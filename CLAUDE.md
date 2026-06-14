@@ -8,7 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 현재 저장소는 **기획 단계**다. 아직 Godot 프로젝트(게임 코드)가 생성되지 않았고, 저장소에는 기획 문서·결정 기록·작업 도구만 있다. 첫 코드는 ROADMAP의 **Phase 1 / Sprint 1**(Godot 그레이박스)에서 시작된다.
 
-이 저장소는 **Git 저장소가 아니다.** 버전 관리가 필요하면 먼저 사용자와 상의할 것.
+이 저장소는 **Git으로 버전 관리된다.** 원격은 `github.com/JeffKM/naraka-valley`(기본 브랜치 `main`)다. Git 작업은 `.claude/commands/`의 `/git:branch` `/git:commit` `/git:merge` `/git:pr` 워크플로우를 따른다.
+
+> **벤더 디렉터리 주의:** `mcp-shrimp-task-manager/`는 upstream(cjo4m06)을 일반 파일로 벤더링한 것이다. 서브모듈이 아니므로 내부에 `.git`을 두지 말 것. `node_modules/`·`dist/`·`shrimp_data/`는 `.gitignore`로 제외되어 있어, 클론 후 도구를 쓰려면 `cd mcp-shrimp-task-manager && npm install && npm run build`가 필요하다.
 
 ## 권위 있는 문서 (작업 전 반드시 참조)
 
