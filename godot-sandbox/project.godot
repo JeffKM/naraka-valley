@@ -1,0 +1,21 @@
+; Godot 학습용 샌드박스 (T1.1) — 나라카 밸리 본체가 아님.
+; "Dodge the Creeps" 공식 튜토리얼을 회색 도형으로 재현한 교보재.
+; 게임 본체는 Phase 1 Sprint 1에서 별도 프로젝트로 시작한다.
+
+config_version=5
+
+[application]
+
+config/name="godot-sandbox (T1.1 학습용)"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.6", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=480
+window/size/viewport_height=640
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
