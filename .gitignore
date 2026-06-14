@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# 로그
+*.log
+npm-debug.log*
+
+# 의존성 / 빌드 산출물 (벤더 도구 포함)
+node_modules/
+dist/
+
+# shrimp-task-manager 데이터 (로컬 작업 상태)
+shrimp_data/
+
+# Claude Code 로컬 설정 / 세션 산출물
+.claude/settings.local.json
+.claude/plans/
