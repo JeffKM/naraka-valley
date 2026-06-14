@@ -15,3 +15,6 @@ shrimp_data/
 # Claude Code 로컬 설정 / 세션 산출물
 .claude/settings.local.json
 .claude/plans/
+
+# Godot 임포트/캐시 (godot-sandbox, godot-tutorial 등 하위 프로젝트 공통)
+.godot/
