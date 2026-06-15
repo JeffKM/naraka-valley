@@ -1,16 +1,22 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://player.tscn" id="2"]
 [ext_resource type="Script" path="res://clock.gd" id="3"]
+[ext_resource type="Script" path="res://field.gd" id="4"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
 
 [node name="Ground" type="TileMapLayer" parent="."]
 
+[node name="Field" type="TileMapLayer" parent="."]
+
 [node name="Clock" type="Node" parent="."]
 script = ExtResource("3")
+
+[node name="FarmField" type="Node" parent="."]
+script = ExtResource("4")
 
 [node name="Player" parent="." instance=ExtResource("2")]
 position = Vector2(328, 344)
@@ -42,6 +48,16 @@ offset_right = 316.0
 offset_bottom = 174.0
 theme_override_font_sizes/font_size = 8
 text = "[Enter] 취침"
+horizontal_alignment = 1
+
+[node name="InteractPrompt" type="Label" parent="CanvasLayer"]
+visible = false
+offset_left = 4.0
+offset_top = 162.0
+offset_right = 316.0
+offset_bottom = 174.0
+theme_override_font_sizes/font_size = 8
+text = "[E] 괭이질"
 horizontal_alignment = 1
 
 [node name="Fade" type="ColorRect" parent="CanvasLayer"]
