@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://player.tscn" id="2"]
@@ -6,6 +6,8 @@
 [ext_resource type="Script" path="res://field.gd" id="4"]
 [ext_resource type="Script" path="res://energy.gd" id="5"]
 [ext_resource type="Script" path="res://save.gd" id="6"]
+[ext_resource type="Script" path="res://wallet.gd" id="7"]
+[ext_resource type="Script" path="res://inventory.gd" id="8"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -25,6 +27,12 @@ script = ExtResource("5")
 
 [node name="SaveManager" type="Node" parent="."]
 script = ExtResource("6")
+
+[node name="Wallet" type="Node" parent="."]
+script = ExtResource("7")
+
+[node name="Inventory" type="Node" parent="."]
+script = ExtResource("8")
 
 [node name="Player" parent="." instance=ExtResource("2")]
 position = Vector2(328, 344)
@@ -91,6 +99,30 @@ offset_right = 250.0
 offset_bottom = 46.0
 theme_override_font_sizes/font_size = 8
 text = "[F5] 저장 · [F9] 불러오기"
+
+[node name="GoldLabel" type="Label" parent="CanvasLayer"]
+offset_left = 4.0
+offset_top = 44.0
+offset_right = 200.0
+offset_bottom = 56.0
+theme_override_font_sizes/font_size = 8
+text = "..."
+
+[node name="ShopPanel" type="ColorRect" parent="CanvasLayer"]
+visible = false
+offset_left = 60.0
+offset_top = 46.0
+offset_right = 260.0
+offset_bottom = 134.0
+color = Color(0.1, 0.1, 0.12, 0.88)
+
+[node name="Text" type="Label" parent="CanvasLayer/ShopPanel"]
+offset_left = 8.0
+offset_top = 6.0
+offset_right = 192.0
+offset_bottom = 82.0
+theme_override_font_sizes/font_size = 8
+text = "..."
 
 [node name="Fade" type="ColorRect" parent="CanvasLayer"]
 modulate = Color(1, 1, 1, 0)

@@ -69,9 +69,9 @@
 
 ### Sprint 3 (~2주) — 경제 + 미호 + 관계 루프
 
-- [ ] **T3.1 — 카페 출하대: 수확물 → 골드 → 씨앗 재구매**
+- [x] **T3.1 — 카페 출하대: 수확물 → 골드 → 씨앗 재구매**
   - 완료기준: 수확물을 팔아 골드를 얻고 그 골드로 씨앗을 사서 다시 심는 한 바퀴가 돈다(작은 순환 폐쇄).
-  - 의존: T2.5 · 메모: 회색 UI.
+  - 의존: T2.5 · 메모: 회색 UI. **구현: `wallet.gd`(`Wallet` 노드, 골드 단일 책임+`changed` 시그널)·`inventory.gd`(`Inventory` 노드, 수확물·씨앗 재고+`changed`). 둘 다 `energy.gd`/`field.gd`와 같은 결(순수 Dictionary 상태·시그널 디커플링·`to_save`/`load_save`). 순환: 심기 시 `inventory.take_seed`(씨앗 1 소모)·수확 시 `add_harvest`(`crop_of`로 거둘 id 미리 확보) → 카페 구역 안 `E`로 출하대 패널 토글, `S`=수확물 전량 판매(`sell_price` 합산→`wallet.earn`)·`B`=선택 작물 씨앗 구매(`seed_cost`→`wallet.spend`). 가격은 `CropCatalog.seed_cost`/`sell_price` 헬퍼로 조회(데이터 분리). 종잣돈은 골드(START_GOLD 0)가 아니라 시작 씨앗(`START_SEEDS` 혼령초 3)으로 줘 첫 수확→판매로 골드가 처음 생기는 자연스러운 폐쇄. 씨앗 0이면 심기 막힘·"카페에서 구매" 안내. 세이브는 `main`이 `wallet`/`inventory` 두 조각 추가(설계대로 `SaveManager`는 불변). 헤드리스 단위검증(골드 earn/spend·음수 방지·clamp / 재고 누적·소모·0키 삭제·카탈로그 검증·손상 방어 / 시작 씨앗 / 순환 폐쇄 시나리오)+통합 임포트·구동 클린(에러·경고 0).**
 - [ ] **T3.2 — 미호 NPC 배치 + 대화 텍스트박스**
   - 완료기준: 미호에게 말 걸면 텍스트박스가 뜨고 끝까지 넘기면 닫힌다.
   - 의존: T2.5 · 메모: 초상화 일러스트는 Phase 2. 지금은 회색 박스+텍스트만.
