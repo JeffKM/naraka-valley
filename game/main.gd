@@ -99,6 +99,7 @@ const MIHO_TILE := Vector2i(20, 14)
 @onready var dialogue_text: Label = $CanvasLayer/DialoguePanel/Text  # T3.2 대화 본문
 @onready var affinity: Affinity = $Affinity                   # T3.3 미호 호감도(하트)
 @onready var affinity_label: Label = $CanvasLayer/AffinityLabel  # T3.3 하트 HUD
+@onready var foxfire_label: Label = $CanvasLayer/FoxfireLabel  # T3.4 여우불 도움 HUD
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
@@ -331,9 +332,13 @@ func _setup_clock() -> void:
 	# T2.4 같은 훅에 혼력 회복도 나란히 붙는다(취침 시 가득).
 	clock.day_advanced.connect(_on_day_advanced)
 
-# 새 날 시작 → 밭 전체 하루 경과 처리(물 준 칸 성장 +1, 흙 마름) + 혼력 가득 회복.
+# 새 날 시작 → 밭 전체 하루 경과 처리 + 혼력 가득 회복.
+# T3.4 여우불 성장 촉진(관계 보상형 A): 미호 호감도 하트가 높을수록 여우불 도움이
+# 강해진다 — 물 준 칸이 더 빨리 자라고(가속) 물 못 준 칸도 돌본다(범위). 하트→세기
+# 매핑은 Foxfire가 들고, farm은 그 값만 받아 적용한다(Affinity를 모름, 디커플링).
 func _on_day_advanced(_day: int) -> void:
-	farm.advance_day()
+	var h := affinity.hearts()
+	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h))
 	energy.refill()
 
 # T2.3 선택 작물을 카탈로그 순서(빠른 성장 순)대로 다음 것으로 순환.
@@ -490,6 +495,8 @@ func _process(delta: float) -> void:
 	affinity_label.text = "미호 %s %d/%d" % [
 		affinity.heart_bar(), affinity.hearts(), Affinity.MAX_HEARTS
 	]
+	# T3.4 여우불 도움 HUD: 현재 하트로 파생한 여우불 세기(관계→농사 보상을 눈에 보이게).
+	foxfire_label.text = Foxfire.summary(affinity.hearts())
 	shop_panel.visible = _shop_open
 	if _shop_open:
 		shop_text.text = _shop_text()
