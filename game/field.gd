@@ -109,24 +109,55 @@ func harvest(t: Vector2i) -> String:
 	return crop_id
 
 # ── 하루 경과(취침 트리거) ───────────────────────────────────────────────────
-# GameClock.day_advanced에 연결된다. 스타듀 규칙:
+# GameClock.day_advanced에 연결된다. 스타듀 규칙 + T3.4 여우불 도움:
 #   1) 물 준(watered) 칸은 성장일수가 +1 된다(아직 다 자라기 전까지만).
-#   2) 모든 경작 칸의 흙은 아침에 마른다(watered → false).
+#      T3.4: 여기에 여우불 가속(accel)을 더해 더 빨리 자란다(+1+accel).
+#   2) T3.4 여우불 범위(reach): 물을 못 준 심긴 칸도 reach개까지 여우불이 대신
+#      돌봐 +1 자란다('넓게'). 어느 칸을 돌볼지는 (y,x) 정렬 순으로 정해 결정적이다
+#      (헤드리스 검증 재현성). 아침 마름 전 상태로 고르므로, 오늘 물 준 칸은 후보가
+#      아니다(가속으로 이미 자람 — 이중 적용 방지).
+#   3) 모든 경작 칸의 흙은 아침에 마른다(watered → false).
+# accel/reach 기본 0 = 여우불 잠듦(순수 스타듀 성장 — 기존 동작·T2.3 그대로). 세기
+# 매핑은 Foxfire(foxfire.gd)가 호감도 하트에서 파생하고, main이 값으로 넘긴다(디커플링).
 # 상태가 바뀐 칸마다 tile_changed를 발화해 main이 오버레이를 갱신한다.
-func advance_day() -> void:
+func advance_day(accel: int = 0, reach: int = 0) -> void:
+	# 여우불 범위 후보를 마름 전(밤 상태)에 먼저 고른다 — 물 안 준 심긴 미성숙 칸.
+	var foxfire_targets := _foxfire_targets(reach)
+	# 1) 물 준 칸: 기본 +1 에 여우불 가속을 더해 자란다(성장일수는 작물 한계까지만).
 	for t in _tiles.keys():
 		var tile: Dictionary = _tiles[t]
 		var changed := false
-		# 1) 물 준 데다 아직 덜 자란 작물만 하루치 성장.
 		if tile["planted"] and tile["watered"] and not is_mature(t):
-			tile["grown_days"] += 1
+			_grow(t, 1 + maxi(accel, 0))
 			changed = true
-		# 2) 흙은 아침에 마른다.
+		# 흙은 아침에 마른다.
 		if tile["watered"]:
 			tile["watered"] = false
 			changed = true
 		if changed:
 			tile_changed.emit(t)
+	# 2) 여우불 범위: 물 못 준 칸을 reach개까지 +1 돌본다(양육의 불, ADR-0004).
+	for t in foxfire_targets:
+		_grow(t, 1)
+		tile_changed.emit(t)
+
+# 한 칸의 성장일수를 n만큼 올리되 작물 성장일수(완성)까지만 잰다(가속 과성장 방지).
+func _grow(t: Vector2i, n: int) -> void:
+	var need := CropCatalog.growth_days(_tiles[t]["crop"])
+	_tiles[t]["grown_days"] = mini(_tiles[t]["grown_days"] + n, need)
+
+# T3.4 여우불 범위가 돌볼 칸 목록(물 못 준 심긴 미성숙 칸 중 (y,x) 정렬 순 limit개).
+# 정렬로 결정적이라 헤드리스 검증이 재현 가능하다. limit ≤ 0이면 빈 배열.
+func _foxfire_targets(limit: int) -> Array:
+	if limit <= 0:
+		return []
+	var cands: Array = []
+	for t in _tiles.keys():
+		if _tiles[t]["planted"] and not _tiles[t]["watered"] and not is_mature(t):
+			cands.append(t)
+	cands.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.y < b.y if a.y != b.y else a.x < b.x)
+	return cands.slice(0, limit)
 
 # ── T2.5 세이브/로드 ──────────────────────────────────────────────────────
 # 밭 상태(_tiles)는 Vector2i 키 + bool/String/int 값의 순수 Dictionary라,

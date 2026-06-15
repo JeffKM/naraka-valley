@@ -128,6 +128,14 @@ offset_bottom = 66.0
 theme_override_font_sizes/font_size = 8
 text = "..."
 
+[node name="FoxfireLabel" type="Label" parent="CanvasLayer"]
+offset_left = 4.0
+offset_top = 64.0
+offset_right = 250.0
+offset_bottom = 76.0
+theme_override_font_sizes/font_size = 8
+text = "..."
+
 [node name="ShopPanel" type="ColorRect" parent="CanvasLayer"]
 visible = false
 offset_left = 60.0
