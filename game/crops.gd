@@ -75,3 +75,11 @@ static func name_of(id: String) -> String:
 # 성장일수(완료기준의 핵심 값). 없는 id면 -1.
 static func growth_days(id: String) -> int:
 	return CATALOG[id]["growth_days"] if CATALOG.has(id) else -1
+
+# 씨앗 구매가(T3.1 경제: 골드 → 씨앗). 없는 id면 -1.
+static func seed_cost(id: String) -> int:
+	return CATALOG[id]["seed_cost"] if CATALOG.has(id) else -1
+
+# 수확물 판매가(T3.1 경제: 수확물 → 골드). 없는 id면 0(판매 합산에 안전).
+static func sell_price(id: String) -> int:
+	return CATALOG[id]["sell_price"] if CATALOG.has(id) else 0

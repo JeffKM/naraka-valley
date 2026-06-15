@@ -84,6 +84,11 @@ const SPAWN_TILE := Vector2i(20, 21)      # 도착 지점
 @onready var energy_label: Label = $CanvasLayer/EnergyLabel  # T2.4 혼력 HUD
 @onready var saver: SaveManager = $SaveManager            # T2.5 세이브/로드
 @onready var save_label: Label = $CanvasLayer/SaveLabel   # T2.5 저장 안내·확인 HUD
+@onready var wallet: Wallet = $Wallet                     # T3.1 골드
+@onready var inventory: Inventory = $Inventory            # T3.1 수확물·씨앗 재고
+@onready var gold_label: Label = $CanvasLayer/GoldLabel        # T3.1 골드 HUD
+@onready var shop_panel: ColorRect = $CanvasLayer/ShopPanel    # T3.1 카페 출하대 패널 배경
+@onready var shop_text: Label = $CanvasLayer/ShopPanel/Text    # T3.1 패널 본문
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
@@ -99,6 +104,10 @@ var _selected_crop: String = CropCatalog.HONRYEONGCHO
 # T2.5 저장/불러오기 확인 문구를 잠깐 띄우는 잔여 시간(초). 0이면 기본 안내로 복귀.
 var _notice_secs := 0.0
 const NOTICE_DEFAULT := "[F5] 저장 · [F9] 불러오기"
+
+# T3.1 카페 출하대 패널이 열려 있는가. 카페 구역 안에서 E로 토글하고, 구역을
+# 벗어나면 자동으로 닫힌다(집 취침과 같은 '구역 안에서만' 패턴).
+var _shop_open := false
 
 func _ready() -> void:
 	_ensure_input_actions()
@@ -137,6 +146,16 @@ func _ensure_input_actions() -> void:
 	var ev_f9 := InputEventKey.new()
 	ev_f9.physical_keycode = KEY_F9
 	InputMap.action_add_event("load_game", ev_f9)
+	# T3.1 카페 출하대: 수확물 전량 판매(S)·선택 작물 씨앗 구매(B). 패널이 열렸을
+	# 때만 처리하므로(_shop_open 가드), 밭 작업 키(E·Q)와 충돌하지 않는다.
+	InputMap.add_action("shop_sell")
+	var ev_s := InputEventKey.new()
+	ev_s.physical_keycode = KEY_S
+	InputMap.action_add_event("shop_sell", ev_s)
+	InputMap.add_action("shop_buy")
+	var ev_b := InputEventKey.new()
+	ev_b.physical_keycode = KEY_B
+	InputMap.action_add_event("shop_buy", ev_b)
 
 # ── TileSet 조립: 단색 블록 아틀라스 + WALL 충돌 ──────────────────────────
 func _build_tileset() -> TileSet:
@@ -337,12 +356,15 @@ func _on_sleep_done() -> void:
 # ── T2.5 세이브/로드 조율 ──────────────────────────────────────────────────
 # 각 시스템 노드는 자기 상태만 직렬화한다(단일 책임). main은 그 조각들을 모아
 # SaveManager에 넘기고(파일 IO), 불러올 땐 받은 조각을 각 노드에 분배한다.
-# 골드(T3.1)가 생기면 여기 "gold" 한 줄을 더하고 SaveManager는 손대지 않는다.
+# T3.1 경제가 붙으며 "wallet"(골드)·"inventory"(수확물·씨앗) 두 조각이 추가됐다.
+# SaveManager는 IO만 책임지므로 저장 항목이 늘어도 손대지 않는다(설계대로).
 func _save_game() -> void:
 	var data := {
 		"clock": clock.to_save(),
 		"energy": energy.to_save(),
 		"farm": farm.to_save(),
+		"wallet": wallet.to_save(),
+		"inventory": inventory.to_save(),
 		"selected_crop": _selected_crop,
 	}
 	if saver.save_game(data):
@@ -361,6 +383,10 @@ func _load_game() -> void:
 		energy.load_save(data["energy"])
 	if data.has("farm"):
 		farm.load_save(data["farm"])
+	if data.has("wallet"):
+		wallet.load_save(data["wallet"])
+	if data.has("inventory"):
+		inventory.load_save(data["inventory"])
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
 	_notice("불러옴")
@@ -394,35 +420,131 @@ func _process(delta: float) -> void:
 	# T2.1/T2.3 밭 상호작용: 바라보는 앞 칸을 대상으로, E 한 키가 다음 단계를
 	# 수행한다(괭이질→심기→물주기→…자람…→수확). 심기엔 현재 선택 작물을 넘긴다.
 	# T2.4 행동 한 번마다 혼력을 쓴다. 혼력이 바닥나면(can_act false) 행동이 막힌다.
+	# T3.1 심기엔 씨앗이 필요하고, 수확물은 인벤토리에 쌓인다(경제 순환의 양끝).
 	_update_target()
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("interact"):
-		var action := farm.next_action(_target)
-		if action != "" and energy.can_act():
-			farm.interact(_target, _selected_crop)  # action != "" 이므로 반드시 수행됨
-			energy.spend()                           # 한 동작당 혼력 소모
-			queue_redraw()                           # 새 상태가 바로 보이도록
+		_try_farm_action()
+
+	# T3.1 카페 출하대: 카페 구역 안에서 E로 패널을 열고/닫고, 열린 동안 S로 수확물을
+	# 팔고 B로 씨앗을 산다(작은 순환을 닫는 곳). 카페를 벗어나면 자동으로 닫힌다.
+	_process_shop()
 
 	var p := player.global_position
 	readout.text = "방향키 이동   구역: %s   위치(%d, %d)   FPS %d" % [
 		_zone_at(p), int(p.x), int(p.y), Engine.get_frames_per_second()
 	]
 	clock_label.text = "Day %d   %s   %s" % [clock.day, clock.clock_string(), clock.phase()]
-	# T2.3 선택 작물 HUD: 이름·성장일수 + 전환 안내.
-	crop_label.text = "심을 작물: %s(%d일)  [Q] 변경" % [
-		CropCatalog.name_of(_selected_crop), CropCatalog.growth_days(_selected_crop)
+	# T2.3 선택 작물 HUD + T3.1 보유 씨앗 수(심을 수 있는지 한눈에).
+	crop_label.text = "심을 작물: %s(%d일) 씨앗%d  [Q] 변경" % [
+		CropCatalog.name_of(_selected_crop), CropCatalog.growth_days(_selected_crop),
+		inventory.seed_count(_selected_crop)
 	]
 	# T2.4 혼력 HUD: 현재/최대. 바닥나면 취침 안내를 덧붙여 막힌 이유를 알린다.
 	energy_label.text = "혼력: %d/%d%s" % [
 		energy.current, SoulEnergy.MAX, "  지쳤다(취침 필요)" if not energy.can_act() else ""
 	]
+	# T3.1 골드 HUD + 카페 출하대 패널(열렸을 때만).
+	gold_label.text = "골드: %d" % wallet.gold
+	shop_panel.visible = _shop_open
+	if _shop_open:
+		shop_text.text = _shop_text()
 	# 집 안에서만 취침 안내를 띄운다(연출 중엔 숨김).
 	sleep_prompt.visible = _can_sleep()
-	# 밭 칸을 바라볼 때만 [E] 안내(다음 동작 이름). 다 키운(물준) 칸이면 숨김.
-	# T2.4 혼력이 바닥나면 동작 대신 막힌 이유를 안내한다.
-	var action := farm.next_action(_target) if _target_valid else ""
-	interact_prompt.visible = not _sleeping and _target_valid and action != ""
-	if interact_prompt.visible:
-		interact_prompt.text = "[E] %s" % action if energy.can_act() else "혼력 부족 — 집에서 취침"
+	# 하단 프롬프트(집은 sleep_prompt, 카페·밭은 interact_prompt — 구역이 달라 겹치지 않음).
+	# 우선순위: 패널이 열렸으면 패널이 대신하니 숨김 > 카페 출하대 안내 > 밭 동작 안내.
+	if _shop_open:
+		interact_prompt.visible = false
+	elif not _sleeping and _zone_at(p) == "카페":
+		interact_prompt.visible = true
+		interact_prompt.text = "[E] 카페 출하대"
+	else:
+		# 밭 칸을 바라볼 때만 [E] 안내(다음 동작 이름). 다 키운(물준) 칸이면 숨김.
+		# T2.4 혼력 바닥, T3.1 씨앗 없음이면 동작 대신 막힌 이유를 안내한다.
+		var action := farm.next_action(_target) if _target_valid else ""
+		interact_prompt.visible = not _sleeping and _target_valid and action != ""
+		if interact_prompt.visible:
+			if not energy.can_act():
+				interact_prompt.text = "혼력 부족 — 집에서 취침"
+			elif action == "심기" and not inventory.has_seed(_selected_crop):
+				interact_prompt.text = "%s 씨앗 없음 — 카페에서 구매" % CropCatalog.name_of(_selected_crop)
+			else:
+				interact_prompt.text = "[E] %s" % action
+
+# ── T2.1/T3.1 밭 한 동작 ──────────────────────────────────────────────────
+# 바라보는 칸의 다음 동작을 수행한다. 혼력이 없으면 막고, 심기는 씨앗이 있어야
+# 하며(없으면 카페에서 사야 한다), 수확물은 인벤토리에 쌓아 경제의 양끝을 잇는다.
+func _try_farm_action() -> void:
+	var action := farm.next_action(_target)
+	if action == "" or not energy.can_act():
+		return
+	# 심기는 씨앗 1개가 필요하다. 없으면 막는다(프롬프트가 "카페에서 구매"를 안내).
+	if action == "심기" and not inventory.has_seed(_selected_crop):
+		return
+	# 수확이면 거둘 작물 id를 미리 확보한다(interact 뒤엔 칸이 비어 crop_of가 ""다).
+	var harvested_crop := farm.crop_of(_target) if action == "수확" else ""
+	farm.interact(_target, _selected_crop)  # action != "" 이므로 반드시 수행됨
+	if action == "심기":
+		inventory.take_seed(_selected_crop)   # 심은 씨앗 1개 소모
+	elif action == "수확":
+		inventory.add_harvest(harvested_crop) # 거둔 수확물 적재(나중에 카페에서 판매)
+	energy.spend()                            # 한 동작당 혼력 소모
+	queue_redraw()                            # 새 상태가 바로 보이도록
+
+# ── T3.1 카페 출하대 ──────────────────────────────────────────────────────
+# 카페 구역 안에서만 동작한다(집 취침과 같은 '구역 안에서만' 패턴). E로 패널을
+# 토글하고, 열린 동안 S=수확물 전량 판매, B=선택 작물 씨앗 구매. 구역을 벗어나면 닫힌다.
+func _process_shop() -> void:
+	if _sleeping or _zone_at(player.global_position) != "카페":
+		_shop_open = false
+		return
+	if Input.is_action_just_pressed("interact"):
+		_shop_open = not _shop_open
+	if not _shop_open:
+		return
+	if Input.is_action_just_pressed("shop_sell"):
+		_sell_all()
+	if Input.is_action_just_pressed("shop_buy"):
+		_buy_seed(_selected_crop)
+
+# 수확물 전량을 판매가(sell_price)로 환산해 골드로 바꾼다 — 순환의 '수확물 → 골드'.
+func _sell_all() -> void:
+	var total := 0
+	for id in inventory.harvested:
+		total += inventory.harvest_count(id) * CropCatalog.sell_price(id)
+	if total <= 0:
+		_notice("팔 수확물이 없다")
+		return
+	inventory.clear_harvest()
+	wallet.earn(total)
+	_notice("판매 +%d골드" % total)
+
+# 선택 작물 씨앗 1개를 seed_cost로 산다 — 순환의 '골드 → 씨앗'. 골드가 모자라면 막는다.
+func _buy_seed(crop_id: String) -> void:
+	var cost := CropCatalog.seed_cost(crop_id)
+	if cost <= 0:
+		return
+	if not wallet.spend(cost):
+		_notice("골드 부족(%d 필요)" % cost)
+		return
+	inventory.add_seed(crop_id)
+	_notice("%s 씨앗 −%d골드" % [CropCatalog.name_of(crop_id), cost])
+
+# 카페 출하대 패널 본문(골드·수확물 판매 예상액·씨앗 구매가·조작 안내).
+func _shop_text() -> String:
+	var sell_total := 0
+	for id in inventory.harvested:
+		sell_total += inventory.harvest_count(id) * CropCatalog.sell_price(id)
+	var sel := _selected_crop
+	return "\n".join([
+		"── 카페 출하대 ──",
+		"골드 %d" % wallet.gold,
+		"수확물 %d개 → %d골드" % [inventory.total_harvest(), sell_total],
+		"[S] 전량 판매",
+		"[B] %s 씨앗 (−%d골드 · 보유 %d)" % [
+			CropCatalog.name_of(sel), CropCatalog.seed_cost(sel), inventory.seed_count(sel)
+		],
+		"[Q] 작물 변경    [E] 닫기",
+	])
 
 # ── T2.1 상호작용 대상 칸 / 시각화 ────────────────────────────────────────
 # 플레이어 발 타일에서 바라보는 방향으로 한 칸 앞을 대상으로 삼는다.
