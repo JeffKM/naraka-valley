@@ -24,10 +24,14 @@ class_name Affinity
 signal changed(points: int, hearts: int)  # 호감도가 바뀐 프레임(main이 HUD 갱신)
 
 const MAX_HEARTS := 5             # 그레이박스 하트 단계 수(밸런싱은 후속)
-const POINTS_PER_HEART := 50      # 하트 한 칸을 채우는 데 필요한 점수
+# T4.3 밸런싱: 50→40. 14일 슬라이스에서 여우불 곡선을 켜기 위한 하트 임계값 완화.
+# 대화만(8점/일)으로도 ♡1≈D5·♡2≈D10이 성립하게 맞췄다(miho-heart-arc 목표 곡선).
+const POINTS_PER_HEART := 40      # 하트 한 칸을 채우는 데 필요한 점수
 const MAX_POINTS := MAX_HEARTS * POINTS_PER_HEART  # 만렙 점수(여기서 멈춤)
 
-const DAILY_TALK_POINTS := 5         # 일일 대화 1회 소폭(느린 채널)
+# T4.3 밸런싱: 5→8. 느린 대화 채널을 키워, 선물 없이 대화만으로도 14일에 ♡2 후반에
+# 닿게 한다(여우불 ♡2 '번짐'까지 보장). ♡3은 선물(영혼 호박 등)이 밀어 올린다.
+const DAILY_TALK_POINTS := 8         # 일일 대화 1회 소폭(느린 채널)
 const GIFT_POINTS := 15              # 일반 작물 선물
 const GIFT_PREFERRED_POINTS := 40    # 선호 작물 선물(빠른 채널)
 const PREFERRED_CROP := CropCatalog.YEONGHON_HOBAK  # 영혼 호박 선호
