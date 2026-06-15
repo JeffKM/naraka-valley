@@ -69,6 +69,10 @@ const HOUSE_RECT := Rect2i(3, 4, 7, 6)    # x3..9,  y4..9
 const FARM_RECT := Rect2i(14, 4, 14, 11)  # x14..27, y4..14
 const CAFE_RECT := Rect2i(30, 4, 8, 7)    # x30..37, y4..10
 const SPAWN_TILE := Vector2i(20, 21)      # 도착 지점
+# T3.2 미호가 서 있는 칸 — 밭 남쪽 입구(도착→복도→밭 동선의 첫 밭 칸). 길에서 위를
+# 바라보면 바로 미호를 향하게 되어, 멘토가 밭 문 앞에서 맞이하는 자연스러운 첫 만남.
+# 이 칸은 농사 대상에서 제외한다(_is_farmable). NPC와 밭 동작이 겹치지 않게.
+const MIHO_TILE := Vector2i(20, 14)
 
 @onready var ground: TileMapLayer = $Ground
 @onready var field_layer: TileMapLayer = $Field           # T2.1 밭 상태 오버레이
@@ -89,6 +93,10 @@ const SPAWN_TILE := Vector2i(20, 21)      # 도착 지점
 @onready var gold_label: Label = $CanvasLayer/GoldLabel        # T3.1 골드 HUD
 @onready var shop_panel: ColorRect = $CanvasLayer/ShopPanel    # T3.1 카페 출하대 패널 배경
 @onready var shop_text: Label = $CanvasLayer/ShopPanel/Text    # T3.1 패널 본문
+@onready var miho: Miho = $Miho                               # T3.2 미호 NPC(그레이박스)
+@onready var dialogue: DialogueBox = $Dialogue                # T3.2 대사 진행기
+@onready var dialogue_panel: ColorRect = $CanvasLayer/DialoguePanel  # T3.2 대화 텍스트박스 배경
+@onready var dialogue_text: Label = $CanvasLayer/DialoguePanel/Text  # T3.2 대화 본문
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
@@ -119,6 +127,10 @@ func _ready() -> void:
 	_place_labels()
 	_setup_player_and_camera()
 	_setup_clock()
+	# T3.2 미호를 밭 입구 칸 중앙에 세우고, 대사 진행 시그널을 패널·이동잠금에 연결한다.
+	miho.position = _tile_center_px(MIHO_TILE)
+	dialogue.changed.connect(_on_dialogue_changed)
+	dialogue.finished.connect(_on_dialogue_finished)
 	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다.
 	if saver.has_save():
 		_load_game()
@@ -397,6 +409,14 @@ func _notice(msg: String) -> void:
 	_notice_secs = 2.0
 
 func _process(delta: float) -> void:
+	# T3.2 대화 중엔 다른 모든 입력을 막고 대사 넘기기(E)만 처리한다. 이동은 대화
+	# 시작 시 player 물리를 꺼 잠가 두었고(_start_dialogue), 끝나면 다시 켠다.
+	# 패널 본문은 dialogue.changed 시그널로 갱신되므로 여기선 입력만 본다.
+	if dialogue.is_open():
+		if Input.is_action_just_pressed("interact"):
+			dialogue.advance()
+		return
+
 	# 취침 입력: 집 안에서 Enter/Space(ui_accept)
 	if _can_sleep() and Input.is_action_just_pressed("ui_accept"):
 		_do_sleep()
@@ -422,6 +442,13 @@ func _process(delta: float) -> void:
 	# T2.4 행동 한 번마다 혼력을 쓴다. 혼력이 바닥나면(can_act false) 행동이 막힌다.
 	# T3.1 심기엔 씨앗이 필요하고, 수확물은 인벤토리에 쌓인다(경제 순환의 양끝).
 	_update_target()
+	# T3.2 미호에게 말 걸기: 바라보는 칸이 미호 칸이면 E로 대화를 연다(밭 동작보다
+	# 우선 — 미호 칸은 농사 대상에서 빠져 있어 둘이 겹치지 않는다). facing_miho는 아래
+	# 하단 프롬프트에서도 재사용한다.
+	var facing_miho := not _sleeping and _target == MIHO_TILE
+	if facing_miho and Input.is_action_just_pressed("interact"):
+		_start_dialogue()
+		return
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("interact"):
 		_try_farm_action()
 
@@ -451,9 +478,12 @@ func _process(delta: float) -> void:
 	# 집 안에서만 취침 안내를 띄운다(연출 중엔 숨김).
 	sleep_prompt.visible = _can_sleep()
 	# 하단 프롬프트(집은 sleep_prompt, 카페·밭은 interact_prompt — 구역이 달라 겹치지 않음).
-	# 우선순위: 패널이 열렸으면 패널이 대신하니 숨김 > 카페 출하대 안내 > 밭 동작 안내.
+	# 우선순위: 패널이 열렸으면 패널이 대신하니 숨김 > 미호 말걸기 > 카페 출하대 > 밭 동작.
 	if _shop_open:
 		interact_prompt.visible = false
+	elif facing_miho:
+		interact_prompt.visible = true
+		interact_prompt.text = "[E] %s와 대화" % miho.display_name()
 	elif not _sleeping and _zone_at(p) == "카페":
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 카페 출하대"
@@ -546,6 +576,28 @@ func _shop_text() -> String:
 		"[Q] 작물 변경    [E] 닫기",
 	])
 
+# ── T3.2 미호 대화 ─────────────────────────────────────────────────────────
+# 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다(완료기준). 대사 내용은 미호가
+# 들고 오고(ADR-0005), 진행·열림은 DialogueBox가, 패널 표시·이동잠금은 main이 맡는다.
+func _start_dialogue() -> void:
+	# 대사가 없으면 시작하지 않는다(이동을 잠근 채 못 닫는 상태 방지).
+	if miho.lines().is_empty():
+		return
+	player.set_physics_process(false)  # 대화 중 이동 잠금(취침 연출과 같은 결)
+	player.velocity = Vector2.ZERO
+	dialogue.start(miho.display_name(), miho.lines())
+
+# 현재 줄이 바뀔 때마다(시작·넘기기) 패널을 갱신한다. 마지막 줄이면 "닫기"로 안내.
+func _on_dialogue_changed(speaker: String, line: String) -> void:
+	dialogue_panel.visible = true
+	var hint := "[E] 닫기" if dialogue.is_last() else "[E] 다음"
+	dialogue_text.text = "%s\n\n%s\n\n%s   %s" % [speaker, line, dialogue.progress(), hint]
+
+# 마지막 줄까지 넘겨 닫혔을 때: 패널을 숨기고 이동 잠금을 푼다.
+func _on_dialogue_finished() -> void:
+	dialogue_panel.visible = false
+	player.set_physics_process(true)
+
 # ── T2.1 상호작용 대상 칸 / 시각화 ────────────────────────────────────────
 # 플레이어 발 타일에서 바라보는 방향으로 한 칸 앞을 대상으로 삼는다.
 # 대각선 facing은 더 큰 축으로 스냅(4방향화)한다.
@@ -566,8 +618,11 @@ func _update_target() -> void:
 		queue_redraw()  # 커서 위치/표시 갱신
 
 # 상호작용 가능한 칸 = 맵 안 + 밭 흙(SOIL). 길·집·카페·벽은 제외.
+# T3.2 미호가 선 칸은 사람 자리라 농사 대상에서 뺀다(말걸기와 밭 동작 충돌 방지).
 func _is_farmable(t: Vector2i) -> bool:
 	if t.x < 0 or t.x >= MAP_W or t.y < 0 or t.y >= MAP_H:
+		return false
+	if t == MIHO_TILE:
 		return false
 	return _grid[t.y][t.x] == SOIL
 
