@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://player.tscn" id="2"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://inventory.gd" id="8"]
 [ext_resource type="Script" path="res://dialogue.gd" id="9"]
 [ext_resource type="Script" path="res://miho.gd" id="10"]
+[ext_resource type="Script" path="res://affinity.gd" id="11"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -41,6 +42,9 @@ script = ExtResource("9")
 
 [node name="Miho" type="Node2D" parent="."]
 script = ExtResource("10")
+
+[node name="Affinity" type="Node" parent="."]
+script = ExtResource("11")
 
 [node name="Player" parent="." instance=ExtResource("2")]
 position = Vector2(328, 344)
@@ -113,6 +117,14 @@ offset_left = 4.0
 offset_top = 44.0
 offset_right = 200.0
 offset_bottom = 56.0
+theme_override_font_sizes/font_size = 8
+text = "..."
+
+[node name="AffinityLabel" type="Label" parent="CanvasLayer"]
+offset_left = 4.0
+offset_top = 54.0
+offset_right = 200.0
+offset_bottom = 66.0
 theme_override_font_sizes/font_size = 8
 text = "..."
 
