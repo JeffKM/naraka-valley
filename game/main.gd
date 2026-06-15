@@ -73,6 +73,9 @@ const SPAWN_TILE := Vector2i(20, 21)      # 도착 지점
 # 바라보면 바로 미호를 향하게 되어, 멘토가 밭 문 앞에서 맞이하는 자연스러운 첫 만남.
 # 이 칸은 농사 대상에서 제외한다(_is_farmable). NPC와 밭 동작이 겹치지 않게.
 const MIHO_TILE := Vector2i(20, 14)
+# T4.1 옥자가 오프닝 통보 때 서는 칸 — 스폰(20,21) 바로 위. 도착하자마자 옥자를
+# 마주보게 된다. 통보가 끝나면 옥자는 숨는다(CONTEXT '옥자': 오프닝에 잠깐 등장).
+const OKJA_TILE := Vector2i(20, 20)
 
 @onready var ground: TileMapLayer = $Ground
 @onready var field_layer: TileMapLayer = $Field           # T2.1 밭 상태 오버레이
@@ -100,6 +103,9 @@ const MIHO_TILE := Vector2i(20, 14)
 @onready var affinity: Affinity = $Affinity                   # T3.3 미호 호감도(하트)
 @onready var affinity_label: Label = $CanvasLayer/AffinityLabel  # T3.3 하트 HUD
 @onready var foxfire_label: Label = $CanvasLayer/FoxfireLabel  # T3.4 여우불 도움 HUD
+@onready var okja: Okja = $Okja                               # T4.1 옥자 NPC(오프닝 통보)
+@onready var onboarding: Onboarding = $Onboarding             # T4.1 온보딩 단계 머신
+@onready var onboarding_label: Label = $CanvasLayer/OnboardingLabel  # T4.1 안내 배너
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
@@ -139,11 +145,16 @@ func _ready() -> void:
 	_setup_clock()
 	# T3.2 미호를 밭 입구 칸 중앙에 세우고, 대사 진행 시그널을 패널·이동잠금에 연결한다.
 	miho.position = _tile_center_px(MIHO_TILE)
+	# T4.1 옥자를 스폰 앞 칸에 세우되 평소엔 숨긴다(오프닝 통보 때만 등장).
+	okja.position = _tile_center_px(OKJA_TILE)
+	okja.visible = false
 	dialogue.changed.connect(_on_dialogue_changed)
 	dialogue.finished.connect(_on_dialogue_finished)
 	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다.
 	if saver.has_save():
 		_load_game()
+	# T4.1 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다.
+	_maybe_start_intro()
 
 # 'interact' 액션을 코드로 등록한다(키 E). project.godot 수동 편집 대신 런타임
 # 조립 — 이 프로젝트의 TileSet·벽 생성과 같은 결이고, 직렬화 포맷 깨질 위험이 없다.
@@ -347,6 +358,9 @@ func _on_day_advanced(_day: int) -> void:
 	var h := affinity.hearts()
 	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h))
 	energy.refill()
+	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
+	if farm.any_mature():
+		onboarding.crop_ready()
 
 # T2.3 선택 작물을 카탈로그 순서(빠른 성장 순)대로 다음 것으로 순환.
 func _cycle_crop() -> void:
@@ -397,6 +411,7 @@ func _save_game() -> void:
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
 		"affinity": affinity.to_save(),
+		"onboarding": onboarding.to_save(),
 		"selected_crop": _selected_crop,
 	}
 	if saver.save_game(data):
@@ -421,6 +436,8 @@ func _load_game() -> void:
 		inventory.load_save(data["inventory"])
 	if data.has("affinity"):
 		affinity.load_save(data["affinity"])
+	if data.has("onboarding"):
+		onboarding.load_save(data["onboarding"])
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
 	_notice("불러옴")
@@ -436,6 +453,7 @@ func _process(delta: float) -> void:
 	# 시작 시 player 물리를 꺼 잠가 두었고(_start_dialogue), 끝나면 다시 켠다.
 	# 패널 본문은 dialogue.changed 시그널로 갱신되므로 여기선 입력만 본다.
 	if dialogue.is_open():
+		onboarding_label.visible = false  # T4.1 대화가 화면을 채우는 동안 배너 숨김
 		if Input.is_action_just_pressed("interact"):
 			dialogue.advance()
 		return
@@ -505,6 +523,11 @@ func _process(delta: float) -> void:
 	]
 	# T3.4 여우불 도움 HUD: 현재 하트로 파생한 여우불 세기(관계→농사 보상을 눈에 보이게).
 	foxfire_label.text = Foxfire.summary(affinity.hearts())
+	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. 상점 패널이 떴으면 숨겨 겹침을 막는다
+	# (대화 중엔 위 early-return에서 이미 숨겼다). 완료(DONE) 후엔 문구가 ""라 사라진다.
+	var guide := onboarding.guidance()
+	onboarding_label.visible = guide != "" and not _shop_open
+	onboarding_label.text = guide
 	shop_panel.visible = _shop_open
 	if _shop_open:
 		shop_text.text = _shop_text()
@@ -551,6 +574,7 @@ func _try_farm_action() -> void:
 	elif action == "수확":
 		inventory.add_harvest(harvested_crop) # 거둔 수확물 적재(나중에 카페에서 판매)
 		_show_flavor(harvested_crop)          # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
+	_advance_onboarding(action)               # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
 	energy.spend()                            # 한 동작당 혼력 소모
 	queue_redraw()                            # 새 상태가 바로 보이도록
 
@@ -622,6 +646,31 @@ func _shop_text() -> String:
 		"[Q] 작물 변경    [E] 닫기",
 	])
 
+# ── T4.1 온보딩 ────────────────────────────────────────────────────────────
+# 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다(CONTEXT
+# '온보딩': 도착 → 옥자 통보). 옥자를 드러내고 이동을 잠근 뒤 통보 대사를 시작한다.
+# 통보 단계가 아니거나 이미 대화 중이면 아무 일도 하지 않는다(중복·오작동 방어).
+func _maybe_start_intro() -> void:
+	if not onboarding.is_intro() or dialogue.is_open():
+		return
+	okja.visible = true
+	player.set_physics_process(false)  # 통보 중 이동 잠금(미호 대화·취침과 같은 결)
+	player.velocity = Vector2.ZERO
+	dialogue.start(okja.display_name(), okja.lines())
+
+# 밭 동작 한 번이 온보딩 단계를 다음으로 넘긴다(각자 해당 단계일 때만 — 멱등·순서
+# 안전). 밭의 강제 순서(괭이질→심기→물주기→수확)가 그대로 튜토리얼 진행이 된다.
+func _advance_onboarding(action: String) -> void:
+	match action:
+		"괭이질":
+			onboarding.tilled()
+		"심기":
+			onboarding.planted()
+		"물주기":
+			onboarding.watered()
+		"수확":
+			onboarding.harvested()
+
 # ── T3.2 미호 대화 ─────────────────────────────────────────────────────────
 # 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다(완료기준). 대사 내용은 미호가
 # 들고 오고(ADR-0005), 진행·열림은 DialogueBox가, 패널 표시·이동잠금은 main이 맡는다.
@@ -659,9 +708,17 @@ func _on_dialogue_changed(speaker: String, line: String) -> void:
 	dialogue_text.text = "%s\n\n%s\n\n%s   %s" % [speaker, line, dialogue.progress(), hint]
 
 # 마지막 줄까지 넘겨 닫혔을 때: 패널을 숨기고 이동 잠금을 푼다.
+# T4.1 온보딩 전진: 방금 어떤 대화였는지는 현재 단계로 가른다(NOTICE=옥자 통보 /
+# MEET_MIHO=미호 멘토). 온보딩이 끝난 뒤(DONE)의 일상 미호 대화는 두 분기 모두
+# 단계가 달라 no-op이 된다(Onboarding._advance_from의 단계 가드 — 안전).
 func _on_dialogue_finished() -> void:
 	dialogue_panel.visible = false
 	player.set_physics_process(true)
+	if onboarding.step == Onboarding.NOTICE:
+		onboarding.notice_seen()
+		okja.visible = false  # 옥자는 통보를 끝내면 사라진다(오프닝에 잠깐 등장)
+	elif onboarding.step == Onboarding.MEET_MIHO:
+		onboarding.talked_to_miho()
 
 # ── T2.1 상호작용 대상 칸 / 시각화 ────────────────────────────────────────
 # 플레이어 발 타일에서 바라보는 방향으로 한 칸 앞을 대상으로 삼는다.
