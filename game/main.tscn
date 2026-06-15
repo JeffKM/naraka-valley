@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://player.tscn" id="2"]
@@ -8,6 +8,8 @@
 [ext_resource type="Script" path="res://save.gd" id="6"]
 [ext_resource type="Script" path="res://wallet.gd" id="7"]
 [ext_resource type="Script" path="res://inventory.gd" id="8"]
+[ext_resource type="Script" path="res://dialogue.gd" id="9"]
+[ext_resource type="Script" path="res://miho.gd" id="10"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -33,6 +35,12 @@ script = ExtResource("7")
 
 [node name="Inventory" type="Node" parent="."]
 script = ExtResource("8")
+
+[node name="Dialogue" type="Node" parent="."]
+script = ExtResource("9")
+
+[node name="Miho" type="Node2D" parent="."]
+script = ExtResource("10")
 
 [node name="Player" parent="." instance=ExtResource("2")]
 position = Vector2(328, 344)
@@ -123,6 +131,23 @@ offset_right = 192.0
 offset_bottom = 82.0
 theme_override_font_sizes/font_size = 8
 text = "..."
+
+[node name="DialoguePanel" type="ColorRect" parent="CanvasLayer"]
+visible = false
+offset_left = 8.0
+offset_top = 118.0
+offset_right = 312.0
+offset_bottom = 174.0
+color = Color(0.08, 0.08, 0.12, 0.92)
+
+[node name="Text" type="Label" parent="CanvasLayer/DialoguePanel"]
+offset_left = 8.0
+offset_top = 5.0
+offset_right = 296.0
+offset_bottom = 51.0
+theme_override_font_sizes/font_size = 8
+text = "..."
+autowrap_mode = 2
 
 [node name="Fade" type="ColorRect" parent="CanvasLayer"]
 modulate = Color(1, 1, 1, 0)
