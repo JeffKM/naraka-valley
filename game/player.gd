@@ -22,6 +22,11 @@ func _physics_process(_delta: float) -> void:
 	# move_and_slide: 벽에 닿으면 멈추고, 벽을 따라 미끄러진다(통과 불가).
 	move_and_slide()
 
+# 마지막으로 바라본 방향(정규화). 정지해도 유지된다.
+# T2.1에서 main이 "바라보는 앞 칸"을 상호작용 대상으로 삼는 데 쓴다.
+func get_facing() -> Vector2:
+	return _facing
+
 func _draw() -> void:
 	# 몸체: 발치 원점 기준 위로 16×32 회색 사각형
 	var body := Rect2(-BODY_SIZE.x * 0.5, -BODY_SIZE.y, BODY_SIZE.x, BODY_SIZE.y)
