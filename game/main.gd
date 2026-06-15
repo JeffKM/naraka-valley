@@ -97,6 +97,8 @@ const MIHO_TILE := Vector2i(20, 14)
 @onready var dialogue: DialogueBox = $Dialogue                # T3.2 대사 진행기
 @onready var dialogue_panel: ColorRect = $CanvasLayer/DialoguePanel  # T3.2 대화 텍스트박스 배경
 @onready var dialogue_text: Label = $CanvasLayer/DialoguePanel/Text  # T3.2 대화 본문
+@onready var affinity: Affinity = $Affinity                   # T3.3 미호 호감도(하트)
+@onready var affinity_label: Label = $CanvasLayer/AffinityLabel  # T3.3 하트 HUD
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
@@ -168,6 +170,11 @@ func _ensure_input_actions() -> void:
 	var ev_b := InputEventKey.new()
 	ev_b.physical_keycode = KEY_B
 	InputMap.action_add_event("shop_buy", ev_b)
+	# T3.3 미호에게 선물(G). 미호를 바라볼 때만 처리하므로 밭 작업 키와 충돌하지 않는다.
+	InputMap.add_action("gift_item")
+	var ev_g := InputEventKey.new()
+	ev_g.physical_keycode = KEY_G
+	InputMap.action_add_event("gift_item", ev_g)
 
 # ── TileSet 조립: 단색 블록 아틀라스 + WALL 충돌 ──────────────────────────
 func _build_tileset() -> TileSet:
@@ -377,6 +384,7 @@ func _save_game() -> void:
 		"farm": farm.to_save(),
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
+		"affinity": affinity.to_save(),
 		"selected_crop": _selected_crop,
 	}
 	if saver.save_game(data):
@@ -399,6 +407,8 @@ func _load_game() -> void:
 		wallet.load_save(data["wallet"])
 	if data.has("inventory"):
 		inventory.load_save(data["inventory"])
+	if data.has("affinity"):
+		affinity.load_save(data["affinity"])
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
 	_notice("불러옴")
@@ -449,6 +459,10 @@ func _process(delta: float) -> void:
 	if facing_miho and Input.is_action_just_pressed("interact"):
 		_start_dialogue()
 		return
+	# T3.3 미호 선물: 바라볼 때 G로 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회).
+	if facing_miho and Input.is_action_just_pressed("gift_item"):
+		_try_gift()
+		return
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("interact"):
 		_try_farm_action()
 
@@ -472,6 +486,10 @@ func _process(delta: float) -> void:
 	]
 	# T3.1 골드 HUD + 카페 출하대 패널(열렸을 때만).
 	gold_label.text = "골드: %d" % wallet.gold
+	# T3.3 미호 호감도 HUD: 하트 막대 + 단계 수(하트 단계가 UI에 반영 — 완료기준).
+	affinity_label.text = "미호 %s %d/%d" % [
+		affinity.heart_bar(), affinity.hearts(), Affinity.MAX_HEARTS
+	]
 	shop_panel.visible = _shop_open
 	if _shop_open:
 		shop_text.text = _shop_text()
@@ -483,7 +501,7 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = false
 	elif facing_miho:
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] %s와 대화" % miho.display_name()
+		interact_prompt.text = "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif not _sleeping and _zone_at(p) == "카페":
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 카페 출하대"
@@ -580,12 +598,31 @@ func _shop_text() -> String:
 # 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다(완료기준). 대사 내용은 미호가
 # 들고 오고(ADR-0005), 진행·열림은 DialogueBox가, 패널 표시·이동잠금은 main이 맡는다.
 func _start_dialogue() -> void:
+	# T3.3 일일 대화: 오늘 첫 대화면 호감도를 소폭 올린다(하루 1회, Affinity가 게이팅).
+	# 보상 여부(first_today)와 현재 하트 단계로 어떤 대사를 들려줄지 미호가 고른다.
+	var first_today := affinity.daily_talk(clock.day)
+	var lines := miho.lines(affinity.hearts(), first_today)
 	# 대사가 없으면 시작하지 않는다(이동을 잠근 채 못 닫는 상태 방지).
-	if miho.lines().is_empty():
+	if lines.is_empty():
 		return
 	player.set_physics_process(false)  # 대화 중 이동 잠금(취침 연출과 같은 결)
 	player.velocity = Vector2.ZERO
-	dialogue.start(miho.display_name(), miho.lines())
+	dialogue.start(miho.display_name(), lines)
+
+# T3.3 미호 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 호감도를 올린다.
+# 선호 작물(영혼 호박)이면 더 크게 오른다. 하루 1회만 가능(Affinity가 게이팅).
+func _try_gift() -> void:
+	var crop := _selected_crop
+	if inventory.harvest_count(crop) <= 0:
+		_notice("%s 수확물이 없다" % CropCatalog.name_of(crop))
+		return
+	if not affinity.can_gift(clock.day):
+		_notice("오늘은 이미 선물했다")
+		return
+	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
+	var gained := affinity.gift(crop, clock.day)
+	var tag := "(선호!) " if affinity.is_preferred(crop) else ""
+	_notice("%s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
 
 # 현재 줄이 바뀔 때마다(시작·넘기기) 패널을 갱신한다. 마지막 줄이면 "닫기"로 안내.
 func _on_dialogue_changed(speaker: String, line: String) -> void:

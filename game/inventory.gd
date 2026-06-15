@@ -53,6 +53,17 @@ func total_harvest() -> int:
 		sum += harvested[id]
 	return sum
 
+# 거둔 수확물 n개를 꺼내 쓴다(T3.3 미호 선물 등). 모자라면 아무것도 안 하고 false.
+# 0이 되면 키를 지운다(seeds.take_seed와 같은 결).
+func take_harvest(crop_id: String, n: int = 1) -> bool:
+	if n <= 0 or harvest_count(crop_id) < n:
+		return false
+	harvested[crop_id] -= n
+	if harvested[crop_id] <= 0:
+		harvested.erase(crop_id)
+	changed.emit()
+	return true
+
 # 수확물 재고를 통째로 비운다(전량 판매 후 호출). 변화가 있을 때만 알린다.
 func clear_harvest() -> void:
 	if harvested.is_empty():
