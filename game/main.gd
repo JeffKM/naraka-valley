@@ -80,6 +80,8 @@ const SPAWN_TILE := Vector2i(20, 21)      # 도착 지점
 @onready var interact_prompt: Label = $CanvasLayer/InteractPrompt  # T2.1 [E] 안내
 @onready var farm: FarmField = $FarmField                  # T2.1 밭 칸 상태
 @onready var crop_label: Label = $CanvasLayer/CropLabel    # T2.3 선택 작물 HUD
+@onready var energy: SoulEnergy = $SoulEnergy              # T2.4 혼력
+@onready var energy_label: Label = $CanvasLayer/EnergyLabel  # T2.4 혼력 HUD
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
@@ -270,11 +272,13 @@ func _setup_clock() -> void:
 	# 24:00에 도달하면(쓰러짐) 위치에 상관없이 강제 취침시킨다.
 	clock.collapsed.connect(_on_collapsed)
 	# T2.3 취침으로 새 날이 시작되면 작물이 하루치 자란다(물 준 칸만). 시그널 디커플링.
+	# T2.4 같은 훅에 혼력 회복도 나란히 붙는다(취침 시 가득).
 	clock.day_advanced.connect(_on_day_advanced)
 
-# 새 날 시작 → 밭 전체 하루 경과 처리(물 준 칸 성장 +1, 흙 마름).
+# 새 날 시작 → 밭 전체 하루 경과 처리(물 준 칸 성장 +1, 흙 마름) + 혼력 가득 회복.
 func _on_day_advanced(_day: int) -> void:
 	farm.advance_day()
+	energy.refill()
 
 # T2.3 선택 작물을 카탈로그 순서(빠른 성장 순)대로 다음 것으로 순환.
 func _cycle_crop() -> void:
@@ -321,12 +325,14 @@ func _process(_delta: float) -> void:
 
 	# T2.1/T2.3 밭 상호작용: 바라보는 앞 칸을 대상으로, E 한 키가 다음 단계를
 	# 수행한다(괭이질→심기→물주기→…자람…→수확). 심기엔 현재 선택 작물을 넘긴다.
+	# T2.4 행동 한 번마다 혼력을 쓴다. 혼력이 바닥나면(can_act false) 행동이 막힌다.
 	_update_target()
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("interact"):
-		var did := farm.interact(_target, _selected_crop)
-		# (did != "" 이면 한 동작이 일어남. T2.4에서 여기에 혼력 소모가 붙는다.)
-		if did != "":
-			queue_redraw()  # 새 상태가 바로 보이도록
+		var action := farm.next_action(_target)
+		if action != "" and energy.can_act():
+			farm.interact(_target, _selected_crop)  # action != "" 이므로 반드시 수행됨
+			energy.spend()                           # 한 동작당 혼력 소모
+			queue_redraw()                           # 새 상태가 바로 보이도록
 
 	var p := player.global_position
 	readout.text = "방향키 이동   구역: %s   위치(%d, %d)   FPS %d" % [
@@ -337,13 +343,18 @@ func _process(_delta: float) -> void:
 	crop_label.text = "심을 작물: %s(%d일)  [Q] 변경" % [
 		CropCatalog.name_of(_selected_crop), CropCatalog.growth_days(_selected_crop)
 	]
+	# T2.4 혼력 HUD: 현재/최대. 바닥나면 취침 안내를 덧붙여 막힌 이유를 알린다.
+	energy_label.text = "혼력: %d/%d%s" % [
+		energy.current, SoulEnergy.MAX, "  지쳤다(취침 필요)" if not energy.can_act() else ""
+	]
 	# 집 안에서만 취침 안내를 띄운다(연출 중엔 숨김).
 	sleep_prompt.visible = _can_sleep()
 	# 밭 칸을 바라볼 때만 [E] 안내(다음 동작 이름). 다 키운(물준) 칸이면 숨김.
+	# T2.4 혼력이 바닥나면 동작 대신 막힌 이유를 안내한다.
 	var action := farm.next_action(_target) if _target_valid else ""
 	interact_prompt.visible = not _sleeping and _target_valid and action != ""
 	if interact_prompt.visible:
-		interact_prompt.text = "[E] %s" % action
+		interact_prompt.text = "[E] %s" % action if energy.can_act() else "혼력 부족 — 집에서 취침"
 
 # ── T2.1 상호작용 대상 칸 / 시각화 ────────────────────────────────────────
 # 플레이어 발 타일에서 바라보는 방향으로 한 칸 앞을 대상으로 삼는다.
