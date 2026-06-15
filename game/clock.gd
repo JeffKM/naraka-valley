@@ -56,6 +56,19 @@ func sleep() -> void:
 	day_advanced.emit(day)
 	minute_ticked.emit(day, int(minutes))
 
+# ── T2.5 세이브/로드 ──────────────────────────────────────────────────────
+# 시간이라는 단일 책임에 맞게, 자기 상태(날짜·분)만 직렬화/복원한다. 파일 IO는
+# SaveManager가, 조율은 main이 맡는다(디커플링). 진행 플래그(running·_collapsed)는
+# 저장하지 않는다 — 로드 직후엔 다시 시간이 흐르는 게 자연스럽다.
+func to_save() -> Dictionary:
+	return {"day": day, "minutes": minutes}
+
+func load_save(data: Dictionary) -> void:
+	day = int(data.get("day", 1))
+	minutes = float(data.get("minutes", START_MIN))
+	running = true
+	_collapsed = false
+
 # ── 표시용 헬퍼 ────────────────────────────────────────────────────────────
 func clock_string() -> String:
 	var m := int(minutes)

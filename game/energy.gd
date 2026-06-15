@@ -44,3 +44,13 @@ func spend() -> bool:
 func refill() -> void:
 	current = MAX
 	changed.emit(current, MAX)
+
+# ── T2.5 세이브/로드 ──────────────────────────────────────────────────────
+# 상태가 정수 current 하나뿐이라 그대로 직렬화된다. 복원 시 0..MAX로 잘라
+# 손상된 세이브에도 안전하게 만들고, changed로 HUD를 즉시 갱신한다.
+func to_save() -> Dictionary:
+	return {"current": current}
+
+func load_save(data: Dictionary) -> void:
+	current = clampi(int(data.get("current", MAX)), 0, MAX)
+	changed.emit(current, MAX)

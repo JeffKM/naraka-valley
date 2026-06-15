@@ -128,6 +128,22 @@ func advance_day() -> void:
 		if changed:
 			tile_changed.emit(t)
 
+# ── T2.5 세이브/로드 ──────────────────────────────────────────────────────
+# 밭 상태(_tiles)는 Vector2i 키 + bool/String/int 값의 순수 Dictionary라,
+# SaveManager의 var_to_str가 키 타입까지 그대로 라운드트립한다(이 노드가 inner
+# class를 안 쓴 이유). 깊은 복사로 넘겨, 호출 측이 들고 있어도 상태가 새지 않게 한다.
+func to_save() -> Dictionary:
+	return {"tiles": _tiles.duplicate(true)}
+
+# 복원: _tiles를 통째로 갈아끼우고, 칸마다 tile_changed를 발화해 main이 오버레이를
+# 다시 그리게 한다(시각 동기화도 디커플링 유지). 로드 전 옛 오버레이 타일 제거는
+# 호출 측(main) 책임이다 — 이 노드는 상태만 알고 화면 레이어를 모르기 때문.
+func load_save(data: Dictionary) -> void:
+	var tiles: Variant = data.get("tiles", {})
+	_tiles = tiles.duplicate(true) if typeof(tiles) == TYPE_DICTIONARY else {}
+	for t in _tiles.keys():
+		tile_changed.emit(t)
+
 # ── 단일 키 흐름 ─────────────────────────────────────────────────────────────
 # 이 칸에서 다음에 할 수 있는 동작 이름("" = 더 할 것 없음). 프롬프트·interact가 공유한다.
 func next_action(t: Vector2i) -> String:
