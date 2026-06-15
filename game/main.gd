@@ -106,6 +106,8 @@ const OKJA_TILE := Vector2i(20, 20)
 @onready var okja: Okja = $Okja                               # T4.1 옥자 NPC(오프닝 통보)
 @onready var onboarding: Onboarding = $Onboarding             # T4.1 온보딩 단계 머신
 @onready var onboarding_label: Label = $CanvasLayer/OnboardingLabel  # T4.1 안내 배너
+@onready var ending_panel: ColorRect = $CanvasLayer/EndingPanel        # T4.2 14일 마무리 화면 배경
+@onready var ending_text: Label = $CanvasLayer/EndingPanel/Text        # T4.2 점수판 본문
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
@@ -133,6 +135,14 @@ var _harvest_seen: Dictionary = {}
 # 벗어나면 자동으로 닫힌다(집 취침과 같은 '구역 안에서만' 패턴).
 var _shop_open := false
 
+# T4.2 14일 슬라이스가 끝났는가(마무리 화면 표시 중). true면 _process가 모든
+# 게임 입력을 막고 마무리 화면만 유지한다. 끝남 자체는 GameClock.day에서 파생되므로
+# (RunSummary.is_over) 세이브할 상태가 아니고, 이 플래그는 한 프레임 표시 래치일 뿐이다.
+var _run_over := false
+# T4.2 이번 슬라이스에서 거둔 영혼(수확) 총수 — 마무리 점수판용. 일시 표시용인
+# _harvest_seen(사연 순환 index)과 달리 점수판이 재개에도 맞아야 하므로 저장한다.
+var _run_harvested := 0
+
 func _ready() -> void:
 	_ensure_input_actions()
 	ground.tile_set = _build_tileset()
@@ -153,8 +163,13 @@ func _ready() -> void:
 	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다.
 	if saver.has_save():
 		_load_game()
-	# T4.1 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다.
-	_maybe_start_intro()
+	# T4.2 이어받은 세이브가 이미 14일을 넘겼으면(15일째 아침) 바로 마무리 화면을 띄운다.
+	# 그 경우 온보딩 컷신은 띄우지 않는다(슬라이스가 끝났으므로).
+	if RunSummary.is_over(clock.day):
+		_end_run()
+	else:
+		# T4.1 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다.
+		_maybe_start_intro()
 
 # 'interact' 액션을 코드로 등록한다(키 E). project.godot 수동 편집 대신 런타임
 # 조립 — 이 프로젝트의 TileSet·벽 생성과 같은 결이고, 직렬화 포맷 깨질 위험이 없다.
@@ -354,7 +369,12 @@ func _setup_clock() -> void:
 # T3.4 여우불 성장 촉진(관계 보상형 A): 미호 호감도 하트가 높을수록 여우불 도움이
 # 강해진다 — 물 준 칸이 더 빨리 자라고(가속) 물 못 준 칸도 돌본다(범위). 하트→세기
 # 매핑은 Foxfire가 들고, farm은 그 값만 받아 적용한다(Affinity를 모름, 디커플링).
-func _on_day_advanced(_day: int) -> void:
+func _on_day_advanced(day: int) -> void:
+	# T4.2 14일 슬라이스의 끝. 취침으로 15일째 아침이 오면 더 진행하지 않고(작물 성장·
+	# 혼력 회복도 생략) 마무리 화면을 띄운다. 끝 판정은 RunSummary가 day로 내린다.
+	if RunSummary.is_over(day):
+		_end_run()
+		return
 	var h := affinity.hearts()
 	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h))
 	energy.refill()
@@ -393,8 +413,11 @@ func _do_sleep() -> void:
 	tw.tween_callback(_on_sleep_done)
 
 func _on_sleep_done() -> void:
-	player.set_physics_process(true)
 	_sleeping = false
+	# T4.2 슬라이스가 끝났으면(이 취침이 15일째를 불렀음) 이동 잠금을 풀지 않고
+	# 마무리 화면을 유지한다. 진행은 보존하므로 다시 켜도 마무리 화면이 뜬다.
+	if not _run_over:
+		player.set_physics_process(true)
 	# T2.5 스타듀식 자동 저장: 한 날이 끝나 잠들 때마다 진행을 보존한다.
 	_save_game()
 
@@ -412,6 +435,7 @@ func _save_game() -> void:
 		"inventory": inventory.to_save(),
 		"affinity": affinity.to_save(),
 		"onboarding": onboarding.to_save(),
+		"run_harvested": _run_harvested,
 		"selected_crop": _selected_crop,
 	}
 	if saver.save_game(data):
@@ -438,6 +462,8 @@ func _load_game() -> void:
 		affinity.load_save(data["affinity"])
 	if data.has("onboarding"):
 		onboarding.load_save(data["onboarding"])
+	# T4.2 슬라이스 점수판 누적(거둔 영혼 총수). 손상 방어로 음수는 0으로 자른다.
+	_run_harvested = maxi(int(data.get("run_harvested", 0)), 0)
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
 	_notice("불러옴")
@@ -449,6 +475,11 @@ func _notice(msg: String, secs: float = NOTICE_SECS) -> void:
 	_notice_secs = secs
 
 func _process(delta: float) -> void:
+	# T4.2 14일 슬라이스가 끝났으면 마무리 화면만 유지하고 모든 게임 입력을 막는다
+	# (이동은 _do_sleep/_end_run에서 이미 잠갔다). 마무리 화면은 _end_run이 한 번
+	# 세웠으므로 여기선 더 손대지 않는다.
+	if _run_over:
+		return
 	# T3.2 대화 중엔 다른 모든 입력을 막고 대사 넘기기(E)만 처리한다. 이동은 대화
 	# 시작 시 player 물리를 꺼 잠가 두었고(_start_dialogue), 끝나면 다시 켠다.
 	# 패널 본문은 dialogue.changed 시그널로 갱신되므로 여기선 입력만 본다.
@@ -573,6 +604,7 @@ func _try_farm_action() -> void:
 		inventory.take_seed(_selected_crop)   # 심은 씨앗 1개 소모
 	elif action == "수확":
 		inventory.add_harvest(harvested_crop) # 거둔 수확물 적재(나중에 카페에서 판매)
+		_run_harvested += 1                   # T4.2 슬라이스 점수판: 거둔 영혼 총수
 		_show_flavor(harvested_crop)          # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
 	_advance_onboarding(action)               # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
 	energy.spend()                            # 한 동작당 혼력 소모
@@ -657,6 +689,24 @@ func _maybe_start_intro() -> void:
 	player.set_physics_process(false)  # 통보 중 이동 잠금(미호 대화·취침과 같은 결)
 	player.velocity = Vector2.ZERO
 	dialogue.start(okja.display_name(), okja.lines())
+
+# ── T4.2 14일 슬라이스 종료 ─────────────────────────────────────────────────
+# 14일이 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리
+# 점수판을 띄운다. 멱등(_run_over 가드)이라 취침 종료·로드 양쪽에서 불려도 한 번만
+# 세운다. 끝 판정·문구는 RunSummary가, 표시·잠금은 main이 맡는다(데이터/표시 디커플링).
+func _end_run() -> void:
+	if _run_over:
+		return
+	_run_over = true
+	clock.running = false
+	player.set_physics_process(false)
+	player.velocity = Vector2.ZERO
+	# 다른 패널·프롬프트는 마무리 화면(전체 화면 불투명 패널)이 덮으므로 따로 숨기지 않는다.
+	ending_text.text = RunSummary.text(
+		clock.day, wallet.gold, affinity.heart_bar(),
+		affinity.hearts(), Affinity.MAX_HEARTS, _run_harvested
+	)
+	ending_panel.visible = true
 
 # 밭 동작 한 번이 온보딩 단계를 다음으로 넘긴다(각자 해당 단계일 때만 — 멱등·순서
 # 안전). 밭의 강제 순서(괭이질→심기→물주기→수확)가 그대로 튜토리얼 진행이 된다.

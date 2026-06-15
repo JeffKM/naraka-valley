@@ -187,6 +187,26 @@ theme_override_font_sizes/font_size = 8
 text = "..."
 autowrap_mode = 2
 
+[node name="EndingPanel" type="ColorRect" parent="CanvasLayer"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(0.06, 0.05, 0.08, 1)
+
+[node name="Text" type="Label" parent="CanvasLayer/EndingPanel"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
+theme_override_font_sizes/font_size = 8
+text = "..."
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+
 [node name="Fade" type="ColorRect" parent="CanvasLayer"]
 modulate = Color(1, 1, 1, 0)
 anchor_right = 1.0
