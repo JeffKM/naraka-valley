@@ -58,6 +58,14 @@ func is_mature(t: Vector2i) -> bool:
 	var need := CropCatalog.growth_days(_tiles[t]["crop"])
 	return need >= 0 and _tiles[t]["grown_days"] >= need
 
+# 수확 가능한 칸이 하나라도 있는가. T4.1 온보딩이 '집에서 키우기'에서 '수확하라'
+# 단계로 넘어갈 시점(취침으로 작물이 다 자란 순간)을 main이 판정하는 데 쓴다.
+func any_mature() -> bool:
+	for t in _tiles.keys():
+		if is_mature(t):
+			return true
+	return false
+
 # 시각 성장 단계(오버레이용): -1=작물없음 / 0=씨앗 / 1=새싹 / 2=수확가능.
 # 작물별 stages 수와 무관한 그레이박스 3단계(외형). 속도 차이는 growth_days가 낸다.
 func growth_stage(t: Vector2i) -> int:
