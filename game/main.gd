@@ -115,6 +115,13 @@ var _selected_crop: String = CropCatalog.HONRYEONGCHO
 # T2.5 저장/불러오기 확인 문구를 잠깐 띄우는 잔여 시간(초). 0이면 기본 안내로 복귀.
 var _notice_secs := 0.0
 const NOTICE_DEFAULT := "[F5] 저장 · [F9] 불러오기"
+const NOTICE_SECS := 2.0          # 기본 알림 표시 시간(저장됨 등 짧은 확인 문구)
+const FLAVOR_SECS := 3.5          # T3.5 사연 한 줄은 읽을 시간을 더 길게 준다
+
+# T3.5 작물(영혼)별 수확 누적 횟수. 수확마다 +1 해 SoulMemory.line의 index로 넘겨
+# 사연이 순환되게 한다(같은 작물을 거둘 때마다 다음 사연으로). 일시적 표시용 진척이라
+# 세이브하지 않는다(대화와 같은 결 — SaveManager·main 세이브 불변).
+var _harvest_seen: Dictionary = {}
 
 # T3.1 카페 출하대 패널이 열려 있는가. 카페 구역 안에서 E로 토글하고, 구역을
 # 벗어나면 자동으로 닫힌다(집 취침과 같은 '구역 안에서만' 패턴).
@@ -418,10 +425,11 @@ func _load_game() -> void:
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
 	_notice("불러옴")
 
-# 저장/불러오기 확인 문구를 잠깐 띄운다(2초 후 기본 안내로 복귀).
-func _notice(msg: String) -> void:
+# 확인·알림 문구를 잠깐 띄운다(지속시간 경과 후 기본 안내로 복귀). 저장됨 등은
+# 짧게(NOTICE_SECS), T3.5 사연 한 줄은 읽을 수 있게 길게(FLAVOR_SECS) 띄운다.
+func _notice(msg: String, secs: float = NOTICE_SECS) -> void:
 	save_label.text = msg
-	_notice_secs = 2.0
+	_notice_secs = secs
 
 func _process(delta: float) -> void:
 	# T3.2 대화 중엔 다른 모든 입력을 막고 대사 넘기기(E)만 처리한다. 이동은 대화
@@ -542,8 +550,21 @@ func _try_farm_action() -> void:
 		inventory.take_seed(_selected_crop)   # 심은 씨앗 1개 소모
 	elif action == "수확":
 		inventory.add_harvest(harvested_crop) # 거둔 수확물 적재(나중에 카페에서 판매)
+		_show_flavor(harvested_crop)          # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
 	energy.spend()                            # 한 동작당 혼력 소모
 	queue_redraw()                            # 새 상태가 바로 보이도록
+
+# ── T3.5 사연 한 줄 ────────────────────────────────────────────────────────
+# 방금 거둔 작물(영혼)의 생전 사연 한 줄을 팝업으로 띄운다(CONTEXT '사연 한 줄').
+# 작물별 수확 누적 횟수를 index로 넘겨 거둘 때마다 다음 사연으로 순환시킨다(결정적).
+# 사연 데이터(SoulMemory)는 알지만 어떻게 표시할지는 main이 정한다(데이터 디커플링).
+func _show_flavor(crop_id: String) -> void:
+	var seen: int = _harvest_seen.get(crop_id, 0)
+	var line := SoulMemory.line(crop_id, seen)
+	_harvest_seen[crop_id] = seen + 1
+	if line == "":
+		return  # 사연이 없는 작물이면 조용히 넘어간다(표시할 게 없음)
+	_notice(line, FLAVOR_SECS)
 
 # ── T3.1 카페 출하대 ──────────────────────────────────────────────────────
 # 카페 구역 안에서만 동작한다(집 취침과 같은 '구역 안에서만' 패턴). E로 패널을
