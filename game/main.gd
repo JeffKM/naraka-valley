@@ -53,8 +53,13 @@ const SPAWN_TILE := Vector2i(20, 21)      # 도착 지점
 @onready var ground: TileMapLayer = $Ground
 @onready var player: CharacterBody2D = $Player
 @onready var readout: Label = $CanvasLayer/Readout
+@onready var clock: GameClock = $Clock                     # T1.5 시계
+@onready var clock_label: Label = $CanvasLayer/ClockLabel
+@onready var sleep_prompt: Label = $CanvasLayer/SleepPrompt
+@onready var fade: ColorRect = $CanvasLayer/Fade
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
+var _sleeping := false  # T1.5 취침 연출 중이면 이동·입력 잠금
 
 func _ready() -> void:
 	ground.tile_set = _build_tileset()
@@ -62,6 +67,7 @@ func _ready() -> void:
 	_paint_grid()
 	_place_labels()
 	_setup_player_and_camera()
+	_setup_clock()
 
 # ── TileSet 조립: 단색 블록 아틀라스 + WALL 충돌 ──────────────────────────
 func _build_tileset() -> TileSet:
@@ -178,11 +184,51 @@ func _setup_player_and_camera() -> void:
 	player.add_child(cam)
 	cam.make_current()
 
+# ── T1.5 하루 사이클 ──────────────────────────────────────────────────────
+func _setup_clock() -> void:
+	# 24:00에 도달하면(쓰러짐) 위치에 상관없이 강제 취침시킨다.
+	clock.collapsed.connect(_on_collapsed)
+
+func _on_collapsed() -> void:
+	_do_sleep()  # 어디서든 쓰러져 다음 날 아침으로
+
+# 취침 가능 조건: 집 구역 안 + 연출 중이 아님. 그레이박스라 침대 오브젝트 없이
+# '집에 있으면 잘 수 있다'로 단순화한다(에셋·가구는 Phase 2).
+func _can_sleep() -> bool:
+	return not _sleeping and _zone_at(player.global_position) == "집"
+
+func _do_sleep() -> void:
+	if _sleeping:
+		return
+	_sleeping = true
+	clock.running = false
+	player.set_physics_process(false)  # 연출 중 이동 잠금
+	player.velocity = Vector2.ZERO
+	sleep_prompt.visible = false
+	# 검은 화면으로 페이드 → 날짜 넘기기 → 다시 밝아짐. CanvasLayer라 카메라와 무관.
+	var tw := create_tween()
+	tw.tween_property(fade, "modulate:a", 1.0, 0.4)
+	tw.tween_callback(clock.sleep)       # day +1, 06:00 리셋
+	tw.tween_interval(0.3)
+	tw.tween_property(fade, "modulate:a", 0.0, 0.4)
+	tw.tween_callback(_on_sleep_done)
+
+func _on_sleep_done() -> void:
+	player.set_physics_process(true)
+	_sleeping = false
+
 func _process(_delta: float) -> void:
+	# 취침 입력: 집 안에서 Enter/Space(ui_accept)
+	if _can_sleep() and Input.is_action_just_pressed("ui_accept"):
+		_do_sleep()
+
 	var p := player.global_position
 	readout.text = "방향키 이동   구역: %s   위치(%d, %d)   FPS %d" % [
 		_zone_at(p), int(p.x), int(p.y), Engine.get_frames_per_second()
 	]
+	clock_label.text = "Day %d   %s   %s" % [clock.day, clock.clock_string(), clock.phase()]
+	# 집 안에서만 취침 안내를 띄운다(연출 중엔 숨김).
+	sleep_prompt.visible = _can_sleep()
 
 # ── 헬퍼 ──────────────────────────────────────────────────────────────────
 func _set_tile(x: int, y: int, id: int) -> void:
