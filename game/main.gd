@@ -132,6 +132,8 @@ const BANA_NIGHT_TILE := Vector2i(36, 5)
 @onready var bana: Bana = $Bana                             # T6.1 바나 NPC(밤 무대·그레이박스)
 @onready var mel_affinity: Affinity = $MelAffinity           # T5.2 멜 호감도(하트, affinity.gd 재사용)
 @onready var mel_affinity_label: Label = $CanvasLayer/MelAffinityLabel  # T5.2 멜 하트 HUD
+@onready var bana_affinity: Affinity = $BanaAffinity         # T6.2 바나 호감도(하트, affinity.gd 재사용)
+@onready var bana_affinity_label: Label = $CanvasLayer/BanaAffinityLabel  # T6.2 바나 하트 HUD
 @onready var cafe: Cafe = $Cafe                               # T5.4 카페 운영(손님 서빙·일일 정산)
 @onready var cafe_label: Label = $CanvasLayer/CafeLabel       # T5.4 카페 영업 상태·매출 HUD
 @onready var cafe_summary_panel: ColorRect = $CanvasLayer/CafeSummaryPanel  # T5.4 마감 정산 팝업 배경
@@ -223,6 +225,10 @@ func _ready() -> void:
 	# T5.2 멜 선호 선물은 피안화(미호=영혼 호박과 선물 경제 분산). affinity.gd 인스턴스
 	# 하나를 멜용으로 재사용하되, 이 한 값만 멜로 바꾼다(곡선 상수는 미호와 공유).
 	mel_affinity.preferred_crop = CropCatalog.PIANHWA
+	# T6.2 바나 선호 선물은 혼령초(미호=영혼 호박·멜=피안화와 분리 — 세 작물에 선물 경제를
+	# 고르게 분산. 남은 세 번째 작물이라 자연 확정). 같은 affinity.gd 인스턴스를 바나용으로
+	# 재사용하되 이 한 값만 바꾼다(하트 곡선 상수는 미호·멜과 공유 — miho-heart-arc).
+	bana_affinity.preferred_crop = CropCatalog.HONRYEONGCHO
 	dialogue.changed.connect(_on_dialogue_changed)
 	dialogue.finished.connect(_on_dialogue_finished)
 	# T5.4 카페 영업 마감(19시) → 일일 정산 팝업. 손님 상태 변화는 매 프레임 _draw에서
@@ -527,6 +533,7 @@ func _save_game() -> void:
 		"inventory": inventory.to_save(),
 		"affinity": affinity.to_save(),
 		"mel_affinity": mel_affinity.to_save(),
+		"bana_affinity": bana_affinity.to_save(),
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
 		"selected_crop": _selected_crop,
@@ -555,6 +562,8 @@ func _load_game() -> void:
 		affinity.load_save(data["affinity"])
 	if data.has("mel_affinity"):
 		mel_affinity.load_save(data["mel_affinity"])
+	if data.has("bana_affinity"):
+		bana_affinity.load_save(data["bana_affinity"])
 	if data.has("onboarding"):
 		onboarding.load_save(data["onboarding"])
 	# T4.2 슬라이스 점수판 누적(거둔 영혼 총수). 손상 방어로 음수는 0으로 자른다.
@@ -688,10 +697,14 @@ func _process(delta: float) -> void:
 	if facing_okja and Input.is_action_just_pressed("interact"):
 		_start_okja_dialogue()
 		return
-	# T6.1 바나 대화: 밤 무대의 바나를 바라보며 E면 대사를 연다(옥자 일상 대화와 같은 결 —
-	# 호감도·선물은 T6.2 몫). 좌석·밭 동작보다 먼저 처리하고 return해 대화가 우선한다.
+	# T6.1 바나 대화: 밤 무대의 바나를 바라보며 E면 대사를 연다. 좌석·밭 동작보다 먼저
+	# 처리하고 return해 대화가 우선한다. T6.2 선물: 바라볼 때 G로 선택 작물 수확물 1개를
+	# 건넨다(호감도↑, 하루 1회 — 미호·멜 선물과 같은 결).
 	if facing_bana and Input.is_action_just_pressed("interact"):
 		_start_bana_dialogue()
+		return
+	if facing_bana and Input.is_action_just_pressed("gift_item"):
+		_try_bana_gift()
 		return
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("interact"):
 		_try_farm_action()
@@ -742,6 +755,10 @@ func _process(delta: float) -> void:
 	mel_affinity_label.text = "멜 %s %d/%d" % [
 		mel_affinity.heart_bar(), mel_affinity.hearts(), Affinity.MAX_HEARTS
 	]
+	# T6.2 바나 호감도 HUD: 하트 막대 + 단계 수(미호·멜과 같은 표기, 캐릭터만 다름).
+	bana_affinity_label.text = "바나 %s %d/%d" % [
+		bana_affinity.heart_bar(), bana_affinity.hearts(), Affinity.MAX_HEARTS
+	]
 	# T3.4 여우불 도움 HUD: 현재 하트로 파생한 여우불 세기(관계→농사 보상을 눈에 보이게).
 	foxfire_label.text = Foxfire.summary(affinity.hearts())
 	# T5.4 카페 영업 HUD: 영업창(15–19시) 동안만 떠 현재 매출·서빙 인원을 보여준다
@@ -776,9 +793,9 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 대화"
 	elif facing_bana:
-		# T6.1 바나(밤 무대)를 바라볼 때: 대화만(호감도·선물·막기는 T6.2+ — 지금은 배치+대사).
+		# T6.1/T6.2 바나(밤 무대)를 바라볼 때: 대화·선물 한 줄 안내(막기는 T6.4+ 몫).
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 대화"
+		interact_prompt.text = "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif facing_mel:
 		# T5.1/T5.2/T5.3 멜을 바라볼 때: 대화·출하대·선물 한 줄 안내(멜이 카운터 얼굴).
 		interact_prompt.visible = true
@@ -1014,20 +1031,38 @@ func _start_okja_dialogue() -> void:
 	_talking_to = okja.display_name()
 	dialogue.start(okja.display_name(), lines)
 
-# ── T6.1 바나(밤 무대) 대화 ─────────────────────────────────────────────────
+# ── T6.1/T6.2 바나(밤 무대) 대화 ────────────────────────────────────────────
 # 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다(완료기준). 미호·멜·옥자 대화와 같은
 # 결 — 대사는 바나가 들고 오고(ADR-0005), 진행·열림은 DialogueBox가, 표시·이동잠금은 main이
-# 맡는다. 호감도·일일 게이팅은 T6.2 몫이라 지금은 인자 없이 인트로 한 묶음을 들려준다.
-# _talking_to를 바나로 두지만, 바나는 온보딩 화자(옥자=NOTICE·미호=MEET_MIHO)가 아니라
-# _on_dialogue_finished의 두 분기를 모두 비껴가 온보딩을 전진시키지 않는다(멜과 같은 결 — 오전진 0).
+# 맡는다. T6.2 일일 대화: 오늘 첫 대화면 바나 호감도를 소폭 올린다(하루 1회, BanaAffinity가
+# 게이팅). 보상 여부(first_today)와 현재 하트 단계로 어떤 대사를 들려줄지 바나가 고른다
+# (_start_dialogue·_start_mel_dialogue 대칭). _talking_to를 바나로 두지만, 바나는 온보딩 화자
+# (옥자=NOTICE·미호=MEET_MIHO)가 아니라 _on_dialogue_finished의 두 분기를 모두 비껴가 온보딩을
+# 전진시키지 않는다(멜과 같은 결 — 오전진 0).
 func _start_bana_dialogue() -> void:
-	var lines := bana.lines()
+	var first_today := bana_affinity.daily_talk(clock.day)
+	var lines := bana.lines(bana_affinity.hearts(), first_today)
 	if lines.is_empty():
 		return
 	player.set_physics_process(false)  # 대화 중 이동 잠금(미호·멜·옥자 대화와 같은 결)
 	player.velocity = Vector2.ZERO
 	_talking_to = bana.display_name()
 	dialogue.start(bana.display_name(), lines)
+
+# T6.2 바나 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 바나 호감도를 올린다. 선호
+# 작물(혼령초)이면 더 크게 오른다. 하루 1회만(BanaAffinity가 게이팅). _try_mel_gift와 대칭.
+func _try_bana_gift() -> void:
+	var crop := _selected_crop
+	if inventory.harvest_count(crop) <= 0:
+		_notice("%s 수확물이 없다" % CropCatalog.name_of(crop))
+		return
+	if not bana_affinity.can_gift(clock.day):
+		_notice("오늘은 이미 바나에게 선물했다")
+		return
+	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
+	var gained := bana_affinity.gift(crop, clock.day)
+	var tag := "(선호!) " if bana_affinity.is_preferred(crop) else ""
+	_notice("바나에게 %s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
 
 # T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
 # 작물(피안화)이면 더 크게 오른다. 하루 1회만(MelAffinity가 게이팅). _try_gift와 대칭.

@@ -66,6 +66,9 @@ script = ExtResource("15")
 [node name="Bana" type="Node2D" parent="."]
 script = ExtResource("16")
 
+[node name="BanaAffinity" type="Node" parent="."]
+script = ExtResource("11")
+
 [node name="Onboarding" type="Node" parent="."]
 script = ExtResource("13")
 
@@ -164,6 +167,14 @@ offset_left = 4.0
 offset_top = 74.0
 offset_right = 200.0
 offset_bottom = 86.0
+theme_override_font_sizes/font_size = 8
+text = "..."
+
+[node name="BanaAffinityLabel" type="Label" parent="CanvasLayer"]
+offset_left = 4.0
+offset_top = 84.0
+offset_right = 200.0
+offset_bottom = 96.0
 theme_override_font_sizes/font_size = 8
 text = "..."
 

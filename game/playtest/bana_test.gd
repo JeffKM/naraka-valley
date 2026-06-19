@@ -1,8 +1,9 @@
 extends SceneTree
-# T6.1 임시 헤드리스 단위검증 — 바나 NPC 밤 무대 배치 + 대화 텍스트박스를 실제 main 씬을
-# 띄워 검증한다(ephemeral). npc_station_test.gd와 같은 결의 단언 하네스 — 배치/가시성·대화
-# 라우팅이 main.gd(씬 오케스트레이션)에 살아 단독 노드로 떼어 검증할 수 없어, main.tscn을
-# 인스턴스화해 시각·단계를 직접 흘려 분기를 굴린다.
+# T6.1/T6.2 임시 헤드리스 단위검증 — 바나 NPC 밤 무대 배치 + 대화 텍스트박스(T6.1)와
+# 호감도(일일 대화·선물·하트별 대사·세이브, T6.2)를 실제 main 씬을 띄워 검증한다(ephemeral).
+# npc_station_test.gd와 같은 결의 단언 하네스 — 배치/가시성·대화 라우팅이 main.gd(씬
+# 오케스트레이션)에 살아 단독 노드로 떼어 검증할 수 없어, main.tscn을 인스턴스화해 시각·
+# 단계·호감도를 직접 흘려 분기를 굴린다.
 # 실행: godot --headless --path game --script res://playtest/bana_test.gd
 
 var _fail := 0
@@ -23,7 +24,7 @@ func _initialize() -> void:
 	await _run_checks()
 
 func _run_checks() -> void:
-	print("══ T6.1 바나 NPC 밤 무대 배치 + 대화 단위검증 ══")
+	print("══ T6.1/T6.2 바나 NPC 밤 무대 + 호감도(대화·선물) 단위검증 ══")
 	# 결정적 검증을 위해 기존 세이브를 비우고 시작한다(신규 시작 = 통보 단계).
 	var cleaner := SaveManager.new()
 	cleaner.delete_save()
@@ -99,6 +100,76 @@ func _run_checks() -> void:
 	var m3: Node = await _new_main()  # _ready가 자동 복원 후 _update_bana_station 호출
 	_check("⑦ 밤 시각 복원 시 바나가 밤 무대에 보임", m3.bana.visible)
 	m3.free()
+
+	# ══════════════ T6.2 호감도(일일 대화 · 선물 · 하트별 대사 · 세이브) ══════════════
+	var m4: Node = await _new_main()
+	# ── ⑧ 선호 작물 분화: 바나=혼령초(미호=영혼 호박·멜=피안화와 분리, affinity.gd 인스턴스
+	#     하나에 preferred_crop만 바꿔 재사용). 시작 호감도는 0 ──
+	_check("⑧ 바나 선호 작물이 혼령초", m4.bana_affinity.preferred_crop == CropCatalog.HONRYEONGCHO)
+	_check("⑧b 바나 호감도 시작 0", m4.bana_affinity.points == 0)
+
+	# ── ⑨ 일일 대화: 오늘 첫 대화면 호감도 소폭↑, 같은 날 두 번째는 점수 불변(하루 1회 게이팅) ──
+	m4.clock.day = 1
+	var p0: int = m4.bana_affinity.points
+	m4._start_bana_dialogue()
+	_check("⑨ 첫 대화로 호감도가 오른다", m4.bana_affinity.points == p0 + Affinity.DAILY_TALK_POINTS)
+	_check("⑨b 오늘은 더 못 받는다(일일 게이팅)", not m4.bana_affinity.can_daily_talk(1))
+	var g1 := 0
+	while m4.dialogue.is_open() and g1 < 50:
+		m4.dialogue.advance()
+		g1 += 1
+	var p1: int = m4.bana_affinity.points
+	m4._start_bana_dialogue()  # 같은 날 두 번째 대화
+	_check("⑨c 같은 날 두 번째 대화는 호감도 불변", m4.bana_affinity.points == p1)
+	var g2 := 0
+	while m4.dialogue.is_open() and g2 < 50:
+		m4.dialogue.advance()
+		g2 += 1
+
+	# ── ⑩ 선물: 선호(혼령초)는 큰 폭, 비선호는 작은 폭. 하루 1회 게이팅, 막힌 선물은 무소모 ──
+	m4.clock.day = 2
+	m4.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 1)
+	m4.inventory.add_harvest(CropCatalog.PIANHWA, 1)
+	m4._selected_crop = CropCatalog.HONRYEONGCHO
+	var pg0: int = m4.bana_affinity.points
+	m4._try_bana_gift()
+	var pref_gain: int = m4.bana_affinity.points - pg0
+	_check("⑩ 선호(혼령초) 선물로 호감도가 크게 오른다", pref_gain == Affinity.GIFT_PREFERRED_POINTS)
+	_check("⑩b 선물한 혼령초 1개가 소모됨", m4.inventory.harvest_count(CropCatalog.HONRYEONGCHO) == 0)
+	m4._selected_crop = CropCatalog.PIANHWA
+	var pg1: int = m4.bana_affinity.points
+	m4._try_bana_gift()  # 같은 날 두 번째 선물
+	_check("⑩c 같은 날 두 번째 선물은 막힌다", m4.bana_affinity.points == pg1)
+	_check("⑩d 막힌 선물은 작물을 소모하지 않음", m4.inventory.harvest_count(CropCatalog.PIANHWA) == 1)
+	m4.clock.day = 3  # 다음 날: 비선호(피안화) 선물
+	var pg2: int = m4.bana_affinity.points
+	m4._try_bana_gift()
+	var normal_gain: int = m4.bana_affinity.points - pg2
+	_check("⑩e 비선호 작물 선물은 작은 폭", normal_gain == Affinity.GIFT_POINTS)
+	_check("⑩f 선호 선물이 일반 선물보다 큼", pref_gain > normal_gain)
+	m4.free()
+
+	# ── ⑪ 하트별 대사 분기: ♡0 인트로 / ♡2–3 밤 경비 속죄 / ♡4+ '목격' 조각이 서로 다르고,
+	#     ♡4+엔 옥자 목격 떡밥이 깔린다(미호·멜과 같은 틀, 바나=목격 각도 ADR-0005) ──
+	var b2 := Bana.new()
+	var intro := b2.lines(0, true)
+	var warming := b2.lines(2, true)
+	var fact := b2.lines(4, true)
+	_check("⑪ ♡0·♡2·♡4 대사 묶음이 서로 다르다", intro != warming and warming != fact and intro != fact)
+	_check("⑪b ♡4+ '목격' 조각에 옥자가 등장한다(봉인 죄목 떡밥)", "\n".join(fact).contains("옥자"))
+	# 같은 날 두 번째(first_today=false)는 하트와 무관하게 짧은 재대화 한 줄.
+	_check("⑪c 재대화는 하트 무관 한 줄", b2.lines(4, false).size() == 1)
+	b2.free()
+
+	# ── ⑫ 세이브 라운드트립: 바나 호감도 점수가 저장·복원된다(SaveManager 불변, 한 조각 추가) ──
+	var m5: Node = await _new_main()
+	m5.bana_affinity.points = 95  # ♡2(POINTS_PER_HEART=40 → 95/40=2)
+	m5._save_game()
+	m5.free()
+	var m6: Node = await _new_main()  # _ready가 자동 복원
+	_check("⑫ 바나 호감도 점수가 세이브에 저장·복원됨", m6.bana_affinity.points == 95)
+	_check("⑫b 복원된 하트 단계도 일치(♡2)", m6.bana_affinity.hearts() == 2)
+	m6.free()
 
 	# 테스트 잔여 세이브 정리(다른 실행·플레이에 새지 않게).
 	cleaner.delete_save()
