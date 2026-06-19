@@ -69,13 +69,21 @@ const HOUSE_RECT := Rect2i(3, 4, 7, 6)    # x3..9,  y4..9
 const FARM_RECT := Rect2i(14, 4, 14, 11)  # x14..27, y4..14
 const CAFE_RECT := Rect2i(30, 4, 8, 7)    # x30..37, y4..10
 const SPAWN_TILE := Vector2i(20, 21)      # 도착 지점
-# T3.2 미호가 서 있는 칸 — 밭 남쪽 입구(도착→복도→밭 동선의 첫 밭 칸). 길에서 위를
-# 바라보면 바로 미호를 향하게 되어, 멘토가 밭 문 앞에서 맞이하는 자연스러운 첫 만남.
-# 이 칸은 농사 대상에서 제외한다(_is_farmable). NPC와 밭 동작이 겹치지 않게.
-const MIHO_TILE := Vector2i(20, 14)
-# T4.1 옥자가 오프닝 통보 때 서는 칸 — 스폰(20,21) 바로 위. 도착하자마자 옥자를
-# 마주보게 된다. 통보가 끝나면 옥자는 숨는다(CONTEXT '옥자': 오프닝에 잠깐 등장).
-const OKJA_TILE := Vector2i(20, 20)
+# T3.2 미호 밭 자리 — 밭 남쪽 입구(도착→복도→밭 동선의 첫 밭 칸). 길에서 위를 바라보면
+# 바로 미호를 향하게 되어, 멘토가 밭 문 앞에서 맞이하는 자연스러운 첫 만남. 이 칸은 미호가
+# 카페로 출근한 오후에도 농사 대상에서 제외한다(_is_farmable — 돌아올 자리는 비워 둔다).
+const MIHO_FIELD_TILE := Vector2i(20, 14)
+# T5.6 미호 카페 출근 자리 — 카페 뒷벽 줄(y=5)에서 멜(33,5) 오른쪽. 영업 시작(15시)부터
+# 미호가 여기로 출근해 직원이 오후 카페에 모이는 무대를 만든다(ADR-0007). 카페 바닥이라
+# 농사 대상이 아니고(밭과 안 겹침), 좌석(y=7)·문(33,10)·멜·옥자 칸과도 갈린다.
+const MIHO_CAFE_TILE := Vector2i(35, 5)
+# T4.1 옥자가 오프닝 통보 때 서는 칸 — 스폰(20,21) 바로 위. 도착하자마자 옥자를 마주본다.
+# 통보가 끝나면 옥자는 이 자리에서 사라지고 카페(OKJA_CAFE_TILE)로 상주를 옮긴다(T5.6).
+const OKJA_INTRO_TILE := Vector2i(20, 20)
+# T5.6 옥자 카페 상주 자리 — 카페 뒷벽 줄(y=5)에서 멜(33,5) 왼쪽. 통보를 마친 뒤(NOTICE
+# 단계 지남) 여기로 옮겨 매일 보는 사장이 된다(풀 관계 트랙 없음, ADR-0005). 멜(33,5)·
+# 미호 출근 자리(35,5)와 한 줄에 나란히 서고, 좌석·문 동선과는 칸이 갈린다.
+const OKJA_CAFE_TILE := Vector2i(31, 5)
 # T5.1 멜이 서 있는 칸 — 카페 안 뒷벽 가운데(카운터 자리). 카페 문(33,10)으로 들어와
 # 위로 올라오면 바로 멜을 마주본다. 카페 바닥이라 농사 대상이 아니고(밭과 안 겹침),
 # 카페 출하대(T3.1)도 멜이 카운터 얼굴이라 멜을 바라볼 때만 연다(T5.3 — 무인 카운터
@@ -130,6 +138,11 @@ const CUST := Color(0.55, 0.42, 0.50)  # 손님 그레이박스(회색 기조 + 
 var _grid: Array = []  # _grid[y][x] = 타일 id
 var _sleeping := false  # T1.5 취침 연출 중이면 이동·입력 잠금
 
+# T5.6 미호가 지금 서 있는 칸(출퇴근으로 시간대마다 바뀐다 — 아침=밭, 15시부터=카페).
+# 말 걸기 판정(facing_miho)·농사 제외가 이 값을 따라간다. 시간에서 매 프레임 파생되는
+# 일시 상태라 세이브하지 않는다(다음 부팅 때 그 시각으로 다시 결정된다).
+var _miho_tile := MIHO_FIELD_TILE
+
 var _target := Vector2i(-1, -1)  # T2.1 바라보는 앞 칸(상호작용 대상)
 var _target_valid := false       # 그 칸이 밭(SOIL)이라 상호작용 가능한가
 
@@ -181,10 +194,13 @@ func _ready() -> void:
 	_place_labels()
 	_setup_player_and_camera()
 	_setup_clock()
-	# T3.2 미호를 밭 입구 칸 중앙에 세우고, 대사 진행 시그널을 패널·이동잠금에 연결한다.
-	miho.position = _tile_center_px(MIHO_TILE)
-	# T4.1 옥자를 스폰 앞 칸에 세우되 평소엔 숨긴다(오프닝 통보 때만 등장).
-	okja.position = _tile_center_px(OKJA_TILE)
+	# T3.2/T5.6 미호를 현재 시간대의 자리(아침=밭 / 15시부터=카페)에 세우고, 대사 진행
+	# 시그널을 패널·이동잠금에 연결한다. 초기 위치는 _miho_tile(기본 밭)로 두고, 로드 후
+	# 시각이 영업창이면 _update_miho_station이 카페로 옮긴다.
+	miho.position = _tile_center_px(_miho_tile)
+	# T4.1 옥자를 통보 자리에 세우되 평소엔 숨긴다(오프닝 통보 때만 등장). 통보를 마치면
+	# T5.6 _refresh_okja_station이 카페 상주 자리로 옮겨 다시 드러낸다.
+	okja.position = _tile_center_px(OKJA_INTRO_TILE)
 	okja.visible = false
 	# T5.1 멜을 카페 안 카운터 칸 중앙에 세운다(미호처럼 상시 상주, 항상 보임).
 	mel.position = _tile_center_px(MEL_TILE)
@@ -199,6 +215,12 @@ func _ready() -> void:
 	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다.
 	if saver.has_save():
 		_load_game()
+	# T5.6 복원 직후 NPC 상주/출근 상태를 현재(복원된) 진행·시각에 맞춘다. 통보를 이미
+	# 마친 세이브면 옥자가 카페에 보이고, 복원 시각이 영업창(15시+)이면 미호가 카페로 출근해
+	# 있다("껐다 켜도 그대로" — 직원 배치까지 재개에 맞는다). 둘 다 세이브 무상태(시각·단계
+	# 에서 파생)라 SaveManager는 불변이다(메모대로 세이브 통합은 멜 affinity 한 조각뿐).
+	_refresh_okja_station()
+	_update_miho_station()
 	# T4.2 이어받은 세이브가 이미 14일을 넘겼으면(15일째 아침) 바로 마무리 화면을 띄운다.
 	# 그 경우 온보딩 컷신은 띄우지 않는다(슬라이스가 끝났으므로).
 	if RunSummary.is_over(clock.day):
@@ -568,14 +590,21 @@ func _process(delta: float) -> void:
 	# T2.4 행동 한 번마다 혼력을 쓴다. 혼력이 바닥나면(can_act false) 행동이 막힌다.
 	# T3.1 심기엔 씨앗이 필요하고, 수확물은 인벤토리에 쌓인다(경제 순환의 양끝).
 	_update_target()
-	# T3.2 미호에게 말 걸기: 바라보는 칸이 미호 칸이면 E로 대화를 연다(밭 동작보다
-	# 우선 — 미호 칸은 농사 대상에서 빠져 있어 둘이 겹치지 않는다). facing_miho는 아래
-	# 하단 프롬프트에서도 재사용한다.
-	var facing_miho := not _sleeping and _target == MIHO_TILE
+	# T5.6 미호 출퇴근: 현재 시각에 맞춰 미호를 밭/카페 자리로 옮긴다(facing 판정 전에 갱신해
+	# 같은 프레임에 새 자리로 말 걸 수 있게 한다).
+	_update_miho_station()
+	# T3.2/T5.6 미호에게 말 걸기: 바라보는 칸이 미호의 현재 자리(_miho_tile — 아침=밭/
+	# 15시부터=카페)면 E로 대화를 연다(밭 동작보다 우선 — 미호 자리는 농사 대상에서 빠져
+	# 있어 둘이 겹치지 않는다). facing_miho는 아래 하단 프롬프트에서도 재사용한다.
+	var facing_miho := not _sleeping and _target == _miho_tile
 	# T5.1 멜에게 말 걸기: 바라보는 칸이 멜 칸이면 E로 대화를 연다. 멜은 카페 안에 서
 	# 있어, 카페 출하대(_process_shop)보다 먼저 처리하고 return해 대화가 우선한다
 	# (멜을 바라보면 대화, 안 바라보고 카페 안이면 출하대 — T5.3에서 멜 운영으로 통합).
 	var facing_mel := not _sleeping and _target == MEL_TILE
+	# T5.6 옥자(카페 상주)에게 말 걸기: 통보를 마친 뒤(NOTICE 단계 지남)에만 카페에 보인다.
+	# 호감도·선물·출하대 없는 메인 서사 앵커라(ADR-0005) E 일상 대화만 받는다.
+	var facing_okja := not _sleeping and okja.visible and onboarding.step > Onboarding.NOTICE \
+		and _target == OKJA_CAFE_TILE
 	# T5.4 카페 손님 시뮬레이션을 굴린다(연출 중 제외). 영업창(15–19시) 안에서만 손님이
 	# 오고 인내심이 돈다. 영업 중이면 인내심 바가 매 프레임 줄어드므로 다시 그린다.
 	# T5.5 멜 마진 주입(관계 곱셈기, ADR-0008): 멜 하트 → 서빙 단가 배수를 cafe에 얹는다.
@@ -595,6 +624,10 @@ func _process(delta: float) -> void:
 	# T3.3 미호 선물: 바라볼 때 G로 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회).
 	if facing_miho and Input.is_action_just_pressed("gift_item"):
 		_try_gift()
+		return
+	# T5.6 옥자 일상 대화: 카페 상주 옥자를 바라보며 E. 호감도·선물 없는 일상이라 G는 없다.
+	if facing_okja and Input.is_action_just_pressed("interact"):
+		_start_okja_dialogue()
 		return
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("interact"):
 		_try_farm_action()
@@ -668,12 +701,16 @@ func _process(delta: float) -> void:
 	# 집 안에서만 취침 안내를 띄운다(연출 중엔 숨김).
 	sleep_prompt.visible = _can_sleep()
 	# 하단 프롬프트(집은 sleep_prompt, 카페·밭은 interact_prompt — 구역이 달라 겹치지 않음).
-	# 우선순위: 패널이 열렸으면 패널이 대신하니 숨김 > 미호 말걸기 > 멜(대화·출하대·선물) > 밭 동작.
+	# 우선순위: 패널 > 미호 말걸기 > 옥자 말걸기 > 멜(대화·출하대·선물) > 손님 서빙 > 밭 동작.
 	if _shop_open:
 		interact_prompt.visible = false
 	elif facing_miho:
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
+	elif facing_okja:
+		# T5.6 옥자를 바라볼 때: 일상 대화만(호감도·선물·출하대 없음 — 매일 보는 사장).
+		interact_prompt.visible = true
+		interact_prompt.text = "[E] 대화"
 	elif facing_mel:
 		# T5.1/T5.2/T5.3 멜을 바라볼 때: 대화·출하대·선물 한 줄 안내(멜이 카운터 얼굴).
 		interact_prompt.visible = true
@@ -803,6 +840,26 @@ func _maybe_start_intro() -> void:
 	_talking_to = okja.display_name()
 	dialogue.start(okja.display_name(), okja.lines())
 
+# ── T5.6 NPC 상주/출퇴근 ────────────────────────────────────────────────────
+# 미호 출퇴근: 카페 영업 시작(15시, Cafe.OPEN_MIN)을 경계로 아침엔 밭, 오후엔 카페로
+# 자리를 옮긴다(하루 1회 전환 — 직원이 오후 카페에 모이는 무대, ADR-0007). 칸이 실제로
+# 바뀔 때만 위치를 옮긴다(매 프레임 호출되지만 전환은 하루 한 번뿐). 위치는 main이
+# 소유하므로(미호 메모) 여기서 칸을 정하고, facing/농사 제외는 _miho_tile을 따라간다.
+func _update_miho_station() -> void:
+	var t := MIHO_CAFE_TILE if clock.minutes >= Cafe.OPEN_MIN else MIHO_FIELD_TILE
+	if t != _miho_tile:
+		_miho_tile = t
+		miho.position = _tile_center_px(_miho_tile)
+
+# 옥자 상주: 오프닝 통보를 마친 뒤(NOTICE 단계를 지남)엔 카페 상주 자리에 드러낸다(매일
+# 보는 사장 — 풀 관계 트랙 없음, ADR-0005). 통보 단계(또는 세이브 없는 신규 시작)면 통보
+# 흐름(_maybe_start_intro)이 위치·표시를 관리하므로 여기선 손대지 않는다. 멱등이라 로드
+# 직후·통보 종료 양쪽에서 불려도 안전하다(세이브 무상태 — 단계에서 매번 파생).
+func _refresh_okja_station() -> void:
+	if onboarding.step > Onboarding.NOTICE:
+		okja.position = _tile_center_px(OKJA_CAFE_TILE)
+		okja.visible = true
+
 # ── T4.2 14일 슬라이스 종료 ─────────────────────────────────────────────────
 # 14일이 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리
 # 점수판을 띄운다. 멱등(_run_over 가드)이라 취침 종료·로드 양쪽에서 불려도 한 번만
@@ -866,6 +923,20 @@ func _start_mel_dialogue() -> void:
 	player.velocity = Vector2.ZERO
 	_talking_to = mel.display_name()
 	dialogue.start(mel.display_name(), lines)
+
+# ── T5.6 옥자(카페 상주) 일상 대화 ──────────────────────────────────────────
+# 통보 후 카페에 상주하는 옥자에게 말 걸면 일상 대사를 들려준다(미호·멜 대화와 같은 결).
+# 호감도·선물 없는 메인 서사 앵커라(ADR-0005) 일일 게이팅·점수 보상 없이 대사만 — 매번
+# 같은 묶음(미결의 죄 떡밥 톤)을 들려준다. 대화 종료(_on_dialogue_finished)에서 옥자 화자는
+# NOTICE 단계가 아니므로(상주는 통보를 지난 뒤) 온보딩을 전진시키지 않고 그냥 닫힌다.
+func _start_okja_dialogue() -> void:
+	var lines := okja.lines_resident()
+	if lines.is_empty():
+		return
+	player.set_physics_process(false)  # 대화 중 이동 잠금(미호·멜 대화와 같은 결)
+	player.velocity = Vector2.ZERO
+	_talking_to = okja.display_name()
+	dialogue.start(okja.display_name(), lines)
 
 # T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
 # 작물(피안화)이면 더 크게 오른다. 하루 1회만(MelAffinity가 게이팅). _try_gift와 대칭.
@@ -960,7 +1031,10 @@ func _on_dialogue_finished() -> void:
 	# 가르면 멜 대화가 미호 단계를 잘못 전진시킨다). 멜 대화는 온보딩과 무관하다.
 	if _talking_to == okja.display_name() and onboarding.step == Onboarding.NOTICE:
 		onboarding.notice_seen()
-		okja.visible = false  # 옥자는 통보를 끝내면 사라진다(오프닝에 잠깐 등장)
+		# T5.6 옥자는 통보를 끝내면 통보 자리에서 사라지고 카페로 상주를 옮긴다(이전엔 그냥
+		# 숨겼지만, 이제 매일 보는 사장으로 카페에 자리 잡는다 — _refresh_okja_station이
+		# NOTICE를 지난 단계를 보고 카페 자리에 다시 드러낸다).
+		_refresh_okja_station()
 	elif _talking_to == miho.display_name() and onboarding.step == Onboarding.MEET_MIHO:
 		onboarding.talked_to_miho()
 	_talking_to = ""
@@ -985,11 +1059,13 @@ func _update_target() -> void:
 		queue_redraw()  # 커서 위치/표시 갱신
 
 # 상호작용 가능한 칸 = 맵 안 + 밭 흙(SOIL). 길·집·카페·벽은 제외.
-# T3.2 미호가 선 칸은 사람 자리라 농사 대상에서 뺀다(말걸기와 밭 동작 충돌 방지).
+# T3.2/T5.6 미호 밭 자리는 사람 자리라 농사 대상에서 뺀다(말걸기와 밭 동작 충돌 방지).
+# 미호가 오후에 카페로 출근해 비어 있어도 이 자리는 계속 비워 둔다(돌아올 자리 — 작물을
+# 심어 미호와 겹치는 걸 막는다). 카페 자리(_miho_tile 카페값)는 SOIL이 아니라 자동 제외된다.
 func _is_farmable(t: Vector2i) -> bool:
 	if t.x < 0 or t.x >= MAP_W or t.y < 0 or t.y >= MAP_H:
 		return false
-	if t == MIHO_TILE:
+	if t == MIHO_FIELD_TILE:
 		return false
 	return _grid[t.y][t.x] == SOIL
 

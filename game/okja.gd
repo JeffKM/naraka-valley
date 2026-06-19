@@ -31,6 +31,17 @@ const LINES_INTRO := [
 	"농사는 미호가 가르칠 거다. 밭에 있으니 가서 말 걸어. …굶지는 마라.",
 ]
 
+# T5.6 — 통보 후 카페 상주 일상 대사. 옥자는 통보를 마치면 사라지지 않고 카페에 상주한다
+# (매일 보는 사장 — CONTEXT '옥자'). 다만 미호·멜과 달리 풀 관계 트랙이 없다(호감도 동료
+# 아님, ADR-0005): 점수 보상 없이 매번 같은 묶음을 들려주는 가벼운 일상이되, '미결의 죄'
+# 앵커 톤은 유지한다(옥자는 너를 알아본다 — 떡밥만 잇고 죄목은 끝까지 봉인). 통보 대사
+# (LINES_INTRO)와 같은 결로 캐릭터가 서사를 든다(미호 LINE_AGAIN처럼 일상은 가볍게).
+const LINES_RESIDENT := [
+	"장사는 좀 되나. …그 표정 보니 알 만하군. 천천히 익혀.",
+	"난 늘 여기 있다. 카페가 곧 나니까. 필요한 거 있으면 말 걸어.",
+	"넌 가끔 날 빤히 보더군. 기억날 듯 말 듯 한 얼굴이지? …됐다, 서두를 거 없어.",
+]
+
 # 대화창에 띄울 이름.
 func display_name() -> String:
 	return "옥자"
@@ -38,6 +49,11 @@ func display_name() -> String:
 # 오프닝에서 들려줄 통보 대사 줄들. 미호처럼 캐릭터가 서사를 든다(ADR-0005).
 func lines() -> PackedStringArray:
 	return PackedStringArray(LINES_INTRO)
+
+# T5.6 통보 후 카페에 상주할 때 말 걸면 들려줄 일상 대사 줄들. 호감도·선물 없는 일상이라
+# 하트 인자를 받지 않는다(미호/멜의 lines(hearts,...)와 갈림 — 옥자는 관계 트랙 없음).
+func lines_resident() -> PackedStringArray:
+	return PackedStringArray(LINES_RESIDENT)
 
 func _draw() -> void:
 	# 몸체: 발치 원점 기준 위로 16×32. 미호보다 어둡게(검은 마녀 차림)로 대비.
