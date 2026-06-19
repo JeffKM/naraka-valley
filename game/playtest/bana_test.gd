@@ -1,6 +1,6 @@
 extends SceneTree
-# T6.1/T6.2 임시 헤드리스 단위검증 — 바나 NPC 밤 무대 배치 + 대화 텍스트박스(T6.1)와
-# 호감도(일일 대화·선물·하트별 대사·세이브, T6.2)를 실제 main 씬을 띄워 검증한다(ephemeral).
+# T6.1/T6.2/T6.3/T6.4/T6.5 임시 헤드리스 단위검증 — 바나 NPC 밤 무대 배치·대화(T6.1)·호감도
+# (T6.2)·바 옵트인(T6.3)·막기/응대/이중 손실(T6.4)·이중 보호 축(T6.5)을 실제 main 씬으로 검증.
 # npc_station_test.gd와 같은 결의 단언 하네스 — 배치/가시성·대화 라우팅이 main.gd(씬
 # 오케스트레이션)에 살아 단독 노드로 떼어 검증할 수 없어, main.tscn을 인스턴스화해 시각·
 # 단계·호감도를 직접 흘려 분기를 굴린다.
@@ -213,6 +213,12 @@ func _run_checks() -> void:
 	var m9: Node = await _new_main()
 	m9.onboarding.step = Onboarding.MEET_MIHO
 	m9.clock.minutes = NightBar.OPEN_MIN + 60  # 20:00(밤 창)
+	# T6.4 배선은 *막기 실패→약탈* base 경로(♡0, 바나 잠듦)를 본다 — 직전 테스트가 남긴 세이브가
+	# 바나 ♡2로 복원되면 T6.5 자동 차단이 돌파를 대신 막아(약탈 0) base 경로가 가려지므로, 밤 바를
+	# 열기 전 호감도·seam을 ♡0 base로 고정한다(자동 차단 경로는 아래 T6.5 ㉕에서 별도 검증).
+	m9.bana_affinity.points = 0
+	m9.night_bar.raid_amount = NightBar.DEFAULT_RAID
+	m9.night_bar.auto_block = NightBar.DEFAULT_AUTO_BLOCK
 	m9._open_night_bar()
 	# ⑱ 막기: 잡귀를 깃들이고 _try_block → 즉시 격퇴(스폿 비움). main이 block 계약을 배선했다.
 	m9.night_bar.tick(NightBar.SPAWN_INTERVAL + 0.1, m9.clock.minutes)
@@ -234,6 +240,48 @@ func _run_checks() -> void:
 	_check("⑳b _try_night_serve → 밤 매출이 지갑에 들어온다", m9.wallet.gold == gold_before + NightBar.SERVE_PRICE)
 	_check("⑳c 응대한 좌석은 비고 밤 매출이 누적된다", not m9.night_bar.is_waiting(0) and m9.night_bar.tonight_revenue() == NightBar.SERVE_PRICE)
 	m9.free()
+
+	# ══════════════ T6.5 바나 이중 보호 축 (BanaGuard 매핑 + main 주입) ══════════════
+	# ㉠ 재고 방어(약탈량↓·자동 차단↑) · ㉡ 응대 보호(인내심↑). foxfire/cafe_margin 패턴(static
+	# 매핑·세이브 무상태·base 위 얹기). ♡0 = night_bar 기본값 = 바나 잠듦(평평≠막힘, ADR-0008).
+	# ── ㉑ BanaGuard 매핑 앵커: ♡0이면 세 축 모두 night_bar 기본값(바나 잠듦) ──
+	_check("㉑ ♡0 약탈량 = night_bar 기본값", BanaGuard.raid_amount(0) == NightBar.DEFAULT_RAID)
+	_check("㉑b ♡0 자동차단 = 0", BanaGuard.auto_block(0) == NightBar.DEFAULT_AUTO_BLOCK)
+	_check("㉑c ♡0 인내심 = night_bar 기본값", is_equal_approx(BanaGuard.patience_secs(0), NightBar.DEFAULT_PATIENCE))
+	_check("㉑d ♡0이면 바나 보호 잠듦", not BanaGuard.is_awake(0))
+	# ── ㉒ ㉠ 재고 방어: ♡↑ → 약탈량 단조 감소(하한 1) · 자동차단 단조 증가 ──
+	_check("㉒ ♡↑ 약탈량 단조 감소",
+		BanaGuard.raid_amount(5) <= BanaGuard.raid_amount(2) and BanaGuard.raid_amount(2) <= BanaGuard.raid_amount(0))
+	_check("㉒b 약탈량 하한 1(손실 방지지 무효화 아님 — 밤 긴장 유지)", BanaGuard.raid_amount(5) == BanaGuard.MIN_RAID)
+	_check("㉒c ♡↑ 자동차단 단조 증가",
+		BanaGuard.auto_block(5) >= BanaGuard.auto_block(2) and BanaGuard.auto_block(2) >= BanaGuard.auto_block(0) and BanaGuard.auto_block(5) > 0)
+	# ── ㉓ ㉡ 응대 보호: ♡↑ → 인내심 단조 증가, ♡>0이면 보호 깨어남 ──
+	_check("㉓ ♡↑ 인내심 단조 증가", BanaGuard.patience_secs(5) > BanaGuard.patience_secs(0))
+	_check("㉓b ♡1부터 보호 깨어남(인내심 축)", BanaGuard.is_awake(1))
+	_check("㉓c 범위 방어(음수·초과 clamp)",
+		BanaGuard.raid_amount(-3) == BanaGuard.raid_amount(0) and BanaGuard.auto_block(99) == BanaGuard.auto_block(Affinity.MAX_HEARTS))
+
+	# ── ㉔ main 주입: 바나 하트를 올리고 한 프레임 굴리면 night_bar seam에 BanaGuard 값이 얹힌다 ──
+	#     (cafe.margin과 같은 다리 — night_bar는 바나 호감도를 모르고 파라미터만 받는다.)
+	var m10: Node = await _new_main()
+	m10.onboarding.step = Onboarding.MEET_MIHO
+	m10.clock.minutes = NightBar.OPEN_MIN + 60        # 20:00(밤 창)
+	m10.bana_affinity.points = Affinity.MAX_POINTS    # ♡5(만렙)
+	await process_frame                                # main._process가 주입을 한 번 굴리게
+	var h5: int = m10.bana_affinity.hearts()
+	_check("㉔ 주입: night_bar.raid_amount = BanaGuard.raid_amount(하트)", m10.night_bar.raid_amount == BanaGuard.raid_amount(h5))
+	_check("㉔b 주입: night_bar.auto_block = BanaGuard.auto_block(하트)", m10.night_bar.auto_block == BanaGuard.auto_block(h5))
+	_check("㉔c 주입: night_bar.patience_secs = BanaGuard.patience_secs(하트)", is_equal_approx(m10.night_bar.patience_secs, BanaGuard.patience_secs(h5)))
+	# ── ㉕ 체감(end-to-end): ♡5에서 못 막은 돌파를 바나가 자동 차단해 재고가 안 줄어든다 ──
+	#     (open_bar가 현재 주입된 auto_block으로 이 밤 차단 횟수를 채운다.)
+	m10._open_night_bar()
+	m10.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 5)
+	var inv_before: int = m10.inventory.total_harvest()
+	m10.night_bar.tick(NightBar.SPAWN_INTERVAL + 0.1, m10.clock.minutes)
+	m10.night_bar.tick(NightBar.DEFAULT_APPROACH + 1.0, m10.clock.minutes)  # 안 막아 돌파 → 자동 차단
+	_check("㉕ ♡5 자동 차단으로 첫 돌파는 재고가 안 줄어듦(체감)",
+		m10.inventory.total_harvest() == inv_before and m10.night_bar.tonight_auto_blocked() >= 1)
+	m10.free()
 
 	# 테스트 잔여 세이브 정리(다른 실행·플레이에 새지 않게).
 	cleaner.delete_save()

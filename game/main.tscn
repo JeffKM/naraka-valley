@@ -200,6 +200,15 @@ offset_bottom = 122.0
 theme_override_font_sizes/font_size = 8
 text = "..."
 
+[node name="BanaGuardLabel" type="Label" parent="CanvasLayer"]
+visible = false
+offset_left = 4.0
+offset_top = 120.0
+offset_right = 316.0
+offset_bottom = 132.0
+theme_override_font_sizes/font_size = 8
+text = "..."
+
 [node name="ShopPanel" type="ColorRect" parent="CanvasLayer"]
 visible = false
 offset_left = 60.0
