@@ -578,6 +578,11 @@ func _process(delta: float) -> void:
 	var facing_mel := not _sleeping and _target == MEL_TILE
 	# T5.4 카페 손님 시뮬레이션을 굴린다(연출 중 제외). 영업창(15–19시) 안에서만 손님이
 	# 오고 인내심이 돈다. 영업 중이면 인내심 바가 매 프레임 줄어드므로 다시 그린다.
+	# T5.5 멜 마진 주입(관계 곱셈기, ADR-0008): 멜 하트 → 서빙 단가 배수를 cafe에 얹는다.
+	# foxfire가 farm.advance_day(accel,reach)로 하트를 흘려넣는 것과 같은 다리 — cafe는
+	# margin 파라미터만 받고 멜 호감도를 모른다(디커플링). 매 프레임 파생해 HUD 단가·
+	# serve_price가 항상 현재 하트를 반영한다(♡0 ×1.0 base → ♡5 ×2.0, 평평≠막힘).
+	cafe.margin = CafeMargin.margin(mel_affinity.hearts())
 	if not _sleeping:
 		cafe.tick(delta, clock.minutes)
 	if cafe.is_open():
@@ -646,8 +651,11 @@ func _process(delta: float) -> void:
 	# (오후 슬롯에 "지금 카페 시간"이 눈에 보이게 — 시간 희소성 피드백).
 	cafe_label.visible = cafe.is_open()
 	if cafe.is_open():
-		cafe_label.text = "카페 영업 중 (~19:00) · 매출 %d골드 · 손님 %d명 (단가 %d)" % [
-			cafe.today_revenue(), cafe.today_served(), cafe.serve_price()
+		# T5.5 단가에 멜 마진 배수를 붙여 노출 — 멜과 친해질수록 같은 서빙이 비싸지는 걸
+		# 영업 중에 눈으로 체감하게 한다(관계=곱셈기, ADR-0008). ♡0이면 ×1.0(base rate).
+		cafe_label.text = "카페 영업 중 (~19:00) · 매출 %d골드 · 손님 %d명 (단가 %d ×%.1f)" % [
+			cafe.today_revenue(), cafe.today_served(), cafe.serve_price(),
+			CafeMargin.margin(mel_affinity.hearts())
 		]
 	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. 상점 패널이 떴으면 숨겨 겹침을 막는다
 	# (대화 중엔 위 early-return에서 이미 숨겼다). 완료(DONE) 후엔 문구가 ""라 사라진다.
