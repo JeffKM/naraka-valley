@@ -94,6 +94,12 @@ const MEL_TILE := Vector2i(33, 5)
 # 아니고(밭과 안 겹침), 멜·문 동선과도 칸이 갈린다. 인덱스 = Cafe._seats 인덱스(좌석 0..2).
 const SEAT_TILES := [Vector2i(31, 7), Vector2i(33, 7), Vector2i(35, 7)]
 const CUST := Color(0.55, 0.42, 0.50)  # 손님 그레이박스(회색 기조 + 옅은 자줏빛, NPC들과 구분)
+# T6.1 바나가 서는 밤 무대 칸 — 카페 뒷벽 직원 줄(옥자31·멜33·미호35,5) 맨 오른쪽 끝(미호
+# 옆, x37은 벽). 바나는 밤(빈 밤 슬롯 19시=Cafe.CLOSE_MIN)에만 드러나는 밤 무대 호스트라
+# (미호 출퇴근·옥자 상주 station 패턴) 낮엔 숨고 밤에만 보인다. 카페 바닥이라 농사 대상이
+# 아니고(밭과 안 겹침), 좌석(y=7)·문(33,10)·다른 직원 칸과도 칸이 갈린다. 밤 영업창
+# 옵트인(T6.3)·막기(T6.4)는 범위 밖 — T6.1은 배치 + 대사 텍스트박스만(ADR-0006 그레이박스 최소).
+const BANA_NIGHT_TILE := Vector2i(36, 5)
 
 @onready var ground: TileMapLayer = $Ground
 @onready var field_layer: TileMapLayer = $Field           # T2.1 밭 상태 오버레이
@@ -123,6 +129,7 @@ const CUST := Color(0.55, 0.42, 0.50)  # 손님 그레이박스(회색 기조 + 
 @onready var foxfire_label: Label = $CanvasLayer/FoxfireLabel  # T3.4 여우불 도움 HUD
 @onready var okja: Okja = $Okja                               # T4.1 옥자 NPC(오프닝 통보)
 @onready var mel: Mel = $Mel                                 # T5.1 멜 NPC(카페 운영·그레이박스)
+@onready var bana: Bana = $Bana                             # T6.1 바나 NPC(밤 무대·그레이박스)
 @onready var mel_affinity: Affinity = $MelAffinity           # T5.2 멜 호감도(하트, affinity.gd 재사용)
 @onready var mel_affinity_label: Label = $CanvasLayer/MelAffinityLabel  # T5.2 멜 하트 HUD
 @onready var cafe: Cafe = $Cafe                               # T5.4 카페 운영(손님 서빙·일일 정산)
@@ -209,6 +216,10 @@ func _ready() -> void:
 	okja.visible = false
 	# T5.1 멜을 카페 안 카운터 칸 중앙에 세운다(미호처럼 상시 상주, 항상 보임).
 	mel.position = _tile_center_px(MEL_TILE)
+	# T6.1 바나를 밤 무대 칸에 세우되 평소엔 숨긴다(밤에만 등장 — 미호 출퇴근·옥자 상주처럼
+	# 시각에서 파생되는 무상태 배치). 위치는 고정이고 가시성만 _update_bana_station이 토글한다.
+	bana.position = _tile_center_px(BANA_NIGHT_TILE)
+	bana.visible = false
 	# T5.2 멜 선호 선물은 피안화(미호=영혼 호박과 선물 경제 분산). affinity.gd 인스턴스
 	# 하나를 멜용으로 재사용하되, 이 한 값만 멜로 바꾼다(곡선 상수는 미호와 공유).
 	mel_affinity.preferred_crop = CropCatalog.PIANHWA
@@ -226,6 +237,9 @@ func _ready() -> void:
 	# 에서 파생)라 SaveManager는 불변이다(메모대로 세이브 통합은 멜 affinity 한 조각뿐).
 	_refresh_okja_station()
 	_update_miho_station()
+	# T6.1 복원 시각이 밤(19시+)이면 바나가 밤 무대에 이미 서 있도록 가시성을 맞춘다
+	# (옥자·미호와 같은 결 — 껐다 켜도 그대로). 통보 단계면 가드에 걸려 아직 안 보인다.
+	_update_bana_station()
 	# T4.2 이어받은 세이브가 이미 14일을 넘겼으면(15일째 아침) 바로 마무리 화면을 띄운다.
 	# 그 경우 온보딩 컷신은 띄우지 않는다(슬라이스가 끝났으므로).
 	if RunSummary.is_over(clock.day):
@@ -632,6 +646,9 @@ func _process(delta: float) -> void:
 	# T5.6 미호 출퇴근: 현재 시각에 맞춰 미호를 밭/카페 자리로 옮긴다(facing 판정 전에 갱신해
 	# 같은 프레임에 새 자리로 말 걸 수 있게 한다).
 	_update_miho_station()
+	# T6.1 바나 밤 등장: 현재 시각에 맞춰 밤 무대 가시성을 토글한다(밤이면 보이고 낮이면 숨김).
+	# facing 판정 전에 갱신해 같은 프레임에 밤이 오면 바로 말 걸 수 있게 한다(미호 station과 같은 결).
+	_update_bana_station()
 	# T3.2/T5.6 미호에게 말 걸기: 바라보는 칸이 미호의 현재 자리(_miho_tile — 아침=밭/
 	# 15시부터=카페)면 E로 대화를 연다(밭 동작보다 우선 — 미호 자리는 농사 대상에서 빠져
 	# 있어 둘이 겹치지 않는다). facing_miho는 아래 하단 프롬프트에서도 재사용한다.
@@ -644,6 +661,9 @@ func _process(delta: float) -> void:
 	# 호감도·선물·출하대 없는 메인 서사 앵커라(ADR-0005) E 일상 대화만 받는다.
 	var facing_okja := not _sleeping and okja.visible and onboarding.step > Onboarding.NOTICE \
 		and _target == OKJA_CAFE_TILE
+	# T6.1 바나(밤 무대)에게 말 걸기: 밤에 바나가 보일 때(bana.visible) 그 칸을 바라보면 E로
+	# 대화를 연다. 호감도·선물·막기(T6.2+)는 범위 밖이라 지금은 E 대화만(옥자 일상 대화와 같은 결).
+	var facing_bana := not _sleeping and bana.visible and _target == BANA_NIGHT_TILE
 	# T5.4 카페 손님 시뮬레이션을 굴린다(연출 중 제외). 영업창(15–19시) 안에서만 손님이
 	# 오고 인내심이 돈다. 영업 중이면 인내심 바가 매 프레임 줄어드므로 다시 그린다.
 	# T5.5 멜 마진 주입(관계 곱셈기, ADR-0008): 멜 하트 → 서빙 단가 배수를 cafe에 얹는다.
@@ -667,6 +687,11 @@ func _process(delta: float) -> void:
 	# T5.6 옥자 일상 대화: 카페 상주 옥자를 바라보며 E. 호감도·선물 없는 일상이라 G는 없다.
 	if facing_okja and Input.is_action_just_pressed("interact"):
 		_start_okja_dialogue()
+		return
+	# T6.1 바나 대화: 밤 무대의 바나를 바라보며 E면 대사를 연다(옥자 일상 대화와 같은 결 —
+	# 호감도·선물은 T6.2 몫). 좌석·밭 동작보다 먼저 처리하고 return해 대화가 우선한다.
+	if facing_bana and Input.is_action_just_pressed("interact"):
+		_start_bana_dialogue()
 		return
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("interact"):
 		_try_farm_action()
@@ -740,7 +765,7 @@ func _process(delta: float) -> void:
 	# 집 안에서만 취침 안내를 띄운다(연출 중엔 숨김).
 	sleep_prompt.visible = _can_sleep()
 	# 하단 프롬프트(집은 sleep_prompt, 카페·밭은 interact_prompt — 구역이 달라 겹치지 않음).
-	# 우선순위: 패널 > 미호 말걸기 > 옥자 말걸기 > 멜(대화·출하대·선물) > 손님 서빙 > 밭 동작.
+	# 우선순위: 패널 > 미호 말걸기 > 옥자 말걸기 > 바나 말걸기(밤) > 멜(대화·출하대·선물) > 손님 서빙 > 밭 동작.
 	if _shop_open:
 		interact_prompt.visible = false
 	elif facing_miho:
@@ -748,6 +773,10 @@ func _process(delta: float) -> void:
 		interact_prompt.text = "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif facing_okja:
 		# T5.6 옥자를 바라볼 때: 일상 대화만(호감도·선물·출하대 없음 — 매일 보는 사장).
+		interact_prompt.visible = true
+		interact_prompt.text = "[E] 대화"
+	elif facing_bana:
+		# T6.1 바나(밤 무대)를 바라볼 때: 대화만(호감도·선물·막기는 T6.2+ — 지금은 배치+대사).
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 대화"
 	elif facing_mel:
@@ -899,6 +928,14 @@ func _refresh_okja_station() -> void:
 		okja.position = _tile_center_px(OKJA_CAFE_TILE)
 		okja.visible = true
 
+# T6.1 바나 밤 등장: 밤(빈 밤 슬롯 19시, Cafe.CLOSE_MIN)에만 밤 무대에 드러난다(낮엔 숨김 —
+# 미호 출퇴근·옥자 상주처럼 시각에서 매 프레임 파생되는 무상태 배치). 통보(NOTICE) 도중엔
+# 숨겨 둔다(옥자 가드와 같은 결 — 오프닝 컷신 동안 밤 무대가 끼어들지 않게). 위치는 _ready에서
+# 한 번 고정했으므로 여기선 가시성만 토글한다. 밤 영업창 옵트인·잡귀(T6.3+)는 범위 밖이라,
+# 지금은 바나가 밤에 그냥 서 있어 말 걸 수 있을 뿐이다(T6.1 — 배치 + 대사 텍스트박스).
+func _update_bana_station() -> void:
+	bana.visible = clock.minutes >= Cafe.CLOSE_MIN and onboarding.step > Onboarding.NOTICE
+
 # ── T4.2 14일 슬라이스 종료 ─────────────────────────────────────────────────
 # 14일이 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리
 # 점수판을 띄운다. 멱등(_run_over 가드)이라 취침 종료·로드 양쪽에서 불려도 한 번만
@@ -976,6 +1013,21 @@ func _start_okja_dialogue() -> void:
 	player.velocity = Vector2.ZERO
 	_talking_to = okja.display_name()
 	dialogue.start(okja.display_name(), lines)
+
+# ── T6.1 바나(밤 무대) 대화 ─────────────────────────────────────────────────
+# 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다(완료기준). 미호·멜·옥자 대화와 같은
+# 결 — 대사는 바나가 들고 오고(ADR-0005), 진행·열림은 DialogueBox가, 표시·이동잠금은 main이
+# 맡는다. 호감도·일일 게이팅은 T6.2 몫이라 지금은 인자 없이 인트로 한 묶음을 들려준다.
+# _talking_to를 바나로 두지만, 바나는 온보딩 화자(옥자=NOTICE·미호=MEET_MIHO)가 아니라
+# _on_dialogue_finished의 두 분기를 모두 비껴가 온보딩을 전진시키지 않는다(멜과 같은 결 — 오전진 0).
+func _start_bana_dialogue() -> void:
+	var lines := bana.lines()
+	if lines.is_empty():
+		return
+	player.set_physics_process(false)  # 대화 중 이동 잠금(미호·멜·옥자 대화와 같은 결)
+	player.velocity = Vector2.ZERO
+	_talking_to = bana.display_name()
+	dialogue.start(bana.display_name(), lines)
 
 # T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
 # 작물(피안화)이면 더 크게 오른다. 하루 1회만(MelAffinity가 게이팅). _try_gift와 대칭.
