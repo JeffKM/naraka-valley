@@ -1,7 +1,11 @@
 extends SceneTree
-# T6.3 임시 헤드리스 단위검증 — night_bar.gd 계약을 게임 노드로 직접 검증한다(ephemeral).
-# cafe_test.gd와 같은 결의 단언 하네스. 핵심 검증: 잡귀는 *바를 연 밤(옵트인) 의 19–24시
-# 창* 안에서만 등장하고(완료기준 "바를 열 때만"), 안 열거나 일찍 자면 손실 0·밤 매출 0이다.
+# T6.3/T6.4 임시 헤드리스 단위검증 — night_bar.gd 계약을 게임 노드로 직접 검증한다(ephemeral).
+# cafe_test.gd와 같은 결의 단언 하네스. 핵심 검증:
+#  · T6.3: 잡귀는 *바를 연 밤(옵트인) 의 19–24시 창* 안에서만 등장하고, 안 열거나 일찍 자면
+#    손실 0·밤 매출 0이다.
+#  · T6.4: 막기(접근→block→격퇴 즉시 판정, 막기 해소 계약 {repelled, raided}) · 막기 실패→
+#    재고 약탈(돌파 시 _raided += raid_amount + resolved 발화) · 밤 손님 응대(serve→밤 매출) ·
+#    응대 실패→이탈(인내심 0→_left) · 이중 손실 분리 · 보호 seam(approach/patience/raid_amount).
 # 실행: godot --headless --path game --script res://playtest/night_bar_test.gd
 
 var _fail := 0
@@ -42,10 +46,11 @@ func _initialize() -> void:
 	_check("④b 활성 상태", b.is_active())
 	_check("④c 접근 바 잔량이 1 근처(막 등장)", b.approach_ratio(0) > 0.9)
 
-	# ── ⑤ 잡귀 접근(approach) 소진 → 스폿을 비운다(despawn). ★seam: 지금은 약탈 없이 사라짐 ──
-	#     (T6.4 막기가 여기에 "못 막으면 약탈"을 얹는다 — 지금은 _raided가 0으로 남는다)
+	# ── ⑤ 잡귀 접근(approach) 소진 → 막지 못하면 재고 약탈(T6.4가 ★seam을 채움) ──
+	#     (T6.3에선 약탈 없이 사라졌으나, T6.4 막기 실패→약탈이 여기에 얹혔다 — 자세한 돌파/
+	#      막기 분기는 아래 ⑬·⑭에서 검증. 여기선 "안 막으면 손실이 난다"만 확인.)
 	b.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)
-	_check("⑤ 접근 소진 시 약탈 없이 사라짐(★seam) — 손실 0", b.tonight_raided() == 0)
+	_check("⑤ 접근 소진까지 안 막으면 재고 약탈(★seam 채움)", b.tonight_raided() == NightBar.DEFAULT_RAID)
 
 	# ── ⑥ 열었어도 밤 창을 벗어나면(낮) 비활성 = 잡귀 안 깃듦 ──
 	var c := _new_bar()
@@ -58,7 +63,7 @@ func _initialize() -> void:
 	d.open_bar(NIGHT)
 	d.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)
 	var summary := {"fired": false, "raided": -1}
-	d.closed.connect(func(r): summary["fired"] = true; summary["raided"] = r)
+	d.closed.connect(func(r, _rev, _lft): summary["fired"] = true; summary["raided"] = r)
 	d.end_day()
 	_check("⑦ 열었던 밤은 end_day가 정산 요약을 쏨", summary["fired"])
 	_check("⑦b 자정 전 취침 시 약탈(손실) 0", summary["raided"] == 0)
@@ -69,7 +74,7 @@ func _initialize() -> void:
 	var e := _new_bar()
 	e.tick(5.0, NIGHT)  # 안 열고 밤을 보냄
 	var fired := {"v": false}
-	e.closed.connect(func(_r): fired["v"] = true)
+	e.closed.connect(func(_r, _rev, _lft): fired["v"] = true)
 	e.end_day()
 	_check("⑧ 안 연 밤은 end_day가 요약을 안 쏨(빈 밤)", not fired["v"])
 
@@ -92,7 +97,89 @@ func _initialize() -> void:
 	_check("⑪b 24:00은 밤 창 아님(경계 제외 — 강제 취침)", not g.is_window(NightBar.CLOSE_MIN))
 	_check("⑪c 낮(12:00)은 밤 창 아님", not g.is_window(DAY))
 
-	for n in [a, b, c, d, e, f, g]:
+	# ══════════════ T6.4 — 막기 + 막기↔응대 경쟁 + 이중 손실 ══════════════
+
+	# ── ⑫ 막기(block): 잡귀를 깃들이고 block → 막기 해소 계약 {repelled:true, raided:0}, 즉시 격퇴 ──
+	var h := _new_bar()
+	h.open_bar(NIGHT)
+	h.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)  # 잡귀 0 등장(접근 잔량 가득)
+	var events: Array = []
+	h.resolved.connect(func(r): events.append(r))
+	var res: Dictionary = h.block(0)
+	_check("⑫ block은 격퇴 성공 계약을 돌려준다", res["repelled"] == true and res["raided"] == 0)
+	_check("⑫b 막은 스폿의 잡귀는 사라진다", not h.is_threat(0))
+	_check("⑫c 격퇴도 resolved를 쏜다(다운스트림 계약 일관)", events.size() == 1 and events[0]["repelled"])
+	# ⑫d 막을 잡귀 없는 스폿 block은 헛 호출 방어({repelled:false, raided:0})
+	var empty: Dictionary = h.block(0)
+	_check("⑫d 빈 스폿 block은 헛 호출({repelled:false,raided:0})", not empty["repelled"] and empty["raided"] == 0)
+
+	# ── ⑬ 막기 실패 → 재고 약탈(돌파): 접근 소진까지 안 막으면 _raided += raid_amount + resolved 발화 ──
+	var k := _new_bar()
+	k.open_bar(NIGHT)
+	k.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)  # 잡귀 등장
+	var raids: Array = []
+	k.resolved.connect(func(r): raids.append(r))
+	k.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)  # 안 막고 접근 소진 → 돌파(약탈)
+	_check("⑬ 돌파 시 약탈량이 _raided에 쌓인다", k.tonight_raided() == NightBar.DEFAULT_RAID)
+	var had_breakthrough := raids.any(func(r): return not r["repelled"] and r["raided"] == NightBar.DEFAULT_RAID)
+	_check("⑬b 돌파는 막기 실패 계약 {repelled:false, raided>0}을 쏜다", had_breakthrough)
+
+	# ── ⑭ 막으면 약탈이 안 일어난다(접근 소진 전에 block → 손실 0) ──
+	var l := _new_bar()
+	l.open_bar(NIGHT)
+	l.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)
+	l.block(0)                                    # 접근 소진 전에 격퇴
+	l.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)  # 막았으니 이 스폿은 돌파 안 함
+	_check("⑭ 제때 막으면 그 잡귀 약탈은 0", l.tonight_raided() == 0)
+
+	# ── ⑮ raid_amount seam(★㉠): 약탈량을 키우면 돌파당 그만큼 약탈(T6.5 바나 보호가 줄임) ──
+	var n_bar := _new_bar()
+	n_bar.raid_amount = 3
+	n_bar.open_bar(NIGHT)
+	n_bar.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)
+	n_bar.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)
+	_check("⑮ raid_amount↑ → 돌파당 약탈량↑(★㉠ seam)", n_bar.tonight_raided() == 3)
+
+	# ── ⑯ 응대(serve): 바 손님이 앉고 serve → 정액 밤 매출, 좌석 비움(재료 무소모) ──
+	var o := _new_bar()
+	o.open_bar(NIGHT)
+	o.tick(NightBar.CUST_INTERVAL + 0.1, NIGHT)   # 손님 0 착석
+	_check("⑯ 열고 tick → 바 손님 등장", o.customer_count() >= 1 and o.is_waiting(0))
+	var earned := o.serve(0)
+	_check("⑯b serve는 정액 밤 매출을 돌려준다", earned == NightBar.SERVE_PRICE)
+	_check("⑯c 응대한 좌석은 비고 매출이 누적된다", not o.is_waiting(0) and o.tonight_revenue() == NightBar.SERVE_PRICE)
+	_check("⑯d 빈 좌석 serve는 0(헛 호출 방어)", o.serve(0) == 0)
+
+	# ── ⑰ 응대 실패 → 이탈(인내심 0): 안 받으면 손님이 떠난다(_left, 벌칙 없음 → 무막힘) ──
+	var q := _new_bar()
+	q.open_bar(NIGHT)
+	q.tick(NightBar.CUST_INTERVAL + 0.1, NIGHT)   # 손님 착석
+	q.tick(NightBar.DEFAULT_PATIENCE + 1.0, NIGHT)  # 안 받고 인내심 소진 → 이탈
+	_check("⑰ 인내심 소진 손님은 이탈한다(_left↑)", q.tonight_left() >= 1)
+	_check("⑰b 이탈해도 밤 매출은 0(벌칙 없음 — 무막힘)", q.tonight_revenue() == 0)
+
+	# ── ⑱ patience_secs seam(★㉡): 인내심을 키우면 더 오래 버틴다(T6.5 바나 응대 보호 자리) ──
+	var r2 := _new_bar()
+	r2.patience_secs = NightBar.DEFAULT_PATIENCE * 2.0
+	r2.open_bar(NIGHT)
+	r2.tick(NightBar.CUST_INTERVAL + 0.1, NIGHT)
+	r2.tick(NightBar.DEFAULT_PATIENCE + 1.0, NIGHT)  # 기본값이라면 떠났을 시간
+	_check("⑱ 인내심 파라미터↑ → 손님이 더 오래 버팀(★㉡ seam)", r2.is_waiting(0))
+
+	# ── ⑲ 이중 손실 분리: 약탈(재고/미래)과 이탈(매출/현재)은 서로 독립 누적 + end_day가 셋 다 정산 ──
+	var s2 := _new_bar()
+	s2.open_bar(NIGHT)
+	s2.tick(NightBar.CUST_INTERVAL + 0.1, NIGHT)   # 손님 착석
+	var served := s2.serve(0)                       # 한 명 응대(매출)
+	s2.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)  # 잡귀 등장
+	s2.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)  # 안 막아 약탈 + (남은 손님 이탈)
+	var night := {"raided": -1, "revenue": -1, "left": -1}
+	s2.closed.connect(func(rd, rv, lf): night["raided"] = rd; night["revenue"] = rv; night["left"] = lf)
+	s2.end_day()
+	_check("⑲ end_day 정산이 약탈·밤 매출·이탈을 함께 싣는다",
+		night["raided"] == NightBar.DEFAULT_RAID and night["revenue"] == served and night["left"] >= 1)
+
+	for n in [a, b, c, d, e, f, g, h, k, l, n_bar, o, q, r2, s2]:
 		n.free()
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])

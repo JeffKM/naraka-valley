@@ -242,10 +242,15 @@ func _ready() -> void:
 	# T5.4 카페 영업 마감(19시) → 일일 정산 팝업. 손님 상태 변화는 매 프레임 _draw에서
 	# 그리므로 changed는 따로 듣지 않는다(영업 중엔 _process가 queue_redraw로 바를 갱신).
 	cafe.closed.connect(_on_cafe_closed)
-	# T6.3 밤 바 마감(취침 = 밤의 자연스러운 끝, end_day가 쏨) → 밤 정산 요약. 잡귀 상태
+	# T6.3 밤 바 마감(취침 = 밤의 자연스러운 끝, end_day가 쏨) → 밤 정산 요약. 잡귀·손님 상태
 	# 변화는 카페 손님처럼 매 프레임 _draw에서 그리므로 changed는 따로 듣지 않는다(밤이면
-	# _process가 queue_redraw로 접근 바를 갱신). ★seam: 지금 정산은 약탈 0(막기·약탈은 T6.4).
+	# _process가 queue_redraw로 접근·인내심 바를 갱신).
 	night_bar.closed.connect(_on_night_closed)
+	# T6.4 막기 해소 계약(★ {repelled, raided}) → 이중 손실 ㉮ 적용. 잡귀가 돌파하면(막기 실패)
+	# resolved가 약탈량을 싣고 오고, main이 그만큼 낮에 쌓은 수확물을 덜어낸다(미래 자산 — 내일
+	# 카페가 굶음). night_bar는 재고를 모른 채 계약만 쏘고, '어떻게 격퇴했는지'도 모른다(디커플링,
+	# field.gd가 Foxfire 모르는 패턴 — Phase 3 전투가 구현만 교체해도 이 핸들러는 그대로).
+	night_bar.resolved.connect(_on_night_resolved)
 	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다.
 	if saver.has_save():
 		_load_game()
@@ -709,7 +714,13 @@ func _process(delta: float) -> void:
 	if night_bar.is_active():
 		queue_redraw()
 	# 바라보는 칸이 손님 좌석이면 그 좌석 인덱스(없으면 -1). 서빙 대상 판정·프롬프트에 쓴다.
+	# 낮 카페 손님(15–19시)·밤 바 손님(19–24시)이 같은 좌석 줄(y=7)을 시간대로 나눠 쓴다
+	# (둘은 시간이 겹치지 않아 한 번에 한쪽만 is_waiting — cafe/night_bar 활성으로 분기).
 	var facing_seat := SEAT_TILES.find(_target) if not _sleeping else -1
+	# T6.4 바라보는 칸이 밤 잡귀 스폿이면 그 스폿 인덱스(없으면 -1). 막기 대상 판정·프롬프트에 쓴다.
+	# 좌석 줄(y=7)·잡귀 스폿 줄(y=9)이 카페 통로(y=8)를 사이에 둬, 플레이어가 위를 보면 응대·
+	# 아래를 보면 막기 — 한 번에 한쪽만 마주본다(★ 막기↔응대 경쟁의 공간적 뿌리, ADR-0010 #4).
+	var facing_spot := NIGHT_SPOT_TILES.find(_target) if not _sleeping else -1
 	if facing_miho and Input.is_action_just_pressed("interact"):
 		_start_dialogue()
 		return
@@ -757,6 +768,20 @@ func _process(delta: float) -> void:
 		_try_serve(facing_seat)
 		return
 
+	# T6.4 막기: 밤에 잡귀가 깃든 스폿을 바라보며 E면 즉시 격퇴한다(접근→E→쫓아냄, 전투 엔진 0).
+	# block이 막기 해소 계약 {repelled, raided}를 돌려주고, 격퇴 성공은 손실 0이다. 카운터를
+	# 비우고 여기로 오는 동안 손님 인내심이 닳는 게 ★ 막기↔응대 경쟁이다(ADR-0010 #2·#4).
+	if facing_spot >= 0 and night_bar.is_threat(facing_spot) and Input.is_action_just_pressed("interact"):
+		_try_block(facing_spot)
+		return
+
+	# T6.4 밤 손님 응대: 밤에 바 손님이 앉은 좌석을 바라보며 E면 정액 밤 매출을 번다(현재 자산,
+	# 재료 무소모 — 미래 자산인 재고는 잡귀 약탈 쪽이 건드린다, ADR-0010 #5). 낮 카페 서빙과
+	# 같은 좌석 줄이지만 시간이 갈려(cafe 마감 후) 한 번에 한쪽만 is_waiting이다.
+	if facing_seat >= 0 and night_bar.is_waiting(facing_seat) and Input.is_action_just_pressed("interact"):
+		_try_night_serve(facing_seat)
+		return
+
 	# T5.3 멜 카페 출하대: 멜을 바라보며 F로 패널을 열고/닫고, 열린 동안 S로 수확물을
 	# 팔고 B로 씨앗을 산다(작은 순환을 닫는 곳). 멜이 카운터 얼굴이라 멜 앞에서만 열리고,
 	# 멜 앞을 벗어나면 자동으로 닫힌다(무인 카운터 제거 — 대화·선물과 한 접점으로 통합).
@@ -802,13 +827,17 @@ func _process(delta: float) -> void:
 			cafe.today_revenue(), cafe.today_served(), cafe.serve_price(),
 			CafeMargin.margin(mel_affinity.hearts())
 		]
-	# T6.3 밤 바 HUD: 밤 창(19–24시) 동안만 떠 옵트인 여부를 알린다. 안 열었으면 "바나에게
-	# 열 수 있다"(선택), 열었으면 영업 중 잡귀 수(밤이 선택적 고위험 루프임을 눈에 보이게).
+	# T6.3/T6.4 밤 바 HUD: 밤 창(19–24시) 동안만 떠 옵트인 여부를 알린다. 안 열었으면 "바나에게
+	# 열 수 있다"(선택), 열었으면 영업 중 잡귀 수·손님 수·밤 매출(막기↔응대 경쟁과 이중 손익을
+	# 눈에 보이게 — 잡귀를 막을지 손님을 받을지 한눈에 저울질하게 한다).
 	night_label.visible = not _sleeping and night_bar.is_window(clock.minutes) \
 		and onboarding.step > Onboarding.NOTICE
 	if night_label.visible:
 		if night_bar.is_opened():
-			night_label.text = "나라카 바 영업 중 (~24:00) · 잡귀 %d마리" % night_bar.threat_count()
+			night_label.text = "나라카 바 영업 중 (~24:00) · 밤 매출 %d골드 · 잡귀 %d마리 · 손님 %d명 · 약탈 %d개" % [
+				night_bar.tonight_revenue(), night_bar.threat_count(),
+				night_bar.customer_count(), night_bar.tonight_raided()
+			]
 		else:
 			night_label.text = "빈 밤 — 바나에게 [F]로 나라카 바를 열 수 있다 (옵트인)"
 	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. 상점 패널이 떴으면 숨겨 겹침을 막는다
@@ -846,11 +875,20 @@ func _process(delta: float) -> void:
 		# T5.1/T5.2/T5.3 멜을 바라볼 때: 대화·출하대·선물 한 줄 안내(멜이 카운터 얼굴).
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 대화   [F] 출하대   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
+	elif facing_spot >= 0 and night_bar.is_threat(facing_spot):
+		# T6.4 잡귀가 깃든 스폿을 바라볼 때: E로 막는다(즉시 격퇴). 막으러 오느라 카운터를
+		# 비운 사이 손님이 닳는 게 ★ 막기↔응대 경쟁의 비용이다(ADR-0010 #4).
+		interact_prompt.visible = true
+		interact_prompt.text = "[E] 막기 (잡귀 격퇴 · 재고 지킴)"
 	elif facing_seat >= 0 and cafe.is_waiting(facing_seat):
 		# T5.4 기다리는 손님을 바라볼 때: 재료가 있으면 서빙, 없으면 막힌 이유를 안내.
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 서빙 (+%d골드)" % cafe.serve_price() if _has_any_harvest() \
 			else "서빙할 재료 없음 — 수확물 필요"
+	elif facing_seat >= 0 and night_bar.is_waiting(facing_seat):
+		# T6.4 밤 바 손님을 바라볼 때: E로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
+		interact_prompt.visible = true
+		interact_prompt.text = "[E] 응대 (+%d골드)" % NightBar.SERVE_PRICE
 	else:
 		# 밭 칸을 바라볼 때만 [E] 안내(다음 동작 이름). 다 키운(물준) 칸이면 숨김.
 		# T2.4 혼력 바닥, T3.1 씨앗 없음이면 동작 대신 막힌 이유를 안내한다.
@@ -1111,18 +1149,63 @@ func _try_bana_gift() -> void:
 	_notice("바나에게 %s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
 
 # ── T6.3 나라카 바 옵트인 ────────────────────────────────────────────────────
-# 밤 창(19–24시)에 바나를 바라보며 F면 바를 연다 — 잡귀가 깃들기 시작하는 옵트인. 안 열면
+# 밤 창(19–24시)에 바나를 바라보며 F면 바를 연다 — 잡귀·손님이 깃들기 시작하는 옵트인. 안 열면
 # 밤은 빈 밤이라 잡귀도 손실도 없다(매일 세금 아님, ADR-0010 #6). open_bar가 창·중복을
-# 방어하므로(창 밖이면 false) 여기선 성공했을 때만 알린다. 막기·매출은 T6.4가 얹는다.
+# 방어하므로(창 밖이면 false) 여기선 성공했을 때만 알린다.
 func _open_night_bar() -> void:
 	if night_bar.open_bar(clock.minutes):
-		_notice("나라카 바를 열었다 — 잡귀가 밤에 깃든다")
+		_notice("나라카 바를 열었다 — 잡귀가 깃들고 손님이 든다")
 
-# T6.3 밤 창 마감(자정 도달 등 활성→비활성 전이) 밤 정산. ★seam: 지금 약탈은 늘 0(막기·
-# 약탈 메카닉은 T6.4) — "자정 전 취침 시 손실 0·밤 매출 0"의 구조적 보장을 한 줄로 알린다.
-# (cafe _on_cafe_closed와 같은 결 — 데이터/표시 디커플링, 여기선 가벼운 notice로.)
-func _on_night_closed(raided: int) -> void:
-	_notice("나라카 바 마감 · 약탈 %d개 · 밤 매출 0골드" % raided)
+# T6.4 밤 마감(취침 = 밤의 자연스러운 끝) 밤 정산. 이중 손실(약탈 재고·이탈 손님)과 밤 매출을
+# 한 줄로 보인다. 자정 전에 자거나 옵트인을 안 했으면 약탈·매출 모두 0이다(ADR-0010 #5·#6).
+func _on_night_closed(raided: int, revenue: int, left: int) -> void:
+	_notice("나라카 바 마감 · 밤 매출 %d골드 · 약탈 %d개 · 놓친 손님 %d명" % [revenue, raided, left])
+
+# T6.4 ★ 막기 해소 계약 소비(이중 손실 ㉮ — 막기 실패→재고 약탈). 잡귀가 돌파하면(resolved에
+# repelled=false) 약탈량만큼 낮에 쌓은 수확물을 덜어낸다 — *내일* 카페가 굶는 미래 자산 손실
+# (잡귀가 낮 농사 산물을 노리니 밤이 밭→재고→서빙 사슬에 묶인다, 직조). 격퇴 성공(repelled)은
+# 손실이 없어 흘려보낸다. night_bar는 '어떻게 격퇴했는지'도 재고가 무엇인지도 모른 채 계약만
+# 쏘고, 약탈의 실제 적용은 여기서 한다(디커플링 — Phase 3 전투가 막기 구현만 교체해도 불변).
+func _on_night_resolved(result: Dictionary) -> void:
+	if result.get("repelled", false):
+		return
+	var want: int = result.get("raided", 0)
+	if want <= 0:
+		return
+	var stolen := _raid_inventory(want)
+	if stolen > 0:
+		_notice("막지 못했다 — 잡귀가 재고 %d개를 약탈했다" % stolen)
+	else:
+		_notice("잡귀가 뚫었지만 약탈할 재고가 없었다")  # 무막힘(빈 재고면 잃을 것도 없다)
+
+# 보유 수확물을 앞에서부터(가장 싼 것부터) n개까지 덜어내고 실제 약탈량을 돌려준다. 정액
+# 서빙처럼 가장 싼 작물부터 가져간다(비싼 작물은 그래도 남을 확률↑ — 손실의 결을 서빙과 맞춤).
+# 재고가 모자라면 있는 만큼만 가져간다(무막힘 — 없는 재고는 잃지 않는다).
+func _raid_inventory(n: int) -> int:
+	var taken := 0
+	while taken < n:
+		var id := _cheapest_harvest()
+		if id == "":
+			break
+		inventory.take_harvest(id)
+		taken += 1
+	return taken
+
+# T6.4 막기: 바라보는 스폿의 잡귀를 즉시 격퇴한다. block이 막기 해소 계약 {repelled, raided}를
+# 돌려주고(성공이라 raided=0), 성공도 resolved를 쏘지만 손실이 없어 _on_night_resolved가 흘린다.
+# 여기선 격퇴 알림만(HP·무기 없는 얇은 방어 — 전투는 Phase 3 구현 교체, ADR-0010 #2·#8).
+func _try_block(spot: int) -> void:
+	var result := night_bar.block(spot)
+	if result.get("repelled", false):
+		_notice("잡귀를 쫓아냈다")
+
+# T6.4 밤 손님 응대: 바 손님을 응대해 정액 밤 매출을 즉시 번다(현재 자산). 카페 서빙과 달리
+# 재료를 소모하지 않는다(미래 자산인 재고는 잡귀 약탈 쪽 — ADR-0010 #5 현재/미래 분리).
+func _try_night_serve(seat: int) -> void:
+	var revenue := night_bar.serve(seat)
+	if revenue > 0:
+		wallet.earn(revenue)
+		_notice("밤 손님 응대 +%d골드" % revenue)
 
 # T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
 # 작물(피안화)이면 더 크게 오른다. 하루 1회만(MelAffinity가 게이팅). _try_gift와 대칭.
@@ -1280,6 +1363,7 @@ func _overlay_index(t: Vector2i) -> int:
 # 좌석 칸에 직접 그린다 — 노드 생성·해제 없이 그레이박스로 가볍게).
 func _draw() -> void:
 	_draw_customers()
+	_draw_night_customers()
 	_draw_jobgui()
 	if not _target_valid:
 		return
@@ -1305,9 +1389,28 @@ func _draw_customers() -> void:
 		var col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), ratio)
 		draw_rect(Rect2(bar_bg.position, Vector2(bar_bg.size.x * ratio, bar_bg.size.y)), col)
 
+# T6.4 바를 연 밤(옵트인)의 바 손님(회색 박스)과 머리 위 인내심 바를 그린다. 낮 카페 손님과
+# 같은 좌석 줄(y=7)을 시간대로 나눠 쓰므로(cafe 마감 후 밤 바) 그리기도 카페 손님과 똑같은
+# 규격이고, 활성(밤 바 영업 중)일 때만 그린다 — 잡귀(아래 y=9)와 한 화면에 떠 "막을지 받을지"가
+# 눈에 보인다(★ 막기↔응대 경쟁). 인내심이 줄수록 바가 짧아지고 붉어져 "곧 떠난다"가 보인다.
+func _draw_night_customers() -> void:
+	if not night_bar.is_active():
+		return
+	for i in SEAT_TILES.size():
+		if not night_bar.is_waiting(i):
+			continue
+		var t: Vector2i = SEAT_TILES[i]
+		var body := Rect2(t.x * TILE + 3, t.y * TILE + 2, TILE - 6, TILE - 4)
+		draw_rect(body, CUST)
+		var ratio := night_bar.patience_ratio(i)
+		var bar_bg := Rect2(t.x * TILE + 2, t.y * TILE - 3, TILE - 4, 2)
+		draw_rect(bar_bg, Color(0, 0, 0, 0.6))
+		var col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), ratio)
+		draw_rect(Rect2(bar_bg.position, Vector2(bar_bg.size.x * ratio, bar_bg.size.y)), col)
+
 # T6.3 바를 연 밤(옵트인)에 깃든 잡귀(탁한 청록 박스)와 머리 위 접근 바를 그린다. 카페 손님
 # 그리기와 같은 결(노드 생성·해제 없이 main이 스폿 칸에 직접 — 그레이박스). 접근 바는 잔량이
-# 줄수록 짧아지고 붉어져 "곧 닿는다"가 눈에 보인다(막기 우선순위 판단의 근거 — T6.4가 쓴다).
+# 줄수록 짧아지고 붉어져 "곧 닿는다"가 눈에 보인다(막기 우선순위 판단의 근거).
 func _draw_jobgui() -> void:
 	if not night_bar.is_active():
 		return

@@ -206,6 +206,35 @@ func _run_checks() -> void:
 	_check("⑰ 밤 바는 세이브 무상태(복원 후 안 열림·잡귀 0)", not m8.night_bar.is_opened() and m8.night_bar.threat_count() == 0)
 	m8.free()
 
+	# ══════════════ T6.4 막기 + 응대 + 이중 손실 (main 배선) ══════════════
+	# night_bar.gd 계약은 night_bar_test.gd가 단위로 검증한다. 여기선 main이 막기(_try_block)·
+	# 응대(_try_night_serve)·약탈 적용(resolved → _on_night_resolved → 재고 차감)을 *제대로
+	# 배선*했는지 main 씬으로 본다(키 입력 대신 핸들러를 직접 불러 입력 경로를 검증).
+	var m9: Node = await _new_main()
+	m9.onboarding.step = Onboarding.MEET_MIHO
+	m9.clock.minutes = NightBar.OPEN_MIN + 60  # 20:00(밤 창)
+	m9._open_night_bar()
+	# ⑱ 막기: 잡귀를 깃들이고 _try_block → 즉시 격퇴(스폿 비움). main이 block 계약을 배선했다.
+	m9.night_bar.tick(NightBar.SPAWN_INTERVAL + 0.1, m9.clock.minutes)
+	_check("⑱ 막기 전 잡귀 존재", m9.night_bar.is_threat(0))
+	m9._try_block(0)
+	_check("⑱b _try_block → 잡귀 즉시 격퇴(스폿 비움)", not m9.night_bar.is_threat(0))
+	# ⑲ 막기 실패 → 재고 약탈(이중 손실 ㉮): 돌파 시 resolved가 main을 통해 수확물을 덜어낸다.
+	m9.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 3)
+	var before: int = m9.inventory.total_harvest()
+	m9.night_bar.tick(NightBar.SPAWN_INTERVAL + 0.1, m9.clock.minutes)  # 잡귀 재등장
+	m9.night_bar.tick(NightBar.DEFAULT_APPROACH + 1.0, m9.clock.minutes)  # 안 막아 돌파 → 약탈
+	_check("⑲ 막기 실패 시 재고가 약탈된다(미래 자산↓)", m9.inventory.total_harvest() == before - NightBar.DEFAULT_RAID)
+	_check("⑲b 약탈량이 밤 정산에 쌓인다", m9.night_bar.tonight_raided() >= NightBar.DEFAULT_RAID)
+	# ⑳ 응대(이중 손실 ㉯의 반대편 — 현재 자산): 바 손님을 _try_night_serve → 밤 매출 즉시 지갑 반영.
+	m9.night_bar.tick(NightBar.CUST_INTERVAL + 0.1, m9.clock.minutes)  # 손님 착석
+	_check("⑳ 응대 전 바 손님 존재", m9.night_bar.is_waiting(0))
+	var gold_before: int = m9.wallet.gold
+	m9._try_night_serve(0)
+	_check("⑳b _try_night_serve → 밤 매출이 지갑에 들어온다", m9.wallet.gold == gold_before + NightBar.SERVE_PRICE)
+	_check("⑳c 응대한 좌석은 비고 밤 매출이 누적된다", not m9.night_bar.is_waiting(0) and m9.night_bar.tonight_revenue() == NightBar.SERVE_PRICE)
+	m9.free()
+
 	# 테스트 잔여 세이브 정리(다른 실행·플레이에 새지 않게).
 	cleaner.delete_save()
 	cleaner.free()
