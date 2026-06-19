@@ -152,9 +152,14 @@ var _selected_crop: String = CropCatalog.HONRYEONGCHO
 
 # T2.5 저장/불러오기 확인 문구를 잠깐 띄우는 잔여 시간(초). 0이면 기본 안내로 복귀.
 var _notice_secs := 0.0
-const NOTICE_DEFAULT := "[F5] 저장 · [F9] 불러오기"
+const NOTICE_DEFAULT := "[F5] 저장 · [F9] 불러오기 · [F8] 새로 시작"
 const NOTICE_SECS := 2.0          # 기본 알림 표시 시간(저장됨 등 짧은 확인 문구)
 const FLAVOR_SECS := 3.5          # T3.5 사연 한 줄은 읽을 시간을 더 길게 준다
+
+# 세이브 삭제+새 시작(F8)은 되돌릴 수 없어 2단 확인을 받는다 — 첫 F8이 이 시간(초)만큼
+# '무장' 상태를 켜고, 그 안에 한 번 더 F8을 누르면 실제로 삭제·재시작한다. 0이면 비무장.
+var _delete_armed_secs := 0.0
+const DELETE_CONFIRM_SECS := 3.0  # 2단 확인 대기 시간(이 안에 다시 F8이면 실행)
 
 # T3.5 작물(영혼)별 수확 누적 횟수. 수확마다 +1 해 SoulMemory.line의 index로 넘겨
 # 사연이 순환되게 한다(같은 작물을 거둘 때마다 다음 사연으로). 일시적 표시용 진척이라
@@ -252,6 +257,12 @@ func _ensure_input_actions() -> void:
 	var ev_f9 := InputEventKey.new()
 	ev_f9.physical_keycode = KEY_F9
 	InputMap.action_add_event("load_game", ev_f9)
+	# 세이브 삭제 후 새로 시작(F8). 저장(F5)·불러오기(F9) 옆 데브 키로 묶되, 게임플레이
+	# 키(E·Q·S·B·F·G)와 멀어 실수 위험이 낮다. 되돌릴 수 없어 2단 확인을 받는다(_process).
+	InputMap.add_action("delete_save")
+	var ev_f8 := InputEventKey.new()
+	ev_f8.physical_keycode = KEY_F8
+	InputMap.action_add_event("delete_save", ev_f8)
 	# T3.1 카페 출하대: 수확물 전량 판매(S)·선택 작물 씨앗 구매(B). 패널이 열렸을
 	# 때만 처리하므로(_shop_open 가드), 밭 작업 키(E·Q)와 충돌하지 않는다.
 	InputMap.add_action("shop_sell")
@@ -544,11 +555,31 @@ func _notice(msg: String, secs: float = NOTICE_SECS) -> void:
 	save_label.text = msg
 	_notice_secs = secs
 
+# F8 세이브 삭제+새 시작의 2단 확인. 비무장이면 무장만 하고 안내를 띄운다(실수로 한 번
+# 누른 것으로 진행을 날리지 않게). 무장(DELETE_CONFIRM_SECS 안) 중에 또 누르면 실행한다.
+func _arm_or_confirm_delete() -> void:
+	if _delete_armed_secs > 0.0:
+		_delete_save_and_restart()
+	else:
+		_delete_armed_secs = DELETE_CONFIRM_SECS
+		_notice("한 번 더 [F8]: 세이브 삭제 후 새로 시작", DELETE_CONFIRM_SECS)
+
+# 세이브를 지우고 씬을 다시 로드해 즉시 새 게임으로 시작한다. 세이브가 사라졌으므로 새
+# 씬의 _ready가 자동 복원 없이 옥자 오프닝 통보부터 다시 연다(README의 "지우고 재실행"을
+# 게임 안에서 한 키로). reload_current_scene은 프레임 끝에 안전하게 처리된다.
+func _delete_save_and_restart() -> void:
+	saver.delete_save()
+	get_tree().reload_current_scene()
+
 func _process(delta: float) -> void:
 	# T4.2 14일 슬라이스가 끝났으면 마무리 화면만 유지하고 모든 게임 입력을 막는다
 	# (이동은 _do_sleep/_end_run에서 이미 잠갔다). 마무리 화면은 _end_run이 한 번
 	# 세웠으므로 여기선 더 손대지 않는다.
 	if _run_over:
+		# 마무리 화면에서도 세이브 삭제+새 시작(F8)은 받는다 — 슬라이스가 끝나(보호할 진행이
+		# 없음) "다시 처음부터"가 가장 자연스러운 자리다. 여긴 곧바로 실행한다(2단 확인 없음).
+		if Input.is_action_just_pressed("delete_save"):
+			_delete_save_and_restart()
 		return
 	# T3.2 대화 중엔 다른 모든 입력을 막고 대사 넘기기(E)만 처리한다. 이동은 대화
 	# 시작 시 player 물리를 꺼 잠가 두었고(_start_dialogue), 끝나면 다시 켠다.
@@ -568,6 +599,14 @@ func _process(delta: float) -> void:
 		_save_game()
 	if not _sleeping and Input.is_action_just_pressed("load_game"):
 		_load_game()
+	# 세이브 삭제+새 시작(F8). 되돌릴 수 없어 2단 확인 — 첫 F8은 무장만, 무장 중 다시 F8이면
+	# 실행. 연출(취침) 중엔 받지 않는다(저장/불러오기와 같은 결).
+	if not _sleeping and Input.is_action_just_pressed("delete_save"):
+		_arm_or_confirm_delete()
+
+	# F8 무장 시간이 지나면 조용히 해제한다(확인 문구 자체는 _notice가 같은 시간에 거둔다).
+	if _delete_armed_secs > 0.0:
+		_delete_armed_secs -= delta
 
 	# 저장/불러오기 확인 문구 표시 시간이 지나면 기본 안내로 되돌린다.
 	if _notice_secs > 0.0:

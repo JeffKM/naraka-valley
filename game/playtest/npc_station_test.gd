@@ -91,6 +91,16 @@ func _run_checks() -> void:
 		m2._miho_tile == (m2.MIHO_CAFE_TILE if m2.clock.minutes >= Cafe.OPEN_MIN else m2.MIHO_FIELD_TILE))
 	m2.free()
 
+	# ── ⑦ 세이브 삭제+새 시작(F8) 2단 확인 가드: 첫 누름은 무장만, 삭제하지 않는다 ──
+	# (실제 reload_current_scene은 윈도우가 필요해 제외 — F5/F9 키처럼 부팅 클린으로 커버.
+	#  여기선 "한 번 눌러도 진행이 안 날아간다"는 안전 가드만 검증한다.) ⑥에서 쓴 save.dat가
+	# 디스크에 남아 있는 상태에서 시작한다.
+	var m3: Node = await _new_main()
+	_check("⑦pre 세이브 파일이 디스크에 있음", m3.saver.has_save())
+	m3._arm_or_confirm_delete()  # 첫 F8 — 무장만
+	_check("⑦ 첫 F8은 무장만(아직 삭제 안 함)", m3._delete_armed_secs > 0.0 and m3.saver.has_save())
+	m3.free()
+
 	# 테스트 잔여 세이브 정리(다른 실행·플레이에 새지 않게).
 	cleaner.delete_save()
 	cleaner.free()
