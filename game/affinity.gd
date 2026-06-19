@@ -34,7 +34,12 @@ const MAX_POINTS := MAX_HEARTS * POINTS_PER_HEART  # 만렙 점수(여기서 멈
 const DAILY_TALK_POINTS := 8         # 일일 대화 1회 소폭(느린 채널)
 const GIFT_POINTS := 15              # 일반 작물 선물
 const GIFT_PREFERRED_POINTS := 40    # 선호 작물 선물(빠른 채널)
-const PREFERRED_CROP := CropCatalog.YEONGHON_HOBAK  # 영혼 호박 선호
+const PREFERRED_CROP := CropCatalog.YEONGHON_HOBAK  # 기본 선호(미호=영혼 호박)
+
+# T5.2 선호 선물 작물은 캐릭터마다 다르다(미호=영혼 호박 · 멜=피안화 — 선물 경제 분산,
+# CONTEXT '멜'). 같은 affinity.gd 틀을 캐릭터별 인스턴스로 재사용하되, 이 한 값만
+# main이 인스턴스별로 바꾼다(기본값은 미호의 PREFERRED_CROP — 미호 노드는 안 건드림).
+var preferred_crop: String = PREFERRED_CROP
 
 var points: int = 0
 var last_talk_day: int = -1   # 마지막으로 일일 대화 보상을 받은 게임 날(-1 = 아직 없음)
@@ -50,9 +55,10 @@ func heart_bar() -> String:
 	var h := hearts()
 	return "♥".repeat(h) + "♡".repeat(MAX_HEARTS - h)
 
-# 이 작물이 미호의 선호 선물인가(선호면 선물 점수가 크다).
+# 이 작물이 이 캐릭터의 선호 선물인가(선호면 선물 점수가 크다). T5.2: 인스턴스별
+# preferred_crop으로 본다(미호=영혼 호박 · 멜=피안화).
 func is_preferred(crop_id: String) -> bool:
-	return crop_id == PREFERRED_CROP
+	return crop_id == preferred_crop
 
 # ── 일일 대화(하루 1회 소폭) ────────────────────────────────────────────────
 # 오늘(이 게임 날) 아직 대화 보상을 안 받았으면 줄 수 있다.

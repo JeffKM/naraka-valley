@@ -109,6 +109,8 @@ const MEL_TILE := Vector2i(33, 5)
 @onready var foxfire_label: Label = $CanvasLayer/FoxfireLabel  # T3.4 여우불 도움 HUD
 @onready var okja: Okja = $Okja                               # T4.1 옥자 NPC(오프닝 통보)
 @onready var mel: Mel = $Mel                                 # T5.1 멜 NPC(카페 운영·그레이박스)
+@onready var mel_affinity: Affinity = $MelAffinity           # T5.2 멜 호감도(하트, affinity.gd 재사용)
+@onready var mel_affinity_label: Label = $CanvasLayer/MelAffinityLabel  # T5.2 멜 하트 HUD
 @onready var onboarding: Onboarding = $Onboarding             # T4.1 온보딩 단계 머신
 @onready var onboarding_label: Label = $CanvasLayer/OnboardingLabel  # T4.1 안내 배너
 @onready var ending_panel: ColorRect = $CanvasLayer/EndingPanel        # T4.2 14일 마무리 화면 배경
@@ -171,6 +173,9 @@ func _ready() -> void:
 	okja.visible = false
 	# T5.1 멜을 카페 안 카운터 칸 중앙에 세운다(미호처럼 상시 상주, 항상 보임).
 	mel.position = _tile_center_px(MEL_TILE)
+	# T5.2 멜 선호 선물은 피안화(미호=영혼 호박과 선물 경제 분산). affinity.gd 인스턴스
+	# 하나를 멜용으로 재사용하되, 이 한 값만 멜로 바꾼다(곡선 상수는 미호와 공유).
+	mel_affinity.preferred_crop = CropCatalog.PIANHWA
 	dialogue.changed.connect(_on_dialogue_changed)
 	dialogue.finished.connect(_on_dialogue_finished)
 	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다.
@@ -447,6 +452,7 @@ func _save_game() -> void:
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
 		"affinity": affinity.to_save(),
+		"mel_affinity": mel_affinity.to_save(),
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
 		"selected_crop": _selected_crop,
@@ -473,6 +479,8 @@ func _load_game() -> void:
 		inventory.load_save(data["inventory"])
 	if data.has("affinity"):
 		affinity.load_save(data["affinity"])
+	if data.has("mel_affinity"):
+		mel_affinity.load_save(data["mel_affinity"])
 	if data.has("onboarding"):
 		onboarding.load_save(data["onboarding"])
 	# T4.2 슬라이스 점수판 누적(거둔 영혼 총수). 손상 방어로 음수는 0으로 자른다.
@@ -549,6 +557,10 @@ func _process(delta: float) -> void:
 	if facing_mel and Input.is_action_just_pressed("interact"):
 		_start_mel_dialogue()
 		return
+	# T5.2 멜 선물: 바라볼 때 G로 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회).
+	if facing_mel and Input.is_action_just_pressed("gift_item"):
+		_try_mel_gift()
+		return
 
 	# T3.1 카페 출하대: 카페 구역 안에서 E로 패널을 열고/닫고, 열린 동안 S로 수확물을
 	# 팔고 B로 씨앗을 산다(작은 순환을 닫는 곳). 카페를 벗어나면 자동으로 닫힌다.
@@ -574,6 +586,10 @@ func _process(delta: float) -> void:
 	affinity_label.text = "미호 %s %d/%d" % [
 		affinity.heart_bar(), affinity.hearts(), Affinity.MAX_HEARTS
 	]
+	# T5.2 멜 호감도 HUD: 하트 막대 + 단계 수(미호와 같은 표기, 캐릭터만 다름).
+	mel_affinity_label.text = "멜 %s %d/%d" % [
+		mel_affinity.heart_bar(), mel_affinity.hearts(), Affinity.MAX_HEARTS
+	]
 	# T3.4 여우불 도움 HUD: 현재 하트로 파생한 여우불 세기(관계→농사 보상을 눈에 보이게).
 	foxfire_label.text = Foxfire.summary(affinity.hearts())
 	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. 상점 패널이 떴으면 숨겨 겹침을 막는다
@@ -594,9 +610,9 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif facing_mel:
-		# T5.1 멜을 바라볼 때: 대화 안내(출하대 안내보다 우선). 선물은 T5.2에서 붙는다.
+		# T5.1/T5.2 멜을 바라볼 때: 대화·선물 안내(출하대 안내보다 우선).
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 대화"
+		interact_prompt.text = "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif not _sleeping and _zone_at(p) == "카페":
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 카페 출하대"
@@ -764,18 +780,35 @@ func _start_dialogue() -> void:
 	_talking_to = miho.display_name()
 	dialogue.start(miho.display_name(), lines)
 
-# ── T5.1 멜 대화 ───────────────────────────────────────────────────────────
-# 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다(완료기준). 미호 대화와 같은 결 —
-# 대사는 멜이 들고 오고(ADR-0005), 진행·열림은 DialogueBox가, 표시·이동잠금은 main이
-# 맡는다. 호감도(일일 대화·하트 분기)는 아직 없다(T5.2) — 인트로 한 묶음을 들려준다.
+# ── T5.1/T5.2 멜 대화 ──────────────────────────────────────────────────────
+# 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다. 미호 대화와 같은 결 — 대사는
+# 멜이 들고 오고(ADR-0005), 진행·열림은 DialogueBox가, 표시·이동잠금은 main이 맡는다.
+# T5.2 일일 대화: 오늘 첫 대화면 멜 호감도를 소폭 올린다(하루 1회, MelAffinity가 게이팅).
+# 보상 여부(first_today)와 현재 하트 단계로 어떤 대사를 들려줄지 멜이 고른다(_start_dialogue 대칭).
 func _start_mel_dialogue() -> void:
-	var lines := mel.lines()
+	var first_today := mel_affinity.daily_talk(clock.day)
+	var lines := mel.lines(mel_affinity.hearts(), first_today)
 	if lines.is_empty():
 		return
 	player.set_physics_process(false)  # 대화 중 이동 잠금(미호 대화와 같은 결)
 	player.velocity = Vector2.ZERO
 	_talking_to = mel.display_name()
 	dialogue.start(mel.display_name(), lines)
+
+# T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
+# 작물(피안화)이면 더 크게 오른다. 하루 1회만(MelAffinity가 게이팅). _try_gift와 대칭.
+func _try_mel_gift() -> void:
+	var crop := _selected_crop
+	if inventory.harvest_count(crop) <= 0:
+		_notice("%s 수확물이 없다" % CropCatalog.name_of(crop))
+		return
+	if not mel_affinity.can_gift(clock.day):
+		_notice("오늘은 이미 멜에게 선물했다")
+		return
+	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
+	var gained := mel_affinity.gift(crop, clock.day)
+	var tag := "(선호!) " if mel_affinity.is_preferred(crop) else ""
+	_notice("멜에게 %s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
 
 # T3.3 미호 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 호감도를 올린다.
 # 선호 작물(영혼 호박)이면 더 크게 오른다. 하루 1회만 가능(Affinity가 게이팅).
