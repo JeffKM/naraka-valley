@@ -143,6 +143,7 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 @onready var cafe: Cafe = $Cafe                               # T5.4 카페 운영(손님 서빙·일일 정산)
 @onready var night_bar: NightBar = $NightBar                 # T6.3 나라카 바(밤 옵트인·잡귀 등장 게이팅)
 @onready var night_label: Label = $CanvasLayer/NightLabel    # T6.3 밤 바 상태·옵트인 HUD
+@onready var bana_guard_label: Label = $CanvasLayer/BanaGuardLabel  # T6.5 바나 이중 보호 상태 HUD
 @onready var cafe_label: Label = $CanvasLayer/CafeLabel       # T5.4 카페 영업 상태·매출 HUD
 @onready var cafe_summary_panel: ColorRect = $CanvasLayer/CafeSummaryPanel  # T5.4 마감 정산 팝업 배경
 @onready var cafe_summary_text: Label = $CanvasLayer/CafeSummaryPanel/Text  # T5.4 정산 본문
@@ -706,6 +707,16 @@ func _process(delta: float) -> void:
 		cafe.tick(delta, clock.minutes)
 	if cafe.is_open():
 		queue_redraw()
+	# T6.5 바나 이중 보호 곱셈기 주입(관계 곱셈기, ADR-0008·ADR-0010 #7): 바나 하트 → 밤 보호
+	# 세 축을 night_bar seam에 얹는다. cafe.margin과 같은 다리 — night_bar는 바나 호감도를 모르고
+	# 파라미터만 받는다(디커플링). 매 프레임 파생해 HUD·정산이 항상 현재 하트를 반영하고, F로
+	# 바를 여는 순간(_open_night_bar는 아래 입력에서 처리)의 auto_block도 최신 값이 채워진다.
+	# ♡0이면 세 축 모두 night_bar 기본값 = 바나 잠듦(평평≠막힘, ADR-0008). 막기 판정 *위* 레이어라
+	# Phase 3 전투가 막기 구현을 갈아껴도 이 주입은 그대로 산다(ADR-0010 #8).
+	var bana_hearts := bana_affinity.hearts()
+	night_bar.raid_amount = BanaGuard.raid_amount(bana_hearts)      # ㉠ 약탈량↓
+	night_bar.auto_block = BanaGuard.auto_block(bana_hearts)        # ㉠ 창고 잡귀 자동 차단↑
+	night_bar.patience_secs = BanaGuard.patience_secs(bana_hearts)  # ㉡ 카운터 빈 사이 인내심↑
 	# T6.3 밤 바 시뮬레이션을 굴린다(연출 중 제외). 잡귀는 *바를 연 밤(옵트인)* 의 19–24시
 	# 창 안에서만 깃들고 접근한다 — 안 열면 빈 밤이라 아무 일도 없다(ADR-0010 #6 옵트인).
 	# 활성(잡귀 접근 중)이면 접근 바가 매 프레임 줄어드므로 다시 그린다(카페 손님과 같은 결).
@@ -834,12 +845,19 @@ func _process(delta: float) -> void:
 		and onboarding.step > Onboarding.NOTICE
 	if night_label.visible:
 		if night_bar.is_opened():
-			night_label.text = "나라카 바 영업 중 (~24:00) · 밤 매출 %d골드 · 잡귀 %d마리 · 손님 %d명 · 약탈 %d개" % [
+			# T6.5 자동 차단 수를 약탈 옆에 노출 — 바나가 못 막은 돌파를 대신 막은 게 눈에 보이게.
+			night_label.text = "나라카 바 영업 중 (~24:00) · 밤 매출 %d골드 · 잡귀 %d마리 · 손님 %d명 · 약탈 %d개 · 자동차단 %d마리" % [
 				night_bar.tonight_revenue(), night_bar.threat_count(),
-				night_bar.customer_count(), night_bar.tonight_raided()
+				night_bar.customer_count(), night_bar.tonight_raided(),
+				night_bar.tonight_auto_blocked()
 			]
 		else:
 			night_label.text = "빈 밤 — 바나에게 [F]로 나라카 바를 열 수 있다 (옵트인)"
+	# T6.5 바나 이중 보호 HUD: 밤 창 동안 현재 바나 하트로 파생한 보호 세기를 보여준다(관계→밤
+	# 보상을 눈에 보이게 — foxfire_label이 관계→농사에 하는 일의 밤판, ADR-0008 체감). ♡0이면 잠듦.
+	bana_guard_label.visible = night_label.visible
+	if bana_guard_label.visible:
+		bana_guard_label.text = BanaGuard.summary(bana_affinity.hearts())
 	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. 상점 패널이 떴으면 숨겨 겹침을 막는다
 	# (대화 중엔 위 early-return에서 이미 숨겼다). 완료(DONE) 후엔 문구가 ""라 사라진다.
 	var guide := onboarding.guidance()
@@ -1167,6 +1185,11 @@ func _on_night_closed(raided: int, revenue: int, left: int) -> void:
 # 손실이 없어 흘려보낸다. night_bar는 '어떻게 격퇴했는지'도 재고가 무엇인지도 모른 채 계약만
 # 쏘고, 약탈의 실제 적용은 여기서 한다(디커플링 — Phase 3 전투가 막기 구현만 교체해도 불변).
 func _on_night_resolved(result: Dictionary) -> void:
+	# T6.5 ㉠ 자동 차단: 내가 못 막은 돌파를 바나가 대신 막았다(약탈 0). '내 막기'와 구분해
+	# 안내하되 손실은 없다 — 못 간 스폿을 바나가 받쳐주는 체감(여우불 '범위'의 밤판, ADR-0010 #7).
+	if result.get("auto", false):
+		_notice("바나가 못 막은 잡귀를 대신 막았다 (자동 차단)")
+		return
 	if result.get("repelled", false):
 		return
 	var want: int = result.get("raided", 0)

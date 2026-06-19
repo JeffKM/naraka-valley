@@ -1,11 +1,14 @@
 extends SceneTree
-# T6.3/T6.4 임시 헤드리스 단위검증 — night_bar.gd 계약을 게임 노드로 직접 검증한다(ephemeral).
+# T6.3/T6.4/T6.5 임시 헤드리스 단위검증 — night_bar.gd 계약을 게임 노드로 직접 검증한다(ephemeral).
 # cafe_test.gd와 같은 결의 단언 하네스. 핵심 검증:
 #  · T6.3: 잡귀는 *바를 연 밤(옵트인) 의 19–24시 창* 안에서만 등장하고, 안 열거나 일찍 자면
 #    손실 0·밤 매출 0이다.
 #  · T6.4: 막기(접근→block→격퇴 즉시 판정, 막기 해소 계약 {repelled, raided}) · 막기 실패→
 #    재고 약탈(돌파 시 _raided += raid_amount + resolved 발화) · 밤 손님 응대(serve→밤 매출) ·
 #    응대 실패→이탈(인내심 0→_left) · 이중 손실 분리 · 보호 seam(approach/patience/raid_amount).
+#  · T6.5: 바나 ㉠ 자동 차단(auto_block) — 못 막은 돌파를 바나가 N마리까지 대신 막아 약탈 0,
+#    소진 후 재약탈, ♡0(기본 0)이면 잠듦, end_day 리셋. (raid_amount↓·patience↑ seam은 위
+#    ⑮·⑱에서, 하트→보호 매핑은 bana_test.gd가 검증.)
 # 실행: godot --headless --path game --script res://playtest/night_bar_test.gd
 
 var _fail := 0
@@ -24,7 +27,7 @@ const NIGHT := 20 * 60   # 20:00 — 밤 창(19–24시) 한복판
 const DAY := 12 * 60     # 12:00 — 낮(밤 창 밖)
 
 func _initialize() -> void:
-	print("══ T6.3 night_bar.gd 단위검증 ══")
+	print("══ T6.3/T6.4/T6.5 night_bar.gd 단위검증 ══")
 
 	# ── ① 옵트인 안 함: 밤 창(20:00) 안이어도 바를 안 열면 잡귀가 없다(빈 밤 — 매일 세금 X) ──
 	var a := _new_bar()
@@ -179,7 +182,50 @@ func _initialize() -> void:
 	_check("⑲ end_day 정산이 약탈·밤 매출·이탈을 함께 싣는다",
 		night["raided"] == NightBar.DEFAULT_RAID and night["revenue"] == served and night["left"] >= 1)
 
-	for n in [a, b, c, d, e, f, g, h, k, l, n_bar, o, q, r2, s2]:
+	# ══════════════ T6.5 — 바나 ㉠ 자동 차단(auto_block seam) ══════════════
+
+	# ── ⑳ auto_block seam: 못 막은 돌파를 바나가 대신 막아 약탈 0(여우불 '범위'의 밤판) ──
+	var t := _new_bar()
+	t.auto_block = 1
+	t.open_bar(NIGHT)
+	var ev: Array = []
+	t.resolved.connect(func(r): ev.append(r))
+	t.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)       # 잡귀 등장
+	t.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)     # 안 막아 돌파 → 바나 자동 차단
+	_check("⑳ 자동 차단 시 약탈 0(바나가 대신 막음)", t.tonight_raided() == 0)
+	_check("⑳b 자동 차단 수가 누적된다", t.tonight_auto_blocked() == 1)
+	var auto_ev := ev.any(func(r): return r.get("auto", false) and r["repelled"] and r["raided"] == 0)
+	_check("⑳c 자동 차단도 막기 해소 계약을 쏜다({repelled:true,auto:true})", auto_ev)
+
+	# ── ㉑ 자동 차단 소진 후엔 다시 약탈된다(밤당 N마리까지만 받쳐줌) ──
+	var u := _new_bar()
+	u.auto_block = 1
+	u.raid_amount = 2
+	u.open_bar(NIGHT)
+	u.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)       # 잡귀 등장
+	u.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)     # 1차 돌파 → 자동 차단(약탈 0) + 새 잡귀 스폰
+	_check("㉑ 1차 돌파는 자동 차단(약탈 0)", u.tonight_raided() == 0 and u.tonight_auto_blocked() == 1)
+	u.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)     # 2차 돌파 → 차단 소진 → 약탈
+	_check("㉑b 차단 소진 후 2차 돌파는 약탈된다", u.tonight_raided() == 2)
+
+	# ── ㉒ auto_block 기본 0(♡0 base = 바나 잠듦)이면 첫 돌파부터 약탈(평평≠막힘) ──
+	var v2 := _new_bar()
+	v2.open_bar(NIGHT)
+	v2.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)
+	v2.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)
+	_check("㉒ auto_block 기본 0이면 첫 돌파부터 약탈(바나 잠듦)",
+		v2.tonight_raided() == NightBar.DEFAULT_RAID and v2.tonight_auto_blocked() == 0)
+
+	# ── ㉓ end_day가 자동 차단 카운터·잔량도 리셋한다(다음 밤 깨끗이 재개) ──
+	var w := _new_bar()
+	w.auto_block = 2
+	w.open_bar(NIGHT)
+	w.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)
+	w.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)
+	w.end_day()
+	_check("㉓ end_day가 자동 차단 카운터·잔량 리셋", w.tonight_auto_blocked() == 0 and w.auto_blocks_left() == 0)
+
+	for n in [a, b, c, d, e, f, g, h, k, l, n_bar, o, q, r2, s2, t, u, v2, w]:
 		n.free()
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
