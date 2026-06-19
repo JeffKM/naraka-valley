@@ -81,6 +81,11 @@ const OKJA_TILE := Vector2i(20, 20)
 # 카페 출하대(T3.1)도 멜이 카운터 얼굴이라 멜을 바라볼 때만 연다(T5.3 — 무인 카운터
 # 제거, 멜 앞에서 E=대화·F=출하대·G=선물 세 동사를 한 접점으로 통합).
 const MEL_TILE := Vector2i(33, 5)
+# T5.4 카페 손님 좌석 칸 — 카페 안 한 줄(멜 카운터 33,5 아래). 손님이 여기 앉고,
+# 플레이어가 아래 칸(y=8)에 서서 위를 바라보며 E로 서빙한다. 카페 바닥이라 농사 대상이
+# 아니고(밭과 안 겹침), 멜·문 동선과도 칸이 갈린다. 인덱스 = Cafe._seats 인덱스(좌석 0..2).
+const SEAT_TILES := [Vector2i(31, 7), Vector2i(33, 7), Vector2i(35, 7)]
+const CUST := Color(0.55, 0.42, 0.50)  # 손님 그레이박스(회색 기조 + 옅은 자줏빛, NPC들과 구분)
 
 @onready var ground: TileMapLayer = $Ground
 @onready var field_layer: TileMapLayer = $Field           # T2.1 밭 상태 오버레이
@@ -112,6 +117,10 @@ const MEL_TILE := Vector2i(33, 5)
 @onready var mel: Mel = $Mel                                 # T5.1 멜 NPC(카페 운영·그레이박스)
 @onready var mel_affinity: Affinity = $MelAffinity           # T5.2 멜 호감도(하트, affinity.gd 재사용)
 @onready var mel_affinity_label: Label = $CanvasLayer/MelAffinityLabel  # T5.2 멜 하트 HUD
+@onready var cafe: Cafe = $Cafe                               # T5.4 카페 운영(손님 서빙·일일 정산)
+@onready var cafe_label: Label = $CanvasLayer/CafeLabel       # T5.4 카페 영업 상태·매출 HUD
+@onready var cafe_summary_panel: ColorRect = $CanvasLayer/CafeSummaryPanel  # T5.4 마감 정산 팝업 배경
+@onready var cafe_summary_text: Label = $CanvasLayer/CafeSummaryPanel/Text  # T5.4 정산 본문
 @onready var onboarding: Onboarding = $Onboarding             # T4.1 온보딩 단계 머신
 @onready var onboarding_label: Label = $CanvasLayer/OnboardingLabel  # T4.1 안내 배너
 @onready var ending_panel: ColorRect = $CanvasLayer/EndingPanel        # T4.2 14일 마무리 화면 배경
@@ -157,6 +166,11 @@ var _run_harvested := 0
 # 잘못 전진시킨다. 일시 상태라 세이브하지 않는다(대화와 같은 결).
 var _talking_to := ""
 
+# T5.4 카페 마감 정산 팝업을 띄워 두는 잔여 시간(초). 0이 되면 팝업을 숨긴다. 손님과
+# 같은 결로 일시 표시용이라 세이브하지 않는다(cafe.gd 세이브 무상태와 일관).
+var _cafe_summary_secs := 0.0
+const CAFE_SUMMARY_SECS := 5.0  # 마감 정산 팝업 표시 시간(읽을 시간을 넉넉히)
+
 func _ready() -> void:
 	_ensure_input_actions()
 	ground.tile_set = _build_tileset()
@@ -179,6 +193,9 @@ func _ready() -> void:
 	mel_affinity.preferred_crop = CropCatalog.PIANHWA
 	dialogue.changed.connect(_on_dialogue_changed)
 	dialogue.finished.connect(_on_dialogue_finished)
+	# T5.4 카페 영업 마감(19시) → 일일 정산 팝업. 손님 상태 변화는 매 프레임 _draw에서
+	# 그리므로 changed는 따로 듣지 않는다(영업 중엔 _process가 queue_redraw로 바를 갱신).
+	cafe.closed.connect(_on_cafe_closed)
 	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다.
 	if saver.has_save():
 		_load_game()
@@ -395,6 +412,9 @@ func _setup_clock() -> void:
 # 강해진다 — 물 준 칸이 더 빨리 자라고(가속) 물 못 준 칸도 돌본다(범위). 하트→세기
 # 매핑은 Foxfire가 들고, farm은 그 값만 받아 적용한다(Affinity를 모름, 디커플링).
 func _on_day_advanced(day: int) -> void:
+	# T5.4 새 날 시작 시 카페 상태를 리셋한다(영업 중 잠들어 abandon한 경우 정리 —
+	# 손님은 일시적이라 다음 영업창이 깨끗이 다시 연다, cafe.gd 세이브 무상태와 일관).
+	cafe.end_day()
 	# T4.2 14일 슬라이스의 끝. 취침으로 15일째 아침이 오면 더 진행하지 않고(작물 성장·
 	# 혼력 회복도 생략) 마무리 화면을 띄운다. 끝 판정은 RunSummary가 day로 내린다.
 	if RunSummary.is_over(day):
@@ -533,6 +553,12 @@ func _process(delta: float) -> void:
 		if _notice_secs <= 0.0:
 			save_label.text = NOTICE_DEFAULT
 
+	# T5.4 카페 마감 정산 팝업 표시 시간이 지나면 숨긴다(자동 해제 — 비차단 팝업).
+	if _cafe_summary_secs > 0.0:
+		_cafe_summary_secs -= delta
+		if _cafe_summary_secs <= 0.0:
+			cafe_summary_panel.visible = false
+
 	# T2.3 작물 선택 순환(Q). 심을 작물을 바꾼다(성장일수가 다른 3종).
 	if not _sleeping and Input.is_action_just_pressed("cycle_crop"):
 		_cycle_crop()
@@ -550,6 +576,14 @@ func _process(delta: float) -> void:
 	# 있어, 카페 출하대(_process_shop)보다 먼저 처리하고 return해 대화가 우선한다
 	# (멜을 바라보면 대화, 안 바라보고 카페 안이면 출하대 — T5.3에서 멜 운영으로 통합).
 	var facing_mel := not _sleeping and _target == MEL_TILE
+	# T5.4 카페 손님 시뮬레이션을 굴린다(연출 중 제외). 영업창(15–19시) 안에서만 손님이
+	# 오고 인내심이 돈다. 영업 중이면 인내심 바가 매 프레임 줄어드므로 다시 그린다.
+	if not _sleeping:
+		cafe.tick(delta, clock.minutes)
+	if cafe.is_open():
+		queue_redraw()
+	# 바라보는 칸이 손님 좌석이면 그 좌석 인덱스(없으면 -1). 서빙 대상 판정·프롬프트에 쓴다.
+	var facing_seat := SEAT_TILES.find(_target) if not _sleeping else -1
 	if facing_miho and Input.is_action_just_pressed("interact"):
 		_start_dialogue()
 		return
@@ -568,6 +602,13 @@ func _process(delta: float) -> void:
 	# T5.2 멜 선물: 바라볼 때 G로 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회).
 	if facing_mel and not _shop_open and Input.is_action_just_pressed("gift_item"):
 		_try_mel_gift()
+		return
+
+	# T5.4 손님 서빙: 기다리는 손님이 앉은 좌석을 바라보며 E. 보유 재료 1개를 자동
+	# 소모하고 정액 P 골드를 즉시 번다(서사·호감도 없는 가벼운 단골 — ADR-0005). 좌석은
+	# 농사 대상이 아니라(_target_valid false) 밭 동작과 충돌하지 않는다.
+	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("interact"):
+		_try_serve(facing_seat)
 		return
 
 	# T5.3 멜 카페 출하대: 멜을 바라보며 F로 패널을 열고/닫고, 열린 동안 S로 수확물을
@@ -601,6 +642,13 @@ func _process(delta: float) -> void:
 	]
 	# T3.4 여우불 도움 HUD: 현재 하트로 파생한 여우불 세기(관계→농사 보상을 눈에 보이게).
 	foxfire_label.text = Foxfire.summary(affinity.hearts())
+	# T5.4 카페 영업 HUD: 영업창(15–19시) 동안만 떠 현재 매출·서빙 인원을 보여준다
+	# (오후 슬롯에 "지금 카페 시간"이 눈에 보이게 — 시간 희소성 피드백).
+	cafe_label.visible = cafe.is_open()
+	if cafe.is_open():
+		cafe_label.text = "카페 영업 중 (~19:00) · 매출 %d골드 · 손님 %d명 (단가 %d)" % [
+			cafe.today_revenue(), cafe.today_served(), cafe.serve_price()
+		]
 	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. 상점 패널이 떴으면 숨겨 겹침을 막는다
 	# (대화 중엔 위 early-return에서 이미 숨겼다). 완료(DONE) 후엔 문구가 ""라 사라진다.
 	var guide := onboarding.guidance()
@@ -622,6 +670,11 @@ func _process(delta: float) -> void:
 		# T5.1/T5.2/T5.3 멜을 바라볼 때: 대화·출하대·선물 한 줄 안내(멜이 카운터 얼굴).
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 대화   [F] 출하대   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
+	elif facing_seat >= 0 and cafe.is_waiting(facing_seat):
+		# T5.4 기다리는 손님을 바라볼 때: 재료가 있으면 서빙, 없으면 막힌 이유를 안내.
+		interact_prompt.visible = true
+		interact_prompt.text = "[E] 서빙 (+%d골드)" % cafe.serve_price() if _has_any_harvest() \
+			else "서빙할 재료 없음 — 수확물 필요"
 	else:
 		# 밭 칸을 바라볼 때만 [E] 안내(다음 동작 이름). 다 키운(물준) 칸이면 숨김.
 		# T2.4 혼력 바닥, T3.1 씨앗 없음이면 동작 대신 막힌 이유를 안내한다.
@@ -753,6 +806,8 @@ func _end_run() -> void:
 	clock.running = false
 	player.set_physics_process(false)
 	player.velocity = Vector2.ZERO
+	# T5.4 카페 정산 팝업은 마무리 화면보다 위에 그려질 수 있어 명시적으로 숨긴다.
+	cafe_summary_panel.visible = false
 	# 다른 패널·프롬프트는 마무리 화면(전체 화면 불투명 패널)이 덮으므로 따로 숨기지 않는다.
 	ending_text.text = RunSummary.text(
 		clock.day, wallet.gold, affinity.heart_bar(),
@@ -818,6 +873,51 @@ func _try_mel_gift() -> void:
 	var gained := mel_affinity.gift(crop, clock.day)
 	var tag := "(선호!) " if mel_affinity.is_preferred(crop) else ""
 	_notice("멜에게 %s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
+
+# ── T5.4 카페 손님 서빙 ─────────────────────────────────────────────────────
+# 기다리는 손님이 앉은 좌석을 서빙한다. 보유 재료(농사 산출물) 1개를 자동 소모하고
+# 정액 P 골드를 즉시 번다(농사↔카페를 잇는 첫 매듭). 재료가 없으면 막지만 벌칙은 없다
+# (무막힘 — 손님은 인내심이 다하면 그냥 떠난다). 어떤 재료를 쓸지는 가장 싼 수확물부터
+# 고른다 — 정액가라 비싼 작물(피안화·영혼 호박)은 raw 판매로 남겨 두는 게 이득이므로
+# (공급사슬 긴장: raw 덤프 vs 서빙). 특정 작물 요구·손님 다양성은 2층 서랍(범위 밖).
+func _try_serve(seat: int) -> void:
+	var material := _cheapest_harvest()
+	if material == "":
+		_notice("서빙할 재료가 없다 — 수확물이 필요하다")
+		return
+	inventory.take_harvest(material)          # 서빙 재료 1개 소모(아무 재료 1회)
+	var revenue := cafe.serve(seat)           # 정액 P × margin(T5.5에서 마진 분화)
+	wallet.earn(revenue)                      # 서빙 즉시 지갑 반영
+	_notice("%s 서빙 +%d골드" % [CropCatalog.name_of(material), revenue])
+
+# 보유 수확물이 하나라도 있는가(서빙 가능 판정·프롬프트용).
+func _has_any_harvest() -> bool:
+	return inventory.total_harvest() > 0
+
+# 서빙에 쓸 가장 싼 수확물 id("" = 보유 수확물 없음). 정액 서빙가라 비싼 작물은 raw
+# 판매로 남기고 싼 작물부터 서빙하는 게 합리적이라, 자동 소모는 최저가 작물을 고른다.
+func _cheapest_harvest() -> String:
+	var best := ""
+	var best_price := -1
+	for id in inventory.harvested:
+		var price := CropCatalog.sell_price(id)
+		if best == "" or price < best_price:
+			best = id
+			best_price = price
+	return best
+
+# T5.4 영업 마감(19시) 정산 팝업. cafe가 그날 누적한 매출·서빙·이탈 수를 받아 한 장으로
+# 띄운다(비차단 — CAFE_SUMMARY_SECS 뒤 자동으로 사라진다). cafe는 끝남·수치만, 표시는
+# main이 맡는다(RunSummary 점수판과 같은 데이터/표시 디커플링).
+func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
+	cafe_summary_text.text = "\n".join([
+		"── 오늘 카페 영업 마감 ──",
+		"매출  +%d골드" % revenue,
+		"서빙한 손님  %d명" % served,
+		"놓친 손님  %d명" % left,
+	])
+	cafe_summary_panel.visible = true
+	_cafe_summary_secs = CAFE_SUMMARY_SECS
 
 # T3.3 미호 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 호감도를 올린다.
 # 선호 작물(영혼 호박)이면 더 크게 오른다. 하루 1회만 가능(Affinity가 게이팅).
@@ -905,12 +1005,34 @@ func _overlay_index(t: Vector2i) -> int:
 		appearance = farm.growth_stage(t) + 1  # 0/1/2 → SEED/SPROUT/MATURE
 	return appearance * 2 + wet
 
-# 대상 칸 강조 커서(흰 1px 테두리). main은 원점 0,0이라 그리기 좌표=타일 픽셀.
+# 대상 칸 강조 커서(흰 1px 테두리) + T5.4 카페 손님·인내심 바. main은 원점 0,0이라
+# 그리기 좌표 = 타일 픽셀(미호·멜은 자기 Node2D에서 그리지만, 손님은 일시적이라 main이
+# 좌석 칸에 직접 그린다 — 노드 생성·해제 없이 그레이박스로 가볍게).
 func _draw() -> void:
+	_draw_customers()
 	if not _target_valid:
 		return
 	var p := Vector2(_target.x * TILE, _target.y * TILE)
 	draw_rect(Rect2(p, Vector2(TILE, TILE)), Color(1, 1, 1, 0.7), false, 1.0)
+
+# 좌석에 앉은 손님(회색 박스)과 머리 위 인내심 바(초록→빨강)를 그린다. 인내심이 줄수록
+# 바가 짧아지고 붉어져 "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거).
+func _draw_customers() -> void:
+	if not cafe.is_open():
+		return
+	for i in SEAT_TILES.size():
+		if not cafe.is_waiting(i):
+			continue
+		var t: Vector2i = SEAT_TILES[i]
+		# 손님 몸체: 타일 칸 안에 살짝 작은 박스(좌석 위에 앉은 느낌).
+		var body := Rect2(t.x * TILE + 3, t.y * TILE + 2, TILE - 6, TILE - 4)
+		draw_rect(body, CUST)
+		# 인내심 바: 손님 머리 위 가로 막대. 비율만큼 채우고 잔량에 따라 색을 보간한다.
+		var ratio := cafe.patience_ratio(i)
+		var bar_bg := Rect2(t.x * TILE + 2, t.y * TILE - 3, TILE - 4, 2)
+		draw_rect(bar_bg, Color(0, 0, 0, 0.6))
+		var col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), ratio)
+		draw_rect(Rect2(bar_bg.position, Vector2(bar_bg.size.x * ratio, bar_bg.size.y)), col)
 
 # ── 헬퍼 ──────────────────────────────────────────────────────────────────
 func _set_tile(x: int, y: int, id: int) -> void:
