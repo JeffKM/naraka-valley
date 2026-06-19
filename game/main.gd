@@ -78,7 +78,8 @@ const MIHO_TILE := Vector2i(20, 14)
 const OKJA_TILE := Vector2i(20, 20)
 # T5.1 멜이 서 있는 칸 — 카페 안 뒷벽 가운데(카운터 자리). 카페 문(33,10)으로 들어와
 # 위로 올라오면 바로 멜을 마주본다. 카페 바닥이라 농사 대상이 아니고(밭과 안 겹침),
-# 카페 출하대(T3.1)와는 main이 '멜을 바라볼 때 대화 우선'으로 가른다(T5.3에서 통합).
+# 카페 출하대(T3.1)도 멜이 카운터 얼굴이라 멜을 바라볼 때만 연다(T5.3 — 무인 카운터
+# 제거, 멜 앞에서 E=대화·F=출하대·G=선물 세 동사를 한 접점으로 통합).
 const MEL_TILE := Vector2i(33, 5)
 
 @onready var ground: TileMapLayer = $Ground
@@ -138,8 +139,8 @@ const FLAVOR_SECS := 3.5          # T3.5 사연 한 줄은 읽을 시간을 더 
 # 세이브하지 않는다(대화와 같은 결 — SaveManager·main 세이브 불변).
 var _harvest_seen: Dictionary = {}
 
-# T3.1 카페 출하대 패널이 열려 있는가. 카페 구역 안에서 E로 토글하고, 구역을
-# 벗어나면 자동으로 닫힌다(집 취침과 같은 '구역 안에서만' 패턴).
+# T3.1/T5.3 카페 출하대 패널이 열려 있는가. 멜을 바라볼 때 F로 토글하고, 멜 앞을
+# 벗어나면 자동으로 닫힌다(멜이 카운터 얼굴 — '멜 앞에서만' 패턴, 무인 카운터 제거).
 var _shop_open := false
 
 # T4.2 14일 슬라이스가 끝났는가(마무리 화면 표시 중). true면 _process가 모든
@@ -222,6 +223,12 @@ func _ensure_input_actions() -> void:
 	var ev_b := InputEventKey.new()
 	ev_b.physical_keycode = KEY_B
 	InputMap.action_add_event("shop_buy", ev_b)
+	# T5.3 멜 카페 출하대 열기/닫기(F). 멜을 바라볼 때만 처리하므로(facing_mel 가드),
+	# 멜 앞 대화(E)·선물(G) 및 밭 작업과 키가 갈려 충돌하지 않는다(무인 카운터 → 멜 카운터).
+	InputMap.add_action("shop_toggle")
+	var ev_f := InputEventKey.new()
+	ev_f.physical_keycode = KEY_F
+	InputMap.action_add_event("shop_toggle", ev_f)
 	# T3.3 미호에게 선물(G). 미호를 바라볼 때만 처리하므로 밭 작업 키와 충돌하지 않는다.
 	InputMap.add_action("gift_item")
 	var ev_g := InputEventKey.new()
@@ -553,18 +560,20 @@ func _process(delta: float) -> void:
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("interact"):
 		_try_farm_action()
 
-	# T5.1 멜 대화: 멜을 바라보며 E면 대화를 연다(카페 출하대보다 우선 → 아래 return).
-	if facing_mel and Input.is_action_just_pressed("interact"):
+	# T5.1 멜 대화: 멜을 바라보며 E면 대화를 연다. 출하대 패널이 열려 있을 땐 막아
+	# (not _shop_open) 패널 조작(F·S·B)과 섞이지 않게 한다.
+	if facing_mel and not _shop_open and Input.is_action_just_pressed("interact"):
 		_start_mel_dialogue()
 		return
 	# T5.2 멜 선물: 바라볼 때 G로 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회).
-	if facing_mel and Input.is_action_just_pressed("gift_item"):
+	if facing_mel and not _shop_open and Input.is_action_just_pressed("gift_item"):
 		_try_mel_gift()
 		return
 
-	# T3.1 카페 출하대: 카페 구역 안에서 E로 패널을 열고/닫고, 열린 동안 S로 수확물을
-	# 팔고 B로 씨앗을 산다(작은 순환을 닫는 곳). 카페를 벗어나면 자동으로 닫힌다.
-	_process_shop()
+	# T5.3 멜 카페 출하대: 멜을 바라보며 F로 패널을 열고/닫고, 열린 동안 S로 수확물을
+	# 팔고 B로 씨앗을 산다(작은 순환을 닫는 곳). 멜이 카운터 얼굴이라 멜 앞에서만 열리고,
+	# 멜 앞을 벗어나면 자동으로 닫힌다(무인 카운터 제거 — 대화·선물과 한 접점으로 통합).
+	_process_shop(facing_mel)
 
 	var p := player.global_position
 	readout.text = "방향키 이동   구역: %s   위치(%d, %d)   FPS %d" % [
@@ -603,19 +612,16 @@ func _process(delta: float) -> void:
 	# 집 안에서만 취침 안내를 띄운다(연출 중엔 숨김).
 	sleep_prompt.visible = _can_sleep()
 	# 하단 프롬프트(집은 sleep_prompt, 카페·밭은 interact_prompt — 구역이 달라 겹치지 않음).
-	# 우선순위: 패널이 열렸으면 패널이 대신하니 숨김 > 미호 말걸기 > 카페 출하대 > 밭 동작.
+	# 우선순위: 패널이 열렸으면 패널이 대신하니 숨김 > 미호 말걸기 > 멜(대화·출하대·선물) > 밭 동작.
 	if _shop_open:
 		interact_prompt.visible = false
 	elif facing_miho:
 		interact_prompt.visible = true
 		interact_prompt.text = "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif facing_mel:
-		# T5.1/T5.2 멜을 바라볼 때: 대화·선물 안내(출하대 안내보다 우선).
+		# T5.1/T5.2/T5.3 멜을 바라볼 때: 대화·출하대·선물 한 줄 안내(멜이 카운터 얼굴).
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
-	elif not _sleeping and _zone_at(p) == "카페":
-		interact_prompt.visible = true
-		interact_prompt.text = "[E] 카페 출하대"
+		interact_prompt.text = "[E] 대화   [F] 출하대   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	else:
 		# 밭 칸을 바라볼 때만 [E] 안내(다음 동작 이름). 다 키운(물준) 칸이면 숨김.
 		# T2.4 혼력 바닥, T3.1 씨앗 없음이면 동작 대신 막힌 이유를 안내한다.
@@ -664,14 +670,16 @@ func _show_flavor(crop_id: String) -> void:
 		return  # 사연이 없는 작물이면 조용히 넘어간다(표시할 게 없음)
 	_notice(line, FLAVOR_SECS)
 
-# ── T3.1 카페 출하대 ──────────────────────────────────────────────────────
-# 카페 구역 안에서만 동작한다(집 취침과 같은 '구역 안에서만' 패턴). E로 패널을
-# 토글하고, 열린 동안 S=수확물 전량 판매, B=선택 작물 씨앗 구매. 구역을 벗어나면 닫힌다.
-func _process_shop() -> void:
-	if _sleeping or _zone_at(player.global_position) != "카페":
+# ── T3.1/T5.3 멜 카페 출하대 ───────────────────────────────────────────────
+# 멜이 카운터 얼굴이라 멜을 바라볼 때만 동작한다(T5.3 — 무인 카운터 제거, '멜 앞에서만'
+# 패턴). F로 패널을 토글하고, 열린 동안 S=수확물 전량 판매, B=선택 작물 씨앗 구매. 멜
+# 앞을 벗어나거나 자는 중이면 자동으로 닫힌다(이동하면 닫혀 상태가 새지 않는다). 키가
+# E(대화)·G(선물)과 갈려 멜 앞에서 세 동사가 충돌하지 않는다(기존 판매/구매는 그대로).
+func _process_shop(facing_mel: bool) -> void:
+	if _sleeping or not facing_mel:
 		_shop_open = false
 		return
-	if Input.is_action_just_pressed("interact"):
+	if Input.is_action_just_pressed("shop_toggle"):
 		_shop_open = not _shop_open
 	if not _shop_open:
 		return
@@ -703,21 +711,22 @@ func _buy_seed(crop_id: String) -> void:
 	inventory.add_seed(crop_id)
 	_notice("%s 씨앗 −%d골드" % [CropCatalog.name_of(crop_id), cost])
 
-# 카페 출하대 패널 본문(골드·수확물 판매 예상액·씨앗 구매가·조작 안내).
+# 멜 카페 출하대 패널 본문(골드·수확물 판매 예상액·씨앗 구매가·조작 안내). 헤더에 멜이
+# 운영하는 카운터임을 드러낸다(T5.3 — 무인 카운터가 아니라 멜이 골드로 쳐준다).
 func _shop_text() -> String:
 	var sell_total := 0
 	for id in inventory.harvested:
 		sell_total += inventory.harvest_count(id) * CropCatalog.sell_price(id)
 	var sel := _selected_crop
 	return "\n".join([
-		"── 카페 출하대 ──",
+		"── 멜의 카페 출하대 ──",
 		"골드 %d" % wallet.gold,
 		"수확물 %d개 → %d골드" % [inventory.total_harvest(), sell_total],
 		"[S] 전량 판매",
 		"[B] %s 씨앗 (−%d골드 · 보유 %d)" % [
 			CropCatalog.name_of(sel), CropCatalog.seed_cost(sel), inventory.seed_count(sel)
 		],
-		"[Q] 작물 변경    [E] 닫기",
+		"[Q] 작물 변경    [F] 닫기",
 	])
 
 # ── T4.1 온보딩 ────────────────────────────────────────────────────────────
