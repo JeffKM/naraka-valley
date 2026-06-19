@@ -171,6 +171,41 @@ func _run_checks() -> void:
 	_check("⑫b 복원된 하트 단계도 일치(♡2)", m6.bana_affinity.hearts() == 2)
 	m6.free()
 
+	# ══════════════ T6.3 나라카 바 옵트인(밤 영업 창 + 잡귀 등장 게이팅) 통합 ══════════════
+	# night_bar.gd 계약은 night_bar_test.gd가 단위로 검증한다. 여기선 main이 그 노드를
+	# *제대로 배선*했는지(옵트인 키 경로·스폰 게이팅·취침 리셋·세이브 무상태)를 main 씬으로 본다.
+	var m7: Node = await _new_main()
+	m7.onboarding.step = Onboarding.MEET_MIHO  # 통보 지난 상태(밤 무대·바 게이트가 열리는 단계)
+	# ⑬ 시작은 안 열림 — 밤이어도 잡귀 없음(완료기준 "열 때만 등장", 옵트인 X = 빈 밤).
+	m7.clock.minutes = NightBar.OPEN_MIN + 60  # 20:00(밤 창)
+	m7.night_bar.tick(5.0, m7.clock.minutes)
+	_check("⑬ 안 열면 밤이어도 잡귀 없음(빈 밤)", not m7.night_bar.is_opened() and m7.night_bar.threat_count() == 0)
+	# ⑭ 낮엔 옵트인이 막힌다(밤 창 밖) — main의 _open_night_bar가 open_bar 창 가드를 탄다.
+	m7.clock.minutes = 12 * 60  # 낮
+	m7._open_night_bar()
+	_check("⑭ 낮엔 바를 못 연다", not m7.night_bar.is_opened())
+	# ⑮ 밤에 _open_night_bar로 옵트인 → tick하면 잡귀가 깃든다(완료기준 "바를 열 때만 등장").
+	m7.clock.minutes = NightBar.OPEN_MIN + 60
+	m7._open_night_bar()
+	_check("⑮ 밤에 _open_night_bar로 바 열림", m7.night_bar.is_opened())
+	m7.night_bar.tick(NightBar.SPAWN_INTERVAL + 0.1, m7.clock.minutes)
+	_check("⑮b 열고 tick → 잡귀 등장·활성", m7.night_bar.threat_count() >= 1 and m7.night_bar.is_active())
+	# ⑯ 자정 전 취침(_on_day_advanced) → 밤 정산 약탈 0 + 옵트인 리셋(다음 밤 새 선택, 손실 이월 0).
+	var raided: int = m7.night_bar.tonight_raided()
+	m7._on_day_advanced(2)  # 14일 슬라이스 안(끝 아님) — 작물 성장·혼력 회복 + night_bar.end_day
+	_check("⑯ 자정 전 취침 시 손실 0(약탈 0)", raided == 0)
+	_check("⑯b 취침 후 옵트인 리셋(빈 밤으로 복귀)", not m7.night_bar.is_opened() and m7.night_bar.threat_count() == 0)
+	# ⑰ 세이브 무상태: 밤 바는 직렬화 항목이 없다(SaveManager 불변 — T6.2 바나 affinity 한
+	#    조각만 추가됐고, 밤 바 상태는 옵트인·잡귀 모두 일시적). 밤에 바를 연 채 저장하고 새
+	#    인스턴스로 복원해도, 밤 바는 무상태라 안 열린 채(빈 밤) 깨끗이 시작한다.
+	m7.clock.minutes = NightBar.OPEN_MIN + 60
+	m7.night_bar.open_bar(m7.clock.minutes)  # 밤에 바를 연 상태로
+	m7._save_game()
+	m7.free()
+	var m8: Node = await _new_main()
+	_check("⑰ 밤 바는 세이브 무상태(복원 후 안 열림·잡귀 0)", not m8.night_bar.is_opened() and m8.night_bar.threat_count() == 0)
+	m8.free()
+
 	# 테스트 잔여 세이브 정리(다른 실행·플레이에 새지 않게).
 	cleaner.delete_save()
 	cleaner.free()
