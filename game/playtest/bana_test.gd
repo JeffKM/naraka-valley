@@ -169,12 +169,15 @@ func _run_checks() -> void:
 	b2.free()
 
 	# ── ⑫ 세이브 라운드트립: 바나 호감도 점수가 저장·복원된다(SaveManager 불변, 한 조각 추가) ──
+	# T7.3: 곡선이 슬라이스 길이에 비례 스케일되므로(POINTS_PER_HEART) ♡2를 점수 상수에서
+	# 파생한다 — 21일(60점/칸)·14일(40점/칸) 어느 쪽으로 RUN_DAYS를 돌려도 ♡2로 떨어진다.
 	var m5: Node = await _new_main()
-	m5.bana_affinity.points = 95  # ♡2(POINTS_PER_HEART=40 → 95/40=2)
+	var pts_h2: int = 2 * Affinity.POINTS_PER_HEART + 15  # ♡2 칸 안(다음 칸 임계 미만)
+	m5.bana_affinity.points = pts_h2
 	m5._save_game()
 	m5.free()
 	var m6: Node = await _new_main()  # _ready가 자동 복원
-	_check("⑫ 바나 호감도 점수가 세이브에 저장·복원됨", m6.bana_affinity.points == 95)
+	_check("⑫ 바나 호감도 점수가 세이브에 저장·복원됨", m6.bana_affinity.points == pts_h2)
 	_check("⑫b 복원된 하트 단계도 일치(♡2)", m6.bana_affinity.hearts() == 2)
 	m6.free()
 
@@ -199,7 +202,7 @@ func _run_checks() -> void:
 	_check("⑮b 열고 tick → 잡귀 등장·활성", m7.night_bar.threat_count() >= 1 and m7.night_bar.is_active())
 	# ⑯ 자정 전 취침(_on_day_advanced) → 밤 정산 약탈 0 + 옵트인 리셋(다음 밤 새 선택, 손실 이월 0).
 	var raided: int = m7.night_bar.tonight_raided()
-	m7._on_day_advanced(2)  # 14일 슬라이스 안(끝 아님) — 작물 성장·혼력 회복 + night_bar.end_day
+	m7._on_day_advanced(2)  # 슬라이스 안(끝 아님) — 작물 성장·혼력 회복 + night_bar.end_day
 	_check("⑯ 자정 전 취침 시 손실 0(약탈 0)", raided == 0)
 	_check("⑯b 취침 후 옵트인 리셋(빈 밤으로 복귀)", not m7.night_bar.is_opened() and m7.night_bar.threat_count() == 0)
 	# ⑰ 세이브 무상태: 밤 바는 직렬화 항목이 없다(SaveManager 불변 — T6.2 바나 affinity 한
@@ -379,7 +382,7 @@ func _run_checks() -> void:
 		and m12.night_bar.tonight_revenue() == NightBar.SERVE_PRICE
 		and m12.inventory.total_harvest() == inv_after_raid)
 	# (E) 취침 정산: 하루가 넘어가면 밤이 정산되고 옵트인이 꺼져 손실이 다음 밤으로 이월되지 않는다.
-	m12._on_day_advanced(2)  # 14일 슬라이스 안(끝 아님)
+	m12._on_day_advanced(2)  # 슬라이스 안(끝 아님)
 	_check("㉗i 취침 후 옵트인 리셋·잡귀 0(손실 이월 0)",
 		not m12.night_bar.is_opened() and m12.night_bar.threat_count() == 0
 		and m12.night_bar.tonight_raided() == 0)

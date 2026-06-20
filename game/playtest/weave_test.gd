@@ -253,7 +253,7 @@ func _run_checks() -> void:
 	var hm0: int = m5.affinity.hearts()
 	var hl0: int = m5.mel_affinity.hearts()
 	var hb0: int = m5.bana_affinity.hearts()
-	m5._on_day_advanced(2)  # 14일 슬라이스 안(끝 아님)
+	m5._on_day_advanced(2)  # 슬라이스 안(끝 아님)
 	_check("⑫c 취침 후 카페·밤 바 리셋(매일 새 선택 — 직조는 하루 단위로 다시 짜인다)",
 		not m5.cafe.is_open() and not m5.night_bar.is_opened() and m5.night_bar.threat_count() == 0)
 	_check("⑫d 세 호감도는 일 경계를 넘어 보존(관계는 누적·직조의 지속 축)",

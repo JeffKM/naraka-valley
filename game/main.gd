@@ -152,7 +152,7 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 @onready var milestone_text: Label = $CanvasLayer/MilestonePanel/Text         # T7.2 달성 팝업 본문
 @onready var onboarding: Onboarding = $Onboarding             # T4.1 온보딩 단계 머신
 @onready var onboarding_label: Label = $CanvasLayer/OnboardingLabel  # T4.1 안내 배너
-@onready var ending_panel: ColorRect = $CanvasLayer/EndingPanel        # T4.2 14일 마무리 화면 배경
+@onready var ending_panel: ColorRect = $CanvasLayer/EndingPanel        # T4.2/T7.3 슬라이스 마무리 화면 배경
 @onready var ending_text: Label = $CanvasLayer/EndingPanel/Text        # T4.2 점수판 본문
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
@@ -191,7 +191,7 @@ var _harvest_seen: Dictionary = {}
 # 벗어나면 자동으로 닫힌다(멜이 카운터 얼굴 — '멜 앞에서만' 패턴, 무인 카운터 제거).
 var _shop_open := false
 
-# T4.2 14일 슬라이스가 끝났는가(마무리 화면 표시 중). true면 _process가 모든
+# T4.2 슬라이스(RunSummary.RUN_DAYS일)가 끝났는가(마무리 화면 표시 중). true면 _process가 모든
 # 게임 입력을 막고 마무리 화면만 유지한다. 끝남 자체는 GameClock.day에서 파생되므로
 # (RunSummary.is_over) 세이브할 상태가 아니고, 이 플래그는 한 프레임 표시 래치일 뿐이다.
 var _run_over := false
@@ -286,7 +286,7 @@ func _ready() -> void:
 	# 팝업이 다시 터지지 않게(완료 상태는 마일스톤 HUD가 상시 보여 준다). 신규/미완료면 false로,
 	# 플레이 중 채우는 순간 _process가 한 번 팝업을 띄운다(RunSummary.is_over 재개 안전과 같은 결).
 	_milestone_celebrated = _milestone_complete()
-	# T4.2 이어받은 세이브가 이미 14일을 넘겼으면(15일째 아침) 바로 마무리 화면을 띄운다.
+	# T4.2 이어받은 세이브가 이미 슬라이스를 넘겼으면(RUN_DAYS+1일째 아침) 바로 마무리 화면을 띄운다.
 	# 그 경우 온보딩 컷신은 띄우지 않는다(슬라이스가 끝났으므로).
 	if RunSummary.is_over(clock.day):
 		_end_run()
@@ -513,7 +513,7 @@ func _on_day_advanced(day: int) -> void:
 	# 바를 열었던 밤이면 end_day가 정산 요약(closed → _on_night_closed)을 먼저 쏴, 옵트인의
 	# 대가가 0이었음을 한 줄로 보인다(밤의 끝 = 취침이라 이 훅이 카페 19시 마감의 자리).
 	night_bar.end_day()
-	# T4.2 14일 슬라이스의 끝. 취침으로 15일째 아침이 오면 더 진행하지 않고(작물 성장·
+	# T4.2 슬라이스의 끝. 취침으로 RUN_DAYS+1일째 아침이 오면 더 진행하지 않고(작물 성장·
 	# 혼력 회복도 생략) 마무리 화면을 띄운다. 끝 판정은 RunSummary가 day로 내린다.
 	if RunSummary.is_over(day):
 		_end_run()
@@ -557,7 +557,7 @@ func _do_sleep() -> void:
 
 func _on_sleep_done() -> void:
 	_sleeping = false
-	# T4.2 슬라이스가 끝났으면(이 취침이 15일째를 불렀음) 이동 잠금을 풀지 않고
+	# T4.2 슬라이스가 끝났으면(이 취침이 RUN_DAYS+1일째를 불렀음) 이동 잠금을 풀지 않고
 	# 마무리 화면을 유지한다. 진행은 보존하므로 다시 켜도 마무리 화면이 뜬다.
 	if not _run_over:
 		player.set_physics_process(true)
@@ -643,7 +643,7 @@ func _delete_save_and_restart() -> void:
 	get_tree().reload_current_scene()
 
 func _process(delta: float) -> void:
-	# T4.2 14일 슬라이스가 끝났으면 마무리 화면만 유지하고 모든 게임 입력을 막는다
+	# T4.2 슬라이스가 끝났으면 마무리 화면만 유지하고 모든 게임 입력을 막는다
 	# (이동은 _do_sleep/_end_run에서 이미 잠갔다). 마무리 화면은 _end_run이 한 번
 	# 세웠으므로 여기선 더 손대지 않는다.
 	if _run_over:
@@ -1095,8 +1095,8 @@ func _refresh_okja_station() -> void:
 func _update_bana_station() -> void:
 	bana.visible = clock.minutes >= Cafe.CLOSE_MIN and onboarding.step > Onboarding.NOTICE
 
-# ── T4.2 14일 슬라이스 종료 ─────────────────────────────────────────────────
-# 14일이 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리
+# ── T4.2/T7.3 슬라이스 종료 ─────────────────────────────────────────────────
+# 슬라이스가 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리
 # 점수판을 띄운다. 멱등(_run_over 가드)이라 취침 종료·로드 양쪽에서 불려도 한 번만
 # 세운다. 끝 판정·문구는 RunSummary가, 표시·잠금은 main이 맡는다(데이터/표시 디커플링).
 func _end_run() -> void:
