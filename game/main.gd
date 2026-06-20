@@ -147,6 +147,9 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 @onready var cafe_label: Label = $CanvasLayer/CafeLabel       # T5.4 카페 영업 상태·매출 HUD
 @onready var cafe_summary_panel: ColorRect = $CanvasLayer/CafeSummaryPanel  # T5.4 마감 정산 팝업 배경
 @onready var cafe_summary_text: Label = $CanvasLayer/CafeSummaryPanel/Text  # T5.4 정산 본문
+@onready var milestone_label: Label = $CanvasLayer/MilestoneLabel             # T7.2 카페 마일스톤 진행 바 HUD
+@onready var milestone_panel: ColorRect = $CanvasLayer/MilestonePanel         # T7.2 "카페 2단계!" 달성 팝업 배경
+@onready var milestone_text: Label = $CanvasLayer/MilestonePanel/Text         # T7.2 달성 팝업 본문
 @onready var onboarding: Onboarding = $Onboarding             # T4.1 온보딩 단계 머신
 @onready var onboarding_label: Label = $CanvasLayer/OnboardingLabel  # T4.1 안내 배너
 @onready var ending_panel: ColorRect = $CanvasLayer/EndingPanel        # T4.2 14일 마무리 화면 배경
@@ -207,6 +210,21 @@ var _talking_to := ""
 var _cafe_summary_secs := 0.0
 const CAFE_SUMMARY_SECS := 5.0  # 마감 정산 팝업 표시 시간(읽을 시간을 넉넉히)
 
+# T7.2 카페 마일스톤 1단의 "누적 서빙 매출"(카페 손님 서빙 + 밤 바 응대). 출하대 raw 판매는
+# 빼고 *카페를 운영한* 매출만 센다(ADR-0009 — 마일스톤은 카페를 굴리는 쪽으로 당긴다). 매크로
+# 목표의 누적 진행이라 슬라이스를 넘어 보존돼야 하므로 저장한다(_run_harvested 점수판과 같은 결 —
+# 멜·바나 affinity처럼 main 세이브에 한 조각 추가, SaveManager 불변). 거둔 영혼은 _run_harvested,
+# 세 호감도는 affinity 노드들에서 파생되므로 마일스톤이 새로 저장하는 건 이 한 조각뿐이다.
+var _cafe_revenue_total := 0
+# T7.2 1단 달성("카페 2단계!") 팝업을 이미 띄웠는가(한 번만 뜨게 하는 래치). 달성 여부 자체는
+# 누적값에서 파생되므로(CafeMilestone.is_complete — 세이브 무상태) 저장하지 않는다. 이 래치는
+# 일시 표시용으로, _ready에서 "이미 완료된 세이브를 이어받았으면 true"로 초기화해 재개 시
+# 팝업이 다시 터지지 않게 한다(완료 상태는 HUD가 상시 보여 줌 — RunSummary.is_over와 같은 결).
+var _milestone_celebrated := false
+# T7.2 달성 팝업 표시 잔여 시간(초). 카페 마감 정산 팝업과 같은 결(비차단 자동 해제).
+var _milestone_popup_secs := 0.0
+const MILESTONE_POPUP_SECS := 6.0  # 달성 팝업 표시 시간(2단 미리보기를 읽을 시간을 넉넉히)
+
 func _ready() -> void:
 	_ensure_input_actions()
 	ground.tile_set = _build_tileset()
@@ -264,6 +282,10 @@ func _ready() -> void:
 	# T6.1 복원 시각이 밤(19시+)이면 바나가 밤 무대에 이미 서 있도록 가시성을 맞춘다
 	# (옥자·미호와 같은 결 — 껐다 켜도 그대로). 통보 단계면 가드에 걸려 아직 안 보인다.
 	_update_bana_station()
+	# T7.2 이어받은 세이브가 이미 카페 1단을 채웠으면 달성 래치를 켜 둔다 — 재개 때 "카페 2단계!"
+	# 팝업이 다시 터지지 않게(완료 상태는 마일스톤 HUD가 상시 보여 준다). 신규/미완료면 false로,
+	# 플레이 중 채우는 순간 _process가 한 번 팝업을 띄운다(RunSummary.is_over 재개 안전과 같은 결).
+	_milestone_celebrated = _milestone_complete()
 	# T4.2 이어받은 세이브가 이미 14일을 넘겼으면(15일째 아침) 바로 마무리 화면을 띄운다.
 	# 그 경우 온보딩 컷신은 띄우지 않는다(슬라이스가 끝났으므로).
 	if RunSummary.is_over(clock.day):
@@ -559,6 +581,7 @@ func _save_game() -> void:
 		"bana_affinity": bana_affinity.to_save(),
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
+		"cafe_revenue_total": _cafe_revenue_total,
 		"selected_crop": _selected_crop,
 	}
 	if saver.save_game(data):
@@ -591,6 +614,8 @@ func _load_game() -> void:
 		onboarding.load_save(data["onboarding"])
 	# T4.2 슬라이스 점수판 누적(거둔 영혼 총수). 손상 방어로 음수는 0으로 자른다.
 	_run_harvested = maxi(int(data.get("run_harvested", 0)), 0)
+	# T7.2 카페 마일스톤 누적 서빙 매출. 손상 방어로 음수는 0으로 자른다(키 없는 구버전 세이브는 0).
+	_cafe_revenue_total = maxi(int(data.get("cafe_revenue_total", 0)), 0)
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
 	_notice("불러옴")
@@ -665,6 +690,12 @@ func _process(delta: float) -> void:
 		_cafe_summary_secs -= delta
 		if _cafe_summary_secs <= 0.0:
 			cafe_summary_panel.visible = false
+
+	# T7.2 카페 1단 달성 팝업 표시 시간이 지나면 숨긴다(카페 정산 팝업과 같은 결 — 비차단 자동 해제).
+	if _milestone_popup_secs > 0.0:
+		_milestone_popup_secs -= delta
+		if _milestone_popup_secs <= 0.0:
+			milestone_panel.visible = false
 
 	# T2.3 작물 선택 순환(Q). 심을 작물을 바꾼다(성장일수가 다른 3종).
 	if not _sleeping and Input.is_action_just_pressed("cycle_crop"):
@@ -858,6 +889,15 @@ func _process(delta: float) -> void:
 	bana_guard_label.visible = night_label.visible
 	if bana_guard_label.visible:
 		bana_guard_label.text = BanaGuard.summary(bana_affinity.hearts())
+	# T7.2 카페 마일스톤 진행 바(상시 노출 — 매크로 목표). 세 루프 산출물(거둔 영혼·누적 서빙
+	# 매출·세 동료 하트 합)에서 매번 파생해 "셋 다 채워야 1단이 닫힌다"를 바 하나 + 하위 분해로
+	# 보여 준다(ADR-0009 — 왜 농사·카페·관계를 다 하지의 답). 완료되면 바 대신 2단 미리보기를 건다.
+	milestone_label.text = CafeMilestone.summary(_run_harvested, _cafe_revenue_total, _milestone_hearts())
+	# 채우는 순간 한 번 "카페 2단계!" 팝업을 띄운다(래치 — 매 프레임 재팝업 방지). 달성 여부는
+	# 누적값에서 파생되므로(세이브 무상태), 재개 시엔 _ready가 래치를 미리 켜 둬 다시 안 터진다.
+	if not _milestone_celebrated and _milestone_complete():
+		_milestone_celebrated = true
+		_show_milestone_reached()
 	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. 상점 패널이 떴으면 숨겨 겹침을 막는다
 	# (대화 중엔 위 early-return에서 이미 숨겼다). 완료(DONE) 후엔 문구가 ""라 사라진다.
 	var guide := onboarding.guidance()
@@ -1228,6 +1268,7 @@ func _try_night_serve(seat: int) -> void:
 	var revenue := night_bar.serve(seat)
 	if revenue > 0:
 		wallet.earn(revenue)
+		_cafe_revenue_total += revenue        # T7.2 카페 마일스톤 누적(밤 응대도 카페/바 운영 매출)
 		_notice("밤 손님 응대 +%d골드" % revenue)
 
 # T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
@@ -1259,6 +1300,7 @@ func _try_serve(seat: int) -> void:
 	inventory.take_harvest(material)          # 서빙 재료 1개 소모(아무 재료 1회)
 	var revenue := cafe.serve(seat)           # 정액 P × margin(T5.5에서 마진 분화)
 	wallet.earn(revenue)                      # 서빙 즉시 지갑 반영
+	_cafe_revenue_total += revenue            # T7.2 카페 마일스톤 누적(서빙 매출 — 카페를 운영한 매출)
 	_notice("%s 서빙 +%d골드" % [CropCatalog.name_of(material), revenue])
 
 # 보유 수확물이 하나라도 있는가(서빙 가능 판정·프롬프트용).
@@ -1289,6 +1331,26 @@ func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
 	])
 	cafe_summary_panel.visible = true
 	_cafe_summary_secs = CAFE_SUMMARY_SECS
+
+# ── T7.2 카페 마일스톤 1단 ──────────────────────────────────────────────────
+# 관계 루프 산출물 = 세 동료 하트의 합(미호+멜+바나). 곱셈기들이 각자 하트를 곱셈기로 환류하듯
+# (Foxfire·CafeMargin·BanaGuard), 마일스톤은 같은 하트를 *관계 산출물*로 합산해 요구한다 —
+# 세 affinity 노드에서 매번 파생되므로 마일스톤이 따로 저장하는 관계 상태는 없다(세이브 무상태).
+func _milestone_hearts() -> int:
+	return affinity.hearts() + mel_affinity.hearts() + bana_affinity.hearts()
+
+# 카페 1단 완료 여부 — 세 루프 산출물이 *각각* 목표치를 넘었나(AND 게이트, CafeMilestone). 누적
+# 거둔 영혼·누적 서빙 매출·세 동료 하트 합에서 파생한다(끝남이 day에서 파생되는 RunSummary와 같은 결).
+func _milestone_complete() -> bool:
+	return CafeMilestone.is_complete(_run_harvested, _cafe_revenue_total, _milestone_hearts())
+
+# 1단을 채우는 순간 "카페 2단계!" + 2단 미리보기 한 줄을 팝업으로 띄운다(비차단 자동 해제 —
+# 카페 마감 정산 팝업과 같은 결). 진짜 2단 콘텐츠는 Phase 3 — 여기선 깊이를 *암시*만 한다
+# (ADR-0009, T3.5 사연 한 줄처럼 저비용). 측정 신호 "1단 깨니 2단 갈망하나"의 갈망을 거는 자리.
+func _show_milestone_reached() -> void:
+	milestone_text.text = CafeMilestone.reached_text()
+	milestone_panel.visible = true
+	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
 # T3.3 미호 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 호감도를 올린다.
 # 선호 작물(영혼 호박)이면 더 크게 오른다. 하루 1회만 가능(Affinity가 게이팅).
