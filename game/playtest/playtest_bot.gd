@@ -1,15 +1,22 @@
 extends SceneTree
-# T4.4 — ★ 재미 게이트 플레이테스트 봇 (헤드리스 자동 플레이어).
+# T4.4 / T7.3 — ★ 재미 게이트 플레이테스트 봇 (헤드리스 자동 플레이어).
 #
-# 목적: ROADMAP T4.4 — "직접 14일을 플레이테스트하고 '또 하고 싶나?'에 통과/재설계
-#       결정을 근거와 함께 내린다"의 그 '근거'를 봇으로 모은다. 봇은 재미를 느낄 수
+# 목적: ROADMAP T4.4 — "직접 플레이테스트하고 '또 하고 싶나?'에 통과/재설계 결정을
+#       근거와 함께 내린다"의 그 '근거'를 봇으로 모은다. 봇은 재미를 느낄 수
 #       없으므로 재미 그 자체는 판정하지 않는다 — 대신 재미의 '전제조건'을 정량
-#       검증한다: ① 14일이 한 번도 막히지 않고 굴러가는가(무막힘) ② 14일 슬라이스의
+#       검증한다: ① 슬라이스가 한 번도 막히지 않고 굴러가는가(무막힘) ② 슬라이스의
 #       우상향 엔진(여우불=관계 보상)이 실제로 켜지는가 ③ 페이싱이 설계 목표
-#       (miho-heart-arc: ♡1≈D5·♡2≈D10)에 맞는가 ④ 서로 다른 플레이 스타일이
-#       의미 있게 다른 결과를 내는가(선택의 가치).
+#       (miho-heart-arc: 곡선 상수에서 파생되는 ♡1·♡2 도달일)에 맞는가 ④ 서로 다른
+#       플레이 스타일이 의미 있게 다른 결과를 내는가(선택의 가치).
 #
-# 방식: T4.2/T4.3의 "실제 시스템 노드로 14일 풀 시뮬레이션"과 같은 결. 물리 이동·입력
+# ★ T7.3 — 21일 확장 + 위험 B 재조정 검증: 슬라이스 길이(RUN_DAYS)는 RunSummary에서
+#   파생하므로 21일로 자동 확장된다. 호감도 곡선이 슬라이스 길이에 비례 스케일(affinity.gd
+#   POINTS_PER_HEART)되므로, 봇의 페이싱·위험 B 판정도 D5/D10 같은 *고정 날짜*가 아니라
+#   곡선 상수에서 파생한다 — RUN_DAYS를 21↔14로 바꿔도 판정이 따라온다(손절 사다리 ①).
+#   추가 판정 ⑥: 위험 B(♡5 조기 만렙) 해소 — 가장 빠른 관계 경로(Gifter)도 ♡5 만렙이
+#   슬라이스 후반부에야 닿아 후반 동기가 유지되는지.
+#
+# 방식: T4.2/T4.3의 "실제 시스템 노드로 슬라이스 풀 시뮬레이션"과 같은 결. 물리 이동·입력
 #       대신 실제 게임 노드(FarmField·SoulEnergy·Wallet·Inventory·Affinity·GameClock)를
 #       직접 구동하고, main.gd의 하루 루프(_try_farm_action·_on_day_advanced·카페
 #       판매/구매·미호 대화/선물)를 봇 정책으로 재현한다. 노드가 진짜라 밸런스 수치
@@ -28,7 +35,7 @@ extends SceneTree
 
 const COST := SoulEnergy.COST_PER_ACTION       # 행동당 혼력
 const ACTIONS_PER_DAY := SoulEnergy.MAX / COST # 하루 가용 행동 수(= 10)
-const RUN_DAYS := RunSummary.RUN_DAYS          # 14일 슬라이스
+const RUN_DAYS := RunSummary.RUN_DAYS          # 통합 슬라이스 길이(단일 진실원에서 파생 — 21일)
 const N_PLOTS := 16                            # 봇이 굴리는 밭 칸 풀(혼력 한도가 실제 제약)
 
 # 하루 한 명의 행동 정책을 표현하는 가벼운 설정 묶음.
@@ -44,7 +51,7 @@ class Persona:
 
 func _initialize() -> void:
 	print("══════════════════════════════════════════════════════════════")
-	print(" T4.4 재미 게이트 — 14일 플레이테스트 봇 (헤드리스)")
+	print(" T4.4/T7.3 재미 게이트 — %d일 플레이테스트 봇 (헤드리스)" % RUN_DAYS)
 	print(" 행동/일 %d · 슬라이스 %d일 · 하트당 %d점 · 여우불=하트 파생" % [
 		ACTIONS_PER_DAY, RUN_DAYS, Affinity.POINTS_PER_HEART])
 	print("══════════════════════════════════════════════════════════════")
@@ -74,15 +81,15 @@ func _persona_farmer() -> Persona:
 	# 경제 최적화 대조군: 관계를 안 쌓고(대화·선물 X) 밭을 더 넓게 굴린다. 작물은
 	# Talker와 같은 혼령초 — 변수를 '관계 유무 + 칸 수'로 좁혀, 여우불 가속이 없을 때
 	# 순수 경제 상한이 어디까지인지를 Talker와 깨끗이 대비한다(같은 작물).
-	#   ※ 14일 슬라이스에서 혼령초(3일)가 유일하게 2회전 이상 도는 작물이라 사실상
+	#   ※ 슬라이스에서 혼령초(3일)가 가장 빠르게 회전하는 작물이라 사실상 경제
 	#     최적이다. 영혼 호박(8일) 단일작은 여우불 없이는 회수가 안 되는 함정이며
 	#     (별도 진단 — README 참조), 그래서 '경제 최적화'의 정의에서 제외했다.
 	return Persona.new("Farmer(경제 최적화)", false, false, 8,
 		func(_day: int, _gold: int) -> String: return CropCatalog.HONRYEONGCHO)
 
 
-# ── 14일 한 판 시뮬레이션 ────────────────────────────────────────────────────
-# 실제 게임 노드를 새 게임 상태로 세팅하고, 페르소나 정책으로 14일을 굴린다.
+# ── 슬라이스 한 판 시뮬레이션(RUN_DAYS일) ───────────────────────────────────
+# 실제 게임 노드를 새 게임 상태로 세팅하고, 페르소나 정책으로 RUN_DAYS일을 굴린다.
 # 반환: { name, days:[일별 스냅샷...], heart_days:{1:일,2:일,...}, softlocks:int, ... }
 func _run(p: Persona) -> Dictionary:
 	# 새 게임 상태(main의 _ready + Inventory._ready 시작 씨앗을 그대로 모방).
@@ -104,8 +111,8 @@ func _run(p: Persona) -> Dictionary:
 	var heart_days := {}                        # 하트 단계 → 처음 도달한 게임 날
 	var foxfire_awake_day := -1                 # 여우불이 처음 깨어난 날
 
-	# day 1..RUN_DAYS 플레이. 각 날 끝에 취침(advance_day+refill). 14번째 취침이
-	# day를 15로 올려 RunSummary.is_over → 슬라이스 종료(main과 동일).
+	# day 1..RUN_DAYS 플레이. 각 날 끝에 취침(advance_day+refill). RUN_DAYS번째 취침이
+	# day를 RUN_DAYS+1로 올려 RunSummary.is_over → 슬라이스 종료(main과 동일).
 	while clock.day <= RUN_DAYS:
 		var day: int = clock.day
 		var harvested_today := 0
@@ -156,7 +163,7 @@ func _run(p: Persona) -> Dictionary:
 				actions -= 1
 
 		# 소프트락 = 오늘 새로 심을 칸도 없고(씨앗·골드 없음) 물 줄 작물도 없어 농사가
-		# 한 발도 못 나간 날. 14일 내내 0이어야 무막힘(완료기준).
+		# 한 발도 못 나간 날. 슬라이스 내내 0이어야 무막힘(완료기준).
 		if wanted_progress and not made_progress and not _has_growing(farm, plots):
 			softlocks += 1
 
@@ -293,21 +300,25 @@ func _print_verdict(results: Array) -> void:
 	var gifter: Dictionary = results[1]
 	var farmer: Dictionary = results[2]
 
-	# ① 무막힘: 모든 전략이 14일 내내 소프트락 0.
+	# ① 무막힘: 모든 전략이 슬라이스 내내 소프트락 0.
 	var no_softlock := true
 	for r in results:
 		if r["softlocks"] > 0:
 			no_softlock = false
-	_check("① 무막힘 — 세 전략 모두 14일 동안 한 번도 막히지 않음", no_softlock)
+	_check("① 무막힘 — 세 전략 모두 %d일 동안 한 번도 막히지 않음" % RUN_DAYS, no_softlock)
 
-	# ② 우상향 엔진: 대화만 하는 Talker도 여우불이 14일 안에 깨어남(체감 ♡2+).
+	# ② 우상향 엔진: 대화만 하는 Talker도 여우불이 슬라이스 안에 깨어남(체감 ♡2+).
 	var engine_on: bool = talker["foxfire_awake_day"] > 0 and (talker["final_hearts"] as int) >= 2
 	_check("② 우상향 엔진 — 대화만으로도 여우불이 켜지고 ♡2+ 도달", engine_on)
 
-	# ③ 페이싱: miho-heart-arc 목표(♡1≈D5, ♡2≈D10)에 근접(±2일 허용).
+	# ③ 페이싱: miho-heart-arc 목표(대화만 채널의 ♡1·♡2 도달일)에 근접(±2일 허용).
+	#   목표일은 곡선 상수에서 파생한다 — 대화만 8점/일이라 ♡N은 ⌈N·하트점수/대화점수⌉일째
+	#   처음 닿는다. RUN_DAYS를 21↔14로 바꿔도(곡선이 비례 스케일) 목표일이 따라온다.
 	var hd: Dictionary = talker["heart_days"]
-	var pacing: bool = hd.has(1) and hd.has(2) and absi((hd[1] as int) - 5) <= 2 and absi((hd[2] as int) - 10) <= 2
-	_check("③ 페이싱 — Talker ♡1≈D5·♡2≈D10 목표 곡선에 부합", pacing)
+	var t1 := ceili(float(Affinity.POINTS_PER_HEART) / float(Affinity.DAILY_TALK_POINTS))
+	var t2 := ceili(float(2 * Affinity.POINTS_PER_HEART) / float(Affinity.DAILY_TALK_POINTS))
+	var pacing: bool = hd.has(1) and hd.has(2) and absi((hd[1] as int) - t1) <= 2 and absi((hd[2] as int) - t2) <= 2
+	_check("③ 페이싱 — Talker ♡1≈D%d·♡2≈D%d 목표 곡선에 부합" % [t1, t2], pacing)
 
 	# ④ 선택의 가치: 세 전략이 의미 있게 다른 결과(골드·하트가 갈림).
 	var golds := [talker["final_gold"], gifter["final_gold"], farmer["final_gold"]]
@@ -319,8 +330,19 @@ func _print_verdict(results: Array) -> void:
 	# ⑤ 대조군: 관계를 버린 Farmer는 여우불이 잠든 채(엔진 꺼짐)임을 확인.
 	_check("⑤ 대조군 — 관계 무시(Farmer)는 여우불이 끝까지 잠듦", farmer["foxfire_awake_day"] < 0)
 
+	# ⑥ ★T7.3 위험 B(♡5 조기 만렙) 해소: 가장 빠른 관계 경로(Gifter)조차 ♡5 만렙이
+	#   슬라이스 후반부(≥0.7×RUN_DAYS)에야 닿아 후반 동기가 살아 있음을 확인한다. 곡선이
+	#   슬라이스 길이에 비례 스케일되므로(affinity.gd) 14일 곡선을 21일에 그대로 쓸 때의
+	#   조기 만렙(D12/57%)이 후반(D17/81%)으로 밀린다. 임계는 RUN_DAYS에서 파생(손절 사다리 ①).
+	var gh: Dictionary = gifter["heart_days"]
+	var late_threshold := int(round(float(RUN_DAYS) * 0.7))
+	var late_motivation: bool = gh.has(Affinity.MAX_HEARTS) and (gh[Affinity.MAX_HEARTS] as int) >= late_threshold
+	var maxd_str: String = ("D%d" % gh[Affinity.MAX_HEARTS]) if gh.has(Affinity.MAX_HEARTS) else "미달"
+	_check("⑥ 후반 동기 — Gifter ♡%d 만렙이 슬라이스 후반(≥D%d)에 도달 [실제 %s]" % [
+		Affinity.MAX_HEARTS, late_threshold, maxd_str], late_motivation)
+
 	print("\n※ 위는 '재미의 전제조건'이다. 모두 ✓라도 '또 하고 싶나'(주관)는 사람이")
-	print("  직접 14일을 플레이해 판정해야 한다 — 봇은 굴러가는지·곡선이 켜지는지까지만 본다.")
+	print("  직접 %d일을 플레이해 판정해야 한다 — 봇은 굴러가는지·곡선이 켜지는지까지만 본다." % RUN_DAYS)
 
 func _check(label: String, ok: bool) -> void:
 	print(("  ✓ " if ok else "  ✗ ") + label)
