@@ -1,9 +1,16 @@
 extends SceneTree
-# T6.1/T6.2/T6.3/T6.4/T6.5 임시 헤드리스 단위검증 — 바나 NPC 밤 무대 배치·대화(T6.1)·호감도
-# (T6.2)·바 옵트인(T6.3)·막기/응대/이중 손실(T6.4)·이중 보호 축(T6.5)을 실제 main 씬으로 검증.
-# npc_station_test.gd와 같은 결의 단언 하네스 — 배치/가시성·대화 라우팅이 main.gd(씬
-# 오케스트레이션)에 살아 단독 노드로 떼어 검증할 수 없어, main.tscn을 인스턴스화해 시각·
-# 단계·호감도를 직접 흘려 분기를 굴린다.
+# T6.1/T6.2/T6.3/T6.4/T6.5/T6.6 임시 헤드리스 단위검증 — 바나 NPC 밤 무대 배치·대화(T6.1)·호감도
+# (T6.2)·바 옵트인(T6.3)·막기/응대/이중 손실(T6.4)·이중 보호 축(T6.5)·Sprint 6 통합(T6.6)을
+# 실제 main 씬으로 검증. npc_station_test.gd와 같은 결의 단언 하네스 — 배치/가시성·대화 라우팅이
+# main.gd(씬 오케스트레이션)에 살아 단독 노드로 떼어 검증할 수 없어, main.tscn을 인스턴스화해
+# 시각·단계·호감도를 직접 흘려 분기를 굴린다.
+#
+# T6.6(Sprint 6 통합)은 앞 작업들이 *점단위*로 검증한 조각들을 통합 관점으로 마무리한다:
+#   ㉖ 배치 정합 — 밤 시각에 네 NPC(옥자·멜·미호·바나)가 시각·단계에서 파생되어 서로 다른
+#      칸에 충돌 없이 서고, 바나 칸이 좌석 줄(응대)·스폿 줄(막기)과 겹치지 않는다(무대 일관).
+#   ㉗ 밤 루프 end-to-end — 옵트인→막기→자동차단(이중 보호 ㉠)→실제 약탈(이중 손실 ㉮)→응대
+#      매출(㉯)→취침 정산(손실 이월 0)이 *한 밤 한 흐름*으로 끝까지 굴러가고, 그 사이 바나
+#      호감도가 일 경계·세이브를 넘어 보존된다("바나 세이브 + 배치 정합 + 통합" 한자리 검증).
 # 실행: godot --headless --path game --script res://playtest/bana_test.gd
 
 var _fail := 0
@@ -282,6 +289,110 @@ func _run_checks() -> void:
 	_check("㉕ ♡5 자동 차단으로 첫 돌파는 재고가 안 줄어듦(체감)",
 		m10.inventory.total_harvest() == inv_before and m10.night_bar.tonight_auto_blocked() >= 1)
 	m10.free()
+
+	# ══════════════ T6.6 Sprint 6 통합: 배치 정합 + 밤 루프 end-to-end + 바나 세이브 ══════════════
+	# 앞 작업들이 점단위로 본 조각을 통합 관점으로 마무리한다(T5.6과 같은 결의 통합 검증).
+	print("── T6.6 Sprint 6 통합(배치 정합 · 밤 루프 end-to-end · 바나 세이브) ──")
+
+	# ── ㉖ 배치 정합: 밤 시각에 네 NPC가 시각·단계에서 파생되어 서로 다른 칸에 충돌 없이 서고,
+	#     바나 칸이 좌석 줄(응대 대상)·스폿 줄(막기 대상)과 겹치지 않는다(밤 무대 일관) ──
+	var m11: Node = await _new_main()
+	m11.onboarding.step = Onboarding.MEET_MIHO          # 통보 지남(옥자 상주·바나 밤 무대가 열림)
+	m11.clock.minutes = Cafe.CLOSE_MIN + 60             # 20:00(밤 — 미호 카페 출근·바나 등장)
+	m11._refresh_okja_station()
+	m11._update_miho_station()
+	m11._update_bana_station()
+	# 네 NPC의 밤 칸이 모두 서로 다르다(겹쳐 서면 한 칸에서 둘이 겹쳐 그려짐 — 무대 깨짐).
+	var night_tiles := [m11.OKJA_CAFE_TILE, m11.MEL_TILE, m11._miho_tile, m11.BANA_NIGHT_TILE]
+	var uniq := {}
+	for t in night_tiles:
+		uniq[t] = true
+	_check("㉖ 밤 시각 네 NPC(옥자·멜·미호·바나) 칸이 모두 다름(충돌 0)", uniq.size() == 4)
+	# 밤엔 미호가 카페 출근 자리에 있고(밭 아님) 바나가 밤 무대에 보인다(시각 파생 일관).
+	_check("㉖b 밤엔 미호가 카페 자리·바나 보임", m11._miho_tile == m11.MIHO_CAFE_TILE and m11.bana.visible)
+	# 위치도 칸에서 파생된다(세이브 무상태 — 시각·단계가 자리를 정한다).
+	_check("㉖c 옥자·멜·미호·바나 위치가 각 칸 중앙에서 파생",
+		m11.okja.position == m11._tile_center_px(m11.OKJA_CAFE_TILE)
+		and m11.mel.position == m11._tile_center_px(m11.MEL_TILE)
+		and m11.miho.position == m11._tile_center_px(m11.MIHO_CAFE_TILE)
+		and m11.bana.position == m11._tile_center_px(m11.BANA_NIGHT_TILE))
+	# 바나 칸이 좌석 줄·스폿 줄과 겹치지 않는다(NPC가 응대·막기 대상 칸을 깔고 앉지 않게).
+	_check("㉖d 바나 칸은 좌석 줄·스폿 줄과 안 겹침",
+		not m11.SEAT_TILES.has(m11.BANA_NIGHT_TILE) and not m11.NIGHT_SPOT_TILES.has(m11.BANA_NIGHT_TILE))
+	# 좌석 줄(응대)과 스폿 줄(막기)이 분리된다 — 막기↔응대 경쟁의 공간적 뿌리(ADR-0010 #4).
+	var rows_disjoint := true
+	for s in m11.SEAT_TILES:
+		if m11.NIGHT_SPOT_TILES.has(s):
+			rows_disjoint = false
+	_check("㉖e 좌석 줄(응대)과 스폿 줄(막기)이 분리(경쟁의 공간 뿌리)", rows_disjoint)
+	m11.free()
+
+	# ── ㉗ 밤 루프 end-to-end: 옵트인→막기→자동차단(㉠)→실제 약탈(㉮)→응대(㉯)→취침 정산(이월 0)이
+	#     한 밤 한 흐름으로 끝까지 굴러가고, 바나 호감도가 일 경계·세이브를 넘어 보존된다 ──
+	var m12: Node = await _new_main()
+	m12.onboarding.step = Onboarding.MEET_MIHO
+	m12.clock.day = 1
+	m12.clock.minutes = NightBar.OPEN_MIN + 120         # 21:00(밤 창)
+	# ♡3: 보호가 깨어 있되 base를 무효화하진 않는 중간값 — raid 2(<base 3)·자동차단 1·인내심 10.
+	# 이 한 밤에 자동 차단(돌파 1회)과 실제 약탈(다음 돌파)이 모두 나와 이중 보호·이중 손실을
+	# 한 흐름으로 보인다(♡5는 ㉕에서 자동 차단만, ♡0은 ⑱~⑳에서 약탈만 — ♡3이 둘을 잇는다).
+	m12.bana_affinity.points = 3 * Affinity.POINTS_PER_HEART  # ♡3(=120)
+	await process_frame                                  # main._process가 night_bar seam에 ♡3 보호 주입
+	_check("㉗ ♡3 보호가 night_bar에 주입됨(raid 2·자동차단 1·인내심 10)",
+		m12.night_bar.raid_amount == 2 and m12.night_bar.auto_block == 1
+		and is_equal_approx(m12.night_bar.patience_secs, 10.0))
+	# 옵트인 — 여는 순간 auto_block(1)이 이 밤 자동 차단 횟수로 채워진다.
+	m12._open_night_bar()
+	_check("㉗b 옵트인으로 바가 열린다", m12.night_bar.is_opened())
+	m12.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 10)
+	var inv_full: int = m12.inventory.total_harvest()
+	# (A) 막기 성공: 잡귀를 깃들이고 _try_block → 즉시 격퇴(재고 불변).
+	m12.night_bar.tick(NightBar.SPAWN_INTERVAL + 0.1, m12.clock.minutes)
+	_check("㉗c 막기 전 잡귀 존재", m12.night_bar.is_threat(0))
+	m12._try_block(0)
+	_check("㉗d _try_block → 격퇴(스폿 비움·재고 불변)",
+		not m12.night_bar.is_threat(0) and m12.inventory.total_harvest() == inv_full)
+	# (B) 자동 차단(이중 보호 ㉠): 새 잡귀를 돌파시키면 바나가 1마리를 대신 막아 재고 0 손실.
+	m12.night_bar.tick(NightBar.SPAWN_INTERVAL + 0.1, m12.clock.minutes)   # 잡귀 재등장
+	m12.night_bar.tick(NightBar.DEFAULT_APPROACH + 0.1, m12.clock.minutes)  # 안 막아 돌파 → 자동 차단
+	_check("㉗e 첫 돌파는 바나 자동 차단(재고 보존·약탈 0)",
+		m12.night_bar.tonight_auto_blocked() == 1 and m12.night_bar.tonight_raided() == 0
+		and m12.inventory.total_harvest() == inv_full)
+	# (C) 실제 약탈(이중 손실 ㉮): 자동 차단 소진 후 다음 돌파는 재고를 약탈한다(미래 자산↓).
+	# 직전 tick의 돌파가 곧바로 새 잡귀를 재스폰했으므로(spawn_timer), 추가 스폰 없이 한 번
+	# 더 접근시키면 그 잡귀가 돌파한다(자동 차단은 소진됐으니 이번엔 실제 약탈).
+	m12.night_bar.tick(NightBar.DEFAULT_APPROACH + 0.1, m12.clock.minutes)  # 안 막아 돌파 → 약탈
+	_check("㉗f 자동 차단 소진 후 돌파는 재고 약탈(raid 2)",
+		m12.night_bar.tonight_raided() == 2 and m12.inventory.total_harvest() == inv_full - 2)
+	# (D) 응대 매출(이중 손실 ㉯의 반대편 — 현재 자산): 바 손님을 응대해 밤 매출을 번다(재료 무소모).
+	var serve_seat := -1
+	for i in NightBar.N_SEATS:
+		if m12.night_bar.is_waiting(i):
+			serve_seat = i
+			break
+	_check("㉗g 응대할 바 손님이 있다", serve_seat >= 0)
+	var gold0: int = m12.wallet.gold
+	var inv_after_raid: int = m12.inventory.total_harvest()
+	m12._try_night_serve(serve_seat)
+	_check("㉗h 응대 → 밤 매출이 지갑에 들어옴(재료 무소모)",
+		m12.wallet.gold == gold0 + NightBar.SERVE_PRICE
+		and m12.night_bar.tonight_revenue() == NightBar.SERVE_PRICE
+		and m12.inventory.total_harvest() == inv_after_raid)
+	# (E) 취침 정산: 하루가 넘어가면 밤이 정산되고 옵트인이 꺼져 손실이 다음 밤으로 이월되지 않는다.
+	m12._on_day_advanced(2)  # 14일 슬라이스 안(끝 아님)
+	_check("㉗i 취침 후 옵트인 리셋·잡귀 0(손실 이월 0)",
+		not m12.night_bar.is_opened() and m12.night_bar.threat_count() == 0
+		and m12.night_bar.tonight_raided() == 0)
+	# (F) 바나 호감도는 밤 활동·일 경계를 넘어 보존된다(밤 루프는 호감도를 건드리지 않음).
+	_check("㉗j 바나 호감도가 일 경계를 넘어 ♡3 보존", m12.bana_affinity.hearts() == 3)
+	# (G) 바나 세이브 라운드트립 + 배치 재현: 저장·복원 후 ♡3이 살고, 밤이면 바나가 다시 선다.
+	m12.clock.minutes = NightBar.OPEN_MIN + 120  # 밤 시각으로 저장(복원 시 밤 무대 재현 확인)
+	m12._save_game()
+	m12.free()
+	var m13: Node = await _new_main()  # _ready가 자동 복원 후 _update_bana_station
+	_check("㉗k 복원 후 바나 ♡3 유지", m13.bana_affinity.points == 3 * Affinity.POINTS_PER_HEART and m13.bana_affinity.hearts() == 3)
+	_check("㉗l 밤 시각 복원 시 바나가 밤 무대에 재등장(세이브+배치 정합)", m13.bana.visible)
+	m13.free()
 
 	# 테스트 잔여 세이브 정리(다른 실행·플레이에 새지 않게).
 	cleaner.delete_save()
