@@ -200,6 +200,8 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 @onready var interact_prompt: Label = $CanvasLayer/InteractPrompt  # T2.1 [E] 안내
 @onready var farm: FarmField = $FarmField                  # T2.1 밭 칸 상태
 @onready var crop_label: Label = $CanvasLayer/CropLabel    # T2.3 선택 작물 HUD
+@onready var crop_icon: TextureRect = $CanvasLayer/CropIcon  # P2.5④ 선택 작물 아이콘(작물 스프라이트 재사용)
+@onready var shop_crop_icon: TextureRect = $CanvasLayer/ShopPanel/CropIcon  # P2.5④ 출하대 작물 아이콘
 @onready var energy: SoulEnergy = $SoulEnergy              # T2.4 혼력
 @onready var energy_label: Label = $CanvasLayer/EnergyLabel  # T2.4 혼력 HUD
 @onready var saver: SaveManager = $SaveManager            # T2.5 세이브/로드
@@ -1028,6 +1030,11 @@ func _process(delta: float) -> void:
 		CropCatalog.name_of(_selected_crop), CropCatalog.growth_days(_selected_crop),
 		inventory.seed_count(_selected_crop)
 	]
+	# P2.5④ 작물 아이콘 재사용: 선택 작물의 mature 스프라이트를 심기 선택 HUD·출하대에
+	# 아이콘으로 건다(P2.2 작물 도트를 인벤/상점 아이콘으로 재사용 — 무엇을 심고/사는지 한눈에).
+	var crop_icon_tex: Texture2D = CROP_SPRITES[_selected_crop][2]
+	crop_icon.texture = crop_icon_tex
+	shop_crop_icon.texture = crop_icon_tex
 	# T2.4 혼력 HUD: 현재/최대. 바닥나면 취침 안내를 덧붙여 막힌 이유를 알린다.
 	energy_label.text = "혼력: %d/%d%s" % [
 		energy.current, SoulEnergy.MAX, "  지쳤다(취침 필요)" if not energy.can_act() else ""

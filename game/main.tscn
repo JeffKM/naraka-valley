@@ -116,10 +116,19 @@ offset_bottom = 348.0
 text = "[E] 괭이질"
 horizontal_alignment = 1
 
-[node name="CropLabel" type="Label" parent="CanvasLayer"]
+[node name="CropIcon" type="TextureRect" parent="CanvasLayer"]
 offset_left = 8.0
+offset_top = 30.0
+offset_right = 24.0
+offset_bottom = 46.0
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="CropLabel" type="Label" parent="CanvasLayer"]
+offset_left = 28.0
 offset_top = 28.0
-offset_right = 400.0
+offset_right = 420.0
 offset_bottom = 52.0
 text = "..."
 
@@ -230,6 +239,15 @@ offset_top = 12.0
 offset_right = 384.0
 offset_bottom = 164.0
 text = "..."
+
+[node name="CropIcon" type="TextureRect" parent="CanvasLayer/ShopPanel"]
+offset_left = 320.0
+offset_top = 60.0
+offset_right = 352.0
+offset_bottom = 92.0
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
 
 [node name="OnboardingLabel" type="Label" parent="CanvasLayer"]
 visible = false
