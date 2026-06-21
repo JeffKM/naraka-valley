@@ -22,6 +22,13 @@ func _init():
 	out.fill(Color(0.05, 0.05, 0.07, 1.0))
 	for layer in [ground, field]:
 		_blit_layer(layer, out)
+	# P2.3② 가구·장식: main의 _draw 오버레이는 GPU 없이 안 잡히므로, 같은 배치
+	# 데이터(PROP_LAYOUT)를 읽어 텍스처를 바닥정렬로 직접 합성한다(시각 확인용).
+	for entry in main.PROP_LAYOUT:
+		var tex: Texture2D = entry[0]
+		var tex_img := tex.get_image()
+		for t in entry[1]:
+			out.blend_rect(tex_img, Rect2i(Vector2i.ZERO, tex_img.get_size()), Vector2i(t.x * 16, t.y * 16))
 	out.save_png("res://tools/map_dump.png")
 	print("✅ map_dump.png 저장")
 	quit()
