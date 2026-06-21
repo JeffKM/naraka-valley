@@ -6,8 +6,8 @@ extends CharacterBody2D
 # origin 규약: 노드 원점을 "발치 중앙"에 둔다. 탑다운 3/4뷰에서 깊이 정렬
 #              (Y-sort)과 충돌 판정 기준을 발 위치로 잡는 게 자연스럽다.
 
-const SPEED := 80.0                 # px/s. 그레이박스 기준값(약 5타일/초). 밸런싱은 후속.
-const BODY_SIZE := Vector2(16, 32)  # 캐릭터 자리 규격(ADR-0003)
+const SPEED := 160.0                # px/s. 환경 2배(TILE 32px)에 맞춰 2배 → 체감 속도(타일/초) 유지.
+const BODY_SIZE := Vector2(32, 64)  # 그레이박스 폴백 규격(환경 2배에 맞춤). 실사용은 도색 스프라이트.
 
 # 마지막으로 바라본 방향. 정지해도 유지되며, 방향 마커를 그리는 데 쓴다(이동 검증용).
 var _facing := Vector2.DOWN

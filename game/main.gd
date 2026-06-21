@@ -20,7 +20,8 @@ extends Node2D
 #   - 좌상단 readout에 현재 구역·위치·FPS가 뜬다.
 
 # ── 규격 ────────────────────────────────────────────────────────────────
-const TILE := 16                       # 타일 한 칸(ADR-0003)
+const TILE := 32                       # 월드 타일 한 칸(px). 캐릭터 2배(v3 size64)에 맞춰 환경도 2배(C). 좌표·카메라·배치는 이 값.
+const TILE_ART := 16                    # 소스 도트 아트의 타일 픽셀(타일셋·오버레이 *생성*용). Ground/Field 타일맵 노드를 2배 스케일해 16px 아트를 32px로 렌더.
 const MAP_W := 40                      # 맵 가로(타일) = 640px
 const MAP_H := 24                      # 맵 세로(타일) = 384px
 
@@ -418,16 +419,16 @@ func _build_tileset() -> TileSet:
 	#    P2.3② 전엔 단색 fill이었던 자리. 결(가로 배치·source id)은 그대로 두고 픽셀만
 	#    텍스처로 교체한다 → _paint_grid·WALL 충돌은 손 안 대도 그대로 동작한다.
 	var n := SOLID_TILES.size()
-	var img := Image.create_empty(TILE * n, TILE, false, Image.FORMAT_RGBA8)
+	var img := Image.create_empty(TILE_ART * n, TILE_ART, false, Image.FORMAT_RGBA8)
 	for i in n:
 		var src_img := (load(SOLID_TEX[SOLID_TILES[i]]) as Texture2D).get_image()
 		if src_img.get_format() != Image.FORMAT_RGBA8:
 			src_img.convert(Image.FORMAT_RGBA8)
-		img.blit_rect(src_img, Rect2i(0, 0, TILE, TILE), Vector2i(i * TILE, 0))
+		img.blit_rect(src_img, Rect2i(0, 0, TILE_ART, TILE_ART), Vector2i(i * TILE_ART, 0))
 	var tex := ImageTexture.create_from_image(img)
 	var src := TileSetAtlasSource.new()
 	src.texture = tex
-	src.texture_region_size = Vector2i(TILE, TILE)
+	src.texture_region_size = Vector2i(TILE_ART, TILE_ART)
 	for i in n:
 		src.create_tile(Vector2i(i, 0))
 	ts.add_source(src, SOLID_SRC_ID)
@@ -473,15 +474,15 @@ func _extract_soil_base() -> Image:
 			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_RIGHT_CORNER) == TR_SOIL:
 			return src.texture.get_image().get_region(src.get_tile_texture_region(coord, 0))
 	# fallback: 밭흙 단색(soil base를 못 찾을 때)
-	var f := Image.create_empty(TILE, TILE, false, Image.FORMAT_RGBA8)
+	var f := Image.create_empty(TILE_ART, TILE_ART, false, Image.FORMAT_RGBA8)
 	f.fill(COLORS[SOIL])
 	return f
 
 # soil 이미지를 어둡게(mul) + 약간 푸르게(blue_add) 틴트해 경작 고랑 상태색을 만든다.
 func _tint_soil(soil: Image, mul: float, blue_add: float) -> Image:
-	var o := Image.create_empty(TILE, TILE, false, Image.FORMAT_RGBA8)
-	for y in TILE:
-		for x in TILE:
+	var o := Image.create_empty(TILE_ART, TILE_ART, false, Image.FORMAT_RGBA8)
+	for y in TILE_ART:
+		for x in TILE_ART:
 			var p := soil.get_pixel(x, y)
 			o.set_pixel(x, y, Color(p.r * mul, p.g * mul, minf(p.b * mul + blue_add, 1.0), 1.0))
 	return o
@@ -495,27 +496,27 @@ func _build_field_tileset() -> TileSet:
 	var soil := _extract_soil_base()
 	var dry := _tint_soil(soil, 0.80, 0.0)    # 경작된 마른 고랑
 	var wet := _tint_soil(soil, 0.55, 0.10)   # 물 준 젖은 고랑(짙고 푸른빛)
-	var img := Image.create_empty(TILE * N_OV, TILE, false, Image.FORMAT_RGBA8)
+	var img := Image.create_empty(TILE_ART * N_OV, TILE_ART, false, Image.FORMAT_RGBA8)
 	for ap in N_APPEAR:
 		for wet_i in 2:
 			var i := ap * 2 + wet_i
 			var bg: Image = wet if wet_i == 1 else dry
-			img.blit_rect(bg, Rect2i(0, 0, TILE, TILE), Vector2i(i * TILE, 0))
+			img.blit_rect(bg, Rect2i(0, 0, TILE_ART, TILE_ART), Vector2i(i * TILE_ART, 0))
 			var r: int = AP_DOT[ap]                             # 새싹 반지름(0이면 안 그림)
 			if r > 0:
 				var c := MATURE if ap == AP_MATURE else SPROUT
-				var c0 := TILE / 2 - r                          # 가운데 정렬
-				img.fill_rect(Rect2i(i * TILE + c0, c0, r * 2, r * 2), c)
+				var c0 := TILE_ART / 2 - r                      # 가운데 정렬
+				img.fill_rect(Rect2i(i * TILE_ART + c0, c0, r * 2, r * 2), c)
 	var tex := ImageTexture.create_from_image(img)
 
 	var src := TileSetAtlasSource.new()
 	src.texture = tex
-	src.texture_region_size = Vector2i(TILE, TILE)
+	src.texture_region_size = Vector2i(TILE_ART, TILE_ART)
 	for i in N_OV:
 		src.create_tile(Vector2i(i, 0))
 
 	var ts := TileSet.new()
-	ts.tile_size = Vector2i(TILE, TILE)
+	ts.tile_size = Vector2i(TILE_ART, TILE_ART)
 	ts.add_source(src, 0)
 	return ts
 
@@ -1618,7 +1619,8 @@ func _draw_props() -> void:
 	for entry in PROP_LAYOUT:
 		var tex: Texture2D = entry[0]
 		for t in entry[1]:
-			draw_texture(tex, Vector2(t.x * TILE, t.y * TILE))
+			# 가구 아트도 16px라 2배로 그려 32px 타일·캐릭터와 비율을 맞춘다(C).
+			draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), tex.get_size() * 2), false)
 
 # 좌석에 앉은 손님(회색 박스)과 머리 위 인내심 바(초록→빨강)를 그린다. 인내심이 줄수록
 # 바가 짧아지고 붉어져 "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거).
