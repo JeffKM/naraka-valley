@@ -246,6 +246,11 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 # 런타임 조립). 무상태(시각 파생)라 세이브 대상이 아니다 — _setup_lighting에서 생성.
 var lighting: DayNightLighting
 
+# P2.6 사운드(BGM 시간대 라우팅 + 이벤트 SFX + 음소거). lighting과 같은 결 — 코드 생성
+# 자식 노드, 무상태(세이브 대상 아님). _setup_audio에서 생성, _process가 매 프레임 시각으로
+# BGM을 잇고, 각 이벤트 자리에서 audio.sfx(...) 한 줄로 효과음을 쏜다.
+var audio: GameAudio
+
 var _grid: Array = []  # _grid[y][x] = 타일 id
 var _sleeping := false  # T1.5 취침 연출 중이면 이동·입력 잠금
 
@@ -331,6 +336,7 @@ func _ready() -> void:
 	_place_labels()
 	_setup_player_and_camera()
 	_setup_lighting()
+	_setup_audio()
 	_setup_clock()
 	# T3.2/T5.6 미호를 현재 시간대의 자리(아침=밭 / 15시부터=카페)에 세우고, 대사 진행
 	# 시그널을 패널·이동잠금에 연결한다. 초기 위치는 _miho_tile(기본 밭)로 두고, 로드 후
@@ -441,6 +447,11 @@ func _ensure_input_actions() -> void:
 	var ev_g := InputEventKey.new()
 	ev_g.physical_keycode = KEY_G
 	InputMap.action_add_event("gift_item", ev_g)
+	# P2.6 오디오 음소거 토글(M). 게임플레이 키(E·Q·S·B·F·G)와 멀고, 어디서든 받는 UX 토글.
+	InputMap.add_action("mute_audio")
+	var ev_m := InputEventKey.new()
+	ev_m.physical_keycode = KEY_M
+	InputMap.action_add_event("mute_audio", ev_m)
 
 # ── TileSet 조립: terrain 도트(source 0) + 실내/벽 단색(source 1) + WALL 충돌 ──
 func _build_tileset() -> TileSet:
@@ -679,6 +690,20 @@ func _setup_lighting() -> void:
 	lighting.setup(lamp_px)
 	lighting.apply(clock.minutes)
 
+# ── P2.6 사운드 ────────────────────────────────────────────────────────────
+# 오디오 노드를 코드로 붙이고(라이팅과 같은 결), 현재 시각에 맞는 BGM을 즉시 깐다.
+# 이후엔 _process가 매 프레임 update_music으로 시간대 전환을 잇고, 각 이벤트 핸들러가
+# audio.sfx(...)로 효과음을 쏜다. 음소거 토글(M)은 _ensure_input_actions가 등록한다.
+func _setup_audio() -> void:
+	audio = GameAudio.new()
+	add_child(audio)
+	audio.update_music(clock.minutes, _run_over, _in_cafe())
+
+# P2.6 BGM 위치 분기: 플레이어가 카페 안인가(밭↔카페 낮 BGM을 가른다). audio는 이 불리언만
+# 받고 출처(지금=구역 판정, 나중=건물 내부 전환)는 모른다 — Phase 3 내부 전환이 와도 불변.
+func _in_cafe() -> bool:
+	return _zone_at(player.global_position) == "카페"
+
 # ── T1.5 하루 사이클 ──────────────────────────────────────────────────────
 func _setup_clock() -> void:
 	# 24:00에 도달하면(쓰러짐) 위치에 상관없이 강제 취침시킨다.
@@ -717,6 +742,7 @@ func _cycle_crop() -> void:
 	var ids := CropCatalog.ids()
 	var i := ids.find(_selected_crop)
 	_selected_crop = ids[(i + 1) % ids.size()]
+	audio.sfx("ui")                           # P2.6 작물 선택 순환 블립
 
 func _on_collapsed() -> void:
 	_do_sleep()  # 어디서든 쓰러져 다음 날 아침으로
@@ -731,6 +757,7 @@ func _do_sleep() -> void:
 		return
 	_sleeping = true
 	clock.running = false
+	audio.sfx("sleep")                 # P2.6 하루를 닫는 부드러운 하강 패드
 	player.set_physics_process(false)  # 연출 중 이동 잠금
 	player.velocity = Vector2.ZERO
 	sleep_prompt.visible = false
@@ -834,6 +861,14 @@ func _process(delta: float) -> void:
 	# 흐른다). 입력 가드보다 먼저 둬, 대화·정산 패널 뒤로 보이는 월드도 밤이면 밤으로 유지된다.
 	# 취침 연출 중엔 시간이 멈춰(clock.running=false) 색조도 자연히 정지하고, 검은 페이드가 덮는다.
 	lighting.apply(clock.minutes)
+	# P2.6 BGM: 시각·종료·위치(카페 안인가)에서 phase(밭/카페/밤/엔딩)를 파생해 BGM을 잇는다
+	# (같은 phase면 즉시 반환, 라이팅과 같은 무상태 결). 시각이 멈춘 취침 연출 중에도 위치는
+	# 잠겨 있어(이동 잠금) phase가 안정적이다.
+	audio.update_music(clock.minutes, _run_over, _in_cafe())
+	# 음소거 토글(M) — 연출·대화·마무리 화면 어디서든 받는다(입력 가드보다 위, UX 토글이라
+	# 게임 상태와 무관). audio가 Music·SFX 버스를 함께 음소거한다.
+	if Input.is_action_just_pressed("mute_audio"):
+		audio.toggle_mute()
 	# T4.2 슬라이스가 끝났으면 마무리 화면만 유지하고 모든 게임 입력을 막는다
 	# (이동은 _do_sleep/_end_run에서 이미 잠갔다). 마무리 화면은 _end_run이 한 번
 	# 세웠으므로 여기선 더 손대지 않는다.
@@ -1169,6 +1204,9 @@ func _try_farm_action() -> void:
 		inventory.add_harvest(harvested_crop) # 거둔 수확물 적재(나중에 카페에서 판매)
 		_run_harvested += 1                   # T4.2 슬라이스 점수판: 거둔 영혼 총수
 		_show_flavor(harvested_crop)          # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
+	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용 — 둘 다 흙 누르는
+	# 동작), 물주기는 물줄기, 수확은 밝은 팝. 동작 문자열(field.next_action)에서 파생한다.
+	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "수확": "harvest"}.get(action, ""))
 	_advance_onboarding(action)               # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
 	energy.spend()                            # 한 동작당 혼력 소모
 	queue_redraw()                            # 새 상태가 바로 보이도록
@@ -1196,6 +1234,7 @@ func _process_shop(facing_mel: bool) -> void:
 		return
 	if Input.is_action_just_pressed("shop_toggle"):
 		_shop_open = not _shop_open
+		audio.sfx("ui")                       # P2.6 출하대 패널 열고/닫기 블립
 	if not _shop_open:
 		return
 	if Input.is_action_just_pressed("shop_sell"):
@@ -1213,6 +1252,7 @@ func _sell_all() -> void:
 		return
 	inventory.clear_harvest()
 	wallet.earn(total)
+	audio.sfx("gold")                         # P2.6 동전 "치링"(raw 판매 골드 획득)
 	_notice("판매 +%d골드" % total)
 
 # 선택 작물 씨앗 1개를 seed_cost로 산다 — 순환의 '골드 → 씨앗'. 골드가 모자라면 막는다.
@@ -1224,6 +1264,7 @@ func _buy_seed(crop_id: String) -> void:
 		_notice("골드 부족(%d 필요)" % cost)
 		return
 	inventory.add_seed(crop_id)
+	audio.sfx("ui")                           # P2.6 상점 거래 블립(씨앗 구매)
 	_notice("%s 씨앗 −%d골드" % [CropCatalog.name_of(crop_id), cost])
 
 # 멜 카페 출하대 패널 본문(골드·수확물 판매 예상액·씨앗 구매가·조작 안내). 헤더에 멜이
@@ -1394,6 +1435,7 @@ func _try_bana_gift() -> void:
 	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
 	var gained := bana_affinity.gift(crop, clock.day)
 	var tag := "(선호!) " if bana_affinity.is_preferred(crop) else ""
+	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립(바나)
 	_notice("바나에게 %s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
 
 # ── T6.3 나라카 바 옵트인 ────────────────────────────────────────────────────
@@ -1407,6 +1449,8 @@ func _open_night_bar() -> void:
 # T6.4 밤 마감(취침 = 밤의 자연스러운 끝) 밤 정산. 이중 손실(약탈 재고·이탈 손님)과 밤 매출을
 # 한 줄로 보인다. 자정 전에 자거나 옵트인을 안 했으면 약탈·매출 모두 0이다(ADR-0010 #5·#6).
 func _on_night_closed(raided: int, revenue: int, left: int) -> void:
+	if revenue > 0:
+		audio.sfx("gold")                     # P2.6 밤 바 정산 매출 골드
 	_notice("나라카 바 마감 · 밤 매출 %d골드 · 약탈 %d개 · 놓친 손님 %d명" % [revenue, raided, left])
 
 # T6.4 ★ 막기 해소 계약 소비(이중 손실 ㉮ — 막기 실패→재고 약탈). 잡귀가 돌파하면(resolved에
@@ -1450,6 +1494,7 @@ func _raid_inventory(n: int) -> int:
 func _try_block(spot: int) -> void:
 	var result := night_bar.block(spot)
 	if result.get("repelled", false):
+		audio.sfx("block")                    # P2.6 잡귀를 쳐내는 타격 "퍽"
 		_notice("잡귀를 쫓아냈다")
 
 # T6.4 밤 손님 응대: 바 손님을 응대해 정액 밤 매출을 즉시 번다(현재 자산). 카페 서빙과 달리
@@ -1459,6 +1504,7 @@ func _try_night_serve(seat: int) -> void:
 	if revenue > 0:
 		wallet.earn(revenue)
 		_cafe_revenue_total += revenue        # T7.2 카페 마일스톤 누적(밤 응대도 카페/바 운영 매출)
+		audio.sfx("serve")                    # P2.6 밤 손님 응대도 같은 서빙 종
 		_notice("밤 손님 응대 +%d골드" % revenue)
 
 # T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
@@ -1474,6 +1520,7 @@ func _try_mel_gift() -> void:
 	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
 	var gained := mel_affinity.gift(crop, clock.day)
 	var tag := "(선호!) " if mel_affinity.is_preferred(crop) else ""
+	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립(멜)
 	_notice("멜에게 %s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
 
 # ── T5.4 카페 손님 서빙 ─────────────────────────────────────────────────────
@@ -1491,6 +1538,7 @@ func _try_serve(seat: int) -> void:
 	var revenue := cafe.serve(seat)           # 정액 P × margin(T5.5에서 마진 분화)
 	wallet.earn(revenue)                      # 서빙 즉시 지갑 반영
 	_cafe_revenue_total += revenue            # T7.2 카페 마일스톤 누적(서빙 매출 — 카페를 운영한 매출)
+	audio.sfx("serve")                        # P2.6 카운터 종 "딩"
 	_notice("%s 서빙 +%d골드" % [CropCatalog.name_of(material), revenue])
 
 # 보유 수확물이 하나라도 있는가(서빙 가능 판정·프롬프트용).
@@ -1521,6 +1569,8 @@ func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
 	])
 	cafe_summary_panel.visible = true
 	_cafe_summary_secs = CAFE_SUMMARY_SECS
+	if revenue > 0:
+		audio.sfx("gold")                     # P2.6 카페 일일 정산 매출 골드
 
 # ── T7.2 카페 마일스톤 1단 ──────────────────────────────────────────────────
 # 관계 루프 산출물 = 세 동료 하트의 합(미호+멜+바나). 곱셈기들이 각자 하트를 곱셈기로 환류하듯
@@ -1555,11 +1605,13 @@ func _try_gift() -> void:
 	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
 	var gained := affinity.gift(crop, clock.day)
 	var tag := "(선호!) " if affinity.is_preferred(crop) else ""
+	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립(미호)
 	_notice("%s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
 
 # 현재 줄이 바뀔 때마다(시작·넘기기) 패널을 갱신한다. 마지막 줄이면 "닫기"로 안내.
 func _on_dialogue_changed(speaker: String, line: String) -> void:
 	dialogue_panel.visible = true
+	audio.sfx("dialogue")                     # P2.6 대사 한 줄 진행마다 부드러운 비프
 	# P2.4 인라인 표정 태그 파싱: 줄 맨 앞 [smile]/[shy]/[sad]/[talk]만 표정으로 떼고,
 	# 본문에서 제거한다. 화이트리스트 밖([E] 등)은 그대로 본문에 남긴다.
 	var expr := PORTRAIT_FALLBACK_EXPR
