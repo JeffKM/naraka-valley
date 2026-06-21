@@ -25,16 +25,22 @@ const TILE_ART := 32                    # 소스 도트 아트의 타일 픽셀 
 const MAP_W := 40                      # 맵 가로(타일) = 640px
 const MAP_H := 24                      # 맵 세로(타일) = 384px
 
-# ── P2.4 대화 초상화: 화자 표시이름 → 버스트 초상화 경로 ──────────────────────
+# ── P2.4 대화 초상화: 화자 표시이름 → 초상화 파일 stem ───────────────────────
 # ADR-0003 "표정=대화 시 별도 일러스트 초상화". 인게임 도트(작은 실루엣)와 달리 얼굴을
 # 또렷이 살리는 자리. 키는 각 NPC display_name()(미호/옥자/멜/바나)과 일치시킨다.
-# 표정 변형(미호 4~5 등)은 이 매핑에 stem을 늘려 붙이면 되는 자리(P2.4 후속).
-const PORTRAIT_OF := {
-	"미호": "res://assets/portraits/miho.png",
-	"옥자": "res://assets/portraits/okja.png",
-	"멜": "res://assets/portraits/mel.png",
-	"바나": "res://assets/portraits/bana.png",
+# 표정 변형은 stem_<expr>.png(예: miho_smile.png) — 대사 줄 맨 앞 인라인 태그
+# [smile]/[shy]/[sad]/[talk]로 줄마다 지정한다(대사 속 [E] 등 조작키 안내는 화이트리스트
+# 밖이라 표정으로 오인하지 않는다). 태그가 없거나 해당 표정 파일이 없으면 talk로, 그것도
+# 없으면 표정 없는 기본 stem.png로 폴백한다.
+const PORTRAIT_DIR := "res://assets/portraits/"
+const PORTRAIT_STEM := {
+	"미호": "miho",
+	"옥자": "okja",
+	"멜": "mel",
+	"바나": "bana",
 }
+const PORTRAIT_EXPRS := ["smile", "shy", "sad", "talk"]  # 인라인 태그 화이트리스트
+const PORTRAIT_FALLBACK_EXPR := "talk"
 
 # ── 타일 종류(아틀라스 인덱스 = 이 순서) ──────────────────────────────────
 const GROUND := 0   # 바깥 바닥(걷기 O)
@@ -1553,16 +1559,40 @@ func _try_gift() -> void:
 # 현재 줄이 바뀔 때마다(시작·넘기기) 패널을 갱신한다. 마지막 줄이면 "닫기"로 안내.
 func _on_dialogue_changed(speaker: String, line: String) -> void:
 	dialogue_panel.visible = true
-	# P2.4 화자 초상화: 매핑에 있고 에셋이 실제로 존재할 때만 슬롯을 켠다(없으면 텍스트만 —
-	# 그레이박스 손님·잡귀 등 일러스트 없는 화자는 자연스럽게 슬롯 없이 표시된다).
-	var portrait_path: String = PORTRAIT_OF.get(speaker, "")
-	if portrait_path != "" and ResourceLoader.exists(portrait_path):
-		dialogue_portrait.texture = load(portrait_path)
+	# P2.4 인라인 표정 태그 파싱: 줄 맨 앞 [smile]/[shy]/[sad]/[talk]만 표정으로 떼고,
+	# 본문에서 제거한다. 화이트리스트 밖([E] 등)은 그대로 본문에 남긴다.
+	var expr := PORTRAIT_FALLBACK_EXPR
+	var body := line
+	if line.begins_with("["):
+		var close := line.find("]")
+		if close > 1:
+			var tag := line.substr(1, close - 1)
+			if PORTRAIT_EXPRS.has(tag):
+				expr = tag
+				body = line.substr(close + 1).strip_edges()
+	_set_portrait(speaker, expr)
+	var hint := "[E] 닫기" if dialogue.is_last() else "[E] 다음"
+	dialogue_text.text = "%s\n\n%s\n\n%s   %s" % [speaker, body, dialogue.progress(), hint]
+
+# P2.4 화자+표정 → 초상화 슬롯. 표정 → talk → 기본 stem.png 순으로 폴백하고, 매핑에 없는
+# 화자(그레이박스 손님·잡귀 등)는 슬롯을 끈다(텍스트만 표시).
+func _set_portrait(speaker: String, expr: String) -> void:
+	var stem: String = PORTRAIT_STEM.get(speaker, "")
+	if stem == "":
+		dialogue_portrait.visible = false
+		return
+	for cand in [expr, PORTRAIT_FALLBACK_EXPR]:
+		var p: String = PORTRAIT_DIR + stem + "_" + cand + ".png"
+		if ResourceLoader.exists(p):
+			dialogue_portrait.texture = load(p)
+			dialogue_portrait.visible = true
+			return
+	var base := PORTRAIT_DIR + stem + ".png"
+	if ResourceLoader.exists(base):
+		dialogue_portrait.texture = load(base)
 		dialogue_portrait.visible = true
 	else:
 		dialogue_portrait.visible = false
-	var hint := "[E] 닫기" if dialogue.is_last() else "[E] 다음"
-	dialogue_text.text = "%s\n\n%s\n\n%s   %s" % [speaker, line, dialogue.progress(), hint]
 
 # 마지막 줄까지 넘겨 닫혔을 때: 패널을 숨기고 이동 잠금을 푼다.
 # T4.1 온보딩 전진: 방금 어떤 대화였는지는 현재 단계로 가른다(NOTICE=옥자 통보 /
