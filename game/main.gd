@@ -148,6 +148,12 @@ const PROP_RUG := preload("res://assets/props/house_rug.png")
 const PROP_FIREPLACE := preload("res://assets/props/house_fireplace.png")
 const PROP_BOOKSHELF := preload("res://assets/props/house_bookshelf.png")
 const PROP_TABLE := preload("res://assets/props/house_table.png")
+# 카페 실내 앤틱 가구(넓은 방을 채운다, PixelLab 산출). 괘종시계 32×64, 와인 캐비닛 64×64,
+# 액자·카페 테이블 32×32. 모두 충돌 없는 순수 장식(어두운 우드·버건디 — 앤틱 카페 톤).
+const PROP_FRAME := preload("res://assets/props/cafe_frame.png")
+const PROP_CLOCK := preload("res://assets/props/cafe_clock.png")
+const PROP_CABINET := preload("res://assets/props/cafe_cabinet.png")
+const PROP_CAFE_TABLE := preload("res://assets/props/cafe_table.png")
 # 외부 건물 외관(PixelLab 산출, 외관 박스 크기와 1:1). 통과 불가 WALL 박스 위에 덮어 그려
 # "닫힌 건물"로 보이게 한다(_draw_facades). 집=224×192(7×6칸), 카페=256×224(8×7칸).
 const FACADE_HOUSE := preload("res://assets/buildings/house_ext.png")
@@ -168,6 +174,10 @@ const PROP_LAYOUT := [
 	[PROP_COUNTER, [Vector2i(10, 41), Vector2i(11, 41), Vector2i(12, 41), Vector2i(13, 41), Vector2i(14, 41), Vector2i(15, 41), Vector2i(16, 41)]],  # 카페 바 카운터
 	[PROP_STOOL, [Vector2i(11, 42), Vector2i(14, 42), Vector2i(17, 42)]],                # 카페 좌석 스툴(= SEAT_TILES)
 	[PROP_SHELF, [Vector2i(11, 39), Vector2i(13, 39), Vector2i(15, 39)]],                # 카페 뒷벽 선반
+	[PROP_CLOCK, [Vector2i(9, 38)]],                                                     # 카페: 좌측 뒷벽 괘종시계
+	[PROP_FRAME, [Vector2i(10, 38), Vector2i(16, 38)]],                                  # 카페: 뒷벽 앤틱 액자 둘
+	[PROP_CABINET, [Vector2i(18, 38)]],                                                  # 카페: 우측 뒷벽 와인 캐비닛
+	[PROP_CAFE_TABLE, [Vector2i(11, 45), Vector2i(15, 45)]],                             # 카페: 하단 손님 테이블 둘
 	[PROP_LANTERN, LANTERN_TILES],                                                       # 길가 2 + 카페 구석 1 등불
 	[PROP_POT, [Vector2i(18, 27), Vector2i(18, 33)]],                                    # 집 두 구석 혼령초 화분
 ]
