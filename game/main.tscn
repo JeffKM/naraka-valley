@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=19 format=3]
 
 [ext_resource type="Script" path="res://main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://player.tscn" id="2"]
@@ -17,6 +17,7 @@
 [ext_resource type="Script" path="res://cafe.gd" id="15"]
 [ext_resource type="Script" path="res://bana.gd" id="16"]
 [ext_resource type="Script" path="res://night_bar.gd" id="17"]
+[ext_resource type="PackedScene" path="res://heart_bar.tscn" id="18"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -143,12 +144,11 @@ offset_right = 400.0
 offset_bottom = 112.0
 text = "..."
 
-[node name="AffinityLabel" type="Label" parent="CanvasLayer"]
+[node name="AffinityLabel" parent="CanvasLayer" instance=ExtResource("18")]
 offset_left = 8.0
 offset_top = 108.0
 offset_right = 400.0
 offset_bottom = 132.0
-text = "..."
 
 [node name="FoxfireLabel" type="Label" parent="CanvasLayer"]
 offset_left = 8.0
@@ -157,19 +157,17 @@ offset_right = 500.0
 offset_bottom = 152.0
 text = "..."
 
-[node name="MelAffinityLabel" type="Label" parent="CanvasLayer"]
+[node name="MelAffinityLabel" parent="CanvasLayer" instance=ExtResource("18")]
 offset_left = 8.0
 offset_top = 148.0
 offset_right = 400.0
 offset_bottom = 172.0
-text = "..."
 
-[node name="BanaAffinityLabel" type="Label" parent="CanvasLayer"]
+[node name="BanaAffinityLabel" parent="CanvasLayer" instance=ExtResource("18")]
 offset_left = 8.0
 offset_top = 168.0
 offset_right = 400.0
 offset_bottom = 192.0
-text = "..."
 
 [node name="CafeLabel" type="Label" parent="CanvasLayer"]
 visible = false
