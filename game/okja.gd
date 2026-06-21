@@ -55,7 +55,17 @@ func lines() -> PackedStringArray:
 func lines_resident() -> PackedStringArray:
 	return PackedStringArray(LINES_RESIDENT)
 
+# P2.3② P2.1 도색 스프라이트(있으면 그레이박스 대신). 상주 NPC라 남쪽(down) 첫 프레임 정지.
+var _sprite: AnimatedSprite2D = null
+
+func _ready() -> void:
+	_sprite = CharSprite.make("res://assets/characters/okja.png")
+	if _sprite != null:
+		add_child(_sprite)
+
 func _draw() -> void:
+	if _sprite != null:
+		return  # 도색 스프라이트가 있으면 그레이박스는 안 그린다(폴백 전용)
 	# 몸체: 발치 원점 기준 위로 16×32. 미호보다 어둡게(검은 마녀 차림)로 대비.
 	var body := Rect2(-BODY_SIZE.x * 0.5, -BODY_SIZE.y, BODY_SIZE.x, BODY_SIZE.y)
 	draw_rect(body, Color(0.22, 0.20, 0.26))
