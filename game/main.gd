@@ -200,6 +200,8 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 @onready var interact_prompt: Label = $CanvasLayer/InteractPrompt  # T2.1 [E] 안내
 @onready var farm: FarmField = $FarmField                  # T2.1 밭 칸 상태
 @onready var crop_label: Label = $CanvasLayer/CropLabel    # T2.3 선택 작물 HUD
+@onready var crop_icon: TextureRect = $CanvasLayer/CropIcon  # P2.5④ 선택 작물 아이콘(작물 스프라이트 재사용)
+@onready var shop_crop_icon: TextureRect = $CanvasLayer/ShopPanel/CropIcon  # P2.5④ 출하대 작물 아이콘
 @onready var energy: SoulEnergy = $SoulEnergy              # T2.4 혼력
 @onready var energy_label: Label = $CanvasLayer/EnergyLabel  # T2.4 혼력 HUD
 @onready var saver: SaveManager = $SaveManager            # T2.5 세이브/로드
@@ -207,32 +209,32 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 @onready var wallet: Wallet = $Wallet                     # T3.1 골드
 @onready var inventory: Inventory = $Inventory            # T3.1 수확물·씨앗 재고
 @onready var gold_label: Label = $CanvasLayer/GoldLabel        # T3.1 골드 HUD
-@onready var shop_panel: ColorRect = $CanvasLayer/ShopPanel    # T3.1 카페 출하대 패널 배경
+@onready var shop_panel: Panel = $CanvasLayer/ShopPanel    # T3.1 카페 출하대 패널 배경
 @onready var shop_text: Label = $CanvasLayer/ShopPanel/Text    # T3.1 패널 본문
 @onready var miho: Miho = $Miho                               # T3.2 미호 NPC(그레이박스)
 @onready var dialogue: DialogueBox = $Dialogue                # T3.2 대사 진행기
-@onready var dialogue_panel: ColorRect = $CanvasLayer/DialoguePanel  # T3.2 대화 텍스트박스 배경
+@onready var dialogue_panel: Panel = $CanvasLayer/DialoguePanel  # T3.2 대화 텍스트박스 배경
 @onready var dialogue_text: Label = $CanvasLayer/DialoguePanel/Text  # T3.2 대화 본문
 @onready var dialogue_portrait: TextureRect = $CanvasLayer/DialoguePortrait  # P2.4 대화 초상화 슬롯
 @onready var affinity: Affinity = $Affinity                   # T3.3 미호 호감도(하트)
-@onready var affinity_label: Label = $CanvasLayer/AffinityLabel  # T3.3 하트 HUD
+@onready var affinity_label: HeartBar = $CanvasLayer/AffinityLabel  # T3.3 하트 HUD(P2.5② 스프라이트)
 @onready var foxfire_label: Label = $CanvasLayer/FoxfireLabel  # T3.4 여우불 도움 HUD
 @onready var okja: Okja = $Okja                               # T4.1 옥자 NPC(오프닝 통보)
 @onready var mel: Mel = $Mel                                 # T5.1 멜 NPC(카페 운영·그레이박스)
 @onready var bana: Bana = $Bana                             # T6.1 바나 NPC(밤 무대·그레이박스)
 @onready var mel_affinity: Affinity = $MelAffinity           # T5.2 멜 호감도(하트, affinity.gd 재사용)
-@onready var mel_affinity_label: Label = $CanvasLayer/MelAffinityLabel  # T5.2 멜 하트 HUD
+@onready var mel_affinity_label: HeartBar = $CanvasLayer/MelAffinityLabel  # T5.2 멜 하트 HUD(P2.5② 스프라이트)
 @onready var bana_affinity: Affinity = $BanaAffinity         # T6.2 바나 호감도(하트, affinity.gd 재사용)
-@onready var bana_affinity_label: Label = $CanvasLayer/BanaAffinityLabel  # T6.2 바나 하트 HUD
+@onready var bana_affinity_label: HeartBar = $CanvasLayer/BanaAffinityLabel  # T6.2 바나 하트 HUD(P2.5② 스프라이트)
 @onready var cafe: Cafe = $Cafe                               # T5.4 카페 운영(손님 서빙·일일 정산)
 @onready var night_bar: NightBar = $NightBar                 # T6.3 나라카 바(밤 옵트인·잡귀 등장 게이팅)
 @onready var night_label: Label = $CanvasLayer/NightLabel    # T6.3 밤 바 상태·옵트인 HUD
 @onready var bana_guard_label: Label = $CanvasLayer/BanaGuardLabel  # T6.5 바나 이중 보호 상태 HUD
 @onready var cafe_label: Label = $CanvasLayer/CafeLabel       # T5.4 카페 영업 상태·매출 HUD
-@onready var cafe_summary_panel: ColorRect = $CanvasLayer/CafeSummaryPanel  # T5.4 마감 정산 팝업 배경
+@onready var cafe_summary_panel: Panel = $CanvasLayer/CafeSummaryPanel  # T5.4 마감 정산 팝업 배경
 @onready var cafe_summary_text: Label = $CanvasLayer/CafeSummaryPanel/Text  # T5.4 정산 본문
 @onready var milestone_label: Label = $CanvasLayer/MilestoneLabel             # T7.2 카페 마일스톤 진행 바 HUD
-@onready var milestone_panel: ColorRect = $CanvasLayer/MilestonePanel         # T7.2 "카페 2단계!" 달성 팝업 배경
+@onready var milestone_panel: Panel = $CanvasLayer/MilestonePanel         # T7.2 "카페 2단계!" 달성 팝업 배경
 @onready var milestone_text: Label = $CanvasLayer/MilestonePanel/Text         # T7.2 달성 팝업 본문
 @onready var onboarding: Onboarding = $Onboarding             # T4.1 온보딩 단계 머신
 @onready var onboarding_label: Label = $CanvasLayer/OnboardingLabel  # T4.1 안내 배너
@@ -1028,24 +1030,23 @@ func _process(delta: float) -> void:
 		CropCatalog.name_of(_selected_crop), CropCatalog.growth_days(_selected_crop),
 		inventory.seed_count(_selected_crop)
 	]
+	# P2.5④ 작물 아이콘 재사용: 선택 작물의 mature 스프라이트를 심기 선택 HUD·출하대에
+	# 아이콘으로 건다(P2.2 작물 도트를 인벤/상점 아이콘으로 재사용 — 무엇을 심고/사는지 한눈에).
+	var crop_icon_tex: Texture2D = CROP_SPRITES[_selected_crop][2]
+	crop_icon.texture = crop_icon_tex
+	shop_crop_icon.texture = crop_icon_tex
 	# T2.4 혼력 HUD: 현재/최대. 바닥나면 취침 안내를 덧붙여 막힌 이유를 알린다.
 	energy_label.text = "혼력: %d/%d%s" % [
 		energy.current, SoulEnergy.MAX, "  지쳤다(취침 필요)" if not energy.can_act() else ""
 	]
 	# T3.1 골드 HUD + 카페 출하대 패널(열렸을 때만).
 	gold_label.text = "골드: %d" % wallet.gold
-	# T3.3 미호 호감도 HUD: 하트 막대 + 단계 수(하트 단계가 UI에 반영 — 완료기준).
-	affinity_label.text = "미호 %s %d/%d" % [
-		affinity.heart_bar(), affinity.hearts(), Affinity.MAX_HEARTS
-	]
-	# T5.2 멜 호감도 HUD: 하트 막대 + 단계 수(미호와 같은 표기, 캐릭터만 다름).
-	mel_affinity_label.text = "멜 %s %d/%d" % [
-		mel_affinity.heart_bar(), mel_affinity.hearts(), Affinity.MAX_HEARTS
-	]
-	# T6.2 바나 호감도 HUD: 하트 막대 + 단계 수(미호·멜과 같은 표기, 캐릭터만 다름).
-	bana_affinity_label.text = "바나 %s %d/%d" % [
-		bana_affinity.heart_bar(), bana_affinity.hearts(), Affinity.MAX_HEARTS
-	]
+	# T3.3 미호 호감도 HUD: P2.5② 채운/빈 하트 스프라이트 + 단계 수(♥♡ 글리프 대체).
+	affinity_label.render("미호", affinity.hearts(), Affinity.MAX_HEARTS)
+	# T5.2 멜 호감도 HUD: 미호와 같은 HeartBar 틀, 캐릭터만 다름.
+	mel_affinity_label.render("멜", mel_affinity.hearts(), Affinity.MAX_HEARTS)
+	# T6.2 바나 호감도 HUD: 미호·멜과 같은 HeartBar 틀, 캐릭터만 다름.
+	bana_affinity_label.render("바나", bana_affinity.hearts(), Affinity.MAX_HEARTS)
 	# T3.4 여우불 도움 HUD: 현재 하트로 파생한 여우불 세기(관계→농사 보상을 눈에 보이게).
 	foxfire_label.text = Foxfire.summary(affinity.hearts())
 	# T5.4 카페 영업 HUD: 영업창(15–19시) 동안만 떠 현재 매출·서빙 인원을 보여준다

@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://c5p2heartbaruid"]
+
+[ext_resource type="Script" path="res://heart_bar.gd" id="1"]
+
+[node name="HeartBar" type="HBoxContainer"]
+offset_right = 200.0
+offset_bottom = 16.0
+script = ExtResource("1")
