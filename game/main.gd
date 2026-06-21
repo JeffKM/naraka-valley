@@ -140,6 +140,10 @@ const PROP_STOOL := preload("res://assets/props/cafe_stool.png")
 const PROP_SHELF := preload("res://assets/props/cafe_shelf.png")
 const PROP_LANTERN := preload("res://assets/props/soul_lantern.png")
 const PROP_POT := preload("res://assets/props/spirit_pot.png")
+# 외부 건물 외관(PixelLab 산출, 외관 박스 크기와 1:1). 통과 불가 WALL 박스 위에 덮어 그려
+# "닫힌 건물"로 보이게 한다(_draw_facades). 집=224×192(7×6칸), 카페=256×224(8×7칸).
+const FACADE_HOUSE := preload("res://assets/buildings/house_ext.png")
+const FACADE_CAFE := preload("res://assets/buildings/cafe_ext.png")
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 한 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로). 길가 2 + 카페 구석 1.
 const LANTERN_TILES := [Vector2i(12, 15), Vector2i(28, 15), Vector2i(36, 8) + CAFE_OFF]  # 길가 2(외부) + 카페 구석 1(실내)
@@ -708,10 +712,9 @@ func _paint_grid() -> void:
 
 # ── 구역 라벨(월드 좌표, 카메라 따라 스크롤) ──────────────────────────────
 func _place_labels() -> void:
-	# 외부 라벨은 외관(예전 자리)에 — 밖에서 어느 건물인지 식별. 실내 방은 들어가면 자명하니 생략.
-	_add_label("집", _rect_center_px(HOUSE_EXT_RECT))
+	# 집·카페는 도트 외관(간판·건물 형태)으로 식별되므로 라벨을 빼고, 아직 그레이박스인
+	# 밭·도착만 라벨로 남긴다(외관 위 텍스트 중복 제거).
 	_add_label("밭", _rect_center_px(FARM_RECT))
-	_add_label("카페", _rect_center_px(CAFE_EXT_RECT))
 	_add_label("도착", Vector2(SPAWN_TILE.x * TILE + TILE * 0.5, (SPAWN_TILE.y - 1) * TILE))
 
 func _add_label(text: String, center_px: Vector2) -> void:
@@ -1846,6 +1849,7 @@ func _overlay_index(t: Vector2i) -> int:
 # 그리기 좌표 = 타일 픽셀(미호·멜은 자기 Node2D에서 그리지만, 손님은 일시적이라 main이
 # 좌석 칸에 직접 그린다 — 노드 생성·해제 없이 그레이박스로 가볍게).
 func _draw() -> void:
+	_draw_facades()          # 외부 건물 외관(WALL 박스 위에 덮어 닫힌 건물로)
 	_draw_props()            # 가구·장식을 맨 먼저 → 캐릭터·손님이 그 위에 올라온다
 	_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 	_draw_customers()
@@ -1870,6 +1874,13 @@ func _draw_crops() -> void:
 		var stage: int = clampi(farm.growth_stage(t), 0, frames.size() - 1)
 		var tex: Texture2D = frames[stage]
 		draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), Vector2(TILE, TILE)), false)
+
+# 외부 건물 외관을 외관 박스 좌상단에 1:1로 그린다(이미지 크기 = 박스 크기). 통과 불가 WALL
+# 박스를 도트 외관이 덮어 "닫힌 건물"이 되고, 문 칸(외관 하단 중앙)에 닿으면 실내로 fade 전환한다.
+# 실내 모드에선 외관 자리(외부)가 카메라 밖이라 그려져도 보이지 않는다.
+func _draw_facades() -> void:
+	draw_texture_rect(FACADE_HOUSE, Rect2(Vector2(HOUSE_EXT_RECT.position * TILE), FACADE_HOUSE.get_size()), false)
+	draw_texture_rect(FACADE_CAFE, Rect2(Vector2(CAFE_EXT_RECT.position * TILE), FACADE_CAFE.get_size()), false)
 
 func _draw_props() -> void:
 	for entry in PROP_LAYOUT:
