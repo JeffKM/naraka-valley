@@ -33,6 +33,22 @@ const CAFE := 4     # 카페 바닥(걷기 O)
 const WALL := 5     # 벽/건물 외벽(통과 X)
 const N_TILES := 6
 
+# ── P2.3 지형 도트: terrain TileSet + 실내/벽 단색 source ───────────────────
+# combined_terrain.tres = PixelLab Wang 3세트(풀↔길·풀↔밭·길↔밭)를 합친 corner
+# 오토타일. terrain_set_0의 terrain 순서는 컨버터 인자 순서로 고정(0=길,1=풀,2=밭).
+# GROUND/PATH/SOIL은 이 terrain으로 자동 전환해 칠하고, HOUSE/CAFE/WALL(실내·벽)은
+# 아직 도트 전이라 단색 source(SOLID)로 따로 깐다(단계 ②에서 도트 교체).
+const TERRAIN_TILESET_PATH := "res://assets/tiles/combined_terrain.tres"
+const TERRAIN_SET := 0
+const TR_PATH := 0    # dirt path
+const TR_GRASS := 1   # muted grass
+const TR_SOIL := 2    # tilled farm soil
+# 타일 종류 → terrain id(GROUND/PATH/SOIL만 terrain으로 칠한다)
+const TILE_TERRAIN := {GROUND: TR_GRASS, PATH: TR_PATH, SOIL: TR_SOIL}
+# 단색 실내/벽 source: 별도 source_id에 HOUSE/CAFE/WALL 3타일만 둔다.
+const SOLID_SRC_ID := 1
+const SOLID_TILES := [HOUSE, CAFE, WALL]   # 단색 아틀라스 가로 배치 순서(= atlas x)
+
 # ── T2.1/T2.3 밭 오버레이 타일(Field 레이어 아틀라스 인덱스) ───────────────
 # Ground의 SOIL 위에 겹쳐 그리는 칸 상태 표시. 미경작 칸은 오버레이 없음(맨 흙).
 # 인덱스 = 외형단계(APPEAR) × 2 + 젖음(0 마름 / 1 젖음). 코드로 한 번에 생성한다.
@@ -45,9 +61,7 @@ const AP_MATURE := 3   # 다 자람(큰 황금 새싹 = 수확 가능 표시)
 const N_APPEAR := 4
 const N_OV := N_APPEAR * 2  # 외형 4 × 젖음 2 = 8타일
 
-# 고랑 베이스색. SOIL(0.31,0.25,0.20)보다 어둡게, 젖으면 더 어둡고 축축하게.
-const OV_DRY := Color(0.24, 0.17, 0.12)   # 파낸 마른 고랑
-const OV_WET := Color(0.15, 0.12, 0.11)   # 젖은 고랑
+# (P2.3: 경작 고랑 DRY/WET 색은 밭흙 terrain base에서 파생 — _build_field_tileset 참조)
 # 외형단계별 가운데 도형(반지름 px, 색). 수확가능은 황금색으로 눈에 띄게(완료기준 표시).
 const SPROUT := Color(0.40, 0.62, 0.34)   # 회녹색 새싹(그레이박스 작물)
 const MATURE := Color(0.86, 0.74, 0.30)   # 황금 — 다 자람 = 수확 가능
@@ -345,54 +359,104 @@ func _ensure_input_actions() -> void:
 	ev_g.physical_keycode = KEY_G
 	InputMap.action_add_event("gift_item", ev_g)
 
-# ── TileSet 조립: 단색 블록 아틀라스 + WALL 충돌 ──────────────────────────
+# ── TileSet 조립: terrain 도트(source 0) + 실내/벽 단색(source 1) + WALL 충돌 ──
 func _build_tileset() -> TileSet:
-	# 1) N_TILES개의 16×16 단색 블록을 가로로 이어 붙인 아틀라스 이미지를 만든다.
-	#    각 블록의 위/왼쪽 1px을 어둡게 칠해 타일 격자가 눈에 보이게 한다.
-	var img := Image.create_empty(TILE * N_TILES, TILE, false, Image.FORMAT_RGBA8)
-	for i in N_TILES:
-		var base: Color = COLORS[i]
+	# 1) PixelLab Wang 3세트를 합친 corner 오토타일 TileSet을 로드한다(source 0 =
+	#    풀/길/밭 terrain). 런타임에 단색 source와 물리 레이어를 얹으므로 공유 캐시를
+	#    건드리지 않게 복제본을 쓴다.
+	var ts: TileSet = (load(TERRAIN_TILESET_PATH) as TileSet).duplicate(true)
+	# 컨버터 .tres는 mode=CORNERS_AND_SIDES로 나오지만 Wang 타일은 코너만 설정하므로
+	# MATCH_CORNERS로 강제한다(side peering 미설정 → 매칭 깨짐 방지).
+	if ts.get_terrain_sets_count() > 0:
+		ts.set_terrain_set_mode(TERRAIN_SET, TileSet.TERRAIN_MODE_MATCH_CORNERS)
+
+	# 2) HOUSE/CAFE/WALL 단색 블록(아직 도트 전)을 가로로 이어 붙인 아틀라스 → source 1.
+	#    각 블록 위/왼쪽 1px을 어둡게 칠해 격자가 보이게 한다(기존 그레이박스 결 유지).
+	var n := SOLID_TILES.size()
+	var img := Image.create_empty(TILE * n, TILE, false, Image.FORMAT_RGBA8)
+	for i in n:
+		var base: Color = COLORS[SOLID_TILES[i]]
 		img.fill_rect(Rect2i(i * TILE, 0, TILE, TILE), base)
 		var edge := base.darkened(0.35)
 		img.fill_rect(Rect2i(i * TILE, 0, TILE, 1), edge)  # 윗줄
 		img.fill_rect(Rect2i(i * TILE, 0, 1, TILE), edge)  # 왼줄
 	var tex := ImageTexture.create_from_image(img)
-
-	# 2) 아틀라스 소스에 타일 N개 등록
 	var src := TileSetAtlasSource.new()
 	src.texture = tex
 	src.texture_region_size = Vector2i(TILE, TILE)
-	for i in N_TILES:
+	for i in n:
 		src.create_tile(Vector2i(i, 0))
+	ts.add_source(src, SOLID_SRC_ID)
 
-	# 3) TileSet 생성 + 소스 등록 + 물리 레이어 추가
-	var ts := TileSet.new()
-	ts.tile_size = Vector2i(TILE, TILE)
-	ts.add_source(src, 0)            # source_id = 0
-	ts.add_physics_layer()           # 물리 레이어 0 (기본 collision_layer=1)
-
-	# 4) WALL 타일에만 꽉 찬 사각 충돌 폴리곤을 붙인다(타일 중심 기준 −8..8).
-	var td := src.get_tile_data(Vector2i(WALL, 0), 0)
+	# 3) 물리 레이어 추가 + WALL 단색 타일에만 꽉 찬 사각 충돌 폴리곤(타일 중심 −8..8).
+	ts.add_physics_layer()
+	var wall_x := SOLID_TILES.find(WALL)
+	var td := src.get_tile_data(Vector2i(wall_x, 0), 0)
 	td.add_collision_polygon(0)
 	td.set_collision_polygon_points(0, 0, PackedVector2Array([
 		Vector2(-8, -8), Vector2(8, -8), Vector2(8, 8), Vector2(-8, 8),
 	]))
 	return ts
 
+# 타일 종류 → 단색 source의 아틀라스 좌표(HOUSE/CAFE/WALL만)
+func _solid_atlas(tile: int) -> Vector2i:
+	return Vector2i(SOLID_TILES.find(tile), 0)
+
+# terrain source(0)에서 그 terrain의 base 타일(4코너 모두 같은 terrain) 좌표를 찾는다.
+# 1칸 폭 동선처럼 corner 전환에 묻히는 지형을 base로 또렷하게 깔 때 쓴다.
+func _terrain_base_atlas(terrain: int) -> Vector2i:
+	var src := ground.tile_set.get_source(0) as TileSetAtlasSource
+	for i in src.get_tiles_count():
+		var coord := src.get_tile_id(i)
+		var td := src.get_tile_data(coord, 0)
+		if td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_LEFT_CORNER) == terrain \
+			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_RIGHT_CORNER) == terrain \
+			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_LEFT_CORNER) == terrain \
+			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_RIGHT_CORNER) == terrain:
+			return coord
+	return Vector2i.ZERO
+
+# 밭흙(soil) terrain base 타일의 16×16 이미지를 추출한다(field 오버레이의 도트 톤 원본).
+func _extract_soil_base() -> Image:
+	var ts: TileSet = load(TERRAIN_TILESET_PATH)
+	var src := ts.get_source(0) as TileSetAtlasSource
+	for i in src.get_tiles_count():
+		var coord := src.get_tile_id(i)
+		var td := src.get_tile_data(coord, 0)
+		if td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_LEFT_CORNER) == TR_SOIL \
+			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_RIGHT_CORNER) == TR_SOIL \
+			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_LEFT_CORNER) == TR_SOIL \
+			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_RIGHT_CORNER) == TR_SOIL:
+			return src.texture.get_image().get_region(src.get_tile_texture_region(coord, 0))
+	# fallback: 밭흙 단색(soil base를 못 찾을 때)
+	var f := Image.create_empty(TILE, TILE, false, Image.FORMAT_RGBA8)
+	f.fill(COLORS[SOIL])
+	return f
+
+# soil 이미지를 어둡게(mul) + 약간 푸르게(blue_add) 틴트해 경작 고랑 상태색을 만든다.
+func _tint_soil(soil: Image, mul: float, blue_add: float) -> Image:
+	var o := Image.create_empty(TILE, TILE, false, Image.FORMAT_RGBA8)
+	for y in TILE:
+		for x in TILE:
+			var p := soil.get_pixel(x, y)
+			o.set_pixel(x, y, Color(p.r * mul, p.g * mul, minf(p.b * mul + blue_add, 1.0), 1.0))
+	return o
+
 # ── T2.1/T2.3 밭 오버레이 TileSet: 칸 상태 8종(충돌 없음) ──────────────────
-# Ground와 같은 방식(단색 블록 아틀라스를 코드 생성)이지만, 상태 표시용이라
-# 물리 레이어는 없다. 인덱스 = 외형단계 × 2 + 젖음. 외형단계가 오를수록 가운데
-# 새싹이 커지고, 수확가능 단계는 황금색으로 칠해 "수확 가능 표시"를 만든다.
+# P2.3: 단색 고랑 대신 밭흙(soil) terrain 베이스를 파생해 경작 칸 흙을 도트 톤으로
+# 칠한다 — DRY=경작된 마른 고랑(밭흙보다 어둡게)·WET=물 준 젖은 고랑(더 어둡고
+# 푸르게). 무외곽선(ROADMAP 컨벤션). 인덱스 = 외형단계 × 2 + 젖음. 가운데 새싹 점은
+# 성장단계 표시용 그레이박스 유지(P2.2 작물 스프라이트 연결은 T2.3 seam).
 func _build_field_tileset() -> TileSet:
+	var soil := _extract_soil_base()
+	var dry := _tint_soil(soil, 0.80, 0.0)    # 경작된 마른 고랑
+	var wet := _tint_soil(soil, 0.55, 0.10)   # 물 준 젖은 고랑(짙고 푸른빛)
 	var img := Image.create_empty(TILE * N_OV, TILE, false, Image.FORMAT_RGBA8)
 	for ap in N_APPEAR:
-		for wet in 2:
-			var i := ap * 2 + wet
-			var base := OV_WET if wet == 1 else OV_DRY
-			img.fill_rect(Rect2i(i * TILE, 0, TILE, TILE), base)
-			var edge := base.darkened(0.3)
-			img.fill_rect(Rect2i(i * TILE, 0, TILE, 1), edge)  # 윗줄(고랑 격자감)
-			img.fill_rect(Rect2i(i * TILE, 0, 1, TILE), edge)  # 왼줄
+		for wet_i in 2:
+			var i := ap * 2 + wet_i
+			var bg: Image = wet if wet_i == 1 else dry
+			img.blit_rect(bg, Rect2i(0, 0, TILE, TILE), Vector2i(i * TILE, 0))
 			var r: int = AP_DOT[ap]                             # 새싹 반지름(0이면 안 그림)
 			if r > 0:
 				var c := MATURE if ap == AP_MATURE else SPROUT
@@ -459,9 +523,38 @@ func _carve_paths() -> void:
 	_set_tile(20, 15, PATH)                     # 밭 아래 → 복도
 
 func _paint_grid() -> void:
+	# GROUND/PATH/SOIL은 terrain별 칸을 모아 corner 오토타일로 칠하고(경계·모서리
+	# 자동 전환), HOUSE/CAFE/WALL은 단색 source로 직접 깐다.
+	var all_terrain: Array[Vector2i] = []   # GROUND/PATH/SOIL 전부 — 풀 베이스로 단일 칠
+	var path_cells: Array[Vector2i] = []
+	var soil_cells: Array[Vector2i] = []
+	var solids: Array = []   # [[cell, tile_id], ...] — terrain 칠 *뒤*에 덮는다
 	for y in MAP_H:
 		for x in MAP_W:
-			ground.set_cell(Vector2i(x, y), 0, Vector2i(_grid[y][x], 0))
+			var cell := Vector2i(x, y)
+			var t: int = _grid[y][x]
+			if TILE_TERRAIN.has(t):
+				all_terrain.append(cell)
+				if t == PATH:
+					path_cells.append(cell)
+				elif t == SOIL:
+					soil_cells.append(cell)
+			else:
+				solids.append([cell, t])
+	# ★ 모든 지형 칸을 *풀 하나로* 먼저 칠한다. 단일 연속 영역이라 base가 빈틈없이
+	#   매칭돼 검은 구멍이 안 생긴다. 그 위에 길·밭을 얹으면 경계가 grass↔path·grass↔soil
+	#   전환 타일로 자동 교체된다. ignore_empty_terrains=false: 빈 캔버스 첫 칠은 모든 이웃이
+	#   empty라 기본 true면 제약이 사라져 한 칸도 못 칠한다(Godot 4 동작).
+	ground.set_cells_terrain_connect(all_terrain, TERRAIN_SET, TR_GRASS, false)
+	# 밭은 넓어 corner 전환이 자연스럽다 → terrain으로 칠해 풀↔밭 경계를 부드럽게.
+	ground.set_cells_terrain_connect(soil_cells, TERRAIN_SET, TR_SOIL, false)
+	# 길은 1칸 폭 동선이라 전환에 묻힌다 → base 흙길 타일을 직접 깔아 또렷하게(동선 안내).
+	var path_base := _terrain_base_atlas(TR_PATH)
+	for c in path_cells:
+		ground.set_cell(c, 0, path_base)
+	# 단색(HOUSE/CAFE/WALL)은 terrain 위에 덮어 깐다(아직 도트 전, 단계 ②에서 교체).
+	for s in solids:
+		ground.set_cell(s[0], SOLID_SRC_ID, _solid_atlas(s[1]))
 
 # ── 구역 라벨(월드 좌표, 카메라 따라 스크롤) ──────────────────────────────
 func _place_labels() -> void:
