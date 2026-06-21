@@ -48,7 +48,7 @@ func guidance() -> String:
 		WATER:
 			return "▶ 심은 칸에 [E]로 물을 주어라"
 		GROW:
-			return "▶ 집(왼쪽)에서 [Enter]로 잠들어 작물을 키워라 (마르면 다시 물 주기)"
+			return "▶ 집(왼쪽) 문으로 들어가 [Enter]로 잠들어 작물을 키워라 (마르면 다시 물 주기)"
 		HARVEST:
 			return "▶ 다 자란(황금) 작물을 [E]로 수확하라"
 	return ""
