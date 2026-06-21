@@ -13,5 +13,10 @@ tools/light_night.png
 tools/light_night.png.import
 tools/light_night_lamp.png
 tools/light_night_lamp.png.import
+# P2.5 HUD 육안 확인 부산물 (hud_dump.gd로 재생성)
+tools/hud_default.png
+tools/hud_default.png.import
+tools/hud_dialogue.png
+tools/hud_dialogue.png.import
 assets/tiles/combined_terrain_atlas.png
 assets/tiles/combined_terrain_atlas.png.import

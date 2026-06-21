@@ -12,7 +12,7 @@
 - [ ] **Retro Diffusion** — 인게임 픽셀 에셋. 라이선스(개인/상업), 생성물 소유권 확인. (Replicate 경유 시 해당 약관도)
 - [ ] **Suno (또는 Udio 등)** — BGM. **무료 플랜은 보통 상업 사용 불가** → 상업 플랜 필수, 곡 소유권/로열티 조건 확인.
 - [ ] **SFX 에셋팩** — 각 팩의 라이선스(CC0 / 로열티프리 / 귀속 필요 여부) 개별 확인 및 출처 기록.
-- [ ] **폰트** — UI·로고에 쓰는 폰트의 상업·임베딩 라이선스 확인.
+- [x] **폰트** — UI·로고에 쓰는 폰트의 상업·임베딩 라이선스 확인. ✅ **확인(2026-06-21, P2.5)**: 인게임 한글 UI 폰트 = **Neo둥근모(NeoDunggeunmo) v1.601**, **SIL Open Font License 1.1**. OFL은 상업 사용·소프트웨어 번들·임베딩·수정 모두 허용(폰트 자체를 단독 판매만 금지 — 게임에 임베드해 파는 건 허용). 제약: 파생물에 Reserved Font Name "Neo둥근모"/"NeoDunggeunmo" 사용 금지(원본 그대로 쓰면 무관)·OFL 사본 동봉. → `game/assets/fonts/neodgm.ttf` + 라이선스 사본 `NeoDunggeunmo-OFL.txt` 동거. 출처: [neodgm/neodgm](https://github.com/neodgm/neodgm) (저작권 Eunbin Jeong). ⚠️ 로고·홍보 타이틀용 별도 폰트는 추후 선정 시 재점검.
 - [ ] **Godot 엔진** — MIT 라이선스(상업 무료). 스플래시/크레딧 표기 요건만 확인.
 - [ ] **Steam AI 콘텐츠 고지** (플랫폼 의무, 라이선스와 별개) — Valve는 AI 생성 콘텐츠 사용 시 출시 설문에서 **AI 사용을 공개(disclose)**하고 생성물이 불법·침해가 아님을 보증하도록 요구. PixelLab(인게임 도트)·미드저니/제미나이(초상화)·Suno(BGM) 모두 해당 → **출시 빌드 제출 시 AI 사용 신고** 필수. 출시 직전 Valve 최신 정책 재확인.
 

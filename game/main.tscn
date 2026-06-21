@@ -80,158 +80,141 @@ script = ExtResource("13")
 position = Vector2(328, 344)
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
-scale = Vector2(2, 2)
+scale = Vector2(1, 1)
 
 [node name="Readout" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 3.0
-offset_right = 200.0
-offset_bottom = 15.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 6.0
+offset_right = 400.0
+offset_bottom = 30.0
 text = "..."
 
 [node name="ClockLabel" type="Label" parent="CanvasLayer"]
-offset_left = 200.0
-offset_top = 3.0
-offset_right = 316.0
-offset_bottom = 15.0
-theme_override_font_sizes/font_size = 8
+offset_left = 400.0
+offset_top = 6.0
+offset_right = 632.0
+offset_bottom = 30.0
 text = "..."
 horizontal_alignment = 2
 
 [node name="SleepPrompt" type="Label" parent="CanvasLayer"]
 visible = false
-offset_left = 4.0
-offset_top = 162.0
-offset_right = 316.0
-offset_bottom = 174.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 324.0
+offset_right = 632.0
+offset_bottom = 348.0
 text = "[Enter] 취침"
 horizontal_alignment = 1
 
 [node name="InteractPrompt" type="Label" parent="CanvasLayer"]
 visible = false
-offset_left = 4.0
-offset_top = 162.0
-offset_right = 316.0
-offset_bottom = 174.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 324.0
+offset_right = 632.0
+offset_bottom = 348.0
 text = "[E] 괭이질"
 horizontal_alignment = 1
 
 [node name="CropLabel" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 14.0
-offset_right = 200.0
-offset_bottom = 26.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 28.0
+offset_right = 400.0
+offset_bottom = 52.0
 text = "..."
 
 [node name="EnergyLabel" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 24.0
-offset_right = 200.0
-offset_bottom = 36.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 48.0
+offset_right = 400.0
+offset_bottom = 72.0
 text = "..."
 
 [node name="SaveLabel" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 34.0
-offset_right = 250.0
-offset_bottom = 46.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 68.0
+offset_right = 500.0
+offset_bottom = 92.0
 text = "[F5] 저장 · [F9] 불러오기"
 
 [node name="GoldLabel" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 44.0
-offset_right = 200.0
-offset_bottom = 56.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 88.0
+offset_right = 400.0
+offset_bottom = 112.0
 text = "..."
 
 [node name="AffinityLabel" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 54.0
-offset_right = 200.0
-offset_bottom = 66.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 108.0
+offset_right = 400.0
+offset_bottom = 132.0
 text = "..."
 
 [node name="FoxfireLabel" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 64.0
-offset_right = 250.0
-offset_bottom = 76.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 128.0
+offset_right = 500.0
+offset_bottom = 152.0
 text = "..."
 
 [node name="MelAffinityLabel" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 74.0
-offset_right = 200.0
-offset_bottom = 86.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 148.0
+offset_right = 400.0
+offset_bottom = 172.0
 text = "..."
 
 [node name="BanaAffinityLabel" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 84.0
-offset_right = 200.0
-offset_bottom = 96.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 168.0
+offset_right = 400.0
+offset_bottom = 192.0
 text = "..."
 
 [node name="CafeLabel" type="Label" parent="CanvasLayer"]
 visible = false
-offset_left = 4.0
-offset_top = 100.0
-offset_right = 300.0
-offset_bottom = 112.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 200.0
+offset_right = 600.0
+offset_bottom = 224.0
 text = "..."
 
 [node name="NightLabel" type="Label" parent="CanvasLayer"]
 visible = false
-offset_left = 4.0
-offset_top = 110.0
-offset_right = 316.0
-offset_bottom = 122.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 220.0
+offset_right = 632.0
+offset_bottom = 244.0
 text = "..."
 
 [node name="BanaGuardLabel" type="Label" parent="CanvasLayer"]
 visible = false
-offset_left = 4.0
-offset_top = 120.0
-offset_right = 316.0
-offset_bottom = 132.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 240.0
+offset_right = 632.0
+offset_bottom = 264.0
 text = "..."
 
 [node name="MilestoneLabel" type="Label" parent="CanvasLayer"]
-offset_left = 4.0
-offset_top = 130.0
-offset_right = 316.0
-offset_bottom = 142.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 260.0
+offset_right = 632.0
+offset_bottom = 284.0
 text = "..."
 
 [node name="MilestonePanel" type="ColorRect" parent="CanvasLayer"]
 visible = false
-offset_left = 50.0
-offset_top = 54.0
-offset_right = 270.0
-offset_bottom = 126.0
+offset_left = 100.0
+offset_top = 108.0
+offset_right = 540.0
+offset_bottom = 252.0
 color = Color(0.12, 0.09, 0.06, 0.92)
 
 [node name="Text" type="Label" parent="CanvasLayer/MilestonePanel"]
-offset_left = 8.0
-offset_top = 6.0
-offset_right = 212.0
-offset_bottom = 66.0
-theme_override_font_sizes/font_size = 8
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 424.0
+offset_bottom = 132.0
 text = "..."
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -239,54 +222,51 @@ autowrap_mode = 2
 
 [node name="ShopPanel" type="ColorRect" parent="CanvasLayer"]
 visible = false
-offset_left = 60.0
-offset_top = 46.0
-offset_right = 260.0
-offset_bottom = 134.0
+offset_left = 120.0
+offset_top = 92.0
+offset_right = 520.0
+offset_bottom = 268.0
 color = Color(0.1, 0.1, 0.12, 0.88)
 
 [node name="Text" type="Label" parent="CanvasLayer/ShopPanel"]
-offset_left = 8.0
-offset_top = 6.0
-offset_right = 192.0
-offset_bottom = 82.0
-theme_override_font_sizes/font_size = 8
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 384.0
+offset_bottom = 164.0
 text = "..."
 
 [node name="OnboardingLabel" type="Label" parent="CanvasLayer"]
 visible = false
-offset_left = 4.0
-offset_top = 86.0
-offset_right = 316.0
-offset_bottom = 98.0
-theme_override_font_sizes/font_size = 8
+offset_left = 8.0
+offset_top = 172.0
+offset_right = 632.0
+offset_bottom = 196.0
 text = "..."
 horizontal_alignment = 1
 
 [node name="DialoguePanel" type="ColorRect" parent="CanvasLayer"]
 visible = false
-offset_left = 8.0
-offset_top = 104.0
-offset_right = 312.0
-offset_bottom = 174.0
+offset_left = 16.0
+offset_top = 208.0
+offset_right = 624.0
+offset_bottom = 348.0
 color = Color(0.08, 0.08, 0.12, 0.92)
 
 [node name="Text" type="Label" parent="CanvasLayer/DialoguePanel"]
-offset_left = 76.0
-offset_top = 5.0
-offset_right = 296.0
-offset_bottom = 65.0
-theme_override_font_sizes/font_size = 8
+offset_left = 152.0
+offset_top = 10.0
+offset_right = 592.0
+offset_bottom = 130.0
 text = "..."
 autowrap_mode = 2
 
 [node name="DialoguePortrait" type="TextureRect" parent="CanvasLayer"]
 visible = false
 texture_filter = 2
-offset_left = 12.0
-offset_top = 106.0
-offset_right = 74.0
-offset_bottom = 168.0
+offset_left = 24.0
+offset_top = 212.0
+offset_right = 148.0
+offset_bottom = 336.0
 expand_mode = 1
 stretch_mode = 5
 mouse_filter = 2
@@ -301,11 +281,10 @@ color = Color(0.06, 0.05, 0.08, 1)
 [node name="Text" type="Label" parent="CanvasLayer/EndingPanel"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 8.0
-offset_top = 8.0
-offset_right = -8.0
-offset_bottom = -8.0
-theme_override_font_sizes/font_size = 8
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
 text = "..."
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -313,18 +292,17 @@ autowrap_mode = 2
 
 [node name="CafeSummaryPanel" type="ColorRect" parent="CanvasLayer"]
 visible = false
-offset_left = 70.0
-offset_top = 64.0
-offset_right = 250.0
-offset_bottom = 116.0
+offset_left = 140.0
+offset_top = 128.0
+offset_right = 500.0
+offset_bottom = 232.0
 color = Color(0.1, 0.09, 0.13, 0.92)
 
 [node name="Text" type="Label" parent="CanvasLayer/CafeSummaryPanel"]
-offset_left = 8.0
-offset_top = 6.0
-offset_right = 172.0
-offset_bottom = 46.0
-theme_override_font_sizes/font_size = 8
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 344.0
+offset_bottom = 92.0
 text = "..."
 horizontal_alignment = 1
 vertical_alignment = 1
