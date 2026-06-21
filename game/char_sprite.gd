@@ -7,10 +7,10 @@ extends RefCounted
 # 16×32 규격(ADR-0003)에 맞는다 — 다운스케일 불요. 발치(콘텐츠 y≈40)를 노드 원점에 맞춘다
 # (그레이박스가 발치 원점이던 것과 동일 → main의 타일 배치·충돌 손 안 댐).
 
-const FRAME := Vector2i(48, 48)
+const FRAME := Vector2i(80, 80)   # standard size56 통일본 native(콘텐츠 최대 ~70px) — 얼굴 선명·체형 통일
 const DIRS := ["down", "up", "right", "left"]   # 행 순서(시트 규약)
 const FPS := 8.0
-const FOOT_OFFSET_Y := -16   # 프레임 중심(24)에서 발치(≈40)를 노드 원점으로 끌어올림
+const FOOT_OFFSET_Y := -36   # 프레임 중심(40)에서 발치(≈76)를 노드 원점으로 끌어올림
 
 # 시트 경로로 AnimatedSprite2D를 만든다(없으면 null → 호출부가 그레이박스 폴백 유지).
 static func make(sheet_path: String) -> AnimatedSprite2D:

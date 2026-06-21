@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://eu12f67kkcx7"
-path="res://.godot/imported/mel.png-56621441c7343988543b2af89d2690ba.ctex"
+uid="uid://dbxfkjia1ei80"
+path="res://.godot/imported/okja.png-c210d7b65f69968318e9b0101e8e1506.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/mel.png"
-dest_files=["res://.godot/imported/mel.png-56621441c7343988543b2af89d2690ba.ctex"]
+source_file="res://assets/portraits/okja.png"
+dest_files=["res://.godot/imported/okja.png-c210d7b65f69968318e9b0101e8e1506.ctex"]
 
 [params]
 

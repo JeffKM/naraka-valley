@@ -44,7 +44,7 @@ const LAMP_STOPS := [
 
 # 등불 빛 색(따뜻한 앰버) — 차가운 인디고 밤과 대비돼 카페·길이 온기로 떠오른다.
 const LAMP_COLOR := Color(1.0, 0.74, 0.42)
-const LAMP_TEXTURE_SCALE := 1.6  # 128px 텍스처 × 1.6 ≈ 반경 6칸 빛웅덩이
+const LAMP_TEXTURE_SCALE := 3.2  # 환경 2배(TILE 32px)에 맞춰 2배 → 빛웅덩이 반경(칸 기준) 유지
 
 var _lamps: Array[PointLight2D] = []
 

@@ -9,10 +9,10 @@ extends Node2D
 const CHARS := "res://assets/characters/"
 const BG := "res://spike/assets/tile_ground.png"
 const PATH_TEX := "res://spike/assets/tile_path.png"
-const FRAME := Vector2i(48, 48)
+const FRAME := Vector2i(80, 80)   # standard size56 통일본 native
 const DIRS := ["down", "up", "right", "left"]   # 행 순서
 const FPS := 8.0
-const STEP := 58          # 캐스트 가로 간격(라벨 겹침 방지)
+const STEP := 86          # 캐스트 가로 간격(라벨 겹침 방지)
 const START_X := 40.0
 const TILE := 16
 const COLS := 26
@@ -82,7 +82,7 @@ func _build_cast() -> void:
 		var spr := AnimatedSprite2D.new()
 		spr.sprite_frames = _frames_for(sheet, is_walk)
 		spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		spr.offset = Vector2(0, -FRAME.y * 0.5)   # 발치 중앙 정렬
+		spr.offset = Vector2(0, -36)   # 발치(콘텐츠 y≈76)를 노드 원점에 (char_sprite와 동일)
 		spr.position = Vector2(px, baseline_y)
 		spr.play("walk_down")
 		if not is_walk:

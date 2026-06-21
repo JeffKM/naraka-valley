@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://eu12f67kkcx7"
-path="res://.godot/imported/mel.png-56621441c7343988543b2af89d2690ba.ctex"
+uid="uid://bq7us8r1n6wge"
+path="res://.godot/imported/bana_full.png-11721af19d8348ab1f6622c3583a2611.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/characters/mel.png"
-dest_files=["res://.godot/imported/mel.png-56621441c7343988543b2af89d2690ba.ctex"]
+source_file="res://assets/portraits/bana_full.png"
+dest_files=["res://.godot/imported/bana_full.png-11721af19d8348ab1f6622c3583a2611.ctex"]
 
 [params]
 

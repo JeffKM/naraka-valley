@@ -18,7 +18,7 @@ func _init():
 		for i in 8:
 			field.set_cell(Vector2i(16 + i, 6), 0, Vector2i(i, 0))
 		await process_frame
-	var out := Image.create(40 * 16, 24 * 16, false, Image.FORMAT_RGBA8)
+	var out := Image.create(40 * 32, 24 * 32, false, Image.FORMAT_RGBA8)   # 환경 2배(TILE 32px)
 	out.fill(Color(0.05, 0.05, 0.07, 1.0))
 	for layer in [ground, field]:
 		_blit_layer(layer, out)
@@ -27,8 +27,10 @@ func _init():
 	for entry in main.PROP_LAYOUT:
 		var tex: Texture2D = entry[0]
 		var tex_img := tex.get_image()
+		var pimg := tex_img.duplicate()
+		pimg.resize(pimg.get_width() * 2, pimg.get_height() * 2, Image.INTERPOLATE_NEAREST)  # 가구 2배
 		for t in entry[1]:
-			out.blend_rect(tex_img, Rect2i(Vector2i.ZERO, tex_img.get_size()), Vector2i(t.x * 16, t.y * 16))
+			out.blend_rect(pimg, Rect2i(Vector2i.ZERO, pimg.get_size()), Vector2i(t.x * 32, t.y * 32))
 	# P2.3② 캐릭터 스프라이트: 노드의 AnimatedSprite2D 현재 프레임을 발치정렬로 합성한다.
 	# (숨겨진 옥자·바나도 미리보기용으로 그린다 — 위치는 main이 _ready에서 잡아 둠.)
 	for nm in ["Player", "Miho", "Okja", "Mel", "Bana"]:
@@ -65,4 +67,5 @@ func _blit_layer(layer: TileMapLayer, out: Image) -> void:
 		var ac := layer.get_cell_atlas_coords(cell)
 		var region := src.get_tile_texture_region(ac, 0)
 		var tile_img := src.texture.get_image().get_region(region)
-		out.blend_rect(tile_img, Rect2i(Vector2i.ZERO, region.size), Vector2i(cell.x * 16, cell.y * 16))
+		tile_img.resize(region.size.x * 2, region.size.y * 2, Image.INTERPOLATE_NEAREST)  # 타일 2배(TILE 32px)
+		out.blend_rect(tile_img, Rect2i(Vector2i.ZERO, tile_img.get_size()), Vector2i(cell.x * 32, cell.y * 32))
