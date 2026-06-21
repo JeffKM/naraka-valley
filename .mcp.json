@@ -8,6 +8,13 @@
           "TEMPLATES_USE": "en",
           "ENABLE_GUI": "false"
         }
+      },
+      "pixellab": {
+        "type": "http",
+        "url": "https://api.pixellab.ai/mcp",
+        "headers": {
+          "Authorization": "Bearer ${PIXELLAB_API_KEY}"
+        }
       }
     }
   }
