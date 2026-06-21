@@ -646,10 +646,24 @@ func _build_field_tileset() -> TileSet:
 	return ts
 
 # ── 맵 데이터 구성 ────────────────────────────────────────────────────────
+# M1.2 — 현재 구역(_region) 하나만 빌드한다(구현 (b): 현재 구역만 메모리, 전환 시 재빌드).
+# 지금은 홈베이스(묵정 농원)뿐이라 _build_home으로 분기하고, M1.4부터 구역이 늘면 여기에
+# per-region 빌더를 추가한다. 미지 구역은 홈베이스로 폴백(부팅 안 죽음 — RegionCatalog 방어와 결).
 func _build_grid() -> void:
-	# 외부(0..OUTDOOR_H-1)는 풀밭, 그 아래 실내 전용 구역은 검은 여백(VOID)으로 기본을 깐 뒤,
-	# 우선순위 순서로 덮어쓴다. 실내 방 바깥의 VOID는 안 그려져 검은 배경이 비치고, 카메라가
-	# 실내 모드에서 방만 비추므로(아래 _apply_camera_limits) "건물 안에 들어온" 느낌을 준다.
+	match _region:
+		RegionCatalog.HOME:
+			_build_home()
+		_:
+			push_warning("알 수 없는 구역 '%s' — 홈베이스로 폴백" % _region)
+			_build_home()
+
+# 홈베이스(묵정 농원): 외부 풀밭 + 밭(열린 흙) + 집·카페 실내 방(sub) 스택.
+# 외부(0..OUTDOOR_H-1)는 풀밭, 그 아래 실내 전용 구역은 검은 여백(VOID)으로 기본을 깐 뒤,
+# 우선순위 순서로 덮어쓴다. 실내 방 바깥의 VOID는 안 그려져 검은 배경이 비치고, 카메라가
+# 실내 모드에서 방만 비추므로(아래 _apply_camera_limits) "건물 안에 들어온" 느낌을 준다.
+# ★ 홈베이스 grid 크기는 MAP_W×MAP_H(외부 + 아래 실내 방). 구역-레벨 외부 크기는
+#   RegionCatalog.HOME.size(40×24 = MAP_W×OUTDOOR_H)와 같고, 카메라가 그 값으로 외부를 격리한다.
+func _build_home() -> void:
 	_grid = []
 	for y in MAP_H:
 		var row: Array = []
@@ -712,8 +726,10 @@ func _paint_grid() -> void:
 	var path_cells: Array[Vector2i] = []
 	var soil_cells: Array[Vector2i] = []
 	var solids: Array = []   # [[cell, tile_id], ...] — terrain 칠 *뒤*에 덮는다
-	for y in MAP_H:
-		for x in MAP_W:
+	# M1.2 — 현재 구역 _grid의 실제 크기를 따른다(MAP_H/MAP_W 상수 대신). 홈베이스는
+	# MAP_H×MAP_W라 동일하지만, 구역마다 grid 크기가 달라질 M1.4+에 그대로 따라온다.
+	for y in _grid.size():
+		for x in _grid[y].size():
 			var cell := Vector2i(x, y)
 			var t: int = _grid[y][x]
 			if t == VOID:
@@ -767,10 +783,12 @@ func _setup_player_and_camera() -> void:
 	_cam.make_current()
 	_apply_camera_limits()                   # 초기 외부 모드 경계
 
-# 카메라 경계를 현재 모드(_indoor)에 맞춘다. 외부는 외부 영역 전체, 실내는 그 방 둘레만 비춘다 —
-# 실내 모드에선 카메라가 방 밖(외부·다른 방·경계벽)을 비추지 못해 "건물 안"이 격리된다(방 밖은 VOID 검정).
+# 카메라 경계를 현재 모드(_indoor)에 맞춘다. 외부는 현재 구역(_region) 전체, 실내는 그 방 둘레만
+# 비춘다 — 실내 모드에선 카메라가 방 밖(외부·다른 방·경계벽)을 비추지 못해 "건물 안"이 격리된다(방 밖은 VOID 검정).
+# M1.2 — 외부(구역 레벨) 경계는 RegionCatalog.size_of(_region)에서 파생한다(홈베이스 40×24
+# = MAP_W×OUTDOOR_H, 기존과 동일). 집/카페 실내는 홈베이스 sub라 여전히 방 둘레 rect로 격리(M1.4 이주 전까지).
 func _apply_camera_limits() -> void:
-	var r := Rect2i(0, 0, MAP_W, OUTDOOR_H)   # 외부 전체(아래 실내 구역 제외)
+	var r := Rect2i(Vector2i.ZERO, RegionCatalog.size_of(_region))   # 외부 = 현재 구역 전체
 	if _indoor == "집":
 		r = HOUSE_CAM_RECT
 	elif _indoor == "카페":
