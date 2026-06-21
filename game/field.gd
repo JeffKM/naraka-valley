@@ -66,6 +66,15 @@ func any_mature() -> bool:
 			return true
 	return false
 
+# 작물이 심긴 칸 목록(main의 _draw_crops가 칸별 작물 스프라이트를 그릴 때 순회한다).
+# 상태 노드는 화면을 모르지만(설계 메모), "어디에 작물이 있나"는 순수 상태 질의라 노출한다.
+func planted_tiles() -> Array:
+	var out: Array = []
+	for t in _tiles.keys():
+		if _tiles[t]["planted"]:
+			out.append(t)
+	return out
+
 # 시각 성장 단계(오버레이용): -1=작물없음 / 0=씨앗 / 1=새싹 / 2=수확가능.
 # 작물별 stages 수와 무관한 그레이박스 3단계(외형). 속도 차이는 growth_days가 낸다.
 func growth_stage(t: Vector2i) -> int:

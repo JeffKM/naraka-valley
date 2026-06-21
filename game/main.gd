@@ -21,7 +21,7 @@ extends Node2D
 
 # ── 규격 ────────────────────────────────────────────────────────────────
 const TILE := 32                       # 월드 타일 한 칸(px). 캐릭터 2배(v3 size64)에 맞춰 환경도 2배(C). 좌표·카메라·배치는 이 값.
-const TILE_ART := 16                    # 소스 도트 아트의 타일 픽셀(타일셋·오버레이 *생성*용). Ground/Field 타일맵 노드를 2배 스케일해 16px 아트를 32px로 렌더.
+const TILE_ART := 32                    # 소스 도트 아트의 타일 픽셀 = TILE. ADR-0013: 환경 아트를 32px native로 상향(캐릭터 선명도 일치). 타일맵 스케일 1:1 — 더는 ×2 업스케일 안 함.
 const MAP_W := 40                      # 맵 가로(타일) = 640px
 const MAP_H := 24                      # 맵 세로(타일) = 384px
 
@@ -61,20 +61,38 @@ const SOLID_TEX := {
 # ── T2.1/T2.3 밭 오버레이 타일(Field 레이어 아틀라스 인덱스) ───────────────
 # Ground의 SOIL 위에 겹쳐 그리는 칸 상태 표시. 미경작 칸은 오버레이 없음(맨 흙).
 # 인덱스 = 외형단계(APPEAR) × 2 + 젖음(0 마름 / 1 젖음). 코드로 한 번에 생성한다.
-#   외형단계: 0=빈 고랑(작물 없음) / 1=씨앗 / 2=새싹 / 3=수확가능(황금)
-# 젖음은 베이스 흙색만 어둡게 바꾸고, 외형은 가운데 도형으로 표현한다.
+#   외형단계: 0=빈 고랑(작물 없음) / 1=씨앗 / 2=새싹 / 3=수확가능
+# ADR-0013/작물 연결: 오버레이는 흙 고랑(DRY/WET 톤)만 그린다. 성장단계 시각은 더 이상
+# 그레이박스 점이 아니라 _draw_crops가 작물 스프라이트(seed/sprout/mature)로 얹는다.
+# 외형단계 인덱스는 _overlay_index 호환을 위해 유지하되, 8타일 모두 흙 톤만 다르다(젖음).
 const AP_EMPTY := 0    # 경작만(고랑)
-const AP_SEED := 1     # 갓 심음(작은 점)
-const AP_SPROUT := 2   # 자라는 중(중간 새싹)
-const AP_MATURE := 3   # 다 자람(큰 황금 새싹 = 수확 가능 표시)
+const AP_SEED := 1     # 갓 심음
+const AP_SPROUT := 2   # 자라는 중
+const AP_MATURE := 3   # 다 자람(수확 가능)
 const N_APPEAR := 4
 const N_OV := N_APPEAR * 2  # 외형 4 × 젖음 2 = 8타일
 
-# (P2.3: 경작 고랑 DRY/WET 색은 밭흙 terrain base에서 파생 — _build_field_tileset 참조)
-# 외형단계별 가운데 도형(반지름 px, 색). 수확가능은 황금색으로 눈에 띄게(완료기준 표시).
-const SPROUT := Color(0.40, 0.62, 0.34)   # 회녹색 새싹(그레이박스 작물)
-const MATURE := Color(0.86, 0.74, 0.30)   # 황금 — 다 자람 = 수확 가능
-const AP_DOT := [0, 2, 4, 5]              # 외형단계별 새싹 반지름(EMPTY는 0=안 그림)
+# (경작 고랑 DRY/WET 색은 밭흙 terrain base에서 파생 — _build_field_tileset 참조)
+# ── 작물 스프라이트(ADR-0013: 32px native, P2.2 산출) — 성장단계별 3프레임 ──────
+# field.growth_stage(t): 0=씨앗 / 1=새싹 / 2=수확가능 → 이 배열의 같은 인덱스 프레임.
+# 작물 id(CropCatalog)별로 묶어 _draw_crops가 심긴 칸 위에 바닥정렬로 그린다.
+const CROP_SPRITES := {
+	CropCatalog.HONRYEONGCHO: [
+		preload("res://assets/crops/honryeongcho_seed.png"),
+		preload("res://assets/crops/honryeongcho_sprout.png"),
+		preload("res://assets/crops/honryeongcho_mature.png"),
+	],
+	CropCatalog.PIANHWA: [
+		preload("res://assets/crops/pianhwa_seed.png"),
+		preload("res://assets/crops/pianhwa_sprout.png"),
+		preload("res://assets/crops/pianhwa_mature.png"),
+	],
+	CropCatalog.YEONGHON_HOBAK: [
+		preload("res://assets/crops/yeonghon_hobak_seed.png"),
+		preload("res://assets/crops/yeonghon_hobak_sprout.png"),
+		preload("res://assets/crops/yeonghon_hobak_mature.png"),
+	],
+}
 
 # 각 타일의 그레이박스 색(밝기·미세 색조로만 구분, 회색 기조 유지). WALL이 가장 밝다.
 const COLORS := [
@@ -86,12 +104,12 @@ const COLORS := [
 	Color(0.56, 0.56, 0.62),  # WALL   — 가장 밝은 회색(외벽)
 ]
 
-# ── P2.3② 실내 가구·장식(create_map_object 산출, 32px → 16px 다운스케일) ────
+# ── 실내 가구·장식(create_map_object 산출, ADR-0013: 32px raw native 직접 사용) ────
 # 손님·잡귀처럼 노드 없이 main의 _draw에서 바닥정렬로 그린다(캐릭터·손님 *아래* —
 # props를 가장 먼저 그려 자식 노드들이 위에 올라온다). 충돌은 없다(WALL 타일만 충돌,
-# 가구는 순수 장식 — art 패스라 새 시스템·이동 변화 금지). 침대만 16×32(1×2칸), 나머지는
-# 16×16. 카운터=좌석(스툴) 뒤·직원 앞 줄(바 배치) / 선반=뒷벽 / 등불·화분=구역 분위기.
-const PROP_BED := preload("res://assets/props/house_bed.png")        # 16×32
+# 가구는 순수 장식 — art 패스라 새 시스템·이동 변화 금지). 침대만 32×64(1×2칸), 나머지는
+# 32×32. 카운터=좌석(스툴) 뒤·직원 앞 줄(바 배치) / 선반=뒷벽 / 등불·화분=구역 분위기.
+const PROP_BED := preload("res://assets/props/house_bed.png")        # 32×64
 const PROP_COUNTER := preload("res://assets/props/cafe_counter.png")
 const PROP_STOOL := preload("res://assets/props/cafe_stool.png")
 const PROP_SHELF := preload("res://assets/props/cafe_shelf.png")
@@ -501,12 +519,10 @@ func _build_field_tileset() -> TileSet:
 		for wet_i in 2:
 			var i := ap * 2 + wet_i
 			var bg: Image = wet if wet_i == 1 else dry
+			# ADR-0013/작물 연결: 오버레이는 경작 고랑(DRY/WET 흙)만 그린다. 성장단계 표시는
+			# 더 이상 그레이박스 점이 아니라 _draw_crops가 작물 스프라이트로 얹는다(외형단계
+			# 인덱스는 _overlay_index 호환 위해 유지하되 시각은 흙 톤만 — 점 제거).
 			img.blit_rect(bg, Rect2i(0, 0, TILE_ART, TILE_ART), Vector2i(i * TILE_ART, 0))
-			var r: int = AP_DOT[ap]                             # 새싹 반지름(0이면 안 그림)
-			if r > 0:
-				var c := MATURE if ap == AP_MATURE else SPROUT
-				var c0 := TILE_ART / 2 - r                      # 가운데 정렬
-				img.fill_rect(Rect2i(i * TILE_ART + c0, c0, r * 2, r * 2), c)
 	var tex := ImageTexture.create_from_image(img)
 
 	var src := TileSetAtlasSource.new()
@@ -1585,6 +1601,7 @@ func _on_tile_changed(t: Vector2i) -> void:
 		field_layer.erase_cell(t)
 	else:
 		field_layer.set_cell(t, 0, Vector2i(idx, 0))
+	queue_redraw()  # 작물 스프라이트(_draw_crops)는 _draw에서 그리므로 상태 변화 시 다시 그린다
 
 # 칸 상태 → 오버레이 아틀라스 인덱스(-1 = 미경작, 오버레이 없음).
 # 인덱스 = 외형단계 × 2 + 젖음. 외형단계는 FarmField.growth_stage(씨앗/새싹/수확가능)
@@ -1603,6 +1620,7 @@ func _overlay_index(t: Vector2i) -> int:
 # 좌석 칸에 직접 그린다 — 노드 생성·해제 없이 그레이박스로 가볍게).
 func _draw() -> void:
 	_draw_props()            # 가구·장식을 맨 먼저 → 캐릭터·손님이 그 위에 올라온다
+	_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 	_draw_customers()
 	_draw_night_customers()
 	_draw_jobgui()
@@ -1611,16 +1629,27 @@ func _draw() -> void:
 	var p := Vector2(_target.x * TILE, _target.y * TILE)
 	draw_rect(Rect2(p, Vector2(TILE, TILE)), Color(1, 1, 1, 0.7), false, 1.0)
 
-# P2.3② 실내 가구·장식을 바닥정렬(타일 좌상단 원점)로 그린다. 충돌 없는 순수 장식 —
-# 손님·잡귀 그리기와 같은 결(노드 생성·해제 없이 main이 직접). 침대(16×32)는 한 칸 위에서
-# 두 칸 아래로 내려와 1×2칸을 덮고, 나머지(16×16)는 한 칸을 채운다. PROP_LAYOUT 순서대로
+# 실내 가구·장식을 바닥정렬(타일 좌상단 원점)로 그린다. 충돌 없는 순수 장식 —
+# 손님·잡귀 그리기와 같은 결(노드 생성·해제 없이 main이 직접). 침대(32×64)는 1×2칸을 덮고,
+# 나머지(32×32)는 한 칸을 채운다(ADR-0013 native). PROP_LAYOUT 순서대로
 # 그려 선반(뒷벽)→카운터→스툴이 자연스레 겹친다.
+func _draw_crops() -> void:
+	for t in farm.planted_tiles():
+		var crop_id := farm.crop_of(t)
+		var frames: Variant = CROP_SPRITES.get(crop_id)
+		if frames == null:
+			continue
+		# growth_stage: 0=씨앗 / 1=새싹 / 2=수확가능 → 같은 인덱스 프레임. 칸(32×32)을 채운다.
+		var stage: int = clampi(farm.growth_stage(t), 0, frames.size() - 1)
+		var tex: Texture2D = frames[stage]
+		draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), Vector2(TILE, TILE)), false)
+
 func _draw_props() -> void:
 	for entry in PROP_LAYOUT:
 		var tex: Texture2D = entry[0]
 		for t in entry[1]:
-			# 가구 아트도 16px라 2배로 그려 32px 타일·캐릭터와 비율을 맞춘다(C).
-			draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), tex.get_size() * 2), false)
+			# ADR-0013: 가구 아트도 32px native라 1:1로 그린다(스툴 32×32=1칸, 침대 32×64=1×2칸).
+			draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), tex.get_size()), false)
 
 # 좌석에 앉은 손님(회색 박스)과 머리 위 인내심 바(초록→빨강)를 그린다. 인내심이 줄수록
 # 바가 짧아지고 붉어져 "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거).

@@ -22,10 +22,8 @@
 script = ExtResource("1")
 
 [node name="Ground" type="TileMapLayer" parent="."]
-scale = Vector2(2, 2)
 
 [node name="Field" type="TileMapLayer" parent="."]
-scale = Vector2(2, 2)
 
 [node name="Clock" type="Node" parent="."]
 script = ExtResource("3")
