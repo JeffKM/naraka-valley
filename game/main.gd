@@ -25,6 +25,17 @@ const TILE_ART := 32                    # 소스 도트 아트의 타일 픽셀 
 const MAP_W := 40                      # 맵 가로(타일) = 640px
 const MAP_H := 24                      # 맵 세로(타일) = 384px
 
+# ── P2.4 대화 초상화: 화자 표시이름 → 버스트 초상화 경로 ──────────────────────
+# ADR-0003 "표정=대화 시 별도 일러스트 초상화". 인게임 도트(작은 실루엣)와 달리 얼굴을
+# 또렷이 살리는 자리. 키는 각 NPC display_name()(미호/옥자/멜/바나)과 일치시킨다.
+# 표정 변형(미호 4~5 등)은 이 매핑에 stem을 늘려 붙이면 되는 자리(P2.4 후속).
+const PORTRAIT_OF := {
+	"미호": "res://assets/portraits/miho.png",
+	"옥자": "res://assets/portraits/okja.png",
+	"멜": "res://assets/portraits/mel.png",
+	"바나": "res://assets/portraits/bana.png",
+}
+
 # ── 타일 종류(아틀라스 인덱스 = 이 순서) ──────────────────────────────────
 const GROUND := 0   # 바깥 바닥(걷기 O)
 const PATH := 1     # 길 — 온보딩 동선(걷기 O)
@@ -196,6 +207,7 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 @onready var dialogue: DialogueBox = $Dialogue                # T3.2 대사 진행기
 @onready var dialogue_panel: ColorRect = $CanvasLayer/DialoguePanel  # T3.2 대화 텍스트박스 배경
 @onready var dialogue_text: Label = $CanvasLayer/DialoguePanel/Text  # T3.2 대화 본문
+@onready var dialogue_portrait: TextureRect = $CanvasLayer/DialoguePortrait  # P2.4 대화 초상화 슬롯
 @onready var affinity: Affinity = $Affinity                   # T3.3 미호 호감도(하트)
 @onready var affinity_label: Label = $CanvasLayer/AffinityLabel  # T3.3 하트 HUD
 @onready var foxfire_label: Label = $CanvasLayer/FoxfireLabel  # T3.4 여우불 도움 HUD
@@ -1541,6 +1553,14 @@ func _try_gift() -> void:
 # 현재 줄이 바뀔 때마다(시작·넘기기) 패널을 갱신한다. 마지막 줄이면 "닫기"로 안내.
 func _on_dialogue_changed(speaker: String, line: String) -> void:
 	dialogue_panel.visible = true
+	# P2.4 화자 초상화: 매핑에 있고 에셋이 실제로 존재할 때만 슬롯을 켠다(없으면 텍스트만 —
+	# 그레이박스 손님·잡귀 등 일러스트 없는 화자는 자연스럽게 슬롯 없이 표시된다).
+	var portrait_path: String = PORTRAIT_OF.get(speaker, "")
+	if portrait_path != "" and ResourceLoader.exists(portrait_path):
+		dialogue_portrait.texture = load(portrait_path)
+		dialogue_portrait.visible = true
+	else:
+		dialogue_portrait.visible = false
 	var hint := "[E] 닫기" if dialogue.is_last() else "[E] 다음"
 	dialogue_text.text = "%s\n\n%s\n\n%s   %s" % [speaker, line, dialogue.progress(), hint]
 
@@ -1550,6 +1570,7 @@ func _on_dialogue_changed(speaker: String, line: String) -> void:
 # 단계가 달라 no-op이 된다(Onboarding._advance_from의 단계 가드 — 안전).
 func _on_dialogue_finished() -> void:
 	dialogue_panel.visible = false
+	dialogue_portrait.visible = false  # P2.4 초상화 슬롯도 함께 닫는다
 	player.set_physics_process(true)
 	# T5.1 온보딩 전진은 '누구와의 대화였나'(_talking_to)로도 가른다 — 멜이 카페에
 	# 상주하며 미호 멘토 단계 도중에도 말 걸 수 있게 됐기 때문(화자 구분 없이 단계로만

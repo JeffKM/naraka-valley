@@ -266,19 +266,30 @@ horizontal_alignment = 1
 [node name="DialoguePanel" type="ColorRect" parent="CanvasLayer"]
 visible = false
 offset_left = 8.0
-offset_top = 118.0
+offset_top = 104.0
 offset_right = 312.0
 offset_bottom = 174.0
 color = Color(0.08, 0.08, 0.12, 0.92)
 
 [node name="Text" type="Label" parent="CanvasLayer/DialoguePanel"]
-offset_left = 8.0
+offset_left = 76.0
 offset_top = 5.0
 offset_right = 296.0
-offset_bottom = 51.0
+offset_bottom = 65.0
 theme_override_font_sizes/font_size = 8
 text = "..."
 autowrap_mode = 2
+
+[node name="DialoguePortrait" type="TextureRect" parent="CanvasLayer"]
+visible = false
+texture_filter = 2
+offset_left = 12.0
+offset_top = 106.0
+offset_right = 74.0
+offset_bottom = 168.0
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
 
 [node name="EndingPanel" type="ColorRect" parent="CanvasLayer"]
 visible = false
