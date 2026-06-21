@@ -26,9 +26,7 @@ func _init():
 	# 데이터(PROP_LAYOUT)를 읽어 텍스처를 바닥정렬로 직접 합성한다(시각 확인용).
 	for entry in main.PROP_LAYOUT:
 		var tex: Texture2D = entry[0]
-		var tex_img := tex.get_image()
-		var pimg := tex_img.duplicate()
-		pimg.resize(pimg.get_width() * 2, pimg.get_height() * 2, Image.INTERPOLATE_NEAREST)  # 가구 2배
+		var pimg := tex.get_image()  # ADR-0013: 가구 32px native → 1:1
 		for t in entry[1]:
 			out.blend_rect(pimg, Rect2i(Vector2i.ZERO, pimg.get_size()), Vector2i(t.x * 32, t.y * 32))
 	# P2.3② 캐릭터 스프라이트: 노드의 AnimatedSprite2D 현재 프레임을 발치정렬로 합성한다.
@@ -51,6 +49,17 @@ func _init():
 		# 스프라이트는 노드 position에 중심정렬 + offset → 좌상단 = pos + offset − frame/2.
 		var topleft := node.position + spr.offset - Vector2(fimg.get_width(), fimg.get_height()) * 0.5
 		out.blend_rect(fimg, Rect2i(Vector2i.ZERO, fimg.get_size()), Vector2i(topleft))
+	# 작물 스프라이트 미리보기(밭이 비어 있어 샘플로 합성): 3작물 × 3단계를 밭 칸에 직접 그린다.
+	# 실게임에선 _draw_crops가 farm.planted_tiles()를 그린다 — 여기선 native 32px 렌더 확인용.
+	var crop_row := 0
+	for cid in main.CROP_SPRITES:
+		var frames: Array = main.CROP_SPRITES[cid]
+		for st in frames.size():
+			var cimg: Image = frames[st].get_image()
+			var cx := (15 + st) * 32   # 밭 안(x15~17), 단계별 가로
+			var cy := (5 + crop_row * 2) * 32
+			out.blend_rect(cimg, Rect2i(Vector2i.ZERO, cimg.get_size()), Vector2i(cx, cy))
+		crop_row += 1
 	out.save_png("res://tools/map_dump.png")
 	print("✅ map_dump.png 저장")
 	quit()
@@ -66,6 +75,5 @@ func _blit_layer(layer: TileMapLayer, out: Image) -> void:
 			continue
 		var ac := layer.get_cell_atlas_coords(cell)
 		var region := src.get_tile_texture_region(ac, 0)
-		var tile_img := src.texture.get_image().get_region(region)
-		tile_img.resize(region.size.x * 2, region.size.y * 2, Image.INTERPOLATE_NEAREST)  # 타일 2배(TILE 32px)
+		var tile_img := src.texture.get_image().get_region(region)  # ADR-0013: 타일 32px native → 1:1
 		out.blend_rect(tile_img, Rect2i(Vector2i.ZERO, tile_img.get_size()), Vector2i(cell.x * 32, cell.y * 32))
