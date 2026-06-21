@@ -96,6 +96,9 @@ const PROP_STOOL := preload("res://assets/props/cafe_stool.png")
 const PROP_SHELF := preload("res://assets/props/cafe_shelf.png")
 const PROP_LANTERN := preload("res://assets/props/soul_lantern.png")
 const PROP_POT := preload("res://assets/props/spirit_pot.png")
+# P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
+# 이 한 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로). 길가 2 + 카페 구석 1.
+const LANTERN_TILES := [Vector2i(12, 15), Vector2i(28, 15), Vector2i(36, 8)]
 # [텍스처, [놓을 타일들]]. 타일 좌표는 실내 레이아웃(직원 y5 / 카운터 y6 / 좌석 y7 /
 # 통로 y8) 위에 얹어 "장소"로 읽히게 배치한다. 좌석 스툴 위에는 손님 박스가 덮여 그려진다.
 const PROP_LAYOUT := [
@@ -103,7 +106,7 @@ const PROP_LAYOUT := [
 	[PROP_COUNTER, [Vector2i(31, 6), Vector2i(32, 6), Vector2i(33, 6), Vector2i(34, 6), Vector2i(35, 6)]],  # 카페 바 카운터
 	[PROP_STOOL, [Vector2i(31, 7), Vector2i(33, 7), Vector2i(35, 7)]],                   # 카페 좌석 스툴(= SEAT_TILES)
 	[PROP_SHELF, [Vector2i(32, 4), Vector2i(34, 4)]],                                    # 카페 뒷벽 선반
-	[PROP_LANTERN, [Vector2i(12, 15), Vector2i(28, 15), Vector2i(36, 8)]],               # 길가 2 + 카페 구석 1 등불
+	[PROP_LANTERN, LANTERN_TILES],                                                       # 길가 2 + 카페 구석 1 등불
 	[PROP_POT, [Vector2i(8, 5), Vector2i(8, 8)]],                                        # 집 두 구석 혼령초 화분
 ]
 
@@ -200,6 +203,10 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 @onready var ending_text: Label = $CanvasLayer/EndingPanel/Text        # T4.2 점수판 본문
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
+# P2.3③ 밤 라이팅(CanvasModulate + 등불). 월드 캔버스에 코드로 붙인다(타일셋·입력처럼
+# 런타임 조립). 무상태(시각 파생)라 세이브 대상이 아니다 — _setup_lighting에서 생성.
+var lighting: DayNightLighting
+
 var _grid: Array = []  # _grid[y][x] = 타일 id
 var _sleeping := false  # T1.5 취침 연출 중이면 이동·입력 잠금
 
@@ -284,6 +291,7 @@ func _ready() -> void:
 	_paint_grid()
 	_place_labels()
 	_setup_player_and_camera()
+	_setup_lighting()
 	_setup_clock()
 	# T3.2/T5.6 미호를 현재 시간대의 자리(아침=밭 / 15시부터=카페)에 세우고, 대사 진행
 	# 시그널을 패널·이동잠금에 연결한다. 초기 위치는 _miho_tile(기본 밭)로 두고, 로드 후
@@ -621,6 +629,19 @@ func _setup_player_and_camera() -> void:
 	player.add_child(cam)
 	cam.make_current()
 
+# ── P2.3③ 밤 라이팅 ────────────────────────────────────────────────────────
+# CanvasModulate(화면 색조) + 소울 등불 자리 빛웅덩이를 월드 캔버스에 붙인다. 등불 위치는
+# PROP_LAYOUT과 같은 LANTERN_TILES에서 픽셀 중심으로 환산해 그림과 빛을 한 자리에 둔다.
+# 첫 색조는 즉시 적용해 부팅 첫 프레임부터 시각에 맞는 톤이 뜨게 한다(로드 후도 _process가 잇는다).
+func _setup_lighting() -> void:
+	lighting = DayNightLighting.new()
+	add_child(lighting)
+	var lamp_px := PackedVector2Array()
+	for t in LANTERN_TILES:
+		lamp_px.append(_tile_center_px(t))
+	lighting.setup(lamp_px)
+	lighting.apply(clock.minutes)
+
 # ── T1.5 하루 사이클 ──────────────────────────────────────────────────────
 func _setup_clock() -> void:
 	# 24:00에 도달하면(쓰러짐) 위치에 상관없이 강제 취침시킨다.
@@ -772,6 +793,10 @@ func _delete_save_and_restart() -> void:
 	get_tree().reload_current_scene()
 
 func _process(delta: float) -> void:
+	# P2.3③ 밤 라이팅: 시각으로 화면 색조·등불 세기를 매 프레임 잇는다(연속 보간이라 부드럽게
+	# 흐른다). 입력 가드보다 먼저 둬, 대화·정산 패널 뒤로 보이는 월드도 밤이면 밤으로 유지된다.
+	# 취침 연출 중엔 시간이 멈춰(clock.running=false) 색조도 자연히 정지하고, 검은 페이드가 덮는다.
+	lighting.apply(clock.minutes)
 	# T4.2 슬라이스가 끝났으면 마무리 화면만 유지하고 모든 게임 입력을 막는다
 	# (이동은 _do_sleep/_end_run에서 이미 잠갔다). 마무리 화면은 _end_run이 한 번
 	# 세웠으므로 여기선 더 손대지 않는다.

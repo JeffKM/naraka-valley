@@ -4,5 +4,14 @@
 # P2.3 맵 도구 부산물 (재생성물 — combined_terrain.tres에서 파생)
 tools/map_dump.png
 tools/map_dump.png.import
+# P2.3③ 라이팅 육안 확인 부산물 (light_dump.gd로 재생성)
+tools/light_noon.png
+tools/light_noon.png.import
+tools/light_dusk.png
+tools/light_dusk.png.import
+tools/light_night.png
+tools/light_night.png.import
+tools/light_night_lamp.png
+tools/light_night_lamp.png.import
 assets/tiles/combined_terrain_atlas.png
 assets/tiles/combined_terrain_atlas.png.import
