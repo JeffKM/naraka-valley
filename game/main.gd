@@ -33,11 +33,11 @@ const CAFE := 4     # 카페 바닥(걷기 O)
 const WALL := 5     # 벽/건물 외벽(통과 X)
 const N_TILES := 6
 
-# ── P2.3 지형 도트: terrain TileSet + 실내/벽 단색 source ───────────────────
+# ── P2.3 지형 도트: terrain TileSet + 실내/벽 도트 source ───────────────────
 # combined_terrain.tres = PixelLab Wang 3세트(풀↔길·풀↔밭·길↔밭)를 합친 corner
 # 오토타일. terrain_set_0의 terrain 순서는 컨버터 인자 순서로 고정(0=길,1=풀,2=밭).
 # GROUND/PATH/SOIL은 이 terrain으로 자동 전환해 칠하고, HOUSE/CAFE/WALL(실내·벽)은
-# 아직 도트 전이라 단색 source(SOLID)로 따로 깐다(단계 ②에서 도트 교체).
+# 전환이 필요 없는 단일 면이라 별도 source(SOLID)에 16×16 도트 타일로 깐다.
 const TERRAIN_TILESET_PATH := "res://assets/tiles/combined_terrain.tres"
 const TERRAIN_SET := 0
 const TR_PATH := 0    # dirt path
@@ -45,9 +45,17 @@ const TR_GRASS := 1   # muted grass
 const TR_SOIL := 2    # tilled farm soil
 # 타일 종류 → terrain id(GROUND/PATH/SOIL만 terrain으로 칠한다)
 const TILE_TERRAIN := {GROUND: TR_GRASS, PATH: TR_PATH, SOIL: TR_SOIL}
-# 단색 실내/벽 source: 별도 source_id에 HOUSE/CAFE/WALL 3타일만 둔다.
+# 실내/벽 source: 별도 source_id에 HOUSE/CAFE/WALL 3타일만 둔다.
 const SOLID_SRC_ID := 1
-const SOLID_TILES := [HOUSE, CAFE, WALL]   # 단색 아틀라스 가로 배치 순서(= atlas x)
+const SOLID_TILES := [HOUSE, CAFE, WALL]   # 아틀라스 가로 배치 순서(= atlas x)
+# P2.3② 단색 교체: 실내 바닥·벽을 도트 타일(create_tiles_pro 산출 16×16 PNG)로 깐다.
+# 아틀라스 결은 단색 시절과 동일(SOLID_SRC_ID 가로 배치) — _build_tileset이 fill 대신
+# 이 텍스처를 blit한다. WALL 충돌·칠 순서는 불변(지형 위에 덮어 깔기 그대로).
+const SOLID_TEX := {
+	HOUSE: "res://assets/tiles/house_floor.png",  # 청회색 판석(아늑한 저승 집)
+	CAFE: "res://assets/tiles/cafe_floor.png",    # 따뜻한 앰버 판자(멜의 카페)
+	WALL: "res://assets/tiles/wall.png",          # 어두운 회청 벽돌(외벽·건물벽 공용)
+}
 
 # ── T2.1/T2.3 밭 오버레이 타일(Field 레이어 아틀라스 인덱스) ───────────────
 # Ground의 SOIL 위에 겹쳐 그리는 칸 상태 표시. 미경작 칸은 오버레이 없음(맨 흙).
@@ -75,6 +83,28 @@ const COLORS := [
 	Color(0.33, 0.32, 0.41),  # HOUSE  — 푸른 실내
 	Color(0.42, 0.37, 0.30),  # CAFE   — 따뜻한 실내
 	Color(0.56, 0.56, 0.62),  # WALL   — 가장 밝은 회색(외벽)
+]
+
+# ── P2.3② 실내 가구·장식(create_map_object 산출, 32px → 16px 다운스케일) ────
+# 손님·잡귀처럼 노드 없이 main의 _draw에서 바닥정렬로 그린다(캐릭터·손님 *아래* —
+# props를 가장 먼저 그려 자식 노드들이 위에 올라온다). 충돌은 없다(WALL 타일만 충돌,
+# 가구는 순수 장식 — art 패스라 새 시스템·이동 변화 금지). 침대만 16×32(1×2칸), 나머지는
+# 16×16. 카운터=좌석(스툴) 뒤·직원 앞 줄(바 배치) / 선반=뒷벽 / 등불·화분=구역 분위기.
+const PROP_BED := preload("res://assets/props/house_bed.png")        # 16×32
+const PROP_COUNTER := preload("res://assets/props/cafe_counter.png")
+const PROP_STOOL := preload("res://assets/props/cafe_stool.png")
+const PROP_SHELF := preload("res://assets/props/cafe_shelf.png")
+const PROP_LANTERN := preload("res://assets/props/soul_lantern.png")
+const PROP_POT := preload("res://assets/props/spirit_pot.png")
+# [텍스처, [놓을 타일들]]. 타일 좌표는 실내 레이아웃(직원 y5 / 카운터 y6 / 좌석 y7 /
+# 통로 y8) 위에 얹어 "장소"로 읽히게 배치한다. 좌석 스툴 위에는 손님 박스가 덮여 그려진다.
+const PROP_LAYOUT := [
+	[PROP_BED, [Vector2i(4, 5)]],                                                        # 집: 왼쪽 벽 침대
+	[PROP_COUNTER, [Vector2i(31, 6), Vector2i(32, 6), Vector2i(33, 6), Vector2i(34, 6), Vector2i(35, 6)]],  # 카페 바 카운터
+	[PROP_STOOL, [Vector2i(31, 7), Vector2i(33, 7), Vector2i(35, 7)]],                   # 카페 좌석 스툴(= SEAT_TILES)
+	[PROP_SHELF, [Vector2i(32, 4), Vector2i(34, 4)]],                                    # 카페 뒷벽 선반
+	[PROP_LANTERN, [Vector2i(12, 15), Vector2i(28, 15), Vector2i(36, 8)]],               # 길가 2 + 카페 구석 1 등불
+	[PROP_POT, [Vector2i(8, 5), Vector2i(8, 8)]],                                        # 집 두 구석 혼령초 화분
 ]
 
 # ── 구역 사각형(타일 좌표, Rect2i(x, y, 폭, 높이)) ───────────────────────
@@ -243,6 +273,12 @@ func _ready() -> void:
 	_ensure_input_actions()
 	ground.tile_set = _build_tileset()
 	field_layer.tile_set = _build_field_tileset()
+	# 지형·밭 타일맵을 캐릭터·가구보다 한 단계 뒤(z -1)로 내린다. main의 _draw로 그리는
+	# 가구(_draw_props)·손님·밭 커서는 *부모* 그리기라, 기본 트리순서상 자식인 타일맵
+	# *아래*에 깔려 바닥 타일에 가려진다(Godot: 자식이 부모 _draw 위에 그려짐). 타일맵 z만
+	# 내리면 _draw 오버레이가 바닥 위·캐릭터(자식 노드 z0) 아래로 올바르게 낀다.
+	ground.z_index = -1
+	field_layer.z_index = -1
 	farm.tile_changed.connect(_on_tile_changed)
 	_build_grid()
 	_paint_grid()
@@ -370,16 +406,16 @@ func _build_tileset() -> TileSet:
 	if ts.get_terrain_sets_count() > 0:
 		ts.set_terrain_set_mode(TERRAIN_SET, TileSet.TERRAIN_MODE_MATCH_CORNERS)
 
-	# 2) HOUSE/CAFE/WALL 단색 블록(아직 도트 전)을 가로로 이어 붙인 아틀라스 → source 1.
-	#    각 블록 위/왼쪽 1px을 어둡게 칠해 격자가 보이게 한다(기존 그레이박스 결 유지).
+	# 2) HOUSE/CAFE/WALL 도트 타일(16×16 PNG)을 가로로 이어 붙인 아틀라스 → source 1.
+	#    P2.3② 전엔 단색 fill이었던 자리. 결(가로 배치·source id)은 그대로 두고 픽셀만
+	#    텍스처로 교체한다 → _paint_grid·WALL 충돌은 손 안 대도 그대로 동작한다.
 	var n := SOLID_TILES.size()
 	var img := Image.create_empty(TILE * n, TILE, false, Image.FORMAT_RGBA8)
 	for i in n:
-		var base: Color = COLORS[SOLID_TILES[i]]
-		img.fill_rect(Rect2i(i * TILE, 0, TILE, TILE), base)
-		var edge := base.darkened(0.35)
-		img.fill_rect(Rect2i(i * TILE, 0, TILE, 1), edge)  # 윗줄
-		img.fill_rect(Rect2i(i * TILE, 0, 1, TILE), edge)  # 왼줄
+		var src_img := (load(SOLID_TEX[SOLID_TILES[i]]) as Texture2D).get_image()
+		if src_img.get_format() != Image.FORMAT_RGBA8:
+			src_img.convert(Image.FORMAT_RGBA8)
+		img.blit_rect(src_img, Rect2i(0, 0, TILE, TILE), Vector2i(i * TILE, 0))
 	var tex := ImageTexture.create_from_image(img)
 	var src := TileSetAtlasSource.new()
 	src.texture = tex
@@ -1540,6 +1576,7 @@ func _overlay_index(t: Vector2i) -> int:
 # 그리기 좌표 = 타일 픽셀(미호·멜은 자기 Node2D에서 그리지만, 손님은 일시적이라 main이
 # 좌석 칸에 직접 그린다 — 노드 생성·해제 없이 그레이박스로 가볍게).
 func _draw() -> void:
+	_draw_props()            # 가구·장식을 맨 먼저 → 캐릭터·손님이 그 위에 올라온다
 	_draw_customers()
 	_draw_night_customers()
 	_draw_jobgui()
@@ -1547,6 +1584,16 @@ func _draw() -> void:
 		return
 	var p := Vector2(_target.x * TILE, _target.y * TILE)
 	draw_rect(Rect2(p, Vector2(TILE, TILE)), Color(1, 1, 1, 0.7), false, 1.0)
+
+# P2.3② 실내 가구·장식을 바닥정렬(타일 좌상단 원점)로 그린다. 충돌 없는 순수 장식 —
+# 손님·잡귀 그리기와 같은 결(노드 생성·해제 없이 main이 직접). 침대(16×32)는 한 칸 위에서
+# 두 칸 아래로 내려와 1×2칸을 덮고, 나머지(16×16)는 한 칸을 채운다. PROP_LAYOUT 순서대로
+# 그려 선반(뒷벽)→카운터→스툴이 자연스레 겹친다.
+func _draw_props() -> void:
+	for entry in PROP_LAYOUT:
+		var tex: Texture2D = entry[0]
+		for t in entry[1]:
+			draw_texture(tex, Vector2(t.x * TILE, t.y * TILE))
 
 # 좌석에 앉은 손님(회색 박스)과 머리 위 인내심 바(초록→빨강)를 그린다. 인내심이 줄수록
 # 바가 짧아지고 붉어져 "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거).

@@ -66,7 +66,17 @@ func lines(hearts: int = 0, first_today: bool = true) -> PackedStringArray:
 		return PackedStringArray(LINES_WARMING)
 	return PackedStringArray(LINES_INTRO)
 
+# P2.3② P2.1 도색 스프라이트(있으면 그레이박스 대신). 상주 NPC라 남쪽(down) 첫 프레임 정지.
+var _sprite: AnimatedSprite2D = null
+
+func _ready() -> void:
+	_sprite = CharSprite.make("res://assets/characters/miho_walk.png")
+	if _sprite != null:
+		add_child(_sprite)
+
 func _draw() -> void:
+	if _sprite != null:
+		return  # 도색 스프라이트가 있으면 그레이박스는 안 그린다(폴백 전용)
 	# 몸체: 발치 원점 기준 위로 16×32. 플레이어보다 따뜻한 톤으로 한눈에 구분.
 	var body := Rect2(-BODY_SIZE.x * 0.5, -BODY_SIZE.y, BODY_SIZE.x, BODY_SIZE.y)
 	draw_rect(body, Color(0.80, 0.72, 0.52))

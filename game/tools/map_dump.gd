@@ -22,6 +22,33 @@ func _init():
 	out.fill(Color(0.05, 0.05, 0.07, 1.0))
 	for layer in [ground, field]:
 		_blit_layer(layer, out)
+	# P2.3② 가구·장식: main의 _draw 오버레이는 GPU 없이 안 잡히므로, 같은 배치
+	# 데이터(PROP_LAYOUT)를 읽어 텍스처를 바닥정렬로 직접 합성한다(시각 확인용).
+	for entry in main.PROP_LAYOUT:
+		var tex: Texture2D = entry[0]
+		var tex_img := tex.get_image()
+		for t in entry[1]:
+			out.blend_rect(tex_img, Rect2i(Vector2i.ZERO, tex_img.get_size()), Vector2i(t.x * 16, t.y * 16))
+	# P2.3② 캐릭터 스프라이트: 노드의 AnimatedSprite2D 현재 프레임을 발치정렬로 합성한다.
+	# (숨겨진 옥자·바나도 미리보기용으로 그린다 — 위치는 main이 _ready에서 잡아 둠.)
+	for nm in ["Player", "Miho", "Okja", "Mel", "Bana"]:
+		var node := main.get_node_or_null(nm) as Node2D
+		if node == null:
+			continue
+		var spr: AnimatedSprite2D = null
+		for child in node.get_children():
+			if child is AnimatedSprite2D:
+				spr = child
+				break
+		if spr == null:
+			continue
+		var ftex := spr.sprite_frames.get_frame_texture(spr.animation, spr.frame)
+		if ftex == null:
+			continue
+		var fimg := ftex.get_image()
+		# 스프라이트는 노드 position에 중심정렬 + offset → 좌상단 = pos + offset − frame/2.
+		var topleft := node.position + spr.offset - Vector2(fimg.get_width(), fimg.get_height()) * 0.5
+		out.blend_rect(fimg, Rect2i(Vector2i.ZERO, fimg.get_size()), Vector2i(topleft))
 	out.save_png("res://tools/map_dump.png")
 	print("✅ map_dump.png 저장")
 	quit()
