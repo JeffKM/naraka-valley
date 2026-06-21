@@ -1915,63 +1915,56 @@ func _draw_props() -> void:
 			# ADR-0013: 가구 아트도 32px native라 1:1로 그린다(스툴 32×32=1칸, 침대 32×64=1×2칸).
 			draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), tex.get_size()), false)
 
-# 좌석에 앉은 손님(회색 박스)과 머리 위 인내심 바(초록→빨강)를 그린다. 인내심이 줄수록
-# 바가 짧아지고 붉어져 "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거).
+# 좌석에 앉은 손님과 머리 위 인내심 바를 그린다. 인내심이 줄수록 바가 짧아지고 붉어져
+# "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거). 몸체는 그레이박스지만 P2.7 톤 패스에서
+# 도색 무대에 안 떠 보이게 _draw_graybox_figure로 최소 양식화한다(외곽선+음영, 진짜 아트는 Phase 3).
 func _draw_customers() -> void:
 	if not cafe.is_open():
 		return
 	for i in SEAT_TILES.size():
-		if not cafe.is_waiting(i):
-			continue
-		var t: Vector2i = SEAT_TILES[i]
-		# 손님 몸체: 타일 칸 안에 살짝 작은 박스(좌석 위에 앉은 느낌).
-		var body := Rect2(t.x * TILE + 3, t.y * TILE + 2, TILE - 6, TILE - 4)
-		draw_rect(body, CUST)
-		# 인내심 바: 손님 머리 위 가로 막대. 비율만큼 채우고 잔량에 따라 색을 보간한다.
-		var ratio := cafe.patience_ratio(i)
-		var bar_bg := Rect2(t.x * TILE + 2, t.y * TILE - 3, TILE - 4, 2)
-		draw_rect(bar_bg, Color(0, 0, 0, 0.6))
-		var col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), ratio)
-		draw_rect(Rect2(bar_bg.position, Vector2(bar_bg.size.x * ratio, bar_bg.size.y)), col)
+		if cafe.is_waiting(i):
+			_draw_graybox_figure(SEAT_TILES[i], CUST, cafe.patience_ratio(i))
 
-# T6.4 바를 연 밤(옵트인)의 바 손님(회색 박스)과 머리 위 인내심 바를 그린다. 낮 카페 손님과
-# 같은 좌석 줄(y=7)을 시간대로 나눠 쓰므로(cafe 마감 후 밤 바) 그리기도 카페 손님과 똑같은
-# 규격이고, 활성(밤 바 영업 중)일 때만 그린다 — 잡귀(아래 y=9)와 한 화면에 떠 "막을지 받을지"가
-# 눈에 보인다(★ 막기↔응대 경쟁). 인내심이 줄수록 바가 짧아지고 붉어져 "곧 떠난다"가 보인다.
+# T6.4 바를 연 밤(옵트인)의 바 손님과 머리 위 인내심 바를 그린다. 낮 카페 손님과 같은 좌석 줄을
+# 시간대로 나눠 쓰므로(cafe 마감 후 밤 바) 그리기도 카페 손님과 똑같은 규격이고, 활성(밤 바 영업
+# 중)일 때만 그린다 — 잡귀(아래 스폿 줄)와 한 화면에 떠 "막을지 받을지"가 눈에 보인다(★ 막기↔응대 경쟁).
 func _draw_night_customers() -> void:
 	if not night_bar.is_active():
 		return
 	for i in SEAT_TILES.size():
-		if not night_bar.is_waiting(i):
-			continue
-		var t: Vector2i = SEAT_TILES[i]
-		var body := Rect2(t.x * TILE + 3, t.y * TILE + 2, TILE - 6, TILE - 4)
-		draw_rect(body, CUST)
-		var ratio := night_bar.patience_ratio(i)
-		var bar_bg := Rect2(t.x * TILE + 2, t.y * TILE - 3, TILE - 4, 2)
-		draw_rect(bar_bg, Color(0, 0, 0, 0.6))
-		var col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), ratio)
-		draw_rect(Rect2(bar_bg.position, Vector2(bar_bg.size.x * ratio, bar_bg.size.y)), col)
+		if night_bar.is_waiting(i):
+			_draw_graybox_figure(SEAT_TILES[i], CUST, night_bar.patience_ratio(i))
 
-# T6.3 바를 연 밤(옵트인)에 깃든 잡귀(탁한 청록 박스)와 머리 위 접근 바를 그린다. 카페 손님
-# 그리기와 같은 결(노드 생성·해제 없이 main이 스폿 칸에 직접 — 그레이박스). 접근 바는 잔량이
-# 줄수록 짧아지고 붉어져 "곧 닿는다"가 눈에 보인다(막기 우선순위 판단의 근거).
+# T6.3 바를 연 밤(옵트인)에 깃든 잡귀(탁한 청록)와 머리 위 접근 바를 그린다. 카페 손님 그리기와
+# 같은 결(노드 생성·해제 없이 main이 스폿 칸에 직접 — 그레이박스). 접근 바는 잔량이 줄수록
+# 짧아지고 붉어져 "곧 닿는다"가 눈에 보인다(막기 우선순위 판단의 근거).
 func _draw_jobgui() -> void:
 	if not night_bar.is_active():
 		return
 	for i in NIGHT_SPOT_TILES.size():
-		if not night_bar.is_threat(i):
-			continue
-		var t: Vector2i = NIGHT_SPOT_TILES[i]
-		# 잡귀 몸체: 타일 칸 안에 살짝 작은 박스(좌석 손님과 같은 규격, 색만 다름).
-		var body := Rect2(t.x * TILE + 3, t.y * TILE + 2, TILE - 6, TILE - 4)
-		draw_rect(body, JOBGUI)
-		# 접근 바: 잡귀 머리 위 가로 막대. 잔량만큼 채우고 색을 보간한다(초록→빨강).
-		var ratio := night_bar.approach_ratio(i)
-		var bar_bg := Rect2(t.x * TILE + 2, t.y * TILE - 3, TILE - 4, 2)
-		draw_rect(bar_bg, Color(0, 0, 0, 0.6))
-		var col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), ratio)
-		draw_rect(Rect2(bar_bg.position, Vector2(bar_bg.size.x * ratio, bar_bg.size.y)), col)
+		if night_bar.is_threat(i):
+			_draw_graybox_figure(NIGHT_SPOT_TILES[i], JOBGUI, night_bar.approach_ratio(i))
+
+# P2.7 ㉠ 톤 패스 — 손님·잡귀 그레이박스를 도색 무대에 안 떠 보이게 최소 양식화한 공통 그리기.
+# 평면 사각형 대신 (1) 전경 캐릭터 컨벤션을 따르는 어두운 외곽선 한 겹 + (2) 상단 밝게·하단
+# 어둡게 두 띠로 볼륨 + (3) 상단 양 모서리 노치로 어깨를 둥글려 "저승 그림자/혼령" 같은 형체로
+# 읽히게 한다(진짜 캐릭터 아트는 Phase 3 — 여기선 그레이박스 유지가 원칙). 머리 위 상태 바
+# (인내심·접근)는 잔량 비율만큼 채우고 초록→빨강으로 보간해 "곧 떠난다/닿는다"를 노출한다.
+func _draw_graybox_figure(t: Vector2i, base: Color, ratio: float) -> void:
+	var ox := t.x * TILE
+	var oy := t.y * TILE
+	var body := Rect2(ox + 4, oy + 3, TILE - 8, TILE - 6)
+	draw_rect(body.grow(1.0), base.darkened(0.55))                                   # 외곽선
+	var top_h := body.size.y * 0.42
+	draw_rect(Rect2(body.position, Vector2(body.size.x, top_h)), base.lightened(0.14))  # 머리·어깨(밝게)
+	draw_rect(Rect2(body.position + Vector2(0, top_h), Vector2(body.size.x, body.size.y - top_h)), base.darkened(0.20))  # 몸통(어둡게)
+	var notch := base.darkened(0.55)                                                  # 어깨 둥글림(상단 모서리 노치)
+	draw_rect(Rect2(body.position, Vector2(2, 2)), notch)
+	draw_rect(Rect2(body.position + Vector2(body.size.x - 2, 0), Vector2(2, 2)), notch)
+	var bar_bg := Rect2(ox + 2, oy - 3, TILE - 4, 2)                                  # 머리 위 상태 바
+	draw_rect(bar_bg, Color(0, 0, 0, 0.6))
+	var col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), ratio)
+	draw_rect(Rect2(bar_bg.position, Vector2(bar_bg.size.x * ratio, bar_bg.size.y)), col)
 
 # ── 헬퍼 ──────────────────────────────────────────────────────────────────
 func _set_tile(x: int, y: int, id: int) -> void:
