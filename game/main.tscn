@@ -200,13 +200,12 @@ offset_right = 632.0
 offset_bottom = 284.0
 text = "..."
 
-[node name="MilestonePanel" type="ColorRect" parent="CanvasLayer"]
+[node name="MilestonePanel" type="Panel" parent="CanvasLayer"]
 visible = false
 offset_left = 100.0
 offset_top = 108.0
 offset_right = 540.0
 offset_bottom = 252.0
-color = Color(0.12, 0.09, 0.06, 0.92)
 
 [node name="Text" type="Label" parent="CanvasLayer/MilestonePanel"]
 offset_left = 16.0
@@ -218,13 +217,12 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[node name="ShopPanel" type="ColorRect" parent="CanvasLayer"]
+[node name="ShopPanel" type="Panel" parent="CanvasLayer"]
 visible = false
 offset_left = 120.0
 offset_top = 92.0
 offset_right = 520.0
 offset_bottom = 268.0
-color = Color(0.1, 0.1, 0.12, 0.88)
 
 [node name="Text" type="Label" parent="CanvasLayer/ShopPanel"]
 offset_left = 16.0
@@ -242,13 +240,12 @@ offset_bottom = 196.0
 text = "..."
 horizontal_alignment = 1
 
-[node name="DialoguePanel" type="ColorRect" parent="CanvasLayer"]
+[node name="DialoguePanel" type="Panel" parent="CanvasLayer"]
 visible = false
 offset_left = 16.0
 offset_top = 208.0
 offset_right = 624.0
 offset_bottom = 348.0
-color = Color(0.08, 0.08, 0.12, 0.92)
 
 [node name="Text" type="Label" parent="CanvasLayer/DialoguePanel"]
 offset_left = 152.0
@@ -288,13 +285,12 @@ horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 2
 
-[node name="CafeSummaryPanel" type="ColorRect" parent="CanvasLayer"]
+[node name="CafeSummaryPanel" type="Panel" parent="CanvasLayer"]
 visible = false
 offset_left = 140.0
 offset_top = 128.0
 offset_right = 500.0
 offset_bottom = 232.0
-color = Color(0.1, 0.09, 0.13, 0.92)
 
 [node name="Text" type="Label" parent="CanvasLayer/CafeSummaryPanel"]
 offset_left = 16.0

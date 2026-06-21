@@ -28,4 +28,11 @@ func _init() -> void:
 		await process_frame
 	get_root().get_texture().get_image().save_png("res://tools/hud_dialogue.png")
 	print("✅ hud_dialogue.png")
+	# ③ 출하대(상점) 패널 — 같은 9-slice 스킨이 다른 크기에서 잘 늘어나는지
+	main.shop_panel.visible = true
+	main.shop_text.text = main._shop_text()
+	for _i in 3:
+		await process_frame
+	get_root().get_texture().get_image().save_png("res://tools/hud_shop.png")
+	print("✅ hud_shop.png")
 	quit()
