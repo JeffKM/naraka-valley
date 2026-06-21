@@ -22,8 +22,11 @@ class_name RegionCatalog
 #   - 식별자(영문 id)와 표시명(name_ko) 분리: id는 코드·세이브용(가볍고 안정적),
 #     name_ko는 화면 표시용(CONTEXT 지리 용어). M1.5 세이브엔 영문 id만 저장한다.
 #   - 토폴로지(warps)는 world-map.md §2 구역 그래프를 따른다. M1.1에선 "어느 구역이
-#     어느 구역과 이어지나"(to)만 실데이터이고, 워프 트리거/도착 칸(at·dest)은
-#     PLACEHOLDER다(M1.3 워프 시스템이 실좌표로 채운다 — 무대가 지어져야 칸이 정해짐).
+#     어느 구역과 이어지나"(to)만 실데이터였고, M1.3 워프 시스템이 각 구역이 *자기 쪽*에서
+#     아는 좌표(at = 이 구역 가장자리의 발동 칸)를 채운다. dest(도착 구역 안의 칸)는 그 구역이
+#     지어져야 정해지므로 해당 구역 빌드 시 채운다 — 미정이면 TILE_TBD, 워프 실행기가 목적
+#     구역의 기본 스폰으로 폴백한다. ★ M1.3 현재 실데이터는 홈베이스 at 하나뿐(나루 마을이
+#     아직 stub이라 그 워프는 휴면 — main `_maybe_warp_edge`의 is_built 가드. M1.4가 점등).
 
 # ── 구역 식별자(영문 id) ─────────────────────────────────────────────────────
 # id = 코드·세이브 키. 표시명은 CATALOG의 name_ko(CONTEXT 지리 용어).
@@ -49,8 +52,9 @@ const TILE_TBD := Vector2i(-1, -1)
 #             ★ HOME = main.gd SPAWN_TILE(20, 21)과 같다(도착 지점·seam).
 #   warps   : 인접 구역 연결 목록(Array of Dict). 각 워프 = {to, at, dest}.
 #             to   = 목적 구역 id(★ M1.1 실데이터 — world-map.md 토폴로지)
-#             at   = 이 구역에서 워프가 발동하는 가장자리 칸(M1.3까지 TILE_TBD)
-#             dest = 도착 구역에서 플레이어가 놓일 칸(M1.3까지 TILE_TBD)
+#             at   = 이 구역에서 워프가 발동하는 가장자리 칸(M1.3 — 이 구역이 지어졌으면 실좌표)
+#             dest = 도착 구역에서 플레이어가 놓일 칸(목적 구역 빌드 시 확정, 미정이면 TILE_TBD
+#                    → 워프 실행기가 목적 구역 기본 스폰으로 폴백)
 # 주의: const 중첩 Dictionary는 런타임 변경 가능하니 읽기 전용으로 다룬다(수정 금지).
 const CATALOG := {
 	# ── 홈베이스(유일한 실데이터) — 검증된 기존 무대를 그대로 한 구역으로 등록 ──
@@ -58,9 +62,12 @@ const CATALOG := {
 		"name_ko": "묵정 농원",
 		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (외부 무대)
 		"spawn": Vector2i(20, 21),    # = main.SPAWN_TILE (도착 지점)
-		# 묵정 농원 ──(길)── 나루 마을. M1.4에서 카페가 마을로 이주하며 이 워프가 live.
+		# 묵정 농원 ──(길)── 나루 마을. at = 동쪽 가로 복도(y=16) 끝 칸(main `_carve_paths`가
+		# 동쪽 끝까지 길을 잇고, 그 가장자리 칸에 닿으면 워프 — 스타듀식 가장자리/길 워프).
+		# dest는 나루 마을이 지어지는 M1.4에서 채운다(지금은 TBD → 목적 구역 스폰 폴백).
+		# ★ 나루 마을이 아직 stub이라 이 워프는 휴면 상태다(is_built 가드, 회귀 0). M1.4가 점등.
 		"warps": [
-			{"to": NARU_VILLAGE, "at": TILE_TBD, "dest": TILE_TBD},
+			{"to": NARU_VILLAGE, "at": Vector2i(38, 16), "dest": TILE_TBD},
 		],
 	},
 	# ── 이하 7개 = stub(아직 안 지어짐). size·spawn = ZERO, 토폴로지(to)만 실데이터 ──

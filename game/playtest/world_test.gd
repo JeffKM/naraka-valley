@@ -1,9 +1,10 @@
 extends SceneTree
-# M1.1 — Region 데이터 모델 단위검증(ephemeral). RegionCatalog의 8구역 정의·홈베이스
+# M1.1/M1.3 — Region 데이터 모델 단위검증(ephemeral). RegionCatalog의 8구역 정의·홈베이스
 # 실데이터·stub 구분·토폴로지 정합·미지 id 방어를 헤드리스로 단언한다. crops/lighting_test와
 # 같은 결의 하네스 — 정적 참조 데이터라 트리에 안 붙이고 static 함수를 직접 호출한다.
+# M1.3에서 워프 발동 칸(at) 실좌표·도착 칸(dest) 폴백 규칙을 더했다(워프 *동작*은 warp_test.gd).
 #
-# ★ M1.6에서 워프 동작·세이브까지 통합 검증으로 확장(같은 파일명 world_test). M1.1은 데이터만.
+# ★ M1.6에서 워프 동작·세이브까지 통합 검증으로 확장(같은 파일명 world_test).
 # 실행: godot --headless --path game --script res://playtest/world_test.gd
 
 var _fail := 0
@@ -14,7 +15,7 @@ func _check(label: String, ok: bool) -> void:
 		_fail += 1
 
 func _initialize() -> void:
-	print("══ M1.1 region.gd 단위검증 ══")
+	print("══ M1.1/M1.3 region.gd 단위검증 ══")
 
 	# ── ① 8구역이 모두 등록됨 ──
 	var ids := RegionCatalog.ids()
@@ -51,9 +52,19 @@ func _initialize() -> void:
 	for id in ids:
 		for w in RegionCatalog.warps_of(id):
 			_check("④ '%s'→'%s' 목적 구역 실재" % [id, w["to"]], RegionCatalog.has_region(w["to"]))
-			# at·dest는 M1.3까지 PLACEHOLDER(아직 안 정해짐).
-			_check("④b '%s'→'%s' 워프 칸은 TBD(M1.3)" % [id, w["to"]],
-				w["at"] == RegionCatalog.TILE_TBD and w["dest"] == RegionCatalog.TILE_TBD)
+			# M1.3 — at(발동 칸)은 *이 구역*이 지어졌으면 실좌표(그 구역 size 범위 안), stub이면
+			# 아직 TBD다. dest(도착 칸)는 *목적 구역*이 지어져야 정해지므로 지금은 다 TBD다.
+			if RegionCatalog.is_built(id):
+				var sz := RegionCatalog.size_of(id)
+				var at: Vector2i = w["at"]
+				_check("④b '%s'→'%s' 발동 칸이 실좌표" % [id, w["to"]], at != RegionCatalog.TILE_TBD)
+				_check("④b' '%s'→'%s' 발동 칸이 구역 범위 안" % [id, w["to"]],
+					at.x >= 0 and at.y >= 0 and at.x < sz.x and at.y < sz.y)
+			else:
+				_check("④b '%s'→'%s' stub 구역 발동 칸 TBD" % [id, w["to"]],
+					w["at"] == RegionCatalog.TILE_TBD)
+			_check("④b'' '%s'→'%s' 도착 칸 TBD(목적 구역 빌드 시 확정)" % [id, w["to"]],
+				w["dest"] == RegionCatalog.TILE_TBD)
 	# 대칭: A가 B를 이웃으로 두면 B도 A를 둔다(나락 제외 — 진입로 미정).
 	for id in ids:
 		for nb in RegionCatalog.neighbors(id):

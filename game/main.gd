@@ -316,6 +316,9 @@ var lighting: DayNightLighting
 var audio: GameAudio
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
+# M1.3 — 구역 라벨(밭·도착 등) 노드 추적. 구역 전환(_rebuild_region) 시 이전 구역 라벨을
+# 걷어내고 새로 깔기 위해 _add_label이 여기 모은다(중복 누적 방지).
+var _labels: Array[Node] = []
 var _sleeping := false  # T1.5 취침 연출 중이면 이동·입력 잠금
 
 # 외부↔실내 분리. _indoor = "" 바깥 / "집" / "카페"(현재 어느 건물 안인가). 문 칸에 닿으면
@@ -325,9 +328,10 @@ var _indoor := ""
 var _transitioning := false
 var _cam: Camera2D
 
-# M1.1 — 현재 구역(8구역 세계, ADR-0015). 지금은 홈베이스(묵정 농원) 한 구역뿐이라
-# RegionCatalog.HOME 고정이고 아직 아무도 읽지 않는다(데이터 모델만 연결, 렌더·전환 무변경).
-# M1.2가 _build/_paint·카메라를 이 값 기준으로 일반화하고, M1.3 워프가 값을 바꾼다.
+# M1.1 — 현재 구역(8구역 세계, ADR-0015). M1.2가 _build/_paint·카메라를 이 값 기준으로
+# 일반화했고, M1.3 가장자리/길 워프(_maybe_warp_edge → _warp → _rebuild_region)가 이 값을
+# 바꾼다. 지금은 이웃(나루 마을)이 stub이라 모든 가장자리 워프가 휴면 상태라 실제로는
+# 홈베이스 고정이다(회귀 0). M1.4가 나루 마을을 지으면 그 워프가 자동으로 산다.
 var _region := RegionCatalog.HOME
 
 # T5.6 미호가 지금 서 있는 칸(출퇴근으로 시간대마다 바뀐다 — 아침=밭, 15시부터=카페).
@@ -709,8 +713,10 @@ func _build_room(rect: Rect2i, floor_id: int, wall_id: int, door: Vector2i) -> v
 
 func _carve_paths() -> void:
 	# 동선 허브: 가로 복도(y=16)가 집·밭·카페를 잇고, 도착 지점에서 올라온다.
-	for x in range(4, 38):
-		_set_tile(x, 16, PATH)                  # 가로 복도
+	# M1.3 — 복도를 동쪽 끝(x=38, 경계벽 x=39 직전)까지 이어, 그 가장자리 칸이 나루 마을로 가는
+	# 길 워프 발동 칸(RegionCatalog.HOME warps.at)이 되게 한다(스타듀식 가장자리/길 워프).
+	for x in range(4, 39):
+		_set_tile(x, 16, PATH)                  # 가로 복도(동쪽 끝 = 마을 길 워프)
 	for y in range(17, 22):
 		_set_tile(20, y, PATH)                  # 도착(20,21) → 복도
 	for y in range(10, 16):
@@ -773,6 +779,13 @@ func _add_label(text: String, center_px: Vector2) -> void:
 	lbl.position = center_px - Vector2(24, 6)
 	lbl.z_index = 10
 	add_child(lbl)
+	_labels.append(lbl)   # M1.3 구역 전환 시 걷어낼 수 있게 추적
+
+# M1.3 구역 전환 시 이전 구역 라벨을 걷어낸다(_rebuild_region에서 새로 깔기 전).
+func _clear_labels() -> void:
+	for l in _labels:
+		l.queue_free()
+	_labels.clear()
 
 # ── 플레이어 스폰 + 추적 카메라 ───────────────────────────────────────────
 func _setup_player_and_camera() -> void:
@@ -892,10 +905,37 @@ func _maybe_toggle_building() -> void:
 func _player_tile() -> Vector2i:
 	return Vector2i(int(player.global_position.x) / TILE, int(player.global_position.y) / TILE)
 
-# 검은 화면으로 깜빡이며 모드(_indoor)를 바꾸고 플레이어를 목적 칸으로 옮긴 뒤 카메라 경계를
-# 새 모드로 격리한다(취침 연출과 같은 fade 패턴 — CanvasLayer라 카메라와 무관). fade가 가장
-# 어두운 순간에 텔레포트·카메라 전환이 일어나 끊김이 안 보인다.
-func _transition_to(new_indoor: String, dest_tile: Vector2i) -> void:
+# M1.3 — 가장자리/길 워프(스타듀식 구역 전환). 외부에서 현재 구역의 워프 테이블
+# (RegionCatalog.warps_of)을 훑어, 플레이어가 워프 발동 칸(at)에 닿으면 그 구역으로 전환한다.
+# 문(건물 출입)과 같은 _warp 실행기를 쓰되 구역 자체가 바뀐다(문=구역 불변 특수 워프).
+# ★ 가드: 목적 구역이 아직 안 지어졌으면(is_built=false) 발동하지 않는다 — M1.3에선 이웃이
+#   다 stub이라 모든 가장자리 워프가 휴면이다(회귀 0). M1.4가 나루 마을을 지으면 자동으로 산다.
+#   at이 아직 미정(TILE_TBD)인 워프도 건너뛴다(좌표 미정 = 무대 미완).
+func _maybe_warp_edge() -> void:
+	if _transitioning or _sleeping or _indoor != "":
+		return
+	var t := _player_tile()
+	for w in RegionCatalog.warps_of(_region):
+		if w["at"] == RegionCatalog.TILE_TBD or t != w["at"]:
+			continue
+		if not RegionCatalog.is_built(w["to"]):
+			return   # 목적 구역 미완 → 휴면. M1.4에서 산다.
+		_warp(w["to"], "", _warp_dest(w))
+		return
+
+# 워프 도착 칸: 워프가 dest를 명시했으면 그 칸, 아니면(TBD) 목적 구역의 기본 스폰으로 폴백.
+# (도착 칸은 목적 구역이 지어져야 정해지므로, 그 전까진 구역 스폰이 안전한 기본값이다.)
+func _warp_dest(w: Dictionary) -> Vector2i:
+	var dest: Vector2i = w["dest"]
+	return dest if dest != RegionCatalog.TILE_TBD else RegionCatalog.spawn_of(w["to"])
+
+# M1.3 — 일반 워프 실행기. 검은 fade가 가장 어두운 순간에 (구역·실내 모드·플레이어 위치·
+# 카메라)를 한 번에 바꾼다. 끊김이 안 보이는 취침 연출과 같은 fade 패턴(CanvasLayer라 카메라와
+# 무관). 워프는 두 종류를 한 실행기로 다룬다:
+#   · 건물 문(_transition_to) = 같은 구역 안 특수 워프(to_region == _region → 재빌드 없음, 실내 토글만).
+#   · 가장자리/길 워프(_maybe_warp_edge) = 구역 자체 전환(to_region != _region → _rebuild_region).
+# 구역 재빌드도 fade가 덮은 동안 일어나 새 맵이 깔리는 게 안 보인다(M1.2 구현 (b): 현재 구역만 메모리).
+func _warp(to_region: String, new_indoor: String, dest_tile: Vector2i) -> void:
 	if _transitioning:
 		return
 	_transitioning = true
@@ -904,6 +944,8 @@ func _transition_to(new_indoor: String, dest_tile: Vector2i) -> void:
 	var tw := create_tween()
 	tw.tween_property(fade, "modulate:a", 1.0, 0.22)
 	tw.tween_callback(func() -> void:
+		if to_region != _region:
+			_rebuild_region(to_region)   # 구역 전환 = 새 구역 재빌드(그리드·페인트·라벨)
 		_indoor = new_indoor
 		player.position = _tile_center_px(dest_tile)
 		_apply_camera_limits()
@@ -914,6 +956,24 @@ func _transition_to(new_indoor: String, dest_tile: Vector2i) -> void:
 		_transitioning = false
 		if not _run_over:
 			player.set_physics_process(true))
+
+# 건물 문 = 같은 구역 안의 특수 워프(구역 불변, 실내 모드만 토글). 기존 호출부(_maybe_toggle_
+# building)·테스트(building_test)가 그대로 이 시그니처를 쓴다 — "문=특수 워프"(_warp에 위임).
+func _transition_to(new_indoor: String, dest_tile: Vector2i) -> void:
+	_warp(_region, new_indoor, dest_tile)
+
+# M1.3 — 구역 전환 시 새 구역을 메모리에 빌드한다(M1.2 구현 (b): 현재 구역만 메모리, 전환 시 재빌드).
+# 이전 구역의 타일·라벨을 걷어낸 뒤 _build/_paint/_place로 새로 깐다. 플레이어 위치·카메라는
+# _warp이 이어서 잡는다(여기선 월드만 다시 세운다). fade가 덮은 어두운 순간에 호출돼 안 보인다.
+# ★ M1.3에선 이웃이 다 stub이라 인게임에서 이 경로를 타지 않는다(가장자리 워프가 휴면 — 회귀 0).
+#   세이브·NPC 재배치는 범위 밖(M1.4 카페 이주·M1.5 세이브) — 여기는 그리드/페인트/라벨만 일반화.
+func _rebuild_region(to_region: String) -> void:
+	_region = to_region
+	ground.clear()
+	_clear_labels()
+	_build_grid()
+	_paint_grid()
+	_place_labels()
 
 # 취침 가능 조건: 집 구역 안 + 연출 중이 아님. 그레이박스라 침대 오브젝트 없이
 # '집에 있으면 잘 수 있다'로 단순화한다(에셋·가구는 Phase 2).
@@ -1061,6 +1121,9 @@ func _process(delta: float) -> void:
 
 	# 건물 외관 문에 닿으면 실내로, 실내 문에 닿으면 밖으로 — 자동 fade 전환(스타듀식 출입).
 	_maybe_toggle_building()
+	# M1.3 구역 가장자리/길 워프 칸에 닿으면 인접 구역으로 전환(목적 구역이 지어졌을 때만 —
+	# M1.3 현재는 이웃이 stub이라 휴면). 문과 같은 _warp 실행기를 거친다.
+	_maybe_warp_edge()
 
 	# 취침 입력: 집 안에서 Enter/Space(ui_accept)
 	if _can_sleep() and Input.is_action_just_pressed("ui_accept"):
