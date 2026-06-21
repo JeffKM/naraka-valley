@@ -1,0 +1,41 @@
+extends SceneTree
+
+# 맵 시각 확인용 글루(ADR-0001 허용): main 씬을 헤드리스로 띄워 Ground/Field
+# TileMapLayer의 *최종 배치된* 타일을 atlas에서 잘라 한 장 PNG(tools/map_dump.png)로
+# 합성한다. 렌더링(GPU) 없이 타일 배치만 덤프하므로 --headless에서 동작.
+# 사용: godot --headless --path game -s res://tools/map_dump.gd
+# (밭 흙 상태 도트를 보려면 DEBUG_SOIL=true로 밭에 상태 칸을 강제 칠한다)
+const DEBUG_SOIL := false
+
+func _init():
+	var main = load("res://main.tscn").instantiate()
+	get_root().add_child(main)
+	await process_frame
+	await process_frame
+	var ground: TileMapLayer = main.get_node("Ground")
+	var field: TileMapLayer = main.get_node("Field")
+	if DEBUG_SOIL:
+		for i in 8:
+			field.set_cell(Vector2i(16 + i, 6), 0, Vector2i(i, 0))
+		await process_frame
+	var out := Image.create(40 * 16, 24 * 16, false, Image.FORMAT_RGBA8)
+	out.fill(Color(0.05, 0.05, 0.07, 1.0))
+	for layer in [ground, field]:
+		_blit_layer(layer, out)
+	out.save_png("res://tools/map_dump.png")
+	print("✅ map_dump.png 저장")
+	quit()
+
+func _blit_layer(layer: TileMapLayer, out: Image) -> void:
+	var ts := layer.tile_set
+	for cell in layer.get_used_cells():
+		var sid := layer.get_cell_source_id(cell)
+		if sid < 0:
+			continue
+		var src := ts.get_source(sid) as TileSetAtlasSource
+		if src == null:
+			continue
+		var ac := layer.get_cell_atlas_coords(cell)
+		var region := src.get_tile_texture_region(ac, 0)
+		var tile_img := src.texture.get_image().get_region(region)
+		out.blend_rect(tile_img, Rect2i(Vector2i.ZERO, region.size), Vector2i(cell.x * 16, cell.y * 16))

@@ -1,2 +1,8 @@
 # Godot 4 임포트 캐시 (자동 생성물 — 버전 관리 제외)
 .godot/
+
+# P2.3 맵 도구 부산물 (재생성물 — combined_terrain.tres에서 파생)
+tools/map_dump.png
+tools/map_dump.png.import
+assets/tiles/combined_terrain_atlas.png
+assets/tiles/combined_terrain_atlas.png.import
