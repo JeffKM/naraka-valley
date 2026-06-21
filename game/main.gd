@@ -273,6 +273,12 @@ func _ready() -> void:
 	_ensure_input_actions()
 	ground.tile_set = _build_tileset()
 	field_layer.tile_set = _build_field_tileset()
+	# 지형·밭 타일맵을 캐릭터·가구보다 한 단계 뒤(z -1)로 내린다. main의 _draw로 그리는
+	# 가구(_draw_props)·손님·밭 커서는 *부모* 그리기라, 기본 트리순서상 자식인 타일맵
+	# *아래*에 깔려 바닥 타일에 가려진다(Godot: 자식이 부모 _draw 위에 그려짐). 타일맵 z만
+	# 내리면 _draw 오버레이가 바닥 위·캐릭터(자식 노드 z0) 아래로 올바르게 낀다.
+	ground.z_index = -1
+	field_layer.z_index = -1
 	farm.tile_changed.connect(_on_tile_changed)
 	_build_grid()
 	_paint_grid()
