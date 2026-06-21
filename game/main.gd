@@ -142,6 +142,12 @@ const PROP_STOOL := preload("res://assets/props/cafe_stool.png")
 const PROP_SHELF := preload("res://assets/props/cafe_shelf.png")
 const PROP_LANTERN := preload("res://assets/props/soul_lantern.png")
 const PROP_POT := preload("res://assets/props/spirit_pot.png")
+# 집 실내 가구(넓은 방을 아늑하게 채운다, PixelLab 산출 32px native). 러그 96×64(3×2칸),
+# 벽난로·책장 64×64(2×2칸), 테이블 32×32(1칸). 충돌 없는 순수 장식(손님·가구와 같은 결).
+const PROP_RUG := preload("res://assets/props/house_rug.png")
+const PROP_FIREPLACE := preload("res://assets/props/house_fireplace.png")
+const PROP_BOOKSHELF := preload("res://assets/props/house_bookshelf.png")
+const PROP_TABLE := preload("res://assets/props/house_table.png")
 # 외부 건물 외관(PixelLab 산출, 외관 박스 크기와 1:1). 통과 불가 WALL 박스 위에 덮어 그려
 # "닫힌 건물"로 보이게 한다(_draw_facades). 집=224×192(7×6칸), 카페=256×224(8×7칸).
 const FACADE_HOUSE := preload("res://assets/buildings/house_ext.png")
@@ -154,7 +160,11 @@ const LANTERN_TILES := [Vector2i(12, 15), Vector2i(28, 15), Vector2i(18, 43)]  #
 # 실내 가구 좌표(넓은 방에 직접 배치). 집=따뜻한 빈 마루 + 침대·화분, 카페=직원 줄(y40) 앞
 # 카운터(y41)·좌석(y42)·스폿(y44) 무대. 좌석 스툴 위에는 손님 박스가 덮여 그려진다.
 const PROP_LAYOUT := [
+	[PROP_RUG, [Vector2i(11, 30)]],                                                      # 집: 중앙 바닥 러그(맨 먼저 — 바닥)
 	[PROP_BED, [Vector2i(9, 27)]],                                                       # 집: 좌상단 침대
+	[PROP_FIREPLACE, [Vector2i(14, 27)]],                                                # 집: 상단 벽 벽난로
+	[PROP_BOOKSHELF, [Vector2i(16, 27)]],                                                # 집: 상단 벽 책장
+	[PROP_TABLE, [Vector2i(12, 30)]],                                                    # 집: 러그 위 작은 테이블
 	[PROP_COUNTER, [Vector2i(10, 41), Vector2i(11, 41), Vector2i(12, 41), Vector2i(13, 41), Vector2i(14, 41), Vector2i(15, 41), Vector2i(16, 41)]],  # 카페 바 카운터
 	[PROP_STOOL, [Vector2i(11, 42), Vector2i(14, 42), Vector2i(17, 42)]],                # 카페 좌석 스툴(= SEAT_TILES)
 	[PROP_SHELF, [Vector2i(11, 39), Vector2i(13, 39), Vector2i(15, 39)]],                # 카페 뒷벽 선반
