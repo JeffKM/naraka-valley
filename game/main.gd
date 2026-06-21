@@ -26,10 +26,6 @@ const MAP_W := 40                      # 맵 가로(타일) = 640px
 const MAP_H := 52                      # 맵 세로(타일). 외부(0..23) + 실내 전용 구역(아래쪽). 실내 방은
                                        # 외부에서 멀리 떨어진 별도 구역에 두고 카메라로 격리한다(스타듀식 외부↔실내 분리).
 const OUTDOOR_H := 24                  # 외부 영역 세로(타일). 카메라가 외부 모드에서 여기까지만 비춘다(아래 실내 구역은 안 보임).
-# 실내 평행이동(외부↔실내 분리): 실내 좌표 = 예전 좌표 + 오프셋. 실내 NPC·가구·좌석·_zone_at이
-# 모두 이 오프셋이 적용된 상수를 참조하므로 통째로 따라 옮겨진다(아래 "외부↔실내 분리" 블록 참조).
-const HOUSE_OFF := Vector2i(5, 24)     # 집 실내 평행이동(예전 집 자리 → 맵 아래 중앙)
-const CAFE_OFF := Vector2i(-22, 36)    # 카페 실내 평행이동(예전 카페 자리 → 집 실내 아래, 우측 여백 확보)
 
 # ── P2.4 대화 초상화: 화자 표시이름 → 초상화 파일 stem ───────────────────────
 # ADR-0003 "표정=대화 시 별도 일러스트 초상화". 인게임 도트(작은 실루엣)와 달리 얼굴을
@@ -54,9 +50,11 @@ const PATH := 1     # 길 — 온보딩 동선(걷기 O)
 const SOIL := 2     # 밭 흙(걷기 O)
 const HOUSE := 3    # 집 바닥(걷기 O)
 const CAFE := 4     # 카페 바닥(걷기 O)
-const WALL := 5     # 벽/건물 외벽(통과 X)
+const WALL := 5     # 외벽·건물 외관(통과 X, 공용 어두운 벽돌)
 const VOID := 6     # 실내 구역 방 바깥(아무것도 안 그림 → 검은 배경이 비친다, 통과 X). 카메라 격리용 여백.
-const N_TILES := 7
+const HOUSE_WALL := 7  # 집 실내 벽(아늑한 나무·크림 wainscoting — 통과 X)
+const CAFE_WALL := 8   # 카페 실내 벽(앤틱 버건디·우드 패널 — 통과 X)
+const N_TILES := 9
 
 # ── P2.3 지형 도트: terrain TileSet + 실내/벽 도트 source ───────────────────
 # combined_terrain.tres = PixelLab Wang 3세트(풀↔길·풀↔밭·길↔밭)를 합친 corner
@@ -72,14 +70,16 @@ const TR_SOIL := 2    # tilled farm soil
 const TILE_TERRAIN := {GROUND: TR_GRASS, PATH: TR_PATH, SOIL: TR_SOIL}
 # 실내/벽 source: 별도 source_id에 HOUSE/CAFE/WALL 3타일만 둔다.
 const SOLID_SRC_ID := 1
-const SOLID_TILES := [HOUSE, CAFE, WALL]   # 아틀라스 가로 배치 순서(= atlas x)
+const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL]   # 아틀라스 가로 배치 순서(= atlas x)
 # P2.3② 단색 교체: 실내 바닥·벽을 도트 타일(create_tiles_pro 산출 16×16 PNG)로 깐다.
 # 아틀라스 결은 단색 시절과 동일(SOLID_SRC_ID 가로 배치) — _build_tileset이 fill 대신
 # 이 텍스처를 blit한다. WALL 충돌·칠 순서는 불변(지형 위에 덮어 깔기 그대로).
 const SOLID_TEX := {
-	HOUSE: "res://assets/tiles/house_floor.png",  # 청회색 판석(아늑한 저승 집)
-	CAFE: "res://assets/tiles/cafe_floor.png",    # 따뜻한 앰버 판자(멜의 카페)
-	WALL: "res://assets/tiles/wall.png",          # 어두운 회청 벽돌(외벽·건물벽 공용)
+	HOUSE: "res://assets/tiles/house_floor.png",  # 허니톤 나무 마루(아늑한 집 바닥)
+	CAFE: "res://assets/tiles/cafe_floor.png",    # 다크 월넛 헤링본 파켓(앤틱 카페 바닥)
+	WALL: "res://assets/tiles/wall.png",          # 어두운 회청 벽돌(외벽·외관 공용)
+	HOUSE_WALL: "res://assets/tiles/house_wall.png",  # 나무·크림 wainscoting(아늑한 집 벽)
+	CAFE_WALL: "res://assets/tiles/cafe_wall.png",    # 버건디·우드 패널(앤틱 카페 벽)
 }
 
 # ── T2.1/T2.3 밭 오버레이 타일(Field 레이어 아틀라스 인덱스) ───────────────
@@ -127,6 +127,8 @@ const COLORS := [
 	Color(0.42, 0.37, 0.30),  # CAFE   — 따뜻한 실내
 	Color(0.56, 0.56, 0.62),  # WALL   — 가장 밝은 회색(외벽)
 	Color(0.0, 0.0, 0.0),     # VOID   — 검정(실내 방 바깥 여백, 실제로는 안 그려 배경이 비친다)
+	Color(0.40, 0.34, 0.28),  # HOUSE_WALL — 따뜻한 나무 톤(폴백)
+	Color(0.30, 0.16, 0.18),  # CAFE_WALL  — 버건디 톤(폴백)
 ]
 
 # ── 실내 가구·장식(create_map_object 산출, ADR-0013: 32px raw native 직접 사용) ────
@@ -146,18 +148,18 @@ const FACADE_HOUSE := preload("res://assets/buildings/house_ext.png")
 const FACADE_CAFE := preload("res://assets/buildings/cafe_ext.png")
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 한 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로). 길가 2 + 카페 구석 1.
-const LANTERN_TILES := [Vector2i(12, 15), Vector2i(28, 15), Vector2i(36, 8) + CAFE_OFF]  # 길가 2(외부) + 카페 구석 1(실내)
+const LANTERN_TILES := [Vector2i(12, 15), Vector2i(28, 15), Vector2i(18, 43)]  # 길가 2(외부) + 카페 구석 1(실내)
 # [텍스처, [놓을 타일들]]. 타일 좌표는 실내 레이아웃(직원 y5 / 카운터 y6 / 좌석 y7 /
 # 통로 y8) 위에 얹어 "장소"로 읽히게 배치한다. 좌석 스툴 위에는 손님 박스가 덮여 그려진다.
-# 실내 가구 좌표 = 예전 좌표 + 오프셋(집=HOUSE_OFF, 카페=CAFE_OFF). 실내 방이 통째로 옮겨가도
-# _draw_props가 같은 상수를 참조하므로 가구도 따라 그려진다.
+# 실내 가구 좌표(넓은 방에 직접 배치). 집=따뜻한 빈 마루 + 침대·화분, 카페=직원 줄(y40) 앞
+# 카운터(y41)·좌석(y42)·스폿(y44) 무대. 좌석 스툴 위에는 손님 박스가 덮여 그려진다.
 const PROP_LAYOUT := [
-	[PROP_BED, [Vector2i(4, 5) + HOUSE_OFF]],                                            # 집: 왼쪽 벽 침대
-	[PROP_COUNTER, [Vector2i(31, 6) + CAFE_OFF, Vector2i(32, 6) + CAFE_OFF, Vector2i(33, 6) + CAFE_OFF, Vector2i(34, 6) + CAFE_OFF, Vector2i(35, 6) + CAFE_OFF]],  # 카페 바 카운터
-	[PROP_STOOL, [Vector2i(31, 7) + CAFE_OFF, Vector2i(33, 7) + CAFE_OFF, Vector2i(35, 7) + CAFE_OFF]],  # 카페 좌석 스툴(= SEAT_TILES)
-	[PROP_SHELF, [Vector2i(32, 4) + CAFE_OFF, Vector2i(34, 4) + CAFE_OFF]],              # 카페 뒷벽 선반
+	[PROP_BED, [Vector2i(9, 27)]],                                                       # 집: 좌상단 침대
+	[PROP_COUNTER, [Vector2i(10, 41), Vector2i(11, 41), Vector2i(12, 41), Vector2i(13, 41), Vector2i(14, 41), Vector2i(15, 41), Vector2i(16, 41)]],  # 카페 바 카운터
+	[PROP_STOOL, [Vector2i(11, 42), Vector2i(14, 42), Vector2i(17, 42)]],                # 카페 좌석 스툴(= SEAT_TILES)
+	[PROP_SHELF, [Vector2i(11, 39), Vector2i(13, 39), Vector2i(15, 39)]],                # 카페 뒷벽 선반
 	[PROP_LANTERN, LANTERN_TILES],                                                       # 길가 2 + 카페 구석 1 등불
-	[PROP_POT, [Vector2i(8, 5) + HOUSE_OFF, Vector2i(8, 8) + HOUSE_OFF]],                # 집 두 구석 혼령초 화분
+	[PROP_POT, [Vector2i(18, 27), Vector2i(18, 33)]],                                    # 집 두 구석 혼령초 화분
 ]
 
 # ── 외부↔실내 분리(구역 사각형, 타일 좌표 Rect2i(x, y, 폭, 높이)) ─────────────
@@ -165,7 +167,7 @@ const PROP_LAYOUT := [
 # 별도 실내 구역으로 텔레포트한다(스타듀식 외부↔실내). 핵심: 실내 좌표 = 예전 좌표 + 오프셋
 # 이라, 실내 NPC·가구·좌석·_zone_at(전부 이 상수들을 참조)이 오프셋만큼 통째로 따라 옮겨진다 —
 # 참조 코드는 손대지 않는다. 외부 동선·온보딩은 외관이 예전 자리를 그대로 쓰므로 영향이 없다.
-# (HOUSE_OFF·CAFE_OFF는 위 규격 섹션에 정의 — PROP_LAYOUT·LANTERN_TILES보다 먼저 참조돼야 한다.)
+# 실내 좌표는 직접 정의(넓은 방 + 가구·NPC를 방 안에 배치). 외관(EXT)은 외부 예전 자리 그대로.
 
 # 외부 외관(예전 집·카페 자리 그대로). 통과 불가 박스 + 문 한 칸만 트리거.
 const HOUSE_EXT_RECT := Rect2i(3, 4, 7, 6)    # x3..9, y4..9
@@ -173,16 +175,16 @@ const CAFE_EXT_RECT := Rect2i(30, 4, 8, 7)    # x30..37, y4..10
 const HOUSE_EXT_DOOR := Vector2i(6, 9)    # 외관 집 문(닿으면 진입) — 예전 집 문 자리, _carve_paths 동선과 연결
 const CAFE_EXT_DOOR := Vector2i(33, 10)   # 외관 카페 문
 
-# 실내 방(맵 아래 별도 구역, 외부와 멀리 떨어져 카메라로 격리). readout 구역 판정·취침·라벨에 쓴다.
-const HOUSE_RECT := Rect2i(Vector2i(3, 4) + HOUSE_OFF, Vector2i(7, 6))    # x8..14,  y28..33
-const CAFE_RECT := Rect2i(Vector2i(30, 4) + CAFE_OFF, Vector2i(8, 7))     # x8..15,  y40..46
-const HOUSE_DOOR := Vector2i(6, 9) + HOUSE_OFF     # 실내 집 문(닿으면 퇴장) = (11,33)
-const CAFE_DOOR := Vector2i(33, 10) + CAFE_OFF     # 실내 카페 문 = (11,46)
+# 실내 방(맵 아래 별도 구역, 외부와 멀리 떨어져 카메라로 격리). 넓게 잡아 방 안을 돌아다닐 공간을 둔다.
+const HOUSE_RECT := Rect2i(8, 26, 12, 9)    # x8..19,  y26..34 (집 실내 12×9)
+const CAFE_RECT := Rect2i(8, 38, 13, 10)    # x8..20,  y38..47 (카페 실내 13×10)
+const HOUSE_DOOR := Vector2i(13, 34)        # 실내 집 문(닿으면 퇴장) — 아래벽 중앙
+const CAFE_DOOR := Vector2i(14, 47)         # 실내 카페 문 — 아래벽 중앙
 
 # 진입/퇴장 텔레포트 칸. 워프 직후 같은 프레임에 재트리거되지 않게 문 칸 자체가 아니라
 # 한 칸 안/밖에 내려놓는다(실내=문 위, 외부=문 아래).
-const HOUSE_IN_TILE := HOUSE_DOOR + Vector2i(0, -1)      # 실내 집 문 안쪽 (11,32)
-const CAFE_IN_TILE := CAFE_DOOR + Vector2i(0, -1)        # 실내 카페 문 안쪽 (11,45)
+const HOUSE_IN_TILE := Vector2i(13, 33)     # 실내 집 문 안쪽
+const CAFE_IN_TILE := Vector2i(14, 46)      # 실내 카페 문 안쪽
 const HOUSE_OUT_TILE := HOUSE_EXT_DOOR + Vector2i(0, 1)  # 외관 집 문 앞 (6,10)
 const CAFE_OUT_TILE := CAFE_EXT_DOOR + Vector2i(0, 1)    # 외관 카페 문 앞 (33,11)
 
@@ -190,10 +192,10 @@ const FARM_RECT := Rect2i(14, 4, 14, 11)  # x14..27, y4..14 (외부 유지)
 const SPAWN_TILE := Vector2i(20, 21)      # 도착 지점
 
 # 실내 모드 카메라 경계(타일). 각 방을 비추되 외부·다른 방·경계벽이 화면에 들어오지 않게 잡는다.
-# 방이 화면(20×11.25타일)보다 작아 가장자리에 VOID(검정)가 보이지만 "실내 어둠"으로 읽힌다.
+# 폭 20타일 = 화면폭이라 가로는 고정되고, 세로만 방을 따라 스크롤한다. 방 밖은 VOID(검정).
 # 외부 모드 경계는 Rect2i(0, 0, MAP_W, OUTDOOR_H)로 코드에서 만든다(아래 실내 구역 제외).
-const HOUSE_CAM_RECT := Rect2i(1, 24, 20, 14)   # 집 방(x8..14 y28..33) 둘레
-const CAFE_CAM_RECT := Rect2i(1, 37, 20, 13)    # 카페 방(x8..15 y40..46) 둘레
+const HOUSE_CAM_RECT := Rect2i(2, 24, 20, 13)   # 집 방(x8..19 y26..34) 둘레
+const CAFE_CAM_RECT := Rect2i(2, 37, 20, 13)    # 카페 방(x8..20 y38..47) 둘레
 # T3.2 미호 밭 자리 — 밭 남쪽 입구(도착→복도→밭 동선의 첫 밭 칸). 길에서 위를 바라보면
 # 바로 미호를 향하게 되어, 멘토가 밭 문 앞에서 맞이하는 자연스러운 첫 만남. 이 칸은 미호가
 # 카페로 출근한 오후에도 농사 대상에서 제외한다(_is_farmable — 돌아올 자리는 비워 둔다).
@@ -201,35 +203,35 @@ const MIHO_FIELD_TILE := Vector2i(20, 14)
 # T5.6 미호 카페 출근 자리 — 카페 뒷벽 줄(y=5)에서 멜(33,5) 오른쪽. 영업 시작(15시)부터
 # 미호가 여기로 출근해 직원이 오후 카페에 모이는 무대를 만든다(ADR-0007). 카페 바닥이라
 # 농사 대상이 아니고(밭과 안 겹침), 좌석(y=7)·문(33,10)·멜·옥자 칸과도 갈린다.
-const MIHO_CAFE_TILE := Vector2i(35, 5) + CAFE_OFF
+const MIHO_CAFE_TILE := Vector2i(15, 40)   # 카페 직원 줄(y40), 멜 오른쪽
 # T4.1 옥자가 오프닝 통보 때 서는 칸 — 스폰(20,21) 바로 위. 도착하자마자 옥자를 마주본다.
 # 통보가 끝나면 옥자는 이 자리에서 사라지고 카페(OKJA_CAFE_TILE)로 상주를 옮긴다(T5.6).
 const OKJA_INTRO_TILE := Vector2i(20, 20)
 # T5.6 옥자 카페 상주 자리 — 카페 뒷벽 줄(y=5)에서 멜(33,5) 왼쪽. 통보를 마친 뒤(NOTICE
 # 단계 지남) 여기로 옮겨 매일 보는 사장이 된다(풀 관계 트랙 없음, ADR-0005). 멜(33,5)·
 # 미호 출근 자리(35,5)와 한 줄에 나란히 서고, 좌석·문 동선과는 칸이 갈린다.
-const OKJA_CAFE_TILE := Vector2i(31, 5) + CAFE_OFF
+const OKJA_CAFE_TILE := Vector2i(10, 40)   # 카페 직원 줄(y40), 멜 왼쪽
 # T5.1 멜이 서 있는 칸 — 카페 안 뒷벽 가운데(카운터 자리). 카페 문(33,10)으로 들어와
 # 위로 올라오면 바로 멜을 마주본다. 카페 바닥이라 농사 대상이 아니고(밭과 안 겹침),
 # 카페 출하대(T3.1)도 멜이 카운터 얼굴이라 멜을 바라볼 때만 연다(T5.3 — 무인 카운터
 # 제거, 멜 앞에서 E=대화·F=출하대·G=선물 세 동사를 한 접점으로 통합).
-const MEL_TILE := Vector2i(33, 5) + CAFE_OFF
+const MEL_TILE := Vector2i(13, 40)   # 카페 직원 줄(y40) 가운데(카운터 얼굴)
 # T5.4 카페 손님 좌석 칸 — 카페 안 한 줄(멜 카운터 33,5 아래). 손님이 여기 앉고,
 # 플레이어가 아래 칸(y=8)에 서서 위를 바라보며 E로 서빙한다. 카페 바닥이라 농사 대상이
 # 아니고(밭과 안 겹침), 멜·문 동선과도 칸이 갈린다. 인덱스 = Cafe._seats 인덱스(좌석 0..2).
-const SEAT_TILES := [Vector2i(31, 7) + CAFE_OFF, Vector2i(33, 7) + CAFE_OFF, Vector2i(35, 7) + CAFE_OFF]
+const SEAT_TILES := [Vector2i(11, 42), Vector2i(14, 42), Vector2i(17, 42)]   # 카페 좌석 줄(y42)
 const CUST := Color(0.55, 0.42, 0.50)  # 손님 그레이박스(회색 기조 + 옅은 자줏빛, NPC들과 구분)
 # T6.1 바나가 서는 밤 무대 칸 — 카페 뒷벽 직원 줄(옥자31·멜33·미호35,5) 맨 오른쪽 끝(미호
 # 옆, x37은 벽). 바나는 밤(빈 밤 슬롯 19시=Cafe.CLOSE_MIN)에만 드러나는 밤 무대 호스트라
 # (미호 출퇴근·옥자 상주 station 패턴) 낮엔 숨고 밤에만 보인다. 카페 바닥이라 농사 대상이
 # 아니고(밭과 안 겹침), 좌석(y=7)·문(33,10)·다른 직원 칸과도 칸이 갈린다. 밤 영업창
 # 옵트인(T6.3)·막기(T6.4)는 범위 밖 — T6.1은 배치 + 대사 텍스트박스만(ADR-0006 그레이박스 최소).
-const BANA_NIGHT_TILE := Vector2i(36, 5) + CAFE_OFF
+const BANA_NIGHT_TILE := Vector2i(17, 40)   # 카페 직원 줄(y40) 오른쪽 끝(밤 무대)
 # T6.3 잡귀가 깃드는 밤 스폿 칸 — 카페 안 앞줄(문 33,10 안쪽 y=9), 밤에 바를 열면 잡귀가
 # 여기 기어든다. 카페 좌석(y=7)·직원 줄(y=5)과 칸이 갈리고(낮 카페와 시간도 갈림 — 카페
 # 15–19시 마감 후 밤 19–24시), 카페 바닥이라 농사 대상이 아니다(밭과 안 겹침). 인덱스 =
 # NightBar._spots 인덱스(스폿 0..2). 막기 E·이중 손실(T6.4)은 이 칸을 바라볼 때 얹힌다.
-const NIGHT_SPOT_TILES := [Vector2i(31, 9) + CAFE_OFF, Vector2i(33, 9) + CAFE_OFF, Vector2i(35, 9) + CAFE_OFF]
+const NIGHT_SPOT_TILES := [Vector2i(11, 44), Vector2i(14, 44), Vector2i(17, 44)]   # 카페 잡귀 스폿 줄(y44, 좌석과 같은 x)
 const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 — 손님 CUST·NPC들과 구분)
 
 @onready var ground: TileMapLayer = $Ground
@@ -531,14 +533,16 @@ func _build_tileset() -> TileSet:
 		src.create_tile(Vector2i(i, 0))
 	ts.add_source(src, SOLID_SRC_ID)
 
-	# 3) 물리 레이어 추가 + WALL 단색 타일에만 꽉 찬 사각 충돌 폴리곤(타일 중심 −8..8).
+	# 3) 물리 레이어 추가 + 벽 타일(외벽 WALL·실내 벽 HOUSE_WALL·CAFE_WALL)에 꽉 찬 사각
+	#    충돌 폴리곤(타일 중심 −8..8) → 통과 불가. 바닥(HOUSE/CAFE)은 충돌 없이 걷는다.
 	ts.add_physics_layer()
-	var wall_x := SOLID_TILES.find(WALL)
-	var td := src.get_tile_data(Vector2i(wall_x, 0), 0)
-	td.add_collision_polygon(0)
-	td.set_collision_polygon_points(0, 0, PackedVector2Array([
-		Vector2(-8, -8), Vector2(8, -8), Vector2(8, 8), Vector2(-8, 8),
-	]))
+	for solid in [WALL, HOUSE_WALL, CAFE_WALL]:
+		var sx := SOLID_TILES.find(solid)
+		var td := src.get_tile_data(Vector2i(sx, 0), 0)
+		td.add_collision_polygon(0)
+		td.set_collision_polygon_points(0, 0, PackedVector2Array([
+			Vector2(-8, -8), Vector2(8, -8), Vector2(8, 8), Vector2(-8, 8),
+		]))
 	return ts
 
 # 타일 종류 → 단색 source의 아틀라스 좌표(HOUSE/CAFE/WALL만)
@@ -631,8 +635,8 @@ func _build_grid() -> void:
 	_fill_rect(FARM_RECT, SOIL)                     # 밭(열린 흙 구역, 외부)
 	_build_facade(HOUSE_EXT_RECT, HOUSE_EXT_DOOR)   # 외부 집 외관(통과 불가 박스 + 문 트리거)
 	_build_facade(CAFE_EXT_RECT, CAFE_EXT_DOOR)     # 외부 카페 외관
-	_build_room(HOUSE_RECT, HOUSE, HOUSE_DOOR)      # 실내 집 방(맵 아래, 아래 가운데 문)
-	_build_room(CAFE_RECT, CAFE, CAFE_DOOR)         # 실내 카페 방
+	_build_room(HOUSE_RECT, HOUSE, HOUSE_WALL, HOUSE_DOOR)   # 실내 집 방(아늑한 벽, 아래 가운데 문)
+	_build_room(CAFE_RECT, CAFE, CAFE_WALL, CAFE_DOOR)       # 실내 카페 방(앤틱 벽)
 	_carve_paths()                         # 외부 동선(외관 문까지 — 맨 위에 덮어 길 강조)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
@@ -651,16 +655,18 @@ func _build_border() -> void:
 		_set_tile(0, y, WALL)
 		_set_tile(MAP_W - 1, y, WALL)
 
-func _build_room(rect: Rect2i, floor_id: int, door: Vector2i) -> void:
-	# 바닥으로 채운 뒤 둘레를 벽으로, 문 한 칸만 길로 뚫는다 → 문으로만 출입.
+func _build_room(rect: Rect2i, floor_id: int, wall_id: int, door: Vector2i) -> void:
+	# 바닥으로 채운 뒤 둘레를 (실내) 벽으로 두르고, 문 한 칸만 바닥으로 되돌려 통로로 연다
+	# (실내 방이라 외부 흙길 PATH 대신 방 바닥으로 — 문 칸은 퇴장 트리거). 집·카페가 각자
+	# 다른 실내 벽(HOUSE_WALL/CAFE_WALL)을 써 분위기를 가른다(아늑/앤틱).
 	_fill_rect(rect, floor_id)
 	for x in range(rect.position.x, rect.end.x):
-		_set_tile(x, rect.position.y, WALL)
-		_set_tile(x, rect.end.y - 1, WALL)
+		_set_tile(x, rect.position.y, wall_id)
+		_set_tile(x, rect.end.y - 1, wall_id)
 	for y in range(rect.position.y, rect.end.y):
-		_set_tile(rect.position.x, y, WALL)
-		_set_tile(rect.end.x - 1, y, WALL)
-	_set_tile(door.x, door.y, PATH)
+		_set_tile(rect.position.x, y, wall_id)
+		_set_tile(rect.end.x - 1, y, wall_id)
+	_set_tile(door.x, door.y, floor_id)
 
 func _carve_paths() -> void:
 	# 동선 허브: 가로 복도(y=16)가 집·밭·카페를 잇고, 도착 지점에서 올라온다.
