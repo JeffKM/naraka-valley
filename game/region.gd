@@ -16,7 +16,7 @@ class_name RegionCatalog
 #     무대를 그대로 굴린다 — 회귀 0. 빌드·렌더 일반화는 M1.2, 워프 동작은 M1.3,
 #     카페 이주는 M1.4, 세이브 추적은 M1.5에서 이 카탈로그 위에 얹는다.
 #   - ★ 실데이터 vs stub: "빌드는 한 구역씩"(ADR-0015 빈 맵·번아웃 통제)이라
-#     지금 실제로 굴러가는 건 홈베이스(묵정 농원) 한 구역뿐이다. HOME만 실size·
+#     지금 실제로 굴러가는 건 홈베이스(안식 농원) 한 구역뿐이다. HOME만 실size·
 #     실spawn을 갖고, 나머지 7개는 stub(size·spawn = ZERO = "아직 안 지어짐").
 #     is_built()가 이 차이를 파생한다 — 한 구역씩 지어질 때 size·spawn을 채운다.
 #   - 식별자(영문 id)와 표시명(name_ko) 분리: id는 코드·세이브용(가볍고 안정적),
@@ -30,7 +30,7 @@ class_name RegionCatalog
 
 # ── 구역 식별자(영문 id) ─────────────────────────────────────────────────────
 # id = 코드·세이브 키. 표시명은 CATALOG의 name_ko(CONTEXT 지리 용어).
-const HOME := "home"                    # 묵정 농원(홈베이스·농사) — 검증된 기존 무대
+const HOME := "home"                    # 안식 농원(홈베이스·농사) — 검증된 기존 무대
 const NARU_VILLAGE := "naru_village"    # 나루 마을(허브·카페·서비스·거주, 강+다리 동/서 분할)
 const SAMDOCHEON := "samdocheon"        # 삼도천(강 낚시·혼백관)
 const HWANGCHEONHAE := "hwangcheonhae"  # 황천해(바다 낚시·생선가게)
@@ -59,10 +59,10 @@ const TILE_TBD := Vector2i(-1, -1)
 const CATALOG := {
 	# ── 홈베이스(유일한 실데이터) — 검증된 기존 무대를 그대로 한 구역으로 등록 ──
 	HOME: {
-		"name_ko": "묵정 농원",
+		"name_ko": "안식 농원",
 		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (외부 무대)
 		"spawn": Vector2i(20, 21),    # = main.SPAWN_TILE (도착 지점)
-		# 묵정 농원 ──(길)── 나루 마을. at = 동쪽 가로 복도(y=16) 끝 칸(main `_carve_paths`가
+		# 안식 농원 ──(길)── 나루 마을. at = 동쪽 가로 복도(y=16) 끝 칸(main `_carve_paths`가
 		# 동쪽 끝까지 길을 잇고, 그 가장자리 칸에 닿으면 워프 — 스타듀식 가장자리/길 워프).
 		# dest는 나루 마을이 지어지는 M1.4에서 채운다(지금은 TBD → 목적 구역 스폰 폴백).
 		# ★ 나루 마을이 아직 stub이라 이 워프는 휴면 상태다(is_built 가드, 회귀 0). M1.4가 점등.

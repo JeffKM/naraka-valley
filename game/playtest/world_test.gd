@@ -24,9 +24,9 @@ func _initialize() -> void:
 	for id in ids:
 		_check("①c '%s' 카탈로그에 존재" % id, RegionCatalog.has_region(id))
 
-	# ── ② 홈베이스(묵정 농원) 실데이터·필드 정합 ──
+	# ── ② 홈베이스(안식 농원) 실데이터·필드 정합 ──
 	_check("② home 존재", RegionCatalog.has_region(RegionCatalog.HOME))
-	_check("②b home 표시명 = 묵정 농원", RegionCatalog.name_of(RegionCatalog.HOME) == "묵정 농원")
+	_check("②b home 표시명 = 안식 농원", RegionCatalog.name_of(RegionCatalog.HOME) == "안식 농원")
 	# main.gd 외부 무대 크기(MAP_W 40 × OUTDOOR_H 24)·SPAWN_TILE(20,21)과 같은 seam.
 	_check("②c home 크기 = (40, 24)", RegionCatalog.size_of(RegionCatalog.HOME) == Vector2i(40, 24))
 	_check("②d home 스폰 = (20, 21)", RegionCatalog.spawn_of(RegionCatalog.HOME) == Vector2i(20, 21))
