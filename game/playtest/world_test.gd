@@ -4,10 +4,15 @@ extends SceneTree
 # 같은 결의 하네스 — 정적 참조 데이터라 트리에 안 붙이고 static 함수를 직접 호출한다.
 # M1.3에서 워프 발동 칸(at) 실좌표·도착 칸(dest) 폴백 규칙을 더했다(워프 *동작*은 warp_test.gd).
 #
-# ★ M1.6에서 워프 동작·세이브까지 통합 검증으로 확장(같은 파일명 world_test).
+# ★ M1.6 — 데이터 모델 단위검증(①~⑤) 위에 *실제 main 한 세션 end-to-end 통합*(⑥)을 얹었다:
+#   부팅(안식 농원)→동쪽 워프(나루 마을·재빌드)→카페 진입→그 안에서 저장→껐다 켜기(재개)→
+#   카페 퇴장→서쪽 워프(안식 농원 복귀)를 한 흐름으로 굴려, 워프·건물·세이브·재빌드가
+#   *구역 전환을 거쳐 상태 누수 0*으로 합쳐지는지 본다(seam별 단위는 warp/save_region/building_test).
 # 실행: godot --headless --path game --script res://playtest/world_test.gd
 
 var _fail := 0
+const SAVE := "user://save.dat"
+const BAK := "user://save.dat.m1_6_bak"
 
 func _check(label: String, ok: bool) -> void:
 	print(("  ✓ " if ok else "  ✗ ") + label)
@@ -103,8 +108,113 @@ func _initialize() -> void:
 	_check("⑤g 미지 id neighbors 빈 Array", RegionCatalog.neighbors(unknown).is_empty())
 	_check("⑤h 미지 id is_built=false", not RegionCatalog.is_built(unknown))
 
+	# ── ⑥ M1.6 통합: 실제 main을 한 세션 동안 끝까지 굴려 세계 루프 전체를 잇는다 ──
+	# (데이터 모델(①~⑤) 위에서, 워프→건물→세이브→재개→복귀워프가 구역 재빌드를 거쳐
+	#  *상태 누수 0*으로 합쳐지는지 — seam별 단위는 warp/save_region/building_test가 본다.)
+	await _integration()
+
 	print(("══ 통과 ══" if _fail == 0 else "══ 실패 %d건 ══" % _fail))
 	quit(_fail)
+
+# ── M1.6 통합: 실제 main 한 세션 end-to-end ──────────────────────────────────
+# 부팅→동쪽 워프(나루 마을)→카페 진입→그 안에서 저장→껐다 켜기→카페 퇴장→서쪽 워프(안식
+# 농원 복귀)를 한 흐름으로 굴린다. 단위 테스트들은 각 seam을 따로 증명하지만, 여기선 *한 세션*
+# 안에서 구역이 두 번 재빌드되는 동안(농원→마을→농원) 상태가 새지 않는지(잔재 0)를 본다.
+func _integration() -> void:
+	print("\n══ M1.6 세계 루프 통합(실제 main 한 세션 end-to-end) ══")
+
+	# 실제 개발 세이브 백업(테스트 격리 — save_region_test와 같은 결, user://save.dat 단일 슬롯).
+	var had_save := FileAccess.file_exists(SAVE)
+	if had_save:
+		_write_bytes(BAK, _read_bytes(SAVE))
+
+	# ── 부팅: 안식 농원 바깥에서 시작 ──
+	var m: Node = await _spawn_main()
+	m.saver.delete_save()   # 백업했으니 깨끗한 새 게임에서 시작
+	_check("⑥ 부팅 구역 = 안식 농원", m._region == RegionCatalog.HOME)
+	_check("⑥a 부팅은 바깥 모드", m._indoor == "")
+
+	# ── 동쪽 가장자리(38,16) → 나루 마을로 길 워프 + 재빌드 ──
+	m.player.position = m._tile_center_px(Vector2i(38, 16))
+	m._maybe_warp_edge()
+	await _settle()
+	_check("⑥b 나루 마을로 워프", m._region == RegionCatalog.NARU_VILLAGE)
+	_check("⑥c 도착 = 마을 dest(3,16)", m._player_tile() == Vector2i(3, 16))
+	# 재빌드 증명(콘텐츠): 마을엔 카페 외관(WALL)이 선다(building_test ⑥와 같은 seam).
+	_check("⑥d 마을 재빌드 — 카페 외관 자리 = WALL",
+		m._grid[m.CAFE_EXT_RECT.position.y][m.CAFE_EXT_RECT.position.x] == m.WALL)
+
+	# ── 카페 진입(건물 워프) → 그 안에서 저장 ──
+	m.player.position = m._tile_center_px(m.CAFE_EXT_DOOR)
+	m._maybe_toggle_building()
+	await _settle()
+	_check("⑥e 카페 실내 진입", m._indoor == "카페")
+	var saved_tile: Vector2i = m._player_tile()
+	_check("⑥f 카페 방 안에 위치", m.CAFE_RECT.has_point(saved_tile))
+	m._save_game()
+	_check("⑥g 카페 안에서 저장 성공", m.saver.has_save())
+	await _despawn(m)
+
+	# ── 껐다 켜기: 새 인스턴스가 '있던 구역·실내·자리'로 재개(_ready 자동 복원) ──
+	var m2: Node = await _spawn_main()
+	_check("⑥h 재개 구역 = 나루 마을", m2._region == RegionCatalog.NARU_VILLAGE)
+	_check("⑥i 재개 실내 = 카페", m2._indoor == "카페")
+	_check("⑥j 재개 위치 = 저장한 카페 칸", m2._player_tile() == saved_tile)
+	_check("⑥k 재개 카메라가 카페 방 격리(top=CAFE_CAM)",
+		m2._cam.limit_top == m2.CAFE_CAM_RECT.position.y * m2.TILE)
+
+	# ── 카페 퇴장 → 마을 바깥 → 서쪽 가장자리(1,16)로 안식 농원 복귀 워프 ──
+	m2.player.position = m2._tile_center_px(m2.CAFE_DOOR)
+	m2._maybe_toggle_building()
+	await _settle()
+	_check("⑥l 카페 퇴장 → 마을 바깥(구역 불변)", m2._indoor == "" and m2._region == RegionCatalog.NARU_VILLAGE)
+	m2.player.position = m2._tile_center_px(Vector2i(1, 16))
+	m2._maybe_warp_edge()
+	await _settle()
+	_check("⑥m 서쪽 가장자리 → 안식 농원 복귀", m2._region == RegionCatalog.HOME)
+	_check("⑥n 도착 = home dest(37,16)", m2._player_tile() == Vector2i(37, 16))
+	# 재빌드 증명(누수 0): 안식 농원엔 카페가 없다 — 같은 칸이 더는 WALL이 아니다(마을 잔재 0).
+	_check("⑥o 안식 농원 재빌드 — 카페 외관 잔재 없음(자리 ≠ WALL)",
+		m2._grid[m2.CAFE_EXT_RECT.position.y][m2.CAFE_EXT_RECT.position.x] != m2.WALL)
+	await _despawn(m2)
+
+	# ── 세이브 백업 복원(실제 개발 세이브 보존) ──
+	if had_save:
+		_write_bytes(SAVE, _read_bytes(BAK))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(BAK))
+	elif FileAccess.file_exists(SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
+
+# 워프/페이드 tween(실시간 ~0.52s)이 끝나도록 실제 시간 기준으로 프레임을 돌린다(building_test 결).
+func _settle() -> void:
+	var until := Time.get_ticks_msec() + 900
+	while Time.get_ticks_msec() < until:
+		await process_frame
+
+# 새 main 인스턴스를 띄우고 _ready(자동 복원 포함)가 안정될 때까지 프레임을 돌린다.
+func _spawn_main() -> Node:
+	var m: Node = load("res://main.tscn").instantiate()
+	root.add_child(m)
+	await process_frame
+	await process_frame
+	return m
+
+# 인스턴스를 정리한다(quit 시 orphan 0 보장).
+func _despawn(m: Node) -> void:
+	m.queue_free()
+	await process_frame
+	await process_frame
+
+func _read_bytes(path: String) -> PackedByteArray:
+	var f := FileAccess.open(path, FileAccess.READ)
+	var b := f.get_buffer(f.get_length())
+	f.close()
+	return b
+
+func _write_bytes(path: String, bytes: PackedByteArray) -> void:
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_buffer(bytes)
+	f.close()
 
 # 중복 제거(순서 무관 — 개수 비교용).
 func _unique(arr: Array) -> Array:
