@@ -1091,6 +1091,12 @@ func _save_game() -> void:
 		"run_harvested": _run_harvested,
 		"cafe_revenue_total": _cafe_revenue_total,
 		"selected_crop": _selected_crop,
+		# M1.5 — 현재 구역·실내 모드·플레이어 위치(껐다 켜도 '있던 자리'에서 재개). region은
+		# 영문 id(RegionCatalog 키, 가볍고 안정적), indoor는 ""/"집"/"카페", 위치는 타일 좌표.
+		# SaveManager는 IO만 책임지므로(불변) 세 키가 늘어도 손대지 않는다 — main이 조율한다.
+		"region": _region,
+		"indoor": _indoor,
+		"player_tile": _player_tile(),
 	}
 	if saver.save_game(data):
 		_notice("저장됨")
@@ -1126,7 +1132,42 @@ func _load_game() -> void:
 	_cafe_revenue_total = maxi(int(data.get("cafe_revenue_total", 0)), 0)
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
+	# M1.5 — 마지막에 구역·실내 모드·위치를 되돌린다. farm.load_save가 칸마다 발화한 밭
+	# 오버레이는 안식 농원 기준이라, 복원 구역이 다르면 _rebuild_region이 걷어내고(현재 구역만
+	# 그림) 같으면 그대로 둔다 — 그래서 farm 복원 뒤에 둔다(_save_game의 짝).
+	_restore_location(data)
 	_notice("불러옴")
+
+# M1.5 — 세이브된 현재 구역·실내 모드·플레이어 위치를 복원한다. SaveManager는 IO만 책임지므로
+# (불변), '무엇을 어떻게 되돌리나'의 조율은 main이 맡는다(_save_game·_warp과 같은 결).
+# 부팅 기본은 _region=HOME·SPAWN_TILE 외부(이미 _build_grid·_setup_player_and_camera가 깖)라,
+# 복원은 그 위에 (a) 저장 구역이 다르면 _rebuild_region, (b) 실내 모드·위치·카메라를 얹는다.
+# ★ 미지 구역 폴백: 저장된 구역 id가 (안 지어졌거나 알 수 없어) is_built=false면 홈베이스(안식
+#   농원) 외부 스폰으로 떨군다 — 깨진/구버전 세이브로 빈 맵·VOID에 갇히지 않게(미지 id 방어).
+func _restore_location(data: Dictionary) -> void:
+	var saved_region: String = str(data.get("region", RegionCatalog.HOME))
+	if not RegionCatalog.is_built(saved_region):
+		push_warning("[M1.5] 미지/미빌드 구역 '%s' — 홈베이스 스폰으로 폴백" % saved_region)
+		if _region != RegionCatalog.HOME:
+			_rebuild_region(RegionCatalog.HOME)
+		_indoor = ""
+		player.position = _tile_center_px(SPAWN_TILE)
+		_apply_camera_limits()
+		return
+	# 정상 복원: 저장 구역이 부팅 구역(HOME)과 다르면 그 구역을 재빌드한다(_warp과 같은 결 —
+	# 현재 구역만 메모리, M1.2 구현 (b)). 같으면(HOME) 이미 빌드돼 있어 재빌드 불필요.
+	if saved_region != _region:
+		_rebuild_region(saved_region)
+	# 실내 모드는 화이트리스트로 방어한다(알 수 없는 값이면 바깥 — 카메라가 외부 경계로 안전 복귀).
+	var saved_indoor: String = str(data.get("indoor", ""))
+	_indoor = saved_indoor if saved_indoor in ["", "집", "카페"] else ""
+	# 위치 복원(저장 타일 중심). 손상 방어 — Vector2i가 아니면 구역 스폰으로(빈 맵 방지).
+	var saved_tile := RegionCatalog.spawn_of(saved_region)
+	var raw_tile: Variant = data.get("player_tile", saved_tile)
+	if typeof(raw_tile) == TYPE_VECTOR2I:
+		saved_tile = raw_tile
+	player.position = _tile_center_px(saved_tile)
+	_apply_camera_limits()
 
 # 확인·알림 문구를 잠깐 띄운다(지속시간 경과 후 기본 안내로 복귀). 저장됨 등은
 # 짧게(NOTICE_SECS), T3.5 사연 한 줄은 읽을 수 있게 길게(FLAVOR_SECS) 띄운다.
