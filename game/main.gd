@@ -556,6 +556,9 @@ func _ready() -> void:
 	# T6.1 복원 시각이 밤(19시+)이면 바나가 밤 무대에 이미 서 있도록 가시성을 맞춘다
 	# (옥자·미호와 같은 결 — 껐다 켜도 그대로). 통보 단계면 가드에 걸려 아직 안 보인다.
 	_update_bana_station()
+	# M2.4 복원/신규 직후 오늘이 이벤트 데이면 의상·카페 보너스를 맞춘다(껐다 켜도 그대로 —
+	# 14일째에 저장했다 재개하면 그 축제 차림으로 재개된다). 세이브 무상태라 day에서 파생.
+	_refresh_festival()
 	# T7.2 이어받은 세이브가 이미 카페 1단을 채웠으면 달성 래치를 켜 둔다 — 재개 때 "카페 2단계!"
 	# 팝업이 다시 터지지 않게(완료 상태는 마일스톤 HUD가 상시 보여 준다). 신규/미완료면 false로,
 	# 플레이 중 채우는 순간 _process가 한 번 팝업을 띄운다(RunSummary.is_over 재개 안전과 같은 결).
@@ -1061,6 +1064,22 @@ func _on_day_advanced(day: int) -> void:
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
 		onboarding.crop_ready()
+	# M2.4 새 날이 이벤트 데이(2주마다)면 메인 4인 의상·카페 보너스를 켠다(아니면 끈다).
+	_refresh_festival()
+
+# ── M2.4 카페 이벤트 데이 ────────────────────────────────────────────────────
+# 오늘(clock.day)이 이벤트 데이인가를 한 곳에서 파생해, 메인 4인(미호·멜·바나·옥자) 의상과
+# 카페 손님 보너스를 그 상태로 맞춘다. Festival은 세이브 무상태(day에서 파생, store_discount
+# 결)라 신규·복원·취침 어디서 불러도 멱등이다(set_festive·spawn_scale 모두 idempotent). 카페
+# 축제 장식(가랜드·카펫)은 _draw가 같은 Festival.is_event_day로 파생하므로 여기선 redraw만 친다.
+func _refresh_festival() -> void:
+	var f := Festival.is_event_day(clock.day)
+	miho.set_festive(f)
+	mel.set_festive(f)
+	bana.set_festive(f)
+	okja.set_festive(f)
+	cafe.spawn_scale = Festival.spawn_scale(clock.day)   # ★seam 3: 이벤트일 손님 붐빔(단가 불침범)
+	queue_redraw()                                       # 카페 축제 장식(_draw)을 새 상태로 다시 그림
 
 # T2.3 선택 작물을 카탈로그 순서(빠른 성장 순)대로 다음 것으로 순환.
 func _cycle_crop() -> void:
@@ -1323,6 +1342,8 @@ func _load_game() -> void:
 	# 오버레이는 안식 농원 기준이라, 복원 구역이 다르면 _rebuild_region이 걷어내고(현재 구역만
 	# 그림) 같으면 그대로 둔다 — 그래서 farm 복원 뒤에 둔다(_save_game의 짝).
 	_restore_location(data)
+	# M2.4 F9 재로드(이 함수 직접 호출 경로)에서도 복원된 day로 의상·보너스를 맞춘다(멱등).
+	_refresh_festival()
 	_notice("불러옴")
 
 # M1.5 — 세이브된 현재 구역·실내 모드·플레이어 위치를 복원한다. SaveManager는 IO만 책임지므로
@@ -2371,6 +2392,9 @@ func _draw() -> void:
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_props_for(PROP_LAYOUT_CAFE)  # 카페 무대 가구·카페 등불
+			# M2.4 — 이벤트 데이면 카페 무대를 축제 장식으로(가구 위에 가랜드·무대 카펫 덧그림).
+			if Festival.is_event_day(clock.day):
+				_draw_cafe_festival()
 			# ★ M2.2 — 공유 집 실내에 들어와 있으면 집 가구를 재사용해 그린다(HOUSE_RECT 방).
 			# 만물상 방·카페 방은 카메라 밖이라 같이 그려도 안 보이지만, 가구는 들어온 그 방만 둔다.
 			if _is_in_house_interior():
@@ -2408,6 +2432,24 @@ func _draw_facade_home() -> void:
 
 func _draw_facade_cafe() -> void:
 	draw_texture_rect(FACADE_CAFE, Rect2(Vector2(CAFE_EXT_RECT.position * TILE), FACADE_CAFE.get_size()), false)
+
+# M2.4 — 카페 이벤트 데이 축제 장식(절차 도형, 새 에셋 0 — Phase 2 경계 준수). 카메라가 카페
+# 방(CAFE_CAM_RECT)만 비추므로 CAFE_RECT 좌표에 그리면 카페 실내에서만 보인다(다른 구역·집/
+# 만물상 방은 카메라 밖). 카페 프롭 다음에 그려 그 위에 얹히되, 무대 카펫은 반투명이라 스툴·
+# 테이블이 비쳐 "바닥에 깔린" 결을 낸다(_draw_props_for 순서의 짝). festival.gd가 색의 단일 출처.
+func _draw_cafe_festival() -> void:
+	var r := CAFE_RECT
+	# ① 무대 카펫: 손님석 중앙 바닥에 붉은 러그(반투명 — 스툴·테이블이 비친다).
+	var rug := Rect2(Vector2((r.position.x + 2) * TILE, (r.position.y + 5) * TILE),
+		Vector2((r.size.x - 4) * TILE, 3 * TILE))
+	draw_rect(rug, Festival.RUG)
+	# ② 천장 가랜드: 상단 벽 아래 가로로 홍·황 번갈아 삼각 깃발(잔치 줄 — 카운터·선반 위로 매달림).
+	var y := float((r.position.y + 1) * TILE - 4)   # 상단 벽(첫 줄) 하단에 매달림
+	for i in range(r.position.x + 1, r.end.x - 1):
+		var x := float(i * TILE)
+		var col: Color = Festival.BANNER_A if (i % 2 == 0) else Festival.BANNER_B
+		draw_colored_polygon(PackedVector2Array([
+			Vector2(x, y), Vector2(x + TILE, y), Vector2(x + TILE * 0.5, y + 12.0)]), col)
 
 # ★ M1.4 — 넘겨받은 가구 배열(현재 구역 것)만 그린다. PROP_LAYOUT_HOME/PROP_LAYOUT_CAFE를
 # _draw가 구역에 맞춰 골라 넘긴다(다른 구역 가구가 떠다니지 않게).
