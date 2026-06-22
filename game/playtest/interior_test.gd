@@ -77,15 +77,19 @@ func _initialize() -> void:
 
 	var m: Node = await _spawn_main()
 
-	# ── ① 카탈로그: 12채 등록(홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게) + 구역·종류 정합 ──
+	# ── ① 카탈로그: 13채 등록(홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게 + 목공방) + 구역·종류 정합 ──
 	# ★ 창고(HOME·storehouse) 9→10. ★ M3.1 혼백관(SAMDOCHEON·museum) 10→11. ★ M3.2 생선가게(HWANGCHEONHAE·fishshop) 11→12.
+	# ★ M4.1 목공방(JEOSEUNG_FOREST·woodshop) 12→13.
 	var ids: Array = m._buildings.keys()
-	_check("① 건물 12채 등록(_buildings — 홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게)", ids.size() == 12)
+	_check("① 건물 13채 등록(_buildings — 홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게 + 목공방)", ids.size() == 13)
 	_check("① 홈 집 = HOME·house", m._buildings["집"]["region"] == RegionCatalog.HOME and m._buildings["집"]["kind"] == "house")
 	_check("① 창고 = HOME·storehouse", m._buildings["창고"]["region"] == RegionCatalog.HOME and m._buildings["창고"]["kind"] == "storehouse")
-	# 혼백관·생선가게 출입 라운드트립은 samdocheon/hwangcheonhae_test 전담 — 여기선 카탈로그 정합(구역·종류)만.
+	# 혼백관·생선가게·목공방 출입 라운드트립은 samdocheon/hwangcheonhae/jeoseung_forest_test 전담 — 여기선 카탈로그 정합(구역·종류)만.
 	_check("① 혼백관 = 삼도천·museum", m._buildings["혼백관"]["region"] == RegionCatalog.SAMDOCHEON and m._buildings["혼백관"]["kind"] == "museum")
 	_check("① 생선가게 = 황천해·fishshop", m._buildings["생선가게"]["region"] == RegionCatalog.HWANGCHEONHAE and m._buildings["생선가게"]["kind"] == "fishshop")
+	_check("① 목공방 = 저승 숲·woodshop", m._buildings["목공방"]["region"] == RegionCatalog.JEOSEUNG_FOREST and m._buildings["목공방"]["kind"] == "woodshop")
+	# ★ M4.2 옥자 집(미혹의 숲)은 잠긴 외관(비-enterable, 축사 결)이라 카탈로그에 *없다* — 건물 수 13 불변.
+	_check("① 옥자 집 카탈로그 미등록(잠김 — 비-enterable)", not m._buildings.has("옥자 집") and not m._buildings.has("옥자집"))
 	_check("① 카페 = 마을·cafe", m._buildings["카페"]["region"] == RegionCatalog.NARU_VILLAGE and m._buildings["카페"]["kind"] == "cafe")
 	_check("① 만물상 = 마을·store", m._buildings["만물상"]["region"] == RegionCatalog.NARU_VILLAGE and m._buildings["만물상"]["kind"] == "store")
 	for hid in m.HOUSE_IDS:

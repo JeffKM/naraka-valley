@@ -106,6 +106,48 @@ func _initialize() -> void:
 	await _settle()
 	_check("③n 삼도천 남단 → 나루 마을 복귀(왕복)", main._region == RegionCatalog.NARU_VILLAGE)
 	_check("③o 복귀 도착 칸에 놓임", main._player_tile() == samdo_back["dest"])
+
+	# ── ③'''' M4.1 — 나루 마을 ↔ 저승 숲 임시 왕복(산길 임시 직결 점등). 산길(38,8) → 저승 숲, 서단(1,16) → 마을 복귀 ──
+	# ★ 임시(TEMP) 워프: 갱도가 stub이라 산길을 저승 숲에 임시 직결(M4.1). 갱도 빌드 시 정규 경로로 원복.
+	var forest_w: Dictionary = {}
+	for w in RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE):
+		if w["to"] == RegionCatalog.JEOSEUNG_FOREST:
+			forest_w = w
+	main.player.position = main._tile_center_px(forest_w["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③q 산길(38,8) → 저승 숲 전환(임시 점등)", main._region == RegionCatalog.JEOSEUNG_FOREST)
+	_check("③r 저승 숲 도착 칸에 놓임", main._player_tile() == forest_w["dest"])
+
+	# ── ③''''' M4.2 — 저승 숲 ↔ 미혹의 숲 왕복(숲 안쪽 점등). 동단(38,16) → 미혹의 숲, 서단(1,16) → 저승 숲 복귀 ──
+	var mihok_w: Dictionary = {}
+	for w in RegionCatalog.warps_of(RegionCatalog.JEOSEUNG_FOREST):
+		if w["to"] == RegionCatalog.MIHOK_FOREST:
+			mihok_w = w
+	main.player.position = main._tile_center_px(mihok_w["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③u 동단(38,16) → 미혹의 숲 전환(점등)", main._region == RegionCatalog.MIHOK_FOREST)
+	_check("③v 미혹의 숲 도착 칸에 놓임", main._player_tile() == mihok_w["dest"])
+	# 미혹의 숲 서단(1,16) → 저승 숲 복귀(막다른 왕복).
+	var mihok_back: Dictionary = RegionCatalog.warps_of(RegionCatalog.MIHOK_FOREST)[0]
+	main.player.position = main._tile_center_px(mihok_back["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③w 미혹의 숲 서단 → 저승 숲 복귀(왕복)", main._region == RegionCatalog.JEOSEUNG_FOREST)
+	_check("③x 복귀 도착 칸에 놓임", main._player_tile() == mihok_back["dest"])
+
+	# 저승 숲 서단(1,16) → 나루 마을 복귀(임시 우회 왕복).
+	var forest_back: Dictionary = {}
+	for w in RegionCatalog.warps_of(RegionCatalog.JEOSEUNG_FOREST):
+		if w["to"] == RegionCatalog.NARU_VILLAGE:
+			forest_back = w
+	main.player.position = main._tile_center_px(forest_back["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③s 저승 숲 서단 → 나루 마을 복귀(왕복)", main._region == RegionCatalog.NARU_VILLAGE)
+	_check("③t 복귀 도착 칸에 놓임", main._player_tile() == forest_back["dest"])
+
 	# 안식 농원으로 복귀해 이후 검사(⑤)가 HOME 기준에서 이어지게 한다(상태 원복).
 	main.player.position = main._tile_center_px(back_at)
 	main._maybe_warp_edge()
