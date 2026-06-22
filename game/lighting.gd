@@ -50,7 +50,12 @@ var _lamps: Array[PointLight2D] = []
 
 # main이 등불(소울 등불) 픽셀 좌표를 넘겨 빛웅덩이를 만든다. 자리의 진실은 main의
 # PROP_LAYOUT(LANTERN_TILES)이고, 여기선 그 위치에 빛만 얹는다(가구 그리기와 디커플링).
+# M1.4 — 멱등: 구역을 오갈 때(카페 이주로 등불 자리가 구역마다 다름) 다시 불려도 이전 등불을
+# 먼저 거두고 새로 깐다. 한 구역의 등불만 살아 다른 구역 길가/카페 등불이 떠다니지 않게.
 func setup(lamp_positions: PackedVector2Array) -> void:
+	for old in _lamps:
+		old.queue_free()
+	_lamps.clear()
 	var tex := _make_light_texture()
 	for pos in lamp_positions:
 		var lamp := PointLight2D.new()

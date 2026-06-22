@@ -75,6 +75,12 @@ func planted_tiles() -> Array:
 			out.append(t)
 	return out
 
+# 경작된(괭이질된) 칸 전체 목록. M1.4 — 구역을 오갈 때 밭 오버레이(field_layer)를 비웠다가
+# 안식 농원으로 돌아오면 다시 칠하는 데 쓴다(작물뿐 아니라 빈 고랑까지 복원). planted_tiles와
+# 같은 결의 순수 상태 질의(상태 노드는 화면을 모르지만 "어디가 경작됐나"는 질의로 노출).
+func tilled_tiles() -> Array:
+	return _tiles.keys()
+
 # 시각 성장 단계(오버레이용): -1=작물없음 / 0=씨앗 / 1=새싹 / 2=수확가능.
 # 작물별 stages 수와 무관한 그레이박스 3단계(외형). 속도 차이는 growth_days가 낸다.
 func growth_stage(t: Vector2i) -> int:

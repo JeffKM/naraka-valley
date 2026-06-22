@@ -159,18 +159,26 @@ const PROP_CAFE_TABLE := preload("res://assets/props/cafe_table.png")
 const FACADE_HOUSE := preload("res://assets/buildings/house_ext.png")
 const FACADE_CAFE := preload("res://assets/buildings/cafe_ext.png")
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
-# 이 한 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로). 길가 2 + 카페 구석 1.
-const LANTERN_TILES := [Vector2i(12, 15), Vector2i(28, 15), Vector2i(18, 43)]  # 길가 2(외부) + 카페 구석 1(실내)
-# [텍스처, [놓을 타일들]]. 타일 좌표는 실내 레이아웃(직원 y5 / 카운터 y6 / 좌석 y7 /
-# 통로 y8) 위에 얹어 "장소"로 읽히게 배치한다. 좌석 스툴 위에는 손님 박스가 덮여 그려진다.
-# 실내 가구 좌표(넓은 방에 직접 배치). 집=따뜻한 빈 마루 + 침대·화분, 카페=직원 줄(y40) 앞
-# 카운터(y41)·좌석(y42)·스폿(y44) 무대. 좌석 스툴 위에는 손님 박스가 덮여 그려진다.
-const PROP_LAYOUT := [
+# 이 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로).
+# ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
+#   구석 하나. 구역마다 자기 등불만 켜지게(다른 구역 등불이 떠다니지 않게) 둘로 나눈다.
+const LANTERN_TILES_HOME := [Vector2i(12, 15), Vector2i(28, 15)]  # 안식 농원 길가(외부)
+const LANTERN_TILES_CAFE := [Vector2i(18, 43)]                    # 나루 마을 카페 구석(실내)
+# [텍스처, [놓을 타일들]]. 타일 좌표는 실내 레이아웃(직원 y40 / 카운터 y41 / 좌석 y42 /
+# 스폿 y44) 위에 얹어 "장소"로 읽히게 배치한다. 좌석 스툴 위에는 손님 박스가 덮여 그려진다.
+# ★ M1.4 — 카페 이주로 가구도 구역이 갈렸다: 안식 농원(집 가구·길가 등불·화분) / 나루 마을(카페
+#   무대 가구·카페 등불). _draw_props가 현재 구역(_region)의 배열만 그린다(다른 구역 가구가
+#   떠다니지 않게). 카페 내부 좌표는 안식 농원 시절과 동일하게 유지(좌표 대이동 최소화·회귀 0).
+const PROP_LAYOUT_HOME := [
 	[PROP_RUG, [Vector2i(11, 30)]],                                                      # 집: 중앙 바닥 러그(맨 먼저 — 바닥)
 	[PROP_BED, [Vector2i(9, 27)]],                                                       # 집: 좌상단 침대
 	[PROP_FIREPLACE, [Vector2i(14, 27)]],                                                # 집: 상단 벽 벽난로
 	[PROP_BOOKSHELF, [Vector2i(16, 27)]],                                                # 집: 상단 벽 책장
 	[PROP_TABLE, [Vector2i(12, 30)]],                                                    # 집: 러그 위 작은 테이블
+	[PROP_LANTERN, LANTERN_TILES_HOME],                                                  # 안식 농원 길가 등불 둘
+	[PROP_POT, [Vector2i(18, 27), Vector2i(18, 33)]],                                    # 집 두 구석 혼령초 화분
+]
+const PROP_LAYOUT_CAFE := [
 	[PROP_COUNTER, [Vector2i(10, 41), Vector2i(11, 41), Vector2i(12, 41), Vector2i(13, 41), Vector2i(14, 41), Vector2i(15, 41), Vector2i(16, 41)]],  # 카페 바 카운터
 	[PROP_STOOL, [Vector2i(11, 42), Vector2i(14, 42), Vector2i(17, 42)]],                # 카페 좌석 스툴(= SEAT_TILES)
 	[PROP_SHELF, [Vector2i(11, 39), Vector2i(13, 39), Vector2i(15, 39)]],                # 카페 뒷벽 선반
@@ -178,22 +186,23 @@ const PROP_LAYOUT := [
 	[PROP_FRAME, [Vector2i(10, 38), Vector2i(16, 38)]],                                  # 카페: 뒷벽 앤틱 액자 둘
 	[PROP_CABINET, [Vector2i(18, 38)]],                                                  # 카페: 우측 뒷벽 와인 캐비닛
 	[PROP_CAFE_TABLE, [Vector2i(11, 45), Vector2i(15, 45)]],                             # 카페: 하단 손님 테이블 둘
-	[PROP_LANTERN, LANTERN_TILES],                                                       # 길가 2 + 카페 구석 1 등불
-	[PROP_POT, [Vector2i(18, 27), Vector2i(18, 33)]],                                    # 집 두 구석 혼령초 화분
+	[PROP_LANTERN, LANTERN_TILES_CAFE],                                                  # 나루 마을 카페 구석 등불
 ]
 
 # ── 외부↔실내 분리(구역 사각형, 타일 좌표 Rect2i(x, y, 폭, 높이)) ─────────────
-# 집·카페는 외부에선 통과 불가 "외관"(예전 자리)으로 보이고, 문에 닿으면 fade로 맵 아래
-# 별도 실내 구역으로 텔레포트한다(스타듀식 외부↔실내). 핵심: 실내 좌표 = 예전 좌표 + 오프셋
-# 이라, 실내 NPC·가구·좌석·_zone_at(전부 이 상수들을 참조)이 오프셋만큼 통째로 따라 옮겨진다 —
-# 참조 코드는 손대지 않는다. 외부 동선·온보딩은 외관이 예전 자리를 그대로 쓰므로 영향이 없다.
-# 실내 좌표는 직접 정의(넓은 방 + 가구·NPC를 방 안에 배치). 외관(EXT)은 외부 예전 자리 그대로.
+# 건물은 외부에선 통과 불가 "외관"으로 보이고, 문에 닿으면 fade로 맵 아래 별도 실내 구역으로
+# 텔레포트한다(스타듀식 외부↔실내 — 문=같은 구역 안 특수 워프, _transition_to). 실내 NPC·가구·
+# 좌석·_zone_at이 전부 이 상수들을 참조하므로, 좌표를 그대로 두면 참조 코드는 손대지 않아도 된다.
+# ★ M1.4 — 카페가 나루 마을로 이주했다. 집(외관·실내)은 안식 농원에, 카페(외관·실내)는 나루
+#   마을에 지어진다(_build_home / _build_naru_village). 카페 좌표는 안식 농원 시절과 *동일하게*
+#   유지하되 마을 그리드의 같은 칸에 둔다 — 좌표 대이동 없이 카페 시뮬·NPC·좌석 상수가 그대로
+#   따라온다(회귀 0). 어느 구역에서 어느 칸이 실제로 도달 가능한지는 _zone_at이 구역으로 가른다.
 
-# 외부 외관(예전 집·카페 자리 그대로). 통과 불가 박스 + 문 한 칸만 트리거.
-const HOUSE_EXT_RECT := Rect2i(3, 4, 7, 6)    # x3..9, y4..9
-const CAFE_EXT_RECT := Rect2i(30, 4, 8, 7)    # x30..37, y4..10
-const HOUSE_EXT_DOOR := Vector2i(6, 9)    # 외관 집 문(닿으면 진입) — 예전 집 문 자리, _carve_paths 동선과 연결
-const CAFE_EXT_DOOR := Vector2i(33, 10)   # 외관 카페 문
+# 외부 외관. 통과 불가 박스 + 문 한 칸만 트리거. 집=안식 농원 / 카페=나루 마을(같은 칸 좌표 재사용).
+const HOUSE_EXT_RECT := Rect2i(3, 4, 7, 6)    # x3..9, y4..9 (안식 농원)
+const CAFE_EXT_RECT := Rect2i(30, 4, 8, 7)    # x30..37, y4..10 (나루 마을)
+const HOUSE_EXT_DOOR := Vector2i(6, 9)    # 외관 집 문(닿으면 진입) — _carve_paths 동선과 연결
+const CAFE_EXT_DOOR := Vector2i(33, 10)   # 외관 카페 문(닿으면 진입) — _carve_village_paths 동선과 연결
 
 # 실내 방(맵 아래 별도 구역, 외부와 멀리 떨어져 카메라로 격리). 넓게 잡아 방 안을 돌아다닐 공간을 둔다.
 const HOUSE_RECT := Rect2i(8, 26, 12, 9)    # x8..19,  y26..34 (집 실내 12×9)
@@ -657,6 +666,8 @@ func _build_grid() -> void:
 	match _region:
 		RegionCatalog.HOME:
 			_build_home()
+		RegionCatalog.NARU_VILLAGE:
+			_build_naru_village()
 		_:
 			push_warning("알 수 없는 구역 '%s' — 홈베이스로 폴백" % _region)
 			_build_home()
@@ -667,6 +678,8 @@ func _build_grid() -> void:
 # 실내 모드에서 방만 비추므로(아래 _apply_camera_limits) "건물 안에 들어온" 느낌을 준다.
 # ★ 홈베이스 grid 크기는 MAP_W×MAP_H(외부 + 아래 실내 방). 구역-레벨 외부 크기는
 #   RegionCatalog.HOME.size(40×24 = MAP_W×OUTDOOR_H)와 같고, 카메라가 그 값으로 외부를 격리한다.
+# ★ M1.4 — 카페가 나루 마을로 이주해 안식 농원엔 더는 카페 외관·실내가 없다. 집·밭만 남고,
+#   동쪽 복도 끝(38,16)이 나루 마을로 가는 길 워프가 된다(_carve_paths가 동쪽 끝까지 길을 잇는다).
 func _build_home() -> void:
 	_grid = []
 	for y in MAP_H:
@@ -677,10 +690,25 @@ func _build_home() -> void:
 
 	_fill_rect(FARM_RECT, SOIL)                     # 밭(열린 흙 구역, 외부)
 	_build_facade(HOUSE_EXT_RECT, HOUSE_EXT_DOOR)   # 외부 집 외관(통과 불가 박스 + 문 트리거)
-	_build_facade(CAFE_EXT_RECT, CAFE_EXT_DOOR)     # 외부 카페 외관
 	_build_room(HOUSE_RECT, HOUSE, HOUSE_WALL, HOUSE_DOOR)   # 실내 집 방(아늑한 벽, 아래 가운데 문)
-	_build_room(CAFE_RECT, CAFE, CAFE_WALL, CAFE_DOOR)       # 실내 카페 방(앤틱 벽)
 	_carve_paths()                         # 외부 동선(외관 문까지 — 맨 위에 덮어 길 강조)
+	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
+
+# ★ M1.4 — 나루 마을(허브·카페). "최소 그레이박스 마을 = 카페 + 워프만"(전체 레이아웃은 다음
+# 묶음). 안식 농원과 같은 스택 구조(외부 풀밭 y0~23 + 아래 실내 카페 방 y38~47, VOID로 격리).
+# 카페 외관·실내·내부 좌표는 안식 농원 시절과 동일하게 유지해(좌표 대이동 최소화·회귀 0) 마을
+# 그리드의 같은 칸에 둔다 — 카페 시뮬·NPC·좌석·잡귀 상수는 손대지 않아도 그대로 따라온다.
+func _build_naru_village() -> void:
+	_grid = []
+	for y in MAP_H:
+		var row: Array = []
+		for x in MAP_W:
+			row.append(GROUND if y < OUTDOOR_H else VOID)
+		_grid.append(row)
+
+	_build_facade(CAFE_EXT_RECT, CAFE_EXT_DOOR)     # 마을 야외 카페 외관(통과 불가 박스 + 문)
+	_build_room(CAFE_RECT, CAFE, CAFE_WALL, CAFE_DOOR)   # 실내 카페 방(앤틱 벽)
+	_carve_village_paths()                 # 마을 동선(서쪽 워프 가장자리 ~ 카페 문)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
 # 외부에서 보이는 건물 외관 — 통과 불가 박스(WALL)로 채우고 문 한 칸만 PATH로 뚫는다. 그 문 칸에
@@ -712,18 +740,26 @@ func _build_room(rect: Rect2i, floor_id: int, wall_id: int, door: Vector2i) -> v
 	_set_tile(door.x, door.y, floor_id)
 
 func _carve_paths() -> void:
-	# 동선 허브: 가로 복도(y=16)가 집·밭·카페를 잇고, 도착 지점에서 올라온다.
+	# 동선 허브: 가로 복도(y=16)가 집·밭을 잇고, 도착 지점에서 올라온다.
 	# M1.3 — 복도를 동쪽 끝(x=38, 경계벽 x=39 직전)까지 이어, 그 가장자리 칸이 나루 마을로 가는
 	# 길 워프 발동 칸(RegionCatalog.HOME warps.at)이 되게 한다(스타듀식 가장자리/길 워프).
+	# ★ M1.4 — 카페가 마을로 이주해 카페 문 동선(예전 x=33 세로 길)은 안식 농원에서 사라졌다.
 	for x in range(4, 39):
 		_set_tile(x, 16, PATH)                  # 가로 복도(동쪽 끝 = 마을 길 워프)
 	for y in range(17, 22):
 		_set_tile(20, y, PATH)                  # 도착(20,21) → 복도
 	for y in range(10, 16):
 		_set_tile(6, y, PATH)                   # 집 문 → 복도
-	for y in range(11, 16):
-		_set_tile(33, y, PATH)                  # 카페 문 → 복도
 	_set_tile(20, 15, PATH)                     # 밭 아래 → 복도
+
+# ★ M1.4 — 나루 마을 그레이박스 동선. 서쪽 워프 가장자리(1,16 = 안식 농원으로 돌아가는 길
+# 워프 발동 칸)에서 가로 복도로 카페 외관 문(33,10)까지 잇는다. 안식 농원에서 도착하는 칸
+# (spawn 3,16)도 이 복도 위라 도착하자마자 카페로 걸어갈 수 있다(최소 마을 = 카페 + 워프).
+func _carve_village_paths() -> void:
+	for x in range(1, 34):
+		_set_tile(x, 16, PATH)                  # 가로 복도(서쪽 워프 가장자리 ~ 카페 기둥)
+	for y in range(11, 16):
+		_set_tile(33, y, PATH)                  # 카페 문(33,10) → 복도
 
 func _paint_grid() -> void:
 	# GROUND/PATH/SOIL은 terrain별 칸을 모아 corner 오토타일로 칠하고(경계·모서리
@@ -766,9 +802,18 @@ func _paint_grid() -> void:
 # ── 구역 라벨(월드 좌표, 카메라 따라 스크롤) ──────────────────────────────
 func _place_labels() -> void:
 	# 집·카페는 도트 외관(간판·건물 형태)으로 식별되므로 라벨을 빼고, 아직 그레이박스인
-	# 밭·도착만 라벨로 남긴다(외관 위 텍스트 중복 제거).
-	_add_label("밭", _rect_center_px(FARM_RECT))
-	_add_label("도착", Vector2(SPAWN_TILE.x * TILE + TILE * 0.5, (SPAWN_TILE.y - 1) * TILE))
+	# 밭·도착·구역 동선 안내만 라벨로 남긴다(외관 위 텍스트 중복 제거).
+	# ★ M1.4 — 구역마다 자기 라벨만 깐다(_rebuild_region이 전환 시 _clear_labels로 걷어낸다).
+	match _region:
+		RegionCatalog.HOME:
+			_add_label("밭", _rect_center_px(FARM_RECT))
+			_add_label("도착", Vector2(SPAWN_TILE.x * TILE + TILE * 0.5, (SPAWN_TILE.y - 1) * TILE))
+			# 동쪽 복도 끝(38,16) 길 워프 안내 — 마을로 가는 길임을 그레이박스로 일러둔다.
+			_add_label("나루 마을 →", _tile_center_px(Vector2i(36, 15)))
+		RegionCatalog.NARU_VILLAGE:
+			# 마을 도착 칸(spawn 3,16) 위에 구역명, 서쪽 워프 가장자리에 농원으로 돌아가는 길 안내.
+			_add_label("나루 마을", _tile_center_px(Vector2i(3, 14)))
+			_add_label("← 안식 농원", _tile_center_px(Vector2i(3, 15)))
 
 func _add_label(text: String, center_px: Vector2) -> void:
 	var lbl := Label.new()
@@ -798,8 +843,9 @@ func _setup_player_and_camera() -> void:
 
 # 카메라 경계를 현재 모드(_indoor)에 맞춘다. 외부는 현재 구역(_region) 전체, 실내는 그 방 둘레만
 # 비춘다 — 실내 모드에선 카메라가 방 밖(외부·다른 방·경계벽)을 비추지 못해 "건물 안"이 격리된다(방 밖은 VOID 검정).
-# M1.2 — 외부(구역 레벨) 경계는 RegionCatalog.size_of(_region)에서 파생한다(홈베이스 40×24
-# = MAP_W×OUTDOOR_H, 기존과 동일). 집/카페 실내는 홈베이스 sub라 여전히 방 둘레 rect로 격리(M1.4 이주 전까지).
+# M1.2 — 외부(구역 레벨) 경계는 RegionCatalog.size_of(_region)에서 파생한다(안식 농원·나루 마을
+# 둘 다 40×24 = MAP_W×OUTDOOR_H). 집(안식 농원)·카페(나루 마을) 실내는 방 둘레 rect(HOUSE/
+# CAFE_CAM_RECT)로 격리한다 — 좌표가 두 구역에서 같아 _indoor 모드만으로 갈라도 안전하다(★ M1.4).
 func _apply_camera_limits() -> void:
 	var r := Rect2i(Vector2i.ZERO, RegionCatalog.size_of(_region))   # 외부 = 현재 구역 전체
 	if _indoor == "집":
@@ -813,16 +859,23 @@ func _apply_camera_limits() -> void:
 
 # ── P2.3③ 밤 라이팅 ────────────────────────────────────────────────────────
 # CanvasModulate(화면 색조) + 소울 등불 자리 빛웅덩이를 월드 캔버스에 붙인다. 등불 위치는
-# PROP_LAYOUT과 같은 LANTERN_TILES에서 픽셀 중심으로 환산해 그림과 빛을 한 자리에 둔다.
-# 첫 색조는 즉시 적용해 부팅 첫 프레임부터 시각에 맞는 톤이 뜨게 한다(로드 후도 _process가 잇는다).
+# 현재 구역의 LANTERN_TILES_*(가구 그리기와 같은 출처)에서 픽셀 중심으로 환산해 그림과 빛을 한
+# 자리에 둔다(★ M1.4 — 구역별 등불). 첫 색조는 즉시 적용해 부팅 첫 프레임부터 시각에 맞는 톤이 뜬다.
 func _setup_lighting() -> void:
 	lighting = DayNightLighting.new()
 	add_child(lighting)
+	_setup_region_lamps()
+	lighting.apply(clock.minutes)
+
+# ★ M1.4 — 현재 구역(_region)의 등불 자리만 빛웅덩이로 깐다(카페 이주로 등불이 구역마다 갈렸다).
+# lighting.setup이 멱등이라(이전 등불 거두고 새로 깖) 구역 전환(_rebuild_region)마다 다시 부른다 —
+# 안식 농원에선 길가 등불만, 나루 마을에선 카페 등불만 켜져 다른 구역 등불이 떠다니지 않는다.
+func _setup_region_lamps() -> void:
+	var tiles := LANTERN_TILES_HOME if _region == RegionCatalog.HOME else LANTERN_TILES_CAFE
 	var lamp_px := PackedVector2Array()
-	for t in LANTERN_TILES:
+	for t in tiles:
 		lamp_px.append(_tile_center_px(t))
 	lighting.setup(lamp_px)
-	lighting.apply(clock.minutes)
 
 # ── P2.6 사운드 ────────────────────────────────────────────────────────────
 # 오디오 노드를 코드로 붙이고(라이팅과 같은 결), 현재 시각에 맞는 BGM을 즉시 깐다.
@@ -965,15 +1018,28 @@ func _transition_to(new_indoor: String, dest_tile: Vector2i) -> void:
 # M1.3 — 구역 전환 시 새 구역을 메모리에 빌드한다(M1.2 구현 (b): 현재 구역만 메모리, 전환 시 재빌드).
 # 이전 구역의 타일·라벨을 걷어낸 뒤 _build/_paint/_place로 새로 깐다. 플레이어 위치·카메라는
 # _warp이 이어서 잡는다(여기선 월드만 다시 세운다). fade가 덮은 어두운 순간에 호출돼 안 보인다.
-# ★ M1.3에선 이웃이 다 stub이라 인게임에서 이 경로를 타지 않는다(가장자리 워프가 휴면 — 회귀 0).
-#   세이브·NPC 재배치는 범위 밖(M1.4 카페 이주·M1.5 세이브) — 여기는 그리드/페인트/라벨만 일반화.
+# ★ M1.4 — 카페 이주로 이 경로가 인게임에서 살았다(안식 농원↔나루 마을 길 워프). 그리드·페인트·
+#   라벨에 더해 (1) 밭 오버레이(field_layer)를 비웠다가 안식 농원으로 돌아오면 다시 칠하고,
+#   (2) 등불을 현재 구역 자리로 다시 깐다 — 다른 구역의 작물·고랑·등불이 떠다니지 않게 한다.
+#   NPC 가시성은 시각·구역에서 매 프레임 파생되므로(_update_miho_station 등) 여기서 손대지 않는다.
 func _rebuild_region(to_region: String) -> void:
 	_region = to_region
 	ground.clear()
+	field_layer.clear()                # 밭 오버레이는 안식 농원 전용 — 구역 전환 시 비운다
 	_clear_labels()
 	_build_grid()
 	_paint_grid()
 	_place_labels()
+	_setup_region_lamps()              # 등불을 현재 구역 자리로 다시 깐다(멱등)
+	if to_region == RegionCatalog.HOME:
+		_repaint_field_overlays()      # 안식 농원으로 복귀 → 밭 고랑·작물 오버레이 복원
+
+# ★ M1.4 — 경작된 칸의 밭 오버레이(고랑·젖음·성장단계)를 field_layer에 다시 칠한다. 구역을
+# 오갈 때 field_layer를 비웠으므로(다른 구역에 떠다니지 않게), 안식 농원으로 돌아오면 farm
+# 상태에서 오버레이를 재구성한다(_load_game이 칸마다 tile_changed로 칠하는 것과 같은 결).
+func _repaint_field_overlays() -> void:
+	for t in farm.tilled_tiles():
+		_on_tile_changed(t)
 
 # 취침 가능 조건: 집 구역 안 + 연출 중이 아님. 그레이박스라 침대 오브젝트 없이
 # '집에 있으면 잘 수 있다'로 단순화한다(에셋·가구는 Phase 2).
@@ -1541,11 +1607,18 @@ func _maybe_start_intro() -> void:
 # 자리를 옮긴다(하루 1회 전환 — 직원이 오후 카페에 모이는 무대, ADR-0007). 칸이 실제로
 # 바뀔 때만 위치를 옮긴다(매 프레임 호출되지만 전환은 하루 한 번뿐). 위치는 main이
 # 소유하므로(미호 메모) 여기서 칸을 정하고, facing/농사 제외는 _miho_tile을 따라간다.
+# T5.6/★M1.4 — 미호 출퇴근이 구역 경계를 넘는다: 아침엔 안식 농원 밭(MIHO_FIELD_TILE), 영업
+# 시작(15시)부터 나루 마을 카페(MIHO_CAFE_TILE). 두 자리가 서로 다른 구역이라, 위치 갱신에 더해
+# *가시성*도 구역으로 가른다 — 플레이어가 미호와 같은 구역에 있을 때만 보인다(밭 자리는 농원,
+# 카페 자리는 마을). 이 게이팅이 없으면 마을 야외(밭 좌표와 겹침)에 미호가 떠 보인다. 위치는
+# 항상 현재 station 칸 중앙으로 둔다(세이브 무상태 — 헤드리스 테스트가 위치/칸으로 검증).
 func _update_miho_station() -> void:
 	var t := MIHO_CAFE_TILE if clock.minutes >= Cafe.OPEN_MIN else MIHO_FIELD_TILE
 	if t != _miho_tile:
 		_miho_tile = t
 		miho.position = _tile_center_px(_miho_tile)
+	var miho_region := RegionCatalog.NARU_VILLAGE if _miho_tile == MIHO_CAFE_TILE else RegionCatalog.HOME
+	miho.visible = _region == miho_region
 
 # 옥자 상주: 오프닝 통보를 마친 뒤(NOTICE 단계를 지남)엔 카페 상주 자리에 드러낸다(매일
 # 보는 사장 — 풀 관계 트랙 없음, ADR-0005). 통보 단계(또는 세이브 없는 신규 시작)면 통보
@@ -1960,13 +2033,22 @@ func _overlay_index(t: Vector2i) -> int:
 # 대상 칸 강조 커서(흰 1px 테두리) + T5.4 카페 손님·인내심 바. main은 원점 0,0이라
 # 그리기 좌표 = 타일 픽셀(미호·멜은 자기 Node2D에서 그리지만, 손님은 일시적이라 main이
 # 좌석 칸에 직접 그린다 — 노드 생성·해제 없이 그레이박스로 가볍게).
+# ★ M1.4 — 구역별로 그린다. 안식 농원=집 외관·집 가구·밭 작물 / 나루 마을=카페 외관·카페 가구·
+# 카페 손님·잡귀. 두 구역이 좌표 범위를 공유해(같은 그리드 크기) 다른 구역 그림이 떠다니지
+# 않게 현재 구역(_region) 것만 그린다. 카페 손님/잡귀는 카페 실내 칸(y38~47)이라 마을 야외
+# 카메라엔 어차피 안 들지만(실내 카메라에서만 보임), 명시적으로 갈라 그리기를 단순하게 한다.
 func _draw() -> void:
-	_draw_facades()          # 외부 건물 외관(WALL 박스 위에 덮어 닫힌 건물로)
-	_draw_props()            # 가구·장식을 맨 먼저 → 캐릭터·손님이 그 위에 올라온다
-	_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
-	_draw_customers()
-	_draw_night_customers()
-	_draw_jobgui()
+	match _region:
+		RegionCatalog.HOME:
+			_draw_facade_home()      # 집 외관(WALL 박스 위에 덮어 닫힌 건물로)
+			_draw_props_for(PROP_LAYOUT_HOME)  # 집 가구·길가 등불·화분
+			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
+		RegionCatalog.NARU_VILLAGE:
+			_draw_facade_cafe()      # 카페 외관
+			_draw_props_for(PROP_LAYOUT_CAFE)  # 카페 무대 가구·카페 등불
+			_draw_customers()
+			_draw_night_customers()
+			_draw_jobgui()
 	if not _target_valid:
 		return
 	var p := Vector2(_target.x * TILE, _target.y * TILE)
@@ -1990,12 +2072,18 @@ func _draw_crops() -> void:
 # 외부 건물 외관을 외관 박스 좌상단에 1:1로 그린다(이미지 크기 = 박스 크기). 통과 불가 WALL
 # 박스를 도트 외관이 덮어 "닫힌 건물"이 되고, 문 칸(외관 하단 중앙)에 닿으면 실내로 fade 전환한다.
 # 실내 모드에선 외관 자리(외부)가 카메라 밖이라 그려져도 보이지 않는다.
-func _draw_facades() -> void:
+# ★ M1.4 — 외관을 구역별로 갈라 그린다(집=안식 농원, 카페=나루 마을). 카페 이주로 카페 외관은
+# 더는 안식 농원에 없고 나루 마을 야외에만 선다.
+func _draw_facade_home() -> void:
 	draw_texture_rect(FACADE_HOUSE, Rect2(Vector2(HOUSE_EXT_RECT.position * TILE), FACADE_HOUSE.get_size()), false)
+
+func _draw_facade_cafe() -> void:
 	draw_texture_rect(FACADE_CAFE, Rect2(Vector2(CAFE_EXT_RECT.position * TILE), FACADE_CAFE.get_size()), false)
 
-func _draw_props() -> void:
-	for entry in PROP_LAYOUT:
+# ★ M1.4 — 넘겨받은 가구 배열(현재 구역 것)만 그린다. PROP_LAYOUT_HOME/PROP_LAYOUT_CAFE를
+# _draw가 구역에 맞춰 골라 넘긴다(다른 구역 가구가 떠다니지 않게).
+func _draw_props_for(layout: Array) -> void:
+	for entry in layout:
 		var tex: Texture2D = entry[0]
 		for t in entry[1]:
 			# ADR-0013: 가구 아트도 32px native라 1:1로 그린다(스툴 32×32=1칸, 침대 32×64=1×2칸).
@@ -2069,12 +2157,19 @@ func _rect_center_px(rect: Rect2i) -> Vector2:
 	return Vector2((rect.position.x + rect.size.x * 0.5) * TILE,
 		(rect.position.y + rect.size.y * 0.5) * TILE)
 
+# ★ M1.4 — 구역 인지: 카페가 나루 마을로 이주해, 집·밭은 안식 농원에서만·카페는 나루 마을에서만
+# 구역으로 읽힌다. 두 구역이 같은 그리드 크기(40×52)를 써 좌표 범위가 겹치므로(예: 밭 y4~14가
+# 마을 야외와 겹침), 단순 Rect 판정이 아니라 현재 구역(_region)으로 먼저 가른다. 카페 실내 칸은
+# 마을에서만 도달 가능하고, 집·밭은 농원에서만 도달 가능하다(실내 방·외관이 그 구역에만 지어짐).
 func _zone_at(px: Vector2) -> String:
 	var t := Vector2i(int(px.x) / TILE, int(px.y) / TILE)
-	if HOUSE_RECT.has_point(t):
-		return "집"
-	if FARM_RECT.has_point(t):
-		return "밭"
-	if CAFE_RECT.has_point(t):
-		return "카페"
+	match _region:
+		RegionCatalog.HOME:
+			if HOUSE_RECT.has_point(t):
+				return "집"
+			if FARM_RECT.has_point(t):
+				return "밭"
+		RegionCatalog.NARU_VILLAGE:
+			if CAFE_RECT.has_point(t):
+				return "카페"
 	return "바깥"

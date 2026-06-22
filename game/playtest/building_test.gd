@@ -48,8 +48,17 @@ func _initialize() -> void:
 	_check("③ 실내 집 문에 닿으면 바깥으로 전환", main._indoor == "")
 	_check("③b 플레이어가 외관 집 문 앞으로", main._player_tile() == main.HOUSE_OUT_TILE)
 	_check("③c 카메라 외부 복귀", main._cam.limit_bottom == out_bottom)
+	# 집(안식 농원)에 있는 동안 외관 집 자리가 통과 불가(WALL)인지 본다 — 카페는 마을로 이주했으니
+	# 안식 농원에선 집 외관만 검사한다(★ M1.4).
+	_check("③d 외관 집 자리는 통과 불가(문 외 WALL)", main._grid[main.HOUSE_EXT_RECT.position.y][main.HOUSE_EXT_RECT.position.x] == main.WALL)
 
-	# ── 카페: 외관 문 진입 → 실내 ──
+	# ── ★ M1.4: 카페는 나루 마을에 있다 — 안식 농원 동쪽 가장자리(38,16)에서 마을로 길 워프 ──
+	main.player.position = main._tile_center_px(Vector2i(38, 16))
+	main._maybe_warp_edge()
+	await _settle()
+	_check("④pre 동쪽 가장자리에서 나루 마을로 워프", main._region == RegionCatalog.NARU_VILLAGE)
+
+	# ── 카페(나루 마을): 외관 문 진입 → 실내 ──
 	main.player.position = main._tile_center_px(main.CAFE_EXT_DOOR)
 	main._maybe_toggle_building()
 	await _settle()
@@ -65,8 +74,8 @@ func _initialize() -> void:
 	_check("⑤ 실내 카페 문에 닿으면 바깥으로 전환", main._indoor == "")
 	_check("⑤b 플레이어가 외관 카페 문 앞으로", main._player_tile() == main.CAFE_OUT_TILE)
 
-	# ── 외관 자리는 통과 불가(WALL), 실내 방 바깥은 VOID ──
-	_check("⑥ 외관 집 자리는 통과 불가(문 외 WALL)", main._grid[main.HOUSE_EXT_RECT.position.y][main.HOUSE_EXT_RECT.position.x] == main.WALL)
+	# ── 마을 외관 카페 자리는 통과 불가(WALL), 실내 방 바깥은 VOID ──
+	_check("⑥ 외관 카페 자리는 통과 불가(문 외 WALL)", main._grid[main.CAFE_EXT_RECT.position.y][main.CAFE_EXT_RECT.position.x] == main.WALL)
 	_check("⑥b 실내 구역 방 바깥은 VOID(검은 여백)", main._grid[main.OUTDOOR_H + 1][1] == main.VOID)
 
 	print("══ 결과: %s ══" % ("PASS (실패 0)" if _fail == 0 else "FAIL (실패 %d)" % _fail))

@@ -25,8 +25,9 @@ class_name RegionCatalog
 #     어느 구역과 이어지나"(to)만 실데이터였고, M1.3 워프 시스템이 각 구역이 *자기 쪽*에서
 #     아는 좌표(at = 이 구역 가장자리의 발동 칸)를 채운다. dest(도착 구역 안의 칸)는 그 구역이
 #     지어져야 정해지므로 해당 구역 빌드 시 채운다 — 미정이면 TILE_TBD, 워프 실행기가 목적
-#     구역의 기본 스폰으로 폴백한다. ★ M1.3 현재 실데이터는 홈베이스 at 하나뿐(나루 마을이
-#     아직 stub이라 그 워프는 휴면 — main `_maybe_warp_edge`의 is_built 가드. M1.4가 점등).
+#     구역의 기본 스폰으로 폴백한다. ★ M1.4 현재 실데이터 구역은 둘(홈베이스·나루 마을)이고,
+#     두 구역을 잇는 워프는 at·dest가 다 실좌표라 *살아 있다*. 나루 마을→갱도·삼도천은 목적지가
+#     아직 stub이라 휴면이다(main `_maybe_warp_edge`의 is_built 가드 — 그 구역 빌드 시 점등).
 
 # ── 구역 식별자(영문 id) ─────────────────────────────────────────────────────
 # id = 코드·세이브 키. 표시명은 CATALOG의 name_ko(CONTEXT 지리 용어).
@@ -64,24 +65,33 @@ const CATALOG := {
 		"spawn": Vector2i(20, 21),    # = main.SPAWN_TILE (도착 지점)
 		# 안식 농원 ──(길)── 나루 마을. at = 동쪽 가로 복도(y=16) 끝 칸(main `_carve_paths`가
 		# 동쪽 끝까지 길을 잇고, 그 가장자리 칸에 닿으면 워프 — 스타듀식 가장자리/길 워프).
-		# dest는 나루 마을이 지어지는 M1.4에서 채운다(지금은 TBD → 목적 구역 스폰 폴백).
-		# ★ 나루 마을이 아직 stub이라 이 워프는 휴면 상태다(is_built 가드, 회귀 0). M1.4가 점등.
+		# ★ M1.4: 나루 마을이 지어져 이 워프가 점등했다(is_built=true). dest = 마을 도착 칸(서쪽
+		# 복도, 마을 워프 가장자리 (1,16)에서 한 칸 안 — 즉시 재발동 방지). 두 구역 다 빌드라 실좌표.
 		"warps": [
-			{"to": NARU_VILLAGE, "at": Vector2i(38, 16), "dest": TILE_TBD},
+			{"to": NARU_VILLAGE, "at": Vector2i(38, 16), "dest": Vector2i(3, 16)},
 		],
 	},
-	# ── 이하 7개 = stub(아직 안 지어짐). size·spawn = ZERO, 토폴로지(to)만 실데이터 ──
+	# ── 나루 마을(M1.4 빌드 — 카페 이주) ─────────────────────────────────────────
+	# ★ M1.4: 두 번째 실데이터 구역. 안식 농원에서 검증된 카페(옥자·미호·멜·바나·서빙·정산·밤
+	#   바)를 이 마을로 옮겨 담는다("최소 그레이박스 마을 = 카페 + 워프만", 전체 레이아웃은 다음 묶음).
+	#   size = (40, 24)(안식 농원과 같은 외부 무대 크기 — 카메라 격리 seam, main.MAP_W×OUTDOOR_H).
+	#   spawn = (3, 16)(서쪽 복도, 안식 농원에서 도착하는 칸). 카페 내부 좌표는 안식 농원 시절과
+	#   동일하게 유지하고(좌표 대이동 최소화·회귀 0), 마을 그리드의 같은 칸(y38~47)에 카페 방을 둔다.
 	NARU_VILLAGE: {
 		"name_ko": "나루 마을",
-		"size": Vector2i.ZERO,
-		"spawn": Vector2i.ZERO,
-		# 허브 — 모든 길이 통과(world-map.md §2). 농원·갱도·삼도천과 이어진다.
+		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (안식 농원과 같은 외부 무대)
+		"spawn": Vector2i(3, 16),     # 서쪽 복도(안식 농원 → 마을 도착 칸)
+		# 허브 — 모든 길이 통과(world-map.md §2). 농원·갱도·삼도천과 이어진다. 마을이 지어졌으므로
+		# 자기 쪽 가장자리 발동 칸(at)은 셋 다 실좌표다(region.gd 설계: at = 이 구역이 지어지면 확정).
+		# dest는 *목적 구역*이 지어져야 정해진다 — 안식 농원만 빌드라 그쪽만 실좌표, 갱도·삼도천은
+		# 아직 stub이라 TBD(그 구역 빌드 시 확정). 갱도·삼도천 워프는 목적지 미빌드라 휴면이다.
 		"warps": [
-			{"to": HOME, "at": TILE_TBD, "dest": TILE_TBD},
-			{"to": EOPHWA_MINE, "at": TILE_TBD, "dest": TILE_TBD},
-			{"to": SAMDOCHEON, "at": TILE_TBD, "dest": TILE_TBD},
+			{"to": HOME, "at": Vector2i(1, 16), "dest": Vector2i(37, 16)},   # 서쪽 가장자리 → 안식 농원
+			{"to": EOPHWA_MINE, "at": Vector2i(38, 8), "dest": TILE_TBD},    # 동쪽(산길) — 휴면
+			{"to": SAMDOCHEON, "at": Vector2i(20, 1), "dest": TILE_TBD},     # 북쪽(나룻터) — 휴면
 		],
 	},
+	# ── 이하 6개 = stub(아직 안 지어짐). size·spawn = ZERO, 토폴로지(to)만 실데이터 ──
 	SAMDOCHEON: {
 		"name_ko": "삼도천",
 		"size": Vector2i.ZERO,

@@ -4,12 +4,12 @@ extends SceneTree
 # (_rebuild_region)를 헤드리스로 단언한다. RegionCatalog *데이터*는 world_test가 본다 —
 # 여기는 main이 그 데이터를 어떻게 *쓰는지*(동작)를 본다(building_test와 같은 결의 하네스).
 #
-# ★ M1.3 핵심 불변식: 이웃(나루 마을)이 아직 stub이라 모든 가장자리 워프는 *휴면*이다 —
-#   발동 칸에 닿아도 구역이 안 바뀐다(회귀 0). M1.4가 마을을 지으면 그 워프가 산다.
+# ★ M1.4 핵심 불변식: 나루 마을이 지어져(is_built) 안식 농원↔나루 마을 가장자리 워프가 *살았다* —
+#   발동 칸(38,16)에 닿으면 구역이 나루 마을로 전환되고 도착 칸(3,16)에 놓인다. 마을→갱도·삼도천은
+#   목적지가 아직 stub이라 휴면이다(M1.3에선 모든 워프가 휴면이었으나 M1.4가 첫 워프를 점등).
 #
 # 메모: _warp/_transition_to는 tween(실시간) 기반이라, 트리거 후 실제 시간이 흐를 때까지
-# 프레임을 돌려야 콜백(_indoor·텔레포트·카메라)이 끝난다(_settle). _rebuild_region·
-# _maybe_warp_edge(휴면)는 동기라 settle이 필요 없다.
+# 프레임을 돌려야 콜백(_region·_indoor·텔레포트·카메라)이 끝난다(_settle). _rebuild_region은 동기.
 # 실행: godot --headless --path game --script res://playtest/warp_test.gd
 
 var _fail := 0
@@ -42,11 +42,24 @@ func _initialize() -> void:
 	_check("② home 워프 발동 칸 = (38,16)", at == Vector2i(38, 16))
 	_check("②b 그 칸이 길(PATH — 걸어 닿을 수 있음)", main._grid[at.y][at.x] == main.PATH)
 
-	# ── ③ 가장자리 워프 휴면: 목적 구역(나루 마을)이 stub이라 발동 안 함(회귀 0) ──
+	# ── ③ 가장자리 워프 점등(M1.4): 발동 칸에 닿으면 나루 마을로 전환되고 도착 칸에 놓인다 ──
+	var dest: Vector2i = RegionCatalog.warps_of(RegionCatalog.HOME)[0]["dest"]
 	main.player.position = main._tile_center_px(at)
 	main._maybe_warp_edge()
-	_check("③ 발동 칸에 닿아도 구역 불변(나루 마을 미빌드 → 휴면)", main._region == RegionCatalog.HOME)
-	_check("③b 실내 모드도 불변", main._indoor == "")
+	await _settle()
+	_check("③ 발동 칸에 닿으면 나루 마을로 전환(워프 점등)", main._region == RegionCatalog.NARU_VILLAGE)
+	_check("③b 도착 칸(마을 스폰)에 놓임", main._player_tile() == dest)
+	_check("③c 전환 후 바깥(실내 아님)", main._indoor == "")
+	_check("③d 마을 카페 외관 문이 길(PATH — 카페 진입 가능)",
+		main._grid[main.CAFE_EXT_DOOR.y][main.CAFE_EXT_DOOR.x] == main.PATH)
+	# ── ③' 되돌아가기: 마을 서쪽 가장자리(1,16)에 닿으면 안식 농원으로 복귀(왕복 검증) ──
+	var back_at: Vector2i = RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE)[0]["at"]
+	var back_dest: Vector2i = RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE)[0]["dest"]
+	main.player.position = main._tile_center_px(back_at)
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③e 마을 서쪽 가장자리 → 안식 농원 복귀(왕복)", main._region == RegionCatalog.HOME)
+	_check("③f 복귀 도착 칸에 놓임", main._player_tile() == back_dest)
 
 	# ── ④ 워프 도착 칸 폴백 규칙(_warp_dest) ──
 	# dest 미정(TBD)이면 목적 구역 기본 스폰으로 폴백, 명시했으면 그 칸 그대로.

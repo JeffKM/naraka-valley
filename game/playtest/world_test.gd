@@ -32,28 +32,37 @@ func _initialize() -> void:
 	_check("②d home 스폰 = (20, 21)", RegionCatalog.spawn_of(RegionCatalog.HOME) == Vector2i(20, 21))
 	_check("②e home은 지어진 구역(is_built)", RegionCatalog.is_built(RegionCatalog.HOME))
 
-	# ── ③ 나머지 7개 = stub(아직 안 지어짐): size·spawn = ZERO, 표시명만 있음 ──
+	# ── ②' 나루 마을(M1.4 빌드 — 카페 이주) 실데이터·필드 정합 ──
+	# main.gd 외부 무대 크기(MAP_W 40 × OUTDOOR_H 24)·서쪽 복도 도착 칸(3,16)과 같은 seam.
+	_check("②f 나루 마을 표시명 = 나루 마을", RegionCatalog.name_of(RegionCatalog.NARU_VILLAGE) == "나루 마을")
+	_check("②g 나루 마을 크기 = (40, 24)", RegionCatalog.size_of(RegionCatalog.NARU_VILLAGE) == Vector2i(40, 24))
+	_check("②h 나루 마을 스폰 = (3, 16)", RegionCatalog.spawn_of(RegionCatalog.NARU_VILLAGE) == Vector2i(3, 16))
+	_check("②i 나루 마을은 지어진 구역(is_built)", RegionCatalog.is_built(RegionCatalog.NARU_VILLAGE))
+
+	# ── ③ 나머지 6개 = stub(아직 안 지어짐): size·spawn = ZERO, 표시명만 있음 ──
+	# ★ M1.4 — 빌드된 구역이 둘(안식 농원·나루 마을)로 늘어, 둘을 빼고 6개가 stub이다.
 	var stub_count := 0
 	for id in ids:
-		if id == RegionCatalog.HOME:
+		if id == RegionCatalog.HOME or id == RegionCatalog.NARU_VILLAGE:
 			continue
 		stub_count += 1
 		_check("③ '%s' stub size=ZERO" % id, RegionCatalog.size_of(id) == Vector2i.ZERO)
 		_check("③b '%s' stub spawn=ZERO" % id, RegionCatalog.spawn_of(id) == Vector2i.ZERO)
 		_check("③c '%s' stub 미빌드(is_built=false)" % id, not RegionCatalog.is_built(id))
 		_check("③d '%s' 표시명은 채워짐" % id, RegionCatalog.name_of(id) != "")
-	_check("③e stub은 정확히 7개", stub_count == 7)
-	# ★ 핵심 불변식: 지어진 구역은 홈베이스 하나뿐("빌드는 한 구역씩", ADR-0015).
+	_check("③e stub은 정확히 6개", stub_count == 6)
+	# ★ 핵심 불변식: 지어진 구역 = 안식 농원·나루 마을 둘("빌드는 한 구역씩", ADR-0015 — M1.4로 둘째 점등).
 	var built := ids.filter(func(id): return RegionCatalog.is_built(id))
-	_check("③f 지어진 구역 = home 하나뿐", built == [RegionCatalog.HOME])
+	_check("③f 지어진 구역 = home·나루 마을 둘", built == [RegionCatalog.HOME, RegionCatalog.NARU_VILLAGE])
 
 	# ── ④ 토폴로지(warps) 정합: world-map.md §2 구역 그래프 ──
 	# 워프의 to는 실재하는 구역이어야 하고, 토폴로지는 대칭(양방향)이어야 한다.
 	for id in ids:
 		for w in RegionCatalog.warps_of(id):
 			_check("④ '%s'→'%s' 목적 구역 실재" % [id, w["to"]], RegionCatalog.has_region(w["to"]))
-			# M1.3 — at(발동 칸)은 *이 구역*이 지어졌으면 실좌표(그 구역 size 범위 안), stub이면
-			# 아직 TBD다. dest(도착 칸)는 *목적 구역*이 지어져야 정해지므로 지금은 다 TBD다.
+			# at(발동 칸)은 *이 구역*이 지어졌으면 실좌표(그 구역 size 범위 안), stub이면 TBD.
+			# dest(도착 칸)는 *양 끝 구역이 다 지어져야* 정해진다 — 그래야 도착 칸이 목적 구역 안에
+			# 실재한다(★ M1.4: 안식 농원↔나루 마을 워프는 양끝 빌드라 dest 실좌표, 그 외는 TBD).
 			if RegionCatalog.is_built(id):
 				var sz := RegionCatalog.size_of(id)
 				var at: Vector2i = w["at"]
@@ -63,8 +72,15 @@ func _initialize() -> void:
 			else:
 				_check("④b '%s'→'%s' stub 구역 발동 칸 TBD" % [id, w["to"]],
 					w["at"] == RegionCatalog.TILE_TBD)
-			_check("④b'' '%s'→'%s' 도착 칸 TBD(목적 구역 빌드 시 확정)" % [id, w["to"]],
-				w["dest"] == RegionCatalog.TILE_TBD)
+			if RegionCatalog.is_built(id) and RegionCatalog.is_built(w["to"]):
+				var dsz := RegionCatalog.size_of(w["to"])
+				var dest: Vector2i = w["dest"]
+				_check("④b'' '%s'→'%s' 양끝 빌드 → 도착 칸 실좌표" % [id, w["to"]], dest != RegionCatalog.TILE_TBD)
+				_check("④b''' '%s'→'%s' 도착 칸이 목적 구역 범위 안" % [id, w["to"]],
+					dest.x >= 0 and dest.y >= 0 and dest.x < dsz.x and dest.y < dsz.y)
+			else:
+				_check("④b'' '%s'→'%s' 도착 칸 TBD(목적 구역 미빌드)" % [id, w["to"]],
+					w["dest"] == RegionCatalog.TILE_TBD)
 	# 대칭: A가 B를 이웃으로 두면 B도 A를 둔다(나락 제외 — 진입로 미정).
 	for id in ids:
 		for nb in RegionCatalog.neighbors(id):
