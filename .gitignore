@@ -18,3 +18,6 @@ shrimp_data/
 
 # Godot 임포트/캐시 (godot-sandbox, godot-tutorial 등 하위 프로젝트 공통)
 .godot/
+
+# Godot이 CSV를 번역 소스로 자동 임포트하며 생성하는 컴파일 산출물
+*.translation
