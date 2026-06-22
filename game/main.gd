@@ -183,14 +183,15 @@ const FACADE_BANA_HOUSE := preload("res://assets/buildings/bana_house_ext.png")
 # ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
 #   구석 하나. 구역마다 자기 등불만 켜지게(다른 구역 등불이 떠다니지 않게) 둘로 나눈다.
 const LANTERN_TILES_HOME := [Vector2i(12, 50), Vector2i(68, 50)]  # 안식 농원 길가(외부) ★C2: 80×65 메인 복도(y50) 양옆
-const LANTERN_TILES_CAFE := [Vector2i(18, 43)]                    # 나루 마을 카페 구석(실내)
+const LANTERN_TILES_CAFE := [Vector2i(18, 91)]                    # 나루 마을 카페 구석(실내) ★C3: +48
 # [텍스처, [놓을 타일들]]. 타일 좌표는 실내 레이아웃(직원 y40 / 카운터 y41 / 좌석 y42 /
 # 스폿 y44) 위에 얹어 "장소"로 읽히게 배치한다. 좌석 스툴 위에는 손님 박스가 덮여 그려진다.
 # ★ M1.4 — 카페 이주로 가구도 구역이 갈렸다: 안식 농원(집 가구·길가 등불·화분) / 나루 마을(카페
 #   무대 가구·카페 등불). _draw_props가 현재 구역(_region)의 배열만 그린다(다른 구역 가구가
 #   떠다니지 않게). 카페 내부 좌표는 안식 농원 시절과 동일하게 유지(좌표 대이동 최소화·회귀 0).
 # ★ C2 — HOME 집 실내가 HOME 밴드(y67+, outdoor_h 65 아래)로 내려가 가구도 +41(=65-24) 이동.
-# 마을 공유 집 가구(PROP_LAYOUT_VILLAGE_HOUSE)는 옛 띠(y26+) 그대로 — 마을 회귀 0.
+# ★ C3 — 마을이 100×72로 커져 마을 실내(카페·공유 집)도 마을 밴드(y72+ 아래)로 +48(=72-24) 이동.
+#   가구도 같은 +48 — 작동 검증된 카페/집 내부 레이아웃이 상대배치 그대로 내려간다(회귀 0).
 const PROP_LAYOUT_HOME := [
 	[PROP_RUG, [Vector2i(11, 71)]],                                                      # 집: 중앙 바닥 러그(맨 먼저 — 바닥)
 	[PROP_BED, [Vector2i(9, 68)]],                                                       # 집: 좌상단 침대
@@ -200,27 +201,30 @@ const PROP_LAYOUT_HOME := [
 	[PROP_LANTERN, LANTERN_TILES_HOME],                                                  # 안식 농원 길가 등불 둘
 	[PROP_POT, [Vector2i(18, 68), Vector2i(18, 74)]],                                    # 집 두 구석 혼령초 화분
 ]
+# ★C3 — 카페 실내가 마을 밴드(y86+)로 +48 평행이동(아래 CAFE_RECT 참조). 가구도 같은 +48이라
+#   작동 검증된 카페 내부 레이아웃이 상대 배치 그대로 내려간다(상대배치 무위험·회귀 0).
 const PROP_LAYOUT_CAFE := [
-	[PROP_COUNTER, [Vector2i(10, 41), Vector2i(11, 41), Vector2i(12, 41), Vector2i(13, 41), Vector2i(14, 41), Vector2i(15, 41), Vector2i(16, 41)]],  # 카페 바 카운터
-	[PROP_STOOL, [Vector2i(11, 42), Vector2i(14, 42), Vector2i(17, 42)]],                # 카페 좌석 스툴(= SEAT_TILES)
-	[PROP_SHELF, [Vector2i(11, 39), Vector2i(13, 39), Vector2i(15, 39)]],                # 카페 뒷벽 선반
-	[PROP_CLOCK, [Vector2i(9, 38)]],                                                     # 카페: 좌측 뒷벽 괘종시계
-	[PROP_FRAME, [Vector2i(10, 38), Vector2i(16, 38)]],                                  # 카페: 뒷벽 앤틱 액자 둘
-	[PROP_CABINET, [Vector2i(18, 38)]],                                                  # 카페: 우측 뒷벽 와인 캐비닛
-	[PROP_CAFE_TABLE, [Vector2i(11, 45), Vector2i(15, 45)]],                             # 카페: 하단 손님 테이블 둘
+	[PROP_COUNTER, [Vector2i(10, 89), Vector2i(11, 89), Vector2i(12, 89), Vector2i(13, 89), Vector2i(14, 89), Vector2i(15, 89), Vector2i(16, 89)]],  # 카페 바 카운터
+	[PROP_STOOL, [Vector2i(11, 90), Vector2i(14, 90), Vector2i(17, 90)]],                # 카페 좌석 스툴(= SEAT_TILES)
+	[PROP_SHELF, [Vector2i(11, 87), Vector2i(13, 87), Vector2i(15, 87)]],                # 카페 뒷벽 선반
+	[PROP_CLOCK, [Vector2i(9, 86)]],                                                     # 카페: 좌측 뒷벽 괘종시계
+	[PROP_FRAME, [Vector2i(10, 86), Vector2i(16, 86)]],                                  # 카페: 뒷벽 앤틱 액자 둘
+	[PROP_CABINET, [Vector2i(18, 86)]],                                                  # 카페: 우측 뒷벽 와인 캐비닛
+	[PROP_CAFE_TABLE, [Vector2i(11, 93), Vector2i(15, 93)]],                             # 카페: 하단 손님 테이블 둘
 	[PROP_LANTERN, LANTERN_TILES_CAFE],                                                  # 나루 마을 카페 구석 등불
 ]
 # ★ M2.2 — 나루 마을 메인/주민 집 실내는 안식 농원 집 가구를 *재사용*한다("기존 집 에셋 재사용",
 # residents.md). PROP_LAYOUT_HOME에서 외부 전용인 길가 등불(LANTERN_TILES_HOME)만 뺀 가구 묶음 —
 # 한 공유 집 방(HOUSE_RECT)에 그린다. 들어간 집 안일 때만 그린다(_is_in_house_interior). 점유자
 # (주민 NPC)는 후속 슬라이스에서 붙고, 그때 각 집이 자기 방을 가진다(ADR-0014 점진 추가).
+# ★C3 — 마을 공유 집 실내가 마을 밴드(y74+)로 +48 평행이동(아래 HOUSE_RECT 참조). 가구도 같은 +48.
 const PROP_LAYOUT_VILLAGE_HOUSE := [
-	[PROP_RUG, [Vector2i(11, 30)]],
-	[PROP_BED, [Vector2i(9, 27)]],
-	[PROP_FIREPLACE, [Vector2i(14, 27)]],
-	[PROP_BOOKSHELF, [Vector2i(16, 27)]],
-	[PROP_TABLE, [Vector2i(12, 30)]],
-	[PROP_POT, [Vector2i(18, 27), Vector2i(18, 33)]],
+	[PROP_RUG, [Vector2i(11, 78)]],
+	[PROP_BED, [Vector2i(9, 75)]],
+	[PROP_FIREPLACE, [Vector2i(14, 75)]],
+	[PROP_BOOKSHELF, [Vector2i(16, 75)]],
+	[PROP_TABLE, [Vector2i(12, 78)]],
+	[PROP_POT, [Vector2i(18, 75), Vector2i(18, 81)]],
 ]
 
 # ── 외부↔실내 분리(구역 사각형, 타일 좌표 Rect2i(x, y, 폭, 높이)) ─────────────
@@ -234,49 +238,54 @@ const PROP_LAYOUT_VILLAGE_HOUSE := [
 
 # 외부 외관. 통과 불가 박스 + 문 한 칸만 트리거. 집=안식 농원 / 카페=나루 마을(같은 칸 좌표 재사용).
 const HOUSE_EXT_RECT := Rect2i(3, 4, 7, 6)    # x3..9, y4..9 (안식 농원)
-# ★ M2.1 — 카페 외관을 나루 마을 *서편*으로 이전(world-map.md '서:카페·메인집'). 도착 칸
-#   (spawn 3,16) 바로 위라 도착하자마자 카페가 보이는 출근 동선. 실내 좌표(CAFE_RECT·NPC·좌석)는
-#   불변이라 카페 운영·시뮬은 회귀 0 — 바뀌는 건 외관 위치·문·동선뿐. 8×7 = FACADE_CAFE 아트 1:1.
-const CAFE_EXT_RECT := Rect2i(2, 3, 8, 7)    # x2..9, y3..9 (나루 마을 서편 상단)
-const HOUSE_EXT_DOOR := Vector2i(6, 9)    # 외관 집 문(닿으면 진입) — _carve_paths 동선과 연결
-const CAFE_EXT_DOOR := Vector2i(5, 9)     # 외관 카페 문(닿으면 진입, 아트 문 로컬 x3과 정렬) — _carve_village_paths 동선과 연결
+# ★ M2.1 — 카페 외관을 나루 마을 *서편*으로 이전(world-map.md '서:카페·메인집'). 도착 칸 바로 위라
+#   도착하자마자 카페가 보이는 출근 동선. 실내 좌표(CAFE_RECT·NPC·좌석)는 따로 +48 평행이동(아래
+#   ★C3)이라 카페 운영·시뮬은 회귀 0 — 바뀌는 건 외관 위치·문·동선뿐. 8×7 = FACADE_CAFE 아트 1:1.
+#   ★C3 — 100×72 코지-와이드: 외관을 서편 도착(3,36) 위쪽 x5..12 y25..31로 옮긴다(코지 여백).
+const CAFE_EXT_RECT := Rect2i(5, 25, 8, 7)    # x5..12, y25..31 (나루 마을 서편, 도착 동선 위)
+const HOUSE_EXT_DOOR := Vector2i(6, 9)    # 외관 집 문(닿으면 진입) — _carve_paths 동선과 연결(HOME)
+const CAFE_EXT_DOOR := Vector2i(8, 31)    # 외관 카페 문(닿으면 진입, 아트 문 로컬 x3=rect.x+3와 정렬) — _carve_village_paths 동선과 연결
 
 # ── ★ M2.1 나루 마을 허브 야외 건물(강+다리 동/서 분할 레이아웃) ───────────────────
 # 카페만 실내가 있고(M1.4 이주), 메인 집 3(미호·멜·바나)·만물상·주민 집은 이 슬라이스에선
 # 그레이박스 외관(통과 불가 WALL 박스 + 문 리세스 1칸) + 라벨이다. 실내·만물상 서비스·축제는
 # 후속 슬라이스(M2.2~). "기존 집 에셋 재사용 외관 재도색"(residents.md)도 후속 에셋 단계.
-# 강(WATER)이 x19·20 세로로 흐르며 마을을 서/동으로 가르고, 다리(y16 가로 복도)가 유일한 도하점.
-const RIVER_X := [19, 20]          # 강 세로 칸(WATER, 통과 X) — 동/서 분할
+# ★ ADR-0018 C3 — 100×72 코지-와이드: 강(WATER)이 x49·50 세로로 흐르며 마을을 서/동으로 가르고,
+#   다리(BRIDGE_Y 36 = 메인 가로 복도)가 유일한 도하점. 8채 외관을 넓은 무대에 코지하게 분산한다
+#   (서: 카페·미호·멜·바나 / 동: 만물상·주민집3). 건물 *크기*는 외관 아트 1:1이라 불변, *위치*만 펼침.
+const RIVER_X := [49, 50]          # 강 세로 칸(WATER, 통과 X) — 동/서 분할(맵 중앙)
 const RIVER_Y0 := 1                # 강 시작 y(맨 위 경계벽 바로 아래 — 북쪽 우회 도하 차단)
-const RIVER_Y1 := 22               # 강 끝 y
-const BRIDGE_Y := 16               # 다리 = 강 위 PATH 한 줄(가로 복도와 같은 줄 — 유일한 도하점)
-# 서편(도착·서워프 옆): 카페(위) + 메인 집 3(미호·멜·바나). 동선은 L자 허용(그레이박스).
-const MEL_HOUSE_RECT := Rect2i(12, 3, 5, 5)    # 멜 집 — 서편 상단 우
-const MEL_HOUSE_DOOR := Vector2i(14, 7)
-const MIHO_HOUSE_RECT := Rect2i(2, 11, 4, 4)   # 미호 집 — 서편 하단 좌
-const MIHO_HOUSE_DOOR := Vector2i(3, 14)
-const BANA_HOUSE_RECT := Rect2i(11, 11, 4, 4)  # 바나 집 — 서편 하단 우
-const BANA_HOUSE_DOOR := Vector2i(12, 14)
+const RIVER_Y1 := 70               # 강 끝 y(아래 경계벽 y71 바로 위 — 남쪽 우회 도하 차단)
+const BRIDGE_Y := 36               # 다리 = 강 위 PATH 한 줄(메인 가로 복도와 같은 줄 — 유일한 도하점)
+# 서편(도착·서워프 옆): 카페(도착 위, CAFE_EXT_RECT 위쪽 정의) + 메인 집 3(미호·멜·바나). 코지 여백으로 흩어 둔다.
+const MEL_HOUSE_RECT := Rect2i(20, 14, 5, 5)   # 멜 집 — 서편 상단 우
+const MEL_HOUSE_DOOR := Vector2i(22, 18)
+const MIHO_HOUSE_RECT := Rect2i(5, 44, 4, 4)   # 미호 집 — 서편 하단 좌
+const MIHO_HOUSE_DOOR := Vector2i(6, 47)
+const BANA_HOUSE_RECT := Rect2i(30, 44, 4, 4)  # 바나 집 — 서편 하단 우
+const BANA_HOUSE_DOOR := Vector2i(31, 47)
 # 동편(다리 건너): 만물상(상단 좌) + 주민 집 3(점진 추가의 시작 — 더 많은 주민 집은 후속).
-const STORE_EXT_RECT := Rect2i(23, 3, 6, 5)    # 만물상
-const STORE_EXT_DOOR := Vector2i(25, 7)
+const STORE_EXT_RECT := Rect2i(58, 14, 6, 5)   # 만물상
+const STORE_EXT_DOOR := Vector2i(60, 18)
 const RESIDENT_HOUSE_RECTS := [
-	Rect2i(31, 3, 5, 4),   # 주민 집 1 — 동편 상단 우
-	Rect2i(23, 11, 4, 4),  # 주민 집 2 — 동편 하단 좌
-	Rect2i(32, 11, 4, 4),  # 주민 집 3 — 동편 하단 우
+	Rect2i(80, 14, 5, 4),  # 주민 집 1 — 동편 상단 우
+	Rect2i(58, 44, 4, 4),  # 주민 집 2 — 동편 하단 좌
+	Rect2i(82, 44, 4, 4),  # 주민 집 3 — 동편 하단 우
 ]
-const RESIDENT_HOUSE_DOORS := [Vector2i(33, 6), Vector2i(24, 14), Vector2i(33, 14)]
+const RESIDENT_HOUSE_DOORS := [Vector2i(82, 17), Vector2i(59, 47), Vector2i(83, 47)]
 
 # 실내 방(맵 아래 별도 구역, 외부와 멀리 떨어져 카메라로 격리). 넓게 잡아 방 안을 돌아다닐 공간을 둔다.
-const HOUSE_RECT := Rect2i(8, 26, 12, 9)    # x8..19,  y26..34 (★C2 이후 = 마을 공유 집 6채 전용. HOME 집은 HOME_HOUSE_RECT)
-const CAFE_RECT := Rect2i(8, 38, 13, 10)    # x8..20,  y38..47 (카페 실내 13×10)
-const HOUSE_DOOR := Vector2i(13, 34)        # 실내 집 문(닿으면 퇴장) — 아래벽 중앙
-const CAFE_DOOR := Vector2i(14, 47)         # 실내 카페 문 — 아래벽 중앙
+# ★C3 — 마을 공유 집·카페 실내를 마을 밴드(y72+)로 +48 평행이동(마을 전용 상수라 in-place 이동 —
+#   다른 구역 MUSEUM/SMITHY/GUILD는 별도 상수라 무관). 방 크기·문·내부 레이아웃 보존, y만 띠 아래로.
+const HOUSE_RECT := Rect2i(8, 74, 12, 9)    # x8..19,  y74..82 (마을 공유 집 6채 전용. HOME 집은 HOME_HOUSE_RECT)
+const CAFE_RECT := Rect2i(8, 86, 13, 10)    # x8..20,  y86..95 (카페 실내 13×10)
+const HOUSE_DOOR := Vector2i(13, 82)        # 실내 집 문(닿으면 퇴장) — 아래벽 중앙
+const CAFE_DOOR := Vector2i(14, 95)         # 실내 카페 문 — 아래벽 중앙
 
 # 진입/퇴장 텔레포트 칸. 워프 직후 같은 프레임에 재트리거되지 않게 문 칸 자체가 아니라
 # 한 칸 안/밖에 내려놓는다(실내=문 위, 외부=문 아래).
-const HOUSE_IN_TILE := Vector2i(13, 33)     # 실내 집 문 안쪽
-const CAFE_IN_TILE := Vector2i(14, 46)      # 실내 카페 문 안쪽
+const HOUSE_IN_TILE := Vector2i(13, 81)     # 실내 집 문 안쪽 (+48)
+const CAFE_IN_TILE := Vector2i(14, 94)      # 실내 카페 문 안쪽 (+48)
 const HOUSE_OUT_TILE := HOUSE_EXT_DOOR + Vector2i(0, 1)  # 외관 집 문 앞 (6,10) — HOME 집 외관(NW)
 const CAFE_OUT_TILE := CAFE_EXT_DOOR + Vector2i(0, 1)    # 외관 카페 문 앞 (5,10) — 서편 카페 동선
 
@@ -299,17 +308,17 @@ const SPAWN_TILE := Vector2i(40, 60)       # 도착 지점(남단 중앙)
 # 실내 모드 카메라 경계(타일). 각 방을 비추되 외부·다른 방·경계벽이 화면에 들어오지 않게 잡는다.
 # 폭 20타일 = 화면폭이라 가로는 고정되고, 세로만 방을 따라 스크롤한다. 방 밖은 VOID(검정).
 # 외부 모드 경계는 Rect2i(0, 0, MAP_W, OUTDOOR_H)로 코드에서 만든다(아래 실내 구역 제외).
-const HOUSE_CAM_RECT := Rect2i(2, 24, 20, 13)   # 집 방(x8..19 y26..34) 둘레 — ★C2 이후 = 마을 공유 집 전용(HOME=HOME_HOUSE_CAM_RECT)
-const CAFE_CAM_RECT := Rect2i(2, 37, 20, 13)    # 카페 방(x8..20 y38..47) 둘레
+const HOUSE_CAM_RECT := Rect2i(2, 72, 20, 13)   # 집 방(x8..19 y74..82) 둘레 — ★C3 +48(마을 공유 집 전용, HOME=HOME_HOUSE_CAM_RECT)
+const CAFE_CAM_RECT := Rect2i(2, 85, 20, 13)    # 카페 방(x8..20 y86..95) 둘레 — ★C3 +48
 # ── ★ M2.2 만물상 실내 방 ───────────────────────────────────────────────────
 # 집 방(HOUSE_RECT, x8..19) *옆* 칸(x23..32, 같은 y26..34 띠)에 둔다 — 세로 스택 대신 가로 배치라
 # MAP_H를 안 늘리고도(warp_test의 grid 크기 불변식 유지) 만물상 전용 방을 추가한다. 집(HOUSE) 대신
 # 카페(CAFE) 타일을 깔아 6채 메인/주민 집(아늑한 청회)과 시각으로 구분한다(상업 톤). 만물상 *서비스*
 # (점주 T2·매대)는 다음 슬라이스 — 이 슬라이스에선 enterable graybox 방까지만.
-const STORE_RECT := Rect2i(23, 26, 10, 9)       # x23..32, y26..34 (집 방 옆, 같은 띠)
-const STORE_DOOR := Vector2i(27, 34)            # 실내 만물상 문(닿으면 퇴장) — 아래벽
-const STORE_IN_TILE := Vector2i(27, 33)         # 실내 만물상 문 안쪽(진입 착지)
-const STORE_CAM_RECT := Rect2i(21, 24, 14, 13)  # 만물상 방 둘레(집 방 x2..21·카페 y37..과 안 겹침)
+const STORE_RECT := Rect2i(23, 74, 10, 9)       # x23..32, y74..82 (집 방 옆, 같은 띠) — ★C3 +48
+const STORE_DOOR := Vector2i(27, 82)            # 실내 만물상 문(닿으면 퇴장) — 아래벽 (+48)
+const STORE_IN_TILE := Vector2i(27, 81)         # 실내 만물상 문 안쪽(진입 착지) (+48)
+const STORE_CAM_RECT := Rect2i(21, 72, 14, 13)  # 만물상 방 둘레(집 방 x2..21·카페 y85..과 안 겹침) — ★C3 +48
 # ── ★ 안식 농원 확장 — 창고(enterable 그레이박스 방) ─────────────────────────
 # HOME 외부 동편(카페 이주로 비워진 x30..35 y4..9)에 창고 외관을 세우고, 실내 띠 동편
 # (x23..32 y38..46 — 카페 방 x8..20·만물상 방 y26..34과 안 겹침)에 들어갈 수 있는 빈 방을 둔다.
@@ -468,42 +477,42 @@ const MIHO_FIELD_TILE := Vector2i(40, 30)   # ★C2: 중앙 대형 밭(24,19,32,
 # T5.6 미호 카페 출근 자리 — 카페 뒷벽 줄(y=5)에서 멜(33,5) 오른쪽. 영업 시작(15시)부터
 # 미호가 여기로 출근해 직원이 오후 카페에 모이는 무대를 만든다(ADR-0007). 카페 바닥이라
 # 농사 대상이 아니고(밭과 안 겹침), 좌석(y=7)·문(33,10)·멜·옥자 칸과도 갈린다.
-const MIHO_CAFE_TILE := Vector2i(15, 40)   # 카페 직원 줄(y40), 멜 오른쪽
+const MIHO_CAFE_TILE := Vector2i(15, 88)   # 카페 직원 줄(y88, ★C3 +48), 멜 오른쪽
 # T4.1 옥자가 오프닝 통보 때 서는 칸 — 스폰(20,21) 바로 위. 도착하자마자 옥자를 마주본다.
 # 통보가 끝나면 옥자는 이 자리에서 사라지고 카페(OKJA_CAFE_TILE)로 상주를 옮긴다(T5.6).
 const OKJA_INTRO_TILE := Vector2i(20, 20)
 # T5.6 옥자 카페 상주 자리 — 카페 뒷벽 줄(y=5)에서 멜(33,5) 왼쪽. 통보를 마친 뒤(NOTICE
 # 단계 지남) 여기로 옮겨 매일 보는 사장이 된다(풀 관계 트랙 없음, ADR-0005). 멜(33,5)·
 # 미호 출근 자리(35,5)와 한 줄에 나란히 서고, 좌석·문 동선과는 칸이 갈린다.
-const OKJA_CAFE_TILE := Vector2i(10, 40)   # 카페 직원 줄(y40), 멜 왼쪽
+const OKJA_CAFE_TILE := Vector2i(10, 88)   # 카페 직원 줄(y88, ★C3 +48), 멜 왼쪽
 # T5.1 멜이 서 있는 칸 — 카페 안 뒷벽 가운데(카운터 자리). 카페 문(33,10)으로 들어와
 # 위로 올라오면 바로 멜을 마주본다. 카페 바닥이라 농사 대상이 아니고(밭과 안 겹침),
 # 카페 출하대(T3.1)도 멜이 카운터 얼굴이라 멜을 바라볼 때만 연다(T5.3 — 무인 카운터
 # 제거, 멜 앞에서 E=대화·F=출하대·G=선물 세 동사를 한 접점으로 통합).
-const MEL_TILE := Vector2i(13, 40)   # 카페 직원 줄(y40) 가운데(카운터 얼굴)
+const MEL_TILE := Vector2i(13, 88)   # 카페 직원 줄(y88, ★C3 +48) 가운데(카운터 얼굴)
 # T5.4 카페 손님 좌석 칸 — 카페 안 한 줄(멜 카운터 33,5 아래). 손님이 여기 앉고,
 # 플레이어가 아래 칸(y=8)에 서서 위를 바라보며 E로 서빙한다. 카페 바닥이라 농사 대상이
 # 아니고(밭과 안 겹침), 멜·문 동선과도 칸이 갈린다. 인덱스 = Cafe._seats 인덱스(좌석 0..2).
-const SEAT_TILES := [Vector2i(11, 42), Vector2i(14, 42), Vector2i(17, 42)]   # 카페 좌석 줄(y42)
+const SEAT_TILES := [Vector2i(11, 90), Vector2i(14, 90), Vector2i(17, 90)]   # 카페 좌석 줄(y90, ★C3 +48)
 const CUST := Color(0.55, 0.42, 0.50)  # 손님 그레이박스(회색 기조 + 옅은 자줏빛, NPC들과 구분)
 # T6.1 바나가 서는 밤 무대 칸 — 카페 뒷벽 직원 줄(옥자31·멜33·미호35,5) 맨 오른쪽 끝(미호
 # 옆, x37은 벽). 바나는 밤(빈 밤 슬롯 19시=Cafe.CLOSE_MIN)에만 드러나는 밤 무대 호스트라
 # (미호 출퇴근·옥자 상주 station 패턴) 낮엔 숨고 밤에만 보인다. 카페 바닥이라 농사 대상이
 # 아니고(밭과 안 겹침), 좌석(y=7)·문(33,10)·다른 직원 칸과도 칸이 갈린다. 밤 영업창
 # 옵트인(T6.3)·막기(T6.4)는 범위 밖 — T6.1은 배치 + 대사 텍스트박스만(ADR-0006 그레이박스 최소).
-const BANA_NIGHT_TILE := Vector2i(17, 40)   # 카페 직원 줄(y40) 오른쪽 끝(밤 무대)
+const BANA_NIGHT_TILE := Vector2i(17, 88)   # 카페 직원 줄(y88, ★C3 +48) 오른쪽 끝(밤 무대)
 # T6.3 잡귀가 깃드는 밤 스폿 칸 — 카페 안 앞줄(문 33,10 안쪽 y=9), 밤에 바를 열면 잡귀가
 # 여기 기어든다. 카페 좌석(y=7)·직원 줄(y=5)과 칸이 갈리고(낮 카페와 시간도 갈림 — 카페
 # 15–19시 마감 후 밤 19–24시), 카페 바닥이라 농사 대상이 아니다(밭과 안 겹침). 인덱스 =
 # NightBar._spots 인덱스(스폿 0..2). 막기 E·이중 손실(T6.4)은 이 칸을 바라볼 때 얹힌다.
-const NIGHT_SPOT_TILES := [Vector2i(11, 44), Vector2i(14, 44), Vector2i(17, 44)]   # 카페 잡귀 스폿 줄(y44, 좌석과 같은 x)
+const NIGHT_SPOT_TILES := [Vector2i(11, 92), Vector2i(14, 92), Vector2i(17, 92)]   # 카페 잡귀 스폿 줄(y92, ★C3 +48, 좌석과 같은 x)
 const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 — 손님 CUST·NPC들과 구분)
-# M2.3 네오(만물상 점주 — 바이블 오토마타, T1 비인간)가 서 있는 칸 — 만물상 방(STORE_RECT x23..32,y26..34) 안 뒷벽
-# 가운데(매대 자리). 만물상 문(STORE_DOOR 27,34)으로 들어와 위로 올라오면 바로 네오를 마주본다.
+# M2.3 네오(만물상 점주 — 바이블 오토마타, T1 비인간)가 서 있는 칸 — 만물상 방(STORE_RECT x23..32,y74..82) 안 뒷벽
+# 가운데(매대 자리). 만물상 문(STORE_DOOR 27,82)으로 들어와 위로 올라오면 바로 네오를 마주본다.
 # 멜과 같은 결 — 네오를 바라볼 때만 E=대화·F=매대 두 동사를 한 접점으로 연다(무인 매대 없음).
 # 만물상 방은 카메라로 격리돼(STORE_CAM_RECT) 만물상에 들어왔을 때만 화면에 보인다. 만물상 방
 # 바닥이라 농사·좌석과 안 겹친다(다른 구역·방에선 카메라 밖이라 안 보이고, 닿을 수도 없다).
-const NEO_TILE := Vector2i(27, 28)
+const NEO_TILE := Vector2i(27, 76)   # 만물상 방 뒷벽 가운데(★C3 +48 = STORE_RECT y74+ 안)
 
 @onready var ground: TileMapLayer = $Ground
 @onready var field_layer: TileMapLayer = $Field           # T2.1 밭 상태 오버레이
@@ -996,12 +1005,13 @@ func _build_home() -> void:
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
 # ★ M2.1 — 나루 마을(허브) 본격 레이아웃. 강(WATER)이 세로로 흘러 마을을 *서/동*으로 가르고,
-# 다리(가로 복도 y16)가 유일한 도하점이다(강이 위 경계까지 닿아 북쪽 우회 도하 차단).
-#   · 서편: 카페(이주·실내 있음) + 메인 집 3(미호·멜·바나) — 도착(spawn 3,16)·서워프 옆.
+# ★C3 — 100×72 코지-와이드: 다리(가로 복도 BRIDGE_Y 36)가 유일한 도하점이다(강 x49·50이 위·아래
+#   경계까지 닿아 우회 도하 차단). 8채를 넓은 무대에 코지 분산한다:
+#   · 서편: 카페(이주·실내 있음) + 메인 집 3(미호·멜·바나) — 도착(spawn 3,36)·서워프 옆.
 #   · 동편: 만물상 + 주민 집 3 — 다리 건너. 북동 나룻터(→삼도천·혼백관)·동 산길(→갱도)은 워프
 #     발동 칸까지 길이 닿되 목적 구역이 stub이라 휴면(M1.x 패턴, 그 구역 빌드 시 점등).
-# 안식 농원과 같은 스택 구조(외부 풀밭 y0~23 + 아래 실내 카페 방 y38~47, VOID로 격리). 카페
-# 실내·내부 좌표는 불변이라(좌표 대이동 0) 카페 시뮬·NPC·좌석·잡귀 상수는 그대로 따라온다(회귀 0).
+# 외부 풀밭 y0~71 + 아래 실내 띠(카페·공유 집·만물상, ★C3 +48 → y72~99)를 VOID로 격리한 스택.
+# 카페 내부 좌표는 일괄 +48 평행이동이라 상대 배치가 보존돼 카페 시뮬·NPC·좌석·잡귀가 그대로 따라온다(회귀 0).
 func _build_naru_village() -> void:
 	_grid = []
 	for y in _grid_h:
@@ -1010,7 +1020,7 @@ func _build_naru_village() -> void:
 			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
-	# 강(WATER, 통과 X) — 세로 두 칸 폭. 다리(y16)는 뒤의 _carve가 PATH로 덮어 도하점이 된다.
+	# 강(WATER, 통과 X) — 세로 두 칸 폭. 다리(BRIDGE_Y 36)는 뒤의 _carve가 PATH로 덮어 도하점이 된다.
 	for rx in RIVER_X:
 		for y in range(RIVER_Y0, RIVER_Y1 + 1):
 			_set_tile(rx, y, WATER)
@@ -1247,33 +1257,35 @@ func _carve_paths() -> void:
 	_carve_h(32, 71, 78)                        # 창고 레인(x71) → 동쪽 길 워프(78,32)
 	_carve_v(62, 44, 50)                        # 축사 앞(62,44) → 복도 — 동편 군집 안내(시각)
 
-# ★ M2.1 — 나루 마을 동선. 가로 복도(y16)가 서/동을 잇되 강(x19,20)을 만나 *다리*로만 건넌다.
-# 서편: 서워프(1,16)·도착(3,16) ~ 다리 서단(18,16). 동편: 다리 동단(21,16) ~ 38,16. 각 건물 문은
-# 복도까지 L자로 우회(건물 비껴감, 그레이박스). 워프 발동 칸(나룻터 22,1 / 산길 38,8)까지도 길이 닿되
-# 목적 구역 stub이라 휴면(M1.x 패턴). _carve_v/_carve_h = 세로/가로 한 줄 PATH(끝칸 포함).
+# ★ M2.1 / ★C3 — 나루 마을 동선. 메인 가로 복도(BRIDGE_Y 36)가 서/동을 잇되 강(x49,50)을 만나
+# *다리*로만 건넌다. 서편: 서워프(1,36)·도착(3,36) ~ 다리 서단(48,36). 동편: 다리 동단(51,36) ~ 98,36.
+# 각 건물 문은 복도까지 세로 스포크로 잇는다(시각 안내). 워프 발동 칸(나룻터 52,1 / 산길 98,18)까지도
+# 길이 닿되 목적 구역 stub이라 휴면(M1.x 패턴). _carve_v/_carve_h = 세로/가로 한 줄 PATH(끝칸 포함).
 func _carve_village_paths() -> void:
-	for x in range(1, 19):
+	# ★C3 — 100×72 코지-와이드 동선. 메인 가로 복도(BRIDGE_Y 36)가 좌우 가장자리를 잇되 강(x49·50)을
+	#   다리로만 건넌다. GROUND이 열려 도달성은 자동(C2 결) — 문 스포크는 시각 안내 레인이다.
+	for x in range(1, 49):
 		_set_tile(x, BRIDGE_Y, PATH)            # 서편 가로 복도(서워프·도착 ~ 다리 서단)
-	for x in range(21, 39):
+	for x in range(51, 99):
 		_set_tile(x, BRIDGE_Y, PATH)            # 동편 가로 복도(다리 동단 ~ 동 가장자리)
 	for rx in RIVER_X:
 		_set_tile(rx, BRIDGE_Y, PATH)           # 다리 — 강 위 PATH(유일한 도하점)
 
-	# 서편 문 → 복도.
-	_set_tile(MIHO_HOUSE_DOOR.x, 15, PATH)      # 미호 문(3,14) → 복도(3,16)
-	_set_tile(BANA_HOUSE_DOOR.x, 15, PATH)      # 바나 문(12,14) → 복도(12,16)
-	_carve_v(5, 10, 10); _carve_h(10, 5, 6); _carve_v(6, 11, 15)     # 카페 문(5,9) → 복도(6,16)
-	_carve_v(14, 8, 10); _carve_h(10, 14, 15); _carve_v(15, 11, 15)  # 멜 문(14,7) → 복도(15,16)
+	# 서편 문 → 복도(문이 복도 위면 위→아래, 아래면 아래→위로 잇는다).
+	_carve_v(CAFE_EXT_DOOR.x, CAFE_EXT_DOOR.y, BRIDGE_Y)      # 카페 문(8,31) → 복도
+	_carve_v(MEL_HOUSE_DOOR.x, MEL_HOUSE_DOOR.y, BRIDGE_Y)    # 멜 문(22,18) → 복도
+	_carve_v(MIHO_HOUSE_DOOR.x, BRIDGE_Y, MIHO_HOUSE_DOOR.y)  # 미호 문(6,47) → 복도(아래)
+	_carve_v(BANA_HOUSE_DOOR.x, BRIDGE_Y, BANA_HOUSE_DOOR.y)  # 바나 문(31,47) → 복도(아래)
 
 	# 동편 문 → 복도.
-	_set_tile(RESIDENT_HOUSE_DOORS[1].x, 15, PATH)   # 주민집2 문(24,14) → 복도
-	_set_tile(RESIDENT_HOUSE_DOORS[2].x, 15, PATH)   # 주민집3 문(33,14) → 복도
-	_carve_v(25, 8, 10); _carve_h(10, 25, 27); _carve_v(27, 11, 15)  # 만물상 문(25,7) → 복도(27,16)
-	_carve_v(33, 7, 10); _carve_h(10, 33, 36); _carve_v(36, 11, 15)  # 주민집1 문(33,6) → 복도(36,16)
+	_carve_v(STORE_EXT_DOOR.x, STORE_EXT_DOOR.y, BRIDGE_Y)                          # 만물상 문(60,18) → 복도
+	_carve_v(RESIDENT_HOUSE_DOORS[0].x, RESIDENT_HOUSE_DOORS[0].y, BRIDGE_Y)        # 주민집1 문(82,17) → 복도
+	_carve_v(RESIDENT_HOUSE_DOORS[1].x, BRIDGE_Y, RESIDENT_HOUSE_DOORS[1].y)        # 주민집2 문(59,47) → 복도(아래)
+	_carve_v(RESIDENT_HOUSE_DOORS[2].x, BRIDGE_Y, RESIDENT_HOUSE_DOORS[2].y)        # 주민집3 문(83,47) → 복도(아래)
 
 	# 워프 발동 칸까지 길(목적 구역 stub → 휴면, 그 구역 빌드 시 점등).
-	_carve_v(22, RIVER_Y0, 15)              # 나룻터(22,1) → 삼도천(혼백관) — 동편 강변로
-	_carve_v(38, 8, 15)                     # 산길(38,8) → 업화 갱도 — 동편 가장자리
+	_carve_v(52, RIVER_Y0, BRIDGE_Y)        # 나룻터(52,1) → 삼도천(혼백관) — 강 동안 북단 강변로
+	_carve_v(98, 18, BRIDGE_Y)              # 산길(98,18) → 업화 갱도 — 동편 가장자리
 
 func _paint_grid() -> void:
 	# GROUND/PATH/SOIL은 terrain별 칸을 모아 corner 오토타일로 칠하고(경계·모서리
@@ -1329,14 +1341,15 @@ func _place_labels() -> void:
 		RegionCatalog.NARU_VILLAGE:
 			# ★ M2.5 — 카페·메인 집 3(미호·멜·바나)은 도트 외관으로 식별되므로 라벨 없음(카페 컨벤션).
 			# 아직 그레이박스인 동편(만물상·주민 집) + 워프(나룻터·산길·서워프) + 다리만 라벨로 식별.
-			_add_label("만물상", _tile_center_px(Vector2i(25, 4)))
-			_add_label("주민 집", _tile_center_px(Vector2i(33, 4)))
-			_add_label("주민 집", _tile_center_px(Vector2i(24, 12)))
-			_add_label("주민 집", _tile_center_px(Vector2i(33, 12)))
-			_add_label("다리", _tile_center_px(Vector2i(19, 14)))
-			_add_label("← 안식 농원", _tile_center_px(Vector2i(3, 17)))   # 서워프(1,16) 안내
-			_add_label("나룻터 → 삼도천", _tile_center_px(Vector2i(24, 2)))  # ★ M3.1 북동 나룻터(혼백관, 점등)
-			_add_label("산길 → 업화 갱도", _tile_center_px(Vector2i(36, 10)))   # ★ M5.1 동 산길(정규 복원 — 갱도로 점등)
+			# ★C3 — 100×72 재배치에 맞춰 라벨도 새 건물·워프 위치로 옮긴다(외관 위·워프 가장자리 옆).
+			_add_label("만물상", _tile_center_px(Vector2i(60, 12)))
+			_add_label("주민 집", _tile_center_px(Vector2i(82, 12)))
+			_add_label("주민 집", _tile_center_px(Vector2i(59, 42)))
+			_add_label("주민 집", _tile_center_px(Vector2i(83, 42)))
+			_add_label("다리", _tile_center_px(Vector2i(48, 34)))
+			_add_label("← 안식 농원", _tile_center_px(Vector2i(4, 35)))   # 서워프(1,36) 안내
+			_add_label("나룻터 → 삼도천", _tile_center_px(Vector2i(53, 3)))  # ★ M3.1 북동 나룻터(혼백관, 점등 — ★C3 52,1)
+			_add_label("산길 → 업화 갱도", _tile_center_px(Vector2i(94, 17)))   # ★ M5.1 동 산길(정규 복원 — 갱도로 점등, ★C3 98,18)
 		RegionCatalog.SAMDOCHEON:
 			# ★ M3.1 — 혼백관은 그레이박스 WALL 박스라 라벨로 식별(만물상·창고 컨벤션). 강 낚시터·워프 안내.
 			_add_label("혼백관", _tile_center_px(Vector2i(9, 8)))
@@ -3016,8 +3029,8 @@ func _rect_center_px(rect: Rect2i) -> Vector2:
 		(rect.position.y + rect.size.y * 0.5) * TILE)
 
 # ★ M1.4 — 구역 인지: 카페가 나루 마을로 이주해, 집·밭은 안식 농원에서만·카페는 나루 마을에서만
-# 구역으로 읽힌다. 두 구역이 같은 그리드 크기(40×52)를 써 좌표 범위가 겹치므로(예: 밭 y4~14가
-# 마을 야외와 겹침), 단순 Rect 판정이 아니라 현재 구역(_region)으로 먼저 가른다. 카페 실내 칸은
+# 구역으로 읽힌다. 구역마다 그리드 크기가 달라도(★C3 마을 100×100·HOME 80×93) 좌표 범위가
+# 겹칠 수 있으므로, 단순 Rect 판정이 아니라 현재 구역(_region)으로 먼저 가른다. 카페 실내 칸은
 # 마을에서만 도달 가능하고, 집·밭은 농원에서만 도달 가능하다(실내 방·외관이 그 구역에만 지어짐).
 func _zone_at(px: Vector2) -> String:
 	var t := Vector2i(int(px.x) / TILE, int(px.y) / TILE)

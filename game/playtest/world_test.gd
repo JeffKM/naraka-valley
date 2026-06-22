@@ -38,10 +38,10 @@ func _initialize() -> void:
 	_check("②e home은 지어진 구역(is_built)", RegionCatalog.is_built(RegionCatalog.HOME))
 
 	# ── ②' 나루 마을(M1.4 빌드 — 카페 이주) 실데이터·필드 정합 ──
-	# main.gd 외부 무대 크기(MAP_W 40 × OUTDOOR_H 24)·서쪽 복도 도착 칸(3,16)과 같은 seam.
+	# ★C3 — 100×72 코지-와이드 외부 무대·서쪽 복도 도착 칸(3,36)과 같은 seam.
 	_check("②f 나루 마을 표시명 = 나루 마을", RegionCatalog.name_of(RegionCatalog.NARU_VILLAGE) == "나루 마을")
-	_check("②g 나루 마을 크기 = (40, 24)", RegionCatalog.size_of(RegionCatalog.NARU_VILLAGE) == Vector2i(40, 24))
-	_check("②h 나루 마을 스폰 = (3, 16)", RegionCatalog.spawn_of(RegionCatalog.NARU_VILLAGE) == Vector2i(3, 16))
+	_check("②g 나루 마을 크기 = (100, 72)", RegionCatalog.size_of(RegionCatalog.NARU_VILLAGE) == Vector2i(100, 72))   # ★ADR-0018 C3
+	_check("②h 나루 마을 스폰 = (3, 36)", RegionCatalog.spawn_of(RegionCatalog.NARU_VILLAGE) == Vector2i(3, 36))
 	_check("②i 나루 마을은 지어진 구역(is_built)", RegionCatalog.is_built(RegionCatalog.NARU_VILLAGE))
 
 	# ── ③ 8구역 전부 실데이터(stub 0): size·spawn 채워짐 ──
@@ -155,12 +155,12 @@ func _integration() -> void:
 	_check("⑥ 부팅 구역 = 안식 농원", m._region == RegionCatalog.HOME)
 	_check("⑥a 부팅은 바깥 모드", m._indoor == "")
 
-	# ── 동쪽 가장자리(38,16) → 나루 마을로 길 워프 + 재빌드 ──
+	# ── 동쪽 가장자리(78,32) → 나루 마을로 길 워프 + 재빌드 ──
 	m.player.position = m._tile_center_px(Vector2i(78, 32))   # ★C2 동쪽 길 워프(y중앙)
 	m._maybe_warp_edge()
 	await _settle()
 	_check("⑥b 나루 마을로 워프", m._region == RegionCatalog.NARU_VILLAGE)
-	_check("⑥c 도착 = 마을 dest(3,16)", m._player_tile() == Vector2i(3, 16))
+	_check("⑥c 도착 = 마을 dest(3,36)", m._player_tile() == Vector2i(3, 36))   # ★C3
 	# 재빌드 증명(콘텐츠): 마을엔 카페 외관(WALL)이 선다(building_test ⑥와 같은 seam).
 	_check("⑥d 마을 재빌드 — 카페 외관 자리 = WALL",
 		m._grid[m.CAFE_EXT_RECT.position.y][m.CAFE_EXT_RECT.position.x] == m.WALL)
@@ -189,7 +189,7 @@ func _integration() -> void:
 	m2._maybe_toggle_building()
 	await _settle()
 	_check("⑥l 카페 퇴장 → 마을 바깥(구역 불변)", m2._indoor == "" and m2._region == RegionCatalog.NARU_VILLAGE)
-	m2.player.position = m2._tile_center_px(Vector2i(1, 16))
+	m2.player.position = m2._tile_center_px(Vector2i(1, 36))   # ★C3 서워프 (1,36)
 	m2._maybe_warp_edge()
 	await _settle()
 	_check("⑥m 서쪽 가장자리 → 안식 농원 복귀", m2._region == RegionCatalog.HOME)
@@ -206,15 +206,22 @@ func _integration() -> void:
 	elif FileAccess.file_exists(SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
 
-# 워프/페이드 tween(실시간 ~0.52s)이 끝나도록 실제 시간 기준으로 프레임을 돌린다(building_test 결).
+# ★C3 — 전환(워프 fade+재빌드)이 끝날 때까지 대기한 뒤 짧게 안정화한다(warp_test ★C2 결). 마을이
+#   100×100 그리드라 HOME↔마을 워프 재빌드 hitch가 고정 sleep을 넘기면 _transitioning이 남아 다음
+#   토글/워프가 가드에 막힌다 → 전환 해소까지 결정적으로 기다린다(_m = 현재 활성 인스턴스).
+var _m: Node = null
 func _settle() -> void:
-	var until := Time.get_ticks_msec() + 900
+	var cap := Time.get_ticks_msec() + 4000
+	while _m != null and _m._transitioning and Time.get_ticks_msec() < cap:
+		await process_frame
+	var until := Time.get_ticks_msec() + 250
 	while Time.get_ticks_msec() < until:
 		await process_frame
 
 # 새 main 인스턴스를 띄우고 _ready(자동 복원 포함)가 안정될 때까지 프레임을 돌린다.
 func _spawn_main() -> Node:
 	var m: Node = load("res://main.tscn").instantiate()
+	_m = m   # ★C3 — _settle이 이 인스턴스의 전환 완료를 기다리게
 	root.add_child(m)
 	await process_frame
 	await process_frame

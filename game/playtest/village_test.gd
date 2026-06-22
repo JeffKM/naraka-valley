@@ -5,8 +5,8 @@ extends SceneTree
 # 짓는지*(그리드 콘텐츠)를 본다(building/warp_test와 같은 결의 하네스).
 #
 # ★ 핵심 불변식:
-#   ① 강(WATER)이 x19·20 세로로 흘러 마을을 서/동으로 가른다(위 경계까지 닿아 북쪽 우회 도하 없음).
-#   ② 다리(y16)가 *유일한* 도하점 — 그 외 모든 y에서 x19·20은 WATER(PATH 아님).
+#   ① 강(WATER)이 x49·50 세로로 흘러 마을을 서/동으로 가른다(위·아래 경계까지 닿아 우회 도하 없음, ★C3).
+#   ② 다리(BRIDGE_Y 36)가 *유일한* 도하점 — 그 외 모든 y에서 x49·50은 WATER(PATH 아님).
 #   ③ 8개 외관(카페·메인집3·만물상·주민집3)이 통과 불가 WALL 박스 + 문 1칸(PATH 리세스).
 #   ④ 도착(spawn)에서 모든 문·워프 발동 칸이 걸어서 닿는다(flood-fill — 그레이박스 무 soft-lock).
 #   ⑤ 카페 실내(CAFE_RECT) 좌표·바닥 불변 = 카페 시뮬 회귀 0 seam.
@@ -19,9 +19,10 @@ func _check(label: String, ok: bool) -> void:
 	if not ok:
 		_fail += 1
 
-# 외부에서 걸을 수 있는 칸인가(WALL·WATER·VOID·범위밖이면 X). 실내 스택(y>=OUTDOOR_H)은 제외.
+# 외부에서 걸을 수 있는 칸인가(WALL·WATER·VOID·범위밖이면 X). 실내 스택(y>=외부세로)은 제외.
+# ★C3 — 마을이 100×72라 전역 MAP_W/OUTDOOR_H가 아니라 빌드된 구역 치수(_grid_w/_outdoor_h)를 쓴다.
 func _walkable(m: Node, t: Vector2i) -> bool:
-	if t.x < 0 or t.y < 0 or t.x >= m.MAP_W or t.y >= m.OUTDOOR_H:
+	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
 	return id != m.WALL and id != m.WATER and id != m.VOID
@@ -53,16 +54,16 @@ func _initialize() -> void:
 
 	# ── ① 강(WATER)이 동/서를 가른다 ──
 	var rx: Array = m.RIVER_X
-	_check("① 강 두 칸 폭(x19·20)", rx == [19, 20])
-	for ry in [m.RIVER_Y0, 8, 12, m.RIVER_Y1]:
+	_check("① 강 두 칸 폭(x49·50, ★C3)", rx == [49, 50])
+	for ry in [m.RIVER_Y0, 20, 50, m.RIVER_Y1]:
 		for x in rx:
 			_check("①b 강 칸 WATER (%d,%d)" % [x, ry], m._grid[ry][x] == m.WATER)
 	# 강이 맨 위 경계 바로 아래(RIVER_Y0=1)까지 닿아 북쪽 우회 도하가 없다.
 	_check("①c 강이 위 경계까지 닿음(북쪽 우회 차단)", m.RIVER_Y0 == 1)
 
-	# ── ② 다리(y16)가 유일한 도하점 ──
+	# ── ② 다리(BRIDGE_Y)가 유일한 도하점 ──
 	for x in rx:
-		_check("② 다리 칸 PATH (%d,16)" % x, m._grid[m.BRIDGE_Y][x] == m.PATH)
+		_check("② 다리 칸 PATH (%d,%d)" % [x, m.BRIDGE_Y], m._grid[m.BRIDGE_Y][x] == m.PATH)
 	# 다리 외 모든 y에서 강 칸은 WATER(다른 도하점 없음).
 	var other_crossing := false
 	for y in range(m.RIVER_Y0, m.RIVER_Y1 + 1):

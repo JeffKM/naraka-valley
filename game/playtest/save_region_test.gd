@@ -24,15 +24,21 @@ func _check(label: String, ok: bool) -> void:
 	if not ok:
 		_fail += 1
 
-# 워프/페이드 tween(실시간 ~0.52s)이 끝나도록 실제 시간 기준으로 프레임을 돌린다(building_test 결).
+# ★C3 — 전환 해소까지 결정적으로 기다린 뒤 짧게 안정화한다(warp_test ★C2 결). 마을 100×100 그리드
+#   재빌드 hitch가 고정 sleep을 넘겨 _transitioning이 남는 걸 막는다(_m = 현재 활성 인스턴스).
+var _m: Node = null
 func _settle() -> void:
-	var until := Time.get_ticks_msec() + 900
+	var cap := Time.get_ticks_msec() + 4000
+	while _m != null and _m._transitioning and Time.get_ticks_msec() < cap:
+		await process_frame
+	var until := Time.get_ticks_msec() + 250
 	while Time.get_ticks_msec() < until:
 		await process_frame
 
 # 새 main 인스턴스를 띄우고 _ready(자동 복원 포함)가 안정될 때까지 프레임을 돌린다.
 func _spawn_main() -> Node:
 	var m: Node = load("res://main.tscn").instantiate()
+	_m = m   # ★C3 — _settle이 이 인스턴스의 전환 완료를 기다리게
 	root.add_child(m)
 	await process_frame
 	await process_frame
@@ -71,8 +77,8 @@ func _initialize() -> void:
 	m1._maybe_warp_edge()
 	await _settle()
 	_check("①pre 동쪽 가장자리에서 나루 마을로 워프", m1._region == RegionCatalog.NARU_VILLAGE)
-	# 마을 서쪽 복도(y=16)의 한 칸에 선 채 저장한다(스폰과 다른 자리 — '있던 자리' 복원 검증).
-	var saved_tile := Vector2i(5, 16)
+	# 마을 서쪽 복도(★C3 y=36)의 한 칸에 선 채 저장한다(스폰과 다른 자리 — '있던 자리' 복원 검증).
+	var saved_tile := Vector2i(5, 36)
 	m1.player.position = m1._tile_center_px(saved_tile)
 	m1._save_game()
 	_check("① 저장은 성공(세이브 파일 존재)", m1.saver.has_save())

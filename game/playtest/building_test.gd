@@ -13,15 +13,22 @@ func _check(label: String, ok: bool) -> void:
 	if not ok:
 		_fail += 1
 
-# 트리거 후 fade 연출(약 0.52초)이 끝나도록 실제 시간 기준으로 프레임을 돌린다.
+# ★C3 — 전환(워프/문 fade+재빌드)이 끝날 때까지 대기한 뒤 짧게 안정화한다(warp_test ★C2 결).
+#   마을이 100×100 그리드로 커져 HOME→마을 워프 재빌드 hitch가 고정 sleep을 넘기면 _transitioning이
+#   남아 다음 토글이 _maybe_toggle_building/_warp의 가드에 막힌다 → 전환 해소까지 결정적으로 기다린다.
+var _m: Node = null
 func _settle() -> void:
-	var until := Time.get_ticks_msec() + 900
+	var cap := Time.get_ticks_msec() + 4000
+	while _m != null and _m._transitioning and Time.get_ticks_msec() < cap:
+		await process_frame
+	var until := Time.get_ticks_msec() + 250
 	while Time.get_ticks_msec() < until:
 		await process_frame
 
 func _initialize() -> void:
 	print("══ 외부↔실내 건물 출입 전환 검증 ══")
 	var main: Node = load("res://main.tscn").instantiate()
+	_m = main
 	root.add_child(main)
 	await process_frame
 	await process_frame
@@ -77,7 +84,7 @@ func _initialize() -> void:
 
 	# ── 마을 외관 카페 자리는 통과 불가(WALL), 실내 방 바깥은 VOID ──
 	_check("⑥ 외관 카페 자리는 통과 불가(문 외 WALL)", main._grid[main.CAFE_EXT_RECT.position.y][main.CAFE_EXT_RECT.position.x] == main.WALL)
-	_check("⑥b 실내 구역 방 바깥은 VOID(검은 여백)", main._grid[main.OUTDOOR_H + 1][1] == main.VOID)
+	_check("⑥b 실내 구역 방 바깥은 VOID(검은 여백)", main._grid[main._outdoor_h + 1][1] == main.VOID)   # ★C3 마을 외부세로(72) 파생
 
 	print("══ 결과: %s ══" % ("PASS (실패 0)" if _fail == 0 else "FAIL (실패 %d)" % _fail))
 	quit(1 if _fail > 0 else 0)

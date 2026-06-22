@@ -139,8 +139,8 @@ func _initialize() -> void:
 	await _settle(m)
 	_check("⓪ 나루 마을로 워프", m._region == RegionCatalog.NARU_VILLAGE)
 
-	# ── ④ 그리드 크기 불변(MAP_H) — 가로 배치라 세로 안 늘어남 ──
-	_check("④ 그리드 크기 = MAP_H×MAP_W(불변)", m._grid.size() == m.MAP_H and m._grid[0].size() == m.MAP_W)
+	# ── ④ 그리드 크기 = 빌드된 구역 치수 파생(★C3 마을 100×100 = _grid_w × _grid_h) ──
+	_check("④ 그리드 크기 = 마을 치수(_grid_h×_grid_w)", m._grid.size() == m._grid_h and m._grid[0].size() == m._grid_w)
 	# ③ 만물상 방·공유 집 방이 실제로 빌드됐는가(방 안쪽 바닥 칸).
 	var si: Vector2i = m.STORE_RECT.position + Vector2i(1, 1)
 	_check("③ 만물상 실내 바닥 빌드(STORE_RECT)", m._grid[si.y][si.x] == m.CAFE)
