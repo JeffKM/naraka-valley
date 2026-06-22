@@ -51,6 +51,11 @@ var patience_secs: float = DEFAULT_PATIENCE
 # ★seam 2(T5.5): 서빙 단가 배수. main이 CafeMargin.margin(멜♡)를 주입한다(♡0 ×1.0
 # base → ♡5 ×2.0). 기본값 1.0 = 주입 없을 때의 base rate 안전판(ADR-0008 평평≠막힘).
 var margin: float = 1.0
+# ★seam 3(M2.4 카페 이벤트 데이): 손님 스폰 간격 배수. main이 이벤트일에 Festival.spawn_scale
+# (0.5=2배 붐빔)을 주입한다(평소 1.0). 단가(margin=멜 마진 축)는 안 건드리고 *유입*만 키운다 —
+# 축제라 사람이 몰리는 시간 한정 보너스라 '활동 곱셈기' 불침범(ADR-0008, festival.gd 참조).
+# 기본값 1.0 = 주입 없을 때(평소·테스트)의 base rate 안전판.
+var spawn_scale: float = 1.0
 
 # 오늘 정산 누적(세이브 무상태 — 매일 영업 시작 시 리셋, 일시 표시·요약용).
 var _today_revenue := 0
@@ -85,7 +90,7 @@ func tick(delta: float, minutes: float) -> void:
 	# 새 손님 스폰(빈 자리가 있을 때만 실제로 앉는다).
 	_spawn_timer -= delta
 	if _spawn_timer <= 0.0:
-		_spawn_timer = SPAWN_INTERVAL
+		_spawn_timer = SPAWN_INTERVAL * spawn_scale   # ★seam 3: 이벤트일 ×0.5 = 더 자주 채움
 		if _seat_customer():
 			dirty = true
 	if dirty:

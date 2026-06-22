@@ -63,7 +63,21 @@ func _ready() -> void:
 	if _sprite != null:
 		add_child(_sprite)
 
+# M2.4 — 카페 이벤트 데이엔 축제 의상으로 바뀐다(금빛 틴트 + 머리 고깔). main이 day에서
+# 파생해 토글한다(miho와 같은 결 — festive 출처는 main, 캐릭터는 자기 몸만 든다).
+var festive := false
+
+func set_festive(on: bool) -> void:
+	if festive == on:
+		return
+	festive = on
+	modulate = Festival.TINT if on else Color.WHITE   # 도색·그레이박스 공통 금빛 틴트(한 줄)
+	queue_redraw()                                    # 머리 고깔 덧그리기 갱신
+
 func _draw() -> void:
+	# M2.4 축제 고깔은 도색 스프라이트 위에도 덧그린다(그레이박스 가드보다 먼저).
+	if festive:
+		Festival.draw_hat(self, -BODY_SIZE.y)
 	if _sprite != null:
 		return  # 도색 스프라이트가 있으면 그레이박스는 안 그린다(폴백 전용)
 	# 몸체: 발치 원점 기준 위로 16×32. 미호보다 어둡게(검은 마녀 차림)로 대비.
