@@ -288,6 +288,29 @@ const STORE_RECT := Rect2i(23, 26, 10, 9)       # x23..32, y26..34 (집 방 옆,
 const STORE_DOOR := Vector2i(27, 34)            # 실내 만물상 문(닿으면 퇴장) — 아래벽
 const STORE_IN_TILE := Vector2i(27, 33)         # 실내 만물상 문 안쪽(진입 착지)
 const STORE_CAM_RECT := Rect2i(21, 24, 14, 13)  # 만물상 방 둘레(집 방 x2..21·카페 y37..과 안 겹침)
+# ── ★ 안식 농원 확장 — 창고(enterable 그레이박스 방) ─────────────────────────
+# HOME 외부 동편(카페 이주로 비워진 x30..35 y4..9)에 창고 외관을 세우고, 실내 띠 동편
+# (x23..32 y38..46 — 카페 방 x8..20·만물상 방 y26..34과 안 겹침)에 들어갈 수 있는 빈 방을 둔다.
+# M2.2 만물상 방 패턴(_build_building_catalog 데이터 주도)을 그대로 재사용 — 출입·카메라·세이브가
+# 자동으로 굴러간다(하드코딩 0). 저장(아이템 보관) 메카닉은 후속(도구/아이템 시스템 생길 때) —
+# 지금은 enterable 빈 방까지. MAP_H 불변(가로 배치, warp_test 그리드 불변식). 집 톤(HOUSE) 바닥을
+# 재사용하되 카탈로그 kind="storehouse"라 _draw 가구 분기(_is_in_house_interior/카페/만물상) 어디에도
+# 안 걸려 *빈* 방으로 그려진다(분기 추가 0 — "그 외 graybox"의 자연 표현).
+const STOREHOUSE_EXT_RECT := Rect2i(30, 4, 6, 6)   # x30..35, y4..9 (HOME 동편, FARM x≤27과 안 겹침)
+const STOREHOUSE_EXT_DOOR := Vector2i(32, 9)       # 외관 창고 문(닿으면 진입) — _carve_paths 동선 연결
+const STOREHOUSE_RECT := Rect2i(23, 38, 10, 9)     # x23..32, y38..46 (카페 방 옆 띠 — MAP_H 불변)
+const STOREHOUSE_DOOR := Vector2i(27, 46)          # 실내 창고 문(닿으면 퇴장) — 아래벽 중앙(end.y-1)
+const STOREHOUSE_IN_TILE := Vector2i(27, 45)       # 실내 창고 문 안쪽(진입 착지)
+const STOREHOUSE_CAM_RECT := Rect2i(22, 37, 14, 13)  # 창고 방 둘레(카페 CAM x2..21·만물상 CAM y24..36과 안 겹침)
+# ── ★ 안식 농원 확장 — 축사(건물 자리만, 비-enterable) ───────────────────────
+# 창고 바로 아래(복도 y16 남쪽) 빈 GROUND에 통과 불가 WALL 박스 + 문 리세스(시각 일관)만 둔다.
+# 창고와 같은 x열(30..35)로 동편 농장 건물 군집을 이룬다. 목축(저승 가축) 메카닉은 Phase 3
+# "채집·목축"으로 명시 연기 → 지금은 *건물 자리*만. ★ _build_building_catalog에 등록하지 않아
+# _maybe_toggle_building이 _buildings 조회로만 진입하므로 축사 문에 닿아도 진입 안 됨('자리만'의
+# 자연 표현, 특수 분기 0). 실내·카메라·세이브 무관. 창고 동선(x32 y10..15·복도 y16) 위가 아니라
+# 아래(y18..21)라 어떤 기존 동선·밭(y≤14)·스폰(x20)과도 안 겹친다(소프트락 0 — flood-fill로 게이트).
+const BARN_EXT_RECT := Rect2i(30, 18, 6, 4)    # x30..35, y18..21 (창고 아래, 복도 남쪽 빈 GROUND)
+const BARN_EXT_DOOR := Vector2i(32, 18)        # 축사 문 리세스(시각 일관용 — 진입 트리거 아님, 카탈로그 미등록)
 # ★ M2.2 — 공유 집 실내(HOUSE_RECT)를 쓰는 나루 마을 6채(메인 집 3 + 주민 집 3). 외관 문·퇴장
 # 칸만 건물마다 다르고 실내 방·문·카메라는 한 방을 공유한다(_build_building_catalog·가구 재사용).
 const HOUSE_IDS := ["미호집", "멜집", "바나집", "주민집1", "주민집2", "주민집3"]
@@ -790,7 +813,10 @@ func _build_home() -> void:
 
 	_fill_rect(FARM_RECT, SOIL)                     # 밭(열린 흙 구역, 외부)
 	_build_facade(HOUSE_EXT_RECT, HOUSE_EXT_DOOR)   # 외부 집 외관(통과 불가 박스 + 문 트리거)
+	_build_facade(STOREHOUSE_EXT_RECT, STOREHOUSE_EXT_DOOR)  # ★ 창고 외관(동편, 카페 이주로 비워진 자리)
+	_build_facade(BARN_EXT_RECT, BARN_EXT_DOOR)             # ★ 축사 건물 자리(비-enterable — 카탈로그 미등록)
 	_build_room(HOUSE_RECT, HOUSE, HOUSE_WALL, HOUSE_DOOR)   # 실내 집 방(아늑한 벽, 아래 가운데 문)
+	_build_room(STOREHOUSE_RECT, HOUSE, HOUSE_WALL, STOREHOUSE_DOOR)  # ★ 실내 창고 방(빈 방 — kind=storehouse)
 	_carve_paths()                         # 외부 동선(외관 문까지 — 맨 위에 덮어 길 강조)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
@@ -871,6 +897,7 @@ func _carve_paths() -> void:
 	for y in range(10, 16):
 		_set_tile(6, y, PATH)                   # 집 문 → 복도
 	_set_tile(20, 15, PATH)                     # 밭 아래 → 복도
+	_carve_v(32, 10, 15)                        # ★ 창고 문(32,9) → 복도(y16) — FARM x≤27·집 비껴 동편 연결
 
 # ★ M2.1 — 나루 마을 동선. 가로 복도(y16)가 서/동을 잇되 강(x19,20)을 만나 *다리*로만 건넌다.
 # 서편: 서워프(1,16)·도착(3,16) ~ 다리 서단(18,16). 동편: 다리 동단(21,16) ~ 38,16. 각 건물 문은
@@ -949,6 +976,8 @@ func _place_labels() -> void:
 			_add_label("도착", Vector2(SPAWN_TILE.x * TILE + TILE * 0.5, (SPAWN_TILE.y - 1) * TILE))
 			# 동쪽 복도 끝(38,16) 길 워프 안내 — 마을로 가는 길임을 그레이박스로 일러둔다.
 			_add_label("나루 마을 →", _tile_center_px(Vector2i(36, 15)))
+			_add_label("창고", _tile_center_px(Vector2i(32, 6)))  # ★ 동편 창고 외관(그레이박스 — 도색 전)
+			_add_label("축사(목축 예정)", _tile_center_px(Vector2i(32, 19)))  # ★ 건물 자리만(Phase 3 목축)
 		RegionCatalog.NARU_VILLAGE:
 			# ★ M2.5 — 카페·메인 집 3(미호·멜·바나)은 도트 외관으로 식별되므로 라벨 없음(카페 컨벤션).
 			# 아직 그레이박스인 동편(만물상·주민 집) + 워프(나룻터·산길·서워프) + 다리만 라벨로 식별.
@@ -1123,6 +1152,13 @@ func _build_building_catalog() -> void:
 		"region": RegionCatalog.NARU_VILLAGE, "kind": "store",
 		"ext_door": STORE_EXT_DOOR, "out_tile": STORE_EXT_DOOR + Vector2i(0, 1),
 		"in_tile": STORE_IN_TILE, "door": STORE_DOOR, "cam": STORE_CAM_RECT,
+	}
+	# ★ 안식 농원 창고(HOME 구역 — enterable 빈 방). kind="storehouse"라 가구 분기 미적용(빈 방).
+	# 저장 메카닉은 후속, 지금은 들어갔다 나오는 그레이박스 방까지. 세이브는 이 dict로 자동 복원.
+	_buildings["창고"] = {
+		"region": RegionCatalog.HOME, "kind": "storehouse",
+		"ext_door": STOREHOUSE_EXT_DOOR, "out_tile": STOREHOUSE_EXT_DOOR + Vector2i(0, 1),
+		"in_tile": STOREHOUSE_IN_TILE, "door": STOREHOUSE_DOOR, "cam": STOREHOUSE_CAM_RECT,
 	}
 	# 메인 집 3 + 주민 집 3 — 공유 집 실내(HOUSE_RECT). 외관 문은 건물마다, 실내는 한 방.
 	var house_ext := {
