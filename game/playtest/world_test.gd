@@ -44,21 +44,27 @@ func _initialize() -> void:
 	_check("②h 나루 마을 스폰 = (3, 16)", RegionCatalog.spawn_of(RegionCatalog.NARU_VILLAGE) == Vector2i(3, 16))
 	_check("②i 나루 마을은 지어진 구역(is_built)", RegionCatalog.is_built(RegionCatalog.NARU_VILLAGE))
 
-	# ── ③ 나머지 6개 = stub(아직 안 지어짐): size·spawn = ZERO, 표시명만 있음 ──
-	# ★ M1.4 — 빌드된 구역이 둘(안식 농원·나루 마을)로 늘어, 둘을 빼고 6개가 stub이다.
+	# ── ③ 나머지 4개 = stub(아직 안 지어짐): size·spawn = ZERO, 표시명만 있음 ──
+	# ★ M3.2 — 빌드된 구역이 넷(안식 농원·나루 마을·삼도천·황천해)으로 늘어, 넷을 빼고 4개가 stub이다.
+	var built_ids := [RegionCatalog.HOME, RegionCatalog.NARU_VILLAGE, RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE]
 	var stub_count := 0
 	for id in ids:
-		if id == RegionCatalog.HOME or id == RegionCatalog.NARU_VILLAGE:
+		if id in built_ids:
 			continue
 		stub_count += 1
 		_check("③ '%s' stub size=ZERO" % id, RegionCatalog.size_of(id) == Vector2i.ZERO)
 		_check("③b '%s' stub spawn=ZERO" % id, RegionCatalog.spawn_of(id) == Vector2i.ZERO)
 		_check("③c '%s' stub 미빌드(is_built=false)" % id, not RegionCatalog.is_built(id))
 		_check("③d '%s' 표시명은 채워짐" % id, RegionCatalog.name_of(id) != "")
-	_check("③e stub은 정확히 6개", stub_count == 6)
-	# ★ 핵심 불변식: 지어진 구역 = 안식 농원·나루 마을 둘("빌드는 한 구역씩", ADR-0015 — M1.4로 둘째 점등).
+	_check("③e stub은 정확히 4개", stub_count == 4)
+	# ★ 핵심 불변식: 지어진 구역 = 안식 농원·나루 마을·삼도천·황천해 넷("빌드는 한 구역씩", ADR-0015 — M3.2로 넷째 점등).
 	var built := ids.filter(func(id): return RegionCatalog.is_built(id))
-	_check("③f 지어진 구역 = home·나루 마을 둘", built == [RegionCatalog.HOME, RegionCatalog.NARU_VILLAGE])
+	_check("③f 지어진 구역 = home·나루 마을·삼도천·황천해 넷", built == built_ids)
+	# ★ M3.1/M3.2 — 삼도천·황천해 실데이터 확인(size·spawn 채워짐).
+	_check("③g 삼도천 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.SAMDOCHEON) == Vector2i(40, 24))
+	_check("③h 삼도천 스폰 = (20,22)", RegionCatalog.spawn_of(RegionCatalog.SAMDOCHEON) == Vector2i(20, 22))
+	_check("③i 황천해 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(40, 24))
+	_check("③j 황천해 스폰 = (2,16)", RegionCatalog.spawn_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(2, 16))
 
 	# ── ④ 토폴로지(warps) 정합: world-map.md §2 구역 그래프 ──
 	# 워프의 to는 실재하는 구역이어야 하고, 토폴로지는 대칭(양방향)이어야 한다.
