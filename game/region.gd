@@ -85,10 +85,13 @@ const CATALOG := {
 		# 자기 쪽 가장자리 발동 칸(at)은 셋 다 실좌표다(region.gd 설계: at = 이 구역이 지어지면 확정).
 		# dest는 *목적 구역*이 지어져야 정해진다 — 안식 농원만 빌드라 그쪽만 실좌표, 갱도·삼도천은
 		# 아직 stub이라 TBD(그 구역 빌드 시 확정). 갱도·삼도천 워프는 목적지 미빌드라 휴면이다.
+		# ★ M2.1 — 마을 본격 레이아웃(강+다리 동/서 분할)이 지어져 워프 발동 칸(at)이 실좌표로
+		# 확정됐다: 서워프(1,16)=서편 복도 / 산길(38,8)=동편 가장자리 / 나룻터(22,1)=동편 강변로
+		# 북단(강 상류 → 삼도천·혼백관). 갱도·삼도천은 목적지 stub이라 여전히 휴면(그 구역 빌드 시 점등).
 		"warps": [
 			{"to": HOME, "at": Vector2i(1, 16), "dest": Vector2i(37, 16)},   # 서쪽 가장자리 → 안식 농원
-			{"to": EOPHWA_MINE, "at": Vector2i(38, 8), "dest": TILE_TBD},    # 동쪽(산길) — 휴면
-			{"to": SAMDOCHEON, "at": Vector2i(20, 1), "dest": TILE_TBD},     # 북쪽(나룻터) — 휴면
+			{"to": EOPHWA_MINE, "at": Vector2i(38, 8), "dest": TILE_TBD},    # 동쪽 산길 → 업화 갱도 — 휴면
+			{"to": SAMDOCHEON, "at": Vector2i(22, 1), "dest": TILE_TBD},     # 북동 나룻터 → 삼도천(혼백관) — 휴면
 		],
 	},
 	# ── 이하 6개 = stub(아직 안 지어짐). size·spawn = ZERO, 토폴로지(to)만 실데이터 ──
