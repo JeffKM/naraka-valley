@@ -88,32 +88,43 @@ const CATALOG := {
 		# ★ M2.1 — 마을 본격 레이아웃(강+다리 동/서 분할)이 지어져 워프 발동 칸(at)이 실좌표로
 		# 확정됐다: 서워프(1,16)=서편 복도 / 산길(38,8)=동편 가장자리 / 나룻터(22,1)=동편 강변로
 		# 북단(강 상류 → 삼도천·혼백관). 갱도·삼도천은 목적지 stub이라 여전히 휴면(그 구역 빌드 시 점등).
+		# ★ M3.1 — 삼도천이 지어져 나룻터 워프 dest가 실좌표로 확정됐다(목적 구역 빌드 시 채움).
 		"warps": [
 			{"to": HOME, "at": Vector2i(1, 16), "dest": Vector2i(37, 16)},   # 서쪽 가장자리 → 안식 농원
 			{"to": EOPHWA_MINE, "at": Vector2i(38, 8), "dest": TILE_TBD},    # 동쪽 산길 → 업화 갱도 — 휴면
-			{"to": SAMDOCHEON, "at": Vector2i(22, 1), "dest": TILE_TBD},     # 북동 나룻터 → 삼도천(혼백관) — 휴면
+			{"to": SAMDOCHEON, "at": Vector2i(22, 1), "dest": Vector2i(20, 22)},  # 북동 나룻터 → 삼도천(혼백관) — M3.1 점등
 		],
 	},
-	# ── 이하 6개 = stub(아직 안 지어짐). size·spawn = ZERO, 토폴로지(to)만 실데이터 ──
+	# ── 삼도천(M3.1 빌드 — 강 낚시 무대·혼백관) ──────────────────────────────────
+	# ★ M3.1: 셋째 실데이터 구역. 나루 마을 나룻터(22,1)에서 휴면이던 워프를 점등해, 강 낚시(Phase 3)가
+	#   들어올 무대를 그레이박스로 깐다(낚시 메카닉은 만들지 않는다 — 무대·혼백관 빈 방까지, ADR-0015).
+	#   size=(40,24)(외부 무대 = main.MAP_W×OUTDOOR_H, 카메라 seam). spawn=(20,22)(남단 나룻터 — 나루
+	#   마을에서 배로 건너 닿는 칸). 하구(→황천해) 워프는 at만 실좌표·dest TBD(목적지 stub이라 휴면, M3.2 점등).
 	SAMDOCHEON: {
 		"name_ko": "삼도천",
-		"size": Vector2i.ZERO,
-		"spawn": Vector2i.ZERO,
+		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (안식 농원·나루 마을과 같은 외부 무대)
+		"spawn": Vector2i(20, 22),    # 남단 나룻터(나루 마을 → 삼도천 도착 칸)
 		# 나루 마을 ──(나룻터)── 삼도천 ──(하구)── 황천해.
 		"warps": [
-			{"to": NARU_VILLAGE, "at": TILE_TBD, "dest": TILE_TBD},
-			{"to": HWANGCHEONHAE, "at": TILE_TBD, "dest": TILE_TBD},
+			{"to": NARU_VILLAGE, "at": Vector2i(20, 23), "dest": Vector2i(22, 2)},  # 남단 나룻터 → 나루 마을(22,1 한 칸 안)
+			{"to": HWANGCHEONHAE, "at": Vector2i(38, 16), "dest": Vector2i(2, 16)},  # 동단 하구 → 황천해 — M3.2 점등
 		],
 	},
+	# ── 황천해(M3.2 빌드 — 바다 낚시 무대·생선가게) ──────────────────────────────
+	# ★ M3.2: 넷째 실데이터 구역(막다른 바다 무대). 삼도천 하구(38,16)에서 휴면이던 워프를 점등해, 바다 낚시
+	#   (Phase 3)가 들어올 무대를 그레이박스로 깐다(낚시 메카닉은 만들지 않는다 — 바다·부두·생선가게 빈 방까지).
+	#   size=(40,24)(외부 무대 = main.MAP_W×OUTDOOR_H, 카메라 seam). spawn=(2,16)(서단 — 삼도천 하구에서 도착).
+	#   막다른 구역이라 워프는 하나(삼도천 복귀). 부두·바다 낚시터는 무대만(라벨), 생선가게 서비스는 후속.
 	HWANGCHEONHAE: {
 		"name_ko": "황천해",
-		"size": Vector2i.ZERO,
-		"spawn": Vector2i.ZERO,
+		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (다른 구역과 같은 외부 무대)
+		"spawn": Vector2i(2, 16),     # 서단(삼도천 하구 → 황천해 도착 칸)
 		# 삼도천 ──(하구)── 황천해(막다른 바다 무대).
 		"warps": [
-			{"to": SAMDOCHEON, "at": TILE_TBD, "dest": TILE_TBD},
+			{"to": SAMDOCHEON, "at": Vector2i(1, 16), "dest": Vector2i(37, 16)},  # 서단 → 삼도천 하구(38,16 한 칸 안)
 		],
 	},
+	# ── 이하 4개 = stub(아직 안 지어짐). size·spawn = ZERO, 토폴로지(to)만 실데이터 ──
 	JEOSEUNG_FOREST: {
 		"name_ko": "저승 숲",
 		"size": Vector2i.ZERO,

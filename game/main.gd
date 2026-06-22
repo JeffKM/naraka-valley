@@ -311,6 +311,43 @@ const STOREHOUSE_CAM_RECT := Rect2i(22, 37, 14, 13)  # 창고 방 둘레(카페 
 # 아래(y18..21)라 어떤 기존 동선·밭(y≤14)·스폰(x20)과도 안 겹친다(소프트락 0 — flood-fill로 게이트).
 const BARN_EXT_RECT := Rect2i(30, 18, 6, 4)    # x30..35, y18..21 (창고 아래, 복도 남쪽 빈 GROUND)
 const BARN_EXT_DOOR := Vector2i(32, 18)        # 축사 문 리세스(시각 일관용 — 진입 트리거 아님, 카탈로그 미등록)
+# ── ★ M3.1 삼도천(강 낚시 무대 + 혼백관) ───────────────────────────────────────
+# 셋째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 낚시 메카닉은 만들지 않는다(Phase 3) — 강(WATER)
+# 무대 + 강 낚시터(라벨만) + 혼백관(enterable 빈 방)까지 그레이박스로 깐다. 나루 마을 나룻터(22,1)에서
+# 배로 건너 남단 spawn(20,22)에 도착하고, 동단 하구(38,16)가 황천해로 가는 워프(M3.2 점등).
+# 강은 상단 가로 띠(y1..3)로 흘러 그 아래 land(y4..23)는 한 덩어리(다리 불필요·flood-fill 단순).
+const SAMDO_RIVER_Y0 := 1                       # 강(WATER) 상단 띠 시작 y(경계벽 y0 바로 아래)
+const SAMDO_RIVER_Y1 := 3                       # 강 띠 끝 y — y4 이하가 강 낚시터 둑(land)
+const SAMDO_FISHING_LABEL_TILE := Vector2i(28, 5)  # 강 낚시터 라벨 자리(둑, 낚시 메카닉 Phase 3)
+# 혼백관(enterable 빈 방) — 외관(land)·실내 방(아래 실내 띠). 창고·만물상 결의 데이터 주도 출입.
+# kind="museum"이라 _draw 가구 분기(house/cafe)에 안 걸려 빈 방으로 그려진다(분기 추가 0). 실내 방은
+# y26..34 띠에 둬 MAP_H 불변(warp_test 그리드 불변식) — 구역별 빌드라 나루 마을 방과 좌표 겹쳐도 무해.
+const MUSEUM_EXT_RECT := Rect2i(6, 6, 7, 6)     # x6..12, y6..11 (강 둑 아래 land)
+const MUSEUM_EXT_DOOR := Vector2i(9, 11)        # 외관 혼백관 문(닿으면 진입) — _carve_samdocheon_paths 동선 연결
+const MUSEUM_RECT := Rect2i(8, 26, 12, 9)       # x8..19, y26..34 (실내 방 — HOUSE_RECT 띠, 구역별 빌드)
+const MUSEUM_DOOR := Vector2i(13, 34)           # 실내 혼백관 문(닿으면 퇴장) — 아래벽 중앙
+const MUSEUM_IN_TILE := Vector2i(13, 33)        # 실내 문 안쪽(진입 착지)
+const MUSEUM_CAM_RECT := Rect2i(2, 24, 20, 13)  # 혼백관 방 둘레(외부·다른 방 격리)
+# ── ★ M3.2 황천해(바다 낚시 무대 + 생선가게) ──────────────────────────────────
+# 넷째 실데이터 구역(막다른 바다). 낚시 메카닉은 만들지 않는다(Phase 3) — 바다(WATER) 무대 + 부두(잔교)
+# + 바다 낚시터(라벨만) + 생선가게(enterable 빈 방)까지. 삼도천 하구(38,16)에서 서단 spawn(2,16)에 도착.
+# 바다는 하단 가로 띠(y19~23)로, 그 위 land(y1~18)가 한 덩어리(flood-fill 단순). 부두가 바다로 뻗어 그
+# 끝이 바다 낚시터(Phase 3 캐스팅 자리). 강(삼도천)과 같은 WATER 타일 재사용(물 색 차별화는 후속).
+const SEA_Y0 := 19                              # 바다(WATER) 상단 띠 시작 y — 그 위 land(y1~18)
+const SEA_Y1 := 23                              # 바다 끝 y(외부 하단)
+const PIER_X := 20                              # 부두(잔교) 세로 칸 — 바다로 뻗음(WATER 위 PATH 덮어 걸을 수 있게)
+const PIER_Y0 := 17                             # 부두 시작 y(land, 복도 y16 바로 아래)
+const PIER_Y1 := 22                             # 부두 끝 y(바다 한가운데 = 바다 낚시터)
+const SEA_FISHING_LABEL_TILE := Vector2i(20, 21)   # 바다 낚시터 라벨 자리(부두 끝, 낚시 메카닉 Phase 3)
+# 생선가게(enterable 빈 방) — 외관(land)·실내 방(아래 실내 띠). 혼백관·창고 결의 데이터 주도 출입.
+# kind="fishshop"이라 _draw 가구 분기에 안 걸려 빈 방(도구·미끼·물고기 거래 서비스는 후속). 실내 방은
+# y26..34 띠(구역별 빌드라 좌표 겹쳐도 무해, MAP_H 불변).
+const FISHSHOP_EXT_RECT := Rect2i(5, 5, 7, 6)   # x5..11, y5..10 (land, 바다 위쪽)
+const FISHSHOP_EXT_DOOR := Vector2i(8, 10)      # 외관 생선가게 문(닿으면 진입) — _carve_hwangcheonhae_paths 동선 연결
+const FISHSHOP_RECT := Rect2i(8, 26, 12, 9)     # x8..19, y26..34 (실내 방)
+const FISHSHOP_DOOR := Vector2i(13, 34)         # 실내 생선가게 문(닿으면 퇴장) — 아래벽 중앙
+const FISHSHOP_IN_TILE := Vector2i(13, 33)      # 실내 문 안쪽(진입 착지)
+const FISHSHOP_CAM_RECT := Rect2i(2, 24, 20, 13)  # 생선가게 방 둘레(외부·다른 방 격리)
 # ★ M2.2 — 공유 집 실내(HOUSE_RECT)를 쓰는 나루 마을 6채(메인 집 3 + 주민 집 3). 외관 문·퇴장
 # 칸만 건물마다 다르고 실내 방·문·카메라는 한 방을 공유한다(_build_building_catalog·가구 재사용).
 const HOUSE_IDS := ["미호집", "멜집", "바나집", "주민집1", "주민집2", "주민집3"]
@@ -791,6 +828,10 @@ func _build_grid() -> void:
 			_build_home()
 		RegionCatalog.NARU_VILLAGE:
 			_build_naru_village()
+		RegionCatalog.SAMDOCHEON:
+			_build_samdocheon()
+		RegionCatalog.HWANGCHEONHAE:
+			_build_hwangcheonhae()
 		_:
 			push_warning("알 수 없는 구역 '%s' — 홈베이스로 폴백" % _region)
 			_build_home()
@@ -856,6 +897,67 @@ func _build_naru_village() -> void:
 	_build_room(STORE_RECT, CAFE, CAFE_WALL, STORE_DOOR)     # 만물상 실내(카페 타일 = 상업 톤)
 	_carve_village_paths()                 # 마을 동선(복도·다리·각 문·워프 발동 칸까지)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
+
+# ★ M3.1 — 삼도천(강 낚시 무대 + 혼백관). 안식 농원·나루 마을과 같은 스택(외부 풀밭 y0~23 + 아래
+# 실내 혼백관 방, VOID 격리). 낚시 메카닉은 만들지 않는다(Phase 3) — 강(WATER) 무대·강 낚시터(라벨만)·
+# 혼백관(enterable 빈 방)까지. 강은 상단 가로 띠(y1~3)로 흘러 그 아래 land(y4~23)가 한 덩어리라
+# 다리 없이도 모든 칸이 닿는다(flood-fill 단순·무 soft-lock). 나룻터 spawn(20,22)에서 동선이 혼백관
+# 문·하구 워프 칸까지 닿는다. 혼백관은 그레이박스 WALL 박스(만물상·창고 결 — _draw 외관 텍스처 없음).
+func _build_samdocheon() -> void:
+	_grid = []
+	for y in MAP_H:
+		var row: Array = []
+		for x in MAP_W:
+			row.append(GROUND if y < OUTDOOR_H else VOID)
+		_grid.append(row)
+
+	# 강(WATER, 통과 X) — 상단 가로 띠. 그 아래 둑(y4~)이 강 낚시터(Phase 3에서 캐스팅 자리).
+	for y in range(SAMDO_RIVER_Y0, SAMDO_RIVER_Y1 + 1):
+		for x in range(1, MAP_W - 1):
+			_set_tile(x, y, WATER)
+
+	_build_facade(MUSEUM_EXT_RECT, MUSEUM_EXT_DOOR)            # 혼백관 외관(통과 불가 박스 + 문)
+	_build_room(MUSEUM_RECT, HOUSE, HOUSE_WALL, MUSEUM_DOOR)   # 실내 혼백관 빈 방(kind=museum)
+	_carve_samdocheon_paths()              # 동선(나룻터 도착 → 혼백관 문·하구 워프 칸)
+	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
+
+# ★ M3.1 — 삼도천 동선. 가로 복도(y16)가 혼백관 쪽과 동단 하구 워프(38,16)를 잇고, 남단 나룻터
+# (spawn 20,22·복귀 워프 20,23)에서 복도로 올라온다. 혼백관 문(9,11)은 세로로 복도까지 잇는다.
+# land가 한 덩어리라 길은 동선 안내용이고, 워프 발동 칸까지 닿아 무 soft-lock.
+func _carve_samdocheon_paths() -> void:
+	_carve_h(16, 1, 38)                    # 가로 복도(동단 하구 워프 38,16까지)
+	_carve_v(20, 16, 23)                   # 나룻터 도착(20,22)·복귀 워프(20,23) → 복도
+	_carve_v(MUSEUM_EXT_DOOR.x, MUSEUM_EXT_DOOR.y, 16)  # 혼백관 문(9,11) → 복도(y16)
+
+# ★ M3.2 — 황천해(바다 낚시 무대 + 생선가게). 삼도천과 같은 패턴(외부 land + 아래 실내 생선가게 방,
+# VOID 격리). 낚시 메카닉은 만들지 않는다(Phase 3) — 바다(WATER) 무대·부두·바다 낚시터(라벨만)·생선가게
+# (enterable 빈 방)까지. 바다는 하단 가로 띠(y19~23)로 흘러 그 위 land(y1~18)가 한 덩어리(flood-fill
+# 단순). 부두(PATH)가 바다로 뻗어 그 끝(PIER_Y1)이 바다 낚시터. 막다른 구역이라 워프는 삼도천 복귀 하나.
+func _build_hwangcheonhae() -> void:
+	_grid = []
+	for y in MAP_H:
+		var row: Array = []
+		for x in MAP_W:
+			row.append(GROUND if y < OUTDOOR_H else VOID)
+		_grid.append(row)
+
+	# 바다(WATER, 통과 X) — 하단 가로 띠. 부두 끝(바다 한가운데)이 바다 낚시터(Phase 3 캐스팅 자리).
+	for y in range(SEA_Y0, SEA_Y1 + 1):
+		for x in range(1, MAP_W - 1):
+			_set_tile(x, y, WATER)
+
+	_build_facade(FISHSHOP_EXT_RECT, FISHSHOP_EXT_DOOR)            # 생선가게 외관(통과 불가 박스 + 문)
+	_build_room(FISHSHOP_RECT, HOUSE, HOUSE_WALL, FISHSHOP_DOOR)   # 실내 생선가게 빈 방(kind=fishshop)
+	_carve_hwangcheonhae_paths()           # 동선(서단 도착 → 생선가게 문·부두)
+	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
+
+# ★ M3.2 — 황천해 동선. 가로 복도(y16)가 서단 도착·복귀 워프(spawn 2,16·at 1,16)와 생선가게·부두를
+# 잇고, 부두(PIER_X)가 복도에서 바다로 세로로 뻗는다(WATER 위에 PATH를 덮어 걸을 수 있는 잔교 — _build
+# 순서상 바다 fill 뒤에 carve라 PATH가 이긴다). 부두 끝(바다 낚시터)까지 닿아 무 soft-lock.
+func _carve_hwangcheonhae_paths() -> void:
+	_carve_h(16, 1, PIER_X)                # 가로 복도(서워프 1,16 ~ 부두 x20)
+	_carve_v(FISHSHOP_EXT_DOOR.x, FISHSHOP_EXT_DOOR.y, 16)  # 생선가게 문(8,10) → 복도(y16)
+	_carve_v(PIER_X, PIER_Y0, PIER_Y1)     # 부두(잔교) — 복도(y16 아래)에서 바다로 뻗음(WATER 위 PATH)
 
 # 외부에서 보이는 건물 외관 — 통과 불가 박스(WALL)로 채우고 문 한 칸만 PATH로 뚫는다. 그 문 칸에
 # 닿으면 _process(_maybe_enter_building)가 실내로 fade 전환한다. 그레이박스 단계라 외관은 회색
@@ -987,8 +1089,20 @@ func _place_labels() -> void:
 			_add_label("주민 집", _tile_center_px(Vector2i(33, 12)))
 			_add_label("다리", _tile_center_px(Vector2i(19, 14)))
 			_add_label("← 안식 농원", _tile_center_px(Vector2i(3, 17)))   # 서워프(1,16) 안내
-			_add_label("나룻터 → 삼도천", _tile_center_px(Vector2i(24, 2)))  # 북동 나룻터(혼백관, 휴면)
+			_add_label("나룻터 → 삼도천", _tile_center_px(Vector2i(24, 2)))  # ★ M3.1 북동 나룻터(혼백관, 점등)
 			_add_label("산길 → 갱도", _tile_center_px(Vector2i(36, 10)))   # 동 산길(업화 갱도, 휴면)
+		RegionCatalog.SAMDOCHEON:
+			# ★ M3.1 — 혼백관은 그레이박스 WALL 박스라 라벨로 식별(만물상·창고 컨벤션). 강 낚시터·워프 안내.
+			_add_label("혼백관", _tile_center_px(Vector2i(9, 8)))
+			_add_label("강 낚시터(Phase 3)", _tile_center_px(SAMDO_FISHING_LABEL_TILE))
+			_add_label("나룻터 → 나루 마을", _tile_center_px(Vector2i(20, 21)))  # 남단 복귀 워프(20,23) 안내
+			_add_label("하구 → 황천해", _tile_center_px(Vector2i(36, 15)))      # ★ M3.2 동단 하구 워프(38,16, 점등)
+		RegionCatalog.HWANGCHEONHAE:
+			# ★ M3.2 — 생선가게는 그레이박스 WALL 박스라 라벨로 식별. 부두·바다 낚시터·복귀 워프 안내.
+			_add_label("생선가게", _tile_center_px(Vector2i(8, 7)))
+			_add_label("부두", _tile_center_px(Vector2i(PIER_X, 18)))
+			_add_label("바다 낚시터(Phase 3)", _tile_center_px(SEA_FISHING_LABEL_TILE))
+			_add_label("하구 → 삼도천", _tile_center_px(Vector2i(4, 15)))       # 서단 복귀 워프(1,16) 안내
 
 func _add_label(text: String, center_px: Vector2) -> void:
 	var lbl := Label.new()
@@ -1045,8 +1159,14 @@ func _setup_lighting() -> void:
 # ★ M1.4 — 현재 구역(_region)의 등불 자리만 빛웅덩이로 깐다(카페 이주로 등불이 구역마다 갈렸다).
 # lighting.setup이 멱등이라(이전 등불 거두고 새로 깖) 구역 전환(_rebuild_region)마다 다시 부른다 —
 # 안식 농원에선 길가 등불만, 나루 마을에선 카페 등불만 켜져 다른 구역 등불이 떠다니지 않는다.
+# ★ M3.1 — 등불 없는 구역(삼도천 등)은 빈 목록 → 다른 구역 등불이 떠다니지 않는다(명시 분기·empty default).
 func _setup_region_lamps() -> void:
-	var tiles := LANTERN_TILES_HOME if _region == RegionCatalog.HOME else LANTERN_TILES_CAFE
+	var tiles: Array = []
+	match _region:
+		RegionCatalog.HOME:
+			tiles = LANTERN_TILES_HOME
+		RegionCatalog.NARU_VILLAGE:
+			tiles = LANTERN_TILES_CAFE
 	var lamp_px := PackedVector2Array()
 	for t in tiles:
 		lamp_px.append(_tile_center_px(t))
@@ -1159,6 +1279,20 @@ func _build_building_catalog() -> void:
 		"region": RegionCatalog.HOME, "kind": "storehouse",
 		"ext_door": STOREHOUSE_EXT_DOOR, "out_tile": STOREHOUSE_EXT_DOOR + Vector2i(0, 1),
 		"in_tile": STOREHOUSE_IN_TILE, "door": STOREHOUSE_DOOR, "cam": STOREHOUSE_CAM_RECT,
+	}
+	# ★ M3.1 삼도천 혼백관(SAMDOCHEON 구역 — enterable 빈 방). kind="museum"이라 가구 분기 미적용(빈 방).
+	# 유품·기억 전시는 후속(서사 작업), 지금은 들어갔다 나오는 그레이박스 방까지. 세이브는 이 dict로 자동 복원.
+	_buildings["혼백관"] = {
+		"region": RegionCatalog.SAMDOCHEON, "kind": "museum",
+		"ext_door": MUSEUM_EXT_DOOR, "out_tile": MUSEUM_EXT_DOOR + Vector2i(0, 1),
+		"in_tile": MUSEUM_IN_TILE, "door": MUSEUM_DOOR, "cam": MUSEUM_CAM_RECT,
+	}
+	# ★ M3.2 황천해 생선가게(HWANGCHEONHAE 구역 — enterable 빈 방). kind="fishshop"이라 가구 분기 미적용(빈 방).
+	# 도구·미끼·물고기 거래(윌리 대응)는 후속(낚시/아이템 시스템 의존), 지금은 들어갔다 나오는 그레이박스 방까지.
+	_buildings["생선가게"] = {
+		"region": RegionCatalog.HWANGCHEONHAE, "kind": "fishshop",
+		"ext_door": FISHSHOP_EXT_DOOR, "out_tile": FISHSHOP_EXT_DOOR + Vector2i(0, 1),
+		"in_tile": FISHSHOP_IN_TILE, "door": FISHSHOP_DOOR, "cam": FISHSHOP_CAM_RECT,
 	}
 	# 메인 집 3 + 주민 집 3 — 공유 집 실내(HOUSE_RECT). 외관 문은 건물마다, 실내는 한 방.
 	var house_ext := {

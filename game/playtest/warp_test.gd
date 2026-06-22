@@ -61,6 +61,57 @@ func _initialize() -> void:
 	_check("③e 마을 서쪽 가장자리 → 안식 농원 복귀(왕복)", main._region == RegionCatalog.HOME)
 	_check("③f 복귀 도착 칸에 놓임", main._player_tile() == back_dest)
 
+	# ── ③'' M3.1 — 나루 마을 ↔ 삼도천 왕복(나룻터 점등). 나룻터(22,1) → 삼도천, 남단(20,23) → 마을 복귀 ──
+	# 먼저 안식 농원 → 나루 마을로 다시 건너간다(삼도천은 마을에서만 닿는다 — 허브 경유).
+	main.player.position = main._tile_center_px(at)
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③g 다시 나루 마을로", main._region == RegionCatalog.NARU_VILLAGE)
+	# 나루 마을 나룻터(22,1) 워프로 삼도천 진입.
+	var samdo_w: Dictionary = {}
+	for w in RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE):
+		if w["to"] == RegionCatalog.SAMDOCHEON:
+			samdo_w = w
+	main.player.position = main._tile_center_px(samdo_w["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③h 나룻터(22,1) → 삼도천 전환(점등)", main._region == RegionCatalog.SAMDOCHEON)
+	_check("③i 삼도천 도착 칸에 놓임", main._player_tile() == samdo_w["dest"])
+
+	# ── ③''' M3.2 — 삼도천 ↔ 황천해 왕복(하구 점등). 하구(38,16) → 황천해, 서단(1,16) → 삼도천 복귀 ──
+	var hae_w: Dictionary = {}
+	for w in RegionCatalog.warps_of(RegionCatalog.SAMDOCHEON):
+		if w["to"] == RegionCatalog.HWANGCHEONHAE:
+			hae_w = w
+	main.player.position = main._tile_center_px(hae_w["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③j 하구(38,16) → 황천해 전환(점등)", main._region == RegionCatalog.HWANGCHEONHAE)
+	_check("③k 황천해 도착 칸에 놓임", main._player_tile() == hae_w["dest"])
+	# 황천해 서단(1,16) → 삼도천 하구 복귀(왕복).
+	var hae_back: Dictionary = RegionCatalog.warps_of(RegionCatalog.HWANGCHEONHAE)[0]
+	main.player.position = main._tile_center_px(hae_back["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③l 황천해 서단 → 삼도천 복귀(왕복)", main._region == RegionCatalog.SAMDOCHEON)
+	_check("③m 복귀 도착 칸에 놓임", main._player_tile() == hae_back["dest"])
+
+	# 삼도천 남단 나룻터(20,23) → 나루 마을 복귀(연쇄 왕복 마무리).
+	var samdo_back: Dictionary = {}
+	for w in RegionCatalog.warps_of(RegionCatalog.SAMDOCHEON):
+		if w["to"] == RegionCatalog.NARU_VILLAGE:
+			samdo_back = w
+	main.player.position = main._tile_center_px(samdo_back["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③n 삼도천 남단 → 나루 마을 복귀(왕복)", main._region == RegionCatalog.NARU_VILLAGE)
+	_check("③o 복귀 도착 칸에 놓임", main._player_tile() == samdo_back["dest"])
+	# 안식 농원으로 복귀해 이후 검사(⑤)가 HOME 기준에서 이어지게 한다(상태 원복).
+	main.player.position = main._tile_center_px(back_at)
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③p 나루 마을 → 안식 농원 복귀(상태 원복)", main._region == RegionCatalog.HOME)
+
 	# ── ④ 워프 도착 칸 폴백 규칙(_warp_dest) ──
 	# dest 미정(TBD)이면 목적 구역 기본 스폰으로 폴백, 명시했으면 그 칸 그대로.
 	var w_tbd := {"to": RegionCatalog.HOME, "dest": RegionCatalog.TILE_TBD}
