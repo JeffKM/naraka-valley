@@ -5,7 +5,7 @@ extends SceneTree
 # 들어온 그 건물 외관 앞으로 fade 전환되고, _indoor·위치·카메라가 올바르게 바뀌는가.
 #
 # ★ 핵심 불변식:
-#   ① 카탈로그(_buildings) — 9채 전부 등록(홈 집 1 + 마을 8), 구역·종류 정합(카페·만물상·집6 = 마을).
+#   ① 카탈로그(_buildings) — 10채 전부 등록(홈 집 1 + 마을 8 + 안식 농원 창고 1), 구역·종류 정합(카페·만물상·집6 = 마을, 창고 = HOME·storehouse).
 #   ② 공유 집 실내 — 메인/주민 집 6채는 한 방(HOUSE_RECT)·실내 문(HOUSE_DOOR)을 공유하되
 #      외관 문·퇴장 칸은 건물마다 다르다(들어온 그 집으로 정확히 퇴장).
 #   ③ 만물상 전용 방(STORE_RECT) — 집 방 옆 칸에 서고, 들어가고 나올 수 있다.
@@ -49,6 +49,7 @@ func _interior_rect(m: Node, kind: String) -> Rect2i:
 		"house": return m.HOUSE_RECT
 		"cafe": return m.CAFE_RECT
 		"store": return m.STORE_RECT
+		"storehouse": return m.STOREHOUSE_RECT
 	return Rect2i()
 
 func _read_bytes(path: String) -> PackedByteArray:
@@ -76,10 +77,12 @@ func _initialize() -> void:
 
 	var m: Node = await _spawn_main()
 
-	# ── ① 카탈로그: 9채 등록(홈 집 + 마을 8채) + 구역·종류 정합 ──
+	# ── ① 카탈로그: 10채 등록(홈 집 + 마을 8채 + 안식 농원 창고) + 구역·종류 정합 ──
+	# ★ 안식 농원 확장 — 창고(HOME·storehouse, enterable 빈 방)가 더해져 9 → 10.
 	var ids: Array = m._buildings.keys()
-	_check("① 건물 9채 등록(_buildings — 홈 집 + 마을 8채)", ids.size() == 9)
+	_check("① 건물 10채 등록(_buildings — 홈 집 + 마을 8채 + 창고)", ids.size() == 10)
 	_check("① 홈 집 = HOME·house", m._buildings["집"]["region"] == RegionCatalog.HOME and m._buildings["집"]["kind"] == "house")
+	_check("① 창고 = HOME·storehouse", m._buildings["창고"]["region"] == RegionCatalog.HOME and m._buildings["창고"]["kind"] == "storehouse")
 	_check("① 카페 = 마을·cafe", m._buildings["카페"]["region"] == RegionCatalog.NARU_VILLAGE and m._buildings["카페"]["kind"] == "cafe")
 	_check("① 만물상 = 마을·store", m._buildings["만물상"]["region"] == RegionCatalog.NARU_VILLAGE and m._buildings["만물상"]["kind"] == "store")
 	for hid in m.HOUSE_IDS:
@@ -97,6 +100,30 @@ func _initialize() -> void:
 		out_tiles[b["out_tile"]] = true
 	_check("②b 외관 문 6채 서로 다름", ext_doors.size() == 6)
 	_check("②b 퇴장 칸 6채 서로 다름", out_tiles.size() == 6)
+
+	# ── ★ 안식 농원 창고(HOME·storehouse) — 빌드·진입·실내·격리·취침불가·퇴장(워프 전, HOME에서) ──
+	# 창고 실내 방은 HOME 그리드에만 빌드되므로(_build_home) 마을로 워프하기 전 HOME에서 검증한다.
+	var ci: Vector2i = m.STOREHOUSE_RECT.position + Vector2i(1, 1)
+	_check("⒮ 창고 실내 바닥 빌드(STOREHOUSE_RECT)", m._grid[ci.y][ci.x] == m.HOUSE)
+	_check("⒮ 창고 방 = 집·만물상·카페 방과 안 겹침",
+		not m.STOREHOUSE_RECT.intersects(m.HOUSE_RECT)
+		and not m.STOREHOUSE_RECT.intersects(m.STORE_RECT)
+		and not m.STOREHOUSE_RECT.intersects(m.CAFE_RECT))
+	var sh: Dictionary = m._buildings["창고"]
+	# 진입: 외관 문에 닿는다.
+	m.player.position = m._tile_center_px(sh["ext_door"])
+	m._maybe_toggle_building()
+	await _settle(m)
+	_check("▶ 창고 외관 문 → 실내 전환", m._indoor == "창고")
+	_check("▶ 창고 플레이어가 실내 방 안", m.STOREHOUSE_RECT.has_point(m._player_tile()))
+	_check("▶ 창고 카메라가 그 방으로 격리(top)", m._cam.limit_top == sh["cam"].position.y * m.TILE)
+	_check("▶ 창고 안에서 취침 불가(저장고)", not m._can_sleep())
+	# 퇴장: 실내 문 → 들어온 외관 앞.
+	m.player.position = m._tile_center_px(sh["door"])
+	m._maybe_toggle_building()
+	await _settle(m)
+	_check("◀ 창고 실내 문 → 바깥 전환", m._indoor == "")
+	_check("◀ 창고 외관 문 앞으로 퇴장(out_tile)", m._player_tile() == sh["out_tile"])
 
 	# ── 마을로 워프(building_test와 같은 경로: 안식 농원 동쪽 가장자리) ──
 	m.player.position = m._tile_center_px(Vector2i(38, 16))
@@ -157,6 +184,7 @@ func _initialize() -> void:
 	var m3: Node = await _spawn_main()
 	_check("⑥e 구역 불일치 indoor → 바깥 복귀", m3._region == RegionCatalog.HOME and m3._indoor == "")
 	await _despawn(m3)
+	# (창고 HOME-구역 세이브 라운드트립은 home_expansion_test에서 전담 — interior_test는 M2.2 + 창고 출입까지.)
 
 	# ── ⑦ 회귀 0: 홈 집 출입이 그대로 동작(id·취침 불변) ──
 	var m4: Node = await _spawn_main()
