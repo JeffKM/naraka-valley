@@ -7,7 +7,7 @@ extends SceneTree
 # ★ 핵심 불변식:
 #   ① 나무(TREE) 군집(FOREST_TREE_RECTS)이 통과 불가로 서고, 그 사이 빈터(GROUND)는 걸을 수 있다.
 #   ② 목공방 외관 = 통과 불가 WALL 박스 + 문 1칸(PATH 리세스), 실내는 빈 방(kind=woodshop).
-#   ③ 남단 spawn(20,22)에서 목공방 문·세 워프 칸(서 우회·동 미혹·남 갱도)이 걸어서 닿는다(flood-fill).
+#   ③ 남단 spawn(20,22)에서 목공방 문·두 워프 칸(동 미혹·남 갱도)이 걸어서 닿는다(flood-fill). ★M5.1: 임시 우회(서) 제거.
 #   ④ 목공방 출입 라운드트립(진입→실내 격리→퇴장) + 취침 불가(남의 건물).
 #   ⑤ 세이브 라운드트립 — 저승 숲 실내(목공방)에서 저장하면 새 인스턴스가 그 구역·실내·위치로 재개.
 #   ⑥ 회귀 0 — 카탈로그에 목공방(JEOSEUNG_FOREST·woodshop) 등록, 홈 집 출입 불변.
@@ -118,7 +118,7 @@ func _initialize() -> void:
 	var reach := _reachable(m, spawn)
 	_check("③b 목공방 외관 문 도달", reach.has(m.WOODSHOP_EXT_DOOR))
 	var warps: Array = RegionCatalog.warps_of(RegionCatalog.JEOSEUNG_FOREST)
-	_check("③c 워프 3개(갱도·미혹·나루마을 임시)", warps.size() == 3)
+	_check("③c 워프 2개(갱도·미혹 — ★M5.1 나루 마을 임시 우회 제거)", warps.size() == 2)
 	for w in warps:
 		_check("③d 워프 발동 칸 도달 (→%s)" % w["to"], reach.has(w["at"]))
 		_check("③e 워프 발동 칸이 PATH (→%s)" % w["to"], m._grid[w["at"].y][w["at"].x] == m.PATH)

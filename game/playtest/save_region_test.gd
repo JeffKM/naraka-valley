@@ -121,15 +121,15 @@ func _initialize() -> void:
 	_check("④d 외부 카메라 경계 = 홈베이스 폭", m5._cam.limit_right == hw)
 	await _despawn(m5)
 
-	# ── 미빌드 stub 구역(업화 갱도)도 미지와 같게 폴백되는가 ──
-	# ★ M4.2 — 저승 숲·미혹의 숲이 빌드돼 더는 stub이 아니다(정상 복원 — jeoseung/mihok_forest_test).
-	#   여전히 stub인 업화 갱도로 폴백 불변식을 검사한다(다음 구역이 빌드되면 다음 stub으로 교체).
+	# ── 이전 stub이던 업화 갱도가 이제 *정상 복원*되는가(M5.2 — 8구역 전부 빌드, stub 0) ──
+	# ★ M5.2 — 업화 갱도·나락이 빌드돼 stub이 0개다. M4.2까지 폴백 예시였던 업화 갱도는 이제 정상 복원된다
+	#   (미빌드→폴백 경로는 ④ 미지 id가 계속 덮는다 — is_built=false면 홈베이스 폴백, 회귀 0).
 	var sm2 := SaveManager.new()
-	sm2.save_game({"region": RegionCatalog.EOPHWA_MINE, "indoor": "", "player_tile": Vector2i(2, 2)})
+	sm2.save_game({"region": RegionCatalog.EOPHWA_MINE, "indoor": "", "player_tile": Vector2i(20, 22)})
 	sm2.free()
 	var m6: Node = await _spawn_main()
-	_check("⑤ 미빌드 stub 구역(업화 갱도) → 홈베이스 폴백", m6._region == RegionCatalog.HOME)
-	_check("⑤b stub 폴백 위치 = 홈베이스 스폰", m6._player_tile() == m6.SPAWN_TILE)
+	_check("⑤ 업화 갱도(이전 stub) 정상 복원(폴백 아님)", m6._region == RegionCatalog.EOPHWA_MINE)
+	_check("⑤b 복원 위치 = 저장한 갱도 칸", m6._player_tile() == Vector2i(20, 22))
 	await _despawn(m6)
 
 	# ── 세이브 백업 복원(실제 개발 세이브 보존) ──
