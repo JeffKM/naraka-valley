@@ -163,6 +163,14 @@ const PROP_CAFE_TABLE := preload("res://assets/props/cafe_table.png")
 # "닫힌 건물"로 보이게 한다(_draw_facades). 집=224×192(7×6칸), 카페=256×224(8×7칸).
 const FACADE_HOUSE := preload("res://assets/buildings/house_ext.png")
 const FACADE_CAFE := preload("res://assets/buildings/cafe_ext.png")
+# ★ M2.5 — 나루 마을 메인 집 3채(미호·멜·바나)를 본체 캐릭터별로 외관 재도색(residents.md
+# "본체별 외관 재도색", ADR-0014 점진 추가). 카페 외관과 같은 결로 통과 불가 WALL 박스 위에
+# 1:1로 덮어 "그 캐릭터의 집"으로 읽히게 한다(미호=한옥·여우불 / 멜=청록·돈 부적 / 바나=고딕·박쥐).
+# 박스 크기와 1:1: 미호·바나=128×128(4×4칸), 멜=160×160(5×5칸). 만물상·주민 집은 이번 패스
+# 범위 밖이라 그레이박스 라벨 유지(본체 제작 시 함께 재도색 — 미리 테마링 안 해 낭비 0).
+const FACADE_MIHO_HOUSE := preload("res://assets/buildings/miho_house_ext.png")
+const FACADE_MEL_HOUSE := preload("res://assets/buildings/mel_house_ext.png")
+const FACADE_BANA_HOUSE := preload("res://assets/buildings/bana_house_ext.png")
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로).
 # ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
@@ -942,11 +950,8 @@ func _place_labels() -> void:
 			# 동쪽 복도 끝(38,16) 길 워프 안내 — 마을로 가는 길임을 그레이박스로 일러둔다.
 			_add_label("나루 마을 →", _tile_center_px(Vector2i(36, 15)))
 		RegionCatalog.NARU_VILLAGE:
-			# ★ M2.1 — 그레이박스 건물은 라벨로 식별(카페만 외관 아트라 라벨 없음, 기존 컨벤션).
-			# 서편(메인 집 3) + 동편(만물상·주민 집) + 워프(나룻터·산길·서워프) + 다리.
-			_add_label("멜 집", _tile_center_px(Vector2i(14, 4)))
-			_add_label("미호 집", _tile_center_px(Vector2i(3, 12)))
-			_add_label("바나 집", _tile_center_px(Vector2i(12, 12)))
+			# ★ M2.5 — 카페·메인 집 3(미호·멜·바나)은 도트 외관으로 식별되므로 라벨 없음(카페 컨벤션).
+			# 아직 그레이박스인 동편(만물상·주민 집) + 워프(나룻터·산길·서워프) + 다리만 라벨로 식별.
 			_add_label("만물상", _tile_center_px(Vector2i(25, 4)))
 			_add_label("주민 집", _tile_center_px(Vector2i(33, 4)))
 			_add_label("주민 집", _tile_center_px(Vector2i(24, 12)))
@@ -2391,6 +2396,7 @@ func _draw() -> void:
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
+			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
 			_draw_props_for(PROP_LAYOUT_CAFE)  # 카페 무대 가구·카페 등불
 			# M2.4 — 이벤트 데이면 카페 무대를 축제 장식으로(가구 위에 가랜드·무대 카펫 덧그림).
 			if Festival.is_event_day(clock.day):
@@ -2432,6 +2438,14 @@ func _draw_facade_home() -> void:
 
 func _draw_facade_cafe() -> void:
 	draw_texture_rect(FACADE_CAFE, Rect2(Vector2(CAFE_EXT_RECT.position * TILE), FACADE_CAFE.get_size()), false)
+
+# ★ M2.5 — 나루 마을 메인 집 3채 외관(카페와 같은 결 — 통과 불가 WALL 박스 위 1:1 덮어 그리기).
+# 본체 캐릭터별 재도색이라 라벨 없이 외관만으로 누구 집인지 읽힌다(카페 컨벤션). 그리기 전용 —
+# WALL 충돌·문 트리거·동선은 그레이박스 시절 그대로(_build_naru_village), 보이는 것만 바뀐다.
+func _draw_facade_village_houses() -> void:
+	draw_texture_rect(FACADE_MEL_HOUSE, Rect2(Vector2(MEL_HOUSE_RECT.position * TILE), FACADE_MEL_HOUSE.get_size()), false)
+	draw_texture_rect(FACADE_MIHO_HOUSE, Rect2(Vector2(MIHO_HOUSE_RECT.position * TILE), FACADE_MIHO_HOUSE.get_size()), false)
+	draw_texture_rect(FACADE_BANA_HOUSE, Rect2(Vector2(BANA_HOUSE_RECT.position * TILE), FACADE_BANA_HOUSE.get_size()), false)
 
 # M2.4 — 카페 이벤트 데이 축제 장식(절차 도형, 새 에셋 0 — Phase 2 경계 준수). 카메라가 카페
 # 방(CAFE_CAM_RECT)만 비추므로 CAFE_RECT 좌표에 그리면 카페 실내에서만 보인다(다른 구역·집/
