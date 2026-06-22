@@ -107,17 +107,27 @@ func _initialize() -> void:
 	_check("③n 삼도천 남단 → 나루 마을 복귀(왕복)", main._region == RegionCatalog.NARU_VILLAGE)
 	_check("③o 복귀 도착 칸에 놓임", main._player_tile() == samdo_back["dest"])
 
-	# ── ③'''' M4.1 — 나루 마을 ↔ 저승 숲 임시 왕복(산길 임시 직결 점등). 산길(38,8) → 저승 숲, 서단(1,16) → 마을 복귀 ──
-	# ★ 임시(TEMP) 워프: 갱도가 stub이라 산길을 저승 숲에 임시 직결(M4.1). 갱도 빌드 시 정규 경로로 원복.
-	var forest_w: Dictionary = {}
+	# ── ③'''' M5.1 — 나루 마을 ↔ 업화 갱도 ↔ 저승 숲 정규 왕복(산길·숲길 점등, M4.1 임시 직결 종료) ──
+	# 산길(38,8) → 업화 갱도(남단 spawn). M4.1의 산길→저승 숲 임시 직결이 정규 산길→갱도로 복원됐다.
+	var mine_w: Dictionary = {}
 	for w in RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE):
-		if w["to"] == RegionCatalog.JEOSEUNG_FOREST:
-			forest_w = w
-	main.player.position = main._tile_center_px(forest_w["at"])
+		if w["to"] == RegionCatalog.EOPHWA_MINE:
+			mine_w = w
+	main.player.position = main._tile_center_px(mine_w["at"])
 	main._maybe_warp_edge()
 	await _settle()
-	_check("③q 산길(38,8) → 저승 숲 전환(임시 점등)", main._region == RegionCatalog.JEOSEUNG_FOREST)
-	_check("③r 저승 숲 도착 칸에 놓임", main._player_tile() == forest_w["dest"])
+	_check("③q 산길(38,8) → 업화 갱도 전환(정규 점등)", main._region == RegionCatalog.EOPHWA_MINE)
+	_check("③r 갱도 남단 도착 칸에 놓임", main._player_tile() == mine_w["dest"])
+	# 업화 갱도 북단 숲길(20,1) → 저승 숲(남단 spawn).
+	var mine_forest_w: Dictionary = {}
+	for w in RegionCatalog.warps_of(RegionCatalog.EOPHWA_MINE):
+		if w["to"] == RegionCatalog.JEOSEUNG_FOREST:
+			mine_forest_w = w
+	main.player.position = main._tile_center_px(mine_forest_w["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③q2 갱도 북단 숲길 → 저승 숲 전환(점등)", main._region == RegionCatalog.JEOSEUNG_FOREST)
+	_check("③r2 저승 숲 도착 칸에 놓임", main._player_tile() == mine_forest_w["dest"])
 
 	# ── ③''''' M4.2 — 저승 숲 ↔ 미혹의 숲 왕복(숲 안쪽 점등). 동단(38,16) → 미혹의 숲, 서단(1,16) → 저승 숲 복귀 ──
 	var mihok_w: Dictionary = {}
@@ -137,16 +147,25 @@ func _initialize() -> void:
 	_check("③w 미혹의 숲 서단 → 저승 숲 복귀(왕복)", main._region == RegionCatalog.JEOSEUNG_FOREST)
 	_check("③x 복귀 도착 칸에 놓임", main._player_tile() == mihok_back["dest"])
 
-	# 저승 숲 서단(1,16) → 나루 마을 복귀(임시 우회 왕복).
-	var forest_back: Dictionary = {}
+	# 저승 숲 남단 숲길(20,23) → 업화 갱도(북단), 갱도 남단 산길(20,23) → 나루 마을(정규 복귀 연쇄).
+	var forest_mine_back: Dictionary = {}
 	for w in RegionCatalog.warps_of(RegionCatalog.JEOSEUNG_FOREST):
-		if w["to"] == RegionCatalog.NARU_VILLAGE:
-			forest_back = w
-	main.player.position = main._tile_center_px(forest_back["at"])
+		if w["to"] == RegionCatalog.EOPHWA_MINE:
+			forest_mine_back = w
+	main.player.position = main._tile_center_px(forest_mine_back["at"])
 	main._maybe_warp_edge()
 	await _settle()
-	_check("③s 저승 숲 서단 → 나루 마을 복귀(왕복)", main._region == RegionCatalog.NARU_VILLAGE)
-	_check("③t 복귀 도착 칸에 놓임", main._player_tile() == forest_back["dest"])
+	_check("③s 저승 숲 남단 숲길 → 업화 갱도 복귀(왕복)", main._region == RegionCatalog.EOPHWA_MINE)
+	_check("③t 갱도 북단 도착 칸에 놓임", main._player_tile() == forest_mine_back["dest"])
+	var mine_naru_back: Dictionary = {}
+	for w in RegionCatalog.warps_of(RegionCatalog.EOPHWA_MINE):
+		if w["to"] == RegionCatalog.NARU_VILLAGE:
+			mine_naru_back = w
+	main.player.position = main._tile_center_px(mine_naru_back["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③s2 갱도 남단 산길 → 나루 마을 복귀(왕복)", main._region == RegionCatalog.NARU_VILLAGE)
+	_check("③t2 나루 마을 산길 도착 칸에 놓임", main._player_tile() == mine_naru_back["dest"])
 
 	# 안식 농원으로 복귀해 이후 검사(⑤)가 HOME 기준에서 이어지게 한다(상태 원복).
 	main.player.position = main._tile_center_px(back_at)

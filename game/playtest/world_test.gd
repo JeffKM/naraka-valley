@@ -44,9 +44,9 @@ func _initialize() -> void:
 	_check("②h 나루 마을 스폰 = (3, 16)", RegionCatalog.spawn_of(RegionCatalog.NARU_VILLAGE) == Vector2i(3, 16))
 	_check("②i 나루 마을은 지어진 구역(is_built)", RegionCatalog.is_built(RegionCatalog.NARU_VILLAGE))
 
-	# ── ③ 나머지 2개 = stub(아직 안 지어짐): size·spawn = ZERO, 표시명만 있음 ──
-	# ★ M4.2 — 빌드된 구역이 여섯(…·저승 숲·미혹의 숲)으로 늘어, 여섯을 빼고 2개가 stub이다(업화 갱도·나락).
-	var built_ids := [RegionCatalog.HOME, RegionCatalog.NARU_VILLAGE, RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE, RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST]
+	# ── ③ 8구역 전부 실데이터(stub 0): size·spawn 채워짐 ──
+	# ★ M5.2 — 업화 갱도·나락이 지어져 8구역 전부 빌드(stub 0, "빌드는 한 구역씩" 완주, ADR-0015).
+	var built_ids := [RegionCatalog.HOME, RegionCatalog.NARU_VILLAGE, RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE, RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST, RegionCatalog.EOPHWA_MINE, RegionCatalog.NARAK]
 	var stub_count := 0
 	for id in ids:
 		if id in built_ids:
@@ -56,11 +56,11 @@ func _initialize() -> void:
 		_check("③b '%s' stub spawn=ZERO" % id, RegionCatalog.spawn_of(id) == Vector2i.ZERO)
 		_check("③c '%s' stub 미빌드(is_built=false)" % id, not RegionCatalog.is_built(id))
 		_check("③d '%s' 표시명은 채워짐" % id, RegionCatalog.name_of(id) != "")
-	_check("③e stub은 정확히 2개", stub_count == 2)
-	# ★ 핵심 불변식: 지어진 구역 = …·저승 숲·미혹의 숲 여섯("빌드는 한 구역씩", ADR-0015 — M4.2로 여섯째 점등).
+	_check("③e stub은 0개(8구역 전부 빌드)", stub_count == 0)
+	# ★ 핵심 불변식: 8구역 전부 빌드("빌드는 한 구역씩" 완주, ADR-0015 — M5.2로 여덟째 점등).
 	var built := ids.filter(func(id): return RegionCatalog.is_built(id))
-	_check("③f 지어진 구역 = home·나루 마을·삼도천·황천해·저승 숲·미혹의 숲 여섯", built == built_ids)
-	# ★ M3.1/M3.2/M4.1/M4.2 — 삼도천·황천해·저승 숲·미혹의 숲 실데이터 확인(size·spawn 채워짐).
+	_check("③f 지어진 구역 = 8구역 전부", built == built_ids)
+	# ★ M3.1/M3.2/M4.1/M4.2/M5.1/M5.2 — 삼도천·황천해·저승 숲·미혹의 숲·업화 갱도·나락 실데이터 확인(size·spawn 채워짐).
 	_check("③g 삼도천 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.SAMDOCHEON) == Vector2i(40, 24))
 	_check("③h 삼도천 스폰 = (20,22)", RegionCatalog.spawn_of(RegionCatalog.SAMDOCHEON) == Vector2i(20, 22))
 	_check("③i 황천해 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(40, 24))
@@ -69,6 +69,10 @@ func _initialize() -> void:
 	_check("③l 저승 숲 스폰 = (20,22)", RegionCatalog.spawn_of(RegionCatalog.JEOSEUNG_FOREST) == Vector2i(20, 22))
 	_check("③m 미혹의 숲 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.MIHOK_FOREST) == Vector2i(40, 24))
 	_check("③n 미혹의 숲 스폰 = (2,16)", RegionCatalog.spawn_of(RegionCatalog.MIHOK_FOREST) == Vector2i(2, 16))
+	_check("③o 업화 갱도 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.EOPHWA_MINE) == Vector2i(40, 24))
+	_check("③p 업화 갱도 스폰 = (20,22)", RegionCatalog.spawn_of(RegionCatalog.EOPHWA_MINE) == Vector2i(20, 22))
+	_check("③q 나락 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.NARAK) == Vector2i(40, 24))
+	_check("③r 나락 스폰 = (20,12)", RegionCatalog.spawn_of(RegionCatalog.NARAK) == Vector2i(20, 12))
 
 	# ── ④ 토폴로지(warps) 정합: world-map.md §2 구역 그래프 ──
 	# 워프의 to는 실재하는 구역이어야 하고, 토폴로지는 대칭(양방향)이어야 한다.
@@ -106,6 +110,13 @@ func _initialize() -> void:
 	_check("④e 나락 = 독립(이웃 0)", RegionCatalog.neighbors(RegionCatalog.NARAK).is_empty())
 	# home은 허브(나루 마을)와 이어진다.
 	_check("④f home↔나루 마을 연결", RegionCatalog.neighbors(RegionCatalog.HOME) == [RegionCatalog.NARU_VILLAGE])
+	# ★ M5.1 정규 토폴로지 복원: 나루 마을 ──(산길)── 업화 갱도 ──(숲길)── 저승 숲(M4.1 임시 우회 종료).
+	_check("④g 나루 마을 이웃에 업화 갱도(산길 정규 복원)", RegionCatalog.neighbors(RegionCatalog.NARU_VILLAGE).has(RegionCatalog.EOPHWA_MINE))
+	_check("④h 업화 갱도 이웃 = 나루 마을·저승 숲(2)",
+		RegionCatalog.neighbors(RegionCatalog.EOPHWA_MINE).has(RegionCatalog.NARU_VILLAGE)
+		and RegionCatalog.neighbors(RegionCatalog.EOPHWA_MINE).has(RegionCatalog.JEOSEUNG_FOREST)
+		and RegionCatalog.neighbors(RegionCatalog.EOPHWA_MINE).size() == 2)
+	_check("④i 저승 숲↔나루 마을 직결 없음(임시 우회 종료)", not RegionCatalog.neighbors(RegionCatalog.JEOSEUNG_FOREST).has(RegionCatalog.NARU_VILLAGE))
 
 	# ── ⑤ 미지 id 방어: 조회가 안전한 빈값을 돌려준다(크래시 X) ──
 	var unknown := "no_such_region"
