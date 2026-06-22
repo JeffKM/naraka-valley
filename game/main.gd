@@ -26,6 +26,7 @@ const MAP_W := 40                      # 맵 가로(타일) = 640px
 const MAP_H := 52                      # 맵 세로(타일). 외부(0..23) + 실내 전용 구역(아래쪽). 실내 방은
                                        # 외부에서 멀리 떨어진 별도 구역에 두고 카메라로 격리한다(스타듀식 외부↔실내 분리).
 const OUTDOOR_H := 24                  # 외부 영역 세로(타일). 카메라가 외부 모드에서 여기까지만 비춘다(아래 실내 구역은 안 보임).
+const INDOOR_BAND_H := MAP_H - OUTDOOR_H  # =28. 외부 아래 실내 전용 띠 높이(구역 공유). 구역 그리드 세로 = 외부 높이 + 이 띠(코지-와이드 C1).
 
 # ── P2.4 대화 초상화: 화자 표시이름 → 초상화 파일 stem ───────────────────────
 # ADR-0003 "표정=대화 시 별도 일러스트 초상화". 인게임 도트(작은 실루엣)와 달리 얼굴을
@@ -553,6 +554,13 @@ var lighting: DayNightLighting
 var audio: GameAudio
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
+# ★ 코지-와이드 C1 — 현재 구역 그리드 치수(RegionCatalog.size_of(_region) 파생). 전역 상수
+# MAP_W/MAP_H/OUTDOOR_H 대신 빌드 경로(_build_*/_set_tile/_build_border/_is_farmable)가 이걸 읽어
+# 구역마다 외부 크기를 달리할 수 있게 한다. _build_grid 최상단에서 매 재빌드마다 갱신(=_region과 항상 동기).
+# 이번 패스(C1)는 8구역 전부 size=(40,24)라 값이 상수와 동일 = 회귀 0.
+var _grid_w := MAP_W          # 현재 구역 외부 가로(타일)
+var _outdoor_h := OUTDOOR_H   # 현재 구역 외부 세로(타일)
+var _grid_h := MAP_H          # 그리드 전체 세로 = _outdoor_h + INDOOR_BAND_H
 # M1.3 — 구역 라벨(밭·도착 등) 노드 추적. 구역 전환(_rebuild_region) 시 이전 구역 라벨을
 # 걷어내고 새로 깔기 위해 _add_label이 여기 모은다(중복 누적 방지).
 var _labels: Array[Node] = []
@@ -916,6 +924,15 @@ func _build_field_tileset() -> TileSet:
 # 지금은 홈베이스(안식 농원)뿐이라 _build_home으로 분기하고, M1.4부터 구역이 늘면 여기에
 # per-region 빌더를 추가한다. 미지 구역은 홈베이스로 폴백(부팅 안 죽음 — RegionCatalog 방어와 결).
 func _build_grid() -> void:
+	# ★ 코지-와이드 C1 — match 분기 직전에 구역 치수를 캐시한다. 8개 빌더·_set_tile·_build_border·
+	# _is_farmable가 전역 상수 대신 이 멤버를 읽어 구역별 외부 크기를 따른다. size_of가 ZERO(미빌드
+	# stub·미지 id)면 홈 외부 무대로 폴백 — 아래 match의 `_:`→_build_home 방어 폴백과 정합(빈 맵 방지).
+	var sz := RegionCatalog.size_of(_region)
+	if sz == Vector2i.ZERO:
+		sz = Vector2i(MAP_W, OUTDOOR_H)
+	_grid_w = sz.x
+	_outdoor_h = sz.y
+	_grid_h = _outdoor_h + INDOOR_BAND_H
 	match _region:
 		RegionCatalog.HOME:
 			_build_home()
@@ -947,10 +964,10 @@ func _build_grid() -> void:
 #   동쪽 복도 끝(38,16)이 나루 마을로 가는 길 워프가 된다(_carve_paths가 동쪽 끝까지 길을 잇는다).
 func _build_home() -> void:
 	_grid = []
-	for y in MAP_H:
+	for y in _grid_h:
 		var row: Array = []
-		for x in MAP_W:
-			row.append(GROUND if y < OUTDOOR_H else VOID)
+		for x in _grid_w:
+			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
 	_fill_rect(FARM_RECT, SOIL)                     # 밭(열린 흙 구역, 외부)
@@ -971,10 +988,10 @@ func _build_home() -> void:
 # 실내·내부 좌표는 불변이라(좌표 대이동 0) 카페 시뮬·NPC·좌석·잡귀 상수는 그대로 따라온다(회귀 0).
 func _build_naru_village() -> void:
 	_grid = []
-	for y in MAP_H:
+	for y in _grid_h:
 		var row: Array = []
-		for x in MAP_W:
-			row.append(GROUND if y < OUTDOOR_H else VOID)
+		for x in _grid_w:
+			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
 	# 강(WATER, 통과 X) — 세로 두 칸 폭. 다리(y16)는 뒤의 _carve가 PATH로 덮어 도하점이 된다.
@@ -1006,15 +1023,15 @@ func _build_naru_village() -> void:
 # 문·하구 워프 칸까지 닿는다. 혼백관은 그레이박스 WALL 박스(만물상·창고 결 — _draw 외관 텍스처 없음).
 func _build_samdocheon() -> void:
 	_grid = []
-	for y in MAP_H:
+	for y in _grid_h:
 		var row: Array = []
-		for x in MAP_W:
-			row.append(GROUND if y < OUTDOOR_H else VOID)
+		for x in _grid_w:
+			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
 	# 강(WATER, 통과 X) — 상단 가로 띠. 그 아래 둑(y4~)이 강 낚시터(Phase 3에서 캐스팅 자리).
 	for y in range(SAMDO_RIVER_Y0, SAMDO_RIVER_Y1 + 1):
-		for x in range(1, MAP_W - 1):
+		for x in range(1, _grid_w - 1):
 			_set_tile(x, y, WATER)
 
 	_build_facade(MUSEUM_EXT_RECT, MUSEUM_EXT_DOOR)            # 혼백관 외관(통과 불가 박스 + 문)
@@ -1036,15 +1053,15 @@ func _carve_samdocheon_paths() -> void:
 # 단순). 부두(PATH)가 바다로 뻗어 그 끝(PIER_Y1)이 바다 낚시터. 막다른 구역이라 워프는 삼도천 복귀 하나.
 func _build_hwangcheonhae() -> void:
 	_grid = []
-	for y in MAP_H:
+	for y in _grid_h:
 		var row: Array = []
-		for x in MAP_W:
-			row.append(GROUND if y < OUTDOOR_H else VOID)
+		for x in _grid_w:
+			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
 	# 바다(WATER, 통과 X) — 하단 가로 띠. 부두 끝(바다 한가운데)이 바다 낚시터(Phase 3 캐스팅 자리).
 	for y in range(SEA_Y0, SEA_Y1 + 1):
-		for x in range(1, MAP_W - 1):
+		for x in range(1, _grid_w - 1):
 			_set_tile(x, y, WATER)
 
 	_build_facade(FISHSHOP_EXT_RECT, FISHSHOP_EXT_DOOR)            # 생선가게 외관(통과 불가 박스 + 문)
@@ -1067,10 +1084,10 @@ func _carve_hwangcheonhae_paths() -> void:
 # WALL 박스(혼백관·생선가게 결 — _draw 외관 텍스처 없음, _paint_grid가 칠함).
 func _build_jeoseung_forest() -> void:
 	_grid = []
-	for y in MAP_H:
+	for y in _grid_h:
 		var row: Array = []
-		for x in MAP_W:
-			row.append(GROUND if y < OUTDOOR_H else VOID)
+		for x in _grid_w:
+			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
 	# 나무(TREE, 통과 X) 군집 — 빈터(GROUND) 사이에 흩어 숲 밀도를 준다(동선·목공방·워프 비껴감).
@@ -1096,10 +1113,10 @@ func _carve_jeoseung_forest_paths() -> void:
 # 옥자 집은 _build_facade만(WALL 박스 + 문 리세스) — 실내·카탈로그 없어 진입 불가(축사 결, '숨겨진·게이트').
 func _build_mihok_forest() -> void:
 	_grid = []
-	for y in MAP_H:
+	for y in _grid_h:
 		var row: Array = []
-		for x in MAP_W:
-			row.append(GROUND if y < OUTDOOR_H else VOID)
+		for x in _grid_w:
+			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
 	# 연못(WATER, 통과 X) — 깊은 숲 한가운데 물웅덩이. 나무(TREE) 군집 — 빈터 사이에 빽빽이(저승 숲보다 짙음).
@@ -1127,10 +1144,10 @@ func _carve_mihok_forest_paths() -> void:
 # 그레이박스 WALL 박스(목공방·혼백관 결), 던전 입구·나락 진입로는 잠긴 외관(옥자 집 결 — 카탈로그 미등록).
 func _build_eophwa_mine() -> void:
 	_grid = []
-	for y in MAP_H:
+	for y in _grid_h:
 		var row: Array = []
-		for x in MAP_W:
-			row.append(GROUND if y < OUTDOOR_H else VOID)
+		for x in _grid_w:
+			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
 	# 바위(ROCK, 통과 X) 군집 + 호수(WATER, 통과 X) — 빈터(GROUND) 사이에 흩어 갱도 밀도를 준다(동선·문·게이트 비껴감).
@@ -1164,10 +1181,10 @@ func _carve_eophwa_mine_paths() -> void:
 # 진입로는 업화 갱도의 잠긴 외관이라 인게임 진입 없음(헤드리스 빌드·검증 전용). spawn(20,12) 중앙은 걸을 수 있다.
 func _build_narak() -> void:
 	_grid = []
-	for y in MAP_H:
+	for y in _grid_h:
 		var row: Array = []
-		for x in MAP_W:
-			row.append(GROUND if y < OUTDOOR_H else VOID)
+		for x in _grid_w:
+			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
 	# 바위(ROCK, 통과 X) — 빈 전투장 네 구석에 흩어 '심연 갱' 분위기(spawn 중앙·동선 비껴감). 라이브 워프·건물 없음.
@@ -1183,12 +1200,12 @@ func _build_facade(rect: Rect2i, door: Vector2i) -> void:
 	_set_tile(door.x, door.y, PATH)
 
 func _build_border() -> void:
-	for x in MAP_W:
+	for x in _grid_w:
 		_set_tile(x, 0, WALL)
-		_set_tile(x, MAP_H - 1, WALL)
-	for y in MAP_H:
+		_set_tile(x, _grid_h - 1, WALL)
+	for y in _grid_h:
 		_set_tile(0, y, WALL)
-		_set_tile(MAP_W - 1, y, WALL)
+		_set_tile(_grid_w - 1, y, WALL)
 
 func _build_room(rect: Rect2i, floor_id: int, wall_id: int, door: Vector2i) -> void:
 	# 바닥으로 채운 뒤 둘레를 (실내) 벽으로 두르고, 문 한 칸만 바닥으로 되돌려 통로로 연다
@@ -2787,7 +2804,7 @@ func _update_target() -> void:
 # 미호가 오후에 카페로 출근해 비어 있어도 이 자리는 계속 비워 둔다(돌아올 자리 — 작물을
 # 심어 미호와 겹치는 걸 막는다). 카페 자리(_miho_tile 카페값)는 SOIL이 아니라 자동 제외된다.
 func _is_farmable(t: Vector2i) -> bool:
-	if t.x < 0 or t.x >= MAP_W or t.y < 0 or t.y >= MAP_H:
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
 		return false
 	if t == MIHO_FIELD_TILE:
 		return false
@@ -2960,7 +2977,7 @@ func _draw_graybox_figure(t: Vector2i, base: Color, ratio: float) -> void:
 
 # ── 헬퍼 ──────────────────────────────────────────────────────────────────
 func _set_tile(x: int, y: int, id: int) -> void:
-	if x >= 0 and x < MAP_W and y >= 0 and y < MAP_H:
+	if x >= 0 and x < _grid_w and y >= 0 and y < _grid_h:
 		_grid[y][x] = id
 
 func _fill_rect(rect: Rect2i, id: int) -> void:
