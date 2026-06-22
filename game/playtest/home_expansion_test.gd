@@ -41,7 +41,9 @@ func _despawn(m: Node) -> void:
 
 # HOME 외부(y<OUTDOOR_H)에서 4방향 flood-fill로 걸을 수 있는 칸 — WALL/VOID 막힘.
 func _walkable(m: Node, t: Vector2i) -> bool:
-	if t.x < 0 or t.y < 0 or t.x >= m.MAP_W or t.y >= m.OUTDOOR_H:
+	# ★C2 — 구역별 외부 치수를 따른다(MAP_W/OUTDOOR_H 전역 상수 대신 _grid_w/_outdoor_h). HOME은
+	#   80×65라 전역(40×24)으로 경계를 잡으면 좌상단 모서리만 탐색하게 된다(C1 치수 일반화 결).
+	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
 	return id != m.WALL and id != m.VOID and id != m.WATER
@@ -90,10 +92,8 @@ func _initialize() -> void:
 	_check("① 창고 region=HOME·kind=storehouse", sh["region"] == RegionCatalog.HOME and sh["kind"] == "storehouse")
 	var ci: Vector2i = m.STOREHOUSE_RECT.position + Vector2i(1, 1)
 	_check("① 창고 실내 바닥 빌드(STOREHOUSE_RECT)", m._grid[ci.y][ci.x] == m.HOUSE)
-	_check("① 창고 방 = 집·만물상·카페 방과 안 겹침",
-		not m.STOREHOUSE_RECT.intersects(m.HOUSE_RECT)
-		and not m.STOREHOUSE_RECT.intersects(m.STORE_RECT)
-		and not m.STOREHOUSE_RECT.intersects(m.CAFE_RECT))
+	_check("① 창고 방 = HOME 집 방과 안 겹침(둘 다 HOME 밴드)",   # ★C2 HOME 집은 HOME_HOUSE_RECT
+		not m.STOREHOUSE_RECT.intersects(m.HOME_HOUSE_RECT))
 
 	# ── ③ 축사 = 건물 자리만(비-enterable) ──
 	var barn: Rect2i = m.BARN_EXT_RECT
@@ -122,7 +122,7 @@ func _initialize() -> void:
 	var reach := _reachable(m, spawn)
 	_check("④ 창고 외관 문 도달", reach.has(m.STOREHOUSE_EXT_DOOR))
 	_check("④ 홈 집 외관 문 도달", reach.has(m.HOUSE_EXT_DOOR))
-	_check("④ 동쪽 길 워프 칸(38,16) 도달", reach.has(Vector2i(38, 16)))
+	_check("④ 동쪽 길 워프 칸(78,32) 도달", reach.has(Vector2i(78, 32)))   # ★C2 80×65
 	# 축사 박스 칸은 WALL이라 도달 집합에 없다(통과 불가 자리). 둘레는 도달 가능(비껴감).
 	_check("④ 축사 박스 안쪽 칸은 막힘(WALL 자리)", not reach.has(barn.position + Vector2i(1, 1)))
 	_check("④ 축사 비껴 아래 칸 도달(소프트락 0)", reach.has(Vector2i(barn_door.x, barn.end.y)))
@@ -152,7 +152,7 @@ func _initialize() -> void:
 	await _settle(m2)
 	_check("⑤ 홈 집 진입(_indoor=집)", m2._indoor == "집")
 	_check("⑤ 홈 집 안 취침 가능(회귀 0)", m2._can_sleep())
-	m2.player.position = m2._tile_center_px(m2.HOUSE_DOOR)
+	m2.player.position = m2._tile_center_px(m2.HOME_HOUSE_DOOR)   # ★C2 HOME 집 실내 문
 	m2._maybe_toggle_building()
 	await _settle(m2)
 	_check("⑤ 홈 집 퇴장", m2._indoor == "")

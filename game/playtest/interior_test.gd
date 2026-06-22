@@ -115,10 +115,8 @@ func _initialize() -> void:
 	# 창고 실내 방은 HOME 그리드에만 빌드되므로(_build_home) 마을로 워프하기 전 HOME에서 검증한다.
 	var ci: Vector2i = m.STOREHOUSE_RECT.position + Vector2i(1, 1)
 	_check("⒮ 창고 실내 바닥 빌드(STOREHOUSE_RECT)", m._grid[ci.y][ci.x] == m.HOUSE)
-	_check("⒮ 창고 방 = 집·만물상·카페 방과 안 겹침",
-		not m.STOREHOUSE_RECT.intersects(m.HOUSE_RECT)
-		and not m.STOREHOUSE_RECT.intersects(m.STORE_RECT)
-		and not m.STOREHOUSE_RECT.intersects(m.CAFE_RECT))
+	_check("⒮ 창고 방 = HOME 집 방과 안 겹침(둘 다 HOME 밴드)",   # ★C2 HOME 집은 HOME_HOUSE_RECT
+		not m.STOREHOUSE_RECT.intersects(m.HOME_HOUSE_RECT))
 	var sh: Dictionary = m._buildings["창고"]
 	# 진입: 외관 문에 닿는다.
 	m.player.position = m._tile_center_px(sh["ext_door"])
@@ -136,7 +134,7 @@ func _initialize() -> void:
 	_check("◀ 창고 외관 문 앞으로 퇴장(out_tile)", m._player_tile() == sh["out_tile"])
 
 	# ── 마을로 워프(building_test와 같은 경로: 안식 농원 동쪽 가장자리) ──
-	m.player.position = m._tile_center_px(Vector2i(38, 16))
+	m.player.position = m._tile_center_px(Vector2i(78, 32))   # ★C2 동쪽 길 워프 → 마을
 	m._maybe_warp_edge()
 	await _settle(m)
 	_check("⓪ 나루 마을로 워프", m._region == RegionCatalog.NARU_VILLAGE)
@@ -203,7 +201,7 @@ func _initialize() -> void:
 	await _settle(m4)
 	_check("⑦ 홈 집 진입(_indoor=집)", m4._indoor == "집")
 	_check("⑦b 홈 집 안 취침 가능(회귀 0)", m4._can_sleep())
-	m4.player.position = m4._tile_center_px(m4.HOUSE_DOOR)
+	m4.player.position = m4._tile_center_px(m4.HOME_HOUSE_DOOR)   # ★C2 HOME 집 실내 문
 	m4._maybe_toggle_building()
 	await _settle(m4)
 	_check("⑦c 홈 집 퇴장(_indoor='')", m4._indoor == "")

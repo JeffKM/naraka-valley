@@ -20,14 +20,23 @@ func _check(label: String, ok: bool) -> void:
 		_fail += 1
 
 # 트리거 후 fade 연출(약 0.52초)이 끝나도록 실제 시간 기준으로 프레임을 돌린다.
+var _m: Node = null
 func _settle() -> void:
-	var until := Time.get_ticks_msec() + 900
+	# ★C2 — 전환(워프 fade+재빌드)이 끝날 때까지 대기한 뒤 짧게 안정화한다. 큰 맵(HOME 80×65 →
+	#   그리드 80×93)의 재빌드 hitch가 고정 sleep(900ms)을 넘겨 _transitioning이 남으면 다음 워프가
+	#   _warp의 `if _transitioning` 가드에 막혀 휴면한다(인게임은 fade가 덮어 무해, 테스트만 깨짐).
+	#   고정 sleep 대신 _transitioning 해소까지 결정적으로 기다린다(없으면 즉시 — 빠름).
+	var cap := Time.get_ticks_msec() + 4000
+	while _m != null and _m._transitioning and Time.get_ticks_msec() < cap:
+		await process_frame
+	var until := Time.get_ticks_msec() + 250
 	while Time.get_ticks_msec() < until:
 		await process_frame
 
 func _initialize() -> void:
 	print("══ M1.3 가장자리/길 워프 시스템 검증 ══")
 	var main: Node = load("res://main.tscn").instantiate()
+	_m = main   # ★C2 — _settle이 전환 완료(_transitioning)를 결정적으로 기다리게
 	root.add_child(main)
 	await process_frame
 	await process_frame
@@ -39,7 +48,7 @@ func _initialize() -> void:
 	# ── ② 가장자리 워프 발동 칸이 걸어갈 수 있는 길(PATH) ──
 	# 동쪽 복도 끝(38,16) = RegionCatalog.HOME warps.at. _carve_paths가 여기까지 길을 잇는다.
 	var at: Vector2i = RegionCatalog.warps_of(RegionCatalog.HOME)[0]["at"]
-	_check("② home 워프 발동 칸 = (38,16)", at == Vector2i(38, 16))
+	_check("② home 워프 발동 칸 = (78,32)", at == Vector2i(78, 32))   # ★C2 80×65 동쪽 길 워프(y중앙)
 	_check("②b 그 칸이 길(PATH — 걸어 닿을 수 있음)", main._grid[at.y][at.x] == main.PATH)
 
 	# ── ③ 가장자리 워프 점등(M1.4): 발동 칸에 닿으면 나루 마을로 전환되고 도착 칸에 놓인다 ──
@@ -184,8 +193,10 @@ func _initialize() -> void:
 	var labels_before: int = main._labels.size()
 	main._rebuild_region(RegionCatalog.HOME)   # 홈베이스 자기 재빌드(이웃 미빌드라 테스트는 self로)
 	_check("⑤ 재빌드 후 구역 = home", main._region == RegionCatalog.HOME)
-	_check("⑤b 재빌드 후 그리드 크기 유지(MAP_H×MAP_W)",
-		main._grid.size() == main.MAP_H and main._grid[0].size() == main.MAP_W)
+	# ★C2 — HOME은 80×65 코지-와이드라 그리드 = _grid_w(80) × _grid_h(65+INDOOR_BAND_H 28 = 93).
+	#   구역별 치수를 따른다(전역 MAP_W/MAP_H가 아니라 _rebuild가 세팅한 멤버).
+	_check("⑤b 재빌드 후 그리드 크기 = HOME 치수(80×93)",
+		main._grid.size() == main._grid_h and main._grid[0].size() == main._grid_w)
 	_check("⑤c 재빌드 후 가장자리 길 유지", main._grid[at.y][at.x] == main.PATH)
 	_check("⑤d 라벨 개수 누적 안 됨(중복 방지)", main._labels.size() == labels_before)
 
@@ -196,7 +207,7 @@ func _initialize() -> void:
 	await _settle()
 	_check("⑥ 집 문 진입 → 실내(집)", main._indoor == "집")
 	_check("⑥b 문 워프는 구역 불변(home 유지)", main._region == RegionCatalog.HOME)
-	_check("⑥c 플레이어가 집 방 안으로 텔레포트", main.HOUSE_RECT.has_point(main._player_tile()))
+	_check("⑥c 플레이어가 집 방 안으로 텔레포트", main.HOME_HOUSE_RECT.has_point(main._player_tile()))   # ★C2 HOME 집 밴드
 
 	print("══ 결과: %s ══" % ("PASS (실패 0)" if _fail == 0 else "FAIL (실패 %d)" % _fail))
 	quit(1 if _fail > 0 else 0)

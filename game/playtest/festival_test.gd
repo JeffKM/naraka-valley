@@ -133,7 +133,7 @@ func _initialize() -> void:
 
 	# ── ⑦ 카페 축제 장식 _draw — 이벤트일 나루 마을에서 크래시 없이 돈다 ──
 	print("── ⑦ 카페 축제 장식 _draw ──")
-	m2.player.position = m2._tile_center_px(Vector2i(38, 16))
+	m2.player.position = m2._tile_center_px(Vector2i(78, 32))   # ★C2 동쪽 길 워프 → 마을
 	m2._maybe_warp_edge()
 	await _settle(m2)
 	_check("⑦pre 나루 마을로 워프", m2._region == RegionCatalog.NARU_VILLAGE)

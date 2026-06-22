@@ -66,8 +66,8 @@ func _initialize() -> void:
 	# ── ① 라운드트립: 나루 마을 어느 칸에서 저장 → 새 인스턴스가 그대로 재개 ──
 	var m1: Node = await _spawn_main()
 	m1.saver.delete_save()   # 백업했으니 깨끗한 새 게임에서 시작
-	# 안식 농원 동쪽 가장자리(38,16)에서 나루 마을로 길 워프(building_test와 같은 경로).
-	m1.player.position = m1._tile_center_px(Vector2i(38, 16))
+	# 안식 농원 동쪽 길 워프(78,32, ★C2)에서 나루 마을로 길 워프(building_test와 같은 경로).
+	m1.player.position = m1._tile_center_px(Vector2i(78, 32))
 	m1._maybe_warp_edge()
 	await _settle()
 	_check("①pre 동쪽 가장자리에서 나루 마을로 워프", m1._region == RegionCatalog.NARU_VILLAGE)

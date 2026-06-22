@@ -87,7 +87,7 @@ func _initialize() -> void:
 
 	# ── ③ 네오 배치 — 만물상 방으로 워프해 방·바닥 확인 ──
 	print("── ③ 네오 배치 ──")
-	m.player.position = m._tile_center_px(Vector2i(38, 16))
+	m.player.position = m._tile_center_px(Vector2i(78, 32))   # ★C2 동쪽 길 워프 → 마을
 	m._maybe_warp_edge()
 	await _settle(m)
 	_check("③pre 나루 마을로 워프", m._region == RegionCatalog.NARU_VILLAGE)
