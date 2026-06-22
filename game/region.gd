@@ -91,7 +91,10 @@ const CATALOG := {
 		# ★ M3.1 — 삼도천이 지어져 나룻터 워프 dest가 실좌표로 확정됐다(목적 구역 빌드 시 채움).
 		"warps": [
 			{"to": HOME, "at": Vector2i(1, 16), "dest": Vector2i(37, 16)},   # 서쪽 가장자리 → 안식 농원
-			{"to": EOPHWA_MINE, "at": Vector2i(38, 8), "dest": TILE_TBD},    # 동쪽 산길 → 업화 갱도 — 휴면
+			# ★ M4.1 임시(TEMP) — 산길은 정규로 업화 갱도(stub)로 가야 하나, 갱도가 아직 안 지어져
+			# 저승 숲이 단절된 섬이 된다. 갱도가 설 때까지 산길을 저승 숲에 임시 직결해 도달성을 확보한다.
+			# 업화 갱도 슬라이스에서 to=EOPHWA_MINE·dest=TBD로 원복(정규 토폴로지 나루 마을→갱도→숲 복귀).
+			{"to": JEOSEUNG_FOREST, "at": Vector2i(38, 8), "dest": Vector2i(20, 22)},  # 동쪽 산길 → 저승 숲 — ★M4.1 임시(원래 EOPHWA_MINE)
 			{"to": SAMDOCHEON, "at": Vector2i(22, 1), "dest": Vector2i(20, 22)},  # 북동 나룻터 → 삼도천(혼백관) — M3.1 점등
 		],
 	},
@@ -124,33 +127,50 @@ const CATALOG := {
 			{"to": SAMDOCHEON, "at": Vector2i(1, 16), "dest": Vector2i(37, 16)},  # 서단 → 삼도천 하구(38,16 한 칸 안)
 		],
 	},
-	# ── 이하 4개 = stub(아직 안 지어짐). size·spawn = ZERO, 토폴로지(to)만 실데이터 ──
+	# ── 저승 숲(M4.1 빌드 — 채집 무대·목공방) ────────────────────────────────────
+	# ★ M4.1: 다섯째 실데이터 구역. 채집(Phase 3)이 들어올 숲 무대를 그레이박스로 깐다(채집 메카닉은
+	#   만들지 않는다 — 나무 무대·채집지 라벨·목공방 enterable 빈 방까지, ADR-0015 "빌드는 한 구역씩").
+	#   size=(40,24)(외부 무대 = main.MAP_W×OUTDOOR_H, 카메라 seam). spawn=(20,22)(남단 — 나루 마을
+	#   산길에서 임시 직결로 도착). 정규 토폴로지: 업화 갱도 ──(숲길)── 저승 숲 ──(숲 안쪽)── 미혹의 숲.
+	#   ★ 도달성(M4.1): 정규 이웃 업화 갱도가 stub이라 나루 마을 산길을 임시 직결(위 NARU_VILLAGE 워프 참조).
 	JEOSEUNG_FOREST: {
 		"name_ko": "저승 숲",
-		"size": Vector2i.ZERO,
-		"spawn": Vector2i.ZERO,
-		# 업화 갱도 ──(숲길)── 저승 숲 ──(숲 안쪽)── 미혹의 숲.
+		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (다른 구역과 같은 외부 무대)
+		"spawn": Vector2i(20, 22),    # 남단(나루 마을 산길 임시 직결 → 저승 숲 도착 칸)
 		"warps": [
-			{"to": EOPHWA_MINE, "at": TILE_TBD, "dest": TILE_TBD},
-			{"to": MIHOK_FOREST, "at": TILE_TBD, "dest": TILE_TBD},
+			{"to": EOPHWA_MINE, "at": Vector2i(20, 23), "dest": TILE_TBD},   # 남단 숲길 → 업화 갱도 — 휴면(갱도 빌드 시 점등)
+			{"to": MIHOK_FOREST, "at": Vector2i(38, 16), "dest": Vector2i(2, 16)},  # 동단 숲 안쪽 → 미혹의 숲 — M4.2 점등
+			# ★ M4.1 임시(TEMP) — 도달성 확보용 우회 복귀 워프. 정규 토폴로지엔 저승 숲↔나루 마을 직결이
+			# 없다(나루 마을→갱도→숲이 정규). 갱도가 설 때까지만 둔다 — 업화 갱도 슬라이스에서 이 워프 제거
+			# + 나루 마을 산길 원복하면 정규 경로(나루 마을→갱도→숲)로 돌아간다.
+			{"to": NARU_VILLAGE, "at": Vector2i(1, 16), "dest": Vector2i(37, 8)},  # 서단 우회 → 나루 마을(산길 38,8 한 칸 안) — ★M4.1 임시
 		],
 	},
+	# ── 미혹의 숲(M4.2 빌드 — 특수 채집 무대·옥자 집) ────────────────────────────
+	# ★ M4.2: 여섯째 실데이터 구역(막다른 깊은 숲). 저승 숲 동단(38,16)에서 휴면이던 워프를 점등해, 특수
+	#   채집(Phase 3)이 들어올 더 깊은 숲을 그레이박스로 깐다(채집 메카닉은 만들지 않는다 — 나무·연못 무대·
+	#   특수 채집지 라벨까지). size=(40,24)(외부 무대 = main.MAP_W×OUTDOOR_H). spawn=(2,16)(서단 — 저승 숲
+	#   동단에서 도착). 막다른 구역이라 워프는 저승 숲 복귀 하나(world-map.md 토폴로지).
+	#   ★ 옥자 집(마녀의 오두막)은 세계관상 '숨겨진·게이트(미결의 죄 해결 후)' — 그레이박스에선 잠긴 외관
+	#     (비-enterable, 카탈로그 미등록)으로만 둔다(축사 결). 실내·게이트 해제는 Phase 3 시나리오.
 	MIHOK_FOREST: {
 		"name_ko": "미혹의 숲",
-		"size": Vector2i.ZERO,
-		"spawn": Vector2i.ZERO,
+		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (다른 구역과 같은 외부 무대)
+		"spawn": Vector2i(2, 16),     # 서단(저승 숲 동단 → 미혹의 숲 도착 칸)
 		# 저승 숲 ──(숲 안쪽)── 미혹의 숲(막다른 깊은 숲, 옥자 집).
 		"warps": [
-			{"to": JEOSEUNG_FOREST, "at": TILE_TBD, "dest": TILE_TBD},
+			{"to": JEOSEUNG_FOREST, "at": Vector2i(1, 16), "dest": Vector2i(37, 16)},  # 서단 → 저승 숲 동단(38,16 한 칸 안)
 		],
 	},
 	EOPHWA_MINE: {
 		"name_ko": "업화 갱도",
 		"size": Vector2i.ZERO,
 		"spawn": Vector2i.ZERO,
-		# 나루 마을 ──(산길)── 업화 갱도 ──(숲길)── 저승 숲.
+		# 정규 토폴로지: 나루 마을 ──(산길)── 업화 갱도 ──(숲길)── 저승 숲.
+		# ★ M4.1 임시(TEMP) — 갱도가 아직 stub이라 나루 마을 산길을 저승 숲에 임시 직결했다(위 NARU_VILLAGE
+		# 참조). 그동안 나루 마을은 갱도를 이웃으로 두지 않으므로, 토폴로지 대칭을 위해 갱도 stub에서도
+		# 나루 마을 워프를 임시로 뺀다. 업화 갱도 슬라이스에서 {to:NARU_VILLAGE} 복원 + 산길 원복.
 		"warps": [
-			{"to": NARU_VILLAGE, "at": TILE_TBD, "dest": TILE_TBD},
 			{"to": JEOSEUNG_FOREST, "at": TILE_TBD, "dest": TILE_TBD},
 		],
 	},
