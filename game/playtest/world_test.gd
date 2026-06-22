@@ -32,9 +32,9 @@ func _initialize() -> void:
 	# ── ② 홈베이스(안식 농원) 실데이터·필드 정합 ──
 	_check("② home 존재", RegionCatalog.has_region(RegionCatalog.HOME))
 	_check("②b home 표시명 = 안식 농원", RegionCatalog.name_of(RegionCatalog.HOME) == "안식 농원")
-	# main.gd 외부 무대 크기(MAP_W 40 × OUTDOOR_H 24)·SPAWN_TILE(20,21)과 같은 seam.
-	_check("②c home 크기 = (40, 24)", RegionCatalog.size_of(RegionCatalog.HOME) == Vector2i(40, 24))
-	_check("②d home 스폰 = (20, 21)", RegionCatalog.spawn_of(RegionCatalog.HOME) == Vector2i(20, 21))
+	# main.gd 외부 무대 크기(80×65, ★C2)·SPAWN_TILE(40,60)과 같은 seam.
+	_check("②c home 크기 = (80, 65)", RegionCatalog.size_of(RegionCatalog.HOME) == Vector2i(80, 65))   # ★ADR-0018 C2 코지-와이드
+	_check("②d home 스폰 = (40, 60)", RegionCatalog.spawn_of(RegionCatalog.HOME) == Vector2i(40, 60))
 	_check("②e home은 지어진 구역(is_built)", RegionCatalog.is_built(RegionCatalog.HOME))
 
 	# ── ②' 나루 마을(M1.4 빌드 — 카페 이주) 실데이터·필드 정합 ──
@@ -156,7 +156,7 @@ func _integration() -> void:
 	_check("⑥a 부팅은 바깥 모드", m._indoor == "")
 
 	# ── 동쪽 가장자리(38,16) → 나루 마을로 길 워프 + 재빌드 ──
-	m.player.position = m._tile_center_px(Vector2i(38, 16))
+	m.player.position = m._tile_center_px(Vector2i(78, 32))   # ★C2 동쪽 길 워프(y중앙)
 	m._maybe_warp_edge()
 	await _settle()
 	_check("⑥b 나루 마을로 워프", m._region == RegionCatalog.NARU_VILLAGE)
@@ -193,7 +193,7 @@ func _integration() -> void:
 	m2._maybe_warp_edge()
 	await _settle()
 	_check("⑥m 서쪽 가장자리 → 안식 농원 복귀", m2._region == RegionCatalog.HOME)
-	_check("⑥n 도착 = home dest(37,16)", m2._player_tile() == Vector2i(37, 16))
+	_check("⑥n 도착 = home dest(77,32)", m2._player_tile() == Vector2i(77, 32))   # ★C2 80×65 동쪽 워프 한 칸 안
 	# 재빌드 증명(누수 0): 안식 농원엔 카페가 없다 — 같은 칸이 더는 WALL이 아니다(마을 잔재 0).
 	_check("⑥o 안식 농원 재빌드 — 카페 외관 잔재 없음(자리 ≠ WALL)",
 		m2._grid[m2.CAFE_EXT_RECT.position.y][m2.CAFE_EXT_RECT.position.x] != m2.WALL)

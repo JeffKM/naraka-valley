@@ -27,22 +27,23 @@ func _initialize() -> void:
 	await process_frame
 
 	var T: int = main.TILE
-	var out_bottom: int = main.OUTDOOR_H * T
+	# ★C2 — HOME은 80×65라 외부 카메라 bottom = 구역 실제 외부높이(65), 전역 OUTDOOR_H(24) 아님.
+	var out_bottom: int = RegionCatalog.size_of(main._region).y * T
 
 	_check("① 시작은 바깥", main._indoor == "")
-	_check("①b 외부 카메라가 외부 영역까지만(bottom=OUTDOOR_H)", main._cam.limit_bottom == out_bottom)
+	_check("①b 외부 카메라가 외부 영역까지만(bottom=구역 외부높이)", main._cam.limit_bottom == out_bottom)
 
 	# ── 집: 외관 문 진입 → 실내 ──
 	main.player.position = main._tile_center_px(main.HOUSE_EXT_DOOR)
 	main._maybe_toggle_building()
 	await _settle()
 	_check("② 집 외관 문에 닿으면 실내(집)로 전환", main._indoor == "집")
-	_check("②b 플레이어가 실내 집 방 안으로 텔레포트", main.HOUSE_RECT.has_point(main._player_tile()))
-	_check("②c 카메라가 집 방으로 격리(top=HOUSE_CAM)", main._cam.limit_top == main.HOUSE_CAM_RECT.position.y * T)
+	_check("②b 플레이어가 실내 집 방 안으로 텔레포트", main.HOME_HOUSE_RECT.has_point(main._player_tile()))   # ★C2 HOME 집 밴드
+	_check("②c 카메라가 집 방으로 격리(top=HOME_HOUSE_CAM)", main._cam.limit_top == main.HOME_HOUSE_CAM_RECT.position.y * T)
 	_check("②d 집 안에서 취침 가능(_zone_at=집)", main._can_sleep())
 
 	# ── 집: 실내 문 퇴장 → 바깥 ──
-	main.player.position = main._tile_center_px(main.HOUSE_DOOR)
+	main.player.position = main._tile_center_px(main.HOME_HOUSE_DOOR)   # ★C2 HOME 집 실내 문
 	main._maybe_toggle_building()
 	await _settle()
 	_check("③ 실내 집 문에 닿으면 바깥으로 전환", main._indoor == "")
@@ -52,8 +53,8 @@ func _initialize() -> void:
 	# 안식 농원에선 집 외관만 검사한다(★ M1.4).
 	_check("③d 외관 집 자리는 통과 불가(문 외 WALL)", main._grid[main.HOUSE_EXT_RECT.position.y][main.HOUSE_EXT_RECT.position.x] == main.WALL)
 
-	# ── ★ M1.4: 카페는 나루 마을에 있다 — 안식 농원 동쪽 가장자리(38,16)에서 마을로 길 워프 ──
-	main.player.position = main._tile_center_px(Vector2i(38, 16))
+	# ── ★ M1.4: 카페는 나루 마을에 있다 — 안식 농원 동쪽 길 워프(78,32, ★C2)에서 마을로 길 워프 ──
+	main.player.position = main._tile_center_px(Vector2i(78, 32))
 	main._maybe_warp_edge()
 	await _settle()
 	_check("④pre 동쪽 가장자리에서 나루 마을로 워프", main._region == RegionCatalog.NARU_VILLAGE)

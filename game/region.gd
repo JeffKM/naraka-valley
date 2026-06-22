@@ -48,9 +48,9 @@ const TILE_TBD := Vector2i(-1, -1)
 # 키 = 영문 id, 값 = 구역 데이터(아래 필드).
 #   name_ko : 화면 표시명(CONTEXT 지리 용어)
 #   size    : 구역 크기(타일, Vector2i). 실데이터면 실제 맵 크기, stub면 ZERO.
-#             ★ HOME = (MAP_W 40 × OUTDOOR_H 24) — main.gd 외부 무대 크기와 같다(seam).
+#             ★ HOME = (80 × 65) — ADR-0018 C2 코지-와이드 재배치(다른 7구역은 아직 40×24).
 #   spawn   : 구역 진입/도착 기본 칸(타일, Vector2i). 실데이터면 실칸, stub면 ZERO.
-#             ★ HOME = main.gd SPAWN_TILE(20, 21)과 같다(도착 지점·seam).
+#             ★ HOME = main.gd SPAWN_TILE(40, 60)과 같다(남단 도착 지점·seam).
 #   warps   : 인접 구역 연결 목록(Array of Dict). 각 워프 = {to, at, dest}.
 #             to   = 목적 구역 id(★ M1.1 실데이터 — world-map.md 토폴로지)
 #             at   = 이 구역에서 워프가 발동하는 가장자리 칸(M1.3 — 이 구역이 지어졌으면 실좌표)
@@ -61,14 +61,15 @@ const CATALOG := {
 	# ── 홈베이스(유일한 실데이터) — 검증된 기존 무대를 그대로 한 구역으로 등록 ──
 	HOME: {
 		"name_ko": "안식 농원",
-		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (외부 무대)
-		"spawn": Vector2i(20, 21),    # = main.SPAWN_TILE (도착 지점)
-		# 안식 농원 ──(길)── 나루 마을. at = 동쪽 가로 복도(y=16) 끝 칸(main `_carve_paths`가
-		# 동쪽 끝까지 길을 잇고, 그 가장자리 칸에 닿으면 워프 — 스타듀식 가장자리/길 워프).
-		# ★ M1.4: 나루 마을이 지어져 이 워프가 점등했다(is_built=true). dest = 마을 도착 칸(서쪽
-		# 복도, 마을 워프 가장자리 (1,16)에서 한 칸 안 — 즉시 재발동 방지). 두 구역 다 빌드라 실좌표.
+		# ★ ADR-0018 C2 — 코지-와이드 80×65 재배치(중앙 대형 밭·코지 여백). 그리드 치수 일반화(C1)
+		#   덕에 size만 키우면 빌드 경로가 따라온다. main.SPAWN_TILE/MIHO_FIELD/외관·동선도 함께 재배치됨.
+		"size": Vector2i(80, 65),     # = main.MAP_W' × main.OUTDOOR_H' (80×65 외부 무대)
+		"spawn": Vector2i(40, 60),    # = main.SPAWN_TILE (남단 중앙 도착 지점)
+		# 안식 농원 ──(길)── 나루 마을. at = 동쪽 길 워프 발동 칸(y중앙, main `_carve_paths`가 창고
+		# 레인에서 y32로 갈라 동쪽 끝까지 길을 잇고, 그 가장자리 칸에 닿으면 워프 — 스타듀식 길 워프).
+		# dest = 마을 서쪽 복도(마을 워프 가장자리 (1,16)에서 한 칸 안 — 마을 size 불변이라 그대로).
 		"warps": [
-			{"to": NARU_VILLAGE, "at": Vector2i(38, 16), "dest": Vector2i(3, 16)},
+			{"to": NARU_VILLAGE, "at": Vector2i(78, 32), "dest": Vector2i(3, 16)},
 		],
 	},
 	# ── 나루 마을(M1.4 빌드 — 카페 이주) ─────────────────────────────────────────
@@ -90,7 +91,7 @@ const CATALOG := {
 		# 북단(강 상류 → 삼도천·혼백관). 갱도·삼도천은 목적지 stub이라 여전히 휴면(그 구역 빌드 시 점등).
 		# ★ M3.1 — 삼도천이 지어져 나룻터 워프 dest가 실좌표로 확정됐다(목적 구역 빌드 시 채움).
 		"warps": [
-			{"to": HOME, "at": Vector2i(1, 16), "dest": Vector2i(37, 16)},   # 서쪽 가장자리 → 안식 농원
+			{"to": HOME, "at": Vector2i(1, 16), "dest": Vector2i(77, 32)},   # 서쪽 가장자리 → 안식 농원(★C2: 동쪽 워프 78,32 한 칸 안)
 			# ★ M5.1 — 정규 토폴로지 복원(M4.1 임시 직결 종료): 산길은 업화 갱도로 간다(갱도가 지어져 점등).
 			# 나루 마을→갱도→저승 숲이 정규 경로. dest = 갱도 남단 spawn(20,22).
 			{"to": EOPHWA_MINE, "at": Vector2i(38, 8), "dest": Vector2i(20, 22)},  # 동쪽 산길 → 업화 갱도(남단 spawn) — M5.1 점등
