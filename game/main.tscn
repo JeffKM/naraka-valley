@@ -88,7 +88,7 @@ script = ExtResource("13")
 position = Vector2(328, 344)
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
-scale = Vector2(1, 1)
+scale = Vector2(1.5, 1.5)
 
 [node name="Readout" type="Label" parent="CanvasLayer"]
 offset_left = 8.0
