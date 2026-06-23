@@ -69,8 +69,8 @@ func _initialize() -> void:
 	_check("③l 저승 숲 스폰 = (30,42) ★C6", RegionCatalog.spawn_of(RegionCatalog.JEOSEUNG_FOREST) == Vector2i(30, 42))
 	_check("③m 미혹의 숲 크기 = (64,44) ★C7", RegionCatalog.size_of(RegionCatalog.MIHOK_FOREST) == Vector2i(64, 44))
 	_check("③n 미혹의 숲 스폰 = (2,22) ★C7", RegionCatalog.spawn_of(RegionCatalog.MIHOK_FOREST) == Vector2i(2, 22))
-	_check("③o 업화 갱도 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.EOPHWA_MINE) == Vector2i(40, 24))
-	_check("③p 업화 갱도 스폰 = (20,22)", RegionCatalog.spawn_of(RegionCatalog.EOPHWA_MINE) == Vector2i(20, 22))
+	_check("③o 업화 갱도 크기 = (64,44) ★C8", RegionCatalog.size_of(RegionCatalog.EOPHWA_MINE) == Vector2i(64, 44))
+	_check("③p 업화 갱도 스폰 = (14,42) ★C8", RegionCatalog.spawn_of(RegionCatalog.EOPHWA_MINE) == Vector2i(14, 42))
 	_check("③q 나락 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.NARAK) == Vector2i(40, 24))
 	_check("③r 나락 스폰 = (20,12)", RegionCatalog.spawn_of(RegionCatalog.NARAK) == Vector2i(20, 12))
 

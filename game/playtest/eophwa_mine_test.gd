@@ -9,7 +9,7 @@ extends SceneTree
 #   ① 바위(ROCK) 군집·호수(WATER)가 통과 불가로 서고, 그 사이 빈터(GROUND)는 걸을 수 있다.
 #   ② 대장간·길드 외관 = 통과 불가 WALL 박스 + 문 1칸(PATH 리세스), 실내는 빈 방(kind=smithy/guild).
 #   ③ 던전 입구·나락 진입로 = 잠긴 외관(WALL 박스 + 문 PATH 리세스), 카탈로그 미등록 → 진입 불가.
-#   ④ 남단 spawn(20,22)에서 대장간/길드 문·두 워프 칸(산길·숲길)이 걸어서 닿는다(flood-fill 무 soft-lock).
+#   ④ 남단 spawn(14,42)에서 대장간/길드 문·두 워프 칸(산길·숲길)이 걸어서 닿는다(flood-fill 무 soft-lock, ★C8).
 #   ⑤ 대장간·길드 출입 라운드트립(진입→실내 격리→퇴장) + 취침 불가(남의 건물) + 두 게이트 진입 안 됨(잠김).
 #   ⑥ 세이브 라운드트립 — 갱도 실내(대장간)에서 저장하면 새 인스턴스가 그 구역·실내·위치로 재개.
 #   ⑦ 회귀 0 — 카탈로그에 대장간·길드(EOPHWA_MINE·smithy/guild) 등록, 홈 집 출입 불변.
@@ -42,9 +42,10 @@ func _despawn(m: Node) -> void:
 	await process_frame
 	await process_frame
 
-# 외부에서 걸을 수 있는 칸인가(WALL·WATER·TREE·ROCK·VOID·범위밖이면 X). 실내 스택(y>=OUTDOOR_H)은 제외.
+# 외부에서 걸을 수 있는 칸인가(WALL·WATER·TREE·ROCK·VOID·범위밖이면 X). 실내 스택(y>=_outdoor_h)은 제외.
+# ★C8 — 업화 갱도가 64×44라 전역 MAP_W/OUTDOOR_H가 아니라 빌드된 구역 치수(_grid_w/_outdoor_h)를 쓴다(저승/미혹 결).
 func _walkable(m: Node, t: Vector2i) -> bool:
-	if t.x < 0 or t.y < 0 or t.x >= m.MAP_W or t.y >= m.OUTDOOR_H:
+	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
 	return id != m.WALL and id != m.WATER and id != m.TREE and id != m.ROCK and id != m.VOID
@@ -100,8 +101,9 @@ func _initialize() -> void:
 	# 업화 갱도 구역을 빌드(동기 — samdocheon/warp_test와 같은 결, 그리드 직접 검사).
 	m._rebuild_region(RegionCatalog.EOPHWA_MINE)
 	_check("⓪ 구역 = 업화 갱도", m._region == RegionCatalog.EOPHWA_MINE)
-	_check("⓪b 그리드 크기 유지(MAP_H×MAP_W)",
-		m._grid.size() == m.MAP_H and m._grid[0].size() == m.MAP_W)
+	_check("⓪b 그리드 크기 = _grid_h×_grid_w (★C8 64×44)",
+		m._grid.size() == m._grid_h and m._grid[0].size() == m._grid_w
+		and m._grid_w == 64 and m._outdoor_h == 44)
 
 	# ── ① 바위(ROCK) 군집·호수(WATER) 통과 불가 + 빈터(GROUND) 걸을 수 있음 ──
 	for r in m.MINE_ROCK_RECTS:
@@ -110,8 +112,9 @@ func _initialize() -> void:
 		_check("①b 바위 칸 통과 불가", not _walkable(m, c))
 	var lake := Vector2i(m.MINE_LAKE_RECT.position.x, m.MINE_LAKE_RECT.position.y)
 	_check("①c 호수 칸 WATER 통과 불가", m._grid[lake.y][lake.x] == m.WATER and not _walkable(m, lake))
-	# 빈터(채광지 라벨 자리)는 걸을 수 있는 GROUND.
-	_check("①d 채광지 빈터 걸을 수 있음", _walkable(m, m.MINE_ORE_LABEL_TILE))
+	# 빈터(채광지 라벨 자리 3곳)는 걸을 수 있는 GROUND. ★C8 — 채광 본진이라 라벨 3(숲 채집보다 촘촘).
+	for ore in m.MINE_ORE_LABEL_TILES:
+		_check("①d 채광지 빈터 걸을 수 있음 (%d,%d)" % [ore.x, ore.y], _walkable(m, ore))
 
 	# ── ② 대장간·길드 외관 = WALL 박스 + 문 PATH 리세스, 실내 빈 방 ──
 	_check_facade(m, m.SMITHY_EXT_RECT, m.SMITHY_EXT_DOOR, "② 대장간")
@@ -131,7 +134,7 @@ func _initialize() -> void:
 
 	# ── ④ flood-fill 무 soft-lock: spawn에서 대장간/길드 문·두 워프 칸 도달 ──
 	var spawn: Vector2i = RegionCatalog.spawn_of(RegionCatalog.EOPHWA_MINE)
-	_check("④ spawn = (20,22)", spawn == Vector2i(20, 22))
+	_check("④ spawn = (14,42) ★C8", spawn == Vector2i(14, 42))
 	var reach := _reachable(m, spawn)
 	_check("④b 대장간 외관 문 도달", reach.has(m.SMITHY_EXT_DOOR))
 	_check("④c 길드 외관 문 도달", reach.has(m.GUILD_EXT_DOOR))

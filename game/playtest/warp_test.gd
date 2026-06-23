@@ -127,7 +127,7 @@ func _initialize() -> void:
 	await _settle()
 	_check("③q 산길(38,8) → 업화 갱도 전환(정규 점등)", main._region == RegionCatalog.EOPHWA_MINE)
 	_check("③r 갱도 남단 도착 칸에 놓임", main._player_tile() == mine_w["dest"])
-	# 업화 갱도 북단 숲길(20,1) → 저승 숲(남단 spawn).
+	# 업화 갱도 북단 숲길(40,1) → 저승 숲(남단 spawn). ★C8
 	var mine_forest_w: Dictionary = {}
 	for w in RegionCatalog.warps_of(RegionCatalog.EOPHWA_MINE):
 		if w["to"] == RegionCatalog.JEOSEUNG_FOREST:
@@ -156,7 +156,7 @@ func _initialize() -> void:
 	_check("③w 미혹의 숲 서단 → 저승 숲 복귀(왕복)", main._region == RegionCatalog.JEOSEUNG_FOREST)
 	_check("③x 복귀 도착 칸에 놓임", main._player_tile() == mihok_back["dest"])
 
-	# 저승 숲 남단 숲길(20,23) → 업화 갱도(북단), 갱도 남단 산길(20,23) → 나루 마을(정규 복귀 연쇄).
+	# 저승 숲 남단 숲길(30,43) → 업화 갱도(북단 40,2), 갱도 남단 산길(14,43) → 나루 마을(정규 복귀 연쇄). ★C8
 	var forest_mine_back: Dictionary = {}
 	for w in RegionCatalog.warps_of(RegionCatalog.JEOSEUNG_FOREST):
 		if w["to"] == RegionCatalog.EOPHWA_MINE:

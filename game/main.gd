@@ -458,43 +458,51 @@ const MIHOK_FORAGE_LABEL_TILE_2 := Vector2i(30, 36) # ★C7 특수 채집지②(
 const OKJA_HUT_EXT_RECT := Rect2i(54, 24, 8, 7)  # ★C7 x54..61, y24..30 (동쪽 깊은 끝, 숨겨진 잠긴 외관)
 const OKJA_HUT_DOOR := Vector2i(57, 30)          # ★C7 문 리세스(남면, 시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
 
-# ── 업화 갱도(M5.1 빌드 — 채광/전투 무대·대장간·길드) ────────────────────────────
-# 일곱째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 채광·전투 메카닉은 만들지 않는다(Phase 3) — 바위(ROCK)·
-# 호수(WATER) 무대 + 대장간·길드(enterable 빈 방) + 갱도 끝 전투 던전 입구·나락 진입로(둘 다 잠긴 외관,
-# 비-enterable, 옥자 집 결)까지. 나루 마을 산길(38,8)에서 남단 spawn(20,22)에 도착, 북단(20,1)에서 숲길로
-# 저승 숲. 세로 복도(x20)가 두 워프를, 가로 복도(y16)가 대장간·길드 문을 잇는다(flood-fill 무 soft-lock).
-const MINE_ROCK_RECTS := [   # 바위(ROCK) 군집 — 빈터(GROUND) 사이에 흩어 갱도 밀도를 준다(동선 x20·y16·문·게이트 비껴감)
-	Rect2i(2, 2, 4, 3),     # 북서 암반
-	Rect2i(36, 2, 2, 6),    # 북동 절벽
-	Rect2i(2, 11, 3, 4),    # 서 중단 암반(가로 복도 y16 위)
-	Rect2i(35, 11, 3, 4),   # 동 중단 암반
-	Rect2i(8, 19, 4, 3),    # 남서 암반(세로 복도 x20 서편)
-	Rect2i(27, 19, 5, 3),   # 남동 암반(세로 복도 x20 동편)
+# ── 업화 갱도(★ ADR-0018 C8 코지-와이드 재배치 — 채광/전투 무대·대장간·길드) ──────────
+# 일곱째 실데이터 구역을 40×24 → 64×44로 역할별 재배치(ADR-0018 결정4 C8, C2~C7 결). 정체성 = "넓은
+# 진폭으로 굽이치는 세로 협곡 + 남→북 위험 구배": 남단 입구(서비스) → 중단 채광 협곡 → 북단 봉인 심연 포켓.
+# 채광·전투 메카닉은 만들지 않는다(Phase 3) — 바위(ROCK) 협곡벽·호수(WATER) 무대 + 대장간·길드(enterable
+# 빈 방) + 던전 입구·나락 진입로(둘 다 잠긴 외관, 비-enterable, 옥자 집 결). 나루 마을 산길에서 남단
+# spawn(14,42), 북단(40,1)에서 숲길로 저승 숲. 지그재그 세로 채널(x14→48→18→40)이 두 워프를 잇고,
+# 협곡벽이 좌우로 번갈아 죈다(저승=곧은 가로 척추 / 미혹=분기 미로 / 갱도=분기 없이 굽이치는 단일 세로 협곡).
+const MINE_ROCK_RECTS := [   # 바위(ROCK) 협곡벽 — 지그재그 채널(x14→48→18→40)을 좌우로 번갈아 죄어 "굽이치는 협곡"(동선·문·게이트·라벨·호수 비껴감)
+	Rect2i(2, 2, 18, 5),     # 북서벽(심연 포켓 서편 막음)
+	Rect2i(52, 2, 11, 14),   # 동북벽
+	Rect2i(1, 8, 11, 12),    # 서벽 상부(x0 경계벽 곁 — 좌상단 ROCK 보장)
+	Rect2i(20, 14, 18, 4),   # 중앙 가로 암반(세로 채널 굽이 사이 죔)
+	Rect2i(50, 18, 13, 18),  # 동벽 중하부
+	Rect2i(2, 27, 11, 9),    # 서벽 중하부
+	Rect2i(44, 33, 16, 8),   # 남동벽
+	Rect2i(20, 34, 16, 7),   # 남단 바닥 암반(길드 위 — 입구 빈터와 채광 협곡 분리)
 ]
-const MINE_LAKE_RECT := Rect2i(3, 18, 5, 4)     # 호수(WATER, 통과 X) — world-map "호수"(남서 구석, 동선 비껴감)
-const MINE_ORE_LABEL_TILE := Vector2i(13, 19)   # 채광지 라벨 자리(빈터, 채광 메카닉 Phase 3)
-# 대장간(업화로 — 도구·무기, enterable 빈 방). 외관=서편, 실내=집 방 띠(x8..19 y26..34, woodshop 결).
-const SMITHY_EXT_RECT := Rect2i(4, 5, 6, 6)     # x4..9, y5..10 (서편 land)
-const SMITHY_EXT_DOOR := Vector2i(6, 10)        # 외관 대장간 문(닿으면 진입) — _carve_eophwa_mine_paths 동선 연결
-const SMITHY_RECT := Rect2i(8, 26, 12, 9)       # x8..19, y26..34 (실내 방 — 집 방 띠, 구역별 빌드라 좌표 겹쳐도 무해)
-const SMITHY_DOOR := Vector2i(13, 34)           # 실내 대장간 문(닿으면 퇴장) — 아래벽 중앙
-const SMITHY_IN_TILE := Vector2i(13, 33)        # 실내 문 안쪽(진입 착지)
-const SMITHY_CAM_RECT := Rect2i(2, 24, 20, 13)  # 대장간 방 둘레(외부·다른 방 격리)
-# 모험가 길드(전투 장비, enterable 빈 방). 외관=동편, 실내=만물상 방 띠 옆 칸(x23..32 y26..34, store 결 — 대장간과 cam 비겹침).
-const GUILD_EXT_RECT := Rect2i(30, 5, 6, 6)     # x30..35, y5..10 (동편 land)
-const GUILD_EXT_DOOR := Vector2i(33, 10)        # 외관 길드 문(닿으면 진입) — _carve_eophwa_mine_paths 동선 연결
-const GUILD_RECT := Rect2i(23, 26, 10, 9)       # x23..32, y26..34 (실내 방 — 만물상 방 띠, 대장간 방 옆)
-const GUILD_DOOR := Vector2i(27, 34)            # 실내 길드 문(닿으면 퇴장) — 아래벽
-const GUILD_IN_TILE := Vector2i(27, 33)         # 실내 문 안쪽(진입 착지)
-const GUILD_CAM_RECT := Rect2i(21, 24, 14, 13)  # 길드 방 둘레(대장간 CAM x2..21과 안 겹침)
-# 갱도 끝 전투 던전 입구 — 잠긴 외관(비-enterable). 채광으로 뚫고 내려가 전투(ADR-0015)는 Phase 3라 잠김.
+const MINE_LAKE_RECT := Rect2i(3, 22, 8, 5)     # 호수(WATER, 통과 X) — world-map "호수"(남서 니치, 채널이 위로 돌아 비껴감 — 미혹 연못 결 8×5)
+const MINE_ORE_LABEL_TILES := [   # 채광지 라벨 자리 3곳(빈터, 채광 메카닉 Phase 3) — 채광 본진이라 숲 채집(미혹 2곳)보다 촘촘, 협곡 굽이 포켓마다
+	Vector2i(22, 13),   # 채광지①(북, seg6 곁)
+	Vector2i(33, 21),   # 채광지②(중, seg4 곁)
+	Vector2i(44, 30),   # 채광지③(남동, seg2/seg3 곁)
+]
+# 대장간(업화로 — 도구·무기, enterable 빈 방). 외관=남단 입구 서편, 실내=실내 띠(y≥44, fishshop/woodshop 결).
+const SMITHY_EXT_RECT := Rect2i(4, 37, 6, 5)    # x4..9, y37..41 (남단 입구 서편)
+const SMITHY_EXT_DOOR := Vector2i(6, 41)        # 외관 대장간 문(닿으면 진입) — 남단 apron으로 carve
+const SMITHY_RECT := Rect2i(8, 46, 12, 9)       # x8..19, y46..54 (실내 방 — 실내 띠, 구역별 빌드라 좌표 겹쳐도 무해)
+const SMITHY_DOOR := Vector2i(13, 54)           # 실내 대장간 문(닿으면 퇴장) — 아래벽 중앙
+const SMITHY_IN_TILE := Vector2i(13, 53)        # 실내 문 안쪽(진입 착지)
+const SMITHY_CAM_RECT := Rect2i(2, 44, 20, 13)  # 대장간 방 둘레(외부·다른 방 격리)
+# 모험가 길드(전투 장비, enterable 빈 방). 외관=남단 입구 동편, 실내=대장간 방 옆 칸(cam 비겹침).
+const GUILD_EXT_RECT := Rect2i(22, 37, 6, 5)    # x22..27, y37..41 (남단 입구 동편)
+const GUILD_EXT_DOOR := Vector2i(24, 41)        # 외관 길드 문(닿으면 진입) — 남단 apron으로 carve
+const GUILD_RECT := Rect2i(23, 46, 10, 9)       # x23..32, y46..54 (실내 방 — 대장간 방 옆, 같은 띠)
+const GUILD_DOOR := Vector2i(27, 54)            # 실내 길드 문(닿으면 퇴장) — 아래벽
+const GUILD_IN_TILE := Vector2i(27, 53)         # 실내 문 안쪽(진입 착지)
+const GUILD_CAM_RECT := Rect2i(21, 44, 14, 13)  # 길드 방 둘레(대장간 CAM x2..21과 안 겹침)
+# 갱도 끝 전투 던전 입구 — 잠긴 외관(비-enterable). 북단 심연 포켓 서편. 채광으로 뚫고 내려가 전투(ADR-0015)는 Phase 3라 잠김.
 # WALL 박스 + 문 리세스만(실내·카탈로그 없음 — 옥자 집 결). 나락(별개 공간)과 다른 잠긴 외관.
-const DUNGEON_GATE_EXT_RECT := Rect2i(12, 2, 5, 5)  # x12..16, y2..6 (북서 중앙, 잠긴 던전 입구)
-const DUNGEON_GATE_DOOR := Vector2i(14, 6)          # 문 리세스(시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
+const DUNGEON_GATE_EXT_RECT := Rect2i(22, 2, 5, 5)  # x22..26, y2..6 (북단 심연 포켓 서, 잠긴 던전 입구)
+const DUNGEON_GATE_DOOR := Vector2i(24, 6)          # 문 리세스(시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
 # 나락 진입로 — 잠긴 외관(비-enterable). 독립 전투 던전(나락)으로 가는 '서랍' 진입로라 Phase 3 전투에서 점등.
 # WALL 박스 + 문 리세스만(실내·카탈로그 없음, 라이브 워프 없음 — 옥자 집 결).
-const NARAK_GATE_EXT_RECT := Rect2i(23, 2, 5, 5)    # x23..27, y2..6 (북동 중앙, 잠긴 나락 진입로)
-const NARAK_GATE_DOOR := Vector2i(25, 6)            # 문 리세스(시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
+const NARAK_GATE_EXT_RECT := Rect2i(30, 2, 5, 5)    # x30..34, y2..6 (북단 심연 포켓 동, 잠긴 나락 진입로)
+const NARAK_GATE_DOOR := Vector2i(32, 6)            # 문 리세스(시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
 
 # ── 나락(M5.2 빌드 — 독립 전투 던전 스테이지) ───────────────────────────────────
 # 여덟째 실데이터 구역(독립 전투 전용). 전투 메카닉은 만들지 않는다(Phase 3) — 심연·업화·봉인 모티프의 빈
@@ -1236,17 +1244,26 @@ func _build_eophwa_mine() -> void:
 	_carve_eophwa_mine_paths()             # 동선(spawn·두 워프·대장간/길드 문·게이트 — 바위 군집을 덮어 길 보장)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
-# ★ M5.1 — 업화 갱도 동선. 세로 복도(x20)가 남단 spawn(20,22)·나루 마을 워프(20,23)와 북단 저승 숲
-# 워프(20,1)를 잇고, 가로 복도(y16)가 대장간(서)·길드(동)를 잇는다. 각 건물·게이트 문은 세로로 복도까지
-# 잇는다(게이트는 잠긴 외관이라 닿아도 진입 안 됨 — 시각·동선 일관만). carve는 바위·호수 fill *뒤*라 PATH가
-# 이겨 동선 칸엔 바위·물이 없다(무 soft-lock).
+# ★ ADR-0018 C8 — 업화 갱도 동선(지그재그 세로 협곡). 남단 spawn(14,42)에서 채널이 x14→48→18→40으로
+# 넓게 굽이쳐 북단 저승 워프(40,1)에 닿는다(7세그먼트). 북단 심연 포켓 곁가지(y7)가 던전·나락 게이트 문을
+# 척추(x40)에서 가르고(잠긴 외관이라 닿아도 진입 안 됨 — 시각·동선 일관만), 남단 입구 두 서비스 문은 apron
+# (y42)으로 내린다. carve는 바위·호수 fill·외관 *뒤*라 PATH가 이겨 동선 칸엔 바위·물이 없다(무 soft-lock).
 func _carve_eophwa_mine_paths() -> void:
-	_carve_v(20, 1, 23)                    # 세로 복도(북단 숲길 20,1 ~ 남단 산길 20,23·spawn 20,22)
-	_carve_h(16, 4, 36)                    # 가로 복도(서 대장간 ~ 동 길드)
-	_carve_v(SMITHY_EXT_DOOR.x, SMITHY_EXT_DOOR.y, 16)   # 대장간 문(6,10) → 복도(y16)
-	_carve_v(GUILD_EXT_DOOR.x, GUILD_EXT_DOOR.y, 16)     # 길드 문(33,10) → 복도(y16)
-	_carve_v(DUNGEON_GATE_DOOR.x, DUNGEON_GATE_DOOR.y, 16)  # 던전 입구(14,6) → 복도(잠김 — 시각·동선 일관)
-	_carve_v(NARAK_GATE_DOOR.x, NARAK_GATE_DOOR.y, 16)      # 나락 진입로(25,6) → 복도(잠김 — 시각·동선 일관)
+	# 지그재그 세로 채널(남 spawn 14,42 → 북 저승 워프 40,1): x14↑→ y32→ x48↑→ y20→ x18↑→ y12→ x40↑
+	_carve_v(14, 32, 43)                   # 남단 채널(나루 워프 14,43·spawn 14,42 → y32)
+	_carve_h(32, 14, 48)                   # 동으로 굽이(x14 → 48)
+	_carve_v(48, 20, 32)                   # 동편 채널(y32 → 20)
+	_carve_h(20, 18, 48)                   # 서로 굽이(x48 → 18)
+	_carve_v(18, 12, 20)                   # 서편 채널(y20 → 12)
+	_carve_h(12, 18, 40)                   # 동으로 굽이(x18 → 40)
+	_carve_v(40, 1, 12)                    # 북단 채널(y12 → 저승 워프 40,1)
+	# 북단 심연 포켓 곁가지(막다른) — 던전·나락 게이트 문을 척추(x40)에서 가른다(잠김 — 시각·동선 일관)
+	_carve_h(7, 24, 40)                    # 곁가지(게이트 문 ~ 척추 x40)
+	_carve_v(DUNGEON_GATE_DOOR.x, DUNGEON_GATE_DOOR.y, 7)   # 던전 입구 문(24,6) → 곁가지(y7)
+	_carve_v(NARAK_GATE_DOOR.x, NARAK_GATE_DOOR.y, 7)       # 나락 진입로 문(32,6) → 곁가지(y7)
+	# 남단 입구 두 서비스 문 → apron(y42, spawn 동선)
+	_carve_v(SMITHY_EXT_DOOR.x, SMITHY_EXT_DOOR.y, 42)     # 대장간 문(6,41) → apron(y42)
+	_carve_v(GUILD_EXT_DOOR.x, GUILD_EXT_DOOR.y, 42)       # 길드 문(24,41) → apron(y42)
 
 # ★ M5.2 — 나락(독립 전투 던전 스테이지). 빈 전투장 — 외부 land 한 덩어리(VOID 스택 띠는 카메라 격리용으로
 # 유지하되 실내 방 없음). 전투 메카닉은 만들지 않는다(Phase 3) — 심연·업화·봉인 모티프의 바위(ROCK) 둘레만.
@@ -1417,16 +1434,17 @@ func _place_labels() -> void:
 			_add_label("숲 안쪽 → 미혹의 숲", _tile_center_px(Vector2i(54, 22)))  # ★C6 동단 워프(58,22, 점등)
 			_add_label("숲길 → 업화 갱도", _tile_center_px(Vector2i(30, 40)))   # ★C6 남단 숲길 워프(30,43, 점등)
 		RegionCatalog.EOPHWA_MINE:
-			# ★ M5.1 — 대장간·길드는 그레이박스 WALL 박스라 라벨로 식별(목공방 컨벤션). 던전 입구·나락 진입로는
-			# 잠긴 외관(비-enterable)이라 라벨로 위상 명시(옥자 집 컨벤션). 채광지·두 워프 안내.
-			_add_label("대장간", _tile_center_px(Vector2i(6, 7)))
-			_add_label("모험가 길드", _tile_center_px(Vector2i(33, 7)))
-			_add_label("채광지(Phase 3)", _tile_center_px(MINE_ORE_LABEL_TILE))
-			_add_label("호수", _tile_center_px(Vector2i(5, 22)))
-			_add_label("던전 입구 (잠김 — 전투 Phase 3)", _tile_center_px(Vector2i(14, 8)))
-			_add_label("나락 진입로 (잠김 — 전투 Phase 3)", _tile_center_px(Vector2i(25, 8)))
-			_add_label("산길 → 나루 마을", _tile_center_px(Vector2i(20, 21)))   # 남단 산길 워프(20,23) 안내
-			_add_label("숲길 → 저승 숲", _tile_center_px(Vector2i(20, 3)))       # 북단 숲길 워프(20,1) 안내
+			# ★ ADR-0018 C8 — 대장간·길드는 그레이박스 WALL 박스라 라벨로 식별(목공방 컨벤션). 던전 입구·나락
+			# 진입로는 잠긴 외관(비-enterable)이라 라벨로 위상 명시(옥자 집 컨벤션). 채광지 3·호수·두 워프 안내(64×44).
+			_add_label("대장간", _tile_center_px(Vector2i(6, 36)))
+			_add_label("모험가 길드", _tile_center_px(Vector2i(24, 36)))
+			for ore in MINE_ORE_LABEL_TILES:
+				_add_label("채광지(Phase 3)", _tile_center_px(ore))
+			_add_label("호수", _tile_center_px(Vector2i(6, 24)))
+			_add_label("던전 입구 (잠김 — 전투 Phase 3)", _tile_center_px(Vector2i(24, 8)))
+			_add_label("나락 진입로 (잠김 — 전투 Phase 3)", _tile_center_px(Vector2i(32, 8)))
+			_add_label("산길 → 나루 마을", _tile_center_px(Vector2i(14, 40)))   # 남단 산길 워프(14,43) 안내
+			_add_label("숲길 → 저승 숲", _tile_center_px(Vector2i(40, 3)))       # 북단 숲길 워프(40,1) 안내
 		RegionCatalog.NARAK:
 			# ★ M5.2 — 독립 전투 던전 스테이지(헤드리스 빌드·검증). 인게임 진입은 잠긴 외관(업화 갱도)이라 없음.
 			_add_label("나락 (전투 — Phase 3)", _tile_center_px(Vector2i(20, 10)))
