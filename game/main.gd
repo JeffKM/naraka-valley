@@ -385,27 +385,47 @@ const FISHSHOP_RECT := Rect2i(8, 46, 12, 9)     # ★C5 x8..19, y46..54 (실내 
 const FISHSHOP_DOOR := Vector2i(13, 54)         # 실내 생선가게 문(닿으면 퇴장) — 아래벽 중앙(+20)
 const FISHSHOP_IN_TILE := Vector2i(13, 53)      # 실내 문 안쪽(진입 착지, +20)
 const FISHSHOP_CAM_RECT := Rect2i(2, 44, 20, 13)  # ★C5 생선가게 방 둘레(외부·다른 방 격리, +20 — y44~ VOID 띠)
-# ── ★ M4.1 저승 숲(채집 무대 + 목공방) ──────────────────────────────────────────
+# ── ★ M4.1 / ★ ADR-0018 C6 저승 숲(채집 무대 + 목공방) ──────────────────────────
 # 다섯째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 채집 메카닉은 만들지 않는다(Phase 3) — 나무(TREE)
-# 무대 + 채집지(라벨만) + 목공방(enterable 빈 방)까지. ★ M5.1: 업화 갱도가 지어져 남단 spawn(20,22)은
-# 갱도 북단 숲길에서 도착(정규 토폴로지 복원 — M4.1 산길 임시 직결 종료). 동단(38,16)이 미혹의 숲 워프(M4.2 점등).
-# 동선 = 가로 복도(y16, 서 목공방 11 ~ 동 미혹 38,16) + 남단 세로(spawn 20,22·갱도 숲길 워프 20,23) + 목공방 문.
-# 나무는 동선·목공방·워프 칸을 비껴간 군집으로 둬 숲 정체성을 주되 flood-fill 무 soft-lock(빈터=GROUND).
-const FOREST_TREE_RECTS := [   # 나무(TREE) 군집 — 동선(y16·x20·목공방)·워프 칸을 비껴감
-	Rect2i(3, 3, 5, 4),     # 북서 군집
-	Rect2i(24, 3, 7, 5),    # 북동 군집
-	Rect2i(3, 19, 6, 3),    # 남서 군집
-	Rect2i(28, 18, 8, 4),   # 남동 군집
+# 무대 + 채집지(라벨만) + 목공방(enterable 빈 방)까지. ★ M5.1: 업화 갱도가 지어져 남단 spawn은 갱도
+# 북단 숲길에서 도착(정규 토폴로지 복원). 동단이 미혹의 숲 워프(M4.2 점등).
+# ★ ADR-0018 C6 — 60×44 코지-와이드 재배치("빽빽한 가장자리 + 안쪽 빈터"). 가장자리 TREE 밴드가 깊은
+#   숲을 둘러싸고(자연 경계 — 강·바다 결), 안쪽 빈터(GROUND)에 채집지 3곳이 흩어진다. 통과형(막다른
+#   미혹의 숲 C7과 달리) — spawn(30,42, 남단·갱도에서 도착)·미혹 워프(58,22, 동단)·목공방(서편 land).
+# 동선 = 가로 복도(y22, 서 목공방 9 ~ 동 미혹 58) + 남단 세로(x30, spawn 30,42·갱도 워프 30,43) + 목공방 문.
+# 나무는 동선·목공방·워프 칸·빈터를 비껴간 밴드+군집으로 둬 숲 정체성을 주되 flood-fill 무 soft-lock(빈터=GROUND).
+const FOREST_TREE_RECTS := [   # 나무(TREE) — 가장자리 밴드(상·하·좌·우) + 내부 악센트. 동선·워프·빈터 비껴감
+	# 상단 밴드(y2~4, 가운데 빈터·공기 틈)
+	Rect2i(2, 2, 12, 3),    # 북서 상단 x2..13
+	Rect2i(24, 2, 14, 3),   # 북중 상단 x24..37
+	Rect2i(48, 2, 9, 3),    # 북동 상단 x48..56
+	# 좌측 밴드(x2~4, 복도 y22 비껴 위·아래)
+	Rect2i(2, 8, 3, 8),     # 서 상부 y8..15
+	Rect2i(2, 26, 3, 12),   # 서 하부 y26..37
+	# 우측 밴드(x55~57, 미혹 워프 y22 비껴 위·아래)
+	Rect2i(55, 6, 3, 12),   # 동 상부 y6..17
+	Rect2i(55, 26, 3, 12),  # 동 하부 y26..37
+	# 하단 밴드(y39~41, 남단 spawn 틈 x26~33 비껴 좌·우)
+	Rect2i(4, 39, 22, 3),   # 남서 x4..25
+	Rect2i(34, 39, 22, 3),  # 남동 x34..55
+	# 내부 악센트 군집(빈터를 갈라 숲 밀도)
+	Rect2i(10, 26, 6, 5),   # 내부 남서 x10..15, y26..30
+	Rect2i(38, 14, 6, 4),   # 내부 북동 x38..43, y14..17
+	Rect2i(46, 28, 7, 5),   # 내부 남동 x46..52, y28..32
 ]
-const FOREST_FORAGE_LABEL_TILE := Vector2i(28, 12)  # 채집지 라벨 자리(빈터, 채집 메카닉 Phase 3)
-# 목공방(enterable 빈 방) — 외관(land)·실내 방(아래 실내 띠). 혼백관·생선가게 결의 데이터 주도 출입.
+const FOREST_FORAGE_LABEL_TILE := Vector2i(20, 8)   # ★C6 채집지 빈터①(북, 채집 메카닉 Phase 3)
+const FOREST_FORAGE_LABEL_TILE_2 := Vector2i(45, 10) # ★C6 채집지 빈터②(북동)
+const FOREST_FORAGE_LABEL_TILE_3 := Vector2i(42, 34) # ★C6 채집지 빈터③(남)
+# 목공방(enterable 빈 방) — 외관(서편 land·나무 곁)·실내 방(아래 실내 띠). 혼백관·생선가게 결의 데이터 주도 출입.
 # kind="woodshop"이라 _draw 가구 분기에 안 걸려 빈 방(집·농장 업그레이드 서비스, 로빈 대응은 후속).
-const WOODSHOP_EXT_RECT := Rect2i(8, 8, 7, 6)   # x8..14, y8..13 (북서 land)
-const WOODSHOP_EXT_DOOR := Vector2i(11, 13)     # 외관 목공방 문(닿으면 진입) — _carve_jeoseung_forest_paths 동선 연결
-const WOODSHOP_RECT := Rect2i(8, 26, 12, 9)     # x8..19, y26..34 (실내 방 — 실내 띠, 구역별 빌드라 좌표 겹쳐도 무해)
-const WOODSHOP_DOOR := Vector2i(13, 34)         # 실내 목공방 문(닿으면 퇴장) — 아래벽 중앙
-const WOODSHOP_IN_TILE := Vector2i(13, 33)      # 실내 문 안쪽(진입 착지)
-const WOODSHOP_CAM_RECT := Rect2i(2, 24, 20, 13)  # 목공방 방 둘레(외부·다른 방 격리)
+# ★C6 — outdoor_h 44>26이라 공유 실내 띠(y26~)가 외부(land)와 겹쳐 → 실내 방·문·카메라를 저승 숲 밴드로
+#   +20 평행이동(y46~ — 생선가게 +20·창고 +41 결). 외관은 서편 land(나무 곁)에 유지.
+const WOODSHOP_EXT_RECT := Rect2i(6, 14, 7, 6)   # ★C6 x6..12, y14..19 (서편 land, 좌측 나무 밴드 곁)
+const WOODSHOP_EXT_DOOR := Vector2i(9, 19)      # 외관 목공방 문(닿으면 진입) — _carve_jeoseung_forest_paths 동선 연결
+const WOODSHOP_RECT := Rect2i(8, 46, 12, 9)     # ★C6 x8..19, y46..54 (실내 방 — 저승 숲 밴드 +20)
+const WOODSHOP_DOOR := Vector2i(13, 54)         # 실내 목공방 문(닿으면 퇴장) — 아래벽 중앙(+20)
+const WOODSHOP_IN_TILE := Vector2i(13, 53)      # 실내 문 안쪽(진입 착지, +20)
+const WOODSHOP_CAM_RECT := Rect2i(2, 44, 20, 13)  # ★C6 목공방 방 둘레(외부·다른 방 격리, +20 — y44~ VOID 띠)
 # ── ★ M4.2 미혹의 숲(특수 채집 무대 + 옥자 집) ────────────────────────────────────
 # 여섯째 실데이터 구역(막다른 깊은 숲). 채집 메카닉은 만들지 않는다(Phase 3) — 더 어둡고 깊은 숲(TREE
 # 밀도↑ + 연못 WATER)·특수 채집지(라벨만)까지. 저승 숲 동단(38,16)에서 서단 spawn(2,16)에 도착(M4.2 점등).
@@ -1133,14 +1153,13 @@ func _build_jeoseung_forest() -> void:
 	_carve_jeoseung_forest_paths()         # 동선(spawn·워프·목공방 문 — 나무 군집을 덮어 길 보장)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
-# ★ M4.1 — 저승 숲 동선. 가로 복도(y16)가 서단 우회 워프(1,16)·동단 미혹 워프(38,16)를 잇고, 남단
-# 세로(x20, spawn 20,22·갱도 워프 20,23)에서 복도로 올라온다. 목공방 문(11,13)은 세로로 복도까지 잇는다.
-# carve는 나무 fill *뒤*라 PATH가 이겨 동선 칸엔 나무가 없다(무 soft-lock).
+# ★ M4.1 / ★C6 — 저승 숲 동선(60×44). 가로 복도(y22)가 서 목공방 열(x9)·동단 미혹 워프(58,22)를 잇고,
+# 남단 세로(x30, spawn 30,42·갱도 워프 30,43)에서 복도로 올라온다. 목공방 문(9,19)은 세로로 복도까지 잇는다.
+# carve는 나무 fill *뒤*라 PATH가 이겨 동선 칸엔 나무가 없다(무 soft-lock). 가장자리 밴드는 동선·워프 틈을 비껴 깔렸다.
 func _carve_jeoseung_forest_paths() -> void:
-	# ★ M5.1 — 서단 임시 우회 워프(1,16) 제거에 맞춰 가로 복도 서단을 목공방 열(x11)까지 트림(서쪽 데드엔드 방지).
-	_carve_h(16, 11, 38)                   # 가로 복도(서 목공방 11 ~ 동 미혹 워프 38,16)
-	_carve_v(20, 16, 23)                   # 남단 spawn(20,22)·갱도 숲길 워프(20,23) → 복도
-	_carve_v(WOODSHOP_EXT_DOOR.x, WOODSHOP_EXT_DOOR.y, 16)  # 목공방 문(11,13) → 복도(y16)
+	_carve_h(22, WOODSHOP_EXT_DOOR.x, 58)  # 가로 복도(서 목공방 9 ~ 동 미혹 워프 58,22)
+	_carve_v(30, 22, 43)                   # 남단 spawn(30,42)·갱도 숲길 워프(30,43) → 복도(y22)
+	_carve_v(WOODSHOP_EXT_DOOR.x, WOODSHOP_EXT_DOOR.y, 22)  # 목공방 문(9,19) → 복도(y22)
 
 # ★ M4.2 — 미혹의 숲(특수 채집 무대 + 옥자 집). 저승 숲과 같은 스택이되 실내 방이 없다(옥자 집은 잠긴
 # 외관 = 비-enterable). 더 깊은 숲: 나무(TREE) 밀도↑ + 연못(WATER). 채집 메카닉은 만들지 않는다(Phase 3).
@@ -1371,11 +1390,13 @@ func _place_labels() -> void:
 			_add_label("바다 낚시터(Phase 3)", _tile_center_px(SEA_FISHING_LABEL_TILE))
 			_add_label("하구 → 삼도천", _tile_center_px(Vector2i(4, 15)))       # ★C5 서단 복귀 워프(1,15) 안내
 		RegionCatalog.JEOSEUNG_FOREST:
-			# ★ M4.1 — 목공방은 그레이박스 WALL 박스라 라벨로 식별. 채집지·워프 안내.
-			_add_label("목공방", _tile_center_px(Vector2i(11, 10)))
+			# ★ M4.1 / ★C6 — 목공방은 그레이박스 WALL 박스라 라벨로 식별. 채집지 3곳(빈터)·워프 안내(60×44).
+			_add_label("목공방", _tile_center_px(Vector2i(9, 16)))
 			_add_label("채집지(Phase 3)", _tile_center_px(FOREST_FORAGE_LABEL_TILE))
-			_add_label("숲 안쪽 → 미혹의 숲", _tile_center_px(Vector2i(36, 15)))  # ★ M4.2 동단 워프(38,16, 점등)
-			_add_label("숲길 → 업화 갱도", _tile_center_px(Vector2i(20, 21)))   # ★ M5.1 남단 숲길 워프(20,23, 점등 — 임시 우회 종료)
+			_add_label("채집지(Phase 3)", _tile_center_px(FOREST_FORAGE_LABEL_TILE_2))
+			_add_label("채집지(Phase 3)", _tile_center_px(FOREST_FORAGE_LABEL_TILE_3))
+			_add_label("숲 안쪽 → 미혹의 숲", _tile_center_px(Vector2i(54, 22)))  # ★C6 동단 워프(58,22, 점등)
+			_add_label("숲길 → 업화 갱도", _tile_center_px(Vector2i(30, 40)))   # ★C6 남단 숲길 워프(30,43, 점등)
 		RegionCatalog.EOPHWA_MINE:
 			# ★ M5.1 — 대장간·길드는 그레이박스 WALL 박스라 라벨로 식별(목공방 컨벤션). 던전 입구·나락 진입로는
 			# 잠긴 외관(비-enterable)이라 라벨로 위상 명시(옥자 집 컨벤션). 채광지·두 워프 안내.

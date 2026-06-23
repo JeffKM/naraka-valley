@@ -40,9 +40,10 @@ func _despawn(m: Node) -> void:
 	await process_frame
 	await process_frame
 
-# 외부에서 걸을 수 있는 칸인가(WALL·WATER·TREE·VOID·범위밖이면 X). 실내 스택(y>=OUTDOOR_H)은 제외.
+# 외부에서 걸을 수 있는 칸인가(WALL·WATER·TREE·VOID·범위밖이면 X). 실내 스택(y>=outdoor_h)은 제외.
+# ★C6 — 저승 숲이 60×44라 전역 MAP_W/OUTDOOR_H가 아니라 빌드된 구역 치수(_grid_w/_outdoor_h)를 쓴다(황천해 결).
 func _walkable(m: Node, t: Vector2i) -> bool:
-	if t.x < 0 or t.y < 0 or t.x >= m.MAP_W or t.y >= m.OUTDOOR_H:
+	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
 	return id != m.WALL and id != m.WATER and id != m.TREE and id != m.VOID
@@ -88,16 +89,20 @@ func _initialize() -> void:
 	# 저승 숲 구역을 빌드(동기 — samdocheon/warp_test와 같은 결, 그리드 직접 검사).
 	m._rebuild_region(RegionCatalog.JEOSEUNG_FOREST)
 	_check("⓪ 구역 = 저승 숲", m._region == RegionCatalog.JEOSEUNG_FOREST)
-	_check("⓪b 그리드 크기 유지(MAP_H×MAP_W)",
-		m._grid.size() == m.MAP_H and m._grid[0].size() == m.MAP_W)
+	# ★C6 — 60×44 재배치: 그리드 = _grid_h(외부44+실내띠28=72) × _grid_w(60). 전역 MAP_*가 아니라 구역 치수.
+	_check("⓪b 그리드 크기 = _grid_h×_grid_w (★C6 60×44)",
+		m._grid.size() == m._grid_h and m._grid[0].size() == m._grid_w
+		and m._grid_w == 60 and m._outdoor_h == 44)
 
 	# ── ① 나무(TREE) 군집 통과 불가 + 빈터(GROUND) 걸을 수 있음 ──
 	for r in m.FOREST_TREE_RECTS:
 		var c := Vector2i(r.position.x, r.position.y)   # 군집 좌상단 — 나무여야(동선이 안 덮은 칸)
 		_check("① 나무 군집 칸 TREE (%d,%d)" % [c.x, c.y], m._grid[c.y][c.x] == m.TREE)
 		_check("①b 나무 칸 통과 불가", not _walkable(m, c))
-	# 빈터(채집지 라벨 자리)는 걸을 수 있는 GROUND.
-	_check("①c 채집지 빈터 걸을 수 있음", _walkable(m, m.FOREST_FORAGE_LABEL_TILE))
+	# ★C6 — 빈터(채집지 라벨 자리 3곳)는 모두 걸을 수 있는 GROUND(나무에 안 묻힘).
+	_check("①c 채집지 빈터① 걸을 수 있음", _walkable(m, m.FOREST_FORAGE_LABEL_TILE))
+	_check("①d 채집지 빈터② 걸을 수 있음", _walkable(m, m.FOREST_FORAGE_LABEL_TILE_2))
+	_check("①e 채집지 빈터③ 걸을 수 있음", _walkable(m, m.FOREST_FORAGE_LABEL_TILE_3))
 
 	# ── ② 목공방 외관 = WALL 박스 + 문 PATH 리세스, 실내 빈 방 ──
 	var ext: Rect2i = m.WOODSHOP_EXT_RECT
@@ -114,9 +119,13 @@ func _initialize() -> void:
 
 	# ── ③ flood-fill 무 soft-lock: spawn에서 목공방 문·세 워프 칸 도달 ──
 	var spawn: Vector2i = RegionCatalog.spawn_of(RegionCatalog.JEOSEUNG_FOREST)
-	_check("③ spawn = (20,22)", spawn == Vector2i(20, 22))
+	_check("③ spawn = (30,42) ★C6", spawn == Vector2i(30, 42))
 	var reach := _reachable(m, spawn)
 	_check("③b 목공방 외관 문 도달", reach.has(m.WOODSHOP_EXT_DOOR))
+	# ★C6 — 채집지 빈터 3곳도 spawn에서 도달(빽빽한 가장자리에 막히지 않음).
+	_check("③b2 채집지 빈터① 도달", reach.has(m.FOREST_FORAGE_LABEL_TILE))
+	_check("③b3 채집지 빈터② 도달", reach.has(m.FOREST_FORAGE_LABEL_TILE_2))
+	_check("③b4 채집지 빈터③ 도달", reach.has(m.FOREST_FORAGE_LABEL_TILE_3))
 	var warps: Array = RegionCatalog.warps_of(RegionCatalog.JEOSEUNG_FOREST)
 	_check("③c 워프 2개(갱도·미혹 — ★M5.1 나루 마을 임시 우회 제거)", warps.size() == 2)
 	for w in warps:
