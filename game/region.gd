@@ -147,12 +147,11 @@ const CATALOG := {
 	#   ★ M5.1 도달성: 정규 이웃 업화 갱도가 지어져, 저승 숲은 남단 숲길로 갱도와 직접 잇는다(임시 우회 종료).
 	JEOSEUNG_FOREST: {
 		"name_ko": "저승 숲",
-		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (다른 구역과 같은 외부 무대)
-		"spawn": Vector2i(20, 22),    # 남단(업화 갱도 북단 숲길 → 저승 숲 도착 칸)
+		"size": Vector2i(60, 44),     # ★ ADR-0018 C6 — 60×44 코지-와이드("빽빽한 가장자리 + 안쪽 빈터", 통과형 채집 무대)
+		"spawn": Vector2i(30, 42),    # ★C6 남단 중앙(업화 갱도 북단 숲길 → 저승 숲 도착 칸)
 		"warps": [
-			{"to": EOPHWA_MINE, "at": Vector2i(20, 23), "dest": Vector2i(20, 2)},   # 남단 숲길 → 업화 갱도(북단 20,1 한 칸 안) — ★M5.1 점등
-			{"to": MIHOK_FOREST, "at": Vector2i(38, 16), "dest": Vector2i(2, 16)},  # 동단 숲 안쪽 → 미혹의 숲 — M4.2 점등
-			# ★ M5.1 — M4.1 임시 우회 워프(서단 1,16 → 나루 마을) 제거. 갱도가 지어져 정규 경로(나루 마을→갱도→숲)로 복귀.
+			{"to": EOPHWA_MINE, "at": Vector2i(30, 43), "dest": Vector2i(20, 2)},   # ★C6 남단 숲길 → 업화 갱도(북단 20,1 한 칸 안)
+			{"to": MIHOK_FOREST, "at": Vector2i(58, 22), "dest": Vector2i(2, 16)},  # ★C6 동단 숲 안쪽 → 미혹의 숲
 		],
 	},
 	# ── 미혹의 숲(M4.2 빌드 — 특수 채집 무대·옥자 집) ────────────────────────────
@@ -168,7 +167,7 @@ const CATALOG := {
 		"spawn": Vector2i(2, 16),     # 서단(저승 숲 동단 → 미혹의 숲 도착 칸)
 		# 저승 숲 ──(숲 안쪽)── 미혹의 숲(막다른 깊은 숲, 옥자 집).
 		"warps": [
-			{"to": JEOSEUNG_FOREST, "at": Vector2i(1, 16), "dest": Vector2i(37, 16)},  # 서단 → 저승 숲 동단(38,16 한 칸 안)
+			{"to": JEOSEUNG_FOREST, "at": Vector2i(1, 16), "dest": Vector2i(57, 22)},  # 서단 → 저승 숲 동단(★C6 58,22 한 칸 안)
 		],
 	},
 	# ── 업화 갱도(M5.1 빌드 — 채광/전투 무대·대장간·길드) ────────────────────────
@@ -182,7 +181,7 @@ const CATALOG := {
 		"spawn": Vector2i(20, 22),    # 남단(나루 마을 산길 → 업화 갱도 도착 칸)
 		"warps": [
 			{"to": NARU_VILLAGE, "at": Vector2i(20, 23), "dest": Vector2i(96, 18)},    # 남단 산길 → 나루 마을(★C3: 산길 98,18 두 칸 안)
-			{"to": JEOSEUNG_FOREST, "at": Vector2i(20, 1), "dest": Vector2i(20, 22)},  # 북단 숲길 → 저승 숲(남단 spawn)
+			{"to": JEOSEUNG_FOREST, "at": Vector2i(20, 1), "dest": Vector2i(30, 42)},  # 북단 숲길 → 저승 숲(★C6 남단 spawn)
 		],
 	},
 	# ── 나락(M5.2 빌드 — 독립 전투 던전 스테이지) ───────────────────────────────
