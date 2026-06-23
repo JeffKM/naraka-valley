@@ -71,8 +71,8 @@ func _initialize() -> void:
 	_check("③n 미혹의 숲 스폰 = (2,22) ★C7", RegionCatalog.spawn_of(RegionCatalog.MIHOK_FOREST) == Vector2i(2, 22))
 	_check("③o 업화 갱도 크기 = (64,44) ★C8", RegionCatalog.size_of(RegionCatalog.EOPHWA_MINE) == Vector2i(64, 44))
 	_check("③p 업화 갱도 스폰 = (14,42) ★C8", RegionCatalog.spawn_of(RegionCatalog.EOPHWA_MINE) == Vector2i(14, 42))
-	_check("③q 나락 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.NARAK) == Vector2i(40, 24))
-	_check("③r 나락 스폰 = (20,12)", RegionCatalog.spawn_of(RegionCatalog.NARAK) == Vector2i(20, 12))
+	_check("③q 나락 크기 = (64,44)", RegionCatalog.size_of(RegionCatalog.NARAK) == Vector2i(64, 44))   # ★C9 코지-와이드
+	_check("③r 나락 스폰 = (32,22)", RegionCatalog.spawn_of(RegionCatalog.NARAK) == Vector2i(32, 22))   # ★C9 아레나 정중앙
 
 	# ── ④ 토폴로지(warps) 정합: world-map.md §2 구역 그래프 ──
 	# 워프의 to는 실재하는 구역이어야 하고, 토폴로지는 대칭(양방향)이어야 한다.
