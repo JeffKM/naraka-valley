@@ -345,21 +345,23 @@ const BARN_EXT_RECT := Rect2i(60, 40, 6, 4)    # ★C2: x60..65, y40..43 (동편
 const BARN_EXT_DOOR := Vector2i(62, 40)        # 축사 문 리세스(시각 일관용 — 진입 트리거 아님, 카탈로그 미등록)
 # ── ★ M3.1 삼도천(강 낚시 무대 + 혼백관) ───────────────────────────────────────
 # 셋째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 낚시 메카닉은 만들지 않는다(Phase 3) — 강(WATER)
-# 무대 + 강 낚시터(라벨만) + 혼백관(enterable 빈 방)까지 그레이박스로 깐다. 나루 마을 나룻터(22,1)에서
-# 배로 건너 남단 spawn(20,22)에 도착하고, 동단 하구(38,16)가 황천해로 가는 워프(M3.2 점등).
-# 강은 상단 가로 띠(y1..3)로 흘러 그 아래 land(y4..23)는 한 덩어리(다리 불필요·flood-fill 단순).
+# 무대 + 강 낚시터(라벨만) + 혼백관(enterable 빈 방)까지 그레이박스로 깐다.
+# ★ ADR-0018 C4 — 낚시 무대 코지-와이드 56×40 재배치. 나루 마을 나룻터(52,1)에서 배로 건너 남단
+#   spawn(28,38)에 도착하고, 동단 하구(54,20)가 황천해로 가는 워프(점등). 강을 굵은 상단 가로 띠
+#   (y1..8 — 낚시 무대다운 진짜 강)로 흘려 그 아래 둑(y9..39)은 한 덩어리(다리 불필요·flood-fill 단순).
 const SAMDO_RIVER_Y0 := 1                       # 강(WATER) 상단 띠 시작 y(경계벽 y0 바로 아래)
-const SAMDO_RIVER_Y1 := 3                       # 강 띠 끝 y — y4 이하가 강 낚시터 둑(land)
-const SAMDO_FISHING_LABEL_TILE := Vector2i(28, 5)  # 강 낚시터 라벨 자리(둑, 낚시 메카닉 Phase 3)
-# 혼백관(enterable 빈 방) — 외관(land)·실내 방(아래 실내 띠). 창고·만물상 결의 데이터 주도 출입.
-# kind="museum"이라 _draw 가구 분기(house/cafe)에 안 걸려 빈 방으로 그려진다(분기 추가 0). 실내 방은
-# y26..34 띠에 둬 MAP_H 불변(warp_test 그리드 불변식) — 구역별 빌드라 나루 마을 방과 좌표 겹쳐도 무해.
-const MUSEUM_EXT_RECT := Rect2i(6, 6, 7, 6)     # x6..12, y6..11 (강 둑 아래 land)
-const MUSEUM_EXT_DOOR := Vector2i(9, 11)        # 외관 혼백관 문(닿으면 진입) — _carve_samdocheon_paths 동선 연결
-const MUSEUM_RECT := Rect2i(8, 26, 12, 9)       # x8..19, y26..34 (실내 방 — HOUSE_RECT 띠, 구역별 빌드)
-const MUSEUM_DOOR := Vector2i(13, 34)           # 실내 혼백관 문(닿으면 퇴장) — 아래벽 중앙
-const MUSEUM_IN_TILE := Vector2i(13, 33)        # 실내 문 안쪽(진입 착지)
-const MUSEUM_CAM_RECT := Rect2i(2, 24, 20, 13)  # 혼백관 방 둘레(외부·다른 방 격리)
+const SAMDO_RIVER_Y1 := 8                       # ★C4 강 띠 끝 y(굵은 강) — y9 이하가 강 낚시터 둑(land)
+const SAMDO_FISHING_LABEL_TILE := Vector2i(28, 10)  # ★C4 강 낚시터 라벨 자리(물가 둑, 낚시 메카닉 Phase 3)
+# 혼백관(enterable 빈 방) — 외관(land)·실내 방(삼도천 밴드). 창고·만물상 결의 데이터 주도 출입.
+# kind="museum"이라 _draw 가구 분기(house/cafe)에 안 걸려 빈 방으로 그려진다(분기 추가 0).
+# ★C4 — outdoor_h 40>26이라 공유 실내 띠(y26~)가 외부(둑)와 겹쳐 → 실내 방·문·카메라를 삼도천 밴드로
+#   +18 평행이동(y44~ — HOME +41·마을 +48 결). 외관은 둑 서편(y14~19, 굵은 강 아래)으로 재배치.
+const MUSEUM_EXT_RECT := Rect2i(6, 14, 7, 6)    # ★C4 x6..12, y14..19 (굵은 강 아래 둑 서편)
+const MUSEUM_EXT_DOOR := Vector2i(9, 19)        # 외관 혼백관 문(닿으면 진입) — _carve_samdocheon_paths 동선 연결
+const MUSEUM_RECT := Rect2i(8, 44, 12, 9)       # ★C4 x8..19, y44..52 (실내 방 — 삼도천 밴드 +18)
+const MUSEUM_DOOR := Vector2i(13, 52)           # 실내 혼백관 문(닿으면 퇴장) — 아래벽 중앙(+18)
+const MUSEUM_IN_TILE := Vector2i(13, 51)        # 실내 문 안쪽(진입 착지, +18)
+const MUSEUM_CAM_RECT := Rect2i(2, 42, 20, 13)  # ★C4 혼백관 방 둘레(외부·다른 방 격리, +18)
 # ── ★ M3.2 황천해(바다 낚시 무대 + 생선가게) ──────────────────────────────────
 # 넷째 실데이터 구역(막다른 바다). 낚시 메카닉은 만들지 않는다(Phase 3) — 바다(WATER) 무대 + 부두(잔교)
 # + 바다 낚시터(라벨만) + 생선가게(enterable 빈 방)까지. 삼도천 하구(38,16)에서 서단 spawn(2,16)에 도착.
@@ -1065,13 +1067,13 @@ func _build_samdocheon() -> void:
 	_carve_samdocheon_paths()              # 동선(나룻터 도착 → 혼백관 문·하구 워프 칸)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
-# ★ M3.1 — 삼도천 동선. 가로 복도(y16)가 혼백관 쪽과 동단 하구 워프(38,16)를 잇고, 남단 나룻터
-# (spawn 20,22·복귀 워프 20,23)에서 복도로 올라온다. 혼백관 문(9,11)은 세로로 복도까지 잇는다.
+# ★ M3.1 / ★C4 — 삼도천 동선(56×40). 가로 복도(y20)가 혼백관 쪽과 동단 하구 워프(54,20)를 잇고, 남단
+# 나룻터(spawn 28,38·복귀 워프 28,39)에서 복도로 올라온다. 혼백관 문(9,19)은 세로로 복도까지 잇는다.
 # land가 한 덩어리라 길은 동선 안내용이고, 워프 발동 칸까지 닿아 무 soft-lock.
 func _carve_samdocheon_paths() -> void:
-	_carve_h(16, 1, 38)                    # 가로 복도(동단 하구 워프 38,16까지)
-	_carve_v(20, 16, 23)                   # 나룻터 도착(20,22)·복귀 워프(20,23) → 복도
-	_carve_v(MUSEUM_EXT_DOOR.x, MUSEUM_EXT_DOOR.y, 16)  # 혼백관 문(9,11) → 복도(y16)
+	_carve_h(20, 1, 54)                    # 가로 복도(동단 하구 워프 54,20까지)
+	_carve_v(28, 20, 39)                   # 나룻터 도착(28,38)·복귀 워프(28,39) → 복도
+	_carve_v(MUSEUM_EXT_DOOR.x, MUSEUM_EXT_DOOR.y, 20)  # 혼백관 문(9,19) → 복도(y20)
 
 # ★ M3.2 — 황천해(바다 낚시 무대 + 생선가게). 삼도천과 같은 패턴(외부 land + 아래 실내 생선가게 방,
 # VOID 격리). 낚시 메카닉은 만들지 않는다(Phase 3) — 바다(WATER) 무대·부두·바다 낚시터(라벨만)·생선가게
@@ -1351,11 +1353,11 @@ func _place_labels() -> void:
 			_add_label("나룻터 → 삼도천", _tile_center_px(Vector2i(53, 3)))  # ★ M3.1 북동 나룻터(혼백관, 점등 — ★C3 52,1)
 			_add_label("산길 → 업화 갱도", _tile_center_px(Vector2i(94, 17)))   # ★ M5.1 동 산길(정규 복원 — 갱도로 점등, ★C3 98,18)
 		RegionCatalog.SAMDOCHEON:
-			# ★ M3.1 — 혼백관은 그레이박스 WALL 박스라 라벨로 식별(만물상·창고 컨벤션). 강 낚시터·워프 안내.
-			_add_label("혼백관", _tile_center_px(Vector2i(9, 8)))
+			# ★ M3.1 / ★C4 — 혼백관은 그레이박스 WALL 박스라 라벨로 식별(만물상·창고 컨벤션). 강 낚시터·워프 안내(56×40).
+			_add_label("혼백관", _tile_center_px(Vector2i(9, 13)))           # ★C4 외관(y14~19) 위
 			_add_label("강 낚시터(Phase 3)", _tile_center_px(SAMDO_FISHING_LABEL_TILE))
-			_add_label("나룻터 → 나루 마을", _tile_center_px(Vector2i(20, 21)))  # 남단 복귀 워프(20,23) 안내
-			_add_label("하구 → 황천해", _tile_center_px(Vector2i(36, 15)))      # ★ M3.2 동단 하구 워프(38,16, 점등)
+			_add_label("나룻터 → 나루 마을", _tile_center_px(Vector2i(28, 37)))  # ★C4 남단 복귀 워프(28,39) 안내
+			_add_label("하구 → 황천해", _tile_center_px(Vector2i(51, 20)))      # ★C4 동단 하구 워프(54,20) 안내
 		RegionCatalog.HWANGCHEONHAE:
 			# ★ M3.2 — 생선가게는 그레이박스 WALL 박스라 라벨로 식별. 부두·바다 낚시터·복귀 워프 안내.
 			_add_label("생선가게", _tile_center_px(Vector2i(8, 7)))
