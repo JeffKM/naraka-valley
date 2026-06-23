@@ -100,8 +100,8 @@ const CATALOG := {
 		"warps": [
 			{"to": HOME, "at": Vector2i(1, 36), "dest": Vector2i(77, 32)},   # 서편 복도 끝 → 안식 농원(★C2: 동쪽 워프 78,32 한 칸 안)
 			# ★ M5.1 — 정규 토폴로지 복원(M4.1 임시 직결 종료): 산길은 업화 갱도로 간다(갱도가 지어져 점등).
-			# 나루 마을→갱도→저승 숲이 정규 경로. dest = 갱도 남단 spawn(20,22).
-			{"to": EOPHWA_MINE, "at": Vector2i(98, 18), "dest": Vector2i(20, 22)},  # 동쪽 산길 → 업화 갱도(남단 spawn) — M5.1 점등
+			# 나루 마을→갱도→저승 숲이 정규 경로. dest = 갱도 남단 spawn(★C8 14,42).
+			{"to": EOPHWA_MINE, "at": Vector2i(98, 18), "dest": Vector2i(14, 42)},  # 동쪽 산길 → 업화 갱도(남단 spawn) — ★C8 (14,42)
 			{"to": SAMDOCHEON, "at": Vector2i(52, 1), "dest": Vector2i(28, 38)},  # 북동 나룻터 → 삼도천(혼백관, ★C4: 삼도천 56×40 새 spawn)
 		],
 	},
@@ -150,7 +150,7 @@ const CATALOG := {
 		"size": Vector2i(60, 44),     # ★ ADR-0018 C6 — 60×44 코지-와이드("빽빽한 가장자리 + 안쪽 빈터", 통과형 채집 무대)
 		"spawn": Vector2i(30, 42),    # ★C6 남단 중앙(업화 갱도 북단 숲길 → 저승 숲 도착 칸)
 		"warps": [
-			{"to": EOPHWA_MINE, "at": Vector2i(30, 43), "dest": Vector2i(20, 2)},   # ★C6 남단 숲길 → 업화 갱도(북단 20,1 한 칸 안)
+			{"to": EOPHWA_MINE, "at": Vector2i(30, 43), "dest": Vector2i(40, 2)},   # ★C6 남단 숲길 → 업화 갱도(북단 40,1 한 칸 안 — ★C8)
 			{"to": MIHOK_FOREST, "at": Vector2i(58, 22), "dest": Vector2i(2, 22)},  # ★C6 동단 숲 안쪽 → 미혹의 숲(★C7 새 spawn 2,22)
 		],
 	},
@@ -173,18 +173,21 @@ const CATALOG := {
 			{"to": JEOSEUNG_FOREST, "at": Vector2i(1, 22), "dest": Vector2i(57, 22)},  # ★C7 서단 → 저승 숲 동단(58,22 한 칸 안, dest 불변)
 		],
 	},
-	# ── 업화 갱도(M5.1 빌드 — 채광/전투 무대·대장간·길드) ────────────────────────
+	# ── 업화 갱도(M5.1 빌드 / ★ ADR-0018 C8 코지-와이드 재배치 — 채광/전투 무대·대장간·길드) ──
 	# ★ M5.1: 일곱째 실데이터 구역. 채광(Phase 3)이 들어올 갱도 무대를 그레이박스로 깐다(채광·전투 메카닉은
-	#   만들지 않는다 — 바위(ROCK)·호수(WATER) 무대·대장간·길드(enterable 빈 방)·갱도 끝 전투 던전 입구(잠긴
-	#   외관)까지, ADR-0015 "빌드는 한 구역씩"). size=(40,24)·spawn=(20,22)(남단 — 나루 마을 산길에서 도착).
-	#   정규 토폴로지 복원: 나루 마을 ──(산길)── 업화 갱도 ──(숲길)── 저승 숲. 양쪽 다 빌드라 at·dest 실좌표.
+	#   만들지 않는다 — 바위(ROCK)·호수(WATER) 무대·대장간·길드(enterable 빈 방)·던전 입구·나락 진입로(잠긴
+	#   외관)까지, ADR-0015 "빌드는 한 구역씩").
+	# ★ ADR-0018 C8 — 40×24 → 64×44 역할별 재배치. 정체성 = "넓은 진폭으로 굽이치는 세로 협곡 + 남→북
+	#   위험 구배"(남 서비스 → 중 채광 협곡 → 북 봉인 심연 포켓). C1 치수 일반화 덕에 size만 키우면 빌드
+	#   경로·카메라가 따라온다(main의 협곡벽·호수·서비스/게이트·동선·라벨·spawn·워프 at도 함께 재배치).
+	#   정규 토폴로지: 나루 마을 ──(산길)── 업화 갱도 ──(숲길)── 저승 숲. spawn=(14,42) 남단, 저승 워프=(40,1) 북단.
 	EOPHWA_MINE: {
 		"name_ko": "업화 갱도",
-		"size": Vector2i(40, 24),     # = main.MAP_W × main.OUTDOOR_H (다른 구역과 같은 외부 무대)
-		"spawn": Vector2i(20, 22),    # 남단(나루 마을 산길 → 업화 갱도 도착 칸)
+		"size": Vector2i(64, 44),     # ★C8 = main.MAP_W' × main.OUTDOOR_H' (64×44 협곡 갱도 무대)
+		"spawn": Vector2i(14, 42),    # ★C8 남단 입구(나루 마을 산길 → 업화 갱도 도착 칸)
 		"warps": [
-			{"to": NARU_VILLAGE, "at": Vector2i(20, 23), "dest": Vector2i(96, 18)},    # 남단 산길 → 나루 마을(★C3: 산길 98,18 두 칸 안)
-			{"to": JEOSEUNG_FOREST, "at": Vector2i(20, 1), "dest": Vector2i(30, 42)},  # 북단 숲길 → 저승 숲(★C6 남단 spawn)
+			{"to": NARU_VILLAGE, "at": Vector2i(14, 43), "dest": Vector2i(96, 18)},    # ★C8 남단 산길 → 나루 마을(dest=마을 안, 불변)
+			{"to": JEOSEUNG_FOREST, "at": Vector2i(40, 1), "dest": Vector2i(30, 42)},  # ★C8 북단 숲길 → 저승 숲(dest=저승 spawn, 불변)
 		],
 	},
 	# ── 나락(M5.2 빌드 — 독립 전투 던전 스테이지) ───────────────────────────────
