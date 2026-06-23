@@ -6,7 +6,8 @@ extends SceneTree
 #
 # ★ 핵심 불변식:
 #   ① 나락 = 실데이터 구역(is_built), size·spawn 채워짐. 그리드 크기 유지(MAP_H×MAP_W).
-#   ② 바위(ROCK) 군집이 통과 불가로 서고, spawn(20,12) 중앙은 걸을 수 있다.
+#   ② 깨진 봉인 고리(ROCK)가 통과 불가로 서고, spawn(32,22) 중앙은 걸을 수 있다 — flood-fill로 중앙 아레나·
+#      라벨·고리 틈 너머 바깥 여백까지 한 덩어리(soft-lock 0, ★C9).
 #   ③ 진입로 잠김 — 나락은 라이브 워프 없음(이웃 0), 어느 구역도 나락으로 워프하지 않는다(독립).
 #   ④ 회귀 0 — 나락은 enterable 건물 0(카탈로그에 나락 구역 건물 없음), 홈 집 출입 불변.
 # 실행: godot --headless --path game --script res://playtest/narak_test.gd
@@ -30,11 +31,26 @@ func _despawn(m: Node) -> void:
 	await process_frame
 	await process_frame
 
+# ★C9 — 나락이 64×44라 전역 MAP_W/OUTDOOR_H가 아니라 빌드된 구역 치수(_grid_w/_outdoor_h)를 쓴다(갱도 C8 결).
 func _walkable(m: Node, t: Vector2i) -> bool:
-	if t.x < 0 or t.y < 0 or t.x >= m.MAP_W or t.y >= m.OUTDOOR_H:
+	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
 	return id != m.WALL and id != m.WATER and id != m.TREE and id != m.ROCK and id != m.VOID
+
+# spawn에서 4방향 flood-fill로 도달 가능한 외부 칸 집합(갱도 C8 결).
+func _reachable(m: Node, start: Vector2i) -> Dictionary:
+	var seen := {}
+	var stack: Array = [start]
+	seen[start] = true
+	while not stack.is_empty():
+		var t: Vector2i = stack.pop_back()
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = t + d
+			if not seen.has(n) and _walkable(m, n):
+				seen[n] = true
+				stack.append(n)
+	return seen
 
 func _read_bytes(path: String) -> PackedByteArray:
 	var f := FileAccess.open(path, FileAccess.READ)
@@ -61,13 +77,14 @@ func _initialize() -> void:
 
 	# ── ① 나락 = 실데이터 구역, 그리드 빌드 ──
 	_check("① 나락 실데이터(is_built)", RegionCatalog.is_built(RegionCatalog.NARAK))
-	_check("①b 나락 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.NARAK) == Vector2i(40, 24))
-	_check("①c 나락 스폰 = (20,12)", RegionCatalog.spawn_of(RegionCatalog.NARAK) == Vector2i(20, 12))
+	_check("①b 나락 크기 = (64,44)", RegionCatalog.size_of(RegionCatalog.NARAK) == Vector2i(64, 44))   # ★C9 코지-와이드
+	_check("①c 나락 스폰 = (32,22)", RegionCatalog.spawn_of(RegionCatalog.NARAK) == Vector2i(32, 22))   # ★C9 아레나 정중앙
 	# 나락 구역을 빌드(헤드리스 — 인게임 진입은 잠긴 외관이라 _region 직접 세팅으로 검증).
 	m._rebuild_region(RegionCatalog.NARAK)
 	_check("①d 구역 = 나락", m._region == RegionCatalog.NARAK)
-	_check("①e 그리드 크기 유지(MAP_H×MAP_W)",
-		m._grid.size() == m.MAP_H and m._grid[0].size() == m.MAP_W)
+	_check("①e 그리드 크기 = _grid_h×_grid_w (★C9 64×44)",
+		m._grid.size() == m._grid_h and m._grid[0].size() == m._grid_w
+		and m._grid_w == 64 and m._outdoor_h == 44)
 
 	# ── ② 바위(ROCK) 군집 통과 불가 + spawn 중앙 걸을 수 있음 ──
 	for r in m.NARAK_ROCK_RECTS:
@@ -76,6 +93,13 @@ func _initialize() -> void:
 		_check("②b 바위 칸 통과 불가", not _walkable(m, c))
 	var spawn: Vector2i = RegionCatalog.spawn_of(RegionCatalog.NARAK)
 	_check("②c spawn 중앙 걸을 수 있음", _walkable(m, spawn))
+
+	# ── ②d 깨진 봉인 고리 도달성(★C9): spawn flood-fill로 중앙 아레나·라벨·고리 틈 너머 바깥 여백까지 한 덩어리 ──
+	# 봉인 고리가 군데군데 끊겨(누출구) 중앙 공동과 바깥 여백이 통해야 한다(soft-lock 0). ROCK 칸은 도달 불가.
+	var reach := _reachable(m, spawn)
+	_check("②d 라벨 칸(32,18) 도달(중앙 아레나 개방)", reach.has(Vector2i(32, 18)))
+	_check("②e 바깥 여백(3,3) 도달(고리 틈으로 통함 — 봉인 갈라짐)", reach.has(Vector2i(3, 3)))
+	_check("②f 봉인 고리 ROCK 칸(10,6) 도달 불가(통과 X)", not reach.has(Vector2i(10, 6)))
 
 	# ── ③ 진입로 잠김: 나락은 라이브 워프 0(이웃 0) + 아무도 나락으로 워프 안 함(독립) ──
 	_check("③ 나락 워프 0(잠긴 진입로)", RegionCatalog.warps_of(RegionCatalog.NARAK).is_empty())
