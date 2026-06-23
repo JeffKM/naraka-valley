@@ -40,9 +40,10 @@ func _despawn(m: Node) -> void:
 	await process_frame
 	await process_frame
 
-# 외부에서 걸을 수 있는 칸인가(WALL·WATER·VOID·범위밖이면 X). 실내 스택(y>=OUTDOOR_H)은 제외.
+# 외부에서 걸을 수 있는 칸인가(WALL·WATER·VOID·범위밖이면 X). 실내 스택(y>=outdoor_h)은 제외.
+# ★C4 — 삼도천이 56×40이라 전역 MAP_W/OUTDOOR_H가 아니라 빌드된 구역 치수(_grid_w/_outdoor_h)를 쓴다(village_test 결).
 func _walkable(m: Node, t: Vector2i) -> bool:
-	if t.x < 0 or t.y < 0 or t.x >= m.MAP_W or t.y >= m.OUTDOOR_H:
+	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
 	return id != m.WALL and id != m.WATER and id != m.VOID
@@ -88,8 +89,10 @@ func _initialize() -> void:
 	# 삼도천 구역을 빌드(동기 — village/warp_test와 같은 결, 그리드 직접 검사).
 	m._rebuild_region(RegionCatalog.SAMDOCHEON)
 	_check("⓪ 구역 = 삼도천", m._region == RegionCatalog.SAMDOCHEON)
-	_check("⓪b 그리드 크기 유지(MAP_H×MAP_W)",
-		m._grid.size() == m.MAP_H and m._grid[0].size() == m.MAP_W)
+	# ★C4 — 56×40 재배치: 그리드 = _grid_h(외부40+실내띠28=68) × _grid_w(56). 전역 MAP_*가 아니라 구역 치수.
+	_check("⓪b 그리드 크기 = _grid_h×_grid_w (★C4 56×40)",
+		m._grid.size() == m._grid_h and m._grid[0].size() == m._grid_w
+		and m._grid_w == 56 and m._outdoor_h == 40)
 
 	# ── ① 강(WATER) 상단 띠 + 걸을 수 있는 둑 ──
 	for y in range(m.SAMDO_RIVER_Y0, m.SAMDO_RIVER_Y1 + 1):
@@ -115,7 +118,7 @@ func _initialize() -> void:
 
 	# ── ③ flood-fill 무 soft-lock: spawn에서 문·두 워프 칸 도달 ──
 	var spawn: Vector2i = RegionCatalog.spawn_of(RegionCatalog.SAMDOCHEON)
-	_check("③ spawn = (20,22)", spawn == Vector2i(20, 22))
+	_check("③ spawn = (28,38) ★C4", spawn == Vector2i(28, 38))
 	var reach := _reachable(m, spawn)
 	_check("③b 혼백관 외관 문 도달", reach.has(m.MUSEUM_EXT_DOOR))
 	var warps: Array = RegionCatalog.warps_of(RegionCatalog.SAMDOCHEON)

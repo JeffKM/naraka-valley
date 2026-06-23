@@ -87,7 +87,7 @@ func _initialize() -> void:
 	_check("③h 나룻터(22,1) → 삼도천 전환(점등)", main._region == RegionCatalog.SAMDOCHEON)
 	_check("③i 삼도천 도착 칸에 놓임", main._player_tile() == samdo_w["dest"])
 
-	# ── ③''' M3.2 — 삼도천 ↔ 황천해 왕복(하구 점등). 하구(38,16) → 황천해, 서단(1,16) → 삼도천 복귀 ──
+	# ── ③''' M3.2 — 삼도천 ↔ 황천해 왕복(하구 점등). 하구(54,20 ★C4) → 황천해, 서단(1,16) → 삼도천 복귀 ──
 	var hae_w: Dictionary = {}
 	for w in RegionCatalog.warps_of(RegionCatalog.SAMDOCHEON):
 		if w["to"] == RegionCatalog.HWANGCHEONHAE:
@@ -95,7 +95,7 @@ func _initialize() -> void:
 	main.player.position = main._tile_center_px(hae_w["at"])
 	main._maybe_warp_edge()
 	await _settle()
-	_check("③j 하구(38,16) → 황천해 전환(점등)", main._region == RegionCatalog.HWANGCHEONHAE)
+	_check("③j 하구(54,20 ★C4) → 황천해 전환(점등)", main._region == RegionCatalog.HWANGCHEONHAE)
 	_check("③k 황천해 도착 칸에 놓임", main._player_tile() == hae_w["dest"])
 	# 황천해 서단(1,16) → 삼도천 하구 복귀(왕복).
 	var hae_back: Dictionary = RegionCatalog.warps_of(RegionCatalog.HWANGCHEONHAE)[0]
@@ -105,7 +105,7 @@ func _initialize() -> void:
 	_check("③l 황천해 서단 → 삼도천 복귀(왕복)", main._region == RegionCatalog.SAMDOCHEON)
 	_check("③m 복귀 도착 칸에 놓임", main._player_tile() == hae_back["dest"])
 
-	# 삼도천 남단 나룻터(20,23) → 나루 마을 복귀(연쇄 왕복 마무리).
+	# 삼도천 남단 나룻터(28,39 ★C4) → 나루 마을 복귀(연쇄 왕복 마무리).
 	var samdo_back: Dictionary = {}
 	for w in RegionCatalog.warps_of(RegionCatalog.SAMDOCHEON):
 		if w["to"] == RegionCatalog.NARU_VILLAGE:
