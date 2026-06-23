@@ -63,8 +63,8 @@ func _initialize() -> void:
 	# ★ M3.1/M3.2/M4.1/M4.2/M5.1/M5.2 — 삼도천·황천해·저승 숲·미혹의 숲·업화 갱도·나락 실데이터 확인(size·spawn 채워짐).
 	_check("③g 삼도천 크기 = (56,40) ★C4", RegionCatalog.size_of(RegionCatalog.SAMDOCHEON) == Vector2i(56, 40))
 	_check("③h 삼도천 스폰 = (28,38) ★C4", RegionCatalog.spawn_of(RegionCatalog.SAMDOCHEON) == Vector2i(28, 38))
-	_check("③i 황천해 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(40, 24))
-	_check("③j 황천해 스폰 = (2,16)", RegionCatalog.spawn_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(2, 16))
+	_check("③i 황천해 크기 = (64,44) ★C5", RegionCatalog.size_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(64, 44))
+	_check("③j 황천해 스폰 = (2,15) ★C5", RegionCatalog.spawn_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(2, 15))
 	_check("③k 저승 숲 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.JEOSEUNG_FOREST) == Vector2i(40, 24))
 	_check("③l 저승 숲 스폰 = (20,22)", RegionCatalog.spawn_of(RegionCatalog.JEOSEUNG_FOREST) == Vector2i(20, 22))
 	_check("③m 미혹의 숲 크기 = (40,24)", RegionCatalog.size_of(RegionCatalog.MIHOK_FOREST) == Vector2i(40, 24))
