@@ -8,7 +8,7 @@ extends SceneTree
 # ★ 핵심 불변식:
 #   ① 나무(TREE) 군집·연못(WATER)이 통과 불가로 서고, 그 사이 빈터(GROUND)는 걸을 수 있다.
 #   ② 옥자 집 = 잠긴 외관(WALL 박스 + 문 PATH 리세스), 실내 방 없음 + 카탈로그 미등록 → 진입 불가.
-#   ③ 서단 spawn(2,16)에서 옥자 집 문·복귀 워프 칸이 걸어서 닿는다(flood-fill 무 soft-lock).
+#   ③ 서단 spawn(2,22)에서 옥자 집 문·특수 채집지 2곳·복귀 워프 칸이 걸어서 닿는다(flood-fill 무 soft-lock). ★C7
 #   ④ 옥자 집 문에 닿아도 진입 안 됨(잠김 — 축사 결, '숨겨진·게이트').
 #   ⑤ 막다른 구역 — 워프는 저승 숲 복귀 하나.
 #   ⑥ 세이브 라운드트립(미혹의 숲 외부) + 회귀 0(홈 집 출입 불변).
@@ -40,9 +40,10 @@ func _despawn(m: Node) -> void:
 	await process_frame
 	await process_frame
 
-# 외부에서 걸을 수 있는 칸인가(WALL·WATER·TREE·VOID·범위밖이면 X). 실내 스택(y>=OUTDOOR_H)은 제외.
+# 외부에서 걸을 수 있는 칸인가(WALL·WATER·TREE·VOID·범위밖이면 X). 실내 스택(y>=outdoor_h)은 제외.
+# ★C7 — 미혹의 숲이 64×44라 전역 MAP_W/OUTDOOR_H가 아니라 빌드된 구역 치수(_grid_w/_outdoor_h)를 쓴다(저승 숲 결).
 func _walkable(m: Node, t: Vector2i) -> bool:
-	if t.x < 0 or t.y < 0 or t.x >= m.MAP_W or t.y >= m.OUTDOOR_H:
+	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
 	return id != m.WALL and id != m.WATER and id != m.TREE and id != m.VOID
@@ -85,8 +86,10 @@ func _initialize() -> void:
 
 	m._rebuild_region(RegionCatalog.MIHOK_FOREST)
 	_check("⓪ 구역 = 미혹의 숲", m._region == RegionCatalog.MIHOK_FOREST)
-	_check("⓪b 그리드 크기 유지(MAP_H×MAP_W)",
-		m._grid.size() == m.MAP_H and m._grid[0].size() == m.MAP_W)
+	# ★C7 — 64×44 재배치: 그리드 = _grid_h(외부44+실내띠) × _grid_w(64). 전역 MAP_*가 아니라 구역 치수.
+	_check("⓪b 그리드 크기 = _grid_h×_grid_w (★C7 64×44)",
+		m._grid.size() == m._grid_h and m._grid[0].size() == m._grid_w
+		and m._grid_w == 64 and m._outdoor_h == 44)
 
 	# ── ① 나무(TREE) 군집·연못(WATER) 통과 불가 + 빈터 걸을 수 있음 ──
 	for r in m.MIHOK_TREE_RECTS:
@@ -96,7 +99,8 @@ func _initialize() -> void:
 	var pc := Vector2i(m.MIHOK_POND_RECT.position.x, m.MIHOK_POND_RECT.position.y)
 	_check("①c 연못 칸 WATER (%d,%d)" % [pc.x, pc.y], m._grid[pc.y][pc.x] == m.WATER)
 	_check("①d 연못 칸 통과 불가", not _walkable(m, pc))
-	_check("①e 특수 채집지 빈터 걸을 수 있음", _walkable(m, m.MIHOK_FORAGE_LABEL_TILE))
+	_check("①e 특수 채집지① 빈터 걸을 수 있음", _walkable(m, m.MIHOK_FORAGE_LABEL_TILE))
+	_check("①f 특수 채집지② 빈터 걸을 수 있음", _walkable(m, m.MIHOK_FORAGE_LABEL_TILE_2))  # ★C7 채집지 2곳
 
 	# ── ② 옥자 집 = 잠긴 외관(WALL 박스 + 문 PATH 리세스), 실내 방 없음 ──
 	var ext: Rect2i = m.OKJA_HUT_EXT_RECT
@@ -111,9 +115,12 @@ func _initialize() -> void:
 
 	# ── ③ flood-fill 무 soft-lock: spawn에서 옥자 집 문·복귀 워프 칸 도달 ──
 	var spawn: Vector2i = RegionCatalog.spawn_of(RegionCatalog.MIHOK_FOREST)
-	_check("③ spawn = (2,16)", spawn == Vector2i(2, 16))
+	_check("③ spawn = (2,22) ★C7", spawn == Vector2i(2, 22))
 	var reach := _reachable(m, spawn)
 	_check("③b 옥자 집 문 도달", reach.has(m.OKJA_HUT_DOOR))
+	# ★C7 — 특수 채집지 2곳도 spawn에서 도달(에워싸는 빽빽한 외곽·굽이 동선에 막히지 않음).
+	_check("③b2 특수 채집지① 도달", reach.has(m.MIHOK_FORAGE_LABEL_TILE))
+	_check("③b3 특수 채집지② 도달", reach.has(m.MIHOK_FORAGE_LABEL_TILE_2))
 	var warps: Array = RegionCatalog.warps_of(RegionCatalog.MIHOK_FOREST)
 	_check("③c 막다른 구역 — 워프 1개(저승 숲 복귀)", warps.size() == 1 and warps[0]["to"] == RegionCatalog.JEOSEUNG_FOREST)
 	for w in warps:
@@ -128,7 +135,7 @@ func _initialize() -> void:
 	await _despawn(m)
 
 	# ── ⑤ 세이브 라운드트립(미혹의 숲 외부) ──
-	var stand: Vector2i = Vector2i(10, 16)   # 복도 위 걸을 수 있는 칸
+	var stand: Vector2i = Vector2i(10, 22)   # ★C7 서단 입구 가로 복도(y22) 위 걸을 수 있는 칸
 	var sm := SaveManager.new()
 	sm.save_game({"region": RegionCatalog.MIHOK_FOREST, "indoor": "", "player_tile": stand})
 	sm.free()

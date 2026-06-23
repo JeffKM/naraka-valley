@@ -426,23 +426,37 @@ const WOODSHOP_RECT := Rect2i(8, 46, 12, 9)     # ★C6 x8..19, y46..54 (실내 
 const WOODSHOP_DOOR := Vector2i(13, 54)         # 실내 목공방 문(닿으면 퇴장) — 아래벽 중앙(+20)
 const WOODSHOP_IN_TILE := Vector2i(13, 53)      # 실내 문 안쪽(진입 착지, +20)
 const WOODSHOP_CAM_RECT := Rect2i(2, 44, 20, 13)  # ★C6 목공방 방 둘레(외부·다른 방 격리, +20 — y44~ VOID 띠)
-# ── ★ M4.2 미혹의 숲(특수 채집 무대 + 옥자 집) ────────────────────────────────────
+# ── ★ M4.2 / ★ ADR-0018 C7 미혹의 숲(특수 채집 무대 + 옥자 집) ──────────────────────
 # 여섯째 실데이터 구역(막다른 깊은 숲). 채집 메카닉은 만들지 않는다(Phase 3) — 더 어둡고 깊은 숲(TREE
-# 밀도↑ + 연못 WATER)·특수 채집지(라벨만)까지. 저승 숲 동단(38,16)에서 서단 spawn(2,16)에 도착(M4.2 점등).
-# 동선 = 가로 복도(y16, 서단 복귀 1,16 ~ 동편) + 옥자 집 문 → 복도. 막다른 구역이라 워프는 저승 숲 복귀 하나.
+# 밀도↑ + 연못 WATER)·특수 채집지(라벨만)까지. 저승 숲 동단(58,22)에서 서단 spawn(2,22)에 도착(점등).
+# ★ ADR-0018 C7 — 64×44 코지-와이드 재배치(황천해와 동일 footprint·종착 무게감). 저승 숲(통과형, 곧은
+#   척추)과 달리 "곧은 척추 없음 — 굽이치는 동선": 에워싸는 빽빽한 외곽 나무 밴드 안을 ㄹ자로 헤쳐 동쪽
+#   깊은 끝 옥자 집(숨겨진 종착)에 닿는다(미혹 = 굽이쳐 헤침). 연못은 키워 깊은 숲 무드·자연 장애물로 쓴다.
 # ★ 옥자 집(마녀의 오두막)은 '숨겨진·게이트' — 잠긴 외관(비-enterable). _build_facade만(실내 방 없음),
 #   _build_building_catalog에 미등록 → 문에 닿아도 진입 안 됨(축사 결). 실내·게이트 해제는 Phase 3 시나리오.
-const MIHOK_TREE_RECTS := [   # 나무(TREE) 군집 — 저승 숲보다 빽빽(깊은 숲). 동선·옥자 집·연못·spawn 비껴감
-	Rect2i(5, 3, 6, 5),     # 북서
-	Rect2i(26, 3, 8, 5),    # 북동(옥자 집 동쪽)
-	Rect2i(4, 19, 7, 4),    # 남서
-	Rect2i(13, 19, 4, 4),   # 남중
+const MIHOK_TREE_RECTS := [   # ★C7 나무(TREE) — 에워싸는 빽빽한 외곽 밴드(4변, 저승보다 짙음) + 내부 악센트. spawn 틈·동선·옥자 집·연못·채집지 비껴감
+	# 상단 밴드(y1~3, 가운데 공기 틈 x28~33)
+	Rect2i(2, 1, 26, 3),    # 북서 x2..27
+	Rect2i(34, 1, 28, 3),   # 북동 x34..61
+	# 하단 밴드(y40~42)
+	Rect2i(2, 40, 60, 3),   # 남 x2..61
+	# 좌측 밴드(x2~4, spawn 틈 y19~24 비껴 위·아래)
+	Rect2i(2, 4, 3, 15),    # 서 상부 y4..18
+	Rect2i(2, 25, 3, 15),   # 서 하부 y25..39
+	# 우측 밴드(x59~61, 옥자 집 비껴 위)
+	Rect2i(59, 4, 3, 19),   # 동 상부 y4..22
+	# 내부 악센트 군집(빈터를 갈라 깊은 숲 밀도 + 굽이 강조 — 동선·연못·채집지 비껴감)
+	Rect2i(7, 5, 9, 4),     # 북서 내부 x7..15, y5..8
+	Rect2i(40, 14, 6, 5),   # 중동 내부 x40..45, y14..18
+	Rect2i(10, 33, 8, 4),   # 남서 내부 x10..17, y33..36
+	Rect2i(48, 23, 5, 6),   # 옥자 집 서편 가림 x48..52, y23..28 (집 숨김)
 ]
-const MIHOK_POND_RECT := Rect2i(28, 17, 7, 4)   # 연못(WATER, 통과 X) — 깊은 숲 분위기(world-map "연못·이끼·고목")
-const MIHOK_FORAGE_LABEL_TILE := Vector2i(33, 13)  # 특수 채집지 라벨 자리(빈터, 채집 메카닉 Phase 3)
+const MIHOK_POND_RECT := Rect2i(26, 14, 12, 6)   # ★C7 연못(WATER, 통과 X) — 키운 물웅덩이(깊은 숲 "연못·이끼·고목", 동선이 위로 돈다)
+const MIHOK_FORAGE_LABEL_TILE := Vector2i(50, 6)    # ★C7 특수 채집지①(북동 깊은 빈터, 채집 메카닉 Phase 3)
+const MIHOK_FORAGE_LABEL_TILE_2 := Vector2i(30, 36) # ★C7 특수 채집지②(남 깊은 빈터)
 # 옥자 집(마녀의 오두막) — 잠긴 외관(비-enterable). WALL 박스 + 문 리세스(시각 일관)만, 실내·카탈로그 없음.
-const OKJA_HUT_EXT_RECT := Rect2i(16, 5, 8, 7)  # x16..23, y5..11 (숲 가운데, 잠긴 외관)
-const OKJA_HUT_DOOR := Vector2i(19, 11)         # 문 리세스(시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
+const OKJA_HUT_EXT_RECT := Rect2i(54, 24, 8, 7)  # ★C7 x54..61, y24..30 (동쪽 깊은 끝, 숨겨진 잠긴 외관)
+const OKJA_HUT_DOOR := Vector2i(57, 30)          # ★C7 문 리세스(남면, 시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
 
 # ── 업화 갱도(M5.1 빌드 — 채광/전투 무대·대장간·길드) ────────────────────────────
 # 일곱째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 채광·전투 메카닉은 만들지 않는다(Phase 3) — 바위(ROCK)·
@@ -1161,9 +1175,10 @@ func _carve_jeoseung_forest_paths() -> void:
 	_carve_v(30, 22, 43)                   # 남단 spawn(30,42)·갱도 숲길 워프(30,43) → 복도(y22)
 	_carve_v(WOODSHOP_EXT_DOOR.x, WOODSHOP_EXT_DOOR.y, 22)  # 목공방 문(9,19) → 복도(y22)
 
-# ★ M4.2 — 미혹의 숲(특수 채집 무대 + 옥자 집). 저승 숲과 같은 스택이되 실내 방이 없다(옥자 집은 잠긴
-# 외관 = 비-enterable). 더 깊은 숲: 나무(TREE) 밀도↑ + 연못(WATER). 채집 메카닉은 만들지 않는다(Phase 3).
-# 옥자 집은 _build_facade만(WALL 박스 + 문 리세스) — 실내·카탈로그 없어 진입 불가(축사 결, '숨겨진·게이트').
+# ★ M4.2 / ★C7 — 미혹의 숲(특수 채집 무대 + 옥자 집). 저승 숲과 같은 스택이되 실내 방이 없다(옥자 집은
+# 잠긴 외관 = 비-enterable). 64×44 막다른 깊은 숲: 에워싸는 빽빽한 외곽 나무 밴드 + 키운 연못(WATER),
+# TREE 밀도↑(저승보다 짙음). 채집 메카닉은 만들지 않는다(Phase 3). 옥자 집은 _build_facade만(WALL 박스 +
+# 문 리세스) — 실내·카탈로그 없어 진입 불가(축사 결, '숨겨진·게이트'). 동쪽 깊은 끝에 숨긴다(서편 가림 군집).
 func _build_mihok_forest() -> void:
 	_grid = []
 	for y in _grid_h:
@@ -1182,12 +1197,16 @@ func _build_mihok_forest() -> void:
 	_carve_mihok_forest_paths()            # 동선(서단 도착 → 옥자 집 문·복귀 워프)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
-# ★ M4.2 — 미혹의 숲 동선. 가로 복도(y16)가 서단 도착·복귀 워프(spawn 2,16·at 1,16)와 동편을 잇고,
-# 옥자 집 문(19,11)은 세로로 복도까지 잇는다(잠긴 외관이라 닿아도 진입 안 됨 — 시각·동선 일관만). 막다른
-# 구역이라 워프는 서단 하나. carve는 나무·연못 fill 뒤라 PATH가 이겨 동선 칸엔 나무·물이 없다(무 soft-lock).
+# ★ M4.2 / ★C7 — 미혹의 숲 동선. "곧은 척추 없음 — ㄹ자 굽이"(미혹 = 굽이쳐 헤침): 서단 입구에서 북→동→
+# 남→동으로 꺾어 동쪽 깊은 끝 옥자 집 문(57,30)에 닿는다. 막다른 구역이라 워프는 서단 하나(복귀 1,22).
+# carve는 나무·연못 fill 뒤라 PATH가 이겨 동선 칸엔 나무·물이 없다(무 soft-lock). 연못(x26~37)은 ③의 위(y10)로 돈다.
 func _carve_mihok_forest_paths() -> void:
-	_carve_h(16, 1, 35)                    # 가로 복도(서단 복귀 1,16 ~ 동편)
-	_carve_v(OKJA_HUT_DOOR.x, OKJA_HUT_DOOR.y, 16)  # 옥자 집 문(19,11) → 복도(y16)
+	_carve_h(22, 1, 20)                    # ① 서단 입구(복귀 1,22·spawn 2,22) → 동 x20
+	_carve_v(20, 10, 22)                   # ② 북으로 꺾음 x20 (y22→y10)
+	_carve_h(10, 20, 44)                   # ③ 동으로 x20→44 (연못 위로 돈다)
+	_carve_v(44, 10, 32)                   # ④ 남으로 꺾음 x44 (y10→y32)
+	_carve_h(32, 44, 57)                   # ⑤ 동으로 x44→57 (옥자 집 아래)
+	_carve_v(OKJA_HUT_DOOR.x, OKJA_HUT_DOOR.y, 32)  # ⑥ 옥자 집 문(57,30) → 복도(y32)
 
 # ★ M5.1 — 업화 갱도(채광/전투 무대 + 대장간·길드). 삼도천·숲 빌더와 같은 스택(외부 land y0~23 + 아래
 # 실내 대장간·길드 방, VOID 격리). 채광·전투 메카닉은 만들지 않는다(Phase 3) — 바위(ROCK)·호수(WATER)
@@ -1412,11 +1431,12 @@ func _place_labels() -> void:
 			# ★ M5.2 — 독립 전투 던전 스테이지(헤드리스 빌드·검증). 인게임 진입은 잠긴 외관(업화 갱도)이라 없음.
 			_add_label("나락 (전투 — Phase 3)", _tile_center_px(Vector2i(20, 10)))
 		RegionCatalog.MIHOK_FOREST:
-			# ★ M4.2 — 옥자 집은 잠긴 외관(비-enterable)이라 라벨로 위상 명시(축사 컨벤션). 특수 채집지·복귀 워프 안내.
-			_add_label("옥자 집 (잠김 — 미결의 죄 해결 후)", _tile_center_px(Vector2i(19, 4)))
+			# ★ M4.2 / ★C7 — 옥자 집은 잠긴 외관(비-enterable)이라 라벨로 위상 명시(축사 컨벤션). 특수 채집지 2곳·연못·복귀 워프 안내.
+			_add_label("옥자 집 (잠김 — 미결의 죄 해결 후)", _tile_center_px(Vector2i(57, 27)))  # ★C7 동쪽 깊은 끝
 			_add_label("특수 채집지(Phase 3)", _tile_center_px(MIHOK_FORAGE_LABEL_TILE))
-			_add_label("연못", _tile_center_px(Vector2i(31, 18)))
-			_add_label("숲 안쪽 → 저승 숲", _tile_center_px(Vector2i(4, 15)))   # 서단 복귀 워프(1,16) 안내
+			_add_label("특수 채집지(Phase 3)", _tile_center_px(MIHOK_FORAGE_LABEL_TILE_2))
+			_add_label("연못", _tile_center_px(Vector2i(31, 21)))            # ★C7 연못(x26..37,y14..19) 아래
+			_add_label("숲 안쪽 → 저승 숲", _tile_center_px(Vector2i(4, 22)))   # ★C7 서단 복귀 워프(1,22) 안내
 
 func _add_label(text: String, center_px: Vector2) -> void:
 	var lbl := Label.new()
