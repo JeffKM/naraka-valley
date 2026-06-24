@@ -39,6 +39,11 @@ HUE_FLOOR = 78.0              # 회전 하한(너무 노래지지 않게 — 화
 SAT_MUL = 0.58                # 채도 절제(저승 무드 — 지상 봄 채도 아님)
 VAL_MUL = 0.92                # 명도 살짝 상향(묘지 이끼 ×0.82보다 밝게 = 봄 생기)
 GRASS_TARGETS = ["grass_path_image.png", "soil_grass_image.png"]
+# ── ★T2 물 Wang 세트(water_grass): 풀 코너만 피안절로, 물(teal hue ~165)은 보존 ──
+# 생성된 물색은 hue ~160–169(murky teal) — 기본 HUE_HI(175)면 retone이 물까지 웜·탈채해
+# 풀로 번진다. 풀(hue ~120)만 잡도록 상한을 148로 좁혀 물 코어(160+)를 살린다.
+WATER_TARGETS = ["water_grass_image.png"]
+WATER_HUE_HI = 148            # 풀(120)은 잡고 물 teal(160+)은 보존하는 분리선
 
 # ── 패스 ② 코어 외관·실내·가구 웜 캐스트 (정체성 보존 = 아주 옅게) ──────────────
 WARM_R, WARM_G, WARM_B = 1.035, 1.005, 0.955   # 살짝 웜(R↑·B↓) — "살짝"이라 미세
@@ -53,8 +58,12 @@ CORE_PROPS = ["cafe_cabinet.png", "cafe_clock.png", "cafe_counter.png",
               "soul_lantern.png", "spirit_pot.png"]
 
 
-def retone_grass(path: str) -> int:
-    """녹색 픽셀만 피안절 봄 톤으로(원본 *_raw.png에서 멱등 출발)."""
+def retone_grass(path: str, hue_hi: float = HUE_HI) -> int:
+    """녹색 픽셀만 피안절 봄 톤으로(원본 *_raw.png에서 멱등 출발).
+
+    hue_hi: 녹색 상한(기본 HUE_HI=175). 물 Wang 세트는 물 teal(hue ~165)을 살리려
+    상한을 좁혀(WATER_HUE_HI) 풀 코너만 잡는다.
+    """
     raw = path.replace(".png", "_raw.png")
     if not os.path.exists(raw):
         Image.open(path).save(raw)            # 최초 1회 원본 백업
@@ -68,7 +77,7 @@ def retone_grass(path: str) -> int:
                 continue
             h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
             hd = h * 360
-            if HUE_LO <= hd <= HUE_HI and s > 0.15:
+            if HUE_LO <= hd <= hue_hi and s > 0.15:
                 hd = max(HUE_FLOOR, hd - HUE_WARM_DEG)         # 웜 회전
                 nr, ng, nb = colorsys.hsv_to_rgb(hd / 360, s * SAT_MUL, v * VAL_MUL)
                 px[x, y] = (int(nr * 255), int(ng * 255), int(nb * 255), a)
@@ -99,6 +108,12 @@ def main() -> None:
     for n in GRASS_TARGETS:
         cnt = retone_grass(os.path.join(TILES, n))
         print(f"   {n}: {cnt} green px → 봄 이끼")
+    print("①w 물 Wang 풀 코너 리컬러 (물 teal 보존, ★T2):")
+    for n in WATER_TARGETS:
+        p = os.path.join(TILES, n)
+        if os.path.exists(p):
+            cnt = retone_grass(p, WATER_HUE_HI)
+            print(f"   {n}: {cnt} green px → 봄 이끼 (물 보존)")
     print("② 코어 외관·실내·가구 웜 캐스트:")
     for n in CORE_TILES:
         warm_cast(n, TILES)
