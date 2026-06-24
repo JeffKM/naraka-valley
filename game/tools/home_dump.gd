@@ -1,9 +1,12 @@
 extends SceneTree
 # ★ Phase 2.8 T3 육안 확인 글루(ADR-0001 허용) — facade·prop은 main._draw(GPU) 오버레이라
-# --headless로 안 잡힌다. tone_dump 결로 실제 GPU 렌더를 띄워 안식 농원을 세 구도로 PNG에 떨군다:
-#   ㉠ home_house.png   — 집(NW) + 길가 화분 + 밭 북쪽 울타리
-#   ㉡ home_farm.png     — 밭 중앙(울타리 프레임·허수아비·꽃 패치)
-#   ㉢ home_service.png  — 창고(NE) + 축사(동편) 외관
+# --headless로 안 잡힌다. tone_dump 결로 실제 GPU 렌더를 띄워 안식 농원을 네 구도로 PNG에 떨군다
+# (★T3② 현관 앞 농장 재배치 기준 — 집 북중앙·밭 남쪽·창고 서북·축사 동북):
+#   home_house.png       — 집(북중앙 9×8 코티지) + 문 바로 아래 밭 입구
+#   home_farm.png        — 밭 중앙(중앙 스파인·미호·울타리)
+#   home_storehouse.png  — 창고(서북) 외관
+#   home_barn.png        — 축사(동북) 외관
+# 실내 가구(③)는 interior_dump.gd 참조.
 # 사용: godot --path game --resolution 1280x720 -s res://tools/home_dump.gd
 
 func _init() -> void:
@@ -21,10 +24,10 @@ func _init() -> void:
 	main.set_process(false)
 	main.player.set_physics_process(false)
 
-	await _shot(main, Vector2i(6, 14), "res://tools/home_house.png")
-	await _shot(main, Vector2i(40, 47), "res://tools/home_farm.png")     # 밭 남쪽 가장자리(울타리·꽃 패치)
-	await _shot(main, Vector2i(70, 11), "res://tools/home_storehouse.png")  # 창고(NE)
-	await _shot(main, Vector2i(62, 42), "res://tools/home_barn.png")     # 축사(동편)
+	await _shot(main, Vector2i(40, 13), "res://tools/home_house.png")    # ★T3② 집(북중앙) + 밭 입구
+	await _shot(main, Vector2i(40, 30), "res://tools/home_farm.png")     # 밭 중앙(스파인·미호·울타리)
+	await _shot(main, Vector2i(11, 11), "res://tools/home_storehouse.png")  # 창고(서북)
+	await _shot(main, Vector2i(68, 12), "res://tools/home_barn.png")     # 축사(동북)
 	print("✅ home_dump 3장 저장 완료")
 	quit()
 
