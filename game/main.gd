@@ -641,6 +641,10 @@ var frame: InventoryFrame
 # 알림 피드(일시 이벤트 큐)와 우하단 혼력 바(+체력 바 자리 예약). _setup_hud_overlays에서 생성·주입.
 var notice_feed: NoticeFeed
 var vitals: VitalsHud
+# ★ 실내 카메라 격리 마스크(코지-와이드 회귀 수정) — 실내일 때 방 바깥을 검정으로 가린다.
+# 월드보다 위·다른 HUD/패널보다 아래 레이어(맨 앞 자식)에 깔아 외부 풀밭·이웃 방을 덮되 HUD·대화는
+# 그 위에 보이게 한다.
+var indoor_mask: IndoorMask
 
 var _grid: Array = []  # _grid[y][x] = 타일 id
 # ★ 코지-와이드 C1 — 현재 구역 그리드 치수(RegionCatalog.size_of(_region) 파생). 전역 상수
@@ -901,6 +905,20 @@ func _ensure_input_actions() -> void:
 	var ev_m := InputEventKey.new()
 	ev_m.physical_keycode = KEY_M
 	InputMap.action_add_event("mute_audio", ev_m)
+	# 전체화면 토글(F11). 창↔전체화면을 어디서든 받는다(음소거와 같은 결 — 게임 상태 무관 UX 토글).
+	InputMap.add_action("toggle_fullscreen")
+	var ev_f11 := InputEventKey.new()
+	ev_f11.physical_keycode = KEY_F11
+	InputMap.action_add_event("toggle_fullscreen", ev_f11)
+
+# 창 ↔ 전체화면 토글(F11). 픽셀은 nearest+fractional 스케일이라 전체화면에서도 화면을 꽉 채우되
+# 또렷하다(ADR-0018 갱신 — 스타듀식 채움). 창 복귀 시 1920×1080 override로 돌아간다.
+func _toggle_fullscreen() -> void:
+	var win := get_window()
+	if win.mode == Window.MODE_WINDOWED:
+		win.mode = Window.MODE_FULLSCREEN
+	else:
+		win.mode = Window.MODE_WINDOWED
 
 # ── TileSet 조립: terrain 도트(source 0) + 실내/벽 단색(source 1) + WALL 충돌 ──
 func _build_tileset() -> TileSet:
@@ -1614,6 +1632,12 @@ func _setup_hud_overlays() -> void:
 	vitals.name = "VitalsHud"
 	$CanvasLayer.add_child(vitals)
 	vitals.setup(energy)
+	# 실내 마스크는 *맨 앞 자식*(index 0)으로 — 월드 위에 깔리되 씬 패널(대화·페이드)·HUD보다 아래라
+	# 방 바깥만 검게 가리고 그 위로 대화·HUD·페이드가 정상 표시된다.
+	indoor_mask = IndoorMask.new()
+	indoor_mask.name = "IndoorMask"
+	$CanvasLayer.add_child(indoor_mask)
+	$CanvasLayer.move_child(indoor_mask, 0)
 
 # P2.6 BGM 위치 분기: 플레이어가 카페 안인가(밭↔카페 낮 BGM을 가른다). audio는 이 불리언만
 # 받고 출처(지금=구역 판정, 나중=건물 내부 전환)는 모른다 — Phase 3 내부 전환이 와도 불변.
@@ -2053,6 +2077,30 @@ func _process(delta: float) -> void:
 	# 게임 상태와 무관). audio가 Music·SFX 버스를 함께 음소거한다.
 	if Input.is_action_just_pressed("mute_audio"):
 		audio.toggle_mute()
+	# 전체화면 토글(F11) — 음소거와 같은 결로 입력 가드보다 위에서 어디서든 받는다.
+	if Input.is_action_just_pressed("toggle_fullscreen"):
+		_toggle_fullscreen()
+	# ★ 상시 HUD(우하단 혼력 바·하단 핫바)는 런타임 add_child라 씬 패널(대화·정산·마일스톤·마무리)
+	# 보다 위에 그려진다 → 그 패널들이 하단을 덮을 때 겹쳐 보였다(스크린샷 버그 — 대화창·초상화가
+	# 핫바를, 정산창이 혼력 바를 덮음). 모달/패널이 열린 동안 둘 다 숨겨 안 겹치게 한다(상시 HUD는
+	# 패널 밖에서만 — 미니멀 결). _process가 가시성 단일 출처라 _open/_close_frame의 hotbar 토글과
+	# 일관(프레임 열림도 아래 조건에 포함).
+	var _hud_hidden := dialogue.is_open() or frame.is_open() or _sleeping \
+		or cafe_summary_panel.visible or milestone_panel.visible or ending_panel.visible
+	if vitals != null:
+		vitals.visible = not _hud_hidden
+	if hotbar != null:
+		hotbar.visible = not _hud_hidden
+	# ★ 실내 카메라 격리 마스크 — 실내일 때 방(cam rect) 바깥을 검정으로 가린다(외부 풀밭·이웃 방
+	# 누출 차단, 코지-와이드 회귀 수정). 카메라가 방을 따라 움직일 수 있어 매 프레임 방 rect를 주입해
+	# 다시 그린다. 외부면 active=false라 아무것도 안 그린다.
+	if indoor_mask != null:
+		if _indoor != "" and _buildings.has(_indoor):
+			var cr: Rect2i = _buildings[_indoor]["cam"]
+			indoor_mask.set_room(true, Rect2(cr.position.x * TILE, cr.position.y * TILE, \
+				cr.size.x * TILE, cr.size.y * TILE))
+		else:
+			indoor_mask.set_room(false, Rect2())
 	# T4.2 슬라이스가 끝났으면 마무리 화면만 유지하고 모든 게임 입력을 막는다
 	# (이동은 _do_sleep/_end_run에서 이미 잠갔다). 마무리 화면은 _end_run이 한 번
 	# 세웠으므로 여기선 더 손대지 않는다.
