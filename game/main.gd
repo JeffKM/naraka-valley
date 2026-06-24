@@ -167,6 +167,12 @@ const PROP_FRAME := preload("res://assets/props/cafe_frame.png")
 const PROP_CLOCK := preload("res://assets/props/cafe_clock.png")
 const PROP_CABINET := preload("res://assets/props/cafe_cabinet.png")
 const PROP_CAFE_TABLE := preload("res://assets/props/cafe_table.png")
+# ★ Phase 2.8 T3 — 안식 농원 외부 농장 장식(PixelLab create_map_object, 32px native·피안절 무채도 톤).
+# 충돌·세이브 없는 순수 장식(_draw_props_for) — 밭을 '농장'으로 읽히게 프레임한다(밀도 상한 4종).
+const PROP_FENCE := preload("res://assets/props/farm_fence.png")              # 32×32 — 밭 경계 울타리(가로 레일)
+const PROP_SCARECROW := preload("res://assets/props/farm_scarecrow.png")      # 32×64 — 허수아비(1×2칸, 밭 곁 GROUND)
+const PROP_PLANTER := preload("res://assets/props/farm_planter.png")          # 32×32 — 길가 화분
+const PROP_FLOWER_PATCH := preload("res://assets/props/spirit_flower_patch.png")  # 32×32 — 꽃 패치(피안화)
 # 외부 건물 외관(PixelLab 산출, 외관 박스 크기와 1:1). 통과 불가 WALL 박스 위에 덮어 그려
 # "닫힌 건물"로 보이게 한다(_draw_facades). 집=224×192(7×6칸), 카페=256×224(8×7칸).
 const FACADE_HOUSE := preload("res://assets/buildings/house_ext.png")
@@ -179,6 +185,10 @@ const FACADE_CAFE := preload("res://assets/buildings/cafe_ext.png")
 const FACADE_MIHO_HOUSE := preload("res://assets/buildings/miho_house_ext.png")
 const FACADE_MEL_HOUSE := preload("res://assets/buildings/mel_house_ext.png")
 const FACADE_BANA_HOUSE := preload("res://assets/buildings/bana_house_ext.png")
+# ★ Phase 2.8 T3 — 안식 농원 서비스 건물 외관(박스 크기와 1:1). 창고=192×192(6×6칸, STOREHOUSE_EXT_RECT)·
+# 축사=192×128(6×4칸, BARN_EXT_RECT). 창고는 enterable(실내 빈 방)·축사는 비-enterable 자리(외관만).
+const FACADE_STOREHOUSE := preload("res://assets/buildings/storehouse_ext.png")
+const FACADE_BARN := preload("res://assets/buildings/barn_ext.png")
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로).
 # ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
@@ -201,6 +211,25 @@ const PROP_LAYOUT_HOME := [
 	[PROP_TABLE, [Vector2i(12, 71)]],                                                    # 집: 러그 위 작은 테이블
 	[PROP_LANTERN, LANTERN_TILES_HOME],                                                  # 안식 농원 길가 등불 둘
 	[PROP_POT, [Vector2i(18, 68), Vector2i(18, 74)]],                                    # 집 두 구석 혼령초 화분
+	# ── ★ T3 외부 농장 장식(밭 x24..55·y19..44 둘레 GROUND — 작물·길·외관 비껴, 충돌 0) ──
+	# 밭 북/남 가장자리 울타리(GROUND y18·y45 — 메인 세로 길 x40·축사 앞 x62 칸은 비운다).
+	[PROP_FENCE, [
+		Vector2i(25, 18), Vector2i(26, 18), Vector2i(27, 18), Vector2i(28, 18), Vector2i(29, 18),
+		Vector2i(30, 18), Vector2i(31, 18), Vector2i(32, 18), Vector2i(33, 18), Vector2i(34, 18),
+		Vector2i(35, 18), Vector2i(36, 18), Vector2i(37, 18), Vector2i(38, 18), Vector2i(39, 18),
+		Vector2i(41, 18), Vector2i(42, 18), Vector2i(43, 18), Vector2i(44, 18), Vector2i(45, 18),
+		Vector2i(46, 18), Vector2i(47, 18), Vector2i(48, 18), Vector2i(49, 18), Vector2i(50, 18),
+		Vector2i(51, 18), Vector2i(52, 18), Vector2i(53, 18), Vector2i(54, 18),
+		Vector2i(25, 45), Vector2i(26, 45), Vector2i(27, 45), Vector2i(28, 45), Vector2i(29, 45),
+		Vector2i(30, 45), Vector2i(31, 45), Vector2i(32, 45), Vector2i(33, 45), Vector2i(34, 45),
+		Vector2i(35, 45), Vector2i(36, 45), Vector2i(37, 45), Vector2i(38, 45), Vector2i(39, 45),
+		Vector2i(41, 45), Vector2i(42, 45), Vector2i(43, 45), Vector2i(44, 45), Vector2i(45, 45),
+		Vector2i(46, 45), Vector2i(47, 45), Vector2i(48, 45), Vector2i(49, 45), Vector2i(50, 45),
+		Vector2i(51, 45), Vector2i(52, 45), Vector2i(53, 45), Vector2i(54, 45),
+	]],
+	[PROP_SCARECROW, [Vector2i(22, 19), Vector2i(57, 42)]],                              # 허수아비 둘(밭 좌/우 곁 GROUND)
+	[PROP_PLANTER, [Vector2i(4, 11), Vector2i(8, 11), Vector2i(38, 53), Vector2i(42, 53)]],  # 집 앞·스폰 접근로 화분
+	[PROP_FLOWER_PATCH, [Vector2i(14, 48), Vector2i(66, 48), Vector2i(10, 55), Vector2i(70, 55), Vector2i(30, 53), Vector2i(50, 53)]],  # 꽃 패치 산재
 ]
 # ★C3 — 카페 실내가 마을 밴드(y86+)로 +48 평행이동(아래 CAFE_RECT 참조). 가구도 같은 +48이라
 #   작동 검증된 카페 내부 레이아웃이 상대 배치 그대로 내려간다(상대배치 무위험·회귀 0).
@@ -3143,7 +3172,9 @@ func _draw() -> void:
 	match _region:
 		RegionCatalog.HOME:
 			_draw_facade_home()      # 집 외관(WALL 박스 위에 덮어 닫힌 건물로)
-			_draw_props_for(PROP_LAYOUT_HOME)  # 집 가구·길가 등불·화분
+			_draw_facade_storehouse()  # ★ T3 창고 외관(NE)
+			_draw_facade_barn()        # ★ T3 축사 외관(동편, 비-enterable 자리)
+			_draw_props_for(PROP_LAYOUT_HOME)  # 집 가구·길가 등불·화분 + ★ T3 농장 장식(울타리·허수아비·화분·꽃)
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
@@ -3187,6 +3218,15 @@ func _draw_crops() -> void:
 # 더는 안식 농원에 없고 나루 마을 야외에만 선다.
 func _draw_facade_home() -> void:
 	draw_texture_rect(FACADE_HOUSE, Rect2(Vector2(HOUSE_EXT_RECT.position * TILE), FACADE_HOUSE.get_size()), false)
+
+# ★ T3 — 안식 농원 서비스 건물 외관(창고 NE·축사 동편). 카페·집 외관과 같은 결 — 통과 불가 WALL
+# 박스(_build_facade) 위에 1:1로 덮어 "닫힌 건물"로 읽히게 한다. 창고는 enterable(문 트리거),
+# 축사는 비-enterable 자리(외관만, 카탈로그 미등록 — 목축은 Phase 3). 그리기 전용, 충돌·동선 불변.
+func _draw_facade_storehouse() -> void:
+	draw_texture_rect(FACADE_STOREHOUSE, Rect2(Vector2(STOREHOUSE_EXT_RECT.position * TILE), FACADE_STOREHOUSE.get_size()), false)
+
+func _draw_facade_barn() -> void:
+	draw_texture_rect(FACADE_BARN, Rect2(Vector2(BARN_EXT_RECT.position * TILE), FACADE_BARN.get_size()), false)
 
 func _draw_facade_cafe() -> void:
 	draw_texture_rect(FACADE_CAFE, Rect2(Vector2(CAFE_EXT_RECT.position * TILE), FACADE_CAFE.get_size()), false)
