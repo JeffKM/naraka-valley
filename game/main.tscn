@@ -98,129 +98,54 @@ offset_bottom = 30.0
 text = "..."
 
 [node name="ClockLabel" type="Label" parent="CanvasLayer"]
-offset_left = 400.0
+offset_left = 312.0
 offset_top = 6.0
 offset_right = 632.0
-offset_bottom = 30.0
+offset_bottom = 28.0
 text = "..."
 horizontal_alignment = 2
 
 [node name="SleepPrompt" type="Label" parent="CanvasLayer"]
 visible = false
 offset_left = 8.0
-offset_top = 324.0
+offset_top = 260.0
 offset_right = 632.0
-offset_bottom = 348.0
+offset_bottom = 278.0
 text = "[Enter] 취침"
 horizontal_alignment = 1
 
 [node name="InteractPrompt" type="Label" parent="CanvasLayer"]
 visible = false
 offset_left = 8.0
-offset_top = 324.0
+offset_top = 260.0
 offset_right = 632.0
-offset_bottom = 348.0
+offset_bottom = 278.0
 text = "[E] 괭이질"
 horizontal_alignment = 1
 
-[node name="CropIcon" type="TextureRect" parent="CanvasLayer"]
-offset_left = 8.0
-offset_top = 30.0
-offset_right = 24.0
-offset_bottom = 46.0
-expand_mode = 1
-stretch_mode = 5
-mouse_filter = 2
-
 [node name="CropLabel" type="Label" parent="CanvasLayer"]
-offset_left = 28.0
-offset_top = 28.0
-offset_right = 420.0
-offset_bottom = 52.0
+offset_left = 120.0
+offset_top = 280.0
+offset_right = 520.0
+offset_bottom = 300.0
 text = "..."
-
-[node name="EnergyLabel" type="Label" parent="CanvasLayer"]
-offset_left = 8.0
-offset_top = 48.0
-offset_right = 400.0
-offset_bottom = 72.0
-text = "..."
-
-[node name="SaveLabel" type="Label" parent="CanvasLayer"]
-offset_left = 8.0
-offset_top = 68.0
-offset_right = 500.0
-offset_bottom = 92.0
-text = "[F5] 저장 · [F9] 불러오기"
+horizontal_alignment = 1
 
 [node name="GoldLabel" type="Label" parent="CanvasLayer"]
-offset_left = 8.0
-offset_top = 88.0
-offset_right = 400.0
-offset_bottom = 112.0
-text = "..."
-
-[node name="AffinityLabel" parent="CanvasLayer" instance=ExtResource("18")]
-offset_left = 8.0
-offset_top = 108.0
-offset_right = 400.0
-offset_bottom = 132.0
-
-[node name="FoxfireLabel" type="Label" parent="CanvasLayer"]
-offset_left = 8.0
-offset_top = 128.0
-offset_right = 500.0
-offset_bottom = 152.0
-text = "..."
-
-[node name="MelAffinityLabel" parent="CanvasLayer" instance=ExtResource("18")]
-offset_left = 8.0
-offset_top = 148.0
-offset_right = 400.0
-offset_bottom = 172.0
-
-[node name="BanaAffinityLabel" parent="CanvasLayer" instance=ExtResource("18")]
-offset_left = 8.0
-offset_top = 168.0
-offset_right = 400.0
-offset_bottom = 192.0
-
-[node name="NeoAffinityLabel" parent="CanvasLayer" instance=ExtResource("18")]
-offset_left = 8.0
-offset_top = 184.0
-offset_right = 400.0
-offset_bottom = 208.0
-
-[node name="CafeLabel" type="Label" parent="CanvasLayer"]
-visible = false
-offset_left = 8.0
-offset_top = 200.0
-offset_right = 600.0
-offset_bottom = 224.0
-text = "..."
-
-[node name="NightLabel" type="Label" parent="CanvasLayer"]
-visible = false
-offset_left = 8.0
-offset_top = 220.0
+offset_left = 312.0
+offset_top = 28.0
 offset_right = 632.0
-offset_bottom = 244.0
+offset_bottom = 50.0
 text = "..."
-
-[node name="BanaGuardLabel" type="Label" parent="CanvasLayer"]
-visible = false
-offset_left = 8.0
-offset_top = 240.0
-offset_right = 632.0
-offset_bottom = 264.0
-text = "..."
+horizontal_alignment = 2
 
 [node name="MilestoneLabel" type="Label" parent="CanvasLayer"]
-offset_left = 8.0
-offset_top = 260.0
+offset_left = 232.0
+offset_top = 50.0
 offset_right = 632.0
-offset_bottom = 284.0
+offset_bottom = 72.0
 text = "..."
+horizontal_alignment = 2
 
 [node name="MilestonePanel" type="Panel" parent="CanvasLayer"]
 visible = false

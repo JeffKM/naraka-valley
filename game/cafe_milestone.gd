@@ -79,6 +79,15 @@ static func summary(harvested: int, revenue: int, hearts: int) -> String:
 		harvested, TARGET_HARVEST, revenue, TARGET_REVENUE, hearts, TARGET_HEARTS,
 	]
 
+# ★ C3 시계 클러스터 곁 compact 한 줄(미니멀 HUD — 매크로 목표를 글랜서블하게, ADR-0018). 상시
+# 라벨 난립을 정리하며 마일스톤은 시계 옆 작은 진행 표시로 남는다(ADR-0009 "왜 다 하지"의 글랜스
+# 신호 유지). 완료 전엔 바+%만(하위 분해는 완료 팝업/관계 탭이 든다), 완료 후엔 "완료 ★".
+static func compact(harvested: int, revenue: int, hearts: int) -> String:
+	if is_complete(harvested, revenue, hearts):
+		return "카페 1단 완료 ★"
+	var r := overall_ratio(harvested, revenue, hearts)
+	return "카페 1단 %s %d%%" % [bar(r), int(round(r * 100.0))]
+
 # 2단 조건 미리보기 한 줄(ADR-0009 — 깊이를 *암시*만, 진짜 2단은 Phase 3). 측정 신호
 # "1단 깨니 2단 갈망하나"의 갈망을 거는 자리. 삼도천 낚시(game-loops §2.2)를 떡밥으로 — "왜
 # 낚시를 하지?"의 답이 카페 성장임을 미리 비춘다(ADR-0009 번들 구조).
