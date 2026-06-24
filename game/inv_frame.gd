@@ -53,6 +53,7 @@ var _sort_rect := Rect2()
 var _buy_rect := Rect2()
 
 var _hearts: Array = []          # HeartBar 4개(관계 탭 재사용)
+var _heart_effects: Array = []   # ★ C3 각 캐릭터의 관계 곱셈기 효과 줄(여우불·마진·경비·할인)
 
 func _ready() -> void:
 	# 관계 탭용 HeartBar 4개를 미리 붙여 둔다(평소 숨김 — 관계 탭일 때만 보임).
@@ -105,13 +106,19 @@ func set_tab(t: int) -> void:
 func cycle_tab() -> void:
 	set_tab(TAB_REL if menu_tab == TAB_INV else TAB_INV)
 
-# 관계 탭 하트 값 주입(읽기 전용). rows = [{name, filled, total}]. main이 affinity들에서 파생해 넘긴다.
+# 관계 탭 하트 값 주입(읽기 전용). rows = [{name, filled, total, effect}]. main이 affinity들에서 파생해
+# 넘긴다. ★ C3 — effect(관계 곱셈기 한 줄)도 함께 받아 하트 아래에 그린다(_draw_menu_top REL 분기).
 func set_hearts(rows: Array) -> void:
+	_heart_effects.resize(_hearts.size())
 	for i in _hearts.size():
 		var hb: HeartBar = _hearts[i]
 		if i < rows.size():
 			var r: Dictionary = rows[i]
 			hb.render(str(r.get("name", "")), int(r.get("filled", 0)), int(r.get("total", 5)))
+			_heart_effects[i] = str(r.get("effect", ""))
+		else:
+			_heart_effects[i] = ""
+	queue_redraw()
 
 # 관계 탭일 때만 하트를 보이고, 패널 안 세로로 줄지어 배치한다(상단 컨텍스트 영역).
 func _apply_heart_visibility() -> void:
@@ -121,8 +128,9 @@ func _apply_heart_visibility() -> void:
 		var hb: HeartBar = _hearts[i]
 		hb.visible = show
 		if show:
-			# 탭 바(y: PAD..PAD+28) 아래로 내려 하트가 탭에 겹치지 않게 한다.
-			hb.position = Vector2(panel.position.x + PAD + 8.0, panel.position.y + 64.0 + i * 26.0)
+			# 탭 바(y: PAD..PAD+28) 아래로 내려 하트가 탭에 겹치지 않게 한다. ★ C3 — 행마다 효과 줄을
+			# 한 칸 더 끼우므로 간격을 48로 넓힌다(하트 + 그 아래 곱셈기 한 줄 = 한 캐릭터 묶음).
+			hb.position = Vector2(panel.position.x + PAD + 8.0, panel.position.y + 64.0 + i * 48.0)
 
 # ── 기하(패널·그리드) ─────────────────────────────────────────────────────────
 # 부모 CanvasLayer가 UI scale(ADR-0018 ×1.5)을 먹어, 전체화면 앵커 Control의 size(=960×540)는
@@ -239,6 +247,15 @@ func _draw_menu_top(panel: Rect2) -> void:
 		# 관계 탭: 하트는 HeartBar 자식이 그린다(_apply_heart_visibility 배치). 탭 바 오른쪽에 '읽기 전용' 안내만.
 		draw_string(font, Vector2(panel.position.x + PAD + 210.0, panel.position.y + PAD + 19.0),
 			"읽기 전용", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.62, 0.62, 0.68))
+		# ★ C3 각 하트 행 아래에 그 캐릭터의 관계 곱셈기(여우불·마진·경비·할인) 한 줄. HeartBar와 같은
+		# y 기준(panel.y + 64 + i*48)에서 한 칸(+24) 내려 그린다 — 상시 HUD에서 걷어낸 정보를 여기서 복기.
+		for i in _heart_effects.size():
+			var eff: String = str(_heart_effects[i])
+			if eff == "":
+				continue
+			var ey := panel.position.y + 64.0 + i * 48.0 + 40.0
+			draw_string(font, Vector2(panel.position.x + PAD + 12.0, ey), eff,
+				HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - PAD * 2.0 - 12.0, 12, Color(0.70, 0.72, 0.78))
 
 # ── 출하함 상단(대기 슬롯 + 정산 미리보기) ────────────────────────────────────
 func _draw_bin_top(panel: Rect2) -> void:
