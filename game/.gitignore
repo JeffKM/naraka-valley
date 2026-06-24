@@ -28,3 +28,10 @@ tools/crop_icons_preview.png
 tools/crop_icons_preview.png.import
 assets/tiles/combined_terrain_atlas.png
 assets/tiles/combined_terrain_atlas.png.import
+
+# T1 톤 검증 합성 이미지 (재생성 가능 — retone_pianjeol.py + PIL)
+tools/t1_tone_compare.png
+tools/t1_tone_compare.png.import
+# 실내 마스크 육안 검증 스크린샷 (indoor_mask_check.gd 재생성)
+tools/indoor_mask_check.png
+tools/indoor_mask_check.png.import
