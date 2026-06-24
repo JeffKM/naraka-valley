@@ -567,6 +567,11 @@ const JOBGUI := Color(0.26, 0.40, 0.30)  # 잡귀 그레이박스(탁한 청록 
 # 만물상 방은 카메라로 격리돼(STORE_CAM_RECT) 만물상에 들어왔을 때만 화면에 보인다. 만물상 방
 # 바닥이라 농사·좌석과 안 겹친다(다른 구역·방에선 카메라 밖이라 안 보이고, 닿을 수도 없다).
 const NEO_TILE := Vector2i(27, 76)   # 만물상 방 뒷벽 가운데(★C3 +48 = STORE_RECT y74+ 안)
+# ★ Phase 2.7 C2 — 무인 출하함 칸(카페 안 뒷줄 오른쪽 끝, NPC 줄 y88에서 바나(17) 오른쪽 x19).
+# 멜 F 게이트를 떼고(ADR-0021 출하대 무인화) 여기 *상자 오브젝트*를 세운다 — 플레이어가 아래 칸
+# (19,89)에 서서 위를 바라보며(facing_bin) 우클릭으로 출하함 패널을 연다. 카페 바닥(CAFE)이라
+# 농사 대상이 아니고(밭과 안 겹침), 좌석(y90)·NPC(x10/13/15/17)·문과도 칸이 갈린다.
+const SHIP_BIN_TILE := Vector2i(19, 88)   # 카페 직원 줄(y88) 오른쪽 끝(무인 출하함 자리)
 
 @onready var ground: TileMapLayer = $Ground
 @onready var field_layer: TileMapLayer = $Field           # T2.1 밭 상태 오버레이
@@ -636,6 +641,14 @@ var audio: GameAudio
 # (인벤토리는 별도 세이브). _setup_hotbar에서 생성·주입하고, 인벤토리 changed로만 다시 그린다.
 var hotbar: HotbarHud
 
+# ★ Phase 2.7 C2 — 무인 출하함(대기 재고 + 익일 정산). wallet·inventory 결의 상태 노드지만 코드
+# 생성으로 붙인다(lighting·hotbar 결 — 새 tscn 노드 추가 회피). 세이브는 별도 조각으로 main이 조율.
+var ship_bin: ShippingBin
+
+# ★ Phase 2.7 C2 — 공통 인벤토리 프레임(메뉴/출하함/매대 컨텍스트 스위칭 UI 셸). hotbar와 같은 결 —
+# 코드 생성 자식 Control, 무상태(인벤토리·출하함이 상태). _setup_frame에서 생성·주입한다.
+var frame: InventoryFrame
+
 var _grid: Array = []  # _grid[y][x] = 타일 id
 # ★ 코지-와이드 C1 — 현재 구역 그리드 치수(RegionCatalog.size_of(_region) 파생). 전역 상수
 # MAP_W/MAP_H/OUTDOOR_H 대신 빌드 경로(_build_*/_set_tile/_build_border/_is_farmable)가 이걸 읽어
@@ -694,15 +707,9 @@ const DELETE_CONFIRM_SECS := 3.0  # 2단 확인 대기 시간(이 안에 다시 
 # 세이브하지 않는다(대화와 같은 결 — SaveManager·main 세이브 불변).
 var _harvest_seen: Dictionary = {}
 
-# T3.1/T5.3 카페 출하대 패널이 열려 있는가. 멜을 바라볼 때 F로 토글하고, 멜 앞을
-# 벗어나면 자동으로 닫힌다(멜이 카운터 얼굴 — '멜 앞에서만' 패턴, 무인 카운터 제거).
-var _shop_open := false
-
-# M2.3 만물상 매대 패널이 열려 있는가. 네오를 바라볼 때 F로 토글하고, 네오 앞을 벗어나면
-# 자동으로 닫힌다(멜 출하대와 같은 '점주 앞에서만' 패턴). 출하대(_shop_open)와 같은 ShopPanel
-# 노드를 재사용하되, 둘은 서로 다른 건물(카페 vs 만물상)이라 동시에 열릴 수 없다 — 한 패널이
-# 둘을 모두 띄운다(어느 쪽이 열렸는지로 본문 텍스트만 가른다).
-var _store_open := false
+# ★ Phase 2.7 C2 — 멜 출하대(_shop_open)·만물상 매대(_store_open) 토글 플래그는 폐기됐다.
+# 판매는 무인 출하함(ship_bin, 드롭→익일 정산)으로, 구매·메뉴·매대는 공통 프레임(frame)으로
+# 옮겨갔다. "패널이 열려 있는가"는 frame.is_open()/frame.context가 단일 출처다(별도 플래그 제거).
 
 # T4.2 슬라이스(RunSummary.RUN_DAYS일)가 끝났는가(마무리 화면 표시 중). true면 _process가 모든
 # 게임 입력을 막고 마무리 화면만 유지한다. 끝남 자체는 GameClock.day에서 파생되므로
@@ -757,6 +764,8 @@ func _ready() -> void:
 	_setup_lighting()
 	_setup_audio()
 	_setup_hotbar()
+	_setup_shipping_bin()   # ★ C2 무인 출하함(프레임이 참조 → 프레임보다 먼저)
+	_setup_frame()          # ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대)
 	_setup_clock()
 	# T3.2/T5.6 미호를 현재 시간대의 자리(아침=밭 / 15시부터=카페)에 세우고, 대사 진행
 	# 시그널을 패널·이동잠금에 연결한다. 초기 위치는 _miho_tile(기본 밭)로 두고, 로드 후
@@ -873,22 +882,23 @@ func _ensure_input_actions() -> void:
 	var ev_f8 := InputEventKey.new()
 	ev_f8.physical_keycode = KEY_F8
 	InputMap.action_add_event("delete_save", ev_f8)
-	# T3.1 카페 출하대: 수확물 전량 판매(S)·선택 작물 씨앗 구매(B). 패널이 열렸을
-	# 때만 처리하므로(_shop_open 가드), 밭 작업 키(E·Q)와 충돌하지 않는다.
-	InputMap.add_action("shop_sell")
-	var ev_s := InputEventKey.new()
-	ev_s.physical_keycode = KEY_S
-	InputMap.action_add_event("shop_sell", ev_s)
-	InputMap.add_action("shop_buy")
-	var ev_b := InputEventKey.new()
-	ev_b.physical_keycode = KEY_B
-	InputMap.action_add_event("shop_buy", ev_b)
-	# T5.3 멜 카페 출하대 열기/닫기(F). 멜을 바라볼 때만 처리하므로(facing_mel 가드),
-	# 멜 앞 대화(E)·선물(G) 및 밭 작업과 키가 갈려 충돌하지 않는다(무인 카운터 → 멜 카운터).
+	# ★ C2 — 멜 출하대 즉시판매(S)·구매(B)는 폐기됐다(무인 출하함 드롭=마우스 클릭, 구매=네오 매대
+	# 클릭). shop_sell/shop_buy 액션 제거 — 판매·구매는 프레임 클릭으로만 이뤄진다(키 충돌면 정리).
+	# 만물상 매대·나라카 바 열기(F). 네오/바나를 바라볼 때만 처리하므로 대화(우클릭)·밭 작업과 갈린다.
 	InputMap.add_action("shop_toggle")
 	var ev_f := InputEventKey.new()
 	ev_f.physical_keycode = KEY_F
 	InputMap.action_add_event("shop_toggle", ev_f)
+	# ★ C2 메뉴 열기/닫기(Tab) — 어디서든 토글. 인벤토리·관계 탭 셸을 띄운다(모달, 이동 잠금).
+	InputMap.add_action("menu_toggle")
+	var ev_tab := InputEventKey.new()
+	ev_tab.physical_keycode = KEY_TAB
+	InputMap.action_add_event("menu_toggle", ev_tab)
+	# ★ C2 메뉴 탭 순환(E) — 메뉴가 열렸을 때만 인벤토리 ↔ 관계를 오간다(마우스 클릭과 병행).
+	InputMap.add_action("menu_tab")
+	var ev_e := InputEventKey.new()
+	ev_e.physical_keycode = KEY_E
+	InputMap.action_add_event("menu_tab", ev_e)
 	# T3.3 미호에게 선물(G). 미호를 바라볼 때만 처리하므로 밭 작업 키와 충돌하지 않는다.
 	InputMap.add_action("gift_item")
 	var ev_g := InputEventKey.new()
@@ -1577,6 +1587,28 @@ func _setup_hotbar() -> void:
 		icons[crop_id] = CROP_SPRITES[crop_id][2]  # mature 프레임을 인벤 아이콘으로 재사용
 	hotbar.setup(inventory, icons)
 
+# ── ★ C2 무인 출하함 ──────────────────────────────────────────────────────────
+# wallet·inventory 결의 상태 노드(대기 재고 + 익일 정산)지만, lighting·hotbar처럼 코드로 붙인다
+# (새 tscn 노드 추가 회피). 대기 내용은 main 세이브에 한 조각으로 직렬화된다(롤백·정산 보존).
+func _setup_shipping_bin() -> void:
+	ship_bin = ShippingBin.new()
+	ship_bin.name = "ShippingBin"
+	add_child(ship_bin)
+
+# ── ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대 컨텍스트 스위칭) ────────────────
+# 하단 백팩 공통 + 상단 레이어 교체. 핫바와 같은 CanvasLayer에 핫바 *위*로 붙여(나중 자식) 열렸을
+# 때 클릭을 가로챈다(모달). 출하함 드롭·롤백·구매는 시그널로 받아 main이 wallet·inventory를 조율한다.
+func _setup_frame() -> void:
+	frame = InventoryFrame.new()
+	$CanvasLayer.add_child(frame)
+	var icons := {}
+	for crop_id in CROP_SPRITES:
+		icons[crop_id] = CROP_SPRITES[crop_id][2]   # 핫바와 같은 작물 아이콘 재사용
+	frame.setup(inventory, ship_bin, icons)
+	frame.deposit_slot.connect(_on_frame_deposit)
+	frame.takeback_id.connect(_on_frame_takeback)
+	frame.buy_pressed.connect(_on_frame_buy)
+
 # P2.6 BGM 위치 분기: 플레이어가 카페 안인가(밭↔카페 낮 BGM을 가른다). audio는 이 불리언만
 # 받고 출처(지금=구역 판정, 나중=건물 내부 전환)는 모른다 — Phase 3 내부 전환이 와도 불변.
 func _in_cafe() -> bool:
@@ -1603,6 +1635,14 @@ func _on_day_advanced(day: int) -> void:
 	# 바를 열었던 밤이면 end_day가 정산 요약(closed → _on_night_closed)을 먼저 쏴, 옵트인의
 	# 대가가 0이었음을 한 줄로 보인다(밤의 끝 = 취침이라 이 훅이 카페 19시 마감의 자리).
 	night_bar.end_day()
+	# ★ C2 무인 출하함 익일 정산: 어젯밤 출하함에 넣어 둔 수확물을 판매가로 환산해 골드로 정산하고
+	# 상자를 비운다(즉시판매 제거 — 스타듀 출하상자 결, ADR-0021). ★ 이 raw 판매는 *카페를 운영한*
+	# 매출이 아니라 마일스톤 누적(_cafe_revenue_total)엔 넣지 않는다(서빙 매출만 — ADR-0009).
+	var ship_gold := ship_bin.settle()
+	if ship_gold > 0:
+		wallet.earn(ship_gold)
+		audio.sfx("gold")                     # 출하 정산 골드 "치링"
+		_notice("출하함 정산 +%d골드" % ship_gold)
 	# T4.2 슬라이스의 끝. 취침으로 RUN_DAYS+1일째 아침이 오면 더 진행하지 않고(작물 성장·
 	# 혼력 회복도 생략) 마무리 화면을 띄운다. 끝 판정은 RunSummary가 day로 내린다.
 	if RunSummary.is_over(day):
@@ -1873,6 +1913,7 @@ func _save_game() -> void:
 		"farm": farm.to_save(),
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
+		"shipping_bin": ship_bin.to_save(),   # ★ C2 출하 대기(롤백·익일 정산 보존)
 		"affinity": affinity.to_save(),
 		"mel_affinity": mel_affinity.to_save(),
 		"bana_affinity": bana_affinity.to_save(),
@@ -1908,6 +1949,8 @@ func _load_game() -> void:
 		wallet.load_save(data["wallet"])
 	if data.has("inventory"):
 		inventory.load_save(data["inventory"])
+	if data.has("shipping_bin"):   # ★ C2 — 키 없는 구버전 세이브는 빈 출하함으로 시작(롤백·정산 무상태)
+		ship_bin.load_save(data["shipping_bin"])
 	if data.has("affinity"):
 		affinity.load_save(data["affinity"])
 	if data.has("mel_affinity"):
@@ -2025,6 +2068,28 @@ func _process(delta: float) -> void:
 			dialogue.advance()
 		return
 
+	# ★ C2 메뉴 토글(Tab): 어디서든 메뉴를 열고/닫는다(대화·연출 밖에서만 — 위 가드 통과 후).
+	if not _sleeping and Input.is_action_just_pressed("menu_toggle"):
+		if frame.context == InventoryFrame.CTX_MENU:
+			_close_frame()
+		elif not frame.is_open():
+			_open_frame(InventoryFrame.CTX_MENU)
+
+	# ★ C2 프레임(메뉴/출하함/매대)이 열려 있으면 모달이다 — 이동은 잠겨 있고(physics off), 클릭은
+	# 프레임이 _gui_input으로 받는다. 여기선 닫기(Esc)·탭 순환(E)만 처리하고 다른 모든 게임 입력을
+	# 막는다(대화 모달과 같은 결). 관계 탭이면 하트 값을 매 프레임 흘려넣어 읽기 전용으로 보인다.
+	if frame.is_open():
+		onboarding_label.visible = false
+		if Input.is_action_just_pressed("ui_cancel") or (frame.context != InventoryFrame.CTX_MENU and Input.is_action_just_pressed("menu_toggle")):
+			_close_frame()
+		elif frame.context == InventoryFrame.CTX_MENU and Input.is_action_just_pressed("menu_tab"):
+			frame.cycle_tab()
+		if frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_REL:
+			frame.set_hearts(_heart_rows())
+		if frame.context == InventoryFrame.CTX_STORE:
+			frame.store_text = _store_text()
+		return
+
 	# 건물 외관 문에 닿으면 실내로, 실내 문에 닿으면 밖으로 — 자동 fade 전환(스타듀식 출입).
 	_maybe_toggle_building()
 	# M1.3 구역 가장자리/길 워프 칸에 닿으면 인접 구역으로 전환(목적 구역이 지어졌을 때만 —
@@ -2094,10 +2159,12 @@ func _process(delta: float) -> void:
 	# 15시부터=카페)면 E로 대화를 연다(밭 동작보다 우선 — 미호 자리는 농사 대상에서 빠져
 	# 있어 둘이 겹치지 않는다). facing_miho는 아래 하단 프롬프트에서도 재사용한다.
 	var facing_miho := not _sleeping and _target == _miho_tile
-	# T5.1 멜에게 말 걸기: 바라보는 칸이 멜 칸이면 E로 대화를 연다. 멜은 카페 안에 서
-	# 있어, 카페 출하대(_process_shop)보다 먼저 처리하고 return해 대화가 우선한다
-	# (멜을 바라보면 대화, 안 바라보고 카페 안이면 출하대 — T5.3에서 멜 운영으로 통합).
+	# T5.1 멜에게 말 걸기: 바라보는 칸이 멜 칸이면 우클릭으로 대화를 연다. ★ C2 — 출하대 F가
+	# 사라져(ADR-0021 무인화) 멜은 *대화(우클릭)·선물(G)만* 남는다(판매는 무인 출하함으로 이전).
 	var facing_mel := not _sleeping and _target == MEL_TILE
+	# ★ C2 무인 출하함: 카페 안에서 출하함 칸을 바라볼 때 우클릭으로 출하함 패널을 연다. NPC·좌석·
+	# 밭과 칸이 갈리고(SHIP_BIN_TILE 단일), _indoor로 가드해 다른 구역 같은 좌표에 닿아도 무반응.
+	var facing_bin := not _sleeping and _indoor == "카페" and _target == SHIP_BIN_TILE
 	# T5.6 옥자(카페 상주)에게 말 걸기: 통보를 마친 뒤(NOTICE 단계 지남)에만 카페에 보인다.
 	# 호감도·선물·출하대 없는 메인 서사 앵커라(ADR-0005) E 일상 대화만 받는다.
 	var facing_okja := not _sleeping and okja.visible and onboarding.step > Onboarding.NOTICE \
@@ -2170,16 +2237,25 @@ func _process(delta: float) -> void:
 	if facing_bana and not night_bar.is_opened() and Input.is_action_just_pressed("shop_toggle"):
 		_open_night_bar()
 		return
-	# T5.1 멜 대화(RMB) / T5.2 선물(G): 출하대 패널이 열렸을 땐 막아(not _shop_open) 패널 조작과 안 섞이게.
-	if facing_mel and not _shop_open and Input.is_action_just_pressed("action"):
+	# ★ C2 무인 출하함 열기(RMB): 카페 출하함 칸을 바라보며 우클릭으로 패널을 연다(좌석·밭보다 먼저
+	# 잡고 return — 출하함 칸은 다른 대상과 안 겹친다). 패널은 모달이라 위 frame.is_open 가드로 닫힌다.
+	if facing_bin and Input.is_action_just_pressed("action"):
+		_open_frame(InventoryFrame.CTX_BIN)
+		return
+	# T5.1 멜 대화(RMB) / T5.2 선물(G): ★ C2 — 출하대 F가 사라져 가드(not _shop_open)도 불필요하다.
+	if facing_mel and Input.is_action_just_pressed("action"):
 		_start_mel_dialogue()
 		return
-	if facing_mel and not _shop_open and Input.is_action_just_pressed("gift_item"):
+	if facing_mel and Input.is_action_just_pressed("gift_item"):
 		_try_mel_gift()
 		return
-	# M2.3 네오 대화(RMB): 만물상에서 네오를 바라보며(일일 대화로 호감도↑). 매대 패널 열렸을 땐 막는다.
-	if facing_neo and not _store_open and Input.is_action_just_pressed("action"):
+	# M2.3 네오 대화(RMB): 만물상에서 네오를 바라보며(일일 대화로 호감도↑).
+	if facing_neo and Input.is_action_just_pressed("action"):
 		_start_neo_dialogue()
+		return
+	# ★ C2 만물상 매대 열기(F): 네오를 바라보며 F로 매대 프레임을 연다(대화=우클릭과 갈린다, 무인 바 F와 같은 결).
+	if facing_neo and Input.is_action_just_pressed("shop_toggle"):
+		_open_frame(InventoryFrame.CTX_STORE)
 		return
 	# T5.4 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 보유 재료 1개를 자동 소모하고 정액 골드.
 	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
@@ -2203,13 +2279,8 @@ func _process(delta: float) -> void:
 	if _can_sleep() and Input.is_action_just_pressed("action"):
 		_do_sleep()
 
-	# T5.3 멜 카페 출하대: 멜을 바라보며 F로 패널을 열고/닫고, 열린 동안 S로 수확물을
-	# 팔고 B로 씨앗을 산다(작은 순환을 닫는 곳). 멜이 카운터 얼굴이라 멜 앞에서만 열리고,
-	# 멜 앞을 벗어나면 자동으로 닫힌다(무인 카운터 제거 — 대화·선물과 한 접점으로 통합).
-	_process_shop(facing_mel)
-	# M2.3 만물상 매대: 네오를 바라보며 F로 패널을 열고/닫고, 열린 동안 B로 선택 작물 씨앗을
-	# (네오 할인가로) 산다. 멜 출하대와 같은 '점주 앞에서만' 패턴 — 네오 앞을 벗어나면 자동으로 닫힌다.
-	_process_store(facing_neo)
+	# ★ C2 — 멜 출하대(_process_shop)·만물상 매대(_process_store) 폴링은 폐기됐다. 판매는 무인
+	# 출하함(위 facing_bin 우클릭 → 모달 프레임), 구매는 매대 프레임(위 facing_neo F)으로 옮겼다.
 
 	var p := player.global_position
 	readout.text = "방향키 이동   구역: %s   위치(%d, %d)   FPS %d" % [
@@ -2279,25 +2350,23 @@ func _process(delta: float) -> void:
 	if not _milestone_celebrated and _milestone_complete():
 		_milestone_celebrated = true
 		_show_milestone_reached()
-	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. 상점 패널이 떴으면 숨겨 겹침을 막는다
-	# (대화 중엔 위 early-return에서 이미 숨겼다). 완료(DONE) 후엔 문구가 ""라 사라진다.
+	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. (프레임이 떴으면 위 모달 early-return에서 이미 숨겼다.)
+	# 완료(DONE) 후엔 문구가 ""라 사라진다.
 	var guide := onboarding.guidance()
-	onboarding_label.visible = guide != "" and not _shop_open and not _store_open
+	onboarding_label.visible = guide != ""
 	onboarding_label.text = guide
-	# T3.1 출하대(멜)·M2.3 매대(네오)는 같은 ShopPanel을 재사용한다(서로 다른 건물이라 동시에 안 열림).
-	# 어느 쪽이 열렸는지로 본문만 가른다.
-	shop_panel.visible = _shop_open or _store_open
-	if _shop_open:
-		shop_text.text = _shop_text()
-	elif _store_open:
-		shop_text.text = _store_text()
+	# ★ C2 — 옛 ShopPanel(멜 출하대·네오 매대 텍스트)은 폐기됐다. 매대·출하함은 공통 프레임이
+	# 그리므로 ShopPanel 노드는 상시 숨긴다(tscn 노드는 남되 미사용 — 회귀 0, frame이 대체).
+	shop_panel.visible = false
 	# 집 안에서만 취침 안내를 띄운다(연출 중엔 숨김).
 	sleep_prompt.visible = _can_sleep()
 	# 하단 프롬프트(집은 sleep_prompt, 카페·밭은 interact_prompt — 구역이 달라 겹치지 않음).
-	# 우선순위: 패널 > 미호 말걸기 > 옥자 말걸기 > 바나 말걸기(밤) > 멜(대화·출하대·선물) > 손님 서빙 > 밭 동작.
+	# 우선순위: 출하함 > 미호 > 옥자 > 바나(밤) > 네오(매대) > 멜(대화·선물) > 손님 서빙 > 밭 동작.
 	# ★ ADR-0024 — 대화·서빙·막기·수확은 RMB(우클릭), 도구질은 LMB(좌클릭). 선물(G)·바·매대(F)는 별개 키.
-	if _shop_open or _store_open:
-		interact_prompt.visible = false
+	if facing_bin:
+		# ★ C2 무인 출하함을 바라볼 때: 우클릭으로 패널을 연다(드롭→익일 정산, 멜 F 소멸).
+		interact_prompt.visible = true
+		interact_prompt.text = "[우클릭] 무인 출하함 (수확물 드롭 → 다음 아침 정산)"
 	elif facing_neo:
 		# M2.3 네오(만물상 점주)를 바라볼 때: 대화·매대 한 줄 안내(네오가 매대 얼굴). 이 슬라이스는
 		# 선물(G) 없이 일일 대화로만 친해진다(풀 T1 트랙은 후속, ADR-0014).
@@ -2321,9 +2390,9 @@ func _process(delta: float) -> void:
 			bana_hint += "   [F] 나라카 바 열기"
 		interact_prompt.text = bana_hint
 	elif facing_mel:
-		# T5.1/T5.2/T5.3 멜을 바라볼 때: 대화·출하대·선물 한 줄 안내(멜이 카운터 얼굴).
+		# T5.1/T5.2 멜을 바라볼 때: ★ C2 — 출하대 F가 사라져 대화·선물만 안내한다(판매는 무인 출하함).
 		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] 대화   [F] 출하대   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
+		interact_prompt.text = "[우클릭] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif facing_spot >= 0 and night_bar.is_threat(facing_spot):
 		# T6.4 잡귀가 깃든 스폿을 바라볼 때: 우클릭으로 막는다(즉시 격퇴). 막으러 오느라 카운터를
 		# 비운 사이 손님이 닳는 게 ★ 막기↔응대 경쟁의 비용이다(ADR-0010 #4).
@@ -2448,117 +2517,113 @@ func _show_flavor(crop_id: String) -> void:
 		return  # 사연이 없는 작물이면 조용히 넘어간다(표시할 게 없음)
 	_notice(line, FLAVOR_SECS)
 
-# ── T3.1/T5.3 멜 카페 출하대 ───────────────────────────────────────────────
-# 멜이 카운터 얼굴이라 멜을 바라볼 때만 동작한다(T5.3 — 무인 카운터 제거, '멜 앞에서만'
-# 패턴). F로 패널을 토글하고, 열린 동안 S=수확물 전량 판매, B=선택 작물 씨앗 구매. 멜
-# 앞을 벗어나거나 자는 중이면 자동으로 닫힌다(이동하면 닫혀 상태가 새지 않는다). 키가
-# E(대화)·G(선물)과 갈려 멜 앞에서 세 동사가 충돌하지 않는다(기존 판매/구매는 그대로).
-func _process_shop(facing_mel: bool) -> void:
-	if _sleeping or not facing_mel:
-		_shop_open = false
-		return
-	if Input.is_action_just_pressed("shop_toggle"):
-		_shop_open = not _shop_open
-		audio.sfx("ui")                       # P2.6 출하대 패널 열고/닫기 블립
-	if not _shop_open:
-		return
-	if Input.is_action_just_pressed("shop_sell"):
-		_sell_all()
-	if Input.is_action_just_pressed("shop_buy"):
-		_buy_seed(_selected_crop)
+# ── ★ C2 공통 프레임 열기/닫기(메뉴/출하함/매대 모달) ───────────────────────
+# 프레임을 컨텍스트로 연다 — 이동을 잠그고(대화·취침과 같은 결) 핫바를 숨긴다(프레임이 백팩을
+# 그리므로 이중 표시 방지). 닫으면 되돌린다. 메뉴는 Tab 어디서든, 출하함은 facing_bin 우클릭,
+# 매대는 facing_neo F가 부른다(위 _process 입력 체인). 한 번에 한 컨텍스트만 열린다.
+func _open_frame(ctx: int) -> void:
+	if ctx == InventoryFrame.CTX_STORE:
+		frame.store_text = _store_text()   # 첫 그림부터 매대 본문이 차 있게(한 프레임 빈 패널 방지)
+	frame.open(ctx)
+	hotbar.visible = false
+	player.set_physics_process(false)   # 모달 — 이동 잠금
+	player.velocity = Vector2.ZERO
+	audio.sfx("ui")                     # 패널 열림 블립(옛 출하대·매대와 같은 SFX)
 
-# 수확물 전량을 판매가(sell_price)로 환산해 골드로 바꾼다 — 순환의 '수확물 → 골드'.
-func _sell_all() -> void:
-	var total := 0
-	for id in inventory.harvest_ids():
-		total += inventory.harvest_count(id) * CropCatalog.sell_price(id)
-	if total <= 0:
-		_notice("팔 수확물이 없다")
-		return
-	inventory.clear_harvest()
-	wallet.earn(total)
-	audio.sfx("gold")                         # P2.6 동전 "치링"(raw 판매 골드 획득)
-	_notice("판매 +%d골드" % total)
+func _close_frame() -> void:
+	frame.close()
+	hotbar.visible = true
+	player.set_physics_process(true)
 
-# 선택 작물 씨앗 1개를 seed_cost로 산다 — 순환의 '골드 → 씨앗'. 골드가 모자라면 막는다.
-func _buy_seed(crop_id: String) -> void:
-	var cost := CropCatalog.seed_cost(crop_id)
-	if cost <= 0:
+# ── ★ C2 무인 출하함 드롭/롤백(프레임 시그널 핸들러) ──────────────────────────
+# 출하함 패널에서 백팩 수확물 슬롯을 클릭하면 그 슬롯을 통째로 출하 대기에 넣는다(인벤토리에서
+# 빠짐 → ship_bin pending). 수확물만 받는다(씨앗·도구는 드롭 불가 — 출하 = 판매). 익일 아침
+# day_advanced에서 settle이 골드로 정산한다(즉시판매 제거 — 스타듀 출하상자 결, ADR-0021).
+func _on_frame_deposit(slot_index: int) -> void:
+	var id := inventory.id_at(slot_index)
+	if id == "" or ItemCatalog.category_of(id) != ItemCatalog.CAT_HARVEST:
+		return   # 수확물 외(씨앗·도구)는 출하 대상이 아니다 — 무동작
+	var n := inventory.count_at(slot_index)
+	if not inventory.remove_item(id, n):
 		return
-	if not wallet.spend(cost):
-		_notice("골드 부족(%d 필요)" % cost)
-		return
-	inventory.add_seed(crop_id)
-	audio.sfx("ui")                           # P2.6 상점 거래 블립(씨앗 구매)
-	_notice("%s 씨앗 −%d골드" % [CropCatalog.name_of(crop_id), cost])
+	ship_bin.add(id, n)
+	audio.sfx("ui")
+	_notice("출하함에 %s %d개 (다음 아침 정산)" % [ItemCatalog.name_of(id), n])
 
-# 멜 카페 출하대 패널 본문(골드·수확물 판매 예상액·씨앗 구매가·조작 안내). 헤더에 멜이
-# 운영하는 카운터임을 드러낸다(T5.3 — 무인 카운터가 아니라 멜이 골드로 쳐준다).
-func _shop_text() -> String:
-	var sell_total := 0
-	for id in inventory.harvest_ids():
-		sell_total += inventory.harvest_count(id) * CropCatalog.sell_price(id)
-	var sel := _selected_crop
-	return "\n".join([
-		"── 멜의 카페 출하대 ──",
-		"골드 %d" % wallet.gold,
-		"수확물 %d개 → %d골드" % [inventory.total_harvest(), sell_total],
-		"[S] 전량 판매",
-		"[B] %s 씨앗 (−%d골드 · 보유 %d)" % [
-			CropCatalog.name_of(sel), CropCatalog.seed_cost(sel), inventory.seed_count(sel)
-		],
-		"[Q] 작물 변경    [F] 닫기",
-	])
-
-# ── M2.3 네오 만물상 매대 ───────────────────────────────────────────────────
-# 네오가 매대 얼굴이라 네오를 바라볼 때만 동작한다(멜 출하대와 같은 '점주 앞에서만' 패턴). F로
-# 패널을 토글하고, 열린 동안 B=선택 작물 씨앗 구매(네오 할인가). 네오 앞을 벗어나거나 자는 중이면
-# 자동으로 닫힌다(이동하면 닫혀 상태가 새지 않는다). ★ 만물상은 *구매 전용* — 수확물 판매·환전은
-# 멜 출하대의 몫이다(서비스 분산, world-map.md / ADR-0015: "카페 출하대(멜, 판매·씨앗)는 유지").
-func _process_store(facing_neo: bool) -> void:
-	if _sleeping or not facing_neo:
-		_store_open = false
+# 출하함 대기 슬롯을 클릭하면 그 분을 통째로 인벤토리에 도로 넣는다(취침 전 롤백 — "잘못 넣었네"
+# 회수). 인벤토리가 가득 차 일부만 들어가면 그만큼만 빼낸다(들어간 만큼만 대기에서 차감).
+func _on_frame_takeback(id: String) -> void:
+	var want := ship_bin.count_of(id)
+	if want <= 0:
 		return
-	if Input.is_action_just_pressed("shop_toggle"):
-		_store_open = not _store_open
-		audio.sfx("ui")                       # 매대 패널 열고/닫기 블립(출하대와 같은 SFX)
-	if not _store_open:
-		return
-	if Input.is_action_just_pressed("shop_buy"):
-		_buy_seed_store(_selected_crop)
+	var added := 0
+	for _i in want:
+		if not inventory.add_item(id, 1):
+			break   # 인벤토리 가득 — 더는 못 받는다
+		added += 1
+	if added > 0:
+		ship_bin.take_back(id, added)
+		audio.sfx("ui")
+		_notice("출하함에서 %s %d개 회수" % [ItemCatalog.name_of(id), added])
 
-# 선택 작물 씨앗 1개를 *네오 할인가*로 산다 — 순환의 '골드 → 씨앗'(멜 출하대 _buy_seed의 만물상판).
-# 가격은 정가(seed_cost)에 네오 호감도 할인을 먹인 값(StoreDiscount). 골드가 모자라면 막는다.
+# ── ★ C2 네오 만물상 매대 구매(프레임 시그널 핸들러) ──────────────────────────
+# 매대에서 [구매] 버튼을 클릭하면 선택 작물 씨앗을 네오 할인가로 산다. bulk(Shift)=대량(BULK개,
+# 골드 닿는 데까지). ★ 만물상은 *구매 전용·구매 일원화* — 멜 출하대 씨앗 구매(_buy_seed)가
+# 사라져 씨앗은 네오 매대에서만 산다(ADR-0021 구매 네오 일원화). 판매는 무인 출하함.
+const STORE_BULK := 5   # Shift 대량 구매 묶음 크기(스타듀 묶음 결)
+func _on_frame_buy(bulk: bool) -> void:
+	_buy_seed_store_n(_selected_crop, STORE_BULK if bulk else 1)
+
+# 선택 작물 씨앗 1개를 *네오 할인가*로 산다(매대 클릭 단건). 골드가 모자라면 막는다.
 func _buy_seed_store(crop_id: String) -> void:
-	var base := CropCatalog.seed_cost(crop_id)
-	if base <= 0:
-		return
-	var cost := StoreDiscount.price(base, neo_affinity.hearts())
-	if not wallet.spend(cost):
-		_notice("골드 부족(%d 필요)" % cost)
-		return
-	inventory.add_seed(crop_id)
-	audio.sfx("ui")                           # 매대 거래 블립(씨앗 구매)
-	_notice("%s 씨앗 −%d골드 (만물상)" % [CropCatalog.name_of(crop_id), cost])
+	_buy_seed_store_n(crop_id, 1)
 
-# 네오 만물상 매대 패널 본문(골드·씨앗 할인가·할인율·조작 안내). 헤더에 네오가 운영하는 매대임을
-# 드러낸다. 정가 대비 할인가를 함께 보여 줘 "친해질수록 싸진다"는 퍼크를 거래 시점에 체감하게 한다.
+# 선택 작물 씨앗을 네오 할인가로 n개까지 산다(골드 닿는 데까지 — 부분 구매 허용). 한 개도 못
+# 사면 골드 부족을 알린다. 가격은 정가(seed_cost)에 네오 호감도 할인을 먹인 값(StoreDiscount).
+func _buy_seed_store_n(crop_id: String, n: int) -> void:
+	var base := CropCatalog.seed_cost(crop_id)
+	if base <= 0 or n <= 0:
+		return
+	var unit := StoreDiscount.price(base, neo_affinity.hearts())
+	var bought := 0
+	for _i in n:
+		if not wallet.spend(unit):
+			break
+		inventory.add_seed(crop_id)
+		bought += 1
+	if bought == 0:
+		_notice("골드 부족(%d 필요)" % unit)
+		return
+	audio.sfx("ui")                           # 매대 거래 블립(씨앗 구매)
+	_notice("%s 씨앗 ×%d −%d골드 (만물상)" % [CropCatalog.name_of(crop_id), bought, unit * bought])
+
+# 네오 만물상 매대 패널 본문(프레임 상단에 그릴 텍스트 — 골드·할인율·씨앗 할인가). 정가 대비
+# 할인가를 함께 보여 줘 "친해질수록 싸진다"는 퍼크를 거래 시점에 체감하게 한다(읽기용 문자열).
 func _store_text() -> String:
 	var sel := _selected_crop
 	var base := CropCatalog.seed_cost(sel)
 	var hearts := neo_affinity.hearts()
 	var cost := StoreDiscount.price(base, hearts)
 	# 할인이 걸렸으면 "정가→할인가"를, 정가면 가격 하나만 보인다(♡0 평평≠막힘).
-	var price_line := "[B] %s 씨앗 (−%d골드 · 보유 %d)" % [CropCatalog.name_of(sel), cost, inventory.seed_count(sel)]
+	var price_line := "%s 씨앗  −%d골드  · 보유 %d" % [CropCatalog.name_of(sel), cost, inventory.seed_count(sel)]
 	if cost < base:
-		price_line = "[B] %s 씨앗 (정가 %d → −%d골드 · 보유 %d)" % [CropCatalog.name_of(sel), base, cost, inventory.seed_count(sel)]
+		price_line = "%s 씨앗  정가 %d → −%d골드  · 보유 %d" % [CropCatalog.name_of(sel), base, cost, inventory.seed_count(sel)]
 	return "\n".join([
 		"── 네오의 만물상 매대 ──",
 		"골드 %d" % wallet.gold,
 		StoreDiscount.summary(hearts),
 		price_line,
-		"[Q] 작물 변경    [F] 닫기",
 	])
+
+# 관계 탭(메뉴) 하트 행 — 미호·멜·바나·네오 호감도를 읽기 전용으로 프레임에 넘긴다(HeartBar 재사용).
+# affinity 노드들에서 매번 파생하므로 별도 상태가 없다(여기서 호감도를 바꾸지 않는다 — 읽기 전용).
+func _heart_rows() -> Array:
+	return [
+		{"name": "미호", "filled": affinity.hearts(), "total": Affinity.MAX_HEARTS},
+		{"name": "멜", "filled": mel_affinity.hearts(), "total": Affinity.MAX_HEARTS},
+		{"name": "바나", "filled": bana_affinity.hearts(), "total": Affinity.MAX_HEARTS},
+		{"name": "네오", "filled": neo_affinity.hearts(), "total": Affinity.MAX_HEARTS},
+	]
 
 # ── T4.1 온보딩 ────────────────────────────────────────────────────────────
 # 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다(CONTEXT
@@ -3042,6 +3107,7 @@ func _draw() -> void:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
 			_draw_props_for(PROP_LAYOUT_CAFE)  # 카페 무대 가구·카페 등불
+			_draw_ship_bin()         # ★ C2 무인 출하함 상자(카페 안 — 카페 카메라에서만 보임)
 			# M2.4 — 이벤트 데이면 카페 무대를 축제 장식으로(가구 위에 가랜드·무대 카펫 덧그림).
 			if Festival.is_event_day(clock.day):
 				_draw_cafe_festival()
@@ -3082,6 +3148,22 @@ func _draw_facade_home() -> void:
 
 func _draw_facade_cafe() -> void:
 	draw_texture_rect(FACADE_CAFE, Rect2(Vector2(CAFE_EXT_RECT.position * TILE), FACADE_CAFE.get_size()), false)
+
+# ★ C2 무인 출하함 상자(그레이박스 — 진짜 아트는 후속). SHIP_BIN_TILE 칸에 나무 궤짝 형태를
+# 절차 도형으로 그린다(가구 프롭과 같은 결 — 충돌·세이브 없는 순수 장식, 상태는 ship_bin이 든다).
+# 카페 카메라(CAFE_CAM_RECT)만 이 칸을 비추므로 카페 안에서만 보인다(손님·잡귀 그리기와 같은 결).
+func _draw_ship_bin() -> void:
+	var ox := SHIP_BIN_TILE.x * TILE
+	var oy := SHIP_BIN_TILE.y * TILE
+	var box := Rect2(ox + 3, oy + 8, TILE - 6, TILE - 12)
+	draw_rect(box.grow(1.0), Color(0.20, 0.14, 0.09))           # 외곽선(어두운 나무)
+	draw_rect(box, Color(0.46, 0.32, 0.18))                     # 궤짝 본체(나무빛)
+	draw_rect(Rect2(box.position, Vector2(box.size.x, 4)), Color(0.58, 0.42, 0.24))  # 뚜껑 밝은 띠
+	# 정면 빗금 두 줄(널판 이음새)로 "상자"임을 읽히게 한다.
+	draw_rect(Rect2(box.position.x, box.position.y + box.size.y * 0.5, box.size.x, 1), Color(0.28, 0.19, 0.11))
+	# 대기 중이면 살짝 열린 표시(밝은 점) — "넣어 둔 게 있다"를 눈에 보이게.
+	if ship_bin != null and not ship_bin.is_empty():
+		draw_rect(Rect2(ox + TILE * 0.5 - 2, oy + 4, 4, 4), Color(0.90, 0.82, 0.45))
 
 # ★ M2.5 — 나루 마을 메인 집 3채 외관(카페와 같은 결 — 통과 불가 WALL 박스 위 1:1 덮어 그리기).
 # 본체 캐릭터별 재도색이라 라벨 없이 외관만으로 누구 집인지 읽힌다(카페 컨벤션). 그리기 전용 —

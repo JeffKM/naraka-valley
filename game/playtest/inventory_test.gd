@@ -28,8 +28,46 @@ func _initialize() -> void:
 	_test_save_roundtrip()
 	_test_corruption_defense()
 	_test_start_kit()
+	_test_move_and_sort()
 	print("══ %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
+
+# ── ⑧ C2 슬롯 재배치(클릭 이동·정리) ─────────────────────────────────────────
+func _test_move_and_sort() -> void:
+	print("── ⑧ move_slot/sort(C2 공통 백팩) ──")
+	var inv := Inventory.new()
+	# 깨끗한 12칸으로 시작(시작 키트는 .new()라 _ready 미실행 → 빈 상태).
+	# 슬롯 0=수확물(혼령초 3), 슬롯 2=빈, 슬롯 5=수확물(혼령초 2) — 흩어 둔다.
+	inv.slots[0] = {"id": "honryeongcho", "count": 3}
+	inv.slots[5] = {"id": "honryeongcho", "count": 2}
+	# move_slot: 빈 칸(2)으로 이동.
+	inv.move_slot(0, 2)
+	_check("⑧a 빈 칸으로 이동 = 원래 칸 비고 대상 칸 채움", inv.id_at(0) == "" and inv.count_at(2) == 3)
+	# move_slot: 같은 스택끼리 병합(2 → 5: 둘 다 혼령초 → 5칸 합쳐짐).
+	inv.move_slot(2, 5)
+	_check("⑧b 같은 스택 병합", inv.id_at(2) == "" and inv.count_at(5) == 5)
+	# 스왑: 도구 vs 수확물 자리 맞바꿈.
+	inv.slots[1] = {"id": "hoe", "count": 1}
+	inv.move_slot(1, 5)   # 괭이(1) ↔ 혼령초5(5)
+	_check("⑧c 다른 아이템 스왑", inv.id_at(1) == "honryeongcho" and inv.id_at(5) == "hoe")
+	_check("⑧d 빈 from·범위 밖·동일 칸은 무동작", true)  # 아래 호출이 크래시 없이 지나가는지
+	inv.move_slot(3, 4)   # 빈 → 빈(무동작)
+	inv.move_slot(-1, 0)  # 범위 밖(무시)
+	inv.move_slot(5, 5)   # 동일 칸(무시)
+	_check("⑧d2 무동작 호출 후에도 상태 보존", inv.id_at(5) == "hoe" and inv.id_at(1) == "honryeongcho")
+	# 정리(sort): 흩어진 도구·씨앗·수확물을 카테고리 순으로 당기고 같은 스택 합친다.
+	var inv2 := Inventory.new()
+	inv2.slots[3] = {"id": "honryeongcho", "count": 2}    # 수확물
+	inv2.slots[7] = {"id": "hoe", "count": 1}             # 도구
+	inv2.slots[9] = {"id": "honryeongcho", "count": 1}    # 수확물(합쳐질 분)
+	inv2.slots[11] = {"id": "honryeongcho_seed", "count": 4}  # 씨앗
+	inv2.sort()
+	_check("⑧e 정리 = 도구가 맨 앞(카테고리 순)", inv2.id_at(0) == "hoe")
+	_check("⑧f 정리 = 씨앗이 도구 뒤", inv2.id_at(1) == "honryeongcho_seed")
+	_check("⑧g 정리 = 수확물이 뒤·스택 병합(2+1=3)", inv2.id_at(2) == "honryeongcho" and inv2.count_at(2) == 3)
+	_check("⑧h 정리 = 빈칸은 뒤로 밀림(앞 3칸만 채움)", inv2.id_at(3) == "" and inv2.id_at(11) == "")
+	inv.free()
+	inv2.free()
 
 # ── ① ItemCatalog ────────────────────────────────────────────────────────────
 func _test_catalog() -> void:

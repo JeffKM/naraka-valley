@@ -122,12 +122,16 @@ func _initialize() -> void:
 	m._buy_seed_store(crop)
 	_check("④d 골드 부족이면 구매 막힘(씨앗 불변)", m.inventory.seed_count(crop) == seeds_before and m.wallet.gold == 0)
 
-	# ── ⑤ 구매 전용(서비스 분산) ──
+	# ── ⑤ 구매 전용(서비스 분산) — ★ C2: 멜 출하대 폐지, 판매=무인 출하함 ──
 	print("── ⑤ 구매 전용 ──")
 	var st: String = m._store_text()
-	var sh: String = m._shop_text()
-	_check("⑤a 만물상 매대 = '매대' 헤더 + 판매 없음", st.contains("매대") and not st.contains("전량 판매"))
-	_check("⑤b 멜 출하대 = '출하대' + 전량 판매(불변)", sh.contains("출하대") and sh.contains("전량 판매"))
+	_check("⑤a 만물상 매대 = '매대' 헤더 + 판매/출하 없음", st.contains("매대") and not st.contains("전량 판매") and not st.contains("판매"))
+	# ★ C2 — 멜 출하대(_shop_text)는 폐지됐다. 판매 채널 = 무인 출하함(ship_bin, 익일 정산).
+	m.ship_bin.pending.clear()
+	m.ship_bin.add(crop, 2)
+	var sell_expect: int = 2 * CropCatalog.sell_price(crop)
+	_check("⑤b 판매 = 무인 출하함 익일 정산(판매가 합)", m.ship_bin.preview_gold() == sell_expect and m.ship_bin.settle() == sell_expect)
+	m.ship_bin.pending.clear()
 
 	# ── ⑥ 호감도 = 대화 한 채널(이 슬라이스 범위 — 풀 T1 트랙은 후속) ──
 	print("── ⑥ 호감도(대화 채널) ──")
@@ -145,12 +149,15 @@ func _initialize() -> void:
 	m._start_neo_dialogue()
 	_check("⑥c 같은 날 두 번째는 점수 불변", m.neo_affinity.points == after_first)
 
-	# ── ⑧ 회귀 0 — 멜 출하대는 네오 할인을 안 받는다 ──
-	print("── ⑧ 회귀(서비스 분산 격리) ──")
-	m.neo_affinity.points = m.neo_affinity.MAX_POINTS   # ♡5라도
+	# ── ⑧ 구매 일원화(★ C2) + Shift 대량 ──
+	print("── ⑧ 구매 일원화 + 대량 ──")
+	# ★ C2 — 씨앗 구매는 네오 매대로 일원화됐다(멜 출하대 _buy_seed 폐지). Shift 대량 구매 검증.
+	m.neo_affinity.points = 0   # ♡0 정가(환산 단순)
 	m.wallet.gold = 1000
-	m._buy_seed(crop)   # 멜 출하대 구매(_process_shop이 부르는 함수)
-	_check("⑧a 멜 출하대 씨앗은 정가(네오 ♡5 무관)", m.wallet.gold == 1000 - base)
+	var seeds_b: int = m.inventory.seed_count(crop)
+	m._on_frame_buy(true)   # Shift 대량(STORE_BULK개)
+	_check("⑧a Shift 대량 구매 = STORE_BULK개", m.inventory.seed_count(crop) == seeds_b + m.STORE_BULK)
+	_check("⑧a2 대량 구매 골드 차감 = 정가×묶음", m.wallet.gold == 1000 - base * m.STORE_BULK)
 	_check("⑧b 만물상 카탈로그 = store 종류 불변", m._buildings["만물상"]["kind"] == "store")
 
 	# ── ⑦ 세이브 라운드트립(네오 호감도) ──

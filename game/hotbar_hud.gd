@@ -31,11 +31,22 @@ func setup(inventory: Inventory, icons: Dictionary) -> void:
 		inv.changed.connect(queue_redraw)
 	queue_redraw()
 
+# 부모 CanvasLayer가 UI scale(ADR-0018 ×1.5)을 먹어, 전체화면 앵커 Control의 size(=960×540)는
+# *논리 좌표*가 아니다 — 화면에 실제로 보이는 영역은 size / scale(=640×360)다. 이걸 무시하면 핫바가
+# 화면 아래(y≈726)로 밀려 안 보인다(C2 프레임과 같은 스케일 함정 — 보이는 영역 기준으로 배치).
+func _view() -> Vector2:
+	var sc := 1.0
+	var par := get_parent()
+	if par is CanvasLayer and par.scale.x != 0.0:
+		sc = par.scale.x
+	return Vector2(size.x / sc, size.y / sc)
+
 func _draw() -> void:
 	if inv == null:
 		return
+	var view := _view()
 	var total_w := SLOTS * SLOT_PX + (SLOTS - 1) * GAP
-	var origin := Vector2((size.x - total_w) * 0.5, size.y - SLOT_PX - MARGIN_BOTTOM)
+	var origin := Vector2((view.x - total_w) * 0.5, view.y - SLOT_PX - MARGIN_BOTTOM)
 	for i in SLOTS:
 		var pos := origin + Vector2(i * (SLOT_PX + GAP), 0.0)
 		_draw_slot(i, pos)

@@ -109,11 +109,13 @@ func _run_checks() -> void:
 	if night_seat >= 0:
 		m1._try_night_serve(night_seat)
 	_check("⑤c 밤 바 응대도 같은 누적에 합류(카페/밤 = 카페 운영 매출)", m1._cafe_revenue_total > before_night)
-	# 출하대 raw 판매는 누적에 안 든다(마일스톤은 카페를 *운영한* 매출만 — ADR-0009).
+	# ★ C2 — 무인 출하함 raw 판매(익일 정산)는 누적에 안 든다(마일스톤은 카페를 *운영한* 매출만 — ADR-0009).
 	var before_raw: int = m1._cafe_revenue_total
-	m1.inventory.add_harvest(CropCatalog.HONRYEONGCHO)
-	m1._sell_all()
-	_check("⑤d raw 출하대 판매는 마일스톤 매출에 안 듦(운영 매출만)", m1._cafe_revenue_total == before_raw)
+	var gold_before: int = m1.wallet.gold
+	m1.ship_bin.add(CropCatalog.HONRYEONGCHO, 1)
+	m1._on_day_advanced(m1.clock.day)   # 익일 settle → wallet엔 들어가되 마일스톤 매출엔 안 듦
+	_check("⑤d raw 출하함 정산은 마일스톤 매출에 안 듦(운영 매출만)", m1._cafe_revenue_total == before_raw)
+	_check("⑤e raw 출하함 정산은 골드엔 들어감(판매 자체는 유효)", m1.wallet.gold > gold_before)
 	m1.free()
 
 	# ══════════════ ⑥ 세 루프 산출물 파생 + 1단 완료 → "카페 2단계!" 팝업(래치 1회) ══════════════

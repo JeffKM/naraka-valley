@@ -268,10 +268,11 @@
   - `inventory.gd` 2-Dictionary → **단일 슬롯 배열**(12칸 고정·확장 예약, 도구=유니크/씨앗·수확물=스택, 슬롯 직렬화·새 세이브 포맷).
   - **마우스 입력 피벗(ADR-0024)** — 핫바(하단 12칸·숫자키/휠 선택) + 커서→인접1칸 타게팅·하이라이트·커서쪽 facing + **LMB=도구 사용 / RMB=액션**. `field.next_action`/`interact` 강제순서 폐기 → `field.hoe/water/plant/harvest` 직접 호출, `Q` 제거. 농사·NPC·서빙·밤 입력 전부 2채널 재배선 + 회귀 재작성(회귀 0 불변식).
   - ▶ 플레이: 핫바서 괭이 골라 LMB로 갈고 씨앗 심고 RMB로 수확/대화 — **스타듀 손맛 첫 등장.**
-- [ ] **C2 — 공통 인벤토리 프레임 + 월드 패널 + 메뉴 (§3.4 불변식)**
+- [x] **C2 — 공통 인벤토리 프레임 + 월드 패널 + 메뉴 (§3.4 불변식)** — ✅ **완료(2026-06-24)**
   - 하단 *플레이어 가방* 고정 + 상단 레이어 교체. **메뉴**(키 토글): 인벤토리 탭(정리)·**관계 탭**(하트 읽기 전용, `HeartBar` 재사용)·스킬/지도 자리 예약.
   - **월드 패널**(다가가 열림, 백팩-하단 공유): **무인 출하함**(드롭→롤백→익일 정산, 멜 F 제거) · **네오 매대**(구매·Shift 대량·구매 일원화) · 대화창(`dialogue.gd`·초상화) · 일일 정산(`summary.gd`·카페 정산 — UI 셸만 공유, 백팩 불변식 밖).
   - ▶ 플레이: 메뉴로 가방·하트 보고, 출하함에 넣어 팔고, 매대서 산다.
+  - **구현:** `inv_frame.gd`(`InventoryFrame` Control — 하단 백팩 공통 + 상단 컨텍스트 교체: 메뉴(인벤토리 탭=백팩+정리 / 관계 탭=`HeartBar` 4개 재사용 읽기 전용)·출하함(대기 슬롯+정산 미리보기)·매대(구매 본문). 코드 생성 자식, `inventory`/`ship_bin` `changed`로만 redraw, 마우스 클릭 `_gui_input` 라우팅 — 드롭·롤백·구매는 시그널로 `main`이 wallet·inventory 조율, 모달 이동 잠금). `shipping_bin.gd`(`ShippingBin` — wallet·inventory 결의 대기 재고 노드: `add`/`take_back`/`preview_gold`/`settle`+세이브, 가격=`ItemCatalog.price_of` 위임). `inventory.gd`에 `move_slot`(클릭 이동·스왑·병합)·`sort`(정리=카테고리순 압축+스택 병합) 추가. `main.gd`: 멜 출하대 F(`_process_shop`·`_sell_all`·`_buy_seed`·`_shop_text`)·만물상 폴링(`_process_store`) 전면 폐기 → 멜=우클릭 대화·G 선물만(ADR-0021 무인화). 무인 출하함 `SHIP_BIN_TILE`(카페 안 우클릭으로 패널)·드롭=인벤 차감+`ship_bin` 대기·취침 전 롤백·`_on_day_advanced`서 `settle`→`wallet.earn`(즉시판매→익일 정산, 마일스톤 누적엔 미포함 — ADR-0009). 씨앗 구매=네오 매대 일원화+Shift 대량(`STORE_BULK`). 메뉴 `Tab` 토글·`E` 탭 순환·`Esc` 닫기. **세이브 새 조각** `shipping_bin`(롤백·정산 보존, SaveManager 불변). ★ 부수: C1 핫바가 CanvasLayer ×1.5 스케일 함정으로 화면 밖(y≈726) 렌더되던 버그를 `_view()`(=size/scale)로 수정 — 핫바·프레임 모두 보이는 640×360 논리 영역 기준 배치. **검증:** 헤드리스 단위검증 신규 3종(`shipping_bin_test` 롤백·정산·세이브 / `frame_test` 메뉴 열기·탭·하트·모달 / `inventory_test` ⑧ `move_slot`·`sort`) + `store_test`·`milestone_test` 갱신(멜 출하대→출하함·구매 일원화) PASS, 회귀 전체 28스위트 + 21일 봇 9/9 PASS, 부팅 클린, GPU 덤프 4컨텍스트 육안 확인(`tools/c2_frame_dump.gd`). → 다음은 **C3(HUD 미니멀 정리)**.
 - [ ] **C3 — HUD 미니멀 정리 + 알림 피드 + 온보딩 재작성**
   - 상시 라벨(하트5·여우불·카페·밤·마일스톤) → 관계 탭/좌하단 알림 피드/시계옆 아이콘으로 이전. 우상단 시계 클러스터(시간·날짜·**날씨 예약**·골드) + 우하단 **혼력 바**(체력 바 *자리만 예약*, Phase 3 ⑤ 전투). 960×540·UI scale 1.5(ADR-0018).
   - 온보딩(T4.1) = 마우스 도구 선택 튜토리얼로 재작성.

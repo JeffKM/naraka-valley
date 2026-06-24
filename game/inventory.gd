@@ -161,6 +161,77 @@ func select_next() -> void:
 func select_prev() -> void:
 	select((selected_index - 1 + slots.size()) % slots.size())
 
+# ── 슬롯 재배치(클릭 이동·정리, Phase 2.7 C2 공통 백팩) ────────────────────────
+# 슬롯 from을 슬롯 to로 옮긴다(백팩 클릭 이동). 같은 스택 아이템이면 합치고(병합),
+# 아니면 자리를 맞바꾼다(스왑). 도구(유니크)는 합치지 않고 스왑만 한다. 범위 밖·같은 칸·
+# 빈 from은 무동작. 백팩 UI가 "집어서 다른 칸에 놓기"를 이 한 메서드로 처리한다(드래그/클릭 공통).
+func move_slot(from: int, to: int) -> void:
+	if from < 0 or from >= slots.size() or to < 0 or to >= slots.size() or from == to:
+		return
+	if slots[from] == null:
+		return
+	var src: Variant = slots[from]
+	var dst: Variant = slots[to]
+	# 빈 칸으로 옮기기 = 그대로 이동.
+	if dst == null:
+		slots[to] = src
+		slots[from] = null
+		changed.emit()
+		return
+	# 같은 스택 아이템이면 합친다(도구는 stackable=false라 이 분기에 안 듦 → 스왑).
+	if src["id"] == dst["id"] and ItemCatalog.stackable_of(src["id"]):
+		slots[to]["count"] += src["count"]
+		slots[from] = null
+		changed.emit()
+		return
+	# 그 외엔 자리 맞바꿈(스왑).
+	slots[to] = src
+	slots[from] = dst
+	changed.emit()
+
+# 정리(스타듀 'Organize'): 빈칸을 없애 앞으로 당기고, 카테고리(도구→씨앗→수확물)·id 순으로
+# 정렬한 뒤 같은 스택 id를 한 슬롯으로 합친다. 슬롯 위치가 바뀌므로 선택 인덱스는 그대로 두되
+# (빈칸 선택 가능), 메뉴 인벤토리 탭의 [정리] 버튼이 호출한다. 도구는 유니크라 합쳐지지 않는다.
+func sort() -> void:
+	# 1) 모든 비지 않은 슬롯을 모아 같은 스택 id를 합산한다.
+	var merged: Dictionary = {}   # id → 누적 개수
+	var order: Array = []         # 처음 등장 순서 보존(안정적 — 같은 키 정렬 전 베이스)
+	for s in slots:
+		if s == null:
+			continue
+		var id: String = s["id"]
+		if merged.has(id):
+			merged[id] += s["count"]
+		else:
+			merged[id] = s["count"]
+			order.append(id)
+	# 2) 카테고리(도구→씨앗→수확물→그 외) 우선, 그다음 id 알파벳 순으로 정렬한다.
+	order.sort_custom(func(a: String, b: String) -> bool:
+		var ca := _cat_rank(a)
+		var cb := _cat_rank(b)
+		if ca != cb:
+			return ca < cb
+		return a < b)
+	# 3) 슬롯을 비우고 앞에서부터 다시 채운다(빈칸 제거 = 앞으로 당김).
+	var fresh: Array = []
+	fresh.resize(SIZE)
+	var i := 0
+	for id in order:
+		if i >= SIZE:
+			break  # 칸을 넘는 분(이론상 정리로 늘지 않음)은 버리지 않게 합쳐졌으므로 발생 X
+		fresh[i] = {"id": id, "count": merged[id]}
+		i += 1
+	slots = fresh
+	changed.emit()
+
+# 카테고리 정렬 순위(도구 0 → 씨앗 1 → 수확물 2 → 그 외 3). sort 비교자가 쓴다.
+func _cat_rank(id: String) -> int:
+	match ItemCatalog.category_of(id):
+		ItemCatalog.CAT_TOOL: return 0
+		ItemCatalog.CAT_SEED: return 1
+		ItemCatalog.CAT_HARVEST: return 2
+		_: return 3
+
 # ── 씨앗(작물군 id 기반 — 내부적으로 "<작물군>_seed" 아이템에 매핑) ──────────────
 func add_seed(crop_id: String, n: int = 1) -> void:
 	if not CropCatalog.has_crop(crop_id):
