@@ -55,7 +55,7 @@ const WALL := 5     # 외벽·건물 외관(통과 X, 공용 어두운 벽돌)
 const VOID := 6     # 실내 구역 방 바깥(아무것도 안 그림 → 검은 배경이 비친다, 통과 X). 카메라 격리용 여백.
 const HOUSE_WALL := 7  # 집 실내 벽(아늑한 나무·크림 wainscoting — 통과 X)
 const CAFE_WALL := 8   # 카페 실내 벽(앤틱 버건디·우드 패널 — 통과 X)
-const WATER := 9    # 강물(통과 X — 나루 마을 동/서 분할, M2.1). 그레이박스 단색(도트 강물은 Phase 2)
+const WATER := 9    # 강물·바다·연못·호수(통과 X). ★T2 — corner terrain으로 승격(물↔풀 Wang). 통과 불가 충돌 유지.
 const TREE := 10    # 나무(통과 X — 저승 숲·미혹의 숲 밀집 나무, M4.1). 그레이박스 단색(도트 나무는 Phase 2)
 const ROCK := 11    # 바위(통과 X — 업화 갱도 바위 절벽·암반, M5.1). 그레이박스 단색(도트 바위는 Phase 2)
 const N_TILES := 12
@@ -70,14 +70,15 @@ const TERRAIN_SET := 0
 const TR_PATH := 0    # dirt path
 const TR_GRASS := 1   # muted grass
 const TR_SOIL := 2    # tilled farm soil
-# 타일 종류 → terrain id(GROUND/PATH/SOIL만 terrain으로 칠한다)
-const TILE_TERRAIN := {GROUND: TR_GRASS, PATH: TR_PATH, SOIL: TR_SOIL}
-# 실내/벽 source: 별도 source_id에 HOUSE/CAFE/WALL 3타일만 둔다.
+const TR_WATER := 3   # ★T2 — 저승 물(피안절 톤 물↔풀 Wang). 컨버터 4번째 쌍(water_grass)이 terrain id 3으로 고정.
+# 타일 종류 → terrain id(GROUND/PATH/SOIL/WATER를 terrain으로 칠한다)
+# ★T2 — WATER를 SOLID 단색 절차 타일에서 corner terrain으로 승격(물 Wang 스파이크 게이트). 통과 불가
+#   충돌은 유지(아트만 — 충돌은 _build_tileset이 source 0 물 타일에 단다). 풀↔물 경계가 corner 전환된다.
+const TILE_TERRAIN := {GROUND: TR_GRASS, PATH: TR_PATH, SOIL: TR_SOIL, WATER: TR_WATER}
+# 실내/벽 source: 별도 source_id에 HOUSE/CAFE/WALL 등 단일 면 타일만 둔다.
 const SOLID_SRC_ID := 1
-const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL, WATER, TREE, ROCK]   # 아틀라스 가로 배치 순서(= atlas x)
-# ★ M2.1 — WATER는 SOLID_TEX에 도트 텍스처가 없다(강물 도트는 Phase 2). _build_tileset이
-#   SOLID_TEX에 없는 타일은 COLORS 단색으로 절차 생성한다(그레이박스 강물). WALL과 같은 결의
-#   통과 불가 충돌 타일이라 SOLID_TILES·충돌 루프에 함께 들어간다.
+const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK]   # 아틀라스 가로 배치 순서(= atlas x)
+# ★ T2 — WATER는 더 이상 SOLID가 아니다(terrain으로 승격). TREE/ROCK는 아직 SOLID 단색(도트는 후속 T7~T9).
 # ★ M4.1 — TREE도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 숲 무대의 밀집 나무.
 # ★ M5.1 — ROCK도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 갱도 무대의 바위 절벽·암반.
 # P2.3② 단색 교체: 실내 바닥·벽을 도트 타일(create_tiles_pro 산출 16×16 PNG)로 깐다.
@@ -138,7 +139,7 @@ const COLORS := [
 	Color(0.0, 0.0, 0.0),     # VOID   — 검정(실내 방 바깥 여백, 실제로는 안 그려 배경이 비친다)
 	Color(0.40, 0.34, 0.28),  # HOUSE_WALL — 따뜻한 나무 톤(폴백)
 	Color(0.30, 0.16, 0.18),  # CAFE_WALL  — 버건디 톤(폴백)
-	Color(0.16, 0.28, 0.42),  # WATER  — 저승 강물(탁한 청록빛 — 통과 불가 강, 그레이박스)
+	Color(0.16, 0.28, 0.42),  # WATER  — ★T2 후 미사용(terrain으로 승격). 폴백·과거 참조용 잔존.
 	Color(0.11, 0.20, 0.13),  # TREE   — 저승 숲 나무(어두운 침엽 녹 — 풀 GROUND보다 짙어 빈터와 구분, 그레이박스)
 	Color(0.34, 0.22, 0.20),  # ROCK   — 업화 갱도 바위(불그스름한 암반 — 풀 GROUND보다 따뜻해 빈터와 구분, 그레이박스)
 ]
@@ -956,17 +957,39 @@ func _build_tileset() -> TileSet:
 		src.create_tile(Vector2i(i, 0))
 	ts.add_source(src, SOLID_SRC_ID)
 
-	# 3) 물리 레이어 추가 + 벽 타일(외벽 WALL·실내 벽 HOUSE_WALL·CAFE_WALL)에 꽉 찬 사각
+	# 3) 물리 레이어 추가 + 벽 타일(외벽 WALL·실내 벽 HOUSE_WALL·CAFE_WALL·TREE·ROCK)에 꽉 찬 사각
 	#    충돌 폴리곤(타일 중심 −8..8) → 통과 불가. 바닥(HOUSE/CAFE)은 충돌 없이 걷는다.
+	var SOLID_POLY := PackedVector2Array([
+		Vector2(-8, -8), Vector2(8, -8), Vector2(8, 8), Vector2(-8, 8),
+	])
 	ts.add_physics_layer()
-	for solid in [WALL, HOUSE_WALL, CAFE_WALL, WATER, TREE, ROCK]:
+	for solid in [WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK]:
 		var sx := SOLID_TILES.find(solid)
 		var td := src.get_tile_data(Vector2i(sx, 0), 0)
 		td.add_collision_polygon(0)
-		td.set_collision_polygon_points(0, 0, PackedVector2Array([
-			Vector2(-8, -8), Vector2(8, -8), Vector2(8, 8), Vector2(-8, 8),
-		]))
+		td.set_collision_polygon_points(0, 0, SOLID_POLY)
+	# ★ T2 — 물(terrain)도 통과 불가. WATER는 corner terrain이라 SOLID source가 아니라 terrain
+	#   source(0)에 든다. 물 칸에 깔리는 타일 = TR_WATER 코너를 *하나라도* 가진 타일들뿐이므로
+	#   (풀 칸은 4코너 모두 풀이라 물 코너 0 → 충돌 없음), 그 전부에 같은 −8..8 충돌을 단다.
+	#   = 옛 SOLID WATER와 동일한 통과 불가 집합(회귀 0)이되 corner 전환 아트가 입혀진다.
+	var tsrc := ts.get_source(0) as TileSetAtlasSource
+	for i in tsrc.get_tiles_count():
+		var coord := tsrc.get_tile_id(i)
+		var td := tsrc.get_tile_data(coord, 0)
+		if td.terrain_set != TERRAIN_SET:
+			continue
+		if _has_water_corner(td):
+			td.add_collision_polygon(0)
+			td.set_collision_polygon_points(0, 0, SOLID_POLY)
 	return ts
+
+# 타일이 TR_WATER 코너를 하나라도 가지나(= 물 칸에 깔리는 타일 → 통과 불가 대상).
+func _has_water_corner(td: TileData) -> bool:
+	for corner in [TileSet.CELL_NEIGHBOR_TOP_LEFT_CORNER, TileSet.CELL_NEIGHBOR_TOP_RIGHT_CORNER,
+			TileSet.CELL_NEIGHBOR_BOTTOM_LEFT_CORNER, TileSet.CELL_NEIGHBOR_BOTTOM_RIGHT_CORNER]:
+		if td.get_terrain_peering_bit(corner) == TR_WATER:
+			return true
+	return false
 
 # 타일 종류 → 단색 source의 아틀라스 좌표(HOUSE/CAFE/WALL만)
 func _solid_atlas(tile: int) -> Vector2i:
@@ -1405,9 +1428,10 @@ func _carve_village_paths() -> void:
 func _paint_grid() -> void:
 	# GROUND/PATH/SOIL은 terrain별 칸을 모아 corner 오토타일로 칠하고(경계·모서리
 	# 자동 전환), HOUSE/CAFE/WALL은 단색 source로 직접 깐다.
-	var all_terrain: Array[Vector2i] = []   # GROUND/PATH/SOIL 전부 — 풀 베이스로 단일 칠
+	var all_terrain: Array[Vector2i] = []   # GROUND/PATH/SOIL/WATER 전부 — 풀 베이스로 단일 칠(검은 구멍 0)
 	var path_cells: Array[Vector2i] = []
 	var soil_cells: Array[Vector2i] = []
+	var water_cells: Array[Vector2i] = []   # ★T2 — 풀 베이스 위에 물 terrain으로 덮어 풀↔물 corner 전환
 	var solids: Array = []   # [[cell, tile_id], ...] — terrain 칠 *뒤*에 덮는다
 	# M1.2 — 현재 구역 _grid의 실제 크기를 따른다(MAP_H/MAP_W 상수 대신). 홈베이스는
 	# MAP_H×MAP_W라 동일하지만, 구역마다 grid 크기가 달라질 M1.4+에 그대로 따라온다.
@@ -1423,6 +1447,8 @@ func _paint_grid() -> void:
 					path_cells.append(cell)
 				elif t == SOIL:
 					soil_cells.append(cell)
+				elif t == WATER:
+					water_cells.append(cell)
 			else:
 				solids.append([cell, t])
 	# ★ 모든 지형 칸을 *풀 하나로* 먼저 칠한다. 단일 연속 영역이라 base가 빈틈없이
@@ -1432,6 +1458,9 @@ func _paint_grid() -> void:
 	ground.set_cells_terrain_connect(all_terrain, TERRAIN_SET, TR_GRASS, false)
 	# 밭은 넓어 corner 전환이 자연스럽다 → terrain으로 칠해 풀↔밭 경계를 부드럽게.
 	ground.set_cells_terrain_connect(soil_cells, TERRAIN_SET, TR_SOIL, false)
+	# ★T2 — 물도 풀 베이스 위에 terrain으로 덮어 풀↔물 경계가 corner 전환된다(둑·강변 자연스러움).
+	#   풀로 먼저 칠해둔 칸을 물로 다시 칠하므로 검은 구멍 0(soil과 같은 결). 충돌은 타일셋이 든다.
+	ground.set_cells_terrain_connect(water_cells, TERRAIN_SET, TR_WATER, false)
 	# 길은 1칸 폭 동선이라 전환에 묻힌다 → base 흙길 타일을 직접 깔아 또렷하게(동선 안내).
 	var path_base := _terrain_base_atlas(TR_PATH)
 	for c in path_cells:
