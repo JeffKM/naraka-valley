@@ -129,7 +129,7 @@ func _run(p: Persona) -> Dictionary:
 	var cafe := Cafe.new();      cafe._ready()
 	var night := NightBar.new(); night._ready()
 	for id in Inventory.START_SEEDS:           # 새 게임 시작 씨앗(혼령초 3)
-		inv.seeds[id] = Inventory.START_SEEDS[id]
+		inv.add_seed(id, Inventory.START_SEEDS[id])  # ★C1 슬롯 인벤토리: 의미 API로 지급(.new()라 _ready 미실행)
 
 	var plots: Array = []
 	for i in N_PLOTS:
@@ -396,7 +396,7 @@ func _has_growing(farm: FarmField, plots: Array) -> bool:
 func _cheapest_harvest(inv: Inventory) -> String:
 	var best := ""
 	var best_price := 1 << 30
-	for id in inv.harvested:
+	for id in inv.harvest_ids():
 		var pr := CropCatalog.sell_price(id)
 		if pr < best_price:
 			best_price = pr
@@ -417,7 +417,7 @@ func _deduct_raid(inv: Inventory, n: int) -> int:
 # 수확물 전량을 판매가로 환산해 골드로(main._sell_all과 동일 — 단일 루프 raw 덤프).
 func _sell_all(inv: Inventory, wallet: Wallet) -> void:
 	var total := 0
-	for id in inv.harvested:
+	for id in inv.harvest_ids():
 		total += inv.harvest_count(id) * CropCatalog.sell_price(id)
 	if total > 0:
 		inv.clear_harvest()

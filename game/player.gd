@@ -49,6 +49,18 @@ func _update_sprite(dir: Vector2) -> void:
 func get_facing() -> Vector2:
 	return _facing
 
+# ★ ADR-0024 — 마우스 커서(월드 좌표) 쪽으로 돌아본다. 도구 사용·조준 방향을 커서가 정하는
+# 스킴이라 main이 매 프레임 대상 칸 방향으로 호출한다. 4방향 스냅(더 큰 축)으로 그레이박스 마커·
+# 워크 스프라이트 방향과 결을 맞춘다. 방향이 바뀐 프레임에만 다시 그린다(_physics_process와 동일).
+func face_toward(world_pos: Vector2) -> void:
+	var d := world_pos - global_position
+	if d == Vector2.ZERO:
+		return
+	var snapped := Vector2(sign(d.x), 0) if abs(d.x) >= abs(d.y) else Vector2(0, sign(d.y))
+	if snapped != Vector2.ZERO and snapped != _facing:
+		_facing = snapped
+		queue_redraw()
+
 func _draw() -> void:
 	if _sprite != null:
 		return  # 도색 스프라이트가 있으면 그레이박스는 안 그린다(폴백 전용)
