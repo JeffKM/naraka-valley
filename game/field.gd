@@ -19,8 +19,12 @@ class_name FarmField
 #     시계는 코드 수정 없이 이 노드를 구동한다(시그널 디커플링).
 #   - T2.5 세이브/로드 — 상태를 순수 Dictionary로만 들고 있어 그대로 직렬화된다
 #     (Vector2i 키, bool/String/int 값). 그래서 일부러 inner class를 쓰지 않는다.
-#   - 완료기준의 "순서대로"는 next_action()이 강제한다: 경작 전엔 심을 수 없고,
-#     심기 전엔 물을 줄 수 없으며, 다 자라기 전엔 수확할 수 없다.
+#   - 완료기준의 "순서대로"는 각 동사(hoe/plant/water/harvest)의 사전조건이 강제한다: 경작 전엔
+#     심을 수 없고(plant는 is_tilled 요구), 심기 전엔 물을 줄 수 없으며(water는 is_planted 요구),
+#     다 자라기 전엔 수확할 수 없다(harvest는 is_mature 요구). ★ ADR-0024(마우스 조작 피벗) —
+#     예전엔 단일 키(E)가 next_action()으로 다음 동작을 *대신 골라줬으나*, 이제 핫바에서 든 도구가
+#     동사를 정하고(괭이→hoe·물뿌리개→water·씨앗→plant·맨손 RMB→harvest) main이 직접 호출한다.
+#     동사 라우팅이 입력층(main)으로 올라가, 이 노드는 "이 칸에 이 동사가 되나"의 사전조건만 든다.
 
 signal tile_changed(tile: Vector2i)  # 칸 상태가 바뀐 프레임(main이 듣고 오버레이 갱신)
 
@@ -197,32 +201,3 @@ func load_save(data: Dictionary) -> void:
 	_tiles = tiles.duplicate(true) if typeof(tiles) == TYPE_DICTIONARY else {}
 	for t in _tiles.keys():
 		tile_changed.emit(t)
-
-# ── 단일 키 흐름 ─────────────────────────────────────────────────────────────
-# 이 칸에서 다음에 할 수 있는 동작 이름("" = 더 할 것 없음). 프롬프트·interact가 공유한다.
-func next_action(t: Vector2i) -> String:
-	if not is_tilled(t):
-		return "괭이질"
-	if not is_planted(t):
-		return "심기"
-	if is_mature(t):
-		return "수확"
-	if not is_watered(t):
-		return "물주기"
-	return ""  # 심겼고 물도 줬으나 아직 덜 자람 → 내일을 기다린다
-
-# 한 번의 상호작용: 칸 상태에 맞는 다음 동작을 수행하고 그 이름을 반환한다("" = 무동작).
-# main의 입력 한 키(E)가 이걸 호출 → 누를 때마다 괭이질→심기→물주기→(성장)→수확.
-# crop_id는 "심기" 단계에서만 쓰인다(main이 현재 선택한 작물을 넘긴다).
-func interact(t: Vector2i, crop_id: String) -> String:
-	var action := next_action(t)
-	match action:
-		"괭이질":
-			hoe(t)
-		"심기":
-			plant(t, crop_id)
-		"물주기":
-			water(t)
-		"수확":
-			harvest(t)
-	return action

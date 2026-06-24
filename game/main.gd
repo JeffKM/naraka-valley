@@ -632,6 +632,10 @@ var lighting: DayNightLighting
 # BGM을 잇고, 각 이벤트 자리에서 audio.sfx(...) 한 줄로 효과음을 쏜다.
 var audio: GameAudio
 
+# ★ ADR-0024 핫바 HUD(하단 12칸 슬롯 바). lighting·audio와 같은 결 — 코드 생성 자식, 무상태
+# (인벤토리는 별도 세이브). _setup_hotbar에서 생성·주입하고, 인벤토리 changed로만 다시 그린다.
+var hotbar: HotbarHud
+
 var _grid: Array = []  # _grid[y][x] = 타일 id
 # ★ 코지-와이드 C1 — 현재 구역 그리드 치수(RegionCatalog.size_of(_region) 파생). 전역 상수
 # MAP_W/MAP_H/OUTDOOR_H 대신 빌드 경로(_build_*/_set_tile/_build_border/_is_farmable)가 이걸 읽어
@@ -752,6 +756,7 @@ func _ready() -> void:
 	_setup_player_and_camera()
 	_setup_lighting()
 	_setup_audio()
+	_setup_hotbar()
 	_setup_clock()
 	# T3.2/T5.6 미호를 현재 시간대의 자리(아침=밭 / 15시부터=카페)에 세우고, 대사 진행
 	# 시그널을 패널·이동잠금에 연결한다. 초기 위치는 _miho_tile(기본 밭)로 두고, 로드 후
@@ -819,20 +824,40 @@ func _ready() -> void:
 		# T4.1 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다.
 		_maybe_start_intro()
 
-# 'interact' 액션을 코드로 등록한다(키 E). project.godot 수동 편집 대신 런타임
-# 조립 — 이 프로젝트의 TileSet·벽 생성과 같은 결이고, 직렬화 포맷 깨질 위험이 없다.
+# 입력 액션을 코드로 등록한다. project.godot 수동 편집 대신 런타임 조립 — 이 프로젝트의
+# TileSet·벽 생성과 같은 결이고, 직렬화 포맷 깨질 위험이 없다.
+# ★ ADR-0024(마우스 커서 조작 피벗) — 예전 단일 키 E(interact)·Q(cycle_crop)를 폐기하고,
+#   LMB(use_tool)=든 도구 사용 · RMB(action)=맨손 액션/대화 2채널 + 핫바(숫자키·휠) 선택으로 간다.
 func _ensure_input_actions() -> void:
-	if InputMap.has_action("interact"):
+	if InputMap.has_action("use_tool"):
 		return
-	InputMap.add_action("interact")
-	var ev := InputEventKey.new()
-	ev.physical_keycode = KEY_E
-	InputMap.action_add_event("interact", ev)
-	# T2.3 작물 선택 순환(키 Q). 같은 결로 런타임 등록한다.
-	InputMap.add_action("cycle_crop")
-	var ev_q := InputEventKey.new()
-	ev_q.physical_keycode = KEY_Q
-	InputMap.action_add_event("cycle_crop", ev_q)
+	# LMB = 손에 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸에 작용.
+	InputMap.add_action("use_tool")
+	var ev_lmb := InputEventMouseButton.new()
+	ev_lmb.button_index = MOUSE_BUTTON_LEFT
+	InputMap.action_add_event("use_tool", ev_lmb)
+	# RMB = 액션/대화(맨손 수확·NPC 대화·서빙·밤 막기·취침·대사 넘기기). 컨텍스트 단일 버튼.
+	InputMap.add_action("action")
+	var ev_rmb := InputEventMouseButton.new()
+	ev_rmb.button_index = MOUSE_BUTTON_RIGHT
+	InputMap.action_add_event("action", ev_rmb)
+	# 핫바 선택: 숫자키 1~9·0·-·= → 슬롯 0..11. 12칸을 한 줄로 직접 고른다(스타듀 동일).
+	var hotbar_keys := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0, KEY_MINUS, KEY_EQUAL]
+	for i in hotbar_keys.size():
+		var act_name := "hotbar_%d" % i
+		InputMap.add_action(act_name)
+		var ev_h := InputEventKey.new()
+		ev_h.physical_keycode = hotbar_keys[i]
+		InputMap.action_add_event(act_name, ev_h)
+	# 핫바 휠 선택(다음/이전 슬롯 순환). 마우스 휠 업=이전, 다운=다음(스타듀 동일).
+	InputMap.add_action("hotbar_next")
+	var ev_wd := InputEventMouseButton.new()
+	ev_wd.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	InputMap.action_add_event("hotbar_next", ev_wd)
+	InputMap.add_action("hotbar_prev")
+	var ev_wu := InputEventMouseButton.new()
+	ev_wu.button_index = MOUSE_BUTTON_WHEEL_UP
+	InputMap.action_add_event("hotbar_prev", ev_wu)
 	# T2.5 수동 저장(F5)·불러오기(F9). 자동 저장(취침)과 별개로 검증·편의용.
 	InputMap.add_action("save_game")
 	var ev_f5 := InputEventKey.new()
@@ -1540,6 +1565,18 @@ func _setup_audio() -> void:
 	add_child(audio)
 	audio.update_music(clock.minutes, _run_over, _in_cafe())
 
+# ── ★ ADR-0024 핫바 HUD ───────────────────────────────────────────────────────
+# 하단 12칸 슬롯 바를 CanvasLayer에 붙이고, 인벤토리와 작물 아이콘(CROP_SPRITES의 mature 프레임)을
+# 주입한다. 씨앗·수확물은 이 작물 도트를 재사용해 그리고, 도구는 색박스(그레이박스). 인벤토리
+# changed로만 다시 그린다(폴링 없이 디커플링). lighting·audio와 같은 결의 코드 생성 자식.
+func _setup_hotbar() -> void:
+	hotbar = HotbarHud.new()
+	$CanvasLayer.add_child(hotbar)
+	var icons := {}
+	for crop_id in CROP_SPRITES:
+		icons[crop_id] = CROP_SPRITES[crop_id][2]  # mature 프레임을 인벤 아이콘으로 재사용
+	hotbar.setup(inventory, icons)
+
 # P2.6 BGM 위치 분기: 플레이어가 카페 안인가(밭↔카페 낮 BGM을 가른다). audio는 이 불리언만
 # 받고 출처(지금=구역 판정, 나중=건물 내부 전환)는 모른다 — Phase 3 내부 전환이 와도 불변.
 func _in_cafe() -> bool:
@@ -1593,13 +1630,6 @@ func _refresh_festival() -> void:
 	okja.set_festive(f)
 	cafe.spawn_scale = Festival.spawn_scale(clock.day)   # ★seam 3: 이벤트일 손님 붐빔(단가 불침범)
 	queue_redraw()                                       # 카페 축제 장식(_draw)을 새 상태로 다시 그림
-
-# T2.3 선택 작물을 카탈로그 순서(빠른 성장 순)대로 다음 것으로 순환.
-func _cycle_crop() -> void:
-	var ids := CropCatalog.ids()
-	var i := ids.find(_selected_crop)
-	_selected_crop = ids[(i + 1) % ids.size()]
-	audio.sfx("ui")                           # P2.6 작물 선택 순환 블립
 
 func _on_collapsed() -> void:
 	_do_sleep()  # 어디서든 쓰러져 다음 날 아침으로
@@ -1986,12 +2016,12 @@ func _process(delta: float) -> void:
 	# _transition_to에서 이미 잠갔다). lighting·BGM은 위에서 이미 이었으므로 그대로 흐른다.
 	if _transitioning:
 		return
-	# T3.2 대화 중엔 다른 모든 입력을 막고 대사 넘기기(E)만 처리한다. 이동은 대화
+	# T3.2 대화 중엔 다른 모든 입력을 막고 대사 넘기기(RMB=action)만 처리한다. 이동은 대화
 	# 시작 시 player 물리를 꺼 잠가 두었고(_start_dialogue), 끝나면 다시 켠다.
 	# 패널 본문은 dialogue.changed 시그널로 갱신되므로 여기선 입력만 본다.
 	if dialogue.is_open():
 		onboarding_label.visible = false  # T4.1 대화가 화면을 채우는 동안 배너 숨김
-		if Input.is_action_just_pressed("interact"):
+		if Input.is_action_just_pressed("action"):
 			dialogue.advance()
 		return
 
@@ -2037,14 +2067,22 @@ func _process(delta: float) -> void:
 		if _milestone_popup_secs <= 0.0:
 			milestone_panel.visible = false
 
-	# T2.3 작물 선택 순환(Q). 심을 작물을 바꾼다(성장일수가 다른 3종).
-	if not _sleeping and Input.is_action_just_pressed("cycle_crop"):
-		_cycle_crop()
+	# ★ ADR-0024 핫바 선택: 숫자키(1~0,-,=)로 슬롯 직접 선택 + 휠로 순환. 든 것이 LMB 동사를 정한다.
+	# Q 작물 순환은 폐기 — 씨앗은 이제 핫바 아이템(ADR-0020 데이터 주도 아이템 위에서).
+	if not _sleeping:
+		for i in Inventory.SIZE:
+			if Input.is_action_just_pressed("hotbar_%d" % i):
+				inventory.select(i)
+		if Input.is_action_just_pressed("hotbar_next"):
+			inventory.select_next()
+		elif Input.is_action_just_pressed("hotbar_prev"):
+			inventory.select_prev()
+	# 선택 슬롯이 씨앗/수확물이면 _selected_crop(선물·구매·HUD 기준 작물)을 그 작물군으로 따라가게 한다.
+	_sync_selected_crop()
 
-	# T2.1/T2.3 밭 상호작용: 바라보는 앞 칸을 대상으로, E 한 키가 다음 단계를
-	# 수행한다(괭이질→심기→물주기→…자람…→수확). 심기엔 현재 선택 작물을 넘긴다.
-	# T2.4 행동 한 번마다 혼력을 쓴다. 혼력이 바닥나면(can_act false) 행동이 막힌다.
-	# T3.1 심기엔 씨앗이 필요하고, 수확물은 인벤토리에 쌓인다(경제 순환의 양끝).
+	# ★ ADR-0024 2채널 상호작용: 대상 칸 = 커서 밑 인접 1칸. LMB(use_tool)=든 도구 동사
+	# (괭이질·물주기·심기), RMB(action)=맨손 액션(수확·대화·서빙·막기·취침). 도구가 칸 상태에
+	# 안 맞으면 무동작(자동 분기 없음). T2.4 행동 한 번마다 혼력 소모, 바닥나면 막힌다.
 	_update_target()
 	# T5.6 미호 출퇴근: 현재 시각에 맞춰 미호를 밭/카페 자리로 옮긴다(facing 판정 전에 갱신해
 	# 같은 프레임에 새 자리로 말 걸 수 있게 한다).
@@ -2106,74 +2144,64 @@ func _process(delta: float) -> void:
 	# 좌석 줄(y=7)·잡귀 스폿 줄(y=9)이 카페 통로(y=8)를 사이에 둬, 플레이어가 위를 보면 응대·
 	# 아래를 보면 막기 — 한 번에 한쪽만 마주본다(★ 막기↔응대 경쟁의 공간적 뿌리, ADR-0010 #4).
 	var facing_spot := NIGHT_SPOT_TILES.find(_target) if not _sleeping else -1
-	if facing_miho and Input.is_action_just_pressed("interact"):
+	# ── ADR-0024 RMB(action) 컨텍스트 체인 ───────────────────────────────────────
+	# RMB는 맨손 액션/대화 — 우선순위대로 하나만 잡고 return으로 가른다. 대상 칸 종류(NPC·좌석·
+	# 스폿·밭)는 서로 배타적이라 충돌하지 않는다. 선물(G)·바 열기/출하대(F)는 별개 키라 그대로 둔다.
+	if facing_miho and Input.is_action_just_pressed("action"):
 		_start_dialogue()
 		return
-	# T3.3 미호 선물: 바라볼 때 G로 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회).
+	# T3.3 미호 선물(G): 바라볼 때 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회).
 	if facing_miho and Input.is_action_just_pressed("gift_item"):
 		_try_gift()
 		return
-	# T5.6 옥자 일상 대화: 카페 상주 옥자를 바라보며 E. 호감도·선물 없는 일상이라 G는 없다.
-	if facing_okja and Input.is_action_just_pressed("interact"):
+	# T5.6 옥자 일상 대화(RMB): 카페 상주 옥자. 호감도·선물 없는 일상이라 G는 없다.
+	if facing_okja and Input.is_action_just_pressed("action"):
 		_start_okja_dialogue()
 		return
-	# T6.1 바나 대화: 밤 무대의 바나를 바라보며 E면 대사를 연다. 좌석·밭 동작보다 먼저
-	# 처리하고 return해 대화가 우선한다. T6.2 선물: 바라볼 때 G로 선택 작물 수확물 1개를
-	# 건넨다(호감도↑, 하루 1회 — 미호·멜 선물과 같은 결).
-	if facing_bana and Input.is_action_just_pressed("interact"):
+	# T6.1 바나 대화(RMB) / T6.2 선물(G): 밤 무대의 바나를 바라볼 때. 좌석·밭보다 먼저 잡고 return.
+	if facing_bana and Input.is_action_just_pressed("action"):
 		_start_bana_dialogue()
 		return
 	if facing_bana and Input.is_action_just_pressed("gift_item"):
 		_try_bana_gift()
 		return
-	# T6.3 나라카 바 옵트인: 밤에 바나를 바라보며 F면 바를 연다(잡귀가 깃들기 시작). 멜
-	# 출하대(F)와 키는 같지만 facing_bana/facing_mel은 칸이 갈려 동시에 참이 아니고(바나=밤
-	# 무대 36,5 / 멜=카운터 33,5), 바나는 출하대가 없어 충돌하지 않는다. 안 열면 빈 밤 —
-	# 옵트인은 그 밤의 선택이지 매일 세금이 아니다(ADR-0010 #6, ADR-0008 평평≠막힘).
+	# T6.3 나라카 바 옵트인(F): 밤에 바나를 바라보며 바를 연다(별개 키 — RMB 대화와 안 겹친다).
+	# 안 열면 빈 밤 — 옵트인은 그 밤의 선택이지 매일 세금이 아니다(ADR-0010 #6, ADR-0008 평평≠막힘).
 	if facing_bana and not night_bar.is_opened() and Input.is_action_just_pressed("shop_toggle"):
 		_open_night_bar()
 		return
-	if not _sleeping and _target_valid and Input.is_action_just_pressed("interact"):
-		_try_farm_action()
-
-	# T5.1 멜 대화: 멜을 바라보며 E면 대화를 연다. 출하대 패널이 열려 있을 땐 막아
-	# (not _shop_open) 패널 조작(F·S·B)과 섞이지 않게 한다.
-	if facing_mel and not _shop_open and Input.is_action_just_pressed("interact"):
+	# T5.1 멜 대화(RMB) / T5.2 선물(G): 출하대 패널이 열렸을 땐 막아(not _shop_open) 패널 조작과 안 섞이게.
+	if facing_mel and not _shop_open and Input.is_action_just_pressed("action"):
 		_start_mel_dialogue()
 		return
-	# T5.2 멜 선물: 바라볼 때 G로 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회).
 	if facing_mel and not _shop_open and Input.is_action_just_pressed("gift_item"):
 		_try_mel_gift()
 		return
-
-	# M2.3 네오 대화: 만물상에서 네오를 바라보며 E면 대화를 연다(일일 대화로 호감도↑). 매대 패널이
-	# 열려 있을 땐 막아(not _store_open) 패널 조작(F·B)과 섞이지 않게 한다(멜 대화와 같은 결).
-	# ★ 이 슬라이스는 선물(G) 없이 *일일 대화 한 채널*로만 친해진다 — 네오는 T1 비인간이지만 풀 T1
-	#   트랙(선물·하트 이벤트·결혼)은 후속이고(ADR-0014 한 명씩), 지금은 매대 단골 할인까지만.
-	if facing_neo and not _store_open and Input.is_action_just_pressed("interact"):
+	# M2.3 네오 대화(RMB): 만물상에서 네오를 바라보며(일일 대화로 호감도↑). 매대 패널 열렸을 땐 막는다.
+	if facing_neo and not _store_open and Input.is_action_just_pressed("action"):
 		_start_neo_dialogue()
 		return
-
-	# T5.4 손님 서빙: 기다리는 손님이 앉은 좌석을 바라보며 E. 보유 재료 1개를 자동
-	# 소모하고 정액 P 골드를 즉시 번다(서사·호감도 없는 가벼운 단골 — ADR-0005). 좌석은
-	# 농사 대상이 아니라(_target_valid false) 밭 동작과 충돌하지 않는다.
-	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("interact"):
+	# T5.4 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 보유 재료 1개를 자동 소모하고 정액 골드.
+	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
 		_try_serve(facing_seat)
 		return
-
-	# T6.4 막기: 밤에 잡귀가 깃든 스폿을 바라보며 E면 즉시 격퇴한다(접근→E→쫓아냄, 전투 엔진 0).
-	# block이 막기 해소 계약 {repelled, raided}를 돌려주고, 격퇴 성공은 손실 0이다. 카운터를
-	# 비우고 여기로 오는 동안 손님 인내심이 닳는 게 ★ 막기↔응대 경쟁이다(ADR-0010 #2·#4).
-	if facing_spot >= 0 and night_bar.is_threat(facing_spot) and Input.is_action_just_pressed("interact"):
+	# T6.4 막기(RMB): 밤에 잡귀가 깃든 스폿을 바라보며 즉시 격퇴(★ 막기↔응대 경쟁, ADR-0010 #2·#4).
+	if facing_spot >= 0 and night_bar.is_threat(facing_spot) and Input.is_action_just_pressed("action"):
 		_try_block(facing_spot)
 		return
-
-	# T6.4 밤 손님 응대: 밤에 바 손님이 앉은 좌석을 바라보며 E면 정액 밤 매출을 번다(현재 자산,
-	# 재료 무소모 — 미래 자산인 재고는 잡귀 약탈 쪽이 건드린다, ADR-0010 #5). 낮 카페 서빙과
-	# 같은 좌석 줄이지만 시간이 갈려(cafe 마감 후) 한 번에 한쪽만 is_waiting이다.
-	if facing_seat >= 0 and night_bar.is_waiting(facing_seat) and Input.is_action_just_pressed("interact"):
+	# T6.4 밤 손님 응대(RMB): 바 손님 좌석을 바라보며 정액 밤 매출(재료 무소모 — 현재 자산, ADR-0010 #5).
+	if facing_seat >= 0 and night_bar.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
 		_try_night_serve(facing_seat)
 		return
+	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
+	if not _sleeping and _target_valid and Input.is_action_just_pressed("use_tool"):
+		_use_tool()
+	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
+	if not _sleeping and _target_valid and Input.is_action_just_pressed("action"):
+		_try_harvest()
+	# ★ ADR-0024 취침(RMB): 집 안이면 RMB로도 잠든다(위 ui_accept와 병행 — 어느 쪽이든).
+	if _can_sleep() and Input.is_action_just_pressed("action"):
+		_do_sleep()
 
 	# T5.3 멜 카페 출하대: 멜을 바라보며 F로 패널을 열고/닫고, 열린 동안 S로 수확물을
 	# 팔고 B로 씨앗을 산다(작은 순환을 닫는 곳). 멜이 카운터 얼굴이라 멜 앞에서만 열리고,
@@ -2188,11 +2216,8 @@ func _process(delta: float) -> void:
 		_zone_at(p), int(p.x), int(p.y), Engine.get_frames_per_second()
 	]
 	clock_label.text = "Day %d   %s   %s" % [clock.day, clock.clock_string(), clock.phase()]
-	# T2.3 선택 작물 HUD + T3.1 보유 씨앗 수(심을 수 있는지 한눈에).
-	crop_label.text = "심을 작물: %s(%d일) 씨앗%d  [Q] 변경" % [
-		CropCatalog.name_of(_selected_crop), CropCatalog.growth_days(_selected_crop),
-		inventory.seed_count(_selected_crop)
-	]
+	# ★ ADR-0024 핫바 HUD: 든 아이템(슬롯) + 선택 안내. 든 게 씨앗이면 보유 수·작물도 보여 준다.
+	crop_label.text = _hotbar_summary()
 	# P2.5④ 작물 아이콘 재사용: 선택 작물의 mature 스프라이트를 심기 선택 HUD·출하대에
 	# 아이콘으로 건다(P2.2 작물 도트를 인벤/상점 아이콘으로 재사용 — 무엇을 심고/사는지 한눈에).
 	var crop_icon_tex: Texture2D = CROP_SPRITES[_selected_crop][2]
@@ -2270,25 +2295,26 @@ func _process(delta: float) -> void:
 	sleep_prompt.visible = _can_sleep()
 	# 하단 프롬프트(집은 sleep_prompt, 카페·밭은 interact_prompt — 구역이 달라 겹치지 않음).
 	# 우선순위: 패널 > 미호 말걸기 > 옥자 말걸기 > 바나 말걸기(밤) > 멜(대화·출하대·선물) > 손님 서빙 > 밭 동작.
+	# ★ ADR-0024 — 대화·서빙·막기·수확은 RMB(우클릭), 도구질은 LMB(좌클릭). 선물(G)·바·매대(F)는 별개 키.
 	if _shop_open or _store_open:
 		interact_prompt.visible = false
 	elif facing_neo:
 		# M2.3 네오(만물상 점주)를 바라볼 때: 대화·매대 한 줄 안내(네오가 매대 얼굴). 이 슬라이스는
 		# 선물(G) 없이 일일 대화로만 친해진다(풀 T1 트랙은 후속, ADR-0014).
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 대화   [F] 매대"
+		interact_prompt.text = "[우클릭] 대화   [F] 매대"
 	elif facing_miho:
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
+		interact_prompt.text = "[우클릭] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif facing_okja:
 		# T5.6 옥자를 바라볼 때: 일상 대화만(호감도·선물·출하대 없음 — 매일 보는 사장).
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 대화"
+		interact_prompt.text = "[우클릭] 대화"
 	elif facing_bana:
 		# T6.1/T6.2 바나(밤 무대)를 바라볼 때: 대화·선물 안내. T6.3 바를 아직 안 열었으면
 		# [F] 바 열기(옵트인)를 덧붙이고, 이미 열었으면 영업 중임을 알린다(막기는 T6.4+ 몫).
 		interact_prompt.visible = true
-		var bana_hint := "[E] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
+		var bana_hint := "[우클릭] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 		if night_bar.is_opened():
 			bana_hint += "   (나라카 바 영업 중)"
 		else:
@@ -2297,59 +2323,118 @@ func _process(delta: float) -> void:
 	elif facing_mel:
 		# T5.1/T5.2/T5.3 멜을 바라볼 때: 대화·출하대·선물 한 줄 안내(멜이 카운터 얼굴).
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 대화   [F] 출하대   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
+		interact_prompt.text = "[우클릭] 대화   [F] 출하대   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif facing_spot >= 0 and night_bar.is_threat(facing_spot):
-		# T6.4 잡귀가 깃든 스폿을 바라볼 때: E로 막는다(즉시 격퇴). 막으러 오느라 카운터를
+		# T6.4 잡귀가 깃든 스폿을 바라볼 때: 우클릭으로 막는다(즉시 격퇴). 막으러 오느라 카운터를
 		# 비운 사이 손님이 닳는 게 ★ 막기↔응대 경쟁의 비용이다(ADR-0010 #4).
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 막기 (잡귀 격퇴 · 재고 지킴)"
+		interact_prompt.text = "[우클릭] 막기 (잡귀 격퇴 · 재고 지킴)"
 	elif facing_seat >= 0 and cafe.is_waiting(facing_seat):
 		# T5.4 기다리는 손님을 바라볼 때: 재료가 있으면 서빙, 없으면 막힌 이유를 안내.
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 서빙 (+%d골드)" % cafe.serve_price() if _has_any_harvest() \
+		interact_prompt.text = "[우클릭] 서빙 (+%d골드)" % cafe.serve_price() if _has_any_harvest() \
 			else "서빙할 재료 없음 — 수확물 필요"
 	elif facing_seat >= 0 and night_bar.is_waiting(facing_seat):
-		# T6.4 밤 바 손님을 바라볼 때: E로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
+		# T6.4 밤 바 손님을 바라볼 때: 우클릭으로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
 		interact_prompt.visible = true
-		interact_prompt.text = "[E] 응대 (+%d골드)" % NightBar.SERVE_PRICE
+		interact_prompt.text = "[우클릭] 응대 (+%d골드)" % NightBar.SERVE_PRICE
 	else:
-		# 밭 칸을 바라볼 때만 [E] 안내(다음 동작 이름). 다 키운(물준) 칸이면 숨김.
-		# T2.4 혼력 바닥, T3.1 씨앗 없음이면 동작 대신 막힌 이유를 안내한다.
-		var action := farm.next_action(_target) if _target_valid else ""
-		interact_prompt.visible = not _sleeping and _target_valid and action != ""
-		if interact_prompt.visible:
-			if not energy.can_act():
-				interact_prompt.text = "혼력 부족 — 집에서 취침"
-			elif action == "심기" and not inventory.has_seed(_selected_crop):
-				interact_prompt.text = "%s 씨앗 없음 — 카페·만물상에서 구매" % CropCatalog.name_of(_selected_crop)
-			else:
-				interact_prompt.text = "[E] %s" % action
+		# 밭 칸을 바라볼 때만 안내. 든 도구·칸 상태로 동사를 파생한다(LMB 도구질 / RMB 맨손 수확).
+		var prompt := _farm_prompt()
+		interact_prompt.visible = not _sleeping and prompt != ""
+		interact_prompt.text = prompt
 
-# ── T2.1/T3.1 밭 한 동작 ──────────────────────────────────────────────────
-# 바라보는 칸의 다음 동작을 수행한다. 혼력이 없으면 막고, 심기는 씨앗이 있어야
-# 하며(없으면 카페에서 사야 한다), 수확물은 인벤토리에 쌓아 경제의 양끝을 잇는다.
-func _try_farm_action() -> void:
-	var action := farm.next_action(_target)
-	if action == "" or not energy.can_act():
+# ── ADR-0024 LMB 도구 사용 / RMB 맨손 수확 ──────────────────────────────────
+# ★ 핵심 피벗(ADR-0024 §2): 든 도구가 동사를 정한다(자동 분기 없음). 괭이→hoe·물뿌리개→water·
+# 씨앗→plant. 도구가 칸 상태에 안 맞으면(예: 미경작 칸에 물뿌리개) field 사전조건이 false라
+# 무동작 — "선택 도구가 장식이 되지 않게"(ADR-0020). 한 동작이 실제로 일어났을 때만 혼력·SFX·
+# 온보딩을 소비한다. 혼력이 바닥나면(can_act false) 아무 도구도 안 듣는다(T2.4).
+func _use_tool() -> void:
+	if not energy.can_act():
 		return
-	# 심기는 씨앗 1개가 필요하다. 없으면 막는다(프롬프트가 "카페에서 구매"를 안내).
-	if action == "심기" and not inventory.has_seed(_selected_crop):
-		return
-	# 수확이면 거둘 작물 id를 미리 확보한다(interact 뒤엔 칸이 비어 crop_of가 ""다).
-	var harvested_crop := farm.crop_of(_target) if action == "수확" else ""
-	farm.interact(_target, _selected_crop)  # action != "" 이므로 반드시 수행됨
-	if action == "심기":
-		inventory.take_seed(_selected_crop)   # 심은 씨앗 1개 소모
-	elif action == "수확":
-		inventory.add_harvest(harvested_crop) # 거둔 수확물 적재(나중에 카페에서 판매)
-		_run_harvested += 1                   # T4.2 슬라이스 점수판: 거둔 영혼 총수
-		_show_flavor(harvested_crop)          # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
-	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용 — 둘 다 흙 누르는
-	# 동작), 물주기는 물줄기, 수확은 밝은 팝. 동작 문자열(field.next_action)에서 파생한다.
-	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "수확": "harvest"}.get(action, ""))
-	_advance_onboarding(action)               # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
+	var item := inventory.selected_id()
+	var cat := ItemCatalog.category_of(item)
+	var verb := ""
+	if item == ItemCatalog.HOE:
+		if farm.hoe(_target):
+			verb = "괭이질"
+	elif item == ItemCatalog.WATERING_CAN:
+		if farm.water(_target):
+			verb = "물주기"
+	elif cat == ItemCatalog.CAT_SEED:
+		# 든 씨앗의 작물군을 심는다(경작된 빈 칸에만 — plant 사전조건). 심으면 씨앗 1개 소모.
+		var crop := ItemCatalog.crop_of(item)
+		if inventory.has_seed(crop) and farm.plant(_target, crop):
+			inventory.take_seed(crop)
+			verb = "심기"
+	if verb == "":
+		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
+	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기는 물줄기.
+	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water"}.get(verb, ""))
+	_advance_onboarding(verb)                 # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
 	energy.spend()                            # 한 동작당 혼력 소모
 	queue_redraw()                            # 새 상태가 바로 보이도록
+
+# RMB 맨손 수확(ADR-0024 §3 — 낫 없음, 수확=맨손). 다 자란 칸만 거두고, 거둔 영혼을 인벤토리에
+# 쌓아 경제의 양끝을 잇는다(밭→재고→판매·서빙). 다 안 자랐거나 혼력 부족이면 무동작.
+func _try_harvest() -> void:
+	if not energy.can_act() or not farm.is_mature(_target):
+		return
+	var harvested_crop := farm.crop_of(_target)  # harvest 뒤엔 칸이 비어 "" 되므로 미리 확보
+	farm.harvest(_target)
+	inventory.add_harvest(harvested_crop)     # 거둔 수확물 적재(나중에 카페에서 판매)
+	_run_harvested += 1                       # T4.2 슬라이스 점수판: 거둔 영혼 총수
+	_show_flavor(harvested_crop)              # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
+	audio.sfx("harvest")                      # P2.6 수확은 밝은 팝
+	_advance_onboarding("수확")               # T4.1 첫 수확 → 온보딩 완료(DONE)
+	energy.spend()                            # 한 동작당 혼력 소모
+	queue_redraw()                            # 새 상태가 바로 보이도록
+
+# 선택 슬롯이 씨앗/수확물이면 _selected_crop(선물·구매·HUD 기준 작물)을 그 작물군으로 맞춘다.
+# 도구를 들었을 땐 마지막 작물을 유지한다(선물·매대가 기억된 작물로 동작). Q 작물 순환의 대체 —
+# 이제 작물 선택은 핫바에서 씨앗·수확물을 고르는 것으로 자연히 따라온다(별도 순환 키 없음).
+func _sync_selected_crop() -> void:
+	var sid := inventory.selected_id()
+	var cat := ItemCatalog.category_of(sid)
+	if cat == ItemCatalog.CAT_SEED:
+		_selected_crop = ItemCatalog.crop_of(sid)
+	elif cat == ItemCatalog.CAT_HARVEST:
+		_selected_crop = sid
+
+# ★ ADR-0024 핫바 HUD 한 줄: 선택 슬롯 번호 + 든 아이템 이름 + 선택 안내. 든 게 씨앗이면 보유 수·
+# 성장일수를, 수확물이면 보유 수를 덧붙여 "지금 무엇을 들고 무엇을 할 수 있나"를 한눈에 보인다.
+func _hotbar_summary() -> String:
+	var sid := inventory.selected_id()
+	var held := ItemCatalog.name_of(sid) if sid != "" else "(빈 손)"
+	var line := "핫바 %d번 · 든 것: %s   [1~0,-,= / 휠] 선택" % [inventory.selected_index + 1, held]
+	match ItemCatalog.category_of(sid):
+		ItemCatalog.CAT_SEED:
+			line += "  (보유 %d · %d일)" % [inventory.count_of(sid), CropCatalog.growth_days(ItemCatalog.crop_of(sid))]
+		ItemCatalog.CAT_HARVEST:
+			line += "  (보유 %d)" % inventory.count_of(sid)
+	return line
+
+# 밭 칸 프롬프트: 든 도구·칸 상태에서 다음에 할 수 있는 동작을 파생한다("" = 안내 없음).
+# 맨손 수확(RMB)은 도구와 무관하게 다 자란 칸이면 항상 안내한다. 그 외엔 든 도구가 칸 상태에
+# 맞을 때만 [좌클릭] 동사를 보인다(안 맞으면 "" — 자동 분기 없음의 HUD 짝, ADR-0024 §2).
+func _farm_prompt() -> String:
+	if not _target_valid:
+		return ""
+	if not energy.can_act():
+		return "혼력 부족 — 집에서 취침"
+	if farm.is_mature(_target):
+		return "[우클릭] 수확"
+	var item := inventory.selected_id()
+	if item == ItemCatalog.HOE and not farm.is_tilled(_target):
+		return "[좌클릭] 괭이질"
+	if item == ItemCatalog.WATERING_CAN and farm.is_planted(_target) and not farm.is_watered(_target):
+		return "[좌클릭] 물주기"
+	if ItemCatalog.category_of(item) == ItemCatalog.CAT_SEED and farm.is_tilled(_target) and not farm.is_planted(_target):
+		var crop := ItemCatalog.crop_of(item)
+		if inventory.has_seed(crop):
+			return "[좌클릭] %s 심기" % CropCatalog.name_of(crop)
+		return "%s 씨앗 없음 — 카페·만물상에서 구매" % CropCatalog.name_of(crop)
+	return ""
 
 # ── T3.5 사연 한 줄 ────────────────────────────────────────────────────────
 # 방금 거둔 작물(영혼)의 생전 사연 한 줄을 팝업으로 띄운다(CONTEXT '사연 한 줄').
@@ -2385,7 +2470,7 @@ func _process_shop(facing_mel: bool) -> void:
 # 수확물 전량을 판매가(sell_price)로 환산해 골드로 바꾼다 — 순환의 '수확물 → 골드'.
 func _sell_all() -> void:
 	var total := 0
-	for id in inventory.harvested:
+	for id in inventory.harvest_ids():
 		total += inventory.harvest_count(id) * CropCatalog.sell_price(id)
 	if total <= 0:
 		_notice("팔 수확물이 없다")
@@ -2411,7 +2496,7 @@ func _buy_seed(crop_id: String) -> void:
 # 운영하는 카운터임을 드러낸다(T5.3 — 무인 카운터가 아니라 멜이 골드로 쳐준다).
 func _shop_text() -> String:
 	var sell_total := 0
-	for id in inventory.harvested:
+	for id in inventory.harvest_ids():
 		sell_total += inventory.harvest_count(id) * CropCatalog.sell_price(id)
 	var sel := _selected_crop
 	return "\n".join([
@@ -2763,7 +2848,7 @@ func _has_any_harvest() -> bool:
 func _cheapest_harvest() -> String:
 	var best := ""
 	var best_price := -1
-	for id in inventory.harvested:
+	for id in inventory.harvest_ids():
 		var price := CropCatalog.sell_price(id)
 		if best == "" or price < best_price:
 			best = id
@@ -2881,24 +2966,32 @@ func _on_dialogue_finished() -> void:
 		onboarding.talked_to_miho()
 	_talking_to = ""
 
-# ── T2.1 상호작용 대상 칸 / 시각화 ────────────────────────────────────────
-# 플레이어 발 타일에서 바라보는 방향으로 한 칸 앞을 대상으로 삼는다.
-# 대각선 facing은 더 큰 축으로 스냅(4방향화)한다.
+# ── ADR-0024 상호작용 대상 칸(마우스 커서) / 시각화 ─────────────────────────
+# 대상 칸 = 마우스 커서 밑 타일. 단 플레이어 인접 1칸 반경(주변 8칸 + 발밑)으로 클램프한다 —
+# 커서가 멀면 그 방향의 가장 가까운 인접 칸으로 당긴다(사거리 = 인접 1칸, AoE는 Phase 3 예약).
+# 도구를 쓸 때 캐릭터가 커서 쪽으로 돌아본다(이동 WASD와 별개 축 — 스타듀 동일).
 func _update_target() -> void:
 	var old_target := _target
 	var old_valid := _target_valid
 	var foot := player.global_position
 	var ft := Vector2i(int(foot.x) / TILE, int(foot.y) / TILE)
-	var f: Vector2 = player.get_facing()
-	var step := Vector2i(0, 1)
-	if abs(f.x) >= abs(f.y) and f.x != 0:
-		step = Vector2i(int(sign(f.x)), 0)
-	elif f.y != 0:
-		step = Vector2i(0, int(sign(f.y)))
-	_target = ft + step
+	# 커서 글로벌 좌표 → 타일. 카메라가 따라가므로 get_global_mouse_position이 월드 좌표를 준다.
+	var cursor := get_global_mouse_position()
+	var ct := Vector2i(int(cursor.x) / TILE, int(cursor.y) / TILE)
+	# 발 칸 기준 인접 1칸으로 클램프(각 축 -1..+1). 발밑(0,0) 포함 — 발밑 칸도 작용 가능.
+	var dx := clampi(ct.x - ft.x, -1, 1)
+	var dy := clampi(ct.y - ft.y, -1, 1)
+	_target = ft + Vector2i(dx, dy)
 	_target_valid = _is_farmable(_target)
+	# 도구 사용·조준 방향 표시를 위해 플레이어가 커서 쪽(대상 칸 방향)으로 돌아본다(발밑이면 유지).
+	if _target != ft:
+		player.face_toward(_target_center_px(_target))
 	if _target != old_target or _target_valid != old_valid:
 		queue_redraw()  # 커서 위치/표시 갱신
+
+# 타일 중심 월드 좌표(facing 방향 계산용). _tile_center_px와 같은 결.
+func _target_center_px(t: Vector2i) -> Vector2:
+	return Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
 
 # 상호작용 가능한 칸 = 맵 안 + 밭 흙(SOIL). 길·집·카페·벽은 제외.
 # T3.2/T5.6 미호 밭 자리는 사람 자리라 농사 대상에서 뺀다(말걸기와 밭 동작 충돌 방지).
