@@ -21,3 +21,12 @@ shrimp_data/
 
 # Godot이 CSV를 번역 소스로 자동 임포트하며 생성하는 컴파일 산출물
 *.translation
+
+# 파이썬 글루 캐시
+game/tools/__pycache__/
+game/tools/p28t3_props_preview.png
+game/tools/home_wide.png
+game/tools/home_wide.png.import
+game/tools/edit_ui.png
+game/tools/edit_ui.png.import
+game/tools/p28t3_props_preview.png.import
