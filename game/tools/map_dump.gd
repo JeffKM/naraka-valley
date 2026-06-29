@@ -22,13 +22,8 @@ func _init():
 	out.fill(Color(0.05, 0.05, 0.07, 1.0))
 	for layer in [ground, field]:
 		_blit_layer(layer, out)
-	# P2.3② 가구·장식: main의 _draw 오버레이는 GPU 없이 안 잡히므로, 같은 배치
-	# 데이터(PROP_LAYOUT)를 읽어 텍스처를 바닥정렬로 직접 합성한다(시각 확인용).
-	for entry in main.PROP_LAYOUT:
-		var tex: Texture2D = entry[0]
-		var pimg := tex.get_image()  # ADR-0013: 가구 32px native → 1:1
-		for t in entry[1]:
-			out.blend_rect(pimg, Rect2i(Vector2i.ZERO, pimg.get_size()), Vector2i(t.x * 32, t.y * 32))
+	# (옛 PROP_LAYOUT 직접합성 블록 제거 — main이 _draw_props_for 함수 기반으로 바뀌어
+	#  PROP_LAYOUT 상수가 없다. 지형 타일 시각 확인이 목적이라 장식 prop은 생략한다.)
 	# P2.3② 캐릭터 스프라이트: 노드의 AnimatedSprite2D 현재 프레임을 발치정렬로 합성한다.
 	# (숨겨진 옥자·바나도 미리보기용으로 그린다 — 위치는 main이 _ready에서 잡아 둠.)
 	for nm in ["Player", "Miho", "Okja", "Mel", "Bana"]:

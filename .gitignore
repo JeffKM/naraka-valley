@@ -34,3 +34,6 @@ game/tools/p28t3_props_preview.png.import
 # 스타듀 위키 스크랩 (CC BY-NC-SA — 비상업, 설계 참고 전용·커밋 금지)
 docs/reference/stardew-wiki/
 tools/stardew-wiki-all-titles.txt
+
+# 런타임 락(추적 제외)
+.claude/scheduled_tasks.lock

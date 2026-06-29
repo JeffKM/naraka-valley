@@ -11,16 +11,22 @@ import os
 from PIL import Image
 
 # 녹색 픽셀 보정 계수
-HUE_LO, HUE_HI = 80, 175      # 녹색~청록 계열(도)
 SAT_MUL = 0.55                # 채도 ↓(순녹 → 이끼/올리브)
 VAL_MUL = 0.82                # 명도 살짝 ↓(저승의 가라앉은 톤)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TILES = os.path.join(HERE, "..", "assets", "tiles")
-TARGETS = ["grass_path_image.png", "soil_grass_image.png"]
+# 세트별 보정 hue 범위(도). 풀 전용 세트는 80~175(녹~청록 그림자 포함),
+# water_grass는 80~150(green만) — 물의 영혼빛 teal-blue(#60d8f0, hue~187)을
+# 보존하려 상한을 150으로 좁혀 풀만 깎고 물은 그대로 둔다(§3.4(b) 영혼빛 액센트).
+TARGETS = {
+    "grass_path_image.png": (80, 175),
+    "soil_grass_image.png": (80, 175),
+    "water_grass_image.png": (80, 150),
+}
 
 
-def desaturate(path: str) -> int:
+def desaturate(path: str, hue_lo: float, hue_hi: float) -> int:
     raw = path.replace(".png", "_raw.png")
     if not os.path.exists(raw):
         Image.open(path).save(raw)          # 최초 1회 원본 백업
@@ -33,7 +39,7 @@ def desaturate(path: str) -> int:
             if a == 0:
                 continue
             h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-            if HUE_LO <= h * 360 <= HUE_HI and s > 0.15:
+            if hue_lo <= h * 360 <= hue_hi and s > 0.15:
                 nr, ng, nb = colorsys.hsv_to_rgb(h, s * SAT_MUL, v * VAL_MUL)
                 px[x, y] = (int(nr * 255), int(ng * 255), int(nb * 255), a)
                 touched += 1
@@ -41,8 +47,8 @@ def desaturate(path: str) -> int:
     return touched
 
 
-for name in TARGETS:
+for name, (lo, hi) in TARGETS.items():
     p = os.path.join(TILES, name)
-    n = desaturate(p)
-    print(f"{name}: {n} green px 보정")
+    n = desaturate(p, lo, hi)
+    print(f"{name}: {n} green px 보정 (hue {lo}~{hi})")
 print("done")
