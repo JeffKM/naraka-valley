@@ -32,6 +32,13 @@ func _init():
 	var tileset_pairs = []
 	var args = OS.get_cmdline_args()
 
+	# 출력 경로 인자(.tres)가 있으면 그걸 사용 — 구역별 combined_terrain_<region>.tres 분할(§3.6).
+	# 없으면 라인 9 기본값 유지(후방호환).
+	for a in args:
+		if a.ends_with(".tres"):
+			output_path = a
+			break
+
 	for i in range(args.size()):
 		if args[i].ends_with("_metadata.json"):
 			var json_path = args[i]

@@ -61,11 +61,12 @@ const ROCK := 11    # 바위(통과 X — 업화 갱도 바위 절벽·암반, M
 const N_TILES := 12
 
 # ── P2.3 지형 도트: terrain TileSet + 실내/벽 도트 source ───────────────────
-# combined_terrain.tres = PixelLab Wang 3세트(풀↔길·풀↔밭·길↔밭)를 합친 corner
-# 오토타일. terrain_set_0의 terrain 순서는 컨버터 인자 순서로 고정(0=길,1=풀,2=밭).
+# combined_terrain_homestead.tres = PixelLab Wang 4세트(풀↔길·길↔밭·밭↔풀·물↔풀)를 합친
+# corner 오토타일. 안식 농원 구역 지형셋(스타듀 룩 재생성, tileset-ruleset §5 스펙 카드).
+# terrain_set_0의 terrain 순서는 컨버터 인자 순서로 고정(0=길,1=풀,2=밭,3=물).
 # GROUND/PATH/SOIL은 이 terrain으로 자동 전환해 칠하고, HOUSE/CAFE/WALL(실내·벽)은
 # 전환이 필요 없는 단일 면이라 별도 source(SOLID)에 16×16 도트 타일로 깐다.
-const TERRAIN_TILESET_PATH := "res://assets/tiles/combined_terrain.tres"
+const TERRAIN_TILESET_PATH := "res://assets/tiles/combined_terrain_homestead.tres"
 const TERRAIN_SET := 0
 const TR_PATH := 0    # dirt path
 const TR_GRASS := 1   # muted grass
@@ -730,6 +731,7 @@ var _prop_body: StaticBody2D = null
 @onready var onboarding_label: Label = $CanvasLayer/OnboardingLabel  # T4.1 안내 배너
 @onready var ending_panel: ColorRect = $CanvasLayer/EndingPanel        # T4.2/T7.3 슬라이스 마무리 화면 배경
 @onready var ending_text: Label = $CanvasLayer/EndingPanel/Text        # T4.2 점수판 본문
+@onready var ending_restart: Button = $CanvasLayer/EndingPanel/Restart  # 마우스 클릭 "처음부터 다시 시작"(맥북 등 F8 없는 환경용 — F8 데브키와 같은 _delete_save_and_restart)
 @onready var fade: ColorRect = $CanvasLayer/Fade
 
 # P2.3③ 밤 라이팅(CanvasModulate + 등불). 월드 캔버스에 코드로 붙인다(타일셋·입력처럼
@@ -826,6 +828,9 @@ var _harvest_seen: Dictionary = {}
 # 게임 입력을 막고 마무리 화면만 유지한다. 끝남 자체는 GameClock.day에서 파생되므로
 # (RunSummary.is_over) 세이브할 상태가 아니고, 이 플래그는 한 프레임 표시 래치일 뿐이다.
 var _run_over := false
+# T4.1 — 직전 프레임의 온보딩 안내 문구. 단계가 바뀔 때(이 값과 달라질 때)만 알림을 한 번 띄운다
+# (상시 중앙 배너 폐기 — 피드백 2026-06-25). 일시 표시라 세이브하지 않는다.
+var _last_onboarding_guide := ""
 # T4.2 이번 슬라이스에서 거둔 영혼(수확) 총수 — 마무리 점수판용. 일시 표시용인
 # _harvest_seen(사연 순환 index)과 달리 점수판이 재개에도 맞아야 하므로 저장한다.
 var _run_harvested := 0
@@ -868,6 +873,7 @@ func _ready() -> void:
 	ground.z_index = -1
 	field_layer.z_index = -1
 	farm.tile_changed.connect(_on_tile_changed)
+	ending_restart.pressed.connect(_delete_save_and_restart)   # 엔딩 화면 "처음부터 다시 시작" 버튼
 	_prop_body = StaticBody2D.new()   # ★ T3③' 가구 충돌체(_build_grid가 칸을 다시 채운다)
 	add_child(_prop_body)
 	_ensure_prop_layouts()   # ★ ADR-0025 ② PROP 좌표 데이터 외부화 로드(_build_grid 충돌 재구성 전)
@@ -951,11 +957,9 @@ func _ready() -> void:
 	# is_debug_build = 에디터·디버그 실행 true·릴리스 export만 false(run_game.sh=에디터 바이너리라 true).
 	if OS.is_debug_build():
 		_make_edit_ui()
-	# ★ 온보딩 안내 배너가 화면 중앙(y172)을 큰 글씨로 가로질러 거슬린다는 피드백 → 폰트 축소(24→18 상당)
-	# + 상단 1/4로 올려(중앙 시야 안 가림) 덜 떡하니. 안내 기능은 유지(첫 플레이 가이드, 진행하면 사라짐).
-	onboarding_label.add_theme_font_size_override("font_size", 12)
-	onboarding_label.offset_top = 96.0
-	onboarding_label.offset_bottom = 116.0
+	# 온보딩 안내는 상시 배너 대신 단계 전환 시 좌하단 알림으로 띄운다(_process의 guidance 비교 블록).
+	# 배너 노드는 끈 채 유지(참조·회귀 안전).
+	onboarding_label.visible = false
 
 # 입력 액션을 코드로 등록한다. project.godot 수동 편집 대신 런타임 조립 — 이 프로젝트의
 # TileSet·벽 생성과 같은 결이고, 직렬화 포맷 깨질 위험이 없다.
@@ -2496,9 +2500,9 @@ func _restore_location(data: Dictionary) -> void:
 # ★ C3 — 일시 이벤트 한 줄을 좌하단 알림 피드(큐)에 민다(저장됨·서빙·약탈·사연 한 줄 등).
 # 저장됨 등은 짧게(NOTICE_SECS), T3.5 사연 한 줄은 읽을 수 있게 길게(FLAVOR_SECS). 피드가 스스로
 # 시간 경과로 흐려지며 사라지므로(상시 라벨 폐기), 여기선 한 줄을 밀어 넣기만 한다.
-func _notice(msg: String, secs: float = NOTICE_SECS) -> void:
+func _notice(msg: String, secs: float = NOTICE_SECS, wide: bool = false) -> void:
 	if notice_feed != null:
-		notice_feed.push(msg, secs)
+		notice_feed.push(msg, secs, wide)
 
 # F8 세이브 삭제+새 시작의 2단 확인. 비무장이면 무장만 하고 안내를 띄운다(실수로 한 번
 # 누른 것으로 진행을 날리지 않게). 무장(DELETE_CONFIRM_SECS 안) 중에 또 누르면 실행한다.
@@ -2817,11 +2821,15 @@ func _process(delta: float) -> void:
 	if not _milestone_celebrated and _milestone_complete():
 		_milestone_celebrated = true
 		_show_milestone_reached()
-	# T4.1 온보딩 안내 배너: 현재 목표 한 줄. (프레임이 떴으면 위 모달 early-return에서 이미 숨겼다.)
-	# 완료(DONE) 후엔 문구가 ""라 사라진다.
+	# T4.1 온보딩 안내: 상시 중앙 배너가 "계속 떠서 불편"(피드백 2026-06-25) → 단계가 *바뀔 때만*
+	# 좌하단 알림으로 잠깐 띄운다(notice_feed, 스타듀식). 매 프레임 guidance()를 보되 직전과 다를 때만
+	# push(=단계 전환 1회). 배너 노드는 끈 채 유지(참조·회귀 안전). 모달 중엔 위 early-return이라 비교 보존.
 	var guide := onboarding.guidance()
-	onboarding_label.visible = guide != ""
-	onboarding_label.text = guide
+	if guide != _last_onboarding_guide:
+		_last_onboarding_guide = guide
+		if guide != "":
+			_notice(guide, 7.0, true)   # wide=긴 안내 안 잘리게, 7초 후 부드럽게 사라짐
+	onboarding_label.visible = false
 	# ★ C2 — 옛 ShopPanel(멜 출하대·네오 매대 텍스트)은 폐기됐다. 매대·출하함은 공통 프레임이
 	# 그리므로 ShopPanel 노드는 상시 숨긴다(tscn 노드는 남되 미사용 — 회귀 0, frame이 대체).
 	shop_panel.visible = false
@@ -3159,7 +3167,12 @@ func _end_run() -> void:
 	player.velocity = Vector2.ZERO
 	# T5.4 카페 정산 팝업은 마무리 화면보다 위에 그려질 수 있어 명시적으로 숨긴다.
 	cafe_summary_panel.visible = false
-	# 다른 패널·프롬프트는 마무리 화면(전체 화면 불투명 패널)이 덮으므로 따로 숨기지 않는다.
+	# 알림 피드·디버그 리드아웃은 코드로 $CanvasLayer에 나중 추가돼 EndingPanel 위에
+	# 그려지므로(트리순서상 위), 마무리 화면이 깔끔히 덮이게 같이 숨긴다.
+	if notice_feed != null:
+		notice_feed.visible = false
+	readout.visible = false
+	# 그 밖의 패널·프롬프트는 마무리 화면(전체 화면 불투명 패널)이 덮으므로 따로 숨기지 않는다.
 	ending_text.text = RunSummary.text(
 		clock.day, wallet.gold, affinity.heart_bar(),
 		affinity.hearts(), Affinity.MAX_HEARTS, _run_harvested

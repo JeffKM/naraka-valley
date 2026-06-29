@@ -31,10 +31,11 @@ var _items: Array = []
 
 # 알림 한 줄을 큐에 민다(main._notice가 호출). secs 후 자동으로 사라진다. 큐가 가득 차면
 # 가장 오래된(앞) 항목을 밀어낸다 — 최신 이벤트가 항상 보이게.
-func push(text: String, secs: float) -> void:
+func push(text: String, secs: float, wide: bool = false) -> void:
 	if text == "":
 		return
-	_items.append({"text": text, "secs": maxf(secs, 0.1)})
+	# wide = 긴 안내(온보딩)용 — 좌측 컬럼(MAX_W) 대신 화면 폭 가까이 허용해 한 줄이 안 잘리게 한다.
+	_items.append({"text": text, "secs": maxf(secs, 0.1), "wide": wide})
 	while _items.size() > MAX_ITEMS:
 		_items.pop_front()
 	queue_redraw()
@@ -78,6 +79,8 @@ func _draw() -> void:
 		var a := clampf(float(item["secs"]) / FADE_SECS, 0.0, 1.0)
 		var text: String = item["text"]
 		# 가독성: 반투명 배경 띠 + 흰 글자(밤 라이팅 위에서도 읽히게). 좌측 컬럼을 넘지 않게 폭 제한.
-		var w := minf(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x + 16.0, MAX_W)
+		# wide 항목(온보딩 안내)은 화면 폭 가까이 허용해 긴 한 줄이 안 잘리게 한다.
+		var limit := (view.x - MARGIN * 2.0) if item.get("wide", false) else MAX_W
+		var w := minf(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x + 16.0, limit)
 		draw_rect(Rect2(pos, Vector2(w, ROW_H - 2.0)), Color(0.06, 0.05, 0.08, 0.66 * a))
 		draw_string(font, pos + Vector2(8.0, 15.0), text, HORIZONTAL_ALIGNMENT_LEFT, w - 12.0, 14, Color(0.96, 0.95, 0.92, a))

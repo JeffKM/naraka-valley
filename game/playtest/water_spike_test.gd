@@ -5,7 +5,7 @@ extends SceneTree
 # (_build_tileset + _paint_grid)로 물 구역을 짓고, 다음 4개 통과 기준을 단언한다:
 #
 # ★ 통과 기준(verification criteria):
-#   ① 물 Wang→corner TileSet 변환 성공 — combined_terrain.tres가 terrain 4종(길·풀·흙·물),
+#   ① 물 Wang→corner TileSet 변환 성공 — combined_terrain_homestead.tres가 terrain 4종(길·풀·흙·물),
 #      terrain 3 = 물, 물 코너 비트를 가진 타일이 존재.
 #   ② WATER 통과 불가 충돌 유지(회귀 0) — 물 코너를 가진 source 0 타일 전부에 충돌 폴리곤이 달려,
 #      옛 SOLID WATER와 동일한 통과 불가 집합. 순수 풀 타일은 충돌 없음(걷기).
@@ -56,8 +56,8 @@ func _cell_blocks(m: Node, cell: Vector2i) -> bool:
 func _initialize() -> void:
 	print("══ Phase 2.8 T2 — 물 터레인 스파이크 게이트 검증 ══")
 
-	# ── ① 변환 성공: combined_terrain.tres가 4 terrain, 물 = terrain 3 ──
-	var ts: TileSet = load("res://assets/tiles/combined_terrain.tres")
+	# ── ① 변환 성공: combined_terrain_homestead.tres가 4 terrain, 물 = terrain 3 ──
+	var ts: TileSet = load("res://assets/tiles/combined_terrain_homestead.tres")
 	_check("① terrain set 1개", ts.get_terrain_sets_count() == 1)
 	_check("①b terrain 4종(길·풀·흙·물)", ts.get_terrains_count(0) == 4)
 	_check("①c terrain 3 = 물(이름에 'water')", ts.get_terrain_name(0, 3).to_lower().contains("water"))

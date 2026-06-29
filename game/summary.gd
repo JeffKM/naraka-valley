@@ -59,5 +59,4 @@ static func text(day: int, gold: int, heart_bar: String, hearts: int, max_hearts
 		"거둔 영혼       %d" % harvested,
 		"",
 		"[ 그레이박스 수직 슬라이스 · Phase 1 ]",
-		"새로 시작하려면 세이브를 지우고 다시 실행하라.",
 	])
