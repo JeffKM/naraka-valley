@@ -211,6 +211,48 @@ const PROP_VINE := preload("res://assets/props/vine.png")               # 32×64
 const PROP_DEBRIS_WEEDS := preload("res://assets/props/debris_weeds.png")          # 32×32 — 이승의 미련·잡초(낫, 통과 O 장식)
 const PROP_DEBRIS_EMBER := preload("res://assets/props/debris_ember_stone.png")    # 64×64 — 업화석(곡괭이, 통과 X SOLID)
 const PROP_DEBRIS_STUMP := preload("res://assets/props/debris_petrified_stump.png")  # 64×64 — 석화 고목(도끼, 통과 X SOLID)
+# ★ 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md). 결정적 절차 배치로
+#   GROUND/PATH 칸마다 자기 지형 테이블로 가중 1롤 → 베이스 위에 디테일을 *구역 빌드 때 1회 베이크*
+#   (런타임 정적 오버레이, _draw에서 1 draw call). 손배치 grass_tuft 폐기 → 이 시스템이 대체.
+const GD_GRASS1 := preload("res://assets/props/ground_grass1.png")     # 잔디 1단계(짧은 풀포기)
+const GD_GRASS2 := preload("res://assets/props/ground_grass2.png")     # 잔디 2단계(중간)
+const GD_GRASS3 := preload("res://assets/props/ground_grass3.png")     # 잔디 3단계(더 자란 덤불)
+const GD_WEED_U := preload("res://assets/props/ground_weed_under.png") # 저승 잡초
+const GD_WEED_D := preload("res://assets/props/ground_weed_dry.png")   # 노란 마른 잡초
+const GD_FLOWER := preload("res://assets/props/ground_flower.png")     # 영혼 들꽃
+const GD_PEBBLE := preload("res://assets/props/ground_pebble.png")     # 잔돌
+const GD_DIRT := preload("res://assets/props/ground_dirt.png")         # 맨 흙 패치
+const GD_GRAVEL := preload("res://assets/props/ground_gravel.png")     # 길 자갈 무리
+const GD_EMBED := preload("res://assets/props/ground_embed.png")       # 길 박힌 잔돌
+const GD_CRACK := preload("res://assets/props/ground_crack.png")       # 길 갈라짐·바퀴자국
+# 지형 종류 → 디테일 테이블. 항목 = [텍스처(null=맨 타일), 가중치, SE그림자]. (§3.1 잔디 / §3.2 길)
+var _GD_TABLES := {
+	GROUND: [
+		[null, 36, false],                  # 맨 잔디(대부분)
+		[GD_GRASS1, 28, true],              # 잔디 1단계 — 최고
+		[GD_GRASS2, 16, true],              # 잔디 2단계
+		[GD_GRASS3, 8, true],               # 잔디 3단계(더 자란)
+		[GD_WEED_U, 5, true],               # 저승 잡초
+		[GD_WEED_D, 3, true],               # 노란 마른 잡초
+		[GD_FLOWER, 2, true],               # 영혼 들꽃(희소)
+		[GD_PEBBLE, 1, true],               # 잔돌(극희소)
+		[GD_DIRT, 1, false],                # 맨 흙 패치(극희소·평면)
+	],
+	PATH: [
+		[null, 78, false],                  # 맨 길(대부분)
+		[GD_EMBED, 9, false],               # 박힌 잔돌
+		[GD_GRAVEL, 6, false],              # 자갈 무리
+		[GD_CRACK, 4, false],               # 갈라짐·바퀴자국
+		[GD_WEED_D, 3, true],               # 가장자리 마른 풀
+	],
+}
+# 구역 → 그 구역이 그리는 PROP 레이아웃 키(지면 디테일이 PROP 점유 칸을 비껴가게 함).
+var _REGION_PROP_KEYS := {
+	RegionCatalog.HOME: ["HOME"],
+	RegionCatalog.NARU_VILLAGE: ["CAFE", "VILLAGE_HOUSE"],
+}
+var _ground_detail_tex: ImageTexture = null   # 구역별 베이크된 지면 디테일 오버레이
+var _gd_shadow_stamp: Image = null            # 재사용 SE 그림자 스탬프
 # 외부 건물 외관(PixelLab 산출, 외관 박스 크기와 1:1). 통과 불가 WALL 박스 위에 덮어 그려
 # "닫힌 건물"로 보이게 한다(_draw_facades). 집=288×256(9×8칸 ★T3①), 카페=256×224(8×7칸).
 const FACADE_HOUSE := preload("res://assets/buildings/house_ext.png")
@@ -313,9 +355,7 @@ const PROP_LAYOUT_HOME := [
 		Vector2i(77, 6), Vector2i(77, 14), Vector2i(77, 44), Vector2i(77, 52)]],
 	[PROP_TREE_B, [Vector2i(74, 1), Vector2i(1, 61)]],           # 동북·서남 코너 활엽수(SOLID)
 	[PROP_ROCK, [Vector2i(5, 55), Vector2i(73, 56), Vector2i(70, 8)]],  # 가장자리 바위(SOLID)
-	[PROP_GRASS, [Vector2i(6, 16), Vector2i(18, 18), Vector2i(4, 46), Vector2i(72, 24),
-		Vector2i(74, 38), Vector2i(66, 54), Vector2i(52, 12), Vector2i(58, 8),
-		Vector2i(24, 58), Vector2i(60, 58)]],                    # 풀 무더기 산재(장식)
+	# ★ 손배치 PROP_GRASS 폐기 → 지면 디테일 절차 시스템(_build_ground_details)이 잔디 무더기 대체.
 	[PROP_BUSH, [Vector2i(0, 29), Vector2i(22, 28), Vector2i(4, 44), Vector2i(72, 50), Vector2i(64, 6)]],  # 절벽 코너 덮개 + 덤불(장식)
 	[PROP_STUMP, [Vector2i(16, 6), Vector2i(66, 28), Vector2i(50, 58)]],  # 그루터기·통나무(장식)
 ]
@@ -1978,6 +2018,87 @@ func _paint_grid() -> void:
 	# 단색(HOUSE/CAFE/WALL)은 terrain 위에 덮어 깐다(아직 도트 전, 단계 ②에서 교체).
 	for s in solids:
 		ground.set_cell(s[0], SOLID_SRC_ID, _solid_atlas(s[1]))
+	# ★ [ADR-0042] 재작업 중 — 큰 청키 클럼프 오버레이 비활성(작은 부드러운 tuft + 터레인 변종으로 교체 예정).
+	#_build_ground_details()
+
+# ── 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md) ──────
+# 결정적 해시 좌표라 프레임·세이브·재방문에 고정(깜빡임 0). 구역 빌드 때 한 장으로 베이크해
+# _draw에서 1 draw call(타일 위·프롭/플레이어 아래). 손배치 grass_tuft를 대체.
+func _gd_h01(x: int, y: int, salt: int) -> float:
+	var n: int = (x * 73856093) ^ (y * 19349663) ^ (salt * 83492791)
+	n = n & 0x7fffffff
+	return float(n % 100000) / 100000.0
+
+func _gd_shadow() -> Image:
+	if _gd_shadow_stamp != null:
+		return _gd_shadow_stamp
+	var w := 20
+	var h := 10
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var cx := w / 2.0
+	var cy := h / 2.0
+	for yy in h:
+		for xx in w:
+			var fx := (xx - cx) / (w / 2.0)
+			var fy := (yy - cy) / (h / 2.0)
+			var d := fx * fx + fy * fy
+			if d <= 1.0:
+				img.set_pixel(xx, yy, Color(0, 0, 0, 0.28 * (1.0 - d * 0.55)))
+	_gd_shadow_stamp = img
+	return img
+
+func _build_ground_details() -> void:
+	_ground_detail_tex = null
+	var bw := _grid_w * TILE
+	var bh := _outdoor_h * TILE
+	if bw <= 0 or bh <= 0:
+		return
+	var out := Image.create(bw, bh, false, Image.FORMAT_RGBA8)
+	# 현재 구역 PROP 점유 칸 회피(나무·바위·가구 위에 디테일 안 얹음)
+	var occupied := {}
+	for key in _REGION_PROP_KEYS.get(_region, []):
+		for entry in _prop_layouts.get(key, []):
+			for t in entry[1]:
+				occupied[Vector2i(t.x, t.y)] = true
+	var shadow := _gd_shadow()
+	var sw := shadow.get_width()
+	var sh := shadow.get_height()
+	for y in range(_outdoor_h):
+		for x in range(_grid_w):
+			var terrain: int = _grid[y][x]
+			if not _GD_TABLES.has(terrain):
+				continue   # 디테일 테이블 없는 지형(밭·물·건물 등)
+			if occupied.has(Vector2i(x, y)):
+				continue
+			var table: Array = _GD_TABLES[terrain]
+			var total := 0
+			for e in table:
+				total += int(e[1])
+			var pick := int(_gd_h01(x, y, 2) * total)
+			var acc := 0
+			var chosen: Variant = null
+			for e in table:
+				acc += int(e[1])
+				if pick < acc:
+					chosen = e
+					break
+			if chosen == null or chosen[0] == null:
+				continue   # 맨 타일(오버레이 없음)
+			var timg: Image = (chosen[0] as Texture2D).get_image()
+			if timg.get_format() != Image.FORMAT_RGBA8:
+				timg.convert(Image.FORMAT_RGBA8)
+			var dw := timg.get_width()
+			var dh := timg.get_height()
+			var jx := int((_gd_h01(x, y, 3) - 0.5) * 8)
+			var jy := int((_gd_h01(x, y, 4) - 0.5) * 6)
+			var px := x * TILE + (TILE - dw) / 2 + jx
+			var py := y * TILE + (TILE - dh) + jy   # bottom-center 피벗
+			if bool(chosen[2]):
+				var sx := x * TILE + TILE / 2 + jx - sw / 2 + 1
+				var sy := y * TILE + TILE - 1 + jy - sh / 2
+				out.blend_rect(shadow, Rect2i(0, 0, sw, sh), Vector2i(sx, sy))
+			out.blend_rect(timg, Rect2i(0, 0, dw, dh), Vector2i(px, py))
+	_ground_detail_tex = ImageTexture.create_from_image(out)
 
 # ── 구역 라벨(월드 좌표, 카메라 따라 스크롤) ──────────────────────────────
 func _place_labels() -> void:
@@ -3670,6 +3791,9 @@ func _overlay_index(t: Vector2i) -> int:
 # 않게 현재 구역(_region) 것만 그린다. 카페 손님/잡귀는 카페 실내 칸(y38~47)이라 마을 야외
 # 카메라엔 어차피 안 들지만(실내 카메라에서만 보임), 명시적으로 갈라 그리기를 단순하게 한다.
 func _draw() -> void:
+	# ★ 지면 디테일 오버레이(타일 위·facade/프롭/플레이어 아래) — 구역 빌드 때 베이크한 한 장.
+	if _ground_detail_tex != null:
+		draw_texture(_ground_detail_tex, Vector2.ZERO)
 	match _region:
 		RegionCatalog.HOME:
 			_draw_house_wall_band()  # ★ T3③ 집 실내 북벽 plank 밴드(가구 아래 — 가구가 위로 덮어 입체)
