@@ -80,7 +80,7 @@ func _initialize() -> void:
 			_check("④ 파일 로드 ≡ 시드(HOME)", _layouts_equal(from_file["HOME"], m._SEED_LAYOUTS["HOME"]))
 
 	# ── ⑤ 등불 빛 좌표는 코드 상수 그대로(데이터는 위치 사본만) ──
-	_check("⑤ LANTERN_TILES_HOME 불변", m.LANTERN_TILES_HOME == [Vector2i(38, 48), Vector2i(42, 48)])
+	_check("⑤ LANTERN_TILES_HOME 불변", m.LANTERN_TILES_HOME == [Vector2i(39, 17), Vector2i(45, 17)])
 
 	m.queue_free()
 	await process_frame

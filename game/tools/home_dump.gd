@@ -24,10 +24,10 @@ func _init() -> void:
 	main.set_process(false)
 	main.player.set_physics_process(false)
 
-	await _shot(main, Vector2i(40, 13), "res://tools/home_house.png")    # ★T3② 집(북중앙) + 밭 입구
-	await _shot(main, Vector2i(40, 30), "res://tools/home_farm.png")     # 밭 중앙(스파인·미호·울타리)
-	await _shot(main, Vector2i(11, 11), "res://tools/home_storehouse.png")  # 창고(서북)
-	await _shot(main, Vector2i(68, 12), "res://tools/home_barn.png")     # 축사(동북)
+	await _shot(main, Vector2i(44, 6), "res://tools/home_house.png")     # ★ADR-0035 본가(북중앙 저지)
+	await _shot(main, Vector2i(42, 14), "res://tools/home_farm.png")     # 스타터 패치(미호·울타리·등불)
+	await _shot(main, Vector2i(30, 6), "res://tools/home_storehouse.png")  # 창고(본가 왼쪽)
+	await _shot(main, Vector2i(10, 24), "res://tools/home_barn.png")     # 축사·계단(고지 하늘 목장)
 	print("✅ home_dump 3장 저장 완료")
 	quit()
 

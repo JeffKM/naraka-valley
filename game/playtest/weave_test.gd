@@ -199,7 +199,7 @@ func _run_checks() -> void:
 	m4._update_miho_station()
 	# ⑪ 영업창(낮)에 카페가 열려 있으면서, 밭(SOIL)은 여전히 농사 가능 — 같은 낮 시간을 둘이 다툰다.
 	# 밭 한 칸을 골라 농사 대상인지 본다(미호 자리·카페 자리 빼고 SOIL이면 경작 가능).
-	var farmable_tile := Vector2i(m4.FARM_RECT.position.x + 1, m4.FARM_RECT.position.y + 1)
+	var farmable_tile := Vector2i(m4.STARTER_PATCH_RECT.position.x + 1, m4.STARTER_PATCH_RECT.position.y + 1)
 	_check("⑪ 카페 영업창(낮)에도 밭은 농사 가능 — 밭 더 vs 카운터가 같은 낮을 다툼",
 		m4.cafe.is_open() and m4._is_farmable(farmable_tile))
 	# ⑪b 그 무대에 미호·멜이 함께 서 있어 '대화'(호감도 곱셈기)도 같은 낮 시간의 선택지 — 셋이 경쟁.

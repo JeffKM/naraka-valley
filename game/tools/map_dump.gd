@@ -18,7 +18,8 @@ func _init():
 		for i in 8:
 			field.set_cell(Vector2i(16 + i, 6), 0, Vector2i(i, 0))
 		await process_frame
-	var out := Image.create(40 * 32, 24 * 32, false, Image.FORMAT_RGBA8)   # 환경 2배(TILE 32px)
+	# ★ADR-0035 — 캔버스를 현재 구역 외부 치수로(구역마다 80×65 등 다름, 40×24 고정이면 좌상단만 잡힘).
+	var out := Image.create(main._grid_w * 32, main._outdoor_h * 32, false, Image.FORMAT_RGBA8)
 	out.fill(Color(0.05, 0.05, 0.07, 1.0))
 	for layer in [ground, field]:
 		_blit_layer(layer, out)

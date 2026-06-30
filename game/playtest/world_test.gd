@@ -162,8 +162,11 @@ func _integration() -> void:
 	_check("⑥b 나루 마을로 워프", m._region == RegionCatalog.NARU_VILLAGE)
 	_check("⑥c 도착 = 마을 dest(3,36)", m._player_tile() == Vector2i(3, 36))   # ★C3
 	# 재빌드 증명(콘텐츠): 마을엔 카페 외관(WALL)이 선다(building_test ⑥와 같은 seam).
+	# ★ADR-0035 — 프로브를 카페 외관 내부 칸(+0,3)으로. 안식 재설계로 축사가 카페 외관 좌상단 꼭짓점(5,25)과
+	#   우연히 겹쳐(고지 남서끝) HOME에서 그 한 칸이 WALL이 됐다 — 잔재 누수가 아닌 좌표 우연 → 내부 칸으로 회피.
+	var cafe_probe: Vector2i = m.CAFE_EXT_RECT.position + Vector2i(0, 3)
 	_check("⑥d 마을 재빌드 — 카페 외관 자리 = WALL",
-		m._grid[m.CAFE_EXT_RECT.position.y][m.CAFE_EXT_RECT.position.x] == m.WALL)
+		m._grid[cafe_probe.y][cafe_probe.x] == m.WALL)
 
 	# ── 카페 진입(건물 워프) → 그 안에서 저장 ──
 	m.player.position = m._tile_center_px(m.CAFE_EXT_DOOR)
@@ -195,8 +198,9 @@ func _integration() -> void:
 	_check("⑥m 서쪽 가장자리 → 안식 농원 복귀", m2._region == RegionCatalog.HOME)
 	_check("⑥n 도착 = home dest(77,32)", m2._player_tile() == Vector2i(77, 32))   # ★C2 80×65 동쪽 워프 한 칸 안
 	# 재빌드 증명(누수 0): 안식 농원엔 카페가 없다 — 같은 칸이 더는 WALL이 아니다(마을 잔재 0).
+	var cafe_probe2: Vector2i = m2.CAFE_EXT_RECT.position + Vector2i(0, 3)   # ★ADR-0035 ⑥d와 같은 내부 칸(축사 우연 겹침 회피)
 	_check("⑥o 안식 농원 재빌드 — 카페 외관 잔재 없음(자리 ≠ WALL)",
-		m2._grid[m2.CAFE_EXT_RECT.position.y][m2.CAFE_EXT_RECT.position.x] != m2.WALL)
+		m2._grid[cafe_probe2.y][cafe_probe2.x] != m2.WALL)
 	await _despawn(m2)
 
 	# ── 세이브 백업 복원(실제 개발 세이브 보존) ──
