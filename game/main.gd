@@ -270,7 +270,15 @@ const PROP_LAYOUT_HOME := [
 	# ── ★ T3⑤ 테두리 프레이밍(초기 시드 — 배치 모드 F10로 다듬음). SOLID 나무·바위는 봇 동선
 	#    (스폰40,60·동워프78,32·집36-44·밭26-53·창고8-13·축사66-71) 비껴 맵 가장자리만. 장식은 빈 코너. ──
 	[PROP_TREE_A, [Vector2i(1, 12), Vector2i(1, 22), Vector2i(2, 34), Vector2i(1, 44),
-		Vector2i(76, 14), Vector2i(76, 44), Vector2i(75, 54)]],   # 서/동 가장자리 침엽수(SOLID)
+		Vector2i(76, 14), Vector2i(76, 44), Vector2i(75, 54),   # 서/동 가장자리 침엽수(SOLID)
+		# ★ 가장자리 자연 경계 — 옛 WALL 띠를 풀+충돌로 바꾸며(ADR-0026) 둘레를 침엽수 밴드로 가림.
+		#   동선(스폰40,60·동워프78,32)·건물(집36~44·창고8~13·축사66~71)·밭(26~53) 비껴 배치.
+		Vector2i(4, 0), Vector2i(16, 0), Vector2i(22, 0), Vector2i(28, 0), Vector2i(34, 0),
+		Vector2i(46, 0), Vector2i(52, 0), Vector2i(58, 0), Vector2i(64, 0), Vector2i(74, 0),     # 북변
+		Vector2i(4, 61), Vector2i(14, 61), Vector2i(20, 61), Vector2i(28, 61), Vector2i(34, 61),
+		Vector2i(48, 61), Vector2i(54, 61), Vector2i(62, 61), Vector2i(70, 61), Vector2i(74, 61),  # 남변
+		Vector2i(0, 7), Vector2i(0, 17), Vector2i(0, 28), Vector2i(0, 38), Vector2i(0, 50), Vector2i(0, 58),  # 서변 보강
+		Vector2i(77, 8), Vector2i(77, 20), Vector2i(77, 44), Vector2i(77, 52)]],   # 동변 보강
 	[PROP_TREE_B, [Vector2i(1, 2), Vector2i(74, 2)]],             # 서북·동북 코너 활엽수(SOLID)
 	[PROP_ROCK, [Vector2i(5, 28), Vector2i(73, 24), Vector2i(6, 58)]],  # 가장자리 바위(SOLID)
 	[PROP_GRASS, [Vector2i(6, 16), Vector2i(8, 40), Vector2i(4, 50), Vector2i(72, 20),
@@ -693,6 +701,9 @@ const SHIP_BIN_TILE := Vector2i(19, 88)   # 카페 직원 줄(y88) 오른쪽 끝
 # ★ T3③' 실내 가구 충돌 — 구역 빌드마다 SOLID_PROPS 칸에 사각 충돌을 다시 세운다(러그 제외).
 #   타일맵 벽과 같은 물리 레이어(기본 1)라 플레이어 move_and_slide가 통과 못 한다.
 var _prop_body: StaticBody2D = null
+# ★ 맵 경계 충돌체 — 옛 WALL 띠(시각)를 풀로 바꾸고(ADR-0026 룩 정합) 충돌만 외부 둘레에 둘러
+#   맵 밖 이탈을 막는다(_build_border가 구역 빌드마다 다시 세운다).
+var _border_body: StaticBody2D = null
 @onready var readout: Label = $CanvasLayer/Readout
 @onready var clock: GameClock = $Clock                     # T1.5 시계
 @onready var clock_label: Label = $CanvasLayer/ClockLabel
@@ -1791,12 +1802,28 @@ func _build_facade(rect: Rect2i, door: Vector2i) -> void:
 	_set_tile(door.x, door.y, PATH)
 
 func _build_border() -> void:
-	for x in _grid_w:
-		_set_tile(x, 0, WALL)
-		_set_tile(x, _grid_h - 1, WALL)
-	for y in _grid_h:
-		_set_tile(0, y, WALL)
-		_set_tile(_grid_w - 1, y, WALL)
+	# ADR-0026 룩 정합 — 옛 WALL 경계 띠(스타듀에 없는 맵 둘레 벽)를 시각에서 없앤다. 외부
+	# 경계칸은 풀(GROUND, _build_grid가 이미 깔아둠)로 남기고, 외부 영역(0..grid_w × 0..outdoor_h)
+	# 바로 바깥 둘레에 StaticBody 충돌 막대 4개를 둘러 맵 밖 이탈만 막는다(시각=자연 지형·충돌만
+	# 유지). 가장자리 나무·바위 PROP이 그 위에 서서 "숲에 안긴" 경계를 완성한다(가장자리 프레이밍).
+	if _border_body != null and is_instance_valid(_border_body):
+		_border_body.queue_free()
+	_border_body = StaticBody2D.new()
+	add_child(_border_body)
+	var w := _grid_w * TILE
+	var h := _outdoor_h * TILE
+	for bar in [
+		Rect2(0, -TILE, w, TILE),      # 상(맵 위 바깥)
+		Rect2(0, h, w, TILE),          # 하(외부 아래 바깥)
+		Rect2(-TILE, 0, TILE, h),      # 좌
+		Rect2(w, 0, TILE, h),          # 우
+	]:
+		var cs := CollisionShape2D.new()
+		var rs := RectangleShape2D.new()
+		rs.size = bar.size
+		cs.shape = rs
+		cs.position = bar.position + bar.size * 0.5
+		_border_body.add_child(cs)
 
 func _build_room(rect: Rect2i, floor_id: int, wall_id: int, door: Vector2i) -> void:
 	# 바닥으로 채운 뒤 둘레를 (실내) 벽으로 두르고, 문 한 칸만 바닥으로 되돌려 통로로 연다
