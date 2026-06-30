@@ -37,3 +37,6 @@ tools/stardew-wiki-all-titles.txt
 
 # 런타임 락(추적 제외)
 .claude/scheduled_tasks.lock
+
+# 에셋 생성 중간 산출물(스테이징 원본) — 라이브 자산만 커밋
+game/assets/_staging_*/

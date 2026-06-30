@@ -46,7 +46,10 @@
 - [x] **3.2 전이 크기 = `transition_size: 0.0`.** 코너 대각선 또렷한 경계(스타듀 정합 + 지형 가독성). 전이 *모양*은 Godot Wang 코너 오토타일이 책임지므로 0.0이 하드 경계를 뜻하지 않음. 0.0~0.5 모두 16타일이라 컨버터 무수정.
 - [x] **3.3 디테일 등급 = `detail: low`.** ⚠️ **★ADR-0035 개정** — 당초 medium으로 정했으나, owner 다회 피드백으로 안식 마스터 스타일을 **`single color outline` + `low detail` + 거친 레트로 도트**(루비/사파이어·스타듀)로 잠금. lineless·highly detail·매끄러운 그라데이션(RPG메이커 룩) 폐기. → **확정 스타일 = `outline:single color outline` + `shading:basic` + `detail:low` + `text_guidance_scale:8` + `transition_size:0.0`.** (이 스타일이 절벽·계단·debris·facade·나무·바위 등 모든 후속 환경 에셋의 앵커.)
 - [x] **3.4 팔레트 규율 = 공유 꼬리 + 선택적 영혼빛 액센트.**
-  - **(a) 공유 꼬리**(모든 지형·객체 설명에 append, ★ADR-0035 개정): `muted desaturated low-saturation underworld palette, somber graveyard tone, rough chunky retro pixel dithering, single color dark outline, NOT smooth gradient, NOT lineless RPG-maker style, clean readable at 32px` (~~soft rounded ... lineless~~ 폐기)
+  - **(a) 공유 꼬리 — ★2026-06-30 개정(따뜻한 베이스 + 저승 에셋, asset-ruleset §9).** 더는 "전부 muted"가 아니라 **둘로 분리**:
+    - **객체용**(건물·나무·바위·debris·가구·작물): `muted desaturated low-saturation underworld palette, somber graveyard tone, rough chunky retro pixel dithering, single color dark outline, NOT smooth gradient, NOT lineless RPG-maker style`
+    - **베이스 지형용**(풀·흙길·밭흙·자갈·모래·숲바닥 = 걸어다니는 땅): `warm inviting farm palette like Stardew Valley, slightly muted/toned-down (not candy-bright), tonal variation, rough chunky retro pixel dithering, single color dark outline, NOT smooth gradient`
+    - **물**(연못·강·바다)은 베이스 아님 = 저승 영혼빛 액센트(아래 b).
   - **(b) 선택적 영혼빛 파랑(`#60d8f0`)** — 테마상 맞는 곳에만(물=혼의 강 푸른 윤슬·잿눈=차가운 푸른 기·영혼 풀 가장자리). **흙길·모래·돌·밭흙은 흙빛 중립 유지**(파랑 강제 금지). 저승색 본체 = "저채도·음울", 파랑 = *영혼 깃든 곳을 짚는 악센트*.
   - **(c) 후보정** — 형광으로 나오면 `desaturate_grass.py`식 hue 선택 채도 하향(ADR-0001 허용), 원본 `*_raw.png` 백업.
 - [x] **3.5 구역별 지형 셋 + 체이닝 그래프** (아래 §4).

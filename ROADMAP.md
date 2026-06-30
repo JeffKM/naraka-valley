@@ -344,9 +344,11 @@ graph TD
 - **의존:** Phase 2.7 ✅ · **병렬:** Slice 1~5 전부와 동시 가능(순수 비주얼). 각 활동 슬라이스의 *아트 파트*만 이 토대를 기다린다.
 - **✅ 캐릭터 5종 스타듀 재생성·인게임 통합 완주**(S0-1~5): 미호·플레이어·옥자·멜·바나 walk 4방향 6프레임(80×80 발치정렬) + 회귀 33. ([ADR-0026] chibi·슬림≠흐림: flat+low 금지)
 - **✅ 코어 타일 룩 정합**(S0-7): wall.png 형광파랑→저승 회청 석벽 재생성 · 맵 경계 WALL 띠 제거→풀+StaticBody 충돌(스타듀식 자연 경계·가장자리 침엽수 밴드) · **마스터 바닥 타일 통일 재생성**(`single color outline`·`low detail`·거친 레트로 도트·밝은 연두 풀+미묘 variation·영혼빛 연못·스타듀 흙길 트레일) + soil/water 짙은 풀 통일. owner 피드백 다회 반영. → **tileset-ruleset.md `outline: lineless→single color outline` 개정**.
-- **🔶 안식 농원 전면 재설계로 진화**([ADR-0035] — 높이 단차 도입 + Overgrown 개간): 좌우대칭 중앙밭 → **비대칭 개간지**(본가+창고 북동 저지·서쪽 1단 고지 [하늘 목장]·돌계단 도구 게이트·[영혼빛 연못]·debris·스타터 패치). 범위=레이아웃+아트(개간 메카닉=Slice 1). CONTEXT 갱신(안식 구조·하늘 목장·영혼빛 연못). **shrimp 등록:** Phase A(절벽·계단·debris 아트)·B(`_build_grid` 전면 재작성)·C(facade·PROP 통일).
-- **남음:** S0-6 대화 초상화 5종 · S0-8 통합 시각확인 · 안식 재설계 Phase A/B/C.
-- 근거: [ADR-0026] 아트 피벗 · [ADR-0035] 안식 재설계 · `docs/design/tileset-ruleset.md` · `docs/design/p2.0-spike-prompts.md` §16(캐릭터 baseline).
+- **🔶 안식 농원 전면 재설계**([ADR-0035] — 높이 단차 + Overgrown 개간): 비대칭 개간지(본가+창고 북동 저지·서쪽 1단 고지 [하늘 목장]·돌계단 도구 게이트·[영혼빛 연못]·debris·스타터 패치). **Phase A(절벽·계단·debris 아트)·B(`_build_grid` 전면 재작성) ✅ 완료.** Phase C(facade·PROP 통일)는 ↓ 에셋 규칙 grill로 재정의됨.
+- **✅ 에셋 생성·배치 통합 규칙 grill 완주(2026-06-30):** owner와 전수 grill해 **`docs/design/asset-ruleset.md`(§0~§17)** 단일 진실원 확립 + **ADR-0036~0041** 신설(정면 facade 남향·피벗/방향성변형·발치 충돌·렌더/알파/발광·애니/드롭아이콘·마스터 팔레트) + ADR-0035/tileset-ruleset 개정. 핵심: **청키 16논리×2 그레인**(풀해상도=MV/MZ 곱은 룩 폐기)·NW광원/분리그림자·**따뜻한 베이스+저승 객체** 팔레트·도트밀도 통일(캐릭터 포함).
+- **🔶 Phase C 재작업(규칙 적용, 실행 대기):** Phase C 1차 청키 9종(본가·창고·축사·바위·그루터기·울타리·허수아비·화분·꽃밭)은 생성했으나 *이소메트릭·풀해상도 문제* 발견 → 규칙대로 재작업: ① 마스터팔레트+바닥타일 warm+청키 ② 건물 3종 **정면 facade** 재생성 ③ 절벽 동면 타일 ④ Slice0 캐릭터 청키화 ⑤ 코드(bottom앵커·분리그림자·pivot·발치충돌·Y-split·z-stack) ⑥ 광원 audit ⑦ 검수.
+- **남음:** S0-6 대화 초상화 5종 · S0-8 통합 시각확인 · **Phase C 규칙 적용 재작업(①~⑦)**.
+- 근거: [ADR-0026] 아트 피벗 · [ADR-0035] 안식 재설계 · **[ADR-0036~0041] 에셋 규칙** · **`docs/design/asset-ruleset.md`** · `docs/design/tileset-ruleset.md` · `docs/design/master-palette.md`.
 
 ### Slice 1 — 안식 농원 (HOME · 데모 1)
 - **의존:** Phase 2.7 ✅ · **병렬:** Slice 0·2·3·4·5와 동시 가능 · **완성 우선순위 1위**(데모 1). · **후행 차단:** S6(카페 합류)·S7·S8이 이 작물 루프를 기다린다.
