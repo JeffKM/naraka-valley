@@ -18,6 +18,12 @@ func _init() -> void:
 	out.fill(Color(0.05, 0.05, 0.07, 1.0))
 	for layer in [main.get_node("Ground") as TileMapLayer, main.get_node("Field") as TileMapLayer]:
 		_blit_layer(layer, out)
+	# ★ 지면 디테일 오버레이(베이크된 한 장 — _draw와 동일 레이어: 타일 위·프롭 아래)
+	if main._ground_detail_tex != null:
+		var gdi: Image = main._ground_detail_tex.get_image()
+		if gdi.get_format() != Image.FORMAT_RGBA8:
+			gdi.convert(Image.FORMAT_RGBA8)
+		out.blend_rect(gdi, Rect2i(Vector2i.ZERO, gdi.get_size()), Vector2i.ZERO)
 	# PROP — _draw_props_for(즉시모드)의 CPU 재현(가장자리 나무·바위·장식 포함)
 	for entry in main._prop_layouts.get("HOME", []):
 		var tex: Texture2D = entry[0]
