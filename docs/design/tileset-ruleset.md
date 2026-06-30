@@ -15,7 +15,8 @@
 | **타일 크기** | **32×32 native, 1:1 렌더**(×2 업스케일 금지) | ADR-0013 (ADR-0012의 16px×2를 환경 한정 개정) |
 | **아트 룩** | 스타듀밸리식 톤 + 저승 저채도 팔레트 + **거친 레트로 도트**(포켓몬 루비/사파이어·스타듀) | ADR-0026 → ADR-0035 개정 |
 | **outline** | `single color outline` (~~`lineless`~~) | **★ADR-0035 개정** — owner 다회 피드백: lineless/매끄러운 RPG메이커 그라데이션 폐기, 단색 외곽선 + 거친 도트 |
-| **detail** | `low detail` (~~medium~~) | **★ADR-0035 개정** — 안식 마스터 스타일 앵커(거친 손맛) |
+| **detail** | **`medium detail`** (~~low~~) | **★ADR-0043 재개정**(지형 한정) — owner가 스타듀 레퍼런스로 lush 요구. 풀이 꽉 차게. |
+| **생성 모드** | **`mode: pro` + `raggedness ~0.4~0.45`** | **★ADR-0043** — 경계 노이즈 = 유기적 들쭉날쭉(스타듀식 들고남) |
 | **shading** | `basic shading` | 기존 4세트 공통 |
 | **text_guidance_scale** | `8` | 〃 |
 | **체이닝** | `lower_base_tile_id`/`upper_base_tile_id`로 이음매 일치 | 기존 풀↔길↔밭흙 체인 |
@@ -28,7 +29,10 @@
 
 ## 2. 파이프라인 (확정 절차)
 
-1. **생성** — `create_topdown_tileset`(아래 규칙 파라미터로). 인접 지형은 이전 세트의 base tile id를 `lower_base_tile_id`로 넘겨 체이닝.
+0. **★ADR-0043 — 풀 톤 정규화는 *런타임*에 일원화.** 여러 grass 세트가 각자 다른 런이라 풀 톤이 어긋나면(특히 water_grass 노랑), 소스 PNG 색보정(desaturate류)은 물 픽셀 오염·base/경계 불일치로 취약하다. → 색 로직을 `main.gd::_harmonize_grass_variants()`(패스 A: 모든 풀 픽셀 hue/채도 warm-moss 수렴 / 패스 B: base 변종 명도 정합)로 통합하고 소스 PNG는 **vivid 원본 유지**(재유도 가능). desaturate_grass.py식 소스 보정은 단일 세트일 때만.
+1. **생성** — `create_topdown_tileset`(아래 규칙 파라미터로, `mode=pro`). 인접 지형은 이전 세트의 base tile id를 `lower_base_tile_id`/`upper_base_tile_id`로 넘겨 체이닝(풀 결 일관). pro 메타데이터도 `tiles[].corners`+`bounding_box`라 컨버터 호환.
+   - **★ADR-0043 입체감:** 풀은 *클럼프/그림자 프롬프트*("small distinct tufts and clumps, sunlit top + shaded base, soft shadows between clumps, volumetric depth, NOT flat uniform pattern")로 입체감을 낸다(shading 파라미터보다 프롬프트가 핵심; `medium shading`은 서버 stall 잦음 → `basic shading`로).
+   - **★ADR-0043 per-cell 변종:** 같은 전이쌍을 **여러 시드**로 생성하고 *동일 terrain 문자열*로 컨버터에 함께 넘기면(dedup) 변종 타일이 같은 peering bit에 등록돼 Godot이 칸마다 랜덤 선택 → 클럼프 격자·직선 경계 반복 제거("같은 경계 들고남"). **컨버터 코드 수정 불필요** — 인자에 세트만 추가.
 2. **다운로드** — `get_topdown_tileset`의 `download_png`/`download_metadata`는 302 redirect(backblaze) → **`curl -L` 필수**(없으면 0바이트). 파일명 = `*_image.png` / `*_metadata.json`.
 3. **색보정**(필요 시) — `tools/desaturate_grass.py`류 PIL hue 선택 보정(ADR-0001 허용 = Aseprite 보정). 원본은 `*_raw.png`로 1회 백업(idempotent).
 4. **합성** — `tools/pixellab_tileset_converter.gd`(PixelLab 공식, 벤더링)로 Wang 세트들을 단일 `.tres`로. **인자 순서가 terrain id를 고정**(기존: 0=길·1=풀·2=밭).

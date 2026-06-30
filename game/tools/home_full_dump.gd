@@ -39,7 +39,21 @@ func _init() -> void:
 		[main.FACADE_STOREHOUSE, main.STOREHOUSE_EXT_RECT],
 		[main.FACADE_BARN, main.BARN_EXT_RECT],
 	]
+	# ★[ADR-0043] facade 블렌드 — facade 그리기 전 footprint를 풀 베이스로 덮어(시각) 회색 WALL 그레이박스가
+	#   투명부로 안 비치게. main._facade_grass_backdrop과 동일 결(여기선 CPU blit로 재현).
+	var gsrc := (main.get_node("Ground") as TileMapLayer).tile_set.get_source(0) as TileSetAtlasSource
+	var grs: int = gsrc.texture_region_size.x
+	var gcoord: Vector2i = main._terrain_base_atlas(main.TR_GRASS)
+	var gatlas: Image = gsrc.texture.get_image()
+	if gatlas.get_format() != Image.FORMAT_RGBA8:
+		gatlas.convert(Image.FORMAT_RGBA8)
+	var gtile := Image.create(grs, grs, false, Image.FORMAT_RGBA8)
+	gtile.blit_rect(gatlas, Rect2i(gcoord.x * grs, gcoord.y * grs, grs, grs), Vector2i.ZERO)
 	for f in facades:
+		var rect := f[1] as Rect2i
+		for ty in range(rect.size.y):
+			for tx in range(rect.size.x):
+				out.blit_rect(gtile, Rect2i(0, 0, grs, grs), Vector2i((rect.position.x + tx) * TILE, (rect.position.y + ty) * TILE))
 		var fimg := (f[0] as Texture2D).get_image()
 		if fimg.get_format() != Image.FORMAT_RGBA8:
 			fimg.convert(Image.FORMAT_RGBA8)
