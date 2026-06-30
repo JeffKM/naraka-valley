@@ -13,9 +13,10 @@
 | 항목 | 값 | 출처 |
 |---|---|---|
 | **타일 크기** | **32×32 native, 1:1 렌더**(×2 업스케일 금지) | ADR-0013 (ADR-0012의 16px×2를 환경 한정 개정) |
-| **아트 룩** | 스타듀밸리식 소프트·둥근 톤 + 저승 저채도 팔레트 | ADR-0026 |
-| **outline** | `lineless` | 기존 4세트 메타데이터 공통 |
-| **shading** | `basic shading` | 〃 |
+| **아트 룩** | 스타듀밸리식 톤 + 저승 저채도 팔레트 + **거친 레트로 도트**(포켓몬 루비/사파이어·스타듀) | ADR-0026 → ADR-0035 개정 |
+| **outline** | `single color outline` (~~`lineless`~~) | **★ADR-0035 개정** — owner 다회 피드백: lineless/매끄러운 RPG메이커 그라데이션 폐기, 단색 외곽선 + 거친 도트 |
+| **detail** | `low detail` (~~medium~~) | **★ADR-0035 개정** — 안식 마스터 스타일 앵커(거친 손맛) |
+| **shading** | `basic shading` | 기존 4세트 공통 |
 | **text_guidance_scale** | `8` | 〃 |
 | **체이닝** | `lower_base_tile_id`/`upper_base_tile_id`로 이음매 일치 | 기존 풀↔길↔밭흙 체인 |
 
@@ -43,9 +44,9 @@
 
 - [x] **3.1 뷰 각도 = `low top-down`.** 기존 타일 4종·캐릭터 5종이 모두 low top-down → 한 화면 시점 일치 강제. 스킬의 high top-down 권장은 무시.
 - [x] **3.2 전이 크기 = `transition_size: 0.0`.** 코너 대각선 또렷한 경계(스타듀 정합 + 지형 가독성). 전이 *모양*은 Godot Wang 코너 오토타일이 책임지므로 0.0이 하드 경계를 뜻하지 않음. 0.0~0.5 모두 16타일이라 컨버터 무수정.
-- [x] **3.3 디테일 등급 = `detail: medium`.** 32px 탑다운 지형은 미세 텍스처(풀잎·흙 결)가 있어야 코지 손맛(스타듀 본가도 지형 텍스처 또렷). "저디테일"(ADR-0026)의 실제 범인은 디테일 등급이 아니라 팔레트·비례라 medium이어도 안 튐. → **확정 스타일 = `outline:lineless` + `shading:basic` + `detail:medium` + `text_guidance_scale:8`.**
+- [x] **3.3 디테일 등급 = `detail: low`.** ⚠️ **★ADR-0035 개정** — 당초 medium으로 정했으나, owner 다회 피드백으로 안식 마스터 스타일을 **`single color outline` + `low detail` + 거친 레트로 도트**(루비/사파이어·스타듀)로 잠금. lineless·highly detail·매끄러운 그라데이션(RPG메이커 룩) 폐기. → **확정 스타일 = `outline:single color outline` + `shading:basic` + `detail:low` + `text_guidance_scale:8` + `transition_size:0.0`.** (이 스타일이 절벽·계단·debris·facade·나무·바위 등 모든 후속 환경 에셋의 앵커.)
 - [x] **3.4 팔레트 규율 = 공유 꼬리 + 선택적 영혼빛 액센트.**
-  - **(a) 공유 꼬리**(모든 지형 설명에 append): `muted desaturated low-saturation underworld palette, somber graveyard tone, soft rounded stardew-style shapes, 2-3 tone shading, lineless, clean readable at 32px`
+  - **(a) 공유 꼬리**(모든 지형·객체 설명에 append, ★ADR-0035 개정): `muted desaturated low-saturation underworld palette, somber graveyard tone, rough chunky retro pixel dithering, single color dark outline, NOT smooth gradient, NOT lineless RPG-maker style, clean readable at 32px` (~~soft rounded ... lineless~~ 폐기)
   - **(b) 선택적 영혼빛 파랑(`#60d8f0`)** — 테마상 맞는 곳에만(물=혼의 강 푸른 윤슬·잿눈=차가운 푸른 기·영혼 풀 가장자리). **흙길·모래·돌·밭흙은 흙빛 중립 유지**(파랑 강제 금지). 저승색 본체 = "저채도·음울", 파랑 = *영혼 깃든 곳을 짚는 악센트*.
   - **(c) 후보정** — 형광으로 나오면 `desaturate_grass.py`식 hue 선택 채도 하향(ADR-0001 허용), 원본 `*_raw.png` 백업.
 - [x] **3.5 구역별 지형 셋 + 체이닝 그래프** (아래 §4).
