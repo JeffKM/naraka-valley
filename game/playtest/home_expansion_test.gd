@@ -46,7 +46,10 @@ func _walkable(m: Node, t: Vector2i) -> bool:
 	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
-	return id != m.WALL and id != m.VOID and id != m.WATER
+	# ★ADR-0035 절벽 단면(CLIFF_*)도 통과 불가(고지를 두름 — 계단 틈만 GROUND).
+	return id != m.WALL and id != m.VOID and id != m.WATER \
+		and id != m.CLIFF_FACE and id != m.CLIFF_CORNER_L \
+		and id != m.CLIFF_CORNER_R and id != m.CLIFF_INNER
 
 func _reachable(m: Node, start: Vector2i) -> Dictionary:
 	var seen := {}
@@ -156,9 +159,9 @@ func _initialize() -> void:
 	m2._maybe_toggle_building()
 	await _settle(m2)
 	_check("⑤ 홈 집 퇴장", m2._indoor == "")
-	# 밭 존재(회귀).
-	var fi: Vector2i = m2.FARM_RECT.position + Vector2i(1, 1)
-	_check("⑤ 밭(SOIL) 존재(회귀)", m2._grid[fi.y][fi.x] == m2.SOIL)
+	# 스타터 패치(SOIL) 존재(회귀).
+	var fi: Vector2i = m2.STARTER_PATCH_RECT.position + Vector2i(1, 1)
+	_check("⑤ 스타터 패치(SOIL) 존재(회귀)", m2._grid[fi.y][fi.x] == m2.SOIL)
 	# 창고 enterable 불변(다시 한 번 진입).
 	m2.player.position = m2._tile_center_px(m2.STOREHOUSE_EXT_DOOR)
 	m2._maybe_toggle_building()

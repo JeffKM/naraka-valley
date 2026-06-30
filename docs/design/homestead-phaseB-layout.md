@@ -1,8 +1,25 @@
 # 안식 농원 Phase B — 80×65 재배치 빌드 스펙 (ADR-0035 구현)
 
-> **상태:** Phase A 아트 완료(13종 라이브 임포트)·레이아웃 owner 확정(2026-06-30) 후 작성한 **Phase B 구현 스펙**.
-> 되돌리기 비싼 재작성([ADR-0035](../adr/0035-homestead-elevation-cliff-overgrown-redesign.md))이라 좌표·회귀를 먼저 굳힌다.
+> **상태:** ✅ **구현 완료(2026-06-30).** Phase A 아트(13종 라이브 임포트) 위에 Phase B 코드 빌드 완료 —
+> 절벽 타일종(CLIFF_FACE/CORNER_L/CORNER_R/INNER)+충돌·고지 둘레 절벽·계단(통과)·debris 하드 게이트·
+> 영혼빛 연못 WATER·5×5 스타터 패치·구불 동선 재작성·PROP_LAYOUT_HOME 전면 재배치. run_tests.sh 전체
+> 통과 + home_full_dump 시각 확인 완료. 남은 것 = 개간 메카닉(파내기·해금)은 Slice 1.
 > 진행 추적: 메모리 `homestead-overgrown-redesign-progress`. 회귀 맵 = 이 문서 §3(Explore 전수조사 산출).
+
+## 0. 구현 결과 요약 (실제 좌표 — 코드 기준)
+
+- **타일종 추가:** `CLIFF_FACE/CORNER_L/CORNER_R/INNER`(SOLID_TILES·SOLID_TEX·COLORS·_build_tileset 충돌).
+- **고지(하늘 목장):** x0..22, y0..28 걷기 가능 풀 / 동향 절벽 x23(y0..28) + 남향 절벽 y29(x0..23, 코너 양끝) /
+  계단 틈 x10,x11(GROUND) / 축사 `BARN_EXT_RECT=Rect2i(3,22,6,4)` door(6,25) 비-enterable.
+- **계단·게이트(PROP):** `STAIRS`(10,28) 통과 O / `DEBRIS_EMBER`(9,30)·`DEBRIS_STUMP`(11,30) 통과 X 하드 게이트.
+- **저지:** 본가 `HOUSE_EXT_RECT=(40,2,9,8)` door(44,9) / 창고 `STOREHOUSE_EXT_RECT=(28,3,6,6)` door(30,8) /
+  스타터 패치 `STARTER_PATCH_RECT=(40,12,5,5)` SOIL·`MIHO_FIELD_TILE=(42,14)` / 연못 `SPIRIT_POND_RECT=(26,34,8,7)` WATER /
+  `OKJA_INTRO_TILE=(40,58)`·`LANTERN_TILES_HOME=[(39,17),(45,17)]` / overgrown debris 산포.
+- **동선(_carve_paths):** 스파인 x38(y10..60)·본가 레인 y10·창고 갈래 y20/x30·동워프 레인 y32(→78,32).
+- **보존:** SPAWN(40,60)·동워프 at(78,32)/dest(3,36)·NARU→HOME dest(77,32)·실내 밴드 불변.
+- **삭제:** `FARM_RECT` → `STARTER_PATCH_RECT`로 대체(중앙 대형 밭 폐지).
+- **테스트 회귀:** world_test ⑥d/⑥o 프로브를 카페 외관 내부 칸(+0,3)으로(축사 우연 겹침 회피) /
+  home_expansion_test `_walkable`에 CLIFF_* 제외 / weave·home_expansion FARM_RECT→STARTER_PATCH / prop_layout 등불 단언.
 
 ## 1. 핵심 제약 (먼저 읽을 것)
 
