@@ -340,11 +340,13 @@ graph TD
 
 > ⚠️ **worktree 병렬의 실질 비용 — 공유 통합 지점 충돌:** 활동 루프들이 결국 `game/main.gd`·`game/main.tscn`·`game/save.gd`·`item_catalog.gd`·핫바/메뉴 UI에 **배선 한 줄씩**을 더한다. 메카닉 노드(`field.gd`·신설 `fishing.gd`·`mining.gd` 등)는 독립 파일이라 안전하지만 *이 통합 지점*에 머지 충돌이 몰린다. 완화: ① 각 슬라이스를 자기 노드 파일에 최대한 캡슐화하고 `main` 배선은 얇게(시그널 연결만), ② 자주 머지(슬라이스끼리 rebase), ③ 세이브 포맷 조각 추가는 슬라이스별 키 네임스페이스로 분리.
 
-### Slice 0 — 아트 피벗 마무리 (순수 비주얼·아트주도) ← 첫
+### Slice 0 — 아트 피벗 마무리 (순수 비주얼·아트주도) ← 첫 [진행 중]
 - **의존:** Phase 2.7 ✅ · **병렬:** Slice 1~5 전부와 동시 가능(순수 비주얼). 각 활동 슬라이스의 *아트 파트*만 이 토대를 기다린다.
-- **캐릭터 5종 스타듀 슬림 재생성 완주**([ADR-0026]): 미호 walk 잠금됨 → 미호 잔여 방향/상태 + 옥자·멜·바나·플레이어 + 초상화 룩 정합. (슬림≠흐림: flat+low 금지)
-- **코어 무대 룩 정합:** 도색 완료분(안식·나루 등)의 타일이 스타듀 룩과 어긋나면 보정.
-- 근거: [ADR-0026] 아트 피벗 · `docs/design/p2.0-spike-prompts.md`(스파이크) · PixelLab `mode=standard size=56 detail=high` + 공통 `proportions` 고정([ADR-0012]).
+- **✅ 캐릭터 5종 스타듀 재생성·인게임 통합 완주**(S0-1~5): 미호·플레이어·옥자·멜·바나 walk 4방향 6프레임(80×80 발치정렬) + 회귀 33. ([ADR-0026] chibi·슬림≠흐림: flat+low 금지)
+- **✅ 코어 타일 룩 정합**(S0-7): wall.png 형광파랑→저승 회청 석벽 재생성 · 맵 경계 WALL 띠 제거→풀+StaticBody 충돌(스타듀식 자연 경계·가장자리 침엽수 밴드) · **마스터 바닥 타일 통일 재생성**(`single color outline`·`low detail`·거친 레트로 도트·밝은 연두 풀+미묘 variation·영혼빛 연못·스타듀 흙길 트레일) + soil/water 짙은 풀 통일. owner 피드백 다회 반영. → **tileset-ruleset.md `outline: lineless→single color outline` 개정**.
+- **🔶 안식 농원 전면 재설계로 진화**([ADR-0035] — 높이 단차 도입 + Overgrown 개간): 좌우대칭 중앙밭 → **비대칭 개간지**(본가+창고 북동 저지·서쪽 1단 고지 [하늘 목장]·돌계단 도구 게이트·[영혼빛 연못]·debris·스타터 패치). 범위=레이아웃+아트(개간 메카닉=Slice 1). CONTEXT 갱신(안식 구조·하늘 목장·영혼빛 연못). **shrimp 등록:** Phase A(절벽·계단·debris 아트)·B(`_build_grid` 전면 재작성)·C(facade·PROP 통일).
+- **남음:** S0-6 대화 초상화 5종 · S0-8 통합 시각확인 · 안식 재설계 Phase A/B/C.
+- 근거: [ADR-0026] 아트 피벗 · [ADR-0035] 안식 재설계 · `docs/design/tileset-ruleset.md` · `docs/design/p2.0-spike-prompts.md` §16(캐릭터 baseline).
 
 ### Slice 1 — 안식 농원 (HOME · 데모 1)
 - **의존:** Phase 2.7 ✅ · **병렬:** Slice 0·2·3·4·5와 동시 가능 · **완성 우선순위 1위**(데모 1). · **후행 차단:** S6(카페 합류)·S7·S8이 이 작물 루프를 기다린다.
