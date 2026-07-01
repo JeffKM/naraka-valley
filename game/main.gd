@@ -2275,6 +2275,10 @@ func _paint_grid() -> void:
 	#   *오버레이가 아니라 풀로 꽉 찬 변종 베이스 타일 + 유기적 경계 변종 타일*(터레인 alternative)로 낸다.
 	#   debris/forage(점적 장식)는 Phase 3 게임플레이 오브젝트로(설계 §5). 오버레이 호출 비활성.
 	#_build_ground_details()
+	# ★[ADR-0043 §6(b)] 길↔풀 유기경계 = grass 쪽 raggedness(비-terrain 기법). *중앙 박기* 디테일 오버레이는
+	#   폐기 유지하되, *경계 fringe* 오버레이만 재도입한다 — 길은 솔리드 base 그대로(1칸 폭 복도 보존)·
+	#   인접 풀칸 경계만 들쭉날쭉. terrain corner-match(복도 소멸) 대신 오버레이라 grid·충돌·테스트 불변.
+	_build_path_grass_fringe()
 
 # ── 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md) ──────
 # 결정적 해시 좌표라 프레임·세이브·재방문에 고정(깜빡임 0). 구역 빌드 때 한 장으로 베이크해
@@ -2343,6 +2347,131 @@ func _gd_soft_image(tex: Texture2D, flip := false) -> Image:
 				p.a * _GD_SOFT_ALPHA))
 	_gd_soft_cache[ckey] = im
 	return im
+
+# ── [ADR-0043 §6(b)] 길↔풀 유기경계 = grass 쪽 raggedness (비-terrain 오버레이) ──────────
+# 길은 솔리드 base로 또렷하게 두고(1칸 폭 복도 보존), *경계선만* 유기적으로 들쭉날쭉하게 만든다.
+# terrain 전환(corner-match)은 1칸 폭 길을 통째로 먹어 폐기했으므로, 대신 경계를 오버레이 한 장으로
+# 베이크(_ground_detail_tex 재활용 — _draw에서 1 draw call, 타일 위·프롭 아래, grid/충돌/테스트 불변).
+#
+# ★[owner 피드백 2026-07-01] 초판은 *풀만 길 위로 더해* 한쪽으로만 부풀어(밑 풀 타일은 그대로라 "깎이는"
+#   오목부가 없어) 부자연스러웠다. → **부호 있는 물결선 하나**로 개정: 위치마다 오프셋이 +면 풀이 길로
+#   *볼록* 튀어나오고(풀 픽셀을 길칸에), -면 길 흙이 풀로 *오목* 파고든다(길 픽셀을 풀칸에 = 풀이 깎임).
+#   → 레퍼런스처럼 경계가 양방향으로 자연스레 물결친다.
+# 톤: 풀은 인접 풀칸의 실제 배치 변종 타일에서, 흙은 그 길칸의 실제 배치 길 변종 타일에서 픽셀 샘플 →
+#   색이 자연히 이어짐. 오프셋은 월드 경계좌표 결정적 해시(재빌드·워프 동일=깜빡임 0)·~3px 코히어런트(풀날
+#   뭉텅이·노이즈 아님)·경계 따라 칸 넘어 연속. |오프셋|이 DEAD 이하는 평평(그리드선 유지 — 과도한 흔들림 방지).
+const _FR_MAX := 6        # 경계가 볼록/오목으로 넘나드는 최대 깊이(px, TILE 32의 ~19%)
+const _FR_DEAD := 0.12    # |signed| 이 값 이하 = 평평 구간(경계선 그대로) — 균일 물결 방지
+func _build_path_grass_fringe() -> void:
+	_ground_detail_tex = null
+	var bw := _grid_w * TILE
+	var bh := _outdoor_h * TILE
+	if bw <= 0 or bh <= 0:
+		return
+	var src0 := ground.tile_set.get_source(0) as TileSetAtlasSource
+	if src0 == null:
+		return
+	var atlas: Image = src0.texture.get_image()
+	if atlas.get_format() != Image.FORMAT_RGBA8:
+		atlas.convert(Image.FORMAT_RGBA8)
+	var rs: int = src0.texture_region_size.x   # =TILE(32), tres 확인 — 1:1 샘플
+	var gvars := _terrain_base_variants(TR_GRASS)
+	var gvn := gvars.size()
+	if gvn == 0:
+		return
+	# 길 흙 샘플 원본: PATH_SRC_ID 디테일 변종(있으면) — 없으면 terrain base path 타일로 폴백.
+	var has_pd: bool = ground.tile_set.has_source(PATH_SRC_ID)
+	var patlas: Image
+	var prs := rs
+	var pbase := Vector2i.ZERO   # 폴백 시 source0 내 path base 아틀라스 좌표
+	if has_pd:
+		var psrc := ground.tile_set.get_source(PATH_SRC_ID) as TileSetAtlasSource
+		patlas = psrc.texture.get_image()
+		if patlas.get_format() != Image.FORMAT_RGBA8:
+			patlas.convert(Image.FORMAT_RGBA8)
+		prs = psrc.texture_region_size.x
+	else:
+		patlas = atlas
+		pbase = _terrain_base_atlas(TR_PATH)
+	var out := Image.create(bw, bh, false, Image.FORMAT_RGBA8)
+	# dir: 0=N(위 풀) 1=S(아래 풀) 2=W(왼 풀) 3=E(오른 풀). 길칸 기준 그 방향 이웃이 풀이면 그 경계 물결.
+	var neigh: Array[Vector2i] = [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
+	for y in range(_outdoor_h):
+		for x in range(_grid_w):
+			if _grid[y][x] != PATH:
+				continue
+			var pox := x * TILE
+			var poy := y * TILE
+			# 이 길칸이 _paint_grid에서 고른 흙 변종(salt 9 재현) → 길 아틀라스 원점.
+			var pv := int(_gd_h01(x, y, 9) * PATH_VARIANTS) % PATH_VARIANTS
+			var pax := (pv * prs) if has_pd else (pbase.x * prs)
+			var pay := 0 if has_pd else (pbase.y * prs)
+			for dir in 4:
+				var nx := x + neigh[dir].x
+				var ny := y + neigh[dir].y
+				if nx < 0 or ny < 0 or nx >= _grid_w or ny >= _outdoor_h:
+					continue
+				if _grid[ny][nx] != GROUND:
+					continue   # 풀(GROUND) 이웃만 — 흙·물·건물 경계는 제외
+				# 인접 풀칸이 _paint_grid에서 고른 변종 아틀라스 좌표(같은 해시 salt 5 재현).
+				var gco: Vector2i = gvars[int(_gd_h01(nx, ny, 5) * gvn) % gvn]
+				var gax := gco.x * rs
+				var gay := gco.y * rs
+				var horiz := dir <= 1   # N/S = 가로 경계(along = 월드 x) / W/E = 세로 경계(along = 월드 y)
+				# 평행한 다른 경계를 구분할 perp 고정 좌표(그 경계선의 월드 위치).
+				var perp := poy
+				if dir == 1:
+					perp = poy + TILE
+				elif dir == 2:
+					perp = pox
+				elif dir == 3:
+					perp = pox + TILE
+				for i in TILE:
+					var along := (pox + i) if horiz else (poy + i)
+					# 부호 있는 오프셋: 월드 경계좌표 결정적(~3px 코히어런트) + per-px 미세 지터.
+					var signed := _gd_h01(int(along / 3), perp, 610 + dir) - 0.5   # -0.5..0.5
+					if absf(signed) <= _FR_DEAD:
+						continue   # 평평(경계선 그대로)
+					var micro := _gd_h01(along, perp, 620 + dir)
+					var mag := (absf(signed) - _FR_DEAD) / (0.5 - _FR_DEAD)   # 0..1
+					var depth := 1 + int(mag * (_FR_MAX - 1) + micro * 1.5)
+					depth = clampi(depth, 1, _FR_MAX)
+					var grass_out := signed > 0.0   # +: 풀 볼록(길로) / -: 흙 오목(풀로, 풀 깎임)
+					for j in depth:
+						# 목적지(dx,dy: 월드 오프셋 from cell 원점) + 샘플(sx,sy: 원본 타일 로컬).
+						var dx := 0
+						var dy := 0
+						var sx := 0
+						var sy := 0
+						if grass_out:
+							# 풀이 길칸 안쪽으로 j만큼 — 인접 풀칸 경계열 픽셀을 이어붙임.
+							match dir:
+								0: dx = i; dy = j; sx = i; sy = rs - 1 - j
+								1: dx = i; dy = TILE - 1 - j; sx = i; sy = j
+								2: dx = j; dy = i; sx = rs - 1 - j; sy = i
+								3: dx = TILE - 1 - j; dy = i; sx = j; sy = i
+							var gp := atlas.get_pixel(gax + sx, gay + sy)
+							if gp.a < 0.5:
+								continue
+							if j == depth - 1:   # blade 팁 = 살짝 어둡게(풀날 윤곽)
+								gp = Color(gp.r * 0.78, gp.g * 0.78, gp.b * 0.82, gp.a)
+							out.set_pixel(pox + dx, poy + dy, gp)
+						else:
+							# 길 흙이 풀칸 안쪽으로 j만큼 — 이 길칸 경계열 흙 픽셀로 풀을 깎음.
+							match dir:
+								0: dx = i; dy = -1 - j; sx = i; sy = j
+								1: dx = i; dy = TILE + j; sx = i; sy = prs - 1 - j
+								2: dx = -1 - j; dy = i; sx = j; sy = i
+								3: dx = TILE + j; dy = i; sx = prs - 1 - j; sy = i
+							var tx := pox + dx
+							var ty := poy + dy
+							if tx < 0 or ty < 0 or tx >= bw or ty >= bh:
+								continue
+							var dp := patlas.get_pixel(pax + sx, pay + sy)
+							if dp.a < 0.5:
+								continue
+							out.set_pixel(tx, ty, dp)
+	_ground_detail_tex = ImageTexture.create_from_image(out)
 
 func _build_ground_details() -> void:
 	_ground_detail_tex = null
