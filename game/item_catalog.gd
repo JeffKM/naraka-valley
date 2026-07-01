@@ -26,7 +26,8 @@ class_name ItemCatalog
 # ── 카테고리(ADR-0020) ──────────────────────────────────────────────────────
 const CAT_TOOL := "tool"           # 도구(괭이·물뿌리개) — 유니크, 비매(price 0)
 const CAT_SEED := "seed"           # 씨앗 — 심으면 작물, 스택
-const CAT_HARVEST := "harvest"     # 수확물·산물 — 팔거나 서빙·선물, 스택
+const CAT_SAPLING := "sapling"     # 묘목 — 심으면 혼의 나무(과수), 스택(S1-5b)
+const CAT_HARVEST := "harvest"     # 수확물·산물(작물 + 과일) — 팔거나 서빙·선물, 스택
 const CAT_MATERIAL := "material"   # 재료 — 자리 예약(Phase 3 가공)
 const CAT_CONSUMABLE := "consumable"  # 소모품 — 자리 예약(Phase 3 조리)
 
@@ -36,6 +37,9 @@ const WATERING_CAN := "watering_can"  # 물뿌리개 — 심은 칸에 물주기
 
 # 씨앗 아이템 id 접미사("<작물군>_seed"). 작물군 id와 1:1 매핑.
 const SEED_SUFFIX := "_seed"
+# 묘목 아이템 id 접미사("<과일종>_sapling"). FruitTreeCatalog 종 id와 1:1(S1-5b).
+# 수확된 과일 아이템 id = 과일 종 id 그대로(harvest_id와 같은 결 — 씨앗:수확물 = 묘목:과일).
+const SAPLING_SUFFIX := "_sapling"
 
 # 도구 카탈로그(유니크·비매). 씨앗·수확물은 CropCatalog 파생이라 상수에 없다(아래 헬퍼).
 #   name_ko  : 표시명
@@ -54,6 +58,10 @@ static func seed_id(crop_id: String) -> String:
 static func harvest_id(crop_id: String) -> String:
 	return crop_id
 
+# 과일 종 id → 묘목 아이템 id("honbaekdo" → "honbaekdo_sapling"). S1-5b 심기 재료.
+static func sapling_id(fruit_id: String) -> String:
+	return fruit_id + SAPLING_SUFFIX
+
 # ── 분류 판정(내부) ─────────────────────────────────────────────────────────
 # id가 씨앗 아이템인가 = "_seed"로 끝나고 그 앞부분이 실제 작물군인가(오타·손상 방어).
 static func _is_seed(id: String) -> bool:
@@ -63,51 +71,78 @@ static func _is_seed(id: String) -> bool:
 static func _seed_crop(id: String) -> String:
 	return id.trim_suffix(SEED_SUFFIX) if id.ends_with(SEED_SUFFIX) else ""
 
+# id가 묘목 아이템인가 = "_sapling"로 끝나고 그 앞부분이 실제 과일 종인가(오타·손상 방어).
+static func _is_sapling(id: String) -> bool:
+	return id.ends_with(SAPLING_SUFFIX) and FruitTreeCatalog.has(_sapling_fruit(id))
+
+# 묘목 아이템 id → 과일 종 id("honbaekdo_sapling" → "honbaekdo"). 묘목 아님이면 "".
+static func _sapling_fruit(id: String) -> String:
+	return id.trim_suffix(SAPLING_SUFFIX) if id.ends_with(SAPLING_SUFFIX) else ""
+
+# id가 수확된 과일 아이템인가(과일 종 id 그대로). 판매·스택은 작물 수확물과 동급(CAT_HARVEST).
+static func _is_fruit(id: String) -> bool:
+	return FruitTreeCatalog.has(id)
+
 # ── 조회 ────────────────────────────────────────────────────────────────────
-# 카탈로그에 있는 유효 아이템인가(도구·씨앗·수확물 어느 하나). 슬롯 add/load 검증에 쓴다.
+# 카탈로그에 있는 유효 아이템인가(도구·씨앗·묘목·수확물·과일 어느 하나). 슬롯 add/load 검증에 쓴다.
 static func has_item(id: String) -> bool:
-	return TOOLS.has(id) or _is_seed(id) or CropCatalog.has_crop(id)
+	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
+# 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
 static func category_of(id: String) -> String:
 	if TOOLS.has(id):
 		return CAT_TOOL
 	if _is_seed(id):
 		return CAT_SEED
-	if CropCatalog.has_crop(id):
+	if _is_sapling(id):
+		return CAT_SAPLING
+	if CropCatalog.has_crop(id) or _is_fruit(id):
 		return CAT_HARVEST
 	return ""
 
-# 표시명(HUD·상점·툴팁). 씨앗은 "<작물명> 씨앗", 수확물은 작물명, 도구는 도구명. 없으면 "".
+# 표시명(HUD·상점·툴팁). 씨앗="<작물명> 씨앗"·묘목="<과일명> 묘목"·수확물=작물명·과일=과일명·도구=도구명. 없으면 "".
 static func name_of(id: String) -> String:
 	if TOOLS.has(id):
 		return TOOLS[id]["name_ko"]
 	if _is_seed(id):
 		return "%s 씨앗" % CropCatalog.name_of(_seed_crop(id))
+	if _is_sapling(id):
+		return "%s 묘목" % FruitTreeCatalog.name_of(_sapling_fruit(id))
 	if CropCatalog.has_crop(id):
 		return CropCatalog.name_of(id)
+	if _is_fruit(id):
+		return FruitTreeCatalog.name_of(id)
 	return ""
 
-# 스택 가능한가. 도구=유니크(false), 씨앗·수확물=스택(true). 인벤토리 add가 합칠지 가른다.
+# 스택 가능한가. 도구=유니크(false), 씨앗·묘목·수확물·과일=스택(true). 인벤토리 add가 합칠지 가른다.
 static func stackable_of(id: String) -> bool:
 	if TOOLS.has(id):
 		return false
-	return _is_seed(id) or CropCatalog.has_crop(id)
+	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id)
 
-# 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 수확물=판매가(sell_price). 없으면 0.
+# 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 수확물/과일=판매가. 없으면 0.
 # 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다(데이터/정책 분리).
 static func price_of(id: String) -> int:
 	if TOOLS.has(id):
 		return 0
 	if _is_seed(id):
 		return CropCatalog.seed_cost(_seed_crop(id))
+	if _is_sapling(id):
+		return FruitTreeCatalog.sapling_cost(_sapling_fruit(id))
 	if CropCatalog.has_crop(id):
 		return CropCatalog.sell_price(id)
+	if _is_fruit(id):
+		return FruitTreeCatalog.fruit_sell(id)
 	return 0
 
 # 씨앗 아이템 → 작물군 id("" = 씨앗 아님). main이 "이 씨앗을 심으면 무슨 작물"을 알 때 쓴다.
 static func crop_of(id: String) -> String:
 	return _seed_crop(id) if _is_seed(id) else ""
+
+# 묘목 아이템 → 과일 종 id("" = 묘목 아님). main이 "이 묘목을 심으면 무슨 혼의 나무"를 알 때 쓴다.
+static func fruit_of(id: String) -> String:
+	return _sapling_fruit(id) if _is_sapling(id) else ""
 
 # 그레이박스 도구 아이콘 색(도구 외엔 흰색 폴백 — 씨앗·수확물은 작물 스프라이트를 쓰므로 미사용).
 static func tool_color_of(id: String) -> Color:

@@ -23,6 +23,26 @@ const START_MIN := 6 * 60            # 06:00 — 하루 시작(아침)
 const END_MIN := 24 * 60            # 24:00 — 이 시각이면 쓰러진다(강제 취침)
 const REAL_SECONDS_PER_DAY := 90.0  # 06:00→24:00(18시간)을 실제 90초에 흘린다(그레이박스 속도)
 
+# ── 저승 절기 유도(S1-5b · ADR-0045) — 읽기 전용 파생, 상태 변수 없음 ──────────
+# clock은 절기 상태를 들지 않고, 기존 day에서 계산되는 순수 파생 함수만 노출한다.
+# 절기당 28일 = 1년 112일(CONTEXT [저승 절기]), 게임 시작 = 피안절 1일(day 1 → index 0).
+# ⚠️ 사멸 판정·날씨·축제·예보는 여기 없다 — 그건 Slice 7(계절·날씨·축제)이 이 위에 얹는다.
+#    지금 유일한 소비자는 orchard(혼의 나무)로, "지금 내 결실 절기인가?"만 읽는다(ADR-0045).
+const DAYS_PER_SEASON := 28
+const SEASON_NAMES := ["피안절", "유화절", "망연절", "성야절"]   # index 0..3(봄·여름·가을·겨울결)
+
+# 어떤 날(1부터)의 절기 인덱스(0=피안·1=유화·2=망연·3=성야). static이라 헤드리스에서도 가볍다.
+static func season_index_for_day(d: int) -> int:
+	return ((d - 1) / DAYS_PER_SEASON) % 4
+
+# 절기 인덱스 → 표시명("" = 범위 밖). flavor·프롬프트용.
+static func season_name(idx: int) -> String:
+	return SEASON_NAMES[idx] if idx >= 0 and idx < SEASON_NAMES.size() else ""
+
+# 현재 절기 인덱스(현재 day 기준 편의 메서드).
+func season_index() -> int:
+	return season_index_for_day(day)
+
 var day := 1
 var minutes: float = START_MIN
 var running := true                  # false면 시간 정지(취침 연출 중 등)

@@ -76,6 +76,10 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			draw_rect(inner, ItemCatalog.tool_color_of(id))
 		ItemCatalog.CAT_SEED:
 			_draw_crop_tex(ItemCatalog.crop_of(id), inner)
+		ItemCatalog.CAT_SAPLING:
+			# ★ [S1-5b] 묘목 그레이박스 아이콘 — 밑동(갈색)+새싹(초록) 색 박스(대형 스프라이트=S1-10).
+			draw_rect(inner, Color(0.42, 0.30, 0.20))
+			draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.45)), Color(0.35, 0.62, 0.35))
 		ItemCatalog.CAT_HARVEST:
 			_draw_crop_tex(id, inner)
 

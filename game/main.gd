@@ -824,6 +824,13 @@ var _border_body: StaticBody2D = null
 #   진실원 = farm.is_crop_solid/solid_crop_tiles(로직), 여긴 물리만(greybox-spec §6.2). 안식 농원 전용.
 #   _prop_body 패턴과 동형(구역/상태 변화마다 재구성). 테스트·봇은 실내를 물리로 안 걷는다(직접 좌표).
 var _trellis_body: StaticBody2D = null
+# ★ [S1-5b] 혼의 나무 밑동 충돌체 — 3×3 과수의 밑동(앵커 1칸)만 SOLID로 세운다(수관 8칸 통과).
+#   진실원 = orchard._trees(로직·자체 좌표계), 여긴 물리만(greybox-spec §7.4). 안식 농원 전용.
+#   _trellis_body와 동형 패턴(orchard.changed·구역 빌드마다 재구성).
+var _orchard_body: StaticBody2D = null
+# ★ [S1-5b] 혼의 나무 과수 상태(심긴 나무·나이·결실). FarmField와 완전 분리된 자체 노드(코드 생성 —
+#   에디터 프로퍼티가 없어 .tscn에 안 넣고 _trellis_body처럼 .new()로 붙인다). save.gd·main이 조율.
+var orchard: Orchard = null
 @onready var readout: Label = $CanvasLayer/Readout
 @onready var clock: GameClock = $Clock                     # T1.5 시계
 @onready var clock_label: Label = $CanvasLayer/ClockLabel
@@ -1009,6 +1016,12 @@ func _ready() -> void:
 	add_child(_prop_body)
 	_trellis_body = StaticBody2D.new()   # ★ [S1-5a] 트렐리스 넝쿨 충돌체(tile_changed·구역빌드가 재구성)
 	add_child(_trellis_body)
+	_orchard_body = StaticBody2D.new()   # ★ [S1-5b] 혼의 나무 밑동 충돌체(orchard.changed·구역빌드가 재구성)
+	add_child(_orchard_body)
+	orchard = Orchard.new()              # ★ [S1-5b] 과수 상태 노드(코드 생성 — 자체 좌표계, FarmField와 분리)
+	orchard.name = "Orchard"
+	add_child(orchard)
+	orchard.changed.connect(_on_orchard_changed)   # 심기·결실·수확·복원 시 밑동 충돌·화면 갱신
 	_ensure_prop_layouts()   # ★ ADR-0025 ② PROP 좌표 데이터 외부화 로드(_build_grid 충돌 재구성 전)
 	_build_grid()
 	_paint_grid()
@@ -1599,6 +1612,7 @@ func _build_grid() -> void:
 			_build_home()
 	_rebuild_prop_collision()   # ★ T3③' 현재 구역 실내 가구 통과 불가 충돌 재구성(러그 제외)
 	_rebuild_trellis_collision()   # ★ [S1-5a] 트렐리스 넝쿨 통과 불가 충돌 재구성(안식 농원 전용)
+	_rebuild_orchard_collision()   # ★ [S1-5b] 혼의 나무 밑동 통과 불가 충돌 재구성(안식 농원 전용)
 
 # ★ T3③' 실내 가구 충돌 재구성 — 현재 구역의 실내 레이아웃에서 SOLID_PROPS 텍스처 칸에만 사각 충돌을
 # 단다(러그·등불·꽃·울타리는 제외 = 통과 O). 시각 lift(WALL_PROP_LIFT)와 같은 오프셋을 충돌에도 줘
@@ -1655,6 +1669,31 @@ func _rebuild_trellis_collision() -> void:
 		cs.shape = rect
 		cs.position = Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
 		_trellis_body.add_child(cs)
+
+# ★ [S1-5b] 혼의 나무 밑동 충돌 재구성(greybox-spec §7.4) — orchard.trunk_tiles() 앵커마다 밑동 1칸
+# SOLID(수관 8칸은 통과 가능 — 3×3 벽 회피). _rebuild_trellis_collision과 동형(안식 농원 전용).
+# orchard.changed(심기·복원)·구역 빌드에서 호출. 결실·수확은 풋프린트가 안 변해 충돌 불변이지만
+# 멱등이라 같이 재구성해도 무해하다.
+func _rebuild_orchard_collision() -> void:
+	if _orchard_body == null or orchard == null:
+		return
+	for c in _orchard_body.get_children():
+		c.queue_free()
+	if _region != RegionCatalog.HOME:
+		return
+	for t in orchard.trunk_tiles():
+		var cs := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(TILE, TILE)
+		cs.shape = rect
+		cs.position = Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
+		_orchard_body.add_child(cs)
+
+# orchard 상태가 바뀐 프레임(심기·결실·수확·세이브 복원). 밑동 충돌을 다시 세우고 화면을 갱신한다
+# (FarmField.tile_changed → _on_tile_changed와 같은 결의 디커플링 훅).
+func _on_orchard_changed() -> void:
+	_rebuild_orchard_collision()
+	queue_redraw()
 
 # ★ ADR-0025 ② — PROP 좌표 외부화 로드. 부팅 시 한 번(_ready, _build_grid 전). res://layout.json이
 # 있으면 거기서, 없거나 깨졌으면 시드에서 부팅하고 layout.json을 1회 생성(에디터/디버그 빌드만 write).
@@ -2892,6 +2931,7 @@ func _on_day_advanced(day: int) -> void:
 		return
 	var h := affinity.hearts()
 	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h))
+	orchard.advance_day(day)   # ★ [S1-5b] 성숙+제철 나무는 결실 +1(비제철 정지·영속). day는 무상태 절기 판정(ADR-0045)
 	energy.refill()
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
@@ -3157,6 +3197,7 @@ func _save_game() -> void:
 		"clock": clock.to_save(),
 		"energy": energy.to_save(),
 		"farm": farm.to_save(),
+		"orchard": orchard.to_save(),   # ★ [S1-5b] 심긴 혼의 나무(앵커·나이·결실). 영속·나이가 planted_day 파생이라 최소
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
 		"shipping_bin": ship_bin.to_save(),   # ★ C2 출하 대기(롤백·익일 정산 보존)
@@ -3191,6 +3232,8 @@ func _load_game() -> void:
 		energy.load_save(data["energy"])
 	if data.has("farm"):
 		farm.load_save(data["farm"])
+	if data.has("orchard"):   # ★ [S1-5b] — 키 없는 구버전 세이브는 나무 0으로 시작(changed가 밑동 충돌 재구성)
+		orchard.load_save(data["orchard"])
 	if data.has("wallet"):
 		wallet.load_save(data["wallet"])
 	if data.has("inventory"):
@@ -3680,6 +3723,14 @@ func _use_tool() -> void:
 		if inventory.has_seed(crop) and farm.plant(_target, crop):
 			inventory.take_seed(crop)
 			verb = "심기"
+	elif cat == ItemCatalog.CAT_SAPLING and _region == RegionCatalog.HOME:
+		# ★ [S1-5b] 든 묘목으로 혼의 나무를 심는다(안식 농원 전용). 앵커=조준 칸, 3×3 판정 통과 시.
+		# is_blocked = 맵밖 or is_solid(절벽·프롭) or is_crop_solid(트렐리스) — 지형 게이팅을 여기서 합성해
+		# orchard에 주입한다(orchard는 지형을 모름, greybox-spec §7.4). 심으면 묘목 1개 소모.
+		var fruit := ItemCatalog.fruit_of(item)
+		if inventory.has_sapling(fruit) and orchard.plant(_target, fruit, clock.day, _is_tree_blocked):
+			inventory.take_sapling(fruit)
+			verb = "심기"
 	if verb == "":
 		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
 	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기는 물줄기.
@@ -3691,7 +3742,23 @@ func _use_tool() -> void:
 # RMB 맨손 수확(ADR-0024 §3 — 낫 없음, 수확=맨손). 다 자란 칸만 거두고, 거둔 영혼을 인벤토리에
 # 쌓아 경제의 양끝을 잇는다(밭→재고→판매·서빙). 다 안 자랐거나 혼력 부족이면 무동작.
 func _try_harvest() -> void:
-	if not energy.can_act() or not farm.is_mature(_target):
+	if not energy.can_act():
+		return
+	# ★ [S1-5b] 혼의 나무 과수 수확 우선(greybox-spec §7.6) — 조준 칸이 성숙+결실 나무 풋프린트에 들면
+	# 매달린 과일을 전량 거둔다. 작물 밭(SOIL)이 아니라 과수라 farm 경로보다 먼저 본다. 안식 농원 전용.
+	if _region == RegionCatalog.HOME:
+		var anchor := orchard.tree_at(_target)
+		if orchard.has_tree(anchor):
+			var picked := orchard.harvest(anchor, clock.day)   # {fruit_id,count,quality_tier} / {} = 미성숙·무결실
+			if not picked.is_empty():
+				# ★ 품질 등급(picked.quality_tier)은 계산만 하고 인벤토리엔 안 붙인다(§7.7 — S1-6이 소비).
+				for _i in int(picked["count"]):
+					inventory.add_item(picked["fruit_id"])   # 과일 = CAT_HARVEST(작물 수확물과 동급 적재)
+				audio.sfx("harvest")
+				energy.spend()
+				queue_redraw()
+				return
+	if not farm.is_mature(_target):
 		return
 	var harvested_crop := farm.crop_of(_target)  # harvest 뒤엔 칸이 비거나(SINGLE) 되감기(REGROW) 되므로 미리 확보
 	farm.harvest(_target)
@@ -3735,6 +3802,26 @@ func _hotbar_summary() -> String:
 # 맨손 수확(RMB)은 도구와 무관하게 다 자란 칸이면 항상 안내한다. 그 외엔 든 도구가 칸 상태에
 # 맞을 때만 [좌클릭] 동사를 보인다(안 맞으면 "" — 자동 분기 없음의 HUD 짝, ADR-0024 §2).
 func _farm_prompt() -> String:
+	# ★ [S1-5b] 혼의 나무 우선(밭 SOIL 판정과 무관 — 과수는 풋프린트 조준). 성숙+결실이면 수확 안내,
+	# 든 게 묘목이면 심기 안내(안식 농원 전용). _target_valid(SOIL) 게이트보다 먼저 본다.
+	if _region == RegionCatalog.HOME:
+		var anchor := orchard.tree_at(_target)
+		if orchard.has_tree(anchor):
+			if not energy.can_act():
+				return "혼력 부족 — 집에서 취침"
+			var n := orchard.fruit_count_of(anchor)
+			if orchard.is_mature(anchor, clock.day) and n > 0:
+				return "[우클릭] 혼의 나무 수확 (%d개)" % n
+			return ""   # 아직 안 자랐거나 결실 없음 — 조용히(비제철/성장 중)
+		var held := inventory.selected_id()
+		if ItemCatalog.category_of(held) == ItemCatalog.CAT_SAPLING:
+			var fruit := ItemCatalog.fruit_of(held)
+			if inventory.has_sapling(fruit):
+				if not energy.can_act():
+					return "혼력 부족 — 집에서 취침"
+				if orchard.can_plant(_target, _is_tree_blocked):
+					return "[좌클릭] %s 묘목 심기 (3×3)" % FruitTreeCatalog.name_of(fruit)
+				return "여기엔 못 심음 — 3×3 빈 자리 필요"
 	if not _target_valid:
 		return ""
 	if not energy.can_act():
@@ -4403,6 +4490,19 @@ func _is_farmable(t: Vector2i) -> bool:
 		return false
 	return _grid[t.y][t.x] == SOIL
 
+# ★ [S1-5b] 혼의 나무 3×3 심기 판정용 "이 칸이 막혔나"(greybox-spec §7.4 ①②③). orchard.can_plant에
+# Callable로 주입한다 — orchard는 지형을 모르고 main이 여기서 합성한다(디커플링). 막힘 = 맵 밖 or
+# is_solid(절벽·프롭·벽·나무·바위) or is_crop_solid(트렐리스 넝쿨) or 미호 밭 자리(예약). SOIL 요구는
+# 없다(밭갈이 무관 — 풀 위에도 심을 수 있다, Q2/Q3). 타 나무 겹침은 orchard가 자체 판정한다(④).
+func _is_tree_blocked(t: Vector2i) -> bool:
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
+		return true
+	if t == MIHO_FIELD_TILE:
+		return true
+	if is_solid(_grid[t.y][t.x]):
+		return true
+	return farm.is_crop_solid(t)
+
 # 밭 칸 상태가 바뀌면 오버레이 타일을 갱신한다(FarmField.tile_changed로 호출).
 func _on_tile_changed(t: Vector2i) -> void:
 	var idx := _overlay_index(t)
@@ -4446,6 +4546,7 @@ func _draw() -> void:
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_prop_layouts.get("HOME", []), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터: 집 가구·길가 등불·화분 + T3 농장 장식
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
+			_draw_orchard()          # ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(대형 스프라이트=S1-10)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
@@ -4482,6 +4583,31 @@ func _draw_crops() -> void:
 		var stage: int = clampi(farm.growth_stage(t), 0, frames.size() - 1)
 		var tex: Texture2D = frames[stage]
 		draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), Vector2(TILE, TILE)), false)
+
+# ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(greybox-spec §7.4 — 대형 스프라이트·Y-sort=S1-10 이관).
+# 묘목(미성숙)=밑동 작은 새싹 / 성숙=3×3 수관(반투명 초록) + 밑동(갈색) + 매달린 과일 점(fruit_count).
+# 순수 시각 placeholder — 로직·충돌은 orchard/_orchard_body가 든다(육안 확인용).
+func _draw_orchard() -> void:
+	if orchard == null:
+		return
+	var day := clock.day
+	for anchor in orchard.trunk_tiles():
+		var trunk_px := Vector2(anchor.x * TILE, anchor.y * TILE)
+		if not orchard.is_mature(anchor, day):
+			# 묘목: 밑동 칸에 작은 갈색 줄기 + 초록 새싹(자라는 중).
+			draw_rect(Rect2(trunk_px + Vector2(TILE * 0.42, TILE * 0.45), Vector2(TILE * 0.16, TILE * 0.5)), Color(0.42, 0.30, 0.20))
+			draw_rect(Rect2(trunk_px + Vector2(TILE * 0.30, TILE * 0.28), Vector2(TILE * 0.4, TILE * 0.22)), Color(0.35, 0.62, 0.35, 0.9))
+			continue
+		# 성숙: 3×3 수관(앵커 ±1) 반투명 초록 — 통과 가능함을 반투명으로 시사.
+		var canopy_px := Vector2((anchor.x - 1) * TILE, (anchor.y - 1) * TILE)
+		draw_rect(Rect2(canopy_px, Vector2(TILE * 3, TILE * 3)), Color(0.28, 0.52, 0.30, 0.5))
+		# 밑동(앵커 1칸, 불투명 갈색 — 통과 불가 SOLID 칸).
+		draw_rect(Rect2(trunk_px + Vector2(TILE * 0.34, TILE * 0.3), Vector2(TILE * 0.32, TILE * 0.7)), Color(0.40, 0.27, 0.17))
+		# 매달린 익은 과일 점(fruit_count개, 수관 상단에 붉은 점).
+		var n := orchard.fruit_count_of(anchor)
+		for i in n:
+			var fp := canopy_px + Vector2(TILE * (0.6 + i * 0.8), TILE * 0.6)
+			draw_circle(fp, TILE * 0.22, Color(0.85, 0.28, 0.32))
 
 # 외부 건물 외관을 외관 박스 좌상단에 1:1로 그린다(이미지 크기 = 박스 크기). 통과 불가 WALL
 # 박스를 도트 외관이 덮어 "닫힌 건물"이 되고, 문 칸(외관 하단 중앙)에 닿으면 실내로 fade 전환한다.
@@ -4524,9 +4650,13 @@ func _blit_facade_anchored(tex: Texture2D, rect: Rect2i) -> void:
 	var base_y := float((rect.position.y + rect.size.y) * TILE)
 	var sz := tex.get_size()
 	# ★[§11 접지] 텍스처는 내용 bbox로 트림돼 있어 art 바텀 = 건물 실제 밑단. 밑단 폭에 맞춘
-	# 납작한 반투명 타원을 밑단 바로 아래(footprint 하단)에 깔아 "땅에 앉은" 접지를 만든다.
-	draw_set_transform(Vector2(cx, base_y - 3.0), 0.0, Vector2(1.0, 0.20))
-	draw_circle(Vector2.ZERO, sz.x * 0.42, Color(0, 0, 0, 0.34))
+	# 납작한 반투명 타원을 밑단에 *밀착*(대부분 밑단 뒤·아래로 한 줄만 삐져나옴)시켜 접지를 만든다.
+	# 예전엔 타원이 밑단 아래로 크게(≈세로반경 20px+) 삐져나온 '접시'라 건물이 떠 보였다(본가·축사).
+	# 세로반경을 줄이고(0.17) 중심을 밑단 살짝 위(−ery*0.4)로 올려 "땅에 앉은" 컨택트 그림자로 교정.
+	var erx := sz.x * 0.42
+	var ery := erx * 0.17
+	draw_set_transform(Vector2(cx + 2.0, base_y - ery * 0.4), 0.0, Vector2(1.0, 0.17))
+	draw_circle(Vector2.ZERO, erx, Color(0, 0, 0, 0.34))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 	# bottom-center 앵커 블릿(트림된 art 바텀 = footprint 하단 = 실제 밑단, 위로 솟음 → 지붕 오버행).
 	draw_texture_rect(tex, Rect2(Vector2(cx - sz.x * 0.5, base_y - sz.y), sz), false)
