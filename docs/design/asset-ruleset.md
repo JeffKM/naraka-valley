@@ -72,7 +72,11 @@ strict adherence to 2-3 color values max, no smooth gradients.
 
 ## 2. 건물 방향 — 정면 Facade + 남향 진입 ([ADR-0036] 잠금 2026-06-30)
 
-- **정면(Front-Facing) Facade**: 정면 벽 평면 렌더 + **지붕 Y축 깊이 1~2 논리 타일만** 노출(2.5D 착시). **측면 벽 렌더 금지**(이소메트릭 금지). PixelLab `view=side` + §1.1 광원 세트 + `"front-facing facade, facing camera, NOT isometric, NOT angled, symmetrical front elevation"`.
+- **정면(Front-Facing) Facade**: 정면 벽 평면 렌더 + **지붕 Y축 깊이 1~2 논리 타일만** 노출(2.5D 착시). **측면 벽 렌더 금지**(이소메트릭 금지).
+- **★지붕 윗면 슬랩 노출 = 필수 검증 (owner 잠금 2026-07-02)**: 정면 지붕 경사면 위에 **하늘을 보는 윗면 슬랩(뒤로 물러나는 깊이면)이 반드시 노출**돼야 한다(본가 지붕이 기준). "정면 삼각형 실루엣만 있고 윗면 0" = **리젝 → 재생성**. 육안 확인(home_dump)에서 윗면이 안 보이면 통과 불가.
+  - **생성 파라미터: `view="low top-down"`**(윗면 노출용 — 기존 `view=side`는 윗면이 안 나와 폐기). + §1.1 광원 + `"front-facing facade, facing camera, NOT isometric, NOT angled, symmetrical front elevation, flat roof-top slab receding behind the ridge (roof depth visible)"`.
+  - **감블(곡면 gambrel) 지붕 금지** — PixelLab이 곡면 지붕의 윗면을 못 그린다(축사 v1~v4 실패). **박공(gable, 삼각 경사) 지붕**을 써야 윗면이 나온다(본가·창고 검증). 축사도 박공 + 넓은 슬라이딩 도어로 정체성 구분.
+  - **선명도: half-res 네이티브 생성 필수** — PixelLab 캔버스를 목표의 절반(예: 6칸 창고=96px)으로 잡아 생성 → `tools/facade_halfres_x2.py`(×2 nearest)로 굳힘. `place_facade.py`(풀해상 → ÷2 청키화)는 **금지**(÷2가 기와·판자를 뭉개 흐릿해짐 — [§0.1] 위반, gemini-shed-barn-spec [REVISION 3] 참조).
 - **남향 고정**: 모든 상호작용 문 = 남쪽(아래), 진입 벡터 북향(아래→위).
 - **DOOR 1:1**: art 문 중심 픽셀 열 = `*_DOOR` 타일 열(좌우대칭 facade라 중앙). `_carve_paths`가 그 좌표 남쪽 인접까지 경로 생성. (안식 정합: 본가 문열 44 / 창고 30 / 축사 6 — rect 중앙·하단.)
 - **입체감** = 지붕 깊이 + NW 음영(§1) + 앞쪽 풀/덤불 Y-Sort 겹침(이소메트릭 아님).
