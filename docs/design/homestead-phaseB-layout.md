@@ -57,6 +57,26 @@
 
 - `_carve_paths` 동선 재작성 → **S1-3** · 아우터 코너 세부 타일·2번째 코너 → **S1-2** · debris 밭 밀도 → **S1-8** · 축사 내부 레이아웃·펜스 시스템·목축 루프 → **S1-7**.
 
+### 5.7 ★ [S1-2 착수 grill 산출, 2026-07-01] pseudo-Z 원시어휘 잠금 (권위)
+
+> **성격:** owner↔Claude grill(Q1~Q5, `grill-with-docs`). **ADR-0044 §1 하위 구현 세부**라 CONTEXT/신규 ADR 불요(pseudo-Z=구현). §5.1~5.5 좌표는 불변, 여기서는 그걸 코드로 옮기는 **타일종+충돌 원시어휘**를 확정한다. 빌드(S1-2 실구현)는 이 §5.7을 권위로 따른다.
+
+**(1) 산출물 경계 — S1-2 vs S1-3.** S1-2 = ① 타일종 상수 ② 재사용 원시함수 ③ 전용 격리 테스트만. **라이브 home맵의 옛 1타일 `_build_cliffs`(y29 행·x23 열)는 그대로 둔다(회귀 0).** §5.1~5.5 좌표로의 실제 재배치(`_build_cliffs` 전면 재작성)는 **S1-3**. 즉 S1-2는 "어휘·문법"을, S1-3이 "문장"을 쓴다.
+
+**(2) 타일종 = 3 의미형만.** `CLIFF_LIP`(걷기 O — 충돌 루프 제외) · `CLIFF_FACE`(SOLID, **기존 상수·`cliff_face.png` 유지**) · `CLIFF_FACE_BASE`(SOLID, 신규). **방향(N/S/E/W)·코너 아트 변종은 S1-10**(그레이박스는 평면색이라 방향 무의미). 옛 `CLIFF_CORNER_L/R/INNER`는 S1-2 동안 유지, **S1-3이 `_build_cliffs` 재작성 시 제거**.
+
+**(3) 그레이박스 색.** `CLIFF_FACE` = `cliff_face.png` 유지(라이브 시각 불변 = 회귀 0) · `CLIFF_LIP` = 밝은 하이라이트 톤(`COLORS`) · `CLIFF_FACE_BASE` = 어두운 접지 톤(`COLORS`). 3티어 명암 차로 pseudo-Z가 헤드리스 덤프에서 읽히게. S1-10이 3종 전부 NW광원 재보정 도트로 교체.
+
+**(4) 원시함수 4종(북/서 불요 — 맵 경계가 막음).**
+- `_lay_south_band(x0, x1, y)` — 남향: `y`=Lip행 / `y+1`=Face행 / `y+2`=Face_Base행(접지 그림자). (ADR-0044 §1 남향 = Lip1+Face1+Base1.)
+- `_lay_east_band(x, y0, y1)` — 동향: `x`=Lip열 / `x+1..x+2`=Face 2열, **base 없음**(ADR-0044 "높이의 가로 치환" = Lip1열+Face2열). NW광원 재보정은 아트(S1-10).
+- `_lay_corner_step(...)` — 외부 코너 L을 `CLIFF_FACE`로 edge-to-edge 채움 + 상단 `CLIFF_LIP` 1칸. **대각 solid-solid 접점 0**(풀 새어나옴·대각 틈 방지). §5.1 아우터 코너 ①(x17→x21 청키 3×3 스텝).
+- `_carve_stair_notch(...)` — 밴드 단면의 SOLID를 일시 해제 → walkable + `STAIRS` 프롭. **노치 폭 = 밴드 깊이**(남향=2행 종단 / 동향=3열 종단). ★ADR-0044 §1 "2폭"과 §5.2 "3열"의 표기 충돌은 이 규칙으로 정합(뚫는 방향의 밴드 단면 전체를 연다).
+
+**(5) animal gate = S1-7로 미룸.** S1-2 노치는 순수 플레이어 walkable. 가축 차단(NavigationRegion)은 혼의 짐승 AI가 도착하는 S1-7. §5.2 x21 계단 탑은 "animal gate 예약" 주석만.
+
+**(6) 검증 = 정준 predicate + `cliff_test.gd`.** `main.gd`에 단일 진실원 `WORLD_SOLID_TILES`(+ `is_solid(id)`)를 두고 `_build_tileset` 충돌 루프가 이걸 참조(중복 제거). 신규 `playtest/cliff_test.gd`: 스크래치 사각형에 원시 4종 배치 → ⓐ 타일종 패턴 단언 ⓑ `is_solid`로 LIP=walk·FACE/BASE=solid 단언 ⓒ **8이웃(대각 포함) BFS leak 단언**(고지 walkable ↔ 저지 walkable = 오직 노치 경유, 대각 인접 시 fail). `home_expansion_test._walkable`의 CLIFF 하드코딩 → `is_solid` 마이그레이션은 **S1-3**(맵 변경과 동반, 회귀 0 유지). **물리 corner-squeeze(CharacterBody2D 대각 틈) 최종확인 = S1-3 bot/`map_dump` 육안**(격자 BFS는 물리 틈을 못 잡음 — 알려진 한계).
+
 ## 0. 구현 결과 요약 (실제 좌표 — 코드 기준)
 
 - **타일종 추가:** `CLIFF_FACE/CORNER_L/CORNER_R/INNER`(SOLID_TILES·SOLID_TEX·COLORS·_build_tileset 충돌).
