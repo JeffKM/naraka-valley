@@ -1,6 +1,6 @@
 # 안식 농원 농사·목축 2·3층 그레이박스 수치 명세 (S1-1 산출)
 
-> **상태:** ✅ **곡선 잠금(2026-07-01, S1-1 grill Q8~Q14) + S1-4 착수 경계·로스터·검증 잠금(2026-07-01, grill Q1~Q6 → §5).** 코드 0 — 이 문서는 S1-4~S1-7 빌드의 입력 스펙이다.
+> **상태:** ✅ **곡선 잠금(2026-07-01, S1-1 grill Q8~Q14) + S1-4 착수 경계 잠금(§5) + S1-5a(§6)·S1-5b(§7)·S1-6(§8) 실구현 완료(2026-07-02).** 이 문서는 S1-4~S1-7 빌드의 입력 스펙이다.
 >
 > **스코프(Q8):** *곡선 모델 + 그레이박스 시작값*만 잠근다. 개별 작물 값 배정 = **S1-4**, 최종 밸런스 튜닝 = **Phase 3**. 두 경계: ① **미호 관계 레이어(농사 XP 가속/자동화)는 이 문서 밖** — [ADR-0019](../adr/0019-physical-skill-relationship-multiplier-two-axis.md)대로 아래 base 곡선 *위에* 후행으로 얹힌다(base 위 곱). ② **숙련 = 농사 스킬 축1(혼력 감산+속도)만**, 품질은 스킬 아님(비료).
 >
@@ -228,3 +228,121 @@ func quality_tier_for_age(age: int) -> int:
 
 ### §7.10 헤드리스 검증 (Q8) — `playtest/orchard_test.gd`
 `run_tests.sh` +1(자동 발견). **Part A(단위):** ①심기 판정(유효 3×3 성공 / SOLID·is_crop_solid·타 나무 교차 거부) ②성숙(순수 달력, 물주기 무관) ③제철 결실 순환 왕복 — **3a** 제철 결실·**3b** 비제철 정지(count 고정)·**3c ★ 다음 해 제철 재진입**(day 113=`(113-1)/28=4, 4%4=0`→피안절 재개·fruit_count 재증가) ④영속(절기 경계 넘겨도 생존·나이 증가·사멸 0) ⑤나이별 품질(28→0·56→1·84→2·112→3·clamp) ⑥수확(전량 회수·0 리셋) + **★ 제철 내부 수확 후 재결실**(day10 수확 3→0 → day11 fruit_count=1, 수확이 결실 루프 미파괴) ⑦세이브 왕복 + **★ 절기 경계 결착**(day28 세이브→day29 로드→첫 틱 즉시 비제철 반영, 로드-틱 유령과일 차단). **Part B(main 스폰):** ⑧`_orchard_body` 밑동 SOLID·수관 통과 ⑨`season_index_for_day`(1→0피안·29→1유화, CONTEXT 정합). **검증기 이빨:** 음성 mock(비제철인데 결실 등)으로 가드 작동 증명.
+
+---
+
+## §8 S1-6 착수 grill 결정 (2026-07-02, `grill-with-docs` Q1~Q4, 품질 4등급 + 비료 + 숙련)
+
+> **상태:** ✅ **실구현 완료(2026-07-02).** 아래 스펙대로 신규 `game/skill.gd`·`game/fertilizer_catalog.gd` + `item_catalog.gd`·`inventory.gd`·`field.gd`·`shipping_bin.gd`·`energy.gd`·`main.gd`·`hotbar_hud.gd`·`inv_frame.gd` 배선 + 검증 2본(`playtest/fertilizer_catalog_test.gd` 순수·경계 / `playtest/quality_skill_test.gd` main 스폰 ⑦~⑭). **전체 40개 통과·부팅 클린·회귀0(crop.gd/orchard.gd 로직 불변).** 이행 메모: FertilizerCatalog↔ItemCatalog는 const 초기화 순환을 피하려 비료 id를 **리터럴로 양쪽 정의**(단방향 의존, 값 어긋남은 §8.12 ④ 검증기가 잡음). 하류 이관은 §8.1 배제 그대로. **grill 잠금(2026-07-02).** S1-1이 곡선을 잠갔고(§3.1 품질 확률표·§3.2 숙련 곡선), S1-5b가 등급 스킴 0..3(`orchard.quality_tier_for_age`)을 선점했다(§7.7 "미래 4등급 표면 수렴" 예고). 이 절은 그 잠긴 곡선을 **밭 작물·인벤토리·판매·숙련 코드로 내리는 경계·범위·검증**을 박제한다. §5(S1-4)·§6(S1-5a)·§7(S1-5b)와 동형 — 슬라이스 내부 신규 파일 + 잠긴 spec 이행이라 **별도 ADR 없음**(Q4). 결정 원천: 본 문서 §3.1/§3.2(정량) · [ADR-0019](../adr/0019-physical-skill-relationship-multiplier-two-axis.md)/[ADR-0020](../adr/0020-item-tool-architecture.md)/[ADR-0027](../adr/0027-tool-tier-aoe-access-skill-efficiency.md)(불변식) · 코드 지형 매핑(2026-07-02).
+>
+> **네 결정(Q1~Q4):** ①품질 소비 = **판매가 배수 + 인벤토리/핫바 표시까지**(선물 호감도·서빙 품질연동은 하류). ②비료 로스터 = **품질군 3 + 성장촉진군 2 = 5종**(2군 XOR). ③획득 = **START_KIT 소량 지급**(정식 상점=Slice 2 하류). ④숙련 = **`farming_xp` main 스칼라 + 혼력 감산만 실효**(작업속도축=그레이박스 즉시동작이라 계산만·하류 애니), **별도 ADR 없음**.
+
+### §8.1 스코프 경계 (Q1~Q4 종합)
+- **포함(건드리는 파일):**
+  - 신규 `game/skill.gd`(`class_name FarmSkill`, 순수 static — foxfire.gd 결) · `game/fertilizer_catalog.gd`(`class_name FertilizerCatalog`, 정적 데이터 — fruit_tree_catalog.gd 결).
+  - `item_catalog.gd`: `CAT_FERTILIZER` 카테고리 + 품질 등급 상수·`quality_mult`·`price_of(id, quality:=0)` 확장.
+  - `inventory.gd`: 슬롯 스키마 `{id,count}` → **`{id,count,quality}`**(스택 키 = id+quality, 아래 §8.3).
+  - `field.gd`: 칸 dict에 `fertilizer` 필드 + `fertilize()` 동사 + `roll_quality()` + 성장촉진 성숙 임계 축소(§8.6).
+  - `main.gd`: 비료 동사 라우팅 + 밭 수확 품질 적재 + orchard `picked.quality_tier` 실적재(§8.8) + 혼력 숙련 감산 + `_farming_xp` 스칼라·세이브.
+  - `shipping_bin.gd`: pending 키에 품질 차원(품질별 판매가 배수).
+  - `energy.gd`: `spend(cost)`·`can_act(cost)` 파라미터화(숙련 감산 주입구).
+  - 신규 검증 `playtest/fertilizer_catalog_test.gd`(순수 데이터) + `playtest/quality_skill_test.gd`(main 스폰).
+- **배제(하류 이관):** 선물 호감도·음식 회복 품질 비례(affinity/cafe — spec §3.1 언급이나 Phase 3 밸런싱) · 비료·묘목 정식 판매처(만물상=Slice 2) · 숙련 '작업 속도' 실효 애니 단축(S1-10) · 품질 아이콘 배지 아트(그레이박스 색/텍스트 표시로 충분, S1-10) · 최종 밸런스 튜닝(Phase 3). **orchard.gd/fruit_tree_catalog.gd 로직 불변**(단 §8.8 소비 지점만 main에서 배선).
+
+### §8.2 품질 등급 = 단일 진실원 (0..3, orchard·field 수렴)
+§7.7이 예고한 두 소스(orchard 나이 / field 비료)가 **한 등급 enum·한 판매가 배수 표**로 수렴한다. `item_catalog.gd`에 잠근다:
+```gdscript
+const Q_NORMAL := 0   # 일반
+const Q_SILVER := 1   # 은
+const Q_GOLD := 2     # 금
+const Q_IRIDIUM := 3  # 이리듐
+const QUALITY_MULT := [1.0, 1.25, 1.5, 2.0]   # §3.1 판매가 배수(등급 인덱스)
+static func quality_mult(q: int) -> float: return QUALITY_MULT[clampi(q, 0, 3)]
+static func quality_name(q: int) -> String: ...   # HUD 표시("일반/은/금/이리듐")
+```
+- **품질 무차원 아이템(도구·씨앗·묘목) = 항상 Q_NORMAL(0).** 등급은 수확물·과일만 실는다.
+- orchard `quality_tier_for_age`(나이→0..3)와 field `roll_quality`(비료→0..3)는 **서로 다른 소스지만 같은 enum·같은 배수 표를 먹인다**(§7.7 "품질=나이 ⊥ 품질=비료 = 두 소스, 미래 4등급 표면 수렴"의 실현). 가공품(카페 메뉴)은 원자재 품질 무시·단일 표준 출력(§3.1 공급망 단순 불변식 — 서빙 경로가 품질을 안 읽어 자연 배제).
+
+### §8.3 인벤토리 슬롯 품질 차원 (스키마 확장 — ADR-0020 예약 실현)
+`item_catalog.gd:21` 예약(`슬롯 {id,count}에 quality를 더한다`)을 이행. 슬롯 = `null | {id:String, count:int, quality:int}`(quality 기본 0).
+- **스택 키 = (id, quality).** 같은 id·같은 품질 → 합침 / 품질 다르면 **별도 슬롯**(스타듀식 — 은 감자와 금 감자는 다른 칸). `_find_slot`·`add_item`·`move_slot` 병합·`sort`(id+quality 키 합산)·`_sanitize`(quality 기본 0 방어)가 이 키로 갱신.
+- **소비 = 최저 품질 우선(worst-first).** `take_harvest(crop, n)`은 그 id의 슬롯들 중 **낮은 품질부터** 소진(플레이어가 프리미엄은 팔고 잡템을 서빙/선물로 소모 — 스타듀 정합). `count_of`/`harvest_count`는 전 품질 합산(선물·서빙 가용 판정 불변). `take_seed`/도구는 전부 Q0라 영향 0.
+- **API 확장:** `add_item(id, n:=1, quality:=0)` · `add_harvest(crop, n:=1, quality:=0)`. 기존 호출부(전부 quality 생략)는 Q0로 회귀 0.
+- **핫바/가방 표시:** `id_at`/`count_at` 옆 `quality_at(i)->int` 추가 — HUD가 등급 색/글자로 표시(그레이박스, 아트 배지=S1-10). 세이브 = `slots.duplicate(true)` 자동 라운드트립, 구세이브(quality 무) → `_sanitize`가 `int(s.get("quality",0))` 기본 0.
+
+### §8.4 비료 = 카테고리 + 동사 + 타일 상태 (2군 5종 XOR)
+- **카테고리:** `item_catalog.gd`에 `CAT_FERTILIZER := "fertilizer"` + `category_of`/`price_of`(=buy_cost)/`name_of`/`stackable_of`(true) 분기.
+- **데이터 `fertilizer_catalog.gd`(`class_name FertilizerCatalog`):** 항목 = `{name_ko, group("quality"|"speed"), state|speed_factor, buy_cost}`. **로스터 5종(Q2):**
+
+  | id | 이름(그레이박스) | group | 매핑 | buy_cost |
+  |---|---|---|---|---|
+  | `fert_basic` | 기초 비료 | quality | `state=BASIC` | 20 |
+  | `fert_quality` | 품질 비료 | quality | `state=QUALITY` | 60 |
+  | `fert_deluxe` | 디럭스 비료 | quality | `state=DELUXE` | 120 |
+  | `fert_speed` | 성장촉진 비료 | speed | `factor=0.75`(−25%) | 40 |
+  | `fert_hyper` | 하이퍼 비료 | speed | `factor=0.67`(−33%) | 100 |
+
+  (name_ko 저승 flavor 리네임·아이콘 = 하류. buy_cost = 그레이박스 placeholder, 밸런싱 Phase 3.)
+- **타일 상태:** `field.gd` 칸 dict에 `"fertilizer": ""`(비료 아이템 id 또는 "") 1필드 추가 → **XOR·overwrite 자연 성립**(단일 슬롯, 다른 비료 투입 시 덮어씀). 조회는 `_tiles[t].get("fertilizer","")`로 구세이브 방어.
+- **동사 `field.fertilize(t, fert_id)`:** 경작된 칸(`is_tilled`, 심김/빈칸 무관)에 유효 비료면 `_tiles[t]["fertilizer"]=fert_id`·overwrite·`tile_changed`·true. `main._use_tool`에 `elif cat == CAT_FERTILIZER:` 분기(§seed 분기 옆) → `farm.fertilize` 성공 시 `inventory.remove_item(item,1)`·verb 세팅(공통 SFX·energy.spend가 뒤이음, main.gd:3720/3737/3739 패턴).
+
+### §8.5 밭 작물 품질 roll (수확 시, 다수확 격리)
+§3.1 확률표를 `FertilizerCatalog`에 데이터로 + **순수 테스트 코어** 분리:
+```gdscript
+const QUALITY_TABLE := {          # state → [일반,은,금,이리듐] 누적경계 아닌 확률(행합 100)
+    "NONE":    [80,18,2,0],  "BASIC":   [55,30,13,2],
+    "QUALITY": [30,35,27,8], "DELUXE":  [10,30,40,20],
+}
+static func tier_for_roll(state, roll:int) -> int   # roll 0..99 → 0..3 (결정적·경계 테스트)
+static func roll_quality(state) -> int              # = tier_for_roll(state, randi()%100)
+```
+- **`field.roll_quality(t)`:** `fertilizer` → state 매핑(quality군 → BASIC/QUALITY/DELUXE · speed군/빈 → NONE) → `FertilizerCatalog.roll_quality(state)`. 성장촉진 비료 칸은 품질 NONE(품질과 별 축, §3.1).
+- **수확 배선(`main._try_harvest`):** `farm.harvest`가 칸을 비우기 **전에** `var q := farm.roll_quality(_target)` 확보 → 다수확 루프에서 **주 수확분(첫 1개)만 `add_harvest(crop,1,q)`, 나머지 = `add_harvest(crop,1,0)`**(§3.1 "추가분 QUALITY_NORMAL 강제"). `field.harvest` 반환 계약(String) 불변(§6.5와 동형, 품질은 별 조회로 분리).
+
+### §8.6 성장촉진 비료 = 성숙 임계 축소 (advance_day 불변)
+성장 루프(`advance_day`·`_grow`·foxfire)를 **안 건드린다** — 성숙 판정 임계만 낮춘다(깔끔한 삽입, foxfire accel과 자연 합성):
+```gdscript
+func effective_growth_days(t) -> int:   # 성장촉진 비료면 목표일 축소
+    var base := CropCatalog.growth_days(crop_of(t))
+    var f := FertilizerCatalog.speed_factor(_tiles[t].get("fertilizer",""))  # 1.0 / 0.75 / 0.67
+    return base if base < 0 else maxi(1, ceili(base * f))
+```
+- `is_mature(t)`가 `grown_days >= effective_growth_days(t)`로 비교(기존 `growth_days` 직접비교 대체). REGROW 되감기(§6.4)도 base 기준 유지(비료는 성숙 목표만 낮춤). **foxfire accel(grown_days 가속) ⊗ speed fert(목표 축소) = 곱 없이 둘 다 빨라짐**(합성, 이중적용 아님). `growth_stage`/`grown_days_of` 표시 불변.
+
+### §8.7 판매가 품질 배수 (출하함 경로)
+raw 판매는 항상 `ItemCatalog.price_of` 경유(코드 지형 §1). 품질 인자 주입:
+- `price_of(id, quality:=0) -> int` = `int(base * quality_mult(quality))`(floor, 스타듀 정합). 기존 무인자 호출 = Q0 회귀 0.
+- **`shipping_bin.gd` pending 품질 차원:** `pending: {id: {quality: count}}` 중첩(또는 `"id#q"` 합성키). `add(id,n,quality)` / `preview_gold` = `Σ count * price_of(id, quality)` / `settle`도 품질별. 세이브 = 중첩 Dict `var_to_str` 자동, `_sanitize` 방어(구세이브 flat `{id:int}` → 품질0 취급). `main._on_frame_deposit`가 인벤토리 슬롯 품질을 읽어 `ship_bin.add(id,n,quality)`.
+
+### §8.8 orchard 품질 실적재 (S1-5b §7.7 소비)
+`main.gd:3754`가 지금 `picked["quality_tier"]`를 버린다(주석: "S1-6이 소비"). 실적재:
+```gdscript
+for _i in int(picked["count"]):
+    inventory.add_item(picked["fruit_id"], 1, int(picked["quality_tier"]))  # 나이 등급 → 슬롯 quality
+```
+과일 판매가도 §8.7 배수를 자동으로 받는다(`fruit_tree_catalog.gd:31` "S1-6이 나이 등급 곱" 예고 실현). orchard.gd 로직 불변 — main 소비만.
+
+### §8.9 농사 숙련 (farming_xp main 스칼라, 혼력 감산만 실효)
+- **상태:** `main._farming_xp: int`(세이브·복원 = `run_harvested` 선례). 별도 노드 없음(Q4). 순수 함수는 `skill.gd`(`class_name FarmSkill`, foxfire.gd 결):
+```gdscript
+const XP_THRESHOLDS := [100,300,600,1000,1500,2100,2800,3600,4500,5500]  # L1..L10
+static func level_for_xp(xp:int) -> int              # 임계 이하 개수, cap 10
+static func energy_factor(level:int) -> float: return 1.0 - 0.03 * clampi(level,0,10)  # L10→0.70
+static func speed_factor(level:int) -> float: return 1.0 - 0.03 * clampi(level,0,10)   # 계산만(§아래)
+```
+- **XP 획득:** 수확 성공 시 `_farming_xp += CropCatalog.sell_price(crop)`(§3.2 crop_base_price). **과수 수확도 농사 XP**(`FruitTreeCatalog.fruit_sell(fruit)` 가산 — 과수=농사).
+- **혼력 감산(실효):** `energy.spend(cost)`·`can_act(cost)` 파라미터화. main의 농사 동작 3지점(hoe/plant/water=main.gd:3739 · 밭수확=3774 · **과수수확=3758**)이 `var cost := int(round(SoulEnergy.COST_PER_ACTION * FarmSkill.energy_factor(FarmSkill.level_for_xp(_farming_xp))))`로 감산 소모(L10 → 10→7). **농사 동작에만** 적용(ADR-0019 스킬=활동별). energy.gd는 순수 소모기 유지(레벨을 모름, main 주입 — 디커플링).
+- **작업 속도축 = no-op(하류):** 현재 동작은 즉시(애니 프레임 없음) → `speed_factor` 계산만 두고 실효 단축 없음. S1-10 애니 도입 시 소비(§8.1 배제). **불변식(§3.2):** ❌AoE(도구 티어) · ❌+%가치(멜) · ❌품질(비료) · ❌혼력 풀 크기 · ❌레벨 게이팅(L0 전 동작 100% 가동, "평평≠막힘").
+
+### §8.10 획득처 (START_KIT 소량, Q3)
+`inventory.gd`에 `START_FERTILIZER := {ItemCatalog.FERT_BASIC: 3, ItemCatalog.FERT_SPEED: 3}`(묘목 선례 `START_SAPLINGS`) — 새 게임 종잣돈에 비료 몇 개로 HOME에서 품질/성장촉진 루프 즉시 체험. 정식 상점 노출(만물상=Slice 2)·전 5종 판매는 하류. 디럭스/하이퍼는 데이터만 등록(테스트 직접 주입), 상점 하류에서 자연 노출.
+
+### §8.11 세이브
+- `_farming_xp` → `main._save_game` dict `"farming_xp": _farming_xp` / 복원 `maxi(int(data.get("farming_xp",0)),0)`(손상 방어). `SaveManager` 불변(IO만).
+- field `fertilizer` 필드·inventory 슬롯 `quality`·shipping pending 품질 = 각 노드 `to_save`가 자동 포함(순수 Dict 통짜). **구세이브 방어:** 조회 `.get(...,기본)` + 각 `_sanitize`가 결측 필드를 Q0/""로 정규화 → **VERSION 불올림**(save.gd 불변).
+
+### §8.12 헤드리스 검증
+`run_tests.sh` +2(자동 발견). **A. `playtest/fertilizer_catalog_test.gd`(순수 데이터, crop_catalog_test 골격):** ①확률표 4행 각 합=100·성분 ≥0 ②`tier_for_roll` 경계(NONE: roll 0..79→0·80..97→1·98..99→2·이리듐 도달 0 / DELUXE: 0..9→0·…·80..99→3) ③등급 배수 `[1.0,1.25,1.5,2.0]`·`quality_mult` clamp ④비료 로스터 2군 5종·group/state/factor 매핑·speed_factor(0.75/0.67, 무비료 1.0) ⑤숙련 임계·`level_for_xp`(99→0·100→1·5500→10·초과 cap)·`energy_factor`(L0=1.0·L10=0.70) ⑥**검증기 이빨:** 행합≠100/등급 역전 mock 주입 → 못 잡으면 크래시. **B. `playtest/quality_skill_test.gd`(main 스폰, orchard_test 골격):** ⑦비료 동사(경작칸 적용·overwrite=품질비료→성장촉진 단일필드 교체·XOR) ⑧밭 수확 품질 적재(DELUXE 칸 `tier_for_roll` 경계 주입→슬롯 quality·**다수확 추가분 Q0 강제**) ⑨성장촉진 성숙 임계 축소(하이퍼 심기→`ceili(base*0.67)`일 성숙, foxfire accel 합성) ⑩인벤토리 품질 스택(같은 작물 다른 품질=별 슬롯·take_harvest worst-first·count_of 합산) ⑪출하 판매가 배수(이리듐 슬롯→×2 preview_gold) ⑫**orchard 품질 실적재**(나이 84 나무 수확→슬롯 quality=2) ⑬숙련(수확 XP 누적·레벨업·energy.spend 감산 확인) ⑭세이브 왕복(farming_xp·타일 fertilizer·슬롯 quality·ship pending 품질 라운드트립 + 구세이브 결측 필드 Q0/"" 방어).
+
+### §8.13 별도 ADR 없음 근거 (Q4)
+§5(S1-4)·§6(S1-5a)·§7(S1-5b)와 동형 — 잠긴 spec(§3.1/§3.2) 이행 + 슬라이스 내부 신규 파일(`skill.gd`·`fertilizer_catalog.gd`)이라 새 결정 없음. 인벤토리 슬롯 스키마 확장은 **ADR-0020이 명시 예약한 방향의 실현**(신규 결정 아님). 품질 등급 수렴은 §7.7이 예고. 불변식(ADR-0019 2축·"평평≠막힘"·혼력 풀 불변, ADR-0027 AoE=도구, §3.1 가공 품질무시·비살상)은 전부 준수 — 어기지 않아 개정 ADR 불요.

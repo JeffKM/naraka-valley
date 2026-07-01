@@ -973,6 +973,11 @@ var _last_onboarding_guide := ""
 # _harvest_seen(사연 순환 index)과 달리 점수판이 재개에도 맞아야 하므로 저장한다.
 var _run_harvested := 0
 
+# ★ S1-6(§8.9) 농사 숙련 XP(main 스칼라, 별도 노드 없음 — Q4). 수확 성공마다 작물 base 판매가가
+# 쌓이고, FarmSkill이 이 값을 레벨·혼력 감산 계수로 옮긴다(순수 함수 파생). 누적 진행이라 저장한다
+# (_run_harvested 점수판과 같은 결 — main 세이브에 한 조각, SaveManager 불변).
+var _farming_xp := 0
+
 # T5.1 직전(현재) 대화 상대의 표시 이름 — 대화 종료 시 온보딩 전진을 '누구와의
 # 대화였나'로 가르는 데 쓴다. 멜이 카페에 상주하면서 온보딩 도중(미호 멘토 단계)에도
 # 말 걸 수 있게 됐기 때문 — 화자 구분 없이 단계로만 가르면 멜 대화가 미호 단계를
@@ -3207,6 +3212,7 @@ func _save_game() -> void:
 		"neo_affinity": neo_affinity.to_save(),   # M2.3 네오(만물상 점주) 호감도 — 매대 할인 파생원
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
+		"farming_xp": _farming_xp,   # ★ S1-6 농사 숙련 XP(혼력 감산 파생원)
 		"cafe_revenue_total": _cafe_revenue_total,
 		"selected_crop": _selected_crop,
 		# M1.5 — 현재 구역·실내 모드·플레이어 위치(껐다 켜도 '있던 자리'에서 재개). region은
@@ -3252,6 +3258,8 @@ func _load_game() -> void:
 		onboarding.load_save(data["onboarding"])
 	# T4.2 슬라이스 점수판 누적(거둔 영혼 총수). 손상 방어로 음수는 0으로 자른다.
 	_run_harvested = maxi(int(data.get("run_harvested", 0)), 0)
+	# ★ S1-6 농사 숙련 XP 복원(키 없는 구세이브는 0 = L0, 무막힘). 손상 방어로 음수는 0.
+	_farming_xp = maxi(int(data.get("farming_xp", 0)), 0)
 	# T7.2 카페 마일스톤 누적 서빙 매출. 손상 방어로 음수는 0으로 자른다(키 없는 구버전 세이브는 0).
 	_cafe_revenue_total = maxi(int(data.get("cafe_revenue_total", 0)), 0)
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
@@ -3705,8 +3713,15 @@ func _process(delta: float) -> void:
 # 씨앗→plant. 도구가 칸 상태에 안 맞으면(예: 미경작 칸에 물뿌리개) field 사전조건이 false라
 # 무동작 — "선택 도구가 장식이 되지 않게"(ADR-0020). 한 동작이 실제로 일어났을 때만 혼력·SFX·
 # 온보딩을 소비한다. 혼력이 바닥나면(can_act false) 아무 도구도 안 듣는다(T2.4).
+# ★ S1-6(§8.9) 농사 동작 1회 혼력 비용 = 기본 × 숙련 감산 계수(FarmSkill.energy_factor).
+# 밭 갈기·심기·물주기·비료·수확·과수수확 — 농사 동작에만 감산 적용(ADR-0019 스킬=활동별). energy.gd는
+# 레벨을 모르고, main이 여기서 계산해 spend/can_act에 주입한다(디커플링). L0=10 그대로·L10→7.
+func _farming_energy_cost() -> int:
+	return int(round(SoulEnergy.COST_PER_ACTION * FarmSkill.energy_factor(FarmSkill.level_for_xp(_farming_xp))))
+
 func _use_tool() -> void:
-	if not energy.can_act():
+	var cost := _farming_energy_cost()        # ★ S1-6 숙련 감산 반영 비용
+	if not energy.can_act(cost):
 		return
 	var item := inventory.selected_id()
 	var cat := ItemCatalog.category_of(item)
@@ -3723,6 +3738,11 @@ func _use_tool() -> void:
 		if inventory.has_seed(crop) and farm.plant(_target, crop):
 			inventory.take_seed(crop)
 			verb = "심기"
+	elif cat == ItemCatalog.CAT_FERTILIZER:
+		# ★ [S1-6] 든 비료를 경작 칸에 뿌린다(§8.4 — 심김/빈칸 무관, 다른 비료면 overwrite). 뿌리면 1개 소모.
+		if farm.fertilize(_target, item):
+			inventory.remove_item(item, 1)
+			verb = "비료"
 	elif cat == ItemCatalog.CAT_SAPLING and _region == RegionCatalog.HOME:
 		# ★ [S1-5b] 든 묘목으로 혼의 나무를 심는다(안식 농원 전용). 앵커=조준 칸, 3×3 판정 통과 시.
 		# is_blocked = 맵밖 or is_solid(절벽·프롭) or is_crop_solid(트렐리스) — 지형 게이팅을 여기서 합성해
@@ -3733,16 +3753,17 @@ func _use_tool() -> void:
 			verb = "심기"
 	if verb == "":
 		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
-	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기는 물줄기.
-	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water"}.get(verb, ""))
+	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기·비료는 물/뿌리는 소리.
+	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water"}.get(verb, ""))
 	_advance_onboarding(verb)                 # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
-	energy.spend()                            # 한 동작당 혼력 소모
+	energy.spend(cost)                        # 한 동작당 혼력 소모(숙련 감산)
 	queue_redraw()                            # 새 상태가 바로 보이도록
 
 # RMB 맨손 수확(ADR-0024 §3 — 낫 없음, 수확=맨손). 다 자란 칸만 거두고, 거둔 영혼을 인벤토리에
 # 쌓아 경제의 양끝을 잇는다(밭→재고→판매·서빙). 다 안 자랐거나 혼력 부족이면 무동작.
 func _try_harvest() -> void:
-	if not energy.can_act():
+	var cost := _farming_energy_cost()        # ★ S1-6 숙련 감산 반영 비용(과수·밭 공통)
+	if not energy.can_act(cost):
 		return
 	# ★ [S1-5b] 혼의 나무 과수 수확 우선(greybox-spec §7.6) — 조준 칸이 성숙+결실 나무 풋프린트에 들면
 	# 매달린 과일을 전량 거둔다. 작물 밭(SOIL)이 아니라 과수라 farm 경로보다 먼저 본다. 안식 농원 전용.
@@ -3751,27 +3772,34 @@ func _try_harvest() -> void:
 		if orchard.has_tree(anchor):
 			var picked := orchard.harvest(anchor, clock.day)   # {fruit_id,count,quality_tier} / {} = 미성숙·무결실
 			if not picked.is_empty():
-				# ★ 품질 등급(picked.quality_tier)은 계산만 하고 인벤토리엔 안 붙인다(§7.7 — S1-6이 소비).
+				# ★ [S1-6 §8.8] 나이 등급(quality_tier)을 슬롯 quality로 실적재(§7.7 소비 실현). 나무 나이가
+				# 소스라 나무 한 그루의 이번 결실은 전량 동일 등급(밭 비료 roll과 달리 결정적).
+				var fq := int(picked["quality_tier"])
 				for _i in int(picked["count"]):
-					inventory.add_item(picked["fruit_id"])   # 과일 = CAT_HARVEST(작물 수확물과 동급 적재)
+					inventory.add_item(picked["fruit_id"], 1, fq)   # 과일 = CAT_HARVEST(등급 실림)
+				_farming_xp += FruitTreeCatalog.fruit_sell(picked["fruit_id"])  # ★ 과수 수확도 농사 XP(§8.9)
 				audio.sfx("harvest")
-				energy.spend()
+				energy.spend(cost)
 				queue_redraw()
 				return
 	if not farm.is_mature(_target):
 		return
 	var harvested_crop := farm.crop_of(_target)  # harvest 뒤엔 칸이 비거나(SINGLE) 되감기(REGROW) 되므로 미리 확보
+	var quality := farm.roll_quality(_target)    # ★ [S1-6 §8.5] 칸을 비우기 전에 품질 확보(비료→등급 roll)
 	farm.harvest(_target)
 	# ★ [S1-5a] 다수확(황천포도 2~3) — yield_range를 굴려 그만큼 적재(greybox-spec §6.5, 데이터는 S1-4 검증).
 	#   기본형(1~1)은 1개 그대로. 점수판(_run_harvested)·사연은 수확 액션당 1(영혼 1 = 사연 1)로 둔다.
+	#   ★ [S1-6 §8.5] 품질 격리: 주 수확분(첫 1개)만 roll 등급, 다수확 추가분은 Q0 강제.
 	var yr := CropCatalog.yield_range(harvested_crop)
-	for _i in randi_range(yr.x, yr.y):
-		inventory.add_harvest(harvested_crop) # 거둔 수확물 적재(나중에 카페에서 판매)
+	var count := randi_range(yr.x, yr.y)
+	for i in count:
+		inventory.add_harvest(harvested_crop, 1, quality if i == 0 else 0)
+	_farming_xp += CropCatalog.sell_price(harvested_crop)  # ★ 수확 성공 XP(§8.9 crop_base_price)
 	_run_harvested += 1                       # T4.2 슬라이스 점수판: 거둔 영혼 총수(수확 액션당 1)
 	_show_flavor(harvested_crop)              # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
 	audio.sfx("harvest")                      # P2.6 수확은 밝은 팝
 	_advance_onboarding("수확")               # T4.1 첫 수확 → 온보딩 완료(DONE)
-	energy.spend()                            # 한 동작당 혼력 소모
+	energy.spend(cost)                        # 한 동작당 혼력 소모(숙련 감산)
 	queue_redraw()                            # 새 상태가 바로 보이도록
 
 # 선택 슬롯이 씨앗/수확물이면 _selected_crop(선물·구매·HUD 기준 작물)을 그 작물군으로 맞춘다.
@@ -3838,6 +3866,9 @@ func _farm_prompt() -> String:
 		if inventory.has_seed(crop):
 			return "[좌클릭] %s 심기" % CropCatalog.name_of(crop)
 		return "%s 씨앗 없음 — 카페·만물상에서 구매" % CropCatalog.name_of(crop)
+	# ★ [S1-6] 든 게 비료면 경작 칸에 뿌리기 안내(심김/빈칸 무관 — overwrite, §8.4).
+	if ItemCatalog.category_of(item) == ItemCatalog.CAT_FERTILIZER and farm.is_tilled(_target):
+		return "[좌클릭] %s 뿌리기" % ItemCatalog.name_of(item)
 	return ""
 
 # ── T3.5 사연 한 줄 ────────────────────────────────────────────────────────
@@ -3877,29 +3908,37 @@ func _close_frame() -> void:
 func _on_frame_deposit(slot_index: int) -> void:
 	var id := inventory.id_at(slot_index)
 	if id == "" or ItemCatalog.category_of(id) != ItemCatalog.CAT_HARVEST:
-		return   # 수확물 외(씨앗·도구)는 출하 대상이 아니다 — 무동작
+		return   # 수확물 외(씨앗·도구·비료)는 출하 대상이 아니다 — 무동작
 	var n := inventory.count_at(slot_index)
-	if not inventory.remove_item(id, n):
+	var q := inventory.quality_at(slot_index)   # ★ S1-6 이 슬롯의 등급을 함께 출하(worst-first 오염 방지 = 슬롯 지정 제거)
+	if not inventory.remove_at(slot_index, n):
 		return
-	ship_bin.add(id, n)
+	ship_bin.add(id, n, q)
 	audio.sfx("ui")
-	_notice("출하함에 %s %d개 (다음 아침 정산)" % [ItemCatalog.name_of(id), n])
+	var qtag := (ItemCatalog.quality_name(q) + " ") if q > 0 else ""
+	_notice("출하함에 %s%s %d개 (다음 아침 정산)" % [qtag, ItemCatalog.name_of(id), n])
 
 # 출하함 대기 슬롯을 클릭하면 그 분을 통째로 인벤토리에 도로 넣는다(취침 전 롤백 — "잘못 넣었네"
 # 회수). 인벤토리가 가득 차 일부만 들어가면 그만큼만 빼낸다(들어간 만큼만 대기에서 차감).
 func _on_frame_takeback(id: String) -> void:
-	var want := ship_bin.count_of(id)
-	if want <= 0:
+	# ★ S1-6: 품질별로 나눠 회수해 등급을 보존한다(출하함이 은/금을 나눠 들므로, 그대로 슬롯에 되돌림).
+	var quals: Array = ship_bin.qualities_of(id)
+	if quals.is_empty():
 		return
-	var added := 0
-	for _i in want:
-		if not inventory.add_item(id, 1):
-			break   # 인벤토리 가득 — 더는 못 받는다
-		added += 1
-	if added > 0:
-		ship_bin.take_back(id, added)
+	var restored := 0
+	for q in quals.duplicate():   # 회수하며 pending을 줄이므로 키 스냅샷
+		var cnt := ship_bin.count_of_quality(id, int(q))
+		var added := 0
+		for _i in cnt:
+			if not inventory.add_item(id, 1, int(q)):
+				break   # 인벤토리 가득 — 더는 못 받는다
+			added += 1
+		if added > 0:
+			ship_bin.take_back(id, added, int(q))
+			restored += added
+	if restored > 0:
 		audio.sfx("ui")
-		_notice("출하함에서 %s %d개 회수" % [ItemCatalog.name_of(id), added])
+		_notice("출하함에서 %s %d개 회수" % [ItemCatalog.name_of(id), restored])
 
 # ── ★ C2 네오 만물상 매대 구매(프레임 시그널 핸들러) ──────────────────────────
 # 매대에서 [구매] 버튼을 클릭하면 선택 작물 씨앗을 네오 할인가로 산다. bulk(Shift)=대량(BULK개,

@@ -33,8 +33,13 @@ const START_SEEDS := {CropCatalog.HONRYEONGCHO: 3}
 # S1-5b — 혼의 나무 묘목(최소 배선, greybox-spec §7.8). 정식 판매처(만물상=Slice 2·온실)는 하류라
 # 새 게임 종잣돈으로 몇 그루 준다(과수 루프를 HOME에서 바로 체험). 과일 종 id → 개수.
 const START_SAPLINGS := {FruitTreeCatalog.HONBAEKDO: 2}
+# S1-6 — 비료 종잣돈(greybox-spec §8.10). 정식 상점 노출(만물상=Slice 2)·전 5종 판매는 하류라
+# 품질군·성장촉진군 대표 1종씩 소량 지급해 HOME에서 품질/성장촉진 루프를 즉시 체험한다. 비료 id → 개수.
+const START_FERTILIZER := {ItemCatalog.FERT_BASIC: 3, ItemCatalog.FERT_SPEED: 3}
 
-# 슬롯 배열. 각 원소 = null(빈칸) 또는 {"id": String, "count": int}. 위치 고정(자동 압축 X).
+# 슬롯 배열. 각 원소 = null(빈칸) 또는 {"id": String, "count": int, "quality": int}. 위치 고정(자동 압축 X).
+# ★ S1-6(§8.3): quality 차원 추가(ADR-0020 예약 실현). 스택 키 = (id, quality) — 같은 작물이라도
+#   품질이 다르면 별 슬롯(은 감자 ≠ 금 감자, 스타듀 정합). 품질 무차원(도구·씨앗·묘목·비료)은 항상 0.
 var slots: Array = []
 # 핫바에서 선택된 슬롯 인덱스(0..SIZE-1). 빈 슬롯을 가리켜도 무방(selected_id가 "" 반환).
 var selected_index: int = 0
@@ -68,15 +73,44 @@ func _grant_start_kit() -> void:
 		add_seed(crop_id, START_SEEDS[crop_id])
 	for fruit_id in START_SAPLINGS:   # S1-5b 혼의 나무 묘목
 		add_sapling(fruit_id, START_SAPLINGS[fruit_id])
+	for fert_id in START_FERTILIZER:  # S1-6 비료 종잣돈(품질·성장촉진 대표 1종씩)
+		add_item(fert_id, START_FERTILIZER[fert_id])
 
-# ── 슬롯 핵심 ────────────────────────────────────────────────────────────────
-# id를 담은 슬롯 인덱스(-1 = 없음). 스택 아이템은 한 슬롯만 쓰므로 첫 일치를 돌려준다.
-func _find_slot(id: String) -> int:
+# ── 슬롯 핵심(S1-6 — (id, quality) 스택 키) ───────────────────────────────────
+# id의 슬롯 인덱스(품질 무관 첫 일치, -1 = 없음). 유니크(도구) 중복 판정·has_item에 쓴다.
+func _find_id(id: String) -> int:
 	for i in slots.size():
 		var s: Variant = slots[i]
 		if s != null and s["id"] == id:
 			return i
 	return -1
+
+# (id, quality) 정확 일치 스택 인덱스(-1 = 없음). add_item이 합칠 스택을 찾는 데 쓴다.
+func _find_stack(id: String, quality: int) -> int:
+	for i in slots.size():
+		var s: Variant = slots[i]
+		if s != null and s["id"] == id and int(s.get("quality", 0)) == quality:
+			return i
+	return -1
+
+# id 슬롯들 중 가장 낮은 품질(있고 count>0)의 인덱스(-1 = 없음). remove_item worst-first가 쓴다.
+func _lowest_quality_slot(id: String) -> int:
+	var best := -1
+	var best_q := 2147483647
+	for i in slots.size():
+		var s: Variant = slots[i]
+		if s != null and s["id"] == id and int(s["count"]) > 0:
+			var q := int(s.get("quality", 0))
+			if q < best_q:
+				best_q = q
+				best = i
+	return best
+
+# 아이템 id의 품질을 정규화(수확물·과일만 등급 실음 0..3, 그 외 품질 무차원=0). add/_sanitize가 쓴다.
+func _norm_quality(id: String, quality: int) -> int:
+	if ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST:
+		return clampi(quality, 0, 3)
+	return 0
 
 # 첫 빈 슬롯 인덱스(-1 = 가득 참).
 func _first_empty() -> int:
@@ -85,32 +119,36 @@ func _first_empty() -> int:
 			return i
 	return -1
 
-# 아이템 id의 보유 개수(없으면 0). 도구는 0/1.
+# 아이템 id의 보유 개수(전 품질 합산 — 선물·서빙·판매 가용 판정 불변). 도구는 0/1.
 func count_of(id: String) -> int:
-	var i := _find_slot(id)
-	return slots[i]["count"] if i >= 0 else 0
+	var sum := 0
+	for s in slots:
+		if s != null and s["id"] == id:
+			sum += int(s["count"])
+	return sum
 
-# 아이템을 들고 있는가.
+# 아이템을 (품질 무관) 하나라도 들고 있는가.
 func has_item(id: String) -> bool:
-	return _find_slot(id) >= 0
+	return _find_id(id) >= 0
 
-# 아이템 n개 추가. 스택은 기존 슬롯에 합치거나 새 빈 슬롯에, 유니크(도구)는 중복 거절·1개만.
-# 빈 슬롯이 없으면(가득) 거절한다. 추가했으면 true(손상·가득·중복은 false).
-func add_item(id: String, n: int = 1) -> bool:
+# 아이템 n개 추가(quality 지정 — 수확물·과일만 실효, 그 외 0 강제). 스택은 (id,quality) 일치 슬롯에
+# 합치거나 새 빈 슬롯에, 유니크(도구)는 중복 거절·1개만. 빈 슬롯이 없으면 거절. 추가했으면 true.
+func add_item(id: String, n: int = 1, quality: int = 0) -> bool:
 	if n <= 0 or not ItemCatalog.has_item(id):
 		return false
 	if not ItemCatalog.stackable_of(id):
-		# 유니크(도구): 이미 있으면 거절, 없으면 빈 슬롯에 1개(개수 인자 무시).
-		if _find_slot(id) >= 0:
+		# 유니크(도구): 이미 있으면 거절, 없으면 빈 슬롯에 1개(개수·품질 인자 무시).
+		if _find_id(id) >= 0:
 			return false
 		var e := _first_empty()
 		if e < 0:
 			return false
-		slots[e] = {"id": id, "count": 1}
+		slots[e] = {"id": id, "count": 1, "quality": 0}
 		changed.emit()
 		return true
-	# 스택(씨앗·수확물): 기존 슬롯에 합치거나 새 빈 슬롯에.
-	var i := _find_slot(id)
+	# 스택(씨앗·수확물·묘목·비료): (id, quality) 일치 슬롯에 합치거나 새 빈 슬롯에.
+	var q := _norm_quality(id, quality)
+	var i := _find_stack(id, q)
 	if i >= 0:
 		slots[i]["count"] += n
 		changed.emit()
@@ -118,20 +156,38 @@ func add_item(id: String, n: int = 1) -> bool:
 	var empty := _first_empty()
 	if empty < 0:
 		return false
-	slots[empty] = {"id": id, "count": n}
+	slots[empty] = {"id": id, "count": n, "quality": q}
 	changed.emit()
 	return true
 
-# 아이템 n개 제거(스택 감소, 0이면 슬롯 비움 — 위치는 그 자리에 빈칸으로 남는다). 모자라면 false.
+# 아이템 n개 제거(전 품질 합산 원자적 — 모자라면 무변경 false). 소비는 ★최저 품질 우선(worst-first):
+# 플레이어가 프리미엄은 팔고 잡템을 서빙·선물로 소모하는 스타듀 결. 0이 된 슬롯은 빈칸으로 남는다.
 func remove_item(id: String, n: int = 1) -> bool:
-	if n <= 0:
+	if n <= 0 or count_of(id) < n:
 		return false
-	var i := _find_slot(id)
-	if i < 0 or slots[i]["count"] < n:
+	var remaining := n
+	while remaining > 0:
+		var idx := _lowest_quality_slot(id)
+		if idx < 0:
+			break   # count_of가 보장하므로 도달 X(방어)
+		var take := mini(remaining, int(slots[idx]["count"]))
+		slots[idx]["count"] -= take
+		remaining -= take
+		if int(slots[idx]["count"]) <= 0:
+			slots[idx] = null
+	changed.emit()
+	return true
+
+# 특정 슬롯 인덱스에서 n개 제거(품질 무관 — 그 슬롯의 (id,quality)를 그대로 소진). 출하함 드롭처럼
+# "이 슬롯을 통째로" 빼낼 때 쓴다(worst-first가 다른 품질 슬롯을 건드리지 않게). 모자라면 false.
+func remove_at(index: int, n: int = 1) -> bool:
+	if index < 0 or index >= slots.size() or slots[index] == null:
 		return false
-	slots[i]["count"] -= n
-	if slots[i]["count"] <= 0:
-		slots[i] = null
+	if n <= 0 or int(slots[index]["count"]) < n:
+		return false
+	slots[index]["count"] -= n
+	if int(slots[index]["count"]) <= 0:
+		slots[index] = null
 	changed.emit()
 	return true
 
@@ -151,6 +207,12 @@ func count_at(i: int) -> int:
 	if i < 0 or i >= slots.size() or slots[i] == null:
 		return 0
 	return slots[i]["count"]
+
+# 슬롯 i의 품질 등급(0 = 빈칸/범위 밖/무차원). HUD가 등급 색·글자로 표시(S1-6 §8.3), 출하함이 배수 조회.
+func quality_at(i: int) -> int:
+	if i < 0 or i >= slots.size() or slots[i] == null:
+		return 0
+	return int(slots[i].get("quality", 0))
 
 # 슬롯 i를 선택한다(범위 밖이면 무시). 숫자키·휠·초기화가 호출한다.
 func select(i: int) -> void:
@@ -183,8 +245,9 @@ func move_slot(from: int, to: int) -> void:
 		slots[from] = null
 		changed.emit()
 		return
-	# 같은 스택 아이템이면 합친다(도구는 stackable=false라 이 분기에 안 듦 → 스왑).
-	if src["id"] == dst["id"] and ItemCatalog.stackable_of(src["id"]):
+	# 같은 스택 아이템 + 같은 품질이면 합친다(도구는 stackable=false·품질 다르면 별 스택 → 스왑).
+	if src["id"] == dst["id"] and int(src.get("quality", 0)) == int(dst.get("quality", 0)) \
+			and ItemCatalog.stackable_of(src["id"]):
 		slots[to]["count"] += src["count"]
 		slots[from] = null
 		changed.emit()
@@ -198,44 +261,53 @@ func move_slot(from: int, to: int) -> void:
 # 정렬한 뒤 같은 스택 id를 한 슬롯으로 합친다. 슬롯 위치가 바뀌므로 선택 인덱스는 그대로 두되
 # (빈칸 선택 가능), 메뉴 인벤토리 탭의 [정리] 버튼이 호출한다. 도구는 유니크라 합쳐지지 않는다.
 func sort() -> void:
-	# 1) 모든 비지 않은 슬롯을 모아 같은 스택 id를 합산한다.
-	var merged: Dictionary = {}   # id → 누적 개수
+	# 1) 비지 않은 슬롯을 (id, quality) 스택 키로 합산한다(품질 다르면 별 스택 유지 — 은/금 분리).
+	var merged: Dictionary = {}   # "id#q" → {id, quality, count}
 	var order: Array = []         # 처음 등장 순서 보존(안정적 — 같은 키 정렬 전 베이스)
 	for s in slots:
 		if s == null:
 			continue
 		var id: String = s["id"]
-		if merged.has(id):
-			merged[id] += s["count"]
+		var q := int(s.get("quality", 0))
+		var key := "%s#%d" % [id, q]
+		if merged.has(key):
+			merged[key]["count"] += int(s["count"])
 		else:
-			merged[id] = s["count"]
-			order.append(id)
-	# 2) 카테고리(도구→씨앗→수확물→그 외) 우선, 그다음 id 알파벳 순으로 정렬한다.
+			merged[key] = {"id": id, "quality": q, "count": int(s["count"])}
+			order.append(key)
+	# 2) 카테고리(도구→씨앗→묘목→수확물→비료→그 외) 우선, 그다음 id, 그다음 품질(낮은 등급 먼저).
 	order.sort_custom(func(a: String, b: String) -> bool:
-		var ca := _cat_rank(a)
-		var cb := _cat_rank(b)
+		var ea: Dictionary = merged[a]
+		var eb: Dictionary = merged[b]
+		var ca := _cat_rank(ea["id"])
+		var cb := _cat_rank(eb["id"])
 		if ca != cb:
 			return ca < cb
-		return a < b)
+		if ea["id"] != eb["id"]:
+			return ea["id"] < eb["id"]
+		return int(ea["quality"]) < int(eb["quality"]))
 	# 3) 슬롯을 비우고 앞에서부터 다시 채운다(빈칸 제거 = 앞으로 당김).
 	var fresh: Array = []
 	fresh.resize(SIZE)
 	var i := 0
-	for id in order:
+	for key in order:
 		if i >= SIZE:
-			break  # 칸을 넘는 분(이론상 정리로 늘지 않음)은 버리지 않게 합쳐졌으므로 발생 X
-		fresh[i] = {"id": id, "count": merged[id]}
+			break  # 칸을 넘는 분(이론상 정리로 늘지 않음)은 합쳐졌으므로 발생 X
+		var e: Dictionary = merged[key]
+		fresh[i] = {"id": e["id"], "count": e["count"], "quality": e["quality"]}
 		i += 1
 	slots = fresh
 	changed.emit()
 
-# 카테고리 정렬 순위(도구 0 → 씨앗 1 → 수확물 2 → 그 외 3). sort 비교자가 쓴다.
+# 카테고리 정렬 순위(도구 0 → 씨앗 1 → 묘목 2 → 수확물 3 → 비료 4 → 그 외 5). sort 비교자가 쓴다.
 func _cat_rank(id: String) -> int:
 	match ItemCatalog.category_of(id):
 		ItemCatalog.CAT_TOOL: return 0
 		ItemCatalog.CAT_SEED: return 1
-		ItemCatalog.CAT_HARVEST: return 2
-		_: return 3
+		ItemCatalog.CAT_SAPLING: return 2
+		ItemCatalog.CAT_HARVEST: return 3
+		ItemCatalog.CAT_FERTILIZER: return 4
+		_: return 5
 
 # ── 씨앗(작물군 id 기반 — 내부적으로 "<작물군>_seed" 아이템에 매핑) ──────────────
 func add_seed(crop_id: String, n: int = 1) -> void:
@@ -270,10 +342,12 @@ func take_sapling(fruit_id: String) -> bool:
 	return remove_item(ItemCatalog.sapling_id(fruit_id), 1)
 
 # ── 수확물(작물군 id = 수확물 아이템 id) ──────────────────────────────────────
-func add_harvest(crop_id: String, n: int = 1) -> void:
+# ★ S1-6(§8.3): quality 인자로 등급을 실는다(기본 Q0라 무인자 기존 호출 회귀 0). 밭 수확 품질 roll이
+#   주 수확분에만 등급을 붙이고 다수확 추가분은 Q0로 넘긴다(§8.5 다수확 격리 — main이 조율).
+func add_harvest(crop_id: String, n: int = 1, quality: int = 0) -> void:
 	if not CropCatalog.has_crop(crop_id):
 		return
-	add_item(ItemCatalog.harvest_id(crop_id), n)
+	add_item(ItemCatalog.harvest_id(crop_id), n, quality)
 
 func harvest_count(crop_id: String) -> int:
 	return count_of(ItemCatalog.harvest_id(crop_id))
@@ -291,11 +365,14 @@ func total_harvest() -> int:
 	return sum
 
 # 보유한 수확물 작물군 id 목록(수확물 카테고리 슬롯의 id = 작물 id). 판매·약탈·서빙이 순회한다.
-# 2-Dictionary 시절 `for id in inventory.harvested`를 대체한다(슬롯 위 동등 질의).
+# ★ S1-6: 같은 작물이 품질별로 여러 슬롯에 나뉠 수 있어 id를 중복 제거한다(작물 "종류" 목록 —
+#   count_of가 전 품질을 합산하므로 종류당 1회만 순회해야 이중 처리가 없다).
 func harvest_ids() -> Array:
 	var out: Array = []
+	var seen: Dictionary = {}
 	for s in slots:
-		if s != null and ItemCatalog.category_of(s["id"]) == ItemCatalog.CAT_HARVEST:
+		if s != null and ItemCatalog.category_of(s["id"]) == ItemCatalog.CAT_HARVEST and not seen.has(s["id"]):
+			seen[s["id"]] = true
 			out.append(s["id"])
 	return out
 
@@ -342,10 +419,13 @@ func _sanitize(raw: Variant) -> Array:
 		var n := int(s.get("count", 0))
 		if not ItemCatalog.has_item(id) or n <= 0:
 			continue
+		# ★ S1-6: 구세이브(quality 무) → 0 기본, 수확물만 등급 실음·그 외 무차원 0(스키마 정규화).
+		var q := _norm_quality(id, int(s.get("quality", 0)))
 		if not ItemCatalog.stackable_of(id):
 			if seen_unique.has(id):
 				continue  # 유니크 중복 슬롯 버림
 			seen_unique[id] = true
 			n = 1
-		clean[i] = {"id": id, "count": n}
+			q = 0
+		clean[i] = {"id": id, "count": n, "quality": q}
 	return clean

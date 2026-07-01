@@ -61,11 +61,23 @@ func _draw_slot(i: int, pos: Vector2) -> void:
 	if id == "":
 		return  # 빈 슬롯(배경만)
 	_draw_icon(id, rect)
+	# ★ S1-6 품질 배지(그레이박스 — 아트 배지=S1-10). 등급>0이면 좌하단에 등급 색 점(스타듀 별 위치).
+	var q := inv.quality_at(i)
+	if q > 0:
+		draw_circle(pos + Vector2(8.0, SLOT_PX - 8.0), 4.0, _quality_color(q))
 	# 스택 개수 배지(2개 이상일 때만 — 1이면 군더더기). 칸 우하단에 작은 숫자.
 	var n := inv.count_at(i)
 	if n > 1:
 		draw_string(ThemeDB.fallback_font, pos + Vector2(SLOT_PX - 15.0, SLOT_PX - 4.0),
 			str(n), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
+
+# 품질 등급 색(그레이박스 배지 — 은/금/이리듐). 0(일반)은 배지 없음이라 호출 안 됨.
+func _quality_color(q: int) -> Color:
+	match q:
+		1: return Color(0.78, 0.80, 0.85)   # 은
+		2: return Color(0.96, 0.80, 0.25)   # 금
+		3: return Color(0.60, 0.38, 0.88)   # 이리듐
+		_: return Color.WHITE
 
 # 아이콘: 도구는 색박스(임시 그레이박스), 씨앗·수확물은 작물 mature 스프라이트 재사용.
 func _draw_icon(id: String, rect: Rect2) -> void:
@@ -82,6 +94,10 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.45)), Color(0.35, 0.62, 0.35))
 		ItemCatalog.CAT_HARVEST:
 			_draw_crop_tex(id, inner)
+		ItemCatalog.CAT_FERTILIZER:
+			# ★ [S1-6] 비료 그레이박스 아이콘 — 품질군=초록 흙, 성장촉진군=청록(축 구분). 아트=하류.
+			var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
+			draw_rect(inner, fc)
 
 # 작물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
