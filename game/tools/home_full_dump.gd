@@ -57,7 +57,22 @@ func _init() -> void:
 		var fimg := (f[0] as Texture2D).get_image()
 		if fimg.get_format() != Image.FORMAT_RGBA8:
 			fimg.convert(Image.FORMAT_RGBA8)
-		out.blend_rect(fimg, Rect2i(Vector2i.ZERO, fimg.get_size()), (f[1] as Rect2i).position * TILE)
+		# ★[ADR-0037] bottom-center 앵커(main._blit_facade_anchored과 동일) — 트림된 art 바텀=footprint 하단, 가로 중앙.
+		var fsz := fimg.get_size()
+		var cx := int((rect.position.x + rect.size.x * 0.5) * TILE)
+		var base_y := (rect.position.y + rect.size.y) * TILE
+		# ★[§11 접지] CPU 접지 그림자 — 밑단 폭 납작한 타원(main의 draw_circle 재현).
+		var srx := fsz.x * 0.42
+		var sry := srx * 0.20
+		var scy := base_y - 3
+		for sy in range(int(scy - sry), int(scy + sry) + 1):
+			for sx in range(int(cx - srx), int(cx + srx) + 1):
+				var nx := (sx - cx) / srx
+				var ny := (sy - scy) / sry
+				if nx * nx + ny * ny <= 1.0 and sx >= 0 and sy >= 0 and sx < out.get_width() and sy < out.get_height():
+					var bg := out.get_pixel(sx, sy)
+					out.set_pixel(sx, sy, bg.lerp(Color(0, 0, 0, 1), 0.34))
+		out.blend_rect(fimg, Rect2i(Vector2i.ZERO, fsz), Vector2i(cx - fsz.x / 2, base_y - fsz.y))
 	out.save_png("res://tools/home_full_dump.png")
 	print("✅ home_full_dump.png 저장 (", size.x, "×", size.y, ")")
 	quit()

@@ -45,6 +45,20 @@ const PORTRAIT_STEM := {
 const PORTRAIT_EXPRS := ["smile", "shy", "sad", "talk"]  # 인라인 태그 화이트리스트
 const PORTRAIT_FALLBACK_EXPR := "talk"
 
+# ── 대화창 「태운 한지」 룩(S0-6, owner 제미나이 윈도우 아트) ──
+# 윈도우 1장(dialog_window.png) 위에 본문·초상화·이름을 오버레이. 내부칸 = 측정 비율.
+const DLG_WINDOW_TEX := "res://assets/ui/dialog_window.png"
+const DLG_ARROW_TEX := "res://assets/ui/ink_arrow.png"
+const DLG_FONT := "res://assets/fonts/neodgm.ttf"
+const DLG_WINDOW := Rect2(16, 172, 608, 176)          # 640×360 논리, CanvasLayer scale 1.5
+const DLG_F_TEXT := Rect2(0.0523, 0.1372, 0.6675, 0.7306)
+const DLG_F_PORT := Rect2(0.7844, 0.1423, 0.1545, 0.5519)
+const DLG_F_NAME := Rect2(0.7645, 0.7830, 0.1952, 0.1151)
+const DLG_INK := Color(0.16, 0.12, 0.085)             # 먹빛 본문
+const DLG_NAME_INK := Color(0.20, 0.14, 0.09)         # 이름(먹빛)
+var _dlg_name: Label = null                            # 이름판(화자명)
+var _dlg_arrow: TextureRect = null                     # 다음 화살표(먹빛)
+
 # ── 타일 종류(아틀라스 인덱스 = 이 순서) ──────────────────────────────────
 const GROUND := 0   # 바깥 바닥(걷기 O)
 const PATH := 1     # 길 — 온보딩 동선(걷기 O)
@@ -1008,6 +1022,7 @@ func _ready() -> void:
 	bana_affinity.preferred_crop = CropCatalog.HONRYEONGCHO
 	dialogue.changed.connect(_on_dialogue_changed)
 	dialogue.finished.connect(_on_dialogue_finished)
+	_build_dialogue_ui()   # S0-6 「태운 한지」 대화창 룩(윈도우 아트 + 오버레이)
 	# T5.4 카페 영업 마감(19시) → 일일 정산 팝업. 손님 상태 변화는 매 프레임 _draw에서
 	# 그리므로 changed는 따로 듣지 않는다(영업 중엔 _process가 queue_redraw로 바를 갱신).
 	cafe.closed.connect(_on_cafe_closed)
@@ -4096,6 +4111,77 @@ func _try_gift() -> void:
 	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립(미호)
 	_notice("%s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
 
+# S0-6 대화창 「태운 한지」 룩 구성(HUD처럼 코드로). 기존 3노드(패널·본문·초상화)를
+# 윈도우 아트 위 오버레이로 재배치하고, 이름판·먹 화살표를 새로 얹는다. main.tscn 무수정.
+func _build_dialogue_ui() -> void:
+	var font := load(DLG_FONT) as FontFile
+	# ① 패널 = 윈도우 컨테이너(배경 투명)
+	dialogue_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	dialogue_panel.position = DLG_WINDOW.position
+	dialogue_panel.size = DLG_WINDOW.size
+	var wtex := load(DLG_WINDOW_TEX) as Texture2D
+	# ② 그림자 + 윈도우 아트(본문보다 뒤로 → 먼저 add 후 앞으로 당김)
+	var shadow := _dlg_texrect(wtex, Rect2(Vector2(4, 6), DLG_WINDOW.size), false)
+	shadow.modulate = Color(0, 0, 0, 0.32)
+	dialogue_panel.add_child(shadow)
+	dialogue_panel.move_child(shadow, 0)
+	var art := _dlg_texrect(wtex, Rect2(Vector2.ZERO, DLG_WINDOW.size), false)
+	dialogue_panel.add_child(art)
+	dialogue_panel.move_child(art, 1)
+	# ③ 본문(먹빛, 좌 텍스트칸 + 안쪽 여백)
+	var tr := _dlg_local(DLG_F_TEXT)
+	dialogue_text.position = tr.position + Vector2(10, 6)
+	dialogue_text.size = tr.size - Vector2(20, 12)
+	dialogue_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	dialogue_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if font:
+		dialogue_text.add_theme_font_override("font", font)
+	dialogue_text.add_theme_font_size_override("font_size", 15)
+	dialogue_text.add_theme_color_override("font_color", DLG_INK)
+	# ④ 이름판(화자명, 가운데)
+	_dlg_name = Label.new()
+	var nr := _dlg_local(DLG_F_NAME)
+	_dlg_name.position = nr.position
+	_dlg_name.size = nr.size
+	_dlg_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_dlg_name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	if font:
+		_dlg_name.add_theme_font_override("font", font)
+	_dlg_name.add_theme_font_size_override("font_size", 13)
+	_dlg_name.add_theme_color_override("font_color", DLG_NAME_INK)
+	dialogue_panel.add_child(_dlg_name)
+	# ⑤ 다음 화살표(먹빛, 우하단, 위아래 bob)
+	_dlg_arrow = _dlg_texrect(load(DLG_ARROW_TEX), Rect2(tr.position + tr.size - Vector2(22, 20), Vector2(18, 16)), false)
+	dialogue_panel.add_child(_dlg_arrow)
+	var y0 := _dlg_arrow.position.y
+	var tw := create_tween().set_loops()
+	tw.tween_property(_dlg_arrow, "position:y", y0 + 3.0, 0.6).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(_dlg_arrow, "position:y", y0, 0.6).set_trans(Tween.TRANS_SINE)
+	# ⑥ 초상화(우 정사각칸, 매팅) — CanvasLayer 직계 유지(패널보다 뒤 트리라 위에 그려짐)
+	var pr := _dlg_abs(DLG_F_PORT).grow(-5)
+	dialogue_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	dialogue_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	dialogue_portrait.position = pr.position
+	dialogue_portrait.size = pr.size
+
+func _dlg_local(f: Rect2) -> Rect2:
+	return Rect2(f.position * DLG_WINDOW.size, f.size * DLG_WINDOW.size)
+
+func _dlg_abs(f: Rect2) -> Rect2:
+	var l := _dlg_local(f)
+	return Rect2(DLG_WINDOW.position + l.position, l.size)
+
+func _dlg_texrect(tex: Texture2D, r: Rect2, nearest: bool) -> TextureRect:
+	var t := TextureRect.new()
+	t.texture = tex
+	t.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if nearest else CanvasItem.TEXTURE_FILTER_LINEAR
+	t.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	t.stretch_mode = TextureRect.STRETCH_SCALE
+	t.position = r.position
+	t.size = r.size
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return t
+
 # 현재 줄이 바뀔 때마다(시작·넘기기) 패널을 갱신한다. 마지막 줄이면 "닫기"로 안내.
 func _on_dialogue_changed(speaker: String, line: String) -> void:
 	dialogue_panel.visible = true
@@ -4112,8 +4198,11 @@ func _on_dialogue_changed(speaker: String, line: String) -> void:
 				expr = tag
 				body = line.substr(close + 1).strip_edges()
 	_set_portrait(speaker, expr)
+	if _dlg_name:
+		_dlg_name.text = speaker                # 화자명 → 이름판(별도 탭)
 	var hint := "[E] 닫기" if dialogue.is_last() else "[E] 다음"
-	dialogue_text.text = "%s\n\n%s\n\n%s   %s" % [speaker, body, dialogue.progress(), hint]
+	# 화자명은 이름판이 맡으므로 본문은 대사 + 진행/안내만
+	dialogue_text.text = "%s\n\n%s   %s" % [body, dialogue.progress(), hint]
 
 # P2.4 화자+표정 → 초상화 슬롯. 표정 → talk → 기본 stem.png 순으로 폴백하고, 매핑에 없는
 # 화자(그레이박스 손님·잡귀 등)는 슬롯을 끈다(텍스트만 표시).
@@ -4302,20 +4391,34 @@ func _facade_grass_backdrop(rect: Rect2i) -> void:
 		_facade_grass_tex = ImageTexture.create_from_image(g)
 	draw_texture_rect(_facade_grass_tex, Rect2(Vector2(rect.position * TILE), Vector2(rect.size * TILE)), true)
 
+# ★[ADR-0037 §3] 안식 건물 facade = bottom-center 앵커 + SE 접지 그림자(§11). facade 아트는 footprint
+# (WALL 박스)보다 클 수 있어(지붕이 위로 솟음), art 바텀을 footprint 하단 경계에·가로 중앙에 맞춰
+# "땅에 앉은" 정면 건물로 그린다. 문(art 하단 중앙)이 door 타일(rect 하단 중앙)과 1:1. 충돌·grid·
+# 테스트(=WALL rect)는 불변 — 순수 시각. 접지 그림자는 반투명 타원(별도 즉시모드, 건물 아래).
+func _blit_facade_anchored(tex: Texture2D, rect: Rect2i) -> void:
+	_facade_grass_backdrop(rect)
+	var cx := (rect.position.x + rect.size.x * 0.5) * TILE
+	var base_y := float((rect.position.y + rect.size.y) * TILE)
+	var sz := tex.get_size()
+	# ★[§11 접지] 텍스처는 내용 bbox로 트림돼 있어 art 바텀 = 건물 실제 밑단. 밑단 폭에 맞춘
+	# 납작한 반투명 타원을 밑단 바로 아래(footprint 하단)에 깔아 "땅에 앉은" 접지를 만든다.
+	draw_set_transform(Vector2(cx, base_y - 3.0), 0.0, Vector2(1.0, 0.20))
+	draw_circle(Vector2.ZERO, sz.x * 0.42, Color(0, 0, 0, 0.34))
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	# bottom-center 앵커 블릿(트림된 art 바텀 = footprint 하단 = 실제 밑단, 위로 솟음 → 지붕 오버행).
+	draw_texture_rect(tex, Rect2(Vector2(cx - sz.x * 0.5, base_y - sz.y), sz), false)
+
 func _draw_facade_home() -> void:
-	_facade_grass_backdrop(HOUSE_EXT_RECT)
-	draw_texture_rect(FACADE_HOUSE, Rect2(Vector2(HOUSE_EXT_RECT.position * TILE), FACADE_HOUSE.get_size()), false)
+	_blit_facade_anchored(FACADE_HOUSE, HOUSE_EXT_RECT)
 
 # ★ T3 — 안식 농원 서비스 건물 외관(창고 NE·축사 동편). 카페·집 외관과 같은 결 — 통과 불가 WALL
 # 박스(_build_facade) 위에 1:1로 덮어 "닫힌 건물"로 읽히게 한다. 창고는 enterable(문 트리거),
 # 축사는 비-enterable 자리(외관만, 카탈로그 미등록 — 목축은 Phase 3). 그리기 전용, 충돌·동선 불변.
 func _draw_facade_storehouse() -> void:
-	_facade_grass_backdrop(STOREHOUSE_EXT_RECT)
-	draw_texture_rect(FACADE_STOREHOUSE, Rect2(Vector2(STOREHOUSE_EXT_RECT.position * TILE), FACADE_STOREHOUSE.get_size()), false)
+	_blit_facade_anchored(FACADE_STOREHOUSE, STOREHOUSE_EXT_RECT)
 
 func _draw_facade_barn() -> void:
-	_facade_grass_backdrop(BARN_EXT_RECT)
-	draw_texture_rect(FACADE_BARN, Rect2(Vector2(BARN_EXT_RECT.position * TILE), FACADE_BARN.get_size()), false)
+	_blit_facade_anchored(FACADE_BARN, BARN_EXT_RECT)
 
 func _draw_facade_cafe() -> void:
 	_facade_grass_backdrop(CAFE_EXT_RECT)
