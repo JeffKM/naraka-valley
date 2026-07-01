@@ -66,13 +66,15 @@ func _init() -> void:
 		var fsz := fimg.get_size()
 		var cx := int((rect.position.x + rect.size.x * 0.5) * TILE)
 		var base_y := (rect.position.y + rect.size.y) * TILE
-		# ★[§11 접지] CPU 접지 그림자 — 밑단 폭 납작한 타원(main의 draw_circle 재현).
+		# ★[§11 접지] CPU 접지 그림자 — 밑단에 밀착한 납작 타원(main._blit_facade_anchored 재현).
+		#   세로반경 0.17·중심 base_y−ery*0.4·SE +2 (예전 base_y−3/0.20 '접시' → 컨택트 그림자로 교정).
 		var srx := fsz.x * 0.42
-		var sry := srx * 0.20
-		var scy := base_y - 3
+		var sry := srx * 0.17
+		var scx := cx + 2
+		var scy := int(base_y - sry * 0.4)
 		for sy in range(int(scy - sry), int(scy + sry) + 1):
-			for sx in range(int(cx - srx), int(cx + srx) + 1):
-				var nx := (sx - cx) / srx
+			for sx in range(int(scx - srx), int(scx + srx) + 1):
+				var nx := (sx - scx) / srx
 				var ny := (sy - scy) / sry
 				if nx * nx + ny * ny <= 1.0 and sx >= 0 and sy >= 0 and sx < out.get_width() and sy < out.get_height():
 					var bg := out.get_pixel(sx, sy)
