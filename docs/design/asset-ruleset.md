@@ -97,6 +97,8 @@ strict adherence to 2-3 color values max, no smooth gradients.
 
 **구현:** 프롭 데이터 테이블 각 엔트리에 **pivot 타입**(`floor`/`wall:N|E|S|W`/`held`) 필드 → 그리기·충돌이 그 앵커를 씀. 임시 `WALL_PROP_LIFT(-18)`를 `wall:N` 케이스로 흡수. facade 블릿을 **bottom-center 앵커**로 변경(현 top-left → art 바텀=footprint 하단행). 지금은 N벽만 실사용(E/S/W 필드 예약).
 
+> **★야외 바닥 프롭 = 발치 기준(foot-referenced)으로 등가 충족(Slice 0 종료, owner 확정 2026-07-01):** facade는 위 `_blit_facade_anchored`로 bottom-center 앵커 적용 완료. **야외 바닥 프롭(나무·바위·debris·그루터기 등)은 좌표를 `top-left`로 두되, 발치(base=`tile.y*TILE + yo + art_h`)를 기준으로 [§5 발치 충돌 바]·[§6 Y-split base_y]·[§11 접지 그림자]가 전부 그 발치를 참조**하므로, 피벗/충돌/그림자가 발치 정렬이라는 §3의 *목적*이 충족된다(인게임 접지 정확·⑦/S0-8 사인오프). 좌표 표기를 foot-tile로 바꾸는 리터럴 재배치는 **시각 결과 동일(payoff 0) + 회귀 리스크**라 하지 않는다. **신규 프롭 배치·후속 pivot 필드 도입 시엔 foot-referenced를 기준으로 설계**한다(이 등가가 규범).
+
 ---
 
 ## 4. 방향성 에셋의 면별 변형 (Directional Variants) ([ADR-0037] 잠금 2026-06-30)
