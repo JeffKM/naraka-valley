@@ -1,3 +1,22 @@
+# [REVISION 3] 창고·축사 — half-res 네이티브 재생성으로 **선명도 + 2px 캐논 동시 달성** (2026-07-02, owner "A안" 확정)
+
+> ✅ **실행 완료.** REVISION 2의 `place_facade.py`(풀해상 생성 → **÷2 BOX 청키화**)는 그 ÷2 다운샘플이
+> 선명한 기와·판자결을 뭉개, 창고·축사가 본가보다 흐릿·뭉툭했다(**owner 지적 "선명도 문제"가 정확한 진단** —
+> "기와 굵기"는 결과였을 뿐). [asset-ruleset §0/§0.1]의 정석은 *half-res 생성 → ×2 nearest*(본가
+> `assets/_staging_phaseC/chunky/house_src.png` 144px가 그 예)인데, place_facade가 *풀해상 → ÷2*로 이를 어긴 게 근본 원인.
+>
+> **교정 = 창고·축사를 PixelLab `create_map_object`로 half-res 네이티브 재생성**(창고 96×104·축사 88×80,
+> view=low top-down) → `tools/facade_halfres_x2.py`(알파 하드임계 → ×2 nearest → bbox 트림)로 굳힘.
+> 결과: **홀수 런 비율 0%(완벽 2px 블록 = 캐논 준수) + 본가급 선명도** 동시 달성 — B(÷2 청키화=캐논O·선명X)와
+> C(원본 1px=선명O·캐논X)의 트레이드오프를 모두 해소. raw = `assets/_staging_phaseC/pixellab_halfres/{storehouse,barn}_hr.png`.
+> 최종 = 창고 158×162 / 축사 152×136. 축사는 **갈색 목재벽 + 빨간 감블지붕**(owner 요청 — 프롬프트에 "barn"이
+> 들어가면 빨간벽 헛간이 강제돼, 명사를 "wooden farm outbuilding"으로 바꿔 교정).
+>
+> **본가 그림자 부양 이슈**(별건, 같은 세션)도 해결: `house_ext.png` 하단의 부유 픽셀(y296~297 좌우 6px) + 공백
+> 14행이 `getbbox` 트림을 실제 밑단보다 16px 아래로 잡아 접지 타원이 떠 있었다 → 하단 트림(298→282px)으로 밀착.
+
+---
+
 # [REVISION 2] 창고(Shed)·축사(Barn) — 본가와 **지붕 시점 통일**(3/4 지붕 윗면 노출)
 
 > ✅ **실행 완료 (2026-07-02).** Gemini 대기 대신 **PixelLab `create_map_object` view="low top-down"**로 재생성(owner 승인 "지금 진행"). facade+지붕 윗면 깊이는 low top-down이 정확히 대응. 산출→`tools/place_facade.py`(2px 청크화+bbox 트림, chunkiness 1.00 정합)→`assets/buildings/{storehouse,barn}_ext.png` 교체(창고 156×160·축사 164×144). raw 소스=`assets/_staging_phaseC/pixellab/{storehouse,barn}_src.png`. home_full_dump 육안: 본가와 지붕 윗면 깊이·팔레트·석재 기초·밀착 그림자 정합 확인. 아래 명세는 생성 프롬프트의 근거로 보존.
