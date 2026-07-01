@@ -235,6 +235,12 @@ const PROP_VINE := preload("res://assets/props/vine.png")               # 32×64
 const PROP_DEBRIS_WEEDS := preload("res://assets/props/debris_weeds.png")          # 32×32 — 이승의 미련·잡초(낫, 통과 O 장식)
 const PROP_DEBRIS_EMBER := preload("res://assets/props/debris_ember_stone.png")    # 64×64 — 업화석(곡괭이, 통과 X SOLID)
 const PROP_DEBRIS_STUMP := preload("res://assets/props/debris_petrified_stump.png")  # 64×64 — 석화 고목(도끼, 통과 X SOLID)
+# ★[asset-ruleset §11] 접지 그림자 대상 = 부피 있는 야외 바닥 프롭. 스프라이트에 굽지 않고
+#   별도 반투명 타원을 밑단 아래에 깔아 "뜬 느낌"을 없앤다(건물 facade는 _blit_facade_anchored가
+#   자체 처리). 납작한 소품(풀·꽃·잡초·울타리·화분·계단·넝쿨·러그·등불)과 실내 벽 가구는 제외 —
+#   높이가 낮아 그림자가 어색하고 사인오프된 실내 배치를 건드리지 않기 위함.
+const PROP_SHADOW_SET := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_STUMP, PROP_BUSH,
+	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP, PROP_SCARECROW]
 # ★ 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md). 결정적 절차 배치로
 #   GROUND/PATH 칸마다 자기 지형 테이블로 가중 1롤 → 베이스 위에 디테일을 *구역 빌드 때 1회 베이크*
 #   (런타임 정적 오버레이, _draw에서 1 draw call). 손배치 grass_tuft 폐기 → 이 시스템이 대체.
@@ -798,6 +804,10 @@ const SHIP_BIN_TILE := Vector2i(19, 88)   # 카페 직원 줄(y88) 오른쪽 끝
 @onready var ground: TileMapLayer = $Ground
 @onready var field_layer: TileMapLayer = $Field           # T2.1 밭 상태 오버레이
 @onready var player: CharacterBody2D = $Player
+# ★[asset-ruleset §6] Y-split 프론트 프롭 오버레이(플레이어 위 z 레이어)와 재분할 트리거.
+#   플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 나눠 그린다(매 프레임 아님 — 값싸게).
+var _front_props: Node2D = null
+var _last_player_tile_y: int = -9999
 # ★ T3③' 실내 가구 충돌 — 구역 빌드마다 SOLID_PROPS 칸에 사각 충돌을 다시 세운다(러그 제외).
 #   타일맵 벽과 같은 물리 레이어(기본 1)라 플레이어 move_and_slide가 통과 못 한다.
 var _prop_body: StaticBody2D = null
@@ -992,6 +1002,12 @@ func _ready() -> void:
 	_paint_grid()
 	_place_labels()
 	_setup_player_and_camera()
+	# ★[asset-ruleset §6] 플레이어(z0)보다 높은 z의 프론트 프롭 오버레이 — "플레이어보다 앞(발치 아래)"
+	#   프롭을 여기서 다시 그려 캐릭터가 나무·바위 뒤로 가려지게 한다(그리기 로직은 main이 단일 출처).
+	_front_props = preload("res://front_props.gd").new()
+	_front_props.host = self
+	_front_props.z_index = 1
+	add_child(_front_props)
 	_setup_lighting()
 	_setup_audio()
 	_setup_hotbar()
@@ -3046,6 +3062,10 @@ func _rebuild_region(to_region: String) -> void:
 	_paint_grid()
 	_place_labels()
 	_setup_region_lamps()              # 등불을 현재 구역 자리로 다시 깐다(멱등)
+	# ★[§6] 구역이 바뀌면 Y-split 캐시를 무효화 → 다음 _process가 앞/뒤 프롭을 재분할(신선도 보장).
+	_last_player_tile_y = -9999
+	if _front_props != null:
+		_front_props.queue_redraw()
 	if to_region == RegionCatalog.HOME:
 		_repaint_field_overlays()      # 안식 농원으로 복귀 → 밭 고랑·작물 오버레이 복원
 
@@ -3229,6 +3249,15 @@ func _process(delta: float) -> void:
 	# (같은 phase면 즉시 반환, 라이팅과 같은 무상태 결). 시각이 멈춘 취침 연출 중에도 위치는
 	# 잠겨 있어(이동 잠금) phase가 안정적이다.
 	audio.update_music(clock.minutes, _run_over, _in_cafe())
+	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
+	#   (매 프레임 아님·값쌈). HOME 야외에서만 의미(다른 구역은 _draw_props_for가 PASS_ALL로 전부 그림).
+	if _region == RegionCatalog.HOME and player != null:
+		var _pty := int(player.global_position.y) / TILE
+		if _pty != _last_player_tile_y:
+			_last_player_tile_y = _pty
+			queue_redraw()
+			if _front_props != null:
+				_front_props.queue_redraw()
 	# 음소거 토글(M) — 연출·대화·마무리 화면 어디서든 받는다(입력 가드보다 위, UX 토글이라
 	# 게임 상태와 무관). audio가 Music·SFX 버스를 함께 음소거한다.
 	if Input.is_action_just_pressed("mute_audio"):
@@ -4368,12 +4397,14 @@ func _draw() -> void:
 			_draw_facade_home()      # 집 외관(WALL 박스 위에 덮어 닫힌 건물로)
 			_draw_facade_storehouse()  # ★ T3 창고 외관(NE)
 			_draw_facade_barn()        # ★ T3 축사 외관(동편, 비-enterable 자리)
-			_draw_props_for(_prop_layouts.get("HOME", []))  # ★ ADR-0025 데이터: 집 가구·길가 등불·화분 + T3 농장 장식
+			# ★[§6] Y-split: 뒤 프롭(플레이어 발치 위)만 여기서(플레이어 아래). 앞 프롭은 _front_props.
+			var _psy: float = player.global_position.y if player != null else 1.0e20
+			_draw_props_for(_prop_layouts.get("HOME", []), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터: 집 가구·길가 등불·화분 + T3 농장 장식
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
-			_draw_props_for(_prop_layouts.get("CAFE", []))  # ★ ADR-0025 데이터: 카페 무대 가구·카페 등불
+			_draw_props_for(_prop_layouts.get("CAFE", []), self)  # ★ ADR-0025 데이터: 카페 무대 가구·카페 등불
 			_draw_ship_bin()         # ★ C2 무인 출하함 상자(카페 안 — 카페 카메라에서만 보임)
 			# M2.4 — 이벤트 데이면 카페 무대를 축제 장식으로(가구 위에 가랜드·무대 카펫 덧그림).
 			if Festival.is_event_day(clock.day):
@@ -4381,7 +4412,7 @@ func _draw() -> void:
 			# ★ M2.2 — 공유 집 실내에 들어와 있으면 집 가구를 재사용해 그린다(HOUSE_RECT 방).
 			# 만물상 방·카페 방은 카메라 밖이라 같이 그려도 안 보이지만, 가구는 들어온 그 방만 둔다.
 			if _is_in_house_interior():
-				_draw_props_for(_prop_layouts.get("VILLAGE_HOUSE", []))  # ★ ADR-0025 데이터
+				_draw_props_for(_prop_layouts.get("VILLAGE_HOUSE", []), self)  # ★ ADR-0025 데이터
 			_draw_customers()
 			_draw_night_customers()
 			_draw_jobgui()
@@ -4518,13 +4549,57 @@ func _draw_cafe_festival() -> void:
 
 # ★ M1.4 — 넘겨받은 가구 배열(현재 구역 것)만 그린다. PROP_LAYOUT_HOME/PROP_LAYOUT_CAFE를
 # _draw가 구역에 맞춰 골라 넘긴다(다른 구역 가구가 떠다니지 않게).
-func _draw_props_for(layout: Array) -> void:
+# ★[asset-ruleset §6] Y-split 패스 모드 — 한 프롭 인스턴스의 발치(base) 스크린 Y를 split_y(플레이어
+#   발치)와 비교해 앞/뒤를 가른다. ALL=전부(카페·실내·마을 등 Y-split 불필요), BACK=플레이어 뒤
+#   (base ≤ split, main._draw = 플레이어 아래), FRONT=플레이어 앞(base > split, _front_props = 위).
+const _PROP_PASS_ALL := 0
+const _PROP_PASS_BACK := 1
+const _PROP_PASS_FRONT := 2
+
+# 프롭 인스턴스 발치(base) 스크린 Y — top-left blit(+yo) 기준 art 하단. Y-split·그림자·테스트 공용 출처.
+func _prop_base_y(t: Vector2i, yo: int, tex: Texture2D) -> float:
+	return float(t.y * TILE + yo) + tex.get_size().y
+
+# canvas = 실제로 그릴 CanvasItem — Godot draw_*는 *현재 _draw 중인 그 노드*에서만 허용되므로,
+#   뒤 패스는 main(self)·앞 패스는 _front_props(플레이어 위 레이어)가 canvas로 넘어온다.
+func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_PASS_ALL, split_y: float = 0.0) -> void:
 	for entry in layout:
 		var tex: Texture2D = entry[0]
 		var yo: int = entry[2] if entry.size() > 2 else 0   # ★ T3③ 벽 가구 시각 보정(밀착, 좌표·충돌 무관)
+		var casts_shadow: bool = tex in PROP_SHADOW_SET
+		var tsz := tex.get_size()
 		for t in entry[1]:
+			# Y-split: 부피 프롭(그림자 세트)만 앞/뒤로 갈린다 — 평면 데칼(러그·꽃·울타리·잡초 등)은
+			#   발치 개념이 없어 늘 뒤(플레이어 아래). 경계 base==split은 BACK. ALL이면 전부 그린다.
+			if pass_mode != _PROP_PASS_ALL:
+				var is_front: bool = casts_shadow and _prop_base_y(t, yo, tex) > split_y
+				if pass_mode == _PROP_PASS_BACK and is_front:
+					continue
+				if pass_mode == _PROP_PASS_FRONT and not is_front:
+					continue
+			# ★[§11] 부피 프롭이면 발치에 SE 접지 그림자 먼저(프롭 본체 아래). 순수 시각.
+			if casts_shadow:
+				_draw_prop_shadow(canvas, t, yo, tsz)
 			# ADR-0013: 가구 아트도 32px native라 1:1로 그린다(스툴 32×32=1칸, 침대 32×64=1×2칸).
-			draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE + yo), tex.get_size()), false)
+			canvas.draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE + yo), tsz), false)
+
+# ★[asset-ruleset §11] 부피 프롭 발치 SE 접지 그림자 — 스프라이트에 굽지 않고 별도 반투명 타원을
+#   밑단 바로 아래에 깐다(배치 100% 자유·"뜬 느낌" 방지). facade _blit_facade_anchored와 같은 결.
+#   NW 광원(§1)이라 그림자는 SE(우·하) 방향으로 살짝 치우친다. 접지점(밑단 중앙) 기준.
+func _draw_prop_shadow(canvas: CanvasItem, t: Vector2i, yo: int, tsz: Vector2) -> void:
+	var cx := t.x * TILE + tsz.x * 0.5 + 2.0        # SE — 밑단 중앙에서 우측으로 살짝
+	var base_y := float(t.y * TILE + yo) + tsz.y - 2.0   # art 밑단 바로 위(발치)
+	canvas.draw_set_transform(Vector2(cx, base_y), 0.0, Vector2(1.0, 0.22))   # 납작한 타원
+	canvas.draw_circle(Vector2.ZERO, tsz.x * 0.40, Color(0, 0, 0, 0.30))
+	canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+# ★[asset-ruleset §6] 플레이어보다 앞(발치 아래)의 HOME 야외 프롭을 플레이어 위 레이어(_front_props)에서
+#   다시 그린다. main._draw는 뒤 프롭만(플레이어 아래) → 이 짝으로 캐릭터가 나무·바위 뒤로 가려진다.
+#   canvas = _front_props(그리기 주체) — draw_*가 그 노드에서 나가야 Godot이 허용한다.
+func _draw_front_props(canvas: CanvasItem) -> void:
+	if _region != RegionCatalog.HOME or player == null:
+		return
+	_draw_props_for(_prop_layouts.get("HOME", []), canvas, _PROP_PASS_FRONT, player.global_position.y)
 
 # 좌석에 앉은 손님과 머리 위 인내심 바를 그린다. 인내심이 줄수록 바가 짧아지고 붉어져
 # "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거). 몸체는 그레이박스지만 P2.7 톤 패스에서

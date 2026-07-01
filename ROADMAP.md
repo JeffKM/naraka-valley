@@ -352,9 +352,11 @@ graph TD
   - **① 마스터팔레트+바닥타일 warm ✅ 완료** — S0-7 심화 지면 구성 시스템(↑ [ADR-0042]/[ADR-0043])에서 바닥 타일 warm 재생성 + `master-palette.md` 확립([ADR-0041]). ※ "청키"는 [ADR-0042]가 *지형 한정 ÷2 청키화 폐기*로 결정 → 지형엔 의도적 미적용.
   - **② 건물 3종 정면 facade → Slice 1 이관(S1-11)** — "Phase C facade·가구 재작업"으로 흡수(아트 파트, S0-8 의존). 미완.
   - **③ ~~절벽 동면 타일~~ → Slice 1 이관**([ADR-0044]: 단일 동향 타일이 2행 pseudo-Z 다단 세트로 격상, 맵 재배치라 안식 농원 Slice 1 산출물). **메카닉 S1-2(타일종+충돌)·S1-3(재배치) ✅ 완료 / 아트 S1-10 미완.**
-  - **④⑤⑥⑦ Slice 0 잔여** — ④ Slice0 캐릭터 청키화 ⑤ 코드(bottom앵커·분리그림자·pivot·발치충돌·Y-split·z-stack) ⑥ 광원 audit ⑦ 검수.
+  - **④ Slice0 캐릭터 청키화 ✅ 완료** — 5종(bana·mel·okja·miho_walk·player_walk) 전부 **100% 2px 청키**(커밋 2e258ef, `enforce_chunk.py`). 초상화는 얼굴 디테일 채널([ADR-0026]#3·§10.2)이라 의도적 1px 유지.
+  - **⑤ 렌더 코드 — 일부 완료(2026-07-01):** **Y-split(§6)·분리 접지 그림자(§11) ✅** — 프론트 프롭 오버레이 노드(`front_props.gd`, 플레이어 위 z)로 [뒤 프롭→플레이어→앞 프롭] 수동 Y-split, 부피 프롭(나무·바위·덤불·그루터기·debris·허수아비)만 발치 SE 반투명 타원 접지(평면 데칼 제외·사인오프 좌표 이동 0). 신규 `prop_ysort_test`(28단언)·회귀 35/35·home_full_dump 육안 사인오프. **잔여: bottom앵커 야외 프롭 적용(§3)·발치충돌 16×8(§5)·z-stack 전면 감사(§13)** — 프롭 재배치라 사인오프 재확인 필요.
+  - **⑥ 광원 audit(§1) · ⑦ 검수 — 잔여.**
 - **✅ 대화 초상화 4캐릭터 × 6표정 = 24장**(S0-6, 2026-07-01): 옥자·미호·멜·바나 각 중립·말하기·미소·수줍음·슬픔(우는)·놀람. **아트 방향 = Sun Haven/SVE류 픽셀 텍스처 초상화**([ADR-0012] 픽셀 룩 정합 — 매끈 애니 셀 폐기). 생성 = Gemini 2×3(610×409) 6칸 시트 → removebg → 얼굴별 크롭·320² 버스트 정규화(`make_okja_portraits.py`, ADR-0001 글루). 도구 실측: **Gemini는 한 장에 칸별 표정을 제각각** 그림(MJ niji는 칸별 표정 제어 불가) → 프롬프트 `docs/design/portrait-midjourney-prompts.md`. 인게임 「태운 한지」 대화창 확인(`dialog_dump{,_okja,_bana,_mel}.png`). 스펙 `portrait-spec-card.md` §3(5→6표정 개정)·§5(옥자 안경 有) 정합. PR #137·#138 머지. (옛 P2.4 인스타툰체 4표정 → 픽셀 6표정으로 재작업 완결.)
-- **남음:** S0-8 통합 시각확인 · **Phase C ④⑤⑥⑦**(캐릭터 청키화·렌더 코드·광원 audit·검수). (①=완료 · ②→S1-11 · ③→S1-2/3 완료·S1-10 아트.)
+- **남음:** S0-8 통합 시각확인 · **Phase C ⑤ 잔여**(bottom앵커 §3·발치충돌 §5·z-stack §13)·**⑥ 광원 audit**·**⑦ 검수**. (①=완료 · ②→S1-11 · ③→S1-2/3 완료·S1-10 아트 · **④ 완료** · **⑤ Y-split+분리그림자 완료**.)
 - 근거: [ADR-0026] 아트 피벗 · [ADR-0035] 안식 재설계 · **[ADR-0036~0041] 에셋 규칙** · **`docs/design/asset-ruleset.md`** · `docs/design/tileset-ruleset.md` · `docs/design/master-palette.md`.
 
 ### Slice 1 — 안식 농원 (HOME · 데모 1)
@@ -368,6 +370,7 @@ graph TD
   - [x] **S1-3 — `_build_grid` pseudo-Z 서쪽 고지(하늘 목장) 재배치 + 회귀 갱신** — ✅ **완료(2026-07-01)**: `_build_cliffs` 전면 재작성 — S1-2 원시어휘로 §5 콤팩트 계단식 고지 실배치(북단 동향밴드 x17·아우터 코너 스텝 x17→x21·남단 동향밴드 x21·남향밴드 y26-28·동향 계단노치 x21-23 y14-15). 옛 1타일 돌띠 폐기. `BARN_EXT`(3,14,4,3) door(5,16)·STAIRS→(21,14) placeholder·debris 게이트→x24·코너 넝쿨 폐지(edge-to-edge). `layout.json` 재생성·`home_expansion._walkable`→`is_solid` 이관(§5.7). 전체 34개 통과·회귀 0(노치 tile-flood 고지 도달성·저지 seam 보존·소프트락 0)·home_full_dump 육안 사인오프. 이월: CORNER 상수 제거=별도 cleanup·구불동선/NW광원 다단 절벽 아트=S1-10. · 의존: S1-2. ([ADR-0035] phaseB 좌표 supersede)
   - [ ] **S1-4 — 작물 5아키타입 + 다절기 프레스티지 희소작물 데이터**
     - 완료기준: 단발·재성장·거대·트렐리스·다수확 + 다절기 플래그가 `CropCatalog`에 정의, 헤드리스 검증 통과. · 의존: S1-1.
+    - ⏳ **착수 grill 완료(2026-07-01, Q1~Q6 → [greybox-spec §5](./docs/design/homestead-farming-greybox-spec.md)):** 스코프=`crops.gd` 데이터+격리검증만·`field.gd` 불변(ADR 없음) / 하위호환 별칭(`growth_days`=`base_growth_days`, missing −1 sentinel·id·경제·stages 불변) / 기존3작물 밴드 리튠 4·7·12(경제 원형) / 신규 2작물 **황천포도**(트렐리스+재성장+다수확)·**불사과**(다절기 프레스티지) → 6아키타입 커버 / 검증 `playtest/crop_catalog_test.gd`(커버리지·불변식·하위호환·음성mock) / `season` 미도입(Slice 7 이관). **다음=실구현.**
   - [ ] **S1-5 — 트렐리스 배치 퍼즐 + 혼의 나무 과수(영속·품질=나이)**
     - 완료기준: 트렐리스 통과불가·인접 수확·혼의 나무 나이별 품질·영속 결실 검증 통과. · 의존: S1-4.
   - [ ] **S1-6 — 품질 4등급 + 비료(품질·성장촉진) + 농사 숙련**
