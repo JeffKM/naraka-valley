@@ -349,7 +349,8 @@ graph TD
 - **🔶 안식 농원 전면 재설계**([ADR-0035] — 높이 단차 + Overgrown 개간): 비대칭 개간지(본가+창고 북동 저지·서쪽 1단 고지 [하늘 목장]·돌계단 도구 게이트·[영혼빛 연못]·debris·스타터 패치). **Phase A(절벽·계단·debris 아트)·B(`_build_grid` 전면 재작성) ✅ 완료.** Phase C(facade·PROP 통일)는 ↓ 에셋 규칙 grill로 재정의됨.
 - **✅ 에셋 생성·배치 통합 규칙 grill 완주(2026-06-30):** owner와 전수 grill해 **`docs/design/asset-ruleset.md`(§0~§17)** 단일 진실원 확립 + **ADR-0036~0041** 신설(정면 facade 남향·피벗/방향성변형·발치 충돌·렌더/알파/발광·애니/드롭아이콘·마스터 팔레트) + ADR-0035/tileset-ruleset 개정. 핵심: **청키 16논리×2 그레인**(풀해상도=MV/MZ 곱은 룩 폐기)·NW광원/분리그림자·**따뜻한 베이스+저승 객체** 팔레트·도트밀도 통일(캐릭터 포함).
 - **🔶 Phase C 재작업(규칙 적용, 실행 대기):** Phase C 1차 청키 9종(본가·창고·축사·바위·그루터기·울타리·허수아비·화분·꽃밭)은 생성했으나 *이소메트릭·풀해상도 문제* 발견 → 규칙대로 재작업: ① 마스터팔레트+바닥타일 warm+청키 ② 건물 3종 **정면 facade** 재생성 ③ ~~절벽 동면 타일~~ **→ 폐기·Slice 1 이관**([ADR-0044]: 단일 동향 타일이 2행 pseudo-Z 다단 세트로 격상, 맵 재배치라 안식 농원 Slice 1 산출물) ④ Slice0 캐릭터 청키화 ⑤ 코드(bottom앵커·분리그림자·pivot·발치충돌·Y-split·z-stack) ⑥ 광원 audit ⑦ 검수.
-- **남음:** S0-6 대화 초상화 5종 · S0-8 통합 시각확인 · **Phase C 규칙 적용 재작업(①~⑦)**.
+- **✅ 대화 초상화 4캐릭터 × 6표정 = 24장**(S0-6, 2026-07-01): 옥자·미호·멜·바나 각 중립·말하기·미소·수줍음·슬픔(우는)·놀람. **아트 방향 = Sun Haven/SVE류 픽셀 텍스처 초상화**([ADR-0012] 픽셀 룩 정합 — 매끈 애니 셀 폐기). 생성 = Gemini 2×3(610×409) 6칸 시트 → removebg → 얼굴별 크롭·320² 버스트 정규화(`make_okja_portraits.py`, ADR-0001 글루). 도구 실측: **Gemini는 한 장에 칸별 표정을 제각각** 그림(MJ niji는 칸별 표정 제어 불가) → 프롬프트 `docs/design/portrait-midjourney-prompts.md`. 인게임 「태운 한지」 대화창 확인(`dialog_dump{,_okja,_bana,_mel}.png`). 스펙 `portrait-spec-card.md` §3(5→6표정 개정)·§5(옥자 안경 有) 정합. PR #137·#138 머지. (옛 P2.4 인스타툰체 4표정 → 픽셀 6표정으로 재작업 완결.)
+- **남음:** S0-8 통합 시각확인 · **Phase C 규칙 적용 재작업(①②④⑤⑥⑦ — ③ 절벽타일은 [ADR-0044]로 Slice 1 이관)**.
 - 근거: [ADR-0026] 아트 피벗 · [ADR-0035] 안식 재설계 · **[ADR-0036~0041] 에셋 규칙** · **`docs/design/asset-ruleset.md`** · `docs/design/tileset-ruleset.md` · `docs/design/master-palette.md`.
 
 ### Slice 1 — 안식 농원 (HOME · 데모 1)
