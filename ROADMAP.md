@@ -359,8 +359,7 @@ graph TD
 - **아트:** 안식 농원 도색 마무리(옛 2.8 T3⑤ 다듬기 완성)·집/창고/축사 외관·가구 세트 아트 · 다단 절벽 타일 세트(방향별·코너·물가 강둑).
 - **원자 작업(shrimp 등록 2026-07-01 · ADR-0028 인터리브):** 설계 잠금 → 맵 재배치(아트 차단 토대) → 농사 2·3층 메카닉 그레이박스(병렬) → 아트(Slice 0 룩 토대 뒤) → 데모 1 캡스톤. `game/run_tests.sh`(워치독) 회귀·부팅 클린이 각 작업 완료기준.
   - [x] **S1-1 — 안식 농원 착수 grill: 레이아웃 실측 + 농사 2·3층 수치 곡선 잠금** — ✅ **완료(2026-07-01)**: owner↔Claude grill(Q1~Q14). **Half A** = 콤팩트 pseudo-Z 좌표표([homestead-phaseB-layout §5](./docs/design/homestead-phaseB-layout.md)) — 저지 밭 극대화 우선으로 고지 콤팩트화(확장판 폐기·창고 인접/연못 축출 충돌 0), H=2 동/남향 밴드·아우터 코너·동향 계단+debris/animal 게이트·4×3 enterable 축사·저지 자산 원위치 고정. **Half B** = 농사·목축 그레이박스 수치([homestead-farming-greybox-spec.md](./docs/design/homestead-farming-greybox-spec.md)) — 5아키타입 합성 데이터 모델(연금·WILD 오염 제거)·재성장/거대/다수확 수치·다절기 프레스티지·품질4등급×비료 확률표·성장촉진·농사 숙련 0~10·목축 우정/기분/산물·비살상 불변식. 코드 0. · 의존: 없음.
-  - [ ] **S1-2 — pseudo-Z 다단 절벽 타일종 + 충돌**
-    - 완료기준: CLIFF_LIP(걷기)/CLIFF_FACE·BASE(SOLID)·동향 면·코너·계단 2행 종단이 헤드리스 검증 통과, 회귀 0. · 의존: S1-1.
+  - [x] **S1-2 — pseudo-Z 다단 절벽 타일종 + 충돌** — ✅ **완료(2026-07-01)**: 착수 grill(Q1~Q5, [phaseB-layout §5.7](./docs/design/homestead-phaseB-layout.md)) → 실구현. `main.gd`에 `CLIFF_LIP`(걷기 O)·`CLIFF_FACE_BASE`(SOLID) 타일종 + 3티어 명암 COLORS + 정준 `WORLD_SOLID_TILES`/`is_solid()`(충돌 루프 중복 제거) + 원시 4종(`_lay_south_band` Lip1+Face1+Base1 / `_lay_east_band` Lip1+Face2 base없음 / `_lay_corner_step` edge-to-edge 청키 / `_carve_stair_notch` 밴드깊이 종단). 신규 `playtest/cliff_test.gd`(스크래치 배치→타일종 패턴·is_solid·8이웃 BFS leak 16단언). 라이브 home맵 옛 1타일 유지(회귀 0), 전체 34개 통과. animal gate→S1-7·predicate 마이그레이션/물리 squeeze 육안→S1-3. · 의존: S1-1.
   - [ ] **S1-3 — `_build_grid` pseudo-Z 서쪽 고지(하늘 목장) 재배치 + 회귀 갱신**
     - 완료기준: 1타일 돌띠 제거·서쪽 고지·본가/창고 저지·연못·구불 동선 재배치, 카메라·세이브·소프트락 0 통과. · 의존: S1-2. ([ADR-0035] phaseB 좌표 supersede)
   - [ ] **S1-4 — 작물 5아키타입 + 다절기 프레스티지 희소작물 데이터**

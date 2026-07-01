@@ -52,7 +52,7 @@ const DLG_ARROW_TEX := "res://assets/ui/ink_arrow.png"
 const DLG_FONT := "res://assets/fonts/neodgm.ttf"
 const DLG_WINDOW := Rect2(16, 172, 608, 176)          # 640×360 논리, CanvasLayer scale 1.5
 const DLG_F_TEXT := Rect2(0.0523, 0.1372, 0.6675, 0.7306)
-const DLG_F_PORT := Rect2(0.7844, 0.1423, 0.1545, 0.5519)
+const DLG_F_PORT := Rect2(0.7844, 0.1423, 0.1545, 0.5519)  # 프레임 아트의 초상화 칸(고정)
 const DLG_F_NAME := Rect2(0.7645, 0.7830, 0.1952, 0.1151)
 const DLG_INK := Color(0.16, 0.12, 0.085)             # 먹빛 본문
 const DLG_NAME_INK := Color(0.20, 0.14, 0.09)         # 이름(먹빛)
@@ -80,7 +80,13 @@ const CLIFF_FACE := 12      # 남향 절벽면(E-W 단면)
 const CLIFF_CORNER_L := 13  # 절벽 좌측 코너
 const CLIFF_CORNER_R := 14  # 절벽 우측 코너(corner_l 좌우반전 PIL)
 const CLIFF_INNER := 15     # 절벽 안쪽 코너
-const N_TILES := 16
+# ★ [S1-2 / ADR-0044 §1] pseudo-Z 다단 절벽 원시어휘(H=2). 옛 CLIFF_FACE/CORNER_*(1타일)를 2행 다단으로
+#   격상 — CLIFF_LIP=고지 밑단(밝은 상단 하이라이트·**걷기 O**·고지 배치 하단 한계), CLIFF_FACE_BASE=절벽
+#   접지(SOLID·접지 그림자 베이크). 방향(N/S/E/W)·코너 아트 변종은 S1-10(그레이박스는 방향 무의미).
+#   z축 아님(ADR-0013 2D 평면 불변). 실배치(§5 좌표)는 S1-3, 여기선 타일종·충돌만 정의(S1-2).
+const CLIFF_LIP := 16       # 고지 밑단(걷기 O — 충돌 루프 제외)
+const CLIFF_FACE_BASE := 17 # 절벽 접지(SOLID)
+const N_TILES := 18
 
 # ── P2.3 지형 도트: terrain TileSet + 실내/벽 도트 source ───────────────────
 # combined_terrain_homestead.tres = PixelLab Wang 4세트(풀↔길·길↔밭·밭↔풀·물↔풀)를 합친
@@ -106,7 +112,14 @@ const PATH_SRC_ID := 2
 const PATH_VARIANTS := 3
 # ★[ADR-0043 §6 후속] 건물 둘레 갈색 path 링 제거는 grass 직접 채우기(솔버 0)로 흡수됨 — RING_FIX 폐지.
 const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
-	CLIFF_FACE, CLIFF_CORNER_L, CLIFF_CORNER_R, CLIFF_INNER]   # 아틀라스 가로 배치 순서(= atlas x)
+	CLIFF_FACE, CLIFF_CORNER_L, CLIFF_CORNER_R, CLIFF_INNER, CLIFF_LIP, CLIFF_FACE_BASE]   # 아틀라스 가로 배치 순서(= atlas x)
+# ★ [S1-2] 통과 불가 타일의 단일 진실원(SOLID). _build_tileset 충돌 루프 + is_solid()가 이걸 참조해
+#   충돌 정의 중복을 제거한다(옛 하드코딩 리스트 대체). 주의:
+#   · WATER는 terrain corner라 여기 없고 _has_water_corner로 따로 판정(회귀 보존).
+#   · HOUSE/CAFE는 SOLID_TILES(단일 면 아틀라스) 멤버지만 걷는 바닥이라 여기 없음(충돌 없음).
+#   · CLIFF_LIP은 아틀라스엔 있으나 걷기 O라 여기서 제외(충돌 없음). CLIFF_FACE_BASE는 신규 SOLID.
+const WORLD_SOLID_TILES := [WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
+	CLIFF_FACE, CLIFF_FACE_BASE, CLIFF_CORNER_L, CLIFF_CORNER_R, CLIFF_INNER]
 # ★ T2 — WATER는 더 이상 SOLID가 아니다(terrain으로 승격). TREE/ROCK는 아직 SOLID 단색(도트는 후속 T7~T9).
 # ★ M4.1 — TREE도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 숲 무대의 밀집 나무.
 # ★ M5.1 — ROCK도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 갱도 무대의 바위 절벽·암반.
@@ -180,6 +193,8 @@ const COLORS := [
 	Color(0.30, 0.27, 0.24),  # CLIFF_CORNER_L
 	Color(0.30, 0.27, 0.24),  # CLIFF_CORNER_R
 	Color(0.30, 0.27, 0.24),  # CLIFF_INNER
+	Color(0.50, 0.54, 0.42),  # CLIFF_LIP       — ★S1-2 밝은 하이라이트 톤(고지 밑단·걷기 O — pseudo-Z 상단이 밝게)
+	Color(0.19, 0.16, 0.14),  # CLIFF_FACE_BASE — ★S1-2 어두운 접지 톤(SOLID·접지 그림자 — 3티어 최하 명암)
 ]
 
 # ── 실내 가구·장식(create_map_object 산출, ADR-0013: 32px raw native 직접 사용) ────
@@ -1218,8 +1233,7 @@ func _build_tileset() -> TileSet:
 		Vector2(-8, -8), Vector2(8, -8), Vector2(8, 8), Vector2(-8, 8),
 	])
 	ts.add_physics_layer()
-	for solid in [WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
-			CLIFF_FACE, CLIFF_CORNER_L, CLIFF_CORNER_R, CLIFF_INNER]:
+	for solid in WORLD_SOLID_TILES:   # ★ [S1-2] 정준 SOLID 목록 참조(옛 하드코딩 대체 — CLIFF_FACE_BASE 포함)
 		var sx := SOLID_TILES.find(solid)
 		var td := src.get_tile_data(Vector2i(sx, 0), 0)
 		td.add_collision_polygon(0)
@@ -1434,6 +1448,11 @@ func _has_water_corner(td: TileData) -> bool:
 # 타일 종류 → 단색 source의 아틀라스 좌표(HOUSE/CAFE/WALL만)
 func _solid_atlas(tile: int) -> Vector2i:
 	return Vector2i(SOLID_TILES.find(tile), 0)
+
+# ★ [S1-2] 타일 id가 통과 불가(SOLID)인가 — 정준 predicate. 테스트(cliff_test 등)·충돌 정의가 공용한다.
+#   WATER(terrain corner)는 여기 없고 _has_water_corner로 따로 판정한다(회귀 보존). CLIFF_LIP은 걷기 O.
+func is_solid(id: int) -> bool:
+	return id in WORLD_SOLID_TILES
 
 # terrain source(0)에서 그 terrain의 base 타일(4코너 모두 같은 terrain) 좌표를 찾는다.
 # 1칸 폭 동선처럼 corner 전환에 묻히는 지형을 base로 또렷하게 깔 때 쓴다.
@@ -2135,6 +2154,43 @@ func _build_cliffs() -> void:
 	# 동향 모서리(x23 열, y0..28) — 측면 절벽(깔끔한 face 아님 → 넝쿨·덤불 덮개로 가림).
 	for y in range(0, 29):
 		_set_tile(23, y, CLIFF_FACE)
+
+# ── ★ [S1-2 / ADR-0044 §1] pseudo-Z 다단 절벽 원시어휘 (재사용 밴드·코너·계단 헬퍼) ────────────────
+# 이 4종이 §5 좌표 실배치(S1-3의 _build_cliffs 재작성)와 cliff_test 격리 검증에 쓰이는 "문법"이다.
+# 모두 _grid에 타일종만 쓴다(z축 아님 — ADR-0013 2D 평면 불변). 걷기/충돌은 타일종이 결정한다:
+#   CLIFF_LIP=걷기 O / CLIFF_FACE·CLIFF_FACE_BASE=SOLID(is_solid). 그레이박스 색은 COLORS(LIP 밝음→FACE 중간→BASE 어둠).
+# 실배치는 S1-3 — 여기(S1-2)는 어휘·문법·격리 검증만, 라이브 home맵은 옛 _build_cliffs 유지(회귀 0).
+
+# 남향 절벽 밴드(고지의 남쪽 가장자리) — y=Lip행 / y+1=Face행 / y+2=Face_Base행(접지 그림자).
+# [x0, x1] 폐구간. ADR-0044 §1 남향 = Lip1+Face1+Base1(논리 3행 = 64px H=2 볼륨).
+func _lay_south_band(x0: int, x1: int, y: int) -> void:
+	for x in range(x0, x1 + 1):
+		_set_tile(x, y, CLIFF_LIP)
+		_set_tile(x, y + 1, CLIFF_FACE)
+		_set_tile(x, y + 2, CLIFF_FACE_BASE)
+
+# 동향 절벽 밴드(고지의 동쪽 가장자리) — x=Lip열 / x+1..x+2=Face 2열(base 없음).
+# [y0, y1] 폐구간. ADR-0044 §1 "높이의 가로 치환" = Lip1열+Face2열(동/서 대칭). NW광원 재보정은 S1-10 아트.
+func _lay_east_band(x: int, y0: int, y1: int) -> void:
+	for y in range(y0, y1 + 1):
+		_set_tile(x, y, CLIFF_LIP)
+		_set_tile(x + 1, y, CLIFF_FACE)
+		_set_tile(x + 2, y, CLIFF_FACE)
+
+# 외부 코너(고지 동경계가 남으로 가며 동쪽으로 꺾이는 청키 스텝) — rect를 FACE로 edge-to-edge 채우고
+# 최상단 행만 LIP로 캡한다. 직선 경계라 대각 solid 틈(corner-squeeze) 0(§5.1 아우터 코너 ①=x17→x21 3×3 스텝).
+# 방향별 코너 아트(안/밖·NW광원)는 S1-10 — 그레이박스는 청키 블록으로 충분(직선 경계만 검증).
+func _lay_corner_step(rect: Rect2i) -> void:
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			_set_tile(x, y, CLIFF_FACE)
+	for x in range(rect.position.x, rect.end.x):
+		_set_tile(x, rect.position.y, CLIFF_LIP)
+
+# 계단 노치 — 절벽 밴드를 종단하는 통로. rect(밴드 단면 전체 × 종단 길이)의 SOLID를 해제해 GROUND(걷기 O)로.
+# 노치 폭 = 밴드 깊이(남향=2행 종단 / 동향=3열 종단 — ADR-0044 "2폭"↔§5"3열" 정합). STAIRS 프롭은 layout(S1-3).
+func _carve_stair_notch(rect: Rect2i) -> void:
+	_fill_rect(rect, GROUND)
 
 func _build_border() -> void:
 	# ADR-0026 룩 정합 — 옛 WALL 경계 띠(스타듀에 없는 맵 둘레 벽)를 시각에서 없앤다. 외부
@@ -4157,10 +4213,11 @@ func _build_dialogue_ui() -> void:
 	var tw := create_tween().set_loops()
 	tw.tween_property(_dlg_arrow, "position:y", y0 + 3.0, 0.6).set_trans(Tween.TRANS_SINE)
 	tw.tween_property(_dlg_arrow, "position:y", y0, 0.6).set_trans(Tween.TRANS_SINE)
-	# ⑥ 초상화(우 정사각칸, 매팅) — CanvasLayer 직계 유지(패널보다 뒤 트리라 위에 그려짐)
-	var pr := _dlg_abs(DLG_F_PORT).grow(-5)
+	# ⑥ 초상화(우 칸) — 여백 없이 꽉(COVER+clip, 매팅 제거). CanvasLayer 직계(패널 위).
+	var pr := _dlg_abs(DLG_F_PORT)
 	dialogue_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	dialogue_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	dialogue_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	dialogue_portrait.clip_contents = true
 	dialogue_portrait.position = pr.position
 	dialogue_portrait.size = pr.size
 
