@@ -326,6 +326,12 @@ const WALL_PROP_LIFT := -18
 const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP_POT,
 	PROP_TREE_A, PROP_TREE_B, PROP_ROCK,   # ★ T3⑤ 나무·바위 = 통과 불가(맵 경계 벽)
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP]  # ★ ADR-0035 업화석·석화 고목 = 통과 불가(계단 하드 게이트·overgrown 장애물)
+# ★[asset-ruleset §5] 발치 충돌 바 — 키 큰 야외 프롭(나무·바위)은 풀타일 충돌 대신 *발치 밑단 바*(폭×반높이)만
+#   막아 "머리는 통과"(§6 Y-split의 물리 짝 — 캐노피 뒤로 지나감). 하드게이트 debris(업화석·석화고목)는
+#   개간 게이트라 풀타일 유지(Slice 1 전환)·실내 벽 가구는 벽 flush라 풀타일 유지(회귀 보존). 맵 이탈은
+#   _border_body(둘레)가 막으므로 야외 트리 축소는 경계 안전.
+const FOOT_BAR_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK]
+const FOOT_BAR_H := 16   # 밑단 바 높이(8 논리 = 반 타일)
 # ★ ADR-0025 ② — PROP 좌표 데이터 외부화. 텍스처는 *코드가* 정의하고(키↔Texture2D 레지스트리),
 # layout.json은 *위치만* 담는다. 직렬화 때 tex→키, 로드 때 키→tex. PROP_LAYOUT에 새 텍스처를
 # 쓰면 이 레지스트리에도 등록해야 한다(미등록 tex는 export에서 빈 키로 경고·로드에서 스킵).
@@ -1608,12 +1614,20 @@ func _rebuild_prop_collision() -> void:
 			continue
 		var sz: Vector2 = entry[0].get_size()
 		var yo: int = entry[2] if entry.size() > 2 else 0
+		var foot_bar: bool = entry[0] in FOOT_BAR_PROPS   # ★[§5] 키 큰 야외 프롭 = 발치 바
 		for t in entry[1]:
 			var cs := CollisionShape2D.new()
 			var rect := RectangleShape2D.new()
-			rect.size = sz
-			cs.shape = rect
-			cs.position = Vector2(t.x * TILE, t.y * TILE + yo) + sz * 0.5
+			if foot_bar:
+				# 발치 바 = 프롭 폭 × 반높이, art 밑단(발치)에 정렬. 상단(머리·캐노피)은 통과 O.
+				rect.size = Vector2(sz.x, FOOT_BAR_H)
+				cs.shape = rect
+				cs.position = Vector2(t.x * TILE + sz.x * 0.5, t.y * TILE + yo + sz.y - FOOT_BAR_H * 0.5)
+			else:
+				# 풀타일(실내 벽 가구·하드게이트 debris) — 회귀 보존.
+				rect.size = sz
+				cs.shape = rect
+				cs.position = Vector2(t.x * TILE, t.y * TILE + yo) + sz * 0.5
 			_prop_body.add_child(cs)
 
 # ★ ADR-0025 ② — PROP 좌표 외부화 로드. 부팅 시 한 번(_ready, _build_grid 전). res://layout.json이

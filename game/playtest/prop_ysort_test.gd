@@ -32,6 +32,23 @@ func _is_front(m: Node, t: Vector2i, yo: int, tex: Texture2D, split_y: float) ->
 	var casts: bool = tex in m.PROP_SHADOW_SET
 	return casts and m._prop_base_y(t, yo, tex) > split_y
 
+# 월드 좌표에 프롭 콜라이더가 있나 — 직접 공간 point query(interior_collision_test와 같은 결).
+func _hits(m: Node, world: Vector2) -> bool:
+	var params := PhysicsPointQueryParameters2D.new()
+	params.position = world
+	params.collide_with_bodies = true
+	params.collision_mask = 0xFFFFFFFF
+	return m.get_world_2d().direct_space_state.intersect_point(params, 8).size() > 0
+
+# SOLID_PROPS 첫 인스턴스의 art 상자(top-left px·크기) — 발치/머리 프로브 좌표 산출용.
+func _prop_box(m: Node, tex) -> Array:
+	for entry in m.PROP_LAYOUT_HOME:
+		if entry[0] == tex:
+			var yo: int = entry[2] if entry.size() > 2 else 0
+			var t = entry[1][0]
+			return [Vector2(t.x * m.TILE, t.y * m.TILE + yo), tex.get_size()]
+	return [Vector2.ZERO, Vector2.ZERO]
+
 func _init() -> void:
 	print("══ Slice0 Phase C ⑤ Y-split 프론트 프롭 + 접지 그림자 검증 ══")
 	var m: Node = await _spawn_main()
@@ -93,6 +110,30 @@ func _init() -> void:
 				back += 1
 	_check("⑤ 앞+뒤 = 전체(배타·완전, 누락 0)", back + front == total and total > 0)
 	_check("⑤b 앞·뒤 둘 다 비어있지 않음(분할 유효)", front > 0 and back > 0)
+
+	# ⑥ 발치 충돌(§5) — 키 큰 야외 프롭(나무·바위)은 발치 바만 막고 머리(캐노피)는 통과.
+	#   하드게이트 debris·실내 벽 가구는 풀타일 유지(회귀 보존).
+	await physics_frame   # StaticBody/CollisionShape 물리 등록 대기
+	_check("⑥ FOOT_BAR_PROPS = 나무A/B·바위(야외 키큰만)",
+		m.PROP_TREE_A in m.FOOT_BAR_PROPS and m.PROP_TREE_B in m.FOOT_BAR_PROPS and m.PROP_ROCK in m.FOOT_BAR_PROPS)
+	_check("⑥b 하드게이트 debris는 발치 바 아님(풀타일 유지)",
+		not (m.PROP_DEBRIS_EMBER in m.FOOT_BAR_PROPS) and not (m.PROP_DEBRIS_STUMP in m.FOOT_BAR_PROPS))
+	# 나무: 발치 히트 / 머리(캐노피) 통과
+	var tb: Array = _prop_box(m, m.PROP_TREE_A)
+	var t_pos: Vector2 = tb[0]; var t_sz: Vector2 = tb[1]
+	var t_foot := t_pos + Vector2(t_sz.x * 0.5, t_sz.y - m.FOOT_BAR_H * 0.5)   # 밑단 바 중앙
+	var t_head := t_pos + Vector2(t_sz.x * 0.5, 12.0)                          # 캐노피 상단
+	_check("⑥c 나무 발치 = 통과 불가(발치 바)", _hits(m, t_foot))
+	_check("⑥d 나무 머리(캐노피) = 통과 O(발치 바 위)", not _hits(m, t_head))
+	# 바위: 발치 히트 / 상단 통과
+	var rb: Array = _prop_box(m, m.PROP_ROCK)
+	var r_pos: Vector2 = rb[0]; var r_sz: Vector2 = rb[1]
+	_check("⑥e 바위 발치 = 통과 불가", _hits(m, r_pos + Vector2(r_sz.x * 0.5, r_sz.y - m.FOOT_BAR_H * 0.5)))
+	_check("⑥f 바위 상단 = 통과 O", not _hits(m, r_pos + Vector2(r_sz.x * 0.5, 8.0)))
+	# 하드게이트 debris(업화석): 중심까지 풀타일로 막힘(게이트 보존)
+	var db: Array = _prop_box(m, m.PROP_DEBRIS_EMBER)
+	var d_pos: Vector2 = db[0]; var d_sz: Vector2 = db[1]
+	_check("⑥g 업화석 게이트 = 중심도 통과 불가(풀타일 유지)", _hits(m, d_pos + d_sz * 0.5))
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
