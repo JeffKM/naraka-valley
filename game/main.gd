@@ -804,6 +804,10 @@ var _prop_body: StaticBody2D = null
 # ★ 맵 경계 충돌체 — 옛 WALL 띠(시각)를 풀로 바꾸고(ADR-0026 룩 정합) 충돌만 외부 둘레에 둘러
 #   맵 밖 이탈을 막는다(_build_border가 구역 빌드마다 다시 세운다).
 var _border_body: StaticBody2D = null
+# ★ [S1-5a] 트렐리스 넝쿨 충돌체 — 통과 불가(황천포도) 넝쿨이 심긴 칸에 사각 충돌을 세운다.
+#   진실원 = farm.is_crop_solid/solid_crop_tiles(로직), 여긴 물리만(greybox-spec §6.2). 안식 농원 전용.
+#   _prop_body 패턴과 동형(구역/상태 변화마다 재구성). 테스트·봇은 실내를 물리로 안 걷는다(직접 좌표).
+var _trellis_body: StaticBody2D = null
 @onready var readout: Label = $CanvasLayer/Readout
 @onready var clock: GameClock = $Clock                     # T1.5 시계
 @onready var clock_label: Label = $CanvasLayer/ClockLabel
@@ -987,6 +991,8 @@ func _ready() -> void:
 	ending_restart.pressed.connect(_delete_save_and_restart)   # 엔딩 화면 "처음부터 다시 시작" 버튼
 	_prop_body = StaticBody2D.new()   # ★ T3③' 가구 충돌체(_build_grid가 칸을 다시 채운다)
 	add_child(_prop_body)
+	_trellis_body = StaticBody2D.new()   # ★ [S1-5a] 트렐리스 넝쿨 충돌체(tile_changed·구역빌드가 재구성)
+	add_child(_trellis_body)
 	_ensure_prop_layouts()   # ★ ADR-0025 ② PROP 좌표 데이터 외부화 로드(_build_grid 충돌 재구성 전)
 	_build_grid()
 	_paint_grid()
@@ -1570,6 +1576,7 @@ func _build_grid() -> void:
 			push_warning("알 수 없는 구역 '%s' — 홈베이스로 폴백" % _region)
 			_build_home()
 	_rebuild_prop_collision()   # ★ T3③' 현재 구역 실내 가구 통과 불가 충돌 재구성(러그 제외)
+	_rebuild_trellis_collision()   # ★ [S1-5a] 트렐리스 넝쿨 통과 불가 충돌 재구성(안식 농원 전용)
 
 # ★ T3③' 실내 가구 충돌 재구성 — 현재 구역의 실내 레이아웃에서 SOLID_PROPS 텍스처 칸에만 사각 충돌을
 # 단다(러그·등불·꽃·울타리는 제외 = 통과 O). 시각 lift(WALL_PROP_LIFT)와 같은 오프셋을 충돌에도 줘
@@ -1599,6 +1606,25 @@ func _rebuild_prop_collision() -> void:
 			cs.shape = rect
 			cs.position = Vector2(t.x * TILE, t.y * TILE + yo) + sz * 0.5
 			_prop_body.add_child(cs)
+
+# ★ [S1-5a] 트렐리스 넝쿨 충돌 재구성(greybox-spec §6.2) — farm.solid_crop_tiles()의 각 칸에
+# 16×16 사각 충돌을 세운다(터레인 SOLID_POLY −8..8과 동형). 넝쿨은 안식 농원(밭)에만 있으므로
+# 다른 구역에선 비운다(field_layer.clear와 같은 결). tile_changed(심기/수확/제거)·구역 빌드마다 호출.
+# 로직은 몰라도 되는 순수 물리 배선 — solid 판정은 farm.is_crop_solid가 유일 진실원.
+func _rebuild_trellis_collision() -> void:
+	if _trellis_body == null:
+		return
+	for c in _trellis_body.get_children():
+		c.queue_free()
+	if _region != RegionCatalog.HOME:
+		return
+	for t in farm.solid_crop_tiles():
+		var cs := CollisionShape2D.new()
+		var rect := RectangleShape2D.new()
+		rect.size = Vector2(TILE, TILE)
+		cs.shape = rect
+		cs.position = Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
+		_trellis_body.add_child(cs)
 
 # ★ ADR-0025 ② — PROP 좌표 외부화 로드. 부팅 시 한 번(_ready, _build_grid 전). res://layout.json이
 # 있으면 거기서, 없거나 깨졌으면 시드에서 부팅하고 layout.json을 1회 생성(에디터/디버그 빌드만 write).
@@ -3624,10 +3650,14 @@ func _use_tool() -> void:
 func _try_harvest() -> void:
 	if not energy.can_act() or not farm.is_mature(_target):
 		return
-	var harvested_crop := farm.crop_of(_target)  # harvest 뒤엔 칸이 비어 "" 되므로 미리 확보
+	var harvested_crop := farm.crop_of(_target)  # harvest 뒤엔 칸이 비거나(SINGLE) 되감기(REGROW) 되므로 미리 확보
 	farm.harvest(_target)
-	inventory.add_harvest(harvested_crop)     # 거둔 수확물 적재(나중에 카페에서 판매)
-	_run_harvested += 1                       # T4.2 슬라이스 점수판: 거둔 영혼 총수
+	# ★ [S1-5a] 다수확(황천포도 2~3) — yield_range를 굴려 그만큼 적재(greybox-spec §6.5, 데이터는 S1-4 검증).
+	#   기본형(1~1)은 1개 그대로. 점수판(_run_harvested)·사연은 수확 액션당 1(영혼 1 = 사연 1)로 둔다.
+	var yr := CropCatalog.yield_range(harvested_crop)
+	for _i in randi_range(yr.x, yr.y):
+		inventory.add_harvest(harvested_crop) # 거둔 수확물 적재(나중에 카페에서 판매)
+	_run_harvested += 1                       # T4.2 슬라이스 점수판: 거둔 영혼 총수(수확 액션당 1)
 	_show_flavor(harvested_crop)              # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
 	audio.sfx("harvest")                      # P2.6 수확은 밝은 팝
 	_advance_onboarding("수확")               # T4.1 첫 수확 → 온보딩 완료(DONE)
@@ -4337,6 +4367,7 @@ func _on_tile_changed(t: Vector2i) -> void:
 		field_layer.erase_cell(t)
 	else:
 		field_layer.set_cell(t, 0, Vector2i(idx, 0))
+	_rebuild_trellis_collision()   # ★ [S1-5a] 트렐리스 심기/수확/제거 시 넝쿨 충돌 갱신(칸 적어 저렴)
 	queue_redraw()  # 작물 스프라이트(_draw_crops)는 _draw에서 그리므로 상태 변화 시 다시 그린다
 
 # 칸 상태 → 오버레이 아틀라스 인덱스(-1 = 미경작, 오버레이 없음).
