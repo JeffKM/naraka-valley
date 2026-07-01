@@ -90,7 +90,7 @@ const SOLID_SRC_ID := 1
 #   길 칸은 결정적 해시로 이 변종 중 하나를 깐다(그리드 반복 방지·임의 아님). 충돌 없음(걷는 길).
 const PATH_SRC_ID := 2
 const PATH_VARIANTS := 3
-const _RING_FIX_ENABLED := true   # ★[ADR-0043] 건물 둘레 갈색 path 링 제거(건물 외벽 한정 — 빌드 비용↓)
+# ★[ADR-0043 §6 후속] 건물 둘레 갈색 path 링 제거는 grass 직접 채우기(솔버 0)로 흡수됨 — RING_FIX 폐지.
 const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
 	CLIFF_FACE, CLIFF_CORNER_L, CLIFF_CORNER_R, CLIFF_INNER]   # 아틀라스 가로 배치 순서(= atlas x)
 # ★ T2 — WATER는 더 이상 SOLID가 아니다(terrain으로 승격). TREE/ROCK는 아직 SOLID 단색(도트는 후속 T7~T9).
@@ -261,6 +261,7 @@ var _REGION_PROP_KEYS := {
 var _ground_detail_tex: ImageTexture = null   # 구역별 베이크된 지면 디테일 오버레이
 var _gd_shadow_stamp: Image = null            # 재사용 SE 그림자 스탬프
 var _gd_soft_cache := {}                       # ★[ADR-0042] 디테일 texture→부드럽게 보정한 Image 캐시
+var _base_variant_cache := {}                  # ★[ADR-0043 §6] terrain id→base 변종 좌표 배열 캐시
 # 외부 건물 외관(PixelLab 산출, 외관 박스 크기와 1:1). 통과 불가 WALL 박스 위에 덮어 그려
 # "닫힌 건물"로 보이게 한다(_draw_facades). 집=288×256(9×8칸 ★T3①), 카페=256×224(8×7칸).
 const FACADE_HOUSE := preload("res://assets/buildings/house_ext.png")
@@ -1433,6 +1434,27 @@ func _terrain_base_atlas(terrain: int) -> Vector2i:
 			return coord
 	return Vector2i.ZERO
 
+# ★[ADR-0043 §6 후속] 그 terrain의 base 타일(4코너 동일)을 *전부* 모은다. _paint_grid 직접 채우기에서
+# 빈 들판 풀 칸을 결정적 해시로 변종 분산할 때 쓴다(set_cells_terrain_connect의 probability 랜덤을
+# 대체 — 재빌드·워프 재진입에 동일 결과라 깜빡임 0, 격자 반복도 해시가 깬다). 캐시(타일셋당 1회).
+func _terrain_base_variants(terrain: int) -> Array:
+	if _base_variant_cache.has(terrain):
+		return _base_variant_cache[terrain]
+	var out: Array[Vector2i] = []
+	var src := ground.tile_set.get_source(0) as TileSetAtlasSource
+	for i in src.get_tiles_count():
+		var coord := src.get_tile_id(i)
+		var td := src.get_tile_data(coord, 0)
+		if td.terrain_set != TERRAIN_SET:
+			continue
+		if td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_LEFT_CORNER) == terrain \
+			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_RIGHT_CORNER) == terrain \
+			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_LEFT_CORNER) == terrain \
+			and td.get_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_RIGHT_CORNER) == terrain:
+			out.append(coord)
+	_base_variant_cache[terrain] = out
+	return out
+
 # 밭흙(soil) terrain base 타일의 16×16 이미지를 추출한다(field 오버레이의 도트 톤 원본).
 func _extract_soil_base() -> Image:
 	var ts: TileSet = load(TERRAIN_TILESET_PATH)
@@ -2178,12 +2200,21 @@ func _carve_village_paths() -> void:
 	_carve_v(98, 18, BRIDGE_Y)              # 산길(98,18) → 업화 갱도 — 동편 가장자리
 
 func _paint_grid() -> void:
-	# GROUND/PATH/SOIL은 terrain별 칸을 모아 corner 오토타일로 칠하고(경계·모서리
-	# 자동 전환), HOUSE/CAFE/WALL은 단색 source로 직접 깐다.
-	var all_terrain: Array[Vector2i] = []   # GROUND/PATH/SOIL/WATER 전부 — 풀 베이스로 단일 칠(검은 구멍 0)
+	# ★[ADR-0043 §6 후속] 빌드 최적화 = "풀 base는 직접 채우고(솔버 0), soil/water만 terrain-connect".
+	#   기존 병목은 *전 지형 7200칸*을 풀로 terrain-solve(~1.6s, 변종 수 무관)한 첫 호출이었다.
+	#   대신 모든 지형 칸을 풀 변종으로 *직접* 깐다(OLD의 첫 grass 솔브를 대체 — 같은 "전부 풀", 솔버 0).
+	#   soil/water 오버레이는 OLD 그대로 set_cells_terrain_connect로 얹어 전환 타일을 *오버레이 칸 자신*에
+	#   싣고(풀 이웃 불변 — 둑이 걷기 가능·강 둑 충돌 0 회귀 보존). 풀이 직접 채움이라(솔브 X) 건물 둘레
+	#   갈색 path 링 원인(OLD의 grass terrain-solve가 빈 코너를 terrain 0=PATH로 처리)도 사라진다
+	#   (RING_FIX 불필요). 결과: ~1.6s → ~0.2s(워프 프리즈 해소 + interior_test _settle 헤드룸 ~180ms→~1.3s).
+	#   ※ 풀로 *먼저 깔아야* 솔버가 전환을 오버레이 칸에 싣는다 — 오버레이 칸을 자기 base로 미리 채우면
+	#     "이미 완전한 그 terrain"이라 솔버가 전환을 *풀 이웃 쪽*으로 밀어 둑이 충돌을 갖는다(진단됨).
+	#   ※ 길(path)은 terrain 오버레이 안 함 — §6(b) 유기경계 재도입은 *기술적 비호환*으로 보류(③ 참조):
+	#     마을 1칸 폭 복도가 corner-match 전환에 묻혀 사라진다. 빌드 예산은 이제 충분하나 길 가시성이 우선.
 	var path_cells: Array[Vector2i] = []
 	var soil_cells: Array[Vector2i] = []
 	var water_cells: Array[Vector2i] = []   # ★T2 — 풀 베이스 위에 물 terrain으로 덮어 풀↔물 corner 전환
+	var grass_cells: Array[Vector2i] = []   # 모든 지형 칸(풀 변종으로 직접 채움 — GROUND·PATH·SOIL·WATER 전부)
 	var solids: Array = []   # [[cell, tile_id], ...] — terrain 칠 *뒤*에 덮는다
 	# M1.2 — 현재 구역 _grid의 실제 크기를 따른다(MAP_H/MAP_W 상수 대신). 홈베이스는
 	# MAP_H×MAP_W라 동일하지만, 구역마다 grid 크기가 달라질 M1.4+에 그대로 따라온다.
@@ -2194,7 +2225,7 @@ func _paint_grid() -> void:
 			if t == VOID:
 				continue   # 실내 방 바깥 여백 — 칠하지 않아 검은 배경이 비친다(카메라 격리용)
 			if TILE_TERRAIN.has(t):
-				all_terrain.append(cell)
+				grass_cells.append(cell)   # 전 지형 칸을 일단 풀로(검은 구멍 0)
 				if t == PATH:
 					path_cells.append(cell)
 				elif t == SOIL:
@@ -2203,23 +2234,32 @@ func _paint_grid() -> void:
 					water_cells.append(cell)
 			else:
 				solids.append([cell, t])
-	# ★ 모든 지형 칸을 *풀 하나로* 먼저 칠한다. 단일 연속 영역이라 base가 빈틈없이
-	#   매칭돼 검은 구멍이 안 생긴다. 그 위에 길·밭을 얹으면 경계가 grass↔path·grass↔soil
-	#   전환 타일로 자동 교체된다. ignore_empty_terrains=false: 빈 캔버스 첫 칠은 모든 이웃이
-	#   empty라 기본 true면 제약이 사라져 한 칸도 못 칠한다(Godot 4 동작).
-	ground.set_cells_terrain_connect(all_terrain, TERRAIN_SET, TR_GRASS, false)
-	# 밭은 넓어 corner 전환이 자연스럽다 → terrain으로 칠해 풀↔밭 경계를 부드럽게.
-	ground.set_cells_terrain_connect(soil_cells, TERRAIN_SET, TR_SOIL, false)
-	# ★T2 — 물도 풀 베이스 위에 terrain으로 덮어 풀↔물 경계가 corner 전환된다(둑·강변 자연스러움).
-	#   풀로 먼저 칠해둔 칸을 물로 다시 칠하므로 검은 구멍 0(soil과 같은 결). 충돌은 타일셋이 든다.
-	ground.set_cells_terrain_connect(water_cells, TERRAIN_SET, TR_WATER, false)
-	# ★ [ADR-0043] 길은 base+디테일로 직접 깐다("너무 깨끗"은 디테일 변종으로 해결). grass↔길 경계
-	#   유기화(터레인 전환)는 *보류*: path를 set_cells_terrain_connect하면 마을의 거대한 길 corridor
-	#   에서 변동성 큰 지연(워프 시 구역 빌드가 ~2s 근처로 튐)이 생겨 전환 연출(2000ms 상한)이
-	#   간헐 실패(interior_test 플레이키). 프로젝트 원칙(끝까지 플레이 > 예쁨) — 안정성 우선, 길 경계
-	#   유기화는 더 싼 방법(경계 풀칸만 국소 전환 등)으로 후속.
-	# ★[ADR-0043] 길 칸은 *디테일 변종*(다짐 결+잔자갈)으로 덮는다 — 결정적 해시로 변종 선택(규칙적·
-	#   비반복). source(PATH_SRC_ID) 없으면(폴백) base 흙길로.
+	# ① 풀 직접 채우기(솔버 0) — 모든 지형 칸을 all-grass 변종으로 깐다. OLD의 7200칸 grass 솔브를
+	#    대체(같은 "전부 풀" 상태). 변종은 결정적 해시로 분산(probability 랜덤 대체 — 재빌드·재진입에
+	#    동일이라 깜빡임 0·격자 반복은 해시가 깬다). 그 위에 ②에서 soil/water 오버레이, ③에서 길 직칠.
+	var grass_vars := _terrain_base_variants(TR_GRASS)
+	var gvn := grass_vars.size()
+	var grass_base := _terrain_base_atlas(TR_GRASS)
+	for c in grass_cells:
+		if gvn > 0:
+			ground.set_cell(c, 0, grass_vars[int(_gd_h01(c.x, c.y, 5) * gvn) % gvn])
+		else:
+			ground.set_cell(c, 0, grass_base)
+	# ② 오버레이(OLD 그대로) — soil/water를 풀 위에 terrain으로 얹어 풀↔밭·풀↔물 경계를 corner 전환.
+	#    오버레이 칸이 풀 pre-state라 전환이 *오버레이 칸*에 실리고 풀 이웃은 안 바뀐다(둑 보존).
+	#    ignore_empty_terrains=true: 빈 코너(solid/void) 무시 → 건물 둘레 갈색 링 0(RING_FIX 불필요).
+	if soil_cells.size() > 0:
+		ground.set_cells_terrain_connect(soil_cells, TERRAIN_SET, TR_SOIL, true)
+	if water_cells.size() > 0:
+		ground.set_cells_terrain_connect(water_cells, TERRAIN_SET, TR_WATER, true)
+	# ③ 길은 base+디테일로 *직접* 깐다(OLD 그대로 — terrain 오버레이 X). ★[ADR-0043 §6(b) 갱신:
+	#   길↔풀 유기경계 재도입은 *보류 유지* — 단, 이유가 성능에서 *기술적 비호환*으로 바뀌었다.] 빌드는
+	#   ~1.6s→~0.2s로 충분히 빨라졌지만, 마을 동선이 *1칸 폭 복도*(BRIDGE_Y 가로 복도·문→복도 세로길)라
+	#   corner-match 지형으로 얹으면 1칸 폭 길이 전환 타일에 *통째로 묻혀 사라진다*(육안 회귀로 확인 —
+	#   OLD 선명한 갈색 복도 → terrain 오버레이 시 흐릿한 풀로 소멸). "끝까지 플레이>예쁨" 원칙상 길
+	#   가시성이 우선 → 길은 솔리드 base+디테일로 또렷하게(_terrain_base_atlas가 corner 전환에 안 묻히는
+	#   base를 깐다). 유기경계는 *grass 쪽 raggedness*(길은 그대로 두고 인접 풀칸만 들쭉날쭉) 같은 별도
+	#   기법이 필요 — 폭≥2 길에 한정하거나 비-terrain 방식으로. 결정적 해시로 디테일 변종 선택(비반복).
 	var has_pd: bool = ground.tile_set.has_source(PATH_SRC_ID)
 	var path_base := _terrain_base_atlas(TR_PATH)
 	for c in path_cells:
@@ -2228,28 +2268,7 @@ func _paint_grid() -> void:
 			ground.set_cell(c, PATH_SRC_ID, Vector2i(pv, 0))
 		else:
 			ground.set_cell(c, 0, path_base)
-	# ★[ADR-0043] 건물(솔리드) 둘레 갈색 path 링 제거 — 싼 방법. 솔리드 칸은 terrain 미할당이라
-	#   set_cells_terrain_connect가 인접 풀칸의 그쪽 코너를 *기본값 terrain 0(=PATH)* 로 처리해 갈색
-	#   링이 생긴다. 솔리드를 terrain-connect에 넣으면(빈코너 제거) 정확하나 7200셀 솔버가 무거워져
-	#   워프 빌드가 ~2s로 튀어 전환 연출이 간헐 실패(플레이키). → 대신 *솔리드 인접 GROUND 칸만*
-	#   all-grass base 타일로 직접 덮는다(솔버 없는 set_cell — 싸다). 건물 둘레가 평범한 풀로 이어진다.
-	if _RING_FIX_ENABLED:
-		var grass_base_coord := _terrain_base_atlas(TR_GRASS)
-		var _ring_dirs: Array[Vector2i] = [Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, -1), Vector2i(0, 1),
-			Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(1, 1)]
-		# ★건물 외벽 타일만 대상(나무·바위·절벽 제외). 사용자 불만은 건물 둘레이고, 대상을 좁혀
-		#   set_cell 호출을 줄여 빌드 비용을 헤드룸 안에 유지(전환 연출 타이밍 여유).
-		for s in solids:
-			var sc: Vector2i = s[0]
-			if sc.y >= _outdoor_h or not (s[1] in [WALL, HOUSE, CAFE, HOUSE_WALL, CAFE_WALL]):
-				continue
-			for d in _ring_dirs:
-				var nb: Vector2i = sc + d
-				if nb.y < 0 or nb.y >= _grid.size() or nb.x < 0 or nb.x >= _grid[nb.y].size():
-					continue
-				if _grid[nb.y][nb.x] == GROUND:
-					ground.set_cell(nb, 0, grass_base_coord)
-	# 단색(HOUSE/CAFE/WALL)은 terrain 위에 덮어 깐다(아직 도트 전, 단계 ②에서 교체).
+	# ④ 단색(HOUSE/CAFE/WALL)은 terrain 위에 덮어 깐다(아직 도트 전, 단계 ②에서 교체).
 	for s in solids:
 		ground.set_cell(s[0], SOLID_SRC_ID, _solid_atlas(s[1]))
 	# ★ [ADR-0042] 증분3 — 오버레이 모델 폐기(owner: "타일 가운데 박아놓은 느낌"). 풀의 생동감·연결은
