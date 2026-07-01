@@ -28,11 +28,16 @@ func _init() -> void:
 	for entry in main._prop_layouts.get("HOME", []):
 		var tex: Texture2D = entry[0]
 		var yo: int = entry[2] if entry.size() > 2 else 0
+		var casts_shadow: bool = tex in main.PROP_SHADOW_SET
 		var timg := tex.get_image()
 		if timg.get_format() != Image.FORMAT_RGBA8:
 			timg.convert(Image.FORMAT_RGBA8)
+		var tsz := timg.get_size()
 		for t in entry[1]:
-			out.blend_rect(timg, Rect2i(Vector2i.ZERO, timg.get_size()), Vector2i(t.x * TILE, t.y * TILE + yo))
+			# ★[§11] 부피 프롭 발치 SE 접지 그림자(main._draw_prop_shadow의 CPU 재현)
+			if casts_shadow:
+				_blit_shadow(out, t.x * TILE + tsz.x * 0.5 + 2.0, float(t.y * TILE + yo) + tsz.y - 2.0, tsz.x * 0.40)
+			out.blend_rect(timg, Rect2i(Vector2i.ZERO, tsz), Vector2i(t.x * TILE, t.y * TILE + yo))
 	# 야외 건물 외관(집·창고·축사) — 통과불가 WALL 박스 위 1:1 blit
 	var facades := [
 		[main.FACADE_HOUSE, main.HOUSE_EXT_RECT],
@@ -76,6 +81,19 @@ func _init() -> void:
 	out.save_png("res://tools/home_full_dump.png")
 	print("✅ home_full_dump.png 저장 (", size.x, "×", size.y, ")")
 	quit()
+
+# ★[§11] 납작한 SE 접지 그림자 타원을 out에 알파 블렌드(main.draw_circle + 세로 0.22 스케일 재현).
+func _blit_shadow(out: Image, cx: float, cy: float, rx: float) -> void:
+	var ry := rx * 0.22
+	for sy in range(int(cy - ry), int(cy + ry) + 1):
+		for sx in range(int(cx - rx), int(cx + rx) + 1):
+			if sx < 0 or sy < 0 or sx >= out.get_width() or sy >= out.get_height():
+				continue
+			var nx := (sx - cx) / rx
+			var ny := (sy - cy) / ry
+			if nx * nx + ny * ny <= 1.0:
+				var bg := out.get_pixel(sx, sy)
+				out.set_pixel(sx, sy, bg.lerp(Color(0, 0, 0, 1), 0.30))
 
 func _blit_layer(layer: TileMapLayer, out: Image) -> void:
 	var ts := layer.tile_set
