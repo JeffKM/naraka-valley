@@ -46,10 +46,9 @@ func _walkable(m: Node, t: Vector2i) -> bool:
 	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
-	# ★ADR-0035 절벽 단면(CLIFF_*)도 통과 불가(고지를 두름 — 계단 틈만 GROUND).
-	return id != m.WALL and id != m.VOID and id != m.WATER \
-		and id != m.CLIFF_FACE and id != m.CLIFF_CORNER_L \
-		and id != m.CLIFF_CORNER_R and id != m.CLIFF_INNER
+	# ★[S1-3/§5.7] 정준 is_solid로 이관(CLIFF_* 하드코딩 제거). pseudo-Z 절벽 = CLIFF_FACE·FACE_BASE는
+	#   is_solid=true(통과 X), CLIFF_LIP은 is_solid=false(걷기 O — 고지 밑단). VOID/WATER는 is_solid 밖이라 별도 배제.
+	return id != m.VOID and id != m.WATER and not m.is_solid(id)
 
 func _reachable(m: Node, start: Vector2i) -> Dictionary:
 	var seen := {}
