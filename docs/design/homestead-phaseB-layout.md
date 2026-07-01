@@ -5,6 +5,8 @@
 > 영혼빛 연못 WATER·5×5 스타터 패치·구불 동선 재작성·PROP_LAYOUT_HOME 전면 재배치. run_tests.sh 전체
 > 통과 + home_full_dump 시각 확인 완료. 남은 것 = 개간 메카닉(파내기·해금)은 Slice 1.
 > 진행 추적: 메모리 `homestead-overgrown-redesign-progress`. 회귀 맵 = 이 문서 §3(Explore 전수조사 산출).
+>
+> **★기하 개정([ADR-0044], 2026-07-01) — Slice 1에서 재구현:** 아래 §1~2의 **1타일 절벽**(남향 y29 1행 · 동향 x23 1열 · 넝쿨/덤불 코너 가림)은 **2행 pseudo-Z 다단**으로 격상된다 — `CLIFF_LIP`(걷기 O) → `CLIFF_FACE`/`CLIFF_FACE_BASE`(SOLID), 동향 면 신규(넝쿨핵 제거·NW광원 재보정), 코너=edge-to-edge, 계단=2행 종단([asset-ruleset §4.1]). z축 아님(2D 평면 불변). **아래 1타일 좌표는 Slice 1 재배치 때 개정**(고지 경계·충돌 행·BARN_EXT·계단 좌표 재산정). 현재 코드(1타일)는 그때까지 유효.
 
 ## 0. 구현 결과 요약 (실제 좌표 — 코드 기준)
 
