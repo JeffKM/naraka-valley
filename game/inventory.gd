@@ -36,6 +36,9 @@ const START_SAPLINGS := {FruitTreeCatalog.HONBAEKDO: 2}
 # S1-6 — 비료 종잣돈(greybox-spec §8.10). 정식 상점 노출(만물상=Slice 2)·전 5종 판매는 하류라
 # 품질군·성장촉진군 대표 1종씩 소량 지급해 HOME에서 품질/성장촉진 루프를 즉시 체험한다. 비료 id → 개수.
 const START_FERTILIZER := {ItemCatalog.FERT_BASIC: 3, ItemCatalog.FERT_SPEED: 3}
+# S1-7 — 건초 종잣돈(§8.10). 정식 입수(만물상 판매·낫 수풀 베기)는 하류라, 스타터 짐승 급여를 HOME에서
+# 바로 체험하도록 소량 지급한다(1마리/일 1개, 며칠분). 건초 아이템 id → 개수.
+const START_FEED := {ItemCatalog.HAY: 6}
 
 # 슬롯 배열. 각 원소 = null(빈칸) 또는 {"id": String, "count": int, "quality": int}. 위치 고정(자동 압축 X).
 # ★ S1-6(§8.3): quality 차원 추가(ADR-0020 예약 실현). 스택 키 = (id, quality) — 같은 작물이라도
@@ -75,6 +78,8 @@ func _grant_start_kit() -> void:
 		add_sapling(fruit_id, START_SAPLINGS[fruit_id])
 	for fert_id in START_FERTILIZER:  # S1-6 비료 종잣돈(품질·성장촉진 대표 1종씩)
 		add_item(fert_id, START_FERTILIZER[fert_id])
+	for feed_id in START_FEED:        # S1-7 건초 종잣돈(스타터 짐승 급여)
+		add_item(feed_id, START_FEED[feed_id])
 
 # ── 슬롯 핵심(S1-6 — (id, quality) 스택 키) ───────────────────────────────────
 # id의 슬롯 인덱스(품질 무관 첫 일치, -1 = 없음). 유니크(도구) 중복 판정·has_item에 쓴다.

@@ -61,6 +61,13 @@ const FERT_HYPER := "fert_hyper"       # 하이퍼 비료(성장촉진군 −33%
 const HOE := "hoe"                 # 괭이 — 미경작 칸을 경작(LMB)
 const WATERING_CAN := "watering_can"  # 물뿌리개 — 심은 칸에 물주기(LMB)
 
+# ── 목축(S1-7) — 건초·대형 산물(§8.6) ────────────────────────────────────────
+# 건초(feed): 짐승 급여 재료(1마리/일 1개, §4.1). 품질 무차원 스택 아이템(CAT_MATERIAL 실사용 개시).
+const HAY := "hay"
+const HAY_COST := 10               # 건초 기준가(placeholder — 만물상 판매·수풀 베기는 하류)
+# 대형 산물 접미("<산물>_large"). 산물 아이템 id + 이 접미 = 대형 변이(판매가 ×2, §4.1). 씨앗:수확물 결.
+const LARGE_SUFFIX := "_large"
+
 # 씨앗 아이템 id 접미사("<작물군>_seed"). 작물군 id와 1:1 매핑.
 const SEED_SUFFIX := "_seed"
 # 묘목 아이템 id 접미사("<과일종>_sapling"). FruitTreeCatalog 종 id와 1:1(S1-5b).
@@ -113,10 +120,36 @@ static func _is_fruit(id: String) -> bool:
 static func _is_fertilizer(id: String) -> bool:
 	return FertilizerCatalog.has(id)
 
+# ── 목축 산물 판정(S1-7, §8.6 — _is_fruit 결) ────────────────────────────────
+# id가 짐승 산물(기준 변이)인가. 데이터·판정은 AnimalCatalog에 위임.
+static func _is_animal_base(id: String) -> bool:
+	return AnimalCatalog.has_product(id)
+
+# 대형 산물 아이템 id → 기준 산물 id("honbaek_ran_large" → "honbaek_ran"). 대형 아님이면 "".
+static func _large_base(id: String) -> String:
+	return id.trim_suffix(LARGE_SUFFIX) if id.ends_with(LARGE_SUFFIX) else ""
+
+# id가 대형 산물 변이인가 = "_large"로 끝나고 그 앞부분이 실제 산물인가(오타·손상 방어).
+static func _is_large_product(id: String) -> bool:
+	return id.ends_with(LARGE_SUFFIX) and AnimalCatalog.has_product(_large_base(id))
+
+# id가 짐승 산물(기준 or 대형)인가. 판매·스택은 작물 수확물과 동급(CAT_HARVEST).
+static func _is_animal_product(id: String) -> bool:
+	return _is_animal_base(id) or _is_large_product(id)
+
+# id가 건초(급여 재료)인가.
+static func _is_hay(id: String) -> bool:
+	return id == HAY
+
+# 기준 산물 id → 대형 변이 아이템 id("honbaek_ran" → "honbaek_ran_large"). livestock 대형 수집이 쓴다.
+static func large_product_id(product_id: String) -> String:
+	return product_id + LARGE_SUFFIX
+
 # ── 조회 ────────────────────────────────────────────────────────────────────
-# 카탈로그에 있는 유효 아이템인가(도구·씨앗·묘목·수확물·과일·비료 어느 하나). 슬롯 add/load 검증에 쓴다.
+# 카탈로그에 있는 유효 아이템인가(도구·씨앗·묘목·수확물·과일·비료·건초·산물 어느 하나). 슬롯 add/load 검증에 쓴다.
 static func has_item(id: String) -> bool:
-	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) or _is_fertilizer(id)
+	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
+		or _is_fertilizer(id) or _is_hay(id) or _is_animal_product(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -127,10 +160,12 @@ static func category_of(id: String) -> String:
 		return CAT_SEED
 	if _is_sapling(id):
 		return CAT_SAPLING
-	if CropCatalog.has_crop(id) or _is_fruit(id):
+	if CropCatalog.has_crop(id) or _is_fruit(id) or _is_animal_product(id):
 		return CAT_HARVEST
 	if _is_fertilizer(id):
 		return CAT_FERTILIZER
+	if _is_hay(id):
+		return CAT_MATERIAL   # 건초 = 급여 재료(예약된 재료 카테고리 실사용 개시, S1-7)
 	return ""
 
 # 표시명(HUD·상점·툴팁). 씨앗="<작물명> 씨앗"·묘목="<과일명> 묘목"·수확물=작물명·과일=과일명·도구=도구명. 없으면 "".
@@ -147,13 +182,20 @@ static func name_of(id: String) -> String:
 		return FruitTreeCatalog.name_of(id)
 	if _is_fertilizer(id):
 		return FertilizerCatalog.name_of(id)
+	if _is_hay(id):
+		return "건초"
+	if _is_large_product(id):
+		return "큰 %s" % AnimalCatalog.product_name(_large_base(id))
+	if _is_animal_base(id):
+		return AnimalCatalog.product_name(id)
 	return ""
 
-# 스택 가능한가. 도구=유니크(false), 씨앗·묘목·수확물·과일·비료=스택(true). 인벤토리 add가 합칠지 가른다.
+# 스택 가능한가. 도구=유니크(false), 씨앗·묘목·수확물·과일·비료·건초·산물=스택(true). 인벤토리 add가 합칠지 가른다.
 static func stackable_of(id: String) -> bool:
 	if TOOLS.has(id):
 		return false
-	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) or _is_fertilizer(id)
+	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
+		or _is_fertilizer(id) or _is_hay(id) or _is_animal_product(id)
 
 # 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 비료=구매가(buy_cost),
 # 수확물/과일=판매가. 없으면 0. 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다.
@@ -172,6 +214,13 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return int(CropCatalog.sell_price(id) * quality_mult(quality))
 	if _is_fruit(id):
 		return int(FruitTreeCatalog.fruit_sell(id) * quality_mult(quality))
+	if _is_hay(id):
+		return HAY_COST   # 건초 = 품질 무차원 고정가(급여 재료)
+	# ★ S1-7(§8.6): 대형 산물은 기준 판매가 ×2에 품질 배수를 얹는다(대형 = 품질과 별 축). 기준 산물은 품질 배수만.
+	if _is_large_product(id):
+		return int(AnimalCatalog.product_sell(_large_base(id)) * 2.0 * quality_mult(quality))
+	if _is_animal_base(id):
+		return int(AnimalCatalog.product_sell(id) * quality_mult(quality))
 	return 0
 
 # 씨앗 아이템 → 작물군 id("" = 씨앗 아님). main이 "이 씨앗을 심으면 무슨 작물"을 알 때 쓴다.

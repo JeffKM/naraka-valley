@@ -346,3 +346,58 @@ static func speed_factor(level:int) -> float: return 1.0 - 0.03 * clampi(level,0
 
 ### §8.13 별도 ADR 없음 근거 (Q4)
 §5(S1-4)·§6(S1-5a)·§7(S1-5b)와 동형 — 잠긴 spec(§3.1/§3.2) 이행 + 슬라이스 내부 신규 파일(`skill.gd`·`fertilizer_catalog.gd`)이라 새 결정 없음. 인벤토리 슬롯 스키마 확장은 **ADR-0020이 명시 예약한 방향의 실현**(신규 결정 아님). 품질 등급 수렴은 §7.7이 예고. 불변식(ADR-0019 2축·"평평≠막힘"·혼력 풀 불변, ADR-0027 AoE=도구, §3.1 가공 품질무시·비살상)은 전부 준수 — 어기지 않아 개정 ADR 불요.
+
+---
+
+## §9 S1-7 착수 결정 (2026-07-02, 혼의 짐승 목축 = 데일리 돌봄 루프 end-to-end)
+
+> §4.1이 곡선을 잠갔고(우정·기분·산물·비살상), 이 절은 **S1-7 실구현의 경계·로스터·배선·검증**을 박제한다.
+> 별도 ADR 없음 — §7(S1-5b)이 Orchard 완전분리를 ADR 없이 박은 것과 동형(ADR-0028 인터리브 + ADR-0025 스펙 카드의 슬라이스 적용). ADR-0004(미호 양육 확장)·ADR-0008(관계=곱셈기, 게이트 아님)·CONTEXT(비살상) 전부 준수.
+
+### §9.1 왜 완전 분리 노드인가 (Orchard와 동형 (A))
+짐승은 밭 칸의 crop도, 3×3 나무도 아니다 — **"매일 돌봄으로 우정·기분이 오르내리고 산물을 내는" 데일리 엔티티**다(작물=며칠·나무=절기 vs **짐승=매일**, §4.1 중복 회피 훅). FarmField/Orchard 상태 모델과 안 맞아 한 줄도 안 건드린다(회귀-0 계승). `livestock.gd`(`class_name Ranch`)가 자체 좌표계(타일 키)로 소유하고, `main`이 배치·돌봄·수집·드로우·세이브를 배선한다. 짐승은 **비-SOLID(통과 가능)**라 Orchard의 밑동 충돌 재구성이 없다(더 단순).
+
+### §9.2 스코프 경계 (포함/배제)
+- **포함:** `game/animal_catalog.gd`(종·산물 데이터) + `game/livestock.gd`(데일리 돌봄 상태·정산·산물·세이브) + `ItemCatalog` 확장(건초·산물 base/large) + `main` 배선(스타터 배치·advance·수집·세이브·feed/pet/collect/tend 동사·placeholder 드로우) + 격리 검증(`playtest/livestock_test.gd`).
+- **배제:** 짐승 AI Navigation·이동(정적 타일 배치 — phaseB §5.4 절벽 천연펜 순찰은 S1-11 아트/애니) · 축사 Enterable 실내(phaseB §5.3 예약만) · 낫 수풀 베기 사일로 건초(ADR-0024 낫 없음 — 건초는 START_KIT/상점 하류) · 미호 곱셈기 가속(ADR-0021 관계층=하류) · 다종 로스터·스프라이트(§9.4 2종·S1-11).
+
+### §9.3 데이터 모델 (`Ranch._animals`)
+타일(Vector2i) 키 → 순수 Dict `{species, friendship(0..1000), mood(0..255), fed/petted/grazed/penned/cleaned(bool), product(0/1), product_quality(0..3), product_large(bool)}`. FarmField/Orchard와 같은 결(inner class 없음 → var_to_str 라운드트립). 데일리 케어 플래그는 낮에 플레이어가 세우고, `advance_day`(취침)가 정산 → 산물 생성 → 리셋한다.
+
+### §9.4 로스터 (그레이박스 2종 = coop+barn 아키타입)
+| 종 id | 이름 | kind | 산물 id | 산물명 | 기준 판매가 | 대형 |
+|---|---|---|---|---|---|---|
+| `honbaek_dak` | 혼백 닭 | coop | `honbaek_ran` | 혼백란 | 50 | ✅ |
+| `honbaek_so` | 혼백 소 | barn | `honbaek_yu` | 혼백유 | 125 | ✅ |
+
+스타듀 Coop(6)/Barn(5)·산물(19) *참고*하되 자체 2종 큐레이션. 4절기·다종 확장(naming=CONTEXT·아트=S1-11·배치=하류)은 이관 — S1-7=메카닉 스코프. `kind`는 그레이박스 flavor 태그(메카닉 동일).
+
+### §9.5 데일리 정산 공식 (`advance_day`, §4.1 이행)
+각 짐승: **① 우정·기분 델타**(하루치, clamp) → **② 산물 생성**(급여한 짐승·대기 없을 때만) → **③ 케어 플래그 리셋**.
+```
+df = (petted?+15:−2) + (fed?+5:−20) + (grazed?+8:0) + (penned?+5:0)         # 우정
+dm = (fed?+40:−60) + (petted?+30:0) + (penned?+40:−40) + (grazed?+30:0) + (cleaned?+20:−30)  # 기분
+friendship = clamp(friendship+df, 0, 1000);  mood = clamp(mood+dm, 0, 255)
+# 산물: fed && product<=0 → hearts=friendship/200; state=quality_state_for(hearts,mood);
+#        product=1; quality=FertilizerCatalog.roll_quality(state);  large = large_capable && randf()<large_chance(hearts)
+```
+- **품질 = §3.1 엔진 재활용:** 우정 하트+당일 기분 → state(`NONE` 0~1 · `BASIC` 2~3 · `QUALITY` 4 · `DELUXE` 5+기분≥200) → `FertilizerCatalog.tier_for_roll` 확률표(작물 비료와 같은 코어). `quality_state_for`는 순수 함수(결정적 경계 검증).
+- **대형 = 별 축:** `large_chance(hearts)=(hearts/5)*0.5`(만렙 0.5). 대형이면 `<산물>_large` 아이템(판매가 ×2)으로 적재.
+- **⚠️ 비살상 불변식:** `advance_day`는 절대 `_animals` 키를 지우지 않는다 — 어떤 방치도 우정·기분 감산으로만(CONTEXT 죽음 단일화). 미급여 = 산물 0(스타듀 결).
+- **초기값:** 새 짐승 우정 0(0하트→산물 NONE)·기분 128(중립). 성숙 게이트 없음(급여 시 1일차부터 산물 — 그레이박스).
+
+### §9.6 산물·건초 아이템 (`ItemCatalog` 확장, `_is_fruit` 결)
+- **건초** `HAY`=CAT_MATERIAL(예약 카테고리 실사용 개시)·품질 무차원 스택·기준가 10. START_KIT 6개.
+- **산물** = CAT_HARVEST(작물 수확물·과일 동급 — 판매·출하·스택·품질). **대형** = `<산물>_large` 접미 변이(씨앗:수확물=산물:대형 결). `price_of`: 대형 = 기준 ×2 × 품질배수(대형·품질 직교 → 대형 이리듐 = ×4). 데이터·이름·판매가는 `AnimalCatalog`에 위임(단방향).
+
+### §9.7 main 배선 (in-game 루프)
+- **스타터 배치:** 신규 게임(세이브 無)만 `_ensure_starter_animals` — 하늘 목장 방목지(`PASTURE_SCAN_RECT` x1..18 y17..24) 걷기 가능 타일에 2종을 2칸+ 간격 배치. 세이브 복원은 `load_save`(멱등, count>0이면 skip).
+- **입력(하늘 목장 풀=비-SOIL이라 `_target_valid`(SOIL) 게이트 밖 별도 디스패치):** LMB(건초 든 채)=급여(건초 1 소모) · RMB=산물 있으면 수집(대형=large 아이템·품질 실적재)·없으면 쓰다듬 · 축사 문(`BARN_EXT_DOOR`) RMB=축사 돌봄(방목·격리·청결 `tend_all` 일괄). 모두 혼력 소모(농사 동작 결).
+- **advance/세이브:** `_on_day_advanced`에 `ranch.advance_day()`(orchard 옆) · save/load `"ranch"` 키(구세이브=짐승 0) · `changed`→`_on_ranch_changed`(충돌 없이 redraw만).
+- **드로우:** `_draw_ranch` placeholder(종별 색 몸통·머리 점·대기 산물 점·우정 하트 바 5칸). 스프라이트·워크 애니 = S1-11.
+
+### §9.8 헤드리스 검증 (`playtest/livestock_test.gd`, orchard_test 골격)
+`run_tests.sh` +1(자동 발견). **Part A(Ranch/카탈로그 단위):** ①배치(성공·중복거부·미지종거부) ②케어 플래그(세움·중복거부·tend_all) ③정산(완전돌봄 +33우정·255기분 saturate / 완전방치 0·0 clamp·리셋) ④하트 파생(1000→5·850→4·399→1) ⑤품질 state 경계(NONE/BASIC/QUALITY/DELUXE 기분게이트) ⑥대형확률(0·0.2·0.5) ⑦산물 급여게이트(급여만 생성·미급여 0·대기중 프리즈) ⑧수집(반환·리셋·미대기 빈) ⑨**비살상**(방치 10일 count 불변·존재·바닥 clamp) ⑩세이브 왕복 ⑪ItemCatalog(산물 CAT_HARVEST·대형 ×2·×4·건초 CAT_MATERIAL). **Part B(main 스폰, 세이브 백업·삭제로 신규게임 강제):** ⑫ranch 스폰·스타터 시드≥1·걷기가능 타일·급여→advance→산물→수집 인벤토리 적재. (품질/대형 roll은 난수라 값 아닌 *state·확률 파생*과 *생성 여부*만 단언.)
+
+### §9.9 별도 ADR 없음 근거
+§5~§8과 동형 — 잠긴 spec(§4.1) 이행 + 슬라이스 내부 신규 파일(`animal_catalog.gd`·`livestock.gd`). ADR-0004(미호 양육 확장·새 캐릭터 X)·ADR-0008(관계=곱셈기 — 우정은 산물 품질·대형을 *가속*하되 base 산물은 0하트에서도 급여만으로 나옴="평평≠막힘")·CONTEXT(비살상) 전부 준수. 미호 곱셈기(농사 XP 결의 목축 가속)는 이 곡선 *위*에 후행(ADR-0021, 하류) — 어기지 않아 개정 ADR 불요.
