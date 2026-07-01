@@ -160,3 +160,71 @@ ADR-0024 타겟 모델이 이미 **발 칸 ±1(커서 방향)** 을 대상으로
 
 ### §6.6 헤드리스 검증 (Q5) — `playtest/trellis_test.gd`
 `run_tests.sh` +1. 단언: ①`is_crop_solid` 술어(트렐리스 심긴=solid·비트렐리스 심긴=non-solid·빈칸=non-solid) ②**REGROW 사이클**(황천포도 성숙→harvest→여전히 planted·`grown_days==base−cd`·is_mature=false→물주고 cd일→재성숙) ③SINGLE 대조(혼령초 수확→비워짐) ④`solid_crop_tiles()` 정확성 ⑤트렐리스 칸 그리드 여전히 SOIL(인접수확 근거). 성장 시뮬은 물-구동 advance_day 재사용분만(신규 성장로직 0).
+
+---
+
+## §7 S1-5b 착수 grill 결정 (2026-07-02, `grill-with-docs` Q1~Q9, 혼의 나무 과수 = 혼백도 end-to-end)
+
+> **✅ 실구현 완료(2026-07-02):** 아래 스펙대로 `game/orchard.gd`·`game/fruit_tree_catalog.gd`·`game/playtest/orchard_test.gd`(43단언) + `clock.gd`·`item_catalog.gd`·`inventory.gd`·`main.gd`·`hotbar_hud.gd`·`inv_frame.gd` 배선. 전체 38개 테스트 통과·부팅 클린·회귀0. **하류 이관:** 과일 정식 판매가(현 raw-sell 경로 0골드 — `ItemCatalog.price_of` 통일=Slice2/6)·대형 스프라이트·Y-sort=S1-10·품질 인벤토리=S1-6·4절기 로스터=하류.
+>
+> S1-5 = 트렐리스(S1-5a, §6) + **혼의 나무 과수(S1-5b, 본 절)**. 상위 결정은 [stardew-systems-catalog §60/§498](./stardew-systems-catalog.md)에서 잠김(grill 2026-06-29): 저승 과수 "혼의 나무" = 28일(1절기) 성숙 → 제철 매일 결실 → **절기 넘어 영속**(다절기 프레스티지의 나무판) · **품질=나무 나이**(비료 불가, 작물 품질=비료와 분리) · 3×3 배치 제약. 본 절은 그 위의 *구현 설계*를 잠근다. **절기 유도 표면 선도입만 [ADR-0045](../adr/0045-orchard-season-derivation-surface-slice1.md)** — 나머지는 §5/§6과 동형으로 별도 ADR 없음(슬라이스 내부 신규 파일). 신규 파일 `game/orchard.gd`·`game/fruit_tree_catalog.gd`·`playtest/orchard_test.gd`.
+
+### §7.1 스코프 (Q2) — orchard 완전 분리, FarmField 불변
+- **포함:** 신규 `orchard.gd`(자체 좌표계로 나무 소유)·`fruit_tree_catalog.gd`(`class_name FruitTreeCatalog`)·`clock.gd` 절기 유도 static·`main.gd` 배선(충돌·심기·수확)·`item_catalog.gd` 아이템 2종·`save.gd` orchard 블록·격리 검증.
+- **배제:** `field.gd`(FarmField) **한 줄도 안 건드림**(회귀-0 계약 계승) — 나무는 밭 칸의 crop이 아니라 자체 엔티티. 물주기·밭갈이 무관(스타듀 과수 정합). 인벤토리 슬롯 quality·판매가 곱·4등급 UI = **S1-6**(§7.7). 4절기 로스터·정식 판매처·온실 = 하류.
+
+### §7.2 절기 유도 표면 (Q1, ADR-0045) — 읽기 전용 파생
+`clock.gd`에 상태 변수 없이 `day`에서 파생:
+```gdscript
+static func season_index_for_day(d: int) -> int:
+    return ((d - 1) / 28) % 4    # 0=피안 · 1=유화 · 2=망연 · 3=성야
+```
+게임 시작=피안절 1일 → `day 1 → 0`. **사멸/날씨/축제/예보=Slice 7 불가침** — orchard는 절기를 *읽기만* 하고 사멸 트리거 안 심음. 절기 판정=매 틱 무상태 재계산(세이브 캐시 아님).
+
+### §7.3 나무 1그루 상태 모델 (Q4) — `planted_day` 파생, 3필드 최소
+`orchard._trees: Dictionary[Vector2i(앵커) → Dict]`, Dict = 3필드만:
+```gdscript
+{ "fruit_id": String, "planted_day": int, "fruit_count": int }  # fruit_count 0..cap(3)
+```
+- **나이 = `clock.day − planted_day`** (누적기 없음) → 품질=나이·영속·세이브가 전부 파생(planted_day는 절기 경계에 절대 리셋 안 됨).
+- **돌봄 0** — 물주기·비료·성장촉진 무관(패시브 영속 생산자).
+
+### §7.4 3×3 기하·심기 판정 (Q3) — center-anchor, 예약≠충돌
+- **앵커 = 중심 칸 1개**(`Vector2i` 1개로 나무 1그루). **예약 풋프린트 = 앵커±1의 3×3 9칸**(파생). **충돌 = 앵커 1칸만 SOLID**(밑동), 수관 8칸 통과 가능(3×3 벽 회피·스타듀 정합).
+- **심기 판정 `can_plant_tree(anchor)`** — 9칸 전수 평가: ①모두 HOME 구역 내 ②모두 `is_solid()==false` ③모두 `is_crop_solid()==false`(트렐리스 미교차) ④타 나무 예약 풋프린트와 미교차(체비쇼프 거리로 역추적).
+- **충돌 물리** = 트렐리스 `_trellis_body` 패턴 복제한 신규 `_orchard_body: StaticBody2D`(밑동 칸 16×16). HOME 전용. 로드·심기·수확 시 재구성.
+- **Y-sort** = 앵커 타일 중심선 pivot만 스펙에 박고, 대형 스프라이트 밑동 보정 = **S1-10 아트** 이관.
+
+### §7.5 결실·생애주기 (Q4) — 달력 구동, 제철 축적
+`day_advanced` 훅에서 `orchard.advance_day(day)`(기존 `_on_day_advanced`가 `farm.advance_day` 옆에서 호출):
+- **성숙 = 순수 달력:** `나이 >= mature_days(28)` → 성숙(물주기 무관).
+- **결실 = 성숙 AND 제철:** `is_mature AND season_index_for_day(day)==fruit.season AND fruit_count<cap` → `fruit_count += 1`. cap=3.
+- **비제철:** 신규 결실 정지, **매달린 과일은 유지**(안 썩음).
+- **영속:** 절기 경계 넘겨도 사멸 판정 미참여 → 나무 생존·나이 계속 증가.
+
+### §7.6 수확·상호작용 (Q5) — 풋프린트 조준, 기존 동사 재사용
+- **수확** = 풋프린트 9칸 중 아무 칸 조준 + 기존 수확 동사. `main._try_harvest`가 `target_tile`을 나무 풋프린트로 **역추적**(체비쇼프 ≤1)→ 성숙+`fruit_count>0`이면 전량 인벤토리 적립·`fruit_count=0`·나이서 tier 산출. 신규 입력 경로 0(트렐리스처럼 기존 라우팅 분기 1개).
+- **심기** = "묘목" 아이템 사용 + 앵커 조준. `can_plant_tree` 통과 시 `planted_day=clock.day`로 생성. 실패 시 기존 심기-실패 UX 재사용.
+
+### §7.7 품질=나이 (Q6) — 파생 함수만, 인벤토리는 S1-6
+```gdscript
+func quality_tier_for_age(age: int) -> int:
+    return clampi((age - 28) / 28, 0, 3)   # 28→0 · 56→1 · 84→2 · 112(1년생)→3
+```
+절기당 +1등급(28일 입도). **지금 = 순수 함수 + 격리테스트만**(완료기준 충족). **인벤토리 슬롯 quality·판매가 곱·4등급 = S1-6**이 이 함수를 소비(수확은 당분간 품질 무차원 적립, item_catalog:21 그레이박스 계약 유지). "품질=나이(비료 불가)" ⊥ S1-6 "작물 품질=비료" = 서로 다른 소스 두 개 → 미래 4등급 표면 수렴.
+
+### §7.8 로스터·아이템 (Q7) — 그레이박스 1종
+`fruit_tree_catalog.gd` 데이터 모델(N종 수용, 로스터 1종):
+```
+{ name_ko, season(int), mature_days(28), fruit_cap(3), sapling_cost, fruit_sell }
+```
+- **혼백도(魂魄桃)** — 저승 복숭아, **결실 절기=피안절(index 0)**(게임 시작 절기라 조기 검증). sapling_cost/fruit_sell = 그레이박스 placeholder(영속 투자→묘목 비쌈·과일 프리미엄, S1-6/밸런싱 리튠).
+- **아이템 등록:** `item_catalog.gd`에 **묘목 아이템 1 + 과일 아이템 1** 신규(트렐리스와 달리 기존 아이템 재사용 불가).
+- **묘목 획득처 = 최소 배선**(만물상=Slice 2라 HOME 미존재) — 아이템만 등록, 정식 판매처·온실 연결 하류 이관.
+- **4절기 로스터 확장**(절기별 저승 과일) = naming(CONTEXT/flavor)·아트(S1-10)·콘텐츠 배치(Slice 7) 이관. S1-5b는 콘텐츠 저작 아닌 메카닉 스코프.
+
+### §7.9 세이브 (Q8)
+`orchard.to_save`/`load_save` = FarmField 패턴 계승(Vector2i 키 Dictionary). `save.gd`에 orchard 블록. 로드 시 `_orchard_body` 재구성. 영속·나이가 planted_day 파생이라 세이브 최소(fruit_count만 가변).
+
+### §7.10 헤드리스 검증 (Q8) — `playtest/orchard_test.gd`
+`run_tests.sh` +1(자동 발견). **Part A(단위):** ①심기 판정(유효 3×3 성공 / SOLID·is_crop_solid·타 나무 교차 거부) ②성숙(순수 달력, 물주기 무관) ③제철 결실 순환 왕복 — **3a** 제철 결실·**3b** 비제철 정지(count 고정)·**3c ★ 다음 해 제철 재진입**(day 113=`(113-1)/28=4, 4%4=0`→피안절 재개·fruit_count 재증가) ④영속(절기 경계 넘겨도 생존·나이 증가·사멸 0) ⑤나이별 품질(28→0·56→1·84→2·112→3·clamp) ⑥수확(전량 회수·0 리셋) + **★ 제철 내부 수확 후 재결실**(day10 수확 3→0 → day11 fruit_count=1, 수확이 결실 루프 미파괴) ⑦세이브 왕복 + **★ 절기 경계 결착**(day28 세이브→day29 로드→첫 틱 즉시 비제철 반영, 로드-틱 유령과일 차단). **Part B(main 스폰):** ⑧`_orchard_body` 밑동 SOLID·수관 통과 ⑨`season_index_for_day`(1→0피안·29→1유화, CONTEXT 정합). **검증기 이빨:** 음성 mock(비제철인데 결실 등)으로 가드 작동 증명.

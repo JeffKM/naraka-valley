@@ -373,8 +373,10 @@ graph TD
   - [ ] **S1-4 — 작물 5아키타입 + 다절기 프레스티지 희소작물 데이터**
     - 완료기준: 단발·재성장·거대·트렐리스·다수확 + 다절기 플래그가 `CropCatalog`에 정의, 헤드리스 검증 통과. · 의존: S1-1.
     - ⏳ **착수 grill 완료(2026-07-01, Q1~Q6 → [greybox-spec §5](./docs/design/homestead-farming-greybox-spec.md)):** 스코프=`crops.gd` 데이터+격리검증만·`field.gd` 불변(ADR 없음) / 하위호환 별칭(`growth_days`=`base_growth_days`, missing −1 sentinel·id·경제·stages 불변) / 기존3작물 밴드 리튠 4·7·12(경제 원형) / 신규 2작물 **황천포도**(트렐리스+재성장+다수확)·**불사과**(다절기 프레스티지) → 6아키타입 커버 / 검증 `playtest/crop_catalog_test.gd`(커버리지·불변식·하위호환·음성mock) / `season` 미도입(Slice 7 이관). **다음=실구현.**
-  - [ ] **S1-5 — 트렐리스 배치 퍼즐 + 혼의 나무 과수(영속·품질=나이)**
+  - [x] **S1-5 — 트렐리스 배치 퍼즐 + 혼의 나무 과수(영속·품질=나이)** *(5a·5b 완료)*
     - 완료기준: 트렐리스 통과불가·인접 수확·혼의 나무 나이별 품질·영속 결실 검증 통과. · 의존: S1-4.
+    - **S1-5a(트렐리스=황천포도 end-to-end) ✅ 완료**(2026-07-01, PR #143, [greybox-spec §6](./docs/design/homestead-farming-greybox-spec.md)) — 트렐리스 충돌+인접수확+REGROW+다수확.
+    - ✅ **S1-5b(혼의 나무 과수) 착수 grill + 실구현 완료(2026-07-02, Q1~Q9 → [greybox-spec §7](./docs/design/homestead-farming-greybox-spec.md) · [ADR-0045](./docs/adr/0045-orchard-season-derivation-surface-slice1.md)):** 신규 `orchard.gd`+`fruit_tree_catalog.gd`(완전 분리, `field.gd` 불변·회귀0) / **절기 유도 표면** `clock.season_index_for_day` 선도입(읽기전용·사멸/날씨/축제=Slice 7 불가침, ADR-0045) / 나무 3필드(`fruit_id·planted_day·fruit_count`)·나이=day−planted_day 파생 / 3×3 center-anchor(예약 9칸≠충돌 밑동1칸 `_orchard_body`)·심기 판정(`_is_tree_blocked` 주입) / 성숙 달력28일·제철 축적 cap3·영속 / 수확=풋프린트 조준(`_try_harvest` 분기) / **품질=나이** 파생함수만(인벤토리=S1-6) / 로스터 1종=**혼백도(魂魄桃)**(피안절)·묘목/과일 아이템 2종·START_KIT 묘목2 / 검증 `playtest/orchard_test.gd` 43단언(제철 순환 왕복·수확 후 재결실·세이브 절기경계 결착 ★). **전체 38개 통과·부팅 클린.** 대형 스프라이트·Y-sort=S1-10 / 과일 정식 판매가(현 raw-sell 경로 0골드)=하류. **S1-5 완료(5a+5b).**
   - [ ] **S1-6 — 품질 4등급 + 비료(품질·성장촉진) + 농사 숙련**
     - 완료기준: 품질 4등급·비료 2종·숙련 곡선·품질 판매가 반영, 검증 통과([ADR-0019] 정합). · 의존: S1-4.
   - [ ] **S1-7 — 목축(혼의 짐승·축사) 매일 돌봄 루프 그레이박스**
