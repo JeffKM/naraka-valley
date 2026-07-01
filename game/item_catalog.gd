@@ -18,8 +18,9 @@ class_name ItemCatalog
 #     씨앗·수확물 엔트리는 CropCatalog에서 *파생*하므로(상수에 박지 않음) 작물이 늘면 자동 따라온다.
 #   - 카테고리(ADR-0020): 도구/씨앗/수확물·산물/재료/소모품. 이 슬라이스(C1)는 앞 셋만 실제로
 #     쓰고, 재료(MATERIAL)·소모품(CONSUMABLE)은 자리만 예약한다(Phase 3 가공·조리).
-#   - quality(품질) 필드는 *예약만* 한다 — Phase 3 §2.1(2축 성장 ADR-0019)에서 수확물에 품질이
-#     붙을 때 슬롯 {id,count}에 quality를 더한다. 지금은 그레이박스라 품질 무차원(전부 동급).
+#   - quality(품질): S1-6(§8.3)에서 슬롯 {id,count}에 quality가 더해졌다(예약 실현, ADR-0020).
+#     수확물·과일만 등급을 실고(Q_NORMAL..Q_IRIDIUM), 판매가는 price_of(id, quality)로 배수를 받는다.
+#     도구·씨앗·묘목·비료는 품질 무차원(항상 Q_NORMAL).
 #   - 아이콘은 뷰(main) 책임이다 — 씨앗·수확물은 CROP_SPRITES(작물 도트) 재사용, 도구는 임시
 #     색박스(tool_color_of). 카탈로그는 텍스처를 들지 않아(데이터/표시 분리) 헤드리스에서도 가볍다.
 
@@ -28,8 +29,33 @@ const CAT_TOOL := "tool"           # 도구(괭이·물뿌리개) — 유니크,
 const CAT_SEED := "seed"           # 씨앗 — 심으면 작물, 스택
 const CAT_SAPLING := "sapling"     # 묘목 — 심으면 혼의 나무(과수), 스택(S1-5b)
 const CAT_HARVEST := "harvest"     # 수확물·산물(작물 + 과일) — 팔거나 서빙·선물, 스택
+const CAT_FERTILIZER := "fertilizer"  # 비료(품질·성장촉진) — 밭 칸에 뿌림, 스택(S1-6)
 const CAT_MATERIAL := "material"   # 재료 — 자리 예약(Phase 3 가공)
 const CAT_CONSUMABLE := "consumable"  # 소모품 — 자리 예약(Phase 3 조리)
+
+# ── 품질 등급(S1-6, §8.2) — 단일 진실원(orchard 나이·field 비료가 같은 enum·배수로 수렴) ──
+# 수확물·과일 슬롯에 실리는 등급. 도구·씨앗·묘목·비료는 항상 Q_NORMAL(품질 무차원).
+const Q_NORMAL := 0    # 일반
+const Q_SILVER := 1    # 은
+const Q_GOLD := 2      # 금
+const Q_IRIDIUM := 3   # 이리듐
+const QUALITY_MULT := [1.0, 1.25, 1.5, 2.0]     # §3.1 판매가 배수(등급 인덱스)
+const QUALITY_NAMES := ["일반", "은", "금", "이리듐"]
+
+# 등급 → 판매가 배수(clamp 0..3 방어). shipping_bin·price_of가 raw 판매가에 곱한다.
+static func quality_mult(q: int) -> float:
+	return QUALITY_MULT[clampi(q, 0, 3)]
+
+# 등급 → 표시명("일반/은/금/이리듐"). HUD 품질 배지·툴팁이 쓴다.
+static func quality_name(q: int) -> String:
+	return QUALITY_NAMES[clampi(q, 0, 3)]
+
+# ── 비료 아이템 id(S1-6, §8.4) — 데이터는 FertilizerCatalog, 여기는 id 진실원(도구 결) ──
+const FERT_BASIC := "fert_basic"       # 기초 비료(품질군 → BASIC)
+const FERT_QUALITY := "fert_quality"   # 품질 비료(품질군 → QUALITY)
+const FERT_DELUXE := "fert_deluxe"     # 디럭스 비료(품질군 → DELUXE)
+const FERT_SPEED := "fert_speed"       # 성장촉진 비료(성장촉진군 −25%)
+const FERT_HYPER := "fert_hyper"       # 하이퍼 비료(성장촉진군 −33%)
 
 # ── 도구 id ─────────────────────────────────────────────────────────────────
 const HOE := "hoe"                 # 괭이 — 미경작 칸을 경작(LMB)
@@ -83,10 +109,14 @@ static func _sapling_fruit(id: String) -> String:
 static func _is_fruit(id: String) -> bool:
 	return FruitTreeCatalog.has(id)
 
+# id가 비료 아이템인가(S1-6). 데이터·판정은 FertilizerCatalog에 위임(_is_fruit 결).
+static func _is_fertilizer(id: String) -> bool:
+	return FertilizerCatalog.has(id)
+
 # ── 조회 ────────────────────────────────────────────────────────────────────
-# 카탈로그에 있는 유효 아이템인가(도구·씨앗·묘목·수확물·과일 어느 하나). 슬롯 add/load 검증에 쓴다.
+# 카탈로그에 있는 유효 아이템인가(도구·씨앗·묘목·수확물·과일·비료 어느 하나). 슬롯 add/load 검증에 쓴다.
 static func has_item(id: String) -> bool:
-	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id)
+	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) or _is_fertilizer(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -99,6 +129,8 @@ static func category_of(id: String) -> String:
 		return CAT_SAPLING
 	if CropCatalog.has_crop(id) or _is_fruit(id):
 		return CAT_HARVEST
+	if _is_fertilizer(id):
+		return CAT_FERTILIZER
 	return ""
 
 # 표시명(HUD·상점·툴팁). 씨앗="<작물명> 씨앗"·묘목="<과일명> 묘목"·수확물=작물명·과일=과일명·도구=도구명. 없으면 "".
@@ -113,27 +145,33 @@ static func name_of(id: String) -> String:
 		return CropCatalog.name_of(id)
 	if _is_fruit(id):
 		return FruitTreeCatalog.name_of(id)
+	if _is_fertilizer(id):
+		return FertilizerCatalog.name_of(id)
 	return ""
 
-# 스택 가능한가. 도구=유니크(false), 씨앗·묘목·수확물·과일=스택(true). 인벤토리 add가 합칠지 가른다.
+# 스택 가능한가. 도구=유니크(false), 씨앗·묘목·수확물·과일·비료=스택(true). 인벤토리 add가 합칠지 가른다.
 static func stackable_of(id: String) -> bool:
 	if TOOLS.has(id):
 		return false
-	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id)
+	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) or _is_fertilizer(id)
 
-# 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 수확물/과일=판매가. 없으면 0.
-# 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다(데이터/정책 분리).
-static func price_of(id: String) -> int:
+# 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 비료=구매가(buy_cost),
+# 수확물/과일=판매가. 없으면 0. 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다.
+# ★ S1-6(§8.7): quality 인자로 수확물·과일 판매가에 등급 배수를 얹는다(floor, 스타듀 정합). 기본 Q0라
+#   무인자 기존 호출은 회귀 0. 품질 무차원 아이템(도구·씨앗·묘목·비료)은 등급을 무시(항상 기준가).
+static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 	if TOOLS.has(id):
 		return 0
 	if _is_seed(id):
 		return CropCatalog.seed_cost(_seed_crop(id))
 	if _is_sapling(id):
 		return FruitTreeCatalog.sapling_cost(_sapling_fruit(id))
+	if _is_fertilizer(id):
+		return FertilizerCatalog.buy_cost(id)
 	if CropCatalog.has_crop(id):
-		return CropCatalog.sell_price(id)
+		return int(CropCatalog.sell_price(id) * quality_mult(quality))
 	if _is_fruit(id):
-		return FruitTreeCatalog.fruit_sell(id)
+		return int(FruitTreeCatalog.fruit_sell(id) * quality_mult(quality))
 	return 0
 
 # 씨앗 아이템 → 작물군 id("" = 씨앗 아님). main이 "이 씨앗을 심으면 무슨 작물"을 알 때 쓴다.
