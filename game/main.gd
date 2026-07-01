@@ -358,15 +358,14 @@ const PROP_LAYOUT_HOME := [
 	[PROP_LANTERN, LANTERN_TILES_HOME],                                                  # ★ADR-0035 스타터 패치 입구 등불 둘(외부)
 	[PROP_POT, [Vector2i(18, 68)], WALL_PROP_LIFT],                                      # 집 우상단 화분(상단 벽 flush)
 	[PROP_POT, [Vector2i(9, 74), Vector2i(18, 74)]],                                     # 집 좌하·우하 화분(하단 벽 — lift 없음)
-	# ── ★ ADR-0035 Phase B 안식 재설계 외부 ─────────────────────────────────────────
-	# 계단(고지↔저지 통과 O) — 절벽면 절개(x10..11). 64×64라 (10,28)에서 2×2칸을 덮는다.
-	[PROP_STAIRS, [Vector2i(10, 28)]],
-	# 하드 게이트 debris(저지측 계단 발치 x9..12 y30..31) — 통과 X SOLID로 길막음(개간 메카닉 Slice 1).
-	[PROP_DEBRIS_EMBER, [Vector2i(9, 30)]],     # 업화석(곡괭이) — (9,30)~(10,31)
-	[PROP_DEBRIS_STUMP, [Vector2i(11, 30)]],    # 석화 고목(도끼) — (11,30)~(12,31)
-	# 절벽 코너·이음매 덮개(통과 O 장식, Y-Sort) — 초록 틈을 넝쿨·덤불로 가림(owner 결정).
-	[PROP_VINE, [Vector2i(2, 29), Vector2i(6, 29), Vector2i(14, 29), Vector2i(18, 29),
-		Vector2i(23, 6), Vector2i(23, 14), Vector2i(23, 22)]],   # 남향 절벽면·동향 모서리 넝쿨
+	# ── ★ [S1-3] phaseB §5 안식 재설계 외부(콤팩트 pseudo-Z) ─────────────────────────
+	# 계단(고지↔저지 통과 O) — 동향 절개 노치(x21..23 y14..15). 64×64라 (21,14)에서 2×2칸을 덮는다.
+	#   ※ 기존 남향 STAIRS 아트를 placeholder로 배치 — 동향 계단 아트는 S1-10 교체(기능>매끄러움).
+	[PROP_STAIRS, [Vector2i(21, 14)]],
+	# 하드 게이트 debris(저지측 계단 발치 x24) — 통과 X SOLID로 노치 출구 막음(개간 온보딩, ADR-0035).
+	[PROP_DEBRIS_EMBER, [Vector2i(24, 14)]],    # 업화석(곡괭이) — 노치 발치 상단
+	[PROP_DEBRIS_STUMP, [Vector2i(24, 16)]],    # 석화 고목(도끼) — 노치 발치 하단
+	# ★ADR-0044 코너 edge-to-edge = seam 없음 → 넝쿨 가림 핵 폐지(넝쿨은 순수 장식으로 강등, 여기선 제거).
 	# ── overgrown debris 밭(저지 — 통과 O 잡초 + 통과 X 업화석·석화 고목 산포, 동선·건물·패치·연못 비껴) ──
 	[PROP_DEBRIS_WEEDS, [Vector2i(50, 22), Vector2i(56, 38), Vector2i(35, 44), Vector2i(60, 52),
 		Vector2i(46, 24), Vector2i(30, 54), Vector2i(58, 20), Vector2i(52, 56), Vector2i(34, 26)]],  # 이승의 미련(잡초·낫)
@@ -574,8 +573,8 @@ const STOREHOUSE_CAM_RECT := Rect2i(22, 78, 14, 13)  # 창고 방 둘레(집 방
 # _maybe_toggle_building이 _buildings 조회로만 진입하므로 축사 문에 닿아도 진입 안 됨('자리만'의
 # 자연 표현, 특수 분기 0). 실내·카메라·세이브 무관. 창고 동선(x32 y10..15·복도 y16) 위가 아니라
 # 아래(y18..21)라 어떤 기존 동선·밭(y≤14)·스폰(x20)과도 안 겹친다(소프트락 0 — flood-fill로 게이트).
-const BARN_EXT_RECT := Rect2i(3, 22, 6, 4)     # ★ADR-0035 Phase B: x3..8, y22..25 (고지 하늘 목장 남서끝 — 절벽=천연 울타리, 비-enterable)
-const BARN_EXT_DOOR := Vector2i(6, 25)         # 축사 문 리세스(아래벽 중앙 x3..8, 시각 일관용 — 진입 트리거 아님, 카탈로그 미등록)
+const BARN_EXT_RECT := Rect2i(3, 14, 4, 3)     # ★[S1-3] phaseB §5.3: x3..6, y14..16 (남단 고지 하늘 목장 — 절벽=천연 울타리, 비-enterable)
+const BARN_EXT_DOOR := Vector2i(5, 16)         # 축사 문 리세스(아래벽 중앙 x3..6, 남향 → 방목지로 열림, 시각 일관용 — 진입 트리거 아님, 카탈로그 미등록)
 # ── ★ M3.1 삼도천(강 낚시 무대 + 혼백관) ───────────────────────────────────────
 # 셋째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 낚시 메카닉은 만들지 않는다(Phase 3) — 강(WATER)
 # 무대 + 강 낚시터(라벨만) + 혼백관(enterable 빈 방)까지 그레이박스로 깐다.
@@ -2135,25 +2134,26 @@ func _build_facade(rect: Rect2i, door: Vector2i) -> void:
 	_fill_rect(rect, WALL)
 	_set_tile(door.x, door.y, PATH)
 
-# ★ ADR-0035 Phase B — 고지(하늘 목장)를 두르는 절벽 단면. 높이=2D평면+절벽 충돌+계단(통과)이라 z축 아님.
-# 고지 = NW 직사각형(x0..22, y0..28, 걷기 가능 풀). 동쪽 가장자리(x23)·남쪽 가장자리(y29)를 절벽 타일로
-# 둘러 통과 불가로 만들고(충돌은 _build_tileset이 CLIFF_* 타일에 단다), 계단 틈(x10..11)만 GROUND로 남긴다.
-# 북·서는 맵 경계 충돌(_build_border)이 막는다. 계단·하드 게이트 debris·넝쿨/덤불 덮개는 PROP(_draw_props).
-const _STAIRS_GAP_X := [10, 11]   # 절벽면을 절개한 계단 통로(2폭) — 이 칸만 GROUND로 비워 통과
+# ★ [S1-3 / ADR-0044 §1 · phaseB-layout §5] 콤팩트 pseudo-Z 계단식 고지(하늘 목장) 재배치.
+# 서쪽 고지 = 계단식 walkable 풀(북단 x0..16 y0..11 / 남단 x0..20 y12..25 — 저지 밭 극대화로 콤팩트).
+# 동·남 가장자리에 2행 다단 절벽 밴드(H=2)를 S1-2 원시어휘로 조립하고, 북·서는 맵 경계(_build_border)가 막는다.
+# 옛 1타일 절벽(x23열·y29행·CLIFF_CORNER 타일)은 폐기 — CORNER 상수는 잔존하나 미사용(별도 cleanup 커밋서 제거).
+# 계단·하드 게이트 debris·넝쿨 장식은 PROP(_draw_props). z축 아님(ADR-0013 2D 평면·세이브·카메라 불변).
 func _build_cliffs() -> void:
-	# 남향 절벽면(E-W) — y29 행, x0..23. 양 끝 코너, 계단 틈은 비운다(GROUND).
-	for x in range(0, 24):
-		if x in _STAIRS_GAP_X:
-			continue
-		var id := CLIFF_FACE
-		if x == 0:
-			id = CLIFF_CORNER_L
-		elif x == 23:
-			id = CLIFF_CORNER_R
-		_set_tile(x, 29, id)
-	# 동향 모서리(x23 열, y0..28) — 측면 절벽(깔끔한 face 아님 → 넝쿨·덤불 덮개로 가림).
-	for y in range(0, 29):
-		_set_tile(23, y, CLIFF_FACE)
+	# ① 북단 동향 밴드(x17 Lip / x18..19 Face) — y0..9(고지 x≤16, 저지 x≥20).
+	_lay_east_band(17, 0, 9)
+	# ② 아우터 코너 ①(x17→x21 청키 스텝) — 전환행 y10..12를 FACE로 edge-to-edge 채워 동경계를 동쪽으로
+	#    넓힌다(고지 x16→x20). LIP 캡 없음(위쪽이 저지라 캡하면 leak) — 순수 솔리드 스텝(직선 타파·§5.1 코너 ①).
+	for y in range(10, 13):
+		for x in range(17, 24):
+			_set_tile(x, y, CLIFF_FACE)
+	# ③ 남단 동향 밴드(x21 Lip / x22..23 Face) — y13..25(고지 x≤20, 저지 x≥24).
+	_lay_east_band(21, 13, 25)
+	# ④ 남단 남향 밴드(y26 Lip / y27 Face / y28 Face_Base) — x0..23(동향 밴드 밑 SE 코너까지 edge-to-edge).
+	_lay_south_band(0, 23, 26)
+	# ⑤ 동향 계단 노치(x21..23 y14..15, 밴드 3열 종단) — 고지(x20)↔저지(x24) 유일 연결. 저지측 발치(x24)는
+	#    debris 하드 게이트(PROP·SOLID)로 개간 전 물리 차단(온보딩 — CONTEXT "평평≠막힘", 고지만 도구 게이트).
+	_carve_stair_notch(Rect2i(21, 14, 3, 2))
 
 # ── ★ [S1-2 / ADR-0044 §1] pseudo-Z 다단 절벽 원시어휘 (재사용 밴드·코너·계단 헬퍼) ────────────────
 # 이 4종이 §5 좌표 실배치(S1-3의 _build_cliffs 재작성)와 cliff_test 격리 검증에 쓰이는 "문법"이다.

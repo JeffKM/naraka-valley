@@ -27,7 +27,7 @@ func _init() -> void:
 	await _shot(main, Vector2i(44, 6), "res://tools/home_house.png")     # ★ADR-0035 본가(북중앙 저지)
 	await _shot(main, Vector2i(42, 14), "res://tools/home_farm.png")     # 스타터 패치(미호·울타리·등불)
 	await _shot(main, Vector2i(30, 6), "res://tools/home_storehouse.png")  # 창고(본가 왼쪽)
-	await _shot(main, Vector2i(10, 24), "res://tools/home_barn.png")     # 축사·계단(고지 하늘 목장)
+	await _shot(main, Vector2i(14, 15), "res://tools/home_barn.png")     # ★[S1-3] 축사·동향 계단 노치·pseudo-Z 절벽(남단 고지 하늘 목장)
 	print("✅ home_dump 3장 저장 완료")
 	quit()
 
