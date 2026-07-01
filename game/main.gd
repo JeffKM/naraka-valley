@@ -577,6 +577,10 @@ const STOREHOUSE_CAM_RECT := Rect2i(22, 78, 14, 13)  # 창고 방 둘레(집 방
 # 아래(y18..21)라 어떤 기존 동선·밭(y≤14)·스폰(x20)과도 안 겹친다(소프트락 0 — flood-fill로 게이트).
 const BARN_EXT_RECT := Rect2i(3, 14, 4, 3)     # ★[S1-3] phaseB §5.3: x3..6, y14..16 (남단 고지 하늘 목장 — 절벽=천연 울타리, 비-enterable)
 const BARN_EXT_DOOR := Vector2i(5, 16)         # 축사 문 리세스(아래벽 중앙 x3..6, 남향 → 방목지로 열림, 시각 일관용 — 진입 트리거 아님, 카탈로그 미등록)
+# ★ [S1-7] 하늘 목장 방목지 — 축사 남쪽 고지 평면(phaseB §5.4 단일 방목 Zone·절벽=천연 펜). 스타터 짐승
+#   자동 배치 스캔 범위(BARN 아래 y17~, 남향 절벽 y26 위). 짐승은 이 안의 걷기 가능 타일에 놓인다.
+const PASTURE_SCAN_RECT := Rect2i(3, 18, 10, 6)   # x3..12, y18..23 (축사 문 아래 방목 평면 — 좌상 구석·맵경계 회피)
+const STARTER_ANIMALS := [AnimalCatalog.HONBAEK_DAK, AnimalCatalog.HONBAEK_SO]   # 신규 게임 스타터 2종(coop+barn)
 # ── ★ M3.1 삼도천(강 낚시 무대 + 혼백관) ───────────────────────────────────────
 # 셋째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 낚시 메카닉은 만들지 않는다(Phase 3) — 강(WATER)
 # 무대 + 강 낚시터(라벨만) + 혼백관(enterable 빈 방)까지 그레이박스로 깐다.
@@ -831,6 +835,10 @@ var _orchard_body: StaticBody2D = null
 # ★ [S1-5b] 혼의 나무 과수 상태(심긴 나무·나이·결실). FarmField와 완전 분리된 자체 노드(코드 생성 —
 #   에디터 프로퍼티가 없어 .tscn에 안 넣고 _trellis_body처럼 .new()로 붙인다). save.gd·main이 조율.
 var orchard: Orchard = null
+# ★ [S1-7] 혼의 짐승 목축 상태(배치 짐승·우정·기분·산물). FarmField/Orchard와 완전 분리된 자체 노드
+#   (코드 생성 — .new()로 붙인다). 짐승은 비-SOLID(통과 가능)라 밑동 같은 충돌체가 없다(Orchard보다 단순).
+#   하늘 목장(남단 고지) 전용. save.gd·main이 배치·돌봄·수집·세이브를 조율(디커플링).
+var ranch: Ranch = null
 @onready var readout: Label = $CanvasLayer/Readout
 @onready var clock: GameClock = $Clock                     # T1.5 시계
 @onready var clock_label: Label = $CanvasLayer/ClockLabel
@@ -1027,6 +1035,10 @@ func _ready() -> void:
 	orchard.name = "Orchard"
 	add_child(orchard)
 	orchard.changed.connect(_on_orchard_changed)   # 심기·결실·수확·복원 시 밑동 충돌·화면 갱신
+	ranch = Ranch.new()                  # ★ [S1-7] 목축 상태 노드(코드 생성 — 자체 좌표계, 짐승은 비-SOLID라 충돌체 없음)
+	ranch.name = "Ranch"
+	add_child(ranch)
+	ranch.changed.connect(_on_ranch_changed)       # 배치·돌봄·산물·수집·복원 시 화면·HUD 갱신
 	_ensure_prop_layouts()   # ★ ADR-0025 ② PROP 좌표 데이터 외부화 로드(_build_grid 충돌 재구성 전)
 	_build_grid()
 	_paint_grid()
@@ -1088,6 +1100,10 @@ func _ready() -> void:
 	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다.
 	if saver.has_save():
 		_load_game()
+	else:
+		# ★ [S1-7] 신규 게임: 하늘 목장에 스타터 짐승을 배치한다(START_KIT 결 — 세이브가 없을 때만,
+		# _grid는 부팅 HOME 그대로라 방목지 좌표계가 유효). 세이브에 짐승이 있으면 load_save가 복원한다.
+		_ensure_starter_animals()
 	# T5.6 복원 직후 NPC 상주/출근 상태를 현재(복원된) 진행·시각에 맞춘다. 통보를 이미
 	# 마친 세이브면 옥자가 카페에 보이고, 복원 시각이 영업창(15시+)이면 미호가 카페로 출근해
 	# 있다("껐다 켜도 그대로" — 직원 배치까지 재개에 맞는다). 둘 다 세이브 무상태(시각·단계
@@ -1698,6 +1714,11 @@ func _rebuild_orchard_collision() -> void:
 # (FarmField.tile_changed → _on_tile_changed와 같은 결의 디커플링 훅).
 func _on_orchard_changed() -> void:
 	_rebuild_orchard_collision()
+	queue_redraw()
+
+# ★ [S1-7] ranch 상태가 바뀐 프레임(배치·돌봄·산물·수집·세이브 복원). 짐승은 비-SOLID라 충돌 재구성은
+# 없고 화면(placeholder 드로우)·HUD만 갱신한다(_on_orchard_changed의 충돌 없는 짝).
+func _on_ranch_changed() -> void:
 	queue_redraw()
 
 # ★ ADR-0025 ② — PROP 좌표 외부화 로드. 부팅 시 한 번(_ready, _build_grid 전). res://layout.json이
@@ -2937,6 +2958,7 @@ func _on_day_advanced(day: int) -> void:
 	var h := affinity.hearts()
 	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h))
 	orchard.advance_day(day)   # ★ [S1-5b] 성숙+제철 나무는 결실 +1(비제철 정지·영속). day는 무상태 절기 판정(ADR-0045)
+	ranch.advance_day()        # ★ [S1-7] 짐승 데일리 정산 — 케어 플래그로 우정·기분 갱신·산물 생성·플래그 리셋(§4.1)
 	energy.refill()
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
@@ -3203,6 +3225,7 @@ func _save_game() -> void:
 		"energy": energy.to_save(),
 		"farm": farm.to_save(),
 		"orchard": orchard.to_save(),   # ★ [S1-5b] 심긴 혼의 나무(앵커·나이·결실). 영속·나이가 planted_day 파생이라 최소
+		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
 		"shipping_bin": ship_bin.to_save(),   # ★ C2 출하 대기(롤백·익일 정산 보존)
@@ -3240,6 +3263,8 @@ func _load_game() -> void:
 		farm.load_save(data["farm"])
 	if data.has("orchard"):   # ★ [S1-5b] — 키 없는 구버전 세이브는 나무 0으로 시작(changed가 밑동 충돌 재구성)
 		orchard.load_save(data["orchard"])
+	if data.has("ranch"):     # ★ [S1-7] — 키 없는 구버전 세이브는 짐승 0으로 시작(changed가 화면·HUD 갱신)
+		ranch.load_save(data["ranch"])
 	if data.has("wallet"):
 		wallet.load_save(data["wallet"])
 	if data.has("inventory"):
@@ -3604,6 +3629,20 @@ func _process(delta: float) -> void:
 	if facing_seat >= 0 and night_bar.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
 		_try_night_serve(facing_seat)
 		return
+	# ★ [S1-7] 축사 문 앞 RMB = 축사 돌봄(방목·격리·청결 일괄, §4.1). 하늘 목장 전용 — SOIL 게이트 밖.
+	if not _sleeping and _region == RegionCatalog.HOME and _target == BARN_EXT_DOOR \
+			and Input.is_action_just_pressed("action"):
+		if ranch.tend_all():
+			audio.sfx("ui")
+			_notice("축사 돌봄 — 방목·격리·청결 완료")
+		return
+	# ★ [S1-7] 짐승 상호작용 — 짐승은 하늘 목장 풀(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치한다.
+	#   LMB=건초 급여(_use_tool 내 hay 분기)·RMB=쓰다듬/산물 수집(_try_harvest 내 짐승 분기). 타일 겹침 없음(방목지).
+	var on_animal := not _sleeping and _region == RegionCatalog.HOME and ranch.has_animal(_target)
+	if on_animal and Input.is_action_just_pressed("use_tool"):
+		_use_tool()
+	if on_animal and Input.is_action_just_pressed("action"):
+		_try_harvest()
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
@@ -3702,6 +3741,14 @@ func _process(delta: float) -> void:
 		# T6.4 밤 바 손님을 바라볼 때: 우클릭으로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 응대 (+%d골드)" % NightBar.SERVE_PRICE
+	elif _region == RegionCatalog.HOME and _target == BARN_EXT_DOOR:
+		# ★ [S1-7] 축사 문 앞: 우클릭으로 방목·격리·청결 일괄(축사 돌봄 리추얼).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[우클릭] 축사 돌봄 (방목·격리·청결)"
+	elif _region == RegionCatalog.HOME and ranch.has_animal(_target):
+		# ★ [S1-7] 짐승을 바라볼 때: 산물 있으면 수집, 없으면 쓰다듬 / 든 게 건초면 급여 안내.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _animal_prompt(_target)
 	else:
 		# 밭 칸을 바라볼 때만 안내. 든 도구·칸 상태로 동사를 파생한다(LMB 도구질 / RMB 맨손 수확).
 		var prompt := _farm_prompt()
@@ -3751,10 +3798,15 @@ func _use_tool() -> void:
 		if inventory.has_sapling(fruit) and orchard.plant(_target, fruit, clock.day, _is_tree_blocked):
 			inventory.take_sapling(fruit)
 			verb = "심기"
+	elif item == ItemCatalog.HAY and _region == RegionCatalog.HOME:
+		# ★ [S1-7] 든 건초로 조준 칸의 짐승을 급여한다(§4.1 — 하늘 목장 전용, 하루 1회). 급여 시 건초 1개 소모.
+		if ranch.has_animal(_target) and ranch.feed(_target):
+			inventory.remove_item(ItemCatalog.HAY, 1)
+			verb = "급여"
 	if verb == "":
 		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
 	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기·비료는 물/뿌리는 소리.
-	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water"}.get(verb, ""))
+	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water", "급여": "water"}.get(verb, ""))
 	_advance_onboarding(verb)                 # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
 	energy.spend(cost)                        # 한 동작당 혼력 소모(숙련 감산)
 	queue_redraw()                            # 새 상태가 바로 보이도록
@@ -3765,6 +3817,23 @@ func _try_harvest() -> void:
 	var cost := _farming_energy_cost()        # ★ S1-6 숙련 감산 반영 비용(과수·밭 공통)
 	if not energy.can_act(cost):
 		return
+	# ★ [S1-7] 혼의 짐승 RMB 우선(§4.1) — 조준 칸에 짐승이 있으면: 대기 산물이 있으면 수집(인벤토리 적재),
+	# 없으면 쓰다듬(우정·기분 데일리 케어). 밭·과수보다 먼저 본다(짐승 타일은 방목지라 겹침 없음). 안식 농원 전용.
+	if _region == RegionCatalog.HOME and ranch.has_animal(_target):
+		if ranch.has_product(_target):
+			var got := ranch.collect(_target)   # {product_id, quality, is_large}
+			if not got.is_empty():
+				# 대형 산물은 "<산물>_large" 아이템(판매가 ×2)으로, 아니면 기준 산물로 적재(§8.6). 품질 등급 실림.
+				var pid: String = ItemCatalog.large_product_id(got["product_id"]) if bool(got["is_large"]) else str(got["product_id"])
+				inventory.add_item(pid, 1, int(got["quality"]))
+				audio.sfx("harvest")
+				energy.spend(cost)
+				queue_redraw()
+		elif ranch.pet(_target):                # 산물 없음 → 쓰다듬(하루 1회 실효)
+			audio.sfx("ui")
+			energy.spend(cost)
+			queue_redraw()
+		return   # 짐승 칸이면 밭·과수로 흘려보내지 않는다(이미 처리했거나 오늘 케어 완료)
 	# ★ [S1-5b] 혼의 나무 과수 수확 우선(greybox-spec §7.6) — 조준 칸이 성숙+결실 나무 풋프린트에 들면
 	# 매달린 과일을 전량 거둔다. 작물 밭(SOIL)이 아니라 과수라 farm 경로보다 먼저 본다. 안식 농원 전용.
 	if _region == RegionCatalog.HOME:
@@ -3825,6 +3894,22 @@ func _hotbar_summary() -> String:
 		ItemCatalog.CAT_HARVEST:
 			line += "  (보유 %d)" % inventory.count_of(sid)
 	return line
+
+# ★ [S1-7] 짐승 프롬프트: 조준한 짐승에 대해 산물 수집/쓰다듬(RMB)·건초 급여(LMB, 든 게 건초일 때) 안내.
+# 우정 하트를 곁들여 "지금 이 짐승에 뭘 할 수 있나"를 한눈에 보인다. 오늘 케어가 끝났으면 완료 안내.
+func _animal_prompt(t: Vector2i) -> String:
+	var nm := AnimalCatalog.name_of(ranch.species_at(t))
+	var hearts := ranch.hearts_of(t)
+	var parts: Array = []
+	if ranch.has_product(t):
+		parts.append("[우클릭] %s 산물 수집" % nm)
+	elif not ranch.is_petted(t):
+		parts.append("[우클릭] %s 쓰다듬기" % nm)
+	if inventory.selected_id() == ItemCatalog.HAY and not ranch.is_fed(t):
+		parts.append("[좌클릭] 건초 급여")
+	if parts.is_empty():
+		return "%s ♥%d — 오늘 돌봄 완료" % [nm, hearts]
+	return "%s   (♥%d)" % ["  ".join(parts), hearts]
 
 # 밭 칸 프롬프트: 든 도구·칸 상태에서 다음에 할 수 있는 동작을 파생한다("" = 안내 없음).
 # 맨손 수확(RMB)은 도구와 무관하게 다 자란 칸이면 항상 안내한다. 그 외엔 든 도구가 칸 상태에
@@ -4542,6 +4627,30 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 		return true
 	return farm.is_crop_solid(t)
 
+# ★ [S1-7] 신규 게임 스타터 짐승 배치. ranch가 비었을 때만(멱등) 하늘 목장 방목지(PASTURE_SCAN_RECT)를
+# 훑어 걷기 가능 타일에 STARTER_ANIMALS를 2칸 이상 간격으로 놓는다(붙어 안 서게 — 육안·조준 구분).
+# 좌표계는 HOME _grid 기준이라 부팅 직후(신규 게임, 구역=HOME)에만 부른다(세이브 복원은 load_save가 담당).
+func _ensure_starter_animals() -> void:
+	if ranch == null or ranch.count() > 0:
+		return
+	var placed := 0
+	for y in range(PASTURE_SCAN_RECT.position.y, PASTURE_SCAN_RECT.end.y):
+		for x in range(PASTURE_SCAN_RECT.position.x, PASTURE_SCAN_RECT.end.x):
+			if placed >= STARTER_ANIMALS.size():
+				return
+			var t := Vector2i(x, y)
+			if _is_tree_blocked(t) or ranch.has_animal(t):
+				continue
+			var too_close := false
+			for at in ranch.animal_tiles():
+				if maxi(absi(at.x - x), absi(at.y - y)) < 2:
+					too_close = true
+					break
+			if too_close:
+				continue
+			ranch.add_animal(t, STARTER_ANIMALS[placed])
+			placed += 1
+
 # 밭 칸 상태가 바뀌면 오버레이 타일을 갱신한다(FarmField.tile_changed로 호출).
 func _on_tile_changed(t: Vector2i) -> void:
 	var idx := _overlay_index(t)
@@ -4586,6 +4695,7 @@ func _draw() -> void:
 			_draw_props_for(_prop_layouts.get("HOME", []), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터: 집 가구·길가 등불·화분 + T3 농장 장식
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 			_draw_orchard()          # ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(대형 스프라이트=S1-10)
+			_draw_ranch()            # ★ [S1-7] 혼의 짐승 그레이박스 표식(스프라이트·애니 = S1-11)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
@@ -4647,6 +4757,26 @@ func _draw_orchard() -> void:
 		for i in n:
 			var fp := canopy_px + Vector2(TILE * (0.6 + i * 0.8), TILE * 0.6)
 			draw_circle(fp, TILE * 0.22, Color(0.85, 0.28, 0.32))
+
+# ★ [S1-7] 혼의 짐승 그레이박스 표식(§8.7 — 스프라이트·워크 애니 = S1-11 이관). 종별 색 몸통 박스 +
+# 머리 점(방향감) + 대기 산물(머리 위 밝은 점) + 우정 하트 바(하단 5칸). 순수 시각 placeholder —
+# 로직·상태는 ranch가 든다(짐승은 비-SOLID라 충돌체 없음). 하늘 목장(HOME) 방목지에서만 그려진다.
+func _draw_ranch() -> void:
+	if ranch == null:
+		return
+	for tile in ranch.animal_tiles():
+		var px := Vector2(tile.x * TILE, tile.y * TILE)
+		var sp := ranch.species_at(tile)
+		var body := Color(0.92, 0.86, 0.6) if AnimalCatalog.kind_of(sp) == "coop" else Color(0.55, 0.38, 0.28)
+		draw_rect(Rect2(px + Vector2(TILE * 0.15, TILE * 0.2), Vector2(TILE * 0.7, TILE * 0.6)), body)
+		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.28), TILE * 0.14, body.darkened(0.3))
+		if ranch.has_product(tile):   # 대기 산물 = 머리 위 밝은 점(수집 신호)
+			draw_circle(px + Vector2(TILE * 0.5, TILE * 0.05), TILE * 0.12, Color(1.0, 0.95, 0.5))
+		var hearts := ranch.hearts_of(tile)   # 우정 하트 바(하단 5칸)
+		for i in 5:
+			var hp := px + Vector2(TILE * (0.1 + i * 0.16), TILE * 0.88)
+			draw_rect(Rect2(hp, Vector2(TILE * 0.12, TILE * 0.08)),
+				Color(0.85, 0.3, 0.4) if i < hearts else Color(0.3, 0.3, 0.3, 0.6))
 
 # 외부 건물 외관을 외관 박스 좌상단에 1:1로 그린다(이미지 크기 = 박스 크기). 통과 불가 WALL
 # 박스를 도트 외관이 덮어 "닫힌 건물"이 되고, 문 칸(외관 하단 중앙)에 닿으면 실내로 fade 전환한다.
