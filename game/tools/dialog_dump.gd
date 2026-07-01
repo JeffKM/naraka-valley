@@ -9,15 +9,19 @@ func _init() -> void:
 		await process_frame
 	get_root().get_texture().get_image().save_png("res://tools/dialog_dump.png")
 	print("✅ dialog_dump.png")
-	# 캐릭터별 컷도 한 장씩(옥자·멜)
+	# 캐릭터별 컷도 한 장씩(옥자·바나·멜) — CAST 순서: 0 미호(기본 dump.png)·1 옥자·2 바나·3 멜
 	if s.has_method("_show"):
 		s._show(1)
 		for _i in 4:
 			await process_frame
 		get_root().get_texture().get_image().save_png("res://tools/dialog_dump_okja.png")
+		s._show(2)
+		for _i in 4:
+			await process_frame
+		get_root().get_texture().get_image().save_png("res://tools/dialog_dump_bana.png")
 		s._show(3)
 		for _i in 4:
 			await process_frame
 		get_root().get_texture().get_image().save_png("res://tools/dialog_dump_mel.png")
-		print("✅ okja/mel 컷")
+		print("✅ okja/bana/mel 컷")
 	quit()
