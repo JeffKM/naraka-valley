@@ -123,17 +123,44 @@ func water(t: Vector2i) -> bool:
 	tile_changed.emit(t)
 	return true
 
-# 수확: 다 자란 칸을 거두고 빈 경작 칸으로 되돌린다. 거둔 작물 id를 반환("" = 실패).
-# 골드 지급(T3.1 경제)은 이 반환값(작물 id)으로 호출 측이 처리한다(범위 분리).
+# 수확: 다 자란 칸을 거둔다. 거둔 작물 id를 반환("" = 실패). 다수확 count(황천포도 2~3)는
+# 호출 측(main._try_harvest)이 CropCatalog.yield_range로 굴린다(범위 분리, greybox-spec §6.5).
+# ★ S1-5a — 성장 모드 2분기(§6.4):
+#   · SINGLE: 빈 경작 칸으로 되돌린다(기존 동작).
+#   · REGROW: 넝쿨을 보존하고 grown_days를 쿨다운만큼 되감아 재결실을 준비한다(황천포도·불사과).
+#     되자람은 물-구동 advance_day를 그대로 재사용한다(특수 성장 분기 0).
 func harvest(t: Vector2i) -> String:
 	if not is_mature(t):
 		return ""
 	var crop_id: String = _tiles[t]["crop"]
-	_tiles[t]["planted"] = false
-	_tiles[t]["crop"] = ""
-	_tiles[t]["grown_days"] = 0
+	if CropCatalog.growth_mode(crop_id) == "REGROW":
+		# 넝쿨 보존. grown_days를 base−cd로 되감아, cd일 더 물주면 다시 성숙한다.
+		# (황천포도 base7·cd3 → 4 → +3일 = 7 재성숙.) planted/crop/watered는 그대로 둔다.
+		var base := CropCatalog.growth_days(crop_id)       # = base_growth_days 별칭
+		var cd := CropCatalog.regrow_cooldown(crop_id)
+		_tiles[t]["grown_days"] = maxi(0, base - cd)
+	else:
+		_tiles[t]["planted"] = false
+		_tiles[t]["crop"] = ""
+		_tiles[t]["grown_days"] = 0
 	tile_changed.emit(t)
 	return crop_id
+
+# ── S1-5a 트렐리스 통과 불가(greybox-spec §6.2) ─────────────────────────────
+# 트렐리스 넝쿨이 칸을 물리적으로 점유하는가 = 통과 불가 단일 술어(진실원).
+# 심긴 트렐리스 작물이면 true. REGROW 쿨다운 중에도 넝쿨은 그대로라(planted 유지) 계속 solid다
+# (열매만 없을 뿐 격자는 남는다). main이 이 술어로 _trellis_body 충돌을 세운다(로직/물리 분리).
+func is_crop_solid(t: Vector2i) -> bool:
+	return is_planted(t) and CropCatalog.is_trellis(_tiles[t]["crop"])
+
+# 통과 불가(트렐리스) 넝쿨이 심긴 칸 전체 목록. main의 _rebuild_trellis_collision이 순회한다
+# (tilled_tiles/planted_tiles와 같은 결의 순수 상태 질의 — 상태 노드는 화면을 모르지만 질의로 노출).
+func solid_crop_tiles() -> Array:
+	var out: Array = []
+	for t in _tiles.keys():
+		if is_crop_solid(t):
+			out.append(t)
+	return out
 
 # ── 하루 경과(취침 트리거) ───────────────────────────────────────────────────
 # GameClock.day_advanced에 연결된다. 스타듀 규칙 + T3.4 여우불 도움:
