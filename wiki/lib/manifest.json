@@ -1,0 +1,1330 @@
+{
+  "generatedNote": "자동 생성(build-manifest.mjs) — 수정 금지. 데일리: npm run manifest",
+  "total": 130,
+  "byCategory": {
+    "buildings": 7,
+    "characters": 5,
+    "portraits": 28,
+    "crops": 9,
+    "tiles": 32,
+    "props": 40,
+    "ui": 9
+  },
+  "byTool": {
+    "확인 필요": 10,
+    "Gemini": 34,
+    "PixelLab": 74,
+    "절차생성": 12
+  },
+  "categories": [
+    "buildings",
+    "characters",
+    "portraits",
+    "crops",
+    "tiles",
+    "props",
+    "ui"
+  ],
+  "items": [
+    {
+      "category": "buildings",
+      "name": "bana_house_ext",
+      "file": "assets/buildings/bana_house_ext.png",
+      "w": 128,
+      "h": 128,
+      "tool": "확인 필요",
+      "method": "나루 마을 건물(카페·주민 집) — 생성 도구 확인 필요",
+      "conf": "low"
+    },
+    {
+      "category": "buildings",
+      "name": "barn_ext",
+      "file": "assets/buildings/barn_ext.png",
+      "w": 128,
+      "h": 98,
+      "tool": "Gemini",
+      "method": "owner 제미나이 정면 facade → gemini_facade_to_chunky(다운스케일→양자화·청키), 2칸 문(ADR-0046), PR #156",
+      "conf": "high"
+    },
+    {
+      "category": "buildings",
+      "name": "cafe_ext",
+      "file": "assets/buildings/cafe_ext.png",
+      "w": 256,
+      "h": 224,
+      "tool": "확인 필요",
+      "method": "나루 마을 건물(카페·주민 집) — 생성 도구 확인 필요",
+      "conf": "low"
+    },
+    {
+      "category": "buildings",
+      "name": "house_ext",
+      "file": "assets/buildings/house_ext.png",
+      "w": 320,
+      "h": 292,
+      "tool": "Gemini",
+      "method": "owner 제미나이 정면 facade → gemini_facade_to_chunky(다운스케일→양자화·청키), 2칸 문(ADR-0046), PR #156",
+      "conf": "high"
+    },
+    {
+      "category": "buildings",
+      "name": "mel_house_ext",
+      "file": "assets/buildings/mel_house_ext.png",
+      "w": 160,
+      "h": 160,
+      "tool": "확인 필요",
+      "method": "나루 마을 건물(카페·주민 집) — 생성 도구 확인 필요",
+      "conf": "low"
+    },
+    {
+      "category": "buildings",
+      "name": "miho_house_ext",
+      "file": "assets/buildings/miho_house_ext.png",
+      "w": 128,
+      "h": 128,
+      "tool": "확인 필요",
+      "method": "나루 마을 건물(카페·주민 집) — 생성 도구 확인 필요",
+      "conf": "low"
+    },
+    {
+      "category": "buildings",
+      "name": "storehouse_ext",
+      "file": "assets/buildings/storehouse_ext.png",
+      "w": 192,
+      "h": 196,
+      "tool": "Gemini",
+      "method": "owner 제미나이 정면 facade → gemini_facade_to_chunky(다운스케일→양자화·청키), 2칸 문(ADR-0046), PR #156",
+      "conf": "high"
+    },
+    {
+      "category": "characters",
+      "name": "bana",
+      "file": "assets/characters/bana.png",
+      "w": 480,
+      "h": 320,
+      "tool": "PixelLab",
+      "method": "PixelLab create_character 4방향 walk 시트 → 청키화",
+      "conf": "high"
+    },
+    {
+      "category": "characters",
+      "name": "mel",
+      "file": "assets/characters/mel.png",
+      "w": 480,
+      "h": 320,
+      "tool": "PixelLab",
+      "method": "PixelLab create_character 4방향 walk 시트 → 청키화",
+      "conf": "high"
+    },
+    {
+      "category": "characters",
+      "name": "miho_walk",
+      "file": "assets/characters/miho_walk.png",
+      "w": 480,
+      "h": 320,
+      "tool": "PixelLab",
+      "method": "PixelLab create_character 4방향 walk 시트 → 청키화",
+      "conf": "high"
+    },
+    {
+      "category": "characters",
+      "name": "okja",
+      "file": "assets/characters/okja.png",
+      "w": 480,
+      "h": 320,
+      "tool": "PixelLab",
+      "method": "PixelLab create_character 4방향 walk 시트 → 청키화",
+      "conf": "high"
+    },
+    {
+      "category": "characters",
+      "name": "player_walk",
+      "file": "assets/characters/player_walk.png",
+      "w": 480,
+      "h": 320,
+      "tool": "PixelLab",
+      "method": "PixelLab create_character 4방향 walk 시트 → 청키화",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "bana",
+      "file": "assets/portraits/bana.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "bana_full",
+      "file": "assets/portraits/bana_full.png",
+      "w": 237,
+      "h": 512,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "bana_sad",
+      "file": "assets/portraits/bana_sad.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "bana_shy",
+      "file": "assets/portraits/bana_shy.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "bana_smile",
+      "file": "assets/portraits/bana_smile.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "bana_surprised",
+      "file": "assets/portraits/bana_surprised.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "bana_talk",
+      "file": "assets/portraits/bana_talk.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "mel",
+      "file": "assets/portraits/mel.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "mel_full",
+      "file": "assets/portraits/mel_full.png",
+      "w": 226,
+      "h": 512,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "mel_sad",
+      "file": "assets/portraits/mel_sad.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "mel_shy",
+      "file": "assets/portraits/mel_shy.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "mel_smile",
+      "file": "assets/portraits/mel_smile.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "mel_surprised",
+      "file": "assets/portraits/mel_surprised.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "mel_talk",
+      "file": "assets/portraits/mel_talk.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "miho",
+      "file": "assets/portraits/miho.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "miho_full",
+      "file": "assets/portraits/miho_full.png",
+      "w": 246,
+      "h": 512,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "miho_sad",
+      "file": "assets/portraits/miho_sad.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "miho_shy",
+      "file": "assets/portraits/miho_shy.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "miho_smile",
+      "file": "assets/portraits/miho_smile.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "miho_surprised",
+      "file": "assets/portraits/miho_surprised.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "miho_talk",
+      "file": "assets/portraits/miho_talk.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "okja",
+      "file": "assets/portraits/okja.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "okja_full",
+      "file": "assets/portraits/okja_full.png",
+      "w": 228,
+      "h": 512,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "okja_sad",
+      "file": "assets/portraits/okja_sad.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "okja_shy",
+      "file": "assets/portraits/okja_shy.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "okja_smile",
+      "file": "assets/portraits/okja_smile.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "okja_surprised",
+      "file": "assets/portraits/okja_surprised.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "portraits",
+      "name": "okja_talk",
+      "file": "assets/portraits/okja_talk.png",
+      "w": 320,
+      "h": 320,
+      "tool": "Gemini",
+      "method": "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)",
+      "conf": "high"
+    },
+    {
+      "category": "crops",
+      "name": "honryeongcho_mature",
+      "file": "assets/crops/honryeongcho_mature.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "honryeongcho_seed",
+      "file": "assets/crops/honryeongcho_seed.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "honryeongcho_sprout",
+      "file": "assets/crops/honryeongcho_sprout.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "pianhwa_mature",
+      "file": "assets/crops/pianhwa_mature.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "pianhwa_seed",
+      "file": "assets/crops/pianhwa_seed.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "pianhwa_sprout",
+      "file": "assets/crops/pianhwa_sprout.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "yeonghon_hobak_mature",
+      "file": "assets/crops/yeonghon_hobak_mature.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "yeonghon_hobak_seed",
+      "file": "assets/crops/yeonghon_hobak_seed.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "yeonghon_hobak_sprout",
+      "file": "assets/crops/yeonghon_hobak_sprout.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "tiles",
+      "name": "cafe_floor",
+      "file": "assets/tiles/cafe_floor.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 실내/벽 타일(집·카페 바닥·벽)",
+      "conf": "med"
+    },
+    {
+      "category": "tiles",
+      "name": "cafe_wall",
+      "file": "assets/tiles/cafe_wall.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 실내/벽 타일(집·카페 바닥·벽)",
+      "conf": "med"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_bank",
+      "file": "assets/tiles/cliff_bank.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_e_face",
+      "file": "assets/tiles/cliff_e_face.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_e_lip",
+      "file": "assets/tiles/cliff_e_lip.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_in_ne",
+      "file": "assets/tiles/cliff_in_ne.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_in_nw",
+      "file": "assets/tiles/cliff_in_nw.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_in_se",
+      "file": "assets/tiles/cliff_in_se.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_in_sw",
+      "file": "assets/tiles/cliff_in_sw.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_n_lip",
+      "file": "assets/tiles/cliff_n_lip.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_out_ne",
+      "file": "assets/tiles/cliff_out_ne.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_out_nw",
+      "file": "assets/tiles/cliff_out_nw.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_out_se",
+      "file": "assets/tiles/cliff_out_se.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_out_sw",
+      "file": "assets/tiles/cliff_out_sw.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_s_base",
+      "file": "assets/tiles/cliff_s_base.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_s_face",
+      "file": "assets/tiles/cliff_s_face.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_s_lip",
+      "file": "assets/tiles/cliff_s_lip.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_w_face",
+      "file": "assets/tiles/cliff_w_face.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "cliff_w_lip",
+      "file": "assets/tiles/cliff_w_lip.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_tiles_pro(square_topdown) → 청키화 → SOLID_TEX 배선(S1-10 다단 절벽)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "combined_terrain_homestead_atlas",
+      "file": "assets/tiles/combined_terrain_homestead_atlas.png",
+      "w": 160,
+      "h": 512,
+      "tool": "PixelLab",
+      "method": "PixelLab create_topdown_tileset(Wang 코너 오토타일) → warm 팔레트 양자화(ADR-0043)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "gpv2_image",
+      "file": "assets/tiles/gpv2_image.png",
+      "w": 128,
+      "h": 128,
+      "tool": "PixelLab",
+      "method": "PixelLab create_topdown_tileset(Wang 코너 오토타일) → warm 팔레트 양자화(ADR-0043)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "gpv3_image",
+      "file": "assets/tiles/gpv3_image.png",
+      "w": 128,
+      "h": 128,
+      "tool": "PixelLab",
+      "method": "PixelLab create_topdown_tileset(Wang 코너 오토타일) → warm 팔레트 양자화(ADR-0043)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "grass_path_image",
+      "file": "assets/tiles/grass_path_image.png",
+      "w": 128,
+      "h": 128,
+      "tool": "PixelLab",
+      "method": "PixelLab create_topdown_tileset(Wang 코너 오토타일) → warm 팔레트 양자화(ADR-0043)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "house_floor",
+      "file": "assets/tiles/house_floor.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 실내/벽 타일(집·카페 바닥·벽)",
+      "conf": "med"
+    },
+    {
+      "category": "tiles",
+      "name": "house_wall",
+      "file": "assets/tiles/house_wall.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 실내/벽 타일(집·카페 바닥·벽)",
+      "conf": "med"
+    },
+    {
+      "category": "tiles",
+      "name": "house_wall_upper",
+      "file": "assets/tiles/house_wall_upper.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 실내/벽 타일(집·카페 바닥·벽)",
+      "conf": "med"
+    },
+    {
+      "category": "tiles",
+      "name": "path_soil_image",
+      "file": "assets/tiles/path_soil_image.png",
+      "w": 128,
+      "h": 128,
+      "tool": "PixelLab",
+      "method": "PixelLab create_topdown_tileset(Wang 코너 오토타일) → warm 팔레트 양자화(ADR-0043)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "sgv2_image",
+      "file": "assets/tiles/sgv2_image.png",
+      "w": 128,
+      "h": 128,
+      "tool": "PixelLab",
+      "method": "PixelLab create_topdown_tileset(Wang 코너 오토타일) → warm 팔레트 양자화(ADR-0043)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "soil_grass_image",
+      "file": "assets/tiles/soil_grass_image.png",
+      "w": 128,
+      "h": 128,
+      "tool": "PixelLab",
+      "method": "PixelLab create_topdown_tileset(Wang 코너 오토타일) → warm 팔레트 양자화(ADR-0043)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "wall",
+      "file": "assets/tiles/wall.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 실내/벽 타일(집·카페 바닥·벽)",
+      "conf": "med"
+    },
+    {
+      "category": "tiles",
+      "name": "water_grass_image",
+      "file": "assets/tiles/water_grass_image.png",
+      "w": 128,
+      "h": 128,
+      "tool": "PixelLab",
+      "method": "PixelLab create_topdown_tileset(Wang 코너 오토타일) → warm 팔레트 양자화(ADR-0043)",
+      "conf": "high"
+    },
+    {
+      "category": "tiles",
+      "name": "wgv2_image",
+      "file": "assets/tiles/wgv2_image.png",
+      "w": 128,
+      "h": 128,
+      "tool": "PixelLab",
+      "method": "PixelLab create_topdown_tileset(Wang 코너 오토타일) → warm 팔레트 양자화(ADR-0043)",
+      "conf": "high"
+    },
+    {
+      "category": "props",
+      "name": "bush",
+      "file": "assets/props/bush.png",
+      "w": 64,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "cafe_cabinet",
+      "file": "assets/props/cafe_cabinet.png",
+      "w": 64,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "cafe_clock",
+      "file": "assets/props/cafe_clock.png",
+      "w": 32,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "cafe_counter",
+      "file": "assets/props/cafe_counter.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "cafe_frame",
+      "file": "assets/props/cafe_frame.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "cafe_shelf",
+      "file": "assets/props/cafe_shelf.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "cafe_stool",
+      "file": "assets/props/cafe_stool.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "cafe_table",
+      "file": "assets/props/cafe_table.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "debris_ember_stone",
+      "file": "assets/props/debris_ember_stone.png",
+      "w": 64,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "debris_petrified_stump",
+      "file": "assets/props/debris_petrified_stump.png",
+      "w": 64,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "debris_weeds",
+      "file": "assets/props/debris_weeds.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "farm_fence",
+      "file": "assets/props/farm_fence.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "farm_planter",
+      "file": "assets/props/farm_planter.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "farm_scarecrow",
+      "file": "assets/props/farm_scarecrow.png",
+      "w": 32,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "grass_tuft",
+      "file": "assets/props/grass_tuft.png",
+      "w": 32,
+      "h": 32,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_crack",
+      "file": "assets/props/ground_crack.png",
+      "w": 24,
+      "h": 16,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_dirt",
+      "file": "assets/props/ground_dirt.png",
+      "w": 28,
+      "h": 28,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_embed",
+      "file": "assets/props/ground_embed.png",
+      "w": 14,
+      "h": 9,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_flower",
+      "file": "assets/props/ground_flower.png",
+      "w": 13,
+      "h": 15,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_grass1",
+      "file": "assets/props/ground_grass1.png",
+      "w": 16,
+      "h": 16,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_grass2",
+      "file": "assets/props/ground_grass2.png",
+      "w": 24,
+      "h": 20,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_grass3",
+      "file": "assets/props/ground_grass3.png",
+      "w": 26,
+      "h": 28,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_gravel",
+      "file": "assets/props/ground_gravel.png",
+      "w": 22,
+      "h": 14,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_pebble",
+      "file": "assets/props/ground_pebble.png",
+      "w": 18,
+      "h": 14,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_weed_dry",
+      "file": "assets/props/ground_weed_dry.png",
+      "w": 20,
+      "h": 16,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "ground_weed_under",
+      "file": "assets/props/ground_weed_under.png",
+      "w": 16,
+      "h": 18,
+      "tool": "절차생성",
+      "method": "지면 디테일 오버레이(ground-composition, ADR-0043) — 타일 샘플/절차",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "house_bed",
+      "file": "assets/props/house_bed.png",
+      "w": 32,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "house_bookshelf",
+      "file": "assets/props/house_bookshelf.png",
+      "w": 64,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "house_fireplace",
+      "file": "assets/props/house_fireplace.png",
+      "w": 64,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "house_rug",
+      "file": "assets/props/house_rug.png",
+      "w": 96,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "house_table",
+      "file": "assets/props/house_table.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "rock",
+      "file": "assets/props/rock.png",
+      "w": 64,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "soul_lantern",
+      "file": "assets/props/soul_lantern.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "spirit_flower_patch",
+      "file": "assets/props/spirit_flower_patch.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "spirit_pot",
+      "file": "assets/props/spirit_pot.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "stairs_east",
+      "file": "assets/props/stairs_east.png",
+      "w": 96,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab(S1-10 절벽/계단 프롭)",
+      "conf": "high"
+    },
+    {
+      "category": "props",
+      "name": "stump_log",
+      "file": "assets/props/stump_log.png",
+      "w": 64,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "tree_spirit_a",
+      "file": "assets/props/tree_spirit_a.png",
+      "w": 64,
+      "h": 96,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "tree_spirit_b",
+      "file": "assets/props/tree_spirit_b.png",
+      "w": 96,
+      "h": 96,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "props",
+      "name": "vine",
+      "file": "assets/props/vine.png",
+      "w": 32,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab create_map_object(가구·나무·바위·debris·농장 프롭)",
+      "conf": "med"
+    },
+    {
+      "category": "ui",
+      "name": "dialog_window",
+      "file": "assets/ui/dialog_window.png",
+      "w": 1400,
+      "h": 405,
+      "tool": "Gemini",
+      "method": "owner 제미나이 「태운 한지」 대화창(make_dialog_window.py 파이프라인)",
+      "conf": "high"
+    },
+    {
+      "category": "ui",
+      "name": "hanji_frame",
+      "file": "assets/ui/hanji_frame.png",
+      "w": 72,
+      "h": 72,
+      "tool": "Gemini",
+      "method": "owner 제미나이 「태운 한지」 대화창(make_dialog_window.py 파이프라인)",
+      "conf": "high"
+    },
+    {
+      "category": "ui",
+      "name": "hanji_plate",
+      "file": "assets/ui/hanji_plate.png",
+      "w": 40,
+      "h": 40,
+      "tool": "Gemini",
+      "method": "owner 제미나이 「태운 한지」 대화창(make_dialog_window.py 파이프라인)",
+      "conf": "high"
+    },
+    {
+      "category": "ui",
+      "name": "heart_empty",
+      "file": "assets/ui/heart_empty.png",
+      "w": 16,
+      "h": 16,
+      "tool": "확인 필요",
+      "method": "UI 아이콘(하트·화살·패널·나방) — 생성 도구 확인 필요",
+      "conf": "low"
+    },
+    {
+      "category": "ui",
+      "name": "heart_full",
+      "file": "assets/ui/heart_full.png",
+      "w": 16,
+      "h": 16,
+      "tool": "확인 필요",
+      "method": "UI 아이콘(하트·화살·패널·나방) — 생성 도구 확인 필요",
+      "conf": "low"
+    },
+    {
+      "category": "ui",
+      "name": "heart_full_32",
+      "file": "assets/ui/heart_full_32.png",
+      "w": 32,
+      "h": 32,
+      "tool": "확인 필요",
+      "method": "UI 아이콘(하트·화살·패널·나방) — 생성 도구 확인 필요",
+      "conf": "low"
+    },
+    {
+      "category": "ui",
+      "name": "ink_arrow",
+      "file": "assets/ui/ink_arrow.png",
+      "w": 18,
+      "h": 16,
+      "tool": "확인 필요",
+      "method": "UI 아이콘(하트·화살·패널·나방) — 생성 도구 확인 필요",
+      "conf": "low"
+    },
+    {
+      "category": "ui",
+      "name": "panel_frame",
+      "file": "assets/ui/panel_frame.png",
+      "w": 46,
+      "h": 47,
+      "tool": "확인 필요",
+      "method": "UI 아이콘(하트·화살·패널·나방) — 생성 도구 확인 필요",
+      "conf": "low"
+    },
+    {
+      "category": "ui",
+      "name": "soul_moth",
+      "file": "assets/ui/soul_moth.png",
+      "w": 24,
+      "h": 24,
+      "tool": "확인 필요",
+      "method": "UI 아이콘(하트·화살·패널·나방) — 생성 도구 확인 필요",
+      "conf": "low"
+    }
+  ]
+}
