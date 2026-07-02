@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cwogkey1hyw6r"
-path="res://.godot/imported/cliff_inner.png-0867adeeec5ec5615121679408235272.ctex"
+uid="uid://ltp6qssgogrj"
+path="res://.godot/imported/cliff_in_nw.png-417e5c3b074a8e91cfb14a6f30daa903.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/tiles/cliff_inner.png"
-dest_files=["res://.godot/imported/cliff_inner.png-0867adeeec5ec5615121679408235272.ctex"]
+source_file="res://assets/tiles/cliff_in_nw.png"
+dest_files=["res://.godot/imported/cliff_in_nw.png-417e5c3b074a8e91cfb14a6f30daa903.ctex"]
 
 [params]
 

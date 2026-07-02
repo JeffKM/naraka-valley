@@ -82,7 +82,10 @@ const CLIFF_FACE := 12      # 남향/동향 절벽면(단면, SOLID)
 #   ※ 옛 1타일 CLIFF_CORNER_L/R/INNER는 [S1-3] _build_cliffs 재작성으로 폐기 → 본 cleanup서 상수 제거·넘버 재정렬.
 const CLIFF_LIP := 13       # 고지 밑단(걷기 O — 충돌 루프 제외)
 const CLIFF_FACE_BASE := 14 # 절벽 접지(SOLID)
-const N_TILES := 15
+# ★ [S1-10 / ADR-0044 §2] 물가 강둑 단차 — 흙 상단 + 물가 돌 ledge(SOLID). 물(연못·강) 북단에 깔려
+#   수면이 '낮게' 읽히는 pseudo-Z 강둑을 만든다(owner 참고 스크린샷). 물 Wang은 불변, 위에 강둑만 얹음.
+const CLIFF_BANK := 15      # 물가 강둑 단차(SOLID)
+const N_TILES := 16
 
 # ── P2.3 지형 도트: terrain TileSet + 실내/벽 도트 source ───────────────────
 # combined_terrain_homestead.tres = PixelLab Wang 4세트(풀↔길·길↔밭·밭↔풀·물↔풀)를 합친
@@ -108,14 +111,14 @@ const PATH_SRC_ID := 2
 const PATH_VARIANTS := 3
 # ★[ADR-0043 §6 후속] 건물 둘레 갈색 path 링 제거는 grass 직접 채우기(솔버 0)로 흡수됨 — RING_FIX 폐지.
 const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
-	CLIFF_FACE, CLIFF_LIP, CLIFF_FACE_BASE]   # 아틀라스 가로 배치 순서(= atlas x)
+	CLIFF_FACE, CLIFF_LIP, CLIFF_FACE_BASE, CLIFF_BANK]   # 아틀라스 가로 배치 순서(= atlas x)
 # ★ [S1-2] 통과 불가 타일의 단일 진실원(SOLID). _build_tileset 충돌 루프 + is_solid()가 이걸 참조해
 #   충돌 정의 중복을 제거한다(옛 하드코딩 리스트 대체). 주의:
 #   · WATER는 terrain corner라 여기 없고 _has_water_corner로 따로 판정(회귀 보존).
 #   · HOUSE/CAFE는 SOLID_TILES(단일 면 아틀라스) 멤버지만 걷는 바닥이라 여기 없음(충돌 없음).
 #   · CLIFF_LIP은 아틀라스엔 있으나 걷기 O라 여기서 제외(충돌 없음). CLIFF_FACE_BASE는 신규 SOLID.
 const WORLD_SOLID_TILES := [WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
-	CLIFF_FACE, CLIFF_FACE_BASE]
+	CLIFF_FACE, CLIFF_FACE_BASE, CLIFF_BANK]
 # ★ T2 — WATER는 더 이상 SOLID가 아니다(terrain으로 승격). TREE/ROCK는 아직 SOLID 단색(도트는 후속 T7~T9).
 # ★ M4.1 — TREE도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 숲 무대의 밀집 나무.
 # ★ M5.1 — ROCK도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 갱도 무대의 바위 절벽·암반.
@@ -128,8 +131,13 @@ const SOLID_TEX := {
 	WALL: "res://assets/tiles/wall.png",          # 어두운 회청 벽돌(외벽·외관 공용)
 	HOUSE_WALL: "res://assets/tiles/house_wall.png",  # 나무·크림 wainscoting(아늑한 집 벽)
 	CAFE_WALL: "res://assets/tiles/cafe_wall.png",    # 버건디·우드 패널(앤틱 카페 벽)
-	# ★ ADR-0035 Phase B 절벽 단면(32px 마스터 스타일, Phase A 생성). WALL과 같은 결로 blit·충돌.
-	CLIFF_FACE: "res://assets/tiles/cliff_face.png",
+	# ★ [S1-10] 다단 절벽 흙 세트(cliff-tileset-spec.md, PixelLab tiles_pro → 청키·warm 흙+풀오버행).
+	#   LIP=고지 풀 오버행(밝은 상단) / FACE=흙 strata 벽 / FACE_BASE=어두운 접지+SE 슬레이트 그림자.
+	#   옛 회색 암석 cliff_face.png 폐기. LIP은 걷기 O지만 렌더 텍스처 필요(placeholder 색 제거).
+	CLIFF_FACE: "res://assets/tiles/cliff_s_face.png",
+	CLIFF_LIP: "res://assets/tiles/cliff_s_lip.png",
+	CLIFF_FACE_BASE: "res://assets/tiles/cliff_s_base.png",
+	CLIFF_BANK: "res://assets/tiles/cliff_bank.png",  # [S1-10 §2] 물가 강둑(흙+돌 ledge)
 }
 
 # ── T2.1/T2.3 밭 오버레이 타일(Field 레이어 아틀라스 인덱스) ───────────────
@@ -185,6 +193,7 @@ const COLORS := [
 	Color(0.30, 0.27, 0.24),  # CLIFF_FACE     — 절벽 단면(SOLID_TEX 있음 — 폴백 미사용, 인덱스 정렬용)
 	Color(0.50, 0.54, 0.42),  # CLIFF_LIP       — ★S1-2 밝은 하이라이트 톤(고지 밑단·걷기 O — pseudo-Z 상단이 밝게)
 	Color(0.19, 0.16, 0.14),  # CLIFF_FACE_BASE — ★S1-2 어두운 접지 톤(SOLID·접지 그림자 — 3티어 최하 명암)
+	Color(0.28, 0.26, 0.28),  # CLIFF_BANK      — ★S1-10 물가 강둑(SOLID_TEX 있음 — 폴백 미사용, 인덱스 정렬용)
 ]
 
 # ── 실내 가구·장식(create_map_object 산출, ADR-0013: 32px raw native 직접 사용) ────
@@ -2211,6 +2220,12 @@ func _build_home() -> void:
 
 	_build_cliffs()                                 # ★ADR-0035 고지(하늘 목장 NW) 둘레 절벽 단면 + 충돌(계단 틈만 열림)
 	_fill_rect(SPIRIT_POND_RECT, WATER)             # ★ADR-0035 영혼빛 연못(중앙-약간서, WATER terrain·통과 X)
+	# ★ [S1-10 / ADR-0044 §2] 연못 북단 강둑 단차 2행 — 물이 '낮게' 읽히는 pseudo-Z(owner 참고 스크린샷:
+	#   흙 밴크 + 물가 돌 ledge). y-1=CLIFF_FACE(흙 strata 밴크), y0=CLIFF_BANK(흙+돌 ledge)로 물 최상단
+	#   grass 전이행을 덮어 돌 ledge가 수면과 바로 맞닿게 한다(둘 다 SOLID). 물 Wang은 y+1부터 자동 정합.
+	for _bx in range(SPIRIT_POND_RECT.position.x, SPIRIT_POND_RECT.end.x):
+		_set_tile(_bx, SPIRIT_POND_RECT.position.y - 1, CLIFF_FACE)
+		_set_tile(_bx, SPIRIT_POND_RECT.position.y, CLIFF_BANK)
 	_fill_rect(STARTER_PATCH_RECT, SOIL)            # ★ADR-0035 5×5 스타터 패치(즉경작 SOIL)
 	_build_facade(HOUSE_EXT_RECT, HOUSE_EXT_DOOR)   # 외부 본가 외관(통과 불가 박스 + 문 트리거)
 	_build_facade(STOREHOUSE_EXT_RECT, STOREHOUSE_EXT_DOOR)  # ★ 창고 외관(본가 왼쪽 병렬)
