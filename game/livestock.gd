@@ -61,6 +61,49 @@ const LOC_PASTURE := "pasture"    # 방목 중 — 문 아래 고지 방목지(p
 # 세이브 왕복(to_save/load_save)으로 보존한다(문 열어 둔 채 자면 다음 아침도 열림).
 var _doors: Dictionary = {}
 
+# ── B1-a.3 여물광(Silo) 건초 저장고 ────────────────────────────────────────────
+# 낫으로 벤 사료풀이 여기 쌓이고(store_hay), 실내 여물통 급여가 여기서 뽑아 쓴다(feed_from_silo_in).
+# 용량 240단(SDV silo). 가득 차면 벤 건초는 소멸(Q7 "초과 시 소멸"). 기본 티어(B1-a)는 여물광이 고지에
+# 항상 있는 고정 건물이라 has_silo 플래그를 두지 않는다 — 저장·소진 게이트는 용량만(버는 여물광=B1-b).
+const SILO_CAP := 240
+var _silo_hay := 0
+
+func silo_hay() -> int:
+	return _silo_hay
+
+func silo_full() -> bool:
+	return _silo_hay >= SILO_CAP
+
+# 여물광 채움 비율(0..1) — main의 시각 게이지가 쓴다.
+func silo_fill_ratio() -> float:
+	return clampf(float(_silo_hay) / float(SILO_CAP), 0.0, 1.0)
+
+# 벤 건초를 여물광에 넣는다(낫 풀베기 → main이 호출). 남은 용량만큼만 저장하고 초과분은 소멸.
+# 반환 = 실제 저장한 수(0 = 가득 차 전량 소멸). changed로 게이지 갱신.
+func store_hay(n := 1) -> int:
+	var room := SILO_CAP - _silo_hay
+	var stored := clampi(n, 0, room)
+	if stored > 0:
+		_silo_hay += stored
+		changed.emit()
+	return stored
+
+# 실내 여물통 급여(건물별) — 여물광 건초로 그 건물 미급여 짐승을 급여한다(짐승당 1단 소모). 여물광이
+# 비면 남은 짐승은 굶는다(비살상 — advance_day가 M_NO_FEED로만 벌한다). 반환 = 급여한 마리 수.
+func feed_from_silo_in(building: String) -> int:
+	var count := 0
+	for tile in animals_in(building):
+		if _silo_hay <= 0:
+			break
+		if is_fed(tile):
+			continue
+		if feed(tile):          # fed 플래그(중복 방지 내장)
+			_silo_hay -= 1
+			count += 1
+	if count > 0:
+		changed.emit()
+	return count
+
 # 짐승 상태. 키 = 타일(Vector2i, 정적 실내 위치 = 소속 건물 방 바닥), 값 = 아래 필드 Dict.
 # 키 없음 = 그 자리에 짐승 없음. 키 타일은 "집(실내)" 앵커이고, 방목 나가면 pasture_tile에 그려진다.
 #   species    : 종 id(AnimalCatalog)
@@ -347,7 +390,8 @@ func advance_day() -> void:
 # _animals는 Vector2i 키 + String/int/bool 값 순수 Dictionary라 var_to_str가 그대로 라운드트립한다.
 # 깊은 복사로 넘겨 호출 측이 들고 있어도 상태가 새지 않게 한다.
 func to_save() -> Dictionary:
-	return {"animals": _animals.duplicate(true), "doors": _doors.duplicate(true)}   # ★ B1-a.2: 방목 문 상태도 보존.
+	# ★ B1-a.2: 방목 문 · B1-a.3: 여물광 건초 재고도 보존.
+	return {"animals": _animals.duplicate(true), "doors": _doors.duplicate(true), "silo_hay": _silo_hay}
 
 # 복원: _animals·_doors를 통째로 갈아끼운다. changed로 main이 화면·HUD를 다시 세우게 한다(디커플링).
 # ★ B1-a: home_building이 없는 구버전 세이브는 ""로 백필한다(building_of/animals_in 방어).
@@ -357,6 +401,7 @@ func load_save(data: Dictionary) -> void:
 	_animals = animals.duplicate(true) if typeof(animals) == TYPE_DICTIONARY else {}
 	var doors: Variant = data.get("doors", {})
 	_doors = doors.duplicate(true) if typeof(doors) == TYPE_DICTIONARY else {}
+	_silo_hay = clampi(int(data.get("silo_hay", 0)), 0, SILO_CAP)   # ★ B1-a.3: 여물광 재고(구버전=0).
 	for tile in _animals.keys():
 		var a: Dictionary = _animals[tile]
 		if not a.has("home_building"):

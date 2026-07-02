@@ -636,6 +636,12 @@ const ANIMAL_BUILDINGS := ["넋우릿간", "넋둥우리"]
 # ★ [S1-7] 하늘 목장 방목지 — 두 건물 남쪽 고지 평면(phaseB §5.4 단일 방목 Zone·절벽=천연 펜). B1-a.1에선
 #   짐승이 실내 거주라 방목지는 비어 있고(B1-a.2 pathing이 낮 방목으로 채움), 문 앞 진입로만 깐다.
 const PASTURE_SCAN_RECT := Rect2i(3, 18, 10, 6)   # x3..12, y18..23 (두 건물 문 아래 방목 평면 — B1-a.2 방목 목적지)
+# ★ [B1-a.3] 여물광(Silo·비진입 저장 건물) — 고지 동편 자유 풀밭(건물 x3..12 동쪽, 계단 x21 서쪽). 낫으로
+#   벤 사료풀이 여기 쌓인다(Ranch._silo_hay). 문·실내 없음 = WALL 박스 그레이박스(아트 후행, 넋둥우리 결).
+const SILO_EXT_RECT := Rect2i(14, 14, 3, 3)       # x14..16, y14..16 (넋둥우리 x9..12 동쪽 자유 고지)
+# ★ [B1-a.3] 사료풀 밭 — 낫으로 베어 건초를 얻는 고지 풀(재생·겨울정지). 여물광 남쪽 자유 풀밭(방목지
+#   x3..12과 안 겹침 — 방목 짐승과 분리). main이 이 rect의 비-SOLID 타일을 Forage에 시드한다.
+const FORAGE_SCAN_RECT := Rect2i(13, 21, 7, 3)    # x13..19, y21..23 (여물광 아래 동편 고지 풀밭)
 # ── ★ M3.1 삼도천(강 낚시 무대 + 혼백관) ───────────────────────────────────────
 # 셋째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 낚시 메카닉은 만들지 않는다(Phase 3) — 강(WATER)
 # 무대 + 강 낚시터(라벨만) + 혼백관(enterable 빈 방)까지 그레이박스로 깐다.
@@ -898,6 +904,10 @@ var ranch: Ranch = null
 #   노드(코드 생성 — .new()). debris 배치는 PROP_LAYOUT_HOME 시드에 잠겨 있고, 이 노드는 "무엇을 치웠나"
 #   델타만 소유한다. main이 드로우/충돌 skip·farmable 판정에서 질의(디커플링 — Reclaim은 화면·지형 무지).
 var reclaim: Reclaim = null
+# ★ [B1-a.3] 사료풀 상태(낫으로 베어 건초를 얻는 고지 풀 — 재생·겨울정지). FarmField/Orchard/Ranch/
+#   Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). main이 고지 자유 풀밭을 시드하고, 벤 결과를
+#   여물광(Ranch.store_hay)에 적재한다(경제 양끝 잇기). 드로우는 main이 이 상태를 질의(디커플링).
+var forage: Forage = null
 # ★ [S1-9] 집 꾸미기 상태(집 내부 3레이어 코스메틱 배치 + 해금 세트). F10 저작 도구(layout.json·
 #   _prop_layouts)와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). 플레이어 세이브 델타만 소유하고
 #   layout.json 시드는 안 건드린다(회귀 0). main이 유효 배치 칸을 주입하고 드로우/충돌 훅에서 질의(디커플링).
@@ -1106,6 +1116,10 @@ func _ready() -> void:
 	reclaim.name = "Reclaim"
 	add_child(reclaim)
 	reclaim.changed.connect(_on_reclaim_changed)   # 개간·복원 시 드로우/충돌 skip 반영
+	forage = Forage.new()                # ★ [B1-a.3] 사료풀 상태 노드(코드 생성 — 낫 채집·재생 원장, 여물광 건초 소스)
+	forage.name = "Forage"
+	add_child(forage)
+	forage.changed.connect(_on_ranch_changed)      # 베기·재생·복원 시 드로우 갱신(짐승과 같은 훅 재사용 — 둘 다 고지 그레이박스)
 	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
 	home_deco.name = "HomeDeco"
 	add_child(home_deco)
@@ -1180,6 +1194,9 @@ func _ready() -> void:
 		#   세이브가 있으면 home_deco.load_save가 해금 집합을 복원한다(구세이브=해금 0, 방어적).
 		for sid in HomeDecoCatalog.STARTER_SETS:
 			home_deco.unlock(sid)
+	# ★ [B1-a.3] 사료풀 시드 — 고지 자유 풀밭(FORAGE_SCAN_RECT 비-SOLID)을 Forage에 등록한다. 신규·복원
+	#   양쪽에서 부른다: seed는 멱등이라 복원된 사료풀 상태(cut_day)를 보존하고 맵상 새 타일만 더한다.
+	_seed_forage_tiles()
 	# T5.6 복원 직후 NPC 상주/출근 상태를 현재(복원된) 진행·시각에 맞춘다. 통보를 이미
 	# 마친 세이브면 옥자가 카페에 보이고, 복원 시각이 영업창(15시+)이면 미호가 카페로 출근해
 	# 있다("껐다 켜도 그대로" — 직원 배치까지 재개에 맞는다). 둘 다 세이브 무상태(시각·단계
@@ -2261,6 +2278,7 @@ func _build_home() -> void:
 	_set_tile(NEOKURITGAN_EXT_DOOR_W.x, NEOKURITGAN_EXT_DOOR_W.y, PATH)  # 2패널 문 서칸도 리세스(문 폭 2칸 = 아트 정합)
 	_build_facade(NEOKDUNGURI_EXT_RECT, NEOKDUNGURI_EXT_DOOR)   # 넋둥우리(소형·노을닭)
 	_set_tile(NEOKDUNGURI_EXT_DOOR_W.x, NEOKDUNGURI_EXT_DOOR_W.y, PATH)  # 2패널 문 서칸도 리세스
+	_fill_rect(SILO_EXT_RECT, WALL)                            # ★ [B1-a.3] 여물광(비진입 저장 건물) WALL 박스 — 문·실내 없음(낫 채집·게이지=_draw_silo)
 	_build_room(HOME_HOUSE_RECT, HOUSE, HOUSE_WALL, HOME_HOUSE_DOOR)   # ★C2 실내 집 방(HOME 밴드 y67+, 마을 공유 방과 분리)
 	_set_tile(HOME_HOUSE_DOOR_E.x, HOME_HOUSE_DOOR_E.y, HOUSE)  # ★[ADR-0046] 실내 본가 문 동칸 개방(2칸·중앙 — 실내문≡외관문)
 	# ★ T3③ 북벽 2타일 밴드 — 상단 벽 한 행(y68 실내)을 더 벽으로(스타듀식 입체 벽, plank는 _draw 오버레이).
@@ -3246,6 +3264,8 @@ func _on_day_advanced(day: int) -> void:
 	# ★ [B1-a.2] 새 아침 방목 방출 — advance_day가 플래그를 리셋한 *뒤*, 문 열린 건물 짐승을 방목지로 내보낸다
 	#   (grazed=이번 새 날치). 평온·낮 게이트는 _release_open_buildings 안에서(_weather_calm 스텁=항상 평온).
 	_release_open_buildings()
+	# ★ [B1-a.3] 사료풀 재생 — 벤 지 REGROW_DAYS 지난 풀이 다시 자란다. 겨울(성야절)엔 재생 정지(Q7 굶음 긴장).
+	forage.advance_day(day, GameClock.season_index_for_day(day) == 3)
 	energy.refill()
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
@@ -3534,6 +3554,7 @@ func _save_game() -> void:
 		"orchard": orchard.to_save(),   # ★ [S1-5b] 심긴 혼의 나무(앵커·나이·결실). 영속·나이가 planted_day 파생이라 최소
 		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
 		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
+		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
@@ -3576,6 +3597,8 @@ func _load_game() -> void:
 		ranch.load_save(data["ranch"])
 	if data.has("reclaim"):   # ★ [S1-8] — 키 없는 구버전은 치운 것 0(전 debris 유지). changed가 드로우/충돌 skip 반영
 		reclaim.load_save(data["reclaim"])
+	if data.has("forage"):    # ★ [B1-a.3] — 키 없는 구버전은 사료풀 0(부팅 후 _seed_forage_tiles가 맵에서 시드). changed가 드로우 갱신
+		forage.load_save(data["forage"])
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
 		home_deco.load_save(data["home_deco"])
 	if data.has("wallet"):
@@ -3962,14 +3985,22 @@ func _process(delta: float) -> void:
 		else:
 			_notice("%s 방목 문 닫힘 — 나간 짐승은 밤 귀가 전 다시 열어 둬야 한다" % _indoor)
 		return
-	# ★ [B1-a.2] 동물 건물 실내 RMB = 잠자리 청소(청결만, §4.1). 방목·격리는 pathing이 자동으로 세운다
-	#   (문 방출→grazed·밤 귀가→penned) — 실내 돌봄은 청소만 남는다. 짐승을 직접 바라볼 땐 아래 on_animal
-	#   의 쓰다듬/수집(급여·산물)이 우선 → 여기선 짐승 밖 실내 칸에서만.
+	# ★ [B1-a.2→B1-a.3] 동물 건물 실내 RMB = 여물통 급여(여물광 건초로) + 잠자리 청소. 방목·격리는 pathing이
+	#   자동으로 세우므로(문 방출→grazed·밤 귀가→penned), 실내 돌봄은 급여+청소만 남는다(SDV 건물 안 돌봄).
+	#   급여는 여물광(Ranch._silo_hay)에서 짐승당 1단 뽑는다 — 비면 굶는다(낫으로 미리 쌓아야, Q7). 짐승을
+	#   직접 바라볼 땐 아래 on_animal의 쓰다듬/수집(손급여)이 우선 → 여기선 짐승 밖 실내 칸에서만.
 	if not _sleeping and _indoor in ANIMAL_BUILDINGS and not ranch.has_animal(_target) \
 			and Input.is_action_just_pressed("action"):
-		if ranch.clean_all_in(_indoor):
+		var fed_ct := ranch.feed_from_silo_in(_indoor)
+		var cleaned := ranch.clean_all_in(_indoor)
+		if fed_ct > 0 or cleaned:
 			audio.sfx("ui")
-			_notice("%s 청소 완료 — 잠자리를 정갈히" % _indoor)
+			if fed_ct > 0:
+				_notice("%s 여물 급여 %d마리 + 청소 (여물광 %d단 남음)" % [_indoor, fed_ct, ranch.silo_hay()])
+			else:
+				_notice("%s 청소 완료 — 여물광이 비어 급여 못 함" % _indoor if ranch.silo_hay() <= 0 else "%s 청소 완료 — 잠자리를 정갈히" % _indoor)
+		elif ranch.silo_hay() <= 0:
+			_notice("여물광이 비었다 — 낫으로 사료풀을 베어 채워야 한다")
 		return
 	# ★ [S1-7→B1-a.1] 짐승 상호작용 — 짐승은 실내 바닥(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치한다.
 	#   LMB=건초 급여(_use_tool 내 hay 분기)·RMB=쓰다듬/산물 수집(_try_harvest 내 짐승 분기). 건물 실내에서 이뤄진다.
@@ -3982,6 +4013,12 @@ func _process(delta: float) -> void:
 	#   LMB(맞는 도구 든 채)=개간(_use_tool 내 개간 분기). 도구·debris 매칭은 그 안에서 판정(틀린 도구=무동작).
 	var on_debris := not _sleeping and _debris_kind_at(_target) != ""
 	if on_debris and Input.is_action_just_pressed("use_tool"):
+		_use_tool()
+	# ★ [B1-a.3] 낫 풀베기 — 사료풀은 GROUND(비-SOIL·비-짐승) 위라 _target_valid 게이트 밖에서 따로 디스패치.
+	#   LMB(낫 든 채)=베기(_use_tool 내 사료풀 분기 → 여물광 +1). 낫 아니거나 안 자란 풀이면 그 안에서 무동작.
+	var on_forage := not _sleeping and _region == RegionCatalog.HOME \
+			and inventory.selected_id() == ItemCatalog.SCYTHE and forage.is_grown(_target)
+	if on_forage and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("use_tool"):
@@ -4147,6 +4184,16 @@ func _use_tool() -> void:
 		if ranch.has_animal(_target) and ranch.feed(_target):
 			inventory.remove_item(ItemCatalog.HAY, 1)
 			verb = "급여"
+	elif item == ItemCatalog.SCYTHE and _region == RegionCatalog.HOME and forage.is_grown(_target):
+		# ★ [B1-a.3] 든 낫으로 조준 칸의 다 자란 사료풀을 벤다 → 여물광에 건초 +1(가득/초과 시 소멸, Q7).
+		#   낫은 개간(debris)에도 쓰이지만 사료풀 분기를 먼저 둬(둘은 좌표가 안 겹침) 풀 위에선 베기가 잡힌다.
+		if forage.cut(_target, clock.day):
+			var stored := ranch.store_hay(1)
+			verb = "풀베기"
+			if stored > 0:
+				_notice("사료풀을 베어 여물광에 건초 +1 (%d/%d단)" % [ranch.silo_hay(), Ranch.SILO_CAP])
+			else:
+				_notice("사료풀을 벴지만 여물광이 가득 차 건초가 흩어졌다")
 	elif DebrisCatalog.is_reclaim_tool(item) and _region == RegionCatalog.HOME:
 		# ★ [S1-8 §10.3] 든 개간 도구(낫/곡괭이/도끼)로 조준 칸의 debris를 친다. 맞는 도구면 reclaim이 치우고
 		# 드랍을 반환한다(틀린 도구·미지 kind·이미 치움이면 {} → 무동작). 드랍은 인벤토리에 적재(경제 양끝 잇기).
@@ -4159,7 +4206,7 @@ func _use_tool() -> void:
 	if verb == "":
 		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
 	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기·비료는 물/뿌리는 소리.
-	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water", "급여": "water", "개간": "hoe"}.get(verb, ""))
+	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water", "급여": "water", "개간": "hoe", "풀베기": "harvest"}.get(verb, ""))
 	_advance_onboarding(verb)                 # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
 	energy.spend(cost)                        # 한 동작당 혼력 소모(숙련 감산)
 	queue_redraw()                            # 새 상태가 바로 보이도록
@@ -5065,6 +5112,20 @@ func _release_open_buildings() -> void:
 		ranch.send_to_pasture(tile, slots[i % slots.size()])
 		i += 1
 
+# ★ [B1-a.3] 사료풀 시드 — FORAGE_SCAN_RECT 안의 걸을 수 있는(비-SOLID) 고지 풀 타일을 Forage에 등록.
+#   여물광 footprint(SILO_EXT_RECT=WALL)는 is_solid로 자동 제외된다. seed는 멱등(복원 상태 보존).
+func _seed_forage_tiles() -> void:
+	if forage == null:
+		return
+	for y in range(FORAGE_SCAN_RECT.position.y, FORAGE_SCAN_RECT.end.y):
+		if y < 0 or y >= _grid.size():
+			continue
+		for x in range(FORAGE_SCAN_RECT.position.x, FORAGE_SCAN_RECT.end.x):
+			if x < 0 or x >= _grid[y].size():
+				continue
+			if not is_solid(_grid[y][x]):
+				forage.seed(Vector2i(x, y))
+
 # 밭 칸 상태가 바뀌면 오버레이 타일을 갱신한다(FarmField.tile_changed로 호출).
 func _on_tile_changed(t: Vector2i) -> void:
 	var idx := _overlay_index(t)
@@ -5105,6 +5166,8 @@ func _draw() -> void:
 			_draw_facade_home()      # 집 외관(WALL 박스 위에 덮어 닫힌 건물로)
 			_draw_facade_storehouse()  # ★ T3 창고 외관(NE)
 			_draw_facade_barn()        # ★ T3 축사 외관(동편, 비-enterable 자리)
+			_draw_silo()               # ★ [B1-a.3] 여물광 외관(WALL 박스 그레이박스 + 건초 게이지)
+			_draw_forage()             # ★ [B1-a.3] 사료풀(다 자람=풀포기·벤 자리=밑동) — 낫 채집 대상
 			# ★[§6] Y-split: 뒤 프롭(플레이어 발치 위)만 여기서(플레이어 아래). 앞 프롭은 _front_props.
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_prop_layouts.get("HOME", []), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터: 집 가구·길가 등불·화분 + T3 농장 장식
@@ -5178,6 +5241,45 @@ func _draw_orchard() -> void:
 # ★ [S1-7] 혼의 짐승 그레이박스 표식(§8.7 — 스프라이트·워크 애니 = S1-11 이관). 종별 색 몸통 박스 +
 # 머리 점(방향감) + 대기 산물(머리 위 밝은 점) + 우정 하트 바(하단 5칸). 순수 시각 placeholder —
 # 로직·상태는 ranch가 든다(짐승은 비-SOLID라 충돌체 없음). 하늘 목장(HOME) 방목지에서만 그려진다.
+# ★ [B1-a.3] 여물광(Silo) 그레이박스 — WALL 박스 footprint 위에 나무빛 사일로 몸통 + 지붕 + 건초 채움
+#   게이지(오른쪽 세로 바, 노란 채움=silo_hay/240). 아트(사일로 도트)는 후행(넋둥우리 결). 실외 HOME 뷰.
+func _draw_silo() -> void:
+	if ranch == null:
+		return
+	var r := SILO_EXT_RECT
+	var px := Vector2(r.position.x * TILE, r.position.y * TILE)
+	var wpx := Vector2(r.size.x * TILE, r.size.y * TILE)
+	draw_rect(Rect2(px, wpx), Color(0.42, 0.34, 0.24))                                  # 몸통(나무빛)
+	draw_rect(Rect2(px, Vector2(wpx.x, TILE * 0.5)), Color(0.30, 0.24, 0.17))           # 지붕 밴드(위 어둡게)
+	draw_rect(Rect2(px, wpx), Color(0.15, 0.12, 0.09), false, 2.0)                      # 외곽선
+	# 건초 채움 게이지 — 우측 세로 바(빈=회색 틀, 채움=노랑, 아래에서 위로).
+	var gw := TILE * 0.5
+	var gh := wpx.y - TILE * 0.8
+	var gpos := px + Vector2(wpx.x - gw - TILE * 0.25, TILE * 0.6)
+	draw_rect(Rect2(gpos, Vector2(gw, gh)), Color(0.12, 0.12, 0.12, 0.8))
+	var fill := gh * ranch.silo_fill_ratio()
+	if fill > 0.0:
+		draw_rect(Rect2(gpos + Vector2(0, gh - fill), Vector2(gw, fill)), Color(0.86, 0.74, 0.32))
+	draw_rect(Rect2(gpos, Vector2(gw, gh)), Color(0.05, 0.05, 0.05), false, 1.0)
+
+# ★ [B1-a.3] 사료풀 그레이박스 — 다 자란 풀은 초록 풀포기(낫 대상), 벤 자리는 낮은 밑동(재생 대기). 실외 HOME.
+func _draw_forage() -> void:
+	if forage == null:
+		return
+	for tile in forage.all_tiles():
+		var px := Vector2(tile.x * TILE, tile.y * TILE)
+		if forage.is_grown(tile):
+			# 다 자람 = 세 갈래 풀포기(초록, 위로 뻗음).
+			for dx in [0.28, 0.5, 0.72]:
+				draw_line(px + Vector2(TILE * dx, TILE * 0.8), px + Vector2(TILE * dx, TILE * 0.35),
+					Color(0.35, 0.62, 0.28), 2.0)
+			draw_line(px + Vector2(TILE * 0.28, TILE * 0.55), px + Vector2(TILE * 0.16, TILE * 0.4), Color(0.35, 0.62, 0.28), 2.0)
+			draw_line(px + Vector2(TILE * 0.72, TILE * 0.55), px + Vector2(TILE * 0.84, TILE * 0.4), Color(0.35, 0.62, 0.28), 2.0)
+		else:
+			# 벤 자리 = 낮은 마른 밑동(재생 대기 — 며칠 뒤 다시 자람).
+			draw_line(px + Vector2(TILE * 0.35, TILE * 0.78), px + Vector2(TILE * 0.35, TILE * 0.66), Color(0.6, 0.56, 0.34), 2.0)
+			draw_line(px + Vector2(TILE * 0.6, TILE * 0.78), px + Vector2(TILE * 0.6, TILE * 0.66), Color(0.6, 0.56, 0.34), 2.0)
+
 func _draw_ranch() -> void:
 	if ranch == null:
 		return

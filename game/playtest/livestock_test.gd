@@ -237,6 +237,31 @@ func _initialize() -> void:
 	_check("⑭ clean_all_in 청소만(방목·격리 불변)",
 		rcl.clean_all_in("넋둥우리") and rcl._animals[ct]["cleaned"] and not rcl._animals[ct]["grazed"] and not rcl._animals[ct]["penned"])
 
+	# ── ⑮ [B1-a.3] 여물광(Silo) 건초 저장·여물통 급여 ──
+	var rsi := Ranch.new()
+	_check("⑮ 여물광 초기 0단", rsi.silo_hay() == 0 and not rsi.silo_full())
+	_check("⑮ store_hay 저장수 반환", rsi.store_hay(5) == 5 and rsi.silo_hay() == 5)
+	_check("⑮ 채움 비율", is_equal_approx(rsi.silo_fill_ratio(), 5.0 / float(Ranch.SILO_CAP)))
+	rsi.store_hay(Ranch.SILO_CAP)   # 5 + 240 요청 → 235만 저장(합 240)·초과 소멸
+	_check("⑮ 용량 상한 clamp(240)", rsi.silo_hay() == Ranch.SILO_CAP and rsi.silo_full())
+	_check("⑮ 가득 찬 뒤 store_hay 0(소멸)", rsi.store_hay(3) == 0 and rsi.silo_hay() == Ranch.SILO_CAP)
+	# 여물통 급여 — 여물광에서 짐승당 1단, 미급여만·재고만큼.
+	var rf := Ranch.new()
+	rf.add_animal(Vector2i(0, 0), DAK, "넋둥우리")
+	rf.add_animal(Vector2i(1, 0), DAK, "넋둥우리")
+	rf.store_hay(1)   # 1단만 → 한 마리만
+	_check("⑮ 여물통 급여 = 재고만큼(1마리)", rf.feed_from_silo_in("넋둥우리") == 1 and rf.silo_hay() == 0)
+	rf.store_hay(5)
+	_check("⑮ 남은 미급여 급여(1마리)", rf.feed_from_silo_in("넋둥우리") == 1 and rf.silo_hay() == 4)
+	_check("⑮ 이미 급여한 짐승 재급여 0", rf.feed_from_silo_in("넋둥우리") == 0 and rf.silo_hay() == 4)
+	# 세이브 왕복 — 여물광 재고 보존 / 구버전(silo_hay 없음) 0 백필.
+	var rf2 := Ranch.new()
+	rf2.load_save(rf.to_save())
+	_check("⑮ 세이브 왕복 여물광 재고 보존", rf2.silo_hay() == 4)
+	var rf3 := Ranch.new()
+	rf3.load_save({"animals": {}})
+	_check("⑮ 구버전 세이브 여물광 0 백필", rf3.silo_hay() == 0)
+
 	# ── Part B: main 통합(⑫) — 신규 게임 강제(세이브 백업·삭제)로 스타터 짐승 시드 검증 ──
 	# save_region_test 결: 실제 개발 세이브를 백업했다가 끝에 복원(테스트 격리, 유저 세이브 불침범).
 	var had_save := FileAccess.file_exists(SAVE)
