@@ -10,6 +10,8 @@ const WIKI = resolve(process.cwd());            // wiki/ 에서 실행
 const ASSETS = resolve(WIKI, "..", "game", "assets");
 const OUT_PUBLIC = join(WIKI, "public", "assets");
 const OUT_MANIFEST = join(WIKI, "lib", "manifest.json");
+const ROSTER_SRC = join(WIKI, "lib", "required-assets.json"); // 손 편집 SOURCE
+const OUT_ROSTER = join(WIKI, "lib", "roster.json");          // 디프 결과(생성)
 
 const CATEGORIES = ["buildings", "characters", "portraits", "crops", "tiles", "props", "ui"];
 
@@ -103,3 +105,68 @@ const manifest = {
 };
 writeFileSync(OUT_MANIFEST, JSON.stringify(manifest, null, 2));
 console.log(`✅ manifest: ${items.length}개 에셋 · 카테고리 ${Object.keys(byCat).length} · 도구 ${JSON.stringify(byTool)}`);
+
+// ── 목표 로스터 디프(required-assets → roster.json) — ADR-0048 §6 ──────────────
+// SOURCE(lib/required-assets.json)의 각 항목을 스캔 결과와 조인해 status를 계산한다.
+//   keys 모두 스캔됨 → have · keys 하나라도 없음 → missing
+//   단, expected==="placeholder"는 항상 placeholder(Claude 임시 확정본·절차색, Gemini 교체 대기).
+//   keys가 비면(=Godot 씬 화면) expected를 그대로 채택(파일 매칭 불가).
+if (existsSync(ROSTER_SRC)) {
+  const src = JSON.parse(readFileSync(ROSTER_SRC, "utf8"));
+  const scanned = new Set(items.map((it) => it.name));
+  // 스템 → {file,w,h} (프리뷰용, 최초 매칭 카테고리 사용)
+  const byStem = new Map();
+  for (const it of items) if (!byStem.has(it.name)) byStem.set(it.name, { file: it.file, w: it.w, h: it.h });
+
+  function resolveStatus(keys, expected) {
+    if (expected === "placeholder") return "placeholder";
+    if (!keys || keys.length === 0) return expected; // 씬 화면: 수기 상태
+    return keys.every((k) => scanned.has(k)) ? "have" : "missing";
+  }
+
+  const flat = [];
+  const rosterCats = src.categories.map((cat) => {
+    const catItems = cat.items.map((r) => {
+      const status = resolveStatus(r.keys, r.expected);
+      const previewStem = (r.keys || []).find((k) => byStem.has(k));
+      const out = {
+        category: cat.id,
+        categoryTitle: cat.title,
+        key: r.key,
+        keys: r.keys || [],
+        name: r.name,
+        maker: r.maker,
+        expected: r.expected,
+        status,
+        note: r.note || "",
+        preview: previewStem ? byStem.get(previewStem) : null,
+      };
+      flat.push(out);
+      return out;
+    });
+    return { id: cat.id, title: cat.title, note: cat.note || "", items: catItems };
+  });
+
+  const byStatus = { have: 0, placeholder: 0, missing: 0 };
+  const byMaker = { claude: 0, gemini: 0 };
+  for (const r of flat) {
+    byStatus[r.status] = (byStatus[r.status] || 0) + 1;
+    byMaker[r.maker] = (byMaker[r.maker] || 0) + 1;
+  }
+
+  const roster = {
+    generatedNote: "자동 생성(build-manifest.mjs) — 수정 금지. SOURCE=lib/required-assets.json. 데일리: npm run manifest",
+    total: flat.length,
+    byStatus,
+    byMaker,
+    categories: rosterCats,
+    items: flat,
+  };
+  writeFileSync(OUT_ROSTER, JSON.stringify(roster, null, 2));
+  const remaining = byStatus.missing + byStatus.placeholder;
+  console.log(
+    `✅ roster: ${flat.length}개 목표 · 있음 ${byStatus.have} / placeholder ${byStatus.placeholder} / 없음 ${byStatus.missing} (남은 작업 ${remaining})`
+  );
+} else {
+  console.warn(`⚠️  roster SOURCE 없음(${ROSTER_SRC}) — 로스터 디프 건너뜀`);
+}

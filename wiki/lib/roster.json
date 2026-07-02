@@ -1,0 +1,1514 @@
+{
+  "generatedNote": "자동 생성(build-manifest.mjs) — 수정 금지. SOURCE=lib/required-assets.json. 데일리: npm run manifest",
+  "total": 48,
+  "byStatus": {
+    "have": 11,
+    "placeholder": 10,
+    "missing": 27
+  },
+  "byMaker": {
+    "claude": 23,
+    "gemini": 25
+  },
+  "categories": [
+    {
+      "id": "buildings",
+      "title": "건물 외관",
+      "note": "안식 농원 건물 정면 facade(남향·청크). 나머지 프롭은 육안 사인오프.",
+      "items": [
+        {
+          "category": "buildings",
+          "categoryTitle": "건물 외관",
+          "key": "house_ext",
+          "keys": [
+            "house_ext"
+          ],
+          "name": "본가",
+          "maker": "gemini",
+          "expected": "have",
+          "status": "have",
+          "note": "Gemini facade 완료(청크)",
+          "preview": {
+            "file": "assets/buildings/house_ext.png",
+            "w": 320,
+            "h": 292
+          }
+        },
+        {
+          "category": "buildings",
+          "categoryTitle": "건물 외관",
+          "key": "storehouse_ext",
+          "keys": [
+            "storehouse_ext"
+          ],
+          "name": "갈무리방(창고)",
+          "maker": "gemini",
+          "expected": "have",
+          "status": "have",
+          "note": "Gemini facade 완료",
+          "preview": {
+            "file": "assets/buildings/storehouse_ext.png",
+            "w": 192,
+            "h": 196
+          }
+        },
+        {
+          "category": "buildings",
+          "categoryTitle": "건물 외관",
+          "key": "barn_ext",
+          "keys": [
+            "barn_ext"
+          ],
+          "name": "넋우릿간(대형 축사)",
+          "maker": "gemini",
+          "expected": "have",
+          "status": "have",
+          "note": "Gemini facade 완료",
+          "preview": {
+            "file": "assets/buildings/barn_ext.png",
+            "w": 128,
+            "h": 98
+          }
+        },
+        {
+          "category": "buildings",
+          "categoryTitle": "건물 외관",
+          "key": "coop_ext",
+          "keys": [
+            "coop_ext"
+          ],
+          "name": "넋둥우리(소형 닭장)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "신규 — 넋우릿간과 구분되는 소형",
+          "preview": null
+        }
+      ]
+    },
+    {
+      "id": "interiors",
+      "title": "건물 실내 (Track B 앞당김)",
+      "note": "실내 타일 + 진입 워프·pathing. 이번 패스 신규(farm-buildings-roster §3 supersede).",
+      "items": [
+        {
+          "category": "interiors",
+          "categoryTitle": "건물 실내 (Track B 앞당김)",
+          "key": "house_floor / house_wall",
+          "keys": [
+            "house_floor",
+            "house_wall"
+          ],
+          "name": "집 내부",
+          "maker": "claude",
+          "expected": "have",
+          "status": "have",
+          "note": "기존 타일, 도색 마무리",
+          "preview": {
+            "file": "assets/tiles/house_floor.png",
+            "w": 32,
+            "h": 32
+          }
+        },
+        {
+          "category": "interiors",
+          "categoryTitle": "건물 실내 (Track B 앞당김)",
+          "key": "barn_floor / barn_wall",
+          "keys": [
+            "barn_floor",
+            "barn_wall"
+          ],
+          "name": "넋우릿간 내부",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "실내 타일 + 진입 워프·pathing",
+          "preview": null
+        },
+        {
+          "category": "interiors",
+          "categoryTitle": "건물 실내 (Track B 앞당김)",
+          "key": "coop_floor / coop_wall",
+          "keys": [
+            "coop_floor",
+            "coop_wall"
+          ],
+          "name": "넋둥우리 내부",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "실내 타일 + 진입 워프·pathing",
+          "preview": null
+        },
+        {
+          "category": "interiors",
+          "categoryTitle": "건물 실내 (Track B 앞당김)",
+          "key": "storehouse_floor / storehouse_wall",
+          "keys": [
+            "storehouse_floor",
+            "storehouse_wall"
+          ],
+          "name": "갈무리방 내부",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "실내 타일 + 진입 워프",
+          "preview": null
+        }
+      ]
+    },
+    {
+      "id": "livestock",
+      "title": "가축 (전부 신규 · 현재 스프라이트 0)",
+      "note": "에셋 키 = 내부 id(honbaek_*, 세이브 안전). 성장 단계(새끼→성체) 포함(B1-b 앞당김). 성장 로직=S1-15.",
+      "items": [
+        {
+          "category": "livestock",
+          "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+          "key": "honbaek_dak_baby",
+          "keys": [
+            "honbaek_dak_baby"
+          ],
+          "name": "노을닭(새끼)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "성장 1단계",
+          "preview": null
+        },
+        {
+          "category": "livestock",
+          "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+          "key": "honbaek_dak_adult",
+          "keys": [
+            "honbaek_dak_adult"
+          ],
+          "name": "노을닭(성체)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "정면+idle(4방향 불요)",
+          "preview": null
+        },
+        {
+          "category": "livestock",
+          "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+          "key": "honbaek_so_baby",
+          "keys": [
+            "honbaek_so_baby"
+          ],
+          "name": "안개소(새끼)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "성장 1단계",
+          "preview": null
+        },
+        {
+          "category": "livestock",
+          "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+          "key": "honbaek_so_adult",
+          "keys": [
+            "honbaek_so_adult"
+          ],
+          "name": "안개소(성체)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "대형",
+          "preview": null
+        },
+        {
+          "category": "livestock",
+          "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+          "key": "honbaek_ran",
+          "keys": [
+            "honbaek_ran"
+          ],
+          "name": "노을알(아이템)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "인벤 아이콘",
+          "preview": null
+        },
+        {
+          "category": "livestock",
+          "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+          "key": "honbaek_yu",
+          "keys": [
+            "honbaek_yu"
+          ],
+          "name": "안개젖(아이템)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "인벤 아이콘",
+          "preview": null
+        }
+      ]
+    },
+    {
+      "id": "crops",
+      "title": "작물·과수",
+      "note": "각 작물 3단계(씨앗·새싹·수확). 과수 혼백도는 orchard.gd 렌더 훅 확정 시 단계 수 잠금(잠정 3).",
+      "items": [
+        {
+          "category": "crops",
+          "categoryTitle": "작물·과수",
+          "key": "honryeongcho_{seed,sprout,mature}",
+          "keys": [
+            "honryeongcho_seed",
+            "honryeongcho_sprout",
+            "honryeongcho_mature"
+          ],
+          "name": "혼령초",
+          "maker": "gemini",
+          "expected": "have",
+          "status": "have",
+          "note": "3단계 완비",
+          "preview": {
+            "file": "assets/crops/honryeongcho_seed.png",
+            "w": 32,
+            "h": 32
+          }
+        },
+        {
+          "category": "crops",
+          "categoryTitle": "작물·과수",
+          "key": "pianhwa_{seed,sprout,mature}",
+          "keys": [
+            "pianhwa_seed",
+            "pianhwa_sprout",
+            "pianhwa_mature"
+          ],
+          "name": "피안화",
+          "maker": "gemini",
+          "expected": "have",
+          "status": "have",
+          "note": "3단계 완비",
+          "preview": {
+            "file": "assets/crops/pianhwa_seed.png",
+            "w": 32,
+            "h": 32
+          }
+        },
+        {
+          "category": "crops",
+          "categoryTitle": "작물·과수",
+          "key": "yeonghon_hobak_{seed,sprout,mature}",
+          "keys": [
+            "yeonghon_hobak_seed",
+            "yeonghon_hobak_sprout",
+            "yeonghon_hobak_mature"
+          ],
+          "name": "영혼 호박",
+          "maker": "gemini",
+          "expected": "have",
+          "status": "have",
+          "note": "3단계 완비",
+          "preview": {
+            "file": "assets/crops/yeonghon_hobak_seed.png",
+            "w": 32,
+            "h": 32
+          }
+        },
+        {
+          "category": "crops",
+          "categoryTitle": "작물·과수",
+          "key": "hwangcheon_podo_{seed,sprout,mature}",
+          "keys": [
+            "hwangcheon_podo_seed",
+            "hwangcheon_podo_sprout",
+            "hwangcheon_podo_mature"
+          ],
+          "name": "황천포도(트렐리스)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "3단계 + 트렐리스 덩굴",
+          "preview": null
+        },
+        {
+          "category": "crops",
+          "categoryTitle": "작물·과수",
+          "key": "bulsagwa_{seed,sprout,mature}",
+          "keys": [
+            "bulsagwa_seed",
+            "bulsagwa_sprout",
+            "bulsagwa_mature"
+          ],
+          "name": "불사과(다절기 프레스티지)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "3단계",
+          "preview": null
+        },
+        {
+          "category": "crops",
+          "categoryTitle": "작물·과수",
+          "key": "honbaekdo_{sapling,growing,fruiting}",
+          "keys": [
+            "honbaekdo_sapling",
+            "honbaekdo_growing",
+            "honbaekdo_fruiting"
+          ],
+          "name": "혼백도(혼의 나무 과수)",
+          "maker": "gemini",
+          "expected": "missing",
+          "status": "missing",
+          "note": "대형·Y-sort·나이별",
+          "preview": null
+        }
+      ]
+    },
+    {
+      "id": "ui",
+      "title": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "note": "규격은 스펙카드가 진실. Claude 임시 확정본은 같은 파일명·규격 Gemini 결과로 코드 무수정 덮어쓰기 가능.",
+      "items": [
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "dialog_window",
+          "keys": [
+            "dialog_window"
+          ],
+          "name": "대화창 태운 한지",
+          "maker": "gemini",
+          "expected": "have",
+          "status": "have",
+          "note": "계승 원본",
+          "preview": {
+            "file": "assets/ui/dialog_window.png",
+            "w": 1400,
+            "h": 405
+          }
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "hanji_frame / hanji_plate / panel_frame",
+          "keys": [
+            "hanji_frame",
+            "hanji_plate",
+            "panel_frame"
+          ],
+          "name": "한지 패널 프레임",
+          "maker": "gemini",
+          "expected": "have",
+          "status": "have",
+          "note": "9-slice 배선 필요",
+          "preview": {
+            "file": "assets/ui/hanji_frame.png",
+            "w": 72,
+            "h": 72
+          }
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "heart_full / heart_empty",
+          "keys": [
+            "heart_full",
+            "heart_empty"
+          ],
+          "name": "하트",
+          "maker": "claude",
+          "expected": "have",
+          "status": "have",
+          "note": "관계 탭 재사용",
+          "preview": {
+            "file": "assets/ui/heart_full.png",
+            "w": 16,
+            "h": 16
+          }
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "ink_arrow / soul_moth",
+          "keys": [
+            "ink_arrow",
+            "soul_moth"
+          ],
+          "name": "진행 화살표·나비",
+          "maker": "gemini",
+          "expected": "have",
+          "status": "have",
+          "note": "",
+          "preview": {
+            "file": "assets/ui/ink_arrow.png",
+            "w": 18,
+            "h": 16
+          }
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "menu_frame_9slice",
+          "keys": [
+            "menu_frame_9slice"
+          ],
+          "name": "탭 메뉴 프레임",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "통합 탭 메뉴 배경",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "tab_icon_inventory",
+          "keys": [
+            "tab_icon_inventory"
+          ],
+          "name": "탭 아이콘: 인벤토리",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "tab_icon_social",
+          "keys": [
+            "tab_icon_social"
+          ],
+          "name": "탭 아이콘: 관계",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "tab_icon_skill",
+          "keys": [
+            "tab_icon_skill"
+          ],
+          "name": "탭 아이콘: 숙련",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "tab_icon_options",
+          "keys": [
+            "tab_icon_options"
+          ],
+          "name": "탭 아이콘: 옵션",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "clock_widget",
+          "keys": [
+            "clock_widget"
+          ],
+          "name": "시계 위젯(요일·날짜·시각·계절)",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "우상단",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "gold_icon",
+          "keys": [
+            "gold_icon"
+          ],
+          "name": "골드 아이콘",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "energy_bar_frame",
+          "keys": [
+            "energy_bar_frame"
+          ],
+          "name": "혼력 바 프레임",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "우하단(체력 자리 포함)",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "tooltip_frame",
+          "keys": [
+            "tooltip_frame"
+          ],
+          "name": "호버 툴팁 프레임",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "toast_frame",
+          "keys": [
+            "toast_frame"
+          ],
+          "name": "아이템 획득 토스트",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "툴바 위",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "popup_frame",
+          "keys": [
+            "popup_frame"
+          ],
+          "name": "좌하단 컨텍스트 팝업(초상화+글)",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "ui",
+          "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+          "key": "slot_frame",
+          "keys": [
+            "slot_frame"
+          ],
+          "name": "인벤/툴바 슬롯",
+          "maker": "claude",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "핫바 텍스처 유무 확인",
+          "preview": null
+        }
+      ]
+    },
+    {
+      "id": "screens",
+      "title": "전체 화면 (리스킨/신규)",
+      "note": "Godot 씬 화면(PNG 키 없음) — 상태는 진행 기준 수기. placeholder=기존 raw 씬 존재, 리스킨 대기.",
+      "items": [
+        {
+          "category": "screens",
+          "categoryTitle": "전체 화면 (리스킨/신규)",
+          "key": "screen_title",
+          "keys": [],
+          "name": "타이틀/시작",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "새 게임/이어하기",
+          "preview": null
+        },
+        {
+          "category": "screens",
+          "categoryTitle": "전체 화면 (리스킨/신규)",
+          "key": "screen_settings",
+          "keys": [],
+          "name": "설정(볼륨·전체화면)",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "옵션 탭이 여는 화면",
+          "preview": null
+        },
+        {
+          "category": "screens",
+          "categoryTitle": "전체 화면 (리스킨/신규)",
+          "key": "screen_day_summary",
+          "keys": [],
+          "name": "하루 정산",
+          "maker": "claude",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "RunSummary 리스킨",
+          "preview": null
+        },
+        {
+          "category": "screens",
+          "categoryTitle": "전체 화면 (리스킨/신규)",
+          "key": "screen_cafe_summary",
+          "keys": [],
+          "name": "카페 정산",
+          "maker": "claude",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "CafeSummaryPanel 리스킨",
+          "preview": null
+        },
+        {
+          "category": "screens",
+          "categoryTitle": "전체 화면 (리스킨/신규)",
+          "key": "screen_ending",
+          "keys": [],
+          "name": "엔딩",
+          "maker": "claude",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "EndingPanel 리스킨",
+          "preview": null
+        },
+        {
+          "category": "screens",
+          "categoryTitle": "전체 화면 (리스킨/신규)",
+          "key": "screen_chest",
+          "keys": [],
+          "name": "상자(저장) UI",
+          "maker": "claude",
+          "expected": "missing",
+          "status": "missing",
+          "note": "신규 컨테이너 + inv_frame CHEST",
+          "preview": null
+        }
+      ]
+    },
+    {
+      "id": "props",
+      "title": "가구·테마 세트 (home_deco)",
+      "note": "home_deco_catalog.gd 2세트(SOULFIRE·HIGANBANA) × 3레이어. 현재 placeholder 색.",
+      "items": [
+        {
+          "category": "props",
+          "categoryTitle": "가구·테마 세트 (home_deco)",
+          "key": "deco_soulfire_floor",
+          "keys": [
+            "deco_soulfire_floor"
+          ],
+          "name": "여우불 세트 바닥재",
+          "maker": "gemini",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "색 placeholder",
+          "preview": null
+        },
+        {
+          "category": "props",
+          "categoryTitle": "가구·테마 세트 (home_deco)",
+          "key": "deco_soulfire_wall",
+          "keys": [
+            "deco_soulfire_wall"
+          ],
+          "name": "여우불 세트 벽지",
+          "maker": "gemini",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "props",
+          "categoryTitle": "가구·테마 세트 (home_deco)",
+          "key": "deco_soulfire_furniture",
+          "keys": [
+            "deco_soulfire_furniture"
+          ],
+          "name": "여우불 세트 가구",
+          "maker": "gemini",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "props",
+          "categoryTitle": "가구·테마 세트 (home_deco)",
+          "key": "deco_higanbana_floor",
+          "keys": [
+            "deco_higanbana_floor"
+          ],
+          "name": "피안화 세트 바닥재",
+          "maker": "gemini",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "props",
+          "categoryTitle": "가구·테마 세트 (home_deco)",
+          "key": "deco_higanbana_wall",
+          "keys": [
+            "deco_higanbana_wall"
+          ],
+          "name": "피안화 세트 벽지",
+          "maker": "gemini",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "",
+          "preview": null
+        },
+        {
+          "category": "props",
+          "categoryTitle": "가구·테마 세트 (home_deco)",
+          "key": "deco_higanbana_furniture",
+          "keys": [
+            "deco_higanbana_furniture"
+          ],
+          "name": "피안화 세트 가구",
+          "maker": "gemini",
+          "expected": "placeholder",
+          "status": "placeholder",
+          "note": "",
+          "preview": null
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "category": "buildings",
+      "categoryTitle": "건물 외관",
+      "key": "house_ext",
+      "keys": [
+        "house_ext"
+      ],
+      "name": "본가",
+      "maker": "gemini",
+      "expected": "have",
+      "status": "have",
+      "note": "Gemini facade 완료(청크)",
+      "preview": {
+        "file": "assets/buildings/house_ext.png",
+        "w": 320,
+        "h": 292
+      }
+    },
+    {
+      "category": "buildings",
+      "categoryTitle": "건물 외관",
+      "key": "storehouse_ext",
+      "keys": [
+        "storehouse_ext"
+      ],
+      "name": "갈무리방(창고)",
+      "maker": "gemini",
+      "expected": "have",
+      "status": "have",
+      "note": "Gemini facade 완료",
+      "preview": {
+        "file": "assets/buildings/storehouse_ext.png",
+        "w": 192,
+        "h": 196
+      }
+    },
+    {
+      "category": "buildings",
+      "categoryTitle": "건물 외관",
+      "key": "barn_ext",
+      "keys": [
+        "barn_ext"
+      ],
+      "name": "넋우릿간(대형 축사)",
+      "maker": "gemini",
+      "expected": "have",
+      "status": "have",
+      "note": "Gemini facade 완료",
+      "preview": {
+        "file": "assets/buildings/barn_ext.png",
+        "w": 128,
+        "h": 98
+      }
+    },
+    {
+      "category": "buildings",
+      "categoryTitle": "건물 외관",
+      "key": "coop_ext",
+      "keys": [
+        "coop_ext"
+      ],
+      "name": "넋둥우리(소형 닭장)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "신규 — 넋우릿간과 구분되는 소형",
+      "preview": null
+    },
+    {
+      "category": "interiors",
+      "categoryTitle": "건물 실내 (Track B 앞당김)",
+      "key": "house_floor / house_wall",
+      "keys": [
+        "house_floor",
+        "house_wall"
+      ],
+      "name": "집 내부",
+      "maker": "claude",
+      "expected": "have",
+      "status": "have",
+      "note": "기존 타일, 도색 마무리",
+      "preview": {
+        "file": "assets/tiles/house_floor.png",
+        "w": 32,
+        "h": 32
+      }
+    },
+    {
+      "category": "interiors",
+      "categoryTitle": "건물 실내 (Track B 앞당김)",
+      "key": "barn_floor / barn_wall",
+      "keys": [
+        "barn_floor",
+        "barn_wall"
+      ],
+      "name": "넋우릿간 내부",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "실내 타일 + 진입 워프·pathing",
+      "preview": null
+    },
+    {
+      "category": "interiors",
+      "categoryTitle": "건물 실내 (Track B 앞당김)",
+      "key": "coop_floor / coop_wall",
+      "keys": [
+        "coop_floor",
+        "coop_wall"
+      ],
+      "name": "넋둥우리 내부",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "실내 타일 + 진입 워프·pathing",
+      "preview": null
+    },
+    {
+      "category": "interiors",
+      "categoryTitle": "건물 실내 (Track B 앞당김)",
+      "key": "storehouse_floor / storehouse_wall",
+      "keys": [
+        "storehouse_floor",
+        "storehouse_wall"
+      ],
+      "name": "갈무리방 내부",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "실내 타일 + 진입 워프",
+      "preview": null
+    },
+    {
+      "category": "livestock",
+      "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+      "key": "honbaek_dak_baby",
+      "keys": [
+        "honbaek_dak_baby"
+      ],
+      "name": "노을닭(새끼)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "성장 1단계",
+      "preview": null
+    },
+    {
+      "category": "livestock",
+      "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+      "key": "honbaek_dak_adult",
+      "keys": [
+        "honbaek_dak_adult"
+      ],
+      "name": "노을닭(성체)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "정면+idle(4방향 불요)",
+      "preview": null
+    },
+    {
+      "category": "livestock",
+      "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+      "key": "honbaek_so_baby",
+      "keys": [
+        "honbaek_so_baby"
+      ],
+      "name": "안개소(새끼)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "성장 1단계",
+      "preview": null
+    },
+    {
+      "category": "livestock",
+      "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+      "key": "honbaek_so_adult",
+      "keys": [
+        "honbaek_so_adult"
+      ],
+      "name": "안개소(성체)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "대형",
+      "preview": null
+    },
+    {
+      "category": "livestock",
+      "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+      "key": "honbaek_ran",
+      "keys": [
+        "honbaek_ran"
+      ],
+      "name": "노을알(아이템)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "인벤 아이콘",
+      "preview": null
+    },
+    {
+      "category": "livestock",
+      "categoryTitle": "가축 (전부 신규 · 현재 스프라이트 0)",
+      "key": "honbaek_yu",
+      "keys": [
+        "honbaek_yu"
+      ],
+      "name": "안개젖(아이템)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "인벤 아이콘",
+      "preview": null
+    },
+    {
+      "category": "crops",
+      "categoryTitle": "작물·과수",
+      "key": "honryeongcho_{seed,sprout,mature}",
+      "keys": [
+        "honryeongcho_seed",
+        "honryeongcho_sprout",
+        "honryeongcho_mature"
+      ],
+      "name": "혼령초",
+      "maker": "gemini",
+      "expected": "have",
+      "status": "have",
+      "note": "3단계 완비",
+      "preview": {
+        "file": "assets/crops/honryeongcho_seed.png",
+        "w": 32,
+        "h": 32
+      }
+    },
+    {
+      "category": "crops",
+      "categoryTitle": "작물·과수",
+      "key": "pianhwa_{seed,sprout,mature}",
+      "keys": [
+        "pianhwa_seed",
+        "pianhwa_sprout",
+        "pianhwa_mature"
+      ],
+      "name": "피안화",
+      "maker": "gemini",
+      "expected": "have",
+      "status": "have",
+      "note": "3단계 완비",
+      "preview": {
+        "file": "assets/crops/pianhwa_seed.png",
+        "w": 32,
+        "h": 32
+      }
+    },
+    {
+      "category": "crops",
+      "categoryTitle": "작물·과수",
+      "key": "yeonghon_hobak_{seed,sprout,mature}",
+      "keys": [
+        "yeonghon_hobak_seed",
+        "yeonghon_hobak_sprout",
+        "yeonghon_hobak_mature"
+      ],
+      "name": "영혼 호박",
+      "maker": "gemini",
+      "expected": "have",
+      "status": "have",
+      "note": "3단계 완비",
+      "preview": {
+        "file": "assets/crops/yeonghon_hobak_seed.png",
+        "w": 32,
+        "h": 32
+      }
+    },
+    {
+      "category": "crops",
+      "categoryTitle": "작물·과수",
+      "key": "hwangcheon_podo_{seed,sprout,mature}",
+      "keys": [
+        "hwangcheon_podo_seed",
+        "hwangcheon_podo_sprout",
+        "hwangcheon_podo_mature"
+      ],
+      "name": "황천포도(트렐리스)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "3단계 + 트렐리스 덩굴",
+      "preview": null
+    },
+    {
+      "category": "crops",
+      "categoryTitle": "작물·과수",
+      "key": "bulsagwa_{seed,sprout,mature}",
+      "keys": [
+        "bulsagwa_seed",
+        "bulsagwa_sprout",
+        "bulsagwa_mature"
+      ],
+      "name": "불사과(다절기 프레스티지)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "3단계",
+      "preview": null
+    },
+    {
+      "category": "crops",
+      "categoryTitle": "작물·과수",
+      "key": "honbaekdo_{sapling,growing,fruiting}",
+      "keys": [
+        "honbaekdo_sapling",
+        "honbaekdo_growing",
+        "honbaekdo_fruiting"
+      ],
+      "name": "혼백도(혼의 나무 과수)",
+      "maker": "gemini",
+      "expected": "missing",
+      "status": "missing",
+      "note": "대형·Y-sort·나이별",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "dialog_window",
+      "keys": [
+        "dialog_window"
+      ],
+      "name": "대화창 태운 한지",
+      "maker": "gemini",
+      "expected": "have",
+      "status": "have",
+      "note": "계승 원본",
+      "preview": {
+        "file": "assets/ui/dialog_window.png",
+        "w": 1400,
+        "h": 405
+      }
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "hanji_frame / hanji_plate / panel_frame",
+      "keys": [
+        "hanji_frame",
+        "hanji_plate",
+        "panel_frame"
+      ],
+      "name": "한지 패널 프레임",
+      "maker": "gemini",
+      "expected": "have",
+      "status": "have",
+      "note": "9-slice 배선 필요",
+      "preview": {
+        "file": "assets/ui/hanji_frame.png",
+        "w": 72,
+        "h": 72
+      }
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "heart_full / heart_empty",
+      "keys": [
+        "heart_full",
+        "heart_empty"
+      ],
+      "name": "하트",
+      "maker": "claude",
+      "expected": "have",
+      "status": "have",
+      "note": "관계 탭 재사용",
+      "preview": {
+        "file": "assets/ui/heart_full.png",
+        "w": 16,
+        "h": 16
+      }
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "ink_arrow / soul_moth",
+      "keys": [
+        "ink_arrow",
+        "soul_moth"
+      ],
+      "name": "진행 화살표·나비",
+      "maker": "gemini",
+      "expected": "have",
+      "status": "have",
+      "note": "",
+      "preview": {
+        "file": "assets/ui/ink_arrow.png",
+        "w": 18,
+        "h": 16
+      }
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "menu_frame_9slice",
+      "keys": [
+        "menu_frame_9slice"
+      ],
+      "name": "탭 메뉴 프레임",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "통합 탭 메뉴 배경",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "tab_icon_inventory",
+      "keys": [
+        "tab_icon_inventory"
+      ],
+      "name": "탭 아이콘: 인벤토리",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "tab_icon_social",
+      "keys": [
+        "tab_icon_social"
+      ],
+      "name": "탭 아이콘: 관계",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "tab_icon_skill",
+      "keys": [
+        "tab_icon_skill"
+      ],
+      "name": "탭 아이콘: 숙련",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "tab_icon_options",
+      "keys": [
+        "tab_icon_options"
+      ],
+      "name": "탭 아이콘: 옵션",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "clock_widget",
+      "keys": [
+        "clock_widget"
+      ],
+      "name": "시계 위젯(요일·날짜·시각·계절)",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "우상단",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "gold_icon",
+      "keys": [
+        "gold_icon"
+      ],
+      "name": "골드 아이콘",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "energy_bar_frame",
+      "keys": [
+        "energy_bar_frame"
+      ],
+      "name": "혼력 바 프레임",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "우하단(체력 자리 포함)",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "tooltip_frame",
+      "keys": [
+        "tooltip_frame"
+      ],
+      "name": "호버 툴팁 프레임",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "toast_frame",
+      "keys": [
+        "toast_frame"
+      ],
+      "name": "아이템 획득 토스트",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "툴바 위",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "popup_frame",
+      "keys": [
+        "popup_frame"
+      ],
+      "name": "좌하단 컨텍스트 팝업(초상화+글)",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "ui",
+      "categoryTitle": "UI / HUD (한지 스킨 · Claude 즉시 제작)",
+      "key": "slot_frame",
+      "keys": [
+        "slot_frame"
+      ],
+      "name": "인벤/툴바 슬롯",
+      "maker": "claude",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "핫바 텍스처 유무 확인",
+      "preview": null
+    },
+    {
+      "category": "screens",
+      "categoryTitle": "전체 화면 (리스킨/신규)",
+      "key": "screen_title",
+      "keys": [],
+      "name": "타이틀/시작",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "새 게임/이어하기",
+      "preview": null
+    },
+    {
+      "category": "screens",
+      "categoryTitle": "전체 화면 (리스킨/신규)",
+      "key": "screen_settings",
+      "keys": [],
+      "name": "설정(볼륨·전체화면)",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "옵션 탭이 여는 화면",
+      "preview": null
+    },
+    {
+      "category": "screens",
+      "categoryTitle": "전체 화면 (리스킨/신규)",
+      "key": "screen_day_summary",
+      "keys": [],
+      "name": "하루 정산",
+      "maker": "claude",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "RunSummary 리스킨",
+      "preview": null
+    },
+    {
+      "category": "screens",
+      "categoryTitle": "전체 화면 (리스킨/신규)",
+      "key": "screen_cafe_summary",
+      "keys": [],
+      "name": "카페 정산",
+      "maker": "claude",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "CafeSummaryPanel 리스킨",
+      "preview": null
+    },
+    {
+      "category": "screens",
+      "categoryTitle": "전체 화면 (리스킨/신규)",
+      "key": "screen_ending",
+      "keys": [],
+      "name": "엔딩",
+      "maker": "claude",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "EndingPanel 리스킨",
+      "preview": null
+    },
+    {
+      "category": "screens",
+      "categoryTitle": "전체 화면 (리스킨/신규)",
+      "key": "screen_chest",
+      "keys": [],
+      "name": "상자(저장) UI",
+      "maker": "claude",
+      "expected": "missing",
+      "status": "missing",
+      "note": "신규 컨테이너 + inv_frame CHEST",
+      "preview": null
+    },
+    {
+      "category": "props",
+      "categoryTitle": "가구·테마 세트 (home_deco)",
+      "key": "deco_soulfire_floor",
+      "keys": [
+        "deco_soulfire_floor"
+      ],
+      "name": "여우불 세트 바닥재",
+      "maker": "gemini",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "색 placeholder",
+      "preview": null
+    },
+    {
+      "category": "props",
+      "categoryTitle": "가구·테마 세트 (home_deco)",
+      "key": "deco_soulfire_wall",
+      "keys": [
+        "deco_soulfire_wall"
+      ],
+      "name": "여우불 세트 벽지",
+      "maker": "gemini",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "props",
+      "categoryTitle": "가구·테마 세트 (home_deco)",
+      "key": "deco_soulfire_furniture",
+      "keys": [
+        "deco_soulfire_furniture"
+      ],
+      "name": "여우불 세트 가구",
+      "maker": "gemini",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "props",
+      "categoryTitle": "가구·테마 세트 (home_deco)",
+      "key": "deco_higanbana_floor",
+      "keys": [
+        "deco_higanbana_floor"
+      ],
+      "name": "피안화 세트 바닥재",
+      "maker": "gemini",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "props",
+      "categoryTitle": "가구·테마 세트 (home_deco)",
+      "key": "deco_higanbana_wall",
+      "keys": [
+        "deco_higanbana_wall"
+      ],
+      "name": "피안화 세트 벽지",
+      "maker": "gemini",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "",
+      "preview": null
+    },
+    {
+      "category": "props",
+      "categoryTitle": "가구·테마 세트 (home_deco)",
+      "key": "deco_higanbana_furniture",
+      "keys": [
+        "deco_higanbana_furniture"
+      ],
+      "name": "피안화 세트 가구",
+      "maker": "gemini",
+      "expected": "placeholder",
+      "status": "placeholder",
+      "note": "",
+      "preview": null
+    }
+  ]
+}
