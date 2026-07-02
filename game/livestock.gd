@@ -117,13 +117,17 @@ func feed_from_silo_in(building: String) -> int:
 #   product    : 대기 중인 미수집 산물 수(0/1 — 한 번에 1개, 수집 전엔 새로 안 뱀)
 #   product_quality : 대기 산물 품질 등급(0..3)
 #   product_large   : 대기 산물이 대형인가
+#   age        : ★ [ADR-0048 Phase E/S1-15] 살아온 일수(0=갓 태어난 새끼). advance_day가 매일 +1.
+#                age >= grow_days_of(species)면 성체(is_adult) — 그전엔 새끼(산물 안 냄, 우정만 쌓임).
 var _animals: Dictionary = {}
 
 # ── 배치·조회 ────────────────────────────────────────────────────────────────
 # 타일에 짐승을 추가한다(유효 종 + 빈 타일). 초기 우정 0·기분 중립·케어 플래그 전부 false·산물 0.
 # home_building = 소속 건물 id(넋둥우리/넋우릿간). B1-a "진입 실내" — 짐승은 실내에 거주하고 돌봄도
 # 실내에서 이뤄진다(방목 왕래 pathing은 B1-a.2). 미지정("")도 허용(단위 테스트·구버전 방어).
-func add_animal(tile: Vector2i, species: String, home_building: String = "") -> bool:
+# ★ [ADR-0048 Phase E/S1-15] age = 초기 나이(일). 0 = 갓 태어난 새끼(기본), grow_days 이상 = 성체로 시작
+# (스타터 성체·구버전 백필). 산물은 성체만 낸다(advance_day 게이트).
+func add_animal(tile: Vector2i, species: String, home_building: String = "", age: int = 0) -> bool:
 	if not AnimalCatalog.has(species) or _animals.has(tile):
 		return false
 	_animals[tile] = {
@@ -135,6 +139,7 @@ func add_animal(tile: Vector2i, species: String, home_building: String = "") -> 
 		"mood": MOOD_START,
 		"fed": false, "petted": false, "grazed": false, "penned": false, "cleaned": false,
 		"product": 0, "product_quality": 0, "product_large": false,
+		"age": maxi(0, age),         # ★ Phase E — 살아온 일수(0=새끼). advance_day가 매일 +1.
 	}
 	changed.emit()
 	return true
@@ -173,6 +178,25 @@ func mood_of(tile: Vector2i) -> int:
 # 우정 하트(0..5) = 우정 pts / 200(내림). 품질 state·P_large의 입력.
 func hearts_of(tile: Vector2i) -> int:
 	return friendship_of(tile) / FRIEND_PER_HEART
+
+# ── ★ [ADR-0048 Phase E/S1-15] 성장 단계(새끼→성체) 조회 ─────────────────────────
+# 살아온 일수(없음/구버전 = 0 방어). advance_day가 매일 +1.
+func age_of(tile: Vector2i) -> int:
+	return int(_animals[tile].get("age", 0)) if _animals.has(tile) else 0
+
+# 성체인가 = age >= 종의 grow_days(노을닭 3·안개소 5). 새끼는 산물을 안 낸다(advance_day 게이트).
+func is_adult(tile: Vector2i) -> bool:
+	return _animals.has(tile) and age_of(tile) >= AnimalCatalog.grow_days_of(species_at(tile))
+
+# 성장 단계 문자열("adult"/"baby") — main의 스프라이트 파일 선택·드로우·프롬프트가 쓴다.
+func stage_of(tile: Vector2i) -> String:
+	return "adult" if is_adult(tile) else "baby"
+
+# 성체까지 남은 일수(성체면 0). 프롬프트에 "성장 중 D일 남음"을 표시할 때 쓴다.
+func days_to_adult(tile: Vector2i) -> int:
+	if not _animals.has(tile):
+		return 0
+	return maxi(0, AnimalCatalog.grow_days_of(species_at(tile)) - age_of(tile))
 
 func is_fed(tile: Vector2i) -> bool:
 	return _animals.has(tile) and bool(_animals[tile]["fed"])
@@ -364,7 +388,10 @@ func advance_day() -> void:
 		return
 	for tile in _animals.keys():
 		var a: Dictionary = _animals[tile]
-		# ① 우정·기분 정산(하루치 델타 → clamp).
+		# ★ [Phase E/S1-15] ⓪ 나이 +1(새끼→성체 성장). 하루가 지났으니 먼저 늙힌 뒤 성체 여부로 산물을 게이팅
+		#   한다 — grow_days째 아침에 성체가 되어 그날부터 생산한다(SDV 결). 케어(우정·기분)는 새끼도 쌓인다.
+		a["age"] = int(a.get("age", 0)) + 1
+		# ① 우정·기분 정산(하루치 델타 → clamp). 새끼도 급여·쓰다듬으로 우정을 쌓아 성체 되는 즉시 좋은 산물.
 		var df := (F_PET if a["petted"] else F_NEGLECT) + (F_FEED if a["fed"] else F_NO_FEED)
 		df += F_GRAZE if a["grazed"] else 0
 		df += F_PEN if a["penned"] else 0
@@ -374,8 +401,9 @@ func advance_day() -> void:
 		dm += M_CLEAN if a["cleaned"] else M_MUCK
 		a["friendship"] = clampi(int(a["friendship"]) + df, 0, FRIEND_MAX)
 		a["mood"] = clampi(int(a["mood"]) + dm, 0, MOOD_MAX)
-		# ② 산물 생성 — 급여한 짐승만(스타듀 결), 대기 산물이 없을 때만(수집 전 중복 방지).
-		if bool(a["fed"]) and int(a["product"]) <= 0:
+		# ② 산물 생성 — 급여한 *성체*만(새끼는 산물 안 냄, Phase E), 대기 산물이 없을 때만(수집 전 중복 방지).
+		var adult: bool = int(a["age"]) >= AnimalCatalog.grow_days_of(a["species"])
+		if adult and bool(a["fed"]) and int(a["product"]) <= 0:
 			var hearts := int(a["friendship"]) / FRIEND_PER_HEART
 			var state := quality_state_for(hearts, int(a["mood"]))
 			a["product"] = 1
@@ -410,4 +438,8 @@ func load_save(data: Dictionary) -> void:
 			a["location"] = LOC_INDOOR
 		if not a.has("pasture_tile"):
 			a["pasture_tile"] = tile
+		# ★ [Phase E/S1-15] age 없는 구버전 세이브 = 성체로 백필(grow_days). 이미 기르던 짐승이 새끼로
+		#   되돌아가 산물이 끊기는 회귀를 막는다(성장은 이번 데모 신규 짐승부터만 의미).
+		if not a.has("age"):
+			a["age"] = AnimalCatalog.grow_days_of(str(a.get("species", "")))
 	changed.emit()

@@ -93,12 +93,12 @@ func _initialize() -> void:
 	_check("⑥ large_chance(2)=0.2", is_equal_approx(Ranch.large_chance(2), 0.2))
 	_check("⑥ large_chance(5)=0.5(만렙)", is_equal_approx(Ranch.large_chance(5), 0.5))
 
-	# ── ⑦ 산물 생성 — 급여 게이트(난수 무관 결정적) ──
+	# ── ⑦ 산물 생성 — 급여 게이트(난수 무관 결정적). ★ Phase E: 산물은 *성체*만 내므로 성체로 시드(age=grow_days). ──
 	var rp := Ranch.new()
 	var fed_tile := Vector2i(0, 5)
 	var starve_tile := Vector2i(1, 5)
-	rp.add_animal(fed_tile, DAK)
-	rp.add_animal(starve_tile, DAK)
+	rp.add_animal(fed_tile, DAK, "", AnimalCatalog.grow_days_of(DAK))
+	rp.add_animal(starve_tile, DAK, "", AnimalCatalog.grow_days_of(DAK))
 	rp.feed(fed_tile)                  # fed_tile만 급여
 	rp.advance_day()
 	_check("⑦ 급여한 짐승 산물 생성", rp.has_product(fed_tile))
@@ -262,6 +262,41 @@ func _initialize() -> void:
 	rf3.load_save({"animals": {}})
 	_check("⑮ 구버전 세이브 여물광 0 백필", rf3.silo_hay() == 0)
 
+	# ── ⑯ [ADR-0048 Phase E/S1-15] 새끼→성체 성장(baby→adult) ──
+	var rg := Ranch.new()
+	var baby := Vector2i(0, 0)
+	var grown := Vector2i(1, 0)
+	rg.add_animal(baby, DAK)                                        # age 0 = 새끼(grow_days 3)
+	rg.add_animal(grown, DAK, "", AnimalCatalog.grow_days_of(DAK))  # age=grow_days = 성체로 시작
+	_check("⑯ 새끼(age0) = baby·성체 아님", not rg.is_adult(baby) and rg.stage_of(baby) == "baby")
+	_check("⑯ 성체 시드(age=grow_days) = adult", rg.is_adult(grown) and rg.stage_of(grown) == "adult")
+	_check("⑯ 성체까지 남은 일수(새끼 3·성체 0)", rg.days_to_adult(baby) == 3 and rg.days_to_adult(grown) == 0)
+	# 새끼는 급여해도 산물 안 냄(성장 중), 성체는 급여하면 산물 — 같은 advance_day에서 갈린다.
+	rg.feed(baby); rg.feed(grown)
+	rg.advance_day()
+	_check("⑯ 새끼 급여해도 산물 0(성장 중)", not rg.has_product(baby))
+	_check("⑯ 성체 급여 산물 생성", rg.has_product(grown))
+	_check("⑯ advance_day가 나이 +1", rg.age_of(baby) == 1)
+	_check("⑯ 새끼도 우정 축적(급여 델타 >0)", rg.friendship_of(baby) > 0)
+	# grow_days일 뒤 성체 전이 → 그날부터 산물. 새끼를 grow_days까지 급여하며 늙힌다.
+	var rgg := Ranch.new()
+	var bb := Vector2i(2, 0)
+	rgg.add_animal(bb, DAK)   # age 0
+	for _d in range(AnimalCatalog.grow_days_of(DAK)):
+		rgg.feed(bb)
+		rgg.advance_day()
+	_check("⑯ grow_days일 후 성체 전이", rgg.is_adult(bb) and rgg.age_of(bb) == AnimalCatalog.grow_days_of(DAK))
+	_check("⑯ 성체 전이한 날 산물 생성", rgg.has_product(bb))
+	# 종별 성장 일수(노을닭 3·안개소 5, owner grill 2026-07-03).
+	_check("⑯ 성장 일수 노을닭 3·안개소 5", AnimalCatalog.grow_days_of(DAK) == 3 and AnimalCatalog.grow_days_of(SO) == 5)
+	# 세이브 왕복 — 나이 보존 / 구버전(age 없음) = 성체 백필(회귀 방어).
+	var rga := Ranch.new()
+	rga.load_save(rg.to_save())
+	_check("⑯ 세이브 왕복 나이 보존", rga.age_of(baby) == rg.age_of(baby) and rga.age_of(grown) == rg.age_of(grown))
+	var rgo := Ranch.new()
+	rgo.load_save({"animals": {Vector2i(0, 0): _mk(DAK, 0, 128)}})   # age 없음 → 성체 백필
+	_check("⑯ 구버전 세이브 age 백필 = 성체", rgo.is_adult(Vector2i(0, 0)))
+
 	# ── Part B: main 통합(⑫) — 신규 게임 강제(세이브 백업·삭제)로 스타터 짐승 시드 검증 ──
 	# save_region_test 결: 실제 개발 세이브를 백업했다가 끝에 복원(테스트 격리, 유저 세이브 불침범).
 	var had_save := FileAccess.file_exists(SAVE)
@@ -271,7 +306,17 @@ func _initialize() -> void:
 		DirAccess.remove_absolute(SAVE)   # 세이브 제거 → _ready가 신규 게임 경로(스타터 시드)로 부팅
 	var m := await _spawn_main()
 	_check("⑫ ranch 노드 스폰", m.ranch != null)
-	_check("⑫ 신규 게임 스타터 짐승 시드(2종 — 건물별 1마리)", m.ranch.count() == 2)
+	# ★ Phase E: 각 건물 성체1+새끼1 = 4마리(owner 결정 — 데모에서 성체·새끼·성장 셋 다 노출).
+	_check("⑫ 신규 게임 스타터 짐승 시드(2건물 × 성체+새끼 = 4)", m.ranch.count() == 4)
+	# ★ Phase E: 건물마다 성체 1·새끼 1(성장 단계 혼합).
+	var adults := 0
+	var babies := 0
+	for at in m.ranch.animal_tiles():
+		if m.ranch.is_adult(at):
+			adults += 1
+		else:
+			babies += 1
+	_check("⑫ 스타터 = 성체 2·새끼 2", adults == 2 and babies == 2)
 	# ★ [B1-a.1] 스타터 짐승은 소속 건물 실내 바닥(HOUSE)에 놓인다(진입 실내 — 방목 왕래는 B1-a.2).
 	var all_indoor := true
 	for at in m.ranch.animal_tiles():
@@ -289,7 +334,13 @@ func _initialize() -> void:
 			pair_ok = false
 	_check("⑫ 종·소속 건물 짝 정합(안개소=넋우릿간·노을닭=넋둥우리)", pair_ok)
 	# 스타터 짐승에 급여 → advance → 산물 → 수집이 main 인벤토리로 이어지는지(루프 배선).
-	var starter: Vector2i = m.ranch.animal_tiles()[0]
+	# ★ Phase E: 산물은 성체만 내므로 성체 스타터를 골라 검증한다(새끼는 성장 중).
+	var starter: Vector2i = Vector2i.ZERO
+	for at in m.ranch.animal_tiles():
+		if m.ranch.is_adult(at):
+			starter = at
+			break
+	_check("⑫ 성체 스타터 존재", m.ranch.has_animal(starter) and m.ranch.is_adult(starter))
 	m.ranch.feed(starter)
 	m.ranch.advance_day()
 	_check("⑫ 급여→advance 산물 생성", m.ranch.has_product(starter))

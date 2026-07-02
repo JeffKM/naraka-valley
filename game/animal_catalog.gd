@@ -38,6 +38,9 @@ const HONBAEK_YU := "honbaek_yu"     # 안개젖 — 안개소의 젖. (내부 i
 #   product_name  : 산물 표시명
 #   product_sell  : 산물 기준 판매가(골드, tier0·비대형 — 품질/대형 배수는 상류가 얹음, placeholder)
 #   large_capable : 대형 산물(is_large) 가능 종인가(§4.1 P_large)
+#   grow_days     : ★ [ADR-0048 Phase E/S1-15] 새끼→성체 성숙 일수. 새끼(age<grow_days)는 산물을 내지
+#                   않고 급여·쓰다듬으로 우정만 쌓다가 성체가 되면 산물을 시작한다(SDV 결). owner grill
+#                   확정(2026-07-03): 소형 노을닭 3일·대형 안개소 5일(대형=더 긴 투자, SDV 대부분 5일 패리티).
 const CATALOG := {
 	HONBAEK_DAK: {
 		"name_ko": "노을닭",
@@ -46,6 +49,7 @@ const CATALOG := {
 		"product_name": "노을알",
 		"product_sell": 50,       # 알 = 저단가 데일리(placeholder)
 		"large_capable": true,
+		"grow_days": 3,           # 소형 = 빠른 성숙(SDV 병아리 결)
 	},
 	HONBAEK_SO: {
 		"name_ko": "안개소",
@@ -54,6 +58,7 @@ const CATALOG := {
 		"product_name": "안개젖",
 		"product_sell": 125,      # 젖 = 고단가 데일리(placeholder)
 		"large_capable": true,
+		"grow_days": 5,           # 대형 = 느린 성숙(더 긴 투자)
 	},
 }
 
@@ -80,6 +85,11 @@ static func product_of(id: String) -> String:
 # 종 id → 대형 산물 가능 여부. livestock의 P_large 게이트가 쓴다.
 static func large_capable(id: String) -> bool:
 	return CATALOG[id]["large_capable"] if CATALOG.has(id) else false
+
+# ★ [ADR-0048 Phase E/S1-15] 종 id → 새끼→성체 성숙 일수(없는 종·필드 누락 = 5 기본, 대형 결). livestock의
+# is_adult·산물 게이트가 쓴다. 값이 없으면 안전 default 5(성체 판정이 지나치게 관대해지지 않게 보수적).
+static func grow_days_of(id: String) -> int:
+	return int(CATALOG[id].get("grow_days", 5)) if CATALOG.has(id) else 5
 
 # ── 조회(산물 — 산물 아이템 id 기준. ItemCatalog가 CAT_HARVEST 인식에 위임) ─────
 # 산물 아이템 id 목록(전 종의 product_id).
