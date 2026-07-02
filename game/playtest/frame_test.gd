@@ -4,8 +4,9 @@ extends SceneTree
 #
 # ★ 핵심 불변식:
 #   ① _open_frame/_close_frame — 컨텍스트 설정·핫바 숨김·이동 잠금(모달, 대화와 같은 결).
-#   ② 메뉴 탭 — 인벤토리 ↔ 관계 순환, set_tab/cycle_tab.
+#   ② 메뉴 탭 — 인벤토리→관계→숙련→옵션 4탭 순환, set_tab/cycle_tab(★ Phase B).
 #   ③ 관계 탭 하트 — _heart_rows가 미호·멜·바나·네오 4행, set_hearts 무크래시(읽기 전용).
+#   ③′ 숙련 탭 — _skill_rows 파생·set_skills 무크래시. ③″ 옵션 탭 — 저장 액션(★ Phase B).
 #   ④ 한 번에 한 컨텍스트 — 메뉴/출하함/매대가 동시에 안 열린다(frame.context 단일 출처).
 # 실행: godot --headless --path game --script res://playtest/frame_test.gd
 
@@ -44,15 +45,19 @@ func _initialize() -> void:
 	_check("①f 닫으면 핫바 복귀·이동 해제", m.hotbar.visible and m.player.is_physics_processing())
 	_check("①g 닫으면 프레임 숨김", not m.frame.visible)
 
-	# ── ② 메뉴 탭 전환 ──
-	print("── ② 메뉴 탭 ──")
+	# ── ② 메뉴 탭 전환(★ Phase B 4탭 순환) ──
+	print("── ② 메뉴 탭(4탭) ──")
 	m._open_frame(InventoryFrame.CTX_MENU)
 	m.frame.set_tab(InventoryFrame.TAB_INV)
 	_check("②a 기본 인벤토리 탭", m.frame.menu_tab == InventoryFrame.TAB_INV)
 	m.frame.cycle_tab()
 	_check("②b cycle → 관계 탭", m.frame.menu_tab == InventoryFrame.TAB_REL)
 	m.frame.cycle_tab()
-	_check("②c cycle → 인벤토리 탭 복귀", m.frame.menu_tab == InventoryFrame.TAB_INV)
+	_check("②c cycle → 숙련 탭", m.frame.menu_tab == InventoryFrame.TAB_SKILL)
+	m.frame.cycle_tab()
+	_check("②d cycle → 옵션 탭", m.frame.menu_tab == InventoryFrame.TAB_OPTIONS)
+	m.frame.cycle_tab()
+	_check("②e cycle → 인벤토리 탭 복귀(4탭 랩)", m.frame.menu_tab == InventoryFrame.TAB_INV)
 
 	# ── ③ 관계 탭 하트(읽기 전용) ──
 	print("── ③ 관계 탭 하트 ──")
@@ -64,6 +69,25 @@ func _initialize() -> void:
 	await process_frame
 	_check("③c set_hearts 무크래시", true)
 	m._close_frame()
+
+	# ── ③′ 숙련 탭(★ Phase B, 읽기 전용 파생) ──
+	print("── ③′ 숙련 탭 ──")
+	var skills: Array = m._skill_rows()
+	_check("③′a _skill_rows ≥ 1행(농사)", skills.size() >= 1)
+	_check("③′b 행에 레벨·xp·진행 필드",
+		skills[0].has("level") and skills[0].has("xp") and skills[0].has("floor_xp") and skills[0].has("next_xp"))
+	m._open_frame(InventoryFrame.CTX_MENU)
+	m.frame.set_tab(InventoryFrame.TAB_SKILL)
+	m.frame.set_skills(skills)   # 무크래시(진행바 렌더)
+	await process_frame
+	_check("③′c set_skills 무크래시", true)
+	m._close_frame()
+
+	# ── ③″ 옵션 탭(★ Phase B, 저장 액션) ──
+	print("── ③″ 옵션 탭 ──")
+	_check("③″a save/quit 시그널 존재", m.frame.has_signal("save_pressed") and m.frame.has_signal("quit_pressed"))
+	m._on_frame_save()   # 실제 저장 경로(무크래시) — quit은 트리를 닫으므로 테스트에서 호출 안 함
+	_check("③″b _on_frame_save 저장 무크래시 + 세이브 파일 생성", FileAccess.file_exists(SAVE))
 
 	# ── ④ 한 번에 한 컨텍스트(매대/출하함도 같은 프레임) ──
 	print("── ④ 단일 컨텍스트 ──")
