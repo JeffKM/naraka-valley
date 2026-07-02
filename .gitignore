@@ -40,3 +40,6 @@ tools/stardew-wiki-all-titles.txt
 
 # 에셋 생성 중간 산출물(스테이징 원본) — 라이브 자산만 커밋
 game/assets/_staging_*/
+
+# Claude 워크트리(격리 작업 폴더 — 추적 제외)
+.claude/worktrees/

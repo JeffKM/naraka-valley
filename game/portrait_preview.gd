@@ -22,7 +22,7 @@ const NAME_INK := Color(0.20, 0.14, 0.09)  # 이름(먹빛, 이름판 위)
 
 # ── 윈도우 배치(640×360 논리, CanvasLayer scale 1.5) ──
 const WINDOW := Rect2(16, 172, 608, 176)
-# 내부 칸 = 윈도우 대비 비율(측정값, dialog_window.png 3423×991 기준)
+# 내부 칸 = 윈도우 대비 비율(측정값, dialog_window.png 기준)
 const F_TEXT := Rect2(0.0523, 0.1372, 0.6675, 0.7306)
 const F_PORT := Rect2(0.7844, 0.1423, 0.1545, 0.5519)
 const F_NAME := Rect2(0.7645, 0.7830, 0.1952, 0.1151)
@@ -74,11 +74,12 @@ func _ready() -> void:
 	# 윈도우 아트(일러스트 → 보간)
 	_ui.add_child(_win_rect(wtex))
 
-	# 초상화(우 정사각 칸) — 여백(매팅) 넣어 프레임에 안 붙게
-	var pr := _frac(F_PORT).grow(-5)
+	# 초상화(우 칸) — 여백 없이 꽉(COVER+clip, 매팅 제거)
+	var pr := _frac(F_PORT)
 	_portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	_portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	_portrait.clip_contents = true  # COVER 넘침 클립
 	_portrait.position = pr.position
 	_portrait.size = pr.size
 	_ui.add_child(_portrait)

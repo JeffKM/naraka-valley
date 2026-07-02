@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>나라카 밸리 — 게임 소개</title>
+<style>
+  :root {
+    --ink: #1c1a24;
+    --muted: #6b6577;
+    --line: #e3def0;
+    --accent: #7b3fb5;       /* 마녀 보라 */
+    --accent-soft: #f3ecfb;
+    --foxfire: #2f7bd6;      /* 여우불 파랑 */
+    --pia: #d23d5a;          /* 피안화 붉음 */
+    --bg: #faf8fd;
+    --card: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "AppleSDGothicNeo", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.65;
+    margin: 0;
+    font-size: 15px;
+  }
+  .page { max-width: 820px; margin: 0 auto; padding: 48px 40px 80px; }
+
+  /* 화면에서만 보이는 안내 (인쇄 시 숨김) */
+  .howto {
+    background: #fffbe6; border: 1px solid #ffe27a; border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 32px; font-size: 13.5px; color: #6b5500;
+  }
+  .howto b { color: #4a3a00; }
+  @media print { .howto { display: none !important; } }
+
+  h1 {
+    font-size: 32px; letter-spacing: -0.02em; margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .subtitle { color: var(--muted); font-size: 15px; margin: 0 0 4px; }
+  .platform { color: var(--muted); font-size: 13.5px; margin: 0 0 28px; }
+
+  h2 {
+    font-size: 22px; margin: 44px 0 14px; padding-bottom: 8px;
+    border-bottom: 2px solid var(--accent); color: var(--accent);
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    font-size: 17px; margin: 26px 0 8px; color: var(--ink);
+  }
+  h4 { font-size: 15px; margin: 16px 0 4px; color: var(--accent); }
+  p { margin: 8px 0; }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  strong { color: #2a2535; }
+  em { color: var(--muted); font-style: italic; }
+
+  .lead {
+    background: var(--accent-soft); border-left: 4px solid var(--accent);
+    padding: 12px 18px; border-radius: 0 8px 8px 0; margin: 14px 0;
+    font-size: 14.5px;
+  }
+  .spoiler {
+    background: #fdeef1; border-left: 4px solid var(--pia);
+  }
+
+  /* 히어로 스크린샷 */
+  .hero { margin: 0 0 28px; }
+  .hero img { width: 100%; border-radius: 12px; display: block; border: 1px solid var(--line); }
+  .hero .placeholder {
+    width: 100%; min-height: 280px; border: 2px dashed var(--accent);
+    border-radius: 12px; background: var(--accent-soft);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; color: var(--accent); padding: 28px; gap: 8px;
+  }
+  .hero .placeholder .big { font-size: 38px; }
+  .hero .placeholder .small { font-size: 13px; color: var(--muted); }
+  figcaption { font-size: 13px; color: var(--muted); text-align: center; margin-top: 8px; }
+
+  table {
+    width: 100%; border-collapse: collapse; margin: 12px 0 8px;
+    font-size: 13px; background: var(--card);
+    border-radius: 8px; overflow: hidden;
+  }
+  th, td { border: 1px solid var(--line); padding: 9px 11px; vertical-align: top; text-align: left; }
+  thead th { background: var(--accent); color: #fff; font-weight: 600; font-size: 13px; }
+  thead th:nth-child(1) { background: #5aa0e0; }   /* 그대로 */
+  thead th:nth-child(2) { background: #7b3fb5; }   /* 바꿈 */
+  thead th:nth-child(3) { background: var(--pia); }/* 고유 */
+  tbody tr:nth-child(even) { background: #faf8fd; }
+
+  .uniq-card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 18px; margin: 12px 0;
+  }
+  .uniq-card h3 { margin-top: 0; }
+
+  .char {
+    background: var(--card); border: 1px solid var(--line);
+    border-left: 4px solid var(--foxfire);
+    border-radius: 0 10px 10px 0; padding: 12px 18px; margin: 12px 0;
+  }
+  .char.main { border-left-color: var(--accent); }
+  .char.female { border-left-color: var(--pia); }
+  .char.nonhuman { border-left-color: #34a888; }
+  .char h4 { margin: 0 0 6px; color: var(--ink); font-size: 16px; }
+  .char ul { margin: 4px 0; }
+  .tag { color: var(--muted); font-size: 12.5px; }
+
+  .group-label {
+    font-size: 14px; color: var(--muted); font-weight: 600;
+    margin: 22px 0 4px; text-transform: none;
+  }
+
+  .timeline li { margin: 8px 0; }
+  .done { color: #2e8b57; }
+  .now { color: var(--pia); font-weight: 600; }
+  .next { color: var(--muted); }
+
+  .closing {
+    margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-size: 14.5px; color: var(--muted); font-style: italic; text-align: center;
+  }
+
+  /* 인쇄 */
+  @media print {
+    body { background: #fff; font-size: 12px; }
+    .page { padding: 0; max-width: 100%; }
+    h2 { page-break-after: avoid; }
+    h3, h4 { page-break-after: avoid; }
+    table, .char, .uniq-card, .hero, figure { page-break-inside: avoid; }
+    .lead { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="howto">
+    📄 <b>옥자님께 PDF로 드리는 법</b> — ① 아래 <b>맨 위 히어로 자리</b>에 밤 카페 스크린샷을 넣으려면,
+    이 HTML과 같은 폴더에 <code>screenshots/cafe-night.png</code> 로 캡처를 저장하면 자동으로 들어갑니다(없으면 안내 상자가 뜸).
+    ② 브라우저에서 <b>Cmd&nbsp;+&nbsp;P → 대상: PDF로 저장</b> → 배경 그래픽 켜기. 이 노란 안내 상자는 인쇄에 안 나옵니다.
+  </div>
+
+  <h1>나라카 밸리 <span style="font-size:18px;color:var(--muted);font-weight:400;">— 게임 소개</span></h1>
+  <p class="subtitle">스타듀밸리 같은 <strong>농사·생활 RPG</strong>. 무대만 <strong>나라카 컨셉카페</strong>의 세계관(저승)으로 옮겼습니다.</p>
+  <p class="platform">플랫폼: Steam / PC · 엔진: Godot</p>
+
+  <figure class="hero">
+    <img src="screenshots/cafe-night.png" alt="밤 카페 내부 장면"
+         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+    <div class="placeholder" style="display:none;">
+      <div class="big">📷</div>
+      <div><strong>밤 카페 내부 스크린샷 자리</strong></div>
+      <div class="small">불 켜진 카페 안 — 뒷벽에 옥자·미호·멜·바나가 서 있고, 손님 착석, 아래쪽에 플레이어.<br>
+      <code>screenshots/cafe-night.png</code> 로 저장하면 여기에 자동으로 들어갑니다.</div>
+    </div>
+    <figcaption>현재 빌드에서 직접 찍은 화면 — "목업이 아니라 진짜 돈다"의 증거.</figcaption>
+  </figure>
+
+  <h2>1. 한눈에</h2>
+  <ul>
+    <li><strong>장르:</strong> 농사·낚시·채광·관계를 쌓는 스타듀밸리형 생활 시뮬레이션.</li>
+    <li><strong>무대:</strong> 저승(나라카). 그 안의 <strong>나라카 컨셉카페</strong>가 게임의 중심 명소이자 직접 운영하는 공간.</li>
+    <li><strong>플레이어:</strong> 새로 끌려온 카페의 네 번째 직원. 농사를 짓고, 카페를 굴리고, 식구들과 관계를 쌓으며 하루하루를 산다.</li>
+    <li><strong>분량 감각:</strong> 스타듀처럼 끝없이 머무를 수 있는 코지(cozy) 게임. 단, 멀리 깔린 <strong>하나의 미스터리</strong>가 클라이맥스로 해결되는 이야기 척추도 있다.</li>
+    <li><strong>한 줄 요약:</strong> <strong>"스타듀밸리 + 우리 카페 + 속죄라는 한 겹."</strong></li>
+  </ul>
+
+  <h2>2. 스타듀밸리와 비교 — 시스템 하나하나</h2>
+  <p>옥자님이 스타듀를 잘 아시니, <strong>카테고리마다 세 칸</strong>으로 보면 가장 빠릅니다.</p>
+  <ul>
+    <li><strong>그대로 이어받음</strong> = 메카닉은 스타듀와 똑같고, 이름·외피만 저승식.</li>
+    <li><strong>나라카식으로 바꿈</strong> = 의미 있게 다시 설계한 것.</li>
+    <li><strong>나라카에만 있음</strong> = 스타듀엔 없는 것.</li>
+  </ul>
+  <p class="tag">※ 개별 작물·물고기·광물 같은 <em>콘텐츠 목록</em>은 어차피 전부 저승식으로 자체 제작하므로 여기선 <strong>시스템</strong>만 다룹니다.</p>
+
+  <h3>2-1. 시간 · 환경 · 절기</h3>
+  <table>
+    <thead><tr><th>그대로 이어받음</th><th>나라카식으로 바꿈</th><th>나라카에만 있음</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>하루 실시간 시계 · 강제 취침 → 다음 날<br>계절 전환 시 작물 사멸<br>날씨가 농사·낚시에 영향 / 1일 예보</td>
+        <td>사계절(4×28일) → <strong>저승 4절기</strong>(피안·유화·망연·성야). "3월" 대신 <strong>"피안절 1일"</strong><br>날씨 → <strong>저승 날씨</strong>(혼우=비·잿눈=눈)<br>일일 행운 → <strong>명부의 운</strong> / TV → 집의 <strong>저승판 예보 매개체</strong></td>
+        <td><strong>망연절의 이중 한자</strong> — 평소엔 茫然(아득함)이나 클라이맥스에서 真名이 <strong>忘緣(잊은 인연)</strong>으로 드러나는 환경 떡밥</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2-2. 농사</h3>
+  <table>
+    <thead><tr><th>그대로 이어받음</th><th>나라카식으로 바꿈</th><th>나라카에만 있음</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>괭이→심기→물→성장→수확 (<strong>구현 완료</strong>)<br>스프링클러(물주기 자동)<br>작물 품질 등급(예약됨)</td>
+        <td>스태미나 → <strong>혼력(魂力)</strong>(노동 전용)<br>작물 → <strong>저승 작물</strong>(혼령초·피안화·영혼 호박)<br>농장 타입 8종 → <strong>단일 안식 농원 고정</strong></td>
+        <td><strong>여우불 성장 촉진</strong> — 미호와 친해질수록 농사 경험치 가속<br><strong>사연 한 줄</strong> — 수확 시 그 영혼의 생전 사연<br>허수아비·까마귀(작물 피해) <strong>제거</strong>(코지 톤)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2-3. 채집 · 낚시</h3>
+  <table>
+    <thead><tr><th>그대로 이어받음</th><th>나라카식으로 바꿈</th><th>나라카에만 있음</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>채집(자생물 줍기)<br>낚시 미니게임(찌·바)<br>게잡이통(패시브) · 팬닝</td>
+        <td>채집 무대 → <strong>저승 숲·미혹의 숲</strong><br>낚시 무대 → <strong>삼도천</strong>(강) · <strong>황천해</strong>(바다)<br>어종 → 망자의 혼·도깨비 물고기</td>
+        <td><em>(대부분 충실히 번역 — 무대만 저승)</em></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2-4. 채광 · 전투</h3>
+  <table>
+    <thead><tr><th>그대로 이어받음</th><th>나라카식으로 바꿈</th><th>나라카에만 있음</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>레벨식 하강 광산<br>무한 던전(리셋형)<br>전투·무기 / 광물·보석·지오드</td>
+        <td>광산 → <strong>업화 갱도</strong> / 무한 던전 → <strong>나락</strong><br>몬스터 → <strong>잡귀</strong><br>박물관 → <strong>혼백관</strong>(망자의 유품·기억)</td>
+        <td><strong>혼력(채광) / 체력(전투) 이원 자원</strong><br><strong>잡귀 = 바나 죄목의 거울</strong>(침입자→수호자)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2-5. 관계 · 결혼 · 사회</h3>
+  <table>
+    <thead><tr><th>그대로 이어받음</th><th>나라카식으로 바꿈</th><th>나라카에만 있음</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>호감도 하트(0–10) / 선물<br>하트 이벤트 컷신 / 연애→결혼<br>배우자 방 / 이혼 / 출근 동선</td>
+        <td>결혼 펜던트 → <strong>옥자의 소울-바인딩 혼례 부적</strong><br>호감도 <strong>이원화</strong>(메인=활동 실적 / 주민=대화·선물)<br>결혼 = 메인은 <strong>속죄 완성(=해방)</strong>까지</td>
+        <td><strong>메인 4인의 속죄 서사 = 관계 보상</strong><br><strong>해방 엔딩</strong>(종신계약 풀림, 머무름은 선택)<br><strong>주민 3티어</strong>(결혼 가능/점주/단골)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2-6. 상점 · 경제 · 카페</h3>
+  <table>
+    <thead><tr><th>그대로 이어받음</th><th>나라카식으로 바꿈</th><th>나라카에만 있음</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>출하 상자(밤새 판매)<br>상점 점주 / 여행 상인<br>술집(밤 사교)</td>
+        <td>출하 상자 → <strong>무인 출하함</strong><br>상점 → <strong>만물상</strong>(네오)<br>술집 → <strong>나라카 바</strong>(밤 공동 서빙)</td>
+        <td><strong>★ 카페 운영</strong>(서빙·체키·바) — 스타듀엔 <em>없는</em> 고유 핵심 루프<br><strong>멜의 카지노</strong>(공정한 하우스)<br><strong>체키</strong>(즉석 기념사진)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2-7. 제작 · 가공 · 요리</h3>
+  <table>
+    <thead><tr><th>그대로 이어받음</th><th>나라카식으로 바꿈</th><th>나라카에만 있음</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>제작 레시피<br>요리 = 음식 버프·회복</td>
+        <td>아티즌 가공 → <strong>카페 가공</strong>(밭→재료→메뉴 공급사슬)<br>요리 → <strong>카페 메뉴 + 체력 회복 음식</strong></td>
+        <td><strong>카페가 가공·요리의 합류점</strong> — 농사·낚시·채광 산출물이 전부 카페 재료로 흘러듦</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2-8. 진행 · 목표 · 스킬</h3>
+  <table>
+    <thead><tr><th>그대로 이어받음</th><th>나라카식으로 바꿈</th><th>나라카에만 있음</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>마을회관 번들 메카닉(공물→해금)<br>스킬 5종 / 퀘스트 게시판<br>박물관 기증</td>
+        <td>마을회관 번들 → <strong>카페 일구기</strong>(명소 키우기)<br>스킬+전문직 → <strong>2축 성장</strong>(물리 스킬 + 관계 곱셈기)<br>마법사 미스터리·할아버지 서사 → <strong>미결의 죄→옥자→해방</strong></td>
+        <td>할아버지 평가·완벽함 100% 진엔딩 → <strong>해방 엔딩으로 대체</strong>(외부 점수 평가자 없음)<br>카페가 자랄수록 더 많은 테마 데이·메뉴 해금</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>2-9. 플레이어 · 자원 · 기타</h3>
+  <table>
+    <thead><tr><th>그대로 이어받음</th><th>나라카식으로 바꿈</th><th>나라카에만 있음</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>외형 커스터마이징(팔레트·프리셋)<br>기절(손실) / 인벤토리·도구 업글<br>탈것 / 펫 / 우편 / 비밀 노트</td>
+        <td>스태미나 → <strong>혼력</strong>(노동 전용) / 체력 = 전투 전용<br>말 → 저승 가축 탈것 · 펫 → 코지 펫 · 우편 → 저승식 전령<br>비밀 노트 → <strong>저승 단서</strong>(미결의 죄 떡밥)</td>
+        <td><strong>혼력(노동) / 체력(전투) 종류 구분</strong> — "할 때 깎이는 것"과 "맞아서 깎이는 것"을 나눔</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. 나라카 밸리에만 있는 것 (고유 시스템)</h2>
+  <p>비교표의 세 번째 칸 중, <strong>이게 나라카를 나라카답게 만든다</strong> 싶은 것들을 따로 모았습니다.</p>
+
+  <div class="uniq-card">
+    <h3>① 카페 운영 — 스타듀에 없는 핵심 루프</h3>
+    <p>실제 나라카 컨셉카페의 활동을 그대로 게임으로 옮긴, <strong>농사와 나란한 또 하나의 하루 루틴</strong>.</p>
+    <ul>
+      <li><strong>프론트 단계 사슬:</strong> 응대 → 체키 촬영 → 체키 그림 → 편지. 갈수록 단가·단골화가 커지지만 시간도 더 듦. ("한 손님에 깊이 vs 회전 유지")</li>
+      <li><strong>역할 분담:</strong> 주방요괴=기본 메뉴, 메인 4인=특별 음료·칵테일, <strong>플레이어=프론트</strong>.</li>
+      <li><strong>낮 vs 밤:</strong> 낮=<strong>체키</strong>(창작·수집 미니게임), 밤 나라카 바=<strong>칵테일</strong>(믹싱·타이밍 미니게임).</li>
+      <li><strong>공급사슬:</strong> 농사·낚시·채광 산출물 → 카페 재료 → 서빙 매출(대체재가 아니라 보완재).</li>
+    </ul>
+  </div>
+
+  <div class="uniq-card">
+    <h3>② 속죄 테마 — 게임을 관통하는 한 겹</h3>
+    <p>각 캐릭터는 <strong>생전의 죄의 힘을, 나라카에서 정반대로 써서 속죄</strong>합니다. 죄가 흠집이 아니라 멋진 반전 서사의 출발점.</p>
+    <ul>
+      <li>미호(방화) → <strong>여우불로 작물을 키운다</strong>(파괴의 불 → 양육의 불)</li>
+      <li>멜(도박·사채) → <strong>카페 환대로 돈을 돌린다</strong> + 공정한 카지노</li>
+      <li>바나(주거침입·흡혈) → <strong>위협을 근원에서 막는 수호자</strong>(침입자 → 수호자)</li>
+    </ul>
+  </div>
+
+  <div class="uniq-card">
+    <h3>③ 체키 · ④ 카페 이벤트 데이</h3>
+    <p><strong>체키</strong> — 직원과 찍는 즉석 기념사진(IP 시그니처). 그을린 양피지 + 검은 나비 고딕 프레임. 코스프레 동료들과 찍어 모으는 <strong>개인 체키 앨범</strong>도.</p>
+    <p><strong>카페 이벤트 데이(테마 데이)</strong> — 실재 컨셉카페의 시그니처. 절기당 하나씩: <strong>메이드(봄)·바캉스(여름)·힙합(가을)·크리스마스(겨울)</strong>. 장식·의상·메뉴·체키가 한 컨셉으로.</p>
+  </div>
+
+  <div class="uniq-card">
+    <h3>⑤ 명부의 운·절기 떡밥 · ⑥ 해방 엔딩</h3>
+    <p><strong>명부의 운</strong> — "운명·심판의 세계"라 점술·운이 세계관에 깊이 정합. 절기 이름엔 클라이맥스에서야 다시 읽히는 떡밥이 숨어 있음.</p>
+    <p><strong>해방 엔딩</strong> — 외부 점수 엔딩 없음. 플레이어가 자신의 <strong>미결의 죄</strong>를 깨달아 속죄를 완성하면 종신계약의 강제가 풀리는 <strong>해방</strong>이 척추 엔딩(단, 탈출이 아니라 <em>스스로 남기를 선택</em>). 엔딩 후에도 일상은 계속(룬 팩토리형).</p>
+  </div>
+
+  <h2>4. 메인 캐릭터 디자인</h2>
+  <p>원작 IP의 네 인물 + 플레이어. <strong>매일 마주치는 중심 인물</strong>이며, 각자의 속죄 서사가 곧 이야기의 본체입니다.</p>
+
+  <div class="char main">
+    <h4>옥자 — 사장 · 마녀</h4>
+    <ul>
+      <li><strong>외형:</strong> 검은 마녀모자 + 빨간 리본 + 안경. 죄인을 직접 잡아온다(철퇴·십자가 등).</li>
+      <li><strong>성격:</strong> 시크하지만 은근 챙기는 타입(겉은 차갑고 속정 있음).</li>
+      <li><strong>역할:</strong> 오프닝에서 종신계약 통보 후, 카페에 상주하는 사장으로 매일 마주침.</li>
+      <li><strong>★ 메인 스토리의 앵커</strong> (정체는 §5).</li>
+    </ul>
+  </div>
+  <div class="char main">
+    <h4>미호 — 구미호</h4>
+    <ul>
+      <li><strong>외형:</strong> 아홉 꼬리, 여우귀, 여우불(파란 불꽃), 노란 한복.</li>
+      <li><strong>성격:</strong> 밝고 긍정적·해맑고 여성스럽다. 악의가 없다.</li>
+      <li><strong>속죄:</strong> 여우불로 호박밭을 태웠지만(사고), 나라카에선 그 불로 <strong>작물을 키운다.</strong> 농사 멘토.</li>
+      <li><strong>관계:</strong> 옥자와 <strong>친구 사이</strong>라 그녀의 숨긴 속정을 가장 가까이 안다.</li>
+    </ul>
+  </div>
+  <div class="char main">
+    <h4>멜 — 강시</h4>
+    <ul>
+      <li><strong>외형:</strong> 돈자루, 부적, 강시 모자, 청록색 의상.</li>
+      <li><strong>죄목:</strong> 불법 도박 및 사채.</li>
+      <li><strong>속죄:</strong> 돈으로 망쳤지만, 이제 <strong>카페 환대로 돈을 돌린다.</strong> 아침엔 카지노, 오후엔 카페.</li>
+    </ul>
+  </div>
+  <div class="char main">
+    <h4>바나 — 뱀파이어</h4>
+    <ul>
+      <li><strong>외형:</strong> 박쥐·검은고양이 사역마, 고딕 드레스, 흡혈.</li>
+      <li><strong>죄목:</strong> 주거침입 및 상해미수.</li>
+      <li><strong>속죄:</strong> 침입자였던 자가 이제 <strong>던전의 위협을 근원에서 막는 수호자.</strong> 밤엔 바 서빙도.</li>
+    </ul>
+  </div>
+  <div class="char main">
+    <h4>플레이어 — 새 직원</h4>
+    <ul>
+      <li>새로 끌려온 <strong>네 번째 죄인 직원.</strong></li>
+      <li><strong>기억상실이 아니다</strong> — 생전을 다 기억하나, <em>그게 죄였음을 본인이 인지하지 못한다.</em></li>
+      <li><strong>"내 죄는 무엇이었나"가 메인 스토리 훅.</strong> 아직 자기 죄를 인정조차 못 한 유일한 한 명.</li>
+    </ul>
+  </div>
+
+  <h2>5. 메인 스토리 <span style="font-size:14px;color:var(--pia);">(※ 핵심 반전 포함 — 승인용 전체 공개)</span></h2>
+  <div class="lead spoiler">
+    옥자님께 <strong>이야기 방향을 보여드리고 합의</strong>하기 위해 게임의 비밀까지 전부 공개합니다.
+    <em>완성된 게임에서는 플레이어가 직접 발견하는 재미로 숨겨집니다.</em>
+  </div>
+
+  <h3>모델 — 스타듀식 "창발형"</h3>
+  <p>강제 줄거리 게임이 아닙니다. 실제 "이야기 체험"은 미호·멜·바나의 <strong>호감도 단계별 속죄 서사</strong>에서 나오고, 그 위에 플레이어 본인의 미스터리가 멀리 깔립니다.<br>
+  <strong>메인 스토리 = 캐릭터 속죄 서사들의 총합 + 플레이어의 미결의 죄.</strong></p>
+
+  <h3>핵심 반전 — 옥자와 플레이어</h3>
+  <ul>
+    <li><strong>옥자는 플레이어의 생전 은인이자 연인이었다.</strong> 타인의 액운·저주를 삼키며 약을 짓던 <strong>고독한 약사(무녀)</strong>로, 탁기로 죽어가던 플레이어를 살린 사람.</li>
+    <li><strong>그날 밤(대화재).</strong> 약방의 대화재에서 옥자는 자기 존재·기억을 대가로 플레이어를 살리고 나라카의 마녀로 귀속됐다.</li>
+    <li><strong>플레이어의 '미결의 죄'</strong> = 옥자가 살려낸 목숨을 <em>일에 묻혀 인연을 못 돌본 외면·부재.</em> 방화·도박 같은 큰 죄가 아니라 <strong>스스로 잘못이라 느끼지 못한 조용한 죄.</strong></li>
+    <li><strong>기억 봉인.</strong> 플레이어를 살려 돌려보내는 금기 계약이 옥자에 대한 진실을 플레이어 안에 <em>가라앉혔다.</em> 삭제가 아니라, 스스로 들여다봐야 닿는 봉인. <strong>옥자를 알아보지 못하는 것 자체가 그 죄의 증상.</strong></li>
+  </ul>
+
+  <h3>세 동료가 쥔 세 조각</h3>
+  <ul>
+    <li><strong>미호 = 옥자의 마음</strong>(감정 — 숨긴 속정을 읽는다)</li>
+    <li><strong>멜 = 옥자의 기록</strong>(사실 — 봉인된 죄목의 존재를 안다)</li>
+    <li><strong>바나 = 옥자의 행동</strong>(목격 — 무방비한 옥자를 본다)</li>
+  </ul>
+
+  <h3>앙상블 비극 — "그날 밤" & 해방</h3>
+  <p>메인 4인뿐 아니라 <strong>조연 11인 전원이 그 하나의 밤에 인과로 묶입니다</strong>(라쇼몽식 증인). 단, 누구도 중심 진실을 말로 풀어주지 않습니다 — <em>봉인은 본인이 스스로 닿아야만 풀린다</em>는 세계 규칙 때문.</p>
+  <p>플레이어가 진실을 스스로 재구성해 속죄를 완성하면, <strong>해방의 순간 봉인이 풀려 기억이 돌아옵니다</strong>("아, 당신이었군요"). 재구성된 사랑 위에 귀환의 카타르시스가 이중으로. 그 후로도 코지한 일상은 계속됩니다.</p>
+
+  <h2>6. 조연 캐릭터 — 나루 마을 결혼 가능 주민 11인</h2>
+  <div class="lead">
+    메인 4인과 별개로, <strong>게임을 위해 새로 디자인한</strong> 결혼 가능 주민들입니다. 옥자님께 <strong>처음 소개</strong>드리는 캐릭터라 매력·생전 죄·결혼 후 반전까지 함께 보여 드립니다.<br>
+    <span class="tag">설계 규칙: 죄는 그 요괴 설화의 본질과 공명하고, 결혼 후 반전 로맨스의 축이 됩니다(평소 매력적 겉면 ↔ 결혼 후 드러나는 진짜 면모). 비인간 요괴는 죄가 없고, 반전은 본성의 사랑스러운 심화입니다.</span>
+  </div>
+
+  <div class="group-label">남요괴 (5)</div>
+
+  <div class="char">
+    <h4>깨비 — 도깨비</h4>
+    <p class="tag">친구→연인 · 장난꾸러기 · 직진남 · 씨름·괴력·도깨비방망이</p>
+    <ul>
+      <li><strong>평소 매력:</strong> 툭툭 장난 ↔ 힘쓰는 일엔 1등으로 달려오는 동네 오빠.</li>
+      <li><strong>생전 죄:</strong> "모든 걸 장난으로 만들어 진심을 한 번도 못 보인 죄."</li>
+      <li><strong>반전:</strong> 영원한 장난꾼 → 결혼 = 생전 처음 "진심"을 택함.</li>
+    </ul>
+  </div>
+  <div class="char">
+    <h4>켄 — 언데드 거인</h4>
+    <p class="tag">듬직함 · 대형견 · 순정파 솜사탕 · 2m 거구의 순한 미남</p>
+    <ul>
+      <li><strong>평소 매력:</strong> 거구인데 세상 무해·섬세(찻잔은 조심), 식물 사랑, 칭찬하면 얼굴 가림.</li>
+      <li><strong>생전 죄:</strong> "겉모습 때문에 괴물 취급받다 단 한 번 터진 분노로 사람을 해친 죄."</li>
+      <li><strong>반전:</strong> 무서운 겉 ↔ 솜사탕 속 → 결혼 = 주인공만은 그 힘을 '지킴'으로 받아줌.</li>
+    </ul>
+  </div>
+  <div class="char">
+    <h4>미르 — 이무기</h4>
+    <p class="tag">미소년 · 신비 · 츤데레 · 냉미남 · 승천 실패한 큰 뱀</p>
+    <ul>
+      <li><strong>평소 매력:</strong> "흥미 없다"며 매일 구석, 곤란할 때 조용히 해결+생색 없음.</li>
+      <li><strong>생전 죄:</strong> "'용(완성·인정)'에 집착해 곁의 인연을 내치고 홀로 천 년을 버틴 오만·고독의 죄."</li>
+      <li><strong>반전:</strong> 차가운 가면 → 마음 열면 오직 주인공에게 집착·응석 = "나만의 용."</li>
+    </ul>
+  </div>
+  <div class="char">
+    <h4>루카 — 늑대인간</h4>
+    <p class="tag">처연 병약미 · 반항아 · 야생→길들여짐 · 저주·보름달·평생 한 반려</p>
+    <ul>
+      <li><strong>평소 매력:</strong> 거친 반항아지만 주인공 앞 처연, 보름달 가까우면 본능 억누르며 끙끙.</li>
+      <li><strong>생전 죄:</strong> "끓는 충동을 다스리지 못하고 본능에 몸을 맡긴 채 곁을 거칠게 망가뜨린 죄."</li>
+      <li><strong>반전:</strong> 보름달 억누르기 = 생전 졌던 싸움을 매달 다시 싸움 → 결혼 = 오직 주인공 손길에만 얌전.</li>
+    </ul>
+  </div>
+  <div class="char">
+    <h4>강림 — 폐직(廢職) 저승사자</h4>
+    <p class="tag">까칠 차도남 · 정장 핏 · 의외의 허당 · 권능 잃은 전직 저승사자</p>
+    <ul>
+      <li><strong>평소 매력:</strong> 완벽주의·이성·차가움 ↔ 현대문물·달콤한 디저트에 약한 허당 갭.</li>
+      <li><strong>생전 죄:</strong> "직무·규칙 뒤에 감정을 숨긴 채 한 영혼에게 마땅한 자비를 끝내 베풀지 않은 죄."</li>
+      <li><strong>반전:</strong> 평생 인도만 하던 자가 처음 사랑을 배움 → 서툴게 질투하고 고장 남.</li>
+      <li><span class="tag">메인 스토리에서 그날 밤 금기 계약의 집행자이기도 하나, 봉인 법칙에 묶여 말로는 풀어주지 못함.</span></li>
+    </ul>
+  </div>
+
+  <div class="group-label">여요괴 (3)</div>
+
+  <div class="char female">
+    <h4>설화(雪花) — 설녀</h4>
+    <p class="tag">첫사랑 · 청순 가련 · 수줍은 얼음 공주 · 마음은 따뜻한데 몸이 차가움</p>
+    <ul>
+      <li><strong>평소 매력:</strong> 차가운 몸이 해될까 맴돎, 칭찬받으면 영하로(귀여운 버릇).</li>
+      <li><strong>생전 죄:</strong> "따뜻함을 포기한 채 차가운 본질이 곁의 이들을 얼려 해치도록 내버려 둔 체념의 죄."</li>
+      <li><strong>반전:</strong> 마음은 열렸으나 몸이 막음 → 결혼 = 사랑 위해 생전 처음 "따뜻해지는 법"을 연습(순애보).</li>
+    </ul>
+  </div>
+  <div class="char female">
+    <h4>스칼렛 — 메두사</h4>
+    <p class="tag">걸크러시 · 치명적 섹시 · 당당한 플러팅 마스터 · 트렌디·낮</p>
+    <ul>
+      <li><strong>평소 매력:</strong> 석화 소문도 웃어넘김, 나른·매운맛 플러팅, 카리스마 리드.</li>
+      <li><strong>생전 죄:</strong> "치명적 매력으로 사람을 '돌처럼' 가둬두고 누구에게도 마음을 안 준 교만·소유의 죄."</li>
+      <li><strong>반전:</strong> 여유만만 ↔ 처음 페이스 잃고 빠짐 → 결혼 = 처음 자기를 내어줌.</li>
+    </ul>
+  </div>
+  <div class="char female">
+    <h4>세레나 — 인어 <span class="tag">(최고 비용 — 마지막 추가)</span></h4>
+    <p class="tag">나른한 천재 · 목소리 여신 · 낭만 집순이</p>
+    <ul>
+      <li><strong>평소 매력:</strong> 매사 귀찮아하는 집순이지만 노래는 마을을 홀리는 재능, 주인공 음료에 가장 행복.</li>
+      <li><strong>생전 죄:</strong> "세상을 흔드는 목소리를 무관심 속에 흘려, 노래에 파멸한 이들을 돌아보지 않은 방관의 죄."</li>
+      <li><strong>반전:</strong> 평생 누워만 있던 그녀가 사랑 위해 처음 움직임(바다 버리고 육지로).</li>
+    </ul>
+  </div>
+
+  <div class="group-label">비인간 요괴 (3) — 죄 없음, 본성의 심화</div>
+
+  <div class="char nonhuman">
+    <h4>모찌 — 슬라임 <span class="tag">(나라카 출생)</span></h4>
+    <p class="tag">말랑 젤리 · 형태 변신 · 흡수형 플러팅 · 카페 과일/푸딩에서 태어남</p>
+    <ul>
+      <li><strong>평소 매력:</strong> 투명 에메랄드빛, 하트·별 형태 변신, 쫀득 힐링, 어깨/머리 위 찹쌀떡.</li>
+      <li><strong>본성 축:</strong> "흡수만 하던 존재 → 내어주는 존재로." 결혼 후 침대에서 이불처럼 껴안겨줌.</li>
+    </ul>
+  </div>
+  <div class="char nonhuman">
+    <h4>네오 — 오토마타/기계 인형 <span class="tag">(나라카 제작)</span></h4>
+    <p class="tag">태엽 인형 · 이모티콘 눈빛 · 버그 난 감정 · 만물상 점주</p>
+    <ul>
+      <li><strong>평소 매력:</strong> "이해할 수 없는 데이터" 뚝딱거림 ↔ 오차 없는 1등 비서. 만물상에서 씨앗·잡화 판매.</li>
+      <li><strong>본성 축:</strong> "순수 논리 기계 → 사랑이라는 '오류'로 처음 감정을 표현." 기계음 고백("핵심 코어 연산은 평생 당신만을 향해 작동합니다").</li>
+    </ul>
+  </div>
+  <div class="char nonhuman">
+    <h4>프로스티 — 예티 <span class="tag">(나라카 야생 괴수)</span></h4>
+    <p class="tag">설산 거대 털뭉치 · 풍부한 안면 모션 · 극상의 푹신함 · 말 못 하는 반려 괴수</p>
+    <ul>
+      <li><strong>평소 매력:</strong> 새하얀 풍성한 털·거대·푹신, 눈망울·눈썹·귀로 감정 표현, 품에 쏙 안아주는 안식처.</li>
+      <li><strong>본성 축:</strong> "거대·말 못 하는 외형 ↔ 표정·몸짓만으로 가장 깊은 온기를 전하는 영혼"(순수 크리처 로맨스).</li>
+    </ul>
+  </div>
+
+  <h2>7. 지금 어디까지 왔나</h2>
+  <p>게임 개발을 <strong>단계(Phase)</strong>로 나눠 하나씩 끝내고 있습니다. 원칙은 <strong>"한 시스템을 100%로 끝내고 다음으로 + 매 단계 직접 플레이되는 무언가를 남긴다."</strong></p>
+  <ul class="timeline">
+    <li><span class="done">✅ Phase 1 — 농사 코어 + 미호 관계 루프 (완료).</span> 회색 도형(그레이박스)으로 <strong>괭이질·심기·물주기·수확</strong>, <strong>혼력 소모</strong>, <strong>세이브/로드</strong>, <strong>미호 대화·호감도·여우불 성장 촉진</strong>, <strong>골드 경제 순환</strong>, <strong>14일 온보딩</strong>까지 — 핵심 농사·관계 루프 한 사이클을 끝까지 구현.</li>
+    <li><span class="done">✅ Phase 1.5 — 핵심 3루프 통합 검증 (완료, 게이트 통과).</span> 농사(미호)+카페(멜)+밤(바나)을 하루 시계 위에서 직조한 21일치로 "여러 루프가 엮이니 재미가 드러난다" 확인 → <strong>GO 판정.</strong></li>
+    <li><span class="now">🔨 Phase 2 — 그림(에셋) 입히는 중 (현재).</span>
+      <ul>
+        <li>✅ 에셋 파이프라인 검증 + <strong>메인 캐릭터 5종 도트화</strong>(플레이어·옥자·미호·멜·바나) 완료.</li>
+        <li>🔨 코어 시스템(아이템·도구·인벤토리·UI) + <strong>맵 환경 에셋</strong>(안식 농원 재배치, 집 외관, 스타듀식 실내 — 막 들어감).</li>
+      </ul>
+    </li>
+    <li>📌 <strong>직접 플레이되는 빌드 존재</strong> — 오늘 보여드리는 데모가 그것입니다. <strong>목업이 아니라 실제로 돕니다.</strong></li>
+  </ul>
+  <p class="tag">※ 맨 위 히어로 스크린샷이 이 단계의 증거입니다 — 도트가 입혀진 실제 밤 카페 화면.</p>
+
+  <h2>8. 앞으로</h2>
+  <ul class="timeline">
+    <li><span class="now">🔨 Phase 2 마무리 (현재)</span> — 코어 UI·도구·아이템 + 맵 환경 + 초상화·사운드까지 입혀 <em>검증된 그 한 무대</em>를 완전히 도트로 살림.</li>
+    <li><span class="next">🔜 Phase 3 — 활동 확장.</span> 하나씩 100%로:
+      <ul>
+        <li>낚시(삼도천·황천해) · 채광(업화 갱도) · 전투(나락) · 카페 심화(체키·칵테일)</li>
+        <li>저승 절기(4×28일) · 카페 이벤트 데이(메이드·바캉스·힙합·크리스마스)</li>
+        <li>맵 확장(나루 마을·8구역) · 결혼/해방 · 조연 11인 한 명씩 추가</li>
+        <li>메인 스토리(그날 밤·미결의 죄·해방 엔딩)</li>
+      </ul>
+    </li>
+    <li><span class="next">🏁 Steam 출시.</span></li>
+  </ul>
+
+  <div class="closing">
+    나라카 밸리는 옥자님의 카페와 사람들을, 오래 머물고 싶은 하나의 게임 세계로 옮기는 작업입니다. 함께 완성해 가고 싶습니다.
+  </div>
+
+</div>
+</body>
+</html>
