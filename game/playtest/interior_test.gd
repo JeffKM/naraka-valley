@@ -77,13 +77,16 @@ func _initialize() -> void:
 
 	var m: Node = await _spawn_main()
 
-	# ── ① 카탈로그: 15채 등록(홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게 + 목공방 + 대장간 + 길드) + 구역·종류 정합 ──
+	# ── ① 카탈로그: 17채 등록(홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게 + 목공방 + 대장간 + 길드 + 넋우릿간 + 넋둥우리) + 구역·종류 정합 ──
 	# ★ 창고(HOME·storehouse) 9→10. ★ M3.1 혼백관(SAMDOCHEON·museum) 10→11. ★ M3.2 생선가게(HWANGCHEONHAE·fishshop) 11→12.
 	# ★ M4.1 목공방(JEOSEUNG_FOREST·woodshop) 12→13. ★ M5.1 대장간(EOPHWA_MINE·smithy)·길드(EOPHWA_MINE·guild) 13→15.
+	# ★ [B1-a.1] 넋우릿간(HOME·barn)·넋둥우리(HOME·coop) 15→17 (동물 2건물 진입 실내).
 	var ids: Array = m._buildings.keys()
-	_check("① 건물 15채 등록(_buildings — 홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게 + 목공방 + 대장간 + 길드)", ids.size() == 15)
+	_check("① 건물 17채 등록(_buildings — 홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게 + 목공방 + 대장간 + 길드 + 넋우릿간 + 넋둥우리)", ids.size() == 17)
 	_check("① 홈 집 = HOME·house", m._buildings["집"]["region"] == RegionCatalog.HOME and m._buildings["집"]["kind"] == "house")
 	_check("① 창고 = HOME·storehouse", m._buildings["창고"]["region"] == RegionCatalog.HOME and m._buildings["창고"]["kind"] == "storehouse")
+	_check("① 넋우릿간 = HOME·barn", m._buildings["넋우릿간"]["region"] == RegionCatalog.HOME and m._buildings["넋우릿간"]["kind"] == "barn")
+	_check("① 넋둥우리 = HOME·coop", m._buildings["넋둥우리"]["region"] == RegionCatalog.HOME and m._buildings["넋둥우리"]["kind"] == "coop")
 	# 혼백관·생선가게·목공방·대장간·길드 출입 라운드트립은 각 구역 test 전담 — 여기선 카탈로그 정합(구역·종류)만.
 	_check("① 혼백관 = 삼도천·museum", m._buildings["혼백관"]["region"] == RegionCatalog.SAMDOCHEON and m._buildings["혼백관"]["kind"] == "museum")
 	_check("① 생선가게 = 황천해·fishshop", m._buildings["생선가게"]["region"] == RegionCatalog.HWANGCHEONHAE and m._buildings["생선가게"]["kind"] == "fishshop")

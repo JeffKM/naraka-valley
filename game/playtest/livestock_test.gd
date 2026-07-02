@@ -138,6 +138,32 @@ func _initialize() -> void:
 	_check("⑩ 세이브 왕복 우정 보존", r2.friendship_of(t) == r.friendship_of(t))
 	_check("⑩ 세이브 왕복 기분 보존", r2.mood_of(t) == r.mood_of(t))
 	_check("⑩ 세이브 왕복 산물 대기 보존", r2.has_product(t) == r.has_product(t))
+	# ★ [B1-a.1] 구버전 세이브(home_building 없음) 로드 → building_of "" 백필(방어).
+	var rc := Ranch.new()
+	rc.load_save({"animals": {Vector2i(0, 0): _mk(DAK, 0, 128)}})
+	_check("⑩b 구버전 세이브 home_building 백필('')", rc.building_of(Vector2i(0, 0)) == "")
+
+	# ── ⑬ [B1-a.1] 소속 건물·건물별 돌봄(진입 실내) ──
+	var rb := Ranch.new()
+	var bA := Vector2i(3, 3)   # 넋우릿간 소속
+	var bB := Vector2i(4, 3)   # 넋우릿간 소속
+	var bC := Vector2i(5, 3)   # 넋둥우리 소속
+	rb.add_animal(bA, SO, "넋우릿간")
+	rb.add_animal(bB, SO, "넋우릿간")
+	rb.add_animal(bC, DAK, "넋둥우리")
+	_check("⑬ building_of 반영", rb.building_of(bA) == "넋우릿간" and rb.building_of(bC) == "넋둥우리")
+	_check("⑬ animals_in 필터(넋우릿간 2·넋둥우리 1)", rb.animals_in("넋우릿간").size() == 2 and rb.animals_in("넋둥우리").size() == 1)
+	# 넋우릿간만 돌봄 → 그 소속만 방목·격리·청결 플래그 섬(넋둥우리는 불변).
+	_check("⑬ tend_all_in 반환 true", rb.tend_all_in("넋우릿간"))
+	rb.advance_day()   # 정산: 넋우릿간 소속은 방목·격리·청소 가산, 넋둥우리는 방치 감산 — 여기선 플래그 격리만 본다
+	# advance_day가 플래그를 리셋하므로, 격리 검증은 정산 전에 별도로.
+	var rb2 := Ranch.new()
+	rb2.add_animal(bA, SO, "넋우릿간")
+	rb2.add_animal(bC, DAK, "넋둥우리")
+	rb2.tend_all_in("넋우릿간")
+	_check("⑬ 건물별 돌봄 격리(넋우릿간 grazed·넋둥우리 미grazed)",
+		rb2._animals[bA]["grazed"] and not rb2._animals[bC]["grazed"])
+	_check("⑬ 빈 건물 tend_all_in = false(무동작)", not rb2.tend_all_in("없는건물"))
 
 	# ── ⑪ ItemCatalog 통합(§8.6) ──
 	var egg := AnimalCatalog.product_of(DAK)              # honbaek_ran
@@ -160,13 +186,23 @@ func _initialize() -> void:
 		DirAccess.remove_absolute(SAVE)   # 세이브 제거 → _ready가 신규 게임 경로(스타터 시드)로 부팅
 	var m := await _spawn_main()
 	_check("⑫ ranch 노드 스폰", m.ranch != null)
-	_check("⑫ 신규 게임 스타터 짐승 시드(≥1)", m.ranch.count() >= 1)
-	# 스타터 짐승은 방목지 걷기 가능 타일에 놓인다(비-blocked).
-	var all_walkable := true
+	_check("⑫ 신규 게임 스타터 짐승 시드(2종 — 건물별 1마리)", m.ranch.count() == 2)
+	# ★ [B1-a.1] 스타터 짐승은 소속 건물 실내 바닥(HOUSE)에 놓인다(진입 실내 — 방목 왕래는 B1-a.2).
+	var all_indoor := true
 	for at in m.ranch.animal_tiles():
-		if m._is_tree_blocked(at):
-			all_walkable = false
-	_check("⑫ 스타터 짐승 전부 걷기 가능 타일", all_walkable and m.ranch.count() > 0)
+		var bld: String = m.ranch.building_of(at)
+		var room: Rect2i = m.NEOKURITGAN_RECT if bld == "넋우릿간" else (m.NEOKDUNGURI_RECT if bld == "넋둥우리" else Rect2i())
+		if bld == "" or not room.has_point(at) or m._grid[at.y][at.x] != m.HOUSE:
+			all_indoor = false
+	_check("⑫ 스타터 짐승 전부 소속 건물 실내에 배치", all_indoor and m.ranch.count() > 0)
+	# 종·건물 짝 정합(안개소=넋우릿간·노을닭=넋둥우리).
+	var pair_ok := true
+	for at in m.ranch.animal_tiles():
+		var sp: String = m.ranch.species_at(at)
+		var bld: String = m.ranch.building_of(at)
+		if (sp == AnimalCatalog.HONBAEK_SO and bld != "넋우릿간") or (sp == AnimalCatalog.HONBAEK_DAK and bld != "넋둥우리"):
+			pair_ok = false
+	_check("⑫ 종·소속 건물 짝 정합(안개소=넋우릿간·노을닭=넋둥우리)", pair_ok)
 	# 스타터 짐승에 급여 → advance → 산물 → 수집이 main 인벤토리로 이어지는지(루프 배선).
 	var starter: Vector2i = m.ranch.animal_tiles()[0]
 	m.ranch.feed(starter)

@@ -52,6 +52,7 @@ const DELUXE_MOOD_GATE := 200     # DELUXE 산물 = 5하트 + 당일 기분 ≥2
 
 # 짐승 상태. 키 = 타일(Vector2i, 정적 위치), 값 = 아래 필드 Dict. 키 없음 = 그 자리에 짐승 없음.
 #   species    : 종 id(AnimalCatalog)
+#   home_building : 소속 건물 id(넋둥우리/넋우릿간 — B1-a "진입 실내"). "" = 미소속(구버전 세이브 방어).
 #   friendship : 우정 pts(0..1000)
 #   mood       : 기분(0..255, 캐리)
 #   fed/petted/grazed/penned/cleaned : 오늘의 데일리 케어 플래그(advance_day가 정산 후 리셋)
@@ -62,11 +63,14 @@ var _animals: Dictionary = {}
 
 # ── 배치·조회 ────────────────────────────────────────────────────────────────
 # 타일에 짐승을 추가한다(유효 종 + 빈 타일). 초기 우정 0·기분 중립·케어 플래그 전부 false·산물 0.
-func add_animal(tile: Vector2i, species: String) -> bool:
+# home_building = 소속 건물 id(넋둥우리/넋우릿간). B1-a "진입 실내" — 짐승은 실내에 거주하고 돌봄도
+# 실내에서 이뤄진다(방목 왕래 pathing은 B1-a.2). 미지정("")도 허용(단위 테스트·구버전 방어).
+func add_animal(tile: Vector2i, species: String, home_building: String = "") -> bool:
 	if not AnimalCatalog.has(species) or _animals.has(tile):
 		return false
 	_animals[tile] = {
 		"species": species,
+		"home_building": home_building,
 		"friendship": 0,
 		"mood": MOOD_START,
 		"fed": false, "petted": false, "grazed": false, "penned": false, "cleaned": false,
@@ -80,6 +84,18 @@ func has_animal(tile: Vector2i) -> bool:
 
 func species_at(tile: Vector2i) -> String:
 	return str(_animals[tile]["species"]) if _animals.has(tile) else ""
+
+# 짐승의 소속 건물 id("" = 미소속). B1-a 건물별 돌봄·방목 왕래(B1-a.2)의 앵커.
+func building_of(tile: Vector2i) -> String:
+	return str(_animals[tile].get("home_building", "")) if _animals.has(tile) else ""
+
+# 특정 건물 소속 짐승 타일 목록(건물별 돌봄·드로우·pathing이 순회).
+func animals_in(building: String) -> Array:
+	var out: Array = []
+	for tile in _animals.keys():
+		if str(_animals[tile].get("home_building", "")) == building:
+			out.append(tile)
+	return out
 
 # 짐승이 있는 타일 목록(main의 _draw_ranch·프롬프트가 순회). 순수 상태 질의(화면은 main이 앎).
 func animal_tiles() -> Array:
@@ -126,10 +142,21 @@ func pen(tile: Vector2i) -> bool:
 func clean(tile: Vector2i) -> bool:
 	return _set_flag(tile, "cleaned")
 
-# 축사 일괄 돌봄(방목·격리·청결) — main의 "축사 돌봄" E 리추얼이 쓴다. 하나라도 새로 서면 true.
+# 일괄 돌봄(방목·격리·청결) — 전체 짐승. 하나라도 새로 서면 true. (단위 테스트·전역 리추얼용)
 func tend_all() -> bool:
+	return _tend_flags(_animals.keys())
+
+# 건물별 일괄 돌봄(방목·격리·청결) — B1-a "진입 실내": 그 건물 안의 짐승만 돌본다(SDV처럼 건물마다
+# 따로 돌봄). main의 실내 돌봄 리추얼이 쓴다. 하나라도 새로 서면 true.
+func tend_all_in(building: String) -> bool:
+	return _tend_flags(animals_in(building))
+
+# 주어진 타일들의 방목·격리·청결 플래그를 세운다(공통 구현). 하나라도 새로 서면 changed·true.
+func _tend_flags(tiles: Array) -> bool:
 	var any := false
-	for tile in _animals.keys():
+	for tile in tiles:
+		if not _animals.has(tile):
+			continue
 		var a: Dictionary = _animals[tile]
 		for flag in ["grazed", "penned", "cleaned"]:
 			if not bool(a[flag]):
@@ -216,7 +243,11 @@ func to_save() -> Dictionary:
 	return {"animals": _animals.duplicate(true)}
 
 # 복원: _animals를 통째로 갈아끼운다. changed로 main이 화면·HUD를 다시 세우게 한다(디커플링).
+# ★ B1-a: home_building이 없는 구버전 세이브는 ""로 백필한다(building_of/animals_in 방어).
 func load_save(data: Dictionary) -> void:
 	var animals: Variant = data.get("animals", {})
 	_animals = animals.duplicate(true) if typeof(animals) == TYPE_DICTIONARY else {}
+	for tile in _animals.keys():
+		if not _animals[tile].has("home_building"):
+			_animals[tile]["home_building"] = ""
 	changed.emit()
