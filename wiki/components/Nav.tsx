@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Images, ListChecks, Sparkles } from "lucide-react";
+import { Images, ListChecks, Sparkles, PackageCheck } from "lucide-react";
 
 const LINKS = [
   { href: "/", label: "에셋 갤러리", icon: Images },
+  { href: "/assets", label: "데모 필요 에셋", icon: PackageCheck },
   { href: "/mechanics", label: "메카닉 현황", icon: ListChecks },
   { href: "/prompts", label: "Gemini 프롬프트", icon: Sparkles },
 ];
