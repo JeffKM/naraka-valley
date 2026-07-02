@@ -32,9 +32,9 @@ const INDOOR_BAND_H := MAP_H - OUTDOOR_H  # =28. 외부 아래 실내 전용 띠
 # ADR-0003 "표정=대화 시 별도 일러스트 초상화". 인게임 도트(작은 실루엣)와 달리 얼굴을
 # 또렷이 살리는 자리. 키는 각 NPC display_name()(미호/옥자/멜/바나)과 일치시킨다.
 # 표정 변형은 stem_<expr>.png(예: miho_smile.png) — 대사 줄 맨 앞 인라인 태그
-# [smile]/[shy]/[sad]/[talk]로 줄마다 지정한다(대사 속 [E] 등 조작키 안내는 화이트리스트
-# 밖이라 표정으로 오인하지 않는다). 태그가 없거나 해당 표정 파일이 없으면 talk로, 그것도
-# 없으면 표정 없는 기본 stem.png로 폴백한다.
+# [smile]/[shy]/[sad]/[surprised]/[talk]로 줄마다 지정한다(대사 속 [E] 등 조작키 안내는 화이트리스트
+# 밖이라 표정으로 오인하지 않는다). ★owner 2026-07-02: talk(입벌림)은 부자연 → 폐기. talk·무태그·
+# 표정파일 누락은 모두 idle(표정 없는 기본 stem.png, 입 닫힌 중립)로 폴백한다.
 const PORTRAIT_DIR := "res://assets/portraits/"
 const PORTRAIT_STEM := {
 	"미호": "miho",
@@ -42,8 +42,8 @@ const PORTRAIT_STEM := {
 	"멜": "mel",
 	"바나": "bana",
 }
-const PORTRAIT_EXPRS := ["smile", "shy", "sad", "talk"]  # 인라인 태그 화이트리스트
-const PORTRAIT_FALLBACK_EXPR := "talk"
+const PORTRAIT_EXPRS := ["smile", "shy", "sad", "surprised", "talk"]  # 인라인 태그 화이트리스트(surprised=놀람 활성화; talk는 태그로 인식·본문서 제거하되 idle로 렌더)
+const PORTRAIT_FALLBACK_EXPR := ""  # 무태그 기본 = idle(기본 stem.png). talk 폐기(owner 2026-07-02, _set_portrait 참조)
 
 # ── 대화창 「태운 한지」 룩(S0-6, owner 제미나이 윈도우 아트) ──
 # 윈도우 1장(dialog_window.png) 위에 본문·초상화·이름을 오버레이. 내부칸 = 측정 비율.
@@ -3768,7 +3768,9 @@ func _process(delta: float) -> void:
 	# Q 작물 순환은 폐기 — 씨앗은 이제 핫바 아이템(ADR-0020 데이터 주도 아이템 위에서).
 	if not _sleeping:
 		for i in Inventory.SIZE:
-			if Input.is_action_just_pressed("hotbar_%d" % i):
+			# ★ 핫바 키는 12개(1234567890-=)만 등록 → 슬롯 12~15는 액션 미등록. has_action 가드로
+			#   미등록 슬롯 조회를 건너뛴다(안 그러면 매 프레임 "hotbar_15 doesn't exist" 에러 스팸).
+			if InputMap.has_action("hotbar_%d" % i) and Input.is_action_just_pressed("hotbar_%d" % i):
 				inventory.select(i)
 		if Input.is_action_just_pressed("hotbar_next"):
 			inventory.select_next()
@@ -4762,8 +4764,8 @@ func _build_dialogue_ui() -> void:
 	dialogue_panel.move_child(art, 1)
 	# ③ 본문(먹빛, 좌 텍스트칸 + 안쪽 여백)
 	var tr := _dlg_local(DLG_F_TEXT)
-	dialogue_text.position = tr.position + Vector2(10, 6)
-	dialogue_text.size = tr.size - Vector2(20, 12)
+	dialogue_text.position = tr.position + Vector2(30, 6)   # ★좌측 나비 장식 피해 첫 줄 안 잘리게(10→30, 나비 폭 회피)
+	dialogue_text.size = tr.size - Vector2(40, 12)
 	dialogue_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	dialogue_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	if font:
@@ -4837,19 +4839,22 @@ func _on_dialogue_changed(speaker: String, line: String) -> void:
 	# 화자명은 이름판이 맡으므로 본문은 대사 + 진행/안내만
 	dialogue_text.text = "%s\n\n%s   %s" % [body, dialogue.progress(), hint]
 
-# P2.4 화자+표정 → 초상화 슬롯. 표정 → talk → 기본 stem.png 순으로 폴백하고, 매핑에 없는
-# 화자(그레이박스 손님·잡귀 등)는 슬롯을 끈다(텍스트만 표시).
+# P2.4 화자+표정 → 초상화 슬롯. 매핑에 없는 화자(그레이박스 손님·잡귀 등)는 슬롯을 끈다.
+# ★owner 2026-07-02: talk(입벌림)은 부자연스러워 폐기 — talk·무태그·표정파일 누락은 모두 idle(기본
+#   stem.png, 입 닫힌 중립)로. 명시 감정 태그(smile/shy/sad)만 해당 표정 파일을 쓴다.
 func _set_portrait(speaker: String, expr: String) -> void:
 	var stem: String = PORTRAIT_STEM.get(speaker, "")
 	if stem == "":
 		dialogue_portrait.visible = false
 		return
-	for cand in [expr, PORTRAIT_FALLBACK_EXPR]:
-		var p: String = PORTRAIT_DIR + stem + "_" + cand + ".png"
+	# smile/shy/sad 등 명시 감정만 표정 파일 시도(talk 제외 — idle로 보냄).
+	if expr != "" and expr != "talk":
+		var p: String = PORTRAIT_DIR + stem + "_" + expr + ".png"
 		if ResourceLoader.exists(p):
 			dialogue_portrait.texture = load(p)
 			dialogue_portrait.visible = true
 			return
+	# talk·무태그·누락 → idle(기본 stem.png)
 	var base := PORTRAIT_DIR + stem + ".png"
 	if ResourceLoader.exists(base):
 		dialogue_portrait.texture = load(base)
