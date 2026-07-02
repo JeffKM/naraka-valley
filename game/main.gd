@@ -565,6 +565,10 @@ const HOME_HOUSE_DOOR := Vector2i(13, 75)         # 실내 집 문 서칸(아래
 const HOME_HOUSE_DOOR_E := Vector2i(14, 75)       # ★[ADR-0046] 실내 본가 문 동칸 — 실내문≡외관문(2칸·중앙). 방 12폭 중앙 seam x13/x14 straddle. 퇴장 트리거 양 칸 수용.
 const HOME_HOUSE_IN_TILE := Vector2i(13, 74)      # 실내 집 문 안쪽(진입 착지) — HOUSE_IN_TILE + (0,41)
 const HOME_HOUSE_CAM_RECT := Rect2i(2, 65, 20, 13)  # 집 방 둘레 — HOUSE_CAM_RECT + (0,41)
+# ★ ADR-0048 Phase D — 저장 상자 칸(집 실내 북벽 flush, 침대(9,68) 옆). 플레이어가 (11,69)에서 위를
+# 바라보며(facing_chest) 우클릭으로 상자 패널을 연다. 집 바닥(HOUSE, 걷기 O)이라 좌표만 정하면 되고(충돌
+# 없는 순수 배치 — 상태는 chest 노드가 든다), _indoor=="집"으로 가드해 다른 구역 같은 좌표엔 무반응.
+const CHEST_TILE := Vector2i(11, 68)
 
 # ── ★ ADR-0035 Phase B — 80×65 안식 비대칭 Overgrown 개간 재배치 ──────────────────
 # 본가+창고(북동 저지 병렬, 자재 동선) / 5×5 스타터 패치(본가/창고 남쪽, debris 0%·즉경작) /
@@ -974,6 +978,14 @@ var hotbar: HotbarHud
 # 생성으로 붙인다(lighting·hotbar 결 — 새 tscn 노드 추가 회피). 세이브는 별도 조각으로 main이 조율.
 var ship_bin: ShippingBin
 
+# ★ ADR-0048 Phase D — 저장 상자(집 실내 순수 보관 컨테이너, 경제 0). ship_bin과 같은 결의 상태 노드 —
+# 코드 생성으로 붙이고(_setup_chest), 세이브는 별도 조각으로 main이 조율한다. 프레임 CTX_CHEST가 참조.
+var chest: StorageChest
+
+# ★ ADR-0048 Phase D — 게임 설정(볼륨·전체화면). audio·DisplayServer와 분리된 UX 환경설정(user://settings.cfg).
+# 값은 이 노드가 들고, 실제 적용(버스 볼륨·창모드)은 main이 한다(데이터/적용 디커플링).
+var settings: GameSettings
+
 # ★ Phase 2.7 C2 — 공통 인벤토리 프레임(메뉴/출하함/매대 컨텍스트 스위칭 UI 셸). hotbar와 같은 결 —
 # 코드 생성 자식 Control, 무상태(인벤토리·출하함이 상태). _setup_frame에서 생성·주입한다.
 var frame: InventoryFrame
@@ -1147,8 +1159,10 @@ func _ready() -> void:
 	_setup_audio()
 	_setup_hotbar()
 	_setup_shipping_bin()   # ★ C2 무인 출하함(프레임이 참조 → 프레임보다 먼저)
+	_setup_chest()          # ★ Phase D 저장 상자(프레임이 참조 → 프레임보다 먼저)
 	_setup_hud_overlays()   # ★ C3 좌하단 알림 피드 + 우하단 혼력 바(프레임보다 먼저 → 모달이 위에)
-	_setup_frame()          # ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대)
+	_setup_frame()          # ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대/상자)
+	_setup_settings()       # ★ Phase D 설정(볼륨·전체화면 — audio·프레임 존재 후, 프레임 신호 연결·적용)
 	_skin_panel_text()      # ★ Phase B 한지 테마(밝은 배경) 위 라벨을 먹빛으로(대비 확보)
 	_setup_clock()
 	# T3.2/T5.6 미호를 현재 시간대의 자리(아침=밭 / 15시부터=카페)에 세우고, 대사 진행
@@ -1332,11 +1346,12 @@ func _ensure_input_actions() -> void:
 # 창 ↔ 전체화면 토글(F11). 픽셀은 nearest+fractional 스케일이라 전체화면에서도 화면을 꽉 채우되
 # 또렷하다(ADR-0018 갱신 — 스타듀식 채움). 창 복귀 시 1920×1080 override로 돌아간다.
 func _toggle_fullscreen() -> void:
-	var win := get_window()
-	if win.mode == Window.MODE_WINDOWED:
-		win.mode = Window.MODE_FULLSCREEN
-	else:
-		win.mode = Window.MODE_WINDOWED
+	var now_full := get_window().mode != Window.MODE_WINDOWED
+	_apply_fullscreen(not now_full)
+	# ★ Phase D — 설정 값·영속을 F11에서도 맞춘다(옵션 탭 체크박스와 단일 값 원천). 부팅 극초기(settings
+	#   생성 전 F11)엔 아직 없을 수 있어 null 가드.
+	if settings != null and settings.set_fullscreen(not now_full):
+		settings.save_settings()
 
 # ── TileSet 조립: terrain 도트(source 0) + 실내/벽 단색(source 1) + WALL 충돌 ──
 func _build_tileset() -> TileSet:
@@ -3192,6 +3207,60 @@ func _setup_shipping_bin() -> void:
 	ship_bin.name = "ShippingBin"
 	add_child(ship_bin)
 
+# ── ★ ADR-0048 Phase D 저장 상자 ────────────────────────────────────────────────
+# ship_bin과 같은 결의 상태 노드(집 실내 순수 보관). 프레임(CTX_CHEST)이 참조하므로 프레임보다 먼저 붙인다.
+func _setup_chest() -> void:
+	chest = StorageChest.new()
+	chest.name = "StorageChest"
+	add_child(chest)
+
+# ── ★ ADR-0048 Phase D 설정(볼륨·전체화면) ──────────────────────────────────────
+# GameSettings를 붙여 디스크에서 읽고 즉시 적용한다(버스 볼륨·창모드). 옵션 탭 조작은 프레임 신호로 받아
+# 값 갱신→적용→영속한다(데이터/적용 디커플링 — GameSettings는 audio·DisplayServer를 모른다).
+func _setup_settings() -> void:
+	settings = GameSettings.new()
+	settings.name = "GameSettings"
+	add_child(settings)
+	settings.load_settings()
+	_apply_audio_volumes()
+	_apply_fullscreen(settings.fullscreen)
+	# 옵션 탭 설정 조작 신호(볼륨 −/+·전체화면 토글) — main이 실제 적용·영속을 수행.
+	frame.music_vol_changed.connect(_on_music_vol_changed)
+	frame.sfx_vol_changed.connect(_on_sfx_vol_changed)
+	frame.fullscreen_toggled.connect(_on_fullscreen_toggled)
+
+# 현재 설정 볼륨을 오디오 버스에 적용한다(음악·효과음 각 0..1 → dB, audio가 변환).
+func _apply_audio_volumes() -> void:
+	if audio == null or settings == null:
+		return
+	audio.set_music_volume(settings.music_volume)
+	audio.set_sfx_volume(settings.sfx_volume)
+
+# 창 ↔ 전체화면 적용(값→창모드). 실제 창 상태만 바꾸고 값은 GameSettings가 든다.
+func _apply_fullscreen(on: bool) -> void:
+	var win := get_window()
+	win.mode = Window.MODE_FULLSCREEN if on else Window.MODE_WINDOWED
+
+# 옵션 탭 볼륨 −/+ 핸들러 — 값 증감 시에만 적용·영속(불필요한 IO 회피).
+func _on_music_vol_changed(delta: float) -> void:
+	if settings.nudge_music(delta):
+		audio.set_music_volume(settings.music_volume)
+		audio.sfx("ui")
+		settings.save_settings()
+
+func _on_sfx_vol_changed(delta: float) -> void:
+	if settings.nudge_sfx(delta):
+		audio.set_sfx_volume(settings.sfx_volume)
+		audio.sfx("ui")   # 조정 즉시 효과음으로 새 볼륨을 들려준다
+		settings.save_settings()
+
+# 옵션 탭 전체화면 체크박스 핸들러 — 현재 창모드의 반대로 토글(F11과 같은 결·같은 값 원천).
+func _on_fullscreen_toggled() -> void:
+	var now_full := get_window().mode != Window.MODE_WINDOWED
+	_apply_fullscreen(not now_full)
+	if settings.set_fullscreen(not now_full):
+		settings.save_settings()
+
 # ── ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대 컨텍스트 스위칭) ────────────────
 # 하단 백팩 공통 + 상단 레이어 교체. 핫바와 같은 CanvasLayer에 핫바 *위*로 붙여(나중 자식) 열렸을
 # 때 클릭을 가로챈다(모달). 출하함 드롭·롤백·구매는 시그널로 받아 main이 wallet·inventory를 조율한다.
@@ -3201,9 +3270,27 @@ func _setup_shipping_bin() -> void:
 # 대화창은 StyleBoxEmpty로 테마를 덮어 dialog_window를 따로 그리니 여기 대상이 아니다.
 const HANJI_INK := Color(0.16, 0.12, 0.085)   # 먹빛(대화 본문 DLG_INK와 같은 톤)
 func _skin_panel_text() -> void:
-	for lb in [milestone_text, shop_text, cafe_summary_text]:
+	# ★ Phase D — 엔딩 본문도 포함. 옛 엔딩은 어두운 ColorRect라 흰 글자였으나, 이제 밝은 한지 카드
+	#   (EndingPanel/Card, 전역 Panel 테마 = hanji_frame) 위에 얹혀 먹빛이라야 읽힌다.
+	for lb in [milestone_text, shop_text, cafe_summary_text, ending_text]:
 		if lb != null:
 			lb.add_theme_color_override("font_color", HANJI_INK)
+	_skin_ending_button()
+
+# ★ Phase D — 엔딩 "처음부터 다시 시작" 버튼을 한지 판(hanji_plate)으로 스킨한다(raw Godot 버튼 제거).
+# HanjiUi.PLATE는 프레임·플레이트 9-slice의 단일 출처(규격 박제 — 같은 파일명 Gemini 결과로 무수정 교체).
+func _skin_ending_button() -> void:
+	if ending_restart == null:
+		return
+	var sb := StyleBoxTexture.new()
+	sb.texture = HanjiUi.PLATE
+	sb.set_texture_margin_all(HanjiUi.PLATE_MARGIN)
+	for st in ["normal", "hover", "pressed", "focus"]:
+		ending_restart.add_theme_stylebox_override(st, sb)
+	ending_restart.add_theme_font_override("font", HanjiUi.font())
+	ending_restart.add_theme_color_override("font_color", HanjiUi.INK)
+	ending_restart.add_theme_color_override("font_hover_color", HanjiUi.GOLD)
+	ending_restart.add_theme_color_override("font_pressed_color", HanjiUi.INK)
 
 func _setup_frame() -> void:
 	frame = InventoryFrame.new()
@@ -3212,11 +3299,14 @@ func _setup_frame() -> void:
 	for crop_id in CROP_SPRITES:
 		icons[crop_id] = CROP_SPRITES[crop_id][2]   # 핫바와 같은 작물 아이콘 재사용
 	frame.setup(inventory, ship_bin, icons)
+	frame.set_chest(chest)   # ★ Phase D 저장 상자 주입(CTX_CHEST 상단 그리드)
 	frame.deposit_slot.connect(_on_frame_deposit)
 	frame.takeback_id.connect(_on_frame_takeback)
 	frame.buy_pressed.connect(_on_frame_buy)
 	frame.save_pressed.connect(_on_frame_save)   # ★ Phase B 옵션 탭
 	frame.quit_pressed.connect(_on_frame_quit)
+	frame.chest_store.connect(_on_frame_chest_store)   # ★ Phase D 상자 보관
+	frame.chest_take.connect(_on_frame_chest_take)     # ★ Phase D 상자 회수
 
 # ── ★ C3 미니멀 HUD 오버레이(좌하단 알림 피드 + 우하단 혼력 바) ─────────────────
 # hotbar·frame과 같은 결 — 코드 생성 자식 Control(무상태). 프레임보다 *먼저* 붙여(앞 자식) 메뉴·
@@ -3599,6 +3689,7 @@ func _save_game() -> void:
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
 		"shipping_bin": ship_bin.to_save(),   # ★ C2 출하 대기(롤백·익일 정산 보존)
+		"chest": chest.to_save(),   # ★ Phase D 저장 상자 보관 내용(순수 보관 — 세이브별 델타)
 		"affinity": affinity.to_save(),
 		"mel_affinity": mel_affinity.to_save(),
 		"bana_affinity": bana_affinity.to_save(),
@@ -3647,6 +3738,8 @@ func _load_game() -> void:
 		inventory.load_save(data["inventory"])
 	if data.has("shipping_bin"):   # ★ C2 — 키 없는 구버전 세이브는 빈 출하함으로 시작(롤백·정산 무상태)
 		ship_bin.load_save(data["shipping_bin"])
+	if data.has("chest"):   # ★ Phase D — 키 없는 구버전 세이브는 빈 상자로 시작(보관 무상태)
+		chest.load_save(data["chest"])
 	if data.has("affinity"):
 		affinity.load_save(data["affinity"])
 	if data.has("mel_affinity"):
@@ -3895,6 +3988,8 @@ func _process(delta: float) -> void:
 			frame.set_hearts(_heart_rows())
 		elif frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_SKILL:
 			frame.set_skills(_skill_rows())   # ★ Phase B 숙련 탭(관계 탭과 대칭 — 읽기 전용 파생)
+		elif frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_OPTIONS:
+			frame.set_settings(settings.music_volume, settings.sfx_volume, settings.fullscreen)   # ★ Phase D 설정 값 주입
 		if frame.context == InventoryFrame.CTX_STORE:
 			frame.store_text = _store_text()
 		return
@@ -3972,6 +4067,9 @@ func _process(delta: float) -> void:
 	# ★ C2 무인 출하함: 카페 안에서 출하함 칸을 바라볼 때 우클릭으로 출하함 패널을 연다. NPC·좌석·
 	# 밭과 칸이 갈리고(SHIP_BIN_TILE 단일), _indoor로 가드해 다른 구역 같은 좌표에 닿아도 무반응.
 	var facing_bin := not _sleeping and _indoor == "카페" and _target == SHIP_BIN_TILE
+	# ★ Phase D 저장 상자: 집 실내에서 상자 칸을 바라볼 때 우클릭으로 상자 패널을 연다(_indoor로 가드해
+	# 다른 구역 같은 좌표에 닿아도 무반응 — facing_bin과 같은 결). 집 안 상호작용은 상자 하나뿐이라 안 겹친다.
+	var facing_chest := not _sleeping and _indoor == "집" and _target == CHEST_TILE
 	# T5.6 옥자(카페 상주)에게 말 걸기: 통보를 마친 뒤(NOTICE 단계 지남)에만 카페에 보인다.
 	# 호감도·선물·출하대 없는 메인 서사 앵커라(ADR-0005) E 일상 대화만 받는다.
 	var facing_okja := not _sleeping and okja.visible and onboarding.step > Onboarding.NOTICE \
@@ -4062,6 +4160,11 @@ func _process(delta: float) -> void:
 	# 잡고 return — 출하함 칸은 다른 대상과 안 겹친다). 패널은 모달이라 위 frame.is_open 가드로 닫힌다.
 	if facing_bin and Input.is_action_just_pressed("action"):
 		_open_frame(InventoryFrame.CTX_BIN)
+		return
+	# ★ Phase D 저장 상자 열기(RMB): 집 실내 상자 칸을 바라보며 우클릭으로 보관 패널을 연다(모달 —
+	# 위 frame.is_open 가드로 닫힌다). 집 안 취침(ui_accept)·상자(action)는 키가 갈려 안 겹친다.
+	if facing_chest and Input.is_action_just_pressed("action"):
+		_open_frame(InventoryFrame.CTX_CHEST)
 		return
 	# T5.1 멜 대화(RMB) / T5.2 선물(G): ★ C2 — 출하대 F가 사라져 가드(not _shop_open)도 불필요하다.
 	if facing_mel and Input.is_action_just_pressed("action"):
@@ -4198,7 +4301,11 @@ func _process(delta: float) -> void:
 	# 하단 프롬프트(집은 sleep_prompt, 카페·밭은 interact_prompt — 구역이 달라 겹치지 않음).
 	# 우선순위: 출하함 > 미호 > 옥자 > 바나(밤) > 네오(매대) > 멜(대화·선물) > 손님 서빙 > 밭 동작.
 	# ★ ADR-0024 — 대화·서빙·막기·수확은 RMB(우클릭), 도구질은 LMB(좌클릭). 선물(G)·바·매대(F)는 별개 키.
-	if facing_bin:
+	if facing_chest:
+		# ★ Phase D 저장 상자를 바라볼 때: 우클릭으로 보관 패널을 연다(순수 보관 — 판매 아님).
+		interact_prompt.visible = true
+		interact_prompt.text = "[우클릭] 저장 상자 (아이템 보관 · 판매 아님)"
+	elif facing_bin:
 		# ★ C2 무인 출하함을 바라볼 때: 우클릭으로 패널을 연다(드롭→익일 정산, 멜 F 소멸).
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 무인 출하함 (수확물 드롭 → 다음 아침 정산)"
@@ -4563,6 +4670,47 @@ func _on_frame_takeback(id: String) -> void:
 	if restored > 0:
 		audio.sfx("ui")
 		_notice("출하함에서 %s %d개 회수" % [ItemCatalog.name_of(id), restored])
+
+# ── ★ ADR-0048 Phase D 저장 상자 보관/회수(프레임 시그널 핸들러) ────────────────
+# 백팩 슬롯을 통째로 상자에 옮긴다(경제 0 — 판매 아님). 출하함 드롭과 달리 종류 제한이 없다(도구·씨앗·
+# 수확물 다 보관). 상자가 가득이면 못 넣는다(store 반환 0). 넣은 만큼만 백팩에서 뺀다(부분 이동 안전).
+func _on_frame_chest_store(slot_index: int) -> void:
+	if chest == null:
+		return
+	var id := inventory.id_at(slot_index)
+	if id == "":
+		return
+	var n := inventory.count_at(slot_index)
+	var q := inventory.quality_at(slot_index)
+	var stored := chest.store(id, n, q)
+	if stored <= 0:
+		_notice("저장 상자가 가득 찼습니다")
+		return
+	inventory.remove_at(slot_index, stored)   # 넣은 만큼만 차감(상자 가득 부분 이동 안전)
+	audio.sfx("ui")
+	_notice("저장 상자에 %s %d개 보관" % [ItemCatalog.name_of(id), stored])
+
+# 상자 슬롯을 통째로 백팩에 되돌린다. 백팩이 가득 차 일부만 들어가면 그만큼만 상자에서 뺀다(출하함 회수 결).
+func _on_frame_chest_take(chest_index: int) -> void:
+	if chest == null:
+		return
+	var e: Dictionary = chest.peek(chest_index)
+	if e.is_empty():
+		return
+	var id: String = str(e.get("id", ""))
+	var q := int(e.get("quality", 0))
+	var cnt := int(e.get("count", 0))
+	var added := 0
+	for _i in cnt:
+		if not inventory.add_item(id, 1, q):
+			break   # 백팩 가득 — 더는 못 받는다
+		added += 1
+	if added <= 0:
+		_notice("백팩이 가득 찼습니다")
+		return
+	chest.remove_at(chest_index, added)
+	audio.sfx("ui")
+	_notice("저장 상자에서 %s %d개 회수" % [ItemCatalog.name_of(id), added])
 
 # ── ★ C2 네오 만물상 매대 구매(프레임 시그널 핸들러) ──────────────────────────
 # 매대에서 [구매] 버튼을 클릭하면 선택 작물 씨앗을 네오 할인가로 산다. bulk(Shift)=대량(BULK개,
@@ -5323,6 +5471,7 @@ func _draw() -> void:
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 			_draw_orchard()          # ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(대형 스프라이트=S1-10)
 			_draw_ranch()            # ★ [S1-7] 혼의 짐승 그레이박스 표식(스프라이트·애니 = S1-11)
+			_draw_chest()            # ★ Phase D 저장 상자(집 실내 — 집 카메라에서만 보임)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
@@ -5661,6 +5810,22 @@ func _draw_ship_bin() -> void:
 	# 대기 중이면 살짝 열린 표시(밝은 점) — "넣어 둔 게 있다"를 눈에 보이게.
 	if ship_bin != null and not ship_bin.is_empty():
 		draw_rect(Rect2(ox + TILE * 0.5 - 2, oy + 4, 4, 4), Color(0.90, 0.82, 0.45))
+
+# ★ ADR-0048 Phase D 저장 상자(그레이박스 — 진짜 아트는 후속 스프라이트). CHEST_TILE 칸에 나무 궤짝을
+# 절차 도형으로 그린다(출하함과 같은 결이되 자물쇠 걸쇠로 "보관함"임을 구분). 집 카메라(HOME_HOUSE_CAM_RECT)
+# 안에서만 보인다. 좌표가 HOME 밴드라 region==HOME일 때 그리면 집 안에서만 눈에 든다(출하함과 같은 결).
+func _draw_chest() -> void:
+	var ox := CHEST_TILE.x * TILE
+	var oy := CHEST_TILE.y * TILE
+	var box := Rect2(ox + 3, oy + 8, TILE - 6, TILE - 12)
+	draw_rect(box.grow(1.0), Color(0.18, 0.13, 0.08))           # 외곽선(어두운 나무)
+	draw_rect(box, Color(0.50, 0.35, 0.20))                     # 궤짝 본체(따뜻한 나무빛 — 출하함보다 밝은 톤)
+	draw_rect(Rect2(box.position, Vector2(box.size.x, 4)), Color(0.64, 0.46, 0.26))  # 뚜껑 밝은 띠
+	# 정면 금속 걸쇠(자물쇠) — "잠기는 보관함"으로 읽히게(출하함과 시각 구분).
+	draw_rect(Rect2(ox + TILE * 0.5 - 3, oy + 10, 6, 5), Color(0.82, 0.74, 0.42))
+	# 보관 중이면 뚜껑 위 밝은 점 — "넣어 둔 게 있다"(출하함과 같은 결).
+	if chest != null and not chest.is_empty():
+		draw_rect(Rect2(ox + TILE * 0.5 - 2, oy + 4, 4, 4), Color(0.92, 0.86, 0.52))
 
 # ★ M2.5 — 나루 마을 메인 집 3채 외관(카페와 같은 결 — 통과 불가 WALL 박스 위 1:1 덮어 그리기).
 # 본체 캐릭터별 재도색이라 라벨 없이 외관만으로 누구 집인지 읽힌다(카페 컨벤션). 그리기 전용 —
