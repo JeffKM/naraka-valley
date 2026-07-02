@@ -11,7 +11,7 @@ const WINDOW_TEX := "res://assets/ui/dialog_window.png"
 
 const CAST := [
 	["미호", "miho", "오늘 밭일 도와줄래? 여우불로 쑥쑥 키워줄게!"],
-	["옥자", "okja", "왔구나. …앉아. 차는 내가 우려줄 테니."],
+	["옥자", "okja", "깨어났군. 여기는 나라카, 죽은 자들의 카페다. 난 옥자, 이곳의 주인이지."],
 	["바나", "bana", "밤엔 내가 지켜. 넌 신경 쓰지 마."],
 	["멜", "mel", "장부는 거짓말 안 해. 출하대 위에 올려."],
 ]
@@ -85,8 +85,8 @@ func _ready() -> void:
 
 	# 본문(좌 텍스트칸, 안쪽 여백)
 	var tr := _frac(F_TEXT)
-	_line.position = tr.position + Vector2(10, 6)
-	_line.size = tr.size - Vector2(20, 12)
+	_line.position = tr.position + Vector2(30, 6)   # ★좌측 나비 장식 피해 첫 줄 안 잘리게(10→30)
+	_line.size = tr.size - Vector2(40, 12)
 	_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_line.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_style(_line, 15, INK)
