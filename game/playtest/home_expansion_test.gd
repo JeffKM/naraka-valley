@@ -105,6 +105,16 @@ func _initialize() -> void:
 		if m._grid[py][m.STOREHOUSE_EXT_DOOR.x] != m.PATH or m._grid[py][m.STOREHOUSE_EXT_DOOR_E.x] != m.PATH:
 			sh_path_ok = false
 	_check("① 창고 문 앞 진입로 = 2칸 폭 PATH(문과 연결)", sh_path_ok)
+	# ★[ADR-0046] 본가 = 짝수폭(10) + 2칸 문(x44·x45) + 2칸 폭 진입로 (제미나이 재생성 정합)
+	_check("① 본가 짝수폭(10)", m.HOUSE_EXT_RECT.size.x == 10 and m.HOUSE_EXT_RECT.size.x % 2 == 0)
+	_check("① 본가 문 2칸(x44·x45) = PATH 리세스",
+		m._grid[m.HOUSE_EXT_DOOR.y][m.HOUSE_EXT_DOOR.x] == m.PATH \
+		and m._grid[m.HOUSE_EXT_DOOR_E.y][m.HOUSE_EXT_DOOR_E.x] == m.PATH)
+	var ho_path_ok := true
+	for hx in [m.HOUSE_EXT_DOOR.x, m.HOUSE_EXT_DOOR_E.x]:   # 문 아래 진입로 레인(y10) 2칸 폭
+		if m._grid[m.HOUSE_EXT_DOOR.y + 1][hx] != m.PATH:
+			ho_path_ok = false
+	_check("① 본가 문 앞 진입로 = 2칸 폭 PATH(문과 연결)", ho_path_ok)
 
 	# ── ③ 축사 = 건물 자리만(비-enterable) ──
 	var barn: Rect2i = m.BARN_EXT_RECT
@@ -175,6 +185,15 @@ func _initialize() -> void:
 	m2._maybe_toggle_building()
 	await _settle(m2)
 	_check("⑤ 홈 집 퇴장", m2._indoor == "")
+	# ★[ADR-0046] 본가 2칸 문 — 동칸(외관 x45·실내 x14)에서도 진입/퇴장 트리거 수용
+	m2.player.position = m2._tile_center_px(m2.HOUSE_EXT_DOOR_E)
+	m2._maybe_toggle_building()
+	await _settle(m2)
+	_check("⑤ 본가 문 동칸(x45)에서도 진입(2칸 트리거)", m2._indoor == "집")
+	m2.player.position = m2._tile_center_px(m2.HOME_HOUSE_DOOR_E)
+	m2._maybe_toggle_building()
+	await _settle(m2)
+	_check("⑤ 본가 실내 문 동칸에서도 퇴장(2칸 트리거)", m2._indoor == "")
 	# 스타터 패치(SOIL) 존재(회귀).
 	var fi: Vector2i = m2.STARTER_PATCH_RECT.position + Vector2i(1, 1)
 	_check("⑤ 스타터 패치(SOIL) 존재(회귀)", m2._grid[fi.y][fi.x] == m2.SOIL)
