@@ -27,7 +27,7 @@ function charPrompt(slot: string, pose: string): string {
 }
 
 const cropF = (stage: string) =>
-  `${STYLE} a single small crop plant, top-down 3/4 overworld view, centered on a transparent background, ${stage}`;
+  `${STYLE} a single small crop plant, top-down 3/4 overworld view seen STRAIGHT ON — NOT isometric, NOT a rotated diamond/rhombus tile. One small upright sprite that fits a single 32x32 square cell (taller than wide), grows upward. Do NOT draw a full ground/soil tile or platform — the crop already sits on the game's own soil tile; draw ONLY the plant plus at most a SMALL mound of WARM DARK BROWN soil (#332016 to #5b3a2d, muted earthy brown — never cool, purple, or magenta) right at its base, on a fully TRANSPARENT background. ${stage}`;
 
 const CLIFF =
   "a seamless tileable top-down cliff tile, cold desaturated slate blue-grey rock, 3 value steps only, single dark outline #401818, cool blue-violet slate self-shadow, chunky 2px blocks, edge-to-edge no border.";
