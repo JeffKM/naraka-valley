@@ -239,7 +239,7 @@ const PROP_BUSH := preload("res://assets/props/bush.png")               # 64×64
 const PROP_ROCK := preload("res://assets/props/rock.png")               # 64×64 — 바위·돌(2×2칸, SOLID)
 const PROP_STUMP := preload("res://assets/props/stump_log.png")         # 64×32 — 그루터기·통나무(2×1칸, 장식)
 # ★ ADR-0035 Phase B — 안식 재설계 신규 PROP(Phase A 마스터 스타일 생성). 계단·넝쿨·덤불 덮개·debris 3종.
-const PROP_STAIRS := preload("res://assets/props/stairs.png")           # 64×64 — 돌계단(고지↔저지 연결, 통과 O)
+const PROP_STAIRS := preload("res://assets/props/stairs_east.png")      # ★S1-10 96×64 동향 돌계단(고지=서/왼쪽↔저지=동/오른쪽, 노치 3칸 폭, 통과 O). 옛 남향 stairs.png placeholder 교체
 const PROP_VINE := preload("res://assets/props/vine.png")               # 32×64 — 넝쿨(절벽 이음매 덮개, 통과 O)
 const PROP_DEBRIS_WEEDS := preload("res://assets/props/debris_weeds.png")          # 32×32 — 이승의 미련·잡초(낫, 통과 O 장식)
 const PROP_DEBRIS_EMBER := preload("res://assets/props/debris_ember_stone.png")    # 64×64 — 업화석(곡괭이, 통과 X SOLID)
