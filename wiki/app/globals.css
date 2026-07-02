@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #14110f;
+  --panel: #1e1a17;
+  --edge: #3a322c;
+  --ink: #ede6dc;
+  --muted: #a99f92;
+  --amber: #d9a441;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+
+/* 픽셀 아트 = nearest 스케일(뭉개짐 방지) */
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
