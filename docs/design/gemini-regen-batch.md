@@ -3,6 +3,7 @@
 > **상태:** 스펙 확정(2026-07-02), owner Gemini 수동 생성 대기.
 > **근거:** [ADR-0047](../adr/0047-gemini-full-asset-regen-supersede-adr0001-scope.md)(Gemini 전 에셋 격상)·[ADR-0025](../adr/0025-asset-spec-card-gate.md)(생성 전 스펙카드 게이트)·[asset-ruleset.md](./asset-ruleset.md)(NW광원·2px청크·팔레트·피벗·footprint)·[master-palette.md](./master-palette.md)(hex).
 > **워크플로우:** owner가 각 프롬프트를 Gemini에 붙여 생성 → 로컬 raw PNG → 변환 글루(§8) → `game/assets/`. Gemini 생성 부분은 코드 밖 수작업([ADR-0001] 허용 글루만 repo에).
+> **자매 문서:** 이 배치는 *기존 96개 재생성*이다. 안식 농원 데모를 완성하려면 새로 그려야 하는 **신규 스프라이트**(가축·신규 작물/과수·닭장·가구 세트)는 [gemini-demo-sprites-spec.md](./gemini-demo-sprites-spec.md)([ADR-0048] F)에서 다룬다.
 
 ---
 
