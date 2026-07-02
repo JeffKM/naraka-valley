@@ -440,3 +440,64 @@ friendship = clamp(friendship+df, 0, 1000);  mood = clamp(mood+dm, 0, 255)
 
 ### §10.8 별도 ADR 없음 근거
 §5~§9와 동형 — 잠긴 배치(ADR-0035 Phase B) 이행 + 슬라이스 내부 신규 파일. ADR-0024(든 도구=동사·틀린 도구 무동작)·ADR-0035(개간 메카닉은 Slice 1)·ADR-0008(관계=곱셈기 — 개간은 도구·혼력만, 관계 무관)·CONTEXT(이승의 미련·업화석·석화 고목) 전부 준수. 미호 곱셈기(개간 가속)는 하류(ADR-0021) — 어기지 않아 개정 ADR 불요.
+
+---
+
+## §11 S1-9 착수 grill 결정 (2026-07-02, `grill-with-docs` Q1~Q8, 집 꾸미기 = 집 내부 3레이어 코스메틱)
+
+> **상태:** ✅ **실구현 완료(2026-07-02, PR #154, `home_deco_test` 44단언 PASS·회귀0·부팅 클린).** 신규 `home_deco_catalog.gd`·`home_deco.gd` + main 배선 + `playtest/home_deco_test.gd`. `layout.json`·`_prop_layouts`·`field/orchard/ranch/reclaim` 불변. 착수 grill 잠금(2026-07-02, 코드 0). 시스템 레벨 설계는 [CONTEXT '집 꾸미기'](../../CONTEXT.md)에서 이미 잠김(grill 2026-06-29, ADR 없이 CONTEXT+카탈로그): 자유 그리드 3레이어(바닥재+벽지+가구)·순수 코스메틱(버프0/게이트0)·테마 세트=해금 시 무한·무료 배치 팔레트·디제시스 반응·무제작 게이트. 본 절은 그 위의 **실구현 경계·범위·검증**을 박제한다. §5~§10과 동형 — 슬라이스 내부 신규 파일(`game/home_deco.gd`·`game/home_deco_catalog.gd`·`playtest/home_deco_test.gd`)이라 **별도 ADR 없음(§11.9)**. 결정 원천: CONTEXT 집 꾸미기 절 · [ADR-0008](../adr/0008-growth-model-relationship-multiplier.md)(평평≠막힘·관계=곱셈기, 코스메틱은 버프 아님)·[ADR-0019](../adr/0019-physical-skill-relationship-multiplier-two-axis.md)(+가치 배제)·[ADR-0020](../adr/0020-item-tool-architecture.md)(예약 스키마)·[ADR-0025](../adr/0025-in-game-prop-placement-mode-data-externalization.md)(F10 저작 도구 — **이것과 완전 분리**, §11.1).
+
+### §11.1 스코프 경계 (Q1·Q2) — F10 저작 도구와 완전 분리, layout.json 시드 불변
+- **완전 분리(Q1):** 기존 F10 배치 모드(ADR-0025)는 **개발자가 월드 가구를 저작하는 시드**(`layout.json`·`_prop_layouts`·`_EDIT_PALETTE` 외부 장식뿐)다. 플레이어 집 꾸미기는 **세이브별·집 내부 한정·순수 코스메틱**으로 의미가 다르다 → `reclaim.gd` 동형의 **새 얇은 델타 모듈**(`home_deco.gd`)이 소유. `layout.json` 시드·`_prop_layouts`·F10 오버레이는 **한 줄도 안 건드림**(회귀 0). 다른 저장소(세이브 델타 vs git 시드)·다른 생명주기·다른 팔레트.
+- **IN(그레이박스 메카닉):** 신규 `home_deco.gd`(`class_name HomeDeco` — 3레이어 배치 델타 + 해금 세트 소유·세이브·`changed`) · 신규 `home_deco_catalog.gd`(`HomeDecoCatalog` static — 테마 세트 정의) · 3레이어(바닥재·벽지·가구) per-cell 배치/삭제/회전 로직 · 플레이어 꾸미기 모드(집 실내 전용 진입·마우스 커서 배치·키 팔레트) · placeholder 세트 **2개** · 해금 상태 세이브 추적 · 디제시스 **최소 스텁**(읽기전용 조회 표면 + 앰비언트 한 줄) · 순수 코스메틱 불변식 · 헤드리스 검증.
+- **OUT(하류):** 세트 **에셋 아트**(S1-11 — 그레이박스는 색 블록/텍스트) · **목공방·떠돌이 상인 상점** 해금 UI(Slice 2 — 지금 START로 2세트 무상) · **집 평수 업그레이드**(별도 미래 — 현재 고정 룸 rect) · **디제시스 NPC/배우자 반응**(Slice 8 관계 — 지금 조회 표면 훅 + 앰비언트 한 줄만) · **멀티셀 가구**(그레이박스=1×1) · 최종 밸런싱.
+
+### §11.2 3레이어 데이터 모델 (Q3) — 바닥재·벽지=per-cell 칠 / 가구=배치+회전
+| 레이어 | 모델 | 저장(각 레이어 자체 Vector2i-키 Dict) | 렌더 |
+|---|---|---|---|
+| **바닥재 FLOOR** | per-cell "칠하기"(룸 바닥 칸 커버링 오버라이드) | `floor: { Vector2i: {set,item} }` | 기존 바닥 타일 **위** 오버레이 |
+| **벽지 WALL** | per-cell "칠하기"(벽 밴드 칸 오버라이드) | `wall: { Vector2i: {set,item} }` | 벽 밴드 위 오버레이 |
+| **가구 FURNITURE** | discrete 배치 오브젝트 + 회전 | `furniture: { Vector2i: {set,item,rot} }` | props 위 그리기 |
+- **회전은 가구만.** `rot: int` — **데이터 모델은 4방(0..3) 지원**(멀티셀·방향 아트 대비 파이프라인 자리), 그레이박스 **렌더는 2방(가로/세로 flip) 또는 4방 텍스트 표기**만 대응.
+- **가구는 1×1 단순화(Q3).** 멀티셀(침대 2×1·탁자 2×2)은 하류.
+- **레이어 간 같은 셀 공존, 같은 레이어 안에서만 셀당 1(Q7).** 한 셀에 바닥재+벽지+가구 3중 공존 가능(다른 레이어) / 같은 레이어 재배치 = overwrite.
+- **배치 경계:** 룸 rect의 걸을 수 있는 바닥 칸(FLOOR·FURNITURE) / 벽 밴드 칸(WALL). `HOME_HOUSE_RECT` 실내 좌표 파생. 경계 밖 배치 거부.
+
+### §11.3 테마 세트 카탈로그 (Q4) — 3레이어 가로지르는 세트, `home_deco_catalog.gd`
+- **세트 = 3레이어를 가로지르는 아이템 묶음.** 각 세트 `{id, name, items:[...]}`, 각 item `{key, layer, is_solid}` (`layer ∈ {FLOOR, WALL, FURNITURE}`). 러그=FLOOR·벽장식=WALL·침대/탁자/화분/조명=FURNITURE로 흡수. **세트 1개가 3레이어 전부에 ≥1 아이템**(그 세트만 깔아도 완성된 룩 — CONTEXT).
+- **placeholder 2세트:** `SOULFIRE`(혼불)·`HIGANBANA`(피안화). 세트-간 믹스(혼불 가구 + 피안화 바닥) 검증 가능.
+- **`is_solid: bool` 하류 훅(Q5):** 그레이박스는 전부 통과 가능(무충돌)이나, 가구 item에 `is_solid`를 **미리 심어둔다** — 훗날 아트 입힐 때 `home_deco.gd`가 `_rebuild_prop_collision` **동형의 얇은 런타임 충돌 빌더**를 호출해 켤 파이프라인 자리만 마련.
+
+### §11.4 해금 = 무한 팔레트 (Q4) — 세이브 추적
+- **해금 상태를 지금부터 세이브에 추적:** `home_deco.unlocked_sets`(세트 id 집합). 배치는 **해금된 세트의 아이템만** 허용 → "해금하면 그 세트 전체가 무한·무료 배치 팔레트, 낱개 비용 0"(CONTEXT) 실현.
+- **신규 게임:** main이 START로 `unlocked_sets = [SOULFIRE, HIGANBANA]` 2세트 무상 지급(상점=Slice 2 하류 훅만 남김).
+
+### §11.5 플레이어 꾸미기 모드 (Q5) — 집 실내 전용, 마우스 배치, 비용 0, 무충돌
+- **진입 게이트:** `_region == RegionCatalog.HOME and _indoor == 집 건물 id`일 때만 **KEY_C**(F키 회피 — 맥북 F10 시스템 키 이슈)로 토글 진입. 밖·타 구역·타 건물에선 진입 불가.
+- **커서 배치:** 마우스 커서 기반 셀 조준 → **LMB=배치 / RMB=삭제**.
+- **팔레트:** 키 조작으로 레이어(바닥재/벽지/가구) 전환 · 해금 세트+아이템 순환 · 가구 회전(rot 0..3).
+- **순수 코스메틱:** 에너지·시간·골드 소모 0(`energy.spend`·`wallet` 미호출).
+- **충돌:** 그레이박스 = **통과 가능(무충돌)** — soft-lock 회피·버프0/게이트0 정합. `SOLID_PROPS` 충돌 인프라 안 씀. (충돌 켜기 = §11.3 `is_solid` 하류 훅.)
+
+### §11.6 디제시스 최소 스텁 + 순수 코스메틱 불변식 (Q6)
+- **읽기전용 조회 표면:** `home_deco.deco_summary()` — 레이어별 배치 수 / 총 아이템 수 / 세트 다양성 같은 **순수 카운트 스칼라**. S1-9의 어떤 게임플레이 시스템도 소비 안 함 → Slice 8 NPC/배우자 대사가 붙을 **훅만**.
+- **앰비언트 한 줄(포함):** 꾸며진 집 진입 시 `_notice`/flavor로 자기완결 한 줄(관계 미터·버프 0, 순수 감상 — 체키 앨범 결·CONTEXT "앰비언트 한정").
+- **버프 0 못박기:** home_deco는 **곱셈기·확률·XP·골드·에너지 반환 API가 아예 없다**(조회 표면은 카운트 스칼라뿐). 배치 동사가 경제/능력치 노드를 **호출하지 않음**을 검증 테스트가 단언(reclaim이 리스폰 안 함을 단언하듯).
+
+### §11.7 세이브 (`home_deco` 델타 키) — reclaim/orchard 동형
+- `to_save()`:
+  ```
+  { "unlocked_sets": ["SOULFIRE","HIGANBANA"],
+    "floor":     [[x,y,set,item],...],       # per-cell 바닥재
+    "wall":      [[x,y,set,item],...],       # per-cell 벽지
+    "furniture": [[x,y,set,item,rot],...] }  # 배치 가구(+회전)
+  ```
+- **JSON 안정성:** Vector2i를 `[x,y]` 배열로(§10.6 reclaim 동형, `var_to_str` 대신 명시 목록). 로드 시 각 레이어를 Vector2i-키 Dict로 재구성.
+- main `_save_game`에 `"home_deco"` 키(reclaim 옆), `_load_game` 복원 후 `changed.emit()` → 재드로우(+§11.3 충돌 하류 훅). **구세이브 방어:** 키 없으면 빈 델타·해금 0(typeof 체크 reclaim 동형).
+
+### §11.8 헤드리스 검증 (`playtest/home_deco_test.gd`, reclaim_test 골격)
+`run_tests.sh` +1(자동 발견). **Part A(HomeDecoCatalog/HomeDeco 단위):** ①카탈로그 커버리지 — 2세트 각각 3레이어 전부에 ≥1 아이템·모든 item `layer ∈ {FLOOR,WALL,FURNITURE}`+`is_solid: bool` 존재 ②해금 게이팅 — 잠긴 세트 아이템 배치 거부·해금 세트 수락 ③원장 — 3레이어 배치·같은 레이어 같은 셀 overwrite·**레이어 간 같은 셀 공존**·삭제·회전(rot 0..3 순환) ④배치 경계 — 룸 rect 밖/비바닥 칸 FLOOR·FURNITURE 거부·벽 밴드 밖 WALL 거부 ⑤버프 0(검증기 이빨) — 곱셈기 반환 메서드 부재·배치 시그니처가 경제/능력치 노드 안 받음·`deco_summary()` 카운트 스칼라만 ⑥세이브 왕복. **Part B(main 통합, 세이브 백업·삭제로 신규게임 강제):** ⑦집 실내 진입→KEY_C 토글→두 세트 아이템 3레이어 믹스 배치(혼불 가구 + 피안화 바닥) ⑧세이브→리로드 영속(`unlocked_sets`+3레이어 배치 생존) ⑨꾸며진 집 재진입 시 앰비언트 한 줄 발화 ⑩버프 0 end-to-end(배치 전후 energy·wallet·farming_xp 불변).
+- ⚠️ **신규 class_name(`HomeDeco`·`HomeDecoCatalog`) 추가 → `godot --headless --editor --quit`로 전역 클래스 캐시 재생성 필수**([[headless-test-classcache-flakiness]] — 안 하면 헤드리스 `--script`가 "Identifier not declared" 파싱에러).
+
+### §11.9 별도 ADR 없음 근거
+§5~§10과 동형 — 시스템 설계는 CONTEXT(집 꾸미기, grill 2026-06-29)에서 이미 잠겼고 이 절은 슬라이스 내부 신규 파일로 그걸 이행. ADR-0008(평평≠막힘·코스메틱은 버프 아님)·ADR-0019(+가치 배제)·ADR-0020(예약 스키마 실현)·ADR-0025(F10 저작 도구와 완전 분리) 전부 준수. 되돌리기 비싼 놀라운 트레이드오프 없음(F10 분리는 reclaim 델타 패턴 재적용) → 개정/신규 ADR 불요.
