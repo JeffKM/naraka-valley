@@ -1,3 +1,36 @@
+# [REVISION 4] 축사 — 지붕 윗면 노출 회복 (2026-07-02, owner "그렇게 진행")
+
+> ✅ **실행 완료.** REVISION 3의 half-res 재생성이 *선명도*는 잡았으나 축사 지붕이 다시 **정면 flat 감블**로
+> 나와(지붕 윗면 0) 본가·창고와 시점이 어긋났다(owner "축사 지붕 뒤에까지 안 보여"). REVISION 2에서 요구한
+> **지붕 Y축 깊이면 노출(§1)** 이 재생성 과정에서 유실된 것.
+>
+> **교정** = PixelLab `create_map_object` (view=`low top-down`, 88×96, high detail)로 **지붕 윗면이 용마루
+> 뒤로 물러나며 보이도록** 프롬프트 강화 재생성 — 명사는 여전히 "wooden farm outbuilding"(barn→빨강벽 방지),
+> "sloped ROOF TOP SURFACE clearly visible receding backward … roof depth visible from above like a farmhouse
+> roof" 명시. 밑단 풀 덤불(263px)은 초록 우세 픽셀 마스킹으로 제거(접지 그림자는 코드가 절차적으로 깖).
+> raw = `assets/_staging_phaseC/pixellab_halfres/barn_hr_v2_clean.png`(→ barn_hr.png 갱신). 파이프라인은
+> REVISION 3 그대로 `tools/facade_halfres_x2.py`. **최종 축사 = 152×136 → 150×166**(지붕 윗면만큼 세로 증가).
+> home_barn/home_full_dump 육안: 본가·창고와 지붕 윗면 깊이·팔레트·석재 기초 정합 확인. main.gd:303 stale 주석
+> (192×128) 교정. 헤드리스 full_dump는 [[headless-test-classcache-flakiness]](Reclaim class_name)로 1회
+> 실패 → `--editor --quit` 캐시 재생성 후 성공(로직버그 아님).
+>
+> **후속(문·길 폭 정합, owner "문이 2칸이자나 입구·길도 2칸으로 잇게"):** 아트 문이 2패널 미닫이인데
+> 리세스·진입로가 1칸이라 불일치. 아트 문 중심 = footprint(x3..6) 경계 x5.0 → **2패널 문 = 타일 x4·x5**.
+> ① 문 리세스 2칸화(`BARN_EXT_DOOR`=x5 + 신규 `BARN_EXT_DOOR_W`=x4, 둘 다 PATH) ② `_carve_paths`에
+> **문 앞 2칸 폭 흙길**(x4·x5, y17..19) 추가 — y16 리세스는 아트 밑에 가려 y17부터 깔아 문 밑단과 이어짐
+> ③ 축사 돌봄 RMB([S1-7]) 두 문칸 어디서나 발동하게 확장 ④ home_expansion_test = 문 2칸+진입로 검증으로 갱신
+> (livestock 포함 전 통과). 육안: home_barn 덤프에서 2패널 문↔2칸 흙길 정합 확인.
+>
+> **전수 규칙화(owner "입구 2칸인 건물은 길도 2칸"):** facade 아트 보유 7건물의 문 폭을 월드 타일 그리드로
+> 측정 → **2칸 문 = 축사·창고**뿐(둘 다 짝수 폭 footprint라 아트 문이 타일 경계 straddle = 양문). 나머지는
+> 1칸: 본가(홀수9·단문 x44)·카페(단문)·멜(홀수5·좁은 양짝)·미호(한옥 미닫이 실폭~1칸)·바나(단문). **창고도
+> 축사와 동일 처리** — `STOREHOUSE_EXT_DOOR_E`(x31) 신설·리세스 2칸·`_carve_paths` 진입로 2칸(x30·x31,
+> y8..20). 진입 트리거는 서패널(x30)만(enterable 회귀 0 — 재진입 테스트 통과). 다른 구역 건물(만물상·혼백관·
+> 생선가게·목공방·대장간·길드 등)은 아직 전용 facade 아트가 없어(placeholder WALL 박스) 문 폭 판정 대상 아님 —
+> 각 구역 아트 생성 시 같은 규칙 적용. **원칙: 문 폭(타일) = 입구 앞 진입로 폭.**
+
+---
+
 # [REVISION 3] 창고·축사 — half-res 네이티브 재생성으로 **선명도 + 2px 캐논 동시 달성** (2026-07-02, owner "A안" 확정)
 
 > ✅ **실행 완료.** REVISION 2의 `place_facade.py`(풀해상 생성 → **÷2 BOX 청키화**)는 그 ÷2 다운샘플이
