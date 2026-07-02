@@ -11,7 +11,10 @@ import sys, os, glob
 from PIL import Image
 
 CHUNK_THRESHOLD = 0.70   # 2x2 블록 비율 < 0.70 이면 1px(고움) → 청키화 대상
-SCAN_DIRS = ["assets/tiles", "assets/props", "assets/characters", "assets/buildings"]
+# ★캐릭터 제외(owner 결정 2026-07-02): 2px 청키화가 인게임 캐릭터 형태를 뭉개
+#   "형태가 안 보일 정도로 흐려짐" → 캐릭터는 선명도 우선으로 청크 캐논 예외.
+#   타일·props·건물은 캐논 유지. 명시 경로 인자를 주면(assets/characters) 그때만 처리됨.
+SCAN_DIRS = ["assets/tiles", "assets/props", "assets/buildings"]
 
 
 def block2_ratio(im):
