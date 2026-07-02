@@ -1146,6 +1146,7 @@ func _ready() -> void:
 	_setup_shipping_bin()   # ★ C2 무인 출하함(프레임이 참조 → 프레임보다 먼저)
 	_setup_hud_overlays()   # ★ C3 좌하단 알림 피드 + 우하단 혼력 바(프레임보다 먼저 → 모달이 위에)
 	_setup_frame()          # ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대)
+	_skin_panel_text()      # ★ Phase B 한지 테마(밝은 배경) 위 라벨을 먹빛으로(대비 확보)
 	_setup_clock()
 	# T3.2/T5.6 미호를 현재 시간대의 자리(아침=밭 / 15시부터=카페)에 세우고, 대사 진행
 	# 시그널을 패널·이동잠금에 연결한다. 초기 위치는 _miho_tile(기본 밭)로 두고, 로드 후
@@ -3191,6 +3192,16 @@ func _setup_shipping_bin() -> void:
 # ── ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대 컨텍스트 스위칭) ────────────────
 # 하단 백팩 공통 + 상단 레이어 교체. 핫바와 같은 CanvasLayer에 핫바 *위*로 붙여(나중 자식) 열렸을
 # 때 클릭을 가로챈다(모달). 출하함 드롭·롤백·구매는 시그널로 받아 main이 wallet·inventory를 조율한다.
+# ★ Phase B — 전역 Panel 테마를 검정 panel_frame → 태운 한지(hanji_frame)로 바꾸면서
+# (ui_theme.tres), 한지 위 라벨 대비를 위해 마일스톤·상점·카페정산 본문을 먹빛으로 준다.
+# 전역 default_font_color를 바꾸면 어두운 월드 위 HUD 라벨(시계·골드)까지 어두워지므로 국소 처리.
+# 대화창은 StyleBoxEmpty로 테마를 덮어 dialog_window를 따로 그리니 여기 대상이 아니다.
+const HANJI_INK := Color(0.16, 0.12, 0.085)   # 먹빛(대화 본문 DLG_INK와 같은 톤)
+func _skin_panel_text() -> void:
+	for lb in [milestone_text, shop_text, cafe_summary_text]:
+		if lb != null:
+			lb.add_theme_color_override("font_color", HANJI_INK)
+
 func _setup_frame() -> void:
 	frame = InventoryFrame.new()
 	$CanvasLayer.add_child(frame)
@@ -3201,6 +3212,8 @@ func _setup_frame() -> void:
 	frame.deposit_slot.connect(_on_frame_deposit)
 	frame.takeback_id.connect(_on_frame_takeback)
 	frame.buy_pressed.connect(_on_frame_buy)
+	frame.save_pressed.connect(_on_frame_save)   # ★ Phase B 옵션 탭
+	frame.quit_pressed.connect(_on_frame_quit)
 
 # ── ★ C3 미니멀 HUD 오버레이(좌하단 알림 피드 + 우하단 혼력 바) ─────────────────
 # hotbar·frame과 같은 결 — 코드 생성 자식 Control(무상태). 프레임보다 *먼저* 붙여(앞 자식) 메뉴·
@@ -3802,6 +3815,8 @@ func _process(delta: float) -> void:
 			frame.cycle_tab()
 		if frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_REL:
 			frame.set_hearts(_heart_rows())
+		elif frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_SKILL:
+			frame.set_skills(_skill_rows())   # ★ Phase B 숙련 탭(관계 탭과 대칭 — 읽기 전용 파생)
 		if frame.context == InventoryFrame.CTX_STORE:
 			frame.store_text = _store_text()
 		return
@@ -4509,6 +4524,26 @@ func _heart_rows() -> Array:
 		{"name": "네오", "filled": neo_affinity.hearts(), "total": Affinity.MAX_HEARTS,
 			"effect": StoreDiscount.summary(neo_affinity.hearts())},
 	]
+
+# ★ Phase B 숙련 탭 행(_heart_rows와 대칭 — FarmSkill에서 레벨·진행 파생, 읽기 전용). 현재 농사 1종.
+# floor_xp=현 레벨 진입 임계, next_xp=다음 레벨 임계(만렙이면 0). 프레임이 (xp-floor)/(next-floor)로 진행바.
+func _skill_rows() -> Array:
+	var lv := FarmSkill.level_for_xp(_farming_xp)
+	var floor_xp := 0 if lv <= 0 else int(FarmSkill.XP_THRESHOLDS[lv - 1])
+	var next_xp := 0 if lv >= FarmSkill.MAX_LEVEL else int(FarmSkill.XP_THRESHOLDS[lv])
+	return [
+		{"name": "농사", "level": lv, "max": FarmSkill.MAX_LEVEL, "xp": _farming_xp,
+			"floor_xp": floor_xp, "next_xp": next_xp},
+	]
+
+# ★ Phase B 옵션 탭 핸들러 — 프레임은 신호만, 실제 저장·종료는 main이 수행(지갑·세이브 소유).
+func _on_frame_save() -> void:
+	_save_game()
+	_notice("저장했습니다")
+
+func _on_frame_quit() -> void:
+	_save_game()
+	get_tree().quit()
 
 # ── T4.1 온보딩 ────────────────────────────────────────────────────────────
 # 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다(CONTEXT
