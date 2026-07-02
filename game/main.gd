@@ -32,7 +32,7 @@ const INDOOR_BAND_H := MAP_H - OUTDOOR_H  # =28. 외부 아래 실내 전용 띠
 # ADR-0003 "표정=대화 시 별도 일러스트 초상화". 인게임 도트(작은 실루엣)와 달리 얼굴을
 # 또렷이 살리는 자리. 키는 각 NPC display_name()(미호/옥자/멜/바나)과 일치시킨다.
 # 표정 변형은 stem_<expr>.png(예: miho_smile.png) — 대사 줄 맨 앞 인라인 태그
-# [smile]/[shy]/[sad]/[talk]로 줄마다 지정한다(대사 속 [E] 등 조작키 안내는 화이트리스트
+# [smile]/[shy]/[sad]/[surprised]/[talk]로 줄마다 지정한다(대사 속 [E] 등 조작키 안내는 화이트리스트
 # 밖이라 표정으로 오인하지 않는다). ★owner 2026-07-02: talk(입벌림)은 부자연 → 폐기. talk·무태그·
 # 표정파일 누락은 모두 idle(표정 없는 기본 stem.png, 입 닫힌 중립)로 폴백한다.
 const PORTRAIT_DIR := "res://assets/portraits/"
@@ -42,7 +42,7 @@ const PORTRAIT_STEM := {
 	"멜": "mel",
 	"바나": "bana",
 }
-const PORTRAIT_EXPRS := ["smile", "shy", "sad", "talk"]  # 인라인 태그 화이트리스트(talk는 여전히 태그로 인식·본문서 제거하되 idle로 렌더)
+const PORTRAIT_EXPRS := ["smile", "shy", "sad", "surprised", "talk"]  # 인라인 태그 화이트리스트(surprised=놀람 활성화; talk는 태그로 인식·본문서 제거하되 idle로 렌더)
 const PORTRAIT_FALLBACK_EXPR := ""  # 무태그 기본 = idle(기본 stem.png). talk 폐기(owner 2026-07-02, _set_portrait 참조)
 
 # ── 대화창 「태운 한지」 룩(S0-6, owner 제미나이 윈도우 아트) ──
