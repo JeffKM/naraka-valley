@@ -13,9 +13,9 @@ class_name HotbarHud
 #   - 헤드리스 단위검증(main.tscn 로드)에서도 안전 — 텍스처는 유효 preload, _draw는 픽셀이 없어도
 #     크래시하지 않는다(라이팅·손님 그리기와 같은 결).
 
-const SLOTS := 12                 # = Inventory.SIZE(핫바 칸 수). 슬롯이 늘면 함께 키운다.
-const SLOT_PX := 44.0             # 한 칸 변(px)
-const GAP := 4.0                  # 칸 사이 간격
+const SLOTS := 16                 # = Inventory.SIZE(핫바 칸 수). 슬롯이 늘면 함께 키운다. ★S1-8: 12→16
+const SLOT_PX := 36.0             # 한 칸 변(px) — ★S1-8: 16칸이 화면폭(640)에 맞게 44→36
+const GAP := 3.0                  # 칸 사이 간격 — ★S1-8: 4→3 (16*36+15*3=621 < 640)
 const MARGIN_BOTTOM := 12.0       # 화면 아래 여백
 
 var inv: Inventory = null         # 그릴 인벤토리(슬롯·선택). main이 주입.

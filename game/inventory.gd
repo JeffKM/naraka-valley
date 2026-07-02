@@ -25,10 +25,12 @@ class_name Inventory
 
 signal changed()  # 재고·선택이 바뀐 프레임(main이 HUD·핫바 갱신)
 
-const SIZE := 12                  # 시작 슬롯 수(= 핫바 칸). 확장은 이 값만 키운다(슬롯 위치 보존).
+const SIZE := 16                  # 시작 슬롯 수(= 핫바 칸). 확장은 이 값만 키운다(슬롯 위치 보존).
+                                  # ★S1-8: 12→16(개간 도구 3종이 START에 합류 — 도구5+농사보급+수확물 여유). hotbar_hud.SLOTS 동반.
 
 # 새 게임 시작 지급물. 도구는 유니크라 1개씩, 씨앗은 작물군 id → 개수.
-const START_TOOLS := [ItemCatalog.HOE, ItemCatalog.WATERING_CAN]
+const START_TOOLS := [ItemCatalog.HOE, ItemCatalog.WATERING_CAN,
+	ItemCatalog.SCYTHE, ItemCatalog.PICKAXE, ItemCatalog.AXE]   # ★S1-8 개간 도구(무상 그레이박스·소프트락 0)
 const START_SEEDS := {CropCatalog.HONRYEONGCHO: 3}
 # S1-5b — 혼의 나무 묘목(최소 배선, greybox-spec §7.8). 정식 판매처(만물상=Slice 2·온실)는 하류라
 # 새 게임 종잣돈으로 몇 그루 준다(과수 루프를 HOME에서 바로 체험). 과일 종 id → 개수.

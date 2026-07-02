@@ -60,11 +60,26 @@ const FERT_HYPER := "fert_hyper"       # 하이퍼 비료(성장촉진군 −33%
 # ── 도구 id ─────────────────────────────────────────────────────────────────
 const HOE := "hoe"                 # 괭이 — 미경작 칸을 경작(LMB)
 const WATERING_CAN := "watering_can"  # 물뿌리개 — 심은 칸에 물주기(LMB)
+# ★ S1-8 개간 도구 3종(§10.2) — overgrown debris를 맞는 도구로 치운다(든 도구=동사, ADR-0024).
+const SCYTHE := "scythe"           # 낫 — 이승의 미련(잡초) 제거
+const PICKAXE := "pickaxe"         # 곡괭이 — 업화석(돌) 제거
+const AXE := "axe"                 # 도끼 — 석화 고목(그루터기) 제거
 
 # ── 목축(S1-7) — 건초·대형 산물(§8.6) ────────────────────────────────────────
 # 건초(feed): 짐승 급여 재료(1마리/일 1개, §4.1). 품질 무차원 스택 아이템(CAT_MATERIAL 실사용 개시).
 const HAY := "hay"
 const HAY_COST := 10               # 건초 기준가(placeholder — 만물상 판매·수풀 베기는 하류)
+
+# ── 개간(S1-8) — debris 드랍 재료(§10.2) ──────────────────────────────────────
+# 개간으로 나오는 재료 3종. 품질 무차원 스택·CAT_MATERIAL(HAY 결 — Phase 3 가공 예약). name/가격은 아래 표에서.
+const SOUL_FIBER := "soul_fiber"        # 혼백 섬유 — 이승의 미련(잡초·낫) 드랍
+const EMBER_SHARD := "ember_shard"      # 업화석 조각 — 업화석(돌·곡괭이) 드랍
+const PETRIFIED_WOOD := "petrified_wood"  # 석화 목재 — 석화 고목(그루터기·도끼) 드랍
+const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 별 상수라 여기 제외)
+	SOUL_FIBER: {"name_ko": "혼백 섬유", "price": 4},
+	EMBER_SHARD: {"name_ko": "업화석 조각", "price": 12},
+	PETRIFIED_WOOD: {"name_ko": "석화 목재", "price": 15},
+}
 # 대형 산물 접미("<산물>_large"). 산물 아이템 id + 이 접미 = 대형 변이(판매가 ×2, §4.1). 씨앗:수확물 결.
 const LARGE_SUFFIX := "_large"
 
@@ -80,6 +95,9 @@ const SAPLING_SUFFIX := "_sapling"
 const TOOLS := {
 	HOE: {"name_ko": "괭이", "color": Color(0.62, 0.45, 0.30)},          # 흙빛 손잡이
 	WATERING_CAN: {"name_ko": "물뿌리개", "color": Color(0.35, 0.55, 0.70)},  # 물빛 통
+	SCYTHE: {"name_ko": "낫", "color": Color(0.72, 0.70, 0.42)},          # ★S1-8 마른 풀빛 날
+	PICKAXE: {"name_ko": "곡괭이", "color": Color(0.55, 0.52, 0.56)},     # ★S1-8 회청 강철
+	AXE: {"name_ko": "도끼", "color": Color(0.68, 0.40, 0.34)},           # ★S1-8 붉은 자루
 }
 
 # ── id 변환(작물군 ↔ 아이템 id) ─────────────────────────────────────────────
@@ -141,6 +159,10 @@ static func _is_animal_product(id: String) -> bool:
 static func _is_hay(id: String) -> bool:
 	return id == HAY
 
+# id가 개간 드랍 재료인가(S1-8, §10.2). 건초와 함께 CAT_MATERIAL(Phase 3 가공 예약).
+static func _is_material(id: String) -> bool:
+	return MATERIALS.has(id)
+
 # 기준 산물 id → 대형 변이 아이템 id("honbaek_ran" → "honbaek_ran_large"). livestock 대형 수집이 쓴다.
 static func large_product_id(product_id: String) -> String:
 	return product_id + LARGE_SUFFIX
@@ -149,7 +171,7 @@ static func large_product_id(product_id: String) -> String:
 # 카탈로그에 있는 유효 아이템인가(도구·씨앗·묘목·수확물·과일·비료·건초·산물 어느 하나). 슬롯 add/load 검증에 쓴다.
 static func has_item(id: String) -> bool:
 	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
-		or _is_fertilizer(id) or _is_hay(id) or _is_animal_product(id)
+		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -164,8 +186,8 @@ static func category_of(id: String) -> String:
 		return CAT_HARVEST
 	if _is_fertilizer(id):
 		return CAT_FERTILIZER
-	if _is_hay(id):
-		return CAT_MATERIAL   # 건초 = 급여 재료(예약된 재료 카테고리 실사용 개시, S1-7)
+	if _is_hay(id) or _is_material(id):
+		return CAT_MATERIAL   # 건초(S1-7)·개간 드랍(S1-8) = 재료 카테고리(Phase 3 가공 예약)
 	return ""
 
 # 표시명(HUD·상점·툴팁). 씨앗="<작물명> 씨앗"·묘목="<과일명> 묘목"·수확물=작물명·과일=과일명·도구=도구명. 없으면 "".
@@ -184,6 +206,8 @@ static func name_of(id: String) -> String:
 		return FertilizerCatalog.name_of(id)
 	if _is_hay(id):
 		return "건초"
+	if _is_material(id):
+		return MATERIALS[id]["name_ko"]
 	if _is_large_product(id):
 		return "큰 %s" % AnimalCatalog.product_name(_large_base(id))
 	if _is_animal_base(id):
@@ -195,7 +219,7 @@ static func stackable_of(id: String) -> bool:
 	if TOOLS.has(id):
 		return false
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
-		or _is_fertilizer(id) or _is_hay(id) or _is_animal_product(id)
+		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id)
 
 # 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 비료=구매가(buy_cost),
 # 수확물/과일=판매가. 없으면 0. 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다.
@@ -216,6 +240,8 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return int(FruitTreeCatalog.fruit_sell(id) * quality_mult(quality))
 	if _is_hay(id):
 		return HAY_COST   # 건초 = 품질 무차원 고정가(급여 재료)
+	if _is_material(id):
+		return int(MATERIALS[id]["price"])   # ★S1-8 개간 드랍 = 품질 무차원 고정가(Phase 3 가공 예약)
 	# ★ S1-7(§8.6): 대형 산물은 기준 판매가 ×2에 품질 배수를 얹는다(대형 = 품질과 별 축). 기준 산물은 품질 배수만.
 	if _is_large_product(id):
 		return int(AnimalCatalog.product_sell(_large_base(id)) * 2.0 * quality_mult(quality))

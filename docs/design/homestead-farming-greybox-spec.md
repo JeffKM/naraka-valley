@@ -401,3 +401,42 @@ friendship = clamp(friendship+df, 0, 1000);  mood = clamp(mood+dm, 0, 255)
 
 ### §9.9 별도 ADR 없음 근거
 §5~§8과 동형 — 잠긴 spec(§4.1) 이행 + 슬라이스 내부 신규 파일(`animal_catalog.gd`·`livestock.gd`). ADR-0004(미호 양육 확장·새 캐릭터 X)·ADR-0008(관계=곱셈기 — 우정은 산물 품질·대형을 *가속*하되 base 산물은 0하트에서도 급여만으로 나옴="평평≠막힘")·CONTEXT(비살상) 전부 준수. 미호 곱셈기(농사 XP 결의 목축 가속)는 이 곡선 *위*에 후행(ADR-0021, 하류) — 어기지 않아 개정 ADR 불요.
+
+---
+
+## §10 S1-8 착수 결정 (2026-07-02, 개간 = overgrown debris 3종 치우기 end-to-end)
+
+§5~§9와 동형 — 잠긴 배치(ADR-0035 Phase B·[phaseB-layout §5](./homestead-phaseB-layout.md))의 **개간 메카닉을 이행**한다. 신규 파일(`debris_catalog.gd`·`reclaim.gd`)로 완전 분리(orchard/ranch 결), `field.gd`·`_prop_layouts`(설계 시드=layout.json) **불변**. 별도 ADR 없음(§10.8).
+
+### §10.1 스코프 경계 (포함/배제)
+- **IN:** 신규 `reclaim.gd`(`class_name Reclaim` — orchard/ranch 동형 분리 노드: **치운 debris 좌표 델타**만 소유·세이브·`changed`) · 신규 `debris_catalog.gd`(debris 3종→도구·드랍·통과 규칙 데이터) · 도구 3종(낫/곡괭이/도끼) `ItemCatalog.TOOLS` · 드랍 재료 3종 `CAT_MATERIAL` · LMB 개간 분기(짐승처럼 `_target_valid`(SOIL) 게이트 **밖** 별도 디스패치 — debris는 GROUND 위) · 드로우/충돌 **skip-filter**(치운 debris 미표시·통과) · **치운 타일→farmable**(경작지 확장) · 세이브/로드 · 헤드리스 검증.
+- **OUT(하류):** 도구 정식 획득(상점=Slice2, 지금 START_KIT 무상) · debris 리스폰/재생성(그레이박스=1회성, 안 자람) · 드랍 재료 가공(Phase 3) · 개간 툴스윙 애니(S1-10) · 미호 곱셈기(ADR-0021).
+
+### §10.2 debris ↔ 도구 ↔ 드랍 매핑 (`debris_catalog.gd`)
+| debris(CONTEXT) | 텍스처 | 도구 | 통과 | 드랍(CAT_MATERIAL) | 수 |
+|---|---|---|---|---|---|
+| 이승의 미련(잡초) | `PROP_DEBRIS_WEEDS` | 낫 `SCYTHE` | O(장식) | 혼백 섬유 `soul_fiber` | 1 |
+| 업화석(돌) | `PROP_DEBRIS_EMBER` | 곡괭이 `PICKAXE` | X(SOLID) | 업화석 조각 `ember_shard` | 2 |
+| 석화 고목(그루터기) | `PROP_DEBRIS_STUMP` | 도끼 `AXE` | X(SOLID) | 석화 목재 `petrified_wood` | 2 |
+- **맞는 도구만** 그 debris를 연다 — 틀린 도구=무동작(ADR-0024 §2 "선택 도구가 장식이 되지 않게"). 드랍 수는 **결정적**(roll 없음, 그레이박스). ※`PROP_STUMP`(장식 통나무)는 debris **아님**(별 텍스처).
+- **배치(잠김, `PROP_LAYOUT_HOME` 시드):** 미련 9칸 · 업화석 4칸(하드게이트 (24,14) + 산포 3) · 석화고목 4칸(하드게이트 (24,16) + 산포 3) = 총 17.
+
+### §10.3 상태 = 치운 좌표 델타 (`_prop_layouts` 불변)
+- debris 배치는 `PROP_LAYOUT_HOME`(설계 데이터·layout.json)에 그대로 둔다. `Reclaim`은 **치운 좌표 집합 `_cleared: Dictionary`(Vector2i→true)만** 소유(플레이어 세이브 델타). `_prop_layouts`는 절대 안 건드린다(layout.json 오염 방지 — 설계 시드 순수 유지).
+- **드로우**(`_draw_props_for`)·**충돌**(`_rebuild_prop_collision`)에서 debris 텍스처 타일이 `reclaim.is_cleared(t)`면 **skip** → 안 그리고 안 막는다. (CAFE/VILLAGE는 debris 텍스처 無 → no-op.)
+- `reclaim.clear(tile, kind, tool_id)`: 이미 치웠거나 도구 불일치면 `{}` 반환(무동작). 성공 시 `_cleared[tile]=true`·`changed.emit()`·`{"drop":id,"count":n}` 반환. **멱등**(재개간 X).
+
+### §10.4 경작지 확장 = 치운 타일 farmable
+- 치운 debris 타일을 `reclaim`가 farmable로 표시 → `_is_farmable`가 **SOIL ∪ reclaimed**(HOME) 반환 → 괭이질 가능(스타듀식 풀→틸드 오버레이). 지형(`_grid`)·타일셋 **불변**(구역 재빌드 안전 — 세이브는 reclaim 델타만, 틸드는 farm 상태). `_cleared` = reclaimed 집합(치움=개간 완료=경작 가능, 단일 집합).
+
+### §10.5 소프트락 0
+- 고지(하늘 목장) 계단 노치를 막는 **하드게이트** 업화석(24,14)·석화고목(24,16)은 START_KIT 곡괭이·도끼로 즉시 개간 → 고지 항상 도달(계단 통과). 스타터 패치(40,12,5,5)는 debris 0%(설계 불변). `START_TOOLS`에 낫/곡괭이/도끼 추가(무상 그레이박스).
+
+### §10.6 세이브
+- `to_save() → {"cleared": [[x,y],...]}` / `load_save(data)`(통째 교체 후 `changed.emit`). main `_save_game`에 `"reclaim"` 키(orchard/ranch 옆), `_load_game` 복원 시 `_on_reclaim_changed`로 드로우/충돌 반영. 구세이브(키 無)=치운 것 0(전 debris 유지, 방어적).
+
+### §10.7 헤드리스 검증 (`playtest/reclaim_test.gd`, orchard_test 골격)
+`run_tests.sh` +1(자동 발견). **Part A(Reclaim/카탈로그 단위):** ①`DebrisCatalog` 매핑(3종 도구·드랍·수·solid·is_reclaim_tool·미지 kind 방어) ②맞는 도구 개간 성공·드랍 반환 정확 ③틀린 도구 무동작(`{}`) ④멱등(이미 치운 것 재개간 `{}`·`_cleared` 불변) ⑤is_cleared/카운트 ⑥세이브 왕복(치운 집합 복원). **Part B(main 통합, 세이브 백업·삭제로 신규게임 강제):** ⑦START_TOOLS 3종 존재 ⑧하드게이트 업화석/석화고목 좌표에 debris kind 조회됨 ⑨곡괭이/도끼로 개간→`is_cleared`·충돌 제거(통과 가능)·`_is_farmable` true(경작지 확장)·드랍 인벤토리 적재 ⑩스타터 패치 debris 0.
+
+### §10.8 별도 ADR 없음 근거
+§5~§9와 동형 — 잠긴 배치(ADR-0035 Phase B) 이행 + 슬라이스 내부 신규 파일. ADR-0024(든 도구=동사·틀린 도구 무동작)·ADR-0035(개간 메카닉은 Slice 1)·ADR-0008(관계=곱셈기 — 개간은 도구·혼력만, 관계 무관)·CONTEXT(이승의 미련·업화석·석화 고목) 전부 준수. 미호 곱셈기(개간 가속)는 하류(ADR-0021) — 어기지 않아 개정 ADR 불요.
