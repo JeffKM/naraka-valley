@@ -235,3 +235,20 @@ func set_muted(m: bool) -> void:
 
 func is_muted() -> bool:
 	return _muted
+
+# ── ★ ADR-0048 Phase D 볼륨(설정 화면) ───────────────────────────────────────
+# 음악·효과음 버스 볼륨을 0..1 선형으로 받아 dB로 적용한다(설정 GameSettings 값 → main이 이 API로 적용).
+# 버스 볼륨은 크로스페이드(플레이어별 volume_db)·음소거(bus mute)와 직교라 서로 안 싸운다(카테고리 마스터).
+# 0(또는 근사)이면 무음 바닥(SILENT_DB)으로 내려 완전히 죽인다(linear_to_db(0)=-inf 방어).
+func set_music_volume(v01: float) -> void:
+	_set_bus_volume(MUSIC_BUS, v01)
+
+func set_sfx_volume(v01: float) -> void:
+	_set_bus_volume(SFX_BUS, v01)
+
+func _set_bus_volume(bus: String, v01: float) -> void:
+	var idx := AudioServer.get_bus_index(bus)
+	if idx == -1:
+		return
+	var v := clampf(v01, 0.0, 1.0)
+	AudioServer.set_bus_volume_db(idx, SILENT_DB if v <= 0.001 else linear_to_db(v))
