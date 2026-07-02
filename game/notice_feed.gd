@@ -22,7 +22,7 @@ const ROW_H := 22.0           # 한 줄 높이(px, 논리 좌표)
 const MARGIN := 10.0          # 화면 왼쪽 여백
 # 핫바(하단 중앙)·하단 프롬프트와 안 겹치게 피드를 그 위로 올린다(좌하단이되 하단 UI 위).
 # 하단에서 RESERVE_BOTTOM만큼 띄운 자리가 가장 최근(맨 아래) 알림의 바닥이다.
-const RESERVE_BOTTOM := 100.0
+const RESERVE_BOTTOM := 124.0   # ★ Phase C — 좌하단 컨텍스트 팝업(핫바 위, top≈view.y-116) 위로 알림을 쌓는다
 const MAX_W := 320.0          # 알림 띠 최대 폭(좌측 컬럼 유지 — 중앙 프롬프트 침범 방지)
 const FADE_SECS := 0.6        # 사라지기 직전 알파가 줄어드는 구간(초)
 
@@ -31,11 +31,12 @@ var _items: Array = []
 
 # 알림 한 줄을 큐에 민다(main._notice가 호출). secs 후 자동으로 사라진다. 큐가 가득 차면
 # 가장 오래된(앞) 항목을 밀어낸다 — 최신 이벤트가 항상 보이게.
-func push(text: String, secs: float, wide: bool = false) -> void:
+func push(text: String, secs: float, wide: bool = false, icon: Texture2D = null, gold: bool = false) -> void:
 	if text == "":
 		return
 	# wide = 긴 안내(온보딩)용 — 좌측 컬럼(MAX_W) 대신 화면 폭 가까이 허용해 한 줄이 안 잘리게 한다.
-	_items.append({"text": text, "secs": maxf(secs, 0.1), "wide": wide})
+	# ★ Phase C — icon(아이템 획득 토스트의 좌측 아이콘)·gold(레벨업/숙련 알림 금박 강조)를 옵션으로 얹는다.
+	_items.append({"text": text, "secs": maxf(secs, 0.1), "wide": wide, "icon": icon, "gold": gold})
 	while _items.size() > MAX_ITEMS:
 		_items.pop_front()
 	queue_redraw()
@@ -66,7 +67,7 @@ func _draw() -> void:
 	if _items.is_empty():
 		return
 	var view := _view()
-	var font := ThemeDB.fallback_font
+	var font := HanjiUi.font()   # ★ Phase C — 한지 톤 통일(neodgm)
 	# 좌하단: 가장 최근(배열 끝)을 맨 아래에, 오래된 것일수록 위로 쌓는다.
 	var n := _items.size()
 	for idx in n:
@@ -78,9 +79,25 @@ func _draw() -> void:
 		# 마지막 FADE_SECS 동안 서서히 흐려진다(그 전엔 불투명).
 		var a := clampf(float(item["secs"]) / FADE_SECS, 0.0, 1.0)
 		var text: String = item["text"]
-		# 가독성: 반투명 배경 띠 + 흰 글자(밤 라이팅 위에서도 읽히게). 좌측 컬럼을 넘지 않게 폭 제한.
+		var icon: Texture2D = item.get("icon", null)
+		var gold: bool = item.get("gold", false)
+		# 아이콘(아이템 획득 토스트) 여백 — 있으면 좌측에 16px 아이콘 자리를 둔다.
+		var icon_w := (ROW_H - 6.0) if icon != null else 0.0
+		# 가독성: 어두운 인셋 띠 + 밝은 글자(밤 라이팅 위에서도 읽히게) + 따뜻한 테두리. 좌측 컬럼을 넘지 않게 폭 제한.
 		# wide 항목(온보딩 안내)은 화면 폭 가까이 허용해 긴 한 줄이 안 잘리게 한다.
 		var limit := (view.x - MARGIN * 2.0) if item.get("wide", false) else MAX_W
-		var w := minf(font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x + 16.0, limit)
-		draw_rect(Rect2(pos, Vector2(w, ROW_H - 2.0)), Color(0.06, 0.05, 0.08, 0.66 * a))
-		draw_string(font, pos + Vector2(8.0, 15.0), text, HORIZONTAL_ALIGNMENT_LEFT, w - 12.0, 14, Color(0.96, 0.95, 0.92, a))
+		var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+		var w := minf(tw + 16.0 + icon_w, limit)
+		var box := Rect2(pos, Vector2(w, ROW_H - 2.0))
+		# 인셋 바탕 + 테두리(레벨업은 금박, 그 외 따뜻한 테두리). 한지 팔레트로 raw 톤 제거.
+		draw_rect(box, Color(HanjiUi.INSET.r, HanjiUi.INSET.g, HanjiUi.INSET.b, 0.72 * a))
+		var edge := HanjiUi.GOLD if gold else HanjiUi.BORDER
+		draw_rect(box, Color(edge.r, edge.g, edge.b, a), false, 1.0)
+		var tx := pos.x + 8.0
+		if icon != null:
+			draw_texture_rect(icon, Rect2(pos + Vector2(5.0, 3.0), Vector2(ROW_H - 8.0, ROW_H - 8.0)),
+				false, Color(1, 1, 1, a))
+			tx += icon_w
+		var col := HanjiUi.GOLD_SOFT if gold else Color(0.96, 0.95, 0.92)
+		draw_string(font, Vector2(tx, pos.y + 15.0), text, HORIZONTAL_ALIGNMENT_LEFT, w - 12.0 - icon_w, 14,
+			Color(col.r, col.g, col.b, a))

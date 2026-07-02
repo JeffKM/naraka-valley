@@ -41,22 +41,40 @@ func _view() -> Vector2:
 		sc = par.scale.x
 	return Vector2(size.x / sc, size.y / sc)
 
+# 슬롯 배치 원점(_draw·히트테스트 공용) — 하단 중앙, 보이는 논리 영역 기준.
+func _slots_origin() -> Vector2:
+	var view := _view()
+	var total_w := SLOTS * SLOT_PX + (SLOTS - 1) * GAP
+	return Vector2((view.x - total_w) * 0.5, view.y - SLOT_PX - MARGIN_BOTTOM)
+
 func _draw() -> void:
 	if inv == null:
 		return
-	var view := _view()
-	var total_w := SLOTS * SLOT_PX + (SLOTS - 1) * GAP
-	var origin := Vector2((view.x - total_w) * 0.5, view.y - SLOT_PX - MARGIN_BOTTOM)
+	var origin := _slots_origin()
 	for i in SLOTS:
 		var pos := origin + Vector2(i * (SLOT_PX + GAP), 0.0)
 		_draw_slot(i, pos)
 
+# ★ Phase C 툴팁용 — 논리 좌표(보이는 640×360)에서 그 위치의 핫바 슬롯 인덱스(없으면 -1).
+# _draw와 같은 기하를 재계산한다(무상태 뷰라 캐시 대신 재계산 — 슬롯 16개 값싸다).
+func slot_index_at(logical_pos: Vector2) -> int:
+	if inv == null:
+		return -1
+	var origin := _slots_origin()
+	for i in SLOTS:
+		var pos := origin + Vector2(i * (SLOT_PX + GAP), 0.0)
+		if Rect2(pos, Vector2(SLOT_PX, SLOT_PX)).has_point(logical_pos):
+			return i
+	return -1
+
 func _draw_slot(i: int, pos: Vector2) -> void:
 	var rect := Rect2(pos, Vector2(SLOT_PX, SLOT_PX))
 	var selected := i == inv.selected_index
-	# 칸 배경 + 테두리. 선택 칸은 배경이 밝고 테두리가 굵고 환하다(스타듀의 그 칸 강조).
-	draw_rect(rect, Color(0.10, 0.10, 0.13, 0.78))
-	draw_rect(rect, Color(0.95, 0.92, 0.65) if selected else Color(0.45, 0.45, 0.50), false, 2.0 if selected else 1.0)
+	# ★ Phase C — 태운 한지 plate 9-slice 슬롯(inv_frame 백팩과 동일 룩). 선택 칸은 밝은 금박
+	# 테두리를 덧그려 강조한다(스타듀의 그 칸 강조).
+	HanjiUi.draw_plate(self, rect)
+	if selected:
+		draw_rect(rect, HanjiUi.GOLD_SOFT, false, 2.0)
 	var id := inv.id_at(i)
 	if id == "":
 		return  # 빈 슬롯(배경만)
@@ -68,8 +86,8 @@ func _draw_slot(i: int, pos: Vector2) -> void:
 	# 스택 개수 배지(2개 이상일 때만 — 1이면 군더더기). 칸 우하단에 작은 숫자.
 	var n := inv.count_at(i)
 	if n > 1:
-		draw_string(ThemeDB.fallback_font, pos + Vector2(SLOT_PX - 15.0, SLOT_PX - 4.0),
-			str(n), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
+		draw_string(HanjiUi.font(), pos + Vector2(SLOT_PX - 15.0, SLOT_PX - 4.0),
+			str(n), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, HanjiUi.INK_LIGHT)
 
 # 품질 등급 색(그레이박스 배지 — 은/금/이리듐). 0(일반)은 배지 없음이라 호출 안 됨.
 func _quality_color(q: int) -> Color:
