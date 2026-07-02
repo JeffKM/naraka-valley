@@ -34,8 +34,8 @@ func _spawn_main() -> Node:
 
 func _initialize() -> void:
 	print("▶ livestock_test (S1-7)")
-	var DAK := AnimalCatalog.HONBAEK_DAK   # 혼백 닭 — 산물 혼백란·large_capable
-	var SO := AnimalCatalog.HONBAEK_SO     # 혼백 소 — 산물 혼백유
+	var DAK := AnimalCatalog.HONBAEK_DAK   # 노을닭(소형) — 산물 노을알·large_capable (내부 id 보존)
+	var SO := AnimalCatalog.HONBAEK_SO     # 안개소(대형) — 산물 안개젖 (내부 id 보존)
 
 	# ── ① 배치(§8.5) ──
 	var r := Ranch.new()
