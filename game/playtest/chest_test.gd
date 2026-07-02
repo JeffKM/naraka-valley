@@ -126,6 +126,36 @@ func _initialize() -> void:
 			break
 	_check("④a 이어하기에 상자 보관 복원(7)", found == 7)
 
+	# ── ⑤ [ADR-0048 Phase E] 갈무리방(창고) 저장 상자 — 집 상자와 독립·활성 라우팅·세이브 왕복 ──
+	print("── ⑤ 창고 저장 상자(Phase E) ──")
+	_check("⑤a 창고 상자 노드 존재·집 상자와 독립", m.storehouse_chest != null and m.storehouse_chest != m.chest)
+	# _open_chest로 활성 상자를 집→창고로 전환(같은 CTX_CHEST 패널 공유).
+	m._open_chest(m.storehouse_chest)
+	_check("⑤b _open_chest = 프레임에 창고 상자 주입·활성 전환",
+		m.frame.chest == m.storehouse_chest and m._active_chest == m.storehouse_chest and m.frame.is_open())
+	m._close_frame()
+	# 창고 상자 보관이 창고 상자에만 반영(집 상자 불변 — 독립 컨테이너).
+	m.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 4, 0)
+	var sslot := -1
+	for i in Inventory.SIZE:
+		if m.inventory.id_at(i) == hid:
+			sslot = i
+			break
+	var house_empty_before: bool = m.chest.is_empty()
+	m._active_chest = m.storehouse_chest   # 활성 = 창고(보관 핸들러가 이걸 조작)
+	m._on_frame_chest_store(sslot)
+	_check("⑤c 창고 상자에 보관됨", not m.storehouse_chest.is_empty())
+	_check("⑤d 집 상자는 불변(독립 컨테이너)", m.chest.is_empty() == house_empty_before)
+	# 세이브 왕복(main) — 창고 상자 보관이 별도 조각으로 복원된다.
+	m._save_game()
+	var m3: Node = await _spawn_main()
+	var sfound := 0
+	for i in StorageChest.SIZE:
+		if m3.storehouse_chest.id_at(i) == hid:
+			sfound = m3.storehouse_chest.count_at(i)
+			break
+	_check("⑤e 이어하기에 창고 상자 복원", sfound > 0)
+
 	print("══ %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	if FileAccess.file_exists(SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
