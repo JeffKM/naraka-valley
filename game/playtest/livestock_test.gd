@@ -177,6 +177,66 @@ func _initialize() -> void:
 	# 품질 배수 정합: 대형 이리듐(Q3) = 기준 ×2 ×2.0.
 	_check("⑪ 대형 이리듐가 = 기준 ×4", ItemCatalog.price_of(big_egg, ItemCatalog.Q_IRIDIUM) == ItemCatalog.price_of(egg) * 4)
 
+	# ── ⑭ [B1-a.2] pathing(실내↔방목 왕래)·방목 문 ──
+	var rw := Ranch.new()
+	var w1 := Vector2i(3, 3)   # 넋우릿간 소속
+	var w2 := Vector2i(4, 3)   # 넋둥우리 소속
+	rw.add_animal(w1, SO, "넋우릿간")
+	rw.add_animal(w2, DAK, "넋둥우리")
+	_check("⑭ 방목 문 기본 닫힘", not rw.door_open("넋우릿간") and not rw.door_open("넋둥우리"))
+	_check("⑭ 새 짐승 실내 거주 시작", rw.location_of(w1) == Ranch.LOC_INDOOR and not rw.is_outside(w1))
+	_check("⑭ 문 닫힘이면 releasable 0", rw.releasable().is_empty())
+	_check("⑭ toggle_door 열림 반환", rw.toggle_door("넋우릿간"))
+	_check("⑭ 문 연 건물만 releasable(넋우릿간 1)", rw.releasable().size() == 1 and rw.releasable()[0] == w1)
+	var dest := Vector2i(5, 20)
+	_check("⑭ send_to_pasture 성공", rw.send_to_pasture(w1, dest))
+	_check("⑭ 방출 후 방목 상태·좌표", rw.is_outside(w1) and rw.pasture_tile_of(w1) == dest)
+	_check("⑭ 방출이 grazed 자동 세움(F_GRAZE)", rw._animals[w1]["grazed"])
+	# 밤 정산(문 열린 채) → 자동 귀가·penned·실내 복귀 / 실내 잔류 짐승도 penned(야간 격리).
+	var n1 := rw.settle_night()
+	_check("⑭ 문 열림 밤 귀가(실내 복귀·penned)", not rw.is_outside(w1) and rw._animals[w1]["penned"])
+	_check("⑭ 실내 잔류 짐승도 penned(야간 격리, w2)", rw._animals[w2]["penned"])
+	_check("⑭ settle_night 노출 0", int(n1["exposed"]) == 0)
+
+	# 엣지① — 나간 뒤 문 닫아 실외 고립: penned 미설정·방목 위치 유지·비살상(짐승 소멸 0).
+	var re := Ranch.new()
+	var e1 := Vector2i(0, 0)
+	re.add_animal(e1, SO, "넋우릿간")
+	re.set_door("넋우릿간", true)
+	re.send_to_pasture(e1, Vector2i(4, 20))
+	re.set_door("넋우릿간", false)   # 귀가 전 문 닫음
+	var n2 := re.settle_night()
+	_check("⑭ 엣지① 실외 고립: penned 미설정", not re._animals[e1]["penned"])
+	_check("⑭ 엣지① 실외 고립: 방목 위치 유지", re.is_outside(e1))
+	_check("⑭ 엣지① settle_night 노출 1·격리 0", int(n2["exposed"]) == 1 and int(n2["penned"]) == 0)
+	_check("⑭ 엣지① 비살상: 짐승 유지", re.count() == 1 and re.has_animal(e1))
+	# 고립 짐승은 이후 문 다시 열면 다음 밤 귀가(회복).
+	re.set_door("넋우릿간", true)
+	var n3 := re.settle_night()
+	_check("⑭ 문 다시 열면 고립 짐승 귀가", not re.is_outside(e1) and int(n3["penned"]) == 1)
+
+	# 방목 문·위치 세이브 왕복.
+	var rs := Ranch.new()
+	var st := Vector2i(2, 2)
+	rs.add_animal(st, DAK, "넋둥우리")
+	rs.set_door("넋둥우리", true)
+	rs.send_to_pasture(st, Vector2i(7, 21))
+	var rs2 := Ranch.new()
+	rs2.load_save(rs.to_save())
+	_check("⑭ 세이브 왕복 방목 문 보존", rs2.door_open("넋둥우리"))
+	_check("⑭ 세이브 왕복 방목 위치·좌표 보존", rs2.is_outside(st) and rs2.pasture_tile_of(st) == Vector2i(7, 21))
+	# 구버전 세이브(location/doors 없음) 로드 → 실내·닫힘 default 백필.
+	var rold := Ranch.new()
+	rold.load_save({"animals": {Vector2i(9, 9): _mk(DAK, 0, 128)}})
+	_check("⑭ 구버전 세이브 location 백필(실내)", rold.location_of(Vector2i(9, 9)) == Ranch.LOC_INDOOR)
+	_check("⑭ 구버전 세이브 문 백필(닫힘)", not rold.door_open("넋둥우리"))
+	# clean_all_in = 청소(청결)만 — 방목·격리는 pathing 몫이라 안 선다.
+	var rcl := Ranch.new()
+	var ct := Vector2i(1, 1)
+	rcl.add_animal(ct, DAK, "넋둥우리")
+	_check("⑭ clean_all_in 청소만(방목·격리 불변)",
+		rcl.clean_all_in("넋둥우리") and rcl._animals[ct]["cleaned"] and not rcl._animals[ct]["grazed"] and not rcl._animals[ct]["penned"])
+
 	# ── Part B: main 통합(⑫) — 신규 게임 강제(세이브 백업·삭제)로 스타터 짐승 시드 검증 ──
 	# save_region_test 결: 실제 개발 세이브를 백업했다가 끝에 복원(테스트 격리, 유저 세이브 불침범).
 	var had_save := FileAccess.file_exists(SAVE)

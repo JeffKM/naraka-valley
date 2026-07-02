@@ -3237,7 +3237,15 @@ func _on_day_advanced(day: int) -> void:
 	var h := affinity.hearts()
 	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h))
 	orchard.advance_day(day)   # ★ [S1-5b] 성숙+제철 나무는 결실 +1(비제철 정지·영속). day는 무상태 절기 판정(ADR-0045)
+	# ★ [B1-a.2] 밤 pathing 정산 — advance_day 정산 *전에* 방목 짐승을 자동 귀가시켜(penned) 격리 성공을
+	#   확정하고, 문 닫혀 못 들어온 짐승은 실외 고립으로 남긴다(penned 미설정 → advance_day가 M_NIGHT_EXPOSED).
+	var night := ranch.settle_night()
+	if int(night.get("exposed", 0)) > 0:
+		_notice("짐승 %d마리가 밖에 갇혔다 — 문을 열어 둬야 귀가한다" % int(night["exposed"]))
 	ranch.advance_day()        # ★ [S1-7] 짐승 데일리 정산 — 케어 플래그로 우정·기분 갱신·산물 생성·플래그 리셋(§4.1)
+	# ★ [B1-a.2] 새 아침 방목 방출 — advance_day가 플래그를 리셋한 *뒤*, 문 열린 건물 짐승을 방목지로 내보낸다
+	#   (grazed=이번 새 날치). 평온·낮 게이트는 _release_open_buildings 안에서(_weather_calm 스텁=항상 평온).
+	_release_open_buildings()
 	energy.refill()
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
@@ -3943,13 +3951,25 @@ func _process(delta: float) -> void:
 	if facing_seat >= 0 and night_bar.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
 		_try_night_serve(facing_seat)
 		return
-	# ★ [B1-a.1] 동물 건물 실내 RMB = 그 건물 돌봄(방목·격리·청결 일괄, §4.1). SDV처럼 건물 안에서 돌본다
-	#   (진입 실내·Q2=A). 짐승을 직접 바라볼 땐 아래 on_animal의 쓰다듬/수집이 우선 → 여기선 짐승 밖 실내 칸에서만.
+	# ★ [B1-a.2] 동물 건물 실내 방목 문 토글(F) — 문을 열면 짐승이 낮에 방목지로 나간다(즉시 방출·grazed),
+	#   닫으면 실내에 머문다. 나간 뒤 귀가(밤) 전에 닫으면 실외 고립(M_NIGHT_EXPOSED, 엣지①). SDV 헛간 문 결.
+	if not _sleeping and _indoor in ANIMAL_BUILDINGS and Input.is_action_just_pressed("shop_toggle"):
+		var opened := ranch.toggle_door(_indoor)
+		audio.sfx("ui")
+		if opened:
+			_release_open_buildings()   # 낮이면 이 건물 짐승 즉시 방목지로(밤엔 _release가 스스로 가드).
+			_notice("%s 방목 문 열림 — 짐승이 방목지로 나간다" % _indoor)
+		else:
+			_notice("%s 방목 문 닫힘 — 나간 짐승은 밤 귀가 전 다시 열어 둬야 한다" % _indoor)
+		return
+	# ★ [B1-a.2] 동물 건물 실내 RMB = 잠자리 청소(청결만, §4.1). 방목·격리는 pathing이 자동으로 세운다
+	#   (문 방출→grazed·밤 귀가→penned) — 실내 돌봄은 청소만 남는다. 짐승을 직접 바라볼 땐 아래 on_animal
+	#   의 쓰다듬/수집(급여·산물)이 우선 → 여기선 짐승 밖 실내 칸에서만.
 	if not _sleeping and _indoor in ANIMAL_BUILDINGS and not ranch.has_animal(_target) \
 			and Input.is_action_just_pressed("action"):
-		if ranch.tend_all_in(_indoor):
+		if ranch.clean_all_in(_indoor):
 			audio.sfx("ui")
-			_notice("%s 돌봄 — 방목·격리·청결 완료" % _indoor)
+			_notice("%s 청소 완료 — 잠자리를 정갈히" % _indoor)
 		return
 	# ★ [S1-7→B1-a.1] 짐승 상호작용 — 짐승은 실내 바닥(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치한다.
 	#   LMB=건초 급여(_use_tool 내 hay 분기)·RMB=쓰다듬/산물 수집(_try_harvest 내 짐승 분기). 건물 실내에서 이뤄진다.
@@ -5009,6 +5029,42 @@ func _seed_starter_animal(species: String, building: String, room: Rect2i) -> vo
 			if ranch.add_animal(t, species, building):
 				return
 
+# ── ★ [B1-a.2] 방목 pathing 배선 ──────────────────────────────────────────────
+# 방목 날씨 게이트. 혼우(비)·잿눈(눈)이면 짐승은 실내 잔류(Q5 스펙)지만, 날씨 시스템은 Phase 3라
+# 아직 없다 → 지금은 항상 평온(true). 날씨가 붙으면 여기서 clock.weather 등을 물어 게이팅한다(hook).
+func _weather_calm() -> bool:
+	return true
+
+# 방목지(PASTURE_SCAN_RECT) 안의 걸을 수 있는(비-SOLID) 타일 목록. 짐승 방목 목적지 슬롯이 된다.
+# 지형만 본다(그레이박스 — 방목지는 절벽으로 둘린 평면이라 프롭 거의 없음). _grid 경계도 방어.
+func _free_pasture_tiles() -> Array:
+	var out: Array = []
+	for y in range(PASTURE_SCAN_RECT.position.y, PASTURE_SCAN_RECT.end.y):
+		if y < 0 or y >= _grid.size():
+			continue
+		for x in range(PASTURE_SCAN_RECT.position.x, PASTURE_SCAN_RECT.end.x):
+			if x < 0 or x >= _grid[y].size():
+				continue
+			if not is_solid(_grid[y][x]):
+				out.append(Vector2i(x, y))
+	return out
+
+# 문 열린 건물의 실내 짐승을 방목지로 방출한다(아침 경계·문 여는 즉시). 평온·낮일 때만. 방목 슬롯을
+# 짐승마다 하나씩 배정(라운드로빈)한다. ranch가 releasable(문+실내)을 판정하고, main이 지형을 배정한다.
+func _release_open_buildings() -> void:
+	if ranch == null or not _weather_calm():
+		return
+	# 밤엔 방출하지 않는다(방목=낮). day_advanced는 06:00 리셋 직후라 낮이지만, 문 토글은 언제든 눌리므로 가드.
+	if clock != null and clock.phase() == "밤":
+		return
+	var slots := _free_pasture_tiles()
+	if slots.is_empty():
+		return
+	var i := 0
+	for tile in ranch.releasable():
+		ranch.send_to_pasture(tile, slots[i % slots.size()])
+		i += 1
+
 # 밭 칸 상태가 바뀌면 오버레이 타일을 갱신한다(FarmField.tile_changed로 호출).
 func _on_tile_changed(t: Vector2i) -> void:
 	var idx := _overlay_index(t)
@@ -5125,8 +5181,18 @@ func _draw_orchard() -> void:
 func _draw_ranch() -> void:
 	if ranch == null:
 		return
+	# ★ [B1-a.2] 방목 문 상태 표식 — 각 동물 건물 외관 문 앞에 열림=초록·닫힘=적 사각(실외 HOME 뷰에서
+	#   문 여닫힘을 읽는다). 실내 뷰(카메라 y66+)에선 이 y16 표식이 화면 밖이라 안 보인다.
+	for pair in [["넋우릿간", NEOKURITGAN_EXT_DOOR], ["넋둥우리", NEOKDUNGURI_EXT_DOOR]]:
+		var dt: Vector2i = pair[1]
+		var dpx := Vector2(dt.x * TILE, dt.y * TILE)
+		var col := Color(0.4, 0.85, 0.45) if ranch.door_open(str(pair[0])) else Color(0.72, 0.3, 0.3)
+		draw_rect(Rect2(dpx + Vector2(TILE * 0.28, TILE * 0.28), Vector2(TILE * 0.44, TILE * 0.44)), col)
 	for tile in ranch.animal_tiles():
-		var px := Vector2(tile.x * TILE, tile.y * TILE)
+		# ★ [B1-a.2] 방목 나간 짐승은 방목지 타일에, 실내 거주 짐승은 소속 건물 실내 앵커에 그린다.
+		#   두 좌표가 서로 다른 카메라 밴드(방목=y18~·실내=y74+)라, 현재 뷰(실내/실외)에 맞는 것만 화면에 든다.
+		var draw_tile: Vector2i = ranch.pasture_tile_of(tile) if ranch.is_outside(tile) else tile
+		var px := Vector2(draw_tile.x * TILE, draw_tile.y * TILE)
 		var sp := ranch.species_at(tile)
 		var body := Color(0.92, 0.86, 0.6) if AnimalCatalog.kind_of(sp) == "coop" else Color(0.55, 0.38, 0.28)
 		draw_rect(Rect2(px + Vector2(TILE * 0.15, TILE * 0.2), Vector2(TILE * 0.7, TILE * 0.6)), body)
