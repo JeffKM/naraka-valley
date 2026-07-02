@@ -982,6 +982,9 @@ var frame: InventoryFrame
 # 알림 피드(일시 이벤트 큐)와 우하단 혼력 바(+체력 바 자리 예약). _setup_hud_overlays에서 생성·주입.
 var notice_feed: NoticeFeed
 var vitals: VitalsHud
+var clock_hud: ClockHud             # ★ Phase C 우상단 시계 클러스터(절기·일차·시각·때·골드·마일스톤)
+var context_popup: ContextPopup     # ★ Phase C 좌하단 컨텍스트 팝업(근처 NPC 초상화 + 한 줄)
+var hud_tooltip: HudTooltip         # ★ Phase C 마우스 호버 툴팁(핫바 슬롯 아이템명)
 # ★ 실내 카메라 격리 마스크(코지-와이드 회귀 수정) — 실내일 때 방 바깥을 검정으로 가린다.
 # 월드보다 위·다른 HUD/패널보다 아래 레이어(맨 앞 자식)에 깔아 외부 풀밭·이웃 방을 덮되 HUD·대화는
 # 그 위에 보이게 한다.
@@ -3228,6 +3231,21 @@ func _setup_hud_overlays() -> void:
 	vitals.name = "VitalsHud"
 	$CanvasLayer.add_child(vitals)
 	vitals.setup(energy)
+	# ★ Phase C 우상단 시계 클러스터(raw ClockLabel/GoldLabel/MilestoneLabel을 한지 플레이트로 통합).
+	clock_hud = ClockHud.new()
+	clock_hud.name = "ClockHud"
+	$CanvasLayer.add_child(clock_hud)
+	clock_hud.setup()
+	# ★ Phase C 좌하단 컨텍스트 팝업(근처 NPC 초상화 + 한 줄 안내). 초상화는 대화창과 같은 매핑 재사용.
+	context_popup = ContextPopup.new()
+	context_popup.name = "ContextPopup"
+	$CanvasLayer.add_child(context_popup)
+	context_popup.setup()
+	# ★ Phase C 마우스 호버 툴팁(핫바 슬롯 위 아이템명·품질). 핫바 슬롯 히트박스를 질의한다.
+	hud_tooltip = HudTooltip.new()
+	hud_tooltip.name = "HudTooltip"
+	$CanvasLayer.add_child(hud_tooltip)
+	hud_tooltip.setup(hotbar, inventory)
 	# 실내 마스크는 *맨 앞 자식*(index 0)으로 — 월드 위에 깔리되 씬 패널(대화·페이드)·HUD보다 아래라
 	# 방 바깥만 검게 가리고 그 위로 대화·HUD·페이드가 정상 표시된다.
 	indoor_mask = IndoorMask.new()
@@ -3698,6 +3716,58 @@ func _notice(msg: String, secs: float = NOTICE_SECS, wide: bool = false) -> void
 	if notice_feed != null:
 		notice_feed.push(msg, secs, wide)
 
+# ★ Phase C — 아이템 획득 토스트(좌하단 알림에 아이콘+이름 +수량). 게임플레이 획득 지점(수확·수집·
+# 개간 드랍)에서만 부른다 — 세이브 로드·구매·회수는 각자 알림/무알림이라 이중 토스트·로드 스팸 회피.
+func _toast_item(id: String, n: int) -> void:
+	if notice_feed == null or n <= 0 or not ItemCatalog.has_item(id):
+		return
+	notice_feed.push("%s +%d" % [ItemCatalog.name_of(id), n], 2.2, false, _item_icon(id))
+
+# 아이템 아이콘(토스트·툴팁 공용) — 작물군(수확물·씨앗)은 mature 스프라이트 재사용, 그 외(과일·산물·
+# 재료·도구)는 그레이박스라 스프라이트 없음 → null(텍스트만). 핫바 _draw_icon과 같은 매핑 결.
+func _item_icon(id: String) -> Texture2D:
+	var crop := ""
+	match ItemCatalog.category_of(id):
+		ItemCatalog.CAT_HARVEST:
+			crop = id
+		ItemCatalog.CAT_SEED:
+			crop = ItemCatalog.crop_of(id)
+	if crop != "" and CROP_SPRITES.has(crop):
+		return CROP_SPRITES[crop][2]
+	return null
+
+# ★ Phase C — 농사 XP 적립 + 레벨업 감지(숙련 알림). _farming_xp를 직접 더하던 자리를 이 헬퍼로
+# 감싸, 더하기 전후 FarmSkill.level_for_xp를 비교해 레벨이 오른 순간만 금박 알림을 띄운다(래치 불요 —
+# 경계를 넘는 프레임에만 after>before). 숙련 탭(관계 탭과 대칭)에 진행은 상시 파생되므로 여기선 알림만.
+func _gain_farm_xp(amount: int) -> void:
+	if amount <= 0:
+		return
+	var before := FarmSkill.level_for_xp(_farming_xp)
+	_farming_xp += amount
+	var after := FarmSkill.level_for_xp(_farming_xp)
+	if after > before and notice_feed != null:
+		notice_feed.push("숙련 ▲ 농사 Lv %d" % after, 4.0, false, null, true)  # gold=금박 강조
+		audio.sfx("ui")
+
+# ★ Phase C — NPC idle 초상화(컨텍스트 팝업용). 대화창과 같은 PORTRAIT 매핑을 쓰되 표정 없는 기본
+# 얼굴(stem.png)을 로드해 캐시한다(매 프레임 load 회피). 초상화 없는 인물(네오)은 null(팝업은 이름만).
+var _idle_portrait_cache: Dictionary = {}
+func _idle_portrait(speaker: String) -> Texture2D:
+	if _idle_portrait_cache.has(speaker):
+		return _idle_portrait_cache[speaker]
+	var stem: String = PORTRAIT_STEM.get(speaker, "")
+	var tex: Texture2D = null
+	if stem != "":
+		var path := PORTRAIT_DIR + stem + ".png"
+		if ResourceLoader.exists(path):
+			tex = load(path)
+	_idle_portrait_cache[speaker] = tex
+	return tex
+
+# 컨텍스트 팝업 관계 한 줄 — 하트 수(♥ 글리프는 폰트 리스크라 텍스트로). 호감도 없는 인물은 별도 문구.
+func _rel_line(aff: Affinity) -> String:
+	return "친밀도 %d/%d" % [aff.hearts(), Affinity.MAX_HEARTS]
+
 # F8 세이브 삭제+새 시작의 2단 확인. 비무장이면 무장만 하고 안내를 띄운다(실수로 한 번
 # 누른 것으로 진행을 날리지 않게). 무장(DELETE_CONFIRM_SECS 안) 중에 또 누르면 실행한다.
 func _arm_or_confirm_delete() -> void:
@@ -3765,6 +3835,14 @@ func _process(delta: float) -> void:
 		vitals.visible = not _hud_hidden
 	if hotbar != null:
 		hotbar.visible = not _hud_hidden
+	# ★ Phase C — 시계 클러스터·컨텍스트 팝업·툴팁도 상시 HUD라 모달/대화/정산 뒤로 숨긴다(겹침 방지·
+	#   대화창 초상화와 컨텍스트 팝업 중복 회피). notice_feed는 정산 알림을 계속 보여야 해 제외(기존 결).
+	if clock_hud != null:
+		clock_hud.visible = not _hud_hidden
+	if context_popup != null:
+		context_popup.visible = not _hud_hidden
+	if hud_tooltip != null:
+		hud_tooltip.visible = not _hud_hidden
 	# ★ 실내 카메라 격리 마스크 — 실내일 때 방(cam rect) 바깥을 검정으로 가린다(외부 풀밭·이웃 방
 	# 누출 차단, 코지-와이드 회귀 수정). 카메라가 방을 따라 움직일 수 있어 매 프레임 방 rect를 주입해
 	# 다시 그린다. 외부면 active=false라 아무것도 안 그린다.
@@ -3904,6 +3982,20 @@ func _process(delta: float) -> void:
 	# M2.3 네오(만물상 점주)에게 말 걸기/매대 열기: 만물상 안에서 네오 칸을 바라볼 때. _indoor로
 	# 한 번 더 가드해(다른 구역의 같은 좌표에 닿아도 만물상 밖이면 무반응) 멜 출하대와 칸이 갈린다.
 	var facing_neo := not _sleeping and _indoor == "만물상" and _target == NEO_TILE
+	# ★ Phase C 좌하단 컨텍스트 팝업 — 마주 본 주민의 초상화 + 이름 + 관계 한 줄(상시 HUD, 대화창과 별개).
+	if context_popup != null:
+		if facing_miho:
+			context_popup.set_target(_idle_portrait("미호"), "미호", _rel_line(affinity))
+		elif facing_mel:
+			context_popup.set_target(_idle_portrait("멜"), "멜", _rel_line(mel_affinity))
+		elif facing_bana:
+			context_popup.set_target(_idle_portrait("바나"), "바나", _rel_line(bana_affinity))
+		elif facing_neo:
+			context_popup.set_target(_idle_portrait("네오"), "네오", _rel_line(neo_affinity))
+		elif facing_okja:
+			context_popup.set_target(_idle_portrait("옥자"), "옥자", "저승 카페 사장")
+		else:
+			context_popup.clear()
 	# T5.4 카페 손님 시뮬레이션을 굴린다(연출 중 제외). 영업창(15–19시) 안에서만 손님이
 	# 오고 인내심이 돈다. 영업 중이면 인내심 바가 매 프레임 줄어드므로 다시 그린다.
 	# T5.5 멜 마진 주입(관계 곱셈기, ADR-0008): 멜 하트 → 서빙 단가 배수를 cafe에 얹는다.
@@ -4061,13 +4153,18 @@ func _process(delta: float) -> void:
 	readout.text = "방향키 이동   구역: %s   위치(%d, %d)   FPS %d" % [
 		_zone_at(p), int(p.x), int(p.y), Engine.get_frames_per_second()
 	]
-	# ★ C3 시계 클러스터(우상단): 시간·날짜·날씨 자리 예약. 날씨는 Phase 3-6 절기·날씨 시스템에서
-	# 채워진다(지금은 "맑음 —" placeholder — 레이아웃을 미리 잡아 두면 나중에 안 흔들린다).
-	clock_label.text = "Day %d   %s   %s   ☀ —" % [clock.day, clock.clock_string(), clock.phase()]
+	# ★ Phase C 시계 클러스터(우상단): raw ClockLabel/GoldLabel/MilestoneLabel을 한지 플레이트
+	# 하나로 통합했다(clock_hud). 절기 내 일차 = (day-1)%28+1(요일은 도메인에 없음 — clock_hud 주석).
+	# 날씨(☀)는 백엔드 부재로 보류(ADR-0048).
+	var _dos := (clock.day - 1) % GameClock.DAYS_PER_SEASON + 1
+	if clock_hud != null:
+		clock_hud.set_state(GameClock.season_name(clock.season_index()), _dos, clock.clock_string(),
+			clock.phase(), wallet.gold, CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()))
+	clock_label.visible = false
 	# ★ ADR-0024 핫바 요약(핫바 위, 하단 중앙): 든 아이템(슬롯) + 선택 안내. 씨앗이면 보유 수·작물도.
 	crop_label.text = _hotbar_summary()
-	# ★ C3 시계 클러스터 골드(시계 아래, 우상단).
-	gold_label.text = "골드 %d" % wallet.gold
+	# ★ Phase C 골드는 시계 클러스터(clock_hud)로 이전 — raw 라벨 숨김.
+	gold_label.visible = false
 	# ★ C3 — 혼력은 우하단 혼력 바(vitals)가, 하트(미호·멜·바나·네오)는 메뉴 관계 탭이 그린다(프레임이
 	#   열렸을 때 위 입력 핸들러가 set_hearts로 값을 흘려넣는다 — 모달이라 이 HUD 블록엔 안 온다).
 	#   여우불·카페 마진·바나 경비·네오 할인 같은 관계 곱셈기도 관계 탭 효과 줄에서 복기한다(_heart_rows).
@@ -4075,7 +4172,10 @@ func _process(delta: float) -> void:
 	#   난립을 미니멀 HUD로 정리(ADR-0018).
 	# ★ C3 카페 마일스톤(시계 클러스터 곁 작은 진행 표시 — 매크로 목표, ADR-0009). 세 루프 산출물
 	# (거둔 영혼·누적 서빙 매출·세 동료 하트 합)에서 매번 파생한 compact 한 줄(바+%). 완료되면 ★.
+	# ★ Phase C 마일스톤은 시계 클러스터(clock_hud)로 이전해 화면 표시 — raw 라벨은 숨긴다. 단 값은
+	# 계속 채워 둔다(비가시라 raw 0 유지 + milestone_test가 이 문자열을 단언). 표시는 clock_hud가 맡는다.
 	milestone_label.text = CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts())
+	milestone_label.visible = false
 	# 채우는 순간 한 번 "카페 2단계!" 팝업을 띄운다(래치 — 매 프레임 재팝업 방지). 달성 여부는
 	# 누적값에서 파생되므로(세이브 무상태), 재개 시엔 _ready가 래치를 미리 켜 둬 다시 안 터진다.
 	if not _milestone_celebrated and _milestone_complete():
@@ -4226,6 +4326,7 @@ func _use_tool() -> void:
 			var res := reclaim.clear(_target, kind, item)
 			if not res.is_empty():
 				inventory.add_item(str(res["drop"]), int(res["count"]))
+				_toast_item(str(res["drop"]), int(res["count"]))   # ★ Phase C 획득 토스트
 				verb = "개간"
 	if verb == "":
 		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
@@ -4250,6 +4351,7 @@ func _try_harvest() -> void:
 				# 대형 산물은 "<산물>_large" 아이템(판매가 ×2)으로, 아니면 기준 산물로 적재(§8.6). 품질 등급 실림.
 				var pid: String = ItemCatalog.large_product_id(got["product_id"]) if bool(got["is_large"]) else str(got["product_id"])
 				inventory.add_item(pid, 1, int(got["quality"]))
+				_toast_item(pid, 1)                 # ★ Phase C 획득 토스트(산물 수집)
 				audio.sfx("harvest")
 				energy.spend(cost)
 				queue_redraw()
@@ -4270,7 +4372,8 @@ func _try_harvest() -> void:
 				var fq := int(picked["quality_tier"])
 				for _i in int(picked["count"]):
 					inventory.add_item(picked["fruit_id"], 1, fq)   # 과일 = CAT_HARVEST(등급 실림)
-				_farming_xp += FruitTreeCatalog.fruit_sell(picked["fruit_id"])  # ★ 과수 수확도 농사 XP(§8.9)
+				_toast_item(str(picked["fruit_id"]), int(picked["count"]))   # ★ Phase C 획득 토스트
+				_gain_farm_xp(FruitTreeCatalog.fruit_sell(picked["fruit_id"]))  # ★ 과수 수확도 농사 XP(§8.9)+레벨업 감지
 				audio.sfx("harvest")
 				energy.spend(cost)
 				queue_redraw()
@@ -4287,7 +4390,8 @@ func _try_harvest() -> void:
 	var count := randi_range(yr.x, yr.y)
 	for i in count:
 		inventory.add_harvest(harvested_crop, 1, quality if i == 0 else 0)
-	_farming_xp += CropCatalog.sell_price(harvested_crop)  # ★ 수확 성공 XP(§8.9 crop_base_price)
+	_toast_item(ItemCatalog.harvest_id(harvested_crop), count)   # ★ Phase C 획득 토스트(수확)
+	_gain_farm_xp(CropCatalog.sell_price(harvested_crop))  # ★ 수확 성공 XP(§8.9)+레벨업 감지
 	_run_harvested += 1                       # T4.2 슬라이스 점수판: 거둔 영혼 총수(수확 액션당 1)
 	_show_flavor(harvested_crop)              # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
 	audio.sfx("harvest")                      # P2.6 수확은 밝은 팝
