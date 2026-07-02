@@ -1,14 +1,14 @@
 import type { NextConfig } from "next";
 
-// 정적 export(GitHub Pages 배포용). basePath는 프로젝트 페이지 배포 시 env로 주입.
-// 예) NEXT_PUBLIC_BASE_PATH=/naraka-valley npm run build
+// 로컬(dev/기본 build) = API 라우트 동작(에셋 결정 편집·저장).
+// 배포용 정적 export는 NEXT_EXPORT=1 일 때만(GitHub Pages). export 모드에선 편집 API 비활성(뷰 전용).
+const isExport = process.env.NEXT_EXPORT === "1";
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 const nextConfig: NextConfig = {
-  output: "export",
+  ...(isExport ? { output: "export" as const } : {}),
   basePath,
   images: { unoptimized: true },
-  // 픽셀 아트 원본을 그대로 서빙(최적화 비활성 — 위 unoptimized).
 };
 
 export default nextConfig;
