@@ -6,9 +6,9 @@ extends SceneTree
 #   ① 창고 카탈로그 정합(region=HOME·kind=storehouse) + 실내 방 빌드 + 집·만물상·카페 방과 안 겹침.
 #   ② 창고 세이브 라운드트립 — HOME 구역 실내(창고)에서 저장 → 새 인스턴스가 그 구역·실내·위치·
 #      카메라로 그대로 재개(M2.2 카탈로그 주도 복원이 HOME-구역 건물에도 적용됨을 못박는다).
-#   ③ 축사 = 건물 자리만 — BARN_EXT_RECT 전 칸 WALL(문 칸만 PATH 리세스), _buildings에 "축사" 키
-#      부재 → 축사 문에 닿아도 진입 안 됨(_indoor 불변, '자리만'의 자연 표현).
-#   ④ flood-fill(소프트락 0) — 도착(spawn)에서 창고 문·집 문·동쪽 워프 칸이 축사를 비껴 전부 도달.
+#   ③ [B1-a.1] 동물 2건물(넋우릿간·넋둥우리) = enterable — 외관 WALL 박스+2칸 문 PATH, _buildings 등록
+#      (region=HOME·kind=barn/coop), 실내 방 빌드+집·창고 방과 안 겹침, 문 닿으면 진입·퇴장(_indoor 토글).
+#   ④ flood-fill(소프트락 0) — 도착(spawn)에서 창고 문·집 문·동쪽 워프 칸이 동물 건물을 비껴 전부 도달.
 #   ⑤ 회귀 0 — 홈 집 취침 가능·밭 존재·창고 enterable 불변.
 #
 # 좀비 방지: 모든 단언 뒤 quit(). _settle/_spawn 상한 폴링(무한대 X). run_tests.sh 워치독과 함께.
@@ -116,45 +116,65 @@ func _initialize() -> void:
 			ho_path_ok = false
 	_check("① 본가 문 앞 진입로 = 2칸 폭 PATH(문과 연결)", ho_path_ok)
 
-	# ── ③ 축사 = 건물 자리만(비-enterable) ──
-	var barn: Rect2i = m.BARN_EXT_RECT
-	var barn_door: Vector2i = m.BARN_EXT_DOOR               # 대표 문칸(진입 불가·도달성 검증용)
-	var barn_doors := [m.BARN_EXT_DOOR, m.BARN_EXT_DOOR_W]   # ★ 2패널 미닫이 = 2칸 문(x4·x5)
-	var all_wall := true
-	var doors_are_path := true
-	for y in range(barn.position.y, barn.end.y):
-		for x in range(barn.position.x, barn.end.x):
-			var id: int = m._grid[y][x]
-			if barn_doors.has(Vector2i(x, y)):
-				if id != m.PATH:
-					doors_are_path = false
-			elif id != m.WALL:
-				all_wall = false
-	_check("③ 축사 박스 = 문 2칸 외 전부 WALL", all_wall)
-	_check("③ 축사 문 2칸(x4·x5) = PATH 리세스(2패널 문 정합)", doors_are_path)
-	# ★ 문 앞 2칸 폭 진입로(y17..19 x4·x5) = PATH — 문과 이어지는 흙길
-	var apron_ok := true
-	for py in range(17, 20):
-		if m._grid[py][m.BARN_EXT_DOOR_W.x] != m.PATH or m._grid[py][m.BARN_EXT_DOOR.x] != m.PATH:
-			apron_ok = false
-	_check("③ 축사 문 앞 진입로 = 2칸 폭 PATH(문과 연결)", apron_ok)
-	_check("③ 축사 카탈로그 미등록(_buildings에 '축사' 없음)", not m._buildings.has("축사"))
-	# 축사 문에 닿아도 진입 안 됨(자리만 — _maybe_toggle_building이 카탈로그 조회로만 진입).
-	m.player.position = m._tile_center_px(barn_door)
-	m._maybe_toggle_building()
-	await _settle(m)
-	_check("③ 축사 문 닿아도 진입 불가(_indoor 불변)", m._indoor == "")
+	# ── ③ [B1-a.1] 동물 2건물(넋우릿간·넋둥우리) = enterable ──
+	var anim_bldgs := [
+		{"id": "넋우릿간", "kind": "barn", "ext": m.NEOKURITGAN_EXT_RECT,
+			"dE": m.NEOKURITGAN_EXT_DOOR, "dW": m.NEOKURITGAN_EXT_DOOR_W,
+			"room": m.NEOKURITGAN_RECT, "in_tile": m.NEOKURITGAN_IN_TILE, "door": m.NEOKURITGAN_DOOR},
+		{"id": "넋둥우리", "kind": "coop", "ext": m.NEOKDUNGURI_EXT_RECT,
+			"dE": m.NEOKDUNGURI_EXT_DOOR, "dW": m.NEOKDUNGURI_EXT_DOOR_W,
+			"room": m.NEOKDUNGURI_RECT, "in_tile": m.NEOKDUNGURI_IN_TILE, "door": m.NEOKDUNGURI_DOOR},
+	]
+	for e in anim_bldgs:
+		var bid: String = e["id"]
+		var ext: Rect2i = e["ext"]
+		var doors := [e["dE"], e["dW"]]   # 2패널 미닫이 = 2칸 문
+		_check("③ %s 카탈로그 등록" % bid, m._buildings.has(bid))
+		var b: Dictionary = m._buildings.get(bid, {})
+		_check("③ %s region=HOME·kind=%s" % [bid, e["kind"]],
+			b.get("region", -1) == RegionCatalog.HOME and b.get("kind", "") == e["kind"])
+		var all_wall := true
+		var doors_are_path := true
+		for y in range(ext.position.y, ext.end.y):
+			for x in range(ext.position.x, ext.end.x):
+				var id: int = m._grid[y][x]
+				if doors.has(Vector2i(x, y)):
+					if id != m.PATH:
+						doors_are_path = false
+				elif id != m.WALL:
+					all_wall = false
+		_check("③ %s 외관 = 문 2칸 외 전부 WALL" % bid, all_wall)
+		_check("③ %s 문 2칸 = PATH 리세스(2패널 문 정합)" % bid, doors_are_path)
+		# 실내 방 빌드 + 집·창고·다른 동물 방과 안 겹침
+		var room: Rect2i = e["room"]
+		var ri: Vector2i = room.position + Vector2i(1, 1)
+		_check("③ %s 실내 바닥 빌드(HOUSE)" % bid, m._grid[ri.y][ri.x] == m.HOUSE)
+		_check("③ %s 방 = 집·창고 방과 안 겹침" % bid,
+			not room.intersects(m.HOME_HOUSE_RECT) and not room.intersects(m.STOREHOUSE_RECT))
+		# 문 닿으면 진입(_indoor=건물) → 착지 = in_tile → 실내 문에서 퇴장
+		m.player.position = m._tile_center_px(e["dE"])
+		m._maybe_toggle_building()
+		await _settle(m)
+		_check("③ %s 문 닿으면 진입(_indoor=%s)" % [bid, bid], m._indoor == bid)
+		_check("③ %s 진입 착지 = in_tile" % bid, m._player_tile() == e["in_tile"])
+		m.player.position = m._tile_center_px(e["door"])
+		m._maybe_toggle_building()
+		await _settle(m)
+		_check("③ %s 실내 문에서 퇴장(_indoor='')" % bid, m._indoor == "")
+	_check("③ 두 동물 방 서로 안 겹침", not m.NEOKURITGAN_RECT.intersects(m.NEOKDUNGURI_RECT))
 
-	# ── ④ flood-fill: 도착에서 창고 문·집 문·동쪽 워프 칸 도달(축사 비껴, 소프트락 0) ──
+	# ── ④ flood-fill: 도착에서 창고 문·집 문·동쪽 워프 칸 도달(동물 건물 비껴, 소프트락 0) ──
+	var barn: Rect2i = m.NEOKURITGAN_EXT_RECT
+	var barn_door: Vector2i = m.NEOKURITGAN_EXT_DOOR
 	var spawn: Vector2i = m.SPAWN_TILE
 	_check("④pre 도착 칸이 걸을 수 있는 길", _walkable(m, spawn))
 	var reach := _reachable(m, spawn)
 	_check("④ 창고 외관 문 도달", reach.has(m.STOREHOUSE_EXT_DOOR))
 	_check("④ 홈 집 외관 문 도달", reach.has(m.HOUSE_EXT_DOOR))
 	_check("④ 동쪽 길 워프 칸(78,32) 도달", reach.has(Vector2i(78, 32)))   # ★C2 80×65
-	# 축사 박스 칸은 WALL이라 도달 집합에 없다(통과 불가 자리). 둘레는 도달 가능(비껴감).
-	_check("④ 축사 박스 안쪽 칸은 막힘(WALL 자리)", not reach.has(barn.position + Vector2i(1, 1)))
-	_check("④ 축사 비껴 아래 칸 도달(소프트락 0)", reach.has(Vector2i(barn_door.x, barn.end.y)))
+	# 동물 건물 외관 박스 칸은 WALL이라 도달 집합에 없다(통과 불가). 둘레는 도달 가능(비껴감).
+	_check("④ 넋우릿간 박스 안쪽 칸은 막힘(WALL 자리)", not reach.has(barn.position + Vector2i(1, 1)))
+	_check("④ 넋우릿간 비껴 아래 칸 도달(소프트락 0)", reach.has(Vector2i(barn_door.x, barn.end.y)))
 
 	# ── ② 창고 세이브 라운드트립(HOME 구역 실내 복원) ──
 	# m이 살아 있을 때 저장한다(despawn된 노드 참조 금지 — freed 접근 = SCRIPT ERROR→행).

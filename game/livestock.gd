@@ -50,11 +50,70 @@ const M_MUCK := -30               # 오물 방치(청소 안 함)
 
 const DELUXE_MOOD_GATE := 200     # DELUXE 산물 = 5하트 + 당일 기분 ≥200(§4.1)
 
-# 짐승 상태. 키 = 타일(Vector2i, 정적 위치), 값 = 아래 필드 Dict. 키 없음 = 그 자리에 짐승 없음.
+# ── B1-a.2 pathing(실내↔방목 왕래) 위치 상태 ─────────────────────────────────
+# 짐승은 실내(건물 방)에 거주하고, 문이 열린 낮엔 방목지로 나가 풀을 뜯다가(F_GRAZE) 밤에 자동
+# 귀가한다(F_PEN). 문을 닫아 두면 실내에 머문다(=야간 안전 격리, penned). 나간 뒤 귀가 전 문을
+# 닫으면 실외 고립(비살상 — 짐승 유지, penned 미설정 → advance_day가 M_NIGHT_EXPOSED, §4.1 엣지①).
+const LOC_INDOOR := "indoor"      # 실내 거주(기본) — 소속 건물 방 안
+const LOC_PASTURE := "pasture"    # 방목 중 — 문 아래 고지 방목지(pasture_tile 좌표)
+
+# 방목 문 상태. 키 = 건물 id, 값 = bool(열림). 키 없음/false = 닫힘(기본 — 스타듀 헛간 문 결).
+# 세이브 왕복(to_save/load_save)으로 보존한다(문 열어 둔 채 자면 다음 아침도 열림).
+var _doors: Dictionary = {}
+
+# ── B1-a.3 여물광(Silo) 건초 저장고 ────────────────────────────────────────────
+# 낫으로 벤 사료풀이 여기 쌓이고(store_hay), 실내 여물통 급여가 여기서 뽑아 쓴다(feed_from_silo_in).
+# 용량 240단(SDV silo). 가득 차면 벤 건초는 소멸(Q7 "초과 시 소멸"). 기본 티어(B1-a)는 여물광이 고지에
+# 항상 있는 고정 건물이라 has_silo 플래그를 두지 않는다 — 저장·소진 게이트는 용량만(버는 여물광=B1-b).
+const SILO_CAP := 240
+var _silo_hay := 0
+
+func silo_hay() -> int:
+	return _silo_hay
+
+func silo_full() -> bool:
+	return _silo_hay >= SILO_CAP
+
+# 여물광 채움 비율(0..1) — main의 시각 게이지가 쓴다.
+func silo_fill_ratio() -> float:
+	return clampf(float(_silo_hay) / float(SILO_CAP), 0.0, 1.0)
+
+# 벤 건초를 여물광에 넣는다(낫 풀베기 → main이 호출). 남은 용량만큼만 저장하고 초과분은 소멸.
+# 반환 = 실제 저장한 수(0 = 가득 차 전량 소멸). changed로 게이지 갱신.
+func store_hay(n := 1) -> int:
+	var room := SILO_CAP - _silo_hay
+	var stored := clampi(n, 0, room)
+	if stored > 0:
+		_silo_hay += stored
+		changed.emit()
+	return stored
+
+# 실내 여물통 급여(건물별) — 여물광 건초로 그 건물 미급여 짐승을 급여한다(짐승당 1단 소모). 여물광이
+# 비면 남은 짐승은 굶는다(비살상 — advance_day가 M_NO_FEED로만 벌한다). 반환 = 급여한 마리 수.
+func feed_from_silo_in(building: String) -> int:
+	var count := 0
+	for tile in animals_in(building):
+		if _silo_hay <= 0:
+			break
+		if is_fed(tile):
+			continue
+		if feed(tile):          # fed 플래그(중복 방지 내장)
+			_silo_hay -= 1
+			count += 1
+	if count > 0:
+		changed.emit()
+	return count
+
+# 짐승 상태. 키 = 타일(Vector2i, 정적 실내 위치 = 소속 건물 방 바닥), 값 = 아래 필드 Dict.
+# 키 없음 = 그 자리에 짐승 없음. 키 타일은 "집(실내)" 앵커이고, 방목 나가면 pasture_tile에 그려진다.
 #   species    : 종 id(AnimalCatalog)
+#   home_building : 소속 건물 id(넋둥우리/넋우릿간 — B1-a "진입 실내"). "" = 미소속(구버전 세이브 방어).
+#   location   : 현재 위치(LOC_INDOOR/LOC_PASTURE — B1-a.2 pathing). 없음 = 실내(구버전 방어).
+#   pasture_tile : 방목 나갔을 때 서 있는 방목지 타일(main이 배정). 실내면 무의미(키 타일과 동일 default).
 #   friendship : 우정 pts(0..1000)
 #   mood       : 기분(0..255, 캐리)
-#   fed/petted/grazed/penned/cleaned : 오늘의 데일리 케어 플래그(advance_day가 정산 후 리셋)
+#   fed/petted/grazed/penned/cleaned : 오늘의 데일리 케어 플래그(advance_day가 정산 후 리셋).
+#     ★ B1-a.2: grazed=아침 방출 시·penned=밤 귀가/실내잔류 시 자동으로 선다(수동 tend 아님). cleaned만 수동.
 #   product    : 대기 중인 미수집 산물 수(0/1 — 한 번에 1개, 수집 전엔 새로 안 뱀)
 #   product_quality : 대기 산물 품질 등급(0..3)
 #   product_large   : 대기 산물이 대형인가
@@ -62,11 +121,16 @@ var _animals: Dictionary = {}
 
 # ── 배치·조회 ────────────────────────────────────────────────────────────────
 # 타일에 짐승을 추가한다(유효 종 + 빈 타일). 초기 우정 0·기분 중립·케어 플래그 전부 false·산물 0.
-func add_animal(tile: Vector2i, species: String) -> bool:
+# home_building = 소속 건물 id(넋둥우리/넋우릿간). B1-a "진입 실내" — 짐승은 실내에 거주하고 돌봄도
+# 실내에서 이뤄진다(방목 왕래 pathing은 B1-a.2). 미지정("")도 허용(단위 테스트·구버전 방어).
+func add_animal(tile: Vector2i, species: String, home_building: String = "") -> bool:
 	if not AnimalCatalog.has(species) or _animals.has(tile):
 		return false
 	_animals[tile] = {
 		"species": species,
+		"home_building": home_building,
+		"location": LOC_INDOOR,      # ★ B1-a.2 — 새 짐승은 실내 거주로 시작(문 열고 아침 방출돼야 방목).
+		"pasture_tile": tile,        # 방목 배정 전 default = 키 타일(실내 앵커). main이 방출 시 실좌표로 덮는다.
 		"friendship": 0,
 		"mood": MOOD_START,
 		"fed": false, "petted": false, "grazed": false, "penned": false, "cleaned": false,
@@ -80,6 +144,18 @@ func has_animal(tile: Vector2i) -> bool:
 
 func species_at(tile: Vector2i) -> String:
 	return str(_animals[tile]["species"]) if _animals.has(tile) else ""
+
+# 짐승의 소속 건물 id("" = 미소속). B1-a 건물별 돌봄·방목 왕래(B1-a.2)의 앵커.
+func building_of(tile: Vector2i) -> String:
+	return str(_animals[tile].get("home_building", "")) if _animals.has(tile) else ""
+
+# 특정 건물 소속 짐승 타일 목록(건물별 돌봄·드로우·pathing이 순회).
+func animals_in(building: String) -> Array:
+	var out: Array = []
+	for tile in _animals.keys():
+		if str(_animals[tile].get("home_building", "")) == building:
+			out.append(tile)
+	return out
 
 # 짐승이 있는 타일 목록(main의 _draw_ranch·프롬프트가 순회). 순수 상태 질의(화면은 main이 앎).
 func animal_tiles() -> Array:
@@ -108,6 +184,82 @@ func is_petted(tile: Vector2i) -> bool:
 func has_product(tile: Vector2i) -> bool:
 	return _animals.has(tile) and int(_animals[tile]["product"]) > 0
 
+# ── B1-a.2 방목 문(건물별 토글) ────────────────────────────────────────────────
+# 방목 문 = 그 건물 짐승을 낮에 방목지로 내보낼지 여부(스타듀 헛간 문). 기본 닫힘(false).
+# 플레이어가 실내에서 여닫고(main), 세이브로 보존된다. 짐승 출입 pathing의 게이트.
+func door_open(building: String) -> bool:
+	return bool(_doors.get(building, false))
+
+func set_door(building: String, open: bool) -> void:
+	if building == "":
+		return
+	_doors[building] = open
+	changed.emit()
+
+# 방목 문을 뒤집고 새 상태(열림=true)를 반환한다. main의 실내 F 토글이 쓴다.
+func toggle_door(building: String) -> bool:
+	set_door(building, not door_open(building))
+	return door_open(building)
+
+# ── B1-a.2 위치(실내/방목) 조회 ─────────────────────────────────────────────────
+func location_of(tile: Vector2i) -> String:
+	return str(_animals[tile].get("location", LOC_INDOOR)) if _animals.has(tile) else LOC_INDOOR
+
+# 방목지에 나가 있는가(main의 _draw_ranch가 실내 앵커 대신 방목 타일에 그릴지 판정).
+func is_outside(tile: Vector2i) -> bool:
+	return location_of(tile) == LOC_PASTURE
+
+# 방목 나갔을 때 서 있는 타일(실내면 키 타일과 동일). main이 방목지에 그린다.
+func pasture_tile_of(tile: Vector2i) -> Vector2i:
+	return _animals[tile].get("pasture_tile", tile) if _animals.has(tile) else tile
+
+# ── B1-a.2 방목 방출/귀가 ────────────────────────────────────────────────────
+# 지금 방목지로 내보낼 수 있는 짐승 타일(실내 거주 + 소속 건물 문 열림). main이 방목 목적지를
+# 배정해 send_to_pasture로 실제 이동시킨다(지형 좌표는 main이 앎 — 디커플링). 평온·낮 게이트는 main.
+func releasable() -> Array:
+	var out: Array = []
+	for tile in _animals.keys():
+		var a: Dictionary = _animals[tile]
+		if str(a.get("location", LOC_INDOOR)) == LOC_INDOOR and door_open(str(a.get("home_building", ""))):
+			out.append(tile)
+	return out
+
+# 짐승을 방목지 dest 타일로 내보낸다(아침 방출·문 여는 즉시 방출). 방목=F_GRAZE라 grazed 플래그를 세운다.
+func send_to_pasture(tile: Vector2i, dest: Vector2i) -> bool:
+	if not _animals.has(tile):
+		return false
+	var a: Dictionary = _animals[tile]
+	a["location"] = LOC_PASTURE
+	a["pasture_tile"] = dest
+	if not bool(a["grazed"]):
+		a["grazed"] = true
+	changed.emit()
+	return true
+
+# 밤 pathing 정산(취침 → advance_day 직전에 호출). 각 짐승:
+#   · 방목 중 + 문 열림 → 자동 귀가(실내 복귀 + penned=격리 성공, F_PEN/M_PEN).
+#   · 방목 중 + 문 닫힘 → 실외 고립(비살상 — 짐승 유지·penned 미설정 → advance_day가 M_NIGHT_EXPOSED, 엣지①).
+#   · 실내 잔류(방목 안 나감/문 닫아 둠) → penned(야간 안전 격리 — 닫힌 건물도 은신처다).
+# 반환 {penned, exposed} 카운트(main의 알림·디버그). ⚠️ 비살상: 어떤 경우도 짐승 키를 지우지 않는다.
+func settle_night() -> Dictionary:
+	var penned_ct := 0
+	var exposed_ct := 0
+	for tile in _animals.keys():
+		var a: Dictionary = _animals[tile]
+		if str(a.get("location", LOC_INDOOR)) == LOC_PASTURE:
+			if door_open(str(a.get("home_building", ""))):
+				a["location"] = LOC_INDOOR
+				a["penned"] = true
+				penned_ct += 1
+			else:
+				exposed_ct += 1   # 실외 고립 — penned 미설정 유지(방목 위치도 유지, 익일 문 열면 귀가).
+		else:
+			a["penned"] = true    # 실내 잔류 = 야간 격리 성공.
+			penned_ct += 1
+	if penned_ct > 0 or exposed_ct > 0:
+		changed.emit()
+	return {"penned": penned_ct, "exposed": exposed_ct}
+
 # ── 데일리 케어 액션(낮 동안 플레이어가 세우는 플래그) ─────────────────────────
 # 각 액션은 짐승이 있고 그 플래그가 아직 안 섰을 때만 세우고 true(중복 방지 — 하루 1회 실효).
 # 급여의 건초 소모·수집물 인벤토리 적재는 호출 측(main)이 맡는다(디커플링 — 이 노드는 재화를 모름).
@@ -126,10 +278,35 @@ func pen(tile: Vector2i) -> bool:
 func clean(tile: Vector2i) -> bool:
 	return _set_flag(tile, "cleaned")
 
-# 축사 일괄 돌봄(방목·격리·청결) — main의 "축사 돌봄" E 리추얼이 쓴다. 하나라도 새로 서면 true.
+# 일괄 돌봄(방목·격리·청결) — 전체 짐승. 하나라도 새로 서면 true. (단위 테스트·전역 리추얼용)
 func tend_all() -> bool:
+	return _tend_flags(_animals.keys())
+
+# 건물별 일괄 돌봄(방목·격리·청결) — B1-a "진입 실내": 그 건물 안의 짐승만 돌본다(SDV처럼 건물마다
+# 따로 돌봄). ⚠️ B1-a.2 이후 main의 실내 돌봄은 clean_all_in(청소만)만 쓴다 — 방목/격리는 pathing이
+# 자동으로 세운다(문 방출→grazed·밤 귀가→penned). 이 3플래그 일괄은 단위 테스트·전역 리추얼 잔존 API.
+func tend_all_in(building: String) -> bool:
+	return _tend_flags(animals_in(building))
+
+# ★ B1-a.2 실내 청소(청결)만 — 건물 안 짐승의 cleaned 플래그만 세운다. 방목(grazed)·격리(penned)는
+# pathing이 자동으로 세우므로, 실내 돌봄 리추얼(main RMB)은 잠자리 청소만 담당한다(M_CLEAN vs M_MUCK).
+func clean_all_in(building: String) -> bool:
 	var any := false
-	for tile in _animals.keys():
+	for tile in animals_in(building):
+		var a: Dictionary = _animals[tile]
+		if not bool(a["cleaned"]):
+			a["cleaned"] = true
+			any = true
+	if any:
+		changed.emit()
+	return any
+
+# 주어진 타일들의 방목·격리·청결 플래그를 세운다(공통 구현). 하나라도 새로 서면 changed·true.
+func _tend_flags(tiles: Array) -> bool:
+	var any := false
+	for tile in tiles:
+		if not _animals.has(tile):
+			continue
 		var a: Dictionary = _animals[tile]
 		for flag in ["grazed", "penned", "cleaned"]:
 			if not bool(a[flag]):
@@ -213,10 +390,24 @@ func advance_day() -> void:
 # _animals는 Vector2i 키 + String/int/bool 값 순수 Dictionary라 var_to_str가 그대로 라운드트립한다.
 # 깊은 복사로 넘겨 호출 측이 들고 있어도 상태가 새지 않게 한다.
 func to_save() -> Dictionary:
-	return {"animals": _animals.duplicate(true)}
+	# ★ B1-a.2: 방목 문 · B1-a.3: 여물광 건초 재고도 보존.
+	return {"animals": _animals.duplicate(true), "doors": _doors.duplicate(true), "silo_hay": _silo_hay}
 
-# 복원: _animals를 통째로 갈아끼운다. changed로 main이 화면·HUD를 다시 세우게 한다(디커플링).
+# 복원: _animals·_doors를 통째로 갈아끼운다. changed로 main이 화면·HUD를 다시 세우게 한다(디커플링).
+# ★ B1-a: home_building이 없는 구버전 세이브는 ""로 백필한다(building_of/animals_in 방어).
+# ★ B1-a.2: location(→실내)·pasture_tile(→키 타일)·doors(→닫힘) 없는 구버전도 안전 default로 백필.
 func load_save(data: Dictionary) -> void:
 	var animals: Variant = data.get("animals", {})
 	_animals = animals.duplicate(true) if typeof(animals) == TYPE_DICTIONARY else {}
+	var doors: Variant = data.get("doors", {})
+	_doors = doors.duplicate(true) if typeof(doors) == TYPE_DICTIONARY else {}
+	_silo_hay = clampi(int(data.get("silo_hay", 0)), 0, SILO_CAP)   # ★ B1-a.3: 여물광 재고(구버전=0).
+	for tile in _animals.keys():
+		var a: Dictionary = _animals[tile]
+		if not a.has("home_building"):
+			a["home_building"] = ""
+		if not a.has("location"):
+			a["location"] = LOC_INDOOR
+		if not a.has("pasture_tile"):
+			a["pasture_tile"] = tile
 	changed.emit()

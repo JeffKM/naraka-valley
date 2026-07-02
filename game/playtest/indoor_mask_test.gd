@@ -46,6 +46,8 @@ func _room_rect(m: Node, id: String, kind: String) -> Rect2i:
 		"woodshop": return m.WOODSHOP_RECT
 		"smithy": return m.SMITHY_RECT
 		"guild": return m.GUILD_RECT
+		"barn": return m.NEOKURITGAN_RECT     # ★ [B1-a.1] 넋우릿간(대형·안개소)
+		"coop": return m.NEOKDUNGURI_RECT     # ★ [B1-a.1] 넋둥우리(소형·노을닭)
 	return Rect2i()
 
 func _initialize() -> void:
@@ -70,7 +72,7 @@ func _initialize() -> void:
 	_check("③ 외부면 마스크 비활성(active=false)", not m.indoor_mask.active)
 
 	# ── ②④ 모든 enterable 건물: 실내 와이어링 + cam ⊇ room ──
-	# _buildings는 부팅 시 전 구역 15채를 한 번에 등록(카탈로그) → 워프 없이 전부 검증 가능.
+	# _buildings는 부팅 시 전 구역 17채를 한 번에 등록(카탈로그) → 워프 없이 전부 검증 가능.
 	var enterable := 0
 	for id in m._buildings.keys():
 		var b: Dictionary = m._buildings[id]
@@ -86,7 +88,7 @@ func _initialize() -> void:
 		_check("② %s 실내 → 마스크 active" % id, m.indoor_mask.active)
 		_check("② %s 마스크 rect = 그 방 cam rect(px)" % id, m.indoor_mask.world_rect_px == want)
 		enterable += 1
-	_check("②b enterable 건물 15채 전부 검증", enterable == 15)
+	_check("②b enterable 건물 17채 전부 검증", enterable == 17)
 
 	# ── ③b 실내 → 외부 복귀 시 마스크 즉시 비활성(상태 안 샘) ──
 	m._indoor = ""
