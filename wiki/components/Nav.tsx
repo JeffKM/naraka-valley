@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Images, ListChecks } from "lucide-react";
+import { Images, ListChecks, Sparkles } from "lucide-react";
 
 const LINKS = [
   { href: "/", label: "에셋 갤러리", icon: Images },
   { href: "/mechanics", label: "메카닉 현황", icon: ListChecks },
+  { href: "/prompts", label: "Gemini 프롬프트", icon: Sparkles },
 ];
 
 export default function Nav() {
