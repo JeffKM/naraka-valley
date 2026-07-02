@@ -235,6 +235,14 @@ const PROP_VINE := preload("res://assets/props/vine.png")               # 32×64
 const PROP_DEBRIS_WEEDS := preload("res://assets/props/debris_weeds.png")          # 32×32 — 이승의 미련·잡초(낫, 통과 O 장식)
 const PROP_DEBRIS_EMBER := preload("res://assets/props/debris_ember_stone.png")    # 64×64 — 업화석(곡괭이, 통과 X SOLID)
 const PROP_DEBRIS_STUMP := preload("res://assets/props/debris_petrified_stump.png")  # 64×64 — 석화 고목(도끼, 통과 X SOLID)
+# ★ [S1-8] 개간 debris 텍스처 → DebrisCatalog kind. 배치(어느 타일에 무슨 debris)는 PROP_LAYOUT_HOME
+#   시드에 잠겨 있고, 여기서 텍스처로 kind를 역인한다. 드로우/충돌 skip-filter·개간 디스패치가 참조한다.
+#   ※ PROP_STUMP(장식 통나무)는 여기 없음 = debris 아님(치울 수 없는 순수 장식).
+const DEBRIS_KIND := {
+	PROP_DEBRIS_WEEDS: DebrisCatalog.WEEDS,
+	PROP_DEBRIS_EMBER: DebrisCatalog.EMBER,
+	PROP_DEBRIS_STUMP: DebrisCatalog.STUMP,
+}
 # ★[asset-ruleset §11] 접지 그림자 대상 = 부피 있는 야외 바닥 프롭. 스프라이트에 굽지 않고
 #   별도 반투명 타원을 밑단 아래에 깔아 "뜬 느낌"을 없앤다(건물 facade는 _blit_facade_anchored가
 #   자체 처리). 납작한 소품(풀·꽃·잡초·울타리·화분·계단·넝쿨·러그·등불)과 실내 벽 가구는 제외 —
@@ -842,6 +850,10 @@ var orchard: Orchard = null
 #   (코드 생성 — .new()로 붙인다). 짐승은 비-SOLID(통과 가능)라 밑동 같은 충돌체가 없다(Orchard보다 단순).
 #   하늘 목장(남단 고지) 전용. save.gd·main이 배치·돌봄·수집·세이브를 조율(디커플링).
 var ranch: Ranch = null
+# ★ [S1-8] overgrown 개간 상태(치운 debris 좌표 델타). FarmField/Orchard/Ranch와 완전 분리된 얇은 원장
+#   노드(코드 생성 — .new()). debris 배치는 PROP_LAYOUT_HOME 시드에 잠겨 있고, 이 노드는 "무엇을 치웠나"
+#   델타만 소유한다. main이 드로우/충돌 skip·farmable 판정에서 질의(디커플링 — Reclaim은 화면·지형 무지).
+var reclaim: Reclaim = null
 @onready var readout: Label = $CanvasLayer/Readout
 @onready var clock: GameClock = $Clock                     # T1.5 시계
 @onready var clock_label: Label = $CanvasLayer/ClockLabel
@@ -1042,6 +1054,10 @@ func _ready() -> void:
 	ranch.name = "Ranch"
 	add_child(ranch)
 	ranch.changed.connect(_on_ranch_changed)       # 배치·돌봄·산물·수집·복원 시 화면·HUD 갱신
+	reclaim = Reclaim.new()              # ★ [S1-8] 개간 상태 노드(코드 생성 — 치운 debris 좌표 델타 원장)
+	reclaim.name = "Reclaim"
+	add_child(reclaim)
+	reclaim.changed.connect(_on_reclaim_changed)   # 개간·복원 시 드로우/충돌 skip 반영
 	_ensure_prop_layouts()   # ★ ADR-0025 ② PROP 좌표 데이터 외부화 로드(_build_grid 충돌 재구성 전)
 	_build_grid()
 	_paint_grid()
@@ -1660,7 +1676,11 @@ func _rebuild_prop_collision() -> void:
 		var sz: Vector2 = entry[0].get_size()
 		var yo: int = entry[2] if entry.size() > 2 else 0
 		var foot_bar: bool = entry[0] in FOOT_BAR_PROPS   # ★[§5] 키 큰 야외 프롭 = 발치 바
+		var is_debris: bool = DEBRIS_KIND.has(entry[0])   # ★ [S1-8] 치운 SOLID debris는 충돌 skip(통과 O)
 		for t in entry[1]:
+			# ★ [S1-8 §10.3] 개간한 debris 타일은 충돌을 안 세운다(하드게이트 열림·overgrown 장애물 제거).
+			if is_debris and reclaim != null and reclaim.is_cleared(t):
+				continue
 			var cs := CollisionShape2D.new()
 			var rect := RectangleShape2D.new()
 			if foot_bar:
@@ -1723,6 +1743,15 @@ func _on_orchard_changed() -> void:
 # 없고 화면(placeholder 드로우)·HUD만 갱신한다(_on_orchard_changed의 충돌 없는 짝).
 func _on_ranch_changed() -> void:
 	queue_redraw()
+
+# ★ [S1-8] reclaim 상태가 바뀐 프레임(개간·세이브 복원). 치운 debris는 드로우/충돌 skip-filter가
+# reclaim.is_cleared로 질의하므로, 프롭 충돌을 다시 세우고(치운 SOLID debris 통과) 화면·앞프롭을 갱신한다.
+func _on_reclaim_changed() -> void:
+	if _region == RegionCatalog.HOME:
+		_rebuild_prop_collision()
+	queue_redraw()
+	if _front_props != null:
+		_front_props.queue_redraw()
 
 # ★ ADR-0025 ② — PROP 좌표 외부화 로드. 부팅 시 한 번(_ready, _build_grid 전). res://layout.json이
 # 있으면 거기서, 없거나 깨졌으면 시드에서 부팅하고 layout.json을 1회 생성(에디터/디버그 빌드만 write).
@@ -3237,6 +3266,7 @@ func _save_game() -> void:
 		"farm": farm.to_save(),
 		"orchard": orchard.to_save(),   # ★ [S1-5b] 심긴 혼의 나무(앵커·나이·결실). 영속·나이가 planted_day 파생이라 최소
 		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
+		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
 		"shipping_bin": ship_bin.to_save(),   # ★ C2 출하 대기(롤백·익일 정산 보존)
@@ -3276,6 +3306,8 @@ func _load_game() -> void:
 		orchard.load_save(data["orchard"])
 	if data.has("ranch"):     # ★ [S1-7] — 키 없는 구버전 세이브는 짐승 0으로 시작(changed가 화면·HUD 갱신)
 		ranch.load_save(data["ranch"])
+	if data.has("reclaim"):   # ★ [S1-8] — 키 없는 구버전은 치운 것 0(전 debris 유지). changed가 드로우/충돌 skip 반영
+		reclaim.load_save(data["reclaim"])
 	if data.has("wallet"):
 		wallet.load_save(data["wallet"])
 	if data.has("inventory"):
@@ -3655,6 +3687,11 @@ func _process(delta: float) -> void:
 		_use_tool()
 	if on_animal and Input.is_action_just_pressed("action"):
 		_try_harvest()
+	# ★ [S1-8 §10.1] 개간 — debris는 GROUND(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치한다.
+	#   LMB(맞는 도구 든 채)=개간(_use_tool 내 개간 분기). 도구·debris 매칭은 그 안에서 판정(틀린 도구=무동작).
+	var on_debris := not _sleeping and _debris_kind_at(_target) != ""
+	if on_debris and Input.is_action_just_pressed("use_tool"):
+		_use_tool()
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
@@ -3757,6 +3794,10 @@ func _process(delta: float) -> void:
 		# ★ [S1-7] 축사 2칸 문 앞(어느 칸이든): 우클릭으로 방목·격리·청결 일괄(축사 돌봄 리추얼).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[우클릭] 축사 돌봄 (방목·격리·청결)"
+	elif _debris_kind_at(_target) != "":
+		# ★ [S1-8] 개간 대상 debris를 바라볼 때: 맞는 도구를 들었으면 [좌클릭] 개간, 아니면 필요한 도구 안내.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _debris_prompt(_debris_kind_at(_target))
 	elif _region == RegionCatalog.HOME and ranch.has_animal(_target):
 		# ★ [S1-7] 짐승을 바라볼 때: 산물 있으면 수집, 없으면 쓰다듬 / 든 게 건초면 급여 안내.
 		interact_prompt.visible = not _sleeping
@@ -3815,10 +3856,19 @@ func _use_tool() -> void:
 		if ranch.has_animal(_target) and ranch.feed(_target):
 			inventory.remove_item(ItemCatalog.HAY, 1)
 			verb = "급여"
+	elif DebrisCatalog.is_reclaim_tool(item) and _region == RegionCatalog.HOME:
+		# ★ [S1-8 §10.3] 든 개간 도구(낫/곡괭이/도끼)로 조준 칸의 debris를 친다. 맞는 도구면 reclaim이 치우고
+		# 드랍을 반환한다(틀린 도구·미지 kind·이미 치움이면 {} → 무동작). 드랍은 인벤토리에 적재(경제 양끝 잇기).
+		var kind := _debris_kind_at(_target)
+		if kind != "":
+			var res := reclaim.clear(_target, kind, item)
+			if not res.is_empty():
+				inventory.add_item(str(res["drop"]), int(res["count"]))
+				verb = "개간"
 	if verb == "":
 		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
 	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기·비료는 물/뿌리는 소리.
-	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water", "급여": "water"}.get(verb, ""))
+	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water", "급여": "water", "개간": "hoe"}.get(verb, ""))
 	_advance_onboarding(verb)                 # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
 	energy.spend(cost)                        # 한 동작당 혼력 소모(숙련 감산)
 	queue_redraw()                            # 새 상태가 바로 보이도록
@@ -3922,6 +3972,17 @@ func _animal_prompt(t: Vector2i) -> String:
 	if parts.is_empty():
 		return "%s ♥%d — 오늘 돌봄 완료" % [nm, hearts]
 	return "%s   (♥%d)" % ["  ".join(parts), hearts]
+
+# ★ [S1-8] 개간 프롬프트: 조준한 debris에 대해 맞는 도구면 [좌클릭] 개간, 아니면 필요한 도구를 안내한다.
+# 든 도구가 맞을 때만 동사를 보이는 ADR-0024 §2의 HUD 짝(틀린 도구 = "무슨 도구가 필요한지"만).
+func _debris_prompt(kind: String) -> String:
+	var tool_id := DebrisCatalog.tool_for(kind)
+	var tool_nm := ItemCatalog.name_of(tool_id)
+	if inventory.selected_id() == tool_id:
+		if not energy.can_act(_farming_energy_cost()):
+			return "혼력 부족 — 집에서 취침"
+		return "[좌클릭] 개간 (%s)" % tool_nm
+	return "%s 필요 — 개간 대상" % tool_nm
 
 # 밭 칸 프롬프트: 든 도구·칸 상태에서 다음에 할 수 있는 동작을 파생한다("" = 안내 없음).
 # 맨손 수확(RMB)은 도구와 무관하게 다 자란 칸이면 항상 안내한다. 그 외엔 든 도구가 칸 상태에
@@ -4624,7 +4685,11 @@ func _is_farmable(t: Vector2i) -> bool:
 		return false
 	if t == MIHO_FIELD_TILE:
 		return false
-	return _grid[t.y][t.x] == SOIL
+	if _grid[t.y][t.x] == SOIL:
+		return true
+	# ★ [S1-8 §10.4] 경작지 확장 — 안식 농원에서 개간(debris 치움)한 타일도 farmable(스타듀식 풀→틸드).
+	# 지형(_grid)은 GROUND 그대로 두고 reclaim 델타만 얹는다(구역 재빌드 안전·세이브는 reclaim이 담당).
+	return _region == RegionCatalog.HOME and reclaim != null and reclaim.is_cleared(t)
 
 # ★ [S1-5b] 혼의 나무 3×3 심기 판정용 "이 칸이 막혔나"(greybox-spec §7.4 ①②③). orchard.can_plant에
 # Callable로 주입한다 — orchard는 지형을 모르고 main이 여기서 합성한다(디커플링). 막힘 = 맵 밖 or
@@ -4638,6 +4703,18 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 	if is_solid(_grid[t.y][t.x]):
 		return true
 	return farm.is_crop_solid(t)
+
+# ★ [S1-8 §10.2] 조준 타일에 아직 안 치운 debris가 있으면 그 DebrisCatalog kind, 없으면 "". 배치는
+# _prop_layouts["HOME"] 시드에서 텍스처→kind로 역인한다(이미 치운 것은 reclaim이 걸러 "" 반환). 안식
+# 농원 전용(CAFE/VILLAGE는 debris 텍스처 無). 개간 디스패치 게이트·_use_tool 개간 분기가 쓴다.
+func _debris_kind_at(t: Vector2i) -> String:
+	if _region != RegionCatalog.HOME or reclaim == null or reclaim.is_cleared(t):
+		return ""
+	for entry in _prop_layouts.get("HOME", []):
+		var kind: String = DEBRIS_KIND.get(entry[0], "")
+		if kind != "" and t in entry[1]:
+			return kind
+	return ""
 
 # ★ [S1-7] 신규 게임 스타터 짐승 배치. ranch가 비었을 때만(멱등) 하늘 목장 방목지(PASTURE_SCAN_RECT)를
 # 훑어 걷기 가능 타일에 STARTER_ANIMALS를 2칸 이상 간격으로 놓는다(붙어 안 서게 — 육안·조준 구분).
@@ -4923,8 +5000,12 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 		var tex: Texture2D = entry[0]
 		var yo: int = entry[2] if entry.size() > 2 else 0   # ★ T3③ 벽 가구 시각 보정(밀착, 좌표·충돌 무관)
 		var casts_shadow: bool = tex in PROP_SHADOW_SET
+		var is_debris: bool = DEBRIS_KIND.has(tex)          # ★ [S1-8] 치운 debris는 skip(안 그림)
 		var tsz := tex.get_size()
 		for t in entry[1]:
+			# ★ [S1-8 §10.3] 개간한 debris 타일은 안 그린다(reclaim 델타 skip-filter — _prop_layouts 시드는 불변).
+			if is_debris and reclaim != null and reclaim.is_cleared(t):
+				continue
 			# Y-split: 부피 프롭(그림자 세트)만 앞/뒤로 갈린다 — 평면 데칼(러그·꽃·울타리·잡초 등)은
 			#   발치 개념이 없어 늘 뒤(플레이어 아래). 경계 base==split은 BACK. ALL이면 전부 그린다.
 			if pass_mode != _PROP_PASS_ALL:
