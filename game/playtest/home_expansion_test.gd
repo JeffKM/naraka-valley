@@ -96,21 +96,38 @@ func _initialize() -> void:
 	_check("① 창고 실내 바닥 빌드(STOREHOUSE_RECT)", m._grid[ci.y][ci.x] == m.HOUSE)
 	_check("① 창고 방 = HOME 집 방과 안 겹침(둘 다 HOME 밴드)",   # ★C2 HOME 집은 HOME_HOUSE_RECT
 		not m.STOREHOUSE_RECT.intersects(m.HOME_HOUSE_RECT))
+	# ★ 창고 2패널 양문(x30·x31) — 문 리세스 2칸 + 문 앞 진입로 2칸 폭(문/길 폭 정합)
+	_check("① 창고 문 2칸(x30·x31) = PATH 리세스",
+		m._grid[m.STOREHOUSE_EXT_DOOR.y][m.STOREHOUSE_EXT_DOOR.x] == m.PATH \
+		and m._grid[m.STOREHOUSE_EXT_DOOR_E.y][m.STOREHOUSE_EXT_DOOR_E.x] == m.PATH)
+	var sh_path_ok := true
+	for py in range(m.STOREHOUSE_EXT_DOOR.y + 1, 21):   # 문 아래(y9) ~ 갈래(y20) 2칸 폭 확인
+		if m._grid[py][m.STOREHOUSE_EXT_DOOR.x] != m.PATH or m._grid[py][m.STOREHOUSE_EXT_DOOR_E.x] != m.PATH:
+			sh_path_ok = false
+	_check("① 창고 문 앞 진입로 = 2칸 폭 PATH(문과 연결)", sh_path_ok)
 
 	# ── ③ 축사 = 건물 자리만(비-enterable) ──
 	var barn: Rect2i = m.BARN_EXT_RECT
-	var barn_door: Vector2i = m.BARN_EXT_DOOR
+	var barn_door: Vector2i = m.BARN_EXT_DOOR               # 대표 문칸(진입 불가·도달성 검증용)
+	var barn_doors := [m.BARN_EXT_DOOR, m.BARN_EXT_DOOR_W]   # ★ 2패널 미닫이 = 2칸 문(x4·x5)
 	var all_wall := true
-	var door_is_path := false
+	var doors_are_path := true
 	for y in range(barn.position.y, barn.end.y):
 		for x in range(barn.position.x, barn.end.x):
 			var id: int = m._grid[y][x]
-			if Vector2i(x, y) == barn_door:
-				door_is_path = (id == m.PATH)
+			if barn_doors.has(Vector2i(x, y)):
+				if id != m.PATH:
+					doors_are_path = false
 			elif id != m.WALL:
 				all_wall = false
-	_check("③ 축사 박스 = 문 칸 외 전부 WALL", all_wall)
-	_check("③ 축사 문 칸 = PATH 리세스(시각 일관)", door_is_path)
+	_check("③ 축사 박스 = 문 2칸 외 전부 WALL", all_wall)
+	_check("③ 축사 문 2칸(x4·x5) = PATH 리세스(2패널 문 정합)", doors_are_path)
+	# ★ 문 앞 2칸 폭 진입로(y17..19 x4·x5) = PATH — 문과 이어지는 흙길
+	var apron_ok := true
+	for py in range(17, 20):
+		if m._grid[py][m.BARN_EXT_DOOR_W.x] != m.PATH or m._grid[py][m.BARN_EXT_DOOR.x] != m.PATH:
+			apron_ok = false
+	_check("③ 축사 문 앞 진입로 = 2칸 폭 PATH(문과 연결)", apron_ok)
 	_check("③ 축사 카탈로그 미등록(_buildings에 '축사' 없음)", not m._buildings.has("축사"))
 	# 축사 문에 닿아도 진입 안 됨(자리만 — _maybe_toggle_building이 카탈로그 조회로만 진입).
 	m.player.position = m._tile_center_px(barn_door)

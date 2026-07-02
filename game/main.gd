@@ -299,8 +299,9 @@ const FACADE_CAFE := preload("res://assets/buildings/cafe_ext.png")
 const FACADE_MIHO_HOUSE := preload("res://assets/buildings/miho_house_ext.png")
 const FACADE_MEL_HOUSE := preload("res://assets/buildings/mel_house_ext.png")
 const FACADE_BANA_HOUSE := preload("res://assets/buildings/bana_house_ext.png")
-# ★ Phase 2.8 T3 — 안식 농원 서비스 건물 외관(박스 크기와 1:1). 창고=192×192(6×6칸, STOREHOUSE_EXT_RECT)·
-# 축사=192×128(6×4칸, BARN_EXT_RECT). 창고는 enterable(실내 빈 방)·축사는 비-enterable 자리(외관만).
+# ★ 안식 농원 서비스 건물 외관 — half-res 네이티브 생성 → ×2 nearest(tools/facade_halfres_x2.py, 2px 캐논).
+# footprint = 창고 6×6칸(STOREHOUSE_EXT_RECT)·축사 4×3칸(BARN_EXT_RECT). art는 지붕 윗면 노출로 footprint보다
+# 위로 솟아(bottom-center 앵커) 본가와 지붕 시점 통일. 창고=enterable(실내 빈 방)·축사=비-enterable(외관만).
 const FACADE_STOREHOUSE := preload("res://assets/buildings/storehouse_ext.png")
 const FACADE_BARN := preload("res://assets/buildings/barn_ext.png")
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
@@ -563,7 +564,8 @@ const STORE_CAM_RECT := Rect2i(21, 72, 14, 13)  # 만물상 방 둘레(집 방 x
 # 안 걸려 *빈* 방으로 그려진다(분기 추가 0 — "그 외 graybox"의 자연 표현).
 # ★ C2 — 외관은 80×65 북동(NE)으로, 실내는 HOME 밴드(+41)로 이동(집 실내 옆 띠와 안 겹침).
 const STOREHOUSE_EXT_RECT := Rect2i(28, 3, 6, 6)    # ★ADR-0035 Phase B x28..33, y3..8 (본가 왼쪽 병렬 — 자재 동선·서쪽=계단/고지 방향)
-const STOREHOUSE_EXT_DOOR := Vector2i(30, 8)       # 외관 창고 문(닿으면 진입) — 아래벽 중앙(x28..33), _carve_paths 서편 레인 연결
+const STOREHOUSE_EXT_DOOR := Vector2i(30, 8)       # 외관 창고 문 서패널(닿으면 진입) — 아래벽 x28..33 중심 straddle → 2칸 양문 x30·x31, _carve_paths 서편 레인 연결
+const STOREHOUSE_EXT_DOOR_E := Vector2i(31, 8)     # ★ 창고 양문 동패널(아트 문이 2칸이라 리세스·진입로도 2칸 — 문/길 폭 정합). 진입 트리거는 서패널만.
 const STOREHOUSE_RECT := Rect2i(23, 79, 10, 9)     # x23..32, y79..87 (HOME 밴드 — 집 방 y67..75 아래, 안 겹침)
 const STOREHOUSE_DOOR := Vector2i(27, 87)          # 실내 창고 문(닿으면 퇴장) — 아래벽 중앙(end.y-1)
 const STOREHOUSE_IN_TILE := Vector2i(27, 86)       # 실내 창고 문 안쪽(진입 착지)
@@ -576,7 +578,8 @@ const STOREHOUSE_CAM_RECT := Rect2i(22, 78, 14, 13)  # 창고 방 둘레(집 방
 # 자연 표현, 특수 분기 0). 실내·카메라·세이브 무관. 창고 동선(x32 y10..15·복도 y16) 위가 아니라
 # 아래(y18..21)라 어떤 기존 동선·밭(y≤14)·스폰(x20)과도 안 겹친다(소프트락 0 — flood-fill로 게이트).
 const BARN_EXT_RECT := Rect2i(3, 14, 4, 3)     # ★[S1-3] phaseB §5.3: x3..6, y14..16 (남단 고지 하늘 목장 — 절벽=천연 울타리, 비-enterable)
-const BARN_EXT_DOOR := Vector2i(5, 16)         # 축사 문 리세스(아래벽 중앙 x3..6, 남향 → 방목지로 열림, 시각 일관용 — 진입 트리거 아님, 카탈로그 미등록)
+const BARN_EXT_DOOR := Vector2i(5, 16)         # 축사 문 리세스 동패널(아래벽 x3..6 중심 straddle → 2칸 문 x4·x5, 남향 방목지로 열림 — 진입 트리거 아님, 카탈로그 미등록)
+const BARN_EXT_DOOR_W := Vector2i(4, 16)       # ★ 축사 2패널 미닫이문 서패널(아트 문이 2칸이라 리세스도 2칸 — 문/길 폭 정합). 돌봄 RMB는 두 칸 어디서나.
 # ★ [S1-7] 하늘 목장 방목지 — 축사 남쪽 고지 평면(phaseB §5.4 단일 방목 Zone·절벽=천연 펜). 스타터 짐승
 #   자동 배치 스캔 범위(BARN 아래 y17~, 남향 절벽 y26 위). 짐승은 이 안의 걷기 가능 타일에 놓인다.
 const PASTURE_SCAN_RECT := Rect2i(3, 18, 10, 6)   # x3..12, y18..23 (축사 문 아래 방목 평면 — 좌상 구석·맵경계 회피)
@@ -1998,7 +2001,9 @@ func _build_home() -> void:
 	_fill_rect(STARTER_PATCH_RECT, SOIL)            # ★ADR-0035 5×5 스타터 패치(즉경작 SOIL)
 	_build_facade(HOUSE_EXT_RECT, HOUSE_EXT_DOOR)   # 외부 본가 외관(통과 불가 박스 + 문 트리거)
 	_build_facade(STOREHOUSE_EXT_RECT, STOREHOUSE_EXT_DOOR)  # ★ 창고 외관(본가 왼쪽 병렬)
+	_set_tile(STOREHOUSE_EXT_DOOR_E.x, STOREHOUSE_EXT_DOOR_E.y, PATH)  # ★ 2칸 양문 동칸도 리세스(문 폭 2칸 = 아트 정합)
 	_build_facade(BARN_EXT_RECT, BARN_EXT_DOOR)             # ★ 축사 건물 자리(고지 위, 비-enterable — 카탈로그 미등록)
+	_set_tile(BARN_EXT_DOOR_W.x, BARN_EXT_DOOR_W.y, PATH)  # ★ 2패널 문 서칸도 리세스(문 폭 2칸 = 아트 정합)
 	_build_room(HOME_HOUSE_RECT, HOUSE, HOUSE_WALL, HOME_HOUSE_DOOR)   # ★C2 실내 집 방(HOME 밴드 y67+, 마을 공유 방과 분리)
 	# ★ T3③ 북벽 2타일 밴드 — 상단 벽 한 행(y68 실내)을 더 벽으로(스타듀식 입체 벽, plank는 _draw 오버레이).
 	#   바닥은 y69~74로 한 줄 줄지만 충돌·취침(zone)·문·카메라 불변. 가구가 이 벽에 기대 윗부분이 벽을 덮는다.
@@ -2348,8 +2353,14 @@ func _carve_paths() -> void:
 	_carve_h(10, 38, 44)                        # 본가 문 레인(y10, x38..44)
 	_carve_v(44, 9, 10)                         # 본가 문(44,9)까지
 	_carve_h(20, 30, 38)                        # 창고 갈래(y20, x30..38)
-	_carve_v(30, 8, 20)                         # 창고 문(30,8)까지
+	_carve_v(30, 8, 20)                         # 창고 문 서칸(30,8)까지 — 2패널 양문 서레인
+	_carve_v(31, 8, 20)                         # ★ 창고 문 동칸(31) 진입로 — 2칸 양문에 맞춰 입구 앞 2칸 폭
 	_carve_h(32, 38, 78)                        # 동워프 레인(y32, 스파인 → 동쪽 길 워프 78,32)
+	# ★ 축사 2칸 문 앞 진입로 — 2패널 문(x4·x5)에 맞춰 2칸 폭 흙길을 남향 방목지로 뻗어 문과 잇는다.
+	#   (y16 리세스는 아트 밑에 가려 안 보임 → y17부터 깔아야 눈에 보이고 문 밑단과 이어진다.)
+	for py in range(17, 20):
+		_set_tile(BARN_EXT_DOOR_W.x, py, PATH)  # 서칸 레인(x4, y17..19)
+		_set_tile(BARN_EXT_DOOR.x, py, PATH)    # 동칸 레인(x5, y17..19)
 
 # ★ M2.1 / ★C3 — 나루 마을 동선. 메인 가로 복도(BRIDGE_Y 36)가 서/동을 잇되 강(x49,50)을 만나
 # *다리*로만 건넌다. 서편: 서워프(1,36)·도착(3,36) ~ 다리 서단(48,36). 동편: 다리 동단(51,36) ~ 98,36.
@@ -3630,7 +3641,8 @@ func _process(delta: float) -> void:
 		_try_night_serve(facing_seat)
 		return
 	# ★ [S1-7] 축사 문 앞 RMB = 축사 돌봄(방목·격리·청결 일괄, §4.1). 하늘 목장 전용 — SOIL 게이트 밖.
-	if not _sleeping and _region == RegionCatalog.HOME and _target == BARN_EXT_DOOR \
+	if not _sleeping and _region == RegionCatalog.HOME \
+			and (_target == BARN_EXT_DOOR or _target == BARN_EXT_DOOR_W) \
 			and Input.is_action_just_pressed("action"):
 		if ranch.tend_all():
 			audio.sfx("ui")
@@ -3741,8 +3753,8 @@ func _process(delta: float) -> void:
 		# T6.4 밤 바 손님을 바라볼 때: 우클릭으로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 응대 (+%d골드)" % NightBar.SERVE_PRICE
-	elif _region == RegionCatalog.HOME and _target == BARN_EXT_DOOR:
-		# ★ [S1-7] 축사 문 앞: 우클릭으로 방목·격리·청결 일괄(축사 돌봄 리추얼).
+	elif _region == RegionCatalog.HOME and (_target == BARN_EXT_DOOR or _target == BARN_EXT_DOOR_W):
+		# ★ [S1-7] 축사 2칸 문 앞(어느 칸이든): 우클릭으로 방목·격리·청결 일괄(축사 돌봄 리추얼).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[우클릭] 축사 돌봄 (방목·격리·청결)"
 	elif _region == RegionCatalog.HOME and ranch.has_animal(_target):
