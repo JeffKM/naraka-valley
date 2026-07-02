@@ -468,6 +468,16 @@ var _edit_btn_toggle: Button = null
 var _edit_row: Control = null
 var _edit_pal_label: Label = null
 
+# ★ [S1-9] 집 꾸미기 모드 상태(플레이어-facing — F10 저작 도구와 별개, §11.5). 집 실내("집")에서만
+#   KEY_C로 토글 진입. 마우스 커서 배치 + 키 팔레트(레이어·세트·아이템 순환)·회전. 순수 코스메틱(비용0).
+var _deco_mode := false
+var _deco_layer := 0     # 0=바닥재 / 1=벽지 / 2=가구 (_DECO_LAYERS 인덱스)
+var _deco_set := 0       # HomeDecoCatalog.set_ids() 인덱스(현재 팔레트 세트)
+var _deco_item := 0      # 현재 세트·레이어의 items_of_layer 인덱스
+var _deco_rot := 0       # 새로 놓을 가구 회전(0..3)
+const _DECO_LAYERS := [HomeDecoCatalog.L_FLOOR, HomeDecoCatalog.L_WALL, HomeDecoCatalog.L_FURNITURE]
+const _DECO_LAYER_NAMES := {"floor": "바닥재", "wall": "벽지", "furniture": "가구"}
+
 # ── 외부↔실내 분리(구역 사각형, 타일 좌표 Rect2i(x, y, 폭, 높이)) ─────────────
 # 건물은 외부에선 통과 불가 "외관"으로 보이고, 문에 닿으면 fade로 맵 아래 별도 실내 구역으로
 # 텔레포트한다(스타듀식 외부↔실내 — 문=같은 구역 안 특수 워프, _transition_to). 실내 NPC·가구·
@@ -854,6 +864,10 @@ var ranch: Ranch = null
 #   노드(코드 생성 — .new()). debris 배치는 PROP_LAYOUT_HOME 시드에 잠겨 있고, 이 노드는 "무엇을 치웠나"
 #   델타만 소유한다. main이 드로우/충돌 skip·farmable 판정에서 질의(디커플링 — Reclaim은 화면·지형 무지).
 var reclaim: Reclaim = null
+# ★ [S1-9] 집 꾸미기 상태(집 내부 3레이어 코스메틱 배치 + 해금 세트). F10 저작 도구(layout.json·
+#   _prop_layouts)와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). 플레이어 세이브 델타만 소유하고
+#   layout.json 시드는 안 건드린다(회귀 0). main이 유효 배치 칸을 주입하고 드로우/충돌 훅에서 질의(디커플링).
+var home_deco: HomeDeco = null
 @onready var readout: Label = $CanvasLayer/Readout
 @onready var clock: GameClock = $Clock                     # T1.5 시계
 @onready var clock_label: Label = $CanvasLayer/ClockLabel
@@ -1058,6 +1072,11 @@ func _ready() -> void:
 	reclaim.name = "Reclaim"
 	add_child(reclaim)
 	reclaim.changed.connect(_on_reclaim_changed)   # 개간·복원 시 드로우/충돌 skip 반영
+	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
+	home_deco.name = "HomeDeco"
+	add_child(home_deco)
+	home_deco.changed.connect(_on_home_deco_changed)   # 배치·삭제·회전·해금·복원 시 드로우/충돌 훅 갱신
+	_configure_home_deco_bounds()   # ★ [S1-9] 유효 배치 칸 주입(집 룸 rect 파생 — 좌표 정적이라 1회)
 	_ensure_prop_layouts()   # ★ ADR-0025 ② PROP 좌표 데이터 외부화 로드(_build_grid 충돌 재구성 전)
 	_build_grid()
 	_paint_grid()
@@ -1123,6 +1142,10 @@ func _ready() -> void:
 		# ★ [S1-7] 신규 게임: 하늘 목장에 스타터 짐승을 배치한다(START_KIT 결 — 세이브가 없을 때만,
 		# _grid는 부팅 HOME 그대로라 방목지 좌표계가 유효). 세이브에 짐승이 있으면 load_save가 복원한다.
 		_ensure_starter_animals()
+		# ★ [S1-9] 신규 게임: 스타터 테마 세트를 무상 해금한다(§11.4 — 상점=Slice2 하류, 지금은 START).
+		#   세이브가 있으면 home_deco.load_save가 해금 집합을 복원한다(구세이브=해금 0, 방어적).
+		for sid in HomeDecoCatalog.STARTER_SETS:
+			home_deco.unlock(sid)
 	# T5.6 복원 직후 NPC 상주/출근 상태를 현재(복원된) 진행·시각에 맞춘다. 통보를 이미
 	# 마친 세이브면 옥자가 카페에 보이고, 복원 시각이 영업창(15시+)이면 미호가 카페로 출근해
 	# 있다("껐다 켜도 그대로" — 직원 배치까지 재개에 맞는다). 둘 다 세이브 무상태(시각·단계
@@ -1241,6 +1264,11 @@ func _ensure_input_actions() -> void:
 	var ev_f10 := InputEventKey.new()
 	ev_f10.physical_keycode = KEY_F10
 	InputMap.action_add_event("place_mode", ev_f10)
+	# ★ [S1-9] 집 꾸미기 모드 토글(C — 플레이어-facing, 맥 F키 이슈 회피). 집 실내에서만 발동(_can_deco).
+	InputMap.add_action("deco_mode")
+	var ev_c := InputEventKey.new()
+	ev_c.physical_keycode = KEY_C
+	InputMap.action_add_event("deco_mode", ev_c)
 
 # 창 ↔ 전체화면 토글(F11). 픽셀은 nearest+fractional 스케일이라 전체화면에서도 화면을 꽉 채우되
 # 또렷하다(ADR-0018 갱신 — 스타듀식 채움). 창 복귀 시 1920×1080 override로 돌아간다.
@@ -1932,6 +1960,9 @@ func _edit_pick(tile: Vector2i) -> Vector2i:
 	return Vector2i(-1, -1)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _deco_mode:
+		_deco_input(event)
+		return
 	if not _edit_mode:
 		return
 	var key := _edit_key()
@@ -2008,6 +2039,159 @@ func _draw_edit_overlay() -> void:
 	if ptex != null:
 		draw_texture_rect(ptex, Rect2(Vector2(mt.x * TILE, mt.y * TILE), ptex.get_size()), false, Color(1, 1, 1, 0.45))
 	draw_rect(Rect2(Vector2(mt.x * TILE, mt.y * TILE), Vector2(TILE, TILE)), Color(0.2, 1, 1, 0.8), false, 1.0)
+
+# ── ★ [S1-9] 집 꾸미기 모드(플레이어-facing 3레이어 코스메틱, greybox-spec §11.5) ─────────────
+# F10 저작 도구(_edit_*)와 완전 분리 — 독립 상태·오버레이·팔레트. 집 실내("집")에서만 진입, 마우스
+# 커서 배치, 키 팔레트/회전, 순수 코스메틱(에너지·골드·시간 소모 0). 배치 델타는 home_deco가 소유한다.
+
+# 꾸미기 모드 진입 가능 위치인가(집 실내 전용 게이트).
+func _can_deco() -> bool:
+	return _region == RegionCatalog.HOME and _indoor == "집"
+
+func _toggle_deco_mode() -> void:
+	_deco_mode = not _deco_mode
+	if _deco_mode:
+		_notice("집 꾸미기 (C=끄기 · 좌클릭=놓기 · 우클릭=지우기 · Q/E=레이어 · [/]=세트 · ,/.=아이템 · R=회전)", 4.0, true)
+	queue_redraw()
+
+# 현재 선택 레이어 키(FLOOR/WALL/FURNITURE).
+func _deco_cur_layer() -> String:
+	return _DECO_LAYERS[_deco_layer]
+
+# 현재 팔레트 세트 id.
+func _deco_cur_set() -> String:
+	var ids := HomeDecoCatalog.set_ids()
+	return str(ids[_deco_set]) if _deco_set >= 0 and _deco_set < ids.size() else ""
+
+# 현재 세트·레이어의 아이템 key 목록(팔레트 순환 범위).
+func _deco_item_keys() -> Array:
+	return HomeDecoCatalog.items_of_layer(_deco_cur_set(), _deco_cur_layer())
+
+# 현재 선택 아이템 key("" = 이 세트·레이어에 아이템 없음).
+func _deco_cur_item() -> String:
+	var keys := _deco_item_keys()
+	if keys.is_empty():
+		return ""
+	return str(keys[clampi(_deco_item, 0, keys.size() - 1)])
+
+func _deco_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			_deco_place(_mouse_tile())
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			_deco_remove(_mouse_tile())
+			get_viewport().set_input_as_handled()
+		queue_redraw()
+	elif event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_Q:
+				_deco_layer = posmod(_deco_layer - 1, _DECO_LAYERS.size())
+				_deco_item = 0
+				_notice("레이어: " + _DECO_LAYER_NAMES[_deco_cur_layer()])
+			KEY_E:
+				_deco_layer = posmod(_deco_layer + 1, _DECO_LAYERS.size())
+				_deco_item = 0
+				_notice("레이어: " + _DECO_LAYER_NAMES[_deco_cur_layer()])
+			KEY_BRACKETLEFT:
+				_deco_set = posmod(_deco_set - 1, HomeDecoCatalog.set_ids().size())
+				_deco_item = 0
+				_notice("세트: " + HomeDecoCatalog.set_name(_deco_cur_set()))
+			KEY_BRACKETRIGHT:
+				_deco_set = posmod(_deco_set + 1, HomeDecoCatalog.set_ids().size())
+				_deco_item = 0
+				_notice("세트: " + HomeDecoCatalog.set_name(_deco_cur_set()))
+			KEY_COMMA:
+				var n1 := _deco_item_keys().size()
+				if n1 > 0:
+					_deco_item = posmod(_deco_item - 1, n1)
+			KEY_PERIOD:
+				var n2 := _deco_item_keys().size()
+				if n2 > 0:
+					_deco_item = posmod(_deco_item + 1, n2)
+			KEY_R:
+				_deco_rot = posmod(_deco_rot + 1, 4)   # 새로 놓을 가구 회전(0..3)
+				var uc := _mouse_tile()   # 마우스 아래 이미 놓인 가구가 있으면 그것도 함께 돌린다
+				if home_deco.has_any(HomeDecoCatalog.L_FURNITURE, uc):
+					home_deco.rotate_furniture(uc)
+		queue_redraw()
+
+# 마우스 칸에 현재 팔레트 아이템을 놓는다. 순수 코스메틱 — energy/wallet/skill을 부르지 않는다(§11.6).
+func _deco_place(cell: Vector2i) -> void:
+	var item_key := _deco_cur_item()
+	if item_key == "":
+		return
+	var rot := _deco_rot if _deco_cur_layer() == HomeDecoCatalog.L_FURNITURE else 0
+	if not home_deco.place(cell, _deco_cur_set(), item_key, rot):
+		_notice("여기엔 놓을 수 없어요")   # 경계 밖·미해금(방어)
+
+# 마우스 칸의 현재 레이어 배치를 지운다(레이어 간 공존이라 지금 레이어만).
+func _deco_remove(cell: Vector2i) -> void:
+	home_deco.remove(_deco_cur_layer(), cell)
+
+# ★ [S1-9 §11.2] 유효 배치 칸을 계산해 home_deco에 주입한다. 좌표가 정적(HOME_HOUSE_RECT)이라 _ready에서
+# 1회. 바닥 칸(FLOOR·FURNITURE) = 룸 실내 바닥(북벽 2행 밴드·문 아래벽 제외), 벽 밴드 칸(WALL) = 북벽 2행.
+# HomeDeco는 기하를 모르므로(디커플링) main이 여기서 유일하게 좌표를 안다.
+func _configure_home_deco_bounds() -> void:
+	var r := HOME_HOUSE_RECT
+	var floor_cells: Array = []
+	# 바닥 = 내부 x(rect.x+1 .. rect.end.x-2), y(rect.y+2 .. rect.end.y-2). y+2로 북벽(y0)+밴드(y1) 건너뜀.
+	for x in range(r.position.x + 1, r.end.x - 1):
+		for y in range(r.position.y + 2, r.end.y - 1):
+			floor_cells.append(Vector2i(x, y))
+	var wall_cells: Array = []
+	# 벽 밴드 = 북벽 2행(y0·y1)의 내부 x(_draw_house_wall_band 범위와 동일).
+	for x in range(r.position.x + 1, r.end.x - 1):
+		wall_cells.append(Vector2i(x, r.position.y))
+		wall_cells.append(Vector2i(x, r.position.y + 1))
+	home_deco.set_bounds(floor_cells, wall_cells)
+
+# ★ [S1-9] 집 꾸미기 배치를 그린다(그레이박스 placeholder — 세트 색 블록·회전 표기. 실제 아트=S1-11).
+# 레이어 순서 = 바닥재(바닥 위) → 벽지(벽 밴드 위) → 가구(그 위). HOME _draw 분기에서만 호출(집 실내
+# 카메라 격리라 방 안에서만 보임). 순수 시각 — 충돌은 그레이박스에서 없다(§11.5, is_solid는 하류 훅).
+func _draw_home_deco() -> void:
+	if home_deco == null:
+		return
+	# 바닥재: 칸을 세트 색으로 반투명 칠(밑 바닥 타일이 살짝 비쳐 '깔린' 결).
+	for cell in home_deco.layer_dict(HomeDecoCatalog.L_FLOOR):
+		var e: Dictionary = home_deco.layer_dict(HomeDecoCatalog.L_FLOOR)[cell]
+		var c := HomeDecoCatalog.color_of(e["set"], e["item"])
+		c.a = 0.7
+		draw_rect(Rect2(Vector2(cell.x * TILE, cell.y * TILE), Vector2(TILE, TILE)), c)
+	# 벽지: 벽 밴드 칸을 세트 색으로 불투명 칠(벽 위 덮개).
+	for cell in home_deco.layer_dict(HomeDecoCatalog.L_WALL):
+		var ew: Dictionary = home_deco.layer_dict(HomeDecoCatalog.L_WALL)[cell]
+		draw_rect(Rect2(Vector2(cell.x * TILE, cell.y * TILE), Vector2(TILE, TILE)), HomeDecoCatalog.color_of(ew["set"], ew["item"]))
+	# 가구: 세트 색 박스 + 회전 표기(rot 방향 밝은 노치 — 4방 데이터, 그레이박스 표기).
+	for cell in home_deco.layer_dict(HomeDecoCatalog.L_FURNITURE):
+		var ef: Dictionary = home_deco.layer_dict(HomeDecoCatalog.L_FURNITURE)[cell]
+		var px := Vector2(cell.x * TILE, cell.y * TILE)
+		draw_rect(Rect2(px + Vector2(TILE * 0.15, TILE * 0.15), Vector2(TILE * 0.7, TILE * 0.7)), HomeDecoCatalog.color_of(ef["set"], ef["item"]))
+		_draw_deco_rot_notch(px, int(ef.get("rot", 0)))
+
+# 회전 노치 — rot(0=상·1=우·2=하·3=좌) 방향 가장자리에 밝은 점(4방 표기, 그레이박스).
+func _draw_deco_rot_notch(px: Vector2, rot: int) -> void:
+	var pts := [Vector2(0.5, 0.12), Vector2(0.88, 0.5), Vector2(0.5, 0.88), Vector2(0.12, 0.5)]
+	var o: Vector2 = pts[posmod(rot, 4)]
+	draw_circle(px + Vector2(TILE * o.x, TILE * o.y), TILE * 0.09, Color(1, 1, 1, 0.9))
+
+# 꾸미기 모드 오버레이 — 마우스 칸 하이라이트 + 유효/무효 표시 + 현재 팔레트 고스트.
+func _draw_deco_overlay() -> void:
+	var mt := _mouse_tile()
+	var layer := _deco_cur_layer()
+	var valid := HomeDecoCatalog.has_item(_deco_cur_set(), _deco_cur_item())
+	var ec := Color(0.2, 1, 1, 0.85)
+	draw_rect(Rect2(Vector2(mt.x * TILE, mt.y * TILE), Vector2(TILE, TILE)), ec, false, 1.5)
+	if valid:   # 팔레트 고스트(현재 아이템 색 반투명)
+		var gc := HomeDecoCatalog.color_of(_deco_cur_set(), _deco_cur_item())
+		gc.a = 0.45
+		draw_rect(Rect2(Vector2(mt.x * TILE, mt.y * TILE), Vector2(TILE, TILE)), gc)
+
+# ★ [S1-9] home_deco 변경(배치·삭제·회전·해금·복원) → 화면 갱신. 충돌은 그레이박스에서 없다(무충돌,
+# §11.5). ⚠️ 하류 훅: 훗날 아트를 입혀 is_solid 가구 충돌을 켤 때, 여기서 _rebuild_prop_collision
+# 동형의 얇은 런타임 충돌 빌더를 호출하게 확장한다(파이프라인 자리만 마련 — 지금은 통과 가능).
+func _on_home_deco_changed() -> void:
+	queue_redraw()
 
 # 홈베이스(안식 농원): 외부 풀밭 + 밭(열린 흙) + 집·카페 실내 방(sub) 스택.
 # 외부(0..OUTDOOR_H-1)는 풀밭, 그 아래 실내 전용 구역은 검은 여백(VOID)으로 기본을 깐 뒤,
@@ -3129,6 +3313,10 @@ func _maybe_toggle_building() -> void:
 			var b: Dictionary = _buildings[id]
 			if b["region"] == _region and t == b["ext_door"]:
 				_transition_to(id, b["in_tile"])
+				# ★ [S1-9 §11.6] 디제시스 최소 스텁 — 꾸며진 집에 들어오면 앰비언트 한 줄(관계 미터·버프 0,
+				#   순수 감상). Slice 8 NPC/배우자 반응이 붙기 전의 자기완결 신호(CONTEXT '앰비언트 한정').
+				if id == "집" and home_deco != null and home_deco.is_decorated():
+					_notice("집이 아늑하다.")
 				return
 	elif _buildings.has(_indoor) and t == _buildings[_indoor]["door"]:
 		_transition_to("", _buildings[_indoor]["out_tile"])
@@ -3267,6 +3455,7 @@ func _save_game() -> void:
 		"orchard": orchard.to_save(),   # ★ [S1-5b] 심긴 혼의 나무(앵커·나이·결실). 영속·나이가 planted_day 파생이라 최소
 		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
 		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
+		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
 		"shipping_bin": ship_bin.to_save(),   # ★ C2 출하 대기(롤백·익일 정산 보존)
@@ -3308,6 +3497,8 @@ func _load_game() -> void:
 		ranch.load_save(data["ranch"])
 	if data.has("reclaim"):   # ★ [S1-8] — 키 없는 구버전은 치운 것 0(전 debris 유지). changed가 드로우/충돌 skip 반영
 		reclaim.load_save(data["reclaim"])
+	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
+		home_deco.load_save(data["home_deco"])
 	if data.has("wallet"):
 		wallet.load_save(data["wallet"])
 	if data.has("inventory"):
@@ -3430,6 +3621,13 @@ func _process(delta: float) -> void:
 	# 배치 모드 ON이면 게임플레이 입력·시뮬 스텝을 멈춘다(저작 전용 — 시계·이동 정지). 마우스 드래그·
 	# 단축키는 _unhandled_input이 처리하고, 오버레이는 _draw가 그린다. queue_redraw로 갱신 유지.
 	if _edit_mode:
+		queue_redraw()
+		return
+	# ★ [S1-9] 집 꾸미기 모드 토글(C) — 집 실내("집")에서만. 켜면 게임플레이 입력·시뮬을 멈추고(코스메틱
+	#   저작 전용, 배치 모드와 같은 결) 마우스·키로 3레이어를 꾸민다. 나가면 다시 게임(멱등 토글).
+	if Input.is_action_just_pressed("deco_mode") and (_deco_mode or _can_deco()):
+		_toggle_deco_mode()
+	if _deco_mode:
 		queue_redraw()
 		return
 	# ★ 상시 HUD(우하단 혼력 바·하단 핫바)는 런타임 add_child라 씬 패널(대화·정산·마일스톤·마무리)
@@ -4776,6 +4974,7 @@ func _draw() -> void:
 	match _region:
 		RegionCatalog.HOME:
 			_draw_house_wall_band()  # ★ T3③ 집 실내 북벽 plank 밴드(가구 아래 — 가구가 위로 덮어 입체)
+			_draw_home_deco()        # ★ [S1-9] 플레이어 집 꾸미기 3레이어(벽 밴드 위·시드 가구 아래, 집 실내에서만)
 			_draw_facade_home()      # 집 외관(WALL 박스 위에 덮어 닫힌 건물로)
 			_draw_facade_storehouse()  # ★ T3 창고 외관(NE)
 			_draw_facade_barn()        # ★ T3 축사 외관(동편, 비-enterable 자리)
@@ -4802,6 +5001,8 @@ func _draw() -> void:
 			_draw_jobgui()
 	if _edit_mode:          # ★ ADR-0025 ① 배치 모드 오버레이(선택·마우스 칸·팔레트 고스트)
 		_draw_edit_overlay()
+	if _deco_mode:          # ★ [S1-9] 집 꾸미기 모드 오버레이(마우스 칸·팔레트 고스트)
+		_draw_deco_overlay()
 	if not _target_valid:
 		return
 	var p := Vector2(_target.x * TILE, _target.y * TILE)
