@@ -10,6 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 이 저장소는 **Git으로 버전 관리된다.** 원격은 `github.com/JeffKM/naraka-valley`(기본 브랜치 `main`)다. Git 작업은 `.claude/commands/`의 `/git:branch` `/git:commit` `/git:merge` `/git:pr` 워크플로우를 따른다.
 
+> **★ 구현 착수 = 워크트리 격리부터(어길 수 없는 규칙).** owner는 여러 Claude 세션을 **같은 워크트리에서 동시에** 돌린다. 공유 워크트리에서 각 세션이 브랜치를 전환·편집하면 서로의 변경이 사라져 보이고(실제론 각 브랜치에 온전), Godot `user://save.dat`(앱명 공유)까지 경합해 세이브/복원 테스트가 코드와 무관하게 오탐 실패한다. **그러므로 코드·에셋을 수정하는 구현/빌드 작업을 시작하기 전에, 맨 먼저 `EnterWorktree`로 격리 워크트리를 만들고 그 안에서 작업한다**(이 규칙이 곧 `EnterWorktree` 사용 인가다 — 도구 설명이 "CLAUDE.md/메모리가 지시하면 사용"이라 명시). 순서: ①`EnterWorktree`(격리 워크트리 생성·진입) → ②새 워크트리는 `.godot`가 비어 있으니 첫 헤드리스 실행 전 `godot --headless --import` 1회 → ③구현·`game/run_tests.sh` 회귀 → ④`/git:commit`·`/git:pr` → ⑤`ExitWorktree`(keep=나중 이어감 / remove=완료). **예외(워크트리 불요):** ROADMAP·문서·메모리만 고치는 소규모 편집, 또는 이미 격리 워크트리 안일 때. **금지:** 같은 테스트를 두 워크트리에서 동시 헤드리스 실행(save.dat 경합 — 순차로).
+
 > **벤더 디렉터리 주의:** `mcp-shrimp-task-manager/`는 upstream(cjo4m06)을 일반 파일로 벤더링한 것이다. 서브모듈이 아니므로 내부에 `.git`을 두지 말 것. `node_modules/`·`dist/`·`shrimp_data/`는 `.gitignore`로 제외되어 있어, 클론 후 도구를 쓰려면 `cd mcp-shrimp-task-manager && npm install && npm run build`가 필요하다.
 
 ## 권위 있는 문서 (작업 전 반드시 참조)
