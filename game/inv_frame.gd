@@ -319,6 +319,10 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
 	var tex: Texture2D = crop_icons.get(crop_id)
 	if tex == null:
+		var base := ItemCatalog._large_base(crop_id)   # 대형 산물(_large)이면 기준 아이콘 재사용
+		if base != "":
+			tex = crop_icons.get(base)
+	if tex == null:
 		draw_rect(inner, Color(0.8, 0.8, 0.8))
 		return
 	draw_texture_rect(tex, inner, false)
