@@ -1,11 +1,11 @@
 {
   "generatedNote": "자동 생성(build-manifest.mjs) — 수정 금지. 데일리: npm run manifest",
-  "total": 130,
+  "total": 136,
   "byCategory": {
     "buildings": 7,
     "characters": 5,
     "portraits": 28,
-    "crops": 9,
+    "crops": 15,
     "tiles": 32,
     "props": 40,
     "ui": 9
@@ -13,7 +13,7 @@
   "byTool": {
     "확인 필요": 10,
     "Gemini": 34,
-    "PixelLab": 74,
+    "PixelLab": 80,
     "절차생성": 12
   },
   "categories": [
@@ -428,6 +428,36 @@
     },
     {
       "category": "crops",
+      "name": "bulsagwa_mature",
+      "file": "assets/crops/bulsagwa_mature.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "bulsagwa_seed",
+      "file": "assets/crops/bulsagwa_seed.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "bulsagwa_sprout",
+      "file": "assets/crops/bulsagwa_sprout.png",
+      "w": 32,
+      "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
       "name": "honryeongcho_mature",
       "file": "assets/crops/honryeongcho_mature.png",
       "w": 32,
@@ -452,6 +482,36 @@
       "file": "assets/crops/honryeongcho_sprout.png",
       "w": 32,
       "h": 32,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "hwangcheon_podo_mature",
+      "file": "assets/crops/hwangcheon_podo_mature.png",
+      "w": 32,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "hwangcheon_podo_seed",
+      "file": "assets/crops/hwangcheon_podo_seed.png",
+      "w": 32,
+      "h": 64,
+      "tool": "PixelLab",
+      "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
+      "conf": "med"
+    },
+    {
+      "category": "crops",
+      "name": "hwangcheon_podo_sprout",
+      "file": "assets/crops/hwangcheon_podo_sprout.png",
+      "w": 32,
+      "h": 64,
       "tool": "PixelLab",
       "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
       "conf": "med"
