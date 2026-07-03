@@ -5698,8 +5698,20 @@ func _draw_forage() -> void:
 		var grown: bool = forage.is_grown(tile)
 		var tex: Texture2D = grown_tex if grown else cut_tex
 		if tex != null:
+			# ★ 격자 깨기 — 6×3 사료풀 블록이 똑같은 클럼프의 격자로 안 읽히게 타일 해시로 결정적 변형
+			#   (좌우반전 + 미세 오프셋). 결정적이라 매 프레임 동일(깜빡임 없음)·세이브 무관.
 			var sz := tex.get_size()
-			draw_texture(tex, px + Vector2((TILE - sz.x) * 0.5, TILE - sz.y))   # 발치(bottom-center)를 타일 바닥에
+			var hsh: int = absi((int(tile.x) * 73856093) ^ (int(tile.y) * 19349663))
+			var jx := float((hsh % 5) - 2)          # 가로 −2..2 흔들기
+			var jy := float((hsh / 7) % 2)          # 세로 0..1 흔들기(바닥선 살짝 어긋)
+			var bx := px.x + (TILE - sz.x) * 0.5 + jx
+			var by := px.y + TILE - sz.y + jy         # 발치(bottom-center)를 타일 바닥에
+			if (hsh & 1) == 1:                        # 좌우 반전
+				draw_set_transform(Vector2(bx + sz.x, by), 0.0, Vector2(-1, 1))
+				draw_texture(tex, Vector2.ZERO)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)   # 변환 원복(뒤 draw 영향 방지)
+			else:
+				draw_texture(tex, Vector2(bx, by))
 			continue
 		if grown:
 			# 다 자람 = 세 갈래 풀포기(초록, 위로 뻗음).
