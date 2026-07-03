@@ -17,17 +17,20 @@
 1. **owner Gemini 프롬프트** — 지금 아트를 뽑을 수 있다.
 2. **렌더 훅의 계약(contract)** — 다른 세션이 S1-11(스프라이트 훅)·S1-15(가축 성장)·E(실내·과수 렌더) 구현 시, 여기 박제한 **파일명·크기·앵커**를 타겟으로 삼는다. 규격을 여기서 먼저 고정해야 아트와 코드가 나중에 마찰 없이 맞물린다.
 
-| 항목 | 현재 코드 상태 | 렌더 훅 담당 |
-|---|---|---|
-| 가축 스프라이트 | 그레이박스 색박스(`main.gd:5090` `_draw_ranch`), 텍스처 미로드 | S1-11 |
-| 가축 성장(baby/adult) | 로직 없음(`livestock.gd` 나이 필드 부재) | S1-15 |
-| 가축 산물 아이콘 | `crop_icons` dict가 crop id만 채움 → 흰박스 폴백 | S1-11(dict에 산물 id 주입) |
-| 작물(불사과·황천포도) | 데이터 등록됨(`crops.gd`), 스프라이트 미등록(`CROP_SPRITES` 누락→skip) | preload 추가만 |
-| 과수 혼백도 | 그레이박스 도형(`main.gd:5065` `_draw_orchard`), 2상태만 구별 | E/S1-10(대형 스프라이트+Y-sort) |
-| coop_ext | rect/door 상수 전무, 코드 미참조 | E(barn 패턴 복제) |
-| home_deco | 색 `draw_rect`만(`main.gd:2169`), 텍스처 필드 없음 | E/S1-11(텍스처 로드 훅) |
+> **★ 2026-07-03 갱신 — 렌더 훅 대부분 배선 완료(PR #188·farm-infra):** 아래 대부분이 이제 "아트 넣으면 무수정 렌더" 상태다. 남은 순수 미생성 아트 = home_deco 6장 + 야외 인프라 4장(§8) + (건물 실내타일·UI/HUD는 별도 로스터).
 
-> **함의:** 아트를 먼저 뽑아도 즉시 화면엔 안 나온다(정상). 규격을 계약으로 고정하는 게 이 문서의 1차 가치다. 작물 2종만 예외로 preload 한 줄 추가하면 바로 뜬다.
+| 항목 | 현재 코드 상태 | 렌더 훅 |
+|---|---|---|
+| 가축 스프라이트 | ✅ `_livestock_sprite`+`_draw_ranch` 실제 텍스처 렌더(4종 존재) | 배선 완료 |
+| 가축 성장(baby/adult) | ✅ `livestock.gd` age·stage_of·grow_days | 배선 완료(Phase E) |
+| 가축 산물 아이콘 | ✅ `EXTRA_ICONS`(노을알·안개젖)+대형변이 폴백 | 배선 완료(PR #188) |
+| 작물(불사과·황천포도) | ✅ `CROP_SPRITES`에 3단계 등록 | 배선 완료(PR #188) |
+| 과수 혼백도 | ✅ `ORCHARD_SPRITES` 3단계+`_draw_orchard` 단계매핑 | 배선 완료(PR #188) |
+| coop_ext | ✅ `FACADE_COOP`+`_draw_facade_barn`(barn+coop) | 배선 완료(PR #187) |
+| 여물광·혼우물·사료풀(§8) | ✅ `_prop_tex` 훅+`_draw_silo/well/forage` 폴백 | 배선 완료(farm-infra) |
+| home_deco | 색 `draw_rect`만, 텍스처 필드 없음 | 미배선(E/S1-11) |
+
+> **함의:** §8·§1~3 스프라이트는 이제 **파일만 넣으면 즉시 렌더**(훅 배선됨). home_deco만 아직 텍스처 로드 훅 신설 필요.
 
 ---
 
@@ -267,6 +270,9 @@ python3 game/tools/gemini_facade_to_chunky.py <src> game/assets/buildings/coop_e
 - 여우불: ⬜ deco_soulfire_floor ⬜ deco_soulfire_wall ⬜ deco_soulfire_furniture
 - 피안화: ⬜ deco_higanbana_floor ⬜ deco_higanbana_wall ⬜ deco_higanbana_furniture
 
+### 야외 농장 인프라 (4, §8) — ★렌더 훅 선배선 완료(파일만 넣으면 렌더)
+- ⬜ silo ⬜ well ⬜ forage_grown ⬜ forage_cut
+
 ---
 
 ## 7. 확정 결정 (owner 승인 2026-07-02 — 전 항목 권장안 채택)
@@ -281,3 +287,42 @@ python3 game/tools/gemini_facade_to_chunky.py <src> game/assets/buildings/coop_e
 6. **가축 방향 ✅** — **단일 정면 idle 1장**(4방향·걷기·목축 이동 애니는 후속 서랍).
 
 > 전 항목 확정 완료 → §1~4 프롬프트를 그대로 Gemini에 투입 가능. 실제 화면 반영은 각 렌더 훅 세션(위)이 이 계약대로 배선하면 성립.
+
+---
+
+## 8. 야외 농장 인프라 (3종) — ★렌더 훅 선배선 완료 (owner Gemini 대기)
+
+> **코드 상태(중요):** 여물광·혼우물·사료풀은 지금까지 `_draw_silo`/`_draw_well`/`_draw_forage`가 절차 도형 그레이박스만 그렸다. **이 세 훅은 이미 배선됨(2026-07-03)** — `assets/props/<name>.png`가 들어오면 **코드 무수정 렌더**, 없으면 그레이박스 폴백. owner는 아래 프롬프트로 생성 → 후처리 → 경로에 넣기만 하면 된다.
+> **렌더 계약:**
+> - **여물광(`silo`)·혼우물(`well`)** = 구조물. `_blit_facade_anchored`로 렌더 = **풀 백드롭(WALL 박스 가림) + bottom-center 앵커 + SE 접지 그림자(코드가 그림)**. ⇒ 건물 facade와 동일 결이므로 **접지 그림자를 스프라이트에 굽지 말 것**(§0.2 전역 규약 준수 — 혼백도만 예외). 아트 = footprint(96 폭)보다 위로 솟는 지붕 허용(bottom-center).
+> - **여물광 게이지 주의:** 건초 채움 게이지(노란 세로 바)가 **코드 오버레이로 우측에 항상 얹힌다**(silo_hay/240 동적 표시). 아트 우측을 과밀하게 채우지 말 것(게이지가 읽히게 여유).
+> - **사료풀(`forage_grown`/`forage_cut`)** = 타일 프롭. 각 32×32, **bottom-center로 타일에 직접**(facade 앵커 아님, 그림자 없음). 작물처럼 **흙·지면 없이 식물만**(풀밭 타일 위에 얹힘).
+
+### 8.1 규격
+
+| key | 나라카명 | 크기 | 경로 | 앵커 | 비고 |
+|---|---|---|---|---|---|
+| `silo` | 여물광(건초 저장고) | 96×128 | `assets/props/` | bottom-center(facade) | footprint 3×3(96²)+지붕 위로. 우측 게이지 여유 |
+| `well` | 혼우물(돌 우물) | 96×112 | `assets/props/` | bottom-center(facade) | footprint 3×3(96²)+지붕/두레박 위로 |
+| `forage_grown` | 사료풀(다 자람) | 32×32 | `assets/props/` | bottom-center(타일) | 낫 채집 대상·무성한 야생 건초풀 |
+| `forage_cut` | 사료풀(벤 자리) | 32×32 | `assets/props/` | bottom-center(타일) | 벤 밑동·재생 대기(낮음) |
+
+### 8.2 프롬프트 (§0.1 STYLE + §0.3 팔레트 계승)
+
+- **여물광 `silo`** — `[STYLE] a farm hay silo storage structure, top-down 3/4 overworld view, centered on a transparent bg, bottom-center anchored, a warm honey-brown timber slatted round silo tower with a gently domed wooden roof and iron banding, a small hatch, a hint of golden straw at the base, cozy afterlife farmstead feel. warm timber #513928 to #a87d64, straw-yellow accents, single dark outline #401818, NW light source (highlights upper-left), self-shadow warm dark brown, NO baked ground shadow (engine adds it). a rustic hay silo. do NOT clutter the right edge (a hay gauge overlays there).`
+- **혼우물 `well`** — `[STYLE] a stone water well, top-down 3/4 overworld view, centered on a transparent bg, bottom-center anchored, a round grey fieldstone well wall with a small pitched wooden roof frame on two posts, a hanging wooden bucket on a rope, dark still water inside with a faint spirit-blue (#2068e8 to #60d8f0) glow. warm timber roof #724f3b, cool grey stone, single dark outline #401818, NW light source, self-shadow cool blue-violet slate, NO baked ground shadow (engine adds it). an afterlife stone well.`
+- **사료풀 `forage_grown`** — `[STYLE] a single clump of tall wild hay grass, top-down 3/4 view, centered on a transparent bg, bottom-center anchored, a lush tuft of long warm-moss green blades (#446630 to #8fb267) fanning upward, seed heads at the tips, ready to be cut with a scythe, NO soil or ground (sits on a grass tile). a patch of wild forage grass.`
+- **사료풀 `forage_cut`** — `[STYLE] a low mown grass stubble, top-down 3/4 view, centered on a transparent bg, bottom-center anchored, a few short trimmed stalks and stubble in muted moss-green regrowing after a cut, small and low to the ground, NO soil (sits on a grass tile). freshly scythed grass stubble.`
+
+### 8.3 후처리
+
+`process_chunky_phaseC.py`는 커맨드라인이 아니라 **하드코딩 `MANIFEST`** 방식(다른 프롭과 동일). ①Gemini 생성물을 `game/assets/_staging_phaseC/chunky/<key>_src.png`에 두고 ②스크립트 하단 `MANIFEST`에 아래 4행 추가 ③`cd game && python3 tools/process_chunky_phaseC.py`:
+
+```python
+# MANIFEST에 추가 (key, dst_path, target_w, target_h, mode)
+("silo",         "assets/props/silo.png",          96, 128, "x2"),   # half-res 생성 시 x2
+("well",         "assets/props/well.png",          96, 112, "x2"),
+("forage_grown", "assets/props/forage_grown.png",  32,  32, "chunk"),# 32px 최소=동일크기 chunk
+("forage_cut",   "assets/props/forage_cut.png",    32,  32, "chunk"),
+```
+> mode: 생성물이 target 절반이면 `x2`, 32px 최소라 절반생성 불가면 `chunk`(다른 프롭 규약). 변환 후 `cd game && godot --headless --import` → `game/run_tests.sh` → 인게임 육안(`home_full_dump`). **훅이 이미 배선돼 preload/코드 수정 불요 — 파일만 넣으면 렌더.**

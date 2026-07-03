@@ -5649,10 +5649,15 @@ func _draw_silo() -> void:
 	var r := SILO_EXT_RECT
 	var px := Vector2(r.position.x * TILE, r.position.y * TILE)
 	var wpx := Vector2(r.size.x * TILE, r.size.y * TILE)
-	draw_rect(Rect2(px, wpx), Color(0.42, 0.34, 0.24))                                  # 몸통(나무빛)
-	draw_rect(Rect2(px, Vector2(wpx.x, TILE * 0.5)), Color(0.30, 0.24, 0.17))           # 지붕 밴드(위 어둡게)
-	draw_rect(Rect2(px, wpx), Color(0.15, 0.12, 0.09), false, 2.0)                      # 외곽선
-	# 건초 채움 게이지 — 우측 세로 바(빈=회색 틀, 채움=노랑, 아래에서 위로).
+	# ★ 아트 훅: assets/props/silo.png 있으면 facade 앵커(풀 백드롭+접지그림자)로 렌더, 없으면 그레이박스.
+	var tex := _prop_tex("silo")
+	if tex != null:
+		_blit_facade_anchored(tex, r)
+	else:
+		draw_rect(Rect2(px, wpx), Color(0.42, 0.34, 0.24))                              # 몸통(나무빛)
+		draw_rect(Rect2(px, Vector2(wpx.x, TILE * 0.5)), Color(0.30, 0.24, 0.17))       # 지붕 밴드(위 어둡게)
+		draw_rect(Rect2(px, wpx), Color(0.15, 0.12, 0.09), false, 2.0)                  # 외곽선
+	# 건초 채움 게이지(동적 오버레이 — 아트 위에도 그린다) — 우측 세로 바(빈=회색 틀, 채움=노랑, 아래→위).
 	var gw := TILE * 0.5
 	var gh := wpx.y - TILE * 0.8
 	var gpos := px + Vector2(wpx.x - gw - TILE * 0.25, TILE * 0.6)
@@ -5666,6 +5671,11 @@ func _draw_silo() -> void:
 #   아트(우물 도트)·리필 메카닉(유한 물뿌리개)은 후행(별도 grill). 실외 HOME 뷰. _draw_silo와 동형(디커플링).
 func _draw_well() -> void:
 	var r := WELL_RECT
+	# ★ 아트 훅: assets/props/well.png 있으면 facade 앵커(풀 백드롭+접지그림자)로 렌더, 없으면 그레이박스.
+	var tex := _prop_tex("well")
+	if tex != null:
+		_blit_facade_anchored(tex, r)
+		return
 	var px := Vector2(r.position.x * TILE, r.position.y * TILE)
 	var wpx := Vector2(r.size.x * TILE, r.size.y * TILE)
 	draw_rect(Rect2(px, wpx), Color(0.46, 0.47, 0.50))                                  # 몸통(돌빛 회색)
@@ -5680,9 +5690,18 @@ func _draw_well() -> void:
 func _draw_forage() -> void:
 	if forage == null:
 		return
+	# ★ 아트 훅: assets/props/forage_{grown,cut}.png 있으면 타일에 bottom-center 렌더, 없으면 그레이박스.
+	var grown_tex := _prop_tex("forage_grown")
+	var cut_tex := _prop_tex("forage_cut")
 	for tile in forage.all_tiles():
 		var px := Vector2(tile.x * TILE, tile.y * TILE)
-		if forage.is_grown(tile):
+		var grown: bool = forage.is_grown(tile)
+		var tex: Texture2D = grown_tex if grown else cut_tex
+		if tex != null:
+			var sz := tex.get_size()
+			draw_texture(tex, px + Vector2((TILE - sz.x) * 0.5, TILE - sz.y))   # 발치(bottom-center)를 타일 바닥에
+			continue
+		if grown:
 			# 다 자람 = 세 갈래 풀포기(초록, 위로 뻗음).
 			for dx in [0.28, 0.5, 0.72]:
 				draw_line(px + Vector2(TILE * dx, TILE * 0.8), px + Vector2(TILE * dx, TILE * 0.35),
@@ -5705,6 +5724,18 @@ func _livestock_sprite(species: String, stage: String) -> Texture2D:
 	var path := "res://assets/livestock/%s.png" % key
 	var tex: Texture2D = load(path) if ResourceLoader.exists(path) else null
 	_livestock_tex[key] = tex
+	return tex
+
+# ★ [B1-a.3/B2] 야외 농장 인프라 프롭 스프라이트 훅 — assets/props/<name>.png(gemini-demo-sprites-spec §8).
+#   여물광·혼우물·사료풀 아트가 이 경로에 들어오면 코드 무수정 렌더(없으면 그레이박스 폴백). 1회 조회 후
+#   캐시(없음=null도 캐시). 로더만 범용, 앵커·오버레이는 각 _draw_*가 정한다(구조물=facade 앵커, 사료풀=타일).
+var _prop_tex_cache: Dictionary = {}
+func _prop_tex(name: String) -> Texture2D:
+	if _prop_tex_cache.has(name):
+		return _prop_tex_cache[name]
+	var path := "res://assets/props/%s.png" % name
+	var tex: Texture2D = load(path) if ResourceLoader.exists(path) else null
+	_prop_tex_cache[name] = tex
 	return tex
 
 func _draw_ranch() -> void:
