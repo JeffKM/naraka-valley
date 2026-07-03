@@ -139,3 +139,11 @@ Stardew-like chunky pixels, NOT isometric, NOT rocky grey stone.
 - **전체 방향/코너 세트 파일(S2/3 재사용, 인게임 미배치):** `cliff_out_{nw,ne,se,sw}`·`cliff_in_{nw,ne,se,sw}`(batch2 AI 외/내 코너 + rot90)·`cliff_{e,w,n}_lip`·`cliff_{e,w}_face`(남향 세트 rot90 파생). NW광원 재보정은 S2/3 배치 시(spec §8·§4). 옛 회색 암석 `cliff_face/corner_l/corner_r/inner.png` 삭제(참조 0).
 - **동향 계단(`stairs_east`) ✅ 완료(2026-07-02 재시도):** 1차 map_object가 3D 블록+오답 팔레트라 보류했으나, **`view="side"` + "flat orthographic front, NO grass/dirt base, transparent" 프롬프트**로 재생성 → 흙 절벽에 통합된 warm 돌계단 획득. 좌우 반전(고지=서/왼쪽·저지=동/오른쪽)·96×64(노치 3칸)·바닥정렬·청키화 → `stairs_east.png`. `PROP_STAIRS` 배선 교체(placement (21,14) 불변·통과 O)·옛 `stairs.png` 삭제. home_full_dump 노치 사인오프. ※교훈: map_object는 `view="side"`+base 금지로 평면 프롭 유도 가능(low top-down은 3D 유발).
 - **마스터 팔레트:** 저승 객체 슬레이트 램프는 여전히 TBD(master-palette.md). 이번 절벽은 tiles_pro가 warm 흙+슬레이트를 근사 생성 → 정밀 양자화는 저승 램프 큐레이션 확정 시 일괄(리컬러 파이프라인 §4-4).
+
+## 10. 아트 재생성 패스 (2026-07-03, owner "절벽이 이상하게 생성됨" 피드백)
+
+> owner가 스타듀 레퍼런스(청키 둥근 자갈 바위벽 + 풀 오버행 / 물가 둥근 boulder 강둑)를 제시. S1-10 1차 산출(`cliff_s_face`=밋밋한 갈색 그라데이션)이 "이상하다"는 판정 → **코어 남향 세트 + 강둑 아트만 재생성**(메카닉·`SOLID_TEX` 배선·타일종 전부 불변, PNG 4장만 교체).
+
+- **재생성 = PixelLab `create_tiles_pro`(square_topdown, top-down, segmentation, seed 70301).** 4-넘버 프롬프트로 16변종 한 번에 뽑음: ①풀 오버행 립 ②청키 둥근 자갈 바위벽 면 ③어두운 접지 베이스+슬레이트 그림자 ④모래↔물 둥근 boulder 강둑. 베스트(tile 0/4/8/12) 선택 → `enforce_chunk.chunkify`(2px 캐논) → `cliff_s_lip/face/base.png`·`cliff_bank.png` 덮어쓰기. 1차 산출에서 **밋밋 갈색 → 자갈벽으로 확 개선**, home_full_dump 사인오프.
+- **가이드 정합(owner 공유 Gemini 문서):** "면 최소 2칸 높이"는 `_lay_south_band`가 이미 Lip+Face+Face_Base(2 SOLID행=32px 벽)로 충족 — 아트가 이 2칸 벽을 *제대로 된 바위벽으로 보이게* 함. **미구현(하류 분리):** "절벽 상단 엣지(Lip)를 Front 레이어로 캐릭터 머리 위에 덮기" = 현재 lip은 Ground 타일이라 항상 캐릭터 뒤 렌더 → front-overhang은 별도 렌더 메카닉(S2/3 또는 별도 슬라이스).
+- **하류 유지:** 방향/코너 변종 12종(orphan)·`cliff_beach`(S3)·정밀 팔레트 양자화는 §8·§9 그대로.

@@ -118,18 +118,9 @@ func _init() -> void:
 		m.PROP_TREE_A in m.FOOT_BAR_PROPS and m.PROP_TREE_B in m.FOOT_BAR_PROPS and m.PROP_ROCK in m.FOOT_BAR_PROPS)
 	_check("⑥b 하드게이트 debris는 발치 바 아님(풀타일 유지)",
 		not (m.PROP_DEBRIS_EMBER in m.FOOT_BAR_PROPS) and not (m.PROP_DEBRIS_STUMP in m.FOOT_BAR_PROPS))
-	# 나무: 발치 히트 / 머리(캐노피) 통과
-	var tb: Array = _prop_box(m, m.PROP_TREE_A)
-	var t_pos: Vector2 = tb[0]; var t_sz: Vector2 = tb[1]
-	var t_foot := t_pos + Vector2(t_sz.x * 0.5, t_sz.y - m.FOOT_BAR_H * 0.5)   # 밑단 바 중앙
-	var t_head := t_pos + Vector2(t_sz.x * 0.5, 12.0)                          # 캐노피 상단
-	_check("⑥c 나무 발치 = 통과 불가(발치 바)", _hits(m, t_foot))
-	_check("⑥d 나무 머리(캐노피) = 통과 O(발치 바 위)", not _hits(m, t_head))
-	# 바위: 발치 히트 / 상단 통과
-	var rb: Array = _prop_box(m, m.PROP_ROCK)
-	var r_pos: Vector2 = rb[0]; var r_sz: Vector2 = rb[1]
-	_check("⑥e 바위 발치 = 통과 불가", _hits(m, r_pos + Vector2(r_sz.x * 0.5, r_sz.y - m.FOOT_BAR_H * 0.5)))
-	_check("⑥f 바위 상단 = 통과 O", not _hits(m, r_pos + Vector2(r_sz.x * 0.5, 8.0)))
+	# ★ owner 2026-07-03 — 야외 스캐터 나무·바위를 맵에서 제거해 발치 바 콜라이더를 프로브할 라이브
+	#   인스턴스가 없다. FOOT_BAR_PROPS 멤버십(⑥/⑥b)으로 메카닉 설정만 계속 단언한다(더 나은 나무
+	#   아트가 오면 재배치·프로브 복원). 하드게이트 debris는 여전히 배치돼 있어 ⑥g로 게이트 보존 검증.
 	# 하드게이트 debris(업화석): 중심까지 풀타일로 막힘(게이트 보존)
 	var db: Array = _prop_box(m, m.PROP_DEBRIS_EMBER)
 	var d_pos: Vector2 = db[0]; var d_sz: Vector2 = db[1]
