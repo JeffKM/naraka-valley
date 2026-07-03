@@ -43,3 +43,6 @@ game/assets/_staging_*/
 
 # Claude 워크트리(격리 작업 폴더 — 추적 제외)
 .claude/worktrees/
+
+# 16px 실험 하네스 산출(placeholder 결과 — 커밋 제외)
+game/tools/tile16_experiment*.png

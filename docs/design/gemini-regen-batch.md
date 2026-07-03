@@ -183,8 +183,36 @@ CHARACTER: a gender-neutral young afterlife farmer, deliberately plain and unrem
 ## 4. 타일 (32)
 
 > ⚠️ **Wang/오토타일 seamless는 Gemini 최대 약점 → §4.5 후처리 필수.** base 텍스처만 뽑고 전이/이음새는 후처리 보정.
+>
+> ⚠️ **2026-07-04 grill 개정 — §4.2 스펙 일부 stale.** 아래 §4.0 "16px 베이스 룩 실험"의 **판정(GO/NO-GO)이 §4.2를 덮어쓴다**. 특히 ①베이스 지형은 **무외곽선·소프트·저대비**로 전환(Q1 스코프 분리 — 외곽선은 *분리 객체* 전용, 걸어다니는 베이스 지형엔 금지), ②논리 해상도 **16 vs 32는 실험 판정 대기**(현행 §4.2의 128×128=32-native·`single dark outline`·`chunky 2px`는 GO 시 폐기). 실험 전까지 지형 Wang 아틀라스 생성 보류.
 
 **타일 STYLE 접두:** `[STYLE] a seamless tileable top-down [terrain] texture, flat, edge-to-edge, no border.`
+
+### 4.0 16px 베이스 룩 실험 (판정 대기 — 2026-07-04 grill)
+
+> **목표:** "16px 논리 해상도 + 무외곽선·소프트 베이스"가 현행 32-native보다 인게임에서 나은지 **눈으로 판정**. GO면 전 라이브러리 16px 재생성 착수(ADR-0013 supersede), NO-GO면 32-native 유지 + Q1 소프트 베이스만 32px에 적용.
+>
+> **왜 실험부터:** 16px 전환은 타일뿐 아니라 **캐릭터(480×320→240×160)·건물·나무·바위 전부**를 절반 밀도로 재생성해야 픽셀 그레인이 안 섞임(되돌리기 매우 비쌈). 값싼 base 텍스처 몇 장으로 선판단.
+
+**owner가 Gemini로 생성할 것 (최소 셋):**
+- **grass base ×2~3 변종** (서로 다른 시드 — per-cell 랜덤용)
+- **dirt path base ×1**
+- (선택) **grass 위에 흙길 패치가 지나가는 1장** — 경계 룩 즉시 확인용. 정식 Wang 전이는 Claude 후처리(§4.5·§8.2 2px 디더 마진).
+
+**실험 STYLE 접두 (16px·무외곽선·소프트 — §4.2와 다름):**
+```
+[STYLE] a seamless tileable top-down [terrain] texture at 16px logical resolution, warm inviting farm palette like Stardew Valley slightly muted for underworld mood (not candy-bright), soft LOW-contrast tonal variation, tiny soft blended tufts (NOT big chunky high-contrast clumps), NO outline / lineless base ground, gentle soft shading, edge-to-edge, no border.
+```
+- `[terrain]=lush grass` (warm-moss `#2d4720..#8fb267`) — 변종은 클럼프 배치만 다르게.
+- `[terrain]=warm dirt path` (흙길 `#513928..#bc987c`).
+
+**Claude 후처리·검증 (owner 생성 후, EnterWorktree 격리에서):**
+1. crop/tileable 봉합 → 최소 `combined_terrain_experiment16.tres` 조립.
+2. ⚠️ **렌더 스케일 유효성:** 16px 타일을 현행 32-cell 월드에 2×로 넣으면 화면상 32px = 스타듀 대비 절반 크기 → **거짓 NO-GO**. 테스트 씬은 **4× 렌더**(온스크린 타일 ≈64px)로 owner 스타듀 레퍼런스와 물리 크기를 맞춘다.
+3. 굽은 흙길이 잔디를 통과하는 소구역 페인트 → `home_full_dump`로 스크린샷.
+4. owner가 스타듀 레퍼런스(2026-07-04 제공)와 나란히 비교 → GO/NO-GO.
+
+**클럼프 모델(확정, Q5):** A(베이스 변종)→**타일**(terrain alternative) / B(풀 클럼프)→**스캐터 프롭**(`_build_ground_details`, 작게·부드럽게) / C(흙 전이)→**Wang 타일**. 실험엔 클럼프 타일 **생성 불요**(스캐터 프롭 재활용).
 
 ### 4.1 다단 절벽 세트 (17개, 각 32×32) — `cliff_*.png`
 > asset-ruleset §4.1 + [ADR-0044]. 2행 pseudo-Z: `Lip(걷기O 밝은 상단) → Face(SOLID) → Base(SOLID·self-shadow) → 저지`. 재질 = 차가운 슬레이트 청회 암석 + 상단 풀 오버행.
