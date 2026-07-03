@@ -317,12 +317,14 @@ func _initialize() -> void:
 		else:
 			babies += 1
 	_check("⑫ 스타터 = 성체 2·새끼 2", adults == 2 and babies == 2)
-	# ★ [B1-a.1] 스타터 짐승은 소속 건물 실내 바닥(HOUSE)에 놓인다(진입 실내 — 방목 왕래는 B1-a.2).
+	# ★ [B1-a.1] 스타터 짐승은 소속 건물 실내 바닥에 놓인다(진입 실내 — 방목 왕래는 B1-a.2).
+	#   ★[ADR-0048 §2] 바닥은 건물별 전용 타일(넋우릿간=BARN_FLOOR·넋둥우리=COOP_FLOOR).
 	var all_indoor := true
 	for at in m.ranch.animal_tiles():
 		var bld: String = m.ranch.building_of(at)
 		var room: Rect2i = m.NEOKURITGAN_RECT if bld == "넋우릿간" else (m.NEOKDUNGURI_RECT if bld == "넋둥우리" else Rect2i())
-		if bld == "" or not room.has_point(at) or m._grid[at.y][at.x] != m.HOUSE:
+		var floor_id: int = m.BARN_FLOOR if bld == "넋우릿간" else (m.COOP_FLOOR if bld == "넋둥우리" else -1)
+		if bld == "" or not room.has_point(at) or m._grid[at.y][at.x] != floor_id:
 			all_indoor = false
 	_check("⑫ 스타터 짐승 전부 소속 건물 실내에 배치", all_indoor and m.ranch.count() > 0)
 	# 종·건물 짝 정합(안개소=넋우릿간·노을닭=넋둥우리).

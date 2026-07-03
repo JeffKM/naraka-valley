@@ -93,7 +93,7 @@ func _initialize() -> void:
 	var sh: Dictionary = m._buildings["창고"]
 	_check("① 창고 region=HOME·kind=storehouse", sh["region"] == RegionCatalog.HOME and sh["kind"] == "storehouse")
 	var ci: Vector2i = m.STOREHOUSE_RECT.position + Vector2i(1, 1)
-	_check("① 창고 실내 바닥 빌드(STOREHOUSE_RECT)", m._grid[ci.y][ci.x] == m.HOUSE)
+	_check("① 창고 실내 바닥 빌드(STOREHOUSE_RECT=돌 판석)", m._grid[ci.y][ci.x] == m.STOREHOUSE_FLOOR)  # ★[ADR-0048 §2]
 	_check("① 창고 방 = HOME 집 방과 안 겹침(둘 다 HOME 밴드)",   # ★C2 HOME 집은 HOME_HOUSE_RECT
 		not m.STOREHOUSE_RECT.intersects(m.HOME_HOUSE_RECT))
 	# ★ 창고 2패널 양문(x30·x31) — 문 리세스 2칸 + 문 앞 진입로 2칸 폭(문/길 폭 정합)
@@ -120,10 +120,12 @@ func _initialize() -> void:
 	var anim_bldgs := [
 		{"id": "넋우릿간", "kind": "barn", "ext": m.NEOKURITGAN_EXT_RECT,
 			"dE": m.NEOKURITGAN_EXT_DOOR, "dW": m.NEOKURITGAN_EXT_DOOR_W,
-			"room": m.NEOKURITGAN_RECT, "in_tile": m.NEOKURITGAN_IN_TILE, "door": m.NEOKURITGAN_DOOR},
+			"room": m.NEOKURITGAN_RECT, "in_tile": m.NEOKURITGAN_IN_TILE, "door": m.NEOKURITGAN_DOOR,
+			"floor": m.BARN_FLOOR},   # ★[ADR-0048 §2] 전용 실내 바닥
 		{"id": "넋둥우리", "kind": "coop", "ext": m.NEOKDUNGURI_EXT_RECT,
 			"dE": m.NEOKDUNGURI_EXT_DOOR, "dW": m.NEOKDUNGURI_EXT_DOOR_W,
-			"room": m.NEOKDUNGURI_RECT, "in_tile": m.NEOKDUNGURI_IN_TILE, "door": m.NEOKDUNGURI_DOOR},
+			"room": m.NEOKDUNGURI_RECT, "in_tile": m.NEOKDUNGURI_IN_TILE, "door": m.NEOKDUNGURI_DOOR,
+			"floor": m.COOP_FLOOR},
 	]
 	for e in anim_bldgs:
 		var bid: String = e["id"]
@@ -148,7 +150,7 @@ func _initialize() -> void:
 		# 실내 방 빌드 + 집·창고·다른 동물 방과 안 겹침
 		var room: Rect2i = e["room"]
 		var ri: Vector2i = room.position + Vector2i(1, 1)
-		_check("③ %s 실내 바닥 빌드(HOUSE)" % bid, m._grid[ri.y][ri.x] == m.HOUSE)
+		_check("③ %s 실내 바닥 빌드(전용 타일)" % bid, m._grid[ri.y][ri.x] == e["floor"])
 		_check("③ %s 방 = 집·창고 방과 안 겹침" % bid,
 			not room.intersects(m.HOME_HOUSE_RECT) and not room.intersects(m.STOREHOUSE_RECT))
 		# 문 닿으면 진입(_indoor=건물) → 착지 = in_tile → 실내 문에서 퇴장

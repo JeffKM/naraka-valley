@@ -117,7 +117,7 @@ func _initialize() -> void:
 	# ── ★ 안식 농원 창고(HOME·storehouse) — 빌드·진입·실내·격리·취침불가·퇴장(워프 전, HOME에서) ──
 	# 창고 실내 방은 HOME 그리드에만 빌드되므로(_build_home) 마을로 워프하기 전 HOME에서 검증한다.
 	var ci: Vector2i = m.STOREHOUSE_RECT.position + Vector2i(1, 1)
-	_check("⒮ 창고 실내 바닥 빌드(STOREHOUSE_RECT)", m._grid[ci.y][ci.x] == m.HOUSE)
+	_check("⒮ 창고 실내 바닥 빌드(STOREHOUSE_RECT=돌 판석)", m._grid[ci.y][ci.x] == m.STOREHOUSE_FLOOR)  # ★[ADR-0048 §2] 전용 실내 바닥
 	_check("⒮ 창고 방 = HOME 집 방과 안 겹침(둘 다 HOME 밴드)",   # ★C2 HOME 집은 HOME_HOUSE_RECT
 		not m.STOREHOUSE_RECT.intersects(m.HOME_HOUSE_RECT))
 	var sh: Dictionary = m._buildings["창고"]
