@@ -117,9 +117,13 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
 			draw_rect(inner, fc)
 
-# 작물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
+# 작물·수확물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
 	var tex: Texture2D = crop_icons.get(crop_id)
+	if tex == null:
+		var base := ItemCatalog._large_base(crop_id)   # 대형 산물(_large)이면 기준 아이콘 재사용
+		if base != "":
+			tex = crop_icons.get(base)
 	if tex == null:
 		draw_rect(inner, Color(0.8, 0.8, 0.8))
 		return

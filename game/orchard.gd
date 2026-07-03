@@ -93,6 +93,10 @@ func in_season(anchor: Vector2i, day: int) -> bool:
 func fruit_count_of(anchor: Vector2i) -> int:
 	return int(_trees[anchor]["fruit_count"]) if _trees.has(anchor) else 0
 
+# 앵커의 과일 종 id("" = 미존재). _draw_orchard가 종별 스프라이트(ORCHARD_SPRITES) 선택에 쓴다.
+func fruit_id_of(anchor: Vector2i) -> String:
+	return str(_trees[anchor]["fruit_id"]) if _trees.has(anchor) else ""
+
 # ── 품질=나이(§7.7) — 파생 함수만. 인벤토리 배선·판매가는 S1-6이 이 함수를 소비 ─────
 # 나이(일) → 품질 등급 0..3. 절기당 +1등급(28일 입도): 28(갓 성숙)→0 · 56→1 · 84→2 · 112(1년생)→3.
 func quality_tier_for_age(age: int) -> int:

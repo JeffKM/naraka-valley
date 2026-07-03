@@ -180,6 +180,31 @@ const CROP_SPRITES := {
 		preload("res://assets/crops/hwangcheon_podo_sprout.png"),
 		preload("res://assets/crops/hwangcheon_podo_mature.png"),
 	],
+	# ★ [S1-4] 불사과 = 다절기 프레스티지(표준 32² 3프레임 — 트렐리스 아님).
+	CropCatalog.BULSAGWA: [
+		preload("res://assets/crops/bulsagwa_seed.png"),
+		preload("res://assets/crops/bulsagwa_sprout.png"),
+		preload("res://assets/crops/bulsagwa_mature.png"),
+	],
+}
+
+# ── ★ [S1-5b/S1-10] 혼의 나무 과수 스프라이트 — 종별 3단계 프레임(96×160=3타일폭×5높이, bottom-center
+#   앵커). _draw_orchard가 단계(0=묘목/1=성목/2=결실)로 인덱싱. 그레이박스 정준 1종(혼백도)만.
+const ORCHARD_SPRITES := {
+	FruitTreeCatalog.HONBAEKDO: [
+		preload("res://assets/crops/honbaekdo_sapling.png"),
+		preload("res://assets/crops/honbaekdo_growing.png"),
+		preload("res://assets/crops/honbaekdo_fruiting.png"),
+	],
+}
+
+# 비-작물 CAT_HARVEST 수확물 인벤 아이콘(32²) — 과일·가축 산물은 CropCatalog에 없어 CROP_SPRITES 밖.
+# 핫바·출하함·알림 아이콘 맵에 병합(CAT_HARVEST id로 조회). 대형 산물(_large)은 기준 아이콘 재사용
+# (_item_icon·hotbar._draw_crop_tex가 _large_base로 접미 벗겨 조회). _draw_crop_tex가 crop_icons.get(id)로 찾는다.
+const EXTRA_ICONS := {
+	FruitTreeCatalog.HONBAEKDO: preload("res://assets/crops/honbaekdo.png"),   # 혼백도(혼의 나무 과일)
+	AnimalCatalog.HONBAEK_RAN: preload("res://assets/crops/honbaek_ran.png"),  # 노을알(노을닭 산물)
+	AnimalCatalog.HONBAEK_YU: preload("res://assets/crops/honbaek_yu.png"),    # 안개젖(안개소 산물)
 }
 
 # 각 타일의 그레이박스 색(밝기·미세 색조로만 구분, 회색 기조 유지). WALL이 가장 밝다.
@@ -3213,6 +3238,8 @@ func _setup_hotbar() -> void:
 	var icons := {}
 	for crop_id in CROP_SPRITES:
 		icons[crop_id] = CROP_SPRITES[crop_id][2]  # mature 프레임을 인벤 아이콘으로 재사용
+	for extra_id in EXTRA_ICONS:
+		icons[extra_id] = EXTRA_ICONS[extra_id]    # ★ [S1-10] 비-작물 수확물 아이콘(혼백도·노을알·안개젖)
 	hotbar.setup(inventory, icons)
 
 # ── ★ C2 무인 출하함 ──────────────────────────────────────────────────────────
@@ -3320,6 +3347,8 @@ func _setup_frame() -> void:
 	var icons := {}
 	for crop_id in CROP_SPRITES:
 		icons[crop_id] = CROP_SPRITES[crop_id][2]   # 핫바와 같은 작물 아이콘 재사용
+	for extra_id in EXTRA_ICONS:
+		icons[extra_id] = EXTRA_ICONS[extra_id]     # ★ [S1-10] 비-작물 수확물 아이콘(혼백도·노을알·안개젖)
 	frame.setup(inventory, ship_bin, icons)
 	frame.set_chest(chest)   # ★ Phase D 저장 상자 주입(CTX_CHEST 상단 그리드)
 	frame.deposit_slot.connect(_on_frame_deposit)
@@ -3852,6 +3881,11 @@ func _item_icon(id: String) -> Texture2D:
 			crop = ItemCatalog.crop_of(id)
 	if crop != "" and CROP_SPRITES.has(crop):
 		return CROP_SPRITES[crop][2]
+	if crop != "" and EXTRA_ICONS.has(crop):   # ★ [S1-10] 비-작물 수확물(혼백도·노을알·안개젖)
+		return EXTRA_ICONS[crop]
+	var base := ItemCatalog._large_base(id)    # 대형 산물(_large)이면 기준 산물 아이콘 재사용
+	if base != "" and EXTRA_ICONS.has(base):
+		return EXTRA_ICONS[base]
 	return null
 
 # ★ Phase C — 농사 XP 적립 + 레벨업 감지(숙련 알림). _farming_xp를 직접 더하던 자리를 이 헬퍼로
@@ -5513,7 +5547,7 @@ func _draw() -> void:
 			_draw_home_deco()        # ★ [S1-9] 플레이어 집 꾸미기 3레이어(벽 밴드 위·시드 가구 아래, 집 실내에서만)
 			_draw_facade_home()      # 집 외관(WALL 박스 위에 덮어 닫힌 건물로)
 			_draw_facade_storehouse()  # ★ T3 창고 외관(NE)
-			_draw_facade_barn()        # ★ T3 축사 외관(동편, 비-enterable 자리)
+			_draw_facade_barn()        # ★ [B1-a.1] 넋우릿간+넋둥우리 외관(동물 2건물 — barn 6×4·coop 4×2)
 			_draw_silo()               # ★ [B1-a.3] 여물광 외관(WALL 박스 그레이박스 + 건초 게이지)
 			_draw_well()               # ★ [B2] 혼우물 외관(WALL 박스 그레이박스 — 돌 우물, 리필 메카닉=별도 grill)
 			_draw_forage()             # ★ [B1-a.3] 사료풀(다 자람=풀포기·벤 자리=밑동) — 낫 채집 대상
@@ -5521,9 +5555,9 @@ func _draw() -> void:
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_prop_layouts.get("HOME", []), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터: 집 가구·길가 등불·화분 + T3 농장 장식
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
-			_draw_orchard()          # ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(대형 스프라이트=S1-10)
+			_draw_orchard()          # ★ [S1-5b/S1-10] 혼의 나무 과수 — 종별 3단계 스프라이트(묘목·성목·결실)
 			_draw_trackb_interiors() # ★ Phase E Track B 실내 가구(여물통·보관 크레이트 — 짐승 아래, 카메라로 방별 클립)
-			_draw_ranch()            # ★ [S1-7] 혼의 짐승 그레이박스 표식(스프라이트·애니 = S1-11)
+			_draw_ranch()            # ★ [S1-7/S1-15] 혼의 짐승 — 전용 스프라이트(assets/livestock) 방목/실내 렌더
 			_draw_chest()            # ★ Phase D/E 저장 상자(집·창고 실내 — 각 카메라에서만 보임)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
@@ -5578,6 +5612,18 @@ func _draw_orchard() -> void:
 	var day := clock.day
 	for anchor in orchard.trunk_tiles():
 		var trunk_px := Vector2(anchor.x * TILE, anchor.y * TILE)
+		# ★ [S1-10] 종별 3단계 스프라이트: 0=묘목(미성숙) / 1=성목(성숙·과일0) / 2=결실(성숙·과일>0).
+		var frames = ORCHARD_SPRITES.get(orchard.fruit_id_of(anchor))
+		if frames != null:
+			var stage := 0
+			if orchard.is_mature(anchor, day):
+				stage = 2 if orchard.fruit_count_of(anchor) > 0 else 1
+			var tex: Texture2D = frames[stage]
+			var sz := tex.get_size()
+			# bottom-center 앵커 — 밑동을 앵커 칸 하단 중앙에, 3타일폭 수관이 위로 솟는다(facade와 같은 결).
+			draw_texture(tex, Vector2(trunk_px.x + TILE * 0.5 - sz.x * 0.5, trunk_px.y + TILE - sz.y))
+			continue
+		# ── 폴백: 그레이박스(아트 없는 종 방어) ──
 		if not orchard.is_mature(anchor, day):
 			# 묘목: 밑동 칸에 작은 갈색 줄기 + 초록 새싹(자라는 중).
 			draw_rect(Rect2(trunk_px + Vector2(TILE * 0.42, TILE * 0.45), Vector2(TILE * 0.16, TILE * 0.5)), Color(0.42, 0.30, 0.20))
@@ -5594,11 +5640,9 @@ func _draw_orchard() -> void:
 			var fp := canopy_px + Vector2(TILE * (0.6 + i * 0.8), TILE * 0.6)
 			draw_circle(fp, TILE * 0.22, Color(0.85, 0.28, 0.32))
 
-# ★ [S1-7] 혼의 짐승 그레이박스 표식(§8.7 — 스프라이트·워크 애니 = S1-11 이관). 종별 색 몸통 박스 +
-# 머리 점(방향감) + 대기 산물(머리 위 밝은 점) + 우정 하트 바(하단 5칸). 순수 시각 placeholder —
-# 로직·상태는 ranch가 든다(짐승은 비-SOLID라 충돌체 없음). 하늘 목장(HOME) 방목지에서만 그려진다.
 # ★ [B1-a.3] 여물광(Silo) 그레이박스 — WALL 박스 footprint 위에 나무빛 사일로 몸통 + 지붕 + 건초 채움
-#   게이지(오른쪽 세로 바, 노란 채움=silo_hay/240). 아트(사일로 도트)는 후행(넋둥우리 결). 실외 HOME 뷰.
+#   게이지(오른쪽 세로 바, 노란 채움=silo_hay/240). ※짐승 스프라이트·과수는 이미 배선됨(_draw_ranch·
+#   _draw_orchard). 남은 그레이박스=여물광·혼우물·사료풀·Track B 실내가구(아트 Gemini 후행). 실외 HOME 뷰.
 func _draw_silo() -> void:
 	if ranch == null:
 		return

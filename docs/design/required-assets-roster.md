@@ -21,7 +21,7 @@
 | `house_ext` | 본가 | ✅ have | gemini | Gemini facade 완료(청크) |
 | `storehouse_ext` | 갈무리방(창고) | ✅ have | gemini | Gemini facade 완료 |
 | `barn_ext` | 넋우릿간(대형 축사) | ✅ have | gemini | Gemini facade 완료 |
-| `coop_ext` | 넋둥우리(소형 닭장) | ❌ missing | gemini | 신규 — 넋우릿간과 구분되는 소형 |
+| `coop_ext` | 넋둥우리(소형 닭장) | ✅ have | gemini | Gemini facade 완료·코드 배선 완료(PR #188) |
 
 ## 2. 건물 실내 (interiors) — ★이번 패스 신규 (Track B 앞당김)
 
@@ -32,19 +32,19 @@
 | `coop_floor` / `coop_wall` | 넋둥우리 내부 | ❌ missing | claude | 실내 타일 + 진입 워프·pathing |
 | `storehouse_floor` / `storehouse_wall` | 갈무리방 내부 | ❌ missing | claude | 실내 타일 + 진입 워프 |
 
-## 3. 가축 (livestock) — ★전부 신규 (현재 스프라이트 0)
+## 3. 가축 (livestock) — ✅ 스프라이트 4종 완료·배선 완료 (2026-07-03)
 
 > `animal_catalog.gd` = **2종뿐**(coop=노을닭 / barn=안개소), 산물 노을알·안개젖. **에셋 키 = 내부 id**(`honbaek_*`, 세이브 안전 위해 보존 — `animal_catalog.gd` §id 상수, 표시명≠식별자). 작물 규약(id=파일명)과 일치.
 > ⚠️ **성장 단계(새끼→성체) 포함**(owner 2026-07-02 결정 — 성체+새끼 둘 다 이번 데모). 단 `livestock.gd`(Ranch)에 성장 로직이 없어 **메카닉 신규**가 딸림 = B1-b(성장티어) 앞당김. 로직은 S1-15에서 구현.
 
 | key | 나라카명 | status | maker | 비고 |
 |---|---|---|---|---|
-| `honbaek_dak_baby` | 노을닭(새끼) | ❌ missing | gemini | 성장 1단계 |
-| `honbaek_dak_adult` | 노을닭(성체) | ❌ missing | gemini | 정면+idle(4방향 불요) |
-| `honbaek_so_baby` | 안개소(새끼) | ❌ missing | gemini | 성장 1단계 |
-| `honbaek_so_adult` | 안개소(성체) | ❌ missing | gemini | 대형 |
-| `honbaek_ran` (아이템) | 노을알 | ❌ missing | gemini | 인벤 아이콘 |
-| `honbaek_yu` (아이템) | 안개젖 | ❌ missing | gemini | 인벤 아이콘 |
+| `honbaek_dak_baby` | 노을닭(새끼) | ✅ have | gemini | `_draw_ranch` 배선 완료 |
+| `honbaek_dak_adult` | 노을닭(성체) | ✅ have | gemini | `_draw_ranch` 배선 완료 |
+| `honbaek_so_baby` | 안개소(새끼) | ✅ have | gemini | `_draw_ranch` 배선 완료 |
+| `honbaek_so_adult` | 안개소(성체) | ✅ have | gemini | `_draw_ranch` 배선 완료 |
+| `honbaek_ran` (아이템) | 노을알 | ✅ have | gemini | 인벤 아이콘 배선(EXTRA_ICONS·PR #188) |
+| `honbaek_yu` (아이템) | 안개젖 | ✅ have | gemini | 인벤 아이콘 배선(EXTRA_ICONS·PR #188) |
 
 > 성장티어 세부 수치(며칠 만에 성체·성장 중 산물 여부)는 S1-15 착수 grill에서 잠금([track-b-livestock-rework-design] 참조).
 
@@ -55,9 +55,9 @@
 | `honryeongcho_{seed,sprout,mature}` | 혼령초 | ✅ have | gemini | 3단계 완비 |
 | `pianhwa_{seed,sprout,mature}` | 피안화 | ✅ have | gemini | 3단계 완비 |
 | `yeonghon_hobak_{seed,sprout,mature}` | 영혼 호박 | ✅ have | gemini | 3단계 완비 |
-| `hwangcheon_podo_{seed,sprout,mature}` | 황천포도(트렐리스) | ❌ missing | gemini | 3단계 + 트렐리스 덩굴 (id=`hwangcheon_podo`) |
-| `bulsagwa_{seed,sprout,mature}` | 불사과(다절기 프레스티지) | ❌ missing | gemini | 3단계 |
-| `honbaekdo_{sapling,growing,fruiting}` | 혼백도(혼의 나무 과수) | ❌ missing | gemini | 대형·Y-sort·나이별. 단계 수는 orchard.gd 렌더 훅 확정 시(잠정 3) |
+| `hwangcheon_podo_{seed,sprout,mature}` | 황천포도(트렐리스) | ✅ have | gemini | 3단계 완비·CROP_SPRITES 배선 |
+| `bulsagwa_{seed,sprout,mature}` | 불사과(다절기 프레스티지) | ✅ have | gemini | 3단계 완비·CROP_SPRITES 배선(PR #188) |
+| `honbaekdo_{sapling,growing,fruiting}` | 혼백도(혼의 나무 과수) | ✅ have | gemini | 3단계·ORCHARD_SPRITES 배선(PR #188). 대형·bottom-center 앵커 |
 
 ## 5. UI / HUD — ★Claude 즉시 제작 (한지 스킨)
 
