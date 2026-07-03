@@ -45,4 +45,4 @@ game/assets/_staging_*/
 .claude/worktrees/
 
 # 16px 실험 하네스 산출(placeholder 결과 — 커밋 제외)
-game/tools/tile16_experiment*.png
+game/tools/tile16_experiment*.png*

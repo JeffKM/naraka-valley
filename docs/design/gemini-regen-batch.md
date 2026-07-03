@@ -194,25 +194,29 @@ CHARACTER: a gender-neutral young afterlife farmer, deliberately plain and unrem
 >
 > **왜 실험부터:** 16px 전환은 타일뿐 아니라 **캐릭터(480×320→240×160)·건물·나무·바위 전부**를 절반 밀도로 재생성해야 픽셀 그레인이 안 섞임(되돌리기 매우 비쌈). 값싼 base 텍스처 몇 장으로 선판단.
 
-**owner가 Gemini로 생성할 것 (최소 셋):**
-- **grass base ×2~3 변종** (서로 다른 시드 — per-cell 랜덤용)
-- **dirt path base ×1**
-- (선택) **grass 위에 흙길 패치가 지나가는 1장** — 경계 룩 즉시 확인용. 정식 Wang 전이는 Claude 후처리(§4.5·§8.2 2px 디더 마진).
+**owner가 Gemini로 생성할 것:**
+- **grass 필드 텍스처** — 베이스(민무늬) + 클럼프 변종 (2026-07-04: grass_a/b/c 3장 생성 완료).
+- **dirt 필드 텍스처 ×1** (완료).
 
-**실험 STYLE 접두 (16px·무외곽선·소프트 — §4.2와 다름):**
+> ★2026-07-04 실물 반영: Gemini는 **고해상(2048²) 지형 필드 텍스처**를 뽑는다(16×16 단위 타일 아님).
+> 그래서 "16px 청키감"은 **다운스케일 배율**로 만든다 — 글루 `tools/gemini_grass_to_field.py`가
+> 워터마크 제거(우하단 sparkle 고정박스) + **필드 128px BOX 다운스케일**(grill 확정 청키감).
+> **베이스 = grass_a만**(Q5: grass_b/c의 큰 클럼프를 베이스에 박으면 타일링 격자 반복 → 스캐터 프롭 별도 추출).
+
+**실험 STYLE 접두 (무외곽선·소프트·seamless):**
 ```
-[STYLE] a seamless tileable top-down [terrain] texture at 16px logical resolution, warm inviting farm palette like Stardew Valley slightly muted for underworld mood (not candy-bright), soft LOW-contrast tonal variation, tiny soft blended tufts (NOT big chunky high-contrast clumps), NO outline / lineless base ground, gentle soft shading, edge-to-edge, no border.
+[STYLE] a seamless tileable top-down [terrain] texture, warm inviting farm palette like Stardew Valley slightly muted for underworld mood (not candy-bright), soft LOW-contrast tonal variation, tiny soft blended tufts (NOT big chunky high-contrast clumps), NO outline / lineless base ground, gentle soft shading, edge-to-edge, no border.
 ```
-- `[terrain]=lush grass` (warm-moss `#2d4720..#8fb267`) — 변종은 클럼프 배치만 다르게.
-- `[terrain]=warm dirt path` (흙길 `#513928..#bc987c`).
+- `[terrain]=lush grass` (warm-moss `#2d4720..#8fb267`)  ·  `[terrain]=warm dirt` (`#513928..#bc987c`).
 
-**Claude 후처리·검증 (owner 생성 후, EnterWorktree 격리에서):**
-1. crop/tileable 봉합 → 최소 `combined_terrain_experiment16.tres` 조립.
-2. ⚠️ **렌더 스케일 유효성:** 16px 타일을 현행 32-cell 월드에 2×로 넣으면 화면상 32px = 스타듀 대비 절반 크기 → **거짓 NO-GO**. 테스트 씬은 **4× 렌더**(온스크린 타일 ≈64px)로 owner 스타듀 레퍼런스와 물리 크기를 맞춘다.
-3. 굽은 흙길이 잔디를 통과하는 소구역 페인트 → `home_full_dump`로 스크린샷.
-4. owner가 스타듀 레퍼런스(2026-07-04 제공)와 나란히 비교 → GO/NO-GO.
+**파이프라인 (구현 완료 — 하네스):**
+1. 원본 `_staging_tile16/raw/{grass_a,grass_b,grass_c,dirt}.png` → 글루 → `{name}_field.png`(128²).
+2. `tools/tile16_experiment.gd` — 필드를 **월드좌표 모듈로 타일링**(단위 셀 반복 아님·격자 반복 0) +
+   굽은 흙길 + **지터 디더 유기적 경계** + **4× nearest 업스케일**(온스크린 64px = 스타듀 정합, 거짓 NO-GO 방지).
+3. ⚠️ **렌더 스케일 유효성:** 4× 렌더로 owner 스타듀 스크린샷(≈64px/타일)과 물리 크기를 맞춘다.
+4. `./run_tile16.sh` → `tools/tile16_experiment.png` → owner가 스타듀 레퍼런스(2026-07-04 제공)와 나란히 → GO/NO-GO.
 
-**클럼프 모델(확정, Q5):** A(베이스 변종)→**타일**(terrain alternative) / B(풀 클럼프)→**스캐터 프롭**(`_build_ground_details`, 작게·부드럽게) / C(흙 전이)→**Wang 타일**. 실험엔 클럼프 타일 **생성 불요**(스캐터 프롭 재활용).
+**클럼프 모델(확정, Q5):** A(베이스 변종)→**타일** / B(풀 클럼프 = grass_b/c)→**스캐터 프롭**(`_build_ground_details`, 작게·부드럽게) / C(흙 전이)→**Wang 타일**. 실험 베이스엔 클럼프 미포함.
 
 ### 4.1 다단 절벽 세트 (17개, 각 32×32) — `cliff_*.png`
 > asset-ruleset §4.1 + [ADR-0044]. 2행 pseudo-Z: `Lip(걷기O 밝은 상단) → Face(SOLID) → Base(SOLID·self-shadow) → 저지`. 재질 = 차가운 슬레이트 청회 암석 + 상단 풀 오버행.
