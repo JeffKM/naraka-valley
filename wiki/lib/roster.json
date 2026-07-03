@@ -2,9 +2,9 @@
   "generatedNote": "자동 생성(build-manifest.mjs) — 수정 금지. SOURCE=lib/required-assets.json. 데일리: npm run manifest",
   "total": 48,
   "byStatus": {
-    "have": 13,
+    "have": 20,
     "placeholder": 10,
-    "missing": 25
+    "missing": 18
   },
   "byMaker": {
     "claude": 23,
@@ -172,9 +172,13 @@
           "name": "노을닭(새끼)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "성장 1단계",
-          "preview": null
+          "preview": {
+            "file": "assets/livestock/honbaek_dak_baby.png",
+            "w": 32,
+            "h": 32
+          }
         },
         {
           "category": "livestock",
@@ -186,9 +190,13 @@
           "name": "노을닭(성체)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "정면+idle(4방향 불요)",
-          "preview": null
+          "preview": {
+            "file": "assets/livestock/honbaek_dak_adult.png",
+            "w": 32,
+            "h": 32
+          }
         },
         {
           "category": "livestock",
@@ -200,9 +208,13 @@
           "name": "안개소(새끼)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "성장 1단계",
-          "preview": null
+          "preview": {
+            "file": "assets/livestock/honbaek_so_baby.png",
+            "w": 48,
+            "h": 48
+          }
         },
         {
           "category": "livestock",
@@ -214,9 +226,13 @@
           "name": "안개소(성체)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "대형",
-          "preview": null
+          "preview": {
+            "file": "assets/livestock/honbaek_so_adult.png",
+            "w": 64,
+            "h": 48
+          }
         },
         {
           "category": "livestock",
@@ -228,9 +244,13 @@
           "name": "노을알(아이템)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "인벤 아이콘",
-          "preview": null
+          "preview": {
+            "file": "assets/crops/honbaek_ran.png",
+            "w": 32,
+            "h": 32
+          }
         },
         {
           "category": "livestock",
@@ -242,9 +262,13 @@
           "name": "안개젖(아이템)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "인벤 아이콘",
-          "preview": null
+          "preview": {
+            "file": "assets/crops/honbaek_yu.png",
+            "w": 32,
+            "h": 32
+          }
         }
       ]
     },
@@ -365,9 +389,13 @@
           "name": "혼백도(혼의 나무 과수)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "대형·Y-sort·나이별",
-          "preview": null
+          "preview": {
+            "file": "assets/crops/honbaekdo_sapling.png",
+            "w": 96,
+            "h": 160
+          }
         }
       ]
     },
@@ -936,9 +964,13 @@
       "name": "노을닭(새끼)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "성장 1단계",
-      "preview": null
+      "preview": {
+        "file": "assets/livestock/honbaek_dak_baby.png",
+        "w": 32,
+        "h": 32
+      }
     },
     {
       "category": "livestock",
@@ -950,9 +982,13 @@
       "name": "노을닭(성체)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "정면+idle(4방향 불요)",
-      "preview": null
+      "preview": {
+        "file": "assets/livestock/honbaek_dak_adult.png",
+        "w": 32,
+        "h": 32
+      }
     },
     {
       "category": "livestock",
@@ -964,9 +1000,13 @@
       "name": "안개소(새끼)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "성장 1단계",
-      "preview": null
+      "preview": {
+        "file": "assets/livestock/honbaek_so_baby.png",
+        "w": 48,
+        "h": 48
+      }
     },
     {
       "category": "livestock",
@@ -978,9 +1018,13 @@
       "name": "안개소(성체)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "대형",
-      "preview": null
+      "preview": {
+        "file": "assets/livestock/honbaek_so_adult.png",
+        "w": 64,
+        "h": 48
+      }
     },
     {
       "category": "livestock",
@@ -992,9 +1036,13 @@
       "name": "노을알(아이템)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "인벤 아이콘",
-      "preview": null
+      "preview": {
+        "file": "assets/crops/honbaek_ran.png",
+        "w": 32,
+        "h": 32
+      }
     },
     {
       "category": "livestock",
@@ -1006,9 +1054,13 @@
       "name": "안개젖(아이템)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "인벤 아이콘",
-      "preview": null
+      "preview": {
+        "file": "assets/crops/honbaek_yu.png",
+        "w": 32,
+        "h": 32
+      }
     },
     {
       "category": "crops",
@@ -1122,9 +1174,13 @@
       "name": "혼백도(혼의 나무 과수)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "대형·Y-sort·나이별",
-      "preview": null
+      "preview": {
+        "file": "assets/crops/honbaekdo_sapling.png",
+        "w": 96,
+        "h": 160
+      }
     },
     {
       "category": "ui",

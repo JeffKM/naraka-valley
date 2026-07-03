@@ -13,7 +13,7 @@ const OUT_MANIFEST = join(WIKI, "lib", "manifest.json");
 const ROSTER_SRC = join(WIKI, "lib", "required-assets.json"); // 손 편집 SOURCE
 const OUT_ROSTER = join(WIKI, "lib", "roster.json");          // 디프 결과(생성)
 
-const CATEGORIES = ["buildings", "characters", "portraits", "crops", "tiles", "props", "ui"];
+const CATEGORIES = ["buildings", "characters", "portraits", "crops", "livestock", "tiles", "props", "ui"];
 
 // PNG IHDR에서 가로·세로(빅엔디언, 오프셋 16/20) 읽기 — 의존성 없이.
 function pngSize(buf) {
@@ -37,8 +37,13 @@ function attribute(category, name) {
     return { tool: T.GEMINI, method: "Gemini 2×3 표정 그리드 → removebg → 320² 버스트 정규화(make_okja_portraits.py)", conf: "high" };
   if (category === "characters")
     return { tool: T.PIXELLAB, method: "PixelLab create_character 4방향 walk 시트 → 청키화", conf: "high" };
-  if (category === "crops")
+  if (category === "crops") {
+    if (n.startsWith("honbaek"))  // 혼백도 과수·가축 산물(노을알·안개젖) = owner 제미나이
+      return { tool: T.GEMINI, method: "owner 제미나이 생성 → gemini_crop_to_cell 배치(혼백도 과수·가축 산물 아이콘)", conf: "high" };
     return { tool: T.PIXELLAB, method: "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트", conf: "med" };
+  }
+  if (category === "livestock")
+    return { tool: T.GEMINI, method: "owner 제미나이 생성 → strip_baked_shadow.py(구운 접지그림자 제거, self-shadow only 규약 §0.2·§7-2) → gemini_crop_to_cell 배치", conf: "high" };
   if (category === "buildings") {
     if (["house_ext", "storehouse_ext", "barn_ext"].includes(n))
       return { tool: T.GEMINI, method: "owner 제미나이 정면 facade → gemini_facade_to_chunky(다운스케일→양자화·청키), 2칸 문(ADR-0046), PR #156", conf: "high" };
