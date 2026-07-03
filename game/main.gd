@@ -5698,15 +5698,14 @@ func _draw_forage() -> void:
 		var grown: bool = forage.is_grown(tile)
 		var tex: Texture2D = grown_tex if grown else cut_tex
 		if tex != null:
-			# ★ 격자 깨기 — 6×3 사료풀 블록이 똑같은 클럼프의 격자로 안 읽히게 타일 해시로 결정적 변형
-			#   (좌우반전 + 미세 오프셋). 결정적이라 매 프레임 동일(깜빡임 없음)·세이브 무관.
+			# ★ 사료풀 = 타일 꽉 채우는 fill 스프라이트(빽빽한 건초밭 — 이웃 타일과 이어짐). 오프셋 흔들기는
+			#   fill 타일에 이음새(gap)를 만들므로 좌우반전만으로 변형(6×3 블록이 균일 반복으로 안 읽히게).
+			#   타일 해시 결정적 → 매 프레임 동일(깜빡임 없음)·세이브 무관.
 			var sz := tex.get_size()
 			var hsh: int = absi((int(tile.x) * 73856093) ^ (int(tile.y) * 19349663))
-			var jx := float((hsh % 5) - 2)          # 가로 −2..2 흔들기
-			var jy := float((hsh / 7) % 2)          # 세로 0..1 흔들기(바닥선 살짝 어긋)
-			var bx := px.x + (TILE - sz.x) * 0.5 + jx
-			var by := px.y + TILE - sz.y + jy         # 발치(bottom-center)를 타일 바닥에
-			if (hsh & 1) == 1:                        # 좌우 반전
+			var bx := px.x + (TILE - sz.x) * 0.5
+			var by := px.y + TILE - sz.y              # 발치(bottom-center)를 타일 바닥에
+			if (hsh & 1) == 1:                        # 좌우 반전(이음새 없이 변형)
 				draw_set_transform(Vector2(bx + sz.x, by), 0.0, Vector2(-1, 1))
 				draw_texture(tex, Vector2.ZERO)
 				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)   # 변환 원복(뒤 draw 영향 방지)

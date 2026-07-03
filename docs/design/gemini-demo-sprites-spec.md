@@ -296,7 +296,7 @@ python3 game/tools/gemini_facade_to_chunky.py <src> game/assets/buildings/coop_e
 > **렌더 계약:**
 > - **여물광(`silo`)·혼우물(`well`)** = 구조물. `_blit_facade_anchored`로 렌더 = **풀 백드롭(WALL 박스 가림) + bottom-center 앵커 + SE 접지 그림자(코드가 그림)**. ⇒ 건물 facade와 동일 결이므로 **접지 그림자를 스프라이트에 굽지 말 것**(§0.2 전역 규약 준수 — 혼백도만 예외). 아트 = footprint(96 폭)보다 위로 솟는 지붕 허용(bottom-center).
 > - **여물광 게이지 주의:** 건초 채움 게이지(노란 세로 바)가 **코드 오버레이로 우측에 항상 얹힌다**(silo_hay/240 동적 표시). 아트 우측을 과밀하게 채우지 말 것(게이지가 읽히게 여유).
-> - **사료풀(`forage_grown`/`forage_cut`)** = 타일 프롭. 각 32×32, **bottom-center로 타일에 직접**(facade 앵커 아님, 그림자 없음). 작물처럼 **흙·지면 없이 식물만**(풀밭 타일 위에 얹힘).
+> - **사료풀(`forage_grown`/`forage_cut`)** = 타일 프롭. 각 **32×32 fill 타일**(6×3=18칸 꽉 찬 블록 → **빽빽한 건초밭**으로 읽히게 프레임을 가득 채움. 중앙 클럼프 1개 = 성긴 격자로 부자연). `_draw_forage`가 타일에 직접 렌더 + **타일 해시 좌우반전만으로 변형**(fill 타일엔 오프셋이 이음새를 만들어 flip-only). 작물처럼 **흙·지면 없이 풀만**(풀밭 타일 위에 얹힘·2026-07-03 owner 재생성으로 fill 채택).
 
 ### 8.1 규격
 
@@ -304,15 +304,16 @@ python3 game/tools/gemini_facade_to_chunky.py <src> game/assets/buildings/coop_e
 |---|---|---|---|---|---|
 | `silo` | 여물광(건초 저장고) | 96×128 | `assets/props/` | bottom-center(facade) | footprint 3×3(96²)+지붕 위로. 우측 게이지 여유 |
 | `well` | 혼우물(돌 우물) | 96×112 | `assets/props/` | bottom-center(facade) | footprint 3×3(96²)+지붕/두레박 위로 |
-| `forage_grown` | 사료풀(다 자람) | 32×32 | `assets/props/` | bottom-center(타일) | 낫 채집 대상·무성한 야생 건초풀 |
-| `forage_cut` | 사료풀(벤 자리) | 32×32 | `assets/props/` | bottom-center(타일) | 벤 밑동·재생 대기(낮음) |
+| `forage_grown` | 사료풀(다 자람) | 32×32 **fill** | `assets/props/` | 타일 채움 | 프레임 꽉 채운 밀집 건초풀(이삭)·좌우반전 변형 |
+| `forage_cut` | 사료풀(벤 자리) | 32×32 **fill** | `assets/props/` | 타일 채움 | 프레임 꽉 채운 낮은 그루터기 |
 
 ### 8.2 프롬프트 (§0.1 STYLE + §0.3 팔레트 계승)
 
 - **여물광 `silo`** — `[STYLE] a farm hay silo storage structure, top-down 3/4 overworld view, centered on a transparent bg, bottom-center anchored, a warm honey-brown timber slatted round silo tower with a gently domed wooden roof and iron banding, a small hatch, a hint of golden straw at the base, cozy afterlife farmstead feel. warm timber #513928 to #a87d64, straw-yellow accents, single dark outline #401818, NW light source (highlights upper-left), self-shadow warm dark brown, NO baked ground shadow (engine adds it). a rustic hay silo. do NOT clutter the right edge (a hay gauge overlays there).`
 - **혼우물 `well`** — `[STYLE] a stone water well, top-down 3/4 overworld view, centered on a transparent bg, bottom-center anchored, a round grey fieldstone well wall with a small pitched wooden roof frame on two posts, a hanging wooden bucket on a rope, dark still water inside with a faint spirit-blue (#2068e8 to #60d8f0) glow. warm timber roof #724f3b, cool grey stone, single dark outline #401818, NW light source, self-shadow cool blue-violet slate, NO baked ground shadow (engine adds it). an afterlife stone well.`
-- **사료풀 `forage_grown`** — `[STYLE] a single clump of tall wild hay grass, top-down 3/4 view, centered on a transparent bg, bottom-center anchored, a lush tuft of long warm-moss green blades (#446630 to #8fb267) fanning upward, seed heads at the tips, ready to be cut with a scythe, NO soil or ground (sits on a grass tile). a patch of wild forage grass.`
-- **사료풀 `forage_cut`** — `[STYLE] a low mown grass stubble, top-down 3/4 view, centered on a transparent bg, bottom-center anchored, a few short trimmed stalks and stubble in muted moss-green regrowing after a cut, small and low to the ground, NO soil (sits on a grass tile). freshly scythed grass stubble.`
+> ⚠️ **fill 타일 규약(2026-07-03 owner 재생성 교훈):** 초판 "중앙 클럼프 1개"는 6×3 블록에서 성긴 격자로 부자연스러웠다. **프레임을 가득 채우는 밀집 fill 타일**로 재생성(아래) — 이웃 타일과 이어져 빽빽한 밭. 코드는 좌우반전만으로 변형.
+- **사료풀 `forage_grown`** — `[STYLE] a DENSE full patch of tall hay grass that FILLS THE ENTIRE SQUARE FRAME edge to edge, top-down 3/4 pixel art, transparent bg, bottom-anchored, many overlapping warm-moss green blades (#446630 to #8fb267) covering the whole width left to right with wheat-like seed heads, a thick lush clump with NO empty gaps, tiles seamlessly into a continuous meadow. single dark outline #401818, NO soil (sits on a grass tile).`
+- **사료풀 `forage_cut`** — `[STYLE] a patch of freshly scythed grass stubble that FILLS THE ENTIRE SQUARE FRAME edge to edge, top-down 3/4 pixel art, transparent bg, bottom-anchored, many short trimmed stalks in muted moss-green regrowing after a cut, low and dense covering the whole tile width with NO empty gaps, tiles seamlessly. NO soil (sits on a grass tile).`
 
 ### 8.3 후처리
 

@@ -75,10 +75,8 @@ func _blit_forage(out: Image, tex: Texture2D, tile: Vector2i) -> void:
 	var sz := img.get_size()
 	var px := Vector2i(tile.x * TILE, tile.y * TILE)
 	var hsh: int = absi((tile.x * 73856093) ^ (tile.y * 19349663))
-	var jx := (hsh % 5) - 2
-	var jy := (hsh / 7) % 2
-	var bx := px.x + int((TILE - sz.x) * 0.5) + jx
-	var by := px.y + TILE - sz.y + jy
+	var bx := px.x + int((TILE - sz.x) * 0.5)
+	var by := px.y + TILE - sz.y
 	var src := img
 	if (hsh & 1) == 1:   # 좌우 반전
 		src = Image.create(sz.x, sz.y, false, Image.FORMAT_RGBA8)
