@@ -4347,8 +4347,11 @@ func _process(delta: float) -> void:
 		clock_hud.set_state(GameClock.season_name(clock.season_index()), _dos, clock.clock_string(),
 			clock.phase(), wallet.gold, CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()))
 	clock_label.visible = false
-	# ★ ADR-0024 핫바 요약(핫바 위, 하단 중앙): 든 아이템(슬롯) + 선택 안내. 씨앗이면 보유 수·작물도.
+	# ★ owner 2026-07-03 HUD 가이드 A — 하단 중앙 날것 텍스트("핫바 N번 · 든 것…")는 화면을 가리고
+	#   몰입을 깬다. 핫바가 이제 단축키 인덱스·선택 금박·개수 배지를 다 보여줘 이 요약은 중복 → 숨김.
+	#   씨앗 보유 수·성장일 상세는 핫바 호버 툴팁(HudTooltip)이 담당. 텍스트는 계산 유지(향후 토글).
 	crop_label.text = _hotbar_summary()
+	crop_label.visible = false
 	# ★ Phase C 골드는 시계 클러스터(clock_hud)로 이전 — raw 라벨 숨김.
 	gold_label.visible = false
 	# ★ C3 — 혼력은 우하단 혼력 바(vitals)가, 하트(미호·멜·바나·네오)는 메뉴 관계 탭이 그린다(프레임이
