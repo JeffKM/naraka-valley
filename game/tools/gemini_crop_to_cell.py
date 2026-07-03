@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-# Gemini raw 작물/오브젝트 → 셀 크기 bottom-center 청키 스프라이트 (ADR-0001 배치 글루).
+# raw 작물/오브젝트 → 셀 크기 bottom-center 스프라이트 (ADR-0001 배치 글루).
 #
-# 왜 필요한가: Gemini raw는 큰 캔버스(예: 680×380)에 콘텐츠가 중앙 작게 놓여 여백이 크다.
+# 왜 필요한가: raw는 큰 캔버스에 콘텐츠가 중앙 작게 놓여 여백이 크다.
 #   process_chunky_phaseC.py는 bbox 크롭·앵커 없이 target으로 stretch만 해서 raw엔 안 맞는다.
-#   이 글루는 배경 투명화 → 콘텐츠 bbox 크롭 → cell 안에 aspect 유지 contain →
-#   bottom-center 배치 → 2px 청키화(÷2 BOX→알파임계 128→×2 nearest).
+#   이 글루는 배경 투명화 → 콘텐츠 bbox 크롭 → bottom-center 배치.
+#
+# ★ 선명도(2px 청크 예외, ADR-0047 §4): 작물은 PixelLab이 이미 32×32 네이티브 픽셀아트로
+#   생성한다. 예전엔 ÷2 BOX→×2 로 "2px 청키화"했으나, 이는 해상도를 절반으로 죽이고 BOX가
+#   색을 평균내 뭉개서 인게임 형태 가독성을 해쳤다(캐릭터가 겪은 문제와 동일). 그래서 작물도
+#   캐릭터처럼 청크 캐논의 예외로 두고, 원본 픽셀을 1:1 보존한다: 절대 확대하지 않고,
+#   셀을 초과할 때만 NEAREST로 축소(BOX 금지). threshold_alpha로 가장자리를 하드에지 정리.
 #
 # 사용: python3 tools/gemini_crop_to_cell.py <src.png> <dst.png> <cell_w> <cell_h>
 #   트렐리스 작물 = 32 64 (밑동 접지·위로 1칸 솟음), 일반 작물 = 32 32.
@@ -66,18 +71,17 @@ def process(src, dst, cell_w, cell_h):
     if bbox:
         im = im.crop(bbox)
     cw, ch = im.size
-    # half 캔버스(청키화 전) — cell의 절반
-    hw, hh = max(1, cell_w // 2), max(1, cell_h // 2)
-    # aspect 유지 contain: 콘텐츠가 half 캔버스 안에 다 들어가게
-    scale = min(hw / cw, hh / ch)
+    # 네이티브 1:1 — 절대 확대 안 함(scale≤1). 셀을 초과할 때만 NEAREST 축소(BOX 금지 = 색 뭉갬 방지).
+    scale = min(cell_w / cw, cell_h / ch, 1.0)
     nw, nh = max(1, round(cw * scale)), max(1, round(ch * scale))
-    scaled = threshold_alpha(im.resize((nw, nh), Image.BOX))
-    # bottom-center 배치
-    canvas = Image.new("RGBA", (hw, hh), (0, 0, 0, 0))
-    canvas.alpha_composite(scaled, ((hw - nw) // 2, hh - nh))
-    out = canvas.resize((cell_w, cell_h), Image.NEAREST)  # ×2 청키
-    out.save(dst)
-    return (cw, ch), out.size
+    if (nw, nh) != (cw, ch):
+        im = im.resize((nw, nh), Image.NEAREST)
+    im = threshold_alpha(im)  # 반투명 가장자리 → 하드에지(선명 윤곽)
+    # bottom-center 배치 (셀 하단 접지)
+    canvas = Image.new("RGBA", (cell_w, cell_h), (0, 0, 0, 0))
+    canvas.alpha_composite(im, ((cell_w - nw) // 2, cell_h - nh))
+    canvas.save(dst)
+    return (cw, ch), canvas.size
 
 
 if __name__ == "__main__":
