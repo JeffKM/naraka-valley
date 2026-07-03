@@ -1,6 +1,7 @@
 # Gemini 데모 스프라이트 스펙카드 — 안식 농원 데모 완성 (ADR-0048 F)
 
 > **상태:** 스펙 확정(2026-07-02, owner §7 전항목 승인) — Gemini 생성 대기([ADR-0025] 게이트). 렌더 훅(E·S1-11·S1-15·S1-10)은 §7 계약을 타겟.
+> **개정(2026-07-03):** 스타듀 나무 스펙 대조로 과수 혼백도(§2.3·§7-3) 2건 조정 — 캔버스 세로 4칸→5칸(96×128→**96×160**), 접지 그림자 **스프라이트에 구움**(§0.2 전역 예외). owner 승인.
 > **근거:** [ADR-0048](../adr/0048-homestead-demo-completion-pass-ui-screens-interiors.md) §5 **F**(게임플레이 스프라이트 = 스펙카드→owner Gemini)·[ADR-0025](../adr/0025-asset-spec-card-gate.md)(생성 전 스펙카드 게이트)·[ADR-0047](../adr/0047-gemini-full-asset-regen-supersede-adr0001-scope.md)(Gemini 1차 생성기)·[required-assets-roster.md](./required-assets-roster.md)(디프 소스)·[master-palette.md](./master-palette.md)(hex)·[asset-ruleset.md](./asset-ruleset.md)(NW광원·2px청크·피벗).
 >
 > **범위 = 데모 신규분만.** [gemini-regen-batch.md](./gemini-regen-batch.md)는 *기존 96개 재생성* 배치다. 이 문서는 그 배치에 **없는**, 안식 농원 데모를 시각적으로 완성하려면 새로 그려야 하는 스프라이트만 다룬다(로스터에서 maker=`gemini`·status=`missing`/`placeholder`인 항목). STYLE 토큰·팔레트·프레이밍은 gemini-regen-batch §1을 **계승**하며 아래 §0에 재기재해 프롬프트를 자체 완결로 만든다.
@@ -37,6 +38,7 @@ detailed pixel art in the style of Stardew Valley and Sun Haven, chunky visible 
 
 ### 0.2 프레이밍
 - **props/작물/가축/아이콘:** `a single [OBJECT], top-down 3/4 overworld view (Stardew Valley angle), centered on a transparent background, bottom-center anchored, standing upright, no baked ground shadow or cast shadow (only its own form self-shadow), self-shadow color [SHADOW].`
+  - **예외 — 과수 혼백도(§2.3):** 대형 Y-sort 나무는 스타듀식으로 **구운 타원 접지 그림자를 포함**한다(owner 2026-07-03). 이 항목만 위 "no baked shadow"를 오버라이드하며, `_draw_orchard`는 코드 접지 그림자를 그리지 않는다.
 - **타일(deco 바닥/벽):** `a seamless tileable top-down [surface] texture, flat, edge-to-edge, no border.`
 - **건물:** [gemini-building-prompt.md](./gemini-building-prompt.md) §6.0 공통 골격 계승(§3).
 
@@ -148,14 +150,15 @@ centered on a transparent background, no shadow, clean readable inventory icon s
 - **mature** — `[STYLE] … a harvest-ready ancient apple plant bearing one or two glossy deep-crimson apples that glow faintly from within with a warm undying ember light (a hint of spirit-blue #60d8f0 at the core), rich dark-green leaves, an eerie immortal fruit. the fruit of no-death, ripe.`
 
 ### 2.3 혼백도 (`honbaekdo`) — 혼의 나무 과수 (피안절/봄 결실)
-> 魂魄桃, 저승 복숭아. [혼의 나무] 그레이박스 정준 1종. **3×3 영속 엔티티(96×96 풋프린트)**, 밑동 앵커 1칸만 SOLID·bottom-center 접지, 수관은 위/옆 통과 가능. Y-sort pivot=앵커 중심선(배선 S1-10).
+> 魂魄桃, 저승 복숭아. [혼의 나무] 그레이박스 정준 1종. **3×3 영속 엔티티(96×96 풋프린트=논리 3×3칸)**, 밑동 앵커 1칸만 SOLID·bottom-center 접지, 수관은 위/옆 통과 가능. Y-sort pivot=앵커 중심선(배선 S1-10).
 > ⚠️ **현재 orchard는 그레이박스 도형만 그리고 2상태(sapling/mature)만 구별.** **단계 수 = 3 확정(§7-3, sapling→growing→fruiting)** — `_draw_orchard`에 growing/fruiting 렌더 훅 신설(E/S1-10 담당). 열매 아이콘도 미등록.
+> **★ owner 2026-07-03 개정(스타듀 나무 스펙 대조):** ①캔버스 세로 4칸→**5칸(96×160)**으로 상향(스타듀 과일나무 3×5 존재감). ②접지 그림자 = **스프라이트에 구움**(§0.2 전역 "no baked shadow" 예외 — 유일). ⇒ 렌더 훅 계약: `_draw_orchard`는 이 과수에 **별도 코드 접지 그림자를 그리지 않는다**(스프라이트에 포함).
 
-**규격(권장):** 대형 단일 스프라이트, 캔버스 **96×128**(가로 3칸=96, 세로는 밑동 96 접지 + 수관이 위로 솟는 여유 32). bottom-center 앵커 = 밑동이 캔버스 하단 중앙, 수관이 위로.
+**규격:** 대형 단일 스프라이트, 캔버스 **96×160**(가로 3칸=96, 세로 5칸=160 → 밑동 접지 + 수관이 위로 솟는 여유). 3단계 **동일 캔버스**(정합 — pivot 고정). bottom-center 앵커 = 밑동이 캔버스 하단 중앙, 수관이 위로. **접지 그림자(반투명 blue-violet 타원)를 밑동 아래에 구워 넣음**(스타듀식 접지감).
 
-- **sapling(묘목)** — `[STYLE] a single small peach tree sapling, top-down 3/4 overworld view, centered on a transparent bg, bottom-center anchored, a slender dark bare trunk with a few small tender leaves at the top, freshly planted, no blossoms or fruit, self-shadow cool blue-violet slate. a young spirit peach sapling.`
-- **growing(성장)** — `[STYLE] a medium underworld peach tree, top-down 3/4 view, centered, transparent bg, bottom-center anchored, a fuller rounded canopy of muted blue-green and soft pink leaves on a dark trunk, a few pale pink spirit blossoms, not yet fruiting, self-shadow cool blue-violet slate. a growing spirit peach tree.`
-- **fruiting(결실)** — `[STYLE] a large mature underworld peach tree, top-down 3/4 view, centered, transparent bg, bottom-center anchored, a full rounded canopy of muted blue-green leaves with soft pink spirit-blossoms, several ripe pale-pink-and-cream afterlife peaches (魂魄桃) hanging with a faint spirit-blue #60d8f0 glow, a thick dark trunk at the base, ethereal and cozy, self-shadow cool blue-violet slate. a fruiting spirit peach tree.`
+- **sapling(묘목)** — `[STYLE] a single small peach tree sapling, top-down 3/4 overworld view, centered on a transparent bg, bottom-center anchored, a slender dark bare trunk with a few small tender leaves at the top, freshly planted, no blossoms or fruit, self-shadow cool blue-violet slate, with a small soft semi-transparent dark blue-violet elliptical ground shadow baked directly under the trunk base. a young spirit peach sapling.`
+- **growing(성장)** — `[STYLE] a medium underworld peach tree, top-down 3/4 view, centered, transparent bg, bottom-center anchored, a fuller rounded canopy of muted blue-green and soft pink leaves on a dark trunk, a few pale pink spirit blossoms, not yet fruiting, self-shadow cool blue-violet slate, with a soft semi-transparent dark blue-violet elliptical ground shadow baked directly under the trunk base. a growing spirit peach tree.`
+- **fruiting(결실)** — `[STYLE] a large mature underworld peach tree, top-down 3/4 view, centered, transparent bg, bottom-center anchored, a full rounded canopy of muted blue-green leaves with soft pink spirit-blossoms, several ripe pale-pink-and-cream afterlife peaches (魂魄桃) hanging with a faint spirit-blue #60d8f0 glow, a thick dark trunk at the base, ethereal and cozy, self-shadow cool blue-violet slate, with a wide soft semi-transparent dark blue-violet elliptical ground shadow baked directly under the trunk base. a fruiting spirit peach tree.`
 - **혼백도 과일 아이콘(`honbaekdo`, 32×32)** — `[STYLE] a single spirit peach fruit icon, a plump ripe peach in pale pink and cream with a soft cleft, a faint spirit-blue (#60d8f0) glow at the core, single dark outline #401818, centered on transparent bg, no shadow, clean inventory icon. an afterlife peach.`
 
 ---
@@ -268,7 +271,7 @@ python3 game/tools/gemini_facade_to_chunky.py <src> game/assets/buildings/coop_e
 
 1. **가축 경로 ✅** — 스프라이트 = 신규 **`assets/livestock/`**(의미 분리·`crop_icons` 오염 회피). 산물 아이콘(`honbaek_ran`/`honbaek_yu`)은 인벤 dict 재사용 편의상 **`assets/crops/`** 유지.
 2. **가축 캔버스 크기 ✅** — 닭 32×32 · 안개소 새끼 48×48 · 안개소 성체 64×48. baby:adult 콘텐츠 = 0.6배.
-3. **과수 혼백도 단계 수 ✅** — **3단계**(sapling→growing→fruiting). `_draw_orchard`에 growing/fruiting 렌더 훅 신설(E/S1-10). 캔버스 96×128.
+3. **과수 혼백도 단계 수 ✅** — **3단계**(sapling→growing→fruiting). `_draw_orchard`에 growing/fruiting 렌더 훅 신설(E/S1-10). 캔버스 **96×160**(owner 2026-07-03 개정, 스타듀 3×5 존재감 — 기존 96×128에서 상향). **접지 그림자는 스프라이트에 구움**(§0.2 전역 규약 유일 예외) → `_draw_orchard`는 별도 코드 접지 그림자 미렌더.
 4. **coop_ext footprint ✅** — **3×2 · 중앙 2칸 문 · target_w=96**.
 5. **home_deco 세트당 장수 ✅** — **세트당 3장**(floor 타일·wall 타일·furniture 대표 1장). 코드 8아이템은 furniture 시트 매핑/후속 확장.
 6. **가축 방향 ✅** — **단일 정면 idle 1장**(4방향·걷기·목축 이동 애니는 후속 서랍).
