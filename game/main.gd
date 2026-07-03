@@ -174,6 +174,12 @@ const CROP_SPRITES := {
 		preload("res://assets/crops/yeonghon_hobak_sprout.png"),
 		preload("res://assets/crops/yeonghon_hobak_mature.png"),
 	],
+	# ★ [S1-5a] 황천포도 = 트렐리스 작물. 프레임은 32×64(밑동 접지·위로 1칸 솟음, _draw_crops 트렐리스 훅).
+	CropCatalog.HWANGCHEON_PODO: [
+		preload("res://assets/crops/hwangcheon_podo_seed.png"),
+		preload("res://assets/crops/hwangcheon_podo_sprout.png"),
+		preload("res://assets/crops/hwangcheon_podo_mature.png"),
+	],
 }
 
 # 각 타일의 그레이박스 색(밝기·미세 색조로만 구분, 회색 기조 유지). WALL이 가장 밝다.
@@ -5554,7 +5560,12 @@ func _draw_crops() -> void:
 		# growth_stage: 0=씨앗 / 1=새싹 / 2=수확가능 → 같은 인덱스 프레임. 칸(32×32)을 채운다.
 		var stage: int = clampi(farm.growth_stage(t), 0, frames.size() - 1)
 		var tex: Texture2D = frames[stage]
-		draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), Vector2(TILE, TILE)), false)
+		if CropCatalog.is_trellis(crop_id):
+			# 트렐리스 작물(황천포도): 32×64 스프라이트 — 밑동을 타일 하단에 접지, 위로 1칸 솟음
+			# (스타듀 홉/포도 결). 밑동 SOIL 칸은 그대로, 위 칸은 통과 가능하나 넝쿨이 시각적으로 덮는다.
+			draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, (t.y - 1) * TILE), Vector2(TILE, TILE * 2)), false)
+		else:
+			draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), Vector2(TILE, TILE)), false)
 
 # ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(greybox-spec §7.4 — 대형 스프라이트·Y-sort=S1-10 이관).
 # 묘목(미성숙)=밑동 작은 새싹 / 성숙=3×3 수관(반투명 초록) + 밑동(갈색) + 매달린 과일 점(fruit_count).
