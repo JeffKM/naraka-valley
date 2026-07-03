@@ -332,6 +332,7 @@ const FACADE_BANA_HOUSE := preload("res://assets/buildings/bana_house_ext.png")
 # footprint보다 위로 솟아(bottom-center 앵커) 본가와 지붕 시점 통일. 창고·동물 2건물 모두 enterable(실내 방).
 const FACADE_STOREHOUSE := preload("res://assets/buildings/storehouse_ext.png")
 const FACADE_BARN := preload("res://assets/buildings/barn_ext.png")
+const FACADE_COOP := preload("res://assets/buildings/coop_ext.png")  # ★[B1-a.1] 넋둥우리(소형·닭장형) 전용 아트 — 128×100, footprint 4×3(NEOKDUNGURI_EXT_RECT)
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로).
 # ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
@@ -5512,7 +5513,8 @@ func _draw() -> void:
 			_draw_home_deco()        # ★ [S1-9] 플레이어 집 꾸미기 3레이어(벽 밴드 위·시드 가구 아래, 집 실내에서만)
 			_draw_facade_home()      # 집 외관(WALL 박스 위에 덮어 닫힌 건물로)
 			_draw_facade_storehouse()  # ★ T3 창고 외관(NE)
-			_draw_facade_barn()        # ★ T3 축사 외관(동편, 비-enterable 자리)
+			_draw_facade_barn()        # ★ [B1-a.1] 넋우릿간 외관(남단 고지 6×4)
+			_draw_facade_coop()        # ★ [B1-a.1] 넋둥우리 외관(동편 4×3, coop_ext 아트)
 			_draw_silo()               # ★ [B1-a.3] 여물광 외관(WALL 박스 그레이박스 + 건초 게이지)
 			_draw_well()               # ★ [B2] 혼우물 외관(WALL 박스 그레이박스 — 돌 우물, 리필 메카닉=별도 grill)
 			_draw_forage()             # ★ [B1-a.3] 사료풀(다 자람=풀포기·벤 자리=밑동) — 낫 채집 대상
@@ -5522,7 +5524,7 @@ func _draw() -> void:
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 			_draw_orchard()          # ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(대형 스프라이트=S1-10)
 			_draw_trackb_interiors() # ★ Phase E Track B 실내 가구(여물통·보관 크레이트 — 짐승 아래, 카메라로 방별 클립)
-			_draw_ranch()            # ★ [S1-7] 혼의 짐승 그레이박스 표식(스프라이트·애니 = S1-11)
+			_draw_ranch()            # ★ [S1-7/S1-15] 혼의 짐승 — 전용 스프라이트(assets/livestock) 방목/실내 렌더
 			_draw_chest()            # ★ Phase D/E 저장 상자(집·창고 실내 — 각 카메라에서만 보임)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
@@ -5871,10 +5873,13 @@ func _draw_facade_home() -> void:
 func _draw_facade_storehouse() -> void:
 	_blit_facade_anchored(FACADE_STOREHOUSE, STOREHOUSE_EXT_RECT)
 
-# ★ [B1-a.1] 동물 2건물 외관. 넋우릿간=기존 축사 아트(barn_ext) 재사용. 넋둥우리(소형·닭장형) 전용 아트는
-# 아직 없어(Q9 아트 분업 보류 — ADR-0028 아트 후행) WALL 박스 그레이박스로 둔다 — 라벨로 구분(_add_label).
+# ★ [B1-a.1] 동물 2건물 외관 — 둘 다 전용 아트 완비(barn_ext=넋우릿간·coop_ext=넋둥우리, 제미나이 생성).
+# 창고·축사와 동형(bottom-center 앵커 blit). WALL 박스를 도트 외관이 덮어 "닫힌 건물"이 된다.
 func _draw_facade_barn() -> void:
 	_blit_facade_anchored(FACADE_BARN, NEOKURITGAN_EXT_RECT)
+
+func _draw_facade_coop() -> void:
+	_blit_facade_anchored(FACADE_COOP, NEOKDUNGURI_EXT_RECT)
 
 func _draw_facade_cafe() -> void:
 	_facade_grass_backdrop(CAFE_EXT_RECT)
