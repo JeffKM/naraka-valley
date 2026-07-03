@@ -9,6 +9,8 @@ extends SceneTree
 #   ④ 계단 노치 = 밴드 단면 종단이 walkable로 열림(옆 밴드는 여전히 SOLID).
 #   ⑤ 코너 스텝 = 청키 블록 edge-to-edge(내부 FACE·상단 LIP 캡).
 #   ⑥ 8이웃(대각 포함) BFS leak = 2행 밴드가 고지↔저지를 차단(대각 squeeze 0), 노치로만 연결.
+#   ⑦ [단계3] 남향-only 오토타일러 = 사각 마스크 → 남쪽만 Lip/Face/Base, 동/서/북=잔디 능선.
+#   ⑧ [단계3-④] 곡선 코너 = 벽 서/동 바깥 끝 = CORNER_SW/SE × Face/Base(전부 SOLID), 중간 벽 직선.
 #
 # 라이브 home맵은 건드리지 않는다(스크래치 rect만 덮어쓴다 — 회귀 0). 옛 _build_cliffs(1타일) 유지.
 # 물리 corner-squeeze(CharacterBody2D 대각 틈) 최종확인은 S1-3 bot/map_dump 육안(격자 BFS는 물리 틈 못 잡음).
@@ -117,6 +119,17 @@ func _initialize() -> void:
 	_check("⑦ 동경계 = 풀 능선(바위벽 없음)", m._grid[45][59] == m.GROUND and m._grid[45][60] == m.GROUND)
 	_check("⑦ 북경계 = 풀 능선(바위벽 없음)", m._grid[42][55] == m.GROUND)
 	_check("⑦ 서경계 = 풀 능선(바위벽 없음)", m._grid[45][52] == m.GROUND and m._grid[45][51] == m.GROUND)
+
+	# ── ⑧ [단계3-④] 곡선 코너: 벽 서/동 바깥 끝 = 곡선 코너 타일(SW/SE × Face/Base), 전부 SOLID ──
+	# ⑦ 오토타일 결과(hi=x52..59) 재사용 — 서끝 x52·동끝 x59의 Face(y49)/Base(y50) 행.
+	_check("⑧ 서끝 Face = CORNER_SW", m._grid[49][52] == m.CLIFF_CORNER_SW)
+	_check("⑧ 서끝 Base = CORNER_SW_B", m._grid[50][52] == m.CLIFF_CORNER_SW_B)
+	_check("⑧ 동끝 Face = CORNER_SE", m._grid[49][59] == m.CLIFF_CORNER_SE)
+	_check("⑧ 동끝 Base = CORNER_SE_B", m._grid[50][59] == m.CLIFF_CORNER_SE_B)
+	_check("⑧ 곡선 코너 4종 전부 SOLID", m.is_solid(m.CLIFF_CORNER_SW) and m.is_solid(m.CLIFF_CORNER_SW_B) \
+		and m.is_solid(m.CLIFF_CORNER_SE) and m.is_solid(m.CLIFF_CORNER_SE_B))
+	_check("⑧ 중간 벽은 직선 유지(코너 아님)", m._grid[49][55] == m.CLIFF_FACE and m._grid[50][55] == m.CLIFF_FACE_BASE)
+
 
 	m.queue_free()
 	await process_frame

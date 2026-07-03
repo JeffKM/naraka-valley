@@ -94,7 +94,14 @@ const COOP_FLOOR := 18       # 넋둥우리 바닥(밝은 볏짚 깔개, 걷기 
 const COOP_WALL := 19        # 넋둥우리 벽(가로 밝은 널빤지, 통과 X)
 const STOREHOUSE_FLOOR := 20 # 갈무리방 바닥(돌 판석, 걷기 O)
 const STOREHOUSE_WALL := 21  # 갈무리방 벽(쌓은 돌켜, 통과 X)
-const N_TILES := 22
+# ★[단계3-④ / cliff-tileset-spec §10.2] 남향 절벽 벽 좌우 끝 곡선 대각 전이 코너. 옛 90° 각진 벽 끝을
+#   스타듀식 곡선으로 마감 — Face(위)+Base(아래) 두 타일의 1/4 코사인 곡선이 세로로 이어져 벽 밑끝이
+#   둥글게 잔디로 물러난다. 전부 SOLID(절벽 못 넘음). 아트=make_cliff_corners.py 절차 파생(§10.1 방침).
+const CLIFF_CORNER_SW := 22   # 남서 벽면 곡선(Face 톤, SOLID)
+const CLIFF_CORNER_SW_B := 23 # 남서 밑동 곡선(Base 톤, SOLID)
+const CLIFF_CORNER_SE := 24   # 남동 벽면 곡선(Face 톤, SOLID)
+const CLIFF_CORNER_SE_B := 25 # 남동 밑동 곡선(Base 톤, SOLID)
+const N_TILES := 26
 
 # ── P2.3 지형 도트: terrain TileSet + 실내/벽 도트 source ───────────────────
 # combined_terrain_homestead.tres = PixelLab Wang 4세트(풀↔길·길↔밭·밭↔풀·물↔풀)를 합친
@@ -121,7 +128,8 @@ const PATH_VARIANTS := 3
 # ★[ADR-0043 §6 후속] 건물 둘레 갈색 path 링 제거는 grass 직접 채우기(솔버 0)로 흡수됨 — RING_FIX 폐지.
 const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
 	CLIFF_FACE, CLIFF_LIP, CLIFF_FACE_BASE, CLIFF_BANK,
-	BARN_FLOOR, BARN_WALL, COOP_FLOOR, COOP_WALL, STOREHOUSE_FLOOR, STOREHOUSE_WALL]   # 아틀라스 가로 배치 순서(= atlas x)
+	BARN_FLOOR, BARN_WALL, COOP_FLOOR, COOP_WALL, STOREHOUSE_FLOOR, STOREHOUSE_WALL,
+	CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]   # 아틀라스 가로 배치 순서(= atlas x)
 # ★ [S1-2] 통과 불가 타일의 단일 진실원(SOLID). _build_tileset 충돌 루프 + is_solid()가 이걸 참조해
 #   충돌 정의 중복을 제거한다(옛 하드코딩 리스트 대체). 주의:
 #   · WATER는 terrain corner라 여기 없고 _has_water_corner로 따로 판정(회귀 보존).
@@ -129,7 +137,8 @@ const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
 #   · CLIFF_LIP은 아틀라스엔 있으나 걷기 O라 여기서 제외(충돌 없음). CLIFF_FACE_BASE는 신규 SOLID.
 const WORLD_SOLID_TILES := [WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
 	CLIFF_FACE, CLIFF_FACE_BASE, CLIFF_BANK,
-	BARN_WALL, COOP_WALL, STOREHOUSE_WALL]   # ★[ADR-0048] 실내 전용 벽 3종도 통과 X
+	BARN_WALL, COOP_WALL, STOREHOUSE_WALL,
+	CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]   # ★[ADR-0048] 실내 벽 3종 + [단계3-④] 곡선 코너 4종도 통과 X
 # ★ T2 — WATER는 더 이상 SOLID가 아니다(terrain으로 승격). TREE/ROCK는 아직 SOLID 단색(도트는 후속 T7~T9).
 # ★ M4.1 — TREE도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 숲 무대의 밀집 나무.
 # ★ M5.1 — ROCK도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 갱도 무대의 바위 절벽·암반.
@@ -156,6 +165,11 @@ const SOLID_TEX := {
 	COOP_WALL: "res://assets/tiles/coop_wall.png",                # 넋둥우리 벽(가로 밝은 널빤지)
 	STOREHOUSE_FLOOR: "res://assets/tiles/storehouse_floor.png",  # 갈무리방 바닥(돌 판석)
 	STOREHOUSE_WALL: "res://assets/tiles/storehouse_wall.png",    # 갈무리방 벽(쌓은 돌켜)
+	# ★[단계3-④] 남향 절벽 곡선 코너(make_cliff_corners.py 절차 파생 — cliff_s_face/base + lip 풀 곡선 전이)
+	CLIFF_CORNER_SW: "res://assets/tiles/cliff_corner_sw.png",
+	CLIFF_CORNER_SW_B: "res://assets/tiles/cliff_corner_sw_b.png",
+	CLIFF_CORNER_SE: "res://assets/tiles/cliff_corner_se.png",
+	CLIFF_CORNER_SE_B: "res://assets/tiles/cliff_corner_se_b.png",
 }
 
 # ── T2.1/T2.3 밭 오버레이 타일(Field 레이어 아틀라스 인덱스) ───────────────
@@ -250,6 +264,11 @@ const COLORS := [
 	Color(0.59, 0.45, 0.29),  # COOP_WALL       — 밝은 널빤지 톤
 	Color(0.43, 0.41, 0.38),  # STOREHOUSE_FLOOR — 회색 판석 톤
 	Color(0.39, 0.37, 0.34),  # STOREHOUSE_WALL  — 돌켜 톤
+	# ★[단계3-④] 곡선 코너(전부 SOLID_TEX 있음 — 폴백 미사용, 인덱스 정렬용). Face=벽면 톤·B=밑동 톤.
+	Color(0.30, 0.27, 0.24),  # CLIFF_CORNER_SW
+	Color(0.19, 0.16, 0.14),  # CLIFF_CORNER_SW_B
+	Color(0.30, 0.27, 0.24),  # CLIFF_CORNER_SE
+	Color(0.19, 0.16, 0.14),  # CLIFF_CORNER_SE_B
 ]
 
 # ── 실내 가구·장식(create_map_object 산출, ADR-0013: 32px raw native 직접 사용) ────
@@ -2696,10 +2715,17 @@ func _autotile_south_cliffs(is_hi: Callable) -> void:
 				continue                                   # 아래도 고지 → 내부 평면(풀 그대로)
 			# 남쪽이 저지 → 남향 절벽. Face/Base는 맵 안·저지일 때만(다른 고지 침범 금지).
 			_set_tile(x, y, CLIFF_LIP)
+			# ★[단계3-④] 벽의 서/동 바깥 끝(이웃이 고지 아님 = 맵경계·능선과 만나는 진짜 끝) → 곡선 코너로
+			#   마감(각진 90° 대신 스타듀식 곡선 전이). 게이트 노치는 오토타일 후 GROUND로 덮이므로 여기선
+			#   벽 셀만 보고 판정 — 노치 옆은 이웃이 아직 고지라 코너 아님(진짜 바깥 끝만).
+			var west_end: bool = not is_hi.call(Vector2i(x - 1, y))
+			var east_end: bool = not is_hi.call(Vector2i(x + 1, y))
+			var face_id: int = CLIFF_CORNER_SW if west_end else (CLIFF_CORNER_SE if east_end else CLIFF_FACE)
+			var base_id: int = CLIFF_CORNER_SW_B if west_end else (CLIFF_CORNER_SE_B if east_end else CLIFF_FACE_BASE)
 			if y + 1 < _outdoor_h and not is_hi.call(Vector2i(x, y + 1)):
-				_set_tile(x, y + 1, CLIFF_FACE)
+				_set_tile(x, y + 1, face_id)
 			if y + 2 < _outdoor_h and not is_hi.call(Vector2i(x, y + 2)):
-				_set_tile(x, y + 2, CLIFF_FACE_BASE)
+				_set_tile(x, y + 2, base_id)
 
 # ★ [단계3] 동향 잔디 능선 = 바위벽 없이 통행만 막는 충돌바(고지 x≤HIGHLAND_E ↔ 저지 x≥+1 seam). 타일은
 #   풀 그대로 두고(옛 동향 바위벽 폐기) 수풀 프롭(PROP_LAYOUT_HOME)이 시각적 능선을 완성한다 —
