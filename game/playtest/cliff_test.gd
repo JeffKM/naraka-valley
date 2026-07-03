@@ -105,6 +105,19 @@ func _initialize() -> void:
 	var opened := _reach8(m, lowland, scratch)
 	_check("⑥ 노치 뚫음: 고지↔저지 연결(노치 경유)", opened.has(plateau))
 
+	# ── ⑦ [단계3 남향-only] 오토타일러: 사각 고지 마스크 → 남쪽만 Lip/Face/Base 바위벽, 동/서/북=잔디 유지 ──
+	# owner Gemini 가이드(선택지 B) 문법을 임의 불리언 마스크에서 검증(스타듀: 남향만 벽, 나머지=능선).
+	m._fill_rect(scratch, m.GROUND)
+	var hi := Rect2i(52, 43, 8, 6)   # 고지 x52..59, y43..48 (scratch 안)
+	m._autotile_south_cliffs(func(c: Vector2i) -> bool: return hi.has_point(c))
+	_check("⑦ 남단 Lip(걷기 O)", m._grid[48][55] == m.CLIFF_LIP and not m.is_solid(m.CLIFF_LIP))
+	_check("⑦ 남단+1 Face(SOLID)", m._grid[49][55] == m.CLIFF_FACE and m.is_solid(m.CLIFF_FACE))
+	_check("⑦ 남단+2 Base(SOLID)", m._grid[50][55] == m.CLIFF_FACE_BASE and m.is_solid(m.CLIFF_FACE_BASE))
+	_check("⑦ 고지 내부 = 풀(바위벽 아님)", m._grid[45][55] == m.GROUND)
+	_check("⑦ 동경계 = 풀 능선(바위벽 없음)", m._grid[45][59] == m.GROUND and m._grid[45][60] == m.GROUND)
+	_check("⑦ 북경계 = 풀 능선(바위벽 없음)", m._grid[42][55] == m.GROUND)
+	_check("⑦ 서경계 = 풀 능선(바위벽 없음)", m._grid[45][52] == m.GROUND and m._grid[45][51] == m.GROUND)
+
 	m.queue_free()
 	await process_frame
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
