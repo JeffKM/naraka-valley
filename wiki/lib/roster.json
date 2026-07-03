@@ -2,9 +2,9 @@
   "generatedNote": "자동 생성(build-manifest.mjs) — 수정 금지. SOURCE=lib/required-assets.json. 데일리: npm run manifest",
   "total": 48,
   "byStatus": {
-    "have": 11,
+    "have": 13,
     "placeholder": 10,
-    "missing": 27
+    "missing": 25
   },
   "byMaker": {
     "claude": 23,
@@ -325,9 +325,13 @@
           "name": "황천포도(트렐리스)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "3단계 + 트렐리스 덩굴",
-          "preview": null
+          "preview": {
+            "file": "assets/crops/hwangcheon_podo_seed.png",
+            "w": 32,
+            "h": 64
+          }
         },
         {
           "category": "crops",
@@ -341,9 +345,13 @@
           "name": "불사과(다절기 프레스티지)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "3단계",
-          "preview": null
+          "preview": {
+            "file": "assets/crops/bulsagwa_seed.png",
+            "w": 32,
+            "h": 32
+          }
         },
         {
           "category": "crops",
@@ -1074,9 +1082,13 @@
       "name": "황천포도(트렐리스)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "3단계 + 트렐리스 덩굴",
-      "preview": null
+      "preview": {
+        "file": "assets/crops/hwangcheon_podo_seed.png",
+        "w": 32,
+        "h": 64
+      }
     },
     {
       "category": "crops",
@@ -1090,9 +1102,13 @@
       "name": "불사과(다절기 프레스티지)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "3단계",
-      "preview": null
+      "preview": {
+        "file": "assets/crops/bulsagwa_seed.png",
+        "w": 32,
+        "h": 32
+      }
     },
     {
       "category": "crops",
