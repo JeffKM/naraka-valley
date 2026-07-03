@@ -1,18 +1,19 @@
 {
   "generatedNote": "자동 생성(build-manifest.mjs) — 수정 금지. 데일리: npm run manifest",
-  "total": 136,
+  "total": 146,
   "byCategory": {
     "buildings": 7,
     "characters": 5,
     "portraits": 28,
-    "crops": 15,
+    "crops": 21,
+    "livestock": 4,
     "tiles": 32,
     "props": 40,
     "ui": 9
   },
   "byTool": {
     "확인 필요": 10,
-    "Gemini": 34,
+    "Gemini": 44,
     "PixelLab": 80,
     "절차생성": 12
   },
@@ -21,6 +22,7 @@
     "characters",
     "portraits",
     "crops",
+    "livestock",
     "tiles",
     "props",
     "ui"
@@ -458,6 +460,66 @@
     },
     {
       "category": "crops",
+      "name": "honbaek_ran",
+      "file": "assets/crops/honbaek_ran.png",
+      "w": 32,
+      "h": 32,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → gemini_crop_to_cell 배치(혼백도 과수·가축 산물 아이콘)",
+      "conf": "high"
+    },
+    {
+      "category": "crops",
+      "name": "honbaek_yu",
+      "file": "assets/crops/honbaek_yu.png",
+      "w": 32,
+      "h": 32,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → gemini_crop_to_cell 배치(혼백도 과수·가축 산물 아이콘)",
+      "conf": "high"
+    },
+    {
+      "category": "crops",
+      "name": "honbaekdo",
+      "file": "assets/crops/honbaekdo.png",
+      "w": 32,
+      "h": 32,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → gemini_crop_to_cell 배치(혼백도 과수·가축 산물 아이콘)",
+      "conf": "high"
+    },
+    {
+      "category": "crops",
+      "name": "honbaekdo_fruiting",
+      "file": "assets/crops/honbaekdo_fruiting.png",
+      "w": 96,
+      "h": 160,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → gemini_crop_to_cell 배치(혼백도 과수·가축 산물 아이콘)",
+      "conf": "high"
+    },
+    {
+      "category": "crops",
+      "name": "honbaekdo_growing",
+      "file": "assets/crops/honbaekdo_growing.png",
+      "w": 96,
+      "h": 160,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → gemini_crop_to_cell 배치(혼백도 과수·가축 산물 아이콘)",
+      "conf": "high"
+    },
+    {
+      "category": "crops",
+      "name": "honbaekdo_sapling",
+      "file": "assets/crops/honbaekdo_sapling.png",
+      "w": 96,
+      "h": 160,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → gemini_crop_to_cell 배치(혼백도 과수·가축 산물 아이콘)",
+      "conf": "high"
+    },
+    {
+      "category": "crops",
       "name": "honryeongcho_mature",
       "file": "assets/crops/honryeongcho_mature.png",
       "w": 32,
@@ -575,6 +637,46 @@
       "tool": "PixelLab",
       "method": "PixelLab 작물 3단계(씨앗·새싹·수확) 스프라이트",
       "conf": "med"
+    },
+    {
+      "category": "livestock",
+      "name": "honbaek_dak_adult",
+      "file": "assets/livestock/honbaek_dak_adult.png",
+      "w": 32,
+      "h": 32,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → strip_baked_shadow.py(구운 접지그림자 제거, self-shadow only 규약 §0.2·§7-2) → gemini_crop_to_cell 배치",
+      "conf": "high"
+    },
+    {
+      "category": "livestock",
+      "name": "honbaek_dak_baby",
+      "file": "assets/livestock/honbaek_dak_baby.png",
+      "w": 32,
+      "h": 32,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → strip_baked_shadow.py(구운 접지그림자 제거, self-shadow only 규약 §0.2·§7-2) → gemini_crop_to_cell 배치",
+      "conf": "high"
+    },
+    {
+      "category": "livestock",
+      "name": "honbaek_so_adult",
+      "file": "assets/livestock/honbaek_so_adult.png",
+      "w": 64,
+      "h": 48,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → strip_baked_shadow.py(구운 접지그림자 제거, self-shadow only 규약 §0.2·§7-2) → gemini_crop_to_cell 배치",
+      "conf": "high"
+    },
+    {
+      "category": "livestock",
+      "name": "honbaek_so_baby",
+      "file": "assets/livestock/honbaek_so_baby.png",
+      "w": 48,
+      "h": 48,
+      "tool": "Gemini",
+      "method": "owner 제미나이 생성 → strip_baked_shadow.py(구운 접지그림자 제거, self-shadow only 규약 §0.2·§7-2) → gemini_crop_to_cell 배치",
+      "conf": "high"
     },
     {
       "category": "tiles",

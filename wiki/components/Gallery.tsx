@@ -15,6 +15,7 @@ const CAT_LABEL: Record<string, string> = {
   characters: "캐릭터",
   portraits: "초상화",
   crops: "작물",
+  livestock: "가축",
   tiles: "타일",
   props: "프롭·가구",
   ui: "UI",
