@@ -182,6 +182,22 @@ const CROP_SPRITES := {
 	],
 }
 
+# ── ★ [S1-5b/S1-10] 혼의 나무 과수 스프라이트 — 종별 3단계 프레임(96×160=3타일폭×5높이, bottom-center
+#   앵커). _draw_orchard가 단계(0=묘목/1=성목/2=결실)로 인덱싱. 그레이박스 정준 1종(혼백도)만.
+const ORCHARD_SPRITES := {
+	FruitTreeCatalog.HONBAEKDO: [
+		preload("res://assets/crops/honbaekdo_sapling.png"),
+		preload("res://assets/crops/honbaekdo_growing.png"),
+		preload("res://assets/crops/honbaekdo_fruiting.png"),
+	],
+}
+
+# 과일 수확물 인벤 아이콘(32²) — 과일은 CropCatalog에 없어 CROP_SPRITES 밖. 핫바·출하함·알림 아이콘
+# 맵에 병합(CAT_HARVEST id로 조회). _draw_crop_tex/_item_icon이 crop_icons.get(id)로 찾는다.
+const FRUIT_ICONS := {
+	FruitTreeCatalog.HONBAEKDO: preload("res://assets/crops/honbaekdo.png"),
+}
+
 # 각 타일의 그레이박스 색(밝기·미세 색조로만 구분, 회색 기조 유지). WALL이 가장 밝다.
 const COLORS := [
 	Color(0.16, 0.18, 0.16),  # GROUND — 어두운 풀밭 톤
@@ -3213,6 +3229,8 @@ func _setup_hotbar() -> void:
 	var icons := {}
 	for crop_id in CROP_SPRITES:
 		icons[crop_id] = CROP_SPRITES[crop_id][2]  # mature 프레임을 인벤 아이콘으로 재사용
+	for fruit_id in FRUIT_ICONS:
+		icons[fruit_id] = FRUIT_ICONS[fruit_id]    # ★ [S1-10] 과일 수확물 아이콘(honbaekdo 등)
 	hotbar.setup(inventory, icons)
 
 # ── ★ C2 무인 출하함 ──────────────────────────────────────────────────────────
@@ -3320,6 +3338,8 @@ func _setup_frame() -> void:
 	var icons := {}
 	for crop_id in CROP_SPRITES:
 		icons[crop_id] = CROP_SPRITES[crop_id][2]   # 핫바와 같은 작물 아이콘 재사용
+	for fruit_id in FRUIT_ICONS:
+		icons[fruit_id] = FRUIT_ICONS[fruit_id]     # ★ [S1-10] 과일 수확물 아이콘(honbaekdo 등)
 	frame.setup(inventory, ship_bin, icons)
 	frame.set_chest(chest)   # ★ Phase D 저장 상자 주입(CTX_CHEST 상단 그리드)
 	frame.deposit_slot.connect(_on_frame_deposit)
@@ -3852,6 +3872,8 @@ func _item_icon(id: String) -> Texture2D:
 			crop = ItemCatalog.crop_of(id)
 	if crop != "" and CROP_SPRITES.has(crop):
 		return CROP_SPRITES[crop][2]
+	if crop != "" and FRUIT_ICONS.has(crop):   # ★ [S1-10] 과일 수확물(honbaekdo 등)
+		return FRUIT_ICONS[crop]
 	return null
 
 # ★ Phase C — 농사 XP 적립 + 레벨업 감지(숙련 알림). _farming_xp를 직접 더하던 자리를 이 헬퍼로
@@ -5522,7 +5544,7 @@ func _draw() -> void:
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_prop_layouts.get("HOME", []), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터: 집 가구·길가 등불·화분 + T3 농장 장식
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
-			_draw_orchard()          # ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(대형 스프라이트=S1-10)
+			_draw_orchard()          # ★ [S1-5b/S1-10] 혼의 나무 과수 — 종별 3단계 스프라이트(묘목·성목·결실)
 			_draw_trackb_interiors() # ★ Phase E Track B 실내 가구(여물통·보관 크레이트 — 짐승 아래, 카메라로 방별 클립)
 			_draw_ranch()            # ★ [S1-7/S1-15] 혼의 짐승 — 전용 스프라이트(assets/livestock) 방목/실내 렌더
 			_draw_chest()            # ★ Phase D/E 저장 상자(집·창고 실내 — 각 카메라에서만 보임)
@@ -5579,6 +5601,18 @@ func _draw_orchard() -> void:
 	var day := clock.day
 	for anchor in orchard.trunk_tiles():
 		var trunk_px := Vector2(anchor.x * TILE, anchor.y * TILE)
+		# ★ [S1-10] 종별 3단계 스프라이트: 0=묘목(미성숙) / 1=성목(성숙·과일0) / 2=결실(성숙·과일>0).
+		var frames = ORCHARD_SPRITES.get(orchard.fruit_id_of(anchor))
+		if frames != null:
+			var stage := 0
+			if orchard.is_mature(anchor, day):
+				stage = 2 if orchard.fruit_count_of(anchor) > 0 else 1
+			var tex: Texture2D = frames[stage]
+			var sz := tex.get_size()
+			# bottom-center 앵커 — 밑동을 앵커 칸 하단 중앙에, 3타일폭 수관이 위로 솟는다(facade와 같은 결).
+			draw_texture(tex, Vector2(trunk_px.x + TILE * 0.5 - sz.x * 0.5, trunk_px.y + TILE - sz.y))
+			continue
+		# ── 폴백: 그레이박스(아트 없는 종 방어) ──
 		if not orchard.is_mature(anchor, day):
 			# 묘목: 밑동 칸에 작은 갈색 줄기 + 초록 새싹(자라는 중).
 			draw_rect(Rect2(trunk_px + Vector2(TILE * 0.42, TILE * 0.45), Vector2(TILE * 0.16, TILE * 0.5)), Color(0.42, 0.30, 0.20))
