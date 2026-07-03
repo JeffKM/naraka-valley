@@ -180,6 +180,12 @@ const CROP_SPRITES := {
 		preload("res://assets/crops/hwangcheon_podo_sprout.png"),
 		preload("res://assets/crops/hwangcheon_podo_mature.png"),
 	],
+	# ★ [S1-4] 불사과 = 다절기 프레스티지(표준 32² 3프레임 — 트렐리스 아님).
+	CropCatalog.BULSAGWA: [
+		preload("res://assets/crops/bulsagwa_seed.png"),
+		preload("res://assets/crops/bulsagwa_sprout.png"),
+		preload("res://assets/crops/bulsagwa_mature.png"),
+	],
 }
 
 # ── ★ [S1-5b/S1-10] 혼의 나무 과수 스프라이트 — 종별 3단계 프레임(96×160=3타일폭×5높이, bottom-center
