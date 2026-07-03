@@ -146,4 +146,14 @@ Stardew-like chunky pixels, NOT isometric, NOT rocky grey stone.
 
 - **재생성 = PixelLab `create_tiles_pro`(square_topdown, top-down, segmentation, seed 70301).** 4-넘버 프롬프트로 16변종 한 번에 뽑음: ①풀 오버행 립 ②청키 둥근 자갈 바위벽 면 ③어두운 접지 베이스+슬레이트 그림자 ④모래↔물 둥근 boulder 강둑. 베스트(tile 0/4/8/12) 선택 → `enforce_chunk.chunkify`(2px 캐논) → `cliff_s_lip/face/base.png`·`cliff_bank.png` 덮어쓰기. 1차 산출에서 **밋밋 갈색 → 자갈벽으로 확 개선**, home_full_dump 사인오프.
 - **가이드 정합(owner 공유 Gemini 문서):** "면 최소 2칸 높이"는 `_lay_south_band`가 이미 Lip+Face+Face_Base(2 SOLID행=32px 벽)로 충족 — 아트가 이 2칸 벽을 *제대로 된 바위벽으로 보이게* 함. **미구현(하류 분리):** "절벽 상단 엣지(Lip)를 Front 레이어로 캐릭터 머리 위에 덮기" = 현재 lip은 Ground 타일이라 항상 캐릭터 뒤 렌더 → front-overhang은 별도 렌더 메카닉(S2/3 또는 별도 슬라이스).
-- **하류 유지:** 방향/코너 변종 12종(orphan)·`cliff_beach`(S3)·정밀 팔레트 양자화는 §8·§9 그대로.
+- **하류 유지:** `cliff_beach`(S3)·정밀 팔레트 양자화는 §8·§9 그대로.
+
+### 10.1 방향/코너 세트 재생성 (2026-07-04, "같은 룩으로" owner 요청)
+
+> 남향 코어를 새 룩으로 바꾸자, orphan 방향/코너 변종 13종(옛 rot90+AI 코너)이 톤 불일치. owner "방향/코너도 같은 룩으로 재생성" → **새 남향 세트(`cliff_s_lip`/`cliff_s_face`)에서 파생**해 룩을 픽셀 단위로 일치시킴(PixelLab 불요·결정적). 전부 orphan(코드 참조 0)이라 **PNG만 교체**, 배선·타일종·회귀 불변.
+
+- **방향 면(`cliff_e_face`·`cliff_w_face`)** = `cliff_s_face`(바위=무방향). 서면은 좌우반전으로 결 변화만.
+- **방향 립(`cliff_e_lip`·`cliff_w_lip`·`cliff_n_lip`)** = `cliff_s_lip` 회전/반전(풀이 항상 고지쪽 — 동=풀좌/서=풀우/북=풀아래). NW광원 정밀 재보정은 인게임 배치(S2/3) 때.
+- **외부(볼록) 코너 4** = 바위 면 기반 + 고지 코너에만 풀 nub(대각 마스크 fx+fy>1.25). 바위-다수.
+- **내부(오목) 코너 4** = 풀 채운 타일 기반 + 저지(notch) 코너에만 바위 nub. 풀-다수.
+- 파생 후 `enforce_chunk` 2px 캐논 유지. 몽타주 육안 확인(방향·볼록/오목 semantics 정합). 인게임 배치·NW광원 재보정은 여전히 S2(나루)/S3(삼도천·황천해) — greybox-ready.
