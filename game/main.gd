@@ -351,6 +351,11 @@ const GD_DIRT := preload("res://assets/props/ground_dirt.png")         # 맨 흙
 const GD_GRAVEL := preload("res://assets/props/ground_gravel.png")     # 길 자갈 무리
 const GD_EMBED := preload("res://assets/props/ground_embed.png")       # 길 박힌 잔돌
 const GD_CRACK := preload("res://assets/props/ground_crack.png")       # 길 갈라짐·바퀴자국
+# ★[단계3-③ / owner Gemini 가이드 2차] 풀 클러스터 노이즈 레버 — 스타듀식 "민무늬 베이스 80~90% +
+#   특정 영역에만 풀 덩어리". _gd_cluster(x,y) < GD_CLUSTER_CUT인 넓은 영역은 풀 포기 없이 민무늬로 비운다.
+#   CUT↑ = 풀 영역 축소(여백↑). BLOCK = 덩어리 크기(칸). GROUND만 게이트(길은 자체 밀도).
+const GD_CLUSTER_CUT := 0.60     # 이 노이즈값 미만 = 민무늬 베이스(풀 포기 skip)
+const GD_CLUSTER_BLOCK := 5      # 저주파 블록 크기(클수록 큰 덩어리)
 # 지형 종류 → 디테일 테이블. 항목 = [텍스처(null=맨 타일), 가중치, SE그림자]. (§3.1 잔디 / §3.2 길)
 var _GD_TABLES := {
 	# ★ [ADR-0042] 증분2 — 큰 청키 클럼프(GD_GRASS3 덤불) 폐기 → 작은 *부드러운* tuft 위주.
@@ -1577,10 +1582,11 @@ func _harmonize_grass_variants(ts: TileSet) -> void:
 		rch.sort(); gch.sort(); bch.sort()
 		var mid := coords.size() / 2
 		var target := Color(rch[mid], gch[mid], bch[mid])
-		# ★[ADR-0043] 클럼프 대비 감쇠 — 7변종을 균일 랜덤으로 깔면 고대비 클럼프가 칸마다 제멋대로라
-		#   "정신없다"(owner). 평균은 공통 타깃으로 옮기되 *국소 편차(클럼프 대비)를 DAMP만큼 줄여* 차분·아기자기하게.
-		#   깊이는 일부 남긴다(완전 평탄 아님). 값 조절로 입체감↔차분함 균형.
-		const _GD_CLUMP_DAMP := 0.42
+		# ★[ADR-0043 → owner Gemini 가이드 2차 2026-07-04] base grass 무늬(lush 풀잎) 대비 감쇠 —
+		#   target + (p−tile_mean)*(1−DAMP). owner "필드가 자글자글 지저분 → 민무늬 베이스 80~90%"(스타듀식)
+		#   가이드로 0.42→0.82 대폭 상향: 국소 무늬(풀잎 텍스처)를 18%만 남겨 "은은한 질감의 민무늬 베이스"로
+		#   (Gemini 1단계 "연한 픽셀 감각" — 완전 단색 아님). 풀 입체감은 클러스터 오버레이(_gd_cluster)가 담당.
+		const _GD_CLUMP_DAMP := 0.82
 		for idx in coords.size():
 			var coord: Vector2i = coords[idx]
 			var ox := coord.x * rs
@@ -2925,6 +2931,23 @@ func _gd_h01(x: int, y: int, salt: int) -> float:
 	n = n & 0x7fffffff
 	return float(n % 100000) / 100000.0
 
+# ★[단계3-③ / owner Gemini 가이드 2차 2026-07-04] 저주파 값 노이즈(블록 해시 bilinear+smoothstep) —
+#   풀 포기 클러스터 마스크(0~1). 스타듀식 "넓은 민무늬 베이스 + 특정 영역에만 풀 덩어리"를 위해, 칸별
+#   독립 배치(자글자글) 대신 GD_CLUSTER_BLOCK칸 단위 저주파로 3~4칸 무리를 만든다. 결정적(해시 기반).
+func _gd_cluster(x: int, y: int) -> float:
+	var s := GD_CLUSTER_BLOCK
+	var gx := x / s
+	var gy := y / s
+	var fx := float(x - gx * s) / s
+	var fy := float(y - gy * s) / s
+	fx = fx * fx * (3.0 - 2.0 * fx)   # smoothstep(격자 각짐 완화)
+	fy = fy * fy * (3.0 - 2.0 * fy)
+	var v00 := _gd_h01(gx, gy, 30)
+	var v10 := _gd_h01(gx + 1, gy, 30)
+	var v01 := _gd_h01(gx, gy + 1, 30)
+	var v11 := _gd_h01(gx + 1, gy + 1, 30)
+	return lerpf(lerpf(v00, v10, fx), lerpf(v01, v11, fx), fy)
+
 func _gd_shadow() -> Image:
 	if _gd_shadow_stamp != null:
 		return _gd_shadow_stamp
@@ -3132,6 +3155,10 @@ func _build_ground_details() -> void:
 			if not _GD_TABLES.has(terrain):
 				continue   # 디테일 테이블 없는 지형(밭·물·건물 등)
 			if occupied.has(Vector2i(x, y)):
+				continue
+			# ★[owner Gemini 2차] 클러스터 게이트 — 풀(GROUND)은 저주파 노이즈 낮은 영역을 민무늬 베이스로
+			#   비운다(스타듀식 80~90% 여백, 자글자글 제거). 길(PATH)은 자체 밀도라 게이트 안 함.
+			if terrain == GROUND and _gd_cluster(x, y) < GD_CLUSTER_CUT:
 				continue
 			var table: Array = _GD_TABLES[terrain]
 			var total := 0
