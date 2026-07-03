@@ -628,18 +628,18 @@ const STOREHOUSE_CHEST_TILE := Vector2i(25, 81)
 # 현 남단 고지(x0..20 y12..25)가 2건물+방목지를 이미 수용하므로 terraform 불요 → 여물광 자리가 필요한
 # B1-a.3로 이연. 실내 방은 x38+ 열에 배치(집 x8..19·창고 x22..35 CAM과 안 겹침).
 # 넋우릿간(대형·barn형·안개소) — 현 축사 외관 자리 유지, enterable 승격.
-const NEOKURITGAN_EXT_RECT := Rect2i(3, 14, 4, 3)   # x3..6, y14..16 (남단 고지 — 절벽=천연 울타리)
-const NEOKURITGAN_EXT_DOOR := Vector2i(5, 16)       # 외관 문 동패널(닿으면 진입) — 아래벽 x3..6 중심 straddle → 2칸 문 x4·x5, 남향 방목지로 열림
-const NEOKURITGAN_EXT_DOOR_W := Vector2i(4, 16)     # 외관 2패널 문 서패널(아트 문 2칸 = 리세스·진입로 2칸 정합). 진입 트리거는 양 칸 수용.
+const NEOKURITGAN_EXT_RECT := Rect2i(3, 14, 6, 4)   # x3..8, y14..17 (남단 고지 — 6×4 대형, owner 2026-07-03d·절벽=천연 울타리)
+const NEOKURITGAN_EXT_DOOR := Vector2i(6, 17)       # 외관 문 동패널(닿으면 진입) — 아래벽 x3..8 중심 straddle → 2칸 문 x5·x6, 남향 방목지로 열림
+const NEOKURITGAN_EXT_DOOR_W := Vector2i(5, 17)     # 외관 2패널 문 서패널(아트 문 2칸 = 리세스·진입로 2칸 정합). 진입 트리거는 양 칸 수용.
 const NEOKURITGAN_RECT := Rect2i(38, 67, 12, 9)     # 실내 x38..49, y67..75 (HOME 밴드 — 집·창고 방과 안 겹침)
 const NEOKURITGAN_DOOR := Vector2i(43, 75)          # 실내 문 서칸(닿으면 퇴장) — 아래벽 중앙(방 x38..49, end.y-1)
 const NEOKURITGAN_DOOR_E := Vector2i(44, 75)        # 실내 문 동칸(실내문≡외관문 2칸). 퇴장 트리거 양 칸 수용.
 const NEOKURITGAN_IN_TILE := Vector2i(43, 74)       # 실내 문 안쪽(진입 착지)
 const NEOKURITGAN_CAM_RECT := Rect2i(37, 66, 14, 11)  # 넋우릿간 방 둘레(창고 CAM x22..35과 안 겹침)
 # 넋둥우리(소형·coop형·노을닭) — 신설, 넋우릿간 동편 병렬(고지 위).
-const NEOKDUNGURI_EXT_RECT := Rect2i(9, 14, 4, 3)   # x9..12, y14..16 (넋우릿간 동쪽 3칸 간격 병렬 — 방목지 공유)
-const NEOKDUNGURI_EXT_DOOR := Vector2i(11, 16)      # 외관 문 동패널 — 아래벽 x9..12 중심 straddle → 2칸 문 x10·x11
-const NEOKDUNGURI_EXT_DOOR_W := Vector2i(10, 16)    # 외관 2패널 문 서패널
+const NEOKDUNGURI_EXT_RECT := Rect2i(10, 14, 4, 3)  # x10..13, y14..16 (넋우릿간 6×4 확대로 동쪽 이동, 1칸 간격 병렬 — 방목지 공유)
+const NEOKDUNGURI_EXT_DOOR := Vector2i(12, 16)      # 외관 문 동패널 — 아래벽 x10..13 중심 straddle → 2칸 문 x11·x12
+const NEOKDUNGURI_EXT_DOOR_W := Vector2i(11, 16)    # 외관 2패널 문 서패널
 const NEOKDUNGURI_RECT := Rect2i(38, 79, 12, 9)     # 실내 x38..49, y79..87 (넋우릿간 방 y67..75 아래, 창고 방 x22..32과 안 겹침)
 const NEOKDUNGURI_DOOR := Vector2i(43, 87)          # 실내 문 서칸(닿으면 퇴장)
 const NEOKDUNGURI_DOOR_E := Vector2i(44, 87)        # 실내 문 동칸
@@ -649,13 +649,13 @@ const NEOKDUNGURI_CAM_RECT := Rect2i(37, 78, 14, 11)  # 넋둥우리 방 둘레(
 const ANIMAL_BUILDINGS := ["넋우릿간", "넋둥우리"]
 # ★ [S1-7] 하늘 목장 방목지 — 두 건물 남쪽 고지 평면(phaseB §5.4 단일 방목 Zone·절벽=천연 펜). B1-a.1에선
 #   짐승이 실내 거주라 방목지는 비어 있고(B1-a.2 pathing이 낮 방목으로 채움), 문 앞 진입로만 깐다.
-const PASTURE_SCAN_RECT := Rect2i(3, 18, 10, 6)   # x3..12, y18..23 (두 건물 문 아래 방목 평면 — B1-a.2 방목 목적지)
+const PASTURE_SCAN_RECT := Rect2i(3, 18, 11, 6)   # x3..13, y18..23 (두 건물 문 아래 방목 평면 — B1-a.2 방목 목적지; 넋둥우리 x13 확대 반영)
 # ★ [B1-a.3] 여물광(Silo·비진입 저장 건물) — 고지 동편 자유 풀밭(건물 x3..12 동쪽, 계단 x21 서쪽). 낫으로
 #   벤 사료풀이 여기 쌓인다(Ranch._silo_hay). 문·실내 없음 = WALL 박스 그레이박스(아트 후행, 넋둥우리 결).
-const SILO_EXT_RECT := Rect2i(14, 14, 3, 3)       # x14..16, y14..16 (넋둥우리 x9..12 동쪽 자유 고지)
+const SILO_EXT_RECT := Rect2i(15, 14, 3, 3)       # x15..17, y14..16 (넋둥우리 x10..13 동쪽 자유 고지, 1칸 간격)
 # ★ [B1-a.3] 사료풀 밭 — 낫으로 베어 건초를 얻는 고지 풀(재생·겨울정지). 여물광 남쪽 자유 풀밭(방목지
 #   x3..12과 안 겹침 — 방목 짐승과 분리). main이 이 rect의 비-SOLID 타일을 Forage에 시드한다.
-const FORAGE_SCAN_RECT := Rect2i(13, 21, 7, 3)    # x13..19, y21..23 (여물광 아래 동편 고지 풀밭)
+const FORAGE_SCAN_RECT := Rect2i(14, 21, 6, 3)    # x14..19, y21..23 (여물광 아래 동편 고지 풀밭 — 방목지 x3..13과 안 겹침)
 # ★ [B2 · 혼우물] 물뿌리개 리필 우물(Well) — 비진입 그레이박스 구조물(문·실내 없음 = WALL 박스, 여물광 결).
 #   ⚠️ 리필 메카닉은 아직 없다(유한 물뿌리개 = 별도 grill 후 도입) → 지금은 farm-infra 자리만 잡는 shell.
 #   스타터 밭(x40..44 y12..16) 남쪽 1칸 아래(y17 여백) — "밭에 물 대는 우물"로 읽히는 farm-infra 존.
@@ -2679,11 +2679,12 @@ func _carve_paths() -> void:
 	_carve_h(32, 38, 78)                        # 동워프 레인(y32, 스파인 → 동쪽 길 워프 78,32)
 	# ★ [B1-a.1] 동물 2건물 2칸 문 앞 진입로 — 2패널 문(x4·x5 / x10·x11)에 맞춰 2칸 폭 흙길을 남향
 	#   방목지로 뻗어 문과 잇는다. (y16 리세스는 아트 밑에 가려 안 보임 → y17부터 깔아야 문 밑단과 이어진다.)
-	for py in range(17, 20):
-		_set_tile(NEOKURITGAN_EXT_DOOR_W.x, py, PATH)  # 넋우릿간 서칸 레인(x4, y17..19)
-		_set_tile(NEOKURITGAN_EXT_DOOR.x, py, PATH)    # 넋우릿간 동칸 레인(x5, y17..19)
-		_set_tile(NEOKDUNGURI_EXT_DOOR_W.x, py, PATH)  # 넋둥우리 서칸 레인(x10, y17..19)
-		_set_tile(NEOKDUNGURI_EXT_DOOR.x, py, PATH)    # 넋둥우리 동칸 레인(x11, y17..19)
+	for py in range(18, 21):  # 넋우릿간(6×4, 아래벽 y17) 진입로 y18..20
+		_set_tile(NEOKURITGAN_EXT_DOOR_W.x, py, PATH)  # 넋우릿간 서칸 레인(x5, y18..20)
+		_set_tile(NEOKURITGAN_EXT_DOOR.x, py, PATH)    # 넋우릿간 동칸 레인(x6, y18..20)
+	for py in range(17, 20):  # 넋둥우리(4×3, 아래벽 y16) 진입로 y17..19
+		_set_tile(NEOKDUNGURI_EXT_DOOR_W.x, py, PATH)  # 넋둥우리 서칸 레인(x11, y17..19)
+		_set_tile(NEOKDUNGURI_EXT_DOOR.x, py, PATH)    # 넋둥우리 동칸 레인(x12, y17..19)
 	# ★ [B2] 혼우물 접근 스퍼 — 중앙 스파인(x38)에서 우물 서면(x40,y19)까지 한 칸 잇는 흙길(시각 안내).
 	#   우물 자체(x40..42)는 WALL이라 덮지 않는다(스퍼는 x39에서 멈춤 → 우물 서면과 인접).
 	_carve_h(19, 38, 39)                        # 스파인(38,19) → 우물 서면 앞(39,19)
