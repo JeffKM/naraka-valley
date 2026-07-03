@@ -166,3 +166,9 @@ Stardew-like chunky pixels, NOT isometric, NOT rocky grey stone.
 
 - **단계 1·2 완료(라이브 선반영):** PixelLab tiles_pro(seed 70402, 유기 프롬프트) → 립=t5(불규칙 흙 하단), 면=t8(warm 흙 수평 침식결), 베이스=t13(차분 warm 흙)+**검정 반투명 그림자 굽기**(파란빛 t14 폐기). `enforce_chunk` → `cliff_s_lip/face/base.png` **라이브 교체**(SOLID_TEX 배선 불변 — 안식 남향밴드·동향밴드·연못강둑 즉시 유기화). home_full_dump 사인오프: 그리드 경계 소멸·warm 톤 일관.
 - **단계 3(하류, ADR-0044 개정 슬라이스):** ①잔디 입체화(클러스터 명암 + 4~5 변종 노이즈 배치 + 지상 장식 프롭) ②**남향-only 오토타일러**(동/서/북=잔디 립, 곡선 대각 전이 타일, 그림자 자동합성) 라이브 통합 ③옛 90°코너·측벽(out/in/e_w_face) 폐기 ④상단 립 Front 레이어(머리 덮기). §10.1 파생 코너는 이 단계에서 곡선 전이로 대체.
+- **단계 3 후속 증분 완료(2026-07-04, 워크트리 cliff-south-followup — ②남향-only 오토타일러는 PR#193 Increment A로 선완료):**
+  - **③ 잔디 입체화(부분):** 동향 잔디 능선을 x20 4칸 간격 bush 7개 → y1~25 2칸 지그재그(x19↔20) 13개로 연속 산등성이화(`PROP_LAYOUT_HOME`). 필드 변종 노이즈·클러스터 명암은 owner 차분함 선호(`_GD_CLUMP_DAMP=0.42`) 존중해 보류(육안 후 별도).
+  - **④ 곡선 대각 전이 코너:** 신규 타일종 4종(`CLIFF_CORNER_SW/SE × Face/Base`, 전부 SOLID) + 오토타일러 코너 로직(벽 서/동 바깥 끝=맵경계·능선과 만나는 진짜 끝 감지). 아트=`make_cliff_corners.py` 절차 파생(`cliff_s_face/base` + lip 풀을 1/4 코사인 곡선으로 전이, 결정적·2px 캐논). §10.1 파생 out/in 코너를 이 곡선 전이로 대체.
+  - **⑤ 벽면 오버행(owner 결정 = 벽면 전체 front, 스타듀 표준):** CLIFF_LIP은 고지 위·안 닿음 → 캐릭터가 절벽 밑 1~2칸에 서면 Face/Base를 `_front_props`(z=1)에서 재렌더해 상체 가림(`_cliff_face_cells` 캐시 + `_front_cliff_cells_for` 판정, 밑 3칸부터 감쇠). 그리드·충돌 불변(순수 시각).
+  - **⑥ orphan 폐기:** `_lay_east_band`·`_lay_corner_step`(라이브 참조 0·cliff_test 전용) 제거 + cliff_test 옛 동향밴드·코너스텝 케이스 폐기·①~⑥ 재번호. orphan 에셋 13종(`cliff_e/w_face`·`cliff_e/w/n_lip`·`cliff_out/in_*`) git rm. `_lay_south_band`는 격리 테스트 원시어휘로 유지.
+  - **회귀:** 전체 46개 PASS + `cliff_test ⑥`·`front_cliff_test`(신규) 추가. home_full_dump(SW/SE 곡선 코너)·오버행 시뮬 육안 사인오프. **미결(owner 육안 후):** ③ 필드 잔디 변종 강화 방향.

@@ -2672,11 +2672,12 @@ func _build_cliffs() -> void:
 	#    GROUND로 덮은 뒤라 게이트 자리는 제외됨). HOME 재빌드마다 갱신.
 	_cache_cliff_face_cells()
 
-# ── ★ [S1-2 / ADR-0044 §1] pseudo-Z 다단 절벽 원시어휘 (재사용 밴드·코너·계단 헬퍼) ────────────────
-# 이 4종이 §5 좌표 실배치(S1-3의 _build_cliffs 재작성)와 cliff_test 격리 검증에 쓰이는 "문법"이다.
+# ── ★ [S1-2 / ADR-0044 §1 → 단계3-⑥ 정리] pseudo-Z 절벽 원시어휘 (남향밴드·계단노치) ────────────────
+# 남향-only 피벗으로 옛 동향 측벽(_lay_east_band)·90° 코너 스텝(_lay_corner_step)은 폐기했다(라이브 참조 0,
+# cliff_test에서만 썼음 → 함께 정리). 남은 2종은 cliff_test 격리 검증에 쓰이는 "문법":
 # 모두 _grid에 타일종만 쓴다(z축 아님 — ADR-0013 2D 평면 불변). 걷기/충돌은 타일종이 결정한다:
 #   CLIFF_LIP=걷기 O / CLIFF_FACE·CLIFF_FACE_BASE=SOLID(is_solid). 그레이박스 색은 COLORS(LIP 밝음→FACE 중간→BASE 어둠).
-# 실배치는 S1-3 — 여기(S1-2)는 어휘·문법·격리 검증만, 라이브 home맵은 옛 _build_cliffs 유지(회귀 0).
+# 라이브 home맵은 _autotile_south_cliffs가 남향 벽을 굽는다(밴드 헬퍼는 격리 테스트 전용).
 
 # 남향 절벽 밴드(고지의 남쪽 가장자리) — y=Lip행 / y+1=Face행 / y+2=Face_Base행(접지 그림자).
 # [x0, x1] 폐구간. ADR-0044 §1 남향 = Lip1+Face1+Base1(논리 3행 = 64px H=2 볼륨).
@@ -2685,24 +2686,6 @@ func _lay_south_band(x0: int, x1: int, y: int) -> void:
 		_set_tile(x, y, CLIFF_LIP)
 		_set_tile(x, y + 1, CLIFF_FACE)
 		_set_tile(x, y + 2, CLIFF_FACE_BASE)
-
-# 동향 절벽 밴드(고지의 동쪽 가장자리) — x=Lip열 / x+1..x+2=Face 2열(base 없음).
-# [y0, y1] 폐구간. ADR-0044 §1 "높이의 가로 치환" = Lip1열+Face2열(동/서 대칭). NW광원 재보정은 S1-10 아트.
-func _lay_east_band(x: int, y0: int, y1: int) -> void:
-	for y in range(y0, y1 + 1):
-		_set_tile(x, y, CLIFF_LIP)
-		_set_tile(x + 1, y, CLIFF_FACE)
-		_set_tile(x + 2, y, CLIFF_FACE)
-
-# 외부 코너(고지 동경계가 남으로 가며 동쪽으로 꺾이는 청키 스텝) — rect를 FACE로 edge-to-edge 채우고
-# 최상단 행만 LIP로 캡한다. 직선 경계라 대각 solid 틈(corner-squeeze) 0(§5.1 아우터 코너 ①=x17→x21 3×3 스텝).
-# 방향별 코너 아트(안/밖·NW광원)는 S1-10 — 그레이박스는 청키 블록으로 충분(직선 경계만 검증).
-func _lay_corner_step(rect: Rect2i) -> void:
-	for y in range(rect.position.y, rect.end.y):
-		for x in range(rect.position.x, rect.end.x):
-			_set_tile(x, y, CLIFF_FACE)
-	for x in range(rect.position.x, rect.end.x):
-		_set_tile(x, rect.position.y, CLIFF_LIP)
 
 # 계단 노치 — 절벽 밴드를 종단하는 통로. rect(밴드 단면 전체 × 종단 길이)의 SOLID를 해제해 GROUND(걷기 O)로.
 # 노치 폭 = 밴드 깊이(남향=2행 종단 / 동향=3열 종단 — ADR-0044 "2폭"↔§5"3열" 정합). STAIRS 프롭은 layout(S1-3).
