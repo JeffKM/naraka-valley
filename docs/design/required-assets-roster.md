@@ -28,9 +28,9 @@
 | key | 화면 | status | maker | 비고 |
 |---|---|---|---|---|
 | `house_floor` / `house_wall` | 집 내부 | ✅ have | claude | 기존 타일, 도색 마무리 |
-| `barn_floor` / `barn_wall` | 넋우릿간 내부 | ❌ missing | claude | 실내 타일 + 진입 워프·pathing |
-| `coop_floor` / `coop_wall` | 넋둥우리 내부 | ❌ missing | claude | 실내 타일 + 진입 워프·pathing |
-| `storehouse_floor` / `storehouse_wall` | 갈무리방 내부 | ❌ missing | claude | 실내 타일 + 진입 워프 |
+| `barn_floor` / `barn_wall` | 넋우릿간 내부 | ✅ have | claude | 절차 생성(다진흙+볏짚/세로판재)·배선 완료(PR #191) |
+| `coop_floor` / `coop_wall` | 넋둥우리 내부 | ✅ have | claude | 절차 생성(밝은볏짚/가로널빤지)·배선 완료(PR #191) |
+| `storehouse_floor` / `storehouse_wall` | 갈무리방 내부 | ✅ have | claude | 절차 생성(돌판석/돌켜)·배선 완료(PR #191) |
 
 ## 3. 가축 (livestock) — ✅ 스프라이트 4종 완료·배선 완료 (2026-07-03)
 
