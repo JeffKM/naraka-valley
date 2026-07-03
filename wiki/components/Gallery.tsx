@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search, Info, Pencil } from "lucide-react";
+import { Search, Info, Pencil, Maximize2 } from "lucide-react";
 import type { AssetItem, Manifest, Decision, DecisionMap } from "@/lib/types";
 import { assetId } from "@/lib/types";
 import Legend from "@/components/Legend";
 import DecisionModal from "@/components/DecisionModal";
+import ImageLightbox from "@/components/ImageLightbox";
 
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
@@ -45,6 +46,7 @@ export default function Gallery({ manifest }: { manifest: Manifest }) {
   const [q, setQ] = useState("");
   const [decisions, setDecisions] = useState<DecisionMap>({});
   const [editing, setEditing] = useState<AssetItem | null>(null);
+  const [viewing, setViewing] = useState<AssetItem | null>(null); // 전체 이미지 라이트박스
 
   useEffect(() => {
     fetch(`${BASE}/api/decisions`)
@@ -143,7 +145,13 @@ export default function Gallery({ manifest }: { manifest: Manifest }) {
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
         {items.map((it) => (
-          <Card key={assetId(it)} it={it} decision={decisions[assetId(it)]} onClick={() => setEditing(it)} />
+          <Card
+            key={assetId(it)}
+            it={it}
+            decision={decisions[assetId(it)]}
+            onClick={() => setEditing(it)}
+            onView={() => setViewing(it)}
+          />
         ))}
       </section>
       {items.length === 0 && (
@@ -158,6 +166,8 @@ export default function Gallery({ manifest }: { manifest: Manifest }) {
           onClose={() => setEditing(null)}
         />
       )}
+
+      {viewing && <ImageLightbox item={viewing} onClose={() => setViewing(null)} />}
     </main>
   );
 }
@@ -177,7 +187,17 @@ function FilterBtn({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function Card({ it, decision, onClick }: { it: AssetItem; decision?: Decision; onClick: () => void }) {
+function Card({
+  it,
+  decision,
+  onClick,
+  onView,
+}: {
+  it: AssetItem;
+  decision?: Decision;
+  onClick: () => void;
+  onView: () => void;
+}) {
   const BOX = 132;
   const s = previewScale(it.w, it.h, BOX);
   const effTool = decision?.tool || it.tool;
@@ -211,6 +231,26 @@ function Card({ it, decision, onClick }: { it: AssetItem; decision?: Decision; o
             확인 필요
           </span>
         )}
+        {/* 전체 이미지 보기 — 카드 클릭(지시)과 분리해 이미지만 크게 연다 */}
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label={`${it.name} 전체 이미지 보기`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onView();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              onView();
+            }
+          }}
+          className="absolute bottom-1.5 left-1.5 flex cursor-pointer items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition hover:bg-black/80 group-hover:opacity-100"
+        >
+          <Maximize2 className="size-3" /> 전체
+        </span>
         <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
           <Pencil className="size-3" /> 지시
         </span>
