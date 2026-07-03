@@ -2,6 +2,7 @@
 
 > **상태:** 스펙 확정(2026-07-02, owner §7 전항목 승인) — Gemini 생성 대기([ADR-0025] 게이트). 렌더 훅(E·S1-11·S1-15·S1-10)은 §7 계약을 타겟.
 > **개정(2026-07-03):** 스타듀 나무 스펙 대조로 과수 혼백도(§2.3·§7-3) 2건 조정 — 캔버스 세로 4칸→5칸(96×128→**96×160**), 접지 그림자 **스프라이트에 구움**(§0.2 전역 예외). owner 승인.
+> **개정(2026-07-03b):** 스타듀 Coop 대조로 넋둥우리 `coop_ext`(§3·§7-4) 2건 조정 — footprint 3×2→**4×2**(폭 홀수→짝수, 문 반칸 치우침 해소), 문 **우측 배치**(스타듀식, barn 중앙과 다른 coop 특례), target_w 96→128. owner 승인.
 > **근거:** [ADR-0048](../adr/0048-homestead-demo-completion-pass-ui-screens-interiors.md) §5 **F**(게임플레이 스프라이트 = 스펙카드→owner Gemini)·[ADR-0025](../adr/0025-asset-spec-card-gate.md)(생성 전 스펙카드 게이트)·[ADR-0047](../adr/0047-gemini-full-asset-regen-supersede-adr0001-scope.md)(Gemini 1차 생성기)·[required-assets-roster.md](./required-assets-roster.md)(디프 소스)·[master-palette.md](./master-palette.md)(hex)·[asset-ruleset.md](./asset-ruleset.md)(NW광원·2px청크·피벗).
 >
 > **범위 = 데모 신규분만.** [gemini-regen-batch.md](./gemini-regen-batch.md)는 *기존 96개 재생성* 배치다. 이 문서는 그 배치에 **없는**, 안식 농원 데모를 시각적으로 완성하려면 새로 그려야 하는 스프라이트만 다룬다(로스터에서 maker=`gemini`·status=`missing`/`placeholder`인 항목). STYLE 토큰·팔레트·프레이밍은 gemini-regen-batch §1을 **계승**하며 아래 §0에 재기재해 프롬프트를 자체 완결로 만든다.
@@ -168,23 +169,24 @@ centered on a transparent background, no shadow, clean readable inventory icon s
 > **파이프라인 계승:** [gemini-building-prompt.md](./gemini-building-prompt.md) §6.0 공통 골격 + `gemini_facade_to_chunky.py`. 넋우릿간(`barn_ext`, 4×3칸·대형)과 **구분되는 소형**.
 > **코드 상태:** `coop_ext` rect/door 상수 전무. barn 패턴(`main.gd`: `BARN_EXT_RECT`/`BARN_EXT_DOOR`/`_draw_facade_barn`) 복제로 신설(E 담당). 앵커 = **bottom-center**(문 트리거 정렬), target_w=footprint폭×32, 48색.
 
-### 3.1 footprint·문 (확정, §7-4)
-| 건물 | footprint | 문 폭 | target_w | 근거 |
+### 3.1 footprint·문 (확정, §7-4 — owner 2026-07-03 개정)
+| 건물 | footprint | 문 폭·위치 | target_w | 근거 |
 |---|---|---|---|---|
-| `barn_ext`(기존/대형) | 4×3 | 2칸 | 128 | 안개소·대형 |
-| **`coop_ext`(신규/소형)** | **3×2** | **2칸(중앙 straddle)** | **96** | 노을닭·소형, barn보다 작게 |
+| `barn_ext`(기존/대형) | 4×3 | 2칸·중앙 straddle | 128 | 안개소·대형 |
+| **`coop_ext`(신규/소형)** | **4×2** | **2칸·우측(스타듀식)** | **128** | 노을닭·소형, barn보다 세로만 작음 |
 
-> 문 폭 규약([ADR-0046]): 짝수폭 footprint → 2칸 문. coop = **3×2·중앙 2칸 straddle 문 확정**(barn과 문 규약 통일).
+> **owner 2026-07-03 개정(스타듀 Coop 대조):** ①footprint 3×2→**4×2**(폭 홀수→짝수 = 중앙 2칸 문 반칸 치우침 해소, 가로 2:1 = 스타듀 Coop 6×3 비율·닭장다운 가로형 오두막). ②문 위치 = **우측**(스타듀 Coop "우측에서 2번째 타일" 채택 — barn 중앙과 다른 coop 특례). ⇒ 4칸 폭 중 **우측 2칸을 문으로**(맨 좌측 벽 2칸 + 우측 문 2칸). target_w 96→128(폭 4×32).
+> 문 폭 규약([ADR-0046]): 짝수폭 footprint → 2칸 문. **coop만 문을 우측 배치**(barn=중앙 straddle과 갈림) — 배선 시 door rect를 우측에서 계산.
 
 ### 3.2 프롬프트 (§6.0 골격의 `[[BUILDING]]`/`[[DOOR]]`/`[[PALETTE_ACCENT]]` 치환)
 - `[[BUILDING]]` = `a small cozy afterlife chicken coop, a low single-story timber hut with a gently pitched gable roof, a small round coop window, a low fenced run hint, and a little perch under the eaves; clearly smaller and humbler than a big barn`
-- `[[DOOR]]` = `a modest wooden coop door (~2 tiles wide, low)`
+- `[[DOOR]]` = `a modest wooden coop door (~2 tiles wide, low), positioned toward the RIGHT side of the front wall (offset right, not centered — Stardew coop style)`
 - `[[PALETTE_ACCENT]]` = `warm honey-brown timber walls with a warm-toned roof, straw-yellow accents at the eaves, and a tiny warm sunset-orange glow at the coop window echoing the 노을닭 (sunset hen) it houses. Keep it warm and cozy, small-scale.`
 - **emit(선반영, 코드 미사용):** 창 앰버 = `coop_ext_emit.png`(§6.3 파이프라인 동일 크기 통과). Phase 3+ 야간 조명 도입 시 자동 활용.
 
 ### 3.3 후처리
 ```
-python3 game/tools/gemini_facade_to_chunky.py <src> game/assets/buildings/coop_ext.png 96 48
+python3 game/tools/gemini_facade_to_chunky.py <src> game/assets/buildings/coop_ext.png 128 48
 ```
 > 앵커 팁: 확정된 `barn_ext.png`를 참조로 첨부해 "same art style/grain/palette, but smaller and humbler". 육안 = `home_full_dump`/`village_dump`.
 
@@ -272,7 +274,7 @@ python3 game/tools/gemini_facade_to_chunky.py <src> game/assets/buildings/coop_e
 1. **가축 경로 ✅** — 스프라이트 = 신규 **`assets/livestock/`**(의미 분리·`crop_icons` 오염 회피). 산물 아이콘(`honbaek_ran`/`honbaek_yu`)은 인벤 dict 재사용 편의상 **`assets/crops/`** 유지.
 2. **가축 캔버스 크기 ✅** — 닭 32×32 · 안개소 새끼 48×48 · 안개소 성체 64×48. baby:adult 콘텐츠 = 0.6배.
 3. **과수 혼백도 단계 수 ✅** — **3단계**(sapling→growing→fruiting). `_draw_orchard`에 growing/fruiting 렌더 훅 신설(E/S1-10). 캔버스 **96×160**(owner 2026-07-03 개정, 스타듀 3×5 존재감 — 기존 96×128에서 상향). **접지 그림자는 스프라이트에 구움**(§0.2 전역 규약 유일 예외) → `_draw_orchard`는 별도 코드 접지 그림자 미렌더.
-4. **coop_ext footprint ✅** — **3×2 · 중앙 2칸 문 · target_w=96**.
+4. **coop_ext footprint ✅** — **4×2 · 우측 2칸 문(스타듀식) · target_w=128** (owner 2026-07-03 개정, 스타듀 Coop 대조 — 기존 3×2·중앙·96에서: 폭 홀수→짝수로 문 정합, 문 우측 배치는 barn 중앙과 다른 coop 특례).
 5. **home_deco 세트당 장수 ✅** — **세트당 3장**(floor 타일·wall 타일·furniture 대표 1장). 코드 8아이템은 furniture 시트 매핑/후속 확장.
 6. **가축 방향 ✅** — **단일 정면 idle 1장**(4방향·걷기·목축 이동 애니는 후속 서랍).
 
