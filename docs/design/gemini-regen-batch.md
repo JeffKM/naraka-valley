@@ -188,9 +188,9 @@ CHARACTER: a gender-neutral young afterlife farmer, deliberately plain and unrem
 
 **타일 STYLE 접두:** `[STYLE] a seamless tileable top-down [terrain] texture, flat, edge-to-edge, no border.`
 
-### 4.0 16px 베이스 룩 실험 (판정 대기 — 2026-07-04 grill)
+### 4.0 16px 베이스 룩 실험 (★GO — 2026-07-04, [ADR-0049](../adr/0049-environment-16px-logical-stardew-grain-supersede-0013.md))
 
-> **목표:** "16px 논리 해상도 + 무외곽선·소프트 베이스"가 현행 32-native보다 인게임에서 나은지 **눈으로 판정**. GO면 전 라이브러리 16px 재생성 착수(ADR-0013 supersede), NO-GO면 32-native 유지 + Q1 소프트 베이스만 32px에 적용.
+> **판정 결과 = GO.** owner가 실물 렌더(필드 128·grass_a·무외곽선 소프트)를 스타듀 레퍼런스와 비교 → 16px 청키 그레인이 32-native보다 스타듀답다고 확정. → **환경/전 아트 16px 논리 전환(ADR-0049, ADR-0013 supersede)**. 전 라이브러리 16px 재생성 프로그램 개시(①지형→②캐릭터·프롭·건물).
 >
 > **왜 실험부터:** 16px 전환은 타일뿐 아니라 **캐릭터(480×320→240×160)·건물·나무·바위 전부**를 절반 밀도로 재생성해야 픽셀 그레인이 안 섞임(되돌리기 매우 비쌈). 값싼 base 텍스처 몇 장으로 선판단.
 

@@ -12,7 +12,7 @@
 
 | 항목 | 값 | 출처 |
 |---|---|---|
-| **타일 크기** | **32×32 native, 1:1 렌더**(×2 업스케일 금지) | ADR-0013 (ADR-0012의 16px×2를 환경 한정 개정) |
+| **타일 크기** | **16×16 논리 native, 정수 4× 렌더**(온스크린 64px) | **★[ADR-0049](../adr/0049-environment-16px-logical-stardew-grain-supersede-0013.md)**(2026-07-04 16px 실험 GO) — ADR-0013 32-native를 supersede. 스타듀 청키 그레인·전 자산 16 밀도 통일. 지형 = Gemini 필드→`gemini_grass_to_field.py` 128 다운스케일 |
 | **아트 룩** | 스타듀밸리식 톤 + 저승 저채도 팔레트 + **거친 레트로 도트**(포켓몬 루비/사파이어·스타듀) | ADR-0026 → ADR-0035 개정 |
 | **outline** | `single color outline` (~~`lineless`~~) | **★ADR-0035 개정** — owner 다회 피드백: lineless/매끄러운 RPG메이커 그라데이션 폐기, 단색 외곽선 + 거친 도트 |
 | **detail** | **`medium detail`** (~~low~~) | **★ADR-0043 재개정**(지형 한정) — owner가 스타듀 레퍼런스로 lush 요구. 풀이 꽉 차게. |
@@ -25,7 +25,7 @@
 
 **기존 지형 4종:** 풀(grass) · 흙길(dirt path) · 밭흙(tilled soil) · 물(water).
 
-> ⚠️ **stale 주의:** `p2.0-spike-prompts.md` §3·§4·§11은 아직 `tile_size=16×16`·`TILE_ART=16`으로 적혀 있다(ADR-0012 시절 잔재). **ADR-0013이 환경 아트를 32px native로 뒤집었고 실제 자산 메타데이터도 32×32다** — 타일 크기는 이 문서(32px)가 진실. 팔레트 §4.2만 스파이크 문서를 참조.
+> ⚠️ **해상도 히스토리:** ADR-0012(16px×2) → ADR-0013(32 native) → **[ADR-0049](../adr/0049-environment-16px-logical-stardew-grain-supersede-0013.md)(16px 논리·4× 렌더, 2026-07-04 GO)**로 다시 16 논리로. 현행 32-native 자산·`.tres`(`combined_terrain_homestead` 등)는 **16px 재생성 프로그램의 대상**(ADR-0049 downstream). 팔레트 §4.2는 유효.
 
 ## 2. 파이프라인 (확정 절차)
 
