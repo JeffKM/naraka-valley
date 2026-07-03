@@ -3,6 +3,7 @@
 > **상태:** 스펙 확정(2026-07-02, owner §7 전항목 승인) — Gemini 생성 대기([ADR-0025] 게이트). 렌더 훅(E·S1-11·S1-15·S1-10)은 §7 계약을 타겟.
 > **개정(2026-07-03):** 스타듀 나무 스펙 대조로 과수 혼백도(§2.3·§7-3) 2건 조정 — 캔버스 세로 4칸→5칸(96×128→**96×160**), 접지 그림자 **스프라이트에 구움**(§0.2 전역 예외). owner 승인.
 > **개정(2026-07-03b):** 스타듀 Coop 대조로 넋둥우리 `coop_ext`(§3·§7-4) 2건 조정 — footprint 3×2→**4×2**(폭 홀수→짝수, 문 반칸 치우침 해소), 문 **우측 배치**(스타듀식, barn 중앙과 다른 coop 특례), target_w 96→128. owner 승인.
+> **개정(2026-07-03c):** 스타듀 Barn 대조로 넋우릿간 `barn_ext`(§3.1) 확대 — footprint 4×3→**5×4**(coop 4×2와 폭이 같아진 대형 위계 회복, 스타듀 Barn 7×4 근접), target_w 128→160. **barn 아트 재생성 + 코드 rect(E) 필요.** owner 승인.
 > **근거:** [ADR-0048](../adr/0048-homestead-demo-completion-pass-ui-screens-interiors.md) §5 **F**(게임플레이 스프라이트 = 스펙카드→owner Gemini)·[ADR-0025](../adr/0025-asset-spec-card-gate.md)(생성 전 스펙카드 게이트)·[ADR-0047](../adr/0047-gemini-full-asset-regen-supersede-adr0001-scope.md)(Gemini 1차 생성기)·[required-assets-roster.md](./required-assets-roster.md)(디프 소스)·[master-palette.md](./master-palette.md)(hex)·[asset-ruleset.md](./asset-ruleset.md)(NW광원·2px청크·피벗).
 >
 > **범위 = 데모 신규분만.** [gemini-regen-batch.md](./gemini-regen-batch.md)는 *기존 96개 재생성* 배치다. 이 문서는 그 배치에 **없는**, 안식 농원 데모를 시각적으로 완성하려면 새로 그려야 하는 스프라이트만 다룬다(로스터에서 maker=`gemini`·status=`missing`/`placeholder`인 항목). STYLE 토큰·팔레트·프레이밍은 gemini-regen-batch §1을 **계승**하며 아래 §0에 재기재해 프롬프트를 자체 완결로 만든다.
@@ -166,17 +167,18 @@ centered on a transparent background, no shadow, clean readable inventory icon s
 
 ## 3. 건물 외관 — coop_ext (넋둥우리, 소형 닭장)
 
-> **파이프라인 계승:** [gemini-building-prompt.md](./gemini-building-prompt.md) §6.0 공통 골격 + `gemini_facade_to_chunky.py`. 넋우릿간(`barn_ext`, 4×3칸·대형)과 **구분되는 소형**.
+> **파이프라인 계승:** [gemini-building-prompt.md](./gemini-building-prompt.md) §6.0 공통 골격 + `gemini_facade_to_chunky.py`. 넋우릿간(`barn_ext`, 5×4칸·대형 — §3.1 개정)과 **구분되는 소형**.
 > **코드 상태:** `coop_ext` rect/door 상수 전무. barn 패턴(`main.gd`: `BARN_EXT_RECT`/`BARN_EXT_DOOR`/`_draw_facade_barn`) 복제로 신설(E 담당). 앵커 = **bottom-center**(문 트리거 정렬), target_w=footprint폭×32, 48색.
 
 ### 3.1 footprint·문 (확정, §7-4 — owner 2026-07-03 개정)
 | 건물 | footprint | 문 폭·위치 | target_w | 근거 |
 |---|---|---|---|---|
-| `barn_ext`(기존/대형) | 4×3 | 2칸·중앙 straddle | 128 | 안개소·대형 |
-| **`coop_ext`(신규/소형)** | **4×2** | **2칸·우측(스타듀식)** | **128** | 노을닭·소형, barn보다 세로만 작음 |
+| **`barn_ext`(대형·★재생성)** | **5×4** | **2칸·중앙 straddle** | **160** | 안개소·대형, coop과 위계 확보(스타듀 Barn 7×4) |
+| **`coop_ext`(신규/소형)** | **4×2** | **2칸·우측(스타듀식)** | **128** | 노을닭·소형, barn보다 작음 |
 
 > **owner 2026-07-03 개정(스타듀 Coop 대조):** ①footprint 3×2→**4×2**(폭 홀수→짝수 = 중앙 2칸 문 반칸 치우침 해소, 가로 2:1 = 스타듀 Coop 6×3 비율·닭장다운 가로형 오두막). ②문 위치 = **우측**(스타듀 Coop "우측에서 2번째 타일" 채택 — barn 중앙과 다른 coop 특례). ⇒ 4칸 폭 중 **우측 2칸을 문으로**(맨 좌측 벽 2칸 + 우측 문 2칸). target_w 96→128(폭 4×32).
 > 문 폭 규약([ADR-0046]): 짝수폭 footprint → 2칸 문. **coop만 문을 우측 배치**(barn=중앙 straddle과 갈림) — 배선 시 door rect를 우측에서 계산.
+> **owner 2026-07-03c 개정(스타듀 Barn 대조):** 넋우릿간 `barn_ext` footprint 4×3→**5×4**(coop 4×2로 키운 뒤 barn과 폭이 같아져 대형 위계가 약해짐 → 폭+1·세로+1로 Barn>Coop 재현, 스타듀 Barn 7×4 근접). target_w 128→160. **⇒ barn 아트 재생성 필요**(현 `barn_ext.png`는 4×3 기준). 문은 중앙 straddle 유지(스타듀 Barn "정중앙"과 일치). **코드 배선(E): `NEOKURITGAN_EXT_RECT` 4×3→5×4 + 남단 고지 맵 재배치(좌우 여유 확인).**
 
 ### 3.2 프롬프트 (§6.0 골격의 `[[BUILDING]]`/`[[DOOR]]`/`[[PALETTE_ACCENT]]` 치환)
 - `[[BUILDING]]` = `a small cozy afterlife chicken coop, a low single-story timber hut with a gently pitched gable roof, a small round coop window, a low fenced run hint, and a little perch under the eaves; clearly smaller and humbler than a big barn`
