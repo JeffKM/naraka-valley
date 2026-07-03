@@ -5698,8 +5698,19 @@ func _draw_forage() -> void:
 		var grown: bool = forage.is_grown(tile)
 		var tex: Texture2D = grown_tex if grown else cut_tex
 		if tex != null:
+			# ★ 사료풀 = 타일 꽉 채우는 fill 스프라이트(빽빽한 건초밭 — 이웃 타일과 이어짐). 오프셋 흔들기는
+			#   fill 타일에 이음새(gap)를 만들므로 좌우반전만으로 변형(6×3 블록이 균일 반복으로 안 읽히게).
+			#   타일 해시 결정적 → 매 프레임 동일(깜빡임 없음)·세이브 무관.
 			var sz := tex.get_size()
-			draw_texture(tex, px + Vector2((TILE - sz.x) * 0.5, TILE - sz.y))   # 발치(bottom-center)를 타일 바닥에
+			var hsh: int = absi((int(tile.x) * 73856093) ^ (int(tile.y) * 19349663))
+			var bx := px.x + (TILE - sz.x) * 0.5
+			var by := px.y + TILE - sz.y              # 발치(bottom-center)를 타일 바닥에
+			if (hsh & 1) == 1:                        # 좌우 반전(이음새 없이 변형)
+				draw_set_transform(Vector2(bx + sz.x, by), 0.0, Vector2(-1, 1))
+				draw_texture(tex, Vector2.ZERO)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)   # 변환 원복(뒤 draw 영향 방지)
+			else:
+				draw_texture(tex, Vector2(bx, by))
 			continue
 		if grown:
 			# 다 자람 = 세 갈래 풀포기(초록, 위로 뻗음).
