@@ -1050,6 +1050,7 @@ var vitals: VitalsHud
 var clock_hud: ClockHud             # ★ Phase C 우상단 시계 클러스터(절기·일차·시각·때·골드·마일스톤)
 var context_popup: ContextPopup     # ★ Phase C 좌하단 컨텍스트 팝업(근처 NPC 초상화 + 한 줄)
 var hud_tooltip: HudTooltip         # ★ Phase C 마우스 호버 툴팁(핫바 슬롯 아이템명)
+var onboarding_banner: OnboardingBanner  # ★ owner 2026-07-03 상단-중앙 온보딩 안내 팝업 배너
 # ★ 실내 카메라 격리 마스크(코지-와이드 회귀 수정) — 실내일 때 방 바깥을 검정으로 가린다.
 # 월드보다 위·다른 HUD/패널보다 아래 레이어(맨 앞 자식)에 깔아 외부 풀밭·이웃 방을 덮되 HUD·대화는
 # 그 위에 보이게 한다.
@@ -3401,6 +3402,11 @@ func _setup_hud_overlays() -> void:
 	hud_tooltip.name = "HudTooltip"
 	$CanvasLayer.add_child(hud_tooltip)
 	hud_tooltip.setup(hotbar, inventory)
+	# ★ owner 2026-07-03 — 상단-중앙 온보딩 안내 배너(옛 좌하단 wide notice 대체 · 잠깐 떴다 페이드).
+	onboarding_banner = OnboardingBanner.new()
+	onboarding_banner.name = "OnboardingBanner"
+	$CanvasLayer.add_child(onboarding_banner)
+	onboarding_banner.setup()
 	# 실내 마스크는 *맨 앞 자식*(index 0)으로 — 월드 위에 깔리되 씬 패널(대화·페이드)·HUD보다 아래라
 	# 방 바깥만 검게 가리고 그 위로 대화·HUD·페이드가 정상 표시된다.
 	indoor_mask = IndoorMask.new()
@@ -4037,6 +4043,8 @@ func _process(delta: float) -> void:
 	# 패널 본문은 dialogue.changed 시그널로 갱신되므로 여기선 입력만 본다.
 	if dialogue.is_open():
 		onboarding_label.visible = false  # T4.1 대화가 화면을 채우는 동안 배너 숨김
+		if onboarding_banner != null:
+			onboarding_banner.hide_now()  # 대화가 화면을 채우면 상단 안내 배너도 즉시 숨김
 		if Input.is_action_just_pressed("action"):
 			dialogue.advance()
 		return
@@ -4371,13 +4379,14 @@ func _process(delta: float) -> void:
 		_milestone_celebrated = true
 		_show_milestone_reached()
 	# T4.1 온보딩 안내: 상시 중앙 배너가 "계속 떠서 불편"(피드백 2026-06-25) → 단계가 *바뀔 때만*
-	# 좌하단 알림으로 잠깐 띄운다(notice_feed, 스타듀식). 매 프레임 guidance()를 보되 직전과 다를 때만
-	# push(=단계 전환 1회). 배너 노드는 끈 채 유지(참조·회귀 안전). 모달 중엔 위 early-return이라 비교 보존.
+	# 잠깐 띄운다. ★owner 2026-07-03 3차 HUD 가이드 — 좌하단 wide notice(화면 폭 날것 띠)를 폐기하고
+	# 전용 상단-중앙 팝업 배너(한지 플레이트·외곽선·페이드)로 교체. 매 프레임 guidance()를 보되 직전과
+	# 다를 때만 show_guide(=단계 전환 1회). 모달 중엔 위 early-return이라 비교 보존.
 	var guide := onboarding.guidance()
 	if guide != _last_onboarding_guide:
 		_last_onboarding_guide = guide
-		if guide != "":
-			_notice(guide, 7.0, true)   # wide=긴 안내 안 잘리게, 7초 후 부드럽게 사라짐
+		if guide != "" and onboarding_banner != null:
+			onboarding_banner.show_guide(guide)   # 상단 중앙 배너, HOLD 후 부드럽게 페이드아웃
 	onboarding_label.visible = false
 	# ★ C2 — 옛 ShopPanel(멜 출하대·네오 매대 텍스트)은 폐기됐다. 매대·출하함은 공통 프레임이
 	# 그리므로 ShopPanel 노드는 상시 숨긴다(tscn 노드는 남되 미사용 — 회귀 0, frame이 대체).
