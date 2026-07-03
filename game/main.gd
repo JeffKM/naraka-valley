@@ -6030,17 +6030,36 @@ func _draw_feed_trough(room: Rect2i, fill: float) -> void:
 	var w := float((room.size.x - 4) * TILE)
 	var y := float((room.position.y + 2) * TILE) + TILE * 0.4
 	var h := TILE * 0.5
-	draw_rect(Rect2(x0 - 2, y - 2, w + 4, h + 4), Color(0.18, 0.13, 0.08))   # 외곽선(어두운 나무)
-	draw_rect(Rect2(x0, y, w, h), Color(0.34, 0.24, 0.15))                   # 여물통 본체
-	draw_rect(Rect2(x0, y, w, 3), Color(0.46, 0.33, 0.2))                    # 위 테두리 밝은 띠
+	# ★ 아트 훅: assets/props/feed_trough.png(32×16 세그먼트) 있으면 방 폭에 가로 타일링, 없으면 그레이박스.
+	#   건초는 어느 쪽이든 동적 오버레이(여물광 재고 비율 → 아트 여물칸 안쪽에 담김).
+	var tex := _prop_tex("feed_trough")
+	if tex != null:
+		draw_texture_rect(tex, Rect2(x0, y, w, h), true)                     # 가로 반복(tile=true)
+	else:
+		draw_rect(Rect2(x0 - 2, y - 2, w + 4, h + 4), Color(0.18, 0.13, 0.08))   # 외곽선(어두운 나무)
+		draw_rect(Rect2(x0, y, w, h), Color(0.34, 0.24, 0.15))                   # 여물통 본체
+		draw_rect(Rect2(x0, y, w, 3), Color(0.46, 0.33, 0.2))                    # 위 테두리 밝은 띠
 	var hay_w := w * clampf(fill, 0.0, 1.0)                                  # 담긴 건초 = 여물광 재고 비율
 	if hay_w > 1.0:
-		draw_rect(Rect2(x0, y + 3, hay_w, h - 4), Color(0.82, 0.7, 0.3))     # 건초(따뜻한 노랑)
+		draw_rect(Rect2(x0, y + 3, hay_w, h - 4), Color(0.82, 0.7, 0.3))     # 건초(따뜻한 노랑 — 아트 여물칸 위)
 
 # 갈무리방(창고) 실내 보관 크레이트 — 동벽 flush로 나무 상자 몇 개(빈 창고를 "보관 공간"으로 읽히게). 비충돌 시각.
 func _draw_storehouse_crates(room: Rect2i) -> void:
 	var ex := float((room.end.x - 2) * TILE)   # 동벽 안쪽 한 칸
+	# ★ 아트 훅: assets/props/storehouse_crate.png(32²) 있으면 3단 적층 크레이트로 렌더(칸당 1장·교대 반전
+	#   으로 반복감 완화), 없으면 그레이박스. bottom-center는 칸 그리드 정렬(스택이 위로 쌓임).
+	var tex := _prop_tex("storehouse_crate")
 	for i in 3:                                # 3단 적층 크레이트
+		if tex != null:
+			var sz := tex.get_size()
+			var cy := float((room.position.y + 2 + i) * TILE) + (TILE - sz.y)   # 칸 바닥 정렬
+			if i % 2 == 1:                     # 교대 좌우반전(3장 반복감 완화)
+				draw_set_transform(Vector2(ex + sz.x, cy), 0.0, Vector2(-1, 1))
+				draw_texture(tex, Vector2.ZERO)
+				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			else:
+				draw_texture(tex, Vector2(ex, cy))
+			continue
 		var y := float((room.position.y + 2 + i) * TILE) + TILE * 0.15
 		var s := TILE * 0.7
 		draw_rect(Rect2(ex, y, s, s).grow(1.0), Color(0.18, 0.13, 0.08))     # 외곽선
