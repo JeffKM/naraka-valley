@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dtvvox8y6vptn"
-path="res://.godot/imported/cliff_out_sw.png-b6c006acef7956ce3e064e469dc94791.ctex"
+uid="uid://btl4u3irtf46o"
+path="res://.godot/imported/cliff_corner_se.png-484520871db7373f62310d59324a9a4f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/tiles/cliff_out_sw.png"
-dest_files=["res://.godot/imported/cliff_out_sw.png-b6c006acef7956ce3e064e469dc94791.ctex"]
+source_file="res://assets/tiles/cliff_corner_se.png"
+dest_files=["res://.godot/imported/cliff_corner_se.png-484520871db7373f62310d59324a9a4f.ctex"]
 
 [params]
 

@@ -1,18 +1,17 @@
 extends SceneTree
 
-# ★ [S1-2 / ADR-0044 §1] pseudo-Z 다단 절벽 원시어휘 격리 검증(ephemeral 헤드리스).
+# ★ [S1-2 / ADR-0044 §1 → 단계3 남향-only] pseudo-Z 절벽 격리 검증(ephemeral 헤드리스).
 #
-# 무엇을 보나(S1-2 = 어휘·문법·격리 검증만 — 실배치 §5는 S1-3):
+# 무엇을 보나(단계3 남향-only 피벗 후 — 옛 동향밴드·90°코너스텝 케이스는 ⑥ 정리로 폐기):
 #   ① 남향 밴드 = Lip행 / Face행 / Face_Base행 타일종 패턴.
 #   ② 타일종별 통과성(정준 is_solid) — CLIFF_LIP 걷기 O / CLIFF_FACE·CLIFF_FACE_BASE SOLID.
-#   ③ 동향 밴드 = Lip열 / Face 2열(base 없음 — "높이의 가로 치환").
-#   ④ 계단 노치 = 밴드 단면 종단이 walkable로 열림(옆 밴드는 여전히 SOLID).
-#   ⑤ 코너 스텝 = 청키 블록 edge-to-edge(내부 FACE·상단 LIP 캡).
-#   ⑥ 8이웃(대각 포함) BFS leak = 2행 밴드가 고지↔저지를 차단(대각 squeeze 0), 노치로만 연결.
+#   ③ 계단 노치 = 밴드 단면 종단이 walkable로 열림(옆 밴드는 여전히 SOLID).
+#   ④ 8이웃(대각 포함) BFS leak = 2행 밴드가 고지↔저지를 차단(대각 squeeze 0), 노치로만 연결.
+#   ⑤ [단계3] 남향-only 오토타일러 = 사각 마스크 → 남쪽만 Lip/Face/Base, 동/서/북=잔디 능선.
+#   ⑥ [단계3-④] 곡선 코너 = 벽 서/동 바깥 끝 = CORNER_SW/SE × Face/Base(전부 SOLID), 중간 벽 직선.
 #
-# 라이브 home맵은 건드리지 않는다(스크래치 rect만 덮어쓴다 — 회귀 0). 옛 _build_cliffs(1타일) 유지.
-# 물리 corner-squeeze(CharacterBody2D 대각 틈) 최종확인은 S1-3 bot/map_dump 육안(격자 BFS는 물리 틈 못 잡음).
-# 좀비 방지: 모든 단언 뒤 quit(). run_tests.sh 워치독과 함께.
+# 라이브 home맵은 건드리지 않는다(스크래치 rect만 덮어쓴다 — 회귀 0). 라이브는 _autotile_south_cliffs가 남향
+# 벽을 굽고, _lay_south_band는 이 격리 검증 전용 원시어휘다. 좀비 방지: quit(). run_tests.sh 워치독과 함께.
 
 var _fail := 0
 
@@ -67,56 +66,49 @@ func _initialize() -> void:
 	_check("② CLIFF_FACE SOLID", m.is_solid(m.CLIFF_FACE))
 	_check("② CLIFF_FACE_BASE SOLID", m.is_solid(m.CLIFF_FACE_BASE))
 
-	# ── ③ 동향 밴드: Lip열 / Face 2열(base 없음) ──
-	m._fill_rect(scratch, m.GROUND)
-	var ex := 52
-	m._lay_east_band(ex, 44, 52)
-	_check("③ 동향 Lip열 = CLIFF_LIP", m._grid[48][ex] == m.CLIFF_LIP)
-	_check("③ 동향 Face 1열 = CLIFF_FACE", m._grid[48][ex + 1] == m.CLIFF_FACE)
-	_check("③ 동향 Face 2열 = CLIFF_FACE (base 없음)", m._grid[48][ex + 2] == m.CLIFF_FACE)
-	_check("③ 동향 Lip 걷기 O·Face 2열 SOLID", (not m.is_solid(m._grid[48][ex])) \
-		and m.is_solid(m._grid[48][ex + 1]) and m.is_solid(m._grid[48][ex + 2]))
-
-	# ── ④ 계단 노치: 밴드 단면 종단 → walkable(옆 밴드는 SOLID 유지) ──
+	# ── ③ 계단 노치: 밴드 단면 종단 → walkable(옆 밴드는 SOLID 유지) ──
 	m._fill_rect(scratch, m.GROUND)
 	var ny := 45
 	m._lay_south_band(50, 62, ny)
 	m._carve_stair_notch(Rect2i(55, ny, 2, 3))   # 2열 종단(Lip/Face/Base 3행 깊이)
-	_check("④ 노치 Lip행 walkable", not m.is_solid(m._grid[ny][55]))
-	_check("④ 노치 Face행 walkable", not m.is_solid(m._grid[ny + 1][55]))
-	_check("④ 노치 Base행 walkable", not m.is_solid(m._grid[ny + 2][55]))
-	_check("④ 노치 옆 Face 여전히 SOLID", m.is_solid(m._grid[ny + 1][60]))
+	_check("③ 노치 Lip행 walkable", not m.is_solid(m._grid[ny][55]))
+	_check("③ 노치 Face행 walkable", not m.is_solid(m._grid[ny + 1][55]))
+	_check("③ 노치 Base행 walkable", not m.is_solid(m._grid[ny + 2][55]))
+	_check("③ 노치 옆 Face 여전히 SOLID", m.is_solid(m._grid[ny + 1][60]))
 
-	# ── ⑤ 코너 스텝: 청키 블록 edge-to-edge(내부 FACE·상단 LIP 캡) ──
-	m._fill_rect(scratch, m.GROUND)
-	m._lay_corner_step(Rect2i(50, 42, 3, 3))   # x50..52, y42..44
-	_check("⑤ 코너 상단행 = LIP 캡", m._grid[42][51] == m.CLIFF_LIP)
-	_check("⑤ 코너 내부 = FACE(edge-to-edge)", m._grid[43][51] == m.CLIFF_FACE and m._grid[44][52] == m.CLIFF_FACE)
-
-	# ── ⑥ 8이웃 BFS leak: 2행 밴드가 고지↔저지 차단(대각 squeeze 0), 노치로만 연결 ──
+	# ── ④ 8이웃 BFS leak: 2행 밴드가 고지↔저지 차단(대각 squeeze 0), 노치로만 연결 ──
 	m._fill_rect(scratch, m.GROUND)
 	var br := 48
 	m._lay_south_band(48, 67, br)   # 스크래치 전폭(x48..67) 종단 → 고지(y40..47)↔저지(y51..59) 분리
 	var plateau := Vector2i(58, 44)
 	var lowland := Vector2i(58, 55)
 	var blocked := _reach8(m, lowland, scratch)
-	_check("⑥ 무노치: 2행 밴드가 고지↔저지 차단(대각 leak 0)", not blocked.has(plateau))
+	_check("④ 무노치: 2행 밴드가 고지↔저지 차단(대각 leak 0)", not blocked.has(plateau))
 	m._carve_stair_notch(Rect2i(57, br, 2, 3))
 	var opened := _reach8(m, lowland, scratch)
-	_check("⑥ 노치 뚫음: 고지↔저지 연결(노치 경유)", opened.has(plateau))
+	_check("④ 노치 뚫음: 고지↔저지 연결(노치 경유)", opened.has(plateau))
 
-	# ── ⑦ [단계3 남향-only] 오토타일러: 사각 고지 마스크 → 남쪽만 Lip/Face/Base 바위벽, 동/서/북=잔디 유지 ──
-	# owner Gemini 가이드(선택지 B) 문법을 임의 불리언 마스크에서 검증(스타듀: 남향만 벽, 나머지=능선).
+	# ── ⑤ [단계3 남향-only] 오토타일러: 사각 고지 마스크 → 남쪽만 Lip/Face/Base 바위벽, 동/서/북=잔디 유지 ──
 	m._fill_rect(scratch, m.GROUND)
 	var hi := Rect2i(52, 43, 8, 6)   # 고지 x52..59, y43..48 (scratch 안)
 	m._autotile_south_cliffs(func(c: Vector2i) -> bool: return hi.has_point(c))
-	_check("⑦ 남단 Lip(걷기 O)", m._grid[48][55] == m.CLIFF_LIP and not m.is_solid(m.CLIFF_LIP))
-	_check("⑦ 남단+1 Face(SOLID)", m._grid[49][55] == m.CLIFF_FACE and m.is_solid(m.CLIFF_FACE))
-	_check("⑦ 남단+2 Base(SOLID)", m._grid[50][55] == m.CLIFF_FACE_BASE and m.is_solid(m.CLIFF_FACE_BASE))
-	_check("⑦ 고지 내부 = 풀(바위벽 아님)", m._grid[45][55] == m.GROUND)
-	_check("⑦ 동경계 = 풀 능선(바위벽 없음)", m._grid[45][59] == m.GROUND and m._grid[45][60] == m.GROUND)
-	_check("⑦ 북경계 = 풀 능선(바위벽 없음)", m._grid[42][55] == m.GROUND)
-	_check("⑦ 서경계 = 풀 능선(바위벽 없음)", m._grid[45][52] == m.GROUND and m._grid[45][51] == m.GROUND)
+	_check("⑤ 남단 Lip(걷기 O)", m._grid[48][55] == m.CLIFF_LIP and not m.is_solid(m.CLIFF_LIP))
+	_check("⑤ 남단+1 Face(SOLID)", m._grid[49][55] == m.CLIFF_FACE and m.is_solid(m.CLIFF_FACE))
+	_check("⑤ 남단+2 Base(SOLID)", m._grid[50][55] == m.CLIFF_FACE_BASE and m.is_solid(m.CLIFF_FACE_BASE))
+	_check("⑤ 고지 내부 = 풀(바위벽 아님)", m._grid[45][55] == m.GROUND)
+	_check("⑤ 동경계 = 풀 능선(바위벽 없음)", m._grid[45][59] == m.GROUND and m._grid[45][60] == m.GROUND)
+	_check("⑤ 북경계 = 풀 능선(바위벽 없음)", m._grid[42][55] == m.GROUND)
+	_check("⑤ 서경계 = 풀 능선(바위벽 없음)", m._grid[45][52] == m.GROUND and m._grid[45][51] == m.GROUND)
+
+	# ── ⑥ [단계3-④] 곡선 코너: 벽 서/동 바깥 끝 = 곡선 코너 타일(SW/SE × Face/Base), 전부 SOLID ──
+	# ⑤ 오토타일 결과(hi=x52..59) 재사용 — 서끝 x52·동끝 x59의 Face(y49)/Base(y50) 행.
+	_check("⑥ 서끝 Face = CORNER_SW", m._grid[49][52] == m.CLIFF_CORNER_SW)
+	_check("⑥ 서끝 Base = CORNER_SW_B", m._grid[50][52] == m.CLIFF_CORNER_SW_B)
+	_check("⑥ 동끝 Face = CORNER_SE", m._grid[49][59] == m.CLIFF_CORNER_SE)
+	_check("⑥ 동끝 Base = CORNER_SE_B", m._grid[50][59] == m.CLIFF_CORNER_SE_B)
+	_check("⑥ 곡선 코너 4종 전부 SOLID", m.is_solid(m.CLIFF_CORNER_SW) and m.is_solid(m.CLIFF_CORNER_SW_B) \
+		and m.is_solid(m.CLIFF_CORNER_SE) and m.is_solid(m.CLIFF_CORNER_SE_B))
+	_check("⑥ 중간 벽은 직선 유지(코너 아님)", m._grid[49][55] == m.CLIFF_FACE and m._grid[50][55] == m.CLIFF_FACE_BASE)
 
 	m.queue_free()
 	await process_frame

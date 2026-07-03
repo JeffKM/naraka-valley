@@ -94,7 +94,14 @@ const COOP_FLOOR := 18       # 넋둥우리 바닥(밝은 볏짚 깔개, 걷기 
 const COOP_WALL := 19        # 넋둥우리 벽(가로 밝은 널빤지, 통과 X)
 const STOREHOUSE_FLOOR := 20 # 갈무리방 바닥(돌 판석, 걷기 O)
 const STOREHOUSE_WALL := 21  # 갈무리방 벽(쌓은 돌켜, 통과 X)
-const N_TILES := 22
+# ★[단계3-④ / cliff-tileset-spec §10.2] 남향 절벽 벽 좌우 끝 곡선 대각 전이 코너. 옛 90° 각진 벽 끝을
+#   스타듀식 곡선으로 마감 — Face(위)+Base(아래) 두 타일의 1/4 코사인 곡선이 세로로 이어져 벽 밑끝이
+#   둥글게 잔디로 물러난다. 전부 SOLID(절벽 못 넘음). 아트=make_cliff_corners.py 절차 파생(§10.1 방침).
+const CLIFF_CORNER_SW := 22   # 남서 벽면 곡선(Face 톤, SOLID)
+const CLIFF_CORNER_SW_B := 23 # 남서 밑동 곡선(Base 톤, SOLID)
+const CLIFF_CORNER_SE := 24   # 남동 벽면 곡선(Face 톤, SOLID)
+const CLIFF_CORNER_SE_B := 25 # 남동 밑동 곡선(Base 톤, SOLID)
+const N_TILES := 26
 
 # ── P2.3 지형 도트: terrain TileSet + 실내/벽 도트 source ───────────────────
 # combined_terrain_homestead.tres = PixelLab Wang 4세트(풀↔길·길↔밭·밭↔풀·물↔풀)를 합친
@@ -121,7 +128,8 @@ const PATH_VARIANTS := 3
 # ★[ADR-0043 §6 후속] 건물 둘레 갈색 path 링 제거는 grass 직접 채우기(솔버 0)로 흡수됨 — RING_FIX 폐지.
 const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
 	CLIFF_FACE, CLIFF_LIP, CLIFF_FACE_BASE, CLIFF_BANK,
-	BARN_FLOOR, BARN_WALL, COOP_FLOOR, COOP_WALL, STOREHOUSE_FLOOR, STOREHOUSE_WALL]   # 아틀라스 가로 배치 순서(= atlas x)
+	BARN_FLOOR, BARN_WALL, COOP_FLOOR, COOP_WALL, STOREHOUSE_FLOOR, STOREHOUSE_WALL,
+	CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]   # 아틀라스 가로 배치 순서(= atlas x)
 # ★ [S1-2] 통과 불가 타일의 단일 진실원(SOLID). _build_tileset 충돌 루프 + is_solid()가 이걸 참조해
 #   충돌 정의 중복을 제거한다(옛 하드코딩 리스트 대체). 주의:
 #   · WATER는 terrain corner라 여기 없고 _has_water_corner로 따로 판정(회귀 보존).
@@ -129,7 +137,12 @@ const SOLID_TILES := [HOUSE, CAFE, WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
 #   · CLIFF_LIP은 아틀라스엔 있으나 걷기 O라 여기서 제외(충돌 없음). CLIFF_FACE_BASE는 신규 SOLID.
 const WORLD_SOLID_TILES := [WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
 	CLIFF_FACE, CLIFF_FACE_BASE, CLIFF_BANK,
-	BARN_WALL, COOP_WALL, STOREHOUSE_WALL]   # ★[ADR-0048] 실내 전용 벽 3종도 통과 X
+	BARN_WALL, COOP_WALL, STOREHOUSE_WALL,
+	CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]   # ★[ADR-0048] 실내 벽 3종 + [단계3-④] 곡선 코너 4종도 통과 X
+# ★[단계3-⑤ Front 립/오버행] 남향 절벽 벽면(캐릭터가 밑에 서면 상체를 가리는 front 오버행 대상). Lip은
+#   걷기 O·안 가림이라 제외, Bank는 물가라 제외. 벽면(Face/Base/곡선코너)만 캐릭터 위 레이어로 재렌더.
+const CLIFF_WALL_TILES := [CLIFF_FACE, CLIFF_FACE_BASE,
+	CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]
 # ★ T2 — WATER는 더 이상 SOLID가 아니다(terrain으로 승격). TREE/ROCK는 아직 SOLID 단색(도트는 후속 T7~T9).
 # ★ M4.1 — TREE도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 숲 무대의 밀집 나무.
 # ★ M5.1 — ROCK도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 갱도 무대의 바위 절벽·암반.
@@ -156,6 +169,11 @@ const SOLID_TEX := {
 	COOP_WALL: "res://assets/tiles/coop_wall.png",                # 넋둥우리 벽(가로 밝은 널빤지)
 	STOREHOUSE_FLOOR: "res://assets/tiles/storehouse_floor.png",  # 갈무리방 바닥(돌 판석)
 	STOREHOUSE_WALL: "res://assets/tiles/storehouse_wall.png",    # 갈무리방 벽(쌓은 돌켜)
+	# ★[단계3-④] 남향 절벽 곡선 코너(make_cliff_corners.py 절차 파생 — cliff_s_face/base + lip 풀 곡선 전이)
+	CLIFF_CORNER_SW: "res://assets/tiles/cliff_corner_sw.png",
+	CLIFF_CORNER_SW_B: "res://assets/tiles/cliff_corner_sw_b.png",
+	CLIFF_CORNER_SE: "res://assets/tiles/cliff_corner_se.png",
+	CLIFF_CORNER_SE_B: "res://assets/tiles/cliff_corner_se_b.png",
 }
 
 # ── T2.1/T2.3 밭 오버레이 타일(Field 레이어 아틀라스 인덱스) ───────────────
@@ -250,6 +268,11 @@ const COLORS := [
 	Color(0.59, 0.45, 0.29),  # COOP_WALL       — 밝은 널빤지 톤
 	Color(0.43, 0.41, 0.38),  # STOREHOUSE_FLOOR — 회색 판석 톤
 	Color(0.39, 0.37, 0.34),  # STOREHOUSE_WALL  — 돌켜 톤
+	# ★[단계3-④] 곡선 코너(전부 SOLID_TEX 있음 — 폴백 미사용, 인덱스 정렬용). Face=벽면 톤·B=밑동 톤.
+	Color(0.30, 0.27, 0.24),  # CLIFF_CORNER_SW
+	Color(0.19, 0.16, 0.14),  # CLIFF_CORNER_SW_B
+	Color(0.30, 0.27, 0.24),  # CLIFF_CORNER_SE
+	Color(0.19, 0.16, 0.14),  # CLIFF_CORNER_SE_B
 ]
 
 # ── 실내 가구·장식(create_map_object 산출, ADR-0013: 32px raw native 직접 사용) ────
@@ -328,6 +351,11 @@ const GD_DIRT := preload("res://assets/props/ground_dirt.png")         # 맨 흙
 const GD_GRAVEL := preload("res://assets/props/ground_gravel.png")     # 길 자갈 무리
 const GD_EMBED := preload("res://assets/props/ground_embed.png")       # 길 박힌 잔돌
 const GD_CRACK := preload("res://assets/props/ground_crack.png")       # 길 갈라짐·바퀴자국
+# ★[단계3-③ / owner Gemini 가이드 2차] 풀 클러스터 노이즈 레버 — 스타듀식 "민무늬 베이스 80~90% +
+#   특정 영역에만 풀 덩어리". _gd_cluster(x,y) < GD_CLUSTER_CUT인 넓은 영역은 풀 포기 없이 민무늬로 비운다.
+#   CUT↑ = 풀 영역 축소(여백↑). BLOCK = 덩어리 크기(칸). GROUND만 게이트(길은 자체 밀도).
+const GD_CLUSTER_CUT := 0.60     # 이 노이즈값 미만 = 민무늬 베이스(풀 포기 skip)
+const GD_CLUSTER_BLOCK := 5      # 저주파 블록 크기(클수록 큰 덩어리)
 # 지형 종류 → 디테일 테이블. 항목 = [텍스처(null=맨 타일), 가중치, SE그림자]. (§3.1 잔디 / §3.2 길)
 var _GD_TABLES := {
 	# ★ [ADR-0042] 증분2 — 큰 청키 클럼프(GD_GRASS3 덤불) 폐기 → 작은 *부드러운* tuft 위주.
@@ -447,10 +475,15 @@ const PROP_LAYOUT_HOME := [
 	# 하드 게이트 debris(노치 발치 — 통과 X SOLID로 게이트 물리 차단, 개간 온보딩). 64×64=2×2칸 풋프린트.
 	[PROP_DEBRIS_EMBER, [Vector2i(9, 28)]],     # 업화석(곡괭이) — 노치 입구(x9..10 y28..29)
 	[PROP_DEBRIS_STUMP, [Vector2i(9, 30)]],     # 석화 고목(도끼) — 접근로 하단(x9..10 y30..31)
-	# 동향 잔디 능선 수풀(x20 seam — 충돌바 위 시각 능선, 통과 판정은 _ridge_body 담당). 64×64 덤불을
-	#   y1~25 균등 배치해 능선이 남향 벽(y26)까지 자연스레 이어지게(SE 코너 시각 폐쇄).
-	[PROP_BUSH, [Vector2i(20, 1), Vector2i(20, 5), Vector2i(20, 9), Vector2i(20, 13),
-		Vector2i(20, 17), Vector2i(20, 21), Vector2i(20, 25)]],
+	# ★[단계3-③ 잔디 입체화] 동향 잔디 능선 수풀(x19~20 seam — 충돌바 위 시각 능선, 통과 판정은 _ridge_body).
+	#   옛 x20 4칸 간격(뚝뚝 끊긴 덤불)을 y1~25 *2칸 간격 지그재그*(x19↔20 교대)로 촘촘히 겹쳐 끊김 없는
+	#   산등성이로 — owner Gemini "수풀·낭떠러지로 막힌 자연 산등성이 능선". 남단(y25)이 남향 벽(y26)과
+	#   자연 연결(SE 코너 시각 폐쇄). bush=비-SOLID(통행은 _ridge_body seam이 담당 — 시각만 촘촘).
+	[PROP_BUSH, [
+		Vector2i(20, 1), Vector2i(19, 3), Vector2i(20, 5), Vector2i(19, 7),
+		Vector2i(20, 9), Vector2i(19, 11), Vector2i(20, 13), Vector2i(19, 15),
+		Vector2i(20, 17), Vector2i(19, 19), Vector2i(20, 21), Vector2i(19, 23),
+		Vector2i(20, 25)]],
 	# ── overgrown debris 밭(저지 — 통과 O 잡초 + 통과 X 업화석·석화 고목 산포, 동선·건물·패치·연못 비껴) ──
 	[PROP_DEBRIS_WEEDS, [Vector2i(50, 22), Vector2i(56, 38), Vector2i(35, 44), Vector2i(60, 52),
 		Vector2i(46, 24), Vector2i(30, 54), Vector2i(58, 20), Vector2i(52, 56), Vector2i(34, 26)]],  # 이승의 미련(잡초·낫)
@@ -946,6 +979,7 @@ var _prop_body: StaticBody2D = null
 #   맵 밖 이탈을 막는다(_build_border가 구역 빌드마다 다시 세운다).
 var _border_body: StaticBody2D = null
 var _ridge_body: StaticBody2D = null   # ★[단계3] 고지 동향 잔디 능선 통행 차단 충돌바(HOME 전용, _build_ridge_barrier)
+var _cliff_face_cells: Array[Vector2i] = []   # ★[단계3-⑤] 남향 절벽 벽면 셀 캐시(front 오버행 — _build_cliffs가 채움, HOME 전용)
 # ★ [S1-5a] 트렐리스 넝쿨 충돌체 — 통과 불가(황천포도) 넝쿨이 심긴 칸에 사각 충돌을 세운다.
 #   진실원 = farm.is_crop_solid/solid_crop_tiles(로직), 여긴 물리만(greybox-spec §6.2). 안식 농원 전용.
 #   _prop_body 패턴과 동형(구역/상태 변화마다 재구성). 테스트·봇은 실내를 물리로 안 걷는다(직접 좌표).
@@ -1548,10 +1582,11 @@ func _harmonize_grass_variants(ts: TileSet) -> void:
 		rch.sort(); gch.sort(); bch.sort()
 		var mid := coords.size() / 2
 		var target := Color(rch[mid], gch[mid], bch[mid])
-		# ★[ADR-0043] 클럼프 대비 감쇠 — 7변종을 균일 랜덤으로 깔면 고대비 클럼프가 칸마다 제멋대로라
-		#   "정신없다"(owner). 평균은 공통 타깃으로 옮기되 *국소 편차(클럼프 대비)를 DAMP만큼 줄여* 차분·아기자기하게.
-		#   깊이는 일부 남긴다(완전 평탄 아님). 값 조절로 입체감↔차분함 균형.
-		const _GD_CLUMP_DAMP := 0.42
+		# ★[ADR-0043 → owner Gemini 가이드 2차 2026-07-04] base grass 무늬(lush 풀잎) 대비 감쇠 —
+		#   target + (p−tile_mean)*(1−DAMP). owner "필드가 자글자글 지저분 → 민무늬 베이스 80~90%"(스타듀식)
+		#   가이드로 0.42→0.82 대폭 상향: 국소 무늬(풀잎 텍스처)를 18%만 남겨 "은은한 질감의 민무늬 베이스"로
+		#   (Gemini 1단계 "연한 픽셀 감각" — 완전 단색 아님). 풀 입체감은 클러스터 오버레이(_gd_cluster)가 담당.
+		const _GD_CLUMP_DAMP := 0.82
 		for idx in coords.size():
 			var coord: Vector2i = coords[idx]
 			var ox := coord.x * rs
@@ -2639,12 +2674,16 @@ func _build_cliffs() -> void:
 	_carve_stair_notch(Rect2i(RANCH_GATE_X, HIGHLAND_S, RANCH_GATE_W, 3))   # x9..10, y26..28
 	# ③ 동향 잔디 능선 — 바위벽 없이 충돌바(x21 seam)로 고지를 자연 능선으로 폐쇄(수풀 프롭이 시각 완성).
 	_build_ridge_barrier()
+	# ④ [단계3-⑤] 남향 벽면 셀 캐시 — front 오버행이 매프레임 그리드 스캔 없이 근접 판정만 하도록(노치가
+	#    GROUND로 덮은 뒤라 게이트 자리는 제외됨). HOME 재빌드마다 갱신.
+	_cache_cliff_face_cells()
 
-# ── ★ [S1-2 / ADR-0044 §1] pseudo-Z 다단 절벽 원시어휘 (재사용 밴드·코너·계단 헬퍼) ────────────────
-# 이 4종이 §5 좌표 실배치(S1-3의 _build_cliffs 재작성)와 cliff_test 격리 검증에 쓰이는 "문법"이다.
+# ── ★ [S1-2 / ADR-0044 §1 → 단계3-⑥ 정리] pseudo-Z 절벽 원시어휘 (남향밴드·계단노치) ────────────────
+# 남향-only 피벗으로 옛 동향 측벽(_lay_east_band)·90° 코너 스텝(_lay_corner_step)은 폐기했다(라이브 참조 0,
+# cliff_test에서만 썼음 → 함께 정리). 남은 2종은 cliff_test 격리 검증에 쓰이는 "문법":
 # 모두 _grid에 타일종만 쓴다(z축 아님 — ADR-0013 2D 평면 불변). 걷기/충돌은 타일종이 결정한다:
 #   CLIFF_LIP=걷기 O / CLIFF_FACE·CLIFF_FACE_BASE=SOLID(is_solid). 그레이박스 색은 COLORS(LIP 밝음→FACE 중간→BASE 어둠).
-# 실배치는 S1-3 — 여기(S1-2)는 어휘·문법·격리 검증만, 라이브 home맵은 옛 _build_cliffs 유지(회귀 0).
+# 라이브 home맵은 _autotile_south_cliffs가 남향 벽을 굽는다(밴드 헬퍼는 격리 테스트 전용).
 
 # 남향 절벽 밴드(고지의 남쪽 가장자리) — y=Lip행 / y+1=Face행 / y+2=Face_Base행(접지 그림자).
 # [x0, x1] 폐구간. ADR-0044 §1 남향 = Lip1+Face1+Base1(논리 3행 = 64px H=2 볼륨).
@@ -2653,24 +2692,6 @@ func _lay_south_band(x0: int, x1: int, y: int) -> void:
 		_set_tile(x, y, CLIFF_LIP)
 		_set_tile(x, y + 1, CLIFF_FACE)
 		_set_tile(x, y + 2, CLIFF_FACE_BASE)
-
-# 동향 절벽 밴드(고지의 동쪽 가장자리) — x=Lip열 / x+1..x+2=Face 2열(base 없음).
-# [y0, y1] 폐구간. ADR-0044 §1 "높이의 가로 치환" = Lip1열+Face2열(동/서 대칭). NW광원 재보정은 S1-10 아트.
-func _lay_east_band(x: int, y0: int, y1: int) -> void:
-	for y in range(y0, y1 + 1):
-		_set_tile(x, y, CLIFF_LIP)
-		_set_tile(x + 1, y, CLIFF_FACE)
-		_set_tile(x + 2, y, CLIFF_FACE)
-
-# 외부 코너(고지 동경계가 남으로 가며 동쪽으로 꺾이는 청키 스텝) — rect를 FACE로 edge-to-edge 채우고
-# 최상단 행만 LIP로 캡한다. 직선 경계라 대각 solid 틈(corner-squeeze) 0(§5.1 아우터 코너 ①=x17→x21 3×3 스텝).
-# 방향별 코너 아트(안/밖·NW광원)는 S1-10 — 그레이박스는 청키 블록으로 충분(직선 경계만 검증).
-func _lay_corner_step(rect: Rect2i) -> void:
-	for y in range(rect.position.y, rect.end.y):
-		for x in range(rect.position.x, rect.end.x):
-			_set_tile(x, y, CLIFF_FACE)
-	for x in range(rect.position.x, rect.end.x):
-		_set_tile(x, rect.position.y, CLIFF_LIP)
 
 # 계단 노치 — 절벽 밴드를 종단하는 통로. rect(밴드 단면 전체 × 종단 길이)의 SOLID를 해제해 GROUND(걷기 O)로.
 # 노치 폭 = 밴드 깊이(남향=2행 종단 / 동향=3열 종단 — ADR-0044 "2폭"↔§5"3열" 정합). STAIRS 프롭은 layout(S1-3).
@@ -2691,10 +2712,17 @@ func _autotile_south_cliffs(is_hi: Callable) -> void:
 				continue                                   # 아래도 고지 → 내부 평면(풀 그대로)
 			# 남쪽이 저지 → 남향 절벽. Face/Base는 맵 안·저지일 때만(다른 고지 침범 금지).
 			_set_tile(x, y, CLIFF_LIP)
+			# ★[단계3-④] 벽의 서/동 바깥 끝(이웃이 고지 아님 = 맵경계·능선과 만나는 진짜 끝) → 곡선 코너로
+			#   마감(각진 90° 대신 스타듀식 곡선 전이). 게이트 노치는 오토타일 후 GROUND로 덮이므로 여기선
+			#   벽 셀만 보고 판정 — 노치 옆은 이웃이 아직 고지라 코너 아님(진짜 바깥 끝만).
+			var west_end: bool = not is_hi.call(Vector2i(x - 1, y))
+			var east_end: bool = not is_hi.call(Vector2i(x + 1, y))
+			var face_id: int = CLIFF_CORNER_SW if west_end else (CLIFF_CORNER_SE if east_end else CLIFF_FACE)
+			var base_id: int = CLIFF_CORNER_SW_B if west_end else (CLIFF_CORNER_SE_B if east_end else CLIFF_FACE_BASE)
 			if y + 1 < _outdoor_h and not is_hi.call(Vector2i(x, y + 1)):
-				_set_tile(x, y + 1, CLIFF_FACE)
+				_set_tile(x, y + 1, face_id)
 			if y + 2 < _outdoor_h and not is_hi.call(Vector2i(x, y + 2)):
-				_set_tile(x, y + 2, CLIFF_FACE_BASE)
+				_set_tile(x, y + 2, base_id)
 
 # ★ [단계3] 동향 잔디 능선 = 바위벽 없이 통행만 막는 충돌바(고지 x≤HIGHLAND_E ↔ 저지 x≥+1 seam). 타일은
 #   풀 그대로 두고(옛 동향 바위벽 폐기) 수풀 프롭(PROP_LAYOUT_HOME)이 시각적 능선을 완성한다 —
@@ -2713,6 +2741,15 @@ func _build_ridge_barrier() -> void:
 	cs.shape = rs
 	cs.position = Vector2(seam_x, bar_h * 0.5)
 	_ridge_body.add_child(cs)
+
+# ★[단계3-⑤] 남향 절벽 벽면 셀 수집(front 오버행 대상). _build_cliffs 끝(오토타일+노치 후)에 부른다 —
+#   노치가 GROUND로 덮은 게이트 자리는 자동 제외된다. 벽면 = CLIFF_WALL_TILES(Face/Base/곡선코너, Lip 제외).
+func _cache_cliff_face_cells() -> void:
+	_cliff_face_cells.clear()
+	for y in range(_outdoor_h):
+		for x in range(_grid_w):
+			if _grid[y][x] in CLIFF_WALL_TILES:
+				_cliff_face_cells.append(Vector2i(x, y))
 
 func _build_border() -> void:
 	# ADR-0026 룩 정합 — 옛 WALL 경계 띠(스타듀에 없는 맵 둘레 벽)를 시각에서 없앤다. 외부
@@ -2893,6 +2930,23 @@ func _gd_h01(x: int, y: int, salt: int) -> float:
 	var n: int = (x * 73856093) ^ (y * 19349663) ^ (salt * 83492791)
 	n = n & 0x7fffffff
 	return float(n % 100000) / 100000.0
+
+# ★[단계3-③ / owner Gemini 가이드 2차 2026-07-04] 저주파 값 노이즈(블록 해시 bilinear+smoothstep) —
+#   풀 포기 클러스터 마스크(0~1). 스타듀식 "넓은 민무늬 베이스 + 특정 영역에만 풀 덩어리"를 위해, 칸별
+#   독립 배치(자글자글) 대신 GD_CLUSTER_BLOCK칸 단위 저주파로 3~4칸 무리를 만든다. 결정적(해시 기반).
+func _gd_cluster(x: int, y: int) -> float:
+	var s := GD_CLUSTER_BLOCK
+	var gx := x / s
+	var gy := y / s
+	var fx := float(x - gx * s) / s
+	var fy := float(y - gy * s) / s
+	fx = fx * fx * (3.0 - 2.0 * fx)   # smoothstep(격자 각짐 완화)
+	fy = fy * fy * (3.0 - 2.0 * fy)
+	var v00 := _gd_h01(gx, gy, 30)
+	var v10 := _gd_h01(gx + 1, gy, 30)
+	var v01 := _gd_h01(gx, gy + 1, 30)
+	var v11 := _gd_h01(gx + 1, gy + 1, 30)
+	return lerpf(lerpf(v00, v10, fx), lerpf(v01, v11, fx), fy)
 
 func _gd_shadow() -> Image:
 	if _gd_shadow_stamp != null:
@@ -3101,6 +3155,10 @@ func _build_ground_details() -> void:
 			if not _GD_TABLES.has(terrain):
 				continue   # 디테일 테이블 없는 지형(밭·물·건물 등)
 			if occupied.has(Vector2i(x, y)):
+				continue
+			# ★[owner Gemini 2차] 클러스터 게이트 — 풀(GROUND)은 저주파 노이즈 낮은 영역을 민무늬 베이스로
+			#   비운다(스타듀식 80~90% 여백, 자글자글 제거). 길(PATH)은 자체 밀도라 게이트 안 함.
+			if terrain == GROUND and _gd_cluster(x, y) < GD_CLUSTER_CUT:
 				continue
 			var table: Array = _GD_TABLES[terrain]
 			var total := 0
@@ -6221,6 +6279,30 @@ func _draw_front_props(canvas: CanvasItem) -> void:
 	if _region != RegionCatalog.HOME or player == null:
 		return
 	_draw_props_for(_prop_layouts.get("HOME", []), canvas, _PROP_PASS_FRONT, player.global_position.y)
+	_draw_front_cliff_faces(canvas)   # ★[단계3-⑤] 절벽 밑에 붙은 캐릭터를 벽면이 가리는 오버행
+
+# ★[단계3-⑤ / cliff-tileset-spec §10.2] 남향 절벽 벽면 오버행 — 캐릭터가 절벽 바로 밑(같은 열, 1~2칸
+#   아래)에 서면 그 열의 Face/Base 벽면을 캐릭터 위 레이어(z=1)에서 재렌더해 상체를 가린다 → "절벽 그늘
+#   아래로 들어간" 깊이감(owner 결정: 벽면 전체 front, 스타듀 표준). 그리드·충돌은 불변(순수 시각). 벽면은
+#   ground 레이어(z=-1)에 이미 있으므로, 근접 시에만 같은 텍스처를 위에 한 번 더 얹는다(중복 blit=오버행).
+func _draw_front_cliff_faces(canvas: CanvasItem) -> void:
+	if _cliff_face_cells.is_empty():
+		return
+	for cell in _front_cliff_cells_for(_player_tile()):
+		var id: int = _grid[cell.y][cell.x]
+		if SOLID_TEX.has(id):
+			var tex: Texture2D = load(SOLID_TEX[id]) as Texture2D
+			canvas.draw_texture(tex, Vector2(cell.x * TILE, cell.y * TILE))
+
+# ★[단계3-⑤] 주어진 플레이어 타일에서 오버행으로 덮을 벽면 셀 목록(렌더와 분리 — 격리 테스트 가능).
+#   같은 열(pt.x==cell.x) + 벽 밑 1~2칸(0<dy<=2) = 캐릭터 상체가 벽면 픽셀과 겹치는 근접 범위.
+func _front_cliff_cells_for(pt: Vector2i) -> Array:
+	var out: Array = []
+	for cell in _cliff_face_cells:
+		var dy: int = pt.y - cell.y
+		if pt.x == cell.x and dy > 0 and dy <= 2:
+			out.append(cell)
+	return out
 
 # 좌석에 앉은 손님과 머리 위 인내심 바를 그린다. 인내심이 줄수록 바가 짧아지고 붉어져
 # "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거). 몸체는 그레이박스지만 P2.7 톤 패스에서

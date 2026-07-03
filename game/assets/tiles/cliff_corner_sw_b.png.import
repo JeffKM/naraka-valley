@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bvy3sg57jtlry"
-path="res://.godot/imported/cliff_e_lip.png-88889655bc044201fdd056de99bbb483.ctex"
+uid="uid://betwowqhej3rh"
+path="res://.godot/imported/cliff_corner_sw_b.png-2d0923ea0c6809764a18fffe87c68d44.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/tiles/cliff_e_lip.png"
-dest_files=["res://.godot/imported/cliff_e_lip.png-88889655bc044201fdd056de99bbb483.ctex"]
+source_file="res://assets/tiles/cliff_corner_sw_b.png"
+dest_files=["res://.godot/imported/cliff_corner_sw_b.png-2d0923ea0c6809764a18fffe87c68d44.ctex"]
 
 [params]
 
