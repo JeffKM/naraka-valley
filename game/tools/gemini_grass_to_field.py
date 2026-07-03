@@ -55,6 +55,13 @@ def main():
         out = os.path.join(STAGE, name + "_field.png")
         field.save(out)
         done.append(f"{name}({im.size[0]}²→{FIELD}²)")
+        # ★ 실게임 Wang 베이스 타일 = 자기 타일링되는 32px 청키 소프트 타일.
+        #   128 필드는 128주기 seamless → BOX÷8=16px(여전히 seamless) → NEAREST×2=32px 청키.
+        if name in ("grass_a", "dirt"):
+            base16 = field.resize((16, 16), Image.BOX)          # seamless 유지
+            base32 = base16.resize((32, 32), Image.NEAREST)     # 청키(16 유효) 32px 타일
+            base32.save(os.path.join(STAGE, name + "_base32.png"))
+            done[-1] += "+base32"
     print("✅ 변환:", ", ".join(done) if done else "(없음)")
     print("   → 하네스: cd game && ./run_tile16.sh")
 
