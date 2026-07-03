@@ -70,14 +70,14 @@ func _initialize() -> void:
 	var res := r.clear(tw, WEEDS, ItemCatalog.SCYTHE)
 	_check("② 낫으로 잡초 개간 성공", not res.is_empty() and str(res["drop"]) == ItemCatalog.SOUL_FIBER \
 		and int(res["count"]) == 1 and r.is_cleared(tw))
-	var te := Vector2i(24, 14)
+	var te := Vector2i(9, 28)   # ★[단계3] 남향 게이트 업화석(옛 동향 24,14 → 90° 회전)
 	var res_e := r.clear(te, EMBER, ItemCatalog.PICKAXE)
 	_check("② 곡괭이로 업화석 개간 드랍 2", not res_e.is_empty() and int(res_e["count"]) == 2 and r.is_cleared(te))
 
 	# ── ③ 틀린 도구 무동작 ──
 	var tw2 := Vector2i(56, 38)
 	_check("③ 곡괭이로 잡초 무동작", r.clear(tw2, WEEDS, ItemCatalog.PICKAXE).is_empty() and not r.is_cleared(tw2))
-	_check("③ 낫으로 석화고목 무동작", r.clear(Vector2i(24, 16), STUMP, ItemCatalog.SCYTHE).is_empty())
+	_check("③ 낫으로 석화고목 무동작", r.clear(Vector2i(9, 30), STUMP, ItemCatalog.SCYTHE).is_empty())
 
 	# ── ④ 멱등(이미 치운 것 재개간) ──
 	var cnt := r.cleared_count()
@@ -110,10 +110,10 @@ func _initialize() -> void:
 		and m.inventory.has_item(ItemCatalog.PICKAXE) and m.inventory.has_item(ItemCatalog.AXE))
 
 	# ⑧ 하드게이트 debris kind 조회
-	var gate_e := Vector2i(24, 14)
-	var gate_s := Vector2i(24, 16)
-	_check("⑧ 하드게이트 (24,14)=업화석", m._debris_kind_at(gate_e) == DebrisCatalog.EMBER)
-	_check("⑧ 하드게이트 (24,16)=석화고목", m._debris_kind_at(gate_s) == DebrisCatalog.STUMP)
+	var gate_e := Vector2i(9, 28)    # ★[단계3] 남향 게이트 업화석 발치(옛 동향 24,14 → 90° 회전)
+	var gate_s := Vector2i(9, 30)    # ★[단계3] 남향 게이트 석화고목 접근로(옛 동향 24,16)
+	_check("⑧ 하드게이트 (9,28)=업화석", m._debris_kind_at(gate_e) == DebrisCatalog.EMBER)
+	_check("⑧ 하드게이트 (9,30)=석화고목", m._debris_kind_at(gate_s) == DebrisCatalog.STUMP)
 
 	# ⑨ end-to-end — 곡괭이 선택 후 _use_tool로 하드게이트 업화석 개간
 	var pick_idx := _slot_of(m.inventory, ItemCatalog.PICKAXE)
