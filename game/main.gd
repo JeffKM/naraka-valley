@@ -447,10 +447,15 @@ const PROP_LAYOUT_HOME := [
 	# 하드 게이트 debris(노치 발치 — 통과 X SOLID로 게이트 물리 차단, 개간 온보딩). 64×64=2×2칸 풋프린트.
 	[PROP_DEBRIS_EMBER, [Vector2i(9, 28)]],     # 업화석(곡괭이) — 노치 입구(x9..10 y28..29)
 	[PROP_DEBRIS_STUMP, [Vector2i(9, 30)]],     # 석화 고목(도끼) — 접근로 하단(x9..10 y30..31)
-	# 동향 잔디 능선 수풀(x20 seam — 충돌바 위 시각 능선, 통과 판정은 _ridge_body 담당). 64×64 덤불을
-	#   y1~25 균등 배치해 능선이 남향 벽(y26)까지 자연스레 이어지게(SE 코너 시각 폐쇄).
-	[PROP_BUSH, [Vector2i(20, 1), Vector2i(20, 5), Vector2i(20, 9), Vector2i(20, 13),
-		Vector2i(20, 17), Vector2i(20, 21), Vector2i(20, 25)]],
+	# ★[단계3-③ 잔디 입체화] 동향 잔디 능선 수풀(x19~20 seam — 충돌바 위 시각 능선, 통과 판정은 _ridge_body).
+	#   옛 x20 4칸 간격(뚝뚝 끊긴 덤불)을 y1~25 *2칸 간격 지그재그*(x19↔20 교대)로 촘촘히 겹쳐 끊김 없는
+	#   산등성이로 — owner Gemini "수풀·낭떠러지로 막힌 자연 산등성이 능선". 남단(y25)이 남향 벽(y26)과
+	#   자연 연결(SE 코너 시각 폐쇄). bush=비-SOLID(통행은 _ridge_body seam이 담당 — 시각만 촘촘).
+	[PROP_BUSH, [
+		Vector2i(20, 1), Vector2i(19, 3), Vector2i(20, 5), Vector2i(19, 7),
+		Vector2i(20, 9), Vector2i(19, 11), Vector2i(20, 13), Vector2i(19, 15),
+		Vector2i(20, 17), Vector2i(19, 19), Vector2i(20, 21), Vector2i(19, 23),
+		Vector2i(20, 25)]],
 	# ── overgrown debris 밭(저지 — 통과 O 잡초 + 통과 X 업화석·석화 고목 산포, 동선·건물·패치·연못 비껴) ──
 	[PROP_DEBRIS_WEEDS, [Vector2i(50, 22), Vector2i(56, 38), Vector2i(35, 44), Vector2i(60, 52),
 		Vector2i(46, 24), Vector2i(30, 54), Vector2i(58, 20), Vector2i(52, 56), Vector2i(34, 26)]],  # 이승의 미련(잡초·낫)
