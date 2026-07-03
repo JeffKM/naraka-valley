@@ -42,8 +42,8 @@ func _init() -> void:
 	var facades := [
 		[main.FACADE_HOUSE, main.HOUSE_EXT_RECT],
 		[main.FACADE_STOREHOUSE, main.STOREHOUSE_EXT_RECT],
-		[main.FACADE_BARN, main.NEOKURITGAN_EXT_RECT],   # ★[B1-a.1] 넋우릿간(barn_ext 아트)
-		[main.FACADE_COOP, main.NEOKDUNGURI_EXT_RECT],   # ★[B1-a.1] 넋둥우리(coop_ext 아트 — 전용 외관 완비)
+		[main.FACADE_BARN, main.NEOKURITGAN_EXT_RECT],   # ★[B1-a.1] 넋우릿간(barn_ext 6×4)
+		[main.FACADE_COOP, main.NEOKDUNGURI_EXT_RECT],   # ★[아트 배선] 넋둥우리(coop_ext 4×2·문 우측)
 	]
 	# ★[ADR-0043] facade 블렌드 — facade 그리기 전 footprint를 풀 베이스로 덮어(시각) 회색 WALL 그레이박스가
 	#   투명부로 안 비치게. main._facade_grass_backdrop과 동일 결(여기선 CPU blit로 재현).
