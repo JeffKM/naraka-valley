@@ -15,13 +15,15 @@ class_name ClockHud
 #     절기 내 *일차*를 보여 준다("성야절 12일") — 더 도메인 충실하고 정보량도 크다.
 #   - 날씨(☀)는 백엔드 부재로 보류(ADR-0048) — 자리만 비운다.
 
+# ★ owner 2026-07-03 3차 HUD 가이드(C) — 플레이트 빈 여백 제거·전체 축소. PAD·폰트 압축 +
+#   플레이트 폭은 고정 W 폐기하고 *내용 최대폭*에 맞춰 동적 산출(_draw). 우상단 구석 밀착.
 const MARGIN := 8.0        # 화면 오른쪽·위 여백
-const PAD := 11.0          # 플레이트 안쪽 여백
-const W := 182.0           # 플레이트 폭(우상단 고정 정렬)
-const ROW_DATE := 16       # 절기·일차 글자 크기
-const ROW_TIME := 14       # 시각·때
-const ROW_GOLD := 15       # 골드
-const ROW_MILE := 11       # 마일스톤(작게)
+const PAD := 7.0           # 플레이트 안쪽 여백(11→7 압축)
+const ROW_GAP := 4.0       # 줄 사이 여유(8→4 압축)
+const ROW_DATE := 13       # 절기·일차 글자 크기(16→13)
+const ROW_TIME := 11       # 시각·때(14→11)
+const ROW_GOLD := 12       # 골드(15→12)
+const ROW_MILE := 9        # 마일스톤(11→9)
 
 var _date := ""            # "성야절 12일"
 var _time := ""            # "18:24 · 저녁"
@@ -58,26 +60,31 @@ func _draw() -> void:
 	if _date == "":
 		return
 	var view := _view()
-	# 플레이트 높이 = 세 줄(날짜·시각·골드) + 마일스톤 한 줄 + 여백. 줄 간격은 각 글자 크기+여유.
-	var h := PAD * 2.0 + float(ROW_DATE + 6) + float(ROW_TIME + 6) + float(ROW_GOLD + 6)
+	# ★ 플레이트 폭 = 내용 최대폭 + 여백(고정 W 폐기 — 빈 마진 0, guide C). 높이 = 줄 높이 합 + 여백.
+	var wmax := maxf(maxf(HanjiUi.text_width(_date, ROW_DATE), HanjiUi.text_width(_time, ROW_TIME)),
+		HanjiUi.text_width(_gold, ROW_GOLD))
 	if _mile != "":
-		h += float(ROW_MILE + 6)
-	var plate := Rect2(view.x - W - MARGIN, MARGIN, W, h)
+		wmax = maxf(wmax, HanjiUi.text_width(_mile, ROW_MILE))
+	var w := wmax + PAD * 2.0
+	var h := PAD * 2.0 + float(ROW_DATE) + ROW_GAP + float(ROW_TIME) + ROW_GAP + float(ROW_GOLD)
+	if _mile != "":
+		h += ROW_GAP + float(ROW_MILE)
+	var plate := Rect2(view.x - w - MARGIN, MARGIN, w, h)
 	HanjiUi.draw_plate(self, plate)
 	var x := plate.position.x + PAD
 	var right := plate.end.x - PAD
 	var y := plate.position.y + PAD + float(ROW_DATE)
 	# 절기·일차(우측 정렬, 밝은 금박 — 클러스터의 표제).
 	_draw_right(x, right, y, _date, ROW_DATE, HanjiUi.GOLD_SOFT)
-	y += float(ROW_TIME + 8)
+	y += ROW_GAP + float(ROW_TIME)
 	# 시각·때(우측 정렬, 밝은 글자).
 	_draw_right(x, right, y, _time, ROW_TIME, HanjiUi.INK_LIGHT)
-	y += float(ROW_GOLD + 8)
+	y += ROW_GAP + float(ROW_GOLD)
 	# 골드(우측 정렬, 금박).
 	_draw_right(x, right, y, _gold, ROW_GOLD, HanjiUi.GOLD)
 	# 마일스톤(우측 정렬, 보조 톤 — 매크로 목표 한 줄).
 	if _mile != "":
-		y += float(ROW_MILE + 8)
+		y += ROW_GAP + float(ROW_MILE)
 		_draw_right(x, right, y, _mile, ROW_MILE, HanjiUi.INK_DIM)
 
 # 우측 정렬 한 줄(플레이트 우변 - PAD에 오른끝을 맞춘다).

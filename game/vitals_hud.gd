@@ -13,14 +13,14 @@ class_name VitalsHud
 #   - 부모 CanvasLayer scale(ADR-0018 ×1.5)을 되돌려 보이는 영역(=640×360) 우하단에 배치한다
 #     (핫바·피드와 같은 스케일 함정 회피). 핫바(하단 중앙)와 겹치지 않게 오른쪽 끝에 둔다.
 
-const BAR_W := 132.0          # 바 길이(px, 논리 좌표)
-const BAR_H := 14.0           # 바 높이
-const MARGIN := 12.0          # 화면 오른쪽 여백
-# 핫바(하단 중앙, 폭이 넓어 코너까지 뻗는다)와 안 겹치게 바를 핫바 *위*로 올린다(우하단이되
-# 핫바 상단보다 위). 하단에서 RESERVE_BOTTOM만큼 띄운 자리가 혼력 바의 바닥이다.
-const RESERVE_BOTTOM := 80.0
-const GAP := 6.0              # 혼력 바와 체력 바 자리 사이 간격
-const LABEL_W := 34.0         # 바 왼쪽 라벨 폭("혼력"/"체력")
+# ★ owner 2026-07-03 3차 HUD 가이드 — 우하단 혼력바 압축(BAR_W/H·라벨 축소). 체력 placeholder
+#   빈 바는 자리만 먹어 제거(Phase 3 전투에서 재도입 — 그때 두 바 레이아웃 복원). 우하단 구석 밀착.
+const BAR_W := 100.0          # 바 길이(px, 논리 좌표) — 132→100 압축
+const BAR_H := 11.0           # 바 높이 — 14→11
+const MARGIN := 10.0          # 화면 오른쪽 여백
+# 핫바(하단 중앙)와 안 겹치게 바를 핫바 *위*로 올린다. 하단에서 RESERVE_BOTTOM만큼 띄운 자리가 바닥.
+const RESERVE_BOTTOM := 40.0  # 핫바(24px+여백)가 작아져 코너로 더 내려붙임(80→40)
+const LABEL_W := 26.0         # 바 왼쪽 라벨 폭("혼력")
 
 var energy: SoulEnergy = null  # 그릴 혼력(현재/최대). main이 주입.
 
@@ -47,34 +47,29 @@ func _draw() -> void:
 	if energy == null:
 		return
 	var view := _view()
-	var font := HanjiUi.font()
 	var right := view.x - MARGIN
-	# ★ Phase C — 두 바(체력 자리 + 혼력)를 태운 한지 플레이트로 감싼다(raw 박스 → 한지 클러스터).
+	# ★ 혼력 바 한 줄만(체력 placeholder 제거) 태운 한지 플레이트로 감싼다.
 	var soul_top := view.y - RESERVE_BOTTOM - BAR_H
-	var hp_top := view.y - RESERVE_BOTTOM - BAR_H * 2.0 - GAP
-	var plate := Rect2(right - BAR_W - LABEL_W - 8.0, hp_top - 8.0,
-		BAR_W + LABEL_W + 16.0, (soul_top + BAR_H) - hp_top + 16.0)
+	var plate := Rect2(right - BAR_W - LABEL_W - 7.0, soul_top - 6.0,
+		BAR_W + LABEL_W + 14.0, BAR_H + 12.0)
 	HanjiUi.draw_plate(self, plate)
-	# 체력 바 자리(위, 예약 — 빈 인셋 바). Phase 3 ⑤ 전투에서 채워진다.
-	_draw_bar(font, Vector2(right - BAR_W, hp_top), "체력", 0.0, Color(0.55, 0.28, 0.30), true)
-	# 혼력 바(아래, 현재/최대). 바닥나면 채움이 0 → 비어 보이고, 색이 식는다(취침 신호).
+	# 혼력 바(현재/최대). 바닥나면 채움이 0 → 비어 보이고, 색이 식는다(취침 신호).
 	var ratio := clampf(float(energy.current) / float(SoulEnergy.MAX), 0.0, 1.0)
 	var low := not energy.can_act()
 	# 혼(soul) 보랏빛 채움 — 바닥나면 식은 붉은빛(취침 신호).
 	var fill := Color(0.52, 0.46, 0.76) if not low else Color(0.62, 0.42, 0.44)
-	_draw_bar(font, Vector2(right - BAR_W, soul_top), "혼력", ratio, fill, false)
+	_draw_bar(Vector2(right - BAR_W, soul_top), "혼력", ratio, fill)
 
-# 라벨 + 인셋 트랙 + 채움(ratio). reserved면 채움 없이 빈 자리만 그린다(체력 placeholder).
-func _draw_bar(font: Font, pos: Vector2, label: String, ratio: float, fill: Color, reserved: bool) -> void:
-	# 왼쪽 라벨(먹빛 계열 — 밝은 한지 위 가독).
-	draw_string(font, pos + Vector2(-LABEL_W, BAR_H - 2.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
-		HanjiUi.INK_DIM if reserved else HanjiUi.INK)
+# 라벨 + 인셋 트랙 + 채움(ratio) + 수치.
+func _draw_bar(pos: Vector2, label: String, ratio: float, fill: Color) -> void:
+	# 왼쪽 라벨(먹빛 — 밝은 한지 위 가독). 외곽선으로 선명.
+	HanjiUi.draw_text(self, pos + Vector2(-LABEL_W, BAR_H - 1.0), label, 10, HanjiUi.INK)
 	var box := Rect2(pos, Vector2(BAR_W, BAR_H))
 	draw_rect(box, HanjiUi.INSET)
-	if not reserved and ratio > 0.0:
+	if ratio > 0.0:
 		draw_rect(Rect2(pos, Vector2(BAR_W * ratio, BAR_H)), fill)
-	draw_rect(box, HanjiUi.BORDER if not reserved else Color(0.40, 0.34, 0.28), false, 1.0)
-	# 혼력만 수치 텍스트를 바 안에 작게(현재/최대) — 어두운 트랙 위라 밝은 글자.
-	if not reserved and energy != null:
-		draw_string(font, pos + Vector2(BAR_W - 46.0, BAR_H - 2.0), "%d/%d" % [energy.current, SoulEnergy.MAX],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, HanjiUi.INK_LIGHT)
+	draw_rect(box, HanjiUi.BORDER, false, 1.0)
+	# 수치 텍스트를 바 안에 작게(현재/최대) — 어두운 트랙 위라 밝은 글자.
+	if energy != null:
+		HanjiUi.draw_text(self, pos + Vector2(BAR_W - 40.0, BAR_H - 1.0),
+			"%d/%d" % [energy.current, SoulEnergy.MAX], 10, HanjiUi.INK_LIGHT)

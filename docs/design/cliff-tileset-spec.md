@@ -139,3 +139,30 @@ Stardew-like chunky pixels, NOT isometric, NOT rocky grey stone.
 - **전체 방향/코너 세트 파일(S2/3 재사용, 인게임 미배치):** `cliff_out_{nw,ne,se,sw}`·`cliff_in_{nw,ne,se,sw}`(batch2 AI 외/내 코너 + rot90)·`cliff_{e,w,n}_lip`·`cliff_{e,w}_face`(남향 세트 rot90 파생). NW광원 재보정은 S2/3 배치 시(spec §8·§4). 옛 회색 암석 `cliff_face/corner_l/corner_r/inner.png` 삭제(참조 0).
 - **동향 계단(`stairs_east`) ✅ 완료(2026-07-02 재시도):** 1차 map_object가 3D 블록+오답 팔레트라 보류했으나, **`view="side"` + "flat orthographic front, NO grass/dirt base, transparent" 프롬프트**로 재생성 → 흙 절벽에 통합된 warm 돌계단 획득. 좌우 반전(고지=서/왼쪽·저지=동/오른쪽)·96×64(노치 3칸)·바닥정렬·청키화 → `stairs_east.png`. `PROP_STAIRS` 배선 교체(placement (21,14) 불변·통과 O)·옛 `stairs.png` 삭제. home_full_dump 노치 사인오프. ※교훈: map_object는 `view="side"`+base 금지로 평면 프롭 유도 가능(low top-down은 3D 유발).
 - **마스터 팔레트:** 저승 객체 슬레이트 램프는 여전히 TBD(master-palette.md). 이번 절벽은 tiles_pro가 warm 흙+슬레이트를 근사 생성 → 정밀 양자화는 저승 램프 큐레이션 확정 시 일괄(리컬러 파이프라인 §4-4).
+
+## 10. 아트 재생성 패스 (2026-07-03, owner "절벽이 이상하게 생성됨" 피드백)
+
+> owner가 스타듀 레퍼런스(청키 둥근 자갈 바위벽 + 풀 오버행 / 물가 둥근 boulder 강둑)를 제시. S1-10 1차 산출(`cliff_s_face`=밋밋한 갈색 그라데이션)이 "이상하다"는 판정 → **코어 남향 세트 + 강둑 아트만 재생성**(메카닉·`SOLID_TEX` 배선·타일종 전부 불변, PNG 4장만 교체).
+
+- **재생성 = PixelLab `create_tiles_pro`(square_topdown, top-down, segmentation, seed 70301).** 4-넘버 프롬프트로 16변종 한 번에 뽑음: ①풀 오버행 립 ②청키 둥근 자갈 바위벽 면 ③어두운 접지 베이스+슬레이트 그림자 ④모래↔물 둥근 boulder 강둑. 베스트(tile 0/4/8/12) 선택 → `enforce_chunk.chunkify`(2px 캐논) → `cliff_s_lip/face/base.png`·`cliff_bank.png` 덮어쓰기. 1차 산출에서 **밋밋 갈색 → 자갈벽으로 확 개선**, home_full_dump 사인오프.
+- **가이드 정합(owner 공유 Gemini 문서):** "면 최소 2칸 높이"는 `_lay_south_band`가 이미 Lip+Face+Face_Base(2 SOLID행=32px 벽)로 충족 — 아트가 이 2칸 벽을 *제대로 된 바위벽으로 보이게* 함. **미구현(하류 분리):** "절벽 상단 엣지(Lip)를 Front 레이어로 캐릭터 머리 위에 덮기" = 현재 lip은 Ground 타일이라 항상 캐릭터 뒤 렌더 → front-overhang은 별도 렌더 메카닉(S2/3 또는 별도 슬라이스).
+- **하류 유지:** `cliff_beach`(S3)·정밀 팔레트 양자화는 §8·§9 그대로.
+
+### 10.1 방향/코너 세트 재생성 (2026-07-04, "같은 룩으로" owner 요청)
+
+> 남향 코어를 새 룩으로 바꾸자, orphan 방향/코너 변종 13종(옛 rot90+AI 코너)이 톤 불일치. owner "방향/코너도 같은 룩으로 재생성" → **새 남향 세트(`cliff_s_lip`/`cliff_s_face`)에서 파생**해 룩을 픽셀 단위로 일치시킴(PixelLab 불요·결정적). 전부 orphan(코드 참조 0)이라 **PNG만 교체**, 배선·타일종·회귀 불변.
+
+- **방향 면(`cliff_e_face`·`cliff_w_face`)** = `cliff_s_face`(바위=무방향). 서면은 좌우반전으로 결 변화만.
+- **방향 립(`cliff_e_lip`·`cliff_w_lip`·`cliff_n_lip`)** = `cliff_s_lip` 회전/반전(풀이 항상 고지쪽 — 동=풀좌/서=풀우/북=풀아래). NW광원 정밀 재보정은 인게임 배치(S2/3) 때.
+- **외부(볼록) 코너 4** = 바위 면 기반 + 고지 코너에만 풀 nub(대각 마스크 fx+fy>1.25). 바위-다수.
+- **내부(오목) 코너 4** = 풀 채운 타일 기반 + 저지(notch) 코너에만 바위 nub. 풀-다수.
+- 파생 후 `enforce_chunk` 2px 캐논 유지. 몽타주 육안 확인(방향·볼록/오목 semantics 정합). 인게임 배치·NW광원 재보정은 여전히 S2(나루)/S3(삼도천·황천해) — greybox-ready.
+
+### 10.2 유기적 자연 절벽 피벗 (2026-07-04, owner Gemini 가이드 5·6차)
+
+> owner가 스타듀 맵 정밀비교 가이드 연속 제공 → **절벽 시스템 문법 교정** + **에셋 유기화** 확정:
+> - **문법**: 스타듀 절벽은 **남향(아래)에만 바위벽**, 동/서/북은 **잔디 립 경계만**(바위벽 없음), 좌우 코너는 90°가 아닌 **곡선 대각 전이**, 발치 **검정 반투명 그림자**. → 옛 box-model(동/서 밴드 바위벽·90° 코너)·`_lay_east_band`·orphan out/in·e/w_face 폐기 대상.
+> - **에셋**: 청키 자갈면(§10.1)이 "인공적 벽돌/옹벽"으로 읽힘 → **유기적 흙/퇴적암**으로 재생성(불규칙 삐죽 풀잎 립·수평 침식결 흙면·warm 베이스).
+
+- **단계 1·2 완료(라이브 선반영):** PixelLab tiles_pro(seed 70402, 유기 프롬프트) → 립=t5(불규칙 흙 하단), 면=t8(warm 흙 수평 침식결), 베이스=t13(차분 warm 흙)+**검정 반투명 그림자 굽기**(파란빛 t14 폐기). `enforce_chunk` → `cliff_s_lip/face/base.png` **라이브 교체**(SOLID_TEX 배선 불변 — 안식 남향밴드·동향밴드·연못강둑 즉시 유기화). home_full_dump 사인오프: 그리드 경계 소멸·warm 톤 일관.
+- **단계 3(하류, ADR-0044 개정 슬라이스):** ①잔디 입체화(클러스터 명암 + 4~5 변종 노이즈 배치 + 지상 장식 프롭) ②**남향-only 오토타일러**(동/서/북=잔디 립, 곡선 대각 전이 타일, 그림자 자동합성) 라이브 통합 ③옛 90°코너·측벽(out/in/e_w_face) 폐기 ④상단 립 Front 레이어(머리 덮기). §10.1 파생 코너는 이 단계에서 곡선 전이로 대체.

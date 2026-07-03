@@ -34,7 +34,8 @@ static func font() -> Font:
 
 # 즉시모드 9-slice — 텍스처를 9칸(모서리 고정 · 변/중앙 신축)으로 rect에 그린다.
 # inv_frame._draw_nine 이식(대상 노드를 ci로 받는 것만 다름).
-static func draw_nine(ci: CanvasItem, tex: Texture2D, rect: Rect2, m: float) -> void:
+# ★ owner 2026-07-03 HUD 가이드 — mod로 알파 낮춰(예: 0.82) 슬롯 배경 뒤 지형이 투과되게(시야 확보).
+static func draw_nine(ci: CanvasItem, tex: Texture2D, rect: Rect2, m: float, mod: Color = Color.WHITE) -> void:
 	var tw := float(tex.get_width())
 	var th := float(tex.get_height())
 	var mx: float = minf(m, floorf(rect.size.x * 0.5))
@@ -51,19 +52,27 @@ static func draw_nine(ci: CanvasItem, tex: Texture2D, rect: Rect2, m: float) -> 
 		for c in 3:
 			ci.draw_texture_rect_region(tex,
 				Rect2(dx[c], dy[r], dw[c], dh[r]),
-				Rect2(sx[c], sy[r], sw[c], sh[r]))
+				Rect2(sx[c], sy[r], sw[c], sh[r]), mod)
 
 # 태운 한지 프레임(큰 패널·팝업 셸).
 static func draw_frame(ci: CanvasItem, rect: Rect2) -> void:
 	draw_nine(ci, FRAME, rect, FRAME_MARGIN)
 
-# 태운 한지 판(슬롯·바·작은 위젯 바탕).
-static func draw_plate(ci: CanvasItem, rect: Rect2) -> void:
-	draw_nine(ci, PLATE, rect, PLATE_MARGIN)
+# 태운 한지 판(슬롯·바·작은 위젯 바탕). alpha<1이면 뒤 지형이 투과(핫바 시야 확보).
+static func draw_plate(ci: CanvasItem, rect: Rect2, alpha: float = 1.0) -> void:
+	draw_nine(ci, PLATE, rect, PLATE_MARGIN, Color(1.0, 1.0, 1.0, alpha))
+
+# 외곽선 두께(px) — 밝은 잔디·어두운 절벽 어디서든 글자가 칼같이 보이게(owner HUD 가이드 C).
+const TEXT_OUTLINE := 4
+const OUTLINE_COL := Color(0.05, 0.04, 0.03, 0.92)   # 단단한 먹빛 외곽선
 
 # 한지 글자(neodgm). 좌상단이 아니라 baseline 기준이라, 호출부가 y에 폰트 높이를 더해 넘긴다.
+# ★ owner 2026-07-03 — 검정 외곽선을 먼저 깔아 배경 무관 선명도 확보(픽셀 퍼펙트 가독).
 static func draw_text(ci: CanvasItem, pos: Vector2, text: String, size: int, color: Color,
-		max_w: float = -1.0) -> void:
+		max_w: float = -1.0, outline: bool = true) -> void:
+	if outline:
+		ci.draw_string_outline(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, max_w, size,
+			TEXT_OUTLINE, OUTLINE_COL)
 	ci.draw_string(FONT, pos, text, HORIZONTAL_ALIGNMENT_LEFT, max_w, size, color)
 
 # 글자 폭(레이아웃 계산용).

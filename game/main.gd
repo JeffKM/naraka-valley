@@ -461,22 +461,10 @@ const PROP_LAYOUT_HOME := [
 		Vector2i(8, 12), Vector2i(16, 8), Vector2i(70, 18), Vector2i(72, 44), Vector2i(20, 56), Vector2i(62, 56),
 		Vector2i(4, 20), Vector2i(74, 10), Vector2i(50, 8), Vector2i(64, 34), Vector2i(56, 60), Vector2i(36, 56),
 	]],  # 꽃 패치 산재(고지·동/남 코지 여백 — 휑함 완화, 클러터 X)
-	# ── ★ 테두리 프레이밍(SOLID 나무·바위는 동선·건물·패치·연못·워프 비껴 맵 가장자리만). ──
-	[PROP_TREE_A, [
-		# 북변 저지(x24~, 창고 x28~33·본가 x40~48 비껴)
-		Vector2i(24, 0), Vector2i(36, 0), Vector2i(52, 0), Vector2i(60, 0), Vector2i(68, 0),
-		# 남변 저지(스폰 x40·스파인 x38 비껴)
-		Vector2i(4, 62), Vector2i(12, 62), Vector2i(20, 62), Vector2i(28, 62), Vector2i(48, 62),
-		Vector2i(56, 62), Vector2i(64, 62), Vector2i(72, 62),
-		# 서변 저지(y31~, 고지 절벽 아래)
-		Vector2i(0, 34), Vector2i(0, 42), Vector2i(0, 50), Vector2i(0, 58), Vector2i(1, 38), Vector2i(1, 54),
-		# 동변(동워프 y31~33·dest 비껴)
-		Vector2i(77, 6), Vector2i(77, 14), Vector2i(77, 44), Vector2i(77, 52)]],
-	[PROP_TREE_B, [Vector2i(74, 1), Vector2i(1, 61)]],           # 동북·서남 코너 활엽수(SOLID)
-	[PROP_ROCK, [Vector2i(5, 55), Vector2i(73, 56), Vector2i(70, 8)]],  # 가장자리 바위(SOLID)
-	# ★ 손배치 PROP_GRASS 폐기 → 지면 디테일 절차 시스템(_build_ground_details)이 잔디 무더기 대체.
-	[PROP_BUSH, [Vector2i(0, 29), Vector2i(22, 28), Vector2i(4, 44), Vector2i(72, 50), Vector2i(64, 6)]],  # 절벽 코너 덮개 + 덤불(장식)
-	[PROP_STUMP, [Vector2i(16, 6), Vector2i(66, 28), Vector2i(50, 58)]],  # 그루터기·통나무(장식)
+	# ── ★ 옛 테두리 스캐터 프롭 제거(owner 2026-07-03): 안 어울리는 나무(tree_spirit)·바위(rock)·
+	#   그루터기(stump)·덤불(bush)을 맵에서 걷어냈다. 맵 이탈 방어는 _build_border(4변 경계벽)가 이미
+	#   맡으므로 SOLID 프레이밍 트리 없이도 경계 안전. 텍스처 상수·레지스트리는 남겨 둔다(회귀·재사용).
+	#   과수(혼백나무 등 최근 생성분)는 orchard 시스템 소관이라 여기서 안 건드림. 절벽/계단은 아트 재생성.
 ]
 # ★C3 — 카페 실내가 마을 밴드(y86+)로 +48 평행이동(아래 CAFE_RECT 참조). 가구도 같은 +48이라
 #   작동 검증된 카페 내부 레이아웃이 상대 배치 그대로 내려간다(상대배치 무위험·회귀 0).
@@ -1062,6 +1050,7 @@ var vitals: VitalsHud
 var clock_hud: ClockHud             # ★ Phase C 우상단 시계 클러스터(절기·일차·시각·때·골드·마일스톤)
 var context_popup: ContextPopup     # ★ Phase C 좌하단 컨텍스트 팝업(근처 NPC 초상화 + 한 줄)
 var hud_tooltip: HudTooltip         # ★ Phase C 마우스 호버 툴팁(핫바 슬롯 아이템명)
+var onboarding_banner: OnboardingBanner  # ★ owner 2026-07-03 상단-중앙 온보딩 안내 팝업 배너
 # ★ 실내 카메라 격리 마스크(코지-와이드 회귀 수정) — 실내일 때 방 바깥을 검정으로 가린다.
 # 월드보다 위·다른 HUD/패널보다 아래 레이어(맨 앞 자식)에 깔아 외부 풀밭·이웃 방을 덮되 HUD·대화는
 # 그 위에 보이게 한다.
@@ -3413,6 +3402,11 @@ func _setup_hud_overlays() -> void:
 	hud_tooltip.name = "HudTooltip"
 	$CanvasLayer.add_child(hud_tooltip)
 	hud_tooltip.setup(hotbar, inventory)
+	# ★ owner 2026-07-03 — 상단-중앙 온보딩 안내 배너(옛 좌하단 wide notice 대체 · 잠깐 떴다 페이드).
+	onboarding_banner = OnboardingBanner.new()
+	onboarding_banner.name = "OnboardingBanner"
+	$CanvasLayer.add_child(onboarding_banner)
+	onboarding_banner.setup()
 	# 실내 마스크는 *맨 앞 자식*(index 0)으로 — 월드 위에 깔리되 씬 패널(대화·페이드)·HUD보다 아래라
 	# 방 바깥만 검게 가리고 그 위로 대화·HUD·페이드가 정상 표시된다.
 	indoor_mask = IndoorMask.new()
@@ -4049,6 +4043,8 @@ func _process(delta: float) -> void:
 	# 패널 본문은 dialogue.changed 시그널로 갱신되므로 여기선 입력만 본다.
 	if dialogue.is_open():
 		onboarding_label.visible = false  # T4.1 대화가 화면을 채우는 동안 배너 숨김
+		if onboarding_banner != null:
+			onboarding_banner.hide_now()  # 대화가 화면을 채우면 상단 안내 배너도 즉시 숨김
 		if Input.is_action_just_pressed("action"):
 			dialogue.advance()
 		return
@@ -4345,9 +4341,12 @@ func _process(delta: float) -> void:
 	# 출하함(위 facing_bin 우클릭 → 모달 프레임), 구매는 매대 프레임(위 facing_neo F)으로 옮겼다.
 
 	var p := player.global_position
+	# ★ owner 2026-07-03 — 좌상단 디버그 Readout(방향키·구역·좌표·FPS)은 화면을 가려 상시 숨김.
+	#   텍스트는 계속 갱신해 둬(F-키 등 향후 디버그 토글 시 값 즉시 노출). 표시만 끈다.
 	readout.text = "방향키 이동   구역: %s   위치(%d, %d)   FPS %d" % [
 		_zone_at(p), int(p.x), int(p.y), Engine.get_frames_per_second()
 	]
+	readout.visible = false
 	# ★ Phase C 시계 클러스터(우상단): raw ClockLabel/GoldLabel/MilestoneLabel을 한지 플레이트
 	# 하나로 통합했다(clock_hud). 절기 내 일차 = (day-1)%28+1(요일은 도메인에 없음 — clock_hud 주석).
 	# 날씨(☀)는 백엔드 부재로 보류(ADR-0048).
@@ -4356,8 +4355,11 @@ func _process(delta: float) -> void:
 		clock_hud.set_state(GameClock.season_name(clock.season_index()), _dos, clock.clock_string(),
 			clock.phase(), wallet.gold, CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()))
 	clock_label.visible = false
-	# ★ ADR-0024 핫바 요약(핫바 위, 하단 중앙): 든 아이템(슬롯) + 선택 안내. 씨앗이면 보유 수·작물도.
+	# ★ owner 2026-07-03 HUD 가이드 A — 하단 중앙 날것 텍스트("핫바 N번 · 든 것…")는 화면을 가리고
+	#   몰입을 깬다. 핫바가 이제 단축키 인덱스·선택 금박·개수 배지를 다 보여줘 이 요약은 중복 → 숨김.
+	#   씨앗 보유 수·성장일 상세는 핫바 호버 툴팁(HudTooltip)이 담당. 텍스트는 계산 유지(향후 토글).
 	crop_label.text = _hotbar_summary()
+	crop_label.visible = false
 	# ★ Phase C 골드는 시계 클러스터(clock_hud)로 이전 — raw 라벨 숨김.
 	gold_label.visible = false
 	# ★ C3 — 혼력은 우하단 혼력 바(vitals)가, 하트(미호·멜·바나·네오)는 메뉴 관계 탭이 그린다(프레임이
@@ -4377,13 +4379,14 @@ func _process(delta: float) -> void:
 		_milestone_celebrated = true
 		_show_milestone_reached()
 	# T4.1 온보딩 안내: 상시 중앙 배너가 "계속 떠서 불편"(피드백 2026-06-25) → 단계가 *바뀔 때만*
-	# 좌하단 알림으로 잠깐 띄운다(notice_feed, 스타듀식). 매 프레임 guidance()를 보되 직전과 다를 때만
-	# push(=단계 전환 1회). 배너 노드는 끈 채 유지(참조·회귀 안전). 모달 중엔 위 early-return이라 비교 보존.
+	# 잠깐 띄운다. ★owner 2026-07-03 3차 HUD 가이드 — 좌하단 wide notice(화면 폭 날것 띠)를 폐기하고
+	# 전용 상단-중앙 팝업 배너(한지 플레이트·외곽선·페이드)로 교체. 매 프레임 guidance()를 보되 직전과
+	# 다를 때만 show_guide(=단계 전환 1회). 모달 중엔 위 early-return이라 비교 보존.
 	var guide := onboarding.guidance()
 	if guide != _last_onboarding_guide:
 		_last_onboarding_guide = guide
-		if guide != "":
-			_notice(guide, 7.0, true)   # wide=긴 안내 안 잘리게, 7초 후 부드럽게 사라짐
+		if guide != "" and onboarding_banner != null:
+			onboarding_banner.show_guide(guide)   # 상단 중앙 배너, HOLD 후 부드럽게 페이드아웃
 	onboarding_label.visible = false
 	# ★ C2 — 옛 ShopPanel(멜 출하대·네오 매대 텍스트)은 폐기됐다. 매대·출하함은 공통 프레임이
 	# 그리므로 ShopPanel 노드는 상시 숨긴다(tscn 노드는 남되 미사용 — 회귀 0, frame이 대체).
