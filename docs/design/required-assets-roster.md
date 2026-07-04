@@ -106,7 +106,9 @@
 
 ## 8. facade·기존 프롭 다듬기 (S1-11 흡수)
 
-집·창고·축사 정면 facade 남향·청크 규칙 재생성([ADR-0036]·[ADR-0047])은 §1(건물)의 Gemini 재생성으로 흡수. 기존 프롭(울타리·허수아비·planter 등)은 도색 마무리 대상(별도 로스터 항목 아님, 육안 사인오프로 처리).
+집·창고·축사 정면 facade 남향·청크 규칙 재생성([ADR-0036]·[ADR-0047])은 §1(건물)의 Gemini 재생성으로 흡수.
+
+**자연·시스템 프롭 13종**(나무·바위·덤불·그루터기·debris 3종·넝쿨·울타리·허수아비·화분·꽃 패치)의 32-native 드롭인 교체는 [prop-regen-roster.md](./prop-regen-roster.md)가 전담한다(2026-07-04 grill: 장식+개간만·[ADR-0050] 32-native·코드 그림자 유지·드롭인). debris 3종은 PixelLab 1칸·3변주로 재작업·배선 완료(§5). 프롬프트 단일 출처 = [gemini-regen-batch.md](./gemini-regen-batch.md) §5.
 
 ---
 

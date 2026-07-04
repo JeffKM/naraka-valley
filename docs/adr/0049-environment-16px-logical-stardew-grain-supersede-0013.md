@@ -1,6 +1,6 @@
 # 환경 아트 16px 논리 해상도로 하향 — 스타듀 청키 그레인 (ADR-0013 supersede)
 
-> **Status:** accepted (2026-07-04, 16px 실험 GO). **supersedes [ADR-0013](./0013-environment-art-32px-native.md).**
+> **Status:** ~~accepted (2026-07-04, 16px 실험 GO)~~ → **SUPERSEDED (2026-07-04 같은 날) by [ADR-0050](./0050-environment-32-native-revert-ai-source-supersede-0049.md)** — debris 아트 생성 중 실제 스타듀와 대조하니 AI 축소 16px가 손그림 스타듀보다 뭉개짐이 드러나 **32px native로 복귀**. 아래는 역사 기록. **supersedes [ADR-0013](./0013-environment-art-32px-native.md)** (넷효과는 ADR-0050이 ADR-0013 규격 복원).
 
 ## 맥락
 
