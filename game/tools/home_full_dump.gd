@@ -43,7 +43,9 @@ func _init() -> void:
 			# ★[roster §5.2] debris면 좌표 결정적 해시로 변주 이미지를 고른다(_debris_variant_tex 재현). 크기는 동일.
 			var dimg := timg
 			if not variants.is_empty():
-				var vtex: Texture2D = variants[(t.x * 7 + t.y * 13) % variants.size()]
+				# debris=산포 (x*7+y*13)%3, 덤불=능선 한 줄 (x+y/2)%2 교대(_draw_props_for와 동일 식).
+				var idx: int = (t.x + t.y / 2) if main.BUSH_VARIANTS.has(tex) else (t.x * 7 + t.y * 13)
+				var vtex: Texture2D = variants[idx % variants.size()]
 				dimg = vtex.get_image()
 				if dimg.get_format() != Image.FORMAT_RGBA8:
 					dimg.convert(Image.FORMAT_RGBA8)

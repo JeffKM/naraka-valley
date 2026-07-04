@@ -459,6 +459,7 @@ const WALL_PROP_LIFT := -18
 #   이 텍스처들은 실내 레이아웃에만 쓰여(카페/외부 props는 다른 텍스처) 충돌이 실내 가구에만 걸린다.
 const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP_POT,
 	PROP_TREE_A, PROP_TREE_B, PROP_ROCK,   # ★ T3⑤ 나무·바위 = 통과 불가(맵 경계 벽)
+	PROP_BUSH,                             # ★[roster] 덤불 = 능선 벽(풀 2×2 SOLID·FOOT_BAR 아님 = 전체 막음, owner "막 지나가지길 원해")
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP]  # ★ ADR-0035 업화석·석화 고목 = 통과 불가(계단 하드 게이트·overgrown 장애물)
 # ★[asset-ruleset §5] 발치 충돌 바 — 키 큰 야외 프롭(나무·바위)은 풀타일 충돌 대신 *발치 밑단 바*(폭×반높이)만
 #   막아 "머리는 통과"(§6 Y-split의 물리 짝 — 캐노피 뒤로 지나감). 하드게이트 debris(업화석·석화고목)는
@@ -512,14 +513,16 @@ const PROP_LAYOUT_HOME := [
 	#   뚫려 게이트 누출). 앵커 (9,28)/(9,30)은 보존 — _debris_kind_at·reclaim_test 단언 불변.
 	[PROP_DEBRIS_EMBER, [Vector2i(9, 28), Vector2i(10, 28)]],   # 업화석(곡괭이) — 노치 입구 폭 x9..10 y28
 	[PROP_DEBRIS_STUMP, [Vector2i(9, 30), Vector2i(10, 30)]],   # 석화 고목(도끼) — 접근로 폭 x9..10 y30
-	# ★[단계3-③ 잔디 입체화] 동향 잔디 능선 수풀(x19~20 seam — 충돌바 위 시각 능선, 통과 판정은 _ridge_body).
-	#   옛 x20 4칸 간격(뚝뚝 끊긴 덤불)을 y1~25 *2칸 간격 지그재그*(x19↔20 교대)로 촘촘히 겹쳐 끊김 없는
-	#   산등성이로 — owner Gemini "수풀·낭떠러지로 막힌 자연 산등성이 능선". 남단(y25)이 남향 벽(y26)과
-	#   자연 연결(SE 코너 시각 폐쇄). bush=비-SOLID(통행은 _ridge_body seam이 담당 — 시각만 촘촘).
+	# ★[단계3-③ 잔디 입체화 / 2026-07-04 owner "막 지나가지길 원해·한 줄"] 동향 잔디 능선 수풀 = x20 한 줄
+	#   세로 스택(y1~25 2칸 간격 13개 = 2×2 블록이 y1~26 빈틈 없이 이어짐). bush=SOLID(풀 2×2)로 전환 →
+	#   덤불 자체가 통행 벽(옛 비-SOLID+_ridge_body 시각만 → 이제 덤불에 직접 부딪힘). _ridge_body는 백업으로
+	#   유지(y0 틈·남단 안전망). 남단(y25 블록=y25~26)이 남향 벽(y26)과 자연 연결(SE 코너 폐쇄).
+	#   ★변주 교대: 한 줄이라 x 고정 → (x+y)%2가 y홀수만 남아 단색이 되므로, bush 변주는 (x + y/2)%2로
+	#   y 스택을 따라 dark↔bright 교대(_draw_props_for·home_full_dump 동일 식).
 	[PROP_BUSH, [
-		Vector2i(20, 1), Vector2i(19, 3), Vector2i(20, 5), Vector2i(19, 7),
-		Vector2i(20, 9), Vector2i(19, 11), Vector2i(20, 13), Vector2i(19, 15),
-		Vector2i(20, 17), Vector2i(19, 19), Vector2i(20, 21), Vector2i(19, 23),
+		Vector2i(20, 1), Vector2i(20, 3), Vector2i(20, 5), Vector2i(20, 7),
+		Vector2i(20, 9), Vector2i(20, 11), Vector2i(20, 13), Vector2i(20, 15),
+		Vector2i(20, 17), Vector2i(20, 19), Vector2i(20, 21), Vector2i(20, 23),
 		Vector2i(20, 25)]],
 	# ── overgrown debris 밭(저지 — 통과 O 잡초 + 통과 X 업화석·석화 고목 산포, 동선·건물·패치·연못 비껴) ──
 	[PROP_DEBRIS_WEEDS, [Vector2i(50, 22), Vector2i(56, 38), Vector2i(35, 44), Vector2i(60, 52),
@@ -6429,8 +6432,9 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 			if is_debris:
 				draw_tex = _debris_variant_tex(tex, t)
 			elif BUSH_VARIANTS.has(tex):
+				# 능선 한 줄 세로 스택 → (x + y/2)%2로 dark↔bright 교대(x 고정이라 y/2가 교대 축).
 				var bvs: Array = BUSH_VARIANTS[tex]
-				draw_tex = bvs[(t.x * 7 + t.y * 13) % bvs.size()]
+				draw_tex = bvs[(t.x + t.y / 2) % bvs.size()]
 			# ★[roster] 앞 패스 나무는 occlusion fade 알파를 modulate로 얹는다(_update_tree_fade가 lerp).
 			#   뒤 패스·다른 프롭·다른 구역은 늘 불투명(get 기본 1.0).
 			var mod := Color(1, 1, 1, 1)
