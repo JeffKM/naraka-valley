@@ -29,6 +29,7 @@ func _init() -> void:
 		var tex: Texture2D = entry[0]
 		var yo: int = entry[2] if entry.size() > 2 else 0
 		var casts_shadow: bool = tex in main.PROP_SHADOW_SET
+		var variants: Array = main.DEBRIS_VARIANTS.get(tex, [])   # ★[roster §5.2] debris는 좌표해시 변주(_draw_props_for와 동일)
 		var timg := tex.get_image()
 		if timg.get_format() != Image.FORMAT_RGBA8:
 			timg.convert(Image.FORMAT_RGBA8)
@@ -37,7 +38,14 @@ func _init() -> void:
 			# ★[§11] 부피 프롭 발치 SE 접지 그림자(main._draw_prop_shadow의 CPU 재현)
 			if casts_shadow:
 				_blit_shadow(out, t.x * TILE + tsz.x * 0.5 + 2.0, float(t.y * TILE + yo) + tsz.y - 2.0, tsz.x * 0.40)
-			out.blend_rect(timg, Rect2i(Vector2i.ZERO, tsz), Vector2i(t.x * TILE, t.y * TILE + yo))
+			# ★[roster §5.2] debris면 좌표 결정적 해시로 변주 이미지를 고른다(_debris_variant_tex 재현). 크기는 동일.
+			var dimg := timg
+			if not variants.is_empty():
+				var vtex: Texture2D = variants[(t.x * 7 + t.y * 13) % variants.size()]
+				dimg = vtex.get_image()
+				if dimg.get_format() != Image.FORMAT_RGBA8:
+					dimg.convert(Image.FORMAT_RGBA8)
+			out.blend_rect(dimg, Rect2i(Vector2i.ZERO, tsz), Vector2i(t.x * TILE, t.y * TILE + yo))
 	# 야외 건물 외관(집·창고·축사) — 통과불가 WALL 박스 위 1:1 blit
 	var facades := [
 		[main.FACADE_HOUSE, main.HOUSE_EXT_RECT],

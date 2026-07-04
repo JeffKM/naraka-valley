@@ -321,8 +321,8 @@ const PROP_STUMP := preload("res://assets/props/stump_log.png")         # 64×32
 const PROP_STAIRS := preload("res://assets/props/stairs_east.png")      # ★S1-10 96×64 동향 돌계단(고지=서/왼쪽↔저지=동/오른쪽, 노치 3칸 폭, 통과 O). 옛 남향 stairs.png placeholder 교체
 const PROP_VINE := preload("res://assets/props/vine.png")               # 32×64 — 넝쿨(절벽 이음매 덮개, 통과 O)
 const PROP_DEBRIS_WEEDS := preload("res://assets/props/debris_weeds.png")          # 32×32 — 이승의 미련·잡초(낫, 통과 O 장식)
-const PROP_DEBRIS_EMBER := preload("res://assets/props/debris_ember_stone.png")    # 64×64 — 업화석(곡괭이, 통과 X SOLID)
-const PROP_DEBRIS_STUMP := preload("res://assets/props/debris_petrified_stump.png")  # 64×64 — 석화 고목(도끼, 통과 X SOLID)
+const PROP_DEBRIS_EMBER := preload("res://assets/props/debris_ember_stone.png")    # ★[roster §5.2] 32×32(1칸, 64→32 축소) — 업화석(곡괭이, 통과 X SOLID)
+const PROP_DEBRIS_STUMP := preload("res://assets/props/debris_petrified_stump.png")  # ★[roster §5.2] 32×32(1칸) — 석화 고목(도끼, 통과 X SOLID)
 # ★ [S1-8] 개간 debris 텍스처 → DebrisCatalog kind. 배치(어느 타일에 무슨 debris)는 PROP_LAYOUT_HOME
 #   시드에 잠겨 있고, 여기서 텍스처로 kind를 역인한다. 드로우/충돌 skip-filter·개간 디스패치가 참조한다.
 #   ※ PROP_STUMP(장식 통나무)는 여기 없음 = debris 아님(치울 수 없는 순수 장식).
@@ -330,6 +330,20 @@ const DEBRIS_KIND := {
 	PROP_DEBRIS_WEEDS: DebrisCatalog.WEEDS,
 	PROP_DEBRIS_EMBER: DebrisCatalog.EMBER,
 	PROP_DEBRIS_STUMP: DebrisCatalog.STUMP,
+}
+# ★ [roster §5.2 / ADR-0050] 32-native 재생성 — kind별 3변주(좌표해시로 결정적 선택 → 같은 kind가 맵에서
+#   3형태로 다양). 정체성 토큰(위 const=v1)은 DEBRIS_KIND·SOLID_PROPS·충돌·reclaim가 그대로 키잉하고,
+#   변주는 *순수 그리기 관심사*(3장 전부 32×32 동일 크기라 발치·그림자·Y-split·충돌 불변).
+const PROP_DEBRIS_WEEDS_V2 := preload("res://assets/props/debris_weeds_v2.png")
+const PROP_DEBRIS_WEEDS_V3 := preload("res://assets/props/debris_weeds_v3.png")
+const PROP_DEBRIS_EMBER_V2 := preload("res://assets/props/debris_ember_stone_v2.png")
+const PROP_DEBRIS_EMBER_V3 := preload("res://assets/props/debris_ember_stone_v3.png")
+const PROP_DEBRIS_STUMP_V2 := preload("res://assets/props/debris_petrified_stump_v2.png")
+const PROP_DEBRIS_STUMP_V3 := preload("res://assets/props/debris_petrified_stump_v3.png")
+const DEBRIS_VARIANTS := {
+	PROP_DEBRIS_WEEDS: [PROP_DEBRIS_WEEDS, PROP_DEBRIS_WEEDS_V2, PROP_DEBRIS_WEEDS_V3],
+	PROP_DEBRIS_EMBER: [PROP_DEBRIS_EMBER, PROP_DEBRIS_EMBER_V2, PROP_DEBRIS_EMBER_V3],
+	PROP_DEBRIS_STUMP: [PROP_DEBRIS_STUMP, PROP_DEBRIS_STUMP_V2, PROP_DEBRIS_STUMP_V3],
 }
 # ★[asset-ruleset §11] 접지 그림자 대상 = 부피 있는 야외 바닥 프롭. 스프라이트에 굽지 않고
 #   별도 반투명 타원을 밑단 아래에 깔아 "뜬 느낌"을 없앤다(건물 facade는 _blit_facade_anchored가
@@ -477,9 +491,11 @@ const PROP_LAYOUT_HOME := [
 	# 남향 개간 게이트 = 남향 벽 관통 계단 노치(x9..10 y26..28). 넝쿨 장벽(비-SOLID 시각) + 저지측 발치
 	#   debris 하드게이트(SOLID)로 개간 전 물리 차단. 옛 동향 게이트(x21,x24)를 남향으로 90° 회전.
 	[PROP_VINE, [Vector2i(9, 26)]],             # 넝쿨 장벽(계단 입구 시각 — 통과 O, 32×64)
-	# 하드 게이트 debris(노치 발치 — 통과 X SOLID로 게이트 물리 차단, 개간 온보딩). 64×64=2×2칸 풋프린트.
-	[PROP_DEBRIS_EMBER, [Vector2i(9, 28)]],     # 업화석(곡괭이) — 노치 입구(x9..10 y28..29)
-	[PROP_DEBRIS_STUMP, [Vector2i(9, 30)]],     # 석화 고목(도끼) — 접근로 하단(x9..10 y30..31)
+	# 하드 게이트 debris(노치 발치 — 통과 X SOLID로 게이트 물리 차단, 개간 온보딩). ★[roster §5.2] 32×32=1×1칸이
+	#   되며 옛 2×2 한 개론 2칸 노치(x9..10)를 못 막으므로 열마다 2타일(x9+x10)로 폭을 채운다(안 그러면 x10이
+	#   뚫려 게이트 누출). 앵커 (9,28)/(9,30)은 보존 — _debris_kind_at·reclaim_test 단언 불변.
+	[PROP_DEBRIS_EMBER, [Vector2i(9, 28), Vector2i(10, 28)]],   # 업화석(곡괭이) — 노치 입구 폭 x9..10 y28
+	[PROP_DEBRIS_STUMP, [Vector2i(9, 30), Vector2i(10, 30)]],   # 석화 고목(도끼) — 접근로 폭 x9..10 y30
 	# ★[단계3-③ 잔디 입체화] 동향 잔디 능선 수풀(x19~20 seam — 충돌바 위 시각 능선, 통과 판정은 _ridge_body).
 	#   옛 x20 4칸 간격(뚝뚝 끊긴 덤불)을 y1~25 *2칸 간격 지그재그*(x19↔20 교대)로 촘촘히 겹쳐 끊김 없는
 	#   산등성이로 — owner Gemini "수풀·낭떠러지로 막힌 자연 산등성이 능선". 남단(y25)이 남향 벽(y26)과
@@ -6328,6 +6344,14 @@ const _PROP_PASS_FRONT := 2
 func _prop_base_y(t: Vector2i, yo: int, tex: Texture2D) -> float:
 	return float(t.y * TILE + yo) + tex.get_size().y
 
+# ★[roster §5.2] debris 변주 선택 — 좌표 결정적 해시로 kind별 3변주 중 하나(같은 kind가 맵에서 3형태로
+#   다양). 정체성 토큰이 DEBRIS_VARIANTS에 없으면(=debris 아님) 원본 그대로. 순수 시각(충돌·kind 무관).
+func _debris_variant_tex(tex: Texture2D, t: Vector2i) -> Texture2D:
+	var vs: Array = DEBRIS_VARIANTS.get(tex, [])
+	if vs.is_empty():
+		return tex
+	return vs[(t.x * 7 + t.y * 13) % vs.size()]
+
 # canvas = 실제로 그릴 CanvasItem — Godot draw_*는 *현재 _draw 중인 그 노드*에서만 허용되므로,
 #   뒤 패스는 main(self)·앞 패스는 _front_props(플레이어 위 레이어)가 canvas로 넘어온다.
 func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_PASS_ALL, split_y: float = 0.0) -> void:
@@ -6352,8 +6376,11 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 			# ★[§11] 부피 프롭이면 발치에 SE 접지 그림자 먼저(프롭 본체 아래). 순수 시각.
 			if casts_shadow:
 				_draw_prop_shadow(canvas, t, yo, tsz)
+			# ★[roster §5.2] debris는 좌표 결정적 해시로 3변주 중 하나를 그린다(같은 kind가 맵에서 다양).
+			#   변주 3장은 tex와 동일 크기(32×32)라 tsz·발치·그림자·Y-split 계산은 정체성 토큰 그대로 유효.
+			var draw_tex: Texture2D = _debris_variant_tex(tex, t) if is_debris else tex
 			# ADR-0013: 가구 아트도 32px native라 1:1로 그린다(스툴 32×32=1칸, 침대 32×64=1×2칸).
-			canvas.draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE + yo), tsz), false)
+			canvas.draw_texture_rect(draw_tex, Rect2(Vector2(t.x * TILE, t.y * TILE + yo), tsz), false)
 
 # ★[asset-ruleset §11] 부피 프롭 발치 SE 접지 그림자 — 스프라이트에 굽지 않고 별도 반투명 타원을
 #   밑단 바로 아래에 깐다(배치 100% 자유·"뜬 느낌" 방지). facade _blit_facade_anchored와 같은 결.
