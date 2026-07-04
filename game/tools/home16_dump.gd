@@ -59,6 +59,24 @@ func _init() -> void:
 			var src: Image = _dirt if use_dirt else _grass
 			out.set_pixel(px, py, src.get_pixel((px / 2) % FIELD, (py / 2) % FIELD))
 
+	# ── 클럼프 스캐터(Q5) — 필드 타일링 주기 반복감을 깨는 tuft. GROUND 셀에 결정적 해시 ──
+	var tufts: Array[Image] = [
+		_chunkify(_img(load("res://assets/props/ground_grass2.png"))),
+		_chunkify(_img(load("res://assets/props/ground_grass3.png"))),
+		_chunkify(_img(load("res://assets/props/ground_grass1.png"))),
+	]
+	for ty in gh:
+		for tx in gw:
+			if int(main._grid[ty][tx]) != GROUND:
+				continue
+			if _h01(tx, ty, 301) > 0.16:      # ~16% 밀도
+				continue
+			var timg: Image = tufts[int(_h01(tx, ty, 302) * tufts.size()) % tufts.size()]
+			var tsz := timg.get_size()
+			var ox := tx * TILE + int(_h01(tx, ty, 303) * maxi(1, TILE - tsz.x))
+			var oy := ty * TILE + int(_h01(tx, ty, 304) * maxi(1, TILE - tsz.y))
+			out.blend_rect(timg, Rect2i(Vector2i.ZERO, tsz), Vector2i(ox, oy))
+
 	# ── 프롭(청키화) + 발치 그림자 ──
 	for entry in main._prop_layouts.get("HOME", []):
 		var tex: Texture2D = entry[0]
