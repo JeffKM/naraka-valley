@@ -293,7 +293,7 @@ warm 베이스 지형 프롬프트:
 - **farm_planter** (32×32) — `a small warm terracotta farm planter box with dark soil and a tiny muted afterlife sprout` · `dark warm brown`.
 - **farm_scarecrow** (32×64, 1×2) — `a farm scarecrow on a single wooden post, straw-stuffed body, burlap head with a stitched face, tattered muted cloth, a small crow motif` · `dark warm brown`. 발치만 좁게.
 - **rock** (64×64, SOLID) — `a large mossy underworld boulder, chunky faceted grey-slate stone with muted moss patches, solid and heavy` · `cool blue-violet slate`. 발치 충돌·머리 통과.
-- **stump_log** (64×32, 통과·장식) — `a fallen tree stump and log on its side, weathered grey-brown deadwood, visible ring on the cut face, muted bark` · `cool blue-violet slate`. ※debris 아님(치울 수 없음).
+- **stump_log** (64×32, 통과·장식) — `a fallen tree stump and log on its side, weathered grey-brown deadwood, visible ring on the cut face, muted bark` · `cool blue-violet slate`. ※debris 아님(치울 수 없음). **★SUPERSEDED(2026-07-04):** owner가 이 1종 드롭인 대신 **PixelLab 통나무 5종 재설계**로 전환 — [prop-regen-roster.md §5.3](./prop-regen-roster.md) 참조(긴/짧은/세워진/대각2, `PROP_LOG_*`).
 
 ### 5.2 카페 가구 (7) — 어두운 우드+버건디 앤틱, 충돌 없음, SHADOW=dark warm brown
 - **cafe_cabinet** (64×64) — `an antique wine cabinet, dark carved wood with glass doors, rows of muted bottles and glassware, burgundy accents`.

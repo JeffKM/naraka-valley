@@ -63,7 +63,12 @@ func _init() -> void:
 	_check("② 나무A 그림자 대상", m.PROP_TREE_A in m.PROP_SHADOW_SET)
 	_check("② 나무B 그림자 대상", m.PROP_TREE_B in m.PROP_SHADOW_SET)
 	_check("② 바위 그림자 대상", m.PROP_ROCK in m.PROP_SHADOW_SET)
-	_check("② 그루터기 그림자 대상", m.PROP_STUMP in m.PROP_SHADOW_SET)
+	# ★[prop-regen-roster §5.3] 옛 PROP_STUMP → 통나무 5종 재생성. 전부 부피 바닥 프롭이라 그림자 대상.
+	_check("② 긴통나무 그림자 대상", m.PROP_LOG_LONG in m.PROP_SHADOW_SET)
+	_check("② 짧은통나무 그림자 대상", m.PROP_LOG_SHORT in m.PROP_SHADOW_SET)
+	_check("② 세워진통나무 그림자 대상", m.PROP_LOG_UPRIGHT in m.PROP_SHADOW_SET)
+	_check("② 대각통나무(밝) 그림자 대상", m.PROP_LOG_DIAG_A in m.PROP_SHADOW_SET)
+	_check("② 대각통나무(어둠) 그림자 대상", m.PROP_LOG_DIAG_B in m.PROP_SHADOW_SET)
 	_check("② 덤불 그림자 대상", m.PROP_BUSH in m.PROP_SHADOW_SET)
 	_check("② 업화석 그림자 대상", m.PROP_DEBRIS_EMBER in m.PROP_SHADOW_SET)
 	_check("② 석화고목 그림자 대상", m.PROP_DEBRIS_STUMP in m.PROP_SHADOW_SET)
