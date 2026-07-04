@@ -30,6 +30,8 @@ func _init() -> void:
 		var yo: int = entry[2] if entry.size() > 2 else 0
 		var casts_shadow: bool = tex in main.PROP_SHADOW_SET
 		var variants: Array = main.DEBRIS_VARIANTS.get(tex, [])   # ★[roster §5.2] debris는 좌표해시 변주(_draw_props_for와 동일)
+		if variants.is_empty():
+			variants = main.BUSH_VARIANTS.get(tex, [])            # ★[roster] 덤불 능선도 좌표해시 변주(dark↔bright, 동일 해시)
 		var timg := tex.get_image()
 		if timg.get_format() != Image.FORMAT_RGBA8:
 			timg.convert(Image.FORMAT_RGBA8)
@@ -41,7 +43,9 @@ func _init() -> void:
 			# ★[roster §5.2] debris면 좌표 결정적 해시로 변주 이미지를 고른다(_debris_variant_tex 재현). 크기는 동일.
 			var dimg := timg
 			if not variants.is_empty():
-				var vtex: Texture2D = variants[(t.x * 7 + t.y * 13) % variants.size()]
+				# debris=산포 (x*7+y*13)%3, 덤불=능선 한 줄 (x+y/2)%2 교대(_draw_props_for와 동일 식).
+				var idx: int = (t.x + t.y / 2) if main.BUSH_VARIANTS.has(tex) else (t.x * 7 + t.y * 13)
+				var vtex: Texture2D = variants[idx % variants.size()]
 				dimg = vtex.get_image()
 				if dimg.get_format() != Image.FORMAT_RGBA8:
 					dimg.convert(Image.FORMAT_RGBA8)

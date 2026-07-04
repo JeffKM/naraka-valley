@@ -316,15 +316,22 @@ const PROP_TREE_B := preload("res://assets/props/tree_spirit_b.png")    # ★[ro
 const PROP_GRASS := preload("res://assets/props/grass_tuft.png")        # 32×32 — 풀 무더기(장식)
 const PROP_BUSH := preload("res://assets/props/bush.png")               # 64×64 — 덤불(2×2칸, 장식)
 const PROP_ROCK := preload("res://assets/props/rock.png")               # 64×64 — 바위·돌(2×2칸, SOLID)
-# ★[prop-regen-roster §5.3 / owner 2026-07-04] 통나무(logs) 5종 재생성(PixelLab create_1_direction_object
-#   → tools/_logs_build.py 정규화). 옛 PROP_STUMP(단일 그루터기, 맵 미배치)를 대체. 전부 통과 O 순수 장식
-#   (SOLID·발치바·fade 없음 — 낮은 바닥 프롭). 크기가 3종(96×32/64×32/32×32)이라 debris식 변주배열이
-#   아니라 개별 프롭으로 배선(발치·Y-Sort가 크기 파생). 코드 그림자(_draw_prop_shadow 타원)만 얹는다.
+# ★[prop-regen-roster §5.3 / owner 2026-07-04~05] 통나무(logs) 5종 재생성(PixelLab create_1_direction_object
+#   → tools/_logs_build.py 정규화). 옛 PROP_STUMP(단일 그루터기, 맵 미배치)를 대체(stump_log.png 폐기).
+#   ★통과 불가 SOLID(owner "통나무 통과X"). 크기가 3종(96×32/64×32/32×32)이라 debris식 변주배열이
+#   아니라 개별 프롭으로 배선(발치·Y-Sort·충돌이 크기 파생). 코드 그림자(_draw_prop_shadow 타원)만 얹는다.
 const PROP_LOG_LONG := preload("res://assets/props/stump_log_long.png")        # 96×32 — 긴 통나무(3×1칸, ㅡ자)
 const PROP_LOG_SHORT := preload("res://assets/props/stump_log_short.png")      # 64×32 — 짧은 통나무(2×1칸)
 const PROP_LOG_UPRIGHT := preload("res://assets/props/stump_log_upright.png")  # 32×32 — 세워진 그루터기(1×1칸, 위 나이테)
 const PROP_LOG_DIAG_A := preload("res://assets/props/stump_log_diag_a.png")    # 32×32 — 대각 통나무 밝은(1×1칸, ＼)
 const PROP_LOG_DIAG_B := preload("res://assets/props/stump_log_diag_b.png")    # 32×32 — 대각 통나무 어두운(1×1칸, ／)
+# ★[roster 2026-07-04] 덤불 능선 수풀 2변주(어두운 톱니+베리 / 밝은 라임 dome — PixelLab 32-native 재생성,
+#   owner 레퍼런스). debris와 동일한 좌표 결정적 해시로 능선에서 dark↔bright 교대(단조로움 완화). 순수 시각 —
+#   크기 64×64 동일·PROP_BUSH 정체성(PROP_SHADOW_SET·레지스트리·_ridge_body 통행·배치 좌표) 전부 불변.
+const PROP_BUSH_V2 := preload("res://assets/props/bush_v2.png")         # 64×64 — 덤불 밝은 라임 변주
+const BUSH_VARIANTS := {
+	PROP_BUSH: [PROP_BUSH, PROP_BUSH_V2],
+}
 # ★ ADR-0035 Phase B — 안식 재설계 신규 PROP(Phase A 마스터 스타일 생성). 계단·넝쿨·덤불 덮개·debris 3종.
 const PROP_STAIRS := preload("res://assets/props/stairs_east.png")      # ★S1-10 96×64 동향 돌계단(고지=서/왼쪽↔저지=동/오른쪽, 노치 3칸 폭, 통과 O). 옛 남향 stairs.png placeholder 교체
 const PROP_VINE := preload("res://assets/props/vine.png")               # 32×64 — 넝쿨(절벽 이음매 덮개, 통과 O)
@@ -461,6 +468,7 @@ const WALL_PROP_LIFT := -18
 #   이 텍스처들은 실내 레이아웃에만 쓰여(카페/외부 props는 다른 텍스처) 충돌이 실내 가구에만 걸린다.
 const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP_POT,
 	PROP_TREE_A, PROP_TREE_B, PROP_ROCK,   # ★ T3⑤ 나무·바위 = 통과 불가(맵 경계 벽)
+	PROP_BUSH,                             # ★[roster] 덤불 = 능선 벽(풀 2×2 SOLID·FOOT_BAR 아님 = 전체 막음, owner "막 지나가지길 원해")
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP,  # ★ ADR-0035 업화석·석화 고목 = 통과 불가(계단 하드 게이트·overgrown 장애물)
 	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B]  # ★통나무 5종 = 통과 불가(owner 2026-07-05·FOOT_BAR 아님=풀타일 장애물, 낮은 프롭)
 # ★[asset-ruleset §5] 발치 충돌 바 — 키 큰 야외 프롭(나무·바위)은 풀타일 충돌 대신 *발치 밑단 바*(폭×반높이)만
@@ -518,14 +526,16 @@ const PROP_LAYOUT_HOME := [
 	#   뚫려 게이트 누출). 앵커 (9,28)/(9,30)은 보존 — _debris_kind_at·reclaim_test 단언 불변.
 	[PROP_DEBRIS_EMBER, [Vector2i(9, 28), Vector2i(10, 28)]],   # 업화석(곡괭이) — 노치 입구 폭 x9..10 y28
 	[PROP_DEBRIS_STUMP, [Vector2i(9, 30), Vector2i(10, 30)]],   # 석화 고목(도끼) — 접근로 폭 x9..10 y30
-	# ★[단계3-③ 잔디 입체화] 동향 잔디 능선 수풀(x19~20 seam — 충돌바 위 시각 능선, 통과 판정은 _ridge_body).
-	#   옛 x20 4칸 간격(뚝뚝 끊긴 덤불)을 y1~25 *2칸 간격 지그재그*(x19↔20 교대)로 촘촘히 겹쳐 끊김 없는
-	#   산등성이로 — owner Gemini "수풀·낭떠러지로 막힌 자연 산등성이 능선". 남단(y25)이 남향 벽(y26)과
-	#   자연 연결(SE 코너 시각 폐쇄). bush=비-SOLID(통행은 _ridge_body seam이 담당 — 시각만 촘촘).
+	# ★[단계3-③ 잔디 입체화 / 2026-07-04 owner "막 지나가지길 원해·한 줄"] 동향 잔디 능선 수풀 = x20 한 줄
+	#   세로 스택(y1~25 2칸 간격 13개 = 2×2 블록이 y1~26 빈틈 없이 이어짐). bush=SOLID(풀 2×2)로 전환 →
+	#   덤불 자체가 통행 벽(옛 비-SOLID+_ridge_body 시각만 → 이제 덤불에 직접 부딪힘). _ridge_body는 백업으로
+	#   유지(y0 틈·남단 안전망). 남단(y25 블록=y25~26)이 남향 벽(y26)과 자연 연결(SE 코너 폐쇄).
+	#   ★변주 교대: 한 줄이라 x 고정 → (x+y)%2가 y홀수만 남아 단색이 되므로, bush 변주는 (x + y/2)%2로
+	#   y 스택을 따라 dark↔bright 교대(_draw_props_for·home_full_dump 동일 식).
 	[PROP_BUSH, [
-		Vector2i(20, 1), Vector2i(19, 3), Vector2i(20, 5), Vector2i(19, 7),
-		Vector2i(20, 9), Vector2i(19, 11), Vector2i(20, 13), Vector2i(19, 15),
-		Vector2i(20, 17), Vector2i(19, 19), Vector2i(20, 21), Vector2i(19, 23),
+		Vector2i(20, 1), Vector2i(20, 3), Vector2i(20, 5), Vector2i(20, 7),
+		Vector2i(20, 9), Vector2i(20, 11), Vector2i(20, 13), Vector2i(20, 15),
+		Vector2i(20, 17), Vector2i(20, 19), Vector2i(20, 21), Vector2i(20, 23),
 		Vector2i(20, 25)]],
 	# ── overgrown debris 밭(저지 — 통과 O 잡초 + 통과 X 업화석·석화 고목 산포, 동선·건물·패치·연못 비껴) ──
 	[PROP_DEBRIS_WEEDS, [Vector2i(50, 22), Vector2i(56, 38), Vector2i(35, 44), Vector2i(60, 52),
@@ -6441,7 +6451,14 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 				_draw_prop_shadow(canvas, t, yo, tsz)
 			# ★[roster §5.2] debris는 좌표 결정적 해시로 3변주 중 하나를 그린다(같은 kind가 맵에서 다양).
 			#   변주 3장은 tex와 동일 크기(32×32)라 tsz·발치·그림자·Y-split 계산은 정체성 토큰 그대로 유효.
-			var draw_tex: Texture2D = _debris_variant_tex(tex, t) if is_debris else tex
+			#   덤불도 같은 해시로 2변주(dark↔bright)를 그린다 — 64×64 동일 크기라 발치·그림자 불변.
+			var draw_tex: Texture2D = tex
+			if is_debris:
+				draw_tex = _debris_variant_tex(tex, t)
+			elif BUSH_VARIANTS.has(tex):
+				# 능선 한 줄 세로 스택 → (x + y/2)%2로 dark↔bright 교대(x 고정이라 y/2가 교대 축).
+				var bvs: Array = BUSH_VARIANTS[tex]
+				draw_tex = bvs[(t.x + t.y / 2) % bvs.size()]
 			# ★[roster] 앞 패스 나무는 occlusion fade 알파를 modulate로 얹는다(_update_tree_fade가 lerp).
 			#   뒤 패스·다른 프롭·다른 구역은 늘 불투명(get 기본 1.0).
 			var mod := Color(1, 1, 1, 1)
