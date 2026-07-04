@@ -311,8 +311,8 @@ const PROP_FLOWER_PATCH := preload("res://assets/props/spirit_flower_patch.png")
 # ★ Phase 2.8 T3⑤ — 안식 농원 테두리 프레이밍 장식(PixelLab create_map_object, 피안절 톤 통일
 # retone_props_p28t3.py). 나무·바위 = 통과 불가 SOLID(맵 경계 벽 — 채집·채광 상호작용은 Phase 3).
 # 풀·덤불·그루터기 = 통과 가능 순수 장식. 가장자리·빈 코너만 두르고 밭·동선은 연다(테두리 프레이밍).
-const PROP_TREE_A := preload("res://assets/props/tree_spirit_a.png")    # 64×96 — 저승 봄나무 침엽(2×3칸, SOLID)
-const PROP_TREE_B := preload("res://assets/props/tree_spirit_b.png")    # 96×96 — 저승 봄나무 활엽(3×3칸, SOLID)
+const PROP_TREE_A := preload("res://assets/props/tree_spirit_a.png")    # ★[roster] 64×128 — 저승 봄나무 침엽(2×4칸): 밑둥 1칸 SOLID·수관 통과+occlusion fade
+const PROP_TREE_B := preload("res://assets/props/tree_spirit_b.png")    # ★[roster] 64×128 — 저승 봄나무 활엽(2×4칸): 밑둥 1칸 SOLID·수관 통과+occlusion fade
 const PROP_GRASS := preload("res://assets/props/grass_tuft.png")        # 32×32 — 풀 무더기(장식)
 const PROP_BUSH := preload("res://assets/props/bush.png")               # 64×64 — 덤불(2×2칸, 장식)
 const PROP_ROCK := preload("res://assets/props/rock.png")               # 64×64 — 바위·돌(2×2칸, SOLID)
@@ -458,7 +458,15 @@ const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP
 #   개간 게이트라 풀타일 유지(Slice 1 전환)·실내 벽 가구는 벽 flush라 풀타일 유지(회귀 보존). 맵 이탈은
 #   _border_body(둘레)가 막으므로 야외 트리 축소는 경계 안전.
 const FOOT_BAR_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK]
-const FOOT_BAR_H := 16   # 밑단 바 높이(8 논리 = 반 타일)
+const FOOT_BAR_H := 16   # 밑단 바 높이(8 논리 = 반 타일) — 바위 등 부피 프롭 기본
+# ★[roster] 저승 봄나무(2×4칸) = 밑둥만 SOLID(폭 전체 × 젤밑 1칸)·수관 3칸은 통과 O(캐릭터가 뒤로 지나감).
+#   owner 결정: "젤밑 2칸(밑둥)만 막고 그 위는 통과". 나무 발치바는 FOOT_BAR_H 대신 1칸(TILE) 높이.
+const TREE_FOOT_H := TILE
+# ★[roster] 수관 뒤 캐릭터 occlusion fade — 앞 패스(플레이어보다 앞)로 그려지는 나무가 플레이어를 덮으면
+#   살짝 반투명해 "뒤에 있음"을 드러낸다(스타듀식). 나무별 alpha를 _tree_fade에 lerp(순수 시각).
+const FADE_PROPS := [PROP_TREE_A, PROP_TREE_B]
+const TREE_FADE_MIN := 0.45   # 겹칠 때 최소 알파(완전 투명 X — 나무가 남아 보이게)
+const TREE_FADE_SPEED := 8.0  # 알파 전환 속도(초당 — move_toward, 부드러운 페이드)
 # ★ ADR-0025 ② — PROP 좌표 데이터 외부화. 텍스처는 *코드가* 정의하고(키↔Texture2D 레지스트리),
 # layout.json은 *위치만* 담는다. 직렬화 때 tex→키, 로드 때 키→tex. PROP_LAYOUT에 새 텍스처를
 # 쓰면 이 레지스트리에도 등록해야 한다(미등록 tex는 export에서 빈 키로 경고·로드에서 스킵).
@@ -518,6 +526,22 @@ const PROP_LAYOUT_HOME := [
 		Vector2i(8, 12), Vector2i(16, 8), Vector2i(70, 18), Vector2i(72, 44), Vector2i(20, 56), Vector2i(62, 56),
 		Vector2i(4, 20), Vector2i(74, 10), Vector2i(50, 8), Vector2i(64, 34), Vector2i(56, 60), Vector2i(36, 56),
 	]],  # 꽃 패치 산재(고지·동/남 코지 여백 — 휑함 완화, 클러터 X)
+	# ── ★[roster 2026-07-04] 저승 봄나무 재도입(2×4칸·밑둥 1칸 SOLID·수관 통과+occlusion fade). owner가
+	#   2026-07-03에 옛 나무를 "안 어울림"으로 걷어냈으나, 스타듀 룩 2×4 재생성본으로 테두리 프레이밍 복귀.
+	#   전부 빈 코너·가장자리(밭·동선·건물·연못·debris·능선 회피 — 아래 좌표는 그 밖의 잔디 잉여지대). ──
+	[PROP_TREE_A, [
+		Vector2i(54, 3), Vector2i(68, 4), Vector2i(74, 3),   # 우상단 코너 클러스터
+		Vector2i(76, 54), Vector2i(70, 58),                  # 우하단 코너
+		Vector2i(44, 60), Vector2i(3, 50),                   # 하단·좌하단
+		Vector2i(4, 33),                                     # 좌중(넋우릿간 아래·연못 서편)
+	]],  # 침엽수 8
+	[PROP_TREE_B, [
+		Vector2i(61, 2), Vector2i(77, 11),                   # 우상단 코너·우측 가장자리
+		Vector2i(72, 46), Vector2i(64, 49),                  # 우하단 코너
+		Vector2i(52, 61),                                    # 하단 가장자리
+		Vector2i(10, 54), Vector2i(18, 58),                  # 좌하단 코너
+		Vector2i(3, 24),                                     # 좌중
+	]],  # 활엽수 8
 	# ── ★ 옛 테두리 스캐터 프롭 제거(owner 2026-07-03): 안 어울리는 나무(tree_spirit)·바위(rock)·
 	#   그루터기(stump)·덤불(bush)을 맵에서 걷어냈다. 맵 이탈 방어는 _build_border(4변 경계벽)가 이미
 	#   맡으므로 SOLID 프레이밍 트리 없이도 경계 안전. 텍스처 상수·레지스트리는 남겨 둔다(회귀·재사용).
@@ -993,6 +1017,9 @@ const SHIP_BIN_TILE := Vector2i(19, 88)   # 카페 직원 줄(y88) 오른쪽 끝
 #   플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 나눠 그린다(매 프레임 아님 — 값싸게).
 var _front_props: Node2D = null
 var _last_player_tile_y: int = -9999
+# ★[roster] 나무 occlusion fade — key=나무 앵커 타일(Vector2i), value=현재 알파(1.0=불투명). 매 프레임
+#   플레이어 겹침을 판정해 target(TREE_FADE_MIN/1.0)으로 lerp, 변화가 있으면 _front_props를 다시 그린다.
+var _tree_fade: Dictionary = {}
 # ★ T3③' 실내 가구 충돌 — 구역 빌드마다 SOLID_PROPS 칸에 사각 충돌을 다시 세운다(러그 제외).
 #   타일맵 벽과 같은 물리 레이어(기본 1)라 플레이어 move_and_slide가 통과 못 한다.
 var _prop_body: StaticBody2D = null
@@ -1904,10 +1931,12 @@ func _rebuild_prop_collision() -> void:
 			var cs := CollisionShape2D.new()
 			var rect := RectangleShape2D.new()
 			if foot_bar:
-				# 발치 바 = 프롭 폭 × 반높이, art 밑단(발치)에 정렬. 상단(머리·캐노피)은 통과 O.
-				rect.size = Vector2(sz.x, FOOT_BAR_H)
+				# 발치 바 = 프롭 폭 × 밑단 높이, art 밑단(발치)에 정렬. 상단(머리·캐노피)은 통과 O.
+				# ★[roster] 나무(2×4)는 밑둥 1칸(TREE_FOOT_H)만 막고, 그 외 부피 프롭(바위)은 반타일(FOOT_BAR_H).
+				var fh: float = TREE_FOOT_H if entry[0] in FADE_PROPS else FOOT_BAR_H
+				rect.size = Vector2(sz.x, fh)
 				cs.shape = rect
-				cs.position = Vector2(t.x * TILE + sz.x * 0.5, t.y * TILE + yo + sz.y - FOOT_BAR_H * 0.5)
+				cs.position = Vector2(t.x * TILE + sz.x * 0.5, t.y * TILE + yo + sz.y - fh * 0.5)
 			else:
 				# 풀타일(실내 벽 가구·하드게이트 debris) — 회귀 보존.
 				rect.size = sz
@@ -4186,6 +4215,7 @@ func _process(delta: float) -> void:
 			queue_redraw()
 			if _front_props != null:
 				_front_props.queue_redraw()
+		_update_tree_fade(delta)   # ★[roster] 수관 뒤 캐릭터 occlusion fade(행 넘김과 별개 — 매 프레임 부드럽게)
 	# 음소거 토글(M) — 연출·대화·마무리 화면 어디서든 받는다(입력 가드보다 위, UX 토글이라
 	# 게임 상태와 무관). audio가 Music·SFX 버스를 함께 음소거한다.
 	if Input.is_action_just_pressed("mute_audio"):
@@ -6379,8 +6409,13 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 			# ★[roster §5.2] debris는 좌표 결정적 해시로 3변주 중 하나를 그린다(같은 kind가 맵에서 다양).
 			#   변주 3장은 tex와 동일 크기(32×32)라 tsz·발치·그림자·Y-split 계산은 정체성 토큰 그대로 유효.
 			var draw_tex: Texture2D = _debris_variant_tex(tex, t) if is_debris else tex
+			# ★[roster] 앞 패스 나무는 occlusion fade 알파를 modulate로 얹는다(_update_tree_fade가 lerp).
+			#   뒤 패스·다른 프롭·다른 구역은 늘 불투명(get 기본 1.0).
+			var mod := Color(1, 1, 1, 1)
+			if pass_mode == _PROP_PASS_FRONT and tex in FADE_PROPS:
+				mod.a = _tree_fade.get(t, 1.0)
 			# ADR-0013: 가구 아트도 32px native라 1:1로 그린다(스툴 32×32=1칸, 침대 32×64=1×2칸).
-			canvas.draw_texture_rect(draw_tex, Rect2(Vector2(t.x * TILE, t.y * TILE + yo), tsz), false)
+			canvas.draw_texture_rect(draw_tex, Rect2(Vector2(t.x * TILE, t.y * TILE + yo), tsz), false, mod)
 
 # ★[asset-ruleset §11] 부피 프롭 발치 SE 접지 그림자 — 스프라이트에 굽지 않고 별도 반투명 타원을
 #   밑단 바로 아래에 깐다(배치 100% 자유·"뜬 느낌" 방지). facade _blit_facade_anchored와 같은 결.
@@ -6395,6 +6430,35 @@ func _draw_prop_shadow(canvas: CanvasItem, t: Vector2i, yo: int, tsz: Vector2) -
 # ★[asset-ruleset §6] 플레이어보다 앞(발치 아래)의 HOME 야외 프롭을 플레이어 위 레이어(_front_props)에서
 #   다시 그린다. main._draw는 뒤 프롭만(플레이어 아래) → 이 짝으로 캐릭터가 나무·바위 뒤로 가려진다.
 #   canvas = _front_props(그리기 주체) — draw_*가 그 노드에서 나가야 Godot이 허용한다.
+# ★[roster] 나무 occlusion fade 갱신 — HOME 야외에서 매 프레임, 각 나무가 (a) 앞 패스로 그려지고
+#   (플레이어보다 앞 = 발치가 플레이어 아래) (b) 플레이어 발치를 스프라이트 rect로 덮으면 target=TREE_FADE_MIN,
+#   아니면 1.0으로 move_toward. 알파가 바뀐 프레임에만 _front_props를 다시 그린다(정적이면 재드로우 0).
+func _update_tree_fade(delta: float) -> void:
+	var ppos := player.global_position
+	var changed := false
+	var live: Dictionary = {}   # 이번 프레임 나무 앵커 집합(사라진 나무의 잔여 엔트리 정리)
+	for entry in _prop_layouts.get("HOME", []):
+		var tex: Texture2D = entry[0]
+		if not tex in FADE_PROPS:
+			continue
+		var yo: int = entry[2] if entry.size() > 2 else 0
+		var tsz := tex.get_size()
+		for t in entry[1]:
+			live[t] = true
+			var r := Rect2(Vector2(t.x * TILE, t.y * TILE + yo), tsz)
+			var occl: bool = _prop_base_y(t, yo, tex) > ppos.y and r.has_point(ppos)
+			var target: float = TREE_FADE_MIN if occl else 1.0
+			var cur: float = _tree_fade.get(t, 1.0)
+			if not is_equal_approx(cur, target):
+				_tree_fade[t] = move_toward(cur, target, delta * TREE_FADE_SPEED)
+				changed = true
+	# 배치가 바뀌어(F10) 사라진 나무의 잔여 알파는 제거(다음 등장 시 1.0에서 다시 시작)
+	for k in _tree_fade.keys():
+		if not live.has(k):
+			_tree_fade.erase(k)
+	if changed and _front_props != null:
+		_front_props.queue_redraw()
+
 func _draw_front_props(canvas: CanvasItem) -> void:
 	if _region != RegionCatalog.HOME or player == null:
 		return

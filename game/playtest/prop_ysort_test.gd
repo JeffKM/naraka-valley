@@ -76,18 +76,19 @@ func _init() -> void:
 	_check("②b 계단 그림자 제외(평면)", not (m.PROP_STAIRS in m.PROP_SHADOW_SET))
 
 	# ③ Y-split — 부피 프롭 발치로 앞/뒤 분할
-	# 북단 나무(row0, 64×96) 발치 = 0*32+96 = 96px. 남단 나무(row62) 발치 = 62*32+96 = 2080px.
+	# ★[roster 2026-07-04] 나무 2×4(64×128)로 재생성 — 발치 = row*32 + 128.
+	# 북단 나무(row0) 발치 = 0*32+128 = 128px. 남단 나무(row62) 발치 = 62*32+128 = 2112px.
 	var tree: Texture2D = m.PROP_TREE_A
 	var by_top: float = m._prop_base_y(Vector2i(24, 0), 0, tree)
 	var by_bot: float = m._prop_base_y(Vector2i(4, 62), 0, tree)
-	_check("③ 북단 나무 발치=96px", is_equal_approx(by_top, 96.0))
-	_check("③ 남단 나무 발치=2080px", is_equal_approx(by_bot, 2080.0))
+	_check("③ 북단 나무 발치=128px", is_equal_approx(by_top, 128.0))
+	_check("③ 남단 나무 발치=2112px", is_equal_approx(by_bot, 2112.0))
 	# 플레이어가 두 나무 사이(y=1000px)일 때: 북단=뒤(플레이어 위로 안 가림), 남단=앞(플레이어를 가림).
 	var split := 1000.0
 	_check("③b 북단 나무 = 뒤(base≤split)", not _is_front(m, Vector2i(24, 0), 0, tree, split))
 	_check("③b 남단 나무 = 앞(base>split)", _is_front(m, Vector2i(4, 62), 0, tree, split))
-	# 플레이어가 남단 나무보다 더 아래(y=2100px)면 그 나무도 뒤가 된다(플레이어가 앞).
-	_check("③c 플레이어가 더 아래면 남단 나무도 뒤", not _is_front(m, Vector2i(4, 62), 0, tree, 2100.0))
+	# 플레이어가 남단 나무보다 더 아래(y=2150px > 발치 2112)면 그 나무도 뒤가 된다(플레이어가 앞).
+	_check("③c 플레이어가 더 아래면 남단 나무도 뒤", not _is_front(m, Vector2i(4, 62), 0, tree, 2150.0))
 
 	# ④ 평면 데칼은 split과 무관하게 절대 '앞'이 아니다(러그가 발 위로 덮이는 버그 차단)
 	_check("④ 러그는 어떤 split에서도 앞 아님", not _is_front(m, Vector2i(11, 71), 0, m.PROP_RUG, 0.0))
