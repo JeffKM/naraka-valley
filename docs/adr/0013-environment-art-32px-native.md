@@ -1,5 +1,7 @@
 # 환경 아트 32px native로 상향 — 캐릭터 선명도 일치 (ADR-0012 절충 개정)
 
+> **Status:** superseded by [ADR-0049](./0049-environment-16px-logical-stardew-grain-supersede-0013.md) (2026-07-04). 16px 실험 GO로 환경/전 아트를 **16px 논리(4× 렌더)**로 하향 — 스타듀 청키 그레인. 아래 32-native 결정은 히스토리로만 유효.
+
 ADR-0012는 캐릭터를 2배(standard size56, native ~58–70px)로 올리되 **환경 아트는
 16px로 유지하고 TileMapLayer를 ×2 스케일해 렌더**하기로 했다("작업량 1/4 이점 보존",
 "신규 환경 아트도 16px로 만들면 됨"). 그 결과 인게임에서 **캐릭터·작물은 native 32px급

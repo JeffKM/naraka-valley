@@ -386,6 +386,11 @@ var _REGION_PROP_KEYS := {
 }
 var _ground_detail_tex: ImageTexture = null   # 구역별 베이크된 지면 디테일 오버레이
 var _gd_shadow_stamp: Image = null            # 재사용 SE 그림자 스탬프
+# ★[ADR-0049] 16px 소프트 지면 big-field 캐시(256²=필드128×2, 월드좌표 타일링용). 최초 1회 로드.
+var _bf_grass: Image = null
+var _bf_dirt: Image = null
+var _bf_soil: Image = null
+var _bf_water: Image = null
 var _gd_soft_cache := {}                       # ★[ADR-0042] 디테일 texture→부드럽게 보정한 Image 캐시
 var _base_variant_cache := {}                  # ★[ADR-0043 §6] terrain id→base 변종 좌표 배열 캐시
 var _facade_base_cache := {}                   # facade tex→밑단선 span{line_y,center,half}(캐스트 그림자 발 앵커)
@@ -2921,7 +2926,13 @@ func _paint_grid() -> void:
 	# ★[ADR-0043 §6(b)] 길↔풀 유기경계 = grass 쪽 raggedness(비-terrain 기법). *중앙 박기* 디테일 오버레이는
 	#   폐기 유지하되, *경계 fringe* 오버레이만 재도입한다 — 길은 솔리드 base 그대로(1칸 폭 복도 보존)·
 	#   인접 풀칸 경계만 들쭉날쭉. terrain corner-match(복도 소멸) 대신 오버레이라 grid·충돌·테스트 불변.
-	_build_path_grass_fringe()
+	# ★[ADR-0049 라이브 통합] 안식 농원 = 새 16px 소프트 필드 지면(잔디·흙길·밭·물 필드 타일링 +
+	#   경계 지터 디더)을 한 장 베이크해 _ground_detail_tex에 실어 기존 draw call로 그린다(씸-프리,
+	#   grid·충돌·terrain 로직 불변). 그 외 구역은 기존 fringe 유지.
+	if _region == RegionCatalog.HOME:
+		_build_ground16()
+	else:
+		_build_path_grass_fringe()
 
 # ── 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md) ──────
 # 결정적 해시 좌표라 프레임·세이브·재방문에 고정(깜빡임 0). 구역 빌드 때 한 장으로 베이크해
@@ -3131,6 +3142,88 @@ func _build_path_grass_fringe() -> void:
 							if dp.a < 0.5:
 								continue
 							out.set_pixel(tx, ty, dp)
+	_ground_detail_tex = ImageTexture.create_from_image(out)
+
+# ★[ADR-0049 라이브 통합] 16px 소프트 지면 오버레이 베이크(home16_dump 로직 이식).
+#   필드(잔디·흙길·밭·물)를 월드좌표로 타일링(단위셀 반복 아님·격자 반복은 스캐터로 별도) +
+#   길↔풀 경계 지터 디더. 성능: 셀 단위 blit_rect(빠름) + 경계 셀만 per-pixel 지터.
+#   HOUSE/CAFE(실내 바닥)은 건너뛰어(투명) 타일맵 실내 바닥이 비치게 한다.
+const _GF := 128         # 필드 한 변
+const _GJIT := 5         # 경계 지터 진폭(px)
+func _load_big_fields() -> void:
+	if _bf_grass != null:
+		return
+	_bf_grass = _big_field("res://assets/terrain16/grass_field.png", Color(0.29, 0.42, 0.24))
+	_bf_dirt = _big_field("res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
+	_bf_soil = _big_field("res://assets/terrain16/soil_field.png", Color(0.35, 0.22, 0.16))
+	_bf_water = _big_field("res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39))
+
+func _big_field(path: String, fallback: Color) -> Image:
+	var img: Image
+	if ResourceLoader.exists(path):
+		img = (load(path) as Texture2D).get_image()
+		if img.get_format() != Image.FORMAT_RGBA8:
+			img.convert(Image.FORMAT_RGBA8)
+		if img.get_width() != _GF:
+			img.resize(_GF, _GF, Image.INTERPOLATE_NEAREST)
+	else:
+		img = Image.create(_GF, _GF, false, Image.FORMAT_RGBA8)
+		img.fill(fallback)
+	img.resize(_GF * 2, _GF * 2, Image.INTERPOLATE_NEAREST)   # ×2 = 256 (월드 타일링 주기)
+	return img
+
+func _build_ground16() -> void:
+	_ground_detail_tex = null
+	_load_big_fields()
+	var bw := _grid_w * TILE
+	var bh := _outdoor_h * TILE
+	if bw <= 0 or bh <= 0:
+		return
+	var out := Image.create(bw, bh, false, Image.FORMAT_RGBA8)
+	var P := _GF * 2   # 256 = 월드좌표 타일링 주기(=8칸)
+	# ① 셀 단위 필드 blit(빠름) — HOUSE/CAFE는 투명(실내 바닥 비침)
+	for y in _outdoor_h:
+		for x in _grid_w:
+			var cell: int = _grid[y][x]
+			if cell == HOUSE or cell == CAFE:
+				continue
+			var src: Image = _bf_grass
+			if cell == PATH:
+				src = _bf_dirt
+			elif cell == SOIL:
+				src = _bf_soil
+			elif cell == WATER:
+				src = _bf_water
+			out.blit_rect(src, Rect2i((x * TILE) % P, (y * TILE) % P, TILE, TILE), Vector2i(x * TILE, y * TILE))
+	# ② 길↔풀 경계 지터 디더 — 경계 셀만 per-pixel(유기적 들쭉날쭉)
+	for y in _outdoor_h:
+		for x in _grid_w:
+			var cell2: int = _grid[y][x]
+			if cell2 != GROUND and cell2 != PATH:
+				continue
+			var edge := false
+			var dirs: Array[Vector2i] = [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
+			for d in dirs:
+				var nx := x + d.x
+				var ny := y + d.y
+				if nx < 0 or ny < 0 or nx >= _grid_w or ny >= _outdoor_h:
+					continue
+				var nc: int = _grid[ny][nx]
+				if (cell2 == GROUND and nc == PATH) or (cell2 == PATH and nc == GROUND):
+					edge = true
+					break
+			if not edge:
+				continue
+			for iy in TILE:
+				for ix in TILE:
+					var px := x * TILE + ix
+					var py := y * TILE + iy
+					var jx := px + int((_gd_h01(px, py, 610) - 0.5) * _GJIT * 2.0)
+					var jy := py + int((_gd_h01(px, py, 620) - 0.5) * _GJIT * 2.0)
+					var jcx := clampi(jx / TILE, 0, _grid_w - 1)
+					var jcy := clampi(jy / TILE, 0, _outdoor_h - 1)
+					var s: Image = _bf_dirt if int(_grid[jcy][jcx]) == PATH else _bf_grass
+					out.set_pixel(px, py, s.get_pixel(px % P, py % P))
 	_ground_detail_tex = ImageTexture.create_from_image(out)
 
 func _build_ground_details() -> void:

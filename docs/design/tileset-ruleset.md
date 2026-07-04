@@ -12,7 +12,7 @@
 
 | 항목 | 값 | 출처 |
 |---|---|---|
-| **타일 크기** | **32×32 native, 1:1 렌더**(×2 업스케일 금지) | ADR-0013 (ADR-0012의 16px×2를 환경 한정 개정) |
+| **타일 크기** | **16×16 논리 native, 정수 4× 렌더**(온스크린 64px) | **★[ADR-0049](../adr/0049-environment-16px-logical-stardew-grain-supersede-0013.md)**(2026-07-04 16px 실험 GO) — ADR-0013 32-native를 supersede. 스타듀 청키 그레인·전 자산 16 밀도 통일. 지형 = Gemini 필드→`gemini_grass_to_field.py` 128 다운스케일 |
 | **아트 룩** | 스타듀밸리식 톤 + 저승 저채도 팔레트 + **거친 레트로 도트**(포켓몬 루비/사파이어·스타듀) | ADR-0026 → ADR-0035 개정 |
 | **outline** | `single color outline` (~~`lineless`~~) | **★ADR-0035 개정** — owner 다회 피드백: lineless/매끄러운 RPG메이커 그라데이션 폐기, 단색 외곽선 + 거친 도트 |
 | **detail** | **`medium detail`** (~~low~~) | **★ADR-0043 재개정**(지형 한정) — owner가 스타듀 레퍼런스로 lush 요구. 풀이 꽉 차게. |
@@ -25,7 +25,7 @@
 
 **기존 지형 4종:** 풀(grass) · 흙길(dirt path) · 밭흙(tilled soil) · 물(water).
 
-> ⚠️ **stale 주의:** `p2.0-spike-prompts.md` §3·§4·§11은 아직 `tile_size=16×16`·`TILE_ART=16`으로 적혀 있다(ADR-0012 시절 잔재). **ADR-0013이 환경 아트를 32px native로 뒤집었고 실제 자산 메타데이터도 32×32다** — 타일 크기는 이 문서(32px)가 진실. 팔레트 §4.2만 스파이크 문서를 참조.
+> ⚠️ **해상도 히스토리:** ADR-0012(16px×2) → ADR-0013(32 native) → **[ADR-0049](../adr/0049-environment-16px-logical-stardew-grain-supersede-0013.md)(16px 논리·4× 렌더, 2026-07-04 GO)**로 다시 16 논리로. 현행 32-native 자산·`.tres`(`combined_terrain_homestead` 등)는 **16px 재생성 프로그램의 대상**(ADR-0049 downstream). 팔레트 §4.2는 유효.
 
 ## 2. 파이프라인 (확정 절차)
 
@@ -49,6 +49,9 @@
 - [x] **3.1 뷰 각도 = `low top-down`.** 기존 타일 4종·캐릭터 5종이 모두 low top-down → 한 화면 시점 일치 강제. 스킬의 high top-down 권장은 무시.
 - [x] **3.2 전이 크기 = `transition_size: 0.0`.** 코너 대각선 또렷한 경계(스타듀 정합 + 지형 가독성). 전이 *모양*은 Godot Wang 코너 오토타일이 책임지므로 0.0이 하드 경계를 뜻하지 않음. 0.0~0.5 모두 16타일이라 컨버터 무수정.
 - [x] **3.3 디테일 등급 = `detail: low`.** ⚠️ **★ADR-0035 개정** — 당초 medium으로 정했으나, owner 다회 피드백으로 안식 마스터 스타일을 **`single color outline` + `low detail` + 거친 레트로 도트**(루비/사파이어·스타듀)로 잠금. lineless·highly detail·매끄러운 그라데이션(RPG메이커 룩) 폐기. → **확정 스타일 = `outline:single color outline` + `shading:basic` + `detail:low` + `text_guidance_scale:8` + `transition_size:0.0`.** (이 스타일이 절벽·계단·debris·facade·나무·바위 등 모든 후속 환경 에셋의 앵커.)
+  - **★★2026-07-04 grill 개정 — 외곽선 = 스코프 분리(Q1).** owner가 스타듀 실물 스크린샷 + Gemini 잔디 가이드로 재지적: 스타듀는 잔디에 검은 외곽선이 **없고** 나무·울타리엔 **있다**. 따라서 `single color outline`은 **분리된 객체 전용**(나무·바위·건물·debris·클럼프 프롭)이고, **걸어다니는 베이스 지형(풀·흙길·밭흙·자갈·모래·숲바닥)은 무외곽선·저대비·소프트**(Gemini 룰1·스타듀 문법). asset-ruleset §9의 객체/베이스 분리선을 외곽선까지 확장. → 베이스 지형 STYLE = `NO outline / lineless, soft LOW-contrast tonal variation, tiny soft blended tufts (NOT big chunky clumps)`. (객체는 기존 청키+outline 유지.)
+  - **★논리 해상도 16 vs 32 = 실험 판정 대기.** owner가 16px 논리(스타듀 밀도) 전환 검토 → 되돌리기 비싼 결정(전 라이브러리 재생성)이라 **값싼 base 룩 실험 먼저**([gemini-regen-batch.md §4.0](./gemini-regen-batch.md)). GO 시 ADR-0013 supersede, NO-GO 시 32-native 유지 + 위 소프트 베이스만 32px 적용. **판정 전까지 §1 "32px native"는 잠정 유지.**
+  - **★클럼프 모델(Q5 확정):** Gemini 3카테고리 → 기존 3메커니즘 매핑 = A(베이스 변종)→**타일**(terrain alternative) / B(풀 클럼프)→**스캐터 프롭**(ground-composition §4) / C(흙 전이)→**Wang 타일**. Gemini "클럼프=타일" 반려(디컴파일: 스타듀 tuft=작고 부드러운 런타임 오버레이).
 - [x] **3.4 팔레트 규율 = 공유 꼬리 + 선택적 영혼빛 액센트.**
   - **(a) 공유 꼬리 — ★2026-06-30 개정(따뜻한 베이스 + 저승 에셋, asset-ruleset §9).** 더는 "전부 muted"가 아니라 **둘로 분리**:
     - **객체용**(건물·나무·바위·debris·가구·작물): `muted desaturated low-saturation underworld palette, somber graveyard tone, rough chunky retro pixel dithering, single color dark outline, NOT smooth gradient, NOT lineless RPG-maker style`

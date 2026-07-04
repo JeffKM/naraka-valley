@@ -2,9 +2,9 @@
   "generatedNote": "자동 생성(build-manifest.mjs) — 수정 금지. SOURCE=lib/required-assets.json. 데일리: npm run manifest",
   "total": 48,
   "byStatus": {
-    "have": 20,
+    "have": 24,
     "placeholder": 10,
-    "missing": 18
+    "missing": 14
   },
   "byMaker": {
     "claude": 23,
@@ -66,8 +66,8 @@
           "note": "Gemini facade 완료",
           "preview": {
             "file": "assets/buildings/barn_ext.png",
-            "w": 128,
-            "h": 98
+            "w": 192,
+            "h": 142
           }
         },
         {
@@ -80,9 +80,13 @@
           "name": "넋둥우리(소형 닭장)",
           "maker": "gemini",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "신규 — 넋우릿간과 구분되는 소형",
-          "preview": null
+          "preview": {
+            "file": "assets/buildings/coop_ext.png",
+            "w": 128,
+            "h": 100
+          }
         }
       ]
     },
@@ -121,9 +125,13 @@
           "name": "넋우릿간 내부",
           "maker": "claude",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "실내 타일 + 진입 워프·pathing",
-          "preview": null
+          "preview": {
+            "file": "assets/tiles/barn_floor.png",
+            "w": 32,
+            "h": 32
+          }
         },
         {
           "category": "interiors",
@@ -136,9 +144,13 @@
           "name": "넋둥우리 내부",
           "maker": "claude",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "실내 타일 + 진입 워프·pathing",
-          "preview": null
+          "preview": {
+            "file": "assets/tiles/coop_floor.png",
+            "w": 32,
+            "h": 32
+          }
         },
         {
           "category": "interiors",
@@ -151,9 +163,13 @@
           "name": "갈무리방 내부",
           "maker": "claude",
           "expected": "missing",
-          "status": "missing",
+          "status": "have",
           "note": "실내 타일 + 진입 워프",
-          "preview": null
+          "preview": {
+            "file": "assets/tiles/storehouse_floor.png",
+            "w": 32,
+            "h": 32
+          }
         }
       ]
     },
@@ -872,8 +888,8 @@
       "note": "Gemini facade 완료",
       "preview": {
         "file": "assets/buildings/barn_ext.png",
-        "w": 128,
-        "h": 98
+        "w": 192,
+        "h": 142
       }
     },
     {
@@ -886,9 +902,13 @@
       "name": "넋둥우리(소형 닭장)",
       "maker": "gemini",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "신규 — 넋우릿간과 구분되는 소형",
-      "preview": null
+      "preview": {
+        "file": "assets/buildings/coop_ext.png",
+        "w": 128,
+        "h": 100
+      }
     },
     {
       "category": "interiors",
@@ -920,9 +940,13 @@
       "name": "넋우릿간 내부",
       "maker": "claude",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "실내 타일 + 진입 워프·pathing",
-      "preview": null
+      "preview": {
+        "file": "assets/tiles/barn_floor.png",
+        "w": 32,
+        "h": 32
+      }
     },
     {
       "category": "interiors",
@@ -935,9 +959,13 @@
       "name": "넋둥우리 내부",
       "maker": "claude",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "실내 타일 + 진입 워프·pathing",
-      "preview": null
+      "preview": {
+        "file": "assets/tiles/coop_floor.png",
+        "w": 32,
+        "h": 32
+      }
     },
     {
       "category": "interiors",
@@ -950,9 +978,13 @@
       "name": "갈무리방 내부",
       "maker": "claude",
       "expected": "missing",
-      "status": "missing",
+      "status": "have",
       "note": "실내 타일 + 진입 워프",
-      "preview": null
+      "preview": {
+        "file": "assets/tiles/storehouse_floor.png",
+        "w": 32,
+        "h": 32
+      }
     },
     {
       "category": "livestock",
