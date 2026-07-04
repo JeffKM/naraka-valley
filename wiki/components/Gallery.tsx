@@ -33,7 +33,13 @@ const ACTION_STYLE: Record<string, { label: string; cls: string }> = {
   ok: { label: "OK", cls: "bg-emerald-500/80 text-white" },
   regen: { label: "재생성", cls: "bg-amber-500/90 text-black" },
   check: { label: "확인중", cls: "bg-sky-500/80 text-white" },
+  delete: { label: "삭제 대기", cls: "bg-rose-600/90 text-white" },
 };
+
+// ISO 커밋일 → 사람이 읽는 날짜(YYYY-MM-DD). null이면 "날짜 없음".
+function fmtDate(iso: string | null) {
+  return iso ? iso.slice(0, 10) : "날짜 없음";
+}
 
 function previewScale(w: number, h: number, box: number) {
   const m = Math.max(w, h) || 1;
@@ -43,7 +49,8 @@ function previewScale(w: number, h: number, box: number) {
 export default function Gallery({ manifest }: { manifest: Manifest }) {
   const [cat, setCat] = useState("all");
   const [tool, setTool] = useState("all");
-  const [work, setWork] = useState("all"); // all | decided | regen | ok | check
+  const [work, setWork] = useState("all"); // all | decided | regen | ok | check | delete
+  const [sort, setSort] = useState<"name" | "recent">("name"); // 알파벳 | 최근순(createdAt desc)
   const [q, setQ] = useState("");
   const [decisions, setDecisions] = useState<DecisionMap>({});
   const [editing, setEditing] = useState<AssetItem | null>(null);
@@ -58,19 +65,34 @@ export default function Gallery({ manifest }: { manifest: Manifest }) {
 
   const tools = Object.keys(manifest.byTool);
   const items = useMemo(() => {
-    return manifest.items.filter((it) => {
+    const filtered = manifest.items.filter((it) => {
       const d = decisions[assetId(it)];
       if (cat !== "all" && it.category !== cat) return false;
       if (tool !== "all" && (d?.tool || it.tool) !== tool) return false;
       if (work === "decided" && !d) return false;
-      if ((work === "regen" || work === "ok" || work === "check") && d?.action !== work) return false;
+      if (
+        (work === "regen" || work === "ok" || work === "check" || work === "delete") &&
+        d?.action !== work
+      )
+        return false;
       if (q && !it.name.toLowerCase().includes(q.toLowerCase())) return false;
       return true;
     });
-  }, [manifest.items, decisions, cat, tool, work, q]);
+    if (sort === "recent") {
+      // createdAt 내림차순(최근 먼저), null은 맨 뒤
+      return [...filtered].sort((a, b) => {
+        if (a.createdAt === b.createdAt) return a.name.localeCompare(b.name);
+        if (!a.createdAt) return 1;
+        if (!b.createdAt) return -1;
+        return b.createdAt.localeCompare(a.createdAt);
+      });
+    }
+    return filtered; // 매니페스트는 이미 알파벳 정렬
+  }, [manifest.items, decisions, cat, tool, work, sort, q]);
 
   const decidedCount = Object.keys(decisions).length;
   const regenCount = Object.values(decisions).filter((d) => d.action === "regen").length;
+  const deleteCount = Object.values(decisions).filter((d) => d.action === "delete").length;
 
   function onSaved(id: string, d: Decision | null) {
     setDecisions((prev) => {
@@ -91,7 +113,8 @@ export default function Gallery({ manifest }: { manifest: Manifest }) {
         <p className="mt-1 text-sm text-[var(--muted)]">
           렌더 에셋 <b className="text-[var(--ink)]">{manifest.total}</b>개 · 카드 클릭 → 작업 지시 저장 ·{" "}
           결정 <b className="text-[var(--ink)]">{decidedCount}</b> · 재생성 요청{" "}
-          <b className="text-amber-300">{regenCount}</b>
+          <b className="text-amber-300">{regenCount}</b> · 삭제 대기{" "}
+          <b className="text-rose-300">{deleteCount}</b>
         </p>
       </header>
 
@@ -142,6 +165,11 @@ export default function Gallery({ manifest }: { manifest: Manifest }) {
         <FilterBtn active={work === "regen"} onClick={() => setWork("regen")}>재생성 {regenCount}</FilterBtn>
         <FilterBtn active={work === "ok"} onClick={() => setWork("ok")}>OK</FilterBtn>
         <FilterBtn active={work === "check"} onClick={() => setWork("check")}>확인중</FilterBtn>
+        <FilterBtn active={work === "delete"} onClick={() => setWork("delete")}>삭제 대기 {deleteCount}</FilterBtn>
+        <span className="mx-1 h-5 w-px bg-[var(--edge)]" />
+        <span className="text-xs text-[var(--muted)]">정렬:</span>
+        <FilterBtn active={sort === "name"} onClick={() => setSort("name")}>이름순</FilterBtn>
+        <FilterBtn active={sort === "recent"} onClick={() => setSort("recent")}>최근순</FilterBtn>
       </section>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
@@ -204,10 +232,15 @@ function Card({
   const effTool = decision?.tool || it.tool;
   const corrected = !!decision?.tool && decision.tool !== it.tool;
   const act = decision?.action ? ACTION_STYLE[decision.action] : null;
+  const isDelete = decision?.action === "delete"; // 삭제 표시 → 빨강 테두리로 뚜렷하게
   return (
     <button
       onClick={onClick}
-      className="group flex flex-col overflow-hidden rounded-lg border border-[var(--edge)] bg-[var(--panel)] text-left transition hover:border-[var(--amber)]/60"
+      className={`group flex flex-col overflow-hidden rounded-lg border bg-[var(--panel)] text-left transition ${
+        isDelete
+          ? "border-rose-500 ring-1 ring-rose-500/40 hover:border-rose-400"
+          : "border-[var(--edge)] hover:border-[var(--amber)]/60"
+      }`}
     >
       <div
         className="relative flex items-center justify-center overflow-hidden border-b border-[var(--edge)] bg-[repeating-conic-gradient(#242019_0%_25%,#1b1815_0%_50%)] bg-[length:16px_16px]"
@@ -271,6 +304,13 @@ function Card({
             {corrected && " ✎"}
           </span>
           <span className="text-[10px] text-[var(--muted)]">{CAT_LABEL[it.category] || it.category}</span>
+          {/* git 최초 커밋일(최근/예전 분류 축) */}
+          <span
+            className={`ml-auto text-[10px] ${it.createdAt ? "text-[var(--muted)]" : "text-rose-400/70"}`}
+            title="git 최초 커밋일(생성 시각)"
+          >
+            {fmtDate(it.createdAt)}
+          </span>
         </div>
         <p className="line-clamp-2 flex items-start gap-1 text-[11px] leading-snug text-[var(--muted)]">
           <Info className="mt-px size-3 shrink-0" />

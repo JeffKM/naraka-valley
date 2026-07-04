@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Save, Trash2 } from "lucide-react";
+import { X, Save, Trash2, Trash } from "lucide-react";
 import type { AssetItem, Decision, DecisionAction } from "@/lib/types";
 import { TOOLS, GEN_TOOLS, assetId } from "@/lib/types";
 
@@ -12,6 +12,7 @@ const ACTIONS: { v: DecisionAction; label: string; hint: string }[] = [
   { v: "ok", label: "OK(잘됨)", hint: "이대로 유지" },
   { v: "regen", label: "재생성", hint: "다시 만들기 — 아래 도구로" },
   { v: "check", label: "확인중", hint: "보류·검토중" },
+  { v: "delete", label: "삭제 표시", hint: "예전 생성물 — 삭제 대기(실행기가 처리)" },
 ];
 
 export default function DecisionModal({
@@ -63,6 +64,14 @@ export default function DecisionModal({
       note: note.trim() || undefined,
     });
 
+  // 예전 생성물 삭제 표시 — action=delete로 즉시 저장(기타 필드 보존).
+  const markDelete = () =>
+    post({
+      tool: tool || undefined,
+      action: "delete",
+      note: note.trim() || undefined,
+    });
+
   const scale = Math.max(1, Math.min(10, Math.floor(320 / (Math.max(item.w, item.h) || 1))));
 
   return (
@@ -79,6 +88,7 @@ export default function DecisionModal({
             <h3 className="font-semibold">{item.name}</h3>
             <p className="text-[11px] text-[var(--muted)]">
               {item.category} · {item.w}×{item.h} · 현재 태그: {item.tool}
+              {item.createdAt && ` · 생성 ${item.createdAt.slice(0, 10)}`}
             </p>
           </div>
           <button onClick={onClose} className="text-[var(--muted)] hover:text-[var(--ink)]">
@@ -160,13 +170,23 @@ export default function DecisionModal({
         </div>
 
         <div className="flex items-center justify-between border-t border-[var(--edge)] px-4 py-3">
-          <button
-            onClick={() => post(null)}
-            disabled={busy}
-            className="flex items-center gap-1.5 rounded-md border border-[var(--edge)] px-3 py-1.5 text-xs text-[var(--muted)] hover:text-rose-300 disabled:opacity-50"
-          >
-            <Trash2 className="size-3.5" /> 결정 삭제
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => post(null)}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-md border border-[var(--edge)] px-3 py-1.5 text-xs text-[var(--muted)] hover:text-rose-300 disabled:opacity-50"
+            >
+              <Trash2 className="size-3.5" /> 결정 삭제
+            </button>
+            {/* 예전 생성물 즉시 삭제 표시(action=delete) */}
+            <button
+              onClick={markDelete}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 disabled:opacity-50"
+            >
+              <Trash className="size-3.5" /> 삭제 표시
+            </button>
+          </div>
           <button
             onClick={save}
             disabled={busy}

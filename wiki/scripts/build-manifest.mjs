@@ -5,9 +5,11 @@
 // 의존성 0(내장 fs/path + PNG IHDR 직접 파싱). 데일리 재생성: `npm run manifest`.
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, rmSync, existsSync } from "node:fs";
 import { join, resolve, basename } from "node:path";
+import { execSync } from "node:child_process";
 
 const WIKI = resolve(process.cwd());            // wiki/ 에서 실행
-const ASSETS = resolve(WIKI, "..", "game", "assets");
+const GAME_ROOT = resolve(WIKI, "..");          // game 저장소 루트(.git 위치) — git 명령 cwd
+const ASSETS = resolve(GAME_ROOT, "game", "assets");
 const OUT_PUBLIC = join(WIKI, "public", "assets");
 const OUT_MANIFEST = join(WIKI, "lib", "manifest.json");
 const ROSTER_SRC = join(WIKI, "lib", "required-assets.json"); // 손 편집 SOURCE
@@ -19,6 +21,21 @@ const CATEGORIES = ["buildings", "characters", "portraits", "crops", "livestock"
 function pngSize(buf) {
   if (buf.length < 24 || buf.readUInt32BE(0) !== 0x89504e47) return { w: 0, h: 0 };
   return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+}
+
+// git 최초 커밋일(에셋 생성 시각의 유일한 신뢰 시간축) — 워크트리 fs mtime은 부정확해 사용 안 함.
+// GAME_ROOT를 cwd로 `git log --diff-filter=A --follow` 최초 추가 커밋의 author ISO 날짜를 읽는다.
+// repoRelPath 예: "game/assets/props/bush.png". 미추적/신규/실패 시 null. 에셋당 1회만 호출.
+function gitCreatedAt(repoRelPath) {
+  try {
+    const out = execSync(
+      `git log --diff-filter=A --follow --format=%aI -1 -- ${JSON.stringify(repoRelPath)}`,
+      { cwd: GAME_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+    ).trim();
+    return out || null;
+  } catch {
+    return null;
+  }
 }
 
 // ── 도구 귀속(tool attribution) — docs/design·메모리 근거 ──────────────────────
@@ -91,7 +108,9 @@ for (const category of CATEGORIES) {
     copyFileSync(src, join(OUT_PUBLIC, category, f));
     const name = basename(f, ".png");
     const attr = attribute(category, name);
-    items.push({ category, name, file: `assets/${category}/${f}`, w, h, ...attr });
+    // 게임 소스 png의 git 최초 커밋일(최근/예전 분류 축) — 에셋당 1회.
+    const createdAt = gitCreatedAt(`game/assets/${category}/${f}`);
+    items.push({ category, name, file: `assets/${category}/${f}`, w, h, createdAt, ...attr });
   }
 }
 

@@ -7,6 +7,7 @@ export interface AssetItem {
   tool: string; // Gemini | PixelLab | 절차생성 | 확인 필요
   method: string;
   conf: "high" | "med" | "low";
+  createdAt: string | null; // git 최초 커밋일(ISO) — 최근/예전 분류. 미추적이면 null
   note?: string;
 }
 
@@ -64,7 +65,7 @@ export const MAKER_META: Record<Maker, { label: string; cls: string }> = {
 };
 
 // 에셋 결정(웹에서 owner가 선택 → data/asset-decisions.json → 어시스턴트가 읽어 작업)
-export type DecisionAction = "" | "ok" | "regen" | "check";
+export type DecisionAction = "" | "ok" | "regen" | "check" | "delete";
 
 export interface Decision {
   tool?: string; // 실제 도구 정정(확인필요/오귀속 교정)
