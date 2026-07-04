@@ -50,8 +50,12 @@ def main():
             print(f"  · {name}: 원본 없음(건너뜀)")
             continue
         im = Image.open(src).convert("RGB")
-        im = dewatermark(im)
-        field = im.resize((FIELD, FIELD), Image.BOX)     # area 다운스케일 = 청키·저노이즈
+        # 큰 Gemini raw(2048급)만 워터마크 제거. 작은 사전제작 타일(<512)은 clean 취급 → 스킵.
+        if im.size[0] >= 512:
+            im = dewatermark(im)
+        # 필드로: 다운스케일=BOX(area·청키), 업스케일=NEAREST(픽셀 보존)
+        method = Image.BOX if im.size[0] >= FIELD else Image.NEAREST
+        field = im.resize((FIELD, FIELD), method)
         out = os.path.join(STAGE, name + "_field.png")
         field.save(out)
         done.append(f"{name}({im.size[0]}²→{FIELD}²)")
