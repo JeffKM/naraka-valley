@@ -22,6 +22,8 @@ const WATER := 9
 
 var _grass: Image
 var _dirt: Image
+var _soil: Image
+var _water: Image
 
 func _init() -> void:
 	var main = load("res://main.tscn").instantiate()
@@ -30,25 +32,23 @@ func _init() -> void:
 	await process_frame
 	_grass = _load_field("grass_a_field")
 	_dirt = _load_field("dirt_field")
+	_soil = _load_field("soil_field")
+	_water = _load_field("water_field")
 	var gw: int = main._grid_w
 	var gh: int = main._outdoor_h
 	var out := Image.create(gw * TILE, gh * TILE, false, Image.FORMAT_RGBA8)
 
-	# 기존 아틀라스에서 soil·water 베이스 타일(청키화) — 새로 안 만든 지형은 유지.
-	var soil_t := _base_tile(main, main.TR_SOIL)
-	var water_t := _base_tile(main, main.TR_WATER)
-
-	# ── 지면: grid → 새 소프트 필드(GROUND/PATH) + 지터 디더 경계 / soil·water는 기존 청키 ──
+	# ── 지면: grid → 새 소프트 16px 필드(GROUND/PATH/SOIL/WATER 전부 필드 타일링) + 지터 디더 경계 ──
 	for py in gh * TILE:
 		for px in gw * TILE:
 			var tx := px / TILE
 			var ty := py / TILE
 			var cell: int = main._grid[ty][tx]
 			if cell == SOIL:
-				out.set_pixel(px, py, soil_t.get_pixel(px % TILE, py % TILE))
+				out.set_pixel(px, py, _soil.get_pixel((px / 2) % FIELD, (py / 2) % FIELD))
 				continue
 			if cell == WATER:
-				out.set_pixel(px, py, water_t.get_pixel(px % TILE, py % TILE))
+				out.set_pixel(px, py, _water.get_pixel((px / 2) % FIELD, (py / 2) % FIELD))
 				continue
 			# GROUND/PATH/그 외(나무·바위·건물 밑 = 잔디) : 지터로 셀 판정 → 필드 ×2 샘플(16 유효)
 			var jx := px + int((_h01(px, py, 610) - 0.5) * JIT * 2.0)
