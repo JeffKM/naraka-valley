@@ -317,6 +317,13 @@ const PROP_GRASS := preload("res://assets/props/grass_tuft.png")        # 32×32
 const PROP_BUSH := preload("res://assets/props/bush.png")               # 64×64 — 덤불(2×2칸, 장식)
 const PROP_ROCK := preload("res://assets/props/rock.png")               # 64×64 — 바위·돌(2×2칸, SOLID)
 const PROP_STUMP := preload("res://assets/props/stump_log.png")         # 64×32 — 그루터기·통나무(2×1칸, 장식)
+# ★[roster 2026-07-04] 덤불 능선 수풀 2변주(어두운 톱니+베리 / 밝은 라임 dome — PixelLab 32-native 재생성,
+#   owner 레퍼런스). debris와 동일한 좌표 결정적 해시로 능선에서 dark↔bright 교대(단조로움 완화). 순수 시각 —
+#   크기 64×64 동일·PROP_BUSH 정체성(PROP_SHADOW_SET·레지스트리·_ridge_body 통행·배치 좌표) 전부 불변.
+const PROP_BUSH_V2 := preload("res://assets/props/bush_v2.png")         # 64×64 — 덤불 밝은 라임 변주
+const BUSH_VARIANTS := {
+	PROP_BUSH: [PROP_BUSH, PROP_BUSH_V2],
+}
 # ★ ADR-0035 Phase B — 안식 재설계 신규 PROP(Phase A 마스터 스타일 생성). 계단·넝쿨·덤불 덮개·debris 3종.
 const PROP_STAIRS := preload("res://assets/props/stairs_east.png")      # ★S1-10 96×64 동향 돌계단(고지=서/왼쪽↔저지=동/오른쪽, 노치 3칸 폭, 통과 O). 옛 남향 stairs.png placeholder 교체
 const PROP_VINE := preload("res://assets/props/vine.png")               # 32×64 — 넝쿨(절벽 이음매 덮개, 통과 O)
@@ -6417,7 +6424,13 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 				_draw_prop_shadow(canvas, t, yo, tsz)
 			# ★[roster §5.2] debris는 좌표 결정적 해시로 3변주 중 하나를 그린다(같은 kind가 맵에서 다양).
 			#   변주 3장은 tex와 동일 크기(32×32)라 tsz·발치·그림자·Y-split 계산은 정체성 토큰 그대로 유효.
-			var draw_tex: Texture2D = _debris_variant_tex(tex, t) if is_debris else tex
+			#   덤불도 같은 해시로 2변주(dark↔bright)를 그린다 — 64×64 동일 크기라 발치·그림자 불변.
+			var draw_tex: Texture2D = tex
+			if is_debris:
+				draw_tex = _debris_variant_tex(tex, t)
+			elif BUSH_VARIANTS.has(tex):
+				var bvs: Array = BUSH_VARIANTS[tex]
+				draw_tex = bvs[(t.x * 7 + t.y * 13) % bvs.size()]
 			# ★[roster] 앞 패스 나무는 occlusion fade 알파를 modulate로 얹는다(_update_tree_fade가 lerp).
 			#   뒤 패스·다른 프롭·다른 구역은 늘 불투명(get 기본 1.0).
 			var mod := Color(1, 1, 1, 1)

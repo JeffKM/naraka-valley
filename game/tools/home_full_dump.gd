@@ -30,6 +30,8 @@ func _init() -> void:
 		var yo: int = entry[2] if entry.size() > 2 else 0
 		var casts_shadow: bool = tex in main.PROP_SHADOW_SET
 		var variants: Array = main.DEBRIS_VARIANTS.get(tex, [])   # ★[roster §5.2] debris는 좌표해시 변주(_draw_props_for와 동일)
+		if variants.is_empty():
+			variants = main.BUSH_VARIANTS.get(tex, [])            # ★[roster] 덤불 능선도 좌표해시 변주(dark↔bright, 동일 해시)
 		var timg := tex.get_image()
 		if timg.get_format() != Image.FORMAT_RGBA8:
 			timg.convert(Image.FORMAT_RGBA8)
