@@ -458,13 +458,14 @@ const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP
 #   개간 게이트라 풀타일 유지(Slice 1 전환)·실내 벽 가구는 벽 flush라 풀타일 유지(회귀 보존). 맵 이탈은
 #   _border_body(둘레)가 막으므로 야외 트리 축소는 경계 안전.
 const FOOT_BAR_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK]
-const FOOT_BAR_H := 16   # 밑단 바 높이(8 논리 = 반 타일) — 바위 등 부피 프롭 기본
-# ★[roster] 저승 봄나무(2×4칸) = 밑둥만 SOLID(폭 전체 × 젤밑 1칸)·수관 3칸은 통과 O(캐릭터가 뒤로 지나감).
-#   owner 결정: "젤밑 2칸(밑둥)만 막고 그 위는 통과". 나무 발치바는 FOOT_BAR_H 대신 1칸(TILE) 높이.
+const FOOT_BAR_H := 16   # 밑단 바 높이(8 논리 = 반 타일) — FADE_PROPS 밖 부피 프롭용(현재 예약, 향후 반타일 프롭)
+# ★[roster] 저승 봄나무(2×4칸)·바위(2×2칸) = 밑둥/밑행만 SOLID(폭 전체 × 젤밑 1칸)·그 위는 통과 O(캐릭터가 뒤로 지나감).
+#   owner 결정: "젤밑 두 칸만 막고 그 위는 통과". 나무·바위 발치바는 FOOT_BAR_H 대신 1칸(TILE) 높이(FADE_PROPS 소속).
 const TREE_FOOT_H := TILE
-# ★[roster] 수관 뒤 캐릭터 occlusion fade — 앞 패스(플레이어보다 앞)로 그려지는 나무가 플레이어를 덮으면
-#   살짝 반투명해 "뒤에 있음"을 드러낸다(스타듀식). 나무별 alpha를 _tree_fade에 lerp(순수 시각).
-const FADE_PROPS := [PROP_TREE_A, PROP_TREE_B]
+# ★[roster] 수관/바위 뒤 캐릭터 occlusion fade — 앞 패스(플레이어보다 앞)로 그려지는 부피 프롭이 플레이어를 덮으면
+#   살짝 반투명해 "뒤에 있음"을 드러낸다(스타듀식). 프롭별 alpha를 _tree_fade에 lerp(순수 시각).
+#   ★바위(PROP_ROCK)도 여기 합류 = 나무와 동일 인프라(밑행 1칸 SOLID + 뒤로 지나갈 때 반투명). owner 2026-07-04.
+const FADE_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK]
 const TREE_FADE_MIN := 0.45   # 겹칠 때 최소 알파(완전 투명 X — 나무가 남아 보이게)
 const TREE_FADE_SPEED := 8.0  # 알파 전환 속도(초당 — move_toward, 부드러운 페이드)
 # ★ ADR-0025 ② — PROP 좌표 데이터 외부화. 텍스처는 *코드가* 정의하고(키↔Texture2D 레지스트리),
@@ -542,6 +543,13 @@ const PROP_LAYOUT_HOME := [
 		Vector2i(10, 54), Vector2i(18, 58),                  # 좌하단 코너
 		Vector2i(3, 24),                                     # 좌중
 	]],  # 활엽수 8
+	# ★[roster 바위 재도입] 저승 바위(2×2·밑행 SOLID·수관처럼 뒤로 지나가면 occlusion fade) — 빈 밭에
+	#   산재해 부피감·프레이밍(나무 사이 보완). 밭·동선·건물·연못·debris·능선·꽃/울타리 회피(라이브 그리드 검증).
+	[PROP_ROCK, [
+		Vector2i(58, 15), Vector2i(67, 24), Vector2i(68, 36),   # 우측 빈 밭 산재
+		Vector2i(52, 40),                                        # 중앙-하 밭
+		Vector2i(10, 22), Vector2i(14, 46),                     # 좌측(연못 서편·좌하 빈 밭)
+	]],  # 바위 6
 	# ── ★ 옛 테두리 스캐터 프롭 제거(owner 2026-07-03): 안 어울리는 나무(tree_spirit)·바위(rock)·
 	#   그루터기(stump)·덤불(bush)을 맵에서 걷어냈다. 맵 이탈 방어는 _build_border(4변 경계벽)가 이미
 	#   맡으므로 SOLID 프레이밍 트리 없이도 경계 안전. 텍스처 상수·레지스트리는 남겨 둔다(회귀·재사용).
@@ -1932,7 +1940,8 @@ func _rebuild_prop_collision() -> void:
 			var rect := RectangleShape2D.new()
 			if foot_bar:
 				# 발치 바 = 프롭 폭 × 밑단 높이, art 밑단(발치)에 정렬. 상단(머리·캐노피)은 통과 O.
-				# ★[roster] 나무(2×4)는 밑둥 1칸(TREE_FOOT_H)만 막고, 그 외 부피 프롭(바위)은 반타일(FOOT_BAR_H).
+				# ★[roster] 나무(2×4)·바위(2×2)는 밑행 1칸(TREE_FOOT_H)만 막고 그 위는 통과(FADE_PROPS 소속).
+				#   FADE_PROPS 밖 부피 프롭은 반타일(FOOT_BAR_H) — 현재 예약(FADE_PROPS==FOOT_BAR_PROPS라 미사용).
 				var fh: float = TREE_FOOT_H if entry[0] in FADE_PROPS else FOOT_BAR_H
 				rect.size = Vector2(sz.x, fh)
 				cs.shape = rect

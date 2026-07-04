@@ -62,5 +62,26 @@ func _init() -> void:
 	var restored: float = m._tree_fade.get(anchor, 1.0)
 	_check("④ 벗어나면 알파 1.0 복귀(불투명)", is_equal_approx(restored, 1.0))
 
+	# ⑤ 바위(PROP_ROCK)도 같은 fade 인프라 — 뒤로 지나가면 반투명(owner 2026-07-04). 나무와 동일 코드 경로.
+	var r_anchor := Vector2i(-1, -1)
+	for entry in m._prop_layouts.get("HOME", []):
+		if entry[0] == m.PROP_ROCK:
+			r_anchor = entry[1][0]
+			break
+	_check("⑤ 라이브 바위(FADE_PROPS 합류) 인스턴스 존재", r_anchor.x >= 0)
+	if r_anchor.x >= 0:
+		var rtsz: Vector2 = m.PROP_ROCK.get_size()
+		_check("⑤ 바위 크기 = 64×64(2×2칸)", is_equal_approx(rtsz.x, 64.0) and is_equal_approx(rtsz.y, 64.0))
+		var rrect := Rect2(Vector2(r_anchor.x * TILE, r_anchor.y * TILE), rtsz)
+		var r_base: float = m._prop_base_y(r_anchor, 0, m.PROP_ROCK)
+		m.player.global_position = Vector2(rrect.position.x + rtsz.x * 0.5, r_base - TILE)  # 바위 뒤(rect 안·base 위)
+		for i in range(30):
+			m._update_tree_fade(0.1)
+		_check("⑤ 바위 뒤에 서면 알파 TREE_FADE_MIN 수렴", is_equal_approx(m._tree_fade.get(r_anchor, 1.0), m.TREE_FADE_MIN))
+		m.player.global_position = Vector2(-9999, -9999)
+		for i in range(30):
+			m._update_tree_fade(0.1)
+		_check("⑤ 바위도 벗어나면 알파 1.0 복귀", is_equal_approx(m._tree_fade.get(r_anchor, 1.0), 1.0))
+
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
