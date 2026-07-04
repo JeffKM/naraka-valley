@@ -3737,6 +3737,14 @@ func _on_day_advanced(day: int) -> void:
 	if RunSummary.is_over(day):
 		_end_run()
 		return
+	# ★ [ADR-0051] 밤 까마귀(미련까마귀) 습격 — 성장(advance_day) *전에* 무방비 작물을 영구 소실시킨다
+	#   (밤새 쪼임 → 살아남은 작물만 아침에 자람). 허수아비 반경이 덮은 칸은 안전. 3중 안전장치
+	#   (작물 문턱·한 밤 상한·반경 보호)는 CrowRaid가 판정하고, day 시드로 결정적이다(헤드리스 재현).
+	var eaten := CrowRaid.resolve(farm.planted_tiles(), _scarecrow_tiles(), CrowRaid.BASE_RADIUS, day)
+	for et in eaten:
+		farm.remove_plant(et)                 # 작물만 제거·흙/비료 보존(tile_changed로 오버레이 갱신)
+	if eaten.size() > 0:
+		_notice("까마귀가 작물 %d개를 쪼아먹었다 — 허수아비로 막을 수 있다" % eaten.size())
 	var h := affinity.hearts()
 	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h))
 	orchard.advance_day(day)   # ★ [S1-5b] 성숙+제철 나무는 결실 +1(비제철 정지·영속). day는 무상태 절기 판정(ADR-0045)
@@ -3757,6 +3765,17 @@ func _on_day_advanced(day: int) -> void:
 		onboarding.crop_ready()
 	# M2.4 새 날이 이벤트 데이(2주마다)면 메인 4인 의상·카페 보너스를 켠다(아니면 끈다).
 	_refresh_festival()
+
+# ★ [ADR-0051] 배치된 허수아비의 보호 중심 칸 목록 — 밤 까마귀 판정(CrowRaid) 입력.
+#   안식 농원 장식으로 세운 허수아비(_prop_layouts["HOME"]의 PROP_SCARECROW)가 곧 방어 인프라다
+#   (보이는 아트 = 실제 보호). 스프라이트는 1×2칸(위→아래)이라, 말뚝 밑동(앵커+아래 1칸)을 반경 중심으로 쓴다.
+func _scarecrow_tiles() -> Array:
+	var out: Array = []
+	for entry in _prop_layouts.get("HOME", []):
+		if entry[0] == PROP_SCARECROW:
+			for t in entry[1]:
+				out.append(t + Vector2i(0, 1))
+	return out
 
 # ── M2.4 카페 이벤트 데이 ────────────────────────────────────────────────────
 # 오늘(clock.day)이 이벤트 데이인가를 한 곳에서 파생해, 메인 4인(미호·멜·바나·옥자) 의상과
