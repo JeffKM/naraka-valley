@@ -26,6 +26,34 @@ NAMES = ["grass_a", "grass_b", "grass_c", "dirt"]
 # Gemini sparkle 고정 박스(2048² 기준, 우하단). 넉넉히 잡아 4각별 전체 커버.
 WM = (1680, 1695, 1920, 1935)
 
+def make_seamless(im: Image.Image, band: int = 20) -> Image.Image:
+    # 토로이달 seamless: 양 가장자리를 seam에서 평균으로 수렴(대칭 페더). Gemini "seamless"의
+    # 미세한 가장자리 불일치가 만드는 타일링 경계선을 제거. 고주파 잔디라 육안 무손실.
+    im = im.convert("RGB").copy()
+    W, H = im.size
+    px = im.load()
+    def blend(a, b, w):
+        return tuple(int(a[c] * (1 - w) + b[c] * w) for c in range(3))
+    b = min(band, W // 2, H // 2)
+    # 가로(좌우 가장자리)
+    for y in range(H):
+        for i in range(b):
+            w = 0.5 * (i / (b - 1)) if b > 1 else 0.5   # 0(내부)→0.5(가장자리)
+            xr, xl = W - b + i, b - 1 - i
+            cr, cl = px[xr, y], px[xl, y]
+            px[xr, y] = blend(cr, cl, w)
+            px[xl, y] = blend(cl, cr, w)
+    # 세로(상하 가장자리)
+    for x in range(W):
+        for i in range(b):
+            w = 0.5 * (i / (b - 1)) if b > 1 else 0.5
+            yb, yt = H - b + i, b - 1 - i
+            cb, ct = px[x, yb], px[x, yt]
+            px[x, yb] = blend(cb, ct, w)
+            px[x, yt] = blend(ct, cb, w)
+    return im
+
+
 def dewatermark(im: Image.Image) -> Image.Image:
     W, H = im.size
     # 좌표를 원본 비율로 스케일(항상 2048이 아닐 수 있으니 방어)
@@ -56,6 +84,7 @@ def main():
         # 필드로: 다운스케일=BOX(area·청키), 업스케일=NEAREST(픽셀 보존)
         method = Image.BOX if im.size[0] >= FIELD else Image.NEAREST
         field = im.resize((FIELD, FIELD), method)
+        field = make_seamless(field)                     # 타일링 이음매 제거(토로이달)
         out = os.path.join(STAGE, name + "_field.png")
         field.save(out)
         done.append(f"{name}({im.size[0]}²→{FIELD}²)")
