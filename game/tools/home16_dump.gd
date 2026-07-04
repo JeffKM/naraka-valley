@@ -59,35 +59,8 @@ func _init() -> void:
 			var src: Image = _dirt if use_dirt else _grass
 			out.set_pixel(px, py, src.get_pixel((px / 2) % FIELD, (py / 2) % FIELD))
 
-	# ── 클럼프 스캐터(Q5) — 필드 타일링 주기 반복감을 깨는 tuft. GROUND 셀에 결정적 해시 ──
-	var tufts: Array[Image] = [
-		_chunkify(_img(load("res://assets/props/ground_grass2.png"))),
-		_chunkify(_img(load("res://assets/props/ground_grass3.png"))),
-		_chunkify(_img(load("res://assets/props/ground_grass1.png"))),
-	]
-	for ty in gh:
-		for tx in gw:
-			if int(main._grid[ty][tx]) != GROUND:
-				continue
-			if _h01(tx, ty, 301) > 0.16:      # ~16% 밀도
-				continue
-			var timg: Image = tufts[int(_h01(tx, ty, 302) * tufts.size()) % tufts.size()]
-			var tsz := timg.get_size()
-			var ox := tx * TILE + int(_h01(tx, ty, 303) * maxi(1, TILE - tsz.x))
-			var oy := ty * TILE + int(_h01(tx, ty, 304) * maxi(1, TILE - tsz.y))
-			out.blend_rect(timg, Rect2i(Vector2i.ZERO, tsz), Vector2i(ox, oy))
-
-	# ── 프롭(청키화) + 발치 그림자 ──
-	for entry in main._prop_layouts.get("HOME", []):
-		var tex: Texture2D = entry[0]
-		var yo: int = entry[2] if entry.size() > 2 else 0
-		var casts: bool = tex in main.PROP_SHADOW_SET
-		var timg := _chunkify(_img(tex))
-		var tsz := timg.get_size()
-		for t in entry[1]:
-			if casts:
-				_shadow(out, t.x * TILE + tsz.x * 0.5 + 2.0, float(t.y * TILE + yo) + tsz.y - 2.0, tsz.x * 0.40, 0.30)
-			out.blend_rect(timg, Rect2i(Vector2i.ZERO, tsz), Vector2i(t.x * TILE, t.y * TILE + yo))
+	# ── 스캐터 tuft·자연 프롭(나무·바위·그루터기·덤불) 전부 제외 (owner 2026-07-04) ──
+	#   "풀 위에 떠서 따로 노는 에셋"을 다 지우고 깨끗한 베이스(잔디+흙길+건물)만 본다.
 
 	# ── 건물 facade(청키화) + 잔디 백드롭 + 접지 그림자 ──
 	var facades := [
