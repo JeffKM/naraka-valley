@@ -29,11 +29,21 @@ func _init() -> void:
 		var tex: Texture2D = entry[0]
 		var yo: int = entry[2] if entry.size() > 2 else 0
 		var casts_shadow: bool = tex in main.PROP_SHADOW_SET
-		var timg := tex.get_image()
-		if timg.get_format() != Image.FORMAT_RGBA8:
-			timg.convert(Image.FORMAT_RGBA8)
-		var tsz := timg.get_size()
+		var is_debris: bool = main.DEBRIS_KIND.has(tex)
+		var kind: String = main.DEBRIS_KIND.get(tex, "")
+		var base_img := tex.get_image()
+		if base_img.get_format() != Image.FORMAT_RGBA8:
+			base_img.convert(Image.FORMAT_RGBA8)
 		for t in entry[1]:
+			# ★ [roster §5.2] debris는 변주 스왑 CPU 재현(main._debris_variant_tex와 동일 좌표 해시)
+			var timg := base_img
+			if is_debris:
+				var arr: Array = main.DEBRIS_VARIANTS.get(kind, [])
+				var vtex: Texture2D = arr[(t.x + t.y * 2) % arr.size()]
+				timg = vtex.get_image()
+				if timg.get_format() != Image.FORMAT_RGBA8:
+					timg.convert(Image.FORMAT_RGBA8)
+			var tsz := timg.get_size()
 			# ★[§11] 부피 프롭 발치 SE 접지 그림자(main._draw_prop_shadow의 CPU 재현)
 			if casts_shadow:
 				_blit_shadow(out, t.x * TILE + tsz.x * 0.5 + 2.0, float(t.y * TILE + yo) + tsz.y - 2.0, tsz.x * 0.40)

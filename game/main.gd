@@ -320,16 +320,34 @@ const PROP_STUMP := preload("res://assets/props/stump_log.png")         # 64×32
 # ★ ADR-0035 Phase B — 안식 재설계 신규 PROP(Phase A 마스터 스타일 생성). 계단·넝쿨·덤불 덮개·debris 3종.
 const PROP_STAIRS := preload("res://assets/props/stairs_east.png")      # ★S1-10 96×64 동향 돌계단(고지=서/왼쪽↔저지=동/오른쪽, 노치 3칸 폭, 통과 O). 옛 남향 stairs.png placeholder 교체
 const PROP_VINE := preload("res://assets/props/vine.png")               # 32×64 — 넝쿨(절벽 이음매 덮개, 통과 O)
-const PROP_DEBRIS_WEEDS := preload("res://assets/props/debris_weeds.png")          # 32×32 — 이승의 미련·잡초(낫, 통과 O 장식)
-const PROP_DEBRIS_EMBER := preload("res://assets/props/debris_ember_stone.png")    # 64×64 — 업화석(곡괭이, 통과 X SOLID)
-const PROP_DEBRIS_STUMP := preload("res://assets/props/debris_petrified_stump.png")  # 64×64 — 석화 고목(도끼, 통과 X SOLID)
+# ★ [ADR-0050 32-native / prop-regen-roster §5] debris = **1칸(32×32)·타입당 3변주**(PixelLab, owner 확정 2026-07-04).
+#   업화석·석화 고목을 2×2(64×64)에서 1칸으로 축소(스타듀 debris=1칸). 석화 고목=두툼한 나뭇가지(통나무 아님).
+#   PROP_DEBRIS_*(=v1)는 데이터 모델의 대표 텍스처(레이아웃·DEBRIS_KIND·SOLID·충돌·그림자가 이걸로 키잉).
+#   변주 v2/v3는 *그리기에서만* 좌표 해시로 스왑(_draw_props_for·DEBRIS_VARIANTS) — 데이터/충돌엔 안 들어감.
+const PROP_DEBRIS_WEEDS := preload("res://assets/props/debris_weeds.png")           # 32×32 — 이승의 미련·잡초(낫, 통과 O)
+const PROP_DEBRIS_WEEDS_2 := preload("res://assets/props/debris_weeds_v2.png")
+const PROP_DEBRIS_WEEDS_3 := preload("res://assets/props/debris_weeds_v3.png")
+const PROP_DEBRIS_EMBER := preload("res://assets/props/debris_ember_stone.png")     # 32×32 — 업화석(곡괭이, 통과 X SOLID)
+const PROP_DEBRIS_EMBER_2 := preload("res://assets/props/debris_ember_stone_v2.png")
+const PROP_DEBRIS_EMBER_3 := preload("res://assets/props/debris_ember_stone_v3.png")
+const PROP_DEBRIS_STUMP := preload("res://assets/props/debris_petrified_stump.png") # 32×32 — 석화 고목(두툼한 나뭇가지, 도끼, 통과 X SOLID)
+const PROP_DEBRIS_STUMP_2 := preload("res://assets/props/debris_petrified_stump_v2.png")
+const PROP_DEBRIS_STUMP_3 := preload("res://assets/props/debris_petrified_stump_v3.png")
 # ★ [S1-8] 개간 debris 텍스처 → DebrisCatalog kind. 배치(어느 타일에 무슨 debris)는 PROP_LAYOUT_HOME
 #   시드에 잠겨 있고, 여기서 텍스처로 kind를 역인한다. 드로우/충돌 skip-filter·개간 디스패치가 참조한다.
-#   ※ PROP_STUMP(장식 통나무)는 여기 없음 = debris 아님(치울 수 없는 순수 장식).
+#   ※ PROP_STUMP(장식 통나무)는 여기 없음 = debris 아님(치울 수 없는 순수 장식). ※변주 v2/v3는 여기 없음
+#   (레이아웃 entry[0]은 항상 대표 텍스처라 kind 역인은 대표만으로 충분 — 변주는 순수 시각).
 const DEBRIS_KIND := {
 	PROP_DEBRIS_WEEDS: DebrisCatalog.WEEDS,
 	PROP_DEBRIS_EMBER: DebrisCatalog.EMBER,
 	PROP_DEBRIS_STUMP: DebrisCatalog.STUMP,
+}
+# ★ [prop-regen-roster §5.2] kind → 3변주 텍스처. 그리기에서 좌표 결정적 해시로 하나 골라 스왑(맵에서
+#   같은 kind가 3형태로 다양하게 보임). [0]=대표(=DEBRIS_KIND 키). 데이터·충돌·그림자는 대표로만 판정.
+const DEBRIS_VARIANTS := {
+	DebrisCatalog.WEEDS: [PROP_DEBRIS_WEEDS, PROP_DEBRIS_WEEDS_2, PROP_DEBRIS_WEEDS_3],
+	DebrisCatalog.EMBER: [PROP_DEBRIS_EMBER, PROP_DEBRIS_EMBER_2, PROP_DEBRIS_EMBER_3],
+	DebrisCatalog.STUMP: [PROP_DEBRIS_STUMP, PROP_DEBRIS_STUMP_2, PROP_DEBRIS_STUMP_3],
 }
 # ★[asset-ruleset §11] 접지 그림자 대상 = 부피 있는 야외 바닥 프롭. 스프라이트에 굽지 않고
 #   별도 반투명 타원을 밑단 아래에 깔아 "뜬 느낌"을 없앤다(건물 facade는 _blit_facade_anchored가
@@ -477,9 +495,10 @@ const PROP_LAYOUT_HOME := [
 	# 남향 개간 게이트 = 남향 벽 관통 계단 노치(x9..10 y26..28). 넝쿨 장벽(비-SOLID 시각) + 저지측 발치
 	#   debris 하드게이트(SOLID)로 개간 전 물리 차단. 옛 동향 게이트(x21,x24)를 남향으로 90° 회전.
 	[PROP_VINE, [Vector2i(9, 26)]],             # 넝쿨 장벽(계단 입구 시각 — 통과 O, 32×64)
-	# 하드 게이트 debris(노치 발치 — 통과 X SOLID로 게이트 물리 차단, 개간 온보딩). 64×64=2×2칸 풋프린트.
-	[PROP_DEBRIS_EMBER, [Vector2i(9, 28)]],     # 업화석(곡괭이) — 노치 입구(x9..10 y28..29)
-	[PROP_DEBRIS_STUMP, [Vector2i(9, 30)]],     # 석화 고목(도끼) — 접근로 하단(x9..10 y30..31)
+	# 하드 게이트 debris(노치 발치 — 통과 X SOLID로 게이트 물리 차단, 개간 온보딩). ★[ADR-0050] 1칸(32×32)
+	#   이라 노치 2칸 폭(RANCH_GATE_X 9..10)을 각 행 두 칸으로 채워야 통행이 막힌다(1칸으론 한 칸 뚫림).
+	[PROP_DEBRIS_EMBER, [Vector2i(9, 28), Vector2i(10, 28)]],   # 업화석(곡괭이) — 노치 입구 행 x9..10 y28
+	[PROP_DEBRIS_STUMP, [Vector2i(9, 30), Vector2i(10, 30)]],   # 석화 고목(도끼) — 접근로 하단 행 x9..10 y30
 	# ★[단계3-③ 잔디 입체화] 동향 잔디 능선 수풀(x19~20 seam — 충돌바 위 시각 능선, 통과 판정은 _ridge_body).
 	#   옛 x20 4칸 간격(뚝뚝 끊긴 덤불)을 y1~25 *2칸 간격 지그재그*(x19↔20 교대)로 촘촘히 겹쳐 끊김 없는
 	#   산등성이로 — owner Gemini "수풀·낭떠러지로 막힌 자연 산등성이 능선". 남단(y25)이 남향 벽(y26)과
@@ -6336,11 +6355,15 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 		var yo: int = entry[2] if entry.size() > 2 else 0   # ★ T3③ 벽 가구 시각 보정(밀착, 좌표·충돌 무관)
 		var casts_shadow: bool = tex in PROP_SHADOW_SET
 		var is_debris: bool = DEBRIS_KIND.has(tex)          # ★ [S1-8] 치운 debris는 skip(안 그림)
+		var debris_kind: String = DEBRIS_KIND.get(tex, "")  # ★ [roster §5.2] 변주 스왑용 kind(그리기 한정)
 		var tsz := tex.get_size()
 		for t in entry[1]:
 			# ★ [S1-8 §10.3] 개간한 debris 타일은 안 그린다(reclaim 델타 skip-filter — _prop_layouts 시드는 불변).
 			if is_debris and reclaim != null and reclaim.is_cleared(t):
 				continue
+			# ★ [roster §5.2] debris는 좌표 결정적 해시로 3변주 중 하나를 골라 그린다(같은 kind가 3형태로
+			#   다양). 크기·앵커 동일(32×32)이라 그림자/충돌/Y-split은 대표 tex로 그대로. 순수 시각.
+			var draw_tex: Texture2D = _debris_variant_tex(debris_kind, t) if is_debris else tex
 			# Y-split: 부피 프롭(그림자 세트)만 앞/뒤로 갈린다 — 평면 데칼(러그·꽃·울타리·잡초 등)은
 			#   발치 개념이 없어 늘 뒤(플레이어 아래). 경계 base==split은 BACK. ALL이면 전부 그린다.
 			if pass_mode != _PROP_PASS_ALL:
@@ -6352,8 +6375,17 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 			# ★[§11] 부피 프롭이면 발치에 SE 접지 그림자 먼저(프롭 본체 아래). 순수 시각.
 			if casts_shadow:
 				_draw_prop_shadow(canvas, t, yo, tsz)
-			# ADR-0013: 가구 아트도 32px native라 1:1로 그린다(스툴 32×32=1칸, 침대 32×64=1×2칸).
-			canvas.draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE + yo), tsz), false)
+			# ADR-0013/0050: 아트 32px native 1:1(스툴 32×32=1칸). debris도 32×32=1칸(변주 draw_tex).
+			canvas.draw_texture_rect(draw_tex, Rect2(Vector2(t.x * TILE, t.y * TILE + yo), tsz), false)
+
+# ★ [prop-regen-roster §5.2] debris kind의 3변주 중 이 타일에 그릴 텍스처(결정적 좌표 해시). 같은 kind가
+#   맵에서 3형태로 다양하게 보이게 한다. 세이브/충돌/reclaim과 무관한 순수 시각(매 프레임 같은 결과).
+func _debris_variant_tex(kind: String, t: Vector2i) -> Texture2D:
+	var arr: Array = DEBRIS_VARIANTS.get(kind, [])
+	if arr.is_empty():
+		return DEBRIS_VARIANTS[DebrisCatalog.WEEDS][0]   # 방어(도달 불가 — is_debris가 이미 보장)
+	var idx := (t.x + t.y * 2) % arr.size()              # 결정적·좌표별 분산(x·y 둘 다 반영 — 계수 3의 배수 금지)
+	return arr[idx]
 
 # ★[asset-ruleset §11] 부피 프롭 발치 SE 접지 그림자 — 스프라이트에 굽지 않고 별도 반투명 타원을
 #   밑단 바로 아래에 깐다(배치 100% 자유·"뜬 느낌" 방지). facade _blit_facade_anchored와 같은 결.
