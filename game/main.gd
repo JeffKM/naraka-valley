@@ -316,7 +316,15 @@ const PROP_TREE_B := preload("res://assets/props/tree_spirit_b.png")    # ★[ro
 const PROP_GRASS := preload("res://assets/props/grass_tuft.png")        # 32×32 — 풀 무더기(장식)
 const PROP_BUSH := preload("res://assets/props/bush.png")               # 64×64 — 덤불(2×2칸, 장식)
 const PROP_ROCK := preload("res://assets/props/rock.png")               # 64×64 — 바위·돌(2×2칸, SOLID)
-const PROP_STUMP := preload("res://assets/props/stump_log.png")         # 64×32 — 그루터기·통나무(2×1칸, 장식)
+# ★[prop-regen-roster §5.3 / owner 2026-07-04] 통나무(logs) 5종 재생성(PixelLab create_1_direction_object
+#   → tools/_logs_build.py 정규화). 옛 PROP_STUMP(단일 그루터기, 맵 미배치)를 대체. 전부 통과 O 순수 장식
+#   (SOLID·발치바·fade 없음 — 낮은 바닥 프롭). 크기가 3종(96×32/64×32/32×32)이라 debris식 변주배열이
+#   아니라 개별 프롭으로 배선(발치·Y-Sort가 크기 파생). 코드 그림자(_draw_prop_shadow 타원)만 얹는다.
+const PROP_LOG_LONG := preload("res://assets/props/stump_log_long.png")        # 96×32 — 긴 통나무(3×1칸, ㅡ자)
+const PROP_LOG_SHORT := preload("res://assets/props/stump_log_short.png")      # 64×32 — 짧은 통나무(2×1칸)
+const PROP_LOG_UPRIGHT := preload("res://assets/props/stump_log_upright.png")  # 32×32 — 세워진 그루터기(1×1칸, 위 나이테)
+const PROP_LOG_DIAG_A := preload("res://assets/props/stump_log_diag_a.png")    # 32×32 — 대각 통나무 밝은(1×1칸, ＼)
+const PROP_LOG_DIAG_B := preload("res://assets/props/stump_log_diag_b.png")    # 32×32 — 대각 통나무 어두운(1×1칸, ／)
 # ★ ADR-0035 Phase B — 안식 재설계 신규 PROP(Phase A 마스터 스타일 생성). 계단·넝쿨·덤불 덮개·debris 3종.
 const PROP_STAIRS := preload("res://assets/props/stairs_east.png")      # ★S1-10 96×64 동향 돌계단(고지=서/왼쪽↔저지=동/오른쪽, 노치 3칸 폭, 통과 O). 옛 남향 stairs.png placeholder 교체
 const PROP_VINE := preload("res://assets/props/vine.png")               # 32×64 — 넝쿨(절벽 이음매 덮개, 통과 O)
@@ -349,8 +357,9 @@ const DEBRIS_VARIANTS := {
 #   별도 반투명 타원을 밑단 아래에 깔아 "뜬 느낌"을 없앤다(건물 facade는 _blit_facade_anchored가
 #   자체 처리). 납작한 소품(풀·꽃·잡초·울타리·화분·계단·넝쿨·러그·등불)과 실내 벽 가구는 제외 —
 #   높이가 낮아 그림자가 어색하고 사인오프된 실내 배치를 건드리지 않기 위함.
-const PROP_SHADOW_SET := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_STUMP, PROP_BUSH,
-	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP, PROP_SCARECROW]
+const PROP_SHADOW_SET := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_BUSH,
+	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP, PROP_SCARECROW,
+	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B]  # ★통나무 5종 접지 그림자
 # ★ 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md). 결정적 절차 배치로
 #   GROUND/PATH 칸마다 자기 지형 테이블로 가중 1롤 → 베이스 위에 디테일을 *구역 빌드 때 1회 베이크*
 #   (런타임 정적 오버레이, _draw에서 1 draw call). 손배치 grass_tuft 폐기 → 이 시스템이 대체.
@@ -452,7 +461,8 @@ const WALL_PROP_LIFT := -18
 #   이 텍스처들은 실내 레이아웃에만 쓰여(카페/외부 props는 다른 텍스처) 충돌이 실내 가구에만 걸린다.
 const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP_POT,
 	PROP_TREE_A, PROP_TREE_B, PROP_ROCK,   # ★ T3⑤ 나무·바위 = 통과 불가(맵 경계 벽)
-	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP]  # ★ ADR-0035 업화석·석화 고목 = 통과 불가(계단 하드 게이트·overgrown 장애물)
+	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP,  # ★ ADR-0035 업화석·석화 고목 = 통과 불가(계단 하드 게이트·overgrown 장애물)
+	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B]  # ★통나무 5종 = 통과 불가(owner 2026-07-05·FOOT_BAR 아님=풀타일 장애물, 낮은 프롭)
 # ★[asset-ruleset §5] 발치 충돌 바 — 키 큰 야외 프롭(나무·바위)은 풀타일 충돌 대신 *발치 밑단 바*(폭×반높이)만
 #   막아 "머리는 통과"(§6 Y-split의 물리 짝 — 캐노피 뒤로 지나감). 하드게이트 debris(업화석·석화고목)는
 #   개간 게이트라 풀타일 유지(Slice 1 전환)·실내 벽 가구는 벽 flush라 풀타일 유지(회귀 보존). 맵 이탈은
@@ -479,7 +489,10 @@ const PROP_TEX_REGISTRY := {
 	"SCARECROW": PROP_SCARECROW, "PLANTER": PROP_PLANTER, "FLOWER_PATCH": PROP_FLOWER_PATCH,
 	# ★ T3⑤ 테두리 장식 6종
 	"TREE_A": PROP_TREE_A, "TREE_B": PROP_TREE_B, "GRASS": PROP_GRASS,
-	"BUSH": PROP_BUSH, "ROCK": PROP_ROCK, "STUMP": PROP_STUMP,
+	"BUSH": PROP_BUSH, "ROCK": PROP_ROCK,
+	# ★통나무 5종(prop-regen-roster §5.3)
+	"LOG_LONG": PROP_LOG_LONG, "LOG_SHORT": PROP_LOG_SHORT, "LOG_UPRIGHT": PROP_LOG_UPRIGHT,
+	"LOG_DIAG_A": PROP_LOG_DIAG_A, "LOG_DIAG_B": PROP_LOG_DIAG_B,
 	# ★ ADR-0035 Phase B 안식 재설계 5종(계단·넝쿨·debris)
 	"STAIRS": PROP_STAIRS, "VINE": PROP_VINE, "DEBRIS_WEEDS": PROP_DEBRIS_WEEDS,
 	"DEBRIS_EMBER": PROP_DEBRIS_EMBER, "DEBRIS_STUMP": PROP_DEBRIS_STUMP,
@@ -550,6 +563,14 @@ const PROP_LAYOUT_HOME := [
 		Vector2i(52, 40),                                        # 중앙-하 밭
 		Vector2i(10, 22), Vector2i(14, 46),                     # 좌측(연못 서편·좌하 빈 밭)
 	]],  # 바위 6
+	# ★[prop-regen-roster §5.3 / owner 2026-07-04] 통나무 5종 산재(통과 O 순수 장식·발치 타원 그림자만).
+	#   벌목/자연 쓰러진 나무 느낌으로 나무 클러스터 곁·빈 가장자리에 배치. 라이브 검증(SOLID·기존 프롭·건물
+	#   EXT·연못·패치·방목 겹침 0 — tools/logs_place_check.gd)으로 좌표 확정.
+	[PROP_LOG_LONG, [Vector2i(63, 6), Vector2i(6, 40), Vector2i(66, 55)]],                       # 긴 통나무(3×1) 3
+	[PROP_LOG_SHORT, [Vector2i(50, 5), Vector2i(14, 50), Vector2i(56, 32)]],                     # 짧은 통나무(2×1) 3
+	[PROP_LOG_UPRIGHT, [Vector2i(58, 7), Vector2i(72, 50), Vector2i(7, 45), Vector2i(66, 29)]],  # 세워진 그루터기(1×1) 4
+	[PROP_LOG_DIAG_A, [Vector2i(60, 9), Vector2i(16, 50), Vector2i(12, 38)]],                    # 대각 통나무 밝은(1×1) 3
+	[PROP_LOG_DIAG_B, [Vector2i(52, 9), Vector2i(15, 52), Vector2i(68, 30)]],                    # 대각 통나무 어두운(1×1) 3
 	# ── ★ 옛 테두리 스캐터 프롭 제거(owner 2026-07-03): 안 어울리는 나무(tree_spirit)·바위(rock)·
 	#   그루터기(stump)·덤불(bush)을 맵에서 걷어냈다. 맵 이탈 방어는 _build_border(4변 경계벽)가 이미
 	#   맡으므로 SOLID 프레이밍 트리 없이도 경계 안전. 텍스처 상수·레지스트리는 남겨 둔다(회귀·재사용).
@@ -598,7 +619,8 @@ var _prop_layouts: Dictionary = {}
 # ★ ADR-0025 ① 인게임 배치 모드 상태(디버그/에디터 전용 저작 도구). _toggle_edit_mode·_unhandled_input·
 # _draw_edit_overlay가 참조. 등불(LANTERN)은 빛 좌표가 코드 상수(LANTERN_TILES_*)라 편집 팔레트서 제외
 # (여기서 옮겨도 빛이 안 따라옴 — 빛 동기화는 후속). 새로 놓는 외부 장식만 팔레트에 둔다([ ] 순환).
-const _EDIT_PALETTE := ["TREE_A", "TREE_B", "GRASS", "BUSH", "ROCK", "STUMP",
+const _EDIT_PALETTE := ["TREE_A", "TREE_B", "GRASS", "BUSH", "ROCK",
+	"LOG_LONG", "LOG_SHORT", "LOG_UPRIGHT", "LOG_DIAG_A", "LOG_DIAG_B",
 	"FENCE", "SCARECROW", "PLANTER", "FLOWER_PATCH", "POT"]
 var _edit_mode := false
 var _edit_sel_entry := -1     # 선택된 _prop_layouts[key] 엔트리 인덱스(-1=없음)
@@ -609,7 +631,9 @@ var _edit_palette := 0        # _EDIT_PALETTE 인덱스(새로 놓을 텍스처)
 # 팔레트 영어 키 → 한글 별칭(라벨 가독). 패널 위젯 참조는 토글 시 갱신(_edit_update_ui).
 const _EDIT_PAL_NAMES := {
 	"TREE_A": "침엽수", "TREE_B": "활엽수", "GRASS": "풀", "BUSH": "덤불", "ROCK": "바위",
-	"STUMP": "그루터기", "FENCE": "울타리", "SCARECROW": "허수아비", "PLANTER": "화분",
+	"LOG_LONG": "긴통나무", "LOG_SHORT": "짧은통나무", "LOG_UPRIGHT": "그루터기",
+	"LOG_DIAG_A": "대각통나무(밝)", "LOG_DIAG_B": "대각통나무(어둠)",
+	"FENCE": "울타리", "SCARECROW": "허수아비", "PLANTER": "화분",
 	"FLOWER_PATCH": "꽃", "POT": "항아리",
 }
 var _edit_btn_toggle: Button = null
