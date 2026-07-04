@@ -1,1 +1,122 @@
-{}
+{
+  "props/bush": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.925Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/debris_ember_stone": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/debris_petrified_stump": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/rock": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_grass3": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_grass2": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_grass1": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_flower": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_gravel": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_pebble": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_weed_dry": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_weed_under": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/spirit_flower_patch": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/stump_log": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/tree_spirit_a": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/tree_spirit_b": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/vine": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/stairs_east": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/spirit_pot": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_dirt": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/ground_crack": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/grass_tuft": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/debris_weeds": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  },
+  "props/farm_planter": {
+    "action": "regen",
+    "updatedAt": "2026-07-04T02:14:28.926Z",
+    "note": " [16px 재생성 필요 — 맵과 따로 놂]"
+  }
+}
