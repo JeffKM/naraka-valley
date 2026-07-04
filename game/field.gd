@@ -117,6 +117,17 @@ func hoe(t: Vector2i) -> bool:
 	tile_changed.emit(t)
 	return true
 
+# ★ [ADR-0051] 밤 까마귀([CrowRaid])가 쪼아먹은 칸 — 작물만 제거하고 흙(경작)·비료는 남긴다(스타듀 결).
+#   is_tilled = 키 존재라 키를 지우지 않고 심김 상태만 초기화 → 다음 날 바로 다시 심을 수 있다.
+#   소실은 영구(씨앗·자란 날수 증발, 되돌림 없음). 안 심긴 칸이면 false.
+func remove_plant(t: Vector2i) -> bool:
+	if not is_planted(t):
+		return false
+	var fert: String = _tiles[t]["fertilizer"]
+	_tiles[t] = {"planted": false, "watered": false, "crop": "", "grown_days": 0, "fertilizer": fert}
+	tile_changed.emit(t)
+	return true
+
 # ── S1-6 비료(§8.4) ─────────────────────────────────────────────────────────
 # 경작된 칸(심김/빈칸 무관)에 유효 비료를 뿌린다. 단일 fertilizer 필드라 다른 비료 투입 시 overwrite —
 # XOR가 자연 성립(한 칸에 한 비료). 성공 시 tile_changed·true(비료 소모는 호출 측 main). 미경작·무효 비료면 false.
