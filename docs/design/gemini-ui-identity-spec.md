@@ -186,8 +186,8 @@ a pixel-art game LOGO wordmark on a transparent background, the main title "Dear
 ## 6. 추적표 (owner Gemini 생성 진행)
 범례: ⬜ 미생성 · 🟡 생성됨(변환 전) · ✅ 변환·적용 완료
 
-### 탭 아이콘 (4)
-- ⬜ tab_icon_inventory ⬜ tab_icon_social ⬜ tab_icon_skill ⬜ tab_icon_options
+### 탭 아이콘 (4) — ✅ claude PixelLab 완료(PR#214, 트랙 변경)
+- ✅ tab_icon_inventory ✅ tab_icon_social ✅ tab_icon_skill ✅ tab_icon_options
 
 ### 시계 위젯 아이콘 (8, §7-c 이번 큐 포함)
 - 절기: ⬜ season_icon_pianhwa ⬜ season_icon_yuhwa ⬜ season_icon_mangyeon ⬜ season_icon_seongya
