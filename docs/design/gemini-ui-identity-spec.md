@@ -214,7 +214,7 @@ a pixel-art game LOGO wordmark on a transparent background, the main title "Dear
 - **j. Credits ✅** — **넣음**(메뉴 5개째). 개발진·감사 명단 아래→위 스크롤. Steam 출시 필수.
 
 ### 후속(배선 세션 정련 — 아트와 무관)
-- **★멀티 세이브 슬롯 = `save.gd` 재설계**(단일 save.dat → save0/1/2.dat·슬롯 선택 UI·코지 다이어리 표시). 타이틀 슬라이스의 최대 코드 작업.
+- **★멀티 세이브 슬롯 = `save.gd` 재설계** — **백엔드 완료(PR#216, 워크트리 save-multislot).** 단일 → **3 슬롯**(`SaveManager`: `slot_path`·`has_save/save_game/load_game/delete_save(slot)`·`slot_meta`(코지 다이어리 헤더)·`any_save`). ★**slot 0 = 레거시 `user://save.dat`**로 매핑(하위호환·save.dat 백업하는 전 회귀 테스트 무수정 통과·기존 세이브 자동 승계), slot 1·2 = `save1/2.dat`. main에 `_active_slot`(기본 0) 배선(저장·로드·삭제·부팅 4곳)+저장 시 `meta={day,soul}` 헤더. `save_slot_test.gd` 신규(30+ 단언). **남은 = 슬롯 선택 UI**(타이틀 [Load Game]이 `slot_meta`로 [N년차 절기 D일 / 혼력] 표시·슬롯 골라 `_active_slot` 심기)=타이틀 씬 증분.
 - Credits 화면(스크롤)·Settings 팝업(그래픽/오디오/언어 UI)·Quit 확인 팝업 신설.
 - 세이브 확인창·Quit 문구 카피·다이얼로그 스킨(한지 plate).
 - 타이틀 BGM 로파이 승격(audio.gd:28) · 4직원 idle 애니(후속) · 패럴랙스 레이어 분리(선택).
