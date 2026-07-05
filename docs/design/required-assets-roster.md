@@ -14,6 +14,20 @@
 
 ---
 
+## 0. 도구 (tools) — ★2026-07-05 grill 추가 (로스터 누락 해소)
+
+> 데모에 매일 쓰이는 5 도구가 로스터에 없었다([ADR-0048] 개정 노트). 인게임은 **임시 색박스**(`item_catalog.gd` `tool_color_of`)·인벤=텍스트만. **아트 범위 = 아이콘만**(핫바·인벤). 휘두름/손든 스프라이트는 **캐릭터 시트 재생성 트랙으로 defer**(현재 도구-사용 애니·손든 렌더 슬롯 없음 — [ADR-0048] 개정 노트 §1). 5 도구가 농사+개간 공용(낫=이승의 미련·곡괭이=업화석·도끼=석화 고목).
+
+| key | 나라카명 | status | maker | 비고 |
+|---|---|---|---|---|
+| `hoe` | 괭이 | ❌ missing | claude(PixelLab) | 미경작 칸 경작. `assets/tools/hoe.png` 32×32 아이콘 |
+| `watering_can` | 물뿌리개 | ❌ missing | claude(PixelLab) | 심은 칸 물주기 |
+| `scythe` | 낫 | ❌ missing | claude(PixelLab) | 이승의 미련(잡초) 제거·사료풀 베기 |
+| `pickaxe` | 곡괭이 | ❌ missing | claude(PixelLab) | 업화석(돌) 제거 |
+| `axe` | 도끼 | ❌ missing | claude(PixelLab) | 석화 고목(그루터기) 제거 |
+
+**배선:** `main.gd` `TOOL_ICONS` 레지스트리(EXTRA_ICONS 형식) + `icons` dict 병합(id "hoe"는 crop id 불충돌) → hotbar·inv_frame `_draw_icon` CAT_TOOL 분기를 텍스처화(색박스 폴백 유지)·`_item_icon` 도구 분기(토스트 아이콘). 좌표·로직 불변.
+
 ## 1. 건물 외관 (buildings)
 
 | key | 나라카명 | status | maker | 비고 |
@@ -59,7 +73,9 @@
 | `bulsagwa_{seed,sprout,mature}` | 불사과(다절기 프레스티지) | ✅ have | gemini | 3단계 완비·CROP_SPRITES 배선(PR #188) |
 | `honbaekdo_{sapling,growing,fruiting}` | 혼백도(혼의 나무 과수) | ✅ have | gemini | 3단계·ORCHARD_SPRITES 배선(PR #188). 대형·bottom-center 앵커 |
 
-## 5. UI / HUD — ★Claude 즉시 제작 (한지 스킨)
+## 5. UI / HUD — ★maker C-혼합 (2026-07-05 grill, [ADR-0048] 개정 §2)
+
+> **구조적(claude): 즉시 제작** — 9-slice 패널·슬롯·툴팁·토스트·팝업·골드 아이콘·혼력바 프레임(`hanji_frame` 팔레트 샘플로 톤 맞춤). **정체성(gemini): 스펙카드+큐** — 탭 아이콘 4·시계 위젯(첫인상·손그림 한지). 원래 "UI 전체=claude"에서 정련.
 
 | key | 요소 | status | maker | 비고 |
 |---|---|---|---|---|
@@ -68,11 +84,11 @@
 | `heart_full` / `heart_empty` | 하트 | ✅ have | claude | 관계 탭 재사용 |
 | `ink_arrow` / `soul_moth` | 진행 화살표·나비 | ✅ have | gemini | — |
 | `menu_frame_9slice` | 탭 메뉴 프레임 | ❌ missing | claude | 통합 탭 메뉴 배경 |
-| `tab_icon_inventory` | 탭 아이콘: 인벤토리 | ❌ missing | claude | — |
-| `tab_icon_social` | 탭 아이콘: 관계 | ❌ missing | claude | — |
-| `tab_icon_skill` | 탭 아이콘: 숙련 | ❌ missing | claude | — |
-| `tab_icon_options` | 탭 아이콘: 옵션 | ❌ missing | claude | — |
-| `clock_widget` | 시계 위젯(요일·날짜·시각·계절) | ❌ missing | claude | 우상단 |
+| `tab_icon_inventory` | 탭 아이콘: 인벤토리 | ❌ missing | **gemini** | ★C-혼합: 정체성(큐·스펙카드) |
+| `tab_icon_social` | 탭 아이콘: 관계 | ❌ missing | **gemini** | ★정체성(큐) |
+| `tab_icon_skill` | 탭 아이콘: 숙련 | ❌ missing | **gemini** | ★정체성(큐) |
+| `tab_icon_options` | 탭 아이콘: 옵션 | ❌ missing | **gemini** | ★정체성(큐) |
+| `clock_widget` | 시계 위젯(요일·날짜·시각·계절) | ❌ missing | **gemini** | ★정체성·첫인상(큐)·우상단 |
 | `gold_icon` | 골드 아이콘 | ❌ missing | claude | — |
 | `energy_bar_frame` | 혼력 바 프레임 | ❌ missing | claude | 우하단(체력 자리 포함) |
 | `tooltip_frame` | 호버 툴팁 프레임 | ❌ missing | claude | — |
@@ -80,11 +96,13 @@
 | `popup_frame` | 좌하단 컨텍스트 팝업(초상화+글) | ❌ missing | claude | — |
 | `slot_frame` | 인벤/툴바 슬롯 | 🟡 placeholder | claude | 핫바 텍스처 유무 확인 |
 
-## 6. 전체 화면 (screens) — 리스킨/신규
+## 6. 전체 화면 (screens) — 리스킨/신규 (★maker C-혼합)
+
+> 구조적 화면(정산·상자·설정 리스킨)=claude 즉시. **타이틀/시작=gemini**(정체성·첫인상·큐).
 
 | 화면 | status | maker | 비고 |
 |---|---|---|---|
-| 타이틀/시작 | ❌ missing | claude | 새 게임/이어하기 |
+| 타이틀/시작 | ❌ missing | **gemini** | ★정체성·첫인상(큐)·새 게임/이어하기 |
 | 설정(볼륨·전체화면) | ❌ missing | claude | 옵션 탭이 여는 화면 |
 | 하루 정산 | 🟡 placeholder | claude | RunSummary 리스킨 |
 | 카페 정산 | 🟡 placeholder | claude | CafeSummaryPanel 리스킨 |
