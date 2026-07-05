@@ -1,4 +1,4 @@
-# 나라카 밸리 — 마스터 팔레트 (Master Palette)
+# Dear My Naraka — 마스터 팔레트 (Master Palette)
 
 > **상태:** warm 베이스 램프 **큐레이션 확정**(2026-06-30, owner 승인 — 풀=C warm-moss + 흙/밭 제시안).
 > [ADR-0041]/[asset-ruleset §16]의 단일 출처. 생성 후 `tools/quantize_to_palette.py`로 nearest 스냅.
