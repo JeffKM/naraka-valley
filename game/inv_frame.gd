@@ -402,12 +402,15 @@ func _draw_menu_top(panel: Rect2) -> void:
 		TAB_OPTIONS:
 			_draw_options_tab(panel, font)
 
-# ★ 아이콘 탭 호버 툴팁 — 호버 중인 탭 바로 아래에 한글명 한지 칩(어두운 박스 + 밝은 글자).
+# ★ 아이콘 탭 호버 툴팁 — 한글명 한지 칩(어두운 박스 + 밝은 글자).
+# 위치 = 탭 바 우측 빈 공간(탭 행과 같은 높이). 옛 위치(호버 탭 바로 아래 tab.end.y+4)는 탭 칸 밖
+# 아래로 삐져나와 곧바로 밑 내용(저장 버튼·설명)과 겹쳤다(owner 리포트 2026-07-06 "튀어나온다").
 func _draw_tab_tooltip(font: Font, tab: Rect2, label: String) -> void:
 	var fs := 12
 	var tw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var pad := 6.0
-	var box := Rect2(tab.position.x, tab.end.y + 4.0, tw + pad * 2.0, 20.0)
+	var last: Rect2 = _tab_rects[_tab_rects.size() - 1]   # 마지막 탭 우측 = 항상 빈 공간(탭 4개는 좌측만 씀)
+	var box := Rect2(last.end.x + 12.0, tab.position.y + (tab.size.y - 20.0) * 0.5, tw + pad * 2.0, 20.0)
 	draw_rect(box, Color(0.10, 0.08, 0.06, 0.94))
 	draw_rect(box, Color(0.55, 0.48, 0.32), false, 1.0)
 	draw_string(font, box.position + Vector2(pad, 14.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.96, 0.84))

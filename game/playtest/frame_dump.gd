@@ -26,14 +26,18 @@ func _initialize() -> void:
 	for i in 8:
 		await process_frame
 
-	# 옵션 탭
+	# 옵션 탭 — 옵션(gear) 탭 호버 툴팁 표시(탭 바 우측에 뜨는지 확인)
 	m._open_frame(InventoryFrame.CTX_MENU)
 	m.frame.set_tab(InventoryFrame.TAB_OPTIONS)
 	m.frame.set_settings(0.8, 0.9, false)
+	m.frame._hover_tab = InventoryFrame.TAB_OPTIONS
+	m.frame.queue_redraw()
 	await _grab("frame_options")
 
-	# 인벤토리 탭
+	# 인벤토리 탭 — 관계(heart) 탭 호버 툴팁 표시
 	m.frame.set_tab(InventoryFrame.TAB_INV)
+	m.frame._hover_tab = InventoryFrame.TAB_REL
+	m.frame.queue_redraw()
 	await _grab("frame_inv")
 
 	m._close_frame()
