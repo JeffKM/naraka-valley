@@ -77,6 +77,7 @@
 
 > **구조적(claude): 즉시 제작** — 9-slice 패널·슬롯·툴팁·토스트·팝업·골드 아이콘·혼력바 프레임(`hanji_frame` 팔레트 샘플로 톤 맞춤). **정체성(gemini): 스펙카드+큐** — 탭 아이콘 4·시계 위젯(첫인상·손그림 한지). 원래 "UI 전체=claude"에서 정련.
 > **★2026-07-05 실상태 정정:** 아래 status는 2026-07-02 초안이었으나 그 뒤 HUD 폴리시 PR들이 **구조적 UI를 대부분 이미 완성**(`clock_hud`·`vitals_hud`·`hud_tooltip`·`notice_feed`·`context_popup`·`inv_frame` 4탭·전역 한지 Panel 테마 = `clock_hud.gd` "화면에 raw 패널 0" 달성). 실제 코드 대조로 ✅have 정정. **남은 진짜 gap = ①`gold_icon`(◈ 글리프→엽전, claude·이 슬라이스) ②탭 아이콘 4·시계는 위젯 완성이나 텍스트/글리프라 아이콘화만 gemini 정체성 큐.** 시계 위젯 자체는 have(정체성 아이콘 얹기만 큐).
+> **★ 정체성 큐 스펙카드 = [gemini-ui-identity-spec.md](./gemini-ui-identity-spec.md)**(2026-07-05 작성 — 탭 아이콘 4·시계 위젯 아이콘 8·타이틀 화면. 크기·앵커·배선 계약 박제, owner Gemini 대기).
 
 | key | 요소 | status | maker | 비고 |
 |---|---|---|---|---|
@@ -85,11 +86,11 @@
 | `heart_full` / `heart_empty` | 하트 | ✅ have | claude | 관계 탭 재사용 |
 | `ink_arrow` / `soul_moth` | 진행 화살표·나비 | ✅ have | gemini | — |
 | `menu_frame_9slice` | 탭 메뉴 프레임 | ✅ have | claude | **★실상태 정정**: `inv_frame` 4탭(한지 9-slice)·`c2_frame_dump` |
-| `tab_icon_inventory` | 탭 아이콘: 인벤토리 | ❌ missing | **gemini** | ★C-혼합: 정체성(큐·스펙카드) |
-| `tab_icon_social` | 탭 아이콘: 관계 | ❌ missing | **gemini** | ★정체성(큐) |
-| `tab_icon_skill` | 탭 아이콘: 숙련 | ❌ missing | **gemini** | ★정체성(큐) |
-| `tab_icon_options` | 탭 아이콘: 옵션 | ❌ missing | **gemini** | ★정체성(큐) |
-| `clock_widget` | 시계 위젯(요일·날짜·시각·계절) | ✅ have | claude | **★정정**: `clock_hud.gd`(한지 플레이트·절기/일차/시각/골드/마일스톤) |
+| `tab_icon_inventory` | 탭 아이콘: 인벤토리 | ❌ missing | **gemini** | ★정체성(큐) — [스펙카드](./gemini-ui-identity-spec.md) §1, 24×24·아이콘만 배선 |
+| `tab_icon_social` | 탭 아이콘: 관계 | ❌ missing | **gemini** | ★정체성(큐) — §1, 24×24 |
+| `tab_icon_skill` | 탭 아이콘: 숙련 | ❌ missing | **gemini** | ★정체성(큐) — §1, 24×24 |
+| `tab_icon_options` | 탭 아이콘: 옵션 | ❌ missing | **gemini** | ★정체성(큐) — §1, 24×24 |
+| `clock_widget` | 시계 위젯(절기·일차·시각·골드) | ✅ have | claude | **★정정**: `clock_hud.gd`. 정체성 아이콘 8(절기/시간대)만 [스펙카드](./gemini-ui-identity-spec.md) §2 큐(❓후속) |
 | `gold_icon` | 골드 아이콘(엽전) | 🟡 placeholder | claude | 현재 `◈` 글리프 → 엽전 아이콘 교체(이 슬라이스) |
 | `energy_bar_frame` | 혼력 바 프레임 | ✅ have | claude | **★정정**: `vitals_hud.gd` |
 | `tooltip_frame` | 호버 툴팁 프레임 | ✅ have | claude | **★정정**: `hud_tooltip.gd` |
@@ -103,7 +104,7 @@
 
 | 화면 | status | maker | 비고 |
 |---|---|---|---|
-| 타이틀/시작 | ❌ missing | **gemini** | ★정체성·첫인상(큐)·새 게임/이어하기 |
+| 타이틀/시작 | ❌ missing | **gemini** | ★정체성·첫인상(큐)·새 게임/이어하기 — [스펙카드](./gemini-ui-identity-spec.md) §3(풀 배경 일러스트 `title_bg` 1280×720 + `title_logo`, owner 2026-07-05 결정) |
 | 설정(볼륨·전체화면) | ✅ have | claude | **★정정**: 옵션 탭 내장(inv_frame 음악/효과음 볼륨·전체화면 토글) |
 | 하루 정산 | ✅ have | claude | **★정정**: 전역 한지 Panel 테마 적용(RunSummary) |
 | 카페 정산 | ✅ have | claude | **★정정**: 전역 한지 Panel 테마(CafeSummaryPanel) |
