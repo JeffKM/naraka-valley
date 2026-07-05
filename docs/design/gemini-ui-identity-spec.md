@@ -189,9 +189,10 @@ a pixel-art game LOGO wordmark on a transparent background, the main title "Dear
 ### 탭 아이콘 (4) — ✅ claude PixelLab 완료(PR#214, 트랙 변경)
 - ✅ tab_icon_inventory ✅ tab_icon_social ✅ tab_icon_skill ✅ tab_icon_options
 
-### 시계 위젯 아이콘 (8, §7-c 이번 큐 포함)
-- 절기: ⬜ season_icon_pianhwa ⬜ season_icon_yuhwa ⬜ season_icon_mangyeon ⬜ season_icon_seongya
-- 시간대: ⬜ time_icon_morning ⬜ time_icon_day ⬜ time_icon_evening ⬜ time_icon_night
+### 시계 위젯 아이콘 (8, §7-c 이번 큐 포함) — ✅ claude PixelLab 완료(트랙 변경 — 탭 아이콘 선례)
+- 절기: ✅ season_icon_pianhwa ✅ season_icon_yuhwa ✅ season_icon_mangyeon ✅ season_icon_seongya
+- 시간대: ✅ time_icon_morning ✅ time_icon_day ✅ time_icon_evening ✅ time_icon_night
+- 생성=`create_map_object`(128² side 뷰·low detail·basic shading·single outline)→`tab_icon_crop.py`(16px·pad1) 변환. 배선=`clock_hud.gd`(절기·시각 줄 좌측 16px 심볼·`SEASON_ICONS`/`TIME_ICONS` preload·문자열→인덱스 매핑). 회귀 51개 통과. ★피안화는 봉오리(4px 얇음)→활짝 핀 꽃 재생성으로 실루엣 보강.
 
 ### 타이틀 (2)
 - ⬜ title_bg ⬜ title_logo
