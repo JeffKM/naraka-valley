@@ -243,6 +243,17 @@ const EXTRA_ICONS := {
 	AnimalCatalog.HONBAEK_YU: preload("res://assets/crops/honbaek_yu.png"),    # 안개젖(안개소 산물)
 }
 
+# ★ [아트정리패스, ADR-0048 개정 §1] 도구 아이콘 5종 — 옛 임시 색박스(tool_color_of) 대체.
+# 아이콘만(핫바·인벤); 휘두름/손든 스프라이트는 캐릭터 시트 재생성 트랙 defer(도구-사용 애니 부재).
+# id "hoe" 등은 crop id와 불충돌하므로 icons dict(범용 id→아이콘 맵)에 병합해 _draw_icon이 조회한다.
+const TOOL_ICONS := {
+	ItemCatalog.HOE: preload("res://assets/tools/hoe.png"),                     # 괭이
+	ItemCatalog.WATERING_CAN: preload("res://assets/tools/watering_can.png"),  # 물뿌리개
+	ItemCatalog.SCYTHE: preload("res://assets/tools/scythe.png"),              # 낫
+	ItemCatalog.PICKAXE: preload("res://assets/tools/pickaxe.png"),            # 곡괭이
+	ItemCatalog.AXE: preload("res://assets/tools/axe.png"),                    # 도끼
+}
+
 # 각 타일의 그레이박스 색(밝기·미세 색조로만 구분, 회색 기조 유지). WALL이 가장 밝다.
 const COLORS := [
 	Color(0.16, 0.18, 0.16),  # GROUND — 어두운 풀밭 톤
@@ -3553,6 +3564,8 @@ func _setup_hotbar() -> void:
 		icons[crop_id] = CROP_SPRITES[crop_id][2]  # mature 프레임을 인벤 아이콘으로 재사용
 	for extra_id in EXTRA_ICONS:
 		icons[extra_id] = EXTRA_ICONS[extra_id]    # ★ [S1-10] 비-작물 수확물 아이콘(혼백도·노을알·안개젖)
+	for tool_id in TOOL_ICONS:
+		icons[tool_id] = TOOL_ICONS[tool_id]       # ★ [아트정리패스] 도구 아이콘(색박스 대체)
 	hotbar.setup(inventory, icons)
 
 # ── ★ C2 무인 출하함 ──────────────────────────────────────────────────────────
@@ -3662,6 +3675,8 @@ func _setup_frame() -> void:
 		icons[crop_id] = CROP_SPRITES[crop_id][2]   # 핫바와 같은 작물 아이콘 재사용
 	for extra_id in EXTRA_ICONS:
 		icons[extra_id] = EXTRA_ICONS[extra_id]     # ★ [S1-10] 비-작물 수확물 아이콘(혼백도·노을알·안개젖)
+	for tool_id in TOOL_ICONS:
+		icons[tool_id] = TOOL_ICONS[tool_id]        # ★ [아트정리패스] 도구 아이콘(색박스 대체)
 	frame.setup(inventory, ship_bin, icons)
 	frame.set_chest(chest)   # ★ Phase D 저장 상자 주입(CTX_CHEST 상단 그리드)
 	frame.deposit_slot.connect(_on_frame_deposit)
@@ -4226,6 +4241,8 @@ func _item_icon(id: String) -> Texture2D:
 		return CROP_SPRITES[crop][2]
 	if crop != "" and EXTRA_ICONS.has(crop):   # ★ [S1-10] 비-작물 수확물(혼백도·노을알·안개젖)
 		return EXTRA_ICONS[crop]
+	if TOOL_ICONS.has(id):                     # ★ [아트정리패스] 도구 아이콘(토스트·알림에서 텍스트→아이콘)
+		return TOOL_ICONS[id]
 	var base := ItemCatalog._large_base(id)    # 대형 산물(_large)이면 기준 산물 아이콘 재사용
 	if base != "" and EXTRA_ICONS.has(base):
 		return EXTRA_ICONS[base]

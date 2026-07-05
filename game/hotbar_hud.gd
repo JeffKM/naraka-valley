@@ -107,7 +107,12 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 	var inner := Rect2(rect.position + Vector2(pad, pad), rect.size - Vector2(pad * 2.0, pad * 2.0))
 	match ItemCatalog.category_of(id):
 		ItemCatalog.CAT_TOOL:
-			draw_rect(inner, ItemCatalog.tool_color_of(id))
+			# ★ [아트정리패스] 도구 아이콘(icons dict에 병합된 도구 텍스처). 없으면 옛 색박스 폴백.
+			var ttex: Texture2D = crop_icons.get(id)
+			if ttex != null:
+				draw_texture_rect(ttex, inner, false)
+			else:
+				draw_rect(inner, ItemCatalog.tool_color_of(id))
 		ItemCatalog.CAT_SEED:
 			_draw_crop_tex(ItemCatalog.crop_of(id), inner)
 		ItemCatalog.CAT_SAPLING:
