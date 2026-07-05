@@ -1264,6 +1264,15 @@ var _run_harvested := 0
 # (_run_harvested 점수판과 같은 결 — main 세이브에 한 조각, SaveManager 불변).
 var _farming_xp := 0
 
+# ★ ADR-0052 그레이박스 — 채집 스킬 XP(농사와 대칭·main 스칼라). XP 곡선은 FarmSkill을 *공유*한다
+# (XP_THRESHOLDS/level_for_xp는 스킬-불특정 순수 곡선 — ADR-0052는 5스킬 공통 기반). 라이브 채집
+# 루프(숲·야생씨앗)가 아직 없어 지금은 XP 소스 미배선(프레임워크 우선) — 헬퍼·상태·조회만 잠근다.
+var _foraging_xp := 0
+# ★ ADR-0052 전문직 선택 상태 — {skill_id: {tier(5/10): prof_id}}. 빈 = 미선택("평평≠막힘", L0도
+# 활동 100% 가동, 전문직은 곱셈 편의). ProfessionCatalog가 규칙(무상태), 이 dict가 세이브 상태
+# (_farming_xp↔FarmSkill 관계와 동일). main이 세이브 dict에 한 조각으로 끼운다(SaveManager 불변).
+var _professions := {}
+
 # T5.1 직전(현재) 대화 상대의 표시 이름 — 대화 종료 시 온보딩 전진을 '누구와의
 # 대화였나'로 가르는 데 쓴다. 멜이 카페에 상주하면서 온보딩 도중(미호 멘토 단계)에도
 # 말 걸 수 있게 됐기 때문 — 화자 구분 없이 단계로만 가르면 멜 대화가 미호 단계를
@@ -3662,6 +3671,7 @@ func _setup_frame() -> void:
 	frame.quit_pressed.connect(_on_frame_quit)
 	frame.chest_store.connect(_on_frame_chest_store)   # ★ Phase D 상자 보관
 	frame.chest_take.connect(_on_frame_chest_take)     # ★ Phase D 상자 회수
+	frame.profession_chosen.connect(_on_frame_profession)   # ★ ADR-0052 숙련 탭 전문직 선택
 
 # ── ★ C3 미니멀 HUD 오버레이(좌하단 알림 피드 + 우하단 혼력 바) ─────────────────
 # hotbar·frame과 같은 결 — 코드 생성 자식 Control(무상태). 프레임보다 *먼저* 붙여(앞 자식) 메뉴·
@@ -4077,6 +4087,8 @@ func _save_game() -> void:
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
 		"farming_xp": _farming_xp,   # ★ S1-6 농사 숙련 XP(혼력 감산 파생원)
+		"foraging_xp": _foraging_xp,   # ★ ADR-0052 채집 숙련 XP(전문직 게이트·퍼크 파생원)
+		"professions": _professions_to_save(),   # ★ ADR-0052 전문직 선택 {skill:{tier:id}}
 		"cafe_revenue_total": _cafe_revenue_total,
 		"selected_crop": _selected_crop,
 		# M1.5 — 현재 구역·실내 모드·플레이어 위치(껐다 켜도 '있던 자리'에서 재개). region은
@@ -4136,6 +4148,9 @@ func _load_game() -> void:
 	_run_harvested = maxi(int(data.get("run_harvested", 0)), 0)
 	# ★ S1-6 농사 숙련 XP 복원(키 없는 구세이브는 0 = L0, 무막힘). 손상 방어로 음수는 0.
 	_farming_xp = maxi(int(data.get("farming_xp", 0)), 0)
+	# ★ ADR-0052 채집 숙련 XP·전문직 복원(키 없는 구세이브 = 0/미선택, 무막힘·정합 재검증은 _load_professions).
+	_foraging_xp = maxi(int(data.get("foraging_xp", 0)), 0)
+	_load_professions(data.get("professions", {}))
 	# T7.2 카페 마일스톤 누적 서빙 매출. 손상 방어로 음수는 0으로 자른다(키 없는 구버전 세이브는 0).
 	_cafe_revenue_total = maxi(int(data.get("cafe_revenue_total", 0)), 0)
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
@@ -4228,6 +4243,120 @@ func _gain_farm_xp(amount: int) -> void:
 	if after > before and notice_feed != null:
 		notice_feed.push("숙련 ▲ 농사 Lv %d" % after, 4.0, false, null, true)  # gold=금박 강조
 		audio.sfx("ui")
+
+# ★ ADR-0052 그레이박스 — 채집 XP 적립 + 레벨업 감지(_gain_farm_xp 대칭). 라이브 채집 루프(숲·
+# 야생씨앗)가 붙으면 그 산출 지점에서 호출(현재 프레임워크 우선이라 소스 미배선 — 테스트가 직접 구동).
+func _gain_forage_xp(amount: int) -> void:
+	if amount <= 0:
+		return
+	var before := FarmSkill.level_for_xp(_foraging_xp)
+	_foraging_xp += amount
+	var after := FarmSkill.level_for_xp(_foraging_xp)
+	if after > before and notice_feed != null:
+		notice_feed.push("숙련 ▲ 채집 Lv %d" % after, 4.0, false, null, true)
+		audio.sfx("ui")
+
+# ── ADR-0052 전문직 선택·조회 API ──────────────────────────────────────────────
+# 스킬의 현재 레벨(FarmSkill 곡선 공유). 채집·농사만 XP 소스 존재, 나머지는 0(각 슬라이스에서 XP 배선).
+func _skill_level(skill: String) -> int:
+	match skill:
+		ProfessionCatalog.FARMING: return FarmSkill.level_for_xp(_farming_xp)
+		ProfessionCatalog.FORAGING: return FarmSkill.level_for_xp(_foraging_xp)
+		_: return 0
+
+# (skill,tier)에 이미 고른 전문직 id("" = 미선택).
+func _profession_at(skill: String, tier: int) -> String:
+	return String(_professions.get(skill, {}).get(tier, ""))
+
+func has_profession(skill: String, prof_id: String) -> bool:
+	var chosen: Dictionary = _professions.get(skill, {})
+	for tier in chosen:
+		if chosen[tier] == prof_id:
+			return true
+	return false
+
+# 선택 유효성: ①실존 전문직 ②스킬 레벨 ≥ tier(5/10 게이트, "평평≠막힘"과 별개 — 이건 곱셈 편의 해금)
+# ③해당 tier 슬롯 비어있음(재선택 금지 — 스타듀는 책으로만 변경, 그레이박스는 1회) ④tier10은 부모 lvl5 선택됨.
+func _can_choose_profession(skill: String, prof_id: String) -> bool:
+	if not ProfessionCatalog.is_valid(skill, prof_id):
+		return false
+	var tier := ProfessionCatalog.tier_of(skill, prof_id)
+	if _skill_level(skill) < tier:
+		return false
+	if _profession_at(skill, tier) != "":
+		return false
+	if tier == 10:
+		var parent := ProfessionCatalog.requires_of(skill, prof_id)
+		if _profession_at(skill, 5) != parent:
+			return false
+	return true
+
+# 전문직 선택(유효하면 슬롯 세팅 후 true). UI/테스트가 호출.
+func choose_profession(skill: String, prof_id: String) -> bool:
+	if not _can_choose_profession(skill, prof_id):
+		return false
+	var tier := ProfessionCatalog.tier_of(skill, prof_id)
+	if not _professions.has(skill):
+		_professions[skill] = {}
+	_professions[skill][tier] = prof_id
+	if notice_feed != null:
+		notice_feed.push("전문직 ▲ %s" % ProfessionCatalog.name_of(skill, prof_id), 4.0, false, null, true)
+		audio.sfx("ui")
+	return true
+
+# 지금 고를 수 있는 tier(5 또는 10, 없으면 0) — UI 배지·온보딩용. 레벨 도달·슬롯 빔·부모 충족 판정.
+func _pending_profession_tier(skill: String) -> int:
+	for tier in [5, 10]:
+		for p in ProfessionCatalog.tier_profs(skill, tier):
+			if _can_choose_profession(skill, p["id"]):
+				return tier
+	return 0
+
+# 선택한 전문직들의 퍼크에서 dim의 값(여럿이면 max). 로더(loop)가 base 위에 얹을 때 읽는다. ADR-0052
+# 비-가치 차원만 존재(+판매가/마진은 여기 없음 — 관계 곱셈기 전용). 미선택/미배선이면 default_val.
+func _perk_value(skill: String, dim: String, default_val: float) -> float:
+	var best := default_val
+	var chosen: Dictionary = _professions.get(skill, {})
+	for tier in chosen:
+		for perk in ProfessionCatalog.perks_of(skill, String(chosen[tier])):
+			if perk["dim"] == dim:
+				best = maxf(best, float(perk["value"]))
+	return best
+
+# 편의 조회(채집 파일럿) — 라이브 루프가 호출할 인터페이스. 약초학자 → Q_IRIDIUM, 채집꾼 → 0.20 등.
+func forage_quality_floor() -> int:
+	return int(_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_QUALITY_FLOOR, 0.0))
+
+func forage_double_drop_chance() -> float:
+	return _perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_DOUBLE_DROP, 0.0)
+
+# 세이브 직렬화 — _professions를 {skill: {tier: id}} 그대로(var_to_str가 중첩 dict/int키 왕복). 로드 시
+# 카탈로그로 재검증해 손상/구버전 잔여를 버린다(유효 전문직만 복원, tier/부모 정합).
+func _professions_to_save() -> Dictionary:
+	return _professions.duplicate(true)
+
+func _load_professions(raw) -> void:
+	_professions = {}
+	if typeof(raw) != TYPE_DICTIONARY:
+		return
+	for skill in raw:
+		if not (skill is String) or typeof(raw[skill]) != TYPE_DICTIONARY:
+			continue
+		for tier in raw[skill]:
+			var pid := String(raw[skill][tier])
+			var t := int(tier)
+			# 유효성: 실존·tier 일치. tier10 부모 정합은 아래 2패스로(부모 먼저 실릴 수 있게).
+			if ProfessionCatalog.is_valid(skill, pid) and ProfessionCatalog.tier_of(skill, pid) == t:
+				if not _professions.has(skill):
+					_professions[skill] = {}
+				_professions[skill][t] = pid
+	# 2패스: tier10인데 부모 lvl5가 세이브에 없거나 불일치면 폐기(정합 보장).
+	for skill in _professions.keys():
+		var slots: Dictionary = _professions[skill]
+		if slots.has(10):
+			var parent := ProfessionCatalog.requires_of(skill, String(slots[10]))
+			if String(slots.get(5, "")) != parent:
+				slots.erase(10)
 
 # ★ Phase C — NPC idle 초상화(컨텍스트 팝업용). 대화창과 같은 PORTRAIT 매핑을 쓰되 표정 없는 기본
 # 얼굴(stem.png)을 로드해 캐시한다(매 프레임 load 회피). 초상화 없는 인물(네오)은 null(팝업은 이름만).
@@ -5198,15 +5327,41 @@ func _heart_rows() -> Array:
 # ★ Phase B 숙련 탭 행(_heart_rows와 대칭 — FarmSkill에서 레벨·진행 파생, 읽기 전용). 현재 농사 1종.
 # floor_xp=현 레벨 진입 임계, next_xp=다음 레벨 임계(만렙이면 0). 프레임이 (xp-floor)/(next-floor)로 진행바.
 func _skill_rows() -> Array:
-	var lv := FarmSkill.level_for_xp(_farming_xp)
-	var floor_xp := 0 if lv <= 0 else int(FarmSkill.XP_THRESHOLDS[lv - 1])
-	var next_xp := 0 if lv >= FarmSkill.MAX_LEVEL else int(FarmSkill.XP_THRESHOLDS[lv])
+	# ★ ADR-0052 — 농사·채집 2행(FarmSkill 곡선 공유). 전문직 요약·선택가능 tier도 파생(읽기 전용).
 	return [
-		{"name": "농사", "level": lv, "max": FarmSkill.MAX_LEVEL, "xp": _farming_xp,
-			"floor_xp": floor_xp, "next_xp": next_xp},
+		_skill_row("농사", ProfessionCatalog.FARMING, _farming_xp),
+		_skill_row("채집", ProfessionCatalog.FORAGING, _foraging_xp),
 	]
 
+# 한 스킬 행 조립 — 레벨/진행바 + 고른 전문직 이름 요약 + 지금 고를 수 있는 tier(0=없음).
+func _skill_row(display_name: String, skill: String, xp: int) -> Dictionary:
+	var lv := FarmSkill.level_for_xp(xp)
+	var floor_xp := 0 if lv <= 0 else int(FarmSkill.XP_THRESHOLDS[lv - 1])
+	var next_xp := 0 if lv >= FarmSkill.MAX_LEVEL else int(FarmSkill.XP_THRESHOLDS[lv])
+	var chosen: Array = []
+	for tier in [5, 10]:
+		var pid := _profession_at(skill, tier)
+		if pid != "":
+			chosen.append(ProfessionCatalog.name_of(skill, pid))
+	# 지금 고를 수 있는 전문직 목록(프레임이 버튼으로 그림 — main이 자격 판정, 프레임은 무상태 렌더).
+	# pt==0이면 tier_profs가 빈 배열이라 options=[](선택 UI 미표시).
+	var pt := _pending_profession_tier(skill)
+	var options: Array = []
+	for p in ProfessionCatalog.tier_profs(skill, pt):
+		if _can_choose_profession(skill, p["id"]):
+			options.append({"id": p["id"], "name": p["name"], "desc": p["desc"]})
+	return {"name": display_name, "level": lv, "max": FarmSkill.MAX_LEVEL, "xp": xp,
+		"floor_xp": floor_xp, "next_xp": next_xp,
+		"skill": skill, "profession": ", ".join(chosen), "pending_tier": pt, "options": options}
+
 # ★ Phase B 옵션 탭 핸들러 — 프레임은 신호만, 실제 저장·종료는 main이 수행(지갑·세이브 소유).
+# ★ ADR-0052 — 숙련 탭 전문직 선택 버튼 핸들러. choose_profession이 자격을 재검증(레벨/슬롯/부모)하므로
+# 프레임 신호를 그대로 위임한다(프레임은 지갑·상태를 모름 — 옵션 탭 저장/나가기와 같은 결). 다음 프레임
+# set_skills가 옵션을 갱신하지만 즉시 반영을 위해 재주입한다(버튼이 바로 사라지고 요약이 갱신되게).
+func _on_frame_profession(skill: String, prof_id: String) -> void:
+	if choose_profession(skill, prof_id):
+		frame.set_skills(_skill_rows())
+
 func _on_frame_save() -> void:
 	_save_game()
 	_notice("저장했습니다")
