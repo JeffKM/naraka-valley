@@ -305,7 +305,7 @@ const PROP_CAFE_TABLE := preload("res://assets/props/cafe_table.png")
 # ★ Phase 2.8 T3 — 안식 농원 외부 농장 장식(PixelLab create_map_object, 32px native·피안절 무채도 톤).
 # 충돌·세이브 없는 순수 장식(_draw_props_for) — 밭을 '농장'으로 읽히게 프레임한다(밀도 상한 4종).
 const PROP_FENCE := preload("res://assets/props/farm_fence.png")              # 32×32 — 밭 경계 울타리(가로 레일)
-const PROP_SCARECROW := preload("res://assets/props/farm_scarecrow.png")      # 32×64 — 허수아비(1×2칸, 밭 곁 GROUND)
+const PROP_SCARECROW := preload("res://assets/props/farm_scarecrow.png")      # 32×64 — 허수아비(1×2칸) 밑 1칸 SOLID·위 1칸 통과+fade(나무·바위 인프라)
 const PROP_PLANTER := preload("res://assets/props/farm_planter.png")          # 32×32 — 길가 화분
 const PROP_FLOWER_PATCH := preload("res://assets/props/spirit_flower_patch.png")  # 32×32 — 꽃 패치(피안화)
 # ★ Phase 2.8 T3⑤ — 안식 농원 테두리 프레이밍 장식(PixelLab create_map_object, 피안절 톤 통일
@@ -470,12 +470,13 @@ const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP
 	PROP_TREE_A, PROP_TREE_B, PROP_ROCK,   # ★ T3⑤ 나무·바위 = 통과 불가(맵 경계 벽)
 	PROP_BUSH,                             # ★[roster] 덤불 = 능선 벽(풀 2×2 SOLID·FOOT_BAR 아님 = 전체 막음, owner "막 지나가지길 원해")
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP,  # ★ ADR-0035 업화석·석화 고목 = 통과 불가(계단 하드 게이트·overgrown 장애물)
-	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B]  # ★통나무 5종 = 통과 불가(owner 2026-07-05·FOOT_BAR 아님=풀타일 장애물, 낮은 프롭)
+	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B,  # ★통나무 5종 = 통과 불가(owner 2026-07-05·FOOT_BAR 아님=풀타일 장애물, 낮은 프롭)
+	PROP_SCARECROW]                        # ★허수아비(1×2) = 밑 1칸 SOLID·위 1칸 통과+fade(나무·바위 인프라, owner 2026-07-05) — FOOT_BAR_PROPS·FADE_PROPS 동반
 # ★[asset-ruleset §5] 발치 충돌 바 — 키 큰 야외 프롭(나무·바위)은 풀타일 충돌 대신 *발치 밑단 바*(폭×반높이)만
 #   막아 "머리는 통과"(§6 Y-split의 물리 짝 — 캐노피 뒤로 지나감). 하드게이트 debris(업화석·석화고목)는
 #   개간 게이트라 풀타일 유지(Slice 1 전환)·실내 벽 가구는 벽 flush라 풀타일 유지(회귀 보존). 맵 이탈은
 #   _border_body(둘레)가 막으므로 야외 트리 축소는 경계 안전.
-const FOOT_BAR_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK]
+const FOOT_BAR_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_SCARECROW]
 const FOOT_BAR_H := 16   # 밑단 바 높이(8 논리 = 반 타일) — FADE_PROPS 밖 부피 프롭용(현재 예약, 향후 반타일 프롭)
 # ★[roster] 저승 봄나무(2×4칸)·바위(2×2칸) = 밑둥/밑행만 SOLID(폭 전체 × 젤밑 1칸)·그 위는 통과 O(캐릭터가 뒤로 지나감).
 #   owner 결정: "젤밑 두 칸만 막고 그 위는 통과". 나무·바위 발치바는 FOOT_BAR_H 대신 1칸(TILE) 높이(FADE_PROPS 소속).
@@ -483,7 +484,9 @@ const TREE_FOOT_H := TILE
 # ★[roster] 수관/바위 뒤 캐릭터 occlusion fade — 앞 패스(플레이어보다 앞)로 그려지는 부피 프롭이 플레이어를 덮으면
 #   살짝 반투명해 "뒤에 있음"을 드러낸다(스타듀식). 프롭별 alpha를 _tree_fade에 lerp(순수 시각).
 #   ★바위(PROP_ROCK)도 여기 합류 = 나무와 동일 인프라(밑행 1칸 SOLID + 뒤로 지나갈 때 반투명). owner 2026-07-04.
-const FADE_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK]
+#   ★허수아비(PROP_SCARECROW·1×2)도 합류(owner 2026-07-05 "밑 1×1 못 지나가고 위 1×1은 뒤로 통과+반투명") —
+#     TREE_FOOT_H=TILE이라 32×64의 밑 1칸만 SOLID·위 1칸(몸통·머리)은 통과 O + occlusion fade.
+const FADE_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_SCARECROW]
 const TREE_FADE_MIN := 0.45   # 겹칠 때 최소 알파(완전 투명 X — 나무가 남아 보이게)
 const TREE_FADE_SPEED := 8.0  # 알파 전환 속도(초당 — move_toward, 부드러운 페이드)
 # ★ ADR-0025 ② — PROP 좌표 데이터 외부화. 텍스처는 *코드가* 정의하고(키↔Texture2D 레지스트리),
