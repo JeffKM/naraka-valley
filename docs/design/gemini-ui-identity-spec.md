@@ -110,26 +110,29 @@ crisp pixel-art UI in the burned-hanji (aged Korean mulberry paper) style of a c
 
 ## 3. 타이틀 / 시작 화면 — 첫인상 (신규 화면)
 
-> **owner 결정(2026-07-05):** **(A) 풀 배경 일러스트 + (d) 전경 4직원 단체.** 저승 컨셉카페 야경 손그림 배경 + **전경에 카페 식구 4인(옥자 중앙·미호·멜·바나)** + 로고(`Dear My Naraka`) + [새 게임]/[이어하기] 버튼 오버레이. [okja-overview] 히어로(`screenshots/cafe-night.png`)의 카페 야경 심상 계승.
-> **⚠️ 전경 캐릭터 정합 리스크(§7-d 완화책):** 전경 대형 캐릭터는 초상화/스프라이트 외형과 어긋나면 눈에 띈다. **기존 초상화 28장**(bana/mel/miho/okja × 7표정 — Gemini 완료, [portrait-spec-card.md]·[gemini-regen-batch §0.2])을 **생성 시 참조 이미지로 첨부**해 외형(머리색·의상·여우귀·안경 등)을 앵커한다. 안경=옥자만. 미호=여우귀·꼬리 1개·여우불.
-> **코드 상태:** 타이틀 화면 **없음** — `main.gd:1423 saver.has_save()` 분기로 월드에 바로 진입. 타이틀 = **신규 씬/Control 신설**(별도 세션 = 데모완성패스 S1-11~17 화면군, [ADR-0048] §6). 이 스펙은 ①아트 규격 ②배선 계약을 박제.
+> **owner 결정(2026-07-05, [Dear_My_Naraka_Cozy_Title_Spec] 기획서 채택):** 풀 **패럴랙스 씬** — **"스산한 외곽(붉은 달·지옥문) + 따뜻한 중심(카페·농장·4직원)"의 뚜렷한 대비**로 코지를 극대화. 앞선 "카페 야경+전경 4직원"을 owner 제공 Cozy Ver.로 정련. **다크판타지 HUD·전사 캐릭터(대검)·핏빛 톤·RPG 레벨은 반려**(ADR-0002 코지·ADR-0005 무퀘스트 정합). **톤 = 타이틀만 서정·미스터리, 게임 안은 코지(의도된 대비 — owner 확정).**
+> **메뉴 5개:** Game Start · Load Game(멀티 3슬롯 신규) · Settings(에센셜) · Credits · Quit.
+> **⚠️ 정합 규약:** 4직원 = 초상화 28장 참조 앵커 · **무기 없음**(전사 이미지 금지) · **여우불 = 파란 `#60d8f0`**(노란빛은 카페 등불/모닥불 담당, 혼동 금지) · 붉은 달 = **파스텔 부드러운 붉은빛**(날카롭지 않게) · 지옥문 = 인디고/딥퍼플로 가라앉힌 신비 실루엣(위협 아님). 4인 = 옥자(마녀모자·안경·버건디) / 미호(여우귀·꼬리1·파란여우불·안경無) / 멜(청록 강시복·검은단발) / 바나(고딕롤리타·금발+검은앞머리·송곳니).
+> **코드 상태:** 타이틀 화면 **없음** — `main.gd:1423 saver.has_save()` 분기로 월드에 바로 진입. 타이틀 = **신규 씬 신설**(배선 세션 S1-11~17, [ADR-0048] §6). 이 스펙은 ①아트 규격 ②배선 계약을 박제. **★멀티 슬롯은 `save.gd` 단일→멀티 재설계가 딸린 중간 규모 코드 작업(아트 아님).**
 
-### 3.1 아트 규격
+### 3.1 아트 규격 (패럴랙스 씬 + 로고)
 
 | key | 요소 | 크기 | 경로 | 비고 |
 |---|---|---|---|---|
-| `title_bg` | 배경 일러스트 | **1280×720**(내부 640×360의 2×, 정수배) | `assets/ui/` | 픽셀아트 일러스트. **청크 캐논 예외**(대형 씬 — 캐릭터처럼 선명도 우선, [ADR-0047] §4 결). 코드에서 화면 cover 표시 |
-| `title_logo` | 로고 | **~360×140**(가변, 투명) | `assets/ui/` | 배경과 **분리 레이어**(재배치·애니 유연). 상단 중앙 앵커 |
+| `title_bg` | 배경+중경 통합 씬 | **1280×720**(16:9·2×) | `assets/ui/` | 붉은달·지옥문(원경) + 카페·농장·4직원(중경). **청크 캐논 예외**(대형 씬 선명도, [ADR-0047] §4). 코드 cover |
+| `title_logo` | 로고 | **~360×140**(투명) | `assets/ui/` | 분리 레이어·상단 중앙 |
 
-- **버튼(새 게임/이어하기)은 아트 불요** — `inv_frame`의 한지 plate 9-slice(`HANJI_PLATE`) 즉시모드 스킨 재사용(코드 스킨). Gemini가 그릴 건 **배경 + 로고 2장뿐**.
-- `title_bg`는 640×360 비율(16:9) 정합 — Gemini가 다른 비율로 뽑으면 글루가 16:9 크롭/레터박스. 안전영역: 로고(상단 중앙)·버튼(하단 중앙)이 얹히므로 **그 두 영역은 디테일 과밀 금지**(글자 가독성).
+- **전경 파티클 = 코드 생성(아트 불요):** 찻잎(tea leaves) + **파란 여우불 `#60d8f0`** + 따뜻한 노란 불티, 바람 타고 대각선 흩날림·일부 카메라 근접(픽셀 아웃포커싱). 도트 파티클.
+- **패럴랙스(선택):** MVP = `title_bg` 통합 1장 + 코드 파티클. 배선 세션이 깊이감을 원하면 `title_bg`를 **far**(붉은달·지옥문·하늘) / **mid**(카페·농장·4직원) 2장으로 분리 생성해 시차 스크롤(옵션 — 각 1280×720).
+- **4직원 idle 애니(후속):** MVP = **정적 4직원**. idle 루프(옥자 찻잔김·미호 꼬리살랑·멜 졸다깨기·바나 망토 펄럭·머리칼 바람)는 후속 애니 트랙(캐릭터 스프라이트와 얽힘 — 정적 먼저).
+- **버튼·프레임 = 코드 스킨**(`inv_frame` 한지 plate 9-slice 재사용). Gemini가 그릴 건 **`title_bg` + `title_logo` 2장뿐.** 로고(상단 중앙)·메뉴(중앙 하단 or 좌/우 한쪽) 안전영역 디테일 과밀 금지.
 
-### 3.2 배경 일러스트 프롬프트 (`title_bg`)
-> **청크 캐논 예외:** 타이틀 배경은 대형 씬 일러스트라 2px 강제 청크화하면 뭉갠다 — `enforce_chunk.py` **미적용**(캐릭터와 동일 예외). high detail·crisp로 뽑아 다운스케일 최소.
+### 3.2 배경+중경 씬 프롬프트 (`title_bg`)
+> **청크 캐논 예외:** 대형 씬 일러스트라 2px 강제 청크화하면 뭉갠다 — `enforce_chunk.py` **미적용**. high detail·crisp로 뽑아 다운스케일 최소.
 ```
-detailed pixel-art title-screen illustration for a cozy underworld/afterlife farming game titled "Dear My Naraka" (in the style of Stardew Valley and Sun Haven title art, warm and inviting despite the afterlife setting). SCENE: a warm glowing underworld concept-cafe at dusk/night — a cozy two-story timber cafe building with big amber-lit windows spilling warm light, soft foxfire-blue (#60d8f0) paper lanterns hung under the eaves, red spider lilies (higanbana, #c0403a) blooming, a hanok-tiled roofline, wisps of spirit-mist and a deep starry twilight sky with a slim crescent moon. FOREGROUND CAST — the four cafe family members standing together in front of the cafe, welcoming the player: at CENTER a composed elegant witch cafe-owner (Okja) with a black witch hat, burgundy wavy hair and round glasses; beside her a gentle young woman with white fox ears, one fox tail and a small blue foxfire flame (Miho); a young woman in a teal jiangshi robe and cap with a black bob (Mel); and a young woman in a purple-black gothic-lolita dress, blonde hair with a black front-bang streak and small vampire fangs (Bana). warm friendly poses, chibi ~2.5-3 heads tall, readable silhouettes, match their established portrait designs. WARM cozy welcoming mood — the heart of the village at dusk, NOT scary. warm honey-amber and cream palette with cool foxfire-blue and muted crimson accents, slightly desaturated. flat 2D pixel art, painterly pixel shading, light from the glowing cafe windows. Leave the TOP-CENTER area calmer/darker for a logo and the BOTTOM-CENTER area calmer for menu buttons; keep the cast slightly lower/spread so the logo space stays clear. 16:9 aspect, high detail crisp readable pixels.
+detailed pixel-art title-screen illustration for a cozy underworld/afterlife farming & cafe game titled "Dear My Naraka" (Stardew Valley / Sun Haven title-art style, warm and cozy). A PARALLAX SCENE with a clear contrast between a bleak outer background and a warm cozy center. BACKGROUND (far): a deep starry night sky over a desolate afterlife valley, a large soft PASTEL red moon glowing gently (not harsh), and the distant silhouette of a great hell-gate sunk into soft indigo / deep-purple tones — mysterious and serene, NOT threatening, faint emissive pixels glimmering through the gate. MIDGROUND (the warm heart): a small cozy timber cafe-and-farmstead with warm amber/orange light spilling from its windows and a lantern, white smoke puffing from the chimney, a little farm plot beside it; in the front yard the FOUR cafe family gathered in a peaceful evening moment, stable triangular composition — Okja (witch cafe-owner: black witch hat, burgundy wavy hair, round glasses) sitting on a small chair cupping a steaming teacup, smiling warmly; Miho (white fox ears, ONE fox tail, a small BLUE foxfire flame #60d8f0, no glasses) sitting by the field gathering cute crops into a basket, tail wagging; Mel (teal jiangshi robe and cap with a yellow talisman, black bob) dozing by a small campfire with arms stretched out; Bana (purple-black gothic-lolita dress, blonde hair with a black front-bang streak, small fangs) leaning relaxed by the cafe door with a broom, watching the others fondly. Warm CENTER light from the cafe windows and campfire wraps the cast; shadows in cozy INDIGO / deep-purple (NOT black). chibi ~2.5-3 heads tall, match their established portrait designs, NO weapons. warm honey-amber and cream palette, soft pastel-red moon, cool indigo accents, one blue foxfire accent by Miho. flat 2D pixel art, painterly pixel shading. Leave the TOP-CENTER calmer/darker for a logo and keep a calmer band (center-bottom or one side) for menu text. 16:9 aspect, high detail crisp readable pixels.
 ```
-> 정합: 생성 시 `game/assets/portraits/`(또는 초상화 원본)의 옥자·미호·멜·바나 초상화를 **참조 첨부**. 4인 정체성 = 옥자(마녀모자·안경·버건디) / 미호(여우귀·꼬리1·여우불·안경無) / 멜(청록 강시복·검은 단발) / 바나(고딕롤리타·금발+검은 앞머리·송곳니). 얼굴 디테일이 뭉개지면 원경으로 물리거나 각 캐릭터 개별 생성 후 합성(Aseprite) 폴백.
+> 정합: 생성 시 옥자·미호·멜·바나 **초상화 참조 첨부**. idle 포즈(Cozy 기획서 §2): 옥자=찻잔 감싸쥐고 미소 / 미호=밭가 작물 바구니·꼬리 살랑 / 멜=모닥불가 졸다 부적 만지작 / 바나=문가 빗자루·동료 바라봄. 얼굴 뭉개지면 개별 생성 후 합성(Aseprite) 폴백. **여우불=파랑, 무기 없음.**
 
 ### 3.3 로고 프롬프트 (`title_logo`)
 > **owner 결정(§7-a): 영문 주 "Dear My Naraka" + 한글 독음 "디어 마이 나라카" 보조 · 자형=Gemini 직접 생성 + 사후 Aseprite 미세조정.** 게임명이 영문이라 자형 리스크가 낮아(한글 조판 부담 소멸) Gemini 직생으로 전환. 붓글씨(sumi-ink) + 여우불 액센트 = 게임 정체성.
@@ -138,11 +141,17 @@ a pixel-art game LOGO wordmark on a transparent background, the main title "Dear
 ```
 > ⚠️ 영문 자형은 Gemini가 잘 뽑지만 **한글 독음("디어 마이 나라카") 자형은 여전히 틀릴 수 있다** — 독음 줄만 사후 Aseprite/폰트로 교정([ADR-0001] 허용 글루). 영문 주 타이틀은 Gemini 산출을 크게 손대지 않아도 됨. 최종 커닝/스코치 액센트는 Aseprite 미세조정.
 
-### 3.4 배선 계약 (신규 씬 — 별도 세션 S1-11~17)
-- 신규 `title_screen.gd`(Control, CanvasLayer 최상위) — 부팅 시 `main` 위에 오버레이(또는 별도 씬 → main 진입).
-- `title_bg` TextureRect(cover stretch) + `title_logo` TextureRect(상단 중앙) + 한지 plate 버튼 2개(하단 중앙).
-- **[새 게임]**(§7-e 확정: **2단 확인 다이얼로그**) = `saver.has_save()`면 "기존 진행이 삭제됩니다. 새로 시작?" 확인창 → 예 시 `_delete_save_and_restart` 경로(기존 F8 2단 무장 로직 재사용) / 세이브 없으면 바로 신규 시작. **[이어하기]** = `has_save()` **없으면 비활성(dim)**, 있으면 `_load_game()` 경로.
-- 현행 `main.gd:1422~1461`(has_save 자동 복원·intro)를 타이틀 선택 뒤로 미룬다(부팅 직행 → 타이틀 대기). BGM = `audio.gd` 타이틀 곡 자리(현재 주석 "타이틀 없음" — 곡 하나 승격 여지, audio.gd:28).
+### 3.4 배선 계약 (신규 씬 — 배선 세션 S1-11~17)
+- 신규 `title_screen.gd`(Control, CanvasLayer 최상위) — 부팅 시 `main` 위 오버레이(또는 별도 씬 → main 진입).
+- `title_bg` cover + `title_logo` 상단 중앙 + **코드 파티클**(찻잎·파란여우불·노란불티) + **메뉴 5개**(한지 plate 세로 정렬, 중앙 하단 or 좌/우 한쪽·선택 항목 노란빛 강조 + 찻잔/새싹 포인터 픽셀 아이콘).
+- **진입 시퀀스(Cozy 기획서 §3):** 0~1.5s 페이드인 → 밤하늘·붉은달·지옥문 + **카페 창·가로등 "톡톡" 점등** / 1.5~2.5s 4직원 선명(idle 시작 = 후속) / 2.5s~ 파티클 감돌기 + 메뉴 페이드인. **BGM = 로파이**(어쿠스틱 기타/칼림바 — `audio.gd:28` "타이틀 없음" 주석 해소·곡 하나 타이틀 승격).
+- **메뉴 라우팅:**
+  - **Game Start** = 새 농장 시작. `has_save()` 있으면 **§7-e 2단 확인**("오늘까지의 진행을 지우고 새로 시작?") → 예 시 `_delete_save_and_restart`(F8 2단 무장 재사용) / 없으면 바로 신규(프롤로그 자리).
+  - **Load Game [★신규 개발]** = **멀티 3슬롯**. ⚠️ `save.gd` 단일→멀티 재설계(중간 규모 코드): 슬롯별 파일(`save0/1/2.dat`)·슬롯 선택 UI. 각 슬롯 = **코지 다이어리 [N년차 M월 D일(day) / 혼력 수치]**(RPG 레벨 아님 — `clock`·`soul_energy` 파생·도트 아이콘). 빈 슬롯 = 새 시작. 세이브 없으면 슬롯 전부 빈칸.
+  - **Settings [에센셜]** = **그래픽**(해상도·전체화면/창) · **오디오**(마스터·BGM·SFX 슬라이더) · **언어**(선택 UI 자리만 — **§7-f: 한국어 구동, 영어 로컬라이제이션은 후속**). 나무 표지판 톤 팝업. 기존 옵션탭(`inv_frame`) 볼륨/전체화면 로직 재사용 가능.
+  - **Credits** = 개발진·감사 명단 **아래→위 스크롤**(신규 화면·텍스트 데이터). Steam 출시 필수.
+  - **Quit** = **"오늘 영업을 마감하고 안식처를 떠나시겠습니까?"** [예/아니오] 도트 팝업 → `get_tree().quit()`.
+- 현행 `main.gd:1422~1461`(has_save 자동복원·intro)를 타이틀 선택 뒤로 미룬다(부팅 직행 → 타이틀 대기).
 - 폴백: 씬 미신설 시 현행 직행 유지(아트만 넣고 배선 안 하면 무영향).
 
 ---
@@ -167,9 +176,10 @@ a pixel-art game LOGO wordmark on a transparent background, the main title "Dear
 |---|---|---|---|
 | 탭 아이콘 4 | `tab_icon_*` 24×24 | `inv_frame::_draw_menu_top` 정사각 탭+`TAB_ICONS` | 현행 한글 라벨 유지 |
 | 절기/시간대 아이콘 8 | `season_icon_*`·`time_icon_*` 16×16 | `clock_hud::_draw` 텍스트 좌측 아이콘 draw | 현행 텍스트만 |
-| 타이틀 화면 | `title_bg` 1280×720 + `title_logo` | 신규 `title_screen.gd` + main 진입 미룸 | 현행 월드 직행 |
+| 타이틀 화면 | `title_bg`(패럴랙스 씬)+`title_logo` | 신규 `title_screen.gd` · 메뉴 5개 · 코드 파티클 · **멀티슬롯 `save.gd` 재설계** · Credits 스크롤 · Settings 팝업 · main 진입 미룸 | 현행 월드 직행 |
 
 > **핵심:** 세 항목 모두 **아트 없이도 게임이 안 깨진다**(라벨/텍스트/직행 폴백). 파일을 경로에 넣고 배선 세션이 계약대로 훅을 연결하면 정체성이 얹힌다.
+> **★ 타이틀 배선은 규모 큼:** 다른 두 항목(탭·시계)은 아이콘 draw 한 줄이지만, 타이틀은 신규 씬 + **멀티 세이브 슬롯(save.gd 재설계)** + Credits/Settings 화면이 딸린다 — S1-11~17 화면군의 독립 슬라이스로 잡는다(아트 선행·배선 후행).
 
 ---
 
@@ -179,7 +189,7 @@ a pixel-art game LOGO wordmark on a transparent background, the main title "Dear
 ### 탭 아이콘 (4)
 - ⬜ tab_icon_inventory ⬜ tab_icon_social ⬜ tab_icon_skill ⬜ tab_icon_options
 
-### 시계 위젯 아이콘 (8, ❓ §7-c 우선순위)
+### 시계 위젯 아이콘 (8, §7-c 이번 큐 포함)
 - 절기: ⬜ season_icon_pianhwa ⬜ season_icon_yuhwa ⬜ season_icon_mangyeon ⬜ season_icon_seongya
 - 시간대: ⬜ time_icon_morning ⬜ time_icon_day ⬜ time_icon_evening ⬜ time_icon_night
 
@@ -190,15 +200,22 @@ a pixel-art game LOGO wordmark on a transparent background, the main title "Dear
 
 ## 7. 확정 결정 (owner grill 2026-07-05 — [ADR-0025] 게이트 통과)
 
-5개 전부 확정. 각 §에 인라인 반영 완료.
+정체성 큐 5결정(a~e) + 타이틀 Cozy Ver. 재설계(f~j, 2차 grill) 확정. 각 §에 인라인 반영.
 
 - **a. 게임명·로고 ✅** — **게임명 = `Dear My Naraka`**(옛 가제 "나라카 밸리" 전면 폐기, CONTEXT.md 갱신). 로고 = **영문 주 "Dear My Naraka" + 한글 독음 "디어 마이 나라카"**(§3.3). 자형 = **Gemini 직접 생성**(영문이라 리스크↓) + 사후 Aseprite 미세조정(독음 줄·커닝). ※옛 권장(Aseprite 손조판)은 한글 게임명 전제였고, 영문 전환으로 변경.
 - **b. 탭 툴팁 ✅** — **넣음**(§1.2). 호버 시 `hud_tooltip`에 탭 한글명. 스타듀 정합·저비용.
 - **c. 시계 아이콘 ✅** — **이번 큐 포함**(§2). 절기4·시간대4 = 8장. 단 생성 순서는 탭·타이틀 뒤(가장 작은 액센트).
-- **d. 타이틀 캐릭터 ✅** — **전경 4직원 단체**(옥자 중앙·미호·멜·바나, §3.2). 순수 씬/원경 실루엣이 아니라 **전경 대형**(화려함 우선). 정합 완화 = 기존 초상화 28장 참조 첨부·개별 생성 후 합성 폴백.
-- **e. 세이브 UX ✅** — **[새 게임] 2단 확인 다이얼로그**(§3.4). 기존 `_delete_save_and_restart`(F8 2단 무장) 재사용. [이어하기]=세이브 없으면 dim.
+- **d. 타이틀 캐릭터 ✅** — **전경 4직원 단체(코지 idle)**(옥자 중앙·미호·멜·바나, §3.2). 전경 대형 유지하되 전투 태세가 아니라 **카페 마감 후 휴식하는 코지 일상**(옥자 찻잔·미호 꼬리·멜 졸기·바나 문가). **무기 없음·여우불 파랑**. 정합 완화 = 초상화 28장 참조·개별 생성 후 합성 폴백.
+- **e. 세이브 UX ✅** — **[새 게임] 2단 확인 다이얼로그**(§3.4). 기존 `_delete_save_and_restart`(F8 2단 무장) 재사용.
+- **f. 타이틀 화면 재설계 ✅(Cozy Ver.)** — owner 제공 [Dear_My_Naraka_Cozy_Title_Spec] 채택. **패럴랙스 씬**(스산한 외곽 붉은달·지옥문 + 따뜻한 중심 카페·농장·4직원, 대비로 코지 극대화)·**메뉴 5개**. **다크판타지 인게임 HUD(§4)·전사 캐릭터(대검)·핏빛 톤·RPG 레벨·퀘스트 매니저는 반려**(ADR-0002 코지·0005 무퀘스트). 붉은달=파스텔·지옥문=인디고 신비.
+- **g. 세이브 슬롯 ✅** — **멀티 3슬롯**(§3.4). `save.gd` 단일→멀티 재설계 = **중간 규모 코드 작업**(배선 세션). 슬롯 표시 = **[N년차 M월 D일 / 혼력]** 코지 다이어리(RPG 레벨 아님).
+- **h. 설정 범위 ✅** — **에센셜 셋**(그래픽·오디오·언어). 조작법 키 리바인드 = **후속 태스크**.
+- **i. 언어 ✅** — **(A) 언어 선택 UI 자리만·한국어 구동.** 영어 로컬라이제이션(전 텍스트 번역)은 **후속 大작업**. 현행 "한국어 고정"에서 UI 슬롯만 선반영.
+- **j. Credits ✅** — **넣음**(메뉴 5개째). 개발진·감사 명단 아래→위 스크롤. Steam 출시 필수.
 
 ### 후속(배선 세션 정련 — 아트와 무관)
-- 세이브 확인창 문구 최종 카피·다이얼로그 스킨(한지 plate).
-- 타이틀 BGM 승격(audio.gd:28 "타이틀 없음" 주석 해소 — 곡 하나 타이틀로).
+- **★멀티 세이브 슬롯 = `save.gd` 재설계**(단일 save.dat → save0/1/2.dat·슬롯 선택 UI·코지 다이어리 표시). 타이틀 슬라이스의 최대 코드 작업.
+- Credits 화면(스크롤)·Settings 팝업(그래픽/오디오/언어 UI)·Quit 확인 팝업 신설.
+- 세이브 확인창·Quit 문구 카피·다이얼로그 스킨(한지 plate).
+- 타이틀 BGM 로파이 승격(audio.gd:28) · 4직원 idle 애니(후속) · 패럴랙스 레이어 분리(선택).
 - 탭 툴팁 지연/위치 튜닝.

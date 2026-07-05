@@ -104,7 +104,7 @@
 
 | 화면 | status | maker | 비고 |
 |---|---|---|---|
-| 타이틀/시작 | ❌ missing | **gemini** | ★정체성·첫인상(큐)·새 게임/이어하기 — [스펙카드](./gemini-ui-identity-spec.md) §3(풀 배경 일러스트 `title_bg` 1280×720 + `title_logo`, owner 2026-07-05 결정) |
+| 타이틀/시작 | ❌ missing | **gemini** | ★정체성·첫인상(큐) — [스펙카드](./gemini-ui-identity-spec.md) §3(Cozy Ver.: 패럴랙스 씬 `title_bg` 1280×720 + `title_logo`, 4직원 코지 idle·붉은달/지옥문 서정 대비). **배선=메뉴 5개·멀티 3슬롯(save.gd 재설계)·Credits·Settings** — 큰 슬라이스 |
 | 설정(볼륨·전체화면) | ✅ have | claude | **★정정**: 옵션 탭 내장(inv_frame 음악/효과음 볼륨·전체화면 토글) |
 | 하루 정산 | ✅ have | claude | **★정정**: 전역 한지 Panel 테마 적용(RunSummary) |
 | 카페 정산 | ✅ have | claude | **★정정**: 전역 한지 Panel 테마(CafeSummaryPanel) |
