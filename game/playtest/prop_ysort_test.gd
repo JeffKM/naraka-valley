@@ -140,6 +140,11 @@ func _init() -> void:
 	var db: Array = _prop_box(m, m.PROP_DEBRIS_EMBER)
 	var d_pos: Vector2 = db[0]; var d_sz: Vector2 = db[1]
 	_check("⑥g 업화석 게이트 = 중심도 통과 불가(풀타일 유지)", _hits(m, d_pos + d_sz * 0.5))
+	# ★ owner 2026-07-05 — 울타리 SOLID 편입("못 지나가게"). 첫 인스턴스(40,17) 중심 통과 불가·풀타일.
+	_check("⑥h 울타리 = 풀타일 SOLID(FOOT_BAR 아님)",
+		m.PROP_FENCE in m.SOLID_PROPS and not (m.PROP_FENCE in m.FOOT_BAR_PROPS))
+	var fb: Array = _prop_box(m, m.PROP_FENCE)
+	_check("⑥h 울타리 = 중심 통과 불가(경계벽)", _hits(m, fb[0] + fb[1] * 0.5))
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
