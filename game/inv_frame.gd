@@ -402,13 +402,15 @@ func _draw_tab_tooltip(font: Font, tab: Rect2, label: String) -> void:
 	draw_string(font, box.position + Vector2(pad, 14.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.96, 0.84))
 
 func _draw_inv_tab(panel: Rect2, font: Font) -> void:
-	# [정리] 버튼 — 탭 바 아래로 내린다(4탭이 상단 폭을 다 써서 우상단 여백이 없음).
-	_sort_rect = Rect2(panel.end.x - PAD - 72.0, panel.position.y + PAD + 36.0, 72.0, 26.0)
+	# [정리] 버튼 — 그리드 바로 위(설명 행) 우측에 앵커. 옛 위치(PAD+36)는 상단 빈 컨텍스트
+	# 영역 한가운데 떠 보였다(owner 리포트 2026-07-06 "튀어나온다"). 설명은 짧게 줄여 좌측에 두어
+	# 우측 버튼과 안 겹치게 한다(옛 긴 문구는 버튼까지 뻗어 겹쳤다).
+	_sort_rect = Rect2(panel.end.x - PAD - 72.0, panel.position.y + TOP_H - 12.0, 72.0, 26.0)
 	draw_rect(_sort_rect, Color(0.22, 0.20, 0.12, 0.85))
 	draw_rect(_sort_rect, Color(0.55, 0.50, 0.35), false, 1.0)
 	draw_string(font, _sort_rect.position + Vector2(16.0, 18.0), "정리", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 0.97, 0.88))
 	draw_string(font, Vector2(panel.position.x + PAD, panel.position.y + TOP_H + 6.0),
-		"플레이어 가방 — 슬롯을 클릭해 집고 다른 칸에 놓아 옮긴다", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.82, 0.76, 0.66))
+		"슬롯을 클릭해 집어 다른 칸으로 옮긴다", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.82, 0.76, 0.66))
 
 func _draw_rel_tab(panel: Rect2, font: Font) -> void:
 	# 관계 탭: 하트는 HeartBar 자식이 그린다(_apply_heart_visibility 배치). 탭 바 아래에 '읽기 전용' 안내만
@@ -489,8 +491,10 @@ func _draw_options_tab(panel: Rect2, font: Font) -> void:
 	draw_rect(_quit_rect, Color(0.62, 0.42, 0.36), false, 1.0)
 	draw_string(font, _quit_rect.position + Vector2(14.0, 19.0), "저장하고 나가기", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 0.94, 0.86))
 	# ── ★ Phase D 설정 본체 ──
-	var sy := y + 84.0
-	draw_string(font, Vector2(x, sy - 8.0), "── 설정 ──", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.90, 0.86, 0.60))
+	# ★ 구분선을 볼륨 행과 확실히 띄운다 — 옛 (sy=y+84, 구분선 sy-8)은 "── 설정 ──"이 "음악 볼륨"
+	#   라벨과 겹쳤다(owner 리포트 2026-07-06). 구분선을 위로(y+80)·첫 행을 아래로(y+104) 분리.
+	draw_string(font, Vector2(x, y + 80.0), "── 설정 ──", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.90, 0.86, 0.60))
+	var sy := y + 104.0
 	var r1 := _draw_volume_row(font, x, sy, "음악 볼륨", _set_music)
 	_music_minus_rect = r1[0]
 	_music_plus_rect = r1[1]
