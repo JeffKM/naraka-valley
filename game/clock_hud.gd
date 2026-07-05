@@ -25,9 +25,14 @@ const ROW_TIME := 11       # 시각·때(14→11)
 const ROW_GOLD := 12       # 골드(15→12)
 const ROW_MILE := 9        # 마일스톤(11→9)
 
+# ★ [아트정리패스] 골드 아이콘 = 엽전(옛 "◈" 글리프 대체). 골드 숫자 왼쪽에 그린다.
+const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
+const COIN_PX := 12.0      # 엽전 렌더 변(골드 줄 높이에 맞춤)
+const COIN_GAP := 2.0      # 엽전↔숫자 사이 여백
+
 var _date := ""            # "성야절 12일"
 var _time := ""            # "18:24 · 저녁"
-var _gold := ""            # "◈ 1234"
+var _gold := ""            # 골드 숫자만(예 "1234") — 엽전은 아이콘으로 앞에 그림
 var _mile := ""            # "카페 1단 ▓▓▒▒ 45%"
 
 func setup() -> void:
@@ -40,7 +45,7 @@ func set_state(season: String, day_of_season: int, time_str: String, phase: Stri
 		gold: int, milestone: String) -> void:
 	var date := "%s %d일" % [season, day_of_season]
 	var timv := "%s · %s" % [time_str, phase]
-	var goldv := "◈ %d" % gold
+	var goldv := "%d" % gold
 	if date == _date and timv == _time and goldv == _gold and milestone == _mile:
 		return
 	_date = date
@@ -61,8 +66,10 @@ func _draw() -> void:
 		return
 	var view := _view()
 	# ★ 플레이트 폭 = 내용 최대폭 + 여백(고정 W 폐기 — 빈 마진 0, guide C). 높이 = 줄 높이 합 + 여백.
+	# 골드 줄 폭 = 엽전 + 여백 + 숫자(플레이트 폭 산출이 아이콘을 포함해야 잘림 없음).
+	var gold_w := COIN_PX + COIN_GAP + HanjiUi.text_width(_gold, ROW_GOLD)
 	var wmax := maxf(maxf(HanjiUi.text_width(_date, ROW_DATE), HanjiUi.text_width(_time, ROW_TIME)),
-		HanjiUi.text_width(_gold, ROW_GOLD))
+		gold_w)
 	if _mile != "":
 		wmax = maxf(wmax, HanjiUi.text_width(_mile, ROW_MILE))
 	var w := wmax + PAD * 2.0
@@ -80,8 +87,12 @@ func _draw() -> void:
 	# 시각·때(우측 정렬, 밝은 글자).
 	_draw_right(x, right, y, _time, ROW_TIME, HanjiUi.INK_LIGHT)
 	y += ROW_GAP + float(ROW_GOLD)
-	# 골드(우측 정렬, 금박).
-	_draw_right(x, right, y, _gold, ROW_GOLD, HanjiUi.GOLD)
+	# 골드(우측 정렬, 금박) — 엽전 아이콘 + 숫자. 숫자를 우변에 맞추고 엽전을 그 왼쪽에.
+	var num_w := HanjiUi.text_width(_gold, ROW_GOLD)
+	var num_x: float = maxf(x + COIN_PX + COIN_GAP, right - num_w)
+	HanjiUi.draw_text(self, Vector2(num_x, y), _gold, ROW_GOLD, HanjiUi.GOLD)
+	var coin_rect := Rect2(num_x - COIN_GAP - COIN_PX, y - COIN_PX + 1.0, COIN_PX, COIN_PX)
+	draw_texture_rect(COIN, coin_rect, false)
 	# 마일스톤(우측 정렬, 보조 톤 — 매크로 목표 한 줄).
 	if _mile != "":
 		y += ROW_GAP + float(ROW_MILE)
