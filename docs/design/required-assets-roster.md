@@ -76,6 +76,7 @@
 ## 5. UI / HUD — ★maker C-혼합 (2026-07-05 grill, [ADR-0048] 개정 §2)
 
 > **구조적(claude): 즉시 제작** — 9-slice 패널·슬롯·툴팁·토스트·팝업·골드 아이콘·혼력바 프레임(`hanji_frame` 팔레트 샘플로 톤 맞춤). **정체성(gemini): 스펙카드+큐** — 탭 아이콘 4·시계 위젯(첫인상·손그림 한지). 원래 "UI 전체=claude"에서 정련.
+> **★2026-07-05 실상태 정정:** 아래 status는 2026-07-02 초안이었으나 그 뒤 HUD 폴리시 PR들이 **구조적 UI를 대부분 이미 완성**(`clock_hud`·`vitals_hud`·`hud_tooltip`·`notice_feed`·`context_popup`·`inv_frame` 4탭·전역 한지 Panel 테마 = `clock_hud.gd` "화면에 raw 패널 0" 달성). 실제 코드 대조로 ✅have 정정. **남은 진짜 gap = ①`gold_icon`(◈ 글리프→엽전, claude·이 슬라이스) ②탭 아이콘 4·시계는 위젯 완성이나 텍스트/글리프라 아이콘화만 gemini 정체성 큐.** 시계 위젯 자체는 have(정체성 아이콘 얹기만 큐).
 
 | key | 요소 | status | maker | 비고 |
 |---|---|---|---|---|
@@ -83,18 +84,18 @@
 | `hanji_frame` / `hanji_plate` / `panel_frame` | 한지 패널 프레임 | ✅ have | gemini | 9-slice 배선 필요 |
 | `heart_full` / `heart_empty` | 하트 | ✅ have | claude | 관계 탭 재사용 |
 | `ink_arrow` / `soul_moth` | 진행 화살표·나비 | ✅ have | gemini | — |
-| `menu_frame_9slice` | 탭 메뉴 프레임 | ❌ missing | claude | 통합 탭 메뉴 배경 |
+| `menu_frame_9slice` | 탭 메뉴 프레임 | ✅ have | claude | **★실상태 정정**: `inv_frame` 4탭(한지 9-slice)·`c2_frame_dump` |
 | `tab_icon_inventory` | 탭 아이콘: 인벤토리 | ❌ missing | **gemini** | ★C-혼합: 정체성(큐·스펙카드) |
 | `tab_icon_social` | 탭 아이콘: 관계 | ❌ missing | **gemini** | ★정체성(큐) |
 | `tab_icon_skill` | 탭 아이콘: 숙련 | ❌ missing | **gemini** | ★정체성(큐) |
 | `tab_icon_options` | 탭 아이콘: 옵션 | ❌ missing | **gemini** | ★정체성(큐) |
-| `clock_widget` | 시계 위젯(요일·날짜·시각·계절) | ❌ missing | **gemini** | ★정체성·첫인상(큐)·우상단 |
-| `gold_icon` | 골드 아이콘 | ❌ missing | claude | — |
-| `energy_bar_frame` | 혼력 바 프레임 | ❌ missing | claude | 우하단(체력 자리 포함) |
-| `tooltip_frame` | 호버 툴팁 프레임 | ❌ missing | claude | — |
-| `toast_frame` | 아이템 획득 토스트 | ❌ missing | claude | 툴바 위 |
-| `popup_frame` | 좌하단 컨텍스트 팝업(초상화+글) | ❌ missing | claude | — |
-| `slot_frame` | 인벤/툴바 슬롯 | 🟡 placeholder | claude | 핫바 텍스처 유무 확인 |
+| `clock_widget` | 시계 위젯(요일·날짜·시각·계절) | ✅ have | claude | **★정정**: `clock_hud.gd`(한지 플레이트·절기/일차/시각/골드/마일스톤) |
+| `gold_icon` | 골드 아이콘(엽전) | 🟡 placeholder | claude | 현재 `◈` 글리프 → 엽전 아이콘 교체(이 슬라이스) |
+| `energy_bar_frame` | 혼력 바 프레임 | ✅ have | claude | **★정정**: `vitals_hud.gd` |
+| `tooltip_frame` | 호버 툴팁 프레임 | ✅ have | claude | **★정정**: `hud_tooltip.gd` |
+| `toast_frame` | 아이템 획득 토스트 | ✅ have | claude | **★정정**: `notice_feed.gd` |
+| `popup_frame` | 좌하단 컨텍스트 팝업(초상화+글) | ✅ have | claude | **★정정**: `context_popup.gd` |
+| `slot_frame` | 인벤/툴바 슬롯 | ✅ have | claude | **★정정**: HanjiUi 스킨(hotbar·inv_frame `_draw_nine`) |
 
 ## 6. 전체 화면 (screens) — 리스킨/신규 (★maker C-혼합)
 
@@ -103,11 +104,11 @@
 | 화면 | status | maker | 비고 |
 |---|---|---|---|
 | 타이틀/시작 | ❌ missing | **gemini** | ★정체성·첫인상(큐)·새 게임/이어하기 |
-| 설정(볼륨·전체화면) | ❌ missing | claude | 옵션 탭이 여는 화면 |
-| 하루 정산 | 🟡 placeholder | claude | RunSummary 리스킨 |
-| 카페 정산 | 🟡 placeholder | claude | CafeSummaryPanel 리스킨 |
-| 엔딩 | 🟡 placeholder | claude | EndingPanel 리스킨 |
-| 상자(저장) UI | ❌ missing | claude | 신규 컨테이너 + inv_frame CHEST |
+| 설정(볼륨·전체화면) | ✅ have | claude | **★정정**: 옵션 탭 내장(inv_frame 음악/효과음 볼륨·전체화면 토글) |
+| 하루 정산 | ✅ have | claude | **★정정**: 전역 한지 Panel 테마 적용(RunSummary) |
+| 카페 정산 | ✅ have | claude | **★정정**: 전역 한지 Panel 테마(CafeSummaryPanel) |
+| 엔딩 | ✅ have | claude | **★정정**: 한지 Card 리스킨(EndingPanel/Card·먹빛 본문) |
+| 상자(저장) UI | ✅ have | claude | **★정정**: `inv_frame` CHEST 컨텍스트(`chest.gd`·set_chest) |
 
 ## 7. 가구·테마 세트 (props) — home_deco
 
