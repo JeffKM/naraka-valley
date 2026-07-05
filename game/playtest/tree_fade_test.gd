@@ -25,10 +25,11 @@ func _init() -> void:
 	var TILE: int = m.TILE
 
 	# layout.json HOME의 첫 나무 앵커를 집는다(시드=우상단 (54,3) 침엽).
+	#   ★나무만 명시 매칭(FADE_PROPS엔 바위·허수아비도 있어 "첫 FADE" ≠ 나무 — owner 2026-07-05 허수아비 합류).
 	var anchor := Vector2i(-1, -1)
 	var tex = null
 	for entry in m._prop_layouts.get("HOME", []):
-		if entry[0] in m.FADE_PROPS:
+		if entry[0] == m.PROP_TREE_A or entry[0] == m.PROP_TREE_B:
 			anchor = entry[1][0]
 			tex = entry[0]
 			break
@@ -82,6 +83,27 @@ func _init() -> void:
 		for i in range(30):
 			m._update_tree_fade(0.1)
 		_check("⑤ 바위도 벗어나면 알파 1.0 복귀", is_equal_approx(m._tree_fade.get(r_anchor, 1.0), 1.0))
+
+	# ⑥ 허수아비(PROP_SCARECROW·1×2)도 같은 fade 인프라 — 위 1칸 뒤로 지나가면 반투명(owner 2026-07-05).
+	var s_anchor := Vector2i(-1, -1)
+	for entry in m._prop_layouts.get("HOME", []):
+		if entry[0] == m.PROP_SCARECROW:
+			s_anchor = entry[1][0]
+			break
+	_check("⑥ 라이브 허수아비(FADE_PROPS 합류) 인스턴스 존재", s_anchor.x >= 0)
+	if s_anchor.x >= 0:
+		var stsz: Vector2 = m.PROP_SCARECROW.get_size()
+		_check("⑥ 허수아비 크기 = 32×64(1×2칸)", is_equal_approx(stsz.x, 32.0) and is_equal_approx(stsz.y, 64.0))
+		var srect := Rect2(Vector2(s_anchor.x * TILE, s_anchor.y * TILE), stsz)
+		var s_base: float = m._prop_base_y(s_anchor, 0, m.PROP_SCARECROW)
+		m.player.global_position = Vector2(srect.position.x + stsz.x * 0.5, s_base - TILE)  # 허수아비 뒤(rect 안·base 위)
+		for i in range(30):
+			m._update_tree_fade(0.1)
+		_check("⑥ 허수아비 뒤에 서면 알파 TREE_FADE_MIN 수렴", is_equal_approx(m._tree_fade.get(s_anchor, 1.0), m.TREE_FADE_MIN))
+		m.player.global_position = Vector2(-9999, -9999)
+		for i in range(30):
+			m._update_tree_fade(0.1)
+		_check("⑥ 허수아비도 벗어나면 알파 1.0 복귀", is_equal_approx(m._tree_fade.get(s_anchor, 1.0), 1.0))
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
