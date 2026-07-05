@@ -1142,6 +1142,10 @@ var home_deco: HomeDeco = null
 @onready var crop_label: Label = $CanvasLayer/CropLabel    # ★ C3 핫바 든 아이템 요약(핫바 위, 하단 중앙)
 @onready var energy: SoulEnergy = $SoulEnergy              # T2.4 혼력
 @onready var saver: SaveManager = $SaveManager            # T2.5 세이브/로드
+# ★멀티 슬롯(§3.4·§7-g) — 인게임 저장(취침·F5)·로드·삭제가 겨냥하는 활성 슬롯. 부팅 기본 0
+#   (= 레거시 save.dat, 현행 동작 동일). 타이틀 [Load Game]/[새 게임]이 슬롯을 고르면 그 값을
+#   여기 심어 이후 저장이 그 슬롯으로 간다(타이틀 배선 = 후속 증분).
+var _active_slot := 0
 @onready var wallet: Wallet = $Wallet                     # T3.1 골드
 @onready var inventory: Inventory = $Inventory            # T3.1 수확물·씨앗 재고
 @onready var gold_label: Label = $CanvasLayer/GoldLabel        # T3.1 골드 HUD
@@ -1440,8 +1444,8 @@ func _ready() -> void:
 	# 카페가 굶음). night_bar는 재고를 모른 채 계약만 쏘고, '어떻게 격퇴했는지'도 모른다(디커플링,
 	# field.gd가 Foxfire 모르는 패턴 — Phase 3 전투가 구현만 교체해도 이 핸들러는 그대로).
 	night_bar.resolved.connect(_on_night_resolved)
-	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다.
-	if saver.has_save():
+	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다(활성 슬롯 기준).
+	if saver.has_save(_active_slot):
 		_load_game()
 	else:
 		# ★ [S1-7] 신규 게임: 하늘 목장에 스타터 짐승을 배치한다(START_KIT 결 — 세이브가 없을 때만,
@@ -4156,11 +4160,13 @@ func _save_game() -> void:
 		"indoor": _indoor,
 		"player_tile": _player_tile(),
 	}
-	if saver.save_game(data):
+	# ★ 활성 슬롯에 저장 + 코지 다이어리 메타(날짜·혼력) 헤더를 얹는다(타이틀 슬롯 UI가
+	#   전체 로드 없이 [N년차 절기 D일 / 혼력]을 읽도록). meta는 SaveManager엔 불투명 blob.
+	if saver.save_game(data, _active_slot, {"day": clock.day, "soul": energy.current}):
 		_notice("저장됨")
 
 func _load_game() -> void:
-	var data := saver.load_game()
+	var data := saver.load_game(_active_slot)
 	if data.is_empty():
 		return
 	# 옛 오버레이를 먼저 비운다(F9 재로드 대비). 이후 FarmField.load_save가
@@ -4466,7 +4472,7 @@ func _arm_or_confirm_delete() -> void:
 # 씬의 _ready가 자동 복원 없이 옥자 오프닝 통보부터 다시 연다(README의 "지우고 재실행"을
 # 게임 안에서 한 키로). reload_current_scene은 프레임 끝에 안전하게 처리된다.
 func _delete_save_and_restart() -> void:
-	saver.delete_save()
+	saver.delete_save(_active_slot)
 	get_tree().reload_current_scene()
 
 func _process(delta: float) -> void:
