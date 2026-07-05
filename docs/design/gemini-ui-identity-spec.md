@@ -193,8 +193,9 @@ a pixel-art game LOGO wordmark on a transparent background, the main title "Dear
 - 절기: ⬜ season_icon_pianhwa ⬜ season_icon_yuhwa ⬜ season_icon_mangyeon ⬜ season_icon_seongya
 - 시간대: ⬜ time_icon_morning ⬜ time_icon_day ⬜ time_icon_evening ⬜ time_icon_night
 
-### 타이틀 (2)
-- ⬜ title_bg ⬜ title_logo
+### 타이틀 (2) — ✅ 생성·배선 완료(owner Gemini 아트 + claude 배선, PR#217)
+- ✅ title_bg(패럴랙스 씬·1280×720·구운 체커/"MENU TEXT" 제거) ✅ title_logo(먹 나비 붓글씨·투명·**동적 붉은 셰이더**)
+- 배선=`title_screen.gd`(메뉴 5·멀티슬롯 선택 UI가 `slot_meta` 소비·확인/정보 패널·코드 파티클) + main 부팅 지연(`_begin_game` 추출·`current_scene` 게이트). ★로고 파란 여우불 대신 owner 지시로 **글자에 붉은 기운이 흐르는 셰이더**(`title_logo.gdshader`). Settings·Credits·BGM·idle애니는 stub/후속(B2).
 
 ---
 

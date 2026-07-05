@@ -1444,8 +1444,19 @@ func _ready() -> void:
 	# 카페가 굶음). night_bar는 재고를 모른 채 계약만 쏘고, '어떻게 격퇴했는지'도 모른다(디커플링,
 	# field.gd가 Foxfire 모르는 패턴 — Phase 3 전투가 구현만 교체해도 이 핸들러는 그대로).
 	night_bar.resolved.connect(_on_night_resolved)
-	# T2.5 세이브가 있으면 시작 시 자동 복원 → "껐다 켜도 그대로"가 성립한다(활성 슬롯 기준).
-	if saver.has_save(_active_slot):
+	# ★타이틀(§3.4) — 실제 실행에서만 타이틀을 띄우고 게임 시작(로드/신규)을 선택까지 미룬다.
+	#   테스트는 main을 수동 add_child라 current_scene≠self → 종전대로 즉시 부팅(타이틀 없음·무영향).
+	if get_tree().current_scene == self:
+		_show_title()
+	else:
+		_begin_game(false)
+
+# ── ★타이틀 배선 — 게임 시작 finalize(부팅/타이틀 공용). 세이브 로드(이어하기) 또는 신규
+#   셋업 후 시드·직원배치·축제·마일스톤·인트로까지 잇는다(구 _ready 부팅 tail을 함수로 승격).
+#   is_new_game=true면 세이브가 있어도 신규 셋업(타이틀 [새 게임]/빈 슬롯). ──
+func _begin_game(is_new_game: bool) -> void:
+	# T2.5 세이브가 있으면(이어하기) 복원, 아니면(신규) 스타터 셋업 → "껐다 켜도 그대로".
+	if not is_new_game and saver.has_save(_active_slot):
 		_load_game()
 	else:
 		# ★ [S1-7] 신규 게임: 하늘 목장에 스타터 짐승을 배치한다(START_KIT 결 — 세이브가 없을 때만,
@@ -1491,6 +1502,33 @@ func _ready() -> void:
 	# 온보딩 안내는 상시 배너 대신 단계 전환 시 좌하단 알림으로 띄운다(_process의 guidance 비교 블록).
 	# 배너 노드는 끈 채 유지(참조·회귀 안전).
 	onboarding_label.visible = false
+
+# ★타이틀 화면을 띄우고 게임 시작을 선택까지 미룬다(실제 실행 전용). 월드는 이미 _ready에서
+#   빌드됐고(HOME 스폰), 타이틀이 그 위를 덮으며 트리를 일시정지(월드 시뮬 정지·입력 격리)한다.
+func _show_title() -> void:
+	get_tree().paused = true
+	var title := TitleScreen.new()
+	title.name = "TitleScreen"
+	add_child(title)
+	title.setup(saver)
+	title.start_game.connect(_on_title_start)
+	title.quit_game.connect(_on_title_quit)
+
+# 타이틀에서 슬롯을 골라 시작 — 활성 슬롯을 심고(이후 저장이 그 슬롯으로), 신규면 그 슬롯을
+#   비운 뒤 게임 시작 finalize를 돌린다. 일시정지 해제·타이틀 제거.
+func _on_title_start(slot: int, is_new: bool) -> void:
+	_active_slot = slot
+	if is_new:
+		saver.delete_save(slot)
+	var t := get_node_or_null("TitleScreen")
+	if t != null:
+		t.queue_free()
+	get_tree().paused = false
+	_begin_game(is_new)
+
+# 타이틀 [종료].
+func _on_title_quit() -> void:
+	get_tree().quit()
 
 # 입력 액션을 코드로 등록한다. project.godot 수동 편집 대신 런타임 조립 — 이 프로젝트의
 # TileSet·벽 생성과 같은 결이고, 직렬화 포맷 깨질 위험이 없다.
