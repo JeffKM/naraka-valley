@@ -36,7 +36,7 @@ profession   : {id, tier(5|10), requires(tier10=부모 lvl5 id / tier5=""), name
 - **XP 곡선 = FarmSkill 공유** — `XP_THRESHOLDS [100,300,600,1000,1500,2100,2800,3600,4500,5500]`·`level_for_xp`는 스킬-불특정. 스킬별 XP는 별 스칼라, 곡선은 하나.
 - **선택 게이트(`_can_choose_profession`):** ①실존 ②스킬 레벨 ≥ tier ③슬롯 1회(재선택 거부·스타듀 책 변경은 defer) ④tier10 부모 lvl5 정합. 레벨 게이트는 *접근 게이트 아님* — L0도 활동 100% 가동, 전문직은 곱셈 편의 해금.
 - **조회 API(로더가 호출):** `_perk_value(skill, dim, default)`(고른 전문직 퍼크 max) → 편의 래퍼 `forage_quality_floor()`·`forage_double_drop_chance()`. `has_profession`·`_pending_profession_tier`(UI 배지)·`_skill_level`.
-- **UI:** `_skill_rows()`에 채집 행 추가(농사와 대칭) + `profession`(고른 이름)·`pending_tier`(선택 가능 5/10) 필드. **인터랙티브 선택 picker UI는 얇은 후속**(현재 데이터·로직·API 완비, 프레임 렌더는 채집 행/배지까지).
+- **UI(구현 완료):** `_skill_rows()`에 채집 행(농사와 대칭) + `profession`(고른 이름)·`pending_tier`·`options`(지금 고를 수 있는 전문직 [id·name·desc], main이 자격 판정) 필드. `inv_frame.gd` 숙련 탭이 진행바 밑에 **전문직 요약 + pending 시 2갈래 선택 버튼**을 그리고(클릭 영역 `_prof_choice_rects` 매 그리기 재구성), 클릭 → `profession_chosen` 신호 → main `_on_frame_profession` → `choose_profession` + 즉시 재주입(옵션 탭 저장/나가기와 같은 결·프레임 무상태). 매 프레임 `set_skills`가 옵션 갱신.
 
 ## §3 XP 소스 배선 계획 (defer — 각 루프 슬라이스)
 
@@ -66,7 +66,8 @@ profession   : {id, tier(5|10), requires(tier10=부모 lvl5 id / tier5=""), name
 
 ## §6 남은 것 (defer)
 
-1. **인터랙티브 전문직 선택 picker UI**(숙련 탭에서 pending tier 도달 시 2갈래 선택 — 현재 로직·데이터 완비, 렌더/입력만).
-2. **채집 라이브 루프**(저승 숲 줍기·야생 씨앗 재배) — XP 소스·퍼크 적용점 배선.
-3. **나머지 4스킬 퍼크 시맨틱**(각 스킬 빌드 슬라이스 — 구조는 카탈로그에 잠김).
-4. **전문직 재선택/리스펙**(스타듀 책 대응 — 현재 1회 고정).
+1. **채집 라이브 루프**(저승 숲 줍기·야생 씨앗 재배) — XP 소스(`_gain_forage_xp` 호출점)·퍼크 적용점 배선.
+2. **나머지 4스킬 퍼크 시맨틱**(각 스킬 빌드 슬라이스 — 구조는 카탈로그에 잠김).
+3. **전문직 재선택/리스펙**(스타듀 책 대응 — 현재 1회 고정).
+
+> ✅ **인터랙티브 선택 picker UI 완료**(2026-07-05) — 숙련 탭 pending 2갈래 버튼·클릭 라우팅(§2 UI). 육안 확인은 인게임(L5/L10 도달 시 숙련 탭) — 현재 라이브 XP 소스 부재라 owner 실플레이 시 디버그 XP로 도달 확인.

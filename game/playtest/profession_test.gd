@@ -159,6 +159,36 @@ func _initialize() -> void:
 	m3._gain_forage_xp(-10)   # 음수 무시
 	_check("⑨ 음수 XP 무시", m3._foraging_xp == 150)
 
+	# ⑩ UI 데이터 계약 — _skill_rows가 프레임에 넘길 options/profession/pending_tier.
+	m3._foraging_xp = 1500   # L5
+	m3._professions = {}
+	var frow := _forage_row(m3._skill_rows())
+	_check("⑩ L5 미선택 행 = pending 5·옵션 2(감지자·채집꾼)", int(frow.get("pending_tier", 0)) == 5 and frow.get("options", []).size() == 2)
+	_check("⑩ L5 행 profession 빈 문자열", String(frow.get("profession", "")) == "")
+	m3.choose_profession(F, "gatherer")
+	frow = _forage_row(m3._skill_rows())
+	_check("⑩ 선택 후 옵션 0(L5 소진)·profession=채집꾼", frow.get("options", []).size() == 0 and String(frow.get("profession", "")) == "채집꾼")
+	m3._foraging_xp = 5500   # L10 → 채집꾼 자식 2개(약초학자·추적자)만
+	frow = _forage_row(m3._skill_rows())
+	var opt_ids := []
+	for o in frow.get("options", []): opt_ids.append(String(o["id"]))
+	_check("⑩ L10 옵션 = 채집꾼 자식 2(약초학자·추적자)", opt_ids.size() == 2 and opt_ids.has("botanist") and opt_ids.has("tracker"))
+
+	# ⑪ 프레임 클릭 라우팅 — 숙련 탭 버튼 클릭 → profession_chosen 신호(옵션 탭 패턴). _draw 없이
+	# _prof_choice_rects를 직접 채워 _click_menu 라우팅만 검증(레이아웃과 무관한 라우팅 단위).
+	var fr := InventoryFrame.new()
+	root.add_child(fr)
+	fr.menu_tab = InventoryFrame.TAB_SKILL
+	fr._prof_choice_rects = [{"rect": Rect2(10, 10, 120, 30), "skill": F, "prof_id": "gatherer"}]
+	var captured := {"skill": "", "id": "", "hit": false}
+	fr.profession_chosen.connect(func(s, pid): captured.skill = s; captured.id = pid; captured.hit = true)
+	fr._click_menu(Vector2(20, 20))   # 버튼 안 클릭
+	_check("⑪ 버튼 클릭 → profession_chosen(채집꾼)", captured.hit and captured.skill == F and captured.id == "gatherer")
+	captured.hit = false
+	fr._click_menu(Vector2(300, 300))   # 버튼 밖 클릭 = 무신호
+	_check("⑪ 버튼 밖 클릭 = 무신호", not captured.hit)
+	fr.free()
+
 	m3.queue_free()
 	await process_frame
 
@@ -179,6 +209,13 @@ func _perk_of(skill: String, id: String, dim: String) -> float:
 		if perk["dim"] == dim:
 			return float(perk["value"])
 	return -1.0
+
+# _skill_rows에서 채집 행(skill==FORAGING) 하나 — UI 데이터 계약 검사용.
+func _forage_row(rows: Array) -> Dictionary:
+	for r in rows:
+		if String(r.get("skill", "")) == ProfessionCatalog.FORAGING:
+			return r
+	return {}
 
 # save.dat를 지운 새 main(각 스폰이 깨끗한 기본 상태에서 시작하도록).
 func _spawn_main_fresh() -> Node:

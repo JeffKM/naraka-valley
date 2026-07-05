@@ -3671,6 +3671,7 @@ func _setup_frame() -> void:
 	frame.quit_pressed.connect(_on_frame_quit)
 	frame.chest_store.connect(_on_frame_chest_store)   # ★ Phase D 상자 보관
 	frame.chest_take.connect(_on_frame_chest_take)     # ★ Phase D 상자 회수
+	frame.profession_chosen.connect(_on_frame_profession)   # ★ ADR-0052 숙련 탭 전문직 선택
 
 # ── ★ C3 미니멀 HUD 오버레이(좌하단 알림 피드 + 우하단 혼력 바) ─────────────────
 # hotbar·frame과 같은 결 — 코드 생성 자식 Control(무상태). 프레임보다 *먼저* 붙여(앞 자식) 메뉴·
@@ -5342,11 +5343,25 @@ func _skill_row(display_name: String, skill: String, xp: int) -> Dictionary:
 		var pid := _profession_at(skill, tier)
 		if pid != "":
 			chosen.append(ProfessionCatalog.name_of(skill, pid))
+	# 지금 고를 수 있는 전문직 목록(프레임이 버튼으로 그림 — main이 자격 판정, 프레임은 무상태 렌더).
+	# pt==0이면 tier_profs가 빈 배열이라 options=[](선택 UI 미표시).
+	var pt := _pending_profession_tier(skill)
+	var options: Array = []
+	for p in ProfessionCatalog.tier_profs(skill, pt):
+		if _can_choose_profession(skill, p["id"]):
+			options.append({"id": p["id"], "name": p["name"], "desc": p["desc"]})
 	return {"name": display_name, "level": lv, "max": FarmSkill.MAX_LEVEL, "xp": xp,
 		"floor_xp": floor_xp, "next_xp": next_xp,
-		"skill": skill, "profession": ", ".join(chosen), "pending_tier": _pending_profession_tier(skill)}
+		"skill": skill, "profession": ", ".join(chosen), "pending_tier": pt, "options": options}
 
 # ★ Phase B 옵션 탭 핸들러 — 프레임은 신호만, 실제 저장·종료는 main이 수행(지갑·세이브 소유).
+# ★ ADR-0052 — 숙련 탭 전문직 선택 버튼 핸들러. choose_profession이 자격을 재검증(레벨/슬롯/부모)하므로
+# 프레임 신호를 그대로 위임한다(프레임은 지갑·상태를 모름 — 옵션 탭 저장/나가기와 같은 결). 다음 프레임
+# set_skills가 옵션을 갱신하지만 즉시 반영을 위해 재주입한다(버튼이 바로 사라지고 요약이 갱신되게).
+func _on_frame_profession(skill: String, prof_id: String) -> void:
+	if choose_profession(skill, prof_id):
+		frame.set_skills(_skill_rows())
+
 func _on_frame_save() -> void:
 	_save_game()
 	_notice("저장했습니다")
