@@ -265,6 +265,12 @@ const FERT_ICONS := {
 	FertilizerCatalog.FERT_HYPER: preload("res://assets/fertilizer/fert_hyper.png"),      # 하이퍼 비료
 }
 
+# ★ [아트정리패스] 묘목 아이콘(색박스 대체 — PixelLab). 과수 종당 1개("<과일종>_sapling", S1-5b 규약).
+# 현재 혼백도 1종. TOOL/FERT_ICONS와 동형: icons 병합→inv_frame·hotbar `_draw_icon` CAT_SAPLING 텍스처화.
+const SAPLING_ICONS := {
+	"honbaekdo_sapling": preload("res://assets/saplings/honbaekdo_sapling.png"),   # 혼백도 묘목
+}
+
 # 각 타일의 그레이박스 색(밝기·미세 색조로만 구분, 회색 기조 유지). WALL이 가장 밝다.
 const COLORS := [
 	Color(0.16, 0.18, 0.16),  # GROUND — 어두운 풀밭 톤
@@ -3594,6 +3600,8 @@ func _setup_hotbar() -> void:
 		icons[tool_id] = TOOL_ICONS[tool_id]       # ★ [아트정리패스] 도구 아이콘(색박스 대체)
 	for fert_id in FERT_ICONS:
 		icons[fert_id] = FERT_ICONS[fert_id]       # ★ [아트정리패스] 비료 아이콘(색박스 대체)
+	for sapling_id in SAPLING_ICONS:
+		icons[sapling_id] = SAPLING_ICONS[sapling_id]   # ★ [아트정리패스] 묘목 아이콘(색박스 대체)
 	hotbar.setup(inventory, icons)
 
 # ── ★ C2 무인 출하함 ──────────────────────────────────────────────────────────
@@ -3707,6 +3715,8 @@ func _setup_frame() -> void:
 		icons[tool_id] = TOOL_ICONS[tool_id]        # ★ [아트정리패스] 도구 아이콘(색박스 대체)
 	for fert_id in FERT_ICONS:
 		icons[fert_id] = FERT_ICONS[fert_id]        # ★ [아트정리패스] 비료 아이콘(색박스 대체)
+	for sapling_id in SAPLING_ICONS:
+		icons[sapling_id] = SAPLING_ICONS[sapling_id]    # ★ [아트정리패스] 묘목 아이콘(색박스 대체)
 	frame.setup(inventory, ship_bin, icons)
 	frame.set_chest(chest)   # ★ Phase D 저장 상자 주입(CTX_CHEST 상단 그리드)
 	frame.deposit_slot.connect(_on_frame_deposit)
@@ -4280,6 +4290,8 @@ func _item_icon(id: String) -> Texture2D:
 		return TOOL_ICONS[id]
 	if FERT_ICONS.has(id):                     # ★ [아트정리패스] 비료 아이콘(토스트·알림)
 		return FERT_ICONS[id]
+	if SAPLING_ICONS.has(id):                  # ★ [아트정리패스] 묘목 아이콘(토스트·알림)
+		return SAPLING_ICONS[id]
 	var base := ItemCatalog._large_base(id)    # 대형 산물(_large)이면 기준 산물 아이콘 재사용
 	if base != "" and EXTRA_ICONS.has(base):
 		return EXTRA_ICONS[base]
