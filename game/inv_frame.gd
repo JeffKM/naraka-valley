@@ -40,6 +40,17 @@ const HANJI_PLATE: Texture2D = preload("res://assets/ui/hanji_plate.png")
 const FRAME_MARGIN := 22.0
 const PLATE_MARGIN := 12.0
 
+# ★ [정체성 UI] 통합 탭 아이콘 4종(24×24, PixelLab·한지 톤 — gemini-ui-identity-spec §1).
+# 인덱스 = TAB_INV/TAB_REL/TAB_SKILL/TAB_OPTIONS 순서. 라벨 텍스트를 아이콘으로 대체하고
+# 탭을 정사각으로 좁힌다(owner 2026-07-05: 아이콘만 배선). 호버 시 한글명 툴팁으로 학습 보조.
+const TAB_ICONS: Array[Texture2D] = [
+	preload("res://assets/ui/tab_icon_inventory.png"),
+	preload("res://assets/ui/tab_icon_social.png"),
+	preload("res://assets/ui/tab_icon_skill.png"),
+	preload("res://assets/ui/tab_icon_options.png"),
+]
+const TAB_LABELS := ["인벤토리", "관계", "숙련", "옵션"]   # 호버 툴팁용(아이콘만 배선이라 라벨은 툴팁에)
+
 # 컨텍스트(상단 레이어). NONE이면 닫힘(보이지 않음). ★ Phase D — CTX_CHEST(저장 상자) 추가.
 enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST }
 # 메뉴 탭(인벤토리 · 관계 · 숙련 · 옵션 — ADR-0048 §2 통합 탭 메뉴).
@@ -63,6 +74,7 @@ var store_text: String = ""
 var context := CTX_NONE
 var menu_tab := TAB_INV
 var _held := -1                  # 메뉴 인벤토리 탭에서 집어 든 백팩 슬롯(-1=없음)
+var _hover_tab := -1             # ★ 마우스가 호버 중인 메뉴 탭(-1=없음) — 아이콘 탭 툴팁용
 
 # 히트 테스트 캐시(_draw에서 채우고 _gui_input에서 읽는다).
 var _bp_rects: Array = []        # 백팩 12칸 Rect2
@@ -131,6 +143,7 @@ func open(ctx: int) -> void:
 func close() -> void:
 	context = CTX_NONE
 	_held = -1
+	_hover_tab = -1
 	visible = false
 	_apply_heart_visibility()
 
@@ -338,18 +351,27 @@ func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
 # ── 메뉴 상단(탭 바 + 탭별 내용) ──────────────────────────────────────────────
 func _draw_menu_top(panel: Rect2) -> void:
 	var font := ThemeDB.fallback_font
-	# ★ Phase B 탭 4개(인벤토리 | 관계 | 숙련 | 옵션). 현재 탭은 밝게. 한지 위라 라벨만으로 구분(아이콘 후행).
+	# ★ [정체성 UI] 탭 4개 = 정사각 아이콘 탭(인벤토리·관계·숙련·옵션). 라벨 텍스트를 24×24 아이콘으로
+	# 대체하고 폭을 좁힌다(owner 2026-07-05). 현재 탭은 밝은 한지 배경 + 아이콘 풀컬러, 비활성은
+	# 어둡게 + 아이콘 감광(modulate). 한글명은 호버 툴팁으로.
 	_tab_rects.clear()
-	var labels := ["인벤토리", "관계", "숙련", "옵션"]
-	var tab_w := 68.0
-	for i in labels.size():
-		var r := Rect2(panel.position.x + PAD + i * (tab_w + GAP), panel.position.y + PAD, tab_w, 28.0)
+	var tab_w := 34.0
+	var tab_h := 32.0
+	for i in TAB_COUNT:
+		var r := Rect2(panel.position.x + PAD + i * (tab_w + GAP), panel.position.y + PAD, tab_w, tab_h)
 		_tab_rects.append(r)
 		var on := i == menu_tab
 		draw_rect(r, Color(0.30, 0.22, 0.14, 0.85) if on else Color(0.14, 0.11, 0.08, 0.70))
 		draw_rect(r, Color(0.95, 0.88, 0.60) if on else Color(0.50, 0.42, 0.30), false, 1.0)
-		draw_string(font, r.position + Vector2(9.0, 19.0), labels[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 14,
-			Color(1, 0.97, 0.88) if on else Color(0.72, 0.66, 0.56))
+		# 24×24 아이콘 중앙 정렬(비활성은 감광해 대비).
+		var tex: Texture2D = TAB_ICONS[i]
+		var isz := Vector2(24.0, 24.0)
+		var ipos := r.position + (r.size - isz) * 0.5
+		draw_texture_rect(tex, Rect2(ipos, isz), false,
+			Color(1, 1, 1, 1) if on else Color(0.62, 0.62, 0.62, 0.9))
+	# 호버 툴팁(아이콘만이라 첫 사용자 학습 보조 — 호버 탭 아래에 한글명 한지 칩).
+	if _hover_tab >= 0 and _hover_tab < _tab_rects.size():
+		_draw_tab_tooltip(font, _tab_rects[_hover_tab], TAB_LABELS[_hover_tab])
 	match menu_tab:
 		TAB_INV:
 			_draw_inv_tab(panel, font)
@@ -359,6 +381,16 @@ func _draw_menu_top(panel: Rect2) -> void:
 			_draw_skill_tab(panel, font)
 		TAB_OPTIONS:
 			_draw_options_tab(panel, font)
+
+# ★ 아이콘 탭 호버 툴팁 — 호버 중인 탭 바로 아래에 한글명 한지 칩(어두운 박스 + 밝은 글자).
+func _draw_tab_tooltip(font: Font, tab: Rect2, label: String) -> void:
+	var fs := 12
+	var tw: float = font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var pad := 6.0
+	var box := Rect2(tab.position.x, tab.end.y + 4.0, tw + pad * 2.0, 20.0)
+	draw_rect(box, Color(0.10, 0.08, 0.06, 0.94))
+	draw_rect(box, Color(0.55, 0.48, 0.32), false, 1.0)
+	draw_string(font, box.position + Vector2(pad, 14.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 0.96, 0.84))
 
 func _draw_inv_tab(panel: Rect2, font: Font) -> void:
 	# [정리] 버튼 — 탭 바 아래로 내린다(4탭이 상단 폭을 다 써서 우상단 여백이 없음).
@@ -565,6 +597,10 @@ func _draw_store_top(panel: Rect2) -> void:
 func _gui_input(event: InputEvent) -> void:
 	if context == CTX_NONE:
 		return
+	# ★ 아이콘 탭 호버 추적(메뉴 컨텍스트만) — 클릭과 무관하게 마우스 이동으로 툴팁 갱신.
+	if event is InputEventMouseMotion:
+		_update_hover_tab(event.position)
+		return
 	if not (event is InputEventMouseButton) or not event.pressed or event.button_index != MOUSE_BUTTON_LEFT:
 		return
 	var p: Vector2 = event.position
@@ -579,6 +615,18 @@ func _gui_input(event: InputEvent) -> void:
 		CTX_CHEST:
 			_click_chest(p)
 	accept_event()
+
+# ★ 마우스 호버 탭 갱신(메뉴 컨텍스트만) — 바뀔 때만 다시 그린다(툴팁 표시).
+func _update_hover_tab(p: Vector2) -> void:
+	var h := -1
+	if context == CTX_MENU:
+		for i in _tab_rects.size():
+			if _tab_rects[i].has_point(p):
+				h = i
+				break
+	if h != _hover_tab:
+		_hover_tab = h
+		queue_redraw()
 
 func _click_menu(p: Vector2) -> void:
 	# 탭 전환.
