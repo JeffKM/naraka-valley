@@ -134,6 +134,13 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			else:
 				var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
 				draw_rect(inner, fc)
+		ItemCatalog.CAT_MATERIAL:
+			# ★ 재료(건초·개간 드랍) — 케이스 누락으로 아이콘 없이 개수만 뜨던 버그(inv_frame과 동형 수정).
+			var mtex: Texture2D = crop_icons.get(id)
+			if mtex != null:
+				draw_texture_rect(mtex, inner, false)
+			else:
+				draw_rect(inner, Color(0.80, 0.66, 0.30) if ItemCatalog._is_hay(id) else Color(0.46, 0.36, 0.26))
 
 # 작물·수확물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:

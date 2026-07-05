@@ -286,8 +286,11 @@ func _quality_color(q: int) -> Color:
 		_: return Color.WHITE
 
 func _draw_slot_box(rect: Rect2, highlight: bool) -> void:
-	# ★ Phase B 한지 plate 9-slice 슬롯. 집어 든 슬롯은 밝은 테두리를 덧그려 강조(스타듀 결).
-	_draw_nine(HANJI_PLATE, rect, PLATE_MARGIN)
+	# ★ 슬롯 = 깔끔한 단일 테두리(owner 리포트 2026-07-06). 옛 한지 plate 9-slice는 안쪽에 마룬
+	#   테두리 사각("중간 네모")이 있어 도구 아이콘과 겹쳐 보였다 — 따뜻한 크림 채움 + 갈색 외곽선
+	#   하나로 교체해 아이콘이 깨끗한 바탕 위에 놓이게 한다. 집어 든 슬롯은 금박 테두리 강조(스타듀 결).
+	draw_rect(rect, Color(0.86, 0.80, 0.62))
+	draw_rect(rect, Color(0.38, 0.27, 0.19), false, 2.0)
 	if highlight:
 		draw_rect(rect, Color(0.98, 0.90, 0.55), false, 2.0)
 
@@ -345,6 +348,14 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			else:
 				var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
 				draw_rect(inner, fc)
+		ItemCatalog.CAT_MATERIAL:
+			# ★ 재료(건초·개간 드랍) — 케이스 누락으로 아이콘 없이 개수만 뜨던 버그 방어(owner 리포트
+			#   2026-07-06 "6" 슬롯). 텍스처 있으면 쓰고, 없으면 건초=짚 금색·재료=흙 갈색 그레이박스.
+			var mtex: Texture2D = crop_icons.get(id)
+			if mtex != null:
+				draw_texture_rect(mtex, inner, false)
+			else:
+				draw_rect(inner, Color(0.80, 0.66, 0.30) if ItemCatalog._is_hay(id) else Color(0.46, 0.36, 0.26))
 
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
 	var tex: Texture2D = crop_icons.get(crop_id)
