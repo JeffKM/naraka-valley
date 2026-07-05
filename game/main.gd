@@ -304,7 +304,7 @@ const PROP_CABINET := preload("res://assets/props/cafe_cabinet.png")
 const PROP_CAFE_TABLE := preload("res://assets/props/cafe_table.png")
 # ★ Phase 2.8 T3 — 안식 농원 외부 농장 장식(PixelLab create_map_object, 32px native·피안절 무채도 톤).
 # 충돌·세이브 없는 순수 장식(_draw_props_for) — 밭을 '농장'으로 읽히게 프레임한다(밀도 상한 4종).
-const PROP_FENCE := preload("res://assets/props/farm_fence.png")              # 32×32 — 밭 경계 울타리(가로 레일)
+const PROP_FENCE := preload("res://assets/props/farm_fence.png")              # 32×32 — 밭 경계 울타리(가로 레일·통과 불가 SOLID)
 const PROP_SCARECROW := preload("res://assets/props/farm_scarecrow.png")      # 32×64 — 허수아비(1×2칸, 밭 곁 GROUND)
 const PROP_PLANTER := preload("res://assets/props/farm_planter.png")          # 32×32 — 길가 화분
 const PROP_FLOWER_PATCH := preload("res://assets/props/spirit_flower_patch.png")  # 32×32 — 꽃 패치(피안화)
@@ -470,7 +470,8 @@ const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP
 	PROP_TREE_A, PROP_TREE_B, PROP_ROCK,   # ★ T3⑤ 나무·바위 = 통과 불가(맵 경계 벽)
 	PROP_BUSH,                             # ★[roster] 덤불 = 능선 벽(풀 2×2 SOLID·FOOT_BAR 아님 = 전체 막음, owner "막 지나가지길 원해")
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP,  # ★ ADR-0035 업화석·석화 고목 = 통과 불가(계단 하드 게이트·overgrown 장애물)
-	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B]  # ★통나무 5종 = 통과 불가(owner 2026-07-05·FOOT_BAR 아님=풀타일 장애물, 낮은 프롭)
+	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B,  # ★통나무 5종 = 통과 불가(owner 2026-07-05·FOOT_BAR 아님=풀타일 장애물, 낮은 프롭)
+	PROP_FENCE]                            # ★울타리 = 통과 불가(owner 2026-07-05 "못 지나가게"·FOOT_BAR 아님=풀타일 경계벽·낮은 프롭). 패치 남단 여백(y17)이라 진입은 북쪽 본가 문·옆구리 x39/x45 우회로 유지
 # ★[asset-ruleset §5] 발치 충돌 바 — 키 큰 야외 프롭(나무·바위)은 풀타일 충돌 대신 *발치 밑단 바*(폭×반높이)만
 #   막아 "머리는 통과"(§6 Y-split의 물리 짝 — 캐노피 뒤로 지나감). 하드게이트 debris(업화석·석화고목)는
 #   개간 게이트라 풀타일 유지(Slice 1 전환)·실내 벽 가구는 벽 flush라 풀타일 유지(회귀 보존). 맵 이탈은
@@ -545,7 +546,7 @@ const PROP_LAYOUT_HOME := [
 	# ── 농경 장식(스타터 패치 곁 — 통과 O) ──────────────────────────────────────
 	[PROP_SCARECROW, [Vector2i(37, 14), Vector2i(46, 14)]],                              # 허수아비 둘(패치 양옆 GROUND — 스파인·패치 비껴)
 	[PROP_PLANTER, [Vector2i(42, 11), Vector2i(46, 11)]],                                # 본가 문~패치 접근로 화분(등불·울타리 비껴)
-	[PROP_FENCE, [Vector2i(40, 17), Vector2i(41, 17), Vector2i(42, 17), Vector2i(43, 17), Vector2i(44, 17)]],  # 패치 남단 가로 울타리(연속 런)
+	[PROP_FENCE, [Vector2i(40, 17), Vector2i(41, 17), Vector2i(42, 17), Vector2i(43, 17), Vector2i(44, 17)]],  # 패치 남단 가로 울타리(연속 런·통과 불가 SOLID·옆구리 x39/x45 우회)
 	[PROP_FLOWER_PATCH, [
 		Vector2i(8, 12), Vector2i(16, 8), Vector2i(70, 18), Vector2i(72, 44), Vector2i(20, 56), Vector2i(62, 56),
 		Vector2i(4, 20), Vector2i(74, 10), Vector2i(50, 8), Vector2i(64, 34), Vector2i(56, 60), Vector2i(36, 56),
@@ -1943,8 +1944,9 @@ func _build_grid() -> void:
 	_rebuild_trellis_collision()   # ★ [S1-5a] 트렐리스 넝쿨 통과 불가 충돌 재구성(안식 농원 전용)
 	_rebuild_orchard_collision()   # ★ [S1-5b] 혼의 나무 밑동 통과 불가 충돌 재구성(안식 농원 전용)
 
-# ★ T3③' 실내 가구 충돌 재구성 — 현재 구역의 실내 레이아웃에서 SOLID_PROPS 텍스처 칸에만 사각 충돌을
-# 단다(러그·등불·꽃·울타리는 제외 = 통과 O). 시각 lift(WALL_PROP_LIFT)와 같은 오프셋을 충돌에도 줘
+# ★ T3③' 프롭 충돌 재구성 — 현재 구역 레이아웃에서 SOLID_PROPS 텍스처 칸에만 사각 충돌을
+# 단다(러그·등불·꽃·debris(개간분)는 제외 = 통과 O. ★울타리는 2026-07-05 SOLID 편입 = 통과 불가).
+# 시각 lift(WALL_PROP_LIFT)와 같은 오프셋을 충돌에도 줘
 # 보이는 가구와 막히는 자리를 일치시킨다. 구역마다 가구 밴드가 달라(HOME y67~/마을 y74~) 외부 이동엔
 # 무관 — 빌드/워프(_build_grid)마다 한 번 세운다. 테스트·봇은 실내를 물리로 안 걷는다(직접 좌표 세팅).
 func _rebuild_prop_collision() -> void:
