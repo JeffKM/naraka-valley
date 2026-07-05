@@ -1108,6 +1108,10 @@ var reclaim: Reclaim = null
 #   Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). main이 고지 자유 풀밭을 시드하고, 벤 결과를
 #   여물광(Ranch.store_hay)에 적재한다(경제 양끝 잇기). 드로우는 main이 이 상태를 질의(디커플링).
 var forage: Forage = null
+# ★ ADR-0052 §118 채집 꽃 패치 상태(안식 피안화 손수확 → 채집물+채집 XP, 재생). Forage(사료풀)와 좌표·
+#   도구가 갈린 별개 원장 노드(코드 생성 — .new()). main이 layout.json 꽃 패치 좌표를 시드하고, 딴 결과를
+#   인벤토리·채집 XP에 잇는다(경제 양끝 잇기). 수확 등급은 채집 레벨/전문직이 소스(main이 주입, 디커플링).
+var flower: FlowerPatch = null
 # ★ [S1-9] 집 꾸미기 상태(집 내부 3레이어 코스메틱 배치 + 해금 세트). F10 저작 도구(layout.json·
 #   _prop_layouts)와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). 플레이어 세이브 델타만 소유하고
 #   layout.json 시드는 안 건드린다(회귀 0). main이 유효 배치 칸을 주입하고 드로우/충돌 훅에서 질의(디커플링).
@@ -1345,6 +1349,10 @@ func _ready() -> void:
 	forage.name = "Forage"
 	add_child(forage)
 	forage.changed.connect(_on_ranch_changed)      # 베기·재생·복원 시 드로우 갱신(짐승과 같은 훅 재사용 — 둘 다 고지 그레이박스)
+	flower = FlowerPatch.new()           # ★ ADR-0052 꽃 패치 채집 상태 노드(코드 생성 — 손수확·재생 원장, 채집물+XP 소스)
+	flower.name = "FlowerPatch"
+	add_child(flower)
+	flower.changed.connect(_on_ranch_changed)      # 따기·재생·복원 시 드로우 갱신(사료풀과 같은 훅 재사용 — 둘 다 야외 그레이박스)
 	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
 	home_deco.name = "HomeDeco"
 	add_child(home_deco)
@@ -1425,6 +1433,9 @@ func _ready() -> void:
 	# ★ [B1-a.3] 사료풀 시드 — 고지 자유 풀밭(FORAGE_SCAN_RECT 비-SOLID)을 Forage에 등록한다. 신규·복원
 	#   양쪽에서 부른다: seed는 멱등이라 복원된 사료풀 상태(cut_day)를 보존하고 맵상 새 타일만 더한다.
 	_seed_forage_tiles()
+	# ★ ADR-0052 꽃 패치 시드 — layout.json HOME의 FLOWER_PATCH 좌표를 FlowerPatch에 등록한다(신규·복원
+	#   양쪽). seed는 멱등이라 복원된 딴 상태(picked_day)를 보존하고 배치상 새 타일만 더한다(_seed_forage_tiles 결).
+	_seed_flower_patches()
 	# T5.6 복원 직후 NPC 상주/출근 상태를 현재(복원된) 진행·시각에 맞춘다. 통보를 이미
 	# 마친 세이브면 옥자가 카페에 보이고, 복원 시각이 영업창(15시+)이면 미호가 카페로 출근해
 	# 있다("껐다 켜도 그대로" — 직원 배치까지 재개에 맞는다). 둘 다 세이브 무상태(시각·단계
@@ -3789,6 +3800,8 @@ func _on_day_advanced(day: int) -> void:
 	_release_open_buildings()
 	# ★ [B1-a.3] 사료풀 재생 — 벤 지 REGROW_DAYS 지난 풀이 다시 자란다. 겨울(성야절)엔 재생 정지(Q7 굶음 긴장).
 	forage.advance_day(day, GameClock.season_index_for_day(day) == 3)
+	# ★ ADR-0052 꽃 패치 재생 — 딴 지 REGROW_DAYS 지난 패치가 다시 핀다(절기 무관 — 피안화는 저승 꽃).
+	flower.advance_day(day)
 	energy.refill()
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
@@ -4089,6 +4102,7 @@ func _save_game() -> void:
 		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
 		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
+		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
@@ -4137,6 +4151,8 @@ func _load_game() -> void:
 		reclaim.load_save(data["reclaim"])
 	if data.has("forage"):    # ★ [B1-a.3] — 키 없는 구버전은 사료풀 0(부팅 후 _seed_forage_tiles가 맵에서 시드). changed가 드로우 갱신
 		forage.load_save(data["forage"])
+	if data.has("flower_patch"):  # ★ ADR-0052 — 키 없는 구세이브는 딴 상태 0(부팅 후 _seed_flower_patches가 배치에서 시드). changed가 드로우 갱신
+		flower.load_save(data["flower_patch"])
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
 		home_deco.load_save(data["home_deco"])
 	if data.has("wallet"):
@@ -4346,6 +4362,16 @@ func forage_quality_floor() -> int:
 
 func forage_double_drop_chance() -> float:
 	return _perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_DOUBLE_DROP, 0.0)
+
+# ★ ADR-0052 채집물 기본 품질(채집 레벨 → 등급). 스타듀 결(레벨이 오를수록 상위 등급) 결정적 그레이박스
+#   버전: L0~3 일반 / L4~6 은 / L7+ 금. 이리듐(최고)은 base로 안 나오고 약초학자 전문직 하한으로만
+#   닿는다(ADR-0052 §채집 "약초학자 → 이리듐 고정" — 퍼크가 의미를 갖게). _pick_flower가 하한과 max.
+func _forage_base_quality(level: int) -> int:
+	if level >= 7:
+		return ItemCatalog.Q_GOLD
+	if level >= 4:
+		return ItemCatalog.Q_SILVER
+	return ItemCatalog.Q_NORMAL
 
 # 세이브 직렬화 — _professions를 {skill: {tier: id}} 그대로(var_to_str가 중첩 dict/int키 왕복). 로드 시
 # 카탈로그로 재검증해 손상/구버전 잔여를 버린다(유효 전문직만 복원, tier/부모 정합).
@@ -4782,6 +4808,12 @@ func _process(delta: float) -> void:
 			and inventory.selected_id() == ItemCatalog.SCYTHE and forage.is_grown(_target)
 	if on_forage and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
+	# ★ ADR-0052 꽃 패치 채집 — 피안화는 GROUND(비-SOIL·비-짐승·비-나무) 위라 _target_valid 밖에서 따로 디스패치.
+	#   RMB 맨손(줍기=혼력0, ADR-0033 #1)=따기(_pick_flower → 채집물+채집 XP). 안 폈으면 무동작. 아래 일반
+	#   RMB 수확(_try_harvest)은 _target_valid(SOIL)에서만 도니 겹치지 않는다(꽃 패치는 GROUND).
+	var on_flower := not _sleeping and _region == RegionCatalog.HOME and flower.is_bloomed(_target)
+	if on_flower and Input.is_action_just_pressed("action"):
+		_pick_flower(_target)
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
@@ -4911,6 +4943,10 @@ func _process(delta: float) -> void:
 		# ★ [S1-8] 개간 대상 debris를 바라볼 때: 맞는 도구를 들었으면 [좌클릭] 개간, 아니면 필요한 도구 안내.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _debris_prompt(_debris_kind_at(_target))
+	elif _region == RegionCatalog.HOME and flower.is_bloomed(_target):
+		# ★ ADR-0052 활짝 핀 꽃 패치를 바라볼 때: 우클릭 맨손 채집(혼력0). 채집물+채집 XP.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[우클릭] 피안화 채집 (채집 숙련)"
 	else:
 		# 밭 칸을 바라볼 때만 안내. 든 도구·칸 상태로 동사를 파생한다(LMB 도구질 / RMB 맨손 수확).
 		var prompt := _farm_prompt()
@@ -5055,6 +5091,28 @@ func _try_harvest() -> void:
 	_advance_onboarding("수확")               # T4.1 첫 수확 → 온보딩 완료(DONE)
 	energy.spend(cost)                        # 한 동작당 혼력 소모(숙련 감산)
 	queue_redraw()                            # 새 상태가 바로 보이도록
+
+# ★ ADR-0052 §118 · ADR-0033 — 안식 꽃 패치(피안화) 손수확. 라이브 채집 루프의 XP 소스이자 전문직 퍼크
+#   실효점. 전체 사슬을 살린다: 따기 → 채집물+채집 XP → 레벨업 → picker 전문직 선택 → 퍼크(품질 하한·2배)
+#   실효. ★혼력 0(ADR-0033 #1 "줍기=혼력0" — 유일 무비용 산출 루프, "평평≠막힘" 안전판). 품질·수량은
+#   채집 레벨/전문직이 소스(밭 비료 roll과 대비 — 스킬 주도 replace, ADR-0033 #3 개정).
+func _pick_flower(tile: Vector2i) -> void:
+	if not flower.pick(tile, clock.day):
+		return   # 안 폈거나 패치 아님(디스패치가 걸렀지만 방어)
+	var lvl := _skill_level(ProfessionCatalog.FORAGING)
+	# 품질 = 채집 레벨 기본 등급, 약초학자 하한(이리듐)과 max(퍼크가 base를 끌어올림). ADR-0052.
+	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 채집물은 밭 다수확과 달리
+	#   품질 격리 없음: 한 포기에서 두 송이라 등급 동일). ADR-0052 DIM_DOUBLE_DROP.
+	var count := 1
+	if randf() < forage_double_drop_chance():
+		count = 2
+	inventory.add_item(ItemCatalog.SPIRIT_FLOWER, count, quality)
+	_toast_item(ItemCatalog.SPIRIT_FLOWER, count)   # ★ Phase C 획득 토스트
+	_gain_forage_xp(ItemCatalog.price_of(ItemCatalog.SPIRIT_FLOWER))  # ★ 채집 XP(기준가 기반, 수확=farm XP 결)+레벨업 감지
+	audio.sfx("harvest")                      # 채집도 밝은 팝(수확 결)
+	# ★ 혼력 소모 없음(ADR-0033 #1) · 온보딩은 농사 동사 체인이라 여긴 안 건드림. queue_redraw로 새 상태 반영.
+	queue_redraw()
 
 # 선택 슬롯이 씨앗/수확물이면 _selected_crop(선물·구매·HUD 기준 작물)을 그 작물군으로 맞춘다.
 # 도구를 들었을 땐 마지막 작물을 유지한다(선물·매대가 기억된 작물로 동작). Q 작물 순환의 대체 —
@@ -6018,6 +6076,16 @@ func _seed_forage_tiles() -> void:
 			if not is_solid(_grid[y][x]):
 				forage.seed(Vector2i(x, y))
 
+# ★ ADR-0052 꽃 패치 시드 — layout.json HOME 배치에서 FLOWER_PATCH 타일을 FlowerPatch에 등록(_debris_kind_at
+#   결 — 배치는 _prop_layouts에 잠기고 노드는 상태만). 신규·복원 멱등(seed가 딴 상태 보존).
+func _seed_flower_patches() -> void:
+	if flower == null:
+		return
+	for entry in _prop_layouts.get("HOME", []):
+		if entry[0] == PROP_FLOWER_PATCH:
+			for t in entry[1]:
+				flower.seed(t)
+
 # 밭 칸 상태가 바뀌면 오버레이 타일을 갱신한다(FarmField.tile_changed로 호출).
 func _on_tile_changed(t: Vector2i) -> void:
 	var idx := _overlay_index(t)
@@ -6061,6 +6129,7 @@ func _draw() -> void:
 			_draw_silo()               # ★ [B1-a.3] 여물광 외관(WALL 박스 그레이박스 + 건초 게이지)
 			_draw_well()               # ★ [B2] 혼우물 외관(WALL 박스 그레이박스 — 돌 우물, 리필 메카닉=별도 grill)
 			_draw_forage()             # ★ [B1-a.3] 사료풀(다 자람=풀포기·벤 자리=밑동) — 낫 채집 대상
+			_draw_flower_regrow()      # ★ ADR-0052 딴 꽃 패치 자리 새싹(재생 대기 — 폄은 _draw_props_for가 풀 스프라이트로)
 			# ★[§6] Y-split: 뒤 프롭(플레이어 발치 위)만 여기서(플레이어 아래). 앞 프롭은 _front_props.
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_prop_layouts.get("HOME", []), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터: 집 가구·길가 등불·화분 + T3 농장 장식
@@ -6233,6 +6302,19 @@ func _draw_forage() -> void:
 			# 벤 자리 = 낮은 마른 밑동(재생 대기 — 며칠 뒤 다시 자람).
 			draw_line(px + Vector2(TILE * 0.35, TILE * 0.78), px + Vector2(TILE * 0.35, TILE * 0.66), Color(0.6, 0.56, 0.34), 2.0)
 			draw_line(px + Vector2(TILE * 0.6, TILE * 0.78), px + Vector2(TILE * 0.6, TILE * 0.66), Color(0.6, 0.56, 0.34), 2.0)
+
+# ★ ADR-0052 딴 꽃 패치 자리 = 낮은 새싹(재생 대기 — REGROW_DAYS 뒤 다시 핌). 폄 상태는 _draw_props_for가
+#   PROP_FLOWER_PATCH 풀 스프라이트로 그리므로 여기선 딴 자리(비-폄)만 그린다. 순수 시각(상태는 노드 소유).
+func _draw_flower_regrow() -> void:
+	if flower == null or _region != RegionCatalog.HOME:
+		return
+	for tile in flower.all_tiles():
+		if flower.is_bloomed(tile):
+			continue   # 폄 = _draw_props_for가 풀 패치로(중복 방지)
+		var px := Vector2(tile.x * TILE, tile.y * TILE)
+		# 딴 자리 = 어린 초록 새싹 두 갈래(며칠 뒤 다시 핌). 사료풀 밑동과 색을 갈라(초록) 채집물임을 읽힘.
+		draw_line(px + Vector2(TILE * 0.42, TILE * 0.72), px + Vector2(TILE * 0.36, TILE * 0.56), Color(0.40, 0.66, 0.34), 2.0)
+		draw_line(px + Vector2(TILE * 0.58, TILE * 0.72), px + Vector2(TILE * 0.64, TILE * 0.56), Color(0.40, 0.66, 0.34), 2.0)
 
 # ★ [Phase E/S1-15] 가축 스프라이트 훅 — assets/livestock/<species>_<stage>.png(gemini-demo-sprites-spec §5,
 #   bottom-center 앵커, dak 32²·so_baby 48²·so_adult 64×48). owner Gemini 결과가 이 경로에 들어오면 코드
@@ -6629,10 +6711,14 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 		var yo: int = entry[2] if entry.size() > 2 else 0   # ★ T3③ 벽 가구 시각 보정(밀착, 좌표·충돌 무관)
 		var casts_shadow: bool = tex in PROP_SHADOW_SET
 		var is_debris: bool = DEBRIS_KIND.has(tex)          # ★ [S1-8] 치운 debris는 skip(안 그림)
+		var is_flower: bool = tex == PROP_FLOWER_PATCH      # ★ ADR-0052 딴 꽃 패치는 skip(새싹은 _draw_flower_regrow가 그림)
 		var tsz := tex.get_size()
 		for t in entry[1]:
 			# ★ [S1-8 §10.3] 개간한 debris 타일은 안 그린다(reclaim 델타 skip-filter — _prop_layouts 시드는 불변).
 			if is_debris and reclaim != null and reclaim.is_cleared(t):
+				continue
+			# ★ ADR-0052 딴 꽃 패치는 풀 스프라이트를 숨긴다(reclaim 결 skip-filter). 재생 대기 새싹은 별도 패스.
+			if is_flower and flower != null and not flower.is_bloomed(t):
 				continue
 			# Y-split: 부피 프롭(그림자 세트)만 앞/뒤로 갈린다 — 평면 데칼(러그·꽃·울타리·잡초 등)은
 			#   발치 개념이 없어 늘 뒤(플레이어 아래). 경계 base==split은 BACK. ALL이면 전부 그린다.
