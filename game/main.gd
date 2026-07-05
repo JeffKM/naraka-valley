@@ -254,6 +254,17 @@ const TOOL_ICONS := {
 	ItemCatalog.AXE: preload("res://assets/tools/axe.png"),                    # 도끼
 }
 
+# ★ [아트정리패스] 비료 아이콘 5종(색박스 대체 — PixelLab, S1-6 카탈로그 2군 XOR).
+# 품질군 3(기초·품질·디럭스=삼베 포대·등급 액센트 상승) / 성장촉진군 2(성장촉진·하이퍼=영혼빛 물약병).
+# TOOL_ICONS와 동형: icons dict에 병합→hotbar·inv_frame `_draw_icon` CAT_FERTILIZER 텍스처화(색박스 폴백).
+const FERT_ICONS := {
+	FertilizerCatalog.FERT_BASIC: preload("res://assets/fertilizer/fert_basic.png"),      # 기초 비료
+	FertilizerCatalog.FERT_QUALITY: preload("res://assets/fertilizer/fert_quality.png"),  # 품질 비료
+	FertilizerCatalog.FERT_DELUXE: preload("res://assets/fertilizer/fert_deluxe.png"),    # 디럭스 비료
+	FertilizerCatalog.FERT_SPEED: preload("res://assets/fertilizer/fert_speed.png"),      # 성장촉진 비료
+	FertilizerCatalog.FERT_HYPER: preload("res://assets/fertilizer/fert_hyper.png"),      # 하이퍼 비료
+}
+
 # 각 타일의 그레이박스 색(밝기·미세 색조로만 구분, 회색 기조 유지). WALL이 가장 밝다.
 const COLORS := [
 	Color(0.16, 0.18, 0.16),  # GROUND — 어두운 풀밭 톤
@@ -3581,6 +3592,8 @@ func _setup_hotbar() -> void:
 		icons[extra_id] = EXTRA_ICONS[extra_id]    # ★ [S1-10] 비-작물 수확물 아이콘(혼백도·노을알·안개젖)
 	for tool_id in TOOL_ICONS:
 		icons[tool_id] = TOOL_ICONS[tool_id]       # ★ [아트정리패스] 도구 아이콘(색박스 대체)
+	for fert_id in FERT_ICONS:
+		icons[fert_id] = FERT_ICONS[fert_id]       # ★ [아트정리패스] 비료 아이콘(색박스 대체)
 	hotbar.setup(inventory, icons)
 
 # ── ★ C2 무인 출하함 ──────────────────────────────────────────────────────────
@@ -3692,6 +3705,8 @@ func _setup_frame() -> void:
 		icons[extra_id] = EXTRA_ICONS[extra_id]     # ★ [S1-10] 비-작물 수확물 아이콘(혼백도·노을알·안개젖)
 	for tool_id in TOOL_ICONS:
 		icons[tool_id] = TOOL_ICONS[tool_id]        # ★ [아트정리패스] 도구 아이콘(색박스 대체)
+	for fert_id in FERT_ICONS:
+		icons[fert_id] = FERT_ICONS[fert_id]        # ★ [아트정리패스] 비료 아이콘(색박스 대체)
 	frame.setup(inventory, ship_bin, icons)
 	frame.set_chest(chest)   # ★ Phase D 저장 상자 주입(CTX_CHEST 상단 그리드)
 	frame.deposit_slot.connect(_on_frame_deposit)
@@ -4263,6 +4278,8 @@ func _item_icon(id: String) -> Texture2D:
 		return EXTRA_ICONS[crop]
 	if TOOL_ICONS.has(id):                     # ★ [아트정리패스] 도구 아이콘(토스트·알림에서 텍스트→아이콘)
 		return TOOL_ICONS[id]
+	if FERT_ICONS.has(id):                     # ★ [아트정리패스] 비료 아이콘(토스트·알림)
+		return FERT_ICONS[id]
 	var base := ItemCatalog._large_base(id)    # 대형 산물(_large)이면 기준 산물 아이콘 재사용
 	if base != "" and EXTRA_ICONS.has(base):
 		return EXTRA_ICONS[base]

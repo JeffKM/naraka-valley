@@ -122,9 +122,13 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 		ItemCatalog.CAT_HARVEST:
 			_draw_crop_tex(id, inner)
 		ItemCatalog.CAT_FERTILIZER:
-			# ★ [S1-6] 비료 그레이박스 아이콘 — 품질군=초록 흙, 성장촉진군=청록(축 구분). 아트=하류.
-			var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
-			draw_rect(inner, fc)
+			# ★ [아트정리패스] 비료 아이콘(icons dict에 병합된 FERT_ICONS). 없으면 옛 색박스 폴백.
+			var ftex: Texture2D = crop_icons.get(id)
+			if ftex != null:
+				draw_texture_rect(ftex, inner, false)
+			else:
+				var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
+				draw_rect(inner, fc)
 
 # 작물·수확물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
