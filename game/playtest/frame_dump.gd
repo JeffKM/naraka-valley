@@ -34,11 +34,29 @@ func _initialize() -> void:
 	m.frame.queue_redraw()
 	await _grab("frame_options")
 
-	# 인벤토리 탭 — 관계(heart) 탭 호버 툴팁 표시
+	# 인벤토리 탭 — 스크롤바가 뜨는지(16칸=6열×3행 > 2행 뷰포트)
 	m.frame.set_tab(InventoryFrame.TAB_INV)
-	m.frame._hover_tab = InventoryFrame.TAB_REL
+	m.frame._hover_tab = -1
+	m.frame._bp_first_row = 0
 	m.frame.queue_redraw()
 	await _grab("frame_inv")
+
+	# 인벤토리 탭(스크롤 내림) — 3번째 행이 보이고 썸이 아래로 내려갔는지
+	m.frame._bp_first_row = 1
+	m.frame.queue_redraw()
+	await _grab("frame_inv_scrolled")
+
+	# 관계 탭 — 안내 문구와 하트 행이 안 겹치는지(owner 리포트 2026-07-06 세로 겹침 확인용)
+	m.frame.set_tab(InventoryFrame.TAB_REL)
+	m.frame._hover_tab = -1
+	m.frame.set_hearts([
+		{"name": "미호", "filled": 1, "total": 5, "effect": "여우불: 잠듦 — 미호와 친해지면 깨어난다"},
+		{"name": "멜", "filled": 0, "total": 5, "effect": "멜 마진: ×1.0 — 멜과 친해지면 단가가 오른다"},
+		{"name": "바나", "filled": 0, "total": 5, "effect": "바나 경비: 잠듦 — 바나와 친해지면 밤을 지켜준다"},
+		{"name": "네오", "filled": 0, "total": 5, "effect": "네오 할인: 정가 — 네오와 친해지면 매대가 싸진다"},
+	])
+	m.frame.queue_redraw()
+	await _grab("frame_rel")
 
 	m._close_frame()
 	m.queue_free()
