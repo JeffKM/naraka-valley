@@ -3409,6 +3409,9 @@ func _build_ground16() -> void:
 		for x in _grid_w:
 			row.append(_g16_surface(x, y))
 		surf.append(row)
+	# ★[ADR-0053 후속 GDD — 잔디 군락화] 낱개 1×1 고립 금지 + 최소 유기 군락 강제. seed(클럼프+셀해시)는
+	#   경계에서 단일 잔디 셀을 낳을 수 있어 격자 스케일이 드러난다("개발 격자 테스트 화면"). CA 정리로 응집.
+	_g16_cluster_cleanup(surf)
 	# ① 셀 단위 필드 blit(빠름) — 건물바닥(-1)은 투명(실내 바닥 비침)
 	for y in _outdoor_h:
 		for x in _grid_w:
@@ -3462,10 +3465,61 @@ func _build_ground16() -> void:
 const _G16_GRASS_THR := 0.66   # 잔디 패치 문턱(↑=잔디↓·흙↑). 스타듀 시작 농장 ≈ 흙 지배(잔디 ~28%).
 
 # 마당(GROUND) 칸이 잔디 패치인가 — 저주파 클럼프(넓은 초록 영역) + 셀 해시(작은 무리로 분해).
-# 결정적(좌표 해시)이라 재빌드·재진입 동일. true=잔디(grass_field), false=맨흙(earth).
+# 결정적(좌표 해시)이라 재빌드·재진입 동일. true=잔디(grass_field), false=맨흙(earth). 이것은 *seed*이고,
+# 낱개/최소군락 정리는 _g16_cluster_cleanup(surf)가 CA로 후처리한다(격자 스케일 노출 방지).
 func _g16_is_grass_patch(x: int, y: int) -> bool:
 	var score := _gd_cluster(x, y) * 0.6 + _gd_h01(x, y, 41) * 0.4
 	return score >= _G16_GRASS_THR
+
+# ★[ADR-0053 후속 GDD — 잔디 군락화] seed 잔디 마스크를 셀룰러 오토마타로 응집시켜 *낱개 1×1 고립 금지 +
+#   최소 유기 군락*을 강제한다. surf(0맨흙/1잔디/2+하드)에 in-place. 셀 단위(per-pixel 아님)·결정적.
+#   ① CA 2패스: 잔디 8이웃<2 → 사멸(고립·촉수 제거) / 맨흙 8이웃≥5 → 잔디 생성(오목부 채움·응집).
+#   ② 최소군락 필터: 잔디 4-연결 컴포넌트가 _G16_MIN_PATCH 미만이면 맨흙으로 흡수(작은 조각 제거).
+const _G16_MIN_PATCH := 5      # 이보다 작은 잔디 덩어리는 맨흙으로 흡수(격자 스케일 노출 방지)
+func _g16_cluster_cleanup(surf: Array) -> void:
+	var W := _grid_w
+	var H := _outdoor_h
+	for _p in 2:
+		var snap: Array = surf.duplicate(true)
+		for y in H:
+			for x in W:
+				var s: int = snap[y][x]
+				if s < 0 or s > 1:
+					continue   # 맨흙(0)/잔디(1)만 대상 — 길·밭·물·건물 불변
+				var gn := 0
+				for dy in range(-1, 2):
+					for dx in range(-1, 2):
+						if dx == 0 and dy == 0:
+							continue
+						var nx := x + dx
+						var ny := y + dy
+						if nx >= 0 and ny >= 0 and nx < W and ny < H and int(snap[ny][nx]) == 1:
+							gn += 1
+				if s == 1 and gn < 2:
+					surf[y][x] = 0
+				elif s == 0 and gn >= 5:
+					surf[y][x] = 1
+	# 최소군락 필터(4-연결 BFS 컴포넌트 크기)
+	var seen := {}
+	for y in H:
+		for x in W:
+			if int(surf[y][x]) != 1 or seen.has(Vector2i(x, y)):
+				continue
+			var comp: Array = []
+			var stack: Array = [Vector2i(x, y)]
+			seen[Vector2i(x, y)] = true
+			while not stack.is_empty():
+				var c: Vector2i = stack.pop_back()
+				comp.append(c)
+				for d in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
+					var n: Vector2i = c + d
+					if n.x >= 0 and n.y >= 0 and n.x < W and n.y < H \
+							and int(surf[n.y][n.x]) == 1 and not seen.has(n):
+						seen[n] = true
+						stack.append(n)
+			if comp.size() < _G16_MIN_PATCH:
+				for cc in comp:
+					surf[cc.y][cc.x] = 0
 
 # 셀의 지면 표면 종류(0=맨흙 1=잔디 2=길 3=밭 4=물, -1=건물바닥 skip).
 func _g16_surface(x: int, y: int) -> int:
