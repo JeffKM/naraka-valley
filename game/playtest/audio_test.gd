@@ -119,6 +119,21 @@ func _smoke_checks() -> void:
 	_check("⑦e set_phase(title) → 타이틀 테마로 전환", A._current_phase == GameAudio.PHASE_TITLE)
 	_check("⑦f 오디오 노드는 ALWAYS(pause 중에도 BGM 유지)", A.process_mode == Node.PROCESS_MODE_ALWAYS)
 
+	# ★ 부팅 충돌 회귀(타이틀 BGM 1초 컷 버그): _setup_audio의 update_music(farm)과 _show_title의
+	#   set_phase(title)이 *같은 프레임*에 연달아 일어나면, farm에서 페이드아웃+정지 예약된 플레이어가
+	#   그대로 title의 incoming으로 재사용된다. _fade가 이전 트윈을 kill하지 않으면 낡은 "정지 콜백"이
+	#   1초 뒤 발동해 방금 깐 title을 죽인다. → _fade가 재사용 플레이어의 낡은 트윈을 kill하는지 단언.
+	var B := GameAudio.new()
+	get_root().add_child(B)
+	await process_frame
+	B.update_music(NOON, false, false)   # farm: incoming=_music_b·outgoing=_music_a(정지 예약)
+	var stale: Tween = B._music_tweens.get(B._music_a.get_instance_id())
+	_check("⑦g farm 후 A(다음 incoming)에 페이드 트윈 예약됨", stale != null and stale.is_valid())
+	B.set_phase(GameAudio.PHASE_TITLE)   # 같은 프레임: A를 title로 재사용
+	_check("⑦h 재사용된 A의 낡은 트윈이 kill됨(정지 콜백 취소 — 1초 컷 방지)", stale == null or not stale.is_valid())
+	_check("⑦i title이 A에 실림", B._music_a.stream != null and B._music_a.stream.resource_path.get_file().begins_with("bgm_title"))
+	B.free()
+
 	# SFX: 9종 + 미정의/빈 이벤트를 연달아 쏴도 풀이 죽지 않는다(라운드로빈 보이스).
 	for e in ["hoe", "water", "harvest", "serve", "gold", "ui", "dialogue", "block", "sleep", "explode", ""]:
 		A.sfx(e)
