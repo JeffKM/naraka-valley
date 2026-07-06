@@ -1507,12 +1507,20 @@ func _begin_game(is_new_game: bool) -> void:
 #   빌드됐고(HOME 스폰), 타이틀이 그 위를 덮으며 트리를 일시정지(월드 시뮬 정지·입력 격리)한다.
 func _show_title() -> void:
 	get_tree().paused = true
+	# ★ B2 타이틀 BGM(로파이 코지) — 트리가 멈춰도 audio는 ALWAYS라 곡이 깔린다. 게임 시작 시
+	#   _process의 update_music이 farm/cafe/night/ending으로 크로스페이드해 넘어간다(phase 전환).
+	if audio != null:
+		audio.set_phase(GameAudio.PHASE_TITLE)
 	var title := TitleScreen.new()
 	title.name = "TitleScreen"
 	add_child(title)
-	title.setup(saver)
+	title.setup(saver, settings)   # ★ B2 설정 값 원천 주입(_setup_settings가 먼저 생성 — 부팅 순서 보장)
 	title.start_game.connect(_on_title_start)
 	title.quit_game.connect(_on_title_quit)
+	# ★ B2 타이틀 설정 조작 → 옵션 탭과 *같은* 핸들러로 실제 적용·영속(단일 값 원천 GameSettings 공유).
+	title.music_nudged.connect(_on_music_vol_changed)
+	title.sfx_nudged.connect(_on_sfx_vol_changed)
+	title.fullscreen_nudged.connect(_on_fullscreen_toggled)
 
 # 타이틀에서 슬롯을 골라 시작 — 활성 슬롯을 심고(이후 저장이 그 슬롯으로), 신규면 그 슬롯을
 #   비운 뒤 게임 시작 finalize를 돌린다. 일시정지 해제·타이틀 제거.
