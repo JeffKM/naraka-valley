@@ -129,6 +129,8 @@
 
 집·창고·축사 정면 facade 남향·청크 규칙 재생성([ADR-0036]·[ADR-0047])은 §1(건물)의 Gemini 재생성으로 흡수.
 
+> ★ **2026-07-06([ADR-0054]) facade 지면 리컬러 대기:** `house_ext`·`storehouse_ext`·`barn_ext`·`coop_ext` facade 스프라이트에 **초록 잔디 지면이 구워져** 있어, 흙-지배 마당([ADR-0053]) 위에서 초록 사각으로 튄다. **재출력 시 파사드 하단 지면을 tan(맨흙)/투명으로 리컬러**해 근본 접지. 그 전까지는 코드 오버랩 트릭([ADR-0054] Option C)으로 완화(다음 슬라이스).
+
 **자연·시스템 프롭 13종**(나무·바위·덤불·그루터기·debris 3종·넝쿨·울타리·허수아비·화분·꽃 패치)의 16px Gemini 드롭인 교체는 [prop-regen-roster.md](./prop-regen-roster.md)가 전담한다(2026-07-04 grill: 장식+개간만·단일 상태·코드 그림자 유지·정확 크기 드롭인). 프롬프트 단일 출처 = [gemini-regen-batch.md](./gemini-regen-batch.md) §5.
 
 ---
