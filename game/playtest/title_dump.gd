@@ -42,6 +42,15 @@ func _initialize() -> void:
 	ts._go(TitleScreen.State.CONFIRM_QUIT)
 	ts._canvas.queue_redraw()
 	await _grab("title_quit")
+	# ★ B2 SETTINGS — 전체화면 켠 상태·효과음 행 선택으로 컨트롤 강조·체크박스 채움 확인
+	var gs := GameSettings.new()
+	gs.music_volume = 0.7; gs.sfx_volume = 0.5; gs.fullscreen = true
+	ts._settings = gs
+	ts._go(TitleScreen.State.SETTINGS)
+	ts._sel = TitleScreen.SetRow.SFX
+	ts._canvas.queue_redraw()
+	await _grab("title_settings")
+	gs.free()
 	# 정리 — 더미 슬롯 제거 후 개발 세이브 복원
 	sm.delete_save(0); sm.delete_save(2)
 	for p in paths:

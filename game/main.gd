@@ -1510,9 +1510,13 @@ func _show_title() -> void:
 	var title := TitleScreen.new()
 	title.name = "TitleScreen"
 	add_child(title)
-	title.setup(saver)
+	title.setup(saver, settings)   # ★ B2 설정 값 원천 주입(_setup_settings가 먼저 생성 — 부팅 순서 보장)
 	title.start_game.connect(_on_title_start)
 	title.quit_game.connect(_on_title_quit)
+	# ★ B2 타이틀 설정 조작 → 옵션 탭과 *같은* 핸들러로 실제 적용·영속(단일 값 원천 GameSettings 공유).
+	title.music_nudged.connect(_on_music_vol_changed)
+	title.sfx_nudged.connect(_on_sfx_vol_changed)
+	title.fullscreen_nudged.connect(_on_fullscreen_toggled)
 
 # 타이틀에서 슬롯을 골라 시작 — 활성 슬롯을 심고(이후 저장이 그 슬롯으로), 신규면 그 슬롯을
 #   비운 뒤 게임 시작 finalize를 돌린다. 일시정지 해제·타이틀 제거.

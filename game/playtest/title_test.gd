@@ -14,6 +14,10 @@ extends SceneTree
 var _fail := 0
 var _got_start: Array = []   # [slot, is_new]
 var _got_quit := 0
+# ★ B2 설정 패널 조작 신호 캡처.
+var _music_delta := 0.0
+var _sfx_delta := 0.0
+var _fs_toggles := 0
 
 func _check(label: String, ok: bool) -> void:
 	print(("  ✓ " if ok else "  ✗ ") + label)
@@ -25,6 +29,15 @@ func _on_start(slot: int, is_new: bool) -> void:
 
 func _on_quit() -> void:
 	_got_quit += 1
+
+func _on_music(d: float) -> void:
+	_music_delta = d
+
+func _on_sfx(d: float) -> void:
+	_sfx_delta = d
+
+func _on_fs() -> void:
+	_fs_toggles += 1
 
 func _rm(p: String) -> void:
 	if FileAccess.file_exists(p):
@@ -54,6 +67,9 @@ func _initialize() -> void:
 	ts.setup(sm)
 	ts.start_game.connect(_on_start)
 	ts.quit_game.connect(_on_quit)
+	ts.music_nudged.connect(_on_music)
+	ts.sfx_nudged.connect(_on_sfx)
+	ts.fullscreen_nudged.connect(_on_fs)
 
 	# ── ④ slot_label ──
 	var l0 := ts.slot_label(0)
@@ -109,11 +125,41 @@ func _initialize() -> void:
 	ts._cancel()
 	_check("⑤b ESC(메뉴) → 종료확인", ts._state == TitleScreen.State.CONFIRM_QUIT)
 
-	# ── 설정·만든사람들 stub → INFO → 확인 → 메뉴 ──
+	# ── ⑥ 설정(★ B2 실동작) → SETTINGS 패널 → 볼륨·전체화면 조작 신호 → 뒤로/ESC ──
 	ts._go(TitleScreen.State.MENU); ts._sel = 2; ts.activate()
-	_check("⑥a 설정 → INFO", ts._state == TitleScreen.State.INFO)
+	_check("⑥a 설정 → SETTINGS", ts._state == TitleScreen.State.SETTINGS)
+	_check("⑥b 초기 행=음악(sel 0)", ts._sel == 0)
+	# 음악 행 좌/우 = 음악 볼륨 −/+ 신호
+	_music_delta = 0.0; ts.adjust(1)
+	_check("⑥c 음악행 우 → music_nudged(+STEP)", is_equal_approx(_music_delta, TitleScreen.VOL_STEP))
+	ts.adjust(-1)
+	_check("⑥d 음악행 좌 → music_nudged(−STEP)", is_equal_approx(_music_delta, -TitleScreen.VOL_STEP))
+	# 효과음 행
+	ts.move_selection(1)
+	_check("⑥e 아래 → 효과음 행(sel 1)", ts._sel == 1)
+	_sfx_delta = 99.0; ts.adjust(1)
+	_check("⑥f 효과음행 우 → sfx_nudged(+STEP)", is_equal_approx(_sfx_delta, TitleScreen.VOL_STEP))
+	# 음악 행 조작이 효과음으로 새지 않는가(행별 라우팅)
+	_music_delta = 0.0; ts._sel = 1; ts.adjust(-1)
+	_check("⑥g 효과음행에선 music 무변", is_equal_approx(_music_delta, 0.0))
+	# 전체화면 행 → 엔터/조정 = 토글 신호
+	ts.move_selection(1)
+	_check("⑥h 아래 → 전체화면 행(sel 2)", ts._sel == 2)
+	_fs_toggles = 0; ts.activate()
+	_check("⑥i 전체화면 엔터 → fullscreen_nudged", _fs_toggles == 1)
+	ts.adjust(1)
+	_check("⑥j 전체화면 조정도 토글", _fs_toggles == 2)
+	# 뒤로 행 → 메뉴 복귀
+	ts.move_selection(1)
+	_check("⑥k 아래 → 뒤로 행(sel 3)", ts._sel == 3)
 	ts.activate()
-	_check("⑥b INFO 확인 → 메뉴", ts._state == TitleScreen.State.MENU)
+	_check("⑥l 뒤로 → 메뉴", ts._state == TitleScreen.State.MENU)
+	# ESC로도 설정→메뉴
+	ts._go(TitleScreen.State.SETTINGS); ts._cancel()
+	_check("⑥m ESC(설정) → 메뉴", ts._state == TitleScreen.State.MENU)
+	# adjust는 SETTINGS 외 상태(MENU)에선 무동작(가드)
+	_music_delta = 0.0; ts._sel = 0; ts.adjust(1)
+	_check("⑥n MENU에서 adjust 무동작", is_equal_approx(_music_delta, 0.0))
 
 	# ── 정리 ──
 	ts.free()

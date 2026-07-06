@@ -15,6 +15,12 @@ class_name TitleScreen
 
 signal start_game(slot: int, is_new: bool)   # 슬롯을 정해 게임 시작(is_new=신규/이어하기)
 signal quit_game()                            # 게임 종료
+# ★ B2 설정 실동작 — 인게임 옵션 탭(inv_frame.gd)과 같은 디커플링: 타이틀은 값 표시·조작 신호만 쏘고,
+#   main이 실제 적용(버스 볼륨·창모드)·영속(settings.cfg)을 수행한다. main은 옵션 탭과 *같은* 핸들러
+#   (_on_music_vol_changed 등)에 이 신호들을 연결해 단일 값 원천(GameSettings)을 공유한다.
+signal music_nudged(delta: float)             # 음악 볼륨 증감(설정 패널 −/+·좌우)
+signal sfx_nudged(delta: float)               # 효과음 볼륨 증감(설정 패널 −/+·좌우)
+signal fullscreen_nudged()                    # 전체화면 토글(설정 패널 체크박스·엔터/좌우)
 
 const VIEW := Vector2(960.0, 540.0)           # 스트레치 뷰포트(project.godot)
 const BG_TEX: Texture2D = preload("res://assets/ui/title_bg.png")
@@ -24,15 +30,28 @@ const FOXFIRE := Color(0.376, 0.847, 0.941)   # 파란 여우불 #60d8f0
 const EMBER := Color(1.0, 0.72, 0.32)         # 따뜻한 불티
 const TEALEAF := Color(0.62, 0.44, 0.28)      # 찻잎 갈색
 
-enum State { MENU, SLOTS, CONFIRM_NEW, CONFIRM_QUIT, INFO }
+enum State { MENU, SLOTS, CONFIRM_NEW, CONFIRM_QUIT, INFO, SETTINGS }
+
+# 설정 패널 행(순서 = _sel 의미·_sel_count SETTINGS). 볼륨 두 줄은 좌우로 조정, 전체화면은 토글, 뒤로는 복귀.
+enum SetRow { MUSIC, SFX, FULLSCREEN, BACK }
+
+const VOL_STEP := 0.1             # 볼륨 −/+ 한 눈금(옵션 탭 inv_frame.gd과 동일 — 단일 조작 규격)
 
 var _saver: SaveManager
+var _settings: GameSettings       # ★ B2 설정 값 원천(main이 주입). null이면(테스트) 기본값 표시·조작만 신호로
 var _state: State = State.MENU
 var _sel := 0                     # 현재 상태의 선택 인덱스
-var _info_text := ""              # INFO 패널 문구(설정·만든사람들 stub)
+var _info_text := ""              # INFO 패널 문구(만든사람들 stub)
 var _t := 0.0                     # 파티클 애니 시간
 var _particles: Array = []        # {pos, vel, kind, size, ph}
 var _hit: Array[Rect2] = []       # 현재 상태 선택 항목 히트 rect(마우스)
+# ★ B2 설정 패널 세부 컨트롤 히트 rect(마우스 −/+·체크박스·뒤로 — _paint_settings가 채운다).
+var _set_music_minus := Rect2()
+var _set_music_plus := Rect2()
+var _set_sfx_minus := Rect2()
+var _set_sfx_plus := Rect2()
+var _set_fs_rect := Rect2()
+var _set_back_rect := Rect2()
 
 const MENU_ITEMS := ["새 게임", "이어하기", "설정", "만든 사람들", "종료"]
 
@@ -46,8 +65,9 @@ class _Canvas extends Control:
 		if ts != null:
 			ts._paint(self)
 
-func setup(saver: SaveManager) -> void:
+func setup(saver: SaveManager, settings: GameSettings = null) -> void:
 	_saver = saver
+	_settings = settings   # ★ B2 설정 값 표시용(main이 주입). 조작 반영은 신호→main→GameSettings→다음 프레임 표시
 	layer = 128
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_canvas = _Canvas.new()
@@ -107,6 +127,10 @@ func _input(event: InputEvent) -> void:
 				move_selection(-1)
 			KEY_DOWN, KEY_S:
 				move_selection(1)
+			KEY_LEFT, KEY_A:
+				adjust(-1)   # 설정 패널에서만 의미(볼륨 감소·전체화면 토글). 다른 상태는 무동작.
+			KEY_RIGHT, KEY_D:
+				adjust(1)
 			KEY_ENTER, KEY_KP_ENTER, KEY_SPACE:
 				activate()
 			KEY_ESCAPE:
@@ -121,6 +145,9 @@ func _input(event: InputEvent) -> void:
 				break
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var mp2: Vector2 = _canvas.get_local_mouse_position() if _canvas != null else event.position
+		# 설정 패널은 −/+·체크박스 세부 rect를 먼저 처리(행 전체 _hit로는 눈금 조작이 불가).
+		if _state == State.SETTINGS and _settings_click(mp2):
+			return
 		for i in _hit.size():
 			if _hit[i].has_point(mp2):
 				_sel = i
@@ -141,6 +168,7 @@ func _sel_count() -> int:
 		State.SLOTS: return SaveManager.SLOT_COUNT + 1   # 슬롯 3 + 뒤로
 		State.CONFIRM_NEW, State.CONFIRM_QUIT: return 2  # 예 / 아니오
 		State.INFO: return 1                              # 확인
+		State.SETTINGS: return SetRow.size()              # 음악·효과음·전체화면·뒤로
 	return 1
 
 func move_selection(dir: int) -> void:
@@ -170,8 +198,8 @@ func activate() -> void:
 						start_game.emit(0, true)
 				1:   # 이어하기 — 슬롯 선택
 					_go(State.SLOTS)
-				2:   # 설정(stub — B2)
-					_show_info("설정은 다음 업데이트에서 준비 중입니다.\n(그래픽·오디오·언어)")
+				2:   # 설정 — 볼륨·전체화면 실동작 패널(★ B2)
+					_go(State.SETTINGS)
 				3:   # 만든 사람들(stub — B2)
 					_show_info("Dear My Naraka\n\n만든 사람들 — 준비 중")
 				4:   # 종료
@@ -194,6 +222,48 @@ func activate() -> void:
 				_go(State.MENU)
 		State.INFO:
 			_go(State.MENU)
+		State.SETTINGS:
+			# 엔터 = 현재 행 실행. 볼륨 두 줄은 좌우로 조정하므로 엔터는 전체화면 토글·뒤로만 의미.
+			match _sel:
+				SetRow.FULLSCREEN:
+					fullscreen_nudged.emit()
+				SetRow.BACK:
+					_go(State.MENU)
+
+# 설정 패널 좌/우(또는 −/+ 키) 조정 — 값 변경은 신호로 main에 올린다(디커플링). dir: -1 감소·+1 증가.
+func adjust(dir: int) -> void:
+	if _state != State.SETTINGS:
+		return
+	match _sel:
+		SetRow.MUSIC:
+			music_nudged.emit(float(dir) * VOL_STEP)
+		SetRow.SFX:
+			sfx_nudged.emit(float(dir) * VOL_STEP)
+		SetRow.FULLSCREEN:
+			fullscreen_nudged.emit()   # 체크박스 — 좌우 어느 쪽이든 토글(이진 값)
+		# BACK: 조정 없음
+	if _canvas != null:
+		_canvas.queue_redraw()
+
+# 설정 패널 마우스 클릭 — −/+·체크박스·뒤로 세부 rect 판정. 처리했으면 true(호출부가 일반 _hit 건너뜀).
+func _settings_click(mp: Vector2) -> bool:
+	if _set_music_minus.has_point(mp):
+		_sel = SetRow.MUSIC; music_nudged.emit(-VOL_STEP)
+	elif _set_music_plus.has_point(mp):
+		_sel = SetRow.MUSIC; music_nudged.emit(VOL_STEP)
+	elif _set_sfx_minus.has_point(mp):
+		_sel = SetRow.SFX; sfx_nudged.emit(-VOL_STEP)
+	elif _set_sfx_plus.has_point(mp):
+		_sel = SetRow.SFX; sfx_nudged.emit(VOL_STEP)
+	elif _set_fs_rect.has_point(mp):
+		_sel = SetRow.FULLSCREEN; fullscreen_nudged.emit()
+	elif _set_back_rect.has_point(mp):
+		_go(State.MENU)
+	else:
+		return false
+	if _canvas != null:
+		_canvas.queue_redraw()
+	return true
 
 func _show_info(text: String) -> void:
 	_info_text = text
@@ -234,6 +304,8 @@ func _paint(ci: CanvasItem) -> void:
 			_paint_confirm(ci, "오늘 영업을 마감하고\n안식처를 떠나시겠습니까?")
 		State.INFO:
 			_paint_info(ci)
+		State.SETTINGS:
+			_paint_settings(ci)
 
 func _paint_particles(ci: CanvasItem) -> void:
 	for p in _particles:
@@ -344,3 +416,72 @@ func _paint_info(ci: CanvasItem) -> void:
 	var bw := HanjiUi.text_width("확인", 20)
 	HanjiUi.draw_text(ci, Vector2(rect.position.x + (fw - bw) * 0.5, rect.end.y - 30.0), "확인", 20, bc)
 	_hit.append(Rect2(rect.position.x, rect.end.y - 48.0, fw, 34.0))
+
+# ★ B2 설정 패널 — 음악·효과음 볼륨(−/+·트랙바) + 전체화면 체크박스 + 뒤로. 값은 _settings(GameSettings)에서
+#   읽어 표시만 하고(무상태), 조작은 신호로 main에 올려 실제 적용·영속을 맡긴다(옵션 탭 inv_frame.gd과 동형).
+func _paint_settings(ci: CanvasItem) -> void:
+	var fw := 520.0
+	var fh := 320.0
+	var rect := Rect2((VIEW.x - fw) * 0.5, (VIEW.y - fh) * 0.5, fw, fh)
+	HanjiUi.draw_frame(ci, rect)
+	# 제목.
+	var tw := HanjiUi.text_width("설정", 24)
+	HanjiUi.draw_text(ci, Vector2(rect.position.x + (fw - tw) * 0.5, rect.position.y + 50.0), "설정", 24, HanjiUi.INK)
+	var x := rect.position.x + 46.0
+	# 값(_settings 없으면 기본값 — 테스트/GPU-무 경로).
+	var mv: float = _settings.music_volume if _settings != null else 0.8
+	var sv: float = _settings.sfx_volume if _settings != null else 0.9
+	var fsv: bool = _settings.fullscreen if _settings != null else false
+	# 음악 볼륨.
+	var my := rect.position.y + 110.0
+	var mr := _paint_vol_row(ci, x, my, "음악 볼륨", mv, _sel == SetRow.MUSIC)
+	_set_music_minus = mr[0]; _set_music_plus = mr[1]
+	_hit.append(Rect2(rect.position.x + 20.0, my - 22.0, fw - 40.0, 32.0))
+	# 효과음 볼륨.
+	var sy := my + 46.0
+	var sr := _paint_vol_row(ci, x, sy, "효과음 볼륨", sv, _sel == SetRow.SFX)
+	_set_sfx_minus = sr[0]; _set_sfx_plus = sr[1]
+	_hit.append(Rect2(rect.position.x + 20.0, sy - 22.0, fw - 40.0, 32.0))
+	# 전체화면 체크박스.
+	var fy := sy + 52.0
+	var fs_sel := _sel == SetRow.FULLSCREEN
+	_set_fs_rect = Rect2(x, fy - 15.0, 20.0, 20.0)
+	ci.draw_rect(_set_fs_rect, HanjiUi.INSET)
+	ci.draw_rect(_set_fs_rect, HanjiUi.GOLD_SOFT if fs_sel else HanjiUi.BORDER, false, 1.0)
+	if fsv:
+		ci.draw_rect(_set_fs_rect.grow(-4.0), HanjiUi.GOLD)
+	var fcol := HanjiUi.GOLD_SOFT if fs_sel else HanjiUi.INK
+	HanjiUi.draw_text(ci, Vector2(x + 30.0, fy), ("❀ " if fs_sel else "") + "전체화면", 16, fcol)
+	HanjiUi.draw_text(ci, Vector2(x + 150.0, fy), "(F11)", 13, HanjiUi.INK_DIM)
+	_hit.append(Rect2(rect.position.x + 20.0, fy - 22.0, fw - 40.0, 32.0))
+	# 언어(한국어 고정 — 표시만, ADR-0048 §2).
+	HanjiUi.draw_text(ci, Vector2(x, fy + 34.0), "언어  한국어 (고정)", 13, HanjiUi.INK_DIM)
+	# 뒤로.
+	var by := fy + 66.0
+	var back_sel := _sel == SetRow.BACK
+	var bcol := HanjiUi.GOLD_SOFT if back_sel else HanjiUi.INK
+	HanjiUi.draw_text(ci, Vector2(x, by), ("❀ " if back_sel else "") + "뒤로", 18, bcol)
+	_set_back_rect = Rect2(x - 8.0, by - 20.0, 120.0, 30.0)
+	_hit.append(_set_back_rect)
+
+# 볼륨 한 줄(라벨 · [−] · 트랙바 · [+] · 백분율). [−]/[+] 히트 rect 둘을 배열로 돌려준다(옵션 탭과 동일 규격).
+func _paint_vol_row(ci: CanvasItem, x: float, yy: float, label: String, v01: float, selected: bool) -> Array:
+	var lcol := HanjiUi.GOLD_SOFT if selected else HanjiUi.INK
+	if selected:
+		HanjiUi.draw_text(ci, Vector2(x - 26.0, yy), "❀", 16, HanjiUi.GOLD)
+	HanjiUi.draw_text(ci, Vector2(x, yy), label, 16, lcol)
+	var minus := Rect2(x + 118.0, yy - 15.0, 22.0, 20.0)
+	ci.draw_rect(minus, HanjiUi.INSET)
+	ci.draw_rect(minus, HanjiUi.BORDER, false, 1.0)
+	HanjiUi.draw_text(ci, Vector2(minus.position.x + 7.0, yy), "−", 18, HanjiUi.INK_LIGHT)
+	var track := Rect2(x + 150.0, yy - 12.0, 150.0, 13.0)
+	ci.draw_rect(track, HanjiUi.INSET)
+	ci.draw_rect(track, HanjiUi.BORDER, false, 1.0)
+	if v01 > 0.0:
+		ci.draw_rect(Rect2(track.position, Vector2(track.size.x * clampf(v01, 0.0, 1.0), track.size.y)), HanjiUi.GOLD)
+	var plus := Rect2(x + 308.0, yy - 15.0, 22.0, 20.0)
+	ci.draw_rect(plus, HanjiUi.INSET)
+	ci.draw_rect(plus, HanjiUi.BORDER, false, 1.0)
+	HanjiUi.draw_text(ci, Vector2(plus.position.x + 6.0, yy), "+", 17, HanjiUi.INK_LIGHT)
+	HanjiUi.draw_text(ci, Vector2(x + 340.0, yy), "%d%%" % roundi(v01 * 100.0), 15, HanjiUi.INK)
+	return [minus, plus]
