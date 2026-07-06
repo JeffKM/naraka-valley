@@ -167,8 +167,8 @@ func _test_selection() -> void:
 	inv.select(-5)
 	_check("④e 범위 밖 select 무시", inv.selected_index == 1)
 	inv.select_prev()
-	inv.select_prev()  # 0 → -1 → SIZE-1 순환
-	_check("④f prev 순환(0→끝칸)", inv.selected_index == Inventory.SIZE - 1)
+	inv.select_prev()  # 0 → -1 → 핫바 끝칸(HOTBAR_SLOTS-1) 순환 (★핫바 첫 행 범위로 한정)
+	_check("④f prev 순환(0→핫바 끝칸)", inv.selected_index == Inventory.HOTBAR_SLOTS - 1)
 
 # ── ⑤ 세이브 라운드트립 ──────────────────────────────────────────────────────
 func _test_save_roundtrip() -> void:

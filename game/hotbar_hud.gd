@@ -13,12 +13,11 @@ class_name HotbarHud
 #   - 헤드리스 단위검증(main.tscn 로드)에서도 안전 — 텍스처는 유효 preload, _draw는 픽셀이 없어도
 #     크래시하지 않는다(라이팅·손님 그리기와 같은 결).
 
-const SLOTS := 16                 # = Inventory.SIZE(핫바 칸 수). 슬롯이 늘면 함께 키운다. ★S1-8: 12→16
 const SLOT_PX := 24.0             # 한 칸 변(px) — ★owner 2026-07-03 HUD 가이드: 36→24(≈67%, 시야 확보)
-const GAP := 2.0                  # 칸 사이 간격 — 16*24+15*2=414 < 640(양옆 ~113px 여백)
+const GAP := 2.0                  # 칸 사이 간격 — 12*24+11*2=310 < 640(양옆 ~165px 여백)
 const MARGIN_BOTTOM := 10.0       # 화면 아래 여백
 const PLATE_ALPHA := 0.82         # 슬롯 배경 알파(<1 = 뒤 지형 투과, 답답함 완화)
-const HOTKEYS := "1234567890-="   # 슬롯 좌상단 단축키 인덱스(0..11). 12..15는 표시 없음(휠 전용)
+const HOTKEYS := "1234567890-="   # 슬롯 좌상단 단축키 인덱스(0..11) — 핫바 12칸에 1:1 대응
 
 var inv: Inventory = null         # 그릴 인벤토리(슬롯·선택). main이 주입.
 var crop_icons: Dictionary = {}   # 작물군 id → mature 스프라이트(씨앗·수확물 아이콘 재사용). main 주입.
@@ -44,16 +43,19 @@ func _view() -> Vector2:
 	return Vector2(size.x / sc, size.y / sc)
 
 # 슬롯 배치 원점(_draw·히트테스트 공용) — 하단 중앙, 보이는 논리 영역 기준.
+# ★ 핫바는 첫 행(Inventory.HOTBAR_SLOTS=12)만 그린다 — 나머지 가방 슬롯은 메뉴 백팩(스크롤)에서만
+#   보인다. 가방 용량(Inventory.SIZE)이 늘어도 핫바 폭은 고정이라 화면 밖으로 안 넘친다(owner 2026-07-06).
 func _slots_origin() -> Vector2:
 	var view := _view()
-	var total_w := SLOTS * SLOT_PX + (SLOTS - 1) * GAP
+	var n := Inventory.HOTBAR_SLOTS
+	var total_w := n * SLOT_PX + (n - 1) * GAP
 	return Vector2((view.x - total_w) * 0.5, view.y - SLOT_PX - MARGIN_BOTTOM)
 
 func _draw() -> void:
 	if inv == null:
 		return
 	var origin := _slots_origin()
-	for i in SLOTS:
+	for i in Inventory.HOTBAR_SLOTS:
 		var pos := origin + Vector2(i * (SLOT_PX + GAP), 0.0)
 		_draw_slot(i, pos)
 
@@ -63,7 +65,7 @@ func slot_index_at(logical_pos: Vector2) -> int:
 	if inv == null:
 		return -1
 	var origin := _slots_origin()
-	for i in SLOTS:
+	for i in Inventory.HOTBAR_SLOTS:
 		var pos := origin + Vector2(i * (SLOT_PX + GAP), 0.0)
 		if Rect2(pos, Vector2(SLOT_PX, SLOT_PX)).has_point(logical_pos):
 			return i
