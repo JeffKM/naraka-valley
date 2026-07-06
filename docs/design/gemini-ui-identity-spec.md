@@ -123,8 +123,9 @@ crisp pixel-art UI in the burned-hanji (aged Korean mulberry paper) style of a c
 | `title_logo` | 로고 | **~360×140**(투명) | `assets/ui/` | 분리 레이어·상단 중앙 |
 
 - **전경 파티클 = 코드 생성(아트 불요):** 찻잎(tea leaves) + **파란 여우불 `#60d8f0`** + 따뜻한 노란 불티, 바람 타고 대각선 흩날림·일부 카메라 근접(픽셀 아웃포커싱). 도트 파티클.
-- **패럴랙스(선택):** MVP = `title_bg` 통합 1장 + 코드 파티클. 배선 세션이 깊이감을 원하면 `title_bg`를 **far**(붉은달·지옥문·하늘) / **mid**(카페·농장·4직원) 2장으로 분리 생성해 시차 스크롤(옵션 — 각 1280×720).
-- **4직원 idle 애니(후속):** MVP = **정적 4직원**. idle 루프(옥자 찻잔김·미호 꼬리살랑·멜 졸다깨기·바나 망토 펄럭·머리칼 바람)는 후속 애니 트랙(캐릭터 스프라이트와 얽힘 — 정적 먼저).
+- **패럴랙스 + 직원 idle(→ 정식 계약 확정, 2026-07-06):** 위 "far/mid 분리 시차"와 아래 "4직원 idle"은 **[title-parallax-layers-spec.md](./title-parallax-layers-spec.md)로 승급·구현 완료**. 코드 엔진(깊이별 시차 + 직원 bob + flat fallback)은 이미 `title_screen.gd`에 있고, **owner가 `title_bg`를 6장(sky/mid/okja/miho/mel/bana)으로 슬라이스해 넣으면 켜진다**(부분 납품·미납 모두 안전 fallback). 아래 두 줄은 그 스펙 카드에 흡수됨.
+  - (구) 패럴랙스: `title_bg`를 far/mid로 분리 → **6-레이어로 확장 확정**(각 1280×720, 스펙 §2).
+  - (구) 4직원 idle: 정적 먼저 → **엔진의 미세 bob으로 대체**(추가 스프라이트 프레임 불요 — 레이어를 통짜로 흔들어 숨쉬기, 스펙 §4). 옥자 찻잔김·머리칼 바람 같은 픽셀 프레임 애니는 여전히 후속 캐릭터 스프라이트 트랙.
 - **버튼·프레임 = 코드 스킨**(`inv_frame` 한지 plate 9-slice 재사용). Gemini가 그릴 건 **`title_bg` + `title_logo` 2장뿐.** 로고(상단 중앙)·메뉴(중앙 하단 or 좌/우 한쪽) 안전영역 디테일 과밀 금지.
 
 ### 3.2 배경+중경 씬 프롬프트 (`title_bg`)

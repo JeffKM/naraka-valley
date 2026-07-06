@@ -19,6 +19,10 @@ var _music_delta := 0.0
 var _sfx_delta := 0.0
 var _fs_toggles := 0
 
+# OVERSCAN 여백(레이어가 밀려도 가장자리가 안 드러나는 한계) — 각 축 절반.
+func VIEW_MARGIN() -> Vector2:
+	return TitleScreen.VIEW * (TitleScreen.OVERSCAN - 1.0) * 0.5
+
 func _check(label: String, ok: bool) -> void:
 	print(("  ✓ " if ok else "  ✗ ") + label)
 	if not ok:
@@ -171,6 +175,33 @@ func _initialize() -> void:
 	# ESC로도 크레딧 → 메뉴
 	ts._go(TitleScreen.State.CREDITS); ts._cancel()
 	_check("⑦e ESC(크레딧) → 메뉴", ts._state == TitleScreen.State.MENU)
+
+	# ── ⑧ 패럴랙스 배경 + 직원 idle(순수 시차 수식) ──
+	# 레이어 PNG가 아직 없으면 flat fallback(빈 _layers) — owner-Gemini가 슬라이스하면 채워짐.
+	_check("⑧a 레이어 미배치 → flat fallback(_layers 빔)", ts._layers.is_empty())
+	# 마우스 오른쪽·t=0: 원경(sky)이 근경(mid)보다 덜 움직인다(시차 = 깊이 비례).
+	ts._t = 0.0; ts._mouse_norm = Vector2(1.0, 0.0)
+	var sky_shift: Vector2 = ts._layer_shift(0.10, false, 0.0)
+	var mid_shift: Vector2 = ts._layer_shift(0.35, false, 0.0)
+	_check("⑧b 원경이 근경보다 덜 흐름(|sky.x| < |mid.x|)", absf(sky_shift.x) < absf(mid_shift.x))
+	_check("⑧c 마우스 우 → 레이어 좌로(into-screen, sx<0)", mid_shift.x < 0.0)
+	# 직원 bob = 상하 숨쉬기. peak 시각에서 bob 레이어의 y가 무-bob 레이어와 유의미하게 갈린다.
+	ts._t = (PI * 0.5) / TitleScreen.BOB_SPEED; ts._mouse_norm = Vector2.ZERO
+	var bob_y: float = ts._layer_shift(0.60, true, 0.0).y
+	var flat_y: float = ts._layer_shift(0.60, false, 0.0).y
+	_check("⑧d bob 레이어가 숨쉬기로 상하 이동(peak ~BOB_AMP)", absf(bob_y - flat_y) > 2.0)
+	# 모든 이동은 OVERSCAN 여백 안(가장자리 안 드러남). 최전경(0.9·bob)을 마우스·시간 극단에서 스캔.
+	var mx := VIEW_MARGIN().x
+	var my := VIEW_MARGIN().y
+	var in_bounds := true
+	for corner in [Vector2(1, 1), Vector2(-1, -1), Vector2(1, -1), Vector2(-1, 1)]:
+		ts._mouse_norm = corner
+		for k in 24:
+			ts._t = float(k) * 0.37
+			var sh: Vector2 = ts._layer_shift(0.90, true, 4.9)
+			if absf(sh.x) >= mx or absf(sh.y) >= my:
+				in_bounds = false
+	_check("⑧e 최전경 이동이 OVERSCAN 여백 내(가장자리 무노출)", in_bounds)
 
 	# ── 정리 ──
 	ts.free()
