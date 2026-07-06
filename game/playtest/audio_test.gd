@@ -62,7 +62,7 @@ func _pure_checks() -> void:
 		and A.phase_for(NOON, true, false) != GameAudio.PHASE_TITLE)
 	_check("④e .ogg(Suno)가 .wav(플레이스홀더)보다 우선", GameAudio.BGM_EXTS[0] == ".ogg" and GameAudio.BGM_EXTS[1] == ".wav")
 	# 같은 stem에 .ogg·.wav가 같이 있으면 .ogg가 잡힌다(실제 드롭인 검증 — farm이 그 경우).
-	for phase in [GameAudio.PHASE_FARM, GameAudio.PHASE_CAFE, GameAudio.PHASE_NIGHT, GameAudio.PHASE_ENDING]:
+	for phase in [GameAudio.PHASE_FARM, GameAudio.PHASE_CAFE, GameAudio.PHASE_NIGHT, GameAudio.PHASE_ENDING, GameAudio.PHASE_TITLE]:
 		var stem: String = GameAudio.BGM_STEM[phase]
 		if FileAccess.file_exists(GameAudio.BGM_DIR + stem + ".ogg") and FileAccess.file_exists(GameAudio.BGM_DIR + stem + ".wav"):
 			_check("④f [%s] .ogg·.wav 공존 시 .ogg 우선(드롭인 교체)" % phase, A.bgm_source(phase).ends_with(".ogg"))
