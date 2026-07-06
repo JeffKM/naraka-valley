@@ -76,6 +76,10 @@ var _music_a: AudioStreamPlayer
 var _music_b: AudioStreamPlayer
 var _music_on_a := true          # 지금 들리는 쪽(A/B 교대 크로스페이드)
 var _current_phase := ""         # 현재 깔린 phase(같으면 재페이드 안 함)
+# 플레이어별 현재 페이드 트윈(instance_id → Tween). 새 페이드가 걸리면 그 플레이어의 이전 트윈을
+# 죽인다 — 특히 낡은 페이드아웃 트윈에 딸린 "정지 콜백"이 재사용된 플레이어에서 뒤늦게 발동해
+# 새 곡을 끊는 걸 막는다(부팅 시 update_music→같은 프레임 set_phase(title) 충돌: 타이틀 1초 컷).
+var _music_tweens := {}
 var _sfx_pool: Array[AudioStreamPlayer] = []
 var _sfx_next := 0               # 라운드로빈 인덱스
 var _muted := false
@@ -193,15 +197,22 @@ func _enable_loop(stream: AudioStream) -> void:
 
 # 볼륨을 dB로 보간한다. 트리 밖(헤드리스 단언)이거나 트윈을 못 만들면 즉시 적용한다.
 # 트윈은 player.create_tween()으로 만들어 *그 플레이어에 묶는다* — 페이드 도중 플레이어가
-# 해제되면 트윈도 함께 죽어 매달린 트윈(누수·orphan)이 남지 않는다. 또 같은 플레이어에 새
-# 페이드가 걸리면 이전 트윈이 자동 무효화돼 볼륨이 튀지 않는다(크로스페이드 재진입 안전).
+# 해제되면 트윈도 함께 죽어 매달린 트윈(누수·orphan)이 남지 않는다. ★같은 플레이어에 새 페이드가
+# 걸리면 *직접* 이전 트윈을 kill한다 — Godot 4는 create_tween을 자동 무효화하지 않으므로, 낡은
+# 페이드아웃 트윈에 딸린 tween_callback(stop)이 재사용된 플레이어에서 뒤늦게 발동해 새 곡을 끊는
+# 걸 막는다(부팅 update_music→같은 프레임 set_phase(title) 충돌 = 타이틀 BGM 1초 컷 버그).
 func _fade(player: AudioStreamPlayer, to_db: float, stop_after: bool) -> void:
+	# 이 플레이어에 걸려 있던 이전 페이드 트윈(정지 콜백 포함)을 먼저 죽인다.
+	var prev: Tween = _music_tweens.get(player.get_instance_id())
+	if prev != null and prev.is_valid():
+		prev.kill()
 	if not player.is_inside_tree():
 		player.volume_db = to_db
 		if stop_after:
 			player.stop()
 		return
 	var tw := player.create_tween()
+	_music_tweens[player.get_instance_id()] = tw
 	tw.tween_property(player, "volume_db", to_db, CROSSFADE_SECS)
 	if stop_after:
 		tw.tween_callback(player.stop)
