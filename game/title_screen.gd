@@ -119,6 +119,7 @@ const MENU_ITEMS := ["새 게임", "이어하기", "설정", "만든 사람들",
 
 var _canvas: Control              # 배경·파티클·메뉴 그리는 자식
 var _logo: TextureRect            # 셰이더 로고(위에 얹음)
+var _logo_glow: ImageTexture      # ★ 로고 뒤 은은한 어두운 라디얼 글로우(가독 받침, 캔버스에 그려 로고 밑)
 
 # ── 내부 캔버스(즉시모드 _draw를 바깥 TitleScreen으로 위임) ──
 class _Canvas extends Control:
@@ -151,8 +152,23 @@ func setup(saver: SaveManager, settings: GameSettings = null) -> void:
 	_logo.position = Vector2((VIEW.x - lw) * 0.5, 18.0)
 	_logo.size = Vector2(lw, lh)
 	add_child(_logo)
+	# ★ 로고 뒤 어두운 라디얼 글로우 받침 — 밝은 로고가 카페/하늘 위에서 또렷하게 뜨도록. GPU 무관(Image).
+	_logo_glow = _make_radial_glow(Color(0.03, 0.025, 0.06), 0.60, 192)
 	_load_layers()
 	_seed_particles()
+
+# 중앙이 짙고 가장자리로 투명해지는 라디얼 글로우 텍스처(가독 받침용). max_a=중앙 알파. 헤드리스 생성 가능.
+func _make_radial_glow(col: Color, max_a: float, size: int) -> ImageTexture:
+	var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+	var c := size * 0.5
+	for y in size:
+		for x in size:
+			var dx := (float(x) - c) / c
+			var dy := (float(y) - c) / c
+			var d := sqrt(dx * dx + dy * dy)
+			var a := pow(clampf(1.0 - d, 0.0, 1.0), 1.5) * max_a   # 부드러운 falloff
+			img.set_pixel(x, y, Color(col.r, col.g, col.b, a))
+	return ImageTexture.create_from_image(img)
 	_state = State.MENU
 	_sel = 0
 
@@ -376,6 +392,14 @@ func _paint(ci: CanvasItem) -> void:
 	ci.draw_rect(Rect2(0.0, VIEW.y - 250.0, VIEW.x, 250.0), Color(0.08, 0.06, 0.12, 0.28))
 	# 최하단 은은한 바닥 비네트(코지 그라운딩).
 	ci.draw_rect(Rect2(0.0, VIEW.y - 40.0, VIEW.x, 40.0), Color(0.05, 0.04, 0.09, 0.35))
+	# ★ 로고 뒤 은은한 어두운 글로우(가독 받침) — MENU에서만(로고 표시 상태). 캔버스라 _logo(자식) 밑에 깔린다.
+	if _state == State.MENU and _logo_glow != null and _logo != null:
+		var lr := Rect2(_logo.position, _logo.size)
+		var gw := lr.size.x * 1.5
+		var gh := lr.size.y * 1.9
+		var gcx := lr.position.x + lr.size.x * 0.5
+		var gcy := lr.position.y + lr.size.y * 0.58   # 텍스트(로고 하단)로 살짝 치우쳐 가독 강화
+		ci.draw_texture_rect(_logo_glow, Rect2(gcx - gw * 0.5, gcy - gh * 0.5, gw, gh), false)
 	match _state:
 		State.MENU:
 			_paint_menu(ci)

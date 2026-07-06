@@ -180,6 +180,7 @@ func _initialize() -> void:
 	# 레이어 6장(sky/mid/okja/miho/mel/bana) 설치 완료 → 레이어 모드. sky 없으면 flat fallback(빈 _layers).
 	_check("⑧a 레이어 6장 로드(sky 필수 존재 → 레이어 모드)", ts._layers.size() == TitleScreen.LAYER_SPECS.size())
 	_check("⑧a2 첫 레이어=sky(bob 없음)·끝=직원(bob 있음)", not ts._layers[0].bob and ts._layers[ts._layers.size() - 1].bob)
+	_check("⑧a3 로고 뒤 글로우 받침 생성됨(가독)", ts._logo_glow != null)
 	# 마우스 오른쪽·t=0: 원경(sky)이 근경(mid)보다 덜 움직인다(시차 = 깊이 비례).
 	ts._t = 0.0; ts._mouse_norm = Vector2(1.0, 0.0)
 	var sky_shift: Vector2 = ts._layer_shift(0.10, false, 0.0)
