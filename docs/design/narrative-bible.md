@@ -1,4 +1,4 @@
-# 나라카 밸리 — 서사 바이블 (그날 밤 수렴 서사)
+# Dear My Naraka — 서사 바이블 (그날 밤 수렴 서사)
 
 > **상태:** 2026-06-22 시나리오 grill 세션 산출. **설계 지도(구현 아님).** 대사·컷신·플래그가 아니라, 척추·아크·복선의 *청사진*이다. ADR-0005 운영 규칙("메인 스토리는 Phase 1~3 구현 작업에 넣지 않는다")과 정합 — 이 문서는 *지금* 만들되, 실제 대사화·구현은 캐릭터 슬라이스가 깔린 뒤 엔드게임에서.
 > **권위:** 이 문서는 [CONTEXT.md](../../CONTEXT.md) 용어집을 따르며, [ADR-0005](../adr/0005-main-story-emergent.md)·[ADR-0014](../adr/0014-relationship-marriage-liberation.md)를 개정하는 **[ADR-0016](../adr/0016-converging-night-ensemble.md)** 위에 선다.

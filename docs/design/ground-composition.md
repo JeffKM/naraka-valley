@@ -1,4 +1,4 @@
-# 나라카 밸리 — 지면 구성 시스템 (Ground Composition)
+# Dear My Naraka — 지면 구성 시스템 (Ground Composition)
 
 > **상태:** 제안(2026-06-30, owner와 grill 중). 바닥을 "색·패턴만"이 아니라 *살아있게* 만드는 시스템.
 > 트레이서 프리뷰로 방향 검증 완료(`game/tools/scatter_preview.gd` → `scatter_preview.png`).

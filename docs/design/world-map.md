@@ -1,4 +1,4 @@
-# 나라카 밸리 — 세계 지도 설계 (맵 확장)
+# Dear My Naraka — 세계 지도 설계 (맵 확장)
 
 > **상태:** 맵 확장 grill(2026-06-22) 산출물. 토폴로지·건물 로스터·구역별 환경 에셋의 청사진이다. 정체성·결정 근거는 [CONTEXT 지리](../../CONTEXT.md) + [ADR-0014](../adr/0014-relationship-marriage-liberation.md)(사회·결혼·해방)·[ADR-0015](../adr/0015-multi-region-world-map-expansion.md)(멀티 구역·순서). 구역 내부 상세 레이아웃·타일 배치는 빌드 시 구역별로 확정(여기는 넓이의 청사진).
 >

@@ -107,19 +107,40 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 	var inner := Rect2(rect.position + Vector2(pad, pad), rect.size - Vector2(pad * 2.0, pad * 2.0))
 	match ItemCatalog.category_of(id):
 		ItemCatalog.CAT_TOOL:
-			draw_rect(inner, ItemCatalog.tool_color_of(id))
+			# ★ [아트정리패스] 도구 아이콘(icons dict에 병합된 도구 텍스처). 없으면 옛 색박스 폴백.
+			var ttex: Texture2D = crop_icons.get(id)
+			if ttex != null:
+				draw_texture_rect(ttex, inner, false)
+			else:
+				draw_rect(inner, ItemCatalog.tool_color_of(id))
 		ItemCatalog.CAT_SEED:
 			_draw_crop_tex(ItemCatalog.crop_of(id), inner)
 		ItemCatalog.CAT_SAPLING:
 			# ★ [S1-5b] 묘목 그레이박스 아이콘 — 밑동(갈색)+새싹(초록) 색 박스(대형 스프라이트=S1-10).
-			draw_rect(inner, Color(0.42, 0.30, 0.20))
-			draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.45)), Color(0.35, 0.62, 0.35))
+			# ★ [아트정리패스] 묘목 아이콘(SAPLING_ICONS). 없으면 옛 밑동갈색+새싹초록 폴백.
+			var stex: Texture2D = crop_icons.get(id)
+			if stex != null:
+				draw_texture_rect(stex, inner, false)
+			else:
+				draw_rect(inner, Color(0.42, 0.30, 0.20))
+				draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.45)), Color(0.35, 0.62, 0.35))
 		ItemCatalog.CAT_HARVEST:
 			_draw_crop_tex(id, inner)
 		ItemCatalog.CAT_FERTILIZER:
-			# ★ [S1-6] 비료 그레이박스 아이콘 — 품질군=초록 흙, 성장촉진군=청록(축 구분). 아트=하류.
-			var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
-			draw_rect(inner, fc)
+			# ★ [아트정리패스] 비료 아이콘(icons dict에 병합된 FERT_ICONS). 없으면 옛 색박스 폴백.
+			var ftex: Texture2D = crop_icons.get(id)
+			if ftex != null:
+				draw_texture_rect(ftex, inner, false)
+			else:
+				var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
+				draw_rect(inner, fc)
+		ItemCatalog.CAT_MATERIAL:
+			# ★ 재료(건초·개간 드랍) — 케이스 누락으로 아이콘 없이 개수만 뜨던 버그(inv_frame과 동형 수정).
+			var mtex: Texture2D = crop_icons.get(id)
+			if mtex != null:
+				draw_texture_rect(mtex, inner, false)
+			else:
+				draw_rect(inner, Color(0.80, 0.66, 0.30) if ItemCatalog._is_hay(id) else Color(0.46, 0.36, 0.26))
 
 # 작물·수확물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:

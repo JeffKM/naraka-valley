@@ -80,6 +80,16 @@ const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 
 	EMBER_SHARD: {"name_ko": "업화석 조각", "price": 12},
 	PETRIFIED_WOOD: {"name_ko": "석화 목재", "price": 15},
 }
+
+# ── 채집물(ADR-0052 §118 · ADR-0033) — 안식 꽃 패치 손수확 산출(품질 실림) ──────────────
+# 야생 채집물. 작물·과일·산물처럼 품질 등급(Q_NORMAL..Q_IRIDIUM)을 싣고 판매가에 배수를 받는
+# CAT_HARVEST 아이템(선물·서빙·정렬 동일 취급). 다만 소스는 밭(비료 roll)이 아니라 채집 레벨/전문직
+# (main._forage_base_quality + 약초학자 하한 = ADR-0052). 재료(HAY·개간)와 달리 품질 유차원이라
+# MATERIALS와 분리한다. 지금은 피안화 1종(파일럿) — 종 확장은 숲 채집 슬라이스에서(ADR-0033 무대).
+const SPIRIT_FLOWER := "spirit_flower"  # 피안화(彼岸花) — 안식 꽃 패치 채집물
+const FORAGEABLES := {                   # 채집물 id → {name_ko, price(기준 판매가)}
+	SPIRIT_FLOWER: {"name_ko": "피안화", "price": 30},
+}
 # 대형 산물 접미("<산물>_large"). 산물 아이템 id + 이 접미 = 대형 변이(판매가 ×2, §4.1). 씨앗:수확물 결.
 const LARGE_SUFFIX := "_large"
 
@@ -163,6 +173,10 @@ static func _is_hay(id: String) -> bool:
 static func _is_material(id: String) -> bool:
 	return MATERIALS.has(id)
 
+# id가 채집물인가(ADR-0052 §118). 품질 유차원 CAT_HARVEST(작물 수확물 결 — 판매·서빙·선물 동급).
+static func _is_forageable(id: String) -> bool:
+	return FORAGEABLES.has(id)
+
 # 기준 산물 id → 대형 변이 아이템 id("honbaek_ran" → "honbaek_ran_large"). livestock 대형 수집이 쓴다.
 static func large_product_id(product_id: String) -> String:
 	return product_id + LARGE_SUFFIX
@@ -171,7 +185,7 @@ static func large_product_id(product_id: String) -> String:
 # 카탈로그에 있는 유효 아이템인가(도구·씨앗·묘목·수확물·과일·비료·건초·산물 어느 하나). 슬롯 add/load 검증에 쓴다.
 static func has_item(id: String) -> bool:
 	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
-		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id)
+		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -182,8 +196,8 @@ static func category_of(id: String) -> String:
 		return CAT_SEED
 	if _is_sapling(id):
 		return CAT_SAPLING
-	if CropCatalog.has_crop(id) or _is_fruit(id) or _is_animal_product(id):
-		return CAT_HARVEST
+	if CropCatalog.has_crop(id) or _is_fruit(id) or _is_animal_product(id) or _is_forageable(id):
+		return CAT_HARVEST   # 채집물(ADR-0052)도 수확물 결 — 품질·판매·서빙 동급
 	if _is_fertilizer(id):
 		return CAT_FERTILIZER
 	if _is_hay(id) or _is_material(id):
@@ -208,6 +222,8 @@ static func name_of(id: String) -> String:
 		return "건초"
 	if _is_material(id):
 		return MATERIALS[id]["name_ko"]
+	if _is_forageable(id):
+		return FORAGEABLES[id]["name_ko"]
 	if _is_large_product(id):
 		return "큰 %s" % AnimalCatalog.product_name(_large_base(id))
 	if _is_animal_base(id):
@@ -219,7 +235,7 @@ static func stackable_of(id: String) -> bool:
 	if TOOLS.has(id):
 		return false
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
-		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id)
+		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id)
 
 # 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 비료=구매가(buy_cost),
 # 수확물/과일=판매가. 없으면 0. 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다.
@@ -242,6 +258,8 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return HAY_COST   # 건초 = 품질 무차원 고정가(급여 재료)
 	if _is_material(id):
 		return int(MATERIALS[id]["price"])   # ★S1-8 개간 드랍 = 품질 무차원 고정가(Phase 3 가공 예약)
+	if _is_forageable(id):
+		return int(FORAGEABLES[id]["price"] * quality_mult(quality))   # ★ADR-0052 채집물 = 기준가 × 등급 배수(수확물 결)
 	# ★ S1-7(§8.6): 대형 산물은 기준 판매가 ×2에 품질 배수를 얹는다(대형 = 품질과 별 축). 기준 산물은 품질 배수만.
 	if _is_large_product(id):
 		return int(AnimalCatalog.product_sell(_large_base(id)) * 2.0 * quality_mult(quality))

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dbl2ldjob0aex"
-path="res://.godot/imported/stump_log_raw.png-71aaed606c7e86590c6482f3bc3c08b7.ctex"
+uid="uid://cyx7ye0j7k8j8"
+path="res://.godot/imported/season_icon_yuhwa.png-f7160952dd276ed3b98eabfde58be759.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/props/stump_log_raw.png"
-dest_files=["res://.godot/imported/stump_log_raw.png-71aaed606c7e86590c6482f3bc3c08b7.ctex"]
+source_file="res://assets/ui/season_icon_yuhwa.png"
+dest_files=["res://.godot/imported/season_icon_yuhwa.png-f7160952dd276ed3b98eabfde58be759.ctex"]
 
 [params]
 

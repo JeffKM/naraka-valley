@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 이 저장소의 성격 (먼저 읽을 것)
 
-**나라카 밸리**는 저승 컨셉카페 세계관의 **진짜 스타듀밸리형 게임**(농사·낚시·채광·관계)이다. 엔진은 **Godot**, 타겟은 **Steam/PC**.
+**Dear My Naraka**는 저승 컨셉카페 세계관의 **진짜 스타듀밸리형 게임**(농사·낚시·채광·관계)이다. 엔진은 **Godot**, 타겟은 **Steam/PC**.
 
 현재 저장소는 **기획 단계**다. 아직 Godot 프로젝트(게임 코드)가 생성되지 않았고, 저장소에는 기획 문서·결정 기록·작업 도구만 있다. 첫 코드는 ROADMAP의 **Phase 1 / Sprint 1**(Godot 그레이박스)에서 시작된다.
 

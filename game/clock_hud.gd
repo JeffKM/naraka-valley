@@ -25,10 +25,35 @@ const ROW_TIME := 11       # 시각·때(14→11)
 const ROW_GOLD := 12       # 골드(15→12)
 const ROW_MILE := 9        # 마일스톤(11→9)
 
+# ★ [아트정리패스] 골드 아이콘 = 엽전(옛 "◈" 글리프 대체). 골드 숫자 왼쪽에 그린다.
+const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
+const COIN_PX := 12.0      # 엽전 렌더 변(골드 줄 높이에 맞춤)
+const COIN_GAP := 2.0      # 엽전↔숫자 사이 여백
+
+# ★ [정체성 UI 큐 §2] 절기·시간대 심볼 아이콘(gemini-ui-identity-spec §2.1). 절기 줄·시각 줄
+#   좌측에 16px 심볼을 얹어 "저승 절기 클러스터"의 정체성을 준다(위젯 재설계 아님·아이콘 액센트).
+#   폴백: 파일이 없으면 preload가 실패하므로 8장 모두 있어야 한다(드롭인 원칙 — 없으면 이 파트만 제거).
+const SEASON_ICONS: Array[Texture2D] = [   # GameClock.SEASON_NAMES index 0..3(피안·유화·망연·성야)
+	preload("res://assets/ui/season_icon_pianhwa.png"),
+	preload("res://assets/ui/season_icon_yuhwa.png"),
+	preload("res://assets/ui/season_icon_mangyeon.png"),
+	preload("res://assets/ui/season_icon_seongya.png"),
+]
+const TIME_ICONS := {                       # GameClock.phase() 문자열 4
+	"아침": preload("res://assets/ui/time_icon_morning.png"),
+	"낮": preload("res://assets/ui/time_icon_day.png"),
+	"저녁": preload("res://assets/ui/time_icon_evening.png"),
+	"밤": preload("res://assets/ui/time_icon_night.png"),
+}
+const ICON_PX := 16.0      # 절기/시간대 심볼 렌더 변
+const ICON_GAP := 3.0      # 심볼↔글자 사이 여백
+
 var _date := ""            # "성야절 12일"
 var _time := ""            # "18:24 · 저녁"
-var _gold := ""            # "◈ 1234"
+var _gold := ""            # 골드 숫자만(예 "1234") — 엽전은 아이콘으로 앞에 그림
 var _mile := ""            # "카페 1단 ▓▓▒▒ 45%"
+var _season_idx := -1      # 절기 심볼 인덱스(SEASON_ICONS·-1=미매칭 시 심볼 생략)
+var _phase_key := ""       # 시간대 심볼 키(TIME_ICONS·미매칭 시 생략)
 
 func setup() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -40,13 +65,16 @@ func set_state(season: String, day_of_season: int, time_str: String, phase: Stri
 		gold: int, milestone: String) -> void:
 	var date := "%s %d일" % [season, day_of_season]
 	var timv := "%s · %s" % [time_str, phase]
-	var goldv := "◈ %d" % gold
+	var goldv := "%d" % gold
 	if date == _date and timv == _time and goldv == _gold and milestone == _mile:
 		return
 	_date = date
 	_time = timv
 	_gold = goldv
 	_mile = milestone
+	# 심볼 인덱싱(문자열 → 아이콘) — main이 넘긴 절기명·때를 그대로 매핑(무매칭이면 심볼 생략).
+	_season_idx = GameClock.SEASON_NAMES.find(season)
+	_phase_key = phase if TIME_ICONS.has(phase) else ""
 	queue_redraw()
 
 func _view() -> Vector2:
@@ -61,8 +89,14 @@ func _draw() -> void:
 		return
 	var view := _view()
 	# ★ 플레이트 폭 = 내용 최대폭 + 여백(고정 W 폐기 — 빈 마진 0, guide C). 높이 = 줄 높이 합 + 여백.
-	var wmax := maxf(maxf(HanjiUi.text_width(_date, ROW_DATE), HanjiUi.text_width(_time, ROW_TIME)),
-		HanjiUi.text_width(_gold, ROW_GOLD))
+	# 골드 줄 폭 = 엽전 + 여백 + 숫자(플레이트 폭 산출이 아이콘을 포함해야 잘림 없음).
+	var gold_w := COIN_PX + COIN_GAP + HanjiUi.text_width(_gold, ROW_GOLD)
+	# 절기·시각 줄은 좌측 심볼 폭(있을 때)을 폭 산출에 포함(글자가 심볼과 겹치지 않게).
+	var date_lead := (ICON_PX + ICON_GAP) if _season_idx >= 0 else 0.0
+	var time_lead := (ICON_PX + ICON_GAP) if _phase_key != "" else 0.0
+	var date_w := date_lead + HanjiUi.text_width(_date, ROW_DATE)
+	var time_w := time_lead + HanjiUi.text_width(_time, ROW_TIME)
+	var wmax := maxf(maxf(date_w, time_w), gold_w)
 	if _mile != "":
 		wmax = maxf(wmax, HanjiUi.text_width(_mile, ROW_MILE))
 	var w := wmax + PAD * 2.0
@@ -74,21 +108,32 @@ func _draw() -> void:
 	var x := plate.position.x + PAD
 	var right := plate.end.x - PAD
 	var y := plate.position.y + PAD + float(ROW_DATE)
-	# 절기·일차(우측 정렬, 밝은 금박 — 클러스터의 표제).
-	_draw_right(x, right, y, _date, ROW_DATE, HanjiUi.GOLD_SOFT)
+	# 절기·일차(우측 정렬, 밝은 금박 — 클러스터의 표제) + 절기 심볼(글자 왼쪽).
+	var date_tx := _draw_right(x + date_lead, right, y, _date, ROW_DATE, HanjiUi.GOLD_SOFT)
+	if _season_idx >= 0 and _season_idx < SEASON_ICONS.size():
+		draw_texture_rect(SEASON_ICONS[_season_idx],
+			Rect2(date_tx - ICON_GAP - ICON_PX, y - ICON_PX + 2.0, ICON_PX, ICON_PX), false)
 	y += ROW_GAP + float(ROW_TIME)
-	# 시각·때(우측 정렬, 밝은 글자).
-	_draw_right(x, right, y, _time, ROW_TIME, HanjiUi.INK_LIGHT)
+	# 시각·때(우측 정렬, 밝은 글자) + 시간대 심볼(글자 왼쪽).
+	var time_tx := _draw_right(x + time_lead, right, y, _time, ROW_TIME, HanjiUi.INK_LIGHT)
+	if _phase_key != "":
+		draw_texture_rect(TIME_ICONS[_phase_key],
+			Rect2(time_tx - ICON_GAP - ICON_PX, y - ICON_PX + 2.0, ICON_PX, ICON_PX), false)
 	y += ROW_GAP + float(ROW_GOLD)
-	# 골드(우측 정렬, 금박).
-	_draw_right(x, right, y, _gold, ROW_GOLD, HanjiUi.GOLD)
+	# 골드(우측 정렬, 금박) — 엽전 아이콘 + 숫자. 숫자를 우변에 맞추고 엽전을 그 왼쪽에.
+	var num_w := HanjiUi.text_width(_gold, ROW_GOLD)
+	var num_x: float = maxf(x + COIN_PX + COIN_GAP, right - num_w)
+	HanjiUi.draw_text(self, Vector2(num_x, y), _gold, ROW_GOLD, HanjiUi.GOLD)
+	var coin_rect := Rect2(num_x - COIN_GAP - COIN_PX, y - COIN_PX + 1.0, COIN_PX, COIN_PX)
+	draw_texture_rect(COIN, coin_rect, false)
 	# 마일스톤(우측 정렬, 보조 톤 — 매크로 목표 한 줄).
 	if _mile != "":
 		y += ROW_GAP + float(ROW_MILE)
 		_draw_right(x, right, y, _mile, ROW_MILE, HanjiUi.INK_DIM)
 
-# 우측 정렬 한 줄(플레이트 우변 - PAD에 오른끝을 맞춘다).
-func _draw_right(left: float, right: float, baseline: float, text: String, size: int, color: Color) -> void:
+# 우측 정렬 한 줄(플레이트 우변 - PAD에 오른끝을 맞춘다). 그린 글자의 좌측 x를 반환(심볼 배치용).
+func _draw_right(left: float, right: float, baseline: float, text: String, size: int, color: Color) -> float:
 	var w := HanjiUi.text_width(text, size)
 	var px: float = maxf(left, right - w)
 	HanjiUi.draw_text(self, Vector2(px, baseline), text, size, color)
+	return px
