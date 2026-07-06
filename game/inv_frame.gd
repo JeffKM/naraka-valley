@@ -57,12 +57,17 @@ enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST }
 enum { TAB_INV, TAB_REL, TAB_SKILL, TAB_OPTIONS }
 const TAB_COUNT := 4
 
-const COLS := 6                  # 백팩 그리드 가로 칸 수(12칸 = 6×2)
-const ROWS := 2
+const COLS := 6                  # 백팩·상자 공통 그리드 가로 칸 수(6열)
 const SLOT := 48.0               # 슬롯 한 변(px)
 const GAP := 4.0
-const PAD := 16.0                # 패널 안쪽 여백
+const PAD := 26.0                # ★ 패널 안쪽 여백 — 9-slice 테두리(FRAME_MARGIN=22)보다 커야 슬롯·글자가
+                                 #   나무 테두리 밑으로 파고들지 않는다(옛 16 < 22라 좌우 열이 6px 겹쳤다).
 const TOP_H := 132.0             # 상단 컨텍스트 영역 높이
+# ★ 백팩 스크롤(owner 2026-07-06) — 용량이 늘어도 패널이 틀 밖으로 안 넘치게, 백팩 그리드를 고정
+# 높이 뷰포트(BP_VIS_ROWS행)로 보여주고 총 행이 더 많으면 세로 스크롤한다(휠·스크롤바). Inventory.SIZE=16은
+# 6열×3행 → 2행 뷰포트라 스크롤바가 바로 뜬다. 패널 세로는 이 행 수로 고정(용량과 분리).
+const BP_VIS_ROWS := 2           # 백팩 뷰포트에 한 번에 보이는 행 수(총 행 > 이 값이면 스크롤)
+const SCROLLBAR_W := 6.0         # 백팩 스크롤바 폭
 
 var inv: Inventory = null
 var bin: ShippingBin = null
@@ -75,12 +80,17 @@ var context := CTX_NONE
 var menu_tab := TAB_INV
 var _held := -1                  # 메뉴 인벤토리 탭에서 집어 든 백팩 슬롯(-1=없음)
 var _hover_tab := -1             # ★ 마우스가 호버 중인 메뉴 탭(-1=없음) — 아이콘 탭 툴팁용
+# ★ 백팩 스크롤 상태(행 단위 스냅 — 부분 행이 없어 클리핑 불필요). first_row = 뷰포트 최상단에 보이는 행.
+var _bp_first_row := 0           # 0.._bp_max_first_row(); 휠·스크롤바로 이동
+var _bp_scroll_dragging := false # 스크롤바 썸을 잡고 드래그 중
 
 # 히트 테스트 캐시(_draw에서 채우고 _gui_input에서 읽는다).
 var _bp_rects: Array = []        # 백팩 12칸 Rect2
 var _bin_rects: Array = []       # 출하함 대기 슬롯 [{rect, id}]
 var _chest_rects: Array = []     # ★ Phase D 상자 슬롯 Rect2(인덱스=상자 슬롯 번호)
 var _tab_rects: Array = []       # 메뉴 탭 4개 Rect2
+var _bp_track_rect := Rect2()    # ★ 백팩 스크롤바 트랙(_draw_backpack이 채움 — 없으면 size 0)
+var _bp_thumb_rect := Rect2()    # ★ 백팩 스크롤바 썸(드래그·점프 히트)
 var _sort_rect := Rect2()
 var _buy_rect := Rect2()
 var _save_rect := Rect2()        # ★ Phase B 옵션 탭: 저장 버튼
@@ -135,6 +145,8 @@ func set_chest(storage_chest: StorageChest) -> void:
 func open(ctx: int) -> void:
 	context = ctx
 	_held = -1
+	_bp_first_row = 0            # ★ 열 때 백팩 스크롤 맨 위로
+	_bp_scroll_dragging = false
 	visible = true
 	_apply_heart_visibility()
 	queue_redraw()
@@ -144,6 +156,7 @@ func close() -> void:
 	context = CTX_NONE
 	_held = -1
 	_hover_tab = -1
+	_bp_scroll_dragging = false
 	visible = false
 	_apply_heart_visibility()
 
@@ -198,9 +211,10 @@ func _apply_heart_visibility() -> void:
 		var hb: HeartBar = _hearts[i]
 		hb.visible = show
 		if show:
-			# 탭 바(y: PAD..PAD+28) 아래로 내려 하트가 탭에 겹치지 않게 한다. ★ C3 — 행마다 효과 줄을
-			# 한 칸 더 끼우므로 간격을 48로 넓힌다(하트 + 그 아래 곱셈기 한 줄 = 한 캐릭터 묶음).
-			hb.position = Vector2(panel.position.x + PAD + 8.0, panel.position.y + 64.0 + i * 48.0)
+			# 탭 바(y: PAD..PAD+32)·안내 문구(PAD+50) 아래로 내려 겹치지 않게 한다. ★ 기준을 PAD 반영으로
+			# 통일 — 옛 하드코딩 +64는 PAD를 안 타 안내 문구(PAD+44)와 겹쳤다(owner 리포트 2026-07-06).
+			# ★ C3 — 행마다 효과 줄을 한 칸 더 끼우므로 간격 48(하트 + 그 아래 곱셈기 한 줄 = 한 캐릭터 묶음).
+			hb.position = Vector2(panel.position.x + PAD + 8.0, panel.position.y + PAD + 60.0 + i * 48.0)
 
 # ── 기하(패널·그리드) ─────────────────────────────────────────────────────────
 # 부모 CanvasLayer가 UI scale(ADR-0018 ×1.5)을 먹어, 전체화면 앵커 Control의 size(=960×540)는
@@ -215,11 +229,45 @@ func _view() -> Vector2:
 
 func _panel_rect() -> Rect2:
 	var view := _view()
+	# 패널 폭 = 백팩 그리드 + 좌우 여백 + 스크롤바 자리(항상 확보 — 스크롤 유무로 폭이 안 바뀌게).
+	# 세로 = 상단 컨텍스트(TOP_H) + 뷰포트(BP_VIS_ROWS행, 고정) + 상하 여백. ★ 하단은 프레임 9-slice
+	# 테두리(FRAME_MARGIN)만큼 더 띄운다 — 옵션 탭 막줄·그리드 막줄이 나무 테두리에 안 걸치게
+	# (owner 리포트 2026-07-06). 뷰포트가 고정이라 용량이 늘어도 패널이 틀 밖으로 안 넘친다(스크롤로 흡수).
 	var grid_w := COLS * SLOT + (COLS - 1) * GAP
-	var w := grid_w + PAD * 2.0
-	var grid_h := ROWS * SLOT + (ROWS - 1) * GAP
-	var h := TOP_H + grid_h + PAD * 3.0
+	var w := grid_w + PAD * 2.0 + SCROLLBAR_W + 6.0
+	var grid_h := BP_VIS_ROWS * SLOT + (BP_VIS_ROWS - 1) * GAP
+	var h := TOP_H + grid_h + PAD * 2.0 + FRAME_MARGIN + 6.0
 	return Rect2((view.x - w) * 0.5, (view.y - h) * 0.5, w, h)
+
+# ── 백팩 스크롤 계산(행 단위 스냅) ──────────────────────────────────────────────
+func _bp_total_rows() -> int:
+	return ceili(float(Inventory.SIZE) / float(COLS))
+
+func _bp_max_first_row() -> int:
+	return maxi(0, _bp_total_rows() - BP_VIS_ROWS)
+
+# 백팩 하단 그리드가 그려지는 컨텍스트인가(관계·숙련·옵션 탭은 백팩을 안 그림).
+func _backpack_visible() -> bool:
+	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST:
+		return true
+	return context == CTX_MENU and menu_tab == TAB_INV
+
+func _scroll_bp(dir: int) -> void:
+	var nf := clampi(_bp_first_row + dir, 0, _bp_max_first_row())
+	if nf != _bp_first_row:
+		_bp_first_row = nf
+		queue_redraw()
+
+# 썸 드래그/트랙 클릭 — 포인터 y를 트랙 범위에 매핑해 first_row를 잡는다.
+func _drag_bp_scroll(p: Vector2) -> void:
+	var mx := _bp_max_first_row()
+	if mx == 0 or _bp_track_rect.size.y <= 0.0:
+		return
+	var t := clampf((p.y - _bp_track_rect.position.y) / _bp_track_rect.size.y, 0.0, 1.0)
+	var nf := roundi(t * mx)
+	if nf != _bp_first_row:
+		_bp_first_row = nf
+		queue_redraw()
 
 func _grid_origin(panel: Rect2) -> Vector2:
 	# 백팩 그리드는 패널 하단(상단 컨텍스트 영역 아래).
@@ -252,15 +300,21 @@ func _draw() -> void:
 			_draw_chest_top(panel)
 			_draw_backpack(panel)
 
-# 공통 백팩 그리드(하단 고정). 슬롯 = 핫바와 동일 규격(빈칸·아이콘·개수 배지).
+# 공통 백팩 그리드(하단 고정 + 세로 스크롤). 뷰포트에 보이는 행만 그리고, 그 위치를 _bp_rects에
+# 저장한다(뷰포트 밖 슬롯은 빈 Rect2 = 히트 없음). 행 단위 스냅이라 부분 행이 없어 클리핑이 필요 없다.
 func _draw_backpack(panel: Rect2) -> void:
 	_bp_rects.clear()
 	_bp_rects.resize(Inventory.SIZE)
+	_bp_first_row = clampi(_bp_first_row, 0, _bp_max_first_row())   # 용량 변화 방어
 	var origin := _grid_origin(panel)
 	for i in Inventory.SIZE:
 		var col := i % COLS
 		var row := i / COLS
-		var pos := origin + Vector2(col * (SLOT + GAP), row * (SLOT + GAP))
+		var vrow := row - _bp_first_row              # 뷰포트 기준 행(0..BP_VIS_ROWS-1이면 보임)
+		if vrow < 0 or vrow >= BP_VIS_ROWS:
+			_bp_rects[i] = Rect2()                   # 뷰포트 밖 — 히트 없음(빈 rect)
+			continue
+		var pos := origin + Vector2(col * (SLOT + GAP), vrow * (SLOT + GAP))
 		var rect := Rect2(pos, Vector2(SLOT, SLOT))
 		_bp_rects[i] = rect
 		var picked := i == _held
@@ -276,6 +330,28 @@ func _draw_backpack(panel: Rect2) -> void:
 			if n > 1:
 				draw_string(ThemeDB.fallback_font, pos + Vector2(SLOT - 16.0, SLOT - 5.0),
 					str(n), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
+	_draw_bp_scrollbar(panel, origin)
+
+# 백팩 스크롤바(총 행 > 뷰포트일 때만). 트랙 + 썸(보이는 비율만큼 높이, first_row만큼 내림). 그리드
+# 우측 여백에 세로로. 트랙/썸 Rect2를 캐시해 _gui_input이 드래그·트랙 점프에 쓴다.
+func _draw_bp_scrollbar(panel: Rect2, origin: Vector2) -> void:
+	_bp_track_rect = Rect2()
+	_bp_thumb_rect = Rect2()
+	var total := _bp_total_rows()
+	if total <= BP_VIS_ROWS:
+		return                                       # 다 보이면 스크롤바 없음
+	var vis_h := BP_VIS_ROWS * SLOT + (BP_VIS_ROWS - 1) * GAP
+	var bar_x := origin.x + COLS * (SLOT + GAP) - GAP + 6.0
+	var track := Rect2(bar_x, origin.y, SCROLLBAR_W, vis_h)
+	_bp_track_rect = track
+	draw_rect(track, Color(0.14, 0.11, 0.08, 0.70))
+	draw_rect(track, Color(0.45, 0.38, 0.28), false, 1.0)
+	var thumb_h := maxf(vis_h * float(BP_VIS_ROWS) / float(total), 16.0)
+	var mx := _bp_max_first_row()
+	var t := 0.0 if mx == 0 else float(_bp_first_row) / float(mx)
+	var thumb := Rect2(bar_x, track.position.y + (vis_h - thumb_h) * t, SCROLLBAR_W, thumb_h)
+	_bp_thumb_rect = thumb
+	draw_rect(thumb, Color(0.72, 0.60, 0.38))
 
 # 품질 등급 색(그레이박스 배지 — 은/금/이리듐). hotbar_hud와 동일 팔레트(뷰 책임, 카탈로그 무결합).
 func _quality_color(q: int) -> Color:
@@ -429,15 +505,15 @@ func _draw_inv_tab(panel: Rect2, font: Font) -> void:
 func _draw_rel_tab(panel: Rect2, font: Font) -> void:
 	# 관계 탭: 하트는 HeartBar 자식이 그린다(_apply_heart_visibility 배치). 탭 바 아래에 '읽기 전용' 안내만
 	# (4탭이 상단 폭을 다 써 우측 여백이 없음 — 탭 아래로 내린다).
-	draw_string(font, Vector2(panel.position.x + PAD + 8.0, panel.position.y + PAD + 44.0),
+	draw_string(font, Vector2(panel.position.x + PAD + 8.0, panel.position.y + PAD + 50.0),
 		"관계 — 읽기 전용(호감도는 대화·활동으로)", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.78, 0.70, 0.58))
 	# ★ C3 각 하트 행 아래에 그 캐릭터의 관계 곱셈기(여우불·마진·경비·할인) 한 줄. HeartBar와 같은
-	# y 기준(panel.y + 64 + i*48)에서 한 칸(+40) 내려 그린다 — 상시 HUD에서 걷어낸 정보를 여기서 복기.
+	# y 기준(panel.y + PAD + 60 + i*48, _apply_heart_visibility와 동일)에서 한 칸(+40) 내려 그린다.
 	for i in _heart_effects.size():
 		var eff: String = str(_heart_effects[i])
 		if eff == "":
 			continue
-		var ey := panel.position.y + 64.0 + i * 48.0 + 40.0
+		var ey := panel.position.y + PAD + 60.0 + i * 48.0 + 40.0
 		draw_string(font, Vector2(panel.position.x + PAD + 12.0, ey), eff,
 			HORIZONTAL_ALIGNMENT_LEFT, panel.size.x - PAD * 2.0 - 12.0, 12, Color(0.82, 0.78, 0.70))
 
@@ -624,13 +700,35 @@ func _draw_store_top(panel: Rect2) -> void:
 func _gui_input(event: InputEvent) -> void:
 	if context == CTX_NONE:
 		return
-	# ★ 아이콘 탭 호버 추적(메뉴 컨텍스트만) — 클릭과 무관하게 마우스 이동으로 툴팁 갱신.
+	# ★ 아이콘 탭 호버 추적 + 스크롤바 썸 드래그 중이면 포인터 이동을 스크롤로.
 	if event is InputEventMouseMotion:
 		_update_hover_tab(event.position)
+		if _bp_scroll_dragging:
+			_drag_bp_scroll(event.position)
 		return
-	if not (event is InputEventMouseButton) or not event.pressed or event.button_index != MOUSE_BUTTON_LEFT:
+	if not (event is InputEventMouseButton):
+		return
+	# ★ 마우스 휠 = 백팩 세로 스크롤(백팩이 보이는 컨텍스트에서). 위=이전 행, 아래=다음 행.
+	if event.pressed and _backpack_visible():
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_scroll_bp(-1); accept_event(); return
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_scroll_bp(1); accept_event(); return
+	if event.button_index != MOUSE_BUTTON_LEFT:
+		return
+	# ★ 좌클릭 뗌 = 스크롤 드래그 종료.
+	if not event.pressed:
+		_bp_scroll_dragging = false
 		return
 	var p: Vector2 = event.position
+	# ★ 스크롤바: 썸 클릭=드래그 시작, 트랙 클릭=그 위치로 점프(다른 클릭 라우팅보다 먼저).
+	if _backpack_visible() and _bp_track_rect.size.y > 0.0:
+		if _bp_thumb_rect.has_point(p):
+			_bp_scroll_dragging = true
+			accept_event(); return
+		elif _bp_track_rect.has_point(p):
+			_drag_bp_scroll(p)
+			accept_event(); return
 	match context:
 		CTX_MENU:
 			_click_menu(p)
