@@ -30,10 +30,45 @@ const FOXFIRE := Color(0.376, 0.847, 0.941)   # 파란 여우불 #60d8f0
 const EMBER := Color(1.0, 0.72, 0.32)         # 따뜻한 불티
 const TEALEAF := Color(0.62, 0.44, 0.28)      # 찻잎 갈색
 
-enum State { MENU, SLOTS, CONFIRM_NEW, CONFIRM_QUIT, INFO, SETTINGS }
+enum State { MENU, SLOTS, CONFIRM_NEW, CONFIRM_QUIT, SETTINGS, CREDITS }
 
 # 설정 패널 행(순서 = _sel 의미·_sel_count SETTINGS). 볼륨 두 줄은 좌우로 조정, 전체화면은 토글, 뒤로는 복귀.
 enum SetRow { MUSIC, SFX, FULLSCREEN, BACK }
+
+# ★ B2 Credits — 개발진·감사 명단(아래→위 자동 스크롤, gemini-ui-identity-spec §j·Steam 출시 필수).
+#   순수 텍스트 데이터라 owner가 이름·역할을 자유로이 편집한다(무상태 — 조작 없음, 스크롤만).
+#   kind: "title"(큰 금박)·"role"(역할 헤더)·"name"(이름)·"note"(작은 보조)·"gap"(빈 줄).
+const CREDITS := [
+	{"kind": "gap"}, {"kind": "gap"}, {"kind": "gap"},
+	{"kind": "title", "text": "Dear My Naraka"},
+	{"kind": "note", "text": "디어 마이 나라카"},
+	{"kind": "gap"}, {"kind": "gap"},
+	{"kind": "role", "text": "기획 · 연출"},
+	{"kind": "name", "text": "JeffKM"},
+	{"kind": "gap"},
+	{"kind": "role", "text": "프로그래밍"},
+	{"kind": "name", "text": "JeffKM"},
+	{"kind": "gap"},
+	{"kind": "role", "text": "도트 아트"},
+	{"kind": "name", "text": "Gemini · PixelLab"},
+	{"kind": "gap"},
+	{"kind": "role", "text": "음악 · 사운드"},
+	{"kind": "name", "text": "준비 중"},
+	{"kind": "gap"}, {"kind": "gap"},
+	{"kind": "role", "text": "저승 컨셉카페 식구들"},
+	{"kind": "name", "text": "옥자 · 미호 · 멜 · 바나"},
+	{"kind": "gap"}, {"kind": "gap"},
+	{"kind": "role", "text": "함께한 도구들"},
+	{"kind": "name", "text": "Godot Engine"},
+	{"kind": "name", "text": "Aseprite"},
+	{"kind": "gap"}, {"kind": "gap"},
+	{"kind": "role", "text": "특별히"},
+	{"kind": "name", "text": "이 이야기를 함께한 당신께"},
+	{"kind": "gap"}, {"kind": "gap"},
+	{"kind": "note", "text": "— 당신의 저승에서 —"},
+	{"kind": "gap"}, {"kind": "gap"}, {"kind": "gap"},
+]
+const CREDITS_SPEED := 34.0   # 스크롤 속도(px/s) — 느긋한 코지 텐포
 
 const VOL_STEP := 0.1             # 볼륨 −/+ 한 눈금(옵션 탭 inv_frame.gd과 동일 — 단일 조작 규격)
 
@@ -41,7 +76,6 @@ var _saver: SaveManager
 var _settings: GameSettings       # ★ B2 설정 값 원천(main이 주입). null이면(테스트) 기본값 표시·조작만 신호로
 var _state: State = State.MENU
 var _sel := 0                     # 현재 상태의 선택 인덱스
-var _info_text := ""              # INFO 패널 문구(만든사람들 stub)
 var _t := 0.0                     # 파티클 애니 시간
 var _particles: Array = []        # {pos, vel, kind, size, ph}
 var _hit: Array[Rect2] = []       # 현재 상태 선택 항목 히트 rect(마우스)
@@ -52,6 +86,7 @@ var _set_sfx_minus := Rect2()
 var _set_sfx_plus := Rect2()
 var _set_fs_rect := Rect2()
 var _set_back_rect := Rect2()
+var _credits_y := 0.0             # ★ B2 Credits 스크롤 오프셋(아래→위, _process가 증가·끝나면 루프)
 
 const MENU_ITEMS := ["새 게임", "이어하기", "설정", "만든 사람들", "종료"]
 
@@ -116,6 +151,11 @@ func _process(delta: float) -> void:
 		if p.pos.y > VIEW.y + 8.0:
 			p.pos.y = -8.0
 			p.pos.x = randf() * VIEW.x
+	# ★ B2 Credits 자동 스크롤(아래→위) — 명단이 다 지나가면 처음으로 되감아 반복(코지 무한 롤).
+	if _state == State.CREDITS:
+		_credits_y += CREDITS_SPEED * delta
+		if _credits_y > _credits_total_h() + VIEW.y:
+			_credits_y = 0.0
 	if _canvas != null:
 		_canvas.queue_redraw()
 
@@ -167,8 +207,8 @@ func _sel_count() -> int:
 		State.MENU: return MENU_ITEMS.size()
 		State.SLOTS: return SaveManager.SLOT_COUNT + 1   # 슬롯 3 + 뒤로
 		State.CONFIRM_NEW, State.CONFIRM_QUIT: return 2  # 예 / 아니오
-		State.INFO: return 1                              # 확인
 		State.SETTINGS: return SetRow.size()              # 음악·효과음·전체화면·뒤로
+		State.CREDITS: return 1                           # 아무 키·클릭 = 돌아가기
 	return 1
 
 func move_selection(dir: int) -> void:
@@ -180,6 +220,8 @@ func move_selection(dir: int) -> void:
 func _go(s: State) -> void:
 	_state = s
 	_sel = 0
+	if s == State.CREDITS:
+		_credits_y = 0.0   # 진입 시 명단을 맨 아래에서 다시 시작
 	# 로고는 메인 메뉴에서만(서브 패널 슬롯·확인·정보 위를 가리지 않게).
 	if _logo != null:
 		_logo.visible = s == State.MENU
@@ -200,8 +242,8 @@ func activate() -> void:
 					_go(State.SLOTS)
 				2:   # 설정 — 볼륨·전체화면 실동작 패널(★ B2)
 					_go(State.SETTINGS)
-				3:   # 만든 사람들(stub — B2)
-					_show_info("Dear My Naraka\n\n만든 사람들 — 준비 중")
+				3:   # 만든 사람들 — 스크롤 명단(★ B2)
+					_go(State.CREDITS)
 				4:   # 종료
 					_go(State.CONFIRM_QUIT)
 		State.SLOTS:
@@ -220,8 +262,6 @@ func activate() -> void:
 				quit_game.emit()
 			else:
 				_go(State.MENU)
-		State.INFO:
-			_go(State.MENU)
 		State.SETTINGS:
 			# 엔터 = 현재 행 실행. 볼륨 두 줄은 좌우로 조정하므로 엔터는 전체화면 토글·뒤로만 의미.
 			match _sel:
@@ -229,6 +269,8 @@ func activate() -> void:
 					fullscreen_nudged.emit()
 				SetRow.BACK:
 					_go(State.MENU)
+		State.CREDITS:
+			_go(State.MENU)   # 엔터/스페이스 = 명단 닫고 메뉴로(ESC도 _cancel 경유 동일)
 
 # 설정 패널 좌/우(또는 −/+ 키) 조정 — 값 변경은 신호로 main에 올린다(디커플링). dir: -1 감소·+1 증가.
 func adjust(dir: int) -> void:
@@ -265,10 +307,6 @@ func _settings_click(mp: Vector2) -> bool:
 		_canvas.queue_redraw()
 	return true
 
-func _show_info(text: String) -> void:
-	_info_text = text
-	_go(State.INFO)
-
 # 슬롯 메타 → 코지 다이어리 한 줄. 순수 함수(테스트 대상).
 func slot_label(slot: int) -> String:
 	if _saver == null or not _saver.has_save(slot):
@@ -302,10 +340,10 @@ func _paint(ci: CanvasItem) -> void:
 			_paint_confirm(ci, "오늘까지의 진행을 지우고\n새로 시작할까요?")
 		State.CONFIRM_QUIT:
 			_paint_confirm(ci, "오늘 영업을 마감하고\n안식처를 떠나시겠습니까?")
-		State.INFO:
-			_paint_info(ci)
 		State.SETTINGS:
 			_paint_settings(ci)
+		State.CREDITS:
+			_paint_credits(ci)
 
 func _paint_particles(ci: CanvasItem) -> void:
 	for p in _particles:
@@ -400,23 +438,6 @@ func _paint_confirm(ci: CanvasItem, msg: String) -> void:
 		HanjiUi.draw_text(ci, Vector2(bx, by + 18.0), (("❀ " if selected else "") + labels[i]), 22, col)
 		_hit.append(Rect2(rect.position.x + slotw * i, by, slotw, 34.0))
 
-func _paint_info(ci: CanvasItem) -> void:
-	var fw := 480.0
-	var fh := 220.0
-	var rect := Rect2((VIEW.x - fw) * 0.5, (VIEW.y - fh) * 0.5, fw, fh)
-	HanjiUi.draw_frame(ci, rect)
-	var lines := _info_text.split("\n")
-	var y := rect.position.y + 56.0
-	for line in lines:
-		var w := HanjiUi.text_width(line, 18)
-		HanjiUi.draw_text(ci, Vector2(rect.position.x + (fw - w) * 0.5, y), line, 18, HanjiUi.INK)
-		y += 26.0
-	var back_sel := _sel == 0
-	var bc := HanjiUi.GOLD_SOFT if back_sel else HanjiUi.INK
-	var bw := HanjiUi.text_width("확인", 20)
-	HanjiUi.draw_text(ci, Vector2(rect.position.x + (fw - bw) * 0.5, rect.end.y - 30.0), "확인", 20, bc)
-	_hit.append(Rect2(rect.position.x, rect.end.y - 48.0, fw, 34.0))
-
 # ★ B2 설정 패널 — 음악·효과음 볼륨(−/+·트랙바) + 전체화면 체크박스 + 뒤로. 값은 _settings(GameSettings)에서
 #   읽어 표시만 하고(무상태), 조작은 신호로 main에 올려 실제 적용·영속을 맡긴다(옵션 탭 inv_frame.gd과 동형).
 func _paint_settings(ci: CanvasItem) -> void:
@@ -485,3 +506,46 @@ func _paint_vol_row(ci: CanvasItem, x: float, yy: float, label: String, v01: flo
 	HanjiUi.draw_text(ci, Vector2(plus.position.x + 6.0, yy), "+", 17, HanjiUi.INK_LIGHT)
 	HanjiUi.draw_text(ci, Vector2(x + 340.0, yy), "%d%%" % roundi(v01 * 100.0), 15, HanjiUi.INK)
 	return [minus, plus]
+
+# ── ★ B2 Credits(개발진·감사 명단, 아래→위 자동 스크롤) ──
+# kind별 글자 크기·색·줄높이(advance). 어두운 월드 위에 떠 있으므로 밝은 글자(INK_LIGHT)로 가독.
+func _credits_style(kind: String) -> Array:
+	match kind:
+		"title": return [34, HanjiUi.GOLD, 48.0]
+		"role":  return [20, HanjiUi.GOLD_SOFT, 34.0]
+		"name":  return [17, HanjiUi.INK_LIGHT, 26.0]
+		"note":  return [13, HanjiUi.INK_DIM, 22.0]
+		_:       return [0, HanjiUi.INK_DIM, 24.0]   # gap(빈 줄)
+	return [0, HanjiUi.INK_DIM, 24.0]
+
+# 명단 전체 높이(줄높이 합) — 스크롤 되감기 기준(_process).
+func _credits_total_h() -> float:
+	var h := 0.0
+	for line in CREDITS:
+		h += float(_credits_style(String(line.get("kind", "gap")))[2])
+	return h
+
+func _paint_credits(ci: CanvasItem) -> void:
+	# 명단 가독을 위해 화면을 은은히 어둡게 깐다(코지 인디고 암막).
+	ci.draw_rect(Rect2(Vector2.ZERO, VIEW), Color(0.05, 0.04, 0.09, 0.62))
+	var cx := VIEW.x * 0.5
+	var y := VIEW.y - _credits_y   # 아래에서 시작해 위로 흐른다
+	for line in CREDITS:
+		var kind := String(line.get("kind", "gap"))
+		var st := _credits_style(kind)
+		var size: int = st[0]
+		var col: Color = st[1]
+		var adv: float = st[2]
+		var text := String(line.get("text", ""))
+		# 화면 안에 든 줄만 그린다(위로 벗어난 줄·하단 안내 바에 닿는 줄 컬링 — 겹침 방지).
+		if size > 0 and text != "" and y > -40.0 and y < VIEW.y - 40.0:
+			var w := HanjiUi.text_width(text, size)
+			HanjiUi.draw_text(ci, Vector2(cx - w * 0.5, y), text, size, col)
+		y += adv
+	# 하단 고정 안내(스크롤과 무관 — 항상 보임).
+	var hint := "아무 키 · 클릭 — 돌아가기"
+	var hw := HanjiUi.text_width(hint, 13)
+	ci.draw_rect(Rect2(0.0, VIEW.y - 34.0, VIEW.x, 34.0), Color(0.05, 0.04, 0.09, 0.55))
+	HanjiUi.draw_text(ci, Vector2(cx - hw * 0.5, VIEW.y - 12.0), hint, 13, HanjiUi.INK_DIM)
+	# 화면 아무 곳이나 클릭하면 돌아가도록 전체 히트 rect 하나(activate → 메뉴).
+	_hit.append(Rect2(Vector2.ZERO, VIEW))

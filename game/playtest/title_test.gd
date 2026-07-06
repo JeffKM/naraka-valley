@@ -161,6 +161,17 @@ func _initialize() -> void:
 	_music_delta = 0.0; ts._sel = 0; ts.adjust(1)
 	_check("⑥n MENU에서 adjust 무동작", is_equal_approx(_music_delta, 0.0))
 
+	# ── ⑦ 만든 사람들(★ B2) → CREDITS 스크롤 화면 → 아무 키/ESC = 메뉴 ──
+	ts._go(TitleScreen.State.MENU); ts._sel = 3; ts.activate()
+	_check("⑦a 만든사람들 → CREDITS", ts._state == TitleScreen.State.CREDITS)
+	_check("⑦b 진입 시 스크롤 오프셋 0", is_equal_approx(ts._credits_y, 0.0))
+	_check("⑦c 명단 총 높이 > 화면(스크롤 대상)", ts._credits_total_h() > TitleScreen.VIEW.y)
+	ts.activate()
+	_check("⑦d 아무 키(엔터) → 메뉴", ts._state == TitleScreen.State.MENU)
+	# ESC로도 크레딧 → 메뉴
+	ts._go(TitleScreen.State.CREDITS); ts._cancel()
+	_check("⑦e ESC(크레딧) → 메뉴", ts._state == TitleScreen.State.MENU)
+
 	# ── 정리 ──
 	ts.free()
 	sm.free()

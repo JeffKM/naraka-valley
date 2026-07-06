@@ -51,6 +51,11 @@ func _initialize() -> void:
 	ts._canvas.queue_redraw()
 	await _grab("title_settings")
 	gs.free()
+	# ★ B2 CREDITS — 중간까지 스크롤한 상태로 캡처(역할 헤더·이름 줄이 화면에 보이게)
+	ts._go(TitleScreen.State.CREDITS)
+	ts._credits_y = 260.0
+	ts._canvas.queue_redraw()
+	await _grab("title_credits")
 	# 정리 — 더미 슬롯 제거 후 개발 세이브 복원
 	sm.delete_save(0); sm.delete_save(2)
 	for p in paths:
