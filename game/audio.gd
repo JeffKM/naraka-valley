@@ -25,8 +25,9 @@ const SFX_BUS := "SFX"
 
 # ── BGM 시간대(phase) ──────────────────────────────────────────────────────
 # 하루를 음악으로 셋으로 나눈다(ROADMAP P2.6: ①낮 농사+카페 ②밤 바 긴장 ③엔딩).
-# 타이틀 화면은 없으므로(게임이 월드에서 바로 시작) 선택 3번 곡은 *엔딩*(슬라이스
-# 마무리 화면)에 쓴다 — 실제 인게임 순간이라 곡이 붙을 자리가 분명하다.
+# ★ B2: 타이틀 화면(gemini-ui-identity-spec §3.4)이 생겨 title 테마가 추가됐다 — 부팅 첫인상
+# (로파이 코지)을 깐다. title은 시각에서 파생되지 않는 UI 상태라 phase_for에 넣지 않고, main이
+# 타이틀을 띄울 때 set_phase(PHASE_TITLE)로 직접 건다(게임 시작 시 update_music이 farm/…로 잇는다).
 # 낮은 *위치*로 둘로 갈린다: 카페 안=cafe / 밖(밭·집·길)=farm — 카페가 자기만의 공간
 # 분위기를 갖는다(스타듀 술집 결). 전환 출처(지금=구역, 나중=건물 내부)는 main이 in_cafe
 # 불리언으로 넘기고 audio는 그 출처를 모른다(디커플링 — Phase 3 건물 내부 전환이 와도 불변).
@@ -34,6 +35,7 @@ const PHASE_FARM := "farm"
 const PHASE_CAFE := "cafe"
 const PHASE_NIGHT := "night"
 const PHASE_ENDING := "ending"
+const PHASE_TITLE := "title"
 # 밤 테마 시작 = 카페 마감 = 밤 바 영업 개시(19:00). 라이팅 등불 점등·NightBar.OPEN_MIN과
 # 같은 경계라 "낮 활동이 닫히고 밤이 긴장으로 바뀌는" 한 순간에 색·빛·음악이 함께 넘어간다.
 # 밤은 위치보다 우선한다 — 밤의 카페는 '나라카 바'라 카페 안이어도 밤 테마가 맞다(T6.4).
@@ -45,6 +47,7 @@ const BGM_STEM := {
 	PHASE_CAFE: "bgm_cafe",
 	PHASE_NIGHT: "bgm_night",
 	PHASE_ENDING: "bgm_ending",
+	PHASE_TITLE: "bgm_title",
 }
 const BGM_EXTS := [".ogg", ".wav"]  # .ogg(Suno 생성본) 우선, 없으면 .wav(플레이스홀더)
 
@@ -117,6 +120,10 @@ func sfx_source(event: String) -> String:
 # ── 셋업 ───────────────────────────────────────────────────────────────────
 func _ready() -> void:
 	_silent = DisplayServer.get_name() == "headless"
+	# ★ B2: 트리 일시정지(타이틀 오버레이 get_tree().paused=true) 중에도 BGM이 계속 재생·크로스페이드
+	#   되도록 ALWAYS로 둔다 — pausable이면 타이틀에서 곡이 멎고 페이드 트윈도 멈춘다. 자식 플레이어는
+	#   INHERIT라 이 값을 따른다(음악은 정지 메뉴에서도 이어지는 게 자연스럽다).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_ensure_buses()
 	_music_a = _make_player(MUSIC_BUS)
 	_music_b = _make_player(MUSIC_BUS)

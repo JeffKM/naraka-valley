@@ -1507,6 +1507,10 @@ func _begin_game(is_new_game: bool) -> void:
 #   빌드됐고(HOME 스폰), 타이틀이 그 위를 덮으며 트리를 일시정지(월드 시뮬 정지·입력 격리)한다.
 func _show_title() -> void:
 	get_tree().paused = true
+	# ★ B2 타이틀 BGM(로파이 코지) — 트리가 멈춰도 audio는 ALWAYS라 곡이 깔린다. 게임 시작 시
+	#   _process의 update_music이 farm/cafe/night/ending으로 크로스페이드해 넘어간다(phase 전환).
+	if audio != null:
+		audio.set_phase(GameAudio.PHASE_TITLE)
 	var title := TitleScreen.new()
 	title.name = "TitleScreen"
 	add_child(title)

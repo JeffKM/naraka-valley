@@ -12,9 +12,10 @@
 설계:
   - 의존성 0(numpy 없이 stdlib wave/struct/math/random만). 시드 고정이라 재실행 결정적.
   - SFX 9종(ROADMAP P2.6: 괭이·물·수확·서빙·골드·UI·대화·막기·취침)은 *최종 에셋*.
-  - BGM 3종(낮·밤·엔딩)은 *그레이박스 플레이스홀더 루프* — 음악 버스·크로스페이드를
-    지금 굴려 보고 검증하기 위한 것. Suno Pro 생성본(.ogg)이 같은 파일명으로 떨어지면
-    audio.gd가 .ogg를 우선 로드해 자동 교체된다(docs/design/p2.0-spike-prompts.md §13).
+  - BGM 5종(farm·cafe·night·ending·title)은 *그레이박스 플레이스홀더 루프* — 음악 버스·
+    크로스페이드를 지금 굴려 보고 검증하기 위한 것. farm~ending은 이미 Suno 생성본(.ogg)으로
+    교체됨. title(로파이 코지)만 아직 플레이스홀더 .wav. Suno Pro 생성본(.ogg)이 같은
+    파일명으로 떨어지면 audio.gd가 .ogg를 우선 로드해 자동 교체된다(p2.0-spike-prompts §13).
 
 실행: python3 game/tools/make_sfx.py   (game/assets/audio/{sfx,bgm}/*.wav 생성)
 """
@@ -303,6 +304,30 @@ def bgm_ending():
     return normalize(out, 0.5)
 
 
+def bgm_title():
+    # 타이틀(첫인상): 느긋한 로파이 코지 — 부드러운 maj7 4마디 순환 패드 + 잔잔한 리드.
+    #   저역통과로 뭉근하게·느린 트레몰로로 로파이 결을 낸다. Suno 로파이 생성본(bgm_title.ogg)이
+    #   같은 파일명으로 떨어지면 audio.gd가 .ogg를 우선 로드해 자동 교체된다(그레이박스 드롭인).
+    out = [0.0] * 0
+    bar = 2.0
+    # 코지 4마디 진행: Cmaj7 → Am7 → Fmaj7 → G7 (아래→위 흐르는 명단 뒤 은은한 배경).
+    add(out, _chord([261.63, 329.63, 392.00, 493.88], bar, "sine", gain=0.11), 0.0)        # Cmaj7
+    add(out, _chord([220.00, 261.63, 329.63, 392.00], bar, "sine", gain=0.11), bar)        # Am7
+    add(out, _chord([349.23, 440.00, 523.25, 659.25], bar, "sine", gain=0.11), bar * 2.0)  # Fmaj7
+    add(out, _chord([196.00, 246.94, 293.66, 349.23], bar, "sine", gain=0.11), bar * 3.0)  # G7
+    # 잔잔한 리드 한 줄(삼각파, 느린 프레이즈).
+    lead = [523.25, 587.33, 659.25, 587.33, 523.25, 440.00, 392.00, 440.00]
+    step = 1.0
+    for i, f in enumerate(lead):
+        add(out, env_ad(tone(f, step * 0.95, "tri", gain=0.13), 0.06, 0.3, 0.5, 0.25), i * step)
+    # 로파이 톤: 저역통과로 살짝 뭉근 + 느린 트레몰로.
+    out = lowpass(out, 0.18)
+    for i in range(len(out)):
+        t = i / SR
+        out[i] *= 0.85 + 0.15 * math.sin(TWO_PI * 0.25 * t)
+    return normalize(out, 0.42)
+
+
 SFX = {
     "hoe": sfx_hoe,
     "water": sfx_water,
@@ -320,6 +345,7 @@ BGM = {
     "bgm_cafe": bgm_cafe,
     "bgm_night": bgm_night,
     "bgm_ending": bgm_ending,
+    "bgm_title": bgm_title,
 }
 
 
