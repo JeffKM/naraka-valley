@@ -4,6 +4,8 @@
 > 트레이서 프리뷰로 방향 검증 완료(`game/tools/scatter_preview.gd` → `scatter_preview.png`).
 > **근거:** 스타듀 위키 미러 전수 조사 + owner 피드백(2026-06-30: "확률 계층형 잔디 1/2/3단계 + 희소 흙").
 > [asset-ruleset.md](./asset-ruleset.md)(§9 팔레트·§11 그림자) · [master-palette.md](./master-palette.md)(warm 램프).
+>
+> ★ **2026-07-06 갱신([ADR-0053](../adr/0053-homestead-dirt-dominant-ground-overgrown-identity-sealed.md)):** owner가 스타듀 시작 농장을 참고로 안식 농원 마당을 **흙 지배(맨흙 ~72%) + 잔디 패치(~28%)**로 뒤집었다. 이는 단순 미관이 아니라 **overgrown 개간지(방치된 땅)의 시각화**로 정식 규정된다(봉인 법칙 준수 — 환경은 서사를 *말하지* 않음, 스코프=정적 72/28·단일 잔디만 현 슬라이스). 구현은 `main.gd::_build_ground16`(맨흙 `_bf_earth` + 저주파 클럼프 잔디 패치 + band 경계 지터). 아래 §3 확률 테이블(점적 debris/forage)은 이 베이스 위에 얹히는 *별개 겹*이다.
 
 ---
 

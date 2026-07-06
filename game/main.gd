@@ -449,6 +449,7 @@ var _bf_grass: Image = null
 var _bf_dirt: Image = null
 var _bf_soil: Image = null
 var _bf_water: Image = null
+var _bf_earth: Image = null   # ★[스타듀 농장 룩] 마당 베이스 = 따뜻한 황갈색 맨흙(dirt_field 리톤). 잔디는 위에 패치로만.
 var _gd_soft_cache := {}                       # ★[ADR-0042] 디테일 texture→부드럽게 보정한 Image 캐시
 var _base_variant_cache := {}                  # ★[ADR-0043 §6] terrain id→base 변종 좌표 배열 캐시
 var _facade_base_cache := {}                   # facade tex→밑단선 span{line_y,center,half}(캐스트 그림자 발 앵커)
@@ -3352,6 +3353,9 @@ func _load_big_fields() -> void:
 	_bf_dirt = _big_field("res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
 	_bf_soil = _big_field("res://assets/terrain16/soil_field.png", Color(0.35, 0.22, 0.16))
 	_bf_water = _big_field("res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39))
+	# ★[스타듀 농장 룩] 마당 맨흙 = dirt_field(다져진 붉은 흙 길)을 더 밝고 노란 tan으로 리톤.
+	#   스타듀 시작 농장의 모래빛 황갈색 지면 + 저승 warm 팔레트 정합. PATH(_bf_dirt)보다 밝아 길과 구분.
+	_bf_earth = _retone_earth(_bf_dirt)
 
 func _big_field(path: String, fallback: Color) -> Image:
 	var img: Image
@@ -3367,6 +3371,26 @@ func _big_field(path: String, fallback: Color) -> Image:
 	img.resize(_GF * 2, _GF * 2, Image.INTERPOLATE_NEAREST)   # ×2 = 256 (월드 타일링 주기)
 	return img
 
+# ★[스타듀 농장 룩] 다져진 붉은 흙(dirt_field)을 마당 베이스용 밝은 황갈색(tan) 맨흙으로 리톤.
+#   HSV로 명도↑·채도 약간↓·색상을 노란 쪽으로 살짝 이동 → 그레인(다짐 결)은 보존하되 스타듀 시작
+#   농장의 모래빛 지면 톤으로. 결정적(픽셀 순수 함수)이라 재빌드·재진입 동일.
+func _retone_earth(src: Image) -> Image:
+	var img: Image = src.duplicate()
+	var w := img.get_width()
+	var h := img.get_height()
+	for yy in h:
+		for xx in w:
+			var c := img.get_pixel(xx, yy)
+			if c.a <= 0.01:
+				continue
+			var hh := c.h
+			# 붉은 흙(hue ~0.05)을 노란-갈색(hue ~0.095)으로 당김(가중 평균, 과이동 방지).
+			hh = lerpf(hh, 0.095, 0.55)
+			var ss := c.s * 0.80              # 채도 완화(모래빛)
+			var vv := clampf(c.v * 1.22 + 0.14, 0.0, 1.0)  # 명도↑(밝은 tan)
+			img.set_pixel(xx, yy, Color.from_hsv(hh, ss, vv, c.a))
+	return img
+
 func _build_ground16() -> void:
 	_ground_detail_tex = null
 	_load_big_fields()
@@ -3376,50 +3400,94 @@ func _build_ground16() -> void:
 		return
 	var out := Image.create(bw, bh, false, Image.FORMAT_RGBA8)
 	var P := _GF * 2   # 256 = 월드좌표 타일링 주기(=8칸)
-	# ① 셀 단위 필드 blit(빠름) — HOUSE/CAFE는 투명(실내 바닥 비침)
+	# ★[스타듀 농장 룩] 표면 종류를 셀마다 1회 산출(0=맨흙 1=잔디패치 2=길 3=밭 4=물 -1=건물바닥).
+	#   마당(GROUND)은 이제 *흙이 기본*이고 잔디는 저주파 클럼프로 흩뿌린 패치로만(흙 지배). 재계산 없이
+	#   ①blit·②지터가 이 표면 그리드를 공유(per-pixel _grid 재해석 제거 — 잔디패치 경계도 유기적으로).
+	var surf: Array = []
+	for y in _outdoor_h:
+		var row: Array = []
+		for x in _grid_w:
+			row.append(_g16_surface(x, y))
+		surf.append(row)
+	# ① 셀 단위 필드 blit(빠름) — 건물바닥(-1)은 투명(실내 바닥 비침)
 	for y in _outdoor_h:
 		for x in _grid_w:
-			var cell: int = _grid[y][x]
-			if cell == HOUSE or cell == CAFE:
+			var s0: int = surf[y][x]
+			if s0 < 0:
 				continue
-			var src: Image = _bf_grass
-			if cell == PATH:
-				src = _bf_dirt
-			elif cell == SOIL:
-				src = _bf_soil
-			elif cell == WATER:
-				src = _bf_water
-			out.blit_rect(src, Rect2i((x * TILE) % P, (y * TILE) % P, TILE, TILE), Vector2i(x * TILE, y * TILE))
-	# ② 길↔풀 경계 지터 디더 — 경계 셀만 per-pixel(유기적 들쭉날쭉)
+			out.blit_rect(_g16_field(s0), Rect2i((x * TILE) % P, (y * TILE) % P, TILE, TILE), Vector2i(x * TILE, y * TILE))
+	# ② 경계 지터 디더 — soft 표면(흙0·잔디1·길2)끼리의 경계만 per-pixel(유기적 들쭉날쭉).
+	#    밭(3)·물(4)은 자기 필드 하드 경계 유지(고랑·수면 가독). 흙↔잔디패치·흙↔길·잔디↔길 모두 물결침.
+	# ★[성능] 지터 진폭이 ±_GJIT라 셀 경계에서 _GJIT px 안쪽 픽셀만 이웃 표면으로 넘어갈 수 있다. 그래서
+	#   *다른 soft 표면과 맞닿은 변(邊)의 band(_GJIT+1 px)만* 처리한다(내부는 blit 값 그대로=동일). 흩뿌린
+	#   잔디 패치로 에지 셀이 폭증해도(전체 32×32 순회 시 홈 빌드 ~17s→bana_test 90s 초과) band-only면 몇 배 빠름.
+	var dirs: Array[Vector2i] = [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
+	var band := _GJIT + 1
 	for y in _outdoor_h:
 		for x in _grid_w:
-			var cell2: int = _grid[y][x]
-			if cell2 != GROUND and cell2 != PATH:
+			var sc: int = surf[y][x]
+			if sc < 0 or sc > 2:   # 건물·밭·물 = 지터 대상 아님
 				continue
-			var edge := false
-			var dirs: Array[Vector2i] = [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
-			for d in dirs:
-				var nx := x + d.x
-				var ny := y + d.y
+			for dir in 4:
+				var nx := x + dirs[dir].x
+				var ny := y + dirs[dir].y
 				if nx < 0 or ny < 0 or nx >= _grid_w or ny >= _outdoor_h:
 					continue
-				var nc: int = _grid[ny][nx]
-				if (cell2 == GROUND and nc == PATH) or (cell2 == PATH and nc == GROUND):
-					edge = true
-					break
-			if not edge:
-				continue
-			for iy in TILE:
-				for ix in TILE:
-					var px := x * TILE + ix
-					var py := y * TILE + iy
-					var jx := px + int((_gd_h01(px, py, 610) - 0.5) * _GJIT * 2.0)
-					var jy := py + int((_gd_h01(px, py, 620) - 0.5) * _GJIT * 2.0)
-					var jcx := clampi(jx / TILE, 0, _grid_w - 1)
-					var jcy := clampi(jy / TILE, 0, _outdoor_h - 1)
-					var s: Image = _bf_dirt if int(_grid[jcy][jcx]) == PATH else _bf_grass
-					out.set_pixel(px, py, s.get_pixel(px % P, py % P))
+				var ns: int = surf[ny][nx]
+				if ns < 0 or ns > 2 or ns == sc:
+					continue   # 이웃이 하드 표면이거나 같은 표면 = 이 변엔 물결 없음
+				# 이 변(dir)에 인접한 band 픽셀만 지터(변 따라 a=0..TILE, 안쪽 깊이 b=0..band).
+				for a in TILE:
+					for b in band:
+						var ix: int
+						var iy: int
+						match dir:
+							0: ix = a; iy = b                 # N(위 변)
+							1: ix = a; iy = TILE - 1 - b      # S(아래 변)
+							2: ix = b; iy = a                 # W(왼 변)
+							_: ix = TILE - 1 - b; iy = a      # E(오른 변)
+						var px := x * TILE + ix
+						var py := y * TILE + iy
+						var jx := px + int((_gd_h01(px, py, 610) - 0.5) * _GJIT * 2.0)
+						var jy := py + int((_gd_h01(px, py, 620) - 0.5) * _GJIT * 2.0)
+						var jcx := clampi(jx / TILE, 0, _grid_w - 1)
+						var jcy := clampi(jy / TILE, 0, _outdoor_h - 1)
+						var js: int = surf[jcy][jcx]
+						if js < 0 or js > 2:
+							js = sc   # 밭·물·건물로 지터가 튀면 자기 표면 유지(하드 경계 안 침범)
+						out.set_pixel(px, py, _g16_field(js).get_pixel(px % P, py % P))
 	_ground_detail_tex = ImageTexture.create_from_image(out)
+
+# ★[스타듀 농장 룩] 지면 표면 결정 헬퍼(_build_ground16 전용) ─────────────────────────────
+const _G16_GRASS_THR := 0.66   # 잔디 패치 문턱(↑=잔디↓·흙↑). 스타듀 시작 농장 ≈ 흙 지배(잔디 ~28%).
+
+# 마당(GROUND) 칸이 잔디 패치인가 — 저주파 클럼프(넓은 초록 영역) + 셀 해시(작은 무리로 분해).
+# 결정적(좌표 해시)이라 재빌드·재진입 동일. true=잔디(grass_field), false=맨흙(earth).
+func _g16_is_grass_patch(x: int, y: int) -> bool:
+	var score := _gd_cluster(x, y) * 0.6 + _gd_h01(x, y, 41) * 0.4
+	return score >= _G16_GRASS_THR
+
+# 셀의 지면 표면 종류(0=맨흙 1=잔디 2=길 3=밭 4=물, -1=건물바닥 skip).
+func _g16_surface(x: int, y: int) -> int:
+	var c: int = _grid[y][x]
+	if c == HOUSE or c == CAFE:
+		return -1
+	if c == PATH:
+		return 2
+	if c == SOIL:
+		return 3
+	if c == WATER:
+		return 4
+	# GROUND(및 벽/void — 프롭·facade가 덮음): 흙 베이스 + 잔디 패치
+	return 1 if _g16_is_grass_patch(x, y) else 0
+
+func _g16_field(s: int) -> Image:
+	match s:
+		1: return _bf_grass
+		2: return _bf_dirt
+		3: return _bf_soil
+		4: return _bf_water
+		_: return _bf_earth
 
 func _build_ground_details() -> void:
 	_ground_detail_tex = null
