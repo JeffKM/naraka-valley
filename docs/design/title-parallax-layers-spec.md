@@ -1,6 +1,6 @@
 # 타이틀 패럴랙스 레이어 스펙 카드 (owner-Gemini 아트 트랙)
 
-> **상태:** 코드 엔진·레이어 계약 **확정·구현 완료**(2026-07-06, `title_screen.gd`). 실제 레이어 PNG는 **owner Gemini 수동 슬라이스 대기**([ADR-0025] 게이트). 레이어가 없으면 현행 `title_bg.png` 통합본으로 자동 fallback(은은한 드리프트만) — **레이어를 넣기 전에도 타이틀은 정상 동작한다.**
+> **상태:** 코드 엔진·레이어 계약·**레이어 6장 설치 완료**(2026-07-06, owner Gemini 슬라이스 6장 납품 → 워터마크 제거·1280×720 정규화·`assets/ui/title_layer_*.png` 배치·회귀 통과). 레이어가 없으면 현행 `title_bg.png` 통합본으로 자동 fallback(은은한 드리프트만) — **레이어를 넣기 전에도 타이틀은 정상 동작한다.** owner 납품 원본=`Gemini_Generated_Image_*`(sky 1장+removebg 5장), 워터마크는 sky·mid만 남아 있어(4직원은 removebg가 이미 제거) inpaint로 제거.
 >
 > 이 문서는 [gemini-ui-identity-spec §3.1](./gemini-ui-identity-spec.md)이 예고한 "**far/mid 분리 시차 스크롤(옵션)**" + "**1.5~2.5s 4직원 idle 시작(후속)**"을 정식 계약으로 확정한 것이다. 톤·구도·프롬프트는 그 문서 §3의 확정 씬(`title_bg`)을 **그대로 계승**한다 — 이 작업은 *새 씬을 그리는 게 아니라 이미 확정된 한 장을 깊이 레이어로 쪼개는 것*이다.
 
