@@ -25,8 +25,12 @@ class_name Inventory
 
 signal changed()  # 재고·선택이 바뀐 프레임(main이 HUD·핫바 갱신)
 
-const SIZE := 16                  # 시작 슬롯 수(= 핫바 칸). 확장은 이 값만 키운다(슬롯 위치 보존).
-                                  # ★S1-8: 12→16(개간 도구 3종이 START에 합류 — 도구5+농사보급+수확물 여유). hotbar_hud.SLOTS 동반.
+const SIZE := 16                  # 시작 슬롯 수(가방 전체 칸). 확장은 이 값만 키운다(슬롯 위치 보존).
+                                  # ★S1-8: 12→16(개간 도구 3종이 START에 합류 — 도구5+농사보급+수확물 여유).
+# ★ 핫바(첫 행) 칸 수 — 화면 하단 핫바에 보이고 숫자키(1~0,-,=)·휠로 빠르게 고를 수 있는 칸 수.
+# SIZE보다 작아도 되며(나머지 슬롯은 가방 보관 전용), SIZE가 늘어도 핫바는 이 값으로 고정 → 핫바가
+# 화면 밖으로 안 넘친다(owner 2026-07-06, 스타듀 툴바 방식). 숫자키 12개(1234567890-=)와 일치.
+const HOTBAR_SLOTS := 12
 
 # 새 게임 시작 지급물. 도구는 유니크라 1개씩, 씨앗은 작물군 id → 개수.
 const START_TOOLS := [ItemCatalog.HOE, ItemCatalog.WATERING_CAN,
@@ -229,11 +233,13 @@ func select(i: int) -> void:
 	changed.emit()
 
 # 핫바 선택을 한 칸 옮긴다(휠). 빈 슬롯도 포함해 단순 순환(스타듀와 동일 — 빈칸도 선택된다).
+# ★ 순환 범위 = HOTBAR_SLOTS(첫 행)로 한정 — 핫바에 안 보이는 슬롯(12+)은 휠로 못 고른다(선택 표시가
+#   화면 밖이 되지 않게). 숫자키도 12개뿐이라 일관. 나머지 슬롯은 가방을 열어 앞 칸으로 옮겨 쓴다.
 func select_next() -> void:
-	select((selected_index + 1) % slots.size())
+	select((selected_index + 1) % HOTBAR_SLOTS)
 
 func select_prev() -> void:
-	select((selected_index - 1 + slots.size()) % slots.size())
+	select((selected_index - 1 + HOTBAR_SLOTS) % HOTBAR_SLOTS)
 
 # ── 슬롯 재배치(클릭 이동·정리, Phase 2.7 C2 공통 백팩) ────────────────────────
 # 슬롯 from을 슬롯 to로 옮긴다(백팩 클릭 이동). 같은 스택 아이템이면 합치고(병합),
@@ -407,7 +413,8 @@ func to_save() -> Dictionary:
 # 카탈로그에 없는 id·음수 개수는 걸러 안전하게 만든다. 항상 SIZE칸으로 정규화한다.
 func load_save(data: Dictionary) -> void:
 	slots = _sanitize(data.get("slots", []))
-	selected_index = clampi(int(data.get("selected_index", 0)), 0, slots.size() - 1)
+	# 선택은 핫바(첫 행) 범위로 클램프 — 핫바에 안 보이는 슬롯을 선택한 채 복원되지 않게(옛 세이브 방어).
+	selected_index = clampi(int(data.get("selected_index", 0)), 0, mini(HOTBAR_SLOTS, slots.size()) - 1)
 	changed.emit()
 
 # 슬롯 배열 정제: 길이를 SIZE로 맞추고, 각 슬롯은 유효 아이템 + 양수 개수만 남긴다(손상·버전 방어).
