@@ -57,11 +57,14 @@ enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST }
 enum { TAB_INV, TAB_REL, TAB_SKILL, TAB_OPTIONS }
 const TAB_COUNT := 4
 
-const COLS := 6                  # 백팩 그리드 가로 칸 수(12칸 = 6×2)
-const ROWS := 2
+const COLS := 6                  # 상자(chest) 그리드 가로 칸 수(12칸 = 6×2)
+const BP_COLS := 8               # ★ 백팩 그리드 가로 칸 수(16칸 = 8×2). 6열이면 3행이 되어 패널 세로가
+                                 #   640×360 뷰(≈364px)를 넘겨 막줄이 틀 밖으로 삐져나온다(owner 리포트
+                                 #   2026-07-06) — 8열 2행으로 눕혀 세로 넘침을 없앤다. 상자는 6열 유지.
 const SLOT := 48.0               # 슬롯 한 변(px)
 const GAP := 4.0
-const PAD := 16.0                # 패널 안쪽 여백
+const PAD := 26.0                # ★ 패널 안쪽 여백 — 9-slice 테두리(FRAME_MARGIN=22)보다 커야 슬롯·글자가
+                                 #   나무 테두리 밑으로 파고들지 않는다(옛 16 < 22라 좌우 열이 6px 겹쳤다).
 const TOP_H := 132.0             # 상단 컨텍스트 영역 높이
 
 var inv: Inventory = null
@@ -215,10 +218,14 @@ func _view() -> Vector2:
 
 func _panel_rect() -> Rect2:
 	var view := _view()
-	var grid_w := COLS * SLOT + (COLS - 1) * GAP
+	# 패널 폭 = 가장 넓은 내용(백팩 8열 그리드) 기준. 세로 = 상단 컨텍스트(TOP_H) + 그리드 + 상하 여백.
+	# ★ 하단은 프레임 9-slice 테두리(FRAME_MARGIN)만큼 더 띄운다 — 옵션 탭 마지막 줄('언어')·그리드
+	#   막줄이 나무 테두리에 걸치지 않게(owner 리포트 2026-07-06 "틀 밑에 아슬아슬").
+	var grid_w := BP_COLS * SLOT + (BP_COLS - 1) * GAP
 	var w := grid_w + PAD * 2.0
-	var grid_h := ROWS * SLOT + (ROWS - 1) * GAP
-	var h := TOP_H + grid_h + PAD * 3.0
+	var rows := ceili(float(Inventory.SIZE) / float(BP_COLS))
+	var grid_h := rows * SLOT + (rows - 1) * GAP
+	var h := TOP_H + grid_h + PAD * 2.0 + FRAME_MARGIN + 6.0
 	return Rect2((view.x - w) * 0.5, (view.y - h) * 0.5, w, h)
 
 func _grid_origin(panel: Rect2) -> Vector2:
@@ -258,8 +265,8 @@ func _draw_backpack(panel: Rect2) -> void:
 	_bp_rects.resize(Inventory.SIZE)
 	var origin := _grid_origin(panel)
 	for i in Inventory.SIZE:
-		var col := i % COLS
-		var row := i / COLS
+		var col := i % BP_COLS
+		var row := i / BP_COLS
 		var pos := origin + Vector2(col * (SLOT + GAP), row * (SLOT + GAP))
 		var rect := Rect2(pos, Vector2(SLOT, SLOT))
 		_bp_rects[i] = rect
