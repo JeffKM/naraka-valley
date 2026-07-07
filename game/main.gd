@@ -7132,8 +7132,22 @@ func _draw_front_cliff_faces(canvas: CanvasItem) -> void:
 	for cell in _front_cliff_cells_for(_player_tile()):
 		var id: int = _grid[cell.y][cell.x]
 		if SOLID_TEX.has(id):
-			var tex: Texture2D = load(SOLID_TEX[id]) as Texture2D
-			canvas.draw_texture(tex, Vector2(cell.x * TILE, cell.y * TILE))
+			canvas.draw_texture(_cliff_front_tex(id), Vector2(cell.x * TILE, cell.y * TILE))
+
+# ★[버그픽스] 절벽 벽면 front 오버행 텍스처 캐시(id→ImageTexture). GL Compatibility 렌더러가 `load()`한
+#   CompressedTexture2D를 draw_texture로 그리면 플랫 색 사각형으로 깨진다(owner "하얀 사각형"). 타일맵이
+#   쓰는 방식(get_image→ImageTexture)과 동일하게 비압축 ImageTexture로 변환해 캐시하면 정상 렌더된다.
+#   _draw 안에서 매 프레임 load하지 않고 1회 변환 후 재사용(성능 짝).
+var _cliff_front_tex_cache: Dictionary = {}
+func _cliff_front_tex(id: int) -> Texture2D:
+	if _cliff_front_tex_cache.has(id):
+		return _cliff_front_tex_cache[id]
+	var img := (load(SOLID_TEX[id]) as Texture2D).get_image()
+	if img.get_format() != Image.FORMAT_RGBA8:
+		img.convert(Image.FORMAT_RGBA8)
+	var tex := ImageTexture.create_from_image(img)
+	_cliff_front_tex_cache[id] = tex
+	return tex
 
 # ★[단계3-⑤] 주어진 플레이어 타일에서 오버행으로 덮을 벽면 셀 목록(렌더와 분리 — 격리 테스트 가능).
 #   같은 열(pt.x==cell.x) + 벽 밑 1~2칸(0<dy<=2) = 캐릭터 상체가 벽면 픽셀과 겹치는 근접 범위.
