@@ -139,10 +139,6 @@ const WORLD_SOLID_TILES := [WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
 	CLIFF_FACE, CLIFF_FACE_BASE, CLIFF_BANK,
 	BARN_WALL, COOP_WALL, STOREHOUSE_WALL,
 	CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]   # ★[ADR-0048] 실내 벽 3종 + [단계3-④] 곡선 코너 4종도 통과 X
-# ★[단계3-⑤ Front 립/오버행] 남향 절벽 벽면(캐릭터가 밑에 서면 상체를 가리는 front 오버행 대상). Lip은
-#   걷기 O·안 가림이라 제외, Bank는 물가라 제외. 벽면(Face/Base/곡선코너)만 캐릭터 위 레이어로 재렌더.
-const CLIFF_WALL_TILES := [CLIFF_FACE, CLIFF_FACE_BASE,
-	CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]
 # ★[ADR-0053/0054 흙-지배 flip 리그레션 픽스] 절벽 계열 전체(LIP 오버행·FACE·BASE·BANK·곡선코너 = 전부
 #   자체 SOLID_TEX로 렌더). 지면 오버레이(_build_ground16/_ground_detail_tex)가 이 셀을 tan/잔디로 덮으면
 #   타일맵 절벽이 사라진다 → _g16_surface가 -1(투명)로 분류해 밑 절벽 텍스처가 비치게 한다(HOUSE/CAFE 결).
@@ -1111,7 +1107,6 @@ var _prop_body: StaticBody2D = null
 #   맵 밖 이탈을 막는다(_build_border가 구역 빌드마다 다시 세운다).
 var _border_body: StaticBody2D = null
 var _ridge_body: StaticBody2D = null   # ★[단계3] 고지 동향 잔디 능선 통행 차단 충돌바(HOME 전용, _build_ridge_barrier)
-var _cliff_face_cells: Array[Vector2i] = []   # ★[단계3-⑤] 남향 절벽 벽면 셀 캐시(front 오버행 — _build_cliffs가 채움, HOME 전용)
 # ★ [S1-5a] 트렐리스 넝쿨 충돌체 — 통과 불가(황천포도) 넝쿨이 심긴 칸에 사각 충돌을 세운다.
 #   진실원 = farm.is_crop_solid/solid_crop_tiles(로직), 여긴 물리만(greybox-spec §6.2). 안식 농원 전용.
 #   _prop_body 패턴과 동형(구역/상태 변화마다 재구성). 테스트·봇은 실내를 물리로 안 걷는다(직접 좌표).
@@ -2594,8 +2589,7 @@ func _build_home() -> void:
 	_build_cliffs()                                 # ★ADR-0035 고지(하늘 목장 NW) 둘레 절벽 단면 + 충돌(계단 틈만 열림)
 	_fill_rect(SPIRIT_POND_RECT, WATER)             # ★ADR-0035 영혼빛 연못(중앙-약간서, WATER terrain·통과 X)
 	# ★ [S1-10 / ADR-0044 §2 → ADR-0056 ④] 연못 북단 강둑 단차 2행 — 옛 하드코딩 루프를 SPIRIT_POND_RECT
-	#   북단에서 유도하는 로컬 sibling 자동화로 대체. ★위 _build_cliffs가 _cache_cliff_face_cells를 이미
-	#   돌린 *뒤*라 이 CLIFF_FACE 뱅크는 front 오버행에서 자연 제외된다(순서 불변 필수).
+	#   북단에서 유도하는 로컬 sibling 자동화로 대체(위 물 fill 뒤라야 유효).
 	_autotile_pond_siblings()
 	_fill_rect(STARTER_PATCH_RECT, SOIL)            # ★ADR-0035 5×5 스타터 패치(즉경작 SOIL)
 	_build_facade(HOUSE_EXT_RECT, HOUSE_EXT_DOOR)   # 외부 본가 외관(통과 불가 박스 + 문 트리거)
@@ -2883,9 +2877,6 @@ func _build_cliffs() -> void:
 	_carve_stair_notch(Rect2i(RANCH_GATE_X, HIGHLAND_S, RANCH_GATE_W, 3))   # x9..10, y26..28
 	# ③ 동향 잔디 능선 — 바위벽 없이 충돌바(x21 seam)로 고지를 자연 능선으로 폐쇄(수풀 프롭이 시각 완성).
 	_build_ridge_barrier()
-	# ④ [단계3-⑤] 남향 벽면 셀 캐시 — front 오버행이 매프레임 그리드 스캔 없이 근접 판정만 하도록(노치가
-	#    GROUND로 덮은 뒤라 게이트 자리는 제외됨). HOME 재빌드마다 갱신.
-	_cache_cliff_face_cells()
 
 # ── ★ [S1-2 / ADR-0044 §1 → 단계3-⑥ 정리] pseudo-Z 절벽 원시어휘 (남향밴드·계단노치) ────────────────
 # 남향-only 피벗으로 옛 동향 측벽(_lay_east_band)·90° 코너 스텝(_lay_corner_step)은 폐기했다(라이브 참조 0,
@@ -2963,15 +2954,6 @@ func _build_ridge_barrier() -> void:
 	cs.shape = rs
 	cs.position = Vector2(seam_x, bar_h * 0.5)
 	_ridge_body.add_child(cs)
-
-# ★[단계3-⑤] 남향 절벽 벽면 셀 수집(front 오버행 대상). _build_cliffs 끝(오토타일+노치 후)에 부른다 —
-#   노치가 GROUND로 덮은 게이트 자리는 자동 제외된다. 벽면 = CLIFF_WALL_TILES(Face/Base/곡선코너, Lip 제외).
-func _cache_cliff_face_cells() -> void:
-	_cliff_face_cells.clear()
-	for y in range(_outdoor_h):
-		for x in range(_grid_w):
-			if _grid[y][x] in CLIFF_WALL_TILES:
-				_cliff_face_cells.append(Vector2i(x, y))
 
 func _build_border() -> void:
 	# ADR-0026 룩 정합 — 옛 WALL 경계 띠(스타듀에 없는 맵 둘레 벽)를 시각에서 없앤다. 외부
@@ -7158,44 +7140,6 @@ func _draw_front_props(canvas: CanvasItem) -> void:
 	if _region != RegionCatalog.HOME or player == null:
 		return
 	_draw_props_for(_prop_layouts.get("HOME", []), canvas, _PROP_PASS_FRONT, player.global_position.y)
-	_draw_front_cliff_faces(canvas)   # ★[단계3-⑤] 절벽 밑에 붙은 캐릭터를 벽면이 가리는 오버행
-
-# ★[단계3-⑤ / cliff-tileset-spec §10.2] 남향 절벽 벽면 오버행 — 캐릭터가 절벽 바로 밑(같은 열, 1~2칸
-#   아래)에 서면 그 열의 Face/Base 벽면을 캐릭터 위 레이어(z=1)에서 재렌더해 상체를 가린다 → "절벽 그늘
-#   아래로 들어간" 깊이감(owner 결정: 벽면 전체 front, 스타듀 표준). 그리드·충돌은 불변(순수 시각). 벽면은
-#   ground 레이어(z=-1)에 이미 있으므로, 근접 시에만 같은 텍스처를 위에 한 번 더 얹는다(중복 blit=오버행).
-func _draw_front_cliff_faces(canvas: CanvasItem) -> void:
-	if _cliff_face_cells.is_empty():
-		return
-	for cell in _front_cliff_cells_for(_player_tile()):
-		var id: int = _grid[cell.y][cell.x]
-		if SOLID_TEX.has(id):
-			canvas.draw_texture(_cliff_front_tex(id), Vector2(cell.x * TILE, cell.y * TILE))
-
-# ★[버그픽스] 절벽 벽면 front 오버행 텍스처 캐시(id→ImageTexture). GL Compatibility 렌더러가 `load()`한
-#   CompressedTexture2D를 draw_texture로 그리면 플랫 색 사각형으로 깨진다(owner "하얀 사각형"). 타일맵이
-#   쓰는 방식(get_image→ImageTexture)과 동일하게 비압축 ImageTexture로 변환해 캐시하면 정상 렌더된다.
-#   _draw 안에서 매 프레임 load하지 않고 1회 변환 후 재사용(성능 짝).
-var _cliff_front_tex_cache: Dictionary = {}
-func _cliff_front_tex(id: int) -> Texture2D:
-	if _cliff_front_tex_cache.has(id):
-		return _cliff_front_tex_cache[id]
-	var img := (load(SOLID_TEX[id]) as Texture2D).get_image()
-	if img.get_format() != Image.FORMAT_RGBA8:
-		img.convert(Image.FORMAT_RGBA8)
-	var tex := ImageTexture.create_from_image(img)
-	_cliff_front_tex_cache[id] = tex
-	return tex
-
-# ★[단계3-⑤] 주어진 플레이어 타일에서 오버행으로 덮을 벽면 셀 목록(렌더와 분리 — 격리 테스트 가능).
-#   같은 열(pt.x==cell.x) + 벽 밑 1~2칸(0<dy<=2) = 캐릭터 상체가 벽면 픽셀과 겹치는 근접 범위.
-func _front_cliff_cells_for(pt: Vector2i) -> Array:
-	var out: Array = []
-	for cell in _cliff_face_cells:
-		var dy: int = pt.y - cell.y
-		if pt.x == cell.x and dy > 0 and dy <= 2:
-			out.append(cell)
-	return out
 
 # 좌석에 앉은 손님과 머리 위 인내심 바를 그린다. 인내심이 줄수록 바가 짧아지고 붉어져
 # "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거). 몸체는 그레이박스지만 P2.7 톤 패스에서
