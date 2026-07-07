@@ -1,7 +1,7 @@
 # 안식 개간 차등 재점령 — 잡초 재생·구조물 영구 (ADR-0053 §2.B 부분 supersede)
 
 > **Status:** accepted (2026-07-07, `grill-with-docs` + owner 사인오프). owner "매일 번식 vs 일방향 clearable" 근간 grill 산출.
-> **연관/정합:** [ADR-0004](./0004-atonement-theme-keystone.md)(속죄=진보) · [ADR-0035](./0035-homestead-elevation-cliff-overgrown-redesign.md)(overgrown 개간지) · [ADR-0051](./0051-scarecrow-crow-crop-defense-revive-cozy-bounded.md)(cozy bounded 안전장치 선례) · [ADR-0053](./0053-homestead-dirt-dominant-ground-overgrown-identity-sealed.md)(영구 회복·봉인 법칙 — **§2.B 부분 supersede**).
+> **연관/정합:** [ADR-0004](./0004-atonement-theme-keystone.md)(속죄=진보) · [ADR-0035](./0035-homestead-elevation-cliff-overgrown-redesign.md)(overgrown 개간지) · [ADR-0051](./0051-scarecrow-crow-crop-defense-revive-cozy-bounded.md)(cozy bounded 안전장치 선례) · [ADR-0053](./0053-homestead-dirt-dominant-ground-overgrown-identity-sealed.md)(영구 회복·봉인 법칙 — **§2.B 부분 supersede**) · [ADR-0056](./0056-cliff-quality-visual-overlays-fringe-bakedao-pond-bank.md)(절벽 품질 오버레이 — **세이브-안전 국소 오버레이 대원칙 공유**: `_grid`/충돌/세이브 불변으로 안식 시각을 얹는 같은 결).
 > **불변 유지:** 봉인 법칙([ADR-0053] §1 — 환경은 서사를 *말하지* 않는다) · 활동-독립 규칙(CONTEXT 라인 85/180) · 작물·경작지 성역(cozy bounded).
 
 ## 맥락
