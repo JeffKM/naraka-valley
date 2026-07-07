@@ -3487,32 +3487,33 @@ func _build_ground16() -> void:
 						if js < 0 or js > 2:
 							js = sc   # 밭·물·건물로 지터가 튀면 자기 표면 유지(하드 경계 안 침범)
 						out.set_pixel(px, py, _g16_field(js).get_pixel(px % P, py % P))
-	# ★[ADR-0056 ①] 절벽 상단 완충 fringe — CLIFF_LIP 상단 엣지에 고지 풀을 삐죽 늘어뜨려 평지↔절벽 직각
-	#   seam을 완화한다(_build_path_grass_fringe grass_out(dir=0) 기술 재활용). HOME 지면 오버레이는 이
-	#   _build_ground16이 담당하므로(그 외 구역만 _build_path_grass_fringe) 여기 얹는다. surf=-1로 lip 셀은
-	#   오버레이가 투명 → drooped 풀이 밑 타일맵 lip 상단을 덮는다. _grid·충돌·세이브 불변(순수 시각).
-	#   풀 소스=_bf_grass(lip 자체가 '고지 풀 오버행'이라 흙-지배 마당에서도 정합). +측(볼록)만 아래로 늘어뜨림.
+	# ★[ADR-0056 ①] 절벽 상단 완충 fringe — CLIFF_LIP(고지 풀 오버행)의 풀을 *위 셀(고지 마당·흙-지배 tan)*
+	#   하단으로 삐죽 솟구치게 해 tan↔초록 lip 상단 직각 seam을 완화한다. lip 자체가 이미 풀이라 lip 안으로
+	#   늘어뜨리면 안 보인다(초록 위 초록) → 위 tan 셀 하단 픽셀을 풀로 덮어야 경계가 유기적으로 풀린다
+	#   (_build_path_grass_fringe grass_out 기술 재활용). HOME 지면 오버레이=_build_ground16(그 외 구역만
+	#   _build_path_grass_fringe)이라 여기 얹는다. _grid·충돌·세이브 불변(순수 시각). 풀 소스=_bf_grass.
 	for y in _outdoor_h:
 		for x in _grid_w:
 			if _grid[y][x] != CLIFF_LIP:
 				continue
 			if y - 1 < 0 or _grid[y - 1][x] != GROUND:
-				continue   # 위가 고지 풀일 때만(안쪽 lip·노치·경계 제외)
-			var lox := x * TILE
-			var loy := y * TILE
+				continue   # 위가 고지 마당(GROUND)일 때만(안쪽 lip·노치·경계 제외)
+			var aox := x * TILE            # 위 셀(y-1) 원점 — 풀이 이 셀 하단으로 솟는다
+			var aoy := (y - 1) * TILE
 			for i in TILE:
-				var along := lox + i
-				var signed := _gd_h01(int(along / 3), loy, 630) - 0.5   # -0.5..0.5
+				var along := aox + i
+				var signed := _gd_h01(int(along / 3), aoy, 630) - 0.5   # -0.5..0.5
 				if signed <= _FR_DEAD:
-					continue   # 평평·오목(−측)은 스킵 — 풀 볼록(+측)만 아래로 늘어뜨림
-				var micro := _gd_h01(along, loy, 640)
+					continue   # 평평·오목(−측) 스킵 — 풀 볼록(+측)만 위로 솟음
+				var micro := _gd_h01(along, aoy, 640)
 				var mag := (signed - _FR_DEAD) / (0.5 - _FR_DEAD)   # 0..1
 				var depth := clampi(1 + int(mag * (_FR_MAX - 1) + micro * 1.5), 1, _FR_MAX)
 				for j in depth:
-					var gp := _bf_grass.get_pixel((lox + i) % P, (loy + j) % P)
+					var ty := aoy + TILE - 1 - j   # 위 셀 하단에서 j만큼 위로 솟음
+					var gp := _bf_grass.get_pixel((aox + i) % P, ty % P)
 					if j == depth - 1:   # blade 팁 = 살짝 어둡게(풀날 윤곽)
 						gp = Color(gp.r * 0.78, gp.g * 0.78, gp.b * 0.82, gp.a)
-					out.set_pixel(lox + i, loy + j, gp)
+					out.set_pixel(aox + i, ty, gp)
 	_ground_detail_tex = ImageTexture.create_from_image(out)
 
 # ★[스타듀 농장 룩] 지면 표면 결정 헬퍼(_build_ground16 전용) ─────────────────────────────
