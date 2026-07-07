@@ -21,7 +21,7 @@
 
 | # | 작업 | 성격 | 상태 |
 |---|---|---|---|
-| 1 | **debris/개간 근간 결정 grill** → 안식 개간 루프 완성 | grill→코드 | ⏳ 다음 |
+| 1 | **debris/개간 근간 결정 grill** → 안식 개간 루프 완성 | grill→코드 | ✅ 완료 (ADR-0055·재점령 `advance_day`·main 배선·reclaim_test ⑪~⑱) |
 | 2 | **절벽 시스템 스타듀 정식화** (남향-only 오토타일러·ADR-0044 개정) | 코드 | shrimp 등록됨(`3f8f4a75`) |
 | 3 | **캐릭터 5종 재생성** (스타듀 룩) | 아트(owner-Gemini) | 스펙카드 有 |
 | 4 | **동향 계단 아트** (S1-10 placeholder 교체) | 아트 | — |
@@ -106,7 +106,7 @@ graph TD
 - **폴리시 패스:** S1-폴리시 HUD/절벽 가이드(PR#192) · 프롭 재생성 13종(PR#198~#209·[prop-regen-roster.md]) · 까마귀(PR#205·[ADR-0051]) · 아트정리 도구·엽전·탭·시계(PR#211~#215) · 전문직 프레임워크+채집 루프(PR#210·#212·[ADR-0052]) · 타이틀 완성(PR#216·#218·#224·#225·#226) · 흙-지배 flip(PR#231·[ADR-0053]) · 건물 접지(PR#232·[ADR-0054]).
 
 #### ⏳ 잔여 (비차단 후속 — 순서는 위 [지금 위치 & 남은 작업])
-- [ ] **debris/개간 근간 결정 grill → 안식 개간 루프 완성** *(다음 빌드 #1)* — owner GDD 2건(근원지 전파·통행로 자정) 대기·"매일 번식 vs 일방향 clearable" 미해결. 메모리 `homestead-dirt-dominant-ground-flip`.
+- [x] **debris/개간 근간 결정 grill → 안식 개간 루프 완성** *(다음 빌드 #1)* — ✅ **완료([ADR-0055] 차등 재점령)**. "매일 번식 vs 일방향 clearable" 해소: 잡초(non-solid)만 빈 맨땅에 밤 1~2칸 재점령(cap=후보×0.75·day 결정적·겨울 정지)·구조물(돌/그루터기=solid) 치운 자리·밭·작물은 영구 성역. `reclaim.gd`(`_weeds` 원장·`advance_day`·`clear_weed`·세이브 확장)+main 배선(`_encroach_candidates`·day-advance·낫 디스패치·프롬프트·`_draw_encroach_weeds`)+`reclaim_test` ⑪~⑱ 검증(회귀 54 PASS). 근원지 전파·타일셋 이원화는 여전히 North Star([ADR-0053] §2.B).
 - [ ] **절벽 시스템 스타듀 정식화(단계 3·[ADR-0044] 개정 슬라이스)** *(다음 빌드 #2)* — 남향-only 오토타일러(동/서/북=잔디 립·곡선 대각 전이·발치 그림자 자동합성)+잔디 입체화+Front 레이어 립+옛 90°코너/측벽 폐기. shrimp `3f8f4a75`·owner 라이브 확인 후. [cliff-tileset-spec.md §10.2].
 - [ ] **캐릭터 5종 재생성**(owner-Gemini·메모리 `gemini-full-regen-batch`) *(다음 빌드 #3)*.
 - [ ] **동향 계단 아트**(S1-10 `stairs_east` placeholder 교체) *(다음 빌드 #4)*.

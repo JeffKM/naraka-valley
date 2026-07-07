@@ -776,6 +776,10 @@ const CHEST_TILE := Vector2i(11, 68)
 # 영혼빛 연못(중앙-약간서) / 고지 하늘 목장(NW, 절벽+계단으로만 진입 — debris 하드 게이트) /
 # 나머지 저지=overgrown debris 밭. 옛 FARM_RECT 중앙 대형 밭은 삭제(스타터 패치 + overgrown으로 대체).
 const STARTER_PATCH_RECT := Rect2i(40, 12, 5, 5)  # x40..44, y12..16 (본가/창고 남쪽 5×5 — debris 0%·즉경작 SOIL)
+# ★ [ADR-0055] 재점령(잡초 재생) 스캔 범위 — overgrown 저지 마당(debris 밭 x28..60·y20..56을 여유로 감쌈).
+#   이 rect 안의 빈 맨땅(GROUND·프롭·밭 미점유)만 밤새 잡초가 다시 덮는다. NW 하늘 목장·먼 코너 나무숲·
+#   남단 seam은 밖(마당 밖 잔디는 재점령 대상 아님 — cozy 스코프). 정밀 범위는 Phase 3 밸런싱 레버.
+const ENCROACH_SCAN_RECT := Rect2i(26, 18, 36, 40)  # x26..61, y18..57
 const SPIRIT_POND_RECT := Rect2i(26, 34, 8, 7)    # ★ADR-0035 영혼빛 연못 x26..33, y34..40 (WATER — 물뿌리개·낚시 앵커, 메카닉 Slice 3)
 const SPAWN_TILE := Vector2i(40, 60)       # 도착 지점(남단 중앙) — 불변(구역 경계 seam)
 
@@ -1122,6 +1126,7 @@ var ranch: Ranch = null
 #   노드(코드 생성 — .new()). debris 배치는 PROP_LAYOUT_HOME 시드에 잠겨 있고, 이 노드는 "무엇을 치웠나"
 #   델타만 소유한다. main이 드로우/충돌 skip·farmable 판정에서 질의(디커플링 — Reclaim은 화면·지형 무지).
 var reclaim: Reclaim = null
+var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌트를 한 번만 띄웠는지(세션 로컬 — 세이브 무관)
 # ★ [B1-a.3] 사료풀 상태(낫으로 베어 건초를 얻는 고지 풀 — 재생·겨울정지). FarmField/Orchard/Ranch/
 #   Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). main이 고지 자유 풀밭을 시드하고, 벤 결과를
 #   여물광(Ranch.store_hay)에 적재한다(경제 양끝 잇기). 드로우는 main이 이 상태를 질의(디커플링).
@@ -4026,6 +4031,13 @@ func _on_day_advanced(day: int) -> void:
 	forage.advance_day(day, GameClock.season_index_for_day(day) == 3)
 	# ★ ADR-0052 꽃 패치 재생 — 딴 지 REGROW_DAYS 지난 패치가 다시 핀다(절기 무관 — 피안화는 저승 꽃).
 	flower.advance_day(day)
+	# ★ [ADR-0055] 안식 재점령 — 빈 맨땅 1~2칸에 밤새 잡초(이승의 미련)가 다시 돋는다(구조물·밭·작물 성역).
+	#   겨울(잿눈)엔 정지(Forage와 같은 저승 성장정지). 자격 빈 맨땅 후보는 main이 계산해 전달(디커플링).
+	if reclaim != null:
+		var new_weeds := reclaim.advance_day(_encroach_candidates(), day, GameClock.season_index_for_day(day) == 3)
+		if new_weeds.size() > 0 and not _hinted_encroach:
+			_hinted_encroach = true          # 첫 재점령 1회만 멘토 힌트(봉인 법칙 — 순수 앰비언트, ADR-0055 §5)
+			_notice("땅은 잠깐만 안 돌봐도 금세 거칠어진다 — 낫으로 잡초를 벨 수 있다")
 	energy.refill()
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
@@ -5032,6 +5044,11 @@ func _process(delta: float) -> void:
 	var on_debris := not _sleeping and _debris_kind_at(_target) != ""
 	if on_debris and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
+	# ★ [ADR-0055] 재점령 잡초 낫질 — 잡초는 GROUND(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치.
+	#   LMB(낫 든 채)=베기(_use_tool 내 개간 분기 → clear_weed). 낫 아니면 그 안에서 무동작.
+	var on_weed := not _sleeping and _region == RegionCatalog.HOME and reclaim != null and reclaim.has_weed(_target)
+	if on_weed and Input.is_action_just_pressed("use_tool"):
+		_use_tool()
 	# ★ [B1-a.3] 낫 풀베기 — 사료풀은 GROUND(비-SOIL·비-짐승) 위라 _target_valid 게이트 밖에서 따로 디스패치.
 	#   LMB(낫 든 채)=베기(_use_tool 내 사료풀 분기 → 여물광 +1). 낫 아니거나 안 자란 풀이면 그 안에서 무동작.
 	var on_forage := not _sleeping and _region == RegionCatalog.HOME \
@@ -5173,6 +5190,10 @@ func _process(delta: float) -> void:
 		# ★ [S1-8] 개간 대상 debris를 바라볼 때: 맞는 도구를 들었으면 [좌클릭] 개간, 아니면 필요한 도구 안내.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _debris_prompt(_debris_kind_at(_target))
+	elif _region == RegionCatalog.HOME and reclaim != null and reclaim.has_weed(_target):
+		# ★ [ADR-0055] 밤새 돋은 재점령 잡초를 바라볼 때: 낫을 들었으면 [좌클릭] 풀베기, 아니면 낫 안내.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _debris_prompt(DebrisCatalog.WEEDS)
 	elif _region == RegionCatalog.HOME and flower.is_bloomed(_target):
 		# ★ ADR-0052 활짝 핀 꽃 패치를 바라볼 때: 우클릭 맨손 채집(혼력0). 채집물+채집 XP.
 		interact_prompt.visible = not _sleeping
@@ -5251,6 +5272,13 @@ func _use_tool() -> void:
 				inventory.add_item(str(res["drop"]), int(res["count"]))
 				_toast_item(str(res["drop"]), int(res["count"]))   # ★ Phase C 획득 토스트
 				verb = "개간"
+		elif reclaim.has_weed(_target):
+			# ★ [ADR-0055] 밤새 돋은 재점령 잡초를 낫으로 벤다(WEEDS 드랍 = 혼백섬유 ×1). 낫 아니면 무동작.
+			var wres := reclaim.clear_weed(_target, item)
+			if not wres.is_empty():
+				inventory.add_item(str(wres["drop"]), int(wres["count"]))
+				_toast_item(str(wres["drop"]), int(wres["count"]))
+				verb = "풀베기"
 	if verb == "":
 		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
 	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기·비료는 물/뿌리는 소리.
@@ -6231,6 +6259,48 @@ func _debris_kind_at(t: Vector2i) -> String:
 			return kind
 	return ""
 
+# ★ [ADR-0055] HOME 프롭이 점유한 타일 집합(다중 타일 footprint 포함). 프롭 크기(get_size)를 타일로
+#   환산해 앵커에서 아래·오른쪽으로 펼친다(나무 2×4·바위 2×2 등). 재점령 후보에서 이 타일을 배제해
+#   건물·나무·바위·debris·꽃·울타리·허수아비·가구 위에 잡초가 안 돋게 한다(성역·시각 겹침 방지).
+func _home_occupied_tiles() -> Dictionary:
+	var occ: Dictionary = {}
+	for entry in _prop_layouts.get("HOME", []):
+		var sz: Vector2 = entry[0].get_size()
+		var tw: int = maxi(int(round(sz.x / TILE)), 1)
+		var th: int = maxi(int(round(sz.y / TILE)), 1)
+		for anchor in entry[1]:
+			for dx in range(tw):
+				for dy in range(th):
+					occ[anchor + Vector2i(dx, dy)] = true
+	return occ
+
+# ★ [ADR-0055 §2] 재점령 자격 빈 맨땅 후보 — reclaim.advance_day 입력. ENCROACH_SCAN_RECT 안에서
+#   순수 빈 GROUND(밭 SOIL·길·벽·물·절벽 아님)이고, 프롭 미점유(건물·나무·바위·debris·꽃·울타리 등)이며,
+#   밭(경작·심음)도 아니고, 개간(치운 debris) 자리도 아닌 타일만 모은다 = 아직 안 다듬은 잔디 여백.
+#   → 밭·작물·구조물·이미 연 땅은 절대 재점령 안 됨(진보·cozy 성역). HOME 전용.
+func _encroach_candidates() -> Array:
+	var out: Array = []
+	if _region != RegionCatalog.HOME or reclaim == null:
+		return out
+	var occ := _home_occupied_tiles()
+	var y0: int = maxi(ENCROACH_SCAN_RECT.position.y, 0)
+	var y1: int = mini(ENCROACH_SCAN_RECT.end.y, _outdoor_h)
+	var x0: int = maxi(ENCROACH_SCAN_RECT.position.x, 0)
+	var x1: int = mini(ENCROACH_SCAN_RECT.end.x, _grid_w)
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			var t := Vector2i(x, y)
+			if _grid[y][x] != GROUND:              # 밭 흙·길·벽·물·절벽 = 진보/성역 → 배제
+				continue
+			if occ.has(t):                          # 프롭 점유(구조물·장식·debris) → 배제
+				continue
+			if reclaim.is_cleared(t):               # 이미 연 땅(구조물 치운 성역) → 배제
+				continue
+			if farm.is_tilled(t) or farm.is_planted(t):  # 밭 성역(이중 방어) → 배제
+				continue
+			out.append(t)
+	return out
+
 # ★ [B1-a.1 → Phase E/S1-15] 신규 게임 스타터 짐승 배치. ranch가 비었을 때만(멱등) 종별 소속 건물 실내에
 # 놓는다(진입 실내 — 안개소=넋우릿간·노을닭=넋둥우리). ★ Phase E: 각 건물에 *성체 1 + 새끼 1*(owner 결정
 # 2026-07-03 — 데모에서 성체·새끼·성장 셋 다 보이게). 성체는 age=grow_days로 즉시 산물 가능, 새끼는 age=0.
@@ -6360,6 +6430,7 @@ func _draw() -> void:
 			_draw_well()               # ★ [B2] 혼우물 외관(WALL 박스 그레이박스 — 돌 우물, 리필 메카닉=별도 grill)
 			_draw_forage()             # ★ [B1-a.3] 사료풀(다 자람=풀포기·벤 자리=밑동) — 낫 채집 대상
 			_draw_flower_regrow()      # ★ ADR-0052 딴 꽃 패치 자리 새싹(재생 대기 — 폄은 _draw_props_for가 풀 스프라이트로)
+			_draw_encroach_weeds()     # ★ ADR-0055 밤새 돋은 재점령 잡초(빈 맨땅 위 평면 데칼 — 낫 채집 대상)
 			# ★[§6] Y-split: 뒤 프롭(플레이어 발치 위)만 여기서(플레이어 아래). 앞 프롭은 _front_props.
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_prop_layouts.get("HOME", []), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터: 집 가구·길가 등불·화분 + T3 농장 장식
@@ -6545,6 +6616,17 @@ func _draw_flower_regrow() -> void:
 		# 딴 자리 = 어린 초록 새싹 두 갈래(며칠 뒤 다시 핌). 사료풀 밑동과 색을 갈라(초록) 채집물임을 읽힘.
 		draw_line(px + Vector2(TILE * 0.42, TILE * 0.72), px + Vector2(TILE * 0.36, TILE * 0.56), Color(0.40, 0.66, 0.34), 2.0)
 		draw_line(px + Vector2(TILE * 0.58, TILE * 0.72), px + Vector2(TILE * 0.64, TILE * 0.56), Color(0.40, 0.66, 0.34), 2.0)
+
+# ★ [ADR-0055] 밤새 돋은 재점령 잡초를 그린다 — 이승의 미련(잡초) 스프라이트를 빈 맨땅 위에 평면 데칼로.
+#   debris 잡초와 같은 텍스처·변주(좌표 결정적 해시)를 써 개간 대상과 시각 동일(낫 대상임을 읽힘). 순수
+#   시각(상태는 reclaim 노드 소유). 평면이라 그림자·Y-split 없음(back 레이어 = 플레이어 아래, debris 잡초 결).
+func _draw_encroach_weeds() -> void:
+	if reclaim == null or _region != RegionCatalog.HOME:
+		return
+	var tsz := PROP_DEBRIS_WEEDS.get_size()
+	for t in reclaim.weed_tiles():
+		var tex := _debris_variant_tex(PROP_DEBRIS_WEEDS, t)
+		draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), tsz), false)
 
 # ★ [Phase E/S1-15] 가축 스프라이트 훅 — assets/livestock/<species>_<stage>.png(gemini-demo-sprites-spec §5,
 #   bottom-center 앵커, dak 32²·so_baby 48²·so_adult 64×48). owner Gemini 결과가 이 경로에 들어오면 코드
