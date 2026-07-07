@@ -11,6 +11,8 @@ extends SceneTree
 #   ⑥ [단계3-④] 곡선 코너 = 벽 서/동 바깥 끝 = CORNER_SW/SE × Face/Base(전부 SOLID), 중간 벽 직선.
 #   ⑦ [ADR-0056 ④] 연못 북단 뱅크 = _autotile_pond_siblings가 SPIRIT_POND_RECT에서 유도(하드코딩 제거·멱등).
 #   ⑧ [ADR-0056 ①] 절벽 상단 fringe = _build_ground16이 CLIFF_LIP 위에 풀 늘어뜨림(순수 시각·_grid 불변).
+#   ⑨ [ADR-0056 ③] 노치 좌우 벽 끝 = _round_south_notch가 곡선 코너(SE/SW)로 라운딩(SOLID·폭 불변).
+#   ⑩ [ADR-0056 ④] BASE 발치 그림자 밴드 = 아래 tan 그리드 불변(순수 시각 오버레이).
 #
 # 라이브 home맵은 건드리지 않는다(스크래치 rect만 덮어쓴다 — 회귀 0). 라이브는 _autotile_south_cliffs가 남향
 # 벽을 굽고, _lay_south_band는 이 격리 검증 전용 원시어휘다. 좀비 방지: quit(). run_tests.sh 워치독과 함께.
@@ -152,6 +154,25 @@ func _initialize() -> void:
 			lip_intact = false
 	_check("⑧ fringe 후 CLIFF_LIP 격자 불변(순수 시각)", lip_intact and lip_cells.size() > 0)
 	_check("⑧ _ground_detail_tex 생성됨(오버레이 베이크)", m._ground_detail_tex != null)
+
+	# ── ⑨ [ADR-0056 ③ FINAL] 노치 좌우 벽 끝 = 곡선 코너 라운딩(라이브 HOME 노치) ──
+	# _round_south_notch가 통로 마주 벽 끝을 CORNER로 스위칭(좌벽 동측=SE / 우벽 서측=SW). 코너는 SOLID라 폭 불변.
+	var gx: int = m.RANCH_GATE_X
+	var gw: int = m.RANCH_GATE_W
+	var hs: int = m.HIGHLAND_S
+	var nleft: int = gx - 1
+	var nright: int = gx + gw
+	_check("⑨ 노치 좌벽 Face 끝 = CORNER_SE", m._grid[hs + 1][nleft] == m.CLIFF_CORNER_SE)
+	_check("⑨ 노치 좌벽 Base 끝 = CORNER_SE_B", m._grid[hs + 2][nleft] == m.CLIFF_CORNER_SE_B)
+	_check("⑨ 노치 우벽 Face 끝 = CORNER_SW", m._grid[hs + 1][nright] == m.CLIFF_CORNER_SW)
+	_check("⑨ 노치 우벽 Base 끝 = CORNER_SW_B", m._grid[hs + 2][nright] == m.CLIFF_CORNER_SW_B)
+	_check("⑨ 코너 라운딩 후에도 SOLID(통로 폭 불변)", m.is_solid(m.CLIFF_CORNER_SE) and m.is_solid(m.CLIFF_CORNER_SW))
+
+	# ── ⑩ [ADR-0056 ④ FINAL] BASE 발치 그림자 밴드 = 순수 시각(아래 tan 그리드 불변) ──
+	# 접지 밴드는 _ground_detail_tex 오버레이만 어둡게 — _grid의 발치 아래(Y+1) 셀은 순수 GROUND(tan) 유지.
+	var base_x: int = 5   # 노치(x9) 서쪽 내부 남향 벽
+	_check("⑩ 남향 벽 Base 존재(x5)", m._grid[hs + 2][base_x] == m.CLIFF_FACE_BASE)
+	_check("⑩ Base 아래(Y+1) 그리드 = GROUND(tan 불변·순수 시각)", m._grid[hs + 3][base_x] == m.GROUND)
 
 	m.queue_free()
 	await process_frame
