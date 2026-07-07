@@ -9,6 +9,8 @@ extends SceneTree
 #   ④ 8이웃(대각 포함) BFS leak = 2행 밴드가 고지↔저지를 차단(대각 squeeze 0), 노치로만 연결.
 #   ⑤ [단계3] 남향-only 오토타일러 = 사각 마스크 → 남쪽만 Lip/Face/Base, 동/서/북=잔디 능선.
 #   ⑥ [단계3-④] 곡선 코너 = 벽 서/동 바깥 끝 = CORNER_SW/SE × Face/Base(전부 SOLID), 중간 벽 직선.
+#   ⑦ [ADR-0056 ④] 연못 북단 뱅크 = _autotile_pond_siblings가 SPIRIT_POND_RECT에서 유도(하드코딩 제거·멱등).
+#   ⑧ [ADR-0056 ①] 절벽 상단 fringe = _build_ground16이 CLIFF_LIP 위에 풀 늘어뜨림(순수 시각·_grid 불변).
 #
 # 라이브 home맵은 건드리지 않는다(스크래치 rect만 덮어쓴다 — 회귀 0). 라이브는 _autotile_south_cliffs가 남향
 # 벽을 굽고, _lay_south_band는 이 격리 검증 전용 원시어휘다. 좀비 방지: quit(). run_tests.sh 워치독과 함께.
@@ -124,6 +126,39 @@ func _initialize() -> void:
 	_check("⑥ 곡선 코너 4종 전부 SOLID", m.is_solid(m.CLIFF_CORNER_SW) and m.is_solid(m.CLIFF_CORNER_SW_B) \
 		and m.is_solid(m.CLIFF_CORNER_SE) and m.is_solid(m.CLIFF_CORNER_SE_B))
 	_check("⑥ 중간 벽은 직선 유지(코너 아님)", m._grid[49][55] == m.CLIFF_FACE and m._grid[50][55] == m.CLIFF_FACE_BASE)
+
+	# ── ⑦ [ADR-0056 ④] 연못 북단 뱅크 = SPIRIT_POND_RECT 로컬 유도(하드코딩 제거·좌표 바이트 동일) ──
+	# _build_home이 _autotile_pond_siblings로 깐 라이브 뱅크를 검증(함수가 rect 폭 전체에서 정확히 유도했는지).
+	# scratch(x48..)와 연못(x26..33)은 안 겹쳐 앞 케이스 영향 없음.
+	var pr: Rect2i = m.SPIRIT_POND_RECT
+	var bank_ok := true
+	var face_ok := true
+	for px in range(pr.position.x, pr.end.x):
+		if m._grid[pr.position.y][px] != m.CLIFF_BANK:
+			bank_ok = false
+		if m._grid[pr.position.y - 1][px] != m.CLIFF_FACE:
+			face_ok = false
+	_check("⑦ 연못 북단 y0 = CLIFF_BANK(돌 ledge, 폭 전체)", bank_ok)
+	_check("⑦ 연못 북단 y-1 = CLIFF_FACE(흙 밴크, 폭 전체)", face_ok)
+	m._autotile_pond_siblings()   # 멱등: 순수 유도라 재호출해도 동일
+	_check("⑦ _autotile_pond_siblings 멱등", m._grid[pr.position.y][pr.position.x] == m.CLIFF_BANK \
+		and m._grid[pr.position.y - 1][pr.position.x] == m.CLIFF_FACE)
+
+	# ── ⑧ [ADR-0056 ①] 절벽 상단 fringe = 순수 시각(_grid·타일종 불변) ──
+	# _build_ground16(HOME 지면 오버레이)이 CLIFF_LIP 상단에 풀을 늘어뜨리되 _grid·충돌은 안 건드리고
+	# _ground_detail_tex(오버레이 텍스처)만 다시 굽는다. fringe 루프가 라이브 HOME lip 위를 실제로 돈다.
+	var lip_cells: Array = []
+	for yy in range(m._outdoor_h):
+		for xx in range(m._grid_w):
+			if m._grid[yy][xx] == m.CLIFF_LIP:
+				lip_cells.append(Vector2i(xx, yy))
+	m._build_ground16()
+	var lip_intact := true
+	for c in lip_cells:
+		if m._grid[c.y][c.x] != m.CLIFF_LIP:
+			lip_intact = false
+	_check("⑧ fringe 후 CLIFF_LIP 격자 불변(순수 시각)", lip_intact and lip_cells.size() > 0)
+	_check("⑧ _ground_detail_tex 생성됨(오버레이 베이크)", m._ground_detail_tex != null)
 
 	m.queue_free()
 	await process_frame

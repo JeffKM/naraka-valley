@@ -2593,12 +2593,10 @@ func _build_home() -> void:
 
 	_build_cliffs()                                 # ★ADR-0035 고지(하늘 목장 NW) 둘레 절벽 단면 + 충돌(계단 틈만 열림)
 	_fill_rect(SPIRIT_POND_RECT, WATER)             # ★ADR-0035 영혼빛 연못(중앙-약간서, WATER terrain·통과 X)
-	# ★ [S1-10 / ADR-0044 §2] 연못 북단 강둑 단차 2행 — 물이 '낮게' 읽히는 pseudo-Z(owner 참고 스크린샷:
-	#   흙 밴크 + 물가 돌 ledge). y-1=CLIFF_FACE(흙 strata 밴크), y0=CLIFF_BANK(흙+돌 ledge)로 물 최상단
-	#   grass 전이행을 덮어 돌 ledge가 수면과 바로 맞닿게 한다(둘 다 SOLID). 물 Wang은 y+1부터 자동 정합.
-	for _bx in range(SPIRIT_POND_RECT.position.x, SPIRIT_POND_RECT.end.x):
-		_set_tile(_bx, SPIRIT_POND_RECT.position.y - 1, CLIFF_FACE)
-		_set_tile(_bx, SPIRIT_POND_RECT.position.y, CLIFF_BANK)
+	# ★ [S1-10 / ADR-0044 §2 → ADR-0056 ④] 연못 북단 강둑 단차 2행 — 옛 하드코딩 루프를 SPIRIT_POND_RECT
+	#   북단에서 유도하는 로컬 sibling 자동화로 대체. ★위 _build_cliffs가 _cache_cliff_face_cells를 이미
+	#   돌린 *뒤*라 이 CLIFF_FACE 뱅크는 front 오버행에서 자연 제외된다(순서 불변 필수).
+	_autotile_pond_siblings()
 	_fill_rect(STARTER_PATCH_RECT, SOIL)            # ★ADR-0035 5×5 스타터 패치(즉경작 SOIL)
 	_build_facade(HOUSE_EXT_RECT, HOUSE_EXT_DOOR)   # 외부 본가 외관(통과 불가 박스 + 문 트리거)
 	_set_tile(HOUSE_EXT_DOOR_E.x, HOUSE_EXT_DOOR_E.y, PATH)  # ★[ADR-0046] 본가 2칸 문 동칸도 리세스(짝수폭 중앙 2칸 = 아트 정합)
@@ -2908,6 +2906,19 @@ func _lay_south_band(x0: int, x1: int, y: int) -> void:
 # 노치 폭 = 밴드 깊이(남향=2행 종단 / 동향=3열 종단 — ADR-0044 "2폭"↔§5"3열" 정합). STAIRS 프롭은 layout(S1-3).
 func _carve_stair_notch(rect: Rect2i) -> void:
 	_fill_rect(rect, GROUND)
+
+# ★[ADR-0056 ④] 연못 북단 뱅크 로컬 sibling 자동화 — SPIRIT_POND_RECT 북단 경계선에서 강둑 2행을 유도
+#   생성한다(옛 _build_home 하드코딩 루프 대체). 물/길 교차 full 오토타일 일반화(B안)·cliff_bank_water
+#   전이 타일은 [cliff-tileset-spec §8]대로 S2/S3 연기 — 여기선 연못 하나에 대한 국소 유도만.
+#   y-1=CLIFF_FACE(흙 strata 밴크) / y0=CLIFF_BANK(흙+돌 ledge)로 물 최상단 grass 전이행을 덮어 돌 ledge가
+#   수면과 바로 맞닿게 한다(둘 다 SOLID·물 Wang은 y+1부터 자동 정합). 좌표=옛 하드코딩과 바이트 동일
+#   → 세이브·연못 낚시/물뿌리개 앵커(Slice 3 예약) 불변. 순수 유도라 멱등(중복 호출 안전).
+#   ★반드시 물(_fill_rect WATER)·_build_cliffs 뒤에 부른다(_build_home 결).
+func _autotile_pond_siblings() -> void:
+	var top: int = SPIRIT_POND_RECT.position.y
+	for bx in range(SPIRIT_POND_RECT.position.x, SPIRIT_POND_RECT.end.x):
+		_set_tile(bx, top - 1, CLIFF_FACE)
+		_set_tile(bx, top, CLIFF_BANK)
 
 # ★ [ADR-0044 개정 / 단계3] 남향-only 절벽 오토타일러 — 고지 불리언 마스크(is_hi)에서 스타듀 남향 문법을 굽는다.
 #   각 고지 셀 중 *바로 아래가 저지*인 셀만 남쪽 경계로 보고 y=Lip(걷기O 오버행) / y+1=Face(SOLID) /
@@ -3476,6 +3487,32 @@ func _build_ground16() -> void:
 						if js < 0 or js > 2:
 							js = sc   # 밭·물·건물로 지터가 튀면 자기 표면 유지(하드 경계 안 침범)
 						out.set_pixel(px, py, _g16_field(js).get_pixel(px % P, py % P))
+	# ★[ADR-0056 ①] 절벽 상단 완충 fringe — CLIFF_LIP 상단 엣지에 고지 풀을 삐죽 늘어뜨려 평지↔절벽 직각
+	#   seam을 완화한다(_build_path_grass_fringe grass_out(dir=0) 기술 재활용). HOME 지면 오버레이는 이
+	#   _build_ground16이 담당하므로(그 외 구역만 _build_path_grass_fringe) 여기 얹는다. surf=-1로 lip 셀은
+	#   오버레이가 투명 → drooped 풀이 밑 타일맵 lip 상단을 덮는다. _grid·충돌·세이브 불변(순수 시각).
+	#   풀 소스=_bf_grass(lip 자체가 '고지 풀 오버행'이라 흙-지배 마당에서도 정합). +측(볼록)만 아래로 늘어뜨림.
+	for y in _outdoor_h:
+		for x in _grid_w:
+			if _grid[y][x] != CLIFF_LIP:
+				continue
+			if y - 1 < 0 or _grid[y - 1][x] != GROUND:
+				continue   # 위가 고지 풀일 때만(안쪽 lip·노치·경계 제외)
+			var lox := x * TILE
+			var loy := y * TILE
+			for i in TILE:
+				var along := lox + i
+				var signed := _gd_h01(int(along / 3), loy, 630) - 0.5   # -0.5..0.5
+				if signed <= _FR_DEAD:
+					continue   # 평평·오목(−측)은 스킵 — 풀 볼록(+측)만 아래로 늘어뜨림
+				var micro := _gd_h01(along, loy, 640)
+				var mag := (signed - _FR_DEAD) / (0.5 - _FR_DEAD)   # 0..1
+				var depth := clampi(1 + int(mag * (_FR_MAX - 1) + micro * 1.5), 1, _FR_MAX)
+				for j in depth:
+					var gp := _bf_grass.get_pixel((lox + i) % P, (loy + j) % P)
+					if j == depth - 1:   # blade 팁 = 살짝 어둡게(풀날 윤곽)
+						gp = Color(gp.r * 0.78, gp.g * 0.78, gp.b * 0.82, gp.a)
+					out.set_pixel(lox + i, loy + j, gp)
 	_ground_detail_tex = ImageTexture.create_from_image(out)
 
 # ★[스타듀 농장 룩] 지면 표면 결정 헬퍼(_build_ground16 전용) ─────────────────────────────
