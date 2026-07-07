@@ -144,6 +144,8 @@
 
 > ⚠️ **이중 그림자 금지:** `cliff_s_base.png`엔 [cliff-tileset-spec §10.2] 단계1·2에서 **접지 그림자가 이미 베이크됨** → 위는 *신규*가 아니라 그 그림자의 **정밀화**다(발치 뭉갬 방지).
 
+> ✅ **적용됨(2026-07-07, PR):** `cliff_s_face.png` 하단 감쇄는 **`game/tools/bake_cliff_face_ao.py`**(절차적 per-row gradient·strength 0.24)로 현 아트에 베이크 완료. `cliff_s_base.png`는 위 이중 금지대로 **미변경**. Gemini가 face를 재생성하면 이 스크립트를 재적용(strength 튜너블).
+
 ---
 
 ## 위키 디프 구현 메모 (Phase A)
