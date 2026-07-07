@@ -177,7 +177,7 @@ Stardew-like chunky pixels, NOT isometric, NOT rocky grey stone.
 
 > owner 라이브 확인이 봉합한 회귀 2건(PR#234 절벽 안보임·PR#235 하얀 사각형) 뒤, 남은 **품질 3항목**을 `grill-with-docs`로 정식화해 [ADR-0056](../adr/0056-cliff-quality-visual-overlays-fringe-bakedao-pond-bank.md)에 박제했다. 유실된 Gemini 가이드 대신 현 코드+스타듀 불변식 역설계. **대원칙 = 데이터-안전 국소 오버레이**(`_grid`·충돌·세이브 불변, ④만 세이브-안전 예외).
 
-- **① 상단 완충** = `_build_path_grass_fringe` 재활용 `_draw_cliff_fringe` 오버레이(CLIFF_LIP 상단 엣지 ragged 풀 늘어짐). 새 타일종 X.
+- **① 상단 완충** = CLIFF_LIP 상단 엣지 ragged 풀 늘어짐 오버레이(새 타일종 X). ★구현 훅 = **`_build_ground16`** 인라인(HOME 지면 오버레이는 흙-지배 flip의 이 함수 — `_build_path_grass_fringe`는 *그 외 구역* 전용이라 절벽 있는 HOME엔 안 붙는다). grass_out(dir=0) *기술*만 재활용·풀 소스 `_bf_grass`.
 - **② FACE 원근 AO** = **코드 0**, 아트 베이크 트랙. `cliff_s_face`(하단 감쇄)·`cliff_s_base`(접지 드롭섀도우 0.65) — ⚠️ **§10.2 단계1·2 기존 접지 그림자를 *정밀화*, 이중 금지.** 스펙은 [required-assets-roster] 등록.
 - **④ 수변 뱅크** = `_build_home` 하드코딩 2행(연못 북단 CLIFF_FACE+CLIFF_BANK) 삭제 → `_autotile_pond_siblings`(SPIRIT_POND_RECT 북단 유도). Full 일반화(물/길 교차·`cliff_bank_water`·`cliff_beach`)는 **§8대로 S2/S3 연기**. ★통합 초안이 이를 `_autotile_south_cliffs` 인라인 IF로 흡수했으나 고지 마스크(x0..20/y0..26)와 연못(x26..33/y34..40)이 안 겹쳐 **죽은 코드** → sibling 함수가 유일 정답([ADR-0056] §결정-④).
 - **§3 불변식:** 하프타일 콜라이더·Y-Sort는 현 엔진에 없음. 실제 = whole-tile SOLID(−8..8) 타일종 충돌 + `_front_cliff_cells_for` 근접 재렌더 front. front 텍스처는 **ImageTexture 변환 필수**(CompressedTexture2D `draw_texture`=하얀사각형).
