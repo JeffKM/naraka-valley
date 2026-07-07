@@ -3613,7 +3613,13 @@ func _g16_surface(x: int, y: int) -> int:
 		return 3
 	if c == WATER:
 		return 4
-	# GROUND(및 벽/void — 프롭·facade가 덮음): 흙 베이스 + 잔디 패치
+	# ★[ADR-0056 후속 — 절벽 top 연결] 하늘 목장(고지 평지 NW 사각)은 잔디-지배로 둔다 — 초록 lip과 이어져
+	#   절벽 top이 tan 줄무늬 단절 없이 자연스럽게 연속(스타듀 elevated=grassy). 저지 마당만 흙-지배 flip
+	#   (ADR-0053) 유지 → 목장=잔디 vs 농장=흙 대비. 건물 발치 tan 패드는 _build_ground16의
+	#   _g16_near_building 오버라이드가 그대로 유지(surf=1이어도 발치는 tan으로 되돌림).
+	if x <= HIGHLAND_E and y <= HIGHLAND_S:
+		return 1
+	# GROUND(및 벽/void — 프롭·facade가 덮음): 흙 베이스 + 잔디 패치(저지 마당 흙-지배)
 	return 1 if _g16_is_grass_patch(x, y) else 0
 
 func _g16_field(s: int) -> Image:
