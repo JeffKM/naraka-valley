@@ -169,7 +169,7 @@ Stardew-like chunky pixels, NOT isometric, NOT rocky grey stone.
 - **단계 3 후속 증분 완료(2026-07-04, 워크트리 cliff-south-followup — ②남향-only 오토타일러는 PR#193 Increment A로 선완료):**
   - **③ 잔디 입체화(부분):** 동향 잔디 능선을 x20 4칸 간격 bush 7개 → y1~25 2칸 지그재그(x19↔20) 13개로 연속 산등성이화(`PROP_LAYOUT_HOME`). 필드 변종 노이즈·클러스터 명암은 owner 차분함 선호(`_GD_CLUMP_DAMP=0.42`) 존중해 보류(육안 후 별도).
   - **④ 곡선 대각 전이 코너:** 신규 타일종 4종(`CLIFF_CORNER_SW/SE × Face/Base`, 전부 SOLID) + 오토타일러 코너 로직(벽 서/동 바깥 끝=맵경계·능선과 만나는 진짜 끝 감지). 아트=`make_cliff_corners.py` 절차 파생(`cliff_s_face/base` + lip 풀을 1/4 코사인 곡선으로 전이, 결정적·2px 캐논). §10.1 파생 out/in 코너를 이 곡선 전이로 대체.
-  - **⑤ 벽면 오버행(owner 결정 = 벽면 전체 front, 스타듀 표준):** CLIFF_LIP은 고지 위·안 닿음 → 캐릭터가 절벽 밑 1~2칸에 서면 Face/Base를 `_front_props`(z=1)에서 재렌더해 상체 가림(`_cliff_face_cells` 캐시 + `_front_cliff_cells_for` 판정, 밑 3칸부터 감쇠). 그리드·충돌 불변(순수 시각).
+  - **⑤ 벽면 오버행 → ★2026-07-07 owner 라이브 검수로 제거(결정 반전):** 초기 결정은 "벽면 전체 front"(캐릭터가 절벽 밑 1~2칸에서 상체 가림). owner가 라이브 GL에서 확인하니 **과잉 가림**(밑 1칸에서 머리+상체 전체가 벽면에 파묻혀 "절벽에 빠진" 듯) → **근본 오류 = 남향 절벽 밑 캐릭터는 절벽 *앞(남쪽)*이라 원래 안 가려져야 맞음**(스타듀도 절벽 밑은 앞). `_draw_front_cliff_faces`·`_front_cliff_cells_for`·`_cliff_front_tex`·`_cache_cliff_face_cells`·`_cliff_face_cells`·`CLIFF_WALL_TILES` + `front_cliff_test.gd` 전부 제거. **부수 효과:** front 절벽 draw 경로 소멸 → 하얀사각형(CompressedTexture2D `draw_texture`) 위험 원천 소멸. 캐릭터는 항상 남향 벽 앞에 그려진다.
   - **⑥ orphan 폐기:** `_lay_east_band`·`_lay_corner_step`(라이브 참조 0·cliff_test 전용) 제거 + cliff_test 옛 동향밴드·코너스텝 케이스 폐기·①~⑥ 재번호. orphan 에셋 13종(`cliff_e/w_face`·`cliff_e/w/n_lip`·`cliff_out/in_*`) git rm. `_lay_south_band`는 격리 테스트 원시어휘로 유지.
   - **회귀:** 전체 46개 PASS + `cliff_test ⑥`·`front_cliff_test`(신규) 추가. home_full_dump(SW/SE 곡선 코너)·오버행 시뮬 육안 사인오프. **미결(owner 육안 후):** ③ 필드 잔디 변종 강화 방향.
 

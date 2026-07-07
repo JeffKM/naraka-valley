@@ -71,13 +71,6 @@ func _initialize() -> void:
 	_check("①' 오버레이 Base 스킵(-1)", m._g16_surface(55, sy + 2) == -1)
 	_check("①' 오버레이 GROUND는 안 스킵(≥0)", m._g16_surface(55, sy - 2) >= 0)
 
-	# ── ①'' Front 오버행 텍스처 = ImageTexture(하얀 사각형 리그레션 가드) ──
-	# GL Compatibility 렌더러가 load()한 CompressedTexture2D를 draw_texture로 그리면 플랫 색 사각형으로
-	# 깨진다(owner "하얀 사각형"). Front 오버행은 비압축 ImageTexture로 변환·캐시해야 정상 렌더된다.
-	var front_face = m._cliff_front_tex(m.CLIFF_FACE)
-	_check("①'' Front 절벽 텍스처가 ImageTexture(CompressedTexture2D 아님)", front_face is ImageTexture)
-	_check("①'' Front 절벽 텍스처 32×32 유효", front_face != null and front_face.get_size() == Vector2(32, 32))
-
 	# ── ② 타일종별 통과성(정준 is_solid) ──
 	_check("② CLIFF_LIP 걷기 O (is_solid=false)", not m.is_solid(m.CLIFF_LIP))
 	_check("② CLIFF_FACE SOLID", m.is_solid(m.CLIFF_FACE))
