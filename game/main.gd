@@ -3491,57 +3491,83 @@ func _build_ground16() -> void:
 						if js < 0 or js > 2:
 							js = sc   # 밭·물·건물로 지터가 튀면 자기 표면 유지(하드 경계 안 침범)
 						out.set_pixel(px, py, _g16_field(js).get_pixel(px % P, py % P))
-	# ★[ADR-0056 ①] 절벽 상단 완충 fringe — CLIFF_LIP(고지 풀 오버행)의 풀을 *위 셀(고지 마당·흙-지배 tan)*
-	#   하단으로 삐죽 솟구치게 해 tan↔초록 lip 상단 직각 seam을 완화한다. lip 자체가 이미 풀이라 lip 안으로
-	#   늘어뜨리면 안 보인다(초록 위 초록) → 위 tan 셀 하단 픽셀을 풀로 덮어야 경계가 유기적으로 풀린다
-	#   (_build_path_grass_fringe grass_out 기술 재활용). HOME 지면 오버레이=_build_ground16(그 외 구역만
-	#   _build_path_grass_fringe)이라 여기 얹는다. _grid·충돌·세이브 불변(순수 시각). 풀 소스=_bf_grass.
+	# ★[ADR-0056 REV4 ①] LIP 상단 텍스처 평지화 — CLIFF_LIP 타일 상단(잔디부)을 평지 _bf_grass로 오버레이해
+	#   윗면 평지와 텍스처 문법 100% 일치. 고지 잔디화 뒤 lip은 톤은 맞으나 블레이드 패턴이 평지와 이질 →
+	#   _bf_grass를 월드 타일링으로 끌어와(위 평지 grass와 씸리스 연속) lip 상단 _LIP_GRASS_H px에 그린다.
+	#   잔디↔바위 엣지 경계는 raggedness 지터로 유기화(하드컷 방지). lip 하단 바위 엣지는 남김(out 투명).
+	#   surf=-1로 lip은 오버레이 투명이라 여기 그린 grass가 밑 타일맵 lip 상단을 덮음. _grid·충돌·세이브 불변.
 	for y in _outdoor_h:
 		for x in _grid_w:
 			if _grid[y][x] != CLIFF_LIP:
 				continue
-			if y - 1 < 0 or _grid[y - 1][x] != GROUND:
-				continue   # 위가 고지 마당(GROUND)일 때만(안쪽 lip·노치·경계 제외)
-			var aox := x * TILE            # 위 셀(y-1) 원점 — 풀이 이 셀 하단으로 솟는다
-			var aoy := (y - 1) * TILE
+			var lox := x * TILE
+			var loy := y * TILE
 			for i in TILE:
-				var along := aox + i
-				var signed := _gd_h01(int(along / 3), aoy, 630) - 0.5   # -0.5..0.5
-				if signed <= _FR_DEAD:
-					continue   # 평평·오목(−측) 스킵 — 풀 볼록(+측)만 위로 솟음
-				var micro := _gd_h01(along, aoy, 640)
-				var mag := (signed - _FR_DEAD) / (0.5 - _FR_DEAD)   # 0..1
-				var depth := clampi(1 + int(mag * (_FR_MAX - 1) + micro * 1.5), 1, _FR_MAX)
-				for j in depth:
-					var ty := aoy + TILE - 1 - j   # 위 셀 하단에서 j만큼 위로 솟음
-					var gp := _bf_grass.get_pixel((aox + i) % P, ty % P)
-					if j == depth - 1:   # blade 팁 = 살짝 어둡게(풀날 윤곽)
-						gp = Color(gp.r * 0.78, gp.g * 0.78, gp.b * 0.82, gp.a)
-					out.set_pixel(aox + i, ty, gp)
+				# 잔디↔바위 경계 깊이(평지 잔디가 lip 위로 삐죽하게 내려옴 — raggedness)
+				var edge: int = _LIP_GRASS_H + int((_gd_h01(lox + i, loy, 650) - 0.5) * 2.0 * _LIP_EDGE_JIT)
+				for j in range(maxi(0, edge)):
+					out.set_pixel(lox + i, loy + j, _bf_grass.get_pixel((lox + i) % P, (loy + j) % P))
 	# ★[ADR-0056 ④ FINAL] BASE 발치 접지 그림자 밴드 — CLIFF_BASE(및 곡선 base) 바로 아래(Y+1) tan 셀 상단에
 	#   검은 알파 감쇄 밴드를 얹어 절벽 발치를 접지시킨다(ADR-0054 건물 접지 정신). _grid는 순수 tan 유지
 	#   (충돌·세이브 불변) — 오버레이 픽셀만 어둡게. 아래가 tan(GROUND)일 때만(물·건물·다른 절벽 제외).
+	#   ★[REV5] 곡선 base는 물러난(투명) 열엔 벽이 없으니 그 열 그림자는 스킵(코너에서 절벽 끊기는데 그림자가
+	#   이어지던 것 교정 — owner). 벽(불투명) 열 아래에만 접지 그림자를 깐다.
 	for y in _outdoor_h:
 		for x in _grid_w:
-			if not (_grid[y][x] in _CLIFF_BASE_TILES):
+			var bcid: int = _grid[y][x]
+			if not (bcid in _CLIFF_BASE_TILES):
 				continue
 			var sby: int = y + 1
 			if sby >= _outdoor_h or _grid[sby][x] != GROUND:
 				continue
+			# 곡선 코너 base면 그 타일의 최하단 행 불투명 마스크(벽=불투명 / 물러남=투명)로 열을 게이트.
+			var bimg: Image = _corner_img(bcid) if (bcid == CLIFF_CORNER_SW_B or bcid == CLIFF_CORNER_SE_B) else null
 			var sbx0: int = x * TILE
 			var sby0: int = sby * TILE
 			for i in TILE:
+				if bimg != null and bimg.get_pixel(i, TILE - 1).a < 0.5:
+					continue   # 코너 물러난 열 = 벽 없음 → 그림자 없음
 				for j in _G16_APRON_H:
 					var amt: float = (1.0 - float(j) / _G16_APRON_H) * _G16_APRON_MAX   # 상단 진함 → 아래로 0
 					out.set_pixel(sbx0 + i, sby0 + j, out.get_pixel(sbx0 + i, sby0 + j).darkened(amt))
+	# ★[ADR-0056 REV5 ②] 코너 컨텍스트 필 — 곡선 코너의 물러난(투명) 영역을 *주변 타일 지형*으로 채운다.
+	#   코너 PNG는 벽만 불투명·물러난 영역 투명(make_cliff_corners). 그 투명 픽셀을 이웃 셀 지형으로 채워
+	#   "절벽이 정면 아닐 때 주변 타일을 인식해 이어짐"(owner "잔디타일이 이어졌자나" 교정). SW=서쪽/SE=동쪽
+	#   이웃 샘플(노치 코너=tan 통로 / 맵끝=저지). 벽 픽셀은 타일맵이 그림. _grid·충돌·세이브 불변.
+	for y in _outdoor_h:
+		for x in _grid_w:
+			var cid: int = _grid[y][x]
+			if not (cid in _CLIFF_CORNER_TILES):
+				continue
+			var cimg: Image = _corner_img(cid)
+			if cimg == null:
+				continue
+			var ndx: int = -1 if (cid == CLIFF_CORNER_SW or cid == CLIFF_CORNER_SW_B) else 1
+			var ns: int = -1
+			if x + ndx >= 0 and x + ndx < _grid_w:
+				ns = _g16_surface(x + ndx, y)
+			if ns < 0:
+				ns = 0   # 이웃이 절벽/건물/맵밖 → tan 폴백
+			var fld: Image = _g16_field(ns)
+			var cx0: int = x * TILE
+			var cy0: int = y * TILE
+			for j in TILE:
+				for i in TILE:
+					if cimg.get_pixel(i, j).a < 0.5:   # 코너 PNG 투명(물러난 영역) → 주변 지형
+						out.set_pixel(cx0 + i, cy0 + j, fld.get_pixel((cx0 + i) % P, (cy0 + j) % P))
 	_ground_detail_tex = ImageTexture.create_from_image(out)
 
 # ★[스타듀 농장 룩] 지면 표면 결정 헬퍼(_build_ground16 전용) ─────────────────────────────
 const _G16_GRASS_THR := 0.66   # 잔디 패치 문턱(↑=잔디↓·흙↑). 스타듀 시작 농장 ≈ 흙 지배(잔디 ~28%).
 # ★[ADR-0056 ④ FINAL] BASE 발치 접지 그림자 밴드 레버(_build_ground16 순수 시각 오버레이).
 const _CLIFF_BASE_TILES := [CLIFF_FACE_BASE, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE_B]   # 접지 대상 = 벽 최하단
+# ★[ADR-0056 REV5 ②] 곡선 코너 4종 — 물러난 투명 영역을 이웃 지형으로 채우는 컨텍스트 필 대상.
+const _CLIFF_CORNER_TILES := [CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]
 const _G16_APRON_H := 7        # 그림자 밴드 높이(px, 아래 tan 셀 상단부터)
 const _G16_APRON_MAX := 0.42   # 상단 최대 어둠(Color.darkened amount) → 아래로 0 감쇄
+# ★[ADR-0056 REV4 ①] LIP 상단 텍스처 평지화 레버(평지 _bf_grass를 lip 상단에 오버레이).
+const _LIP_GRASS_H := 18       # lip 상단에 평지 잔디를 덮을 높이(px) — 하단 바위 엣지는 남김
+const _LIP_EDGE_JIT := 3       # 잔디↔바위 경계 raggedness 진폭(px)
 
 # 마당(GROUND) 칸이 잔디 패치인가 — 저주파 클럼프(넓은 초록 영역) + 셀 해시(작은 무리로 분해).
 # 결정적(좌표 해시)이라 재빌드·재진입 동일. true=잔디(grass_field), false=맨흙(earth). 이것은 *seed*이고,
@@ -3599,6 +3625,19 @@ func _g16_cluster_cleanup(surf: Array) -> void:
 			if comp.size() < _G16_MIN_PATCH:
 				for cc in comp:
 					surf[cc.y][cc.x] = 0
+
+# ★[ADR-0056 REV5 ②] 곡선 코너 PNG 이미지 캐시(id→Image) — 컨텍스트 필이 투명(물러난) 마스크를 읽는다.
+var _corner_img_cache: Dictionary = {}
+func _corner_img(id: int) -> Image:
+	if _corner_img_cache.has(id):
+		return _corner_img_cache[id]
+	var img: Image = null
+	if SOLID_TEX.has(id):
+		img = (load(SOLID_TEX[id]) as Texture2D).get_image()
+		if img.get_format() != Image.FORMAT_RGBA8:
+			img.convert(Image.FORMAT_RGBA8)
+	_corner_img_cache[id] = img
+	return img
 
 # 셀의 지면 표면 종류(0=맨흙 1=잔디 2=길 3=밭 4=물, -1=건물바닥 skip).
 func _g16_surface(x: int, y: int) -> int:
