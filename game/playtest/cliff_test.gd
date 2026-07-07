@@ -61,6 +61,14 @@ func _initialize() -> void:
 	_check("① 남향 Face행 = CLIFF_FACE", m._grid[sy + 1][55] == m.CLIFF_FACE)
 	_check("① 남향 Base행 = CLIFF_FACE_BASE", m._grid[sy + 2][55] == m.CLIFF_FACE_BASE)
 
+	# ── ①' 지면 오버레이 절벽 스킵(ADR-0053/0054 흙-지배 flip 리그레션 가드) ──
+	# _build_ground16/_ground_detail_tex가 절벽 셀을 tan/잔디로 베이크·덮으면 절벽이 화면에서 사라진다
+	# (owner "절벽 아예 안 보여" 버그). _g16_surface가 절벽 계열을 -1(투명 통과)로 분류해 밑 타일맵 절벽이 비쳐야 한다.
+	_check("①' 오버레이 Lip 스킵(-1)", m._g16_surface(55, sy) == -1)
+	_check("①' 오버레이 Face 스킵(-1)", m._g16_surface(55, sy + 1) == -1)
+	_check("①' 오버레이 Base 스킵(-1)", m._g16_surface(55, sy + 2) == -1)
+	_check("①' 오버레이 GROUND는 안 스킵(≥0)", m._g16_surface(55, sy - 2) >= 0)
+
 	# ── ② 타일종별 통과성(정준 is_solid) ──
 	_check("② CLIFF_LIP 걷기 O (is_solid=false)", not m.is_solid(m.CLIFF_LIP))
 	_check("② CLIFF_FACE SOLID", m.is_solid(m.CLIFF_FACE))
