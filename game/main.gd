@@ -3412,6 +3412,13 @@ func _build_ground16() -> void:
 	# ★[ADR-0053 후속 GDD — 잔디 군락화] 낱개 1×1 고립 금지 + 최소 유기 군락 강제. seed(클럼프+셀해시)는
 	#   경계에서 단일 잔디 셀을 낳을 수 있어 격자 스케일이 드러난다("개발 격자 테스트 화면"). CA 정리로 응집.
 	_g16_cluster_cleanup(surf)
+	# ★[ADR-0054 건물 접지 — 잔디억제 패드] 건물 발치 링(footprint + _G16_BUILD_PAD칸)은 맨흙으로 강제해
+	#   깔끔한 tan 접지(잔디 패치가 벽에 어색하게 맞닿는 것 방지·남향 문앞 성역화와 결). CA가 발치에 잔디를
+	#   되심을 수 있어(맨흙 8이웃≥5 생성) *cluster_cleanup 뒤*에 최종 오버라이드로 적용한다. 순수 시각.
+	for y in _outdoor_h:
+		for x in _grid_w:
+			if int(surf[y][x]) == 1 and _g16_near_building(x, y):
+				surf[y][x] = 0
 	# ① 셀 단위 필드 blit(빠름) — 건물바닥(-1)은 투명(실내 바닥 비침)
 	for y in _outdoor_h:
 		for x in _grid_w:
@@ -3542,6 +3549,22 @@ func _g16_field(s: int) -> Image:
 		3: return _bf_soil
 		4: return _bf_water
 		_: return _bf_earth
+
+# ★[ADR-0054 건물 접지 — 잔디억제 패드] 안식 농원 건물 footprint 목록(facade WALL 박스 + 비진입 사일로·우물).
+#   발치 링을 맨흙으로 깔기 위한 기준. 문(door)은 별도로 PATH라 이 검사와 무관(성역화 = 남향 흙 진입로 유지).
+const _G16_BUILD_PAD := 1   # footprint 바깥 몇 칸까지 맨흙 패드로 볼지(1 = 발치 한 겹)
+const _HOME_BUILDING_RECTS: Array[Rect2i] = [
+	HOUSE_EXT_RECT, STOREHOUSE_EXT_RECT, NEOKURITGAN_EXT_RECT, NEOKDUNGURI_EXT_RECT,
+	SILO_EXT_RECT, WELL_RECT,
+]
+
+# 셀 (x,y)가 어느 건물 footprint의 발치 패드(rect를 _G16_BUILD_PAD칸 확장) 안인가.
+func _g16_near_building(x: int, y: int) -> bool:
+	var p := _G16_BUILD_PAD
+	for r in _HOME_BUILDING_RECTS:
+		if x >= r.position.x - p and x < r.end.x + p and y >= r.position.y - p and y < r.end.y + p:
+			return true
+	return false
 
 func _build_ground_details() -> void:
 	_ground_detail_tex = null
@@ -6607,8 +6630,14 @@ func _draw_house_wall_band() -> void:
 # ★[ADR-0043] facade 블렌드 — facade 아트는 footprint(WALL 박스)보다 작아 *투명 가장자리로 회색 WALL
 # 그레이박스가 비친다*(새 lush 풀과 안 어울림). 충돌·grid·테스트(=WALL)는 그대로 두고, facade를 그리기
 # *직전*에 그 footprint를 풀 베이스 타일로 덮어(시각 전용) 투명부가 풀로 비치게 한다 → 자연스러운 블렌드.
+# ★[ADR-0054 건물 접지] 안식 농원(HOME)은 흙-지배 flip으로 세계가 tan이라, 이 풀 백드롭이 건물마다
+#   *초록 사각형*을 낳는 회귀가 됐다(ADR-0053 flip). HOME은 ground16(_build_ground16)이 이미 WALL
+#   footprint 칸을 월드-정렬 맨흙으로 칠하고(잔디억제 패드까지), 그 위 투명부에 seamless하게 비치므로
+#   풀 백드롭을 건너뛴다(이중 그리기 제거 = 초록 사각 소멸·씸 프리). 그 외 구역은 초록 세계라 유지.
 var _facade_grass_tex: Texture2D = null
 func _facade_grass_backdrop(rect: Rect2i) -> void:
+	if _region == RegionCatalog.HOME:
+		return
 	if _facade_grass_tex == null:
 		var src := ground.tile_set.get_source(0) as TileSetAtlasSource
 		var rs: int = src.texture_region_size.x
