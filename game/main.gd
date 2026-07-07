@@ -143,6 +143,11 @@ const WORLD_SOLID_TILES := [WALL, HOUSE_WALL, CAFE_WALL, TREE, ROCK,
 #   걷기 O·안 가림이라 제외, Bank는 물가라 제외. 벽면(Face/Base/곡선코너)만 캐릭터 위 레이어로 재렌더.
 const CLIFF_WALL_TILES := [CLIFF_FACE, CLIFF_FACE_BASE,
 	CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]
+# ★[ADR-0053/0054 흙-지배 flip 리그레션 픽스] 절벽 계열 전체(LIP 오버행·FACE·BASE·BANK·곡선코너 = 전부
+#   자체 SOLID_TEX로 렌더). 지면 오버레이(_build_ground16/_ground_detail_tex)가 이 셀을 tan/잔디로 덮으면
+#   타일맵 절벽이 사라진다 → _g16_surface가 -1(투명)로 분류해 밑 절벽 텍스처가 비치게 한다(HOUSE/CAFE 결).
+const CLIFF_TILES := [CLIFF_FACE, CLIFF_LIP, CLIFF_FACE_BASE, CLIFF_BANK,
+	CLIFF_CORNER_SW, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE, CLIFF_CORNER_SE_B]
 # ★ T2 — WATER는 더 이상 SOLID가 아니다(terrain으로 승격). TREE/ROCK는 아직 SOLID 단색(도트는 후속 T7~T9).
 # ★ M4.1 — TREE도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 숲 무대의 밀집 나무.
 # ★ M5.1 — ROCK도 같은 결(도트 텍스처 없음 → COLORS 단색 절차 생성, 통과 불가 충돌). 갱도 무대의 바위 절벽·암반.
@@ -3538,6 +3543,8 @@ func _g16_surface(x: int, y: int) -> int:
 	var c: int = _grid[y][x]
 	if c == HOUSE or c == CAFE:
 		return -1
+	if c in CLIFF_TILES:
+		return -1   # ★ 절벽 = 자체 SOLID_TEX로 렌더 → 오버레이 투명 통과(flip 리그레션 픽스, 안 그러면 tan이 덮어 절벽 사라짐)
 	if c == PATH:
 		return 2
 	if c == SOIL:
