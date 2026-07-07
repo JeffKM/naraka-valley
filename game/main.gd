@@ -2875,6 +2875,8 @@ func _build_cliffs() -> void:
 	# ② 남향 개간 게이트 — 남향 벽(y26 Lip / y27 Face / y28 Base)을 관통하는 2칸 계단 노치. 저지측 발치(y28~)는
 	#    debris 하드 게이트(PROP·SOLID)로 개간 전 물리 차단(온보딩 — CONTEXT "평평≠막힘", 고지만 도구 게이트).
 	_carve_stair_notch(Rect2i(RANCH_GATE_X, HIGHLAND_S, RANCH_GATE_W, 3))   # x9..10, y26..28
+	# ★[ADR-0056 ③ FINAL] 노치 좌우 벽 끝을 곡선 코너로 라운딩(직각 마감 완화·스타듀식 말아넣기).
+	_round_south_notch(RANCH_GATE_X, RANCH_GATE_W)
 	# ③ 동향 잔디 능선 — 바위벽 없이 충돌바(x21 seam)로 고지를 자연 능선으로 폐쇄(수풀 프롭이 시각 완성).
 	_build_ridge_barrier()
 
@@ -2897,6 +2899,26 @@ func _lay_south_band(x0: int, x1: int, y: int) -> void:
 # 노치 폭 = 밴드 깊이(남향=2행 종단 / 동향=3열 종단 — ADR-0044 "2폭"↔§5"3열" 정합). STAIRS 프롭은 layout(S1-3).
 func _carve_stair_notch(rect: Rect2i) -> void:
 	_fill_rect(rect, GROUND)
+
+# ★[ADR-0056 ③ FINAL] 노치(계단 통로) 직각 마감 라운딩 — 통로와 마주하는 절벽 좌우 끝 벽 셀을 곡선 코너
+#   타일종으로 스위칭해 수직 단절을 스타듀식으로 말아넣는다. 새 타일 ID 0·순수 그리드 로직(세이브 불변).
+#   좌벽의 동측 끝(노치 서변) → CORNER_SE / 우벽의 서측 끝(노치 동변) → CORNER_SW (오토타일러 west/east end
+#   시맨틱과 동일). Face행=HIGHLAND_S+1 / Base행=HIGHLAND_S+2. 코너는 전부 SOLID라 통로 폭·충돌 불변.
+func _round_south_notch(gate_x: int, gate_w: int) -> void:
+	var fy: int = HIGHLAND_S + 1
+	var by: int = HIGHLAND_S + 2
+	var left: int = gate_x - 1
+	var right: int = gate_x + gate_w
+	if left >= 0:   # 좌벽 동측 끝(노치를 향한 면) → SE 곡선
+		if _grid[fy][left] == CLIFF_FACE:
+			_set_tile(left, fy, CLIFF_CORNER_SE)
+		if _grid[by][left] == CLIFF_FACE_BASE:
+			_set_tile(left, by, CLIFF_CORNER_SE_B)
+	if right < _grid_w:   # 우벽 서측 끝(노치를 향한 면) → SW 곡선
+		if _grid[fy][right] == CLIFF_FACE:
+			_set_tile(right, fy, CLIFF_CORNER_SW)
+		if _grid[by][right] == CLIFF_FACE_BASE:
+			_set_tile(right, by, CLIFF_CORNER_SW_B)
 
 # ★[ADR-0056 ④] 연못 북단 뱅크 로컬 sibling 자동화 — SPIRIT_POND_RECT 북단 경계선에서 강둑 2행을 유도
 #   생성한다(옛 _build_home 하드코딩 루프 대체). 물/길 교차 full 오토타일 일반화(B안)·cliff_bank_water
@@ -3496,10 +3518,30 @@ func _build_ground16() -> void:
 					if j == depth - 1:   # blade 팁 = 살짝 어둡게(풀날 윤곽)
 						gp = Color(gp.r * 0.78, gp.g * 0.78, gp.b * 0.82, gp.a)
 					out.set_pixel(aox + i, ty, gp)
+	# ★[ADR-0056 ④ FINAL] BASE 발치 접지 그림자 밴드 — CLIFF_BASE(및 곡선 base) 바로 아래(Y+1) tan 셀 상단에
+	#   검은 알파 감쇄 밴드를 얹어 절벽 발치를 접지시킨다(ADR-0054 건물 접지 정신). _grid는 순수 tan 유지
+	#   (충돌·세이브 불변) — 오버레이 픽셀만 어둡게. 아래가 tan(GROUND)일 때만(물·건물·다른 절벽 제외).
+	for y in _outdoor_h:
+		for x in _grid_w:
+			if not (_grid[y][x] in _CLIFF_BASE_TILES):
+				continue
+			var sby: int = y + 1
+			if sby >= _outdoor_h or _grid[sby][x] != GROUND:
+				continue
+			var sbx0: int = x * TILE
+			var sby0: int = sby * TILE
+			for i in TILE:
+				for j in _G16_APRON_H:
+					var amt: float = (1.0 - float(j) / _G16_APRON_H) * _G16_APRON_MAX   # 상단 진함 → 아래로 0
+					out.set_pixel(sbx0 + i, sby0 + j, out.get_pixel(sbx0 + i, sby0 + j).darkened(amt))
 	_ground_detail_tex = ImageTexture.create_from_image(out)
 
 # ★[스타듀 농장 룩] 지면 표면 결정 헬퍼(_build_ground16 전용) ─────────────────────────────
 const _G16_GRASS_THR := 0.66   # 잔디 패치 문턱(↑=잔디↓·흙↑). 스타듀 시작 농장 ≈ 흙 지배(잔디 ~28%).
+# ★[ADR-0056 ④ FINAL] BASE 발치 접지 그림자 밴드 레버(_build_ground16 순수 시각 오버레이).
+const _CLIFF_BASE_TILES := [CLIFF_FACE_BASE, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE_B]   # 접지 대상 = 벽 최하단
+const _G16_APRON_H := 7        # 그림자 밴드 높이(px, 아래 tan 셀 상단부터)
+const _G16_APRON_MAX := 0.42   # 상단 최대 어둠(Color.darkened amount) → 아래로 0 감쇄
 
 # 마당(GROUND) 칸이 잔디 패치인가 — 저주파 클럼프(넓은 초록 영역) + 셀 해시(작은 무리로 분해).
 # 결정적(좌표 해시)이라 재빌드·재진입 동일. true=잔디(grass_field), false=맨흙(earth). 이것은 *seed*이고,
