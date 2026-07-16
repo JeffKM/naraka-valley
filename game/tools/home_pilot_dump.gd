@@ -1,9 +1,9 @@
 extends SceneTree
 
-# 육안 글루(ADR-0001) — 안식 농원 *전체 맵*(80×65)을 한 장에, 지형+PROP(나무·바위 테두리)+facade까지
-# CPU 합성한다. home_wide_dump는 GPU 카메라 캡처라 --headless에서 빈 화면 → village_dump처럼 CPU blit로
-# 재현(_draw_props_for의 즉시모드 draw_texture_rect를 layout 데이터로 1:1 재현).
-# 사용: godot --headless --path game -s res://tools/home_full_dump.gd
+# ★[스타듀 타일 파일럿] home_full_dump 복제 + PixelLab 지형 텍스처 검증용.
+#   terrain16/grass_field·dirt_field가 PixelLab 순수 타일로 스왑된 상태에서 전체 맵을 렌더한다.
+#   _retone_earth는 identity(hue0·sat1·val×1+0)로 두어 PixelLab 흙 톤을 그대로 보존(사후보정 배제).
+# 사용: godot --headless --path game -s res://tools/home_pilot_dump.gd
 
 const TILE := 32
 
@@ -12,75 +12,67 @@ func _init() -> void:
 	get_root().add_child(main)
 	await process_frame
 	await process_frame
-	# HOME이 부팅 기본 구역(별도 rebuild 불필요)
+	# ★ PixelLab 흙 톤 보존 — retone 계수 identity로 재빌드
+	main._earth_hue_lerp = 0.0
+	main._earth_sat_mul = 1.0
+	main._earth_val_mul = 1.0
+	main._earth_val_add = 0.0
+	main._bf_grass_mute = false   # ★ 파일럿은 재생성 crisp 잔디의 순수 톤(muted 전)을 검증
+	main._bf_grass = null
+	main._load_big_fields()
+	main._build_ground16()
 	var size: Vector2i = RegionCatalog.size_of(RegionCatalog.HOME)
+	var out := _compose(main, size)
+	out.save_png("res://tools/home_pilot_dump.png")
+	print("✅ home_pilot_dump.png 저장 (", size.x, "×", size.y, ")")
+	quit()
+
+func _compose(main, size: Vector2i) -> Image:
 	var out := Image.create(size.x * TILE, size.y * TILE, false, Image.FORMAT_RGBA8)
 	out.fill(Color(0.05, 0.05, 0.07, 1.0))
 	for layer in [main.get_node("Ground") as TileMapLayer, main.get_node("Field") as TileMapLayer]:
 		_blit_layer(layer, out)
-	# ★ 지면 디테일 오버레이(베이크된 한 장 — _draw와 동일 레이어: 타일 위·프롭 아래)
 	if main._ground_detail_tex != null:
 		var gdi: Image = main._ground_detail_tex.get_image()
 		if gdi.get_format() != Image.FORMAT_RGBA8:
 			gdi.convert(Image.FORMAT_RGBA8)
 		out.blend_rect(gdi, Rect2i(Vector2i.ZERO, gdi.get_size()), Vector2i.ZERO)
-	# PROP — _draw_props_for(즉시모드)의 CPU 재현(가장자리 나무·바위·장식 포함)
 	for entry in main._prop_layouts.get("HOME", []):
 		var tex: Texture2D = entry[0]
 		var yo: int = entry[2] if entry.size() > 2 else 0
 		var casts_shadow: bool = tex in main.PROP_SHADOW_SET
-		var variants: Array = main.DEBRIS_VARIANTS.get(tex, [])   # ★[roster §5.2] debris는 좌표해시 변주(_draw_props_for와 동일)
+		var variants: Array = main.DEBRIS_VARIANTS.get(tex, [])
 		if variants.is_empty():
-			variants = main.BUSH_VARIANTS.get(tex, [])            # ★[roster] 덤불 능선도 좌표해시 변주(dark↔bright, 동일 해시)
+			variants = main.BUSH_VARIANTS.get(tex, [])
 		var timg := tex.get_image()
 		if timg.get_format() != Image.FORMAT_RGBA8:
 			timg.convert(Image.FORMAT_RGBA8)
-		if tex == main.PROP_GRASS:
-			main._mute_grass_pixels(timg)   # ★ 잔디뭉치 프롭 muted(_draw_props_for와 동일)
 		var tsz := timg.get_size()
 		for t in entry[1]:
-			# ★[§11] 부피 프롭 발치 SE 접지 그림자(main._draw_prop_shadow의 CPU 재현)
 			if casts_shadow:
 				_blit_shadow(out, t.x * TILE + tsz.x * 0.5 + 2.0, float(t.y * TILE + yo) + tsz.y - 2.0, tsz.x * 0.40)
-			# ★[roster §5.2] debris면 좌표 결정적 해시로 변주 이미지를 고른다(_debris_variant_tex 재현). 크기는 동일.
 			var dimg := timg
 			if not variants.is_empty():
-				# debris=산포 (x*7+y*13)%3, 덤불=능선 한 줄 (x+y/2)%2 교대(_draw_props_for와 동일 식).
 				var idx: int = (t.x + t.y / 2) if main.BUSH_VARIANTS.has(tex) else (t.x * 7 + t.y * 13)
 				var vtex: Texture2D = variants[idx % variants.size()]
 				dimg = vtex.get_image()
 				if dimg.get_format() != Image.FORMAT_RGBA8:
 					dimg.convert(Image.FORMAT_RGBA8)
-			if main._MUTE_GREEN_PROPS.has(tex):
-				if dimg == timg:
-					dimg = dimg.duplicate()   # 원본 공유 방지(variants 비었을 때)
-				# ★ 초록 프롭 muted(_draw_props_for와 동일) — 목본은 완화 강도로 입체감 보존.
-				if main._MUTE_WOODY.has(tex):
-					main._mute_grass_pixels(dimg, main._WOODY_SAT_MUL, main._WOODY_SAT_CAP)
-				else:
-					main._mute_grass_pixels(dimg)
 			out.blend_rect(dimg, Rect2i(Vector2i.ZERO, tsz), Vector2i(t.x * TILE, t.y * TILE + yo))
-	# 야외 건물 외관(집·창고·축사) — 통과불가 WALL 박스 위 1:1 blit
 	var facades := [
 		[main.FACADE_HOUSE, main.HOUSE_EXT_RECT],
 		[main.FACADE_STOREHOUSE, main.STOREHOUSE_EXT_RECT],
-		[main.FACADE_BARN, main.NEOKURITGAN_EXT_RECT],   # ★[B1-a.1] 넋우릿간(barn_ext 6×4)
-		[main.FACADE_COOP, main.NEOKDUNGURI_EXT_RECT],   # ★[아트 배선] 넋둥우리(coop_ext 4×2·문 우측)
+		[main.FACADE_BARN, main.NEOKURITGAN_EXT_RECT],
+		[main.FACADE_COOP, main.NEOKDUNGURI_EXT_RECT],
 	]
-	# ★[ADR-0054 건물 접지] HOME은 풀 백드롭을 안 깐다(main._facade_grass_backdrop이 HOME은 early-return).
-	#   ground16(_ground_detail_tex, 위에서 이미 blend)이 WALL footprint를 월드-정렬 맨흙(+잔디억제 패드)으로
-	#   덮으므로, facade 투명부에 그 흙이 seamless하게 비친다 → 초록 사각 소멸. 여기선 grass blit을 제거만.
 	for f in facades:
 		var rect := f[1] as Rect2i
 		var fimg := (f[0] as Texture2D).get_image()
 		if fimg.get_format() != Image.FORMAT_RGBA8:
 			fimg.convert(Image.FORMAT_RGBA8)
-		# ★[ADR-0037] bottom-center 앵커(main._blit_facade_anchored과 동일) — 트림된 art 바텀=footprint 하단, 가로 중앙.
 		var fsz := fimg.get_size()
 		var cx := int((rect.position.x + rect.size.x * 0.5) * TILE)
 		var base_y := (rect.position.y + rect.size.y) * TILE
-		# ★[§11 접지] CPU 접지 그림자 — 밑단에 밀착한 납작 타원(main._blit_facade_anchored 재현).
-		#   세로반경 0.17·중심 base_y−ery*0.4·SE +2 (예전 base_y−3/0.20 '접시' → 컨택트 그림자로 교정).
 		var srx := fsz.x * 0.42
 		var sry := srx * 0.17
 		var scx := cx + 2
@@ -93,11 +85,8 @@ func _init() -> void:
 					var bg := out.get_pixel(sx, sy)
 					out.set_pixel(sx, sy, bg.lerp(Color(0, 0, 0, 1), 0.34))
 		out.blend_rect(fimg, Rect2i(Vector2i.ZERO, fsz), Vector2i(cx - fsz.x / 2, base_y - fsz.y))
-	out.save_png("res://tools/home_full_dump.png")
-	print("✅ home_full_dump.png 저장 (", size.x, "×", size.y, ")")
-	quit()
+	return out
 
-# ★[§11] 납작한 SE 접지 그림자 타원을 out에 알파 블렌드(main.draw_circle + 세로 0.22 스케일 재현).
 func _blit_shadow(out: Image, cx: float, cy: float, rx: float) -> void:
 	var ry := rx * 0.22
 	for sy in range(int(cy - ry), int(cy + ry) + 1):
