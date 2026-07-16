@@ -451,6 +451,12 @@ var _bf_dirt: Image = null
 var _bf_soil: Image = null
 var _bf_water: Image = null
 var _bf_earth: Image = null   # ★[스타듀 농장 룩] 마당 베이스 = 따뜻한 황갈색 맨흙(dirt_field 리톤). 잔디는 위에 패치로만.
+# ★[지면 채도 A/B 실험] _retone_earth 계수 — 기본값=현행이라 baseline 완전 불변(회귀 안전).
+#   ground_ab_dump.gd가 프리셋마다 이 값을 오버라이드 → _bf_earth 재계산 → 실제 코드 경로로 A/B 렌더.
+var _earth_hue_lerp := 0.55   # 붉은 흙 hue를 노란-갈색(0.095)으로 당기는 가중치
+var _earth_sat_mul := 0.80    # 채도 배율(현행: 완화). 스타듀 골든머스타드 방향이면 >1
+var _earth_val_mul := 1.22    # 명도 배율(현행: 크게 밝힘 → 파스텔 원인)
+var _earth_val_add := 0.14    # 명도 가산(현행: 추가로 밝힘)
 var _gd_soft_cache := {}                       # ★[ADR-0042] 디테일 texture→부드럽게 보정한 Image 캐시
 var _base_variant_cache := {}                  # ★[ADR-0043 §6] terrain id→base 변종 좌표 배열 캐시
 var _facade_base_cache := {}                   # facade tex→밑단선 span{line_y,center,half}(캐스트 그림자 발 앵커)
@@ -3410,9 +3416,9 @@ func _retone_earth(src: Image) -> Image:
 				continue
 			var hh := c.h
 			# 붉은 흙(hue ~0.05)을 노란-갈색(hue ~0.095)으로 당김(가중 평균, 과이동 방지).
-			hh = lerpf(hh, 0.095, 0.55)
-			var ss := c.s * 0.80              # 채도 완화(모래빛)
-			var vv := clampf(c.v * 1.22 + 0.14, 0.0, 1.0)  # 명도↑(밝은 tan)
+			hh = lerpf(hh, 0.095, _earth_hue_lerp)
+			var ss := clampf(c.s * _earth_sat_mul, 0.0, 1.0)   # 채도 배율(A/B 계수)
+			var vv := clampf(c.v * _earth_val_mul + _earth_val_add, 0.0, 1.0)  # 명도(A/B 계수)
 			img.set_pixel(xx, yy, Color.from_hsv(hh, ss, vv, c.a))
 	return img
 
