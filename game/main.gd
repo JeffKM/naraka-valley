@@ -464,6 +464,23 @@ var _GD_SPARSE := [
 	[GD_WEED_D, 2, true],   # 마른 잡초(개활지)
 ]
 const _GD_SPARSE_DENSITY := 0.12   # 빈 tan 셀 중 clutter가 놓일 비율(↑=빽빽). 스타듀 개활지 밀도.
+
+# ★[ADR-0058] 구역-키드 스캐터 테이블 — 각 구역 고유 clutter 정체성(심심함 최대 레버).
+#   비면 전역 _GD_TABLES/_GD_SPARSE 폴백(회귀 0). 구역이 지어질 때 자기 엔트리를 채운다.
+#   구조: { region_id: { GROUND:[[tex,weight,shadow]...], PATH:[...] } }. Task 2에서 home 채움.
+var _REGION_GD_TABLES := {}
+var _REGION_GD_SPARSE := {}
+
+# 현재 구역(_region)의 terrain 스캐터 테이블 — 구역 오버라이드 → 전역 폴백.
+func _gd_table_for(terrain: int) -> Array:
+	var rt: Dictionary = _REGION_GD_TABLES.get(_region, {})
+	if rt.has(terrain):
+		return rt[terrain]
+	return _GD_TABLES.get(terrain, [])
+
+func _gd_sparse_for() -> Array:
+	return _REGION_GD_SPARSE.get(_region, _GD_SPARSE)
+
 # 구역 → 그 구역이 그리는 PROP 레이아웃 키(지면 디테일이 PROP 점유 칸을 비껴가게 함).
 var _REGION_PROP_KEYS := {
 	RegionCatalog.HOME: ["HOME"],
@@ -3731,13 +3748,13 @@ func _g16_blend_scatter(out: Image) -> void:
 			var table: Array
 			if terrain == GROUND:
 				if _gd_cluster(x, y) >= GD_CLUSTER_CUT:
-					table = _GD_TABLES[GROUND]         # 풀 무리 구역 — 풀 tuft 포함 전체
+					table = _gd_table_for(GROUND)      # 풀 무리 구역 — 풀 tuft 포함 전체(구역-키드, 폴백=전역)
 				elif _gd_h01(x, y, 71) < _GD_SPARSE_DENSITY:
-					table = _GD_SPARSE                 # 빈 tan — 나뭇가지·돌 저밀도 확산(스타듀 개활지)
+					table = _gd_sparse_for()           # 빈 tan — 나뭇가지·돌 저밀도 확산(스타듀 개활지, 구역-키드)
 				else:
 					continue                           # 대부분의 빈 tan = 민무늬(여백)
 			else:
-				table = _GD_TABLES[terrain]            # PATH 등
+				table = _gd_table_for(terrain)         # PATH 등(구역-키드, 폴백=전역)
 			var total := 0
 			for e in table:
 				total += int(e[1])
