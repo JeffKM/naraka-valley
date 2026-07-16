@@ -435,7 +435,8 @@ var _GD_TABLES := {
 		[GD_WEED_D, 3, true],               # 노란 마른 잡초(액센트)
 		[GD_FLOWER, 2, true],               # 영혼 들꽃(희소)
 		[GD_PEBBLE, 1, true],               # 잔돌(극희소)
-		[GD_DIRT, 1, false],                # 맨 흙 패치(극희소·평면)
+		# ★[후속 배치 2026-07-17] GD_DIRT(맨 흙 패치) 제거 — PixelLab 재생성이 평면 흙패치를 계속
+		#   보라빛 입체 블롭으로 뽑아 실패. tan 베이스 위 극희소(가중1)라 손실 미미 → 나쁜 에셋 대신 렌더 제외.
 		# ★[스캐터 재생성] 스타듀식 갈색 twig·회색 stone 다종(색대비로 tan 밀도) — 크리스프(mute 대상 아님)
 		[GD_TWIG1, 4, false],               # 마른 교차 나뭇가지(평면)
 		[GD_TWIG2, 3, false],               # 잎 가지 변주(평면)
@@ -444,9 +445,10 @@ var _GD_TABLES := {
 	],
 	PATH: [
 		[null, 78, false],                  # 맨 길(대부분)
-		[GD_EMBED, 9, false],               # 박힌 잔돌
-		[GD_GRAVEL, 6, false],              # 자갈 무리
-		[GD_CRACK, 4, false],               # 갈라짐·바퀴자국
+		[GD_EMBED, 9, false],               # 박힌 잔돌(재생성 크리스프)
+		# ★[후속 배치 2026-07-17] GD_GRAVEL 제거 — PixelLab이 흩뿌린 자갈을 계속 입체 블롭으로 뽑아 실패.
+		#   얇은 길 디테일이라 embed(박힌 잔돌)+crack으로 충분 → Style B 블러 자갈 렌더 제외.
+		[GD_CRACK, 4, false],               # 갈라짐·바퀴자국(재생성 크리스프 크랙)
 		[GD_WEED_D, 3, true],               # 가장자리 마른 풀
 	],
 }
