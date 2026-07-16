@@ -17,6 +17,7 @@ func _init() -> void:
 	main._earth_sat_mul = 1.0
 	main._earth_val_mul = 1.0
 	main._earth_val_add = 0.0
+	main._bf_grass_mute = false   # ★ 파일럿은 재생성 crisp 잔디의 순수 톤(muted 전)을 검증
 	main._bf_grass = null
 	main._load_big_fields()
 	main._build_ground16()
