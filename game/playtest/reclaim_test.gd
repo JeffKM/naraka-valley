@@ -15,7 +15,16 @@ extends SceneTree
 #      _is_farmable true(경작지 확장)·드랍 인벤토리 적재·_debris_kind_at "" .
 #   ⑩ (main) 스타터 패치(40,12,5,5) debris 0.
 #
-# Part A(①~⑥)는 Reclaim/DebrisCatalog 단위(main 불필요), Part B(⑦~⑩)만 main 스폰(livestock_test 결).
+# ★ [ADR-0055] 차등 재점령(encroachment):
+#   ⑪ advance_day — 밤당 1~2칸 재점령·후보 안에서만·day 시드 결정적.
+#   ⑫ 겨울(잿눈) 게이트 — 재점령 정지.  ⑬ 후보 0 방어.
+#   ⑭ 총상한(cap=ceil(후보×0.75))·이미 돋은 칸 재선정 안 함·후보 부분집합.
+#   ⑮ clear_weed — 낫 성공(혼백섬유×1)·has_weed 해제 / 틀린 도구·무잡초 무동작.
+#   ⑯ 세이브 왕복 — 치운 것 + 재점령 잡초 둘 다 보존.
+#   ⑰ (main) _encroach_candidates — GROUND·스캔 안·프롭/SOIL/개간 자리 배제.
+#   ⑱ (main) end-to-end — advance_day 재점령 → 낫 _use_tool 베기 → 드랍 적립·has_weed 해제.
+#
+# Part A(①~⑥,⑪~⑯)는 Reclaim/DebrisCatalog 단위(main 불필요), Part B(⑦~⑩,⑰~⑱)만 main 스폰(livestock_test 결).
 # 좀비 방지: 끝에 quit(). run_tests 워치독.
 
 var _fail := 0
@@ -96,6 +105,72 @@ func _initialize() -> void:
 	r.free()
 	r2.free()
 
+	# ── ⑪~⑯ 차등 재점령(ADR-0055) 단위 검증 ──────────────────────────────────────
+	var SCY := ItemCatalog.SCYTHE
+	# 후보 8칸(main이 걸러 준 자격 빈 맨땅을 흉내). cap = ceil(8×0.75) = 6.
+	var cands := [Vector2i(30, 20), Vector2i(31, 20), Vector2i(32, 20), Vector2i(33, 20),
+		Vector2i(30, 21), Vector2i(31, 21), Vector2i(32, 21), Vector2i(33, 21)]
+
+	# ⑪ 밤당 1~2칸 재점령·후보 안에서만·결정적
+	var ra := Reclaim.new()
+	var added := ra.advance_day(cands, 1, false)
+	var all_in := true
+	for t in added:
+		if not t in cands:
+			all_in = false
+	_check("⑪ 밤당 1~2칸 재점령", added.size() >= Reclaim.RESPAWN_MIN and added.size() <= Reclaim.RESPAWN_MAX)
+	_check("⑪ 재점령은 후보 안에서만", all_in and ra.weed_count() == added.size())
+	var rb := Reclaim.new()
+	var added_b := rb.advance_day(cands, 1, false)
+	var same := added.size() == added_b.size()
+	for t in added:
+		if not rb.has_weed(t):
+			same = false
+	_check("⑪ 같은 날·후보 → 결정적 동일", same)
+
+	# ⑫ 겨울(잿눈) 게이트 — 재점령 정지
+	var rw := Reclaim.new()
+	_check("⑫ 겨울엔 재점령 정지(빈 배열)", rw.advance_day(cands, 1, true).is_empty() and rw.weed_count() == 0)
+
+	# ⑬ 후보 없음 방어
+	_check("⑬ 후보 0 → 무동작", Reclaim.new().advance_day([], 1, false).is_empty())
+
+	# ⑭ 총상한(cap=6)·이미 돋은 칸 재선정 안 함 — 여러 밤 누적
+	var rc := Reclaim.new()
+	for d in range(1, 40):
+		rc.advance_day(cands, d, false)
+	var cap := int(ceil(cands.size() * Reclaim.RESPAWN_CAP_RATIO))
+	var weeds_in := true
+	for t in rc.weed_tiles():
+		if not t in cands:
+			weeds_in = false
+	_check("⑭ 총상한 초과 안 함(≤ cap=6)", rc.weed_count() <= cap)
+	_check("⑭ 누적 재점령이 상한 도달", rc.weed_count() == cap)
+	_check("⑭ 재점령은 늘 후보 부분집합", weeds_in)
+
+	# ⑮ 낫으로 잡초 베기 — 드랍·has_weed·틀린 도구·무잡초 방어
+	var wtile: Vector2i = rc.weed_tiles()[0]
+	var wres := rc.clear_weed(wtile, SCY)
+	_check("⑮ 낫으로 잡초 베기 성공(혼백섬유×1)", not wres.is_empty() and str(wres["drop"]) == ItemCatalog.SOUL_FIBER \
+		and int(wres["count"]) == 1 and not rc.has_weed(wtile))
+	var wtile2: Vector2i = rc.weed_tiles()[0]
+	_check("⑮ 곡괭이로 잡초 무동작(낫만)", rc.clear_weed(wtile2, ItemCatalog.PICKAXE).is_empty() and rc.has_weed(wtile2))
+	_check("⑮ 잡초 없는 칸 clear_weed {}", rc.clear_weed(Vector2i(99, 99), SCY).is_empty())
+
+	# ⑯ 세이브 왕복 — 치운 것 + 재점령 잡초 둘 다 보존
+	var rs := Reclaim.new()
+	rs.clear(Vector2i(50, 22), WEEDS, SCY)                # _cleared 하나
+	rs.advance_day([Vector2i(40, 40), Vector2i(41, 40)], 7, false)  # _weeds 채움
+	var wsaved := rs.weed_tiles().duplicate()
+	var rs2 := Reclaim.new()
+	rs2.load_save(rs.to_save())
+	var weeds_ok := rs2.weed_count() == rs.weed_count()
+	for t in wsaved:
+		if not rs2.has_weed(t):
+			weeds_ok = false
+	_check("⑯ 세이브 왕복 잡초+개간 둘 다 보존", weeds_ok and rs2.is_cleared(Vector2i(50, 22)))
+	ra.free(); rb.free(); rw.free(); rc.free(); rs.free(); rs2.free()
+
 	# ── Part B: main 통합(⑦~⑩) — 신규 게임 강제(세이브 백업·삭제) ──
 	var had_save := FileAccess.file_exists(SAVE)
 	if had_save:
@@ -143,6 +218,31 @@ func _initialize() -> void:
 			if m._debris_kind_at(Vector2i(x, y)) != "":
 				patch_clean = false
 	_check("⑩ 스타터 패치 debris 0", patch_clean)
+
+	# ── ⑰~⑱ 재점령 main 통합(ADR-0055) ──────────────────────────────────────────
+	# ⑰ _encroach_candidates — 자격 빈 맨땅만(SOIL·프롭·개간 자리·밭 배제)
+	var cand: Array = m._encroach_candidates()
+	var scan: Rect2i = m.ENCROACH_SCAN_RECT
+	var cand_ok := cand.size() > 0
+	for t in cand:
+		if m._grid[t.y][t.x] != m.GROUND or not scan.has_point(t):
+			cand_ok = false
+	_check("⑰ 후보 비어있지 않음·전부 GROUND·스캔 안", cand_ok)
+	_check("⑰ debris 잡초 자리(50,22) 후보 아님(프롭 점유)", not (Vector2i(50, 22) in cand))
+	_check("⑰ 스타터 패치(40,12) 후보 아님(SOIL/밖)", not (Vector2i(40, 12) in cand))
+
+	# ⑱ end-to-end — advance_day로 잡초 재점령 → 낫으로 베기(드랍 적립·has_weed 해제)
+	var weeds_added: Array = m.reclaim.advance_day(cand, 3, false)
+	_check("⑱ advance_day 잡초 1개 이상 재점령", weeds_added.size() >= 1)
+	if weeds_added.size() >= 1:
+		var wt: Vector2i = weeds_added[0]
+		var scy_idx := _slot_of(m.inventory, ItemCatalog.SCYTHE)
+		m.inventory.select(scy_idx)
+		var fiber_before: int = m.inventory.count_of(ItemCatalog.SOUL_FIBER)
+		m._target = wt
+		m._use_tool()
+		_check("⑱ 낫으로 재점령 잡초 베기 → has_weed 해제", not m.reclaim.has_weed(wt))
+		_check("⑱ 혼백섬유 ×1 적재", m.inventory.count_of(ItemCatalog.SOUL_FIBER) == fiber_before + 1)
 
 	m.queue_free()
 	await process_frame

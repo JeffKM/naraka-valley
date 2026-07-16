@@ -63,7 +63,12 @@ func _init() -> void:
 	_check("② 나무A 그림자 대상", m.PROP_TREE_A in m.PROP_SHADOW_SET)
 	_check("② 나무B 그림자 대상", m.PROP_TREE_B in m.PROP_SHADOW_SET)
 	_check("② 바위 그림자 대상", m.PROP_ROCK in m.PROP_SHADOW_SET)
-	_check("② 그루터기 그림자 대상", m.PROP_STUMP in m.PROP_SHADOW_SET)
+	# ★[prop-regen-roster §5.3] 옛 PROP_STUMP → 통나무 5종 재생성. 전부 부피 바닥 프롭이라 그림자 대상.
+	_check("② 긴통나무 그림자 대상", m.PROP_LOG_LONG in m.PROP_SHADOW_SET)
+	_check("② 짧은통나무 그림자 대상", m.PROP_LOG_SHORT in m.PROP_SHADOW_SET)
+	_check("② 세워진통나무 그림자 대상", m.PROP_LOG_UPRIGHT in m.PROP_SHADOW_SET)
+	_check("② 대각통나무(밝) 그림자 대상", m.PROP_LOG_DIAG_A in m.PROP_SHADOW_SET)
+	_check("② 대각통나무(어둠) 그림자 대상", m.PROP_LOG_DIAG_B in m.PROP_SHADOW_SET)
 	_check("② 덤불 그림자 대상", m.PROP_BUSH in m.PROP_SHADOW_SET)
 	_check("② 업화석 그림자 대상", m.PROP_DEBRIS_EMBER in m.PROP_SHADOW_SET)
 	_check("② 석화고목 그림자 대상", m.PROP_DEBRIS_STUMP in m.PROP_SHADOW_SET)
@@ -119,6 +124,15 @@ func _init() -> void:
 		m.PROP_TREE_A in m.FOOT_BAR_PROPS and m.PROP_TREE_B in m.FOOT_BAR_PROPS and m.PROP_ROCK in m.FOOT_BAR_PROPS)
 	_check("⑥b 하드게이트 debris는 발치 바 아님(풀타일 유지)",
 		not (m.PROP_DEBRIS_EMBER in m.FOOT_BAR_PROPS) and not (m.PROP_DEBRIS_STUMP in m.FOOT_BAR_PROPS))
+	# ⑥s 허수아비(1×2) = 밑 1칸 SOLID·위 1칸 통과(나무·바위 인프라, owner 2026-07-05). 라이브 배치라 실물 프로브.
+	_check("⑥s 허수아비 = FOOT_BAR+FADE 소속",
+		m.PROP_SCARECROW in m.FOOT_BAR_PROPS and m.PROP_SCARECROW in m.FADE_PROPS and m.PROP_SCARECROW in m.SOLID_PROPS)
+	var sb: Array = _prop_box(m, m.PROP_SCARECROW)
+	var s_pos: Vector2 = sb[0]; var s_sz: Vector2 = sb[1]
+	_check("⑥s 허수아비 밑 1칸 = 통과 불가(발치 SOLID)",
+		_hits(m, s_pos + Vector2(s_sz.x * 0.5, s_sz.y - m.TILE * 0.5)))
+	_check("⑥s 허수아비 위 1칸 = 통과 O(머리 통과)",
+		not _hits(m, s_pos + Vector2(s_sz.x * 0.5, m.TILE * 0.5)))
 	# ★ owner 2026-07-03 — 야외 스캐터 나무·바위를 맵에서 제거해 발치 바 콜라이더를 프로브할 라이브
 	#   인스턴스가 없다. FOOT_BAR_PROPS 멤버십(⑥/⑥b)으로 메카닉 설정만 계속 단언한다(더 나은 나무
 	#   아트가 오면 재배치·프로브 복원). 하드게이트 debris는 여전히 배치돼 있어 ⑥g로 게이트 보존 검증.
@@ -126,6 +140,11 @@ func _init() -> void:
 	var db: Array = _prop_box(m, m.PROP_DEBRIS_EMBER)
 	var d_pos: Vector2 = db[0]; var d_sz: Vector2 = db[1]
 	_check("⑥g 업화석 게이트 = 중심도 통과 불가(풀타일 유지)", _hits(m, d_pos + d_sz * 0.5))
+	# ★ owner 2026-07-05 — 울타리 SOLID 편입("못 지나가게"). 첫 인스턴스(40,17) 중심 통과 불가·풀타일.
+	_check("⑥h 울타리 = 풀타일 SOLID(FOOT_BAR 아님)",
+		m.PROP_FENCE in m.SOLID_PROPS and not (m.PROP_FENCE in m.FOOT_BAR_PROPS))
+	var fb: Array = _prop_box(m, m.PROP_FENCE)
+	_check("⑥h 울타리 = 중심 통과 불가(경계벽)", _hits(m, fb[0] + fb[1] * 0.5))
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)

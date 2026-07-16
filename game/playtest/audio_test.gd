@@ -52,9 +52,17 @@ func _pure_checks() -> void:
 	_check("④b cafe BGM 실제 파일로 해석", _resolves(A, GameAudio.PHASE_CAFE, "bgm_cafe"))
 	_check("④c night BGM 실제 파일로 해석", _resolves(A, GameAudio.PHASE_NIGHT, "bgm_night"))
 	_check("④d ending BGM 실제 파일로 해석", _resolves(A, GameAudio.PHASE_ENDING, "bgm_ending"))
+	# ★ B2 타이틀 테마 — 로파이 코지 플레이스홀더(.wav)로 해석. Suno .ogg가 떨어지면 자동 교체.
+	_check("④d① title BGM 실제 파일로 해석", _resolves(A, GameAudio.PHASE_TITLE, "bgm_title"))
+	_check("④d② BGM stem 5종(farm·cafe·night·ending·title)", GameAudio.BGM_STEM.size() == 5)
+	# title은 UI 상태라 phase_for(시각·종료·위치)에서는 절대 나오지 않는다(main이 set_phase로 직접 건다).
+	_check("④d③ title은 phase_for에서 안 나옴(UI 상태)",
+		A.phase_for(NOON, false, false) != GameAudio.PHASE_TITLE
+		and A.phase_for(DEEP_NIGHT, false, true) != GameAudio.PHASE_TITLE
+		and A.phase_for(NOON, true, false) != GameAudio.PHASE_TITLE)
 	_check("④e .ogg(Suno)가 .wav(플레이스홀더)보다 우선", GameAudio.BGM_EXTS[0] == ".ogg" and GameAudio.BGM_EXTS[1] == ".wav")
 	# 같은 stem에 .ogg·.wav가 같이 있으면 .ogg가 잡힌다(실제 드롭인 검증 — farm이 그 경우).
-	for phase in [GameAudio.PHASE_FARM, GameAudio.PHASE_CAFE, GameAudio.PHASE_NIGHT, GameAudio.PHASE_ENDING]:
+	for phase in [GameAudio.PHASE_FARM, GameAudio.PHASE_CAFE, GameAudio.PHASE_NIGHT, GameAudio.PHASE_ENDING, GameAudio.PHASE_TITLE]:
 		var stem: String = GameAudio.BGM_STEM[phase]
 		if FileAccess.file_exists(GameAudio.BGM_DIR + stem + ".ogg") and FileAccess.file_exists(GameAudio.BGM_DIR + stem + ".wav"):
 			_check("④f [%s] .ogg·.wav 공존 시 .ogg 우선(드롭인 교체)" % phase, A.bgm_source(phase).ends_with(".ogg"))
@@ -104,6 +112,27 @@ func _smoke_checks() -> void:
 	A.update_music(NOON, true, false)  # run_over=true → 시각·위치 무관 엔딩
 	await process_frame
 	_check("⑦d 슬라이스 종료 시 엔딩으로 전환", A._current_phase == GameAudio.PHASE_ENDING)
+	# ★ B2 타이틀: main이 타이틀을 띄울 때 직접 거는 phase(update_music 경로 아님). 스트림이 배정되고
+	#   루프로 잡힌다(pause 중 재생·페이드는 ALWAYS 덕 — 헤드리스는 play() 생략, 상태·배정은 그대로).
+	A.set_phase(GameAudio.PHASE_TITLE)
+	await process_frame
+	_check("⑦e set_phase(title) → 타이틀 테마로 전환", A._current_phase == GameAudio.PHASE_TITLE)
+	_check("⑦f 오디오 노드는 ALWAYS(pause 중에도 BGM 유지)", A.process_mode == Node.PROCESS_MODE_ALWAYS)
+
+	# ★ 부팅 충돌 회귀(타이틀 BGM 1초 컷 버그): _setup_audio의 update_music(farm)과 _show_title의
+	#   set_phase(title)이 *같은 프레임*에 연달아 일어나면, farm에서 페이드아웃+정지 예약된 플레이어가
+	#   그대로 title의 incoming으로 재사용된다. _fade가 이전 트윈을 kill하지 않으면 낡은 "정지 콜백"이
+	#   1초 뒤 발동해 방금 깐 title을 죽인다. → _fade가 재사용 플레이어의 낡은 트윈을 kill하는지 단언.
+	var B := GameAudio.new()
+	get_root().add_child(B)
+	await process_frame
+	B.update_music(NOON, false, false)   # farm: incoming=_music_b·outgoing=_music_a(정지 예약)
+	var stale: Tween = B._music_tweens.get(B._music_a.get_instance_id())
+	_check("⑦g farm 후 A(다음 incoming)에 페이드 트윈 예약됨", stale != null and stale.is_valid())
+	B.set_phase(GameAudio.PHASE_TITLE)   # 같은 프레임: A를 title로 재사용
+	_check("⑦h 재사용된 A의 낡은 트윈이 kill됨(정지 콜백 취소 — 1초 컷 방지)", stale == null or not stale.is_valid())
+	_check("⑦i title이 A에 실림", B._music_a.stream != null and B._music_a.stream.resource_path.get_file().begins_with("bgm_title"))
+	B.free()
 
 	# SFX: 9종 + 미정의/빈 이벤트를 연달아 쏴도 풀이 죽지 않는다(라운드로빈 보이스).
 	for e in ["hoe", "water", "harvest", "serve", "gold", "ui", "dialogue", "block", "sleep", "explode", ""]:

@@ -35,6 +35,8 @@ func _init() -> void:
 		var timg := tex.get_image()
 		if timg.get_format() != Image.FORMAT_RGBA8:
 			timg.convert(Image.FORMAT_RGBA8)
+		if tex == main.PROP_GRASS:
+			main._mute_grass_pixels(timg)   # ★ 잔디뭉치 프롭 muted(_draw_props_for와 동일)
 		var tsz := timg.get_size()
 		for t in entry[1]:
 			# ★[§11] 부피 프롭 발치 SE 접지 그림자(main._draw_prop_shadow의 CPU 재현)
@@ -49,6 +51,14 @@ func _init() -> void:
 				dimg = vtex.get_image()
 				if dimg.get_format() != Image.FORMAT_RGBA8:
 					dimg.convert(Image.FORMAT_RGBA8)
+			if main._MUTE_GREEN_PROPS.has(tex):
+				if dimg == timg:
+					dimg = dimg.duplicate()   # 원본 공유 방지(variants 비었을 때)
+				# ★ 초록 프롭 muted(_draw_props_for와 동일) — 목본은 완화 강도로 입체감 보존.
+				if main._MUTE_WOODY.has(tex):
+					main._mute_grass_pixels(dimg, main._WOODY_SAT_MUL, main._WOODY_SAT_CAP)
+				else:
+					main._mute_grass_pixels(dimg)
 			out.blend_rect(dimg, Rect2i(Vector2i.ZERO, tsz), Vector2i(t.x * TILE, t.y * TILE + yo))
 	# 야외 건물 외관(집·창고·축사) — 통과불가 WALL 박스 위 1:1 blit
 	var facades := [
@@ -57,21 +67,11 @@ func _init() -> void:
 		[main.FACADE_BARN, main.NEOKURITGAN_EXT_RECT],   # ★[B1-a.1] 넋우릿간(barn_ext 6×4)
 		[main.FACADE_COOP, main.NEOKDUNGURI_EXT_RECT],   # ★[아트 배선] 넋둥우리(coop_ext 4×2·문 우측)
 	]
-	# ★[ADR-0043] facade 블렌드 — facade 그리기 전 footprint를 풀 베이스로 덮어(시각) 회색 WALL 그레이박스가
-	#   투명부로 안 비치게. main._facade_grass_backdrop과 동일 결(여기선 CPU blit로 재현).
-	var gsrc := (main.get_node("Ground") as TileMapLayer).tile_set.get_source(0) as TileSetAtlasSource
-	var grs: int = gsrc.texture_region_size.x
-	var gcoord: Vector2i = main._terrain_base_atlas(main.TR_GRASS)
-	var gatlas: Image = gsrc.texture.get_image()
-	if gatlas.get_format() != Image.FORMAT_RGBA8:
-		gatlas.convert(Image.FORMAT_RGBA8)
-	var gtile := Image.create(grs, grs, false, Image.FORMAT_RGBA8)
-	gtile.blit_rect(gatlas, Rect2i(gcoord.x * grs, gcoord.y * grs, grs, grs), Vector2i.ZERO)
+	# ★[ADR-0054 건물 접지] HOME은 풀 백드롭을 안 깐다(main._facade_grass_backdrop이 HOME은 early-return).
+	#   ground16(_ground_detail_tex, 위에서 이미 blend)이 WALL footprint를 월드-정렬 맨흙(+잔디억제 패드)으로
+	#   덮으므로, facade 투명부에 그 흙이 seamless하게 비친다 → 초록 사각 소멸. 여기선 grass blit을 제거만.
 	for f in facades:
 		var rect := f[1] as Rect2i
-		for ty in range(rect.size.y):
-			for tx in range(rect.size.x):
-				out.blit_rect(gtile, Rect2i(0, 0, grs, grs), Vector2i((rect.position.x + tx) * TILE, (rect.position.y + ty) * TILE))
 		var fimg := (f[0] as Texture2D).get_image()
 		if fimg.get_format() != Image.FORMAT_RGBA8:
 			fimg.convert(Image.FORMAT_RGBA8)

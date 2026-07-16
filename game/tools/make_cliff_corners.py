@@ -15,16 +15,19 @@ from PIL import Image
 T = "assets/tiles/"
 face = Image.open(T + "cliff_s_face.png").convert("RGBA")
 base = Image.open(T + "cliff_s_base.png").convert("RGBA")
-lip = Image.open(T + "cliff_s_lip.png").convert("RGBA")
+# ★[ADR-0056 REV5 ②] 코너의 물러난 영역 = *투명*(고정 잔디 X). 런타임에 _build_ground16이 그 투명 픽셀을
+#   *주변 타일 지형*(노치 코너=tan 통로 / 맵끝=저지 등, 이웃 셀 샘플)으로 채운다 → 코너가 주변 타일을
+#   인식해 이어짐(owner "잔디타일이 이어졌자나" 교정). 여기선 벽(불투명)만 남기고 물러난 영역을 비운다.
 W, H = face.size            # 32,32
 WALL_H = H * 2              # Face+Base = 논리 세로 64
-R = 18                     # 밑동에서 잔디로 물러나는 최대 폭(px) — dump 보고 조정 가능
-GRASS_H = 18               # lip 상단 순수 풀 높이(흙 전이 하단 제외)
+R = 18                     # 밑동에서 물러나는 최대 폭(px) — dump 보고 조정 가능
+JIT = 3                    # ★ 경계 raggedness 진폭(px) — 코사인 곡선에 격자 파쇄 주입(벽↔주변 경계 유기화)
 
 
-def grass_px(x, y):
-    # lip 상단 풀 스트립을 세로 타일링(순수 풀만 — 흙 경계 제외)
-    return lip.getpixel((x % W, y % GRASS_H))
+def noise(x, y):
+    # 결정적 유기 노이즈(격자 파쇄) — 경계를 ±JIT px 불규칙하게 삐치게
+    h = (x * 73856093) ^ (y * 19349663) ^ 0x517CC1B7
+    return ((h & 0x7FFFFFFF) % 1000) / 1000.0   # 0..1
 
 
 def boundary(yg):
@@ -36,11 +39,13 @@ def boundary(yg):
 def carve(src, y_off, side):
     out = src.copy()
     for y in range(H):
-        b = boundary(y + y_off)
+        yg = y + y_off
+        # ★ 매끄러운 코사인 경계에 유기 노이즈 주입 — 벽↔주변 지형 경계가 불규칙하게 삐침.
         for x in range(W):
-            is_grass = (x < b) if side == "sw" else (x > W - 1 - b)
-            if is_grass:
-                out.putpixel((x, y), grass_px(x, y + y_off))
+            b = boundary(yg) + int((noise(x, yg) - 0.5) * 2.0 * JIT)   # ±JIT 지터
+            retreated = (x < b) if side == "sw" else (x > W - 1 - b)
+            if retreated:
+                out.putpixel((x, y), (0, 0, 0, 0))   # 투명 — 런타임에 주변 지형이 채움
     return out
 
 

@@ -1,6 +1,6 @@
 # 상업 라이선스 점검 체크리스트 (Steam 출시 전 필수)
 
-> 나라카 밸리는 **Steam 유료 상업 출시**가 목표다. 사용하는 모든 생성형/외부 에셋 도구의
+> Dear My Naraka는 **Steam 유료 상업 출시**가 목표다. 사용하는 모든 생성형/외부 에셋 도구의
 > 상업적 사용 권리와 저작권 귀속을 **출시 전에 반드시 확인**한다. 약관은 수시로 바뀌므로
 > 출시 직전 재확인한다.
 
@@ -20,7 +20,7 @@
 
 - [ ] **미드저니 (Midjourney)** — 컨셉·컷신·홍보 일러스트. 상업 사용 가능 플랜인지, 생성물 소유권/재배포 조건 확인.
 - [ ] **제미나이 (Gemini)** — 이미지 생성. 상업적 사용 약관 및 출력물 권리 확인.
-- [x] **PixelLab** — 인게임 스프라이트·타일·애니. ✅ **확인(2026-06-21)**: 사용자가 출력물 **소유권 유지**, "use, modify, and distribute the outputs from our tools for **any purpose**"(상업 포함). **유일한 제약 = 출력물로 다른 AI 모델 학습 금지**. **상업권은 유료/트라이얼 등급 무관**(트라이얼은 생성 *수량*만 제한, 권리 제한 아님). → 나라카 밸리 Steam 유료 출시에 **사용 가능**. 출처: [ToS](https://www.pixellab.ai/termsofservice) · [FAQ](https://www.pixellab.ai/docs/faq). ⚠️ 단 아래 *Steam AI 고지* 항목은 별도 의무.
+- [x] **PixelLab** — 인게임 스프라이트·타일·애니. ✅ **확인(2026-06-21)**: 사용자가 출력물 **소유권 유지**, "use, modify, and distribute the outputs from our tools for **any purpose**"(상업 포함). **유일한 제약 = 출력물로 다른 AI 모델 학습 금지**. **상업권은 유료/트라이얼 등급 무관**(트라이얼은 생성 *수량*만 제한, 권리 제한 아님). → Dear My Naraka Steam 유료 출시에 **사용 가능**. 출처: [ToS](https://www.pixellab.ai/termsofservice) · [FAQ](https://www.pixellab.ai/docs/faq). ⚠️ 단 아래 *Steam AI 고지* 항목은 별도 의무.
 - [ ] **Retro Diffusion** — 인게임 픽셀 에셋. 라이선스(개인/상업), 생성물 소유권 확인. (Replicate 경유 시 해당 약관도)
 - [~] **Suno (또는 Udio 등)** — BGM. **무료 플랜은 보통 상업 사용 불가** → 상업 플랜 필수, 곡 소유권/로열티 조건 확인. **진행(2026-06-22, P2.6):** 사용자 **Suno Pro 구독**(유료 = 상업 등급). 곡 프롬프트 레시피 잠금 → [p2.0-spike §13.4](./design/p2.0-spike-prompts.md)(밭·카페·밤·엔딩 4곡). **4곡 생성·드롭인 완료**(`game/assets/audio/bgm/bgm_{farm,cafe,night,ending}.ogg`, Suno Pro로 생성한 WAV → OGG 변환). ⚠️ **남은 미완 — Suno ToS 상업권·곡 소유권/로열티 약관 정독 미실시.** 출시 전 ① Suno ToS로 *Pro 등급 생성곡의 상업 사용·소유권·로열티* 확정(특히 Pro라도 곡 단독 재판매·동기화 라이선스 제약이 있는지) ② Steam AI 고지 대상 등록(BGM = AI 생성). 약관 확정 전까지 출시 빌드 확정 보류.
 - [x] **SFX 에셋팩** — 각 팩의 라이선스(CC0 / 로열티프리 / 귀속 필요 여부) 개별 확인 및 출처 기록. ✅ **확인(2026-06-22, P2.6)**: 외부 팩 대신 **코드 합성(자작)** — `game/tools/make_sfx.py`가 순수 Python(stdlib만, 의존성 0)으로 9종 SFX WAV를 절차적 생성한다(괭이·물·수확·서빙·골드·UI·대화·막기·취침). **출력물 100% 자작 = 제3자 라이선스·귀속·로열티 무관**(외부 에셋팩 출처 추적 불필요). 시드 고정이라 `make_sfx.py` 재실행으로 동일 재생성 가능(소스가 곧 출처). → 상업 출시에 제약 없음. ⚠️ Steam AI 고지는 *생성형 AI* 산출물 대상이라 절차적 코드 합성 SFX는 해당 없음(BGM Suno·도트 PixelLab·초상화 Gemini만 신고).

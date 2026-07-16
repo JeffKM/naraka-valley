@@ -1,4 +1,4 @@
-# 나라카 밸리 — 타일셋 생성 규칙 (Tileset Ruleset)
+# Dear My Naraka — 타일셋 생성 규칙 (Tileset Ruleset)
 
 > **상태:** 타일셋 규칙 grill(2026-06-29) 산출물. PixelLab `create_topdown_tileset`으로 지형 타일을
 > 생성할 때의 **단일 진실의 원천**이다. 설치한 마켓 스킬(`cautiouskurns-game-template-pixellab-tileset-generator`)의

@@ -169,6 +169,17 @@ Stardew-like chunky pixels, NOT isometric, NOT rocky grey stone.
 - **단계 3 후속 증분 완료(2026-07-04, 워크트리 cliff-south-followup — ②남향-only 오토타일러는 PR#193 Increment A로 선완료):**
   - **③ 잔디 입체화(부분):** 동향 잔디 능선을 x20 4칸 간격 bush 7개 → y1~25 2칸 지그재그(x19↔20) 13개로 연속 산등성이화(`PROP_LAYOUT_HOME`). 필드 변종 노이즈·클러스터 명암은 owner 차분함 선호(`_GD_CLUMP_DAMP=0.42`) 존중해 보류(육안 후 별도).
   - **④ 곡선 대각 전이 코너:** 신규 타일종 4종(`CLIFF_CORNER_SW/SE × Face/Base`, 전부 SOLID) + 오토타일러 코너 로직(벽 서/동 바깥 끝=맵경계·능선과 만나는 진짜 끝 감지). 아트=`make_cliff_corners.py` 절차 파생(`cliff_s_face/base` + lip 풀을 1/4 코사인 곡선으로 전이, 결정적·2px 캐논). §10.1 파생 out/in 코너를 이 곡선 전이로 대체.
-  - **⑤ 벽면 오버행(owner 결정 = 벽면 전체 front, 스타듀 표준):** CLIFF_LIP은 고지 위·안 닿음 → 캐릭터가 절벽 밑 1~2칸에 서면 Face/Base를 `_front_props`(z=1)에서 재렌더해 상체 가림(`_cliff_face_cells` 캐시 + `_front_cliff_cells_for` 판정, 밑 3칸부터 감쇠). 그리드·충돌 불변(순수 시각).
+  - **⑤ 벽면 오버행 → ★2026-07-07 owner 라이브 검수로 제거(결정 반전):** 초기 결정은 "벽면 전체 front"(캐릭터가 절벽 밑 1~2칸에서 상체 가림). owner가 라이브 GL에서 확인하니 **과잉 가림**(밑 1칸에서 머리+상체 전체가 벽면에 파묻혀 "절벽에 빠진" 듯) → **근본 오류 = 남향 절벽 밑 캐릭터는 절벽 *앞(남쪽)*이라 원래 안 가려져야 맞음**(스타듀도 절벽 밑은 앞). `_draw_front_cliff_faces`·`_front_cliff_cells_for`·`_cliff_front_tex`·`_cache_cliff_face_cells`·`_cliff_face_cells`·`CLIFF_WALL_TILES` + `front_cliff_test.gd` 전부 제거. **부수 효과:** front 절벽 draw 경로 소멸 → 하얀사각형(CompressedTexture2D `draw_texture`) 위험 원천 소멸. 캐릭터는 항상 남향 벽 앞에 그려진다.
   - **⑥ orphan 폐기:** `_lay_east_band`·`_lay_corner_step`(라이브 참조 0·cliff_test 전용) 제거 + cliff_test 옛 동향밴드·코너스텝 케이스 폐기·①~⑥ 재번호. orphan 에셋 13종(`cliff_e/w_face`·`cliff_e/w/n_lip`·`cliff_out/in_*`) git rm. `_lay_south_band`는 격리 테스트 원시어휘로 유지.
   - **회귀:** 전체 46개 PASS + `cliff_test ⑥`·`front_cliff_test`(신규) 추가. home_full_dump(SW/SE 곡선 코너)·오버행 시뮬 육안 사인오프. **미결(owner 육안 후):** ③ 필드 잔디 변종 강화 방향.
+
+### 10.3 품질 3항목 정식화 → [ADR-0056] (2026-07-07, `grill-with-docs`)
+
+> owner 라이브 확인이 봉합한 회귀 2건(PR#234 절벽 안보임·PR#235 하얀 사각형) 뒤, 남은 **품질 3항목**을 `grill-with-docs`로 정식화해 [ADR-0056](../adr/0056-cliff-quality-visual-overlays-fringe-bakedao-pond-bank.md)에 박제했다. 유실된 Gemini 가이드 대신 현 코드+스타듀 불변식 역설계. **대원칙 = 데이터-안전 국소 오버레이**(`_grid`·충돌·세이브 불변, ④만 세이브-안전 예외).
+
+- **① 상단 완충** = CLIFF_LIP 상단 엣지 ragged 풀 늘어짐 오버레이(새 타일종 X). ★구현 훅 = **`_build_ground16`** 인라인(HOME 지면 오버레이는 흙-지배 flip의 이 함수 — `_build_path_grass_fringe`는 *그 외 구역* 전용이라 절벽 있는 HOME엔 안 붙는다). grass_out(dir=0) *기술*만 재활용·풀 소스 `_bf_grass`.
+- **② FACE 원근 AO** = **코드 0**, 아트 베이크 트랙. `cliff_s_face`(하단 감쇄)·`cliff_s_base`(접지 드롭섀도우 0.65) — ⚠️ **§10.2 단계1·2 기존 접지 그림자를 *정밀화*, 이중 금지.** 스펙은 [required-assets-roster] 등록.
+- **④ 수변 뱅크** = `_build_home` 하드코딩 2행(연못 북단 CLIFF_FACE+CLIFF_BANK) 삭제 → `_autotile_pond_siblings`(SPIRIT_POND_RECT 북단 유도). Full 일반화(물/길 교차·`cliff_bank_water`·`cliff_beach`)는 **§8대로 S2/S3 연기**. ★통합 초안이 이를 `_autotile_south_cliffs` 인라인 IF로 흡수했으나 고지 마스크(x0..20/y0..26)와 연못(x26..33/y34..40)이 안 겹쳐 **죽은 코드** → sibling 함수가 유일 정답([ADR-0056] §결정-④).
+- **§3 불변식:** 하프타일 콜라이더·Y-Sort는 현 엔진에 없음. 실제 = whole-tile SOLID(−8..8) 타일종 충돌 + `_front_cliff_cells_for` 근접 재렌더 front. front 텍스처는 **ImageTexture 변환 필수**(CompressedTexture2D `draw_texture`=하얀사각형).
+
+**미구현(후속 빌드 슬라이스, 워크트리 격리):** ①④ 코드·② 아트 재생성.

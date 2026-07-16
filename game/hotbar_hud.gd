@@ -13,12 +13,11 @@ class_name HotbarHud
 #   - 헤드리스 단위검증(main.tscn 로드)에서도 안전 — 텍스처는 유효 preload, _draw는 픽셀이 없어도
 #     크래시하지 않는다(라이팅·손님 그리기와 같은 결).
 
-const SLOTS := 16                 # = Inventory.SIZE(핫바 칸 수). 슬롯이 늘면 함께 키운다. ★S1-8: 12→16
 const SLOT_PX := 24.0             # 한 칸 변(px) — ★owner 2026-07-03 HUD 가이드: 36→24(≈67%, 시야 확보)
-const GAP := 2.0                  # 칸 사이 간격 — 16*24+15*2=414 < 640(양옆 ~113px 여백)
+const GAP := 2.0                  # 칸 사이 간격 — 12*24+11*2=310 < 640(양옆 ~165px 여백)
 const MARGIN_BOTTOM := 10.0       # 화면 아래 여백
 const PLATE_ALPHA := 0.82         # 슬롯 배경 알파(<1 = 뒤 지형 투과, 답답함 완화)
-const HOTKEYS := "1234567890-="   # 슬롯 좌상단 단축키 인덱스(0..11). 12..15는 표시 없음(휠 전용)
+const HOTKEYS := "1234567890-="   # 슬롯 좌상단 단축키 인덱스(0..11) — 핫바 12칸에 1:1 대응
 
 var inv: Inventory = null         # 그릴 인벤토리(슬롯·선택). main이 주입.
 var crop_icons: Dictionary = {}   # 작물군 id → mature 스프라이트(씨앗·수확물 아이콘 재사용). main 주입.
@@ -44,16 +43,19 @@ func _view() -> Vector2:
 	return Vector2(size.x / sc, size.y / sc)
 
 # 슬롯 배치 원점(_draw·히트테스트 공용) — 하단 중앙, 보이는 논리 영역 기준.
+# ★ 핫바는 첫 행(Inventory.HOTBAR_SLOTS=12)만 그린다 — 나머지 가방 슬롯은 메뉴 백팩(스크롤)에서만
+#   보인다. 가방 용량(Inventory.SIZE)이 늘어도 핫바 폭은 고정이라 화면 밖으로 안 넘친다(owner 2026-07-06).
 func _slots_origin() -> Vector2:
 	var view := _view()
-	var total_w := SLOTS * SLOT_PX + (SLOTS - 1) * GAP
+	var n := Inventory.HOTBAR_SLOTS
+	var total_w := n * SLOT_PX + (n - 1) * GAP
 	return Vector2((view.x - total_w) * 0.5, view.y - SLOT_PX - MARGIN_BOTTOM)
 
 func _draw() -> void:
 	if inv == null:
 		return
 	var origin := _slots_origin()
-	for i in SLOTS:
+	for i in Inventory.HOTBAR_SLOTS:
 		var pos := origin + Vector2(i * (SLOT_PX + GAP), 0.0)
 		_draw_slot(i, pos)
 
@@ -63,7 +65,7 @@ func slot_index_at(logical_pos: Vector2) -> int:
 	if inv == null:
 		return -1
 	var origin := _slots_origin()
-	for i in SLOTS:
+	for i in Inventory.HOTBAR_SLOTS:
 		var pos := origin + Vector2(i * (SLOT_PX + GAP), 0.0)
 		if Rect2(pos, Vector2(SLOT_PX, SLOT_PX)).has_point(logical_pos):
 			return i
@@ -107,19 +109,40 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 	var inner := Rect2(rect.position + Vector2(pad, pad), rect.size - Vector2(pad * 2.0, pad * 2.0))
 	match ItemCatalog.category_of(id):
 		ItemCatalog.CAT_TOOL:
-			draw_rect(inner, ItemCatalog.tool_color_of(id))
+			# ★ [아트정리패스] 도구 아이콘(icons dict에 병합된 도구 텍스처). 없으면 옛 색박스 폴백.
+			var ttex: Texture2D = crop_icons.get(id)
+			if ttex != null:
+				draw_texture_rect(ttex, inner, false)
+			else:
+				draw_rect(inner, ItemCatalog.tool_color_of(id))
 		ItemCatalog.CAT_SEED:
 			_draw_crop_tex(ItemCatalog.crop_of(id), inner)
 		ItemCatalog.CAT_SAPLING:
 			# ★ [S1-5b] 묘목 그레이박스 아이콘 — 밑동(갈색)+새싹(초록) 색 박스(대형 스프라이트=S1-10).
-			draw_rect(inner, Color(0.42, 0.30, 0.20))
-			draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.45)), Color(0.35, 0.62, 0.35))
+			# ★ [아트정리패스] 묘목 아이콘(SAPLING_ICONS). 없으면 옛 밑동갈색+새싹초록 폴백.
+			var stex: Texture2D = crop_icons.get(id)
+			if stex != null:
+				draw_texture_rect(stex, inner, false)
+			else:
+				draw_rect(inner, Color(0.42, 0.30, 0.20))
+				draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.45)), Color(0.35, 0.62, 0.35))
 		ItemCatalog.CAT_HARVEST:
 			_draw_crop_tex(id, inner)
 		ItemCatalog.CAT_FERTILIZER:
-			# ★ [S1-6] 비료 그레이박스 아이콘 — 품질군=초록 흙, 성장촉진군=청록(축 구분). 아트=하류.
-			var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
-			draw_rect(inner, fc)
+			# ★ [아트정리패스] 비료 아이콘(icons dict에 병합된 FERT_ICONS). 없으면 옛 색박스 폴백.
+			var ftex: Texture2D = crop_icons.get(id)
+			if ftex != null:
+				draw_texture_rect(ftex, inner, false)
+			else:
+				var fc := Color(0.40, 0.55, 0.32) if FertilizerCatalog.group_of(id) == "quality" else Color(0.30, 0.55, 0.55)
+				draw_rect(inner, fc)
+		ItemCatalog.CAT_MATERIAL:
+			# ★ 재료(건초·개간 드랍) — 케이스 누락으로 아이콘 없이 개수만 뜨던 버그(inv_frame과 동형 수정).
+			var mtex: Texture2D = crop_icons.get(id)
+			if mtex != null:
+				draw_texture_rect(mtex, inner, false)
+			else:
+				draw_rect(inner, Color(0.80, 0.66, 0.30) if ItemCatalog._is_hay(id) else Color(0.46, 0.36, 0.26))
 
 # 작물·수확물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:

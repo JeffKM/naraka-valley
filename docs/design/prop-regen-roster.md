@@ -102,4 +102,28 @@ owner가 스타듀 실물 + "Farm Cleanup Asset Set" 레퍼런스와 대조해 d
 5. **좌표:** `PROP_LAYOUT_HOME`의 debris 좌표는 1×1 기준으로 재점검(2×2 시절 배치가 겹치지 않게).
 6. **회귀:** `run_tests.sh`(개간 디스패치·drop·is_cleared skip 불변) + `home_full_dump` 육안.
 
+## 5.3 통나무(logs) 5종 — PixelLab 재설계·배선 완료 (PR #202, 2026-07-04~05, owner 방향)
+
+로스터 #5 `stump_log`(단일 그루터기, 맵 미배치)를 owner 레퍼런스(스타듀 "Logs & Branches")로 **5종 재설계**했다. 배치 §5.1의 "현행 크기 드롭인"과 별개 — debris·나무와 같은 PixelLab `create_1_direction_object` 트랙.
+
+**5종(전부 32-native, ★통과 불가 SOLID 장애물 — owner 2026-07-05 "통나무는 통과 안 됨"):**
+
+| key | 크기(칸) | 형태 |
+|---|---|---|
+| `PROP_LOG_LONG` | 96×32 (3×1) | ㅡ자 긴 통나무(수평) |
+| `PROP_LOG_SHORT` | 64×32 (2×1) | 짧은 통나무(수평) |
+| `PROP_LOG_UPRIGHT` | 32×32 (1×1) | 세워진 그루터기(위 나이테 단면) |
+| `PROP_LOG_DIAG_A` | 32×32 (1×1) | 대각 통나무 밝은(honey, ＼) |
+| `PROP_LOG_DIAG_B` | 32×32 (1×1) | 대각 통나무 어두운(walnut, ／ — A와 대칭) |
+
+**아트 파이프라인(`tools/_logs_build.py`):** raw(정사각) → 최대 연결덩어리만 남겨 부스러기 제거 → (필요 시)회전 보정(diag_b −45° 대각) → 목표 박스 fit(long=stretch 96×32·나머지 contain) → bottom-center 정렬.
+- **★긴 통나무 ㅡ자 교훈(owner 2026-07-05):** 회전 보정본은 *실루엣*만 수평이고 **나뭇결이 대각으로 흘러** 여전히 기울어 보였다(중심선 0°여도 owner "아직 기울어"). → **나뭇결이 수평인 후보로 재생성**(프롬프트 "grain lines running straight horizontal")해 회전 불필요(rot 0)·결까지 수평. 실루엣 각도는 픽셀 중심선 회귀로 정량 검증(중심 −0.1°·상단 0.1°·하단 −0.4°). 원본 aspect도 ~3.2:1이라 stretch 왜곡 최소.
+
+**배선 스펙(모두 `main.gd`):**
+1. **preload 5종**(옛 `PROP_STUMP`·`stump_log.png`/`_raw.png` 폐기 — 맵 미배치라 안전).
+2. **레지스트리·팔레트:** `PROP_TEX_REGISTRY`(`LOG_LONG`…)·`_EDIT_PALETTE`·`_EDIT_PAL_NAMES` 5키. `PROP_SHADOW_SET`에 5종(부피 바닥 프롭).
+3. **★통과 불가(SOLID):** `SOLID_PROPS`에 5종(**풀타일 장애물** — `FOOT_BAR_PROPS`·`FADE_PROPS` 미포함=낮은 프롭이라 발치바/occlusion fade 없이 스프라이트 footprint 전체 충돌). 크기가 3종이라 debris식 변주배열이 아닌 **개별 프롭**(발치·Y-Sort·충돌 footprint가 크기 파생).
+4. **배치:** `PROP_LAYOUT_HOME` 16곳(나무 클러스터 곁·빈 가장자리, "벌목 숲" 프레이밍). 라이브 검증 `tools/logs_place_check.gd`(SOLID·기존 프롭·건물 EXT·연못·패치·방목 겹침 0). `layout.json` 시드 재생성 필수(삭제 후 헤드리스 1회).
+5. **테스트:** `prop_ysort_test` ② 그림자 단언 PROP_STUMP→통나무 5종 갱신. `run_tests.sh` 48개 전체 통과·회귀 0(SOLID 전환 soft-lock 0). `home_full_dump` 육안(접지·그림자·톤·대칭·수평 확인).
+
 
