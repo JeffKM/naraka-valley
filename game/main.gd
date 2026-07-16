@@ -3542,6 +3542,7 @@ func _retone_earth(src: Image) -> Image:
 func _build_ground16() -> void:
 	_ground_detail_tex = null
 	_load_big_fields()
+	_load_wang_pairs()
 	var bw := _grid_w * TILE
 	var bh := _outdoor_h * TILE
 	if bw <= 0 or bh <= 0:
@@ -3574,46 +3575,40 @@ func _build_ground16() -> void:
 			if s0 < 0:
 				continue
 			out.blit_rect(_g16_field(s0), Rect2i((x * TILE) % P, (y * TILE) % P, TILE, TILE), Vector2i(x * TILE, y * TILE))
-	# ② 경계 지터 디더 — soft 표면(흙0·잔디1·길2)끼리의 경계만 per-pixel(유기적 들쭉날쭉).
-	#    밭(3)·물(4)은 자기 필드 하드 경계 유지(고랑·수면 가독). 흙↔잔디패치·흙↔길·잔디↔길 모두 물결침.
-	# ★[성능] 지터 진폭이 ±_GJIT라 셀 경계에서 _GJIT px 안쪽 픽셀만 이웃 표면으로 넘어갈 수 있다. 그래서
-	#   *다른 soft 표면과 맞닿은 변(邊)의 band(_GJIT+1 px)만* 처리한다(내부는 blit 값 그대로=동일). 흩뿌린
-	#   잔디 패치로 에지 셀이 폭증해도(전체 32×32 순회 시 홈 빌드 ~17s→bana_test 90s 초과) band-only면 몇 배 빠름.
-	var dirs: Array[Vector2i] = [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
-	var band := _GJIT + 1
+	# ② Wang 경계 전환 — 4코너 표면이 2종 이상인 경계 셀에 손그림 전환 타일 blit(지터 대체).
+	#    위계 상위 2표면을 (lo,up) 쌍으로 취해 그 tileset의 코너키 타일을 셀에 통째로 덮는다.
+	#    삼중점(3종+)은 상위 2종만 쌍으로, 최하위 코너는 lower로 흡수(스타듀 폴백). 순수 셀·미생성
+	#    쌍·미커버 코너조합은 스킵(①의 base blit 유지). _grid·충돌·세이브 불변(픽셀만).
 	for y in _outdoor_h:
 		for x in _grid_w:
-			var sc: int = surf[y][x]
-			if sc < 0 or sc > 2:   # 건물·밭·물 = 지터 대상 아님
-				continue
-			for dir in 4:
-				var nx := x + dirs[dir].x
-				var ny := y + dirs[dir].y
-				if nx < 0 or ny < 0 or nx >= _grid_w or ny >= _outdoor_h:
-					continue
-				var ns: int = surf[ny][nx]
-				if ns < 0 or ns > 2 or ns == sc:
-					continue   # 이웃이 하드 표면이거나 같은 표면 = 이 변엔 물결 없음
-				# 이 변(dir)에 인접한 band 픽셀만 지터(변 따라 a=0..TILE, 안쪽 깊이 b=0..band).
-				for a in TILE:
-					for b in band:
-						var ix: int
-						var iy: int
-						match dir:
-							0: ix = a; iy = b                 # N(위 변)
-							1: ix = a; iy = TILE - 1 - b      # S(아래 변)
-							2: ix = b; iy = a                 # W(왼 변)
-							_: ix = TILE - 1 - b; iy = a      # E(오른 변)
-						var px := x * TILE + ix
-						var py := y * TILE + iy
-						var jx := px + int((_gd_h01(px, py, 610) - 0.5) * _GJIT * 2.0)
-						var jy := py + int((_gd_h01(px, py, 620) - 0.5) * _GJIT * 2.0)
-						var jcx := clampi(jx / TILE, 0, _grid_w - 1)
-						var jcy := clampi(jy / TILE, 0, _outdoor_h - 1)
-						var js: int = surf[jcy][jcx]
-						if js < 0 or js > 2:
-							js = sc   # 밭·물·건물로 지터가 튀면 자기 표면 유지(하드 경계 안 침범)
-						out.set_pixel(px, py, _g16_field(js).get_pixel(px % P, py % P))
+			if int(surf[y][x]) < 0:
+				continue   # 건물·절벽 = 오버레이 투명(절벽 오버레이가 덮음)
+			var c_nw := _wang_vertex_surf(surf, x, y)
+			var c_ne := _wang_vertex_surf(surf, x + 1, y)
+			var c_sw := _wang_vertex_surf(surf, x, y + 1)
+			var c_se := _wang_vertex_surf(surf, x + 1, y + 1)
+			var uniq := {}
+			for cv: int in [c_nw, c_ne, c_sw, c_se]:
+				if cv >= 0:
+					uniq[cv] = true
+			if uniq.size() < 2:
+				continue   # 순수 셀 = ① base blit 유지
+			var ks: Array = uniq.keys()
+			ks.sort_custom(func(a, b): return _surf_rank(a) > _surf_rank(b))
+			var up_s: int = ks[0]
+			var lo_s: int = ks[1]
+			var pk := _wang_pair_key(lo_s, up_s)
+			if not _wang_tiles.has(pk):
+				continue   # 이 쌍 미생성(스킵된 쌍) → base 유지
+			var bits := _corner_bits(
+				1 if c_nw == up_s else 0,
+				1 if c_ne == up_s else 0,
+				1 if c_sw == up_s else 0,
+				1 if c_se == up_s else 0)
+			var tmap: Dictionary = _wang_tiles[pk]
+			if not tmap.has(bits):
+				continue   # 미커버 코너조합 → base 유지
+			out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
 	# ★[ADR-0056 REV4 ①] LIP 상단 텍스처 평지화 — CLIFF_LIP 타일 상단(잔디부)을 평지 _bf_grass로 오버레이해
 	#   윗면 평지와 텍스처 문법 100% 일치. 고지 잔디화 뒤 lip은 톤은 맞으나 블레이드 패턴이 평지와 이질 →
 	#   _bf_grass를 월드 타일링으로 끌어와(위 평지 grass와 씸리스 연속) lip 상단 _LIP_GRASS_H px에 그린다.
