@@ -1725,6 +1725,47 @@ func _build_tileset() -> TileSet:
 			td.set_collision_polygon_points(0, 0, SOLID_POLY)
 	return ts
 
+# ── [잔디 muted 조율] 풀(녹색) 픽셀을 warm-moss·저채도(세이지)로 수렴하는 공통 규칙 ──────────
+# terrain 타일셋(_harmonize_grass_variants 패스A)과 프롭 잔디 오버레이(ground_grass·grass_tuft)가
+# 같은 필드 톤을 공유하도록 단일 소스로 둔다(ADR-0001 런타임 글루 — 원본 에셋 보존). in-place.
+# owner: 필드 잔디를 muted(청록끼↓·채도↓ 올리브 세이지)로. 형광 잔디뭉치 프롭도 같은 톤에 매칭.
+const _MG_CANON_H := 95.0 / 360.0   # warm-moss 기준 hue
+# 프롭 잔디 오버레이 — 이 텍스처들은 blit 전 _mute_grass_pixels로 필드 톤에 맞춘다.
+const _GD_GRASS_MUTE := [GD_GRASS1, GD_GRASS2, GD_GRASS3, PROP_GRASS]
+func _mute_grass_pixels(img: Image) -> void:
+	if img.get_format() != Image.FORMAT_RGBA8:
+		img.convert(Image.FORMAT_RGBA8)
+	var w := img.get_width()
+	var h := img.get_height()
+	for y in h:
+		for x in w:
+			var c := img.get_pixel(x, y)
+			if c.a < 0.5 or c.s < 0.18:
+				continue   # 투명·외곽선/회색은 보존
+			var hd := c.h * 360.0
+			if hd < 60.0 or hd > 158.0:
+				continue   # 갈색(<60)·청록 물·soul-blue(>158) 제외 → 풀만
+			var nh: float = lerpf(c.h, _MG_CANON_H, 0.72)  # hue를 warm-moss로 수렴(청록끼 제거·올리브)
+			var ns: float = minf(c.s * 0.74, 0.38)         # 채도 캡 하향(candy·형광→muted 세이지)
+			var nv: float = c.v * 0.96
+			img.set_pixel(x, y, Color.from_hsv(nh, ns, nv, c.a))
+
+# 프롭 잔디 스프라이트(grass_tuft)를 muted 톤으로 변환한 ImageTexture 캐시 —
+# _draw_props_for는 프롭을 draw_texture_rect로 직접 그려 ground-detail muted 경로를 안 지난다.
+# 원본 텍스처는 보존하고, 그리기용 muted 사본만 lazy 생성(ADR-0001 런타임 글루).
+var _muted_prop_cache: Dictionary = {}
+func _muted_prop_tex(tex: Texture2D) -> Texture2D:
+	if _muted_prop_cache.has(tex):
+		return _muted_prop_cache[tex]
+	var im: Image = tex.get_image()
+	if im.get_format() != Image.FORMAT_RGBA8:
+		im.convert(Image.FORMAT_RGBA8)
+	im = im.duplicate()
+	_mute_grass_pixels(im)
+	var t := ImageTexture.create_from_image(im)
+	_muted_prop_cache[tex] = t
+	return t
+
 # ── [ADR-0042] 증분3 — 잔디 변종 톤 평준화(체커 제거, lush 결 보존) ──────────
 # 재생성한 Wang 4세트는 grass-bearing 3세트(grass_path·soil_grass·water_grass)가 각자 all-grass
 # 타일을 만든다. grass base id로 체인해도 desaturate가 water_grass만 좁은 hue로 처리해 그 타일이
@@ -1738,24 +1779,11 @@ func _harmonize_grass_variants(ts: TileSet) -> void:
 	var img: Image = src.texture.get_image()
 	if img.get_format() != Image.FORMAT_RGBA8:
 		img.convert(Image.FORMAT_RGBA8)
-	# ── 패스 A: 모든 풀(녹색) 픽셀을 warm-moss로 수렴(hue·채도) ───────────────
+	# ── 패스 A: 모든 풀(녹색) 픽셀을 warm-moss·저채도(세이지)로 수렴(hue·채도) ───────────────
 	# 세트마다 다른 풀 톤(특히 water_grass의 노랑)·연못 둘레 링·candy 채도를 한 번에 정리한다.
 	# 갈색(길·밭)·청록 물·soul-blue는 hue 범위로 제외돼 보존. 명도(v)는 거의 유지 → lush 풀결 보존.
-	const CANON_H := 95.0 / 360.0   # warm-moss 기준 hue
-	var W := img.get_width()
-	var H := img.get_height()
-	for y in H:
-		for x in W:
-			var c := img.get_pixel(x, y)
-			if c.a < 0.5 or c.s < 0.18:
-				continue   # 투명·외곽선/회색은 보존
-			var hd := c.h * 360.0
-			if hd < 60.0 or hd > 158.0:
-				continue   # 갈색(<60)·청록 물·soul-blue(>158) 제외 → 풀만
-			var nh: float = lerpf(c.h, CANON_H, 0.6)   # hue를 기준으로 수렴(노랑→이끼)
-			var ns: float = minf(c.s * 0.82, 0.46)      # 채도 캡(candy→muted)
-			var nv: float = c.v * 0.96
-			img.set_pixel(x, y, Color.from_hsv(nh, ns, nv, c.a))
+	# ★ 규칙은 프롭 잔디 오버레이(ground_grass·grass_tuft)와 공유 → _mute_grass_pixels 단일 소스.
+	_mute_grass_pixels(img)
 	# ── 패스 B: base all-grass 3변종의 *평균색*을 공통 톤(채널별 중앙값)으로 평행이동 ──
 	# 패스 A로 hue/채도는 맞았으나 세트별 *명도* 차이가 남아 필드에 밝기 체커가 보일 수 있다.
 	# base 타일 평균만 정합(텍스처는 평행이동이라 보존). 좌표는 터레인 비트로 robust 탐색.
@@ -3220,6 +3248,8 @@ func _gd_soft_image(tex: Texture2D, flip := false) -> Image:
 	im = im.duplicate()
 	if flip:
 		im.flip_x()   # 좌우 반전 변종(같은 풀포기가 도장처럼 반복되지 않게)
+	if _GD_GRASS_MUTE.has(tex):
+		_mute_grass_pixels(im)   # ★ 프롭 잔디 오버레이도 필드 톤에 맞춰 muted(평균/저대비화 전)
 	var w := im.get_width()
 	var h := im.get_height()
 	# 불투명 픽셀 평균색
@@ -3741,6 +3771,8 @@ func _build_ground_details() -> void:
 				timg = ctex.get_image()
 				if timg.get_format() != Image.FORMAT_RGBA8:
 					timg.convert(Image.FORMAT_RGBA8)
+				if _GD_GRASS_MUTE.has(ctex):
+					_mute_grass_pixels(timg)   # ★ non-soft 잔디 오버레이도 필드 톤에 맞춰 muted
 			var dw := timg.get_width()
 			var dh := timg.get_height()
 			var jx := int((_gd_h01(x, y, 3) - 0.5) * 8)
@@ -7175,10 +7207,14 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 			var draw_tex: Texture2D = tex
 			if is_debris:
 				draw_tex = _debris_variant_tex(tex, t)
+				if tex == PROP_DEBRIS_WEEDS:
+					draw_tex = _muted_prop_tex(draw_tex)   # ★ 잡초 debris 형광 초록 → 필드 잔디 톤에 매칭
 			elif BUSH_VARIANTS.has(tex):
 				# 능선 한 줄 세로 스택 → (x + y/2)%2로 dark↔bright 교대(x 고정이라 y/2가 교대 축).
 				var bvs: Array = BUSH_VARIANTS[tex]
 				draw_tex = bvs[(t.x + t.y / 2) % bvs.size()]
+			elif tex == PROP_GRASS:
+				draw_tex = _muted_prop_tex(tex)   # ★ 잔디뭉치 프롭도 필드 잔디 톤에 맞춰 muted
 			# ★[roster] 앞 패스 나무는 occlusion fade 알파를 modulate로 얹는다(_update_tree_fade가 lerp).
 			#   뒤 패스·다른 프롭·다른 구역은 늘 불투명(get 기본 1.0).
 			var mod := Color(1, 1, 1, 1)

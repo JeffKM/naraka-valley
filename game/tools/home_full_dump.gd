@@ -35,6 +35,8 @@ func _init() -> void:
 		var timg := tex.get_image()
 		if timg.get_format() != Image.FORMAT_RGBA8:
 			timg.convert(Image.FORMAT_RGBA8)
+		if tex == main.PROP_GRASS:
+			main._mute_grass_pixels(timg)   # ★ 잔디뭉치 프롭 muted(_draw_props_for와 동일)
 		var tsz := timg.get_size()
 		for t in entry[1]:
 			# ★[§11] 부피 프롭 발치 SE 접지 그림자(main._draw_prop_shadow의 CPU 재현)
@@ -49,6 +51,10 @@ func _init() -> void:
 				dimg = vtex.get_image()
 				if dimg.get_format() != Image.FORMAT_RGBA8:
 					dimg.convert(Image.FORMAT_RGBA8)
+			if tex == main.PROP_DEBRIS_WEEDS:
+				if dimg == timg:
+					dimg = dimg.duplicate()   # 원본 공유 방지(variants 비었을 때)
+				main._mute_grass_pixels(dimg)   # ★ 잡초 debris muted(_draw_props_for와 동일)
 			out.blend_rect(dimg, Rect2i(Vector2i.ZERO, tsz), Vector2i(t.x * TILE, t.y * TILE + yo))
 	# 야외 건물 외관(집·창고·축사) — 통과불가 WALL 박스 위 1:1 blit
 	var facades := [
