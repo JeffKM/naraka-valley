@@ -500,6 +500,50 @@ func _gd_table_for(terrain: int) -> Array:
 func _gd_sparse_for() -> Array:
 	return _REGION_GD_SPARSE.get(_region, _GD_SPARSE)
 
+# ★[ADR-0058 B] 구역별 풀무리 문턱(↓=clump 면적↑). 안식은 풀무리↑라 전역보다 낮춘다.
+var _REGION_CLUSTER_CUT := { RegionCatalog.HOME: 0.52 }   # 전역 GD_CLUSTER_CUT=0.60
+
+# 풀무리 마스크 — 저주파 seed + CA 이웃-확산(스타듀 풀 확산 본뜸). 결정적·셀단위·2패스 상한.
+#   _gd_cluster로 seed(GROUND만) → 이웃≥5 성장·<2 사멸 2패스 → 유기적 clump. _g16_cluster_cleanup 계보.
+var _scatter_clump: Array = []
+
+func _compute_scatter_clump() -> void:
+	var W := _grid_w
+	var H := _outdoor_h
+	var cut: float = _REGION_CLUSTER_CUT.get(_region, GD_CLUSTER_CUT)
+	var mask := []
+	for y in H:
+		var row := []
+		for x in W:
+			row.append(1 if (_grid[y][x] == GROUND and _gd_cluster(x, y) >= cut) else 0)
+		mask.append(row)
+	for _p in 2:
+		var snap: Array = mask.duplicate(true)
+		for y in H:
+			for x in W:
+				if _grid[y][x] != GROUND:
+					mask[y][x] = 0
+					continue
+				var gn := 0
+				for dy in range(-1, 2):
+					for dx in range(-1, 2):
+						if dx == 0 and dy == 0:
+							continue
+						var nx := x + dx
+						var ny := y + dy
+						if nx >= 0 and nx < W and ny >= 0 and ny < H and snap[ny][nx] == 1:
+							gn += 1
+				if snap[y][x] == 1 and gn < 2:
+					mask[y][x] = 0
+				elif snap[y][x] == 0 and gn >= 5:
+					mask[y][x] = 1
+	_scatter_clump = mask
+
+func _scatter_is_clump(x: int, y: int) -> bool:
+	if _scatter_clump.is_empty():
+		return _gd_cluster(x, y) >= _REGION_CLUSTER_CUT.get(_region, GD_CLUSTER_CUT)  # 안전 폴백
+	return _scatter_clump[y][x] == 1
+
 # 구역 → 그 구역이 그리는 PROP 레이아웃 키(지면 디테일이 PROP 점유 칸을 비껴가게 함).
 var _REGION_PROP_KEYS := {
 	RegionCatalog.HOME: ["HOME"],
@@ -3740,6 +3784,7 @@ func _build_ground16() -> void:
 						out.set_pixel(cx0 + i, cy0 + j, fld.get_pixel((cx0 + i) % P, (cy0 + j) % P))
 	# ★[P2 프로토타입] tan 위 오브젝트 스캐터(스타듀 잡초/tuft 모델) — 채움 패치를 끈 만큼 초록을 데칼로.
 	if _G16_SCATTER:
+		_compute_scatter_clump()   # ★[ADR-0058 B] 풀무리 CA 마스크 1회 계산(스캐터가 참조)
 		_g16_blend_scatter(out)
 	_ground_detail_tex = ImageTexture.create_from_image(out)
 
@@ -3766,7 +3811,7 @@ func _g16_blend_scatter(out: Image) -> void:
 			# ★[스캐터 확산 ②] GROUND는 클러스터면 full 테이블(풀 무리), 빈 tan이면 sparse 마른 clutter(twig·stone)만.
 			var table: Array
 			if terrain == GROUND:
-				if _gd_cluster(x, y) >= GD_CLUSTER_CUT:
+				if _scatter_is_clump(x, y):          # 구 _gd_cluster(x,y) >= GD_CLUSTER_CUT
 					table = _gd_table_for(GROUND)      # 풀 무리 구역 — 풀 tuft 포함 전체(구역-키드, 폴백=전역)
 				elif _gd_h01(x, y, 71) < _GD_SPARSE_DENSITY:
 					table = _gd_sparse_for()           # 빈 tan — 나뭇가지·돌 저밀도 확산(스타듀 개활지, 구역-키드)

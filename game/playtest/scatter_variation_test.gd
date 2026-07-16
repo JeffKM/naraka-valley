@@ -38,6 +38,21 @@ func _initialize() -> void:
 	# 맨 잔디 여백(null)이 전역(44)보다 낮다 → 풀무리 체감↑.
 	_check("② 안식 맨 여백(null) 가중 < 전역", _weight_of(home_ground, null) < _weight_of(m._GD_TABLES[m.GROUND], null))
 
+	# ── Task 3: 풀무리 CA 이웃-확산 마스크 ──
+	m._compute_scatter_clump()
+	var first: Array = m._scatter_clump.duplicate(true)
+	m._compute_scatter_clump()
+	_check("③ 마스크 결정적(재계산 동일)", str(first) == str(m._scatter_clump))
+	# 비-GROUND 셀은 clump=0(저작 셀 불침범).
+	var bad := false
+	for yy in m._outdoor_h:
+		for xx in m._grid_w:
+			if m._grid[yy][xx] != m.GROUND and m._scatter_clump[yy][xx] == 1:
+				bad = true
+	_check("③ 비-GROUND 셀은 clump 아님", not bad)
+	# 이웃-상관: clump 셀의 직교이웃이 clump일 확률 > 전역 clump 비율(유기적 응집).
+	_check("③ clump 이웃-상관 > 전역비율", _neighbor_corr(m) > _global_rate(m))
+
 	print("결과: %d 실패" % _fail)
 	quit(1 if _fail > 0 else 0)
 
@@ -64,3 +79,24 @@ func _weight_of(table: Array, tex: Variant) -> int:
 		if e[0] == tex:
 			return int(e[1])
 	return 0
+
+func _global_rate(m: Node) -> float:
+	var g := 0; var tot := 0
+	for yy in m._outdoor_h:
+		for xx in m._grid_w:
+			if m._grid[yy][xx] == m.GROUND:
+				tot += 1
+				if m._scatter_clump[yy][xx] == 1: g += 1
+	return float(g) / max(1, tot)
+
+func _neighbor_corr(m: Node) -> float:
+	var hit := 0; var tot := 0
+	for yy in m._outdoor_h:
+		for xx in m._grid_w:
+			if m._grid[yy][xx] == m.GROUND and m._scatter_clump[yy][xx] == 1:
+				for d in [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]:
+					var nx = xx + d.x; var ny = yy + d.y
+					if nx >= 0 and nx < m._grid_w and ny >= 0 and ny < m._outdoor_h and m._grid[ny][nx] == m.GROUND:
+						tot += 1
+						if m._scatter_clump[ny][nx] == 1: hit += 1
+	return float(hit) / max(1, tot)
