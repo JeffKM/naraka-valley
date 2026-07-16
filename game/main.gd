@@ -3419,6 +3419,77 @@ func _build_path_grass_fringe() -> void:
 #   HOUSE/CAFE(실내 바닥)은 건너뛰어(투명) 타일맵 실내 바닥이 비치게 한다.
 const _GF := 128         # 필드 한 변
 const _GJIT := 5         # 경계 지터 진폭(px)
+
+# ── Wang 경계 전환 타일 (spec 2026-07-16) ──────────────────────────────
+# 표면 위계: 잔디>흙>길>밭>물. 경계에서 위계 높은 쪽이 upper(오버행=볼록).
+const _SURF_RANK := {1: 4, 0: 3, 2: 2, 3: 1, 4: 0}
+var _wang_tiles: Dictionary = {}   # pair_key → { corner_bits(0..15): Image }
+const _WANG_DIR := "res://assets/terrain16/wang/"
+
+func _surf_rank(s: int) -> int:
+	return int(_SURF_RANK.get(s, -1))
+
+func _corner_bits(nw: int, ne: int, sw: int, se: int) -> int:
+	return nw | (ne << 1) | (sw << 2) | (se << 3)
+
+func _wang_pair_key(lo: int, up: int) -> int:
+	return lo * 10 + up
+
+# 꼭짓점 (vx,vy)를 공유하는 최대 4셀 중 위계 최대 표면(-1=건물/절벽 제외, 없으면 -1).
+func _wang_vertex_surf(surf: Array, vx: int, vy: int) -> int:
+	var best := -1
+	var best_r := -1
+	for d: Vector2i in [Vector2i(-1, -1), Vector2i(0, -1), Vector2i(-1, 0), Vector2i(0, 0)]:
+		var cx := vx + d.x
+		var cy := vy + d.y
+		if cx < 0 or cy < 0 or cx >= _grid_w or cy >= _outdoor_h:
+			continue
+		var s: int = surf[cy][cx]
+		if s < 0:
+			continue
+		var r := _surf_rank(s)
+		if r > best_r:
+			best_r = r
+			best = s
+	return best
+
+# 에셋 폴더의 <lo>_<up>_metadata.json + _image.png를 슬라이스해 코너키→Image 캐시.
+func _load_wang_pairs() -> void:
+	if not _wang_tiles.is_empty():
+		return
+	var dir := DirAccess.open(_WANG_DIR)
+	if dir == null:
+		return
+	for f in dir.get_files():
+		if not f.ends_with("_metadata.json"):
+			continue
+		var stem := f.replace("_metadata.json", "")   # "lo_up"
+		var parts := stem.split("_")
+		if parts.size() != 2:
+			continue
+		var lo := int(parts[0])
+		var up := int(parts[1])
+		var png := _WANG_DIR + stem + "_image.png"
+		if not ResourceLoader.exists(png):
+			continue
+		var jf := FileAccess.open(_WANG_DIR + f, FileAccess.READ)
+		var meta: Dictionary = JSON.parse_string(jf.get_as_text())
+		jf.close()
+		var atlas: Image = (load(png) as Texture2D).get_image()
+		if atlas.get_format() != Image.FORMAT_RGBA8:
+			atlas.convert(Image.FORMAT_RGBA8)
+		var tmap: Dictionary = {}
+		for t in meta["tileset_data"]["tiles"]:
+			var c: Dictionary = t["corners"]
+			var bits := _corner_bits(
+				1 if c["NW"] == "upper" else 0,
+				1 if c["NE"] == "upper" else 0,
+				1 if c["SW"] == "upper" else 0,
+				1 if c["SE"] == "upper" else 0)
+			var b: Dictionary = t["bounding_box"]
+			tmap[bits] = atlas.get_region(Rect2i(int(b["x"]), int(b["y"]), int(b["width"]), int(b["height"])))
+		_wang_tiles[_wang_pair_key(lo, up)] = tmap
+
 func _load_big_fields() -> void:
 	if _bf_grass != null:
 		return
