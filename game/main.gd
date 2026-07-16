@@ -410,6 +410,13 @@ const GD_DIRT := preload("res://assets/props/ground_dirt.png")         # 맨 흙
 const GD_GRAVEL := preload("res://assets/props/ground_gravel.png")     # 길 자갈 무리
 const GD_EMBED := preload("res://assets/props/ground_embed.png")       # 길 박힌 잔돌
 const GD_CRACK := preload("res://assets/props/ground_crack.png")       # 길 갈라짐·바퀴자국
+# ★[스캐터 재생성 2026-07-16 — scatter-asset-regen-analysis.md] 스타듀 초기 농장식 다종 스캐터.
+#   PixelLab create_map_object(single color outline·basic shading·high top-down·32-native, 저색·크리스프).
+#   잡초/풀만이 아니라 갈색 twig·회색 stone이 tan을 색대비로 깨는 밀도의 핵심. Style A(debris)와 동일 규율.
+const GD_TWIG1 := preload("res://assets/props/scatter_twig_a.png")     # 마른 교차 나뭇가지(진한 외곽선)
+const GD_TWIG2 := preload("res://assets/props/scatter_twig_b.png")     # 잎 달린 가지(변주)
+const GD_STONE1 := preload("res://assets/props/scatter_stone_a.png")   # 돌 3개 무리
+const GD_STONE2 := preload("res://assets/props/scatter_stone_b.png")   # 단독 슬레이트
 # ★[단계3-③ / owner Gemini 가이드 2차] 풀 클러스터 노이즈 레버 — 스타듀식 "민무늬 베이스 80~90% +
 #   특정 영역에만 풀 덩어리". _gd_cluster(x,y) < GD_CLUSTER_CUT인 넓은 영역은 풀 포기 없이 민무늬로 비운다.
 #   CUT↑ = 풀 영역 축소(여백↑). BLOCK = 덩어리 크기(칸). GROUND만 게이트(길은 자체 밀도).
@@ -429,6 +436,11 @@ var _GD_TABLES := {
 		[GD_FLOWER, 2, true],               # 영혼 들꽃(희소)
 		[GD_PEBBLE, 1, true],               # 잔돌(극희소)
 		[GD_DIRT, 1, false],                # 맨 흙 패치(극희소·평면)
+		# ★[스캐터 재생성] 스타듀식 갈색 twig·회색 stone 다종(색대비로 tan 밀도) — 크리스프(mute 대상 아님)
+		[GD_TWIG1, 4, false],               # 마른 교차 나뭇가지(평면)
+		[GD_TWIG2, 3, false],               # 잎 가지 변주(평면)
+		[GD_STONE1, 4, true],               # 돌 3개 무리(미세 그림자)
+		[GD_STONE2, 3, true],               # 단독 슬레이트(미세 그림자)
 	],
 	PATH: [
 		[null, 78, false],                  # 맨 길(대부분)
@@ -438,6 +450,18 @@ var _GD_TABLES := {
 		[GD_WEED_D, 3, true],               # 가장자리 마른 풀
 	],
 }
+# ★[스캐터 확산 2026-07-16 — ②tan 전역] 빈 tan(클러스터 게이트 밖)에 뿌리는 *마른 clutter* 테이블.
+#   스타듀 초기 농장은 나뭇가지·돌을 밭 전역에 흩뿌린다(풀 tuft는 무리에만). 풀 없이 twig·stone·잔돌·마른잡초만.
+#   null 없음(밀도는 _GD_SPARSE_DENSITY 해시 게이트가 담당 — 통과 셀은 반드시 1개 clutter).
+var _GD_SPARSE := [
+	[GD_TWIG1, 5, false],   # 마른 교차 나뭇가지
+	[GD_TWIG2, 3, false],   # 잎 가지
+	[GD_STONE1, 4, true],   # 돌 무리
+	[GD_STONE2, 4, true],   # 단독 슬레이트
+	[GD_PEBBLE, 2, true],   # 잔돌
+	[GD_WEED_D, 2, true],   # 마른 잡초(개활지)
+]
+const _GD_SPARSE_DENSITY := 0.12   # 빈 tan 셀 중 clutter가 놓일 비율(↑=빽빽). 스타듀 개활지 밀도.
 # 구역 → 그 구역이 그리는 PROP 레이아웃 키(지면 디테일이 PROP 점유 칸을 비껴가게 함).
 var _REGION_PROP_KEYS := {
 	RegionCatalog.HOME: ["HOME"],
@@ -3248,8 +3272,11 @@ func _gd_shadow() -> Image:
 # 청키·고대비 원본을 그대로 얹으면 "울퉁불퉁·박힌 느낌". 불투명 픽셀을 자기 평균색으로 끌어
 # 내부 대비를 낮추고(SOFT_LERP), 알파를 살짝 낮춰(SOFT_ALPHA) 베이스에 스며들게 한다. texture당 1회 캐시.
 const _GD_SOFT_SET := [GD_GRASS1, GD_GRASS2, GD_WEED_U]  # 부드럽게 녹일 풀포기·잡초
-const _GD_SOFT_LERP := 0.34   # 평균색으로 끌어당기는 비율(내부 대비 완화)
-const _GD_SOFT_ALPHA := 0.86  # 전체 알파 배수(베이스에 스며듦)
+# ★[스캐터 재생성 2026-07-16] 소프트-멜트 약화 — 재생성 tuft는 외곽선·블레이드 구조가 핵심(스타듀식).
+#   구값(0.34/0.86)은 크리스프 소스를 평균색으로 씻어 구조를 뭉갰다. flip 변주·mute(GRASS_MUTE)는 유지하되
+#   멜트만 약하게(대비·알파 거의 보존) → 재생성 tuft가 또렷하게 얹힌다.
+const _GD_SOFT_LERP := 0.10   # 평균색으로 끌어당기는 비율(내부 대비 완화) — 재생성 tuft는 약하게
+const _GD_SOFT_ALPHA := 0.95  # 전체 알파 배수(베이스에 스며듦) — 거의 불투명
 func _gd_soft_image(tex: Texture2D, flip := false) -> Image:
 	var ckey := [tex, flip]
 	if _gd_soft_cache.has(ckey):
@@ -3673,10 +3700,85 @@ func _build_ground16() -> void:
 				for i in TILE:
 					if cimg.get_pixel(i, j).a < 0.5:   # 코너 PNG 투명(물러난 영역) → 주변 지형
 						out.set_pixel(cx0 + i, cy0 + j, fld.get_pixel((cx0 + i) % P, (cy0 + j) % P))
+	# ★[P2 프로토타입] tan 위 오브젝트 스캐터(스타듀 잡초/tuft 모델) — 채움 패치를 끈 만큼 초록을 데칼로.
+	if _G16_SCATTER:
+		_g16_blend_scatter(out)
 	_ground_detail_tex = ImageTexture.create_from_image(out)
+
+# ★[P2 프로토타입 2026-07-16] tan 베이스 위에 잡초/tuft/잔돌 데칼을 흩뿌린다(스타듀 농장: 초록=바닥 아닌
+#   오브젝트). 기존 지면 디테일 시스템(_GD_TABLES 가중 롤 + _gd_cluster 여백 게이트 + _gd_soft_image 소프트
+#   tuft + _gd_shadow 미세 그림자)을 _build_ground16의 out에 직접 blend(단일 텍스처·단일 draw call 유지).
+#   프롭 점유 칸 회피·결정적 해시(재빌드/재방문 고정)·순수 시각. 구 _build_ground_details(비활성) 로직 이식.
+func _g16_blend_scatter(out: Image) -> void:
+	var occupied := {}
+	for key in _REGION_PROP_KEYS.get(_region, []):
+		for entry in _prop_layouts.get(key, []):
+			for t in entry[1]:
+				occupied[Vector2i(t.x, t.y)] = true
+	var shadow := _gd_shadow()
+	var sw := shadow.get_width()
+	var sh := shadow.get_height()
+	for y in range(_outdoor_h):
+		for x in range(_grid_w):
+			var terrain: int = _grid[y][x]
+			if not _GD_TABLES.has(terrain):
+				continue   # GROUND/PATH만 스캐터(밭·물·건물·절벽 제외)
+			if occupied.has(Vector2i(x, y)):
+				continue   # 나무·바위·가구 위엔 안 얹음
+			# ★[스캐터 확산 ②] GROUND는 클러스터면 full 테이블(풀 무리), 빈 tan이면 sparse 마른 clutter(twig·stone)만.
+			var table: Array
+			if terrain == GROUND:
+				if _gd_cluster(x, y) >= GD_CLUSTER_CUT:
+					table = _GD_TABLES[GROUND]         # 풀 무리 구역 — 풀 tuft 포함 전체
+				elif _gd_h01(x, y, 71) < _GD_SPARSE_DENSITY:
+					table = _GD_SPARSE                 # 빈 tan — 나뭇가지·돌 저밀도 확산(스타듀 개활지)
+				else:
+					continue                           # 대부분의 빈 tan = 민무늬(여백)
+			else:
+				table = _GD_TABLES[terrain]            # PATH 등
+			var total := 0
+			for e in table:
+				total += int(e[1])
+			var pick := int(_gd_h01(x, y, 2) * total)
+			var acc := 0
+			var chosen: Variant = null
+			for e in table:
+				acc += int(e[1])
+				if pick < acc:
+					chosen = e
+					break
+			if chosen == null or chosen[0] == null:
+				continue   # 맨 타일(오버레이 없음)
+			var ctex: Texture2D = chosen[0] as Texture2D
+			var timg: Image
+			if _GD_SOFT_SET.has(ctex):
+				timg = _gd_soft_image(ctex, _gd_h01(x, y, 5) < 0.5)   # 소프트 tuft(저대비·좌우반전 변종)
+			else:
+				timg = ctex.get_image()
+				if timg.get_format() != Image.FORMAT_RGBA8:
+					timg.convert(Image.FORMAT_RGBA8)
+				if _GD_GRASS_MUTE.has(ctex):
+					_mute_grass_pixels(timg)   # 잔디류 오버레이도 필드 톤에 맞춰 muted
+			var dw := timg.get_width()
+			var dh := timg.get_height()
+			var jx := int((_gd_h01(x, y, 3) - 0.5) * 8)
+			var jy := int((_gd_h01(x, y, 4) - 0.5) * 6)
+			var px := x * TILE + (TILE - dw) / 2 + jx
+			var py := y * TILE + (TILE - dh) + jy   # bottom-center 피벗
+			if bool(chosen[2]):
+				var sx := x * TILE + TILE / 2 + jx - sw / 2 + 1
+				var sy := y * TILE + TILE - 1 + jy - sh / 2
+				out.blend_rect(shadow, Rect2i(0, 0, sw, sh), Vector2i(sx, sy))
+			out.blend_rect(timg, Rect2i(0, 0, dw, dh), Vector2i(px, py))
 
 # ★[스타듀 농장 룩] 지면 표면 결정 헬퍼(_build_ground16 전용) ─────────────────────────────
 const _G16_GRASS_THR := 0.66   # 잔디 패치 문턱(↑=잔디↓·흙↑). 스타듀 시작 농장 ≈ 흙 지배(잔디 ~28%).
+# ★[P2 프로토타입 2026-07-16 — docs/design/stardew-boundary-tile-analysis.md] 스타듀 농장은 채움 잔디
+#   바닥 패치도 잔디↔흙 경계선도 없다. 초록은 전부 tan 위에 흩뿌린 오브젝트(잡초/tuft/나무)다. 그래서
+#   저지 마당의 채움 잔디 패치를 끄고(→전부 tan) 초록을 스캐터 데칼로만 낸다 → 흙↔잔디 Wang 경계(0_1)·
+#   외곽선 문제가 통째로 소멸. 순수 시각(out 픽셀만)·_grid/충돌/세이브 불변. false=스타듀식/true=구 채움패치.
+const _G16_GRASS_PATCHES := false
+const _G16_SCATTER := true      # tan 위 잡초/tuft/잔돌 데칼 스캐터(기존 _GD_TABLES/_gd_cluster 재활용)
 # ★[ADR-0056 ④ FINAL] BASE 발치 접지 그림자 밴드 레버(_build_ground16 순수 시각 오버레이).
 const _CLIFF_BASE_TILES := [CLIFF_FACE_BASE, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE_B]   # 접지 대상 = 벽 최하단
 # ★[ADR-0056 REV5 ②] 곡선 코너 4종 — 물러난 투명 영역을 이웃 지형으로 채우는 컨텍스트 필 대상.
@@ -3777,6 +3879,10 @@ func _g16_surface(x: int, y: int) -> int:
 	if x <= HIGHLAND_E and y <= HIGHLAND_S:
 		return 1
 	# GROUND(및 벽/void — 프롭·facade가 덮음): 흙 베이스 + 잔디 패치(저지 마당 흙-지배)
+	# ★[P2 프로토타입] 스타듀 농장 모델 — 채움 잔디 패치를 끄면(_G16_GRASS_PATCHES=false) 저지 마당은
+	#   전부 tan(earth)이 되고, 초록은 _g16_blend_scatter의 오브젝트 데칼(잡초/tuft)로만 표현된다.
+	if not _G16_GRASS_PATCHES:
+		return 0
 	return 1 if _g16_is_grass_patch(x, y) else 0
 
 func _g16_field(s: int) -> Image:
