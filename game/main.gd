@@ -1732,7 +1732,15 @@ func _build_tileset() -> TileSet:
 const _MG_CANON_H := 95.0 / 360.0   # warm-moss 기준 hue
 # 프롭 잔디 오버레이 — 이 텍스처들은 blit 전 _mute_grass_pixels로 필드 톤에 맞춘다.
 const _GD_GRASS_MUTE := [GD_GRASS1, GD_GRASS2, GD_GRASS3, PROP_GRASS]
-func _mute_grass_pixels(img: Image) -> void:
+# ★ owner "초록 전부" — 화면의 초목 프롭(잔디뭉치·잡초·나무·덤불)을 필드 잔디와 같은 muted 톤으로.
+#   _draw_props_for가 정체성 tex로 키잉(변주는 draw_tex를 _muted_prop_tex로 캐시). 갈색 밑둥은 hue 필터로 보존.
+const _MUTE_GREEN_PROPS := [PROP_GRASS, PROP_DEBRIS_WEEDS, PROP_TREE_A, PROP_TREE_B, PROP_BUSH]
+# 목본(나무·덤불) — 입체감이 채도에서 오므로 hue만 통일하고 채도는 덜 낮춘다(완화 강도).
+# 잔디류(바닥 잔디·잡초·잔디뭉치)는 기본값(강함)으로 형광을 확실히 죽인다.
+const _MUTE_WOODY := [PROP_TREE_A, PROP_TREE_B, PROP_BUSH]
+const _WOODY_SAT_MUL := 0.85   # 목본 채도 계수(기본 0.74보다 덜 깎음)
+const _WOODY_SAT_CAP := 0.50   # 목본 채도 캡(기본 0.38보다 높게 — 생기 유지, 밝은 라임만 억제)
+func _mute_grass_pixels(img: Image, sat_mul := 0.74, sat_cap := 0.38) -> void:
 	if img.get_format() != Image.FORMAT_RGBA8:
 		img.convert(Image.FORMAT_RGBA8)
 	var w := img.get_width()
@@ -1746,7 +1754,7 @@ func _mute_grass_pixels(img: Image) -> void:
 			if hd < 60.0 or hd > 158.0:
 				continue   # 갈색(<60)·청록 물·soul-blue(>158) 제외 → 풀만
 			var nh: float = lerpf(c.h, _MG_CANON_H, 0.72)  # hue를 warm-moss로 수렴(청록끼 제거·올리브)
-			var ns: float = minf(c.s * 0.74, 0.38)         # 채도 캡 하향(candy·형광→muted 세이지)
+			var ns: float = minf(c.s * sat_mul, sat_cap)   # 채도 캡(잔디류=강함 0.38 / 목본=완화 0.50)
 			var nv: float = c.v * 0.96
 			img.set_pixel(x, y, Color.from_hsv(nh, ns, nv, c.a))
 
@@ -1754,14 +1762,17 @@ func _mute_grass_pixels(img: Image) -> void:
 # _draw_props_for는 프롭을 draw_texture_rect로 직접 그려 ground-detail muted 경로를 안 지난다.
 # 원본 텍스처는 보존하고, 그리기용 muted 사본만 lazy 생성(ADR-0001 런타임 글루).
 var _muted_prop_cache: Dictionary = {}
-func _muted_prop_tex(tex: Texture2D) -> Texture2D:
+func _muted_prop_tex(tex: Texture2D, woody := false) -> Texture2D:
 	if _muted_prop_cache.has(tex):
 		return _muted_prop_cache[tex]
 	var im: Image = tex.get_image()
 	if im.get_format() != Image.FORMAT_RGBA8:
 		im.convert(Image.FORMAT_RGBA8)
 	im = im.duplicate()
-	_mute_grass_pixels(im)
+	if woody:
+		_mute_grass_pixels(im, _WOODY_SAT_MUL, _WOODY_SAT_CAP)   # 나무·덤불 완화(입체감 보존)
+	else:
+		_mute_grass_pixels(im)                                    # 잔디류 기본(형광 확실히 억제)
 	var t := ImageTexture.create_from_image(im)
 	_muted_prop_cache[tex] = t
 	return t
@@ -7207,14 +7218,14 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 			var draw_tex: Texture2D = tex
 			if is_debris:
 				draw_tex = _debris_variant_tex(tex, t)
-				if tex == PROP_DEBRIS_WEEDS:
-					draw_tex = _muted_prop_tex(draw_tex)   # ★ 잡초 debris 형광 초록 → 필드 잔디 톤에 매칭
 			elif BUSH_VARIANTS.has(tex):
 				# 능선 한 줄 세로 스택 → (x + y/2)%2로 dark↔bright 교대(x 고정이라 y/2가 교대 축).
 				var bvs: Array = BUSH_VARIANTS[tex]
 				draw_tex = bvs[(t.x + t.y / 2) % bvs.size()]
-			elif tex == PROP_GRASS:
-				draw_tex = _muted_prop_tex(tex)   # ★ 잔디뭉치 프롭도 필드 잔디 톤에 맞춰 muted
+			# ★ 초록 프롭(잔디뭉치·잡초·나무·덤불)은 필드 잔디 톤에 맞춰 muted(owner "초록 전부").
+			#   목본(나무·덤불)은 완화 강도로 입체감 보존. tex=정체성으로 판별, draw_tex=변주별 캐시.
+			if _MUTE_GREEN_PROPS.has(tex):
+				draw_tex = _muted_prop_tex(draw_tex, _MUTE_WOODY.has(tex))
 			# ★[roster] 앞 패스 나무는 occlusion fade 알파를 modulate로 얹는다(_update_tree_fade가 lerp).
 			#   뒤 패스·다른 프롭·다른 구역은 늘 불투명(get 기본 1.0).
 			var mod := Color(1, 1, 1, 1)
