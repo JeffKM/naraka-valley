@@ -464,6 +464,86 @@ var _GD_SPARSE := [
 	[GD_WEED_D, 2, true],   # 마른 잡초(개활지)
 ]
 const _GD_SPARSE_DENSITY := 0.12   # 빈 tan 셀 중 clutter가 놓일 비율(↑=빽빽). 스타듀 개활지 밀도.
+
+# ★[ADR-0058] 구역-키드 스캐터 테이블 — 각 구역 고유 clutter 정체성(심심함 최대 레버).
+#   비면 전역 _GD_TABLES/_GD_SPARSE 폴백(회귀 0). 구역이 지어질 때 자기 엔트리를 채운다.
+#   구조: { region_id: { GROUND:[[tex,weight,shadow]...], PATH:[...] } }. Task 2에서 home 채움.
+var _REGION_GD_TABLES := {
+	# ★[ADR-0058] 안식 농원 = 풀무리 증가(owner 2026-07-17). 전역 대비 GD_GRASS 가중↑·맨 여백↓.
+	#   ⚠️ base는 tan-지배 유지(ADR-0053) — 이건 스캐터 tuft 데칼 밀도이지 잔디패치 아님.
+	RegionCatalog.HOME: {
+		GROUND: [
+			[null, 34, false],       # 맨 잔디 여백 44→34(풀무리 체감↑)
+			[GD_GRASS1, 38, false],  # 짧은 풀포기 주력 30→38
+			[GD_GRASS2, 9, false],   # 중간 풀포기 5→9
+			[GD_WEED_U, 4, false],
+			[GD_WEED_D, 3, true],
+			[GD_FLOWER, 2, true],
+			[GD_PEBBLE, 1, true],
+			[GD_TWIG1, 4, false],
+			[GD_TWIG2, 3, false],
+			[GD_STONE1, 4, true],
+			[GD_STONE2, 3, true],
+		],
+		# PATH는 전역 폴백(오버라이드 없음).
+	},
+}
+var _REGION_GD_SPARSE := {}
+
+# 현재 구역(_region)의 terrain 스캐터 테이블 — 구역 오버라이드 → 전역 폴백.
+func _gd_table_for(terrain: int) -> Array:
+	var rt: Dictionary = _REGION_GD_TABLES.get(_region, {})
+	if rt.has(terrain):
+		return rt[terrain]
+	return _GD_TABLES.get(terrain, [])
+
+func _gd_sparse_for() -> Array:
+	return _REGION_GD_SPARSE.get(_region, _GD_SPARSE)
+
+# ★[ADR-0058 B] 구역별 풀무리 문턱(↓=clump 면적↑). 안식은 풀무리↑라 전역보다 낮춘다.
+var _REGION_CLUSTER_CUT := { RegionCatalog.HOME: 0.46 }   # 전역 GD_CLUSTER_CUT=0.60 (↓=풀무리 면적↑·초원 소멸 후 넉넉히)
+
+# 풀무리 마스크 — 저주파 seed + CA 이웃-확산(스타듀 풀 확산 본뜸). 결정적·셀단위·2패스 상한.
+#   _gd_cluster로 seed(GROUND만) → 이웃≥5 성장·<2 사멸 2패스 → 유기적 clump. _g16_cluster_cleanup 계보.
+var _scatter_clump: Array = []
+
+func _compute_scatter_clump() -> void:
+	var W := _grid_w
+	var H := _outdoor_h
+	var cut: float = _REGION_CLUSTER_CUT.get(_region, GD_CLUSTER_CUT)
+	var mask := []
+	for y in H:
+		var row := []
+		for x in W:
+			row.append(1 if (_grid[y][x] == GROUND and _gd_cluster(x, y) >= cut) else 0)
+		mask.append(row)
+	for _p in 2:
+		var snap: Array = mask.duplicate(true)
+		for y in H:
+			for x in W:
+				if _grid[y][x] != GROUND:
+					mask[y][x] = 0
+					continue
+				var gn := 0
+				for dy in range(-1, 2):
+					for dx in range(-1, 2):
+						if dx == 0 and dy == 0:
+							continue
+						var nx := x + dx
+						var ny := y + dy
+						if nx >= 0 and nx < W and ny >= 0 and ny < H and snap[ny][nx] == 1:
+							gn += 1
+				if snap[y][x] == 1 and gn < 2:
+					mask[y][x] = 0
+				elif snap[y][x] == 0 and gn >= 5:
+					mask[y][x] = 1
+	_scatter_clump = mask
+
+func _scatter_is_clump(x: int, y: int) -> bool:
+	if _scatter_clump.is_empty():
+		return _gd_cluster(x, y) >= _REGION_CLUSTER_CUT.get(_region, GD_CLUSTER_CUT)  # 안전 폴백
+	return _scatter_clump[y][x] == 1
+
 # 구역 → 그 구역이 그리는 PROP 레이아웃 키(지면 디테일이 PROP 점유 칸을 비껴가게 함).
 var _REGION_PROP_KEYS := {
 	RegionCatalog.HOME: ["HOME"],
@@ -3568,10 +3648,229 @@ func _retone_earth(src: Image) -> Image:
 			img.set_pixel(xx, yy, Color.from_hsv(hh, ss, vv, c.a))
 	return img
 
+# ★[ADR-0058 확장·B mismatch-proof·owner 2026-07-17] 잔디(1)↔흙(0) 전환 타일을 라이브 base 픽셀에서 합성.
+#   근원: Wang 손그림 타일이 base(_bf_grass)와 톤·스타일 불일치("다른 잔디"). 해법=같은 _bf_grass/_bf_earth
+#   픽셀로 전환타일을 만들어 불일치를 *수학적으로 불가능*하게. 코너조합(bits, 1=잔디upper)별로 bilinear
+#   grassness + 래그드 노이즈로 잔디/흙 영역을 나눠 blit + 잔디 경계 1px 어두운선(레퍼런스 2026-07-04 엣지).
+#   결정적(좌표해시). _wang_tiles[pair_key(0,1)]를 덮어써 기존 Wang 렌더(② 루프)가 그대로 이 타일을 쓴다.
+const _W01_RAG := 0.20     # 잔디↔흙 경계 래그드 진폭(코히어런트 파, ↑=들쭉날쭉)
+const _W01_MICRO := 0.10   # per-px 미세 지터
+const _W01_EDGE_DARK := 0.14   # 잔디 경계 픽셀 살짝 어둡게(잔디 밑동 정의)
+const _W01_SHADOW := 4         # ★잔디 아래(남) 흙에 드리우는 드롭섀도 깊이(px) — "잔디가 흙 위에 자라난" 입체(owner "살짝 더"→3→4)
+const _W01_SHADOW_DARK := 0.40 # 드롭섀도 최대 어둠(잔디 밑동 흙에서 아래로 감쇄, owner "살짝 더"→0.30→0.40)
+# ★[ADR-0058 확장] 잔디↔흙 전환은 이 일반 합성기에 base(_bf_grass upper, _bf_earth lower)를 넘기는 래퍼.
+func _bake_grass_dirt_wang() -> void:
+	_bake_field_wang(_wang_pair_key(0, 1), _bf_grass, _bf_earth, _W01_RAG, _W01_MICRO, _W01_EDGE_DARK, _W01_SHADOW, _W01_SHADOW_DARK)
+
+# ★[owner 2026-07-17 7차·경계 타일 = 흙/물 전환] 경계 타일은 물로 꽉 차면 안 되고 흙(적게)+물(지배)로 나뉘어야
+#   한다(유기 곡선·안=물/밖=흙). 손그림 4_0의 *형태(마스크)*로 흙/물을 나누되, 채움은 우리 base를 **월드위상**으로
+#   (격자 없음), 밝은 물가 테두리·코너는 손그림 픽셀로. classify: 물/흙 채움색 근처=물/흙, 둘 다 먼=테두리.
+#   코너는 16-tile 오토타일이 자연 해결. 북쪽 강둑(surf<0)은 물↔흙 경계가 아니라 자동 제외.
+const _SHORE_KEEP := 0.18   # 채움색과 이 거리(RGB) 이내면 물/흙 채움, 초과면 테두리 — 라이브 튜닝 레버
+var _shore_mask := {}       # bits → PackedByteArray(TILE*TILE): 0=물·1=흙·2=테두리
+func _build_shore_masks() -> void:
+	if not _shore_mask.is_empty():
+		return
+	var pk := _wang_pair_key(4, 0)
+	if not _wang_tiles.has(pk):
+		return
+	var tmap: Dictionary = _wang_tiles[pk]
+	if not (tmap.has(0) and tmap.has(15)):
+		return   # 물(bits0)·흙(bits15) 순수 타일 없으면 classify 기준색 없음 → 마스크 스킵(조용한 오분류 방지)
+	var water_ref := _shore_avg(tmap.get(0, null))    # all-lower(물) 대표색
+	var earth_ref := _shore_avg(tmap.get(15, null))   # all-upper(흙) 대표색
+	for bits in tmap.keys():
+		var img: Image = tmap[bits]
+		var m := PackedByteArray()
+		m.resize(TILE * TILE)
+		for j in TILE:
+			for i in TILE:
+				var c := img.get_pixel(i, j)
+				var dw := _shore_dist(c, water_ref)
+				var de := _shore_dist(c, earth_ref)
+				if dw < _SHORE_KEEP and dw <= de:
+					m[j * TILE + i] = 0   # 물 채움
+				elif de < _SHORE_KEEP:
+					m[j * TILE + i] = 1   # 흙 채움
+				else:
+					m[j * TILE + i] = 2   # 테두리(밝은 물가 반사·경계 그림자)
+		_shore_mask[bits] = m
+
+# 경계 물 셀(x,y)을 손그림 마스크로 칠한다: 물=① base 유지, 흙=_bf_earth 월드위상(격자 없음), 테두리=손그림 픽셀.
+func _paint_shore_cell(out: Image, x: int, y: int, bits: int) -> void:
+	if not _shore_mask.has(bits):
+		return
+	var m: PackedByteArray = _shore_mask[bits]
+	var src: Image = _wang_tiles[_wang_pair_key(4, 0)][bits]
+	var P := _GF * 2
+	for j in TILE:
+		for i in TILE:
+			var cls := m[j * TILE + i]
+			if cls == 0:
+				continue   # 물 = ① base blit 유지
+			var wx := x * TILE + i
+			var wy := y * TILE + j
+			if cls == 1:
+				out.set_pixel(wx, wy, _bf_earth.get_pixel(wx % P, wy % P))   # 흙 = 우리 base 월드위상
+			else:
+				out.set_pixel(wx, wy, src.get_pixel(i, j))                    # 테두리 = 손그림 픽셀
+
+func _shore_avg(img: Image) -> Color:
+	if img == null:
+		return Color(0, 0, 0, 1)
+	var r := 0.0
+	var g := 0.0
+	var b := 0.0
+	var n := 0
+	for j in TILE:
+		for i in TILE:
+			var c := img.get_pixel(i, j)
+			if c.a <= 0.01:
+				continue
+			r += c.r
+			g += c.g
+			b += c.b
+			n += 1
+	if n == 0:
+		return Color(0, 0, 0, 1)
+	return Color(r / n, g / n, b / n, 1)
+
+func _shore_dist(a: Color, b: Color) -> float:
+	var dr := a.r - b.r
+	var dg := a.g - b.g
+	var db := a.b - b.b
+	return sqrt(dr * dr + dg * dg + db * db)
+
+# ★[SOIL·PATH 경계·owner 2026-07-17 최종] 밭(SOIL)·길(PATH)은 인공물 → 잔디식 유기 래그드(Wang 합성)를 쓰지
+#   않는다. 밭은 타일에 *꽉 차야* 하고(가장자리 침식·스캐터 금지), 경계는 *직선(1자)이되 부드럽게*여야 한다.
+#   또 Wang 통짜 타일(0위상) blit은 base(월드위상)와 어긋나 옅은 격자무늬를 낳는다(owner 지적).
+#   해법: 밭·길은 Wang 스킵 → ① base blit(월드위상=격자 없음·밭 꽉 참) + `_soften_field_edges`로 흙 경계
+#   직선만 ±2px 부드럽게(anti-alias). 잔디↔흙만 _bake_grass_dirt_wang 유기 전환. _W30_* 폐기.
+const _EDGE_SOFT := 2   # 밭·길↔흙 직선 경계 부드럽게 할 폭(px, 경계 양쪽)
+
+# ★[owner 2026-07-17] 밭(3)·길(2) 셀과 흙(0) 사이 직선 타일 경계선을 경계 양쪽 픽셀 평균으로 부드럽게 한다.
+#   밭은 안 깎이고(base blit 그대로 꽉 참) 경계선 픽셀만 anti-alias → "1자 경계만 부드럽게". base blit이라
+#   위상 연속(격자 없음). 잔디는 Wang 유기 전환이라 대상 아님. out 이미지 후처리(순수 시각·_grid 불변).
+func _soften_field_edges(out: Image, surf: Array) -> void:
+	for y in _outdoor_h:
+		for x in _grid_w:
+			var s: int = surf[y][x]
+			if s != 2 and s != 3:
+				continue   # 밭·길 셀만 기준(흙과의 경계). 잔디·물·건물 제외.
+			var x0 := x * TILE
+			var y0 := y * TILE
+			if x + 1 < _grid_w and int(surf[y][x + 1]) == 0:
+				_soften_vseam(out, x0 + TILE, y0)   # 오른쪽 흙 경계(세로선)
+			if x - 1 >= 0 and int(surf[y][x - 1]) == 0:
+				_soften_vseam(out, x0, y0)           # 왼쪽 흙 경계
+			if y + 1 < _outdoor_h and int(surf[y + 1][x]) == 0:
+				_soften_hseam(out, x0, y0 + TILE)   # 아래 흙 경계(가로선)
+			if y - 1 >= 0 and int(surf[y - 1][x]) == 0:
+				_soften_hseam(out, x0, y0)           # 위 흙 경계
+
+# 세로 경계선 xb(좌=xb-1, 우=xb)의 y0..y0+TILE 범위를 경계 양쪽 _EDGE_SOFT px 좌우 평균으로 완화.
+func _soften_vseam(out: Image, xb: int, y0: int) -> void:
+	for j in TILE:
+		var yy := y0 + j
+		if yy < 0 or yy >= out.get_height():
+			continue
+		for k in range(1, _EDGE_SOFT + 1):
+			var xl := xb - k
+			var xr := xb + k - 1
+			if xl < 0 or xr >= out.get_width():
+				continue
+			var cl := out.get_pixel(xl, yy)
+			var cr := out.get_pixel(xr, yy)
+			var t := 0.5 / float(k)   # 경계에 가까운 픽셀일수록 강하게 섞음
+			out.set_pixel(xl, yy, cl.lerp(cr, t))
+			out.set_pixel(xr, yy, cr.lerp(cl, t))
+
+# 가로 경계선 yb(위=yb-1, 아래=yb)의 x0..x0+TILE 범위를 경계 양쪽 상하 평균으로 완화.
+func _soften_hseam(out: Image, x0: int, yb: int) -> void:
+	for i in TILE:
+		var xx := x0 + i
+		if xx < 0 or xx >= out.get_width():
+			continue
+		for k in range(1, _EDGE_SOFT + 1):
+			var yu := yb - k
+			var yd := yb + k - 1
+			if yu < 0 or yd >= out.get_height():
+				continue
+			var cu := out.get_pixel(xx, yu)
+			var cd := out.get_pixel(xx, yd)
+			var t := 0.5 / float(k)
+			out.set_pixel(xx, yu, cu.lerp(cd, t))
+			out.set_pixel(xx, yd, cd.lerp(cu, t))
+
+# 전환 타일 base 합성기(pair `pk`, upper=코너bit 1, lower=코너bit 0). bilinear upper-ness + 래그드 노이즈로
+# upper/lower 영역을 나눠 base 픽셀 blit + upper 경계 1px 엣지다크 + upper 밑동 남쪽 lower 드롭섀도(감쇄).
+# rag/micro=경계 불규칙 진폭(잔디는 크게, 밭은 작게). 결정적(좌표해시). _wang_tiles[pk]를 덮어써 기존 Wang 렌더가 이 합성 타일을 쓴다.
+func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, micro: float, edge_dark: float, shadow_depth: int, shadow_dark: float) -> void:
+	if up_field == null or lo_field == null:
+		return
+	var P := _GF * 2
+	var tmap := {}
+	for bits in 16:
+		var cnw := float(bits & 1)
+		var cne := float((bits >> 1) & 1)
+		var csw := float((bits >> 2) & 1)
+		var cse := float((bits >> 3) & 1)
+		var img := Image.create(TILE, TILE, false, Image.FORMAT_RGBA8)
+		var umask: Array = []
+		for j in TILE:
+			var mrow: Array = []
+			for i in TILE:
+				var fx := (float(i) + 0.5) / float(TILE)
+				var fy := (float(j) + 0.5) / float(TILE)
+				var g := lerpf(lerpf(cnw, cne, fx), lerpf(csw, cse, fx), fy)
+				var wv := (_gd_h01(int(i / 3), int(j / 3), 700) - 0.5) * 2.0 * rag
+				var mv := (_gd_h01(i, j, 701) - 0.5) * 2.0 * micro
+				var is_u := (g + wv + mv) > 0.5
+				mrow.append(is_u)
+				if is_u:
+					img.set_pixel(i, j, up_field.get_pixel(i % P, j % P))
+				else:
+					img.set_pixel(i, j, lo_field.get_pixel(i % P, j % P))
+			umask.append(mrow)
+		# upper 경계(lower 이웃 있는 upper 픽셀) 1px 어두운선 — 엣지 그림자(입체·자연 분리).
+		for j in TILE:
+			for i in TILE:
+				if not bool(umask[j][i]):
+					continue
+				var edge := false
+				for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+					var ni := i + d.x
+					var nj := j + d.y
+					if ni < 0 or nj < 0 or ni >= TILE or nj >= TILE or not bool(umask[nj][ni]):
+						edge = true
+						break
+				if edge:
+					img.set_pixel(i, j, img.get_pixel(i, j).darkened(edge_dark))
+		# ★upper 밑동 남쪽 lower 픽셀에 드롭섀도(upper가 lower 위로 솟은 입체). NW광원 → 그림자 남/남동.
+		#   lower 픽셀 위(북) shadow_depth 이내에 upper가 있으면 밑동 가까울수록 진하게 어둡힘(선형 감쇄).
+		if shadow_depth > 0:
+			for i in TILE:
+				for j in TILE:
+					if bool(umask[j][i]):
+						continue   # lower 픽셀만
+					for k in range(1, shadow_depth + 1):
+						var nj := j - k
+						if nj >= 0 and bool(umask[nj][i]):
+							var amt: float = shadow_dark * (1.0 - float(k - 1) / float(shadow_depth))
+							img.set_pixel(i, j, img.get_pixel(i, j).darkened(amt))
+							break
+		tmap[bits] = img
+	_wang_tiles[pk] = tmap
+
 func _build_ground16() -> void:
 	_ground_detail_tex = null
 	_load_big_fields()
 	_load_wang_pairs()
+	_bake_grass_dirt_wang()   # ★[ADR-0058 확장] 잔디↔흙 전환을 base에서 합성(불일치-불가) — 손그림 Wang 0_1 덮음
+	_build_shore_masks()      # ★[owner 7차] 손그림 물↔흙 4_0 → 흙/물/테두리 형태 마스크(② 루프서 셀별 합성)
+	# 밭↔흙·길↔흙은 Wang 미사용(② 루프서 스킵) — base blit 사각 + _soften_field_edges 직선 완화(격자 방지).
+	#   물↔흙(4_0)은 스킵하지 않고 ② 루프서 _paint_shore_cell로 합성 — 손그림 형태 마스크(흙/물/테두리) +
+	#   흙=_bf_earth 월드위상 채움(격자 없음) + 손그림 테두리. 잔디↔흙(0_1)만 _bake_grass_dirt_wang Wang 합성.
 	var bw := _grid_w * TILE
 	var bh := _outdoor_h * TILE
 	if bw <= 0 or bh <= 0:
@@ -3626,6 +3925,11 @@ func _build_ground16() -> void:
 			ks.sort_custom(func(a, b): return _surf_rank(a) > _surf_rank(b))
 			var up_s: int = ks[0]
 			var lo_s: int = ks[1]
+			# ★[owner 2026-07-17 최종] 길(2)·밭(3) 경계 = Wang 스킵(base blit·격자 없음, 인공물이라 직선+_soften).
+			#   물(4)↔흙(0)은 스킵하지 않는다 — 손그림 4_0에서 추출한 테두리 링을 오버레이 blit(아래 blend 분기).
+			#   잔디↔흙(0_1)만 Wang base 합성.
+			if up_s == 2 or lo_s == 2 or up_s == 3 or lo_s == 3:
+				continue
 			var pk := _wang_pair_key(lo_s, up_s)
 			if not _wang_tiles.has(pk):
 				continue   # 이 쌍 미생성(스킵된 쌍) → base 유지
@@ -3637,7 +3941,10 @@ func _build_ground16() -> void:
 			var tmap: Dictionary = _wang_tiles[pk]
 			if not tmap.has(bits):
 				continue   # 미커버 코너조합 → base 유지
-			out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
+			if pk == _wang_pair_key(4, 0):
+				_paint_shore_cell(out, x, y, bits)   # 물↔흙 = 손그림 형태 마스크로 흙/물 전환(월드위상 base·손그림 테두리)
+			else:
+				out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
 	# ★[ADR-0056 REV4 ①] LIP 상단 텍스처 평지화 — CLIFF_LIP 타일 상단(잔디부)을 평지 _bf_grass로 오버레이해
 	#   윗면 평지와 텍스처 문법 100% 일치. 고지 잔디화 뒤 lip은 톤은 맞으나 블레이드 패턴이 평지와 이질 →
 	#   _bf_grass를 월드 타일링으로 끌어와(위 평지 grass와 씸리스 연속) lip 상단 _LIP_GRASS_H px에 그린다.
@@ -3703,7 +4010,9 @@ func _build_ground16() -> void:
 					if cimg.get_pixel(i, j).a < 0.5:   # 코너 PNG 투명(물러난 영역) → 주변 지형
 						out.set_pixel(cx0 + i, cy0 + j, fld.get_pixel((cx0 + i) % P, (cy0 + j) % P))
 	# ★[P2 프로토타입] tan 위 오브젝트 스캐터(스타듀 잡초/tuft 모델) — 채움 패치를 끈 만큼 초록을 데칼로.
+	_soften_field_edges(out, surf)   # ★[owner 2026-07-17] 밭·길↔흙 직선 경계선만 부드럽게(밭 꽉 참·base blit=격자 없음)
 	if _G16_SCATTER:
+		_compute_scatter_clump()   # ★[ADR-0058 B] 풀무리 CA 마스크 1회 계산(스캐터가 참조)
 		_g16_blend_scatter(out)
 	_ground_detail_tex = ImageTexture.create_from_image(out)
 
@@ -3730,14 +4039,14 @@ func _g16_blend_scatter(out: Image) -> void:
 			# ★[스캐터 확산 ②] GROUND는 클러스터면 full 테이블(풀 무리), 빈 tan이면 sparse 마른 clutter(twig·stone)만.
 			var table: Array
 			if terrain == GROUND:
-				if _gd_cluster(x, y) >= GD_CLUSTER_CUT:
-					table = _GD_TABLES[GROUND]         # 풀 무리 구역 — 풀 tuft 포함 전체
+				if _scatter_is_clump(x, y):          # 구 _gd_cluster(x,y) >= GD_CLUSTER_CUT
+					table = _gd_table_for(GROUND)      # 풀 무리 구역 — 풀 tuft 포함 전체(구역-키드, 폴백=전역)
 				elif _gd_h01(x, y, 71) < _GD_SPARSE_DENSITY:
-					table = _GD_SPARSE                 # 빈 tan — 나뭇가지·돌 저밀도 확산(스타듀 개활지)
+					table = _gd_sparse_for()           # 빈 tan — 나뭇가지·돌 저밀도 확산(스타듀 개활지, 구역-키드)
 				else:
 					continue                           # 대부분의 빈 tan = 민무늬(여백)
 			else:
-				table = _GD_TABLES[terrain]            # PATH 등
+				table = _gd_table_for(terrain)         # PATH 등(구역-키드, 폴백=전역)
 			var total := 0
 			for e in table:
 				total += int(e[1])
@@ -3774,12 +4083,12 @@ func _g16_blend_scatter(out: Image) -> void:
 			out.blend_rect(timg, Rect2i(0, 0, dw, dh), Vector2i(px, py))
 
 # ★[스타듀 농장 룩] 지면 표면 결정 헬퍼(_build_ground16 전용) ─────────────────────────────
-const _G16_GRASS_THR := 0.66   # 잔디 패치 문턱(↑=잔디↓·흙↑). 스타듀 시작 농장 ≈ 흙 지배(잔디 ~28%).
+const _G16_GRASS_THR := 0.68   # 잔디 패치 문턱(↑=잔디↓·흙↑). ★Forest Farm=흙지배(owner "너무 많아"→0.62→0.68).
 # ★[P2 프로토타입 2026-07-16 — docs/design/stardew-boundary-tile-analysis.md] 스타듀 농장은 채움 잔디
 #   바닥 패치도 잔디↔흙 경계선도 없다. 초록은 전부 tan 위에 흩뿌린 오브젝트(잡초/tuft/나무)다. 그래서
 #   저지 마당의 채움 잔디 패치를 끄고(→전부 tan) 초록을 스캐터 데칼로만 낸다 → 흙↔잔디 Wang 경계(0_1)·
 #   외곽선 문제가 통째로 소멸. 순수 시각(out 픽셀만)·_grid/충돌/세이브 불변. false=스타듀식/true=구 채움패치.
-const _G16_GRASS_PATCHES := false
+const _G16_GRASS_PATCHES := true   # ★[ADR-0058 확장·owner Forest Farm 레퍼런스 2026-07-17] 흙 위 유기 잔디뭉치 부활(CA 클럼프)
 const _G16_SCATTER := true      # tan 위 잡초/tuft/잔돌 데칼 스캐터(기존 _GD_TABLES/_gd_cluster 재활용)
 # ★[ADR-0056 ④ FINAL] BASE 발치 접지 그림자 밴드 레버(_build_ground16 순수 시각 오버레이).
 const _CLIFF_BASE_TILES := [CLIFF_FACE_BASE, CLIFF_CORNER_SW_B, CLIFF_CORNER_SE_B]   # 접지 대상 = 벽 최하단
@@ -3874,13 +4183,13 @@ func _g16_surface(x: int, y: int) -> int:
 		return 3
 	if c == WATER:
 		return 4
-	# ★[ADR-0056 후속 — 절벽 top 연결] 하늘 목장(고지 평지 NW 사각)은 잔디-지배로 둔다 — 초록 lip과 이어져
-	#   절벽 top이 tan 줄무늬 단절 없이 자연스럽게 연속(스타듀 elevated=grassy). 저지 마당만 흙-지배 flip
-	#   (ADR-0053) 유지 → 목장=잔디 vs 농장=흙 대비. 건물 발치 tan 패드는 _build_ground16의
-	#   _g16_near_building 오버라이드가 그대로 유지(surf=1이어도 발치는 tan으로 되돌림).
-	if x <= HIGHLAND_E and y <= HIGHLAND_S:
-		return 1
-	# GROUND(및 벽/void — 프롭·facade가 덮음): 흙 베이스 + 잔디 패치(저지 마당 흙-지배)
+	# ★[ADR-0058 확장 — 초원 경계 소멸(owner 2026-07-17 라이브)] 고지 하늘 목장(NW 사각)의 *채움 잔디*를
+	#   폐지 → tan+스캐터로 녹인다. 이유: 고지 잔디(surf=1)↔저지 흙(surf=0)의 동단(x=HIGHLAND_E+1) 평평
+	#   grass↔tan 하드 seam이 부자연스럽다(스타듀는 잔디↔흙 경계선 자체가 없다 — taxonomy §1). 절벽 top 초록
+	#   연속은 CLIFF_LIP 오버레이(위 REV4·surf 독립)가 그대로 담당하므로 고지를 tan화해도 유지된다.
+	#   → ADR-0053(저지-only flip)·ADR-0056(고지=잔디) 개정: 이제 고지·저지 전부 tan 베이스 + 풀 tuft 스캐터로
+	#   통일되어 채움 잔디 필드가 없어지고 grass↔tan 하드 경계가 소멸한다. (구: highland → return 1, 폐지)
+	# GROUND(및 벽/void — 프롭·facade가 덮음): 흙 베이스 + 잔디 패치(전 구역 흙-지배)
 	# ★[P2 프로토타입] 스타듀 농장 모델 — 채움 잔디 패치를 끄면(_G16_GRASS_PATCHES=false) 저지 마당은
 	#   전부 tan(earth)이 되고, 초록은 _g16_blend_scatter의 오브젝트 데칼(잡초/tuft)로만 표현된다.
 	if not _G16_GRASS_PATCHES:
