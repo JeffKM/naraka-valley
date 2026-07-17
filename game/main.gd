@@ -3662,6 +3662,18 @@ const _W01_SHADOW_DARK := 0.40 # 드롭섀도 최대 어둠(잔디 밑동 흙에
 func _bake_grass_dirt_wang() -> void:
 	_bake_field_wang(_wang_pair_key(0, 1), _bf_grass, _bf_earth, _W01_RAG, _W01_MICRO, _W01_EDGE_DARK, _W01_SHADOW, _W01_SHADOW_DARK)
 
+# ★[ADR-0058 확장·물가 단차·owner 2026-07-17] 물(4)↔흙(0) 전환 = 흙(upper)/물(lower) base 합성.
+#   _bake_field_wang이 흙 밑동→물 남쪽 드롭섀도(겹②·"흙이 물 위로 솟음")를 만든다. 스타듀 물가처럼
+#   "물이 흙보다 아래"인 웅덩이 단차. 손그림 Wang 4_0 덮음 → 톤불일치 불가. 얕은물 림(겹①)은 Task 2.
+#   ⚠️ 접근 C: 북단 강둑(CLIFF_BANK) pseudo-Z는 무수정. 물가 rag는 잔디(0.20)보다 얌전(진흙 shore).
+const _W40_RAG := 0.12         # 물가 경계 래그드 진폭
+const _W40_MICRO := 0.08       # per-px 미세 지터
+const _W40_EDGE_DARK := 0.14   # 흙 경계 1px 엣지다크(흙 밑동 정의)
+const _W40_SHADOW := 5         # 흙 밑동 남쪽 물에 드리우는 드롭섀도 깊이(px) — 단차 겹②(잔디 4보다 깊게)
+const _W40_SHADOW_DARK := 0.42 # 드롭섀도 최대 어둠
+func _bake_water_dirt_wang() -> void:
+	_bake_field_wang(_wang_pair_key(4, 0), _bf_earth, _bf_water, _W40_RAG, _W40_MICRO, _W40_EDGE_DARK, _W40_SHADOW, _W40_SHADOW_DARK)
+
 # ★[SOIL·PATH 경계·owner 2026-07-17 최종] 밭(SOIL)·길(PATH)은 인공물 → 잔디식 유기 래그드(Wang 합성)를 쓰지
 #   않는다. 밭은 타일에 *꽉 차야* 하고(가장자리 침식·스캐터 금지), 경계는 *직선(1자)이되 부드럽게*여야 한다.
 #   또 Wang 통짜 타일(0위상) blit은 base(월드위상)와 어긋나 옅은 격자무늬를 낳는다(owner 지적).
@@ -3788,6 +3800,7 @@ func _build_ground16() -> void:
 	_load_big_fields()
 	_load_wang_pairs()
 	_bake_grass_dirt_wang()   # ★[ADR-0058 확장] 잔디↔흙 전환을 base에서 합성(불일치-불가) — 손그림 Wang 0_1 덮음
+	_bake_water_dirt_wang()   # ★[ADR-0058 확장] 물↔흙 단차 base 합성 — 손그림 Wang 4_0 덮음(스타듀 웅덩이)
 	# 밭↔흙·길↔흙은 Wang 미사용(② 루프서 스킵) — base blit 사각+_soften_field_edges로 경계선만 부드럽게(격자 방지).
 	var bw := _grid_w * TILE
 	var bh := _outdoor_h * TILE

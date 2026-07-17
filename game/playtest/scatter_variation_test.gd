@@ -53,6 +53,26 @@ func _initialize() -> void:
 	# 이웃-상관: clump 셀의 직교이웃이 clump일 확률 > 전역 clump 비율(유기적 응집).
 	_check("③ clump 이웃-상관 > 전역비율", _neighbor_corr(m) > _global_rate(m))
 
+	# ── Task 4(Wang 물↔흙): base 합성 + 단차 ──
+	var wkey: int = m._wang_pair_key(4, 0)   # = 40
+	var wt: Dictionary = m._wang_tiles.get(wkey, {})
+	_check("④ 물↔흙(40) 합성 타일 16 코너키 존재", wt.size() == 16)
+	# all-upper(bits=15) 타일 중앙 = 흙 base(_bf_earth), all-lower(bits=0) = 물 base(_bf_water).
+	var P: int = m._GF * 2
+	var cc := int(m.TILE / 2)
+	if wt.has(15) and wt.has(0):
+		var earth_px: Color = (wt[15] as Image).get_pixel(cc, cc)
+		var water_px: Color = (wt[0] as Image).get_pixel(cc, cc)
+		_check("④ all-흙 코너 = _bf_earth 픽셀", earth_px.is_equal_approx(m._bf_earth.get_pixel(cc % P, cc % P)))
+		_check("④ all-물 코너 = _bf_water 픽셀", water_px.is_equal_approx(m._bf_water.get_pixel(cc % P, cc % P)))
+	else:
+		_check("④ all-흙/all-물 코너키 존재", false)
+	# 결정성: 재-bake 시 동일 픽셀(좌표해시 순수).
+	m._bake_water_dirt_wang()
+	var again: PackedByteArray = (m._wang_tiles[wkey][12] as Image).get_data()
+	m._bake_water_dirt_wang()
+	_check("④ 물↔흙 합성 결정적", again == (m._wang_tiles[wkey][12] as Image).get_data())
+
 	print("결과: %d 실패" % _fail)
 	quit(1 if _fail > 0 else 0)
 
