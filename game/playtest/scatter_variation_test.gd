@@ -82,6 +82,12 @@ func _initialize() -> void:
 	_check("④ 물 북쪽(흙인접) = 제외(강둑 담당·단차 없음)", north_px.is_equal_approx(center_px))
 	# 동/서가 남보다 깊은 단차(_WS_SIDE_DARK > _WS_BOT_DARK) → 경계 픽셀이 더 어둡다.
 	_check("④ 동/서 단차 > 남 단차(경계 더 어둠)", west_px.v < south_px.v)
+	# 흙쪽(바깥): 서쪽 흙셀의 물-인접 가장자리(x=TL-1) 일부 픽셀이 불규칙하게 어두워짐(젖은 진흙 얼룩).
+	var earth_dark := false
+	for jj in TL:
+		if timg.get_pixel(TL - 1, TL + jj).v < center_px.v - 0.001:
+			earth_dark = true
+	_check("④ 흙쪽(바깥) 불규칙 젖은 진흙 적용", earth_dark)
 	# 결정성: 재실행 동일 픽셀(순수 함수).
 	var timg2 := Image.create(3 * TL, 3 * TL, false, Image.FORMAT_RGBA8)
 	timg2.fill(base_c)

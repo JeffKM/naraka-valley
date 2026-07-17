@@ -3675,8 +3675,11 @@ const _WS_SIDE_DEPTH := 6    # 동/서 단차 밴드 폭(px, 물 안쪽)
 const _WS_SIDE_DARK := 0.32  # 동/서 단차 최대 어둠(경계 진함→안쪽 0 선형감쇄)
 const _WS_BOT_DEPTH := 3     # 남(아래) 단차 밴드 폭
 const _WS_BOT_DARK := 0.16   # 남 단차 최대 어둠
-const _WS_WOBBLE := 2        # ★[owner 2026-07-17 4차] 단차 안쪽 경계 울퉁불퉁 진폭(px, 물/흙 경계는 직선 유지)
-const _WS_WOBBLE_STEP := 5   # 물결 파장(px, ↑=완만)
+const _WS_WOBBLE := 2        # ★[owner 2026-07-17 4차] 물쪽 단차 안쪽 경계 물결 진폭(px, 저주파·물/흙 경계는 직선 유지)
+const _WS_WOBBLE_STEP := 5   # 물쪽 물결 파장(px, ↑=완만)
+const _WS_E_DEPTH := 4       # ★[owner 2026-07-17 5차] 흙쪽(바깥) 젖은 진흙 밴드 폭(px)
+const _WS_E_DARK := 0.22     # 흙쪽 최대 어둠(젖은 진흙)
+const _WS_E_WOBBLE := 2      # 흙쪽 경계 삐죽 진폭(고주파·불규칙)
 
 # 물 셀(surf==4)의 흙(0)-인접 변에 물 안쪽 어두운 단차 밴드를 얹는다(동/서 깊게·남 얕게·북 제외).
 func _water_shore_edges(out: Image, surf: Array) -> void:
@@ -3687,11 +3690,14 @@ func _water_shore_edges(out: Image, surf: Array) -> void:
 			var x0 := x * TILE
 			var y0 := y * TILE
 			if x - 1 >= 0 and int(surf[y][x - 1]) == 0:
-				_shore_band_v(out, x0, y0, 1, _WS_SIDE_DEPTH, _WS_SIDE_DARK)          # 서쪽 흙 → 좌측 세로 밴드
+				_shore_band_v(out, x0, y0, 1, _WS_SIDE_DEPTH, _WS_SIDE_DARK)             # 서쪽: 물쪽 좌측 밴드
+				_shore_earth_v(out, x0 - 1, y0, -1)                                       # 서쪽: 흙쪽(바깥) 불규칙
 			if x + 1 < _grid_w and int(surf[y][x + 1]) == 0:
-				_shore_band_v(out, x0 + TILE - 1, y0, -1, _WS_SIDE_DEPTH, _WS_SIDE_DARK)  # 동쪽 흙 → 우측
+				_shore_band_v(out, x0 + TILE - 1, y0, -1, _WS_SIDE_DEPTH, _WS_SIDE_DARK)  # 동쪽: 물쪽 우측 밴드
+				_shore_earth_v(out, x0 + TILE, y0, 1)                                     # 동쪽: 흙쪽(바깥)
 			if y + 1 < _outdoor_h and int(surf[y + 1][x]) == 0:
-				_shore_band_h(out, x0, y0 + TILE - 1, -1, _WS_BOT_DEPTH, _WS_BOT_DARK)    # 남쪽 흙 → 하단 가로
+				_shore_band_h(out, x0, y0 + TILE - 1, -1, _WS_BOT_DEPTH, _WS_BOT_DARK)    # 남쪽: 물쪽 하단 밴드
+				_shore_earth_h(out, x0, y0 + TILE, 1)                                     # 남쪽: 흙쪽(바깥)
 			# 북쪽(위) 흙 = 강둑 담당 → 제외
 
 # 세로 단차 밴드: 경계열 xb에서 dir(+1=오른쪽/-1=왼쪽) 방향, 경계 진함→안쪽 0 선형감쇄로 어둡게.
@@ -3725,6 +3731,41 @@ func _shore_band_h(out: Image, x0: int, yb: int, dir: int, depth: int, dark: flo
 			if yy < 0 or yy >= out.get_height():
 				continue
 			var amt: float = dark * (1.0 - float(k) / float(dep))
+			out.set_pixel(xx, yy, out.get_pixel(xx, yy).darkened(amt))
+
+# ★[owner 2026-07-17 5차] 흙쪽(바깥) 젖은 진흙 — 물결이 아니라 불규칙 울퉁불퉁: 경계 깊이는 고주파(per-row/col)
+#   해시로 삐죽삐죽, 각 픽셀 어둠은 per-px 해시로 얼룩. 세로(서/동): 경계열 xb에서 dir 방향 흙으로.
+func _shore_earth_v(out: Image, xb: int, y0: int, dir: int) -> void:
+	for j in TILE:
+		var yy := y0 + j
+		if yy < 0 or yy >= out.get_height():
+			continue
+		var dep := _WS_E_DEPTH + int(round((_gd_h01(xb, yy, 730) - 0.5) * 2.0 * _WS_E_WOBBLE))
+		if dep < 0:
+			dep = 0
+		for k in dep:
+			var xx := xb + dir * k
+			if xx < 0 or xx >= out.get_width():
+				continue
+			var n := _gd_h01(xx, yy, 731)   # per-px 불규칙 얼룩(0..1)
+			var amt: float = _WS_E_DARK * (1.0 - float(k) / float(_WS_E_DEPTH)) * n
+			out.set_pixel(xx, yy, out.get_pixel(xx, yy).darkened(amt))
+
+# 흙쪽 가로(남): 경계행 yb에서 dir 방향 흙으로. 깊이 삐죽(per-col 고주파) + per-px 얼룩.
+func _shore_earth_h(out: Image, x0: int, yb: int, dir: int) -> void:
+	for i in TILE:
+		var xx := x0 + i
+		if xx < 0 or xx >= out.get_width():
+			continue
+		var dep := _WS_E_DEPTH + int(round((_gd_h01(xx, yb, 732) - 0.5) * 2.0 * _WS_E_WOBBLE))
+		if dep < 0:
+			dep = 0
+		for k in dep:
+			var yy := yb + dir * k
+			if yy < 0 or yy >= out.get_height():
+				continue
+			var n := _gd_h01(xx, yy, 733)
+			var amt: float = _WS_E_DARK * (1.0 - float(k) / float(_WS_E_DEPTH)) * n
 			out.set_pixel(xx, yy, out.get_pixel(xx, yy).darkened(amt))
 
 # ★[SOIL·PATH 경계·owner 2026-07-17 최종] 밭(SOIL)·길(PATH)은 인공물 → 잔디식 유기 래그드(Wang 합성)를 쓰지
