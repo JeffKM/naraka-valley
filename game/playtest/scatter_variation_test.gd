@@ -73,6 +73,19 @@ func _initialize() -> void:
 	m._bake_water_dirt_wang()
 	_check("④ 물↔흙 합성 결정적", again == (m._wang_tiles[wkey][12] as Image).get_data())
 
+	# ── Task 4(림): 얕은물 밝은 림이 물 픽셀을 밝힌다(rim on > rim off) ──
+	const _TMPK := 987654   # 실제 _wang_tiles[40] 불침범용 임시 키
+	m._bake_field_wang(_TMPK, m._bf_earth, m._bf_water, m._W40_RAG, m._W40_MICRO, m._W40_EDGE_DARK, m._W40_SHADOW, m._W40_SHADOW_DARK, 0.0, 0)
+	var lum_off := _tile_luma(m._wang_tiles[_TMPK][1] as Image)   # bits=1: NW만 흙, 나머지 물(경계 존재)
+	m._bake_field_wang(_TMPK, m._bf_earth, m._bf_water, m._W40_RAG, m._W40_MICRO, m._W40_EDGE_DARK, m._W40_SHADOW, m._W40_SHADOW_DARK, 0.30, 2)
+	var lum_on := _tile_luma(m._wang_tiles[_TMPK][1] as Image)
+	_check("④ 얕은물 림 활성 시 물 픽셀 더 밝음(rim on > off)", lum_on > lum_off)
+	m._wang_tiles.erase(_TMPK)
+	# 하위호환: 잔디↔흙(0_1) 재-bake는 rim 기본 0이라 결정적·불변(회귀 0 방증).
+	var g_before: PackedByteArray = (m._wang_tiles[m._wang_pair_key(0,1)][12] as Image).get_data()
+	m._bake_grass_dirt_wang()
+	_check("④ 잔디↔흙 rim 무영향(재-bake 동일)", g_before == (m._wang_tiles[m._wang_pair_key(0,1)][12] as Image).get_data())
+
 	print("결과: %d 실패" % _fail)
 	quit(1 if _fail > 0 else 0)
 
@@ -120,3 +133,11 @@ func _neighbor_corr(m: Node) -> float:
 						tot += 1
 						if m._scatter_clump[ny][nx] == 1: hit += 1
 	return float(hit) / max(1, tot)
+
+func _tile_luma(img: Image) -> float:
+	var s := 0.0
+	for j in img.get_height():
+		for i in img.get_width():
+			var c := img.get_pixel(i, j)
+			s += (c.r + c.g + c.b) * c.a
+	return s

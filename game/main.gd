@@ -3671,8 +3671,10 @@ const _W40_MICRO := 0.08       # per-px 미세 지터
 const _W40_EDGE_DARK := 0.14   # 흙 경계 1px 엣지다크(흙 밑동 정의)
 const _W40_SHADOW := 5         # 흙 밑동 남쪽 물에 드리우는 드롭섀도 깊이(px) — 단차 겹②(잔디 4보다 깊게)
 const _W40_SHADOW_DARK := 0.42 # 드롭섀도 최대 어둠
+const _W40_RIM := 0.30         # ★얕은물 밝은 림 강도(lightened·겹①)
+const _W40_RIM_PX := 2         # ★얕은물 림 폭(px, 물 안쪽)
 func _bake_water_dirt_wang() -> void:
-	_bake_field_wang(_wang_pair_key(4, 0), _bf_earth, _bf_water, _W40_RAG, _W40_MICRO, _W40_EDGE_DARK, _W40_SHADOW, _W40_SHADOW_DARK)
+	_bake_field_wang(_wang_pair_key(4, 0), _bf_earth, _bf_water, _W40_RAG, _W40_MICRO, _W40_EDGE_DARK, _W40_SHADOW, _W40_SHADOW_DARK, _W40_RIM, _W40_RIM_PX)
 
 # ★[SOIL·PATH 경계·owner 2026-07-17 최종] 밭(SOIL)·길(PATH)은 인공물 → 잔디식 유기 래그드(Wang 합성)를 쓰지
 #   않는다. 밭은 타일에 *꽉 차야* 하고(가장자리 침식·스캐터 금지), 경계는 *직선(1자)이되 부드럽게*여야 한다.
@@ -3738,7 +3740,7 @@ func _soften_hseam(out: Image, x0: int, yb: int) -> void:
 # 전환 타일 base 합성기(pair `pk`, upper=코너bit 1, lower=코너bit 0). bilinear upper-ness + 래그드 노이즈로
 # upper/lower 영역을 나눠 base 픽셀 blit + upper 경계 1px 엣지다크 + upper 밑동 남쪽 lower 드롭섀도(감쇄).
 # rag/micro=경계 불규칙 진폭(잔디는 크게, 밭은 작게). 결정적(좌표해시). _wang_tiles[pk]를 덮어써 기존 Wang 렌더가 이 합성 타일을 쓴다.
-func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, micro: float, edge_dark: float, shadow_depth: int, shadow_dark: float) -> void:
+func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, micro: float, edge_dark: float, shadow_depth: int, shadow_dark: float, rim_light: float = 0.0, rim_px: int = 0) -> void:
 	if up_field == null or lo_field == null:
 		return
 	var P := _GF * 2
@@ -3792,6 +3794,28 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 							var amt: float = shadow_dark * (1.0 - float(k - 1) / float(shadow_depth))
 							img.set_pixel(i, j, img.get_pixel(i, j).darkened(amt))
 							break
+		# ★[물가 얕은물 림·ADR-0058] lower(물) 픽셀이 upper(흙) 경계에서 rim_px 안쪽일수록 밝게 = 스타듀 겹①.
+		#   밑동 가까울수록 강하게(선형 감쇄). 기본 rim_light=0 → 잔디·밭 호출 무영향(하위호환).
+		if rim_light > 0.0 and rim_px > 0:
+			for i in TILE:
+				for j in TILE:
+					if bool(umask[j][i]):
+						continue   # lower(물) 픽셀만
+					var dist := rim_px + 1
+					for kk in range(1, rim_px + 1):
+						var found := false
+						for d: Vector2i in [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1), Vector2i(1,1), Vector2i(-1,1), Vector2i(1,-1), Vector2i(-1,-1)]:
+							var ni := i + d.x * kk
+							var nj := j + d.y * kk
+							if ni >= 0 and nj >= 0 and ni < TILE and nj < TILE and bool(umask[nj][ni]):
+								found = true
+								break
+						if found:
+							dist = kk
+							break
+					if dist <= rim_px:
+						var amt: float = rim_light * (1.0 - float(dist - 1) / float(rim_px))
+						img.set_pixel(i, j, img.get_pixel(i, j).lightened(amt))
 		tmap[bits] = img
 	_wang_tiles[pk] = tmap
 
