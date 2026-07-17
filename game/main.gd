@@ -3675,6 +3675,8 @@ func _build_shore_masks() -> void:
 	if not _wang_tiles.has(pk):
 		return
 	var tmap: Dictionary = _wang_tiles[pk]
+	if not (tmap.has(0) and tmap.has(15)):
+		return   # 물(bits0)·흙(bits15) 순수 타일 없으면 classify 기준색 없음 → 마스크 스킵(조용한 오분류 방지)
 	var water_ref := _shore_avg(tmap.get(0, null))    # all-lower(물) 대표색
 	var earth_ref := _shore_avg(tmap.get(15, null))   # all-upper(흙) 대표색
 	for bits in tmap.keys():
@@ -3866,8 +3868,9 @@ func _build_ground16() -> void:
 	_load_wang_pairs()
 	_bake_grass_dirt_wang()   # ★[ADR-0058 확장] 잔디↔흙 전환을 base에서 합성(불일치-불가) — 손그림 Wang 0_1 덮음
 	_build_shore_masks()      # ★[owner 7차] 손그림 물↔흙 4_0 → 흙/물/테두리 형태 마스크(② 루프서 셀별 합성)
-	# 밭↔흙·길↔흙·물↔흙은 Wang 미사용(② 루프서 스킵) — base blit(격자 방지) + 경계 후처리
-	#   (밭·길=_soften_field_edges 직선 완화 / 물=_water_shore_edges 단차 밴드).
+	# 밭↔흙·길↔흙은 Wang 미사용(② 루프서 스킵) — base blit 사각 + _soften_field_edges 직선 완화(격자 방지).
+	#   물↔흙(4_0)은 스킵하지 않고 ② 루프서 _paint_shore_cell로 합성 — 손그림 형태 마스크(흙/물/테두리) +
+	#   흙=_bf_earth 월드위상 채움(격자 없음) + 손그림 테두리. 잔디↔흙(0_1)만 _bake_grass_dirt_wang Wang 합성.
 	var bw := _grid_w * TILE
 	var bh := _outdoor_h * TILE
 	if bw <= 0 or bh <= 0:
