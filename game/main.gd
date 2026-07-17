@@ -3080,10 +3080,10 @@ func _round_south_notch(gate_x: int, gate_w: int) -> void:
 #   → 세이브·연못 낚시/물뿌리개 앵커(Slice 3 예약) 불변. 순수 유도라 멱등(중복 호출 안전).
 #   ★반드시 물(_fill_rect WATER)·_build_cliffs 뒤에 부른다(_build_home 결).
 func _autotile_pond_siblings() -> void:
-	var top: int = SPIRIT_POND_RECT.position.y
-	for bx in range(SPIRIT_POND_RECT.position.x, SPIRIT_POND_RECT.end.x):
-		_set_tile(bx, top - 1, CLIFF_FACE)
-		_set_tile(bx, top, CLIFF_BANK)
+	# ★[ADR-0058·북벽 세로 절벽] 옛 북쪽 CLIFF_FACE/CLIFF_BANK 강둑(인공물 느낌) 폐지. 물(_fill_rect WATER)이
+	#   SPIRIT_POND_RECT 전체를 채우고(WATER=통과불가라 물리 유지), 북벽은 _draw_north_pond_cliff 오버레이
+	#   (side-view 절벽 — 흙 상단+물잠김 하단·울퉁불퉁)가 담당. 남/동/서는 4_0 평면 물가. no-op(멱등).
+	pass
 
 # ★ [ADR-0044 개정 / 단계3] 남향-only 절벽 오토타일러 — 고지 불리언 마스크(is_hi)에서 스타듀 남향 문법을 굽는다.
 #   각 고지 셀 중 *바로 아래가 저지*인 셀만 남쪽 경계로 보고 y=Lip(걷기O 오버행) / y+1=Face(SOLID) /
@@ -3942,6 +3942,8 @@ func _build_ground16() -> void:
 			if not tmap.has(bits):
 				continue   # 미커버 코너조합 → base 유지
 			if pk == _wang_pair_key(4, 0):
+				if _is_north_edge_cell(x, y) or _is_north_edge_cell(x, y + 1):
+					continue   # ★[ADR-0058] 북벽 = 절벽 담당 → shoreline 스킵(절벽 아래 흙/테두리 띠 제거)
 				_paint_shore_cell(out, x, y, bits)   # 물↔흙 = 손그림 형태 마스크로 흙/물 전환(월드위상 base·손그림 테두리)
 			else:
 				out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
@@ -4014,7 +4016,89 @@ func _build_ground16() -> void:
 	if _G16_SCATTER:
 		_compute_scatter_clump()   # ★[ADR-0058 B] 풀무리 CA 마스크 1회 계산(스캐터가 참조)
 		_g16_blend_scatter(out)
+	_draw_north_pond_cliff(out)   # ★[ADR-0058] 북쪽 물 경계 = side-view 절벽(흙 상단+물잠김 하단·울퉁불퉁 변주)
 	_ground_detail_tex = ImageTexture.create_from_image(out)
+
+# ★[ADR-0058·북벽 세로 절벽] 물의 북쪽 경계 셀(물이고 바로 위가 흙)에만 side-view 절벽 타일을 셀마다 좌표해시
+#   변주로 blend한다 — 흙 상단(마른)+물잠김 하단(물속+물결 라인), 상단 경계가 변주마다 달라 울퉁불퉁. 남/동/서는
+#   4_0 평면 물가 유지(위에서 비스듬히 보는 시점상 북쪽 가장자리만 벽 단면이 정면으로 보임). 순수 렌더 오버레이
+#   (_grid·WATER 통과불가 물리 불변). owner: 인공 강둑 아니라 "파인 웅덩이 북벽"이 정답.
+const _WALL_FADE := 8  # 물잠긴 벽 하단을 연못 물로 알파 페이드할 높이(px) — 벽이 물속으로 융화(경계 점프 제거)
+var _wall_dirt: Array = []   # ★[Gemini 타일셋] 흙 벽면(경계 위 1칸, 32×32) 변주
+var _wall_sub: Array = []    # 물잠긴 벽(경계 현재 칸, 32×32) 변주
+var _wall_corner_nw: Image = null   # 북서 코너(감김·위칸 흙+현재칸 물, 32×64)
+var _wall_corner_ne: Image = null   # 북동 코너(32×64)
+func _load_pond_cliffs() -> void:
+	if not _wall_dirt.is_empty():
+		return
+	for i in 12:
+		var p := "res://assets/tiles/pond_cliff/wall_dirt_%02d.png" % i
+		if ResourceLoader.exists(p):
+			var img: Image = (load(p) as Texture2D).get_image()
+			if img.get_format() != Image.FORMAT_RGBA8:
+				img.convert(Image.FORMAT_RGBA8)
+			_wall_dirt.append(img)
+	for i in 12:
+		var p := "res://assets/tiles/pond_cliff/wall_sub_%02d.png" % i
+		if ResourceLoader.exists(p):
+			var img: Image = (load(p) as Texture2D).get_image()
+			if img.get_format() != Image.FORMAT_RGBA8:
+				img.convert(Image.FORMAT_RGBA8)
+			_wall_sub.append(img)
+	for side in ["nw", "ne"]:
+		var p := "res://assets/tiles/pond_cliff/corner_%s.png" % side
+		if ResourceLoader.exists(p):
+			var img: Image = (load(p) as Texture2D).get_image()
+			if img.get_format() != Image.FORMAT_RGBA8:
+				img.convert(Image.FORMAT_RGBA8)
+			if side == "nw":
+				_wall_corner_nw = img
+			else:
+				_wall_corner_ne = img
+
+# 북쪽 물 경계 셀(물이고 바로 위가 흙)인지 — 좌우 끝 코너 판정에도 씀.
+func _is_north_edge_cell(x: int, y: int) -> bool:
+	if x < 0 or x >= _grid_w or y < 0 or y >= _outdoor_h:
+		return false
+	if _grid[y][x] != WATER:
+		return false
+	if y - 1 < 0 or _grid[y - 1][x] == WATER:
+		return false
+	return true
+
+# 북벽 절벽: 북쪽 물 경계 셀에 흙벽(경계 위 1칸)+물잠김(현재 칸)을 그린다. 좌우 끝은 감김 코너(32×64, 위칸+현재칸).
+#   각 타일이 셀을 꽉 채우므로 전체(0,0,TILE,TILE) blit. 남/동/서는 4_0 평면 물가. 순수 렌더 오버레이(물리 불변).
+func _draw_north_pond_cliff(out: Image) -> void:
+	_load_pond_cliffs()
+	if _wall_dirt.is_empty():
+		return
+	var P: int = _GF * 2
+	var bh: int = _outdoor_h * TILE
+	for y in _outdoor_h:
+		for x in _grid_w:
+			if not _is_north_edge_cell(x, y):
+				continue
+			var h: int = x * 7 + y * 13
+			var yb: int = y * TILE   # 물 경계선(물 최상단 셀 top)
+			var left_end: bool = not _is_north_edge_cell(x - 1, y)
+			var right_end: bool = not _is_north_edge_cell(x + 1, y)
+			# ★ 좌우 끝 = 감김 코너(위칸 흙+현재칸 물을 한 타일에). 코너는 자체 물 포함 → 페이드 생략.
+			if left_end and _wall_corner_nw != null:
+				out.blend_rect(_wall_corner_nw, Rect2i(0, 0, TILE, TILE * 2), Vector2i(x * TILE, yb - TILE))
+				continue
+			if right_end and _wall_corner_ne != null:
+				out.blend_rect(_wall_corner_ne, Rect2i(0, 0, TILE, TILE * 2), Vector2i(x * TILE, yb - TILE))
+				continue
+			out.blend_rect(_wall_dirt[h % _wall_dirt.size()], Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, yb - TILE))  # 흙 벽면(경계 위칸) — 바로 아래는 물
+			# ★ 흙벽 하단 _WALL_FADE px를 연못 물(base)로 알파 그라디언트 → 판자 벽이 물로 융화(흙 띠 없이 물과 직결).
+			for fy in _WALL_FADE:
+				var yy: int = yb - _WALL_FADE + fy
+				if yy < 0 or yy >= bh:
+					continue
+				var t: float = float(fy + 1) / _WALL_FADE   # 아래로 갈수록 연못 물 비중↑
+				for i in TILE:
+					var wx: int = x * TILE + i
+					out.set_pixel(wx, yy, out.get_pixel(wx, yy).lerp(_bf_water.get_pixel(wx % P, yy % P), t))
 
 # ★[P2 프로토타입 2026-07-16] tan 베이스 위에 잡초/tuft/잔돌 데칼을 흩뿌린다(스타듀 농장: 초록=바닥 아닌
 #   오브젝트). 기존 지면 디테일 시스템(_GD_TABLES 가중 롤 + _gd_cluster 여백 게이트 + _gd_soft_image 소프트
