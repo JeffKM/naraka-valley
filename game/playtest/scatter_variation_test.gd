@@ -86,6 +86,19 @@ func _initialize() -> void:
 	m._bake_grass_dirt_wang()
 	_check("④ 잔디↔흙 rim 무영향(재-bake 동일)", g_before == (m._wang_tiles[m._wang_pair_key(0,1)][12] as Image).get_data())
 
+	# ── Task 4(방향 게이팅·owner A): 북쪽 경계·NW·NE 코너(bits 1/2/3)는 단차/림 없이 순수 base ──
+	# bits=3 = 위(NW,NE)=흙/아래(SW,SE)=물. jb=경계 바로 아래 물 픽셀(북쪽 흙 인접 → 원래 rim 대상).
+	m._bake_water_dirt_wang()   # skip_north=true 래퍼
+	var jb := int(m.TILE / 2)
+	var gated: Color = (m._wang_tiles[wkey][3] as Image).get_pixel(cc, jb)
+	_check("④ 북쪽(bits3) 게이팅 → 경계 물 순수 base(림 없음)", gated.is_equal_approx(m._bf_water.get_pixel(cc % P, jb % P)))
+	# 대조: skip_north=false로 구우면 같은 픽셀에 rim(밝음) → base와 다름(게이팅 실효 증명).
+	const _NKEY := 987655
+	m._bake_field_wang(_NKEY, m._bf_earth, m._bf_water, m._W40_RAG, m._W40_MICRO, m._W40_EDGE_DARK, m._W40_SHADOW, m._W40_SHADOW_DARK, m._W40_RIM, m._W40_RIM_PX, false)
+	var ungated: Color = (m._wang_tiles[_NKEY][3] as Image).get_pixel(cc, jb)
+	_check("④ 게이팅 실효(off면 bits3 경계 물에 rim)", not ungated.is_equal_approx(m._bf_water.get_pixel(cc % P, jb % P)))
+	m._wang_tiles.erase(_NKEY)
+
 	print("결과: %d 실패" % _fail)
 	quit(1 if _fail > 0 else 0)
 

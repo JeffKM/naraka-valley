@@ -3666,15 +3666,18 @@ func _bake_grass_dirt_wang() -> void:
 #   _bake_field_wang이 흙 밑동→물 남쪽 드롭섀도(겹②·"흙이 물 위로 솟음")를 만든다. 스타듀 물가처럼
 #   "물이 흙보다 아래"인 웅덩이 단차. 손그림 Wang 4_0 덮음 → 톤불일치 불가. 얕은물 림(겹①)은 Task 2.
 #   ⚠️ 접근 C: 북단 강둑(CLIFF_BANK) pseudo-Z는 무수정. 물가 rag는 잔디(0.20)보다 얌전(진흙 shore).
-const _W40_RAG := 0.12         # 물가 경계 래그드 진폭
-const _W40_MICRO := 0.08       # per-px 미세 지터
-const _W40_EDGE_DARK := 0.14   # 흙 경계 1px 엣지다크(흙 밑동 정의)
-const _W40_SHADOW := 5         # 흙 밑동 남쪽 물에 드리우는 드롭섀도 깊이(px) — 단차 겹②(잔디 4보다 깊게)
-const _W40_SHADOW_DARK := 0.42 # 드롭섀도 최대 어둠
-const _W40_RIM := 0.30         # ★얕은물 밝은 림 강도(lightened·겹①)
-const _W40_RIM_PX := 2         # ★얕은물 림 폭(px, 물 안쪽)
+# ★[owner 2026-07-17 2차·물가 미세단차] 물↔흙은 '아주 살짝 단차감'만: 래그드(스캐터) 제거·물 비중 보존.
+#   B(ⓐ)=물쪽 1px 옅은 밝은 라인(rim)+흙쪽 1px 옅은 그림자선(edge_dark). 드롭섀도 밴드는 뺌.
+#   A=북쪽 경계·NW·NE 코너 타일 제외(그 단차는 강둑 CLIFF_BANK 별도 슬라이스가 담당) → skip_north=true.
+const _W40_RAG := 0.0          # 래그드 제거(깔끔한 타일 경계·물 비중 보존)
+const _W40_MICRO := 0.0        # per-px 지터 없음
+const _W40_EDGE_DARK := 0.12   # 흙 경계 1px 옅은 그림자선(B ⓐ 흙쪽)
+const _W40_SHADOW := 0         # 드롭섀도 밴드 없음(북쪽 전용이라 A로 제외·edge/rim만으로 미세단차)
+const _W40_SHADOW_DARK := 0.42 # (미사용·shadow=0)
+const _W40_RIM := 0.18         # 물쪽 1px 옅은 밝은 라인(B ⓐ 물쪽·얕은물)
+const _W40_RIM_PX := 1         # 림 폭 1px(아주 얇게·물 침식 최소)
 func _bake_water_dirt_wang() -> void:
-	_bake_field_wang(_wang_pair_key(4, 0), _bf_earth, _bf_water, _W40_RAG, _W40_MICRO, _W40_EDGE_DARK, _W40_SHADOW, _W40_SHADOW_DARK, _W40_RIM, _W40_RIM_PX)
+	_bake_field_wang(_wang_pair_key(4, 0), _bf_earth, _bf_water, _W40_RAG, _W40_MICRO, _W40_EDGE_DARK, _W40_SHADOW, _W40_SHADOW_DARK, _W40_RIM, _W40_RIM_PX, true)
 
 # ★[SOIL·PATH 경계·owner 2026-07-17 최종] 밭(SOIL)·길(PATH)은 인공물 → 잔디식 유기 래그드(Wang 합성)를 쓰지
 #   않는다. 밭은 타일에 *꽉 차야* 하고(가장자리 침식·스캐터 금지), 경계는 *직선(1자)이되 부드럽게*여야 한다.
@@ -3740,7 +3743,7 @@ func _soften_hseam(out: Image, x0: int, yb: int) -> void:
 # 전환 타일 base 합성기(pair `pk`, upper=코너bit 1, lower=코너bit 0). bilinear upper-ness + 래그드 노이즈로
 # upper/lower 영역을 나눠 base 픽셀 blit + upper 경계 1px 엣지다크 + upper 밑동 남쪽 lower 드롭섀도(감쇄).
 # rag/micro=경계 불규칙 진폭(잔디는 크게, 밭은 작게). 결정적(좌표해시). _wang_tiles[pk]를 덮어써 기존 Wang 렌더가 이 합성 타일을 쓴다.
-func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, micro: float, edge_dark: float, shadow_depth: int, shadow_dark: float, rim_light: float = 0.0, rim_px: int = 0) -> void:
+func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, micro: float, edge_dark: float, shadow_depth: int, shadow_dark: float, rim_light: float = 0.0, rim_px: int = 0, skip_north: bool = false) -> void:
 	if up_field == null or lo_field == null:
 		return
 	var P := _GF * 2
@@ -3767,6 +3770,11 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 				else:
 					img.set_pixel(i, j, lo_field.get_pixel(i % P, j % P))
 			umask.append(mrow)
+		# ★[owner 2026-07-17 A] skip_north 시 북쪽 경계·NW·NE 코너(bits 1/2/3 = upper가 북쪽 꼭짓점에만)는
+		#   단차/그림자/림 없이 순수 base(그 단차는 강둑 CLIFF_BANK이 담당·별도 슬라이스).
+		if skip_north and (bits == 1 or bits == 2 or bits == 3):
+			tmap[bits] = img
+			continue
 		# upper 경계(lower 이웃 있는 upper 픽셀) 1px 어두운선 — 엣지 그림자(입체·자연 분리).
 		for j in TILE:
 			for i in TILE:
