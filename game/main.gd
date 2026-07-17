@@ -3533,6 +3533,7 @@ const _GJIT := 5         # 경계 지터 진폭(px)
 # 표면 위계: 잔디>흙>길>밭>물. 경계에서 위계 높은 쪽이 upper(오버행=볼록).
 const _SURF_RANK := {1: 4, 0: 3, 2: 2, 3: 1, 4: 0}
 var _wang_tiles: Dictionary = {}   # pair_key → { corner_bits(0..15): Image }
+var _shore_extracted := false      # 물↔흙 4_0 테두리 추출은 in-place 변환 → 재빌드 이중 추출 방지 가드
 const _WANG_DIR := "res://assets/terrain16/wang/"
 
 func _surf_rank(s: int) -> int:
@@ -3662,111 +3663,59 @@ const _W01_SHADOW_DARK := 0.40 # 드롭섀도 최대 어둠(잔디 밑동 흙에
 func _bake_grass_dirt_wang() -> void:
 	_bake_field_wang(_wang_pair_key(0, 1), _bf_grass, _bf_earth, _W01_RAG, _W01_MICRO, _W01_EDGE_DARK, _W01_SHADOW, _W01_SHADOW_DARK)
 
-# ★[ADR-0058 확장·물가 단차·owner 2026-07-17] 물(4)↔흙(0) 전환 = 흙(upper)/물(lower) base 합성.
-#   _bake_field_wang이 흙 밑동→물 남쪽 드롭섀도(겹②·"흙이 물 위로 솟음")를 만든다. 스타듀 물가처럼
-#   "물이 흙보다 아래"인 웅덩이 단차. 손그림 Wang 4_0 덮음 → 톤불일치 불가. 얕은물 림(겹①)은 Task 2.
-#   ⚠️ 접근 C: 북단 강둑(CLIFF_BANK) pseudo-Z는 무수정. 물가 rag는 잔디(0.20)보다 얌전(진흙 shore).
-# ★[owner 2026-07-17 3차·물가 재설계] 물↔흙은 Wang 합성 폐기 — 위치독립 전환 타일이라 base 위상이
-#   주변 순수 타일(월드위상)과 어긋나 옅은 격자 seam을 낳고, bilinear 분할이 흙 비중을 키운다.
-#   밭·길↔흙과 동일하게: 물 셀은 ① base blit로 물이 월드위상 꽉 참(격자 없음·흙 비중 0) + 이 후처리로
-#   경계 단차만 얹는다. 물 셀의 흙(0)-인접 변에 물 안쪽 어두운 단차 밴드 — 동/서는 탑다운 시점의 벽면이라
-#   깊게, 남(아래)은 얕게, 북(위)은 강둑(CLIFF_BANK)이 담당하므로 제외. 순수 시각·결정적(픽셀 순수함수).
-const _WS_SIDE_DEPTH := 6    # 동/서 단차 밴드 폭(px, 물 안쪽)
-const _WS_SIDE_DARK := 0.32  # 동/서 단차 최대 어둠(경계 진함→안쪽 0 선형감쇄)
-const _WS_BOT_DEPTH := 3     # 남(아래) 단차 밴드 폭
-const _WS_BOT_DARK := 0.16   # 남 단차 최대 어둠
-const _WS_WOBBLE := 2        # ★[owner 2026-07-17 4차] 물쪽 단차 안쪽 경계 물결 진폭(px, 저주파·물/흙 경계는 직선 유지)
-const _WS_WOBBLE_STEP := 5   # 물쪽 물결 파장(px, ↑=완만)
-const _WS_E_DEPTH := 4       # ★[owner 2026-07-17 5차] 흙쪽(바깥) 젖은 진흙 밴드 폭(px)
-const _WS_E_DARK := 0.22     # 흙쪽 최대 어둠(젖은 진흙)
-const _WS_E_WOBBLE := 2      # 흙쪽 경계 삐죽 진폭(고주파·불규칙)
+# ★[owner 2026-07-17 6차·손그림 테두리 추출 오버레이] 물↔흙은 스타듀 오토타일처럼 손그림 4_0의 밝은 물가
+#   테두리·코너를 쓰되 격자를 회피한다: 손그림 각 타일에서 물/흙 *채움색*과 유사한 픽셀을 투명화해 *테두리 링만*
+#   남기고(밝은 물가 반사 + 어두운 경계 그림자 + 코너), 물/흙 base(우리 톤·월드위상=격자 없음) 위에 알파
+#   오버레이 blit(② 루프). 코너는 16-tile 오토타일이 자연 해결. 북쪽 강둑(surf<0)은 물↔흙 경계가 아니라 자동 제외.
+const _SHORE_KEEP := 0.18   # 채움색과 이 거리(RGB) 이내면 투명(테두리만 남김) — 라이브 튜닝 레버
+func _extract_shore_border() -> void:
+	if _shore_extracted:
+		return   # 이미 추출됨(_wang_tiles 캐시 in-place 변환) → 재빌드 이중 추출 방지
+	var pk := _wang_pair_key(4, 0)
+	if not _wang_tiles.has(pk):
+		return
+	_shore_extracted = true
+	var tmap: Dictionary = _wang_tiles[pk]
+	var water_ref := _shore_avg(tmap.get(0, null))    # all-lower(물) 대표색
+	var earth_ref := _shore_avg(tmap.get(15, null))   # all-upper(흙) 대표색
+	for bits in tmap.keys():
+		var src: Image = tmap[bits]
+		var dst := Image.create(TILE, TILE, false, Image.FORMAT_RGBA8)
+		for j in TILE:
+			for i in TILE:
+				var c := src.get_pixel(i, j)
+				if c.a <= 0.01 or _shore_dist(c, water_ref) < _SHORE_KEEP or _shore_dist(c, earth_ref) < _SHORE_KEEP:
+					dst.set_pixel(i, j, Color(0, 0, 0, 0))   # 물/흙 채움 = 투명(base가 비침)
+				else:
+					dst.set_pixel(i, j, c)                    # 테두리(밝은 반사·어두운 그림자) 유지
+		tmap[bits] = dst
+	_wang_tiles[pk] = tmap
 
-# 물 셀(surf==4)의 흙(0)-인접 변에 물 안쪽 어두운 단차 밴드를 얹는다(동/서 깊게·남 얕게·북 제외).
-func _water_shore_edges(out: Image, surf: Array) -> void:
-	for y in _outdoor_h:
-		for x in _grid_w:
-			if int(surf[y][x]) != 4:
-				continue   # 물 셀만
-			var x0 := x * TILE
-			var y0 := y * TILE
-			if x - 1 >= 0 and int(surf[y][x - 1]) == 0:
-				_shore_band_v(out, x0, y0, 1, _WS_SIDE_DEPTH, _WS_SIDE_DARK)             # 서쪽: 물쪽 좌측 밴드
-				_shore_earth_v(out, x0 - 1, y0, -1)                                       # 서쪽: 흙쪽(바깥) 불규칙
-			if x + 1 < _grid_w and int(surf[y][x + 1]) == 0:
-				_shore_band_v(out, x0 + TILE - 1, y0, -1, _WS_SIDE_DEPTH, _WS_SIDE_DARK)  # 동쪽: 물쪽 우측 밴드
-				_shore_earth_v(out, x0 + TILE, y0, 1)                                     # 동쪽: 흙쪽(바깥)
-			if y + 1 < _outdoor_h and int(surf[y + 1][x]) == 0:
-				_shore_band_h(out, x0, y0 + TILE - 1, -1, _WS_BOT_DEPTH, _WS_BOT_DARK)    # 남쪽: 물쪽 하단 밴드
-				_shore_earth_h(out, x0, y0 + TILE, 1)                                     # 남쪽: 흙쪽(바깥)
-			# 북쪽(위) 흙 = 강둑 담당 → 제외
-
-# 세로 단차 밴드: 경계열 xb에서 dir(+1=오른쪽/-1=왼쪽) 방향, 경계 진함→안쪽 0 선형감쇄로 어둡게.
-#   밴드 깊이를 월드 y로 저주파 변조(_gd_h01)해 안쪽 경계를 울퉁불퉁하게(경계열 xb=k0은 항상 칠해 물/흙 직선 유지).
-func _shore_band_v(out: Image, xb: int, y0: int, dir: int, depth: int, dark: float) -> void:
+func _shore_avg(img: Image) -> Color:
+	if img == null:
+		return Color(0, 0, 0, 1)
+	var r := 0.0
+	var g := 0.0
+	var b := 0.0
+	var n := 0
 	for j in TILE:
-		var yy := y0 + j
-		if yy < 0 or yy >= out.get_height():
-			continue
-		var dep := depth + int(round((_gd_h01(xb, int(yy / _WS_WOBBLE_STEP), 720) - 0.5) * 2.0 * _WS_WOBBLE))
-		if dep < 1:
-			dep = 1
-		for k in dep:
-			var xx := xb + dir * k
-			if xx < 0 or xx >= out.get_width():
+		for i in TILE:
+			var c := img.get_pixel(i, j)
+			if c.a <= 0.01:
 				continue
-			var amt: float = dark * (1.0 - float(k) / float(dep))
-			out.set_pixel(xx, yy, out.get_pixel(xx, yy).darkened(amt))
+			r += c.r
+			g += c.g
+			b += c.b
+			n += 1
+	if n == 0:
+		return Color(0, 0, 0, 1)
+	return Color(r / n, g / n, b / n, 1)
 
-# 가로 단차 밴드: 경계행 yb에서 dir(-1=위/+1=아래) 방향 선형감쇄로 어둡게. 깊이를 월드 x로 저주파 변조(울퉁불퉁).
-func _shore_band_h(out: Image, x0: int, yb: int, dir: int, depth: int, dark: float) -> void:
-	for i in TILE:
-		var xx := x0 + i
-		if xx < 0 or xx >= out.get_width():
-			continue
-		var dep := depth + int(round((_gd_h01(int(xx / _WS_WOBBLE_STEP), yb, 721) - 0.5) * 2.0 * _WS_WOBBLE))
-		if dep < 1:
-			dep = 1
-		for k in dep:
-			var yy := yb + dir * k
-			if yy < 0 or yy >= out.get_height():
-				continue
-			var amt: float = dark * (1.0 - float(k) / float(dep))
-			out.set_pixel(xx, yy, out.get_pixel(xx, yy).darkened(amt))
-
-# ★[owner 2026-07-17 5차] 흙쪽(바깥) 젖은 진흙 — 물결이 아니라 불규칙 울퉁불퉁: 경계 깊이는 고주파(per-row/col)
-#   해시로 삐죽삐죽, 각 픽셀 어둠은 per-px 해시로 얼룩. 세로(서/동): 경계열 xb에서 dir 방향 흙으로.
-func _shore_earth_v(out: Image, xb: int, y0: int, dir: int) -> void:
-	for j in TILE:
-		var yy := y0 + j
-		if yy < 0 or yy >= out.get_height():
-			continue
-		var dep := _WS_E_DEPTH + int(round((_gd_h01(xb, yy, 730) - 0.5) * 2.0 * _WS_E_WOBBLE))
-		if dep < 0:
-			dep = 0
-		for k in dep:
-			var xx := xb + dir * k
-			if xx < 0 or xx >= out.get_width():
-				continue
-			var n := _gd_h01(xx, yy, 731)   # per-px 불규칙 얼룩(0..1)
-			var amt: float = _WS_E_DARK * (1.0 - float(k) / float(_WS_E_DEPTH)) * n
-			out.set_pixel(xx, yy, out.get_pixel(xx, yy).darkened(amt))
-
-# 흙쪽 가로(남): 경계행 yb에서 dir 방향 흙으로. 깊이 삐죽(per-col 고주파) + per-px 얼룩.
-func _shore_earth_h(out: Image, x0: int, yb: int, dir: int) -> void:
-	for i in TILE:
-		var xx := x0 + i
-		if xx < 0 or xx >= out.get_width():
-			continue
-		var dep := _WS_E_DEPTH + int(round((_gd_h01(xx, yb, 732) - 0.5) * 2.0 * _WS_E_WOBBLE))
-		if dep < 0:
-			dep = 0
-		for k in dep:
-			var yy := yb + dir * k
-			if yy < 0 or yy >= out.get_height():
-				continue
-			var n := _gd_h01(xx, yy, 733)
-			var amt: float = _WS_E_DARK * (1.0 - float(k) / float(_WS_E_DEPTH)) * n
-			out.set_pixel(xx, yy, out.get_pixel(xx, yy).darkened(amt))
+func _shore_dist(a: Color, b: Color) -> float:
+	var dr := a.r - b.r
+	var dg := a.g - b.g
+	var db := a.b - b.b
+	return sqrt(dr * dr + dg * dg + db * db)
 
 # ★[SOIL·PATH 경계·owner 2026-07-17 최종] 밭(SOIL)·길(PATH)은 인공물 → 잔디식 유기 래그드(Wang 합성)를 쓰지
 #   않는다. 밭은 타일에 *꽉 차야* 하고(가장자리 침식·스캐터 금지), 경계는 *직선(1자)이되 부드럽게*여야 한다.
@@ -3894,6 +3843,7 @@ func _build_ground16() -> void:
 	_load_big_fields()
 	_load_wang_pairs()
 	_bake_grass_dirt_wang()   # ★[ADR-0058 확장] 잔디↔흙 전환을 base에서 합성(불일치-불가) — 손그림 Wang 0_1 덮음
+	_extract_shore_border()   # ★[owner 6차] 손그림 물↔흙 4_0 → 물가 테두리 링만 추출(채움 투명·오버레이 blit)
 	# 밭↔흙·길↔흙·물↔흙은 Wang 미사용(② 루프서 스킵) — base blit(격자 방지) + 경계 후처리
 	#   (밭·길=_soften_field_edges 직선 완화 / 물=_water_shore_edges 단차 밴드).
 	var bw := _grid_w * TILE
@@ -3950,10 +3900,10 @@ func _build_ground16() -> void:
 			ks.sort_custom(func(a, b): return _surf_rank(a) > _surf_rank(b))
 			var up_s: int = ks[0]
 			var lo_s: int = ks[1]
-			# ★[owner 2026-07-17 최종] 길(2)·밭(3)·물(4) 경계 = Wang 스킵(base blit·격자 없음). 인공물/물은
-			#   위치독립 Wang 전환의 격자 seam·흙비중과다를 피해야 하므로 base blit + 경계 후처리로 간다.
-			#   밭·길=_soften_field_edges(직선 완화)·물=_water_shore_edges(단차 밴드). 잔디↔흙(0_1)만 Wang 합성.
-			if up_s == 2 or lo_s == 2 or up_s == 3 or lo_s == 3 or up_s == 4 or lo_s == 4:
+			# ★[owner 2026-07-17 최종] 길(2)·밭(3) 경계 = Wang 스킵(base blit·격자 없음, 인공물이라 직선+_soften).
+			#   물(4)↔흙(0)은 스킵하지 않는다 — 손그림 4_0에서 추출한 테두리 링을 오버레이 blit(아래 blend 분기).
+			#   잔디↔흙(0_1)만 Wang base 합성.
+			if up_s == 2 or lo_s == 2 or up_s == 3 or lo_s == 3:
 				continue
 			var pk := _wang_pair_key(lo_s, up_s)
 			if not _wang_tiles.has(pk):
@@ -3966,7 +3916,10 @@ func _build_ground16() -> void:
 			var tmap: Dictionary = _wang_tiles[pk]
 			if not tmap.has(bits):
 				continue   # 미커버 코너조합 → base 유지
-			out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
+			if pk == _wang_pair_key(4, 0):
+				out.blend_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))   # 물 = 투명 테두리 오버레이(알파 블렌드)
+			else:
+				out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
 	# ★[ADR-0056 REV4 ①] LIP 상단 텍스처 평지화 — CLIFF_LIP 타일 상단(잔디부)을 평지 _bf_grass로 오버레이해
 	#   윗면 평지와 텍스처 문법 100% 일치. 고지 잔디화 뒤 lip은 톤은 맞으나 블레이드 패턴이 평지와 이질 →
 	#   _bf_grass를 월드 타일링으로 끌어와(위 평지 grass와 씸리스 연속) lip 상단 _LIP_GRASS_H px에 그린다.
@@ -4033,7 +3986,6 @@ func _build_ground16() -> void:
 						out.set_pixel(cx0 + i, cy0 + j, fld.get_pixel((cx0 + i) % P, (cy0 + j) % P))
 	# ★[P2 프로토타입] tan 위 오브젝트 스캐터(스타듀 잡초/tuft 모델) — 채움 패치를 끈 만큼 초록을 데칼로.
 	_soften_field_edges(out, surf)   # ★[owner 2026-07-17] 밭·길↔흙 직선 경계선만 부드럽게(밭 꽉 참·base blit=격자 없음)
-	_water_shore_edges(out, surf)    # ★[owner 2026-07-17 3차] 물↔흙 경계 단차 밴드(동/서 깊게·남 얕게·북=강둑 제외)
 	if _G16_SCATTER:
 		_compute_scatter_clump()   # ★[ADR-0058 B] 풀무리 CA 마스크 1회 계산(스캐터가 참조)
 		_g16_blend_scatter(out)

@@ -53,50 +53,32 @@ func _initialize() -> void:
 	# 이웃-상관: clump 셀의 직교이웃이 clump일 확률 > 전역 clump 비율(유기적 응집).
 	_check("③ clump 이웃-상관 > 전역비율", _neighbor_corr(m) > _global_rate(m))
 
-	# ── Task 4(물↔흙 shore 후처리): 물 셀의 흙-인접 변에 어두운 단차 밴드(동/서·남), 북쪽 제외 ──
-	# 3×3 셀: 중앙(1,1)=물, 좌·우·상·하=흙, 나머지 물. _water_shore_edges가 out 픽셀을 어둡게 한다.
-	var TL: int = m.TILE
-	var tsurf := []
-	for yy in 3:
-		var row := []
-		for xx in 3:
-			row.append(4)   # 물
-		tsurf.append(row)
-	tsurf[1][0] = 0; tsurf[1][2] = 0; tsurf[0][1] = 0; tsurf[2][1] = 0   # 서·동·북·남 흙
-	var base_c := Color(0.2, 0.4, 0.45)
-	var timg := Image.create(3 * TL, 3 * TL, false, Image.FORMAT_RGBA8)
-	timg.fill(base_c)
-	# _water_shore_edges가 _grid_w/_outdoor_h를 참조 → 임시 세팅 후 복원.
-	var sv_w = m._grid_w; var sv_h = m._outdoor_h
-	m._grid_w = 3; m._outdoor_h = 3
-	m._water_shore_edges(timg, tsurf)
-	var mid := TL + int(TL / 2)
-	var west_px: Color = timg.get_pixel(TL, mid)            # 중앙셀 좌측 첫 열(서쪽 흙 인접)
-	var east_px: Color = timg.get_pixel(2 * TL - 1, mid)    # 중앙셀 우측 끝 열(동쪽 흙 인접)
-	var south_px: Color = timg.get_pixel(mid, 2 * TL - 1)   # 중앙셀 하단 끝 행(남쪽 흙 인접)
-	var north_px: Color = timg.get_pixel(mid, TL)           # 중앙셀 상단 첫 행(북쪽 흙 인접)
-	var center_px: Color = timg.get_pixel(mid, mid)         # 중앙셀 중앙(어느 밴드도 안 닿음 = pristine base)
-	_check("④ 물 서쪽(흙인접) 단차 = 어두워짐", west_px.v < center_px.v)
-	_check("④ 물 동쪽(흙인접) 단차 = 어두워짐", east_px.v < center_px.v)
-	_check("④ 물 남쪽(흙인접) 단차 = 어두워짐", south_px.v < center_px.v)
-	_check("④ 물 북쪽(흙인접) = 제외(강둑 담당·단차 없음)", north_px.is_equal_approx(center_px))
-	# 동/서가 남보다 깊은 단차(_WS_SIDE_DARK > _WS_BOT_DARK) → 경계 픽셀이 더 어둡다.
-	_check("④ 동/서 단차 > 남 단차(경계 더 어둠)", west_px.v < south_px.v)
-	# 흙쪽(바깥): 서쪽 흙셀의 물-인접 가장자리(x=TL-1) 일부 픽셀이 불규칙하게 어두워짐(젖은 진흙 얼룩).
-	var earth_dark := false
-	for jj in TL:
-		if timg.get_pixel(TL - 1, TL + jj).v < center_px.v - 0.001:
-			earth_dark = true
-	_check("④ 흙쪽(바깥) 불규칙 젖은 진흙 적용", earth_dark)
-	# 결정성: 재실행 동일 픽셀(순수 함수).
-	var timg2 := Image.create(3 * TL, 3 * TL, false, Image.FORMAT_RGBA8)
-	timg2.fill(base_c)
-	m._water_shore_edges(timg2, tsurf)
-	m._grid_w = sv_w; m._outdoor_h = sv_h
-	_check("④ shore 후처리 결정적", timg.get_data() == timg2.get_data())
+	# ── Task 4(손그림 테두리 추출): 물↔흙 4_0에서 물/흙 채움 투명화 → 테두리 링만 남김(오버레이) ──
+	# 부팅 시 _build_ground16이 이미 _extract_shore_border 호출 → _wang_tiles[40]은 테두리 추출본.
+	var wt: Dictionary = m._wang_tiles.get(m._wang_pair_key(4, 0), {})
+	_check("④ 물↔흙(40) 손그림 타일 16 코너키 로드됨", wt.size() == 16)
+	if wt.size() == 16:
+		var solid0 := _count_opaque(wt[0] as Image)    # bits=0 all-물: 채움뿐 → 테두리 거의 없음
+		var solid3 := _count_opaque(wt[3] as Image)    # bits=3 경계(북흙/남물): 밝은 물가 테두리 존재
+		var full: int = int(m.TILE) * int(m.TILE)
+		_check("④ 경계 타일 테두리 > 순수 물 타일(채움 투명화)", solid3 > solid0)
+		_check("④ 순수 물 타일 대부분 투명(채움 제거됨)", solid0 < full / 2)
+		_check("④ 경계 타일에 테두리 픽셀 존재(오버레이 실효)", solid3 > 0)
+		# 추출 idempotent: 재호출해도 이미 추출됨(플래그) → 불변.
+		var d3 := (wt[3] as Image).get_data()
+		m._extract_shore_border()
+		_check("④ 테두리 추출 idempotent(재호출 불변)", d3 == (m._wang_tiles[m._wang_pair_key(4,0)][3] as Image).get_data())
 
 	print("결과: %d 실패" % _fail)
 	quit(1 if _fail > 0 else 0)
+
+func _count_opaque(img: Image) -> int:
+	var n := 0
+	for j in img.get_height():
+		for i in img.get_width():
+			if img.get_pixel(i, j).a > 0.5:
+				n += 1
+	return n
 
 func _same_table(a: Array, b: Array) -> bool:
 	return a.size() == b.size() and (a.is_empty() or a[0][1] == b[0][1])
