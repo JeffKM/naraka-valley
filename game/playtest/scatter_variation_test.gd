@@ -53,31 +53,33 @@ func _initialize() -> void:
 	# 이웃-상관: clump 셀의 직교이웃이 clump일 확률 > 전역 clump 비율(유기적 응집).
 	_check("③ clump 이웃-상관 > 전역비율", _neighbor_corr(m) > _global_rate(m))
 
-	# ── Task 4(손그림 테두리 추출): 물↔흙 4_0에서 물/흙 채움 투명화 → 테두리 링만 남김(오버레이) ──
-	# 부팅 시 _build_ground16이 이미 _extract_shore_border 호출 → _wang_tiles[40]은 테두리 추출본.
-	var wt: Dictionary = m._wang_tiles.get(m._wang_pair_key(4, 0), {})
-	_check("④ 물↔흙(40) 손그림 타일 16 코너키 로드됨", wt.size() == 16)
-	if wt.size() == 16:
-		var solid0 := _count_opaque(wt[0] as Image)    # bits=0 all-물: 채움뿐 → 테두리 거의 없음
-		var solid3 := _count_opaque(wt[3] as Image)    # bits=3 경계(북흙/남물): 밝은 물가 테두리 존재
+	# ── Task 4(손그림 형태 마스크): 물↔흙 4_0 → 0=물·1=흙·2=테두리 마스크(② 루프서 셀별 합성) ──
+	# 부팅 시 _build_ground16이 이미 _build_shore_masks 호출 → _shore_mask 채워짐.
+	var sm: Dictionary = m._shore_mask
+	_check("④ 물↔흙 형태 마스크 16 코너키 생성됨", sm.size() == 16)
+	if sm.size() == 16:
 		var full: int = int(m.TILE) * int(m.TILE)
-		_check("④ 경계 타일 테두리 > 순수 물 타일(채움 투명화)", solid3 > solid0)
-		_check("④ 순수 물 타일 대부분 투명(채움 제거됨)", solid0 < full / 2)
-		_check("④ 경계 타일에 테두리 픽셀 존재(오버레이 실효)", solid3 > 0)
-		# 추출 idempotent: 재호출해도 이미 추출됨(플래그) → 불변.
-		var d3 := (wt[3] as Image).get_data()
-		m._extract_shore_border()
-		_check("④ 테두리 추출 idempotent(재호출 불변)", d3 == (m._wang_tiles[m._wang_pair_key(4,0)][3] as Image).get_data())
+		var m0: PackedByteArray = sm[0]     # bits=0 all-물
+		var m15: PackedByteArray = sm[15]   # bits=15 all-흙
+		var m3: PackedByteArray = sm[3]     # bits=3 경계(북흙/남물)
+		_check("④ all-물(bits0) = 대부분 물(0)", _cls_count(m0, 0) > full / 2)
+		_check("④ all-흙(bits15) = 대부분 흙(1)", _cls_count(m15, 1) > full / 2)
+		# 경계 타일은 흙(1)·물(0) 둘 다 존재(전환) + 테두리(2) 존재(오토타일 실효).
+		_check("④ 경계(bits3) 흙·물 둘 다 존재(전환 나뉨)", _cls_count(m3, 0) > 0 and _cls_count(m3, 1) > 0)
+		_check("④ 경계(bits3) 테두리(2) 존재", _cls_count(m3, 2) > 0)
+		# idempotent: 재호출해도 이미 있으면 불변.
+		var before := _cls_count(m3, 2)
+		m._build_shore_masks()
+		_check("④ 마스크 idempotent(재호출 불변)", _cls_count(m._shore_mask[3], 2) == before)
 
 	print("결과: %d 실패" % _fail)
 	quit(1 if _fail > 0 else 0)
 
-func _count_opaque(img: Image) -> int:
+func _cls_count(m: PackedByteArray, cls: int) -> int:
 	var n := 0
-	for j in img.get_height():
-		for i in img.get_width():
-			if img.get_pixel(i, j).a > 0.5:
-				n += 1
+	for v in m:
+		if v == cls:
+			n += 1
 	return n
 
 func _same_table(a: Array, b: Array) -> bool:

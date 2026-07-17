@@ -3533,7 +3533,6 @@ const _GJIT := 5         # 경계 지터 진폭(px)
 # 표면 위계: 잔디>흙>길>밭>물. 경계에서 위계 높은 쪽이 upper(오버행=볼록).
 const _SURF_RANK := {1: 4, 0: 3, 2: 2, 3: 1, 4: 0}
 var _wang_tiles: Dictionary = {}   # pair_key → { corner_bits(0..15): Image }
-var _shore_extracted := false      # 물↔흙 4_0 테두리 추출은 in-place 변환 → 재빌드 이중 추출 방지 가드
 const _WANG_DIR := "res://assets/terrain16/wang/"
 
 func _surf_rank(s: int) -> int:
@@ -3663,33 +3662,56 @@ const _W01_SHADOW_DARK := 0.40 # 드롭섀도 최대 어둠(잔디 밑동 흙에
 func _bake_grass_dirt_wang() -> void:
 	_bake_field_wang(_wang_pair_key(0, 1), _bf_grass, _bf_earth, _W01_RAG, _W01_MICRO, _W01_EDGE_DARK, _W01_SHADOW, _W01_SHADOW_DARK)
 
-# ★[owner 2026-07-17 6차·손그림 테두리 추출 오버레이] 물↔흙은 스타듀 오토타일처럼 손그림 4_0의 밝은 물가
-#   테두리·코너를 쓰되 격자를 회피한다: 손그림 각 타일에서 물/흙 *채움색*과 유사한 픽셀을 투명화해 *테두리 링만*
-#   남기고(밝은 물가 반사 + 어두운 경계 그림자 + 코너), 물/흙 base(우리 톤·월드위상=격자 없음) 위에 알파
-#   오버레이 blit(② 루프). 코너는 16-tile 오토타일이 자연 해결. 북쪽 강둑(surf<0)은 물↔흙 경계가 아니라 자동 제외.
-const _SHORE_KEEP := 0.18   # 채움색과 이 거리(RGB) 이내면 투명(테두리만 남김) — 라이브 튜닝 레버
-func _extract_shore_border() -> void:
-	if _shore_extracted:
-		return   # 이미 추출됨(_wang_tiles 캐시 in-place 변환) → 재빌드 이중 추출 방지
+# ★[owner 2026-07-17 7차·경계 타일 = 흙/물 전환] 경계 타일은 물로 꽉 차면 안 되고 흙(적게)+물(지배)로 나뉘어야
+#   한다(유기 곡선·안=물/밖=흙). 손그림 4_0의 *형태(마스크)*로 흙/물을 나누되, 채움은 우리 base를 **월드위상**으로
+#   (격자 없음), 밝은 물가 테두리·코너는 손그림 픽셀로. classify: 물/흙 채움색 근처=물/흙, 둘 다 먼=테두리.
+#   코너는 16-tile 오토타일이 자연 해결. 북쪽 강둑(surf<0)은 물↔흙 경계가 아니라 자동 제외.
+const _SHORE_KEEP := 0.18   # 채움색과 이 거리(RGB) 이내면 물/흙 채움, 초과면 테두리 — 라이브 튜닝 레버
+var _shore_mask := {}       # bits → PackedByteArray(TILE*TILE): 0=물·1=흙·2=테두리
+func _build_shore_masks() -> void:
+	if not _shore_mask.is_empty():
+		return
 	var pk := _wang_pair_key(4, 0)
 	if not _wang_tiles.has(pk):
 		return
-	_shore_extracted = true
 	var tmap: Dictionary = _wang_tiles[pk]
 	var water_ref := _shore_avg(tmap.get(0, null))    # all-lower(물) 대표색
 	var earth_ref := _shore_avg(tmap.get(15, null))   # all-upper(흙) 대표색
 	for bits in tmap.keys():
-		var src: Image = tmap[bits]
-		var dst := Image.create(TILE, TILE, false, Image.FORMAT_RGBA8)
+		var img: Image = tmap[bits]
+		var m := PackedByteArray()
+		m.resize(TILE * TILE)
 		for j in TILE:
 			for i in TILE:
-				var c := src.get_pixel(i, j)
-				if c.a <= 0.01 or _shore_dist(c, water_ref) < _SHORE_KEEP or _shore_dist(c, earth_ref) < _SHORE_KEEP:
-					dst.set_pixel(i, j, Color(0, 0, 0, 0))   # 물/흙 채움 = 투명(base가 비침)
+				var c := img.get_pixel(i, j)
+				var dw := _shore_dist(c, water_ref)
+				var de := _shore_dist(c, earth_ref)
+				if dw < _SHORE_KEEP and dw <= de:
+					m[j * TILE + i] = 0   # 물 채움
+				elif de < _SHORE_KEEP:
+					m[j * TILE + i] = 1   # 흙 채움
 				else:
-					dst.set_pixel(i, j, c)                    # 테두리(밝은 반사·어두운 그림자) 유지
-		tmap[bits] = dst
-	_wang_tiles[pk] = tmap
+					m[j * TILE + i] = 2   # 테두리(밝은 물가 반사·경계 그림자)
+		_shore_mask[bits] = m
+
+# 경계 물 셀(x,y)을 손그림 마스크로 칠한다: 물=① base 유지, 흙=_bf_earth 월드위상(격자 없음), 테두리=손그림 픽셀.
+func _paint_shore_cell(out: Image, x: int, y: int, bits: int) -> void:
+	if not _shore_mask.has(bits):
+		return
+	var m: PackedByteArray = _shore_mask[bits]
+	var src: Image = _wang_tiles[_wang_pair_key(4, 0)][bits]
+	var P := _GF * 2
+	for j in TILE:
+		for i in TILE:
+			var cls := m[j * TILE + i]
+			if cls == 0:
+				continue   # 물 = ① base blit 유지
+			var wx := x * TILE + i
+			var wy := y * TILE + j
+			if cls == 1:
+				out.set_pixel(wx, wy, _bf_earth.get_pixel(wx % P, wy % P))   # 흙 = 우리 base 월드위상
+			else:
+				out.set_pixel(wx, wy, src.get_pixel(i, j))                    # 테두리 = 손그림 픽셀
 
 func _shore_avg(img: Image) -> Color:
 	if img == null:
@@ -3843,7 +3865,7 @@ func _build_ground16() -> void:
 	_load_big_fields()
 	_load_wang_pairs()
 	_bake_grass_dirt_wang()   # ★[ADR-0058 확장] 잔디↔흙 전환을 base에서 합성(불일치-불가) — 손그림 Wang 0_1 덮음
-	_extract_shore_border()   # ★[owner 6차] 손그림 물↔흙 4_0 → 물가 테두리 링만 추출(채움 투명·오버레이 blit)
+	_build_shore_masks()      # ★[owner 7차] 손그림 물↔흙 4_0 → 흙/물/테두리 형태 마스크(② 루프서 셀별 합성)
 	# 밭↔흙·길↔흙·물↔흙은 Wang 미사용(② 루프서 스킵) — base blit(격자 방지) + 경계 후처리
 	#   (밭·길=_soften_field_edges 직선 완화 / 물=_water_shore_edges 단차 밴드).
 	var bw := _grid_w * TILE
@@ -3917,7 +3939,7 @@ func _build_ground16() -> void:
 			if not tmap.has(bits):
 				continue   # 미커버 코너조합 → base 유지
 			if pk == _wang_pair_key(4, 0):
-				out.blend_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))   # 물 = 투명 테두리 오버레이(알파 블렌드)
+				_paint_shore_cell(out, x, y, bits)   # 물↔흙 = 손그림 형태 마스크로 흙/물 전환(월드위상 base·손그림 테두리)
 			else:
 				out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
 	# ★[ADR-0056 REV4 ①] LIP 상단 텍스처 평지화 — CLIFF_LIP 타일 상단(잔디부)을 평지 _bf_grass로 오버레이해
