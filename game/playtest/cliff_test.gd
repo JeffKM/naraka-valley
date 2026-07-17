@@ -125,19 +125,16 @@ func _initialize() -> void:
 	# ── ⑦ [ADR-0056 ④] 연못 북단 뱅크 = SPIRIT_POND_RECT 로컬 유도(하드코딩 제거·좌표 바이트 동일) ──
 	# _build_home이 _autotile_pond_siblings로 깐 라이브 뱅크를 검증(함수가 rect 폭 전체에서 정확히 유도했는지).
 	# scratch(x48..)와 연못(x26..33)은 안 겹쳐 앞 케이스 영향 없음.
+	# ★[ADR-0058·북벽 세로 절벽] 옛 CLIFF_FACE/BANK 강둑 폐지 — 물(_fill_rect)이 연못 전체를 채우고 북벽은
+	# _draw_north_pond_cliff 오버레이(순수 렌더)가 담당. _autotile_pond_siblings는 no-op(멱등). WATER=통과불가.
 	var pr: Rect2i = m.SPIRIT_POND_RECT
-	var bank_ok := true
-	var face_ok := true
+	var water_ok := true
 	for px in range(pr.position.x, pr.end.x):
-		if m._grid[pr.position.y][px] != m.CLIFF_BANK:
-			bank_ok = false
-		if m._grid[pr.position.y - 1][px] != m.CLIFF_FACE:
-			face_ok = false
-	_check("⑦ 연못 북단 y0 = CLIFF_BANK(돌 ledge, 폭 전체)", bank_ok)
-	_check("⑦ 연못 북단 y-1 = CLIFF_FACE(흙 밴크, 폭 전체)", face_ok)
-	m._autotile_pond_siblings()   # 멱등: 순수 유도라 재호출해도 동일
-	_check("⑦ _autotile_pond_siblings 멱등", m._grid[pr.position.y][pr.position.x] == m.CLIFF_BANK \
-		and m._grid[pr.position.y - 1][pr.position.x] == m.CLIFF_FACE)
+		if m._grid[pr.position.y][px] != m.WATER:
+			water_ok = false
+	_check("⑦ 연못 북단 y0 = WATER(북벽=오버레이·옛 CLIFF_BANK 강둑 폐지)", water_ok)
+	m._autotile_pond_siblings()   # 멱등: no-op이라 재호출해도 물 불변
+	_check("⑦ _autotile_pond_siblings 멱등(no-op)", m._grid[pr.position.y][pr.position.x] == m.WATER)
 
 	# ── ⑧ [ADR-0056 ①] 절벽 상단 fringe = 순수 시각(_grid·타일종 불변) ──
 	# _build_ground16(HOME 지면 오버레이)이 CLIFF_LIP 상단에 풀을 늘어뜨리되 _grid·충돌은 안 건드리고

@@ -1,25 +1,48 @@
-# Wang 경계 전환 타일 — 진행 ledger
+# 지상 지형 변주(스타듀-정통 스캐터·ADR-0058) — 진행 ledger
 
-plan: /Users/jefflee/workspace/naraka-valley/docs/superpowers/plans/2026-07-16-wang-boundary-transition-tiles.md
-worktree branch: worktree-wang-boundary-transition (base origin/main #248)
+plan: /Users/jefflee/workspace/naraka-valley/docs/superpowers/plans/2026-07-17-overworld-terrain-scatter.md
+worktree branch: worktree-scatter-variation-adr0058 (base origin/main 061f81f)
 
-- [x] Task 1: 경계쌍·삼중점 스캔 (controller 직접 — owner 크레딧 게이트)
-- [x] Task 2: PixelLab 전환 tileset 생성·정리 (controller 직접 — MCP)
-- [x] Task 3: 코너 인덱서·전환 로더 헬퍼 (subagent TDD)
-- [x] Task 4: _build_ground16 ②지터→Wang blit 교체 (subagent TDD)
-- [x] Task 5: mute 후처리 + transition_size 튜닝 (controller 육안)
-- [x] Task 6: 육안 하네스 + 최종 선별 회귀 (subagent + controller 육안)
-- [ ] Task 7: owner 라이브 확인 (핸드오프)
+- [x] Task 1: 구역-키드 스캐터 조회 (폴백=전역·회귀0)
+- [x] Task 2: 안식 테이블 풀무리↑
+- [x] Task 3: 풀무리 CA 이웃-확산 마스크
+- [x] Task 4: 변종 아트 로스터·스펙카드
 
 ## 완료 기록
-- Task 3: complete (commit 72cbe7b, review Spec✅ quality-approved)
-  - Minor(final review로): _load_wang_pairs가 JSON.parse_string 결과 널체크 없이 사용(손상 metadata 시 런타임 에러). 사전검증 에셋이라 즉각 위험 낮음.
-- Task 4: complete (commit 638f9a6, review Spec✅ quality-approved)
-  - ⚠️→해소: 타일크기 32×32(Task3 bbox 확인·get_region 보장), 실렌더 검증은 Task6, 밭/물경계 owner의도.
-- Task 5: 불필요(skip) — 라이브 톤 육안 확인 결과 전환 타일 잔디가 base 잔디(muted)와 이미 일치(8ffcb621 잔디=60dcdf27 원본 muted). 밭·물 transition_size=0.25 얇게 잘 나옴. mute/재생성 불요(YAGNI).
-- Task 6: complete — wang_live_dump.gd 하네스 커밋 + 최종 회귀 building_grounding·reclaim·wang_boundary 3/3 PASS. 육안: crisp 오버행·변주·톤일치 확인.
+- Task 1: complete (commits 061f81f..752ce3b, review Spec✅ quality-approved)
+  - Minor(final review로): scatter_variation_test `_same_table`가 size+첫엔트리 가중만 비교(약함). Task1 폴백=참조동일이라 실무 적정. Task2+ 구역테이블 차이 검증엔 텍스처 참조 전체 비교로 강화 고려.
+  - implementer가 브리프 테스트 버그 정정: 테스트로컬 헬퍼를 m.이 아닌 self로 호출(프로덕션 불변).
+- Task 2: complete (commits 752ce3b..0b59e3b, review Spec✅ quality-approved, findings 0)
+- Task 3: complete (commits 0b59e3b..762c18e, review Spec✅ quality-approved by opus, 결함0)
+  - Minor(비-결함): _neighbor_corr 테스트는 저주파 seed만으로도 통과(CA 기여 격리 못함)·브리프 규정대로. _scatter_is_clump 폴백이 regional cut 사용(도달불가·무해).
+- Task 4: complete (controller 직접·문서 태스크, commit fb14829, 테스트사이클 없음)
 
 ## Final whole-branch review (opus)
-판정: READY. 정확성·불변식·회귀 안전, Critical 없음.
-- Important(owner 라이브 게이트=Task 7): ①0_1 전환타일 흙(raw a2f59b0e) vs 라이브 _bf_earth(retone tan) 톤 정합 ②밭·물 엣지 전환(의도, furrow/수면 가독 owner 확인). 어긋나면 후속: _mute_grass_pixels/retone 또는 transition_size 재생성.
-- Minor(머지전 불요): _load_wang_pairs JSON 널체크·blit_rect 알파. 값싼 가드지만 블로커 아님.
+판정: **READY**. 결정성·저작맵불가침·ADR-0053/0055/0057 정합·커밋간 일관성 성립. must-fix 0.
+- Minor(옵션·머지 후속): 스캐터 적격 게이트(main.gd:3807)가 전역 `_GD_TABLES.has(terrain)`로 판정하나 테이블 본문은 `_gd_table_for(terrain)`. 오늘 무해(HOME=GROUND만 오버라이드·전역에 GROUND/PATH 존재). 향후 구역이 전역에 없는 terrain 오버라이드 시 조용히 스킵 → Slice 2+ 구역 실테이블 채울 때 게이트를 region-resolved 테이블로 바꾸거나 주석.
+- 선별 회귀(controller 실행, 최종 HEAD): scatter_variation·building_grounding·reclaim 3/3 PASS·exit0.
+- 육안(map_dump·라이브 톤) = owner 확인 대기(코드 아님).
+
+## 물↔흙(4_0) Wang 물가 단차 트랙 (ADR-0058 확장·별도 slice)
+plan: docs/superpowers/plans/2026-07-17-water-dirt-wang-shore-depth.md
+spec: docs/superpowers/specs/2026-07-17-water-dirt-wang-shore-depth-design.md (commit fbc0af8)
+base: 99dfcaa (plan commit)
+- Task 1: complete (commits 99dfcaa..ee8377c, review Spec✅ quality-approved, Critical/Important 0)
+  - Minor(cosmetic·brief에서 유래): scatter_variation_test 물↔흙 블록 주석이 "Task 4" 라벨(실제 SDD Task 1). blame 혼동 여지·무해.
+- Task 2: complete (commits ee8377c..9fec662, review Spec✅ quality-approved, Critical/Important 0)
+  - implementer self-review가 rim 패스 nesting 버그(if shadow_depth>0 안 중첩→sibling) 자가수정·리뷰 확인.
+  - Minor(plan-mandated·비-결함): ①테스트 주석 "Task 4" 라벨(Task1 동일). ②림 거리=8-ray cast(true Chebyshev 아님)→convex/concave 코너 방향 불균등 여지. rim_px=2라 영향 미미·owner _W40_* 라이브 튜닝 대상.
+
+## Final whole-branch review — 물↔흙 slice (opus)
+판정: **READY (Yes)**. 렌더 ② 루프 통합·함수계약 확장·rim/shadow 겹침·하위호환·결정성 코드 확인 정합. Critical/Important 0.
+- Minor#1: shadow(남쪽 물 darkened)와 rim(전방향 lightened)이 남쪽 shore 물 픽셀 중복수정→부분상쇄. owner _W40_ 튜닝 시 인지. 버그 아님.
+- Minor#2(값어치有): 테스트가 rim만 리터럴(0.30,2) 하드코딩→shipping에서 _W40_RIM=0으로 꺼져도 회귀 못잡음. 상수참조로 바꾸면 커버(단 owner가 0으로 끌 때 테스트 조정 trade-off). owner 판단.
+- Minor#3: 타일 내부만 스캔→타일 씸에서 rim 불연속 여지. 기존 _bake_field_wang 아키텍처 한계(잔디↔흙 공유)·이 slice 신규 아님·대개 무해.
+- Minor#4: 알려진 2건("Task4"주석 cosmetic·8-ray 거리 rim_px=2 영향미미) 무해 확정.
+- 육안(안식 연못 3면 톤·단차) = owner 라이브 확인 대기(순수 시각·코드 아님).
+
+## 물↔흙 물가 — owner 라이브 7차 반복 후 최종 확정 (2026-07-17)
+초기 spec/plan(base 합성 단차)은 owner 라이브 반복으로 전면 재설계됨. **최종 = 손그림 형태 마스크**(commit 4fd7c45, owner "이제 괜찮아졌어" 승인).
+반복 경로: ①Wang base합성(ee8377c~9fec662·격자seam) → ②절차 shore후처리(d38dd22~cfa84bf·"코드 손댄 느낌") → ③테두리만 오버레이(8deb8f9·경계 무의미) → ④손그림 형태 마스크(4fd7c45·정답).
+정답 구조: _build_shore_masks(손그림 4_0→0물/1흙/2테두리)·_paint_shore_cell(② 루프 경계 물셀 셀별: 물=base·흙=_bf_earth 월드위상=격자없음·테두리=손그림). 회귀 scatter_variation/building_grounding/reclaim 3/3 PASS.
+메모리: [[water-dirt-shore-handpainted-mask-adr0058]]. spec/plan은 초기 방식이라 최종과 상이(메모리가 정확).

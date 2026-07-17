@@ -4083,11 +4083,13 @@ func _draw_north_pond_cliff(out: Image) -> void:
 			var left_end: bool = not _is_north_edge_cell(x - 1, y)
 			var right_end: bool = not _is_north_edge_cell(x + 1, y)
 			# ★ 좌우 끝 = 감김 코너(위칸 흙+현재칸 물을 한 타일에). 코너는 자체 물 포함 → 페이드 생략.
+			#   ★[owner 2026-07-18] 정적 blit이 아니라 측면 셀(_paint_shore_cell)과 동일하게 흙/물을 게임 base로
+			#   재칠한다 → 코너 흙색이 옆 측면 흙(_bf_earth)과 통일, 흙벽 갈색·청록 outline만 코너 원본 유지.
 			if left_end and _wall_corner_nw != null:
-				out.blend_rect(_wall_corner_nw, Rect2i(0, 0, TILE, TILE * 2), Vector2i(x * TILE, yb - TILE))
+				_blit_pond_corner(out, _wall_corner_nw, x, yb)
 				continue
 			if right_end and _wall_corner_ne != null:
-				out.blend_rect(_wall_corner_ne, Rect2i(0, 0, TILE, TILE * 2), Vector2i(x * TILE, yb - TILE))
+				_blit_pond_corner(out, _wall_corner_ne, x, yb)
 				continue
 			out.blend_rect(_wall_dirt[h % _wall_dirt.size()], Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, yb - TILE))  # 흙 벽면(경계 위칸) — 바로 아래는 물
 			# ★ 흙벽 하단 _WALL_FADE px를 연못 물(base)로 알파 그라디언트 → 판자 벽이 물로 융화(흙 띠 없이 물과 직결).
@@ -4099,6 +4101,33 @@ func _draw_north_pond_cliff(out: Image) -> void:
 				for i in TILE:
 					var wx: int = x * TILE + i
 					out.set_pixel(wx, yy, out.get_pixel(wx, yy).lerp(_bf_water.get_pixel(wx % P, yy % P), t))
+
+# ★[owner 2026-07-18·코너 정합] 감김 코너(32×64)를 측면 셀과 동일 규칙으로 out에 칠한다: 픽셀을 물/흙/테두리로
+#   분류(_bf_water/_bf_earth 대표색 거리) → 물=base 월드위상·흙=_bf_earth 월드위상·그 외(흙벽 갈색·청록
+#   outline)=코너 원본. 이래야 코너 흙/물이 옆 측면 셀(_paint_shore_cell)과 같은 base 색 → 이음매 색·형태 통일.
+func _blit_pond_corner(out: Image, corner: Image, x: int, yb: int) -> void:
+	var P: int = _GF * 2
+	var bw: int = _grid_w * TILE
+	var bh: int = _outdoor_h * TILE
+	var wref: Color = _bf_water.get_pixel(int(P * 0.5), int(P * 0.5))
+	var eref: Color = _bf_earth.get_pixel(int(P * 0.5), int(P * 0.5))
+	for j in TILE * 2:
+		for i in TILE:
+			var c: Color = corner.get_pixel(i, j)
+			if c.a < 0.5:
+				continue
+			var wx: int = x * TILE + i
+			var wy: int = yb - TILE + j
+			if wx < 0 or wy < 0 or wx >= bw or wy >= bh:
+				continue
+			var dw: float = _shore_dist(c, wref)
+			var de: float = _shore_dist(c, eref)
+			if dw < _SHORE_KEEP and dw <= de:
+				out.set_pixel(wx, wy, _bf_water.get_pixel(wx % P, wy % P))   # 물 = base(옆 셀과 통일)
+			elif de < _SHORE_KEEP:
+				out.set_pixel(wx, wy, _bf_earth.get_pixel(wx % P, wy % P))   # 흙 = base(옆 셀과 통일)
+			else:
+				out.set_pixel(wx, wy, c)   # 흙벽 갈색·청록 outline = 코너 원본 유지
 
 # ★[P2 프로토타입 2026-07-16] tan 베이스 위에 잡초/tuft/잔돌 데칼을 흩뿌린다(스타듀 농장: 초록=바닥 아닌
 #   오브젝트). 기존 지면 디테일 시스템(_GD_TABLES 가중 롤 + _gd_cluster 여백 게이트 + _gd_soft_image 소프트
