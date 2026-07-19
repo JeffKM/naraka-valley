@@ -4,7 +4,7 @@ grass = gemini_grass2.png(대비·톤패치 개선본, NEAREST=블레이드), di
 공유 팔레트 = [grass + 시트 dirt밴드 + 시트 water밴드] 몽타주 64색(코히어런스). 씸-힐링(엣지 wrap).
 재현: python3 extract_fields.py"""
 import math
-from PIL import Image
+from PIL import Image, ImageFilter
 grass = Image.open('gemini_grass2.png').convert('RGB')
 sheet = Image.open('gemini_sheet.png').convert('RGB')
 GW, GH = grass.size
@@ -24,11 +24,22 @@ def seamless(im, b=12):
         w = 0.5*(1-y/b)
         for x in range(W): oo[x,y]=bl(t[y][x],t[H-1-y][x],w); oo[x,H-1-y]=bl(t[H-1-y][x],t[y][x],w)
     return o
-def field(imgsrc, box, method):
-    c = imgsrc.crop(box).resize((128,128), method).quantize(palette=pal, dither=Image.NONE).convert('RGBA')
+def flatten(im, radius=11):
+    """high-pass: 큰 톤패치 제거(블레이드 유지) → 타일정렬 색블록(네모) 방지. out=px-blur+mean."""
+    im=im.convert('RGB'); W,H=im.size; px=im.load(); bx=im.filter(ImageFilter.GaussianBlur(radius)).load()
+    n=W*H; mean=[sum(px[x,y][i] for y in range(H) for x in range(W))/n for i in range(3)]
+    o=Image.new('RGB',(W,H)); oo=o.load()
+    for y in range(H):
+        for x in range(W): oo[x,y]=tuple(max(0,min(255,int(px[x,y][i]-bx[x,y][i]+mean[i]))) for i in range(3))
+    return o
+
+def field(imgsrc, box, method, flat=False):
+    c = imgsrc.crop(box).resize((128,128), method)
+    if flat: c = flatten(c, 11)
+    c = c.quantize(palette=pal, dither=Image.NONE).convert('RGBA')
     return seamless(c,12).convert('RGB').quantize(palette=pal, dither=Image.NONE).convert('RGBA')
 S = int(GH*0.26)
-field(grass, (int(GW*0.55),int(GH*0.02),int(GW*0.55)+S,int(GH*0.02)+S), Image.NEAREST).save('ss_grass.png')
+field(grass, (int(GW*0.55),int(GH*0.02),int(GW*0.55)+S,int(GH*0.02)+S), Image.NEAREST, flat=True).save('ss_grass.png')
 field(sheet, (300,580,556,836), Image.BOX).save('ss_dirt.png')
 field(sheet, (120,1120,376,1376), Image.BOX).save('ss_water.png')
 print('ss_grass/dirt/water.png (128 seamless, 64-shared pal)')
