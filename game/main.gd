@@ -3606,17 +3606,33 @@ func _load_wang_pairs() -> void:
 			tmap[bits] = atlas.get_region(Rect2i(int(b["x"]), int(b["y"]), int(b["width"]), int(b["height"])))
 		_wang_tiles[_wang_pair_key(lo, up)] = tmap
 
+# ★[단일출처 실험 플래그·owner 2026-07-20 Retro Diffusion 트랙] on = 코히어런트 세트를 base로 사용
+#   (single_source/ 에 파일이 있을 때만). 기본 off = 현행 shipping 아트 완전 불변(회귀 안전).
+#   owner가 RD로 grass/dirt/water 씸리스 필드를 생성해 넣으면 이 플래그만 켜서 나란히 비교한다.
+#   전환(잔디↔흙·물↔흙)은 코드(_bake_field_wang·shore)가 그대로 합성 → base만 코히어런트면 톤 일치.
+#   ※SS 사용 시 owner는 흙 이중보정 방지로 _earth_val_mul/_add를 항등(1.0/0.0)으로 낮추는 게 보통.
+const _TERRAIN_SINGLE_SOURCE := false
+const _SS_DIR := "res://assets/terrain16/single_source/"
+
+# 단일출처 플래그가 켜져 있고 SS 파일이 있으면 그걸, 아니면 현행 shipping 소스를 로드(폴백=완전 불변).
+func _ss_or(name: String, ship_path: String, fallback: Color) -> Image:
+	if _TERRAIN_SINGLE_SOURCE:
+		var p := _SS_DIR + name
+		if ResourceLoader.exists(p):
+			return _big_field(p, fallback)
+	return _big_field(ship_path, fallback)
+
 func _load_big_fields() -> void:
 	if _bf_grass != null:
 		return
-	_bf_grass = _big_field("res://assets/terrain16/grass_field.png", Color(0.29, 0.42, 0.24))
+	_bf_grass = _ss_or("grass_field.png", "res://assets/terrain16/grass_field.png", Color(0.29, 0.42, 0.24))
 	# ★ 재생성 crisp 잔디 타일(PixelLab 저색, 형광 채도)을 muted somber green으로 톤 보정(owner "둘 다").
 	#   grass_field.png는 crisp 소스로 보존하고 런타임에서만 muted(ADR-0001). 파일럿(순수 톤 검증)은 off.
 	if _bf_grass_mute:
 		_mute_grass_pixels(_bf_grass)
-	_bf_dirt = _big_field("res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
+	_bf_dirt = _ss_or("dirt_field.png", "res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
 	_bf_soil = _big_field("res://assets/terrain16/soil_field.png", Color(0.35, 0.22, 0.16))
-	_bf_water = _recolor_water(_big_field("res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39)))
+	_bf_water = _recolor_water(_ss_or("water_field.png", "res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39)))
 	# ★[스타듀 농장 룩] 마당 맨흙 = dirt_field(다져진 붉은 흙 길)을 더 밝고 노란 tan으로 리톤.
 	#   스타듀 시작 농장의 모래빛 황갈색 지면 + 저승 warm 팔레트 정합. PATH(_bf_dirt)보다 밝아 길과 구분.
 	_bf_earth = _retone_earth(_bf_dirt)
