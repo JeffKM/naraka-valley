@@ -564,6 +564,13 @@ var _earth_hue_lerp := 0.55   # 붉은 흙 hue를 노란-갈색(0.095)으로 당
 var _earth_sat_mul := 0.80    # 채도 배율(현행: 완화). 스타듀 골든머스타드 방향이면 >1
 var _earth_val_mul := 1.22    # 명도 배율(현행: 크게 밝힘 → 파스텔 원인)
 var _earth_val_add := 0.14    # 명도 가산(현행: 추가로 밝힘)
+# ★[물 톤 라이브 레버] _recolor_water 계수 — 흙 _earth_* 레버와 대칭. 소스(water_field) 재생성 없이
+#   물 색을 HSV로 즉석 조절. 기본값=항등(no-op)이라 baseline 완전 불변(회귀 안전) — owner가 값을 올려 튜닝.
+var _water_hue_target := 0.53   # 물 hue 목표(0.53≈청록). _water_hue_lerp>0일 때만 이 값으로 당김
+var _water_hue_lerp := 0.0      # 물 hue를 목표로 당기는 가중치(0=원본 유지)
+var _water_sat_mul := 1.0       # 채도 배율(1.0=원본. >1 선명·<1 탁하게)
+var _water_val_mul := 1.0       # 명도 배율(1.0=원본. >1 밝게)
+var _water_val_add := 0.0       # 명도 가산(0=원본. +로 전체 밝힘)
 var _gd_soft_cache := {}                       # ★[ADR-0042] 디테일 texture→부드럽게 보정한 Image 캐시
 var _base_variant_cache := {}                  # ★[ADR-0043 §6] terrain id→base 변종 좌표 배열 캐시
 var _facade_base_cache := {}                   # facade tex→밑단선 span{line_y,center,half}(캐스트 그림자 발 앵커)
@@ -3599,20 +3606,38 @@ func _load_wang_pairs() -> void:
 			tmap[bits] = atlas.get_region(Rect2i(int(b["x"]), int(b["y"]), int(b["width"]), int(b["height"])))
 		_wang_tiles[_wang_pair_key(lo, up)] = tmap
 
+# ★[단일출처 실험 플래그·owner 2026-07-20 Retro Diffusion 트랙] on = 코히어런트 세트를 base로 사용
+#   (single_source/ 에 파일이 있을 때만). 기본 off = 현행 shipping 아트 완전 불변(회귀 안전).
+#   owner가 RD로 grass/dirt/water 씸리스 필드를 생성해 넣으면 이 플래그만 켜서 나란히 비교한다.
+#   전환(잔디↔흙·물↔흙)은 코드(_bake_field_wang·shore)가 그대로 합성 → base만 코히어런트면 톤 일치.
+#   ※SS 사용 시 owner는 흙 이중보정 방지로 _earth_val_mul/_add를 항등(1.0/0.0)으로 낮추는 게 보통.
+const _TERRAIN_SINGLE_SOURCE := true
+const _SS_DIR := "res://assets/terrain16/single_source/"
+
+# 단일출처 플래그가 켜져 있고 SS 파일이 있으면 그걸, 아니면 현행 shipping 소스를 로드(폴백=완전 불변).
+func _ss_or(name: String, ship_path: String, fallback: Color) -> Image:
+	if _TERRAIN_SINGLE_SOURCE:
+		var p := _SS_DIR + name
+		if ResourceLoader.exists(p):
+			return _big_field(p, fallback)
+	return _big_field(ship_path, fallback)
+
 func _load_big_fields() -> void:
 	if _bf_grass != null:
 		return
-	_bf_grass = _big_field("res://assets/terrain16/grass_field.png", Color(0.29, 0.42, 0.24))
+	_bf_grass = _ss_or("grass_field.png", "res://assets/terrain16/grass_field.png", Color(0.29, 0.42, 0.24))
 	# ★ 재생성 crisp 잔디 타일(PixelLab 저색, 형광 채도)을 muted somber green으로 톤 보정(owner "둘 다").
 	#   grass_field.png는 crisp 소스로 보존하고 런타임에서만 muted(ADR-0001). 파일럿(순수 톤 검증)은 off.
-	if _bf_grass_mute:
+	# SS 코히어런트 잔디는 이미 muted 톤 → 이중 뮤트 생략(과다 어두워짐 방지).
+	if _bf_grass_mute and not _TERRAIN_SINGLE_SOURCE:
 		_mute_grass_pixels(_bf_grass)
-	_bf_dirt = _big_field("res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
+	_bf_dirt = _ss_or("dirt_field.png", "res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
 	_bf_soil = _big_field("res://assets/terrain16/soil_field.png", Color(0.35, 0.22, 0.16))
-	_bf_water = _big_field("res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39))
+	_bf_water = _recolor_water(_ss_or("water_field.png", "res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39)))
 	# ★[스타듀 농장 룩] 마당 맨흙 = dirt_field(다져진 붉은 흙 길)을 더 밝고 노란 tan으로 리톤.
 	#   스타듀 시작 농장의 모래빛 황갈색 지면 + 저승 warm 팔레트 정합. PATH(_bf_dirt)보다 밝아 길과 구분.
-	_bf_earth = _retone_earth(_bf_dirt)
+	# SS 코히어런트 dirt는 이미 tan earth 톤 → retone 이중보정 생략(RETRO-DIFFUSION-SPEC 대로).
+	_bf_earth = _bf_dirt.duplicate() if _TERRAIN_SINGLE_SOURCE else _retone_earth(_bf_dirt)
 
 func _big_field(path: String, fallback: Color) -> Image:
 	var img: Image
@@ -3645,6 +3670,26 @@ func _retone_earth(src: Image) -> Image:
 			hh = lerpf(hh, 0.095, _earth_hue_lerp)
 			var ss := clampf(c.s * _earth_sat_mul, 0.0, 1.0)   # 채도 배율(A/B 계수)
 			var vv := clampf(c.v * _earth_val_mul + _earth_val_add, 0.0, 1.0)  # 명도(A/B 계수)
+			img.set_pixel(xx, yy, Color.from_hsv(hh, ss, vv, c.a))
+	return img
+
+# ★[물 톤 라이브 레버] 물 base(water_field)를 소스 재생성 없이 HSV로 즉석 리톤(흙 _retone_earth와 대칭).
+#   기본 계수=항등이면 원본을 그대로 반환(복제·순회 생략 → 빠름·완전 불변). 결정적(픽셀 순수 함수).
+func _recolor_water(src: Image) -> Image:
+	if _water_hue_lerp == 0.0 and is_equal_approx(_water_sat_mul, 1.0) \
+			and is_equal_approx(_water_val_mul, 1.0) and _water_val_add == 0.0:
+		return src   # 항등 = 현행 물 톤 그대로(회귀 안전)
+	var img: Image = src.duplicate()
+	var w := img.get_width()
+	var h := img.get_height()
+	for yy in h:
+		for xx in w:
+			var c := img.get_pixel(xx, yy)
+			if c.a <= 0.01:
+				continue
+			var hh := lerpf(c.h, _water_hue_target, _water_hue_lerp)   # hue를 목표(청록)로 당김
+			var ss := clampf(c.s * _water_sat_mul, 0.0, 1.0)
+			var vv := clampf(c.v * _water_val_mul + _water_val_add, 0.0, 1.0)
 			img.set_pixel(xx, yy, Color.from_hsv(hh, ss, vv, c.a))
 	return img
 
@@ -3802,14 +3847,42 @@ func _soften_hseam(out: Image, x0: int, yb: int) -> void:
 			out.set_pixel(xx, yu, cu.lerp(cd, t))
 			out.set_pixel(xx, yd, cd.lerp(cu, t))
 
+# ★[잔디↔흙 월드위상 전환·owner 2026-07-20] 캔드 전환 타일(_bake_field_wang이 필드 좌상단만 샘플)은
+#   월드위상 base 셀과 톤·위치가 어긋나 경계에 격자·색급변을 낳는다(물↔흙 _paint_shore_cell과 같은 병).
+#   해법 동형: 형태 마스크(upper/lower)와 엣지다크/드롭섀도(dark)만 캔드에서 쓰고, 채움은 월드위상 base로
+#   → 전환 셀 잔디/흙이 이웃 base 셀과 연속. SS(코히어런트 base)에서만 사용(shipping 불변).
+var _field_paint := {}   # pk → {bits → {mask:PackedByteArray(1=upper), dark:PackedFloat32Array}}
+
+func _paint_field_cell(out: Image, x: int, y: int, pk: int, bits: int, up_field: Image, lo_field: Image) -> void:
+	if not _field_paint.has(pk):
+		return
+	var pm: Dictionary = _field_paint[pk]
+	if not pm.has(bits):
+		return
+	var mask: PackedByteArray = pm[bits]["mask"]
+	var dark: PackedFloat32Array = pm[bits]["dark"]
+	var P := _GF * 2
+	for j in TILE:
+		for i in TILE:
+			var idx := j * TILE + i
+			var wx := x * TILE + i
+			var wy := y * TILE + j
+			var c := up_field.get_pixel(wx % P, wy % P) if mask[idx] == 1 else lo_field.get_pixel(wx % P, wy % P)
+			var d := dark[idx]
+			if d > 0.0:
+				c = c.darkened(d)
+			out.set_pixel(wx, wy, c)
+
 # 전환 타일 base 합성기(pair `pk`, upper=코너bit 1, lower=코너bit 0). bilinear upper-ness + 래그드 노이즈로
 # upper/lower 영역을 나눠 base 픽셀 blit + upper 경계 1px 엣지다크 + upper 밑동 남쪽 lower 드롭섀도(감쇄).
 # rag/micro=경계 불규칙 진폭(잔디는 크게, 밭은 작게). 결정적(좌표해시). _wang_tiles[pk]를 덮어써 기존 Wang 렌더가 이 합성 타일을 쓴다.
+# ★[SS] 셀별 월드위상 전환용으로 형태 마스크+dark를 _field_paint[pk]에도 기록(캔드 img는 flag-off 경로 유지).
 func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, micro: float, edge_dark: float, shadow_depth: int, shadow_dark: float) -> void:
 	if up_field == null or lo_field == null:
 		return
 	var P := _GF * 2
 	var tmap := {}
+	var pm := {}
 	for bits in 16:
 		var cnw := float(bits & 1)
 		var cne := float((bits >> 1) & 1)
@@ -3817,6 +3890,10 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 		var cse := float((bits >> 3) & 1)
 		var img := Image.create(TILE, TILE, false, Image.FORMAT_RGBA8)
 		var umask: Array = []
+		var mask := PackedByteArray()
+		mask.resize(TILE * TILE)
+		var dark := PackedFloat32Array()
+		dark.resize(TILE * TILE)
 		for j in TILE:
 			var mrow: Array = []
 			for i in TILE:
@@ -3827,6 +3904,7 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 				var mv := (_gd_h01(i, j, 701) - 0.5) * 2.0 * micro
 				var is_u := (g + wv + mv) > 0.5
 				mrow.append(is_u)
+				mask[j * TILE + i] = 1 if is_u else 0
 				if is_u:
 					img.set_pixel(i, j, up_field.get_pixel(i % P, j % P))
 				else:
@@ -3846,6 +3924,7 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 						break
 				if edge:
 					img.set_pixel(i, j, img.get_pixel(i, j).darkened(edge_dark))
+					dark[j * TILE + i] = edge_dark
 		# ★upper 밑동 남쪽 lower 픽셀에 드롭섀도(upper가 lower 위로 솟은 입체). NW광원 → 그림자 남/남동.
 		#   lower 픽셀 위(북) shadow_depth 이내에 upper가 있으면 밑동 가까울수록 진하게 어둡힘(선형 감쇄).
 		if shadow_depth > 0:
@@ -3858,9 +3937,12 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 						if nj >= 0 and bool(umask[nj][i]):
 							var amt: float = shadow_dark * (1.0 - float(k - 1) / float(shadow_depth))
 							img.set_pixel(i, j, img.get_pixel(i, j).darkened(amt))
+							dark[j * TILE + i] = amt
 							break
 		tmap[bits] = img
+		pm[bits] = {"mask": mask, "dark": dark}
 	_wang_tiles[pk] = tmap
+	_field_paint[pk] = pm
 
 func _build_ground16() -> void:
 	_ground_detail_tex = null
@@ -3943,6 +4025,8 @@ func _build_ground16() -> void:
 				continue   # 미커버 코너조합 → base 유지
 			if pk == _wang_pair_key(4, 0):
 				_paint_shore_cell(out, x, y, bits)   # 물↔흙 = 손그림 형태 마스크로 흙/물 전환(월드위상 base·손그림 테두리)
+			elif _TERRAIN_SINGLE_SOURCE and pk == _wang_pair_key(0, 1) and _field_paint.has(pk):
+				_paint_field_cell(out, x, y, pk, bits, _bf_grass, _bf_earth)   # SS 잔디↔흙 = 월드위상 셀별 합성(경계 격자·색급변 제거)
 			else:
 				out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
 	# ★[ADR-0056 REV4 ①] LIP 상단 텍스처 평지화 — CLIFF_LIP 타일 상단(잔디부)을 평지 _bf_grass로 오버레이해
