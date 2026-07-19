@@ -564,6 +564,13 @@ var _earth_hue_lerp := 0.55   # 붉은 흙 hue를 노란-갈색(0.095)으로 당
 var _earth_sat_mul := 0.80    # 채도 배율(현행: 완화). 스타듀 골든머스타드 방향이면 >1
 var _earth_val_mul := 1.22    # 명도 배율(현행: 크게 밝힘 → 파스텔 원인)
 var _earth_val_add := 0.14    # 명도 가산(현행: 추가로 밝힘)
+# ★[물 톤 라이브 레버] _recolor_water 계수 — 흙 _earth_* 레버와 대칭. 소스(water_field) 재생성 없이
+#   물 색을 HSV로 즉석 조절. 기본값=항등(no-op)이라 baseline 완전 불변(회귀 안전) — owner가 값을 올려 튜닝.
+var _water_hue_target := 0.53   # 물 hue 목표(0.53≈청록). _water_hue_lerp>0일 때만 이 값으로 당김
+var _water_hue_lerp := 0.0      # 물 hue를 목표로 당기는 가중치(0=원본 유지)
+var _water_sat_mul := 1.0       # 채도 배율(1.0=원본. >1 선명·<1 탁하게)
+var _water_val_mul := 1.0       # 명도 배율(1.0=원본. >1 밝게)
+var _water_val_add := 0.0       # 명도 가산(0=원본. +로 전체 밝힘)
 var _gd_soft_cache := {}                       # ★[ADR-0042] 디테일 texture→부드럽게 보정한 Image 캐시
 var _base_variant_cache := {}                  # ★[ADR-0043 §6] terrain id→base 변종 좌표 배열 캐시
 var _facade_base_cache := {}                   # facade tex→밑단선 span{line_y,center,half}(캐스트 그림자 발 앵커)
@@ -3609,7 +3616,7 @@ func _load_big_fields() -> void:
 		_mute_grass_pixels(_bf_grass)
 	_bf_dirt = _big_field("res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
 	_bf_soil = _big_field("res://assets/terrain16/soil_field.png", Color(0.35, 0.22, 0.16))
-	_bf_water = _big_field("res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39))
+	_bf_water = _recolor_water(_big_field("res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39)))
 	# ★[스타듀 농장 룩] 마당 맨흙 = dirt_field(다져진 붉은 흙 길)을 더 밝고 노란 tan으로 리톤.
 	#   스타듀 시작 농장의 모래빛 황갈색 지면 + 저승 warm 팔레트 정합. PATH(_bf_dirt)보다 밝아 길과 구분.
 	_bf_earth = _retone_earth(_bf_dirt)
@@ -3645,6 +3652,26 @@ func _retone_earth(src: Image) -> Image:
 			hh = lerpf(hh, 0.095, _earth_hue_lerp)
 			var ss := clampf(c.s * _earth_sat_mul, 0.0, 1.0)   # 채도 배율(A/B 계수)
 			var vv := clampf(c.v * _earth_val_mul + _earth_val_add, 0.0, 1.0)  # 명도(A/B 계수)
+			img.set_pixel(xx, yy, Color.from_hsv(hh, ss, vv, c.a))
+	return img
+
+# ★[물 톤 라이브 레버] 물 base(water_field)를 소스 재생성 없이 HSV로 즉석 리톤(흙 _retone_earth와 대칭).
+#   기본 계수=항등이면 원본을 그대로 반환(복제·순회 생략 → 빠름·완전 불변). 결정적(픽셀 순수 함수).
+func _recolor_water(src: Image) -> Image:
+	if _water_hue_lerp == 0.0 and is_equal_approx(_water_sat_mul, 1.0) \
+			and is_equal_approx(_water_val_mul, 1.0) and _water_val_add == 0.0:
+		return src   # 항등 = 현행 물 톤 그대로(회귀 안전)
+	var img: Image = src.duplicate()
+	var w := img.get_width()
+	var h := img.get_height()
+	for yy in h:
+		for xx in w:
+			var c := img.get_pixel(xx, yy)
+			if c.a <= 0.01:
+				continue
+			var hh := lerpf(c.h, _water_hue_target, _water_hue_lerp)   # hue를 목표(청록)로 당김
+			var ss := clampf(c.s * _water_sat_mul, 0.0, 1.0)
+			var vv := clampf(c.v * _water_val_mul + _water_val_add, 0.0, 1.0)
 			img.set_pixel(xx, yy, Color.from_hsv(hh, ss, vv, c.a))
 	return img
 
