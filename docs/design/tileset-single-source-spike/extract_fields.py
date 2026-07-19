@@ -24,7 +24,7 @@ def seamless(im, b=12):
         w = 0.5*(1-y/b)
         for x in range(W): oo[x,y]=bl(t[y][x],t[H-1-y][x],w); oo[x,H-1-y]=bl(t[H-1-y][x],t[y][x],w)
     return o
-def flatten(im, radius=11):
+def flatten(im, radius=24):
     """high-pass: 큰 톤패치 제거(블레이드 유지) → 타일정렬 색블록(네모) 방지. out=px-blur+mean."""
     im=im.convert('RGB'); W,H=im.size; px=im.load(); bx=im.filter(ImageFilter.GaussianBlur(radius)).load()
     n=W*H; mean=[sum(px[x,y][i] for y in range(H) for x in range(W))/n for i in range(3)]
@@ -35,7 +35,7 @@ def flatten(im, radius=11):
 
 def field(imgsrc, box, method, flat=False):
     c = imgsrc.crop(box).resize((128,128), method)
-    if flat: c = flatten(c, 11)
+    if flat: c = flatten(c, 24)
     c = c.quantize(palette=pal, dither=Image.NONE).convert('RGBA')
     return seamless(c,12).convert('RGB').quantize(palette=pal, dither=Image.NONE).convert('RGBA')
 S = int(GH*0.26)
