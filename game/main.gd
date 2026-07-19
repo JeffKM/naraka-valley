@@ -3628,14 +3628,16 @@ func _load_big_fields() -> void:
 	_bf_grass = _ss_or("grass_field.png", "res://assets/terrain16/grass_field.png", Color(0.29, 0.42, 0.24))
 	# ★ 재생성 crisp 잔디 타일(PixelLab 저색, 형광 채도)을 muted somber green으로 톤 보정(owner "둘 다").
 	#   grass_field.png는 crisp 소스로 보존하고 런타임에서만 muted(ADR-0001). 파일럿(순수 톤 검증)은 off.
-	if _bf_grass_mute:
+	# SS 코히어런트 잔디는 이미 muted 톤 → 이중 뮤트 생략(과다 어두워짐 방지).
+	if _bf_grass_mute and not _TERRAIN_SINGLE_SOURCE:
 		_mute_grass_pixels(_bf_grass)
 	_bf_dirt = _ss_or("dirt_field.png", "res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
 	_bf_soil = _big_field("res://assets/terrain16/soil_field.png", Color(0.35, 0.22, 0.16))
 	_bf_water = _recolor_water(_ss_or("water_field.png", "res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39)))
 	# ★[스타듀 농장 룩] 마당 맨흙 = dirt_field(다져진 붉은 흙 길)을 더 밝고 노란 tan으로 리톤.
 	#   스타듀 시작 농장의 모래빛 황갈색 지면 + 저승 warm 팔레트 정합. PATH(_bf_dirt)보다 밝아 길과 구분.
-	_bf_earth = _retone_earth(_bf_dirt)
+	# SS 코히어런트 dirt는 이미 tan earth 톤 → retone 이중보정 생략(RETRO-DIFFUSION-SPEC 대로).
+	_bf_earth = _bf_dirt.duplicate() if _TERRAIN_SINGLE_SOURCE else _retone_earth(_bf_dirt)
 
 func _big_field(path: String, fallback: Color) -> Image:
 	var img: Image
