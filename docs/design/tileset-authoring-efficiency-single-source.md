@@ -98,3 +98,19 @@ TileMapLayer는 본질적으로 **격자-고정**(셀 = 고정 아틀라스 1타
 - **✅ 감성:** 물가 밝은 shore 엣지·부드러운 잔디 경계 = 스타듀-ish cozy.
 - **⚠️ 남은 과제(= B-5 철학 결정):** 솔리드 잔디/물에 **타일링 반복이 눈에 보임**. 이는 월드위상 bake가 숨기던 것 → 이제 **변종 수 + 스캐터 디테일**(ADR-0058 §3)로 가려야 함. "약간의 타일링 허용 + 변종↑"이 더 스타듀-정통(B-5)이나, owner가 무격자를 고수하면 변종 타일을 4~6종 생성해 per-cell 변주(기존 `_harmonize_grass_variants` 계열)를 얹어야 함.
 - **판정:** 단일 팔레트-락 출처 경로는 **작동하며 코드를 크게 줄인다**. 프로덕션 채택 전 결정할 것 = (1) 변종 밀도로 타일링 은폐할지, (2) 생성 도구를 PixelLab로 갈지 Retro Diffusion(2026 base 룩 우위)로 갈지, (3) 물 톤(현재 dark teal) 등 팔레트 라이브 튜닝.
+
+### 후속 (owner 피드백: 경계 각진 계단) — 2026-07-20
+
+owner가 `eval_map.png` 경계의 **각진 계단(staircase)**을 지적. 진단:
+- pinch/불일치 아님(테스트 지형 대각 X-셀 0개). 순수 **32px 계단** — 원인 = 스파이크를 **raggedness=0(매끈)**으로 뽑아 경계를 흩뜨릴 유기적 물결이 없음.
+- PixelLab **pro 모드(raggedness 지원)로 재생성 시도 → 실패**(experimental·unknown error). 실패해도 생성 쿼터 소모(13→6). **pro 모드 신뢰 불가, 재시도 금지.**
+
+**해결 실증(무료 코드 데모, `compare_smooth_vs_ragged.png`):** 코히어런트 솔리드(grass/dirt, 단일 출처라 톤 일치) + `_bake_field_wang` raggedness 재현 → 경계가 유기적 물결로 바뀌어 계단 소멸(스타듀식). LEFT=계단 / RIGHT=유기 경계.
+
+**⇒ 정제된 실전 최적안 (하이브리드):** `_bake_field_wang`은 **①톤 맞추기 + ②유기 raggedness/엣지다크/드롭섀도**를 겸한다. 최적은 *전면 삭제가 아니라*:
+- **①톤 맞추기 부담을 없앰** — 단일 출처 코히어런트 솔리드를 base로 쓰면 톤 불일치가 원천 소멸 → `_paint_shore_cell`의 톤 곡예·월드위상 톤 보정 불필요.
+- **②raggedness/그림자 처리는 유지** — 이미 코드베이스가 잘 하는 유기 경계 생성. 생성 도구의 raggedness(PixelLab pro 실패·Retro Diffusion 미검증)에 의존 안 함.
+
+즉 "합성 엔진 통째 삭제"(B-3 극단)보다 **"합성 엔진의 톤-맞추기 절반만 제거, 유기-경계 절반은 유지"**가 더 안전하고 이미 증명됨. 코드 절감은 덜하지만 경계 품질 확실 + 리스크 최저.
+
+- 산출물: `compare_smooth_vs_ragged.png`(좌 계단/우 유기), `eval_map_ragged.png`, `zoom_raw_boundary.png`.
