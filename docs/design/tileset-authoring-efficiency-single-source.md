@@ -114,3 +114,14 @@ owner가 `eval_map.png` 경계의 **각진 계단(staircase)**을 지적. 진단
 즉 "합성 엔진 통째 삭제"(B-3 극단)보다 **"합성 엔진의 톤-맞추기 절반만 제거, 유기-경계 절반은 유지"**가 더 안전하고 이미 증명됨. 코드 절감은 덜하지만 경계 품질 확실 + 리스크 최저.
 
 - 산출물: `compare_smooth_vs_ragged.png`(좌 계단/우 유기), `eval_map_ragged.png`, `zoom_raw_boundary.png`.
+
+### 후속 2 (씸리스 base 필드 문제) — 2026-07-20
+
+owner "변주 다 생성 + 타일셋 다 + 맵 구현" 요청 중 발견: **PixelLab `create_topdown_tileset`의 "솔리드" 코너 타일은 base 필드로 이어붙이면 씸이 보인다**(측정 seam_score: dirt=96·grass=67·water=0[거의 단색 예외], `field_*.png`). Wang 타일은 *이웃 다른 타일*과 맞물리게 설계라 자기 반복은 안 맞물림.
+
+**함의:** 프로덕션 "맵 구현"엔 ①**씸리스 base 필드**(현행 `grass_field.png` 같은 tileable 텍스처) + ②코히어런트 전환이 둘 다 필요. Wang 세트는 ②만 잘 준다. 따라서:
+- 6 gens로 "변주 다 생성 + 타일셋 다 만들기"는 **물리적으로 불가**(씸리스 base는 별도 생성 모드·별도 매수 필요, pro 모드는 실패).
+- 프로덕션 base 필드는 (a) owner Retro Diffusion(선택된 도구)로 씸리스 세트 생성, 또는 (b) PixelLab 크레딧 충전 후 `create_tiles_pro`/texture 모드로 씸리스 생성이 필요.
+- **코어 지면 아트 교체 = shipping 룩 전면 변경**이라 스파이크→프로덕션 승격은 **owner 승인 게이트**(ADR급 결정). 플래그 토글로 현행 보존한 채 나란히 비교부터 권장.
+
+산출물: `field_water.png`/`field_dirt.png`/`field_grass.png`(솔리드 4×4 타일 = 씸 육안 확인).
