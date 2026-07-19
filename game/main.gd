@@ -3847,14 +3847,42 @@ func _soften_hseam(out: Image, x0: int, yb: int) -> void:
 			out.set_pixel(xx, yu, cu.lerp(cd, t))
 			out.set_pixel(xx, yd, cd.lerp(cu, t))
 
+# ★[잔디↔흙 월드위상 전환·owner 2026-07-20] 캔드 전환 타일(_bake_field_wang이 필드 좌상단만 샘플)은
+#   월드위상 base 셀과 톤·위치가 어긋나 경계에 격자·색급변을 낳는다(물↔흙 _paint_shore_cell과 같은 병).
+#   해법 동형: 형태 마스크(upper/lower)와 엣지다크/드롭섀도(dark)만 캔드에서 쓰고, 채움은 월드위상 base로
+#   → 전환 셀 잔디/흙이 이웃 base 셀과 연속. SS(코히어런트 base)에서만 사용(shipping 불변).
+var _field_paint := {}   # pk → {bits → {mask:PackedByteArray(1=upper), dark:PackedFloat32Array}}
+
+func _paint_field_cell(out: Image, x: int, y: int, pk: int, bits: int, up_field: Image, lo_field: Image) -> void:
+	if not _field_paint.has(pk):
+		return
+	var pm: Dictionary = _field_paint[pk]
+	if not pm.has(bits):
+		return
+	var mask: PackedByteArray = pm[bits]["mask"]
+	var dark: PackedFloat32Array = pm[bits]["dark"]
+	var P := _GF * 2
+	for j in TILE:
+		for i in TILE:
+			var idx := j * TILE + i
+			var wx := x * TILE + i
+			var wy := y * TILE + j
+			var c := up_field.get_pixel(wx % P, wy % P) if mask[idx] == 1 else lo_field.get_pixel(wx % P, wy % P)
+			var d := dark[idx]
+			if d > 0.0:
+				c = c.darkened(d)
+			out.set_pixel(wx, wy, c)
+
 # 전환 타일 base 합성기(pair `pk`, upper=코너bit 1, lower=코너bit 0). bilinear upper-ness + 래그드 노이즈로
 # upper/lower 영역을 나눠 base 픽셀 blit + upper 경계 1px 엣지다크 + upper 밑동 남쪽 lower 드롭섀도(감쇄).
 # rag/micro=경계 불규칙 진폭(잔디는 크게, 밭은 작게). 결정적(좌표해시). _wang_tiles[pk]를 덮어써 기존 Wang 렌더가 이 합성 타일을 쓴다.
+# ★[SS] 셀별 월드위상 전환용으로 형태 마스크+dark를 _field_paint[pk]에도 기록(캔드 img는 flag-off 경로 유지).
 func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, micro: float, edge_dark: float, shadow_depth: int, shadow_dark: float) -> void:
 	if up_field == null or lo_field == null:
 		return
 	var P := _GF * 2
 	var tmap := {}
+	var pm := {}
 	for bits in 16:
 		var cnw := float(bits & 1)
 		var cne := float((bits >> 1) & 1)
@@ -3862,6 +3890,10 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 		var cse := float((bits >> 3) & 1)
 		var img := Image.create(TILE, TILE, false, Image.FORMAT_RGBA8)
 		var umask: Array = []
+		var mask := PackedByteArray()
+		mask.resize(TILE * TILE)
+		var dark := PackedFloat32Array()
+		dark.resize(TILE * TILE)
 		for j in TILE:
 			var mrow: Array = []
 			for i in TILE:
@@ -3872,6 +3904,7 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 				var mv := (_gd_h01(i, j, 701) - 0.5) * 2.0 * micro
 				var is_u := (g + wv + mv) > 0.5
 				mrow.append(is_u)
+				mask[j * TILE + i] = 1 if is_u else 0
 				if is_u:
 					img.set_pixel(i, j, up_field.get_pixel(i % P, j % P))
 				else:
@@ -3891,6 +3924,7 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 						break
 				if edge:
 					img.set_pixel(i, j, img.get_pixel(i, j).darkened(edge_dark))
+					dark[j * TILE + i] = edge_dark
 		# ★upper 밑동 남쪽 lower 픽셀에 드롭섀도(upper가 lower 위로 솟은 입체). NW광원 → 그림자 남/남동.
 		#   lower 픽셀 위(북) shadow_depth 이내에 upper가 있으면 밑동 가까울수록 진하게 어둡힘(선형 감쇄).
 		if shadow_depth > 0:
@@ -3903,9 +3937,12 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 						if nj >= 0 and bool(umask[nj][i]):
 							var amt: float = shadow_dark * (1.0 - float(k - 1) / float(shadow_depth))
 							img.set_pixel(i, j, img.get_pixel(i, j).darkened(amt))
+							dark[j * TILE + i] = amt
 							break
 		tmap[bits] = img
+		pm[bits] = {"mask": mask, "dark": dark}
 	_wang_tiles[pk] = tmap
+	_field_paint[pk] = pm
 
 func _build_ground16() -> void:
 	_ground_detail_tex = null
@@ -3988,6 +4025,8 @@ func _build_ground16() -> void:
 				continue   # 미커버 코너조합 → base 유지
 			if pk == _wang_pair_key(4, 0):
 				_paint_shore_cell(out, x, y, bits)   # 물↔흙 = 손그림 형태 마스크로 흙/물 전환(월드위상 base·손그림 테두리)
+			elif _TERRAIN_SINGLE_SOURCE and pk == _wang_pair_key(0, 1) and _field_paint.has(pk):
+				_paint_field_cell(out, x, y, pk, bits, _bf_grass, _bf_earth)   # SS 잔디↔흙 = 월드위상 셀별 합성(경계 격자·색급변 제거)
 			else:
 				out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
 	# ★[ADR-0056 REV4 ①] LIP 상단 텍스처 평지화 — CLIFF_LIP 타일 상단(잔디부)을 평지 _bf_grass로 오버레이해
