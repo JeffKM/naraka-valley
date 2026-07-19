@@ -3611,7 +3611,7 @@ func _load_wang_pairs() -> void:
 #   owner가 RD로 grass/dirt/water 씸리스 필드를 생성해 넣으면 이 플래그만 켜서 나란히 비교한다.
 #   전환(잔디↔흙·물↔흙)은 코드(_bake_field_wang·shore)가 그대로 합성 → base만 코히어런트면 톤 일치.
 #   ※SS 사용 시 owner는 흙 이중보정 방지로 _earth_val_mul/_add를 항등(1.0/0.0)으로 낮추는 게 보통.
-const _TERRAIN_SINGLE_SOURCE := false
+const _TERRAIN_SINGLE_SOURCE := true
 const _SS_DIR := "res://assets/terrain16/single_source/"
 
 # 단일출처 플래그가 켜져 있고 SS 파일이 있으면 그걸, 아니면 현행 shipping 소스를 로드(폴백=완전 불변).
