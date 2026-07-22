@@ -123,11 +123,12 @@ graph TD
 
 - [x] **격차 감사 3축** (2026-07-22) — 맵=[homestead-vs-stardew-map-audit.md](./docs/design/homestead-vs-stardew-map-audit.md) §5(P2·P7·P8 해소 / P3·P4·P5·P6 미해소 / 신규 C-1 남단 공동·C-2 나무 밀도·C-3 ADR-0058 모순) · 농사·UI=[slice1r-stardew-gap-audit.md](./docs/design/slice1r-stardew-gap-audit.md)(농사: 수치 계층 유지·체감 루프/에너지 철학 재작업 / UI: inv_frame 내부 스킨 교정 중심·정체성 모티프 유지).
 - [x] **타일맵 생성 알고리즘 전수 서베이** (2026-07-22) — 9계열 병렬 리서치(워커 10기)+`last30days` 30일 동향 → [tilemap-generation-algorithms-survey.md](./docs/design/tilemap-generation-algorithms-survey.md). 채택 티어1=외톨이 flood-fill 정리·지터드 그리드 스캐터·경계 디더 프린지 / 티어2=`_mask_noise` 유틸(OpenSimplex2)+저진폭 도메인 워핑·fBm 주파수대 분리·다수결 평활 / 티어3=Neyman-Scott 군집·density-mask·Catmull-Rom 중심선. WFC·듀얼그리드는 기록만(재론 금지 유지).
-- [ ] **착수 self-grill → 새 ADR** — 감사·서베이 산출 기반 결정 확정(파종·수확 무과금·C-3 단일 진실원 복구·남단 조닝 방향 등) + `stardew-systems-catalog.md` 갱신.
-- [ ] **shrimp 원자 분해** — 재작업·신규 항목만 T번호 등록.
-- [ ] **맵 축 빌드** — ①남단 조닝(C-1/P6) ②Forest Farm 나무 밀집대(C-2) ③덤불 유기화(P5) ④연못 유기형(P3) ⑤절벽 형태 유기화(P4) ⑥길 폭축소·유기화. 좌표 의존 테스트 4종(home_expansion·livestock·reclaim·well) 동반 갱신.
-- [ ] **농사 축 빌드** — P1 도구 스윙 애니 · P2 파종·수확 무과금 · P3 저승 스프링클러(카탈로그 §1-B 기결정) · 후순위(커서·수확 팝·탈진 피드백·동물케어 XP).
-- [ ] **UI 축 빌드** — 1순위: inv_frame 타이포 통일·한지 스킨(도구 아이콘 5종은 기완료 PR#211 — 감사 오류 정정) / 2순위: 상점 그리드 승격·인벤탭 정보패널·정산 아이콘 내역 / 3순위 defer.
+- [x] **착수 self-grill → [ADR-0059](./docs/adr/0059-slice1r-homestead-stardew-grammar-remake.md)** (2026-07-22) — 결정 6부(남단 조닝·알고리즘 세트·에너지 정합·물뿌리개 용량·스윙 애니 defer 해소·UI=0048 실행) + ADR-0058 개정 노트(C-3 진실원 복구) + 카탈로그 갱신. 잠정 항목은 owner 큐 적재 후 즉시 착수(§2-1).
+- [x] **shrimp 원자 분해** (2026-07-22) — S1R-T1~T12 등록(맵 6·농사 3·아트 1·UI 2).
+- [x] **맵 축 빌드 완료** (2026-07-23·PR#253~257 전부 머지) — T1·T2 마이크로 알고리즘 티어1·2(`_mask_noise`·외톨이 정리·지터드·경계 디더·저진폭 워핑·fBm·다수결 평활, #253) / T3 남단 조닝 4존+길 재배선+zoning_check 하네스(#254) / T4 forage 숲 Neyman-Scott 밀집·능선 일렬 덤불 대체·남동 debris(#255) / T5 연못 유기화(정적 마스크·셀별 합성 규약 준수·rect 바이트 불변, #256) / T6 절벽 남단 유기 윤곽(침식-only 워핑·ADR-0056 장치 보존, #257). 고정 앵커(건물·well·pond·워프) 무이동으로 좌표 테스트 갱신 불필요·선별 회귀 전부 PASS.
+- [x] **농사 축 빌드(메카닉) 완료** (2026-07-23·PR#258~260) — T7 에너지 정합(괭이·물·낫만 과금, 파종·수확·시비 무과금 + energy_contract_test 8계약, #258) / T8 물뿌리개 용량 20칸·혼우물/연못 리필·핫바 잔량 배지·세이브 하위호환(#259) / T9 저승 스프링클러 티어1(sprinkler.gd 델타 원장·십자 4칸 아침 급수·혼력 0·만물상 구매, #260). 잔여 후순위(커서·수확 팝·탈진 피드백·동물케어 XP)는 폴리시 패스로.
+- [ ] **T10 도구 스윙 애니 4모션** — PixelLab 생성 진행 중(hoe·water 6/16 방향 완료 시점 보고·실패 0). 생성 완료 → 배선(char_sprite 애니 행·_use_tool 재생·speed_factor 실효화) 후속 태스크로.
+- [x] **UI 축 빌드 완료** (2026-07-23·PR#261~262) — T11 inv_frame 한지 스킨·타이포 전면 교정(fallback_font·raw rect 0건·슬롯=핫바 plate 정합, #261) / T12 상점 5행 그리드·인벤탭 정보패널(소지금/총수입/날짜/농장명)+닫기X+휴지통·출하 정산 품목 내역(#262). 도구 아이콘 5종은 기완료(PR#211 — 감사 오류 정정). 3순위(드래그&드롭·장비슬롯 등) defer 유지.
 - [ ] **시각 확인 + 선별 회귀 + 기록** — 덤프 하네스 육안 판정 · `run_tests.sh` 선별 · owner 큐 갱신.
 
 ### Slice 2 — 나루 마을 (데모 2 · ★옥자 데모 체크포인트)
