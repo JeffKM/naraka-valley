@@ -24,8 +24,8 @@ func _init() -> void:
 		if gdi.get_format() != Image.FORMAT_RGBA8:
 			gdi.convert(Image.FORMAT_RGBA8)
 		out.blend_rect(gdi, Rect2i(Vector2i.ZERO, gdi.get_size()), Vector2i.ZERO)
-	# PROP — _draw_props_for(즉시모드)의 CPU 재현(가장자리 나무·바위·장식 포함)
-	for entry in main._prop_layouts.get("HOME", []):
+	# PROP — _draw_props_for(즉시모드)의 CPU 재현(가장자리 나무·바위·장식 + ★S1R-T4 절차 스캐터)
+	for entry in main._home_prop_entries():
 		var tex: Texture2D = entry[0]
 		var yo: int = entry[2] if entry.size() > 2 else 0
 		var casts_shadow: bool = tex in main.PROP_SHADOW_SET
