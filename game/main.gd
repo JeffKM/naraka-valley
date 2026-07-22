@@ -6503,11 +6503,14 @@ func _farming_energy_cost() -> int:
 	return int(round(SoulEnergy.COST_PER_ACTION * FarmSkill.energy_factor(FarmSkill.level_for_xp(_farming_xp))))
 
 func _use_tool() -> void:
-	var cost := _farming_energy_cost()        # ★ S1-6 숙련 감산 반영 비용
-	if not energy.can_act(cost):
-		return
 	var item := inventory.selected_id()
 	var cat := ItemCatalog.category_of(item)
+	# ★ ADR-0059 결정3(에너지 스타듀 정합) — 파종(씨앗)·시비(비료)는 무과금, 괭이·물·낫·개간·급여는 과금.
+	#   무과금 동사는 혼력 0에서도 굴러야 하므로 상단 can_act 게이트를 과금 동사에만 건다.
+	var free_verb := cat == ItemCatalog.CAT_SEED or cat == ItemCatalog.CAT_FERTILIZER
+	var cost := _farming_energy_cost()        # ★ S1-6 숙련 감산 반영 비용(과금 동사에만 적용)
+	if not free_verb and not energy.can_act(cost):
+		return
 	var verb := ""
 	if item == ItemCatalog.HOE:
 		if farm.hoe(_target):
@@ -6571,18 +6574,21 @@ func _use_tool() -> void:
 	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기·비료는 물/뿌리는 소리.
 	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water", "급여": "water", "개간": "hoe", "풀베기": "harvest"}.get(verb, ""))
 	_advance_onboarding(verb)                 # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
-	energy.spend(cost)                        # 한 동작당 혼력 소모(숙련 감산)
+	if not free_verb:
+		energy.spend(cost)                    # ★ ADR-0059 결정3 — 과금 동사(괭이·물·낫·개간·급여)만 소모
 	queue_redraw()                            # 새 상태가 바로 보이도록
 
 # RMB 맨손 수확(ADR-0024 §3 — 낫 없음, 수확=맨손). 다 자란 칸만 거두고, 거둔 영혼을 인벤토리에
 # 쌓아 경제의 양끝을 잇는다(밭→재고→판매·서빙). 다 안 자랐거나 혼력 부족이면 무동작.
 func _try_harvest() -> void:
-	var cost := _farming_energy_cost()        # ★ S1-6 숙련 감산 반영 비용(과수·밭 공통)
-	if not energy.can_act(cost):
-		return
+	# ★ ADR-0059 결정3 — 밭 작물 수확은 무과금(하단 can_act 가드·spend 없음). 목축·과수는 다른 계층이라
+	#   에너지 행동을 그대로 유지(각 분기에서 자체 게이트·소모 — 계층 불변).
+	var cost := _farming_energy_cost()        # ★ 목축·과수 동사용(밭 수확엔 미사용)
 	# ★ [S1-7] 혼의 짐승 RMB 우선(§4.1) — 조준 칸에 짐승이 있으면: 대기 산물이 있으면 수집(인벤토리 적재),
 	# 없으면 쓰다듬(우정·기분 데일리 케어). 밭·과수보다 먼저 본다(짐승 타일은 방목지라 겹침 없음). 안식 농원 전용.
 	if _region == RegionCatalog.HOME and ranch.has_animal(_target):
+		if not energy.can_act(cost):
+			return                            # 목축 계층 — 혼력 게이트 유지(불변)
 		if ranch.has_product(_target):
 			var got := ranch.collect(_target)   # {product_id, quality, is_large}
 			if not got.is_empty():
@@ -6603,6 +6609,8 @@ func _try_harvest() -> void:
 	if _region == RegionCatalog.HOME:
 		var anchor := orchard.tree_at(_target)
 		if orchard.has_tree(anchor):
+			if not energy.can_act(cost):
+				return                          # 과수 계층 — 혼력 게이트 유지(불변)
 			var picked := orchard.harvest(anchor, clock.day)   # {fruit_id,count,quality_tier} / {} = 미성숙·무결실
 			if not picked.is_empty():
 				# ★ [S1-6 §8.8] 나이 등급(quality_tier)을 슬롯 quality로 실적재(§7.7 소비 실현). 나무 나이가
@@ -6634,7 +6642,7 @@ func _try_harvest() -> void:
 	_show_flavor(harvested_crop)              # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
 	audio.sfx("harvest")                      # P2.6 수확은 밝은 팝
 	_advance_onboarding("수확")               # T4.1 첫 수확 → 온보딩 완료(DONE)
-	energy.spend(cost)                        # 한 동작당 혼력 소모(숙련 감산)
+	# ★ ADR-0059 결정3 — 밭 작물 수확은 무과금(energy.spend 없음): "보람 액션 과세" 제거로 스타듀 체감 회복.
 	queue_redraw()                            # 새 상태가 바로 보이도록
 
 # ★ ADR-0052 §118 · ADR-0033 — 안식 꽃 패치(피안화) 손수확. 라이브 채집 루프의 XP 소스이자 전문직 퍼크
@@ -6741,14 +6749,18 @@ func _farm_prompt() -> String:
 				return "여기엔 못 심음 — 3×3 빈 자리 필요"
 	if not _target_valid:
 		return ""
-	if not energy.can_act():
-		return "혼력 부족 — 집에서 취침"
+	# ★ ADR-0059 결정3 — 수확은 무과금이라 혼력과 무관하게 항상 안내(0에서도 거둘 수 있다).
 	if farm.is_mature(_target):
 		return "[우클릭] 수확"
 	var item := inventory.selected_id()
+	# 과금 동사(괭이·물)만 혼력 부족 시 차단 안내한다(무과금 파종·시비는 아래에서 혼력 무관 안내).
 	if item == ItemCatalog.HOE and not farm.is_tilled(_target):
+		if not energy.can_act():
+			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 괭이질"
 	if item == ItemCatalog.WATERING_CAN and farm.is_planted(_target) and not farm.is_watered(_target):
+		if not energy.can_act():
+			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 물주기"
 	if ItemCatalog.category_of(item) == ItemCatalog.CAT_SEED and farm.is_tilled(_target) and not farm.is_planted(_target):
 		var crop := ItemCatalog.crop_of(item)

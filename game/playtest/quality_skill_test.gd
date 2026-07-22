@@ -9,7 +9,7 @@ extends SceneTree
 #   ⑩ 인벤토리 품질 스택 — 같은 작물 다른 품질=별 슬롯·count_of 합산·take_harvest worst-first.
 #   ⑪ 출하 판매가 배수 — 이리듐 슬롯 → preview_gold = 판매가×2.0.
 #   ⑫ (main) orchard 품질 실적재 — 나이 84 나무 수확 → 슬롯 quality=2(§8.8 소비).
-#   ⑬ (main) 숙련 — 수확 XP 누적·energy.spend 감산(L0=10·L10=7) 실효.
+#   ⑬ (main) 숙련 — 수확 XP 누적·_farming_energy_cost 감산곡선(L0=10·L10=7)·밭 수확 무과금(ADR-0059 결정3).
 #   ⑭ (main) 세이브 왕복 — farming_xp·타일 fertilizer·슬롯 quality·ship pending 품질 라운드트립 +
 #      구세이브 결측 필드 Q0/"" 방어.
 #
@@ -147,7 +147,8 @@ func _initialize() -> void:
 	_check("⑬ L0 농사 비용 = 10(기본)", m._farming_energy_cost() == 10)
 	m._farming_xp = 5500   # L10
 	_check("⑬ L10 농사 비용 = 7(30% 감산)", m._farming_energy_cost() == 7)
-	# 밭 수확으로 XP 누적 + energy.spend 감산 실효(강제 성숙 셋업).
+	# 밭 수확으로 XP 누적(강제 성숙 셋업). ★ ADR-0059 결정3 — 밭 수확은 무과금이라 혼력 불변을 확인한다
+	#   (숙련 감산 소모의 실효는 과금 동사로 energy_contract_test가 검증 — L0=10·L10=7).
 	var ht := _free_home_soil(m)
 	_check("⑬ 안식 농원 빈 밭칸 확보", ht.x >= 0)
 	m.farm.hoe(ht)
@@ -159,7 +160,7 @@ func _initialize() -> void:
 	var xp_before: int = m._farming_xp
 	m._try_harvest()
 	_check("⑬ 수확 XP 누적(+base 판매가)", m._farming_xp == xp_before + CropCatalog.sell_price(CROP))
-	_check("⑬ energy.spend L10 감산 소모(−7)", m.energy.current == e_before - 7)
+	_check("⑬ 밭 수확 무과금 — 혼력 불변(ADR-0059 결정3)", m.energy.current == e_before)
 	_check("⑬ 수확물 인벤토리 적재", m.inventory.count_of(ItemCatalog.harvest_id(CROP)) >= 1)
 
 	# ── ⑫ orchard 품질 실적재(§8.8) — 나이 84 나무 → 슬롯 quality=2 ──
