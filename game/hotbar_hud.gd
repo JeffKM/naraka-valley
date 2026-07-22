@@ -22,6 +22,11 @@ const HOTKEYS := "1234567890-="   # 슬롯 좌상단 단축키 인덱스(0..11) 
 var inv: Inventory = null         # 그릴 인벤토리(슬롯·선택). main이 주입.
 var crop_icons: Dictionary = {}   # 작물군 id → mature 스프라이트(씨앗·수확물 아이콘 재사용). main 주입.
 
+# ★ [S1R-T8 / ADR-0059 결정4] 물뿌리개 잔량 배지 상태(잔량은 인벤 변화 없이 바뀌므로 main이 set_water_state로 주입).
+#   <0 = 미표시(부팅 초기값). set_water_state가 값 동일 시 조기 반환해 매프레임 호출도 저비용.
+var water_level := -1
+var water_cap := 20
+
 # main이 인벤토리·작물 아이콘을 주입하고 changed 구독을 건다. 전체 화면 앵커로 깔아 하단 배치 기준을 잡는다.
 func setup(inventory: Inventory, icons: Dictionary) -> void:
 	inv = inventory
@@ -30,6 +35,15 @@ func setup(inventory: Inventory, icons: Dictionary) -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE  # 핫바가 마우스 클릭(도구 사용)을 가로채지 않게
 	if inv != null and not inv.changed.is_connected(queue_redraw):
 		inv.changed.connect(queue_redraw)
+	queue_redraw()
+
+# ★ [S1R-T8] 물뿌리개 잔량 배지 주입(main._refresh_water_badge → 리필·물주기·로드·셋업에서 호출).
+#   값이 바뀔 때만 다시 그린다(인벤 changed와 별개 축이라 별도 갱신 — 무변화 시 조기 반환).
+func set_water_state(level: int, cap: int) -> void:
+	if level == water_level and cap == water_cap:
+		return
+	water_level = level
+	water_cap = cap
 	queue_redraw()
 
 # 부모 CanvasLayer가 UI scale(ADR-0018 ×1.5)을 먹어, 전체화면 앵커 Control의 size(=960×540)는
@@ -91,6 +105,12 @@ func _draw_slot(i: int, pos: Vector2) -> void:
 		if n > 1:
 			HanjiUi.draw_text(self, pos + Vector2(SLOT_PX - 11.0, SLOT_PX - 2.0),
 				str(n), 10, HanjiUi.INK_LIGHT)
+		# ★ [S1R-T8] 물뿌리개 잔량 배지(우하단, 스택 배지 자리 재사용) — 물뿌리개는 유니크(스택 없음)라 겹침 없음.
+		#   잔량 0은 붉은빛으로 경고(리필 필요). main이 set_water_state로 값 주입(water_level<0 = 미표시).
+		if id == ItemCatalog.WATERING_CAN and water_level >= 0:
+			var wcol := HanjiUi.INK_LIGHT if water_level > 0 else Color(0.88, 0.34, 0.28)
+			HanjiUi.draw_text(self, pos + Vector2(SLOT_PX - 13.0, SLOT_PX - 2.0),
+				str(water_level), 10, wcol)
 	# ★owner HUD 가이드 B — 슬롯 좌상단 단축키 인덱스(1..0,-,=). 스타듀식 퀵슬롯 가독.
 	if i < HOTKEYS.length():
 		HanjiUi.draw_text(self, pos + Vector2(2.0, 9.0), HOTKEYS[i], 9, HanjiUi.GOLD_SOFT)
