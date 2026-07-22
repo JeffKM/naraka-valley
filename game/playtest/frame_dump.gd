@@ -58,6 +58,21 @@ func _initialize() -> void:
 	m.frame.queue_redraw()
 	await _grab("frame_rel")
 
+	# ★ [S1R-T11] 상점 — 매대 본문 타이포·구매 버튼 2개(씨앗/스프링클러) 한지 plate 확인
+	m._close_frame()
+	m._open_frame(InventoryFrame.CTX_STORE)
+	await _grab("frame_store")
+
+	# ★ [S1R-T11] 저장 상자 — 상단 상자 그리드·하단 백팩 슬롯이 핫바 plate와 정합인지 확인
+	m._close_frame()
+	m._open_frame(InventoryFrame.CTX_CHEST)
+	await _grab("frame_chest")
+
+	# ★ [S1R-T11] 출하함 — 제목·정산 미리보기 타이포(neodgm+외곽선) 확인
+	m._close_frame()
+	m._open_frame(InventoryFrame.CTX_BIN)
+	await _grab("frame_bin")
+
 	m._close_frame()
 	m.queue_free()
 	await process_frame
