@@ -163,6 +163,10 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 				draw_texture_rect(mtex, inner, false)
 			else:
 				draw_rect(inner, Color(0.80, 0.66, 0.30) if ItemCatalog._is_hay(id) else Color(0.46, 0.36, 0.26))
+		ItemCatalog.CAT_PLACEABLE:
+			# ★ [S1R-T9] 설치물(스프링클러) 그레이박스 아이콘 — 청록 몸통 + 위 물방울 점(급수기 결).
+			draw_rect(inner, Color(0.32, 0.52, 0.60))
+			draw_circle(inner.position + Vector2(inner.size.x * 0.5, inner.size.y * 0.28), inner.size.x * 0.14, Color(0.62, 0.82, 0.92))
 
 # 작물·수확물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
