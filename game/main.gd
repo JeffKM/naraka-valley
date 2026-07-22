@@ -718,7 +718,8 @@ const PROP_LAYOUT_HOME := [
 		Vector2i(20, 17), Vector2i(20, 19), Vector2i(20, 21), Vector2i(20, 23),
 		Vector2i(20, 25)]],
 	# ── overgrown debris 밭(저지 — 통과 O 잡초 + 통과 X 업화석·석화 고목 산포, 동선·건물·패치·연못 비껴) ──
-	[PROP_DEBRIS_WEEDS, [Vector2i(50, 22), Vector2i(56, 38), Vector2i(35, 44), Vector2i(60, 52),
+	# ★[ADR-0059 결정1] (35,44)→(35,46): 옛 좌표가 새 분기 복도(y44 x33..40) 위에 얹혀 길을 가림 → 남쪽 한 칸 이동.
+	[PROP_DEBRIS_WEEDS, [Vector2i(50, 22), Vector2i(56, 38), Vector2i(35, 46), Vector2i(60, 52),
 		Vector2i(46, 24), Vector2i(30, 54), Vector2i(58, 20), Vector2i(52, 56), Vector2i(34, 26)]],  # 이승의 미련(잡초·낫)
 	[PROP_DEBRIS_EMBER, [Vector2i(54, 44), Vector2i(48, 50), Vector2i(33, 48)]],         # 업화석(SOLID, overgrown 장애물)
 	[PROP_DEBRIS_STUMP, [Vector2i(60, 40), Vector2i(45, 52), Vector2i(28, 50)]],         # 석화 고목(SOLID, overgrown 장애물)
@@ -923,12 +924,32 @@ const CHEST_TILE := Vector2i(11, 68)
 # 영혼빛 연못(중앙-약간서) / 고지 하늘 목장(NW, 절벽+계단으로만 진입 — debris 하드 게이트) /
 # 나머지 저지=overgrown debris 밭. 옛 FARM_RECT 중앙 대형 밭은 삭제(스타터 패치 + overgrown으로 대체).
 const STARTER_PATCH_RECT := Rect2i(40, 12, 5, 5)  # x40..44, y12..16 (본가/창고 남쪽 5×5 — debris 0%·즉경작 SOIL)
-# ★ [ADR-0055] 재점령(잡초 재생) 스캔 범위 — overgrown 저지 마당(debris 밭 x28..60·y20..56을 여유로 감쌈).
+# ★ [ADR-0055 → ADR-0059 결정1 C-1] 재점령(잡초 재생) 스캔 범위 — overgrown 저지 마당.
 #   이 rect 안의 빈 맨땅(GROUND·프롭·밭 미점유)만 밤새 잡초가 다시 덮는다. NW 하늘 목장·먼 코너 나무숲·
 #   남단 seam은 밖(마당 밖 잔디는 재점령 대상 아님 — cozy 스코프). 정밀 범위는 Phase 3 밸런싱 레버.
-const ENCROACH_SCAN_RECT := Rect2i(26, 18, 36, 40)  # x26..61, y18..57
-const SPIRIT_POND_RECT := Rect2i(26, 34, 8, 7)    # ★ADR-0035 영혼빛 연못 x26..33, y34..40 (WATER — 물뿌리개·낚시 앵커, 메카닉 Slice 3)
+#   ★[ADR-0059 결정1] 남단 조닝으로 동단(x61→75)·남단(y57→59)을 넓혀 남동 overgrown 추가 개간지
+#   (OVERGROWN_EXPANSION_RECT)까지 재점령 필드를 확장한다. 물가 활동존(POND_ACTIVITY_RECT)은
+#   _encroach_candidates에서 제외해 낚시 물가를 잡초 없는 활동 여백으로 지킨다.
+const ENCROACH_SCAN_RECT := Rect2i(26, 18, 50, 42)  # x26..75, y18..59 (★ADR-0059 결정1: 남동 개간지까지 확장)
+const SPIRIT_POND_RECT := Rect2i(26, 34, 8, 7)    # ★ADR-0035 영혼빛 연못 x26..33, y34..40 (WATER — 물뿌리개·낚시 앵커, 메카닉 Slice 3). ★ADR-0059: 좌표 바이트 불변(save/앵커·_autotile_pond_siblings 요구)
 const SPAWN_TILE := Vector2i(40, 60)       # 도착 지점(남단 중앙) — 불변(구역 경계 seam)
+
+# ── ★ [ADR-0059 결정1 — 남단 조닝(C-1 해소)] 안식 농원 남단 공동(y20~65)에 목적존 4개를 손설계한다.
+#   전부 결정적 상수(알고리즘 배치 금지). 건물 6동·STARTER_PATCH·WELL·SPIRIT_POND는 바이트 불변(이 존들은
+#   그 사이 공동을 채운다). 스캐터 채우기(나무·덤불 밀집·꽃무리)는 후속 T4 — 이 태스크는 존 rect만 확정한다.
+#   근거 = docs/design/homestead-vs-stardew-map-audit.md §5.3(C-1·C-2·C-4·C-5) · ADR-0059 결정1.
+# 남서 = forage 숲 존 — 나무·덤불 밀집대(C-2). 서측 고지 절벽(HIGHLAND x0..20,y0..26) 남측과 자연 연속.
+const FORAGE_FOREST_RECT := Rect2i(2, 30, 22, 30)     # x2..23, y30..59 (좌하 숲 — T4 스캐터가 밀집 채움)
+# 중남 = 과수원 존 — 혼의 나무(Orchard, 플레이어 식재) 목적 구역. 연못(y34..40) 남측과 인접(C-5 완화).
+#   남향 스파인이 이 존 상단(y44)을 지나며 입구를 낸다(C-4). Orchard는 자체 좌표계(런타임 식재)라 시드 좌표
+#   없음 — 이 rect는 식재 목적지 프레이밍(프롭 회피·동선 안내의 기준). 스파인 스퍼(x40)가 관통해 접근을 연다.
+const ORCHARD_ZONE_RECT := Rect2i(28, 44, 20, 14)     # x28..47, y44..57 (과수원 — 연못 남측 인접)
+# 남동 = overgrown 추가 개간지 — ADR-0055 차등 재점령 필드 확장(ENCROACH_SCAN_RECT가 이 영역을 덮음).
+#   debris 스캐터는 기존 개간 파이프라인(PROP_LAYOUT_HOME의 DEBRIS_*·reclaim) 재사용.
+const OVERGROWN_EXPANSION_RECT := Rect2i(52, 36, 24, 24)  # x52..75, y36..59 (남동 개간지 — ENCROACH 확장분)
+# 연못 주변 = 물가 활동존 — 낚시(Slice 3) 앵커 여백. 프롭 금지 클리어런스 + 잡초 재점령 제외(_encroach_candidates).
+#   SPIRIT_POND_RECT(x26..33,y34..40)를 여유 링으로 감싼다. 연못 자체 좌표는 불변(이 존은 둘레 여백만).
+const POND_ACTIVITY_RECT := Rect2i(24, 32, 12, 11)    # x24..35, y32..42 (연못 물가 활동 여백)
 
 # 실내 모드 카메라 경계(타일). 각 방을 비추되 외부·다른 방·경계벽이 화면에 들어오지 않게 잡는다.
 # 폭 20타일 = 화면폭이라 가로는 고정되고, 세로만 방을 따라 스크롤한다. 방 밖은 VOID(검정).
@@ -3203,7 +3224,14 @@ func _carve_paths() -> void:
 	# ★ ADR-0035 Phase B 구불 흙길(시각 안내 — GROUND/SOIL이 열려 도달성은 자동, 길은 *안내*다).
 	#   스폰(40,60)에서 중앙 스파인(x38, 스타터 패치 x40..44 비껴)으로 북상해 본가 문(44,9)·창고 문(30,8)·
 	#   스타터 패치로 갈라지고, 동워프(78,32)로 동편 갈래가 닿는다(스타듀식 가장자리 워프).
-	_carve_v(38, 10, 60)                        # 중앙 스파인: 스폰(40,60) 곁 → 북(x38, 패치 비껴)
+	# ★[ADR-0059 결정1 C-4] 남향 스파인 재배선 — 옛 x38 y10..60 직선 데드런(목적지 없이 뻗던 두꺼운 스트립)을
+	#   *분기점(y44)에서 서쪽으로 꺾어* 연못 동안·과수원 존 입구로 잇는다. 북부(건물 허브)는 x38 스파인 유지,
+	#   남부는 스폰(40,60)→스퍼(x40)→분기 가로 복도(y44)→연못(x33)/과수원(ORCHARD_ZONE_RECT 상단 관통)으로 흐른다.
+	#   폭은 1칸(축소 유지) — 사분면 절단 대신 목적지 있는 굽은 동선. 가로 복도(y32 동워프)·건물 스퍼는 아래서 유지.
+	_carve_v(38, 10, 44)                        # 중앙 스파인 북부: 건물 허브 → 과수원/연못 분기점(y44)
+	_carve_h(44, 33, 40)                        # ★분기 가로 복도(y44): 연못 동안(x33) ~ 스파인(x38) ~ 스폰 스퍼(x40) — 과수원 존 입구 관통
+	_carve_v(33, 41, 44)                        # ★연못 훅: 복도 서단 → 연못 남안 물가(y41, 물 y40 바로 아래) — C-5 물가 활동존 접속
+	_carve_v(40, 44, 60)                        # ★스폰 스퍼: 분기점 → 스폰(40,60) 정렬(옛 x38 데드런 대체·스폰이 길 위)
 	_carve_h(10, 38, 45)                        # 본가 문 레인(y10, x38..45 — 2칸 문 폭까지)
 	_carve_v(44, 9, 10)                         # 본가 문 서칸(44,9)까지
 	_carve_v(45, 9, 10)                         # ★[ADR-0046] 본가 문 동칸(45,9) 진입로 — 2칸 문에 맞춰 입구 앞 2칸 폭
@@ -7229,6 +7257,8 @@ func _encroach_candidates() -> Array:
 			if reclaim.is_cleared(t):               # 이미 연 땅(구조물 치운 성역) → 배제
 				continue
 			if farm.is_tilled(t) or farm.is_planted(t):  # 밭 성역(이중 방어) → 배제
+				continue
+			if POND_ACTIVITY_RECT.has_point(t):     # ★[ADR-0059 결정1] 물가 활동존 = 잡초 없는 여백 → 배제
 				continue
 			out.append(t)
 	return out
