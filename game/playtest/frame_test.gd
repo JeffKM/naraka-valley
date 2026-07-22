@@ -89,6 +89,33 @@ func _initialize() -> void:
 	m._on_frame_save()   # 실제 저장 경로(무크래시) — quit은 트리를 닫으므로 테스트에서 호출 안 함
 	_check("③″b _on_frame_save 저장 무크래시 + 세이브 파일 생성", FileAccess.file_exists(SAVE))
 
+	# ── ③‴ S1R-T12: 닫기 X · 휴지통 · 정보패널 · 매대 그리드 시그널 ──
+	print("── ③‴ S1R-T12 UI 구조 승격 ──")
+	_check("③‴a 신규 시그널 존재(close/discard/buy_seed)",
+		m.frame.has_signal("close_pressed") and m.frame.has_signal("discard_slot") and m.frame.has_signal("buy_seed"))
+	# 닫기 X: close_pressed → _close_frame 배선.
+	m._open_frame(InventoryFrame.CTX_MENU)
+	m.frame.close_pressed.emit()
+	_check("③‴b close_pressed → 프레임 닫힘", not m.frame.is_open())
+	# 정보패널 주입 무크래시(소지금·총수입·날짜·농장명).
+	m._open_frame(InventoryFrame.CTX_MENU)
+	m.frame.set_tab(InventoryFrame.TAB_INV)
+	m.frame.set_inv_info(m.wallet.gold, m._total_income, m._inv_date_string(), "안식 농원")
+	await process_frame
+	_check("③‴c set_inv_info 무크래시 + 날짜 문자열 비어있지 않음", m._inv_date_string() != "")
+	m._close_frame()
+	# 휴지통: 집은 슬롯을 _on_frame_discard가 통째로 비운다(경제 0).
+	var slot := -1
+	for i in range(Inventory.SIZE):
+		if m.inventory.id_at(i) != "":
+			slot = i
+			break
+	_check("③‴pre 비울 아이템 슬롯 존재", slot >= 0)
+	var g_before: int = m.wallet.gold
+	m._on_frame_discard(slot)
+	_check("③‴d 휴지통 버리기 = 슬롯 비움", m.inventory.id_at(slot) == "")
+	_check("③‴e 버리기는 경제 0(지갑 불변)", m.wallet.gold == g_before)
+
 	# ── ④ 한 번에 한 컨텍스트(매대/출하함도 같은 프레임) ──
 	print("── ④ 단일 컨텍스트 ──")
 	m._open_frame(InventoryFrame.CTX_STORE)

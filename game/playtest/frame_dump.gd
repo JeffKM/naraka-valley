@@ -34,12 +34,23 @@ func _initialize() -> void:
 	m.frame.queue_redraw()
 	await _grab("frame_options")
 
-	# 인벤토리 탭 — 스크롤바가 뜨는지(16칸=6열×3행 > 2행 뷰포트)
+	# 인벤토리 탭 — 정보패널(소지금·총수입·날짜·농장명)·휴지통·닫기 X + 스크롤바
 	m.frame.set_tab(InventoryFrame.TAB_INV)
 	m.frame._hover_tab = -1
 	m.frame._bp_first_row = 0
+	m.wallet.gold = 340
+	m._total_income = 1280
+	m.frame.set_inv_info(m.wallet.gold, m._total_income, m._inv_date_string(), "안식 농원")
 	m.frame.queue_redraw()
 	await _grab("frame_inv")
+
+	# ★ [S1R-T12] 휴지통 버리기 확인 오버레이(집은 상태) — 슬롯 0을 집어 확인 띄움
+	m.frame._held = 0
+	m.frame._trash_pending = 0
+	m.frame.queue_redraw()
+	await _grab("frame_inv_trash")
+	m.frame._held = -1
+	m.frame._trash_pending = -1
 
 	# 인벤토리 탭(스크롤 내림) — 3번째 행이 보이고 썸이 아래로 내려갔는지
 	m.frame._bp_first_row = 1
@@ -68,10 +79,15 @@ func _initialize() -> void:
 	m._open_frame(InventoryFrame.CTX_CHEST)
 	await _grab("frame_chest")
 
-	# ★ [S1R-T11] 출하함 — 제목·정산 미리보기 타이포(neodgm+외곽선) 확인
+	# ★ [S1R-T12] 출하함 — 품목별 정산 내역 행(아이콘|이름×수량|소계) + 총액 강조
 	m._close_frame()
+	m.ship_bin.pending.clear()
+	m.ship_bin.add(CropCatalog.HONRYEONGCHO, 5, 0)
+	m.ship_bin.add(CropCatalog.PIANHWA, 3, 1)
+	m.ship_bin.add(CropCatalog.YEONGHON_HOBAK, 2, 0)
 	m._open_frame(InventoryFrame.CTX_BIN)
 	await _grab("frame_bin")
+	m.ship_bin.pending.clear()
 
 	m._close_frame()
 	m.queue_free()

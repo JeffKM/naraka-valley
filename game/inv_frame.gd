@@ -21,8 +21,11 @@ class_name InventoryFrame
 
 signal deposit_slot(slot_index: int)   # 출하함: 백팩 슬롯을 통째로 드롭(판매 예약)
 signal takeback_id(id: String)         # 출하함: 대기분을 통째로 롤백(취침 전 회수)
-signal buy_pressed(bulk: bool)         # 매대: 선택 씨앗 구매(bulk=Shift 대량)
+signal buy_pressed(bulk: bool)         # 매대: 선택 씨앗 구매(bulk=Shift 대량 — 회귀 호환 유지)
 signal buy_sprinkler_pressed(bulk: bool)  # ★ [S1R-T9] 매대: 저승 스프링클러 구매(bulk=Shift 대량)
+signal buy_seed(crop_id: String, bulk: bool)  # ★ [S1R-T12] 매대 그리드: 특정 작물 씨앗 구매(행별 버튼)
+signal close_pressed                   # ★ [S1R-T12] 우상단 X: 메뉴/패널 닫기(main이 _close_frame)
+signal discard_slot(slot_index: int)   # ★ [S1R-T12] 휴지통: 집은 백팩 슬롯을 통째로 버림(확인 후)
 signal save_pressed                    # ★ Phase B 옵션 탭: 저장(main이 _save_game 호출)
 signal quit_pressed                    # ★ Phase B 옵션 탭: 저장하고 나가기
 signal chest_store(slot_index: int)    # ★ Phase D 상자: 백팩 슬롯을 통째로 상자에 보관
@@ -50,6 +53,9 @@ const TAB_ICONS: Array[Texture2D] = [
 ]
 const TAB_LABELS := ["인벤토리", "관계", "숙련", "옵션"]   # 호버 툴팁용(아이콘만 배선이라 라벨은 툴팁에)
 
+# ★ [S1R-T12] 엽전 아이콘(가격·소지금 표시 — clock_hud와 동일 에셋, 정체성 통일).
+const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
+
 # 컨텍스트(상단 레이어). NONE이면 닫힘(보이지 않음). ★ Phase D — CTX_CHEST(저장 상자) 추가.
 enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST }
 # 메뉴 탭(인벤토리 · 관계 · 숙련 · 옵션 — ADR-0048 §2 통합 탭 메뉴).
@@ -72,8 +78,16 @@ var inv: Inventory = null
 var bin: ShippingBin = null
 var chest: StorageChest = null   # ★ Phase D 저장 상자(CTX_CHEST 상단 그리드 — main이 set_chest로 주입)
 var crop_icons: Dictionary = {}
-# main이 매 프레임 채워 넣는 보조 텍스트(매대 본문·정산 미리보기 등) — 프레임은 표시만.
+# main이 매 프레임 채워 넣는 보조 텍스트(매대 헤더·정산 미리보기 등) — 프레임은 표시만.
 var store_text: String = ""
+# ★ [S1R-T12] 매대 아이템 행 데이터(main이 _store_items로 주입 — 무상태 렌더). 각 항목:
+#   {icon_id, name, price, base, owned, kind("seed"/"placeable"), buy_id}. price<base면 할인 표시.
+var store_items: Array = []
+# ★ [S1R-T12] 인벤토리 탭 정보패널 값(main이 set_inv_info로 주입 — 무상태 표시).
+var _inv_gold := 0
+var _inv_income := 0
+var _inv_date := ""
+var _inv_farm := "안식 농원"
 
 var context := CTX_NONE
 var menu_tab := TAB_INV
@@ -93,6 +107,13 @@ var _bp_thumb_rect := Rect2()    # ★ 백팩 스크롤바 썸(드래그·점프
 var _sort_rect := Rect2()
 var _buy_rect := Rect2()
 var _buy_sprinkler_rect := Rect2()   # ★ [S1R-T9] 매대 스프링클러 구매 버튼
+# ★ [S1R-T12] 매대 그리드 행별 구매 버튼 히트 [{rect, kind, buy_id}] + 우상단 닫기 X + 휴지통.
+var _store_row_rects: Array = []
+var _close_rect := Rect2()            # 우상단 닫기 X(모든 컨텍스트)
+var _trash_rect := Rect2()           # 인벤 탭 휴지통 슬롯(집은 상태로 클릭=버리기)
+var _trash_pending := -1             # 버리기 확인 대기 중인 백팩 슬롯(-1=없음)
+var _trash_yes_rect := Rect2()       # 확인 오버레이 [버리기]
+var _trash_no_rect := Rect2()        # 확인 오버레이 [취소]
 var _save_rect := Rect2()        # ★ Phase B 옵션 탭: 저장 버튼
 var _quit_rect := Rect2()        # ★ Phase B 옵션 탭: 저장하고 나가기 버튼
 # ★ Phase D 옵션 탭 설정 본체(볼륨 −/+ · 전체화면 체크박스) 히트 rect + main이 주입한 현재 값.
@@ -145,6 +166,7 @@ func set_chest(storage_chest: StorageChest) -> void:
 func open(ctx: int) -> void:
 	context = ctx
 	_held = -1
+	_trash_pending = -1         # ★ 열 때 버리기 확인 대기 해제
 	_bp_first_row = 0            # ★ 열 때 백팩 스크롤 맨 위로
 	_bp_scroll_dragging = false
 	visible = true
@@ -155,6 +177,7 @@ func open(ctx: int) -> void:
 func close() -> void:
 	context = CTX_NONE
 	_held = -1
+	_trash_pending = -1
 	_hover_tab = -1
 	_bp_scroll_dragging = false
 	visible = false
@@ -167,6 +190,7 @@ func is_open() -> bool:
 func set_tab(t: int) -> void:
 	menu_tab = t
 	_held = -1
+	_trash_pending = -1
 	_apply_heart_visibility()
 	queue_redraw()
 
@@ -187,6 +211,17 @@ func set_settings(music: float, sfx: float, is_fullscreen: bool) -> void:
 	_set_sfx = sfx
 	_set_fullscreen = is_fullscreen
 	if context == CTX_MENU and menu_tab == TAB_OPTIONS:
+		queue_redraw()
+
+# ★ [S1R-T12] 인벤토리 탭 정보패널 값 주입(읽기 전용 — 소지금·총수입·날짜·농장명). main이 wallet·
+# clock·누적 통계에서 파생해 인벤 탭이 열려 있을 때 넘긴다(set_settings·set_skills와 대칭, 무상태).
+func set_inv_info(gold: int, income: int, date_str: String, farm_name: String) -> void:
+	_inv_gold = gold
+	_inv_income = income
+	_inv_date = date_str
+	if farm_name != "":
+		_inv_farm = farm_name
+	if context == CTX_MENU and menu_tab == TAB_INV:
 		queue_redraw()
 
 # 관계 탭 하트 값 주입(읽기 전용). rows = [{name, filled, total, effect}]. main이 affinity들에서 파생해
@@ -299,6 +334,42 @@ func _draw() -> void:
 		CTX_CHEST:
 			_draw_chest_top(panel)
 			_draw_backpack(panel)
+	# ★ [S1R-T12] 우상단 닫기 X — 모든 컨텍스트 공통(스타듀 패널 닫기 문법). 9-slice 테두리 안쪽 모서리.
+	_draw_close_x(panel)
+	# ★ [S1R-T12] 버리기 확인 오버레이(집은 아이템 휴지통) — 대기 중이면 맨 위에 모달로.
+	if _trash_pending >= 0:
+		_draw_trash_confirm(panel)
+
+# ★ [S1R-T12] 우상단 닫기 X 버튼(한지 plate + 먹빛 X). 클릭 시 close_pressed(main이 _close_frame).
+func _draw_close_x(panel: Rect2) -> void:
+	var sz := 22.0
+	_close_rect = Rect2(panel.end.x - FRAME_MARGIN - sz + 2.0, panel.position.y + FRAME_MARGIN - 4.0, sz, sz)
+	HanjiUi.draw_plate(self, _close_rect)
+	var c := _close_rect
+	var m := 6.0
+	draw_line(c.position + Vector2(m, m), c.end - Vector2(m, m), HanjiUi.INK_LIGHT, 2.0)
+	draw_line(Vector2(c.end.x - m, c.position.y + m), Vector2(c.position.x + m, c.end.y - m), HanjiUi.INK_LIGHT, 2.0)
+
+# ★ [S1R-T12] 버리기 확인 — 화면 중앙 작은 한지 패널 + [버리기]/[취소]. 확인 1회(스타듀 파괴 방어).
+func _draw_trash_confirm(panel: Rect2) -> void:
+	var view := _view()
+	draw_rect(Rect2(Vector2.ZERO, view), Color(0, 0, 0, 0.35))   # 이중 백드롭(모달 강조)
+	var w := 260.0
+	var h := 108.0
+	var box := Rect2((view.x - w) * 0.5, (view.y - h) * 0.5, w, h)
+	HanjiUi.draw_frame(self, box)
+	var name := ""
+	if inv != null and _trash_pending < Inventory.SIZE:
+		name = ItemCatalog.name_of(inv.id_at(_trash_pending))
+	HanjiUi.draw_text(self, box.position + Vector2(24.0, 34.0),
+		"%s 을(를) 버릴까요?" % name, 14, HanjiUi.INK_LIGHT, w - 40.0)
+	_trash_yes_rect = Rect2(box.position.x + 24.0, box.end.y - 40.0, 96.0, 26.0)
+	_plate_btn(_trash_yes_rect)
+	draw_rect(_trash_yes_rect, Color(0.72, 0.40, 0.34), false, 1.0)   # 파괴적 액센트
+	HanjiUi.draw_text(self, _trash_yes_rect.position + Vector2(24.0, 18.0), "버리기", 14, Color(0.95, 0.72, 0.66))
+	_trash_no_rect = Rect2(box.end.x - 24.0 - 96.0, box.end.y - 40.0, 96.0, 26.0)
+	_plate_btn(_trash_no_rect)
+	HanjiUi.draw_text(self, _trash_no_rect.position + Vector2(32.0, 18.0), "취소", 14, HanjiUi.INK_LIGHT)
 
 # 공통 백팩 그리드(하단 고정 + 세로 스크롤). 뷰포트에 보이는 행만 그리고, 그 위치를 _bp_rects에
 # 저장한다(뷰포트 밖 슬롯은 빈 Rect2 = 히트 없음). 행 단위 스냅이라 부분 행이 없어 클리핑이 필요 없다.
@@ -481,14 +552,48 @@ func _draw_tab_tooltip(font: Font, tab: Rect2, label: String) -> void:
 	HanjiUi.draw_text(self, box.position + Vector2(pad, 14.0), label, fs, HanjiUi.INK_LIGHT)
 
 func _draw_inv_tab(panel: Rect2, font: Font) -> void:
-	# [정리] 버튼 — 그리드 바로 위(설명 행) 우측에 앵커. 옛 위치(PAD+36)는 상단 빈 컨텍스트
-	# 영역 한가운데 떠 보였다(owner 리포트 2026-07-06 "튀어나온다"). 설명은 짧게 줄여 좌측에 두어
-	# 우측 버튼과 안 겹치게 한다(옛 긴 문구는 버튼까지 뻗어 겹쳤다).
-	_sort_rect = Rect2(panel.end.x - PAD - 72.0, panel.position.y + TOP_H - 12.0, 72.0, 26.0)
+	# ★ [S1R-T12] 정보패널 — 탭 바 아래 한지 plate. 농장명·날짜·소지금·총수입을 스타듀 인벤 좌측
+	# 정보열처럼 한자리에 모은다(상시 HUD에서 걷어낸 골드·날짜를 여기서 복기). 우측엔 휴지통 슬롯.
+	var plate := Rect2(panel.position.x + PAD, panel.position.y + PAD + 36.0,
+		panel.size.x - PAD * 2.0, 74.0)
+	HanjiUi.draw_plate(self, plate)
+	var ix := plate.position.x + 12.0
+	HanjiUi.draw_text(self, Vector2(ix, plate.position.y + 20.0), _inv_farm, 15, HanjiUi.GOLD_SOFT,
+		plate.size.x - 90.0)
+	HanjiUi.draw_text(self, Vector2(ix, plate.position.y + 40.0), _inv_date, 13, HanjiUi.INK_LIGHT)
+	# 소지금(엽전 + 골드) · 총수입(엽전 + 누적) 한 줄.
+	var gy := plate.position.y + 60.0
+	HanjiUi.draw_text(self, Vector2(ix, gy), "소지금", 12, HanjiUi.INK_DIM)
+	var cx := ix + 44.0
+	draw_texture_rect(COIN, Rect2(cx, gy - 11.0, 12.0, 12.0), false)
+	HanjiUi.draw_text(self, Vector2(cx + 15.0, gy), str(_inv_gold), 13, HanjiUi.GOLD)
+	var ix2 := ix + 150.0
+	HanjiUi.draw_text(self, Vector2(ix2, gy), "총수입", 12, HanjiUi.INK_DIM)
+	var cx2 := ix2 + 44.0
+	draw_texture_rect(COIN, Rect2(cx2, gy - 11.0, 12.0, 12.0), false)
+	HanjiUi.draw_text(self, Vector2(cx2 + 15.0, gy), str(_inv_income), 13, HanjiUi.GOLD)
+	# 휴지통 슬롯(우측) — 집은 상태로 클릭하면 확인 후 버린다. 빈손이면 안내만.
+	_trash_rect = Rect2(plate.end.x - 12.0 - SLOT, plate.position.y + (plate.size.y - SLOT) * 0.5, SLOT, SLOT)
+	_plate_btn(_trash_rect, _held >= 0)
+	_draw_trash_icon(_trash_rect)
+	# [정리] 버튼 + 안내 — 정보패널 아래(그리드 바로 위).
+	_sort_rect = Rect2(panel.end.x - PAD - 72.0, panel.position.y + TOP_H + 2.0, 72.0, 26.0)
 	_plate_btn(_sort_rect)
 	HanjiUi.draw_text(self, _sort_rect.position + Vector2(16.0, 18.0), "정리", 14, HanjiUi.INK_LIGHT)
-	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + TOP_H + 6.0),
-		"슬롯을 클릭해 집어 다른 칸으로 옮긴다", 12, HanjiUi.INK_DIM)
+	var hint := "휴지통에 넣어 버리기" if _held >= 0 else "슬롯을 클릭해 집어 옮긴다"
+	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + TOP_H + 20.0),
+		hint, 12, HanjiUi.INK_DIM)
+
+# ★ [S1R-T12] 휴지통 픽토그램(그레이박스 — 몸통 + 뚜껑 + 세로 홈). 아이콘 에셋 없이 draw로 그린다.
+func _draw_trash_icon(rect: Rect2) -> void:
+	var c := rect.get_center()
+	var body := Rect2(c.x - 11.0, c.y - 6.0, 22.0, 18.0)
+	draw_rect(body, HanjiUi.INK_DIM)
+	draw_rect(body, HanjiUi.BORDER, false, 1.0)
+	draw_rect(Rect2(c.x - 14.0, c.y - 11.0, 28.0, 4.0), HanjiUi.BORDER)   # 뚜껑
+	for dx in [-5.0, 0.0, 5.0]:
+		draw_line(Vector2(c.x + dx, body.position.y + 3.0), Vector2(c.x + dx, body.end.y - 3.0),
+			Color(0.10, 0.09, 0.08, 0.7), 1.0)
 
 func _draw_rel_tab(panel: Rect2, font: Font) -> void:
 	# 관계 탭: 하트는 HeartBar 자식이 그린다(_apply_heart_visibility 배치). 탭 바 아래에 '읽기 전용' 안내만
@@ -610,28 +715,51 @@ func _draw_volume_row(font: Font, x: float, yy: float, label: String, v01: float
 
 # ── 출하함 상단(대기 슬롯 + 정산 미리보기) ────────────────────────────────────
 func _draw_bin_top(panel: Rect2) -> void:
+	# ★ [S1R-T12] 출하 정산 = 품목별 [아이콘 | 이름×수량 | 소계 골드] 내역 행 + 총액 강조(GOLD).
+	# 옛 가로 슬롯 나열을 스타듀 정산 브레이크다운으로 승격(클릭 회수는 각 행 아이콘 칸이 그대로 담당).
 	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 18.0),
 		"무인 출하함", 16, HanjiUi.GOLD_SOFT)
 	var preview := bin.preview_gold() if bin != null else 0
-	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 40.0),
-		"다음 아침 정산  +%d골드   ·   백팩 수확물 클릭=드롭 / 위 칸 클릭=회수" % preview,
-		12, HanjiUi.INK_DIM)
-	# 대기 슬롯(가로로 나열).
+	# 총액(우측 상단, GOLD 강조 — 엽전 아이콘 + 합계). ★ 닫기 X(우상단 모서리)와 겹치지 않게
+	# FRAME_MARGIN + X 폭만큼 왼쪽으로 물린다.
+	var total_str := "+%d" % preview
+	var tw := HanjiUi.text_width(total_str, 15)
+	var num_x := panel.end.x - FRAME_MARGIN - 28.0 - tw
+	draw_texture_rect(COIN, Rect2(num_x - 15.0, panel.position.y + PAD + 8.0, 13.0, 13.0), false)
+	HanjiUi.draw_text(self, Vector2(num_x, panel.position.y + PAD + 20.0), total_str, 15, HanjiUi.GOLD)
+	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 38.0),
+		"다음 아침 정산  ·  백팩 클릭=드롭 / 내역 클릭=회수", 12, HanjiUi.INK_DIM)
+	# 품목별 내역 행(아이콘 칸=회수 히트). 상단 영역에 들어갈 만큼만 그리고 넘치면 "…외 N종".
 	_bin_rects.clear()
 	if bin == null:
 		return
-	var origin := Vector2(panel.position.x + PAD, panel.position.y + PAD + 52.0)
-	var i := 0
-	for id in bin.ids():
-		var pos := origin + Vector2(i * (SLOT + GAP), 0.0)
-		var rect := Rect2(pos, Vector2(SLOT, SLOT))
-		_bin_rects.append({"rect": rect, "id": id})
-		_draw_slot_box(rect, false)
-		_draw_icon(id, rect)
+	const ROW_H := 30.0
+	const ICON := 26.0
+	var row_y := panel.position.y + PAD + 52.0
+	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0   # 백팩 그리드 시작 직전까지
+	var ids: Array = bin.ids()
+	var max_rows := int((max_y - row_y) / ROW_H)
+	var shown := mini(ids.size(), max_rows)
+	for i in shown:
+		var id: String = ids[i]
+		var pos := Vector2(panel.position.x + PAD, row_y + i * ROW_H)
+		var icon_rect := Rect2(pos, Vector2(ICON, ICON))
+		_bin_rects.append({"rect": icon_rect, "id": id})
+		_draw_slot_box(icon_rect, false)
+		_draw_icon(id, icon_rect)
 		var n := bin.count_of(id)
-		if n > 1:
-			HanjiUi.draw_text(self, pos + Vector2(SLOT - 16.0, SLOT - 5.0), str(n), 13, HanjiUi.INK_LIGHT)
-		i += 1
+		var sub := 0
+		for q in bin.qualities_of(id):
+			sub += bin.count_of_quality(id, int(q)) * ItemCatalog.price_of(id, int(q))
+		var ty := pos.y + ICON - 8.0
+		HanjiUi.draw_text(self, Vector2(pos.x + ICON + 10.0, ty),
+			"%s ×%d" % [ItemCatalog.name_of(id), n], 13, HanjiUi.INK_LIGHT, 150.0)
+		var subs := "+%d" % sub
+		HanjiUi.draw_text(self, Vector2(panel.end.x - PAD - HanjiUi.text_width(subs, 13), ty),
+			subs, 13, HanjiUi.GOLD_SOFT)
+	if ids.size() > shown:
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + shown * ROW_H + 12.0),
+			"…외 %d종" % (ids.size() - shown), 12, HanjiUi.INK_DIM)
 
 # ── ★ Phase D 저장 상자 상단(보관 슬롯 그리드) ────────────────────────────────
 # 상단 컨텍스트 영역에 상자 슬롯을 백팩과 같은 6열 그리드로 그린다(하단=백팩, 상단=상자). 클릭은
@@ -666,21 +794,58 @@ func _draw_chest_top(panel: Rect2) -> void:
 
 # ── 매대 상단(본문 텍스트 + 구매 버튼) ────────────────────────────────────────
 func _draw_store_top(panel: Rect2) -> void:
-	var y := panel.position.y + PAD + 16.0
+	# ★ [S1R-T12] 매대 그리드 — 헤더(골드·할인) 2줄 + 품목 행 리스트 [아이콘|이름|가격(엽전)|구매].
+	# store_text는 헤더(제목·골드·할인 요약)만, 품목은 store_items 데이터로 행을 그린다(평문 → 그리드).
+	var y := panel.position.y + PAD + 14.0
 	for line in store_text.split("\n"):
-		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT)
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
+			panel.size.x - PAD * 2.0)
 		y += 18.0
-	# 씨앗 구매 버튼(좌클릭=1개 / Shift+좌클릭=대량). ★ 라벨은 neodgm 폭에 맞게 압축 +
-	# max_w 클램프(버튼 밖으로 흘러 옆 버튼과 겹치지 않게 — 육안 덤프에서 잡은 오버플로).
-	_buy_rect = Rect2(panel.position.x + PAD, panel.position.y + TOP_H - 6.0, 220.0, 26.0)
-	_plate_btn(_buy_rect)
-	HanjiUi.draw_text(self, _buy_rect.position + Vector2(12.0, 18.0), "[클릭] 씨앗 구매·[Shift] 대량",
-		13, HanjiUi.INK_LIGHT, _buy_rect.size.x - 20.0)
-	# ★ [S1R-T9] 스프링클러 구매 버튼(씨앗 버튼 오른쪽 — 설치물 획득 그레이박스 경로).
-	_buy_sprinkler_rect = Rect2(_buy_rect.position.x + 232.0, _buy_rect.position.y, 220.0, 26.0)
-	_plate_btn(_buy_sprinkler_rect)
-	HanjiUi.draw_text(self, _buy_sprinkler_rect.position + Vector2(12.0, 18.0), "[클릭] 스프링클러 구매",
-		13, HanjiUi.INK_LIGHT, _buy_sprinkler_rect.size.x - 20.0)
+	# 품목 행(아이콘·이름·가격·구매 버튼). 행 클릭 or 버튼 클릭으로 구매(Shift=대량).
+	# 헤더(2줄) 아래부터 백팩 그리드 직전까지 꽉 채워 판매 품목 전부(씨앗 4 + 스프링클러)를 담는다.
+	_store_row_rects.clear()
+	const ROW_H := 22.0
+	const ICON := 20.0
+	var row_y := panel.position.y + PAD + 42.0
+	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0   # 백팩 그리드 시작(_grid_origin) 직전까지
+	var i := 0
+	for item in store_items:
+		var ry := row_y + i * ROW_H
+		if ry + ROW_H > max_y:
+			break
+		var rowrect := Rect2(panel.position.x + PAD, ry, panel.size.x - PAD * 2.0, ROW_H - 2.0)
+		var buyrect := Rect2(panel.end.x - PAD - 54.0, ry, 54.0, ROW_H - 4.0)
+		_store_row_rects.append({"row": rowrect, "buy": buyrect,
+			"kind": String(item.get("kind", "")), "buy_id": String(item.get("buy_id", ""))})
+		# 아이콘.
+		var icon_rect := Rect2(rowrect.position, Vector2(ICON, ICON))
+		_draw_icon(String(item.get("icon_id", "")), icon_rect)
+		# 이름.
+		var ty := ry + ICON - 6.0
+		HanjiUi.draw_text(self, Vector2(rowrect.position.x + ICON + 8.0, ty),
+			String(item.get("name", "")), 13, HanjiUi.INK_LIGHT, 118.0)
+		# 가격(엽전 + 숫자). 할인 시 정가→할인가.
+		var price := int(item.get("price", 0))
+		var base := int(item.get("base", price))
+		var px := rowrect.position.x + ICON + 8.0 + 124.0
+		if price < base:
+			var bs := "%d→" % base
+			HanjiUi.draw_text(self, Vector2(px, ty), bs, 11, HanjiUi.INK_DIM)
+			px += HanjiUi.text_width(bs, 11) + 2.0
+		draw_texture_rect(COIN, Rect2(px, ty - 11.0, 12.0, 12.0), false)
+		HanjiUi.draw_text(self, Vector2(px + 15.0, ty), str(price), 13, HanjiUi.GOLD)
+		# 구매 버튼.
+		_plate_btn(buyrect)
+		HanjiUi.draw_text(self, buyrect.position + Vector2(11.0, 16.0), "구매", 12, HanjiUi.INK_LIGHT)
+		i += 1
+
+# ★ [S1R-T12] 매대 행 구매 라우팅 — 행/버튼 클릭 시 종류별 시그널. Shift=대량.
+func _buy_store_row(e: Dictionary, bulk: bool) -> void:
+	match String(e.get("kind", "")):
+		"placeable":
+			buy_sprinkler_pressed.emit(bulk)
+		"seed":
+			buy_seed.emit(String(e.get("buy_id", "")), bulk)
 
 # ── 클릭 라우팅 ───────────────────────────────────────────────────────────────
 func _gui_input(event: InputEvent) -> void:
@@ -707,6 +872,23 @@ func _gui_input(event: InputEvent) -> void:
 		_bp_scroll_dragging = false
 		return
 	var p: Vector2 = event.position
+	# ★ [S1R-T12] 버리기 확인 오버레이가 떠 있으면 그 버튼만 받는다(모달 — 다른 클릭 차단).
+	if _trash_pending >= 0:
+		if _trash_yes_rect.has_point(p):
+			discard_slot.emit(_trash_pending)
+			_trash_pending = -1
+			_held = -1
+			queue_redraw()
+		elif _trash_no_rect.has_point(p):
+			_trash_pending = -1
+			queue_redraw()
+		accept_event()
+		return
+	# ★ [S1R-T12] 우상단 닫기 X — 모든 컨텍스트 공통(다른 라우팅보다 먼저).
+	if _close_rect.has_point(p):
+		close_pressed.emit()
+		accept_event()
+		return
 	# ★ 스크롤바: 썸 클릭=드래그 시작, 트랙 클릭=그 위치로 점프(다른 클릭 라우팅보다 먼저).
 	if _backpack_visible() and _bp_track_rect.size.y > 0.0:
 		if _bp_thumb_rect.has_point(p):
@@ -721,10 +903,10 @@ func _gui_input(event: InputEvent) -> void:
 		CTX_BIN:
 			_click_bin(p)
 		CTX_STORE:
-			if _buy_rect.has_point(p):
-				buy_pressed.emit(event.shift_pressed)
-			elif _buy_sprinkler_rect.has_point(p):   # ★ [S1R-T9] 스프링클러 구매
-				buy_sprinkler_pressed.emit(event.shift_pressed)
+			for e in _store_row_rects:   # ★ [S1R-T12] 행/버튼 클릭=개별 구매(Shift 대량)
+				if e["buy"].has_point(p) or e["row"].has_point(p):
+					_buy_store_row(e, event.shift_pressed)
+					break
 		CTX_CHEST:
 			_click_chest(p)
 	accept_event()
@@ -778,6 +960,12 @@ func _click_menu(p: Vector2) -> void:
 	if _sort_rect.has_point(p):
 		inv.sort()
 		_held = -1
+		return
+	# ★ [S1R-T12] 휴지통 — 집은 상태로 클릭하면 확인 오버레이를 띄운다(빈손이면 무시).
+	if _trash_rect.has_point(p):
+		if _held >= 0:
+			_trash_pending = _held
+			queue_redraw()
 		return
 	# 백팩 슬롯: 집기/놓기(클릭 이동).
 	for i in _bp_rects.size():
