@@ -72,8 +72,45 @@ func _initialize() -> void:
 		m._build_shore_masks()
 		_check("④ 마스크 idempotent(재호출 불변)", _cls_count(m._shore_mask[3], 2) == before)
 
+	# ── Task 5(ADR-0059 결정 2): 마이크로 알고리즘 티어1·2 결정성 ──
+	# 같은 시드 2회 빌드 산출 동일(FastNoiseLite seed 고정 + hash 결정 랜덤 → randi/Time 미사용 확증).
+	m._build_ground16()
+	var data_a: PackedByteArray = m._ground_detail_tex.get_image().get_data()
+	m._build_ground16()
+	var data_b: PackedByteArray = m._ground_detail_tex.get_image().get_data()
+	_check("⑤ _build_ground16 결정적(2회 빌드 픽셀 동일)", data_a == data_b)
+	_check("⑤ _mask_noise 결정적(단일 진입점)", m._mask_noise(12.0, 34.0) == m._mask_noise(12.0, 34.0))
+	_check("⑤ _macro/_micro fBm 결정적", m._macro_noise01(5.0, 7.0) == m._macro_noise01(5.0, 7.0) \
+		and m._micro_noise01(5.0, 7.0) == m._micro_noise01(5.0, 7.0))
+	# 외톨이 정리 실효 — clump 마스크에 min-size(3) 미만 4-연결 조각이 없다.
+	m._compute_scatter_clump()
+	_check("⑤ clump 외톨이(<%d) 조각 없음" % m._SCATTER_CLUMP_MIN, _min_clump_comp(m) >= m._SCATTER_CLUMP_MIN)
+
 	print("결과: %d 실패" % _fail)
 	quit(1 if _fail > 0 else 0)
+
+# clump 마스크의 4-연결 컴포넌트 중 최소 크기(외톨이 정리 검증). 조각 없으면 큰 값.
+func _min_clump_comp(m: Node) -> int:
+	var seen := {}
+	var smallest := 1 << 30
+	for y in m._outdoor_h:
+		for x in m._grid_w:
+			if int(m._scatter_clump[y][x]) != 1 or seen.has(Vector2i(x, y)):
+				continue
+			var n := 0
+			var stack: Array = [Vector2i(x, y)]
+			seen[Vector2i(x, y)] = true
+			while not stack.is_empty():
+				var c: Vector2i = stack.pop_back()
+				n += 1
+				for d in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
+					var nb: Vector2i = c + d
+					if nb.x >= 0 and nb.y >= 0 and nb.x < m._grid_w and nb.y < m._outdoor_h \
+							and int(m._scatter_clump[nb.y][nb.x]) == 1 and not seen.has(nb):
+						seen[nb] = true
+						stack.append(nb)
+			smallest = min(smallest, n)
+	return smallest
 
 func _cls_count(m: PackedByteArray, cls: int) -> int:
 	var n := 0
