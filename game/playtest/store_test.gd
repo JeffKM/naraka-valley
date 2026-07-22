@@ -160,6 +160,37 @@ func _initialize() -> void:
 	_check("⑧a2 대량 구매 골드 차감 = 정가×묶음", m.wallet.gold == 1000 - base * m.STORE_BULK)
 	_check("⑧b 만물상 카탈로그 = store 종류 불변", m._buildings["만물상"]["kind"] == "store")
 
+	# ── ⑨ 매대 그리드 승격(★ S1R-T12) + 누적 총수입 ──
+	print("── ⑨ 매대 그리드 + 총수입 ──")
+	var items: Array = m._store_items()
+	# 판매 씨앗 4종(불사과=채집 전용 제외) + 스프링클러 1 = 5행.
+	_check("⑨a _store_items = 씨앗4 + 스프링클러(5행)", items.size() == 5)
+	var has_fields := true
+	for it in items:
+		if not (it.has("icon_id") and it.has("name") and it.has("price") and it.has("kind") and it.has("buy_id")):
+			has_fields = false
+	_check("⑨b 각 행에 아이콘·이름·가격·종류·구매id", has_fields)
+	_check("⑨c 불사과(채집 전용)는 매대에 없음",
+		items.all(func(it): return it["buy_id"] != CropCatalog.BULSAGWA))
+	_check("⑨d 마지막 행 = 스프링클러(설치물)", items[4]["kind"] == "placeable" and items[4]["buy_id"] == ItemCatalog.SPRINKLER)
+	# 행별 구매 = 선택 작물이 아니라 그 행의 작물을 산다(_on_frame_buy_seed).
+	m.neo_affinity.points = 0
+	m.wallet.gold = 1000
+	var target: String = CropCatalog.PIANHWA   # _selected_crop(혼령초)과 다른 작물로 검증
+	var tbase: int = CropCatalog.seed_cost(target)
+	var seeds_t: int = m.inventory.seed_count(target)
+	m._on_frame_buy_seed(target, false)
+	_check("⑨e 행별 구매 = 그 행 작물 씨앗 +1", m.inventory.seed_count(target) == seeds_t + 1)
+	_check("⑨f 행별 구매 골드 차감 = 정가", m.wallet.gold == 1000 - tbase)
+	# 누적 총수입 — 출하 정산분이 _total_income에 쌓인다(_on_day_advanced 실경로).
+	m.ship_bin.pending.clear()
+	m.ship_bin.add(crop, 2)
+	var expect_inc: int = 2 * CropCatalog.sell_price(crop)
+	var inc0: int = m._total_income
+	m._on_day_advanced(2)
+	_check("⑨g 총수입 누적(출하 정산분)", m._total_income == inc0 + expect_inc)
+	m.ship_bin.pending.clear()
+
 	# ── ⑦ 세이브 라운드트립(네오 호감도) ──
 	print("── ⑦ 세이브 라운드트립 ──")
 	m.neo_affinity.points = 2 * m.neo_affinity.POINTS_PER_HEART   # ♡2
