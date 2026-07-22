@@ -2,7 +2,7 @@
 
 > **사용법:** 아래 `---` 이하 전문을 새 Claude Code(Fable 5) 세션에 통째로 붙여넣는다. 세션이 끊기거나 컨텍스트가 요약되어 새로 시작할 때도 같은 프롬프트를 다시 붙여넣으면 된다 — 프롬프트가 ROADMAP과 진행 기록을 읽고 중단 지점부터 이어가도록 설계되어 있다(멱등). 장시간 무인 운행을 원하면 붙여넣은 뒤 `/loop`를 함께 걸어도 된다.
 >
-> **설계 결정(2026-07-22 owner 확정):** ①전체 자율 오케스트레이터 형태 ②아트는 Claude가 PixelLab으로 전부 생성(+owner-Gemini 교체용 스펙카드 큐 병행) ③슬라이스는 순차, 슬라이스 내부만 병렬 ④**Slice 1 리메이크(맵·농사·전 UI 스타듀 스타일 재작업)를 최우선 과제로 선행** ⑤맵 리메이크 전 `deep-research`·`last30days`로 타일맵 생성 알고리즘 전수 서베이 후 반영.
+> **설계 결정(2026-07-22 owner 확정):** ①전체 자율 오케스트레이터 형태 ②아트는 Claude가 PixelLab으로 전부 생성(+owner-Gemini 교체용 스펙카드 큐 병행) ③슬라이스는 순차, 슬라이스 내부만 병렬 ④**Slice 1 리메이크(맵·농사·전 UI 스타듀 스타일 재작업)를 최우선 과제로 선행** ⑤맵 리메이크 전 `deep-research`·`last30days`로 타일맵 생성 알고리즘 전수 서베이 후 반영 ⑥**Fable 5 = 어드바이저/오케스트레이터 전담, 실작업 워커는 전부 Opus/Sonnet**.
 
 ---
 
@@ -27,6 +27,10 @@
 1. **자율 grill (self-grill):** `grill-with-docs`는 원래 owner 인터뷰 스킬이지만, 이 캠페인에서는 **자문자답 변형**으로 실행한다 — 스킬을 로드해 질문 트리를 그대로 생성하되, 답은 ①기존 ADR·설계 문서 ②`docs/design/stardew-systems-catalog.md` ③스타듀 위키 로컬 미러(`docs/reference/stardew-wiki/`) 순으로 문서에서 찾는다. 문서로 답할 수 없는 취향 결정만 **잠정 추천으로 즉시 확정**하고 새 ADR로 기록 + owner 큐(§8)에 적재한다. **owner 답변을 기다리며 멈추지 않는다.**
 2. **아트 = Claude PixelLab 전담:** ADR-0047·ADR-0058의 owner-Gemini 분담을 이 캠페인 동안 일시 오버라이드한다. 필요한 모든 에셋(캐릭터·초상화·대형 씬 포함)을 PixelLab MCP로 생성해 게임을 항상 완성 상태로 유지한다. 단 규격은 그대로 지킨다: `asset-ruleset.md` §0~13 · `tileset-ruleset.md` · ADR-0012 픽셀 규격 · 캐릭터는 `mode=standard, size=56, detail=high` + 공통 proportions. 그리고 **생성한 모든 에셋의 스펙카드를 `docs/design/gemini-regen-batch.md` 형식으로 큐에 남겨**, owner가 나중에 Gemini 고품질본으로 무수정 교체할 수 있게 한다(ADR-0048 원칙: Claude 제작물 = Gemini 교체 가능).
 3. **순차 슬라이스 + 내부 병렬:** 슬라이스는 한 번에 하나만 진행한다. 슬라이스 내부에서는 Workflow·서브에이전트 fan-out을 적극 사용한다. **멀티에이전트 오케스트레이션(Workflow 도구) 사용을 명시적으로 허가한다.**
+4. **모델 계층 정책 — Fable 5는 어드바이저, 워커는 Opus/Sonnet:** 너(메인 루프·Fable 5)는 **오케스트레이터/어드바이저 전담**이다 — 문서 판독, self-grill 판정, 작업 분해, 워커 프롬프트 설계, 결과 검수·통합 판정, 커밋/PR 결정, owner 큐 관리만 직접 한다. **코드 구현·테스트 작성·아트 생성/후처리·리서치 수집·문서 초안 등 실작업은 전부 서브에이전트(Agent 도구)나 Workflow `agent()`에 `model` 지정으로 위임한다:**
+   - `model: "opus"` — 메카닉 구현·헤드리스 테스트 작성·맵 재설계 실행·코드리뷰 verify·설계안 생성 등 판단이 필요한 실작업.
+   - `model: "sonnet"` — 기계적 편집·일괄 변환·문서 정리·위키 미러 스캔·스펙카드 작성 등 경량 작업.
+   - 메인 루프의 직접 편집은 예외적으로만: 워커 결과의 소규모 글루(수 줄 수정)·ROADMAP/메모리/큐 갱신·커밋 실행. 파일 수십 줄 이상의 구현을 메인 루프가 직접 쓰고 있다면 위임으로 전환하라.
 
 ## 3. 최우선 과제 — Slice 1R: 안식 농원 스타듀 리메이크 (owner 지시 2026-07-22)
 
@@ -57,7 +61,7 @@ Slice 1은 그레이박스·시각완성 상태지만, owner 판정은 **"아직
 ## 5. 하네스 운용 규칙
 
 - **Workflow(멀티에이전트):** ①슬라이스 착수 설계 리뷰(judge panel — 독립 설계안 N개→심사→합성) ②PR 전 대규모 코드리뷰(find→adversarial verify) ③스타듀 위키 미러 전수 리서치 sweep(특히 Slice 1R 격차 감사) ④타일맵 알고리즘 서베이(§3-①-a)의 multi-modal sweep — 계열별 병렬 리서처 fan-out 후 합성. 최종 폴리시 루프에서는 버그 헌트 loop-until-dry.
-- **서브에이전트:** `Explore`=코드·문서 리서치, `code-reviewer`=PR 전 리뷰, `general-purpose`=독립 병렬 작업. 독립 작업은 한 메시지에 묶어 동시 발사.
+- **서브에이전트:** `Explore`=코드·문서 리서치, `code-reviewer`=PR 전 리뷰, `general-purpose`=독립 병렬 작업. 독립 작업은 한 메시지에 묶어 동시 발사. **모든 워커에 §2-4 모델 정책 적용** — Agent 도구는 `model: "opus"|"sonnet"`, Workflow는 `agent(prompt, {model: ...})`로 명시하고, `model: "fable"` 워커는 만들지 않는다(Fable 5는 메인 루프 하나뿐).
 - **헤드리스 테스트 절대 병렬 금지** — `user://save.dat` 경합. `game/run_tests.sh` 순차 러너만 사용, godot 직접 백그라운드 실행 금지, 워치독 필수.
 - 에셋(PNG) 수정이 게임에 반영 안 되면 로직 의심 전에 **임포트 캐시**부터: `godot --headless --import`.
 - playtest가 무작위로 깨지면 로직 버그 전에 **클래스캐시 flakiness**부터: `godot --headless --editor --quit`로 캐시 재생성.
