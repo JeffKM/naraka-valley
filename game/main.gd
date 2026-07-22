@@ -1314,6 +1314,10 @@ var ranch: Ranch = null
 #   노드(코드 생성 — .new()). debris 배치는 PROP_LAYOUT_HOME 시드에 잠겨 있고, 이 노드는 "무엇을 치웠나"
 #   델타만 소유한다. main이 드로우/충돌 skip·farmable 판정에서 질의(디커플링 — Reclaim은 화면·지형 무지).
 var reclaim: Reclaim = null
+# ★ [S1R-T9] 저승 스프링클러 상태(설치 좌표 델타). Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 —
+#   .new()). 상점 구매→지면 설치→아침 자동 급수(십자 4칸)→세이브. FarmField/Reclaim와 디커플링(자동
+#   급수 시 main이 sprinkler.watered_targets를 farm.sprinkle로 흘려넣는다 — Sprinkler는 밭·화면을 모름).
+var sprinkler: Sprinkler = null
 var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌트를 한 번만 띄웠는지(세션 로컬 — 세이브 무관)
 # ★ [B1-a.3] 사료풀 상태(낫으로 베어 건초를 얻는 고지 풀 — 재생·겨울정지). FarmField/Orchard/Ranch/
 #   Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). main이 고지 자유 풀밭을 시드하고, 벤 결과를
@@ -1570,6 +1574,10 @@ func _ready() -> void:
 	reclaim.name = "Reclaim"
 	add_child(reclaim)
 	reclaim.changed.connect(_on_reclaim_changed)   # 개간·복원 시 드로우/충돌 skip 반영
+	sprinkler = Sprinkler.new()          # ★ [S1R-T9] 저승 스프링클러 상태 노드(코드 생성 — 설치 좌표 델타 원장)
+	sprinkler.name = "Sprinkler"
+	add_child(sprinkler)
+	sprinkler.changed.connect(_on_sprinkler_changed)   # 설치·철거·복원 시 드로우 갱신
 	forage = Forage.new()                # ★ [B1-a.3] 사료풀 상태 노드(코드 생성 — 낫 채집·재생 원장, 여물광 건초 소스)
 	forage.name = "Forage"
 	add_child(forage)
@@ -2391,6 +2399,11 @@ func _on_reclaim_changed() -> void:
 	queue_redraw()
 	if _front_props != null:
 		_front_props.queue_redraw()
+
+# ★ [S1R-T9] 스프링클러 상태가 바뀐 프레임(설치·철거·세이브 복원). 순수 시각 데칼이라(비-SOLID·
+#   통과 O 그레이박스) 충돌 재구성 없이 드로우만 갱신한다(잡초·꽃 결의 얇은 원장).
+func _on_sprinkler_changed() -> void:
+	queue_redraw()
 
 # ★ ADR-0025 ② — PROP 좌표 외부화 로드. 부팅 시 한 번(_ready, _build_grid 전). res://layout.json이
 # 있으면 거기서, 없거나 깨졌으면 시드에서 부팅하고 layout.json을 1회 생성(에디터/디버그 빌드만 write).
@@ -5216,6 +5229,7 @@ func _setup_frame() -> void:
 	frame.deposit_slot.connect(_on_frame_deposit)
 	frame.takeback_id.connect(_on_frame_takeback)
 	frame.buy_pressed.connect(_on_frame_buy)
+	frame.buy_sprinkler_pressed.connect(_on_frame_buy_sprinkler)   # ★ [S1R-T9] 매대 스프링클러 구매
 	frame.save_pressed.connect(_on_frame_save)   # ★ Phase B 옵션 탭
 	frame.quit_pressed.connect(_on_frame_quit)
 	frame.chest_store.connect(_on_frame_chest_store)   # ★ Phase D 상자 보관
@@ -5309,6 +5323,13 @@ func _on_day_advanced(day: int) -> void:
 		farm.remove_plant(et)                 # 작물만 제거·흙/비료 보존(tile_changed로 오버레이 갱신)
 	if eaten.size() > 0:
 		_notice("까마귀가 작물 %d개를 쪼아먹었다 — 허수아비로 막을 수 있다" % eaten.size())
+	# ★ [S1R-T9] 저승 스프링클러 자동 급수 — 성장(advance_day) *전에* 설치된 스프링클러의 십자 인접 칸을
+	#   적신다(혼력 0·물뿌리개 잔량 무관 — T8 축과 독립). 스타듀 문법: 아침에 뿌려 그날 성장할 칸을 미리
+	#   적시고, 바로 아래 advance_day가 젖은 심긴 칸을 자란다("급수 → 성장 판정" 순서 = 하루 사이클 정합).
+	#   까마귀에 쪼여 비워진 칸(위 remove_plant)은 이제 미심김이라 급수해도 성장 없음(무해).
+	if sprinkler != null:
+		for st in sprinkler.watered_targets():
+			farm.sprinkle(st)
 	var h := affinity.hearts()
 	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h))
 	orchard.advance_day(day)   # ★ [S1-5b] 성숙+제철 나무는 결실 +1(비제철 정지·영속). day는 무상태 절기 판정(ADR-0045)
@@ -5631,6 +5652,7 @@ func _save_game() -> void:
 		"orchard": orchard.to_save(),   # ★ [S1-5b] 심긴 혼의 나무(앵커·나이·결실). 영속·나이가 planted_day 파생이라 최소
 		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
 		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
+		"sprinkler": sprinkler.to_save(),   # ★ [S1R-T9] 설치한 스프링클러 좌표(플레이어 델타 — 슬라이스 키 네임스페이스)
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
 		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
@@ -5682,6 +5704,8 @@ func _load_game() -> void:
 		ranch.load_save(data["ranch"])
 	if data.has("reclaim"):   # ★ [S1-8] — 키 없는 구버전은 치운 것 0(전 debris 유지). changed가 드로우/충돌 skip 반영
 		reclaim.load_save(data["reclaim"])
+	if data.has("sprinkler"):   # ★ [S1R-T9] — 키 없는 구버전은 설치 0(빈 목록). changed가 드로우 갱신
+		sprinkler.load_save(data["sprinkler"])
 	if data.has("forage"):    # ★ [B1-a.3] — 키 없는 구버전은 사료풀 0(부팅 후 _seed_forage_tiles가 맵에서 시드). changed가 드로우 갱신
 		forage.load_save(data["forage"])
 	if data.has("flower_patch"):  # ★ ADR-0052 — 키 없는 구세이브는 딴 상태 0(부팅 후 _seed_flower_patches가 배치에서 시드). changed가 드로우 갱신
@@ -6364,8 +6388,18 @@ func _process(delta: float) -> void:
 	var on_refill := not _sleeping and inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target)
 	if on_refill and Input.is_action_just_pressed("use_tool"):
 		_refill_watering_can()
+	# ★ [S1R-T9] 스프링클러 설치/철거 — 설치물은 GROUND/SOIL 위(비-SOIL 포함)라 _target_valid 게이트 밖에서
+	#   따로 디스패치(개간·리필과 같은 결). 스프링클러 아이템을 들고 LMB: 이미 설치된 칸이면 회수, 빈 지면이면
+	#   설치. 허수아비 배치 결(보이는 아트=인프라)이되 런타임 델타라 Sprinkler 원장이 든다(layout.json 불변).
+	var holding_sprinkler := inventory.selected_id() == ItemCatalog.SPRINKLER
+	var on_sprinkler := not _sleeping and holding_sprinkler and sprinkler != null and sprinkler.has_at(_target)
+	if on_sprinkler and Input.is_action_just_pressed("use_tool"):
+		_remove_sprinkler(_target)
+	elif not _sleeping and holding_sprinkler and Input.is_action_just_pressed("use_tool") and _can_place_sprinkler(_target):
+		_place_sprinkler(_target)
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
-	if not _sleeping and _target_valid and Input.is_action_just_pressed("use_tool"):
+	#   ★ 스프링클러를 들었으면 위에서 설치/철거를 이미 처리했으니 밭 도구질로 흘리지 않는다(중복 방지).
+	if not _sleeping and _target_valid and not holding_sprinkler and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("action"):
@@ -6506,6 +6540,14 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 물뿌리개 채우기 (%d/%d)" % [_can_water, _CAN_CAPACITY] if _can_water < _CAN_CAPACITY \
 			else "물뿌리개 가득 참 (%d/%d)" % [_can_water, _CAN_CAPACITY]
+	elif inventory.selected_id() == ItemCatalog.SPRINKLER and sprinkler != null and sprinkler.has_at(_target):
+		# ★ [S1R-T9] 이미 설치된 스프링클러를 겨눌 때: LMB로 회수(허수아비 재회수 동형).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 저승 스프링클러 회수"
+	elif inventory.selected_id() == ItemCatalog.SPRINKLER and _can_place_sprinkler(_target):
+		# ★ [S1R-T9] 빈 지면·경작지를 스프링클러를 들고 겨눌 때: LMB로 설치(아침 인접 4칸 자동 급수).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 저승 스프링클러 설치 (인접 4칸 자동 급수)"
 	else:
 		# 밭 칸을 바라볼 때만 안내. 든 도구·칸 상태로 동사를 파생한다(LMB 도구질 / RMB 맨손 수확).
 		var prompt := _farm_prompt()
@@ -6633,6 +6675,70 @@ func _use_tool() -> void:
 	if not free_verb:
 		energy.spend(cost)                    # ★ ADR-0059 결정3 — 과금 동사(괭이·물·낫·개간·급여)만 소모
 	queue_redraw()                            # 새 상태가 바로 보이도록
+
+# ── ★ [S1R-T9] 저승 스프링클러 설치/철거/구매 ─────────────────────────────────
+# 이 칸에 스프링클러를 설치할 수 있는가(⑤ 기존 배치 규칙 준수). 안식 농원 전용·빈 지면(GROUND) 또는
+# 경작지(SOIL)만 — 길·물·벽·절벽·건물 패드(SOLID)는 배제하고, POND_ACTIVITY_RECT(물가 활동존)·프롭 점유
+# (나무·바위·debris·꽃·울타리·허수아비)·트렐리스 넝쿨·이미 설치된 칸도 배제한다(성역·겹침 방지).
+func _can_place_sprinkler(t: Vector2i) -> bool:
+	if _region != RegionCatalog.HOME or sprinkler == null:
+		return false
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
+		return false
+	if sprinkler.has_at(t):
+		return false                          # 이미 설치됨(그 위엔 철거만)
+	var cell: int = _grid[t.y][t.x]
+	if cell != GROUND and cell != SOIL:       # 빈 지면·경작지만(길·물·벽·절벽·건물 패드 배제)
+		return false
+	if is_solid(cell):                        # 방어(건물 패드·절벽·벽 = SOLID)
+		return false
+	if POND_ACTIVITY_RECT.has_point(t):       # 물가 활동존(연못 여백) → 배제
+		return false
+	if _home_occupied_tiles().has(t):         # 프롭 점유(나무·바위·debris·꽃·울타리·허수아비) → 배제
+		return false
+	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
+		return false
+	if farm.is_crop_solid(t):                 # 트렐리스 넝쿨 점유 → 배제
+		return false
+	return true
+
+# 조준 칸에 스프링클러를 설치한다(아이템 1개 소모). 원장이 좌표를 든다(허수아비처럼 보이는 아트=인프라).
+func _place_sprinkler(t: Vector2i) -> void:
+	if not inventory.has_item(ItemCatalog.SPRINKLER):
+		return
+	if sprinkler.place(t):
+		inventory.remove_item(ItemCatalog.SPRINKLER, 1)
+		audio.sfx("ui")
+		_notice("저승 스프링클러를 설치했다 — 아침마다 인접 4칸을 자동으로 적신다")
+		queue_redraw()
+
+# 조준 칸의 스프링클러를 회수한다(아이템 1개 인벤토리 반환 — 허수아비 재회수 동형). 없으면 무동작.
+func _remove_sprinkler(t: Vector2i) -> void:
+	if sprinkler.remove(t):
+		inventory.add_item(ItemCatalog.SPRINKLER, 1)
+		audio.sfx("ui")
+		_notice("저승 스프링클러를 회수했다")
+		queue_redraw()
+
+# 스프링클러 1개를 네오 만물상에서 산다(그레이박스 획득 경로 — 카탈로그의 정식 제작 게이트는 채광 재료가
+# Slice 5 의존이라 구매로 대체). 씨앗 구매(_buy_seed_store_n)와 같은 결: 네오 호감도 할인가·골드 부족 방어.
+func buy_sprinkler(n: int = 1) -> int:
+	var base := ItemCatalog.price_of(ItemCatalog.SPRINKLER)
+	if base <= 0 or n <= 0:
+		return 0
+	var unit := StoreDiscount.price(base, neo_affinity.hearts())
+	var bought := 0
+	for _i in n:
+		if not wallet.spend(unit):
+			break
+		inventory.add_item(ItemCatalog.SPRINKLER, 1)
+		bought += 1
+	if bought == 0:
+		_notice("골드 부족(%d 필요)" % unit)
+		return 0
+	audio.sfx("ui")                           # 매대 거래 블립
+	_notice("저승 스프링클러 ×%d −%d골드 (만물상)" % [bought, unit * bought])
+	return bought
 
 # RMB 맨손 수확(ADR-0024 §3 — 낫 없음, 수확=맨손). 다 자란 칸만 거두고, 거둔 영혼을 인벤토리에
 # 쌓아 경제의 양끝을 잇는다(밭→재고→판매·서빙). 다 안 자랐거나 혼력 부족이면 무동작.
@@ -6955,6 +7061,10 @@ const STORE_BULK := 5   # Shift 대량 구매 묶음 크기(스타듀 묶음 결
 func _on_frame_buy(bulk: bool) -> void:
 	_buy_seed_store_n(_selected_crop, STORE_BULK if bulk else 1)
 
+# ★ [S1R-T9] 매대 스프링클러 구매(그레이박스 획득 경로). Shift=대량(STORE_BULK 묶음).
+func _on_frame_buy_sprinkler(bulk: bool) -> void:
+	buy_sprinkler(STORE_BULK if bulk else 1)
+
 # 선택 작물 씨앗 1개를 *네오 할인가*로 산다(매대 클릭 단건). 골드가 모자라면 막는다.
 func _buy_seed_store(crop_id: String) -> void:
 	_buy_seed_store_n(crop_id, 1)
@@ -6989,11 +7099,18 @@ func _store_text() -> String:
 	var price_line := "%s 씨앗  −%d골드  · 보유 %d" % [CropCatalog.name_of(sel), cost, inventory.seed_count(sel)]
 	if cost < base:
 		price_line = "%s 씨앗  정가 %d → −%d골드  · 보유 %d" % [CropCatalog.name_of(sel), base, cost, inventory.seed_count(sel)]
+	# ★ [S1R-T9] 설치물 — 저승 스프링클러 할인가·보유. 씨앗과 같은 네오 할인(친해질수록 싸짐)을 먹인다.
+	var spr_base := ItemCatalog.price_of(ItemCatalog.SPRINKLER)
+	var spr_cost := StoreDiscount.price(spr_base, hearts)
+	var spr_line := "저승 스프링클러  −%d골드  · 보유 %d" % [spr_cost, inventory.count_of(ItemCatalog.SPRINKLER)]
+	if spr_cost < spr_base:
+		spr_line = "저승 스프링클러  정가 %d → −%d골드  · 보유 %d" % [spr_base, spr_cost, inventory.count_of(ItemCatalog.SPRINKLER)]
 	return "\n".join([
 		"── 네오의 만물상 매대 ──",
 		"골드 %d" % wallet.gold,
 		StoreDiscount.summary(hearts),
 		price_line,
+		spr_line,
 	])
 
 # 관계 탭(메뉴) 하트 행 — 미호·멜·바나·네오 호감도를 읽기 전용으로 프레임에 넘긴다(HeartBar 재사용).
@@ -7788,6 +7905,7 @@ func _draw() -> void:
 			_draw_forage()             # ★ [B1-a.3] 사료풀(다 자람=풀포기·벤 자리=밑동) — 낫 채집 대상
 			_draw_flower_regrow()      # ★ ADR-0052 딴 꽃 패치 자리 새싹(재생 대기 — 폄은 _draw_props_for가 풀 스프라이트로)
 			_draw_encroach_weeds()     # ★ ADR-0055 밤새 돋은 재점령 잡초(빈 맨땅 위 평면 데칼 — 낫 채집 대상)
+			_draw_sprinklers()         # ★ [S1R-T9] 저승 스프링클러(설치물 — 몸통 + 급수 십자 표식, 그레이박스)
 			# ★[§6] Y-split: 뒤 프롭(플레이어 발치 위)만 여기서(플레이어 아래). 앞 프롭은 _front_props.
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_home_prop_entries(), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터 + S1R-T4 절차 스캐터(숲·능선·debris)
@@ -7984,6 +8102,24 @@ func _draw_encroach_weeds() -> void:
 	for t in reclaim.weed_tiles():
 		var tex := _debris_variant_tex(PROP_DEBRIS_WEEDS, t)
 		draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), tsz), false)
+
+# ★ [S1R-T9] 저승 스프링클러 그레이박스 렌더(설치물 — 아트는 후속 아트 패스). 각 설치 칸에 청록 몸통 +
+#   물방울 머리를 그리고, 급수 십자 4칸을 옅은 물빛 표식으로 얹어 "무엇을 적시는지" 보이게 한다(순수 시각).
+func _draw_sprinklers() -> void:
+	if sprinkler == null or _region != RegionCatalog.HOME:
+		return
+	for t: Vector2i in sprinkler.tiles():
+		# 급수 범위(십자 4칸) 옅은 물빛 하이라이트 — 무엇을 적시는지 가독.
+		for d: Vector2i in Sprinkler.CROSS_OFFSETS:
+			var c: Vector2i = t + d
+			if c.x < 0 or c.x >= _grid_w or c.y < 0 or c.y >= _grid_h:
+				continue
+			draw_rect(Rect2(Vector2(c.x * TILE, c.y * TILE), Vector2(TILE, TILE)), Color(0.45, 0.72, 0.85, 0.20))
+		# 몸통(청록 사각) + 물방울 머리(밝은 물빛 원) — 설치물이 또렷이 보이게.
+		var base := Vector2(t.x * TILE, t.y * TILE)
+		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), Color(0.30, 0.50, 0.58))
+		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), Color(0.16, 0.28, 0.34), false, 1.0)
+		draw_circle(base + Vector2(TILE * 0.5, TILE * 0.34), TILE * 0.16, Color(0.62, 0.84, 0.94))
 
 # ★ [Phase E/S1-15] 가축 스프라이트 훅 — assets/livestock/<species>_<stage>.png(gemini-demo-sprites-spec §5,
 #   bottom-center 앵커, dak 32²·so_baby 48²·so_adult 64×48). owner Gemini 결과가 이 경로에 들어오면 코드

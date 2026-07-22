@@ -22,6 +22,7 @@ class_name InventoryFrame
 signal deposit_slot(slot_index: int)   # 출하함: 백팩 슬롯을 통째로 드롭(판매 예약)
 signal takeback_id(id: String)         # 출하함: 대기분을 통째로 롤백(취침 전 회수)
 signal buy_pressed(bulk: bool)         # 매대: 선택 씨앗 구매(bulk=Shift 대량)
+signal buy_sprinkler_pressed(bulk: bool)  # ★ [S1R-T9] 매대: 저승 스프링클러 구매(bulk=Shift 대량)
 signal save_pressed                    # ★ Phase B 옵션 탭: 저장(main이 _save_game 호출)
 signal quit_pressed                    # ★ Phase B 옵션 탭: 저장하고 나가기
 signal chest_store(slot_index: int)    # ★ Phase D 상자: 백팩 슬롯을 통째로 상자에 보관
@@ -93,6 +94,7 @@ var _bp_track_rect := Rect2()    # ★ 백팩 스크롤바 트랙(_draw_backpack
 var _bp_thumb_rect := Rect2()    # ★ 백팩 스크롤바 썸(드래그·점프 히트)
 var _sort_rect := Rect2()
 var _buy_rect := Rect2()
+var _buy_sprinkler_rect := Rect2()   # ★ [S1R-T9] 매대 스프링클러 구매 버튼
 var _save_rect := Rect2()        # ★ Phase B 옵션 탭: 저장 버튼
 var _quit_rect := Rect2()        # ★ Phase B 옵션 탭: 저장하고 나가기 버튼
 # ★ Phase D 옵션 탭 설정 본체(볼륨 −/+ · 전체화면 체크박스) 히트 rect + main이 주입한 현재 값.
@@ -432,6 +434,10 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 				draw_texture_rect(mtex, inner, false)
 			else:
 				draw_rect(inner, Color(0.80, 0.66, 0.30) if ItemCatalog._is_hay(id) else Color(0.46, 0.36, 0.26))
+		ItemCatalog.CAT_PLACEABLE:
+			# ★ [S1R-T9] 설치물(스프링클러) 그레이박스 아이콘(핫바와 동일 — 청록 몸통 + 물방울 점).
+			draw_rect(inner, Color(0.32, 0.52, 0.60))
+			draw_circle(inner.position + Vector2(inner.size.x * 0.5, inner.size.y * 0.28), inner.size.x * 0.14, Color(0.62, 0.82, 0.92))
 
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
 	var tex: Texture2D = crop_icons.get(crop_id)
@@ -689,11 +695,17 @@ func _draw_store_top(panel: Rect2) -> void:
 	for line in store_text.split("\n"):
 		draw_string(font, Vector2(panel.position.x + PAD, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.85, 0.85, 0.90))
 		y += 18.0
-	# 구매 버튼(좌클릭=1개 / Shift+좌클릭=대량).
+	# 씨앗 구매 버튼(좌클릭=1개 / Shift+좌클릭=대량).
 	_buy_rect = Rect2(panel.position.x + PAD, panel.position.y + TOP_H - 6.0, 220.0, 26.0)
 	draw_rect(_buy_rect, Color(0.20, 0.24, 0.30))
 	draw_rect(_buy_rect, Color(0.45, 0.55, 0.65), false, 1.0)
-	draw_string(font, _buy_rect.position + Vector2(12.0, 18.0), "[클릭] 구매   ·   [Shift+클릭] 대량",
+	draw_string(font, _buy_rect.position + Vector2(12.0, 18.0), "[클릭] 씨앗 구매   ·   [Shift+클릭] 대량",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
+	# ★ [S1R-T9] 스프링클러 구매 버튼(씨앗 버튼 오른쪽 — 설치물 획득 그레이박스 경로).
+	_buy_sprinkler_rect = Rect2(_buy_rect.position.x + 232.0, _buy_rect.position.y, 220.0, 26.0)
+	draw_rect(_buy_sprinkler_rect, Color(0.20, 0.28, 0.30))
+	draw_rect(_buy_sprinkler_rect, Color(0.45, 0.62, 0.65), false, 1.0)
+	draw_string(font, _buy_sprinkler_rect.position + Vector2(12.0, 18.0), "[클릭] 스프링클러 구매",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.WHITE)
 
 # ── 클릭 라우팅 ───────────────────────────────────────────────────────────────
@@ -737,6 +749,8 @@ func _gui_input(event: InputEvent) -> void:
 		CTX_STORE:
 			if _buy_rect.has_point(p):
 				buy_pressed.emit(event.shift_pressed)
+			elif _buy_sprinkler_rect.has_point(p):   # ★ [S1R-T9] 스프링클러 구매
+				buy_sprinkler_pressed.emit(event.shift_pressed)
 		CTX_CHEST:
 			_click_chest(p)
 	accept_event()

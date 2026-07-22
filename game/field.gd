@@ -168,6 +168,17 @@ func water(t: Vector2i) -> bool:
 	tile_changed.emit(t)
 	return true
 
+# ★ [S1R-T9] 스프링클러 자동 급수 — 경작된 칸(심겼든 아니든)을 적신다. 손 물주기(water)와 달리 빈
+#   경작 칸도 젖고(스타듀 문법 — 흙이 젖어 보임), 심긴 미성숙 칸은 그날 advance_day 성장에 반영된다.
+#   혼력·물뿌리개 무관(호출 측 게이트 없음 — 스프링클러 편익은 그 두 축과 독립, ADR-0059 결정4).
+#   미경작 칸이거나 이미 젖었으면 무동작(멱등). main이 아침(성장 판정 전)에 급수 대상 칸마다 부른다.
+func sprinkle(t: Vector2i) -> bool:
+	if not is_tilled(t) or is_watered(t):
+		return false
+	_tiles[t]["watered"] = true
+	tile_changed.emit(t)
+	return true
+
 # 수확: 다 자란 칸을 거둔다. 거둔 작물 id를 반환("" = 실패). 다수확 count(황천포도 2~3)는
 # 호출 측(main._try_harvest)이 CropCatalog.yield_range로 굴린다(범위 분리, greybox-spec §6.5).
 # ★ S1-5a — 성장 모드 2분기(§6.4):
