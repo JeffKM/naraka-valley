@@ -1503,6 +1503,12 @@ var _foraging_xp := 0
 # (_farming_xp↔FarmSkill 관계와 동일). main이 세이브 dict에 한 조각으로 끼운다(SaveManager 불변).
 var _professions := {}
 
+# ★ [S1R-T8 / ADR-0059 결정4] 물뿌리개 용량·리필(잠정 — owner 큐). 물주기 1회당 잔량 −1, 0이면 물주기 불가
+#   (혼우물·연못에서 풀충전). 에너지(혼력) 과금(결정3)과 독립 축 — 물은 자원 압박, 혼력은 행동 예산.
+#   용량 20은 그레이박스 값(도구 티어 ADR-0027로 상향 축 정합). 세이브 보존(구세이브 = 기본값 20, 하위호환).
+const _CAN_CAPACITY := 20
+var _can_water := _CAN_CAPACITY
+
 # T5.1 직전(현재) 대화 상대의 표시 이름 — 대화 종료 시 온보딩 전진을 '누구와의
 # 대화였나'로 가르는 데 쓴다. 멜이 카페에 상주하면서 온보딩 도중(미호 멘토 단계)에도
 # 말 걸 수 있게 됐기 때문 — 화자 구분 없이 단계로만 가르면 멜 대화가 미호 단계를
@@ -5090,6 +5096,7 @@ func _setup_hotbar() -> void:
 	for sapling_id in SAPLING_ICONS:
 		icons[sapling_id] = SAPLING_ICONS[sapling_id]   # ★ [아트정리패스] 묘목 아이콘(색박스 대체)
 	hotbar.setup(inventory, icons)
+	_refresh_water_badge()   # ★ [S1R-T8] 초기 물뿌리개 잔량 배지(부팅 = 가득 20/20)
 
 # ── ★ C2 무인 출하함 ──────────────────────────────────────────────────────────
 # wallet·inventory 결의 상태 노드(대기 재고 + 익일 정산)지만, lighting·hotbar처럼 코드로 붙인다
@@ -5639,6 +5646,7 @@ func _save_game() -> void:
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
 		"farming_xp": _farming_xp,   # ★ S1-6 농사 숙련 XP(혼력 감산 파생원)
+		"watering_can": _can_water,   # ★ [S1R-T8] 물뿌리개 잔량(구세이브 = 기본값 20, 하위호환)
 		"foraging_xp": _foraging_xp,   # ★ ADR-0052 채집 숙련 XP(전문직 게이트·퍼크 파생원)
 		"professions": _professions_to_save(),   # ★ ADR-0052 전문직 선택 {skill:{tier:id}}
 		"cafe_revenue_total": _cafe_revenue_total,
@@ -5707,6 +5715,9 @@ func _load_game() -> void:
 	# ★ ADR-0052 채집 숙련 XP·전문직 복원(키 없는 구세이브 = 0/미선택, 무막힘·정합 재검증은 _load_professions).
 	_foraging_xp = maxi(int(data.get("foraging_xp", 0)), 0)
 	_load_professions(data.get("professions", {}))
+	# ★ [S1R-T8] 물뿌리개 잔량 복원 — 키 없는 구세이브는 기본값 20(가득, 하위호환). 손상 방어로 0..20 클램프.
+	_can_water = clampi(int(data.get("watering_can", _CAN_CAPACITY)), 0, _CAN_CAPACITY)
+	_refresh_water_badge()
 	# T7.2 카페 마일스톤 누적 서빙 매출. 손상 방어로 음수는 0으로 자른다(키 없는 구버전 세이브는 0).
 	_cafe_revenue_total = maxi(int(data.get("cafe_revenue_total", 0)), 0)
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
@@ -6348,6 +6359,11 @@ func _process(delta: float) -> void:
 	var on_flower := not _sleeping and _region == RegionCatalog.HOME and flower.is_bloomed(_target)
 	if on_flower and Input.is_action_just_pressed("action"):
 		_pick_flower(_target)
+	# ★ [S1R-T8 / ADR-0059 결정4] 물뿌리개 리필 — 혼우물(WELL_RECT·WALL)·연못(WATER)은 SOIL이 아니라
+	#   _target_valid 게이트 밖 → 개간·잡초와 같은 결로 따로 디스패치. 물뿌리개 들고 대상 겨눠 LMB = 잔량 풀충전.
+	var on_refill := not _sleeping and inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target)
+	if on_refill and Input.is_action_just_pressed("use_tool"):
+		_refill_watering_can()
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
@@ -6485,6 +6501,11 @@ func _process(delta: float) -> void:
 		# ★ ADR-0052 활짝 핀 꽃 패치를 바라볼 때: 우클릭 맨손 채집(혼력0). 채집물+채집 XP.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[우클릭] 피안화 채집 (채집 숙련)"
+	elif inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target):
+		# ★ [S1R-T8] 혼우물·연못을 물뿌리개로 겨눌 때: LMB로 잔량 풀충전(이미 가득이면 안내만).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 물뿌리개 채우기 (%d/%d)" % [_can_water, _CAN_CAPACITY] if _can_water < _CAN_CAPACITY \
+			else "물뿌리개 가득 참 (%d/%d)" % [_can_water, _CAN_CAPACITY]
 	else:
 		# 밭 칸을 바라볼 때만 안내. 든 도구·칸 상태로 동사를 파생한다(LMB 도구질 / RMB 맨손 수확).
 		var prompt := _farm_prompt()
@@ -6502,6 +6523,33 @@ func _process(delta: float) -> void:
 func _farming_energy_cost() -> int:
 	return int(round(SoulEnergy.COST_PER_ACTION * FarmSkill.energy_factor(FarmSkill.level_for_xp(_farming_xp))))
 
+# ★ [S1R-T8 / ADR-0059 결정4] 이 칸이 물뿌리개 리필 대상인가 — 혼우물(WELL_RECT·비진입 WALL 박스) 또는
+#   물타일(WATER — 손그림 마스크로 유기화된 연못 포함, SPIRIT_POND/POND_ACTIVITY 불문). _target은 발밑 인접
+#   1칸으로 클램프되므로(_update_target), 대상을 겨눈다 = 인접에 섰다는 뜻(별도 거리 판정 불요).
+func _is_refill_target(t: Vector2i) -> bool:
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
+		return false
+	if WELL_RECT.has_point(t):
+		return true
+	return _grid[t.y][t.x] == WATER
+
+# ★ [S1R-T8] 물뿌리개를 잔량 20으로 풀충전. 이미 가득이면 안내만(무동작). 에너지 무과금(리필은 자원 회복이라
+#   행동 예산과 무관 — 결정4는 물 축만 도입). SFX는 water 재사용.
+func _refill_watering_can() -> void:
+	if _can_water >= _CAN_CAPACITY:
+		_notice("물뿌리개가 이미 가득 찼다 (%d/%d)" % [_can_water, _CAN_CAPACITY])
+		return
+	_can_water = _CAN_CAPACITY
+	_refresh_water_badge()
+	audio.sfx("water")
+	_notice("물뿌리개를 가득 채웠다 (%d/%d)" % [_can_water, _CAN_CAPACITY])
+
+# ★ [S1R-T8] 핫바 물뿌리개 슬롯 잔량 배지 갱신(잔량은 인벤토리 변화 없이 바뀌므로 별도 주입 — set_water_state가
+#   값 동일 시 조기 반환해 저비용). 리필·물주기 소모·세이브 로드·초기 셋업에서 부른다.
+func _refresh_water_badge() -> void:
+	if hotbar != null:
+		hotbar.set_water_state(_can_water, _CAN_CAPACITY)
+
 func _use_tool() -> void:
 	var item := inventory.selected_id()
 	var cat := ItemCatalog.category_of(item)
@@ -6516,8 +6564,16 @@ func _use_tool() -> void:
 		if farm.hoe(_target):
 			verb = "괭이질"
 	elif item == ItemCatalog.WATERING_CAN:
-		if farm.water(_target):
-			verb = "물주기"
+		# ★ [S1R-T8] 용량 축(에너지와 독립) — 잔량 있으면 물주기 1회당 −1, 없으면 물 줄 칸일 때만 안내(스퓨리어스 방지).
+		#   리필(혼우물·연못)은 SOIL 밖 별도 디스패치(_refill_watering_can)라 여기 도달하지 않는다.
+		if _can_water > 0:
+			if farm.water(_target):
+				_can_water -= 1
+				_refresh_water_badge()
+				verb = "물주기"
+		elif farm.is_planted(_target) and not farm.is_watered(_target):
+			_notice("물이 없다 — 혼우물·연못에서 채우자")
+			return
 	elif cat == ItemCatalog.CAT_SEED:
 		# 든 씨앗의 작물군을 심는다(경작된 빈 칸에만 — plant 사전조건). 심으면 씨앗 1개 소모.
 		var crop := ItemCatalog.crop_of(item)
