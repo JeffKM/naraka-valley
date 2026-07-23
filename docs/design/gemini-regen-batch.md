@@ -155,6 +155,46 @@ CHARACTER: a gender-neutral young afterlife farmer, deliberately plain and unrem
 - `--targeth`=0(네이티브, 선명도 보존) 기본.
 - 신규 글루 후보(승인 후 작성): `mirror_east_to_west.py`(east→west 미러), 배경 전처리(Gemini가 투명 대신 단색/체커 렌더 시 — 초상화 배경 3분기 로직 재사용).
 
+### 2.5 플레이어 도구 스윙 4모션 (S1R-T10 · 2026-07-23 추가)
+
+> **1차 생성 = PixelLab 완료**(기존 "Player v2 stardew" 캐릭터 `ce6e1f81`에 `animate_character` v3, 방향당 1젠·6프레임). 이 카드는 [ADR-0025] 스펙카드 + owner Gemini 교체용 큐 항목. 배선(.gd)은 후속 태스크.
+
+**시트 규격(§2.1과 동일 — 드롭인):**
+
+| 항목 | 값 |
+|---|---|
+| 파일 | `game/assets/characters/player_{hoe,water,scythe,harvest}.png` |
+| 시트 | **480×320** = 6열 × 4행, 프레임 80×80 |
+| 행=방향 | 0=down(남)·1=up(북)·2=right(동)·3=left(서) |
+| 열 | 0~5 = 모션 6프레임(대기 열 없음 — 대기는 walk 시트 0열 재사용) |
+| 발치 | 콘텐츠 발치 y≈76, 가로 중앙(`assemble_char.py` 규약) |
+
+**모션 정의(각 4방향 × 6프레임):**
+
+| 모션 | 파일 | 동작 프롬프트(영문 그대로 사용) |
+|---|---|---|
+| 괭이 내려찍기 | `player_hoe.png` | `raising a farming hoe overhead with both hands and swinging it down hard to strike the ground directly in front, a full downward hoe chop, ONE single long-handled hoe only` |
+| 물뿌리개 뿌리기 | `player_water.png` | `holding a small teal-green metal watering can with both hands and tilting it forward to pour a stream of pale blue water downward from its spout onto the ground ahead, the can stays teal-green colored` |
+| 낫 휘두르기 | `player_scythe.png` | `gripping a scythe with both hands and swinging it in a wide horizontal arc across the front, a sweeping harvest slash from one side to the other` |
+| 맨손 수확 | `player_harvest.png` | `bending forward and reaching down with empty bare hands to grab and pluck something from the ground in front, then straightening back up, no tool` |
+
+**공통 캐릭터·스타일:** §2.3 플레이어 프롬프트(무채·저채도 farmer) + §2.3 방향 지시 문구. 도구 색은 `game/assets/tools/`의 인벤토리 아이콘(hoe·watering_can·scythe)과 톤 정합(물뿌리개=teal-green, 괭이=나무자루+회색 금속날).
+
+**Gemini 교체 방법:** 방향별 6프레임 개별 생성 → `<dir>/{south,north,east,west}/000..005.png` 구조로 저장 → `python game/tools/assemble_char.py <dir> game/assets/characters/player_<motion>.png` (§2.4 파이프라인 그대로).
+
+**1차 생성 함정 기록(PixelLab v3, 재현 회피용):** ①north(등짝) 방향에서 도구가 양손 2개로 쪼개지거나(괭이) 색이 이탈(물뿌리개 orange화) — "ONE single …", "stays … colored" 명시로 억제(물뿌리개 north는 이 문구로 재생성 성공). ②south에서도 orange 오염 발생 사례 있음(물뿌리개 south 미해결). ③프레임0은 정지 rotation 기준이라 도구가 늦게 등장하는 모션이 있음(배선 시 fps로 흡수 가능).
+
+**1차 생성 상태 추적(2026-07-23 기준 — ✅정상 / ⚠️결함 재생성 대기 / ❌미생성):**
+
+| 시트 | south | north | east | west |
+|---|---|---|---|---|
+| player_hoe | ✅ | ⚠️ 도구가 2개 막대로 분열(v1) — 재생성 1회 미완(세션 마감) | ✅ | ✅ |
+| player_water | ⚠️ 가슴 orange 오염(v1) — 재생성 미착수 | ✅ (teal 명시 v2) | ✅ | ✅ |
+| player_scythe | ✅ | ✅ | ✅ | ✅ |
+| player_harvest | ✅ | ✅ | ❌ 빈 행(잡 슬롯 소진으로 미발주) | ❌ 빈 행(동일) |
+
+> 잔여 4칸(hoe north·water south·harvest east/west)은 후속 태스크에서 같은 프롬프트로 `animate_character` 재발주 후 `assemble_char.py` 재실행이면 됨(방향당 1젠).
+
 ---
 
 ## 3. 작물 (9)
