@@ -6606,6 +6606,19 @@ func _refresh_water_badge() -> void:
 	if hotbar != null:
 		hotbar.set_water_state(_can_water, _CAN_CAPACITY)
 
+# ★ [S1R-T10] 든 도구에 맞는 스윙 모션을 1회 재생(시각 전용). 4모션 시트가 있는 괭이·물뿌리개·낫만 —
+#   곡괭이·도끼(개간)는 전용 시트가 없어 무동작 폴백(player.swing_tool이 조용히 생략, 로직 불변).
+#   재생 속도 = FarmSkill.speed_factor(농사 레벨)로 실효화(숙련↑ → 스윙↑ · §8.9 no-op 해소). 효과 적용 시점은 불변.
+func _swing_for_item(item: String) -> void:
+	var motion := ""
+	match item:
+		ItemCatalog.HOE: motion = "hoe"
+		ItemCatalog.WATERING_CAN: motion = "water"
+		ItemCatalog.SCYTHE: motion = "scythe"
+	if motion == "":
+		return
+	player.swing_tool(motion, FarmSkill.speed_factor(FarmSkill.level_for_xp(_farming_xp)))
+
 func _use_tool() -> void:
 	var item := inventory.selected_id()
 	var cat := ItemCatalog.category_of(item)
@@ -6683,6 +6696,8 @@ func _use_tool() -> void:
 				verb = "풀베기"
 	if verb == "":
 		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
+	# ★ [S1R-T10] 도구 스윙 애니 1회 재생(시각 전용 — 위 즉발 효과와 독립). 든 도구에 맞는 모션이 있을 때만.
+	_swing_for_item(item)
 	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기·비료는 물/뿌리는 소리.
 	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water", "급여": "water", "개간": "hoe", "풀베기": "harvest"}.get(verb, ""))
 	_advance_onboarding(verb)                 # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
@@ -6817,6 +6832,8 @@ func _try_harvest() -> void:
 	_run_harvested += 1                       # T4.2 슬라이스 점수판: 거둔 영혼 총수(수확 액션당 1)
 	_show_flavor(harvested_crop)              # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
 	audio.sfx("harvest")                      # P2.6 수확은 밝은 팝
+	# ★ [S1R-T10] 맨손 수확 스윙 애니 1회 재생(시각 전용 — 위 수확 로직과 독립). 숙련 speed_factor로 속도 실효화.
+	player.swing_tool("harvest", FarmSkill.speed_factor(FarmSkill.level_for_xp(_farming_xp)))
 	_advance_onboarding("수확")               # T4.1 첫 수확 → 온보딩 완료(DONE)
 	# ★ ADR-0059 결정3 — 밭 작물 수확은 무과금(energy.spend 없음): "보람 액션 과세" 제거로 스타듀 체감 회복.
 	queue_redraw()                            # 새 상태가 바로 보이도록
