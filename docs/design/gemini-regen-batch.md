@@ -184,16 +184,18 @@ CHARACTER: a gender-neutral young afterlife farmer, deliberately plain and unrem
 
 **1차 생성 함정 기록(PixelLab v3, 재현 회피용):** ①north(등짝) 방향에서 도구가 양손 2개로 쪼개지거나(괭이) 색이 이탈(물뿌리개 orange화) — "ONE single …", "stays … colored" 명시로 억제(물뿌리개 north는 이 문구로 재생성 성공). ②south에서도 orange 오염 발생 사례 있음(물뿌리개 south 미해결). ③프레임0은 정지 rotation 기준이라 도구가 늦게 등장하는 모션이 있음(배선 시 fps로 흡수 가능).
 
-**1차 생성 상태 추적(2026-07-23 기준 — ✅정상 / ⚠️결함 재생성 대기 / ❌미생성):**
+**생성 상태(2026-07-24 완결 — PR#264): 4시트 × 4방향 전원 ✅.** 방향별 소스 그룹/애니 구성(캐릭터 `ce6e1f81-5b7a-4b67-a080-5e8b8a66e990`, 재조립 재현용):
 
 | 시트 | south | north | east | west |
 |---|---|---|---|---|
-| player_hoe | ✅ | ⚠️ 도구가 2개 막대로 분열(v1) — 재생성 1회 미완(세션 마감) | ✅ | ✅ |
-| player_water | ⚠️ 가슴 orange 오염(v1) — 재생성 미착수 | ✅ (teal 명시 v2) | ✅ | ✅ |
-| player_scythe | ✅ | ✅ | ✅ | ✅ |
-| player_harvest | ✅ | ✅ | ❌ 빈 행(잡 슬롯 소진으로 미발주) | ❌ 빈 행(동일) |
+| player_hoe | `4a7b7482`/2756015f(0..5) | **v3 `8b46c6c8`**/5103f27c(7f→1..6) | `4a7b7482`/b8ae1b9d(0..5) | `4a7b7482`/55d1ab7b(0..5) |
+| player_water | **v3 `5dd76a04`**(7f→1..6) | v2 `496d40c9`/dd9065fd(0..5) | `fb6d8f52`/07eaf1ef(0..5) | `fb6d8f52`/25d38d05(0..5) |
+| player_scythe | `29093773` 4방향(0..5) | 〃 | 〃 | 〃 |
+| player_harvest | `a7b83565`/74749e2a(0..5) | `a7b83565`/7d99d7d6(0..5) | **신규**/b2a24eed(7f→1..6) | **신규** `a7b83565` 추가(7f→1..6) |
 
-> 잔여 4칸(hoe north·water south·harvest east/west)은 후속 태스크에서 같은 프롬프트로 `animate_character` 재발주 후 `assemble_char.py` 재실행이면 됨(방향당 1젠).
+> 프레임 규약: v1 그룹=6프레임 전부(0..5), 재발주분=7프레임에서 프레임 0(정지 참조) 폐기·1..6을 000..005로. 추출은 download ZIP 권장(개별 URL 불요). 배선=PR#264(char_sprite `add_tool_motion`·player `swing_tool`·main `_swing_for_item`).
+
+**추가 함정 기록(2026-07-24):** ④**v3 잡이 95%에서 산출물 없이 드롭**되는 현상 2회 재현(hoe north 1차 재생성 그룹 `12b4aa59` 서버에서 소멸·water south/harvest west 1차 재발주 동일) — pending 목록에서 사라져도 download ZIP에 프레임이 없으면 드롭이다. 같은 프롬프트 재발주로 해결(단, 완료된 동일 프롬프트·방향이 있으면 dedupe로 "already complete" 스킵되므로 문구를 미세 변형해 새 그룹 발주). ⑤검수·판정 시 `load()` 경로 덤프는 **임포트 캐시 STALE** 주의 — 시트 교체 후 `--headless --import` 1회 없이 렌더하면 교체 전 프레임이 나온다.
 
 ---
 
