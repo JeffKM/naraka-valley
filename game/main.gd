@@ -4080,13 +4080,17 @@ func _load_big_fields() -> void:
 	# SS 코히어런트 잔디는 이미 muted 톤 → 이중 뮤트 생략(과다 어두워짐 방지).
 	if _bf_grass_mute and not _TERRAIN_SINGLE_SOURCE:
 		_mute_grass_pixels(_bf_grass)
-	_bf_dirt = _ss_or("dirt_field.png", "res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
+	# ★[S1R 폴리시 / ADR-0057 "길 타일 분리"] 길(PATH) = 다진 흙길 전용 필드. 단일출처 전환 뒤 길과 마당
+	#   맨흙이 같은 dirt_field라 십자 길이 tan-on-tan으로 소실됐다 → 같은 출처를 톤만 눌러 구운 path_field
+	#   (make_path_field.py·명도 -12.6 L*·채도↓)를 쓴다. SS off면 폴백=dirt_field로 종전 동작 그대로.
+	_bf_dirt = _ss_or("path_field.png", "res://assets/terrain16/dirt_field.png", Color(0.42, 0.33, 0.26))
 	_bf_soil = _big_field("res://assets/terrain16/soil_field.png", Color(0.35, 0.22, 0.16))
 	_bf_water = _recolor_water(_ss_or("water_field.png", "res://assets/terrain16/water_field.png", Color(0.13, 0.33, 0.39)))
 	# ★[스타듀 농장 룩] 마당 맨흙 = dirt_field(다져진 붉은 흙 길)을 더 밝고 노란 tan으로 리톤.
 	#   스타듀 시작 농장의 모래빛 황갈색 지면 + 저승 warm 팔레트 정합. PATH(_bf_dirt)보다 밝아 길과 구분.
 	# SS 코히어런트 dirt는 이미 tan earth 톤 → retone 이중보정 생략(RETRO-DIFFUSION-SPEC 대로).
-	_bf_earth = _bf_dirt.duplicate() if _TERRAIN_SINGLE_SOURCE else _retone_earth(_bf_dirt)
+	var earth_src := _ss_or("dirt_field.png", "res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
+	_bf_earth = earth_src if _TERRAIN_SINGLE_SOURCE else _retone_earth(earth_src)
 
 func _big_field(path: String, fallback: Color) -> Image:
 	var img: Image
@@ -4442,6 +4446,14 @@ func _build_ground16() -> void:
 		for x in _grid_w:
 			if int(surf[y][x]) == 1 and _g16_near_building(x, y):
 				surf[y][x] = 0
+	# ★[S1R 폴리시 — 물가 맨흙 패드] 물과 꼭짓점을 공유하는 잔디패치는 맨흙으로 내린다. 물가는 스타듀에서도
+	#   흙/모래고, 무엇보다 잔디는 위계 최상(rank 4)이라 물가에 닿으면 ② Wang 쌍 축약에서 물(rank 0)이
+	#   탈락한다 → 물 셀이 잔디↔흙 타일로 칠해져 통째로 사라진다(연못 남안 1셀 구멍의 근원). 8이웃 =
+	#   그 셀의 네 꼭짓점을 공유할 수 있는 전 범위. 순수 시각(_grid·충돌 불변).
+	for y in _outdoor_h:
+		for x in _grid_w:
+			if int(surf[y][x]) == 1 and _g16_near_water(surf, x, y):
+				surf[y][x] = 0
 	# ① 셀 단위 필드 blit(빠름) — 건물바닥(-1)은 투명(실내 바닥 비침)
 	for y in _outdoor_h:
 		for x in _grid_w:
@@ -4461,6 +4473,18 @@ func _build_ground16() -> void:
 			var c_ne := _wang_vertex_surf(surf, x + 1, y)
 			var c_sw := _wang_vertex_surf(surf, x, y + 1)
 			var c_se := _wang_vertex_surf(surf, x + 1, y + 1)
+			# ★[S1R 폴리시 — 연못 남안 계단 노치] 물 셀의 경계는 *언제나* 물↔땅(4_0) 손그림 shore로 합성한다.
+			#   아래 "위계 상위 2종" 축약은 물의 rank가 최하(0)라 물가에 잔디·길이 닿으면 물을 쌍에서 떨어뜨려,
+			#   그 셀이 ㉠엉뚱한 잔디↔흙 타일로 칠해지거나(구멍) ㉡쌍 없음/길·밭 스킵으로 ①의 물 사각이 그대로
+			#   남았다(하드 엣지 1셀 돌출). 셀 자신이 물이면 코너를 물/땅 2치로만 읽어 이 축약을 건너뛴다.
+			#   길·밭 코너는 '물' 쪽으로 본다 — 부두(물 위 PATH) 옆에 물가 흙이 생겨 모래톱으로 오독되면 안 됨.
+			if int(surf[y][x]) == 4:
+				var wbits := _corner_bits(
+					1 if _shore_is_land(c_nw) else 0, 1 if _shore_is_land(c_ne) else 0,
+					1 if _shore_is_land(c_sw) else 0, 1 if _shore_is_land(c_se) else 0)
+				if wbits != 0 and _shore_mask.has(wbits):
+					_paint_shore_cell(out, x, y, wbits)
+				continue   # 순수 물(wbits=0)·마스크 없음 = ① base blit 유지
 			var uniq := {}
 			for cv: int in [c_nw, c_ne, c_sw, c_se]:
 				if cv >= 0:
@@ -4854,6 +4878,23 @@ func _g16_surface(x: int, y: int) -> int:
 	if not _G16_GRASS_PATCHES:
 		return 0
 	return 1 if _g16_is_grass_patch(x, y) else 0
+
+# ★[S1R 폴리시] 물 셀 경계 판정 — 코너 표면이 '땅'(맨흙·잔디)인가. 길·밭은 물 위 구조물(부두)일 수 있어
+#   땅으로 치지 않는다(물 위 길 옆에 물가 흙이 생기는 오독 방지).
+func _shore_is_land(s: int) -> bool:
+	return s == 0 or s == 1
+
+# 셀 (x,y)가 물 셀과 꼭짓점을 공유하는가(8이웃에 물 = 물가). 물가 맨흙 패드 판정.
+func _g16_near_water(surf: Array, x: int, y: int) -> bool:
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			var nx := x + dx
+			var ny := y + dy
+			if nx < 0 or ny < 0 or nx >= _grid_w or ny >= _outdoor_h:
+				continue
+			if int(surf[ny][nx]) == 4:
+				return true
+	return false
 
 func _g16_field(s: int) -> Image:
 	match s:
