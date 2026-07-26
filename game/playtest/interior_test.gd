@@ -77,12 +77,13 @@ func _initialize() -> void:
 
 	var m: Node = await _spawn_main()
 
-	# ── ① 카탈로그: 17채 등록(홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게 + 목공방 + 대장간 + 길드 + 넋우릿간 + 넋둥우리) + 구역·종류 정합 ──
+	# ── ① 카탈로그: 25채 등록(홈 집 + 마을 16채 + 창고 + 혼백관 + 생선가게 + 목공방 + 대장간 + 길드 + 넋우릿간 + 넋둥우리) + 구역·종류 정합 ──
 	# ★ 창고(HOME·storehouse) 9→10. ★ M3.1 혼백관(SAMDOCHEON·museum) 10→11. ★ M3.2 생선가게(HWANGCHEONHAE·fishshop) 11→12.
 	# ★ M4.1 목공방(JEOSEUNG_FOREST·woodshop) 12→13. ★ M5.1 대장간(EOPHWA_MINE·smithy)·길드(EOPHWA_MINE·guild) 13→15.
 	# ★ [B1-a.1] 넋우릿간(HOME·barn)·넋둥우리(HOME·coop) 15→17 (동물 2건물 진입 실내).
+	# ★ [ADR-0060 결정 2 / S2-T2] 주민 집 3→11채(로스터 11인 1:1) 17→25 — 실내는 여전히 공유 방 1개.
 	var ids: Array = m._buildings.keys()
-	_check("① 건물 17채 등록(_buildings — 홈 집 + 마을 8채 + 창고 + 혼백관 + 생선가게 + 목공방 + 대장간 + 길드 + 넋우릿간 + 넋둥우리)", ids.size() == 17)
+	_check("① 건물 25채 등록(_buildings — 홈 집 + 마을 16채 + 창고 + 혼백관 + 생선가게 + 목공방 + 대장간 + 길드 + 넋우릿간 + 넋둥우리)", ids.size() == 25)
 	_check("① 홈 집 = HOME·house", m._buildings["집"]["region"] == RegionCatalog.HOME and m._buildings["집"]["kind"] == "house")
 	_check("① 창고 = HOME·storehouse", m._buildings["창고"]["region"] == RegionCatalog.HOME and m._buildings["창고"]["kind"] == "storehouse")
 	_check("① 넋우릿간 = HOME·barn", m._buildings["넋우릿간"]["region"] == RegionCatalog.HOME and m._buildings["넋우릿간"]["kind"] == "barn")
@@ -111,8 +112,10 @@ func _initialize() -> void:
 		_check("② %s 카메라 공유(HOUSE_CAM)" % hid, b["cam"] == m.HOUSE_CAM_RECT)
 		ext_doors[b["ext_door"]] = true
 		out_tiles[b["out_tile"]] = true
-	_check("②b 외관 문 6채 서로 다름", ext_doors.size() == 6)
-	_check("②b 퇴장 칸 6채 서로 다름", out_tiles.size() == 6)
+	# ★[S2-T2] 6채 → 14채(메인 3 + 주민 11). 공유 방 1개인데도 외관 문·퇴장 칸은 전부 달라야
+	#   "들어온 그 집으로 정확히 퇴장"이 성립한다(중복 좌표 = 엉뚱한 집 앞으로 나오는 버그).
+	_check("②b 외관 문 %d채 서로 다름" % m.HOUSE_IDS.size(), ext_doors.size() == m.HOUSE_IDS.size())
+	_check("②b 퇴장 칸 %d채 서로 다름" % m.HOUSE_IDS.size(), out_tiles.size() == m.HOUSE_IDS.size())
 
 	# ── ★ 안식 농원 창고(HOME·storehouse) — 빌드·진입·실내·격리·취침불가·퇴장(워프 전, HOME에서) ──
 	# 창고 실내 방은 HOME 그리드에만 빌드되므로(_build_home) 마을로 워프하기 전 HOME에서 검증한다.
@@ -152,8 +155,17 @@ func _initialize() -> void:
 	# 두 방이 안 겹친다(가로 배치).
 	_check("③b 집 방·만물상 방 안 겹침", not m.HOUSE_RECT.intersects(m.STORE_RECT))
 
-	# ── 마을 7채(만물상 + 집 6) 각각: 진입 → 실내 → 퇴장(들어온 그 외관 앞) ──
-	var village_ids: Array = ["만물상"] + Array(m.HOUSE_IDS)
+	# ── 마을 대표 8채: 진입 → 실내 → 퇴장(들어온 그 외관 앞) ──
+	# ★[S2-T2] 주민 집이 3→11채가 되며 전수 왕복이 15채×2전환(전환당 0.52s fade)로 불어나 러너 워치독
+	#   60s를 넘본다. 출입 기계는 _buildings 데이터 하나로 굴러가므로(id별 분기 0) 11채를 다 왕복해도
+	#   같은 코드 경로를 반복할 뿐 — 새 신호가 없다. 그래서 **대표 표본**만 왕복하고, 나머지 집의 정합
+	#   (구역·종류·공유 방·문/퇴장 칸 유일성)은 위 ①②가 14채 전수로 이미 단언한다.
+	#   표본 = 만물상(전용 방) + 메인 집 3(기존 회귀) + 주민집1(앵커) + 주민집4(신규 동편) +
+	#          주민집10·11(신규 강변 — S2-T2가 새로 만든 지오메트리라 반드시 실왕복).
+	var village_ids: Array = ["만물상", "미호집", "멜집", "바나집",
+		"주민집1", "주민집4", "주민집10", "주민집11"]
+	for vid in village_ids:
+		_check("▷ 표본 %s가 카탈로그에 있음" % vid, m._buildings.has(vid))
 	for id in village_ids:
 		var b: Dictionary = m._buildings[id]
 		# 진입: 외관 문에 닿는다.

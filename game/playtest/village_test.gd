@@ -14,7 +14,9 @@ extends SceneTree
 #      북안(강 최상단 바로 위) 1행은 CLIFF_BANK pseudo-Z 강둑 단차(SOLID).
 #   ② 다리(BRIDGE_X, 폭 2칸)가 *유일한* 도하점 — 다리·남단 부두 외 모든 강 칸은 WATER,
 #      강둑도 다리 폭만큼만 PATH로 열린다.
-#   ③ 8개 외관(카페·메인집3·만물상·주민집3)이 통과 불가 WALL 박스 + 문 1칸(PATH 리세스).
+#   ③ ★[S2-T2] 16개 외관(카페·메인집3·만물상·**주민집11**)이 통과 불가 WALL 박스 + 문 1칸(남변 PATH
+#      리세스)이고, 서로 2칸 이상 떨어지며, 메인 복도·다리 스파인·강·강둑을 안 막는다. 강변 주거는
+#      강변 보조 레인(RIVERSIDE_LANE_Y)으로 다리 스파인에 붙는다.
 #   ④ 도착(spawn)에서 모든 문·워프 발동 칸 + **다리 남단 부두**가 걸어서 닿고, 강 남쪽에서 닿는 칸은
 #      다리·부두뿐이다(flood-fill — 무 soft-lock + 우회 불가의 실증).
 #   ⑤ 카페 실내(CAFE_RECT) 좌표·바닥 불변 = 카페 시뮬 회귀 0 seam.
@@ -140,7 +142,10 @@ func _initialize() -> void:
 	]
 	for i in m.RESIDENT_HOUSE_RECTS.size():
 		buildings.append(["주민집%d" % (i + 1), m.RESIDENT_HOUSE_RECTS[i], m.RESIDENT_HOUSE_DOORS[i]])
-	_check("③ 야외 건물 8채(카페+메인집3+만물상+주민집3)", buildings.size() == 8)
+	# ★[S2-T2 / ADR-0060 결정 2] 주민 집 3 → 11채(로스터 11인 1:1) → 야외 건물 8 → 16채.
+	_check("③ 주민 집 11채(residents.md T1 로스터 1:1)", m.RESIDENT_HOUSE_RECTS.size() == 11)
+	_check("③ 주민 집 문도 11개(rect과 짝)", m.RESIDENT_HOUSE_DOORS.size() == 11)
+	_check("③ 야외 건물 16채(카페+메인집3+만물상+주민집11)", buildings.size() == 16)
 	for b in buildings:
 		var bname: String = b[0]
 		var rect: Rect2i = b[1]
@@ -151,8 +156,61 @@ func _initialize() -> void:
 		_check("③ %s 문 = PATH(리세스)" % bname, m._grid[door.y][door.x] == m.PATH)
 		# 문은 그 건물 외관 rect 안에 있다(외관에 붙은 문).
 		_check("③ %s 문이 외관 rect 안" % bname, rect.has_point(door))
+		# 문은 rect *남변*에 있다(남향 진입 — 기존 8채 패턴 계승).
+		_check("③ %s 문이 rect 남변" % bname, door.y == rect.end.y - 1)
 		# ★[S2-T1] 건물은 배후 강·강둑과 겹치지 않는다(강 y범위 침범 0).
 		_check("③ %s rect가 강·강둑(y≥%d) 밖" % [bname, bank_y], rect.end.y - 1 < bank_y)
+		# ★[S2-T2] 외관 몸통에 뚫린 칸은 **문 1칸뿐** — 문 스포크가 건물을 관통하면 그 칸이 PATH(걷기 O)라
+		#   벽을 걸어 통과할 수 있다(옛 _carve_v 스포크의 실제 결함. _carve_door_spoke 우회로 해소).
+		var holes: Array = []
+		for hy in range(rect.position.y, rect.end.y):
+			for hx in range(rect.position.x, rect.end.x):
+				if m._grid[hy][hx] != m.WALL:
+					holes.append(Vector2i(hx, hy))
+		_check("③h %s 몸통 관통 0(뚫린 칸 = 문 1칸) — %s" % [bname, holes],
+			holes.size() == 1 and holes[0] == door)
+		# ★[S2-T2] 건물이 메인 가로 복도(y36)·다리 스파인 열(BRIDGE_X)을 막지 않는다.
+		#   스파인 x52는 북단 나룻터(y1..36)+남향 다리(y36..71)라 사실상 전 높이 열이다.
+		_check("③ %s rect가 메인 복도 y%d 밖" % [bname, m.MAIN_CORRIDOR_Y],
+			m.MAIN_CORRIDOR_Y < rect.position.y or m.MAIN_CORRIDOR_Y > rect.end.y - 1)
+		var on_spine := false
+		for bx in bridge:
+			if int(bx) >= rect.position.x and int(bx) <= rect.end.x - 1:
+				on_spine = true
+		_check("③ %s rect가 다리·나룻터 스파인 열 밖" % bname, not on_spine)
+	# ★[S2-T2] 건물 간 최소 2칸 여백(통행·후속 프롭 여유) — 전 쌍 비교.
+	var too_close := 0
+	for i in buildings.size():
+		for j in range(i + 1, buildings.size()):
+			var ra: Rect2i = buildings[i][1]
+			var rb: Rect2i = buildings[j][1]
+			# 팽창 rect(각 변 +2)가 서로 안 닿아야 여백 ≥2.
+			if ra.grow(2).intersects(rb):
+				too_close += 1
+				print("      · 근접: %s %s ↔ %s %s" % [buildings[i][0], ra, buildings[j][0], rb])
+	_check("③b 건물 간 최소 2칸 여백 — 위반 %d쌍" % too_close, too_close == 0)
+	# ★[S2-T2] 메인 가로 복도가 전 구간 살아 있다(신규 건물이 허리를 끊지 않았다).
+	var corridor_break := 0
+	for x in range(1, m._grid_w - 1):
+		if m._grid[m.MAIN_CORRIDOR_Y][x] != m.PATH:
+			corridor_break += 1
+	_check("③c 메인 복도 y%d 전 구간 PATH — 끊김 %d칸" % [m.MAIN_CORRIDOR_Y, corridor_break], corridor_break == 0)
+	# ★[S2-T2] 강변 보조 레인 — 강변 주거(RIVERSIDE_ZONE_Y 이상)가 있으면 레인이 깔리고 다리 스파인과 교차한다.
+	var riverside: Array = []
+	for i in m.RESIDENT_HOUSE_RECTS.size():
+		if int(m.RESIDENT_HOUSE_RECTS[i].position.y) >= m.RIVERSIDE_ZONE_Y:
+			riverside.append(i)
+	_check("③d 강변 주거 존재(조닝 = 동편 + 강변 분산) — %d채" % riverside.size(), riverside.size() > 0)
+	_check("③e 강변 레인 y%d가 강둑 y%d 위(물가 산책로)" % [m.RIVERSIDE_LANE_Y, bank_y], m.RIVERSIDE_LANE_Y < bank_y)
+	for bx in bridge:
+		_check("③f 강변 레인이 다리 스파인 x%d와 교차(PATH)" % bx, m._grid[m.RIVERSIDE_LANE_Y][bx] == m.PATH)
+	for i in riverside:
+		var rd: Vector2i = m.RESIDENT_HOUSE_DOORS[i]
+		var lane_ok := true
+		for y in range(rd.y, m.RIVERSIDE_LANE_Y + 1):
+			if m._grid[y][rd.x] != m.PATH:
+				lane_ok = false
+		_check("③g 강변 주민집%d 문%s → 레인 연속 PATH" % [i + 1, rd], lane_ok)
 
 	# ── ④ 동선 연결(무 soft-lock): 도착에서 모든 문·워프 발동 칸·남단 부두가 걸어서 닿는다 ──
 	var spawn: Vector2i = RegionCatalog.spawn_of(RegionCatalog.NARU_VILLAGE)
@@ -205,8 +263,11 @@ func _initialize() -> void:
 	_check("⑥g 미호 집 rect 불변", m.MIHO_HOUSE_RECT == Rect2i(5, 44, 4, 4))
 	_check("⑥h 바나 집 rect 불변", m.BANA_HOUSE_RECT == Rect2i(30, 44, 4, 4))
 	_check("⑥i 만물상 rect 불변", m.STORE_EXT_RECT == Rect2i(58, 14, 6, 5))
-	_check("⑥j 주민집 rect 3채 불변", m.RESIDENT_HOUSE_RECTS == [
+	# ★[S2-T2] 3→11채 확장에도 **기존 3채는 앵커**라 앞 3칸이 바이트 불변이어야 한다(신규는 뒤에 append).
+	_check("⑥j 주민집 앵커 3채 rect 불변(선두 3칸)", m.RESIDENT_HOUSE_RECTS.slice(0, 3) == [
 		Rect2i(80, 14, 5, 4), Rect2i(58, 44, 4, 4), Rect2i(82, 44, 4, 4)])
+	_check("⑥j2 주민집 앵커 3채 문 불변(선두 3칸)", m.RESIDENT_HOUSE_DOORS.slice(0, 3) == [
+		Vector2i(82, 17), Vector2i(59, 47), Vector2i(83, 47)])
 	_check("⑥k 메인 가로 복도 y36 불변(옛 BRIDGE_Y 자리)", m.MAIN_CORRIDOR_Y == 36)
 
 	m.queue_free()

@@ -72,7 +72,9 @@ func _initialize() -> void:
 	_check("③ 외부면 마스크 비활성(active=false)", not m.indoor_mask.active)
 
 	# ── ②④ 모든 enterable 건물: 실내 와이어링 + cam ⊇ room ──
-	# _buildings는 부팅 시 전 구역 17채를 한 번에 등록(카탈로그) → 워프 없이 전부 검증 가능.
+	# _buildings는 부팅 시 전 구역 25채를 한 번에 등록(카탈로그) → 워프 없이 전부 검증 가능.
+	# ★[ADR-0060 결정 2 / S2-T2] 나루 주민 집 3→11채로 17→25. 신규 8채도 공유 집 방(HOUSE_CAM_RECT)을
+	#   그대로 쓰므로 cam ⊇ room·마스크 주입이 같은 데이터 경로로 자동 성립한다(여기선 그 실증).
 	var enterable := 0
 	for id in m._buildings.keys():
 		var b: Dictionary = m._buildings[id]
@@ -88,7 +90,7 @@ func _initialize() -> void:
 		_check("② %s 실내 → 마스크 active" % id, m.indoor_mask.active)
 		_check("② %s 마스크 rect = 그 방 cam rect(px)" % id, m.indoor_mask.world_rect_px == want)
 		enterable += 1
-	_check("②b enterable 건물 17채 전부 검증", enterable == 17)
+	_check("②b enterable 건물 25채 전부 검증", enterable == 25)
 
 	# ── ③b 실내 → 외부 복귀 시 마스크 즉시 비활성(상태 안 샘) ──
 	m._indoor = ""

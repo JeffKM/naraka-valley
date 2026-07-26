@@ -894,16 +894,49 @@ const MIHO_HOUSE_RECT := Rect2i(5, 44, 4, 4)   # 미호 집 — 서편 하단 �
 const MIHO_HOUSE_DOOR := Vector2i(6, 47)
 const BANA_HOUSE_RECT := Rect2i(30, 44, 4, 4)  # 바나 집 — 서편 하단 우
 const BANA_HOUSE_DOOR := Vector2i(31, 47)
-# 동편: 만물상(상단 좌) + 주민 집 3(점진 추가의 시작 — 더 많은 주민 집은 후속).
+# 동편: 만물상(상단 좌) + 주민 집 11채.
 #   ★[ADR-0060 결정 1] 배후 강 이행으로 "다리 건너"가 아니라 같은 통짜 마을의 동쪽 구역이다(rect 무이동).
 const STORE_EXT_RECT := Rect2i(58, 14, 6, 5)   # 만물상
 const STORE_EXT_DOOR := Vector2i(60, 18)
+# ★[ADR-0060 결정 2 / S2-T2] 주민 집 3 → **11채** — [residents.md] T1 11인 로스터와 1:1.
+#   · 조닝 문법 = 스타듀 Pelican Town: **상업**(카페·만물상)은 북/중앙 현행 유지, **주거**는 동편 +
+#     강변(배후 강 북안 위쪽)에 코지 분산한다. 강변 2채는 다리(BRIDGE_X)를 사이에 두고 좌우로 앉혀
+#     "다리목 강마을" 결을 낸다(세레나=인어가 물가 집이라 서사와도 맞는다 — 배정은 본체 제작 시).
+#   · **앵커 보존:** 기존 3채(index 0~2) rect·문은 바이트 불변(village_test ⑥j). 신규 8채만 추가한다.
+#   · 로스터 1:1 배정(깨비·켄·미르·루카·강림·설화·스칼렛·세레나·모찌·네오·프로스티)은 **본체 제작 시**
+#     확정한다 — 지금 이름을 박으면 안 만든 캐릭터 집을 미리 테마링했다 갈아엎는 낭비가 난다
+#     ([residents.md] "기존 집 에셋 재사용 → 본체 제작 시 외관 재도색", [ADR-0014] 점진 추가).
+#     ★ 네오(만물상 점주)도 **자기 집을 따로 갖는다** — 만물상은 *직장*이고([ADR-0060] 결정 8 "점주
+#     퍼크와 T1 관계 트랙은 별개 레이어"), 거주 기록은 어디에도 없다. 그래서 11인 = 11채.
+#   · 배치 제약(전부 아래 좌표가 만족): 강둑 y65·강 y66+·메인 복도 y36·다리 스파인 x52/53·기존 문
+#     스포크·워프 칸과 비겹침, 문은 rect 남변 중앙께 1칸 리세스, 건물 간 최소 2칸 여백.
 const RESIDENT_HOUSE_RECTS := [
-	Rect2i(80, 14, 5, 4),  # 주민 집 1 — 동편 상단 우
-	Rect2i(58, 44, 4, 4),  # 주민 집 2 — 동편 하단 좌
-	Rect2i(82, 44, 4, 4),  # 주민 집 3 — 동편 하단 우
+	Rect2i(80, 14, 5, 4),  # 1 주민 집 — 동편 상단 우(앵커·무이동)
+	Rect2i(58, 44, 4, 4),  # 2 주민 집 — 동편 하단 좌(앵커·무이동)
+	Rect2i(82, 44, 4, 4),  # 3 주민 집 — 동편 하단 우(앵커·무이동)
+	# ★ 신규 8채는 격자로 줄 세우지 않고 y를 어긋나게 둔다(Pelican Town 결 — 반듯한 3×2 격자는
+	#   "마을"이 아니라 "택지"로 읽힌다). 여백 규칙(≥2칸)은 village_test ③b가 전 쌍으로 지킨다.
+	Rect2i(66, 22, 4, 4),  # 4 동편 중상단 좌(만물상 남동 — 상업 북/주거 남 조닝)
+	Rect2i(75, 25, 4, 4),  # 5 동편 중상단 중(한 단 아래로 어긋남)
+	Rect2i(88, 21, 4, 4),  # 6 동편 중상단 우(산길 워프 스포크 x98 서쪽)
+	Rect2i(65, 50, 4, 4),  # 7 동편 중하단 좌
+	Rect2i(75, 54, 4, 4),  # 8 동편 중하단 중(한 단 아래로 어긋남)
+	Rect2i(88, 48, 4, 4),  # 9 동편 중하단 우
+	Rect2i(38, 58, 4, 4),  # 10 강변 서 — 다리 서쪽 물가(강둑 y65 위 3칸 여백)
+	Rect2i(60, 57, 4, 4),  # 11 강변 동 — 다리 동쪽 물가
 ]
-const RESIDENT_HOUSE_DOORS := [Vector2i(82, 17), Vector2i(59, 47), Vector2i(83, 47)]
+# 문 = rect 남변(y+size-1) 중앙께 1칸 리세스(기존 패턴 그대로 x+1 / 5폭은 x+2).
+const RESIDENT_HOUSE_DOORS := [
+	Vector2i(82, 17), Vector2i(59, 47), Vector2i(83, 47),
+	Vector2i(67, 25), Vector2i(76, 28), Vector2i(89, 24),
+	Vector2i(66, 53), Vector2i(76, 57), Vector2i(89, 51),
+	Vector2i(39, 61), Vector2i(61, 60),
+]
+# 강변 주거 보조 가로 레인 — 강변 2채(y≥RIVERSIDE_ZONE_Y)는 메인 복도(y36)까지 22칸을 세로로 뚫으면
+#   마을을 관통하는 과도한 길이 되므로, 강둑 위 물가를 따라 한 줄만 낸다. 다리 스파인(x52·53)과
+#   교차해 자동으로 마을 동선에 붙는다(스포크 2개 + 짧은 레인 1줄 = 과설계 금지).
+const RIVERSIDE_ZONE_Y := 56       # 이 y 이상에서 시작하는 주민 집 = 강변 주거(레인에 붙는다)
+const RIVERSIDE_LANE_Y := 63       # 강변 레인 y(강둑 y65 위 2칸 — 물가 산책로 결)
 
 # 실내 방(맵 아래 별도 구역, 외부와 멀리 떨어져 카메라로 격리). 넓게 잡아 방 안을 돌아다닐 공간을 둔다.
 # ★C3 — 마을 공유 집·카페 실내를 마을 밴드(y72+)로 +48 평행이동(마을 전용 상수라 in-place 이동 —
@@ -1243,9 +1276,13 @@ const NARAK_ROCK_RECTS := [
 	# 우변(x55..57)
 	Rect2i(55, 12, 3, 8),  Rect2i(55, 25, 3, 8),
 ]
-# ★ M2.2 — 공유 집 실내(HOUSE_RECT)를 쓰는 나루 마을 6채(메인 집 3 + 주민 집 3). 외관 문·퇴장
-# 칸만 건물마다 다르고 실내 방·문·카메라는 한 방을 공유한다(_build_building_catalog·가구 재사용).
-const HOUSE_IDS := ["미호집", "멜집", "바나집", "주민집1", "주민집2", "주민집3"]
+# ★ M2.2 / ★[ADR-0060 결정 2 — S2-T2 주민집 11채] — 공유 집 실내(HOUSE_RECT)를 쓰는 나루 마을
+# 14채(메인 집 3 + 주민 집 11). 외관 문·퇴장 칸만 건물마다 다르고 실내 방·문·카메라는 한 방을
+# 공유한다(_build_building_catalog·가구 재사용). 실내 개별화는 캐릭터 본체가 붙을 때
+# ([ADR-0014] 점진 추가 — 지금 14개 방을 파면 안 쓰는 방 11개가 생긴다).
+const HOUSE_IDS := ["미호집", "멜집", "바나집",
+	"주민집1", "주민집2", "주민집3", "주민집4", "주민집5", "주민집6",
+	"주민집7", "주민집8", "주민집9", "주민집10", "주민집11"]
 # T3.2 미호 밭 자리 — 밭 남쪽 입구(도착→복도→밭 동선의 첫 밭 칸). 길에서 위를 바라보면
 # 바로 미호를 향하게 되어, 멘토가 밭 문 앞에서 맞이하는 자연스러운 첫 만남. 이 칸은 미호가
 # 카페로 출근한 오후에도 농사 대상에서 제외한다(_is_farmable — 돌아올 자리는 비워 둔다).
@@ -2893,7 +2930,7 @@ func _build_home() -> void:
 # 최남단을 동서로 횡단하는 **배후 강**이다(옛 내부 수직 강 폐지 — [ADR-0044] §2 이행).
 # ★C3 — 100×72 코지-와이드. 8채를 넓은 무대에 코지 분산한다:
 #   · 서편: 카페(이주·실내 있음) + 메인 집 3(미호·멜·바나) — 도착(spawn 3,36)·서워프 옆.
-#   · 동편: 만물상 + 주민 집 3. 북동 나룻터(→삼도천·혼백관)·동 산길(→갱도)은 워프
+#   · 동편: 만물상 + 주민 집 9(★S2-T2 — 나머지 2채는 남단 강변). 북동 나룻터(→삼도천·혼백관)·동 산길(→갱도)은 워프
 #     발동 칸까지 길이 닿되 목적 구역이 stub이라 휴면(M1.x 패턴, 그 구역 빌드 시 점등).
 #   · 남단: 배후 강(전 폭 WATER) + 북안 강둑 단차(CLIFF_BANK 1행) + 다리 1개소(폭 2칸) →
 #     다리 남단 부두(낚시터 스텁 — Slice 3에서 워프 연결).
@@ -2918,14 +2955,14 @@ func _build_naru_village() -> void:
 	for x in _grid_w:
 		_set_tile(x, BACK_RIVER_BANK_Y, CLIFF_BANK)
 
-	# 서편: 카페(실내 있음) + 메인 집 3. 동편: 만물상 + 주민 집 3. 모두 통과 불가 외관 + 문 리세스.
+	# 서편: 카페(실내 있음) + 메인 집 3. 동편·강변: 만물상 + 주민 집 11. 모두 통과 불가 외관 + 문 리세스.
 	_build_facade(CAFE_EXT_RECT, CAFE_EXT_DOOR)         # 서편 카페 외관
 	_build_facade(MEL_HOUSE_RECT, MEL_HOUSE_DOOR)       # 서편 멜 집
 	_build_facade(MIHO_HOUSE_RECT, MIHO_HOUSE_DOOR)     # 서편 미호 집
 	_build_facade(BANA_HOUSE_RECT, BANA_HOUSE_DOOR)     # 서편 바나 집
 	_build_facade(STORE_EXT_RECT, STORE_EXT_DOOR)       # 동편 만물상
 	for i in RESIDENT_HOUSE_RECTS.size():
-		_build_facade(RESIDENT_HOUSE_RECTS[i], RESIDENT_HOUSE_DOORS[i])  # 동편 주민 집들
+		_build_facade(RESIDENT_HOUSE_RECTS[i], RESIDENT_HOUSE_DOORS[i])  # 동편·강변 주민 집 11채
 	_build_room(CAFE_RECT, CAFE, CAFE_WALL, CAFE_DOOR)  # 실내 카페 방(앤틱 벽 — VOID 스택)
 	# ★ M2.2 — 메인/주민 집 6채가 공유하는 집 실내 방(아늑한 청회) + 만물상 전용 방(상업 톤).
 	# 카페 옆 VOID 띠(y26~34)에 가로로 놓아 MAP_H 불변(warp_test grid 크기 불변식 유지). 한 번에
@@ -3454,22 +3491,54 @@ func _carve_paths() -> void:
 # 각 건물 문은 복도까지 세로 스포크로 잇는다(시각 안내). 워프 발동 칸(나룻터 52,1 / 산길 98,18)까지도
 # 길이 닿되 목적 구역 stub이라 휴면(M1.x 패턴). _carve_v/_carve_h = 세로/가로 한 줄 PATH(끝칸 포함).
 # 남향 스파인(x52·53)이 복도에서 배후 강 다리·남단 부두까지 내려간다 = 유일한 도하점.
+# ★[S2-T2] 건물 문 → 간선(lane_y) 스포크 한 줄.
+#
+# 왜 단순 _carve_v가 아닌가: 문은 rect **남변**에 있으므로, 간선이 문보다 *위*(북)에 있으면 세로로
+# 곧장 내려오는 길이 건물 몸통을 세로로 관통한다 — 그리고 관통 칸은 PATH(걷기 O)라 **벽을 걸어
+# 통과**할 수 있었다(옛 코드의 미호집·바나집·주민집2·3. village_dump 육안 + 아래 village_test ③h로
+# 확인·박제). 그래서 그런 집은 건물 **동쪽 옆 열**로 내려가 문 바로 아래 칸에서 가로로 붙는다 —
+# 남향 문을 남쪽에서 진입하는 자연스러운 동선이자, 몸통 관통 0.
+# 간선이 문보다 아래(남)면 문에서 곧장 내려가면 되므로(건물 밖) 예전처럼 세로 한 줄이다.
+func _carve_door_spoke(rect: Rect2i, door: Vector2i, lane_y: int) -> void:
+	if door.y <= lane_y:
+		_carve_v(door.x, door.y, lane_y)      # 문 → 아래 간선(건물 밖으로 내려감)
+		return
+	var side_x: int = rect.end.x              # 건물 동쪽 바로 옆 열(건물 간 여백 ≥2라 비어 있다)
+	var approach_y: int = door.y + 1          # 문 바로 아래 = 남향 진입 칸
+	_carve_v(side_x, lane_y, approach_y)      # 간선 → 옆 열로 남하
+	_carve_h(approach_y, door.x, side_x)      # 문 아래 칸까지 가로로 붙음
+
 func _carve_village_paths() -> void:
 	# ★C3 — 100×72 코지-와이드 동선. GROUND이 열려 도달성은 자동(C2 결) — 문 스포크는 시각 안내 레인이다.
 	for x in range(1, 99):
 		_set_tile(x, MAIN_CORRIDOR_Y, PATH)     # 메인 가로 복도(서워프·도착 ~ 동 가장자리, 무분절)
 
-	# 서편 문 → 복도(문이 복도 위면 위→아래, 아래면 아래→위로 잇는다).
-	_carve_v(CAFE_EXT_DOOR.x, CAFE_EXT_DOOR.y, MAIN_CORRIDOR_Y)      # 카페 문(8,31) → 복도
-	_carve_v(MEL_HOUSE_DOOR.x, MEL_HOUSE_DOOR.y, MAIN_CORRIDOR_Y)    # 멜 문(22,18) → 복도
-	_carve_v(MIHO_HOUSE_DOOR.x, MAIN_CORRIDOR_Y, MIHO_HOUSE_DOOR.y)  # 미호 문(6,47) → 복도(아래)
-	_carve_v(BANA_HOUSE_DOOR.x, MAIN_CORRIDOR_Y, BANA_HOUSE_DOOR.y)  # 바나 문(31,47) → 복도(아래)
+	# 서편 문 → 복도.
+	_carve_door_spoke(CAFE_EXT_RECT, CAFE_EXT_DOOR, MAIN_CORRIDOR_Y)      # 카페 문(8,31) → 복도
+	_carve_door_spoke(MEL_HOUSE_RECT, MEL_HOUSE_DOOR, MAIN_CORRIDOR_Y)    # 멜 문(22,18) → 복도
+	_carve_door_spoke(MIHO_HOUSE_RECT, MIHO_HOUSE_DOOR, MAIN_CORRIDOR_Y)  # 미호 문(6,47) — 복도 아래(우회)
+	_carve_door_spoke(BANA_HOUSE_RECT, BANA_HOUSE_DOOR, MAIN_CORRIDOR_Y)  # 바나 문(31,47) — 복도 아래(우회)
 
 	# 동편 문 → 복도.
-	_carve_v(STORE_EXT_DOOR.x, STORE_EXT_DOOR.y, MAIN_CORRIDOR_Y)                          # 만물상 문(60,18) → 복도
-	_carve_v(RESIDENT_HOUSE_DOORS[0].x, RESIDENT_HOUSE_DOORS[0].y, MAIN_CORRIDOR_Y)        # 주민집1 문(82,17) → 복도
-	_carve_v(RESIDENT_HOUSE_DOORS[1].x, MAIN_CORRIDOR_Y, RESIDENT_HOUSE_DOORS[1].y)        # 주민집2 문(59,47) → 복도(아래)
-	_carve_v(RESIDENT_HOUSE_DOORS[2].x, MAIN_CORRIDOR_Y, RESIDENT_HOUSE_DOORS[2].y)        # 주민집3 문(83,47) → 복도(아래)
+	_carve_door_spoke(STORE_EXT_RECT, STORE_EXT_DOOR, MAIN_CORRIDOR_Y)    # 만물상 문(60,18) → 복도
+	# ★[ADR-0060 결정 2 / S2-T2] 주민 집 11채 문 스포크. 동편 9채는 메인 복도(y36)로, 강변 2채는
+	#   강변 보조 레인(RIVERSIDE_LANE_Y)으로 붙는다. 레인은 다리 스파인(BRIDGE_X)과 교차하므로
+	#   그 자체로 마을 동선에 이어진다 — 레인 span은 강변 문 x와 다리 열을 감싸는 최소 폭으로 잡는다.
+	var lane_x0: int = int(BRIDGE_X[0])
+	var lane_x1: int = int(BRIDGE_X[1])
+	var has_riverside := false
+	for i in RESIDENT_HOUSE_RECTS.size():
+		var rect: Rect2i = RESIDENT_HOUSE_RECTS[i]
+		var door: Vector2i = RESIDENT_HOUSE_DOORS[i]
+		if rect.position.y >= RIVERSIDE_ZONE_Y:
+			has_riverside = true
+			lane_x0 = mini(lane_x0, door.x)
+			lane_x1 = maxi(lane_x1, door.x)
+			_carve_door_spoke(rect, door, RIVERSIDE_LANE_Y)   # 강변 집 → 물가 레인
+		else:
+			_carve_door_spoke(rect, door, MAIN_CORRIDOR_Y)    # 동편 집 → 메인 복도
+	if has_riverside:
+		_carve_h(RIVERSIDE_LANE_Y, lane_x0, lane_x1)    # 강변 물가 산책로(다리 스파인과 교차)
 
 	# 워프 발동 칸까지 길(목적 구역 stub → 휴면, 그 구역 빌드 시 점등).
 	_carve_v(BRIDGE_X[0], 1, MAIN_CORRIDOR_Y)   # 나룻터(52,1) → 삼도천(혼백관) — 북단 강변로(다리 서칸과 같은 열)
@@ -5036,9 +5105,12 @@ func _place_labels() -> void:
 			# 아직 그레이박스인 동편(만물상·주민 집) + 워프(나룻터·산길·서워프) + 다리만 라벨로 식별.
 			# ★C3 — 100×72 재배치에 맞춰 라벨도 새 건물·워프 위치로 옮긴다(외관 위·워프 가장자리 옆).
 			_add_label("만물상", _tile_center_px(Vector2i(60, 12)))
-			_add_label("주민 집", _tile_center_px(Vector2i(82, 12)))
-			_add_label("주민 집", _tile_center_px(Vector2i(59, 42)))
-			_add_label("주민 집", _tile_center_px(Vector2i(83, 42)))
+			# ★[ADR-0060 결정 2 / S2-T2] 주민 집 11채 — rect에서 라벨 자리를 파생한다(하드코딩 3개 →
+			#   로스터가 늘어도 자동). 외관 위 2칸(그레이박스 박스 머리 위)에 "주민 집 N"으로 띄운다.
+			for i in RESIDENT_HOUSE_RECTS.size():
+				var hr: Rect2i = RESIDENT_HOUSE_RECTS[i]
+				_add_label("주민 집 %d" % (i + 1),
+					_tile_center_px(Vector2i(hr.position.x + hr.size.x / 2, hr.position.y - 2)))
 			# ★[ADR-0060 결정 1] 다리·부두 라벨을 배후 강(남단)으로 이전(옛 중앙 수직 강 다리 48,34 폐지).
 			_add_label("다리", _tile_center_px(Vector2i(48, 64)))                   # 강둑 위 다리 서쪽
 			_add_label("나루 부두(낚시터 — Slice 3)", _tile_center_px(Vector2i(62, 70)))  # 남단 부두 동쪽
@@ -5472,7 +5544,7 @@ func _on_collapsed() -> void:
 # in_tile(진입 착지), out_tile(퇴장 착지=외관 문 앞), door(실내 문=퇴장 트리거), cam(실내 카메라
 # 둘레), kind(house/cafe/store — 가구·서비스 분기용). 출입(_maybe_toggle_building)·카메라
 # (_apply_camera_limits)·세이브 복원(_restore_location)이 모두 이 데이터로 굴러간다(하드코딩 제거).
-# ★ 공유 집 실내: 메인 집 3 + 주민 집 3(HOUSE_IDS)은 한 방(HOUSE_RECT)을 공유한다 — in_tile·
+# ★ 공유 집 실내: 메인 집 3 + 주민 집 11(HOUSE_IDS)은 한 방(HOUSE_RECT)을 공유한다 — in_tile·
 #   door·cam은 같고 ext_door·out_tile만 건물마다 다르다(들어온 그 집으로 정확히 퇴장). 점유자
 #   (주민 NPC)가 붙을 때 각 집이 자기 방을 갖는다("기존 집 에셋 재사용", 그레이박스 우선·ADR-0001).
 func _build_building_catalog() -> void:
@@ -5551,11 +5623,14 @@ func _build_building_catalog() -> void:
 		"ext_door": GUILD_EXT_DOOR, "out_tile": GUILD_EXT_DOOR + Vector2i(0, 1),
 		"in_tile": GUILD_IN_TILE, "door": GUILD_DOOR, "cam": GUILD_CAM_RECT,
 	}
-	# 메인 집 3 + 주민 집 3 — 공유 집 실내(HOUSE_RECT). 외관 문은 건물마다, 실내는 한 방.
+	# 메인 집 3 + 주민 집 11 — 공유 집 실내(HOUSE_RECT). 외관 문은 건물마다, 실내는 한 방.
+	# ★[ADR-0060 결정 2 / S2-T2] 주민 집은 RESIDENT_HOUSE_DOORS에서 파생(id = HOUSE_IDS와 같은 순번) —
+	#   로스터가 늘 때 이 dict를 손댈 필요가 없다.
 	var house_ext := {
 		"미호집": MIHO_HOUSE_DOOR, "멜집": MEL_HOUSE_DOOR, "바나집": BANA_HOUSE_DOOR,
-		"주민집1": RESIDENT_HOUSE_DOORS[0], "주민집2": RESIDENT_HOUSE_DOORS[1], "주민집3": RESIDENT_HOUSE_DOORS[2],
 	}
+	for i in RESIDENT_HOUSE_DOORS.size():
+		house_ext["주민집%d" % (i + 1)] = RESIDENT_HOUSE_DOORS[i]
 	for id in house_ext:
 		var ext: Vector2i = house_ext[id]
 		_buildings[id] = {
