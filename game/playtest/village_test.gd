@@ -1,15 +1,24 @@
 extends SceneTree
-# M2.1 — 나루 마을 허브 레이아웃 검증(ephemeral). 실제 main을 인스턴스화해 마을 구역을 빌드한 뒤
-# 강+다리 동/서 분할·8개 건물 외관·동선 연결(무 soft-lock)·카페 실내 좌표 불변(회귀 0)을 단언한다.
+# M2.1 / ★[ADR-0060 결정 1 · S2-T1] — 나루 마을 허브 레이아웃 검증(ephemeral). 실제 main을 인스턴스화해
+# 마을 구역을 빌드한 뒤 최남단 배후 강·북안 강둑·다리 1개소·8개 건물 외관·동선 연결(무 soft-lock)·
+# 카페 실내 좌표 불변(회귀 0)·앵커 무이동을 단언한다.
 # region.gd 데이터(워프 발동 칸)는 world_test가 보고, 여기는 main이 그 데이터로 *마을을 어떻게
 # 짓는지*(그리드 콘텐츠)를 본다(building/warp_test와 같은 결의 하네스).
 #
+# ★ 옛 토폴로지(마을 내부 수직 강 RIVER_X 49·50 × y1~70 세로 절단 + 다리 BRIDGE_Y 36)는 [ADR-0044] §2
+#   남향 물 토폴로지 이행으로 **폐지**됐다. 불변식 ①②를 새 배후 강 구조로 재작성한다.
+#
 # ★ 핵심 불변식:
-#   ① 강(WATER)이 x49·50 세로로 흘러 마을을 서/동으로 가른다(위·아래 경계까지 닿아 우회 도하 없음, ★C3).
-#   ② 다리(BRIDGE_Y 36)가 *유일한* 도하점 — 그 외 모든 y에서 x49·50은 WATER(PATH 아님).
+#   ① 배후 강(WATER)이 최남단을 **동서로 횡단**한다 — x0..99 전 폭(동서 끝까지 = 우회 도하 없음),
+#      y BACK_RIVER_Y0..BACK_RIVER_Y1(폭 ≥3행), 남단은 외부 무대 마지막 행까지(남쪽 우회 없음).
+#      북안(강 최상단 바로 위) 1행은 CLIFF_BANK pseudo-Z 강둑 단차(SOLID).
+#   ② 다리(BRIDGE_X, 폭 2칸)가 *유일한* 도하점 — 다리·남단 부두 외 모든 강 칸은 WATER,
+#      강둑도 다리 폭만큼만 PATH로 열린다.
 #   ③ 8개 외관(카페·메인집3·만물상·주민집3)이 통과 불가 WALL 박스 + 문 1칸(PATH 리세스).
-#   ④ 도착(spawn)에서 모든 문·워프 발동 칸이 걸어서 닿는다(flood-fill — 그레이박스 무 soft-lock).
+#   ④ 도착(spawn)에서 모든 문·워프 발동 칸 + **다리 남단 부두**가 걸어서 닿고, 강 남쪽에서 닿는 칸은
+#      다리·부두뿐이다(flood-fill — 무 soft-lock + 우회 불가의 실증).
 #   ⑤ 카페 실내(CAFE_RECT) 좌표·바닥 불변 = 카페 시뮬 회귀 0 seam.
+#   ⑥ 앵커 무이동 — 워프 3좌표·spawn·기존 건물 rect가 맵 리팩토링 전과 바이트 동일.
 # 실행: godot --headless --path game --script res://playtest/village_test.gd
 
 var _fail := 0
@@ -19,13 +28,14 @@ func _check(label: String, ok: bool) -> void:
 	if not ok:
 		_fail += 1
 
-# 외부에서 걸을 수 있는 칸인가(WALL·WATER·VOID·범위밖이면 X). 실내 스택(y>=외부세로)은 제외.
+# 외부에서 걸을 수 있는 칸인가(SOLID·WATER·VOID·범위밖이면 X). 실내 스택(y>=외부세로)은 제외.
 # ★C3 — 마을이 100×72라 전역 MAP_W/OUTDOOR_H가 아니라 빌드된 구역 치수(_grid_w/_outdoor_h)를 쓴다.
+# ★[S2-T1] 강둑(CLIFF_BANK)이 도입돼 WALL 하드코딩으로는 부족하다 — 게임의 단일 진실원 is_solid()를 쓴다.
 func _walkable(m: Node, t: Vector2i) -> bool:
 	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
-	return id != m.WALL and id != m.WATER and id != m.VOID
+	return not m.is_solid(id) and id != m.WATER and id != m.VOID
 
 # spawn에서 4방향 flood-fill로 도달 가능한 외부 칸 집합.
 func _reachable(m: Node, start: Vector2i) -> Dictionary:
@@ -41,8 +51,12 @@ func _reachable(m: Node, start: Vector2i) -> Dictionary:
 				stack.append(n)
 	return seen
 
+# 그 칸이 다리(BRIDGE_X 열) 또는 남단 부두(BACK_RIVER_DOCK_RECT) 소속인가 = 의도된 도하 통로.
+func _is_crossing(m: Node, t: Vector2i) -> bool:
+	return t.x in m.BRIDGE_X or m.BACK_RIVER_DOCK_RECT.has_point(t)
+
 func _initialize() -> void:
-	print("══ M2.1 나루 마을 허브 레이아웃 검증 ══")
+	print("══ M2.1 / S2-T1 나루 마을 허브 레이아웃 검증(배후 강) ══")
 	var m: Node = load("res://main.tscn").instantiate()
 	root.add_child(m)
 	await process_frame
@@ -52,27 +66,69 @@ func _initialize() -> void:
 	m._rebuild_region(RegionCatalog.NARU_VILLAGE)
 	_check("⓪ 구역 = 나루 마을", m._region == RegionCatalog.NARU_VILLAGE)
 
-	# ── ① 강(WATER)이 동/서를 가른다 ──
-	var rx: Array = m.RIVER_X
-	_check("① 강 두 칸 폭(x49·50, ★C3)", rx == [49, 50])
-	for ry in [m.RIVER_Y0, 20, 50, m.RIVER_Y1]:
-		for x in rx:
-			_check("①b 강 칸 WATER (%d,%d)" % [x, ry], m._grid[ry][x] == m.WATER)
-	# 강이 맨 위 경계 바로 아래(RIVER_Y0=1)까지 닿아 북쪽 우회 도하가 없다.
-	_check("①c 강이 위 경계까지 닿음(북쪽 우회 차단)", m.RIVER_Y0 == 1)
+	var y0: int = m.BACK_RIVER_Y0
+	var y1: int = m.BACK_RIVER_Y1
+	var bank_y: int = m.BACK_RIVER_BANK_Y
+	var bridge: Array = m.BRIDGE_X
+	var dock: Rect2i = m.BACK_RIVER_DOCK_RECT
 
-	# ── ② 다리(BRIDGE_Y)가 유일한 도하점 ──
-	for x in rx:
-		_check("② 다리 칸 PATH (%d,%d)" % [x, m.BRIDGE_Y], m._grid[m.BRIDGE_Y][x] == m.PATH)
-	# 다리 외 모든 y에서 강 칸은 WATER(다른 도하점 없음).
-	var other_crossing := false
-	for y in range(m.RIVER_Y0, m.RIVER_Y1 + 1):
-		if y == m.BRIDGE_Y:
+	# ── ① 배후 강 = 최남단 동서 횡단(전 폭·폭≥3행·남단 경계까지) + 북안 강둑 단차 ──
+	_check("① 강 폭 ≥3행(강으로 읽힘) — %d행" % (y1 - y0 + 1), y1 - y0 + 1 >= 3)
+	_check("①b 강 남단이 외부 무대 마지막 행(남쪽 우회 없음)", y1 == m._outdoor_h - 1)
+	_check("①c 강둑 1행이 강 최상단 바로 위", bank_y == y0 - 1)
+	# 강이 맵 서단(x0)·동단(x99)까지 닿는다 = 동서 우회 도하 불가.
+	for ex in [0, m._grid_w - 1]:
+		for ey in [y0, y1]:
+			_check("①d 강이 맵 가장자리까지(%d,%d) WATER" % [ex, ey], m._grid[ey][ex] == m.WATER)
+	# 전 폭 전수 스캔 — 다리·부두를 제외한 모든 강 칸이 WATER인가(구멍 0).
+	var river_hole := 0
+	var river_water := 0
+	for y in range(y0, y1 + 1):
+		for x in m._grid_w:
+			if _is_crossing(m, Vector2i(x, y)):
+				continue
+			if m._grid[y][x] == m.WATER:
+				river_water += 1
+			else:
+				river_hole += 1
+	_check("①e 강 전 폭 전수 WATER(다리·부두 제외) — 구멍 %d칸" % river_hole, river_hole == 0)
+	_check("①f 강 수면 칸 수 = 전 폭×행수 − 통로", river_water > 0)
+	# 북안 강둑(CLIFF_BANK, SOLID) — 다리 폭을 뺀 전 폭.
+	var bank_hole := 0
+	for x in m._grid_w:
+		if x in bridge:
 			continue
-		for x in rx:
-			if m._grid[y][x] != m.WATER:
-				other_crossing = true
-	_check("②b 다리 외 강 칸은 전부 WATER(유일 도하점)", not other_crossing)
+		if m._grid[bank_y][x] != m.CLIFF_BANK:
+			bank_hole += 1
+	_check("①g 북안 강둑 전 폭 CLIFF_BANK(다리 폭 제외) — 구멍 %d칸" % bank_hole, bank_hole == 0)
+	_check("①h 강둑이 SOLID(pseudo-Z 단차 — [ADR-0044] §2)", m.is_solid(m.CLIFF_BANK))
+	# 강둑 바로 위(y64)는 마을 땅 = 강가까지 걸어갈 수 있다.
+	_check("①i 강둑 위 마을 땅(x10,y%d) 걷기 O" % (bank_y - 1), _walkable(m, Vector2i(10, bank_y - 1)))
+
+	# ── ② 다리(BRIDGE_X, 폭 2칸)가 유일한 도하점 ──
+	_check("② 다리 폭 2칸([ADR-0046] 문 2칸 규약과 결)", bridge.size() == 2)
+	_check("②b 다리 두 열이 인접(끊긴 두 다리 아님)", int(bridge[1]) - int(bridge[0]) == 1)
+	for bx in bridge:
+		# 강둑 종단 + 강 종단 전 구간이 PATH.
+		var span_ok := true
+		for y in range(bank_y, y1 + 1):
+			if m._grid[y][bx] != m.PATH:
+				span_ok = false
+		_check("②c 다리 열 x%d 강둑~강 종단 전부 PATH(y%d..%d)" % [bx, bank_y, y1], span_ok)
+		# 복도에서 다리까지 내려오는 남향 스파인도 이어져 있다.
+		var spine_ok := true
+		for y in range(m.MAIN_CORRIDOR_Y, bank_y):
+			if m._grid[y][bx] != m.PATH:
+				spine_ok = false
+		_check("②d 남향 스파인 x%d 복도(y%d)→강둑 연속 PATH" % [bx, m.MAIN_CORRIDOR_Y], spine_ok)
+	# 다리 남단 부두(낚시터 스텁) 전 칸 PATH.
+	var dock_ok := true
+	for dy in range(dock.position.y, dock.end.y):
+		for dx in range(dock.position.x, dock.end.x):
+			if m._grid[dy][dx] != m.PATH:
+				dock_ok = false
+	_check("②e 다리 남단 부두 %s 전 칸 PATH(낚시터 스텁)" % dock, dock_ok)
+	_check("②f 부두가 맵 남경계에서 막힘(마지막 행까지)", dock.end.y - 1 == y1)
 
 	# ── ③ 8개 건물 외관: 통과 불가 WALL 박스 + 문 1칸(PATH) ──
 	var buildings: Array = [
@@ -86,17 +142,19 @@ func _initialize() -> void:
 		buildings.append(["주민집%d" % (i + 1), m.RESIDENT_HOUSE_RECTS[i], m.RESIDENT_HOUSE_DOORS[i]])
 	_check("③ 야외 건물 8채(카페+메인집3+만물상+주민집3)", buildings.size() == 8)
 	for b in buildings:
-		var name: String = b[0]
+		var bname: String = b[0]
 		var rect: Rect2i = b[1]
 		var door: Vector2i = b[2]
 		# 외관 좌상단 코너 = WALL(통과 불가 박스).
-		_check("③ %s 외관 WALL 박스" % name, m._grid[rect.position.y][rect.position.x] == m.WALL)
+		_check("③ %s 외관 WALL 박스" % bname, m._grid[rect.position.y][rect.position.x] == m.WALL)
 		# 문 1칸은 PATH 리세스(WALL 박스 안에서 유일하게 뚫림).
-		_check("③ %s 문 = PATH(리세스)" % name, m._grid[door.y][door.x] == m.PATH)
+		_check("③ %s 문 = PATH(리세스)" % bname, m._grid[door.y][door.x] == m.PATH)
 		# 문은 그 건물 외관 rect 안에 있다(외관에 붙은 문).
-		_check("③ %s 문이 외관 rect 안" % name, rect.has_point(door))
+		_check("③ %s 문이 외관 rect 안" % bname, rect.has_point(door))
+		# ★[S2-T1] 건물은 배후 강·강둑과 겹치지 않는다(강 y범위 침범 0).
+		_check("③ %s rect가 강·강둑(y≥%d) 밖" % [bname, bank_y], rect.end.y - 1 < bank_y)
 
-	# ── ④ 동선 연결(무 soft-lock): 도착에서 모든 문·워프 발동 칸이 걸어서 닿는다 ──
+	# ── ④ 동선 연결(무 soft-lock): 도착에서 모든 문·워프 발동 칸·남단 부두가 걸어서 닿는다 ──
 	var spawn: Vector2i = RegionCatalog.spawn_of(RegionCatalog.NARU_VILLAGE)
 	_check("④pre 도착 칸이 걸을 수 있는 길", _walkable(m, spawn))
 	var reach := _reachable(m, spawn)
@@ -107,14 +165,49 @@ func _initialize() -> void:
 	for w in RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE):
 		var at: Vector2i = w["at"]
 		_check("④ 워프 발동 칸 도달 가능 →%s %s" % [w["to"], at], reach.has(at))
-	# 동편(다리 건너)도 닿는다 = 다리가 실제로 서/동을 잇는다(예: 동편 만물상 문).
-	_check("④b 동편(다리 건너) 도달 — 만물상 문", reach.has(m.STORE_EXT_DOOR))
+	# ★[S2-T1] 마을이 통짜 = 동편 끝(만물상 문)이 다리 없이도 닿는다.
+	_check("④b 동편 만물상 문 도달(마을 통짜 — 도하 불요)", reach.has(m.STORE_EXT_DOOR))
+	# ★[S2-T1] 다리 남단 부두 도달(강을 실제로 건널 수 있다) — 부두 4모서리 전부.
+	for corner in [dock.position, Vector2i(dock.end.x - 1, dock.position.y),
+			Vector2i(dock.position.x, dock.end.y - 1), dock.end - Vector2i.ONE]:
+		_check("④c 다리 남단 부두 모서리 도달 %s" % corner, reach.has(corner))
+	# ★[S2-T1] 우회 불가의 실증 — 강 남쪽(y≥BACK_RIVER_Y0)에서 닿는 칸은 다리·부두뿐이다.
+	var south_reached := 0
+	var south_stray := 0
+	for t in reach:
+		var tt: Vector2i = t
+		if tt.y < y0:
+			continue
+		south_reached += 1
+		if not _is_crossing(m, tt):
+			south_stray += 1
+	_check("④d 강 남쪽 도달 칸이 전부 다리·부두(우회 도하 0) — 이탈 %d칸" % south_stray, south_stray == 0)
+	_check("④e 강 남쪽에 실제로 도달함(막다른 부두 살아 있음) — %d칸" % south_reached, south_reached > 0)
+	# 강둑(SOLID)은 다리 열 말고는 못 넘는다.
+	_check("④f 강둑 비-다리 칸은 도달 불가(x10,y%d)" % bank_y, not reach.has(Vector2i(10, bank_y)))
 
 	# ── ⑤ 카페 실내(CAFE_RECT) 좌표·바닥 불변 = 카페 시뮬 회귀 0 seam ──
 	# 외관은 서편으로 옮겼어도 실내 방은 VOID 스택의 같은 칸에 그대로 선다(좌표 대이동 0).
 	var ci: Vector2i = m.CAFE_RECT.position + Vector2i(1, 1)   # 방 안쪽 한 칸
 	_check("⑤ 카페 실내 바닥(CAFE_RECT 불변)", m._grid[ci.y][ci.x] == m.CAFE)
 	_check("⑤b 실내 카페 문 불변(CAFE_DOOR)", m.CAFE_RECT.has_point(m.CAFE_DOOR))
+
+	# ── ⑥ 앵커 무이동(맵 리팩토링 전 좌표와 바이트 동일 — [ADR-0060] 결정 1 "앵커 보존") ──
+	_check("⑥ spawn (3,36) 불변", spawn == Vector2i(3, 36))
+	var warp_at := {}
+	for w in RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE):
+		warp_at[w["to"]] = w["at"]
+	_check("⑥b 워프 HOME at (1,36) 불변", warp_at.get(RegionCatalog.HOME) == Vector2i(1, 36))
+	_check("⑥c 워프 어푸광산 at (98,18) 불변", warp_at.get(RegionCatalog.EOPHWA_MINE) == Vector2i(98, 18))
+	_check("⑥d 워프 삼도천 at (52,1) 불변", warp_at.get(RegionCatalog.SAMDOCHEON) == Vector2i(52, 1))
+	_check("⑥e 카페 외관 rect 불변", m.CAFE_EXT_RECT == Rect2i(5, 25, 8, 7))
+	_check("⑥f 멜 집 rect 불변", m.MEL_HOUSE_RECT == Rect2i(20, 14, 5, 5))
+	_check("⑥g 미호 집 rect 불변", m.MIHO_HOUSE_RECT == Rect2i(5, 44, 4, 4))
+	_check("⑥h 바나 집 rect 불변", m.BANA_HOUSE_RECT == Rect2i(30, 44, 4, 4))
+	_check("⑥i 만물상 rect 불변", m.STORE_EXT_RECT == Rect2i(58, 14, 6, 5))
+	_check("⑥j 주민집 rect 3채 불변", m.RESIDENT_HOUSE_RECTS == [
+		Rect2i(80, 14, 5, 4), Rect2i(58, 44, 4, 4), Rect2i(82, 44, 4, 4)])
+	_check("⑥k 메인 가로 복도 y36 불변(옛 BRIDGE_Y 자리)", m.MAIN_CORRIDOR_Y == 36)
 
 	m.queue_free()
 	await process_frame
