@@ -1,9 +1,19 @@
 extends SceneTree
 
-# M2.5 외관 재도색 육안 확인용 글루(ADR-0001 허용 — map_dump 결, GPU 없이 CPU 합성).
-# main을 헤드리스로 띄워 나루 마을(NARU_VILLAGE)로 재빌드한 뒤, Ground/Field 타일과
-# 야외 건물 외관(카페 + 미호·멜·바나 집)을 박스 좌상단에 1:1로 합성해 한 장 PNG로 떨군다.
-# _draw_facade_*는 텍스처를 rect.position*TILE에 1:1로 그리므로 CPU blit이 렌더와 동일.
+# 육안 글루(ADR-0001) — 나루 마을(100×72) *전체 무대*를 한 장에 CPU 합성한다.
+# ★[S2-T3 / ADR-0060 결정 3] 종전 버전은 Ground/Field 타일맵 + 외관 4장만 그려 stale였다(마을이
+#   `_build_ground16` 단일출처 파이프라인으로 이식되면서 실제 화면의 지면은 거의 전부
+#   `_ground_detail_tex` 오버레이 한 장이다 — 그걸 안 그리면 덤프가 라이브와 완전히 다른 그림이 된다).
+#   home_full_dump.gd와 같은 층위로 맞춘다: 타일맵 → 지면 오버레이 → 프롭 → 외관.
+#
+# 레이어 순서 = main._draw와 동일:
+#   ① Ground/Field 타일맵(그레이박스 WALL 박스 = 만물상·주민 집 11채가 여기서 보인다)
+#   ② _ground_detail_tex(ground16 베이크 — 잔디/흙 Wang 합성·길·물가 shore·스캐터)
+#   ③ 야외 프롭(마을은 현재 야외 프롭 0 — CAFE/VILLAGE_HOUSE 레이아웃은 실내 띠 y72+라 캔버스 밖)
+#   ④ 건물 외관 4장(카페·미호/멜/바나 집) — main._draw_facade_*와 같은 **좌상단 1:1** blit
+#      (HOME의 bottom-center 앵커와 다르다. 마을 외관은 rect.position에 그대로 얹힌다.)
+#      ★ 풀 백드롭은 그리지 않는다 — ground16 구역은 main._facade_grass_backdrop이 early-return
+#        (건물마다 초록 사각형이 되살아나는 [ADR-0054] 회귀 방지). 지면 오버레이의 흙 패드가 비친다.
 # 사용: godot --headless --path game -s res://tools/village_dump.gd
 
 const TILE := 32
@@ -13,14 +23,38 @@ func _init() -> void:
 	get_root().add_child(main)
 	await process_frame
 	await process_frame
-	main._rebuild_region(RegionCatalog.NARU_VILLAGE)   # 마을로 전환(그리드·외관 자리)
+	var t0 := Time.get_ticks_msec()
+	main._rebuild_region(RegionCatalog.NARU_VILLAGE)   # 마을로 전환(그리드·지면·외관 자리)
+	var build_ms := Time.get_ticks_msec() - t0
 	await process_frame
 	var size: Vector2i = RegionCatalog.size_of(RegionCatalog.NARU_VILLAGE)
 	var out := Image.create(size.x * TILE, size.y * TILE, false, Image.FORMAT_RGBA8)
 	out.fill(Color(0.05, 0.05, 0.07, 1.0))
+	# ① 타일맵(Ground/Field)
 	for layer in [main.get_node("Ground") as TileMapLayer, main.get_node("Field") as TileMapLayer]:
 		_blit_layer(layer, out)
-	# 야외 건물 외관(통과 불가 WALL 박스 위에 덮어 그리는 것과 동일 — _draw의 1:1 blit 재현).
+	# ② 지면 디테일 오버레이(ground16 베이크 한 장 — 타일 위·프롭 아래)
+	if main._ground_detail_tex != null:
+		var gdi: Image = main._ground_detail_tex.get_image()
+		if gdi.get_format() != Image.FORMAT_RGBA8:
+			gdi.convert(Image.FORMAT_RGBA8)
+		out.blend_rect(gdi, Rect2i(Vector2i.ZERO, gdi.get_size()), Vector2i.ZERO)
+	# ③ 야외 프롭(_draw_props_for의 CPU 재현 — 실내 띠 좌표는 캔버스 밖이라 건너뛴다)
+	for key in main._REGION_PROP_KEYS.get(RegionCatalog.NARU_VILLAGE, []):
+		for entry in main._prop_entries_for(key):
+			var ptex: Texture2D = entry[0]
+			if ptex == null:
+				continue
+			var yo: int = entry[2] if entry.size() > 2 else 0
+			var timg := ptex.get_image()
+			if timg.get_format() != Image.FORMAT_RGBA8:
+				timg.convert(Image.FORMAT_RGBA8)
+			var tsz := timg.get_size()
+			for t in entry[1]:
+				if t.y >= size.y:
+					continue   # 실내 띠(y72+) — 야외 캔버스 밖
+				out.blend_rect(timg, Rect2i(Vector2i.ZERO, tsz), Vector2i(t.x * TILE, t.y * TILE + yo))
+	# ④ 건물 외관 — main._draw_facade_cafe / _draw_facade_village_houses와 동일한 좌상단 1:1 blit
 	var facades := [
 		[main.FACADE_CAFE, main.CAFE_EXT_RECT],
 		[main.FACADE_MEL_HOUSE, main.MEL_HOUSE_RECT],
@@ -35,7 +69,7 @@ func _init() -> void:
 			fimg.convert(Image.FORMAT_RGBA8)
 		out.blend_rect(fimg, Rect2i(Vector2i.ZERO, fimg.get_size()), rect.position * TILE)
 	out.save_png("res://tools/village_dump.png")
-	print("✅ village_dump.png 저장")
+	print("✅ village_dump.png 저장 (", size.x, "×", size.y, ") — 구역 리빌드 ", build_ms, "ms")
 	quit()
 
 func _blit_layer(layer: TileMapLayer, out: Image) -> void:

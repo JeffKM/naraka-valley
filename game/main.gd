@@ -487,6 +487,22 @@ var _REGION_GD_TABLES := {
 		],
 		# PATH는 전역 폴백(오버라이드 없음).
 	},
+	# ★[S2-T3] 나루 마을 = **정돈된 마을** 결. 잔디 지배 base 위에 데칼은 절제한다(농원의 야생
+	#   overgrown과 대비 — 사람이 쓸고 다니는 마을이라 잡초·마른 clutter가 적다). 맨 여백↑·풀포기↓·
+	#   저승 잡초/마른 잡초 축소, 대신 들꽃을 조금 살려 화단 결을 남긴다. 신규 에셋 0(전역 테이블 재구성).
+	RegionCatalog.NARU_VILLAGE: {
+		GROUND: [
+			[null, 62, false],       # 맨 지면 여백 44→62(마을=정돈)
+			[GD_GRASS1, 20, false],  # 짧은 풀포기 30→20
+			[GD_GRASS2, 4, false],
+			[GD_WEED_U, 1, false],   # 저승 잡초 4→1(마을은 잡초를 뽑는다)
+			[GD_WEED_D, 1, true],
+			[GD_FLOWER, 3, true],    # 들꽃 2→3(마을 화단 결)
+			[GD_PEBBLE, 2, true],
+			[GD_STONE2, 2, true],    # 단독 슬레이트만(나뭇가지·돌무리=야생 → 마을에선 제외)
+		],
+		# PATH는 전역 폴백(박힌 잔돌·갈라짐 — 마을 포장 결과 그대로 맞는다).
+	},
 }
 var _REGION_GD_SPARSE := {}
 
@@ -501,7 +517,10 @@ func _gd_sparse_for() -> Array:
 	return _REGION_GD_SPARSE.get(_region, _GD_SPARSE)
 
 # ★[ADR-0058 B] 구역별 풀무리 문턱(↓=clump 면적↑). 안식은 풀무리↑라 전역보다 낮춘다.
-var _REGION_CLUSTER_CUT := { RegionCatalog.HOME: 0.46 }   # 전역 GD_CLUSTER_CUT=0.60 (↓=풀무리 면적↑·초원 소멸 후 넉넉히)
+var _REGION_CLUSTER_CUT := {
+	RegionCatalog.HOME: 0.46,           # 전역 GD_CLUSTER_CUT=0.60 (↓=풀무리 면적↑·초원 소멸 후 넉넉히)
+	RegionCatalog.NARU_VILLAGE: 0.68,   # ★[S2-T3] 마을은 풀무리 면적↓(↑=여백↑) — 정돈된 마당 결
+}
 
 # 풀무리 마스크 — 저주파 seed + CA 이웃-확산(스타듀 풀 확산 본뜸). 결정적·셀단위·2패스 상한.
 #   _gd_cluster로 seed(GROUND만) → 이웃≥5 성장·<2 사멸 2패스 → 유기적 clump. _g16_cluster_cleanup 계보.
@@ -3633,7 +3652,9 @@ func _paint_grid() -> void:
 	# ★[ADR-0049 라이브 통합] 안식 농원 = 새 16px 소프트 필드 지면(잔디·흙길·밭·물 필드 타일링 +
 	#   경계 지터 디더)을 한 장 베이크해 _ground_detail_tex에 실어 기존 draw call로 그린다(씸-프리,
 	#   grid·충돌·terrain 로직 불변). 그 외 구역은 기존 fringe 유지.
-	if _region == RegionCatalog.HOME:
+	# ★[S2-T3 / ADR-0060 결정 3] 이제 구역 프로파일이 있는 구역(HOME·나루 마을)이 단일출처 16px 지형
+	#   파이프라인을 탄다. 미이식 구역(삼도천·황천해 등)은 기존 fringe 폴백 유지 — 각자의 Slice에서 이식.
+	if _uses_ground16():
 		_build_ground16()
 	else:
 		_build_path_grass_fringe()
@@ -4506,6 +4527,7 @@ func _bake_field_wang(pk: int, up_field: Image, lo_field: Image, rag: float, mic
 
 func _build_ground16() -> void:
 	_ground_detail_tex = null
+	_g16_resolve_profile()   # ★[S2-T3] 구역 지형 프로파일 해석(HOME=종전 상수 그대로 → 렌더 바이트 불변)
 	_load_big_fields()
 	_load_wang_pairs()
 	_bake_grass_dirt_wang()   # ★[ADR-0058 확장] 잔디↔흙 전환을 base에서 합성(불일치-불가) — 손그림 Wang 0_1 덮음
@@ -4551,6 +4573,30 @@ func _build_ground16() -> void:
 		for x in _grid_w:
 			if int(surf[y][x]) == 1 and _g16_near_water(surf, x, y):
 				surf[y][x] = 0
+	# ★[S2-T3 — 길 맨흙 갓길] 잔디 지배 구역(나루)에서만. 길(PATH)·밭(SOIL)은 인공물이라 Wang 전환을
+	#   건너뛰고 base blit 사각 + `_soften_field_edges`(흙 경계선만 완화)로 그린다 — 즉 *흙과 만날 때만*
+	#   경계가 부드러워진다. 잔디 지배 마을에선 길 이웃이 대부분 잔디라 그 완화가 안 걸려 길이 하드한
+	#   초록 위 사각 띠가 된다. 길에 8-인접한 잔디를 맨흙으로 내려 [길]—[흙 갓길]—[유기 잔디 전환]
+	#   3단으로 만든다(닳은 노변 결). HOME은 흙 지배라 불필요 → path_apron=false로 바이트 불변.
+	if bool(_g16_prof["path_apron"]):
+		for y in _outdoor_h:
+			for x in _grid_w:
+				if int(surf[y][x]) != 1:
+					continue
+				var near_path := false
+				for dy in range(-1, 2):
+					for dx in range(-1, 2):
+						var px2 := x + dx
+						var py2 := y + dy
+						if px2 < 0 or py2 < 0 or px2 >= _grid_w or py2 >= _outdoor_h:
+							continue
+						if int(surf[py2][px2]) == 2:
+							near_path = true
+							break
+					if near_path:
+						break
+				if near_path:
+					surf[y][x] = 0
 	# ① 셀 단위 필드 blit(빠름) — 건물바닥(-1)은 투명(실내 바닥 비침)
 	for y in _outdoor_h:
 		for x in _grid_w:
@@ -4614,6 +4660,20 @@ func _build_ground16() -> void:
 				_paint_field_cell(out, x, y, pk, bits, _bf_grass, _bf_earth)   # SS 잔디↔흙 = 월드위상 셀별 합성(경계 격자·색급변 제거)
 			else:
 				out.blit_rect(tmap[bits] as Image, Rect2i(0, 0, TILE, TILE), Vector2i(x * TILE, y * TILE))
+	# ★[S2-T3] 다단 절벽 오버레이 3패스(LIP 평지화·BASE 발치 접지 그림자·곡선 코너 컨텍스트 필)는
+	#   절벽이 있는 구역만 — 나루 마을엔 다단 절벽이 없다(강둑 CLIFF_BANK는 자체 SOLID_TEX로 렌더).
+	if bool(_g16_prof["cliff_overlays"]):
+		_g16_paint_cliff_overlays(out, P)
+	# ★[P2 프로토타입] tan 위 오브젝트 스캐터(스타듀 잡초/tuft 모델) — 채움 패치를 끈 만큼 초록을 데칼로.
+	_soften_field_edges(out, surf)   # ★[owner 2026-07-17] 밭·길↔흙 직선 경계선만 부드럽게(밭 꽉 참·base blit=격자 없음)
+	if bool(_g16_prof["scatter"]):
+		_compute_scatter_clump()   # ★[ADR-0058 B] 풀무리 CA 마스크 1회 계산(스캐터가 참조)
+		_g16_blend_scatter(out, surf)
+	_ground_detail_tex = ImageTexture.create_from_image(out)
+
+# ★[S2-T3] `_build_ground16`에서 뽑아낸 절벽 오버레이 3패스(구역 프로파일 "cliff_overlays" 게이트).
+#   P = _GF * 2 (월드 타일링 주기). 로직·순서·픽셀 연산은 이동 전과 완전 동일(HOME 바이트 불변).
+func _g16_paint_cliff_overlays(out: Image, P: int) -> void:
 	# ★[ADR-0056 REV4 ①] LIP 상단 텍스처 평지화 — CLIFF_LIP 타일 상단(잔디부)을 평지 _bf_grass로 오버레이해
 	#   윗면 평지와 텍스처 문법 100% 일치. 고지 잔디화 뒤 lip은 톤은 맞으나 블레이드 패턴이 평지와 이질 →
 	#   _bf_grass를 월드 타일링으로 끌어와(위 평지 grass와 씸리스 연속) lip 상단 _LIP_GRASS_H px에 그린다.
@@ -4678,18 +4738,14 @@ func _build_ground16() -> void:
 				for i in TILE:
 					if cimg.get_pixel(i, j).a < 0.5:   # 코너 PNG 투명(물러난 영역) → 주변 지형
 						out.set_pixel(cx0 + i, cy0 + j, fld.get_pixel((cx0 + i) % P, (cy0 + j) % P))
-	# ★[P2 프로토타입] tan 위 오브젝트 스캐터(스타듀 잡초/tuft 모델) — 채움 패치를 끈 만큼 초록을 데칼로.
-	_soften_field_edges(out, surf)   # ★[owner 2026-07-17] 밭·길↔흙 직선 경계선만 부드럽게(밭 꽉 참·base blit=격자 없음)
-	if _G16_SCATTER:
-		_compute_scatter_clump()   # ★[ADR-0058 B] 풀무리 CA 마스크 1회 계산(스캐터가 참조)
-		_g16_blend_scatter(out, surf)
-	_ground_detail_tex = ImageTexture.create_from_image(out)
 
 # ★[P2 프로토타입 2026-07-16] tan 베이스 위에 잡초/tuft/잔돌 데칼을 흩뿌린다(스타듀 농장: 초록=바닥 아닌
 #   오브젝트). 기존 지면 디테일 시스템(_GD_TABLES 가중 롤 + _gd_cluster 여백 게이트 + _gd_soft_image 소프트
 #   tuft + _gd_shadow 미세 그림자)을 _build_ground16의 out에 직접 blend(단일 텍스처·단일 draw call 유지).
 #   프롭 점유 칸 회피·결정적 해시(재빌드/재방문 고정)·순수 시각. 구 _build_ground_details(비활성) 로직 이식.
 func _g16_blend_scatter(out: Image, surf: Array) -> void:
+	var sparse_density: float = float(_g16_prof["sparse_density"])   # ★[S2-T3] 구역 프로파일 레버
+	var fringe_density: float = float(_g16_prof["fringe_density"])
 	var occupied := {}
 	for key in _REGION_PROP_KEYS.get(_region, []):
 		for entry in _prop_entries_for(key):
@@ -4712,9 +4768,9 @@ func _g16_blend_scatter(out: Image, surf: Array) -> void:
 					table = _gd_table_for(GROUND)      # 풀 무리 구역 — 풀 tuft 포함 전체(구역-키드, 폴백=전역)
 				# ★[ADR-0059 결정 2 티어2 #6] fBm 저주파 밀도 가중 — 빈 tan clutter 밀도를 넓은 존별로 변주
 				#   (density-mask lite). 매크로 손설계 불변, 결정적(seed).
-				elif _near_grass_boundary(surf, x, y) and _gd_h01(x, y, 72) < _SCATTER_FRINGE_DENSITY:
+				elif _near_grass_boundary(surf, x, y) and _gd_h01(x, y, 72) < fringe_density:
 					table = _gd_table_for(GROUND)      # ★[티어1 #4] 경계 디더 프린지 — 잔디↔흙 경계밴드에 tuft↑
-				elif _gd_h01(x, y, 71) < _GD_SPARSE_DENSITY * (0.55 + 0.9 * _macro_noise01(float(x), float(y))):
+				elif _gd_h01(x, y, 71) < sparse_density * (0.55 + 0.9 * _macro_noise01(float(x), float(y))):
 					table = _gd_sparse_for()           # 빈 tan — 나뭇가지·돌 저밀도 확산(스타듀 개활지, 구역-키드)
 				else:
 					continue                           # 대부분의 빈 tan = 민무늬(여백)
@@ -4793,7 +4849,7 @@ func _g16_is_grass_patch(x: int, y: int) -> bool:
 	# ★[ADR-0059 결정 2 티어2 #5] 저진폭 도메인 워핑(문턱) — 잔디패치 문턱 경계를 저주파 노이즈로 흔들어
 	#   원형 CA·격자 규칙성을 깬다. 진폭 ±_DW_PATCH_AMP(≈0.06)라 경계 셀만 미세 변동(매크로 배치 불변). 결정적.
 	score += _mask_noise(float(x), float(y)) * _DW_PATCH_AMP
-	return score >= _G16_GRASS_THR
+	return score >= _g16_grass_thr   # ★[S2-T3] 구역 프로파일 레버(HOME 0.68 흙지배 / 나루 0.30 잔디지배)
 
 # ★[ADR-0059 결정 2 티어1 #4] 셀 (x,y)가 잔디↔흙 경계밴드(±_SCATTER_FRINGE_R 셀)에 있는가.
 #   빈 흙(surf=0) 셀 기준(잔디측은 이미 clump 스캐터). 이웃에 잔디(1)가 있으면 경계밴드로 판정.
@@ -4813,10 +4869,11 @@ func _near_grass_boundary(surf: Array, x: int, y: int) -> bool:
 #   최소 유기 군락*을 강제한다. surf(0맨흙/1잔디/2+하드)에 in-place. 셀 단위(per-pixel 아님)·결정적.
 #   ① CA 2패스: 잔디 8이웃<2 → 사멸(고립·촉수 제거) / 맨흙 8이웃≥5 → 잔디 생성(오목부 채움·응집).
 #   ② 최소군락 필터: 잔디 4-연결 컴포넌트가 _G16_MIN_PATCH 미만이면 맨흙으로 흡수(작은 조각 제거).
-const _G16_MIN_PATCH := 5      # 이보다 작은 잔디 덩어리는 맨흙으로 흡수(격자 스케일 노출 방지)
+const _G16_MIN_PATCH := 5      # 이보다 작은 잔디 덩어리는 맨흙으로 흡수(격자 스케일 노출 방지) — 구역 프로파일 "min_patch" 기본값
 func _g16_cluster_cleanup(surf: Array) -> void:
 	var W := _grid_w
 	var H := _outdoor_h
+	var min_patch: int = int(_g16_prof["min_patch"])
 	for _p in 2:
 		var snap: Array = surf.duplicate(true)
 		for y in H:
@@ -4855,17 +4912,18 @@ func _g16_cluster_cleanup(surf: Array) -> void:
 							and int(surf[n.y][n.x]) == 1 and not seen.has(n):
 						seen[n] = true
 						stack.append(n)
-			if comp.size() < _G16_MIN_PATCH:
+			if comp.size() < min_patch:
 				for cc in comp:
 					surf[cc.y][cc.x] = 0
 
 # ★[ADR-0059 결정 2 티어2 #7] 다수결 평활 — CA 클럼프 경계의 1셀 노이즈를 매끈한 곡선으로(외톨이 정리와
 #   상보). 맨흙(0)/잔디(1)만 대상, 8이웃 다수(≥_G16_SMOOTH_MAJ)가 반대면 다수로 뒤집는다. 보수적 문턱(6)·
 #   1패스라 과평활(4회+ = 밋밋) 회피. 결정적(snap 스냅샷)·매크로 손설계 불변.
-const _G16_SMOOTH_MAJ := 6
+const _G16_SMOOTH_MAJ := 6     # 구역 프로파일 "smooth_maj" 기본값
 func _g16_majority_smooth(surf: Array) -> void:
 	var W := _grid_w
 	var H := _outdoor_h
+	var maj: int = int(_g16_prof["smooth_maj"])
 	var snap: Array = surf.duplicate(true)
 	for y in H:
 		for x in W:
@@ -4887,19 +4945,20 @@ func _g16_majority_smooth(surf: Array) -> void:
 						g1 += 1
 					elif ns == 0:
 						g0 += 1
-			if s == 0 and g1 >= _G16_SMOOTH_MAJ:
+			if s == 0 and g1 >= maj:
 				surf[y][x] = 1
-			elif s == 1 and g0 >= _G16_SMOOTH_MAJ:
+			elif s == 1 and g0 >= maj:
 				surf[y][x] = 0
 
 # ★[ADR-0059 결정 2 티어1 #2] 외톨이 영역 flood-fill 정리 — 맨흙(0)·잔디(1) 양측의 min-size 미만 4-연결
 #   컴포넌트를, 그것이 반대 지형(1-v)에 실제로 접해 있을 때만 반대 지형으로 흡수한다('떠다니는 1셀 얼룩=
 #   노이즈 카펫' 직접 소거). 하드표면(길·밭·물·건물)·맵끝에만 접한 소형 조각은 오배치 방지 위해 불변.
 #   결정적(위치 결정)·매크로 손설계 불변.
-const _G16_ISO_MIN := 3
+const _G16_ISO_MIN := 3        # 구역 프로파일 "iso_min" 기본값
 func _g16_isolated_cleanup(surf: Array) -> void:
 	var W := _grid_w
 	var H := _outdoor_h
+	var iso_min: int = int(_g16_prof["iso_min"])
 	var seen := {}
 	var orth := [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
 	for y0 in H:
@@ -4919,7 +4978,7 @@ func _g16_isolated_cleanup(surf: Array) -> void:
 							and int(surf[n.y][n.x]) == v and not seen.has(n):
 						seen[n] = true
 						stack.append(n)
-			if comp.size() >= _G16_ISO_MIN:
+			if comp.size() >= iso_min:
 				continue
 			# 소형 조각 — 반대 지형(1-v)에 실제 접할 때만 흡수(하드표면/맵끝 접경 조각은 불변).
 			var opp := 1 - v
@@ -4957,6 +5016,10 @@ func _g16_surface(x: int, y: int) -> int:
 		return -1
 	if c in CLIFF_TILES:
 		return -1   # ★ 절벽 = 자체 SOLID_TEX로 렌더 → 오버레이 투명 통과(flip 리그레션 픽스, 안 그러면 tan이 덮어 절벽 사라짐)
+	# ★[S2-T3] facade 아트가 없는 그레이박스 건물(나루 만물상·주민 집 11)은 오버레이 투명 통과 —
+	#   덮으면 비칠 아트가 없어 건물이 통째로 지면에 삼켜진다(HOME은 6동 전부 facade가 있어 해당 없음).
+	if c == WALL and not _g16_greybox_rects.is_empty() and _g16_in_rects(x, y, _g16_greybox_rects, 0):
+		return -1
 	if c == PATH:
 		return 2
 	if c == SOIL:
@@ -4972,7 +5035,7 @@ func _g16_surface(x: int, y: int) -> int:
 	# GROUND(및 벽/void — 프롭·facade가 덮음): 흙 베이스 + 잔디 패치(전 구역 흙-지배)
 	# ★[P2 프로토타입] 스타듀 농장 모델 — 채움 잔디 패치를 끄면(_G16_GRASS_PATCHES=false) 저지 마당은
 	#   전부 tan(earth)이 되고, 초록은 _g16_blend_scatter의 오브젝트 데칼(잡초/tuft)로만 표현된다.
-	if not _G16_GRASS_PATCHES:
+	if not _g16_grass_patches:
 		return 0
 	return 1 if _g16_is_grass_patch(x, y) else 0
 
@@ -5009,13 +5072,91 @@ const _HOME_BUILDING_RECTS: Array[Rect2i] = [
 	SILO_EXT_RECT, WELL_RECT,
 ]
 
-# 셀 (x,y)가 어느 건물 footprint의 발치 패드(rect를 _G16_BUILD_PAD칸 확장) 안인가.
-func _g16_near_building(x: int, y: int) -> bool:
-	var p := _G16_BUILD_PAD
-	for r in _HOME_BUILDING_RECTS:
-		if x >= r.position.x - p and x < r.end.x + p and y >= r.position.y - p and y < r.end.y + p:
+# ── ★[S2-T3 / ADR-0060 결정 3] 구역 지형 프로파일 ────────────────────────────────────────
+# `_build_ground16`(단일출처 Wang 합성·스캐터·소프트닝·물가 셀별 합성)은 원래 안식 농원(HOME) 전용
+# 하드코딩이었다. 나루 마을 이식을 위해 "구역마다 다른 것"만 이 프로파일 한 곳으로 뽑는다.
+#   · **HOME 값 = 종전 상수 그대로** — HOME 렌더 바이트 불변이 절대 제약(scatter_variation·
+#     building_grounding 회귀 + home_full_dump 픽셀 diff 0이 지킴이).
+#   · **신규 텍스처 0** — 같은 단일출처(grass/dirt/path/water_field)를 레버 값만 바꿔 쓴다(그레이박스
+#     원칙). 자갈 광장 등 마을 전용 룩은 S2-T9 아트 패스에서 텍스처를 얹는다(여기선 프로파일 훅만).
+const _G16_PROFILE_BASE := {
+	"grass_thr": _G16_GRASS_THR,              # 잔디 패치 문턱(↑=흙 지배 / ↓=잔디 지배)
+	"grass_patches": _G16_GRASS_PATCHES,      # 채움 잔디 패치 사용(false=전부 tan + 스캐터만)
+	"scatter": _G16_SCATTER,                  # 잡초/tuft/잔돌 데칼 스캐터
+	"min_patch": _G16_MIN_PATCH,              # 이보다 작은 잔디 덩어리는 맨흙으로 흡수
+	"smooth_maj": _G16_SMOOTH_MAJ,            # 다수결 평활 문턱(8이웃 중 반대 지형 수)
+	"iso_min": _G16_ISO_MIN,                  # 외톨이 flood-fill 정리 최소 컴포넌트 크기
+	"sparse_density": _GD_SPARSE_DENSITY,     # 빈 tan clutter(나뭇가지·돌) 밀도
+	"fringe_density": _SCATTER_FRINGE_DENSITY,# 잔디↔흙 경계밴드 tuft 추가 비율
+	"build_pad": _G16_BUILD_PAD,              # 건물 footprint 밖 몇 칸까지 맨흙 패드인가
+	"cliff_overlays": true,                   # LIP 평지화·BASE 발치 그림자·코너 컨텍스트 필 패스
+	"path_apron": false,                      # 길 둘레 1칸 맨흙 갓길(잔디 지배 구역 전용)
+	"building_rects": [],                     # 발치 잔디억제 패드 기준 footprint 목록
+	"greybox_rects": [],                      # facade 아트 없는 그레이박스 건물(오버레이 투명 = WALL 노출)
+}
+# 나루 마을 건물 footprint — 카페·메인 집 3(facade 아트 있음) + 만물상·주민 집 11(그레이박스 WALL).
+#   그레이박스 건물은 오버레이가 덮으면 통째로 사라지므로(아트가 없어 비칠 것이 없다) surf=-1로 투명
+#   통과시켜 타일맵 WALL 박스를 그대로 노출한다. facade 있는 4채는 HOME과 같이 지면으로 칠해
+#   아트 투명부에 월드-정렬 흙이 seamless하게 비친다([ADR-0054]).
+var _VILLAGE_GREYBOX_RECTS: Array = [STORE_EXT_RECT] + RESIDENT_HOUSE_RECTS
+var _VILLAGE_BUILDING_RECTS: Array = [
+	CAFE_EXT_RECT, MEL_HOUSE_RECT, MIHO_HOUSE_RECT, BANA_HOUSE_RECT,
+] + _VILLAGE_GREYBOX_RECTS
+# 구역별 오버라이드(없는 키는 _G16_PROFILE_BASE 폴백). HOME은 rect 목록만 — 나머지는 전부 base = 불변.
+var _G16_REGION_PROFILES := {
+	RegionCatalog.HOME: {
+		"building_rects": _HOME_BUILDING_RECTS,
+	},
+	# ★ 나루 마을 = **잔디 지배**(마을=풀밭 기조) + 길(PATH)=path_field + 맨흙 액센트 소량.
+	#   HOME(농원=흙 지배 0.68)의 정반대 방향으로 문턱을 내린다. 스캐터·clutter는 HOME보다 절제해
+	#   "정돈된 마을" 결(농원의 야생 overgrown과 대비). 배후 강은 물↔흙 4_0 shore 셀별 합성이 자동 처리.
+	RegionCatalog.NARU_VILLAGE: {
+		"grass_thr": 0.30,          # 잔디 지배(HOME 0.68 = 흙 지배의 정확한 반대편 — 맨흙은 "액센트 소량")
+		# 잔디/흙을 큰 덩어리로 뭉친다 — 마을은 정돈된 결(농원의 자잘한 얼룩과 대비). 자투리 흙 얼룩이
+		#   잔디 바다에 떠 있으면 "닳은 자리"가 아니라 노이즈로 읽힌다.
+		"min_patch": 14,            # 작은 잔디 덩어리 흡수 문턱 5→14
+		"iso_min": 8,               # 외톨이 조각 흡수 3→8
+		"sparse_density": 0.05,     # 빈 흙 clutter 절제(HOME 0.12)
+		"fringe_density": 0.22,     # 경계 tuft 절제(HOME 0.40)
+		"cliff_overlays": false,    # 마을엔 다단 절벽 없음(강둑 CLIFF_BANK는 자체 SOLID_TEX) → 패스 생략
+		"path_apron": true,         # 길 둘레 1칸 맨흙 갓길 — 잔디 지배라 길↔잔디가 하드 사각이 되는 것 방지
+		"building_rects": _VILLAGE_BUILDING_RECTS,
+		"greybox_rects": _VILLAGE_GREYBOX_RECTS,
+	},
+}
+
+# 이 구역이 단일출처 16px 지형 파이프라인(_build_ground16)을 쓰는가. 미이식 구역은 기존
+# `_build_path_grass_fringe()` 폴백 유지(구역별 점진 이식 — [ADR-0060] 결정 3 "나루 슬라이스는 나루분만").
+func _uses_ground16() -> bool:
+	return _G16_REGION_PROFILES.has(_region)
+
+# 해석된 현재 구역 프로파일 + 셀/픽셀 루프가 매번 읽는 핫 레버(Dictionary 조회 비용 회피).
+var _g16_prof: Dictionary = _G16_PROFILE_BASE
+var _g16_grass_thr: float = _G16_PROFILE_BASE["grass_thr"]
+var _g16_grass_patches: bool = _G16_PROFILE_BASE["grass_patches"]
+var _g16_build_pad: int = _G16_PROFILE_BASE["build_pad"]
+var _g16_build_rects: Array = []
+var _g16_greybox_rects: Array = []
+
+func _g16_resolve_profile() -> void:
+	var p: Dictionary = _G16_PROFILE_BASE.duplicate()
+	p.merge(_G16_REGION_PROFILES.get(_region, {}), true)
+	_g16_prof = p
+	_g16_grass_thr = float(p["grass_thr"])
+	_g16_grass_patches = bool(p["grass_patches"])
+	_g16_build_pad = int(p["build_pad"])
+	_g16_build_rects = p["building_rects"]
+	_g16_greybox_rects = p["greybox_rects"]
+
+func _g16_in_rects(x: int, y: int, rects: Array, pad: int) -> bool:
+	for r: Rect2i in rects:
+		if x >= r.position.x - pad and x < r.end.x + pad and y >= r.position.y - pad and y < r.end.y + pad:
 			return true
 	return false
+
+# 셀 (x,y)가 어느 건물 footprint의 발치 패드(rect를 build_pad칸 확장) 안인가.
+func _g16_near_building(x: int, y: int) -> bool:
+	return _g16_in_rects(x, y, _g16_build_rects, _g16_build_pad)
 
 func _build_ground_details() -> void:
 	_ground_detail_tex = null
@@ -8425,7 +8566,10 @@ func _draw_house_wall_band() -> void:
 #   풀 백드롭을 건너뛴다(이중 그리기 제거 = 초록 사각 소멸·씸 프리). 그 외 구역은 초록 세계라 유지.
 var _facade_grass_tex: Texture2D = null
 func _facade_grass_backdrop(rect: Rect2i) -> void:
-	if _region == RegionCatalog.HOME:
+	# ★[S2-T3] HOME만이 아니라 *ground16을 쓰는 전 구역*이 건너뛴다 — 그 구역은 지면 오버레이가 이미
+	#   WALL footprint를 월드-정렬 흙(+발치 잔디억제 패드)으로 칠하므로, 풀 백드롭을 덧그리면 건물마다
+	#   초록 사각형이 되살아난다([ADR-0054] 회귀). 미이식 구역은 초록 세계라 종전대로 백드롭 유지.
+	if _uses_ground16():
 		return
 	if _facade_grass_tex == null:
 		var src := ground.tile_set.get_source(0) as TileSetAtlasSource
