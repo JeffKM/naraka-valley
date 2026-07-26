@@ -860,17 +860,33 @@ const HOUSE_EXT_DOOR := Vector2i(44, 9)     # ★ADR-0035/[ADR-0046] 외관 본�
 const HOUSE_EXT_DOOR_E := Vector2i(45, 9)   # ★[ADR-0046] 본가 2칸 문 동패널(짝수폭 정중앙 2칸 — 문/진입로/트리거 폭 정합). 진입 트리거는 양 칸 다 수용.
 const CAFE_EXT_DOOR := Vector2i(8, 31)    # 외관 카페 문(닿으면 진입, 아트 문 로컬 x3=rect.x+3와 정렬) — _carve_village_paths 동선과 연결
 
-# ── ★ M2.1 나루 마을 허브 야외 건물(강+다리 동/서 분할 레이아웃) ───────────────────
+# ── ★ M2.1 나루 마을 허브 야외 건물(★[ADR-0060 결정 1] 통짜 마을 + 최남단 배후 강) ──────────
 # 카페만 실내가 있고(M1.4 이주), 메인 집 3(미호·멜·바나)·만물상·주민 집은 이 슬라이스에선
 # 그레이박스 외관(통과 불가 WALL 박스 + 문 리세스 1칸) + 라벨이다. 실내·만물상 서비스·축제는
 # 후속 슬라이스(M2.2~). "기존 집 에셋 재사용 외관 재도색"(residents.md)도 후속 에셋 단계.
-# ★ ADR-0018 C3 — 100×72 코지-와이드: 강(WATER)이 x49·50 세로로 흐르며 마을을 서/동으로 가르고,
-#   다리(BRIDGE_Y 36 = 메인 가로 복도)가 유일한 도하점. 8채 외관을 넓은 무대에 코지하게 분산한다
-#   (서: 카페·미호·멜·바나 / 동: 만물상·주민집3). 건물 *크기*는 외관 아트 1:1이라 불변, *위치*만 펼침.
-const RIVER_X := [49, 50]          # 강 세로 칸(WATER, 통과 X) — 동/서 분할(맵 중앙)
-const RIVER_Y0 := 1                # 강 시작 y(맨 위 경계벽 바로 아래 — 북쪽 우회 도하 차단)
-const RIVER_Y1 := 70               # 강 끝 y(아래 경계벽 y71 바로 위 — 남쪽 우회 도하 차단)
-const BRIDGE_Y := 36               # 다리 = 강 위 PATH 한 줄(메인 가로 복도와 같은 줄 — 유일한 도하점)
+# ★ ADR-0018 C3 — 100×72 코지-와이드 무대에 8채 외관을 분산한다. 건물 *크기*는 외관 아트 1:1이라 불변.
+#
+# ★ [ADR-0060 결정 1 / S2-T1] 옛 내부 수직 강(RIVER_X 49·50 × y1~70)이 마을을 세로로 완전 절단하던
+#   토폴로지를 **폐지**하고, [ADR-0044] §2 남향 물 토폴로지를 실좌표로 이행한다:
+#   · 마을은 "동/서 이분할" → **통짜 + 남쪽 경계 강**. 메인 가로 복도(MAIN_CORRIDOR_Y)가 좌우 가장자리를
+#     끊김 없이 잇고, 8채 문 스포크는 그대로다(건물 rect·워프·spawn 전부 무이동 — 앵커 보존).
+#   · 배후 강은 x0..99 **전 폭**을 동서로 횡단해 우회 도하가 없고, 맵 남단 마지막 행까지 채워
+#     남쪽 우회도 없다(경계 충돌바는 외부 y72 바깥 — _build_border는 타일 벽을 안 깐다).
+const BACK_RIVER_Y0 := 66          # 배후 강 시작 y(북안 강둑 y65 바로 아래)
+const BACK_RIVER_Y1 := 71          # 배후 강 끝 y(외부 무대 마지막 행 — 남쪽 우회 차단)
+# 북안 강둑 단차 1행 — [ADR-0044] §2 CLIFF_BANK(흙 상단 + 물가 돌 ledge, SOLID)로 수면이 '낮게'
+#   읽히는 pseudo-Z 고저차를 준다. 안식 연못 북벽(_autotile_pond_siblings) 선례를 재사용하되 **1행**만:
+#   강물 자체가 SOLID라 강둑은 통행 차단이 아니라 *시각 경계*가 목적이다(과공학 금지).
+const BACK_RIVER_BANK_Y := 65
+# 다리 1개소 — 강을 남북으로 종단하는 폭 2칸 PATH([ADR-0046] 문 2칸 규약과 결). 서칸(x52)이 북단
+#   나룻터 세로 스파인과 같은 열이라 마을 중앙 동선이 그대로 남쪽으로 이어진다. 강둑도 이 폭만큼 열린다.
+const BRIDGE_X := [52, 53]
+# 다리 남단 둑/부두 — 맵 남경계에서 막히는 짧은 부두 조각. 낚시터 스텁(본체·워프는 Slice 3 소관)이라
+#   지금은 다리로만 닿는 막다른 발판이다.
+const BACK_RIVER_DOCK_RECT := Rect2i(50, 69, 6, 3)   # x50..55, y69..71
+# 마을 메인 가로 복도 — 옛 BRIDGE_Y(다리가 얹혔던 줄). 배후 강 이행으로 이 줄엔 더는 다리가 없고,
+#   서워프·도착에서 동 가장자리까지 잇는 마을 내부 동선(8채 문 스포크의 허리)만 남는다.
+const MAIN_CORRIDOR_Y := 36
 # 서편(도착·서워프 옆): 카페(도착 위, CAFE_EXT_RECT 위쪽 정의) + 메인 집 3(미호·멜·바나). 코지 여백으로 흩어 둔다.
 const MEL_HOUSE_RECT := Rect2i(20, 14, 5, 5)   # 멜 집 — 서편 상단 우
 const MEL_HOUSE_DOOR := Vector2i(22, 18)
@@ -878,7 +894,8 @@ const MIHO_HOUSE_RECT := Rect2i(5, 44, 4, 4)   # 미호 집 — 서편 하단 �
 const MIHO_HOUSE_DOOR := Vector2i(6, 47)
 const BANA_HOUSE_RECT := Rect2i(30, 44, 4, 4)  # 바나 집 — 서편 하단 우
 const BANA_HOUSE_DOOR := Vector2i(31, 47)
-# 동편(다리 건너): 만물상(상단 좌) + 주민 집 3(점진 추가의 시작 — 더 많은 주민 집은 후속).
+# 동편: 만물상(상단 좌) + 주민 집 3(점진 추가의 시작 — 더 많은 주민 집은 후속).
+#   ★[ADR-0060 결정 1] 배후 강 이행으로 "다리 건너"가 아니라 같은 통짜 마을의 동쪽 구역이다(rect 무이동).
 const STORE_EXT_RECT := Rect2i(58, 14, 6, 5)   # 만물상
 const STORE_EXT_DOOR := Vector2i(60, 18)
 const RESIDENT_HOUSE_RECTS := [
@@ -2872,12 +2889,14 @@ func _build_home() -> void:
 	_apply_pond_organic_mask()             # ★[S1R-T5] 연못 남·동·서 유기 확장(정적 마스크·rect/북벽/PATH 불변)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
-# ★ M2.1 — 나루 마을(허브) 본격 레이아웃. 강(WATER)이 세로로 흘러 마을을 *서/동*으로 가르고,
-# ★C3 — 100×72 코지-와이드: 다리(가로 복도 BRIDGE_Y 36)가 유일한 도하점이다(강 x49·50이 위·아래
-#   경계까지 닿아 우회 도하 차단). 8채를 넓은 무대에 코지 분산한다:
+# ★ M2.1 / ★[ADR-0060 결정 1] — 나루 마을(허브) 본격 레이아웃. 마을은 **통짜**고, 강(WATER)은
+# 최남단을 동서로 횡단하는 **배후 강**이다(옛 내부 수직 강 폐지 — [ADR-0044] §2 이행).
+# ★C3 — 100×72 코지-와이드. 8채를 넓은 무대에 코지 분산한다:
 #   · 서편: 카페(이주·실내 있음) + 메인 집 3(미호·멜·바나) — 도착(spawn 3,36)·서워프 옆.
-#   · 동편: 만물상 + 주민 집 3 — 다리 건너. 북동 나룻터(→삼도천·혼백관)·동 산길(→갱도)은 워프
+#   · 동편: 만물상 + 주민 집 3. 북동 나룻터(→삼도천·혼백관)·동 산길(→갱도)은 워프
 #     발동 칸까지 길이 닿되 목적 구역이 stub이라 휴면(M1.x 패턴, 그 구역 빌드 시 점등).
+#   · 남단: 배후 강(전 폭 WATER) + 북안 강둑 단차(CLIFF_BANK 1행) + 다리 1개소(폭 2칸) →
+#     다리 남단 부두(낚시터 스텁 — Slice 3에서 워프 연결).
 # 외부 풀밭 y0~71 + 아래 실내 띠(카페·공유 집·만물상, ★C3 +48 → y72~99)를 VOID로 격리한 스택.
 # 카페 내부 좌표는 일괄 +48 평행이동이라 상대 배치가 보존돼 카페 시뮬·NPC·좌석·잡귀가 그대로 따라온다(회귀 0).
 func _build_naru_village() -> void:
@@ -2888,10 +2907,16 @@ func _build_naru_village() -> void:
 			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
-	# 강(WATER, 통과 X) — 세로 두 칸 폭. 다리(BRIDGE_Y 36)는 뒤의 _carve가 PATH로 덮어 도하점이 된다.
-	for rx in RIVER_X:
-		for y in range(RIVER_Y0, RIVER_Y1 + 1):
-			_set_tile(rx, y, WATER)
+	# ★[ADR-0060 결정 1] 배후 강(WATER, 통과 X) — 최남단 동서 횡단 6행 × x0..99 **전 폭**.
+	#   전 폭이라 동서 우회 도하가 없고, 마지막 행(BACK_RIVER_Y1 = 외부 무대 남단)까지 채워 남쪽 우회도 없다.
+	#   다리 칸(BRIDGE_X)·남단 부두는 뒤의 _carve_village_paths가 PATH로 덮어 **유일한** 도하점이 된다.
+	for y in range(BACK_RIVER_Y0, BACK_RIVER_Y1 + 1):
+		for x in _grid_w:
+			_set_tile(x, y, WATER)
+	# 북안 강둑 단차(CLIFF_BANK, SOLID) 1행 — 물 최상단 바로 위. 수면이 한 단 낮게 읽히는 pseudo-Z 경계
+	#   ([ADR-0044] §2). 다리 폭(BRIDGE_X)만 뒤의 _carve가 PATH로 열어 둑을 종단시킨다.
+	for x in _grid_w:
+		_set_tile(x, BACK_RIVER_BANK_Y, CLIFF_BANK)
 
 	# 서편: 카페(실내 있음) + 메인 집 3. 동편: 만물상 + 주민 집 3. 모두 통과 불가 외관 + 문 리세스.
 	_build_facade(CAFE_EXT_RECT, CAFE_EXT_DOOR)         # 서편 카페 외관
@@ -3424,35 +3449,38 @@ func _carve_paths() -> void:
 	#   우물 자체(x40..42)는 WALL이라 덮지 않는다(스퍼는 x39에서 멈춤 → 우물 서면과 인접).
 	_carve_h(19, 38, 39)                        # 스파인(38,19) → 우물 서면 앞(39,19)
 
-# ★ M2.1 / ★C3 — 나루 마을 동선. 메인 가로 복도(BRIDGE_Y 36)가 서/동을 잇되 강(x49,50)을 만나
-# *다리*로만 건넌다. 서편: 서워프(1,36)·도착(3,36) ~ 다리 서단(48,36). 동편: 다리 동단(51,36) ~ 98,36.
+# ★ M2.1 / ★C3 / ★[ADR-0060 결정 1] — 나루 마을 동선. 메인 가로 복도(MAIN_CORRIDOR_Y 36)가 서워프
+# (1,36)·도착(3,36)에서 동 가장자리(98,36)까지 **끊김 없이** 잇는다(옛 다리 분절 삭제 — 마을 통짜화).
 # 각 건물 문은 복도까지 세로 스포크로 잇는다(시각 안내). 워프 발동 칸(나룻터 52,1 / 산길 98,18)까지도
 # 길이 닿되 목적 구역 stub이라 휴면(M1.x 패턴). _carve_v/_carve_h = 세로/가로 한 줄 PATH(끝칸 포함).
+# 남향 스파인(x52·53)이 복도에서 배후 강 다리·남단 부두까지 내려간다 = 유일한 도하점.
 func _carve_village_paths() -> void:
-	# ★C3 — 100×72 코지-와이드 동선. 메인 가로 복도(BRIDGE_Y 36)가 좌우 가장자리를 잇되 강(x49·50)을
-	#   다리로만 건넌다. GROUND이 열려 도달성은 자동(C2 결) — 문 스포크는 시각 안내 레인이다.
-	for x in range(1, 49):
-		_set_tile(x, BRIDGE_Y, PATH)            # 서편 가로 복도(서워프·도착 ~ 다리 서단)
-	for x in range(51, 99):
-		_set_tile(x, BRIDGE_Y, PATH)            # 동편 가로 복도(다리 동단 ~ 동 가장자리)
-	for rx in RIVER_X:
-		_set_tile(rx, BRIDGE_Y, PATH)           # 다리 — 강 위 PATH(유일한 도하점)
+	# ★C3 — 100×72 코지-와이드 동선. GROUND이 열려 도달성은 자동(C2 결) — 문 스포크는 시각 안내 레인이다.
+	for x in range(1, 99):
+		_set_tile(x, MAIN_CORRIDOR_Y, PATH)     # 메인 가로 복도(서워프·도착 ~ 동 가장자리, 무분절)
 
 	# 서편 문 → 복도(문이 복도 위면 위→아래, 아래면 아래→위로 잇는다).
-	_carve_v(CAFE_EXT_DOOR.x, CAFE_EXT_DOOR.y, BRIDGE_Y)      # 카페 문(8,31) → 복도
-	_carve_v(MEL_HOUSE_DOOR.x, MEL_HOUSE_DOOR.y, BRIDGE_Y)    # 멜 문(22,18) → 복도
-	_carve_v(MIHO_HOUSE_DOOR.x, BRIDGE_Y, MIHO_HOUSE_DOOR.y)  # 미호 문(6,47) → 복도(아래)
-	_carve_v(BANA_HOUSE_DOOR.x, BRIDGE_Y, BANA_HOUSE_DOOR.y)  # 바나 문(31,47) → 복도(아래)
+	_carve_v(CAFE_EXT_DOOR.x, CAFE_EXT_DOOR.y, MAIN_CORRIDOR_Y)      # 카페 문(8,31) → 복도
+	_carve_v(MEL_HOUSE_DOOR.x, MEL_HOUSE_DOOR.y, MAIN_CORRIDOR_Y)    # 멜 문(22,18) → 복도
+	_carve_v(MIHO_HOUSE_DOOR.x, MAIN_CORRIDOR_Y, MIHO_HOUSE_DOOR.y)  # 미호 문(6,47) → 복도(아래)
+	_carve_v(BANA_HOUSE_DOOR.x, MAIN_CORRIDOR_Y, BANA_HOUSE_DOOR.y)  # 바나 문(31,47) → 복도(아래)
 
 	# 동편 문 → 복도.
-	_carve_v(STORE_EXT_DOOR.x, STORE_EXT_DOOR.y, BRIDGE_Y)                          # 만물상 문(60,18) → 복도
-	_carve_v(RESIDENT_HOUSE_DOORS[0].x, RESIDENT_HOUSE_DOORS[0].y, BRIDGE_Y)        # 주민집1 문(82,17) → 복도
-	_carve_v(RESIDENT_HOUSE_DOORS[1].x, BRIDGE_Y, RESIDENT_HOUSE_DOORS[1].y)        # 주민집2 문(59,47) → 복도(아래)
-	_carve_v(RESIDENT_HOUSE_DOORS[2].x, BRIDGE_Y, RESIDENT_HOUSE_DOORS[2].y)        # 주민집3 문(83,47) → 복도(아래)
+	_carve_v(STORE_EXT_DOOR.x, STORE_EXT_DOOR.y, MAIN_CORRIDOR_Y)                          # 만물상 문(60,18) → 복도
+	_carve_v(RESIDENT_HOUSE_DOORS[0].x, RESIDENT_HOUSE_DOORS[0].y, MAIN_CORRIDOR_Y)        # 주민집1 문(82,17) → 복도
+	_carve_v(RESIDENT_HOUSE_DOORS[1].x, MAIN_CORRIDOR_Y, RESIDENT_HOUSE_DOORS[1].y)        # 주민집2 문(59,47) → 복도(아래)
+	_carve_v(RESIDENT_HOUSE_DOORS[2].x, MAIN_CORRIDOR_Y, RESIDENT_HOUSE_DOORS[2].y)        # 주민집3 문(83,47) → 복도(아래)
 
 	# 워프 발동 칸까지 길(목적 구역 stub → 휴면, 그 구역 빌드 시 점등).
-	_carve_v(52, RIVER_Y0, BRIDGE_Y)        # 나룻터(52,1) → 삼도천(혼백관) — 강 동안 북단 강변로
-	_carve_v(98, 18, BRIDGE_Y)              # 산길(98,18) → 업화 갱도 — 동편 가장자리
+	_carve_v(BRIDGE_X[0], 1, MAIN_CORRIDOR_Y)   # 나룻터(52,1) → 삼도천(혼백관) — 북단 강변로(다리 서칸과 같은 열)
+	_carve_v(98, 18, MAIN_CORRIDOR_Y)           # 산길(98,18) → 업화 갱도 — 동편 가장자리
+
+	# ★[ADR-0060 결정 1] 남향 스파인 + 배후 강 다리. 복도(y36)에서 남쪽으로 내려가 강둑(y65)을 종단하고
+	#   강(y66~71)을 건넌다. 폭 2칸([ADR-0046] 결) — 강둑 CLIFF_BANK도 이 두 열에서만 PATH로 열린다.
+	for bx in BRIDGE_X:
+		_carve_v(bx, MAIN_CORRIDOR_Y, BACK_RIVER_Y1)
+	# 다리 남단 부두(낚시터 스텁) — 맵 남경계에서 막히는 짧은 발판. 다리로만 닿는다(Slice 3에서 워프 연결).
+	_fill_rect(BACK_RIVER_DOCK_RECT, PATH)
 
 func _paint_grid() -> void:
 	# ★[ADR-0043 §6 후속] 빌드 최적화 = "풀 base는 직접 채우고(솔버 0), soil/water만 terrain-connect".
@@ -3509,7 +3537,7 @@ func _paint_grid() -> void:
 		ground.set_cells_terrain_connect(water_cells, TERRAIN_SET, TR_WATER, true)
 	# ③ 길은 base+디테일로 *직접* 깐다(OLD 그대로 — terrain 오버레이 X). ★[ADR-0043 §6(b) 갱신:
 	#   길↔풀 유기경계 재도입은 *보류 유지* — 단, 이유가 성능에서 *기술적 비호환*으로 바뀌었다.] 빌드는
-	#   ~1.6s→~0.2s로 충분히 빨라졌지만, 마을 동선이 *1칸 폭 복도*(BRIDGE_Y 가로 복도·문→복도 세로길)라
+	#   ~1.6s→~0.2s로 충분히 빨라졌지만, 마을 동선이 *1칸 폭 복도*(MAIN_CORRIDOR_Y 가로 복도·문→복도 세로길)라
 	#   corner-match 지형으로 얹으면 1칸 폭 길이 전환 타일에 *통째로 묻혀 사라진다*(육안 회귀로 확인 —
 	#   OLD 선명한 갈색 복도 → terrain 오버레이 시 흐릿한 풀로 소멸). "끝까지 플레이>예쁨" 원칙상 길
 	#   가시성이 우선 → 길은 솔리드 base+디테일로 또렷하게(_terrain_base_atlas가 corner 전환에 안 묻히는
@@ -5011,7 +5039,9 @@ func _place_labels() -> void:
 			_add_label("주민 집", _tile_center_px(Vector2i(82, 12)))
 			_add_label("주민 집", _tile_center_px(Vector2i(59, 42)))
 			_add_label("주민 집", _tile_center_px(Vector2i(83, 42)))
-			_add_label("다리", _tile_center_px(Vector2i(48, 34)))
+			# ★[ADR-0060 결정 1] 다리·부두 라벨을 배후 강(남단)으로 이전(옛 중앙 수직 강 다리 48,34 폐지).
+			_add_label("다리", _tile_center_px(Vector2i(48, 64)))                   # 강둑 위 다리 서쪽
+			_add_label("나루 부두(낚시터 — Slice 3)", _tile_center_px(Vector2i(62, 70)))  # 남단 부두 동쪽
 			_add_label("← 안식 농원", _tile_center_px(Vector2i(4, 35)))   # 서워프(1,36) 안내
 			_add_label("나룻터 → 삼도천", _tile_center_px(Vector2i(53, 3)))  # ★ M3.1 북동 나룻터(혼백관, 점등 — ★C3 52,1)
 			_add_label("산길 → 업화 갱도", _tile_center_px(Vector2i(94, 17)))   # ★ M5.1 동 산길(정규 복원 — 갱도로 점등, ★C3 98,18)
