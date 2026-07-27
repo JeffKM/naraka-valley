@@ -216,6 +216,24 @@ const QUALITY_TABLE := [
 	[8, 32, 45, 15],
 ]
 
+# ★ [S3-T8 / ADR-0061 결정 8] 게시판 납품 의뢰 출제 풀 — 그 절기에 낚을 수 있는 어종(서식지 무관·
+#   시간대 무시)을 체급 상한으로 걸러 **사전순**으로 돌려준다(Dictionary 키 순서 비의존 = 결정성).
+#   시간대(밤 전용 등) 잠금 어종도 포함한다 — 일일 기한이 게시일 포함 2일이라 밤 창이 두 번 오고,
+#   스타듀 게시판도 시간대 어종을 그대로 낸다. 전설은 max_class 상한이 자연 배제한다
+#   (결정 3 "전설 = 선택 프레스티지" — 의뢰가 전설을 강제하면 서사·의뢰 게이팅 금지 취지가 깨진다).
+static func quest_pool(season_idx: int, max_class: int) -> Array:
+	var out: Array = []
+	for id in FISH.keys():
+		var f: Dictionary = FISH[id]
+		if int(f["weight_class"]) > max_class:
+			continue
+		var seasons: Array = f["seasons"]
+		if not seasons.is_empty() and not seasons.has(season_idx):
+			continue
+		out.append(id)
+	out.sort()
+	return out
+
 # ── 조회 ────────────────────────────────────────────────────────────────────
 static func has(id: String) -> bool:
 	return FISH.has(id)

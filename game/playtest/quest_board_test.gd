@@ -4,7 +4,8 @@ extends SceneTree
 #
 # ★ 핵심 불변식:
 #   ① 결정성 — 같은 day면 항상 같은 의뢰(비결정 랜덤 금지)·다른 day면 상이할 수 있다. 대상 아이템은
-#      실존 소스 풀(작물 + 채집물) 소속이고 처치·낚시 유형이 없다. 수량·기한이 스펙 범위 안.
+#      실존 소스 풀(작물 + 채집물 + ★[S3-T8] 물고기) 소속이고 처치 유형이 없다. 수량·기한이 스펙 범위 안.
+#      ★[S3-T8] 물고기 갈래는 *별도 시드*라 비-물고기 날의 의뢰는 S2-T6 수열과 바이트 동일(①k).
 #   ② 수락→납품→보상 — 골드 = 일반품질 판매가 × 3 × 수량 정확·의뢰인 호감도 가산·아이템 차감.
 #   ③ 동시 1건 — 수락 중이면 새 수락 거부(일일·중기 통틀어).
 #   ④ 기한 경과 만료·무페널티 — 골드·호감도 불변으로 조용히 소멸한다.
@@ -71,34 +72,60 @@ func _initialize() -> void:
 		if not ItemCatalog.has_item(String(pid)) or ItemCatalog.category_of(String(pid)) != ItemCatalog.CAT_HARVEST:
 			pool_ok = false
 	_check("①c 풀 전원 = 유효 수확물 아이템(처치·낚시 유형 없음)", pool_ok)
-	# 하루씩 21일치를 훑어 범위·소속·기한·의뢰인을 전수 확인하고, 변주가 실제로 생기는지도 본다.
+	# 하루씩 112일(1년)치를 훑어 범위·소속·기한·의뢰인을 전수 확인하고, 변주가 실제로 생기는지도 본다.
+	# ★[S3-T8] 물고기 날은 물고기 규칙(절기 가용·체급 상한·FISH_CLIENTS)을, 아닌 날은 기존 규칙을 본다.
 	var range_ok := true
 	var member_ok := true
 	var due_ok := true
 	var client_ok := true
 	var gold_ok := true
+	var fish_season_ok := true
+	var fish_class_ok := true
+	var legacy_intact := true
+	var fish_days := 0
+	var crop_days := 0
 	var seen := {}
-	for d in range(1, 22):
+	for d in range(1, 113):
 		var q := QuestBoard.daily_quest(d)
+		var qid := String(q["item_id"])
 		var cnt := int(q["count"])
 		if cnt < QuestBoard.DAILY_COUNT_MIN or cnt > QuestBoard.DAILY_COUNT_MAX:
 			range_ok = false
-		if not pool.has(String(q["item_id"])):
-			member_ok = false
 		if int(q["due_day"]) != d + QuestBoard.DAILY_SPAN_DAYS - 1:
 			due_ok = false
-		if not QuestBoard.CLIENTS.has(String(q["client"])):
-			client_ok = false
-		if int(q["gold"]) != ItemCatalog.price_of(String(q["item_id"]), ItemCatalog.Q_NORMAL) * QuestBoard.REWARD_MULT * cnt:
+		if int(q["gold"]) != ItemCatalog.price_of(qid, ItemCatalog.Q_NORMAL) * QuestBoard.REWARD_MULT * cnt:
 			gold_ok = false
-		seen["%s×%d" % [q["item_id"], cnt]] = true
-	_check("①d 수량 1~3(전 21일)", range_ok)
-	_check("①e 대상 id 전부 풀 소속", member_ok)
+		if FishCatalog.has(qid):
+			fish_days += 1
+			if not QuestBoard.FISH_CLIENTS.has(String(q["client"])):
+				client_ok = false
+			# 그날 절기에 실제로 낚이는 어종만 출제(전설·대어 배제 = quest_pool 상한 중 체급).
+			if not FishCatalog.quest_pool(GameClock.season_index_for_day(d), FishCatalog.WC_MEDIUM).has(qid):
+				fish_season_ok = false
+			if FishCatalog.weight_class_of(qid) > FishCatalog.WC_MEDIUM:
+				fish_class_ok = false
+		else:
+			crop_days += 1
+			if not pool.has(qid):
+				member_ok = false
+			if not QuestBoard.CLIENTS.has(String(q["client"])):
+				client_ok = false
+			# ★[S3-T8] 비-물고기 날 = 기존 _make 경로와 바이트 동일(작물/채집 의뢰 시드 수열 보존).
+			if q != QuestBoard._make(QuestBoard.KIND_DAILY, d, d, d + QuestBoard.DAILY_SPAN_DAYS - 1,
+					QuestBoard.DAILY_COUNT_MIN, QuestBoard.DAILY_COUNT_MAX, QuestBoard.DAILY_AFFINITY):
+				legacy_intact = false
+		seen["%s×%d" % [qid, cnt]] = true
+	_check("①d 수량 1~3(전 112일)", range_ok)
+	_check("①e 비-물고기 날 대상 id 전부 기존 풀 소속", member_ok)
 	_check("①f 기한 = 게시일 포함 2일", due_ok)
-	_check("①g 의뢰인 = affinity 보유 NPC", client_ok)
-	_check("①h 보상 골드 = 일반품질가 ×3 ×수량", gold_ok)
-	_check("①i 다른 day면 의뢰가 갈린다(21일에 조합 3종 이상 — 실측 %d)" % seen.size(), seen.size() >= 3)
+	_check("①g 의뢰인 = 유형별 풀 소속(물고기 날만 뱃사공 허용)", client_ok)
+	_check("①h 보상 골드 = 일반품질가 ×3 ×수량(유형 무관 동일 공식)", gold_ok)
+	_check("①i 다른 day면 의뢰가 갈린다(112일에 조합 3종 이상 — 실측 %d)" % seen.size(), seen.size() >= 3)
 	_check("①j 일일 호감도 = 선물 1회급", int(q7a["affinity"]) == Affinity.GIFT_POINTS)
+	_check("①k 비-물고기 날 = S2-T6 경로와 바이트 동일(결정성 회귀 0)", legacy_intact)
+	_check("①l 물고기 날·작물 날이 공존한다(112일 실측 물고기 %d·작물 %d)" % [fish_days, crop_days],
+		fish_days > 0 and crop_days > 0)
+	_check("①m 물고기 의뢰 = 현 절기 가용종·중 체급 이하만(전설·대어 0)", fish_season_ok and fish_class_ok)
 
 	# ── ⑥ 중기 의뢰(주 시드) ──
 	print("── ⑥ 중기 의뢰 ──")
@@ -109,16 +136,26 @@ func _initialize() -> void:
 	_check("⑥b 같은 주 = 같은 의뢰(결정적)", w0a == w0b)
 	_check("⑥c 기한 = 그 주 마지막 날(0주 → 7일 · 1주 → 14일)",
 		int(w0a["due_day"]) == 7 and int(QuestBoard.weekly_quest(1)["due_day"]) == 14)
+	# ★[S3-T8] 중기도 물고기 갈래 분기 — 물고기 주는 소 체급 한정·수량 4~6, 작물 주는 기존 5~8.
 	var wrange_ok := true
 	var wgold_ok := true
-	for w in range(0, 6):
+	var wfish_ok := true
+	var fish_weeks := 0
+	for w in range(0, 16):
 		var wq := QuestBoard.weekly_quest(w)
+		var wid := String(wq["item_id"])
 		var wc := int(wq["count"])
-		if wc < QuestBoard.WEEKLY_COUNT_MIN or wc > QuestBoard.WEEKLY_COUNT_MAX:
+		if FishCatalog.has(wid):
+			fish_weeks += 1
+			if wc < QuestBoard.WEEKLY_FISH_COUNT_MIN or wc > QuestBoard.WEEKLY_FISH_COUNT_MAX \
+					or FishCatalog.weight_class_of(wid) != FishCatalog.WC_SMALL:
+				wfish_ok = false
+		elif wc < QuestBoard.WEEKLY_COUNT_MIN or wc > QuestBoard.WEEKLY_COUNT_MAX:
 			wrange_ok = false
-		if int(wq["gold"]) != ItemCatalog.price_of(String(wq["item_id"]), ItemCatalog.Q_NORMAL) * QuestBoard.REWARD_MULT * wc:
+		if int(wq["gold"]) != ItemCatalog.price_of(wid, ItemCatalog.Q_NORMAL) * QuestBoard.REWARD_MULT * wc:
 			wgold_ok = false
-	_check("⑥d 중기 수량 5~8(일일보다 큼)", wrange_ok)
+	_check("⑥d 중기 수량 — 작물 5~8·물고기 4~6(소 체급 한정, 물고기 주 실측 %d)" % fish_weeks,
+		wrange_ok and wfish_ok)
 	_check("⑥e 중기 보상 공식 = 일일과 같은 배수", wgold_ok)
 	_check("⑥f 중기 호감도 = 일일의 2배",
 		int(w0a["affinity"]) == 2 * int(q7a["affinity"]) and QuestBoard.WEEKLY_AFFINITY == 2 * QuestBoard.DAILY_AFFINITY)
@@ -176,6 +213,8 @@ func _initialize() -> void:
 	var expect_gold: int = ItemCatalog.price_of(item_id, ItemCatalog.Q_NORMAL) * QuestBoard.REWARD_MULT * need
 	var af: Node = m._quest_client_affinity(client)
 	_check("②pre 의뢰인 affinity 다리 연결(%s)" % client, af != null)
+	# ★[S3-T8] 새 의뢰인 뱃사공도 다리가 성립한다(Resident 등록·affinity 보유 — 어느 유형이 걸리든).
+	_check("②pre2 뱃사공 affinity 다리 연결", m._quest_client_affinity("뱃사공") != null)
 	af.points = 0
 	m.wallet.gold = 0
 	# 수량 부족 상태 = 아무것도 안 일어난다(부분 납품 없음).
