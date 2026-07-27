@@ -266,11 +266,23 @@ func _run_checks() -> void:
 		and ForageSpawns.zone_kind_at(FOREST, m.FOREST_FORAGE_LABEL_TILE_2) == ForageSpawns.KIND_COMMON
 		and ForageSpawns.zone_kind_at(FOREST, m.FOREST_FORAGE_LABEL_TILE_3) == ForageSpawns.KIND_COMMON)
 	m._rebuild_region(MIHOK)
+	# ★[S4-T4 / ADR-0062 결정 1 ㉡] 재작성 — 심층 존은 이제 **의도적으로 막혀 있다**. 큰 그루터기 6개가
+	#   존 안에 서고(일일 리스폰 · 명동 도끼 필요), 존 전체가 봉쇄 링 + 큰 통나무 뒤에 있다. 즉 "존 칸이
+	#   전부 걸을 수 있다"는 옛 단언은 희소 빈터 2곳에만 해당하고, 심층은 **큰 그루터기 칸만** 막힌 게
+	#   정답이다(그 외 30칸은 여전히 빈터라 채집물이 묻히지 않는다). 도달성 자체는 tool_tier_test ⑦이 본다.
 	var blocked_mihok := 0
+	var blocked_deep := 0
 	for t: Vector2i in ForageSpawns.candidates(MIHOK):
-		if not _walkable(m, t):
+		if _walkable(m, t):
+			continue
+		if ForageSpawns.zone_kind_at(MIHOK, t) == ForageSpawns.KIND_DEEP:
+			blocked_deep += 1
+		else:
 			blocked_mihok += 1
-	_check("⑩e 미혹의 숲 존 %d칸 전부 걸을 수 있음" % ForageSpawns.candidates(MIHOK).size(), blocked_mihok == 0)
+	_check("⑩e 미혹 희소 빈터 2곳은 전부 걸을 수 있음(심층 제외)", blocked_mihok == 0)
+	_check("⑩e2 심층 존에서 막힌 칸 = 큰 그루터기 6칸뿐(나머지 30칸은 빈터)",
+		blocked_deep == m.MIHOK_DEEP_STUMP_TILES.size()
+		and m.tree_ledger.large_tiles(MIHOK, TreeLedger.KIND_LARGE_STUMP).size() == 6)
 	_check("⑩f 미혹 라벨 앵커 2곳 = 희소 존",
 		ForageSpawns.zone_kind_at(MIHOK, m.MIHOK_FORAGE_LABEL_TILE) == ForageSpawns.KIND_RARE
 		and ForageSpawns.zone_kind_at(MIHOK, m.MIHOK_FORAGE_LABEL_TILE_2) == ForageSpawns.KIND_RARE)

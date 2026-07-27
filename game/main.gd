@@ -1504,6 +1504,23 @@ const MIHOK_TREE_RECTS := [   # ★C7 나무(TREE) — 에워싸는 빽빽한 �
 const MIHOK_POND_RECT := Rect2i(26, 14, 12, 6)   # ★C7 연못(WATER, 통과 X) — 키운 물웅덩이(깊은 숲 "연못·이끼·고목", 동선이 위로 돈다)
 const MIHOK_FORAGE_LABEL_TILE := Vector2i(50, 6)    # ★C7 특수 채집지①(북동 깊은 빈터, 채집 메카닉 Phase 3)
 const MIHOK_FORAGE_LABEL_TILE_2 := Vector2i(30, 36) # ★C7 특수 채집지②(남 깊은 빈터)
+# ── ★[S4-T4 / ADR-0062 결정 1 ㉡] 미혹 심층 구획(도끼 티어 게이트) ─────────────
+# ADR-0033 "특수 채집지(희소종)만 도끼 티어로 접근"의 **실배치**이자 스타듀 비밀의 숲 문법 상속.
+# 동북부의 한 칸 방을 나무로 에워싸고 서쪽 진입목만 **큰 통나무**로 막는다 — 유철 도끼가 없으면
+# 걸어서 **닿을 수 없고**, 치우면 영영 열린다(재생성 없음). 안은 큰 그루터기 6개가 매일 되살아나
+# 단단한 원목을 지속 공급한다(스타듀 Large Stump 1:1).
+#   · 존 rect는 ForageSpawns.zones() KIND_DEEP과 **한 칸도 안 어긋난다**(심층 2종 전용 스폰존).
+#   · 옥자 집 앞마당(OKJA_HUT_EXT_RECT y24~30)과 **공간 분리** — 스토리 게이트↔메카닉 게이트 분리를
+#     지리로 강제한다(ADR-0062 결정 1 "심층 구획은 옥자 집 앞마당이 아니다").
+const MIHOK_DEEP_ZONE_RECT := Rect2i(53, 10, 6, 6)    # x53..58, y10..15 (심층 방 내부 = 스폰존)
+const MIHOK_DEEP_WALL_RECT := Rect2i(52, 9, 8, 8)     # x52..59, y9..16 (둘레 링 — 링 안쪽이 곧 존)
+# 서측 진입목 = 큰 통나무 2칸(링 서벽의 유일한 틈). 둘 다 치워야 방이 열린다.
+const MIHOK_DEEP_LOG_TILES := [Vector2i(52, 12), Vector2i(52, 13)]
+# 심층 내부 큰 그루터기 6개(일일 리스폰). 진입 동선(53,12)·(53,13)을 비껴 흩었다.
+const MIHOK_DEEP_STUMP_TILES := [
+	Vector2i(54, 11), Vector2i(57, 11), Vector2i(55, 13),
+	Vector2i(58, 13), Vector2i(54, 15), Vector2i(57, 15),
+]
 # 옥자 집(마녀의 오두막) — 잠긴 외관(비-enterable). WALL 박스 + 문 리세스(시각 일관)만, 실내·카탈로그 없음.
 const OKJA_HUT_EXT_RECT := Rect2i(54, 24, 8, 7)  # ★C7 x54..61, y24..30 (동쪽 깊은 끝, 숨겨진 잠긴 외관)
 const OKJA_HUT_DOOR := Vector2i(57, 30)          # ★C7 문 리세스(남면, 시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
@@ -1538,6 +1555,10 @@ const SMITHY_RECT := Rect2i(8, 46, 12, 9)       # x8..19, y46..54 (실내 방 �
 const SMITHY_DOOR := Vector2i(13, 54)           # 실내 대장간 문(닿으면 퇴장) — 아래벽 중앙
 const SMITHY_IN_TILE := Vector2i(13, 53)        # 실내 문 안쪽(진입 착지)
 const SMITHY_CAM_RECT := Rect2i(2, 44, 20, 13)  # 대장간 방 둘레(외부·다른 방 격리)
+# ★[S4-T4 / ADR-0062 결정 6] 무인 도구 업그레이드대(방 중북부 — 북벽 y46 바로 안쪽). 혼백관 무인
+#   기증대(MUSEUM_DONATE_TILE) 1:1 선례: 얼굴 없는 서비스로 먼저 열고 점주(클린트 대응 T2)는 S5에.
+#   [F] 즉시 구매 — **스타듀식 2일 대기 없음**(잠정, 무인 스텁 단순화. S5 점주 도입 때 재검토).
+const SMITHY_UPGRADE_TILE := Vector2i(13, 47)
 # 모험가 길드(전투 장비, enterable 빈 방). 외관=남단 입구 동편, 실내=대장간 방 옆 칸(cam 비겹침).
 const GUILD_EXT_RECT := Rect2i(22, 37, 6, 5)    # x22..27, y37..41 (남단 입구 동편)
 const GUILD_EXT_DOOR := Vector2i(24, 41)        # 외관 길드 문(닿으면 진입) — 남단 apron으로 carve
@@ -1696,6 +1717,11 @@ var forage_spawns: ForageSpawns = null
 #   불변식 보존). ForageSpawns와 같은 RefCounted 순수 원장이고, 통행 판정·그리드 동기화·산출 적재는
 #   전부 main이 한다(원장은 지형·인벤·혼력을 모른다).
 var tree_ledger: TreeLedger = null
+# ★[S4-T4 / ADR-0062 결정 6] 도구 티어 원장(도구별 티어 정수 — S4 실효는 도끼 2티어, 나머지 3종은 키
+#   예약). ADR-0027이 코드에 처음 존재하게 되는 지점이다: 도끼 티어가 ①성숙목 타수(10/8/6)와
+#   ②큰 장애물 접근(큰 그루터기=명동 / 큰 통나무=유철)을 가른다. 무대는 업화 갱도 대장간의 **무인
+#   업그레이드대**(혼백관 무인 기증대 선례) — 점주(옹이·클린트 대응)는 S5 소관.
+var tool_tier: ToolTier = null
 # ★ [S1-9] 집 꾸미기 상태(집 내부 3레이어 코스메틱 배치 + 해금 세트). F10 저작 도구(layout.json·
 #   _prop_layouts)와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). 플레이어 세이브 델타만 소유하고
 #   layout.json 시드는 안 건드린다(회귀 0). main이 유효 배치 칸을 주입하고 드로우/충돌 훅에서 질의(디커플링).
@@ -2019,6 +2045,8 @@ func _ready() -> void:
 	forage_spawns.changed.connect(queue_redraw)   # 스폰·줍기·리셋·복원 시 그레이박스 갱신(게잡이통 결)
 	tree_ledger = TreeLedger.new()       # ★[S4-T3] 나무 원장(RefCounted — 채집물 스폰 원장과 같은 결)
 	tree_ledger.changed.connect(_on_tree_ledger_changed)   # 벌목·성장·재성장·복원 시 충돌·드로우 갱신
+	tool_tier = ToolTier.new()           # ★[S4-T4] 도구 티어 원장(RefCounted — 나무 원장과 같은 결)
+	tool_tier.changed.connect(queue_redraw)   # 티어가 오르면 프롬프트 타수·대장간 안내가 즉시 갱신
 	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
 	home_deco.name = "HomeDeco"
 	add_child(home_deco)
@@ -2739,6 +2767,28 @@ func _is_tree_border_band(t: Vector2i) -> bool:
 	return t.x < TREE_BORDER_BAND or t.x >= _grid_w - TREE_BORDER_BAND \
 		or t.y < TREE_BORDER_BAND or t.y >= _outdoor_h - TREE_BORDER_BAND
 
+# ★[S4-T4] 심층 봉쇄 링 칸인가(= 불벌목). 경계 밴드와 **같은 이유**로 원장 밖이다: 이 링이 벌목
+# 가능하면 0티어 도끼로 벽을 우회해 심층에 들어갈 수 있어 도끼 티어 게이트 자체가 무의미해진다.
+# (링 안쪽 = 심층 존은 원장 대상이 아니라 애초에 빈터라 여기 안 걸린다.)
+func _is_mihok_deep_wall(t: Vector2i) -> bool:
+	if _region != RegionCatalog.MIHOK_FOREST:
+		return false
+	var r := MIHOK_DEEP_WALL_RECT
+	if not r.has_point(t):
+		return false
+	return t.x == r.position.x or t.x == r.end.x - 1 or t.y == r.position.y or t.y == r.end.y - 1
+
+# ★[S4-T4] 심층 봉쇄 링을 세운다 — 둘레는 TREE, 서측 진입목 2칸만 빈터로 남긴다(그 자리에 큰 통나무가
+# 선다). 동벽(x59)은 이미 외곽 우측 밴드라 겹쳐 칠해도 무해하다.
+func _build_mihok_deep_enclosure() -> void:
+	var r := MIHOK_DEEP_WALL_RECT
+	for y in range(r.position.y, r.end.y):
+		for x in range(r.position.x, r.end.x):
+			var t := Vector2i(x, y)
+			if t.x != r.position.x and t.x != r.end.x - 1 and t.y != r.position.y and t.y != r.end.y - 1:
+				continue                      # 링 안쪽(심층 존) — 빈터 그대로
+			_set_tile(x, y, GROUND if t in MIHOK_DEEP_LOG_TILES else TREE)
+
 # 지금 구역이 나무 원장을 그리드로 표현하는 곳인가(숲 2구역). 안식 농원은 프롭(TREE_A/B)이라 별도 결.
 func _is_tree_grid_region() -> bool:
 	return _region == RegionCatalog.JEOSEUNG_FOREST or _region == RegionCatalog.MIHOK_FOREST
@@ -2751,7 +2801,7 @@ func _inner_tree_tiles() -> Array:
 		if y >= _grid.size():
 			break
 		for x in range(TREE_BORDER_BAND, maxi(_grid_w - TREE_BORDER_BAND, TREE_BORDER_BAND)):
-			if x < _grid[y].size() and _grid[y][x] == TREE:
+			if x < _grid[y].size() and _grid[y][x] == TREE and not _is_mihok_deep_wall(Vector2i(x, y)):
 				out.append(Vector2i(x, y))
 	return out
 
@@ -2764,6 +2814,7 @@ func _apply_tree_ledger() -> void:
 		return
 	if not tree_ledger.is_seeded(_region):
 		tree_ledger.seed_region(_region, _inner_tree_tiles())
+	_seed_mihok_deep_objects()   # ★[S4-T4] 심층 큰 통나무·큰 그루터기(멱등 — 치운 건 부활 안 함)
 	for t: Vector2i in tree_ledger.tiles(_region):
 		if t.x < 0 or t.y < 0 or t.y >= _grid.size() or t.x >= _grid[t.y].size():
 			continue
@@ -2789,6 +2840,14 @@ func _sync_tree_tile(t: Vector2i) -> void:
 			ground.set_cell(t, 0, gv[int(_gd_h01(t.x, t.y, 5) * gv.size()) % gv.size()])
 		else:
 			ground.set_cell(t, 0, _terrain_base_atlas(TR_GRASS))
+
+# ★[S4-T4 / ADR-0062 결정 1 ㉡] 미혹 심층 큰 장애물을 원장에 심는다(멱등 — seed_large가 슬롯 유무로
+# 거른다). 세이브로 복원된 "치워진 큰 통나무"는 슬롯이 이미 있어 다시 서지 않는다 = 영구 개방.
+func _seed_mihok_deep_objects() -> void:
+	if tree_ledger == null or _region != RegionCatalog.MIHOK_FOREST:
+		return
+	tree_ledger.seed_large(_region, MIHOK_DEEP_LOG_TILES, TreeLedger.KIND_LARGE_LOG)
+	tree_ledger.seed_large(_region, MIHOK_DEEP_STUMP_TILES, TreeLedger.KIND_LARGE_STUMP)
 
 # ★ 안식 농원 나무 = 프롭(PROP_TREE_A/B 2×4). 손저작 배치(layout.json HOME)의 앵커 16그루가 원장 시드다.
 #   절차 스캐터 숲(_home_scatter)은 **원장 밖**이다 — 그건 남단 존 배경 프레이밍이고, 손저작 16그루가
@@ -2834,9 +2893,16 @@ func _chop_tree(t: Vector2i) -> void:
 	if not energy.can_act(cost):
 		return
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
-	var res := tree_ledger.chop(_region, t, clock.day, lvl, forage_wood_bonus(), forage_hardwood_chance())
+	var res := tree_ledger.chop(_region, t, clock.day, lvl, forage_wood_bonus(),
+		forage_hardwood_chance(), axe_tier())
 	if res.is_empty():
 		return                                   # 대상 없음(디스패치가 걸렀지만 방어)
+	# ★[S4-T4] 도끼 티어 부족 — 큰 장애물은 튕겨 낸다. **혼력 미소모**(무효타는 값을 안 매긴다).
+	if bool(res.get("blocked", false)):
+		_notice("더 단단한 도끼가 필요하다 — %s (%s)" % [
+			TreeLedger.large_name(String(res.get("large", ""))),
+			ToolTier.tier_name(ToolTier.AXE, int(res.get("need_tier", 1)))])
+		return
 	energy.spend(cost)
 	audio.sfx("hoe")                             # 도끼질 = 둔탁한 "턱"(전용 SFX는 아트 패스)
 	# 산출 적재(마지막 타가 아니면 전부 0이라 아무것도 안 들어온다).
@@ -2845,7 +2911,12 @@ func _chop_tree(t: Vector2i) -> void:
 	_grant_chop_drop(ItemCatalog.SAP, int(res.get("sap", 0)))
 	_grant_chop_drop(String(res.get("seed_id", "")), int(res.get("seeds", 0)))
 	_gain_forage_xp(int(res.get("xp", 0)))       # 0이면 _gain_forage_xp가 알아서 무동작
-	if bool(res.get("felled", false)) and not bool(res.get("cleared", false)):
+	var large := String(res.get("large", ""))
+	if large != "" and bool(res.get("felled", false)):
+		# ★[S4-T4] 큰 통나무는 영영 치워진다(재생성 없음 = 심층 개방) / 큰 그루터기는 밤에 되돌아온다.
+		_notice("%s를 치웠다 — %s" % [TreeLedger.large_name(large),
+			"밤이 지나면 다시 자리를 잡는다" if TreeLedger.respawns_large(large) else "길이 열렸다"])
+	elif bool(res.get("felled", false)) and not bool(res.get("cleared", false)):
 		_notice("%s를 쓰러뜨렸다 — 그루터기는 도끼로 마저 치울 수 있다"
 			% TreeLedger.species_name(String(res.get("species", ""))))
 	_sync_tree_tile(t)                           # 숲: 슬롯이 비었으면 그 칸이 즉시 걸을 수 있게 된다
@@ -3664,6 +3735,7 @@ func _build_mihok_forest() -> void:
 	_fill_rect(MIHOK_POND_RECT, WATER)
 	for r in MIHOK_TREE_RECTS:
 		_fill_rect(r, TREE)
+	_build_mihok_deep_enclosure()          # ★[S4-T4] 심층 구획 봉쇄 링(서측 틈 2칸만 열어 둠 — 큰 통나무 자리)
 
 	# 옥자 집 = 잠긴 외관(비-enterable). 통과 불가 WALL 박스 + 문 리세스만(실내 방·카탈로그 없음 — 축사 결).
 	_build_facade(OKJA_HUT_EXT_RECT, OKJA_HUT_DOOR)
@@ -6009,10 +6081,12 @@ func _place_labels() -> void:
 		RegionCatalog.MIHOK_FOREST:
 			# ★ M4.2 / ★C7 — 옥자 집은 잠긴 외관(비-enterable)이라 라벨로 위상 명시(축사 컨벤션). 특수 채집지 2곳·연못·복귀 워프 안내.
 			_add_label("옥자 집 (잠김 — 미결의 죄 해결 후)", _tile_center_px(Vector2i(57, 27)))  # ★C7 동쪽 깊은 끝
-			# ★[S4-T1] 플레이스홀더 제거 — 희소종 스폰 빈터로 승격(좌표 불변). 심층 구획(동북부)은
-			#   봉쇄 프롭·도끼 티어가 서는 S4-T4/T5에서 라벨을 얻는다(지금은 존 정의만).
+			# ★[S4-T1] 플레이스홀더 제거 — 희소종 스폰 빈터로 승격(좌표 불변).
 			_add_label("특수 채집지", _tile_center_px(MIHOK_FORAGE_LABEL_TILE))
 			_add_label("특수 채집지", _tile_center_px(MIHOK_FORAGE_LABEL_TILE_2))
+			# ★[S4-T4 / ADR-0062 결정 1 ㉡] 심층 구획 — 봉쇄 링 서쪽(큰 통나무 앞)에 세워 "여기가 막힌
+			#   길"임을 알린다. 라벨은 링 밖(x50)이라 봉쇄 자체를 흐리지 않는다.
+			_add_label("미혹 심층 (큰 통나무에 막힘)", _tile_center_px(Vector2i(48, 12)))
 			_add_label("연못", _tile_center_px(Vector2i(31, 21)))            # ★C7 연못(x26..37,y14..19) 아래
 			_add_label("숲 안쪽 → 저승 숲", _tile_center_px(Vector2i(4, 22)))   # ★C7 서단 복귀 워프(1,22) 안내
 
@@ -6383,6 +6457,10 @@ func _on_day_advanced(day: int) -> void:
 		for e in tree_day["grown"]:
 			if String(e["region"]) == _region and int(e["stage"]) == TreeLedger.REGROW_STAGE:
 				_sync_tree_tile(e["tile"])   # 빈 슬롯 → 성장 경로는 없지만 멱등 방어
+		# ★[S4-T4] 큰 그루터기 일일 리스폰 — 치워 둔 자리가 밤새 다시 막힌다(큰 통나무는 여기 안 온다).
+		for e in tree_day["large_respawned"]:
+			if String(e["region"]) == _region:
+				_sync_tree_tile(e["tile"])
 		if not tree_day["seeded"].is_empty():
 			_notice("마당에 어린 나무가 %d그루 돋았다" % tree_day["seeded"].size())
 	# ★ [ADR-0055] 안식 재점령 — 빈 맨땅 1~2칸에 밤새 잡초(이승의 미련)가 다시 돋는다(구조물·밭·작물 성역).
@@ -6722,6 +6800,7 @@ func _save_game() -> void:
 		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
 		"forage_spawn": forage_spawns.to_save(),  # ★[S4-T1] 숲 채집물 스폰 원장(구역별 좌표·종 — 매일 굴러 나온 델타)
 		"tree_ledger": tree_ledger.to_save(),  # ★[S4-T3] 나무 원장(구역별 좌표·종·단계·타수·그루터기 + 시드 완료 구역)
+		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
@@ -6797,6 +6876,8 @@ func _load_game() -> void:
 		forage_spawns.load_save(data["forage_spawn"])
 	if data.has("tree_ledger"):   # ★[S4-T3] — 키 없는 구세이브는 원장 0 → 구역 첫 빌드의 seed_region이
 		tree_ledger.load_save(data["tree_ledger"])   #   초기 배치를 결정적으로 재생성한다(종=좌표 해시·하위호환)
+	if data.has("tool_tiers"):    # ★[S4-T4] — 키 없는 구세이브는 전 도구 티어 0(기본 도끼 그대로·무막힘)
+		tool_tier.load_save(data["tool_tiers"])
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
 		home_deco.load_save(data["home_deco"])
 	if data.has("wallet"):
@@ -6971,6 +7052,11 @@ func _skill_level(skill: String) -> int:
 		ProfessionCatalog.FORAGING: return ForageSkill.level_for_xp(_foraging_xp)   # ★[S4-T2]
 		ProfessionCatalog.FISHING: return FishSkill.level_for_xp(_fishing_xp)   # ★[S3-T6]
 		_: return 0
+
+# ★[S4-T4] 지금 든 도끼의 티어(원장 부재 방어 = 0). 타수 환산·큰 장애물 게이트·프롬프트의 단일 접점이다
+#   — main의 다른 곳은 ToolTier 내부를 모른다(_skill_level이 XP 스칼라를 감싸는 것과 같은 결).
+func axe_tier() -> int:
+	return tool_tier.tier_of(ToolTier.AXE) if tool_tier != null else 0
 
 # (skill,tier)에 이미 고른 전문직 id("" = 미선택).
 func _profession_at(skill: String, tier: int) -> String:
@@ -7378,6 +7464,9 @@ func _process(delta: float) -> void:
 	var facing_storehouse_chest := not _sleeping and _indoor == "창고" and _target == STOREHOUSE_CHEST_TILE
 	# ★ [S2-T5] 혼백관 기증대: 혼백관 안에서 기증대 칸을 바라볼 때(_indoor 가드 — 무인 기증대, ADR-0060 결정 5).
 	var facing_donate := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_DONATE_TILE
+	# ★ [S4-T4] 대장간 무인 업그레이드대: 대장간 안에서 업그레이드대 칸을 바라볼 때(_indoor 가드 —
+	#   기증대와 정확히 같은 결. 다른 구역의 같은 좌표에 닿아도 무반응).
+	var facing_upgrade := not _sleeping and _indoor == "대장간" and _target == SMITHY_UPGRADE_TILE
 	# ★ [S2-T6] 만물상 앞 게시판: 나루 마을 *야외*에서 게시판 칸을 바라볼 때(_indoor==""로 실내 배제 —
 	#   기증대가 _indoor로 가드하는 것과 대칭. 다른 구역의 같은 좌표에 닿아도 무반응).
 	var facing_board := not _sleeping and _region == RegionCatalog.NARU_VILLAGE and _indoor == "" \
@@ -7473,6 +7562,11 @@ func _process(delta: float) -> void:
 	# ★ [S2-T5] 혼백관 기증(F): 기증대를 바라보며 F — 든 유품을 기증한다(무인 기증대·마일스톤 보상 즉시 지급).
 	if facing_donate and Input.is_action_just_pressed("shop_toggle"):
 		_try_donate_selected()
+		return
+	# ★ [S4-T4] 대장간 무인 업그레이드(F): 업그레이드대를 바라보며 F — 다음 도끼 티어를 즉시 산다
+	#   (골드 차감 → 티어 +1. 대기 없음 — 무인 스텁 잠정). 기증대와 같은 무인 F 결.
+	if facing_upgrade and Input.is_action_just_pressed("shop_toggle"):
+		_try_upgrade_tool(ToolTier.AXE)
 		return
 	# ★ [S3-T7] 게잡이통(F): 물가의 통을 바라보며 F — 수거 / 미끼 장전 / 회수(상태별 한 동사).
 	#   주민·기증대 뒤에 둔다(설치 시 주민 칸을 배제하지만, 순서로도 한 번 더 안전하게).
@@ -7709,6 +7803,10 @@ func _process(delta: float) -> void:
 		else:
 			interact_prompt.text = "혼백관 기증대 — 유품을 들고 오자 (전시 %d/%d)" % [museum.donated_count(),
 				Museum.donatable_ids().size()]
+	elif facing_upgrade:
+		# ★ [S4-T4] 대장간 무인 업그레이드대: 현재 티어 · 다음 티어 · 가격을 한 줄로(무인 — 점주 후속).
+		interact_prompt.visible = true
+		interact_prompt.text = _tool_upgrade_prompt(ToolTier.AXE)
 	elif facing_board:
 		# ★ [S2-T6] 만물상 앞 게시판: 수락 중이면 납품 진행(보유/요구)을, 아니면 오늘 걸린 의뢰를 보인다.
 		#   무인 게시판이라 대화(RMB) 없이 F/G만 받는다(혼백관 기증대와 같은 결).
@@ -8552,6 +8650,19 @@ func _debris_prompt(kind: String) -> String:
 # ★[S4-T3] 원장 나무·그루터기 프롬프트 — 남은 타수를 밝혀 "몇 번 더 치면 되나"가 보이게 한다
 #   (성숙목 10타는 도구 티어(S4-T4)로 줄어들 값이라, 수치를 숨기면 티어의 실효가 안 읽힌다).
 func _tree_prompt(t: Vector2i) -> String:
+	# ★[S4-T4] 큰 장애물(큰 그루터기·큰 통나무)은 이름과 **요구 도끼 티어**를 먼저 밝힌다 —
+	#   "왜 안 깨지나"가 프롬프트에서 즉시 읽혀야 티어 업그레이드가 목표로 선다(ADR-0027 경제 게이트).
+	var large := tree_ledger.large_at(_region, t)
+	if large != "":
+		var need := TreeLedger.tier_for_large(large)
+		var lname := TreeLedger.large_name(large)
+		if inventory.selected_id() != ItemCatalog.AXE:
+			return "%s — %s 필요" % [lname, ToolTier.tier_name(ToolTier.AXE, need)]
+		if axe_tier() < need:
+			return "%s — 더 단단한 도끼 필요 (%s)" % [lname, ToolTier.tier_name(ToolTier.AXE, need)]
+		if not energy.can_act(SoulEnergy.COST_PER_ACTION):
+			return "혼력 부족 — 집에서 취침"
+		return "[좌클릭] %s 치우기 (%d타 남음)" % [lname, tree_ledger.hp_at(_region, t, axe_tier())]
 	var stump := tree_ledger.is_stump(_region, t)
 	var nm := TreeLedger.species_name(tree_ledger.species_at(_region, t))
 	var label := "%s 그루터기" % nm if stump else nm
@@ -8559,7 +8670,8 @@ func _tree_prompt(t: Vector2i) -> String:
 		return "%s — 도끼 필요" % label
 	if not energy.can_act(SoulEnergy.COST_PER_ACTION):
 		return "혼력 부족 — 집에서 취침"
-	return "[좌클릭] %s %s (%d타 남음)" % [label, "치우기" if stump else "벌목", tree_ledger.hp_at(_region, t)]
+	return "[좌클릭] %s %s (%d타 남음)" % [label, "치우기" if stump else "벌목",
+		tree_ledger.hp_at(_region, t, axe_tier())]
 
 # 밭 칸 프롬프트: 든 도구·칸 상태에서 다음에 할 수 있는 동작을 파생한다("" = 안내 없음).
 # 맨손 수확(RMB)은 도구와 무관하게 다 자란 칸이면 항상 안내한다. 그 외엔 든 도구가 칸 상태에
@@ -8928,6 +9040,65 @@ func _try_donate_selected() -> void:
 		museum.claim(int(m["count"]))
 		_toast_item(rid, n)
 		_notice("혼백관 답례 — %s ×%d (전시 %d점 달성)" % [ItemCatalog.name_of(rid), n, int(m["count"])])
+
+# ═══ ★[S4-T4 / ADR-0062 결정 6] 대장간 무인 도구 업그레이드 스텁 ═════════════════════
+# ADR-0027이 업그레이드 무대로 지목한 업화 대장간을, 점주 없이 **무인 서비스**로 먼저 연다
+# (Slice 2 혼백관 무인 기증대 선례 — 얼굴 없는 서비스로 열고 점주는 나중). 스코프는 딱 셋이다:
+#   ㉠ 골드 단독 구매(잠정 — 저승 금속 재료 요구는 S5 대장간 본무대)
+#   ㉡ 즉시 반영(스타듀식 2일 대기 없음 — 잠정. 대기를 넣으려면 "맡긴 도구" 상태가 필요한데 그건
+#      점주·수리대 UI가 있어야 읽히는 구조다. S5 재검토)
+#   ㉢ 도끼만 실효 — 나머지 3종은 "준비 중"으로 존재만 알린다(ADR-0027 축을 미리 보이게)
+
+# 업그레이드대 프롬프트 — 현재 티어 · 다음 티어 · 가격 · 지불 가능 여부를 한 줄로.
+func _tool_upgrade_prompt(tool_id: String) -> String:
+	if not ToolTier.is_upgradable(tool_id):
+		return "업화 대장간 — %s 벼림은 준비 중" % ItemCatalog.name_of(tool_id)
+	var cur := tool_tier.tier_of(tool_id)
+	var cur_nm := ToolTier.tier_name(tool_id, cur)
+	var nxt := tool_tier.pending_upgrade(tool_id)
+	if nxt.is_empty():
+		return "업화 대장간 — %s (최고 티어). 곡괭이·괭이·물뿌리개 벼림은 준비 중" % cur_nm
+	var price := int(nxt["price"])
+	var line := "%s → %s · %d냥" % [cur_nm, String(nxt["name"]), price]
+	if wallet.gold < price:
+		return "업화 대장간 — %s (냥 부족 %d/%d)" % [line, wallet.gold, price]
+	return "[F] 벼리기 — %s" % line
+
+# 무인 업그레이드 실행 — 골드 차감 → 티어 +1. 순차 강제(0→2 직행 없음)는 pending_upgrade가 구조적으로
+# 보장한다(다음 계단만 돌려주므로 두 계단을 한 번에 살 방법이 없다).
+func _try_upgrade_tool(tool_id: String) -> bool:
+	if tool_tier == null or not ToolTier.is_upgradable(tool_id):
+		_notice("업화 대장간 — 아직 벼릴 수 없는 도구다 (준비 중)")
+		return false
+	var nxt := tool_tier.pending_upgrade(tool_id)
+	if nxt.is_empty():
+		_notice("%s — 더 벼릴 곳이 없다 (최고 티어)" % ToolTier.tier_name(tool_id, tool_tier.tier_of(tool_id)))
+		return false
+	var price := int(nxt["price"])
+	if not wallet.spend(price):
+		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [String(nxt["name"]), price, wallet.gold])
+		return false
+	tool_tier.upgrade(tool_id)
+	audio.sfx("ui")
+	_notice("업화로에서 %s를 벼렸다 — 더 굵은 것을 벨 수 있다" % String(nxt["name"]))
+	return true
+
+# ★[S4-T4] 대장간 실내 그레이박스 — 업그레이드대(2×1 모루 대) + 북벽 업화로(붉은 불빛). 혼백관 진열과
+#   같은 결(순수 장식 · 충돌 없음 — 조준 칸 상호작용만). 진짜 아트는 후속 아트 패스.
+func _draw_smithy_room() -> void:
+	if _indoor != "대장간":
+		return
+	var base := Vector2(SMITHY_UPGRADE_TILE.x * TILE, SMITHY_UPGRADE_TILE.y * TILE)
+	# 업그레이드대 — 2×1 돌 받침 + 그 위 모루(검은 쇠).
+	draw_rect(Rect2(base + Vector2(-TILE * 0.5, 8), Vector2(TILE * 2.0, TILE - 14)), Color(0.30, 0.29, 0.31))
+	draw_rect(Rect2(base + Vector2(-TILE * 0.5, 8), Vector2(TILE * 2.0, 5)), Color(0.42, 0.41, 0.43))
+	draw_rect(Rect2(base + Vector2(2, 2), Vector2(TILE - 4, 9)), Color(0.16, 0.16, 0.18))   # 모루 몸통
+	draw_rect(Rect2(base + Vector2(-2, 0), Vector2(TILE + 4, 4)), Color(0.22, 0.22, 0.25))  # 모루 상판
+	# 업화로 — 북벽 서편의 화덕(돌 아궁이 + 붉은 불). 순수 분위기(상호작용 없음).
+	var forge := Vector2(float(SMITHY_RECT.position.x + 2) * TILE, float(SMITHY_RECT.position.y + 1) * TILE)
+	draw_rect(Rect2(forge, Vector2(TILE * 1.5, TILE)), Color(0.26, 0.24, 0.24))
+	draw_rect(Rect2(forge + Vector2(6, 10), Vector2(TILE * 1.5 - 12, TILE - 16)), Color(0.72, 0.28, 0.14))
+	draw_rect(Rect2(forge + Vector2(10, 14), Vector2(TILE * 1.5 - 20, TILE - 24)), Color(0.95, 0.66, 0.24))
 
 # ★ [S2-T6] 만물상 앞 게시판 그레이박스 — 두 기둥 + 나무 판 + 걸린 의뢰 쪽지(게시 수만큼). 수락 중이면
 #   쪽지 하나가 붉은 도장으로 바뀐다(진행 중 표식). 좌표 상태 없음 — 전부 원장·day 파생이다.
@@ -10400,6 +10571,8 @@ func _draw() -> void:
 		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
 			_draw_forage_spawns()    # ★[S4-T1] 빈터에 돋은 채집물(종별 색점 그레이박스 — 아이콘 아트는 S4-T10)
 			_draw_tree_ledger()      # ★[S4-T3] 원장 나무 중 미성숙·그루터기(성숙목은 TREE 타일이 그린다)
+		RegionCatalog.EOPHWA_MINE:
+			_draw_smithy_room()      # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
@@ -10712,6 +10885,10 @@ const _TREE_STUMP_TOP := Color(0.62, 0.45, 0.30)     # 그루터기 단면(밝�
 const _TREE_STUMP_SIDE := Color(0.34, 0.24, 0.17)    # 그루터기 옆면(어두운 껍질)
 const _TREE_YOUNG_LEAF := Color(0.30, 0.55, 0.32)    # 유목 잎(밝은 새순 — 성숙 침엽보다 밝게)
 const _TREE_YOUNG_TRUNK := Color(0.35, 0.26, 0.18)   # 유목 줄기
+# ★[S4-T4] 큰 장애물 — 밑의 TREE 타일을 지우는 배경 + 굵은 껍질/단면(그레이박스, 아트는 S4-T9).
+const _LARGE_BACKDROP := Color(0.13, 0.18, 0.13)     # 심층 그늘(타일 덮개 — 어두운 숲 바닥)
+const _LARGE_BARK := Color(0.26, 0.18, 0.12)         # 굵은 껍질(보통 그루터기보다 어둡고 두껍게)
+const _LARGE_TOP := Color(0.58, 0.42, 0.27)          # 잘린 단면 나이테
 func _draw_tree_ledger() -> void:
 	if tree_ledger == null or _indoor != "":
 		return
@@ -10719,6 +10896,20 @@ func _draw_tree_ledger() -> void:
 		if not tree_ledger.is_occupied(_region, t):
 			continue
 		var px := Vector2(t.x * TILE, t.y * TILE)
+		# ★[S4-T4] 큰 장애물 — 밑의 TREE 타일을 **덮어** 그린다(같은 칸에 나무 그림이 남으면 "왜 도끼가
+		#   안 먹히나"가 안 읽힌다). 큰 그루터기 = 넓은 밑동 / 큰 통나무 = 옆으로 누운 통(가로 결).
+		var large := tree_ledger.large_at(_region, t)
+		if large != "":
+			draw_rect(Rect2(px, Vector2(TILE, TILE)), _LARGE_BACKDROP)
+			if large == TreeLedger.KIND_LARGE_LOG:
+				draw_rect(Rect2(px + Vector2(1, TILE * 0.24), Vector2(TILE - 2, TILE * 0.52)), _LARGE_BARK)
+				draw_rect(Rect2(px + Vector2(1, TILE * 0.24), Vector2(TILE - 2, 4)), _LARGE_TOP)
+				draw_circle(px + Vector2(TILE * 0.16, TILE * 0.5), TILE * 0.15, _LARGE_TOP)   # 잘린 단면
+			else:
+				draw_rect(Rect2(px + Vector2(TILE * 0.12, TILE * 0.34), Vector2(TILE * 0.76, TILE * 0.5)), _LARGE_BARK)
+				draw_circle(px + Vector2(TILE * 0.5, TILE * 0.36), TILE * 0.36, _LARGE_TOP)
+				draw_circle(px + Vector2(TILE * 0.5, TILE * 0.36), TILE * 0.36, _LARGE_BARK, false, 1.5)
+			continue
 		if tree_ledger.is_stump(_region, t):
 			# 그루터기 — 칸 아래쪽에 낮은 밑동(옆면 + 단면 타원). 통행 불가 상태의 시각 신호.
 			draw_rect(Rect2(px + Vector2(TILE * 0.24, TILE * 0.46), Vector2(TILE * 0.52, TILE * 0.34)),
