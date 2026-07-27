@@ -1657,6 +1657,22 @@ var _miho_tile: Vector2i:
 var _target := Vector2i(-1, -1)  # T2.1 바라보는 앞 칸(상호작용 대상)
 var _target_valid := false       # 그 칸이 밭(SOIL)이라 상호작용 가능한가
 
+# ── ★[S3-T2 / ADR-0061 결정 2·6·9] 릴 격투 세션(낚시) ──────────────────────────
+# 진행 중인 캐스팅 1건(없으면 null). 로직은 전부 fishing.gd(FishingSession — Node 아님·순수 클래스)에
+# 있고, main은 ①입력(캐스팅·당김 홀드·이동 취소) ②혼력 게이트 ③산출물 지급 ④그레이박스 HUD만 맡는다.
+# **세이브 무상태**(세션은 비영속 — ADR-0061 결정 2 "일시 상태"): 저장되는 건 어획물·혼력뿐이다.
+var fishing: FishingSession = null
+var _cast_serial := 0            # 캐스팅 일련번호(시드 섞기 — 같은 분·같은 칸 반복 캐스팅의 어종 고착 방지)
+# ★ 캐스팅 무대 = 삼도천·황천해 한정(ADR-0061 결정 9). 나루 배후 강·안식 연못은 이번 슬라이스에서
+#   비캐스팅("낚시의 집" 정체성 + 수면별 어종 테이블 스코프 억제 — 전 수면 개방은 owner 큐 서랍).
+const FISHING_REGIONS := [RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE]
+# ★ 체급 추첨(그레이박스 — ★[S3-T3 fish_catalog 절기·시간·장소 테이블로 교체]). 누적 확률 컷.
+#   T1 낚싯대(허용 = 소)만 있는 지금은 소에 크게 치우쳐야 루프가 돈다 — 중 이상은 "체급 게이트를
+#   가르치는 드문 사고"로 남는다(T2~T4가 열리면 이 표는 어종 카탈로그가 대체한다).
+const FISH_CLASS_CUTS := [0.80, 0.95, 0.99]   # <0.80=소 · <0.95=중 · <0.99=대 · 그 외=전설
+# ★ 낚시 스킬 절감 훅(S3-T6 FishSkill 소관 — 지금은 정확히 중립 1.0). FarmSkill.energy_factor 문법 대칭.
+const FISHING_ENERGY_FACTOR := 1.0
+
 # T2.3 현재 심을 작물. Q로 카탈로그(빠른 성장 순)를 순환 선택한다.
 # 그레이박스에선 도구·씨앗 인벤토리 UI 없이 이 한 변수로 작물 종류를 고른다.
 var _selected_crop: String = CropCatalog.HONRYEONGCHO
@@ -6096,6 +6112,10 @@ func _rebuild_region(to_region: String) -> void:
 		_front_props.queue_redraw()
 	if to_region == RegionCatalog.HOME:
 		_repaint_field_overlays()      # 안식 농원으로 복귀 → 밭 고랑·작물 오버레이 복원
+	# ★ [S3-T2] 구역이 바뀌면 진행 중이던 캐스팅은 버린다(세션은 이 무대에 묶인 일시 상태).
+	fishing = null
+	if to_region in FISHING_REGIONS:
+		_grant_starter_rod()           # ★ 임시 지급 경로(★[S3-T5에서 뱃사공 증정으로 교체])
 
 # ★ M1.4 — 경작된 칸의 밭 오버레이(고랑·젖음·성장단계)를 field_layer에 다시 칠한다. 구역을
 # 오갈 때 field_layer를 비웠으므로(다른 구역에 떠다니지 않게), 안식 농원으로 돌아오면 farm
@@ -6190,6 +6210,9 @@ func _load_game() -> void:
 	var data := saver.load_game(_active_slot)
 	if data.is_empty():
 		return
+	# ★ [S3-T2] 진행 중이던 릴 격투 세션은 로드에서 버린다(비영속 — 세이브에 낚시 키가 없는 것과 짝).
+	#   로드는 상태 하드 리셋이라, 옛 세션이 새 월드 위에 남아 있으면 안 된다.
+	fishing = null
 	# 옛 오버레이를 먼저 비운다(F9 재로드 대비). 이후 FarmField.load_save가
 	# 칸마다 tile_changed를 발화해 main이 새 상태로 다시 칠한다.
 	field_layer.clear()
@@ -6846,6 +6869,12 @@ func _process(delta: float) -> void:
 		elif ranch.silo_hay() <= 0:
 			_notice("여물광이 비었다 — 낫으로 사료풀을 베어 채워야 한다")
 		return
+	# ★ [S3-T2 / ADR-0061 결정 2] 릴 격투 — 물(WATER)은 _target_valid(SOIL) 게이트 밖이라 짐승·debris와
+	#   같은 결로 따로 디스패치한다. 세션이 살아 있으면 tick(LMB 홀드 = 당김)만 굴리고, 없으면 캐스팅 판정.
+	if fishing != null:
+		_tick_fishing(delta)
+	elif not _sleeping and _can_cast() and Input.is_action_just_pressed("use_tool"):
+		_start_fishing(_cast_water_tile(_target))
 	# ★ [S1-7→B1-a.1] 짐승 상호작용 — 짐승은 실내 바닥(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치한다.
 	#   LMB=건초 급여(_use_tool 내 hay 분기)·RMB=쓰다듬/산물 수집(_try_harvest 내 짐승 분기). 건물 실내에서 이뤄진다.
 	var on_animal := not _sleeping and _region == RegionCatalog.HOME and ranch.has_animal(_target)
@@ -6960,7 +6989,16 @@ func _process(delta: float) -> void:
 	# 우선순위: 상자 > 출하함 > ★주민(레지스트리 한 갈래) > 기증대 > 게시판 > 막기 > 손님 서빙 > 밭 동작.
 	# ★ [S2-T7] 주민 5갈래가 한 분기로 접혔다 — 대상 칸이 서로 배타적이라 순서 이동은 무해하다.
 	# ★ ADR-0024 — 대화·서빙·막기·수확은 RMB(우클릭), 도구질은 LMB(좌클릭). 선물(G)·바·매대(F)는 별개 키.
-	if facing_chest or facing_storehouse_chest:
+	if fishing != null:
+		# ★ [S3-T2] 릴 격투 진행 중 — 다른 프롬프트를 전부 덮는다(미니게임이 화면을 소유). 조작 안내만.
+		interact_prompt.visible = true
+		interact_prompt.text = "[좌클릭 홀드] 당기기 · [놓기] 풀기   (이동하면 그만둠)" if fishing.state == FishingSession.State.FIGHT \
+			else "%s — [좌클릭]으로 챈다" % fishing.state_label()
+	elif _can_cast():
+		# ★ [S3-T2 / ADR-0061 결정 9] 낚싯대를 들고 삼도천·황천해 물가를 겨눌 때: LMB = 캐스팅.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 낚싯줄 던지기"
+	elif facing_chest or facing_storehouse_chest:
 		# ★ Phase D/E 저장 상자를 바라볼 때: 우클릭으로 보관 패널을 연다(순수 보관 — 판매 아님).
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 저장 상자 (아이템 보관 · 판매 아님)"
@@ -7211,6 +7249,134 @@ func _use_tool() -> void:
 	if not free_verb:
 		energy.spend(cost)                    # ★ ADR-0059 결정3 — 과금 동사(괭이·물·낫·개간·급여)만 소모
 	queue_redraw()                            # 새 상태가 바로 보이도록
+
+# ── ★ [S3-T2 / ADR-0061 결정 2·6·9] 릴 격투 배선 ─────────────────────────────
+# main의 몫은 딱 넷이다: ①캐스팅 판정·입력 ②혼력 게이트(후킹) ③산출물 지급 ④그레이박스 HUD.
+# 격투 로직은 전부 FishingSession(fishing.gd)에 있고 main은 그 상태를 폴링만 한다 — 이 경계가
+# ADR-0061 결정 2의 핵심이다(main.gd 인라인 미니게임 금지 = 후속 미니게임의 구조 선례).
+
+# 지금 캐스팅 무대(삼도천·황천해)인가 — ADR-0061 결정 9(기타 수면은 이번 슬라이스에서 비캐스팅).
+func _is_fishing_region() -> bool:
+	return _region in FISHING_REGIONS
+
+# 이 조준 칸으로 던질 수 있는 물 칸(못 던지면 (-1,-1)). 두 갈래다:
+#   ㉠ 조준 칸이 바로 물(WATER) — 잔교·부두 위, 백사장 물가.
+#   ㉡ 조준 칸이 강둑 단차(CLIFF_BANK)면 **같은 방향 한 칸 더** 본다 — 삼도천 북안 물가 산책로
+#      (강 낚시터 라벨 자리 y28)는 둑(y29) 너머에 물(y30)이 있어, 물가에 서서 둑 너머로 던지는
+#      게 자연스러운 낚시 문법이다. 다른 SOLID(벽·절벽·나무)는 안 뚫는다(강둑 한정).
+func _cast_water_tile(t: Vector2i) -> Vector2i:
+	const NONE := Vector2i(-1, -1)
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
+		return NONE
+	if _grid[t.y][t.x] == WATER:
+		return t
+	if _grid[t.y][t.x] != CLIFF_BANK:
+		return NONE
+	var dir := t - _player_tile()
+	if dir == Vector2i.ZERO:
+		return NONE
+	var beyond := t + dir
+	if beyond.x < 0 or beyond.x >= _grid_w or beyond.y < 0 or beyond.y >= _outdoor_h:
+		return NONE
+	return beyond if _grid[beyond.y][beyond.x] == WATER else NONE
+
+# 캐스팅 조건: 세션 없음 + 낚싯대를 들었음 + 캐스팅 무대 + 겨눈 칸에서 물이 잡힘(ADR-0061 결정 2 입력 배선).
+# ★ 혼력은 여기서 안 본다 — 캐스팅·대기 = 혼력 0이고(결정 6), 소모는 후킹 순간뿐이다.
+func _can_cast() -> bool:
+	if fishing != null or _indoor != "" or not _is_fishing_region():
+		return false
+	if inventory == null or inventory.selected_id() != ItemCatalog.ROD_T1:
+		return false
+	return _cast_water_tile(_target) != Vector2i(-1, -1)
+
+# 체급 추첨(그레이박스 — ★[S3-T3 fish_catalog 절기·시간·장소 테이블로 교체]).
+func _roll_fish_class(seed_value: int) -> int:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value ^ 0x5f3a7c1d
+	var r := rng.randf()
+	for i in FISH_CLASS_CUTS.size():
+		if r < float(FISH_CLASS_CUTS[i]):
+			return i
+	return FishingSession.WeightClass.LEGEND
+
+# 캐스팅 시작. 시드 = (날짜·물칸·시각·캐스팅 일련번호) 파생 — 결정적 롤 관례(유품 발굴·재점령과 같은 결)
+# 이되 일련번호를 섞어 같은 분·같은 칸 반복 캐스팅이 같은 어종으로 굳지 않게 한다.
+func _start_fishing(water: Vector2i) -> void:
+	if water == Vector2i(-1, -1):
+		return
+	_cast_serial += 1
+	var s := clock.day * 100003 + water.x * 397 + water.y * 31 + int(clock.minutes) * 7 + _cast_serial
+	fishing = FishingSession.new(s, {"weight_class": _roll_fish_class(s)}, FishingSession.ROD_T1,
+		{"energy_factor": FISHING_ENERGY_FACTOR})   # ★ 기어·스킬 보정은 전부 중립(S3-T4/T6이 채움)
+	fishing.hook_gate = _fishing_hook_gate
+	fishing.cast()
+	player.face_toward(_target_center_px(water))
+	audio.sfx("water")
+	queue_redraw()
+
+# ★ 후킹 게이트(FishingSession에 주입) — 이 세션에서 혼력이 나가는 유일한 순간(ADR-0061 결정 6:
+#   소 4·중 8·대 14·전설 30). 못 내면 false → 세션은 "입질 놓침"으로 끝난다(후킹 불가). 낸 뒤엔
+#   줄이 끊겨도 환불 없다(리스크 — 결정 6 "줄 끊김이어도 소모 유지"). 낚시 스킬 절감은 세션이
+#   energy_factor로 이미 먹였다(FISHING_ENERGY_FACTOR = 지금 중립, S3-T6에서 실효).
+func _fishing_hook_gate() -> bool:
+	if fishing == null:
+		return false
+	var cost := fishing.energy_cost()
+	return energy.spend(cost) if energy.can_act(cost) else false
+
+# 세션 1프레임 진행 — 이동 입력이면 취소(스타듀 문법: 낚시 중엔 자리를 지킨다), 아니면 LMB 홀드 = 당김.
+func _tick_fishing(delta: float) -> void:
+	if fishing == null:
+		return
+	if Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down") != Vector2.ZERO:
+		fishing = null
+		_notice("낚시를 그만뒀다")
+		queue_redraw()
+		return
+	fishing.tick(delta, Input.is_action_pressed("use_tool"))
+	if fishing.is_finished():
+		_finish_fishing()
+	queue_redraw()   # 텐션·스태미나 바가 매 프레임 흐르게
+
+# 결착 수확 — 포획이면 어획물 1개 지급(★[S3-T3 fish_catalog로 교체] 체급 스텁), 아니면 실패 안내.
+# 세션은 여기서 버려진다(비영속 — 세이브 무간섭).
+func _finish_fishing() -> void:
+	if fishing == null:
+		return
+	var res := fishing.result()
+	fishing = null
+	if bool(res["landed"]):
+		var fish_id := ItemCatalog.fish_for_class(int(res["weight_class"]))
+		inventory.add_item(fish_id, 1)
+		_toast_item(fish_id, 1)
+		var perfects := int(res["perfect_count"])
+		# ★ perfect_count는 품질 산정 재료다 — 등급 매핑(퍼펙트 → 은/금/이리듐)은 S3-T3 소관이라
+		#   지금은 안내 문구로만 노출한다(그레이박스에서 크리가 보이게).
+		_notice("%s 를 낚았다!%s" % [ItemCatalog.name_of(fish_id),
+			"" if perfects == 0 else " 퍼펙트 릴 ×%d" % perfects])
+		audio.sfx("harvest")
+	elif bool(res["hook_refused"]):
+		_notice("혼력이 모자라 챌 수 없었다 — 입질을 놓쳤다 (필요 %d)" % int(res["energy_cost"]))
+	elif bool(res["line_broke_by_class"]):
+		_notice("줄이 끊겼다! 낡은 낚싯대로는 버거운 놈이다 (혼력 %d 소모)" % int(res["energy_cost"]))
+		audio.sfx("ui")
+	elif bool(res["line_broke"]):
+		_notice("줄이 끊겼다 — 너무 세게 당겼다 (혼력 %d 소모)" % int(res["energy_cost"]))
+		audio.sfx("ui")
+	else:
+		_notice("입질을 놓쳤다")
+	queue_redraw()
+
+# ★[S3-T2 임시 지급 경로 — ★[S3-T5에서 뱃사공 증정으로 교체]] 캐스팅 무대(삼도천·황천해)에 들어설 때
+#   T1 낚싯대가 없으면 자동 지급한다. ADR-0061 결정 4는 "T1 = 뱃사공 첫 대화 증정"이지만 뱃사공
+#   Resident 등록이 S3-T5라, 그때까지 루프가 시작조차 못 하는 걸 막는 디버그 겸 그레이박스 경로다.
+#   S3-T5가 붙으면 이 호출을 지우고 증정 대사로 옮긴다(아이템·인벤 경로는 그대로 재사용).
+func _grant_starter_rod() -> void:
+	if inventory == null or inventory.has_item(ItemCatalog.ROD_T1):
+		return
+	inventory.add_item(ItemCatalog.ROD_T1, 1)
+	_toast_item(ItemCatalog.ROD_T1, 1)
+	_notice("낡은 낚싯대를 얻었다 — 물가를 겨누고 좌클릭으로 던져 보자")
 
 # ── ★ [S1R-T9] 저승 스프링클러 설치/철거/구매 ─────────────────────────────────
 # 이 칸에 스프링클러를 설치할 수 있는가(⑤ 기존 배치 규칙 준수). 안식 농원 전용·빈 지면(GROUND) 또는
@@ -9013,6 +9179,7 @@ func _draw() -> void:
 			_draw_customers()
 			_draw_night_customers()
 			_draw_jobgui()
+	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
 	if _edit_mode:          # ★ ADR-0025 ① 배치 모드 오버레이(선택·마우스 칸·팔레트 고스트)
 		_draw_edit_overlay()
 	if _deco_mode:          # ★ [S1-9] 집 꾸미기 모드 오버레이(마우스 칸·팔레트 고스트)
@@ -9026,6 +9193,69 @@ func _draw() -> void:
 # 손님·잡귀 그리기와 같은 결(노드 생성·해제 없이 main이 직접). 침대(32×64)는 1×2칸을 덮고,
 # 나머지(32×32)는 한 칸을 채운다(ADR-0013 native). PROP_LAYOUT 순서대로
 # 그려 선반(뒷벽)→카운터→스툴이 자연스레 겹친다.
+# ★ [S3-T2 / ADR-0061 결정 10] 릴 격투 그레이박스 HUD — 플레이어 머리 위 도형 게이지.
+# **예쁨보다 판독성**(스타듀 문법 스킨은 S3-T10). main.gd는 _draw에서 텍스트를 안 쓰는 관례라
+# (문구는 전부 Label 노드 — 여기선 interact_prompt가 상태·조작을 글로 낸다) 순수 도형만 그린다.
+#   ① 텐션 바 — 마지막 20%가 붉은 띠(끊김 임계). 채움 색이 초록→노랑→빨강으로 넘어간다.
+#   ② 물고기 스태미나 바 — 0이면 포획.
+#   ③ 거리 트랙 — 마커가 왼쪽(내 손)에 닿아도 포획.
+#   ④ 발버둥 텔레그래프(느낌표) / 발버둥 중 붉은 테 — "읽고 대응"(ADR-0030 발버둥 읽기).
+#   ⑤ 퍼펙트 릴 창(초록 테) / 성공 플래시(흰 굵은 테) + 누적 눈금.
+func _draw_fishing_hud() -> void:
+	if fishing == null or player == null:
+		return
+	const W := 112.0
+	const H := 38.0
+	var org: Vector2 = player.global_position + Vector2(-W * 0.5, -92.0)
+	draw_rect(Rect2(org, Vector2(W, H)), Color(0.08, 0.09, 0.12, 0.82))
+	draw_rect(Rect2(org, Vector2(W, H)), Color(0.85, 0.82, 0.70, 0.55), false, 1.0)
+	if fishing.state != FishingSession.State.FIGHT:
+		# 격투 전(던지는 중·입질 대기·입질 창) — 한 줄 램프. 입질이면 붉게 차 "지금 채라"를 알린다.
+		var lamp := Rect2(org + Vector2(6.0, H * 0.5 - 5.0), Vector2(W - 12.0, 10.0))
+		draw_rect(lamp, Color(0.16, 0.18, 0.22))
+		var bite := fishing.state == FishingSession.State.BITE
+		draw_rect(lamp.grow(-1.0), Color(0.95, 0.30, 0.25) if bite else Color(0.32, 0.38, 0.46))
+		draw_rect(lamp, Color(0.05, 0.05, 0.06), false, 1.0)
+		return
+	# ① 텐션 바(끊김 임계 붉은 띠 = 마지막 20%)
+	var tb := Rect2(org + Vector2(6.0, 6.0), Vector2(W - 12.0, 9.0))
+	draw_rect(tb, Color(0.16, 0.18, 0.22))
+	draw_rect(Rect2(tb.position + Vector2(tb.size.x * 0.8, 0.0), Vector2(tb.size.x * 0.2, tb.size.y)),
+		Color(0.45, 0.12, 0.12))
+	var tr := fishing.tension_ratio()
+	var tcol := Color(0.35, 0.78, 0.45)
+	if tr >= 0.8:
+		tcol = Color(0.95, 0.30, 0.25)
+	elif tr >= 0.6:
+		tcol = Color(0.92, 0.78, 0.30)
+	draw_rect(Rect2(tb.position, Vector2(tb.size.x * tr, tb.size.y)), tcol)
+	draw_rect(tb, Color(0.05, 0.05, 0.06), false, 1.0)
+	# ② 물고기 스태미나 바
+	var sb := Rect2(org + Vector2(6.0, 18.0), Vector2(W - 12.0, 7.0))
+	draw_rect(sb, Color(0.16, 0.18, 0.22))
+	draw_rect(Rect2(sb.position, Vector2(sb.size.x * fishing.stamina_ratio(), sb.size.y)),
+		Color(0.42, 0.62, 0.88))
+	draw_rect(sb, Color(0.05, 0.05, 0.06), false, 1.0)
+	# ③ 거리 트랙(왼쪽 = 내 손 · 오른쪽 = 먼 물속)
+	var db := Rect2(org + Vector2(6.0, 29.0), Vector2(W - 12.0, 4.0))
+	draw_rect(db, Color(0.16, 0.18, 0.22))
+	var mx := db.position.x + db.size.x * fishing.distance_ratio()
+	draw_rect(Rect2(Vector2(mx - 2.0, db.position.y - 2.0), Vector2(4.0, 8.0)), Color(0.95, 0.85, 0.45))
+	# ④ 발버둥 텔레그래프(느낌표) / 발버둥 중(붉은 테)
+	if fishing.is_telegraphing():
+		var ex := org + Vector2(W + 6.0, 4.0)
+		draw_rect(Rect2(ex, Vector2(4.0, 14.0)), Color(0.98, 0.80, 0.25))
+		draw_rect(Rect2(ex + Vector2(0.0, 18.0), Vector2(4.0, 4.0)), Color(0.98, 0.80, 0.25))
+	if fishing.is_bursting():
+		draw_rect(Rect2(org - Vector2(2.0, 2.0), Vector2(W + 4.0, H + 4.0)), Color(0.95, 0.28, 0.24), false, 2.0)
+	# ⑤ 퍼펙트 릴 창(초록 테) / 성공 플래시(흰 굵은 테) / 누적 눈금
+	if fishing.is_perfect_window():
+		draw_rect(Rect2(org - Vector2(4.0, 4.0), Vector2(W + 8.0, H + 8.0)), Color(0.40, 0.95, 0.55), false, 1.0)
+	if fishing.perfect_flash():
+		draw_rect(Rect2(org - Vector2(5.0, 5.0), Vector2(W + 10.0, H + 10.0)), Color(1.0, 1.0, 1.0, 0.9), false, 3.0)
+	for i in mini(fishing.perfect_count, 8):
+		draw_rect(Rect2(org + Vector2(6.0 + i * 7.0, H + 3.0), Vector2(5.0, 3.0)), Color(0.40, 0.95, 0.55))
+
 func _draw_crops() -> void:
 	for t in farm.planted_tiles():
 		var crop_id := farm.crop_of(t)
