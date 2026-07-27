@@ -105,7 +105,10 @@ func _initialize() -> void:
 	var n0: int = m.inventory.count_of(SF)
 	m._pick_flower(tile)
 	_check("⑥ 따기 후 채집물(피안화) +1", m.inventory.count_of(SF) == n0 + 1)
-	_check("⑥ 채집 XP 적립(기준가만큼)", m._foraging_xp == xp0 + ItemCatalog.price_of(SF))
+	# ★[S4-T2 / ADR-0062 결정 8] XP 축 전환: 기준가 기반 → **행위 고정 7**(ForageSkill.PICK_XP).
+	#   비싼 종을 주우면 더 배우는 옛 방식은 판매가 축을 스킬 곡선에 흘리는 누수였다(ADR-0052 §1).
+	_check("⑥ 채집 XP 적립(줍기 고정 %d)" % ForageSkill.PICK_XP,
+		m._foraging_xp == xp0 + ForageSkill.PICK_XP)
 	_check("⑥ 혼력 소모 없음(줍기=혼력0)", m.energy.current == e0)
 	_check("⑥ 딴 자리 비-폄(노드 상태 반영)", not m.flower.is_bloomed(tile))
 

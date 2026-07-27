@@ -6722,14 +6722,16 @@ func _gain_farm_xp(amount: int) -> void:
 		notice_feed.push("숙련 ▲ 농사 Lv %d" % after, 4.0, false, null, true)  # gold=금박 강조
 		audio.sfx("ui")
 
-# ★ ADR-0052 그레이박스 — 채집 XP 적립 + 레벨업 감지(_gain_farm_xp 대칭). 라이브 채집 루프(숲·
-# 야생씨앗)가 붙으면 그 산출 지점에서 호출(현재 프레임워크 우선이라 소스 미배선 — 테스트가 직접 구동).
+# ★ ADR-0052 그레이박스 — 채집 XP 적립 + 레벨업 감지(_gain_farm_xp 대칭). 소스 = 꽃 패치 손수확·
+# 숲 빈터 줍기(둘 다 ForageSkill.PICK_XP 고정 — S4-T2에서 기준가 방식을 걷어냈다).
+# ★[S4-T2] 곡선 조회가 FarmSkill 직접 호출에서 ForageSkill 위임으로 바뀐다(값은 동일 — ForageSkill이
+#   그 곡선에 다시 위임하므로. 바뀌는 건 "채집 곡선을 누구에게 묻나"라는 단일 출처뿐이다).
 func _gain_forage_xp(amount: int) -> void:
 	if amount <= 0:
 		return
-	var before := FarmSkill.level_for_xp(_foraging_xp)
+	var before := ForageSkill.level_for_xp(_foraging_xp)
 	_foraging_xp += amount
-	var after := FarmSkill.level_for_xp(_foraging_xp)
+	var after := ForageSkill.level_for_xp(_foraging_xp)
 	if after > before and notice_feed != null:
 		notice_feed.push("숙련 ▲ 채집 Lv %d" % after, 4.0, false, null, true)
 		audio.sfx("ui")
@@ -6752,7 +6754,7 @@ func _gain_fishing_xp(amount: int) -> void:
 func _skill_level(skill: String) -> int:
 	match skill:
 		ProfessionCatalog.FARMING: return FarmSkill.level_for_xp(_farming_xp)
-		ProfessionCatalog.FORAGING: return FarmSkill.level_for_xp(_foraging_xp)
+		ProfessionCatalog.FORAGING: return ForageSkill.level_for_xp(_foraging_xp)   # ★[S4-T2]
 		ProfessionCatalog.FISHING: return FishSkill.level_for_xp(_fishing_xp)   # ★[S3-T6]
 		_: return 0
 
@@ -6816,11 +6818,48 @@ func _perk_value(skill: String, dim: String, default_val: float) -> float:
 	return best
 
 # 편의 조회(채집 파일럿) — 라이브 루프가 호출할 인터페이스. 약초학자 → Q_IRIDIUM, 채집꾼 → 0.20 등.
+# ★[S4-T2 / ADR-0062 결정 8] 시그니처는 그대로 두고 **해석만 ForageSkill로 이관**했다(호출부 무변경).
+#   main은 "이 세이브가 어떤 퍼크를 가졌나"(_perk_value)만 알고, 그 float의 *의미*는 스킬 파일이 안다.
 func forage_quality_floor() -> int:
-	return int(_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_QUALITY_FLOOR, 0.0))
+	return ForageSkill.quality_floor(
+		_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_QUALITY_FLOOR, 0.0))
 
 func forage_double_drop_chance() -> float:
-	return _perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_DOUBLE_DROP, 0.0)
+	return ForageSkill.double_drop_chance(
+		_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_DOUBLE_DROP, 0.0))
+
+# ── ★[S4-T2 / ADR-0062 결정 8] 채집 퍼크 조회 3종 — 표적(벌목·수액)이 아직 없어 **지금은 아무도 안
+#   부른다**(실배선은 S4-T3 벌목 · S4-T6 수액 소관). FishSkill의 덫꾼 갈래 3종 선례와 정확히 같은
+#   자리다 — 퍼크 데이터(ADR-0052)는 잠겼고 여기 세 줄이 그 소비 접점이다.
+func forage_wood_bonus() -> int:        # 감지자(lvl5) — 벌목 원목 +1
+	return ForageSkill.wood_bonus(
+		_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_WOOD_BONUS, 0.0))
+
+func forage_hardwood_chance() -> float: # 벌목꾼(lvl10) — 모든 나무에서 단단한 원목 확률
+	return ForageSkill.hardwood_chance(
+		_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_HARDWOOD, 0.0))
+
+func forage_tap_quality() -> int:       # 수액꾼(lvl10) — 수액 등급 계단 +1
+	return ForageSkill.tap_quality(
+		_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_TAP_QUALITY, 0.0))
+
+# ── ★[S4-T2] 혼 감지(base lvl3+) · 추적자 퍼크 ────────────────────────────────
+# 지금 감지 반경(칸). 0 = 감지 없음 · ForageSkill.DETECT_RANGE_ALL(-1) = 구역 전체(감지자 퍼크).
+func forage_detect_radius() -> int:
+	return ForageSkill.detect_radius(_skill_level(ProfessionCatalog.FORAGING),
+		_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_DETECT, 0.0))
+
+# 추적자(lvl10) — 화면 안 채집물 칸 하이라이트 화살표 여부.
+func forage_track_enabled() -> bool:
+	return _perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_TRACK, 0.0) > 0.0
+
+# 지금 감지 중인 채집물 칸(ForageSkill.NO_TARGET = 없음). 드로우·테스트의 단일 판정 지점 —
+# "무엇을 가리키나"를 렌더가 아니라 여기서 정하므로 헤드리스가 마커 로직을 그대로 검증한다.
+func forage_detect_target() -> Vector2i:
+	if forage_spawns == null or player == null or _indoor != "":
+		return ForageSkill.NO_TARGET
+	return ForageSkill.nearest_forage(_player_tile(), forage_spawns.tiles(_region),
+		forage_detect_radius())
 
 # ── ★[S3-T6 / ADR-0061 결정 6] 낚시 전문직 편의 조회(채집 파일럿과 같은 결) ──────────
 # ① 낚시꾼(lvl5) — 어획 등급 판정 축 상향. 퀄리티 보버(태클)와 **같은 축**이라 캐스팅 보정에 합산된다.
@@ -6847,15 +6886,12 @@ func crab_pot_no_junk() -> bool:         # 뱃사람(lvl10) — 잡동사니 배
 func crab_pot_bait_free() -> bool:       # 미끼장인(lvl10) — 미끼 불필요
 	return _perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_TRAP_NO_BAIT, 0.0) > 0.0
 
-# ★ ADR-0052 채집물 기본 품질(채집 레벨 → 등급). 스타듀 결(레벨이 오를수록 상위 등급) 결정적 그레이박스
-#   버전: L0~3 일반 / L4~6 은 / L7+ 금. 이리듐(최고)은 base로 안 나오고 약초학자 전문직 하한으로만
-#   닿는다(ADR-0052 §채집 "약초학자 → 이리듐 고정" — 퍼크가 의미를 갖게). _pick_flower가 하한과 max.
+# ★ ADR-0052 채집물 기본 품질(채집 레벨 → 등급). L0~3 일반 / L4~6 은 / L7+ 금. 이리듐(최고)은 base로
+#   안 나오고 약초학자 전문직 하한으로만 닿는다. _pick_flower·_pick_forage가 하한과 max.
+# ★[S4-T2] 계단 자체는 ForageSkill.base_quality로 이관(계단 수치의 단일 출처). 시그니처는 유지 —
+#   기존 호출부(_pick_flower·_pick_forage·flower_patch_test·forage_spawn_test)가 그대로 돈다.
 func _forage_base_quality(level: int) -> int:
-	if level >= 7:
-		return ItemCatalog.Q_GOLD
-	if level >= 4:
-		return ItemCatalog.Q_SILVER
-	return ItemCatalog.Q_NORMAL
+	return ForageSkill.base_quality(level)
 
 # 세이브 직렬화 — _professions를 {skill: {tier: id}} 그대로(var_to_str가 중첩 dict/int키 왕복). 로드 시
 # 카탈로그로 재검증해 손상/구버전 잔여를 버린다(유효 전문직만 복원, tier/부모 정합).
@@ -8204,7 +8240,9 @@ func _pick_flower(tile: Vector2i) -> void:
 		count = 2
 	inventory.add_item(ItemCatalog.SPIRIT_FLOWER, count, quality)
 	_toast_item(ItemCatalog.SPIRIT_FLOWER, count)   # ★ Phase C 획득 토스트
-	_gain_forage_xp(ItemCatalog.price_of(ItemCatalog.SPIRIT_FLOWER))  # ★ 채집 XP(기준가 기반, 수확=farm XP 결)+레벨업 감지
+	# ★[S4-T2 / ADR-0062 결정 8] 채집 XP = **줍기 고정 7**(옛 기준가 방식 폐기 — 비싼 종을 주우면 더
+	#   배우는 구조는 판매가 축을 스킬 곡선에 흘리는 누수였다). 숲 줍기(_pick_forage)와 정확히 같은 값.
+	_gain_forage_xp(ForageSkill.PICK_XP)
 	audio.sfx("harvest")                      # 채집도 밝은 팝(수확 결)
 	# ★ 혼력 소모 없음(ADR-0033 #1) · 온보딩은 농사 동사 체인이라 여긴 안 건드림. queue_redraw로 새 상태 반영.
 	queue_redraw()
@@ -8213,8 +8251,6 @@ func _pick_flower(tile: Vector2i) -> void:
 #   XP·SFX·혼력 0 전부 같은 사슬). 다른 건 셋뿐: ① 종이 칸마다 다르다(원장이 소유) ② 다구역이다
 #   (저승 숲·미혹의 숲) ③ 주운 자리는 재생이 아니라 **사라진다**(다음 판은 advance_day가 다시 깐다 —
 #   고정 패치가 아니라 매일 굴러 나오는 스폰이라 "그 자리"라는 개념이 없다).
-# ★ XP는 기존 `_gain_forage_xp(기준가)` 방식 그대로다 — 고정 XP 테이블(줍기 7 등, ADR-0062 결정 8)
-#   전환은 S4-T2(ForageSkill) 소관이라 여기서 축을 바꾸지 않는다(회귀면 최소).
 func _pick_forage(tile: Vector2i) -> void:
 	var species := forage_spawns.pick(_region, tile)
 	if species == "":
@@ -8228,7 +8264,7 @@ func _pick_forage(tile: Vector2i) -> void:
 		count = 2
 	inventory.add_item(species, count, quality)
 	_toast_item(species, count)
-	_gain_forage_xp(ItemCatalog.price_of(species))   # ★ 채집 XP(기준가 기반 — 꽃 패치와 같은 사슬)
+	_gain_forage_xp(ForageSkill.PICK_XP)   # ★[S4-T2] 줍기 고정 7 — 종·가격 무관(꽃 패치와 같은 값)
 	audio.sfx("harvest")
 	queue_redraw()
 
@@ -10147,6 +10183,7 @@ func _draw() -> void:
 			_draw_customers()
 			_draw_night_customers()
 			_draw_jobgui()
+	_draw_forage_detect()   # ★[S4-T2] 혼 감지 가장자리 여우불 + 추적자 ▼(대상 없으면 무동작 — 구역 무관)
 	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
 	if _edit_mode:          # ★ ADR-0025 ① 배치 모드 오버레이(선택·마우스 칸·팔레트 고스트)
 		_draw_edit_overlay()
@@ -10424,6 +10461,59 @@ func _draw_forage_spawns() -> void:
 		draw_line(px + Vector2(TILE * 0.58, TILE * 0.78), px + Vector2(TILE * 0.58, TILE * 0.60), Color(0.28, 0.44, 0.26), 2.0)
 		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.17, col)
 		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.17, Color(0.08, 0.06, 0.10, 0.75), false, 1.0)
+
+# ★[S4-T2 / ADR-0062 결정 8] 혼 감지(base lvl3+) 가장자리 여우불 마커 + 추적자(DIM_TRACK) ▼ 하이라이트.
+#   순수 시각 — "무엇을 가리키나"는 forage_detect_target()/forage_track_enabled()가 이미 정했고 여긴
+#   그걸 그리기만 한다(로직·렌더 분리 = 헤드리스가 마커 판정을 그대로 검증할 수 있는 이유).
+#   그레이박스: 여우불 = 청록 점 + 두 겹 훈. 아트(여우불 스프라이트)는 S4-T10 소관.
+#
+#   두 표시의 역할이 갈린다:
+#     ① 감지 마커 = **화면 밖** 최근접 대상 방향(안 보이는 것을 가리킨다 — 화면 안이면 안 뜬다)
+#     ② 추적자 ▼ = **화면 안** 채집물 전부(보이는 것을 놓치지 않게 — CONTEXT "길 잃음"의 반대편 편의)
+const _FDET_MARGIN := 14.0                          # 화면 가장자리에서 안으로 들인 여백(마커 중심선)
+const _FDET_GLOW := Color(0.42, 0.92, 0.88, 0.28)   # 여우불 훈(바깥 — 청록 저승 팔레트)
+const _FDET_CORE := Color(0.62, 1.00, 0.94, 0.92)   # 여우불 심지(안 — 가장 밝은 점)
+func _draw_forage_detect() -> void:
+	if forage_spawns == null or player == null or _indoor != "":
+		return
+	var view := _forage_view_rect()
+	# ① 추적자 — 화면 안 채집물 전부에 ▼(대상 하나가 아니라 보이는 전부. 퍼크의 문구가 "위치 표시"다).
+	if forage_track_enabled():
+		for t: Vector2i in forage_spawns.tiles(_region):
+			var c := Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
+			if view.has_point(c):
+				_draw_forage_track_arrow(c)
+	# ② 혼 감지 — 최근접 대상이 화면 밖일 때만 가장자리에 여우불을 앉힌다.
+	var target := forage_detect_target()
+	if target == ForageSkill.NO_TARGET:
+		return
+	var tp := Vector2(target.x * TILE + TILE * 0.5, target.y * TILE + TILE * 0.5)
+	if view.has_point(tp):
+		return   # 이미 눈에 든다 — 마커는 "안 보이는 것"만 가리킨다(화면 중앙 잡동사니 방지)
+	var inner := view.grow(-_FDET_MARGIN)
+	var px := Vector2(clampf(tp.x, inner.position.x, inner.end.x),
+		clampf(tp.y, inner.position.y, inner.end.y))
+	draw_circle(px, 7.0, _FDET_GLOW)
+	draw_circle(px, 4.0, Color(_FDET_GLOW.r, _FDET_GLOW.g, _FDET_GLOW.b, 0.55))
+	draw_circle(px, 2.0, _FDET_CORE)
+	# 대상 쪽으로 뻗는 짧은 꼬리 — 가장자리 어디에 앉았는지만으로는 모호한 방향을 못 박는다.
+	var dir := (tp - px).normalized()
+	draw_line(px + dir * 4.0, px + dir * 9.0, _FDET_CORE, 1.0)
+
+# 추적자 ▼ 한 개(칸 바로 위 금박 대신 여우불 심지색 삼각 — 채집물 색점과 안 섞이게 위쪽에 띄운다).
+func _draw_forage_track_arrow(center: Vector2) -> void:
+	var top := center + Vector2(0.0, -TILE * 0.74)
+	var pts := PackedVector2Array([top + Vector2(-4.0, 0.0), top + Vector2(4.0, 0.0), top + Vector2(0.0, 6.0)])
+	draw_colored_polygon(pts, _FDET_CORE)
+	draw_polyline(PackedVector2Array([pts[0], pts[1], pts[2], pts[0]]), Color(0.08, 0.06, 0.10, 0.8), 1.0)
+
+# 지금 카메라가 비추는 월드 rect(px). 카메라가 없으면(부팅 전·테스트) 플레이어 중심 폴백.
+func _forage_view_rect() -> Rect2:
+	var vp := get_viewport_rect().size
+	var zoom := _cam.zoom if _cam != null else Vector2.ONE
+	var size := Vector2(vp.x / maxf(zoom.x, 0.01), vp.y / maxf(zoom.y, 0.01))
+	var center := _cam.get_screen_center_position() if _cam != null else player.global_position
+	return Rect2(center - size * 0.5, size)
 
 # 종 id → 그레이박스 색(해시 파생 — 채도·명도는 저승 팔레트 안에 가둔다). 아트가 들어오면 이 함수와
 # 위 렌더가 통째로 스프라이트 blit으로 교체된다(S4-T10).

@@ -290,7 +290,9 @@ func _run_checks() -> void:
 		m.inventory.count_of(ItemCatalog.NEOK_SONGI) - inv_before >= 1)
 	_check("⑧b 원장에서 그 칸 제거(자리는 재생 아니라 소멸)",
 		not m.forage_spawns.has_at(FOREST, spot) and m.forage_spawns.total() == 0)
-	_check("⑧c 채집 XP 획득(기준가 기반 — 꽃 패치와 같은 사슬)", m._foraging_xp == ItemCatalog.price_of(ItemCatalog.NEOK_SONGI))
+	# ★[S4-T2] 고정 XP 테이블 전환 — 종·가격 무관하게 줍기 7(꽃 패치와 정확히 같은 값).
+	_check("⑧c 채집 XP 획득(줍기 고정 %d — 꽃 패치와 같은 사슬)" % ForageSkill.PICK_XP,
+		m._foraging_xp == ForageSkill.PICK_XP)
 	_check("⑧d 없는 칸 줍기 = 무동작(방어)", m.forage_spawns.pick(FOREST, spot) == "")
 
 	# ⑦ 품질 롤 범위(레벨 → 등급 · 0..3 밖 없음).
