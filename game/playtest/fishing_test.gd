@@ -37,6 +37,40 @@ func _run_holding(sess: FishingSession, secs_cap := 30.0, step := 0.05) -> Array
 			seen.append(sess.state)
 	return seen
 
+# ★[S3-T4] 안전 리듬 조작기 — 텐션이 안전선 아래이고 발버둥이 아닐 때만 당긴다(플레이어가 배우는
+# "당기고 풀기"의 최소 지능형 재현). 체급 게이트를 넘긴 대어를 실제로 건져 올릴 수 있는지 볼 때 쓴다.
+func _run_smart(sess: FishingSession, safe := 50.0, secs_cap := 45.0, step := 0.05) -> void:
+	var t := 0.0
+	while sess.is_active() and t < secs_cap:
+		var reeling: bool = sess.state == FishingSession.State.BITE \
+			or (sess.state == FishingSession.State.FIGHT and sess.tension < safe and not sess.is_bursting())
+		sess.tick(step, reeling)
+		t += step
+
+# ★[S3-T4] 입질(BITE)까지 걸린 시간(초). 미끼의 대기 단축을 계측한다(같은 시드끼리만 비교할 것).
+func _secs_to_bite(sess: FishingSession, secs_cap := 30.0, step := 0.05) -> float:
+	sess.cast()
+	var t := 0.0
+	while sess.is_active() and sess.state != FishingSession.State.BITE and t < secs_cap:
+		sess.tick(step, false)
+		t += step
+	return sess.elapsed
+
+# ★[S3-T4] 격투에서 n틱 동안 계속 당겼을 때의 텐션(끊김 전 구간만 — 태클 감쇠의 직접 계측).
+func _tension_after_holding(sess: FishingSession, ticks: int, step := 0.05) -> float:
+	sess.cast()
+	_advance_to_fight(sess, 30.0, step)
+	for _i in ticks:
+		sess.tick(step, true)
+	return sess.tension
+
+# ★[S3-T4] 인벤토리 전체 비우기(기어 배선 검증 전용 — 슬롯 16칸 경합을 없애고 보유 상태를 통제한다).
+func _wipe_inventory(m: Node) -> void:
+	for i in range(m.inventory.slots.size()):
+		m.inventory.slots[i] = null
+	m.inventory.select(0)
+	m.inventory.changed.emit()
+
 # FIGHT 진입까지만 굴린다(그 뒤 격투 입력을 테스트가 직접 조종하려고). 실패 시 false.
 func _advance_to_fight(sess: FishingSession, secs_cap := 30.0, step := 0.05) -> bool:
 	var t := 0.0
@@ -257,6 +291,177 @@ func _initialize() -> void:
 	_check("ⓕ 다른 시드 = 다른 대기시간(시드가 실제로 먹힌다)",
 		not is_equal_approx(g1.elapsed, g2.elapsed))
 
+	# ══ ⓘ [S3-T4 / ADR-0061 결정 4] 기어 — 낚싯대 4티어·미끼 3·태클 3(순수 층) ══════════
+	var GC := GearCatalog
+	# ── ⓘ-1 로스터 계약(슬롯 규칙의 축) ──
+	_check("ⓘ1 로스터 = 낚싯대 4 · 미끼 3 · 태클 3",
+		GC.RODS.size() == 4 and GC.BAITS.size() == 3 and GC.TACKLES.size() == 3)
+	_check("ⓘ1 줄 강도 = 티어별 체급 상한(소·중·대·전설)",
+		GC.max_class_of(GC.ROD_T1) == WC.SMALL and GC.max_class_of(GC.ROD_T2) == WC.MEDIUM
+		and GC.max_class_of(GC.ROD_T3) == WC.LARGE and GC.max_class_of(GC.ROD_T4) == WC.LEGEND)
+	_check("ⓘ1 미끼 슬롯 = T1만 0(T2+ 부터 미끼)",
+		GC.bait_slots_of(GC.ROD_T1) == 0 and GC.bait_slots_of(GC.ROD_T2) == 1
+		and GC.bait_slots_of(GC.ROD_T3) == 1 and GC.bait_slots_of(GC.ROD_T4) == 1)
+	_check("ⓘ1 태클 슬롯 = 0·0·1·2(T3 하나 · T4 둘)",
+		GC.tackle_slots_of(GC.ROD_T1) == 0 and GC.tackle_slots_of(GC.ROD_T2) == 0
+		and GC.tackle_slots_of(GC.ROD_T3) == 1 and GC.tackle_slots_of(GC.ROD_T4) == 2)
+	_check("ⓘ1 가격 밴드 = T1 증정(0) · 500 · 2,000 · 7,500 결",
+		GC.price_of(GC.ROD_T1) == 0 and GC.price_of(GC.ROD_T2) == 500
+		and GC.price_of(GC.ROD_T3) == 2000 and GC.price_of(GC.ROD_T4) == 7500)
+	var gear_item_ok := true
+	for gid in [GC.ROD_T2, GC.ROD_T3, GC.ROD_T4, GC.TACKLE_CORK, GC.TACKLE_SINKER, GC.TACKLE_QUALITY]:
+		if not (ItemCatalog.has_item(gid) and ItemCatalog.category_of(gid) == ItemCatalog.CAT_TOOL
+				and not ItemCatalog.stackable_of(gid) and ItemCatalog.name_of(gid) != ""
+				and ItemCatalog.price_of(gid) == GC.price_of(gid)):
+			gear_item_ok = false
+	_check("ⓘ1 낚싯대·태클 = CAT_TOOL 유니크·매입가 위임(ItemCatalog 통용)", gear_item_ok)
+	var bait_item_ok := true
+	for bid in GC.BAITS:
+		if not (ItemCatalog.has_item(bid)
+				and ItemCatalog.category_of(bid) == ItemCatalog.CAT_CONSUMABLE
+				and ItemCatalog.stackable_of(bid) and ItemCatalog.price_of(bid) > 0):
+			bait_item_ok = false
+	_check("ⓘ1 미끼 3종 = CAT_CONSUMABLE 스택·유가(소모품 카테고리 첫 실사용)", bait_item_ok)
+
+	# ── ⓘ-2 슬롯 규칙(자동 적용·초과 무효·우선순위) ──
+	var all_tackle := [GC.TACKLE_QUALITY, GC.TACKLE_SINKER, GC.TACKLE_CORK]   # 보유 순서는 무관해야 한다
+	_check("ⓘ2 T1·T2 = 태클 슬롯 0(보유해도 적용 0)",
+		GC.active_tackles(GC.ROD_T1, all_tackle).is_empty()
+		and GC.active_tackles(GC.ROD_T2, all_tackle).is_empty())
+	_check("ⓘ2 T3 = 우선순위 상위 1개만(코르크)",
+		GC.active_tackles(GC.ROD_T3, all_tackle) == [GC.TACKLE_CORK])
+	_check("ⓘ2 T4 = 상위 2개(코르크+납추) · 초과분(퀄리티) 무효",
+		GC.active_tackles(GC.ROD_T4, all_tackle) == [GC.TACKLE_CORK, GC.TACKLE_SINKER])
+	_check("ⓘ2 같은 종 중복 보유는 한 번만 센다(서로 다른 종만)",
+		GC.active_tackles(GC.ROD_T4, [GC.TACKLE_CORK, GC.TACKLE_CORK]) == [GC.TACKLE_CORK])
+	_check("ⓘ2 미끼 자동 소모 우선순위 = 보장 > 유인 > 일반",
+		GC.active_bait(GC.ROD_T2, [GC.BAIT_BASIC, GC.BAIT_LURE, GC.BAIT_PLEDGE]) == GC.BAIT_PLEDGE
+		and GC.active_bait(GC.ROD_T2, [GC.BAIT_BASIC, GC.BAIT_LURE]) == GC.BAIT_LURE
+		and GC.active_bait(GC.ROD_T2, [GC.BAIT_BASIC]) == GC.BAIT_BASIC)
+	_check("ⓘ2 T1은 미끼 슬롯 0 = 보유해도 무소모(맨몸)",
+		GC.active_bait(GC.ROD_T1, [GC.BAIT_PLEDGE, GC.BAIT_BASIC]) == "")
+	_check("ⓘ2 미끼 잔량 0 = 맨몸(빈 문자열)", GC.active_bait(GC.ROD_T4, []) == "")
+
+	# ── ⓘ-3 주입 인터페이스가 정확히 중립인가(맨몸 = base, ADR-0008 "평평 ≠ 막힘") ──
+	_check("ⓘ3 T1 맨몸 rod_params = FishingSession.ROD_T1과 동일",
+		GC.rod_params(GC.ROD_T1) == FishingSession.ROD_T1)
+	var neutral_mods := GC.mods_for()
+	_check("ⓘ3 태클·미끼 0 = mods 정확히 중립(1.0/0.0)",
+		is_equal_approx(float(neutral_mods["energy_factor"]), 1.0)
+		and is_equal_approx(float(neutral_mods["burst_damp"]), 0.0)
+		and is_equal_approx(float(neutral_mods["wait_factor"]), 1.0)
+		and is_equal_approx(float(neutral_mods["perfect_window_add"]), 0.0))
+	_check("ⓘ3 태클 0 = 퀄리티 보정 0.0(중립)", is_equal_approx(GC.bobber_bonus_for([]), 0.0))
+	_check("ⓘ3 미끼 0 = 롤 보정 중립(시프트 0 · 보장 없음)",
+		is_equal_approx(GC.class_shift_for(""), 0.0) and GC.guarantee_cap_for("", GC.ROD_T4) == -1)
+	_check("ⓘ3 스킬 훅(extra)은 그대로 통과 — energy_factor 병합",
+		is_equal_approx(float(GC.mods_for([], "", {"energy_factor": 0.5})["energy_factor"]), 0.5))
+
+	# ── ⓘ-4 기어 효과의 방향성(같은 시드·같은 입력열에서 base와 비교) ──
+	# ㉠ 코르크 보버 = 텐션 상승 감쇠 → 같은 조건에서 끊김이 늦게 온다.
+	var cork_rod := GC.rod_params(GC.ROD_T3, [GC.TACKLE_CORK])
+	_check("ⓘ4pre 코르크 = 안전 여유 비율 0.15(무적 태클 방지 클램프 아래)",
+		is_equal_approx(float(cork_rod["tension_safe_bonus"]), 0.15))
+	var med := {"weight_class": WC.MEDIUM}
+	var base_break := FishingSession.new(4242, med, {"max_class": WC.MEDIUM})
+	base_break.cast()
+	_run_holding(base_break)
+	var cork_break := FishingSession.new(4242, med, GC.rod_params(GC.ROD_T3, [GC.TACKLE_CORK]))
+	cork_break.cast()
+	_run_holding(cork_break)
+	_check("ⓘ4 코르크 = 같은 시드에서 끊김 지연(%.2fs → %.2fs)" % [base_break.elapsed, cork_break.elapsed],
+		base_break.line_broke and cork_break.line_broke and cork_break.elapsed > base_break.elapsed)
+	# ㉡ 납추 = 발버둥 텐션 급등 완화 → 같은 틱 수에서 텐션이 낮다(발버둥 잦은 물고기로 격리 관찰).
+	var bursty := {"weight_class": WC.MEDIUM, "stamina": 999.0, "tension_rise": 10.0,
+		"burst_period": 0.4, "burst_len": 2.0, "burst_mult": 3.0}
+	var t_base := _tension_after_holding(
+		FishingSession.new(909, bursty, {"max_class": WC.MEDIUM}), 20)
+	var t_damp := _tension_after_holding(FishingSession.new(909, bursty, {"max_class": WC.MEDIUM},
+		GC.mods_for([GC.TACKLE_SINKER])), 20)
+	_check("ⓘ4 납추 = 발버둥 텐션 완화(%.1f → %.1f)" % [t_base, t_damp], t_damp < t_base)
+	_check("ⓘ4 납추 감쇠값 = 0.35(burst_mult에서 뺀다)",
+		is_equal_approx(float(GC.mods_for([GC.TACKLE_SINKER])["burst_damp"]), 0.35))
+	# ㉢ 퀄리티 보버 = 품질 분포 상향(등급 합 비교) — 다만 "품질 = 퍼펙트 릴" 축은 지켜야 한다.
+	var qb := GC.bobber_bonus_for([GC.TACKLE_QUALITY])
+	var q_plain := 0
+	var q_boost := 0
+	var gold_boost := 0
+	var rq1 := RandomNumberGenerator.new()
+	var rq2 := RandomNumberGenerator.new()
+	rq1.seed = 777
+	rq2.seed = 777
+	for _i in 2000:
+		q_plain += FishCatalog.quality_for(0, rq1, 0.0)
+		var qg := FishCatalog.quality_for(0, rq2, qb)
+		q_boost += qg
+		if qg >= ItemCatalog.Q_GOLD:
+			gold_boost += 1
+	_check("ⓘ4 퀄리티 보버 = 품질 분포 상향(등급 합 %d > %d)" % [q_boost, q_plain], q_boost > q_plain)
+	_check("ⓘ4 그래도 퍼펙트 0회 금+ 비율은 억제(%.2f < 0.35 — '품질 = 퍼펙트 릴' 축 보존)"
+		% (float(gold_boost) / 2000.0), float(gold_boost) / 2000.0 < 0.35)
+	# ㉣ 일반 미끼 = 입질 대기 −40%(같은 시드에서 BITE가 더 빨리 온다).
+	var wait_plain := _secs_to_bite(FishingSession.new(5150, {"weight_class": WC.SMALL}))
+	var wait_bait := _secs_to_bite(FishingSession.new(5150, {"weight_class": WC.SMALL}, {},
+		GC.mods_for([], GC.BAIT_BASIC)))
+	_check("ⓘ4 일반 미끼 = 입질 대기 단축(%.2fs → %.2fs)" % [wait_plain, wait_bait],
+		wait_bait < wait_plain and wait_bait > 0.0)
+	_check("ⓘ4 미끼 없는 캐스팅은 대기 배수 1.0(정확히 중립)",
+		is_equal_approx(_secs_to_bite(FishingSession.new(5150, {"weight_class": WC.SMALL})), wait_plain))
+	# ㉤ 유인 미끼 = 체급 가중이 상위로 한 계단(중·대 빈도↑). 망연절 강 저녁 = 소2·중2·대1 혼합 구간.
+	var shift_lure := GC.class_shift_for(GC.BAIT_LURE)
+	var big_plain := 0
+	var big_lure := 0
+	var rs1 := RandomNumberGenerator.new()
+	var rs2 := RandomNumberGenerator.new()
+	rs1.seed = 20260727
+	rs2.seed = 20260727
+	for _i in 3000:
+		if FishCatalog.weight_class_of(FishCatalog.roll_fish(
+				FishCatalog.HABITAT_RIVER, 2, FishCatalog.PHASE_EVENING, rs1)) >= WC.MEDIUM:
+			big_plain += 1
+		if FishCatalog.weight_class_of(FishCatalog.roll_fish(
+				FishCatalog.HABITAT_RIVER, 2, FishCatalog.PHASE_EVENING, rs2, shift_lure)) >= WC.MEDIUM:
+			big_lure += 1
+	_check("ⓘ4 유인 미끼 = 중·대 빈도 상승(%d → %d / 3,000)" % [big_plain, big_lure],
+		big_lure > big_plain * 2)
+	# ㉥ 보장 미끼 = 가용 종 중 (낚싯대 허용 체급 이하) 최고 체급 확정.
+	_check("ⓘ4pre 보장 상한 = 낚싯대 허용 체급(함정 방지 캡)",
+		GC.guarantee_cap_for(GC.BAIT_PLEDGE, GC.ROD_T2) == WC.MEDIUM
+		and GC.guarantee_cap_for(GC.BAIT_PLEDGE, GC.ROD_T3) == WC.LARGE)
+	var pledge_ok := true
+	var pledge_cap_ok := true
+	var rp := RandomNumberGenerator.new()
+	rp.seed = 4
+	for _i in 200:
+		var big_id := FishCatalog.roll_fish(FishCatalog.HABITAT_RIVER, 2,
+			FishCatalog.PHASE_EVENING, rp, 0.0, WC.LARGE)
+		if FishCatalog.weight_class_of(big_id) != WC.LARGE:
+			pledge_ok = false
+		var capped := FishCatalog.roll_fish(FishCatalog.HABITAT_RIVER, 2,
+			FishCatalog.PHASE_EVENING, rp, 0.0, WC.MEDIUM)
+		if FishCatalog.weight_class_of(capped) != WC.MEDIUM:
+			pledge_cap_ok = false
+	_check("ⓘ4 보장 미끼 = 200회 전부 최고 체급(대) 확정", pledge_ok)
+	_check("ⓘ4 보장 상한이 낚싯대를 넘지 않는다 — T2 캡이면 중 체급 확정(끊김 함정 방지)", pledge_cap_ok)
+
+	# ── ⓘ-5 체급 게이트 × 티어(줄 강도가 4티어의 존재 이유) ──
+	var large := {"weight_class": WC.LARGE}
+	var gate_t1 := FishingSession.new(2468, large, GC.rod_params(GC.ROD_T1))
+	gate_t1.cast()
+	_run_smart(gate_t1)
+	_check("ⓘ5 T1으로 대어 = 확정 끊김(줄 강도 부족)",
+		gate_t1.state == S.ESCAPED and gate_t1.line_broke_by_class)
+	var gate_t3 := FishingSession.new(2468, large, GC.rod_params(GC.ROD_T3))
+	gate_t3.cast()
+	_run_smart(gate_t3)
+	_check("ⓘ5 T3으로 같은 대어 = 게이트 통과 후 포획 성공(안전 리듬)",
+		not gate_t3.line_broke_by_class and gate_t3.state == S.LANDED)
+	var gate_t3_legend := FishingSession.new(2468, {"weight_class": WC.LEGEND},
+		GC.rod_params(GC.ROD_T3))
+	gate_t3_legend.cast()
+	_run_smart(gate_t3_legend)
+	_check("ⓘ5 T3으로 전설 = 여전히 끊김(T4 프레스티지의 자리)", gate_t3_legend.line_broke_by_class)
+
 	# ══ 여기부터 main 배선(ⓔ2·ⓖ·ⓗ) ══
 	const SAVE := "user://save.dat"
 	if FileAccess.file_exists(SAVE):
@@ -418,6 +623,104 @@ func _initialize() -> void:
 	m._use_tool()
 	_check("ⓗ5 회귀 — 안식 농원 괭이질 정상(밭 루프 불변)", m.farm.is_tilled(hoe_tile))
 	_check("ⓗ5 회귀 — 안식 농원은 여전히 비캐스팅", not m._can_cast())
+
+	# ══ ⓙ [S3-T4] main 기어 배선 — 든 낚싯대 티어 인식 · 미끼 자동 소모 · 태클 자동 적용 ══
+	# 인벤을 통째로 비우고(16칸 경합 제거) 보유 상태를 한 조합씩 만들어 캐스팅한다. 획득 경로는
+	# 아직 없으므로(★S3-T5 매대) 여기선 디버그 지급 = inventory.add_item이 곧 "샀다"다.
+	m._rebuild_region(RegionCatalog.SAMDOCHEON)
+	await _settle(m)
+	var cast_lane: Vector2i = m.SAMDO_FISHING_LABEL_TILE
+	var cast_bank: Vector2i = Vector2i(cast_lane.x, m.SAMDO_RIVER_BANK_Y)
+	var cast_water: Vector2i = Vector2i(cast_lane.x, m.SAMDO_RIVER_Y0)
+	_stand_and_aim(m, cast_lane, cast_bank)
+	m.energy.refill()
+
+	# ㉠ T1 = 미끼 슬롯 0 — 미끼를 들고 있어도 소모 0·효과 0.
+	_wipe_inventory(m)
+	_select(m, ItemCatalog.ROD_T1)
+	m.inventory.add_item(GearCatalog.BAIT_BASIC, 3)
+	m.fishing = null
+	m._start_fishing(cast_water)
+	_check("ⓙ1 T1 캐스팅 = 미끼 무소모(슬롯 0)",
+		m.inventory.count_of(GearCatalog.BAIT_BASIC) == 3 and m._cast_bait == "")
+	_check("ⓙ1 T1 주입 = 줄 강도 소 · 안전 여유 0 · 대기 배수 1.0",
+		int(m.fishing.rod["max_class"]) == WC.SMALL
+		and is_equal_approx(float(m.fishing.rod["tension_safe_bonus"]), 0.0)
+		and is_equal_approx(float(m.fishing.mods["wait_factor"]), 1.0))
+	m.fishing = null
+
+	# ㉡ T2 = 미끼 1개 자동 소모(강한 것부터) · 잔량 0이면 맨몸.
+	_wipe_inventory(m)
+	_select(m, ItemCatalog.ROD_T2)
+	_check("ⓙ2pre 상위 티어를 들면 캐스팅 가능(티어 인식)", m._can_cast())
+	m.inventory.add_item(GearCatalog.BAIT_BASIC, 2)
+	m.inventory.add_item(GearCatalog.BAIT_LURE, 1)
+	m.inventory.add_item(GearCatalog.BAIT_PLEDGE, 1)
+	m.fishing = null
+	m._start_fishing(cast_water)
+	_check("ⓙ2 첫 캐스팅 = 보장 미끼 소모(우선순위 최상위)",
+		m._cast_bait == GearCatalog.BAIT_PLEDGE
+		and m.inventory.count_of(GearCatalog.BAIT_PLEDGE) == 0)
+	_check("ⓙ2 T2 주입 = 줄 강도 중 · 미끼 대기 단축 반영(<1.0)",
+		int(m.fishing.rod["max_class"]) == WC.MEDIUM
+		and float(m.fishing.mods["wait_factor"]) < 1.0)
+	_check("ⓙ2 보장 미끼 = 낚싯대 허용 체급 이하 최고 체급이 걸린다",
+		FishCatalog.weight_class_of(String(m.fishing.result()["fish_id"])) == WC.MEDIUM)
+	m.fishing = null
+	m._start_fishing(cast_water)
+	_check("ⓙ2 둘째 캐스팅 = 유인 미끼 소모(다음 우선순위)",
+		m._cast_bait == GearCatalog.BAIT_LURE and m.inventory.count_of(GearCatalog.BAIT_LURE) == 0)
+	m.fishing = null
+	m._start_fishing(cast_water)
+	m.fishing = null
+	m._start_fishing(cast_water)
+	_check("ⓙ2 일반 미끼 2개 소진(스택 소모품)",
+		m._cast_bait == GearCatalog.BAIT_BASIC and m.inventory.count_of(GearCatalog.BAIT_BASIC) == 0)
+	m.fishing = null
+	m._start_fishing(cast_water)
+	_check("ⓙ2 잔량 0 = 맨몸 캐스팅(막히지 않는다 — ADR-0008)",
+		m._cast_bait == "" and is_equal_approx(float(m.fishing.mods["wait_factor"]), 1.0))
+	m.fishing = null
+
+	# ㉢ T3 = 태클 1슬롯(보유 3개 중 우선순위 1개만) · T4 = 2슬롯(초과분 무효).
+	_wipe_inventory(m)
+	_select(m, ItemCatalog.ROD_T3)
+	m.inventory.add_item(GearCatalog.TACKLE_QUALITY, 1)
+	m.inventory.add_item(GearCatalog.TACKLE_SINKER, 1)
+	m.inventory.add_item(GearCatalog.TACKLE_CORK, 1)
+	m.fishing = null
+	m._start_fishing(cast_water)
+	_check("ⓙ3 T3 = 태클 1개만 적용(코르크) · 나머지 무효",
+		m._cast_tackles == [GearCatalog.TACKLE_CORK]
+		and is_equal_approx(float(m.fishing.rod["tension_safe_bonus"]), 0.15)
+		and is_equal_approx(float(m.fishing.mods["burst_damp"]), 0.0)
+		and is_equal_approx(m._cast_bobber_bonus, 0.0))
+	_check("ⓙ3 T3 줄 강도 = 대 체급", int(m.fishing.rod["max_class"]) == WC.LARGE)
+	m.fishing = null
+	_select(m, ItemCatalog.ROD_T4)
+	m._start_fishing(cast_water)
+	_check("ⓙ3 T4 = 태클 2개 적용(코르크+납추) · 퀄리티는 슬롯 초과로 무효",
+		m._cast_tackles == [GearCatalog.TACKLE_CORK, GearCatalog.TACKLE_SINKER]
+		and is_equal_approx(float(m.fishing.rod["tension_safe_bonus"]), 0.15)
+		and is_equal_approx(float(m.fishing.mods["burst_damp"]), 0.35)
+		and is_equal_approx(m._cast_bobber_bonus, 0.0))
+	_check("ⓙ3 T4 줄 강도 = 전설 체급(프레스티지)",
+		int(m.fishing.rod["max_class"]) == WC.LEGEND)
+	m.fishing = null
+	# 태클을 하나만 들면 그게 적용된다(퀄리티 보버 → 품질 보정이 결착 산정으로 흐른다).
+	m.inventory.remove_item(GearCatalog.TACKLE_CORK, 1)
+	m.inventory.remove_item(GearCatalog.TACKLE_SINKER, 1)
+	m._start_fishing(cast_water)
+	_check("ⓙ3 퀄리티 보버 단독 = 품질 보정이 캐스팅에 실린다",
+		m._cast_tackles == [GearCatalog.TACKLE_QUALITY] and m._cast_bobber_bonus > 0.0)
+	m.fishing = null
+	# HUD 한 줄(장전 UI 부재의 임시 창구) — 미끼 잔량·적용 태클이 실제로 읽힌다.
+	m.inventory.add_item(GearCatalog.BAIT_BASIC, 5)
+	var gear_line: String = m._fishing_gear_line(ItemCatalog.ROD_T4)
+	_check("ⓙ4 기어 HUD 한 줄 = 미끼 잔량 + 적용 태클(%s)" % gear_line,
+		gear_line.find("일반 미끼 ×5") >= 0 and gear_line.find("퀄리티 보버") >= 0)
+	_check("ⓙ4 T1은 슬롯이 없어 기어 줄도 없다(맨몸 티어)",
+		m._fishing_gear_line(ItemCatalog.ROD_T1) == "")
 
 	await _despawn(m)
 	if FileAccess.file_exists(SAVE):

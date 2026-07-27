@@ -167,6 +167,11 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			# ★ [S1R-T9] 설치물(스프링클러) 그레이박스 아이콘 — 청록 몸통 + 위 물방울 점(급수기 결).
 			draw_rect(inner, Color(0.32, 0.52, 0.60))
 			draw_circle(inner.position + Vector2(inner.size.x * 0.5, inner.size.y * 0.28), inner.size.x * 0.14, Color(0.62, 0.82, 0.92))
+		ItemCatalog.CAT_CONSUMABLE:
+			# ★ [S3-T4] 소모품(낚시 미끼) 그레이박스 아이콘 — 종별 색 통 + 흰 뚜껑(아이콘 아트 = S3-T10).
+			#   케이스가 없으면 개수만 뜨고 칸이 비어 보인다(CAT_MATERIAL 누락 버그 선례) — 미리 채운다.
+			draw_rect(inner, ItemCatalog.tool_color_of(id))
+			draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.22)), Color(0.90, 0.88, 0.80))
 
 # 작물·수확물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:

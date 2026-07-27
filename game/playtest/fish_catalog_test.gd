@@ -263,6 +263,62 @@ func _initialize() -> void:
 		plain += FC.quality_for(0, rpl, 0.0)
 	_check("ⓓ 퀄리티 보버 보정 > 중립(등급 합 %d > %d)" % [boosted, plain], boosted > plain)
 
+	# ══ ⓖ [S3-T4] 롤 보정 파라미터(미끼) — 중립성·결정성·효과 ═══════════════════
+	# 유인 미끼(class_shift)·보장 미끼(guarantee_cap)는 roll_fish의 **선택 인자**다. 기본값이 정확히
+	# 중립이어야 S3-T3의 모든 기존 단언(위 ⓒ)이 계속 유효하다 — 그것부터 못 박는다.
+	_check("ⓖ 가중 시프트 0.0 = CLASS_WEIGHT 그대로(정확히 중립)",
+		FC.class_weights(0.0) == FC.CLASS_WEIGHT)
+	_check("ⓖ 가중 시프트 1.0 = 한 계단 위(중 15→80 · 대 5→15) · 전설 몫은 항상 0",
+		is_equal_approx(float(FC.class_weights(1.0)[FC.WC_MEDIUM]), 80.0)
+		and is_equal_approx(float(FC.class_weights(1.0)[FC.WC_LARGE]), 15.0)
+		and is_equal_approx(float(FC.class_weights(1.0)[FC.WC_LEGEND]), 0.0))
+	var seq_plain: Array = []
+	var seq_zero: Array = []
+	var r_p := _rng(2026)
+	var r_z := _rng(2026)
+	for _i in 100:
+		seq_plain.append(FC.roll_fish(FC.HABITAT_SEA, 1, FC.PHASE_DAY, r_p))
+		seq_zero.append(FC.roll_fish(FC.HABITAT_SEA, 1, FC.PHASE_DAY, r_z, 0.0, -1))
+	_check("ⓖ 무인자 호출 = 보정 0 호출과 100회 열 완전 일치(회귀 0)", seq_plain == seq_zero)
+	var seq_shift_a: Array = []
+	var seq_shift_b: Array = []
+	var r_a := _rng(555)
+	var r_b := _rng(555)
+	for _i in 100:
+		seq_shift_a.append(FC.roll_fish(FC.HABITAT_SEA, 1, FC.PHASE_DAY, r_a, 1.0))
+		seq_shift_b.append(FC.roll_fish(FC.HABITAT_SEA, 1, FC.PHASE_DAY, r_b, 1.0))
+	_check("ⓖ 유인 시프트 결정성 — 같은 시드 100회 열 완전 일치", seq_shift_a == seq_shift_b)
+	_check("ⓖ 유인 시프트 = 열이 실제로 달라진다(상수 반환 아님)", seq_shift_a != seq_plain)
+	# 보장(guarantee_cap): 캡 이하 최고 체급만 나온다 + 전설은 여전히 안 샌다 + 결정적.
+	var g_top_ok := true
+	var g_cap_ok := true
+	var g_legend := 0
+	var r_g := _rng(99)
+	for _i in 200:
+		# 피안절 바다 저녁 가용 = 넋멸치·은비늘청어(소) · 저녁놀도미(중) · 너울범치(대).
+		var top_id := FC.roll_fish(FC.HABITAT_SEA, 0, FC.PHASE_EVENING, r_g, 0.0, FC.WC_LEGEND)
+		if top_id != FC.NEOUL_BEOMCHI:   # 캡을 안 씌우면 최고 체급(대) = 너울범치 단일
+			g_top_ok = false
+		if FC.is_legendary(top_id):
+			g_legend += 1
+		if FC.weight_class_of(FC.roll_fish(FC.HABITAT_SEA, 0, FC.PHASE_EVENING, r_g,
+				0.0, FC.WC_SMALL)) != FC.WC_SMALL:
+			g_cap_ok = false
+		if FC.roll_fish(FC.HABITAT_SEA, 0, FC.PHASE_EVENING, r_g,
+				0.0, FC.WC_MEDIUM) != FC.JEONYEOKNOL_DOMI:
+			g_cap_ok = false
+	_check("ⓖ 보장 = 가용 최고 체급 확정(피안절 바다 저녁 = 너울범치·대)", g_top_ok)
+	_check("ⓖ 보장 상한 = 캡 이하 최고만(소 캡 = 소 · 중 캡 = 저녁놀도미)", g_cap_ok)
+	_check("ⓖ 보장이어도 전설은 새지 않는다(일반 롤 전설 격리 불변)", g_legend == 0)
+	var g_seq_a: Array = []
+	var g_seq_b: Array = []
+	var rg1 := _rng(1234)
+	var rg2 := _rng(1234)
+	for _i in 50:
+		g_seq_a.append(FC.roll_fish(FC.HABITAT_RIVER, 2, FC.PHASE_NIGHT, rg1, 0.0, FC.WC_LARGE))
+		g_seq_b.append(FC.roll_fish(FC.HABITAT_RIVER, 2, FC.PHASE_NIGHT, rg2, 0.0, FC.WC_LARGE))
+	_check("ⓖ 보장 롤 결정성 — 같은 시드 50회 열 완전 일치", g_seq_a == g_seq_b)
+
 	# ══ ⓔ ItemCatalog 통용 · 출하함 정산 ═════════════════════════════════════
 	var ic_ok := true
 	var ic_bad: Array = []

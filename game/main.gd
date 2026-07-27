@@ -1671,8 +1671,11 @@ const FISHING_REGIONS := [RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE]
 #   S3-T2의 그레이박스 체급 컷(FISH_CLASS_CUTS)·_roll_fish_class는 그 가중에 흡수돼 제거됐다.
 # ★ 낚시 스킬 절감 훅(S3-T6 FishSkill 소관 — 지금은 정확히 중립 1.0). FarmSkill.energy_factor 문법 대칭.
 const FISHING_ENERGY_FACTOR := 1.0
-# ★ 퀄리티 보버 태클 보정 훅(S3-T4 기어 소관 — 지금은 정확히 중립 0.0). FishCatalog.quality_for 인자.
-const FISHING_BOBBER_BONUS := 0.0
+# ★[S3-T4 / ADR-0061 결정 4] 이번 캐스팅에 실제로 적용된 기어(HUD·결착 산정용 — 캐스팅 시 확정).
+#   퀄리티 보버 보정은 이제 상수가 아니라 **장착 태클에서 파생**된다(옛 const FISHING_BOBBER_BONUS 폐기).
+var _cast_bobber_bonus := 0.0    # 이번 캐스팅의 품질 보정(퀄리티 보버 — FishCatalog.quality_for 인자)
+var _cast_bait := ""             # 이번 캐스팅에 소모한 미끼 id("" = 맨몸)
+var _cast_tackles: Array = []    # 이번 캐스팅에 적용된 태클 id 목록(슬롯 수 이내)
 
 # T2.3 현재 심을 작물. Q로 카탈로그(빠른 성장 순)를 순환 선택한다.
 # 그레이박스에선 도구·씨앗 인벤토리 UI 없이 이 한 변수로 작물 종류를 고른다.
@@ -6997,8 +7000,11 @@ func _process(delta: float) -> void:
 			else "%s — [좌클릭]으로 챈다" % fishing.state_label()
 	elif _can_cast():
 		# ★ [S3-T2 / ADR-0061 결정 9] 낚싯대를 들고 삼도천·황천해 물가를 겨눌 때: LMB = 캐스팅.
+		# ★ [S3-T4] 뒤에 기어 한 줄(미끼 잔량·적용 태클)을 붙인다 — 장전 UI가 없으니 "무엇이 걸려 있나"를
+		#   여기서만 읽을 수 있다(★[owner 큐: 슬롯 장전 UI는 아트/UX 패스에서 재검토]).
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = "[좌클릭] 낚싯줄 던지기"
+		var gear_line := _fishing_gear_line(inventory.selected_id())
+		interact_prompt.text = "[좌클릭] 낚싯줄 던지기" + ("" if gear_line == "" else "   " + gear_line)
 	elif facing_chest or facing_storehouse_chest:
 		# ★ Phase D/E 저장 상자를 바라볼 때: 우클릭으로 보관 패널을 연다(순수 보관 — 판매 아님).
 		interact_prompt.visible = true
@@ -7286,7 +7292,8 @@ func _cast_water_tile(t: Vector2i) -> Vector2i:
 func _can_cast() -> bool:
 	if fishing != null or _indoor != "" or not _is_fishing_region():
 		return false
-	if inventory == null or inventory.selected_id() != ItemCatalog.ROD_T1:
+	# ★[S3-T4] 4티어 어느 낚싯대든 든 것이 곧 그 티어의 캐스팅이다(도구 4종 = 각각 아이템인 기존 관례).
+	if inventory == null or not ItemCatalog._is_rod(inventory.selected_id()):
 		return false
 	return _cast_water_tile(_target) != Vector2i(-1, -1)
 
@@ -7297,7 +7304,10 @@ func _fishing_habitat() -> String:
 # ★[S3-T3] 이번 입질의 어종 추첨 — ①전설 특수 입질(극저확률·조건 충족 시) → ②일반 가중 롤(체급 파생)
 #   → ③방어 폴백(가용 0이라는 있어선 안 될 상태). 절기·시간 잠금은 clock에서 곧장 읽는다(결정 3
 #   "절기-잠금 = 즉시 실효" — 신규 시스템 0). 날씨는 아직 안 본다(★[S7 점등]).
-func _roll_fish_id(seed_value: int) -> String:
+#   ★[S3-T4] 미끼 보정 2개가 여기로 들어온다: 유인 = 체급 가중 상향(class_shift) · 보장 = 낚싯대 허용
+#   체급 이하 최고 체급 확정(guarantee_cap). 전설 롤은 **미끼 무관**이다(ADR-0061 결정 4 — 전설은 기어가
+#   아니라 사건이고, 체급 게이트가 "T4가 아니면 걸려도 끊긴다"를 자연 처리한다 = 드라마 허용).
+func _roll_fish_id(seed_value: int, class_shift: float = 0.0, guarantee_cap: int = -1) -> String:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value ^ 0x5f3a7c1d
 	var habitat := _fishing_habitat()
@@ -7305,21 +7315,62 @@ func _roll_fish_id(seed_value: int) -> String:
 	var ph := clock.phase()
 	var id := FishCatalog.roll_legendary(habitat, season, ph, rng)
 	if id == "":
-		id = FishCatalog.roll_fish(habitat, season, ph, rng)
+		id = FishCatalog.roll_fish(habitat, season, ph, rng, class_shift, guarantee_cap)
 	return id if id != "" else FishCatalog.fallback_id(habitat)
+
+# ★[S3-T4] 지금 인벤에 든 낚시 기어 id 목록(태클·미끼 자동 적용의 입력). GearCatalog는 인벤토리를
+#   모르므로(순수 static) 보유 여부만 여기서 뽑아 넘긴다 — 장착 UI가 없는 그레이박스의 대체 경로다.
+#   ★[owner 큐] 슬롯 장전 UI가 붙으면 이 "보유 = 장착" 규칙 자체가 장전 상태로 대체된다.
+func _owned_gear_ids() -> Array:
+	var out: Array = []
+	if inventory == null:
+		return out
+	for id in GearCatalog.TACKLES:
+		if inventory.has_item(id):
+			out.append(id)
+	for id in GearCatalog.BAITS:
+		if inventory.has_item(id):
+			out.append(id)
+	return out
+
+# ★[S3-T4] 낚시 기어 HUD 한 줄("미끼 일반 미끼 ×3 · 태클 코르크 보버+납추"). 슬롯이 0인 티어는 그 항을
+#   아예 안 쓴다(T1 = 빈 문자열 = 맨몸). 잔량은 인벤에서 매 프레임 파생한다(소모가 즉시 보인다).
+func _fishing_gear_line(rod_id: String) -> String:
+	if inventory == null or not GearCatalog.is_rod(rod_id):
+		return ""
+	var owned := _owned_gear_ids()
+	var counts := {}
+	for id in GearCatalog.BAITS:
+		counts[id] = inventory.count_of(id)
+	return GearCatalog.status_line(rod_id, GearCatalog.active_bait(rod_id, owned),
+		GearCatalog.active_tackles(rod_id, owned), counts)
 
 # 캐스팅 시작. 시드 = (날짜·물칸·시각·캐스팅 일련번호) 파생 — 결정적 롤 관례(유품 발굴·재점령과 같은 결)
 # 이되 일련번호를 섞어 같은 분·같은 칸 반복 캐스팅이 같은 어종으로 굳지 않게 한다.
 func _start_fishing(water: Vector2i) -> void:
 	if water == Vector2i(-1, -1):
 		return
+	var rod_id := inventory.selected_id() if inventory != null else ""
+	if not GearCatalog.is_rod(rod_id):
+		return   # 방어 — _can_cast이 이미 걸렀지만 직접 호출(테스트·디버그) 대비
 	_cast_serial += 1
 	var s := clock.day * 100003 + water.x * 397 + water.y * 31 + int(clock.minutes) * 7 + _cast_serial
 	_cast_seed = s
+	# ★[S3-T4 / ADR-0061 결정 4] 기어 해석 — 든 낚싯대의 티어(줄 강도·슬롯) + 보유 태클(슬롯 수만큼
+	#   자동 적용) + 보유 미끼(강한 것부터 1개 자동 소모). 장착 UI 없음 = 보유가 곧 장착이다.
+	var owned := _owned_gear_ids()
+	_cast_tackles = GearCatalog.active_tackles(rod_id, owned)
+	_cast_bait = GearCatalog.active_bait(rod_id, owned)
+	_cast_bobber_bonus = GearCatalog.bobber_bonus_for(_cast_tackles)
+	if _cast_bait != "":
+		inventory.remove_item(_cast_bait, 1)   # 캐스팅 시 1개 소모(입질 결과와 무관 — 던진 값이다)
 	# ★[S3-T3] 어종 dict 주입 — FishingSession은 어종을 모르고(디커플링), 체급·격투 오버라이드가 실린
 	#   dict 하나만 받는다(fishing.gd 주석의 "같은 스키마 dict" 계약 이행). id는 result()로 되돌아온다.
-	fishing = FishingSession.new(s, FishCatalog.session_params(_roll_fish_id(s)), FishingSession.ROD_T1,
-		{"energy_factor": FISHING_ENERGY_FACTOR})   # ★ 기어·스킬 보정은 전부 중립(S3-T4/T6이 채움)
+	var fish_id := _roll_fish_id(s, GearCatalog.class_shift_for(_cast_bait),
+		GearCatalog.guarantee_cap_for(_cast_bait, rod_id))
+	fishing = FishingSession.new(s, FishCatalog.session_params(fish_id),
+		GearCatalog.rod_params(rod_id, _cast_tackles),
+		GearCatalog.mods_for(_cast_tackles, _cast_bait, {"energy_factor": FISHING_ENERGY_FACTOR}))
 	fishing.hook_gate = _fishing_hook_gate
 	fishing.cast()
 	player.face_toward(_target_center_px(water))
@@ -7367,7 +7418,8 @@ func _finish_fishing() -> void:
 		#   FishCatalog가 한다. 시드는 캐스팅 시드에서 갈라 결정적으로 굴린다(어종 롤과 다른 가지).
 		var qrng := RandomNumberGenerator.new()
 		qrng.seed = _cast_seed ^ 0x2ff1c37b
-		var quality := FishCatalog.quality_for(perfects, qrng, FISHING_BOBBER_BONUS)
+		# ★[S3-T4] 퀄리티 보버(태클)가 등급 판정 축을 위로 민다 — 이번 캐스팅에 적용된 값만 쓴다.
+		var quality := FishCatalog.quality_for(perfects, qrng, _cast_bobber_bonus)
 		inventory.add_item(fish_id, 1, quality)
 		_toast_item(fish_id, 1)
 		_notice("%s%s 를 낚았다!%s" % [
@@ -7378,7 +7430,9 @@ func _finish_fishing() -> void:
 	elif bool(res["hook_refused"]):
 		_notice("혼력이 모자라 챌 수 없었다 — 입질을 놓쳤다 (필요 %d)" % int(res["energy_cost"]))
 	elif bool(res["line_broke_by_class"]):
-		_notice("줄이 끊겼다! 낡은 낚싯대로는 버거운 놈이다 (혼력 %d 소모)" % int(res["energy_cost"]))
+		# ★[S3-T4] 문구를 티어 중립으로 — 어느 티어든 "이 낚싯대의 줄 강도를 넘었다"가 사유다(상위 티어 안내).
+		_notice("줄이 끊겼다! 이 낚싯대로는 버거운 놈이다 — 더 강한 줄이 필요하다 (혼력 %d 소모)"
+			% int(res["energy_cost"]))
 		audio.sfx("ui")
 	elif bool(res["line_broke"]):
 		_notice("줄이 끊겼다 — 너무 세게 당겼다 (혼력 %d 소모)" % int(res["energy_cost"]))

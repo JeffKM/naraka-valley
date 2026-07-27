@@ -66,10 +66,21 @@ const WATERING_CAN := "watering_can"  # 물뿌리개 — 심은 칸에 물주기
 const SCYTHE := "scythe"           # 낫 — 이승의 미련(잡초) 제거
 const PICKAXE := "pickaxe"         # 곡괭이 — 업화석(돌) 제거
 const AXE := "axe"                 # 도끼 — 석화 고목(그루터기) 제거
-# ★[S3-T2 / ADR-0061 결정 4] 낚싯대 T1(입문 티어) — 삼도천·황천해 물가에서 LMB = 캐스팅(FishingSession).
-#   4티어 중 T1만 신설한다(T2~T4·미끼·태클 = 생선가게 매대 = S3-T4/T5 소관). 줄 강도(허용 체급) =
-#   FishingSession.ROD_T1.max_class = 소. 도구라 유니크·비매(price 0 — 매입가는 매대가 따로 든다).
-const ROD_T1 := "rod_t1"           # 낡은 낚싯대(T1)
+# ★[S3-T4 / ADR-0061 결정 4] 낚시 기어 10종 — 낚싯대 4티어 + 미끼 3 + 태클 3.
+#   데이터(이름·가격·줄 강도·슬롯·효과)는 **GearCatalog가 단일 출처**로 들고, 여기는 id 진실원 +
+#   판정/표시 위임만 한다(FertilizerCatalog·FishCatalog 위임 관례 동형 — 데이터 중복 0).
+#   분류: 낚싯대·태클 = CAT_TOOL(유니크 장착물) · 미끼 = CAT_CONSUMABLE(스택 소모품 — 예약 자리 실사용 개시).
+#   ★ 획득 경로(매대 판매·T1 증정)는 S3-T5 소관 — 지금은 디버그 지급(삼도천 진입 T1 자동 지급)뿐이다.
+const ROD_T1 := GearCatalog.ROD_T1   # 낡은 낚싯대(T1 — 소 체급·슬롯 0)
+const ROD_T2 := GearCatalog.ROD_T2   # 삼줄 낚싯대(T2 — 중 체급·미끼 슬롯)
+const ROD_T3 := GearCatalog.ROD_T3   # 놋쇠 낚싯대(T3 — 대 체급·태클 1)
+const ROD_T4 := GearCatalog.ROD_T4   # 만장 낚싯대(T4 — 전설 체급·태클 2)
+const BAIT_BASIC := GearCatalog.BAIT_BASIC        # 일반 미끼(입질 대기 −40%)
+const BAIT_LURE := GearCatalog.BAIT_LURE          # 유인 미끼(체급 가중 한 계단 위로)
+const BAIT_PLEDGE := GearCatalog.BAIT_PLEDGE      # 보장 미끼(가용 최고 체급 확정)
+const TACKLE_CORK := GearCatalog.TACKLE_CORK      # 코르크 보버(텐션 안전 여유)
+const TACKLE_SINKER := GearCatalog.TACKLE_SINKER  # 납추(발버둥 완화)
+const TACKLE_QUALITY := GearCatalog.TACKLE_QUALITY  # 퀄리티 보버(품질 보정)
 
 # ── 목축(S1-7) — 건초·대형 산물(§8.6) ────────────────────────────────────────
 # 건초(feed): 짐승 급여 재료(1마리/일 1개, §4.1). 품질 무차원 스택 아이템(CAT_MATERIAL 실사용 개시).
@@ -127,6 +138,14 @@ const FORAGEABLES := {                   # 채집물 id → {name_ko, price(기�
 static func _is_fish(id: String) -> bool:
 	return FishCatalog.has(id)
 
+# ★[S3-T4] id가 낚시 기어(낚싯대·미끼·태클)인가. 데이터·판정은 GearCatalog 위임(_is_fish 결).
+static func _is_gear(id: String) -> bool:
+	return GearCatalog.has(id)
+
+# 낚싯대만(캐스팅 가능 판정 — main._can_cast이 "든 도구 = 동사"로 읽는다).
+static func _is_rod(id: String) -> bool:
+	return GearCatalog.is_rod(id)
+
 # 대형 산물 접미("<산물>_large"). 산물 아이템 id + 이 접미 = 대형 변이(판매가 ×2, §4.1). 씨앗:수확물 결.
 const LARGE_SUFFIX := "_large"
 
@@ -154,7 +173,8 @@ const TOOLS := {
 	SCYTHE: {"name_ko": "낫", "color": Color(0.72, 0.70, 0.42)},          # ★S1-8 마른 풀빛 날
 	PICKAXE: {"name_ko": "곡괭이", "color": Color(0.55, 0.52, 0.56)},     # ★S1-8 회청 강철
 	AXE: {"name_ko": "도끼", "color": Color(0.68, 0.40, 0.34)},           # ★S1-8 붉은 자루
-	ROD_T1: {"name_ko": "낡은 낚싯대", "color": Color(0.45, 0.62, 0.66)},  # ★S3-T2 바랜 대나무+물빛 줄
+	# ★[S3-T4] 낚싯대·태클은 여기 없다 — GearCatalog가 이름·색·가격의 단일 출처이고(4티어·3태클),
+	#   아래 조회 함수들이 CAT_TOOL 취급을 그대로 얹는다(도구:기어 = 같은 카테고리·다른 출처).
 }
 
 # ── id 변환(작물군 ↔ 아이템 id) ─────────────────────────────────────────────
@@ -240,13 +260,19 @@ static func large_product_id(product_id: String) -> String:
 static func has_item(id: String) -> bool:
 	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
-		or _is_placeable(id) or _is_relic(id) or _is_fish(id)
+		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
 static func category_of(id: String) -> String:
 	if TOOLS.has(id):
 		return CAT_TOOL
+	# ★[S3-T4] 낚시 기어 — 낚싯대·태클은 유니크 장착물이라 도구와 같은 칸(CAT_TOOL), 미끼는 스택
+	#   소모품(CAT_CONSUMABLE — Phase 3 조리용으로 예약만 돼 있던 카테고리의 첫 실사용).
+	if GearCatalog.is_rod(id) or GearCatalog.is_tackle(id):
+		return CAT_TOOL
+	if GearCatalog.is_bait(id):
+		return CAT_CONSUMABLE
 	if _is_seed(id):
 		return CAT_SEED
 	if _is_sapling(id):
@@ -267,6 +293,8 @@ static func category_of(id: String) -> String:
 static func name_of(id: String) -> String:
 	if TOOLS.has(id):
 		return TOOLS[id]["name_ko"]
+	if _is_gear(id):
+		return GearCatalog.name_of(id)   # ★S3-T4 낚시 기어 10종(단일 출처 = GearCatalog)
 	if _is_seed(id):
 		return "%s 씨앗" % CropCatalog.name_of(_seed_crop(id))
 	if _is_sapling(id):
@@ -299,6 +327,8 @@ static func name_of(id: String) -> String:
 static func stackable_of(id: String) -> bool:
 	if TOOLS.has(id):
 		return false
+	if _is_gear(id):
+		return GearCatalog.stackable_of(id)   # ★S3-T4 미끼만 스택(낚싯대·태클 = 유니크 장착물)
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id)
@@ -310,6 +340,9 @@ static func stackable_of(id: String) -> bool:
 static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 	if TOOLS.has(id):
 		return 0
+	# ★[S3-T4] 낚시 기어 = 품질 무차원 고정 매입가(T1 = 0 — 뱃사공 증정, S3-T5). 파는 곳은 매대다.
+	if _is_gear(id):
+		return GearCatalog.price_of(id)
 	if _is_seed(id):
 		return CropCatalog.seed_cost(_seed_crop(id))
 	if _is_sapling(id):
@@ -349,4 +382,8 @@ static func fruit_of(id: String) -> String:
 
 # 그레이박스 도구 아이콘 색(도구 외엔 흰색 폴백 — 씨앗·수확물은 작물 스프라이트를 쓰므로 미사용).
 static func tool_color_of(id: String) -> Color:
-	return TOOLS[id]["color"] if TOOLS.has(id) else Color.WHITE
+	if TOOLS.has(id):
+		return TOOLS[id]["color"]
+	if _is_gear(id):
+		return GearCatalog.color_of(id)   # ★S3-T4 기어 색박스(아이콘 아트 = S3-T10)
+	return Color.WHITE

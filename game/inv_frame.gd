@@ -494,6 +494,10 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			# ★ [S1R-T9] 설치물(스프링클러) 그레이박스 아이콘(핫바와 동일 — 청록 몸통 + 물방울 점).
 			draw_rect(inner, Color(0.32, 0.52, 0.60))
 			draw_circle(inner.position + Vector2(inner.size.x * 0.5, inner.size.y * 0.28), inner.size.x * 0.14, Color(0.62, 0.82, 0.92))
+		ItemCatalog.CAT_CONSUMABLE:
+			# ★ [S3-T4] 소모품(낚시 미끼) 그레이박스 아이콘(핫바와 동일 — 종별 색 통 + 흰 뚜껑).
+			draw_rect(inner, ItemCatalog.tool_color_of(id))
+			draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.22)), Color(0.90, 0.88, 0.80))
 
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
 	var tex: Texture2D = crop_icons.get(crop_id)
