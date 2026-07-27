@@ -63,7 +63,8 @@ func _run_checks() -> void:
 	_check("ⓐe 관계 트랙 보유 · 선물 채널 있음(T2 사귐)", r.affinity != null and r.can_gift)
 	_check("ⓐf 선호 선물 = 불사과(기존 4인과 안 겹침)",
 		r.affinity.preferred_crop == CropCatalog.BULSAGWA)
-	_check("ⓐg 초상화 없음(아트는 S3-T10)", r.portrait_stem == "")
+	# ★[S3-T10] 아트 패스 2에서 초상화가 붙었다(도트 스톱갭 — 스펙카드 §13.4 교체 큐).
+	_check("ⓐg 초상화 stem = boatman", r.portrait_stem == "boatman")
 	# 자리 — 황천해 생선가게 앞 백사장(문 열·산책로 레인을 둘 다 비껴간 칸).
 	var tile: Vector2i = r.schedule[0]["tile"]
 	_check("ⓐh 상시 영업(스케줄 1항목)", r.schedule.size() == 1)
