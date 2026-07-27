@@ -110,30 +110,22 @@ const SPIRIT_FLOWER := "spirit_flower"  # 피안화(彼岸花) — 안식 꽃 �
 const FORAGEABLES := {                   # 채집물 id → {name_ko, price(기준 판매가)}
 	SPIRIT_FLOWER: {"name_ko": "피안화", "price": 30},
 }
-# ── ★[S3-T2] 어획물 스텁(그레이박스) — ★[S3-T3 fish_catalog로 교체] ─────────────
-# 릴 격투가 **살아 있는 산출물로 끝나게** 하려고 체급당 1종씩만 임시로 등록한 자리표(ADR-0061 결정 3의
-# 18종 로스터·이름·절기/시간/날씨 태그·실판매가는 S3-T3 소관). 채집물(FORAGEABLES)과 같은 결로 품질
-# 유차원 CAT_HARVEST다 — 판매·서빙·선물·정렬이 작물 수확물과 동급이고, 퍼펙트 릴 → 등급 매핑이 붙을
-# 자리를 지금 열어 둔다. 교체 시 이 dict만 fish_catalog 파생으로 바꾸면 하류(인벤·출하·토스트)는 불변.
-const FISH_STUB_SMALL := "fish_stub_small"
-const FISH_STUB_MEDIUM := "fish_stub_medium"
-const FISH_STUB_LARGE := "fish_stub_large"
-const FISH_STUB_LEGEND := "fish_stub_legend"
-const FISHES := {                        # 어획물 id → {name_ko, price(기준 판매가)}
-	FISH_STUB_SMALL: {"name_ko": "작은 물고기(임시)", "price": 25},
-	FISH_STUB_MEDIUM: {"name_ko": "중간 물고기(임시)", "price": 60},
-	FISH_STUB_LARGE: {"name_ko": "큰 물고기(임시)", "price": 140},
-	FISH_STUB_LEGEND: {"name_ko": "전설의 물고기(임시)", "price": 500},
-}
-# 체급(FishingSession.WeightClass 0~3) → 어획물 스텁 id. main이 포획 결과를 인벤토리로 옮길 때 쓴다.
-const FISH_BY_CLASS := [FISH_STUB_SMALL, FISH_STUB_MEDIUM, FISH_STUB_LARGE, FISH_STUB_LEGEND]
+# ── ★[S3-T3 / ADR-0061 결정 3] 어획물(물고기 18종) — 정식 편입 ────────────────
+# 채집물(FORAGEABLES)과 같은 결로 품질 유차원 CAT_HARVEST다 — 판매·서빙·선물·정렬이 작물 수확물과
+# 동급이고, 퍼펙트 릴 → 등급 매핑(FishCatalog.quality_for)이 그 위에 얹힌다.
+# ★ 다만 로스터 dict를 여기 복제하지 않는다 — 데이터는 FishCatalog가 단일 출처로 들고, ItemCatalog는
+#   FruitTreeCatalog·AnimalCatalog·FertilizerCatalog와 **정확히 같은 위임 패턴**으로 판정·이름·가격만
+#   빌려 온다(이 파일 머리말 "데이터 중복 0, 단일 출처"). 어종 id = 아이템 id다(과일 종 id : 과일
+#   아이템 id 관례 동형 — 접미사 없음).
+# ★ S3-T2 스텁 4종(fish_stub_*) 제거 — 마이그레이션 코드 없음. 근거: 스텁은 S3-T2가 만든 *같은 슬라이스
+#   안의 미공개 중간물*이라 owner 릴리스·세이브 배포를 거친 적이 없고, 설령 개발 세이브에 남아 있어도
+#   Inventory._sanitize / ShippingBin.load_save가 "ItemCatalog.has_item 실패 = 조용히 버림"으로 이미
+#   방어한다(구세이브 방어 관례 — inventory.gd:434). 남는 건 스텁 물고기가 사라진 슬롯 하나뿐이라
+#   치환 매핑을 유지할 값이 없다(ADR-0024 "구포맷 마이그레이션 안 함"과 같은 판단).
 
-static func fish_for_class(wc: int) -> String:
-	return FISH_BY_CLASS[clampi(wc, 0, FISH_BY_CLASS.size() - 1)]
-
-# id가 어획물인가(★[S3-T2] — ADR-0061 "영향" 항의 `_is_fish` 헬퍼). 뱃사공 환전·낚시 의뢰가 이걸 본다.
+# id가 어획물인가(ADR-0061 "영향" 항의 `_is_fish` 헬퍼 — _is_fruit 결). 뱃사공 환전·낚시 의뢰가 이걸 본다.
 static func _is_fish(id: String) -> bool:
-	return FISHES.has(id)
+	return FishCatalog.has(id)
 
 # 대형 산물 접미("<산물>_large"). 산물 아이템 id + 이 접미 = 대형 변이(판매가 ×2, §4.1). 씨앗:수확물 결.
 const LARGE_SUFFIX := "_large"
@@ -292,7 +284,7 @@ static func name_of(id: String) -> String:
 	if _is_forageable(id):
 		return FORAGEABLES[id]["name_ko"]
 	if _is_fish(id):
-		return FISHES[id]["name_ko"]   # ★S3-T2 어획물 스텁(정식 어종명은 S3-T3)
+		return FishCatalog.name_of(id)   # ★S3-T3 어획물 18종(로스터 단일 출처 = FishCatalog)
 	if _is_placeable(id):
 		return PLACEABLES[id]["name_ko"]
 	if _is_relic(id):
@@ -335,7 +327,7 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 	if _is_forageable(id):
 		return int(FORAGEABLES[id]["price"] * quality_mult(quality))   # ★ADR-0052 채집물 = 기준가 × 등급 배수(수확물 결)
 	if _is_fish(id):
-		return int(FISHES[id]["price"] * quality_mult(quality))   # ★S3-T2 어획물 = 기준가 × 등급 배수(채집물 결)
+		return int(FishCatalog.price_of(id) * quality_mult(quality))   # ★S3-T3 어획물 = 기준가 × 등급 배수(채집물 결)
 	if _is_placeable(id):
 		return int(PLACEABLES[id]["price"])   # ★S1R-T9 설치물 = 품질 무차원 고정 구매가(스프링클러)
 	if _is_relic(id):

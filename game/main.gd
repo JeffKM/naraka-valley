@@ -1663,15 +1663,16 @@ var _target_valid := false       # 그 칸이 밭(SOIL)이라 상호작용 가�
 # **세이브 무상태**(세션은 비영속 — ADR-0061 결정 2 "일시 상태"): 저장되는 건 어획물·혼력뿐이다.
 var fishing: FishingSession = null
 var _cast_serial := 0            # 캐스팅 일련번호(시드 섞기 — 같은 분·같은 칸 반복 캐스팅의 어종 고착 방지)
+var _cast_seed := 0              # ★[S3-T3] 이번 캐스팅의 시드(어종 롤·품질 롤이 같은 뿌리에서 갈라진다)
 # ★ 캐스팅 무대 = 삼도천·황천해 한정(ADR-0061 결정 9). 나루 배후 강·안식 연못은 이번 슬라이스에서
 #   비캐스팅("낚시의 집" 정체성 + 수면별 어종 테이블 스코프 억제 — 전 수면 개방은 owner 큐 서랍).
 const FISHING_REGIONS := [RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE]
-# ★ 체급 추첨(그레이박스 — ★[S3-T3 fish_catalog 절기·시간·장소 테이블로 교체]). 누적 확률 컷.
-#   T1 낚싯대(허용 = 소)만 있는 지금은 소에 크게 치우쳐야 루프가 돈다 — 중 이상은 "체급 게이트를
-#   가르치는 드문 사고"로 남는다(T2~T4가 열리면 이 표는 어종 카탈로그가 대체한다).
-const FISH_CLASS_CUTS := [0.80, 0.95, 0.99]   # <0.80=소 · <0.95=중 · <0.99=대 · 그 외=전설
+# ★[S3-T3] 어종 추첨은 이제 FishCatalog(로스터 18종 · 절기/시간 잠금 · 체급 가중)가 한다 —
+#   S3-T2의 그레이박스 체급 컷(FISH_CLASS_CUTS)·_roll_fish_class는 그 가중에 흡수돼 제거됐다.
 # ★ 낚시 스킬 절감 훅(S3-T6 FishSkill 소관 — 지금은 정확히 중립 1.0). FarmSkill.energy_factor 문법 대칭.
 const FISHING_ENERGY_FACTOR := 1.0
+# ★ 퀄리티 보버 태클 보정 훅(S3-T4 기어 소관 — 지금은 정확히 중립 0.0). FishCatalog.quality_for 인자.
+const FISHING_BOBBER_BONUS := 0.0
 
 # T2.3 현재 심을 작물. Q로 카탈로그(빠른 성장 순)를 순환 선택한다.
 # 그레이박스에선 도구·씨앗 인벤토리 UI 없이 이 한 변수로 작물 종류를 고른다.
@@ -7289,15 +7290,23 @@ func _can_cast() -> bool:
 		return false
 	return _cast_water_tile(_target) != Vector2i(-1, -1)
 
-# 체급 추첨(그레이박스 — ★[S3-T3 fish_catalog 절기·시간·장소 테이블로 교체]).
-func _roll_fish_class(seed_value: int) -> int:
+# ★[S3-T3] 지금 이 구역의 어종 서식지(캐스팅 무대 = 삼도천 강 / 황천해 바다, ADR-0061 결정 9).
+func _fishing_habitat() -> String:
+	return FishCatalog.HABITAT_SEA if _region == RegionCatalog.HWANGCHEONHAE else FishCatalog.HABITAT_RIVER
+
+# ★[S3-T3] 이번 입질의 어종 추첨 — ①전설 특수 입질(극저확률·조건 충족 시) → ②일반 가중 롤(체급 파생)
+#   → ③방어 폴백(가용 0이라는 있어선 안 될 상태). 절기·시간 잠금은 clock에서 곧장 읽는다(결정 3
+#   "절기-잠금 = 즉시 실효" — 신규 시스템 0). 날씨는 아직 안 본다(★[S7 점등]).
+func _roll_fish_id(seed_value: int) -> String:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value ^ 0x5f3a7c1d
-	var r := rng.randf()
-	for i in FISH_CLASS_CUTS.size():
-		if r < float(FISH_CLASS_CUTS[i]):
-			return i
-	return FishingSession.WeightClass.LEGEND
+	var habitat := _fishing_habitat()
+	var season := clock.season_index()
+	var ph := clock.phase()
+	var id := FishCatalog.roll_legendary(habitat, season, ph, rng)
+	if id == "":
+		id = FishCatalog.roll_fish(habitat, season, ph, rng)
+	return id if id != "" else FishCatalog.fallback_id(habitat)
 
 # 캐스팅 시작. 시드 = (날짜·물칸·시각·캐스팅 일련번호) 파생 — 결정적 롤 관례(유품 발굴·재점령과 같은 결)
 # 이되 일련번호를 섞어 같은 분·같은 칸 반복 캐스팅이 같은 어종으로 굳지 않게 한다.
@@ -7306,7 +7315,10 @@ func _start_fishing(water: Vector2i) -> void:
 		return
 	_cast_serial += 1
 	var s := clock.day * 100003 + water.x * 397 + water.y * 31 + int(clock.minutes) * 7 + _cast_serial
-	fishing = FishingSession.new(s, {"weight_class": _roll_fish_class(s)}, FishingSession.ROD_T1,
+	_cast_seed = s
+	# ★[S3-T3] 어종 dict 주입 — FishingSession은 어종을 모르고(디커플링), 체급·격투 오버라이드가 실린
+	#   dict 하나만 받는다(fishing.gd 주석의 "같은 스키마 dict" 계약 이행). id는 result()로 되돌아온다.
+	fishing = FishingSession.new(s, FishCatalog.session_params(_roll_fish_id(s)), FishingSession.ROD_T1,
 		{"energy_factor": FISHING_ENERGY_FACTOR})   # ★ 기어·스킬 보정은 전부 중립(S3-T4/T6이 채움)
 	fishing.hook_gate = _fishing_hook_gate
 	fishing.cast()
@@ -7338,7 +7350,7 @@ func _tick_fishing(delta: float) -> void:
 		_finish_fishing()
 	queue_redraw()   # 텐션·스태미나 바가 매 프레임 흐르게
 
-# 결착 수확 — 포획이면 어획물 1개 지급(★[S3-T3 fish_catalog로 교체] 체급 스텁), 아니면 실패 안내.
+# 결착 수확 — 포획이면 어획물 1개를 **품질 등급과 함께** 지급(★[S3-T3]), 아니면 실패 안내.
 # 세션은 여기서 버려진다(비영속 — 세이브 무간섭).
 func _finish_fishing() -> void:
 	if fishing == null:
@@ -7346,13 +7358,21 @@ func _finish_fishing() -> void:
 	var res := fishing.result()
 	fishing = null
 	if bool(res["landed"]):
-		var fish_id := ItemCatalog.fish_for_class(int(res["weight_class"]))
-		inventory.add_item(fish_id, 1)
-		_toast_item(fish_id, 1)
+		# ★[S3-T3] 어종 id는 세션이 되돌려 준다(캐스팅 때 주입한 그것). 손상 방어로만 폴백한다.
+		var fish_id := String(res["fish_id"])
+		if not ItemCatalog.has_item(fish_id):
+			fish_id = FishCatalog.fallback_id(_fishing_habitat())
 		var perfects := int(res["perfect_count"])
-		# ★ perfect_count는 품질 산정 재료다 — 등급 매핑(퍼펙트 → 은/금/이리듐)은 S3-T3 소관이라
-		#   지금은 안내 문구로만 노출한다(그레이박스에서 크리가 보이게).
-		_notice("%s 를 낚았다!%s" % [ItemCatalog.name_of(fish_id),
+		# ★ 품질 = 퍼펙트 릴(카탈로그 §1-D). 세션은 등급을 모르고 perfect_count만 넘기며, 매핑은
+		#   FishCatalog가 한다. 시드는 캐스팅 시드에서 갈라 결정적으로 굴린다(어종 롤과 다른 가지).
+		var qrng := RandomNumberGenerator.new()
+		qrng.seed = _cast_seed ^ 0x2ff1c37b
+		var quality := FishCatalog.quality_for(perfects, qrng, FISHING_BOBBER_BONUS)
+		inventory.add_item(fish_id, 1, quality)
+		_toast_item(fish_id, 1)
+		_notice("%s%s 를 낚았다!%s" % [
+			"" if quality <= ItemCatalog.Q_NORMAL else "[%s] " % ItemCatalog.quality_name(quality),
+			ItemCatalog.name_of(fish_id),
 			"" if perfects == 0 else " 퍼펙트 릴 ×%d" % perfects])
 		audio.sfx("harvest")
 	elif bool(res["hook_refused"]):
