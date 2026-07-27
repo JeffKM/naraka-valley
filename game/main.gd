@@ -1496,6 +1496,10 @@ var reclaim: Reclaim = null
 #   .new()). 상점 구매→지면 설치→아침 자동 급수(십자 4칸)→세이브. FarmField/Reclaim와 디커플링(자동
 #   급수 시 main이 sprinkler.watered_targets를 farm.sprinkle로 흘려넣는다 — Sprinkler는 밭·화면을 모름).
 var sprinkler: Sprinkler = null
+# ★ [S3-T7 / ADR-0061 결정 7] 게잡이통 상태(구역별 설치 좌표·미끼·수거 대기 어획물). Sprinkler 결의
+#   얇은 원장 노드(코드 생성 — .new()). 생선가게 lvl3 구매→물가 인접 칸 설치→미끼 장전→밤 일일 롤→
+#   아침 수거→세이브. CrabPotLedger는 지형·인벤·혼력·전문직을 모른다(판정·주입은 전부 main).
+var crab_pot: CrabPotLedger = null
 # ★ [S2-T5 / ADR-0060 결정 5] 혼백관 전시 상태(기증 원장·마일스톤). Sprinkler 결의 얇은 원장 노드(코드
 #   생성 — .new()). 유품 발굴(괭이질)→기증대 기증→마일스톤 보상→세이브. 진열 그리기는 main이 원장에서 파생.
 var museum: Museum = null
@@ -1810,6 +1814,10 @@ func _ready() -> void:
 	sprinkler.name = "Sprinkler"
 	add_child(sprinkler)
 	sprinkler.changed.connect(_on_sprinkler_changed)   # 설치·철거·복원 시 드로우 갱신
+	crab_pot = CrabPotLedger.new()       # ★ [S3-T7] 게잡이통 원장 노드(코드 생성 — 구역별 설치·미끼·어획 델타)
+	crab_pot.name = "CrabPot"
+	add_child(crab_pot)
+	crab_pot.changed.connect(queue_redraw)   # 설치·장전·수거·회수·일일 롤·복원 시 그레이박스 갱신
 	museum = Museum.new()                # ★ [S2-T5] 혼백관 전시 상태 노드(코드 생성 — 기증 원장·마일스톤)
 	museum.name = "Museum"
 	add_child(museum)
@@ -5873,6 +5881,15 @@ func _on_day_advanced(day: int) -> void:
 		if new_weeds.size() > 0 and not _hinted_encroach:
 			_hinted_encroach = true          # 첫 재점령 1회만 멘토 힌트(봉인 법칙 — 순수 앰비언트, ADR-0055 §5)
 			_notice("땅은 잠깐만 안 돌봐도 금세 거칠어진다 — 낫으로 잡초를 벨 수 있다")
+	# ★ [S3-T7 / ADR-0061 결정 7] 게잡이통 일일 롤 — 미끼 든 통마다 하룻밤 어획을 얹는다(혼력 0·완전
+	#   패시브). 걸린 건 통 안에 남고, 플레이어가 물가에 들러 F로 수거해야 인벤에 들어온다(스타듀
+	#   문법 — "수거가 곧 재가동"이라 안 비운 통은 다음 밤을 쉰다). 덫꾼·뱃사람·미끼장인 퍼크 3종이
+	#   여기서 원장에 *주입*된다(CrabPotLedger는 전문직을 모른다 — S3-T6 조회 헬퍼가 유일한 접점).
+	if crab_pot != null:
+		var pot_catch := crab_pot.advance_day(day, crab_pot_no_junk(), crab_pot_bait_free(),
+			crab_pot_cost_save())
+		if not pot_catch.is_empty():
+			_notice("게잡이통 %d개에 무언가 걸렸다 — 물가에 들러 [F]로 거두자" % pot_catch.size())
 	# ★ [S2-T6] 게시판 의뢰 만료 — 기한(일일 2일 / 중기 그 주 끝)이 지난 수락분을 조용히 버린다.
 	#   페널티는 없다(골드·호감도 불변 — ADR-0060 결정 6 "미완료 무페널티"). 알림도 벌칙이 아니라
 	#   "자리가 다시 비었다"는 안내다(ADR-0008 평평≠막힘).
@@ -6187,6 +6204,7 @@ func _save_game() -> void:
 		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
 		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
 		"sprinkler": sprinkler.to_save(),   # ★ [S1R-T9] 설치한 스프링클러 좌표(플레이어 델타 — 슬라이스 키 네임스페이스)
+		"crab_pot": crab_pot.to_save(),   # ★ [S3-T7] 설치한 게잡이통(구역별 좌표·미끼·수거 대기 어획물)
 		"museum": museum.to_save(),   # ★ [S2-T5] 혼백관 기증 원장·마일스톤 지급 기록(수집 진행 보존)
 		"quest_board": quest_board.to_save(),   # ★ [S2-T6] 게시판 수락 계약·완료 이력·지급 기록(의뢰 내용은 day 파생이라 무상태)
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
@@ -6252,6 +6270,8 @@ func _load_game() -> void:
 		reclaim.load_save(data["reclaim"])
 	if data.has("sprinkler"):   # ★ [S1R-T9] — 키 없는 구버전은 설치 0(빈 목록). changed가 드로우 갱신
 		sprinkler.load_save(data["sprinkler"])
+	if data.has("crab_pot"):   # ★ [S3-T7] — 키 없는 구세이브는 게잡이통 0(빈 원장·하위호환)
+		crab_pot.load_save(data["crab_pot"])
 	if data.has("museum"):   # ★ [S2-T5] — 키 없는 구버전은 기증 0(빈 원장·하위호환)
 		museum.load_save(data["museum"])
 	if data.has("quest_board"):   # ★ [S2-T6] — 키 없는 구버전은 수락 0·완료 0(빈 원장·하위호환)
@@ -6897,6 +6917,12 @@ func _process(delta: float) -> void:
 	if facing_donate and Input.is_action_just_pressed("shop_toggle"):
 		_try_donate_selected()
 		return
+	# ★ [S3-T7] 게잡이통(F): 물가의 통을 바라보며 F — 수거 / 미끼 장전 / 회수(상태별 한 동사).
+	#   주민·기증대 뒤에 둔다(설치 시 주민 칸을 배제하지만, 순서로도 한 번 더 안전하게).
+	if not _sleeping and crab_pot != null and _indoor == "" and crab_pot.has_at(_region, _target) \
+			and Input.is_action_just_pressed("shop_toggle"):
+		_use_crab_pot(_target)
+		return
 	# T5.4 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 보유 재료 1개를 자동 소모하고 정액 골드.
 	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
 		_try_serve(facing_seat)
@@ -6986,6 +7012,12 @@ func _process(delta: float) -> void:
 		_remove_sprinkler(_target)
 	elif not _sleeping and holding_sprinkler and Input.is_action_just_pressed("use_tool") and _can_place_sprinkler(_target):
 		_place_sprinkler(_target)
+	# ★ [S3-T7] 게잡이통 설치 — 통을 들고 물가 인접 칸(백사장·부두 목판)을 겨눠 LMB. 회수는 LMB가
+	#   아니라 [F]다(스프링클러와 갈린 지점): 통은 "미끼 넣기·수거·회수" 세 동사를 한 칸에서 쓰므로
+	#   상호작용 키 하나(F)로 모으는 게 자연스럽다(출하함·기증대·게시판과 같은 결).
+	var holding_pot := inventory.selected_id() == ItemCatalog.CRAB_POT
+	if not _sleeping and holding_pot and Input.is_action_just_pressed("use_tool") and _can_place_crab_pot(_target):
+		_place_crab_pot(_target)
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	#   ★ 스프링클러를 들었으면 위에서 설치/철거를 이미 처리했으니 밭 도구질로 흘리지 않는다(중복 방지).
 	if not _sleeping and _target_valid and not holding_sprinkler and Input.is_action_just_pressed("use_tool"):
@@ -7167,6 +7199,14 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 물뿌리개 채우기 (%d/%d)" % [_can_water, _CAN_CAPACITY] if _can_water < _CAN_CAPACITY \
 			else "물뿌리개 가득 참 (%d/%d)" % [_can_water, _CAN_CAPACITY]
+	elif crab_pot != null and _indoor == "" and crab_pot.has_at(_region, _target):
+		# ★ [S3-T7] 물가의 게잡이통을 겨눌 때: 상태별 [F] 한 동사(수거 / 미끼 넣기 / 회수).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _crab_pot_prompt(_target)
+	elif inventory.selected_id() == ItemCatalog.CRAB_POT and _can_place_crab_pot(_target):
+		# ★ [S3-T7] 통을 들고 물가 인접 칸을 겨눌 때: LMB로 설치(설치 후 [F]로 미끼 장전).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 게잡이통 놓기 (물가 — 미끼를 넣으면 밤새 어획)"
 	elif inventory.selected_id() == ItemCatalog.SPRINKLER and sprinkler != null and sprinkler.has_at(_target):
 		# ★ [S1R-T9] 이미 설치된 스프링클러를 겨눌 때: LMB로 회수(허수아비 재회수 동형).
 		interact_prompt.visible = not _sleeping
@@ -7639,6 +7679,105 @@ func _remove_sprinkler(t: Vector2i) -> void:
 		_notice("저승 스프링클러를 회수했다")
 		queue_redraw()
 
+# ── ★ [S3-T7 / ADR-0061 결정 7] 게잡이통 설치/장전/수거/회수 ────────────────────
+# 이 칸에 게잡이통을 놓을 수 있는가. 스프링클러 배치 규칙의 **낚시판**이다:
+#   ① 캐스팅 무대(삼도천·황천해)에서만 — ADR-0061 결정 9와 같은 무대 한정이다. 안식 연못·나루
+#      배후 강에 통을 깔면 "낚시의 집" 정체성이 다시 새고, 통용물 소스가 전 구역으로 번진다.
+#   ② **물가 인접 land 칸**(4방 중 하나가 WATER) — 통은 물에 담그는 물건이라 물 없는 데 못 놓는다.
+#      캐스팅(_cast_water_tile)이 "겨눈 물"을 요구하는 것과 짝을 이루는 규칙이다.
+#   ③ 걸을 수 있는 지면(GROUND·PATH)만 — 부두·잔교 목판(PATH)이 곧 통의 자리다(스타듀 부두 결).
+#      통은 비-SOLID 원장이라 깔아도 통행을 막지 않는다(동선 soft-lock 0 — 스프링클러 동형).
+#   ④ 같은 칸 중복 설치 불가(원장이 멱등이지만 프롬프트·소모 판정을 위해 여기서도 본다).
+func _can_place_crab_pot(t: Vector2i) -> bool:
+	if crab_pot == null or not _is_fishing_region() or _indoor != "":
+		return false
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
+		return false
+	if crab_pot.has_at(_region, t):
+		return false                          # 이미 통이 있다(그 위엔 상호작용만)
+	var cell: int = _grid[t.y][t.x]
+	if cell != GROUND and cell != PATH:        # 백사장·물가 지면 + 부두/잔교 목판만
+		return false
+	# ⑤ 주민이 선 칸엔 못 놓는다 — 뱃사공 자리(12,27)가 마침 물가 인접이라, 통을 깔면 그 칸의 [F]가
+	#   가게 열기와 겹쳐 통이 영영 안 열린다(입력 사다리에서 주민이 먼저 잡는다). 아예 못 놓게 막는다.
+	for r in _residents:
+		if r.tile != Resident.UNPLACED and r.tile == t:
+			return false
+	return _is_waterside(t)
+
+# 이 칸이 물가인가 = 4방 인접 중 하나가 WATER. 통 설치의 핵심 조건이고, 프롬프트도 이걸 본다.
+func _is_waterside(t: Vector2i) -> bool:
+	for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var c: Vector2i = t + d
+		if c.x < 0 or c.x >= _grid_w or c.y < 0 or c.y >= _outdoor_h:
+			continue
+		if _grid[c.y][c.x] == WATER:
+			return true
+	return false
+
+# 조준 칸에 게잡이통을 놓는다(아이템 1개 소모 · 혼력 0). 원장이 좌표를 든다(스프링클러 동형).
+func _place_crab_pot(t: Vector2i) -> void:
+	if not inventory.has_item(ItemCatalog.CRAB_POT):
+		return
+	if crab_pot.place(_region, t):
+		inventory.remove_item(ItemCatalog.CRAB_POT, 1)
+		audio.sfx("ui")
+		_notice("게잡이통을 놓았다 — [F]로 미끼를 넣어 두면 밤새 무언가 걸린다")
+		queue_redraw()
+
+# 게잡이통 [F] 상호작용 — 상태 하나에 동사 하나가 대응하는 단순 사다리다(어느 상태에서도 F가 논다는
+# 느낌이 없게). ①걸린 게 있으면 수거 → ②미끼가 없고 미끼를 가졌으면 장전 → ③그 외엔 회수.
+#   · 수거·장전·회수 **전부 혼력 0**(ADR-0061 결정 7 "패시브·혼력 0" — spend 호출이 한 줄도 없다).
+#   · 미끼장인(crab_pot_bait_free)이면 장전 단계를 건너뛴다("미끼 불요" 퍼크의 UI 실효 — 넣으라는
+#     프롬프트조차 안 뜨고 바로 회수로 간다).
+func _use_crab_pot(t: Vector2i) -> void:
+	if crab_pot == null or not crab_pot.has_at(_region, t):
+		return
+	# ① 수거 — 인벤이 가득이면 통 안에 그대로 둔다(어획물 증발 방지).
+	var got := crab_pot.pending_catch(_region, t)
+	if got != "":
+		if not inventory.add_item(got, 1):
+			_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시 [F]")
+			return
+		crab_pot.collect(_region, t)
+		_toast_item(got, 1)
+		audio.sfx("harvest")
+		_notice("게잡이통에서 %s 를 거뒀다" % ItemCatalog.name_of(got))
+		queue_redraw()
+		return
+	# ② 미끼 장전 — 일반 미끼 1개 소모(미끼장인이면 이 단계 자체가 없다).
+	if not crab_pot.is_baited(_region, t) and not crab_pot_bait_free() \
+			and inventory.has_item(ItemCatalog.BAIT_BASIC):
+		if crab_pot.load_bait(_region, t):
+			inventory.remove_item(ItemCatalog.BAIT_BASIC, 1)
+			audio.sfx("ui")
+			_notice("게잡이통에 미끼를 넣었다 — 내일 아침에 들러 보자")
+			queue_redraw()
+		return
+	# ③ 회수 — 빈 통을 인벤으로 되돌린다(스프링클러 회수 동형).
+	if not inventory.add_item(ItemCatalog.CRAB_POT, 1):
+		_notice("백팩이 가득 차 통을 거둘 수 없다")
+		return
+	if crab_pot.remove(_region, t):
+		audio.sfx("ui")
+		_notice("게잡이통을 회수했다")
+		queue_redraw()
+	else:
+		inventory.remove_item(ItemCatalog.CRAB_POT, 1)   # 원장이 거절 → 방금 넣은 통을 되돈다(무해)
+
+# 게잡이통을 겨눴을 때의 안내 문구(상호작용 사다리와 **같은 순서**로 파생 — 프롬프트와 실동작 불일치 0).
+func _crab_pot_prompt(t: Vector2i) -> String:
+	var got := crab_pot.pending_catch(_region, t)
+	if got != "":
+		return "[F] 게잡이통 수거 (%s)" % ItemCatalog.name_of(got)
+	if crab_pot_bait_free():
+		return "[F] 게잡이통 회수 (미끼장인 — 미끼 없이도 걸린다)"
+	if crab_pot.is_baited(_region, t):
+		return "[F] 게잡이통 회수 (미끼 장전됨 — 내일 아침 확인)"
+	if inventory.has_item(ItemCatalog.BAIT_BASIC):
+		return "[F] 미끼 넣기 (일반 미끼 1개)"
+	return "[F] 게잡이통 회수 (미끼 없음 — 일반 미끼가 있어야 걸린다)"
+
 # 스프링클러 1개를 네오 만물상에서 산다(그레이박스 획득 경로 — 카탈로그의 정식 제작 게이트는 채광 재료가
 # Slice 5 의존이라 구매로 대체). 씨앗 구매(_buy_seed_store_n)와 같은 결: 네오 호감도 할인가·골드 부족 방어.
 func buy_sprinkler(n: int = 1) -> int:
@@ -8041,6 +8180,18 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 					_notice("%s 는 이미 가지고 있다" % label)
 					return
 				n = 1
+		"pot":
+			# ★[S3-T7] 게잡이통 = 생선가게 전용 + **낚시 숙련 lvl3 해금**(진열과 같은 판정 함수를 본다).
+			#   설치물이라 스택 소모품처럼 여러 개 산다(유니크 아님 — 물가에 여러 통을 까는 게 정상 플레이).
+			if buy_id != ItemCatalog.CRAB_POT:
+				return
+			if not _crab_pot_unlocked():
+				_notice("낚시 숙련 %d이 필요하다" % FishSkill.CRAB_POT_LEVEL)
+				return
+			base = ItemCatalog.price_of(ItemCatalog.CRAB_POT)
+			label = ItemCatalog.name_of(ItemCatalog.CRAB_POT)
+			hearts = _boatman_hearts()
+			shop = "생선가게"
 	if base <= 0 or n <= 0:
 		return
 	var unit := StoreDiscount.price(base, hearts)
@@ -8057,6 +8208,8 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 				inventory.add_item(ItemCatalog.HAY, 1)
 			"gear":
 				inventory.add_item(buy_id, 1)
+			"pot":
+				inventory.add_item(ItemCatalog.CRAB_POT, 1)   # ★[S3-T7] 설치물 스택 적재
 		bought += 1
 	if bought == 0:
 		_notice("골드 부족(%d 필요)" % unit)
@@ -8070,7 +8223,9 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 # (ItemCatalog.price_of(id, quality))이라 어느 채널로 팔아도 총액이 같다 — 편의만 다르다.
 # ★관계-중립: 환전가에 뱃사공 ♡ 보정 0(ADR-0052 "+판매가는 관계 곱셈기 전용"·낚시 base-only).
 func _on_frame_sell_fish(id: String, quality: int, bulk: bool) -> void:
-	if not ItemCatalog._is_fish(id):
+	# ★[S3-T7] 취급 물목 = 어획물 + 게잡이통 통용물(_is_seafood). 통용물의 유일한 소스가 낚시 계열이라
+	#   환전 창구를 어획물과 공유한다(게·조개를 만물상에 팔러 가는 건 어색 — 서비스 분산 유지).
+	if not ItemCatalog._is_seafood(id):
 		return
 	# bulk(Shift) = 이 행(같은 어종·같은 등급) 전량, 아니면 1마리.
 	var want := _fish_count(id, quality) if bulk else 1
@@ -8379,8 +8534,11 @@ func _fishshop_text() -> String:
 # 기어 매대 품목 행 — 낚싯대 T2~T4 + 미끼 3 + 태클 3(전량 GearCatalog 가격 · 뱃사공 할인가).
 # ★T1(낡은 낚싯대)은 **매대에 없다** — 증정품이라 price 0이고 팔 물건이 아니다(ADR-0061 결정 4).
 # ★유니크(낚싯대·태클)는 이미 보유하면 "보유 중"으로 잠긴다(재구매 불가 — locked 행).
-# ★[S3-T7 게잡이통 — 낚시 스킬 lvl3 해금 시 여기 한 행으로 노출]. 지금은 로스터에 없어 미노출이다
-#   (해금 조건·아이템 정의가 S3-T7 소관 — 그때 이 목록 끝에 조건부로 붙인다).
+# ★[S3-T7 / ADR-0061 결정 7] 게잡이통 = 목록 **끝에 조건부 한 행**(자리 주석 이행). 낚시 숙련
+#   lvl3(FishSkill.CRAB_POT_LEVEL) 미만이면 **행 자체가 없다** — 스타듀 Crab Pot 레시피가 레벨 전까진
+#   목록에 아예 안 뜨는 것과 1:1이고, 매대의 잠금 행(locked)은 "유니크 기어 보유 중" 전용 어휘라
+#   해금 게이트에 전용하면 두 의미가 섞인다(그리고 boatman_test ⓒg가 잠근 계약이기도 하다).
+#   해금 사실은 레벨업 순간의 알림(_notice)이 아니라 **매대에 물건이 늘어나는 것**으로 알린다.
 func _fishshop_items() -> Array:
 	var hearts := _boatman_hearts()
 	var rows: Array = []
@@ -8391,7 +8549,20 @@ func _fishshop_items() -> Array:
 		rows.append(_gear_row(bait_id, hearts))
 	for tackle_id in GearCatalog.TACKLES:
 		rows.append(_gear_row(tackle_id, hearts))
+	if _crab_pot_unlocked():
+		var pot_base := ItemCatalog.price_of(ItemCatalog.CRAB_POT)
+		rows.append({
+			"kind": "pot", "buy_id": ItemCatalog.CRAB_POT, "icon_id": ItemCatalog.CRAB_POT,
+			"name": ItemCatalog.name_of(ItemCatalog.CRAB_POT),
+			"price": StoreDiscount.price(pot_base, hearts), "base": pot_base,
+			"owned": inventory.count_of(ItemCatalog.CRAB_POT),
+		})
 	return rows
+
+# ★[S3-T7] 게잡이통 매대 해금 조건 = 낚시 숙련 lvl3 이상(단일 판정 지점 — 진열과 구매가 같은 함수를
+#   본다. 두 곳에 조건을 복제하면 "안 보이는데 살 수 있는" 구멍이 난다).
+func _crab_pot_unlocked() -> bool:
+	return _skill_level(ProfessionCatalog.FISHING) >= FishSkill.CRAB_POT_LEVEL
 
 # 기어 한 행(만물상 행 스키마 + locked). 미끼는 스택 소모품이라 보유해도 안 잠긴다.
 func _gear_row(gear_id: String, hearts: int) -> Dictionary:
@@ -8415,7 +8586,7 @@ func _trade_items() -> Array:
 	var index := {}   # "id|q" → rows 인덱스(같은 어종·같은 등급을 한 행으로 합산)
 	for i in Inventory.SIZE:
 		var id := inventory.id_at(i)
-		if id == "" or not ItemCatalog._is_fish(id):
+		if id == "" or not ItemCatalog._is_seafood(id):   # ★[S3-T7] 어획물 + 통용물(게·조개)
 			continue
 		var q := inventory.quality_at(i)
 		var key := "%s|%d" % [id, q]
@@ -9596,6 +9767,9 @@ func _draw() -> void:
 			_draw_chest()            # ★ Phase D/E 저장 상자(집·창고 실내 — 각 카메라에서만 보임)
 		RegionCatalog.SAMDOCHEON:
 			_draw_museum_room()      # ★ [S2-T5] 혼백관 실내 — 기증대·전시 진열(원장 파생 그레이박스)
+			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(설치물 — 미끼/어획 상태 색 구분, 그레이박스)
+		RegionCatalog.HWANGCHEONHAE:
+			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(삼도천과 같은 렌더 — 구역만 다르다)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
@@ -9873,6 +10047,36 @@ func _draw_sprinklers() -> void:
 		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), Color(0.30, 0.50, 0.58))
 		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), Color(0.16, 0.28, 0.34), false, 1.0)
 		draw_circle(base + Vector2(TILE * 0.5, TILE * 0.34), TILE * 0.16, Color(0.62, 0.84, 0.94))
+
+# ★ [S3-T7 / ADR-0061 결정 10] 게잡이통 그레이박스 렌더(아트는 S3-T10). 상태 셋을 **색과 표식으로**
+#   갈라, 물가를 한 번 훑기만 해도 "어느 통을 들러야 하는지"가 읽히게 한다(스프링클러 급수 십자 표식과
+#   같은 목적 — 설치물은 자기 상태를 스스로 말해야 한다):
+#     · 미끼 없음  = 마른 대나무 갈색(할 일 있음 — 미끼를 넣어야 논다)
+#     · 미끼 장전  = 젖은 짙은 갈색 + 붉은 미끼 점(가동 중 — 내일 아침 확인)
+#     · 어획 대기  = 위 두 상태 위에 밝은 금빛 마름모(거둘 것 있음 — 가장 눈에 띄는 표식)
+func _draw_crab_pots() -> void:
+	if crab_pot == null:
+		return
+	for t: Vector2i in crab_pot.tiles(_region):
+		var base := Vector2(t.x * TILE, t.y * TILE)
+		var baited := crab_pot.is_baited(_region, t)
+		# 통 몸통 — 엮은 대나무 상자(가로 살 두 줄로 "엮음"을 낸다). 장전되면 젖은 톤으로 어두워진다.
+		var body := Color(0.42, 0.32, 0.19) if baited else Color(0.60, 0.48, 0.30)
+		draw_rect(Rect2(base + Vector2(TILE * 0.18, TILE * 0.34), Vector2(TILE * 0.64, TILE * 0.50)), body)
+		draw_rect(Rect2(base + Vector2(TILE * 0.18, TILE * 0.34), Vector2(TILE * 0.64, TILE * 0.50)),
+			Color(0.22, 0.16, 0.10), false, 1.0)
+		for k in 2:
+			draw_rect(Rect2(base + Vector2(TILE * 0.18, TILE * (0.48 + 0.16 * k)), Vector2(TILE * 0.64, 1.0)),
+				Color(0.26, 0.19, 0.12))
+		if baited:
+			draw_circle(base + Vector2(TILE * 0.50, TILE * 0.44), TILE * 0.08, Color(0.72, 0.28, 0.24))
+		if crab_pot.pending_catch(_region, t) != "":
+			# 어획 대기 마름모(통 위) — "거둘 것 있음"의 유일한 표식이라 가장 밝다.
+			var c := base + Vector2(TILE * 0.5, TILE * 0.20)
+			draw_colored_polygon(PackedVector2Array([
+				c + Vector2(0.0, -TILE * 0.14), c + Vector2(TILE * 0.11, 0.0),
+				c + Vector2(0.0, TILE * 0.14), c + Vector2(-TILE * 0.11, 0.0),
+			]), Color(0.95, 0.82, 0.42))
 
 # ★ [Phase E/S1-15] 가축 스프라이트 훅 — assets/livestock/<species>_<stage>.png(gemini-demo-sprites-spec §5,
 #   bottom-center 앵커, dak 32²·so_baby 48²·so_adult 64×48). owner Gemini 결과가 이 경로에 들어오면 코드

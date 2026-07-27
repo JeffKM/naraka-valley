@@ -126,6 +126,25 @@ const SPIRIT_FLOWER := "spirit_flower"  # 피안화(彼岸花) — 안식 꽃 �
 const FORAGEABLES := {                   # 채집물 id → {name_ko, price(기준 판매가)}
 	SPIRIT_FLOWER: {"name_ko": "피안화", "price": 30},
 }
+# ── ★[S3-T7 / ADR-0061 결정 7] 게잡이통 통용물 3종 — 게·조개류(패시브 어획) ──────────
+# 채집물(FORAGEABLES)·어획물(FishCatalog)과 **정확히 같은 결**의 품질 유차원 CAT_HARVEST다. 즉
+# 판매·서빙·선물·정렬·출하·의뢰 보상 계산이 전부 기존 경로로 자동 통용된다(신규 분기 0).
+# ★ 왜 FishCatalog가 아니라 여기인가: FishCatalog는 **캐스팅으로 걸리는 로스터**(서식지·절기·시간
+#   잠금·체급·격투 파라미터)의 단일 출처다. 통용물은 격투도 체급도 절기 잠금도 없는 *덫의 산물*이라
+#   그 스키마의 필드를 대부분 못 채운다 — 넣으면 로스터가 "안 낚이는 어종"으로 오염된다(그리고
+#   roll_fish 가중 분모까지 흔든다). 채집물이 밭 작물과 분리돼 있는 것과 같은 판단이다.
+# ★ 명명(CONTEXT 저승 결 · FishCatalog 명명 규약 계승 — "넋/잿빛" 수식어 합성, 잠정·owner 큐):
+#   넋게(넋붕어·넋멸치 결) · 혼조개 · 잿빛소라(잿빛송사리 결).
+# ★ 가격 밴드 = 소 체급 물고기 결(30~60G — 넋붕어 32 / 초롱치 52 근방). 패시브 산출이 손 낚시
+#   중·대 체급(78~190G)을 넘지 않게 잠근다(ADR-0008 "관계·자동화는 곱셈기지 대체가 아니다"의 결).
+const NEOK_GE := "neok_ge"              # 넋게
+const HON_JOGAE := "hon_jogae"          # 혼조개
+const JAETBIT_SORA := "jaetbit_sora"    # 잿빛소라
+const POT_GOODS := {                     # 통용물 id → {name_ko, price(기준 판매가)}
+	NEOK_GE: {"name_ko": "넋게", "price": 45},
+	HON_JOGAE: {"name_ko": "혼조개", "price": 32},
+	JAETBIT_SORA: {"name_ko": "잿빛소라", "price": 58},
+}
 # ── ★[S3-T3 / ADR-0061 결정 3] 어획물(물고기 18종) — 정식 편입 ────────────────
 # 채집물(FORAGEABLES)과 같은 결로 품질 유차원 CAT_HARVEST다 — 판매·서빙·선물·정렬이 작물 수확물과
 # 동급이고, 퍼펙트 릴 → 등급 매핑(FishCatalog.quality_for)이 그 위에 얹힌다.
@@ -158,9 +177,16 @@ const LARGE_SUFFIX := "_large"
 # 지면 칸에 설치해 4방 인접 4칸을 아침에 자동 급수하는 설치물. 스택 가능·상점 구매(그레이박스
 # 획득 경로 — 카탈로그의 정식 제작 게이트는 채광 재료가 Slice 5 의존이라 여기선 구매로 대체).
 # 배치·급수·세이브는 Sprinkler 노드(sprinkler.gd)가, 아이템 정의는 여기가 든다(도구:재료 결).
+# ★[S3-T7 / ADR-0061 결정 7] 게잡이통 — 물가 인접 칸에 놓고 미끼를 넣어 두면 밤새 어획하는 패시브
+#   설치물(스프링클러 결). **생선가게 전용·낚시 숙련 lvl3 해금**(스타듀 Crab Pot 레시피 1:1 — 잠정).
+#   배치·장전·수거·일일 롤·세이브는 CrabPotLedger(crab_pot.gd)가, 아이템 정의는 여기가 든다.
+const CRAB_POT := "crab_pot"
 const SPRINKLER := "sprinkler"
 const PLACEABLES := {                    # 설치물 id → {name_ko, price(구매가)}
 	SPRINKLER: {"name_ko": "저승 스프링클러", "price": 60},
+	# 600G(잠정) — 스프링클러(60G) 10배. 낚시 lvl3까지 굴린 플레이어의 한나절 벌이 규모라
+	# "해금 직후 하나, 이후 천천히 늘린다"가 되게 잡았다(패시브 수입의 초기 투자 게이트).
+	CRAB_POT: {"name_ko": "게잡이통", "price": 600},
 }
 
 # 씨앗 아이템 id 접미사("<작물군>_seed"). 작물군 id와 1:1 매핑.
@@ -252,6 +278,18 @@ static func _is_relic(id: String) -> bool:
 static func _is_forageable(id: String) -> bool:
 	return FORAGEABLES.has(id)
 
+# ★[S3-T7] id가 게잡이통 통용물인가(넋게·혼조개·잿빛소라). 채집물과 같은 품질 유차원 CAT_HARVEST.
+static func _is_pot_good(id: String) -> bool:
+	return POT_GOODS.has(id)
+
+# ★[S3-T7] 생선가게가 **취급하는 물목**인가 = 어획물 + 통용물. 뱃사공 환전 창구가 이걸 본다
+#   ("상점 중 물고기를 취급하는 유일한 얼굴" — ADR-0061 결정 5). 게·조개를 잡화점에 팔러 가는 건
+#   어색하고, 통용물의 유일한 소스가 낚시 계열이라 환전 창구를 공유하는 게 정배다.
+#   ★ `_is_fish`와 갈라 둔 이유: 어종 로스터(18종)는 캐스팅 롤·의뢰·도감의 축이라 통용물이
+#     섞이면 안 된다. "낚이는 것"과 "생선가게가 사 주는 것"은 다른 집합이다.
+static func _is_seafood(id: String) -> bool:
+	return _is_fish(id) or _is_pot_good(id)
+
 # id가 설치물인가(S1R-T9 — 스프링클러). 품질 무차원 스택·CAT_PLACEABLE(구매·설치).
 static func _is_placeable(id: String) -> bool:
 	return PLACEABLES.has(id)
@@ -265,7 +303,7 @@ static func large_product_id(product_id: String) -> String:
 static func has_item(id: String) -> bool:
 	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
-		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id)
+		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id) or _is_pot_good(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -282,8 +320,9 @@ static func category_of(id: String) -> String:
 		return CAT_SEED
 	if _is_sapling(id):
 		return CAT_SAPLING
-	if CropCatalog.has_crop(id) or _is_fruit(id) or _is_animal_product(id) or _is_forageable(id) or _is_fish(id):
-		return CAT_HARVEST   # 채집물(ADR-0052)·어획물(★S3-T2)도 수확물 결 — 품질·판매·서빙 동급
+	if CropCatalog.has_crop(id) or _is_fruit(id) or _is_animal_product(id) or _is_forageable(id) \
+			or _is_fish(id) or _is_pot_good(id):
+		return CAT_HARVEST   # 채집물(ADR-0052)·어획물(★S3-T2)·통용물(★S3-T7)도 수확물 결 — 품질·판매·서빙 동급
 	if _is_fertilizer(id):
 		return CAT_FERTILIZER
 	if _is_hay(id) or _is_material(id):
@@ -318,6 +357,8 @@ static func name_of(id: String) -> String:
 		return FORAGEABLES[id]["name_ko"]
 	if _is_fish(id):
 		return FishCatalog.name_of(id)   # ★S3-T3 어획물 18종(로스터 단일 출처 = FishCatalog)
+	if _is_pot_good(id):
+		return POT_GOODS[id]["name_ko"]   # ★S3-T7 게잡이통 통용물 3종
 	if _is_placeable(id):
 		return PLACEABLES[id]["name_ko"]
 	if _is_relic(id):
@@ -336,7 +377,7 @@ static func stackable_of(id: String) -> bool:
 		return GearCatalog.stackable_of(id)   # ★S3-T4 미끼만 스택(낚싯대·태클 = 유니크 장착물)
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
-		or _is_placeable(id) or _is_relic(id) or _is_fish(id)
+		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_pot_good(id)
 
 # 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 비료=구매가(buy_cost),
 # 수확물/과일=판매가. 없으면 0. 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다.
@@ -366,6 +407,8 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return int(FORAGEABLES[id]["price"] * quality_mult(quality))   # ★ADR-0052 채집물 = 기준가 × 등급 배수(수확물 결)
 	if _is_fish(id):
 		return int(FishCatalog.price_of(id) * quality_mult(quality))   # ★S3-T3 어획물 = 기준가 × 등급 배수(채집물 결)
+	if _is_pot_good(id):
+		return int(POT_GOODS[id]["price"] * quality_mult(quality))   # ★S3-T7 통용물 = 기준가 × 등급 배수(어획물 결)
 	if _is_placeable(id):
 		return int(PLACEABLES[id]["price"])   # ★S1R-T9 설치물 = 품질 무차원 고정 구매가(스프링클러)
 	if _is_relic(id):
