@@ -755,3 +755,136 @@ cafe_ext.png — 알파가 전부 255고 배경이 #8c8681 회색으로 구워�
 ★미완: **표정 5종 없음**(`neo_talk/_smile/_shy/_sad/_surprised`). 네오 대사의 [smile]/[shy] 태그는
   `_set_portrait`의 누락 폴백을 타 기본 stem으로 떨어진다(대사·코드 무개정으로 나중에 추가 가능).
 ```
+
+---
+
+## 12. ★[S3-T9] 삼도천·황천해 아트 패스 1 — 지형·건물·프롭 9종 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-07-28). §10·§11과 같은 [ADR-0048] 교체
+> 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰면 **코드 0줄 수정**으로 반영된다.
+>
+> **후처리 글루:** [`game/tools/make_s3_art.py`](../../game/tools/make_s3_art.py)
+> **raw 보관:** `game/assets/buildings/{museum,fishshop}_ext_raw.png` ·
+> `game/assets/props/{rowboat,pier_post,beach_shell,beach_seaweed}_raw.png` ·
+> `game/assets/terrain16/s3_raw/sand_tile_raw_*.png`
+> **육안 하네스:** `godot --headless --path game -s res://tools/fishing_region_dump.gd`
+> → `game/tools/{samdo,hwang}_dump.png`
+>
+> **이 패스로 삼도천·황천해에 그레이박스 건물이 0이 됐다** — 외관이 붙어 "혼백관"·"생선가게" 라벨을 뗐다
+> (S2-T10 마을 컨벤션과 같은 판단: 도트 외관으로 식별되면 라벨 없음).
+
+### 12.0 공통 규약
+
+```
+건물 2종은 §11.0 공통 규약을 그대로 따른다(정면 facade · 남향 문 · 박공 지붕 + 윗면 슬랩 노출 ·
+  base 투명 · bottom-center 앵커 · 아트 폭 = footprint 폭 정확히 · fit_facade가 규격에 앉힘).
+★[§1.3] 추가 리젝 기준: **지면을 구워 오면 안 된다.** PixelLab이 건물 밑에 모래/흙 타원을 굽는 일이
+  잦아(생선가게 1차 판) 글루에 `trim_baked_ground()`(바깥에서 실측 지면 팔레트 ±34 flood-fill)를 뒀다.
+  구운 지면은 ㉠실제 지형이 안 비치고 ㉡bbox가 아래로 늘어 **문 정렬이 밀린다**(치명).
+★리젝 기준: **3/4 각도 금지.** 생성물이 옆벽이 보이는 반-아이소로 나오면 재생성한다
+  (1차 생선가게가 그랬다 — 프롬프트에 "flat front elevation only, viewed straight on from the front"
+   를 명시하면 정면으로 나온다).
+```
+
+### 12.1 혼백관 외관 `museum_ext`
+
+```
+파일: game/assets/buildings/museum_ext.png   (raw: museum_ext_raw.png 140×126)
+크기: 224×200 = MUSEUM_EXT_RECT Rect2i(6,8,7,6) 폭 1:1(224) · 높이는 지붕이 위로 솟음
+배선: main._draw_facade_museum() — SAMDOCHEON 드로우 분기
+생성: create_map_object(140×126 / low top-down / medium detail / basic shading / single color outline)
+  PROMPT: Korean underworld memorial shrine hall for the souls of the dead, front elevation facade,
+    solemn and wide. Hanok tiled gable roof (triangular pitch) with a visible flat roof-top slab
+    receding behind the ridge so the roof depth is seen from slightly above. Dark slate roof tiles,
+    pale grey stone walls with dark timber posts, a wide double wooden door dead center at the bottom
+    of the front wall, a carved stone name plaque mounted above the door, two stone soul lanterns
+    flanking the doorway glowing faint pale blue, a low stone foundation strip.
+    + [§1.1 광원 세트] + 배경 투명·지면 금지
+후처리: trim_baked_ground → fit_facade(7,6) → 채도 ×0.88·명도 ×0.96
+★정체성 기준: **장사가 아니라 사당**이다 — 간판(상호) 대신 **석조 현판**, 문 양옆 **석등**,
+  어두운 슬레이트 기와. 만물상·생선가게와 톤이 겹치면(나무 간판·등롱) 재생성.
+```
+
+### 12.2 생선가게 외관 `fishshop_ext`
+
+```
+파일: game/assets/buildings/fishshop_ext.png   (raw: fishshop_ext_raw.png 140×126)
+크기: 224×192 = FISHSHOP_EXT_RECT Rect2i(8,20,7,6) 폭 1:1
+배선: main._draw_facade_fishshop() — HWANGCHEONHAE 드로우 분기
+생성: create_map_object(140×126 / low top-down / medium detail / basic shading / single color outline)
+  PROMPT: Korean underworld seaside fish shop building, flat front elevation only, viewed straight on
+    from the front so no side wall and no perspective is visible, wide and low shop. Hanok tiled gable
+    roof ... Weathered blue-grey roof tiles, salt-bleached driftwood plank front wall, a wide double
+    wooden sliding door dead center at the bottom of the front wall, a hanging wooden shop sign board
+    above the door with a fish silhouette carved on it, fishing nets draped on the front wall, stacked
+    crates and a barrel beside the door, two small paper lanterns.
+    + [§1.1] + 배경 투명·지면 금지
+후처리: trim_baked_ground(673px 제거) → fit_facade(7,6) → 채도 ×0.88·명도 ×0.96
+★리젝 기준: **물고기 현판이 없으면 재생성**(§11.1 만물상 간판 기준 동형 — 점포임을 읽히게 하는 요소).
+```
+
+### 12.3 백사장 base 필드 `sand_field` / `sand_wet_field`
+
+```
+파일: game/assets/terrain16/single_source/sand_field.png · sand_wet_field.png (각 128×128 seamless)
+배선: main._bf_sand / _bf_sand_wet — 표면코드 7(모래) · 프로파일 sand_rects/shore_sand가 켠다
+생성: create_tiles_pro(square_topdown / top-down / 32px / segmentation, seed 3901)
+  PROMPT: 1). smooth dry pale beach sand 2). beach sand with scattered tiny pebbles
+          3). beach sand with faint wind ripple marks 4). damp darker packed sand near the waterline
+후처리: **팔레트만 취하고 구조는 절차 합성**(3옥타브 주기 노이즈 seamless + 미세 그레인 + 극희소 모래알)
+★★ 왜 타일을 그대로 안 붙였나(폐기 기록·재시도 금지):
+  자갈 광장(§10.3 cobble_field) 문법대로 32px 변주 12장을 4×4로 깔아 봤고 **육안 리젝**했다 —
+  변주마다 모티프(물결선·해칭·다이아 메시)가 타일 **중앙에** 몰려 있어 배치가 통째로 **32px 격자**로
+  읽힌다(타일 평균 레벨을 맞춰 톤 체커를 지워도 모티프 격자는 남는다). 판석은 원래 격자 물건이라
+  통했지만 모래는 무정형이라 안 통한다. 기준선 `dirt_field`(무정형 저주파 얼룩)의 구조를 맞추려면
+  절차 합성이 정배다(`make_terrain_fields.py`의 soil·water 선례와 같은 층위).
+★ 진폭을 작게 잡는다 — 백사장이 9행 × 전 폭이라 결이 세면 필드 주기(256px = 8칸)가 반복 얼룩으로 뜬다.
+★ `sand_wet_field`는 **물가 테두리 전용**이다. 손그림 4_0 shore 마스크의 테두리 클래스는 연못·강용
+  **붉은 흙빛** 반사라, 백사장에 그대로 쓰면 바다 경계에 **붉은 줄**이 그어진다(1차 덤프 육안).
+  owner 교체 시 두 장의 **톤 차이(젖은 쪽이 한 단 어둡고 채도 조금 높음)** 를 유지할 것.
+```
+
+### 12.4 나룻배 `rowboat`
+
+```
+파일: game/assets/props/rowboat.png (64×96 = 2×3칸)   (raw: rowboat_raw.png)
+배선: PROP_ROWBOAT — layout.json SAMDO_OUTDOOR(12,28)·HWANG_OUTDOOR(34,22)
+생성: create_map_object(64×96 / high top-down / medium detail / basic shading / single color outline)
+  PROMPT: small old wooden rowboat ferry beached on sand, seen from above at an angle, empty hull with
+    two bench seats and a pair of oars laid inside, weathered warm brown planks, dark waterline stain,
+    a coil of rope at the bow. + [§1.1] + 배경 투명·물/모래 금지
+후처리: 발치 bottom-flush(64×96 프레임) → 채도 ×0.85·명도 ×0.95
+★**비-SOLID**다(장식만). 삼도천·황천해는 동선이 한 줄 스파인(잔교·부두)뿐이라 물가에 충돌을 얹으면
+  flood-fill 도달성이 깨질 위험이 크다. 물리적 가둠이 필요해지면 그때 SOLID_PROPS로 승격한다.
+```
+
+### 12.5 잔교 말뚝 `pier_post`
+
+```
+파일: game/assets/props/pier_post.png (32×32 = 1×1칸)   (raw: pier_post_raw.png)
+배선: PROP_PIER_POST — 잔교(x28) 양옆 물 위 x27/x29에 세 쌍(삼도천)·네 쌍(황천해)
+생성: create_map_object(32×32 / low top-down / medium detail / basic shading / single color outline)
+  PROMPT: single short wooden mooring piling post standing in water, weathered dark timber stump with
+    a flat sawn top, a rope loop wrapped near the top, green algae and barnacles at the base.
+    + [§1.1] + 배경 투명·물 금지
+후처리: 발치 bottom-flush → 채도 ×0.85·명도 ×0.95
+★역할: 1칸 폭 잔교가 "물 위에 홀로 뜬 판자"로 보이던 것을 **말뚝에 얹힌 다리**로 읽히게 한다
+  (통행 폭을 넓히지 않고 부피감만 준다 — 충돌·동선 불변).
+```
+
+### 12.6 백사장 지면 데칼 `beach_shell` / `beach_seaweed`
+
+```
+파일: game/assets/props/beach_shell.png · beach_seaweed.png (각 32×32 프레임, 콘텐츠 폭 16px)
+배선: GD_SHELL / GD_SEAWEED — `_GD_BEACH` 테이블(모래 표면 전용 스캐터, 프로파일 beach_density)
+생성: create_map_object(32×32 / high top-down / low detail / basic shading / selective outline)
+  조개: tiny flat cluster of three pale seashells lying on sand, viewed straight from above, very
+        small and flat decal, one spiral shell and two clam shells, cream and faint pink.
+  해초: tiny flat tangle of dried dark seaweed washed up on a beach, viewed straight from above,
+        very small and flat decal, muted olive and dusty brown strands.
+후처리: 콘텐츠 폭 16px로 축소 + 발치 정렬(기존 ground_pebble 14×6 · ground_weed_dry 18×12 관례) →
+  조개 채도 ×0.80·명도 ×0.94 / 해초 채도 ×0.72·명도 ×0.92
+★모래 위엔 풀 tuft·나뭇가지 계보를 **일절 뿌리지 않는다**(해변이 잔디밭으로 읽힌다). 이 둘 + 잔돌
+  (GD_PEBBLE)·슬레이트(GD_STONE2)만으로 백사장 결을 낸다.
+★해초는 현재 판본이 "검은 성게"처럼 읽히는 기미가 있다 — 교체 1순위(가닥이 옆으로 눕는 실루엣이 정답).
+```

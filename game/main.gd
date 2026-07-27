@@ -349,6 +349,12 @@ const PROP_GRASS := preload("res://assets/props/grass_tuft.png")        # 32×32
 #   돌담은 farm_fence 계보(32×32 풀타일 SOLID 경계벽)이되 좌우 edge-extend라 가로 런이 끊기지 않는다.
 const PROP_VILLAGE_TREE := preload("res://assets/props/village_tree_cherry.png")  # 64×128 — 벚꽃 나무(2×4칸)
 const PROP_STONE_WALL := preload("res://assets/props/village_stone_wall.png")     # 32×32 — 돌담(1×1칸, SOLID)
+# ★[S3-T9 아트 패스] 낚시 무대 정체성 프롭 2종(PixelLab create_map_object → tools/make_s3_art.py 정규화).
+#   둘 다 **비-SOLID**다 — 삼도천·황천해는 동선이 한 줄 스파인(잔교·부두)뿐이라 물가에 충돌을 얹으면
+#   flood-fill 도달성이 깨질 위험이 크다(hwangcheonhae_test 불변식). 순수 장식으로 두고, 물리적
+#   가둠이 필요해지면 그때 SOLID_PROPS에 편입한다(울타리·통나무 선례와 같은 승격 경로).
+const PROP_ROWBOAT := preload("res://assets/props/rowboat.png")     # 64×96 — 나룻배(2×3칸, 물가에 대어 둔 배)
+const PROP_PIER_POST := preload("res://assets/props/pier_post.png") # 32×32 — 잔교 말뚝(1×1칸, 데크 양옆 물 위)
 const PROP_BUSH := preload("res://assets/props/bush.png")               # 64×64 — 덤불(2×2칸, 장식)
 const PROP_ROCK := preload("res://assets/props/rock.png")               # 64×64 — 바위·돌(2×2칸, SOLID)
 # ★[prop-regen-roster §5.3 / owner 2026-07-04~05] 통나무(logs) 5종 재생성(PixelLab create_1_direction_object
@@ -402,7 +408,8 @@ const DEBRIS_VARIANTS := {
 const PROP_SHADOW_SET := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_BUSH,
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP, PROP_SCARECROW,
 	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B,  # ★통나무 5종 접지 그림자
-	PROP_VILLAGE_TREE]  # ★[S2-T9] 벚꽃 나무 = 저승 봄나무와 같은 부피 프롭(발치 타원 그림자)
+	PROP_VILLAGE_TREE,  # ★[S2-T9] 벚꽃 나무 = 저승 봄나무와 같은 부피 프롭(발치 타원 그림자)
+	PROP_ROWBOAT, PROP_PIER_POST]  # ★[S3-T9] 나룻배·말뚝 = 부피 프롭(발치 그림자 + Y-split)
 # ★ 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md). 결정적 절차 배치로
 #   GROUND/PATH 칸마다 자기 지형 테이블로 가중 1롤 → 베이스 위에 디테일을 *구역 빌드 때 1회 베이크*
 #   (런타임 정적 오버레이, _draw에서 1 draw call). 손배치 grass_tuft 폐기 → 이 시스템이 대체.
@@ -424,6 +431,10 @@ const GD_TWIG1 := preload("res://assets/props/scatter_twig_a.png")     # 마른 
 const GD_TWIG2 := preload("res://assets/props/scatter_twig_b.png")     # 잎 달린 가지(변주)
 const GD_STONE1 := preload("res://assets/props/scatter_stone_a.png")   # 돌 3개 무리
 const GD_STONE2 := preload("res://assets/props/scatter_stone_b.png")   # 단독 슬레이트
+# ★[S3-T9] 백사장 전용 데칼 2종 — 모래 위에 풀 tuft·나뭇가지를 뿌리면 해변이 잔디밭으로 읽힌다.
+#   조개·마른 해초로 갈아 "여기는 바닷가"를 지면이 스스로 말하게 한다(ADR-0057 "베이스는 단순·디테일은 오브젝트").
+const GD_SHELL := preload("res://assets/props/beach_shell.png")        # 조개 무리(작고 납작한 데칼)
+const GD_SEAWEED := preload("res://assets/props/beach_seaweed.png")    # 마른 해초 뭉치
 # ★[단계3-③ / owner Gemini 가이드 2차] 풀 클러스터 노이즈 레버 — 스타듀식 "민무늬 베이스 80~90% +
 #   특정 영역에만 풀 덩어리". _gd_cluster(x,y) < GD_CLUSTER_CUT인 넓은 영역은 풀 포기 없이 민무늬로 비운다.
 #   CUT↑ = 풀 영역 축소(여백↑). BLOCK = 덩어리 크기(칸). GROUND만 게이트(길은 자체 밀도).
@@ -471,6 +482,14 @@ var _GD_SPARSE := [
 	[GD_WEED_D, 2, true],   # 마른 잡초(개활지)
 ]
 const _GD_SPARSE_DENSITY := 0.12   # 빈 tan 셀 중 clutter가 놓일 비율(↑=빽빽). 스타듀 개활지 밀도.
+# ★[S3-T9] 백사장(모래 표면) 전용 데칼 테이블. `_GD_SPARSE`와 같은 층위(null 없음 — 밀도는 프로파일
+#   `beach_density` 해시 게이트가 담당). 잔돌·슬레이트를 섞어 조개만 반복되는 걸 막는다.
+var _GD_BEACH := [
+	[GD_SHELL, 5, true],    # 조개 무리(미세 그림자)
+	[GD_SEAWEED, 4, false], # 마른 해초(평면)
+	[GD_PEBBLE, 3, true],   # 잔돌
+	[GD_STONE2, 2, true],   # 단독 슬레이트(파도에 밀려온 돌)
+]
 
 # ★[ADR-0058] 구역-키드 스캐터 테이블 — 각 구역 고유 clutter 정체성(심심함 최대 레버).
 #   비면 전역 _GD_TABLES/_GD_SPARSE 폴백(회귀 0). 구역이 지어질 때 자기 엔트리를 채운다.
@@ -510,6 +529,36 @@ var _REGION_GD_TABLES := {
 		],
 		# PATH는 전역 폴백(박힌 잔돌·갈라짐 — 마을 포장 결과 그대로 맞는다).
 	},
+	# ★[S3-T9] 삼도천 = **강변 초지**. 마을(정돈)과 농원(야생) 사이 — 물가라 풀이 무성하되 사람이
+	#   지나는 나룻터 일대라 농원만큼 잡동사니가 쌓이진 않는다. 들꽃을 살려 강변 결을 준다.
+	RegionCatalog.SAMDOCHEON: {
+		GROUND: [
+			[null, 46, false],
+			[GD_GRASS1, 30, false],
+			[GD_GRASS2, 8, false],   # 중간 풀포기↑(물가 = 키 큰 풀)
+			[GD_WEED_U, 3, false],
+			[GD_WEED_D, 2, true],
+			[GD_FLOWER, 3, true],
+			[GD_PEBBLE, 3, true],    # 강자갈
+			[GD_STONE2, 3, true],
+			[GD_TWIG1, 2, false],
+		],
+	},
+	# ★[S3-T9] 황천해 고지 수풀 = **덤불 바닥**. 나무가 빽빽한 밴드라 지면은 떨어진 가지·돌이 흔하고
+	#   풀은 무성하다. 꽃은 뺀다(바닷바람 고지 = 척박). 모래 밴드는 이 테이블을 안 탄다(_GD_BEACH).
+	RegionCatalog.HWANGCHEONHAE: {
+		GROUND: [
+			[null, 40, false],
+			[GD_GRASS1, 30, false],
+			[GD_GRASS2, 10, false],
+			[GD_WEED_U, 5, false],
+			[GD_WEED_D, 4, true],
+			[GD_TWIG1, 5, false],    # 수풀 = 떨어진 가지↑
+			[GD_TWIG2, 4, false],
+			[GD_STONE1, 4, true],
+			[GD_STONE2, 3, true],
+		],
+	},
 }
 var _REGION_GD_SPARSE := {}
 
@@ -527,6 +576,8 @@ func _gd_sparse_for() -> Array:
 var _REGION_CLUSTER_CUT := {
 	RegionCatalog.HOME: 0.46,           # 전역 GD_CLUSTER_CUT=0.60 (↓=풀무리 면적↑·초원 소멸 후 넉넉히)
 	RegionCatalog.NARU_VILLAGE: 0.68,   # ★[S2-T3] 마을은 풀무리 면적↓(↑=여백↑) — 정돈된 마당 결
+	RegionCatalog.SAMDOCHEON: 0.52,     # ★[S3-T9] 강변 초지 — 마을보다 무성, 농원보단 성기다
+	RegionCatalog.HWANGCHEONHAE: 0.48,  # ★[S3-T9] 고지 수풀 — 나무 밑이라 풀무리 면적↑
 }
 
 # 풀무리 마스크 — 저주파 seed + CA 이웃-확산(스타듀 풀 확산 본뜸). 결정적·셀단위·2패스 상한.
@@ -600,6 +651,8 @@ func _scatter_is_clump(x: int, y: int) -> bool:
 var _REGION_PROP_KEYS := {
 	RegionCatalog.HOME: ["HOME"],
 	RegionCatalog.NARU_VILLAGE: ["CAFE", "VILLAGE_HOUSE", "VILLAGE_OUTDOOR"],
+	RegionCatalog.SAMDOCHEON: ["SAMDO_OUTDOOR"],        # ★[S3-T9] 강변 장식(나룻배·말뚝)
+	RegionCatalog.HWANGCHEONHAE: ["HWANG_OUTDOOR"],     # ★[S3-T9] 백사장·부두 장식
 }
 var _ground_detail_tex: ImageTexture = null   # 구역별 베이크된 지면 디테일 오버레이
 var _gd_shadow_stamp: Image = null            # 재사용 SE 그림자 스탬프
@@ -612,6 +665,8 @@ var _bf_water: Image = null
 var _bf_earth: Image = null   # ★[스타듀 농장 룩] 마당 베이스 = 따뜻한 황갈색 맨흙(dirt_field 리톤). 잔디는 위에 패치로만.
 var _bf_cobble: Image = null  # ★[S2-T9] 나루 자갈 광장(판석 포장) base 필드
 var _bf_plank: Image = null   # ★[S2-T9] 나루 다리·부두 목판 데크 base 필드
+var _bf_sand: Image = null    # ★[S3-T9] 황천해 백사장(모래) base 필드 — 물가 shore의 '땅'도 이걸 쓴다
+var _bf_sand_wet: Image = null # ★[S3-T9] 젖은 모래(물가 테두리 전용 — 손그림 붉은 테두리 대체)
 # ★[지면 채도 A/B 실험] _retone_earth 계수 — 기본값=현행이라 baseline 완전 불변(회귀 안전).
 #   ground_ab_dump.gd가 프리셋마다 이 값을 오버라이드 → _bf_earth 재계산 → 실제 코드 경로로 A/B 렌더.
 var _earth_hue_lerp := 0.55   # 붉은 흙 hue를 노란-갈색(0.095)으로 당기는 가중치
@@ -662,6 +717,12 @@ const VILLAGE_HOUSE_CYCLE := [FACADE_VILLAGE_HOUSE_A, FACADE_VILLAGE_HOUSE_B, FA
 const FACADE_STOREHOUSE := preload("res://assets/buildings/storehouse_ext.png")
 const FACADE_BARN := preload("res://assets/buildings/barn_ext.png")
 const FACADE_COOP := preload("res://assets/buildings/coop_ext.png")
+# ★[S3-T9 / ADR-0061 결정 10] 삼도천·황천해의 마지막 그레이박스 두 채. 만물상(PR#275)과 같은 간판 문법
+#   (기와 박공 + 윗면 슬랩 노출 + 문 위 현판)으로, 폭 = footprint 7칸과 1:1(224px)·높이는 지붕이 위로 솟는다.
+#   · 혼백관 = 어두운 슬레이트 기와 + 회백 석벽 + 문 양옆 석등(창백한 혼불) — "장사 아닌 사당" 톤.
+#   · 생선가게 = 소금기 먹은 유목 판벽 + 물고기 현판 + 그물·궤짝 — 바닷가 점포 톤.
+const FACADE_MUSEUM := preload("res://assets/buildings/museum_ext.png")
+const FACADE_FISHSHOP := preload("res://assets/buildings/fishshop_ext.png")
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로).
 # ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
@@ -723,6 +784,8 @@ const PROP_TEX_REGISTRY := {
 	# ★[S2-T9] 나루 마을 환경 아트
 	"VILLAGE_TREE": PROP_VILLAGE_TREE, "STONE_WALL": PROP_STONE_WALL,
 	"BUSH": PROP_BUSH, "ROCK": PROP_ROCK,
+	# ★[S3-T9] 삼도천·황천해 낚시 무대 프롭
+	"ROWBOAT": PROP_ROWBOAT, "PIER_POST": PROP_PIER_POST,
 	# ★통나무 5종(prop-regen-roster §5.3)
 	"LOG_LONG": PROP_LOG_LONG, "LOG_SHORT": PROP_LOG_SHORT, "LOG_UPRIGHT": PROP_LOG_UPRIGHT,
 	"LOG_DIAG_A": PROP_LOG_DIAG_A, "LOG_DIAG_B": PROP_LOG_DIAG_B,
@@ -857,6 +920,53 @@ const PROP_LAYOUT_VILLAGE_OUTDOOR := [
 		Vector2i(70, 42), Vector2i(24, 58), Vector2i(78, 58),   # 동편 중단·강변 좌우
 	]],
 ]
+# ★[S3-T9 아트 패스] 삼도천 강변 장식 — 무대가 "그냥 물 띠"로 안 읽히게 물가에 쓰임새를 놓는다.
+#   · **나룻배** — 북안 서편(낚시터 라벨 서쪽)에 대어 둔다. 아트 하단이 물(y30)에 걸쳐 "물에 띄운 배"로
+#     읽히고, 산책로(y28 · x18~28)·잔교 스파인(x28)은 비껴간다.
+#   · **말뚝** — 잔교(x28) 양옆 물 위 x27/x29에 세 쌍. 1칸 폭 잔교가 물 위에 홀로 뜬 판자로 보이던 것을
+#     "말뚝에 얹힌 다리"로 읽히게 한다(폭을 넓히지 않고 부피감만 준다 — 충돌·동선 불변).
+const PROP_LAYOUT_SAMDO_OUTDOOR := [
+	[PROP_ROWBOAT, [Vector2i(12, 28)]],                        # x12..13, y28..30 (밑단이 강물에 걸침)
+	[PROP_PIER_POST, [
+		Vector2i(27, 30), Vector2i(29, 30),
+		Vector2i(27, 33), Vector2i(29, 33),
+		Vector2i(27, 36), Vector2i(29, 36),
+	]],
+]
+# ★[S3-T9 아트 패스] 황천해 백사장·부두 장식(삼도천과 같은 어휘 — 무대만 바다).
+#   나룻배는 모래에 올려 둔 배(백사장 동편·산책로 y26 위쪽), 말뚝은 부두(x28) 양옆 바다에.
+# ★[S3-T9] 고지 **수풀** 나무 — 1차 덤프 육안에서 북단 밴드가 "그냥 풀밭"으로 읽혔다. 원인:
+#   `HWANG_HIGHLAND_TREE_RECTS`가 까는 TREE는 **그레이박스 단색 타일**이고, 이번 패스로 그 위를
+#   ground16 지면 오버레이가 덮으면서 초록 사각마저 사라졌다(= 수풀 정체성 0). 타일은 충돌 담당으로
+#   그대로 두고, **저승 봄나무 프롭(64×128)을 그 rect 안에 얹어** 시각만 수풀로 만든다.
+#   ★불변식: 각 나무의 **발치 행(anchor.y+3)과 두 열이 전부 TREE rect 안**이다 — 발치 1칸만 SOLID인데
+#     그 칸이 이미 TREE(SOLID)라 통행 가능 집합이 **한 칸도 안 바뀐다**(hwangcheonhae_test flood-fill 불변).
+const HWANG_HIGHLAND_TREES := [
+	Vector2i(3, 3), Vector2i(5, 3), Vector2i(7, 3),            # rect1 x3..9,y3..6  (발치 y6)
+	Vector2i(14, 6), Vector2i(16, 6),                          # rect2 x14..18,y7..9 (발치 y9)
+	Vector2i(38, 3), Vector2i(40, 3), Vector2i(42, 3), Vector2i(44, 3),   # rect3 x38..46,y3..6
+	Vector2i(50, 9), Vector2i(52, 9), Vector2i(54, 9), Vector2i(56, 9),   # rect4 x50..57,y9..12
+	Vector2i(6, 10), Vector2i(8, 10), Vector2i(10, 10),        # rect5 x6..11,y11..13 (발치 y13)
+]
+const PROP_LAYOUT_HWANG_OUTDOOR := [
+	[PROP_TREE_A, [
+		HWANG_HIGHLAND_TREES[0], HWANG_HIGHLAND_TREES[2], HWANG_HIGHLAND_TREES[4],
+		HWANG_HIGHLAND_TREES[6], HWANG_HIGHLAND_TREES[8], HWANG_HIGHLAND_TREES[10],
+		HWANG_HIGHLAND_TREES[12], HWANG_HIGHLAND_TREES[14],
+	]],
+	[PROP_TREE_B, [
+		HWANG_HIGHLAND_TREES[1], HWANG_HIGHLAND_TREES[3], HWANG_HIGHLAND_TREES[5],
+		HWANG_HIGHLAND_TREES[7], HWANG_HIGHLAND_TREES[9], HWANG_HIGHLAND_TREES[11],
+		HWANG_HIGHLAND_TREES[13], HWANG_HIGHLAND_TREES[15],
+	]],
+	[PROP_ROWBOAT, [Vector2i(34, 22)]],                        # x34..35, y22..24 (백사장에 올려 둔 배)
+	[PROP_PIER_POST, [
+		Vector2i(27, 29), Vector2i(29, 29),
+		Vector2i(27, 33), Vector2i(29, 33),
+		Vector2i(27, 37), Vector2i(29, 37),
+		Vector2i(27, 40), Vector2i(29, 40),                    # 부두 끝(바다 낚시터) 양옆
+	]],
+]
 # ★ ADR-0025 ② — 시드(코드 하드코딩) 묶음. layout.json이 없을 때의 출발점이자 회귀 비교 기준.
 # 키 = 묶음 이름(json 최상위 키 — 구역이 아니라 "어느 가구 세트"). 멱등 이주: _SEED_LAYOUTS를
 # 직렬화→역직렬화한 결과가 _prop_layouts이며, 시드와 바이트 동등하면 회귀 0(좌표만 데이터로 나감).
@@ -865,6 +975,8 @@ const _SEED_LAYOUTS := {
 	"CAFE": PROP_LAYOUT_CAFE,
 	"VILLAGE_HOUSE": PROP_LAYOUT_VILLAGE_HOUSE,
 	"VILLAGE_OUTDOOR": PROP_LAYOUT_VILLAGE_OUTDOOR,   # ★[S2-T9] 나루 야외 장식(벚꽃 나무·돌담)
+	"SAMDO_OUTDOOR": PROP_LAYOUT_SAMDO_OUTDOOR,       # ★[S3-T9] 삼도천 강변 장식(나룻배·잔교 말뚝)
+	"HWANG_OUTDOOR": PROP_LAYOUT_HWANG_OUTDOOR,       # ★[S3-T9] 황천해 백사장·부두 장식
 }
 const LAYOUT_PATH := "res://layout.json"   # 진실의 원천(git 추적). 없으면 시드에서 1회 생성.
 # 런타임 PROP 배열(로드됨). 소비처(_draw_props_for·_rebuild_prop_collision)가 const 대신 이걸 참조.
@@ -1243,6 +1355,12 @@ const PIER_X := 28                              # ★[S3-T1] 부두(잔교) 세�
 const PIER_Y0 := 26                             # ★[S3-T1] 부두 시작 y(백사장 산책로에서 바다로 내려가는 진입)
 const PIER_Y1 := 40                             # ★[S3-T1] 부두 끝 y(남부 바다 한가운데 = 바다 낚시터, ~13칸 돌출)
 const SEA_FISHING_LABEL_TILE := Vector2i(28, 39)   # ★[S3-T1] 바다 낚시터 라벨 자리(부두 끝 — 캐스팅은 S3-T2)
+# ★[S3-T9 아트 패스] 백사장 모래 밴드(절벽 Base 바로 아래 y19 ~ 바다 직전 y27) — 폭은 전 폭이라
+#   경계벽 열까지 덮는다(맵 끝에 흙 띠가 남지 않게). **순수 시각 오버레이**(_grid·충돌·동선 불변).
+const HWANG_BEACH_RECT := Rect2i(0, HWANG_CLIFF_Y + 3, 64, SEA_Y0 - (HWANG_CLIFF_Y + 3))   # x0..63, y19..27
+# ★[S3-T9] 부두 목판 데크 = **바다 구간만**(y28~40). 백사장 구간(y26~27)은 모래 그대로 둔다 —
+#   해변에서 데크가 시작하면 목판이 모래에 파묻힌 듯 보인다(잔교는 물 위에 놓인다).
+const HWANG_PIER_DECK_RECT := Rect2i(PIER_X, SEA_Y0, 1, PIER_Y1 - SEA_Y0 + 1)   # x28, y28..40
 # ★[S3-T1] 고지 수풀(TREE) 군집 — 북단 도착 밴드에 "수풀 고지" 정체성을 준다(ADR-0044 §2 ② 고지 수풀).
 #   세로 스파인(x28)·절벽 런(y16~)·복귀 워프 칸(28,1)을 전부 비껴 깔아 flood-fill 무 soft-lock.
 const HWANG_HIGHLAND_TREE_RECTS := [
@@ -4298,13 +4416,17 @@ const _GF := 128         # 필드 한 변
 const _GJIT := 5         # 경계 지터 진폭(px)
 
 # ── Wang 경계 전환 타일 (spec 2026-07-16) ──────────────────────────────
-# 표면 위계: 잔디>흙>길>자갈광장>다리목판>밭>물. 경계에서 위계 높은 쪽이 upper(오버행=볼록).
+# 표면 위계: 잔디>모래>흙>길>자갈광장>다리목판>밭>물. 경계에서 위계 높은 쪽이 upper(오버행=볼록).
 # ★[S2-T9] 나루 아트 패스로 두 표면(5=자갈 광장·6=다리 목판)이 붙으면서 값을 ×10으로 벌려 **사이 등급**을
 #   낼 자리를 만들었다. 기존 5종의 상대 순서는 그대로라 HOME 렌더는 바이트 불변(_surf_rank는 비교에만 쓴다).
-const _SURF_RANK := {1: 40, 0: 30, 2: 20, 3: 10, 4: 0, 5: 22, 6: 18}
+# ★[S3-T9] 7=백사장 모래를 흙(30)과 잔디(40) 사이(34)에 끼운다 — 물가에서 모래가 물을 이겨 upper로 잡혀야
+#   `_paint_shore_cell`이 물↔모래 전이를 그린다(물이 쌍에서 탈락하면 물 셀이 통째로 사라진다 = S1R 폴리시 교훈).
+const _SURF_RANK := {1: 40, 0: 30, 2: 20, 3: 10, 4: 0, 5: 22, 6: 18, 7: 34}
 # 인공 포장 표면 = Wang 전환을 건너뛰고 base blit 사각 + `_soften_field_edges`로만 마감하는 것들.
 #   (길·밭은 owner 2026-07-17 확정, 광장·다리는 같은 인공물이라 같은 규칙 — 손그림 Wang 쌍도 없다.)
 const _ARTIFICIAL_SURF := [2, 3, 5, 6]
+# 자연 지면 표면(맨흙·잔디·모래) — 고아 셀 채움이 손대도 되는 것들. 인공 포장(1칸 폭이 정상)·물 제외.
+const _NATURAL_SURF := [0, 1, 7]
 var _wang_tiles: Dictionary = {}   # pair_key → { corner_bits(0..15): Image }
 const _WANG_DIR := "res://assets/terrain16/wang/"
 
@@ -4412,6 +4534,10 @@ func _load_big_fields() -> void:
 	#   파일이 없어도 종전 룩으로 굴러간다. 이 둘을 쓰는 구역은 프로파일에 rect를 준 곳뿐(HOME 불변).
 	_bf_cobble = _ss_or("cobble_field.png", "res://assets/terrain16/dirt_field.png", Color(0.55, 0.53, 0.44))
 	_bf_plank = _ss_or("plank_field.png", "res://assets/terrain16/dirt_field.png", Color(0.40, 0.30, 0.21))
+	# ★[S3-T9 황천해 아트 패스] 백사장 모래 base 필드. 위 둘과 같은 단일출처 규약(_ss_or 폴백=마당 맨흙)이라
+	#   파일이 없어도 tan 지면으로 굴러간다. 이 필드를 쓰는 구역은 프로파일에 sand_rects를 준 곳뿐(HOME·나루 불변).
+	_bf_sand = _ss_or("sand_field.png", "res://assets/terrain16/dirt_field.png", Color(0.78, 0.70, 0.53))
+	_bf_sand_wet = _ss_or("sand_wet_field.png", "res://assets/terrain16/dirt_field.png", Color(0.62, 0.55, 0.45))
 
 func _big_field(path: String, fallback: Color) -> Image:
 	var img: Image
@@ -4530,7 +4656,15 @@ func _paint_shore_cell(out: Image, x: int, y: int, bits: int) -> void:
 			var wx := x * TILE + i
 			var wy := y * TILE + j
 			if cls == 1:
-				out.set_pixel(wx, wy, _bf_earth.get_pixel(wx % P, wy % P))   # 흙 = 우리 base 월드위상
+				# ★[S3-T9] 물가의 '땅'은 구역 프로파일이 정한다 — 강·연못은 흙(_bf_earth), 바다는 모래(_bf_sand).
+				#   손그림 4_0 마스크는 형태만 쓰고 채움색은 우리 base 월드위상이라, 필드만 바꾸면 백사장↔바다
+				#   전이가 흙 띠 없이 모래로 이어진다(모래 전용 Wang 쌍 생성 0).
+				out.set_pixel(wx, wy, _g16_shore_field.get_pixel(wx % P, wy % P))
+			elif _g16_shore_edge != null:
+				# ★[S3-T9] 테두리 클래스도 필드로 갈아 끼운다 — 손그림 4_0의 테두리는 연못·강용 **붉은 흙빛**
+				#   반사라, 백사장에 그대로 쓰면 바다 경계에 붉은 줄이 그어진다(1차 덤프 육안). 바다 구역만
+				#   젖은 모래 필드로 대체해 "물 먹은 모래 물가"로 읽히게 한다. 강·연못은 null = 손그림 그대로.
+				out.set_pixel(wx, wy, _g16_shore_edge.get_pixel(wx % P, wy % P))
 			else:
 				out.set_pixel(wx, wy, src.get_pixel(i, j))                    # 테두리 = 손그림 픽셀
 
@@ -4566,6 +4700,9 @@ func _shore_dist(a: Color, b: Color) -> float:
 #   해법: 밭·길은 Wang 스킵 → ① base blit(월드위상=격자 없음·밭 꽉 참) + `_soften_field_edges`로 흙 경계
 #   직선만 ±2px 부드럽게(anti-alias). 잔디↔흙만 _bake_grass_dirt_wang 유기 전환. _W30_* 폐기.
 const _EDGE_SOFT := 2   # 밭·길↔흙 직선 경계 부드럽게 할 폭(px, 경계 양쪽)
+# 인공 포장이 만나면 경계선을 완화할 **자연 지면** 표면들. ★[S3-T9] 모래(7)를 흙(0)과 같이 취급 —
+#   백사장을 관통하는 목판 부두·계단 노치 진입로가 하드 사각 경계로 뜨는 것 방지. HOME·나루엔 7이 없어 불변.
+const _SOFTEN_AGAINST_SURF := [0, 7]
 
 # ★[owner 2026-07-17] 밭(3)·길(2) 셀과 흙(0) 사이 직선 타일 경계선을 경계 양쪽 픽셀 평균으로 부드럽게 한다.
 #   밭은 안 깎이고(base blit 그대로 꽉 참) 경계선 픽셀만 anti-alias → "1자 경계만 부드럽게". base blit이라
@@ -4578,14 +4715,14 @@ func _soften_field_edges(out: Image, surf: Array) -> void:
 				continue   # 밭·길·광장·다리 셀만 기준(흙과의 경계). 잔디·물·건물 제외.
 			var x0 := x * TILE
 			var y0 := y * TILE
-			if x + 1 < _grid_w and int(surf[y][x + 1]) == 0:
-				_soften_vseam(out, x0 + TILE, y0)   # 오른쪽 흙 경계(세로선)
-			if x - 1 >= 0 and int(surf[y][x - 1]) == 0:
-				_soften_vseam(out, x0, y0)           # 왼쪽 흙 경계
-			if y + 1 < _outdoor_h and int(surf[y + 1][x]) == 0:
-				_soften_hseam(out, x0, y0 + TILE)   # 아래 흙 경계(가로선)
-			if y - 1 >= 0 and int(surf[y - 1][x]) == 0:
-				_soften_hseam(out, x0, y0)           # 위 흙 경계
+			if x + 1 < _grid_w and int(surf[y][x + 1]) in _SOFTEN_AGAINST_SURF:
+				_soften_vseam(out, x0 + TILE, y0)   # 오른쪽 흙·모래 경계(세로선)
+			if x - 1 >= 0 and int(surf[y][x - 1]) in _SOFTEN_AGAINST_SURF:
+				_soften_vseam(out, x0, y0)           # 왼쪽 흙·모래 경계
+			if y + 1 < _outdoor_h and int(surf[y + 1][x]) in _SOFTEN_AGAINST_SURF:
+				_soften_hseam(out, x0, y0 + TILE)   # 아래 흙·모래 경계(가로선)
+			if y - 1 >= 0 and int(surf[y - 1][x]) in _SOFTEN_AGAINST_SURF:
+				_soften_hseam(out, x0, y0)           # 위 흙·모래 경계
 
 # 세로 경계선 xb(좌=xb-1, 우=xb)의 y0..y0+TILE 범위를 경계 양쪽 _EDGE_SOFT px 좌우 평균으로 완화.
 func _soften_vseam(out: Image, xb: int, y0: int) -> void:
@@ -4732,6 +4869,10 @@ func _build_ground16() -> void:
 	_ground_detail_tex = null
 	_g16_resolve_profile()   # ★[S2-T3] 구역 지형 프로파일 해석(HOME=종전 상수 그대로 → 렌더 바이트 불변)
 	_load_big_fields()
+	# ★[S3-T9] 물가 shore '땅'·'테두리' 필드는 big field 로드 뒤에 잡는다(프로파일 해석 시점엔 아직 null).
+	var _wet: bool = bool(_g16_prof["shore_sand"])
+	_g16_shore_field = _bf_sand if _wet else _bf_earth
+	_g16_shore_edge = _bf_sand_wet if _wet else null
 	_load_wang_pairs()
 	_bake_grass_dirt_wang()   # ★[ADR-0058 확장] 잔디↔흙 전환을 base에서 합성(불일치-불가) — 손그림 Wang 0_1 덮음
 	_build_shore_masks()      # ★[owner 7차] 손그림 물↔흙 4_0 → 흙/물/테두리 형태 마스크(② 루프서 셀별 합성)
@@ -4838,6 +4979,19 @@ func _build_ground16() -> void:
 				if cv >= 0:
 					uniq[cv] = true
 			if uniq.size() < 2:
+				# ★[S3-T9] **고아 셀 채움**(프로파일 게이트). Wang은 지형을 *꼭짓점*에서 정의하는데
+				#   `_wang_vertex_surf`가 위계 최대를 취하므로, **폭 1칸 돌기·노치**는 네 꼭짓점이 전부
+				#   이웃 지형으로 잡혀 uniq={이웃 1종}이 된다 → 전환 타일이 안 걸리고 ①의 base blit이
+				#   그대로 남아 **하드 사각**으로 튄다(삼도천 1차 덤프 육안 — 잔디 바다에 뜬 오렌지 네모).
+				#   코너 규약대로 "네 코너가 전부 A면 이 셀은 A"로 다시 칠해 돌기를 시각적으로 흡수한다.
+				#   자연 지면(맨흙·잔디·모래)끼리만 — 길·밭·포장·물은 **1칸 폭이 정상**이라(부두·복도)
+				#   여기 걸리면 통째로 지워진다. HOME·나루는 게이트 off = 렌더 바이트 불변.
+				if _g16_orphan_fill and not uniq.is_empty():
+					var vs0: int = int(uniq.keys()[0])
+					var cs0: int = int(surf[y][x])
+					if vs0 != cs0 and (vs0 in _NATURAL_SURF) and (cs0 in _NATURAL_SURF):
+						out.blit_rect(_g16_field(vs0), Rect2i((x * TILE) % P, (y * TILE) % P, TILE, TILE),
+							Vector2i(x * TILE, y * TILE))
 				continue   # 순수 셀 = ① base blit 유지
 			var ks: Array = uniq.keys()
 			ks.sort_custom(func(a, b): return _surf_rank(a) > _surf_rank(b))
@@ -4973,7 +5127,13 @@ func _g16_blend_scatter(out: Image, surf: Array) -> void:
 				continue   # 나무·바위·가구 위엔 안 얹음
 			# ★[스캐터 확산 ②] GROUND는 클러스터면 full 테이블(풀 무리), 빈 tan이면 sparse 마른 clutter(twig·stone)만.
 			var table: Array
-			if terrain == GROUND:
+			if sv == 7:
+				# ★[S3-T9] 백사장 — 풀·나뭇가지 계보를 통째로 갈아치운다(모래 위 잔디 tuft = 해변 오독).
+				#   클러스터·프린지 게이트도 안 탄다(모래엔 풀무리 개념이 없다) — 단일 밀도 해시만.
+				if _gd_h01(x, y, 73) >= float(_g16_prof["beach_density"]):
+					continue
+				table = _GD_BEACH
+			elif terrain == GROUND:
 				if _scatter_is_clump(x, y):          # 구 _gd_cluster(x,y) >= GD_CLUSTER_CUT
 					table = _gd_table_for(GROUND)      # 풀 무리 구역 — 풀 tuft 포함 전체(구역-키드, 폴백=전역)
 				# ★[ADR-0059 결정 2 티어2 #6] fBm 저주파 밀도 가중 — 빈 tan clutter 밀도를 넓은 존별로 변주
@@ -5238,6 +5398,12 @@ func _g16_surface(x: int, y: int) -> int:
 		return 6
 	if not _g16_plaza_rects.is_empty() and _g16_in_rects(x, y, _g16_plaza_rects, 0):
 		return 5
+	# ★[S3-T9 황천해 백사장] 모래 밴드 — 목판·광장과 같은 **순수 시각 오버레이**다(_grid·충돌·동선 불변).
+	#   길(PATH) 검사보다 **먼저** 온다: 백사장을 가로지르는 산책로·부두 진입은 다진 흙길이 아니라 모래여야
+	#   한다(해변에 흙길이 나면 이물 — 스타듀 Beach도 모래 한 겹이고 길 텍스처가 없다). 경계 벽(WALL) 열도
+	#   같이 모래로 덮어 맵 좌우 끝에 흙 띠가 남지 않게 한다.
+	if not _g16_sand_rects.is_empty() and _g16_in_rects(x, y, _g16_sand_rects, 0):
+		return 7
 	if c == PATH:
 		return 2
 	if c == SOIL:
@@ -5260,7 +5426,7 @@ func _g16_surface(x: int, y: int) -> int:
 # ★[S1R 폴리시] 물 셀 경계 판정 — 코너 표면이 '땅'(맨흙·잔디)인가. 길·밭은 물 위 구조물(부두)일 수 있어
 #   땅으로 치지 않는다(물 위 길 옆에 물가 흙이 생기는 오독 방지).
 func _shore_is_land(s: int) -> bool:
-	return s == 0 or s == 1
+	return s == 0 or s == 1 or s == 7   # ★[S3-T9] 백사장 모래도 '땅' — 바다 물가가 모래로 전이해야 한다
 
 # 셀 (x,y)가 물 셀과 꼭짓점을 공유하는가(8이웃에 물 = 물가). 물가 맨흙 패드 판정.
 func _g16_near_water(surf: Array, x: int, y: int) -> bool:
@@ -5282,6 +5448,7 @@ func _g16_field(s: int) -> Image:
 		4: return _bf_water
 		5: return _bf_cobble   # ★[S2-T9] 자갈 광장
 		6: return _bf_plank    # ★[S2-T9] 다리 목판
+		7: return _bf_sand     # ★[S3-T9] 백사장 모래
 		_: return _bf_earth
 
 # ★[ADR-0054 건물 접지 — 잔디억제 패드] 안식 농원 건물 footprint 목록(facade WALL 박스 + 비진입 사일로·우물).
@@ -5316,6 +5483,12 @@ const _G16_PROFILE_BASE := {
 	# ★[S2-T9] 마을 포장면 rect(순수 시각). 비면 그 구역엔 포장이 없다 = HOME 등 기존 구역 바이트 불변.
 	"plaza_rects": [],                        # 자갈 광장(판석 포장) — 광장 일대 지면 텍스처
 	"plank_rects": [],                        # 다리·부두 목판 데크 — 물 위 구조물
+	# ★[S3-T9] 백사장 모래 rect(순수 시각). 비면 그 구역엔 모래가 없다 = 기존 구역 바이트 불변.
+	"sand_rects": [],                         # 백사장(모래) — 바다 물가 밴드
+	# 네 코너가 전부 한 지형인 1칸 돌기를 그 지형으로 다시 칠한다(하드 사각 근절). 기존 구역은 off = 불변.
+	"orphan_fill": false,
+	"shore_sand": false,                      # 물가 shore 셀의 '땅' 채움을 모래로(바다 구역) / false=흙(강·연못)
+	"beach_density": 0.10,                    # 모래 셀에 조개·해초 데칼이 놓일 비율(모래가 있는 구역만 의미)
 }
 # 나루 마을 건물 footprint — 야외 16채 전부 facade 아트가 있다. 지면 오버레이가 이 rect들을
 #   HOME과 같이 지면으로 칠하면 아트 투명부에 월드-정렬 흙이 seamless하게 비친다([ADR-0054]).
@@ -5350,6 +5523,47 @@ var _G16_REGION_PROFILES := {
 		"plaza_rects": [NARU_PLAZA_RECT],
 		"plank_rects": [NARU_BRIDGE_DECK_RECT, BACK_RIVER_DOCK_RECT],
 	},
+	# ★[S3-T9 / ADR-0061 결정 10] 삼도천 = **강변 초지**. 나루(마을·정돈 0.30)와 HOME(농원·흙지배 0.68)
+	#   사이 — 사람 손이 덜 탄 강변이라 잔디가 이기되(0.42) 닳은 맨흙 자국이 마을보다 잦다. 스캐터도
+	#   마을보다 야생(잡초·나뭇가지 존치)이되 농원만큼 빽빽하진 않다. 다단 절벽은 없고 북안 강둑
+	#   (CLIFF_BANK)만이라 절벽 오버레이 3패스는 생략(나루 배후 강과 같은 판단).
+	RegionCatalog.SAMDOCHEON: {
+		"grass_thr": 0.42,
+		# ★ 1차 덤프 육안에서 **1칸 폭 흙 돌기가 하드 오렌지 사각**으로 떴다. 원인은 아트가 아니라
+		#   `_wang_vertex_surf`의 최대-위계 규칙이다: 폭 1칸 돌기는 네 꼭짓점이 전부 잔디(rank 40)로
+		#   잡혀 uniq={잔디} → Wang 전환이 아예 안 걸리고 ①의 base blit 사각이 그대로 남는다.
+		#   → 마을(min_patch 14 · iso_min 8)의 검증된 뭉침 값 + `smooth_maj` 5로 **1칸 돌기 자체를 없앤다**
+		#   (8이웃 중 5개가 반대면 뒤집기 — 돌기의 반대 이웃 수가 정확히 5다). HOME·나루는 자기 값 유지 = 불변.
+		"min_patch": 14,
+		"iso_min": 8,
+		"smooth_maj": 5,
+		"orphan_fill": true,        # 남은 1칸 돌기는 코너 규약대로 이웃 지형으로 흡수(위 주석)
+		"sparse_density": 0.09,
+		"fringe_density": 0.30,
+		"cliff_overlays": false,    # 강둑 CLIFF_BANK는 자체 SOLID_TEX → 패스 생략(나루 동형)
+		"path_apron": true,         # 잔디 지배 → 길 둘레 맨흙 갓길로 하드 사각 방지
+		"building_rects": [MUSEUM_EXT_RECT],
+		"plank_rects": [SAMDO_DOCK_RECT, SAMDO_JETTY_DECK_RECT],   # 북단 나룻터 데크 + 강 종단 잔교
+	},
+	# ★[S3-T9 / ADR-0061 결정 10] 황천해 = **고지 수풀(북) + 백사장(남)** 두 얼굴. 북단 도착 밴드는
+	#   나무가 빽빽한 수풀이라 잔디 지배(0.34)로 두고, 절벽 런 아래 y19~27은 통째로 모래 밴드다.
+	#   모래는 sand_rects 오버레이라 _grid는 GROUND 그대로 — 충돌·동선·flood-fill 불변.
+	RegionCatalog.HWANGCHEONHAE: {
+		"grass_thr": 0.34,          # 고지 수풀 = 잔디 지배(수풀 바닥)
+		"min_patch": 14,            # ★삼도천과 같은 이유(1칸 돌기 = Wang 미적용 하드 사각) — 위 주석 참조
+		"iso_min": 8,
+		"smooth_maj": 5,
+		"orphan_fill": true,
+		"sparse_density": 0.10,
+		"fringe_density": 0.28,
+		"cliff_overlays": true,     # 수평 절벽 런(Lip/Face/Base + 노치 곡선 코너)이 실재한다
+		"path_apron": true,
+		"building_rects": [FISHSHOP_EXT_RECT],
+		"plank_rects": [HWANG_PIER_DECK_RECT],   # 바다 위 부두 데크(백사장 구간은 모래 그대로)
+		"sand_rects": [HWANG_BEACH_RECT],
+		"shore_sand": true,         # 바다 물가의 '땅' = 모래(흙 띠 금지)
+		"beach_density": 0.11,
+	},
 }
 
 # 이 구역이 단일출처 16px 지형 파이프라인(_build_ground16)을 쓰는가. 미이식 구역은 기존
@@ -5366,6 +5580,10 @@ var _g16_build_rects: Array = []
 var _g16_greybox_rects: Array = []
 var _g16_plaza_rects: Array = []   # ★[S2-T9] 자갈 광장 rect(핫 루프 캐시)
 var _g16_plank_rects: Array = []   # ★[S2-T9] 다리·부두 목판 rect(핫 루프 캐시)
+var _g16_sand_rects: Array = []    # ★[S3-T9] 백사장 모래 rect(핫 루프 캐시)
+var _g16_shore_field: Image = null # ★[S3-T9] 물가 shore 셀의 '땅' 채움 필드(흙 또는 모래)
+var _g16_orphan_fill := false      # ★[S3-T9] 고아 셀 채움 게이트(핫 루프 캐시)
+var _g16_shore_edge: Image = null  # ★[S3-T9] 물가 테두리 대체 필드(바다=젖은 모래 / 강·연못=null=손그림)
 
 func _g16_resolve_profile() -> void:
 	var p: Dictionary = _G16_PROFILE_BASE.duplicate()
@@ -5378,6 +5596,8 @@ func _g16_resolve_profile() -> void:
 	_g16_greybox_rects = p["greybox_rects"]
 	_g16_plaza_rects = p["plaza_rects"]
 	_g16_plank_rects = p["plank_rects"]
+	_g16_sand_rects = p["sand_rects"]
+	_g16_orphan_fill = bool(p["orphan_fill"])
 
 func _g16_in_rects(x: int, y: int, rects: Array, pad: int) -> bool:
 	for r: Rect2i in rects:
@@ -5489,18 +5709,18 @@ func _place_labels() -> void:
 			_add_label("← 안식 농원", _tile_center_px(Vector2i(4, 35)))   # 서워프(1,36) 안내
 			_add_label("산길 → 업화 갱도", _tile_center_px(Vector2i(94, 17)))   # ★ M5.1 동 산길(정규 복원 — 갱도로 점등, ★C3 98,18)
 		RegionCatalog.SAMDOCHEON:
-			# ★ M3.1 / ★[S3-T1] — 혼백관은 그레이박스 WALL 박스라 라벨로 식별(만물상·창고 컨벤션).
-			#   종형 플립에 맞춰 라벨도 북(도착)→남(하구) 순으로 내려간다.
-			_add_label("혼백관", _tile_center_px(Vector2i(9, 7)))              # ★[S3-T1] 외관(y8~13) 위
+			# ★ M3.1 / ★[S3-T1] — 종형 플립에 맞춰 라벨이 북(도착)→남(하구) 순으로 내려간다.
+			# ★[S3-T9] "혼백관" 라벨을 **뗀다** — 외관 아트(석등·현판 달린 사당)가 붙어 마을 컨벤션
+			#   ("도트 외관으로 식별되면 라벨 없음", S2-T10)의 대상이 됐다. 남는 라벨은 워프·잔교·낚시터뿐.
 			_add_label("나룻터 → 나루 마을", _tile_center_px(Vector2i(34, 2)))  # ★[S3-T1] 북단 복귀 워프(28,1) 동쪽
 			_add_label("강 낚시터", _tile_center_px(SAMDO_FISHING_LABEL_TILE))  # ★[S3-T1] 북안 물가(캐스팅은 S3-T2)
 			_add_label("잔교", _tile_center_px(Vector2i(SAMDO_JETTY_X + 3, 33)))  # ★[S3-T1] 강 종단 목판 잔교
 			_add_label("하구 → 황천해", _tile_center_px(Vector2i(22, 38)))      # ★[S3-T1] 남단 하구 워프(28,39) 서쪽
 		RegionCatalog.HWANGCHEONHAE:
-			# ★ M3.2 / ★[S3-T1] — 생선가게는 그레이박스 WALL 박스라 라벨로 식별. 북(도착)→남(바다) 순.
+			# ★ M3.2 / ★[S3-T1] — 북(도착)→남(바다) 순. ★[S3-T9] "생선가게" 라벨 제거(간판 달린 외관이
+			#   붙어 라벨 없이 읽힌다 — 삼도천 혼백관과 같은 판단).
 			_add_label("물길 → 삼도천", _tile_center_px(Vector2i(22, 2)))       # ★[S3-T1] 북단 복귀 워프(28,1) 서쪽
 			_add_label("고지 계단", _tile_center_px(Vector2i(HWANG_CLIFF_GATE_X + 4, HWANG_CLIFF_Y + 1)))  # ★[S3-T1] 절벽 런 관통 노치
-			_add_label("생선가게", _tile_center_px(Vector2i(11, 19)))           # ★[S3-T1] 외관(y20~25) 위
 			_add_label("부두", _tile_center_px(Vector2i(PIER_X + 3, 30)))       # ★[S3-T1] 부두 잔교(남부 바다 위) 안내
 			_add_label("바다 낚시터", _tile_center_px(SEA_FISHING_LABEL_TILE))  # ★[S3-T1] 부두 끝(캐스팅은 S3-T2)
 		RegionCatalog.JEOSEUNG_FOREST:
@@ -9766,9 +9986,16 @@ func _draw() -> void:
 			_draw_ranch()            # ★ [S1-7/S1-15] 혼의 짐승 — 전용 스프라이트(assets/livestock) 방목/실내 렌더
 			_draw_chest()            # ★ Phase D/E 저장 상자(집·창고 실내 — 각 카메라에서만 보임)
 		RegionCatalog.SAMDOCHEON:
+			_draw_facade_museum()    # ★ [S3-T9] 혼백관 외관(WALL 박스 위에 덮어 닫힌 건물로)
 			_draw_museum_room()      # ★ [S2-T5] 혼백관 실내 — 기증대·전시 진열(원장 파생 그레이박스)
+			# ★[S3-T9] 강변 장식(나룻배·잔교 말뚝) — HOME·나루와 같은 Y-split. 뒤 프롭만 여기서.
+			var _ssy: float = player.global_position.y if player != null else 1.0e20
+			_draw_props_for(_prop_layouts.get("SAMDO_OUTDOOR", []), self, _PROP_PASS_BACK, _ssy)
 			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(설치물 — 미끼/어획 상태 색 구분, 그레이박스)
 		RegionCatalog.HWANGCHEONHAE:
+			_draw_facade_fishshop()  # ★ [S3-T9] 생선가게 외관
+			var _hsy: float = player.global_position.y if player != null else 1.0e20
+			_draw_props_for(_prop_layouts.get("HWANG_OUTDOOR", []), self, _PROP_PASS_BACK, _hsy)
 			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(삼도천과 같은 렌더 — 구역만 다르다)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
@@ -10442,6 +10669,15 @@ func _draw_facade_village_houses() -> void:
 func _draw_facade_store() -> void:
 	_blit_facade_anchored(FACADE_STORE, STORE_EXT_RECT)
 
+# ★ [S3-T9] 삼도천 혼백관 외관. 만물상·주민 집과 같은 결(bottom-center 앵커 + SE 캐스트 그림자)로
+# WALL 박스 위에 덮는다 — 그리기 전용이라 충돌·문 트리거·실내 rect는 그레이박스 시절 그대로다.
+func _draw_facade_museum() -> void:
+	_blit_facade_anchored(FACADE_MUSEUM, MUSEUM_EXT_RECT)
+
+# ★ [S3-T9] 황천해 생선가게 외관(혼백관과 동형 — 구역만 다르다).
+func _draw_facade_fishshop() -> void:
+	_blit_facade_anchored(FACADE_FISHSHOP, FISHSHOP_EXT_RECT)
+
 # ★ [S2-T10] 주민 집 11채 외관. 아직 누가 사는 집인지 안 정했으므로([ADR-0060] 결정 2 "배정은 본체
 # 제작 시") 캐릭터색 없는 **공용 변주**를 돌려 쓴다 — 4칸 폭은 변주 3종을 index로 순환시키고,
 # 5칸 폭 1채(index 0)만 폭이 맞는 와이드 초가집을 쓴다. 폭을 rect에서 읽으므로 로스터가 바뀌어도
@@ -10593,6 +10829,12 @@ func _draw_front_props(canvas: CanvasItem) -> void:
 		RegionCatalog.NARU_VILLAGE:
 			# ★[S2-T9] 마을 벚꽃 나무도 같은 Y-split을 받는다(수관 뒤로 지나가면 반투명 — FADE_PROPS).
 			_draw_props_for(_prop_layouts.get("VILLAGE_OUTDOOR", []), canvas, _PROP_PASS_FRONT,
+				player.global_position.y)
+		RegionCatalog.SAMDOCHEON:
+			_draw_props_for(_prop_layouts.get("SAMDO_OUTDOOR", []), canvas, _PROP_PASS_FRONT,
+				player.global_position.y)
+		RegionCatalog.HWANGCHEONHAE:
+			_draw_props_for(_prop_layouts.get("HWANG_OUTDOOR", []), canvas, _PROP_PASS_FRONT,
 				player.global_position.y)
 
 # 좌석에 앉은 손님과 머리 위 인내심 바를 그린다. 인내심이 줄수록 바가 짧아지고 붉어져
