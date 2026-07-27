@@ -11,6 +11,14 @@ extends SceneTree
 #   ⑥ 마주 본 주민 판정의 가드(네오=실내 · 바나=가시성 · 옥자=통보 단계).
 #   ⑦ [ADR-0060 결정 8] 네오 이중 신분 — 점주 레이어와 관계 트랙이 서로를 게이팅하지 않는다.
 #   ⑧ 관계 탭 행이 레지스트리에서 파생된다(관계 트랙 보유 주민만·등록 순서).
+#   ⑨ 세이브 왕복이 옛 키로 돈다. ⑩ 레코드가 노드를 낳는 길(main.tscn 무수정)이 살아 있다.
+#
+# ★ [S2-T8] ⑪ 모찌 — 위 절차를 실제로 탄 **첫 T1 주민**의 종단 검증:
+#   등록·런타임 노드 생성 → 스케줄 3자리(집 앞·광장·카페) 시각 판정 → **같은 구역 전환의 보간
+#   걷기 첫 실동작**(복도 스포크 경유·결정적·오프셋 0 수렴) → 실내 자리는 안 걷는 가드 →
+#   대화 4묶음 하트 게이팅 → 선물 선호 배수·하루 1회 → 세이브 왕복(신규 키 mochi_affinity)과
+#   구세이브 하위호환 → **기존 5인 거동 불변**. 이 섹션이 통과하면 "1인 추가 = 파일 1 + 레코드 1"
+#   주장이 실증된 것이다(ADR-0060 결정 7).
 #
 # 실행: ./run_tests.sh resident   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -90,8 +98,11 @@ func _run_checks() -> void:
 	var ids := []
 	for res in m._residents:
 		ids.append(res.id)
-	_check("③a 주민 5인 등록", m._residents.size() == 5)
-	_check("③b 5인 = 미호·멜·바나·네오·옥자", ids == ["miho", "mel", "bana", "neo", "okja"])
+	# ★ [S2-T8] 모찌가 여섯째로 붙었다(레코드 1건 — main.tscn 무수정). 앞 5인의 **순서는 불변**이라
+	#   facing 판정 순서·관계 탭 순서가 그대로다(신규는 뒤에만 붙는다).
+	_check("③a 주민 6인 등록(★T8 모찌 추가)", m._residents.size() == 6)
+	_check("③b 6인 = 미호·멜·바나·네오·옥자·모찌",
+		ids == ["miho", "mel", "bana", "neo", "okja", "mochi"])
 	_check("③c id 조회", m._resident("mel") != null and m._resident("mel").display_name == "멜")
 	_check("③d 이름 조회", m._resident_named("바나") != null and m._resident_named("바나").id == "bana")
 	_check("③e 없는 id/이름 = null", m._resident("없음") == null and m._resident_named("없음") == null)
@@ -263,7 +274,160 @@ func _run_checks() -> void:
 	m2._residents_by_id.erase(spawn.id)
 	spawn.node.queue_free()
 	spawn.affinity.queue_free()
+
+	# ── ⑪ [S2-T8] 모찌 — 위 절차를 실제로 탄 첫 T1 주민 ──
+	# ⑩이 "길이 있다"를 보였다면 여기서는 그 길로 **진짜 주민 한 명이 굴러가는지**를 본다.
+	print("── ⑪ 모찌(첫 T1 주민) ──")
+	var r_mochi: Resident = m2._resident("mochi")
+	_check("⑪a 레코드 등록", r_mochi != null and r_mochi.display_name == "모찌")
+	_check("⑪b 몸이 런타임 생성돼 트리에 붙는다(main.tscn 무수정)",
+		r_mochi.node != null and r_mochi.node.is_inside_tree() and r_mochi.node is Mochi)
+	_check("⑪c 관계 트랙(Affinity)도 함께 생긴다", r_mochi.affinity != null)
+	_check("⑪d 신규 세이브 키", r_mochi.save_key == "mochi_affinity")
+	_check("⑪e 선물 채널 있음 · 선호 = 황천포도(과일 = 모찌 정체성)",
+		r_mochi.can_gift and r_mochi.affinity.preferred_crop == CropCatalog.HWANGCHEON_PODO)
+	_check("⑪f 초상화 없음(도트 눈입은 T10 아트)", r_mochi.portrait_stem == "")
+	_check("⑪g 관계 곱셈기 없음(ADR-0008 메인 4인 독점)", not r_mochi.effect_fn.is_valid())
+
+	# 스케줄 3자리 — 시각별 판정(집 앞 → 광장 → 카페). 좌표는 레코드가 소유하므로 여기선
+	# 스케줄에서 되읽어 비교한다(main에 상수를 새로 심지 않은 설계 그대로).
+	var t_home: Vector2i = r_mochi.schedule[0]["tile"]
+	var t_plaza: Vector2i = r_mochi.schedule[1]["tile"]
+	var t_cafe: Vector2i = r_mochi.schedule[2]["tile"]
+	_check("⑪h 세 자리가 전부 다른 칸", t_home != t_plaza and t_plaza != t_cafe)
+	_check("⑪i 집 앞 = 주민 집 4 문 바로 아래(남향 진입 칸)",
+		t_home == m2.RESIDENT_HOUSE_DOORS[3] + Vector2i(0, 1))
+	_check("⑪j 광장은 통행 레인을 안 막는다(복도 y36·다리 스파인 x52·53 비껴감)",
+		t_plaza.y != m2.MAIN_CORRIDOR_Y and not (t_plaza.x in m2.BRIDGE_X))
+	_check("⑪k 카페 자리는 실내 카페 방 안 · 좌석/직원 줄과 안 겹침",
+		m2.CAFE_RECT.has_point(t_cafe) and not (t_cafe in m2.SEAT_TILES)
+		and t_cafe != m2.MEL_TILE and t_cafe != m2.MIHO_CAFE_TILE and t_cafe != m2.OKJA_CAFE_TILE)
+	_check("⑪l 세 자리 모두 나루 마을 구역", r_mochi.station_region(6 * 60) == RegionCatalog.NARU_VILLAGE
+		and r_mochi.station_region(12 * 60) == RegionCatalog.NARU_VILLAGE
+		and r_mochi.station_region(20 * 60) == RegionCatalog.NARU_VILLAGE)
+	_check("⑪m 아침(06:00) = 집 앞", r_mochi.station_tile(GameClock.START_MIN) == t_home)
+	_check("⑪n 낮(12:00) = 광장", r_mochi.station_tile(12 * 60) == t_plaza)
+	_check("⑪o 저녁(20:00) = 카페", r_mochi.station_tile(20 * 60) == t_cafe)
+
+	# ★ 같은 구역 전환 = 보간 걷기의 첫 실동작. 논리 위치는 즉시 스냅하고 그림만 뒤따른다.
+	m2.clock.minutes = GameClock.START_MIN
+	m2._update_resident_stations(0.0)
+	_check("⑪p 아침 배치 = 집 앞(논리·노드 동시)",
+		r_mochi.tile == t_home and r_mochi.node.position == m2._tile_center_px(t_home))
+	m2.clock.minutes = 10 * 60
+	m2._update_resident_stations(0.0)
+	_check("⑪q 낮 전환 = 논리 위치 즉시 광장(스냅)",
+		r_mochi.tile == t_plaza and r_mochi.node.position == m2._tile_center_px(t_plaza))
+	_check("⑪r 같은 구역이라 실제로 걷는다(첫 실동작)",
+		r_mochi.walk != null and r_mochi.walk.is_walking())
+	_check("⑪s 걷는 중엔 그림 오프셋 ≠ 0(그림만 뒤따름)", r_mochi.node.walk_offset != Vector2.ZERO)
+	# 경로가 메인 복도(길 스포크)를 실제로 경유한다.
+	var mochi_spokes: PackedVector2Array = m2._road_spokes(t_home, t_plaza, RegionCatalog.NARU_VILLAGE)
+	_check("⑪t 경로가 메인 복도를 경유한다(ㄱ자 스포크)",
+		mochi_spokes.size() == 3
+		and mochi_spokes[0] == m2._tile_center_px(Vector2i(t_home.x, m2.MAIN_CORRIDOR_Y))
+		and mochi_spokes[1] == m2._tile_center_px(Vector2i(t_plaza.x, m2.MAIN_CORRIDOR_Y)))
+	# 결정적: 같은 전환을 두 레코드로 굴리면 같은 delta에 같은 오프셋.
+	var twin := Resident.new()
+	twin.id = "mochi_twin"
+	m2._begin_resident_walk(twin, t_home, RegionCatalog.NARU_VILLAGE, t_plaza, RegionCatalog.NARU_VILLAGE)
+	twin.walk.advance(0.3)
+	var solo := ResidentWalk.new()
+	solo.start(m2._tile_center_px(t_home), mochi_spokes)
+	solo.advance(0.3)
+	_check("⑪u 걷기가 결정적(같은 경로·같은 delta = 같은 오프셋)", twin.walk.offset() == solo.offset())
+	# 충분히 진행하면 정확히 도착(오프셋 0 = 그림이 논리 위치에 앉는다).
+	m2._advance_resident_walk(r_mochi, 100.0)
+	_check("⑪v 도착하면 오프셋 0(그림 = 논리 위치)",
+		not r_mochi.walk.is_walking() and r_mochi.node.walk_offset == Vector2.ZERO)
+	# ★ 저녁 카페(실내 밴드)로는 걷지 않는다 — 실내는 길 그래프 밖(T8 가드).
+	m2.clock.minutes = Cafe.OPEN_MIN
+	m2._update_resident_stations(0.0)
+	_check("⑪w 저녁 전환 = 카페 자리로 즉시 도착", r_mochi.tile == t_cafe)
+	_check("⑪x 실내 자리로는 걷지 않는다(길 그래프 밖 가드)", not r_mochi.walk.is_walking())
+	_check("⑪y 실내 밴드 스포크 = 빈 배열",
+		m2._road_spokes(t_plaza, t_cafe, RegionCatalog.NARU_VILLAGE).is_empty())
+
+	# 대화 4묶음 하트 게이팅(캐릭터가 고른다 — 프레임워크는 시그니처만 안다).
+	var l0: PackedStringArray = r_mochi.node.lines(0, true)
+	var l1: PackedStringArray = r_mochi.node.lines(2, true)
+	var l3: PackedStringArray = r_mochi.node.lines(4, true)
+	var l5: PackedStringArray = r_mochi.node.lines(5, true)
+	_check("⑪z 대화 4묶음이 하트 단계로 갈린다(0 / 1~2 / 3~4 / 5)",
+		l0 != l1 and l1 != l3 and l3 != l5 and l0 != l5)
+	_check("⑪A 묶음마다 3줄 이상",
+		l0.size() >= 3 and l1.size() >= 3 and l3.size() >= 3 and l5.size() >= 3)
+	_check("⑪B 오늘 두 번째 대화는 한 줄", r_mochi.node.lines(0, false).size() == 1)
+	# 프레임워크 대화 경로(레지스트리 → 캐릭터)가 실제로 물린다.
+	m2._start_resident_dialogue(r_mochi)
+	_check("⑪C 공통 대화 경로로 대화창이 열린다(화자 = 모찌)",
+		m2.dialogue.is_open() and m2._talking_to == "모찌")
+	var guard := 0
+	while m2.dialogue.is_open() and guard < 32:   # 끝까지 넘겨 닫는다(플레이어 조작과 같은 경로)
+		m2.dialogue.advance()
+		guard += 1
+	_check("⑪D 끝까지 넘기면 닫힌다", not m2.dialogue.is_open())
+	m2.player.set_physics_process(true)
+
+	# 선물 → 호감도(선호 배수). 일반 작물과 선호 작물을 다른 날에 하나씩 건네 비교한다.
+	r_mochi.affinity.points = 0
+	r_mochi.affinity.last_gift_day = -1
+	m2.clock.day = 3
+	m2._selected_crop = CropCatalog.HONRYEONGCHO      # 선호가 아닌 작물
+	m2.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 1)
+	m2._try_resident_gift(r_mochi)
+	var plain_pts: int = r_mochi.affinity.points
+	_check("⑪E 일반 선물 = 기본 점수", plain_pts == Affinity.GIFT_POINTS)
+	_check("⑪F 선물한 수확물이 인벤에서 소모된다",
+		m2.inventory.harvest_count(CropCatalog.HONRYEONGCHO) == 0)
+	# 하루 1회 게이팅 — 재고를 다시 채우고 같은 날 또 건네도 점수도 재고도 안 움직인다
+	# (재고 부족으로 반려되는 게 아니라 *게이트*에 막히는지를 본다).
+	m2.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 1)
+	m2._try_resident_gift(r_mochi)
+	_check("⑪G 하루 1회 게이팅(같은 날 두 번째는 무점수·무소모)",
+		r_mochi.affinity.points == plain_pts
+		and m2.inventory.harvest_count(CropCatalog.HONRYEONGCHO) == 1)
+	m2.clock.day = 4
+	m2._selected_crop = CropCatalog.HWANGCHEON_PODO   # 선호 작물
+	m2.inventory.add_harvest(CropCatalog.HWANGCHEON_PODO, 1)
+	m2._try_resident_gift(r_mochi)
+	_check("⑪H 선호 선물 = 배수 점수(황천포도)",
+		r_mochi.affinity.points - plain_pts == Affinity.GIFT_PREFERRED_POINTS)
+	_check("⑪I 선호 판정이 모찌 인스턴스에만 걸린다(멜·바나 선호 불변)",
+		m2.mel_affinity.preferred_crop == CropCatalog.PIANHWA
+		and m2.bana_affinity.preferred_crop == CropCatalog.HONRYEONGCHO)
+
+	# ★ 기존 5인 거동 불변 — 신규 주민 등록이 앞사람 자리·하트·관계 탭을 건드리지 않는다.
+	_check("⑪J 관계 탭은 여전히 곱셈기 보유 4인(모찌는 곱셈기 없어 미표시)",
+		m2._heart_rows().size() == 4)
+	_check("⑪K 기존 주민 자리 불변",
+		m2._resident("mel").tile == m2.MEL_TILE and m2._resident("neo").tile == m2.NEO_TILE)
+	_check("⑪L 기존 4인 호감도 불변(⑨ 복원값 그대로)",
+		m2.affinity.hearts() == 1 and m2.mel_affinity.hearts() == 2
+		and m2.bana_affinity.hearts() == 3 and m2.neo_affinity.hearts() == 4)
+
+	# 세이브 왕복 — 신규 키로 저장·복원된다.
+	r_mochi.affinity.points = 2 * Affinity.POINTS_PER_HEART
+	m2._save_game()
+	var slot: int = m2._active_slot
 	m2.free()
+	var m3: Node = await _new_main()
+	_check("⑪M 모찌 호감도가 mochi_affinity 키로 복원", m3._resident("mochi").affinity.hearts() == 2)
+	_check("⑪N 같은 세이브에서 기존 4인도 그대로",
+		m3.affinity.hearts() == 1 and m3.neo_affinity.hearts() == 4)
+	m3.free()
+	# 구세이브 하위호환 — mochi_affinity 키만 없는 세이브를 만들어 새로 부팅한다.
+	var sm := SaveManager.new()
+	var raw := sm.load_game(slot)
+	raw.erase("mochi_affinity")
+	sm.save_game(raw, slot, {"day": 1, "soul": 0})
+	sm.free()
+	var m4: Node = await _new_main()
+	_check("⑪O 구세이브(키 없음) = 모찌만 ♡0으로 시작(무막힘)",
+		m4._resident("mochi") != null and m4._resident("mochi").affinity.hearts() == 0)
+	_check("⑪P 구세이브에서도 기존 주민은 정상 복원",
+		m4.mel_affinity.hearts() == 2 and m4.neo_affinity.hearts() == 4)
+	m4.free()
 
 	cleaner.delete_save()
 	cleaner.free()
