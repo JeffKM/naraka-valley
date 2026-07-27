@@ -638,11 +638,23 @@ const FACADE_CAFE := preload("res://assets/buildings/cafe_ext.png")
 # ★ M2.5 — 나루 마을 메인 집 3채(미호·멜·바나)를 본체 캐릭터별로 외관 재도색(residents.md
 # "본체별 외관 재도색", ADR-0014 점진 추가). 카페 외관과 같은 결로 통과 불가 WALL 박스 위에
 # 1:1로 덮어 "그 캐릭터의 집"으로 읽히게 한다(미호=한옥·여우불 / 멜=청록·돈 부적 / 바나=고딕·박쥐).
-# 박스 크기와 1:1: 미호·바나=128×128(4×4칸), 멜=160×160(5×5칸). 만물상·주민 집은 이번 패스
-# 범위 밖이라 그레이박스 라벨 유지(본체 제작 시 함께 재도색 — 미리 테마링 안 해 낭비 0).
+# 박스 크기와 1:1: 미호·바나=128×128(4×4칸), 멜=160×160(5×5칸).
 const FACADE_MIHO_HOUSE := preload("res://assets/buildings/miho_house_ext.png")
 const FACADE_MEL_HOUSE := preload("res://assets/buildings/mel_house_ext.png")
 const FACADE_BANA_HOUSE := preload("res://assets/buildings/bana_house_ext.png")
+# ★[S2-T10 아트 패스 2] 동편 만물상 + 주민 집 11채 외관 — 마지막 그레이박스 건물들이 아트로 바뀐다.
+#   · 만물상 192×160 = STORE_EXT_RECT(6×5)와 1:1(PixelLab 한옥 상점 — 간판·기와 박공·2칸 중앙 문).
+#   · 주민 집은 [residents.md] "기존 집 에셋 재사용 → 본체 제작 시 재도색" 그대로 **공용 변주**다.
+#     한옥(미호 집) 지붕 재도색 2종 + 초가집 1종을 돌려 쓰고, 5칸 폭 1채만 초가집 와이드를 쓴다.
+#     누가 사는 집인지는 아직 안 정했으므로(로스터 배정=본체 제작 시) 캐릭터색을 안 넣는다 —
+#     미리 테마링했다 갈아엎는 낭비 0([ADR-0014] 점진 추가).
+const FACADE_STORE := preload("res://assets/buildings/store_ext.png")
+const FACADE_VILLAGE_HOUSE_A := preload("res://assets/buildings/village_house_a.png")
+const FACADE_VILLAGE_HOUSE_B := preload("res://assets/buildings/village_house_b.png")
+const FACADE_VILLAGE_HOUSE_C := preload("res://assets/buildings/village_house_c.png")
+const FACADE_VILLAGE_HOUSE_WIDE := preload("res://assets/buildings/village_house_wide.png")
+# 4칸 폭 주민 집이 돌려 쓰는 변주 고리(집 index % 3). 같은 집이 나란히 서지 않게 섞인다.
+const VILLAGE_HOUSE_CYCLE := [FACADE_VILLAGE_HOUSE_A, FACADE_VILLAGE_HOUSE_B, FACADE_VILLAGE_HOUSE_C]
 # ★ 안식 농원 서비스 건물 외관 — 창고=제미나이 재생성(tools/gemini_facade_to_chunky.py: 다운스케일→양자화
 # →×2 nearest, 2px 캐논+선명, [ADR-0046]) 192×196 · 축사=PixelLab half-res(facade_halfres_x2.py) 150×166.
 # footprint = 창고 6×6칸(STOREHOUSE_EXT_RECT)·넋우릿간 4×3칸(NEOKURITGAN_EXT_RECT). art는 지붕 윗면 노출로
@@ -5200,14 +5212,16 @@ const _G16_PROFILE_BASE := {
 	"plaza_rects": [],                        # 자갈 광장(판석 포장) — 광장 일대 지면 텍스처
 	"plank_rects": [],                        # 다리·부두 목판 데크 — 물 위 구조물
 }
-# 나루 마을 건물 footprint — 카페·메인 집 3(facade 아트 있음) + 만물상·주민 집 11(그레이박스 WALL).
-#   그레이박스 건물은 오버레이가 덮으면 통째로 사라지므로(아트가 없어 비칠 것이 없다) surf=-1로 투명
-#   통과시켜 타일맵 WALL 박스를 그대로 노출한다. facade 있는 4채는 HOME과 같이 지면으로 칠해
-#   아트 투명부에 월드-정렬 흙이 seamless하게 비친다([ADR-0054]).
-var _VILLAGE_GREYBOX_RECTS: Array = [STORE_EXT_RECT] + RESIDENT_HOUSE_RECTS
+# 나루 마을 건물 footprint — 야외 16채 전부 facade 아트가 있다. 지면 오버레이가 이 rect들을
+#   HOME과 같이 지면으로 칠하면 아트 투명부에 월드-정렬 흙이 seamless하게 비친다([ADR-0054]).
+# ★[S2-T10] greybox_rects가 **비었다** — 만물상·주민 집 11채에 외관이 붙어 마을에 그레이박스 건물이
+#   하나도 안 남았다. 이 목록은 "아트가 없어 오버레이를 투명 통과시켜야 하는 건물"을 뜻하므로,
+#   아트를 붙이고도 여기 남겨 두면 오버레이가 걷혀 건물 발치가 지면에 붙지 못한다(반대로 아트 없는
+#   건물을 빼면 그 건물이 통째로 지면에 삼켜진다). 아트↔이 목록은 항상 짝으로 움직인다.
+var _VILLAGE_GREYBOX_RECTS: Array = []
 var _VILLAGE_BUILDING_RECTS: Array = [
-	CAFE_EXT_RECT, MEL_HOUSE_RECT, MIHO_HOUSE_RECT, BANA_HOUSE_RECT,
-] + _VILLAGE_GREYBOX_RECTS
+	CAFE_EXT_RECT, MEL_HOUSE_RECT, MIHO_HOUSE_RECT, BANA_HOUSE_RECT, STORE_EXT_RECT,
+] + RESIDENT_HOUSE_RECTS
 # 구역별 오버라이드(없는 키는 _G16_PROFILE_BASE 폴백). HOME은 rect 목록만 — 나머지는 전부 base = 불변.
 var _G16_REGION_PROFILES := {
 	RegionCatalog.HOME: {
@@ -5355,15 +5369,11 @@ func _place_labels() -> void:
 			_add_label("계단(막힘 — 개간 후)", _tile_center_px(Vector2i(10, 33)))  # ★ADR-0035 계단 발치 debris 하드 게이트
 		RegionCatalog.NARU_VILLAGE:
 			# ★ M2.5 — 카페·메인 집 3(미호·멜·바나)은 도트 외관으로 식별되므로 라벨 없음(카페 컨벤션).
-			# 아직 그레이박스인 동편(만물상·주민 집) + 워프(나룻터·산길·서워프) + 다리만 라벨로 식별.
+			# ★[S2-T10] 만물상("만물상")·주민 집 11채("주민 집 N") 라벨을 **뗀다** — 셋 다 외관 아트가
+			#   붙어 위 컨벤션("도트 외관으로 식별되면 라벨 없음")의 대상이 됐다. 간판 달린 상점과
+			#   초가·기와 지붕이 건물을 말해 주므로 텍스트가 겹치면 오히려 마을 그림을 가린다.
+			#   이제 남는 라벨은 아직 그레이박스인 워프·다리·부두뿐이다.
 			# ★C3 — 100×72 재배치에 맞춰 라벨도 새 건물·워프 위치로 옮긴다(외관 위·워프 가장자리 옆).
-			_add_label("만물상", _tile_center_px(Vector2i(60, 12)))
-			# ★[ADR-0060 결정 2 / S2-T2] 주민 집 11채 — rect에서 라벨 자리를 파생한다(하드코딩 3개 →
-			#   로스터가 늘어도 자동). 외관 위 2칸(그레이박스 박스 머리 위)에 "주민 집 N"으로 띄운다.
-			for i in RESIDENT_HOUSE_RECTS.size():
-				var hr: Rect2i = RESIDENT_HOUSE_RECTS[i]
-				_add_label("주민 집 %d" % (i + 1),
-					_tile_center_px(Vector2i(hr.position.x + hr.size.x / 2, hr.position.y - 2)))
 			# ★[ADR-0060 결정 1] 다리·부두 라벨을 배후 강(남단)으로 이전(옛 중앙 수직 강 다리 48,34 폐지).
 			_add_label("다리", _tile_center_px(Vector2i(48, 64)))                   # 강둑 위 다리 서쪽
 			_add_label("나루 부두(낚시터 — Slice 3)", _tile_center_px(Vector2i(62, 70)))  # 남단 부두 동쪽
@@ -8015,7 +8025,9 @@ func _setup_residents() -> void:
 	r_neo.affinity = neo_affinity
 	r_neo.save_key = "neo_affinity"
 	r_neo.can_gift = false
-	r_neo.portrait_stem = ""            # 초상화 미제작(팝업은 이름만) — 아트는 Phase 2
+	# ★[S2-T10] 초상화 제작 완료 → 대화창에 얼굴이 뜬다. 표정 파일(_smile 등)은 아직 없어
+	#   [smile]/[shy] 태그도 기본 stem으로 폴백한다(_set_portrait의 누락 폴백 — 대사는 무개정).
+	r_neo.portrait_stem = "neo"
 	r_neo.require_indoor = "만물상"
 	r_neo.schedule = [{"from_min": 0, "tile": NEO_TILE, "region": ""}]
 	r_neo.prompt_extra = func() -> String: return "   [F] 매대"
@@ -8910,6 +8922,8 @@ func _draw() -> void:
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
+			_draw_facade_store()            # ★ [S2-T10] 동편 만물상 외관
+			_draw_facade_resident_houses()  # ★ [S2-T10] 주민 집 11채 외관(공용 변주 재도색)
 			_draw_quest_board()      # ★ [S2-T6] 만물상 앞 게시판(SOLID 1칸 그레이박스 — 수락 중이면 표식)
 			# ★[S2-T9] 마을 야외 장식(벚꽃 나무·돌담) — HOME과 같은 Y-split. 뒤 프롭만 여기서 그리고
 			#   앞 프롭은 _front_props가 플레이어 위에 다시 그린다(캐노피 뒤로 지나가기).
@@ -9475,6 +9489,24 @@ func _draw_facade_village_houses() -> void:
 	draw_texture_rect(FACADE_MIHO_HOUSE, Rect2(Vector2(MIHO_HOUSE_RECT.position * TILE), FACADE_MIHO_HOUSE.get_size()), false)
 	_facade_grass_backdrop(BANA_HOUSE_RECT)
 	draw_texture_rect(FACADE_BANA_HOUSE, Rect2(Vector2(BANA_HOUSE_RECT.position * TILE), FACADE_BANA_HOUSE.get_size()), false)
+
+# ★ [S2-T10] 동편 만물상 외관. 안식 농원 서비스 건물과 같은 결(bottom-center 앵커 + SE 접지 그림자)로
+# WALL 박스 위에 덮는다 — 아트 폭 192 = footprint 6칸과 1:1이라 좌우가 박스에 flush로 앉고, 지붕은
+# 위로 솟아 y13 한 줄을 오버행한다. 문(아트 하단 중앙 2칸)이 STORE_EXT_DOOR(60,18)와 겹친다.
+# 그리기 전용 — WALL 충돌·문 트리거·진입로는 그레이박스 시절 그대로다.
+func _draw_facade_store() -> void:
+	_blit_facade_anchored(FACADE_STORE, STORE_EXT_RECT)
+
+# ★ [S2-T10] 주민 집 11채 외관. 아직 누가 사는 집인지 안 정했으므로([ADR-0060] 결정 2 "배정은 본체
+# 제작 시") 캐릭터색 없는 **공용 변주**를 돌려 쓴다 — 4칸 폭은 변주 3종을 index로 순환시키고,
+# 5칸 폭 1채(index 0)만 폭이 맞는 와이드 초가집을 쓴다. 폭을 rect에서 읽으므로 로스터가 바뀌어도
+# 이 함수는 그대로다. 본체 제작 시 그 캐릭터 전용 재도색으로 한 채씩 교체하면 된다.
+func _draw_facade_resident_houses() -> void:
+	for i in RESIDENT_HOUSE_RECTS.size():
+		var r: Rect2i = RESIDENT_HOUSE_RECTS[i]
+		var tex: Texture2D = FACADE_VILLAGE_HOUSE_WIDE if r.size.x >= 5 \
+			else VILLAGE_HOUSE_CYCLE[i % VILLAGE_HOUSE_CYCLE.size()]
+		_blit_facade_anchored(tex, r)
 
 # M2.4 — 카페 이벤트 데이 축제 장식(절차 도형, 새 에셋 0 — Phase 2 경계 준수). 카메라가 카페
 # 방(CAFE_CAM_RECT)만 비추므로 CAFE_RECT 좌표에 그리면 카페 실내에서만 보인다(다른 구역·집/

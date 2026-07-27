@@ -54,20 +54,35 @@ func _init() -> void:
 				if t.y >= size.y:
 					continue   # 실내 띠(y72+) — 야외 캔버스 밖
 				out.blend_rect(timg, Rect2i(Vector2i.ZERO, tsz), Vector2i(t.x * TILE, t.y * TILE + yo))
-	# ④ 건물 외관 — main._draw_facade_cafe / _draw_facade_village_houses와 동일한 좌상단 1:1 blit
+	# ④ 건물 외관 — 앵커가 두 갈래라 각 항목이 자기 앵커를 들고 온다(main._draw와 1:1):
+	#    · 카페·메인 집 3 = `_draw_facade_*`의 **좌상단 1:1** blit(rect.position에 그대로)
+	#    · ★[S2-T10] 만물상·주민 집 11 = `_blit_facade_anchored`의 **bottom-center** 앵커
+	#      (art 바텀 = footprint 하단 경계, 가로 중앙 정렬 → 지붕이 위로 솟는다)
 	var facades := [
-		[main.FACADE_CAFE, main.CAFE_EXT_RECT],
-		[main.FACADE_MEL_HOUSE, main.MEL_HOUSE_RECT],
-		[main.FACADE_MIHO_HOUSE, main.MIHO_HOUSE_RECT],
-		[main.FACADE_BANA_HOUSE, main.BANA_HOUSE_RECT],
+		[main.FACADE_CAFE, main.CAFE_EXT_RECT, false],
+		[main.FACADE_MEL_HOUSE, main.MEL_HOUSE_RECT, false],
+		[main.FACADE_MIHO_HOUSE, main.MIHO_HOUSE_RECT, false],
+		[main.FACADE_BANA_HOUSE, main.BANA_HOUSE_RECT, false],
+		[main.FACADE_STORE, main.STORE_EXT_RECT, true],
 	]
+	for i in main.RESIDENT_HOUSE_RECTS.size():
+		var hr: Rect2i = main.RESIDENT_HOUSE_RECTS[i]
+		var htex: Texture2D = main.FACADE_VILLAGE_HOUSE_WIDE if hr.size.x >= 5 \
+			else main.VILLAGE_HOUSE_CYCLE[i % main.VILLAGE_HOUSE_CYCLE.size()]
+		facades.append([htex, hr, true])
 	for f in facades:
 		var tex: Texture2D = f[0]
 		var rect: Rect2i = f[1]
 		var fimg := tex.get_image()
 		if fimg.get_format() != Image.FORMAT_RGBA8:
 			fimg.convert(Image.FORMAT_RGBA8)
-		out.blend_rect(fimg, Rect2i(Vector2i.ZERO, fimg.get_size()), rect.position * TILE)
+		var at := rect.position * TILE
+		if bool(f[2]):
+			var sz := fimg.get_size()
+			at = Vector2i(
+				int((rect.position.x + rect.size.x * 0.5) * TILE) - sz.x / 2,
+				(rect.position.y + rect.size.y) * TILE - sz.y)
+		out.blend_rect(fimg, Rect2i(Vector2i.ZERO, fimg.get_size()), at)
 	out.save_png("res://tools/village_dump.png")
 	print("✅ village_dump.png 저장 (", size.x, "×", size.y, ") — 구역 리빌드 ", build_ms, "ms")
 	quit()
