@@ -103,6 +103,13 @@ func gift(crop_id: String, day: int) -> int:
 	_add(gained)
 	return gained
 
+# ── ★ [S2-T6] 외부 채널 가산(게시판 의뢰 보상 등) ──────────────────────────
+# 대화(하루 1회)·선물(하루 1회)과 다른 제3 채널이 호감도를 올릴 때 쓴다. 여기서는 날짜를 보지
+# 않는다 — 게이팅은 호출 측 이벤트가 이미 보장한다(의뢰 완료는 계약당 1회, QuestBoard가 중복
+# 완료를 막는다). 두 일일 채널의 last_*_day를 건드리지 않아 대화·선물 리듬과 서로 독립이다.
+func add_points(n: int) -> void:
+	_add(n)
+
 # 점수를 더하고 [0, MAX_POINTS]로 잘라 changed를 발화한다(음수·만렙 초과 방지).
 func _add(n: int) -> void:
 	points = clampi(points + n, 0, MAX_POINTS)

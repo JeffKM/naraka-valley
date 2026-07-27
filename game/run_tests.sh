@@ -44,7 +44,11 @@ run_one() {
   fi
 
   echo "▶ $name  (워치독 ${TIMEOUT}s)"
-  "$GODOT" --headless --path "$PWD" --script "$script" &
+  # 출력을 로그로 받아 종료 후 되쏜다 — 스크립트 파싱/로드 실패 시 Godot이 종료코드 0으로 끝나
+  # "통과"로 오탐되던 구멍(S2-T6에서 실증)을 에러 패턴 검사로 막기 위함.
+  local log
+  log="$(mktemp)"
+  "$GODOT" --headless --path "$PWD" --script "$script" > "$log" 2>&1 &
   local pid=$!
 
   # 워치독: TIMEOUT 후에도 살아 있으면 강제 종료
@@ -54,6 +58,12 @@ run_one() {
 
   wait "$pid"; local ec=$?
   kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
+  cat "$log"
+  if [ "$ec" -eq 0 ] && grep -qE "SCRIPT ERROR|Parse Error" "$log"; then
+    echo "  ✗ $name: 스크립트 에러 감지(파싱/로드 실패가 종료코드 0으로 끝남) → FAIL"
+    ec=1
+  fi
+  rm -f "$log"
   return "$ec"
 }
 
