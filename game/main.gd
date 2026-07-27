@@ -1686,6 +1686,11 @@ var forage: Forage = null
 #   도구가 갈린 별개 원장 노드(코드 생성 — .new()). main이 layout.json 꽃 패치 좌표를 시드하고, 딴 결과를
 #   인벤토리·채집 XP에 잇는다(경제 양끝 잇기). 수확 등급은 채집 레벨/전문직이 소스(main이 주입, 디커플링).
 var flower: FlowerPatch = null
+# ★[S4-T1 / ADR-0062 결정 2] 숲 채집물 스폰 원장(저승 숲·미혹의 숲 빈터에 매일 돋는 채집물 — 결정 롤·
+#   구역 상한 6·7일 리셋·절기 전환일 전량 삭제). FlowerPatch(안식 고정 패치)와 좌표·구역·수명이 갈린
+#   별개 원장이고, **Node가 아니라 RefCounted**다(설치물이 아니라 순수 데이터 — ADR-0062 "순수 원장").
+#   main이 절기·day를 주입하고, 줍기 결과(품질·수량·XP)를 채집 레벨/전문직으로 정한다(디커플링).
+var forage_spawns: ForageSpawns = null
 # ★ [S1-9] 집 꾸미기 상태(집 내부 3레이어 코스메틱 배치 + 해금 세트). F10 저작 도구(layout.json·
 #   _prop_layouts)와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). 플레이어 세이브 델타만 소유하고
 #   layout.json 시드는 안 건드린다(회귀 0). main이 유효 배치 칸을 주입하고 드로우/충돌 훅에서 질의(디커플링).
@@ -2005,6 +2010,8 @@ func _ready() -> void:
 	flower.name = "FlowerPatch"
 	add_child(flower)
 	flower.changed.connect(_on_ranch_changed)      # 따기·재생·복원 시 드로우 갱신(사료풀과 같은 훅 재사용 — 둘 다 야외 그레이박스)
+	forage_spawns = ForageSpawns.new()   # ★[S4-T1] 숲 채집물 스폰 원장(RefCounted — 씬 트리에 안 선다)
+	forage_spawns.changed.connect(queue_redraw)   # 스폰·줍기·리셋·복원 시 그레이박스 갱신(게잡이통 결)
 	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
 	home_deco.name = "HomeDeco"
 	add_child(home_deco)
@@ -5779,9 +5786,11 @@ func _place_labels() -> void:
 		RegionCatalog.JEOSEUNG_FOREST:
 			# ★ M4.1 / ★C6 — 목공방은 그레이박스 WALL 박스라 라벨로 식별. 채집지 3곳(빈터)·워프 안내(60×44).
 			_add_label("목공방", _tile_center_px(Vector2i(9, 16)))
-			_add_label("채집지(Phase 3)", _tile_center_px(FOREST_FORAGE_LABEL_TILE))
-			_add_label("채집지(Phase 3)", _tile_center_px(FOREST_FORAGE_LABEL_TILE_2))
-			_add_label("채집지(Phase 3)", _tile_center_px(FOREST_FORAGE_LABEL_TILE_3))
+			# ★[S4-T1 / ADR-0062 결정 1 ㉠] "채집지(Phase 3)" 플레이스홀더 제거 — 라벨 자리가 실제 스폰
+			#   빈터(ForageSpawns.zones)로 승격돼 매일 채집물이 돋는다(좌표는 한 칸도 안 움직였다).
+			_add_label("채집지", _tile_center_px(FOREST_FORAGE_LABEL_TILE))
+			_add_label("채집지", _tile_center_px(FOREST_FORAGE_LABEL_TILE_2))
+			_add_label("채집지", _tile_center_px(FOREST_FORAGE_LABEL_TILE_3))
 			_add_label("숲 안쪽 → 미혹의 숲", _tile_center_px(Vector2i(54, 22)))  # ★C6 동단 워프(58,22, 점등)
 			_add_label("숲길 → 업화 갱도", _tile_center_px(Vector2i(30, 40)))   # ★C6 남단 숲길 워프(30,43, 점등)
 		RegionCatalog.EOPHWA_MINE:
@@ -5802,8 +5811,10 @@ func _place_labels() -> void:
 		RegionCatalog.MIHOK_FOREST:
 			# ★ M4.2 / ★C7 — 옥자 집은 잠긴 외관(비-enterable)이라 라벨로 위상 명시(축사 컨벤션). 특수 채집지 2곳·연못·복귀 워프 안내.
 			_add_label("옥자 집 (잠김 — 미결의 죄 해결 후)", _tile_center_px(Vector2i(57, 27)))  # ★C7 동쪽 깊은 끝
-			_add_label("특수 채집지(Phase 3)", _tile_center_px(MIHOK_FORAGE_LABEL_TILE))
-			_add_label("특수 채집지(Phase 3)", _tile_center_px(MIHOK_FORAGE_LABEL_TILE_2))
+			# ★[S4-T1] 플레이스홀더 제거 — 희소종 스폰 빈터로 승격(좌표 불변). 심층 구획(동북부)은
+			#   봉쇄 프롭·도끼 티어가 서는 S4-T4/T5에서 라벨을 얻는다(지금은 존 정의만).
+			_add_label("특수 채집지", _tile_center_px(MIHOK_FORAGE_LABEL_TILE))
+			_add_label("특수 채집지", _tile_center_px(MIHOK_FORAGE_LABEL_TILE_2))
 			_add_label("연못", _tile_center_px(Vector2i(31, 21)))            # ★C7 연못(x26..37,y14..19) 아래
 			_add_label("숲 안쪽 → 저승 숲", _tile_center_px(Vector2i(4, 22)))   # ★C7 서단 복귀 워프(1,22) 안내
 
@@ -6155,6 +6166,14 @@ func _on_day_advanced(day: int) -> void:
 	forage.advance_day(day, GameClock.season_index_for_day(day) == 3)
 	# ★ ADR-0052 꽃 패치 재생 — 딴 지 REGROW_DAYS 지난 패치가 다시 핀다(절기 무관 — 피안화는 저승 꽃).
 	flower.advance_day(day)
+	# ★[S4-T1 / ADR-0062 결정 2] 숲 채집물 일일 스폰 — 저승 숲·미혹의 숲 빈터에 그 절기의 종이
+	#   소량 돋는다(구역 상한 6 · 7일 주기 리셋 · 절기 전환일 전량 삭제 · 결정 롤). 줍기는 혼력 0이라
+	#   완전 무과금 산출이고, 절기 게이트는 clock의 기존 파생(season_index_for_day)을 그대로 쓴다
+	#   (신규 시스템 0 — 어종 절기-잠금 선례 동형).
+	if forage_spawns != null:
+		var forage_new := forage_spawns.advance_day(day, GameClock.season_index_for_day(day))
+		if bool(forage_new["season_reset"]) and int(forage_new["cleared"]) > 0:
+			_notice("절기가 바뀌어 숲의 채집물이 모두 졌다 — 새 절기의 것이 돋는다")
 	# ★ [ADR-0055] 안식 재점령 — 빈 맨땅 1~2칸에 밤새 잡초(이승의 미련)가 다시 돋는다(구조물·밭·작물 성역).
 	#   겨울(잿눈)엔 정지(Forage와 같은 저승 성장정지). 자격 빈 맨땅 후보는 main이 계산해 전달(디커플링).
 	if reclaim != null:
@@ -6490,6 +6509,7 @@ func _save_game() -> void:
 		"quest_board": quest_board.to_save(),   # ★ [S2-T6] 게시판 수락 계약·완료 이력·지급 기록(의뢰 내용은 day 파생이라 무상태)
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
 		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
+		"forage_spawn": forage_spawns.to_save(),  # ★[S4-T1] 숲 채집물 스폰 원장(구역별 좌표·종 — 매일 굴러 나온 델타)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
@@ -6561,6 +6581,8 @@ func _load_game() -> void:
 		forage.load_save(data["forage"])
 	if data.has("flower_patch"):  # ★ ADR-0052 — 키 없는 구세이브는 딴 상태 0(부팅 후 _seed_flower_patches가 배치에서 시드). changed가 드로우 갱신
 		flower.load_save(data["flower_patch"])
+	if data.has("forage_spawn"):  # ★[S4-T1] — 키 없는 구세이브는 채집물 0(다음 취침의 advance_day가 판을 깐다·무막힘)
+		forage_spawns.load_save(data["forage_spawn"])
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
 		home_deco.load_save(data["home_deco"])
 	if data.has("wallet"):
@@ -7283,6 +7305,14 @@ func _process(delta: float) -> void:
 	var on_flower := not _sleeping and _region == RegionCatalog.HOME and flower.is_bloomed(_target)
 	if on_flower and Input.is_action_just_pressed("action"):
 		_pick_flower(_target)
+	# ★[S4-T1 / ADR-0062 결정 2] 숲 채집물 줍기 — 빈터에 돋은 채집물은 GROUND 위(비-SOIL)라 _target_valid
+	#   게이트 밖에서 따로 디스패치한다(꽃 패치와 정확히 같은 결). RMB(맨손) 또는 [F] 어느 쪽이든 줍는다
+	#   — 줍기는 도구가 필요 없고(혼력 0, ADR-0033 #1), 물가 게잡이통·기증대처럼 [F]로 손이 가는 동선도
+	#   있어 둘 다 받는다. 실내에선 안 돈다(_indoor 게이트).
+	var on_forage_spawn := not _sleeping and _indoor == "" and forage_spawns != null \
+			and forage_spawns.has_at(_region, _target)
+	if on_forage_spawn and (Input.is_action_just_pressed("action") or Input.is_action_just_pressed("shop_toggle")):
+		_pick_forage(_target)
 	# ★ [S1R-T8 / ADR-0059 결정4] 물뿌리개 리필 — 혼우물(WELL_RECT·WALL)·연못(WATER)은 SOIL이 아니라
 	#   _target_valid 게이트 밖 → 개간·잡초와 같은 결로 따로 디스패치. 물뿌리개 들고 대상 겨눠 LMB = 잔량 풀충전.
 	var on_refill := not _sleeping and inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target)
@@ -7479,6 +7509,11 @@ func _process(delta: float) -> void:
 		# ★ ADR-0052 활짝 핀 꽃 패치를 바라볼 때: 우클릭 맨손 채집(혼력0). 채집물+채집 XP.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[우클릭] 피안화 채집 (채집 숙련)"
+	elif forage_spawns != null and _indoor == "" and forage_spawns.has_at(_region, _target):
+		# ★[S4-T1] 숲 빈터에 돋은 채집물을 바라볼 때: 우클릭/[F] 맨손 채집(혼력0). 종명을 밝혀
+		#   "무엇을 줍는지"가 보이게 한다(아이콘 아트는 S4-T10).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[우클릭/F] %s 채집 (채집 숙련)" % ItemCatalog.name_of(forage_spawns.species_at(_region, _target))
 	elif inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target):
 		# ★ [S1R-T8] 혼우물·연못을 물뿌리개로 겨눌 때: LMB로 잔량 풀충전(이미 가득이면 안내만).
 		interact_prompt.visible = not _sleeping
@@ -8172,6 +8207,29 @@ func _pick_flower(tile: Vector2i) -> void:
 	_gain_forage_xp(ItemCatalog.price_of(ItemCatalog.SPIRIT_FLOWER))  # ★ 채집 XP(기준가 기반, 수확=farm XP 결)+레벨업 감지
 	audio.sfx("harvest")                      # 채집도 밝은 팝(수확 결)
 	# ★ 혼력 소모 없음(ADR-0033 #1) · 온보딩은 농사 동사 체인이라 여긴 안 건드림. queue_redraw로 새 상태 반영.
+	queue_redraw()
+
+# ★[S4-T1 / ADR-0062 결정 2] 숲 빈터 채집물 줍기 — `_pick_flower`와 **완전 동형**이다(품질 롤·더블드랍·
+#   XP·SFX·혼력 0 전부 같은 사슬). 다른 건 셋뿐: ① 종이 칸마다 다르다(원장이 소유) ② 다구역이다
+#   (저승 숲·미혹의 숲) ③ 주운 자리는 재생이 아니라 **사라진다**(다음 판은 advance_day가 다시 깐다 —
+#   고정 패치가 아니라 매일 굴러 나오는 스폰이라 "그 자리"라는 개념이 없다).
+# ★ XP는 기존 `_gain_forage_xp(기준가)` 방식 그대로다 — 고정 XP 테이블(줍기 7 등, ADR-0062 결정 8)
+#   전환은 S4-T2(ForageSkill) 소관이라 여기서 축을 바꾸지 않는다(회귀면 최소).
+func _pick_forage(tile: Vector2i) -> void:
+	var species := forage_spawns.pick(_region, tile)
+	if species == "":
+		return   # 없는 칸(디스패치가 걸렀지만 방어)
+	var lvl := _skill_level(ProfessionCatalog.FORAGING)
+	# 품질 = 채집 레벨 기본 등급 ⊔ 약초학자 하한(이리듐). 꽃 패치와 같은 소스(ADR-0052).
+	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 한 자리에서 두 개).
+	var count := 1
+	if randf() < forage_double_drop_chance():
+		count = 2
+	inventory.add_item(species, count, quality)
+	_toast_item(species, count)
+	_gain_forage_xp(ItemCatalog.price_of(species))   # ★ 채집 XP(기준가 기반 — 꽃 패치와 같은 사슬)
+	audio.sfx("harvest")
 	queue_redraw()
 
 # 선택 슬롯이 씨앗/수확물이면 _selected_crop(선물·구매·HUD 기준 작물)을 그 작물군으로 맞춘다.
@@ -10065,6 +10123,8 @@ func _draw() -> void:
 			var _hsy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_prop_layouts.get("HWANG_OUTDOOR", []), self, _PROP_PASS_BACK, _hsy)
 			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(삼도천과 같은 렌더 — 구역만 다르다)
+		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
+			_draw_forage_spawns()    # ★[S4-T1] 빈터에 돋은 채집물(종별 색점 그레이박스 — 아이콘 아트는 S4-T10)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
@@ -10348,6 +10408,30 @@ func _draw_flower_regrow() -> void:
 		# 딴 자리 = 어린 초록 새싹 두 갈래(며칠 뒤 다시 핌). 사료풀 밑동과 색을 갈라(초록) 채집물임을 읽힘.
 		draw_line(px + Vector2(TILE * 0.42, TILE * 0.72), px + Vector2(TILE * 0.36, TILE * 0.56), Color(0.40, 0.66, 0.34), 2.0)
 		draw_line(px + Vector2(TILE * 0.58, TILE * 0.72), px + Vector2(TILE * 0.64, TILE * 0.56), Color(0.40, 0.66, 0.34), 2.0)
+
+# ★[S4-T1 / ADR-0062 결정 2] 숲 빈터에 돋은 채집물 그레이박스 렌더(아이콘 아트 = S4-T10 ㉤).
+#   칸마다 종별 색점 + 낮은 줄기 두 갈래를 그려 "여기 뭔가 돋아 있다"가 읽히게 한다. 색은 종 id 해시
+#   파생이라 종마다 다르고 세션 간 고정이다(플레이스홀더 색 표를 손으로 관리하지 않는다).
+#   순수 시각 — 상태는 ForageSpawns가 소유하고 여긴 질의만 한다(꽃 패치 새싹 렌더와 같은 결).
+func _draw_forage_spawns() -> void:
+	if forage_spawns == null or _indoor != "":
+		return
+	for t: Vector2i in forage_spawns.tiles(_region):
+		var px := Vector2(t.x * TILE, t.y * TILE)
+		var col := _forage_species_color(forage_spawns.species_at(_region, t))
+		# 줄기(어두운 초록 두 갈래) → 그 위에 종 색 열매/꽃 점.
+		draw_line(px + Vector2(TILE * 0.44, TILE * 0.78), px + Vector2(TILE * 0.44, TILE * 0.56), Color(0.28, 0.44, 0.26), 2.0)
+		draw_line(px + Vector2(TILE * 0.58, TILE * 0.78), px + Vector2(TILE * 0.58, TILE * 0.60), Color(0.28, 0.44, 0.26), 2.0)
+		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.17, col)
+		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.17, Color(0.08, 0.06, 0.10, 0.75), false, 1.0)
+
+# 종 id → 그레이박스 색(해시 파생 — 채도·명도는 저승 팔레트 안에 가둔다). 아트가 들어오면 이 함수와
+# 위 렌더가 통째로 스프라이트 blit으로 교체된다(S4-T10).
+func _forage_species_color(species: String) -> Color:
+	if species == "":
+		return Color(0.7, 0.7, 0.7)
+	var h := float(abs(hash(species)) % 1000) / 1000.0
+	return Color.from_hsv(h, 0.52, 0.86)
 
 # ★ [ADR-0055] 밤새 돋은 재점령 잡초를 그린다 — 이승의 미련(잡초) 스프라이트를 빈 맨땅 위에 평면 데칼로.
 #   debris 잡초와 같은 텍스처·변주(좌표 결정적 해시)를 써 개간 대상과 시각 동일(낫 대상임을 읽힘). 순수
