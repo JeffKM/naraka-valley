@@ -25,7 +25,10 @@ func _check(label: String, ok: bool) -> void:
 # 전환(워프/문) tween이 끝날 때까지 — _transitioning이 내려갈 때까지 폴링한다(실시간 tween).
 # 다중 연속 전환(워프 + 건물 14회)이라 고정 대기는 빠듯해 캐스케이드 실패가 나므로, 상태로 본다.
 func _settle(m: Node) -> void:
-	var until := Time.get_ticks_msec() + 2000   # 안전 상한(좀비 방지 — 무한대 X)
+	# ★[S2-T5 정정] 2000→8000ms: S2-T3 지형 파이프라인 이식으로 나루 리빌드가 ~4s가 되며, 워프 페이드
+	#   중 동기 리빌드가 벽시계를 먹어 2s 상한으론 전환이 끝나기 전에 빠져나갔다(_transitioning=true 잔존
+	#   → 직후 토글이 가드에 막혀 첫 표본(만물상) 왕복만 경합 실패). 상한은 좀비 방지용이라 여유 있게.
+	var until := Time.get_ticks_msec() + 8000   # 안전 상한(좀비 방지 — 무한대 X)
 	while m._transitioning and Time.get_ticks_msec() < until:
 		await process_frame
 	await process_frame   # 최종 콜백 직후 위치·카메라 반영 한 프레임
