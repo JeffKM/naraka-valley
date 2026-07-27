@@ -1449,6 +1449,14 @@ var _active_slot := 0
 @onready var bana_affinity: Affinity = $BanaAffinity         # T6.2 바나 호감도(하트, affinity.gd 재사용)
 @onready var neo: Neo = $Neo                                 # M2.3 네오 NPC(만물상 점주·그레이박스)
 @onready var neo_affinity: Affinity = $NeoAffinity           # M2.3 네오 호감도(하트, affinity.gd 재사용 — 단골 할인 파생원)
+
+# ── ★ [S2-T7 / ADR-0060 결정 7] 주민 레지스트리 ────────────────────────────────
+# 위 노드들은 그대로 두되(다른 시스템이 mel_affinity·neo_affinity 등을 직접 참조한다), NPC
+# 축(facing·팝업·프롬프트·입력·대화·선물·스테이션·초상화·세이브)은 전부 이 레지스트리 한 곳을
+# 훑어 처리한다. 1인 추가 = 개별 캐릭터 파일 1개 + `_setup_residents()`에 레코드 1건 등록.
+# 등록 순서 = 관계 탭(_heart_rows) 표시 순서다(미호·멜·바나·네오 — 옥자는 관계 트랙 없음).
+var _residents: Array[Resident] = []
+var _residents_by_id: Dictionary = {}   # id → Resident(빠른 조회)
 @onready var cafe: Cafe = $Cafe                               # T5.4 카페 운영(손님 서빙·일일 정산)
 @onready var night_bar: NightBar = $NightBar                 # T6.3 나라카 바(밤 옵트인·잡귀 등장 게이팅)
 @onready var cafe_summary_panel: Panel = $CanvasLayer/CafeSummaryPanel  # T5.4 마감 정산 팝업 배경
@@ -1540,9 +1548,14 @@ var _cam: Camera2D
 var _region := RegionCatalog.HOME
 
 # T5.6 미호가 지금 서 있는 칸(출퇴근으로 시간대마다 바뀐다 — 아침=밭, 15시부터=카페).
-# 말 걸기 판정(facing_miho)·농사 제외가 이 값을 따라간다. 시간에서 매 프레임 파생되는
-# 일시 상태라 세이브하지 않는다(다음 부팅 때 그 시각으로 다시 결정된다).
-var _miho_tile := MIHO_FIELD_TILE
+# 말 걸기 판정·농사 제외가 이 값을 따라간다. 시간에서 매 프레임 파생되는 일시 상태라
+# 세이브하지 않는다(다음 부팅 때 그 시각으로 다시 결정된다).
+# ★ [S2-T7] 이제 단일 출처는 주민 레지스트리(Resident.tile)다 — 이 이름은 기존 참조·헤드리스
+#   테스트가 계속 읽는 **읽기 전용 별칭**으로 남는다(레지스트리 구성 전엔 기본 밭 자리).
+var _miho_tile: Vector2i:
+	get:
+		var r := _resident("miho")
+		return MIHO_FIELD_TILE if r == null or r.tile == Resident.UNPLACED else r.tile
 
 var _target := Vector2i(-1, -1)  # T2.1 바라보는 앞 칸(상호작용 대상)
 var _target_valid := false       # 그 칸이 밭(SOIL)이라 상호작용 가능한가
@@ -1712,31 +1725,18 @@ func _ready() -> void:
 	_setup_settings()       # ★ Phase D 설정(볼륨·전체화면 — audio·프레임 존재 후, 프레임 신호 연결·적용)
 	_skin_panel_text()      # ★ Phase B 한지 테마(밝은 배경) 위 라벨을 먹빛으로(대비 확보)
 	_setup_clock()
-	# T3.2/T5.6 미호를 현재 시간대의 자리(아침=밭 / 15시부터=카페)에 세우고, 대사 진행
-	# 시그널을 패널·이동잠금에 연결한다. 초기 위치는 _miho_tile(기본 밭)로 두고, 로드 후
-	# 시각이 영업창이면 _update_miho_station이 카페로 옮긴다.
-	miho.position = _tile_center_px(_miho_tile)
+	# ★ [S2-T7] 주민 5인(미호·멜·바나·네오·옥자)을 레지스트리에 등록하고 각자의 첫 자리에 세운다.
+	#   옛 1인당 하드배선(위치·선호 선물·가시성 각각 따로)이 여기 한 호출로 접혔다.
+	_setup_residents()
 	# T4.1 옥자를 통보 자리에 세우되 평소엔 숨긴다(오프닝 통보 때만 등장). 통보를 마치면
 	# T5.6 _refresh_okja_station이 카페 상주 자리로 옮겨 다시 드러낸다.
+	# ★ [S2-T7] 통보 배치는 **프레임워크 밖**이다 — 통보 흐름이 옥자의 위치·표시를 소유하고,
+	#   레지스트리는 station_gate(통보를 지났는가)로 그 동안 손을 뗀다(과일반화 금지).
 	okja.position = _tile_center_px(OKJA_INTRO_TILE)
 	okja.visible = false
-	# T5.1 멜을 카페 안 카운터 칸 중앙에 세운다(미호처럼 상시 상주, 항상 보임).
-	mel.position = _tile_center_px(MEL_TILE)
-	# T6.1 바나를 밤 무대 칸에 세우되 평소엔 숨긴다(밤에만 등장 — 미호 출퇴근·옥자 상주처럼
-	# 시각에서 파생되는 무상태 배치). 위치는 고정이고 가시성만 _update_bana_station이 토글한다.
-	bana.position = _tile_center_px(BANA_NIGHT_TILE)
+	# T6.1 바나는 밤에만 등장한다(시각에서 파생되는 무상태 배치) — 자리는 _setup_residents가
+	# 잡았고 여기선 첫 프레임 전까지의 초기 가시성만 끈다(visible_rule이 매 프레임 갱신한다).
 	bana.visible = false
-	# M2.3 네오를 만물상 방 안 매대 칸에 세운다(멜처럼 상시 상주). 만물상 방은 카메라로 격리돼
-	# (STORE_CAM_RECT) 만물상에 들어왔을 때만 보이므로, 멜과 같이 visible 토글 없이 위치만 고정한다
-	# (다른 구역·방에선 카메라 밖 → 안 보이고, NEO_TILE에 닿을 수도 없다).
-	neo.position = _tile_center_px(NEO_TILE)
-	# T5.2 멜 선호 선물은 피안화(미호=영혼 호박과 선물 경제 분산). affinity.gd 인스턴스
-	# 하나를 멜용으로 재사용하되, 이 한 값만 멜로 바꾼다(곡선 상수는 미호와 공유).
-	mel_affinity.preferred_crop = CropCatalog.PIANHWA
-	# T6.2 바나 선호 선물은 혼령초(미호=영혼 호박·멜=피안화와 분리 — 세 작물에 선물 경제를
-	# 고르게 분산. 남은 세 번째 작물이라 자연 확정). 같은 affinity.gd 인스턴스를 바나용으로
-	# 재사용하되 이 한 값만 바꾼다(하트 곡선 상수는 미호·멜과 공유 — miho-heart-arc).
-	bana_affinity.preferred_crop = CropCatalog.HONRYEONGCHO
 	dialogue.changed.connect(_on_dialogue_changed)
 	dialogue.finished.connect(_on_dialogue_finished)
 	_build_dialogue_ui()   # S0-6 「태운 한지」 대화창 룩(윈도우 아트 + 오버레이)
@@ -5990,10 +5990,6 @@ func _save_game() -> void:
 		"shipping_bin": ship_bin.to_save(),   # ★ C2 출하 대기(롤백·익일 정산 보존)
 		"chest": chest.to_save(),   # ★ Phase D 저장 상자 보관 내용(순수 보관 — 세이브별 델타)
 		"storehouse_chest": storehouse_chest.to_save(),   # ★ Phase E 갈무리방(창고) 저장 상자(집 상자와 독립)
-		"affinity": affinity.to_save(),
-		"mel_affinity": mel_affinity.to_save(),
-		"bana_affinity": bana_affinity.to_save(),
-		"neo_affinity": neo_affinity.to_save(),   # M2.3 네오(만물상 점주) 호감도 — 매대 할인 파생원
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
 		"farming_xp": _farming_xp,   # ★ S1-6 농사 숙련 XP(혼력 감산 파생원)
@@ -6010,6 +6006,12 @@ func _save_game() -> void:
 		"indoor": _indoor,
 		"player_tile": _player_tile(),
 	}
+	# ★ [S2-T7] 주민 호감도 직렬화 — 레코드의 save_key로 붙인다. 키는 **옛 이름 그대로**라
+	#   (미호="affinity" · 멜="mel_affinity" · 바나="bana_affinity" · 네오="neo_affinity")
+	#   기존 세이브가 그대로 읽힌다(하위호환 — 개명 금지). 주민이 늘면 키가 하나 더 붙을 뿐이다.
+	for r in _residents:
+		if r.affinity != null and r.save_key != "":
+			data[r.save_key] = r.affinity.to_save()
 	# ★ 활성 슬롯에 저장 + 코지 다이어리 메타(날짜·혼력) 헤더를 얹는다(타이틀 슬롯 UI가
 	#   전체 로드 없이 [N년차 절기 D일 / 혼력]을 읽도록). meta는 SaveManager엔 불투명 blob.
 	if saver.save_game(data, _active_slot, {"day": clock.day, "soul": energy.current}):
@@ -6056,14 +6058,11 @@ func _load_game() -> void:
 		chest.load_save(data["chest"])
 	if data.has("storehouse_chest"):   # ★ Phase E — 창고 상자(키 없는 구버전 = 빈 상자)
 		storehouse_chest.load_save(data["storehouse_chest"])
-	if data.has("affinity"):
-		affinity.load_save(data["affinity"])
-	if data.has("mel_affinity"):
-		mel_affinity.load_save(data["mel_affinity"])
-	if data.has("bana_affinity"):
-		bana_affinity.load_save(data["bana_affinity"])
-	if data.has("neo_affinity"):   # M2.3 — 키 없는 구버전 세이브는 ♡0으로 시작(정가, 무막힘)
-		neo_affinity.load_save(data["neo_affinity"])
+	# ★ [S2-T7] 주민 호감도 복원 — 세이브 키가 없는 구버전은 그 주민만 ♡0으로 시작한다
+	#   (네오 M2.3 원문 규칙과 같은 결: 정가·무막힘. 옛 4갈래 if가 이 루프로 접혔다).
+	for r in _residents:
+		if r.affinity != null and r.save_key != "" and data.has(r.save_key):
+			r.affinity.load_save(data[r.save_key])
 	if data.has("onboarding"):
 		onboarding.load_save(data["onboarding"])
 	# T4.2 슬라이스 점수판 누적(거둔 영혼 총수). 손상 방어로 음수는 0으로 자른다.
@@ -6303,11 +6302,19 @@ func _load_professions(raw) -> void:
 
 # ★ Phase C — NPC idle 초상화(컨텍스트 팝업용). 대화창과 같은 PORTRAIT 매핑을 쓰되 표정 없는 기본
 # 얼굴(stem.png)을 로드해 캐시한다(매 프레임 load 회피). 초상화 없는 인물(네오)은 null(팝업은 이름만).
+# ★ [S2-T7] 화자 이름 → 초상화 파일 stem. **주민 레지스트리가 1순위**(레코드의 portrait_stem)이고,
+# 주민이 아닌 화자만 PORTRAIT_STEM 표로 떨어진다 — 주민 1인 추가 시 초상화 배선도 레코드 한 줄로 끝난다.
+func _portrait_stem(speaker: String) -> String:
+	var r := _resident_named(speaker)
+	if r != null:
+		return r.portrait_stem
+	return String(PORTRAIT_STEM.get(speaker, ""))
+
 var _idle_portrait_cache: Dictionary = {}
 func _idle_portrait(speaker: String) -> Texture2D:
 	if _idle_portrait_cache.has(speaker):
 		return _idle_portrait_cache[speaker]
-	var stem: String = PORTRAIT_STEM.get(speaker, "")
+	var stem := _portrait_stem(speaker)
 	var tex: Texture2D = null
 	if stem != "":
 		var path := PORTRAIT_DIR + stem + ".png"
@@ -6516,19 +6523,13 @@ func _process(delta: float) -> void:
 	# (괭이질·물주기·심기), RMB(action)=맨손 액션(수확·대화·서빙·막기·취침). 도구가 칸 상태에
 	# 안 맞으면 무동작(자동 분기 없음). T2.4 행동 한 번마다 혼력 소모, 바닥나면 막힌다.
 	_update_target()
-	# T5.6 미호 출퇴근: 현재 시각에 맞춰 미호를 밭/카페 자리로 옮긴다(facing 판정 전에 갱신해
-	# 같은 프레임에 새 자리로 말 걸 수 있게 한다).
-	_update_miho_station()
-	# T6.1 바나 밤 등장: 현재 시각에 맞춰 밤 무대 가시성을 토글한다(밤이면 보이고 낮이면 숨김).
-	# facing 판정 전에 갱신해 같은 프레임에 밤이 오면 바로 말 걸 수 있게 한다(미호 station과 같은 결).
-	_update_bana_station()
-	# T3.2/T5.6 미호에게 말 걸기: 바라보는 칸이 미호의 현재 자리(_miho_tile — 아침=밭/
-	# 15시부터=카페)면 E로 대화를 연다(밭 동작보다 우선 — 미호 자리는 농사 대상에서 빠져
-	# 있어 둘이 겹치지 않는다). facing_miho는 아래 하단 프롬프트에서도 재사용한다.
-	var facing_miho := not _sleeping and _target == _miho_tile
-	# T5.1 멜에게 말 걸기: 바라보는 칸이 멜 칸이면 우클릭으로 대화를 연다. ★ C2 — 출하대 F가
-	# 사라져(ADR-0021 무인화) 멜은 *대화(우클릭)·선물(G)만* 남는다(판매는 무인 출하함으로 이전).
-	var facing_mel := not _sleeping and _target == MEL_TILE
+	# ★ [S2-T7] 전 주민 스테이션 갱신(옛 _update_miho_station·_update_bana_station·_refresh_okja_station
+	# 세 갈래가 한 루프로 접혔다): 현재 시각·단계에서 자리·가시성을 파생하고, 보간 걷기 오프셋을
+	# 진행시킨다. facing 판정 *전에* 갱신해 같은 프레임에 새 자리로 바로 말 걸 수 있게 한다.
+	_update_resident_stations(delta)
+	# ★ [S2-T7] 지금 마주 본 주민(없으면 null). 옛 facing_miho/mel/bana/okja/neo 다섯 갈래가
+	# 이 한 줄로 접혔다 — 각 주민의 자리·실내/가시성 가드는 레지스트리 레코드가 들고 있다.
+	var faced_resident := _facing_resident()
 	# ★ C2 무인 출하함: 카페 안에서 출하함 칸을 바라볼 때 우클릭으로 출하함 패널을 연다. NPC·좌석·
 	# 밭과 칸이 갈리고(SHIP_BIN_TILE 단일), _indoor로 가드해 다른 구역 같은 좌표에 닿아도 무반응.
 	var facing_bin := not _sleeping and _indoor == "카페" and _target == SHIP_BIN_TILE
@@ -6538,16 +6539,6 @@ func _process(delta: float) -> void:
 	# ★ Phase E 갈무리방(창고) 저장 상자: 창고 실내에서 상자 칸을 바라볼 때(_indoor로 가드해 다른 구역 같은
 	# 좌표 무반응). 집 상자와 좌표·건물이 갈려 안 겹친다.
 	var facing_storehouse_chest := not _sleeping and _indoor == "창고" and _target == STOREHOUSE_CHEST_TILE
-	# T5.6 옥자(카페 상주)에게 말 걸기: 통보를 마친 뒤(NOTICE 단계 지남)에만 카페에 보인다.
-	# 호감도·선물·출하대 없는 메인 서사 앵커라(ADR-0005) E 일상 대화만 받는다.
-	var facing_okja := not _sleeping and okja.visible and onboarding.step > Onboarding.NOTICE \
-		and _target == OKJA_CAFE_TILE
-	# T6.1 바나(밤 무대)에게 말 걸기: 밤에 바나가 보일 때(bana.visible) 그 칸을 바라보면 E로
-	# 대화를 연다. 호감도·선물·막기(T6.2+)는 범위 밖이라 지금은 E 대화만(옥자 일상 대화와 같은 결).
-	var facing_bana := not _sleeping and bana.visible and _target == BANA_NIGHT_TILE
-	# M2.3 네오(만물상 점주)에게 말 걸기/매대 열기: 만물상 안에서 네오 칸을 바라볼 때. _indoor로
-	# 한 번 더 가드해(다른 구역의 같은 좌표에 닿아도 만물상 밖이면 무반응) 멜 출하대와 칸이 갈린다.
-	var facing_neo := not _sleeping and _indoor == "만물상" and _target == NEO_TILE
 	# ★ [S2-T5] 혼백관 기증대: 혼백관 안에서 기증대 칸을 바라볼 때(_indoor 가드 — 무인 기증대, ADR-0060 결정 5).
 	var facing_donate := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_DONATE_TILE
 	# ★ [S2-T6] 만물상 앞 게시판: 나루 마을 *야외*에서 게시판 칸을 바라볼 때(_indoor==""로 실내 배제 —
@@ -6555,17 +6546,11 @@ func _process(delta: float) -> void:
 	var facing_board := not _sleeping and _region == RegionCatalog.NARU_VILLAGE and _indoor == "" \
 		and _target == QUEST_BOARD_TILE
 	# ★ Phase C 좌하단 컨텍스트 팝업 — 마주 본 주민의 초상화 + 이름 + 관계 한 줄(상시 HUD, 대화창과 별개).
+	# ★ [S2-T7] 5갈래 분기가 레지스트리 한 줄로 접혔다(관계 트랙 없는 주민은 rel_text가 대신한다).
 	if context_popup != null:
-		if facing_miho:
-			context_popup.set_target(_idle_portrait("미호"), "미호", _rel_line(affinity))
-		elif facing_mel:
-			context_popup.set_target(_idle_portrait("멜"), "멜", _rel_line(mel_affinity))
-		elif facing_bana:
-			context_popup.set_target(_idle_portrait("바나"), "바나", _rel_line(bana_affinity))
-		elif facing_neo:
-			context_popup.set_target(_idle_portrait("네오"), "네오", _rel_line(neo_affinity))
-		elif facing_okja:
-			context_popup.set_target(_idle_portrait("옥자"), "옥자", "저승 카페 사장")
+		if faced_resident != null:
+			context_popup.set_target(_idle_portrait(faced_resident.display_name),
+				faced_resident.display_name, _resident_rel_line(faced_resident))
 		else:
 			context_popup.clear()
 	# T5.4 카페 손님 시뮬레이션을 굴린다(연출 중 제외). 영업창(15–19시) 안에서만 손님이
@@ -6607,29 +6592,22 @@ func _process(delta: float) -> void:
 	# ── ADR-0024 RMB(action) 컨텍스트 체인 ───────────────────────────────────────
 	# RMB는 맨손 액션/대화 — 우선순위대로 하나만 잡고 return으로 가른다. 대상 칸 종류(NPC·좌석·
 	# 스폿·밭)는 서로 배타적이라 충돌하지 않는다. 선물(G)·바 열기/출하대(F)는 별개 키라 그대로 둔다.
-	if facing_miho and Input.is_action_just_pressed("action"):
-		_start_dialogue()
-		return
-	# T3.3 미호 선물(G): 바라볼 때 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회).
-	if facing_miho and Input.is_action_just_pressed("gift_item"):
-		_try_gift()
-		return
-	# T5.6 옥자 일상 대화(RMB): 카페 상주 옥자. 호감도·선물 없는 일상이라 G는 없다.
-	if facing_okja and Input.is_action_just_pressed("action"):
-		_start_okja_dialogue()
-		return
-	# T6.1 바나 대화(RMB) / T6.2 선물(G): 밤 무대의 바나를 바라볼 때. 좌석·밭보다 먼저 잡고 return.
-	if facing_bana and Input.is_action_just_pressed("action"):
-		_start_bana_dialogue()
-		return
-	if facing_bana and Input.is_action_just_pressed("gift_item"):
-		_try_bana_gift()
-		return
-	# T6.3 나라카 바 옵트인(F): 밤에 바나를 바라보며 바를 연다(별개 키 — RMB 대화와 안 겹친다).
-	# 안 열면 빈 밤 — 옵트인은 그 밤의 선택이지 매일 세금이 아니다(ADR-0010 #6, ADR-0008 평평≠막힘).
-	if facing_bana and not night_bar.is_opened() and Input.is_action_just_pressed("shop_toggle"):
-		_open_night_bar()
-		return
+	# ★ [S2-T7] 주민 상호작용 3키 — 옛 5인 × 최대 3갈래(우클릭 대화 · G 선물 · F 훅) 하드배선이
+	# 이 한 블록으로 접혔다. 어떤 주민이 어느 키를 받는지는 레코드가 든다(can_gift·shop_key).
+	# 대상 칸이 서로 배타적이라(주민 칸끼리도, 출하함·상자·게시판·기증대와도) 순서는 무해하다.
+	if faced_resident != null:
+		if Input.is_action_just_pressed("action"):
+			_start_resident_dialogue(faced_resident)
+			return
+		# 선물(G): 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회 — Affinity가 게이팅).
+		if faced_resident.can_gift and Input.is_action_just_pressed("gift_item"):
+			_try_resident_gift(faced_resident)
+			return
+		# [F] 특수 훅(네오 매대 · 바나 나라카 바 옵트인). ★결정 8 — 이 채널은 관계 트랙과
+		# 서로를 게이팅하지 않는다(♡0이어도 열리고, 많이 열어도 하트가 안 오른다).
+		if faced_resident.shop_key.is_valid() and Input.is_action_just_pressed("shop_toggle"):
+			if faced_resident.shop_key.call():
+				return
 	# ★ C2 무인 출하함 열기(RMB): 카페 출하함 칸을 바라보며 우클릭으로 패널을 연다(좌석·밭보다 먼저
 	# 잡고 return — 출하함 칸은 다른 대상과 안 겹친다). 패널은 모달이라 위 frame.is_open 가드로 닫힌다.
 	if facing_bin and Input.is_action_just_pressed("action"):
@@ -6643,21 +6621,6 @@ func _process(delta: float) -> void:
 	# ★ Phase E 창고 상자 열기(RMB): 집 상자와 같은 결 — 활성 상자만 바꿔 같은 CTX_CHEST 패널을 연다.
 	if facing_storehouse_chest and Input.is_action_just_pressed("action"):
 		_open_chest(storehouse_chest)
-		return
-	# T5.1 멜 대화(RMB) / T5.2 선물(G): ★ C2 — 출하대 F가 사라져 가드(not _shop_open)도 불필요하다.
-	if facing_mel and Input.is_action_just_pressed("action"):
-		_start_mel_dialogue()
-		return
-	if facing_mel and Input.is_action_just_pressed("gift_item"):
-		_try_mel_gift()
-		return
-	# M2.3 네오 대화(RMB): 만물상에서 네오를 바라보며(일일 대화로 호감도↑).
-	if facing_neo and Input.is_action_just_pressed("action"):
-		_start_neo_dialogue()
-		return
-	# ★ C2 만물상 매대 열기(F): 네오를 바라보며 F로 매대 프레임을 연다(대화=우클릭과 갈린다, 무인 바 F와 같은 결).
-	if facing_neo and Input.is_action_just_pressed("shop_toggle"):
-		_open_frame(InventoryFrame.CTX_STORE)
 		return
 	# ★ [S2-T6] 게시판 F: 미수락이면 일일 의뢰 수락, 수락 중이면 납품. 납품형이라 "손에 든 것"이 아니라
 	#   "가진 것"(인벤토리 보유량)이 기준이다. G = 중기 의뢰 수락(게시판은 사람이 아니라 선물과 안 겹친다).
@@ -6769,7 +6732,7 @@ func _process(delta: float) -> void:
 		_do_sleep()
 
 	# ★ C2 — 멜 출하대(_process_shop)·만물상 매대(_process_store) 폴링은 폐기됐다. 판매는 무인
-	# 출하함(위 facing_bin 우클릭 → 모달 프레임), 구매는 매대 프레임(위 facing_neo F)으로 옮겼다.
+	# 출하함(위 facing_bin 우클릭 → 모달 프레임), 구매는 매대 프레임(위 주민 [F] 훅)으로 옮겼다.
 
 	var p := player.global_position
 	# ★ owner 2026-07-03 — 좌상단 디버그 Readout(방향키·구역·좌표·FPS)은 화면을 가려 상시 숨김.
@@ -6825,7 +6788,8 @@ func _process(delta: float) -> void:
 	# 집 안에서만 취침 안내를 띄운다(연출 중엔 숨김).
 	sleep_prompt.visible = _can_sleep()
 	# 하단 프롬프트(집은 sleep_prompt, 카페·밭은 interact_prompt — 구역이 달라 겹치지 않음).
-	# 우선순위: 출하함 > 미호 > 옥자 > 바나(밤) > 네오(매대) > 멜(대화·선물) > 손님 서빙 > 밭 동작.
+	# 우선순위: 상자 > 출하함 > ★주민(레지스트리 한 갈래) > 기증대 > 게시판 > 막기 > 손님 서빙 > 밭 동작.
+	# ★ [S2-T7] 주민 5갈래가 한 분기로 접혔다 — 대상 칸이 서로 배타적이라 순서 이동은 무해하다.
 	# ★ ADR-0024 — 대화·서빙·막기·수확은 RMB(우클릭), 도구질은 LMB(좌클릭). 선물(G)·바·매대(F)는 별개 키.
 	if facing_chest or facing_storehouse_chest:
 		# ★ Phase D/E 저장 상자를 바라볼 때: 우클릭으로 보관 패널을 연다(순수 보관 — 판매 아님).
@@ -6835,11 +6799,17 @@ func _process(delta: float) -> void:
 		# ★ C2 무인 출하함을 바라볼 때: 우클릭으로 패널을 연다(드롭→익일 정산, 멜 F 소멸).
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 무인 출하함 (수확물 드롭 → 다음 아침 정산)"
-	elif facing_neo:
-		# M2.3 네오(만물상 점주)를 바라볼 때: 대화·매대 한 줄 안내(네오가 매대 얼굴). 이 슬라이스는
-		# 선물(G) 없이 일일 대화로만 친해진다(풀 T1 트랙은 후속, ADR-0014).
+	elif faced_resident != null:
+		# ★ [S2-T7] 주민 프롬프트 — 옛 5갈래(미호·옥자·바나·멜·네오) 문구가 한 조립식으로 접혔다.
+		# 기본 "[우클릭] 대화" + (선물 채널이 있으면) "[G] <작물> 선물" + (특수 훅이 있으면) 꼬리
+		# (네오="[F] 매대" · 바나="[F] 나라카 바 열기"/"(나라카 바 영업 중)"). 문구는 원문 그대로다.
 		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] 대화   [F] 매대"
+		var res_hint := "[우클릭] 대화"
+		if faced_resident.can_gift:
+			res_hint += "   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
+		if faced_resident.prompt_extra.is_valid():
+			res_hint += String(faced_resident.prompt_extra.call())
+		interact_prompt.text = res_hint
 	elif facing_donate:
 		# ★ [S2-T5] 혼백관 기증대: 든 유품이면 기증 안내, 아니면 수집 진행을 보인다(무인 — 큐레이터 후속).
 		interact_prompt.visible = true
@@ -6875,27 +6845,6 @@ func _process(delta: float) -> void:
 					board_text += "   "
 				board_text += "[G] 중기 — %s" % QuestBoard.summary(weekly)
 			interact_prompt.text = board_text if board_text != "" else "게시판 — 오늘 걸린 의뢰가 없다"
-	elif facing_miho:
-		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
-	elif facing_okja:
-		# T5.6 옥자를 바라볼 때: 일상 대화만(호감도·선물·출하대 없음 — 매일 보는 사장).
-		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] 대화"
-	elif facing_bana:
-		# T6.1/T6.2 바나(밤 무대)를 바라볼 때: 대화·선물 안내. T6.3 바를 아직 안 열었으면
-		# [F] 바 열기(옵트인)를 덧붙이고, 이미 열었으면 영업 중임을 알린다(막기는 T6.4+ 몫).
-		interact_prompt.visible = true
-		var bana_hint := "[우클릭] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
-		if night_bar.is_opened():
-			bana_hint += "   (나라카 바 영업 중)"
-		else:
-			bana_hint += "   [F] 나라카 바 열기"
-		interact_prompt.text = bana_hint
-	elif facing_mel:
-		# T5.1/T5.2 멜을 바라볼 때: ★ C2 — 출하대 F가 사라져 대화·선물만 안내한다(판매는 무인 출하함).
-		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
 	elif facing_spot >= 0 and night_bar.is_threat(facing_spot):
 		# T6.4 잡귀가 깃든 스폿을 바라볼 때: 우클릭으로 막는다(즉시 격퇴). 막으러 오느라 카운터를
 		# 비운 사이 손님이 닳는 게 ★ 막기↔응대 경쟁의 비용이다(ADR-0010 #4).
@@ -7369,7 +7318,7 @@ func _show_flavor(crop_id: String) -> void:
 # ── ★ C2 공통 프레임 열기/닫기(메뉴/출하함/매대 모달) ───────────────────────
 # 프레임을 컨텍스트로 연다 — 이동을 잠그고(대화·취침과 같은 결) 핫바를 숨긴다(프레임이 백팩을
 # 그리므로 이중 표시 방지). 닫으면 되돌린다. 메뉴는 Tab 어디서든, 출하함은 facing_bin 우클릭,
-# 매대는 facing_neo F가 부른다(위 _process 입력 체인). 한 번에 한 컨텍스트만 열린다.
+# 매대는 네오 레코드의 shop_key([F])가 부른다(위 _process 주민 입력 블록). 한 번에 한 컨텍스트만 열린다.
 func _open_frame(ctx: int) -> void:
 	if ctx == InventoryFrame.CTX_STORE:
 		frame.store_text = _store_text()   # 첫 그림부터 매대 본문이 차 있게(한 프레임 빈 패널 방지)
@@ -7599,18 +7548,12 @@ func _try_accept_quest(kind: String) -> void:
 	_notice("%s 의뢰 수락 — %s" % [kind_ko, QuestBoard.summary(q)])
 
 # ★ [S2-T6] 의뢰인 이름 → 그 NPC의 affinity 노드(없으면 null). museum·foxfire와 같은 *다리* — QuestBoard는
-#   "누가 의뢰인인가"라는 이름만 알고 호감도 노드를 모른다(디커플링). NPC가 늘면 여기 한 줄만 는다.
+#   "누가 의뢰인인가"라는 이름만 알고 호감도 노드를 모른다(디커플링).
+# ★ [S2-T7] 옛 4갈래 match가 레지스트리 조회로 접혔다 — 이제 NPC가 늘어도 **여기는 안 고친다**
+#   (레코드를 등록하는 순간 그 주민이 의뢰인이 될 수 있다). 관계 트랙 없는 주민(옥자)은 null.
 func _quest_client_affinity(client: String) -> Affinity:
-	match client:
-		"미호":
-			return affinity
-		"멜":
-			return mel_affinity
-		"바나":
-			return bana_affinity
-		"네오":
-			return neo_affinity
-	return null
+	var r := _resident_named(client)
+	return r.affinity if r != null else null
 
 # ★ [S2-T6] 수락한 의뢰를 납품한다 — 요구 수량 차감 → 골드 지급 → 의뢰인 호감도 가산. 수량이 모자라면
 #   진행 상황만 보이고 아무것도 소모하지 않는다(스타듀 게시판 결 — 부분 납품 없음).
@@ -7783,17 +7726,16 @@ func _inv_date_string() -> String:
 # affinity 노드들에서 매번 파생하므로 별도 상태가 없다(여기서 호감도를 바꾸지 않는다 — 읽기 전용).
 # ★ C3 — 각 캐릭터의 관계 곱셈기(여우불·마진·경비·할인)를 effect 줄로 함께 넘긴다. 상시 HUD에서
 #   걷어낸 그 정보가 사라지지 않고 관계 탭에서 복기되게 한다(ADR-0008 관계=곱셈기를 한자리에).
+# ★ [S2-T7] 옛 4행 하드코딩이 레지스트리 순회로 접혔다 — 관계 트랙(affinity)과 곱셈기 훅(effect_fn)을
+#   둘 다 가진 주민만 뜬다(옥자는 관계 트랙이 없어 자동 제외). 행 순서 = 등록 순서(미호·멜·바나·네오).
 func _heart_rows() -> Array:
-	return [
-		{"name": "미호", "filled": affinity.hearts(), "total": Affinity.MAX_HEARTS,
-			"effect": Foxfire.summary(affinity.hearts())},
-		{"name": "멜", "filled": mel_affinity.hearts(), "total": Affinity.MAX_HEARTS,
-			"effect": CafeMargin.summary(mel_affinity.hearts())},
-		{"name": "바나", "filled": bana_affinity.hearts(), "total": Affinity.MAX_HEARTS,
-			"effect": BanaGuard.summary(bana_affinity.hearts())},
-		{"name": "네오", "filled": neo_affinity.hearts(), "total": Affinity.MAX_HEARTS,
-			"effect": StoreDiscount.summary(neo_affinity.hearts())},
-	]
+	var rows := []
+	for r in _residents:
+		if r.affinity == null or not r.effect_fn.is_valid():
+			continue
+		rows.append({"name": r.display_name, "filled": r.affinity.hearts(),
+			"total": Affinity.MAX_HEARTS, "effect": String(r.effect_fn.call())})
+	return rows
 
 # ★ Phase B 숙련 탭 행(_heart_rows와 대칭 — FarmSkill에서 레벨·진행 파생, 읽기 전용). 현재 농사 1종.
 # floor_xp=현 레벨 진입 임계, next_xp=다음 레벨 임계(만렙이면 0). 프레임이 (xp-floor)/(next-floor)로 진행바.
@@ -7854,40 +7796,331 @@ func _maybe_start_intro() -> void:
 	_talking_to = okja.display_name()
 	dialogue.start(okja.display_name(), okja.lines())
 
-# ── T5.6 NPC 상주/출퇴근 ────────────────────────────────────────────────────
-# 미호 출퇴근: 카페 영업 시작(15시, Cafe.OPEN_MIN)을 경계로 아침엔 밭, 오후엔 카페로
-# 자리를 옮긴다(하루 1회 전환 — 직원이 오후 카페에 모이는 무대, ADR-0007). 칸이 실제로
-# 바뀔 때만 위치를 옮긴다(매 프레임 호출되지만 전환은 하루 한 번뿐). 위치는 main이
-# 소유하므로(미호 메모) 여기서 칸을 정하고, facing/농사 제외는 _miho_tile을 따라간다.
-# T5.6/★M1.4 — 미호 출퇴근이 구역 경계를 넘는다: 아침엔 안식 농원 밭(MIHO_FIELD_TILE), 영업
-# 시작(15시)부터 나루 마을 카페(MIHO_CAFE_TILE). 두 자리가 서로 다른 구역이라, 위치 갱신에 더해
-# *가시성*도 구역으로 가른다 — 플레이어가 미호와 같은 구역에 있을 때만 보인다(밭 자리는 농원,
-# 카페 자리는 마을). 이 게이팅이 없으면 마을 야외(밭 좌표와 겹침)에 미호가 떠 보인다. 위치는
-# 항상 현재 station 칸 중앙으로 둔다(세이브 무상태 — 헤드리스 테스트가 위치/칸으로 검증).
+# ══ ★ [S2-T7 / ADR-0060 결정 7] 주민 프레임워크 ═══════════════════════════════
+# 옛 구조: NPC 1인이 늘 때마다 main.gd 15곳 안팎(노드·위치·facing·팝업·프롬프트·입력 4갈래·
+# 대화·선물·스테이션·초상화·세이브 2곳)을 각각 손으로 배선했다. 이제 그 축을 **한 인터페이스**
+# (resident.gd 레코드)로 모으고, main은 레지스트리를 훑는 공통 루프만 든다.
+#
+# 1인 추가 절차(T8 모찌가 이 절차의 검증이다):
+#   ① 캐릭터 파일 1개 — 대사 lines(hearts, first_today)·display_name()·몸 _draw + walk_offset 블록
+#   ② 여기 `_setup_residents()`에 Resident 레코드 1건 등록(자리·스케줄·선물·훅). 레코드에
+#      script_path·needs_affinity를 채우면 **main.tscn도 안 고친다** — 노드는 _register_resident가
+#      낳는다(기존 5인은 이미 tscn에 노드가 있어 그 경로를 안 탄다).
+#   그 외 코드는 **한 줄도 안 고친다** — facing·팝업·프롬프트·입력·대화·선물·초상화·세이브가
+#   전부 레코드에서 파생된다.
+#
+# 특수 거동은 일반화하지 않고 훅으로 남겼다(과일반화 금지): 옥자 통보 단계(station_gate)·
+# 네오 매대(shop_key)·바나 밤 경비 옵트인(shop_key+visible_rule)·미호 여우불 다리(effect_fn).
+
+func _register_resident(r: Resident) -> void:
+	# ★ main.tscn을 안 고치고 늘리는 길: 노드가 비어 있고 script_path가 있으면 여기서 낳는다.
+	#   기존 5인은 main.tscn 노드를 그대로 물고 오므로 이 경로를 안 탄다(거동 불변).
+	if r.node == null and r.script_path != "":
+		var body: Node2D = load(r.script_path).new()
+		body.name = r.id.capitalize()
+		add_child(body)
+		r.node = body
+	if r.affinity == null and r.needs_affinity:
+		var aff := Affinity.new()
+		aff.name = r.id.capitalize() + "Affinity"
+		add_child(aff)
+		r.affinity = aff
+	_residents.append(r)
+	_residents_by_id[r.id] = r
+	# 첫 자리에 세운다. station_gate가 걸린 주민(옥자)은 그 흐름이 배치를 소유하므로 건드리지
+	# 않는다 — 게이트가 열리는 순간 _update_resident_station이 상주 자리로 옮긴다.
+	if not r.station_gate.is_valid() and not r.schedule.is_empty():
+		r.tile = r.schedule[0]["tile"]
+		r.tile_region = String(r.schedule[0].get("region", ""))
+		r.node.position = _tile_center_px(r.tile)
+
+# id로 주민 레코드 조회(없으면 null).
+func _resident(id: String) -> Resident:
+	return _residents_by_id.get(id, null)
+
+# 표시이름으로 주민 레코드 조회(대화 화자·의뢰인 이름처럼 이름이 키인 곳에서 쓴다).
+func _resident_named(display_name: String) -> Resident:
+	for r in _residents:
+		if r.display_name == display_name:
+			return r
+	return null
+
+# 주민 5인을 등록한다. 등록 순서 = 관계 탭 표시 순서(미호·멜·바나·네오).
+func _setup_residents() -> void:
+	_residents.clear()
+	_residents_by_id.clear()
+
+	# ── 미호(T3.2/T3.3) — 농사 멘토. 유일하게 **구역을 넘는 출퇴근**을 한다: 아침엔 안식 농원
+	#    밭, 카페 영업 시작(15시)부터 나루 마을 카페(ADR-0007 직원이 오후 카페에 모이는 무대).
+	#    두 자리가 서로 다른 구역이라 가시성도 구역으로 가른다 — 이 게이팅이 없으면 마을 야외
+	#    (밭 좌표와 겹침)에 미호가 떠 보인다(★M1.4 원문 규칙 그대로).
+	var r_miho := Resident.new()
+	r_miho.id = "miho"
+	r_miho.display_name = "미호"
+	r_miho.node = miho
+	r_miho.affinity = affinity
+	r_miho.save_key = "affinity"        # ★하위호환: 미호 호감도의 옛 세이브 키(개명 금지)
+	r_miho.can_gift = true
+	r_miho.gift_target_ko = ""          # T3.3 원문이 이름 없이 "… 선물 +N 호감도"라 그대로 보존
+	r_miho.portrait_stem = "miho"
+	r_miho.schedule = [
+		{"from_min": 0, "tile": MIHO_FIELD_TILE, "region": RegionCatalog.HOME},
+		{"from_min": Cafe.OPEN_MIN, "tile": MIHO_CAFE_TILE, "region": RegionCatalog.NARU_VILLAGE},
+	]
+	r_miho.effect_fn = func() -> String: return Foxfire.summary(affinity.hearts())
+	_register_resident(r_miho)
+
+	# ── 멜(T5.1/T5.2) — 카페 카운터 상주. 카페 방은 카메라로 격리돼 있어(구역 밖에선 못 닿는다)
+	#    가시성을 따로 가르지 않는다(region "" = 미터치, 항상 보임). 선호 선물 = 피안화
+	#    (미호=영혼 호박과 선물 경제 분산 — 곡선 상수는 affinity.gd를 공유하고 이 한 값만 다르다).
+	var r_mel := Resident.new()
+	r_mel.id = "mel"
+	r_mel.display_name = "멜"
+	r_mel.node = mel
+	r_mel.affinity = mel_affinity
+	r_mel.save_key = "mel_affinity"
+	r_mel.can_gift = true
+	r_mel.gift_target_ko = "멜"
+	r_mel.portrait_stem = "mel"
+	r_mel.schedule = [{"from_min": 0, "tile": MEL_TILE, "region": ""}]
+	r_mel.effect_fn = func() -> String: return CafeMargin.summary(mel_affinity.hearts())
+	mel_affinity.preferred_crop = CropCatalog.PIANHWA
+	_register_resident(r_mel)
+
+	# ── 바나(T6.1/T6.2) — 밤 무대. 자리는 고정이고 **가시성만 시각으로** 토글한다(19시부터,
+	#    통보 중엔 숨김 — 오프닝 컷신에 밤 무대가 끼어들지 않게). ★특수 훅 = [F] 나라카 바
+	#    옵트인(ADR-0010 #6: 안 열면 빈 밤 — 매일 세금이 아니다). 선호 선물 = 혼령초.
+	var r_bana := Resident.new()
+	r_bana.id = "bana"
+	r_bana.display_name = "바나"
+	r_bana.node = bana
+	r_bana.affinity = bana_affinity
+	r_bana.save_key = "bana_affinity"
+	r_bana.can_gift = true
+	r_bana.gift_target_ko = "바나"
+	r_bana.portrait_stem = "bana"
+	r_bana.require_visible = true       # 밤에 드러났을 때만 말 걸 수 있다
+	r_bana.schedule = [{"from_min": 0, "tile": BANA_NIGHT_TILE, "region": ""}]
+	r_bana.visible_rule = func() -> bool:
+		return clock.minutes >= Cafe.CLOSE_MIN and onboarding.step > Onboarding.NOTICE
+	r_bana.prompt_extra = func() -> String:
+		return "   (나라카 바 영업 중)" if night_bar.is_opened() else "   [F] 나라카 바 열기"
+	r_bana.shop_key = func() -> bool:
+		if night_bar.is_opened():
+			return false                # 이미 열었으면 F를 흘려보낸다(원문 가드 그대로)
+		_open_night_bar()
+		return true
+	r_bana.effect_fn = func() -> String: return BanaGuard.summary(bana_affinity.hearts())
+	bana_affinity.preferred_crop = CropCatalog.HONRYEONGCHO
+	_register_resident(r_bana)
+
+	# ── 네오(M2.3) — 만물상 점주. ★[ADR-0060 결정 8] **이중 신분**: 점주 레이어(shop_key = 매대·
+	#    ♡ 할인)와 T1 관계 트랙(affinity = 대화·하트)이 **서로를 게이팅하지 않는다** — 할인이
+	#    늘어도 하트 이벤트가 열리지 않고, ♡0이어도 매대 거래는 정상 동작한다. 두 축이 이 레코드
+	#    안에서도 독립 필드로 있는 게 그 규칙의 코드적 표현이다(네오 선례 → 일반 허용 패턴).
+	#    선물(G) 채널은 아직 없다 — 풀 T1 트랙(선물·하트 이벤트·결혼)은 후속(ADR-0014 한 명씩).
+	#    실내 가드: 만물상 방 안에서만 말 걸 수 있다(다른 구역 같은 좌표에 닿아도 무반응).
+	var r_neo := Resident.new()
+	r_neo.id = "neo"
+	r_neo.display_name = "네오"
+	r_neo.node = neo
+	r_neo.affinity = neo_affinity
+	r_neo.save_key = "neo_affinity"
+	r_neo.can_gift = false
+	r_neo.portrait_stem = ""            # 초상화 미제작(팝업은 이름만) — 아트는 Phase 2
+	r_neo.require_indoor = "만물상"
+	r_neo.schedule = [{"from_min": 0, "tile": NEO_TILE, "region": ""}]
+	r_neo.prompt_extra = func() -> String: return "   [F] 매대"
+	r_neo.shop_key = func() -> bool:
+		_open_frame(InventoryFrame.CTX_STORE)
+		return true
+	r_neo.effect_fn = func() -> String: return StoreDiscount.summary(neo_affinity.hearts())
+	_register_resident(r_neo)
+
+	# ── 옥자(T4.1/T5.6) — 메인 서사 앵커. **관계 트랙 없음**(호감도·선물 없는 일상 대화 —
+	#    ADR-0005: 서사 텍스트는 캐릭터에만, 깊이는 메인 4인 독점). ★특수 훅 = 통보 단계 게이트:
+	#    통보를 지나기 전엔 통보 흐름(_maybe_start_intro)이 위치·표시를 소유하므로 프레임워크가
+	#    아예 손을 떼고, 지난 뒤엔 카페 상주 자리로 옮겨 드러낸다(멱등 — 매 프레임 안전).
+	var r_okja := Resident.new()
+	r_okja.id = "okja"
+	r_okja.display_name = "옥자"
+	r_okja.node = okja
+	r_okja.affinity = null              # 관계 트랙 없음 → 세이브 키·선물·일일 게이팅 전부 없음
+	r_okja.rel_text = "저승 카페 사장"
+	r_okja.plain_talk = true            # lines_resident() — 하트·first_today 인자 없는 일상 묶음
+	r_okja.portrait_stem = "okja"
+	r_okja.require_visible = true
+	r_okja.facing_gate = func() -> bool: return onboarding.step > Onboarding.NOTICE
+	r_okja.station_gate = func() -> bool: return onboarding.step > Onboarding.NOTICE
+	r_okja.visible_rule = func() -> bool: return true
+	r_okja.schedule = [{"from_min": 0, "tile": OKJA_CAFE_TILE, "region": ""}]
+	_register_resident(r_okja)
+
+# ── 스테이션 갱신(매 프레임) ────────────────────────────────────────────────
+# 전 주민의 자리·가시성을 현재 시각·단계에서 파생한다(세이브 무상태 — 껐다 켜도 그 시각의
+# 자리로 다시 결정된다). delta는 보간 걷기(시각 전용)를 진행시키는 데만 쓴다.
+func _update_resident_stations(delta: float = 0.0) -> void:
+	for r in _residents:
+		_update_resident_station(r)
+		_advance_resident_walk(r, delta)
+
+func _update_resident_station(r: Resident) -> void:
+	# ★특수 훅: 게이트가 닫혀 있으면 배치를 통째로 남에게 맡긴다(옥자 통보 흐름).
+	if r.station_gate.is_valid() and not r.station_gate.call():
+		return
+	var e := r.station_at(clock.minutes)
+	if e.is_empty():
+		return
+	var t: Vector2i = e["tile"]
+	if t != r.tile:
+		var prev := r.tile
+		var prev_region := r.tile_region
+		r.tile = t
+		r.tile_region = String(e.get("region", ""))
+		# ★ 논리 위치는 **즉시 스냅**한다 — 말 걸기(facing) 판정·농사 제외·헤드리스 테스트가
+		#   전부 이 값을 본다. 걷는 연출은 아래 시각 오프셋이 따로 진다(resident_walk.gd).
+		r.node.position = _tile_center_px(t)
+		_begin_resident_walk(r, prev, prev_region, t, r.tile_region)
+	# 가시성: ㉠ 훅이 있으면 훅 ㉡ 없고 스케줄에 구역이 박혀 있으면 같은 구역일 때만
+	#          ㉢ 둘 다 없으면 손대지 않는다(멜·네오 — 카메라 격리로 자연히 안 보인다).
+	if r.visible_rule.is_valid():
+		r.node.visible = r.visible_rule.call()
+	elif String(e.get("region", "")) != "":
+		r.node.visible = _region == String(e["region"])
+
+# ── 보간 걷기(시각 전용) ────────────────────────────────────────────────────
+# 스테이션이 바뀌면 길 스포크를 따라 걸어온 것처럼 보이게 한다. 논리 위치는 이미 목적지로
+# 스냅됐으므로 여기서 만드는 건 **그림 오프셋**뿐이다(ADR-0060 결정 7 — 게임플레이 판정 불변).
+func _begin_resident_walk(r: Resident, from_tile: Vector2i, from_region: String,
+		to_tile: Vector2i, to_region: String) -> void:
+	if from_tile == Resident.UNPLACED:
+		return                          # 첫 배치는 걷지 않는다(부팅·게이트 개방 = 그냥 거기 있다)
+	if from_region != to_region:
+		return                          # ★구역을 넘는 전환은 걸어갈 길이 없다(미호 농원 밭 ↔ 마을
+		                                #  카페) — 종전 순간이동 그대로 둔다.
+	var spokes := _road_spokes(from_tile, to_tile, to_region)
+	if spokes.is_empty():
+		return                          # 스포크를 못 만드는 전환(도로 없는 구역·같은 칸)은 즉시 도착
+	if r.walk == null:
+		r.walk = ResidentWalk.new()
+	r.walk.start(_tile_center_px(from_tile), spokes)
+
+func _advance_resident_walk(r: Resident, delta: float) -> void:
+	if r.walk == null or not r.walk.is_walking():
+		return
+	r.walk.advance(delta)
+	if r.node != null and r.node.has_method("set_walk_offset"):
+		r.node.set_walk_offset(r.walk.offset())
+
+# 길 스포크 = 도로 그래프의 **정해진 경유점**. 마을 메인 가로 복도(MAIN_CORRIDOR_Y — 문 스포크가
+# 전부 걸리는 허리)를 타는 ㄱ자 경로다: 출발 칸 → 복도 위 같은 열 → 도착 열 → 도착 칸.
+# ★ A* 등 범용 경로탐색은 도입하지 않는다(ADR-0060 대안 검토 "보류" — 재론 금지 항목).
+# 도로 레인이 없는 구역이거나 같은 칸이면 빈 배열 → 즉시 도착(구역을 넘는 전환은 호출 전
+# _begin_resident_walk가 이미 걸러낸다 — 미호 출퇴근이 거기 해당해 종전 순간이동 그대로 남는다).
+# 지금 도로 레인이 정의된 구역은 나루 마을 하나다(다른 구역은 각자 Slice에서 점진 이식).
+const ROAD_LANE_Y := {RegionCatalog.NARU_VILLAGE: MAIN_CORRIDOR_Y}
+
+func _road_spokes(from_tile: Vector2i, to_tile: Vector2i, region: String) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	if from_tile == to_tile or not ROAD_LANE_Y.has(region):
+		return out
+	var lane: int = ROAD_LANE_Y[region]
+	# 같은 열이면 곧장 세로로, 아니면 복도까지 올라갔다 가로로 건너 다시 내려온다.
+	if from_tile.x != to_tile.x:
+		out.append(_tile_center_px(Vector2i(from_tile.x, lane)))
+		out.append(_tile_center_px(Vector2i(to_tile.x, lane)))
+	out.append(_tile_center_px(to_tile))
+	return out
+
+# ── 하위 참조 호환 래퍼(기존 호출부·헤드리스 테스트가 계속 부른다) ──────────
 func _update_miho_station() -> void:
-	var t := MIHO_CAFE_TILE if clock.minutes >= Cafe.OPEN_MIN else MIHO_FIELD_TILE
-	if t != _miho_tile:
-		_miho_tile = t
-		miho.position = _tile_center_px(_miho_tile)
-	var miho_region := RegionCatalog.NARU_VILLAGE if _miho_tile == MIHO_CAFE_TILE else RegionCatalog.HOME
-	miho.visible = _region == miho_region
+	var r := _resident("miho")
+	if r != null:
+		_update_resident_station(r)
 
-# 옥자 상주: 오프닝 통보를 마친 뒤(NOTICE 단계를 지남)엔 카페 상주 자리에 드러낸다(매일
-# 보는 사장 — 풀 관계 트랙 없음, ADR-0005). 통보 단계(또는 세이브 없는 신규 시작)면 통보
-# 흐름(_maybe_start_intro)이 위치·표시를 관리하므로 여기선 손대지 않는다. 멱등이라 로드
-# 직후·통보 종료 양쪽에서 불려도 안전하다(세이브 무상태 — 단계에서 매번 파생).
 func _refresh_okja_station() -> void:
-	if onboarding.step > Onboarding.NOTICE:
-		okja.position = _tile_center_px(OKJA_CAFE_TILE)
-		okja.visible = true
+	var r := _resident("okja")
+	if r != null:
+		_update_resident_station(r)
 
-# T6.1 바나 밤 등장: 밤(빈 밤 슬롯 19시, Cafe.CLOSE_MIN)에만 밤 무대에 드러난다(낮엔 숨김 —
-# 미호 출퇴근·옥자 상주처럼 시각에서 매 프레임 파생되는 무상태 배치). 통보(NOTICE) 도중엔
-# 숨겨 둔다(옥자 가드와 같은 결 — 오프닝 컷신 동안 밤 무대가 끼어들지 않게). 위치는 _ready에서
-# 한 번 고정했으므로 여기선 가시성만 토글한다. 밤 영업창 옵트인·잡귀(T6.3+)는 범위 밖이라,
-# 지금은 바나가 밤에 그냥 서 있어 말 걸 수 있을 뿐이다(T6.1 — 배치 + 대사 텍스트박스).
 func _update_bana_station() -> void:
-	bana.visible = clock.minutes >= Cafe.CLOSE_MIN and onboarding.step > Onboarding.NOTICE
+	var r := _resident("bana")
+	if r != null:
+		_update_resident_station(r)
+
+# ── 마주 본 주민 판정 ───────────────────────────────────────────────────────
+# 바라보는 칸(_target)이 어느 주민의 현재 자리인가. 각자의 가드는 레코드가 든다:
+#   · require_indoor — 그 실내에서만(네오=만물상. 다른 구역 같은 좌표에 닿아도 무반응)
+#   · require_visible — 지금 드러나 있을 때만(옥자·바나 — 시각·단계로 나타났다 사라진다)
+#   · facing_gate — 추가 훅(옥자 = 통보를 지났는가)
+# ★ 거동 불변: 미호·멜은 옛 코드에도 구역/실내 가드가 없었다(칸 좌표만 봤다). 그대로 옮겼다 —
+#   원문에 잠재한 미세 구멍(다른 구역의 같은 좌표)까지 포함해 보존한다(리팩터는 거동 불변이 최우선).
+# 주민끼리 칸이 겹치지 않으므로 첫 매치 하나만 돌려주면 된다(등록 순서 = 판정 순서).
+func _facing_resident() -> Resident:
+	if _sleeping:
+		return null
+	for r in _residents:
+		if r.tile == Resident.UNPLACED or _target != r.tile:
+			continue
+		if r.require_indoor != "" and _indoor != r.require_indoor:
+			continue
+		if r.require_visible and not r.node.visible:
+			continue
+		if r.facing_gate.is_valid() and not r.facing_gate.call():
+			continue
+		return r
+	return null
+
+# 컨텍스트 팝업 관계 한 줄. 관계 트랙이 있으면 하트 수, 없으면 레코드의 고정 문구(옥자).
+func _resident_rel_line(r: Resident) -> String:
+	return _rel_line(r.affinity) if r.affinity != null else r.rel_text
+
+# ── 대화(공통) ─────────────────────────────────────────────────────────────
+# 말 걸면 텍스트박스가 뜨고, 우클릭으로 끝까지 넘기면 닫힌다. 대사 *내용*은 캐릭터가 들고
+# 오고(ADR-0005: 서사 텍스트는 캐릭터에만), 진행·열림은 DialogueBox가, 패널 표시·이동잠금은
+# main이 맡는다 — 이 함수는 그 셋을 잇기만 한다.
+#   · 관계 트랙이 있으면(미호·멜·바나·네오) 오늘 첫 대화에 호감도를 소폭 올리고(하루 1회 —
+#     Affinity가 게이팅), 보상 여부와 하트 단계로 어떤 묶음을 들려줄지 캐릭터가 고른다.
+#   · 관계 트랙이 없으면(옥자) 일일 게이팅·점수 없이 매번 같은 일상 묶음을 들려준다.
+func _start_resident_dialogue(r: Resident) -> void:
+	var lines: PackedStringArray
+	if r.plain_talk or r.affinity == null:
+		lines = r.node.lines_resident()
+	else:
+		var first_today := r.affinity.daily_talk(clock.day)
+		lines = r.node.lines(r.affinity.hearts(), first_today)
+	# 대사가 없으면 시작하지 않는다(이동을 잠근 채 못 닫는 상태 방지).
+	if lines.is_empty():
+		return
+	player.set_physics_process(false)  # 대화 중 이동 잠금(취침 연출과 같은 결)
+	player.velocity = Vector2.ZERO
+	_talking_to = r.display_name
+	dialogue.start(r.display_name, lines)
+
+# ── 선물(공통) ─────────────────────────────────────────────────────────────
+# 선택 작물(_selected_crop) 수확물 1개를 건네 호감도를 올린다. 선호 작물이면 더 크게 오르고
+# (미호=영혼 호박 · 멜=피안화 · 바나=혼령초), 하루 1회만 받는다(Affinity가 게이팅).
+# ★ 알림 문구는 레코드의 gift_target_ko로 원문을 그대로 재현한다 — 미호만 이름이 빠진 T3.3
+#   원문 형태를 유지한다(거동 불변 우선. 문구 통일은 별건).
+func _try_resident_gift(r: Resident) -> void:
+	if r.affinity == null:
+		return
+	var who := r.gift_target_ko
+	var crop := _selected_crop
+	if inventory.harvest_count(crop) <= 0:
+		_notice("%s 수확물이 없다" % CropCatalog.name_of(crop))
+		return
+	if not r.affinity.can_gift(clock.day):
+		_notice("오늘은 이미 선물했다" if who == "" else "오늘은 이미 %s에게 선물했다" % who)
+		return
+	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
+	var gained := r.affinity.gift(crop, clock.day)
+	var tag := "(선호!) " if r.affinity.is_preferred(crop) else ""
+	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립
+	if who == "":
+		_notice("%s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
+	else:
+		_notice("%s에게 %s 선물 %s+%d 호감도" % [who, CropCatalog.name_of(crop), tag, gained])
 
 # ── T4.2/T7.3 슬라이스 종료 ─────────────────────────────────────────────────
 # 슬라이스가 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리
@@ -7931,17 +8164,9 @@ func _advance_onboarding(action: String) -> void:
 # 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다(완료기준). 대사 내용은 미호가
 # 들고 오고(ADR-0005), 진행·열림은 DialogueBox가, 패널 표시·이동잠금은 main이 맡는다.
 func _start_dialogue() -> void:
-	# T3.3 일일 대화: 오늘 첫 대화면 호감도를 소폭 올린다(하루 1회, Affinity가 게이팅).
-	# 보상 여부(first_today)와 현재 하트 단계로 어떤 대사를 들려줄지 미호가 고른다.
-	var first_today := affinity.daily_talk(clock.day)
-	var lines := miho.lines(affinity.hearts(), first_today)
-	# 대사가 없으면 시작하지 않는다(이동을 잠근 채 못 닫는 상태 방지).
-	if lines.is_empty():
-		return
-	player.set_physics_process(false)  # 대화 중 이동 잠금(취침 연출과 같은 결)
-	player.velocity = Vector2.ZERO
-	_talking_to = miho.display_name()
-	dialogue.start(miho.display_name(), lines)
+	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 진행은 공통 _start_resident_dialogue(레지스트리). 기존
+	#   호출부·헤드리스 테스트(store_test 등)가 이 이름을 계속 부르므로 이름만 남겨 둔다.
+	_start_resident_dialogue(_resident("miho"))
 
 # ── T5.1/T5.2 멜 대화 ──────────────────────────────────────────────────────
 # 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다. 미호 대화와 같은 결 — 대사는
@@ -7949,14 +8174,9 @@ func _start_dialogue() -> void:
 # T5.2 일일 대화: 오늘 첫 대화면 멜 호감도를 소폭 올린다(하루 1회, MelAffinity가 게이팅).
 # 보상 여부(first_today)와 현재 하트 단계로 어떤 대사를 들려줄지 멜이 고른다(_start_dialogue 대칭).
 func _start_mel_dialogue() -> void:
-	var first_today := mel_affinity.daily_talk(clock.day)
-	var lines := mel.lines(mel_affinity.hearts(), first_today)
-	if lines.is_empty():
-		return
-	player.set_physics_process(false)  # 대화 중 이동 잠금(미호 대화와 같은 결)
-	player.velocity = Vector2.ZERO
-	_talking_to = mel.display_name()
-	dialogue.start(mel.display_name(), lines)
+	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 진행은 공통 _start_resident_dialogue(레지스트리). 기존
+	#   호출부·헤드리스 테스트(store_test 등)가 이 이름을 계속 부르므로 이름만 남겨 둔다.
+	_start_resident_dialogue(_resident("mel"))
 
 # ── M2.3 네오(만물상 점주) 대화 ─────────────────────────────────────────────
 # 만물상에서 네오에게 말 걸면 대사를 들려준다(멜 대화와 같은 결 — 대사는 네오가 든다, ADR-0005).
@@ -7965,14 +8185,9 @@ func _start_mel_dialogue() -> void:
 # 한 명씩). 보상 여부(first_today)와 현재 하트로 어떤 대사(낯섦/단골/친근)를 들려줄지 네오가 고른다(_start_mel_dialogue 대칭).
 # 화자(_talking_to=네오)는 온보딩 단계 화자가 아니라 _on_dialogue_finished에서 그냥 닫힌다(멜과 동일).
 func _start_neo_dialogue() -> void:
-	var first_today := neo_affinity.daily_talk(clock.day)
-	var lines := neo.lines(neo_affinity.hearts(), first_today)
-	if lines.is_empty():
-		return
-	player.set_physics_process(false)  # 대화 중 이동 잠금(멜 대화와 같은 결)
-	player.velocity = Vector2.ZERO
-	_talking_to = neo.display_name()
-	dialogue.start(neo.display_name(), lines)
+	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 진행은 공통 _start_resident_dialogue(레지스트리). 기존
+	#   호출부·헤드리스 테스트(store_test 등)가 이 이름을 계속 부르므로 이름만 남겨 둔다.
+	_start_resident_dialogue(_resident("neo"))
 
 # ── T5.6 옥자(카페 상주) 일상 대화 ──────────────────────────────────────────
 # 통보 후 카페에 상주하는 옥자에게 말 걸면 일상 대사를 들려준다(미호·멜 대화와 같은 결).
@@ -7980,13 +8195,9 @@ func _start_neo_dialogue() -> void:
 # 같은 묶음(미결의 죄 떡밥 톤)을 들려준다. 대화 종료(_on_dialogue_finished)에서 옥자 화자는
 # NOTICE 단계가 아니므로(상주는 통보를 지난 뒤) 온보딩을 전진시키지 않고 그냥 닫힌다.
 func _start_okja_dialogue() -> void:
-	var lines := okja.lines_resident()
-	if lines.is_empty():
-		return
-	player.set_physics_process(false)  # 대화 중 이동 잠금(미호·멜 대화와 같은 결)
-	player.velocity = Vector2.ZERO
-	_talking_to = okja.display_name()
-	dialogue.start(okja.display_name(), lines)
+	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 진행은 공통 _start_resident_dialogue(레지스트리). 기존
+	#   호출부·헤드리스 테스트(store_test 등)가 이 이름을 계속 부르므로 이름만 남겨 둔다.
+	_start_resident_dialogue(_resident("okja"))
 
 # ── T6.1/T6.2 바나(밤 무대) 대화 ────────────────────────────────────────────
 # 말 걸면 텍스트박스가 뜨고, E로 끝까지 넘기면 닫힌다(완료기준). 미호·멜·옥자 대화와 같은
@@ -7997,30 +8208,15 @@ func _start_okja_dialogue() -> void:
 # (옥자=NOTICE·미호=MEET_MIHO)가 아니라 _on_dialogue_finished의 두 분기를 모두 비껴가 온보딩을
 # 전진시키지 않는다(멜과 같은 결 — 오전진 0).
 func _start_bana_dialogue() -> void:
-	var first_today := bana_affinity.daily_talk(clock.day)
-	var lines := bana.lines(bana_affinity.hearts(), first_today)
-	if lines.is_empty():
-		return
-	player.set_physics_process(false)  # 대화 중 이동 잠금(미호·멜·옥자 대화와 같은 결)
-	player.velocity = Vector2.ZERO
-	_talking_to = bana.display_name()
-	dialogue.start(bana.display_name(), lines)
+	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 진행은 공통 _start_resident_dialogue(레지스트리). 기존
+	#   호출부·헤드리스 테스트(store_test 등)가 이 이름을 계속 부르므로 이름만 남겨 둔다.
+	_start_resident_dialogue(_resident("bana"))
 
 # T6.2 바나 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 바나 호감도를 올린다. 선호
 # 작물(혼령초)이면 더 크게 오른다. 하루 1회만(BanaAffinity가 게이팅). _try_mel_gift와 대칭.
 func _try_bana_gift() -> void:
-	var crop := _selected_crop
-	if inventory.harvest_count(crop) <= 0:
-		_notice("%s 수확물이 없다" % CropCatalog.name_of(crop))
-		return
-	if not bana_affinity.can_gift(clock.day):
-		_notice("오늘은 이미 바나에게 선물했다")
-		return
-	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
-	var gained := bana_affinity.gift(crop, clock.day)
-	var tag := "(선호!) " if bana_affinity.is_preferred(crop) else ""
-	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립(바나)
-	_notice("바나에게 %s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
+	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 처리는 공통 _try_resident_gift(레지스트리).
+	_try_resident_gift(_resident("bana"))
 
 # ── T6.3 나라카 바 옵트인 ────────────────────────────────────────────────────
 # 밤 창(19–24시)에 바나를 바라보며 F면 바를 연다 — 잡귀·손님이 깃들기 시작하는 옵트인. 안 열면
@@ -8095,18 +8291,8 @@ func _try_night_serve(seat: int) -> void:
 # T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
 # 작물(피안화)이면 더 크게 오른다. 하루 1회만(MelAffinity가 게이팅). _try_gift와 대칭.
 func _try_mel_gift() -> void:
-	var crop := _selected_crop
-	if inventory.harvest_count(crop) <= 0:
-		_notice("%s 수확물이 없다" % CropCatalog.name_of(crop))
-		return
-	if not mel_affinity.can_gift(clock.day):
-		_notice("오늘은 이미 멜에게 선물했다")
-		return
-	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
-	var gained := mel_affinity.gift(crop, clock.day)
-	var tag := "(선호!) " if mel_affinity.is_preferred(crop) else ""
-	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립(멜)
-	_notice("멜에게 %s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
+	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 처리는 공통 _try_resident_gift(레지스트리).
+	_try_resident_gift(_resident("mel"))
 
 # ── T5.4 카페 손님 서빙 ─────────────────────────────────────────────────────
 # 기다리는 손님이 앉은 좌석을 서빙한다. 보유 재료(농사 산출물) 1개를 자동 소모하고
@@ -8181,18 +8367,8 @@ func _show_milestone_reached() -> void:
 # T3.3 미호 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 호감도를 올린다.
 # 선호 작물(영혼 호박)이면 더 크게 오른다. 하루 1회만 가능(Affinity가 게이팅).
 func _try_gift() -> void:
-	var crop := _selected_crop
-	if inventory.harvest_count(crop) <= 0:
-		_notice("%s 수확물이 없다" % CropCatalog.name_of(crop))
-		return
-	if not affinity.can_gift(clock.day):
-		_notice("오늘은 이미 선물했다")
-		return
-	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
-	var gained := affinity.gift(crop, clock.day)
-	var tag := "(선호!) " if affinity.is_preferred(crop) else ""
-	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립(미호)
-	_notice("%s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
+	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 처리는 공통 _try_resident_gift(레지스트리).
+	_try_resident_gift(_resident("miho"))
 
 # S0-6 대화창 「태운 한지」 룩 구성(HUD처럼 코드로). 기존 3노드(패널·본문·초상화)를
 # 윈도우 아트 위 오버레이로 재배치하고, 이름판·먹 화살표를 새로 얹는다. main.tscn 무수정.
@@ -8292,7 +8468,7 @@ func _on_dialogue_changed(speaker: String, line: String) -> void:
 # ★owner 2026-07-02: talk(입벌림)은 부자연스러워 폐기 — talk·무태그·표정파일 누락은 모두 idle(기본
 #   stem.png, 입 닫힌 중립)로. 명시 감정 태그(smile/shy/sad)만 해당 표정 파일을 쓴다.
 func _set_portrait(speaker: String, expr: String) -> void:
-	var stem: String = PORTRAIT_STEM.get(speaker, "")
+	var stem := _portrait_stem(speaker)
 	if stem == "":
 		dialogue_portrait.visible = false
 		return

@@ -63,6 +63,20 @@ func _ready() -> void:
 	if _sprite != null:
 		add_child(_sprite)
 
+# ★ [S2-T7] 보간 걷기 시각 오프셋(ResidentWalk가 채운다 — resident_walk.gd). 논리 위치(position)는
+# 스테이션 칸으로 즉시 스냅하고(말 걸기 판정·헤드리스 테스트가 보는 값 불변), *그림만* 이만큼 뒤로
+# 밀어 길 스포크를 따라 걸어온 것처럼 보이게 한다. 도착하면 0으로 수렴한다.
+# 주민 프레임워크 공통 규약이라 새 주민 캐릭터 파일도 이 블록을 그대로 복사한다(miho.gd 동형).
+var walk_offset := Vector2.ZERO
+
+func set_walk_offset(v: Vector2) -> void:
+	if walk_offset == v:
+		return
+	walk_offset = v
+	if _sprite != null:
+		_sprite.position = v   # 도색 스프라이트는 자식 노드 → 자식 위치로 민다
+	queue_redraw()             # 그레이박스는 _draw의 draw_set_transform으로 민다
+
 # M2.4 — 카페 이벤트 데이엔 축제 의상으로 바뀐다(금빛 틴트 + 머리 고깔). main이 day에서
 # 파생해 토글한다(miho와 같은 결 — festive 출처는 main, 캐릭터는 자기 몸만 든다).
 var festive := false
@@ -75,6 +89,7 @@ func set_festive(on: bool) -> void:
 	queue_redraw()                                    # 머리 고깔 덧그리기 갱신
 
 func _draw() -> void:
+	draw_set_transform(walk_offset)   # ★ [S2-T7] 보간 걷기: 그레이박스 그림 전체를 오프셋만큼 민다
 	# M2.4 축제 고깔은 도색 스프라이트 위에도 덧그린다(그레이박스 가드보다 먼저).
 	if festive:
 		Festival.draw_hat(self, -BODY_SIZE.y)
