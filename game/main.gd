@@ -917,6 +917,13 @@ const BANA_HOUSE_DOOR := Vector2i(31, 47)
 #   ★[ADR-0060 결정 1] 배후 강 이행으로 "다리 건너"가 아니라 같은 통짜 마을의 동쪽 구역이다(rect 무이동).
 const STORE_EXT_RECT := Rect2i(58, 14, 6, 5)   # 만물상
 const STORE_EXT_DOOR := Vector2i(60, 18)
+# ★ [S2-T6 / ADR-0060 결정 6] 게시판 — 만물상 앞 단일 게시판(일일 + 중기 의뢰 통합). SOLID 그레이박스
+#   1칸이라 좌표 선정 제약이 셋이다: ㉠ 만물상 문(60,18)·문 앞 칸(60,19)을 안 막는다 ㉡ 문 스포크
+#   (x=60 세로로 메인 복도 y36까지 PATH)와 안 겹친다 ㉢ 다른 건물 rect·주민 집 문 스포크(가장 가까운
+#   주민 집 4 문 x67)와 안 겹친다. → 만물상 남변(y18) 바로 앞 줄(y19)의 동쪽 끝께 (62,19).
+#   문에서 두 칸 동쪽이라 드나드는 동선을 비켜 서고, 가게 외관에 붙어 "만물상 앞 게시판"으로 읽힌다.
+#   플레이어는 (62,20)에 서서 위를 보며 상호작용한다(혼백관 기증대와 같은 조준 칸 결).
+const QUEST_BOARD_TILE := Vector2i(62, 19)
 # ★[ADR-0060 결정 2 / S2-T2] 주민 집 3 → **11채** — [residents.md] T1 11인 로스터와 1:1.
 #   · 조닝 문법 = 스타듀 Pelican Town: **상업**(카페·만물상)은 북/중앙 현행 유지, **주거**는 동편 +
 #     강변(배후 강 북안 위쪽)에 코지 분산한다. 강변 2채는 다리(BRIDGE_X)를 사이에 두고 좌우로 앉혀
@@ -1395,6 +1402,9 @@ var sprinkler: Sprinkler = null
 # ★ [S2-T5 / ADR-0060 결정 5] 혼백관 전시 상태(기증 원장·마일스톤). Sprinkler 결의 얇은 원장 노드(코드
 #   생성 — .new()). 유품 발굴(괭이질)→기증대 기증→마일스톤 보상→세이브. 진열 그리기는 main이 원장에서 파생.
 var museum: Museum = null
+# ★ [S2-T6 / ADR-0060 결정 6] 게시판 의뢰 원장(수락 1건·완료 이력·지급 기록). Museum 결의 얇은 노드
+#   (코드 생성 — .new()). 의뢰 *내용*은 day 시드 파생이라 무상태고, 계약·이력만 여기 산다.
+var quest_board: QuestBoard = null
 var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌트를 한 번만 띄웠는지(세션 로컬 — 세이브 무관)
 # ★ [B1-a.3] 사료풀 상태(낫으로 베어 건초를 얻는 고지 풀 — 재생·겨울정지). FarmField/Orchard/Ranch/
 #   Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). main이 고지 자유 풀밭을 시드하고, 벤 결과를
@@ -1663,6 +1673,10 @@ func _ready() -> void:
 	museum.name = "Museum"
 	add_child(museum)
 	museum.changed.connect(queue_redraw)   # 기증·보상·복원 시 진열 갱신
+	quest_board = QuestBoard.new()       # ★ [S2-T6] 게시판 의뢰 원장 노드(코드 생성 — 수락·완료 이력)
+	quest_board.name = "QuestBoard"
+	add_child(quest_board)
+	quest_board.changed.connect(queue_redraw)   # 수락·납품·만료·복원 시 게시판 그레이박스 갱신
 	forage = Forage.new()                # ★ [B1-a.3] 사료풀 상태 노드(코드 생성 — 낫 채집·재생 원장, 여물광 건초 소스)
 	forage.name = "Forage"
 	add_child(forage)
@@ -2997,6 +3011,9 @@ func _build_naru_village() -> void:
 	_build_room(HOUSE_RECT, HOUSE, HOUSE_WALL, HOUSE_DOOR)   # 공유 집 실내(메인·주민 집 재사용)
 	_build_room(STORE_RECT, CAFE, CAFE_WALL, STORE_DOOR)     # 만물상 실내(카페 타일 = 상업 톤)
 	_carve_village_paths()                 # 마을 동선(복도·다리·각 문·워프 발동 칸까지)
+	# ★ [S2-T6] 만물상 앞 게시판(SOLID 1칸 그레이박스). 동선을 깐 *뒤*에 세워, 어떤 스포크도 이 칸을
+	#   PATH로 덮어 게시판을 지우지 않게 한다(현재 스포크는 x60·x67이라 겹치지 않지만 순서로 못 박는다).
+	_set_tile(QUEST_BOARD_TILE.x, QUEST_BOARD_TILE.y, WALL)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
 # ★ M3.1 — 삼도천(강 낚시 무대 + 혼백관). 안식 농원·나루 마을과 같은 스택(외부 풀밭 y0~23 + 아래
@@ -5654,6 +5671,12 @@ func _on_day_advanced(day: int) -> void:
 		if new_weeds.size() > 0 and not _hinted_encroach:
 			_hinted_encroach = true          # 첫 재점령 1회만 멘토 힌트(봉인 법칙 — 순수 앰비언트, ADR-0055 §5)
 			_notice("땅은 잠깐만 안 돌봐도 금세 거칠어진다 — 낫으로 잡초를 벨 수 있다")
+	# ★ [S2-T6] 게시판 의뢰 만료 — 기한(일일 2일 / 중기 그 주 끝)이 지난 수락분을 조용히 버린다.
+	#   페널티는 없다(골드·호감도 불변 — ADR-0060 결정 6 "미완료 무페널티"). 알림도 벌칙이 아니라
+	#   "자리가 다시 비었다"는 안내다(ADR-0008 평평≠막힘).
+	var dropped := quest_board.advance_day(day)
+	if not dropped.is_empty():
+		_notice("게시판 의뢰가 기한을 넘겼다 — %s (페널티 없음)" % QuestBoard.summary(dropped))
 	energy.refill()
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
@@ -5958,6 +5981,7 @@ func _save_game() -> void:
 		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
 		"sprinkler": sprinkler.to_save(),   # ★ [S1R-T9] 설치한 스프링클러 좌표(플레이어 델타 — 슬라이스 키 네임스페이스)
 		"museum": museum.to_save(),   # ★ [S2-T5] 혼백관 기증 원장·마일스톤 지급 기록(수집 진행 보존)
+		"quest_board": quest_board.to_save(),   # ★ [S2-T6] 게시판 수락 계약·완료 이력·지급 기록(의뢰 내용은 day 파생이라 무상태)
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
 		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
@@ -6014,6 +6038,8 @@ func _load_game() -> void:
 		sprinkler.load_save(data["sprinkler"])
 	if data.has("museum"):   # ★ [S2-T5] — 키 없는 구버전은 기증 0(빈 원장·하위호환)
 		museum.load_save(data["museum"])
+	if data.has("quest_board"):   # ★ [S2-T6] — 키 없는 구버전은 수락 0·완료 0(빈 원장·하위호환)
+		quest_board.load_save(data["quest_board"])
 	if data.has("forage"):    # ★ [B1-a.3] — 키 없는 구버전은 사료풀 0(부팅 후 _seed_forage_tiles가 맵에서 시드). changed가 드로우 갱신
 		forage.load_save(data["forage"])
 	if data.has("flower_patch"):  # ★ ADR-0052 — 키 없는 구세이브는 딴 상태 0(부팅 후 _seed_flower_patches가 배치에서 시드). changed가 드로우 갱신
@@ -6524,6 +6550,10 @@ func _process(delta: float) -> void:
 	var facing_neo := not _sleeping and _indoor == "만물상" and _target == NEO_TILE
 	# ★ [S2-T5] 혼백관 기증대: 혼백관 안에서 기증대 칸을 바라볼 때(_indoor 가드 — 무인 기증대, ADR-0060 결정 5).
 	var facing_donate := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_DONATE_TILE
+	# ★ [S2-T6] 만물상 앞 게시판: 나루 마을 *야외*에서 게시판 칸을 바라볼 때(_indoor==""로 실내 배제 —
+	#   기증대가 _indoor로 가드하는 것과 대칭. 다른 구역의 같은 좌표에 닿아도 무반응).
+	var facing_board := not _sleeping and _region == RegionCatalog.NARU_VILLAGE and _indoor == "" \
+		and _target == QUEST_BOARD_TILE
 	# ★ Phase C 좌하단 컨텍스트 팝업 — 마주 본 주민의 초상화 + 이름 + 관계 한 줄(상시 HUD, 대화창과 별개).
 	if context_popup != null:
 		if facing_miho:
@@ -6628,6 +6658,17 @@ func _process(delta: float) -> void:
 	# ★ C2 만물상 매대 열기(F): 네오를 바라보며 F로 매대 프레임을 연다(대화=우클릭과 갈린다, 무인 바 F와 같은 결).
 	if facing_neo and Input.is_action_just_pressed("shop_toggle"):
 		_open_frame(InventoryFrame.CTX_STORE)
+		return
+	# ★ [S2-T6] 게시판 F: 미수락이면 일일 의뢰 수락, 수락 중이면 납품. 납품형이라 "손에 든 것"이 아니라
+	#   "가진 것"(인벤토리 보유량)이 기준이다. G = 중기 의뢰 수락(게시판은 사람이 아니라 선물과 안 겹친다).
+	if facing_board and Input.is_action_just_pressed("shop_toggle"):
+		if quest_board.is_active():
+			_try_deliver_quest()
+		else:
+			_try_accept_quest(QuestBoard.KIND_DAILY)
+		return
+	if facing_board and Input.is_action_just_pressed("gift_item"):
+		_try_accept_quest(QuestBoard.KIND_WEEKLY)
 		return
 	# ★ [S2-T5] 혼백관 기증(F): 기증대를 바라보며 F — 든 유품을 기증한다(무인 기증대·마일스톤 보상 즉시 지급).
 	if facing_donate and Input.is_action_just_pressed("shop_toggle"):
@@ -6811,6 +6852,29 @@ func _process(delta: float) -> void:
 		else:
 			interact_prompt.text = "혼백관 기증대 — 유품을 들고 오자 (전시 %d/%d)" % [museum.donated_count(),
 				Museum.donatable_ids().size()]
+	elif facing_board:
+		# ★ [S2-T6] 만물상 앞 게시판: 수락 중이면 납품 진행(보유/요구)을, 아니면 오늘 걸린 의뢰를 보인다.
+		#   무인 게시판이라 대화(RMB) 없이 F/G만 받는다(혼백관 기증대와 같은 결).
+		interact_prompt.visible = true
+		if quest_board.is_active():
+			var q: Dictionary = quest_board.active
+			var need := int(q["count"])
+			var have := inventory.count_of(String(q["item_id"]))
+			if have >= need:
+				interact_prompt.text = "[F] 납품 — %s (%d/%d)" % [QuestBoard.summary(q), have, need]
+			else:
+				interact_prompt.text = "의뢰 진행 %d/%d — %s" % [have, need, QuestBoard.summary(q)]
+		else:
+			var daily := quest_board.offer(clock.day, QuestBoard.KIND_DAILY)
+			var weekly := quest_board.offer(clock.day, QuestBoard.KIND_WEEKLY)
+			var board_text := ""
+			if not daily.is_empty():
+				board_text = "[F] 일일 — %s" % QuestBoard.summary(daily)
+			if not weekly.is_empty():
+				if board_text != "":
+					board_text += "   "
+				board_text += "[G] 중기 — %s" % QuestBoard.summary(weekly)
+			interact_prompt.text = board_text if board_text != "" else "게시판 — 오늘 걸린 의뢰가 없다"
 	elif facing_miho:
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
@@ -7499,6 +7563,81 @@ func _try_donate_selected() -> void:
 		museum.claim(int(m["count"]))
 		_toast_item(rid, n)
 		_notice("혼백관 답례 — %s ×%d (전시 %d점 달성)" % [ItemCatalog.name_of(rid), n, int(m["count"])])
+
+# ★ [S2-T6] 만물상 앞 게시판 그레이박스 — 두 기둥 + 나무 판 + 걸린 의뢰 쪽지(게시 수만큼). 수락 중이면
+#   쪽지 하나가 붉은 도장으로 바뀐다(진행 중 표식). 좌표 상태 없음 — 전부 원장·day 파생이다.
+func _draw_quest_board() -> void:
+	if _indoor != "":
+		return   # 실내(카페·집·만물상 방)에 있을 땐 야외 게시판을 안 그린다(카메라 밖이지만 명시적으로)
+	var base := Vector2(QUEST_BOARD_TILE.x * TILE, QUEST_BOARD_TILE.y * TILE)
+	draw_rect(Rect2(base + Vector2(5, 20), Vector2(4, 12)), Color(0.30, 0.21, 0.13))    # 왼 기둥
+	draw_rect(Rect2(base + Vector2(23, 20), Vector2(4, 12)), Color(0.30, 0.21, 0.13))   # 오른 기둥
+	draw_rect(Rect2(base + Vector2(2, 4), Vector2(28, 18)), Color(0.44, 0.31, 0.19))    # 판
+	draw_rect(Rect2(base + Vector2(2, 4), Vector2(28, 3)), Color(0.55, 0.40, 0.25))     # 판 상단 하이라이트(NW 광원)
+	# 쪽지 — 수락 중이면 그 계약 1장(붉은 도장), 아니면 오늘 걸린 의뢰 수만큼 흰 쪽지.
+	if quest_board.is_active():
+		draw_rect(Rect2(base + Vector2(8, 8), Vector2(9, 11)), Color(0.90, 0.87, 0.78))
+		draw_rect(Rect2(base + Vector2(10, 11), Vector2(5, 5)), Color(0.72, 0.20, 0.18))
+	else:
+		var n := quest_board.offers(clock.day).size()
+		for i in n:
+			draw_rect(Rect2(base + Vector2(6 + i * 11, 8), Vector2(9, 11)), Color(0.90, 0.87, 0.78))
+
+# ★ [S2-T6 / ADR-0060 결정 6] 게시판 의뢰 수락 — 오늘 그 종류로 걸린 의뢰를 받는다(동시 1건).
+func _try_accept_quest(kind: String) -> void:
+	var kind_ko := "일일" if kind == QuestBoard.KIND_DAILY else "중기"
+	if quest_board.is_active():
+		_notice("이미 맡은 의뢰가 있다 — %s" % QuestBoard.summary(quest_board.active))
+		return
+	var q := quest_board.offer(clock.day, kind)
+	if q.is_empty():
+		_notice("%s 의뢰는 지금 걸린 게 없다" % kind_ko)
+		return
+	if not quest_board.accept(q, clock.day):
+		return
+	audio.sfx("ui")
+	_notice("%s 의뢰 수락 — %s" % [kind_ko, QuestBoard.summary(q)])
+
+# ★ [S2-T6] 의뢰인 이름 → 그 NPC의 affinity 노드(없으면 null). museum·foxfire와 같은 *다리* — QuestBoard는
+#   "누가 의뢰인인가"라는 이름만 알고 호감도 노드를 모른다(디커플링). NPC가 늘면 여기 한 줄만 는다.
+func _quest_client_affinity(client: String) -> Affinity:
+	match client:
+		"미호":
+			return affinity
+		"멜":
+			return mel_affinity
+		"바나":
+			return bana_affinity
+		"네오":
+			return neo_affinity
+	return null
+
+# ★ [S2-T6] 수락한 의뢰를 납품한다 — 요구 수량 차감 → 골드 지급 → 의뢰인 호감도 가산. 수량이 모자라면
+#   진행 상황만 보이고 아무것도 소모하지 않는다(스타듀 게시판 결 — 부분 납품 없음).
+func _try_deliver_quest() -> void:
+	if not quest_board.is_active():
+		return
+	var q: Dictionary = quest_board.active
+	var id := String(q["item_id"])
+	var need := int(q["count"])
+	var have := inventory.count_of(id)
+	if have < need:
+		_notice("납품 진행 %d/%d — %s가 더 필요하다" % [have, need, ItemCatalog.name_of(id)])
+		return
+	var done := quest_board.complete(clock.day, have)
+	if done.is_empty():
+		return
+	if not inventory.remove_item(id, need):
+		return
+	var gold := int(done["gold"])
+	wallet.earn(gold)
+	_total_income += gold                    # ★ [S1R-T12] 누적 총수입(정보패널) — 출하 정산과 같은 결
+	var af := _quest_client_affinity(String(done["client"]))
+	if af != null:
+		af.add_points(int(done["affinity"]))   # 대화·선물의 하루 1회 게이팅과 별개 채널(의뢰 완료 = 1회성)
+	audio.sfx("gold")
+	_notice("의뢰 완료 — %s ×%d 납품 · +%d골드 · %s 호감도↑" % [ItemCatalog.name_of(id), need, gold,
+		String(done["client"])])
 
 # ★ [S2-T5] 혼백관 실내 그레이박스 진열 — 기증대(중북부 2×1 목대) + 북벽 전시대(유품 3좌 + 책 2좌 그릇).
 # 전시는 원장(museum.donated)의 파생 — 좌표 상태 없음. 책 좌대는 [ADR-0034] 그릇 병설(아이템은 Slice 9).
@@ -8448,6 +8587,7 @@ func _draw() -> void:
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
+			_draw_quest_board()      # ★ [S2-T6] 만물상 앞 게시판(SOLID 1칸 그레이박스 — 수락 중이면 표식)
 			_draw_props_for(_prop_layouts.get("CAFE", []), self)  # ★ ADR-0025 데이터: 카페 무대 가구·카페 등불
 			_draw_ship_bin()         # ★ C2 무인 출하함 상자(카페 안 — 카페 카메라에서만 보임)
 			# M2.4 — 이벤트 데이면 카페 무대를 축제 장식으로(가구 위에 가랜드·무대 카펫 덧그림).
