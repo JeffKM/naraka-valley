@@ -24,6 +24,7 @@ signal takeback_id(id: String)         # 출하함: 대기분을 통째로 롤�
 signal buy_pressed(bulk: bool)         # 매대: 선택 씨앗 구매(bulk=Shift 대량 — 회귀 호환 유지)
 signal buy_sprinkler_pressed(bulk: bool)  # ★ [S1R-T9] 매대: 저승 스프링클러 구매(bulk=Shift 대량)
 signal buy_seed(crop_id: String, bulk: bool)  # ★ [S1R-T12] 매대 그리드: 특정 작물 씨앗 구매(행별 버튼)
+signal buy_store_item(buy_id: String, kind: String, bulk: bool)  # ★ [S2-T4] 매대: 묘목·비료·건초 구매(행별)
 signal close_pressed                   # ★ [S1R-T12] 우상단 X: 메뉴/패널 닫기(main이 _close_frame)
 signal discard_slot(slot_index: int)   # ★ [S1R-T12] 휴지통: 집은 백팩 슬롯을 통째로 버림(확인 후)
 signal save_pressed                    # ★ Phase B 옵션 탭: 저장(main이 _save_game 호출)
@@ -109,6 +110,8 @@ var _buy_rect := Rect2()
 var _buy_sprinkler_rect := Rect2()   # ★ [S1R-T9] 매대 스프링클러 구매 버튼
 # ★ [S1R-T12] 매대 그리드 행별 구매 버튼 히트 [{rect, kind, buy_id}] + 우상단 닫기 X + 휴지통.
 var _store_row_rects: Array = []
+var _store_scroll := 0           # ★ [S2-T4] 매대 리스트 첫 표시 행(12행 확장 — 휠 스크롤, 스타듀 상점 결)
+var _store_area_rect := Rect2()  # ★ [S2-T4] 매대 행 영역(휠 라우팅 판정 — 이 안=매대, 밖=백팩)
 var _close_rect := Rect2()            # 우상단 닫기 X(모든 컨텍스트)
 var _trash_rect := Rect2()           # 인벤 탭 휴지통 슬롯(집은 상태로 클릭=버리기)
 var _trash_pending := -1             # 버리기 확인 대기 중인 백팩 슬롯(-1=없음)
@@ -169,6 +172,7 @@ func open(ctx: int) -> void:
 	_trash_pending = -1         # ★ 열 때 버리기 확인 대기 해제
 	_bp_first_row = 0            # ★ 열 때 백팩 스크롤 맨 위로
 	_bp_scroll_dragging = false
+	_store_scroll = 0            # ★ [S2-T4] 열 때 매대 리스트도 맨 위로
 	visible = true
 	_apply_heart_visibility()
 	queue_redraw()
@@ -808,13 +812,16 @@ func _draw_store_top(panel: Rect2) -> void:
 	const ICON := 20.0
 	var row_y := panel.position.y + PAD + 42.0
 	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0   # 백팩 그리드 시작(_grid_origin) 직전까지
-	var i := 0
-	for item in store_items:
-		var ry := row_y + i * ROW_H
-		if ry + ROW_H > max_y:
-			break
-		var rowrect := Rect2(panel.position.x + PAD, ry, panel.size.x - PAD * 2.0, ROW_H - 2.0)
-		var buyrect := Rect2(panel.end.x - PAD - 54.0, ry, 54.0, ROW_H - 4.0)
+	# ★ [S2-T4] 매대 12행 확장 — 보이는 행수만큼 창을 내고 휠로 넘긴다(스타듀 상점 스크롤 리스트 결).
+	#   스크롤 상태는 여기서 clamp(행수·영역이 그리기 시점에 확정되므로 — 휠 핸들러는 ±1만 한다).
+	var vis := maxi(1, int((max_y - row_y) / ROW_H))
+	_store_scroll = clampi(_store_scroll, 0, maxi(0, store_items.size() - vis))
+	_store_area_rect = Rect2(panel.position.x + PAD, row_y, panel.size.x - PAD * 2.0, max_y - row_y)
+	for i in range(_store_scroll, mini(store_items.size(), _store_scroll + vis)):
+		var item: Dictionary = store_items[i]
+		var ry := row_y + (i - _store_scroll) * ROW_H
+		var rowrect := Rect2(panel.position.x + PAD, ry, panel.size.x - PAD * 2.0 - 10.0, ROW_H - 2.0)
+		var buyrect := Rect2(panel.end.x - PAD - 64.0, ry, 54.0, ROW_H - 4.0)
 		_store_row_rects.append({"row": rowrect, "buy": buyrect,
 			"kind": String(item.get("kind", "")), "buy_id": String(item.get("buy_id", ""))})
 		# 아이콘.
@@ -837,7 +844,13 @@ func _draw_store_top(panel: Rect2) -> void:
 		# 구매 버튼.
 		_plate_btn(buyrect)
 		HanjiUi.draw_text(self, buyrect.position + Vector2(11.0, 16.0), "구매", 12, HanjiUi.INK_LIGHT)
-		i += 1
+	# ★ [S2-T4] 미니 스크롤바(행이 창보다 많을 때만) — 우측 얇은 트랙+썸(백팩 스크롤바의 축소 결).
+	if store_items.size() > vis:
+		var track := Rect2(panel.end.x - PAD - 5.0, row_y, 4.0, max_y - row_y)
+		draw_rect(track, Color(0, 0, 0, 0.18))
+		var th := maxf(10.0, track.size.y * float(vis) / float(store_items.size()))
+		var ty2 := track.position.y + (track.size.y - th) * float(_store_scroll) / float(store_items.size() - vis)
+		draw_rect(Rect2(track.position.x, ty2, 4.0, th), HanjiUi.INK_DIM)
 
 # ★ [S1R-T12] 매대 행 구매 라우팅 — 행/버튼 클릭 시 종류별 시그널. Shift=대량.
 func _buy_store_row(e: Dictionary, bulk: bool) -> void:
@@ -846,6 +859,8 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 			buy_sprinkler_pressed.emit(bulk)
 		"seed":
 			buy_seed.emit(String(e.get("buy_id", "")), bulk)
+		"sapling", "fert", "hay":   # ★ [S2-T4] 신규 입고 3종 — 일반 품목 구매 시그널
+			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
 
 # ── 클릭 라우팅 ───────────────────────────────────────────────────────────────
 func _gui_input(event: InputEvent) -> void:
@@ -859,6 +874,13 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	if not (event is InputEventMouseButton):
 		return
+	# ★ [S2-T4] 매대 리스트 휠 스크롤 — 매대 행 영역 위에서만(그 밖=아래 백팩 스크롤 유지).
+	#   clamp는 그리기 시점(_draw_store_top)이 행수와 함께 수행.
+	if event.pressed and context == CTX_STORE and _store_area_rect.has_point(event.position):
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_store_scroll -= 1; queue_redraw(); accept_event(); return
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_store_scroll += 1; queue_redraw(); accept_event(); return
 	# ★ 마우스 휠 = 백팩 세로 스크롤(백팩이 보이는 컨텍스트에서). 위=이전 행, 아래=다음 행.
 	if event.pressed and _backpack_visible():
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:

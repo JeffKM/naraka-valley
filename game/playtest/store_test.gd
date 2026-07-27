@@ -163,8 +163,12 @@ func _initialize() -> void:
 	# ── ⑨ 매대 그리드 승격(★ S1R-T12) + 누적 총수입 ──
 	print("── ⑨ 매대 그리드 + 총수입 ──")
 	var items: Array = m._store_items()
-	# 판매 씨앗 4종(불사과=채집 전용 제외) + 스프링클러 1 = 5행.
-	_check("⑨a _store_items = 씨앗4 + 스프링클러(5행)", items.size() == 5)
+	# ★[S2-T4] 씨앗 4(불사과 제외) + 묘목 1(혼백도) + 비료 5 + 건초 1 + 스프링클러 1 = 12행.
+	_check("⑨a _store_items = 씨앗4+묘목1+비료5+건초1+설치물1(12행)", items.size() == 12)
+	# 카테고리 순서 고정(씨앗 → 묘목 → 비료 → 건초 → 설치물) — 진열 묶음 규약.
+	var kinds_seq: Array = items.map(func(it): return it["kind"])
+	_check("⑨a2 카테고리 진열 순서", kinds_seq == ["seed", "seed", "seed", "seed",
+		"sapling", "fert", "fert", "fert", "fert", "fert", "hay", "placeable"])
 	var has_fields := true
 	for it in items:
 		if not (it.has("icon_id") and it.has("name") and it.has("price") and it.has("kind") and it.has("buy_id")):
@@ -172,7 +176,7 @@ func _initialize() -> void:
 	_check("⑨b 각 행에 아이콘·이름·가격·종류·구매id", has_fields)
 	_check("⑨c 불사과(채집 전용)는 매대에 없음",
 		items.all(func(it): return it["buy_id"] != CropCatalog.BULSAGWA))
-	_check("⑨d 마지막 행 = 스프링클러(설치물)", items[4]["kind"] == "placeable" and items[4]["buy_id"] == ItemCatalog.SPRINKLER)
+	_check("⑨d 마지막 행 = 스프링클러(설치물)", items[11]["kind"] == "placeable" and items[11]["buy_id"] == ItemCatalog.SPRINKLER)
 	# 행별 구매 = 선택 작물이 아니라 그 행의 작물을 산다(_on_frame_buy_seed).
 	m.neo_affinity.points = 0
 	m.wallet.gold = 1000
@@ -182,6 +186,43 @@ func _initialize() -> void:
 	m._on_frame_buy_seed(target, false)
 	_check("⑨e 행별 구매 = 그 행 작물 씨앗 +1", m.inventory.seed_count(target) == seeds_t + 1)
 	_check("⑨f 행별 구매 골드 차감 = 정가", m.wallet.gold == 1000 - tbase)
+
+	# ── ⑩ ★[S2-T4] 신규 입고 3종 구매(묘목·비료·건초) ──
+	print("── ⑩ 신규 입고 구매(S2-T4) ──")
+	m.neo_affinity.points = 0
+	m.wallet.gold = 1000
+	var fert_id: String = ItemCatalog.FERT_DELUXE
+	var fert_base: int = FertilizerCatalog.buy_cost(fert_id)
+	var fert0: int = m.inventory.count_of(fert_id)
+	m._on_frame_buy_store_item(fert_id, "fert", false)
+	_check("⑩a 비료 구매 = 인벤 +1", m.inventory.count_of(fert_id) == fert0 + 1)
+	_check("⑩b 비료 구매 골드 차감 = 정가(♡0)", m.wallet.gold == 1000 - fert_base)
+	var hay0: int = m.inventory.count_of(ItemCatalog.HAY)
+	m._on_frame_buy_store_item(ItemCatalog.HAY, "hay", false)
+	_check("⑩c 건초 구매 = 인벤 +1", m.inventory.count_of(ItemCatalog.HAY) == hay0 + 1)
+	var sap0: int = m.inventory.sapling_count(FruitTreeCatalog.HONBAEKDO)
+	var sap_base: int = FruitTreeCatalog.sapling_cost(FruitTreeCatalog.HONBAEKDO)
+	m.wallet.gold = 1000
+	m._on_frame_buy_store_item(FruitTreeCatalog.HONBAEKDO, "sapling", false)
+	_check("⑩d 묘목 구매 = 묘목 +1", m.inventory.sapling_count(FruitTreeCatalog.HONBAEKDO) == sap0 + 1)
+	_check("⑩e 묘목 구매 골드 차감 = 정가", m.wallet.gold == 1000 - sap_base)
+	# 네오 ♡5 할인 = StoreDiscount 일관 적용(씨앗과 같은 규약).
+	m.neo_affinity.points = 5 * m.neo_affinity.POINTS_PER_HEART
+	m.wallet.gold = 1000
+	var disc_unit: int = StoreDiscount.price(fert_base, 5)
+	m._on_frame_buy_store_item(fert_id, "fert", false)
+	_check("⑩f ♡5 할인 적용(비료)", m.wallet.gold == 1000 - disc_unit and disc_unit < fert_base)
+	# 골드 부족 = 부분 구매 후 중단(대량 구매 규약 — 씨앗과 동일).
+	m.neo_affinity.points = 0
+	m.wallet.gold = fert_base * 2 + 1   # 5개 요청 중 2개만 살 수 있는 골드
+	var fert1: int = m.inventory.count_of(fert_id)
+	m._on_frame_buy_store_item(fert_id, "fert", true)   # bulk=STORE_BULK(5)
+	_check("⑩g 골드 부족 = 부분 구매(2개)", m.inventory.count_of(fert_id) == fert1 + 2 and m.wallet.gold == 1)
+	# 미지 kind·미지 id는 무동작(방어).
+	var g0: int = m.wallet.gold
+	m._on_frame_buy_store_item("no_such_id", "fert", false)
+	m._on_frame_buy_store_item(fert_id, "no_such_kind", false)
+	_check("⑩h 미지 id/kind = 무동작", m.wallet.gold == g0)
 	# 누적 총수입 — 출하 정산분이 _total_income에 쌓인다(_on_day_advanced 실경로).
 	m.ship_bin.pending.clear()
 	m.ship_bin.add(crop, 2)

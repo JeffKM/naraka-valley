@@ -36,11 +36,11 @@ const HOTBAR_SLOTS := 12
 const START_TOOLS := [ItemCatalog.HOE, ItemCatalog.WATERING_CAN,
 	ItemCatalog.SCYTHE, ItemCatalog.PICKAXE, ItemCatalog.AXE]   # ★S1-8 개간 도구(무상 그레이박스·소프트락 0)
 const START_SEEDS := {CropCatalog.HONRYEONGCHO: 3}
-# S1-5b — 혼의 나무 묘목(최소 배선, greybox-spec §7.8). 정식 판매처(만물상=Slice 2·온실)는 하류라
-# 새 게임 종잣돈으로 몇 그루 준다(과수 루프를 HOME에서 바로 체험). 과일 종 id → 개수.
+# S1-5b — 혼의 나무 묘목(최소 배선, greybox-spec §7.8). ★[S2-T4] 정식 판매처=만물상 매대 입고 완료
+# (ADR-0060 결정 4 이행 — 온실은 하류). 종잣돈은 온보딩용으로 유지(과수 루프를 HOME에서 바로 체험).
 const START_SAPLINGS := {FruitTreeCatalog.HONBAEKDO: 2}
-# S1-6 — 비료 종잣돈(greybox-spec §8.10). 정식 상점 노출(만물상=Slice 2)·전 5종 판매는 하류라
-# 품질군·성장촉진군 대표 1종씩 소량 지급해 HOME에서 품질/성장촉진 루프를 즉시 체험한다. 비료 id → 개수.
+# S1-6 — 비료 종잣돈(greybox-spec §8.10). ★[S2-T4] 정식 상점 노출=만물상 매대 전 5종 입고 완료
+# (ADR-0060 결정 4 이행). 종잣돈은 온보딩용으로 유지(품질/성장촉진 루프를 HOME에서 즉시 체험). 비료 id → 개수.
 const START_FERTILIZER := {ItemCatalog.FERT_BASIC: 3, ItemCatalog.FERT_SPEED: 3}
 # S1-7 — 건초 종잣돈(§8.10). 정식 입수(만물상 판매·낫 수풀 베기)는 하류라, 스타터 짐승 급여를 HOME에서
 # 바로 체험하도록 소량 지급한다(1마리/일 1개, 며칠분). 건초 아이템 id → 개수.

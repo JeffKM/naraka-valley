@@ -5519,6 +5519,7 @@ func _setup_frame() -> void:
 	frame.buy_pressed.connect(_on_frame_buy)
 	frame.buy_sprinkler_pressed.connect(_on_frame_buy_sprinkler)   # ★ [S1R-T9] 매대 스프링클러 구매
 	frame.buy_seed.connect(_on_frame_buy_seed)   # ★ [S1R-T12] 매대 그리드 행별 씨앗 구매
+	frame.buy_store_item.connect(_on_frame_buy_store_item)   # ★ [S2-T4] 매대 묘목·비료·건초 구매
 	frame.close_pressed.connect(_close_frame)    # ★ [S1R-T12] 우상단 X 닫기
 	frame.discard_slot.connect(_on_frame_discard)   # ★ [S1R-T12] 휴지통 버리기(확인 후)
 	frame.save_pressed.connect(_on_frame_save)   # ★ Phase B 옵션 탭
@@ -7391,6 +7392,52 @@ func _on_frame_buy_seed(crop_id: String, bulk: bool) -> void:
 		return
 	_buy_seed_store_n(crop_id, STORE_BULK if bulk else 1)
 
+# ★ [S2-T4] 매대 일반 품목 구매(묘목·비료·건초) — 씨앗 구매와 같은 결: 네오 할인가·부분 구매·안내.
+func _on_frame_buy_store_item(buy_id: String, kind: String, bulk: bool) -> void:
+	_buy_store_generic_n(buy_id, kind, STORE_BULK if bulk else 1)
+
+# 매대 일반 품목을 네오 할인가로 n개까지 산다(골드 닿는 데까지 — 부분 구매 허용, _buy_seed_store_n 결).
+# kind가 기준가·인벤 적재 방법을 정한다(카탈로그가 진실원 — 여기선 라우팅만).
+func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
+	var base := 0
+	var label := ""
+	match kind:
+		"sapling":
+			if not FruitTreeCatalog.has(buy_id):
+				return
+			base = FruitTreeCatalog.sapling_cost(buy_id)
+			label = "%s 묘목" % FruitTreeCatalog.name_of(buy_id)
+		"fert":
+			if not FertilizerCatalog.has(buy_id):
+				return
+			base = FertilizerCatalog.buy_cost(buy_id)
+			label = FertilizerCatalog.name_of(buy_id)
+		"hay":
+			base = ItemCatalog.HAY_COST
+			label = ItemCatalog.name_of(ItemCatalog.HAY)
+		_:
+			return
+	if base <= 0 or n <= 0:
+		return
+	var unit := StoreDiscount.price(base, neo_affinity.hearts())
+	var bought := 0
+	for _i in n:
+		if not wallet.spend(unit):
+			break
+		match kind:
+			"sapling":
+				inventory.add_sapling(buy_id)
+			"fert":
+				inventory.add_item(buy_id, 1)
+			"hay":
+				inventory.add_item(ItemCatalog.HAY, 1)
+		bought += 1
+	if bought == 0:
+		_notice("골드 부족(%d 필요)" % unit)
+		return
+	audio.sfx("ui")                           # 매대 거래 블립
+	_notice("%s ×%d −%d골드 (만물상)" % [label, bought, unit * bought])
+
 # ★ [S1R-T12] 휴지통 버리기(프레임 확인 후) — 집은 백팩 슬롯을 통째로 폐기(경제 0 — 판매 아님).
 func _on_frame_discard(slot_index: int) -> void:
 	var id := inventory.id_at(slot_index)
@@ -7451,6 +7498,37 @@ func _store_items() -> Array:
 			"price": StoreDiscount.price(base, hearts), "base": base,
 			"owned": inventory.seed_count(crop_id),
 		})
+	# ★ [S2-T4 / ADR-0060 결정 4] 묘목·비료·건초 정식 입고 — inventory.gd "정식 판매처(만물상=Slice 2)"
+	#   예고 이행. 카테고리 순서 고정: 씨앗 → 묘목 → 비료 → 건초 → 설치물(스타듀 매대 결의 묶음 진열).
+	for fruit_id in FruitTreeCatalog.ids():
+		var sap_base := FruitTreeCatalog.sapling_cost(fruit_id)
+		if sap_base <= 0:
+			continue
+		rows.append({
+			"kind": "sapling", "buy_id": fruit_id,
+			"icon_id": ItemCatalog.sapling_id(fruit_id),
+			"name": "%s 묘목" % FruitTreeCatalog.name_of(fruit_id),
+			"price": StoreDiscount.price(sap_base, hearts), "base": sap_base,
+			"owned": inventory.sapling_count(fruit_id),
+		})
+	for fert_id in FertilizerCatalog.ids():
+		var fert_base := FertilizerCatalog.buy_cost(fert_id)
+		if fert_base <= 0:
+			continue
+		rows.append({
+			"kind": "fert", "buy_id": fert_id,
+			"icon_id": fert_id,
+			"name": FertilizerCatalog.name_of(fert_id),
+			"price": StoreDiscount.price(fert_base, hearts), "base": fert_base,
+			"owned": inventory.count_of(fert_id),
+		})
+	rows.append({
+		"kind": "hay", "buy_id": ItemCatalog.HAY,
+		"icon_id": ItemCatalog.HAY,
+		"name": ItemCatalog.name_of(ItemCatalog.HAY),
+		"price": StoreDiscount.price(ItemCatalog.HAY_COST, hearts), "base": ItemCatalog.HAY_COST,
+		"owned": inventory.count_of(ItemCatalog.HAY),
+	})
 	var spr_base := ItemCatalog.price_of(ItemCatalog.SPRINKLER)
 	rows.append({
 		"kind": "placeable", "buy_id": ItemCatalog.SPRINKLER,
