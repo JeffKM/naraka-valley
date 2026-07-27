@@ -1136,6 +1136,7 @@ const MUSEUM_RECT := Rect2i(8, 44, 12, 9)       # ★C4 x8..19, y44..52 (실내 
 const MUSEUM_DOOR := Vector2i(13, 52)           # 실내 혼백관 문(닿으면 퇴장) — 아래벽 중앙(+18)
 const MUSEUM_IN_TILE := Vector2i(13, 51)        # 실내 문 안쪽(진입 착지, +18)
 const MUSEUM_CAM_RECT := Rect2i(2, 42, 20, 13)  # ★C4 혼백관 방 둘레(외부·다른 방 격리, +18)
+const MUSEUM_DONATE_TILE := Vector2i(13, 46)    # ★[S2-T5] 무인 기증대(방 중북부) — F 기증(ADR-0060 결정 5)
 # ── ★ M3.2 황천해(바다 낚시 무대 + 생선가게) ──────────────────────────────────
 # 넷째 실데이터 구역(막다른 바다). 낚시 메카닉은 만들지 않는다(Phase 3) — 바다(WATER) 무대 + 부두(잔교)
 # + 바다 낚시터(라벨만) + 생선가게(enterable 빈 방)까지. 삼도천 하구에서 서단 spawn(2,15)에 도착.
@@ -1391,6 +1392,9 @@ var reclaim: Reclaim = null
 #   .new()). 상점 구매→지면 설치→아침 자동 급수(십자 4칸)→세이브. FarmField/Reclaim와 디커플링(자동
 #   급수 시 main이 sprinkler.watered_targets를 farm.sprinkle로 흘려넣는다 — Sprinkler는 밭·화면을 모름).
 var sprinkler: Sprinkler = null
+# ★ [S2-T5 / ADR-0060 결정 5] 혼백관 전시 상태(기증 원장·마일스톤). Sprinkler 결의 얇은 원장 노드(코드
+#   생성 — .new()). 유품 발굴(괭이질)→기증대 기증→마일스톤 보상→세이브. 진열 그리기는 main이 원장에서 파생.
+var museum: Museum = null
 var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌트를 한 번만 띄웠는지(세션 로컬 — 세이브 무관)
 # ★ [B1-a.3] 사료풀 상태(낫으로 베어 건초를 얻는 고지 풀 — 재생·겨울정지). FarmField/Orchard/Ranch/
 #   Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). main이 고지 자유 풀밭을 시드하고, 벤 결과를
@@ -1655,6 +1659,10 @@ func _ready() -> void:
 	sprinkler.name = "Sprinkler"
 	add_child(sprinkler)
 	sprinkler.changed.connect(_on_sprinkler_changed)   # 설치·철거·복원 시 드로우 갱신
+	museum = Museum.new()                # ★ [S2-T5] 혼백관 전시 상태 노드(코드 생성 — 기증 원장·마일스톤)
+	museum.name = "Museum"
+	add_child(museum)
+	museum.changed.connect(queue_redraw)   # 기증·보상·복원 시 진열 갱신
 	forage = Forage.new()                # ★ [B1-a.3] 사료풀 상태 노드(코드 생성 — 낫 채집·재생 원장, 여물광 건초 소스)
 	forage.name = "Forage"
 	add_child(forage)
@@ -5949,6 +5957,7 @@ func _save_game() -> void:
 		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
 		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
 		"sprinkler": sprinkler.to_save(),   # ★ [S1R-T9] 설치한 스프링클러 좌표(플레이어 델타 — 슬라이스 키 네임스페이스)
+		"museum": museum.to_save(),   # ★ [S2-T5] 혼백관 기증 원장·마일스톤 지급 기록(수집 진행 보존)
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
 		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
@@ -6003,6 +6012,8 @@ func _load_game() -> void:
 		reclaim.load_save(data["reclaim"])
 	if data.has("sprinkler"):   # ★ [S1R-T9] — 키 없는 구버전은 설치 0(빈 목록). changed가 드로우 갱신
 		sprinkler.load_save(data["sprinkler"])
+	if data.has("museum"):   # ★ [S2-T5] — 키 없는 구버전은 기증 0(빈 원장·하위호환)
+		museum.load_save(data["museum"])
 	if data.has("forage"):    # ★ [B1-a.3] — 키 없는 구버전은 사료풀 0(부팅 후 _seed_forage_tiles가 맵에서 시드). changed가 드로우 갱신
 		forage.load_save(data["forage"])
 	if data.has("flower_patch"):  # ★ ADR-0052 — 키 없는 구세이브는 딴 상태 0(부팅 후 _seed_flower_patches가 배치에서 시드). changed가 드로우 갱신
@@ -6511,6 +6522,8 @@ func _process(delta: float) -> void:
 	# M2.3 네오(만물상 점주)에게 말 걸기/매대 열기: 만물상 안에서 네오 칸을 바라볼 때. _indoor로
 	# 한 번 더 가드해(다른 구역의 같은 좌표에 닿아도 만물상 밖이면 무반응) 멜 출하대와 칸이 갈린다.
 	var facing_neo := not _sleeping and _indoor == "만물상" and _target == NEO_TILE
+	# ★ [S2-T5] 혼백관 기증대: 혼백관 안에서 기증대 칸을 바라볼 때(_indoor 가드 — 무인 기증대, ADR-0060 결정 5).
+	var facing_donate := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_DONATE_TILE
 	# ★ Phase C 좌하단 컨텍스트 팝업 — 마주 본 주민의 초상화 + 이름 + 관계 한 줄(상시 HUD, 대화창과 별개).
 	if context_popup != null:
 		if facing_miho:
@@ -6615,6 +6628,10 @@ func _process(delta: float) -> void:
 	# ★ C2 만물상 매대 열기(F): 네오를 바라보며 F로 매대 프레임을 연다(대화=우클릭과 갈린다, 무인 바 F와 같은 결).
 	if facing_neo and Input.is_action_just_pressed("shop_toggle"):
 		_open_frame(InventoryFrame.CTX_STORE)
+		return
+	# ★ [S2-T5] 혼백관 기증(F): 기증대를 바라보며 F — 든 유품을 기증한다(무인 기증대·마일스톤 보상 즉시 지급).
+	if facing_donate and Input.is_action_just_pressed("shop_toggle"):
+		_try_donate_selected()
 		return
 	# T5.4 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 보유 재료 1개를 자동 소모하고 정액 골드.
 	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
@@ -6782,6 +6799,18 @@ func _process(delta: float) -> void:
 		# 선물(G) 없이 일일 대화로만 친해진다(풀 T1 트랙은 후속, ADR-0014).
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 대화   [F] 매대"
+	elif facing_donate:
+		# ★ [S2-T5] 혼백관 기증대: 든 유품이면 기증 안내, 아니면 수집 진행을 보인다(무인 — 큐레이터 후속).
+		interact_prompt.visible = true
+		var held_id := inventory.selected_id()
+		if museum.can_donate(held_id):
+			interact_prompt.text = "[F] 기증 — %s (전시 %d/%d)" % [ItemCatalog.name_of(held_id),
+				museum.donated_count(), Museum.donatable_ids().size()]
+		elif museum.is_donated(held_id):
+			interact_prompt.text = "이미 전시된 유품 (전시 %d/%d)" % [museum.donated_count(), Museum.donatable_ids().size()]
+		else:
+			interact_prompt.text = "혼백관 기증대 — 유품을 들고 오자 (전시 %d/%d)" % [museum.donated_count(),
+				Museum.donatable_ids().size()]
 	elif facing_miho:
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 대화   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
@@ -6920,6 +6949,14 @@ func _use_tool() -> void:
 	if item == ItemCatalog.HOE:
 		if farm.hoe(_target):
 			verb = "괭이질"
+			# ★ [S2-T5 / ADR-0060 결정 5] 유품 발굴 — 안식 괭이질 저확률(스타듀 Artifact Spot 대응).
+			#   (day, tile) 결정적 롤이라 같은 날 같은 칸 재롤 없음. 혼백관 기증 루프의 유일 시드 소스.
+			if _region == RegionCatalog.HOME:
+				var relic_id := Museum.relic_roll(clock.day, _target)
+				if relic_id != "":
+					inventory.add_item(relic_id, 1)
+					_toast_item(relic_id, 1)
+					_notice("유품 발굴! %s — 삼도천 혼백관에 기증하자" % ItemCatalog.name_of(relic_id))
 	elif item == ItemCatalog.WATERING_CAN:
 		# ★ [S1R-T8] 용량 축(에너지와 독립) — 잔량 있으면 물주기 1회당 −1, 없으면 물 줄 칸일 때만 안내(스퓨리어스 방지).
 		#   리필(혼우물·연못)은 SOIL 밖 별도 디스패치(_refill_watering_can)라 여기 도달하지 않는다.
@@ -7437,6 +7474,65 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 		return
 	audio.sfx("ui")                           # 매대 거래 블립
 	_notice("%s ×%d −%d골드 (만물상)" % [label, bought, unit * bought])
+
+# ★ [S2-T5] 든 유품을 혼백관에 기증한다 — 원장 기록 → 아이템 1개 소모 → 도달 마일스톤 즉시 지급.
+# 무인 기증대(큐레이터 없음 — ADR-0060 결정 5). 보상은 인벤토리로 바로(스타듀 군터 수령 대응 간소화).
+func _try_donate_selected() -> void:
+	var id := inventory.selected_id()
+	if not museum.can_donate(id):
+		if museum.is_donated(id):
+			_notice("이미 전시된 유품이다")
+		else:
+			_notice("기증할 유품을 손에 들어야 한다 (안식 괭이질로 발굴)")
+		return
+	if not inventory.remove_item(id, 1):
+		return
+	museum.donate(id, clock.day)
+	audio.sfx("ui")
+	_notice("%s 기증 — 전시 %d/%d" % [ItemCatalog.name_of(id),
+		museum.donated_count(), Museum.donatable_ids().size()])
+	# 도달 마일스톤 일괄 지급(한 번의 기증이 여러 문턱을 넘을 일은 없지만 방어적으로 전부).
+	for m in museum.pending_milestones():
+		var rid: String = String(m["reward_id"])
+		var n: int = int(m["n"])
+		inventory.add_item(rid, n)
+		museum.claim(int(m["count"]))
+		_toast_item(rid, n)
+		_notice("혼백관 답례 — %s ×%d (전시 %d점 달성)" % [ItemCatalog.name_of(rid), n, int(m["count"])])
+
+# ★ [S2-T5] 혼백관 실내 그레이박스 진열 — 기증대(중북부 2×1 목대) + 북벽 전시대(유품 3좌 + 책 2좌 그릇).
+# 전시는 원장(museum.donated)의 파생 — 좌표 상태 없음. 책 좌대는 [ADR-0034] 그릇 병설(아이템은 Slice 9).
+func _draw_museum_room() -> void:
+	if _indoor != "혼백관":
+		return
+	var base := Vector2(MUSEUM_DONATE_TILE.x * TILE, MUSEUM_DONATE_TILE.y * TILE)
+	# 기증대 — 2×1 목대(나무 상판 + 어두운 다리 그림자). 순수 장식(충돌 없음 — 조준 칸 상호작용만).
+	draw_rect(Rect2(base + Vector2(-TILE * 0.5, 6), Vector2(TILE * 2.0, TILE - 12)), Color(0.32, 0.22, 0.14))
+	draw_rect(Rect2(base + Vector2(-TILE * 0.5, 6), Vector2(TILE * 2.0, 5)), Color(0.45, 0.32, 0.20))
+	# 북벽 전시대 — 유품 좌대(기증 순서 무관·카탈로그 순 고정) + 책 좌대 2(빈 그릇, Slice 9 합류 자리).
+	var slot_ids: Array = Museum.donatable_ids()
+	var y0 := float(MUSEUM_RECT.position.y + 1) * TILE + 8.0
+	var x0 := float(MUSEUM_RECT.position.x + 2) * TILE
+	var relic_colors := {
+		ItemCatalog.RELIC_BINYEO: Color(0.78, 0.80, 0.86),   # 은빛
+		ItemCatalog.RELIC_SPOON: Color(0.72, 0.58, 0.28),    # 놋빛
+		ItemCatalog.RELIC_KKOTSIN: Color(0.82, 0.42, 0.48),  # 꽃신 분홍
+	}
+	for i in slot_ids.size() + 2:   # 유품 좌대 + 책 좌대 2
+		var px := Vector2(x0 + i * TILE * 1.5, y0)
+		draw_rect(Rect2(px, Vector2(20, 12)), Color(0.30, 0.28, 0.26))          # 좌대
+		if i < slot_ids.size():
+			var sid: String = slot_ids[i]
+			if museum.is_donated(sid):
+				# 전시된 유품 — 좌대 위 색 다이아(그레이박스 아이콘 대응).
+				var c: Color = relic_colors.get(sid, Color.WHITE)
+				var cx := px + Vector2(10, -6)
+				draw_colored_polygon(PackedVector2Array([cx + Vector2(0, -6), cx + Vector2(6, 0),
+					cx + Vector2(0, 6), cx + Vector2(-6, 0)]), c)
+			else:
+				draw_rect(Rect2(px + Vector2(4, -8), Vector2(12, 8)), Color(0.2, 0.2, 0.2, 0.5), false, 1.0)  # 빈 자리 실루엣
+		else:
+			draw_rect(Rect2(px + Vector2(4, -8), Vector2(12, 8)), Color(0.25, 0.22, 0.3, 0.5), false, 1.0)   # 책 그릇(Slice 9)
 
 # ★ [S1R-T12] 휴지통 버리기(프레임 확인 후) — 집은 백팩 슬롯을 통째로 폐기(경제 0 — 판매 아님).
 func _on_frame_discard(slot_index: int) -> void:
@@ -8347,6 +8443,8 @@ func _draw() -> void:
 			_draw_trackb_interiors() # ★ Phase E Track B 실내 가구(여물통·보관 크레이트 — 짐승 아래, 카메라로 방별 클립)
 			_draw_ranch()            # ★ [S1-7/S1-15] 혼의 짐승 — 전용 스프라이트(assets/livestock) 방목/실내 렌더
 			_draw_chest()            # ★ Phase D/E 저장 상자(집·창고 실내 — 각 카메라에서만 보임)
+		RegionCatalog.SAMDOCHEON:
+			_draw_museum_room()      # ★ [S2-T5] 혼백관 실내 — 기증대·전시 진열(원장 파생 그레이박스)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관

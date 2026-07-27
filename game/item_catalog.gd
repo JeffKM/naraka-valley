@@ -33,6 +33,7 @@ const CAT_FERTILIZER := "fertilizer"  # 비료(품질·성장촉진) — 밭 칸
 const CAT_MATERIAL := "material"   # 재료 — 자리 예약(Phase 3 가공)
 const CAT_CONSUMABLE := "consumable"  # 소모품 — 자리 예약(Phase 3 조리)
 const CAT_PLACEABLE := "placeable"  # 설치물(스프링클러 등) — 지면 칸에 설치·회수, 스택(S1R-T9)
+const CAT_RELIC := "relic"         # ★[S2-T5] 유품 — 망자의 물건. 혼백관 기증 대상(안식 괭이질 발굴), 스택
 
 # ── 품질 등급(S1-6, §8.2) — 단일 진실원(orchard 나이·field 비료가 같은 enum·배수로 수렴) ──
 # 수확물·과일 슬롯에 실리는 등급. 도구·씨앗·묘목·비료는 항상 Q_NORMAL(품질 무차원).
@@ -76,10 +77,24 @@ const HAY_COST := 10               # 건초 기준가 — ★[S2-T4] 만물상 �
 const SOUL_FIBER := "soul_fiber"        # 혼백 섬유 — 이승의 미련(잡초·낫) 드랍
 const EMBER_SHARD := "ember_shard"      # 업화석 조각 — 업화석(돌·곡괭이) 드랍
 const PETRIFIED_WOOD := "petrified_wood"  # 석화 목재 — 석화 고목(그루터기·도끼) 드랍
+const RARECROW_1 := "rarecrow_1"        # ★[S2-T5] 레어크로우 ① — 혼백관 마일스톤 보상([ADR-0051] B 수집 트랙 최초 획득처)
 const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 별 상수라 여기 제외)
 	SOUL_FIBER: {"name_ko": "혼백 섬유", "price": 4},
 	EMBER_SHARD: {"name_ko": "업화석 조각", "price": 12},
 	PETRIFIED_WOOD: {"name_ko": "석화 목재", "price": 15},
+	RARECROW_1: {"name_ko": "레어크로우 ① — 갓 쓴 허수아비", "price": 0},   # 비매품(수집물 — 배치·8종 디럭스는 후속 ADR-0051 B)
+}
+
+# ── ★[S2-T5 / ADR-0060 결정 5] 유품(relic) — 혼백관 기증 수집물 ─────────────────────
+# 망자가 이승에 남긴 물건. 안식 괭이질 저확률 발굴(Museum.relic_roll — 스타듀 Artifact 대응)로 얻고
+# 혼백관에 기증한다(종당 1회 — 중복 발굴분은 판매 가능). 서사(누구의 유품인가)는 Slice 9 소관(봉인 법칙).
+const RELIC_BINYEO := "relic_binyeo"      # 은비녀 유품
+const RELIC_SPOON := "relic_spoon"        # 놋숟가락 유품
+const RELIC_KKOTSIN := "relic_kkotsin"    # 꽃신 유품
+const RELICS := {                          # 유품 id → {name_ko, price}(중복 발굴분 판매가)
+	RELIC_BINYEO: {"name_ko": "은비녀 유품", "price": 30},
+	RELIC_SPOON: {"name_ko": "놋숟가락 유품", "price": 20},
+	RELIC_KKOTSIN: {"name_ko": "꽃신 유품", "price": 25},
 }
 
 # ── 채집물(ADR-0052 §118 · ADR-0033) — 안식 꽃 패치 손수확 산출(품질 실림) ──────────────
@@ -183,6 +198,9 @@ static func _is_hay(id: String) -> bool:
 static func _is_material(id: String) -> bool:
 	return MATERIALS.has(id)
 
+static func _is_relic(id: String) -> bool:
+	return RELICS.has(id)   # ★[S2-T5] 유품 — 혼백관 기증 대상
+
 # id가 채집물인가(ADR-0052 §118). 품질 유차원 CAT_HARVEST(작물 수확물 결 — 판매·서빙·선물 동급).
 static func _is_forageable(id: String) -> bool:
 	return FORAGEABLES.has(id)
@@ -200,7 +218,7 @@ static func large_product_id(product_id: String) -> String:
 static func has_item(id: String) -> bool:
 	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
-		or _is_placeable(id)
+		or _is_placeable(id) or _is_relic(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -219,6 +237,8 @@ static func category_of(id: String) -> String:
 		return CAT_MATERIAL   # 건초(S1-7)·개간 드랍(S1-8) = 재료 카테고리(Phase 3 가공 예약)
 	if _is_placeable(id):
 		return CAT_PLACEABLE  # 설치물(S1R-T9 스프링클러) — 지면 설치·회수
+	if _is_relic(id):
+		return CAT_RELIC      # ★[S2-T5] 유품 — 혼백관 기증 대상
 	return ""
 
 # 표시명(HUD·상점·툴팁). 씨앗="<작물명> 씨앗"·묘목="<과일명> 묘목"·수확물=작물명·과일=과일명·도구=도구명. 없으면 "".
@@ -243,6 +263,8 @@ static func name_of(id: String) -> String:
 		return FORAGEABLES[id]["name_ko"]
 	if _is_placeable(id):
 		return PLACEABLES[id]["name_ko"]
+	if _is_relic(id):
+		return RELICS[id]["name_ko"]   # ★[S2-T5] 유품
 	if _is_large_product(id):
 		return "큰 %s" % AnimalCatalog.product_name(_large_base(id))
 	if _is_animal_base(id):
@@ -255,7 +277,7 @@ static func stackable_of(id: String) -> bool:
 		return false
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
-		or _is_placeable(id)
+		or _is_placeable(id) or _is_relic(id)
 
 # 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 비료=구매가(buy_cost),
 # 수확물/과일=판매가. 없으면 0. 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다.
@@ -282,6 +304,8 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return int(FORAGEABLES[id]["price"] * quality_mult(quality))   # ★ADR-0052 채집물 = 기준가 × 등급 배수(수확물 결)
 	if _is_placeable(id):
 		return int(PLACEABLES[id]["price"])   # ★S1R-T9 설치물 = 품질 무차원 고정 구매가(스프링클러)
+	if _is_relic(id):
+		return int(RELICS[id]["price"])   # ★S2-T5 유품 = 품질 무차원 고정가(중복 발굴분 판매)
 	# ★ S1-7(§8.6): 대형 산물은 기준 판매가 ×2에 품질 배수를 얹는다(대형 = 품질과 별 축). 기준 산물은 품질 배수만.
 	if _is_large_product(id):
 		return int(AnimalCatalog.product_sell(_large_base(id)) * 2.0 * quality_mult(quality))
