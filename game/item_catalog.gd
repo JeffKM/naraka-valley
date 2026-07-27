@@ -97,12 +97,32 @@ const RARECROW_1 := "rarecrow_1"        # ★[S2-T5] 레어크로우 ① — 혼
 #   같은 결의 품질 무차원 재료라 여기 합류한다(카테고리 신설 0). ★S3-T7 게잡이통 잡동사니 표적으로도
 #   재사용된다(뱃사람 퍼크 = "게잡이통에 잡동사니 안 걸림"의 그 잡동사니 — 신규 아이템 남발 0).
 const ROTTEN_NET := "rotten_net"
+# ── ★[S4-T3 / ADR-0062 결정 3] 벌목 산출 6종 — 원목·단단한 원목·수액 + 나무 씨앗 3 ──────────
+# **원목(WOOD)은 이 게임의 기축 자재**다(제작·건축의 통화 — 결정 4 수액 채취기 40개, 결정 7 목공방
+# 건축 지불). 개간 드랍(석화 목재)과 **역할이 갈린다**: 석화 고목은 1회성 debris이고 살아있는 나무는
+# 재성장하는 자원이라, PETRIFIED_WOOD를 재사용하지 않고 별 아이템으로 둔다(ADR-0062 "역할 분리").
+# 전부 품질 무차원 스택 CAT_MATERIAL(건초·개간 드랍 결 — 벌목은 품질 축이 없다. 품질은 *줍기*의 축이다).
+# ★ 가격 밴드(잠정 — owner 큐): 스타듀 wood 2 / hardwood 15 / sap 2의 비율(1 : 7.5 : 1)을 엽전
+#   스케일(개간 드랍 4~15)에 얹었다. 씨앗 3종은 심기(파종)가 아직 없어 판매만 되는 상태다(S4 후속).
+const WOOD := "wood"                    # 원목 — 범용 자재(기축 통화)
+const HARDWOOD := "hardwood"            # 단단한 원목 — 벌목꾼(DIM_HARDWOOD) 퍼크·심층 그루터기 산출
+const SAP := "sap"                      # 수액 — 벌목 부산물(채취기 정기 수확은 S4-T6)
+const SEED_JEOSEUNGSOL := "seed_jeoseungsol"      # 저승솔 방울(잠정 명명 — ADR-0062 결정 3)
+const SEED_MYEONGDANPUNG := "seed_myeongdanpung"  # 명단풍 씨
+const SEED_NEOKCHAM := "seed_neokcham"            # 넋참나무 도토리
 const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 별 상수라 여기 제외)
 	SOUL_FIBER: {"name_ko": "혼백 섬유", "price": 4},
 	EMBER_SHARD: {"name_ko": "업화석 조각", "price": 12},
 	PETRIFIED_WOOD: {"name_ko": "석화 목재", "price": 15},
 	ROTTEN_NET: {"name_ko": "삭은 그물", "price": 5},   # ★S3-T6 인양 잡동사니(팔면 푼돈)
 	RARECROW_1: {"name_ko": "레어크로우 ① — 갓 쓴 허수아비", "price": 0},   # 비매품(수집물 — 배치·8종 디럭스는 후속 ADR-0051 B)
+	# ★[S4-T3] 벌목 산출 6종
+	WOOD: {"name_ko": "원목", "price": 5},
+	HARDWOOD: {"name_ko": "단단한 원목", "price": 35},
+	SAP: {"name_ko": "수액", "price": 3},
+	SEED_JEOSEUNGSOL: {"name_ko": "저승솔 방울", "price": 12},
+	SEED_MYEONGDANPUNG: {"name_ko": "명단풍 씨", "price": 12},
+	SEED_NEOKCHAM: {"name_ko": "넋참나무 도토리", "price": 12},
 }
 
 # ── ★[S2-T5 / ADR-0060 결정 5] 유품(relic) — 혼백관 기증 수집물 ─────────────────────

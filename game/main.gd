@@ -1691,6 +1691,11 @@ var flower: FlowerPatch = null
 #   별개 원장이고, **Node가 아니라 RefCounted**다(설치물이 아니라 순수 데이터 — ADR-0062 "순수 원장").
 #   main이 절기·day를 주입하고, 줍기 결과(품질·수량·XP)를 채집 레벨/전문직으로 정한다(디커플링).
 var forage_spawns: ForageSpawns = null
+# ★[S4-T3 / ADR-0062 결정 3] 나무 원장(벌목 가능한 *내부* 나무 — 종 3·성장 5단계·타수·그루터기·재성장).
+#   맵 경계 프레이밍 밴드(TREE_BORDER_BAND 안쪽 테두리)는 여기 안 들어온다 = 불벌목 벽(flood-fill·워프
+#   불변식 보존). ForageSpawns와 같은 RefCounted 순수 원장이고, 통행 판정·그리드 동기화·산출 적재는
+#   전부 main이 한다(원장은 지형·인벤·혼력을 모른다).
+var tree_ledger: TreeLedger = null
 # ★ [S1-9] 집 꾸미기 상태(집 내부 3레이어 코스메틱 배치 + 해금 세트). F10 저작 도구(layout.json·
 #   _prop_layouts)와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). 플레이어 세이브 델타만 소유하고
 #   layout.json 시드는 안 건드린다(회귀 0). main이 유효 배치 칸을 주입하고 드로우/충돌 훅에서 질의(디커플링).
@@ -2012,6 +2017,8 @@ func _ready() -> void:
 	flower.changed.connect(_on_ranch_changed)      # 따기·재생·복원 시 드로우 갱신(사료풀과 같은 훅 재사용 — 둘 다 야외 그레이박스)
 	forage_spawns = ForageSpawns.new()   # ★[S4-T1] 숲 채집물 스폰 원장(RefCounted — 씬 트리에 안 선다)
 	forage_spawns.changed.connect(queue_redraw)   # 스폰·줍기·리셋·복원 시 그레이박스 갱신(게잡이통 결)
+	tree_ledger = TreeLedger.new()       # ★[S4-T3] 나무 원장(RefCounted — 채집물 스폰 원장과 같은 결)
+	tree_ledger.changed.connect(_on_tree_ledger_changed)   # 벌목·성장·재성장·복원 시 충돌·드로우 갱신
 	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
 	home_deco.name = "HomeDeco"
 	add_child(home_deco)
@@ -2094,6 +2101,10 @@ func _begin_game(is_new_game: bool) -> void:
 	# ★ ADR-0052 꽃 패치 시드 — layout.json HOME의 FLOWER_PATCH 좌표를 FlowerPatch에 등록한다(신규·복원
 	#   양쪽). seed는 멱등이라 복원된 딴 상태(picked_day)를 보존하고 배치상 새 타일만 더한다(_seed_forage_tiles 결).
 	_seed_flower_patches()
+	# ★[S4-T3 / ADR-0062 결정 3] 안식 나무 원장 시드 — layout.json HOME의 저승 봄나무(TREE_A/B) 앵커를
+	#   성숙목으로 등록한다(신규·복원 양쪽 — seed_region이 멱등이라 복원된 벌목 상태를 보존한다).
+	#   숲 2구역의 내부 나무는 그 구역을 처음 지을 때 _apply_tree_ledger가 실그리드에서 시드한다.
+	_seed_home_trees()
 	# T5.6 복원 직후 NPC 상주/출근 상태를 현재(복원된) 진행·시각에 맞춘다. 통보를 이미
 	# 마친 세이브면 옥자가 카페에 보이고, 복원 시각이 영업창(15시+)이면 미호가 카페로 출근해
 	# 있다("껐다 켜도 그대로" — 직원 배치까지 재개에 맞는다). 둘 다 세이브 무상태(시각·단계
@@ -2706,9 +2717,177 @@ func _build_grid() -> void:
 		_:
 			push_warning("알 수 없는 구역 '%s' — 홈베이스로 폴백" % _region)
 			_build_home()
+	_apply_tree_ledger()        # ★[S4-T3] 숲 내부 나무를 원장 상태로 동기화(첫 빌드면 시드 — 프롭 충돌 전)
 	_rebuild_prop_collision()   # ★ T3③' 현재 구역 실내 가구 통과 불가 충돌 재구성(러그 제외)
 	_rebuild_trellis_collision()   # ★ [S1-5a] 트렐리스 넝쿨 통과 불가 충돌 재구성(안식 농원 전용)
 	_rebuild_orchard_collision()   # ★ [S1-5b] 혼의 나무 밑동 통과 불가 충돌 재구성(안식 농원 전용)
+
+# ═══ ★[S4-T3 / ADR-0062 결정 3] 벌목 — 나무 원장 ↔ 월드 배선 ═══════════════════════
+# main의 몫은 셋뿐이다: ①경계 밴드/내부 이원화(누가 원장에 드나) ②통행 동기화(원장 → 그리드·충돌)
+# ③도끼 디스패치와 산출 적재. 성장·타수·산출·재성장 *규칙*은 전부 TreeLedger에 있다(원장은 지형을
+# 모르고 main은 규칙을 모른다 — FishingSession/CrabPotLedger와 같은 경계).
+
+# 맵 테두리 프레이밍 밴드 두께(칸). 이 밴드 안의 TREE는 **불벌목 벽**으로 남는다 — 구역 도달성
+# (flood-fill)·워프 불변식이 여기 기대고 있어서, 베어 낼 수 있으면 맵 밖으로 새는 구멍이 된다.
+# ★ 5인 이유: 저승 숲·미혹의 숲 두 구역의 *가장자리 밴드* rect(FOREST_TREE_RECTS·MIHOK_TREE_RECTS의
+#   상·하·좌·우)는 전부 테두리에서 5칸 이내이고, *내부 악센트 군집*은 전부 5칸 밖이다. 즉 이 한 수치가
+#   기존 데이터의 "밴드 / 악센트" 주석 구분과 정확히 겹친다(새 좌표 데이터 0).
+const TREE_BORDER_BAND := 5
+
+# 이 칸이 경계 프레이밍 밴드인가(= 불벌목). 테스트가 "경계 밴드 TREE는 여전히 통과 불가"를 이걸로 본다.
+func _is_tree_border_band(t: Vector2i) -> bool:
+	return t.x < TREE_BORDER_BAND or t.x >= _grid_w - TREE_BORDER_BAND \
+		or t.y < TREE_BORDER_BAND or t.y >= _outdoor_h - TREE_BORDER_BAND
+
+# 지금 구역이 나무 원장을 그리드로 표현하는 곳인가(숲 2구역). 안식 농원은 프롭(TREE_A/B)이라 별도 결.
+func _is_tree_grid_region() -> bool:
+	return _region == RegionCatalog.JEOSEUNG_FOREST or _region == RegionCatalog.MIHOK_FOREST
+
+# 실그리드에서 원장이 가져갈 *내부* TREE 칸 전체(경계 밴드 제외). 빌더가 깐 TREE 위에 carve가 이미
+# 길을 뚫은 **뒤**의 최종 그리드를 읽으므로, 동선에 걸린 칸은 애초에 후보가 아니다(무 soft-lock).
+func _inner_tree_tiles() -> Array:
+	var out: Array = []
+	for y in range(TREE_BORDER_BAND, maxi(_outdoor_h - TREE_BORDER_BAND, TREE_BORDER_BAND)):
+		if y >= _grid.size():
+			break
+		for x in range(TREE_BORDER_BAND, maxi(_grid_w - TREE_BORDER_BAND, TREE_BORDER_BAND)):
+			if x < _grid[y].size() and _grid[y][x] == TREE:
+				out.append(Vector2i(x, y))
+	return out
+
+# 구역 빌드 직후, 원장 상태를 그리드에 얹는다(숲 2구역 한정).
+#   · 첫 빌드면 내부 TREE 칸을 성숙목으로 시드한다(멱등 — 두 번째부터는 seed_region이 무동작).
+#   · 그 뒤 슬롯마다 "차 있으면 TREE / 비었으면 GROUND"로 맞춘다 = 벤 자리가 재빌드·워프 재진입
+#     후에도 열린 채로 남는다(세이브 없이도 원장이 유일 진실원).
+func _apply_tree_ledger() -> void:
+	if tree_ledger == null or not _is_tree_grid_region():
+		return
+	if not tree_ledger.is_seeded(_region):
+		tree_ledger.seed_region(_region, _inner_tree_tiles())
+	for t: Vector2i in tree_ledger.tiles(_region):
+		if t.x < 0 or t.y < 0 or t.y >= _grid.size() or t.x >= _grid[t.y].size():
+			continue
+		_grid[t.y][t.x] = TREE if tree_ledger.is_occupied(_region, t) else GROUND
+
+# 한 칸의 통행 상태를 원장에 맞춰 *즉시* 반영한다(벌목·재성장 순간 — 구역 재빌드 없이).
+# 타일셋 물리 레이어가 TREE 타일에 충돌을 달고 있으므로, 셀을 풀 변종으로 바꾸면 충돌도 같이 사라진다
+# (_paint_grid ①의 결정적 해시 변종 선택을 그대로 재사용 — 재빌드해도 같은 그림).
+func _sync_tree_tile(t: Vector2i) -> void:
+	if tree_ledger == null or not _is_tree_grid_region():
+		return
+	if t.x < 0 or t.y < 0 or t.y >= _grid.size() or t.x >= _grid[t.y].size():
+		return
+	var want: int = TREE if tree_ledger.is_occupied(_region, t) else GROUND
+	if _grid[t.y][t.x] == want:
+		return
+	_grid[t.y][t.x] = want
+	if want == TREE:
+		ground.set_cell(t, SOLID_SRC_ID, _solid_atlas(TREE))
+	else:
+		var gv := _terrain_base_variants(TR_GRASS)
+		if gv.size() > 0:
+			ground.set_cell(t, 0, gv[int(_gd_h01(t.x, t.y, 5) * gv.size()) % gv.size()])
+		else:
+			ground.set_cell(t, 0, _terrain_base_atlas(TR_GRASS))
+
+# ★ 안식 농원 나무 = 프롭(PROP_TREE_A/B 2×4). 손저작 배치(layout.json HOME)의 앵커 16그루가 원장 시드다.
+#   절차 스캐터 숲(_home_scatter)은 **원장 밖**이다 — 그건 남단 존 배경 프레이밍이고, 손저작 16그루가
+#   "마당의 나무"라는 정체성을 갖는다(스코프 고정 — ADR-0062 "안식 기존 나무 16그루").
+func _home_tree_anchors() -> Array:
+	var out: Array = []
+	for entry in _prop_layouts.get("HOME", []):
+		if entry[0] == PROP_TREE_A or entry[0] == PROP_TREE_B:
+			for t in entry[1]:
+				out.append(t)
+	return out
+
+func _home_tree_anchor_set() -> Dictionary:
+	var d: Dictionary = {}
+	for t in _home_tree_anchors():
+		d[t] = true
+	return d
+
+func _seed_home_trees() -> void:
+	if tree_ledger == null or tree_ledger.is_seeded(RegionCatalog.HOME):
+		return
+	tree_ledger.seed_region(RegionCatalog.HOME, _home_tree_anchors())
+
+# 원장이 바뀐 프레임(벌목·성장·재성장·파종·세이브 복원). 안식 프롭 나무의 충돌(벤 나무는 통과 O)과
+# 화면을 다시 세운다. 숲 그리드 동기화는 호출부(_chop_tree·_on_day_advanced)가 칸 단위로 처리한다
+# (원장 신호는 "어느 칸"을 안 실어 나르므로 — FarmField.tile_changed와 갈리는 지점).
+func _on_tree_ledger_changed() -> void:
+	_rebuild_prop_collision()
+	if _front_props != null:
+		_front_props.queue_redraw()
+	queue_redraw()
+
+# ★[ADR-0062 결정 3] 도끼 1스윙 = 1타. 산출은 마지막 타에만 실린다(TreeLedger.chop이 판정).
+#   혼력: **나무 작업은 과금**이다(ADR-0033 — 줍기 0과 갈리는 축). 기존 도구 혼력 결을 재사용하되
+#   농사 숙련 감산(FarmSkill.energy_factor)은 안 태운다 — 벌목은 농사가 아니다(채집 효율 축은
+#   ADR-0052 비-가치 4차원이라 혼력 절감이 없다). 즉 고정 COST_PER_ACTION.
+func _chop_tree(t: Vector2i) -> void:
+	if tree_ledger == null or inventory == null:
+		return
+	if inventory.selected_id() != ItemCatalog.AXE:
+		return                                   # 도끼가 아니면 무동작(ADR-0024 §2 자동 분기 없음)
+	var cost := SoulEnergy.COST_PER_ACTION
+	if not energy.can_act(cost):
+		return
+	var lvl := _skill_level(ProfessionCatalog.FORAGING)
+	var res := tree_ledger.chop(_region, t, clock.day, lvl, forage_wood_bonus(), forage_hardwood_chance())
+	if res.is_empty():
+		return                                   # 대상 없음(디스패치가 걸렀지만 방어)
+	energy.spend(cost)
+	audio.sfx("hoe")                             # 도끼질 = 둔탁한 "턱"(전용 SFX는 아트 패스)
+	# 산출 적재(마지막 타가 아니면 전부 0이라 아무것도 안 들어온다).
+	_grant_chop_drop(ItemCatalog.WOOD, int(res.get("wood", 0)))
+	_grant_chop_drop(ItemCatalog.HARDWOOD, int(res.get("hardwood", 0)))
+	_grant_chop_drop(ItemCatalog.SAP, int(res.get("sap", 0)))
+	_grant_chop_drop(String(res.get("seed_id", "")), int(res.get("seeds", 0)))
+	_gain_forage_xp(int(res.get("xp", 0)))       # 0이면 _gain_forage_xp가 알아서 무동작
+	if bool(res.get("felled", false)) and not bool(res.get("cleared", false)):
+		_notice("%s를 쓰러뜨렸다 — 그루터기는 도끼로 마저 치울 수 있다"
+			% TreeLedger.species_name(String(res.get("species", ""))))
+	_sync_tree_tile(t)                           # 숲: 슬롯이 비었으면 그 칸이 즉시 걸을 수 있게 된다
+	queue_redraw()
+
+func _grant_chop_drop(id: String, n: int) -> void:
+	if id == "" or n <= 0:
+		return
+	inventory.add_item(id, n)
+	_toast_item(id, n)
+
+# 안식 자체 파종의 "빈 칸인가" 판정(TreeLedger.advance_day에 Callable로 주입 — 원장은 지형을 모른다).
+# 성역: 밭 흙·길·벽·물·절벽(GROUND 아님) / 프롭 점유(건물·나무·바위·debris·꽃·울타리) / 경작·심긴 칸 /
+# 개간해 연 땅 / 재점령 잡초 / 스프링클러 / 혼의 나무 밑동. = 아직 아무것도 없는 잔디 여백만 통과.
+# ★ occ(프롭 점유)는 호출마다 새로 계산하면 비싸므로 클로저에 캐시해 넘긴다(_tree_seed_free_cb).
+func _is_tree_seed_free(region: String, t: Vector2i, occ: Dictionary) -> bool:
+	if region != RegionCatalog.HOME or _region != RegionCatalog.HOME:
+		return false                              # 다른 구역 그리드가 실려 있으면 판정 불가 → 파종 없음
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
+		return false
+	if _grid[t.y][t.x] != GROUND:
+		return false
+	if occ.has(t):
+		return false
+	if farm != null and (farm.is_tilled(t) or farm.is_planted(t)):
+		return false
+	if reclaim != null and (reclaim.is_cleared(t) or reclaim.has_weed(t)):
+		return false
+	if sprinkler != null and sprinkler.has_at(t):
+		return false
+	if orchard != null and t in orchard.trunk_tiles():
+		return false
+	return true
+
+# 자체 파종 판정 Callable(안식에 서 있을 때만 유효 — 다른 구역에서 자면 그날 파종은 건너뛴다.
+# _grid가 그 구역 것이라 안식 지형을 물어볼 수 없기 때문이다. 결정 롤은 day 시드라 손실이 아니라 스킵).
+func _tree_seed_free_cb() -> Callable:
+	if _region != RegionCatalog.HOME:
+		return Callable()
+	var occ := _home_occupied_tiles()
+	return func(region: String, t: Vector2i) -> bool:
+		return _is_tree_seed_free(region, t, occ)
 
 # ★ T3③' 프롭 충돌 재구성 — 현재 구역 레이아웃에서 SOLID_PROPS 텍스처 칸에만 사각 충돌을
 # 단다(러그·등불·꽃·debris(개간분)는 제외 = 통과 O. ★울타리는 2026-07-05 SOLID 편입 = 통과 불가).
@@ -2735,9 +2914,15 @@ func _rebuild_prop_collision() -> void:
 		var yo: int = entry[2] if entry.size() > 2 else 0
 		var foot_bar: bool = entry[0] in FOOT_BAR_PROPS   # ★[§5] 키 큰 야외 프롭 = 발치 바
 		var is_debris: bool = DEBRIS_KIND.has(entry[0])   # ★ [S1-8] 치운 SOLID debris는 충돌 skip(통과 O)
+		var is_tree: bool = entry[0] == PROP_TREE_A or entry[0] == PROP_TREE_B   # ★[S4-T3] 벌목 대상 나무
 		for t in entry[1]:
 			# ★ [S1-8 §10.3] 개간한 debris 타일은 충돌을 안 세운다(하드게이트 열림·overgrown 장애물 제거).
 			if is_debris and reclaim != null and reclaim.is_cleared(t):
+				continue
+			# ★[S4-T3] 원장 나무 앵커는 원장이 통행을 정한다 — 나무·그루터기면 그대로 막고(발치 바),
+			#   그루터기까지 치운 자리는 충돌을 안 세운다(통과 O). 원장 밖 앵커(절차 스캐터)는 불변.
+			if is_tree and tree_ledger != null and tree_ledger.has_slot(_region, t) \
+					and not tree_ledger.is_occupied(_region, t):
 				continue
 			var cs := CollisionShape2D.new()
 			var rect := RectangleShape2D.new()
@@ -2755,6 +2940,19 @@ func _rebuild_prop_collision() -> void:
 				cs.shape = rect
 				cs.position = Vector2(t.x * TILE, t.y * TILE + yo) + sz * 0.5
 			_prop_body.add_child(cs)
+	# ★[S4-T3] 안식 자체 파종으로 *새로 돋은* 원장 나무 — 프롭 레이아웃에 없는 칸이라 위 루프가 못 세운다.
+	#   유목·그루터기라 발치 1칸(TILE)만 막는다(나무 프롭 TREE_FOOT_H와 같은 규약 = 통행 감각 일관).
+	if _region == RegionCatalog.HOME and tree_ledger != null:
+		var anchors := _home_tree_anchor_set()
+		for t: Vector2i in tree_ledger.tiles(RegionCatalog.HOME):
+			if anchors.has(t) or not tree_ledger.is_occupied(RegionCatalog.HOME, t):
+				continue
+			var cs2 := CollisionShape2D.new()
+			var rect2 := RectangleShape2D.new()
+			rect2.size = Vector2(TILE, TILE)
+			cs2.shape = rect2
+			cs2.position = Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
+			_prop_body.add_child(cs2)
 
 # ★ [S1-5a] 트렐리스 넝쿨 충돌 재구성(greybox-spec §6.2) — farm.solid_crop_tiles()의 각 칸에
 # 16×16 사각 충돌을 세운다(터레인 SOLID_POLY −8..8과 동형). 넝쿨은 안식 농원(밭)에만 있으므로
@@ -6174,6 +6372,19 @@ func _on_day_advanced(day: int) -> void:
 		var forage_new := forage_spawns.advance_day(day, GameClock.season_index_for_day(day))
 		if bool(forage_new["season_reset"]) and int(forage_new["cleared"]) > 0:
 			_notice("절기가 바뀌어 숲의 채집물이 모두 졌다 — 새 절기의 것이 돋는다")
+	# ★[S4-T3 / ADR-0062 결정 3] 나무 원장 하루 — ①미성숙목 20% 한 단계 성장 ②숲 빈 슬롯 20% stage3
+	#   재출현 ③안식 성숙목 15% 반경 3칸 자체 파종. "코지 재성장"(ADR-0033)의 실수치라 민둥산이 안 남는다.
+	#   숲 재출현은 그 칸의 통행이 다시 막히는 것이므로 현재 구역이면 그리드를 즉시 동기화한다.
+	if tree_ledger != null:
+		var tree_day := tree_ledger.advance_day(day, _tree_seed_free_cb())
+		for e in tree_day["regrown"]:
+			if String(e["region"]) == _region:
+				_sync_tree_tile(e["tile"])
+		for e in tree_day["grown"]:
+			if String(e["region"]) == _region and int(e["stage"]) == TreeLedger.REGROW_STAGE:
+				_sync_tree_tile(e["tile"])   # 빈 슬롯 → 성장 경로는 없지만 멱등 방어
+		if not tree_day["seeded"].is_empty():
+			_notice("마당에 어린 나무가 %d그루 돋았다" % tree_day["seeded"].size())
 	# ★ [ADR-0055] 안식 재점령 — 빈 맨땅 1~2칸에 밤새 잡초(이승의 미련)가 다시 돋는다(구조물·밭·작물 성역).
 	#   겨울(잿눈)엔 정지(Forage와 같은 저승 성장정지). 자격 빈 맨땅 후보는 main이 계산해 전달(디커플링).
 	if reclaim != null:
@@ -6510,6 +6721,7 @@ func _save_game() -> void:
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
 		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
 		"forage_spawn": forage_spawns.to_save(),  # ★[S4-T1] 숲 채집물 스폰 원장(구역별 좌표·종 — 매일 굴러 나온 델타)
+		"tree_ledger": tree_ledger.to_save(),  # ★[S4-T3] 나무 원장(구역별 좌표·종·단계·타수·그루터기 + 시드 완료 구역)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
@@ -6583,6 +6795,8 @@ func _load_game() -> void:
 		flower.load_save(data["flower_patch"])
 	if data.has("forage_spawn"):  # ★[S4-T1] — 키 없는 구세이브는 채집물 0(다음 취침의 advance_day가 판을 깐다·무막힘)
 		forage_spawns.load_save(data["forage_spawn"])
+	if data.has("tree_ledger"):   # ★[S4-T3] — 키 없는 구세이브는 원장 0 → 구역 첫 빌드의 seed_region이
+		tree_ledger.load_save(data["tree_ledger"])   #   초기 배치를 결정적으로 재생성한다(종=좌표 해시·하위호환)
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
 		home_deco.load_save(data["home_deco"])
 	if data.has("wallet"):
@@ -7349,6 +7563,13 @@ func _process(delta: float) -> void:
 			and forage_spawns.has_at(_region, _target)
 	if on_forage_spawn and (Input.is_action_just_pressed("action") or Input.is_action_just_pressed("shop_toggle")):
 		_pick_forage(_target)
+	# ★[S4-T3 / ADR-0062 결정 3] 벌목 — 원장 나무·그루터기는 SOLID(비-SOIL)라 _target_valid 게이트 밖에서
+	#   따로 디스패치한다(개간 debris와 같은 결). LMB(도끼 든 채) = 1타. 도끼가 아니거나 혼력이 없으면
+	#   _chop_tree 안에서 무동작이다(자동 분기 없음 — ADR-0024 §2).
+	var on_tree := not _sleeping and _indoor == "" and tree_ledger != null \
+			and tree_ledger.is_occupied(_region, _target)
+	if on_tree and Input.is_action_just_pressed("use_tool"):
+		_chop_tree(_target)
 	# ★ [S1R-T8 / ADR-0059 결정4] 물뿌리개 리필 — 혼우물(WELL_RECT·WALL)·연못(WATER)은 SOIL이 아니라
 	#   _target_valid 게이트 밖 → 개간·잡초와 같은 결로 따로 디스패치. 물뿌리개 들고 대상 겨눠 LMB = 잔량 풀충전.
 	var on_refill := not _sleeping and inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target)
@@ -7550,6 +7771,10 @@ func _process(delta: float) -> void:
 		#   "무엇을 줍는지"가 보이게 한다(아이콘 아트는 S4-T10).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[우클릭/F] %s 채집 (채집 숙련)" % ItemCatalog.name_of(forage_spawns.species_at(_region, _target))
+	elif tree_ledger != null and _indoor == "" and tree_ledger.is_occupied(_region, _target):
+		# ★[S4-T3] 원장 나무·그루터기를 바라볼 때: 도끼를 들었으면 [좌클릭] 남은 타수, 아니면 도끼 안내.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _tree_prompt(_target)
 	elif inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target):
 		# ★ [S1R-T8] 혼우물·연못을 물뿌리개로 겨눌 때: LMB로 잔량 풀충전(이미 가득이면 안내만).
 		interact_prompt.visible = not _sleeping
@@ -8323,6 +8548,18 @@ func _debris_prompt(kind: String) -> String:
 			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 개간 (%s)" % tool_nm
 	return "%s 필요 — 개간 대상" % tool_nm
+
+# ★[S4-T3] 원장 나무·그루터기 프롬프트 — 남은 타수를 밝혀 "몇 번 더 치면 되나"가 보이게 한다
+#   (성숙목 10타는 도구 티어(S4-T4)로 줄어들 값이라, 수치를 숨기면 티어의 실효가 안 읽힌다).
+func _tree_prompt(t: Vector2i) -> String:
+	var stump := tree_ledger.is_stump(_region, t)
+	var nm := TreeLedger.species_name(tree_ledger.species_at(_region, t))
+	var label := "%s 그루터기" % nm if stump else nm
+	if inventory.selected_id() != ItemCatalog.AXE:
+		return "%s — 도끼 필요" % label
+	if not energy.can_act(SoulEnergy.COST_PER_ACTION):
+		return "혼력 부족 — 집에서 취침"
+	return "[좌클릭] %s %s (%d타 남음)" % [label, "치우기" if stump else "벌목", tree_ledger.hp_at(_region, t)]
 
 # 밭 칸 프롬프트: 든 도구·칸 상태에서 다음에 할 수 있는 동작을 파생한다("" = 안내 없음).
 # 맨손 수확(RMB)은 도구와 무관하게 다 자란 칸이면 항상 안내한다. 그 외엔 든 도구가 칸 상태에
@@ -10142,6 +10379,7 @@ func _draw() -> void:
 			# ★[§6] Y-split: 뒤 프롭(플레이어 발치 위)만 여기서(플레이어 아래). 앞 프롭은 _front_props.
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_home_prop_entries(), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터 + S1R-T4 절차 스캐터(숲·능선·debris)
+			_draw_tree_ledger()      # ★[S4-T3] 벤 나무의 그루터기·자라는 유목(성숙목은 위 프롭이 그린다)
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 			_draw_orchard()          # ★ [S1-5b/S1-10] 혼의 나무 과수 — 종별 3단계 스프라이트(묘목·성목·결실)
 			_draw_trackb_interiors() # ★ Phase E Track B 실내 가구(여물통·보관 크레이트 — 짐승 아래, 카메라로 방별 클립)
@@ -10161,6 +10399,7 @@ func _draw() -> void:
 			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(삼도천과 같은 렌더 — 구역만 다르다)
 		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
 			_draw_forage_spawns()    # ★[S4-T1] 빈터에 돋은 채집물(종별 색점 그레이박스 — 아이콘 아트는 S4-T10)
+			_draw_tree_ledger()      # ★[S4-T3] 원장 나무 중 미성숙·그루터기(성숙목은 TREE 타일이 그린다)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
@@ -10461,6 +10700,45 @@ func _draw_forage_spawns() -> void:
 		draw_line(px + Vector2(TILE * 0.58, TILE * 0.78), px + Vector2(TILE * 0.58, TILE * 0.60), Color(0.28, 0.44, 0.26), 2.0)
 		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.17, col)
 		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.17, Color(0.08, 0.06, 0.10, 0.75), false, 1.0)
+
+# ★[S4-T3 / ADR-0062 결정 3·6] 원장 나무 그레이박스 렌더 — **성숙목 말고** 나머지 상태만 그린다.
+#   성숙목은 이미 무대가 그린다(숲 = TREE 그리드 타일 / 안식 = PROP_TREE_A/B 스프라이트). 여기 몫은
+#   그 두 무대가 표현할 줄 모르는 두 상태다:
+#     ㉠ 미성숙(1~4단계) — 단계에 비례해 커지는 축소 폴백(성장 3폼 아트는 S4-T9)
+#     ㉡ 그루터기 — 색 박스 폴백(자른 단면 링 하나로 "밑동"이 읽히게)
+#   숲에선 그 칸이 아직 TREE 타일(통행 불가 유지)이라 어두운 사각 위에 덮어 그린다 = 상태가 구분된다.
+#   순수 시각 — 상태는 TreeLedger가 소유하고 여긴 질의만 한다(채집물 색점 렌더와 같은 결).
+const _TREE_STUMP_TOP := Color(0.62, 0.45, 0.30)     # 그루터기 단면(밝은 나이테)
+const _TREE_STUMP_SIDE := Color(0.34, 0.24, 0.17)    # 그루터기 옆면(어두운 껍질)
+const _TREE_YOUNG_LEAF := Color(0.30, 0.55, 0.32)    # 유목 잎(밝은 새순 — 성숙 침엽보다 밝게)
+const _TREE_YOUNG_TRUNK := Color(0.35, 0.26, 0.18)   # 유목 줄기
+func _draw_tree_ledger() -> void:
+	if tree_ledger == null or _indoor != "":
+		return
+	for t: Vector2i in tree_ledger.tiles(_region):
+		if not tree_ledger.is_occupied(_region, t):
+			continue
+		var px := Vector2(t.x * TILE, t.y * TILE)
+		if tree_ledger.is_stump(_region, t):
+			# 그루터기 — 칸 아래쪽에 낮은 밑동(옆면 + 단면 타원). 통행 불가 상태의 시각 신호.
+			draw_rect(Rect2(px + Vector2(TILE * 0.24, TILE * 0.46), Vector2(TILE * 0.52, TILE * 0.34)),
+				_TREE_STUMP_SIDE)
+			draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.24, _TREE_STUMP_TOP)
+			draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.24, _TREE_STUMP_SIDE, false, 1.0)
+			continue
+		var stage := tree_ledger.stage_at(_region, t)
+		if stage >= TreeLedger.MAX_STAGE:
+			continue                                   # 성숙목은 무대(타일·스프라이트)가 그린다
+		# 미성숙 — 단계 비례 축소 폴백(1단계 묘목 ~ 4단계 거의 다 큰 나무).
+		var k := clampf(float(stage) / float(TreeLedger.MAX_STAGE), 0.2, 0.85)
+		var h := TILE * k
+		var w := TILE * k * 0.72
+		var base := px + Vector2(TILE * 0.5, TILE * 0.88)
+		draw_rect(Rect2(base + Vector2(-1.5, -h * 0.34), Vector2(3.0, h * 0.34)), _TREE_YOUNG_TRUNK)
+		draw_colored_polygon(PackedVector2Array([
+			base + Vector2(-w * 0.5, -h * 0.30),
+			base + Vector2(w * 0.5, -h * 0.30),
+			base + Vector2(0.0, -h)]), _TREE_YOUNG_LEAF)
 
 # ★[S4-T2 / ADR-0062 결정 8] 혼 감지(base lvl3+) 가장자리 여우불 마커 + 추적자(DIM_TRACK) ▼ 하이라이트.
 #   순수 시각 — "무엇을 가리키나"는 forage_detect_target()/forage_track_enabled()가 이미 정했고 여긴
@@ -11012,10 +11290,16 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 		var casts_shadow: bool = tex in PROP_SHADOW_SET
 		var is_debris: bool = DEBRIS_KIND.has(tex)          # ★ [S1-8] 치운 debris는 skip(안 그림)
 		var is_flower: bool = tex == PROP_FLOWER_PATCH      # ★ ADR-0052 딴 꽃 패치는 skip(새싹은 _draw_flower_regrow가 그림)
+		var is_tree: bool = tex == PROP_TREE_A or tex == PROP_TREE_B   # ★[S4-T3] 벌목 대상 나무
 		var tsz := tex.get_size()
 		for t in entry[1]:
 			# ★ [S1-8 §10.3] 개간한 debris 타일은 안 그린다(reclaim 델타 skip-filter — _prop_layouts 시드는 불변).
 			if is_debris and reclaim != null and reclaim.is_cleared(t):
+				continue
+			# ★[S4-T3] 원장 나무 앵커는 **성숙목일 때만** 큰 스프라이트를 그린다 — 벤 자리(그루터기·빈 칸)와
+			#   자라는 중인 나무는 _draw_tree_ledger가 그린다(reclaim/flower와 같은 결의 skip-filter).
+			if is_tree and tree_ledger != null and tree_ledger.has_slot(_region, t) \
+					and not tree_ledger.is_mature(_region, t):
 				continue
 			# ★ ADR-0052 딴 꽃 패치는 풀 스프라이트를 숨긴다(reclaim 결 skip-filter). 재생 대기 새싹은 별도 패스.
 			if is_flower and flower != null and not flower.is_bloomed(t):

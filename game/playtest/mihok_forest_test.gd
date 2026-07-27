@@ -92,15 +92,39 @@ func _initialize() -> void:
 		and m._grid_w == 64 and m._outdoor_h == 44)
 
 	# ── ① 나무(TREE) 군집·연못(WATER) 통과 불가 + 빈터 걸을 수 있음 ──
+	# ★[S4-T3 / ADR-0062 결정 3] 벌목 도입으로 TREE 이원화 — 경계 프레이밍 밴드(테두리 5칸)는
+	#   **불벌목 벽**(원장 밖 · ③ flood-fill 도달성의 근거)이고, 내부 악센트 군집만 원장 나무다.
+	#   통과 불가라는 결론은 벌목 전엔 둘 다 같고, 원장 나무만 완전 제거 후 열린다(①g~①i).
 	for r in m.MIHOK_TREE_RECTS:
 		var c := Vector2i(r.position.x, r.position.y)
 		_check("① 나무 군집 칸 TREE (%d,%d)" % [c.x, c.y], m._grid[c.y][c.x] == m.TREE)
 		_check("①b 나무 칸 통과 불가", not _walkable(m, c))
+		if m._is_tree_border_band(c):
+			_check("①b1 경계 밴드 칸 = 원장 밖(불벌목)", not m.tree_ledger.has_slot(m._region, c))
+		else:
+			_check("①b2 내부 악센트 칸 = 원장 나무(벌목 대상)", m.tree_ledger.is_occupied(m._region, c))
 	var pc := Vector2i(m.MIHOK_POND_RECT.position.x, m.MIHOK_POND_RECT.position.y)
 	_check("①c 연못 칸 WATER (%d,%d)" % [pc.x, pc.y], m._grid[pc.y][pc.x] == m.WATER)
 	_check("①d 연못 칸 통과 불가", not _walkable(m, pc))
 	_check("①e 특수 채집지① 빈터 걸을 수 있음", _walkable(m, m.MIHOK_FORAGE_LABEL_TILE))
 	_check("①f 특수 채집지② 빈터 걸을 수 있음", _walkable(m, m.MIHOK_FORAGE_LABEL_TILE_2))  # ★C7 채집지 2곳
+	# ★[S4-T3] 경계 밴드 TREE는 원장이 모른다(도끼 무동작) = 에워싸는 외곽 밴드가 그대로 벽으로 남는다.
+	var band_slots := 0
+	for t: Vector2i in m.tree_ledger.tiles(m._region):
+		if m._is_tree_border_band(t):
+			band_slots += 1
+	_check("①g 경계 밴드 TREE가 원장에 하나도 없음(불벌목 벽 — %d그루 전량 내부)"
+		% m.tree_ledger.slot_count(m._region), band_slots == 0 and m.tree_ledger.slot_count(m._region) > 0)
+	# 내부 원장 나무 하나를 완전히 치우면(성숙 10타 + 그루터기 3타) 그 칸이 열린다.
+	var inner: Vector2i = m.tree_ledger.tiles(m._region)[0]
+	_check("①h 내부 원장 나무 = 벌목 전 통과 불가", not _walkable(m, inner))
+	for i in 20:
+		if not m.tree_ledger.is_occupied(m._region, inner):
+			break
+		m.tree_ledger.chop(m._region, inner, 1)
+		m._sync_tree_tile(inner)
+	_check("①i 완전 제거(벌목+그루터기) 후 GROUND·통과 가능",
+		m._grid[inner.y][inner.x] == m.GROUND and _walkable(m, inner))
 
 	# ── ② 옥자 집 = 잠긴 외관(WALL 박스 + 문 PATH 리세스), 실내 방 없음 ──
 	var ext: Rect2i = m.OKJA_HUT_EXT_RECT
