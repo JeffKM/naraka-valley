@@ -524,8 +524,14 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 				draw_rect(inner, Color(0.80, 0.66, 0.30) if ItemCatalog._is_hay(id) else Color(0.46, 0.36, 0.26))
 		ItemCatalog.CAT_PLACEABLE:
 			# ★ [S1R-T9] 설치물(스프링클러) 그레이박스 아이콘(핫바와 동일 — 청록 몸통 + 물방울 점).
-			draw_rect(inner, Color(0.32, 0.52, 0.60))
-			draw_circle(inner.position + Vector2(inner.size.x * 0.5, inner.size.y * 0.28), inner.size.x * 0.14, Color(0.62, 0.82, 0.92))
+			# ★ [S3-T7] 게잡이통은 엮은 대나무 통 실루엣으로 갈라 둔다(핫바와 동일 — 아트는 S3-T10).
+			if id == ItemCatalog.CRAB_POT:
+				draw_rect(inner, Color(0.52, 0.40, 0.24))
+				draw_rect(Rect2(inner.position + Vector2(0.0, inner.size.y * 0.30), Vector2(inner.size.x, 2.0)), Color(0.30, 0.22, 0.14))
+				draw_rect(Rect2(inner.position + Vector2(0.0, inner.size.y * 0.62), Vector2(inner.size.x, 2.0)), Color(0.30, 0.22, 0.14))
+			else:
+				draw_rect(inner, Color(0.32, 0.52, 0.60))
+				draw_circle(inner.position + Vector2(inner.size.x * 0.5, inner.size.y * 0.28), inner.size.x * 0.14, Color(0.62, 0.82, 0.92))
 		ItemCatalog.CAT_CONSUMABLE:
 			# ★ [S3-T4] 소모품(낚시 미끼) 그레이박스 아이콘(핫바와 동일 — 종별 색 통 + 흰 뚜껑).
 			draw_rect(inner, ItemCatalog.tool_color_of(id))
@@ -987,7 +993,7 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 			buy_sprinkler_pressed.emit(bulk)
 		"seed":
 			buy_seed.emit(String(e.get("buy_id", "")), bulk)
-		"sapling", "fert", "hay", "gear":   # ★ [S2-T4] 신규 입고 3종 + ★[S3-T5] 낚시 기어 — 일반 품목 구매 시그널
+		"sapling", "fert", "hay", "gear", "pot":   # ★ [S2-T4] 신규 입고 3종 + ★[S3-T5] 낚시 기어 + ★[S3-T7] 게잡이통 — 일반 품목 구매 시그널
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
 
 # ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.
