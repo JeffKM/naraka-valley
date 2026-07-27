@@ -608,3 +608,150 @@ cafe_ext.png — 알파가 전부 255고 배경이 #8c8681 회색으로 구워�
   원본은 cafe_ext_raw.png로 백업(idempotent). 29,347px 투명화 — 재생성 아님, 트림만.
   ★owner가 cafe_ext를 재생성할 땐 **배경을 투명으로** 뽑을 것(그러면 이 트림 자체가 불필요).
 ```
+
+---
+
+## 11. ★[S2-T10] 나루 마을 아트 패스 2 — 건물 외관·NPC 6종 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-07-27). §10과 같은 [ADR-0048] 교체
+> 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰면 **코드 0줄 수정**으로 반영된다.
+>
+> **후처리 글루:** [`game/tools/make_naru_art2.py`](../../game/tools/make_naru_art2.py)
+> **raw 보관:** `game/assets/buildings/*_raw.png` · `game/assets/characters/neo_raw/` ·
+> `game/assets/characters/mochi_raw.png` · `game/assets/portraits/neo_raw.png`
+>
+> **이 패스로 나루 마을에 그레이박스 건물이 0이 됐다** — 야외 16채 전부 외관 아트를 갖는다.
+> 그 짝으로 `main._VILLAGE_GREYBOX_RECTS`가 비었고 "만물상"·"주민 집 N" 라벨을 뗐다(외관으로 식별).
+
+### 11.0 공통 규약 (건물 4종)
+
+```
+[asset-ruleset §2/ADR-0036] 정면 facade · 남향 문 · 박공(gable) 지붕 + **윗면 슬랩 노출 필수**
+  (정면 삼각형만 있고 윗면 0이면 리젝). 생성 파라미터 view="low top-down".
+[§1.1] 광원 프롬프트 세트 그대로: light source from top-left (NW), distinct directional
+  step-shading, 1px highlight on top and left edges, crisp dark shadows to bottom-right (SE),
+  2-3 color values max, no smooth gradients.
+[§1.3] **base 투명 필수** — 지면·잔디를 굽지 말 것(접지 그림자는 엔진이 런타임에 깐다).
+[§3] 앵커 = bottom-center(`_blit_facade_anchored`) — art 바텀 = footprint 하단 경계.
+★치수 불변식: **아트 폭 = footprint 폭 정확히**, 아트 높이 ≥ footprint 높이(지붕은 위로 솟음).
+  PixelLab은 캔버스 대비 콘텐츠 여백이 생성마다 0.80~0.96로 흔들려 캔버스로는 못 맞춘다 →
+  글루 `fit_facade()`가 half-res(16논리px) 격자에서 NEAREST로 맞춘 뒤 ×2(=§0.1 2px 청키 보장).
+  **그래서 raw는 여백이 있어도 된다** — 콘텐츠 비율만 대략 맞으면 글루가 규격에 앉힌다.
+```
+
+### 11.1 만물상 외관 `store_ext`
+
+```
+파일: game/assets/buildings/store_ext.png   (raw: store_ext_raw.png)
+크기: 192×160 = STORE_EXT_RECT Rect2i(58,14,6,5)와 1:1   문: 하단 정중앙 2칸(x60·61 = STORE_EXT_DOOR)
+배선: main._draw_facade_store() — NARU_VILLAGE 드로우 분기
+생성: create_map_object(120×108 / low top-down / medium detail / basic shading / single color outline)
+  PROMPT: Korean underworld general store shop building, front elevation facade, wide and low shop.
+    Hanok tiled gable roof (triangular pitch) with a visible flat roof-top slab receding behind the
+    ridge so the roof depth is seen from slightly above. Muted slate blue-grey roof tiles, warm
+    honey-brown wood plank walls, a wide double wooden sliding door dead center at the bottom of the
+    front wall, a hanging shop sign board above the door, two small paper lanterns, stacked crates and
+    clay jars beside the door. + [§1.1 광원 세트] + 배경 투명·지면 금지
+후처리: fit_facade(6,5) → 채도 ×0.88·명도 ×0.96(§9 저승 muted 소폭)
+★리젝 기준: **간판(sign board)이 없으면 재생성** — 점포임을 읽히게 하는 유일한 요소다(생성 3회 중
+  간판 있는 판본을 골랐다). 기와 박공 + 윗면 슬랩 노출은 §11.0 공통 필수.
+```
+
+### 11.2 주민 집 공용 변주 `village_house_a` / `_b` (한옥 재도색 2종)
+
+```
+파일: game/assets/buildings/village_house_a.png · village_house_b.png
+크기: 각 128×128 = 주민 집 4×4 풋프린트와 1:1
+출처: **생성 0** — 기존 `miho_house_ext.png`(한옥)의 지붕 hue만 돌린 재도색이다
+  ([residents.md] "기존 집 에셋 재사용 → 본체 제작 시 외관 재도색", [ADR-0014] 점진 추가 비용 방어).
+  a = 따뜻한 테라코타 기와(hue 18°, 채도 ×0.75) · b = 이끼 청록 기와(hue 150°, 채도 ×0.50)
+후처리: 지붕 hue 밴드(195~255°)와 처마밑 호박 밴드(5~30°)를 **원본 hue 기준으로 한 번에** 분기
+  (순차 적용하면 옮긴 지붕이 호박 밴드에 재차 걸려 테라코타가 올리브로 뭉개진다) → fit_facade(4,4)
+★owner 교체 시: 누가 사는 집인지는 **아직 미배정**이다([ADR-0060] 결정 2 "배정은 본체 제작 시").
+  캐릭터색을 넣지 말 것 — 본체 제작 때 그 캐릭터 전용 재도색으로 **한 채씩** 교체하는 것이 계획이다.
+```
+
+### 11.3 주민 집 초가 변주 `village_house_c` / `village_house_wide`
+
+```
+파일: game/assets/buildings/village_house_c.png(128×128) · village_house_wide.png(160×144)
+      (raw 공용: village_cottage_raw.png — 한 raw에서 4칸·5칸 두 폭을 굽는다)
+크기: c = 4×4 풋프린트 1:1 / wide = 5×4 풋프린트(RESIDENT_HOUSE_RECTS[0]) 폭 1:1·높이 +16 오버행
+배선: main._draw_facade_resident_houses() — 폭 5 이상이면 wide, 아니면 [a,b,c] 고리를 index로 순환
+생성: create_map_object(89×84 / low top-down / medium detail / basic shading / single color outline)
+  PROMPT: small Korean village cottage house, front elevation facade, wide and low. Straw thatched
+    hipped roof with a visible flat roof-top slab receding behind the ridge so the roof depth is seen
+    from slightly above. Warm ochre straw roof, pale clay plaster walls with dark timber posts, a
+    single wooden plank door dead center at the bottom of the front wall, one small paper window on
+    each side of the door glowing warm amber, a low stone foundation strip. + [§1.1] + 배경 투명
+후처리: fit_facade(4,4) / fit_facade(5,4) → 채도 ×0.88·명도 ×0.96
+```
+
+### 11.4 네오 스프라이트 `neo` (만물상 점주 — 상주 정지 NPC)
+
+```
+파일: game/assets/characters/neo.png   (raw: characters/neo_raw/{south,east,north,west}.png)
+크기: 80×320 = 프레임 80×80 · **1열**(정지 rotation) × 4행(down/up/right/left)
+  ★상주 NPC는 워크 시트 frame0이 아니라 **rotation idle**을 쓴다([p2.0-spike §10.12] 미호 교훈 —
+   워크 첫 프레임은 스트라이드라 서 있어야 할 NPC가 걷는 듯 보인다).
+배선: neo.gd `CharSprite.make("res://assets/characters/neo.png")` — 이미 있던 훅, 파일만 채웠다
+생성: create_character(mode=standard / n_directions=4 / **size=44** / low top-down /
+      selective outline / basic shading / high detail /
+      proportions {"type":"custom","head_size":1.5,"arms_length":0.75,"legs_length":0.9,
+                   "shoulder_width":0.72,"hip_width":0.75})
+  PROMPT: chibi porcelain automata doll shopkeeper standing straight, off-white glazed porcelain
+    skin, smooth pale porcelain head with a large brass wind-up key sticking straight up out of the
+    top of the head, two small round dark dot eyes and a tiny calm mouth, thin dark seam lines at the
+    shoulder and elbow ball joints, dark slate grey buttoned shopkeeper vest with a small brass gear
+    on the chest, dark trousers, arms straight down at the sides, slim chibi build, beautiful clean
+    face, large evenly-spaced eyes, muted underworld palette
+★★ size=44인 이유(문서 정정): [ADR-0012]/스파이크 §10.8은 "size=56, 콘텐츠 ~58~70px"이라고 적었지만
+  **출하된 캐스트 5종 실측은 41~46px**(mel 43·okja 46·bana 43·miho 42·player 41, 전부 발치 y=74)이다.
+  size=56으로 뽑으면 신규 NPC만 30% 커져 나란히 섰을 때 따로 논다 → **size=44가 실측 정합값**이다.
+  신규 캐릭터는 이 값에서 출발할 것(문서의 56은 stale).
+후처리(글루가 정체성 보정 — [p2.0-spike §10.11] "face 디테일은 프롬프트보다 후처리가 확실"):
+  ① 살빛(h 10~60°)을 **백자 오프화이트**(233,231,226)로 치환(명도 계조 보존 = 계단식 음영 유지)
+  ② 머리 꼭대기 중앙에 **태엽 키**(놋쇠 세로 줄기 + 가로 챙) 2px 블록 스탬프
+  — PixelLab standard가 3회 시도 전부 "살빛 민머리 + 키 없음"으로 구웠다(키가 44px 스케일에 안 박힘).
+★owner 교체 시: 위 ①②가 프롬프트로 나오면 후처리를 지워도 된다. 백자·태엽 키·이모티콘 눈은
+  [residents.md §2.2]가 정한 **정체성 불가침 3요소**다.
+```
+
+### 11.5 모찌 스프라이트 `mochi` (슬라임 — 걷는 T1 주민)
+
+```
+파일: game/assets/characters/mochi.png   (raw: characters/mochi_raw.png, 32×32 한 장)
+크기: 80×320 = 프레임 80×80 · 1열 × 4행. 콘텐츠 25×26(≈0.8칸 — 사람형 16×32와 달리 납작·가로가 넓다)
+배선: mochi.gd `CharSprite.make(...)` — 이미 있던 훅, 파일만 채웠다
+생성: create_map_object(32×32 / low top-down / low detail / basic shading / single color outline)
+  ※ 비인간이라 create_character(휴머노이드 골격)를 안 쓴다. 32px 목표라 half-res 생성 불가 →
+    [§0] "≤32px 소형은 동일 크기 생성 후 ÷2→×2 청키화" 경로.
+  PROMPT: tiny translucent emerald green jelly slime creature, a squat flattened rounded blob wider
+    than it is tall with a flat pressed top, NOT a pointed teardrop dome, two simple dark dot eyes
+    and a tiny short smiling dot mouth on the front, a small off-white round rice cake resting on top
+    of its head, glossy highlight on the upper left. + [§1.1] + 배경 투명
+후처리: 방향 4행을 **얼굴만 옮겨** 만든다 — 덩이 실루엣·NW 하이라이트·머리 위 찹쌀떡은 제자리
+  (좌우 미러를 쓰면 [§1] 광원이 뒤집힌다). north=얼굴 숨김(뒷모습) · east/west=얼굴 ±3px 이동.
+  얼굴 픽셀 판정은 **얼굴 띠**(콘텐츠 x 20~80%, y 50~80%) 안의 어두운 내부 픽셀 + 분홍 볼홍조로
+  한정한다(전역으로 "어두운 픽셀"을 잡으면 덩이 내부 윤곽·찹쌀떡 밑그늘까지 얼굴로 오인한다).
+★리젝 기준([residents.md] 명시): **드래곤퀘스트 슬라임 실루엣 금지** — 뾰족한 물방울 돔 + 넓은
+  밑동 + 큰 눈 + 웃는 큰 입 조합을 피할 것. 머리 위 찹쌀떡이 실루엣 꼭대기를 갈라 주는 핵심 장치다.
+★미완: 걷기 애니 없음(정지 1프레임 × 4방향). 모찌는 스케줄이 있어 실제로 이동하는 첫 주민이라
+  후속에서 워크 시트가 오면 열이 늘어난다(char_sprite가 열 수를 파일에서 읽으므로 코드 무수정).
+```
+
+### 11.6 네오 대화 초상화 `portraits/neo`
+
+```
+파일: game/assets/portraits/neo.png   (raw: portraits/neo_raw.png 160×160)
+크기: 320×320 투명 PNG([portrait-spec-card.md] §4 출력 규격) — 슬롯 124×124 논리(×1.5=186px)
+배선: main `r_neo.portrait_stem = "neo"`(""→"neo") — 주민 레코드 한 줄
+생성: create_portrait_character(direction=character_to_portrait / low top-down / result_size=160)
+  입력 = 위 11.4 네오 south 프레임(백자 보정·태엽 키 포함) → 정체성이 스프라이트에서 그대로 승계된다
+후처리: 하드 알파 → ×2 nearest(160→320)
+★★ **화풍 불일치 — 교체 1순위:** 기존 4인(미호·멜·바나·옥자)은 owner-Gemini **소프트 일러스트**
+  버스트인데 이건 **도트 버스트**다. "얼굴 없음"을 메우는 스톱갭으로 넣었을 뿐이니, owner가
+  [portrait-spec-card.md] §1 헤드&체스트 버스트 규격으로 다시 뽑아 덮으면 된다.
+★미완: **표정 5종 없음**(`neo_talk/_smile/_shy/_sad/_surprised`). 네오 대사의 [smile]/[shy] 태그는
+  `_set_portrait`의 누락 폴백을 타 기본 stem으로 떨어진다(대사·코드 무개정으로 나중에 추가 가능).
+```
