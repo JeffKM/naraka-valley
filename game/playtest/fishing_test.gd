@@ -496,18 +496,23 @@ func _initialize() -> void:
 	_stand_and_aim(m, home_water + Vector2i(0, -1), home_water)
 	_check("ⓗ2 안식 연못 = 비캐스팅(결정 9 무대 한정)", not m._can_cast())
 
-	# ── ⓗ-3 삼도천 — 임시 지급 + 잔교/강둑 캐스팅 판정 ──
+	# ── ⓗ-3 삼도천 — ★[S3-T5] 자동 지급 폐기 + 잔교/강둑 캐스팅 판정 ──
+	# ★ ADR-0061 결정 4가 T1을 **뱃사공 첫 대화 증정**으로 옮기면서 옛 구역 진입 자동 지급
+	#   (`_grant_starter_rod`)이 제거됐다. 삼도천은 뱃사공(황천해)보다 먼저 닿는 자리라, 낚싯대 없이
+	#   물가에 서면 안내 프롬프트가 대신 뜬다(_needs_rod_hint).
 	m.inventory.remove_item(ItemCatalog.ROD_T1, 1)
 	_check("ⓗ3pre 낚싯대 회수(미보유 상태에서 진입)", not m.inventory.has_item(ItemCatalog.ROD_T1))
 	m._rebuild_region(RegionCatalog.SAMDOCHEON)
 	await _settle(m)
-	_check("ⓗ3 삼도천 진입 = T1 낚싯대 임시 지급(★S3-T5 뱃사공 증정으로 교체)",
-		m.inventory.has_item(ItemCatalog.ROD_T1))
-	var rod_before: int = m.inventory.count_of(ItemCatalog.ROD_T1)
-	m._rebuild_region(RegionCatalog.SAMDOCHEON)
-	await _settle(m)
-	_check("ⓗ3 재진입해도 중복 지급 없음(멱등)",
-		m.inventory.count_of(ItemCatalog.ROD_T1) == rod_before)
+	_check("ⓗ3 ★[S3-T5] 삼도천 진입만으로는 낚싯대를 안 준다(자동 지급 폐기)",
+		not m.inventory.has_item(ItemCatalog.ROD_T1))
+	# 낚싯대 없이 강 낚시터 물가를 겨누면 뱃사공 안내 조건이 선다(막다른 동선 방어).
+	var hint_lane: Vector2i = m.SAMDO_FISHING_LABEL_TILE
+	var hint_bank: Vector2i = Vector2i(hint_lane.x, m.SAMDO_RIVER_BANK_Y)
+	_stand_and_aim(m, hint_lane, hint_bank)
+	_check("ⓗ3 낚싯대 미보유 + 낚시터 물가 = 뱃사공 안내 조건", m._needs_rod_hint())
+	m.inventory.add_item(ItemCatalog.ROD_T1, 1)   # 이후 캐스팅 판정을 위해 손에 쥐어 준다(증정 대역)
+	_check("ⓗ3 낚싯대를 얻으면 안내는 사라진다", not m._needs_rod_hint())
 	_select(m, ItemCatalog.ROD_T1)
 	# 잔교(x28) 위에서 옆 강물을 겨눔.
 	var jetty: Vector2i = Vector2i(m.SAMDO_JETTY_X, m.SAMDO_RIVER_Y0 + 2)
