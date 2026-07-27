@@ -13,6 +13,8 @@ class_name ProfessionCatalog
 # ★그레이박스 범위(2026-07-05): 채집(FORAGING)이 파일럿 — 퍼크 시맨틱 완비. 나머지 4스킬은
 #   트리 *구조*(id·이름·tier·requires·설명)만 잠그고 perks=[](각 스킬 빌드 슬라이스에서 채움).
 #   프레임워크가 5스킬에 일반적임을 증명하되 투기적 수치는 미리 안 박는다("한 시스템씩").
+#   ★갱신(2026-07-27 · S3-T6 / ADR-0061 결정 6): **낚시(FISHING) 퍼크 완비** — 예고대로 그 스킬의
+#   빌드 슬라이스에서 채웠다("각 스킬 빌드 슬라이스에서 채움" 이행). 남은 구조-only = 농사·채광·전투 3.
 
 # ── 스킬 id ───────────────────────────────────────────────────────────────────
 const FARMING := "farming"
@@ -30,6 +32,14 @@ const DIM_HARDWOOD := "hardwood"            # 자원: 모든 나무 단단한 �
 const DIM_TAP_QUALITY := "tap_quality"      # 품질: 수액 등급↑(flag=1)
 const DIM_DETECT := "detect"               # 편의: 채집물 감지 범위(flag/range)
 const DIM_TRACK := "track"                 # 발견: 채집물 위치 화면 표시(flag=1)
+# ── ★[S3-T6 / ADR-0061 결정 6] 낚시 퍼크 차원 6종 ─────────────────────────────
+# 전부 비-가치 4차원 안에 든다(품질·수량·효율·편의) — +판매가/마진은 여기 없다(ADR-0052 §1).
+const DIM_FISH_QUALITY := "fish_quality"       # 품질: 어획 등급 판정 축 상향(0..1 — 퀄리티 보버와 같은 눈금)
+const DIM_FISH_TOP_QUALITY := "fish_top_quality"  # 품질: 최고 등급(이리듐) 확률 포인트(퍼펙트 2회 게이트 보존)
+const DIM_SALVAGE_DOUBLE := "salvage_double"   # 수량: 인양물 동반 롤 확률 2배(flag=1 — ADR-0061 보물잡이 재해석)
+const DIM_TRAP_SAVE := "trap_save"             # 효율: 게잡이통 자원/미끼 소모↓(0..1 비율) ★S3-T7 소비
+const DIM_TRAP_NO_JUNK := "trap_no_junk"       # 품질: 게잡이통에 잡동사니 안 걸림(flag=1) ★S3-T7 소비
+const DIM_TRAP_NO_BAIT := "trap_no_bait"       # 편의: 게잡이통 미끼 불필요(flag=1) ★S3-T7 소비
 
 # ── 트리 데이터: 스킬 → [전문직...] ────────────────────────────────────────────────
 # profession = {id, tier(5/10), requires(tier10만=부모 lvl5 id / tier5=""), name, desc, perks:[{dim,value}]}
@@ -73,14 +83,31 @@ const _TREE := {
 		{"id": "excavator", "tier": 10, "requires": "geologist", "name": "발굴자", "desc": "지오드 2배 확률", "perks": []},
 		{"id": "gemologist", "tier": 10, "requires": "geologist", "name": "보석사", "desc": "보석 품질 등급↑", "perks": []},
 	],
-	# ── 낚시(구조만) ──────────────────────────────────────────────────────────
+	# ── ★[S3-T6 / ADR-0061 결정 6] 낚시(퍼크 완비 — 채집에 이은 두 번째 실효 트리) ──────
+	# 낚시꾼 갈래 = **릴 격투 산출물**(품질·인양) · 덫꾼 갈래 = **게잡이통**(패시브 어획, ★S3-T7 실배선).
+	# 후자 3종은 여기서 *퍼크 메타데이터만* 잠근다 — 게잡이통이 아직 없어 소비처가 없기 때문이고,
+	# S3-T7이 `has_profession(FISHING,"trapper")`/`_perk_value(...DIM_TRAP_*)`로 그대로 읽어 간다.
 	FISHING: [
-		{"id": "fisher", "tier": 5, "requires": "", "name": "낚시꾼", "desc": "어획 품질 등급 확률↑", "perks": []},
-		{"id": "trapper", "tier": 5, "requires": "", "name": "덫꾼", "desc": "게잡이통 자원/미끼 소모↓", "perks": []},
-		{"id": "angler", "tier": 10, "requires": "fisher", "name": "명조사", "desc": "최고 등급 어획 확률 대폭↑", "perks": []},
-		{"id": "pirate", "tier": 10, "requires": "fisher", "name": "보물잡이", "desc": "낚시 보물 상자 2배 확률", "perks": []},
-		{"id": "mariner", "tier": 10, "requires": "trapper", "name": "뱃사람", "desc": "게잡이통에 잡동사니 안 걸림", "perks": []},
-		{"id": "luremaster", "tier": 10, "requires": "trapper", "name": "미끼장인", "desc": "게잡이통 미끼 불필요", "perks": []},
+		{"id": "fisher", "tier": 5, "requires": "", "name": "낚시꾼",
+			"desc": "어획 품질 등급 확률↑",
+			# 판정 축을 +0.10 위로(퀄리티 보버 0.15와 같은 눈금 = 계단 반 칸 — 품질의 주인은 여전히 퍼펙트 릴).
+			"perks": [{"dim": DIM_FISH_QUALITY, "value": 0.10}]},
+		{"id": "trapper", "tier": 5, "requires": "", "name": "덫꾼",
+			"desc": "게잡이통 자원/미끼 소모↓",
+			"perks": [{"dim": DIM_TRAP_SAVE, "value": 0.50}]},   # ★S3-T7 소비(소모 −50% 잠정)
+		{"id": "angler", "tier": 10, "requires": "fisher", "name": "명조사",
+			"desc": "최고 등급 어획 확률 대폭↑",
+			# 이리듐 몫 +20포인트(퍼펙트 2회 = 5%→25% · 3회 = 15%→35%). 퍼펙트 게이트는 그대로.
+			"perks": [{"dim": DIM_FISH_TOP_QUALITY, "value": 20.0}]},
+		{"id": "pirate", "tier": 10, "requires": "fisher", "name": "보물잡이",
+			"desc": "포획 시 인양물 확률 2배",   # ★ADR-0061 결정 6 재해석(옛 "보물 상자" 표현 폐기)
+			"perks": [{"dim": DIM_SALVAGE_DOUBLE, "value": 1.0}]},
+		{"id": "mariner", "tier": 10, "requires": "trapper", "name": "뱃사람",
+			"desc": "게잡이통에 잡동사니 안 걸림",
+			"perks": [{"dim": DIM_TRAP_NO_JUNK, "value": 1.0}]},   # ★S3-T7 소비
+		{"id": "luremaster", "tier": 10, "requires": "trapper", "name": "미끼장인",
+			"desc": "게잡이통 미끼 불필요",
+			"perks": [{"dim": DIM_TRAP_NO_BAIT, "value": 1.0}]},   # ★S3-T7 소비
 	],
 	# ── 전투(구조만) ──────────────────────────────────────────────────────────
 	COMBAT: [

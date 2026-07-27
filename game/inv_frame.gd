@@ -650,11 +650,22 @@ func _draw_rel_tab(panel: Rect2, font: Font) -> void:
 		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD + 12.0, ey), eff,
 			12, HanjiUi.INK_DIM, panel.size.x - PAD * 2.0 - 12.0)
 
+# ── 숙련 탭 행 치수(★[S3-T6] 상수화) ────────────────────────────────────────
+# 패널 높이는 고정(_panel_rect)이라 숙련 행이 늘면 아래로 넘친다. **낚시가 3행째로 합류**하면서
+# (농사·채집·낚시 — S3-T6) 옛 치수(행 50 + 전문직 줄 20 + 여백 14 = 84/행)로는 3행이 안 들어갔다.
+# 그래서 ①전문직 요약을 XP 꼬리와 **같은 줄**로 접고(행당 −20) ②행 높이·여백을 조인다(−12).
+# ⚠️ 여러 스킬이 *동시에* 선택 대기(pending)면 버튼 묶음 때문에 여전히 빠듯하다 — 이는 2행 시절부터
+#    있던 제약이고(스킬 수와 무관), 스크롤 도입은 아트/UX 패스 소관이다(★owner 큐).
+const SK_ROW_H := 42.0      # 한 스킬 행(제목·진행바·XP 꼬리) 블록 높이
+const SK_ROW_GAP := 4.0     # 행 간 여백
+const SK_OPT_H := 28.0      # 전문직 선택 버튼 높이
+const SK_PROF_X := 118.0    # XP 꼬리 오른쪽에 붙는 "전문직:" 요약의 x 오프셋
+
 # ★ Phase B 숙련 탭 — main이 넘긴 _skill_rows를 레벨·진행바로 그린다(읽기 전용, 관계 탭과 대칭).
 func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 	_prof_choice_rects.clear()   # ★ ADR-0052 — 클릭 영역은 매 그리기마다 재구성(레이아웃 파생)
 	var x := panel.position.x + PAD + 12.0
-	var y := panel.position.y + PAD + 52.0
+	var y := panel.position.y + PAD + 48.0
 	if _skill_rows.is_empty():
 		HanjiUi.draw_text(self, Vector2(x, y), "숙련 정보 없음", 13, HanjiUi.INK_DIM)
 		return
@@ -667,36 +678,35 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 		var next_xp := int(row.get("next_xp", 0))
 		var maxed := next_xp <= 0
 		var head := "%s   Lv.%d%s" % [str(row.get("name", "")), lv, (" (MAX)" if maxed else "/%d" % mx)]
-		HanjiUi.draw_text(self, Vector2(x, y), head, 15, HanjiUi.INK_LIGHT)
+		HanjiUi.draw_text(self, Vector2(x, y), head, 14, HanjiUi.INK_LIGHT)
 		# 진행바(한지 plate 트랙 + 앰버 채움).
-		var track := Rect2(x, y + 8.0, bar_w, 12.0)
+		var track := Rect2(x, y + 6.0, bar_w, 10.0)
 		draw_rect(track, HanjiUi.INSET)
 		draw_rect(track, HanjiUi.BORDER, false, 1.0)
 		var frac := 1.0 if maxed else clampf(float(xp - floor_xp) / float(maxi(next_xp - floor_xp, 1)), 0.0, 1.0)
 		if frac > 0.0:
 			draw_rect(Rect2(track.position, Vector2(track.size.x * frac, track.size.y)), HanjiUi.GOLD)
 		var tail := "만렙" if maxed else "%d / %d XP" % [xp - floor_xp, next_xp - floor_xp]
-		HanjiUi.draw_text(self, Vector2(x, y + 34.0), tail, 12, HanjiUi.INK_DIM)
-		y += 50.0
-		# ★ ADR-0052 — 고른 전문직 요약.
+		HanjiUi.draw_text(self, Vector2(x, y + 30.0), tail, 12, HanjiUi.INK_DIM)
+		# ★ ADR-0052 — 고른 전문직 요약(★[S3-T6] 별 줄 → XP 꼬리와 같은 줄로 접음).
 		var prof := String(row.get("profession", ""))
 		if prof != "":
-			HanjiUi.draw_text(self, Vector2(x, y), "전문직: %s" % prof, 12, HanjiUi.GOLD_SOFT)
-			y += 20.0
+			HanjiUi.draw_text(self, Vector2(x + SK_PROF_X, y + 30.0), "전문직: %s" % prof, 12, HanjiUi.GOLD_SOFT)
+		y += SK_ROW_H
 		# ★ ADR-0052 — 선택 대기(pending) 시 2갈래 버튼(name + desc). 클릭 영역을 _prof_choice_rects에 등록.
 		var options: Array = row.get("options", [])
 		if not options.is_empty():
 			var skill := String(row.get("skill", ""))
-			HanjiUi.draw_text(self, Vector2(x, y), "▶ 전문직 선택 (Lv.%d):" % int(row.get("pending_tier", 0)), 13, HanjiUi.GOLD)
-			y += 22.0
+			HanjiUi.draw_text(self, Vector2(x, y + 12.0), "▶ 전문직 선택 (Lv.%d):" % int(row.get("pending_tier", 0)), 12, HanjiUi.GOLD)
+			y += 18.0
 			for opt in options:
-				var btn := Rect2(x + 8.0, y, bar_w - 16.0, 30.0)
+				var btn := Rect2(x + 8.0, y, bar_w - 16.0, SK_OPT_H)
 				_plate_btn(btn)
-				HanjiUi.draw_text(self, btn.position + Vector2(10.0, 13.0), String(opt.get("name", "")), 13, HanjiUi.INK_LIGHT)
-				HanjiUi.draw_text(self, btn.position + Vector2(10.0, 26.0), String(opt.get("desc", "")), 10, HanjiUi.INK_DIM)
+				HanjiUi.draw_text(self, btn.position + Vector2(10.0, 12.0), String(opt.get("name", "")), 12, HanjiUi.INK_LIGHT)
+				HanjiUi.draw_text(self, btn.position + Vector2(10.0, 24.0), String(opt.get("desc", "")), 10, HanjiUi.INK_DIM)
 				_prof_choice_rects.append({"rect": btn, "skill": skill, "prof_id": String(opt.get("id", ""))})
-				y += 34.0
-		y += 14.0   # 행 간 여백
+				y += SK_OPT_H + 2.0
+		y += SK_ROW_GAP   # 행 간 여백
 
 # ★ Phase B 액션(저장·나가기) + ★ Phase D 설정 본체(음악·효과음 볼륨 −/+, 전체화면 토글, 언어=한국어 고정).
 # 값은 main이 GameSettings에서 set_settings로 주입한 것을 읽어 바·체크박스로만 그린다(무상태 — 조작은

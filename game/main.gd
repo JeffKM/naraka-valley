@@ -1669,8 +1669,8 @@ var _cast_seed := 0              # ★[S3-T3] 이번 캐스팅의 시드(어종 
 const FISHING_REGIONS := [RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE]
 # ★[S3-T3] 어종 추첨은 이제 FishCatalog(로스터 18종 · 절기/시간 잠금 · 체급 가중)가 한다 —
 #   S3-T2의 그레이박스 체급 컷(FISH_CLASS_CUTS)·_roll_fish_class는 그 가중에 흡수돼 제거됐다.
-# ★ 낚시 스킬 절감 훅(S3-T6 FishSkill 소관 — 지금은 정확히 중립 1.0). FarmSkill.energy_factor 문법 대칭.
-const FISHING_ENERGY_FACTOR := 1.0
+# ★[S3-T6] 옛 중립 상수 FISHING_ENERGY_FACTOR는 폐기됐다 — 낚시 스킬이 실효되면서 혼력 절감·퍼펙트
+#   창·텐션 안전창 세 계수가 전부 FishSkill에서 파생된다(_fishing_mods / _fishing_rod_params 참조).
 # ★[S3-T4 / ADR-0061 결정 4] 이번 캐스팅에 실제로 적용된 기어(HUD·결착 산정용 — 캐스팅 시 확정).
 #   퀄리티 보버 보정은 이제 상수가 아니라 **장착 태클에서 파생**된다(옛 const FISHING_BOBBER_BONUS 폐기).
 var _cast_bobber_bonus := 0.0    # 이번 캐스팅의 품질 보정(퀄리티 보버 — FishCatalog.quality_for 인자)
@@ -1723,6 +1723,13 @@ var _farming_xp := 0
 # (XP_THRESHOLDS/level_for_xp는 스킬-불특정 순수 곡선 — ADR-0052는 5스킬 공통 기반). 라이브 채집
 # 루프(숲·야생씨앗)가 아직 없어 지금은 XP 소스 미배선(프레임워크 우선) — 헬퍼·상태·조회만 잠근다.
 var _foraging_xp := 0
+
+# ★[S3-T6 / ADR-0061 결정 6] 낚시 숙련 XP(농사·채집과 대칭·main 스칼라). 포획 성공마다 체급 비례 XP가
+# 쌓이고(FishSkill.xp_for_catch — 소 10·중 20·대 40·전설 100 + 퍼펙트 릴 ×2), FishSkill이 이 값을
+# 레벨·세 계수(텐션 안전창·혼력 절감·퍼펙트 창)로 옮긴다. 누적 진행이라 저장한다(구세이브 = 0, 무막힘).
+# ★ 채집과 달리 **라이브 소스가 이미 있다** — _finish_fishing의 포획 분기가 곧 XP 소스다.
+var _fishing_xp := 0
+
 # ★ ADR-0052 전문직 선택 상태 — {skill_id: {tier(5/10): prof_id}}. 빈 = 미선택("평평≠막힘", L0도
 # 활동 100% 가동, 전문직은 곱셈 편의). ProfessionCatalog가 규칙(무상태), 이 dict가 세이브 상태
 # (_farming_xp↔FarmSkill 관계와 동일). main이 세이브 dict에 한 조각으로 끼운다(SaveManager 불변).
@@ -6195,6 +6202,9 @@ func _save_game() -> void:
 		"farming_xp": _farming_xp,   # ★ S1-6 농사 숙련 XP(혼력 감산 파생원)
 		"watering_can": _can_water,   # ★ [S1R-T8] 물뿌리개 잔량(구세이브 = 기본값 20, 하위호환)
 		"foraging_xp": _foraging_xp,   # ★ ADR-0052 채집 숙련 XP(전문직 게이트·퍼크 파생원)
+		# ★[S3-T6] 낚시 숙련 XP(레벨 계수·전문직 게이트 파생원). 이름은 농사·채집과 같은 규약이다.
+		#   ⚠️ 릴 격투 *세션*은 여전히 비영속이다(ADR-0061 결정 2) — 저장되는 건 이 누적 XP뿐.
+		"fishing_xp": _fishing_xp,
 		"professions": _professions_to_save(),   # ★ ADR-0052 전문직 선택 {skill:{tier:id}}
 		"boatman_rod_given": _boatman_rod_given,   # ★ [S3-T5] 뱃사공 T1 증정 1회 플래그(키 없는 구세이브 = false)
 		"cafe_revenue_total": _cafe_revenue_total,
@@ -6275,6 +6285,8 @@ func _load_game() -> void:
 	_farming_xp = maxi(int(data.get("farming_xp", 0)), 0)
 	# ★ ADR-0052 채집 숙련 XP·전문직 복원(키 없는 구세이브 = 0/미선택, 무막힘·정합 재검증은 _load_professions).
 	_foraging_xp = maxi(int(data.get("foraging_xp", 0)), 0)
+	# ★[S3-T6] 낚시 숙련 XP 복원 — 키 없는 구세이브는 0 = L0(무막힘·base 맨몸 가동). 음수는 0으로 자른다.
+	_fishing_xp = maxi(int(data.get("fishing_xp", 0)), 0)
 	_load_professions(data.get("professions", {}))
 	# ★ [S1R-T8] 물뿌리개 잔량 복원 — 키 없는 구세이브는 기본값 20(가득, 하위호환). 손상 방어로 0..20 클램프.
 	_can_water = clampi(int(data.get("watering_can", _CAN_CAPACITY)), 0, _CAN_CAPACITY)
@@ -6395,12 +6407,26 @@ func _gain_forage_xp(amount: int) -> void:
 		notice_feed.push("숙련 ▲ 채집 Lv %d" % after, 4.0, false, null, true)
 		audio.sfx("ui")
 
+# ★[S3-T6 / ADR-0061 결정 6] 낚시 XP 적립 + 레벨업 감지(_gain_farm_xp 대칭). 소스는 _finish_fishing의
+# 포획 분기 하나뿐이다(놓친 격투 = 0 — 리스크는 혼력으로 이미 냈다).
+func _gain_fishing_xp(amount: int) -> void:
+	if amount <= 0:
+		return
+	var before := FishSkill.level_for_xp(_fishing_xp)
+	_fishing_xp += amount
+	var after := FishSkill.level_for_xp(_fishing_xp)
+	if after > before and notice_feed != null:
+		notice_feed.push("숙련 ▲ 낚시 Lv %d" % after, 4.0, false, null, true)
+		audio.sfx("ui")
+
 # ── ADR-0052 전문직 선택·조회 API ──────────────────────────────────────────────
-# 스킬의 현재 레벨(FarmSkill 곡선 공유). 채집·농사만 XP 소스 존재, 나머지는 0(각 슬라이스에서 XP 배선).
+# 스킬의 현재 레벨(FarmSkill 곡선 공유 — FishSkill도 그 곡선에 위임한다). 농사·채집·낚시만 XP 소스가
+# 있고 나머지(채광·전투)는 0이다(각 슬라이스에서 XP 배선).
 func _skill_level(skill: String) -> int:
 	match skill:
 		ProfessionCatalog.FARMING: return FarmSkill.level_for_xp(_farming_xp)
 		ProfessionCatalog.FORAGING: return FarmSkill.level_for_xp(_foraging_xp)
+		ProfessionCatalog.FISHING: return FishSkill.level_for_xp(_fishing_xp)   # ★[S3-T6]
 		_: return 0
 
 # (skill,tier)에 이미 고른 전문직 id("" = 미선택).
@@ -6468,6 +6494,31 @@ func forage_quality_floor() -> int:
 
 func forage_double_drop_chance() -> float:
 	return _perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_DOUBLE_DROP, 0.0)
+
+# ── ★[S3-T6 / ADR-0061 결정 6] 낚시 전문직 편의 조회(채집 파일럿과 같은 결) ──────────
+# ① 낚시꾼(lvl5) — 어획 등급 판정 축 상향. 퀄리티 보버(태클)와 **같은 축**이라 캐스팅 보정에 합산된다.
+func fishing_quality_bonus() -> float:
+	return _perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_FISH_QUALITY, 0.0)
+
+# ② 명조사(lvl10) — 최고 등급(이리듐) 확률 포인트. FishCatalog.quality_for의 top_bonus 인자.
+func fishing_top_quality_bonus() -> int:
+	return int(_perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_FISH_TOP_QUALITY, 0.0))
+
+# ③ 보물잡이(lvl10) — 인양 롤 확률(퍼밀). 퍼크 보유 시 정확히 2배(SalvageTable.permil_for).
+func fishing_salvage_permil() -> int:
+	return SalvageTable.permil_for(
+		_perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_SALVAGE_DOUBLE, 0.0) > 0.0)
+
+# ── ★[S3-T7 게잡이통이 소비할 훅] 덫꾼 갈래 3종 — 퍼크 데이터는 이미 잠겼고, 여기 세 줄이 그 소비
+#   접점이다(게잡이통 시스템이 아직 없어 지금은 아무도 안 부른다 = 실배선은 S3-T7 소관).
+func crab_pot_cost_save() -> float:      # 덫꾼(lvl5) — 자원/미끼 소모 절감 비율(0..1)
+	return _perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_TRAP_SAVE, 0.0)
+
+func crab_pot_no_junk() -> bool:         # 뱃사람(lvl10) — 잡동사니 배제
+	return _perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_TRAP_NO_JUNK, 0.0) > 0.0
+
+func crab_pot_bait_free() -> bool:       # 미끼장인(lvl10) — 미끼 불필요
+	return _perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_TRAP_NO_BAIT, 0.0) > 0.0
 
 # ★ ADR-0052 채집물 기본 품질(채집 레벨 → 등급). 스타듀 결(레벨이 오를수록 상위 등급) 결정적 그레이박스
 #   버전: L0~3 일반 / L4~6 은 / L7+ 금. 이리듐(최고)은 base로 안 나오고 약초학자 전문직 하한으로만
@@ -7405,19 +7456,40 @@ func _start_fishing(water: Vector2i) -> void:
 	#   dict 하나만 받는다(fishing.gd 주석의 "같은 스키마 dict" 계약 이행). id는 result()로 되돌아온다.
 	var fish_id := _roll_fish_id(s, GearCatalog.class_shift_for(_cast_bait),
 		GearCatalog.guarantee_cap_for(_cast_bait, rod_id))
+	# ★[S3-T6] 낚시 스킬의 세 계수를 여기서 얹는다 — 텐션 안전창은 rod에(기어 보너스 위에 가산),
+	#   혼력 절감·퍼펙트 창은 mods에. FishingSession은 여전히 스킬을 모른다(dict 둘이 유일한 접점).
 	fishing = FishingSession.new(s, FishCatalog.session_params(fish_id),
-		GearCatalog.rod_params(rod_id, _cast_tackles),
-		GearCatalog.mods_for(_cast_tackles, _cast_bait, {"energy_factor": FISHING_ENERGY_FACTOR}))
+		_fishing_rod_params(rod_id), _fishing_mods())
 	fishing.hook_gate = _fishing_hook_gate
 	fishing.cast()
 	player.face_toward(_target_center_px(water))
 	audio.sfx("water")
 	queue_redraw()
 
+# ── ★[S3-T6 / ADR-0061 결정 6] 낚시 스킬 → FishingSession 주입 dict 2종 ──────────────
+# 카탈로그 §1-D ⓐ정량 3종이 여기서 실효된다. 기어(S3-T4)와 **축이 겹치지 않게** 나눠 얹는다:
+#   · rod.tension_safe_bonus  ← 코르크 보버(0.15) + 스킬(레벨당 0.01, L10 = 0.10)  … 가산
+#   · mods.energy_factor      ← 스킬 전용(레벨당 −3%, L10 = 0.70)                   … 기어 무관
+#   · mods.perfect_window_add ← 스킬 전용(레벨당 +0.02s, L10 = +0.2s)               … 기어 무관
+#   · mods.burst_damp / wait_factor ← 기어 전용(납추 · 미끼)                        … 스킬 무관
+# L0이면 세 값이 정확히 중립(0.0 / 1.0 / 0.0)이라 맨몸 T1의 손맛은 한 톨도 안 변한다(ADR-0008).
+func _fishing_rod_params(rod_id: String) -> Dictionary:
+	var p := GearCatalog.rod_params(rod_id, _cast_tackles)
+	p["tension_safe_bonus"] = float(p.get("tension_safe_bonus", 0.0)) \
+		+ FishSkill.tension_safe_bonus(_skill_level(ProfessionCatalog.FISHING))
+	return p
+
+func _fishing_mods() -> Dictionary:
+	var lv := _skill_level(ProfessionCatalog.FISHING)
+	return GearCatalog.mods_for(_cast_tackles, _cast_bait, {
+		"energy_factor": FishSkill.energy_factor(lv),
+		"perfect_window_add": FishSkill.perfect_window_add(lv),
+	})
+
 # ★ 후킹 게이트(FishingSession에 주입) — 이 세션에서 혼력이 나가는 유일한 순간(ADR-0061 결정 6:
 #   소 4·중 8·대 14·전설 30). 못 내면 false → 세션은 "입질 놓침"으로 끝난다(후킹 불가). 낸 뒤엔
 #   줄이 끊겨도 환불 없다(리스크 — 결정 6 "줄 끊김이어도 소모 유지"). 낚시 스킬 절감은 세션이
-#   energy_factor로 이미 먹였다(FISHING_ENERGY_FACTOR = 지금 중립, S3-T6에서 실효).
+#   energy_factor로 이미 먹였다(★[S3-T6] FishSkill.energy_factor — L10이면 소 4 → 3, 전설 30 → 21).
 func _fishing_hook_gate() -> bool:
 	if fishing == null:
 		return false
@@ -7456,7 +7528,9 @@ func _finish_fishing() -> void:
 		var qrng := RandomNumberGenerator.new()
 		qrng.seed = _cast_seed ^ 0x2ff1c37b
 		# ★[S3-T4] 퀄리티 보버(태클)가 등급 판정 축을 위로 민다 — 이번 캐스팅에 적용된 값만 쓴다.
-		var quality := FishCatalog.quality_for(perfects, qrng, _cast_bobber_bonus)
+		# ★[S3-T6] 그 축에 낚시꾼(lvl5) 퍼크가 합산되고, 명조사(lvl10)는 이리듐 몫을 따로 끌어올린다.
+		var quality := FishCatalog.quality_for(perfects, qrng,
+			_cast_bobber_bonus + fishing_quality_bonus(), fishing_top_quality_bonus())
 		inventory.add_item(fish_id, 1, quality)
 		_toast_item(fish_id, 1)
 		_notice("%s%s 를 낚았다!%s" % [
@@ -7464,6 +7538,11 @@ func _finish_fishing() -> void:
 			ItemCatalog.name_of(fish_id),
 			"" if perfects == 0 else " 퍼펙트 릴 ×%d" % perfects])
 		audio.sfx("harvest")
+		# ★[S3-T6] 포획 XP(체급 비례 + 퍼펙트 보너스) — 레벨업 알림은 헬퍼가 띄운다.
+		_gain_fishing_xp(FishSkill.xp_for_catch(int(res["weight_class"]), perfects))
+		# ★[S3-T6 / ADR-0061 결정 6] 인양물 동반 롤 — **결착 뒤**라 격투에 간섭하지 않는다(카탈로그
+		#   §1-D "난입 어색" 제외 취지 보존). 팝업은 한 줄이고, 실패해도 어획 결과엔 영향이 없다.
+		_roll_salvage()
 	elif bool(res["hook_refused"]):
 		_notice("혼력이 모자라 챌 수 없었다 — 입질을 놓쳤다 (필요 %d)" % int(res["energy_cost"]))
 	elif bool(res["line_broke_by_class"]):
@@ -7477,6 +7556,24 @@ func _finish_fishing() -> void:
 	else:
 		_notice("입질을 놓쳤다")
 	queue_redraw()
+
+# ★[S3-T6 / ADR-0061 결정 6 "보물잡이 표적 재해석"] 인양물 동반 롤 — 포획 성공 뒤 1회.
+# 시드는 캐스팅 시드에서 갈라 결정적으로 굴린다(어종 롤·품질 롤과 다른 가지 — 셋이 서로 안 얽힌다).
+# 확률은 기본 3%, 보물잡이(lvl10) 보유 시 6%(SalvageTable이 그 2배를 초집합으로 보장).
+# 백팩이 가득이면 그 사실만 알리고 어획 결과는 건드리지 않는다(인양은 어디까지나 곁다리).
+func _roll_salvage() -> void:
+	if inventory == null:
+		return
+	var id := SalvageTable.roll(_cast_seed ^ 0x51ed270b, fishing_salvage_permil())
+	if id == "" or not ItemCatalog.has_item(id):
+		return
+	if not inventory.add_item(id, 1):
+		_notice("무언가 함께 딸려 왔지만 백팩이 가득했다")
+		return
+	_toast_item(id, 1)
+	# 유품이면 문구를 달리한다 — 혼백관 기증 소스와 이어진다는 신호(결정 6 "유품 저확률" 실효).
+	_notice("… %s 도 함께 인양했다%s" % [ItemCatalog.name_of(id),
+		" — 혼백관에 기증할 수 있겠다" if SalvageTable.is_relic(id) else ""])
 
 # ★[S3-T5 / ADR-0061 결정 4] T1 낚싯대 증정 — **뱃사공 첫 대화 1회**. 옛 S3-T2 임시 경로
 #   (구역 진입 자동 지급 `_grant_starter_rod`)를 대체한다.
@@ -8359,9 +8456,11 @@ func _heart_rows() -> Array:
 # floor_xp=현 레벨 진입 임계, next_xp=다음 레벨 임계(만렙이면 0). 프레임이 (xp-floor)/(next-floor)로 진행바.
 func _skill_rows() -> Array:
 	# ★ ADR-0052 — 농사·채집 2행(FarmSkill 곡선 공유). 전문직 요약·선택가능 tier도 파생(읽기 전용).
+	# ★[S3-T6] 낚시 3행째 — XP 소스(포획)와 퍼크가 실효되면서 picker 경로도 그대로 열린다(행 추가만).
 	return [
 		_skill_row("농사", ProfessionCatalog.FARMING, _farming_xp),
 		_skill_row("채집", ProfessionCatalog.FORAGING, _foraging_xp),
+		_skill_row("낚시", ProfessionCatalog.FISHING, _fishing_xp),
 	]
 
 # 한 스킬 행 조립 — 레벨/진행바 + 고른 전문직 이름 요약 + 지금 고를 수 있는 tier(0=없음).
