@@ -888,3 +888,169 @@ cafe_ext.png — 알파가 전부 255고 배경이 #8c8681 회색으로 구워�
   (GD_PEBBLE)·슬레이트(GD_STONE2)만으로 백사장 결을 낸다.
 ★해초는 현재 판본이 "검은 성게"처럼 읽히는 기미가 있다 — 교체 1순위(가닥이 옆으로 눕는 실루엣이 정답).
 ```
+
+---
+
+## 13. ★[S3-T10] 낚시 아트 패스 2 — 아이템 아이콘 32종·뱃사공·릴 격투 HUD 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-07-28). §10~§12와 같은 [ADR-0048] 교체
+> 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰면 **코드 0줄 수정**으로 반영된다.
+>
+> **후처리 글루:** [`game/tools/make_s3_icons.py`](../../game/tools/make_s3_icons.py)
+> **raw 보관:** `game/assets/fish/raw/*_raw.png`(21) · `game/assets/gear/raw/*_raw.png`(11) ·
+> `game/assets/characters/boatman_raw/{south,north,east,west}.png` · `game/assets/portraits/boatman_raw.png`
+> **육안 하네스:** `godot --path game -s res://tools/fishing_art_dump.gd`(★비-헤드리스 — GPU 실캡처)
+> → `game/tools/s3_{inv_fish,inv_gear,inv_tackle,hud_wait,hud_bite,hud_fight,hud_burst,boatman,crabpot,portrait}.png`
+>
+> **이 패스로 낚시 슬라이스에 그레이박스 아이템 아이콘이 0이 됐다** — 어획물의 흰 박스 폴백,
+> 낚싯대·태클·미끼의 색 박스, 게잡이통 실루엣이 전부 도트로 교체됐다.
+
+### 13.0 공통 규약 (아이콘 32종)
+
+```
+크기: 전부 32×32 투명 PNG **32-native**([ADR-0050] — 축소본 금지). 슬롯이 통째로 늘려 그리므로
+  콘텐츠는 후처리에서 32² 안에 **가운데 정렬**한다(여백이 한쪽에 몰리면 옆 슬롯과 눈금이 어긋난다).
+생성: create_map_object(32×32 / medium detail / basic shading / **single color outline**)
+  · 어획물·기어 = view "side"(옆모습이 실루엣을 가장 잘 낸다 — 스타듀 어획물 아이콘 문법)
+  · 게잡이통·게·조개·소라 = view "high top-down"(바닥에 놓이는 물건)
+공통 꼬리말(전 프롬프트에 붙임):
+  centered on transparent background, no ground shadow, RPG inventory item icon,
+  stardew valley pixel art, muted underworld palette, light from top-left
+후처리: 하드 알파 → [§9] muted(채도 ×0.90 · 명도 ×0.97 — 프롭 0.85/0.95보다 **얕게**. 슬롯 안에서
+  32종이 서로 구분돼야 하므로 정체색을 덜 누른다) → 32² 가운데 정렬
+★리젝 기준 3(실제로 리젝하고 재생성한 것들):
+  ① **흰 외곽선 금지** — 1차 전설 메기가 두꺼운 흰 테로 나와 [§1] 단일 외곽선 규약을 깼다.
+  ② **분리된 조각 금지** — 낚싯대에 "a hook hanging from the tip"을 넣으면 모서리에 **떠 있는 파편**이
+     생긴다. `one connected object with no floating separate pieces`를 넣고 갈고리 문구를 빼면 낫는다.
+  ③ **뭉갠 형태 금지** — 32²에 디테일을 욱여넣으면(1차 안개무늬쏘가리) 진흙이 된다. "clean simple
+     stout body shape" 같은 형태 지시를 넣어 재생성.
+```
+
+### 13.1 어획물 아이콘 21종 `fish/<id>.png`
+
+```
+파일: game/assets/fish/<어종 id>.png — id = FishCatalog 상수 = 아이템 id(파일명이 곧 배선)
+배선: main.FISH_ICONS → `icons` dict 병합(핫바 `_setup_hotbar` · 인벤 `_setup_inv_frame`) +
+  `_item_icon`(토스트). CAT_HARVEST라 `_draw_crop_tex`가 id로 바로 집는다(카테고리 분기 추가 0).
+  ★ 릴 격투 HUD의 트랙 물고기도 **이 텍스처**를 쓴다(16×16 = 32²의 정확히 1/2).
+목록(전부 "whole fish seen in side profile facing left" 고정 — 방향이 섞이면 슬롯이 어지럽다):
+  강 8  넋붕어 pale ghostly crucian carp / 잿빛송사리 tiny ash-grey minnow killifish /
+        여울넋피라미 slender river dace with a bold dark lateral stripe /
+        초롱치 deep-sea lantern fish with glowing light spots and a lantern lure /
+        상엿길잉어 plump bronze carp with barbels / 도깨비메기 goblin catfish with one blunt horn /
+        안개무늬쏘가리 mandarin fish with three pale grey cloud blotches /
+        먹빛장어 thick glossy black eel curved in a wide S
+  바다 8 넋멸치 tiny silver anchovy / 은비늘청어 silver herring / 물마루가자미 flatfish flounder /
+        혼불해파리 glowing translucent jellyfish bell with trailing tentacles /
+        저녁놀도미 sea bream with dusty rose and sunset orange scales /
+        삿갓오징어 squid whose mantle is shaped like a conical straw hat /
+        물비늘농어 sea bass with cool grey-blue scales / 너울범치 bulky scorpionfish with a fanned spiny fin
+  전설 2 검은여울 대메기 giant catfish, dark slate blue-grey, one large pale glowing eye /
+        심연 만장어 ribbon eel with a pale cream banner-like fin like a funeral streamer
+  통용물 3 넋게 pale ghostly crab (top-down) / 혼조개 ribbed clam shell / 잿빛소라 spiral conch shell
+★정체성 기준: 저승 결은 **이름과 톤**이 지고 형태는 실존 어류를 따른다(도감이 아니라 인벤 아이콘 —
+  16px로 줄어도 "무슨 물고기인지" 실루엣으로 읽혀야 한다). 발광 요소(초롱치·혼불해파리·전설 2종)만
+  영혼빛 액센트를 허용한다.
+★교체 시 유지할 것: **왼쪽을 보는 옆모습** · 32² 가운데 정렬 · 밝은 어종/어두운 어종의 대비
+  (HUD 트랙 물빛 `#33454f` 위에서 어두운 어종이 안 묻히게).
+```
+
+### 13.2 낚시 기어 아이콘 11종 `gear/<id>.png`
+
+```
+파일: game/assets/gear/<기어 id>.png — id = GearCatalog 상수(+ crab_pot = ItemCatalog.CRAB_POT)
+배선: main.GEAR_ICONS → `icons` dict 병합 + `_item_icon`. 카테고리별 슬롯 분기:
+  · 낚싯대·태클 = CAT_TOOL(기존 텍스처 분기 재사용)
+  · 미끼 = CAT_CONSUMABLE  · 게잡이통 = CAT_PLACEABLE  ← ★이 둘은 색 박스만 그리던 칸이라
+    inv_frame·hotbar_hud `_draw_icon`에 **텍스처 우선 분기를 이번에 얹었다**(폴백은 남겨 둠).
+  · ★게잡이통 텍스처는 **월드 설치물과 공유**한다(`_draw_crab_pots` — 상태 표식만 그 위에 얹힘).
+낚싯대 4티어(★티어가 한눈에 오르는 게 이 넷의 존재 이유 — 같은 막대 4개면 실패다):
+  T1 낡은 낚싯대  old worn bamboo pole, pale cracked shaft with node rings, cloth-wrapped grip
+  T2 삼줄 낚싯대  dark wooden rod with a thick braided tan hemp rope grip and a coil of hemp line
+  T3 놋쇠 낚싯대  polished wood shaft, three brass guide rings, a round brass reel at the grip
+  T4 만장 낚싯대  glossy black lacquered shaft, gold bands, a crimson cloth banner tied near the tip
+  ※ 넷 다 `lying diagonally from the lower left corner to the upper right corner` 고정(대각 통일).
+미끼 3(실루엣이 서로 완전히 다르게 — 주머니 / 루어 / 부적):
+  일반  coarse brown sackcloth pouch tied with twine, damp earth and two earthworms poking out
+  유인  teardrop metal spoon lure in warm amber with a feather tuft and two treble hooks
+  보장  folded pale yellow ritual paper talisman with dark purple ink, knotted with red string
+태클 3(공 / 더미 / 찌 — 셋의 실루엣이 겹치지 않게):
+  코르크 보버  ball shaped cork float in warm apricot tan with a metal eyelet at the bottom
+  납추        three dull grey teardrop lead sinker weights in a little pile
+  퀄리티 보버  egg shaped float, bright orange top half and cream bottom half, glossy lacquer
+게잡이통  woven bamboo crab trap basket, squat barrel cage of pale split bamboo strips,
+          dark round funnel opening on the front, rope handle loop on top (high top-down)
+★owner 교체 시: 낚싯대 4종은 **한 장에 몰아 그리지 말고 각각** 32²로. 슬롯에서 나란히 봤을 때
+  T1→T4로 재료가 (대나무 → 삼 → 놋쇠 → 흑칠+붉은 천) 오르는 게 읽히면 성공이다.
+```
+
+### 13.3 뱃사공 스프라이트 `boatman`
+
+```
+파일: game/assets/characters/boatman.png  (raw: characters/boatman_raw/{south,east,north,west}.png)
+크기: 80×320 = 프레임 80×80 · **1열**(정지 rotation) × 4행(down/up/right/left) — §11.4 네오와 동형
+배선: boatman.gd `CharSprite.make("res://assets/characters/boatman.png")` — 이미 있던 훅, 파일만 채웠다
+생성: create_character(mode=standard / n_directions=4 / **size=44** / low top-down /
+      selective outline / basic shading / high detail /
+      proportions {"type":"custom","head_size":1.5,"arms_length":0.75,"legs_length":0.9,
+                   "shoulder_width":0.72,"hip_width":0.75})
+  ★ size=44 = 출하 캐스트 실측 정합값(§11.4 문서 정정 참조 — ADR-0012의 56은 stale).
+  PROMPT: chibi underworld ferryman boatman standing straight, wearing a very wide conical woven
+    straw hat pulled low over the eyes, only two small dark dot eyes visible under the hat brim,
+    a dark teal-green straw rain cape over the shoulders, a plain dark indigo tunic and trousers
+    underneath, a rope belt at the waist, holding a long wooden oar upright at his right side with
+    both hands, calm quiet posture, slim chibi build, beautiful clean face, large evenly-spaced
+    eyes, muted underworld palette
+후처리: 하드 알파 → muted(채도 ×0.94·명도 ×0.98 — 캐스트와 나란히 서므로 아주 얕게) →
+  80² 프레임 발치정렬(**y=74**) → ★**east/west 프레임에 노 스탬프**
+★★ 노 스탬프가 왜 있나(네오 태엽 키와 같은 사례): PixelLab standard가 south/north엔 노를 굽고
+  **east/west엔 안 굽는다**. 노는 삿갓과 함께 뱃사공의 **정체성 실루엣 2요소**(boatman.gd 그레이박스가
+  정한 것)라 빠지면 옆모습이 "삿갓 쓴 행인"이 된다 → 뒤쪽 어깨에 자루+노깃을 손으로 얹는다.
+  ★ 실루엣에 **붙여** 세울 것(2px라도 떼면 옆에 세워 둔 말뚝으로 읽힌다 — 1차 판 육안 리젝).
+★owner 교체 시: ①삿갓 ②노 ③짙은 물빛 도롱이가 정체성 3요소다(4방향 전부에 노가 있으면 후처리를
+  지워도 된다). ★[CONTEXT] 본명·종은 서랍이라 얼굴은 특징 없는 중년 사공이면 족하다.
+★미완: 걷기 애니 없음(정지 1프레임 × 4방향). 뱃사공은 상시 한 자리라 당장 필요 없다
+  (char_sprite가 열 수를 파일에서 읽으므로 워크 시트가 오면 코드 무수정으로 늘어난다).
+```
+
+### 13.4 뱃사공 대화 초상화 `portraits/boatman`
+
+```
+파일: game/assets/portraits/boatman.png  (raw: portraits/boatman_raw.png 128×128)
+크기: 256×256 투명 PNG — 슬롯이 KEEP_ASPECT_COVERED로 앉히므로 네이티브 크기는 자유롭다
+배선: main `r_boatman.portrait_stem = "boatman"`(""→"boatman") — 주민 레코드 한 줄
+생성: create_portrait_character(direction=character_to_portrait / low top-down / **result_size=128**)
+  입력 = 위 13.3 뱃사공 south 프레임(노 스탬프 전) → 정체성이 스프라이트에서 그대로 승계된다
+  ※ result_size=160은 character_to_portrait에 스타일이 없어 거부된다(128이 상한 실측).
+  ※ 입력 base64가 길면 MCP가 조용히 잘라 먹는다 — **옥트리 20색 양자화 PNG**로 줄여 넣을 것.
+후처리: 하드 알파 → ×2 nearest(128→256)
+★★ **화풍 불일치 — 교체 1순위:** 기존 4인(미호·멜·바나·옥자)은 owner-Gemini **소프트 일러스트**
+  버스트인데 이건 §11.6 네오와 같은 **도트 버스트**다. "얼굴 없음"을 메우는 스톱갭이니 owner가
+  [portrait-spec-card.md] §1 헤드&체스트 버스트 규격으로 다시 뽑아 덮으면 된다.
+★미완: 표정 5종 없음(`boatman_talk/_smile/_shy/_sad/_surprised`). 대사의 [smile] 태그는
+  `_set_portrait`의 누락 폴백을 타 기본 stem으로 떨어진다(대사·코드 무개정으로 나중에 추가 가능).
+```
+
+### 13.5 릴 격투 HUD 스킨 (아트 생성물 아님 — 코드 드로우)
+
+```
+파일 없음. main.gd `_draw_fishing_hud()` — [HanjiUi] 판·먹빛·금박으로 그리는 즉시모드 위젯이다.
+  (owner Gemini 교체 대상이 아니라 **문법 기록**이다 — 나중에 손댈 사람이 의도를 알게.)
+문법(스타듀 낚시 UI 이식): **세로 트랙 하나 + 좌우 바 둘**. 가로 바 세 줄을 쌓으면 눈이 세 번
+  움직이지만, 세로 트랙에 물고기를 넣고 좌우에 바를 세우면 한 점만 보면 된다.
+  ① 가운데 트랙(16 폭) — 물빛 `#33454f` 바탕. **어종 아이콘 16×16**이 distance_ratio로 오르내린다
+     (위 = 먼 물속 · 아래 = 내 손). 밑 5px 금박 띠 = 착지대(닿으면 포획).
+  ② 오른쪽 바(5 폭) — 텐션. 아래에서 차오르고 위 20%가 붉은 위험대. 채움 초록→노랑→빨강.
+  ③ 왼쪽 바(5 폭) — 물고기 스태미나(남은 힘).
+  ④ 발버둥: 예고 = 판 위 금박 느낌표 / 진행 중 = 판 둘레 붉은 테.
+  ⑤ 퍼펙트: 창 = 금박 테 / 성공 = 흰 굵은 플래시 / 누적 = 판 아래 금박 눈금(최대 5).
+  ⑥ 격투 **전**(캐스팅·대기·입질) = 큰 판이 아니라 **26×30 작은 배지**(찌 하나). 잴 것이 없는데
+     큰 판을 세우면 빈 판이 화면을 가린다(1차 판 육안 리젝). 입질이면 찌가 붉게 잠기고 금박 파문 2줄.
+치수: 판 48×88(한지 판 9-slice 테두리 12가 살아 있는 최소치) · 안쪽 여백 11 · 플레이어 오른쪽 +22px.
+★ 물고기 아이콘은 **32²의 정확히 1/2인 16px**로 줄인다(14 같은 어중간한 축소는 nearest에서 열·행이
+  불규칙하게 빠져 뭉갠다 — 1차 판 육안 리젝).
+★ 이 HUD는 CanvasLayer가 아니라 **월드 좌표**(main._draw)에 있어 시간대 조명 틴트를 같이 받는다
+  (새벽엔 푸르게). 그레이박스 때부터의 성질이고 작물·프롭과 같은 결이라 그대로 뒀다.
+  ★[owner 큐] 조명 무관 HUD를 원하면 CanvasLayer Control로 옮기는 별도 작업이 된다.
+★ 로직 불변: FishingSession은 한 줄도 안 건드렸다(같은 네 수치를 다른 문법으로 그릴 뿐).
+```

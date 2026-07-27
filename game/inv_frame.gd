@@ -524,8 +524,11 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 				draw_rect(inner, Color(0.80, 0.66, 0.30) if ItemCatalog._is_hay(id) else Color(0.46, 0.36, 0.26))
 		ItemCatalog.CAT_PLACEABLE:
 			# ★ [S1R-T9] 설치물(스프링클러) 그레이박스 아이콘(핫바와 동일 — 청록 몸통 + 물방울 점).
-			# ★ [S3-T7] 게잡이통은 엮은 대나무 통 실루엣으로 갈라 둔다(핫바와 동일 — 아트는 S3-T10).
-			if id == ItemCatalog.CRAB_POT:
+			# ★ [S3-T10] 게잡이통은 아이콘 텍스처(엮은 대나무 통)로 승격 — 없으면 옛 실루엣 폴백.
+			var ptex: Texture2D = crop_icons.get(id)
+			if ptex != null:
+				draw_texture_rect(ptex, inner, false)
+			elif id == ItemCatalog.CRAB_POT:
 				draw_rect(inner, Color(0.52, 0.40, 0.24))
 				draw_rect(Rect2(inner.position + Vector2(0.0, inner.size.y * 0.30), Vector2(inner.size.x, 2.0)), Color(0.30, 0.22, 0.14))
 				draw_rect(Rect2(inner.position + Vector2(0.0, inner.size.y * 0.62), Vector2(inner.size.x, 2.0)), Color(0.30, 0.22, 0.14))
@@ -533,9 +536,13 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 				draw_rect(inner, Color(0.32, 0.52, 0.60))
 				draw_circle(inner.position + Vector2(inner.size.x * 0.5, inner.size.y * 0.28), inner.size.x * 0.14, Color(0.62, 0.82, 0.92))
 		ItemCatalog.CAT_CONSUMABLE:
-			# ★ [S3-T4] 소모품(낚시 미끼) 그레이박스 아이콘(핫바와 동일 — 종별 색 통 + 흰 뚜껑).
-			draw_rect(inner, ItemCatalog.tool_color_of(id))
-			draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.22)), Color(0.90, 0.88, 0.80))
+			# ★ [S3-T10] 소모품(낚시 미끼) 아이콘 텍스처. 없으면 옛 색 통 + 흰 뚜껑 그레이박스 폴백.
+			var ctex: Texture2D = crop_icons.get(id)
+			if ctex != null:
+				draw_texture_rect(ctex, inner, false)
+			else:
+				draw_rect(inner, ItemCatalog.tool_color_of(id))
+				draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.22)), Color(0.90, 0.88, 0.80))
 
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
 	var tex: Texture2D = crop_icons.get(crop_id)

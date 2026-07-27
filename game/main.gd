@@ -272,6 +272,59 @@ const SAPLING_ICONS := {
 	"honbaekdo_sapling": preload("res://assets/saplings/honbaekdo_sapling.png"),   # 혼백도 묘목
 }
 
+# ★ [S3-T10 / ADR-0061 결정 10] 낚시 아이템 아이콘 — 어획물 21종 + 기어 11종(색박스·흰박스 대체).
+# TOOL/FERT/SAPLING_ICONS와 **정확히 같은 결**이다: 한 dict를 `icons`(범용 id→아이콘 맵)에 병합하면
+# 핫바·인벤·매대·의뢰·토스트가 전부 `_draw_icon`/`_item_icon` 한 경로로 텍스처를 집는다.
+#   · 어획물(FishCatalog 18 + POT_GOODS 3) = CAT_HARVEST → `_draw_crop_tex`가 id로 바로 찾는다
+#     (작물 수확물과 같은 칸이라 카테고리 분기 추가가 필요 없다).
+#   · 낚싯대·태클 = CAT_TOOL · 미끼 = CAT_CONSUMABLE · 게잡이통 = CAT_PLACEABLE
+#     (뒤 둘은 그레이박스 색박스만 그리던 케이스라 텍스처 우선 분기를 이번에 얹었다 — inv_frame·hotbar).
+# ★ 게잡이통 텍스처는 **인벤 아이콘과 월드 설치물이 공유**한다(`_draw_crab_pots` — 상태 표식은 그 위에).
+const FISH_ICONS := {
+	# 삼도천 강 8종
+	FishCatalog.NEOK_BUNGEO: preload("res://assets/fish/neok_bungeo.png"),
+	FishCatalog.JAETBIT_SONGSARI: preload("res://assets/fish/jaetbit_songsari.png"),
+	FishCatalog.YEOUL_PIRAMI: preload("res://assets/fish/yeoul_pirami.png"),
+	FishCatalog.CHORONG_CHI: preload("res://assets/fish/chorong_chi.png"),
+	FishCatalog.SANGYEOTGIL_INGEO: preload("res://assets/fish/sangyeotgil_ingeo.png"),
+	FishCatalog.DOKKAEBI_MEGI: preload("res://assets/fish/dokkaebi_megi.png"),
+	FishCatalog.ANGAE_SSOGARI: preload("res://assets/fish/angae_ssogari.png"),
+	FishCatalog.MEOKBIT_JANGEO: preload("res://assets/fish/meokbit_jangeo.png"),
+	# 황천해 바다 8종
+	FishCatalog.NEOK_MYEOLCHI: preload("res://assets/fish/neok_myeolchi.png"),
+	FishCatalog.EUNBINEUL_CHEONGEO: preload("res://assets/fish/eunbineul_cheongeo.png"),
+	FishCatalog.MULMARU_GAJAMI: preload("res://assets/fish/mulmaru_gajami.png"),
+	FishCatalog.HONBUL_HAEPARI: preload("res://assets/fish/honbul_haepari.png"),
+	FishCatalog.JEONYEOKNOL_DOMI: preload("res://assets/fish/jeonyeoknol_domi.png"),
+	FishCatalog.SATGAT_OJINGEO: preload("res://assets/fish/satgat_ojingeo.png"),
+	FishCatalog.MULBINEUL_NONGEO: preload("res://assets/fish/mulbineul_nongeo.png"),
+	FishCatalog.NEOUL_BEOMCHI: preload("res://assets/fish/neoul_beomchi.png"),
+	# 전설 2종
+	FishCatalog.GEOMEUNYEOUL_DAEMEGI: preload("res://assets/fish/geomeunyeoul_daemegi.png"),
+	FishCatalog.SIMYEON_MANJANGEO: preload("res://assets/fish/simyeon_manjangeo.png"),
+	# ★[S3-T7] 게잡이통 통용물 3종(어획물과 같은 CAT_HARVEST — 흰박스 폴백을 메운다)
+	ItemCatalog.NEOK_GE: preload("res://assets/fish/neok_ge.png"),
+	ItemCatalog.HON_JOGAE: preload("res://assets/fish/hon_jogae.png"),
+	ItemCatalog.JAETBIT_SORA: preload("res://assets/fish/jaetbit_sora.png"),
+}
+
+# ★ [S3-T10] 낚시 기어 아이콘 11종. 낚싯대는 **티어가 눈으로 읽히게** 갈라 뒀다(대나무 → 삼줄 그립 →
+#   놋쇠 이음쇠/릴 → 흑칠 + 만장 붉은 천). 미끼 3·태클 3은 서로 다른 실루엣(주머니/루어/부적 · 코르크
+#   공/납추 더미/주황 찌)이라 슬롯에서 한눈에 갈린다.
+const GEAR_ICONS := {
+	GearCatalog.ROD_T1: preload("res://assets/gear/rod_t1.png"),
+	GearCatalog.ROD_T2: preload("res://assets/gear/rod_t2.png"),
+	GearCatalog.ROD_T3: preload("res://assets/gear/rod_t3.png"),
+	GearCatalog.ROD_T4: preload("res://assets/gear/rod_t4.png"),
+	GearCatalog.BAIT_BASIC: preload("res://assets/gear/bait_basic.png"),
+	GearCatalog.BAIT_LURE: preload("res://assets/gear/bait_lure.png"),
+	GearCatalog.BAIT_PLEDGE: preload("res://assets/gear/bait_pledge.png"),
+	GearCatalog.TACKLE_CORK: preload("res://assets/gear/tackle_cork.png"),
+	GearCatalog.TACKLE_SINKER: preload("res://assets/gear/tackle_sinker.png"),
+	GearCatalog.TACKLE_QUALITY: preload("res://assets/gear/tackle_quality.png"),
+	ItemCatalog.CRAB_POT: preload("res://assets/gear/crab_pot.png"),
+}
+
 # 각 타일의 그레이박스 색(밝기·미세 색조로만 구분, 회색 기조 유지). WALL이 가장 밝다.
 const COLORS := [
 	Color(0.16, 0.18, 0.16),  # GROUND — 어두운 풀밭 톤
@@ -5849,6 +5902,10 @@ func _setup_hotbar() -> void:
 		icons[fert_id] = FERT_ICONS[fert_id]       # ★ [아트정리패스] 비료 아이콘(색박스 대체)
 	for sapling_id in SAPLING_ICONS:
 		icons[sapling_id] = SAPLING_ICONS[sapling_id]   # ★ [아트정리패스] 묘목 아이콘(색박스 대체)
+	for fish_id in FISH_ICONS:
+		icons[fish_id] = FISH_ICONS[fish_id]       # ★ [S3-T10] 어획물 아이콘(흰박스 대체)
+	for gear_id in GEAR_ICONS:
+		icons[gear_id] = GEAR_ICONS[gear_id]       # ★ [S3-T10] 낚시 기어 아이콘(색박스 대체)
 	hotbar.setup(inventory, icons)
 	_refresh_water_badge()   # ★ [S1R-T8] 초기 물뿌리개 잔량 배지(부팅 = 가득 20/20)
 
@@ -5965,6 +6022,10 @@ func _setup_frame() -> void:
 		icons[fert_id] = FERT_ICONS[fert_id]        # ★ [아트정리패스] 비료 아이콘(색박스 대체)
 	for sapling_id in SAPLING_ICONS:
 		icons[sapling_id] = SAPLING_ICONS[sapling_id]    # ★ [아트정리패스] 묘목 아이콘(색박스 대체)
+	for fish_id in FISH_ICONS:
+		icons[fish_id] = FISH_ICONS[fish_id]        # ★ [S3-T10] 어획물 아이콘(흰박스 대체)
+	for gear_id in GEAR_ICONS:
+		icons[gear_id] = GEAR_ICONS[gear_id]        # ★ [S3-T10] 낚시 기어 아이콘(색박스 대체)
 	frame.setup(inventory, ship_bin, icons)
 	frame.set_chest(chest)   # ★ Phase D 저장 상자 주입(CTX_CHEST 상단 그리드)
 	frame.deposit_slot.connect(_on_frame_deposit)
@@ -6617,6 +6678,10 @@ func _item_icon(id: String) -> Texture2D:
 		return FERT_ICONS[id]
 	if SAPLING_ICONS.has(id):                  # ★ [아트정리패스] 묘목 아이콘(토스트·알림)
 		return SAPLING_ICONS[id]
+	if FISH_ICONS.has(id):                     # ★ [S3-T10] 어획물 아이콘(포획·통 수거 토스트)
+		return FISH_ICONS[id]
+	if GEAR_ICONS.has(id):                     # ★ [S3-T10] 낚시 기어 아이콘(구매·증정 토스트)
+		return GEAR_ICONS[id]
 	var base := ItemCatalog._large_base(id)    # 대형 산물(_large)이면 기준 산물 아이콘 재사용
 	if base != "" and EXTRA_ICONS.has(base):
 		return EXTRA_ICONS[base]
@@ -9132,7 +9197,10 @@ func _setup_residents() -> void:
 	r_boatman.save_key = "boatman_affinity"  # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_boatman.can_gift = true                # T2 사귐 채널(선물)
 	r_boatman.gift_target_ko = "뱃사공"
-	r_boatman.portrait_stem = ""             # 초상화 없음 — 스프라이트·초상화는 S3-T10 아트 패스
+	# ★ [S3-T10] 초상화 점등. 네오(§11.6)와 같은 **도트 버스트 스톱갭**이라 기존 4인(소프트 일러스트)과
+	#   화풍이 다르다 — owner Gemini 교체 1순위(스펙카드 §13.4). 표정 5종은 없어 [smile] 등 태그는
+	#   `_set_portrait`의 누락 폴백을 타 기본 stem으로 떨어진다(대사·코드 무개정).
+	r_boatman.portrait_stem = "boatman"
 	# ★ 자리 = 황천해 **생선가게 앞 백사장**(실내 아님). 실내 생선가게는 빈 방이고, 부두·바다 낚시터와
 	#   한 화면에 서는 "바닷가 카운터" 결이 CONTEXT의 뱃사공(물길의 사공)에 맞는다.
 	#   좌표 근거: 문(11,25) 바로 아래 산책로(y26)의 **한 칸 남쪽**(12,27) — ㉠ 문 진입 열(x11)과
@@ -10033,68 +10101,103 @@ func _draw() -> void:
 # 손님·잡귀 그리기와 같은 결(노드 생성·해제 없이 main이 직접). 침대(32×64)는 1×2칸을 덮고,
 # 나머지(32×32)는 한 칸을 채운다(ADR-0013 native). PROP_LAYOUT 순서대로
 # 그려 선반(뒷벽)→카운터→스툴이 자연스레 겹친다.
-# ★ [S3-T2 / ADR-0061 결정 10] 릴 격투 그레이박스 HUD — 플레이어 머리 위 도형 게이지.
-# **예쁨보다 판독성**(스타듀 문법 스킨은 S3-T10). main.gd는 _draw에서 텍스트를 안 쓰는 관례라
-# (문구는 전부 Label 노드 — 여기선 interact_prompt가 상태·조작을 글로 낸다) 순수 도형만 그린다.
-#   ① 텐션 바 — 마지막 20%가 붉은 띠(끊김 임계). 채움 색이 초록→노랑→빨강으로 넘어간다.
-#   ② 물고기 스태미나 바 — 0이면 포획.
-#   ③ 거리 트랙 — 마커가 왼쪽(내 손)에 닿아도 포획.
-#   ④ 발버둥 텔레그래프(느낌표) / 발버둥 중 붉은 테 — "읽고 대응"(ADR-0030 발버둥 읽기).
-#   ⑤ 퍼펙트 릴 창(초록 테) / 성공 플래시(흰 굵은 테) + 누적 눈금.
+# ★ [S3-T10 / ADR-0061 결정 10] 릴 격투 HUD — **스타듀 낚시 UI 문법 스킨**(S3-T2 그레이박스 리스킨).
+# 로직은 한 줄도 안 건드린다(FishingSession 불변) — 같은 네 수치를 다른 문법으로 그릴 뿐이다.
+#
+# 왜 세로인가(스타듀 문법): 스타듀 낚시 미니게임은 **세로 트랙 + 그 안을 오르내리는 물고기 + 옆에
+#   붙은 진행바** 한 덩이다. 우리 격투도 축이 넷(텐션·거리·스태미나·퍼펙트)이라 가로 바 세 줄을
+#   쌓으면 눈이 세 번 움직인다. 세로 트랙 하나에 물고기를 넣고 좌우에 바를 세우면 **한 점만 보면 된다**.
+#   정체성은 한지 UI(HanjiUi 판·먹빛 인셋·금박)로 붙여 나머지 HUD와 한 살림이 되게 한다.
+#
+#   ① 거리 트랙(가운데) — **물고기 아이콘**이 여기 산다. 위 = 먼 물속 · 아래 = 내 손.
+#      바닥의 금박 띠 = 착지대(여기 닿으면 포획). 어종 아이콘이라 "무엇과 싸우는지"가 보인다.
+#   ② 텐션 바(오른쪽) — 아래에서 차오른다. 위 20%가 붉은 위험대(끊김 임계). 채움 초록→노랑→빨강.
+#   ③ 스태미나 바(왼쪽) — 물고기의 남은 힘. 0이면 포획(트랙의 물고기가 손에 닿는 것과 같은 결말).
+#   ④ 발버둥 텔레그래프(패널 위 금박 느낌표) / 발버둥 중(붉은 테) — "읽고 대응"(ADR-0030).
+#   ⑤ 퍼펙트 릴 창(금박 테) / 성공 플래시(흰 굵은 테) / 누적 = 패널 아래 금박 눈금.
+#
+# main.gd는 _draw에서 텍스트를 안 쓰는 관례라(문구는 전부 Label — 여기선 interact_prompt가 상태·
+# 조작을 글로 낸다) 순수 도형 + 아이콘 텍스처만 그린다.
+const _FHUD_W := 48.0        # 패널 폭 — 한지 판 9-slice(테두리 12)가 살고 안쪽에 3열이 서는 최소치
+const _FHUD_H := 88.0        # 패널 높이 — 세로 트랙이 주인공이라 길다(플레이어 키의 ~2.7배)
+const _FHUD_PAD := 11.0      # 판 테두리 안쪽 여백(한지 크림 바탕이 보이는 띠)
+const _FHUD_FISH := 16.0     # 트랙 안 물고기 아이콘 한 변 = 트랙 폭. **32² 아이콘의 정확히 1/2**
+                             #   (14 같은 어중간한 축소는 nearest에서 열·행이 불규칙하게 빠져 뭉갠다)
+# 트랙 물빛(먹빛 INSET을 그대로 쓰면 어두운 어종 — 먹빛장어·삿갓오징어 — 이 안 보인다).
+const _FHUD_WATER := Color(0.20, 0.27, 0.34)
 func _draw_fishing_hud() -> void:
 	if fishing == null or player == null:
 		return
-	const W := 112.0
-	const H := 38.0
-	var org: Vector2 = player.global_position + Vector2(-W * 0.5, -92.0)
-	draw_rect(Rect2(org, Vector2(W, H)), Color(0.08, 0.09, 0.12, 0.82))
-	draw_rect(Rect2(org, Vector2(W, H)), Color(0.85, 0.82, 0.70, 0.55), false, 1.0)
+	# 패널은 플레이어 **오른쪽 옆**에 세운다(머리 위에 세로로 세우면 화면 위로 넘친다).
+	var org: Vector2 = player.global_position + Vector2(22.0, -_FHUD_H + 14.0)
+	var panel := Rect2(org, Vector2(_FHUD_W, _FHUD_H))
 	if fishing.state != FishingSession.State.FIGHT:
-		# 격투 전(던지는 중·입질 대기·입질 창) — 한 줄 램프. 입질이면 붉게 차 "지금 채라"를 알린다.
-		var lamp := Rect2(org + Vector2(6.0, H * 0.5 - 5.0), Vector2(W - 12.0, 10.0))
-		draw_rect(lamp, Color(0.16, 0.18, 0.22))
+		# 격투 전(던지는 중·입질 대기·입질 창)엔 **작은 배지**만 띄운다 — 아직 잴 것이 없는데 큰 판을
+		# 세우면 빈 판이 화면을 가린다(1차 판 육안 리젝). 찌 하나로 "기다리는 중 / 지금 채라"만 말한다.
+		var badge := Rect2(player.global_position + Vector2(22.0, -46.0), Vector2(26.0, 30.0))
+		HanjiUi.draw_plate(self, badge)
+		var line_x := badge.position.x + badge.size.x * 0.5
 		var bite := fishing.state == FishingSession.State.BITE
-		draw_rect(lamp.grow(-1.0), Color(0.95, 0.30, 0.25) if bite else Color(0.32, 0.38, 0.46))
-		draw_rect(lamp, Color(0.05, 0.05, 0.06), false, 1.0)
+		draw_rect(Rect2(Vector2(line_x - 0.5, badge.position.y + 7.0),
+			Vector2(1.0, badge.size.y * (0.42 if bite else 0.24))), HanjiUi.INK)
+		var bob_y := badge.position.y + badge.size.y * (0.62 if bite else 0.44)
+		draw_circle(Vector2(line_x, bob_y), 4.0, Color(0.92, 0.30, 0.25) if bite else Color(0.94, 0.92, 0.86))
+		draw_circle(Vector2(line_x, bob_y), 4.0, HanjiUi.INK, false, 1.0)
+		if bite:   # 입질 = 찌가 물에 잠기는 파문 두 줄(가장 강한 "지금!" 신호)
+			draw_rect(Rect2(Vector2(line_x - 8.0, bob_y + 6.0), Vector2(16.0, 1.0)), HanjiUi.GOLD)
+			draw_rect(Rect2(Vector2(line_x - 5.0, bob_y + 9.0), Vector2(10.0, 1.0)), HanjiUi.GOLD_SOFT)
 		return
-	# ① 텐션 바(끊김 임계 붉은 띠 = 마지막 20%)
-	var tb := Rect2(org + Vector2(6.0, 6.0), Vector2(W - 12.0, 9.0))
-	draw_rect(tb, Color(0.16, 0.18, 0.22))
-	draw_rect(Rect2(tb.position + Vector2(tb.size.x * 0.8, 0.0), Vector2(tb.size.x * 0.2, tb.size.y)),
-		Color(0.45, 0.12, 0.12))
+	HanjiUi.draw_plate(self, panel)
+	var top := org.y + _FHUD_PAD
+	var col_h := _FHUD_H - _FHUD_PAD * 2.0
+	# ── ① 거리 트랙(가운데) ─────────────────────────────────────────────────
+	var track := Rect2(Vector2(org.x + 16.0, top), Vector2(_FHUD_FISH, col_h))
+	draw_rect(track, _FHUD_WATER)
+	# 착지대(트랙 밑 = 내 손). 여기 닿으면 포획이라 금박으로 "목표"를 못 박는다.
+	draw_rect(Rect2(Vector2(track.position.x, track.end.y - 5.0), Vector2(track.size.x, 5.0)), HanjiUi.GOLD)
+	draw_rect(track, HanjiUi.INK, false, 1.0)
+	# 물고기 — distance_ratio 1(먼 물속)=위 · 0(내 손)=아래. 아이콘이 없으면 도형 폴백.
+	var dr := fishing.distance_ratio()
+	var fy := track.position.y + (1.0 - dr) * (track.size.y - _FHUD_FISH)
+	var fish_rect := Rect2(Vector2(track.position.x, fy), Vector2(_FHUD_FISH, _FHUD_FISH))
+	var ftex: Texture2D = FISH_ICONS.get(String(fishing.fish.get("id", "")))
+	if ftex != null:
+		draw_texture_rect(ftex, fish_rect, false)
+	else:
+		draw_rect(fish_rect.grow(-3.0), HanjiUi.INK_LIGHT)
+	# ── ② 텐션 바(오른쪽 — 아래에서 차오름·위 20% 위험대) ────────────────────
+	var tb := Rect2(Vector2(org.x + 35.0, top), Vector2(5.0, col_h))
+	draw_rect(tb, HanjiUi.INSET)
+	draw_rect(Rect2(tb.position, Vector2(tb.size.x, tb.size.y * 0.2)), Color(0.52, 0.14, 0.13))
 	var tr := fishing.tension_ratio()
 	var tcol := Color(0.35, 0.78, 0.45)
 	if tr >= 0.8:
 		tcol = Color(0.95, 0.30, 0.25)
 	elif tr >= 0.6:
 		tcol = Color(0.92, 0.78, 0.30)
-	draw_rect(Rect2(tb.position, Vector2(tb.size.x * tr, tb.size.y)), tcol)
-	draw_rect(tb, Color(0.05, 0.05, 0.06), false, 1.0)
-	# ② 물고기 스태미나 바
-	var sb := Rect2(org + Vector2(6.0, 18.0), Vector2(W - 12.0, 7.0))
-	draw_rect(sb, Color(0.16, 0.18, 0.22))
-	draw_rect(Rect2(sb.position, Vector2(sb.size.x * fishing.stamina_ratio(), sb.size.y)),
+	draw_rect(Rect2(Vector2(tb.position.x, tb.end.y - tb.size.y * tr), Vector2(tb.size.x, tb.size.y * tr)), tcol)
+	draw_rect(tb, HanjiUi.INK, false, 1.0)
+	# ── ③ 스태미나 바(왼쪽 — 물고기의 남은 힘) ───────────────────────────────
+	var sb := Rect2(Vector2(org.x + 9.0, top), Vector2(5.0, col_h))
+	draw_rect(sb, HanjiUi.INSET)
+	var sr := fishing.stamina_ratio()
+	draw_rect(Rect2(Vector2(sb.position.x, sb.end.y - sb.size.y * sr), Vector2(sb.size.x, sb.size.y * sr)),
 		Color(0.42, 0.62, 0.88))
-	draw_rect(sb, Color(0.05, 0.05, 0.06), false, 1.0)
-	# ③ 거리 트랙(왼쪽 = 내 손 · 오른쪽 = 먼 물속)
-	var db := Rect2(org + Vector2(6.0, 29.0), Vector2(W - 12.0, 4.0))
-	draw_rect(db, Color(0.16, 0.18, 0.22))
-	var mx := db.position.x + db.size.x * fishing.distance_ratio()
-	draw_rect(Rect2(Vector2(mx - 2.0, db.position.y - 2.0), Vector2(4.0, 8.0)), Color(0.95, 0.85, 0.45))
-	# ④ 발버둥 텔레그래프(느낌표) / 발버둥 중(붉은 테)
+	draw_rect(sb, HanjiUi.INK, false, 1.0)
+	# ── ④ 발버둥 텔레그래프(패널 위 금박 느낌표) / 발버둥 중(붉은 테) ────────
 	if fishing.is_telegraphing():
-		var ex := org + Vector2(W + 6.0, 4.0)
-		draw_rect(Rect2(ex, Vector2(4.0, 14.0)), Color(0.98, 0.80, 0.25))
-		draw_rect(Rect2(ex + Vector2(0.0, 18.0), Vector2(4.0, 4.0)), Color(0.98, 0.80, 0.25))
+		var ex := Vector2(org.x + _FHUD_W * 0.5 - 2.0, org.y - 16.0)
+		draw_rect(Rect2(ex, Vector2(4.0, 9.0)), HanjiUi.GOLD)
+		draw_rect(Rect2(ex + Vector2(0.0, 11.0), Vector2(4.0, 3.0)), HanjiUi.GOLD)
 	if fishing.is_bursting():
-		draw_rect(Rect2(org - Vector2(2.0, 2.0), Vector2(W + 4.0, H + 4.0)), Color(0.95, 0.28, 0.24), false, 2.0)
-	# ⑤ 퍼펙트 릴 창(초록 테) / 성공 플래시(흰 굵은 테) / 누적 눈금
+		draw_rect(panel.grow(2.0), Color(0.95, 0.28, 0.24), false, 2.0)
+	# ── ⑤ 퍼펙트 릴 창 / 성공 플래시 / 누적 눈금 ─────────────────────────────
 	if fishing.is_perfect_window():
-		draw_rect(Rect2(org - Vector2(4.0, 4.0), Vector2(W + 8.0, H + 8.0)), Color(0.40, 0.95, 0.55), false, 1.0)
+		draw_rect(panel.grow(4.0), HanjiUi.GOLD_SOFT, false, 2.0)
 	if fishing.perfect_flash():
-		draw_rect(Rect2(org - Vector2(5.0, 5.0), Vector2(W + 10.0, H + 10.0)), Color(1.0, 1.0, 1.0, 0.9), false, 3.0)
-	for i in mini(fishing.perfect_count, 8):
-		draw_rect(Rect2(org + Vector2(6.0 + i * 7.0, H + 3.0), Vector2(5.0, 3.0)), Color(0.40, 0.95, 0.55))
+		draw_rect(panel.grow(6.0), Color(1.0, 1.0, 1.0, 0.9), false, 3.0)
+	for i in mini(fishing.perfect_count, 5):
+		draw_rect(Rect2(org + Vector2(6.0 + i * 8.0, _FHUD_H + 2.0), Vector2(6.0, 3.0)), HanjiUi.GOLD)
 
 func _draw_crops() -> void:
 	for t in farm.planted_tiles():
@@ -10275,11 +10378,12 @@ func _draw_sprinklers() -> void:
 		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), Color(0.16, 0.28, 0.34), false, 1.0)
 		draw_circle(base + Vector2(TILE * 0.5, TILE * 0.34), TILE * 0.16, Color(0.62, 0.84, 0.94))
 
-# ★ [S3-T7 / ADR-0061 결정 10] 게잡이통 그레이박스 렌더(아트는 S3-T10). 상태 셋을 **색과 표식으로**
-#   갈라, 물가를 한 번 훑기만 해도 "어느 통을 들러야 하는지"가 읽히게 한다(스프링클러 급수 십자 표식과
-#   같은 목적 — 설치물은 자기 상태를 스스로 말해야 한다):
-#     · 미끼 없음  = 마른 대나무 갈색(할 일 있음 — 미끼를 넣어야 논다)
-#     · 미끼 장전  = 젖은 짙은 갈색 + 붉은 미끼 점(가동 중 — 내일 아침 확인)
+# ★ [S3-T7 / ADR-0061 결정 10] 게잡이통 렌더(★S3-T10에서 몸통만 도트 텍스처로 승격 — 상태 표식은
+#   그레이박스 때와 같은 도형이다). 상태 셋을 **톤과 표식으로** 갈라, 물가를 한 번 훑기만 해도 "어느
+#   통을 들러야 하는지"가 읽히게 한다(스프링클러 급수 십자 표식과 같은 목적 — 설치물은 자기 상태를
+#   스스로 말해야 한다):
+#     · 미끼 없음  = 마른 대나무 본색(할 일 있음 — 미끼를 넣어야 논다)
+#     · 미끼 장전  = 젖은 톤(모듈레이트로 어둡게) + 붉은 미끼 점(가동 중 — 내일 아침 확인)
 #     · 어획 대기  = 위 두 상태 위에 밝은 금빛 마름모(거둘 것 있음 — 가장 눈에 띄는 표식)
 func _draw_crab_pots() -> void:
 	if crab_pot == null:
@@ -10287,14 +10391,11 @@ func _draw_crab_pots() -> void:
 	for t: Vector2i in crab_pot.tiles(_region):
 		var base := Vector2(t.x * TILE, t.y * TILE)
 		var baited := crab_pot.is_baited(_region, t)
-		# 통 몸통 — 엮은 대나무 상자(가로 살 두 줄로 "엮음"을 낸다). 장전되면 젖은 톤으로 어두워진다.
-		var body := Color(0.42, 0.32, 0.19) if baited else Color(0.60, 0.48, 0.30)
-		draw_rect(Rect2(base + Vector2(TILE * 0.18, TILE * 0.34), Vector2(TILE * 0.64, TILE * 0.50)), body)
-		draw_rect(Rect2(base + Vector2(TILE * 0.18, TILE * 0.34), Vector2(TILE * 0.64, TILE * 0.50)),
-			Color(0.22, 0.16, 0.10), false, 1.0)
-		for k in 2:
-			draw_rect(Rect2(base + Vector2(TILE * 0.18, TILE * (0.48 + 0.16 * k)), Vector2(TILE * 0.64, 1.0)),
-				Color(0.26, 0.19, 0.12))
+		# ★ [S3-T10] 통 몸통 = 아이콘과 공유하는 도트 텍스처(엮은 대나무 통). 장전되면 젖은 톤으로
+		#   어둡게 곱해 그린다 — 상태 셋(무미끼/장전/어획대기)의 읽힘은 그레이박스 때와 똑같다.
+		var pot_tex: Texture2D = GEAR_ICONS[ItemCatalog.CRAB_POT]
+		draw_texture_rect(pot_tex, Rect2(base, Vector2(TILE, TILE)), false,
+			Color(0.72, 0.68, 0.62) if baited else Color.WHITE)
 		if baited:
 			draw_circle(base + Vector2(TILE * 0.50, TILE * 0.44), TILE * 0.08, Color(0.72, 0.28, 0.24))
 		if crab_pot.pending_catch(_region, t) != "":
