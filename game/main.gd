@@ -7932,7 +7932,8 @@ func _resident_named(display_name: String) -> Resident:
 			return r
 	return null
 
-# 주민 5인을 등록한다. 등록 순서 = 관계 탭 표시 순서(미호·멜·바나·네오).
+# 주민을 등록한다. 등록 순서 = 관계 탭 표시 순서(미호·멜·바나·네오) 겸 facing 판정 순서.
+# ★ [S2-T8] 여섯째로 모찌(첫 T1 주민)가 붙었다 — main.tscn 노드 없이 레코드 한 건으로만.
 func _setup_residents() -> void:
 	_residents.clear()
 	_residents_by_id.clear()
@@ -8043,6 +8044,57 @@ func _setup_residents() -> void:
 	r_okja.schedule = [{"from_min": 0, "tile": OKJA_CAFE_TILE, "region": ""}]
 	_register_resident(r_okja)
 
+	# ── ★ [S2-T8 / ADR-0060 결정 7] 모찌 — **첫 T1 주민이자 프레임워크 절차의 실증**.
+	#    이 블록 하나 + `mochi.gd` 한 파일이 주민 1인 추가의 전부다. main.tscn은 안 고친다 —
+	#    script_path·needs_affinity를 채우면 `_register_resident`가 몸과 관계 트랙 노드를 낳는다
+	#    (기존 5인은 tscn 노드를 물고 와 이 경로를 안 탄다 = 거동 불변).
+	#
+	#    ★ 로스터 1:1 집 배정([ADR-0060] 결정 2 "배정은 본체 제작 시 확정"): **모찌 = 주민 집 4**
+	#      (RESIDENT_HOUSE_RECTS[3], 문 67,25). 근거 ㉠ 만물상 남동 = 상업 구역에 가장 가까운
+	#      주거라 "카페에서 난" 모찌의 생활권이 카페·가게 쪽으로 자연스럽다 ㉡ 문(y25)이 메인
+	#      복도(y36)보다 위라 문 스포크가 x67 한 열로 곧장 내려가 — 걷기 경로가 실제 길과 겹친다
+	#      ㉢ 강변 2채(10·11)는 세레나(인어) 서사 예약분이라 비켜 둔다.
+	#
+	#    ★ 하루 = 집 앞 → 마을 광장 → 카페. 세 자리가 **전부 나루 마을**이라 같은 구역 전환이
+	#      되고, 이것이 [결정 7] 보간 걷기의 **첫 실동작**이다(기존 5인은 고정 자리이거나 구역을
+	#      넘어 전부 순간이동이었다). 저녁 카페 자리는 실내 밴드라 걷지 않는다(아래 _road_spokes
+	#      가드 — 실내는 길 그래프 밖).
+	var r_mochi := Resident.new()
+	r_mochi.id = "mochi"
+	r_mochi.display_name = "모찌"
+	r_mochi.script_path = "res://mochi.gd"   # ★ 노드를 레코드가 낳는 길(main.tscn 무수정)
+	r_mochi.needs_affinity = true
+	r_mochi.save_key = "mochi_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_mochi.can_gift = true
+	r_mochi.gift_target_ko = "모찌"
+	r_mochi.portrait_stem = ""               # 초상화 없음 — 도트 눈입 표정은 S2-T10 아트 패스
+	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 14채가 한 방을
+	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 모찌가 보인다 — 그래서 문 바로
+	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다.
+	var mochi_home_tile: Vector2i = RESIDENT_HOUSE_DOORS[3] + Vector2i(0, 1)   # (67,26)
+	# 낮 = 마을 광장. 다리 스파인(x52·53)과 메인 복도(y36)가 만나는 마을 한복판 사거리의 북동쪽
+	# 빈 마당이다 — 통행 레인(복도·스파인) 위에 서지 않으면서 두 축이 다 보이는 칸. 자갈 광장
+	# 텍스처는 S2-T9 아트 패스 소관이고, 지금은 "여기가 광장"을 주민의 자리로만 정한다.
+	var mochi_plaza_tile := Vector2i(54, 34)
+	# 저녁 = 카페(영업창 15:00~). 직원 줄(y88)·카운터(y89)·좌석 스툴(y90)·손님 테이블(y93)을 전부
+	# 비껴간 홀 가운데 칸 — 일하는 자리가 아니라 **손님**으로 서 있다([CONTEXT] "낮 기우는 조연").
+	var mochi_cafe_tile := Vector2i(13, 92)
+	r_mochi.schedule = [
+		{"from_min": 0, "tile": mochi_home_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": 10 * 60, "tile": mochi_plaza_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": Cafe.OPEN_MIN, "tile": mochi_cafe_tile, "region": RegionCatalog.NARU_VILLAGE},
+	]
+	# ★ 관계 곱셈기(effect_fn)는 **안 준다** — [ADR-0008] 활동 곱셈기는 메인 4인 독점이다. 모찌는
+	#   대화·선물로 하트만 오르는 순수 T1 관계 트랙이다(하트 이벤트·결혼은 ADR-0032 소관 후속).
+	_register_resident(r_mochi)
+	# 선호 선물 = 황천포도. 근거: 모찌는 "카페 과일/푸딩에서 흡수해 태어난"([residents.md]) 존재라
+	# *과일*이 정체성과 직결되고, 실존 재배 작물 중 유일한 과일계다(불사과는 미혹의 숲 채집·다절기
+	# 프레스티지라 초반 접근 불가). 기존 3인(영혼 호박·피안화·혼령초)과도 겹치지 않아 선물 경제가
+	# 넷으로 분산된다. ★잠정(owner 큐) — 카페 연고 아이템(푸딩 등)이 카탈로그에 생기면 재검토.
+	# ⚠️ Affinity 노드가 `_register_resident` 안에서 태어나므로 선호는 **등록 뒤에** 물린다
+	#   (멜·바나는 tscn 노드라 등록 전에 물릴 수 있었다 — 순서만 다르고 결과는 같다).
+	r_mochi.affinity.preferred_crop = CropCatalog.HWANGCHEON_PODO
+
 # ── 스테이션 갱신(매 프레임) ────────────────────────────────────────────────
 # 전 주민의 자리·가시성을 현재 시각·단계에서 파생한다(세이브 무상태 — 껐다 켜도 그 시각의
 # 자리로 다시 결정된다). delta는 보간 걷기(시각 전용)를 진행시키는 데만 쓴다.
@@ -8110,6 +8162,14 @@ const ROAD_LANE_Y := {RegionCatalog.NARU_VILLAGE: MAIN_CORRIDOR_Y}
 func _road_spokes(from_tile: Vector2i, to_tile: Vector2i, region: String) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	if from_tile == to_tile or not ROAD_LANE_Y.has(region):
+		return out
+	# ★ [S2-T8] 실내 밴드 가드 — 구역 외부 무대(RegionCatalog.size_of) **아래**는 카메라로 격리된
+	# 실내 방들의 띠라 도로 레인이 닿지 않는다. 그런 자리를 오가는 전환은 걸어갈 길이 없으므로
+	# 즉시 도착으로 되돌린다(구역을 넘는 전환을 _begin_resident_walk가 거르는 것과 같은 이유).
+	# 이 가드가 없으면 모찌의 광장(y34) → 카페 홀(y92) 전환이 무대 밖을 가로지르는 ~56초짜리
+	# 유령 걷기가 된다(T7은 실내 자리를 쓰는 주민이 걸을 일이 없어 드러나지 않던 구멍).
+	var stage_h: int = RegionCatalog.size_of(region).y
+	if from_tile.y >= stage_h or to_tile.y >= stage_h:
 		return out
 	var lane: int = ROAD_LANE_Y[region]
 	# 같은 열이면 곧장 세로로, 아니면 복도까지 올라갔다 가로로 건너 다시 내려온다.
