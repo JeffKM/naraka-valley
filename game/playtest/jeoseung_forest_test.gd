@@ -95,14 +95,41 @@ func _initialize() -> void:
 		and m._grid_w == 60 and m._outdoor_h == 44)
 
 	# ── ① 나무(TREE) 군집 통과 불가 + 빈터(GROUND) 걸을 수 있음 ──
+	# ★[S4-T3 / ADR-0062 결정 3] 벌목 도입으로 TREE가 **이원화**됐다. 옛 "TREE는 전부 통과 불가"
+	#   단언을 정밀화한다: 통과 불가라는 결론은 둘 다 같지만 *이유*가 갈린다.
+	#     ㉠ 경계 프레이밍 밴드(테두리 5칸 안) = **불벌목 벽** — 원장 밖이라 도끼가 안 먹는다.
+	#        ③의 flood-fill 도달성이 여기 기대므로 이 성질이 곧 워프 불변식의 보증이다.
+	#     ㉡ 내부 악센트 군집 = **원장 나무** — 벌목 전엔 똑같이 통과 불가고, 완전 제거(벌목+
+	#        그루터기)하면 그 칸이 열린다(①f~①h).
 	for r in m.FOREST_TREE_RECTS:
 		var c := Vector2i(r.position.x, r.position.y)   # 군집 좌상단 — 나무여야(동선이 안 덮은 칸)
 		_check("① 나무 군집 칸 TREE (%d,%d)" % [c.x, c.y], m._grid[c.y][c.x] == m.TREE)
 		_check("①b 나무 칸 통과 불가", not _walkable(m, c))
+		if m._is_tree_border_band(c):
+			_check("①b1 경계 밴드 칸 = 원장 밖(불벌목)", not m.tree_ledger.has_slot(m._region, c))
+		else:
+			_check("①b2 내부 악센트 칸 = 원장 나무(벌목 대상)", m.tree_ledger.is_occupied(m._region, c))
 	# ★C6 — 빈터(채집지 라벨 자리 3곳)는 모두 걸을 수 있는 GROUND(나무에 안 묻힘).
 	_check("①c 채집지 빈터① 걸을 수 있음", _walkable(m, m.FOREST_FORAGE_LABEL_TILE))
 	_check("①d 채집지 빈터② 걸을 수 있음", _walkable(m, m.FOREST_FORAGE_LABEL_TILE_2))
 	_check("①e 채집지 빈터③ 걸을 수 있음", _walkable(m, m.FOREST_FORAGE_LABEL_TILE_3))
+	# ★[S4-T3] 경계 밴드 TREE는 원장이 아예 모른다 = 도끼 무동작(맵이 새지 않는다).
+	var band_slots := 0
+	for t: Vector2i in m.tree_ledger.tiles(m._region):
+		if m._is_tree_border_band(t):
+			band_slots += 1
+	_check("①f 경계 밴드 TREE가 원장에 하나도 없음(불벌목 벽 — %d그루 전량 내부)"
+		% m.tree_ledger.slot_count(m._region), band_slots == 0 and m.tree_ledger.slot_count(m._region) > 0)
+	# 내부 원장 나무 하나를 완전히 치우면(성숙 10타 + 그루터기 3타) 그 칸이 걸을 수 있게 된다.
+	var inner: Vector2i = m.tree_ledger.tiles(m._region)[0]
+	_check("①g 내부 원장 나무 = 벌목 전 통과 불가", not _walkable(m, inner))
+	for i in 20:
+		if not m.tree_ledger.is_occupied(m._region, inner):
+			break
+		m.tree_ledger.chop(m._region, inner, 1)
+		m._sync_tree_tile(inner)
+	_check("①h 완전 제거(벌목+그루터기) 후 GROUND·통과 가능",
+		m._grid[inner.y][inner.x] == m.GROUND and _walkable(m, inner))
 
 	# ── ② 목공방 외관 = WALL 박스 + 문 PATH 리세스, 실내 빈 방 ──
 	var ext: Rect2i = m.WOODSHOP_EXT_RECT
