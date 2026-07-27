@@ -50,11 +50,26 @@ const SEED_CHANCE := 0.15     # 안식 성숙목이 밤에 자체 파종할 확�
 const SEED_RADIUS := 3        # 자체 파종 반경(칸 — 체비쇼프)
 const HOME_CAP := 40          # 안식 원장 나무 총상한(자체 파종 폭주 방지 — 마당이 숲이 되지 않게)
 
-# ── 도끼 타격 카운트(0티어 기준 — 티어 감소는 S4-T4) ────────────────────────
-const HP_MATURE := 10         # 성숙목 10타(스타듀 0티어 상속)
+# ── 도끼 타격 카운트(0티어 기준 — 티어 감소는 ToolTier.axe_mature_hp) ────────
+const HP_MATURE := 10         # 성숙목 10타(스타듀 0티어 상속 — ToolTier.AXE_MATURE_HP[0]과 동치)
 const HP_STAGE4 := 3          # 4단계(거의 다 큰 나무) 3타
 const HP_SAPLING := 1         # 1~3단계(유목) 1타 — 원장 즉시 제거
 const HP_STUMP := 3           # 그루터기 제거 3타(잠정 — ADR-0062는 "도끼 수회")
+
+# ── ★[S4-T4 / ADR-0062 결정 1 ㉡] 큰 장애물(large object) ───────────────────
+# 보통 나무와 **다른 축**이다: 자라지 않고(성장 단계 없음), 도끼 *티어*가 없으면 아예 안 깨지며,
+# 산출은 단단한 원목 고정 + 큰 장애물 XP 25다. 원장 슬롯을 공유하되 `large` 필드로 갈린다.
+#   ㉠ 큰 그루터기(large_stump) — 명동 도끼(티어 1) · 경목 2 · **일일 리스폰**(지속 공급원.
+#      스타듀 비밀의 숲 Large Stump 1:1 — 심층 6개 = 하루 12 경목).
+#   ㉡ 큰 통나무(large_log) — 유철 도끼(티어 2) · 경목 8 · **재생성 없음**(영구 개방. 스타듀
+#      Large Log 1:1 — 한 번 치우면 그 길이 영영 열린다 = 심층 구획의 열쇠).
+const KIND_LARGE_STUMP := "large_stump"
+const KIND_LARGE_LOG := "large_log"
+const LARGE_KINDS := [KIND_LARGE_STUMP, KIND_LARGE_LOG]
+const HP_LARGE_STUMP := 6     # 큰 그루터기 타수(잠정 — 성숙목보다 적되 보통 그루터기의 2배)
+const HP_LARGE_LOG := 10      # 큰 통나무 타수(잠정 — 심층의 문이라 성숙목과 같은 무게)
+const LARGE_STUMP_HARDWOOD := 2   # 큰 그루터기 산출 = 단단한 원목 2(스타듀 상속)
+const LARGE_LOG_HARDWOOD := 8     # 큰 통나무 산출 = 단단한 원목 8(스타듀 상속)
 
 # ── 산출(ADR-0062 결정 3 — 스타듀 상속) ─────────────────────────────────────
 const WOOD_MIN := 12          # 성숙목 원목 12~16
@@ -74,7 +89,9 @@ const STUMP_XP := 2           # 그루터기 제거 채집 XP 2(ForageSkill 고�
 const MODE_FOREST := "forest"   # 숲 — 빈 슬롯 재출현
 const MODE_SEED := "seed"       # 안식 농원 — 성숙목 자체 파종
 
-# 원장. { region(String) → { Vector2i → {"species","stage","hp","stump","moss"} } }
+# 원장. { region(String) → { Vector2i → {"species","stage","hp","stump","moss","large","gone"} } }
+#   · large("") = 보통 나무 슬롯 / large=KIND_* = 큰 장애물 슬롯(stage·species 미사용)
+#   · gone = 큰 장애물이 치워졌나(큰 그루터기는 밤에 되돌아오고, 큰 통나무는 영영 true)
 var _trees: Dictionary = {}
 # 초기 배치를 이미 깐 구역 집합(재빌드마다 다시 심지 않게 — 벤 나무가 부활하면 안 된다).
 var _seeded: Dictionary = {}
@@ -89,13 +106,45 @@ static func species_at_tile(region: String, t: Vector2i) -> String:
 	var h: int = abs(hash("treesp:%s:%d:%d" % [region, t.x, t.y]))
 	return SPECIES[h % SPECIES.size()]
 
-# 단계별 도끼 타수(그루터기는 hp_for_stump).
-static func hp_for_stage(stage: int) -> int:
+# 단계별 도끼 타수(그루터기는 HP_STUMP). ★[S4-T4] 성숙목만 도끼 티어로 줄어든다(10/8/6) —
+# 유목·4단계는 이미 1~3타라 줄일 여지가 없고, 티어의 의미는 "큰 걸 빨리·더 큰 걸 아예"다.
+static func hp_for_stage(stage: int, tier: int = 0) -> int:
 	if stage >= MAX_STAGE:
-		return HP_MATURE
+		return ToolTier.axe_mature_hp(tier)
 	if stage == 4:
 		return HP_STAGE4
 	return HP_SAPLING
+
+# 큰 장애물 종별 타수(도끼 티어로 줄지 않는다 — 티어는 여기선 *접근* 축이다, ADR-0027).
+static func hp_for_large(kind: String) -> int:
+	match kind:
+		KIND_LARGE_STUMP: return HP_LARGE_STUMP
+		KIND_LARGE_LOG: return HP_LARGE_LOG
+	return 0
+
+# 큰 장애물 종별 요구 도끼 티어(0 = 게이트 없음). 수치의 단일 출처는 ToolTier다(의존 한 방향).
+static func tier_for_large(kind: String) -> int:
+	match kind:
+		KIND_LARGE_STUMP: return ToolTier.TIER_LARGE_STUMP
+		KIND_LARGE_LOG: return ToolTier.TIER_LARGE_LOG
+	return 0
+
+# 큰 장애물 종별 단단한 원목 산출.
+static func hardwood_for_large(kind: String) -> int:
+	match kind:
+		KIND_LARGE_STUMP: return LARGE_STUMP_HARDWOOD
+		KIND_LARGE_LOG: return LARGE_LOG_HARDWOOD
+	return 0
+
+# 큰 장애물이 밤에 되돌아오나(큰 그루터기 O = 지속 공급 / 큰 통나무 X = 영구 개방).
+static func respawns_large(kind: String) -> bool:
+	return kind == KIND_LARGE_STUMP
+
+static func large_name(kind: String) -> String:
+	match kind:
+		KIND_LARGE_STUMP: return "큰 그루터기"
+		KIND_LARGE_LOG: return "큰 통나무"
+	return ""
 
 # 종 → 씨앗 아이템 id(ItemCatalog 단일 출처 — 이름·가격은 저기 산다).
 static func seed_item_for(species: String) -> String:
@@ -119,13 +168,43 @@ func is_occupied(region: String, t: Vector2i) -> bool:
 	if not has_slot(region, t):
 		return false
 	var e: Dictionary = _trees[region][t]
+	if String(e.get("large", "")) != "":
+		return not bool(e.get("gone", false))     # 큰 장애물 — 치우기 전엔 SOLID, 치운 뒤 열린다
 	return int(e.get("stage", 0)) > 0 or bool(e.get("stump", false))
 
 func stage_at(region: String, t: Vector2i) -> int:
 	return int(_trees[region][t].get("stage", 0)) if has_slot(region, t) else 0
 
-func hp_at(region: String, t: Vector2i) -> int:
-	return int(_trees[region][t].get("hp", 0)) if has_slot(region, t) else 0
+# 남은 타수. ★[S4-T4] tier를 주면 **아직 손대지 않은** 대상은 그 티어 기준으로 환산해 보여 준다
+# (프롬프트 "N타 남음"이 든 도끼의 실제 타수와 맞아야 티어의 실효가 읽힌다). 이미 친 대상은
+# 시작할 때의 눈금을 그대로 이어 센다 — 중간에 도끼를 바꿔도 잔여 타수가 늘거나 줄지 않는다.
+func hp_at(region: String, t: Vector2i, tier: int = 0) -> int:
+	if not has_slot(region, t):
+		return 0
+	return _effective_hp(_trees[region][t], tier)
+
+# 이 슬롯의 "지금부터 몇 타"(위 규칙의 단일 구현). 큰 장애물·그루터기는 티어 무관 고정.
+func _effective_hp(e: Dictionary, tier: int) -> int:
+	var hp := int(e.get("hp", 0))
+	var kind := String(e.get("large", ""))
+	if kind != "" or bool(e.get("stump", false)):
+		return hp
+	var stage := int(e.get("stage", 0))
+	if stage < MAX_STAGE:
+		return hp
+	# 성숙목 — 무손상(0티어 만타수 그대로)일 때만 티어 환산이 걸린다.
+	return hp_for_stage(stage, tier) if hp >= HP_MATURE else hp
+
+# 이 칸이 큰 장애물 슬롯인가("" = 아님). 치워진 뒤에도 슬롯은 남으므로 종은 계속 조회된다.
+func large_at(region: String, t: Vector2i) -> String:
+	return String(_trees[region][t].get("large", "")) if has_slot(region, t) else ""
+
+func is_large(region: String, t: Vector2i) -> bool:
+	return large_at(region, t) != ""
+
+# 이 칸을 치우는 데 필요한 도끼 티어(보통 나무는 0 — ADR-0027 "기본 벌목은 0티어에서도 된다").
+func required_tier(region: String, t: Vector2i) -> int:
+	return tier_for_large(large_at(region, t))
 
 func is_stump(region: String, t: Vector2i) -> bool:
 	return has_slot(region, t) and bool(_trees[region][t].get("stump", false))
@@ -200,11 +279,41 @@ func seed_region(region: String, tile_list: Array, stage: int = MAX_STAGE) -> in
 		if has_slot(region, t):
 			continue
 		_put(region, t, {"species": species_at_tile(region, t), "stage": st,
-			"hp": hp_for_stage(st), "stump": false, "moss": false})
+			"hp": hp_for_stage(st), "stump": false, "moss": false, "large": "", "gone": false})
 		n += 1
 	if n > 0:
 		changed.emit()
 	return n
+
+# ★[S4-T4] 큰 장애물을 심는다(맵 빌더가 실좌표로 준다 — 원장은 어디가 심층인지 모른다).
+# ★ 멱등 + **세이브 우선**: 이미 슬롯이 있으면 무동작이라, 치워 둔 큰 통나무가 재빌드·워프 재진입·
+#   세이브 복원 뒤에 부활하지 않는다(영구 개방의 구조적 보증).
+func seed_large(region: String, tile_list: Array, kind: String) -> int:
+	if not kind in LARGE_KINDS:
+		return 0
+	var n := 0
+	for raw in tile_list:
+		if typeof(raw) != TYPE_VECTOR2I:
+			continue
+		var t: Vector2i = raw
+		if has_slot(region, t):
+			continue
+		_put(region, t, {"species": "", "stage": 0, "hp": hp_for_large(kind),
+			"stump": false, "moss": false, "large": kind, "gone": false})
+		n += 1
+	if n > 0:
+		changed.emit()
+	return n
+
+# 이 구역의 큰 장애물 칸 목록(종 필터 · 정렬 순회 — 배치 검증·드로우·테스트).
+func large_tiles(region: String, kind: String = "") -> Array:
+	var out: Array = []
+	for t: Vector2i in tiles(region):
+		var k := large_at(region, t)
+		if k == "" or (kind != "" and k != kind):
+			continue
+		out.append(t)
+	return out
 
 # ── 벌목(도끼 1스윙 = 1타) ───────────────────────────────────────────────────
 # 조준 칸의 나무·그루터기를 한 번 친다. 반환 = {} (대상 없음 — main이 무동작) 또는
@@ -214,25 +323,46 @@ func seed_region(region: String, tile_list: Array, stage: int = MAX_STAGE) -> in
 # ★ 산출은 **마지막 타에만** 실린다(중간 타는 전부 0 — "쓰러뜨린 사건"에 값을 매긴다, 결정 8).
 # ★ 퍼크는 주입: wood_bonus(감지자 +N) · hardwood_chance(벌목꾼 확률). 이 원장은 ProfessionCatalog를
 #   모른다(ForageSkill이 float → 의미 해석의 유일 접점 — FishSkill.crab_pot_* 선례).
+# ★[S4-T4] 인자 둘이 늘었다: `tier`(든 도끼 티어 — 타수 환산 + 큰 장애물 게이트).
+#   게이트에 걸리면 **상태를 하나도 안 건드리고** {"blocked": true, "need_tier": N, "large": kind}만
+#   돌려준다 — 호출 측이 혼력을 쓰기 *전에* 거부할 수 있어야 "혼력 미소모"가 성립한다.
 func chop(region: String, t: Vector2i, day: int, level: int = 0,
-		wood_bonus: int = 0, hardwood_chance: float = 0.0) -> Dictionary:
+		wood_bonus: int = 0, hardwood_chance: float = 0.0, tier: int = 0) -> Dictionary:
 	if not is_occupied(region, t):
 		return {}
 	var e: Dictionary = _trees[region][t]
+	var large := String(e.get("large", ""))
+	# ── 큰 장애물 게이트(ADR-0027 "접근 = 도구 티어") — 티어가 모자라면 무효타다 ──
+	var need := tier_for_large(large)
+	if tier < need:
+		return {"blocked": true, "need_tier": need, "large": large, "hit": false}
 	var was_stump: bool = bool(e.get("stump", false))
 	var stage: int = int(e.get("stage", 0))
 	var species := String(e.get("species", SP_PINE))
-	var hp: int = maxi(int(e.get("hp", 1)) - 1, 0)
+	var hp: int = maxi(_effective_hp(e, tier) - 1, 0)
 	e["hp"] = hp
 	_trees[region][t] = e
 	var out := {"hit": true, "hp": hp, "felled": false, "stump": was_stump, "cleared": false,
-		"wood": 0, "hardwood": 0, "sap": 0, "seed_id": "", "seeds": 0, "xp": 0, "species": species}
+		"wood": 0, "hardwood": 0, "sap": 0, "seed_id": "", "seeds": 0, "xp": 0, "species": species,
+		"large": large, "blocked": false}
 	if hp > 0:
 		changed.emit()
 		return out                                   # 중간 타 — 산출 0(사건이 아직 안 났다)
 	# ── 마지막 타: 상태별로 결말이 갈린다 ──
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("chop:%s:%d:%d:%d" % [region, t.x, t.y, day])
+	if large != "":
+		# ㉮ 큰 장애물 제거 — 단단한 원목 고정 + 큰 장애물 XP 25. 슬롯은 남기고 `gone`만 세운다
+		#    (큰 그루터기는 밤에 되살아나야 하고, 큰 통나무는 "여긴 원래 통나무였다"를 기억한다).
+		out["hardwood"] = hardwood_for_large(large)
+		out["xp"] = ForageSkill.LARGE_OBSTACLE_XP
+		out["felled"] = true
+		out["cleared"] = true
+		e["gone"] = true
+		e["hp"] = 0
+		_trees[region][t] = e
+		changed.emit()
+		return out                                   # 벌목꾼 확률 미적용(경목이 이미 확정 산출이다)
 	if was_stump:
 		# ㉠ 그루터기 제거 — 슬롯이 비고(통행 가능) 원목 4~9 + XP 2.
 		out["wood"] = rng.randi_range(STUMP_WOOD_MIN, STUMP_WOOD_MAX) + maxi(wood_bonus, 0)
@@ -284,15 +414,25 @@ func chop(region: String, t: Vector2i, day: int, level: int = 0,
 #      (Reclaim이 후보를 받는 것과 같은 디커플링). free_cb가 무효면 파종을 건너뛴다.
 #   · 결정적: day + 구역 + 좌표 시드. 구역·좌표는 정렬 순회라 Dictionary 키 순서에 안 기댄다.
 func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
-	var out := {"grown": [], "regrown": [], "seeded": []}
+	var out := {"grown": [], "regrown": [], "seeded": [], "large_respawned": []}
 	for region: String in regions():
 		var mode := mode_for(region)
 		for t: Vector2i in tiles(region):
 			var e: Dictionary = _trees[region][t]
 			var stage: int = int(e.get("stage", 0))
 			var stump: bool = bool(e.get("stump", false))
+			var large := String(e.get("large", ""))
 			var rng := RandomNumberGenerator.new()
 			rng.seed = hash("treeday:%d:%s:%d:%d" % [day, region, t.x, t.y])
+			# ★[S4-T4] 큰 장애물 슬롯은 성장·재성장 축 **밖**이다(자라지 않는다). 큰 그루터기만
+			#   확정적으로 되살아나고(일일 리스폰 = 지속 공급), 큰 통나무는 영영 치워진 채다.
+			if large != "":
+				if bool(e.get("gone", false)) and respawns_large(large):
+					e["gone"] = false
+					e["hp"] = hp_for_large(large)
+					_trees[region][t] = e
+					out["large_respawned"].append({"region": region, "tile": t, "large": large})
+				continue
 			if stump:
 				continue                                   # 그루터기는 안 자란다(치워야 자리가 난다)
 			if stage > 0 and stage < MAX_STAGE:
@@ -330,7 +470,8 @@ func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
 				_put(region, spot, {"species": species_at_tile(region, spot), "stage": 1,
 					"hp": hp_for_stage(1), "stump": false, "moss": false})
 				out["seeded"].append({"region": region, "tile": spot})
-	if not out["grown"].is_empty() or not out["regrown"].is_empty() or not out["seeded"].is_empty():
+	if not out["grown"].is_empty() or not out["regrown"].is_empty() or not out["seeded"].is_empty() \
+			or not out["large_respawned"].is_empty():
 		changed.emit()
 	return out
 
@@ -365,7 +506,8 @@ func _put(region: String, t: Vector2i, entry: Dictionary) -> void:
 func _empty(region: String, t: Vector2i) -> void:
 	if not has_slot(region, t):
 		return
-	_trees[region][t] = {"species": "", "stage": STAGE_EMPTY, "hp": 0, "stump": false, "moss": false}
+	_trees[region][t] = {"species": "", "stage": STAGE_EMPTY, "hp": 0, "stump": false, "moss": false,
+		"large": "", "gone": false}
 
 # ── 세이브/로드(ForageSpawns 패턴 계승) — 슬라이스 키 "tree_ledger" 네임스페이스 ──
 # 구역별 [x, y, species, stage, hp, stump(0/1), moss(0/1)] 7항 배열 목록 + 시드 완료 구역 목록.
@@ -379,7 +521,8 @@ func to_save() -> Dictionary:
 			var e: Dictionary = _trees[region][t]
 			arr.append([t.x, t.y, String(e.get("species", "")), int(e.get("stage", 0)),
 				int(e.get("hp", 0)), 1 if bool(e.get("stump", false)) else 0,
-				1 if bool(e.get("moss", false)) else 0])
+				1 if bool(e.get("moss", false)) else 0,
+				String(e.get("large", "")), 1 if bool(e.get("gone", false)) else 0])
 		out[region] = arr
 	var seeded: Array = _seeded.keys()
 	seeded.sort()
@@ -408,8 +551,14 @@ func load_save(data: Dictionary) -> void:
 				var hp: int = int(e[4]) if e.size() >= 5 else hp_for_stage(stage)
 				var stump: bool = e.size() >= 6 and int(e[5]) != 0
 				var moss: bool = e.size() >= 7 and int(e[6]) != 0
+				# ★[S4-T4] 8·9항(큰 장애물 종·치움 여부)은 구세이브(7항)엔 없다 → 보통 나무로 읽힌다
+				#   (하위호환). 미지 종 id는 조용히 버려 보통 나무로 강등한다(species 정화와 같은 결).
+				var large := String(e[7]) if e.size() >= 8 else ""
+				if large != "" and not large in LARGE_KINDS:
+					large = ""
+				var gone: bool = e.size() >= 9 and int(e[8]) != 0
 				by_tile[Vector2i(int(e[0]), int(e[1]))] = {"species": sp, "stage": stage,
-					"hp": maxi(hp, 0), "stump": stump, "moss": moss}
+					"hp": maxi(hp, 0), "stump": stump, "moss": moss, "large": large, "gone": gone}
 			if not by_tile.is_empty():
 				_trees[String(region)] = by_tile
 	var seeded: Variant = data.get("seeded", [])
