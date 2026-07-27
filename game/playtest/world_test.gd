@@ -62,9 +62,11 @@ func _initialize() -> void:
 	_check("③f 지어진 구역 = 8구역 전부", built == built_ids)
 	# ★ M3.1/M3.2/M4.1/M4.2/M5.1/M5.2 — 삼도천·황천해·저승 숲·미혹의 숲·업화 갱도·나락 실데이터 확인(size·spawn 채워짐).
 	_check("③g 삼도천 크기 = (56,40) ★C4", RegionCatalog.size_of(RegionCatalog.SAMDOCHEON) == Vector2i(56, 40))
-	_check("③h 삼도천 스폰 = (28,38) ★C4", RegionCatalog.spawn_of(RegionCatalog.SAMDOCHEON) == Vector2i(28, 38))
+	# ★[ADR-0061 결정 1 / S3-T1 종형 남향 이행] — 삼도천·황천해 spawn이 **북단 도착**으로 뒤집혔다
+	#   (삼도천 남단 28,38 → 북단 28,2 / 황천해 서단 2,15 → 북단 28,2). 크기는 둘 다 유지.
+	_check("③h 삼도천 스폰 = (28,2) ★[S3-T1] 북단 나룻터", RegionCatalog.spawn_of(RegionCatalog.SAMDOCHEON) == Vector2i(28, 2))
 	_check("③i 황천해 크기 = (64,44) ★C5", RegionCatalog.size_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(64, 44))
-	_check("③j 황천해 스폰 = (2,15) ★C5", RegionCatalog.spawn_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(2, 15))
+	_check("③j 황천해 스폰 = (28,2) ★[S3-T1] 북단 고지", RegionCatalog.spawn_of(RegionCatalog.HWANGCHEONHAE) == Vector2i(28, 2))
 	_check("③k 저승 숲 크기 = (60,44) ★C6", RegionCatalog.size_of(RegionCatalog.JEOSEUNG_FOREST) == Vector2i(60, 44))
 	_check("③l 저승 숲 스폰 = (30,42) ★C6", RegionCatalog.spawn_of(RegionCatalog.JEOSEUNG_FOREST) == Vector2i(30, 42))
 	_check("③m 미혹의 숲 크기 = (64,44) ★C7", RegionCatalog.size_of(RegionCatalog.MIHOK_FOREST) == Vector2i(64, 44))
@@ -105,7 +107,11 @@ func _initialize() -> void:
 		for nb in RegionCatalog.neighbors(id):
 			_check("④c 토폴로지 대칭 '%s'↔'%s'" % [id, nb], RegionCatalog.neighbors(nb).has(id))
 	# 허브 = 나루 마을(이웃 3: home·갱도·삼도천).
+	# ★[S3-T1] 삼도천 워프 칸이 2개(다리 폭 2칸)라도 *이웃*은 하나다 — neighbors()가 중복을 제거한다
+	#   (토폴로지 = 간선 집합. 트리거 칸 수로 위상이 흔들리면 안 된다).
 	_check("④d 나루 마을 = 허브(이웃 3)", RegionCatalog.neighbors(RegionCatalog.NARU_VILLAGE).size() == 3)
+	_check("④d2 워프 칸은 4개(삼도천 다리 남단 2칸) — 칸 수 ≠ 이웃 수",
+		RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE).size() == 4)
 	# 나락 = 독립(이웃 0, 진입로 빌드 시 확정).
 	_check("④e 나락 = 독립(이웃 0)", RegionCatalog.neighbors(RegionCatalog.NARAK).is_empty())
 	# home은 허브(나루 마을)와 이어진다.

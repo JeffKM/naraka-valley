@@ -952,8 +952,9 @@ const BACK_RIVER_BANK_Y := 65
 # 다리 1개소 — 강을 남북으로 종단하는 폭 2칸 PATH([ADR-0046] 문 2칸 규약과 결). 서칸(x52)이 북단
 #   나룻터 세로 스파인과 같은 열이라 마을 중앙 동선이 그대로 남쪽으로 이어진다. 강둑도 이 폭만큼 열린다.
 const BRIDGE_X := [52, 53]
-# 다리 남단 둑/부두 — 맵 남경계에서 막히는 짧은 부두 조각. 낚시터 스텁(본체·워프는 Slice 3 소관)이라
-#   지금은 다리로만 닿는 막다른 발판이다.
+# 다리 남단 둑/부두 — 맵 남경계에 붙은 짧은 부두 조각. ★[ADR-0061 결정 1 / S3-T1] Slice 2에선 막다른
+#   낚시터 스텁이었으나, 이제 **삼도천 진입 나룻터**다(다리 폭 2칸의 남단 마지막 행 x52·53 × y71 =
+#   워프 발동 칸). 종형 남향 축("마을에서 아래로 내려가면 강→바다")의 첫 관문.
 const BACK_RIVER_DOCK_RECT := Rect2i(50, 69, 6, 3)   # x50..55, y69..71
 # 마을 메인 가로 복도 — 옛 BRIDGE_Y(다리가 얹혔던 줄). 배후 강 이행으로 이 줄엔 더는 다리가 없고,
 #   서워프·도착에서 동 가장자리까지 잇는 마을 내부 동선(8채 문 스포크의 허리)만 남는다.
@@ -1190,18 +1191,33 @@ const WELL_RECT := Rect2i(40, 18, 3, 3)           # x40..42, y18..20 (밭 남쪽
 # ── ★ M3.1 삼도천(강 낚시 무대 + 혼백관) ───────────────────────────────────────
 # 셋째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 낚시 메카닉은 만들지 않는다(Phase 3) — 강(WATER)
 # 무대 + 강 낚시터(라벨만) + 혼백관(enterable 빈 방)까지 그레이박스로 깐다.
-# ★ ADR-0018 C4 — 낚시 무대 코지-와이드 56×40 재배치. 나루 마을 나룻터(52,1)에서 배로 건너 남단
-#   spawn(28,38)에 도착하고, 동단 하구(54,20)가 황천해로 가는 워프(점등). 강을 굵은 상단 가로 띠
-#   (y1..8 — 낚시 무대다운 진짜 강)로 흘려 그 아래 둑(y9..39)은 한 덩어리(다리 불필요·flood-fill 단순).
-const SAMDO_RIVER_Y0 := 1                       # 강(WATER) 상단 띠 시작 y(경계벽 y0 바로 아래)
-const SAMDO_RIVER_Y1 := 8                       # ★C4 강 띠 끝 y(굵은 강) — y9 이하가 강 낚시터 둑(land)
-const SAMDO_FISHING_LABEL_TILE := Vector2i(28, 10)  # ★C4 강 낚시터 라벨 자리(물가 둑, 낚시 메카닉 Phase 3)
+# ★ ADR-0018 C4 — 낚시 무대 코지-와이드 56×40(크기는 S3-T1 이후로도 유지. 내부 배치만 아래에서 플립).
+# ★[ADR-0061 결정 1 / S3-T1] **종형 남향 플립**(크기 56×40 유지). 옛 배치는 강이 *북단* 가로 띠(y1~8)고
+#   나룻터 spawn이 *남단*(28,38)·하구가 *동단*(54,20)이라, ADR-0044가 정한 종형 축("나루(북)→삼도천(중)
+#   →황천해(남), 아래로 내려가면 강→바다")과 정반대였다. 이제:
+#     · 북부(y0~28) = 도착 밴드 — 나룻터 부두(다리 남단에서 내려옴)·혼백관 외관·강 낚시터 북안.
+#     · y29 = 북안 강둑 단차 1행(CLIFF_BANK, SOLID) — 나루 배후 강 북안(BACK_RIVER_BANK_Y) 문법 동형.
+#     · y30~36 = 강 밴드 **전 폭**(x0..55 WATER) — 동서 우회 도하 0.
+#     · y37~39 = 남안 좁은 스트립(3행) — 잔교로만 닿고, 그 남단 중앙이 하구 워프(→황천해).
+#   "강이 북단 띠인 채로 남단에서 진입"은 도착하자마자 강 건너편이라 모순이다(ADR-0061 대안 검토 2번째).
+const SAMDO_RIVER_Y0 := 30                      # ★[S3-T1] 강(WATER) 밴드 시작 y(북안 강둑 y29 바로 아래)
+const SAMDO_RIVER_Y1 := 36                      # ★[S3-T1] 강 밴드 끝 y — 7행(굵은 강) · y37~39가 남안 스트립
+const SAMDO_RIVER_BANK_Y := 29                  # ★[S3-T1] 북안 강둑 단차 1행(CLIFF_BANK·SOLID — 배후 강 결)
+const SAMDO_JETTY_X := 28                       # ★[S3-T1] 목판 잔교 열 — 북단 나룻터부터 강을 종단해 남안까지 잇는 스파인
+const SAMDO_DOCK_RECT := Rect2i(26, 1, 5, 3)    # ★[S3-T1] 북단 나룻터 부두(x26..30, y1..3) — 도착 칸·복귀 워프 칸을 품는 데크
+const SAMDO_JETTY_DECK_RECT := Rect2i(28, 29, 1, 8)  # ★[S3-T1] 잔교 데크(x28, y29..36) — 강둑+강물 위 목판(아트 = S3-T9)
+const SAMDO_CORRIDOR_Y := 20                    # ★[S3-T1] 북부 밴드 가로 복도(혼백관 열 ~ 동편)
+const SAMDO_BANK_LANE_Y := 28                   # ★[S3-T1] 북안 물가 산책로(강둑 y29 바로 위 = 강 낚시터 밴드)
+const SAMDO_FISHING_LABEL_TILE := Vector2i(18, 28)  # ★[S3-T1] 강 낚시터 라벨 자리(북안 물가 — 캐스팅은 S3-T2)
 # 혼백관(enterable 빈 방) — 외관(land)·실내 방(삼도천 밴드). 창고·만물상 결의 데이터 주도 출입.
 # kind="museum"이라 _draw 가구 분기(house/cafe)에 안 걸려 빈 방으로 그려진다(분기 추가 0).
 # ★C4 — outdoor_h 40>26이라 공유 실내 띠(y26~)가 외부(둑)와 겹쳐 → 실내 방·문·카메라를 삼도천 밴드로
 #   +18 평행이동(y44~ — HOME +41·마을 +48 결). 외관은 둑 서편(y14~19, 굵은 강 아래)으로 재배치.
-const MUSEUM_EXT_RECT := Rect2i(6, 14, 7, 6)    # ★C4 x6..12, y14..19 (굵은 강 아래 둑 서편)
-const MUSEUM_EXT_DOOR := Vector2i(9, 19)        # 외관 혼백관 문(닿으면 진입) — _carve_samdocheon_paths 동선 연결
+# ★[S3-T1] 외관만 북부 도착 밴드 서측으로 올린다(CONTEXT "나룻터 곁 혼백관" 지리 정합 — 내려서자마자
+#   서쪽에 보인다). **실내 rect·문·카메라·기증대는 무변경**(실내 밴드 y44+는 외부 재배치와 독립 —
+#   ADR-0061 "혼백관 보존 원칙": 세이브 키(기증 원장)·서비스 로직이 실내 좌표에만 걸려 있다).
+const MUSEUM_EXT_RECT := Rect2i(6, 8, 7, 6)     # ★[S3-T1] x6..12, y8..13 (북부 도착 밴드 서측)
+const MUSEUM_EXT_DOOR := Vector2i(9, 13)        # 외관 혼백관 문(닿으면 진입) — _carve_samdocheon_paths 동선 연결
 const MUSEUM_RECT := Rect2i(8, 44, 12, 9)       # ★C4 x8..19, y44..52 (실내 방 — 삼도천 밴드 +18)
 const MUSEUM_DOOR := Vector2i(13, 52)           # 실내 혼백관 문(닿으면 퇴장) — 아래벽 중앙(+18)
 const MUSEUM_IN_TILE := Vector2i(13, 51)        # 실내 문 안쪽(진입 착지, +18)
@@ -1209,23 +1225,41 @@ const MUSEUM_CAM_RECT := Rect2i(2, 42, 20, 13)  # ★C4 혼백관 방 둘레(외
 const MUSEUM_DONATE_TILE := Vector2i(13, 46)    # ★[S2-T5] 무인 기증대(방 중북부) — F 기증(ADR-0060 결정 5)
 # ── ★ M3.2 황천해(바다 낚시 무대 + 생선가게) ──────────────────────────────────
 # 넷째 실데이터 구역(막다른 바다). 낚시 메카닉은 만들지 않는다(Phase 3) — 바다(WATER) 무대 + 부두(잔교)
-# + 바다 낚시터(라벨만) + 생선가게(enterable 빈 방)까지. 삼도천 하구에서 서단 spawn(2,15)에 도착.
-# ★ ADR-0018 C5 — 64×44 코지-와이드("넓은 바다·개방감"). 바다는 ㄴ자 만(남측 y≥SEA_Y0 + 동측 x≥SEA_X0)
-# 으로 깔려 SE가 탁 트인 수면이고, 그 NW가 한 덩어리 land(x1~SEA_X0-1, y1~SEA_Y0-1 — flood-fill 단순).
-# 부두(PATH)가 복도에서 남측 바다로 길게 뻗어 그 끝(PIER_Y1)이 바다 낚시터(Phase 3 캐스팅 자리). 강(삼도천)과
-# 같은 WATER 타일 재사용(물 색 차별화는 후속). 조수웅덩이는 미룸(낚시 메카닉/에셋 Phase — 만에 공간만 확보).
-const SEA_X0 := 38                              # ★C5 동측 바다(WATER) 띠 시작 x — 그 왼쪽(x1~37)이 land
-const SEA_Y0 := 28                              # ★C5 남측 바다 띠 시작 y — 그 위(y1~27)가 land. ㄴ자 만(남+동)
-const PIER_X := 24                              # 부두(잔교) 세로 칸 — 남측 바다로 뻗음(WATER 위 PATH 덮어 걸을 수 있게)
-const PIER_Y0 := 15                             # 부두 시작 y(복도 y15 — 복도에서 바다로 내려가는 잔교 진입)
-const PIER_Y1 := 37                             # ★C5 부두 끝 y(남측 바다 한가운데 = 바다 낚시터, ~10칸 돌출)
-const SEA_FISHING_LABEL_TILE := Vector2i(24, 36)   # ★C5 바다 낚시터 라벨 자리(부두 끝, 낚시 메카닉 Phase 3)
+# + 바다 낚시터(라벨만) + 생선가게(enterable 빈 방)까지. ★[S3-T1] 삼도천 하구에서 **북단** spawn(28,2)에 도착.
+# ★ ADR-0018 C5 — 64×44 코지-와이드("넓은 바다·개방감", 크기는 S3-T1 이후로도 유지). 강(삼도천)과
+# 같은 WATER 타일 재사용(물 색 차별화는 후속). 조수웅덩이는 미룸(낚시 메카닉/에셋 Phase).
+# ★[ADR-0061 결정 1 / S3-T1] **종형 남향 재배치**(크기 64×44 유지). 옛 배치는 서단 진입 + ㄴ자 만(남+동)
+#   이라 동서 축이었다. 이제 북→남으로 **띠가 한 줄로 내려간다**(ADR-0044 §2 ② 고지 수풀↔백사장 전이):
+#     · y0~15  = 고지 수풀 밴드(삼도천 하구에서 내려선 도착 지점).
+#     · y16~18 = **수평 절벽 런**(Lip/Face/Base 3행 — 고지가 한 단 높다는 pseudo-Z). 계단 노치 1곳만 관통.
+#     · y19~27 = 백사장 밴드(생선가게 외관·해변 산책로).
+#     · y28~43 = 바다 **전 폭**(ㄴ자 만 폐지 — 남쪽이 통째로 트인 수면). 부두가 여기로 종단한다.
+const SEA_Y0 := 28                              # ★[S3-T1] 남부 바다 시작 y — 이 아래는 x0..63 **전 폭** WATER
+const HWANG_CLIFF_Y := 16                       # ★[S3-T1] 수평 절벽 런 Lip 행(y17=Face·y18=Base — _lay_south_band)
+const HWANG_CLIFF_GATE_X := 28                  # ★[S3-T1] 절벽 계단 노치 서열(부두·spawn과 같은 세로 스파인)
+const HWANG_CLIFF_GATE_W := 2                   # ★[S3-T1] 노치 폭 2칸(ADR-0044 §1 남향 밴드 관통 규약 = HOME 개간 게이트 결)
+const BEACH_CORRIDOR_Y := 26                    # ★[S3-T1] 백사장 산책로(바다 y28 두 칸 위 — 생선가게 문 ~ 부두 진입)
+const PIER_X := 28                              # ★[S3-T1] 부두(잔교) 세로 칸 — 백사장에서 남쪽 바다로(WATER 위 PATH)
+const PIER_Y0 := 26                             # ★[S3-T1] 부두 시작 y(백사장 산책로에서 바다로 내려가는 진입)
+const PIER_Y1 := 40                             # ★[S3-T1] 부두 끝 y(남부 바다 한가운데 = 바다 낚시터, ~13칸 돌출)
+const SEA_FISHING_LABEL_TILE := Vector2i(28, 39)   # ★[S3-T1] 바다 낚시터 라벨 자리(부두 끝 — 캐스팅은 S3-T2)
+# ★[S3-T1] 고지 수풀(TREE) 군집 — 북단 도착 밴드에 "수풀 고지" 정체성을 준다(ADR-0044 §2 ② 고지 수풀).
+#   세로 스파인(x28)·절벽 런(y16~)·복귀 워프 칸(28,1)을 전부 비껴 깔아 flood-fill 무 soft-lock.
+const HWANG_HIGHLAND_TREE_RECTS := [
+	Rect2i(3, 3, 7, 4),      # 북서 x3..9, y3..6
+	Rect2i(14, 7, 5, 3),     # 중서 x14..18, y7..9
+	Rect2i(38, 3, 9, 4),     # 북동 x38..46, y3..6
+	Rect2i(50, 9, 8, 4),     # 동편 x50..57, y9..12
+	Rect2i(6, 11, 6, 3),     # 서편 하부 x6..11, y11..13
+]
 # 생선가게(enterable 빈 방) — 외관(NW land)·실내 방(황천해 밴드). 혼백관·창고 결의 데이터 주도 출입.
 # kind="fishshop"이라 _draw 가구 분기에 안 걸려 빈 방(도구·미끼·물고기 거래 서비스는 후속).
 # ★C5 — outdoor_h 44>26이라 공유 실내 띠(y26~)가 외부(land)와 겹쳐 → 실내 방·문·카메라를 황천해 밴드로
 #   +20 평행이동(y46~ — 혼백관 +18·창고 +41·마을 +48 결). 외관은 NW land(굵은 바다 위쪽)에 유지.
-const FISHSHOP_EXT_RECT := Rect2i(5, 5, 7, 6)   # x5..11, y5..10 (NW land, 바다 위쪽)
-const FISHSHOP_EXT_DOOR := Vector2i(8, 10)      # 외관 생선가게 문(닿으면 진입) — _carve_hwangcheonhae_paths 동선 연결
+# ★[S3-T1] 외관만 백사장 밴드로 내린다("바닷가 생선가게" — 부두·바다 낚시터와 한 화면). **실내 rect·문·
+#   카메라는 무변경**(실내 밴드 y46+는 외부 재배치와 독립 — 혼백관 보존 원칙 동형).
+const FISHSHOP_EXT_RECT := Rect2i(8, 20, 7, 6)  # ★[S3-T1] x8..14, y20..25 (백사장 밴드 서측)
+const FISHSHOP_EXT_DOOR := Vector2i(11, 25)     # 외관 생선가게 문(닿으면 진입, 로컬 x3 정렬) — 백사장 산책로로 연결
 const FISHSHOP_RECT := Rect2i(8, 46, 12, 9)     # ★C5 x8..19, y46..54 (실내 방 — 황천해 밴드 +20)
 const FISHSHOP_DOOR := Vector2i(13, 54)         # 실내 생선가게 문(닿으면 퇴장) — 아래벽 중앙(+20)
 const FISHSHOP_IN_TILE := Vector2i(13, 53)      # 실내 문 안쪽(진입 착지, +20)
@@ -3080,11 +3114,14 @@ func _build_naru_village() -> void:
 	_set_tile(QUEST_BOARD_TILE.x, QUEST_BOARD_TILE.y, WALL)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
-# ★ M3.1 — 삼도천(강 낚시 무대 + 혼백관). 안식 농원·나루 마을과 같은 스택(외부 풀밭 y0~23 + 아래
-# 실내 혼백관 방, VOID 격리). 낚시 메카닉은 만들지 않는다(Phase 3) — 강(WATER) 무대·강 낚시터(라벨만)·
-# 혼백관(enterable 빈 방)까지. 강은 상단 가로 띠(y1~3)로 흘러 그 아래 land(y4~23)가 한 덩어리라
-# 다리 없이도 모든 칸이 닿는다(flood-fill 단순·무 soft-lock). 나룻터 spawn(20,22)에서 동선이 혼백관
-# 문·하구 워프 칸까지 닿는다. 혼백관은 그레이박스 WALL 박스(만물상·창고 결 — _draw 외관 텍스처 없음).
+# ★ M3.1 / ★[ADR-0061 결정 1 · S3-T1 종형 플립] — 삼도천(강 낚시 무대 + 혼백관). 안식 농원·나루 마을과
+# 같은 스택(외부 y0~39 + 아래 실내 혼백관 방, VOID 격리). 낚시 메카닉은 여기서 안 만든다(S3-T2) —
+# 무대·라벨·워프까지다. **북에서 들어와 남으로 빠지는** 종형:
+#   나루 다리 남단 → 북단 나룻터 부두(spawn 28,2) → 혼백관·북안 물가(강 낚시터) → 잔교로 강 종단 →
+#   남안 스트립 → 하구 워프(28,39) → 황천해.
+# 강(y30~36)은 **전 폭**이라 잔교(SAMDO_JETTY_X) 말고는 도하가 없고, 북안 강둑(CLIFF_BANK·SOLID) 1행이
+# 수면을 한 단 낮게 읽히게 한다(나루 배후 강 북안 문법 동형 — ADR-0044 §2). 혼백관은 그레이박스 WALL
+# 박스(만물상·창고 결 — _draw 외관 텍스처 없음, 아트는 S3-T9).
 func _build_samdocheon() -> void:
 	_grid = []
 	for y in _grid_h:
@@ -3093,29 +3130,40 @@ func _build_samdocheon() -> void:
 			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
-	# 강(WATER, 통과 X) — 상단 가로 띠. 그 아래 둑(y4~)이 강 낚시터(Phase 3에서 캐스팅 자리).
+	# 강(WATER, 통과 X) — 남부 가로 밴드 **전 폭**(x0..grid_w-1). 나루 배후 강과 같은 결로 맵 가장자리까지
+	#   채워 동서 우회 도하를 없앤다(경계벽은 타일이 아니라 바깥 충돌바라 x0/x끝도 물로 남는다).
 	for y in range(SAMDO_RIVER_Y0, SAMDO_RIVER_Y1 + 1):
-		for x in range(1, _grid_w - 1):
+		for x in _grid_w:
 			_set_tile(x, y, WATER)
+	# 북안 강둑 단차(CLIFF_BANK, SOLID) 1행 — 물 최상단 바로 위. 잔교 열만 뒤의 _carve가 PATH로 열어
+	#   둑을 종단시킨다(나루 다리가 BACK_RIVER_BANK_Y를 여는 것과 동형).
+	for x in _grid_w:
+		_set_tile(x, SAMDO_RIVER_BANK_Y, CLIFF_BANK)
 
 	_build_facade(MUSEUM_EXT_RECT, MUSEUM_EXT_DOOR)            # 혼백관 외관(통과 불가 박스 + 문)
 	_build_room(MUSEUM_RECT, HOUSE, HOUSE_WALL, MUSEUM_DOOR)   # 실내 혼백관 빈 방(kind=museum)
-	_carve_samdocheon_paths()              # 동선(나룻터 도착 → 혼백관 문·하구 워프 칸)
+	_carve_samdocheon_paths()              # 동선(북단 나룻터 → 혼백관 문·강 낚시터·잔교·하구 워프)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
-# ★ M3.1 / ★C4 — 삼도천 동선(56×40). 가로 복도(y20)가 혼백관 쪽과 동단 하구 워프(54,20)를 잇고, 남단
-# 나룻터(spawn 28,38·복귀 워프 28,39)에서 복도로 올라온다. 혼백관 문(9,19)은 세로로 복도까지 잇는다.
-# land가 한 덩어리라 길은 동선 안내용이고, 워프 발동 칸까지 닿아 무 soft-lock.
+# ★ M3.1 / ★[S3-T1] — 삼도천 동선(56×40 종형). 세로 스파인(SAMDO_JETTY_X = 28) 하나가 북단 복귀 워프
+# (28,1)에서 남단 하구 워프(28,39)까지 관통한다 — 그 중 y29~36 구간이 강둑+강물 위 **목판 잔교**다
+# (fill 뒤 carve라 PATH가 이긴다). 가로 복도(SAMDO_CORRIDOR_Y)가 혼백관 열과 스파인을 잇고, 북안 물가
+# 산책로(SAMDO_BANK_LANE_Y)가 강 낚시터 라벨 자리와 스파인을 잇는다. 워프 칸까지 닿아 무 soft-lock.
 func _carve_samdocheon_paths() -> void:
-	_carve_h(20, 1, 54)                    # 가로 복도(동단 하구 워프 54,20까지)
-	_carve_v(28, 20, 39)                   # 나룻터 도착(28,38)·복귀 워프(28,39) → 복도
-	_carve_v(MUSEUM_EXT_DOOR.x, MUSEUM_EXT_DOOR.y, 20)  # 혼백관 문(9,19) → 복도(y20)
+	_fill_rect(SAMDO_DOCK_RECT, PATH)      # 북단 나룻터 부두 데크(도착 28,2·복귀 워프 28,1을 품음)
+	_carve_v(SAMDO_JETTY_X, 1, _outdoor_h - 1)   # 세로 스파인 = 나룻터 → 잔교(강 종단) → 남안 → 하구 워프(28,39)
+	_carve_h(SAMDO_CORRIDOR_Y, MUSEUM_EXT_DOOR.x, 46)   # 북부 가로 복도(혼백관 열 x9 ~ 동편 x46)
+	_carve_v(MUSEUM_EXT_DOOR.x, MUSEUM_EXT_DOOR.y, SAMDO_CORRIDOR_Y)  # 혼백관 문(9,13) → 복도
+	_carve_v(SAMDO_FISHING_LABEL_TILE.x, SAMDO_CORRIDOR_Y, SAMDO_BANK_LANE_Y)  # 복도 → 북안 물가(강 낚시터)
+	_carve_h(SAMDO_BANK_LANE_Y, SAMDO_FISHING_LABEL_TILE.x, SAMDO_JETTY_X)     # 북안 물가 산책로 → 잔교 진입
 
-# ★ M3.2 / ★C5 — 황천해(바다 낚시 무대 + 생선가게). 삼도천과 같은 패턴(외부 land + 아래 실내 생선가게 방,
-# VOID 격리). 낚시 메카닉은 만들지 않는다(Phase 3) — 바다(WATER) 무대·부두·바다 낚시터(라벨만)·생선가게
-# (enterable 빈 방)까지. ★C5 64×44 — 바다는 ㄴ자 만(남측 y≥SEA_Y0 + 동측 x≥SEA_X0)으로 흘러 SE가 탁
-# 트인 수면이고, 그 NW(x1~SEA_X0-1, y1~SEA_Y0-1)가 한 덩어리 land(flood-fill 단순). 부두(PATH)가 남측
-# 바다로 길게 뻗어 그 끝(PIER_Y1)이 바다 낚시터. 막다른 구역이라 워프는 삼도천 복귀 하나.
+# ★ M3.2 / ★[ADR-0061 결정 1 · S3-T1 종형 재배치] — 황천해(바다 낚시 무대 + 생선가게). 삼도천과 같은
+# 스택(외부 y0~43 + 아래 실내 생선가게 방, VOID 격리). 낚시 메카닉은 여기서 안 만든다(S3-T2).
+# 북→남으로 띠가 한 줄로 내려간다(ADR-0044 §2 ②):
+#   고지 수풀(y0~15, 도착 밴드) → **수평 절벽 런**(y16~18 Lip/Face/Base·계단 노치 1곳) → 백사장(y19~27,
+#   생선가게) → 바다 전 폭(y28~43). 부두(PIER_X)가 백사장에서 남쪽 바다로 종단하고 그 끝이 바다 낚시터다.
+# ㄴ자 만(옛 SEA_X0 동측 띠)은 폐지 — 남쪽이 통째로 트여 "바다로 빠지는" 종형 축이 눈에 읽힌다.
+# 막다른 구역이라 워프는 삼도천 복귀 하나.
 func _build_hwangcheonhae() -> void:
 	_grid = []
 	for y in _grid_h:
@@ -3124,25 +3172,36 @@ func _build_hwangcheonhae() -> void:
 			row.append(GROUND if y < _outdoor_h else VOID)
 		_grid.append(row)
 
-	# 바다(WATER, 통과 X) — ㄴ자 만(남측 가로 띠 y≥SEA_Y0 + 동측 세로 띠 x≥SEA_X0). NW가 한 덩어리 land로
-	# 남고, 부두 끝(남측 바다 한가운데)이 바다 낚시터(Phase 3 캐스팅 자리). 경계벽은 뒤에서 외곽 링을 덮는다.
-	for y in range(1, _outdoor_h):
-		for x in range(1, _grid_w - 1):
-			if x >= SEA_X0 or y >= SEA_Y0:
-				_set_tile(x, y, WATER)
+	# 바다(WATER, 통과 X) — 남부 **전 폭**(y≥SEA_Y0 × x0..grid_w-1). 삼도천 강과 같은 결로 맵 가장자리까지
+	# 채운다(경계벽은 타일이 아니라 바깥 충돌바). 부두 끝(바다 한가운데)이 바다 낚시터 = S3-T2 캐스팅 자리.
+	for y in range(SEA_Y0, _outdoor_h):
+		for x in _grid_w:
+			_set_tile(x, y, WATER)
+
+	# 고지 수풀(TREE, 통과 X) — 북단 도착 밴드의 "고지" 정체성. 절벽 런·스파인·워프 칸은 비껴 깔린다.
+	for r in HWANG_HIGHLAND_TREE_RECTS:
+		_fill_rect(r, TREE)
+
+	# 수평 절벽 런 — 고지(북)↔백사장(남) 전이. HOME 고지와 같은 원시어휘를 그대로 쓴다(신규 타일종 0):
+	#   y=Lip(걷기 O·밝은 상단) / y+1=Face(SOLID) / y+2=Base(SOLID·접지 그림자). 아트 패스는 S3-T9.
+	_lay_south_band(0, _grid_w - 1, HWANG_CLIFF_Y)
+	# 계단 노치 — 절벽 런을 관통하는 유일한 통로(폭 2칸, HOME 개간 게이트 결). 좌우 끝은 곡선 코너로
+	#   말아넣어 직각 마감을 완화한다(ADR-0056 ③ _round_south_notch와 같은 시맨틱·좌표만 이 구역 것).
+	_carve_stair_notch(Rect2i(HWANG_CLIFF_GATE_X, HWANG_CLIFF_Y, HWANG_CLIFF_GATE_W, 3))
+	_round_cliff_notch(HWANG_CLIFF_GATE_X, HWANG_CLIFF_GATE_W, HWANG_CLIFF_Y)
 
 	_build_facade(FISHSHOP_EXT_RECT, FISHSHOP_EXT_DOOR)            # 생선가게 외관(통과 불가 박스 + 문)
 	_build_room(FISHSHOP_RECT, HOUSE, HOUSE_WALL, FISHSHOP_DOOR)   # 실내 생선가게 빈 방(kind=fishshop)
-	_carve_hwangcheonhae_paths()           # 동선(서단 도착 → 생선가게 문·부두)
+	_carve_hwangcheonhae_paths()           # 동선(북단 도착 → 절벽 노치 → 생선가게 문·부두)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
-# ★ M3.2 / ★C5 — 황천해 동선. 가로 복도(y15)가 서단 도착·복귀 워프(spawn 2,15·at 1,15)와 생선가게·부두를
-# 잇고, 부두(PIER_X)가 복도에서 남측 바다로 세로로 뻗는다(WATER 위에 PATH를 덮어 걸을 수 있는 잔교 — _build
-# 순서상 바다 fill 뒤에 carve라 PATH가 이긴다). 부두 끝(바다 낚시터)까지 닿아 무 soft-lock.
+# ★ M3.2 / ★[S3-T1] — 황천해 동선(64×44 종형). 세로 스파인(PIER_X = 28)이 북단 복귀 워프(28,1)에서
+# 고지·절벽 노치·백사장을 지나 부두 끝(바다 낚시터 PIER_Y1)까지 한 줄로 내려간다. 백사장 산책로
+# (BEACH_CORRIDOR_Y)가 생선가게 문과 스파인을 잇는다. 바다 fill 뒤에 carve라 부두 PATH가 WATER를 이긴다.
 func _carve_hwangcheonhae_paths() -> void:
-	_carve_h(15, 1, PIER_X)                # 가로 복도(서워프 1,15 ~ 부두 x24)
-	_carve_v(FISHSHOP_EXT_DOOR.x, FISHSHOP_EXT_DOOR.y, 15)  # 생선가게 문(8,10) → 복도(y15)
-	_carve_v(PIER_X, PIER_Y0, PIER_Y1)     # 부두(잔교) — 복도(y15)에서 남측 바다로 길게 뻗음(WATER 위 PATH)
+	_carve_v(PIER_X, 1, PIER_Y1)           # 세로 스파인 = 북단 워프(28,1) → 노치 → 백사장 → 부두 끝(바다 낚시터)
+	_carve_h(BEACH_CORRIDOR_Y, FISHSHOP_EXT_DOOR.x, 50)     # 백사장 산책로(생선가게 열 x11 ~ 동편 x50)
+	_carve_v(FISHSHOP_EXT_DOOR.x, FISHSHOP_EXT_DOOR.y, BEACH_CORRIDOR_Y)  # 생선가게 문(11,25) → 산책로
 
 # ★ M4.1 — 저승 숲(채집 무대 + 목공방). 삼도천·황천해와 같은 스택(외부 land y0~23 + 아래 실내 목공방
 # 방, VOID 격리). 채집 메카닉은 만들지 않는다(Phase 3) — 나무(TREE) 무대·채집지(라벨만)·목공방(enterable
@@ -3404,8 +3463,13 @@ func _carve_stair_notch(rect: Rect2i) -> void:
 #   좌벽의 동측 끝(노치 서변) → CORNER_SE / 우벽의 서측 끝(노치 동변) → CORNER_SW (오토타일러 west/east end
 #   시맨틱과 동일). Face행=HIGHLAND_S+1 / Base행=HIGHLAND_S+2. 코너는 전부 SOLID라 통로 폭·충돌 불변.
 func _round_south_notch(gate_x: int, gate_w: int) -> void:
-	var fy: int = HIGHLAND_S + 1
-	var by: int = HIGHLAND_S + 2
+	_round_cliff_notch(gate_x, gate_w, HIGHLAND_S)
+
+# ★[S3-T1] 위 라운딩을 Lip 행 인자화한 일반형 — HOME 고지(HIGHLAND_S)뿐 아니라 다른 구역의 수평 절벽
+#   런(황천해 HWANG_CLIFF_Y)도 같은 마감을 쓴다. 순수 그리드 로직·SOLID 유지라 통로 폭·충돌 불변.
+func _round_cliff_notch(gate_x: int, gate_w: int, lip_y: int) -> void:
+	var fy: int = lip_y + 1
+	var by: int = lip_y + 2
 	var left: int = gate_x - 1
 	var right: int = gate_x + gate_w
 	if left >= 0:   # 좌벽 동측 끝(노치를 향한 면) → SE 곡선
@@ -3649,7 +3713,9 @@ func _carve_village_paths() -> void:
 		_carve_h(RIVERSIDE_LANE_Y, lane_x0, lane_x1)    # 강변 물가 산책로(다리 스파인과 교차)
 
 	# 워프 발동 칸까지 길(목적 구역 stub → 휴면, 그 구역 빌드 시 점등).
-	_carve_v(BRIDGE_X[0], 1, MAIN_CORRIDOR_Y)   # 나룻터(52,1) → 삼도천(혼백관) — 북단 강변로(다리 서칸과 같은 열)
+	# ★[ADR-0061 결정 1 / S3-T1] 북단 나룻터 워프(52,1)는 폐지됐다(삼도천 진입 = 다리 남단). 그래도 이
+	#   세로 스파인 길은 **남긴다** — 마을 형태(남북 척추)를 바꾸지 않기 위해서다(앵커 보존 잔여분).
+	_carve_v(BRIDGE_X[0], 1, MAIN_CORRIDOR_Y)   # 북단 스파인(다리 서칸과 같은 열) — 마을 남북 척추
 	_carve_v(98, 18, MAIN_CORRIDOR_Y)           # 산길(98,18) → 업화 갱도 — 동편 가장자리
 
 	# ★[ADR-0060 결정 1] 남향 스파인 + 배후 강 다리. 복도(y36)에서 남쪽으로 내려가 강둑(y65)을 종단하고
@@ -5375,23 +5441,29 @@ func _place_labels() -> void:
 			#   이제 남는 라벨은 아직 그레이박스인 워프·다리·부두뿐이다.
 			# ★C3 — 100×72 재배치에 맞춰 라벨도 새 건물·워프 위치로 옮긴다(외관 위·워프 가장자리 옆).
 			# ★[ADR-0060 결정 1] 다리·부두 라벨을 배후 강(남단)으로 이전(옛 중앙 수직 강 다리 48,34 폐지).
+			# ★[ADR-0061 결정 1 / S3-T1] 삼도천 진입이 북단 나룻터에서 **다리 남단**으로 내려왔다:
+			#   · 남단 부두 스텁 라벨("나루 부두(낚시터 — Slice 3)")을 실제 진입 안내로 승격.
+			#   · 북단 "나룻터 → 삼도천" 라벨은 **삭제**(워프가 사라진 자리에 안내가 남으면 거짓 안내).
+			#     x52 세로 스파인 길 자체는 남아 마을 형태는 불변이다.
 			_add_label("다리", _tile_center_px(Vector2i(48, 64)))                   # 강둑 위 다리 서쪽
-			_add_label("나루 부두(낚시터 — Slice 3)", _tile_center_px(Vector2i(62, 70)))  # 남단 부두 동쪽
+			_add_label("나룻터 → 삼도천", _tile_center_px(Vector2i(60, 70)))        # ★[S3-T1] 다리 남단 부두(52·53,71) 안내
 			_add_label("← 안식 농원", _tile_center_px(Vector2i(4, 35)))   # 서워프(1,36) 안내
-			_add_label("나룻터 → 삼도천", _tile_center_px(Vector2i(53, 3)))  # ★ M3.1 북동 나룻터(혼백관, 점등 — ★C3 52,1)
 			_add_label("산길 → 업화 갱도", _tile_center_px(Vector2i(94, 17)))   # ★ M5.1 동 산길(정규 복원 — 갱도로 점등, ★C3 98,18)
 		RegionCatalog.SAMDOCHEON:
-			# ★ M3.1 / ★C4 — 혼백관은 그레이박스 WALL 박스라 라벨로 식별(만물상·창고 컨벤션). 강 낚시터·워프 안내(56×40).
-			_add_label("혼백관", _tile_center_px(Vector2i(9, 13)))           # ★C4 외관(y14~19) 위
-			_add_label("강 낚시터(Phase 3)", _tile_center_px(SAMDO_FISHING_LABEL_TILE))
-			_add_label("나룻터 → 나루 마을", _tile_center_px(Vector2i(28, 37)))  # ★C4 남단 복귀 워프(28,39) 안내
-			_add_label("하구 → 황천해", _tile_center_px(Vector2i(51, 20)))      # ★C4 동단 하구 워프(54,20) 안내
+			# ★ M3.1 / ★[S3-T1] — 혼백관은 그레이박스 WALL 박스라 라벨로 식별(만물상·창고 컨벤션).
+			#   종형 플립에 맞춰 라벨도 북(도착)→남(하구) 순으로 내려간다.
+			_add_label("혼백관", _tile_center_px(Vector2i(9, 7)))              # ★[S3-T1] 외관(y8~13) 위
+			_add_label("나룻터 → 나루 마을", _tile_center_px(Vector2i(34, 2)))  # ★[S3-T1] 북단 복귀 워프(28,1) 동쪽
+			_add_label("강 낚시터", _tile_center_px(SAMDO_FISHING_LABEL_TILE))  # ★[S3-T1] 북안 물가(캐스팅은 S3-T2)
+			_add_label("잔교", _tile_center_px(Vector2i(SAMDO_JETTY_X + 3, 33)))  # ★[S3-T1] 강 종단 목판 잔교
+			_add_label("하구 → 황천해", _tile_center_px(Vector2i(22, 38)))      # ★[S3-T1] 남단 하구 워프(28,39) 서쪽
 		RegionCatalog.HWANGCHEONHAE:
-			# ★ M3.2 / ★C5 — 생선가게는 그레이박스 WALL 박스라 라벨로 식별. 부두·바다 낚시터·복귀 워프 안내(64×44).
-			_add_label("생선가게", _tile_center_px(Vector2i(8, 7)))
-			_add_label("부두", _tile_center_px(Vector2i(PIER_X, 24)))           # ★C5 부두 잔교(남측 바다 위) 안내
-			_add_label("바다 낚시터(Phase 3)", _tile_center_px(SEA_FISHING_LABEL_TILE))
-			_add_label("하구 → 삼도천", _tile_center_px(Vector2i(4, 15)))       # ★C5 서단 복귀 워프(1,15) 안내
+			# ★ M3.2 / ★[S3-T1] — 생선가게는 그레이박스 WALL 박스라 라벨로 식별. 북(도착)→남(바다) 순.
+			_add_label("물길 → 삼도천", _tile_center_px(Vector2i(22, 2)))       # ★[S3-T1] 북단 복귀 워프(28,1) 서쪽
+			_add_label("고지 계단", _tile_center_px(Vector2i(HWANG_CLIFF_GATE_X + 4, HWANG_CLIFF_Y + 1)))  # ★[S3-T1] 절벽 런 관통 노치
+			_add_label("생선가게", _tile_center_px(Vector2i(11, 19)))           # ★[S3-T1] 외관(y20~25) 위
+			_add_label("부두", _tile_center_px(Vector2i(PIER_X + 3, 30)))       # ★[S3-T1] 부두 잔교(남부 바다 위) 안내
+			_add_label("바다 낚시터", _tile_center_px(SEA_FISHING_LABEL_TILE))  # ★[S3-T1] 부두 끝(캐스팅은 S3-T2)
 		RegionCatalog.JEOSEUNG_FOREST:
 			# ★ M4.1 / ★C6 — 목공방은 그레이박스 WALL 박스라 라벨로 식별. 채집지 3곳(빈터)·워프 안내(60×44).
 			_add_label("목공방", _tile_center_px(Vector2i(9, 16)))

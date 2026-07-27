@@ -257,7 +257,19 @@ func _initialize() -> void:
 		warp_at[w["to"]] = w["at"]
 	_check("⑥b 워프 HOME at (1,36) 불변", warp_at.get(RegionCatalog.HOME) == Vector2i(1, 36))
 	_check("⑥c 워프 어푸광산 at (98,18) 불변", warp_at.get(RegionCatalog.EOPHWA_MINE) == Vector2i(98, 18))
-	_check("⑥d 워프 삼도천 at (52,1) 불변", warp_at.get(RegionCatalog.SAMDOCHEON) == Vector2i(52, 1))
+	# ★[ADR-0061 결정 1 / S3-T1 종형 남향 이행] — 삼도천 워프는 북단 나룻터(52,1)에서 **다리 남단**
+	#   (52·53,71 = 남단 부두 마지막 행, 다리 폭 2칸)으로 내려왔다. ADR-0060 결정 1의 "북단 앵커 보존"은
+	#   Slice 2 스코프 한정이었고 ADR-0044 종형 축이 상위다. 나머지 앵커(서워프·산길·spawn)는 불변.
+	var samdo_ats: Array = []
+	for w in RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE):
+		if w["to"] == RegionCatalog.SAMDOCHEON:
+			samdo_ats.append(w["at"])
+	_check("⑥d 워프 삼도천 at = 다리 남단 2칸 (52,71)·(53,71) ★[S3-T1]",
+		samdo_ats == [Vector2i(52, 71), Vector2i(53, 71)])
+	for sa in samdo_ats:
+		_check("⑥d2 삼도천 워프 칸 %s이 남단 부두 안(다리로만 닿는 나룻터)" % sa, dock.has_point(sa))
+	_check("⑥d3 북단 세로 스파인 길은 유지(마을 형태 불변)",
+		m._grid[1][int(m.BRIDGE_X[0])] == m.PATH)
 	_check("⑥e 카페 외관 rect 불변", m.CAFE_EXT_RECT == Rect2i(5, 25, 8, 7))
 	_check("⑥f 멜 집 rect 불변", m.MEL_HOUSE_RECT == Rect2i(20, 14, 5, 5))
 	_check("⑥g 미호 집 rect 불변", m.MIHO_HOUSE_RECT == Rect2i(5, 44, 4, 4))
