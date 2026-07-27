@@ -4,11 +4,13 @@ extends SceneTree
 # 세이브 복원·막다른 구역(워프 1개)·회귀 0을 단언한다. region.gd 데이터·워프 동작은 world/warp_test가
 # 본다 — 여기는 main이 그 데이터로 *황천해를 어떻게 짓는지*(그리드 콘텐츠 + 건물)를 본다.
 #
-# ★ 핵심 불변식(★C5 64×44 ㄴ자 만):
-#   ① 바다(WATER)가 ㄴ자 만(남측 y≥SEA_Y0 + 동측 x≥SEA_X0)으로 흐르고, NW land는 걸을 수 있다.
-#   ② 부두(PIER_X) = 남측 바다 위에 PATH로 덮인 잔교(걸을 수 있음), 그 끝이 바다 낚시터.
+# ★ 핵심 불변식(★[ADR-0061 결정 1 · S3-T1] 64×44 종형 남향 재배치 — 북에서 들어와 남쪽 바다로):
+#   ① 남부(y≥SEA_Y0)가 **전 폭** 바다다(ㄴ자 만 폐지 — 옛 동측 띠 SEA_X0 소멸).
+#   ①b 고지(북)↔백사장(남) 사이에 **수평 절벽 런**(Lip/Face/Base 3행)이 가로지르고, 계단 노치 1곳만 관통.
+#   ② 부두(PIER_X) = 남부 바다 위에 PATH로 덮인 잔교(걸을 수 있음), 그 끝이 바다 낚시터.
 #   ③ 생선가게 외관 = WALL 박스 + 문 PATH 리세스, 실내는 빈 방(kind=fishshop).
-#   ④ 서단 spawn(2,16)에서 생선가게 문·부두 끝·복귀 워프가 걸어서 닿는다(flood-fill).
+#      실내 rect·문·카메라는 **무변경**(혼백관 보존 원칙 동형) — 외관만 백사장 밴드로 이동.
+#   ④ 북단 spawn(28,2)에서 생선가게 문·부두 끝·복귀 워프가 걸어서 닿는다(flood-fill·노치 통과).
 #   ⑤ 생선가게 출입 라운드트립 + 취침 불가 + 세이브 라운드트립.
 #   ⑥ 막다른 구역(워프 1개 — 삼도천 복귀) + 회귀 0(카탈로그 생선가게·홈 집 출입 불변).
 # 실행: godot --headless --path game --script res://playtest/hwangcheonhae_test.gd
@@ -39,13 +41,14 @@ func _despawn(m: Node) -> void:
 	await process_frame
 	await process_frame
 
-# 외부에서 걸을 수 있는 칸인가(WALL·WATER·VOID·범위밖이면 X). 실내 스택(y>=outdoor_h)은 제외.
+# 외부에서 걸을 수 있는 칸인가(SOLID·WATER·VOID·범위밖이면 X). 실내 스택(y>=outdoor_h)은 제외.
 # ★C5 — 황천해가 64×44라 전역 MAP_W/OUTDOOR_H가 아니라 빌드된 구역 치수(_grid_w/_outdoor_h)를 쓴다(삼도천 결).
+# ★[S3-T1] 절벽 런(CLIFF_FACE/BASE)·수풀(TREE)이 도입돼 WALL 하드코딩으로는 부족하다 — is_solid()를 쓴다.
 func _walkable(m: Node, t: Vector2i) -> bool:
 	if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
 		return false
 	var id: int = m._grid[t.y][t.x]
-	return id != m.WALL and id != m.WATER and id != m.VOID
+	return not m.is_solid(id) and id != m.WATER and id != m.VOID
 
 func _reachable(m: Node, start: Vector2i) -> Dictionary:
 	var seen := {}
@@ -90,19 +93,36 @@ func _initialize() -> void:
 		m._grid.size() == m._grid_h and m._grid[0].size() == m._grid_w
 		and m._grid_w == 64 and m._outdoor_h == 44)
 
-	# ── ① 바다(WATER) ㄴ자 만(남+동) + 걸을 수 있는 NW land ──
-	# 남측 가로 띠(y≥SEA_Y0). 부두 칸(PIER_X)은 PATH로 덮이므로 비껴 검사한다.
-	for y in [m.SEA_Y0, m._outdoor_h - 2]:
-		for x in [2, 12, 30, 36]:
-			_check("① 남측 바다 칸 WATER (%d,%d)" % [x, y], m._grid[y][x] == m.WATER)
-	# 동측 세로 띠(x≥SEA_X0).
-	for x in [m.SEA_X0, m._grid_w - 2]:
-		for y in [2, 12, 24]:
-			_check("①b 동측 바다 칸 WATER (%d,%d)" % [x, y], m._grid[y][x] == m.WATER)
-	# NW land(만 밖)는 걸을 수 있다.
-	_check("①c NW land(SEA_X0-1, SEA_Y0-1)는 걸을 수 있음",
-		_walkable(m, Vector2i(m.SEA_X0 - 1, m.SEA_Y0 - 1)))
-	_check("①d 생선가게 옆 land(8, SEA_Y0-1)는 걸을 수 있음", _walkable(m, Vector2i(8, m.SEA_Y0 - 1)))
+	# ── ① 남부 바다 = 전 폭(ㄴ자 만 폐지) + 수평 절벽 런 + 걸을 수 있는 백사장 ──
+	var px: int = m.PIER_X
+	var sea_y0: int = m.SEA_Y0
+	var cliff_y: int = m.HWANG_CLIFF_Y
+	# 전 폭 전수 스캔 — 부두 열을 뺀 남부 모든 칸이 WATER인가(맵 가장자리 x0·x끝 포함 = 육로 우회 0).
+	var sea_hole := 0
+	for y in range(sea_y0, m._outdoor_h):
+		for x in m._grid_w:
+			if x == px:
+				continue
+			if m._grid[y][x] != m.WATER:
+				sea_hole += 1
+	_check("① 남부(y≥%d)가 전 폭 바다(부두 열 제외) — 구멍 %d칸" % [sea_y0, sea_hole], sea_hole == 0)
+	_check("①b 바다가 남부 절반 이하에서 시작(북=육지 밴드)", sea_y0 > m._outdoor_h / 2)
+	# 수평 절벽 런 = 고지↔백사장 전이(Lip 걷기 O / Face·Base SOLID). 계단 노치 열만 뚫려 있다.
+	var gx: int = m.HWANG_CLIFF_GATE_X
+	var gw: int = m.HWANG_CLIFF_GATE_W
+	var face_hole := 0
+	for x in m._grid_w:
+		if x >= gx and x < gx + gw:
+			continue
+		if not m.is_solid(m._grid[cliff_y + 1][x]) or not m.is_solid(m._grid[cliff_y + 2][x]):
+			face_hole += 1
+	_check("①c 절벽 런 Face·Base 행이 전 폭 SOLID(노치 제외) — 구멍 %d칸" % face_hole, face_hole == 0)
+	_check("①d 절벽 Lip 행은 걷기 O(고지 밑단 하이라이트)", not m.is_solid(m.CLIFF_LIP))
+	for gy in range(cliff_y, cliff_y + 3):
+		_check("①e 계단 노치(%d,%d) 통행 가능" % [gx, gy], _walkable(m, Vector2i(gx, gy)))
+	# 고지 수풀(TREE)·백사장 land는 걸을 수 있다.
+	_check("①f 백사장(생선가게 옆 y%d)은 걸을 수 있음" % (sea_y0 - 2), _walkable(m, Vector2i(20, sea_y0 - 2)))
+	_check("①g 고지 도착 밴드(28,3)는 걸을 수 있음", _walkable(m, Vector2i(28, 3)))
 
 	# ── ② 부두(잔교) = 바다 위 PATH, 끝이 바다 낚시터 ──
 	for y in range(m.PIER_Y0, m.PIER_Y1 + 1):
@@ -123,11 +143,21 @@ func _initialize() -> void:
 				_check("③b 생선가게 외관 칸 WALL (%d,%d)" % [x, y], m._grid[y][x] == m.WALL)
 	_check("③c 생선가게 실내 바닥 빌드(HOUSE 타일)",
 		m._grid[m.FISHSHOP_RECT.position.y + 1][m.FISHSHOP_RECT.position.x + 1] == m.HOUSE)
+	# ★[S3-T1] 외관만 백사장 밴드로 내렸고 **실내 앵커는 바이트 불변**(혼백관 보존 원칙 동형).
+	_check("③d 실내 rect 무변경(8,46,12,9)", m.FISHSHOP_RECT == Rect2i(8, 46, 12, 9))
+	_check("③e 실내 문·진입 칸 무변경",
+		m.FISHSHOP_DOOR == Vector2i(13, 54) and m.FISHSHOP_IN_TILE == Vector2i(13, 53))
+	_check("③f 실내 카메라 rect 무변경(2,44,20,13)", m.FISHSHOP_CAM_RECT == Rect2i(2, 44, 20, 13))
+	_check("③g 생선가게 외관이 백사장 밴드(절벽 아래·바다 위)",
+		ext.position.y > cliff_y + 2 and ext.end.y - 1 < sea_y0)
 
 	# ── ④ flood-fill 무 soft-lock: spawn에서 문·부두 끝·복귀 워프 도달 ──
+	# ★[S3-T1] spawn이 서단(2,15) → **북단 중앙(28,2)**으로 이동했다(종형 남향 축 = 북에서 들어온다).
 	var spawn: Vector2i = RegionCatalog.spawn_of(RegionCatalog.HWANGCHEONHAE)
-	_check("④ spawn = (2,15) ★C5", spawn == Vector2i(2, 15))
+	_check("④ spawn = (28,2) ★[S3-T1] 북단 고지 도착 밴드", spawn == Vector2i(28, 2))
+	_check("④a spawn이 절벽 런 위(고지 쪽)", spawn.y < cliff_y)
 	var reach := _reachable(m, spawn)
+	_check("④a2 절벽 아래 백사장까지 도달(노치 관통)", reach.has(m.FISHSHOP_EXT_DOOR + Vector2i(0, 1)))
 	_check("④b 생선가게 외관 문 도달", reach.has(m.FISHSHOP_EXT_DOOR))
 	_check("④c 부두 끝(바다 낚시터) 도달", reach.has(Vector2i(m.PIER_X, m.PIER_Y1)))
 	var warps: Array = RegionCatalog.warps_of(RegionCatalog.HWANGCHEONHAE)

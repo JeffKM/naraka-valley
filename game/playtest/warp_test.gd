@@ -70,42 +70,50 @@ func _initialize() -> void:
 	_check("③e 마을 서쪽 가장자리 → 안식 농원 복귀(왕복)", main._region == RegionCatalog.HOME)
 	_check("③f 복귀 도착 칸에 놓임", main._player_tile() == back_dest)
 
-	# ── ③'' M3.1 — 나루 마을 ↔ 삼도천 왕복(나룻터 점등). 나룻터(22,1) → 삼도천, 남단(20,23) → 마을 복귀 ──
-	# 먼저 안식 농원 → 나루 마을로 다시 건너간다(삼도천은 마을에서만 닿는다 — 허브 경유).
+	# ── ③'' ★[ADR-0061 결정 1 / S3-T1] 종형 남향 체인: 나루(북) → 삼도천(중) → 황천해(남)과 각 복귀 ──
+	# 옛 체인은 "마을 **북단** 나룻터(52,1) → 삼도천 남단 → **동단** 하구 → 황천해 서단"이라 종형 축과
+	# 정반대였다. 이제 세 구역이 전부 "북단으로 들어와 남단으로 빠진다":
+	#   마을 다리 남단(52·53,71) → 삼도천 북단(28,2) ─ 삼도천 남단 하구(28,39) → 황천해 북단(28,2)
+	#   복귀: 황천해 북단(28,1) → 삼도천 남안 잔교(28,38) / 삼도천 북단(28,1) → 마을 다리 북단(52,70)
+	# ★ 다리 폭이 2칸이라 삼도천 워프 칸도 2개다 — **두 칸 다** 발동하는지 왕복 안에서 확인한다.
 	main.player.position = main._tile_center_px(at)
 	main._maybe_warp_edge()
 	await _settle()
 	_check("③g 다시 나루 마을로", main._region == RegionCatalog.NARU_VILLAGE)
-	# 나루 마을 나룻터(22,1) 워프로 삼도천 진입.
-	var samdo_w: Dictionary = {}
+	var samdo_ws: Array = []
 	for w in RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE):
 		if w["to"] == RegionCatalog.SAMDOCHEON:
-			samdo_w = w
+			samdo_ws.append(w)
+	_check("③g2 마을 → 삼도천 워프 칸 2개(다리 폭 2칸)", samdo_ws.size() == 2)
+	var samdo_w: Dictionary = samdo_ws[0]
 	main.player.position = main._tile_center_px(samdo_w["at"])
 	main._maybe_warp_edge()
 	await _settle()
-	_check("③h 나룻터(22,1) → 삼도천 전환(점등)", main._region == RegionCatalog.SAMDOCHEON)
-	_check("③i 삼도천 도착 칸에 놓임", main._player_tile() == samdo_w["dest"])
+	_check("③h 다리 남단 서칸(52,71) → 삼도천 전환(종형 진입)", main._region == RegionCatalog.SAMDOCHEON)
+	_check("③i 삼도천 북단 도착 칸에 놓임", main._player_tile() == samdo_w["dest"])
 
-	# ── ③''' M3.2 — 삼도천 ↔ 황천해 왕복(하구 점등). 하구(54,20 ★C4) → 황천해, 서단(1,15 ★C5) → 삼도천 복귀 ──
+	# ── ③''' 삼도천 ↔ 황천해 왕복(남단 하구 → 북단 도착). ──
 	var hae_w: Dictionary = {}
 	for w in RegionCatalog.warps_of(RegionCatalog.SAMDOCHEON):
 		if w["to"] == RegionCatalog.HWANGCHEONHAE:
 			hae_w = w
+	_check("③j0 삼도천 하구 워프가 남단 경계 행", hae_w["at"].y == RegionCatalog.size_of(RegionCatalog.SAMDOCHEON).y - 1)
 	main.player.position = main._tile_center_px(hae_w["at"])
 	main._maybe_warp_edge()
 	await _settle()
-	_check("③j 하구(54,20 ★C4) → 황천해 전환(점등)", main._region == RegionCatalog.HWANGCHEONHAE)
-	_check("③k 황천해 도착 칸에 놓임", main._player_tile() == hae_w["dest"])
-	# 황천해 서단(1,15 ★C5) → 삼도천 하구 복귀(왕복).
+	_check("③j 삼도천 남단 하구(28,39) → 황천해 전환(종형)", main._region == RegionCatalog.HWANGCHEONHAE)
+	_check("③k 황천해 북단 도착 칸에 놓임", main._player_tile() == hae_w["dest"])
+	# 황천해 북단(28,1) → 삼도천 남안 잔교 복귀(왕복).
 	var hae_back: Dictionary = RegionCatalog.warps_of(RegionCatalog.HWANGCHEONHAE)[0]
 	main.player.position = main._tile_center_px(hae_back["at"])
 	main._maybe_warp_edge()
 	await _settle()
-	_check("③l 황천해 서단 → 삼도천 복귀(왕복)", main._region == RegionCatalog.SAMDOCHEON)
-	_check("③m 복귀 도착 칸에 놓임", main._player_tile() == hae_back["dest"])
+	_check("③l 황천해 북단 → 삼도천 복귀(왕복)", main._region == RegionCatalog.SAMDOCHEON)
+	_check("③m 복귀 도착 칸에 놓임(남안 잔교)", main._player_tile() == hae_back["dest"])
+	# ★ 핑퐁 방지 — 복귀 도착 칸이 하구 트리거 칸이면 즉시 되돌아가 버린다(도착 = 트리거 한 칸 안).
+	_check("③m2 복귀 도착 칸 ≠ 하구 트리거 칸(왕복 핑퐁 0)", hae_back["dest"] != hae_w["at"])
 
-	# 삼도천 남단 나룻터(28,39 ★C4) → 나루 마을 복귀(연쇄 왕복 마무리).
+	# 삼도천 북단 나룻터(28,1) → 나루 마을 다리 남단 복귀(연쇄 왕복 마무리).
 	var samdo_back: Dictionary = {}
 	for w in RegionCatalog.warps_of(RegionCatalog.SAMDOCHEON):
 		if w["to"] == RegionCatalog.NARU_VILLAGE:
@@ -113,8 +121,20 @@ func _initialize() -> void:
 	main.player.position = main._tile_center_px(samdo_back["at"])
 	main._maybe_warp_edge()
 	await _settle()
-	_check("③n 삼도천 남단 → 나루 마을 복귀(왕복)", main._region == RegionCatalog.NARU_VILLAGE)
-	_check("③o 복귀 도착 칸에 놓임", main._player_tile() == samdo_back["dest"])
+	_check("③n 삼도천 북단 → 나루 마을 복귀(왕복)", main._region == RegionCatalog.NARU_VILLAGE)
+	_check("③o 복귀 도착 칸에 놓임(다리 북단)", main._player_tile() == samdo_back["dest"])
+	for sw in samdo_ws:
+		_check("③o2 복귀 도착 칸 ≠ 진입 트리거 칸 %s(왕복 핑퐁 0)" % sw["at"], samdo_back["dest"] != sw["at"])
+	# ── ③'''' 다리 **동칸**(53,71)도 삼도천으로 발동하는지(폭 2칸 전부 살아 있음) ──
+	var samdo_w2: Dictionary = samdo_ws[1]
+	main.player.position = main._tile_center_px(samdo_w2["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③o3 다리 남단 동칸(53,71) → 삼도천 전환(폭 2칸 정합)", main._region == RegionCatalog.SAMDOCHEON)
+	main.player.position = main._tile_center_px(samdo_back["at"])
+	main._maybe_warp_edge()
+	await _settle()
+	_check("③o4 다시 나루 마을로 복귀(상태 원복)", main._region == RegionCatalog.NARU_VILLAGE)
 
 	# ── ③'''' M5.1 — 나루 마을 ↔ 업화 갱도 ↔ 저승 숲 정규 왕복(산길·숲길 점등, M4.1 임시 직결 종료) ──
 	# 산길(38,8) → 업화 갱도(남단 spawn). M4.1의 산길→저승 숲 임시 직결이 정규 산길→갱도로 복원됐다.
