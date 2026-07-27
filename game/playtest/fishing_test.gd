@@ -270,17 +270,19 @@ func _initialize() -> void:
 		and not ItemCatalog.stackable_of(ItemCatalog.ROD_T1)
 		and ItemCatalog.price_of(ItemCatalog.ROD_T1) == 0
 		and ItemCatalog.name_of(ItemCatalog.ROD_T1) != "")
+	# ★[S3-T3] 스텁 4종(fish_stub_*)이 정식 로스터 18종으로 교체됐다 — 카탈로그 통용 단언의 축을
+	#   "체급당 스텁"에서 "FishCatalog 전 어종"으로 옮긴다(로스터 세부는 fish_catalog_test 소관).
 	var fish_ok := true
-	for wc in range(4):
-		var fid := ItemCatalog.fish_for_class(wc)
+	for fid in FishCatalog.ids():
 		if not (ItemCatalog.has_item(fid) and ItemCatalog._is_fish(fid)
 				and ItemCatalog.category_of(fid) == ItemCatalog.CAT_HARVEST
 				and ItemCatalog.stackable_of(fid) and ItemCatalog.price_of(fid) > 0):
 			fish_ok = false
-	_check("ⓗ1 어획물 스텁 4종 = 품질 유차원 CAT_HARVEST·스택·유가", fish_ok)
+	_check("ⓗ1 어획물 18종 = 품질 유차원 CAT_HARVEST·스택·유가",
+		fish_ok and FishCatalog.ids().size() == 18)
 	_check("ⓗ1 어획물 판매가에 등급 배수(수확물 결)",
-		ItemCatalog.price_of(ItemCatalog.FISH_STUB_SMALL, ItemCatalog.Q_GOLD)
-			> ItemCatalog.price_of(ItemCatalog.FISH_STUB_SMALL, ItemCatalog.Q_NORMAL))
+		ItemCatalog.price_of(FishCatalog.NEOK_BUNGEO, ItemCatalog.Q_GOLD)
+			> ItemCatalog.price_of(FishCatalog.NEOK_BUNGEO, ItemCatalog.Q_NORMAL))
 
 	# ── ⓗ-2 캐스팅 무대 한정(ADR-0061 결정 9) — 안식 연못은 비캐스팅 ──
 	_select(m, ItemCatalog.ROD_T1)
@@ -338,7 +340,8 @@ func _initialize() -> void:
 	# ── ⓔ-2 혼력 배선(main) — 후킹 1회 소모·끊겨도 소모·부족 시 후킹 불가 ──
 	m.energy.refill()
 	var e0: int = m.energy.current
-	m.fishing = FishingSession.new(11, {"weight_class": FishingSession.WeightClass.SMALL},
+	# ★[S3-T3] 체급 스텁 대신 정식 어종 dict를 주입한다(main._start_fishing과 같은 경로).
+	m.fishing = FishingSession.new(11, FishCatalog.session_params(FishCatalog.NEOK_MYEOLCHI),
 		FishingSession.ROD_T1, {"energy_factor": m.FISHING_ENERGY_FACTOR})
 	m.fishing.hook_gate = m._fishing_hook_gate
 	m.fishing.cast()
@@ -350,14 +353,14 @@ func _initialize() -> void:
 	_check("ⓔ2 격투 중 추가 소모 없음(후킹 1회뿐)", m.energy.current == e_hooked)
 	_run_holding(m.fishing)
 	m._finish_fishing()
-	_check("ⓔ2 포획 → 어획물 인벤 지급(체급 스텁)",
-		m.inventory.has_item(ItemCatalog.FISH_STUB_SMALL))
+	_check("ⓔ2 포획 → 어획물 인벤 지급(정식 어종 id)",
+		m.inventory.has_item(FishCatalog.NEOK_MYEOLCHI))
 	_check("ⓔ2 결착 후 세션 폐기(main.fishing = null)", m.fishing == null)
 
 	# 끊겨도 혼력은 나간 채다(리스크 — 결정 6). 체급 게이트로 확정 끊김을 만든다.
 	m.energy.refill()
 	var e1: int = m.energy.current
-	m.fishing = FishingSession.new(12, {"weight_class": FishingSession.WeightClass.LARGE},
+	m.fishing = FishingSession.new(12, FishCatalog.session_params(FishCatalog.NEOUL_BEOMCHI),
 		FishingSession.ROD_T1, {"energy_factor": m.FISHING_ENERGY_FACTOR})
 	m.fishing.hook_gate = m._fishing_hook_gate
 	m.fishing.cast()
@@ -366,17 +369,17 @@ func _initialize() -> void:
 	_run_holding(m.fishing)
 	_check("ⓔ2 체급 게이트 확정 끊김", m.fishing.state == FishingSession.State.ESCAPED
 		and m.fishing.line_broke_by_class)
-	var fish_before: int = m.inventory.count_of(ItemCatalog.FISH_STUB_LARGE)
+	var fish_before: int = m.inventory.count_of(FishCatalog.NEOUL_BEOMCHI)
 	m._finish_fishing()
 	_check("ⓔ2 끊김 = 어획물 0 · 혼력은 환불 없음",
-		m.inventory.count_of(ItemCatalog.FISH_STUB_LARGE) == fish_before
+		m.inventory.count_of(FishCatalog.NEOUL_BEOMCHI) == fish_before
 		and m.energy.current == e1 - 14)
 
 	# 혼력 부족 → 후킹 불가(입질 놓침) · 소모 0.
 	m.energy.refill()
 	m.energy.spend(SoulEnergy.MAX - 2)   # 잔량 2 < 소 체급 4
 	var e2: int = m.energy.current
-	m.fishing = FishingSession.new(13, {"weight_class": FishingSession.WeightClass.SMALL},
+	m.fishing = FishingSession.new(13, FishCatalog.session_params(FishCatalog.NEOK_MYEOLCHI),
 		FishingSession.ROD_T1, {"energy_factor": m.FISHING_ENERGY_FACTOR})
 	m.fishing.hook_gate = m._fishing_hook_gate
 	m.fishing.cast()
@@ -397,11 +400,11 @@ func _initialize() -> void:
 		if String(k).findn("fishing") >= 0 or String(k).findn("reel") >= 0:
 			no_fishing_key = false
 	_check("ⓖ 세이브 dict에 낚시 세션 키 0(비영속)", no_fishing_key and not raw.has("fishing"))
-	var fish_count: int = m.inventory.count_of(ItemCatalog.FISH_STUB_SMALL)
+	var fish_count: int = m.inventory.count_of(FishCatalog.NEOK_MYEOLCHI)
 	m._load_game()
 	await _settle(m)
 	_check("ⓖ 저장/로드 왕복 후에도 어획물은 인벤에 남는다(하류 산출물만 영속)",
-		m.inventory.count_of(ItemCatalog.FISH_STUB_SMALL) == fish_count)
+		m.inventory.count_of(FishCatalog.NEOK_MYEOLCHI) == fish_count)
 	_check("ⓖ 로드 후 세션은 살아남지 않는다(구역 재구성이 버림)", m.fishing == null)
 
 	# ── ⓗ-5 회귀 0 — 낚시 배선이 기존 밭 루프를 안 건드린다 ──
