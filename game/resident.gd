@@ -58,6 +58,13 @@ var portrait_stem := ""
 #   · plain_talk=true  → node.lines_resident()            (옥자 — 호감도·일일 게이팅 없는 일상)
 var plain_talk := false
 
+# ★ [S3-T5 / ADR-0061 결정 4] 대화 시작 **직전 1회** 불리는 훅 — 이 대화에 *앞세울* 대사 줄들
+# (PackedStringArray)을 돌려준다. 빈 배열이면 아무 일도 없다(유효하지 않은 Callable도 동일).
+# 용도 = "첫 대화 이벤트": 뱃사공의 T1 낚싯대 증정이 여기 붙는다 — 훅이 지급·1회 플래그까지
+# 수행하고 증정 대사를 돌려주면, 프레임워크는 그 줄들을 평소 묶음 앞에 붙여 한 대화로 이어 준다.
+# ★과일반화 금지 규약 그대로: 프레임워크는 "언제 부를지"만 알고 "무엇을 주는지"는 모른다.
+var talk_intro := Callable()
+
 # ── 상호작용 판정(facing) ─────────────────────────────────────────────────
 var require_indoor := ""       # ""=검사 안 함. 값이 있으면 그 실내에서만 말 걸 수 있다(네오="만물상").
 var require_visible := false   # true면 node.visible일 때만(옥자·바나 — 시간·단계로 나타났다 사라진다).

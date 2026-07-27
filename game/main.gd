@@ -1676,6 +1676,10 @@ const FISHING_ENERGY_FACTOR := 1.0
 var _cast_bobber_bonus := 0.0    # 이번 캐스팅의 품질 보정(퀄리티 보버 — FishCatalog.quality_for 인자)
 var _cast_bait := ""             # 이번 캐스팅에 소모한 미끼 id("" = 맨몸)
 var _cast_tackles: Array = []    # 이번 캐스팅에 적용된 태클 id 목록(슬롯 수 이내)
+# ★[S3-T5 / ADR-0061 결정 4] 뱃사공 T1 낚싯대 증정을 이미 받았는가(1회성 · 세이브 영속).
+#   키 없는 구세이브 = false로 시작하되, 인벤에 이미 T1이 있으면 첫 대화에서 조용히 true로 접힌다
+#   (옛 자동 지급 경로로 받은 세이브 방어 — _grant_boatman_rod_lines 주석 참조).
+var _boatman_rod_given := false
 
 # T2.3 현재 심을 작물. Q로 카탈로그(빠른 성장 순)를 순환 선택한다.
 # 그레이박스에선 도구·씨앗 인벤토리 UI 없이 이 한 변수로 작물 종류를 고른다.
@@ -5733,7 +5737,9 @@ func _setup_frame() -> void:
 	frame.buy_pressed.connect(_on_frame_buy)
 	frame.buy_sprinkler_pressed.connect(_on_frame_buy_sprinkler)   # ★ [S1R-T9] 매대 스프링클러 구매
 	frame.buy_seed.connect(_on_frame_buy_seed)   # ★ [S1R-T12] 매대 그리드 행별 씨앗 구매
-	frame.buy_store_item.connect(_on_frame_buy_store_item)   # ★ [S2-T4] 매대 묘목·비료·건초 구매
+	frame.buy_store_item.connect(_on_frame_buy_store_item)   # ★ [S2-T4] 매대 묘목·비료·건초 + ★[S3-T5] 낚시 기어 구매
+	frame.sell_fish.connect(_on_frame_sell_fish)         # ★ [S3-T5] 생선가게 환전(행별 1마리·Shift 전량)
+	frame.sell_fish_all.connect(_on_frame_sell_fish_all) # ★ [S3-T5] 생선가게 전량 환전
 	frame.close_pressed.connect(_close_frame)    # ★ [S1R-T12] 우상단 X 닫기
 	frame.discard_slot.connect(_on_frame_discard)   # ★ [S1R-T12] 휴지통 버리기(확인 후)
 	frame.save_pressed.connect(_on_frame_save)   # ★ Phase B 옵션 탭
@@ -6118,8 +6124,9 @@ func _rebuild_region(to_region: String) -> void:
 		_repaint_field_overlays()      # 안식 농원으로 복귀 → 밭 고랑·작물 오버레이 복원
 	# ★ [S3-T2] 구역이 바뀌면 진행 중이던 캐스팅은 버린다(세션은 이 무대에 묶인 일시 상태).
 	fishing = null
-	if to_region in FISHING_REGIONS:
-		_grant_starter_rod()           # ★ 임시 지급 경로(★[S3-T5에서 뱃사공 증정으로 교체])
+	# ★[S3-T5] 옛 구역 진입 자동 지급(`_grant_starter_rod`)은 **폐기**됐다 — T1 낚싯대는 이제
+	#   뱃사공 첫 대화 증정이다(ADR-0061 결정 4). 낚싯대 없이 강 낚시터에 먼저 닿는 동선은
+	#   프롬프트가 뱃사공에게 안내한다(_process 하단 프롬프트 "낚싯대가 없다 …" 분기).
 
 # ★ M1.4 — 경작된 칸의 밭 오버레이(고랑·젖음·성장단계)를 field_layer에 다시 칠한다. 구역을
 # 오갈 때 field_layer를 비웠으므로(다른 구역에 떠다니지 않게), 안식 농원으로 돌아오면 farm
@@ -6189,6 +6196,7 @@ func _save_game() -> void:
 		"watering_can": _can_water,   # ★ [S1R-T8] 물뿌리개 잔량(구세이브 = 기본값 20, 하위호환)
 		"foraging_xp": _foraging_xp,   # ★ ADR-0052 채집 숙련 XP(전문직 게이트·퍼크 파생원)
 		"professions": _professions_to_save(),   # ★ ADR-0052 전문직 선택 {skill:{tier:id}}
+		"boatman_rod_given": _boatman_rod_given,   # ★ [S3-T5] 뱃사공 T1 증정 1회 플래그(키 없는 구세이브 = false)
 		"cafe_revenue_total": _cafe_revenue_total,
 		"total_income": _total_income,   # ★ [S1R-T12] 누적 총수입(정보패널 — 구세이브 키 없음=0)
 		"selected_crop": _selected_crop,
@@ -6271,6 +6279,9 @@ func _load_game() -> void:
 	# ★ [S1R-T8] 물뿌리개 잔량 복원 — 키 없는 구세이브는 기본값 20(가득, 하위호환). 손상 방어로 0..20 클램프.
 	_can_water = clampi(int(data.get("watering_can", _CAN_CAPACITY)), 0, _CAN_CAPACITY)
 	_refresh_water_badge()
+	# ★ [S3-T5] 뱃사공 T1 증정 플래그 복원(키 없는 구세이브 = false → 첫 대화에서 인벤 보유 여부로
+	#   접힌다. 아직 안 만난 세이브는 그대로 증정 대기 = 무막힘).
+	_boatman_rod_given = bool(data.get("boatman_rod_given", false))
 	# T7.2 카페 마일스톤 누적 서빙 매출. 손상 방어로 음수는 0으로 자른다(키 없는 구버전 세이브는 0).
 	_cafe_revenue_total = maxi(int(data.get("cafe_revenue_total", 0)), 0)
 	# ★ [S1R-T12] 누적 총수입 복원(키 없는 구세이브 = 0, 하위호환).
@@ -6660,6 +6671,8 @@ func _process(delta: float) -> void:
 		if frame.context == InventoryFrame.CTX_STORE:
 			frame.store_text = _store_text()
 			frame.store_items = _store_items()   # ★ [S1R-T12] 매대 그리드 품목 행
+		elif frame.context == InventoryFrame.CTX_FISHSHOP:
+			_refresh_fishshop()                  # ★ [S3-T5] 생선가게 매대·환전 행(구매·환전 즉시 반영)
 		return
 
 	# 건물 외관 문에 닿으면 실내로, 실내 문에 닿으면 밖으로 — 자동 fade 전환(스타듀식 출입).
@@ -7005,6 +7018,11 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		var gear_line := _fishing_gear_line(inventory.selected_id())
 		interact_prompt.text = "[좌클릭] 낚싯줄 던지기" + ("" if gear_line == "" else "   " + gear_line)
+	elif _needs_rod_hint():
+		# ★ [S3-T5] 낚싯대 없이 낚시터에 먼저 닿은 동선의 안내(옛 자동 지급 폐기의 짝). 삼도천 강
+		#   낚시터는 뱃사공(황천해)보다 먼저 만나는 자리라, 여기서 막히면 어디로 가야 하는지 알려 준다.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "낚싯대가 없다 — 황천해 생선가게의 뱃사공을 찾아가자"
 	elif facing_chest or facing_storehouse_chest:
 		# ★ Phase D/E 저장 상자를 바라볼 때: 우클릭으로 보관 패널을 연다(순수 보관 — 판매 아님).
 		interact_prompt.visible = true
@@ -7289,6 +7307,25 @@ func _cast_water_tile(t: Vector2i) -> Vector2i:
 
 # 캐스팅 조건: 세션 없음 + 낚싯대를 들었음 + 캐스팅 무대 + 겨눈 칸에서 물이 잡힘(ADR-0061 결정 2 입력 배선).
 # ★ 혼력은 여기서 안 본다 — 캐스팅·대기 = 혼력 0이고(결정 6), 소모는 후킹 순간뿐이다.
+# ★[S3-T5] 낚싯대를 **하나도** 안 가졌는가(4티어 중 아무거나). 안내 프롬프트 판정용 — "든 것"이
+#   아니라 "가진 것"을 본다(핫바에서 다른 걸 든 채 물가에 선 상황은 안내 대상이 아니다).
+func _has_any_rod() -> bool:
+	if inventory == null:
+		return false
+	for rod_id in GearCatalog.RODS:
+		if inventory.has_item(rod_id):
+			return true
+	return false
+
+# ★[S3-T5] 낚시터 물가를 겨눴는데 낚싯대가 아예 없는 상태인가(= 뱃사공 안내를 띄울 때).
+#   ADR-0061 결정 4가 T1을 뱃사공 증정으로 옮기면서 생긴 "삼도천 강 낚시터 선도달" 동선의 안전망이다.
+func _needs_rod_hint() -> bool:
+	if _sleeping or fishing != null or _indoor != "" or not _is_fishing_region():
+		return false
+	if _has_any_rod():
+		return false
+	return _cast_water_tile(_target) != Vector2i(-1, -1)
+
 func _can_cast() -> bool:
 	if fishing != null or _indoor != "" or not _is_fishing_region():
 		return false
@@ -7441,16 +7478,25 @@ func _finish_fishing() -> void:
 		_notice("입질을 놓쳤다")
 	queue_redraw()
 
-# ★[S3-T2 임시 지급 경로 — ★[S3-T5에서 뱃사공 증정으로 교체]] 캐스팅 무대(삼도천·황천해)에 들어설 때
-#   T1 낚싯대가 없으면 자동 지급한다. ADR-0061 결정 4는 "T1 = 뱃사공 첫 대화 증정"이지만 뱃사공
-#   Resident 등록이 S3-T5라, 그때까지 루프가 시작조차 못 하는 걸 막는 디버그 겸 그레이박스 경로다.
-#   S3-T5가 붙으면 이 호출을 지우고 증정 대사로 옮긴다(아이템·인벤 경로는 그대로 재사용).
-func _grant_starter_rod() -> void:
-	if inventory == null or inventory.has_item(ItemCatalog.ROD_T1):
-		return
-	inventory.add_item(ItemCatalog.ROD_T1, 1)
+# ★[S3-T5 / ADR-0061 결정 4] T1 낚싯대 증정 — **뱃사공 첫 대화 1회**. 옛 S3-T2 임시 경로
+#   (구역 진입 자동 지급 `_grant_starter_rod`)를 대체한다.
+#   레코드의 `talk_intro` 훅이 대화 시작 직전에 부르고, 돌려준 대사 줄들이 평소 묶음 앞에 붙는다.
+#   · 1회성: `_boatman_rod_given` 플래그(세이브 영속). 두 번째 대화부터는 빈 배열 = 아무 일 없음.
+#   · ★하위호환: 플래그가 없는 **구세이브**(옛 자동 지급으로 이미 T1을 가진 세이브 포함)는 인벤에
+#     T1이 있으면 조용히 "이미 받은 것"으로 표시만 하고 두 번째 대를 주지 않는다(중복 방어).
+#   · 인벤이 가득이면 지급 실패 → 플래그를 세우지 않아 다음 대화에 다시 시도된다(손실 0).
+func _grant_boatman_rod_lines() -> PackedStringArray:
+	if _boatman_rod_given or inventory == null:
+		return PackedStringArray()
+	if inventory.has_item(ItemCatalog.ROD_T1):
+		_boatman_rod_given = true      # 구세이브 하위호환 — 이미 가진 사람에게 두 번 주지 않는다
+		return PackedStringArray()
+	if not inventory.add_item(ItemCatalog.ROD_T1, 1):
+		return PackedStringArray()     # 백팩 가득 — 다음 대화에 다시 시도(플래그 안 세움)
+	_boatman_rod_given = true
 	_toast_item(ItemCatalog.ROD_T1, 1)
-	_notice("낡은 낚싯대를 얻었다 — 물가를 겨누고 좌클릭으로 던져 보자")
+	_notice("낡은 낚싯대를 받았다 — 물가를 겨누고 좌클릭으로 던져 보자")
+	return PackedStringArray(Boatman.LINES_ROD_GIFT)
 
 # ── ★ [S1R-T9] 저승 스프링클러 설치/철거/구매 ─────────────────────────────────
 # 이 칸에 스프링클러를 설치할 수 있는가(⑤ 기존 배치 규칙 준수). 안식 농원 전용·빈 지면(GROUND) 또는
@@ -7732,6 +7778,8 @@ func _open_frame(ctx: int) -> void:
 	if ctx == InventoryFrame.CTX_STORE:
 		frame.store_text = _store_text()   # 첫 그림부터 매대 본문이 차 있게(한 프레임 빈 패널 방지)
 		frame.store_items = _store_items()   # ★ [S1R-T12] 첫 그림부터 품목 행이 차 있게
+	elif ctx == InventoryFrame.CTX_FISHSHOP:
+		_refresh_fishshop()                # ★ [S3-T5] 생선가게(기어 매대 + 환전 행)
 	frame.open(ctx)
 	hotbar.visible = false
 	player.set_physics_process(false)   # 모달 — 이동 잠금
@@ -7855,11 +7903,17 @@ func _on_frame_buy_seed(crop_id: String, bulk: bool) -> void:
 func _on_frame_buy_store_item(buy_id: String, kind: String, bulk: bool) -> void:
 	_buy_store_generic_n(buy_id, kind, STORE_BULK if bulk else 1)
 
-# 매대 일반 품목을 네오 할인가로 n개까지 산다(골드 닿는 데까지 — 부분 구매 허용, _buy_seed_store_n 결).
-# kind가 기준가·인벤 적재 방법을 정한다(카탈로그가 진실원 — 여기선 라우팅만).
+# 매대 일반 품목을 점주 할인가로 n개까지 산다(골드 닿는 데까지 — 부분 구매 허용, _buy_seed_store_n 결).
+# kind가 기준가·인벤 적재 방법·**어느 가게인가**를 정한다(카탈로그가 진실원 — 여기선 라우팅만).
+# ★ [S3-T5] "gear"(낚싯대·미끼·태클)가 붙으며 이 함수가 **두 가게**를 태운다:
+#     · 만물상(묘목·비료·건초) = 네오 ♡ 할인
+#     · 생선가게(기어)        = 뱃사공 ♡ 할인   ← 서로 완전 독립(각자 자기 하트만 본다)
+#   할인 공식(StoreDiscount −6%/♡)은 공유하되 **입력 하트가 갈린다**는 게 결정 5의 핵심이다.
 func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 	var base := 0
 	var label := ""
+	var hearts := neo_affinity.hearts()   # 기본 = 만물상(네오)
+	var shop := "만물상"
 	match kind:
 		"sapling":
 			if not FruitTreeCatalog.has(buy_id):
@@ -7874,11 +7928,25 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 		"hay":
 			base = ItemCatalog.HAY_COST
 			label = ItemCatalog.name_of(ItemCatalog.HAY)
-		_:
-			return
+		"gear":
+			# ★[S3-T5] 낚시 기어 = 생선가게 전용(만물상은 취급 0 — 서비스 분산). T1은 증정품이라 비매(price 0).
+			if not GearCatalog.has(buy_id):
+				return
+			base = GearCatalog.price_of(buy_id)
+			label = GearCatalog.name_of(buy_id)
+			hearts = _boatman_hearts()
+			shop = "생선가게"
+			# ★유니크 규약(잠정): 낚싯대·태클은 스택 불가 장착물이라 **각 1개 한정**이다. 이미 가진
+			#   티어·태클은 재구매 불가(같은 태클을 두 개 사도 GearCatalog.active_tackles가 중복을
+			#   지워 효과가 0 = 돈만 버리는 함정). 미끼만 스택 소모품이라 대량 구매를 받는다.
+			if not GearCatalog.is_bait(buy_id):
+				if inventory.has_item(buy_id):
+					_notice("%s 는 이미 가지고 있다" % label)
+					return
+				n = 1
 	if base <= 0 or n <= 0:
 		return
-	var unit := StoreDiscount.price(base, neo_affinity.hearts())
+	var unit := StoreDiscount.price(base, hearts)
 	var bought := 0
 	for _i in n:
 		if not wallet.spend(unit):
@@ -7890,12 +7958,83 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 				inventory.add_item(buy_id, 1)
 			"hay":
 				inventory.add_item(ItemCatalog.HAY, 1)
+			"gear":
+				inventory.add_item(buy_id, 1)
 		bought += 1
 	if bought == 0:
 		_notice("골드 부족(%d 필요)" % unit)
 		return
 	audio.sfx("ui")                           # 매대 거래 블립
-	_notice("%s ×%d −%d골드 (만물상)" % [label, bought, unit * bought])
+	_notice("%s ×%d −%d골드 (%s)" % [label, bought, unit * bought, shop])
+
+# ── ★ [S3-T5 / ADR-0061 결정 5] 물고기 즉시 환전(생선가게 환전 탭) ─────────────
+# ADR-0021 해석: 출하함(무인·익일 정산)은 **전 품목 야간 채널**로 그대로 두고, 뱃사공은 "상점 중
+# 물고기를 취급하는 유일한 얼굴"로서 **즉시 현금화** 편의를 준다. 가격은 출하함 정산과 **동일 공식**
+# (ItemCatalog.price_of(id, quality))이라 어느 채널로 팔아도 총액이 같다 — 편의만 다르다.
+# ★관계-중립: 환전가에 뱃사공 ♡ 보정 0(ADR-0052 "+판매가는 관계 곱셈기 전용"·낚시 base-only).
+func _on_frame_sell_fish(id: String, quality: int, bulk: bool) -> void:
+	if not ItemCatalog._is_fish(id):
+		return
+	# bulk(Shift) = 이 행(같은 어종·같은 등급) 전량, 아니면 1마리.
+	var want := _fish_count(id, quality) if bulk else 1
+	_sell_fish_n(id, quality, want)
+
+# 보유 물고기 **전량** 환전(전 어종·전 등급). 행마다 돌며 같은 경로를 태운다(합산 알림 1줄).
+func _on_frame_sell_fish_all() -> void:
+	var gold := 0
+	var n := 0
+	for row in _trade_items():
+		var got := _sell_fish_n(String(row["buy_id"]), int(row["quality"]), int(row["count"]), true)
+		gold += int(got["gold"])
+		n += int(got["count"])
+	if n == 0:
+		_notice("환전할 물고기가 없다")
+		return
+	audio.sfx("ui")
+	_notice("물고기 %d마리 환전 +%d골드 (생선가게)" % [n, gold])
+
+# (어종, 등급) n마리를 환전한다. quiet=true면 알림·SFX를 호출 측이 합쳐 낸다(전량 환전).
+# 반환 = {"count": 실제 환전 수, "gold": 지급 골드}.
+func _sell_fish_n(id: String, quality: int, n: int, quiet: bool = false) -> Dictionary:
+	var took := _take_fish(id, quality, n)
+	if took <= 0:
+		return {"count": 0, "gold": 0}
+	var gold := ItemCatalog.price_of(id, quality) * took   # ★출하함 정산과 동일 공식
+	wallet.earn(gold)
+	_total_income += gold                     # ★ [S1R-T12] 누적 총수입(정보패널) — 출하 정산과 같은 결
+	if not quiet:
+		audio.sfx("ui")
+		var qtag := (ItemCatalog.quality_name(quality) + " ") if quality > 0 else ""
+		_notice("%s%s ×%d 환전 +%d골드 (생선가게)" % [qtag, ItemCatalog.name_of(id), took, gold])
+	return {"count": took, "gold": gold}
+
+# 인벤에서 (어종, 등급)이 정확히 일치하는 슬롯 보유 수(환전 행 합산·bulk 수량 산정).
+# ★ Inventory는 등급별 조회 API가 없어(슬롯이 등급을 든다) 여기서 슬롯을 훑는다 — 인벤 API를
+#   넓히지 않고 호출 측이 파생하는 관례(출하함 품질 보존 회수와 같은 결).
+func _fish_count(id: String, quality: int) -> int:
+	var sum := 0
+	for i in Inventory.SIZE:
+		if inventory.id_at(i) == id and inventory.quality_at(i) == quality:
+			sum += inventory.count_at(i)
+	return sum
+
+# (어종, 등급) n마리를 인벤에서 뺀다(실제 뺀 수 반환 — 부분 소모 안전).
+func _take_fish(id: String, quality: int, n: int) -> int:
+	if n <= 0:
+		return 0
+	var left := n
+	var took := 0
+	for i in Inventory.SIZE:
+		if left <= 0:
+			break
+		if inventory.id_at(i) != id or inventory.quality_at(i) != quality:
+			continue
+		var take := mini(inventory.count_at(i), left)
+		if take <= 0 or not inventory.remove_at(i, take):
+			continue
+		took += take
+		left -= take
+	return took
 
 # ★ [S2-T5] 든 유품을 혼백관에 기증한다 — 원장 기록 → 아이템 1개 소모 → 도달 마일스톤 즉시 지급.
 # 무인 기증대(큐레이터 없음 — ADR-0060 결정 5). 보상은 인벤토리로 바로(스타듀 군터 수령 대응 간소화).
@@ -8124,6 +8263,76 @@ func _store_items() -> Array:
 		"price": StoreDiscount.price(spr_base, hearts), "base": spr_base,
 		"owned": inventory.count_of(ItemCatalog.SPRINKLER),
 	})
+	return rows
+
+# ══ ★ [S3-T5 / ADR-0061 결정 5] 뱃사공 생선가게 — 기어 매대 + 물고기 즉시 환전 ══════════
+# 프레임에 넘길 세 조각(헤더·기어 행·환전 행)을 한 번에 채운다(_open_frame·_process 공용).
+func _refresh_fishshop() -> void:
+	frame.store_text = _fishshop_text()
+	frame.store_items = _fishshop_items()
+	frame.trade_items = _trade_items()
+
+# 생선가게 헤더 2줄(제목 + 골드·뱃사공 할인). 만물상 `_store_text`와 대칭이되 **뱃사공 하트**를 본다.
+func _fishshop_text() -> String:
+	return "\n".join([
+		"── 뱃사공의 생선가게 ──",
+		"골드 %d   ·   %s" % [wallet.gold, StoreDiscount.summary_for("뱃사공", "생선가게 매대", _boatman_hearts())],
+	])
+
+# 기어 매대 품목 행 — 낚싯대 T2~T4 + 미끼 3 + 태클 3(전량 GearCatalog 가격 · 뱃사공 할인가).
+# ★T1(낡은 낚싯대)은 **매대에 없다** — 증정품이라 price 0이고 팔 물건이 아니다(ADR-0061 결정 4).
+# ★유니크(낚싯대·태클)는 이미 보유하면 "보유 중"으로 잠긴다(재구매 불가 — locked 행).
+# ★[S3-T7 게잡이통 — 낚시 스킬 lvl3 해금 시 여기 한 행으로 노출]. 지금은 로스터에 없어 미노출이다
+#   (해금 조건·아이템 정의가 S3-T7 소관 — 그때 이 목록 끝에 조건부로 붙인다).
+func _fishshop_items() -> Array:
+	var hearts := _boatman_hearts()
+	var rows: Array = []
+	# 낚싯대(티어 순 — T1 제외) → 미끼 → 태클. 카테고리 묶음 진열(만물상 매대 결).
+	for rod_id in [GearCatalog.ROD_T2, GearCatalog.ROD_T3, GearCatalog.ROD_T4]:
+		rows.append(_gear_row(rod_id, hearts))
+	for bait_id in GearCatalog.BAITS:
+		rows.append(_gear_row(bait_id, hearts))
+	for tackle_id in GearCatalog.TACKLES:
+		rows.append(_gear_row(tackle_id, hearts))
+	return rows
+
+# 기어 한 행(만물상 행 스키마 + locked). 미끼는 스택 소모품이라 보유해도 안 잠긴다.
+func _gear_row(gear_id: String, hearts: int) -> Dictionary:
+	var base := GearCatalog.price_of(gear_id)
+	var owned := inventory.count_of(gear_id)
+	var unique := not GearCatalog.is_bait(gear_id)
+	return {
+		"kind": "gear", "buy_id": gear_id, "icon_id": gear_id,
+		"name": GearCatalog.name_of(gear_id),
+		"price": StoreDiscount.price(base, hearts), "base": base,
+		"owned": owned,
+		"locked": unique and owned > 0, "locked_text": "보유 중",
+	}
+
+# 환전 행 — 인벤 보유 **물고기**만(_is_fish), (어종 × 등급)별로 묶는다. 가격은 **출하함 정산과
+# 동일 공식**(ItemCatalog.price_of(id, quality) = 기준가 × 등급 배수)이라 판매 채널이 갈려도 값은
+# 같다(ADR-0061 결정 5 "가격 동일 · 즉시 현금화 편의만 다름"). ★뱃사공 ♡ 할인은 **매입가에만**
+# 적용된다 — 환전가는 관계와 무관한 정가다(관계가 판매가를 올리면 ADR-0052 "+판매가 0" 위반).
+func _trade_items() -> Array:
+	var rows: Array = []
+	var index := {}   # "id|q" → rows 인덱스(같은 어종·같은 등급을 한 행으로 합산)
+	for i in Inventory.SIZE:
+		var id := inventory.id_at(i)
+		if id == "" or not ItemCatalog._is_fish(id):
+			continue
+		var q := inventory.quality_at(i)
+		var key := "%s|%d" % [id, q]
+		if index.has(key):
+			var r: Dictionary = rows[int(index[key])]
+			r["count"] = int(r["count"]) + inventory.count_at(i)
+			continue
+		index[key] = rows.size()
+		rows.append({
+			"kind": "fish", "buy_id": id, "icon_id": id, "quality": q,
+			"name": ItemCatalog.name_of(id),
+			"price": ItemCatalog.price_of(id, q),
+			"count": inventory.count_at(i),
+		})
 	return rows
 
 # ★ [S1R-T12] 인벤 정보패널 날짜 문자열("<절기> N일" — clock_hud와 같은 일차 파생, 요일 없음).
@@ -8419,6 +8628,55 @@ func _setup_residents() -> void:
 	#   (멜·바나는 tscn 노드라 등록 전에 물릴 수 있었다 — 순서만 다르고 결과는 같다).
 	r_mochi.affinity.preferred_crop = CropCatalog.HWANGCHEON_PODO
 
+	# ── ★ [S3-T5 / ADR-0061 결정 5] 뱃사공 — **황천해 생선가게 점주(T2)**.
+	#    네오와 같은 이중 신분 구조([ADR-0060] 결정 8): 점주 레이어(shop_key = 생선가게 매대·환전 ·
+	#    effect_fn = ♡ 할인 요약)와 관계 트랙(affinity = 대화·선물·하트)이 **서로를 게이팅하지 않는다**.
+	#    ★ADR-0008/ADR-0030 관계-중립 불변: 뱃사공 ♡은 *가게 정책 할인*뿐이다 — 낚시 메카닉(입질·품질·
+	#      혼력·체급)에 어떤 보정도 주지 않는다(곱셈기는 메인 4인 독점, 낚시는 base-only).
+	#    ★네오 할인과 **완전 독립**: 같은 공식(StoreDiscount −6%/♡)을 각자 자기 하트로 먹는다.
+	var r_boatman := Resident.new()
+	r_boatman.id = "boatman"
+	r_boatman.display_name = "뱃사공"        # ★칭호 = 호칭(본명·종은 서랍, owner 큐 — boatman.gd 주석)
+	r_boatman.script_path = "res://boatman.gd"   # ★ 노드를 레코드가 낳는 길(main.tscn 무수정 — 모찌 선례)
+	r_boatman.needs_affinity = true
+	r_boatman.save_key = "boatman_affinity"  # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_boatman.can_gift = true                # T2 사귐 채널(선물)
+	r_boatman.gift_target_ko = "뱃사공"
+	r_boatman.portrait_stem = ""             # 초상화 없음 — 스프라이트·초상화는 S3-T10 아트 패스
+	# ★ 자리 = 황천해 **생선가게 앞 백사장**(실내 아님). 실내 생선가게는 빈 방이고, 부두·바다 낚시터와
+	#   한 화면에 서는 "바닷가 카운터" 결이 CONTEXT의 뱃사공(물길의 사공)에 맞는다.
+	#   좌표 근거: 문(11,25) 바로 아래 산책로(y26)의 **한 칸 남쪽**(12,27) — ㉠ 문 진입 열(x11)과
+	#   산책로 레인(y26)을 둘 다 비껴서 통행을 막지 않고 ㉡ 산책로에서 바로 마주 볼 수 있으며
+	#   ㉢ 백사장 밴드(y19~27) 안이라 바다(y28~)를 등지고 선다.
+	var boatman_tile := Vector2i(FISHSHOP_EXT_DOOR.x + 1, BEACH_CORRIDOR_Y + 1)   # (12,27)
+	# 상시 영업(ADR-0061 결정 5 — 네오 상시 선례 동형·"평평≠막힘" QoL). 스케줄 1항목.
+	r_boatman.schedule = [{"from_min": 0, "tile": boatman_tile, "region": RegionCatalog.HWANGCHEONHAE}]
+	# ★ 구역 가시성으로 상호작용까지 가른다 — require_visible을 켜면 다른 구역의 같은 좌표에 닿아도
+	#   무반응이다(네오의 require_indoor가 실내로 가르는 것과 같은 목적의 야외판 가드).
+	r_boatman.require_visible = true
+	r_boatman.prompt_extra = func() -> String: return "   [F] 생선가게"
+	r_boatman.shop_key = func() -> bool:
+		_open_frame(InventoryFrame.CTX_FISHSHOP)
+		return true
+	r_boatman.effect_fn = func() -> String:
+		return StoreDiscount.summary_for("뱃사공", "생선가게 매대", _boatman_hearts())
+	# ★ 첫 대화 = T1 낚싯대 증정(ADR-0061 결정 4). 지급·1회 플래그·대사를 훅 하나가 든다.
+	r_boatman.talk_intro = func() -> PackedStringArray: return _grant_boatman_rod_lines()
+	_register_resident(r_boatman)
+	# 선호 선물 = 불사과. 근거: ㉠ 물고기를 선물로 받는 생선가게 점주는 어색하다(스펙 명시) ㉡ 기존
+	# 4인(영혼 호박·피안화·혼령초·황천포도)과 겹치지 않는 **유일하게 남은 작물**이라 선물 경제가
+	# 다섯으로 분산된다 ㉢ 미혹의 숲 채집 전용 프레스티지 과일이라 "귀한 손님이 가져오는 것" 결이고,
+	# 죽음의 물길을 젓는 사공에게 '불사(不死)'의 과일은 아이러니한 귀물이다.
+	# ★잠정(owner 큐) — 어물·건어물 등 뱃사공 연고 아이템이 카탈로그에 생기면 재검토.
+	# ⚠️ Affinity 노드가 `_register_resident` 안에서 태어나므로 선호는 **등록 뒤에** 물린다(모찌 동형).
+	r_boatman.affinity.preferred_crop = CropCatalog.BULSAGWA
+
+# 뱃사공 하트(생선가게 할인의 유일한 입력). 레코드가 없거나 관계 트랙이 없으면 0 = 정가(방어).
+# ★네오 하트와 **서로 참조 0** — 두 가게 할인이 완전히 독립임을 이 조회 하나로 못 박는다.
+func _boatman_hearts() -> int:
+	var r := _resident("boatman")
+	return r.affinity.hearts() if r != null and r.affinity != null else 0
+
 # ── 스테이션 갱신(매 프레임) ────────────────────────────────────────────────
 # 전 주민의 자리·가시성을 현재 시각·단계에서 파생한다(세이브 무상태 — 껐다 켜도 그 시각의
 # 자리로 다시 결정된다). delta는 보간 걷기(시각 전용)를 진행시키는 데만 쓴다.
@@ -8560,6 +8818,14 @@ func _start_resident_dialogue(r: Resident) -> void:
 	else:
 		var first_today := r.affinity.daily_talk(clock.day)
 		lines = r.node.lines(r.affinity.hearts(), first_today)
+	# ★ [S3-T5] 첫 대화 이벤트 훅(talk_intro) — 유효하면 이 대화에 *앞세울* 줄들을 받아 붙인다.
+	#   훅이 지급·1회 플래그까지 수행하고(뱃사공 T1 낚싯대 증정), 빈 배열이면 아무 일도 없다.
+	if r.talk_intro.is_valid():
+		var intro: PackedStringArray = r.talk_intro.call()
+		if not intro.is_empty():
+			var merged := PackedStringArray(intro)
+			merged.append_array(lines)
+			lines = merged
 	# 대사가 없으면 시작하지 않는다(이동을 잠근 채 못 닫는 상태 방지).
 	if lines.is_empty():
 		return

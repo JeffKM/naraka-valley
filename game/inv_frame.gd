@@ -25,6 +25,10 @@ signal buy_pressed(bulk: bool)         # 매대: 선택 씨앗 구매(bulk=Shift
 signal buy_sprinkler_pressed(bulk: bool)  # ★ [S1R-T9] 매대: 저승 스프링클러 구매(bulk=Shift 대량)
 signal buy_seed(crop_id: String, bulk: bool)  # ★ [S1R-T12] 매대 그리드: 특정 작물 씨앗 구매(행별 버튼)
 signal buy_store_item(buy_id: String, kind: String, bulk: bool)  # ★ [S2-T4] 매대: 묘목·비료·건초 구매(행별)
+# ★ [S3-T5 / ADR-0061 결정 5] 생선가게 환전 탭: 보유 물고기를 그 자리에서 골드로(출하함과 병행).
+#   sell_fish = 한 행(같은 id·같은 등급) 1마리 / bulk(Shift)=그 행 전량 · sell_fish_all = 보유 전량.
+signal sell_fish(id: String, quality: int, bulk: bool)
+signal sell_fish_all
 signal close_pressed                   # ★ [S1R-T12] 우상단 X: 메뉴/패널 닫기(main이 _close_frame)
 signal discard_slot(slot_index: int)   # ★ [S1R-T12] 휴지통: 집은 백팩 슬롯을 통째로 버림(확인 후)
 signal save_pressed                    # ★ Phase B 옵션 탭: 저장(main이 _save_game 호출)
@@ -58,7 +62,11 @@ const TAB_LABELS := ["인벤토리", "관계", "숙련", "옵션"]   # 호버 �
 const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
 
 # 컨텍스트(상단 레이어). NONE이면 닫힘(보이지 않음). ★ Phase D — CTX_CHEST(저장 상자) 추가.
-enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST }
+# ★ [S3-T5] CTX_FISHSHOP(뱃사공 생선가게) — 만물상(CTX_STORE)과 **같은 셸·다른 재고·다른 점주 ♡**다.
+#   기어 매대 + 물고기 즉시 환전 두 서브탭을 든다(만물상은 물고기 비취급 — 서비스 분산 유지).
+enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP }
+# 생선가게 서브탭(기어 매대 / 물고기 환전).
+enum { FS_TAB_GEAR, FS_TAB_TRADE }
 # 메뉴 탭(인벤토리 · 관계 · 숙련 · 옵션 — ADR-0048 §2 통합 탭 메뉴).
 enum { TAB_INV, TAB_REL, TAB_SKILL, TAB_OPTIONS }
 const TAB_COUNT := 4
@@ -84,6 +92,10 @@ var store_text: String = ""
 # ★ [S1R-T12] 매대 아이템 행 데이터(main이 _store_items로 주입 — 무상태 렌더). 각 항목:
 #   {icon_id, name, price, base, owned, kind("seed"/"placeable"), buy_id}. price<base면 할인 표시.
 var store_items: Array = []
+# ★ [S3-T5] 환전 탭 행 데이터(main이 _trade_items로 주입 — 무상태 렌더). 각 항목:
+#   {icon_id, name, price(1마리 환전가), count, quality, kind="fish", buy_id(=물고기 id)}.
+var trade_items: Array = []
+var fishshop_tab := FS_TAB_GEAR   # 생선가게 서브탭(열 때마다 기어로 리셋)
 # ★ [S1R-T12] 인벤토리 탭 정보패널 값(main이 set_inv_info로 주입 — 무상태 표시).
 var _inv_gold := 0
 var _inv_income := 0
@@ -112,6 +124,11 @@ var _buy_sprinkler_rect := Rect2()   # ★ [S1R-T9] 매대 스프링클러 구�
 var _store_row_rects: Array = []
 var _store_scroll := 0           # ★ [S2-T4] 매대 리스트 첫 표시 행(12행 확장 — 휠 스크롤, 스타듀 상점 결)
 var _store_area_rect := Rect2()  # ★ [S2-T4] 매대 행 영역(휠 라우팅 판정 — 이 안=매대, 밖=백팩)
+# ★ [S3-T5] 생선가게 — 서브탭 히트 2개 + 환전 행 히트 + [전량 환전] 버튼 + 환전 리스트 스크롤.
+var _fs_tab_rects: Array = []
+var _trade_row_rects: Array = []
+var _trade_all_rect := Rect2()
+var _trade_scroll := 0
 var _close_rect := Rect2()            # 우상단 닫기 X(모든 컨텍스트)
 var _trash_rect := Rect2()           # 인벤 탭 휴지통 슬롯(집은 상태로 클릭=버리기)
 var _trash_pending := -1             # 버리기 확인 대기 중인 백팩 슬롯(-1=없음)
@@ -137,9 +154,17 @@ var _skill_rows: Array = []
 # ★ ADR-0052 전문직 선택 버튼 클릭 영역 — _draw_skill_tab이 매 그리기마다 재구성 [{rect, skill, prof_id}].
 var _prof_choice_rects: Array = []
 
+# ★ [S3-T5] 관계 탭 하트 행 수·간격. 곱셈기(effect_fn)를 가진 주민만 뜨므로 성장이 느리다
+# (메인 4인 + 점주 퍼크 — ADR-0008). 뱃사공이 다섯째로 붙으며 4 → 5로 늘렸고, 다섯 행이 패널
+# 안에 들어가도록 간격을 48 → 44로 좁혔다(막줄 효과 텍스트가 하단 테두리를 넘지 않게).
+# ★owner 큐: 여섯 행 이상이 필요해지면 이 탭에 세로 스크롤을 붙여야 한다(지금은 고정 5행).
+const HEART_ROWS := 5
+const HEART_ROW_PITCH := 44.0
+const HEART_ROW_TOP := 56.0      # 패널 상단(+PAD)에서 첫 하트까지
+
 func _ready() -> void:
-	# 관계 탭용 HeartBar 4개를 미리 붙여 둔다(평소 숨김 — 관계 탭일 때만 보임).
-	for _i in 4:
+	# 관계 탭용 HeartBar를 미리 붙여 둔다(평소 숨김 — 관계 탭일 때만 보임).
+	for _i in HEART_ROWS:
 		var hb := HeartBar.new()
 		hb.visible = false
 		add_child(hb)
@@ -173,6 +198,8 @@ func open(ctx: int) -> void:
 	_bp_first_row = 0            # ★ 열 때 백팩 스크롤 맨 위로
 	_bp_scroll_dragging = false
 	_store_scroll = 0            # ★ [S2-T4] 열 때 매대 리스트도 맨 위로
+	_trade_scroll = 0            # ★ [S3-T5] 환전 리스트도 맨 위로
+	fishshop_tab = FS_TAB_GEAR   # ★ [S3-T5] 생선가게는 항상 기어 매대부터(예측 가능한 첫 화면)
 	visible = true
 	_apply_heart_visibility()
 	queue_redraw()
@@ -252,8 +279,10 @@ func _apply_heart_visibility() -> void:
 		if show:
 			# 탭 바(y: PAD..PAD+32)·안내 문구(PAD+50) 아래로 내려 겹치지 않게 한다. ★ 기준을 PAD 반영으로
 			# 통일 — 옛 하드코딩 +64는 PAD를 안 타 안내 문구(PAD+44)와 겹쳤다(owner 리포트 2026-07-06).
-			# ★ C3 — 행마다 효과 줄을 한 칸 더 끼우므로 간격 48(하트 + 그 아래 곱셈기 한 줄 = 한 캐릭터 묶음).
-			hb.position = Vector2(panel.position.x + PAD + 8.0, panel.position.y + PAD + 60.0 + i * 48.0)
+			# ★ C3 — 행마다 효과 줄을 한 칸 더 끼우므로 간격을 둔다(하트 + 그 아래 곱셈기 한 줄 =
+			#   한 캐릭터 묶음). ★[S3-T5] 5행이 패널에 들어가도록 상수화(HEART_ROW_*).
+			hb.position = Vector2(panel.position.x + PAD + 8.0,
+				panel.position.y + PAD + HEART_ROW_TOP + i * HEART_ROW_PITCH)
 
 # ── 기하(패널·그리드) ─────────────────────────────────────────────────────────
 # 부모 CanvasLayer가 UI scale(ADR-0018 ×1.5)을 먹어, 전체화면 앵커 Control의 size(=960×540)는
@@ -287,7 +316,7 @@ func _bp_max_first_row() -> int:
 
 # 백팩 하단 그리드가 그려지는 컨텍스트인가(관계·숙련·옵션 탭은 백팩을 안 그림).
 func _backpack_visible() -> bool:
-	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST:
+	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST or context == CTX_FISHSHOP:
 		return true
 	return context == CTX_MENU and menu_tab == TAB_INV
 
@@ -334,6 +363,9 @@ func _draw() -> void:
 			_draw_backpack(panel)
 		CTX_STORE:
 			_draw_store_top(panel)
+			_draw_backpack(panel)
+		CTX_FISHSHOP:
+			_draw_fishshop_top(panel)   # ★ [S3-T5] 뱃사공 생선가게(기어 매대 + 환전 서브탭)
 			_draw_backpack(panel)
 		CTX_CHEST:
 			_draw_chest_top(panel)
@@ -609,12 +641,12 @@ func _draw_rel_tab(panel: Rect2, font: Font) -> void:
 	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD + 8.0, panel.position.y + PAD + 50.0),
 		"관계 — 읽기 전용(호감도는 대화·활동으로)", 12, HanjiUi.INK_DIM)
 	# ★ C3 각 하트 행 아래에 그 캐릭터의 관계 곱셈기(여우불·마진·경비·할인) 한 줄. HeartBar와 같은
-	# y 기준(panel.y + PAD + 60 + i*48, _apply_heart_visibility와 동일)에서 한 칸(+40) 내려 그린다.
+	# y 기준(_apply_heart_visibility와 동일 상수)에서 한 칸 내려 그린다.
 	for i in _heart_effects.size():
 		var eff: String = str(_heart_effects[i])
 		if eff == "":
 			continue
-		var ey := panel.position.y + PAD + 60.0 + i * 48.0 + 40.0
+		var ey := panel.position.y + PAD + HEART_ROW_TOP + i * HEART_ROW_PITCH + 34.0
 		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD + 12.0, ey), eff,
 			12, HanjiUi.INK_DIM, panel.size.x - PAD * 2.0 - 12.0)
 
@@ -811,30 +843,53 @@ func _draw_store_top(panel: Rect2) -> void:
 		y += 18.0
 	# 품목 행(아이콘·이름·가격·구매 버튼). 행 클릭 or 버튼 클릭으로 구매(Shift=대량).
 	# 헤더(2줄) 아래부터 백팩 그리드 직전까지 꽉 채워 판매 품목 전부(씨앗 4 + 스프링클러)를 담는다.
+	# ★ [S3-T5] 실제 행 그리기는 공용 `_draw_row_list`로 옮겼다(생선가게 기어 매대·환전 탭이 같은
+	#   렌더러를 쓴다 — 룩·스크롤 문법 단일 출처). 만물상 거동은 무변경(같은 인자·같은 결과).
 	_store_row_rects.clear()
-	const ROW_H := 22.0
-	const ICON := 20.0
 	var row_y := panel.position.y + PAD + 42.0
 	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0   # 백팩 그리드 시작(_grid_origin) 직전까지
-	# ★ [S2-T4] 매대 12행 확장 — 보이는 행수만큼 창을 내고 휠로 넘긴다(스타듀 상점 스크롤 리스트 결).
-	#   스크롤 상태는 여기서 clamp(행수·영역이 그리기 시점에 확정되므로 — 휠 핸들러는 ±1만 한다).
-	var vis := maxi(1, int((max_y - row_y) / ROW_H))
-	_store_scroll = clampi(_store_scroll, 0, maxi(0, store_items.size() - vis))
 	_store_area_rect = Rect2(panel.position.x + PAD, row_y, panel.size.x - PAD * 2.0, max_y - row_y)
-	for i in range(_store_scroll, mini(store_items.size(), _store_scroll + vis)):
-		var item: Dictionary = store_items[i]
-		var ry := row_y + (i - _store_scroll) * ROW_H
+	_store_scroll = _draw_row_list(panel, store_items, row_y, max_y, _store_scroll, _store_row_rects, "구매")
+
+# ★ [S3-T5] 공용 품목 행 리스트 — [아이콘(+등급 점) | 이름(×N) | 가격 | 버튼] 행 + 미니 스크롤바.
+# rows 항목: {icon_id, name, price, base?, kind, buy_id, count?, quality?, locked?, locked_text?}
+#   · base > price면 "정가→할인가" 병기(할인 체감)
+#   · count > 0이면 이름 뒤에 "×N"(환전 탭 보유 수량)
+#   · quality > 0이면 아이콘 좌하단 등급 점(백팩 배지와 같은 팔레트)
+#   · locked=true면 버튼 대신 locked_text를 회색으로(유니크 기어 "보유 중" — 클릭 히트 미등록)
+# out_rects에 {"row","buy","kind","buy_id","quality"}를 적재하고, clamp된 스크롤 값을 돌려준다.
+func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scroll: int,
+		out_rects: Array, btn_label: String) -> int:
+	const ROW_H := 22.0
+	const ICON := 20.0
+	# ★ [S2-T4] 보이는 행수만큼 창을 내고 휠로 넘긴다(스타듀 상점 스크롤 리스트 결). 스크롤 상태는
+	#   여기서 clamp한다(행수·영역이 그리기 시점에 확정되므로 — 휠 핸들러는 ±1만 한다).
+	var vis := maxi(1, int((max_y - row_y) / ROW_H))
+	var sc := clampi(scroll, 0, maxi(0, rows.size() - vis))
+	for i in range(sc, mini(rows.size(), sc + vis)):
+		var item: Dictionary = rows[i]
+		var ry := row_y + (i - sc) * ROW_H
 		var rowrect := Rect2(panel.position.x + PAD, ry, panel.size.x - PAD * 2.0 - 10.0, ROW_H - 2.0)
 		var buyrect := Rect2(panel.end.x - PAD - 64.0, ry, 54.0, ROW_H - 4.0)
-		_store_row_rects.append({"row": rowrect, "buy": buyrect,
-			"kind": String(item.get("kind", "")), "buy_id": String(item.get("buy_id", ""))})
-		# 아이콘.
+		var locked := bool(item.get("locked", false))
+		if not locked:
+			out_rects.append({"row": rowrect, "buy": buyrect,
+				"kind": String(item.get("kind", "")), "buy_id": String(item.get("buy_id", "")),
+				"quality": int(item.get("quality", 0))})
+		# 아이콘(+ 등급 점).
 		var icon_rect := Rect2(rowrect.position, Vector2(ICON, ICON))
 		_draw_icon(String(item.get("icon_id", "")), icon_rect)
-		# 이름.
+		var q := int(item.get("quality", 0))
+		if q > 0:
+			draw_circle(icon_rect.position + Vector2(4.0, ICON - 4.0), 3.0, _quality_color(q))
+		# 이름(+ 보유 수량).
 		var ty := ry + ICON - 6.0
-		HanjiUi.draw_text(self, Vector2(rowrect.position.x + ICON + 8.0, ty),
-			String(item.get("name", "")), 13, HanjiUi.INK_LIGHT, 118.0)
+		var label := String(item.get("name", ""))
+		var cnt := int(item.get("count", 0))
+		if cnt > 0:
+			label += " ×%d" % cnt
+		HanjiUi.draw_text(self, Vector2(rowrect.position.x + ICON + 8.0, ty), label, 13,
+			HanjiUi.INK_LIGHT, 118.0)
 		# 가격(엽전 + 숫자). 할인 시 정가→할인가.
 		var price := int(item.get("price", 0))
 		var base := int(item.get("base", price))
@@ -845,16 +900,75 @@ func _draw_store_top(panel: Rect2) -> void:
 			px += HanjiUi.text_width(bs, 11) + 2.0
 		draw_texture_rect(COIN, Rect2(px, ty - 11.0, 12.0, 12.0), false)
 		HanjiUi.draw_text(self, Vector2(px + 15.0, ty), str(price), 13, HanjiUi.GOLD)
-		# 구매 버튼.
-		_plate_btn(buyrect)
-		HanjiUi.draw_text(self, buyrect.position + Vector2(11.0, 16.0), "구매", 12, HanjiUi.INK_LIGHT)
+		# 버튼(또는 잠김 표시).
+		if locked:
+			HanjiUi.draw_text(self, buyrect.position + Vector2(4.0, 16.0),
+				String(item.get("locked_text", "보유 중")), 12, HanjiUi.INK_DIM)
+		else:
+			_plate_btn(buyrect)
+			HanjiUi.draw_text(self, buyrect.position + Vector2(11.0, 16.0), btn_label, 12, HanjiUi.INK_LIGHT)
 	# ★ [S2-T4] 미니 스크롤바(행이 창보다 많을 때만) — 우측 얇은 트랙+썸(백팩 스크롤바의 축소 결).
-	if store_items.size() > vis:
+	if rows.size() > vis:
 		var track := Rect2(panel.end.x - PAD - 5.0, row_y, 4.0, max_y - row_y)
 		draw_rect(track, Color(0, 0, 0, 0.18))
-		var th := maxf(10.0, track.size.y * float(vis) / float(store_items.size()))
-		var ty2 := track.position.y + (track.size.y - th) * float(_store_scroll) / float(store_items.size() - vis)
+		var th := maxf(10.0, track.size.y * float(vis) / float(rows.size()))
+		var ty2 := track.position.y + (track.size.y - th) * float(sc) / float(rows.size() - vis)
 		draw_rect(Rect2(track.position.x, ty2, 4.0, th), HanjiUi.INK_DIM)
+	return sc
+
+# ── ★ [S3-T5 / ADR-0061 결정 5] 생선가게 상단(뱃사공) ─────────────────────────
+# 만물상과 같은 셸을 쓰되 **서브탭 2개**를 든다: [기어] 낚싯대·미끼·태클 구매 / [환전] 보유 물고기
+# 즉시 현금화. 두 탭이 같은 `_draw_row_list`를 공유해 룩·스크롤 문법이 한 출처다.
+func _draw_fishshop_top(panel: Rect2) -> void:
+	var y := panel.position.y + PAD + 14.0
+	for line in store_text.split("\n"):
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
+			panel.size.x - PAD * 2.0 - 116.0)   # 우측은 서브탭 자리로 비워 둔다
+		y += 18.0
+	# 서브탭 2개(헤더 우측 상단 — 메뉴 탭과 같은 plate 문법).
+	_fs_tab_rects.clear()
+	var labels := ["기어", "환전"]
+	for i in labels.size():
+		var r := Rect2(panel.end.x - PAD - 108.0 + i * 54.0, panel.position.y + PAD + 2.0, 50.0, 20.0)
+		_fs_tab_rects.append(r)
+		var on := i == fishshop_tab
+		HanjiUi.draw_plate(self, r, 1.0 if on else 0.55)
+		if on:
+			draw_rect(r, HanjiUi.GOLD_SOFT, false, 1.0)
+		HanjiUi.draw_text(self, r.position + Vector2(13.0, 15.0), labels[i], 12,
+			HanjiUi.INK_LIGHT if on else HanjiUi.INK_DIM)
+	var row_y := panel.position.y + PAD + 42.0
+	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0
+	_store_area_rect = Rect2(panel.position.x + PAD, row_y, panel.size.x - PAD * 2.0, max_y - row_y)
+	if fishshop_tab == FS_TAB_GEAR:
+		_store_row_rects.clear()
+		_trade_row_rects.clear()
+		_trade_all_rect = Rect2()
+		_store_scroll = _draw_row_list(panel, store_items, row_y, max_y, _store_scroll,
+			_store_row_rects, "구매")
+		return
+	# ── 환전 탭 ──
+	_store_row_rects.clear()
+	_trade_row_rects.clear()
+	if trade_items.is_empty():
+		_trade_all_rect = Rect2()
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + 16.0),
+			"환전할 물고기가 없다 — 낚아 오면 여기서 그 자리에 값을 쳐 준다", 12, HanjiUi.INK_DIM)
+		return
+	# 마지막 한 줄은 [전량 환전] 버튼 자리로 비워 둔다.
+	var list_max_y := max_y - 22.0
+	_trade_scroll = _draw_row_list(panel, trade_items, row_y, list_max_y, _trade_scroll,
+		_trade_row_rects, "환전")
+	_trade_all_rect = Rect2(panel.position.x + PAD, list_max_y + 2.0, 96.0, 18.0)
+	_plate_btn(_trade_all_rect)
+	HanjiUi.draw_text(self, _trade_all_rect.position + Vector2(12.0, 14.0), "전량 환전", 12, HanjiUi.INK_LIGHT)
+	# 전량 환전 총액(우측) — 지금 누르면 받을 골드(출하함 미리보기와 같은 결).
+	var sum_gold := 0
+	for it in trade_items:
+		sum_gold += int(it.get("price", 0)) * maxi(int(it.get("count", 0)), 0)
+	var ss := "+%d" % sum_gold
+	HanjiUi.draw_text(self, Vector2(panel.end.x - PAD - HanjiUi.text_width(ss, 13), list_max_y + 16.0),
+		ss, 13, HanjiUi.GOLD)
 
 # ★ [S1R-T12] 매대 행 구매 라우팅 — 행/버튼 클릭 시 종류별 시그널. Shift=대량.
 func _buy_store_row(e: Dictionary, bulk: bool) -> void:
@@ -863,8 +977,30 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 			buy_sprinkler_pressed.emit(bulk)
 		"seed":
 			buy_seed.emit(String(e.get("buy_id", "")), bulk)
-		"sapling", "fert", "hay":   # ★ [S2-T4] 신규 입고 3종 — 일반 품목 구매 시그널
+		"sapling", "fert", "hay", "gear":   # ★ [S2-T4] 신규 입고 3종 + ★[S3-T5] 낚시 기어 — 일반 품목 구매 시그널
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
+
+# ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.
+# 세 영역이 겹치지 않으므로 첫 매치 하나만 처리한다(만물상 행 라우팅과 같은 결).
+func _click_fishshop(p: Vector2, shift: bool) -> void:
+	for i in _fs_tab_rects.size():
+		if _fs_tab_rects[i].has_point(p):
+			fishshop_tab = i
+			queue_redraw()
+			return
+	if fishshop_tab == FS_TAB_GEAR:
+		for e in _store_row_rects:
+			if e["buy"].has_point(p) or e["row"].has_point(p):
+				_buy_store_row(e, shift)
+				return
+		return
+	if _trade_all_rect.size.x > 0.0 and _trade_all_rect.has_point(p):
+		sell_fish_all.emit()
+		return
+	for e in _trade_row_rects:
+		if e["buy"].has_point(p) or e["row"].has_point(p):
+			sell_fish.emit(String(e.get("buy_id", "")), int(e.get("quality", 0)), shift)
+			return
 
 # ── 클릭 라우팅 ───────────────────────────────────────────────────────────────
 func _gui_input(event: InputEvent) -> void:
@@ -880,11 +1016,18 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	# ★ [S2-T4] 매대 리스트 휠 스크롤 — 매대 행 영역 위에서만(그 밖=아래 백팩 스크롤 유지).
 	#   clamp는 그리기 시점(_draw_store_top)이 행수와 함께 수행.
-	if event.pressed and context == CTX_STORE and _store_area_rect.has_point(event.position):
+	# ★ [S3-T5] 생선가게도 같은 영역 문법을 쓴다(환전 탭이면 환전 리스트가 스크롤된다).
+	if event.pressed and (context == CTX_STORE or context == CTX_FISHSHOP) \
+			and _store_area_rect.has_point(event.position):
+		var trading := context == CTX_FISHSHOP and fishshop_tab == FS_TAB_TRADE
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_store_scroll -= 1; queue_redraw(); accept_event(); return
+			if trading: _trade_scroll -= 1
+			else: _store_scroll -= 1
+			queue_redraw(); accept_event(); return
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_store_scroll += 1; queue_redraw(); accept_event(); return
+			if trading: _trade_scroll += 1
+			else: _store_scroll += 1
+			queue_redraw(); accept_event(); return
 	# ★ 마우스 휠 = 백팩 세로 스크롤(백팩이 보이는 컨텍스트에서). 위=이전 행, 아래=다음 행.
 	if event.pressed and _backpack_visible():
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -933,6 +1076,8 @@ func _gui_input(event: InputEvent) -> void:
 				if e["buy"].has_point(p) or e["row"].has_point(p):
 					_buy_store_row(e, event.shift_pressed)
 					break
+		CTX_FISHSHOP:
+			_click_fishshop(p, event.shift_pressed)
 		CTX_CHEST:
 			_click_chest(p)
 	accept_event()

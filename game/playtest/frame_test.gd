@@ -62,7 +62,8 @@ func _initialize() -> void:
 	# ── ③ 관계 탭 하트(읽기 전용) ──
 	print("── ③ 관계 탭 하트 ──")
 	var rows: Array = m._heart_rows()
-	_check("③a _heart_rows = 4인(미호·멜·바나·네오)", rows.size() == 4)
+	# ★[S3-T5] 뱃사공(생선가게 점주 — ♡ 할인)이 다섯째 곱셈기 보유 주민으로 붙었다.
+	_check("③a _heart_rows = 5인(미호·멜·바나·네오·뱃사공)", rows.size() == 5)
 	_check("③b 각 행에 이름·하트", rows[0].has("name") and rows[0].has("filled") and rows[0].has("total"))
 	m.frame.set_tab(InventoryFrame.TAB_REL)
 	m.frame.set_hearts(rows)   # 무크래시(읽기 전용 렌더)

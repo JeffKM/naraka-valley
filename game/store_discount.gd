@@ -65,3 +65,12 @@ static func summary(hearts: int) -> String:
 	if _clamp_hearts(hearts) <= 0:
 		return "네오 할인: 정가 — 네오와 친해지면 매대가 싸진다"
 	return "네오 할인: −%d%% (만물상 매대)" % percent(hearts)
+
+# ★ [S3-T5 / ADR-0061 결정 5] 점주 일반형 한 줄 — 같은 공식(−6%/♡)을 **점주별로 독립 적용**한
+# 요약이다. 뱃사공 생선가게가 두 번째 사용자다(네오 만물상 ♡와 완전 별개 — 서로의 하트를 안 본다).
+# ★위 summary()는 네오 원문 문구 보존용으로 남긴다(회귀 0). 신규 점주는 이 함수를 쓴다.
+#   who = 점주 이름("뱃사공") · where = 매대 이름("생선가게 매대").
+static func summary_for(who: String, where: String, hearts: int) -> String:
+	if _clamp_hearts(hearts) <= 0:
+		return "%s 할인: 정가 — %s와 친해지면 %s가 싸진다" % [who, who, where]
+	return "%s 할인: −%d%% (%s)" % [who, percent(hearts), where]
