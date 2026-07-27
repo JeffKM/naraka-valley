@@ -343,6 +343,12 @@ const PROP_FLOWER_PATCH := preload("res://assets/props/spirit_flower_patch.png")
 const PROP_TREE_A := preload("res://assets/props/tree_spirit_a.png")    # ★[roster] 64×128 — 저승 봄나무 침엽(2×4칸): 밑둥 1칸 SOLID·수관 통과+occlusion fade
 const PROP_TREE_B := preload("res://assets/props/tree_spirit_b.png")    # ★[roster] 64×128 — 저승 봄나무 활엽(2×4칸): 밑둥 1칸 SOLID·수관 통과+occlusion fade
 const PROP_GRASS := preload("res://assets/props/grass_tuft.png")        # 32×32 — 풀 무더기(장식)
+# ★[S2-T9 아트 패스] 나루 마을 정체성 프롭 2종(PixelLab create_map_object → tools/make_naru_art.py 정규화).
+#   벚꽃 나무는 저승 봄나무(TREE_A/B)와 **같은 64×128 규격·같은 인프라**(밑둥 1칸 SOLID·수관 통과 +
+#   occlusion fade)라 드롭인이다 — 마을에만 서서 농원의 침엽·활엽과 구역 정체성을 가른다.
+#   돌담은 farm_fence 계보(32×32 풀타일 SOLID 경계벽)이되 좌우 edge-extend라 가로 런이 끊기지 않는다.
+const PROP_VILLAGE_TREE := preload("res://assets/props/village_tree_cherry.png")  # 64×128 — 벚꽃 나무(2×4칸)
+const PROP_STONE_WALL := preload("res://assets/props/village_stone_wall.png")     # 32×32 — 돌담(1×1칸, SOLID)
 const PROP_BUSH := preload("res://assets/props/bush.png")               # 64×64 — 덤불(2×2칸, 장식)
 const PROP_ROCK := preload("res://assets/props/rock.png")               # 64×64 — 바위·돌(2×2칸, SOLID)
 # ★[prop-regen-roster §5.3 / owner 2026-07-04~05] 통나무(logs) 5종 재생성(PixelLab create_1_direction_object
@@ -395,7 +401,8 @@ const DEBRIS_VARIANTS := {
 #   높이가 낮아 그림자가 어색하고 사인오프된 실내 배치를 건드리지 않기 위함.
 const PROP_SHADOW_SET := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_BUSH,
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP, PROP_SCARECROW,
-	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B]  # ★통나무 5종 접지 그림자
+	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B,  # ★통나무 5종 접지 그림자
+	PROP_VILLAGE_TREE]  # ★[S2-T9] 벚꽃 나무 = 저승 봄나무와 같은 부피 프롭(발치 타원 그림자)
 # ★ 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md). 결정적 절차 배치로
 #   GROUND/PATH 칸마다 자기 지형 테이블로 가중 1롤 → 베이스 위에 디테일을 *구역 빌드 때 1회 베이크*
 #   (런타임 정적 오버레이, _draw에서 1 draw call). 손배치 grass_tuft 폐기 → 이 시스템이 대체.
@@ -592,7 +599,7 @@ func _scatter_is_clump(x: int, y: int) -> bool:
 # 구역 → 그 구역이 그리는 PROP 레이아웃 키(지면 디테일이 PROP 점유 칸을 비껴가게 함).
 var _REGION_PROP_KEYS := {
 	RegionCatalog.HOME: ["HOME"],
-	RegionCatalog.NARU_VILLAGE: ["CAFE", "VILLAGE_HOUSE"],
+	RegionCatalog.NARU_VILLAGE: ["CAFE", "VILLAGE_HOUSE", "VILLAGE_OUTDOOR"],
 }
 var _ground_detail_tex: ImageTexture = null   # 구역별 베이크된 지면 디테일 오버레이
 var _gd_shadow_stamp: Image = null            # 재사용 SE 그림자 스탬프
@@ -603,6 +610,8 @@ var _bf_dirt: Image = null
 var _bf_soil: Image = null
 var _bf_water: Image = null
 var _bf_earth: Image = null   # ★[스타듀 농장 룩] 마당 베이스 = 따뜻한 황갈색 맨흙(dirt_field 리톤). 잔디는 위에 패치로만.
+var _bf_cobble: Image = null  # ★[S2-T9] 나루 자갈 광장(판석 포장) base 필드
+var _bf_plank: Image = null   # ★[S2-T9] 나루 다리·부두 목판 데크 base 필드
 # ★[지면 채도 A/B 실험] _retone_earth 계수 — 기본값=현행이라 baseline 완전 불변(회귀 안전).
 #   ground_ab_dump.gd가 프리셋마다 이 값을 오버라이드 → _bf_earth 재계산 → 실제 코드 경로로 A/B 렌더.
 var _earth_hue_lerp := 0.55   # 붉은 흙 hue를 노란-갈색(0.095)으로 당기는 가중치
@@ -667,12 +676,15 @@ const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP,  # ★ ADR-0035 업화석·석화 고목 = 통과 불가(계단 하드 게이트·overgrown 장애물)
 	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B,  # ★통나무 5종 = 통과 불가(owner 2026-07-05·FOOT_BAR 아님=풀타일 장애물, 낮은 프롭)
 	PROP_SCARECROW,                        # ★허수아비(1×2) = 밑 1칸 SOLID·위 1칸 통과+fade(나무·바위 인프라, owner 2026-07-05) — FOOT_BAR_PROPS·FADE_PROPS 동반
-	PROP_FENCE]                            # ★울타리 = 통과 불가(owner 2026-07-05 "못 지나가게"·FOOT_BAR 아님=풀타일 경계벽·낮은 프롭). 패치 남단 여백(y17)이라 진입은 북쪽 본가 문·옆구리 x39/x45 우회로 유지
+	PROP_FENCE,                            # ★울타리 = 통과 불가(owner 2026-07-05 "못 지나가게"·FOOT_BAR 아님=풀타일 경계벽·낮은 프롭). 패치 남단 여백(y17)이라 진입은 북쪽 본가 문·옆구리 x39/x45 우회로 유지
+	# ★[S2-T9] 나루 마을 정체성 프롭. 벚꽃 나무 = TREE_A/B와 동일(밑둥 1칸만 SOLID — 아래 FOOT_BAR/FADE 동반),
+	#   돌담 = 울타리 계보 풀타일 경계벽(광장 남북 테두리만 두르고 동서 진입은 열어 둔다).
+	PROP_VILLAGE_TREE, PROP_STONE_WALL]
 # ★[asset-ruleset §5] 발치 충돌 바 — 키 큰 야외 프롭(나무·바위)은 풀타일 충돌 대신 *발치 밑단 바*(폭×반높이)만
 #   막아 "머리는 통과"(§6 Y-split의 물리 짝 — 캐노피 뒤로 지나감). 하드게이트 debris(업화석·석화고목)는
 #   개간 게이트라 풀타일 유지(Slice 1 전환)·실내 벽 가구는 벽 flush라 풀타일 유지(회귀 보존). 맵 이탈은
 #   _border_body(둘레)가 막으므로 야외 트리 축소는 경계 안전.
-const FOOT_BAR_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_SCARECROW]
+const FOOT_BAR_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_SCARECROW, PROP_VILLAGE_TREE]
 const FOOT_BAR_H := 16   # 밑단 바 높이(8 논리 = 반 타일) — FADE_PROPS 밖 부피 프롭용(현재 예약, 향후 반타일 프롭)
 # ★[roster] 저승 봄나무(2×4칸)·바위(2×2칸) = 밑둥/밑행만 SOLID(폭 전체 × 젤밑 1칸)·그 위는 통과 O(캐릭터가 뒤로 지나감).
 #   owner 결정: "젤밑 두 칸만 막고 그 위는 통과". 나무·바위 발치바는 FOOT_BAR_H 대신 1칸(TILE) 높이(FADE_PROPS 소속).
@@ -682,7 +694,7 @@ const TREE_FOOT_H := TILE
 #   ★바위(PROP_ROCK)도 여기 합류 = 나무와 동일 인프라(밑행 1칸 SOLID + 뒤로 지나갈 때 반투명). owner 2026-07-04.
 #   ★허수아비(PROP_SCARECROW·1×2)도 합류(owner 2026-07-05 "밑 1×1 못 지나가고 위 1×1은 뒤로 통과+반투명") —
 #     TREE_FOOT_H=TILE이라 32×64의 밑 1칸만 SOLID·위 1칸(몸통·머리)은 통과 O + occlusion fade.
-const FADE_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_SCARECROW]
+const FADE_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_SCARECROW, PROP_VILLAGE_TREE]
 const TREE_FADE_MIN := 0.45   # 겹칠 때 최소 알파(완전 투명 X — 나무가 남아 보이게)
 const TREE_FADE_SPEED := 8.0  # 알파 전환 속도(초당 — move_toward, 부드러운 페이드)
 # ★ ADR-0025 ② — PROP 좌표 데이터 외부화. 텍스처는 *코드가* 정의하고(키↔Texture2D 레지스트리),
@@ -696,6 +708,8 @@ const PROP_TEX_REGISTRY := {
 	"SCARECROW": PROP_SCARECROW, "PLANTER": PROP_PLANTER, "FLOWER_PATCH": PROP_FLOWER_PATCH,
 	# ★ T3⑤ 테두리 장식 6종
 	"TREE_A": PROP_TREE_A, "TREE_B": PROP_TREE_B, "GRASS": PROP_GRASS,
+	# ★[S2-T9] 나루 마을 환경 아트
+	"VILLAGE_TREE": PROP_VILLAGE_TREE, "STONE_WALL": PROP_STONE_WALL,
 	"BUSH": PROP_BUSH, "ROCK": PROP_ROCK,
 	# ★통나무 5종(prop-regen-roster §5.3)
 	"LOG_LONG": PROP_LOG_LONG, "LOG_SHORT": PROP_LOG_SHORT, "LOG_UPRIGHT": PROP_LOG_UPRIGHT,
@@ -806,6 +820,31 @@ const PROP_LAYOUT_VILLAGE_HOUSE := [
 	[PROP_POT, [Vector2i(18, 75)], WALL_PROP_LIFT],
 	[PROP_POT, [Vector2i(9, 81), Vector2i(18, 81)]],
 ]
+# ★[S2-T9 아트 패스] 나루 마을 **야외** 장식 — 구역 정체성을 지면이 아니라 오브젝트가 낸다
+#   ([ADR-0057] "타일은 단순하게, 디테일은 그 위 실루엣"). 마을 야외 프롭은 지금까지 0이라 무대가
+#   휑했다(village_dump 육안). 두 종만 놓는다:
+#   · **벚꽃 나무** — 광장 네 귀퉁이(광장을 프레이밍) + 마을 빈 코너·강변. 농원의 침엽·활엽과 달라
+#     "여기는 나루"가 한눈에 읽힌다. 밑둥 1칸만 SOLID라 뒤로 지나갈 수 있다(FADE_PROPS).
+#   · **돌담** — 광장 남북 테두리. 동서 진입(메인 복도 y36)·남북 스파인(x51~54)은 **비워** 사방
+#     진입을 유지한다(SOLID라 막으면 마을이 두 동강 — village_test 도달성 불변식).
+# 좌표 제약(전부 확인됨): 문 스포크·메인 복도·다리 스파인·워프 스포크·건물 rect·게시판 비껴간다.
+#   나무는 2×4칸이라 **발치 행 = anchor.y+3**이 충돌 행이다(그 행의 두 칸이 길이면 동선이 막힌다).
+const PROP_LAYOUT_VILLAGE_OUTDOOR := [
+	[PROP_STONE_WALL, [
+		Vector2i(46, 30), Vector2i(47, 30), Vector2i(48, 30), Vector2i(49, 30), Vector2i(50, 30),
+		Vector2i(55, 30), Vector2i(56, 30), Vector2i(57, 30), Vector2i(58, 30),   # 광장 북변(x51~54 = 스파인 통로)
+		Vector2i(46, 42), Vector2i(47, 42), Vector2i(48, 42), Vector2i(49, 42), Vector2i(50, 42),
+		Vector2i(55, 42), Vector2i(56, 42), Vector2i(57, 42), Vector2i(58, 42),   # 광장 남변(〃)
+	]],
+	[PROP_VILLAGE_TREE, [
+		Vector2i(44, 27), Vector2i(61, 27),   # 광장 북서·북동 귀퉁이(발치 y30)
+		Vector2i(44, 39), Vector2i(59, 39),   # 광장 남서·남동 귀퉁이(발치 y42)
+		Vector2i(14, 24), Vector2i(26, 6),    # 서편 카페 위·멜 집 북쪽 여백
+		Vector2i(70, 8), Vector2i(92, 28),    # 동편 만물상 동쪽·산길 워프 서쪽
+		Vector2i(16, 52), Vector2i(44, 52),   # 남서 여백·중앙 남측
+		Vector2i(70, 42), Vector2i(24, 58), Vector2i(78, 58),   # 동편 중단·강변 좌우
+	]],
+]
 # ★ ADR-0025 ② — 시드(코드 하드코딩) 묶음. layout.json이 없을 때의 출발점이자 회귀 비교 기준.
 # 키 = 묶음 이름(json 최상위 키 — 구역이 아니라 "어느 가구 세트"). 멱등 이주: _SEED_LAYOUTS를
 # 직렬화→역직렬화한 결과가 _prop_layouts이며, 시드와 바이트 동등하면 회귀 0(좌표만 데이터로 나감).
@@ -813,6 +852,7 @@ const _SEED_LAYOUTS := {
 	"HOME": PROP_LAYOUT_HOME,
 	"CAFE": PROP_LAYOUT_CAFE,
 	"VILLAGE_HOUSE": PROP_LAYOUT_VILLAGE_HOUSE,
+	"VILLAGE_OUTDOOR": PROP_LAYOUT_VILLAGE_OUTDOOR,   # ★[S2-T9] 나루 야외 장식(벚꽃 나무·돌담)
 }
 const LAYOUT_PATH := "res://layout.json"   # 진실의 원천(git 추적). 없으면 시드에서 1회 생성.
 # 런타임 PROP 배열(로드됨). 소비처(_draw_props_for·_rebuild_prop_collision)가 const 대신 이걸 참조.
@@ -906,6 +946,17 @@ const BACK_RIVER_DOCK_RECT := Rect2i(50, 69, 6, 3)   # x50..55, y69..71
 # 마을 메인 가로 복도 — 옛 BRIDGE_Y(다리가 얹혔던 줄). 배후 강 이행으로 이 줄엔 더는 다리가 없고,
 #   서워프·도착에서 동 가장자리까지 잇는 마을 내부 동선(8채 문 스포크의 허리)만 남는다.
 const MAIN_CORRIDOR_Y := 36
+# ★[S2-T9 아트 패스] 마을 광장 — 메인 가로 복도(y36)와 남북 스파인(x52)이 만나는 **마을 한복판**을
+#   판석으로 포장한다(자갈 광장). [ADR-0060 결정 1]이 정한 통짜 마을의 중심을 눈으로 읽히게 하는
+#   순수 시각 오버레이다: `_grid` 타일·충돌·동선·세이브 전부 불변이고 지면 텍스처만 바뀐다.
+#   중심 x=52(스파인)·y=36(복도) 대칭. 건물 rect·문 스포크·게시판·워프 스포크 어디와도 겹치지 않는다
+#   (가장 가까운 것 = 만물상 문 스포크 x60·주민 집 2 rect x58 y44 — 둘 다 광장 밖).
+const NARU_PLAZA_RECT := Rect2i(46, 31, 13, 11)   # x46..58, y31..41
+# 광장 남북 테두리 돌담이 앉는 줄(동서 진입은 복도 y36으로 열려 있다). 스파인 x51..54는 비운다.
+const NARU_PLAZA_WALL_Y := [30, 42]
+# 다리 데크 — 강둑(BACK_RIVER_BANK_Y)부터 강 남단까지 다리 폭(BRIDGE_X) 2칸. 이 칸들은 _carve가
+#   PATH로 깐 **물 위 구조물**이라 흙길이 아니라 목판으로 그린다(부두 BACK_RIVER_DOCK_RECT도 같은 데크).
+const NARU_BRIDGE_DECK_RECT := Rect2i(52, 65, 2, 7)   # x52..53, y65..71
 # 서편(도착·서워프 옆): 카페(도착 위, CAFE_EXT_RECT 위쪽 정의) + 메인 집 3(미호·멜·바나). 코지 여백으로 흩어 둔다.
 const MEL_HOUSE_RECT := Rect2i(20, 14, 5, 5)   # 멜 집 — 서편 상단 우
 const MEL_HOUSE_DOOR := Vector2i(22, 18)
@@ -2412,7 +2463,8 @@ func _rebuild_prop_collision() -> void:
 		RegionCatalog.HOME:
 			layout = _home_prop_entries()   # ★[S1R-T4] 손저작 + 절차 스캐터(나무·바위·debris) 병합
 		RegionCatalog.NARU_VILLAGE:
-			layout = _prop_layouts.get("VILLAGE_HOUSE", [])
+			# ★[S2-T9] 실내 가구 + 야외 장식(벚꽃 나무 밑둥·돌담). 실내 띠는 y72+라 야외와 안 겹친다.
+			layout = _prop_layouts.get("VILLAGE_HOUSE", []) + _prop_layouts.get("VILLAGE_OUTDOOR", [])
 	for entry in layout:
 		if not entry[0] in SOLID_PROPS:
 			continue
@@ -4129,8 +4181,13 @@ const _GF := 128         # 필드 한 변
 const _GJIT := 5         # 경계 지터 진폭(px)
 
 # ── Wang 경계 전환 타일 (spec 2026-07-16) ──────────────────────────────
-# 표면 위계: 잔디>흙>길>밭>물. 경계에서 위계 높은 쪽이 upper(오버행=볼록).
-const _SURF_RANK := {1: 4, 0: 3, 2: 2, 3: 1, 4: 0}
+# 표면 위계: 잔디>흙>길>자갈광장>다리목판>밭>물. 경계에서 위계 높은 쪽이 upper(오버행=볼록).
+# ★[S2-T9] 나루 아트 패스로 두 표면(5=자갈 광장·6=다리 목판)이 붙으면서 값을 ×10으로 벌려 **사이 등급**을
+#   낼 자리를 만들었다. 기존 5종의 상대 순서는 그대로라 HOME 렌더는 바이트 불변(_surf_rank는 비교에만 쓴다).
+const _SURF_RANK := {1: 40, 0: 30, 2: 20, 3: 10, 4: 0, 5: 22, 6: 18}
+# 인공 포장 표면 = Wang 전환을 건너뛰고 base blit 사각 + `_soften_field_edges`로만 마감하는 것들.
+#   (길·밭은 owner 2026-07-17 확정, 광장·다리는 같은 인공물이라 같은 규칙 — 손그림 Wang 쌍도 없다.)
+const _ARTIFICIAL_SURF := [2, 3, 5, 6]
 var _wang_tiles: Dictionary = {}   # pair_key → { corner_bits(0..15): Image }
 const _WANG_DIR := "res://assets/terrain16/wang/"
 
@@ -4234,6 +4291,10 @@ func _load_big_fields() -> void:
 	# SS 코히어런트 dirt는 이미 tan earth 톤 → retone 이중보정 생략(RETRO-DIFFUSION-SPEC 대로).
 	var earth_src := _ss_or("dirt_field.png", "res://assets/terrain16/dirt_field.png", Color(0.52, 0.40, 0.29))
 	_bf_earth = earth_src if _TERRAIN_SINGLE_SOURCE else _retone_earth(earth_src)
+	# ★[S2-T9 나루 아트 패스] 마을 전용 두 포장 필드. 단일출처 규약 그대로(_ss_or 폴백 = 길 흙)라
+	#   파일이 없어도 종전 룩으로 굴러간다. 이 둘을 쓰는 구역은 프로파일에 rect를 준 곳뿐(HOME 불변).
+	_bf_cobble = _ss_or("cobble_field.png", "res://assets/terrain16/dirt_field.png", Color(0.55, 0.53, 0.44))
+	_bf_plank = _ss_or("plank_field.png", "res://assets/terrain16/dirt_field.png", Color(0.40, 0.30, 0.21))
 
 func _big_field(path: String, fallback: Color) -> Image:
 	var img: Image
@@ -4396,8 +4457,8 @@ func _soften_field_edges(out: Image, surf: Array) -> void:
 	for y in _outdoor_h:
 		for x in _grid_w:
 			var s: int = surf[y][x]
-			if s != 2 and s != 3:
-				continue   # 밭·길 셀만 기준(흙과의 경계). 잔디·물·건물 제외.
+			if not (s in _ARTIFICIAL_SURF):
+				continue   # 밭·길·광장·다리 셀만 기준(흙과의 경계). 잔디·물·건물 제외.
 			var x0 := x * TILE
 			var y0 := y * TILE
 			if x + 1 < _grid_w and int(surf[y][x + 1]) == 0:
@@ -4615,7 +4676,9 @@ func _build_ground16() -> void:
 						var py2 := y + dy
 						if px2 < 0 or py2 < 0 or px2 >= _grid_w or py2 >= _outdoor_h:
 							continue
-						if int(surf[py2][px2]) == 2:
+						# ★[S2-T9] 자갈 광장(5)도 길과 같은 인공 포장이라 같은 갓길을 받는다 —
+						#   잔디 바다 위 판석 사각이 하드 엣지로 뜨는 것을 [포장]—[흙 갓길]—[잔디]로 눅인다.
+						if int(surf[py2][px2]) == 2 or int(surf[py2][px2]) == 5:
 							near_path = true
 							break
 					if near_path:
@@ -4666,7 +4729,7 @@ func _build_ground16() -> void:
 			# ★[owner 2026-07-17 최종] 길(2)·밭(3) 경계 = Wang 스킵(base blit·격자 없음, 인공물이라 직선+_soften).
 			#   물(4)↔흙(0)은 스킵하지 않는다 — 손그림 4_0에서 추출한 테두리 링을 오버레이 blit(아래 blend 분기).
 			#   잔디↔흙(0_1)만 Wang base 합성.
-			if up_s == 2 or lo_s == 2 or up_s == 3 or lo_s == 3:
+			if up_s in _ARTIFICIAL_SURF or lo_s in _ARTIFICIAL_SURF:
 				continue
 			var pk := _wang_pair_key(lo_s, up_s)
 			if not _wang_tiles.has(pk):
@@ -4784,6 +4847,11 @@ func _g16_blend_scatter(out: Image, surf: Array) -> void:
 			var terrain: int = _grid[y][x]
 			if not _GD_TABLES.has(terrain):
 				continue   # GROUND/PATH만 스캐터(밭·물·건물·절벽 제외)
+			# ★[S2-T9] 포장면(자갈 광장·다리 목판)엔 지면 clutter를 얹지 않는다 — 밑 타일은 GROUND/PATH라
+			#   위 게이트를 통과하지만, 판석·데크 위 나뭇가지·박힌 잔돌은 재질이 어긋나 이물로 읽힌다.
+			var sv: int = int(surf[y][x])
+			if sv == 5 or sv == 6:
+				continue
 			if occupied.has(Vector2i(x, y)):
 				continue   # 나무·바위·가구 위엔 안 얹음
 			# ★[스캐터 확산 ②] GROUND는 클러스터면 full 테이블(풀 무리), 빈 tan이면 sparse 마른 clutter(twig·stone)만.
@@ -5045,6 +5113,14 @@ func _g16_surface(x: int, y: int) -> int:
 	#   덮으면 비칠 아트가 없어 건물이 통째로 지면에 삼켜진다(HOME은 6동 전부 facade가 있어 해당 없음).
 	if c == WALL and not _g16_greybox_rects.is_empty() and _g16_in_rects(x, y, _g16_greybox_rects, 0):
 		return -1
+	# ★[S2-T9 나루 아트 패스] 마을 포장면 — **순수 시각 오버레이**다. _grid 타일(PATH/GROUND/WATER)·충돌·
+	#   동선·세이브는 손대지 않고 이 칸의 지면 텍스처만 자갈/목판으로 바꾼다(길 갓길·잔디 지배와 같은 층위).
+	#   다리 목판이 PATH 검사보다 **먼저** 와야 한다 — 다리 칸은 _carve가 이미 PATH로 깐 물 위 구조물이라
+	#   PATH로 먼저 걸리면 흙길 텍스처가 강 위에 뜬다. 판정 순서 = 목판 → 광장 → 나머지.
+	if not _g16_plank_rects.is_empty() and _g16_in_rects(x, y, _g16_plank_rects, 0):
+		return 6
+	if not _g16_plaza_rects.is_empty() and _g16_in_rects(x, y, _g16_plaza_rects, 0):
+		return 5
 	if c == PATH:
 		return 2
 	if c == SOIL:
@@ -5087,6 +5163,8 @@ func _g16_field(s: int) -> Image:
 		2: return _bf_dirt
 		3: return _bf_soil
 		4: return _bf_water
+		5: return _bf_cobble   # ★[S2-T9] 자갈 광장
+		6: return _bf_plank    # ★[S2-T9] 다리 목판
 		_: return _bf_earth
 
 # ★[ADR-0054 건물 접지 — 잔디억제 패드] 안식 농원 건물 footprint 목록(facade WALL 박스 + 비진입 사일로·우물).
@@ -5118,6 +5196,9 @@ const _G16_PROFILE_BASE := {
 	"path_apron": false,                      # 길 둘레 1칸 맨흙 갓길(잔디 지배 구역 전용)
 	"building_rects": [],                     # 발치 잔디억제 패드 기준 footprint 목록
 	"greybox_rects": [],                      # facade 아트 없는 그레이박스 건물(오버레이 투명 = WALL 노출)
+	# ★[S2-T9] 마을 포장면 rect(순수 시각). 비면 그 구역엔 포장이 없다 = HOME 등 기존 구역 바이트 불변.
+	"plaza_rects": [],                        # 자갈 광장(판석 포장) — 광장 일대 지면 텍스처
+	"plank_rects": [],                        # 다리·부두 목판 데크 — 물 위 구조물
 }
 # 나루 마을 건물 footprint — 카페·메인 집 3(facade 아트 있음) + 만물상·주민 집 11(그레이박스 WALL).
 #   그레이박스 건물은 오버레이가 덮으면 통째로 사라지므로(아트가 없어 비칠 것이 없다) surf=-1로 투명
@@ -5147,6 +5228,8 @@ var _G16_REGION_PROFILES := {
 		"path_apron": true,         # 길 둘레 1칸 맨흙 갓길 — 잔디 지배라 길↔잔디가 하드 사각이 되는 것 방지
 		"building_rects": _VILLAGE_BUILDING_RECTS,
 		"greybox_rects": _VILLAGE_GREYBOX_RECTS,
+		"plaza_rects": [NARU_PLAZA_RECT],
+		"plank_rects": [NARU_BRIDGE_DECK_RECT, BACK_RIVER_DOCK_RECT],
 	},
 }
 
@@ -5162,6 +5245,8 @@ var _g16_grass_patches: bool = _G16_PROFILE_BASE["grass_patches"]
 var _g16_build_pad: int = _G16_PROFILE_BASE["build_pad"]
 var _g16_build_rects: Array = []
 var _g16_greybox_rects: Array = []
+var _g16_plaza_rects: Array = []   # ★[S2-T9] 자갈 광장 rect(핫 루프 캐시)
+var _g16_plank_rects: Array = []   # ★[S2-T9] 다리·부두 목판 rect(핫 루프 캐시)
 
 func _g16_resolve_profile() -> void:
 	var p: Dictionary = _G16_PROFILE_BASE.duplicate()
@@ -5172,6 +5257,8 @@ func _g16_resolve_profile() -> void:
 	_g16_build_pad = int(p["build_pad"])
 	_g16_build_rects = p["building_rects"]
 	_g16_greybox_rects = p["greybox_rects"]
+	_g16_plaza_rects = p["plaza_rects"]
+	_g16_plank_rects = p["plank_rects"]
 
 func _g16_in_rects(x: int, y: int, rects: Array, pad: int) -> bool:
 	for r: Rect2i in rects:
@@ -8824,6 +8911,10 @@ func _draw() -> void:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
 			_draw_quest_board()      # ★ [S2-T6] 만물상 앞 게시판(SOLID 1칸 그레이박스 — 수락 중이면 표식)
+			# ★[S2-T9] 마을 야외 장식(벚꽃 나무·돌담) — HOME과 같은 Y-split. 뒤 프롭만 여기서 그리고
+			#   앞 프롭은 _front_props가 플레이어 위에 다시 그린다(캐노피 뒤로 지나가기).
+			var _vsy: float = player.global_position.y if player != null else 1.0e20
+			_draw_props_for(_prop_layouts.get("VILLAGE_OUTDOOR", []), self, _PROP_PASS_BACK, _vsy)
 			_draw_props_for(_prop_layouts.get("CAFE", []), self)  # ★ ADR-0025 데이터: 카페 무대 가구·카페 등불
 			_draw_ship_bin()         # ★ C2 무인 출하함 상자(카페 안 — 카페 카메라에서만 보임)
 			# M2.4 — 이벤트 데이면 카페 무대를 축제 장식으로(가구 위에 가랜드·무대 카펫 덧그림).
@@ -9517,9 +9608,15 @@ func _update_tree_fade(delta: float) -> void:
 		_front_props.queue_redraw()
 
 func _draw_front_props(canvas: CanvasItem) -> void:
-	if _region != RegionCatalog.HOME or player == null:
+	if player == null:
 		return
-	_draw_props_for(_home_prop_entries(), canvas, _PROP_PASS_FRONT, player.global_position.y)
+	match _region:
+		RegionCatalog.HOME:
+			_draw_props_for(_home_prop_entries(), canvas, _PROP_PASS_FRONT, player.global_position.y)
+		RegionCatalog.NARU_VILLAGE:
+			# ★[S2-T9] 마을 벚꽃 나무도 같은 Y-split을 받는다(수관 뒤로 지나가면 반투명 — FADE_PROPS).
+			_draw_props_for(_prop_layouts.get("VILLAGE_OUTDOOR", []), canvas, _PROP_PASS_FRONT,
+				player.global_position.y)
 
 # 좌석에 앉은 손님과 머리 위 인내심 바를 그린다. 인내심이 줄수록 바가 짧아지고 붉어져
 # "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거). 몸체는 그레이박스지만 P2.7 톤 패스에서

@@ -148,7 +148,8 @@ graph TD
 - [x] **게시판** (2026-07-27·PR#271) — quest_board.gd(일일+중기 납품형 통합 원장 — 의뢰=day/주 시드 결정적 파생·무상태, 수락 동시 1건·일일 기한 2일/중기 그 주 끝·미완료 무페널티·보상=일반품질 판매가 ×3 ×수량+의뢰인 호감도)·만물상 앞 (62,19) 배선(F 수락/납품·G 중기)·`affinity.add_points`(대화·선물 게이팅과 별개 채널)·세이브 하위호환. quest_board_test 45단언·회귀 5종 PASS. **동반 수정**: run_tests.sh 파싱 실패→PASS 오탐 봉합(SCRIPT ERROR 감지 FAIL·음성 검증 완료)
 - [x] **주민 프레임워크** (2026-07-27·PR#272) — resident.gd(등록 레코드 — facing·팝업·프롬프트·입력·대화·선물·스테이션·초상화·세이브 8축 파생·특수 거동은 Callable 훅 격리: 옥자 통보=station_gate·네오 매대=shop_key·바나 밤 경비=visible_rule)·resident_walk.gd(길 스포크 ㄱ자 경유 등속 보간 — **시각 레이어 한정**, 논리 위치는 즉시 스냅이라 게임플레이 판정 불변·A* 미도입)·main.gd 레지스트리 루프화(1인 추가=캐릭터 파일 1+레코드 1등록, main.tscn 무수정 — script_path/needs_affinity 런타임 생성 경로). 기존 5인 거동 불변(기존 테스트 7종 **무수정** 통과)·세이브 키 하위호환·결정 8 명문화. resident_test 신설 67단언·회귀 10종 PASS
 - [x] **모찌(첫 T1 주민 — 프레임워크 절차 검증)** (2026-07-27·PR#273) — mochi.gd(슬라임 그레이박스·도트 눈입·대화 4묶음 "흡수→내어줌" 결)+`_setup_residents` 레코드 1건이 추가의 전부(main.tscn 무수정 — script_path/needs_affinity 런타임 생성 실증). 스케줄=집 앞(67,26)→광장(54,34)→카페 홀(13,92) — **보간 걷기 첫 실동작**(집→광장 25칸 ㄱ자·결정성 단언). **절차 검증 평결=결함 1건 발견·봉합**(_road_spokes 실내 밴드 가드 — 실내 자리 유령 걷기 방지)·결함 2건 이월(관계 탭 T1 미표시=effect_fn 전제+HeartBar 풀 4 고정 — T1 확장 전 owner 결정 필요, owner 큐). resident_test ⑪ 42단언·회귀 7종 PASS
-- [ ] 아트 패스(도색·네오·모찌)
+- [x] **아트 패스 1 — 나루 지형·환경** (2026-07-27·PR#274) — 자갈 광장(tiles_pro segmentation 판석 6변주 모자이크·NARU_PLAZA_RECT 신설·순수 시각)·벚꽃 13그루(64×128 드롭인)·돌담(광장 테두리)·다리+부두 목판 데크(90° 직교 문법)·FACADE_CAFE 알파 트림. 표면 5/6 추가·_ARTIFICIAL_SURF 통일·**HOME 픽셀 diff 0**. 포장 길(PR#265 정합)·강변(Slice 1R 규칙 정상) 재작업 회피. gemini-regen-batch §10 스펙카드 4종+교훈(판석류=tiles_pro, topdown_tileset 격자 실패). 회귀 10종 PASS·덤프 육안 판정 통과
+- [ ] 아트 패스 2 — 건물 외관(만물상·주민집 — ★greybox_rects 제외 필수)·네오·모찌 스프라이트
 - [ ] 시각 확인·선별 회귀·기록
 
 ### Slice 3 — 삼도천·황천해 (낚시)
