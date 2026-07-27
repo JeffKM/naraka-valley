@@ -123,8 +123,88 @@ const RELICS := {                          # 유품 id → {name_ko, price}(중�
 # (main._forage_base_quality + 약초학자 하한 = ADR-0052). 재료(HAY·개간)와 달리 품질 유차원이라
 # MATERIALS와 분리한다. 지금은 피안화 1종(파일럿) — 종 확장은 숲 채집 슬라이스에서(ADR-0033 무대).
 const SPIRIT_FLOWER := "spirit_flower"  # 피안화(彼岸花) — 안식 꽃 패치 채집물
+# ── ★[S4-T1 / ADR-0062 결정 2] 숲·해변 채집물 로스터 22종 — 정식 편입 ──────────────
+# 피안화(안식 파일럿) 옆에 **저승 숲 12 + 미혹 희소 4 + 미혹 심층 2 + 황천해 해변 4**를 얹는다.
+# 전부 같은 결의 품질 유차원 CAT_HARVEST라 판매·서빙·선물·정렬·출하·의뢰 보상이 기존 경로로
+# 자동 통용된다(신규 분기 0 — 어획물·통용물 편입과 같은 판단).
+# ★ 여기는 **id·이름·가격의 단일 출처**이고, "언제·어디서 돋나"(절기·존 매핑)는 ForageSpawns가
+#   든다(FishCatalog 위임 관례의 역방향 — 로스터 스키마가 얇아 이름·가격은 여기 사는 게 맞다).
+# ★ 명명 = CONTEXT 저승 결(넋/혼/잿빛/저승/안개/서리/미혹 수식어 합성 — 어종 로스터 PR#279 선례).
+#   **불사과만 CONTEXT 기정의 명칭 그대로**이고, 그 종은 `CropCatalog.BULSAGWA`로 **이미 존재해 재사용**
+#   한다(신규 등록 21 + 재사용 1 = 로스터 22).
+# ★ 가격 밴드(잠정 — owner 큐): 일반 30~90 · 희소 130~250 · 불사과 600(500+) · 해변 22~55 엽전.
+#
+#   ┌ 로스터 표(절기 · 구역/존 · 기준가) ────────────────────────────────────────┐
+#   │ 넋고사리        피안절  저승 숲 빈터    35 │ 저승산딸기      유화절 저승 숲 35 │
+#   │ 잿빛냉이        피안절  저승 숲 빈터    30 │ 혼잎박하        유화절 저승 숲 45 │
+#   │ 저승달래        피안절  저승 숲 빈터    45 │ 잿빛더덕        유화절 저승 숲 70 │
+#   │ 잿빛도토리      망연절  저승 숲 빈터    30 │ 언혼뿌리        성야절 저승 숲 50 │
+#   │ 안개도라지      망연절  저승 숲 빈터    55 │ 서리동백        성야절 저승 숲 80 │
+#   │ 넋송이버섯      망연절  저승 숲 빈터    90 │ 성야솔방울      성야절 저승 숲 40 │
+#   │ 미혹난초        피안절  미혹 빈터      130 │ 유령초          유화절 미혹    170 │
+#   │ 명월버섯        망연절  미혹 빈터      210 │ 서리혼백초      성야절 미혹    250 │
+#   │ 불사과★재사용   무관    미혹 심층      600 │ 저승삼          무관   미혹 심층 420 │
+#   │ 황천산호        무관    황천해 해변     55 │ 넋성게          무관   황천해     45 │
+#   │ 유리고둥        무관    황천해 해변     35 │ 물비늘조개      무관   황천해     22 │
+#   └──────────────────────────────────────────────────────────────────────────┘
+#   ⚠️ 해변 4종은 **아이템 등록만** — 백사장 스폰 존 배선은 S4-T8 소관이다(무대 재사용).
+# 저승 숲 일반 12(절기당 3)
+const NEOK_GOSARI := "neok_gosari"              # 넋고사리(피안절)
+const JAETBIT_NAENGI := "jaetbit_naengi"        # 잿빛냉이(피안절)
+const JEOSEUNG_DALLAE := "jeoseung_dallae"      # 저승달래(피안절)
+const JEOSEUNG_SANDALGI := "jeoseung_sandalgi"  # 저승산딸기(유화절)
+const HONIP_BAKHA := "honip_bakha"              # 혼잎박하(유화절)
+const JAETBIT_DEODEOK := "jaetbit_deodeok"      # 잿빛더덕(유화절)
+const JAETBIT_DOTORI := "jaetbit_dotori"        # 잿빛도토리(망연절)
+const ANGAE_DORAJI := "angae_doraji"            # 안개도라지(망연절)
+const NEOK_SONGI := "neok_songi"                # 넋송이버섯(망연절)
+const EONHON_PPURI := "eonhon_ppuri"            # 언혼뿌리(성야절)
+const SEORI_DONGBAEK := "seori_dongbaek"        # 서리동백(성야절)
+const SEONGYA_SOLBANGUL := "seongya_solbangul"  # 성야솔방울(성야절)
+# 미혹 희소 4(절기당 1)
+const MIHOK_NANCHO := "mihok_nancho"            # 미혹난초(피안절)
+const YURYEONGCHO := "yuryeongcho"              # 유령초(유화절)
+const MYEONGWOL_BEOSEOT := "myeongwol_beoseot"  # 명월버섯(망연절)
+const SEORI_HONBAEKCHO := "seori_honbaekcho"    # 서리혼백초(성야절)
+# 미혹 심층 2(절기 무관 — 도끼 티어 게이트는 S4-T4/T5)
+# ★ 불사과는 **여기 신규 등록하지 않는다** — `CropCatalog.BULSAGWA`("bulsagwa")로 S1-4에 이미 존재하고
+#   (crops.gd 주석 "다절기 프레스티지(미혹의 숲 채집)"), 수확물 아이템 id = 작물 id라 그 자체가 이미
+#   유효한 CAT_HARVEST 아이템이다. 같은 id를 FORAGEABLES에 또 박으면 name/price 조회가 CropCatalog에
+#   먼저 걸려 **죽은 중복 항목**이 된다. ADR-0062 "CONTEXT 기정의 훼손 없음 — 획득 경로만 먼저 실존화"
+#   의 정확한 이행 = 기존 종을 그대로 쓰고 채집 산출로 잇는 것이다(판매가 상향은 crops.gd에서).
+const JEOSEUNG_SAM := "jeoseung_sam"            # 저승삼(冥蔘)
+# 황천해 해변 4(절기 무관 — 존 배선 S4-T8)
+const HWANGCHEON_SANHO := "hwangcheon_sanho"    # 황천산호
+const NEOK_SEONGGAE := "neok_seonggae"          # 넋성게
+const YURI_GODUNG := "yuri_godung"              # 유리고둥
+const MULBINEUL_JOGAE := "mulbineul_jogae"      # 물비늘조개
 const FORAGEABLES := {                   # 채집물 id → {name_ko, price(기준 판매가)}
 	SPIRIT_FLOWER: {"name_ko": "피안화", "price": 30},
+	# 저승 숲 일반 12
+	NEOK_GOSARI: {"name_ko": "넋고사리", "price": 35},
+	JAETBIT_NAENGI: {"name_ko": "잿빛냉이", "price": 30},
+	JEOSEUNG_DALLAE: {"name_ko": "저승달래", "price": 45},
+	JEOSEUNG_SANDALGI: {"name_ko": "저승산딸기", "price": 35},
+	HONIP_BAKHA: {"name_ko": "혼잎박하", "price": 45},
+	JAETBIT_DEODEOK: {"name_ko": "잿빛더덕", "price": 70},
+	JAETBIT_DOTORI: {"name_ko": "잿빛도토리", "price": 30},
+	ANGAE_DORAJI: {"name_ko": "안개도라지", "price": 55},
+	NEOK_SONGI: {"name_ko": "넋송이버섯", "price": 90},
+	EONHON_PPURI: {"name_ko": "언혼뿌리", "price": 50},
+	SEORI_DONGBAEK: {"name_ko": "서리동백", "price": 80},
+	SEONGYA_SOLBANGUL: {"name_ko": "성야솔방울", "price": 40},
+	# 미혹 희소 4
+	MIHOK_NANCHO: {"name_ko": "미혹난초", "price": 130},
+	YURYEONGCHO: {"name_ko": "유령초", "price": 170},
+	MYEONGWOL_BEOSEOT: {"name_ko": "명월버섯", "price": 210},
+	SEORI_HONBAEKCHO: {"name_ko": "서리혼백초", "price": 250},
+	# 미혹 심층 2(고가 — 도끼 티어 게이트 너머). 불사과는 CropCatalog 기존 종 재사용(위 주석).
+	JEOSEUNG_SAM: {"name_ko": "저승삼", "price": 420},
+	# 황천해 해변 4
+	HWANGCHEON_SANHO: {"name_ko": "황천산호", "price": 55},
+	NEOK_SEONGGAE: {"name_ko": "넋성게", "price": 45},
+	YURI_GODUNG: {"name_ko": "유리고둥", "price": 35},
+	MULBINEUL_JOGAE: {"name_ko": "물비늘조개", "price": 22},
 }
 # ── ★[S3-T7 / ADR-0061 결정 7] 게잡이통 통용물 3종 — 게·조개류(패시브 어획) ──────────
 # 채집물(FORAGEABLES)·어획물(FishCatalog)과 **정확히 같은 결**의 품질 유차원 CAT_HARVEST다. 즉
