@@ -19,9 +19,10 @@ class_name FishingSession
 #   - **어종 데이터를 모른다**(S3-T3 fish_catalog 디커플링). 물고기 파라미터는 dict로 *주입*되고,
 #     지금은 체급별 그레이박스 프리셋 4종(CLASS_PRESETS)이 그 자리를 채운다. fish_catalog가 생기면
 #     같은 스키마 dict를 넘길 뿐 이 파일은 안 바뀐다.
-#   - **스킬·기어 보정은 중립 훅으로만**(S3-T4 기어 / S3-T6 낚시 스킬 소관). mods의 세 계수는 기본값이
-#     정확히 중립(1.0 / 0.0)이라 지금은 base 그대로 굴러간다(ADR-0008 "평평 ≠ 막힘"의 순수 쇼케이스 —
-#     낚시는 관계 곱셈기가 0인 유일 루프, ADR-0030 결정 1).
+#   - **스킬·기어 보정은 중립 훅으로만**(S3-T6 낚시 스킬 소관 · ★S3-T4 기어는 실효). mods의 네 계수는
+#     기본값이 정확히 중립(1.0 / 0.0)이라 **맨몸 T1도 base 그대로 굴러간다**(ADR-0008 "평평 ≠ 막힘"의
+#     순수 쇼케이스 — 낚시는 관계 곱셈기가 0인 유일 루프, ADR-0030 결정 1). 기어는 그 위에 얹히는
+#     가속일 뿐이고, 이 파일은 여전히 **기어 카탈로그를 모른다**(GearCatalog가 dict를 만들어 준다).
 #   - **세이브 무상태**(cafe.gd·night_bar.gd와 일관): 세션은 한 캐스팅 동안만 살아 있고 취침·저장 대상이
 #     아니다. 저장되는 건 하류 산출물(인벤토리 어획물·혼력)뿐이다.
 #   - 품질 등급은 여기서 정하지 않는다 — `perfect_count`만 노출하면 등급 매핑은 S3-T3(어종 카탈로그)이
@@ -80,9 +81,12 @@ const CLASS_PRESETS := [
 	},
 ]
 
-# ── 낚싯대 기본(T1 — ★[S3-T4 기어 카탈로그로 교체]) ──────────────────────────
+# ── 낚싯대 기본값(T1 상당 — 미주입 시의 폴백) ────────────────────────────────
 # max_class = 줄 강도(허용 체급 상한 — 초과 어종을 걸면 확정 끊김, ADR-0061 결정 2 "체급 게이트").
-# tension_safe_bonus = 텐션 상승 감쇠 비율(0.0 = 중립). 태클 '코르크 보버'가 이 자리를 채운다(S3-T4).
+# tension_safe_bonus = 텐션 상승 감쇠 비율(0.0 = 중립).
+# ★[S3-T4] 실제 값은 이제 GearCatalog.rod_params(rod_id, tackles)가 만든다(4티어 max_class 0~3 +
+#   태클 '코르크 보버' 안전 여유). 이 상수는 그 dict의 **스키마 원본이자 T1 폴백**으로 남는다 —
+#   FishingSession은 여전히 기어 카탈로그를 모른다(주입 dict 하나가 유일한 접점).
 const ROD_T1 := {"max_class": WeightClass.SMALL, "tension_safe_bonus": 0.0}
 
 # ── 주입 파라미터(생성자에서 확정 — 이후 불변) ────────────────────────────────
@@ -91,8 +95,10 @@ var rod: Dictionary = {}        # 낚싯대 파라미터(ROD_T1 스키마)
 # 스킬/기어 보정 훅 — **기본값이 정확히 중립**(S3-T4 기어 / S3-T6 낚시 스킬이 채운다).
 #   energy_factor      : 후킹 혼력 배수(1.0 = 중립 · 스킬 절감이 낮춘다 — FarmSkill.energy_factor 문법 대칭)
 #   perfect_window_add : 퍼펙트 릴 창 가산(초, 0.0 = 중립 · 스킬 레벨이 키운다)
-#   burst_damp         : 발버둥 텐션 배수 감쇠(0.0 = 중립 · 태클 '납추'가 키운다)
-var mods: Dictionary = {"energy_factor": 1.0, "perfect_window_add": 0.0, "burst_damp": 0.0}
+#   burst_damp         : 발버둥 텐션 배수 감쇠(0.0 = 중립 · 태클 '납추'가 채운다 — ★S3-T4 실효)
+#   wait_factor        : 입질 대기 배수(1.0 = 중립 · 미끼가 낮춘다 — ★S3-T4 실효). cast()에서 한 번만 먹는다.
+var mods: Dictionary = {"energy_factor": 1.0, "perfect_window_add": 0.0, "burst_damp": 0.0,
+	"wait_factor": 1.0}
 # ★ 후킹 게이트(→ bool). main이 "혼력을 낼 수 있나(내고 소모까지)"를 여기에 주입한다. 무효 Callable =
 #   항상 통과(순수 로직 단독 테스트 기본값 — 이 클래스는 혼력을 모른다).
 var hook_gate: Callable = Callable()
@@ -150,7 +156,10 @@ func cast() -> bool:
 	state = State.CASTING
 	_phase_t = 0.0
 	elapsed = 0.0
-	_wait_secs = _rng.randf_range(WAIT_MIN, WAIT_MAX)
+	# ★[S3-T4] 미끼(일반 −40%·유인/보장 −20%)가 대기 시간을 줄인다. 하한 0.1로 클램프해 "즉시 입질"
+	#   같은 축퇴를 막고, 상한 1.0으로 막아 미끼가 대기를 *늘리는* 방향은 열지 않는다(기어 = 언제나 순이득).
+	_wait_secs = _rng.randf_range(WAIT_MIN, WAIT_MAX) \
+		* clampf(float(mods.get("wait_factor", 1.0)), 0.1, 1.0)
 	return true
 
 # 세션 취소(이동 입력 등). 종착 상태에서도 안전(멱등) — main이 세션 참조를 버리면 끝이다.

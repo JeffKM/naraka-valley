@@ -185,6 +185,22 @@ const FISH := {
 # 그 몫을 그 체급의 가용 종끼리 균등 분배한다 — 로스터가 늘어도 "소가 대부분"이 흔들리지 않는다(전설은
 # 일반 롤에서 몫 0이고, 대신 roll_legendary가 LEGEND_CHANCE로 따로 물린다).
 const CLASS_WEIGHT := [80.0, 15.0, 5.0, 0.0]
+
+# ★[S3-T4 / ADR-0061 결정 4] 유인 미끼의 체급 가중 시프트.
+# 읽는 법: shift = 1.0이면 각 체급이 **한 계단 아래 체급의 몫을 물려받는다**(중 15→80 · 대 5→15 ·
+#   소는 자기 몫 유지). 0.0이면 정확히 중립(CLASS_WEIGHT 그대로 — 무보정 호출과 수치 동일).
+#   0~1 사이는 그 사이를 선형 보간한다(미끼 세기 조절 여지). 전설 몫은 **항상 0**으로 못 박는다 —
+#   시프트로 전설이 일반 롤에 새면 결정 3("전설은 roll_legendary 전용")이 깨진다.
+static func class_weights(shift: float) -> Array:
+	var s := clampf(shift, 0.0, 1.0)
+	if s <= 0.0:
+		return CLASS_WEIGHT.duplicate()
+	var out: Array = []
+	for c in CLASS_WEIGHT.size():
+		var up: float = CLASS_WEIGHT[maxi(c - 1, 0)]   # 한 계단 아래 체급의 몫(= 위로 밀린 가중)
+		out.append(lerpf(float(CLASS_WEIGHT[c]), up, s))
+	out[WC_LEGEND] = 0.0
+	return out
 # 전설 입질 확률(가용 조건 충족 시). 1% 미만 = "평생 몇 번 보는 사건"(ADR-0061 결정 3 극저확률 특수 입질).
 const LEGEND_CHANCE := 0.008
 
@@ -273,12 +289,33 @@ static func season_roster(habitat: String, season_idx: int) -> Array:
 # 가용 필터(무대·절기·시간) 후 체급 가중 추첨. **전설은 절대 안 나온다**(결정 3) — 전설은 roll_legendary
 # 전용이다. 가용 종이 하나도 없으면 ""(호출 측이 방어 폴백을 고른다 — 로스터 밀도상 실제로는 안 난다).
 # rng는 *주입만* 쓴다(결정성 = 헤드리스 게이트의 전제 — 전역 randf 금지).
+#
+# ★[S3-T4] 미끼 보정 2개(둘 다 기본값이 정확히 중립 — 무인자 호출의 결과열은 한 톨도 안 변한다):
+#   class_shift   : 유인 미끼의 체급 가중 상향(0.0 = 중립 · 1.0 = 한 계단. class_weights 참조).
+#   guarantee_cap : 보장 미끼(−1 = 없음). 0 이상이면 **가용 종 중 체급 ≤ cap인 것들의 최고 체급**에서
+#                   균등 추첨한다(= "이 낚싯대로 잡을 수 있는 가장 큰 놈" 확정). cap = 낚싯대 허용
+#                   체급이라 보장 미끼가 확정 끊김 함정이 되지 않는다(GearCatalog.guarantee_cap_for).
 static func roll_fish(habitat: String, season_idx: int, phase: String,
-		rng: RandomNumberGenerator) -> String:
+		rng: RandomNumberGenerator, class_shift: float = 0.0, guarantee_cap: int = -1) -> String:
 	var pool := available_ids(habitat, season_idx, phase)
 	if pool.is_empty():
 		return ""
+	# ★ 보장 미끼 — 가중 추첨을 건너뛰고 "cap 이하 최고 체급" 안에서 균등 추첨한다(확정의 의미 보존).
+	if guarantee_cap >= 0:
+		var top := -1
+		for id in pool:
+			var wc_g := weight_class_of(id)
+			if wc_g <= guarantee_cap and wc_g > top:
+				top = wc_g
+		if top >= 0:
+			var best: Array = []
+			for id in pool:
+				if weight_class_of(id) == top:
+					best.append(id)
+			return String(best[rng.randi() % best.size()])
+		# cap 이하가 하나도 없다는 건 로스터상 있을 수 없다(상시종 = 소 체급) — 일반 롤로 떨어진다.
 	# 체급별 가용 수 → 종당 가중 = 그 체급의 몫 / 그 체급의 가용 종 수(체급 몫 고정·종끼리 균등).
+	var cw := class_weights(class_shift)
 	var per_class := [0, 0, 0, 0]
 	for id in pool:
 		per_class[weight_class_of(id)] += 1
@@ -286,7 +323,7 @@ static func roll_fish(habitat: String, season_idx: int, phase: String,
 	var total := 0.0
 	for id in pool:
 		var wc := weight_class_of(id)
-		var w: float = CLASS_WEIGHT[wc] / float(per_class[wc])
+		var w: float = float(cw[wc]) / float(per_class[wc])
 		weights.append(w)
 		total += w
 	if total <= 0.0:
@@ -347,8 +384,11 @@ static func quality_for_roll(perfect_count: int, roll: int) -> int:
 	return row.size() - 1
 
 # ★ 퍼펙트 릴 → 품질 등급(ItemCatalog.Q_NORMAL..Q_IRIDIUM). rng는 주입만 쓴다(결정성).
-#   bobber_bonus = 퀄리티 보버 태클 보정(0.0 = 정확히 중립 · S3-T4가 채운다). 0~1 비율이며 roll을
-#   그만큼 위로 밀어 상위 등급 쪽으로 기운다(확률행은 그대로 두고 판정 축만 옮긴다 = 표 중복 0).
+#   bobber_bonus = 퀄리티 보버 태클 보정(0.0 = 정확히 중립 · ★S3-T4가 0.15로 채웠다). 0~1 비율이며
+#   roll을 그만큼 위로 밀어 상위 등급 쪽으로 기운다(확률행은 그대로 두고 판정 축만 옮긴다 = 표 중복 0).
+#   ★ 세기 주의: roll이 99에서 클램프되므로 큰 보정(≥0.4)은 최상위 등급에 확률이 뭉친다(0.5 = 퍼펙트
+#     0회에도 금 52%). "품질 = 퍼펙트 릴"(§1-D) 축을 지키려면 보정은 계단 반 칸 수준으로 —
+#     GearCatalog.TACKLES 주석의 잠정 0.15가 그 근거다.
 static func quality_for(perfect_count: int, rng: RandomNumberGenerator,
 		bobber_bonus: float = 0.0) -> int:
 	var roll := rng.randi_range(0, 99) + int(round(clampf(bobber_bonus, 0.0, 1.0) * 100.0))
