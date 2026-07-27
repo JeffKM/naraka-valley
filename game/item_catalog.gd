@@ -93,10 +93,15 @@ const SOUL_FIBER := "soul_fiber"        # 혼백 섬유 — 이승의 미련(잡
 const EMBER_SHARD := "ember_shard"      # 업화석 조각 — 업화석(돌·곡괭이) 드랍
 const PETRIFIED_WOOD := "petrified_wood"  # 석화 목재 — 석화 고목(그루터기·도끼) 드랍
 const RARECROW_1 := "rarecrow_1"        # ★[S2-T5] 레어크로우 ① — 혼백관 마일스톤 보상([ADR-0051] B 수집 트랙 최초 획득처)
+# ★[S3-T6 / ADR-0061 결정 6] 삭은 그물 — 낚시 인양물 잡동사니(SalvageTable). 개간 드랍은 아니지만
+#   같은 결의 품질 무차원 재료라 여기 합류한다(카테고리 신설 0). ★S3-T7 게잡이통 잡동사니 표적으로도
+#   재사용된다(뱃사람 퍼크 = "게잡이통에 잡동사니 안 걸림"의 그 잡동사니 — 신규 아이템 남발 0).
+const ROTTEN_NET := "rotten_net"
 const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 별 상수라 여기 제외)
 	SOUL_FIBER: {"name_ko": "혼백 섬유", "price": 4},
 	EMBER_SHARD: {"name_ko": "업화석 조각", "price": 12},
 	PETRIFIED_WOOD: {"name_ko": "석화 목재", "price": 15},
+	ROTTEN_NET: {"name_ko": "삭은 그물", "price": 5},   # ★S3-T6 인양 잡동사니(팔면 푼돈)
 	RARECROW_1: {"name_ko": "레어크로우 ① — 갓 쓴 허수아비", "price": 0},   # 비매품(수집물 — 배치·8종 디럭스는 후속 ADR-0051 B)
 }
 

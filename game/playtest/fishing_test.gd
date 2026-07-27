@@ -551,8 +551,11 @@ func _initialize() -> void:
 	m.energy.refill()
 	var e0: int = m.energy.current
 	# ★[S3-T3] 체급 스텁 대신 정식 어종 dict를 주입한다(main._start_fishing과 같은 경로).
+	# ★[S3-T6] 옛 `{"energy_factor": m.FISHING_ENERGY_FACTOR}`(중립 상수)가 main._fishing_mods()로
+	#   바뀌었다 — 상수가 폐기되고 낚시 스킬이 세 계수를 만든다. 여기 main은 갓 스폰돼 _fishing_xp=0
+	#   (L0)이고 기어도 없으므로 mods는 여전히 정확히 중립이라 아래 혼력 단언(4·14)은 그대로다.
 	m.fishing = FishingSession.new(11, FishCatalog.session_params(FishCatalog.NEOK_MYEOLCHI),
-		FishingSession.ROD_T1, {"energy_factor": m.FISHING_ENERGY_FACTOR})
+		FishingSession.ROD_T1, m._fishing_mods())
 	m.fishing.hook_gate = m._fishing_hook_gate
 	m.fishing.cast()
 	_advance_to_fight(m.fishing)
@@ -571,7 +574,7 @@ func _initialize() -> void:
 	m.energy.refill()
 	var e1: int = m.energy.current
 	m.fishing = FishingSession.new(12, FishCatalog.session_params(FishCatalog.NEOUL_BEOMCHI),
-		FishingSession.ROD_T1, {"energy_factor": m.FISHING_ENERGY_FACTOR})
+		FishingSession.ROD_T1, m._fishing_mods())
 	m.fishing.hook_gate = m._fishing_hook_gate
 	m.fishing.cast()
 	_advance_to_fight(m.fishing)
@@ -590,7 +593,7 @@ func _initialize() -> void:
 	m.energy.spend(SoulEnergy.MAX - 2)   # 잔량 2 < 소 체급 4
 	var e2: int = m.energy.current
 	m.fishing = FishingSession.new(13, FishCatalog.session_params(FishCatalog.NEOK_MYEOLCHI),
-		FishingSession.ROD_T1, {"energy_factor": m.FISHING_ENERGY_FACTOR})
+		FishingSession.ROD_T1, m._fishing_mods())
 	m.fishing.hook_gate = m._fishing_hook_gate
 	m.fishing.cast()
 	_run_holding(m.fishing)
@@ -607,9 +610,15 @@ func _initialize() -> void:
 	var raw: Dictionary = m.saver.load_game(m._active_slot)
 	var no_fishing_key := true
 	for k in raw.keys():
+		# ★[S3-T6] "fishing_xp"(낚시 숙련 XP)는 **세션이 아니라 누적 스킬 진행**이라 저장이 정배다
+		#   (농사 farming_xp·채집 foraging_xp와 같은 규약). 이 단언의 취지는 "릴 격투 *세션*이 비영속"
+		#   (ADR-0061 결정 2)이므로 XP 키만 면제한다 — 세션 키(텐션·스태미나·상태)는 여전히 0이어야 한다.
+		if String(k) == "fishing_xp":
+			continue
 		if String(k).findn("fishing") >= 0 or String(k).findn("reel") >= 0:
 			no_fishing_key = false
-	_check("ⓖ 세이브 dict에 낚시 세션 키 0(비영속)", no_fishing_key and not raw.has("fishing"))
+	_check("ⓖ 세이브 dict에 낚시 세션 키 0(비영속 — 숙련 XP만 예외)",
+		no_fishing_key and not raw.has("fishing") and raw.has("fishing_xp"))
 	var fish_count: int = m.inventory.count_of(FishCatalog.NEOK_MYEOLCHI)
 	m._load_game()
 	await _settle(m)

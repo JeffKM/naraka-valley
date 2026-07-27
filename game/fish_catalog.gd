@@ -371,10 +371,32 @@ static func session_params(id: String) -> Dictionary:
 static func quality_row(perfect_count: int) -> Array:
 	return QUALITY_TABLE[clampi(perfect_count, 0, QUALITY_TABLE.size() - 1)]
 
+# ★[S3-T6 / ADR-0052 낚시 로스터] 명조사(angler, lvl10) — "최고 등급 어획 확률 대폭↑"의 실효 축.
+# 확률행을 갈아엎지 않고 **이리듐 몫만 끌어올린다**: top_bonus 포인트만큼을 아래 등급(일반 → 은 순)에서
+# 걷어 이리듐으로 옮긴다. 금은 안 건드린다(중간 등급이 얇아지면 등급 체감의 계단이 무너진다).
+#   ★ **퍼펙트 2회 게이트 보존**(카탈로그 §1-D "품질 = 퍼펙트 릴"): 이리듐 몫이 원래 0인 행(퍼펙트
+#     0·1회)은 **손대지 않는다** — 명조사를 골라도 대충 잡은 물고기가 이리듐이 되진 않는다. 전문직은
+#     "퍼펙트를 딴 격투의 보상을 키우는" 것이지 스킬 축을 우회하는 게 아니다(ADR-0052 비-가치 차원).
+#   예) top_bonus=20 → 퍼펙트 2회 [25,40,30,5] → [5,40,30,25] · 3회 [8,32,45,15] → [0,20,45,35]
+static func quality_row_for(perfect_count: int, top_bonus: int) -> Array:
+	var row := quality_row(perfect_count).duplicate()
+	if top_bonus <= 0 or int(row[3]) <= 0:
+		return row
+	var need := top_bonus
+	for tier in [0, 1]:   # 일반 → 은 순으로만 걷는다(금 보존)
+		var take: int = mini(need, int(row[tier]))
+		row[tier] = int(row[tier]) - take
+		row[3] = int(row[3]) + take
+		need -= take
+		if need <= 0:
+			break
+	return row
+
 # ★ 결정적 등급 판정(roll 0..99). 경계 검증·재현이 필요한 곳은 이 순수 함수를 쓴다
 #   (FertilizerCatalog.tier_for_roll 선례 — 확률과 판정을 분리해야 테스트가 이빨을 갖는다).
-static func quality_for_roll(perfect_count: int, roll: int) -> int:
-	var row := quality_row(perfect_count)
+#   ★[S3-T6] top_bonus = 명조사 이리듐 가중(0 = 정확히 중립 — 무인자 기존 호출의 결과는 한 톨도 불변).
+static func quality_for_roll(perfect_count: int, roll: int, top_bonus: int = 0) -> int:
+	var row := quality_row_for(perfect_count, top_bonus)
 	var r := clampi(roll, 0, 99)
 	var acc := 0
 	for tier in row.size():
@@ -389,7 +411,11 @@ static func quality_for_roll(perfect_count: int, roll: int) -> int:
 #   ★ 세기 주의: roll이 99에서 클램프되므로 큰 보정(≥0.4)은 최상위 등급에 확률이 뭉친다(0.5 = 퍼펙트
 #     0회에도 금 52%). "품질 = 퍼펙트 릴"(§1-D) 축을 지키려면 보정은 계단 반 칸 수준으로 —
 #     GearCatalog.TACKLES 주석의 잠정 0.15가 그 근거다.
+#   ★[S3-T6] 두 전문직이 여기로 들어온다(둘 다 기본값이 정확히 중립 — 무인자 호출은 결과 불변):
+#     · 낚시꾼(fisher, lvl5) = bobber_bonus에 **합산**된다(퀄리티 보버와 같은 축 — 판정 축을 위로 미는
+#       완만한 상향. 태클 0.15와 같은 눈금의 0.10이라 "기어 하나를 덜 산 셈"으로 읽힌다).
+#     · 명조사(angler, lvl10) = top_bonus(이리듐 몫 이전 — quality_row_for 참조).
 static func quality_for(perfect_count: int, rng: RandomNumberGenerator,
-		bobber_bonus: float = 0.0) -> int:
+		bobber_bonus: float = 0.0, top_bonus: int = 0) -> int:
 	var roll := rng.randi_range(0, 99) + int(round(clampf(bobber_bonus, 0.0, 1.0) * 100.0))
-	return quality_for_roll(perfect_count, roll)
+	return quality_for_roll(perfect_count, roll, top_bonus)
