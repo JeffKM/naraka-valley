@@ -524,3 +524,87 @@ python3 game/tools/gemini_facade_to_chunky.py <src> game/assets/buildings/cafe_e
 
 ### UI (6)
 - ⬜ heart_empty ⬜ heart_full ⬜ heart_full_32 ⬜ ink_arrow ⬜ panel_frame ⬜ soul_moth
+
+---
+
+## 10. ★[S2-T9] 나루 마을 환경 아트 — 신규 4종 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-07-27). 아래 카드는 [ADR-0048] 원칙
+> ("Claude 제작물 = Gemini 고품질본으로 무수정 교체 가능")에 따른 **교체 큐**다. 파일명·크기·앵커·
+> 팔레트 규약이 이 카드에 잠겨 있으므로, owner가 같은 규격으로 다시 뽑아 덮어쓰면 **코드 0줄 수정**으로
+> 반영된다(`game/tools/make_naru_art.py`가 raw→규격 정규화를 담당 — raw만 갈아끼워도 된다).
+>
+> **후처리 글루:** [`game/tools/make_naru_art.py`](../../game/tools/make_naru_art.py)
+> **raw 보관:** `game/assets/terrain16/naru_raw/`(지형) · `game/assets/**/*_raw.png`(프롭·facade)
+
+### 10.1 벚꽃 나무 `village_tree_cherry`
+
+```
+파일: game/assets/props/village_tree_cherry.png
+크기: 64×128 (2×4칸, 32-native / ADR-0050)   앵커: bottom-center(발치 = 프레임 하단 flush)
+충돌: 밑행 1칸만 SOLID(TREE_FOOT_H) · 수관 통과 O + occlusion fade — FOOT_BAR_PROPS·FADE_PROPS
+그림자: 굽지 않는다(PROP_SHADOW_SET 코드 타원이 발치에 깖 — asset-ruleset §11)
+정체성: 나루 마을 전용. 안식 농원의 저승 봄나무(침엽 TREE_A·활엽 TREE_B)와 **수종이 달라야** 구역이 갈린다.
+PROMPT: a single cherry blossom tree, dark slender twisted trunk with two low branches, wide soft
+  canopy of pale dusty-pink blossoms in distinct clumps, top-down 3/4 overworld view (Stardew Valley
+  angle), centered on a transparent background, bottom-center anchored, standing upright, no baked
+  ground shadow, only its own form self-shadow. + [§1 STYLE 공통 꼬리]
+후처리: bbox 크롭 → 발치 bottom-flush 재배치 · 밑둥(V<0.42)은 자주빛→목재 갈색 hue 이동 ·
+        수관은 채도 ×0.72·명도 ×0.92(캔디 억제, 벚꽃 분홍 정체색은 보존) · 하드 알파
+```
+
+### 10.2 돌담 `village_stone_wall`
+
+```
+파일: game/assets/props/village_stone_wall.png
+크기: 32×32 (1×1칸)   앵커: farm_fence 관례(가로 0..32 꽉 참 · 발치 y=28)
+충돌: 풀타일 SOLID(울타리 계보 — 경계벽). 광장 남북 테두리에만 두르고 동서·남북 진입은 비운다.
+PROMPT: a low dry-stone garden wall, one straight run of rounded irregular grey fieldstones stacked
+  two courses high with a flat capstone row on top, spanning the full width edge to edge so a row of
+  them joins into one continuous wall, transparent above and below, no end posts, no gate.
+  + [§1 STYLE 공통 꼬리] + 슬레이트 청회(§16 저승 객체 램프)
+후처리: 좌우 edge-extend(가로 런 이음매 제거) · 발치 정렬 · 하드 알파
+★재생성 시 개선점: 현행본은 "벽돌 벽 스와치"에 가깝다 — 둥근 야면석·불규칙 크기를 더 밀 것.
+```
+
+### 10.3 자갈 광장 base 필드 `cobble_field`
+
+```
+파일: game/assets/terrain16/single_source/cobble_field.png
+크기: 128×128 seamless(단일출처 규약 — 런타임 ×2=256이 월드 타일링 주기)   색수: 53(ADR-0057 ~45 목표대)
+배선: 지면 표면 종류 5 · 구역 프로파일 "plaza_rects"(순수 시각 — _grid·충돌·세이브 불변)
+생성: create_tiles_pro(square_topdown / tile_size 32 / top-down / outline_mode=segmentation / seed 7)
+  PROMPT: 1). old worn flagstone paving: flat irregular grey-tan stone slabs of clearly different
+    sizes and shapes fitted together like a jigsaw puzzle, thin dark earth gaps between them, seen
+    from straight above, no repeating grid, no bricks, no stripes 2). the same flagstone paving with
+    a few slabs missing showing warm tan dirt beneath 3). warm tan packed dirt, plain 4). warm tan
+    packed dirt with scattered small pebbles
+후처리: 판석 4변주 + 마모 2변주를 결정적 해시로 4×4 배치(32px 반복 격자 소거) · flip 금지(거울쌍
+        나비 무늬) · 채도 ×0.90·명도 ×0.97(§9 살짝 가라앉힌 warm)
+★폐기 기록: create_topdown_tileset 2회 시도 전부 실패 — 세로 줄무늬 격자(v1)·기계적 벽돌 격자(v2).
+  [ADR-0057] "확산 모델 지형 배제"와 별개로, **topdown_tileset도 포장면에선 격자를 뽑는다**.
+  포장·판석류는 tiles_pro segmentation + 변종 모자이크가 정답(이 카드가 그 선례).
+```
+
+### 10.4 다리 목판 base 필드 `plank_field`
+
+```
+파일: game/assets/terrain16/single_source/plank_field.png
+크기: 128×128 seamless   배선: 지면 표면 종류 6 · 구역 프로파일 "plank_rects"(다리 데크 + 남단 부두)
+생성: create_topdown_tileset(lower="dark teal river water" / upper=아래 / 32px / high top-down /
+      low detail / selective outline / basic shading / transition_size 0) → 순수 upper base 타일 추출
+  upper PROMPT: wooden bridge deck of weathered grey-brown planks laid crosswise side by side,
+    visible plank seams, flat walkable surface, no railing, no border
+후처리: 90° 회전(판자가 남북 통행 방향에 **직교** — 실제 교량 데크 문법) · 자홍/보라 기미를 목재
+        갈색으로 hue 이동(blend 0.85) · 채도 ×0.80 · 32→128 self-tile
+★재생성 시 개선점: 현행본은 판자 *끝단(이음매)*이 없는 무한 줄무늬다. 널판 마디를 넣으면 더 다리답다.
+```
+
+### 10.5 곁들여 처리한 기존 에셋
+
+```
+cafe_ext.png — 알파가 전부 255고 배경이 #8c8681 회색으로 구워져 있어 마을에 서면 건물 둘레에 회색
+  사각형이 떴다([asset-ruleset §1.3] "건물 base = 투명" 위반). 테두리 flood-fill로 배경만 걷어내고
+  원본은 cafe_ext_raw.png로 백업(idempotent). 29,347px 투명화 — 재생성 아님, 트림만.
+  ★owner가 cafe_ext를 재생성할 땐 **배경을 투명으로** 뽑을 것(그러면 이 트림 자체가 불필요).
+```
