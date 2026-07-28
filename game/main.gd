@@ -1712,6 +1712,9 @@ var flower: FlowerPatch = null
 #   별개 원장이고, **Node가 아니라 RefCounted**다(설치물이 아니라 순수 데이터 — ADR-0062 "순수 원장").
 #   main이 절기·day를 주입하고, 줍기 결과(품질·수량·XP)를 채집 레벨/전문직으로 정한다(디커플링).
 var forage_spawns: ForageSpawns = null
+# ★[S4-T5 / ADR-0033 #4] 종 발견 원장 — {채집물 id: true}. 줍는 순간 기록되고, 희소종 씨앗 레시피의
+#   해금 게이트(CraftCatalog.unlocked)가 읽는다("탐험으로 먼저 발견해야 씨앗 제작"). 세이브 키 "forage_found".
+var _forage_found: Dictionary = {}
 # ★[S4-T3 / ADR-0062 결정 3] 나무 원장(벌목 가능한 *내부* 나무 — 종 3·성장 5단계·타수·그루터기·재성장).
 #   맵 경계 프레이밍 밴드(TREE_BORDER_BAND 안쪽 테두리)는 여기 안 들어온다 = 불벌목 벽(flood-fill·워프
 #   불변식 보존). ForageSpawns와 같은 RefCounted 순수 원장이고, 통행 판정·그리드 동기화·산출 적재는
@@ -6326,6 +6329,8 @@ func _setup_frame() -> void:
 	frame.chest_store.connect(_on_frame_chest_store)   # ★ Phase D 상자 보관
 	frame.chest_take.connect(_on_frame_chest_take)     # ★ Phase D 상자 회수
 	frame.profession_chosen.connect(_on_frame_profession)   # ★ ADR-0052 숙련 탭 전문직 선택
+	frame.craft_chosen.connect(_on_frame_craft)             # ★[S4-T5] 제작 탭 레시피 실행
+	frame.craft_rows_fn = Callable(self, "_craft_rows")     # ★[S4-T5] 제작 탭 행 데이터 주입(프레임은 무상태)
 
 # ── ★ C3 미니멀 HUD 오버레이(좌하단 알림 피드 + 우하단 혼력 바) ─────────────────
 # hotbar·frame과 같은 결 — 코드 생성 자식 Control(무상태). 프레임보다 *먼저* 붙여(앞 자식) 메뉴·
@@ -6410,7 +6415,7 @@ func _on_day_advanced(day: int) -> void:
 	# ★ [ADR-0051] 밤 까마귀(미련까마귀) 습격 — 성장(advance_day) *전에* 무방비 작물을 영구 소실시킨다
 	#   (밤새 쪼임 → 살아남은 작물만 아침에 자람). 허수아비 반경이 덮은 칸은 안전. 3중 안전장치
 	#   (작물 문턱·한 밤 상한·반경 보호)는 CrowRaid가 판정하고, day 시드로 결정적이다(헤드리스 재현).
-	var eaten := CrowRaid.resolve(farm.planted_tiles(), _scarecrow_tiles(), CrowRaid.BASE_RADIUS, day)
+	var eaten := CrowRaid.resolve(_crow_target_tiles(), _scarecrow_tiles(), CrowRaid.BASE_RADIUS, day)
 	for et in eaten:
 		farm.remove_plant(et)                 # 작물만 제거·흙/비료 보존(tile_changed로 오버레이 갱신)
 	if eaten.size() > 0:
@@ -6799,6 +6804,7 @@ func _save_game() -> void:
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
 		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
 		"forage_spawn": forage_spawns.to_save(),  # ★[S4-T1] 숲 채집물 스폰 원장(구역별 좌표·종 — 매일 굴러 나온 델타)
+		"forage_found": _forage_found.duplicate(),  # ★[S4-T5] 종 발견 원장(희소종 씨앗 레시피 해금 게이트)
 		"tree_ledger": tree_ledger.to_save(),  # ★[S4-T3] 나무 원장(구역별 좌표·종·단계·타수·그루터기 + 시드 완료 구역)
 		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
@@ -6874,6 +6880,9 @@ func _load_game() -> void:
 		flower.load_save(data["flower_patch"])
 	if data.has("forage_spawn"):  # ★[S4-T1] — 키 없는 구세이브는 채집물 0(다음 취침의 advance_day가 판을 깐다·무막힘)
 		forage_spawns.load_save(data["forage_spawn"])
+	if data.has("forage_found"):  # ★[S4-T5] — 키 없는 구세이브는 발견 0(주우면 그때부터 기록·무막힘)
+		var ff: Variant = data["forage_found"]
+		_forage_found = ff.duplicate() if typeof(ff) == TYPE_DICTIONARY else {}
 	if data.has("tree_ledger"):   # ★[S4-T3] — 키 없는 구세이브는 원장 0 → 구역 첫 빌드의 seed_region이
 		tree_ledger.load_save(data["tree_ledger"])   #   초기 배치를 결정적으로 재생성한다(종=좌표 해시·하위호환)
 	if data.has("tool_tiers"):    # ★[S4-T4] — 키 없는 구세이브는 전 도구 티어 0(기본 도끼 그대로·무막힘)
@@ -7986,8 +7995,13 @@ func _use_tool() -> void:
 	elif cat == ItemCatalog.CAT_SEED:
 		# 든 씨앗의 작물군을 심는다(경작된 빈 칸에만 — plant 사전조건). 심으면 씨앗 1개 소모.
 		var crop := ItemCatalog.crop_of(item)
-		if inventory.has_seed(crop) and farm.plant(_target, crop):
-			inventory.take_seed(crop)
+		# ★[S4-T5] 혼합 씨앗 — 심는 순간 그 절기 일반 작물로 치환된다(스타듀 Mixed Seeds 문법).
+		#   소모는 혼합 씨앗("honhap") 쪽이고 밭에는 치환된 실제 작물이 선다. 롤은 day+칸 해시 결정적.
+		var seed_crop := crop   # 인벤에서 빠질 씨앗의 작물군(치환 전 원본)
+		if CropCatalog.is_mixed(crop):
+			crop = _mixed_crop_for(clock.day, _target)
+		if inventory.has_seed(seed_crop) and farm.plant(_target, crop):
+			inventory.take_seed(seed_crop)
 			verb = "심기"
 	elif cat == ItemCatalog.CAT_FERTILIZER:
 		# ★ [S1-6] 든 비료를 경작 칸에 뿌린다(§8.4 — 심김/빈칸 무관, 다른 비료면 overwrite). 뿌리면 1개 소모.
@@ -8026,6 +8040,8 @@ func _use_tool() -> void:
 			if not res.is_empty():
 				inventory.add_item(str(res["drop"]), int(res["count"]))
 				_toast_item(str(res["drop"]), int(res["count"]))   # ★ Phase C 획득 토스트
+				if kind == DebrisCatalog.WEEDS:
+					_roll_mixed_seed_drop(_target)   # ★[S4-T5] 잡초에서만 혼합 씨앗 저확률(스타듀)
 				verb = "개간"
 		elif reclaim.has_weed(_target):
 			# ★ [ADR-0055] 밤새 돋은 재점령 잡초를 낫으로 벤다(WEEDS 드랍 = 혼백섬유 ×1). 낫 아니면 무동작.
@@ -8033,6 +8049,7 @@ func _use_tool() -> void:
 			if not wres.is_empty():
 				inventory.add_item(str(wres["drop"]), int(wres["count"]))
 				_toast_item(str(wres["drop"]), int(wres["count"]))
+				_roll_mixed_seed_drop(_target)   # ★[S4-T5] 재점령 잡초도 같은 롤(잡초 = 혼합 씨앗의 유일 소스)
 				verb = "풀베기"
 	if verb == "":
 		return  # 든 도구가 칸 상태에 안 맞음 → 무동작(자동 분기 없음, ADR-0024 §2)
@@ -8526,6 +8543,11 @@ func _try_harvest() -> void:
 	if not farm.is_mature(_target):
 		return
 	var harvested_crop := farm.crop_of(_target)  # harvest 뒤엔 칸이 비거나(SINGLE) 되감기(REGROW) 되므로 미리 확보
+	# ★[S4-T5 / ADR-0033 #4] 야생 작물 — "밭에서 길러도 채집"이다: 수확물·품질·XP 전부 채집 축으로
+	#   가로챈다(농사 XP·비료 품질·사연 미적용). 아래 일반 경로와 완전 분리(잔가 누수 0).
+	if CropCatalog.is_wild(harvested_crop):
+		_harvest_wild(harvested_crop)
+		return
 	var quality := farm.roll_quality(_target)    # ★ [S1-6 §8.5] 칸을 비우기 전에 품질 확보(비료→등급 roll)
 	farm.harvest(_target)
 	# ★ [S1-5a] 다수확(황천포도 2~3) — yield_range를 굴려 그만큼 적재(greybox-spec §6.5, 데이터는 S1-4 검증).
@@ -8574,6 +8596,91 @@ func _pick_flower(tile: Vector2i) -> void:
 #   XP·SFX·혼력 0 전부 같은 사슬). 다른 건 셋뿐: ① 종이 칸마다 다르다(원장이 소유) ② 다구역이다
 #   (저승 숲·미혹의 숲) ③ 주운 자리는 재생이 아니라 **사라진다**(다음 판은 advance_day가 다시 깐다 —
 #   고정 패치가 아니라 매일 굴러 나오는 스폰이라 "그 자리"라는 개념이 없다).
+# ★[S4-T5] 까마귀 습격 후보 — 야생 작물은 면역(스타듀 Wild Seeds 상속 — 채집 축 작물이라 표적 제외).
+#   CrowRaid는 순수 판정 유틸이라 안 건드리고 후보에서 거른다(crows.gd 무수정). 테스트가 직접 호출.
+func _crow_target_tiles() -> Array:
+	return farm.planted_tiles().filter(
+		func(t: Vector2i) -> bool: return not CropCatalog.is_wild(farm.crop_of(t)))
+
+# ★[S4-T5 / ADR-0062 결정 5] 손 제작 실행 — 해금·재료 재검증 후 차감·적재(프레임 신호는 신뢰하지 않는다).
+#   즉시 완성(손 제작)이라 시간·혼력 0. 기계 가공(§2-6)과 구분되는 결.
+func _on_frame_craft(recipe_id: String) -> void:
+	var lvl := _skill_level(ProfessionCatalog.FORAGING)
+	if not CraftCatalog.unlocked(recipe_id, lvl, _forage_found):
+		return
+	if not CraftCatalog.can_craft(recipe_id, func(id: String) -> int: return inventory.count_of(id)):
+		return
+	var r := CraftCatalog.get_recipe(recipe_id)
+	for m in r["mats"]:
+		inventory.remove_item(String(m["item"]), int(m["count"]))
+	inventory.add_item(String(r["out_item"]), int(r["out_count"]))
+	_toast_item(String(r["out_item"]), int(r["out_count"]))
+	audio.sfx("ui")
+	queue_redraw()
+
+# ★[S4-T5] 제작 탭 행 데이터(inv_frame craft_rows_fn 콜백) — 해금·제작 가능 상태를 매 프레임 파생.
+func _craft_rows() -> Array:
+	var lvl := _skill_level(ProfessionCatalog.FORAGING)
+	var counts := func(id: String) -> int: return inventory.count_of(id)
+	var rows: Array = []
+	for id in CraftCatalog.ids():
+		var r := CraftCatalog.get_recipe(id)
+		var unlocked := CraftCatalog.unlocked(id, lvl, _forage_found)
+		rows.append({"id": id, "name": String(r["name_ko"]), "count": int(r["out_count"]),
+			"mats": CraftCatalog.mats_text(id), "unlock_level": int(r["unlock_level"]),
+			"needs_species": String(r["unlock_species"]), "unlocked": unlocked,
+			"can": unlocked and CraftCatalog.can_craft(id, counts)})
+	return rows
+
+# ★[S4-T5] 잡초 낫질 혼합 씨앗 드랍 — 저확률(10% 잠정)·day+칸 해시 결정 롤(헤드리스 재현).
+#   잡초가 혼합 씨앗의 유일 소스다(스타듀 문법 — 잡초 정리에 작은 보상 결).
+const MIXED_SEED_DROP_CHANCE := 0.10
+func _roll_mixed_seed_drop(t: Vector2i) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("mixdrop:%d:%d:%d" % [clock.day, t.x, t.y])
+	if rng.randf() < MIXED_SEED_DROP_CHANCE:
+		inventory.add_seed(CropCatalog.MIXED)
+		_toast_item(ItemCatalog.seed_id(CropCatalog.MIXED), 1)
+
+# ★[S4-T5] 혼합 씨앗 치환 롤 — 심는 절기의 일반 작물 풀에서 결정적으로 1종(스타듀 Mixed Seeds).
+#   풀은 절기당 1종(현 로스터 규모 — 절기 작물이 늘면 여기만 늘린다·잠정 매핑은 작물 절기 주석 기준).
+func _mixed_crop_for(day: int, t: Vector2i) -> String:
+	var pools := [
+		[CropCatalog.PIANHWA],           # 피안절
+		[CropCatalog.HONRYEONGCHO],      # 유화절
+		[CropCatalog.HWANGCHEON_PODO],   # 망연절
+		[CropCatalog.YEONGHON_HOBAK],    # 성야절
+	]
+	var pool: Array = pools[GameClock.season_index_for_day(day)]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("mixedseed:%d:%d:%d" % [day, t.x, t.y])
+	return pool[rng.randi_range(0, pool.size() - 1)]
+
+# ★[S4-T5 / ADR-0033 #4] 야생 작물 수확 — 채집 축 가로채기(_try_harvest 분기 전용).
+#   수확물: 절기 모둠형 = 그 작물 절기의 저승 숲 일반종 3종 중 결정 롤 / 희소종 모종 = 단일 종.
+#   품질 = 채집 레벨 ⊔ 약초학자 하한 · 수량 = 채집꾼 더블드롭 · XP = 줍기 고정 7(전부 _pick_forage 동형).
+func _harvest_wild(crop: String) -> void:
+	var species := CropCatalog.wild_species(crop)
+	if species == "":
+		var pool := ForageSpawns.species_for(ForageSpawns.KIND_COMMON, CropCatalog.wild_season(crop))
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash("wildharvest:%d:%d:%d" % [clock.day, _target.x, _target.y])
+		species = pool[rng.randi_range(0, pool.size() - 1)]
+	farm.harvest(_target)   # SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다)
+	var lvl := _skill_level(ProfessionCatalog.FORAGING)
+	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	var count := 1
+	if randf() < forage_double_drop_chance():
+		count = 2
+	inventory.add_item(species, count, quality)
+	_forage_found[species] = true   # 재배 수확도 발견(밭에서 길러도 채집 — 씨앗 사슬이 자가 확장)
+	_toast_item(species, count)
+	_gain_forage_xp(ForageSkill.PICK_XP)
+	_run_harvested += 1
+	audio.sfx("harvest")
+	player.swing_tool("harvest", FarmSkill.speed_factor(FarmSkill.level_for_xp(_farming_xp)))
+	queue_redraw()
+
 func _pick_forage(tile: Vector2i) -> void:
 	var species := forage_spawns.pick(_region, tile)
 	if species == "":
@@ -8586,6 +8693,7 @@ func _pick_forage(tile: Vector2i) -> void:
 	if randf() < forage_double_drop_chance():
 		count = 2
 	inventory.add_item(species, count, quality)
+	_forage_found[species] = true   # ★[S4-T5] 종 발견 기록 — 희소종 씨앗 레시피 해금 게이트(ADR-0033 #4)
 	_toast_item(species, count)
 	_gain_forage_xp(ForageSkill.PICK_XP)   # ★[S4-T2] 줍기 고정 7 — 종·가격 무관(꽃 패치와 같은 값)
 	audio.sfx("harvest")

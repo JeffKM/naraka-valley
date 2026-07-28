@@ -124,10 +124,90 @@ const CATALOG := {
 		"yield_max": 1,
 		"multi_seasonal": true,  # 다절기 프레스티지 — 절기 전환 사멸 제외
 	},
+	# ── ★[S4-T5] 야생·혼합(제작 씨앗 전용 — ids() 밖, 위 WILD_INFO 주석 참조) ──
+	# 공통: 성장 7일(스타듀 Wild Seeds 3+4 상속)·SINGLE·sell_price 0(수확은 wild 분기가 치환).
+	# seed_cost = 씨앗 아이템 파생 price(제작 전용이라 상점가 아님 — 출하 판매 시 잔가).
+	MIXED: {"name_ko": "혼합", "stages": 2, "seed_cost": 5, "sell_price": 0,
+		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+	WILD_PIAN: {"name_ko": "야생 모둠(피안)", "stages": 2, "seed_cost": 12, "sell_price": 0,
+		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+	WILD_YUHWA: {"name_ko": "야생 모둠(유화)", "stages": 2, "seed_cost": 12, "sell_price": 0,
+		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+	WILD_MANGYEON: {"name_ko": "야생 모둠(망연)", "stages": 2, "seed_cost": 12, "sell_price": 0,
+		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+	WILD_SEONGYA: {"name_ko": "야생 모둠(성야)", "stages": 2, "seed_cost": 12, "sell_price": 0,
+		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+	WILD_MIHOK_NANCHO: {"name_ko": "미혹난초", "stages": 2, "seed_cost": 40, "sell_price": 0,
+		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+	WILD_YURYEONGCHO: {"name_ko": "유령초", "stages": 2, "seed_cost": 40, "sell_price": 0,
+		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+	WILD_MYEONGWOL: {"name_ko": "명월버섯", "stages": 2, "seed_cost": 40, "sell_price": 0,
+		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+	WILD_SEORI_HONBAEK: {"name_ko": "서리혼백초", "stages": 2, "seed_cost": 40, "sell_price": 0,
+		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
 }
+
+# ── ★[S4-T5 / ADR-0062 결정 5 · ADR-0033 #4] 야생·혼합 작물(제작 씨앗 전용) ────
+# 스타듀 Wild Seeds/Mixed Seeds의 나라카판. 셋 다 **ids()에 넣지 않는다** — ids()는 만물상 매대·표시
+# 목록이고 이 씨앗들은 *제작·드랍 전용*이라 상점에 안 선다(획득 경로 분리가 곧 정체성).
+#   - 야생 모둠 4종(절기별): 수확물이 작물 id가 아니라 **그 절기 저승 숲 일반종 3종 중 결정 롤 1종**
+#     (main._try_harvest가 wild 분기에서 치환 — ADR-0033 #4 "밭에서 길러도 채집": XP·품질 전부 채집 축).
+#   - 희소종 모종 4종: 미혹 희소종을 **주워 본 뒤에야**(종 발견 게이트) 씨앗을 제작해 재배한다.
+#     수확물 = 그 희소종 단일(발견 정체성 보존 + 자급 양립).
+#   - 혼합 씨앗: 심는 순간 그 절기 일반 작물로 **치환**된다(main이 파종 디스패치에서 롤 — 이 "honhap"
+#     작물 자체는 심기지 않는 유령 엔트리다. 씨앗 아이템 파생("혼합 씨앗")과 has_crop 통과용).
+#   - 심층 2종(불사과·저승삼)은 씨앗이 없다(재배 불가 — 불사과 재배는 S7 프레스티지 소관).
+# 스키마 값은 기존 필드 그대로(하위호환 — 미지 필드 0). sell_price 0 = wild 분기가 가로채 직접 판매
+# 경로가 없다는 표식(혹시 새 나가도 0냥이라 무해).
+const MIXED := "honhap"                       # 혼합 씨앗("혼합 씨앗" = 파생 명명 그대로)
+const WILD_PIAN := "yasaeng_pian"             # 야생 모둠(피안)
+const WILD_YUHWA := "yasaeng_yuhwa"           # 야생 모둠(유화)
+const WILD_MANGYEON := "yasaeng_mangyeon"     # 야생 모둠(망연)
+const WILD_SEONGYA := "yasaeng_seongya"       # 야생 모둠(성야)
+const WILD_MIHOK_NANCHO := "mihok_nancho_wild"      # 미혹난초 모종(재배)
+const WILD_YURYEONGCHO := "yuryeongcho_wild"        # 유령초 모종
+const WILD_MYEONGWOL := "myeongwol_beoseot_wild"    # 명월버섯 모종
+const WILD_SEORI_HONBAEK := "seori_honbaekcho_wild" # 서리혼백초 모종
+
+# wild 작물 부가 정보. kind: "season"=절기 모둠(수확 롤은 main이 ForageSpawns.species_for로) /
+# "single"=희소종 단일(species = ItemCatalog 채집물 id 리터럴 — 클래스 참조 순환 회피용 문자열).
+const WILD_INFO := {
+	WILD_PIAN: {"kind": "season", "season": 0, "species": ""},
+	WILD_YUHWA: {"kind": "season", "season": 1, "species": ""},
+	WILD_MANGYEON: {"kind": "season", "season": 2, "species": ""},
+	WILD_SEONGYA: {"kind": "season", "season": 3, "species": ""},
+	WILD_MIHOK_NANCHO: {"kind": "single", "season": 0, "species": "mihok_nancho"},
+	WILD_YURYEONGCHO: {"kind": "single", "season": 1, "species": "yuryeongcho"},
+	WILD_MYEONGWOL: {"kind": "single", "season": 2, "species": "myeongwol_beoseot"},
+	WILD_SEORI_HONBAEK: {"kind": "single", "season": 3, "species": "seori_honbaekcho"},
+}
+
+static func is_wild(id: String) -> bool:
+	return WILD_INFO.has(id)
+
+static func is_mixed(id: String) -> bool:
+	return id == MIXED
+
+# wild 작물의 절기 인덱스(-1 = wild 아님). "season"형의 수확 롤 풀 선택에 쓴다.
+static func wild_season(id: String) -> int:
+	return int(WILD_INFO[id]["season"]) if WILD_INFO.has(id) and WILD_INFO[id]["kind"] == "season" else -1
+
+# wild 작물의 단일 종("" = 절기 모둠형/비-wild). 희소종 모종의 수확물이다.
+static func wild_species(id: String) -> String:
+	return String(WILD_INFO[id]["species"]) if WILD_INFO.has(id) else ""
 
 # ── 조회(초판 표면 — 불변 계약) ────────────────────────────────────────────
 # 작물 id 목록(성장 빠른 순). 카탈로그 정의 순서 = 표시·정렬 순서.
+# ⚠️ wild·혼합 작물은 여기 없다(★S4-T5 — 매대·표시 목록 밖, 위 주석).
 static func ids() -> Array:
 	return [HONRYEONGCHO, PIANHWA, HWANGCHEON_PODO, YEONGHON_HOBAK, BULSAGWA]
 

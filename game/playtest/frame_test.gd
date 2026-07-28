@@ -56,8 +56,11 @@ func _initialize() -> void:
 	_check("②c cycle → 숙련 탭", m.frame.menu_tab == InventoryFrame.TAB_SKILL)
 	m.frame.cycle_tab()
 	_check("②d cycle → 옵션 탭", m.frame.menu_tab == InventoryFrame.TAB_OPTIONS)
+	# ★[S4-T5] 제작 탭이 5번째로 append(기존 탭 인덱스 불변) — 사이클도 5탭 랩으로 확장.
 	m.frame.cycle_tab()
-	_check("②e cycle → 인벤토리 탭 복귀(4탭 랩)", m.frame.menu_tab == InventoryFrame.TAB_INV)
+	_check("②e cycle → 제작 탭(S4-T5 append)", m.frame.menu_tab == InventoryFrame.TAB_CRAFT)
+	m.frame.cycle_tab()
+	_check("②f cycle → 인벤토리 탭 복귀(5탭 랩)", m.frame.menu_tab == InventoryFrame.TAB_INV)
 
 	# ── ③ 관계 탭 하트(읽기 전용) ──
 	print("── ③ 관계 탭 하트 ──")
