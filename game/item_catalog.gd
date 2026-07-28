@@ -282,11 +282,14 @@ const LARGE_SUFFIX := "_large"
 #   배치·장전·수거·일일 롤·세이브는 CrabPotLedger(crab_pot.gd)가, 아이템 정의는 여기가 든다.
 const CRAB_POT := "crab_pot"
 const SPRINKLER := "sprinkler"
+const TAPPER := "sap_tapper"   # ★[S4-T5] 수액 채취기 — 제작 전용(CraftCatalog). 설치·원장은 S4-T6
 const PLACEABLES := {                    # 설치물 id → {name_ko, price(구매가)}
 	SPRINKLER: {"name_ko": "저승 스프링클러", "price": 60},
 	# 600G(잠정) — 스프링클러(60G) 10배. 낚시 lvl3까지 굴린 플레이어의 한나절 벌이 규모라
 	# "해금 직후 하나, 이후 천천히 늘린다"가 되게 잡았다(패시브 수입의 초기 투자 게이트).
 	CRAB_POT: {"name_ko": "게잡이통", "price": 600},
+	# ★[S4-T5] 수액 채취기 — 비매(제작 전용·CraftCatalog TAPPER 레시피). price = 잔가(출하 시).
+	TAPPER: {"name_ko": "수액 채취기", "price": 50},
 }
 
 # 씨앗 아이템 id 접미사("<작물군>_seed"). 작물군 id와 1:1 매핑.

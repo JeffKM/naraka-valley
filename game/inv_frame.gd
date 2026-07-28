@@ -39,6 +39,7 @@ signal music_vol_changed(delta: float) # ★ Phase D 설정: 음악 볼륨 증�
 signal sfx_vol_changed(delta: float)   # ★ Phase D 설정: 효과음 볼륨 증감(옵션 탭 −/+)
 signal fullscreen_toggled              # ★ Phase D 설정: 전체화면 토글(옵션 탭 체크박스)
 signal profession_chosen(skill: String, prof_id: String)   # ★ ADR-0052 숙련 탭: 전문직 선택(main이 choose_profession)
+signal craft_chosen(recipe_id: String)   # ★[S4-T5] 제작 탭: 레시피 행 클릭(main이 _on_frame_craft — 재료 차감·산출 적재)
 
 # ★ [S1R-T11 / ADR-0048 실행] 내부 스킨·타이포를 HanjiUi 공용 문법으로 통일한다(신규 에셋 0).
 # 셸(패널)·슬롯·버튼·탭·툴팁·바를 hanji_ui.gd 헬퍼(draw_frame/draw_plate/draw_text·팔레트 상수)로
@@ -55,8 +56,11 @@ const TAB_ICONS: Array[Texture2D] = [
 	preload("res://assets/ui/tab_icon_social.png"),
 	preload("res://assets/ui/tab_icon_skill.png"),
 	preload("res://assets/ui/tab_icon_options.png"),
+	# ★[S4-T5] 제작 탭 — 전용 아이콘은 S4-T10 아트 패스에서(도끼 = 스톱갭·owner 큐). enum 끝 append라
+	#   기존 탭 인덱스 불변(TAB_OPTIONS 값 유지 — 옵션 탭 좌표 의존 테스트 무영향).
+	preload("res://assets/tools/axe.png"),
 ]
-const TAB_LABELS := ["인벤토리", "관계", "숙련", "옵션"]   # 호버 툴팁용(아이콘만 배선이라 라벨은 툴팁에)
+const TAB_LABELS := ["인벤토리", "관계", "숙련", "옵션", "제작"]   # 호버 툴팁용(아이콘만 배선이라 라벨은 툴팁에)
 
 # ★ [S1R-T12] 엽전 아이콘(가격·소지금 표시 — clock_hud와 동일 에셋, 정체성 통일).
 const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
@@ -68,8 +72,8 @@ enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP }
 # 생선가게 서브탭(기어 매대 / 물고기 환전).
 enum { FS_TAB_GEAR, FS_TAB_TRADE }
 # 메뉴 탭(인벤토리 · 관계 · 숙련 · 옵션 — ADR-0048 §2 통합 탭 메뉴).
-enum { TAB_INV, TAB_REL, TAB_SKILL, TAB_OPTIONS }
-const TAB_COUNT := 4
+enum { TAB_INV, TAB_REL, TAB_SKILL, TAB_OPTIONS, TAB_CRAFT }   # ★[S4-T5] 제작 탭(끝 append — 기존 값 불변)
+const TAB_COUNT := 5
 
 const COLS := 6                  # 백팩·상자 공통 그리드 가로 칸 수(6열)
 const SLOT := 48.0               # 슬롯 한 변(px)
@@ -589,6 +593,46 @@ func _draw_menu_top(panel: Rect2) -> void:
 			_draw_skill_tab(panel, font)
 		TAB_OPTIONS:
 			_draw_options_tab(panel, font)
+		TAB_CRAFT:
+			_draw_craft_tab(panel, font)
+
+# ★[S4-T5 / ADR-0062 결정 5] 제작 탭 — 레시피 행 리스트(매대 행 문법 재사용·신규 UI 언어 0).
+#   행 상태 3단: 해금+재료 OK(밝음·클릭=제작) / 재료 부족(흐림) / 미해금(자물쇠 문구). 데이터는
+#   main이 주입한 craft_rows_fn(무상태 콜백 — 프레임은 레벨·발견 원장·인벤을 모른다)에서 매 프레임 온다.
+var craft_rows_fn: Callable = Callable()
+var _craft_row_rects: Array = []   # [{rect, id}] — 클릭 히트테스트(매 그리기 재구성)
+
+func _draw_craft_tab(panel: Rect2, _font: Font) -> void:
+	_craft_row_rects.clear()
+	var x := panel.position.x + PAD + 12.0
+	var y := panel.position.y + PAD + 48.0
+	HanjiUi.draw_text(self, Vector2(x, y), "손 제작 — 채집 숙련으로 배운다 (행 클릭 = 제작)", 12, HanjiUi.INK_DIM)
+	y += 22.0
+	if craft_rows_fn.is_null():
+		return
+	var rows: Array = craft_rows_fn.call()
+	var row_w := panel.size.x - PAD * 2.0 - 24.0
+	for row in rows:
+		var r := Rect2(x - 4.0, y - 12.0, row_w, 34.0)
+		var unlocked := bool(row.get("unlocked", false))
+		var can := bool(row.get("can", false))
+		if unlocked:
+			HanjiUi.draw_plate(self, r, 1.0 if can else 0.55)
+			if can:
+				_craft_row_rects.append({"rect": r, "id": String(row.get("id", ""))})
+			var head := "%s ×%d" % [String(row.get("name", "")), int(row.get("count", 1))]
+			HanjiUi.draw_text(self, Vector2(x, y), head, 13,
+				HanjiUi.INK_LIGHT if can else HanjiUi.INK_DIM)
+			HanjiUi.draw_text(self, Vector2(x, y + 15.0), "재료: %s" % String(row.get("mats", "")), 11,
+				HanjiUi.INK_DIM)
+		else:
+			HanjiUi.draw_plate(self, r, 0.35)
+			var need := "채집 Lv.%d" % int(row.get("unlock_level", 0))
+			if String(row.get("needs_species", "")) != "":
+				need += " + 야생에서 먼저 발견"
+			HanjiUi.draw_text(self, Vector2(x, y), "[잠김] %s" % String(row.get("name", "")), 13, HanjiUi.INK_DIM)
+			HanjiUi.draw_text(self, Vector2(x, y + 15.0), "해금: %s" % need, 11, HanjiUi.INK_DIM)
+		y += 40.0
 
 # ★ 아이콘 탭 호버 툴팁 — 한글명 한지 칩(어두운 박스 + 밝은 글자).
 # 위치 = 탭 바 우측 빈 공간(탭 행과 같은 높이). 옛 위치(호버 탭 바로 아래 tab.end.y+4)는 탭 칸 밖
@@ -1146,6 +1190,13 @@ func _click_menu(p: Vector2) -> void:
 		for e in _prof_choice_rects:
 			if e["rect"].has_point(p):
 				profession_chosen.emit(String(e["skill"]), String(e["prof_id"]))
+				return
+		return
+	# ★[S4-T5] 제작 탭: 제작 가능 행 클릭 → 신호(main이 재료 차감·산출 적재·토스트). 숙련 탭과 같은 결.
+	if menu_tab == TAB_CRAFT:
+		for e in _craft_row_rects:
+			if e["rect"].has_point(p):
+				craft_chosen.emit(String(e["id"]))
 				return
 		return
 	if menu_tab != TAB_INV:
