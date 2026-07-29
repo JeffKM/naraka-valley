@@ -32,8 +32,13 @@ const PICK_XP := 7
 const CHOP_XP := 14
 # 큰 장애물(큰 통나무·큰 그루터기) 제거 25 — 도끼 티어 게이트를 넘은 사건이라 가장 크다. 소비처 S4-T4.
 const LARGE_OBSTACLE_XP := 25
-# 덤불 흔들기 1 — 곁들이 행위라 최소값(누적은 되되 곡선을 흔들지 않는다). 소비처 S4-T8.
+# 덤불 흔들기 1 — 곁들이 행위라 최소값(누적은 되되 곡선을 흔들지 않는다). ★S4-T8이 소비 개시.
+#   ★ **열매 1개당** 1XP다(스타듀 상속) — 레벨이 오르면 수량 계단(1/2/3)만큼 XP도 따라 오른다.
 const BUSH_SHAKE_XP := 1
+# ★[S4-T8 / ADR-0062 결정 9 ㉡] 이끼 낫 채취 1 — 덤불 흔들기와 같은 "곁들이 최소값" 결(잠정 — owner 큐).
+#   T2가 잠근 넷(줍기7·벌목14·큰장애물25·덤불1) 밖의 잔여값이라, 그루터기 제거 XP(TreeLedger.STUMP_XP)와
+#   같은 판단으로 소비처 쪽이 아니라 **여기 고정 테이블에** 둔다(수치의 단일 출처는 늘 이 파일이다).
+const MOSS_SCRAPE_XP := 1
 
 # ── 혼 감지(base lvl3+ · 감지자 퍼크로 범위 확대) ─────────────────────────────
 # CONTEXT [혼 감지]·미혹 "길 잃음" 테마의 최초 실장. lvl3인 이유 = 줍기 7XP 기준 L3(임계 600)이
@@ -76,6 +81,20 @@ static func base_quality(level: int) -> int:
 	if level >= 4:
 		return ItemCatalog.Q_SILVER
 	return ItemCatalog.Q_NORMAL
+
+# ── ★[S4-T8] 덤불 흔들기 수량 계단(채집 레벨 → 열매 개수) ────────────────────
+# ADR-0062 결정 9 ㉠ "채집 lvl4 = 2개 / lvl8 = 3개"(스타듀 상속). 품질 계단(base_quality)과 **같은 결의
+# 레벨 파생**이라 여기 둔다 — BerryBushes 원장은 스킬을 모르고, main이 이 값을 뽑아 주입한다.
+# ★ 레벨 게이트가 아니다: L0에서도 흔들면 반드시 1개는 나온다("평평≠막힘" — ADR-0008 #1).
+const BUSH_YIELD_L2 := 4      # 2개가 되는 채집 레벨
+const BUSH_YIELD_L3 := 8      # 3개가 되는 채집 레벨
+static func bush_yield(level: int) -> int:
+	var lv := clampi(level, 0, MAX_LEVEL)
+	if lv >= BUSH_YIELD_L3:
+		return 3
+	if lv >= BUSH_YIELD_L2:
+		return 2
+	return 1
 
 # ── 퍼크 해석(main._perk_value가 뽑은 float → 의미) ──────────────────────────
 # 약초학자(DIM_QUALITY_FLOOR) — 산출물 등급 하한. 0 = 퍼크 없음(중립).
