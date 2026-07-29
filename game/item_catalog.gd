@@ -110,6 +110,12 @@ const SAP := "sap"                      # 수액 — 벌목 부산물(채취기 
 const SEED_JEOSEUNGSOL := "seed_jeoseungsol"      # 저승솔 방울(잠정 명명 — ADR-0062 결정 3)
 const SEED_MYEONGDANPUNG := "seed_myeongdanpung"  # 명단풍 씨
 const SEED_NEOKCHAM := "seed_neokcham"            # 넋참나무 도토리
+# ── ★[S4-T8 / ADR-0062 결정 9 ㉡] 저승 이끼 — 성숙 나무에서 낫 1회 채취 ────────────
+# §1-C 기결정("저비용 상시 자원")의 이행. **품질 무차원 CAT_MATERIAL**로 두는 이유는 원목·수액과
+# 정확히 같다: 품질은 *줍기*의 축(채집 레벨 → 등급)이지 자재의 축이 아니다(ADR-0052 §채집).
+# 가격 8(잠정 — owner 큐): 원목 5 ~ 석화 목재 15 사이 저가 밴드. 나무마다 며칠에 한 번씩 끼는
+# 상시 자원이라 개당 값이 크면 벌목·수액의 경제적 이유가 흐려진다.
+const JEOSEUNG_IKKI := "jeoseung_ikki"            # 저승 이끼 — 성숙목 낫 채취(TreeLedger.has_moss)
 const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 별 상수라 여기 제외)
 	SOUL_FIBER: {"name_ko": "혼백 섬유", "price": 4},
 	EMBER_SHARD: {"name_ko": "업화석 조각", "price": 12},
@@ -123,6 +129,8 @@ const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 
 	SEED_JEOSEUNGSOL: {"name_ko": "저승솔 방울", "price": 12},
 	SEED_MYEONGDANPUNG: {"name_ko": "명단풍 씨", "price": 12},
 	SEED_NEOKCHAM: {"name_ko": "넋참나무 도토리", "price": 12},
+	# ★[S4-T8] 저승 이끼(낫 채취 상시 자원)
+	JEOSEUNG_IKKI: {"name_ko": "저승 이끼", "price": 8},
 }
 
 # ── ★[S2-T5 / ADR-0060 결정 5] 유품(relic) — 혼백관 기증 수집물 ─────────────────────
@@ -198,6 +206,17 @@ const HWANGCHEON_SANHO := "hwangcheon_sanho"    # 황천산호
 const NEOK_SEONGGAE := "neok_seonggae"          # 넋성게
 const YURI_GODUNG := "yuri_godung"              # 유리고둥
 const MULBINEUL_JOGAE := "mulbineul_jogae"      # 물비늘조개
+# ── ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 열매 2종(절기 창 나흘씩) ────────────────
+# 스폰 로스터 22종과 **다른 축**이다: 빈터에 돋는 게 아니라 *덤불을 흔들어* 얻는다(BerryBushes 소관).
+# 그래서 `ForageSpawns.all_species()`엔 안 들어가고(로스터 22종 불변) 여기 아이템으로만 산다.
+# ★ id 충돌 확인 — 기존 `JEOSEUNG_SANDALGI`(저승산딸기·유화절 일반종)와 이름이 닮았지만 id·종·획득
+#   경로가 전부 다르다(저건 빈터 스폰, 이건 덤불). 그 외 작물·과일·어종·산물·재료와도 id 교집합 0
+#   (forage_extras_test ①f가 실제로 대조한다).
+# ★ 가격(잠정 — owner 큐): 스타듀 salmonberry 5g / blackberry 20g의 *상대비*는 살리되, 흔들기가
+#   나흘 창 한정이라 채집 일반종 최저(잿빛냉이 30)보다 낮은 20/30 밴드에 둔다(상시 소득이 아니라
+#   철 이벤트 소득 — 절기 창의 희소성이 총량을 이미 제한한다).
+const NEOK_DALGI := "neok_dalgi"                # 넋딸기(피안절 15~18일 — salmonberry 대응)
+const JAETBIT_BOKBUNJA := "jaetbit_bokbunja"    # 잿빛복분자(망연절 8~11일 — blackberry 대응)
 const FORAGEABLES := {                   # 채집물 id → {name_ko, price(기준 판매가)}
 	SPIRIT_FLOWER: {"name_ko": "피안화", "price": 30},
 	# 저승 숲 일반 12
@@ -225,6 +244,9 @@ const FORAGEABLES := {                   # 채집물 id → {name_ko, price(기�
 	NEOK_SEONGGAE: {"name_ko": "넋성게", "price": 45},
 	YURI_GODUNG: {"name_ko": "유리고둥", "price": 35},
 	MULBINEUL_JOGAE: {"name_ko": "물비늘조개", "price": 22},
+	# ★[S4-T8] 덤불 열매 2종(빈터 스폰 아님 — 덤불 흔들기 전용)
+	NEOK_DALGI: {"name_ko": "넋딸기", "price": 20},
+	JAETBIT_BOKBUNJA: {"name_ko": "잿빛복분자", "price": 30},
 }
 # ── ★[S3-T7 / ADR-0061 결정 7] 게잡이통 통용물 3종 — 게·조개류(패시브 어획) ──────────
 # 채집물(FORAGEABLES)·어획물(FishCatalog)과 **정확히 같은 결**의 품질 유차원 CAT_HARVEST다. 즉

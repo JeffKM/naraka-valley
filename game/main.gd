@@ -1532,6 +1532,24 @@ const MIHOK_DEEP_STUMP_TILES := [
 	Vector2i(54, 11), Vector2i(57, 11), Vector2i(55, 13),
 	Vector2i(58, 13), Vector2i(54, 15), Vector2i(57, 15),
 ]
+# ── ★[S4-T8 / ADR-0062 결정 9 ㉠] 채집 덤불 배치(숲 2구역) ────────────────────
+# 카탈로그 §2-2 ㉢ "열매 덤불"의 실좌표. **안식 능선의 SOLID 덤불(PR#201)과 별개 프롭**이라는 게
+# 이 배치의 제1 규칙이다(§2-2 덤불 3역할 분리 — 저건 통행 벽, 이건 채집 대상).
+#   · **통행 가능**(GROUND 위 순수 장식 + 상호작용 — 꽃 패치 결). 그래서 flood-fill 도달성·워프
+#     불변식·구역 통행 테스트를 **한 칸도** 안 건드린다(jeoseung/mihok_forest_test 무갱신).
+#   · 자리는 **빈터 존 밖·동선 밖**이다: 존 안에 두면 같은 칸에서 [F]가 채집물 줍기와 겹치고, 동선
+#     위에 두면 지나다니다 얻어걸린다(찾아가는 맛 0). 대신 빈터 *언저리*라 채집 동선에 자연히 붙는다.
+#   · 저승 4 · 미혹 3 = 7그루. 덤불당 밤 20% × 절기 창 나흘이면 창 한 번에 기대 ~5~6개 수확
+#     (열매 자체가 나흘 이벤트라 그루 수로 총량을 더 죌 이유가 없다 — 잠정 수치, owner 큐).
+const FOREST_BUSH_TILES := [
+	Vector2i(16, 12), Vector2i(24, 12),   # 빈터①(x17..23,y6..10) 남쪽 언저리 좌우
+	Vector2i(41, 13),                     # 빈터②(x42..48,y8..12) 남서 모서리 밖
+	Vector2i(46, 35),                     # 빈터③(x39..45,y32..36) 동쪽 언저리
+]
+const MIHOK_BUSH_TILES := [
+	Vector2i(46, 6),                      # 특수 채집지①(x47..53,y4..8) 서쪽 언저리
+	Vector2i(26, 33), Vector2i(34, 33),   # 특수 채집지②(x27..33,y34..38) 북쪽 언저리 좌우
+]
 # 옥자 집(마녀의 오두막) — 잠긴 외관(비-enterable). WALL 박스 + 문 리세스(시각 일관)만, 실내·카탈로그 없음.
 const OKJA_HUT_EXT_RECT := Rect2i(54, 24, 8, 7)  # ★C7 x54..61, y24..30 (동쪽 깊은 끝, 숨겨진 잠긴 외관)
 const OKJA_HUT_DOOR := Vector2i(57, 30)          # ★C7 문 리세스(남면, 시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
@@ -1723,6 +1741,10 @@ var flower: FlowerPatch = null
 #   별개 원장이고, **Node가 아니라 RefCounted**다(설치물이 아니라 순수 데이터 — ADR-0062 "순수 원장").
 #   main이 절기·day를 주입하고, 줍기 결과(품질·수량·XP)를 채집 레벨/전문직으로 정한다(디커플링).
 var forage_spawns: ForageSpawns = null
+# ★[S4-T8 / ADR-0062 결정 9 ㉠] 채집 덤불 열매 원장(숲 2구역의 덤불 — 절기 창 안에서만 밤 20%로 열매가
+#   달리고 [F] 흔들기로 턴다). 덤불 **자리**는 맵 상수(BUSH_TILES)가 들고 원장은 열매 유무만 든다 —
+#   ForageSpawns(칸+종을 통째로 드는 스폰)와 갈리는 지점이다. 안식 능선 SOLID 덤불 프롭과 별개다.
+var berry_bushes: BerryBushes = null
 # ★[S4-T5 / ADR-0033 #4] 종 발견 원장 — {채집물 id: true}. 줍는 순간 기록되고, 희소종 씨앗 레시피의
 #   해금 게이트(CraftCatalog.unlocked)가 읽는다("탐험으로 먼저 발견해야 씨앗 제작"). 세이브 키 "forage_found".
 var _forage_found: Dictionary = {}
@@ -2066,6 +2088,8 @@ func _ready() -> void:
 	flower.changed.connect(_on_ranch_changed)      # 따기·재생·복원 시 드로우 갱신(사료풀과 같은 훅 재사용 — 둘 다 야외 그레이박스)
 	forage_spawns = ForageSpawns.new()   # ★[S4-T1] 숲 채집물 스폰 원장(RefCounted — 씬 트리에 안 선다)
 	forage_spawns.changed.connect(queue_redraw)   # 스폰·줍기·리셋·복원 시 그레이박스 갱신(게잡이통 결)
+	berry_bushes = BerryBushes.new()     # ★[S4-T8] 덤불 열매 원장(RefCounted — 채집물 스폰 원장과 같은 결)
+	berry_bushes.changed.connect(queue_redraw)    # 결실·흔들기·복원 시 그레이박스 갱신(채집물 색점 결)
 	tree_ledger = TreeLedger.new()       # ★[S4-T3] 나무 원장(RefCounted — 채집물 스폰 원장과 같은 결)
 	tree_ledger.changed.connect(_on_tree_ledger_changed)   # 벌목·성장·재성장·복원 시 충돌·드로우 갱신
 	tapper = TapperLedger.new()          # ★[S4-T6] 수액 채취기 원장(RefCounted — 나무 원장과 같은 결)
@@ -6483,6 +6507,14 @@ func _on_day_advanced(day: int) -> void:
 		var forage_new := forage_spawns.advance_day(day, GameClock.season_index_for_day(day))
 		if bool(forage_new["season_reset"]) and int(forage_new["cleared"]) > 0:
 			_notice("절기가 바뀌어 숲의 채집물이 모두 졌다 — 새 절기의 것이 돋는다")
+	# ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 밤 결실 — 절기 창(피안 15~18 / 망연 8~11) 안에서만 덤불당
+	#   20% 결정 롤로 열매가 달린다. 창을 벗어나면 롤이 없고 남은 열매도 진다(채집물 절기 전환과 같은 결).
+	#   절기 판정은 clock의 기존 파생을 그대로 쓴다 — 신규 시스템 0(ADR-0062 결정 9 마지막 줄).
+	if berry_bushes != null:
+		var berry_day := berry_bushes.advance_day(day, bush_map())
+		if not berry_day["berried"].is_empty():
+			_notice("숲 덤불에 %s가 달렸다 — 덤불을 [F]로 흔들어 보자"
+				% ItemCatalog.name_of(String(berry_day["item"])))
 	# ★[S4-T3 / ADR-0062 결정 3] 나무 원장 하루 — ①미성숙목 20% 한 단계 성장 ②숲 빈 슬롯 20% stage3
 	#   재출현 ③안식 성숙목 15% 반경 3칸 자체 파종. "코지 재성장"(ADR-0033)의 실수치라 민둥산이 안 남는다.
 	#   숲 재출현은 그 칸의 통행이 다시 막히는 것이므로 현재 구역이면 그리드를 즉시 동기화한다.
@@ -6859,6 +6891,7 @@ func _save_game() -> void:
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
 		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
 		"forage_spawn": forage_spawns.to_save(),  # ★[S4-T1] 숲 채집물 스폰 원장(구역별 좌표·종 — 매일 굴러 나온 델타)
+		"berry_bush": berry_bushes.to_save(),   # ★[S4-T8] 덤불 열매(구역별 좌표 — 열매 달린 덤불만)
 		"forage_found": _forage_found.duplicate(),  # ★[S4-T5] 종 발견 원장(희소종 씨앗 레시피 해금 게이트)
 		"tree_ledger": tree_ledger.to_save(),  # ★[S4-T3] 나무 원장(구역별 좌표·종·단계·타수·그루터기 + 시드 완료 구역)
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
@@ -6937,6 +6970,8 @@ func _load_game() -> void:
 		flower.load_save(data["flower_patch"])
 	if data.has("forage_spawn"):  # ★[S4-T1] — 키 없는 구세이브는 채집물 0(다음 취침의 advance_day가 판을 깐다·무막힘)
 		forage_spawns.load_save(data["forage_spawn"])
+	if data.has("berry_bush"):    # ★[S4-T8] — 키 없는 구세이브는 열매 0(다음 취침이 절기 창이면 다시 단다·무막힘)
+		berry_bushes.load_save(data["berry_bush"])
 	if data.has("forage_found"):  # ★[S4-T5] — 키 없는 구세이브는 발견 0(주우면 그때부터 기록·무막힘)
 		var ff: Variant = data["forage_found"]
 		_forage_found = ff.duplicate() if typeof(ff) == TYPE_DICTIONARY else {}
@@ -7739,6 +7774,22 @@ func _process(delta: float) -> void:
 			and forage_spawns.has_at(_region, _target)
 	if on_forage_spawn and (Input.is_action_just_pressed("action") or Input.is_action_just_pressed("shop_toggle")):
 		_pick_forage(_target)
+	# ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 흔들기 — 채집 덤불은 통행 가능 GROUND 위(비-SOIL)라 꽃 패치·
+	#   채집물 줍기와 같은 결로 _target_valid 게이트 밖에서 따로 디스패치한다. **[F] 전용**이다:
+	#   줍기(RMB/F 겸용)와 달리 "흔든다"는 별개 동사이고, 덤불 자리는 빈터 존 밖이라 같은 칸에서 줍기와
+	#   겹치지도 않는다. 열매가 없으면 _shake_bush가 스스로 무동작(프롬프트가 철을 안내한다).
+	var on_bush := not _sleeping and _indoor == "" and berry_bushes != null \
+			and is_bush_tile(_region, _target) and berry_bushes.has_berry(_region, _target)
+	if on_bush and Input.is_action_just_pressed("shop_toggle"):
+		_shake_bush(_target)
+	# ★[S4-T8 / ADR-0062 결정 9 ㉡] 이끼 낫 채취 — 이끼 낀 성숙목은 SOLID(비-SOIL)라 벌목과 같은 자리에서
+	#   디스패치한다. **든 게 낫일 때만** 걸리고(도끼면 아래 벌목이 잡는다), 둘은 서로 배타라 한 칸에서
+	#   충돌하지 않는다(각 함수가 자기 도구를 스스로 검사 — ADR-0024 §2 자동 분기 없음).
+	var on_moss := not _sleeping and _indoor == "" and tree_ledger != null \
+			and tree_ledger.has_moss(_region, _target) \
+			and inventory.selected_id() == ItemCatalog.SCYTHE
+	if on_moss and Input.is_action_just_pressed("use_tool"):
+		_scrape_moss(_target)
 	# ★[S4-T3 / ADR-0062 결정 3] 벌목 — 원장 나무·그루터기는 SOLID(비-SOIL)라 _target_valid 게이트 밖에서
 	#   따로 디스패치한다(개간 debris와 같은 결). LMB(도끼 든 채) = 1타. 도끼가 아니거나 혼력이 없으면
 	#   _chop_tree 안에서 무동작이다(자동 분기 없음 — ADR-0024 §2).
@@ -7958,6 +8009,11 @@ func _process(delta: float) -> void:
 		#   "무엇을 줍는지"가 보이게 한다(아이콘 아트는 S4-T10).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[우클릭/F] %s 채집 (채집 숙련)" % ItemCatalog.name_of(forage_spawns.species_at(_region, _target))
+	elif berry_bushes != null and _indoor == "" and is_bush_tile(_region, _target):
+		# ★[S4-T8] 채집 덤불을 바라볼 때: 열매가 있으면 [F] 흔들기, 없으면 "아직/철이 아니다"를 밝힌다
+		#   (빈손 흔들기가 벌칙처럼 읽히지 않게 — 절기 창을 프롬프트가 가르쳐 준다).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _bush_prompt(_target)
 	elif tapper != null and _indoor == "" and tapper.has_at(_region, _target):
 		# ★[S4-T6] 채취기가 박힌 나무를 바라볼 때: 상태별 [F] 한 동사(수거 / 회수). **나무 프롬프트보다
 		#   먼저** 본다 — 그 칸의 지금 할 일은 벌목이 아니라 채취기이고, 벌목은 애초에 막혀 있다.
@@ -7969,6 +8025,13 @@ func _process(delta: float) -> void:
 		interact_prompt.text = "[좌클릭] 수액 채취기 박기 (%s — %d일 주기)" % [
 			TreeLedger.species_name(tree_ledger.species_at(_region, _target)),
 			TapperLedger.cycle_for(tree_ledger.species_at(_region, _target), forage_tap_cycle_cut())]
+	elif tree_ledger != null and _indoor == "" and tree_ledger.has_moss(_region, _target):
+		# ★[S4-T8] 이끼 낀 성숙목을 바라볼 때: 낫을 들었으면 [좌클릭] 채취, 아니면 낫 안내.
+		#   **채취기 프롬프트 뒤·벌목 프롬프트 앞**이다 — 고인 수액은 시한이 있는 일이라 먼저 알려야 하고
+		#   (그 칸은 어차피 벌목이 막혀 있다), 이끼는 벌목보다 지금 할 수 있는 가벼운 일이라 먼저다.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 저승 이끼 채취 (낫)" if inventory.selected_id() == ItemCatalog.SCYTHE \
+			else "저승 이끼가 끼었다 — 낫으로 긁어낼 수 있다"
 	elif tree_ledger != null and _indoor == "" and tree_ledger.is_occupied(_region, _target):
 		# ★[S4-T3] 원장 나무·그루터기를 바라볼 때: 도끼를 들었으면 [좌클릭] 남은 타수, 아니면 도끼 안내.
 		interact_prompt.visible = not _sleeping
@@ -8857,6 +8920,86 @@ func _pick_forage(tile: Vector2i) -> void:
 	_toast_item(species, count)
 	_gain_forage_xp(ForageSkill.PICK_XP)   # ★[S4-T2] 줍기 고정 7 — 종·가격 무관(꽃 패치와 같은 값)
 	audio.sfx("harvest")
+	queue_redraw()
+
+# ── ★[S4-T8 / ADR-0062 결정 9 ㉠] 채집 덤불 — 흔들기 ─────────────────────────
+# 구역별 덤불 자리(맵이 소유 — 원장은 열매 유무만 든다). 숲 2구역 밖은 빈 배열이다.
+func bush_tiles_for(region: String) -> Array:
+	match region:
+		RegionCatalog.JEOSEUNG_FOREST: return FOREST_BUSH_TILES
+		RegionCatalog.MIHOK_FOREST: return MIHOK_BUSH_TILES
+	return []
+
+# 전 구역 덤불 지도({region: [Vector2i]}) — BerryBushes.advance_day 입력(원장은 맵을 모른다).
+func bush_map() -> Dictionary:
+	return {
+		RegionCatalog.JEOSEUNG_FOREST: FOREST_BUSH_TILES,
+		RegionCatalog.MIHOK_FOREST: MIHOK_BUSH_TILES,
+	}
+
+# 이 칸이 채집 덤불인가(디스패치·프롬프트·드로우의 단일 술어).
+func is_bush_tile(region: String, t: Vector2i) -> bool:
+	return t in bush_tiles_for(region)
+
+# 덤불을 흔든다 — **줍기 결**이라 혼력 0(ADR-0033 #1)이고 도구도 필요 없다.
+#   수량 = 채집 레벨 계단(L0~3 1개 / L4~7 2개 / L8+ 3개, ForageSkill.bush_yield) · XP = 개당 1.
+#   ★ 품질은 안 실린다: 열매는 절기 창 나흘의 이벤트 산출이라 등급 롤을 태우면 "언제 흔드느냐"가
+#     아니라 "레벨이 몇이냐"가 값을 정하게 된다(수량 계단만으로 이미 레벨 보상이 있다). Q_NORMAL 고정.
+func _shake_bush(t: Vector2i) -> void:
+	if berry_bushes == null or not berry_bushes.has_berry(_region, t):
+		return
+	var id := berry_bushes.shake(_region, t, clock.day)
+	if id == "":
+		return                                    # 창 밖 잔여 플래그였다(원장이 정리만 하고 빈손)
+	var n := ForageSkill.bush_yield(_skill_level(ProfessionCatalog.FORAGING))
+	if not inventory.add_item(id, n):
+		berry_bushes.set_berry(_region, t, true)  # 인벤 가득 — 열매를 덤불에 되돌린다(증발 방지)
+		_notice("백팩이 가득 차 열매를 담을 수 없다 — 자리를 비우고 다시 [F]")
+		return
+	_toast_item(id, n)
+	_gain_forage_xp(ForageSkill.BUSH_SHAKE_XP * n)   # ★ 개당 1XP(스타듀 상속 — 수량만큼 배움도 는다)
+	audio.sfx("harvest")
+	_notice("덤불을 흔들어 %s ×%d를 얻었다" % [ItemCatalog.name_of(id), n])
+	queue_redraw()
+
+# 덤불을 겨눴을 때의 안내(상태 = 열매 있음 / 창 안이나 아직 안 달림 / 창 밖 — 셋이 다 읽혀야 한다).
+func _bush_prompt(t: Vector2i) -> String:
+	if berry_bushes != null and berry_bushes.has_berry(_region, t):
+		var id := BerryBushes.berry_for_day(clock.day)
+		return "[F] 덤불 흔들기 (%s ×%d)" % [ItemCatalog.name_of(id),
+			ForageSkill.bush_yield(_skill_level(ProfessionCatalog.FORAGING))]
+	if BerryBushes.in_window(clock.day):
+		return "채집 덤불 — 아직 열매가 안 달렸다(밤새 달릴 수 있다)"
+	return "채집 덤불 — 지금은 열매가 열리는 철이 아니다"
+
+# ── ★[S4-T8 / ADR-0062 결정 9 ㉡] 저승 이끼 — 낫 1회 채취 ────────────────────
+# 성숙 나무에 낀 이끼를 낫으로 긁는다. 혼력·XP·SFX는 **기존 낫 동작의 규칙에 맞춘다**:
+#   · 혼력 = 과금(ADR-0059 결정3 "괭이·물·낫·개간·급여는 과금" + ADR-0033 "나무 작업은 혼력 소모").
+#     단 잡초 낫질(_use_tool)이 쓰는 _farming_energy_cost의 **농사 숙련 감산은 안 태운다** — 이유는
+#     _chop_tree와 한 글자도 다르지 않다: 이건 농사가 아니고, 채집 스킬엔 혼력 절감 축이 없다
+#     (ADR-0052 비-가치 4차원). 즉 벌목과 같은 고정 COST_PER_ACTION이다(나무 위 동사끼리 정합).
+#   · XP = 곁들이 최소값 1(ForageSkill.MOSS_SCRAPE_XP). 잡초 낫질엔 채집 XP가 없지만 그건 *개간*이고
+#     이건 채집물 채취라, 줍기 7보다 훨씬 작은 값으로 "배움은 되되 곡선은 안 흔든다"에 맞춘다.
+#   · 산출 = 저승 이끼 1개(품질 무차원 CAT_MATERIAL — 원목·수액 결).
+func _scrape_moss(t: Vector2i) -> void:
+	if tree_ledger == null or inventory == null:
+		return
+	if inventory.selected_id() != ItemCatalog.SCYTHE:
+		return                                    # 낫이 아니면 무동작(ADR-0024 §2 자동 분기 없음)
+	if not tree_ledger.has_moss(_region, t):
+		return
+	var cost := SoulEnergy.COST_PER_ACTION
+	if not energy.can_act(cost):
+		return
+	if not inventory.add_item(ItemCatalog.JEOSEUNG_IKKI, 1):
+		_notice("백팩이 가득 차 이끼를 담을 수 없다")
+		return
+	tree_ledger.scrape_moss(_region, t, clock.day)   # 플래그 내림 + 재착생 쿨다운(MOSS_COOLDOWN일) 시작
+	_toast_item(ItemCatalog.JEOSEUNG_IKKI, 1)
+	_gain_forage_xp(ForageSkill.MOSS_SCRAPE_XP)
+	_swing_for_item(ItemCatalog.SCYTHE)           # 낫 스윙 모션(시각 전용 — 풀베기와 같은 모션)
+	audio.sfx("harvest")
+	energy.spend(cost)
 	queue_redraw()
 
 # 선택 슬롯이 씨앗/수확물이면 _selected_crop(선물·구매·HUD 기준 작물)을 그 작물군으로 맞춘다.
@@ -11067,8 +11210,10 @@ func _draw() -> void:
 			var _hsy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_prop_layouts.get("HWANG_OUTDOOR", []), self, _PROP_PASS_BACK, _hsy)
 			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(삼도천과 같은 렌더 — 구역만 다르다)
+			_draw_forage_spawns()    # ★[S4-T8] 백사장 존에 돋은 해변 채집물(숲과 같은 렌더 — 무대만 다르다)
 		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
 			_draw_forage_spawns()    # ★[S4-T1] 빈터에 돋은 채집물(종별 색점 그레이박스 — 아이콘 아트는 S4-T10)
+			_draw_berry_bushes()     # ★[S4-T8] 채집 덤불(열매 유무 색 구분 — 아이콘·프롭 아트는 S4-T9)
 			_draw_tree_ledger()      # ★[S4-T3] 원장 나무 중 미성숙·그루터기(성숙목은 TREE 타일이 그린다)
 			_draw_tappers()          # ★[S4-T6] 성숙목에 박힌 수액 채취기(안식과 같은 렌더 — 구역만 다르다)
 			_draw_woodshop_room()    # ★[S4-T7] 목공방 실내 — 카운터·작업대·원목 더미(그레이박스)
@@ -11375,6 +11520,34 @@ func _draw_forage_spawns() -> void:
 		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.17, col)
 		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.17, Color(0.08, 0.06, 0.10, 0.75), false, 1.0)
 
+# ★[S4-T8 / ADR-0062 결정 9 ㉠] 채집 덤불 그레이박스 렌더 — 덤불 덩이 + 열매 점.
+#   ㉠ 덤불 자체는 **늘 그린다**(열매가 없어도 "여기 덤불이 있다"가 보여야 절기 창을 기다릴 수 있다).
+#   ㉡ 열매가 달리면 그 날의 열매 색 점 셋을 얹는다(넋딸기=붉은 자주 / 잿빛복분자=먹빛 남색).
+#   순수 시각 — 상태는 BerryBushes가 소유하고 여긴 질의만 한다(채집물 색점 렌더와 같은 결).
+#   ⚠️ 능선 SOLID 덤불 프롭(PROP_BUSH 64×64)을 **안 쓴다** — 그건 다른 역할의 물건이라 같은 그림을
+#     쓰면 플레이어가 "저 벽도 흔들 수 있나?"로 읽는다(§2-2 역할 분리는 시각에서도 지켜야 한다).
+const _BUSH_BODY := Color(0.20, 0.34, 0.22)          # 덤불 잎(숲 바닥보다 밝은 짙은 초록)
+const _BUSH_SHADE := Color(0.13, 0.22, 0.15)         # 덤불 그늘(아래쪽)
+const _BERRY_COLORS := {
+	ItemCatalog.NEOK_DALGI: Color(0.78, 0.24, 0.36),        # 넋딸기 — 붉은 자주
+	ItemCatalog.JAETBIT_BOKBUNJA: Color(0.28, 0.20, 0.42),  # 잿빛복분자 — 먹빛 남색
+}
+func _draw_berry_bushes() -> void:
+	if berry_bushes == null or _indoor != "":
+		return
+	for t: Vector2i in bush_tiles_for(_region):
+		var px := Vector2(t.x * TILE, t.y * TILE)
+		# 덤불 덩이 — 아래로 퍼진 반원 두 겹(그늘 → 잎).
+		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.68), TILE * 0.36, _BUSH_SHADE)
+		draw_circle(px + Vector2(TILE * 0.44, TILE * 0.58), TILE * 0.30, _BUSH_BODY)
+		draw_circle(px + Vector2(TILE * 0.64, TILE * 0.62), TILE * 0.24, _BUSH_BODY)
+		if not berry_bushes.has_berry(_region, t):
+			continue
+		var col: Color = _BERRY_COLORS.get(BerryBushes.berry_for_day(clock.day), Color(0.8, 0.3, 0.4))
+		for o in [Vector2(0.34, 0.52), Vector2(0.58, 0.46), Vector2(0.52, 0.70)]:
+			draw_circle(px + Vector2(TILE * o.x, TILE * o.y), TILE * 0.09, col)
+			draw_circle(px + Vector2(TILE * o.x, TILE * o.y), TILE * 0.09, Color(0.08, 0.06, 0.10, 0.7), false, 1.0)
+
 # ★[S4-T3 / ADR-0062 결정 3·6] 원장 나무 그레이박스 렌더 — **성숙목 말고** 나머지 상태만 그린다.
 #   성숙목은 이미 무대가 그린다(숲 = TREE 그리드 타일 / 안식 = PROP_TREE_A/B 스프라이트). 여기 몫은
 #   그 두 무대가 표현할 줄 모르는 두 상태다:
@@ -11390,6 +11563,9 @@ const _TREE_YOUNG_TRUNK := Color(0.35, 0.26, 0.18)   # 유목 줄기
 const _LARGE_BACKDROP := Color(0.13, 0.18, 0.13)     # 심층 그늘(타일 덮개 — 어두운 숲 바닥)
 const _LARGE_BARK := Color(0.26, 0.18, 0.12)         # 굵은 껍질(보통 그루터기보다 어둡고 두껍게)
 const _LARGE_TOP := Color(0.58, 0.42, 0.27)          # 잘린 단면 나이테
+# ★[S4-T8] 저승 이끼 얼룩(밑동 — 나무 껍질보다 밝고 축축한 청록. 낫질 대상의 시각 신호).
+const _MOSS_COL := Color(0.32, 0.50, 0.34)
+const _MOSS_HILITE := Color(0.45, 0.63, 0.42)
 func _draw_tree_ledger() -> void:
 	if tree_ledger == null or _indoor != "":
 		return
@@ -11418,6 +11594,12 @@ func _draw_tree_ledger() -> void:
 			draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.24, _TREE_STUMP_TOP)
 			draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.24, _TREE_STUMP_SIDE, false, 1.0)
 			continue
+		# ★[S4-T8 / ADR-0062 결정 9 ㉡] 저승 이끼 — 성숙목 그림 자체는 무대(TREE 타일·프롭)가 그리므로
+		#   여긴 밑동에 이끼 얼룩만 얹는다. 이 한 겹이 "이 나무엔 지금 낫질할 게 있다"의 유일한 신호다.
+		if tree_ledger.has_moss(_region, t):
+			draw_circle(px + Vector2(TILE * 0.32, TILE * 0.80), TILE * 0.15, _MOSS_COL)
+			draw_circle(px + Vector2(TILE * 0.60, TILE * 0.86), TILE * 0.11, _MOSS_COL)
+			draw_circle(px + Vector2(TILE * 0.46, TILE * 0.72), TILE * 0.09, _MOSS_HILITE)
 		var stage := tree_ledger.stage_at(_region, t)
 		if stage >= TreeLedger.MAX_STAGE:
 			continue                                   # 성숙목은 무대(타일·스프라이트)가 그린다

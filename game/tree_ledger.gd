@@ -50,6 +50,15 @@ const SEED_CHANCE := 0.15     # 안식 성숙목이 밤에 자체 파종할 확�
 const SEED_RADIUS := 3        # 자체 파종 반경(칸 — 체비쇼프)
 const HOME_CAP := 40          # 안식 원장 나무 총상한(자체 파종 폭주 방지 — 마당이 숲이 되지 않게)
 
+# ── ★[S4-T8 / ADR-0062 결정 9 ㉡] 저승 이끼 ─────────────────────────────────
+# "저비용 상시 자원"(카탈로그 §1-C)이라 **성숙목에만** 끼고, 낫 한 번에 벗겨지고, 며칠 뒤 다시 낀다.
+# 성숙목 한정인 이유 = 자라는 중인 유목·베어 낸 그루터기·큰 장애물은 이끼가 앉을 몸이 아니고, 무엇보다
+# "다 큰 나무를 찾아 숲을 돈다"는 동선이 벌목·수액과 같아야 곁들이답게 얹힌다(신규 동선 0).
+const MOSS_CHANCE := 0.15     # 자격 있는 성숙목이 하룻밤에 이끼가 낄 확률(잠정 — owner 큐)
+# 벗긴 직후엔 며칠 쉰다(긁자마자 다음 날 또 끼면 나무 한 그루가 무한 자판기가 된다). 3일 쿨다운 +
+# 15% 롤이면 재착생 기대 ~3+6.7 ≈ 10일 — "숲을 한 바퀴 돌 때마다 몇 그루쯤"의 밀도다(잠정 — owner 큐).
+const MOSS_COOLDOWN := 3      # 채취 후 재착생 롤이 다시 열리기까지의 일수
+
 # ── 도끼 타격 카운트(0티어 기준 — 티어 감소는 ToolTier.axe_mature_hp) ────────
 const HP_MATURE := 10         # 성숙목 10타(스타듀 0티어 상속 — ToolTier.AXE_MATURE_HP[0]과 동치)
 const HP_STAGE4 := 3          # 4단계(거의 다 큰 나무) 3타
@@ -216,7 +225,7 @@ func is_mature(region: String, t: Vector2i) -> bool:
 func species_at(region: String, t: Vector2i) -> String:
 	return String(_trees[region][t].get("species", "")) if has_slot(region, t) else ""
 
-# 저승 이끼 플래그(S4-T8 곁들이 ㉡ 예약 — 낫 1회 채취). 지금은 원장이 자리만 든다.
+# ★[S4-T8] 저승 이끼 플래그 — T3이 자리만 잡아 둔 것을 여기서 실배선했다(낫 1회 채취).
 func has_moss(region: String, t: Vector2i) -> bool:
 	return has_slot(region, t) and bool(_trees[region][t].get("moss", false))
 
@@ -225,6 +234,33 @@ func set_moss(region: String, t: Vector2i, on: bool) -> void:
 		return
 	_trees[region][t]["moss"] = on
 	changed.emit()
+
+# 이 나무에 이끼가 낄 자격이 있나 = **성숙목뿐**(유목·그루터기·큰 장애물·빈 슬롯 제외). 채취 후
+# MOSS_COOLDOWN일이 지나야 롤이 다시 열린다(day 0 = 아직 한 번도 안 벗긴 나무 → 즉시 자격).
+func can_moss(region: String, t: Vector2i, day: int) -> bool:
+	if not is_mature(region, t) or has_moss(region, t):
+		return false
+	var last := int(_trees[region][t].get("mossday", 0))
+	return last <= 0 or day - last >= MOSS_COOLDOWN
+
+# 이끼를 벗긴다(낫 1회). 성공하면 true — 플래그를 내리고 **그 날짜를 기억**해 쿨다운을 건다.
+# ★ 산출물(저승 이끼 1개)·XP·혼력은 전부 호출 측(main._scrape_moss)의 몫이다. 이 원장은 아이템을
+#   모른다(chop이 산출 *수치*만 돌려주고 적재는 main이 하는 것과 같은 경계).
+func scrape_moss(region: String, t: Vector2i, day: int) -> bool:
+	if not has_moss(region, t):
+		return false
+	_trees[region][t]["moss"] = false
+	_trees[region][t]["mossday"] = maxi(day, 1)
+	changed.emit()
+	return true
+
+# 이 구역의 이끼 낀 칸 목록(드로우·검증 — tiles()가 정렬 순회라 결정적).
+func moss_tiles(region: String) -> Array:
+	var out: Array = []
+	for t: Vector2i in tiles(region):
+		if has_moss(region, t):
+			out.append(t)
+	return out
 
 # 이 구역의 슬롯 전체(빈 슬롯 포함 — 그리드 동기화가 순회한다). 정렬(결정적 순회).
 func tiles(region: String) -> Array:
@@ -414,7 +450,7 @@ func chop(region: String, t: Vector2i, day: int, level: int = 0,
 #      (Reclaim이 후보를 받는 것과 같은 디커플링). free_cb가 무효면 파종을 건너뛴다.
 #   · 결정적: day + 구역 + 좌표 시드. 구역·좌표는 정렬 순회라 Dictionary 키 순서에 안 기댄다.
 func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
-	var out := {"grown": [], "regrown": [], "seeded": [], "large_respawned": []}
+	var out := {"grown": [], "regrown": [], "seeded": [], "large_respawned": [], "mossed": []}
 	for region: String in regions():
 		var mode := mode_for(region)
 		for t: Vector2i in tiles(region):
@@ -435,6 +471,16 @@ func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
 				continue
 			if stump:
 				continue                                   # 그루터기는 안 자란다(치워야 자리가 난다)
+			# ★[S4-T8 / ADR-0062 결정 9 ㉡] 저승 이끼 착생 롤 — **성숙목만**(자격·쿨다운 판정은
+			#   can_moss가 통째로 든다). 성장·재성장 축과 완전히 독립이다: 성숙목은 이미 다 자라
+			#   아래 두 분기에 안 걸리고, 시드 접두사가 달라 두 사건이 상관되지도 않는다.
+			if can_moss(region, t, day):
+				var mrng := RandomNumberGenerator.new()
+				mrng.seed = hash("moss:%d:%s:%d:%d" % [day, region, t.x, t.y])
+				if mrng.randf() < MOSS_CHANCE:
+					e["moss"] = true
+					_trees[region][t] = e
+					out["mossed"].append({"region": region, "tile": t})
 			if stage > 0 and stage < MAX_STAGE:
 				if rng.randf() < GROWTH_CHANCE:
 					stage += 1
@@ -448,6 +494,7 @@ func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
 					e["stage"] = REGROW_STAGE
 					e["hp"] = hp_for_stage(REGROW_STAGE)
 					e["moss"] = false
+					e["mossday"] = 0            # 되살아난 나무는 이끼 이력이 없다(쿨다운 초기화)
 					_trees[region][t] = e
 					out["regrown"].append({"region": region, "tile": t})
 	# ③ 자체 파종(안식) — 성숙목마다 한 번씩 굴린다. 상한(HOME_CAP)에 닿으면 멈춘다.
@@ -471,7 +518,7 @@ func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
 					"hp": hp_for_stage(1), "stump": false, "moss": false})
 				out["seeded"].append({"region": region, "tile": spot})
 	if not out["grown"].is_empty() or not out["regrown"].is_empty() or not out["seeded"].is_empty() \
-			or not out["large_respawned"].is_empty():
+			or not out["large_respawned"].is_empty() or not out["mossed"].is_empty():
 		changed.emit()
 	return out
 
@@ -507,10 +554,11 @@ func _empty(region: String, t: Vector2i) -> void:
 	if not has_slot(region, t):
 		return
 	_trees[region][t] = {"species": "", "stage": STAGE_EMPTY, "hp": 0, "stump": false, "moss": false,
-		"large": "", "gone": false}
+		"mossday": 0, "large": "", "gone": false}
 
 # ── 세이브/로드(ForageSpawns 패턴 계승) — 슬라이스 키 "tree_ledger" 네임스페이스 ──
-# 구역별 [x, y, species, stage, hp, stump(0/1), moss(0/1)] 7항 배열 목록 + 시드 완료 구역 목록.
+# 구역별 [x, y, species, stage, hp, stump(0/1), moss(0/1), large, gone(0/1), mossday] 10항 배열
+# 목록 + 시드 완료 구역 목록.
 # ★ 하위호환: 키 없는 구세이브 = 원장 0 → 구역 첫 빌드의 seed_region이 초기 배치를 **결정적으로**
 #   재생성한다(종 = 좌표 해시라 같은 맵이면 같은 배치 — ADR-0062 결정 7 요구).
 func to_save() -> Dictionary:
@@ -522,7 +570,8 @@ func to_save() -> Dictionary:
 			arr.append([t.x, t.y, String(e.get("species", "")), int(e.get("stage", 0)),
 				int(e.get("hp", 0)), 1 if bool(e.get("stump", false)) else 0,
 				1 if bool(e.get("moss", false)) else 0,
-				String(e.get("large", "")), 1 if bool(e.get("gone", false)) else 0])
+				String(e.get("large", "")), 1 if bool(e.get("gone", false)) else 0,
+				int(e.get("mossday", 0))])
 		out[region] = arr
 	var seeded: Array = _seeded.keys()
 	seeded.sort()
@@ -557,8 +606,12 @@ func load_save(data: Dictionary) -> void:
 				if large != "" and not large in LARGE_KINDS:
 					large = ""
 				var gone: bool = e.size() >= 9 and int(e[8]) != 0
+				# ★[S4-T8] 10항(이끼 채취일 — 재착생 쿨다운의 기준)도 구세이브엔 없다 → 0 = "한 번도
+				#   안 벗긴 나무"로 읽혀 즉시 자격이 된다(하위호환. 8·9항과 같은 결).
+				var mossday: int = int(e[9]) if e.size() >= 10 else 0
 				by_tile[Vector2i(int(e[0]), int(e[1]))] = {"species": sp, "stage": stage,
-					"hp": maxi(hp, 0), "stump": stump, "moss": moss, "large": large, "gone": gone}
+					"hp": maxi(hp, 0), "stump": stump, "moss": moss, "large": large, "gone": gone,
+					"mossday": maxi(mossday, 0)}
 			if not by_tile.is_empty():
 				_trees[String(region)] = by_tile
 	var seeded: Variant = data.get("seeded", [])
