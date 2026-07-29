@@ -1742,6 +1742,17 @@ const DUNGEON_GATE_DOOR := Vector2i(24, 6)          # 문 리세스(시각 일�
 # WALL 박스 + 문 리세스만(실내·카탈로그 없음, 라이브 워프 없음 — 옥자 집 결).
 const NARAK_GATE_EXT_RECT := Rect2i(30, 2, 5, 5)    # x30..34, y2..6 (북단 심연 포켓 동, 잠긴 나락 진입로)
 const NARAK_GATE_DOOR := Vector2i(32, 6)            # 문 리세스(시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
+# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 시스템 배선 상수. 던전 입구(DUNGEON_GATE)는 이제 **잠긴 외관이
+#   아니라 층 하강 입구로 점등**한다 — 문 칸에서 [F]를 누르면 1층(또는 해금된 엘리베이터 층)으로
+#   내려간다. NARAK_GATE는 그대로 잠김 유지(나락 = S5-T7 소관).
+#   ※ 외관 자체(WALL 박스 + 문 PATH 리세스)는 한 칸도 안 바뀐다 — eophwa_mine_test의 좌표·잠김
+#     단언(카탈로그 미등록이라 _maybe_toggle_building으로는 못 들어감)이 전부 그대로 성립한다.
+const MINE_SURFACE_RETURN := Vector2i(DUNGEON_GATE_DOOR.x, DUNGEON_GATE_DOOR.y + 1)  # 층에서 지상 복귀 착지 칸(문 앞 곁가지)
+const MINE_ROCK_COST := 10       # 돌 1타 = 혼력 10(ADR-0063 결정 4 "채굴 1타 = COST_PER_ACTION" — 값 동기화. const 초기화식에서 타 클래스 상수를 안 읽는 관례상 숫자로 둔다)
+# ★[ADR-0063 결정 1] 하강 직후 무적 1초(스타듀 상속). HP·피격 판정 자체가 S5-T4 소관이라 **지금은
+#   상수 자리만** 둔다 — 층 진입 시각(_mine_descended_at)만 기록해 두고, T4의 피격 판정이 이 값을
+#   읽어 "무적 창"을 가르게 한다(훅 자리·죽은 코드 아님).
+const MINE_DESCEND_INVULN_SECS := 1.0
 
 # ── 나락(M5.2 빌드 → ADR-0018 C9 코지-와이드 재배치) ─────────────────────────────
 # 여덟째 실데이터 구역(독립 전투 전용). 전투 메카닉은 만들지 않는다(Phase 3) — 심연·업화·봉인 모티프의 빈
@@ -1906,6 +1917,22 @@ var tool_tier: ToolTier = null
 #   같은 RefCounted 순수 원장이고, **지불·완공 실효는 전부 main**이 든다 — 여기(main)가 골드·원목을
 #   차감하고, 완공된 프로젝트 id로 Ranch 정원을 승격시킨다(Carpenter는 지갑·인벤·Ranch를 모른다).
 var carpenter: Carpenter = null
+# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 원장(60층·3밴드·day-한정 채굴 기록·도달 최심층). ForageSpawns·
+#   TreeLedger와 같은 RefCounted 순수 원장이고, **층을 실제 그리드로 세우는 것은 전부 main**이 든다
+#   (MineFloors는 타일 id·충돌·혼력·인벤을 모른다 — 논리 좌표 위의 방·돌·사다리만 안다).
+var mine_floors: MineFloors = null
+# ★[S5-T1] 지금 있는 갱도 층(0 = 지상). 구역(_region)과 직교하는 **상태 축**이다: _region이
+#   EOPHWA_MINE이면서 이 값이 >0이면 지상 무대가 아니라 층 그리드를 빌드·렌더한다. 구세이브엔 키가
+#   없어 0(지상)으로 시작한다 = 회귀 0.
+var _mine_floor: int = 0
+# ★[S5-T1] 지금 층의 배치 캐시(MineFloors.generate 결과). 층에 들어설 때 한 번 굴려 두고, 그리기·
+#   프롬프트·채굴 판정이 이 사본을 읽는다(매 프레임 재생성 금지 — 순수 함수지만 값이 싸지 않다).
+var _mine_layout: Dictionary = {}
+# ★[S5-T1] 갱도 입구에서 고른 진입 층(1 = 입구층, 그 외 = 해금된 엘리베이터 체크포인트).
+var _mine_entry_pick: int = 1
+# ★[S5-T1 / ADR-0063 결정 1] 마지막 하강 시각(초). 하강 직후 MINE_DESCEND_INVULN_SECS 동안은
+#   무적이다 — HP·피격 판정 본체가 S5-T4라 지금은 **기록만** 하고 읽는 쪽이 없다(T4의 훅 자리).
+var _mine_descended_at: float = -999.0
 # ★ [S1-9] 집 꾸미기 상태(집 내부 3레이어 코스메틱 배치 + 해금 세트). F10 저작 도구(layout.json·
 #   _prop_layouts)와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). 플레이어 세이브 델타만 소유하고
 #   layout.json 시드는 안 건드린다(회귀 0). main이 유효 배치 칸을 주입하고 드로우/충돌 훅에서 질의(디커플링).
@@ -2237,6 +2264,8 @@ func _ready() -> void:
 	tool_tier.changed.connect(queue_redraw)   # 티어가 오르면 프롬프트 타수·대장간 안내가 즉시 갱신
 	carpenter = Carpenter.new()          # ★[S4-T7] 목공방 건축 의뢰 원장(RefCounted — 도구 티어와 같은 결)
 	carpenter.changed.connect(queue_redraw)   # 의뢰·완공·복원 시 매대 행·목공방 그레이박스 갱신
+	mine_floors = MineFloors.new()       # ★[S5-T1] 갱도 층 원장(RefCounted — 채집물 스폰 원장과 같은 결)
+	mine_floors.changed.connect(queue_redraw)   # 채굴·사다리 개통·깊이 갱신·복원 시 층 그레이박스 갱신
 	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
 	home_deco.name = "HomeDeco"
 	add_child(home_deco)
@@ -2908,6 +2937,11 @@ func _build_grid() -> void:
 	var sz := RegionCatalog.size_of(_region)
 	if sz == Vector2i.ZERO:
 		sz = Vector2i(MAP_W, OUTDOOR_H)
+	# ★[S5-T1 / ADR-0063 결정 1] 갱도 **층**은 지상 무대(64×44)와 좌표를 공유하지 않는 별도 그리드다
+	#   (24×24). 구역 id는 그대로 EOPHWA_MINE이고 _mine_floor(>0)가 무대를 가른다 — 지상 구역·건물·
+	#   워프 좌표는 한 칸도 안 움직인다(ADR-0063 "지상 구역 재배치 없음").
+	if _in_mine_floor():
+		sz = Vector2i(MineFloors.FLOOR_W, MineFloors.FLOOR_H)
 	_grid_w = sz.x
 	_outdoor_h = sz.y
 	_grid_h = _outdoor_h + INDOOR_BAND_H
@@ -2929,7 +2963,10 @@ func _build_grid() -> void:
 		RegionCatalog.MIHOK_FOREST:
 			_build_mihok_forest()
 		RegionCatalog.EOPHWA_MINE:
-			_build_eophwa_mine()
+			if _in_mine_floor():
+				_build_mine_floor()      # ★[S5-T1] 층 그리드(24×24 방 + 돌 + 사다리)
+			else:
+				_build_eophwa_mine()     # 지상 갱도 무대(불변)
 		RegionCatalog.NARAK:
 			_build_narak()
 		_:
@@ -4217,6 +4254,150 @@ func _carve_eophwa_mine_paths() -> void:
 	# 남단 입구 두 서비스 문 → apron(y42, spawn 동선)
 	_carve_v(SMITHY_EXT_DOOR.x, SMITHY_EXT_DOOR.y, 42)     # 대장간 문(6,41) → apron(y42)
 	_carve_v(GUILD_EXT_DOOR.x, GUILD_EXT_DOOR.y, 42)       # 길드 문(24,41) → apron(y42)
+
+# ═══ ★[S5-T1 / ADR-0063 결정 1] 갱도 층 — 빌드·진입·하강·채굴 배선 ═══════════════
+# main의 몫은 넷뿐이다: ①층 배치를 그리드로 세우기 ②진입/하강/복귀 전환 ③곡괭이 디스패치와
+# 혼력 과금 ④그레이박스 렌더·프롬프트. 층 *생성 규칙*(시드·템플릿·사다리 확률·day 리셋)은 전부
+# MineFloors에 있다(원장은 지형을 모르고 main은 규칙을 모른다 — TreeLedger/FishingSession 경계 동형).
+
+# 지금 갱도 층 안인가(구역 = 업화 갱도 AND 층 > 0). 빌드·카메라·라벨·입력이 이 한 술어로 갈린다.
+func _in_mine_floor() -> bool:
+	return _region == RegionCatalog.EOPHWA_MINE and _mine_floor > 0
+
+# ★ 층 그리드 = 사방 WALL(암반) + 방 사각 PATH(갱도 바닥) + 남은 돌 ROCK. 지상 갱도 빌더와 같은
+#   스택(외부 land + 아래 VOID 실내 띠)이라 카메라·충돌·flood-fill 관례가 그대로 통한다.
+#   ★ 그날 이미 깬 돌은 원장이 빼 준다(같은 날 재진입 = 동일 배치 + 깬 돌 제외, 재파밍 차단).
+func _build_mine_floor() -> void:
+	mine_floors.advance_day(clock.day)      # 날이 갈렸으면 day-한정 기록 소멸(취침 훅의 방어적 짝)
+	_mine_layout = MineFloors.generate(clock.day, _mine_floor)
+	_grid = []
+	for y in _grid_h:
+		var row: Array = []
+		for x in _grid_w:
+			row.append(WALL if y < _outdoor_h else VOID)   # 방 밖은 전부 암반(WALL) — 층은 닫힌 공간
+		_grid.append(row)
+	if _mine_layout.is_empty():
+		_build_border()
+		return                              # 범위 밖 층 방어(도달 불가 — 진입부가 이미 걸러낸다)
+	_fill_rect(_mine_layout["rect"], PATH)  # 방 바닥(걷기 O — 갱도 흙바닥 그레이박스)
+	for t: Vector2i in mine_floors.rocks_left(clock.day, _mine_floor):
+		_set_tile(t.x, t.y, ROCK)           # 깰 수 있는 돌(통과 X — 곡괭이로 뚫는다)
+	_build_border()                         # 맵 4변 경계 충돌(마지막에 보장)
+
+# 층 안 이 칸이 아직 안 깬 돌인가(곡괭이 디스패치·프롬프트의 단일 판정).
+func _is_mine_rock(t: Vector2i) -> bool:
+	if not _in_mine_floor() or _mine_layout.is_empty():
+		return false
+	if mine_floors.is_mined(_mine_floor, t):
+		return false
+	return _mine_layout["rocks"].has(t)
+
+# 층 안 이 칸이 내려가는 사다리인가(확정 배치 1개 + 돌을 깨 열린 것들).
+func _is_mine_ladder(t: Vector2i) -> bool:
+	if not _in_mine_floor() or _mine_layout.is_empty():
+		return false
+	return t == _mine_layout["ladder"] or mine_floors.has_ladder(_mine_floor, t)
+
+# 층 안 이 칸이 올라가는 사다리(= 착지한 입구)인가.
+func _is_mine_entrance(t: Vector2i) -> bool:
+	return _in_mine_floor() and not _mine_layout.is_empty() and t == _mine_layout["entrance"]
+
+# 지상에서 갱도 입구 문 칸에 서 있는가(층 진입 트리거). 잠긴 외관이라 _maybe_toggle_building은
+# 여전히 이 문을 모른다 — 진입은 [F] 전용이다(기증대·게시판과 같은 무인 F 결).
+func _at_dungeon_gate() -> bool:
+	return _region == RegionCatalog.EOPHWA_MINE and _mine_floor == 0 and _indoor == "" \
+		and not _sleeping and _player_tile() == DUNGEON_GATE_DOOR
+
+# 갱도 입구에서 고를 수 있는 진입 층 목록 = [1] + 해금된 엘리베이터 체크포인트(5의 배수).
+func _mine_entry_options() -> Array[int]:
+	var out: Array[int] = [1]
+	out.append_array(mine_floors.unlocked_elevators())
+	return out
+
+# [G] 진입 층 순환(그레이박스 선택 UI — 목록을 프롬프트 텍스트로 보이고 키로 돌린다).
+func _cycle_mine_entry() -> void:
+	var opts := _mine_entry_options()
+	var i := opts.find(_mine_entry_pick)
+	_mine_entry_pick = opts[(i + 1) % opts.size()] if i >= 0 else opts[0]
+	audio.sfx("ui")
+
+# 층으로 내려간다(지상 → 층 N, 또는 층 N → 층 N+1). fade 전환은 구역 워프와 같은 실행기를 쓰되
+# 구역은 그대로라(_region 불변) _rebuild_region이 층 그리드를 다시 세운다.
+func _descend_mine(to_floor: int) -> void:
+	if _transitioning or not MineFloors.is_valid_floor(to_floor):
+		return
+	mine_floors.advance_day(clock.day)
+	var layout := MineFloors.generate(clock.day, to_floor)
+	if layout.is_empty():
+		return
+	_mine_floor = to_floor
+	mine_floors.reach_floor(to_floor)          # 도달 최심층 갱신(영구 — 엘리베이터 해금 파생원)
+	_mine_descended_at = float(Time.get_ticks_msec()) / 1000.0   # ★ 하강 직후 무적 1초(판정은 S5-T4)
+	_warp_in_region(layout["entrance"])
+	_notice("갱도 %d층 (%s) — 내려간다" % [to_floor, MineFloors.band_name(MineFloors.band_of(to_floor))])
+
+# 층에서 지상으로 올라온다(입구 사다리). 갱도 입구 문 앞 곁가지 칸에 착지한다.
+func _ascend_mine_to_surface() -> void:
+	if _transitioning or _mine_floor == 0:
+		return
+	_mine_floor = 0
+	_mine_layout = {}
+	_warp_in_region(MINE_SURFACE_RETURN)
+	_notice("갱도 밖으로 나왔다")
+
+# 같은 구역 안에서 무대(층)만 갈리는 전환. _transition_to("")가 실내 토글용이라 재빌드를 안 하므로,
+# 층은 _warp에 *다른 구역인 척* 태울 수 없다 → fade 실행기만 흉내 내 재빌드를 강제한다.
+func _warp_in_region(dest_tile: Vector2i) -> void:
+	_transitioning = true
+	player.set_physics_process(false)
+	player.velocity = Vector2.ZERO
+	var tw := create_tween()
+	tw.tween_property(fade, "modulate:a", 1.0, 0.22)
+	tw.tween_callback(func() -> void:
+		_rebuild_region(_region)          # 같은 구역 id로 재빌드 = 층 그리드 교체(지상↔층 공용)
+		_indoor = ""
+		player.position = _tile_center_px(dest_tile)
+		_apply_camera_limits()
+		queue_redraw())
+	tw.tween_interval(0.08)
+	tw.tween_property(fade, "modulate:a", 0.0, 0.22)
+	tw.tween_callback(func() -> void:
+		_transitioning = false
+		if not _run_over:
+			player.set_physics_process(true))
+
+# ★ 곡괭이로 층 안 돌 1타 — **일반 돌은 타수 1(즉발)**·혼력 10. 광석 노드의 다타수·곡괭이 티어의
+#   타수 감소는 S5-T2/T3 소관이라 여기선 타수 원장 자체가 없다. **XP·드랍도 S5-T2 소관이라 없다**(광물 로스터·
+#   채광 스킬이 그 태스크에서 이 자리에 붙는다). 돌이 깨지면 사다리 롤을 굴린다(ADR-0063 결정 1 ㉡).
+func _mine_rock(t: Vector2i) -> void:
+	if inventory.selected_id() != ItemCatalog.PICKAXE:
+		return                              # 든 게 곡괭이가 아니면 무동작(자동 분기 없음 — ADR-0024 §2)
+	if not energy.can_act(MINE_ROCK_COST):
+		_notice("혼력이 모자라 곡괭이를 휘두를 수 없다")
+		return
+	energy.spend(MINE_ROCK_COST)
+	mine_floors.mark_mined(_mine_floor, t)  # day-한정 원장에 기록(같은 날 재진입 시 이 돌은 없다)
+	_sync_mine_tile(t)                      # 그리드·충돌 즉시 해제(재빌드 없이 — _sync_tree_tile 결)
+	_swing_for_item(ItemCatalog.PICKAXE)
+	audio.sfx("hoe")                        # 곡괭이 타격 SFX는 아트 패스(S5-T9) — 흙 다지는 "턱" 재사용
+	# 사다리 롤 — 남은 돌이 줄수록 확률이 오른다. 몹 전멸 보너스는 S5-T5까지 false 고정이고,
+	# 명부의 운 가산은 운 시스템 빌드 시 채운다(지금은 0.0 — 인자 자리만).
+	var left := mine_floors.rocks_left_count(clock.day, _mine_floor)
+	if MineFloors.roll_ladder(clock.day, _mine_floor, t, left, false, 0.0):
+		mine_floors.add_ladder(_mine_floor, t)
+		_notice("돌 밑에서 사다리가 드러났다 — [F]로 더 내려간다")
+	queue_redraw()
+
+# 깬 돌 한 칸의 통행 상태를 즉시 반영한다(구역 재빌드 없이 — _sync_tree_tile과 같은 결).
+# 타일셋 물리 레이어가 ROCK에 충돌을 달고 있어, 셀을 길 변종으로 바꾸면 충돌도 같이 사라진다.
+func _sync_mine_tile(t: Vector2i) -> void:
+	if t.x < 0 or t.y < 0 or t.y >= _grid.size() or t.x >= _grid[t.y].size():
+		return
+	_grid[t.y][t.x] = PATH
+	if ground.tile_set.has_source(PATH_SRC_ID):
+		ground.set_cell(t, PATH_SRC_ID, Vector2i(int(_gd_h01(t.x, t.y, 9) * PATH_VARIANTS) % PATH_VARIANTS, 0))
+	else:
+		ground.set_cell(t, 0, _terrain_base_atlas(TR_PATH))
 
 # ★ M5.2 — 나락(독립 전투 던전 스테이지). 빈 전투장 — 외부 land 한 덩어리(VOID 스택 띠는 카메라 격리용으로
 # 유지하되 실내 방 없음). 전투 메카닉은 만들지 않는다(Phase 3) — 심연·업화·봉인 모티프의 바위(ROCK) 둘레만.
@@ -6513,6 +6694,11 @@ func _build_ground_details() -> void:
 func _place_labels() -> void:
 	# 집·카페는 도트 외관(간판·건물 형태)으로 식별되므로 라벨을 빼고, 아직 그레이박스인
 	# 밭·도착·구역 동선 안내만 라벨로 남긴다(외관 위 텍스트 중복 제거).
+	# ★[S5-T1] 갱도 층은 구역 라벨(지상 무대 안내)과 완전히 다른 무대라 여기서 먼저 가른다.
+	#   층·밴드·사다리·입구만 안내한다(아트는 S5-T9/T10 — 그때 라벨이 타일·아이콘으로 대체된다).
+	if _in_mine_floor():
+		_place_mine_floor_labels()
+		return
 	# ★ M1.4 — 구역마다 자기 라벨만 깐다(_rebuild_region이 전환 시 _clear_labels로 걷어낸다).
 	match _region:
 		RegionCatalog.HOME:
@@ -6576,7 +6762,9 @@ func _place_labels() -> void:
 			for ore in MINE_ORE_LABEL_TILES:
 				_add_label("채광지(Phase 3)", _tile_center_px(ore))
 			_add_label("호수", _tile_center_px(Vector2i(6, 24)))
-			_add_label("던전 입구 (잠김 — 전투 Phase 3)", _tile_center_px(Vector2i(24, 8)))
+			# ★[S5-T1 / ADR-0063 결정 1] 던전 입구 점등 — "잠김(전투 Phase 3)" 플레이스홀더 제거.
+			#   이제 이 문 칸에서 [F]를 누르면 갱도 층으로 내려간다(외관·좌표는 한 칸도 안 움직였다).
+			_add_label("갱도 입구 — [F] 층으로 내려간다", _tile_center_px(Vector2i(24, 8)))
 			_add_label("나락 진입로 (잠김 — 전투 Phase 3)", _tile_center_px(Vector2i(32, 8)))
 			_add_label("산길 → 나루 마을", _tile_center_px(Vector2i(14, 40)))   # 남단 산길 워프(14,43) 안내
 			_add_label("숲길 → 저승 숲", _tile_center_px(Vector2i(40, 3)))       # 북단 숲길 워프(40,1) 안내
@@ -6594,6 +6782,15 @@ func _place_labels() -> void:
 			_add_label("미혹 심층 (큰 통나무에 막힘)", _tile_center_px(Vector2i(48, 12)))
 			_add_label("연못", _tile_center_px(Vector2i(31, 21)))            # ★C7 연못(x26..37,y14..19) 아래
 			_add_label("숲 안쪽 → 저승 숲", _tile_center_px(Vector2i(4, 22)))   # ★C7 서단 복귀 워프(1,22) 안내
+
+# ★[S5-T1 / ADR-0063 결정 1] 층 라벨 — 층수·밴드(잿길/넋골/업화)와 두 사다리의 위상만.
+func _place_mine_floor_labels() -> void:
+	if _mine_layout.is_empty():
+		return
+	var band := MineFloors.band_name(MineFloors.band_of(_mine_floor))
+	_add_label("%s %d층" % [band, _mine_floor], _tile_center_px(_mine_layout["entrance"] + Vector2i(0, -1)))
+	_add_label("올라가는 사다리 [F]", _tile_center_px(_mine_layout["entrance"]))
+	_add_label("내려가는 사다리 [F]", _tile_center_px(_mine_layout["ladder"]))
 
 func _add_label(text: String, center_px: Vector2) -> void:
 	var lbl := Label.new()
@@ -6628,6 +6825,10 @@ func _setup_player_and_camera() -> void:
 # CAFE_CAM_RECT)로 격리한다 — 좌표가 두 구역에서 같아 _indoor 모드만으로 갈라도 안전하다(★ M1.4).
 func _apply_camera_limits() -> void:
 	var r := Rect2i(Vector2i.ZERO, RegionCatalog.size_of(_region))   # 외부 = 현재 구역 전체
+	# ★[S5-T1] 갱도 층은 구역 카탈로그에 없는 별도 그리드(24×24)라 카메라도 층 크기로 잡는다
+	#   (지상 64×44로 두면 층 밖 검은 여백이 화면에 들어온다).
+	if _in_mine_floor():
+		r = Rect2i(Vector2i.ZERO, Vector2i(MineFloors.FLOOR_W, MineFloors.FLOOR_H))
 	# ★ M2.2 — 실내면 그 건물의 방 둘레로 격리한다(카탈로그가 건물별 cam을 들고 있다 —
 	# "집"→HOUSE_CAM·"카페"→CAFE_CAM·공유 집 6채→HOUSE_CAM·만물상→STORE_CAM, 한 데이터 흐름).
 	if _indoor != "" and _buildings.has(_indoor):
@@ -6929,6 +7130,19 @@ func _on_day_advanced(day: int) -> void:
 	if RunSummary.is_over(day):
 		_end_run()
 		return
+	# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 리셋 — 날이 바뀌면 전 층이 리필된다(그날 깬 돌·열린 사다리
+	#   기록이 전량 소멸하고, 배치는 시드가 day를 물고 있어 저절로 갈린다). 스타듀 "매일 리필" 정합.
+	#   ★ 층 안에서 날이 바뀌면 **지상으로 되돌린다**: 지금은 층 안 취침이 불가능하지만(_can_sleep은 집
+	#     구역 전용) 날짜 전환 경로가 하나 늘 때 옛 층 그리드에 갇히는 사고를 원천 차단한다. 아래
+	#     데일리 정산들(개간 후보 스캔·나무 파종 등)이 *지상 그리드*를 전제하므로 **맨 앞**에서 되돌린다.
+	if mine_floors != null:
+		mine_floors.advance_day(day)
+		if _in_mine_floor():
+			_mine_floor = 0
+			_mine_layout = {}
+			_rebuild_region(_region)
+			player.position = _tile_center_px(MINE_SURFACE_RETURN)
+			_apply_camera_limits()
 	# ★ [ADR-0051] 밤 까마귀(미련까마귀) 습격 — 성장(advance_day) *전에* 무방비 작물을 영구 소실시킨다
 	#   (밤새 쪼임 → 살아남은 작물만 아침에 자람). 허수아비 반경이 덮은 칸은 안전. 3중 안전장치
 	#   (작물 문턱·한 밤 상한·반경 보호)는 CrowRaid가 판정하고, day 시드로 결정적이다(헤드리스 재현).
@@ -7189,6 +7403,10 @@ func _is_in_house_interior() -> bool:
 func _maybe_toggle_building() -> void:
 	if _transitioning or _sleeping:
 		return
+	# ★[S5-T1] 갱도 층 안엔 건물이 없다(지상 대장간·길드의 외관 문 좌표는 층 그리드 밖이라 닿을 수도
+	#   없지만, 무대가 갈린 걸 명시적으로 가른다 — 좌표 우연에 안 기댄다).
+	if _in_mine_floor():
+		return
 	var t := _player_tile()
 	if _indoor == "":
 		for id in _buildings:
@@ -7217,6 +7435,9 @@ func _player_tile() -> Vector2i:
 #   at이 아직 미정(TILE_TBD)인 워프도 건너뛴다(좌표 미정 = 무대 미완).
 func _maybe_warp_edge() -> void:
 	if _transitioning or _sleeping or _indoor != "":
+		return
+	# ★[S5-T1] 층 안에서는 구역 가장자리 워프가 없다(지상으로 나가는 유일한 길 = 입구 사다리).
+	if _in_mine_floor():
 		return
 	var t := _player_tile()
 	for w in RegionCatalog.warps_of(_region):
@@ -7358,6 +7579,8 @@ func _save_game() -> void:
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
 		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
 		"carpenter": carpenter.to_save(),   # ★[S4-T7] 목공방 건축 의뢰(진행 1건 + 완공 이력 — 정원 승격은 ranch에)
+		"mine": mine_floors.to_save(),      # ★[S5-T1] 갱도 층 원장(도달 최심층=영구 + day-한정 채굴·사다리 기록)
+		"mine_floor": _mine_floor,          # ★[S5-T1] 지금 있는 층(0=지상 — region/indoor와 같은 '있던 자리' 축)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
@@ -7444,6 +7667,8 @@ func _load_game() -> void:
 		tool_tier.load_save(data["tool_tiers"])
 	if data.has("carpenter"):     # ★[S4-T7] — 키 없는 구세이브는 진행 의뢰 0·완공 0(하위호환)
 		carpenter.load_save(data["carpenter"])
+	if data.has("mine"):          # ★[S5-T1] — 키 없는 구세이브는 도달 깊이 0·채굴 기록 0(지상 시작·무막힘)
+		mine_floors.load_save(data["mine"])
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
 		home_deco.load_save(data["home_deco"])
 	if data.has("wallet"):
@@ -7500,8 +7725,16 @@ func _load_game() -> void:
 #   농원) 외부 스폰으로 떨군다 — 깨진/구버전 세이브로 빈 맵·VOID에 갇히지 않게(미지 id 방어).
 func _restore_location(data: Dictionary) -> void:
 	var saved_region: String = str(data.get("region", RegionCatalog.HOME))
+	# ★[S5-T1] 갱도 층은 구역 id가 아니라 **직교 상태 축**이라 여기서 함께 복원한다(_rebuild_region이
+	#   이 값을 읽어 지상 무대 대신 층 그리드를 세운다). 갱도가 아닌 구역에 층 값이 붙은 손상/구세이브는
+	#   지상 0층으로 자른다 — 다른 구역에서 24×24 층 그리드가 서는 사고를 원천 차단.
+	var prev_floor := _mine_floor
+	_mine_floor = int(data.get("mine_floor", 0))
+	if saved_region != RegionCatalog.EOPHWA_MINE or not MineFloors.is_valid_floor(_mine_floor):
+		_mine_floor = 0
 	if not RegionCatalog.is_built(saved_region):
 		push_warning("[M1.5] 미지/미빌드 구역 '%s' — 홈베이스 스폰으로 폴백" % saved_region)
+		_mine_floor = 0
 		if _region != RegionCatalog.HOME:
 			_rebuild_region(RegionCatalog.HOME)
 		_indoor = ""
@@ -7510,7 +7743,9 @@ func _restore_location(data: Dictionary) -> void:
 		return
 	# 정상 복원: 저장 구역이 부팅 구역(HOME)과 다르면 그 구역을 재빌드한다(_warp과 같은 결 —
 	# 현재 구역만 메모리, M1.2 구현 (b)). 같으면(HOME) 이미 빌드돼 있어 재빌드 불필요.
-	if saved_region != _region:
+	# ★[S5-T1] 층이 갈렸으면 구역 id가 같아도(갱도↔갱도 층) 재빌드해야 한다 — F9 재로드로 지상↔층을
+	#   오갈 때 옛 그리드가 남는 걸 막는다.
+	if saved_region != _region or prev_floor != _mine_floor:
 		_rebuild_region(saved_region)
 	# 실내 모드는 카탈로그로 방어한다(★ M2.2 — 8채로 늘어 화이트리스트 대신 _buildings 조회).
 	# 알 수 없는 id거나 복원 구역과 다른 구역의 건물이면 바깥("")으로 — 카메라가 외부 경계로
@@ -8260,6 +8495,32 @@ func _process(delta: float) -> void:
 			and inventory.selected_id() == ItemCatalog.SCYTHE
 	if on_moss and Input.is_action_just_pressed("use_tool"):
 		_scrape_moss(_target)
+	# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 — 진입·하강·복귀([F])와 곡괭이 채굴(LMB) 디스패치.
+	#   ㉠ 지상 갱도 입구 문 칸: [F] = 선택한 층으로 하강 · [G] = 진입 층 순환(엘리베이터 체크포인트).
+	#   ㉡ 층 안 내려가는 사다리 칸: [F] = 다음 층(바닥 60층이면 더 못 내려간다).
+	#   ㉢ 층 안 입구(올라가는 사다리) 칸: [F] = 지상 복귀.
+	#   ㉣ 돌: 곡괭이 든 채 LMB(벌목·개간과 같은 결 — _target_valid(SOIL) 게이트 밖 별도 디스패치).
+	if _at_dungeon_gate():
+		if Input.is_action_just_pressed("shop_toggle"):
+			_descend_mine(_mine_entry_pick)
+			return
+		if _mine_entry_options().size() > 1 and Input.is_action_just_pressed("gift_item"):
+			_cycle_mine_entry()
+			return
+	if _in_mine_floor() and not _sleeping and Input.is_action_just_pressed("shop_toggle"):
+		var here := _player_tile()
+		if _is_mine_ladder(here):
+			if _mine_floor >= MineFloors.MAX_FLOOR:
+				_notice("갱도 바닥이다 — 더 내려갈 곳이 없다")   # 나락 열쇠·바닥 보상은 S5-T7/T10
+			else:
+				_descend_mine(_mine_floor + 1)
+			return
+		if _is_mine_entrance(here):
+			_ascend_mine_to_surface()
+			return
+	if _in_mine_floor() and not _sleeping and _is_mine_rock(_target) \
+			and Input.is_action_just_pressed("use_tool"):
+		_mine_rock(_target)
 	# ★[S4-T3 / ADR-0062 결정 3] 벌목 — 원장 나무·그루터기는 SOLID(비-SOIL)라 _target_valid 게이트 밖에서
 	#   따로 디스패치한다(개간 debris와 같은 결). LMB(도끼 든 채) = 1타. 도끼가 아니거나 혼력이 없으면
 	#   _chop_tree 안에서 무동작이다(자동 분기 없음 — ADR-0024 §2).
@@ -8370,6 +8631,33 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = true
 		interact_prompt.text = "[좌클릭 홀드] 당기기 · [놓기] 풀기   (이동하면 그만둠)" if fishing.state == FishingSession.State.FIGHT \
 			else "%s — [좌클릭]으로 챈다" % fishing.state_label()
+	elif _at_dungeon_gate():
+		# ★[S5-T1] 갱도 입구 — 진입 층 선택은 그레이박스 텍스트 목록이다(엘리베이터 UI는 S5-T9/T10 아트).
+		interact_prompt.visible = true
+		var opts := _mine_entry_options()
+		var pick_line := "[F] 갱도 %d층으로 내려간다" % _mine_entry_pick
+		if opts.size() > 1:
+			var names: Array[String] = []
+			for f in opts:
+				names.append(("〔%d〕" % f) if f == _mine_entry_pick else str(f))
+			pick_line += "   [G] 엘리베이터: %s층" % " · ".join(names)
+		interact_prompt.text = pick_line
+	elif _in_mine_floor():
+		# ★[S5-T1] 층 안 프롬프트 — 발밑(사다리) > 겨눈 칸(돌) 순. 남은 돌 수는 사다리 확률의 분모라
+		#   플레이어가 "다 캐면 열린다"를 읽을 수 있게 함께 보인다(스타듀의 암묵 규칙을 명시화).
+		var here_t := _player_tile()
+		interact_prompt.visible = not _sleeping
+		if _is_mine_ladder(here_t):
+			interact_prompt.text = "[F] 아래층으로" if _mine_floor < MineFloors.MAX_FLOOR else "갱도 바닥 — 더 내려갈 곳이 없다"
+		elif _is_mine_entrance(here_t):
+			interact_prompt.text = "[F] 갱도 밖으로 나간다"
+		elif _is_mine_rock(_target):
+			interact_prompt.text = "[좌클릭] 곡괭이로 돌 깨기 (혼력 %d · 남은 돌 %d)" % [
+				MINE_ROCK_COST, mine_floors.rocks_left_count(clock.day, _mine_floor)] \
+				if inventory.selected_id() == ItemCatalog.PICKAXE else "곡괭이가 있어야 돌을 깰 수 있다"
+		else:
+			interact_prompt.text = "%s %d층 — 돌을 깨고 사다리를 찾아 내려간다" % [
+				MineFloors.band_name(MineFloors.band_of(_mine_floor)), _mine_floor]
 	elif _can_cast():
 		# ★ [S3-T2 / ADR-0061 결정 9] 낚싯대를 들고 삼도천·황천해 물가를 겨눌 때: LMB = 캐스팅.
 		# ★ [S3-T4] 뒤에 기어 한 줄(미끼 잔량·적용 태클)을 붙인다 — 장전 UI가 없으니 "무엇이 걸려 있나"를
@@ -9989,6 +10277,24 @@ func _try_upgrade_tool(tool_id: String) -> bool:
 
 # ★[S4-T4] 대장간 실내 그레이박스 — 업그레이드대(2×1 모루 대) + 북벽 업화로(붉은 불빛). 혼백관 진열과
 #   같은 결(순수 장식 · 충돌 없음 — 조준 칸 상호작용만). 진짜 아트는 후속 아트 패스.
+# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 그레이박스 — 사다리 두 종만 그린다(돌·암반은 ROCK/WALL 타일이
+#   이미 그린다). 진짜 아트(밴드별 지형 팔레트·사다리·엘리베이터 타일)는 S5-T9/T10 아트 패스.
+#   · 올라가는 사다리(입구) = 밝은 나무 가로장 + 위 방향 표식
+#   · 내려가는 사다리 = 어두운 구덩이 + 나무 가로장(확정 배치 1 + 돌을 깨 열린 것들)
+func _draw_mine_floor() -> void:
+	if _mine_layout.is_empty():
+		return
+	for t: Vector2i in mine_floors.ladders(clock.day, _mine_floor):
+		var p := Vector2(t.x * TILE, t.y * TILE)
+		draw_rect(Rect2(p + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.06, 0.05, 0.06))  # 구덩이(내려감)
+		for i in 3:
+			draw_rect(Rect2(p + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.52, 0.38, 0.22))
+	var e: Vector2i = _mine_layout["entrance"]
+	var ep := Vector2(e.x * TILE, e.y * TILE)
+	draw_rect(Rect2(ep + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.30, 0.26, 0.22))     # 올라가는 사다리 벽감
+	for i in 3:
+		draw_rect(Rect2(ep + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.76, 0.60, 0.36))
+
 func _draw_smithy_room() -> void:
 	if _indoor != "대장간":
 		return
@@ -11702,7 +12008,10 @@ func _draw() -> void:
 			_draw_tappers()          # ★[S4-T6] 성숙목에 박힌 수액 채취기(안식과 같은 렌더 — 구역만 다르다)
 			_draw_woodshop_room()    # ★[S4-T7] 목공방 실내 — 카운터·작업대·원목 더미(그레이박스)
 		RegionCatalog.EOPHWA_MINE:
-			_draw_smithy_room()      # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
+			if _in_mine_floor():
+				_draw_mine_floor()   # ★[S5-T1] 층 그레이박스(사다리 두 종 표식 — 돌은 ROCK 타일이 그린다)
+			else:
+				_draw_smithy_room()  # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관
