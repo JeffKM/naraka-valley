@@ -61,6 +61,48 @@ const LOC_PASTURE := "pasture"    # 방목 중 — 문 아래 고지 방목지(p
 # 세이브 왕복(to_save/load_save)으로 보존한다(문 열어 둔 채 자면 다음 아침도 열림).
 var _doors: Dictionary = {}
 
+# ── ★[S4-T7 / ADR-0062 결정 7 ㉠] B1-b 성장 티어 — 건물별 수용 두수 ─────────────
+# Track B B1-b("성장 티어 = 목공방 후행")가 여기서 열린다. 건물마다 티어 정수를 들고, 티어가
+# 정원을 정한다 — **스타듀 Coop/Barn 4마리 → Big Coop/Big Barn 8마리 비율 1:1 상속**이다.
+#
+# 왜 Ranch가 드는가: 정원은 *가축 도메인*의 규칙이지 목수의 기억이 아니다. Carpenter는 "무엇을
+# 언제 짓는가"만 들고(그 파일 머리말), 완공 순간 main이 여기 `upgrade_building`을 눌러 준다.
+# 그래서 이 파일은 Carpenter를 모르고, Carpenter는 Ranch를 모른다(양쪽 다 main만 안다).
+#
+# ⚠️ 티어 값은 **1부터**다(0이 아님) — 구세이브에 키가 없어도 `tier_of`가 TIER_BASE를 돌려주므로
+#    "구버전 = 기본 티어"가 자동으로 성립한다(빈 dict = 전 건물 기본).
+const TIER_BASE := 1              # 기본(넋둥우리·넋우릿간 — 스타듀 Coop/Barn)
+const TIER_BIG := 2               # 성장(큰 넋둥우리·큰 넋우릿간 — 스타듀 Big Coop/Big Barn)
+const CAP_BASE := 4               # 기본 티어 정원(스타듀 4마리)
+const CAP_BIG := 8                # 성장 티어 정원(스타듀 8마리 — 정확히 2배)
+
+# 건물 id → 티어 정수. 키 없음 = TIER_BASE(구세이브·미승격 건물).
+var _tiers: Dictionary = {}
+
+# 건물의 현재 티어(모르는 건물도 기본 티어로 답한다 — 정원 판정이 예외로 갈라지지 않게).
+func tier_of(building: String) -> int:
+	return int(_tiers.get(building, TIER_BASE))
+
+# 건물의 수용 두수(티어 파생 — 상태가 아니라 규칙이라 별도 저장하지 않는다).
+func capacity_of(building: String) -> int:
+	return CAP_BIG if tier_of(building) >= TIER_BIG else CAP_BASE
+
+# 이 건물에 지금 사는 짐승 수(정원 판정·매대 헤더가 쓴다).
+func occupancy_of(building: String) -> int:
+	return animals_in(building).size()
+
+# 정원이 찼는가(꽉 찬 건물엔 새 짐승을 못 들인다 — add_animal 게이트).
+func is_full(building: String) -> bool:
+	return occupancy_of(building) >= capacity_of(building)
+
+# 건물을 성장 티어로 승격한다(멱등 — 이미 큰 건물이면 false). 완공 배선은 main 소관.
+func upgrade_building(building: String) -> bool:
+	if building == "" or tier_of(building) >= TIER_BIG:
+		return false
+	_tiers[building] = TIER_BIG
+	changed.emit()
+	return true
+
 # ── B1-a.3 여물광(Silo) 건초 저장고 ────────────────────────────────────────────
 # 낫으로 벤 사료풀이 여기 쌓이고(store_hay), 실내 여물통 급여가 여기서 뽑아 쓴다(feed_from_silo_in).
 # 용량 240단(SDV silo). 가득 차면 벤 건초는 소멸(Q7 "초과 시 소멸"). 기본 티어(B1-a)는 여물광이 고지에
@@ -129,6 +171,10 @@ var _animals: Dictionary = {}
 # (스타터 성체·구버전 백필). 산물은 성체만 낸다(advance_day 게이트).
 func add_animal(tile: Vector2i, species: String, home_building: String = "", age: int = 0) -> bool:
 	if not AnimalCatalog.has(species) or _animals.has(tile):
+		return false
+	# ★[S4-T7] 정원 게이트 — 소속 건물이 지정된 짐승만 본다(""=미소속 단위 테스트·구버전은 무제한).
+	#   이게 "큰 넋둥우리를 짓는 이유"의 전부다: 티어를 올리기 전엔 5마리째가 안 들어온다.
+	if home_building != "" and is_full(home_building):
 		return false
 	_animals[tile] = {
 		"species": species,
@@ -418,8 +464,9 @@ func advance_day() -> void:
 # _animals는 Vector2i 키 + String/int/bool 값 순수 Dictionary라 var_to_str가 그대로 라운드트립한다.
 # 깊은 복사로 넘겨 호출 측이 들고 있어도 상태가 새지 않게 한다.
 func to_save() -> Dictionary:
-	# ★ B1-a.2: 방목 문 · B1-a.3: 여물광 건초 재고도 보존.
-	return {"animals": _animals.duplicate(true), "doors": _doors.duplicate(true), "silo_hay": _silo_hay}
+	# ★ B1-a.2: 방목 문 · B1-a.3: 여물광 건초 재고 · ★[S4-T7] B1-b: 건물 티어(정원)도 보존.
+	return {"animals": _animals.duplicate(true), "doors": _doors.duplicate(true),
+		"silo_hay": _silo_hay, "tiers": _tiers.duplicate(true)}
 
 # 복원: _animals·_doors를 통째로 갈아끼운다. changed로 main이 화면·HUD를 다시 세우게 한다(디커플링).
 # ★ B1-a: home_building이 없는 구버전 세이브는 ""로 백필한다(building_of/animals_in 방어).
@@ -430,6 +477,9 @@ func load_save(data: Dictionary) -> void:
 	var doors: Variant = data.get("doors", {})
 	_doors = doors.duplicate(true) if typeof(doors) == TYPE_DICTIONARY else {}
 	_silo_hay = clampi(int(data.get("silo_hay", 0)), 0, SILO_CAP)   # ★ B1-a.3: 여물광 재고(구버전=0).
+	# ★[S4-T7] B1-b 건물 티어(구버전 = 키 없음 = 전 건물 기본 티어·정원 4 — 하위호환 자동).
+	var tiers: Variant = data.get("tiers", {})
+	_tiers = tiers.duplicate(true) if typeof(tiers) == TYPE_DICTIONARY else {}
 	for tile in _animals.keys():
 		var a: Dictionary = _animals[tile]
 		if not a.has("home_building"):

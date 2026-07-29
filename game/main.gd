@@ -1437,7 +1437,7 @@ const FISHSHOP_IN_TILE := Vector2i(13, 53)      # 실내 문 안쪽(진입 착�
 const FISHSHOP_CAM_RECT := Rect2i(2, 44, 20, 13)  # ★C5 생선가게 방 둘레(외부·다른 방 격리, +20 — y44~ VOID 띠)
 # ── ★ M4.1 / ★ ADR-0018 C6 저승 숲(채집 무대 + 목공방) ──────────────────────────
 # 다섯째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 채집 메카닉은 만들지 않는다(Phase 3) — 나무(TREE)
-# 무대 + 채집지(라벨만) + 목공방(enterable 빈 방)까지. ★ M5.1: 업화 갱도가 지어져 남단 spawn은 갱도
+# 무대 + 채집지(라벨만) + 목공방(★S4-T7에 옹이·건축 서비스가 들어와 빈 방 아님). ★ M5.1: 업화 갱도가 지어져 남단 spawn은 갱도
 # 북단 숲길에서 도착(정규 토폴로지 복원). 동단이 미혹의 숲 워프(M4.2 점등).
 # ★ ADR-0018 C6 — 60×44 코지-와이드 재배치("빽빽한 가장자리 + 안쪽 빈터"). 가장자리 TREE 밴드가 깊은
 #   숲을 둘러싸고(자연 경계 — 강·바다 결), 안쪽 빈터(GROUND)에 채집지 3곳이 흩어진다. 통과형(막다른
@@ -1466,8 +1466,11 @@ const FOREST_TREE_RECTS := [   # 나무(TREE) — 가장자리 밴드(상·하·
 const FOREST_FORAGE_LABEL_TILE := Vector2i(20, 8)   # ★C6 채집지 빈터①(북, 채집 메카닉 Phase 3)
 const FOREST_FORAGE_LABEL_TILE_2 := Vector2i(45, 10) # ★C6 채집지 빈터②(북동)
 const FOREST_FORAGE_LABEL_TILE_3 := Vector2i(42, 34) # ★C6 채집지 빈터③(남)
-# 목공방(enterable 빈 방) — 외관(서편 land·나무 곁)·실내 방(아래 실내 띠). 혼백관·생선가게 결의 데이터 주도 출입.
-# kind="woodshop"이라 _draw 가구 분기에 안 걸려 빈 방(집·농장 업그레이드 서비스, 로빈 대응은 후속).
+# 목공방 — 외관(서편 land·나무 곁)·실내 방(아래 실내 띠). 혼백관·생선가게 결의 데이터 주도 출입.
+# ★[S4-T7 / ADR-0062 결정 7] 옛 "빈 방(로빈 대응은 후속)" 스텁을 **해소**했다: 실내 카운터에
+#   목령 **옹이**(T2 점주)가 상주하고, [F]로 목공방 매대(건축 의뢰 + 가구·자재)를 연다.
+#   kind="woodshop"이라 _draw의 집 가구 분기엔 여전히 안 걸린다 — 실내 그레이박스(카운터·작업대·
+#   원목 더미)는 `_draw_woodshop_room`이 그린다(대장간 `_draw_smithy_room` 동형).
 # ★C6 — outdoor_h 44>26이라 공유 실내 띠(y26~)가 외부(land)와 겹쳐 → 실내 방·문·카메라를 저승 숲 밴드로
 #   +20 평행이동(y46~ — 생선가게 +20·창고 +41 결). 외관은 서편 land(나무 곁)에 유지.
 const WOODSHOP_EXT_RECT := Rect2i(6, 14, 7, 6)   # ★C6 x6..12, y14..19 (서편 land, 좌측 나무 밴드 곁)
@@ -1476,6 +1479,14 @@ const WOODSHOP_RECT := Rect2i(8, 46, 12, 9)     # ★C6 x8..19, y46..54 (실내 
 const WOODSHOP_DOOR := Vector2i(13, 54)         # 실내 목공방 문(닿으면 퇴장) — 아래벽 중앙(+20)
 const WOODSHOP_IN_TILE := Vector2i(13, 53)      # 실내 문 안쪽(진입 착지, +20)
 const WOODSHOP_CAM_RECT := Rect2i(2, 44, 20, 13)  # ★C6 목공방 방 둘레(외부·다른 방 격리, +20 — y44~ VOID 띠)
+# ★[S4-T7] 옹이 자리 = 실내 카운터 **뒤**(방 x8..19·y46..54 중 안쪽 바닥). 카운터 줄(y49)을 사이에
+#   두고 손님(문 13,54에서 올라온다)과 마주 선다 — 생선가게 뱃사공이 매대 앞에 서는 것과 같은 결.
+#   ⚠️ 다른 구역(대장간 SMITHY_RECT)이 좌표를 공유하지만 레코드가 require_indoor="목공방"으로
+#     가드하므로 같은 칸에 닿아도 무반응이다(네오 만물상 가드와 동형).
+const ONGI_TILE := Vector2i(13, 48)               # 카운터 뒤 점주 자리(방 중북부)
+const WOODSHOP_COUNTER_Y := 49                    # 카운터 줄(순수 장식 — 충돌 없음, 대장간 모루 결)
+const WOODSHOP_COUNTER_X0 := 11                   # 카운터 좌단(x11..x16 — 6칸)
+const WOODSHOP_COUNTER_X1 := 16
 # ── ★ M4.2 / ★ ADR-0018 C7 미혹의 숲(특수 채집 무대 + 옥자 집) ──────────────────────
 # 여섯째 실데이터 구역(막다른 깊은 숲). 채집 메카닉은 만들지 않는다(Phase 3) — 더 어둡고 깊은 숲(TREE
 # 밀도↑ + 연못 WATER)·특수 채집지(라벨만)까지. 저승 숲 동단(58,22)에서 서단 spawn(2,22)에 도착(점등).
@@ -1730,6 +1741,10 @@ var tapper: TapperLedger = null
 #   ②큰 장애물 접근(큰 그루터기=명동 / 큰 통나무=유철)을 가른다. 무대는 업화 갱도 대장간의 **무인
 #   업그레이드대**(혼백관 무인 기증대 선례) — 점주(옹이·클린트 대응)는 S5 소관.
 var tool_tier: ToolTier = null
+# ★[S4-T7 / ADR-0062 결정 7 ㉠] 목공방 건축 의뢰 원장(진행 1건 + 완공 이력). 게잡이통·수액 채취기와
+#   같은 RefCounted 순수 원장이고, **지불·완공 실효는 전부 main**이 든다 — 여기(main)가 골드·원목을
+#   차감하고, 완공된 프로젝트 id로 Ranch 정원을 승격시킨다(Carpenter는 지갑·인벤·Ranch를 모른다).
+var carpenter: Carpenter = null
 # ★ [S1-9] 집 꾸미기 상태(집 내부 3레이어 코스메틱 배치 + 해금 세트). F10 저작 도구(layout.json·
 #   _prop_layouts)와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). 플레이어 세이브 델타만 소유하고
 #   layout.json 시드는 안 건드린다(회귀 0). main이 유효 배치 칸을 주입하고 드로우/충돌 훅에서 질의(디커플링).
@@ -2057,6 +2072,8 @@ func _ready() -> void:
 	tapper.changed.connect(queue_redraw) # 설치·수거·회수·일일 진행·복원 시 그레이박스 갱신(게잡이통 결)
 	tool_tier = ToolTier.new()           # ★[S4-T4] 도구 티어 원장(RefCounted — 나무 원장과 같은 결)
 	tool_tier.changed.connect(queue_redraw)   # 티어가 오르면 프롬프트 타수·대장간 안내가 즉시 갱신
+	carpenter = Carpenter.new()          # ★[S4-T7] 목공방 건축 의뢰 원장(RefCounted — 도구 티어와 같은 결)
+	carpenter.changed.connect(queue_redraw)   # 의뢰·완공·복원 시 매대 행·목공방 그레이박스 갱신
 	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
 	home_deco.name = "HomeDeco"
 	add_child(home_deco)
@@ -3419,11 +3436,11 @@ func _deco_input(event: InputEvent) -> void:
 			KEY_BRACKETLEFT:
 				_deco_set = posmod(_deco_set - 1, HomeDecoCatalog.set_ids().size())
 				_deco_item = 0
-				_notice("세트: " + HomeDecoCatalog.set_name(_deco_cur_set()))
+				_notice("세트: " + HomeDecoCatalog.name_of(_deco_cur_set()))
 			KEY_BRACKETRIGHT:
 				_deco_set = posmod(_deco_set + 1, HomeDecoCatalog.set_ids().size())
 				_deco_item = 0
-				_notice("세트: " + HomeDecoCatalog.set_name(_deco_cur_set()))
+				_notice("세트: " + HomeDecoCatalog.name_of(_deco_cur_set()))
 			KEY_COMMA:
 				var n1 := _deco_item_keys().size()
 				if n1 > 0:
@@ -3706,10 +3723,12 @@ func _carve_hwangcheonhae_paths() -> void:
 	_carve_v(FISHSHOP_EXT_DOOR.x, FISHSHOP_EXT_DOOR.y, BEACH_CORRIDOR_Y)  # 생선가게 문(11,25) → 산책로
 
 # ★ M4.1 — 저승 숲(채집 무대 + 목공방). 삼도천·황천해와 같은 스택(외부 land y0~23 + 아래 실내 목공방
-# 방, VOID 격리). 채집 메카닉은 만들지 않는다(Phase 3) — 나무(TREE) 무대·채집지(라벨만)·목공방(enterable
-# 빈 방)까지. 나무 군집(FOREST_TREE_RECTS)을 동선·목공방·워프 칸을 비껴 흩어 숲 정체성을 주고, 빈터
-# (GROUND)와 carve 복도로 모든 워프 칸·목공방 문이 닿는다(flood-fill 무 soft-lock). 목공방은 그레이박스
-# WALL 박스(혼백관·생선가게 결 — _draw 외관 텍스처 없음, _paint_grid가 칠함).
+# 방, VOID 격리). 나무(TREE) 무대·채집지(빈터)·목공방까지 여기서 세운다. 나무 군집(FOREST_TREE_RECTS)을
+# 동선·목공방·워프 칸을 비껴 흩어 숲 정체성을 주고, 빈터(GROUND)와 carve 복도로 모든 워프 칸·목공방
+# 문이 닿는다(flood-fill 무 soft-lock). 목공방 외관은 그레이박스 WALL 박스(혼백관·생선가게 결 —
+# _draw 외관 텍스처 없음, _paint_grid가 칠함).
+# ★[S4-T7] 실내는 더 이상 빈 방이 아니다 — 옹이(T2 점주)가 카운터에 상주하고 `_draw_woodshop_room`이
+#   카운터·작업대·원목 더미를 그린다(건축 의뢰·가구/원목 매대는 그의 [F] 훅).
 func _build_jeoseung_forest() -> void:
 	_grid = []
 	for y in _grid_h:
@@ -3723,7 +3742,7 @@ func _build_jeoseung_forest() -> void:
 		_fill_rect(r, TREE)
 
 	_build_facade(WOODSHOP_EXT_RECT, WOODSHOP_EXT_DOOR)            # 목공방 외관(통과 불가 박스 + 문)
-	_build_room(WOODSHOP_RECT, HOUSE, HOUSE_WALL, WOODSHOP_DOOR)   # 실내 목공방 빈 방(kind=woodshop)
+	_build_room(WOODSHOP_RECT, HOUSE, HOUSE_WALL, WOODSHOP_DOOR)   # 실내 목공방(kind=woodshop — ★S4-T7 옹이 상주)
 	_carve_jeoseung_forest_paths()         # 동선(spawn·워프·목공방 문 — 나무 군집을 덮어 길 보장)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
@@ -6507,6 +6526,17 @@ func _on_day_advanced(day: int) -> void:
 			forage_tap_quality(), forage_tap_cycle_cut())
 		if not sap_ready.is_empty():
 			_notice("수액 채취기 %d개에 수액이 찼다 — 나무에 들러 [F]로 거두자" % sap_ready.size())
+	# ★[S4-T7 / ADR-0062 결정 7 ㉠] 목공방 건축 완공 — 예정일에 닿은 의뢰가 **아침에** 선다(스타듀
+	#   로빈 1:1). 원장은 "다 지어졌다"까지만 알고, 그 실효(Ranch 건물 티어 승격 = 수용 두수 확장)는
+	#   여기서 배선한다 — Carpenter는 Ranch를 모르고 Ranch는 Carpenter를 모른다(양쪽 다 main만 안다).
+	if carpenter != null:
+		var built := carpenter.advance_day(day)
+		if built != "":
+			var bld := Carpenter.building_of(built)
+			if bld != "" and ranch != null:
+				ranch.upgrade_building(bld)
+			_notice("%s 완공 — 이제 %d마리까지 들일 수 있다" % [Carpenter.name_of(built),
+				ranch.capacity_of(bld) if bld != "" and ranch != null else 0])
 	# ★ [S2-T6] 게시판 의뢰 만료 — 기한(일일 2일 / 중기 그 주 끝)이 지난 수락분을 조용히 버린다.
 	#   페널티는 없다(골드·호감도 불변 — ADR-0060 결정 6 "미완료 무페널티"). 알림도 벌칙이 아니라
 	#   "자리가 다시 비었다"는 안내다(ADR-0008 평평≠막힘).
@@ -6611,8 +6641,10 @@ func _build_building_catalog() -> void:
 		"ext_door": FISHSHOP_EXT_DOOR, "out_tile": FISHSHOP_EXT_DOOR + Vector2i(0, 1),
 		"in_tile": FISHSHOP_IN_TILE, "door": FISHSHOP_DOOR, "cam": FISHSHOP_CAM_RECT,
 	}
-	# ★ M4.1 저승 숲 목공방(JEOSEUNG_FOREST 구역 — enterable 빈 방). kind="woodshop"이라 가구 분기 미적용(빈 방).
-	# 집·농장 업그레이드(로빈 대응)는 후속(아이템/업그레이드 시스템 의존), 지금은 들어갔다 나오는 그레이박스 방까지.
+	# ★ M4.1 저승 숲 목공방(JEOSEUNG_FOREST 구역). kind="woodshop"이라 *집 가구* 분기는 미적용.
+	# ★[S4-T7 / ADR-0062 결정 7] 옛 "업그레이드는 후속" 스텁 해소 — 실내에 옹이(T2 점주)가 상주하고
+	#   [F] 매대가 **농장 건물 성장 티어 건축**(큰 넋둥우리·큰 넋우릿간) + 가구 세트·원목 소매를 연다.
+	#   ⚠️ **집 업그레이드 3단계는 여전히 서랍**이다(주방=요리 S6·방=결혼 S8 소비처 미빌드).
 	_buildings["목공방"] = {
 		"region": RegionCatalog.JEOSEUNG_FOREST, "kind": "woodshop",
 		"ext_door": WOODSHOP_EXT_DOOR, "out_tile": WOODSHOP_EXT_DOOR + Vector2i(0, 1),
@@ -6831,6 +6863,7 @@ func _save_game() -> void:
 		"tree_ledger": tree_ledger.to_save(),  # ★[S4-T3] 나무 원장(구역별 좌표·종·단계·타수·그루터기 + 시드 완료 구역)
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
 		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
+		"carpenter": carpenter.to_save(),   # ★[S4-T7] 목공방 건축 의뢰(진행 1건 + 완공 이력 — 정원 승격은 ranch에)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
 		"wallet": wallet.to_save(),
 		"inventory": inventory.to_save(),
@@ -6913,6 +6946,8 @@ func _load_game() -> void:
 		tapper.load_save(data["tapper"])
 	if data.has("tool_tiers"):    # ★[S4-T4] — 키 없는 구세이브는 전 도구 티어 0(기본 도끼 그대로·무막힘)
 		tool_tier.load_save(data["tool_tiers"])
+	if data.has("carpenter"):     # ★[S4-T7] — 키 없는 구세이브는 진행 의뢰 0·완공 0(하위호환)
+		carpenter.load_save(data["carpenter"])
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
 		home_deco.load_save(data["home_deco"])
 	if data.has("wallet"):
@@ -7426,6 +7461,8 @@ func _process(delta: float) -> void:
 			frame.store_items = _store_items()   # ★ [S1R-T12] 매대 그리드 품목 행
 		elif frame.context == InventoryFrame.CTX_FISHSHOP:
 			_refresh_fishshop()                  # ★ [S3-T5] 생선가게 매대·환전 행(구매·환전 즉시 반영)
+		elif frame.context == InventoryFrame.CTX_WOODSHOP:
+			_refresh_woodshop()                  # ★ [S4-T7] 목공방 건축·매대 행(의뢰·해금 즉시 반영)
 		return
 
 	# 건물 외관 문에 닿으면 실내로, 실내 문에 닿으면 밖으로 — 자동 fade 전환(스타듀식 출입).
@@ -8975,6 +9012,8 @@ func _open_frame(ctx: int) -> void:
 		frame.store_items = _store_items()   # ★ [S1R-T12] 첫 그림부터 품목 행이 차 있게
 	elif ctx == InventoryFrame.CTX_FISHSHOP:
 		_refresh_fishshop()                # ★ [S3-T5] 생선가게(기어 매대 + 환전 행)
+	elif ctx == InventoryFrame.CTX_WOODSHOP:
+		_refresh_woodshop()                # ★ [S4-T7] 목공방(건축 의뢰 + 가구·자재 행)
 	frame.open(ctx)
 	hotbar.visible = false
 	player.set_physics_process(false)   # 모달 — 이동 잠금
@@ -9096,6 +9135,15 @@ func _on_frame_buy_seed(crop_id: String, bulk: bool) -> void:
 
 # ★ [S2-T4] 매대 일반 품목 구매(묘목·비료·건초) — 씨앗 구매와 같은 결: 네오 할인가·부분 구매·안내.
 func _on_frame_buy_store_item(buy_id: String, kind: String, bulk: bool) -> void:
+	# ★[S4-T7] 목공방 2종은 "n개 구매"가 아니라 **1회성 행위**다(건축 의뢰 예약 · 세트 해금) —
+	#   수량 루프를 타면 같은 의뢰를 여러 번 걸거나 해금값을 중복 청구한다. 그래서 앞에서 가른다.
+	match kind:
+		"build":
+			_try_order_build(buy_id)
+			return
+		"deco":
+			_try_buy_deco_set(buy_id)
+			return
 	_buy_store_generic_n(buy_id, kind, STORE_BULK if bulk else 1)
 
 # 매대 일반 품목을 점주 할인가로 n개까지 산다(골드 닿는 데까지 — 부분 구매 허용, _buy_seed_store_n 결).
@@ -9151,6 +9199,16 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 			label = ItemCatalog.name_of(ItemCatalog.CRAB_POT)
 			hearts = _boatman_hearts()
 			shop = "생선가게"
+		"wood":
+			# ★[S4-T7] 원목 소매 = 목공방 전용(만물상·생선가게 취급 0 — 서비스 분산). 스택 자재라
+			#   대량 구매를 그대로 받는다. 소매가는 판매가의 2배(잠정) — 사는 게 늘 손해라야 벌목이
+			#   산다. 그래도 *막히지는* 않는 우회로다(ADR-0008 평평≠막힘).
+			if buy_id != ItemCatalog.WOOD:
+				return
+			base = ItemCatalog.price_of(ItemCatalog.WOOD) * WOOD_RETAIL_MULT
+			label = ItemCatalog.name_of(ItemCatalog.WOOD)
+			hearts = _ongi_hearts()
+			shop = "목공방"
 	if base <= 0 or n <= 0:
 		return
 	var unit := StoreDiscount.price(base, hearts)
@@ -9169,6 +9227,8 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 				inventory.add_item(buy_id, 1)
 			"pot":
 				inventory.add_item(ItemCatalog.CRAB_POT, 1)   # ★[S3-T7] 설치물 스택 적재
+			"wood":
+				inventory.add_item(ItemCatalog.WOOD, 1)       # ★[S4-T7] 원목 소매 스택 적재
 		bought += 1
 	if bought == 0:
 		_notice("골드 부족(%d 필요)" % unit)
@@ -9330,6 +9390,34 @@ func _draw_smithy_room() -> void:
 	draw_rect(Rect2(forge, Vector2(TILE * 1.5, TILE)), Color(0.26, 0.24, 0.24))
 	draw_rect(Rect2(forge + Vector2(6, 10), Vector2(TILE * 1.5 - 12, TILE - 16)), Color(0.72, 0.28, 0.14))
 	draw_rect(Rect2(forge + Vector2(10, 14), Vector2(TILE * 1.5 - 20, TILE - 24)), Color(0.95, 0.66, 0.24))
+
+# ★[S4-T7 / ADR-0062 결정 7] 목공방 실내 그레이박스 — 카운터(옹이 앞 응대 줄) + 서벽 작업대 +
+#   동편 원목 더미. 대장간 `_draw_smithy_room`과 같은 결(순수 장식 · 충돌 없음 — 상호작용은 옹이
+#   레코드의 [F] 훅 하나뿐이다). 진짜 아트는 S4-T9/T10 아트 패스.
+#   ★진행 중 의뢰가 있으면 작업대 위에 톱질하던 목재 한 장이 얹힌다 — 원장 상태가 방에 보인다
+#     (게시판이 수락 중을 붉은 도장으로 보이는 것과 같은 결. 순수 파생 — 좌표 상태 0).
+func _draw_woodshop_room() -> void:
+	if _indoor != "목공방":
+		return
+	# 카운터 — 응대 줄(x11..16, y49) 통짜 판 + 상판 하이라이트(NW 광원).
+	var cx := float(WOODSHOP_COUNTER_X0) * TILE
+	var cy := float(WOODSHOP_COUNTER_Y) * TILE
+	var cw := float(WOODSHOP_COUNTER_X1 - WOODSHOP_COUNTER_X0 + 1) * TILE
+	draw_rect(Rect2(cx, cy + 8.0, cw, TILE - 12.0), Color(0.40, 0.29, 0.18))
+	draw_rect(Rect2(cx, cy + 8.0, cw, 5.0), Color(0.54, 0.40, 0.25))
+	# 서벽 작업대 — 톱질대(다리 둘 + 상판). 방 서편 안쪽(x9..10, y47).
+	var wb := Vector2(float(WOODSHOP_RECT.position.x + 1) * TILE, float(WOODSHOP_RECT.position.y + 1) * TILE)
+	draw_rect(Rect2(wb + Vector2(0.0, 10.0), Vector2(TILE * 2.0, 6.0)), Color(0.46, 0.34, 0.21))
+	draw_rect(Rect2(wb + Vector2(4.0, 16.0), Vector2(4.0, TILE - 18.0)), Color(0.33, 0.24, 0.15))
+	draw_rect(Rect2(wb + Vector2(TILE * 2.0 - 8.0, 16.0), Vector2(4.0, TILE - 18.0)), Color(0.33, 0.24, 0.15))
+	if carpenter != null and carpenter.is_active():
+		draw_rect(Rect2(wb + Vector2(6.0, 4.0), Vector2(TILE * 2.0 - 12.0, 6.0)), Color(0.66, 0.52, 0.32))
+	# 동편 원목 더미 — 쌓인 통나무 3개(마구리 원). 방 동편 안쪽(x17..18, y47).
+	var lg := Vector2(float(WOODSHOP_RECT.end.x - 3) * TILE, float(WOODSHOP_RECT.position.y + 1) * TILE)
+	for i in 3:
+		var c := lg + Vector2(8.0 + float(i % 2) * 13.0, 20.0 - float(i / 2) * 11.0)
+		draw_circle(c, 6.0, Color(0.44, 0.32, 0.20))
+		draw_circle(c, 3.0, Color(0.60, 0.46, 0.29))
 
 # ★ [S2-T6] 만물상 앞 게시판 그레이박스 — 두 기둥 + 나무 판 + 걸린 의뢰 쪽지(게시 수만큼). 수락 중이면
 #   쪽지 하나가 붉은 도장으로 바뀐다(진행 중 표식). 좌표 상태 없음 — 전부 원장·day 파생이다.
@@ -9620,6 +9708,139 @@ func _trade_items() -> Array:
 			"count": inventory.count_at(i),
 		})
 	return rows
+
+# ── ★ [S4-T7 / ADR-0062 결정 7] 목공방 매대(옹이) ─────────────────────────────
+# 생선가게 `_refresh_fishshop`과 대칭 — 프레임은 무상태고 main이 매 프레임 행을 파생해 넣는다.
+func _refresh_woodshop() -> void:
+	frame.store_text = _woodshop_text()
+	frame.store_items = _woodshop_items()
+	frame.build_items = _build_rows()
+
+# 목공방 헤더 2줄(제목 + 골드·옹이 할인 / 진행 중 의뢰·원목 보유). 만물상·생선가게 헤더와 대칭이되
+# **옹이 하트**를 보고, 둘째 줄에 이 가게에서만 의미 있는 두 값(진행 의뢰·원목 재고)을 얹는다.
+func _woodshop_text() -> String:
+	var second := "골드 %d   ·   원목 %d   ·   %s" % [wallet.gold, inventory.count_of(ItemCatalog.WOOD),
+		StoreDiscount.summary_for("옹이", "목공방 매대", _ongi_hearts())]
+	var busy := carpenter.summary(clock.day) if carpenter != null else ""
+	if busy != "":
+		second = "짓는 중: %s   ·   %s" % [busy, second]
+	else:
+		# 놀고 있을 때는 가게의 규칙을 먼저 말한다 — 동시 1건·공기는 값의 일부라 사기 전에 보여야 한다.
+		second = "한 번에 한 채 · 공기 %d일   ·   %s" % [
+			Carpenter.build_days(Carpenter.PROJ_BIG_COOP), second]
+	return "\n".join(["── 옹이의 목공방 ──", second])
+
+# 건축 의뢰 행 — 카탈로그 전량(지금은 성장 티어 2건). 값은 옹이 ♡ 할인가(골드만 — 원목은 자재라
+# 할인 대상이 아니다, Carpenter.wood_cost 주석). 완공분·진행 중엔 잠금 행(구매 히트 미등록).
+# ★[결정 7 서랍] 집 업그레이드 3단계는 카탈로그에 없어서 여기에도 안 뜬다(소스 없는 콘텐츠 방지).
+func _build_rows() -> Array:
+	if carpenter == null:
+		return []
+	var hearts := _ongi_hearts()
+	var rows: Array = []
+	for id in Carpenter.ids():
+		var pid := String(id)
+		var gold := Carpenter.gold_cost(pid)
+		var wood := Carpenter.wood_cost(pid)
+		var row := {
+			"kind": "build", "buy_id": pid, "icon_id": ItemCatalog.WOOD,
+			# 공기(工期)는 이름에 안 넣는다 — 넣으면 행이 길어져 가격·상태 칸과 겹친다(육안 덤프 실측).
+			#   대신 헤더가 상시 안내하고(_woodshop_text), 의뢰 직후 알림이 정확한 날짜를 다시 말한다.
+			"name": "%s (원목 %d)" % [Carpenter.name_of(pid), wood],
+			"price": StoreDiscount.price(gold, hearts), "base": gold,
+		}
+		if carpenter.is_done(pid):
+			row["locked"] = true
+			row["locked_text"] = "완공"
+		elif carpenter.is_active():
+			row["locked"] = true
+			# 진행 중이면 **다른 프로젝트도** 잠긴다(동시 1건 — 스타듀 로빈 1:1).
+			row["locked_text"] = "짓는 중" if carpenter.active_id() == pid else "대기"
+		rows.append(row)
+	return rows
+
+# 가구·자재 탭 품목 행 — 판매 가구 세트(해금 구매) + 원목 소매 1행.
+# ★[CONTEXT 집 꾸미기] "제작(재료) 게이트는 안 둔다" — 세트는 **골드 단독**이고 재료 요구가 0이다.
+# ★원목 소매 = 스타듀 로빈 목재 판매 결. 벌목을 안 해도 건축·제작 자재가 막히지 않는 우회로다
+#   ("평평≠막힘", ADR-0008) — 대신 판매가(5냥)의 2배라 벌목이 늘 유리하다(잠정 — owner 큐).
+const WOOD_RETAIL_MULT := 2   # 원목 소매가 = 기준 판매가 × 2(잠정)
+
+func _woodshop_items() -> Array:
+	var hearts := _ongi_hearts()
+	var rows: Array = []
+	for sid in HomeDecoCatalog.purchasable_ids():
+		var set_id := String(sid)
+		var base := HomeDecoCatalog.price_of(set_id)
+		# 아이콘 대신 세트 대표색(FURNITURE 첫 아이템) 한 칸 — 세트 아트는 S4-T9/T10.
+		var pal: Array = HomeDecoCatalog.items_of_layer(set_id, HomeDecoCatalog.L_FURNITURE)
+		var row := {
+			"kind": "deco", "buy_id": set_id, "icon_id": "",
+			"swatch": HomeDecoCatalog.color_of(set_id, String(pal[0])) if not pal.is_empty() else Color(0.5, 0.5, 0.5),
+			"name": "%s 가구 세트" % HomeDecoCatalog.name_of(set_id),
+			"price": StoreDiscount.price(base, hearts), "base": base,
+		}
+		if home_deco != null and home_deco.is_unlocked(set_id):
+			row["locked"] = true
+			row["locked_text"] = "해금됨"
+		rows.append(row)
+	var wood_base := ItemCatalog.price_of(ItemCatalog.WOOD) * WOOD_RETAIL_MULT
+	rows.append({
+		"kind": "wood", "buy_id": ItemCatalog.WOOD, "icon_id": ItemCatalog.WOOD,
+		"name": ItemCatalog.name_of(ItemCatalog.WOOD),
+		"price": StoreDiscount.price(wood_base, hearts), "base": wood_base,
+		"owned": inventory.count_of(ItemCatalog.WOOD),
+	})
+	return rows
+
+# ★[S4-T7] 건축 의뢰 — 골드 + 원목을 **즉시 전액** 치르고 N일 뒤 아침 완공을 예약한다(스타듀 로빈).
+# 순서가 중요하다: 검사 → 골드 차감 → 원목 차감 → 원장 예약. 원장은 지갑·인벤을 모르므로(carpenter.gd
+# 머리말) 여기가 유일한 결제 지점이고, 어느 한쪽이 모자라면 **아무것도 소모하지 않는다**(부분 결제 없음).
+func _try_order_build(project_id: String) -> bool:
+	if carpenter == null or not Carpenter.has_project(project_id):
+		return false
+	if carpenter.is_done(project_id):
+		_notice("%s — 이미 지었다" % Carpenter.name_of(project_id))
+		return false
+	if carpenter.is_active():
+		_notice("옹이는 한 번에 한 채만 짓는다 — %s" % carpenter.summary(clock.day))
+		return false
+	var gold := StoreDiscount.price(Carpenter.gold_cost(project_id), _ongi_hearts())
+	var wood := Carpenter.wood_cost(project_id)
+	var have := inventory.count_of(ItemCatalog.WOOD)
+	if wallet.gold < gold:
+		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [Carpenter.name_of(project_id), gold, wallet.gold])
+		return false
+	if have < wood:
+		_notice("원목이 모자라다 — %d개 필요 (보유 %d개)" % [wood, have])
+		return false
+	if not wallet.spend(gold):
+		return false                       # 방어(위 검사와 이중) — 실패해도 원목은 아직 안 건드렸다
+	inventory.remove_item(ItemCatalog.WOOD, wood)
+	carpenter.order(project_id, clock.day)
+	audio.sfx("ui")
+	_notice("%s 의뢰 — %d냥·원목 %d 지불, %d일 뒤 아침 완공" % [Carpenter.name_of(project_id),
+		gold, wood, Carpenter.build_days(project_id)])
+	return true
+
+# ★[S4-T7] 가구 테마세트 해금 구매 — 골드만 받고 세트를 연다(코스메틱, 재료 게이트 0).
+# 해금은 1회성이라 수량 개념이 없다(Shift 대량 무의미 — 프레임이 같은 신호를 태워도 여기서 1회).
+func _try_buy_deco_set(set_id: String) -> bool:
+	if home_deco == null or not HomeDecoCatalog.has_set(set_id):
+		return false
+	var base := HomeDecoCatalog.price_of(set_id)
+	if base <= 0:
+		return false                       # 비매(스타터 세트 — 매대에 안 뜨지만 이중 방어)
+	if home_deco.is_unlocked(set_id):
+		_notice("%s 세트는 이미 해금했다" % HomeDecoCatalog.name_of(set_id))
+		return false
+	var price := StoreDiscount.price(base, _ongi_hearts())
+	if not wallet.spend(price):
+		_notice("냥이 모자라다 — %s 세트 %d냥 (보유 %d냥)" % [HomeDecoCatalog.name_of(set_id), price, wallet.gold])
+		return false
+	home_deco.unlock(set_id)
+	audio.sfx("ui")
+	_notice("%s 가구 세트 해금 −%d냥 — 집에서 [F10] 꾸미기로 놓을 수 있다" % [HomeDecoCatalog.name_of(set_id), price])
+	return true
 
 # ★ [S1R-T12] 인벤 정보패널 날짜 문자열("<절기> N일" — clock_hud와 같은 일차 파생, 요일 없음).
 func _inv_date_string() -> String:
@@ -9961,6 +10182,52 @@ func _setup_residents() -> void:
 	# ★잠정(owner 큐) — 어물·건어물 등 뱃사공 연고 아이템이 카탈로그에 생기면 재검토.
 	# ⚠️ Affinity 노드가 `_register_resident` 안에서 태어나므로 선호는 **등록 뒤에** 물린다(모찌 동형).
 	r_boatman.affinity.preferred_crop = CropCatalog.BULSAGWA
+
+	# ── ★ [S4-T7 / ADR-0062 결정 7 ㉢] 옹이 — **저승 숲 목공방 점주(T2 · 목령)**.
+	#    뱃사공과 **완전 동형**이다(선례 1:1): 점주 레이어(shop_key = 목공방 매대 · effect_fn = ♡ 할인)와
+	#    관계 트랙(affinity = 대화·선물·하트)이 서로를 게이팅하지 않는다([ADR-0060] 결정 8).
+	#    ★ADR-0008 관계-중립 불변: 옹이 ♡은 *가게 정책 할인*뿐이다 — **공기(工期)·원목 요구량엔 보정 0**
+	#      (건축이 관계로 빨라지면 관계가 활동 곱셈기가 된다. 그건 메인 4인 독점이다).
+	#    ★네오·뱃사공 할인과 **완전 독립**: 같은 공식(StoreDiscount −6%/♡)을 각자 자기 하트로 먹는다.
+	#    ★main.tscn 무수정 — script_path/needs_affinity로 노드·관계 트랙을 프레임워크가 낳는다.
+	var r_ongi := Resident.new()
+	r_ongi.id = "ongi"
+	r_ongi.display_name = "옹이"          # ★호칭 그대로(본명·설정은 서랍, owner 큐 — ongi.gd 주석)
+	r_ongi.script_path = "res://ongi.gd"
+	r_ongi.needs_affinity = true
+	r_ongi.save_key = "ongi_affinity"     # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_ongi.can_gift = true                # T2 사귐 채널(선물)
+	r_ongi.gift_target_ko = "옹이"
+	# 초상화 없음 — 스프라이트·도트 초상화는 S4-T9/T10 아트 패스(ADR-0062 결정 10 ㉥). 그때까진
+	# 컨텍스트 팝업이 이름·관계 줄만 띄운다(네오가 오래 그랬던 상태 — 대사·코드 무개정으로 붙는다).
+	r_ongi.portrait_stem = ""
+	# ★ 자리 = 목공방 **실내 카운터 뒤**(상시 영업 — 네오·뱃사공 선례 동형·"평평≠막힘" QoL).
+	# ⚠️ 네오와 달리 스케줄 region을 **반드시 채운다**: 네오 자리(27,76)는 HOME 실내 띠라 어느
+	#   구역에서도 카메라 밖이지만, 목공방 실내(y46..54)는 **HOME 외부(80×65)와 y가 겹친다** —
+	#   region을 비우면 옹이가 안식 농원 마당 한복판에 서 보인다. region을 박으면 저승 숲에
+	#   있을 때만 visible이고(그때도 야외 카메라는 y<44라 화면 밖), require_visible이 그 가시성을
+	#   상호작용 게이트로도 쓴다. require_indoor가 방까지 좁혀 이중으로 잠근다.
+	r_ongi.schedule = [{"from_min": 0, "tile": ONGI_TILE, "region": RegionCatalog.JEOSEUNG_FOREST}]
+	r_ongi.require_visible = true
+	r_ongi.require_indoor = "목공방"
+	r_ongi.prompt_extra = func() -> String: return "   [F] 목공방"
+	r_ongi.shop_key = func() -> bool:
+		_open_frame(InventoryFrame.CTX_WOODSHOP)
+		return true
+	r_ongi.effect_fn = func() -> String:
+		return StoreDiscount.summary_for("옹이", "목공방 매대", _ongi_hearts())
+	_register_resident(r_ongi)
+	# ★선호 선물 = **없음**(기본값 유지 — 잠정, owner 큐). 근거: 실존 작물 5종이 이미 미호(영혼 호박)·
+	#   멜(피안화)·바나(혼령초)·모찌(황천포도)·뱃사공(불사과)에 전부 배정돼 남은 작물이 0이다. 여기서
+	#   중복 배정하면 "선물 경제 분산"이 깨지므로, 옹이는 일반 선물(GIFT_POINTS)만 받는 상태로 연다
+	#   (선물 채널 자체는 열려 있어 막힘 0 — ADR-0008 평평≠막힘). ★수액·원목 같은 *비-작물* 선물이
+	#   선물 채널에 편입되면(현재 선물은 수확물 전용) 옹이 선호는 명단풍꿀 결이 자연스럽다.
+
+# 옹이 하트(목공방 매대 할인의 유일한 입력). 레코드가 없거나 관계 트랙이 없으면 0 = 정가(방어).
+# ★네오·뱃사공 하트와 **서로 참조 0** — 세 가게 할인이 완전히 독립임을 이 조회로 못 박는다.
+func _ongi_hearts() -> int:
+	var r := _resident("ongi")
+	return r.affinity.hearts() if r != null and r.affinity != null else 0
 
 # 뱃사공 하트(생선가게 할인의 유일한 입력). 레코드가 없거나 관계 트랙이 없으면 0 = 정가(방어).
 # ★네오 하트와 **서로 참조 0** — 두 가게 할인이 완전히 독립임을 이 조회 하나로 못 박는다.
@@ -10804,6 +11071,7 @@ func _draw() -> void:
 			_draw_forage_spawns()    # ★[S4-T1] 빈터에 돋은 채집물(종별 색점 그레이박스 — 아이콘 아트는 S4-T10)
 			_draw_tree_ledger()      # ★[S4-T3] 원장 나무 중 미성숙·그루터기(성숙목은 TREE 타일이 그린다)
 			_draw_tappers()          # ★[S4-T6] 성숙목에 박힌 수액 채취기(안식과 같은 렌더 — 구역만 다르다)
+			_draw_woodshop_room()    # ★[S4-T7] 목공방 실내 — 카운터·작업대·원목 더미(그레이박스)
 		RegionCatalog.EOPHWA_MINE:
 			_draw_smithy_room()      # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
 		RegionCatalog.NARU_VILLAGE:

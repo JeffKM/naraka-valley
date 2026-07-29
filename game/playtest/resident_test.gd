@@ -100,9 +100,9 @@ func _run_checks() -> void:
 		ids.append(res.id)
 	# ★ [S2-T8] 모찌가 여섯째로 붙었다(레코드 1건 — main.tscn 무수정). 앞 5인의 **순서는 불변**이라
 	#   facing 판정 순서·관계 탭 순서가 그대로다(신규는 뒤에만 붙는다).
-	_check("③a 주민 7인 등록(★T8 모찌 · ★S3-T5 뱃사공 추가)", m._residents.size() == 7)
-	_check("③b 7인 = 미호·멜·바나·네오·옥자·모찌·뱃사공",
-		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman"])
+	_check("③a 주민 8인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 추가)", m._residents.size() == 8)
+	_check("③b 8인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이",
+		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman", "ongi"])
 	_check("③c id 조회", m._resident("mel") != null and m._resident("mel").display_name == "멜")
 	_check("③d 이름 조회", m._resident_named("바나") != null and m._resident_named("바나").id == "bana")
 	_check("③e 없는 id/이름 = null", m._resident("없음") == null and m._resident_named("없음") == null)
@@ -229,12 +229,13 @@ func _run_checks() -> void:
 	var names := []
 	for row in rows:
 		names.append(String(row["name"]))
-	# ★[S3-T5] 뱃사공(생선가게 점주)이 다섯째로 붙는다 — 관계 트랙 + 효과 줄(♡ 할인)을 둘 다 가진
-	#   주민만 뜨는 규칙 그대로다(옥자=관계 트랙 없음·모찌=효과 줄 없음이라 여전히 제외).
-	_check("⑧a 관계 트랙+효과 줄 보유 5인만(옥자·모찌 제외)",
-		names == ["미호", "멜", "바나", "네오", "뱃사공"])
+	# ★[S3-T5] 뱃사공(생선가게 점주)이 다섯째로, ★[S4-T7] 옹이(목공방 점주)가 여섯째로 붙는다 —
+	#   관계 트랙 + 효과 줄(♡ 할인)을 둘 다 가진 주민만 뜨는 규칙 그대로다(옥자=관계 트랙 없음·
+	#   모찌=효과 줄 없음이라 여전히 제외).
+	_check("⑧a 관계 트랙+효과 줄 보유 6인만(옥자·모찌 제외)",
+		names == ["미호", "멜", "바나", "네오", "뱃사공", "옹이"])
 	_check("⑧b 곱셈기 효과 줄이 채워진다",
-		rows.size() == 5 and String(rows[0]["effect"]) != "" and String(rows[4]["effect"]) != "")
+		rows.size() == 6 and String(rows[0]["effect"]) != "" and String(rows[5]["effect"]) != "")
 
 	# ── ⑨ 세이브 왕복: 4인 호감도가 옛 키로 저장·복원된다 ──
 	print("── ⑨ 세이브 왕복 ──")
@@ -401,8 +402,8 @@ func _run_checks() -> void:
 		and m2.bana_affinity.preferred_crop == CropCatalog.HONRYEONGCHO)
 
 	# ★ 기존 5인 거동 불변 — 신규 주민 등록이 앞사람 자리·하트·관계 탭을 건드리지 않는다.
-	_check("⑪J 관계 탭은 곱셈기 보유 주민만(모찌는 곱셈기 없어 미표시 · ★S3-T5 뱃사공 포함 5행)",
-		m2._heart_rows().size() == 5)
+	_check("⑪J 관계 탭은 곱셈기 보유 주민만(모찌는 곱셈기 없어 미표시 · ★S3-T5 뱃사공 · ★S4-T7 옹이 포함 6행)",
+		m2._heart_rows().size() == 6)
 	_check("⑪K 기존 주민 자리 불변",
 		m2._resident("mel").tile == m2.MEL_TILE and m2._resident("neo").tile == m2.NEO_TILE)
 	_check("⑪L 기존 4인 호감도 불변(⑨ 복원값 그대로)",
