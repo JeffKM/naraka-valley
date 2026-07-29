@@ -40,6 +40,13 @@ const DIM_SALVAGE_DOUBLE := "salvage_double"   # 수량: 인양물 동반 롤 �
 const DIM_TRAP_SAVE := "trap_save"             # 효율: 게잡이통 자원/미끼 소모↓(0..1 비율) ★S3-T7 소비
 const DIM_TRAP_NO_JUNK := "trap_no_junk"       # 품질: 게잡이통에 잡동사니 안 걸림(flag=1) ★S3-T7 소비
 const DIM_TRAP_NO_BAIT := "trap_no_bait"       # 편의: 게잡이통 미끼 불필요(flag=1) ★S3-T7 소비
+# ── ★[S5-T2 / ADR-0063 결정 9] 채광 퍼크 차원 2종 — **이름만 예약**한다 ─────────
+# 아래 MINING 트리의 `perks`는 여전히 비어 있다(값 인코딩 = S5-T8 소관·이 태스크 스코프 밖).
+# 그럼에도 차원 이름을 먼저 잠그는 이유: T2가 만드는 드랍 경로(main._award_mine_drop →
+# MiningSkill.resolve_drop)가 **지금 이 두 값을 인자로 받게** 설계돼 있어, T8은 트리의 perks
+# 배열만 채우면 배선 손질 없이 효과가 실효된다(ForageSkill 미배선 퍼크 3종과 같은 자리).
+const DIM_ORE_BONUS := "ore_bonus"             # 수량: 광맥당 광석 +N(광부)
+const DIM_GEM_PAIR := "gem_pair"               # 수량: 보석이 쌍으로 나올 확률(지질사)
 
 # ── 트리 데이터: 스킬 → [전문직...] ────────────────────────────────────────────────
 # profession = {id, tier(5/10), requires(tier10만=부모 lvl5 id / tier5=""), name, desc, perks:[{dim,value}]}

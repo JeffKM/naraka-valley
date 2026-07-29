@@ -133,6 +133,54 @@ const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 
 	JEOSEUNG_IKKI: {"name_ko": "저승 이끼", "price": 8},
 }
 
+# ── ★[S5-T2 / ADR-0063 결정 2] 광물 로스터 — 금속 4티어·혼탄·돌·보석 4+1·지오드 2 ────
+# 갱도 광맥(MineFloors 노드)을 곡괭이로 부숴 얻는 자재군. **전부 품질 무차원 CAT_MATERIAL**이다
+# — 품질은 *줍기*(채집 레벨)와 *릴 격투*(퍼펙트)의 축이지 광맥의 축이 아니다(원목·수액과 같은
+# 판단). ADR-0052 보석사 퍼크가 말하는 "보석 등급"은 판매가가 아니라 **별 축**이라 S5-T8 인코딩
+# 시점에 재론한다(지금 품질 등급을 실으면 그 결정이 미리 굳어 버린다).
+# ★ 왜 MATERIALS에 합치지 않고 별 dict인가: 이 로스터는 **제련(S5-T3)·지오드 개봉·전문직 퍼크가
+#   종별로 순회할 데이터**다(광석 → 주괴 매핑, 보석 등급, 알돌 개봉 표). 개간 드랍·벌목 산출이
+#   섞인 MATERIALS 안에 두면 "무엇이 광물인가"를 매번 하드코딩 목록으로 다시 세워야 한다
+#   (POT_GOODS·SAP_GOODS를 FORAGEABLES에서 가른 것과 같은 판단).
+# ★ 가격 밴드(*전부 잠정* — owner 큐): 스타듀 copper 5 / iron 10 / gold 25 / iridium 100 · coal 15 ·
+#   stone 2 · quartz~diamond · geode 50/150을 엽전 스케일에 1:1로 얹었다(광물은 제련 사슬의 입력이라
+#   원가 비율이 흔들리면 주괴·도구 업그레이드 곡선이 통째로 흔들린다 — 스타듀 비율 보존이 안전).
+# ★ 명명 전부 잠정(ADR-0063 결정 2가 "상위 2티어·보석·지오드 명명 전부 잠정"으로 owner 큐 적재).
+const ORE_MYEONGDONG := "ore_myeongdong"            # 명동(冥銅) 광석 — 구리 대응(전층)
+const ORE_YUCHEOL := "ore_yucheol"                  # 유철(幽鐵) 광석 — 철 대응(21층+)
+const ORE_HWANGCHEONGEUM := "ore_hwangcheongeum"    # 황천금(黃泉金) 광석 — 금 대응(41층+)
+# ★ 나락철은 **아이템 등록만**이다 — 갱도 미출현·나락 전용 깊이 비례 산출(ADR-0063 결정 2·7).
+#   노드 테이블(MineFloors.NODE_TABLE)에 없고, 출현·드랍 배선은 S5-T7 나락 소관이다.
+const ORE_NARAKCHEOL := "ore_narakcheol"            # 나락철(奈落鐵) 광석 — 이리듐 대응(나락 전용)
+const HONTAN := "hontan"                            # 혼탄(魂炭) — 석탄 대응(제련 연료)
+const STONE := "stone"                              # 돌 — 범용 자재(계단·업화로 재료)
+# 보석 4 + 초희귀 1(ADR-0063 결정 2 "보석 4+1").
+const GEM_NEOKSUJEONG := "gem_neoksujeong"          # 넋수정 — 석영 결(전층)
+const GEM_MYEONGOK := "gem_myeongok"                # 명옥(冥玉) — 21층+
+const GEM_YEOMJUSEOK := "gem_yeomjuseok"            # 염주석 — 41층+
+const GEM_MYEONGBU_GEUMGANG := "gem_myeongbu_geumgang"  # 명부금강 — 다이아 대응(31층+ 희귀 노드)
+# ★ 오색혼옥도 **등록만**이다 — 프리즈마틱 대응 초희귀 드랍이라 일반 노드 스캐터에 안 들어간다
+#   (소비처·획득 경로는 후속 — 혼백관 전시 후보, ADR-0063 결정 2).
+const GEM_OSAEK_HONOK := "gem_osaek_honok"          # 오색혼옥 — 프리즈마틱 대응(초희귀)
+# 지오드 2종 — 개봉(대장간 서비스 개당 25냥)은 S5-T3 소관. 지금은 드랍·소지·판매만 산다.
+const GEODE_NEOKAL := "geode_neokal"                # 넋알돌(1~40층)
+const GEODE_EOPHWA := "geode_eophwa"                # 업화알돌(41층+·나락)
+const MINERALS := {                      # 광물 id → {name_ko, price(품질 무차원 고정가)}
+	ORE_MYEONGDONG: {"name_ko": "명동 광석", "price": 5},
+	ORE_YUCHEOL: {"name_ko": "유철 광석", "price": 10},
+	ORE_HWANGCHEONGEUM: {"name_ko": "황천금 광석", "price": 25},
+	ORE_NARAKCHEOL: {"name_ko": "나락철 광석", "price": 100},
+	HONTAN: {"name_ko": "혼탄", "price": 15},
+	STONE: {"name_ko": "돌", "price": 2},
+	GEM_NEOKSUJEONG: {"name_ko": "넋수정", "price": 100},
+	GEM_MYEONGOK: {"name_ko": "명옥", "price": 200},
+	GEM_YEOMJUSEOK: {"name_ko": "염주석", "price": 250},
+	GEM_MYEONGBU_GEUMGANG: {"name_ko": "명부금강", "price": 750},
+	GEM_OSAEK_HONOK: {"name_ko": "오색혼옥", "price": 2000},
+	GEODE_NEOKAL: {"name_ko": "넋알돌", "price": 50},
+	GEODE_EOPHWA: {"name_ko": "업화알돌", "price": 150},
+}
+
 # ── ★[S2-T5 / ADR-0060 결정 5] 유품(relic) — 혼백관 기증 수집물 ─────────────────────
 # 망자가 이승에 남긴 물건. 안식 괭이질 저확률 발굴(Museum.relic_roll — 스타듀 Artifact 대응)로 얻고
 # 혼백관에 기증한다(종당 1회 — 중복 발굴분은 판매 가능). 서사(누구의 유품인가)는 Slice 9 소관(봉인 법칙).
@@ -418,6 +466,11 @@ static func _is_material(id: String) -> bool:
 static func _is_relic(id: String) -> bool:
 	return RELICS.has(id)   # ★[S2-T5] 유품 — 혼백관 기증 대상
 
+# ★[S5-T2] id가 광물(광석·혼탄·돌·보석·지오드)인가. 개간 드랍(MATERIALS)과 같은 품질 무차원
+#   CAT_MATERIAL이지만 dict를 가르는 이유는 위 로스터 주석 참조(제련·개봉·퍼크가 종별로 순회한다).
+static func _is_mineral(id: String) -> bool:
+	return MINERALS.has(id)
+
 # id가 채집물인가(ADR-0052 §118). 품질 유차원 CAT_HARVEST(작물 수확물 결 — 판매·서빙·선물 동급).
 static func _is_forageable(id: String) -> bool:
 	return FORAGEABLES.has(id)
@@ -453,7 +506,7 @@ static func has_item(id: String) -> bool:
 	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id) or _is_pot_good(id) \
-		or _is_sap_good(id)
+		or _is_sap_good(id) or _is_mineral(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -475,8 +528,8 @@ static func category_of(id: String) -> String:
 		return CAT_HARVEST   # 채집물(ADR-0052)·어획물(★S3-T2)·통용물(★S3-T7)·수액(★S4-T6)도 수확물 결 — 품질·판매·서빙 동급
 	if _is_fertilizer(id):
 		return CAT_FERTILIZER
-	if _is_hay(id) or _is_material(id):
-		return CAT_MATERIAL   # 건초(S1-7)·개간 드랍(S1-8) = 재료 카테고리(Phase 3 가공 예약)
+	if _is_hay(id) or _is_material(id) or _is_mineral(id):
+		return CAT_MATERIAL   # 건초(S1-7)·개간 드랍(S1-8)·★광물(S5-T2) = 재료 카테고리
 	if _is_placeable(id):
 		return CAT_PLACEABLE  # 설치물(S1R-T9 스프링클러) — 지면 설치·회수
 	if _is_relic(id):
@@ -503,6 +556,8 @@ static func name_of(id: String) -> String:
 		return "건초"
 	if _is_material(id):
 		return MATERIALS[id]["name_ko"]
+	if _is_mineral(id):
+		return MINERALS[id]["name_ko"]   # ★S5-T2 광물 13종(광석 4·혼탄·돌·보석 5·지오드 2)
 	if _is_forageable(id):
 		return FORAGEABLES[id]["name_ko"]
 	if _is_fish(id):
@@ -529,7 +584,8 @@ static func stackable_of(id: String) -> bool:
 		return GearCatalog.stackable_of(id)   # ★S3-T4 미끼만 스택(낚싯대·태클 = 유니크 장착물)
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
-		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_pot_good(id) or _is_sap_good(id)
+		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_pot_good(id) or _is_sap_good(id) \
+		or _is_mineral(id)
 
 # 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 비료=구매가(buy_cost),
 # 수확물/과일=판매가. 없으면 0. 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다.
@@ -555,6 +611,8 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return HAY_COST   # 건초 = 품질 무차원 고정가(급여 재료)
 	if _is_material(id):
 		return int(MATERIALS[id]["price"])   # ★S1-8 개간 드랍 = 품질 무차원 고정가(Phase 3 가공 예약)
+	if _is_mineral(id):
+		return int(MINERALS[id]["price"])    # ★S5-T2 광물 = 품질 무차원 고정가(등급 배수 없음)
 	if _is_forageable(id):
 		return int(FORAGEABLES[id]["price"] * quality_mult(quality))   # ★ADR-0052 채집물 = 기준가 × 등급 배수(수확물 결)
 	if _is_fish(id):

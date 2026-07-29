@@ -1749,10 +1749,29 @@ const NARAK_GATE_DOOR := Vector2i(32, 6)            # 문 리세스(시각 일�
 #     단언(카탈로그 미등록이라 _maybe_toggle_building으로는 못 들어감)이 전부 그대로 성립한다.
 const MINE_SURFACE_RETURN := Vector2i(DUNGEON_GATE_DOOR.x, DUNGEON_GATE_DOOR.y + 1)  # 층에서 지상 복귀 착지 칸(문 앞 곁가지)
 const MINE_ROCK_COST := 10       # 돌 1타 = 혼력 10(ADR-0063 결정 4 "채굴 1타 = COST_PER_ACTION" — 값 동기화. const 초기화식에서 타 클래스 상수를 안 읽는 관례상 숫자로 둔다)
+                                 # ★[S5-T2] 이제 **감산 전 기준값**이다 — 실제 과금은 _mining_energy_cost()(채광 숙련 3%/lv 감산)
 # ★[ADR-0063 결정 1] 하강 직후 무적 1초(스타듀 상속). HP·피격 판정 자체가 S5-T4 소관이라 **지금은
 #   상수 자리만** 둔다 — 층 진입 시각(_mine_descended_at)만 기록해 두고, T4의 피격 판정이 이 값을
 #   읽어 "무적 창"을 가르게 한다(훅 자리·죽은 코드 아님).
 const MINE_DESCEND_INVULN_SECS := 1.0
+# ★[S5-T2 / ADR-0063 결정 2] 광맥 그레이박스 색(아이콘 아트 = S5-T9/T10 — 여긴 종 구분만).
+#   색 결은 로스터 명명을 따른다: 명동=붉은 구리 / 유철=푸른 강철 / 황천금=황금 / 혼탄=검정 /
+#   알돌=흙빛 덩어리 / 보석 4종은 각자 이름의 색(넋수정=투명 백, 명옥=옥빛, 염주석=자주, 명부금강=백청).
+#   ※ 키는 MineFloors.N_* 와 같은 문자열이되 **리터럴로 둔다** — const 초기화식에서 타 클래스
+#     상수를 안 읽는 이 파일의 관례(MINE_ROCK_COST 주석 참조). mining_test ⑧f가 두 목록이 갈리는
+#     걸 잡고, 미등록 종은 드로우에서 회색 폴백이라 조용히 깨지지도 않는다.
+const _MINE_NODE_COLORS := {
+	"ore_myeongdong": Color(0.78, 0.44, 0.28),        # 명동 — 붉은 구리
+	"ore_yucheol": Color(0.58, 0.62, 0.70),           # 유철 — 푸른 강철
+	"ore_hwangcheongeum": Color(0.90, 0.75, 0.30),    # 황천금 — 황금
+	"hontan": Color(0.18, 0.17, 0.20),                # 혼탄 — 검정
+	"geode_neokal": Color(0.52, 0.46, 0.38),          # 넋알돌 — 흙빛 덩어리
+	"geode_eophwa": Color(0.62, 0.34, 0.24),          # 업화알돌 — 달군 흙빛
+	"gem_neoksujeong": Color(0.86, 0.90, 0.94),       # 넋수정 — 투명 백
+	"gem_myeongok": Color(0.42, 0.78, 0.62),          # 명옥 — 옥빛
+	"gem_yeomjuseok": Color(0.60, 0.36, 0.72),        # 염주석 — 자주
+	"gem_myeongbu_geumgang": Color(0.72, 0.90, 0.98), # 명부금강 — 백청
+}
 
 # ── 나락(M5.2 빌드 → ADR-0018 C9 코지-와이드 재배치) ─────────────────────────────
 # 여덟째 실데이터 구역(독립 전투 전용). 전투 메카닉은 만들지 않는다(Phase 3) — 심연·업화·봉인 모티프의 빈
@@ -2151,6 +2170,12 @@ var _foraging_xp := 0
 # 레벨·세 계수(텐션 안전창·혼력 절감·퍼펙트 창)로 옮긴다. 누적 진행이라 저장한다(구세이브 = 0, 무막힘).
 # ★ 채집과 달리 **라이브 소스가 이미 있다** — _finish_fishing의 포획 분기가 곧 XP 소스다.
 var _fishing_xp := 0
+
+# ★[S5-T2 / ADR-0063 결정 9] 채광 숙련 XP(농사·채집·낚시와 대칭·main 스칼라). 갱도 노드·돌을 부술
+# 때마다 캔 것별 고정 XP가 쌓이고(MiningSkill.xp_for_node — 명동 5 ~ 명부금강 150), MiningSkill이
+# 이 값을 레벨·두 계수(혼력 감산·크리 채굴 확률)로 옮긴다. 누적 진행이라 저장한다(구세이브 = 0).
+# ★ 낚시와 같이 **라이브 소스가 이미 있다** — _mine_rock의 파괴 분기가 곧 XP 소스다.
+var _mining_xp := 0
 
 # ★ ADR-0052 전문직 선택 상태 — {skill_id: {tier(5/10): prof_id}}. 빈 = 미선택("평평≠막힘", L0도
 # 활동 100% 가동, 전문직은 곱셈 편의). ProfessionCatalog가 규칙(무상태), 이 dict가 세이브 상태
@@ -4366,20 +4391,45 @@ func _warp_in_region(dest_tile: Vector2i) -> void:
 		if not _run_over:
 			player.set_physics_process(true))
 
-# ★ 곡괭이로 층 안 돌 1타 — **일반 돌은 타수 1(즉발)**·혼력 10. 광석 노드의 다타수·곡괭이 티어의
-#   타수 감소는 S5-T2/T3 소관이라 여기선 타수 원장 자체가 없다. **XP·드랍도 S5-T2 소관이라 없다**(광물 로스터·
-#   채광 스킬이 그 태스크에서 이 자리에 붙는다). 돌이 깨지면 사다리 롤을 굴린다(ADR-0063 결정 1 ㉡).
+# ★[S5-T2] 층 안 이 칸의 광맥 종("" = 일반 돌). 배치 캐시(_mine_layout)에서 바로 읽는다 —
+#   원장의 node_at(day,floor,tile)은 층을 매번 재생성하므로 라이브 경로는 캐시를 쓴다.
+func _mine_node_at(t: Vector2i) -> String:
+	if _mine_layout.is_empty():
+		return ""
+	return String((_mine_layout.get("nodes", {}) as Dictionary).get(t, ""))
+
+# ★[S5-T2] 곡괭이 1타의 혼력 — COST_PER_ACTION × 채광 숙련 감산(3%/lv). `_farming_energy_cost`
+#   선례 그대로 **main이 계산해 주입**한다(MINE_ROCK_COST는 이제 감산 전 기준값이다).
+#   ⚠️ 곡괭이 티어는 여기 안 낀다 — 티어는 타수·접근만이라는 ADR-0027 경계(감산은 스킬 축).
+func _mining_energy_cost() -> int:
+	return int(round(float(MINE_ROCK_COST) * MiningSkill.energy_factor(_skill_level(ProfessionCatalog.MINING))))
+
+# ★ 곡괭이로 층 안 돌 1타 — 일반 돌은 타수 1(즉발), **광맥은 3~5타**(MineFloors.node_hits).
+#   혼력은 매 타 과금(감산 반영), 산출·XP는 **부순 마지막 타에만** 실린다(벌목과 같은 결 —
+#   "사건에 값을 매긴다"). 돌이 깨지면 사다리 롤을 굴린다(ADR-0063 결정 1 ㉡).
+#   ⚠️ 곡괭이 티어의 타수 감산은 S5-T3 소관 — `MineFloors.node_hits` 위에 얹힌다(여긴 0티어).
 func _mine_rock(t: Vector2i) -> void:
 	if inventory.selected_id() != ItemCatalog.PICKAXE:
 		return                              # 든 게 곡괭이가 아니면 무동작(자동 분기 없음 — ADR-0024 §2)
-	if not energy.can_act(MINE_ROCK_COST):
+	var cost := _mining_energy_cost()
+	if not energy.can_act(cost):
 		_notice("혼력이 모자라 곡괭이를 휘두를 수 없다")
 		return
-	energy.spend(MINE_ROCK_COST)
-	mine_floors.mark_mined(_mine_floor, t)  # day-한정 원장에 기록(같은 날 재진입 시 이 돌은 없다)
-	_sync_mine_tile(t)                      # 그리드·충돌 즉시 해제(재빌드 없이 — _sync_tree_tile 결)
+	energy.spend(cost)
 	_swing_for_item(ItemCatalog.PICKAXE)
 	audio.sfx("hoe")                        # 곡괭이 타격 SFX는 아트 패스(S5-T9) — 흙 다지는 "턱" 재사용
+	# ── 다타수 광맥: 아직 안 부서졌으면 진행만 올리고 끝난다(산출·사다리 롤 없음) ──
+	var node_id := _mine_node_at(t)
+	var need := MineFloors.node_hits(node_id)
+	if need > 1:
+		var done := mine_floors.add_node_hit(_mine_floor, t)
+		if done < need:
+			_notice("%s 광맥을 쪼갠다 — %d/%d" % [ItemCatalog.name_of(node_id), done, need])
+			queue_redraw()
+			return
+	mine_floors.mark_mined(_mine_floor, t)  # day-한정 원장에 기록(같은 날 재진입 시 이 돌은 없다)
+	_sync_mine_tile(t)                      # 그리드·충돌 즉시 해제(재빌드 없이 — _sync_tree_tile 결)
+	_award_mine_drop(t, node_id)            # ★[S5-T2] 산출·XP·크리(부순 사건에만)
 	# 사다리 롤 — 남은 돌이 줄수록 확률이 오른다. 몹 전멸 보너스는 S5-T5까지 false 고정이고,
 	# 명부의 운 가산은 운 시스템 빌드 시 채운다(지금은 0.0 — 인자 자리만).
 	var left := mine_floors.rocks_left_count(clock.day, _mine_floor)
@@ -4387,6 +4437,31 @@ func _mine_rock(t: Vector2i) -> void:
 		mine_floors.add_ladder(_mine_floor, t)
 		_notice("돌 밑에서 사다리가 드러났다 — [F]로 더 내려간다")
 	queue_redraw()
+
+# ★[S5-T2 / ADR-0063 결정 2·9] 부순 칸의 산출을 인벤에 담고 XP를 적립한다.
+#   "무엇이 몇 개 나오나"는 MiningSkill.resolve_drop(순수·결정적)이 정하고, 여기선 담기·알림·
+#   XP만 한다(_pick_forage : ForageSkill 관계와 같은 결).
+#   ★ 인벤 가득 = 조용히 증발시키지 않는다 — 담기 실패분은 알림으로 알리고 XP는 그대로 준다
+#     (덤불 흔들기와 달리 되돌릴 자리가 없다 — 돌은 이미 부서졌다).
+func _award_mine_drop(t: Vector2i, node_id: String) -> void:
+	var res := MiningSkill.resolve_drop(node_id, clock.day, _mine_floor, t,
+		_skill_level(ProfessionCatalog.MINING), mining_ore_bonus(), mining_gem_pair_chance())
+	var full := false
+	for d: Dictionary in res["drops"]:
+		var id := String(d["id"])
+		var n := int(d["count"])
+		if n <= 0:
+			continue
+		if inventory.add_item(id, n):
+			_toast_item(id, n)
+		else:
+			full = true
+	if full:
+		_notice("백팩이 가득 차 캔 것을 다 담지 못했다")
+	if bool(res["crit"]):
+		_notice("광맥이 통째로 쏟아졌다!")          # 크리 채굴(광석 2배) — 연출은 아트 패스
+	_gain_mining_xp(int(res["xp"]))
+	audio.sfx("harvest")
 
 # 깬 돌 한 칸의 통행 상태를 즉시 반영한다(구역 재빌드 없이 — _sync_tree_tile과 같은 결).
 # 타일셋 물리 레이어가 ROCK에 충돌을 달고 있어, 셀을 길 변종으로 바꾸면 충돌도 같이 사라진다.
@@ -7595,6 +7670,8 @@ func _save_game() -> void:
 		# ★[S3-T6] 낚시 숙련 XP(레벨 계수·전문직 게이트 파생원). 이름은 농사·채집과 같은 규약이다.
 		#   ⚠️ 릴 격투 *세션*은 여전히 비영속이다(ADR-0061 결정 2) — 저장되는 건 이 누적 XP뿐.
 		"fishing_xp": _fishing_xp,
+		# ★[S5-T2] 채광 숙련 XP(혼력 감산·크리 채굴 파생원). 이름은 위 셋과 같은 규약이다.
+		"mining_xp": _mining_xp,
 		"professions": _professions_to_save(),   # ★ ADR-0052 전문직 선택 {skill:{tier:id}}
 		"boatman_rod_given": _boatman_rod_given,   # ★ [S3-T5] 뱃사공 T1 증정 1회 플래그(키 없는 구세이브 = false)
 		"cafe_revenue_total": _cafe_revenue_total,
@@ -7696,6 +7773,8 @@ func _load_game() -> void:
 	_foraging_xp = maxi(int(data.get("foraging_xp", 0)), 0)
 	# ★[S3-T6] 낚시 숙련 XP 복원 — 키 없는 구세이브는 0 = L0(무막힘·base 맨몸 가동). 음수는 0으로 자른다.
 	_fishing_xp = maxi(int(data.get("fishing_xp", 0)), 0)
+	# ★[S5-T2] 채광 숙련 XP 복원 — 키 없는 구세이브는 0 = L0(무막힘·base 곡괭이 그대로). 음수는 0.
+	_mining_xp = maxi(int(data.get("mining_xp", 0)), 0)
 	_load_professions(data.get("professions", {}))
 	# ★ [S1R-T8] 물뿌리개 잔량 복원 — 키 없는 구세이브는 기본값 20(가득, 하위호환). 손상 방어로 0..20 클램프.
 	_can_water = clampi(int(data.get("watering_can", _CAN_CAPACITY)), 0, _CAN_CAPACITY)
@@ -7852,14 +7931,27 @@ func _gain_fishing_xp(amount: int) -> void:
 		notice_feed.push("숙련 ▲ 낚시 Lv %d" % after, 4.0, false, null, true)
 		audio.sfx("ui")
 
+# ★[S5-T2 / ADR-0063 결정 9] 채광 XP 적립 + 레벨업 감지(_gain_farm_xp 대칭). 소스는 _mine_rock의
+# 파괴 분기 하나뿐이다(중간 타 = 0 — 벌목과 같이 "부순 사건"에만 값을 매긴다).
+func _gain_mining_xp(amount: int) -> void:
+	if amount <= 0:
+		return
+	var before := MiningSkill.level_for_xp(_mining_xp)
+	_mining_xp += amount
+	var after := MiningSkill.level_for_xp(_mining_xp)
+	if after > before and notice_feed != null:
+		notice_feed.push("숙련 ▲ 채광 Lv %d" % after, 4.0, false, null, true)
+		audio.sfx("ui")
+
 # ── ADR-0052 전문직 선택·조회 API ──────────────────────────────────────────────
-# 스킬의 현재 레벨(FarmSkill 곡선 공유 — FishSkill도 그 곡선에 위임한다). 농사·채집·낚시만 XP 소스가
-# 있고 나머지(채광·전투)는 0이다(각 슬라이스에서 XP 배선).
+# 스킬의 현재 레벨(FarmSkill 곡선 공유 — FishSkill·MiningSkill도 그 곡선에 위임한다). 농사·채집·
+# 낚시·채광에 XP 소스가 있고 전투만 0이다(S5-T4/T5에서 배선).
 func _skill_level(skill: String) -> int:
 	match skill:
 		ProfessionCatalog.FARMING: return FarmSkill.level_for_xp(_farming_xp)
 		ProfessionCatalog.FORAGING: return ForageSkill.level_for_xp(_foraging_xp)   # ★[S4-T2]
 		ProfessionCatalog.FISHING: return FishSkill.level_for_xp(_fishing_xp)   # ★[S3-T6]
+		ProfessionCatalog.MINING: return MiningSkill.level_for_xp(_mining_xp)   # ★[S5-T2]
 		_: return 0
 
 # ★[S4-T4] 지금 든 도끼의 티어(원장 부재 방어 = 0). 타수 환산·큰 장애물 게이트·프롬프트의 단일 접점이다
@@ -7998,6 +8090,18 @@ func crab_pot_no_junk() -> bool:         # 뱃사람(lvl10) — 잡동사니 배
 
 func crab_pot_bait_free() -> bool:       # 미끼장인(lvl10) — 미끼 불필요
 	return _perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_TRAP_NO_BAIT, 0.0) > 0.0
+
+# ── ★[S5-T2 / ADR-0063 결정 9] 채광 전문직 편의 조회 2종 ──────────────────────
+# 드랍 경로(_award_mine_drop → MiningSkill.resolve_drop)가 **이미 이 둘을 인자로 받는다**. 다만
+# ProfessionCatalog의 채광 트리 perks가 아직 비어 있어(값 인코딩 = S5-T8 소관) 지금은 항상 0/중립을
+# 돌려준다 — 덫꾼 갈래 3종과 정확히 같은 자리다(T8은 카탈로그만 채우면 여기 손댈 게 없다).
+func mining_ore_bonus() -> int:          # 광부(lvl5) — 광맥당 광석 +N
+	return MiningSkill.ore_bonus(
+		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_ORE_BONUS, 0.0))
+
+func mining_gem_pair_chance() -> float:  # 지질사(lvl5) — 보석이 쌍으로 나올 확률
+	return MiningSkill.gem_pair_chance(
+		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_GEM_PAIR, 0.0))
 
 # ★ ADR-0052 채집물 기본 품질(채집 레벨 → 등급). L0~3 일반 / L4~6 은 / L7+ 금. 이리듐(최고)은 base로
 #   안 나오고 약초학자 전문직 하한으로만 닿는다. _pick_flower·_pick_forage가 하한과 max.
@@ -8652,8 +8756,15 @@ func _process(delta: float) -> void:
 		elif _is_mine_entrance(here_t):
 			interact_prompt.text = "[F] 갱도 밖으로 나간다"
 		elif _is_mine_rock(_target):
-			interact_prompt.text = "[좌클릭] 곡괭이로 돌 깨기 (혼력 %d · 남은 돌 %d)" % [
-				MINE_ROCK_COST, mine_floors.rocks_left_count(clock.day, _mine_floor)] \
+			# ★[S5-T2] 광맥이면 종·남은 타수를 함께 보인다(일반 돌은 종전대로 남은 돌 수만).
+			var nid := _mine_node_at(_target)
+			var body := "돌 깨기 (혼력 %d · 남은 돌 %d)" % [
+				_mining_energy_cost(), mine_floors.rocks_left_count(clock.day, _mine_floor)]
+			if nid != "":
+				body = "%s 광맥 캐기 (혼력 %d · %d/%d타)" % [ItemCatalog.name_of(nid),
+					_mining_energy_cost(), mine_floors.node_hits_done(_mine_floor, _target),
+					MineFloors.node_hits(nid)]
+			interact_prompt.text = ("[좌클릭] 곡괭이로 " + body) \
 				if inventory.selected_id() == ItemCatalog.PICKAXE else "곡괭이가 있어야 돌을 깰 수 있다"
 		else:
 			interact_prompt.text = "%s %d층 — 돌을 깨고 사다리를 찾아 내려간다" % [
@@ -10284,6 +10395,24 @@ func _try_upgrade_tool(tool_id: String) -> bool:
 func _draw_mine_floor() -> void:
 	if _mine_layout.is_empty():
 		return
+	# ★[S5-T2] 광맥 그레이박스 — ROCK 타일 위에 종별 색 결정(結) + 남은 타수 눈금. 진짜 아트
+	#   (밴드별 광맥 스프라이트)는 S5-T9/T10이라, 지금은 "저 돌은 다르다"만 읽히면 된다.
+	var nodes: Dictionary = _mine_layout.get("nodes", {})
+	for raw_t in nodes:
+		var t: Vector2i = raw_t
+		if mine_floors.is_mined(_mine_floor, t):
+			continue                                    # 이미 캔 광맥(빈 바닥)
+		var nid := String(nodes[t])
+		var col: Color = _MINE_NODE_COLORS.get(nid, Color(0.80, 0.80, 0.84))
+		var p := Vector2(t.x * TILE, t.y * TILE)
+		draw_rect(Rect2(p + Vector2(7, 7), Vector2(TILE - 14, TILE - 14)), col)                  # 결정 몸통
+		draw_rect(Rect2(p + Vector2(9, 9), Vector2(6, 6)), col.lightened(0.35))                  # NW 광원 하이라이트
+		# 남은 타수 눈금 — 친 만큼 아래 띠가 줄어든다(진행이 화면에 보인다).
+		var need := MineFloors.node_hits(nid)
+		var done := mine_floors.node_hits_done(_mine_floor, t)
+		if done > 0 and need > 1:
+			var w := float(TILE - 12) * float(need - done) / float(need)
+			draw_rect(Rect2(p + Vector2(6, TILE - 7), Vector2(w, 3)), Color(0.92, 0.84, 0.42))
 	for t: Vector2i in mine_floors.ladders(clock.day, _mine_floor):
 		var p := Vector2(t.x * TILE, t.y * TILE)
 		draw_rect(Rect2(p + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.06, 0.05, 0.06))  # 구덩이(내려감)
@@ -10786,10 +10915,13 @@ func _heart_rows() -> Array:
 func _skill_rows() -> Array:
 	# ★ ADR-0052 — 농사·채집 2행(FarmSkill 곡선 공유). 전문직 요약·선택가능 tier도 파생(읽기 전용).
 	# ★[S3-T6] 낚시 3행째 — XP 소스(포획)와 퍼크가 실효되면서 picker 경로도 그대로 열린다(행 추가만).
+	# ★[S5-T2] 채광 4행째 — XP 소스(갱도 채굴)가 실효됐다. 전투 5행째는 S5-T4/T5가 얹는다
+	#   (그러면 ADR-0063 결정 9의 "_skill_rows 5행 완성 = 5스킬 전면 가동"이 닫힌다).
 	return [
 		_skill_row("농사", ProfessionCatalog.FARMING, _farming_xp),
 		_skill_row("채집", ProfessionCatalog.FORAGING, _foraging_xp),
 		_skill_row("낚시", ProfessionCatalog.FISHING, _fishing_xp),
+		_skill_row("채광", ProfessionCatalog.MINING, _mining_xp),
 	]
 
 # 한 스킬 행 조립 — 레벨/진행바 + 고른 전문직 이름 요약 + 지금 고를 수 있는 tier(0=없음).

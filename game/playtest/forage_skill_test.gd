@@ -262,11 +262,13 @@ func _initialize() -> void:
 	_check("⑥B 채집물 없는 구역 = NO_TARGET(마커 안 뜸)",
 		m_base.forage_detect_target() == ForageSkill.NO_TARGET)
 
-	# 숙련 탭 3행(농사·채집·낚시) — 채집 행은 이미 있고 행 수가 안 늘어 높이도 그대로다(회귀 확인).
+	# 숙련 탭에 채집 행이 있는가(이 테스트의 관심사는 *채집 행*이지 총 행 수가 아니다).
+	# ★[S5-T2] 옛 "행 수 3 유지" 단언은 **의도적으로 개정**됐다 — ADR-0063 결정 9가 채광 행을
+	#   4행째로 얹었고(전투 5행째는 S5-T4/T5), 행 수의 계약은 mining_test ⑨가 든다.
 	var srows: Array = m_base._skill_rows()
 	var frow := _forage_row(srows)
-	_check("Ⓑ 숙련 탭 채집 행 존재(행 수 3 유지 — S4-T2는 행을 안 늘린다)",
-		srows.size() == 3 and String(frow.get("name", "")) == "채집")
+	_check("Ⓑ 숙련 탭 채집 행 존재(행 수는 스킬 슬라이스마다 는다 — 지금 %d행)" % srows.size(),
+		srows.size() >= 3 and String(frow.get("name", "")) == "채집")
 	var fr := InventoryFrame.new()
 	root.add_child(fr)
 	fr.menu_tab = InventoryFrame.TAB_SKILL

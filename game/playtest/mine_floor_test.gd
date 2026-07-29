@@ -282,11 +282,17 @@ func _initialize() -> void:
 	_check("⑨n 남은 돌이 전부 ROCK 타일(통과 X)", rock_tiles_ok and live_rocks.size() > 0)
 
 	# ── 곡괭이 채굴: 타수 1 · 혼력 10 · day-한정 원장 기록 · 통행 개방 ────────
-	if live_rocks.size() > 0:
+	# ★[S5-T2] "일반 돌 = 1타"를 보는 단언이라 **광맥이 아닌 돌**을 고른다(광맥은 3~5타 —
+	#   그쪽 계약은 mining_test가 본다). 일반 돌 배치·비용·원장 규칙은 T1과 한 글자도 안 바뀐다.
+	var plain_rocks: Array = []
+	for r: Vector2i in live_rocks:
+		if m._mine_node_at(r) == "":
+			plain_rocks.append(r)
+	if plain_rocks.size() > 0:
 		var pick_idx := _slot_of(m.inventory, ItemCatalog.PICKAXE)
 		m.inventory.select(pick_idx)
 		_check("⑨o 곡괭이 선택", m.inventory.selected_id() == ItemCatalog.PICKAXE)
-		var target: Vector2i = live_rocks[0]
+		var target: Vector2i = plain_rocks[0]
 		var e_before: int = m.energy.current
 		var left_before: int = m.mine_floors.rocks_left_count(m.clock.day, 1)
 		m._target = target
@@ -298,8 +304,8 @@ func _initialize() -> void:
 		_check("⑨t 남은 돌 −1", m.mine_floors.rocks_left_count(m.clock.day, 1) == left_before - 1)
 		_check("⑨u 깬 돌은 더 이상 대상 아님", not m._is_mine_rock(target))
 		# 곡괭이가 아니면 무동작(자동 분기 없음 — ADR-0024 §2).
-		if live_rocks.size() > 1:
-			var t2: Vector2i = live_rocks[1]
+		if plain_rocks.size() > 1:
+			var t2: Vector2i = plain_rocks[1]
 			m.inventory.select(_slot_of(m.inventory, ItemCatalog.HOE))
 			var e2: int = m.energy.current
 			m._mine_rock(t2)
