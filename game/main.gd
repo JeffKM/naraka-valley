@@ -408,6 +408,29 @@ const PROP_STONE_WALL := preload("res://assets/props/village_stone_wall.png")   
 #   가둠이 필요해지면 그때 SOLID_PROPS에 편입한다(울타리·통나무 선례와 같은 승격 경로).
 const PROP_ROWBOAT := preload("res://assets/props/rowboat.png")     # 64×96 — 나룻배(2×3칸, 물가에 대어 둔 배)
 const PROP_PIER_POST := preload("res://assets/props/pier_post.png") # 32×32 — 잔교 말뚝(1×1칸, 데크 양옆 물 위)
+# ★[S4-T9 아트 패스 / ADR-0062 결정 10 ㉡㉢] 저승 숲·미혹의 숲 정체성 프롭 12종
+#   (PixelLab create_map_object → tools/make_forest_art.py 정규화).
+# ★**전부 비-SOLID**다 — 이게 이 묶음의 제1 규칙이다. 숲의 통행 집합은 이미 TREE 그리드 타일과
+#   `tree_ledger`가 통째로 소유하고 있고(`_apply_tree_ledger`/`_sync_tree_tile`), 여기 프롭은 그 위에
+#   얹는 *순수 시각*이다. 프롭에 충돌을 얹는 순간 빈터·동선·워프 도달성(jeoseung/mihok_forest_test
+#   flood-fill 불변식)이 아트 배치에 인질로 잡힌다. 그래서 이 12종은 SOLID_PROPS·FOOT_BAR_PROPS·
+#   PROP_TEX_REGISTRY(=layout.json 직렬화 대상) 어디에도 안 들어가고, 전용 절차 배열
+#   (_forest_canopy/_forest_tree_art/_forest_decor)로만 그려진다.
+# ★배치 불변식: 부피 프롭(성숙목·중간목·고목·통나무·그루터기)은 **발치 칸이 이미 TREE(SOLID)이거나
+#   원장이 든 칸**에만 선다(황천해 고지 수풀 §문법 상속) → 통행 가능 집합이 한 칸도 안 바뀐다.
+#   납작한 바닥 소품(버섯·고사리·이끼)만 걷는 칸에 놓인다(꽃 패치와 같은 결 — 원래 통행 O).
+const PROP_TREE_FOREST := preload("res://assets/props/tree_forest_dark.png")   # 64×128 — 숲 짙은 침엽 성숙목(2×4칸)
+const PROP_TREE_MID := preload("res://assets/props/tree_mid.png")              # 64×64  — 중간 나무(2×2칸, 원장 3~4단계)
+const PROP_TREE_SAPLING := preload("res://assets/props/tree_sapling.png")      # 32×32  — 묘목(1×1칸, 원장 1~2단계)
+const PROP_TREE_STUMP := preload("res://assets/props/tree_stump.png")          # 32×32  — 벤 자리 그루터기
+const PROP_FOREST_BUSH := preload("res://assets/props/forest_berry_bush.png")  # 32×32  — ★채집 덤불(능선 SOLID 덤불과 별 실루엣)
+const PROP_FOREST_MOSS := preload("res://assets/props/forest_moss.png")        # 32×32  — 저승 이끼(성숙목 밑동 얼룩)
+const PROP_FOREST_MUSHROOM := preload("res://assets/props/forest_mushroom.png")# 32×32  — 저승 버섯(바닥 장식)
+const PROP_FOREST_FERN := preload("res://assets/props/forest_fern.png")        # 32×32  — 고사리(바닥 장식)
+const PROP_MIHOK_SNAG := preload("res://assets/props/mihok_dead_snag.png")     # 64×96  — 미혹 고목(2×3칸)
+const PROP_MIHOK_GLOWCAP := preload("res://assets/props/mihok_rare_mushroom.png") # 32×32 — 희귀 발광 버섯
+const PROP_LARGE_STUMP := preload("res://assets/props/large_stump.png")        # 32×32  — 큰 그루터기(명동 도끼)
+const PROP_LARGE_LOG := preload("res://assets/props/large_log.png")            # 32×32  — 큰 통나무(유철 도끼)
 const PROP_BUSH := preload("res://assets/props/bush.png")               # 64×64 — 덤불(2×2칸, 장식)
 const PROP_ROCK := preload("res://assets/props/rock.png")               # 64×64 — 바위·돌(2×2칸, SOLID)
 # ★[prop-regen-roster §5.3 / owner 2026-07-04~05] 통나무(logs) 5종 재생성(PixelLab create_1_direction_object
@@ -462,7 +485,18 @@ const PROP_SHADOW_SET := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_BUSH,
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP, PROP_SCARECROW,
 	PROP_LOG_LONG, PROP_LOG_SHORT, PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B,  # ★통나무 5종 접지 그림자
 	PROP_VILLAGE_TREE,  # ★[S2-T9] 벚꽃 나무 = 저승 봄나무와 같은 부피 프롭(발치 타원 그림자)
-	PROP_ROWBOAT, PROP_PIER_POST]  # ★[S3-T9] 나룻배·말뚝 = 부피 프롭(발치 그림자 + Y-split)
+	PROP_ROWBOAT, PROP_PIER_POST,  # ★[S3-T9] 나룻배·말뚝 = 부피 프롭(발치 그림자 + Y-split)
+	# ★[S4-T9] 숲 부피 프롭 — 나무 3폼·그루터기·큰 장애물·고목. 납작한 소품(이끼·버섯·고사리·덤불)은
+	#   높이가 없어 제외(풀·꽃과 같은 판단).
+	PROP_TREE_FOREST, PROP_TREE_MID, PROP_TREE_SAPLING, PROP_TREE_STUMP,
+	PROP_MIHOK_SNAG, PROP_LARGE_STUMP, PROP_LARGE_LOG]
+# ★[S4-T9] Y-split(앞/뒤 패스) 분류 집합 = 그림자 세트 + **이끼**. 이끼는 그림자를 안 지지만(납작),
+#   자기가 앉은 성숙목과 **같은 패스에 있어야** 한다 — 나무가 앞 패스로 가고 이끼만 뒤에 남으면
+#   수관에 가려 "낫질할 게 있다"는 유일한 신호가 사라진다. 발치(base_y)가 나무와 동일해 판정도 같다.
+#   기존 구역엔 이끼가 없으므로 이 집합 ≡ PROP_SHADOW_SET = 렌더 바이트 불변.
+#   ★const가 아니라 var인 이유: GDScript의 const 초기화식은 다른 const 배열의 `+` 결합을
+#     상수식으로 안 본다(_VILLAGE_BUILDING_RECTS 선례와 같은 회피).
+var SPLIT_PROPS: Array = PROP_SHADOW_SET + [PROP_FOREST_MOSS]
 # ★ 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md). 결정적 절차 배치로
 #   GROUND/PATH 칸마다 자기 지형 테이블로 가중 1롤 → 베이스 위에 디테일을 *구역 빌드 때 1회 베이크*
 #   (런타임 정적 오버레이, _draw에서 1 draw call). 손배치 grass_tuft 폐기 → 이 시스템이 대체.
@@ -820,7 +854,10 @@ const TREE_FOOT_H := TILE
 #   ★바위(PROP_ROCK)도 여기 합류 = 나무와 동일 인프라(밑행 1칸 SOLID + 뒤로 지나갈 때 반투명). owner 2026-07-04.
 #   ★허수아비(PROP_SCARECROW·1×2)도 합류(owner 2026-07-05 "밑 1×1 못 지나가고 위 1×1은 뒤로 통과+반투명") —
 #     TREE_FOOT_H=TILE이라 32×64의 밑 1칸만 SOLID·위 1칸(몸통·머리)은 통과 O + occlusion fade.
-const FADE_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_SCARECROW, PROP_VILLAGE_TREE]
+#   ★[S4-T9] 숲 성숙목·중간목·고목도 합류 — 숲은 캐노피가 화면을 덮는 무대라 fade가 없으면
+#     플레이어가 나무 뒤에서 통째로 사라진다(안식 16그루와는 밀도가 다르다).
+const FADE_PROPS := [PROP_TREE_A, PROP_TREE_B, PROP_ROCK, PROP_SCARECROW, PROP_VILLAGE_TREE,
+	PROP_TREE_FOREST, PROP_TREE_MID, PROP_MIHOK_SNAG]
 const TREE_FADE_MIN := 0.45   # 겹칠 때 최소 알파(완전 투명 X — 나무가 남아 보이게)
 const TREE_FADE_SPEED := 8.0  # 알파 전환 속도(초당 — move_toward, 부드러운 페이드)
 # ★ ADR-0025 ② — PROP 좌표 데이터 외부화. 텍스처는 *코드가* 정의하고(키↔Texture2D 레지스트리),
@@ -2797,6 +2834,7 @@ func _build_grid() -> void:
 			push_warning("알 수 없는 구역 '%s' — 홈베이스로 폴백" % _region)
 			_build_home()
 	_apply_tree_ledger()        # ★[S4-T3] 숲 내부 나무를 원장 상태로 동기화(첫 빌드면 시드 — 프롭 충돌 전)
+	_mark_forest_art_dirty()    # ★[S4-T9] 숲 캐노피·원장 폼·장식 재배치 예약(그리기 직전 1회 — 순수 시각)
 	_rebuild_prop_collision()   # ★ T3③' 현재 구역 실내 가구 통과 불가 충돌 재구성(러그 제외)
 	_rebuild_trellis_collision()   # ★ [S1-5a] 트렐리스 넝쿨 통과 불가 충돌 재구성(안식 농원 전용)
 	_rebuild_orchard_collision()   # ★ [S1-5b] 혼의 나무 밑동 통과 불가 충돌 재구성(안식 농원 전용)
@@ -2891,6 +2929,9 @@ func _sync_tree_tile(t: Vector2i) -> void:
 			ground.set_cell(t, 0, gv[int(_gd_h01(t.x, t.y, 5) * gv.size()) % gv.size()])
 		else:
 			ground.set_cell(t, 0, _terrain_base_atlas(TR_GRASS))
+	# ★[S4-T9] 그리드가 실제로 바뀐 뒤라야 캐노피 후보 판정(_canopy_foot_ok)이 옳다 — 원장 signal
+	#   시점엔 아직 옛 그리드다. 여기서 한 번 더 더티를 세워 그 순서 문제를 없앤다(무변화면 위에서 이미 반환).
+	_mark_forest_art_dirty()
 
 # ★[S4-T4 / ADR-0062 결정 1 ㉡] 미혹 심층 큰 장애물을 원장에 심는다(멱등 — seed_large가 슬롯 유무로
 # 거른다). 세이브로 복원된 "치워진 큰 통나무"는 슬롯이 이미 있어 다시 서지 않는다 = 영구 개방.
@@ -2917,6 +2958,219 @@ func _home_tree_anchor_set() -> Dictionary:
 		d[t] = true
 	return d
 
+# ═══ ★[S4-T9 / ADR-0062 결정 10] 숲 아트 배선 ═══════════════════════════════════════
+# 숲의 나무 그림은 셋으로 갈린다. 셋 다 **순수 시각 절차 배열**이고 layout.json·충돌·세이브 어디에도
+# 안 실린다(황천해 고지 수풀 §문법 상속 — 타일이 충돌을 들고 프롭은 부피만 준다).
+#   ㉠ `_forest_canopy`   — **경계 밴드**(원장 밖 TREE 칸)의 성숙목. 구역 빌드 때 1회.
+#   ㉡ `_forest_tree_art` — **원장 칸**의 단계별 폼(묘목/중간/성숙)·그루터기·큰 장애물·이끼.
+#                           원장이 바뀔 때마다(벌목·성장·재성장·이끼) 다시 짠다.
+#   ㉢ 장식             — 바닥·밴드 장식(버섯·고사리·통나무·고목). 구역 빌드 때 1회.
+# 셋은 **한 배열로 합쳐 발치 y로 통째 정렬**된다 — `_draw_props_for`가 배열 순서대로 그리므로,
+# 세 갈래를 따로 이어 붙이면 남쪽 장식이 북쪽 나무보다 먼저 그려져 원근이 뒤집힌다(painter's order).
+# 엔트리는 `[tex, [tile]]` 한 칸씩이라 정렬 단위가 곧 그리기 단위다.
+var _forest_props: Array = []
+
+const _CANOPY_STEP := 2      # 캐노피 격자 간격(칸) — 스프라이트 폭이 2칸이라 딱 맞물려 빈틈 없이 덮인다
+# 캐노피 수종 배분(좌표 해시). 짙은 숲나무가 지배하고 안식 침엽·활엽이 섞여 결을 흐트러뜨린다.
+#   ★"중복 생성 0"(ADR-0062 결정 10 ㉡) — Slice 1/2 기생성 나무 2종을 그대로 재사용하고
+#     신규는 짙은 변형 1종뿐이다.
+#   ★비율은 1차 덤프 육안으로 정했다: 3:1:1로 섞었더니 안식 나무 2종이 짙은 숲나무보다 **훨씬 밝아**
+#     소수인데도 화면을 지배해 "서리 낀 침엽림"으로 읽혔다. 밝은 쪽은 액센트 몫으로 눌러 둔다.
+const _CANOPY_MIX_JEOSEUNG := [PROP_TREE_FOREST, PROP_TREE_FOREST, PROP_TREE_FOREST,
+	PROP_TREE_FOREST, PROP_TREE_FOREST, PROP_TREE_FOREST, PROP_TREE_A, PROP_TREE_B]
+const _CANOPY_MIX_MIHOK := [PROP_TREE_FOREST, PROP_TREE_FOREST, PROP_TREE_FOREST,
+	PROP_TREE_FOREST, PROP_TREE_FOREST, PROP_TREE_FOREST, PROP_TREE_FOREST, PROP_TREE_A]
+
+# 지금 구역이 숲 아트 대상인가(= 나무 원장 그리드 구역과 동치. 별 술어를 두지 않는다).
+func _is_forest_art_region() -> bool:
+	return _is_tree_grid_region()
+
+# 발치 y 기준으로 엔트리를 정렬해 배열로 굳힌다(painter's order). key = base_y, 동률이면 삽입 순서.
+func _forest_sort_entries(items: Array) -> Array:
+	var idx := 0
+	for it in items:
+		it["ord"] = idx
+		idx += 1
+	items.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if not is_equal_approx(float(a["key"]), float(b["key"])):
+			return float(a["key"]) < float(b["key"])
+		return int(a["ord"]) < int(b["ord"]))
+	var out: Array = []
+	for it in items:
+		out.append([it["tex"], [it["tile"]]])
+	return out
+
+# 발치 칸 `foot`에 텍스처 `tex`를 세울 때의 앵커(=스프라이트 좌상단 타일)와 정렬 키.
+#   `_draw_props_for`는 앵커 타일 좌상단에 원본 크기로 blit하므로, 발치 행 = 앵커 + (높이/32 - 1)이다.
+func _forest_item(tex: Texture2D, foot: Vector2i, bump: float = 0.0) -> Dictionary:
+	var rows := int(tex.get_size().y) / TILE
+	var anchor := Vector2i(foot.x, foot.y - (rows - 1))
+	return {"tex": tex, "tile": anchor, "key": float(foot.y * TILE + TILE) + bump}
+
+# 이 칸이 캐노피 나무의 **발치**로 쓸 수 있는가 = 두 열이 다 TREE 그리드 타일이고 원장 밖이다.
+#   ★불변식(황천해 고지 수풀과 동일): 발치 칸이 이미 SOLID(TREE)라 프롭을 얹어도 통행 가능 집합이
+#     한 칸도 안 바뀐다. 수관은 위로 솟아 걷는 칸을 덮지만 그건 그림일 뿐이다.
+func _canopy_foot_ok(x: int, y: int) -> bool:
+	if y < 0 or y >= _grid.size() or x < 0 or x + 1 >= _grid[y].size():
+		return false
+	if _grid[y][x] != TREE or _grid[y][x + 1] != TREE:
+		return false
+	if tree_ledger != null and (tree_ledger.has_slot(_region, Vector2i(x, y))
+			or tree_ledger.has_slot(_region, Vector2i(x + 1, y))):
+		return false           # 원장 칸은 ㉡이 단계별 폼으로 그린다(이중 렌더 금지)
+	return true
+
+func _collect_forest_canopy(items: Array) -> void:
+	var mix: Array = _CANOPY_MIX_MIHOK if _region == RegionCatalog.MIHOK_FOREST else _CANOPY_MIX_JEOSEUNG
+	var taken: Dictionary = {}
+	# 아래(남)에서 위로 훑어 발치 행을 잡는다 — 남쪽 나무가 나중에 그려져 북쪽 나무를 덮는 게
+	# 정상 원근이고, 정렬이 그걸 다시 보장한다(여긴 후보 수집 순서일 뿐).
+	for y in range(_outdoor_h - 1, -1, -_CANOPY_STEP):
+		var off := (y / _CANOPY_STEP) % 2      # 행마다 반칸 엇갈려 격자가 안 읽히게 한다
+		for x in range(off, _grid_w - 1, _CANOPY_STEP):
+			if taken.has(Vector2i(x, y)) or taken.has(Vector2i(x + 1, y)):
+				continue
+			if not _canopy_foot_ok(x, y):
+				continue
+			var h: int = abs(hash("canopy:%s:%d:%d" % [_region, x, y]))
+			items.append(_forest_item(mix[h % mix.size()], Vector2i(x, y)))
+			taken[Vector2i(x, y)] = true
+			taken[Vector2i(x + 1, y)] = true
+
+# ㉡ 원장 파생 폼. **데이터 5단계 → 아트 3폼 매핑**(스펙카드 gemini-regen-batch §14에 잠금):
+#     stage 1~2 = 묘목(32×32) · stage 3~4 = 중간(64×64) · stage 5 = 성숙(64×128)
+#     stump = 그루터기(32×32) · large_stump/large_log = 큰 장애물(32×32)
+#   폼이 셋뿐인 이유는 에셋 폭발 억제(ADR-0062 결정 3 "에셋 폭발 억제")고, 셋의 **키 계단**
+#   (1칸/2칸/4칸)이 "자라는 중"을 읽히게 하는 유일한 시각 근거다.
+# ★중간목(64×64)은 두 열을 쓴다 — 옆 칸이 걷는 빈터여도 그림만 덮을 뿐이라 통행은 그대로다.
+func _collect_forest_tree_art(items: Array) -> void:
+	if tree_ledger == null:
+		return
+	for t: Vector2i in tree_ledger.tiles(_region):
+		var large := tree_ledger.large_at(_region, t)
+		if large != "":
+			if not tree_ledger.is_occupied(_region, t):
+				continue                       # 치운 큰 장애물 — 자리는 비어 있다
+			items.append(_forest_item(
+				PROP_LARGE_LOG if large == TreeLedger.KIND_LARGE_LOG else PROP_LARGE_STUMP, t))
+			continue
+		if tree_ledger.is_stump(_region, t):
+			items.append(_forest_item(PROP_TREE_STUMP, t))
+			continue
+		var stage := tree_ledger.stage_at(_region, t)
+		if stage <= TreeLedger.STAGE_EMPTY:
+			continue                           # 빈 슬롯 = 벤 자리(재성장 대기 — 아무것도 안 선다)
+		if stage >= TreeLedger.MAX_STAGE:
+			# 성숙목 — 종은 좌표 해시라 같은 자리는 늘 같은 수종(원장 species와 같은 결정성).
+			var h: int = abs(hash("ledgertree:%s:%d:%d" % [_region, t.x, t.y]))
+			var mix: Array = _CANOPY_MIX_MIHOK if _region == RegionCatalog.MIHOK_FOREST else _CANOPY_MIX_JEOSEUNG
+			items.append(_forest_item(mix[h % mix.size()], t))
+		elif stage >= 3:
+			items.append(_forest_item(PROP_TREE_MID, t))
+		else:
+			items.append(_forest_item(PROP_TREE_SAPLING, t))
+		# ★[ADR-0062 결정 9 ㉡] 저승 이끼 — 나무 폼 **위**에 얹는 밑동 얼룩. bump로 같은 발치에서
+		#   나무보다 뒤(=나중에 그려짐)로 정렬한다. SPLIT_PROPS에 들어 있어 나무와 같은 패스를 탄다.
+		if tree_ledger.has_moss(_region, t):
+			items.append(_forest_item(PROP_FOREST_MOSS, t, 0.5))
+
+# ㉢ 장식 스캐터. **두 계급으로 갈린다**(이게 이 함수의 유일한 설계 규칙이다):
+#   · **밴드 장식**(통나무·그루터기·고목) = 이미 SOLID인 TREE 칸에만. 걷는 칸에 두면 "통나무인데
+#     지나가진다"가 되어, 능선 통나무가 SOLID인 안식과 규칙이 어긋난다.
+#   · **바닥 장식**(버섯·고사리·발광버섯) = 걷는 칸(GROUND)에. 원래 통행 O인 납작한 소품이라
+#     꽃 패치와 같은 결이고 오독이 없다.
+const _DECOR_DENSITY_FLOOR := 0.035   # 걷는 칸당 바닥 소품 확률
+const _DECOR_DENSITY_BAND := 0.030    # TREE 칸당 밴드 소품 확률
+const _DECOR_FLOOR_JEOSEUNG := [PROP_FOREST_MUSHROOM, PROP_FOREST_FERN, PROP_FOREST_FERN, PROP_GRASS]
+const _DECOR_FLOOR_MIHOK := [PROP_FOREST_FERN, PROP_FOREST_MOSS, PROP_MIHOK_GLOWCAP, PROP_GRASS]
+# ★밴드 장식에 `PROP_TREE_STUMP`(벤 자리 그루터기)를 **넣지 않는다**: 그 그림은 원장이 "도끼로
+#   마저 치울 대상"이라는 뜻으로 쓰고 있어서, 원장 밖 장식으로 같은 그림을 뿌리면 도끼가 안 먹히는
+#   가짜 그루터기가 생긴다. 통나무는 반대로 안식 능선에서도 "치울 수 없는 순수 장식"이라(#202)
+#   같은 규칙이 이미 서 있다 — 그래서 통나무·고목만 쓴다.
+const _DECOR_BAND_JEOSEUNG := [PROP_LOG_UPRIGHT, PROP_LOG_DIAG_A, PROP_LOG_DIAG_B]
+const _DECOR_BAND_MIHOK := [PROP_MIHOK_SNAG, PROP_LOG_DIAG_B, PROP_LOG_UPRIGHT]
+
+func _collect_forest_decor(items: Array) -> void:
+	var mihok := _region == RegionCatalog.MIHOK_FOREST
+	var floor_mix: Array = _DECOR_FLOOR_MIHOK if mihok else _DECOR_FLOOR_JEOSEUNG
+	var band_mix: Array = _DECOR_BAND_MIHOK if mihok else _DECOR_BAND_JEOSEUNG
+	for y in range(_outdoor_h):
+		if y >= _grid.size():
+			break
+		for x in range(_grid_w):
+			if x >= _grid[y].size():
+				break
+			var t := Vector2i(x, y)
+			var c: int = _grid[y][x]
+			var h: int = abs(hash("decor:%s:%d:%d" % [_region, x, y]))
+			var r: float = float(h % 10000) / 10000.0
+			if c == TREE:
+				# 밴드 소품 — 원장 칸은 ㉡이 이미 쓰고 있어 비켜 간다(한 칸에 두 그림 금지).
+				if tree_ledger != null and tree_ledger.has_slot(_region, t):
+					continue
+				if r >= _DECOR_DENSITY_BAND:
+					continue
+				var btex: Texture2D = band_mix[(h / 7) % band_mix.size()]
+				# 부피 큰 고목(2×3)은 두 열이 다 TREE일 때만(한쪽 발치가 빈터로 삐져나오면 뜬다).
+				if btex == PROP_MIHOK_SNAG and not _canopy_foot_ok(x, y):
+					continue
+				items.append(_forest_item(btex, t))
+			elif c == GROUND:
+				if _forest_decor_blocked(t):
+					continue
+				if r >= _DECOR_DENSITY_FLOOR:
+					continue
+				items.append(_forest_item(floor_mix[(h / 7) % floor_mix.size()], t))
+
+# 바닥 소품을 놓으면 안 되는 칸 — 상호작용이 이미 사는 자리(채집물 스폰존·덤불·수액 나무 앞)와
+# 건물 발치. 그림이 상호작용 표식을 가리면 "여기 뭐가 있나"가 안 읽힌다.
+func _forest_decor_blocked(t: Vector2i) -> bool:
+	if is_bush_tile(_region, t):
+		return true
+	if _region == RegionCatalog.JEOSEUNG_FOREST and WOODSHOP_EXT_RECT.grow(1).has_point(t):
+		return true
+	if _region == RegionCatalog.MIHOK_FOREST and OKJA_HUT_EXT_RECT.grow(1).has_point(t):
+		return true
+	for z in ForageSpawns.zones().get(_region, []):
+		var zr: Rect2i = z["rect"]
+		if zr.has_point(t):
+			return true
+	return false
+
+# 세 갈래를 한 배열로 모아 발치 y로 통째 정렬한다(구역 빌드·원장 변화 공통 입구).
+#   ★원장 변화(벌목·성장·이끼)마다 캐노피·장식까지 다시 짜는 건 낭비로 보이지만, 세 갈래가
+#     **한 정렬 순서**를 공유해야 원근이 맞으므로 부분 갱신이 성립하지 않는다. 구역 한 장(≈2600칸)
+#     스캔이라 벌목 한 번의 비용으로 충분히 싸다.
+#   ★**지연 재빌드**다: 원장이 바뀔 때는 더티 플래그만 세우고 실제 스캔은 *그리기 직전*에 한 번 한다.
+#     즉시 재빌드로 짰다가 `jeoseung_forest_test`가 워치독 180s에 걸렸다 — 그 테스트는 구역의 원장
+#     나무를 전량 벌목하는데, 타격 한 번마다 `changed` 시그널(→_on_tree_ledger_changed)과
+#     `_sync_tree_tile` 둘이 각각 구역 한 장(≈2600칸)을 다시 훑어 수천 배로 불어났다.
+#     지연이면 한 프레임에 최대 1회이고, **헤드리스 테스트는 그리지 않으므로 비용이 0**이다.
+var _forest_art_dirty := true
+
+func _mark_forest_art_dirty() -> void:
+	_forest_art_dirty = true
+
+func _rebuild_forest_art() -> void:
+	_forest_art_dirty = false
+	_forest_props = []
+	_fog_patches = []
+	if not _is_forest_art_region():
+		return
+	var items: Array = []
+	_collect_forest_canopy(items)
+	_collect_forest_decor(items)
+	_collect_forest_tree_art(items)
+	_forest_props = _forest_sort_entries(items)
+	_rebuild_fog_patches()
+
+# 숲 프롭 전량(뒤/앞 패스 공용). 더티면 여기서 한 번 짓는다 — 이 함수가 유일한 소비 입구라
+# (_draw · _draw_front_props · _update_tree_fade) 지연 재빌드의 단일 게이트가 된다.
+func _forest_prop_entries() -> Array:
+	if _forest_art_dirty:
+		_rebuild_forest_art()
+	return _forest_props
+
 func _seed_home_trees() -> void:
 	if tree_ledger == null or tree_ledger.is_seeded(RegionCatalog.HOME):
 		return
@@ -2927,6 +3181,7 @@ func _seed_home_trees() -> void:
 # (원장 신호는 "어느 칸"을 안 실어 나르므로 — FarmField.tile_changed와 갈리는 지점).
 func _on_tree_ledger_changed() -> void:
 	_rebuild_prop_collision()
+	_mark_forest_art_dirty()   # ★[S4-T9] 단계·그루터기·이끼가 바뀌면 폼이 바뀐다(순수 시각·지연 재빌드)
 	if _front_props != null:
 		_front_props.queue_redraw()
 	queue_redraw()
@@ -5417,7 +5672,38 @@ func _build_ground16() -> void:
 	if bool(_g16_prof["scatter"]):
 		_compute_scatter_clump()   # ★[ADR-0058 B] 풀무리 CA 마스크 1회 계산(스캐터가 참조)
 		_g16_blend_scatter(out, surf)
+	_g16_bake_leaf_litter(out, surf)   # ★[S4-T9] 낙엽 결(밀도 0 = 무동작 = 기존 구역 바이트 불변)
 	_ground_detail_tex = ImageTexture.create_from_image(out)
+
+# ★[S4-T9 / ADR-0062 결정 10 ㉠] 낙엽 결 — 지면 오버레이에 굽는 2px 낙엽 알갱이.
+#   ★색을 상수로 박지 않고 **밑에 깔린 지면 픽셀에서 파생**한다(붉은 쪽으로 hue 이동 + 명도 소폭
+#     down). 고정 팔레트를 뿌렸더니 어두운 숲 바닥 위에서 형광 주황 색종이로 읽혔다(1차 덤프 육안).
+#     파생이면 잔디 위 낙엽과 흙 위 낙엽이 각각 제 바탕과 같은 명도대에 앉아 "결"로 가라앉는다.
+#   ★2px 블록 = [asset-ruleset §0.1] 캐논 청크 단위. 1px 점으로 뿌리면 지면만 그레인이 고와진다.
+#   ★칸당 1롤(전 픽셀 순회 아님) — 구역 한 장이 ~2600칸이라 값이 싸다.
+const _LEAF_TINT := Color(0.42, 0.20, 0.10)   # 낙엽 색조(바탕색과 lerp할 목표)
+const _LEAF_MIX := 0.55                        # 바탕→낙엽색 lerp 비율(1.0 = 바탕 무시 = 형광)
+func _g16_bake_leaf_litter(out: Image, surf: Array) -> void:
+	if _g16_leaf_density <= 0.0:
+		return
+	for y in _outdoor_h:
+		for x in _grid_w:
+			if int(surf[y][x]) < 0 or int(surf[y][x]) == 4:
+				continue                 # 건물·절벽(투명 통과)·물 위엔 낙엽이 안 앉는다
+			for k in 3:                  # 칸당 최대 3알갱이
+				var h: int = abs(hash("leaf:%s:%d:%d:%d" % [_region, x, y, k]))
+				if float(h % 10000) / 10000.0 >= _g16_leaf_density:
+					continue
+				var px: int = x * TILE + ((h / 7) % (TILE / 2)) * 2
+				var py: int = y * TILE + ((h / 131) % (TILE / 2)) * 2
+				var base := out.get_pixel(px, py)
+				if base.a <= 0.0:
+					continue             # 투명(오버레이가 안 덮은 칸) — 낙엽만 뜨면 공중부양
+				var c := base.lerp(_LEAF_TINT, _LEAF_MIX)
+				c.a = base.a
+				for j in 2:
+					for i in 2:
+						out.set_pixel(px + i, py + j, c)
 
 # ★[S2-T3] `_build_ground16`에서 뽑아낸 절벽 오버레이 3패스(구역 프로파일 "cliff_overlays" 게이트).
 #   P = _GF * 2 (월드 타일링 주기). 로직·순서·픽셀 연산은 이동 전과 완전 동일(HOME 바이트 불변).
@@ -5878,6 +6164,15 @@ const _G16_PROFILE_BASE := {
 	"orphan_fill": false,
 	"shore_sand": false,                      # 물가 shore 셀의 '땅' 채움을 모래로(바다 구역) / false=흙(강·연못)
 	"beach_density": 0.10,                    # 모래 셀에 조개·해초 데칼이 놓일 비율(모래가 있는 구역만 의미)
+	# ★[S4-T9] 지면 톤 = **그리기 시점 곱셈**(_draw의 draw_texture modulate). 흰색이면 무변화라
+	#   기존 구역 렌더 바이트가 그대로다. 왜 필드 이미지를 갈아끼우지 않고 여기서 곱하나:
+	#   ①`_wang_tiles`(잔디↔흙 전환 타일)가 **전역 1회 캐시**라 구역별 필드로 구우면 먼저 방문한
+	#     구역의 톤이 다른 구역까지 물든다 ②물가 shore 합성·길 갓길·스캐터 데칼이 각자 다른 경로로
+	#     base를 읽어 한 군데만 갈아끼우면 **경계에만 원톤이 남는다**(1차 덤프에서 실측: 연못 둘레·
+	#     길 옆이 형광 tan으로 떴다). 곱셈 한 번은 합성 결과 *전부*에 균일하게 걸린다.
+	"ground_tone": Color(1, 1, 1, 1),
+	# ★[S4-T9] 낙엽 결 — 지면 오버레이에 굽는 2px 낙엽 알갱이 밀도(0 = 없음 = 기존 구역).
+	"leaf_density": 0.0,
 }
 # 나루 마을 건물 footprint — 야외 16채 전부 facade 아트가 있다. 지면 오버레이가 이 rect들을
 #   HOME과 같이 지면으로 칠하면 아트 투명부에 월드-정렬 흙이 seamless하게 비친다([ADR-0054]).
@@ -5953,6 +6248,48 @@ var _G16_REGION_PROFILES := {
 		"shore_sand": true,         # 바다 물가의 '땅' = 모래(흙 띠 금지)
 		"beach_density": 0.11,
 	},
+	# ★[S4-T9 / ADR-0062 결정 10 ㉠] 저승 숲 = **그늘진 숲 바닥**. 나루(정돈 0.30)·삼도천(강변 0.42)보다
+	#   더 잔디가 이긴다(0.26) — 숲 바닥은 사람 손이 닿은 적 없는 하층 식생이라 맨흙이 드물고, 대신
+	#   나무 밑 닳은 자리로만 흙이 비친다. 톤은 field_set이 든다(어두운 잔디 + 낙엽 결).
+	#   스캐터는 전 구역 중 가장 야생(잡초·나뭇가지 존치 = 농원보다도 빽빽).
+	#   ★다단 절벽·포장·모래·밭이 하나도 없는 구역이라 그 패스는 전부 꺼 둔다(비용 0).
+	RegionCatalog.JEOSEUNG_FOREST: {
+		"grass_thr": 0.26,
+		# 마을·삼도천에서 검증된 뭉침 값 그대로 — 1칸 돌기가 Wang 전환에 안 걸려 하드 사각으로 뜨는
+		# 문제(삼도천 1차 덤프 육안)는 지형과 무관한 구조적 결함이라 신규 구역도 같은 처방이 필요하다.
+		"min_patch": 14,
+		"iso_min": 8,
+		"smooth_maj": 5,
+		"orphan_fill": true,
+		"sparse_density": 0.09,     # 빈 흙 clutter(1차 덤프에서 0.14는 카펫으로 읽혀 하향)
+		"fringe_density": 0.26,     # 경계 tuft(같은 이유로 0.38→0.26 — 캐노피가 이미 화면을 채운다)
+		"cliff_overlays": false,    # 숲엔 다단 절벽이 없다(ADR-0062 결정 1 "절벽 런 없음") → 패스 생략
+		"path_apron": true,         # 잔디 지배 → 숲길 둘레 맨흙 갓길로 하드 사각 방지
+		# ★목공방은 **아직 외관 아트가 없다**(T10 소관) → greybox_rects로 오버레이를 투명 통과시켜
+		#   WALL 박스가 살아 있게 한다. building_rects(=facade 있는 건물의 발치 맨흙 패드)에 넣으면
+		#   건물이 통째로 지면에 삼켜진다(1차 덤프에서 실측 — 목공방이 tan 사각이 됐다).
+		"greybox_rects": [WOODSHOP_EXT_RECT],
+		"ground_tone": Color(0.60, 0.69, 0.56, 1.0),   # 어두운 숲 바닥(명도↓ · 초록 쪽으로 살짝)
+		"leaf_density": 0.16,                          # 낙엽 결(칸당 알갱이가 놓일 확률)
+	},
+	# ★[S4-T9] 미혹의 숲 = 저승 숲의 **더 깊은 판**. 같은 골격에 톤만 한 단 더 짙고 차갑다(field_set)
+	#   + 안개 오버레이(_draw_mihok_fog — 순수 시각, 지면 베이크 아님). 잔디는 더 이긴다(0.22 =
+	#   "헤치고 들어가는" 밀도). 연못(12×6)은 shore_sand=false라 흙 물가 = 강·연못 공용 규칙 그대로다.
+	RegionCatalog.MIHOK_FOREST: {
+		"grass_thr": 0.22,
+		"min_patch": 14,
+		"iso_min": 8,
+		"smooth_maj": 5,
+		"orphan_fill": true,
+		"sparse_density": 0.08,
+		"fringe_density": 0.24,
+		"cliff_overlays": false,
+		"path_apron": true,
+		# 옥자 집도 잠긴 **그레이박스 외관**이다(아트는 T10) — 목공방과 같은 이유로 투명 통과.
+		"greybox_rects": [OKJA_HUT_EXT_RECT],
+		"ground_tone": Color(0.42, 0.54, 0.58, 1.0),   # 저승 숲보다 한 단 더 짙고 **차갑게**(청록 쪽)
+		"leaf_density": 0.06,                          # 상록 심림이라 낙엽은 적다(안개가 무드를 든다)
+	},
 }
 
 # 이 구역이 단일출처 16px 지형 파이프라인(_build_ground16)을 쓰는가. 미이식 구역은 기존
@@ -5973,6 +6310,8 @@ var _g16_sand_rects: Array = []    # ★[S3-T9] 백사장 모래 rect(핫 루프
 var _g16_shore_field: Image = null # ★[S3-T9] 물가 shore 셀의 '땅' 채움 필드(흙 또는 모래)
 var _g16_orphan_fill := false      # ★[S3-T9] 고아 셀 채움 게이트(핫 루프 캐시)
 var _g16_shore_edge: Image = null  # ★[S3-T9] 물가 테두리 대체 필드(바다=젖은 모래 / 강·연못=null=손그림)
+var _g16_ground_tone: Color = Color(1, 1, 1, 1)  # ★[S4-T9] 지면 오버레이 곱셈 톤(구역 정체색)
+var _g16_leaf_density: float = 0.0               # ★[S4-T9] 낙엽 알갱이 밀도(0 = 없음)
 
 func _g16_resolve_profile() -> void:
 	var p: Dictionary = _G16_PROFILE_BASE.duplicate()
@@ -5987,6 +6326,8 @@ func _g16_resolve_profile() -> void:
 	_g16_plank_rects = p["plank_rects"]
 	_g16_sand_rects = p["sand_rects"]
 	_g16_orphan_fill = bool(p["orphan_fill"])
+	_g16_ground_tone = p["ground_tone"]       # ★[S4-T9] 지면 곱셈 톤(흰색 = 무변화)
+	_g16_leaf_density = float(p["leaf_density"])
 
 func _g16_in_rects(x: int, y: int, rects: Array, pad: int) -> bool:
 	for r: Rect2i in rects:
@@ -7383,8 +7724,9 @@ func _process(delta: float) -> void:
 	# 잠겨 있어(이동 잠금) phase가 안정적이다.
 	audio.update_music(clock.minutes, _run_over, _in_cafe())
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
-	#   (매 프레임 아님·값쌈). HOME 야외에서만 의미(다른 구역은 _draw_props_for가 PASS_ALL로 전부 그림).
-	if _region == RegionCatalog.HOME and player != null:
+	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
+	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
+	if (_region == RegionCatalog.HOME or _is_forest_art_region()) and player != null:
 		var _pty := int(player.global_position.y) / TILE
 		if _pty != _last_player_tile_y:
 			_last_player_tile_y = _pty
@@ -11174,7 +11516,9 @@ func _overlay_index(t: Vector2i) -> int:
 func _draw() -> void:
 	# ★ 지면 디테일 오버레이(타일 위·facade/프롭/플레이어 아래) — 구역 빌드 때 베이크한 한 장.
 	if _ground_detail_tex != null:
-		draw_texture(_ground_detail_tex, Vector2.ZERO)
+		# ★[S4-T9] 구역 정체 톤을 여기서 곱한다(프로파일 ground_tone). 흰색이면 무변화라
+		#   HOME·나루·삼도천·황천해는 종전과 픽셀 동일이다(§ground_tone 주석의 근거).
+		draw_texture(_ground_detail_tex, Vector2.ZERO, _g16_ground_tone)
 	match _region:
 		RegionCatalog.HOME:
 			_draw_house_wall_band()  # ★ T3③ 집 실내 북벽 plank 밴드(가구 아래 — 가구가 위로 덮어 입체)
@@ -11212,9 +11556,13 @@ func _draw() -> void:
 			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(삼도천과 같은 렌더 — 구역만 다르다)
 			_draw_forage_spawns()    # ★[S4-T8] 백사장 존에 돋은 해변 채집물(숲과 같은 렌더 — 무대만 다르다)
 		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
+			# ★[S4-T9] 숲 프롭(캐노피·원장 폼·장식) — HOME·나루와 같은 Y-split. 뒤 프롭만 여기서
+			#   그리고 앞 프롭은 _front_props가 플레이어 위에 다시 그린다(수관 뒤로 지나가기).
+			var _fsy: float = player.global_position.y if player != null else 1.0e20
+			_draw_props_for(_forest_prop_entries(), self, _PROP_PASS_BACK, _fsy)
 			_draw_forage_spawns()    # ★[S4-T1] 빈터에 돋은 채집물(종별 색점 그레이박스 — 아이콘 아트는 S4-T10)
-			_draw_berry_bushes()     # ★[S4-T8] 채집 덤불(열매 유무 색 구분 — 아이콘·프롭 아트는 S4-T9)
-			_draw_tree_ledger()      # ★[S4-T3] 원장 나무 중 미성숙·그루터기(성숙목은 TREE 타일이 그린다)
+			_draw_berry_bushes()     # ★[S4-T8→T9] 채집 덤불(전용 프롭 + 열매 색점 2상태)
+			_draw_tree_ledger()      # ★[S4-T3] 원장 폴백(숲은 T9 프롭이 대신하므로 안식 전용으로 축소)
 			_draw_tappers()          # ★[S4-T6] 성숙목에 박힌 수액 채취기(안식과 같은 렌더 — 구역만 다르다)
 			_draw_woodshop_room()    # ★[S4-T7] 목공방 실내 — 카운터·작업대·원목 더미(그레이박스)
 		RegionCatalog.EOPHWA_MINE:
@@ -11535,18 +11883,22 @@ const _BERRY_COLORS := {
 func _draw_berry_bushes() -> void:
 	if berry_bushes == null or _indoor != "":
 		return
+	# ★[S4-T9 아트 패스] 그레이박스 반원 두 겹 → 전용 프롭(`forest_berry_bush`).
+	#   ★이 프롭이 능선 SOLID 덤불(PROP_BUSH 64×64)과 **다른 실루엣**인 것이 요구사항이다(owner 큐):
+	#     같은 그림이면 "저 벽도 흔들 수 있나"로 읽혀 §2-2 덤불 3역할 분리가 시각에서 무너진다.
+	#     분리 축 = 크기(1칸 vs 2×2칸) · 실루엣(매끈 낮은 반구 vs 어두운 톱니 dome) · 톤(밝음 vs 어두움).
+	#   열매는 여전히 **코드 색점**이다 — 절기마다 종이 갈리고(넋딸기·잿빛복분자) 유·무 2상태가
+	#   한 텍스처로 굴러야 하므로, 열매를 아트에 구우면 4장이 필요해진다(에셋 폭발).
+	var bsz := PROP_FOREST_BUSH.get_size()
 	for t: Vector2i in bush_tiles_for(_region):
 		var px := Vector2(t.x * TILE, t.y * TILE)
-		# 덤불 덩이 — 아래로 퍼진 반원 두 겹(그늘 → 잎).
-		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.68), TILE * 0.36, _BUSH_SHADE)
-		draw_circle(px + Vector2(TILE * 0.44, TILE * 0.58), TILE * 0.30, _BUSH_BODY)
-		draw_circle(px + Vector2(TILE * 0.64, TILE * 0.62), TILE * 0.24, _BUSH_BODY)
+		draw_texture_rect(PROP_FOREST_BUSH, Rect2(px, bsz), false)
 		if not berry_bushes.has_berry(_region, t):
 			continue
 		var col: Color = _BERRY_COLORS.get(BerryBushes.berry_for_day(clock.day), Color(0.8, 0.3, 0.4))
-		for o in [Vector2(0.34, 0.52), Vector2(0.58, 0.46), Vector2(0.52, 0.70)]:
-			draw_circle(px + Vector2(TILE * o.x, TILE * o.y), TILE * 0.09, col)
-			draw_circle(px + Vector2(TILE * o.x, TILE * o.y), TILE * 0.09, Color(0.08, 0.06, 0.10, 0.7), false, 1.0)
+		for o in [Vector2(0.30, 0.62), Vector2(0.52, 0.55), Vector2(0.70, 0.66), Vector2(0.44, 0.75)]:
+			draw_circle(px + Vector2(TILE * o.x, TILE * o.y), TILE * 0.08, col)
+			draw_circle(px + Vector2(TILE * o.x, TILE * o.y), TILE * 0.08, Color(0.08, 0.06, 0.10, 0.75), false, 1.0)
 
 # ★[S4-T3 / ADR-0062 결정 3·6] 원장 나무 그레이박스 렌더 — **성숙목 말고** 나머지 상태만 그린다.
 #   성숙목은 이미 무대가 그린다(숲 = TREE 그리드 타일 / 안식 = PROP_TREE_A/B 스프라이트). 여기 몫은
@@ -11568,6 +11920,11 @@ const _MOSS_COL := Color(0.32, 0.50, 0.34)
 const _MOSS_HILITE := Color(0.45, 0.63, 0.42)
 func _draw_tree_ledger() -> void:
 	if tree_ledger == null or _indoor != "":
+		return
+	# ★[S4-T9] 숲 2구역은 이제 `_forest_props`(도트 3폼·그루터기·큰 장애물·이끼)가 원장을 그린다.
+	#   아래 그레이박스는 **안식 농원 전용 폴백**으로 남는다 — 거기선 성숙목만 프롭이고 미성숙·
+	#   그루터기 아트가 아직 없다(자체 파종 유목의 아트 승격은 안식 아트 패스 소관).
+	if _is_forest_art_region():
 		return
 	for t: Vector2i in tree_ledger.tiles(_region):
 		if not tree_ledger.is_occupied(_region, t):
@@ -12200,10 +12557,12 @@ func _draw_props_for(layout: Array, canvas: CanvasItem, pass_mode: int = _PROP_P
 			# ★ ADR-0052 딴 꽃 패치는 풀 스프라이트를 숨긴다(reclaim 결 skip-filter). 재생 대기 새싹은 별도 패스.
 			if is_flower and flower != null and not flower.is_bloomed(t):
 				continue
-			# Y-split: 부피 프롭(그림자 세트)만 앞/뒤로 갈린다 — 평면 데칼(러그·꽃·울타리·잡초 등)은
+			# Y-split: 부피 프롭(SPLIT_PROPS)만 앞/뒤로 갈린다 — 평면 데칼(러그·꽃·울타리·잡초 등)은
 			#   발치 개념이 없어 늘 뒤(플레이어 아래). 경계 base==split은 BACK. ALL이면 전부 그린다.
+			#   ★SPLIT_PROPS ⊃ PROP_SHADOW_SET(차이 = 이끼 하나) — 이끼는 그림자를 안 지지만 자기가
+			#     앉은 성숙목과 같은 패스를 타야 한다(§SPLIT_PROPS 주석).
 			if pass_mode != _PROP_PASS_ALL:
-				var is_front: bool = casts_shadow and _prop_base_y(t, yo, tex) > split_y
+				var is_front: bool = tex in SPLIT_PROPS and _prop_base_y(t, yo, tex) > split_y
 				if pass_mode == _PROP_PASS_BACK and is_front:
 					continue
 				if pass_mode == _PROP_PASS_FRONT and not is_front:
@@ -12249,11 +12608,18 @@ func _draw_prop_shadow(canvas: CanvasItem, t: Vector2i, yo: int, tsz: Vector2) -
 # ★[roster] 나무 occlusion fade 갱신 — HOME 야외에서 매 프레임, 각 나무가 (a) 앞 패스로 그려지고
 #   (플레이어보다 앞 = 발치가 플레이어 아래) (b) 플레이어 발치를 스프라이트 rect로 덮으면 target=TREE_FADE_MIN,
 #   아니면 1.0으로 move_toward. 알파가 바뀐 프레임에만 _front_props를 다시 그린다(정적이면 재드로우 0).
+# ★[S4-T9] occlusion fade 모수 = 그 구역의 부피 프롭 배열. 안식은 손저작+절차 병합, 숲은 T9 절차
+#   배열이다(다른 구역은 fade 대상이 없어 빈 배열 = 종전대로 무동작).
+func _fade_prop_entries() -> Array:
+	if _is_forest_art_region():
+		return _forest_prop_entries()
+	return _home_prop_entries()
+
 func _update_tree_fade(delta: float) -> void:
 	var ppos := player.global_position
 	var changed := false
 	var live: Dictionary = {}   # 이번 프레임 나무 앵커 집합(사라진 나무의 잔여 엔트리 정리)
-	for entry in _home_prop_entries():   # ★[S1R-T4] 절차 숲·능선 나무·바위도 occlusion fade(병합)
+	for entry in _fade_prop_entries():   # ★[S1R-T4] 절차 숲·능선 나무·바위도 occlusion fade(병합)
 		var tex: Texture2D = entry[0]
 		if not tex in FADE_PROPS:
 			continue
@@ -12275,6 +12641,49 @@ func _update_tree_fade(delta: float) -> void:
 	if changed and _front_props != null:
 		_front_props.queue_redraw()
 
+# ★[S4-T9 / ADR-0062 결정 10 ㉠] 미혹의 숲 안개 패치 — **순수 시각 오버레이**다(지면 베이크도,
+#   상태도 아니다). [CONTEXT] "미혹 = 길 잃음"의 대기 표현이자, 저승 숲과 미혹을 한눈에 가르는
+#   두 번째 축이다(첫째는 지면 톤 field_set).
+#   · 자리는 **좌표 결정적 해시** — 전역 randf 금지 규약을 그림에도 그대로 적용한다(같은 맵이면
+#     늘 같은 자리에 낀다 = 덤프 바이트 재현).
+#   · 옅은 겹 셋(넓은 훈 → 중간 → 심)으로 소프트 엣지를 만든다. 알파 상한을 0.13에 두는 이유는
+#     그 위로 가면 채집물 색점·감지 마커·플레이어가 안개에 먹혀 가독이 무너지기 때문(§17).
+const _FOG_ALPHA := 0.34
+const _FOG_COLOR := Color(0.70, 0.80, 0.84)
+const _FOG_PATCHES := 70        # 64×44 구역에 흩는 안개 덩이 수(화면 하나에 두어 덩이는 들도록)
+const _FOG_STEPS := 9   # 한 덩이를 이루는 동심 겹 수(↑=부드러움)
+const _FOG_R_MIN := 60.0
+const _FOG_R_MAX := 168.0
+var _fog_patches: Array = []    # [[중심(Vector2), 반지름(float)], ...] — 구역 빌드 때 1회
+
+# 안개 덩이 자리를 굳힌다. ★**시드 RNG**를 쓴다 — 처음엔 `hash("fogx:%d" % i)`로 좌표를 뽑았는데
+#   GDScript hash는 "fogx:0"/"fogx:1"/"fogx:2" 같은 이웃 문자열에 **거의 연속된 값**을 돌려줘서
+#   70덩이가 전부 반경 몇 픽셀 안에 겹쳐 쌓였다(덤프에서 안개가 통째로 안 보인 원인 — 실측
+#   c=(1539,836)/(1540,837)/(1541,838)). 좌표 해시는 *칸마다 다른 salt*가 있을 때만 쓸 수 있다.
+func _rebuild_fog_patches() -> void:
+	_fog_patches = []
+	if _region != RegionCatalog.MIHOK_FOREST:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("mihokfog:%s" % _region)   # 결정적 — 같은 맵이면 늘 같은 자리(덤프 재현)
+	for i in range(_FOG_PATCHES):
+		_fog_patches.append([
+			Vector2(rng.randf() * _grid_w * TILE, rng.randf() * _outdoor_h * TILE),
+			rng.randf_range(_FOG_R_MIN, _FOG_R_MAX)])
+
+func _draw_mihok_fog(canvas: CanvasItem) -> void:
+	if _region != RegionCatalog.MIHOK_FOREST or _indoor != "":
+		return
+	# 겹 하나하나는 아주 옅게(_FOG_STEPS로 나눈 몫) 깔고 **누적**으로 농도를 만든다. 겹이 셋이면
+	# 알파 계단이 커서 동심원 테두리가 "보케 원반"으로 읽힌다(1차 시도 육안) — 겹을 늘리고 겹당
+	# 알파를 낮추면 같은 중심 농도가 부드러운 감쇠로 보인다.
+	var step: float = _FOG_ALPHA / float(_FOG_STEPS)
+	for e in _fog_patches:
+		var c: Vector2 = e[0]
+		var r: float = e[1]
+		for k in range(_FOG_STEPS):
+			canvas.draw_circle(c, r * (1.0 - 0.085 * float(k)), Color(_FOG_COLOR, step))
+
 func _draw_front_props(canvas: CanvasItem) -> void:
 	if player == null:
 		return
@@ -12291,6 +12700,11 @@ func _draw_front_props(canvas: CanvasItem) -> void:
 		RegionCatalog.HWANGCHEONHAE:
 			_draw_props_for(_prop_layouts.get("HWANG_OUTDOOR", []), canvas, _PROP_PASS_FRONT,
 				player.global_position.y)
+		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
+			# ★[S4-T9] 숲 캐노피·원장 폼도 같은 Y-split(수관 뒤로 지나가면 반투명 — FADE_PROPS).
+			_draw_props_for(_forest_prop_entries(), canvas, _PROP_PASS_FRONT, player.global_position.y)
+			# 안개는 나무보다도 위다 — 숲 전체를 덮는 대기라 프롭 뒤에 깔면 "바닥 얼룩"으로 읽힌다.
+			_draw_mihok_fog(canvas)
 
 # 좌석에 앉은 손님과 머리 위 인내심 바를 그린다. 인내심이 줄수록 바가 짧아지고 붉어져
 # "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거). 몸체는 그레이박스지만 P2.7 톤 패스에서

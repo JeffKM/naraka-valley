@@ -1054,3 +1054,194 @@ cafe_ext.png — 알파가 전부 255고 배경이 #8c8681 회색으로 구워�
   ★[owner 큐] 조명 무관 HUD를 원하면 CanvasLayer Control로 옮기는 별도 작업이 된다.
 ★ 로직 불변: FishingSession은 한 줄도 안 건드렸다(같은 네 수치를 다른 문법으로 그릴 뿐).
 ```
+
+---
+
+## 14. ★[S4-T9] 저승 숲·미혹의 숲 아트 패스 1 — 나무 3폼·장식·덤불 12종 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-07-30). §10~§13과 같은 [ADR-0048] 교체
+> 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰면 **코드 0줄 수정**으로 반영된다.
+>
+> **후처리 글루:** [`game/tools/make_forest_art.py`](../../game/tools/make_forest_art.py)
+> **raw 보관:** `game/assets/props/{tree_forest_dark,tree_mid,tree_sapling,tree_stump,forest_berry_bush,`
+> `forest_moss,forest_mushroom,forest_fern,mihok_dead_snag,mihok_rare_mushroom,large_stump,large_log}_raw.png`
+> **육안 하네스:** `godot --path game --script res://playtest/forest_dump.gd` (⚠비-headless)
+> → `/tmp/forest_{jeoseung_clearing1,jeoseung_woodshop,jeoseung_growth,jeoseung_forms,jeoseung_bush,`
+> `mihok_pond,mihok_deep,mihok_clearing}.png`
+>
+> **PixelLab 사용량 13 gen**(ADR-0062 결정 10 천장 ~13 준수). 12종 채택 + 이끼 1회 재생성.
+> 나무는 **Slice 1/2 기생성 2종(`tree_spirit_a`·`tree_spirit_b`)을 그대로 재사용**하고 신규는 짙은
+> 변형 1종뿐이다(결정 10 ㉡ "중복 생성 0"). 통나무 5종·풀 뭉치도 기존 자산 재사용.
+>
+> **이 패스로 숲 2구역에 그레이박스 나무가 0이 됐다** — 다만 **외관 2건(목공방·옥자 집)은 여전히
+> 그레이박스 WALL 박스**다(T10 소관). 그래서 두 rect는 프로파일 `greybox_rects`에 들어가 지면
+> 오버레이를 투명 통과시킨다 — 여기 빠지면 건물이 통째로 지면에 삼켜진다(1차 덤프에서 실측).
+
+### 14.0 공통 규약
+
+```
+전부 [ADR-0050] 32-native · [§0.1] 2px 청키(글루가 ÷2→×2로 강제, 판정 척도 = enforce_chunk와 동일
+  stride 2) · [§1.1] NW 광원 · [§8.1] 하드 알파 · [§3] 발치 bottom-flush(글루 foot_flush) ·
+  [§9] 저승 muted(종별 계수는 아래 카드).
+생성: create_map_object(basic 모드 / high top-down / 단색 외곽선). 지면·그림자를 굽지 않는다
+  (§11 접지 그림자는 코드 타원이 깖).
+★**전 종 비-SOLID**다. 숲의 통행 집합은 TREE 그리드 타일과 `tree_ledger`가 통째로 소유하고, 이
+  프롭들은 그 위에 얹는 순수 시각이다. 부피 프롭(성숙목·중간목·고목·통나무·그루터기)은 **발치 칸이
+  이미 TREE(SOLID)이거나 원장이 든 칸**에만 세운다(황천해 고지 수풀 문법 상속) → 통행 가능 집합이
+  한 칸도 안 바뀐다. 납작한 바닥 소품(버섯·고사리·이끼)만 걷는 칸에 놓인다.
+★리젝 기준: 3/4 각도로 옆면이 보이면 재생성 · 프레임에 지면·그림자가 구워져 있으면 재생성
+  (bbox가 늘어 발치 앵커가 밀린다).
+```
+
+### 14.1 ★나무 3폼 + 그루터기 — 데이터 5단계 ↔ 아트 3폼 매핑표 (잠금)
+
+```
+`TreeLedger`는 성장 **5단계**(+그루터기·큰 장애물)를 들고, 아트는 **3폼**뿐이다. 에셋 폭발을
+억제하면서(ADR-0062 결정 3) "자라는 중"이 읽히게 하는 매핑을 여기 잠근다.
+
+  원장 상태                     아트                     프레임      배선
+  ─────────────────────────────────────────────────────────────────────────────
+  stage 1 ~ 2                   tree_sapling            32×32  (1칸)  PROP_TREE_SAPLING
+  stage 3 ~ 4                   tree_mid                64×64  (2×2)  PROP_TREE_MID
+  stage 5 (성숙)                 캐노피 믹스              64×128 (2×4)  _CANOPY_MIX_*
+  stump = true                  tree_stump              32×32  (1칸)  PROP_TREE_STUMP
+  large = large_stump           large_stump             32×32  (1칸)  PROP_LARGE_STUMP
+  large = large_log             large_log               32×32  (1칸)  PROP_LARGE_LOG
+  stage 0 · stump false (빈 슬롯) 없음(재성장 대기)        —          —
+
+★**세 폼의 키 계단(1칸 / 2칸 / 4칸)이 이 매핑의 유일한 시각 근거다.** 프레임 치수를 흔들면
+  한 화면에 셋이 서도 "자라는 중"이 안 읽힌다 → 교체 시 치수 고정.
+★큰 장애물 2종은 **보통 그루터기와의 대비**가 곧 "도끼 티어가 필요하다"의 신호다. 그래서 글루가
+  콘텐츠를 칸에 꽉 채우고(32×28 / 32×24) 보통 그루터기는 작게 눌러 둔다(22×16).
+★검증: forest_dump `jeoseung_forms` — 빈터 한 줄에 stage1·2·3·4·5·5+이끼·그루터기·큰그루터기·
+  큰통나무를 나란히 심어 굽는다(육안 매핑 확인 전용 하네스).
+```
+
+```
+14.1a  tree_forest_dark   64×128 (2×4칸) · 채도 ×0.78 · 명도 ×0.86
+  배선: PROP_TREE_FOREST — 경계 밴드 캐노피 + 원장 성숙목
+  PROMPT: a single tall dark underworld forest conifer tree, very dark desaturated blue-green
+    needled canopy in three heavy layered tiers tapering to a point, thick dark twisted trunk with
+    two low bare branches, top-down 3/4 overworld view (Stardew Valley angle), standing upright,
+    centered, transparent background, no baked ground shadow, only its own form self-shadow.
+    + [§1.1 광원 세트]
+  ★정체성: 안식 농원의 저승 봄나무(`tree_spirit_a` 침엽·`tree_spirit_b` 활엽)보다 **한참 어둡다**.
+    캐노피 믹스가 8:1:1인 이유가 이것 — 3:1:1로 섞었더니 밝은 안식 2종이 소수인데도 화면을
+    지배해 "서리 낀 침엽림"으로 읽혔다(1차 덤프 육안). 밝은 쪽은 액센트 몫이다.
+
+14.1b  tree_mid           64×64 (2×2칸) · 채도 ×0.80 · 명도 ×0.88
+  PROMPT: a half-grown young underworld conifer tree, a short slim dark blue-green needled canopy
+    in two tiers, thin dark straight trunk, clearly smaller and thinner than a full grown tree, ...
+  ★성숙목과 **같은 수종으로 읽혀야** 한다(자란 결과가 저것이므로). 활엽으로 뽑으면 안 됨.
+
+14.1c  tree_sapling       32×32 (콘텐츠 20×22) · 채도 ×0.84 · 명도 ×0.92
+  PROMPT: a tiny young tree sapling, one slender pale stem with three or four small leaves at the
+    top, very small, standing upright in bare soil, ...
+  ★"뽑으면 씨앗만 나오는 유목"이라 **연약해 보여야** 한다(굵은 줄기면 벌목 대상으로 읽힌다).
+
+14.1d  tree_stump         32×32 (콘텐츠 22×16) · 채도 ×0.86 · 명도 ×0.92
+  PROMPT: a freshly cut tree stump, a low round trunk base sawn flat on top showing pale concentric
+    growth rings, dark rough bark on the sides, a couple of chopped wood chips at its foot, ...
+  ★**통행 불가 상태**의 시각 신호다(그루터기를 마저 치워야 자리가 열린다) — 납작한 그루가 아니라
+    "아직 뽑아야 할 밑동"으로 보이게.
+```
+
+### 14.2 ★채집 덤불 `forest_berry_bush` — 능선 SOLID 덤불과의 실루엣 분리 (필수 요구)
+
+```
+파일: game/assets/props/forest_berry_bush.png (32×32, 콘텐츠 28×18)  채도 ×0.82 · 명도 ×0.98
+배선: PROP_FOREST_BUSH — main._draw_berry_bushes(). 자리는 FOREST_BUSH_TILES·MIHOK_BUSH_TILES(7그루)
+PROMPT: a low wide round berry bush, a squat dome of small rounded leaves sitting close to the
+  ground, much wider than it is tall, soft billowy outline with no sharp spiky leaves, no berries, ...
+
+★★ **이 카드의 존재 이유 = 역할 분리**(owner 큐 2026-07-30 · 카탈로그 §2-2 덤불 3역할).
+   능선 SOLID 덤불(`bush.png` 64×64)과 **같은 그림이면 안 된다** — 같으면 "저 벽도 흔들 수 있나"로
+   읽혀 [흔드는 채집 대상] ↔ [통행 벽]의 분리가 시각에서 무너진다. 분리 축 셋을 전부 지킬 것:
+     ㉠ 크기  = 32×32 (능선 덤불의 **1/4 면적**, 1칸 vs 2×2칸)
+     ㉡ 실루엣 = 매끈한 **낮고 넓은 반구**(능선 덤불 = 어둡고 넓은 **톱니** dome)
+     ㉢ 톤    = 한 단 **밝은** 초록(능선 덤불은 어둡다)
+   ⚠️ 능선 덤불엔 **열매가 이미 구워져 있다**(어두운 붉은 점) — 그게 애초 혼동의 근원이라, 이쪽은
+     열매 없는 판으로 뽑고 열매는 코드가 얹는다.
+
+★열매 = **코드 색점**(아트 아님). 절기마다 종이 갈리고(넋딸기 피안절 / 잿빛복분자 망연절) 유·무
+  2상태가 한 텍스처로 굴러야 해서, 열매를 구우면 텍스처가 4장 필요해진다(에셋 폭발).
+  `_draw_berry_bushes`가 `_BERRY_COLORS`로 4점을 찍고 어두운 1px 테를 두른다.
+```
+
+### 14.3 저승 숲 장식 (5종 — 신규 2 · 재사용 3)
+
+```
+forest_mushroom  32×32 (콘텐츠 20×18) · 채도 ×0.86 · 명도 ×0.94   ← 신규
+  PROMPT: a small cluster of three pale ghostly forest mushrooms growing from the ground, rounded
+    caps with darker gills underneath, thin stalks, muted bone-white and dusty grey, ...
+forest_fern      32×32 (콘텐츠 26×20) · 채도 ×0.80 · 명도 ×0.90   ← 신규
+  PROMPT: a small forest fern plant, a low rosette of four or five arching feathery fronds
+    spreading outward close to the ground, muted deep green, ...
+그루터기 = §14.1d tree_stump 재사용 / 통나무 = PROP_LOG_UPRIGHT·PROP_LOG_DIAG_A/B 재사용(#202)
+덤불 = §14.2 재사용
+
+★배치 규칙(코드): 장식은 **두 계급**으로 갈린다 — 이게 배치의 유일한 설계 규칙이다.
+   · **밴드 장식**(통나무·그루터기·고목) = **이미 SOLID인 TREE 칸**에만. 걷는 칸에 두면 "통나무인데
+     지나가진다"가 되어, 능선 통나무가 SOLID인 안식과 규칙이 어긋난다.
+   · **바닥 장식**(버섯·고사리·풀) = 걷는 칸(GROUND)에. 원래 통행 O인 납작한 소품이라 오독이 없다.
+   · 채집물 스폰존·덤불 칸·건물 발치는 비운다(그림이 상호작용 표식을 가리면 안 된다).
+```
+
+### 14.4 미혹의 숲 장식 (4종 — 신규 2 · 재사용 1 · 절차 1)
+
+```
+mihok_dead_snag      64×96 (2×3칸) · 채도 ×0.72 · 명도 ×0.84      ← 신규
+  PROMPT: a tall dead bare tree snag, a leafless pale grey weathered trunk with a few broken jagged
+    branches reaching up, bark peeling away, hollow dark knot hole, no leaves at all, ...
+  ★밴드 장식(발치 두 열이 다 TREE일 때만 선다 — 한쪽 발치가 빈터로 삐져나오면 뜬다).
+mihok_rare_mushroom  32×32 (콘텐츠 18×22) · 채도 ×1.00 · 명도 ×1.00  ← 신규
+  PROMPT: a pair of rare glowing mushrooms, tall slender stalks with bell shaped caps that emit a
+    soft cyan bioluminescent glow, bright spirit-blue light against a dark stalk, clearly magical, ...
+  ★**유일하게 톤을 안 죽인다** — [asset-ruleset §17] 게임플레이 pop. 미혹 지면이 가장 어두워
+    저채도로 뭉개면 안 보인다. 영혼빛 램프(§16 `#60d8f0→#2068e8`) 정합.
+이끼 = §14.5 forest_moss 재사용
+안개 = **절차**(생성물 0) — main._draw_mihok_fog
+
+★안개 문법: 시드 RNG로 70덩이 자리를 구역 빌드 때 굳히고(`_rebuild_fog_patches`), 덩이마다
+  동심 9겹을 겹당 알파 _FOG_ALPHA/9로 깔아 **누적**으로 감쇠를 만든다. 프롭보다 **위**에 그린다
+  (`_front_props`) — 프롭 뒤에 깔면 "바닥 얼룩"으로 읽힌다.
+  ⚠️폐기 기록(재시도 금지): ①`hash("fogx:%d" % i)`로 자리를 뽑았더니 GDScript hash가 이웃 문자열에
+    거의 연속된 값을 돌려줘 70덩이가 반경 몇 px 안에 겹쳐 쌓였다(안개가 통째로 안 보였다 —
+    실측 c=(1539,836)/(1540,837)/(1541,838)). **좌표 해시는 칸마다 다른 salt가 있을 때만** 쓸 수 있다.
+    ②겹 3장에 알파를 크게 주면 동심원 테두리가 "보케 원반"으로 읽힌다 → 겹을 늘리고 겹당 알파를 낮춘다.
+```
+
+### 14.5 이끼 `forest_moss` (32×32, 콘텐츠 24×12) · 채도 ×0.88 · 명도 ×0.96
+
+```
+배선: PROP_FOREST_MOSS — `tree_ledger.has_moss()`인 성숙목의 **밑동 오버레이**(낫 1회 채취 대상)
+PROMPT: a flat irregular stain of moss growing on the ground, seen from straight above, completely
+  flat with zero height and no dome or ball shape, a ragged blotchy splatter of teal-green fuzzy
+  texture with torn uneven edges and two smaller separate specks beside it, like lichen spreading
+  on bark, top-down flat decal, ... (flat shading / lineless)
+★**납작해야** 한다 — 부피 있는 덩이로 나오면 채집 덤불과 헷갈린다(1차 생성이 그래서 재생성했고,
+  글루가 24×12로 한 번 더 눌러 못 박는다). 이 한 겹이 "이 나무엔 지금 낫질할 게 있다"의 유일한 신호다.
+★렌더 배선의 함정: 이끼는 그림자를 안 지지만(납작) **자기가 앉은 성숙목과 같은 Y-split 패스를
+  타야** 한다 — 나무가 앞 패스로 가고 이끼만 뒤에 남으면 수관에 가려 신호가 사라진다. 그래서
+  `SPLIT_PROPS`(= PROP_SHADOW_SET + 이끼)를 두고 앞/뒤 판정만 그 집합으로 한다(그림자는 종전 집합).
+  정렬 키에 +0.5 bump를 줘 같은 발치에서 나무보다 **나중에** 그려지게 한다.
+```
+
+### 14.6 구역 지면 톤 (아트 생성물 아님 — 프로파일 값)
+
+```
+파일 없음. `main._G16_REGION_PROFILES`의 `ground_tone`(그리기 시점 곱셈) + `leaf_density`(낙엽 결).
+  저승 숲 = Color(0.60, 0.69, 0.56) · leaf 0.16   — 어두운 잔디 + 낙엽 결
+  미혹의 숲 = Color(0.42, 0.54, 0.58) · leaf 0.06 — 한 단 더 짙고 **차갑게**(청록) + 안개
+★★ 왜 필드 PNG를 갈아끼우지 않고 **곱셈**인가(폐기 기록 — 재시도 금지):
+   구역별 파생 필드(forest_grass_field 등 6장)를 구워 `_g16_field`만 갈아끼우는 1차 안을 만들었고
+   **육안 리젝**했다. 이유 둘:
+     ① `_wang_tiles`(잔디↔흙 전환 타일)가 **전역 1회 캐시**라, 먼저 방문한 구역의 톤이 다른 구역까지
+        물든다(구역 오염).
+     ② 물가 shore 셀별 합성·길 갓길·스캐터 데칼이 각자 다른 경로로 base를 직접 읽어, 한 군데만
+        갈아끼우면 **경계에만 원톤이 남는다** — 연못 둘레와 길 옆이 형광 tan으로 떴다(실측).
+   곱셈 한 번(`draw_texture(tex, pos, tone)`)은 합성 **결과 전부**에 균일하게 걸리고, 흰색이면
+   무변화라 HOME·나루·삼도천·황천해가 픽셀 동일이다.
+★낙엽 색은 **밑에 깔린 지면 픽셀에서 파생**한다(붉은 쪽 lerp 0.55 + 명도 소폭 down). 고정 팔레트를
+  뿌렸더니 어두운 숲 바닥 위에서 형광 주황 색종이로 읽혔다(1차 덤프 육안). 2px 블록 = [§0.1] 캐논.
+```
