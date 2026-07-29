@@ -21,11 +21,19 @@ const L_FLOOR := "floor"        # 바닥재(러그 포함) — 룸 바닥 칸에
 const L_WALL := "wall"          # 벽지(벽장식 포함) — 벽 밴드 칸에 per-cell 칠
 const L_FURNITURE := "furniture"  # 가구(침대·탁자·화분·조명) — 배치 + 회전
 
-# ── 테마 세트(§11.3) — placeholder 2세트. 각 세트가 3레이어 전부에 ≥1 아이템 ──────
-# set_id → {name, items:{ item_key → {layer, is_solid, name, color} }}. 아이템 key는 세트 안에서 고유.
+# ── 테마 세트(§11.3) — 각 세트가 3레이어 전부에 ≥1 아이템 ────────────────────
+# set_id → {name, price, items:{ item_key → {layer, is_solid, name, color} }}. key는 세트 안에서 고유.
+#
+# ★[S4-T7 / ADR-0062 결정 7 ㉡] `price` 신설 — [CONTEXT.md] [집 꾸미기] "입수 = 목공방 가구
+#   카탈로그(골드)가 주"의 이행이다. **골드 단독**이고 제작 재료 게이트는 두지 않는다(CONTEXT
+#   명시: "코스메틱을 노동에 묶으면 의무화"). price 0 = 비매(스타터 2세트 — 이미 무상 해금이라
+#   매대에 값을 붙일 게 없다). 판매 세트는 목공방 매대에서만 산다(만물상 취급 0 — 서비스 분산).
+#   ★ 가격은 잠정(owner 큐): 저승솔 3,000냥 / 잿눈 6,000냥 — 도구 티어(명동 2,000·유철 5,000)
+#     밴드에 얹어 "쓸모 있는 도구 한 단계 ≈ 룩 한 벌"이 되게 잡았다(코스메틱이 필수 진척보다
+#     비싸지도, 공짜로 쏟아지지도 않는 자리).
 const SETS := {
 	"SOULFIRE": {
-		"name": "혼불",
+		"name": "혼불", "price": 0,
 		"items": {
 			"sf_floor": {"layer": L_FLOOR,     "is_solid": false, "name": "혼불 바닥재", "color": [0.18, 0.32, 0.46]},
 			"sf_wall":  {"layer": L_WALL,      "is_solid": false, "name": "혼불 벽지",   "color": [0.14, 0.24, 0.38]},
@@ -34,12 +42,35 @@ const SETS := {
 		},
 	},
 	"HIGANBANA": {
-		"name": "피안화",
+		"name": "피안화", "price": 0,
 		"items": {
 			"hb_floor": {"layer": L_FLOOR,     "is_solid": false, "name": "피안화 바닥재", "color": [0.40, 0.15, 0.16]},
 			"hb_rug":   {"layer": L_FLOOR,     "is_solid": false, "name": "피안화 러그",   "color": [0.70, 0.24, 0.30]},
 			"hb_wall":  {"layer": L_WALL,      "is_solid": false, "name": "피안화 벽지",   "color": [0.30, 0.10, 0.13]},
 			"hb_table": {"layer": L_FURNITURE, "is_solid": true,  "name": "피안화 탁자",   "color": [0.62, 0.22, 0.24]},
+		},
+	},
+	# ★[S4-T7] 목공방 판매 세트 ① 저승솔 — 옹이가 제 손으로 짠 **목재 결**. 이름은 신조어가 아니라
+	#   [저승 삼목] 3종 중 하나([CONTEXT] 신설 용어)라 세계관 용어를 그대로 쓴다(용어 인플레 0).
+	#   옹이의 정체성("베인 나무를 살림집으로 되살린다")이 룩으로 드러나는 첫 세트라 최저가로 둔다.
+	"JEOSEUNGSOL": {
+		"name": "저승솔", "price": 3000,
+		"items": {
+			"js_floor": {"layer": L_FLOOR,     "is_solid": false, "name": "저승솔 마루",   "color": [0.42, 0.31, 0.20]},
+			"js_wall":  {"layer": L_WALL,      "is_solid": false, "name": "저승솔 판벽",   "color": [0.33, 0.24, 0.16]},
+			"js_table": {"layer": L_FURNITURE, "is_solid": true,  "name": "저승솔 탁자",   "color": [0.55, 0.41, 0.26]},
+			"js_shelf": {"layer": L_FURNITURE, "is_solid": true,  "name": "저승솔 책장",   "color": [0.47, 0.35, 0.22]},
+		},
+	},
+	# ★[S4-T7] 목공방 판매 세트 ② 잿눈 — [CONTEXT] 저승 날씨의 성야절 눈. 차고 흰 룩이라 혼불(푸른)·
+	#   피안화(붉은)·저승솔(갈색) 셋과 색면이 안 겹친다(세트 간 조합 다양성, §11.3). 상위가.
+	"JAETNUN": {
+		"name": "잿눈", "price": 6000,
+		"items": {
+			"jn_floor": {"layer": L_FLOOR,     "is_solid": false, "name": "잿눈 바닥재",   "color": [0.72, 0.73, 0.76]},
+			"jn_wall":  {"layer": L_WALL,      "is_solid": false, "name": "잿눈 벽지",     "color": [0.58, 0.60, 0.65]},
+			"jn_bed":   {"layer": L_FURNITURE, "is_solid": true,  "name": "잿눈 침대",     "color": [0.84, 0.86, 0.90]},
+			"jn_lamp":  {"layer": L_FURNITURE, "is_solid": false, "name": "잿눈 등불",     "color": [0.90, 0.92, 0.97]},
 		},
 	},
 }
@@ -61,8 +92,26 @@ static func set_ids() -> Array:
 	return SETS.keys()
 
 # 세트 표시명("" = 미지).
-static func set_name(set_id: String) -> String:
+# ★[S4-T7] 옛 이름 `set_name`에서 개명했다(호출부 전량 갱신). **정적 호출이 조용히 깨져 있었다**:
+#   `HomeDecoCatalog.set_name(x)`가 스크립트의 이 static이 아니라 엔진 쪽 `Object.set_name` 계열로
+#   흡수돼 **항상 null**을 돌려줬다(인스턴스 호출·인라인 식은 정상 — 정적 호출만). S1-9부터 잠복해
+#   있다가 S4-T7 목공방 매대(이 함수의 첫 실사용처)의 육안 덤프에서 "가구 세트"만 뜨는 걸로 드러났다.
+#   F10 꾸미기 안내문("세트: <null>")도 같은 원인이었다. 카탈로그 관례(ItemCatalog.name_of·
+#   Carpenter.name_of·FishCatalog.name_of)와도 이제 일치한다. **`set_*` 이름의 static은 금지**.
+static func name_of(set_id: String) -> String:
 	return str(SETS[set_id]["name"]) if SETS.has(set_id) else ""
+
+# ★[S4-T7] 세트 정가(냥). 0 = 비매(스타터 세트 — 무상 해금분). ♡ 할인은 소비처(main)가 얹는다.
+static func price_of(set_id: String) -> int:
+	return int(SETS[set_id].get("price", 0)) if SETS.has(set_id) else 0
+
+# ★[S4-T7] 목공방 매대에 진열할 세트 id 목록(정가 > 0인 것만 — 정의 순서).
+static func purchasable_ids() -> Array:
+	var out: Array = []
+	for sid in SETS:
+		if price_of(String(sid)) > 0:
+			out.append(String(sid))
+	return out
 
 # 세트에 이 아이템이 있는가.
 static func has_item(set_id: String, key: String) -> bool:

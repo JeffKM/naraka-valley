@@ -68,9 +68,13 @@ const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
 # 컨텍스트(상단 레이어). NONE이면 닫힘(보이지 않음). ★ Phase D — CTX_CHEST(저장 상자) 추가.
 # ★ [S3-T5] CTX_FISHSHOP(뱃사공 생선가게) — 만물상(CTX_STORE)과 **같은 셸·다른 재고·다른 점주 ♡**다.
 #   기어 매대 + 물고기 즉시 환전 두 서브탭을 든다(만물상은 물고기 비취급 — 서비스 분산 유지).
-enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP }
+# ★[S4-T7] CTX_WOODSHOP(옹이 목공방) — 생선가게와 **같은 셸·다른 재고·다른 점주 ♡**다(신규 UI
+#   언어 0). 건축 의뢰 / 가구·자재 두 서브탭을 든다. enum 끝에 붙여 기존 값 불변(좌표 의존 무영향).
+enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP }
 # 생선가게 서브탭(기어 매대 / 물고기 환전).
 enum { FS_TAB_GEAR, FS_TAB_TRADE }
+# ★[S4-T7] 목공방 서브탭(건축 의뢰 / 가구·자재 매대) — 생선가게 서브탭과 같은 문법.
+enum { WS_TAB_BUILD, WS_TAB_GOODS }
 # 메뉴 탭(인벤토리 · 관계 · 숙련 · 옵션 — ADR-0048 §2 통합 탭 메뉴).
 enum { TAB_INV, TAB_REL, TAB_SKILL, TAB_OPTIONS, TAB_CRAFT }   # ★[S4-T5] 제작 탭(끝 append — 기존 값 불변)
 const TAB_COUNT := 5
@@ -100,6 +104,11 @@ var store_items: Array = []
 #   {icon_id, name, price(1마리 환전가), count, quality, kind="fish", buy_id(=물고기 id)}.
 var trade_items: Array = []
 var fishshop_tab := FS_TAB_GEAR   # 생선가게 서브탭(열 때마다 기어로 리셋)
+# ★[S4-T7] 목공방 건축 의뢰 행 데이터(main이 _build_items로 주입 — 무상태 렌더). 각 항목:
+#   {icon_id, name, price, base, kind="build", buy_id(=프로젝트 id), locked?, locked_text?}.
+#   매대 행(store_items)과 **같은 스키마**라 같은 `_draw_row_list`로 그린다(신규 UI 언어 0).
+var build_items: Array = []
+var woodshop_tab := WS_TAB_BUILD   # 목공방 서브탭(열 때마다 건축으로 리셋)
 # ★ [S1R-T12] 인벤토리 탭 정보패널 값(main이 set_inv_info로 주입 — 무상태 표시).
 var _inv_gold := 0
 var _inv_income := 0
@@ -130,6 +139,9 @@ var _store_scroll := 0           # ★ [S2-T4] 매대 리스트 첫 표시 행(1
 var _store_area_rect := Rect2()  # ★ [S2-T4] 매대 행 영역(휠 라우팅 판정 — 이 안=매대, 밖=백팩)
 # ★ [S3-T5] 생선가게 — 서브탭 히트 2개 + 환전 행 히트 + [전량 환전] 버튼 + 환전 리스트 스크롤.
 var _fs_tab_rects: Array = []
+var _ws_tab_rects: Array = []    # ★[S4-T7] 목공방 서브탭 2개 Rect2(생선가게 _fs_tab_rects 동형)
+var _build_row_rects: Array = [] # ★[S4-T7] 건축 의뢰 행 히트 [{row, buy, kind, buy_id, quality}]
+var _build_scroll := 0           # ★[S4-T7] 건축 리스트 첫 표시 행(휠 스크롤)
 var _trade_row_rects: Array = []
 var _trade_all_rect := Rect2()
 var _trade_scroll := 0
@@ -204,6 +216,8 @@ func open(ctx: int) -> void:
 	_store_scroll = 0            # ★ [S2-T4] 열 때 매대 리스트도 맨 위로
 	_trade_scroll = 0            # ★ [S3-T5] 환전 리스트도 맨 위로
 	fishshop_tab = FS_TAB_GEAR   # ★ [S3-T5] 생선가게는 항상 기어 매대부터(예측 가능한 첫 화면)
+	_build_scroll = 0            # ★ [S4-T7] 건축 리스트도 맨 위로
+	woodshop_tab = WS_TAB_BUILD  # ★ [S4-T7] 목공방은 항상 건축 의뢰부터(가게의 얼굴 = 로빈 건축)
 	visible = true
 	_apply_heart_visibility()
 	queue_redraw()
@@ -320,7 +334,8 @@ func _bp_max_first_row() -> int:
 
 # 백팩 하단 그리드가 그려지는 컨텍스트인가(관계·숙련·옵션 탭은 백팩을 안 그림).
 func _backpack_visible() -> bool:
-	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST or context == CTX_FISHSHOP:
+	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST or context == CTX_FISHSHOP \
+			or context == CTX_WOODSHOP:
 		return true
 	return context == CTX_MENU and menu_tab == TAB_INV
 
@@ -370,6 +385,9 @@ func _draw() -> void:
 			_draw_backpack(panel)
 		CTX_FISHSHOP:
 			_draw_fishshop_top(panel)   # ★ [S3-T5] 뱃사공 생선가게(기어 매대 + 환전 서브탭)
+			_draw_backpack(panel)
+		CTX_WOODSHOP:
+			_draw_woodshop_top(panel)   # ★ [S4-T7] 옹이 목공방(건축 의뢰 + 가구·자재 서브탭)
 			_draw_backpack(panel)
 		CTX_CHEST:
 			_draw_chest_top(panel)
@@ -925,8 +943,12 @@ func _draw_store_top(panel: Rect2) -> void:
 #   · quality > 0이면 아이콘 좌하단 등급 점(백팩 배지와 같은 팔레트)
 #   · locked=true면 버튼 대신 locked_text를 회색으로(유니크 기어 "보유 중" — 클릭 히트 미등록)
 # out_rects에 {"row","buy","kind","buy_id","quality"}를 적재하고, clamp된 스크롤 값을 돌려준다.
+# ★[S4-T7] name_w·price_dx = 이름 칸 폭과 가격 칸 시작 x(둘 다 행 시작 기준). 기본값은 기존 그대로라
+#   만물상·생선가게·환전 호출부는 픽셀 한 점도 안 바뀐다. 목공방 건축 행만 넓게 받는다 — 품목명에
+#   자재 요구량과 공기가 함께 들어가(“큰 넋둥우리 (원목 400 · 2일)”) 118px에서 잘렸기 때문이다
+#   (육안 덤프에서 "큰 넋둥우리 (원목"까지만 보였다). 폭을 넓히면 가격 칸도 같이 밀어야 겹치지 않는다.
 func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scroll: int,
-		out_rects: Array, btn_label: String) -> int:
+		out_rects: Array, btn_label: String, name_w: float = 118.0, price_dx: float = 124.0) -> int:
 	const ROW_H := 22.0
 	const ICON := 20.0
 	# ★ [S2-T4] 보이는 행수만큼 창을 내고 휠로 넘긴다(스타듀 상점 스크롤 리스트 결). 스크롤 상태는
@@ -943,9 +965,16 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 			out_rects.append({"row": rowrect, "buy": buyrect,
 				"kind": String(item.get("kind", "")), "buy_id": String(item.get("buy_id", "")),
 				"quality": int(item.get("quality", 0))})
-		# 아이콘(+ 등급 점).
+		# 아이콘(+ 등급 점). ★[S4-T7] 인벤 아이템이 아닌 품목(가구 테마세트)은 아이콘이 없으므로
+		#   `swatch`(세트 대표색) 한 칸으로 대신한다 — 빈 네모가 뜨는 것보다 낫고, 세트 아트가
+		#   들어오면 icon_id로 갈아끼우면 된다(S4-T9/T10 아트 패스).
 		var icon_rect := Rect2(rowrect.position, Vector2(ICON, ICON))
-		_draw_icon(String(item.get("icon_id", "")), icon_rect)
+		if item.has("swatch"):
+			var sw: Color = item["swatch"]
+			draw_rect(icon_rect.grow(-3.0), sw)
+			draw_rect(icon_rect.grow(-3.0), HanjiUi.INK_DIM, false, 1.0)
+		else:
+			_draw_icon(String(item.get("icon_id", "")), icon_rect)
 		var q := int(item.get("quality", 0))
 		if q > 0:
 			draw_circle(icon_rect.position + Vector2(4.0, ICON - 4.0), 3.0, _quality_color(q))
@@ -956,11 +985,11 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 		if cnt > 0:
 			label += " ×%d" % cnt
 		HanjiUi.draw_text(self, Vector2(rowrect.position.x + ICON + 8.0, ty), label, 13,
-			HanjiUi.INK_LIGHT, 118.0)
+			HanjiUi.INK_LIGHT, name_w)
 		# 가격(엽전 + 숫자). 할인 시 정가→할인가.
 		var price := int(item.get("price", 0))
 		var base := int(item.get("base", price))
-		var px := rowrect.position.x + ICON + 8.0 + 124.0
+		var px := rowrect.position.x + ICON + 8.0 + price_dx
 		if price < base:
 			var bs := "%d→" % base
 			HanjiUi.draw_text(self, Vector2(px, ty), bs, 11, HanjiUi.INK_DIM)
@@ -1037,6 +1066,68 @@ func _draw_fishshop_top(panel: Rect2) -> void:
 	HanjiUi.draw_text(self, Vector2(panel.end.x - PAD - HanjiUi.text_width(ss, 13), list_max_y + 16.0),
 		ss, 13, HanjiUi.GOLD)
 
+# ── ★ [S4-T7 / ADR-0062 결정 7] 목공방 상단(옹이) ─────────────────────────────
+# 생선가게와 **같은 셸·같은 서브탭 문법**을 쓴다(신규 UI 언어 0 — 결정 7 ㉡ 규율):
+#   [건축]     건축 의뢰 행(골드 + 원목 선불 → N일 뒤 완공). 진행 중이면 헤더에 남은 날이 뜨고
+#              모든 행이 잠긴다(동시 1건 — 스타듀 로빈 1:1).
+#   [가구·자재] 가구 테마세트 해금 구매 + 원목 소매(벌목을 안 해도 자재가 안 막히는 우회로).
+# 두 탭이 같은 `_draw_row_list`를 공유해 룩·스크롤 문법이 한 출처다(만물상·생선가게와도 동일).
+func _draw_woodshop_top(panel: Rect2) -> void:
+	var y := panel.position.y + PAD + 14.0
+	for line in store_text.split("\n"):
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
+			panel.size.x - PAD * 2.0 - 126.0)   # 우측은 서브탭 자리로 비워 둔다
+		y += 18.0
+	# 서브탭 2개(헤더 우측 상단 — 생선가게와 같은 plate 문법·같은 좌표계).
+	_ws_tab_rects.clear()
+	var labels := ["건축", "가구·자재"]
+	var widths := PackedFloat32Array([46.0, 72.0])   # "건축"(2자) / "가구·자재"(5자) 폭이 달라 고정폭 대신
+	var tx: float = panel.end.x - PAD - (widths[0] + widths[1] + 4.0)
+	for i in labels.size():
+		var r := Rect2(tx, panel.position.y + PAD + 2.0, widths[i], 20.0)
+		tx += widths[i] + 4.0
+		_ws_tab_rects.append(r)
+		var on := i == woodshop_tab
+		HanjiUi.draw_plate(self, r, 1.0 if on else 0.55)
+		if on:
+			draw_rect(r, HanjiUi.GOLD_SOFT, false, 1.0)
+		HanjiUi.draw_text(self, r.position + Vector2(7.0, 15.0), labels[i], 12,
+			HanjiUi.INK_LIGHT if on else HanjiUi.INK_DIM)
+	var row_y := panel.position.y + PAD + 42.0
+	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0
+	_store_area_rect = Rect2(panel.position.x + PAD, row_y, panel.size.x - PAD * 2.0, max_y - row_y)
+	if woodshop_tab == WS_TAB_BUILD:
+		_store_row_rects.clear()
+		_build_row_rects.clear()
+		if build_items.is_empty():
+			HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + 16.0),
+				"지금 지을 것이 없다 — 다 지었거나, 아직 열리지 않았다", 12, HanjiUi.INK_DIM)
+			return
+		# 건축 행은 이름에 자재량이 붙어 길다 → 이름 칸 168px·가격 칸 174px(이 탭 한정 — 기본 118/124).
+		#   더 넓히면 가격이 우측 상태 칸("짓는 중"·"대기")과 겹친다(육안 덤프 실측 상한).
+		_build_scroll = _draw_row_list(panel, build_items, row_y, max_y, _build_scroll,
+			_build_row_rects, "의뢰", 168.0, 174.0)
+		return
+	# ── 가구·자재 탭 ──
+	_build_row_rects.clear()
+	_store_row_rects.clear()
+	_store_scroll = _draw_row_list(panel, store_items, row_y, max_y, _store_scroll,
+		_store_row_rects, "구매")
+
+# ★ [S4-T7] 목공방 클릭 라우팅 — 서브탭 전환 > (건축) 의뢰 행 > (가구·자재) 구매 행.
+# 세 영역이 겹치지 않으므로 첫 매치 하나만 처리한다(생선가게 라우팅과 같은 결).
+func _click_woodshop(p: Vector2, shift: bool) -> void:
+	for i in _ws_tab_rects.size():
+		if _ws_tab_rects[i].has_point(p):
+			woodshop_tab = i
+			queue_redraw()
+			return
+	var rows: Array = _build_row_rects if woodshop_tab == WS_TAB_BUILD else _store_row_rects
+	for e in rows:
+		if e["buy"].has_point(p) or e["row"].has_point(p):
+			_buy_store_row(e, shift)
+			return
+
 # ★ [S1R-T12] 매대 행 구매 라우팅 — 행/버튼 클릭 시 종류별 시그널. Shift=대량.
 func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 	match String(e.get("kind", "")):
@@ -1044,7 +1135,11 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 			buy_sprinkler_pressed.emit(bulk)
 		"seed":
 			buy_seed.emit(String(e.get("buy_id", "")), bulk)
-		"sapling", "fert", "hay", "gear", "pot":   # ★ [S2-T4] 신규 입고 3종 + ★[S3-T5] 낚시 기어 + ★[S3-T7] 게잡이통 — 일반 품목 구매 시그널
+		# ★ [S2-T4] 신규 입고 3종 + ★[S3-T5] 낚시 기어 + ★[S3-T7] 게잡이통 + ★[S4-T7] 목공방
+		#   3종(build=건축 의뢰 · deco=가구 세트 해금 · wood=원목 소매) — 일반 품목 구매 시그널.
+		#   목공방 3종은 "수량 n개 구매"가 아니지만(의뢰·해금은 1회성), 라우팅은 같은 신호를 태우고
+		#   main이 kind로 갈라 처리한다(프레임에 가게 규칙을 안 심는다 — 프레임은 표시·클릭만).
+		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood":
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
 
 # ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.
@@ -1084,15 +1179,19 @@ func _gui_input(event: InputEvent) -> void:
 	# ★ [S2-T4] 매대 리스트 휠 스크롤 — 매대 행 영역 위에서만(그 밖=아래 백팩 스크롤 유지).
 	#   clamp는 그리기 시점(_draw_store_top)이 행수와 함께 수행.
 	# ★ [S3-T5] 생선가게도 같은 영역 문법을 쓴다(환전 탭이면 환전 리스트가 스크롤된다).
-	if event.pressed and (context == CTX_STORE or context == CTX_FISHSHOP) \
+	# ★ [S4-T7] 목공방도 같은 영역 문법(건축 탭이면 건축 리스트가 스크롤된다).
+	if event.pressed and (context == CTX_STORE or context == CTX_FISHSHOP or context == CTX_WOODSHOP) \
 			and _store_area_rect.has_point(event.position):
 		var trading := context == CTX_FISHSHOP and fishshop_tab == FS_TAB_TRADE
+		var building := context == CTX_WOODSHOP and woodshop_tab == WS_TAB_BUILD
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			if trading: _trade_scroll -= 1
+			elif building: _build_scroll -= 1
 			else: _store_scroll -= 1
 			queue_redraw(); accept_event(); return
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			if trading: _trade_scroll += 1
+			elif building: _build_scroll += 1
 			else: _store_scroll += 1
 			queue_redraw(); accept_event(); return
 	# ★ 마우스 휠 = 백팩 세로 스크롤(백팩이 보이는 컨텍스트에서). 위=이전 행, 아래=다음 행.
@@ -1145,6 +1244,8 @@ func _gui_input(event: InputEvent) -> void:
 					break
 		CTX_FISHSHOP:
 			_click_fishshop(p, event.shift_pressed)
+		CTX_WOODSHOP:
+			_click_woodshop(p, event.shift_pressed)   # ★ [S4-T7] 목공방(서브탭 + 의뢰·구매 행)
 		CTX_CHEST:
 			_click_chest(p)
 	accept_event()

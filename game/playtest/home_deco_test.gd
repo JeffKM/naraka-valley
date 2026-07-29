@@ -50,12 +50,30 @@ func _initialize() -> void:
 			var it: Dictionary = Cat.SETS[sid]["items"][key]
 			if not Cat.is_layer(str(it.get("layer", ""))) or typeof(it.get("is_solid")) != TYPE_BOOL:
 				item_ok = false
-	_check("① 2세트 각 3레이어 전부 커버", cover_ok and Cat.set_ids().size() == 2)
+	# ★[S4-T7] 로스터가 2세트 → 4세트로 늘었다(목공방 판매분 저승솔·잿눈 신설, ADR-0062 결정 7 ㉡).
+	#   커버리지 계약(세트마다 3레이어 전부)은 그대로고 수만 갱신한다.
+	_check("① 4세트 각 3레이어 전부 커버", cover_ok and Cat.set_ids().size() == 4)
 	_check("① 모든 item layer 유효 + is_solid bool", item_ok)
-	_check("① 스타터 2세트 = 정의 세트", Cat.STARTER_SETS.size() == 2 \
+	_check("① 스타터 2세트 = 정의 세트(무상 해금분 — 나머지는 목공방 판매)", Cat.STARTER_SETS.size() == 2 \
 		and Cat.has_set(Cat.STARTER_SETS[0]) and Cat.has_set(Cat.STARTER_SETS[1]))
+	# ★[S4-T7] 판매 세트 = 스타터가 아닌 것 정확히 2건이고, 스타터는 전부 비매(price 0).
+	var starter_free := true
+	for sid in Cat.STARTER_SETS:
+		if Cat.price_of(String(sid)) != 0:
+			starter_free = false
+	_check("① 판매 세트 2건(정가>0) + 스타터는 비매", Cat.purchasable_ids().size() == 2 and starter_free)
 	_check("① 미지 세트/아이템 방어", not Cat.has_set("VOID") and Cat.layer_of("VOID", "x") == "" \
 		and Cat.item("SOULFIRE", "nope").is_empty())
+	# ★[S4-T7] 세트 표시명이 **정적 호출로** 실제 이름을 돌려주는가. 옛 이름 `set_name`은 엔진 쪽
+	#   메서드로 흡수돼 `Cat.set_name(x)`가 항상 null이었다(S1-9부터 잠복 — 매대·F10 안내문이 전부
+	#   "<null>"). 개명(name_of) 뒤 이 단언이 그 회귀를 영구히 잠근다. **정적 호출로 부르는 게 요점**.
+	var name_ok := true
+	for sid in Cat.set_ids():
+		var nm: String = Cat.name_of(String(sid))
+		if nm == "" or nm == "<null>":
+			name_ok = false
+	_check("① 전 세트 표시명이 정적 호출로 실명 반환(set_* 이름 금지 회귀 잠금)",
+		name_ok and Cat.name_of("VOID") == "")
 
 	# ── HomeDeco 스크래치 원장(스크래치 경계 주입) ──
 	var h := HomeDeco.new()
