@@ -1245,3 +1245,256 @@ PROMPT: a flat irregular stain of moss growing on the ground, seen from straight
 ★낙엽 색은 **밑에 깔린 지면 픽셀에서 파생**한다(붉은 쪽 lerp 0.55 + 명도 소폭 down). 고정 팔레트를
   뿌렸더니 어두운 숲 바닥 위에서 형광 주황 색종이로 읽혔다(1차 덤프 육안). 2px 블록 = [§0.1] 캐논.
 ```
+
+---
+
+## 15. ★[S4-T10] 숲 아트 패스 2 — 아이템 아이콘 48종·외관 2채·옹이 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-07-30). §10~§14와 같은 [ADR-0048] 교체
+> 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰면 **코드 0줄 수정**으로 반영된다.
+>
+> **후처리 글루:** [`game/tools/make_t10_icons.py`](../../game/tools/make_t10_icons.py)
+> **raw 보관:** `game/assets/forage/raw/*_raw.png`(24) · `game/assets/materials/raw/*_raw.png`(16) ·
+> `game/assets/buildings/raw/{woodshop,okja_hut}_ext_raw.png` ·
+> `game/assets/characters/ongi_raw/{south,north,east,west}.png` · `game/assets/portraits/ongi_raw.png`
+> **육안 하네스:** `godot --path game --script res://playtest/t10_icon_dump.gd`(★비-헤드리스)
+> → `/tmp/t10_inv_{1,2,3}.png`(인벤 슬롯 실렌더) · `/tmp/t10_portrait.png`(대화창 초상화 슬롯)
+> 그리고 `forest_dump.gd`에 3면 추가 → `/tmp/forest_{jeoseung_forage_icons,jeoseung_tapper,mihok_okja_hut}.png`
+>
+> **이 패스로 Slice 4의 그레이박스 아이템 아이콘이 0이 됐다** — 채집물 22종의 흰 박스, 원목·수액·
+> 씨앗의 색 박스, 수액 채취기의 색 사각형이 전부 도트로 교체됐고, **곁들여 기존 슬라이스가 남긴
+> CAT_MATERIAL 색박스 5종(건초·개간 드랍 3·삭은 그물)까지 닫았다**(§15.5).
+
+### 15.0 공통 규약 (아이콘 48종)
+
+```
+크기: 전부 32×32 투명 PNG **32-native**([ADR-0050] — 축소본 금지). 슬롯이 통째로 늘려 그리므로
+  콘텐츠는 후처리에서 32² 안에 **가운데 정렬**한다.
+생성: create_map_object(32×32 / medium detail / basic shading / **single color outline**)
+  · 식물·자재·씨앗 = view "side"   · 조개/산호/성게/이끼 = view "high top-down"(바닥에 놓이는 물건)
+공통 꼬리말(전 프롬프트에 붙임 — §13.0 어획물 꼬리말에 ③을 상시화한 판):
+  centered on transparent background, no ground shadow, RPG inventory item icon,
+  stardew valley pixel art, muted underworld palette, light from top-left,
+  one connected object with no floating separate pieces
+후처리: 하드 알파 → [§9] muted(채도 ×0.90 · 명도 ×0.97 — §13.0 어획물과 **같은 계수**라 낚시
+  아이콘과 나란히 놓여도 톤이 안 튄다) → 32² 가운데 정렬
+★리젝 기준(실제로 리젝하고 재생성한 5건 — 전부 **"이웃과 안 갈린다"** 한 축이다):
+  ① **같은 계열 두 종이 같은 실루엣** — 1차 잿빛냉이가 혼잎박하와 똑같은 "가는 초록 잔가지"로
+     나왔다. 32²에서 잎사귀 종류는 안 읽힌다. **형태 계급을 바꿔** 풀었다(냉이 = 끈으로 묶은
+     **다발**, 박하 = 가는 **가지**). 색이 아니라 실루엣으로 가른다.
+  ② **부피가 없어 뭉갬** — 1차 넋고사리가 줄기 한 가닥이라 16px에서 사라졌다. "bundle of three,
+     bold chunky readable shape"로 재생성.
+  ③ **정체 오독** — 1차 언혼뿌리가 접시 위 흰 원뿔(아이스크림)로 나왔다. "long parsnip shaped
+     taproot with a tapering tip"처럼 **실존 채소 형태를 지정**하면 잡힌다.
+  ④ **디테일이 안 실림** — 1차 넋성게가 가시 없는 보라 공이었다. "many long sharp radiating
+     spines, spiky star silhouette"로 실루엣을 말로 그려 주면 나온다.
+  ⑤ **형태 없는 덩어리** — 1차 유령초가 흰 얼룩이었다. "bending over at the top into a single
+     drooping bell flower"로 구조를 지정.
+★교체 시 유지할 것: 32² 가운데 정렬 · **한 절기 안에서 세 종의 실루엣 계급이 다를 것**
+  (잎다발 / 뿌리 / 열매·꽃처럼) — 이게 22종을 인벤에서 가르는 유일한 축이다.
+```
+
+### 15.1 채집물 아이콘 24종 `forage/<id>.png`
+
+```
+파일: game/assets/forage/<채집물 id>.png — id = ItemCatalog 상수 = 아이템 id(파일명이 곧 배선)
+배선: main.FORAGE_ICONS → `_merge_t10_icons()`가 `icons` dict에 병합(핫바·인벤 두 곳 공통) +
+  `_item_icon`(토스트). 전부 CAT_HARVEST(이끼만 CAT_MATERIAL)라 기존 분기가 그대로 집는다.
+  ★ **월드 렌더도 이 텍스처를 쓴다**(`_draw_forage_spawns` — 게잡이통이 아이콘↔설치물을 공유한 결).
+    빈터에 뭐가 돋았는지가 줍기 *전에* 눈으로 갈린다(색점 시절엔 22종이 전부 "동그란 것"이었다).
+저승 숲 일반 12(절기당 3 — ★한 절기 안에서 잎/뿌리/열매로 계급을 갈라 뒀다):
+  피안 넋고사리 bundle of three fiddlehead fern shoots, coiled crozier heads /
+       잿빛냉이 bundle of wild greens tied with straw twine, white roots /
+       저승달래 wild garlic chive bunch, one round white bulb with long stalks
+  유화 저승산딸기 sprig of wild raspberries, three dusky red berries /
+       혼잎박하 sprig of mint, pale blue-green oval leaves in opposite pairs /
+       잿빛더덕 knobby bellflower taproot, pale beige forked root
+  망연 잿빛도토리 cluster of three grey-brown acorns joined at their caps /
+       안개도라지 balloon flower, five pointed violet-blue star petals /
+       넋송이버섯 pine mushroom matsutake, thick cream stem, domed tan cap
+  성야 언혼뿌리 frost covered parsnip shaped taproot with frosted leaf tuft /
+       서리동백 camellia, deep crimson bloom with golden center, glossy leaves /
+       성야솔방울 large pine cone with open scales + sprig of pine needles
+미혹 희소 4(절기당 1 — 전부 **창백·발광 액센트**로 일반종과 계급을 가른다):
+  미혹난초 rare orchid, pale violet bloom with a spotted lip /
+  유령초 ghost pipe, bone white stalk drooping into one bell flower /
+  명월버섯 glowing moon mushroom, luminous blue-white cap /
+  서리혼백초 frost herb, silvery feathery leaves rimmed with ice crystals
+미혹 심층 1  저승삼 wild ginseng root, pale forked taproot with fine whiskers
+  ※ 심층 2종 중 나머지 **불사과는 생성하지 않는다** — 작물 3프레임 아트가 이미 있어
+    `CROP_SPRITES`의 mature 프레임이 인벤 아이콘으로 재사용된다(중복 생성 0).
+황천해 해변 4(절기 무관 · high top-down):
+  황천산호 branching coral, dusty rose fading to bone white /
+  넋성게 sea urchin, long sharp radiating spines /
+  유리고둥 glassy translucent spiral shell (side) /
+  물비늘조개 fan shaped scallop, pearly cream with pale blue ridges
+덤불 열매 2 + 이끼 1:
+  넋딸기 cluster of four amber orange salmonberries on a leafy stem /
+  잿빛복분자 cluster of four glossy dark purple blackberries on a leafy stem /
+  저승 이끼 low rounded cushion of muted grey-green moss (high top-down)
+  ※ 덤불 열매 둘은 **같은 프롬프트 뼈대에 색만 다르다** — 같은 상호작용(bush-shake)의 절기
+    변주라 계열로 읽혀야 한다(위 "실루엣을 가르라"의 의도적 예외).
+```
+
+### 15.2 자재·수액·씨앗 아이콘 `materials/<id>.png`
+
+```
+파일: game/assets/materials/<아이템 id>.png (씨앗 봉지만 **작물 id** — 아래 참조)
+배선: main.MATERIAL_ICONS / SEED_PACKET_ICONS → `_merge_t10_icons()` + `_item_icon`
+벌목 산출 3(★원목 두 종은 **한눈에 갈려야 한다** — 건축 의뢰·제작 재료창에서 헷갈리면 비싼 경목을
+  잘못 쓴다. 밝은 tan ↔ 짙은 적갈로 명도를 벌려 놨다):
+  원목        stack of three cut logs bound together, warm tan, growth rings on sawn ends
+  단단한 원목  stack of three dense hardwood logs, deep reddish brown, very tight rings
+  수액        one thick translucent amber resin droplet with a glossy highlight
+수액 3(채취기 산출 — 셋 다 "덩어리"가 되지 않게 **재질을 갈랐다**):
+  솔넋진      lump of pale pine resin, milky translucent cream-white crystalline
+  넋수지      lump of dark oak resin, deep glossy brown, wet sheen
+  명단풍꿀    small round glass jar of maple syrup, amber liquid, cloth-tied lid
+나무 씨앗 3(★대응 채집물과 안 겹치게 어긋냈다 — 잿빛도토리=**셋 다발**/넋참나무 도토리=**싹 튼 하나**,
+  성야솔방울=**솔잎 달린 큰 열린 방울**/저승솔 방울=**작고 닫힌 방울**):
+  저승솔 방울   small slender closed pine cone, dark tight scales
+  명단풍 씨     pair of winged maple samara seeds joined at the base, V shape
+  넋참나무 도토리 single sprouting acorn, pale root curling out, two seedling leaves
+수액 채취기(★인벤 아이콘과 월드 설치물이 **다른 텍스처**다 — 게잡이통(§13.2)이 한 장을 공유한 것과
+  갈리는 지점. 채취기는 *나무에 박히는* 물건이라 월드 판엔 줄기가 있어야 "박혔다"가 읽히고,
+  그 줄기가 인벤 슬롯에선 군더더기다):
+  materials/sap_tapper.png  small wooden bucket with metal hoops and a curved spile on its rim (인벤)
+  props/sap_tapper.png      metal spile driven into bark with a bucket hanging from it (월드·발치 flush)
+```
+
+### 15.3 씨앗 봉지 9종 = 원본 2장의 절기 틴트 파생 (★생성물 2장뿐)
+
+```
+파일: game/assets/materials/<**작물 id**>.png — honhap · yasaeng_{pian,yuhwa,mangyeon,seongya} ·
+  {mihok_nancho,yuryeongcho,myeongwol_beoseot,seori_honbaekcho}_wild
+배선: main.SEED_PACKET_ICONS. ★키가 아이템 id가 아니라 **작물 id**인 이유: 씨앗은 인벤에서
+  `_draw_crop_tex(ItemCatalog.crop_of(id))`로 조회된다 — 아이템 id로 얹으면 영원히 안 잡힌다.
+생성 raw 2장:
+  seed_packet   folded paper seed packet, coarse tan paper pouch tied with twine, seeds in the fold
+  seed_pouch_rare  small silk drawstring bag in bone white cloth, gold cord, red wax seal, glowing sprout
+파생(tools/make_t10_icons.py의 SEED_TINTS/RARE_TINTS): 혼합=무채 / 피안=붉음 / 유화=초록 /
+  망연=짙은 황갈 / 성야=청백 · 희귀 4 = 자보라·청록·달빛파랑·금빛
+★왜 9장을 따로 안 그렸나: ㉠ 스타듀 야생 씨앗도 전부 같은 봉지 실루엣의 절기색 변주다(문법 상속)
+  ㉡ 아홉을 각자 생성하면 실루엣이 흔들려 오히려 "한 계열"로 안 읽힌다 ㉢ [ADR-0001] 큐레이션.
+★★ 틴트 함수의 규칙 2개(두 번의 실패에서 얻음 — 교체 시에도 유효):
+  ㉠ **hue lerp는 1.0이어야 한다.** 0.5로 두면 tan(0.09)→청록(0.56)의 중간인 **초록**에 착지해
+     성야(청백)와 유화(초록)가 같은 색이 됐다. 부분 lerp는 "섞는" 게 아니라 "엉뚱한 데 멈추는" 것.
+  ㉡ **sat_add 없이는 흰 비단 주머니가 안 물든다.** 채도 0 픽셀은 hue를 어디로 돌려도 흰색이라
+     희귀 4종이 전부 같은 흰 주머니로 나왔다. 단 **어두운 외곽선은 제외**(v>0.35) — 안 그러면
+     검은 테가 색 테로 바뀌어 [§1] 단일 외곽선 규약이 깨진다.
+```
+
+### 15.4 건물 외관 2채 `buildings/{woodshop,okja_hut}_ext.png`
+
+```
+공통: §12.0 규약 그대로(정면 facade · 남향 문 · 박공 + 윗면 슬랩 · base 투명 · bottom-center 앵커 ·
+  아트 폭 = footprint 폭 정확히 · fit_facade가 규격에 앉힘 · 3/4 각도·구운 지면 금지).
+★이 두 장의 설계 규칙 = **톤을 정반대로 가르는 것**. 두 채가 한 화면에 안 서므로 대비는 구역 간이다.
+
+15.4.1 목공방 `woodshop_ext`
+파일: game/assets/buildings/woodshop_ext.png (raw: buildings/raw/woodshop_ext_raw.png 140×126)
+크기: 224×202 = WOODSHOP_EXT_RECT Rect2i(6,14,7,6) 폭 1:1(224) · 지붕이 위로 솟음
+배선: main._draw_facade_woodshop() — JEOSEUNG_FOREST 드로우 분기
+  PROMPT: Korean underworld carpenter's woodworking workshop building, flat front elevation only,
+    viewed straight on from the front so no side wall and no perspective is visible, wide and sturdy
+    workshop. Hanok tiled gable roof with a triangular pitch and a visible flat roof-top slab receding
+    behind the ridge. Warm honey brown timber plank front wall showing wood grain, exposed heavy beam
+    posts, a wide double wooden door dead center at the bottom of the front wall, a hanging carved
+    wooden shop sign board above the door showing a hand plane and a saw, a stack of sawn logs and a
+    sawhorse beside the door, wood shavings and a workbench under the eaves. + [§1.1] + 지면 금지
+후처리: fit_facade(7,6) → 채도 ×0.88 · 명도 ×0.96(만물상·혼백관과 같은 계수)
+★정체성 기준: **일하는 집**이다 — 문 위 대패·톱 현판(간판 문법 §11.1), 옆에 통나무 더미와 톱질
+  모탕, 꿀빛 나뭇결. 현판에 목공 도구가 없으면 재생성(생선가게 물고기 현판 기준 동형).
+★문 정렬: footprint 7칸(홀수)이라 문은 **1칸**(x=9 = rect 중앙)이다. [ADR-0046] 짝수폭·2칸 문은
+  신규 footprint 규약이고, 목공방 rect는 [ADR-0062] 결정 1이 "무이동"으로 잠갔다. 아트의 문(2짝
+  여닫이)이 **가로 정중앙**에 오기만 하면 맞는다 — 좌우 비대칭 소품(모탕)이 bbox를 밀면 어긋난다.
+
+15.4.2 옥자 집 `okja_hut_ext`
+파일: game/assets/buildings/okja_hut_ext.png (raw: buildings/raw/okja_hut_ext_raw.png 160×148)
+크기: 256×228 = OKJA_HUT_EXT_RECT Rect2i(54,24,8,7) 폭 1:1(256)
+배선: main._draw_facade_okja_hut() — MIHOK_FOREST 드로우 분기
+  PROMPT: an abandoned locked witch's hut deep in a dark underworld forest, flat front elevation only,
+    viewed straight on from the front. Crooked steep thatched gable roof sagging with moss and dead
+    leaves, weathered dark grey-brown timber plank walls, one narrow closed wooden door dead center at
+    the bottom of the front wall barred with a heavy plank and a rusted padlock, two small shuttered
+    windows boarded up, crawling vines and pale lichen creeping over the walls, a crooked stone chimney
+    with no smoke, a faint cold pale blue glow leaking through one shutter slit. Lonely and sealed.
+    + [§1.1] + 지면 금지
+후처리: fit_facade(8,7) → 채도 ×0.80 · 명도 ×0.90(**목공방보다 한 단 더 눌러** 폐가 톤)
+★정체성 기준: **잠긴 집**이 그림만으로 읽혀야 한다 — 널빤지로 가로막은 문 + 녹슨 자물쇠가 리젝
+  기준이다(코드는 이미 진입을 막지만, 플레이어가 "문인데 왜 안 열리지"로 읽으면 진 것이다).
+  창 틈의 창백한 빛 한 줄 = "비었지만 죽지는 않은 집"([ADR-0062] 결정 1 스토리 게이트 예고).
+```
+
+### 15.5 곁들여 메운 기존 슬라이스 자재 5종 (★스코프 밖이었다가 덤프가 잡아냄)
+
+```
+파일: game/assets/materials/{petrified_wood,soul_fiber,ember_shard,hay,rotten_net}.png
+왜 들어왔나: §15.2 원목 아이콘을 붙이고 인벤 덤프를 찍었더니 **바로 옆 칸**의 석화 목재·건초가
+  여전히 색박스였다. 한 CAT_MATERIAL 줄에서 절반만 도트면 새 아이콘 쪽이 오히려 튄다.
+  · 석화 목재  grey stone log fragment with mineralized growth rings, cracked crystalline surface
+  · 혼백 섬유  pale ghostly white plant fiber threads twisted into a coil, tied at the middle
+  · 업화석 조각 jagged dark charcoal rock with glowing orange cracks and faint heat glow
+  · 건초      small bale of dried hay tied with two cords, golden straw
+  · 삭은 그물  tangled scrap of rotten fishing net, frayed grey-green rope mesh with algae
+★이걸로 **CAT_MATERIAL 카테고리의 색박스 폴백이 0**이 됐다(폴백 코드는 손상 방어로 남겨 둔다).
+```
+
+### 15.6 옹이 스프라이트 `characters/ongi` + 도트 초상화 `portraits/ongi`
+
+```
+파일: game/assets/characters/ongi.png (raw: characters/ongi_raw/{south,north,east,west}.png)
+크기: 80×320 = 프레임 80×80 · **1열**(정지 rotation) × 4행(down/up/right/left)
+  — §11.4 네오·§13.3 뱃사공과 동형. ★옹이 스케줄은 목공방 카운터 한 칸 고정이라 실제로 걷지도
+    돌지도 않는다(walk_down 행만 재생된다) → 워크 4프레임을 뽑지 않는 게 맞다.
+배선: ongi.gd `CharSprite.make("res://assets/characters/ongi.png")` — 이미 있던 훅, 파일만 채웠다
+생성: create_character(mode=standard / n_directions=4 / **size=44** / low top-down /
+      selective outline / basic shading / high detail / text_guidance_scale=11 /
+      proportions {"type":"custom","head_size":1.5,"arms_length":0.75,"legs_length":0.9,
+                   "shoulder_width":0.72,"hip_width":0.75})
+  ★ size=44 = 출하 캐스트 실측 정합값(§11.4 — ADR-0012의 56은 stale).
+  PROMPT: chibi tree spirit woodsman, a living tree stump come to life, his whole head and body are
+    carved weathered brown tree bark with deep vertical grain and a big round knot whorl on his chest,
+    no human skin anywhere, craggy bark face with two glowing warm amber eyes and a beard of hanging
+    pale grey-green lichen, thick mossy eyebrows, a small green leaf sprig sprouting from the top of
+    his head, short stubby branch arms and root feet, wearing a dark indigo carpenter apron with tool
+    pockets over the bark torso, sturdy and calm, standing straight
+후처리: 하드 알파 → muted(채도 ×0.94 · 명도 ×0.98 — 캐스트와 나란히 서므로 아주 얕게) →
+  80×80 프레임에 발치정렬(FOOT_Y=74)
+★리젝 1건(재생성): 1차는 "wood elemental / bark skin"을 **부드럽게** 적었더니 그냥 **초록 머리
+  노인 목수**가 나왔다(사람 피부·나무 요소 = 머리의 잎사귀 한 장뿐). "no human skin anywhere",
+  "his whole head and body are carved weathered brown tree bark", "root feet"처럼 **재질을 몸 전체에
+  못 박고** guidance를 8→11로 올려야 목령이 나온다.
+★알려진 결함(교체 시 고칠 것): **north(뒷모습) 프레임에 얼굴이 그려져 있다** — PixelLab standard의
+  알려진 3방향 일관성 한계다. 옹이는 정지 NPC라 walk_down 행만 화면에 들어 **인게임에선 안 보이지만**,
+  시트를 다른 용도로 재사용하기 전에 반드시 고쳐야 한다.
+
+파일: game/assets/portraits/ongi.png (raw: portraits/ongi_raw.png 128×128)
+크기: 256×256 (raw ×2 nearest) — 네오·뱃사공과 같은 규격
+배선: main `r_ongi.portrait_stem = "ongi"`. **표정 파일은 만들지 않는다** — `_set_portrait`가
+  smile/shy/sad 파일이 없으면 idle로 떨어지므로 idle 한 장이 대사 전량을 덮는다.
+생성: create_portrait_character(character_to_portrait / low top-down / result_size=128) —
+  위 시트의 south 프레임을 20색 양자화해 입력(★[S3-T10 교훈] base64 과長 시 MCP 무음 절단 회피).
+★★ **교체 1순위**(이 패스에서 품질이 가장 낮은 산출물이다). 스프라이트는 목령으로 나왔는데
+  `character_to_portrait` 변환이 **바크 재질을 사람 피부로 되돌린다** — 초록 머리·발광 눈만 남고
+  "나무"가 사라진다. seed를 바꿔 2판을 뽑았지만 둘 다 같은 성질의 실패라 **모델 한계로 판단**하고
+  더 태우지 않았다(네오·뱃사공과 같은 도트 스톱갭 지위). owner-Gemini가 2×3 표정 그리드로 다시
+  그릴 때 요구할 것: **얼굴이 나무껍질**일 것 · 이끼 수염 · 호박빛 눈 · 사람 피부색 0.
+```
+
+### 15.7 이 패스가 바꾼 월드 렌더 (아트 생성물 아님 — 코드)
+
+```
+① `_draw_forage_spawns` — 종 색점 → **FORAGE_ICONS 텍스처**(불사과만 CROP_SPRITES). 아이콘 없는
+   종은 옛 색점으로 폴백(로스터 확장 중 임시 상태 방어).
+   ⚠ 이 변경으로 **황천해 백사장 렌더가 바뀐다**(해변 채집 4종이 색점 → 조개·산호 도트). 의도된
+   변경이며, 삼도천·나루·HOME 지면/건물 렌더는 불변이다.
+② `_draw_tappers` — 색 사각형 두 개 → **PROP_TAPPER 텍스처 + 수거 대기 방울**. 방울만 코드 드로우로
+   남긴다(유·무 2상태를 한 텍스처로 굴려야 에셋이 안 는다 — 덤불 열매 색점과 같은 판단).
+③ 채취기 **Y-split** — 숲에선 플레이어보다 앞에 선 채취기를 뒤 패스에서 빼고 `_draw_tappers_front`가
+   앞 패스에서 다시 그린다. [S4-T9]가 이끼를 SPLIT_PROPS에 넣어 푼 문제의 채취기판이되, 채취기는
+   **상태가 매일 바뀌어 프롭 캐시(`_forest_props`)에 못 들어가므로** 같은 규칙을 손으로 적용했다.
+④ `greybox_rects` → `building_rects` **짝 이동**(목공방·옥자 집). 두 목록은 뜻이 정반대라 아트와
+   반드시 같이 움직여야 한다: greybox = "그림 없으니 오버레이 투명 통과", building = "facade가
+   덮으니 발치 맨흙 패드". 아트를 붙이고 greybox에 남기면 오버레이가 facade를 삼킨다(T9 실측).
+```

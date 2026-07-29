@@ -108,6 +108,38 @@ func _initialize() -> void:
 		m._front_props.queue_redraw()
 	await _grab("jeoseung_forms")
 
+	# ★[S4-T10] 채집물 아이콘 — 폼 보드 위 빈터 한 줄에 종을 **직접 심어** 22종 중 앞 8종을
+	#   한 화면에 세운다(결정 롤을 기다리면 하루 6개 상한이라 육안 대조가 안 된다).
+	#   판정 기준: 색점이 아니라 도트가 나와야 하고, 이웃끼리 실루엣이 갈려야 한다.
+	var icon_row := [
+		ItemCatalog.NEOK_GOSARI, ItemCatalog.JAETBIT_NAENGI, ItemCatalog.JEOSEUNG_DALLAE,
+		ItemCatalog.HONIP_BAKHA, ItemCatalog.JAETBIT_DOTORI, ItemCatalog.ANGAE_DORAJI,
+		ItemCatalog.NEOK_SONGI, ItemCatalog.SEORI_DONGBAEK,
+	]
+	for i in range(icon_row.size()):
+		m.forage_spawns._tiles[JF] = m.forage_spawns._tiles.get(JF, {})
+		m.forage_spawns._tiles[JF][Vector2i(16 + i * 2, 17)] = String(icon_row[i])
+	m.forage_spawns.changed.emit()
+	m._warp(JF, "", Vector2i(23, 19))
+	m.queue_redraw()
+	if m._front_props != null:
+		m._front_props.queue_redraw()
+	await _grab("jeoseung_forage_icons")
+
+	# ★[S4-T10] 수액 채취기 — 폼 보드의 성숙목 둘에 박고, 플레이어를 그 **위**에 세운다.
+	#   이 배치가 핵심이다: 플레이어가 나무보다 위면 나무가 앞 패스로 가므로, 채취기가 뒤 패스에
+	#   남아 있으면 캐노피에 통째로 먹힌다(T9 이끼가 겪은 문제의 채취기판). 통·수거 방울이 다
+	#   보여야 통과.
+	m.tapper.place(JF, Vector2i(23, 20), TreeLedger.SP_PINE)
+	m.tapper.place(JF, Vector2i(25, 20), TreeLedger.SP_MAPLE)
+	m.tapper._taps[JF][Vector2i(23, 20)]["product"] = ItemCatalog.SOLNEOKJIN
+	m.tapper.changed.emit()
+	m._warp(JF, "", Vector2i(24, 18))
+	m.queue_redraw()
+	if m._front_props != null:
+		m._front_props.queue_redraw()
+	await _grab("jeoseung_tapper")
+
 	# 채집 덤불 — 4그루 중 둘만 열매를 달아 2상태를 한 화면에 둔다.
 	var bl: Array = m.bush_tiles_for(JF)
 	for i in range(bl.size()):
@@ -143,6 +175,15 @@ func _initialize() -> void:
 	if m._front_props != null:
 		m._front_props.queue_redraw()
 	await _grab("mihok_clearing")
+
+	# ★[S4-T10] 옥자 집 외관 — 문(57,30) 아래로 파인 동선 칸에 선다. 판정 기준 둘:
+	#   ㉠ facade가 지면 오버레이에 안 삼켜졌는가(building_rects 짝 이동이 됐는가),
+	#   ㉡ "잠긴 폐가"로 읽히는가(널빤지·자물쇠·이끼 얹힌 초가 — 목공방과 톤이 반대인가).
+	m._warp(MF, "", Vector2i(57, 33))
+	m.queue_redraw()
+	if m._front_props != null:
+		m._front_props.queue_redraw()
+	await _grab("mihok_okja_hut")
 
 	if had:
 		_write(sp, bak)

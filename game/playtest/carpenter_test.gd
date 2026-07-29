@@ -118,7 +118,10 @@ func _run_checks() -> void:
 		r.node != null and r.node.is_inside_tree() and r.node is Ongi)
 	_check("ⓑd 신규 세이브 키(구세이브엔 없음 = ♡0 시작)", r.save_key == "ongi_affinity")
 	_check("ⓑe 관계 트랙 보유 · 선물 채널 있음(T2 사귐)", r.affinity != null and r.can_gift)
-	_check("ⓑf 초상화 없음(아트는 S4-T9/T10)", r.portrait_stem == "")
+	# ★[S4-T10] 아트 패스 2가 도트 초상화를 붙여 단언을 **뒤집었다**(옛 단언 = "초상화 없음").
+	#   표정 파일은 안 만든다 — `_set_portrait`가 없으면 idle로 떨어지므로 idle 한 장이 계약이다.
+	_check("ⓑf 도트 초상화 배선(S4-T10 스톱갭 — idle 한 장)",
+		r.portrait_stem == "ongi" and ResourceLoader.exists("res://assets/portraits/ongi.png"))
 	_check("ⓑg 상시 영업(스케줄 1항목) · 자리 = 목공방 카운터 뒤",
 		r.schedule.size() == 1 and r.tile == m.ONGI_TILE
 		and m.WOODSHOP_RECT.has_point(m.ONGI_TILE))
