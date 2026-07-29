@@ -53,6 +53,10 @@ const NO_TARGET := Vector2i(-1, -1)
 const HARDWOOD_CHANCE := 0.25
 # 수액꾼(DIM_TAP_QUALITY) — 수액 등급 계단 +1(일반→은→금). 등급 상한은 소비처(S4-T6)가 클램프한다.
 const TAP_QUALITY_STEP := 1
+# 수액꾼의 나머지 절반 = **주기 단축**([ADR-0052] "수액 등급↑ + 채취 주기 단축"). 1일인 이유: 주기
+# 5/7/9에서 −1이면 각각 −20%/−14%/−11%라 스타듀 수액꾼(+25% 산출)과 같은 체급이면서, 가장 짧은
+# 저승솔(5→4)도 "이틀에 한 번"으로 무너지지 않는다(패시브가 손 노동을 대체하지 않는다 — ADR-0008).
+const TAP_CYCLE_CUT := 1
 
 # ── 조회(XP → 레벨) ─────────────────────────────────────────────────────────
 # 누적 XP → 레벨(0..10). ★곡선은 FarmSkill이 단일 출처(ADR-0052 "5스킬 공통 기반") — 위임만 한다.
@@ -95,6 +99,11 @@ static func hardwood_chance(perk: float) -> float:
 # 수액꾼(DIM_TAP_QUALITY) — 수액 등급 계단(flag → +1 등급).
 static func tap_quality(perk: float) -> int:
 	return TAP_QUALITY_STEP if perk > 0.0 else 0
+
+# 수액꾼(DIM_TAP_QUALITY) — 채취 주기 단축(일). **같은 퍼크 flag가 두 효과를 낸다**(등급↑ + 주기↓)
+#   — ADR-0052 로스터 한 줄의 두 절반이라 dim을 쪼개지 않는다(퍼크 데이터 불변).
+static func tap_cycle_cut(perk: float) -> int:
+	return TAP_CYCLE_CUT if perk > 0.0 else 0
 
 # ── 혼 감지 ─────────────────────────────────────────────────────────────────
 # 지금 감지 반경(칸). 0 = 감지 없음(lvl3 미만) · DETECT_RANGE_ALL(-1) = 구역 전체(감지자 퍼크).

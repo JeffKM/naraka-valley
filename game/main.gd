@@ -1720,6 +1720,11 @@ var _forage_found: Dictionary = {}
 #   불변식 보존). ForageSpawns와 같은 RefCounted 순수 원장이고, 통행 판정·그리드 동기화·산출 적재는
 #   전부 main이 한다(원장은 지형·인벤·혼력을 모른다).
 var tree_ledger: TreeLedger = null
+# ★[S4-T6 / ADR-0062 결정 4] 수액 채취기 원장(성숙 나무에 박은 채취기 — 종·남은 날·고인 수액).
+#   게잡이통 원장의 1:1 복제이고 설치 판정만 "물가 인접"→"성숙 나무"로 갈린다. 나무 원장과 좌표를
+#   공유하되 **서로를 모른다**(TreeLedger는 채취기를 모르고, 여기선 종만 스냅샷해 든다 — 벌목 차단·
+#   설치 자격 같은 두 원장의 교차 규칙은 전부 main이 든다).
+var tapper: TapperLedger = null
 # ★[S4-T4 / ADR-0062 결정 6] 도구 티어 원장(도구별 티어 정수 — S4 실효는 도끼 2티어, 나머지 3종은 키
 #   예약). ADR-0027이 코드에 처음 존재하게 되는 지점이다: 도끼 티어가 ①성숙목 타수(10/8/6)와
 #   ②큰 장애물 접근(큰 그루터기=명동 / 큰 통나무=유철)을 가른다. 무대는 업화 갱도 대장간의 **무인
@@ -2048,6 +2053,8 @@ func _ready() -> void:
 	forage_spawns.changed.connect(queue_redraw)   # 스폰·줍기·리셋·복원 시 그레이박스 갱신(게잡이통 결)
 	tree_ledger = TreeLedger.new()       # ★[S4-T3] 나무 원장(RefCounted — 채집물 스폰 원장과 같은 결)
 	tree_ledger.changed.connect(_on_tree_ledger_changed)   # 벌목·성장·재성장·복원 시 충돌·드로우 갱신
+	tapper = TapperLedger.new()          # ★[S4-T6] 수액 채취기 원장(RefCounted — 나무 원장과 같은 결)
+	tapper.changed.connect(queue_redraw) # 설치·수거·회수·일일 진행·복원 시 그레이박스 갱신(게잡이통 결)
 	tool_tier = ToolTier.new()           # ★[S4-T4] 도구 티어 원장(RefCounted — 나무 원장과 같은 결)
 	tool_tier.changed.connect(queue_redraw)   # 티어가 오르면 프롬프트 타수·대장간 안내가 즉시 갱신
 	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
@@ -2892,6 +2899,12 @@ func _chop_tree(t: Vector2i) -> void:
 		return
 	if inventory.selected_id() != ItemCatalog.AXE:
 		return                                   # 도끼가 아니면 무동작(ADR-0024 §2 자동 분기 없음)
+	# ★[S4-T6] 채취기가 박힌 나무는 못 벤다 — 베면 그 위의 채취기(원목 40 + 석화 목재 2)와 고인 수액이
+	#   조용히 증발한다. 게잡이통이 "어획 대기 중 회수 거절"로 막는 것과 **정확히 같은 손실 방지**이고,
+	#   해법도 같다(먼저 [F]로 거두고 뽑아라). 혼력은 안 든다 — 무효타는 값을 안 매긴다(티어 부족 결).
+	if tapper != null and tapper.has_at(_region, t):
+		_notice("수액 채취기가 박힌 나무는 벨 수 없다 — [F]로 채취기를 먼저 회수하자")
+		return
 	var cost := SoulEnergy.COST_PER_ACTION
 	if not energy.can_act(cost):
 		return
@@ -6484,6 +6497,16 @@ func _on_day_advanced(day: int) -> void:
 			crab_pot_cost_save())
 		if not pot_catch.is_empty():
 			_notice("게잡이통 %d개에 무언가 걸렸다 — 물가에 들러 [F]로 거두자" % pot_catch.size())
+	# ★[S4-T6 / ADR-0062 결정 4] 수액 채취기 하루 — 박힌 채취기마다 남은 날을 하나 줄이고, 다 차면 그
+	#   종의 수액이 고인다(혼력 0·완전 패시브·RNG 0). 게잡이통과 같은 문법으로 **안 비운 채취기는
+	#   카운트다운도 멈춘다**. 수액꾼 퍼크 2효과(등급 계단·주기 −1일)와 채집 레벨 기본 등급이 여기서
+	#   원장에 *주입*된다(TapperLedger는 전문직·스킬을 모른다 — 게잡이통 퍼크 주입과 같은 자리).
+	if tapper != null:
+		var sap_ready := tapper.advance_day(
+			_forage_base_quality(_skill_level(ProfessionCatalog.FORAGING)),
+			forage_tap_quality(), forage_tap_cycle_cut())
+		if not sap_ready.is_empty():
+			_notice("수액 채취기 %d개에 수액이 찼다 — 나무에 들러 [F]로 거두자" % sap_ready.size())
 	# ★ [S2-T6] 게시판 의뢰 만료 — 기한(일일 2일 / 중기 그 주 끝)이 지난 수락분을 조용히 버린다.
 	#   페널티는 없다(골드·호감도 불변 — ADR-0060 결정 6 "미완료 무페널티"). 알림도 벌칙이 아니라
 	#   "자리가 다시 비었다"는 안내다(ADR-0008 평평≠막힘).
@@ -6806,6 +6829,7 @@ func _save_game() -> void:
 		"forage_spawn": forage_spawns.to_save(),  # ★[S4-T1] 숲 채집물 스폰 원장(구역별 좌표·종 — 매일 굴러 나온 델타)
 		"forage_found": _forage_found.duplicate(),  # ★[S4-T5] 종 발견 원장(희소종 씨앗 레시피 해금 게이트)
 		"tree_ledger": tree_ledger.to_save(),  # ★[S4-T3] 나무 원장(구역별 좌표·종·단계·타수·그루터기 + 시드 완료 구역)
+		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
 		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
 		"wallet": wallet.to_save(),
@@ -6885,6 +6909,8 @@ func _load_game() -> void:
 		_forage_found = ff.duplicate() if typeof(ff) == TYPE_DICTIONARY else {}
 	if data.has("tree_ledger"):   # ★[S4-T3] — 키 없는 구세이브는 원장 0 → 구역 첫 빌드의 seed_region이
 		tree_ledger.load_save(data["tree_ledger"])   #   초기 배치를 결정적으로 재생성한다(종=좌표 해시·하위호환)
+	if data.has("tapper"):        # ★[S4-T6] — 키 없는 구세이브는 채취기 0(빈 원장·하위호환)
+		tapper.load_save(data["tapper"])
 	if data.has("tool_tiers"):    # ★[S4-T4] — 키 없는 구세이브는 전 도구 티어 0(기본 도끼 그대로·무막힘)
 		tool_tier.load_save(data["tool_tiers"])
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
@@ -7150,6 +7176,10 @@ func forage_hardwood_chance() -> float: # 벌목꾼(lvl10) — 모든 나무에�
 
 func forage_tap_quality() -> int:       # 수액꾼(lvl10) — 수액 등급 계단 +1
 	return ForageSkill.tap_quality(
+		_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_TAP_QUALITY, 0.0))
+
+func forage_tap_cycle_cut() -> int:     # 수액꾼(lvl10) — 채취 주기 −1일(같은 퍼크의 나머지 절반)
+	return ForageSkill.tap_cycle_cut(
 		_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_TAP_QUALITY, 0.0))
 
 # ── ★[S4-T2] 혼 감지(base lvl3+) · 추적자 퍼크 ────────────────────────────────
@@ -7583,6 +7613,12 @@ func _process(delta: float) -> void:
 			and Input.is_action_just_pressed("shop_toggle"):
 		_use_crab_pot(_target)
 		return
+	# ★ [S4-T6] 수액 채취기(F): 채취기가 박힌 나무를 바라보며 F — 수거 / 회수(게잡이통과 같은 사다리).
+	#   나무 칸이라 [F]가 겹칠 상대가 없고(벌목은 LMB), 프롬프트도 같은 순서로 파생된다.
+	if not _sleeping and tapper != null and _indoor == "" and tapper.has_at(_region, _target) \
+			and Input.is_action_just_pressed("shop_toggle"):
+		_use_tapper(_target)
+		return
 	# T5.4 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 보유 재료 1개를 자동 소모하고 정액 골드.
 	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
 		_try_serve(facing_seat)
@@ -7693,6 +7729,13 @@ func _process(delta: float) -> void:
 	var holding_pot := inventory.selected_id() == ItemCatalog.CRAB_POT
 	if not _sleeping and holding_pot and Input.is_action_just_pressed("use_tool") and _can_place_crab_pot(_target):
 		_place_crab_pot(_target)
+	# ★ [S4-T6] 수액 채취기 설치 — 채취기를 들고 **성숙 나무**를 겨눠 LMB. 회수는 게잡이통과 같이
+	#   LMB가 아니라 [F]다(같은 칸에서 "수거·회수" 두 동사를 쓰므로 상호작용 키로 모은다).
+	#   ★ 위 벌목 디스패치와 같은 칸에서 겹치지만 충돌하지 않는다: 든 게 도끼가 아니면 _chop_tree가
+	#     스스로 무동작이고(자동 분기 없음, ADR-0024 §2), 반대로 도끼를 들었으면 여기가 안 걸린다.
+	var holding_tapper := inventory.selected_id() == ItemCatalog.TAPPER
+	if not _sleeping and holding_tapper and Input.is_action_just_pressed("use_tool") and _can_place_tapper(_target):
+		_place_tapper(_target)
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	#   ★ 스프링클러를 들었으면 위에서 설치/철거를 이미 처리했으니 밭 도구질로 흘리지 않는다(중복 방지).
 	if not _sleeping and _target_valid and not holding_sprinkler and Input.is_action_just_pressed("use_tool"):
@@ -7878,6 +7921,17 @@ func _process(delta: float) -> void:
 		#   "무엇을 줍는지"가 보이게 한다(아이콘 아트는 S4-T10).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[우클릭/F] %s 채집 (채집 숙련)" % ItemCatalog.name_of(forage_spawns.species_at(_region, _target))
+	elif tapper != null and _indoor == "" and tapper.has_at(_region, _target):
+		# ★[S4-T6] 채취기가 박힌 나무를 바라볼 때: 상태별 [F] 한 동사(수거 / 회수). **나무 프롬프트보다
+		#   먼저** 본다 — 그 칸의 지금 할 일은 벌목이 아니라 채취기이고, 벌목은 애초에 막혀 있다.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _tapper_prompt(_target)
+	elif inventory.selected_id() == ItemCatalog.TAPPER and _can_place_tapper(_target):
+		# ★[S4-T6] 채취기를 들고 성숙 나무를 겨눌 때: LMB로 설치(주기는 종이 정한다).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 수액 채취기 박기 (%s — %d일 주기)" % [
+			TreeLedger.species_name(tree_ledger.species_at(_region, _target)),
+			TapperLedger.cycle_for(tree_ledger.species_at(_region, _target), forage_tap_cycle_cut())]
 	elif tree_ledger != null and _indoor == "" and tree_ledger.is_occupied(_region, _target):
 		# ★[S4-T3] 원장 나무·그루터기를 바라볼 때: 도끼를 들었으면 [좌클릭] 남은 타수, 아니면 도끼 안내.
 		interact_prompt.visible = not _sleeping
@@ -8473,6 +8527,75 @@ func _crab_pot_prompt(t: Vector2i) -> String:
 	if inventory.has_item(ItemCatalog.BAIT_BASIC):
 		return "[F] 미끼 넣기 (일반 미끼 1개)"
 	return "[F] 게잡이통 회수 (미끼 없음 — 일반 미끼가 있어야 걸린다)"
+
+# ── ★[S4-T6 / ADR-0062 결정 4] 수액 채취기 — 설치·수거·회수 ───────────────────
+# 채취기를 박을 수 있는 칸인가. 게잡이통 `_can_place_crab_pot`의 **판정 하나만 갈린 쌍둥이**다
+# (ADR-0062 "설치 판정만 물가 인접 → 성숙 나무로 교체"):
+#   ① 야외에서만(실내 게이트) · ② **원장에 있는 성숙 나무**(stage 5 · 그루터기·유목·큰 장애물 제외)
+#   ③ 같은 나무 중복 설치 불가.
+# ★ 구역 제한이 없다 — 저승 숲·미혹의 숲은 물론 **안식 농원 나무 16그루에도 박힌다**(결정 3이
+#   안식 나무를 원장에 편입했으므로 그 자연스러운 귀결이고, "마당에서 시작하는 패시브 수입"이라
+#   숲까지 못 간 초반 플레이어에게도 채취기가 죽은 레시피가 아니게 된다).
+# ★ 큰 통나무·큰 그루터기는 `is_mature`가 false라 자동으로 배제된다(large 슬롯은 stage를 안 쓴다).
+func _can_place_tapper(t: Vector2i) -> bool:
+	if tapper == null or tree_ledger == null or _indoor != "":
+		return false
+	if tapper.has_at(_region, t):
+		return false                          # 이미 박혀 있다(그 위엔 상호작용만)
+	return tree_ledger.is_mature(_region, t)
+
+# 조준한 성숙 나무에 채취기를 박는다(아이템 1개 소모 · 혼력 0 — 패시브는 무과금이 정의).
+func _place_tapper(t: Vector2i) -> void:
+	if not inventory.has_item(ItemCatalog.TAPPER):
+		return
+	var species := tree_ledger.species_at(_region, t)
+	if tapper.place(_region, t, species, forage_tap_cycle_cut()):
+		inventory.remove_item(ItemCatalog.TAPPER, 1)
+		audio.sfx("ui")
+		_notice("%s에 수액 채취기를 박았다 — %d일 뒤 %s가 고인다" % [
+			TreeLedger.species_name(species), tapper.days_left(_region, t),
+			ItemCatalog.name_of(TapperLedger.product_for(species))])
+		queue_redraw()
+
+# 수액 채취기 [F] 상호작용 — 게잡이통과 같은 "상태 하나에 동사 하나" 사다리(미끼 단계만 없다).
+#   ①고인 수액이 있으면 수거 → ②없으면 회수. 둘 다 **혼력 0**(spend 호출이 한 줄도 없다).
+func _use_tapper(t: Vector2i) -> void:
+	if tapper == null or not tapper.has_at(_region, t):
+		return
+	# ① 수거 — 인벤이 가득이면 채취기 안에 그대로 둔다(산출물 증발 방지 · 게잡이통 1:1).
+	var got := tapper.pending_product(_region, t)
+	if got != "":
+		var q := tapper.pending_quality(_region, t)
+		if not inventory.add_item(got, 1, q):
+			_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시 [F]")
+			return
+		tapper.collect(_region, t)
+		_toast_item(got, 1)
+		audio.sfx("harvest")
+		_notice("채취기에서 %s(%s)를 거뒀다 — 다시 %d일" % [ItemCatalog.name_of(got),
+			ItemCatalog.quality_name(q), tapper.days_left(_region, t)])
+		queue_redraw()
+		return
+	# ② 회수 — 빈 채취기를 인벤으로 되돌린다(게잡이통 회수 동형).
+	if not inventory.add_item(ItemCatalog.TAPPER, 1):
+		_notice("백팩이 가득 차 채취기를 거둘 수 없다")
+		return
+	if tapper.remove(_region, t):
+		audio.sfx("ui")
+		_notice("수액 채취기를 회수했다")
+		queue_redraw()
+	else:
+		inventory.remove_item(ItemCatalog.TAPPER, 1)   # 원장이 거절 → 방금 넣은 채취기를 되돈다(무해)
+
+# 채취기를 겨눴을 때의 안내 문구(상호작용 사다리와 **같은 순서**로 파생 — 프롬프트와 실동작 불일치 0).
+func _tapper_prompt(t: Vector2i) -> String:
+	var got := tapper.pending_product(_region, t)
+	if got != "":
+		return "[F] 수액 수거 (%s · %s)" % [ItemCatalog.name_of(got),
+			ItemCatalog.quality_name(tapper.pending_quality(_region, t))]
+	return "[F] 수액 채취기 회수 (%s — %d일 남음)" % [
+		ItemCatalog.name_of(TapperLedger.product_for(tapper.species_at(_region, t))),
+		tapper.days_left(_region, t)]
 
 # 스프링클러 1개를 네오 만물상에서 산다(그레이박스 획득 경로 — 카탈로그의 정식 제작 게이트는 채광 재료가
 # Slice 5 의존이라 구매로 대체). 씨앗 구매(_buy_seed_store_n)와 같은 결: 네오 호감도 할인가·골드 부족 방어.
@@ -10659,6 +10782,7 @@ func _draw() -> void:
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_home_prop_entries(), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터 + S1R-T4 절차 스캐터(숲·능선·debris)
 			_draw_tree_ledger()      # ★[S4-T3] 벤 나무의 그루터기·자라는 유목(성숙목은 위 프롭이 그린다)
+			_draw_tappers()          # ★[S4-T6] 성숙목에 박힌 수액 채취기(밑동 표식 — 고임/대기 상태 구분)
 			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
 			_draw_orchard()          # ★ [S1-5b/S1-10] 혼의 나무 과수 — 종별 3단계 스프라이트(묘목·성목·결실)
 			_draw_trackb_interiors() # ★ Phase E Track B 실내 가구(여물통·보관 크레이트 — 짐승 아래, 카메라로 방별 클립)
@@ -10679,6 +10803,7 @@ func _draw() -> void:
 		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
 			_draw_forage_spawns()    # ★[S4-T1] 빈터에 돋은 채집물(종별 색점 그레이박스 — 아이콘 아트는 S4-T10)
 			_draw_tree_ledger()      # ★[S4-T3] 원장 나무 중 미성숙·그루터기(성숙목은 TREE 타일이 그린다)
+			_draw_tappers()          # ★[S4-T6] 성숙목에 박힌 수액 채취기(안식과 같은 렌더 — 구역만 다르다)
 		RegionCatalog.EOPHWA_MINE:
 			_draw_smithy_room()      # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
 		RegionCatalog.NARU_VILLAGE:
@@ -11156,6 +11281,28 @@ func _draw_crab_pots() -> void:
 				c + Vector2(0.0, -TILE * 0.14), c + Vector2(TILE * 0.11, 0.0),
 				c + Vector2(0.0, TILE * 0.14), c + Vector2(-TILE * 0.11, 0.0),
 			]), Color(0.95, 0.82, 0.42))
+
+# ★ [S4-T6 / ADR-0062 결정 4] 수액 채취기 렌더(그레이박스 — 아트는 S4-T9/T10 아이콘 패스).
+# 게잡이통 렌더와 같은 목적: **설치물은 자기 상태를 스스로 말해야 한다.** 숲을 한 번 훑기만 해도
+# "어느 나무에 들러야 하는지"가 읽히게, 두 상태를 통·표식으로 가른다:
+#   · 고이는 중  = 나무 밑동의 어두운 통 + 관(가동 중 — 남은 날은 프롬프트가 밝힌다)
+#   · 수거 대기  = 그 위에 밝은 호박빛 방울(거둘 것 있음 — 게잡이통 금빛 마름모와 같은 자리·같은 역할)
+# ★ 나무 스프라이트(안식=프롭 / 숲=TREE 타일)는 이미 그려진 뒤라, 채취기는 그 위 밑동에 얹는다.
+func _draw_tappers() -> void:
+	if tapper == null:
+		return
+	for t: Vector2i in tapper.tiles(_region):
+		var base := Vector2(t.x * TILE, t.y * TILE)
+		# 통 몸통 — 나무 밑동 높이(타일 아래쪽)에 붙인 작은 나무통.
+		draw_rect(Rect2(base + Vector2(TILE * 0.30, TILE * 0.58),
+			Vector2(TILE * 0.40, TILE * 0.30)), Color(0.36, 0.26, 0.18))
+		# 수액관 — 줄기에서 통으로 꽂힌 짧은 관(설치물임이 실루엣으로 읽히게).
+		draw_rect(Rect2(base + Vector2(TILE * 0.44, TILE * 0.48),
+			Vector2(TILE * 0.12, TILE * 0.12)), Color(0.55, 0.44, 0.30))
+		if tapper.pending_product(_region, t) != "":
+			# 수거 대기 방울(통 위) — "거둘 것 있음"의 유일한 표식이라 가장 밝다.
+			draw_circle(base + Vector2(TILE * 0.50, TILE * 0.44), TILE * 0.10,
+				Color(0.95, 0.74, 0.34))
 
 # ★ [Phase E/S1-15] 가축 스프라이트 훅 — assets/livestock/<species>_<stage>.png(gemini-demo-sprites-spec §5,
 #   bottom-center 앵커, dak 32²·so_baby 48²·so_adult 64×48). owner Gemini 결과가 이 경로에 들어오면 코드
