@@ -325,6 +325,89 @@ const GEAR_ICONS := {
 	ItemCatalog.CRAB_POT: preload("res://assets/gear/crab_pot.png"),
 }
 
+# ★ [S4-T10 / ADR-0062 결정 10 ㉤] 숲 슬라이스 아이콘 — 채집물 24종 + 자재·수액·씨앗 19종.
+# TOOL/FERT/SAPLING/FISH/GEAR_ICONS와 **정확히 같은 결**이다(한 dict를 `icons`에 병합하면 핫바·
+# 인벤·매대·의뢰·환전·토스트가 전부 `_draw_icon`/`_item_icon` 한 경로로 텍스처를 집는다).
+# 카테고리별 도착 칸(전부 기존 분기라 **코드 분기 추가 0**):
+#   · 채집물·덤불 열매·수액 3종 = CAT_HARVEST → `_draw_crop_tex`가 id로 바로 찾는다
+#   · 원목·단단한 원목·수액(부산물)·나무 씨앗 3·저승 이끼 = CAT_MATERIAL(텍스처 우선 분기 기존)
+#   · 수액 채취기 = CAT_PLACEABLE(게잡이통이 뚫어 둔 분기 재사용)
+#   · 야생·혼합·희귀 씨앗 = CAT_SEED → **작물 id로 조회된다**(`_draw_crop_tex(crop_of(id))`)
+#     → 그래서 아래 SEED_PACKET_ICONS의 키는 아이템 id가 아니라 **CropCatalog 작물 id**다.
+# ★불사과는 여기 없다 — 작물 3프레임 아트가 이미 있어 CROP_SPRITES의 mature 프레임이 인벤
+#   아이콘으로 재사용된다(중복 생성 0).
+const FORAGE_ICONS := {
+	# 저승 숲 일반 12(절기당 3 — 피안/유화/망연/성야 순)
+	ItemCatalog.NEOK_GOSARI: preload("res://assets/forage/neok_gosari.png"),
+	ItemCatalog.JAETBIT_NAENGI: preload("res://assets/forage/jaetbit_naengi.png"),
+	ItemCatalog.JEOSEUNG_DALLAE: preload("res://assets/forage/jeoseung_dallae.png"),
+	ItemCatalog.JEOSEUNG_SANDALGI: preload("res://assets/forage/jeoseung_sandalgi.png"),
+	ItemCatalog.HONIP_BAKHA: preload("res://assets/forage/honip_bakha.png"),
+	ItemCatalog.JAETBIT_DEODEOK: preload("res://assets/forage/jaetbit_deodeok.png"),
+	ItemCatalog.JAETBIT_DOTORI: preload("res://assets/forage/jaetbit_dotori.png"),
+	ItemCatalog.ANGAE_DORAJI: preload("res://assets/forage/angae_doraji.png"),
+	ItemCatalog.NEOK_SONGI: preload("res://assets/forage/neok_songi.png"),
+	ItemCatalog.EONHON_PPURI: preload("res://assets/forage/eonhon_ppuri.png"),
+	ItemCatalog.SEORI_DONGBAEK: preload("res://assets/forage/seori_dongbaek.png"),
+	ItemCatalog.SEONGYA_SOLBANGUL: preload("res://assets/forage/seongya_solbangul.png"),
+	# 미혹 희소 4(절기당 1)
+	ItemCatalog.MIHOK_NANCHO: preload("res://assets/forage/mihok_nancho.png"),
+	ItemCatalog.YURYEONGCHO: preload("res://assets/forage/yuryeongcho.png"),
+	ItemCatalog.MYEONGWOL_BEOSEOT: preload("res://assets/forage/myeongwol_beoseot.png"),
+	ItemCatalog.SEORI_HONBAEKCHO: preload("res://assets/forage/seori_honbaekcho.png"),
+	# 미혹 심층 1(+불사과 = 작물 아트 재사용)
+	ItemCatalog.JEOSEUNG_SAM: preload("res://assets/forage/jeoseung_sam.png"),
+	# 황천해 해변 4(절기 무관)
+	ItemCatalog.HWANGCHEON_SANHO: preload("res://assets/forage/hwangcheon_sanho.png"),
+	ItemCatalog.NEOK_SEONGGAE: preload("res://assets/forage/neok_seonggae.png"),
+	ItemCatalog.YURI_GODUNG: preload("res://assets/forage/yuri_godung.png"),
+	ItemCatalog.MULBINEUL_JOGAE: preload("res://assets/forage/mulbineul_jogae.png"),
+	# ★[S4-T8] 덤불 열매 2 + 저승 이끼(낫 채취)
+	ItemCatalog.NEOK_DALGI: preload("res://assets/forage/neok_dalgi.png"),
+	ItemCatalog.JAETBIT_BOKBUNJA: preload("res://assets/forage/jaetbit_bokbunja.png"),
+	ItemCatalog.JEOSEUNG_IKKI: preload("res://assets/forage/jeoseung_ikki.png"),
+}
+
+# 벌목·수액·제작 자재. ★원목 두 종은 **한눈에 갈려야 한다**(밝은 tan 통나무 ↔ 짙은 적갈 경목) —
+#   건축 의뢰·제작 재료창에서 둘을 헷갈리면 비싼 경목을 잘못 쓴다. 수액 3종도 마찬가지로 톤을
+#   갈라 뒀다(솔넋진=유백 / 넋수지=짙은 갈색 / 명단풍꿀=호박빛 유리병).
+const MATERIAL_ICONS := {
+	ItemCatalog.WOOD: preload("res://assets/materials/wood.png"),
+	ItemCatalog.HARDWOOD: preload("res://assets/materials/hardwood.png"),
+	ItemCatalog.SAP: preload("res://assets/materials/sap.png"),
+	ItemCatalog.SOLNEOKJIN: preload("res://assets/materials/solneokjin.png"),
+	ItemCatalog.NEOKSUJI: preload("res://assets/materials/neoksuji.png"),
+	ItemCatalog.MYEONGDANPUNG_KKUL: preload("res://assets/materials/myeongdanpung_kkul.png"),
+	ItemCatalog.SEED_JEOSEUNGSOL: preload("res://assets/materials/seed_jeoseungsol.png"),
+	ItemCatalog.SEED_MYEONGDANPUNG: preload("res://assets/materials/seed_myeongdanpung.png"),
+	ItemCatalog.SEED_NEOKCHAM: preload("res://assets/materials/seed_neokcham.png"),
+	# 설치물 — ★게잡이통과 달리 인벤 아이콘과 월드 설치물이 **다른 텍스처**다(PROP_TAPPER 주석 참조).
+	ItemCatalog.TAPPER: preload("res://assets/materials/sap_tapper.png"),
+	# ★곁들여 메운 기존 슬라이스 색박스 5종(S1-7 건초 · S1-8 개간 드랍 3 · S3-T6 인양 잡동사니).
+	#   이번 인벤 덤프에서 원목 바로 옆 칸에 색박스로 떠 드러났다 — 한 카테고리 안에서 절반만
+	#   도트면 오히려 새 아이콘이 튄다. CAT_MATERIAL 폴백을 0으로 닫는 마감이다.
+	ItemCatalog.HAY: preload("res://assets/materials/hay.png"),
+	ItemCatalog.SOUL_FIBER: preload("res://assets/materials/soul_fiber.png"),
+	ItemCatalog.EMBER_SHARD: preload("res://assets/materials/ember_shard.png"),
+	ItemCatalog.PETRIFIED_WOOD: preload("res://assets/materials/petrified_wood.png"),
+	ItemCatalog.ROTTEN_NET: preload("res://assets/materials/rotten_net.png"),
+}
+
+# 야생·혼합·희귀 씨앗 봉지 9종. **키 = 작물 id**(위 주석 CAT_SEED 참조). 아홉 장 다 같은 봉지
+# 실루엣의 절기 틴트 파생이다(tools/make_t10_icons.py) — 스타듀 야생 씨앗 문법 상속이자,
+# 아홉을 따로 그리면 실루엣이 흔들려 "한 계열"로 안 읽히기 때문이다([ADR-0001] 큐레이션).
+const SEED_PACKET_ICONS := {
+	CropCatalog.MIXED: preload("res://assets/materials/honhap.png"),
+	CropCatalog.WILD_PIAN: preload("res://assets/materials/yasaeng_pian.png"),
+	CropCatalog.WILD_YUHWA: preload("res://assets/materials/yasaeng_yuhwa.png"),
+	CropCatalog.WILD_MANGYEON: preload("res://assets/materials/yasaeng_mangyeon.png"),
+	CropCatalog.WILD_SEONGYA: preload("res://assets/materials/yasaeng_seongya.png"),
+	CropCatalog.WILD_MIHOK_NANCHO: preload("res://assets/materials/mihok_nancho_wild.png"),
+	CropCatalog.WILD_YURYEONGCHO: preload("res://assets/materials/yuryeongcho_wild.png"),
+	CropCatalog.WILD_MYEONGWOL: preload("res://assets/materials/myeongwol_beoseot_wild.png"),
+	CropCatalog.WILD_SEORI_HONBAEK: preload("res://assets/materials/seori_honbaekcho_wild.png"),
+}
+
 # 각 타일의 그레이박스 색(밝기·미세 색조로만 구분, 회색 기조 유지). WALL이 가장 밝다.
 const COLORS := [
 	Color(0.16, 0.18, 0.16),  # GROUND — 어두운 풀밭 톤
@@ -425,6 +508,14 @@ const PROP_TREE_SAPLING := preload("res://assets/props/tree_sapling.png")      #
 const PROP_TREE_STUMP := preload("res://assets/props/tree_stump.png")          # 32×32  — 벤 자리 그루터기
 const PROP_FOREST_BUSH := preload("res://assets/props/forest_berry_bush.png")  # 32×32  — ★채집 덤불(능선 SOLID 덤불과 별 실루엣)
 const PROP_FOREST_MOSS := preload("res://assets/props/forest_moss.png")        # 32×32  — 저승 이끼(성숙목 밑동 얼룩)
+# ★[S4-T10] 수액 채취기 월드 설치물(32×32 — 줄기에 박은 관 + 매달린 나무통, 발치 flush).
+#   ★인벤 아이콘(MATERIAL_ICONS의 sap_tapper)과 **다른 텍스처**다 — 게잡이통(S3-T7)은 한 장을
+#     공유했지만 채취기는 *나무에 박히는* 물건이라 월드 판엔 줄기가 있어야 "박혔다"가 읽히고,
+#     그 줄기가 인벤 슬롯에선 군더더기다. 그래서 통만 든 판을 따로 굽는다.
+#   ★프롭 배열(_forest_props)에 안 넣는다 — 채취기는 원장 상태(수거 대기)가 매일 바뀌는데
+#     _forest_props는 지연 재빌드 캐시라 상태 표식을 얹을 자리가 없다. 대신 _draw_tappers가
+#     프롭과 **같은 Y-split 규칙**을 손으로 적용한다(아래 함수 주석).
+const PROP_TAPPER := preload("res://assets/props/sap_tapper.png")
 const PROP_FOREST_MUSHROOM := preload("res://assets/props/forest_mushroom.png")# 32×32  — 저승 버섯(바닥 장식)
 const PROP_FOREST_FERN := preload("res://assets/props/forest_fern.png")        # 32×32  — 고사리(바닥 장식)
 const PROP_MIHOK_SNAG := preload("res://assets/props/mihok_dead_snag.png")     # 64×96  — 미혹 고목(2×3칸)
@@ -810,6 +901,17 @@ const FACADE_COOP := preload("res://assets/buildings/coop_ext.png")
 #   · 생선가게 = 소금기 먹은 유목 판벽 + 물고기 현판 + 그물·궤짝 — 바닷가 점포 톤.
 const FACADE_MUSEUM := preload("res://assets/buildings/museum_ext.png")
 const FACADE_FISHSHOP := preload("res://assets/buildings/fishshop_ext.png")
+# ★[S4-T10 / ADR-0062 결정 10 ㉣] 숲 2구역의 마지막 그레이박스 두 채. 위 넷과 같은 간판 문법
+#   (박공 지붕 + 윗면 슬랩 노출 + bottom-center 앵커)이되, **둘의 톤을 정반대로 갈랐다** — 이게
+#   이 두 장의 설계 규칙이다:
+#   · 목공방 224×202 = WOODSHOP_EXT_RECT(7×6) 폭 1:1. 따뜻한 꿀빛 통나무 벽 + 문 위 대패·톱 현판
+#     + 옆에 통나무 더미와 톱질 모탕. "사람이 일하는 집"(옹이가 안에 있다).
+#   · 옥자 집 256×228 = OKJA_HUT_EXT_RECT(8×7) 폭 1:1. 이끼 얹힌 굽은 초가 + 널빤지로 가로막고
+#     녹슨 자물쇠를 채운 문 + 덧문 박은 창. 후처리 채도·명도도 한 단 더 눌렀다(0.80/0.90 —
+#     목공방 0.88/0.96). **문은 있되 안 열린다**([ADR-0062] 결정 1 "잠긴 외관 무이동")를
+#     그림만으로 읽히게 하는 게 목적이라, 자물쇠·판자가 빠지면 리젝 대상이다.
+const FACADE_WOODSHOP := preload("res://assets/buildings/woodshop_ext.png")
+const FACADE_OKJA_HUT := preload("res://assets/buildings/okja_hut_ext.png")
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로).
 # ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
@@ -6265,10 +6367,13 @@ var _G16_REGION_PROFILES := {
 		"fringe_density": 0.26,     # 경계 tuft(같은 이유로 0.38→0.26 — 캐노피가 이미 화면을 채운다)
 		"cliff_overlays": false,    # 숲엔 다단 절벽이 없다(ADR-0062 결정 1 "절벽 런 없음") → 패스 생략
 		"path_apron": true,         # 잔디 지배 → 숲길 둘레 맨흙 갓길로 하드 사각 방지
-		# ★목공방은 **아직 외관 아트가 없다**(T10 소관) → greybox_rects로 오버레이를 투명 통과시켜
-		#   WALL 박스가 살아 있게 한다. building_rects(=facade 있는 건물의 발치 맨흙 패드)에 넣으면
-		#   건물이 통째로 지면에 삼켜진다(1차 덤프에서 실측 — 목공방이 tan 사각이 됐다).
-		"greybox_rects": [WOODSHOP_EXT_RECT],
+		# ★[S4-T10] 목공방에 외관 아트가 붙어 greybox_rects → **building_rects로 옮겼다**(짝 이동).
+		#   두 목록의 뜻이 정반대라 아트와 반드시 같이 움직여야 한다:
+		#     greybox_rects = "그림이 없으니 지면 오버레이를 투명 통과시켜 WALL 박스를 노출하라"
+		#     building_rects = "facade가 덮으니 발치에 잔디억제 맨흙 패드를 깔아라"
+		#   아트를 붙이고 greybox에 남겨 두면 오버레이가 facade를 삼키고(T9 1차 덤프 실측 —
+		#   목공방이 tan 사각이 됐다), 반대로 아트 없이 building에 넣으면 건물이 사라진다.
+		"building_rects": [WOODSHOP_EXT_RECT],
 		"ground_tone": Color(0.60, 0.69, 0.56, 1.0),   # 어두운 숲 바닥(명도↓ · 초록 쪽으로 살짝)
 		"leaf_density": 0.16,                          # 낙엽 결(칸당 알갱이가 놓일 확률)
 	},
@@ -6285,8 +6390,8 @@ var _G16_REGION_PROFILES := {
 		"fringe_density": 0.24,
 		"cliff_overlays": false,
 		"path_apron": true,
-		# 옥자 집도 잠긴 **그레이박스 외관**이다(아트는 T10) — 목공방과 같은 이유로 투명 통과.
-		"greybox_rects": [OKJA_HUT_EXT_RECT],
+		# ★[S4-T10] 옥자 집도 외관 아트가 붙어 building_rects로 짝 이동(목공방과 같은 이유·같은 규칙).
+		"building_rects": [OKJA_HUT_EXT_RECT],
 		"ground_tone": Color(0.42, 0.54, 0.58, 1.0),   # 저승 숲보다 한 단 더 짙고 **차갑게**(청록 쪽)
 		"leaf_density": 0.06,                          # 상록 심림이라 낙엽은 적다(안개가 무드를 든다)
 	},
@@ -6571,6 +6676,19 @@ func _setup_audio() -> void:
 # 하단 12칸 슬롯 바를 CanvasLayer에 붙이고, 인벤토리와 작물 아이콘(CROP_SPRITES의 mature 프레임)을
 # 주입한다. 씨앗·수확물은 이 작물 도트를 재사용해 그리고, 도구는 색박스(그레이박스). 인벤토리
 # changed로만 다시 그린다(폴링 없이 디커플링). lighting·audio와 같은 결의 코드 생성 자식.
+# ★ [S4-T10] 숲 슬라이스 아이콘 3묶음을 범용 `icons` 맵에 얹는다. 핫바·인벤 두 곳이 같은 맵을
+#   만들므로 병합을 한 함수로 모아 둔다(두 곳이 어긋나 한쪽만 흰박스로 남는 사고 방지 — S3-T10
+#   때 두 곳에 같은 루프를 두 번 적은 것의 정리판이다).
+# ★ 씨앗 봉지만 키가 **작물 id**다(SEED_PACKET_ICONS 주석) — 그대로 얹으면 `_draw_crop_tex`가
+#   `crop_of(seed_id)`로 조회할 때 바로 맞는다(아이템 id로 얹으면 영원히 안 잡힌다).
+func _merge_t10_icons(icons: Dictionary) -> void:
+	for forage_id in FORAGE_ICONS:
+		icons[forage_id] = FORAGE_ICONS[forage_id]
+	for mat_id in MATERIAL_ICONS:
+		icons[mat_id] = MATERIAL_ICONS[mat_id]
+	for crop_id in SEED_PACKET_ICONS:
+		icons[crop_id] = SEED_PACKET_ICONS[crop_id]
+
 func _setup_hotbar() -> void:
 	hotbar = HotbarHud.new()
 	$CanvasLayer.add_child(hotbar)
@@ -6589,6 +6707,7 @@ func _setup_hotbar() -> void:
 		icons[fish_id] = FISH_ICONS[fish_id]       # ★ [S3-T10] 어획물 아이콘(흰박스 대체)
 	for gear_id in GEAR_ICONS:
 		icons[gear_id] = GEAR_ICONS[gear_id]       # ★ [S3-T10] 낚시 기어 아이콘(색박스 대체)
+	_merge_t10_icons(icons)                        # ★ [S4-T10] 채집물·자재·씨앗 봉지(흰박스 대체)
 	hotbar.setup(inventory, icons)
 	_refresh_water_badge()   # ★ [S1R-T8] 초기 물뿌리개 잔량 배지(부팅 = 가득 20/20)
 
@@ -6709,6 +6828,7 @@ func _setup_frame() -> void:
 		icons[fish_id] = FISH_ICONS[fish_id]        # ★ [S3-T10] 어획물 아이콘(흰박스 대체)
 	for gear_id in GEAR_ICONS:
 		icons[gear_id] = GEAR_ICONS[gear_id]        # ★ [S3-T10] 낚시 기어 아이콘(색박스 대체)
+	_merge_t10_icons(icons)                         # ★ [S4-T10] 채집물·자재·씨앗 봉지(흰박스 대체)
 	frame.setup(inventory, ship_bin, icons)
 	frame.set_chest(chest)   # ★ Phase D 저장 상자 주입(CTX_CHEST 상단 그리드)
 	frame.deposit_slot.connect(_on_frame_deposit)
@@ -7445,6 +7565,14 @@ func _item_icon(id: String) -> Texture2D:
 		return FISH_ICONS[id]
 	if GEAR_ICONS.has(id):                     # ★ [S3-T10] 낚시 기어 아이콘(구매·증정 토스트)
 		return GEAR_ICONS[id]
+	if FORAGE_ICONS.has(id):                   # ★ [S4-T10] 채집물·덤불 열매·이끼(줍기·흔들기 토스트)
+		return FORAGE_ICONS[id]
+	if MATERIAL_ICONS.has(id):                 # ★ [S4-T10] 원목·수액·나무 씨앗(벌목·수거 토스트)
+		return MATERIAL_ICONS[id]
+	# 씨앗은 아이템 id가 아니라 **작물 id**로 아이콘을 잡는다(SEED_PACKET_ICONS 주석 — 인벤과 같은 규약).
+	var packet_crop := ItemCatalog.crop_of(id)
+	if packet_crop != "" and SEED_PACKET_ICONS.has(packet_crop):
+		return SEED_PACKET_ICONS[packet_crop]
 	var base := ItemCatalog._large_base(id)    # 대형 산물(_large)이면 기준 산물 아이콘 재사용
 	if base != "" and EXTRA_ICONS.has(base):
 		return EXTRA_ICONS[base]
@@ -10683,9 +10811,10 @@ func _setup_residents() -> void:
 	r_ongi.save_key = "ongi_affinity"     # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_ongi.can_gift = true                # T2 사귐 채널(선물)
 	r_ongi.gift_target_ko = "옹이"
-	# 초상화 없음 — 스프라이트·도트 초상화는 S4-T9/T10 아트 패스(ADR-0062 결정 10 ㉥). 그때까진
-	# 컨텍스트 팝업이 이름·관계 줄만 띄운다(네오가 오래 그랬던 상태 — 대사·코드 무개정으로 붙는다).
-	r_ongi.portrait_stem = ""
+	# ★[S4-T10 / ADR-0062 결정 10 ㉥] 도트 초상화 배선(네오·뱃사공과 같은 **스톱갭**). 표정 파일은
+	#   안 만든다 — `_set_portrait`가 smile/shy/sad 파일이 없으면 idle로 떨어지므로 idle 한 장이면
+	#   대사 전량이 붙는다(4인 소프트 일러스트와 화풍이 달라 owner-Gemini 교체 1순위 큐).
+	r_ongi.portrait_stem = "ongi"
 	# ★ 자리 = 목공방 **실내 카운터 뒤**(상시 영업 — 네오·뱃사공 선례 동형·"평평≠막힘" QoL).
 	# ⚠️ 네오와 달리 스케줄 region을 **반드시 채운다**: 네오 자리(27,76)는 HOME 실내 띠라 어느
 	#   구역에서도 카메라 밖이지만, 목공방 실내(y46..54)는 **HOME 외부(80×65)와 y가 겹친다** —
@@ -11556,6 +11685,13 @@ func _draw() -> void:
 			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(삼도천과 같은 렌더 — 구역만 다르다)
 			_draw_forage_spawns()    # ★[S4-T8] 백사장 존에 돋은 해변 채집물(숲과 같은 렌더 — 무대만 다르다)
 		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
+			# ★[S4-T10] 구역별 건물 외관 한 채씩(두 구역이 한 분기를 공유하므로 여기서 갈린다).
+			#   프롭보다 **먼저** 그린다 — 숲 캐노피·장식이 건물 앞에 얹혀야 나무 사이에 낀 집으로
+			#   읽힌다(마을 만물상이 벚꽃 나무 뒤에 서는 것과 같은 순서).
+			if _region == RegionCatalog.JEOSEUNG_FOREST:
+				_draw_facade_woodshop()   # ★ 목공방 외관(간판 문법 — 옹이가 안에 있다)
+			else:
+				_draw_facade_okja_hut()   # ★ 옥자 집 외관(잠긴 폐가 — 진입 불가 유지)
 			# ★[S4-T9] 숲 프롭(캐노피·원장 폼·장식) — HOME·나루와 같은 Y-split. 뒤 프롭만 여기서
 			#   그리고 앞 프롭은 _front_props가 플레이어 위에 다시 그린다(수관 뒤로 지나가기).
 			var _fsy: float = player.global_position.y if player != null else 1.0e20
@@ -11861,8 +11997,19 @@ func _draw_forage_spawns() -> void:
 		return
 	for t: Vector2i in forage_spawns.tiles(_region):
 		var px := Vector2(t.x * TILE, t.y * TILE)
-		var col := _forage_species_color(forage_spawns.species_at(_region, t))
-		# 줄기(어두운 초록 두 갈래) → 그 위에 종 색 열매/꽃 점.
+		var species := forage_spawns.species_at(_region, t)
+		# ★[S4-T10] 종 아이콘을 **월드에도 그대로 쓴다**(게잡이통이 아이콘↔설치물을 공유한 결).
+		#   이게 이 슬라이스에서 아이콘이 갖는 두 번째 값이다: 빈터에 뭐가 돋았는지가 줍기 *전에*
+		#   눈으로 갈린다(색점만으로는 22종이 전부 "동그란 것"이었다). 아이콘은 32² = 정확히 1칸이라
+		#   타일에 1:1로 앉는다.
+		var tex: Texture2D = FORAGE_ICONS.get(species)
+		if tex == null:
+			tex = CROP_SPRITES[species][2] if CROP_SPRITES.has(species) else null   # 불사과 = 작물 아트
+		if tex != null:
+			draw_texture_rect(tex, Rect2(px, tex.get_size()), false)
+			continue
+		# 폴백(아이콘 없는 종 — 로스터 확장 중 임시 상태): 옛 줄기 + 종 색 점 그레이박스.
+		var col := _forage_species_color(species)
 		draw_line(px + Vector2(TILE * 0.44, TILE * 0.78), px + Vector2(TILE * 0.44, TILE * 0.56), Color(0.28, 0.44, 0.26), 2.0)
 		draw_line(px + Vector2(TILE * 0.58, TILE * 0.78), px + Vector2(TILE * 0.58, TILE * 0.60), Color(0.28, 0.44, 0.26), 2.0)
 		draw_circle(px + Vector2(TILE * 0.5, TILE * 0.48), TILE * 0.17, col)
@@ -12096,20 +12243,43 @@ func _draw_crab_pots() -> void:
 #   · 수거 대기  = 그 위에 밝은 호박빛 방울(거둘 것 있음 — 게잡이통 금빛 마름모와 같은 자리·같은 역할)
 # ★ 나무 스프라이트(안식=프롭 / 숲=TREE 타일)는 이미 그려진 뒤라, 채취기는 그 위 밑동에 얹는다.
 func _draw_tappers() -> void:
+	# 뒤 패스(플레이어 아래). 숲에선 플레이어보다 앞에 선 채취기를 여기서 빼고 _draw_tappers_front가
+	# 다시 그린다 — 안 그러면 앞 패스 캐노피(PROP_TREE_FOREST)가 채취기를 통째로 덮어 "수거 대기"
+	# 방울이 안 보인다([S4-T9 인계] 이끼가 SPLIT_PROPS로 푼 문제의 채취기판. 이끼와 달리 채취기는
+	# 상태가 매일 바뀌어 프롭 캐시에 못 들어가므로 같은 규칙을 손으로 적용한다).
+	var split_y := 1.0e20
+	if _in_forest() and player != null:
+		split_y = player.global_position.y
+	_draw_tappers_pass(self, false, split_y)
+
+# 앞 패스(플레이어 위) — front_props 노드가 부른다. 뒤 패스가 건너뛴 것만 그린다.
+func _draw_tappers_front(canvas: CanvasItem) -> void:
+	if player == null:
+		return
+	_draw_tappers_pass(canvas, true, player.global_position.y)
+
+func _in_forest() -> bool:
+	return _region == RegionCatalog.JEOSEUNG_FOREST or _region == RegionCatalog.MIHOK_FOREST
+
+# 채취기 한 패스. front=false면 split_y 이하(뒤)만, true면 split_y 초과(앞)만 그린다.
+# 발치(base_y) = 타일 아래 모서리 — 프롭 Y-split(_prop_base_y)과 같은 기준이라 나무와 짝이 맞는다.
+func _draw_tappers_pass(canvas: CanvasItem, front: bool, split_y: float) -> void:
 	if tapper == null:
 		return
+	var tsz := PROP_TAPPER.get_size()
 	for t: Vector2i in tapper.tiles(_region):
+		var base_y := float(t.y * TILE + TILE)
+		if (base_y > split_y) != front:
+			continue
 		var base := Vector2(t.x * TILE, t.y * TILE)
-		# 통 몸통 — 나무 밑동 높이(타일 아래쪽)에 붙인 작은 나무통.
-		draw_rect(Rect2(base + Vector2(TILE * 0.30, TILE * 0.58),
-			Vector2(TILE * 0.40, TILE * 0.30)), Color(0.36, 0.26, 0.18))
-		# 수액관 — 줄기에서 통으로 꽂힌 짧은 관(설치물임이 실루엣으로 읽히게).
-		draw_rect(Rect2(base + Vector2(TILE * 0.44, TILE * 0.48),
-			Vector2(TILE * 0.12, TILE * 0.12)), Color(0.55, 0.44, 0.30))
+		canvas.draw_texture_rect(PROP_TAPPER, Rect2(base, tsz), false)
 		if tapper.pending_product(_region, t) != "":
-			# 수거 대기 방울(통 위) — "거둘 것 있음"의 유일한 표식이라 가장 밝다.
-			draw_circle(base + Vector2(TILE * 0.50, TILE * 0.44), TILE * 0.10,
+			# 수거 대기 방울(통 위) — "거둘 것 있음"의 유일한 표식이라 가장 밝다. 아트가 붙어도
+			# 이건 **코드 드로우로 남긴다**: 유·무 2상태를 한 텍스처로 굴려야 에셋이 안 는다.
+			canvas.draw_circle(base + Vector2(TILE * 0.50, TILE * 0.30), TILE * 0.11,
 				Color(0.95, 0.74, 0.34))
+			canvas.draw_circle(base + Vector2(TILE * 0.50, TILE * 0.30), TILE * 0.11,
+				Color(0.20, 0.14, 0.08, 0.80), false, 1.0)
 
 # ★ [Phase E/S1-15] 가축 스프라이트 훅 — assets/livestock/<species>_<stage>.png(gemini-demo-sprites-spec §5,
 #   bottom-center 앵커, dak 32²·so_baby 48²·so_adult 64×48). owner Gemini 결과가 이 경로에 들어오면 코드
@@ -12484,6 +12654,16 @@ func _draw_facade_museum() -> void:
 func _draw_facade_fishshop() -> void:
 	_blit_facade_anchored(FACADE_FISHSHOP, FISHSHOP_EXT_RECT)
 
+# ★ [S4-T10] 저승 숲 목공방 외관(혼백관·생선가게와 동형). 그리기 전용 — WALL 충돌·문 트리거
+#   (WOODSHOP_EXT_DOOR)·실내 rect는 그레이박스 시절 그대로다.
+func _draw_facade_woodshop() -> void:
+	_blit_facade_anchored(FACADE_WOODSHOP, WOODSHOP_EXT_RECT)
+
+# ★ [S4-T10] 미혹의 숲 옥자 집 외관(잠긴 집 — 진입 불가는 코드가 이미 보장한다: 실내 방도
+#   카탈로그 항목도 없어 문에 닿아도 아무 일이 없다. 여긴 그 사실을 **그림으로** 말할 뿐이다).
+func _draw_facade_okja_hut() -> void:
+	_blit_facade_anchored(FACADE_OKJA_HUT, OKJA_HUT_EXT_RECT)
+
 # ★ [S2-T10] 주민 집 11채 외관. 아직 누가 사는 집인지 안 정했으므로([ADR-0060] 결정 2 "배정은 본체
 # 제작 시") 캐릭터색 없는 **공용 변주**를 돌려 쓴다 — 4칸 폭은 변주 3종을 index로 순환시키고,
 # 5칸 폭 1채(index 0)만 폭이 맞는 와이드 초가집을 쓴다. 폭을 rect에서 읽으므로 로스터가 바뀌어도
@@ -12703,6 +12883,8 @@ func _draw_front_props(canvas: CanvasItem) -> void:
 		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
 			# ★[S4-T9] 숲 캐노피·원장 폼도 같은 Y-split(수관 뒤로 지나가면 반투명 — FADE_PROPS).
 			_draw_props_for(_forest_prop_entries(), canvas, _PROP_PASS_FRONT, player.global_position.y)
+			# ★[S4-T10] 채취기도 같은 Y-split — 캐노피와 같은 패스에 있어야 "수거 대기" 표식이 안 묻힌다.
+			_draw_tappers_front(canvas)
 			# 안개는 나무보다도 위다 — 숲 전체를 덮는 대기라 프롭 뒤에 깔면 "바닥 얼룩"으로 읽힌다.
 			_draw_mihok_fog(canvas)
 
