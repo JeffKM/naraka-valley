@@ -1498,3 +1498,222 @@ PROMPT: a flat irregular stain of moss growing on the ground, seen from straight
    반드시 같이 움직여야 한다: greybox = "그림 없으니 오버레이 투명 통과", building = "facade가
    덮으니 발치 맨흙 패드". 아트를 붙이고 greybox에 남기면 오버레이가 facade를 삼킨다(T9 실측).
 ```
+
+---
+
+## 16. ★[S5-T9] 업화 갱도·나락 아트 패스 1 — 지형 필드 2·프롭 9·외관 2채 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-07-30). §10~§15와 같은 [ADR-0048] 교체
+> 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`(지형은 `mine_src/*.png`)만 덮어쓰면
+> **코드 0줄 수정**으로 반영된다.
+>
+> **후처리 글루:** [`game/tools/make_mine_art.py`](../../game/tools/make_mine_art.py)
+> **raw 보관:** `game/assets/props/{mine_rock,mine_node_ore,mine_node_gem,mine_node_geode,mine_ladder,`
+> `mine_chest,narak_seal,smithy_anvil,guild_weapon_rack}_raw.png` ·
+> `game/assets/buildings/raw/{smithy,guild}_ext_raw.png` · `game/assets/terrain16/mine_src/*.png`
+> **육안 하네스:** `godot --path game --script res://playtest/mine_dump.gd` (⚠비-headless)
+> → `/tmp/mine_{surface_smithy,band_jaetgil,band_neokgol,band_eophwa,nodes,smithy_room,guild_room,`
+> `narak_arena,narak_floor}.png`
+>
+> **PixelLab 사용량 31 gen**(tiles_pro 1회 ≈20 + map_object 11). S4-T10이 102를 쓴 뒤 owner 큐에
+> 편차 확인이 올라간 것을 받아, **재사용·틴트 파생을 최우선**으로 짰다:
+>   · 광맥 11종 = 원본 **3장**(광석·보석·지오드) + `_MINE_NODE_COLORS` 곱셈(§16.3)
+>   · 밴드 3톤 = 신규 에셋 **0장**(그리기 시점 곱셈 — §16.5)
+>   · 나락 = 갱도 지형·돌·사다리 **전량 재사용** + 톤 + 봉인석 1장
+>
+> **이 패스로 갱도·나락에 남은 그레이박스는 잡귀·보스 스프라이트와 업화로 화덕뿐이다**(둘 다 T10/후속).
+
+### 16.0 공통 규약
+
+```
+전부 [ADR-0050] 32-native · [§0.1] 2px 청키 · [§1.1] NW 광원 · [§8.1] 하드 알파 ·
+  [§3] 발치 bottom-flush(글루 foot_flush) · [§9] 저승 muted(종별 계수는 아래 카드).
+생성: 프롭 = create_map_object(basic / high top-down / single color outline) ·
+      지형 = create_tiles_pro(square_topdown / 32px / top-down / segmentation) — 팔레트 소스로만.
+★리젝 기준: 3/4 각도로 옆면이 보이면 재생성 · 프레임에 지면·그림자가 구워져 있으면 재생성.
+★전 종 **비-SOLID**다. 층의 통행 집합은 그리드(PATH/ROCK/WALL)와 원장이 통째로 소유하고, 이
+  프롭들은 그 위에 얹는 순수 시각이다 — 돌 프롭이 사라져도(캐도) 그리드가 이미 열려 있다.
+```
+
+### 16.1 ★지형 필드 2종 `mine_floor_field` / `mine_bedrock_field` — 팔레트 상속 + 절차 합성
+
+```
+파일: game/assets/terrain16/{mine_floor_field,mine_bedrock_field}.png (각 128×128 seamless)
+소스: game/assets/terrain16/mine_src/{floor_a,floor_b,floor_c,rock_a,rock_b,rock_c}.png (32×32)
+배선: main._build_mine_ground() — 갱도·나락의 **층과 지상 양쪽**을 한 파이프라인으로 굽는다.
+  · 층   — WALL=암반 / 나머지(PATH·ROCK)=바닥  ※ROCK도 바닥으로 굽는 게 핵심(아래 ★)
+  · 지상 — ROCK(바위 노두)=암반 / GROUND(협곡 바닥)=바닥 / PATH·WATER·WALL은 투명 통과
+생성 PROMPT(tiles_pro seed 5901): 1). rough cave floor of packed ash-grey dirt with scattered small
+  angular stone chips and fine gravel, seen from straight above, no repeating grid, no bricks,
+  no stripes 2). the same cave floor with a few larger flat rock slabs half embedded in it
+  3). dark cracked bedrock cave wall stone, heavy irregular blocky mass with deep fissures
+  4). dark bedrock with a scatter of loose rubble chips over it
+후처리: **팔레트(명도 램프)만 취하고 구조는 절차 합성**(주기 value 노이즈 3옥타브 seamless +
+  잔돌 알갱이). 바닥 sat×0.64·val×1.02 / 암반 sat×0.60·val×1.16(암반이 한 단 어둡고 결이 굵다).
+
+★★ 왜 생성 타일을 그대로 안 깔았나 — §12.3 백사장 선례의 **재확인**(재시도 금지):
+  갱도 바닥·암반은 무정형이다. 32px 변주를 모자이크로 깔면 모티프가 타일 중앙에 몰려 배치가
+  통째로 32px 격자로 읽힌다. 판석(§10.3 cobble)이 통한 건 그게 원래 격자 물건이어서다.
+★★ 램프는 **픽셀 백분위가 아니라 고유색 목록**에서 뽑는다(이 카드가 새로 얻은 교훈):
+  저색 crisp 소스는 한 색이 화면의 80%를 먹어서, 픽셀 백분위로 자르면 12단계 램프가 실색 3종으로
+  접혀 필드가 민무늬가 된다(1차 산출 실측 — 색수 3). 고유색을 명도순으로 세우고 사이를 보간해야
+  램프가 램프가 된다. 팔레트(색 정체)는 소스에서, 단계(결의 세기)는 글루에서.
+★ ROCK 칸까지 바닥으로 굽는 이유: 깰 수 있는 돌은 프롭으로 위에 얹으므로, 깨지는 순간 밑에서
+  바닥이 드러나 **재베이크가 0**이다(원장이 바뀔 때마다 768² 이미지를 다시 굽지 않는다).
+★ owner 교체 시 지킬 것: 두 장의 **명도 차**(암반이 확실히 어둡다)와 **결의 굵기 차**(암반이
+  덩어리·바닥이 잔알갱이). 둘이 비슷해지면 층에서 "벽이 어디까지인지"가 안 읽힌다.
+```
+
+### 16.2 ★밴드 3톤 + 나락 톤 (아트 생성물 아님 — 그리기 시점 곱셈)
+
+```
+파일 없음. `main._MINE_BAND_TONES` / `_MINE_SURFACE_TONE` / `_NARAK_{FLOOR,ARENA}_TONE`.
+  잿길(1~20)   Color(0.94, 0.90, 0.84)  마른 잿빛 — 팔레트의 기준선
+  넋골(21~40)  Color(0.62, 0.72, 0.80)  청록 그림자 — "빛이 안 드는 층"
+  업화(41~60)  Color(1.00, 0.66, 0.46)  달군 주홍 — 용암
+  갱도 지상     Color(0.92, 0.88, 0.84)  흙먼지 한 겹(건물 아트가 물들면 안 되므로 약하게)
+  나락 런 층    Color(0.58, 0.46, 0.78)  심연 자보라(갱도 3밴드 어디와도 안 겹친다)
+  나락 아레나    Color(0.74, 0.64, 0.84)  한 단 옅게(봉인 고리·구멍이 읽혀야 하는 스테이징)
+곱하는 대상: 타일맵(`ground.modulate`) + 지면 오버레이(`_g16_ground_tone`) + **돌 프롭 100% /
+  사다리·상자 50%**(`_mine_cast`). 광맥은 **안 물들인다** — 종 식별이 최우선이다.
+
+★★ 왜 밴드마다 필드 PNG를 안 굽나 — [S4-T9 §14.6]이 이미 폐기한 길이다(재시도 금지):
+  파생 필드는 owner 교체 큐를 3배로 늘리는데 실제로 갈리는 건 톤 하나뿐이고, 곱셈은 합성
+  **결과 전부**(바닥·암반·돌)에 균일하게 걸려 한 무대가 한 톤으로 잠긴다.
+★ 돌 프롭에도 톤을 얹는 이유(1차 덤프 육안): 지면만 물들이면 업화 층에서 **잿빛 돌이 붉은 바닥
+  위에 떠 있다**. 돌은 그 층 암반과 같은 재질이므로 같은 빛을 받아야 한다.
+```
+
+### 16.3 ★광맥 3종 = 11종의 원본 (2층 분해 + 종색 곱셈 — ★생성물 3장뿐)
+
+```
+파일: game/assets/props/mine_node_{ore,ore_vein,gem,gem_core,geode}.png (각 32×32)
+      ※ 생성 raw는 3장(ore·gem·geode)이고, `_vein`/`_core`는 글루가 **쪼갠 층**이다.
+배선: main._draw_node_at() — 몸통을 `종색.lerp(WHITE, 0.55)`로, 광물 층을 `종색.lerp(WHITE, 0.12)`로
+      곱한다. 지오드는 광물 층이 없고 몸통만 `lerp(WHITE, 0.20)`(통짜 한 재질).
+      종색의 단일 출처 = `_MINE_NODE_COLORS` + `_NARAK_NODE_COLORS`(나락철).
+커버 종 11: 명동·유철·황천금·혼탄(ore) / 넋수정·명옥·염주석·명부금강(gem) / 넋알돌·업화알돌(geode)
+            / 나락철(ore·나락 전용)
+
+16.3a mine_node_ore  — PROMPT: a mine ore vein rock, a chunky grey stone boulder with four bright
+  metallic nuggets embedded in its face catching the light, clearly a mineable ore node, ...
+16.3b mine_node_gem  — PROMPT: a cluster of sharp faceted crystals growing out of a low grey stone
+  base, three tall pointed gem shards, bright and translucent with a glowing core, ...
+16.3c mine_node_geode — PROMPT: a rounded geode nodule, a lumpy potato-shaped stone with a rough
+  bumpy crust and a thin bright mineral seam running around it, ...
+
+★ 글루의 분해 규칙: 채도 ≥ 임계인 픽셀 = 광물 층(명도만 남긴 **회백**으로 정규화 — 원본 청록
+  너깃 색이 남으면 곱셈이 두 색의 곱이 되어 명동이 탁한 올리브로 나온다), 나머지 = 몸통(광물
+  자리는 돌 중앙값으로 메워 구멍을 없앤다).
+★ 광물 마스크는 **1px 팽창**한다. 안 하면 너깃 하이라이트(채도가 낮아 돌로 분류된 밝은 점)가
+  빠져 광물이 서너 점으로 쪼개지고 32px에서 종색이 안 읽힌다(1차 산출 육안 = 판정 실패).
+★ 몸통까지 함께 물들이는 이유도 같다 — 광물 층만 물들이면 종이 안 읽힌다. 몸통을 흰색 쪽으로
+  절반 당긴 값으로 곱하면 "구리빛 돌 / 강철빛 돌"이 된다.
+★ 검증: mine_dump `nodes` — 방 한 줄에 전 종 10개를 강제로 심어 굽는다(육안 식별 전용 하네스.
+  층 생성 롤은 한 줄도 안 건드리고 `_mine_layout["nodes"]` 사본만 덮어쓴다 = RNG 무접촉).
+★ owner 교체 시: 3장의 **실루엣 계단**(모난 광석 상자 / 뾰족한 결정 다발 / 둥근 덩이)이 종
+  부류(ore·gem·geode)의 유일한 시각 근거다. 셋이 닮아지면 색만으로는 부류가 안 갈린다.
+```
+
+### 16.4 갱도·나락 설치물 4종
+
+```
+mine_rock    32×32 (콘텐츠 28×26) 채도×0.72·명도×0.94   배선: 층·나락 남은 돌 전량
+  PROMPT: a single loose breakable mine boulder, a chunky rounded grey-slate rock with angular
+    chipped facets and a few pale cracks, ...
+  ★칸을 꽉 채우지 않는다(28×26) — 돌이 층 바닥을 뒤덮는 물건이라 꽉 채우면 바닥이 안 보인다.
+  ★광맥과 **실루엣이 갈려야** 한다(둥근 덩이 ↔ 모난 상자/결정). 같으면 "저건 캘 값이 있나"가
+    곡괭이를 대 보기 전엔 안 읽힌다.
+mine_ladder  32×32 (콘텐츠 18×30) 채도×0.80            배선: 내려가는/올라가는/나가는 사다리 공용
+  PROMPT: an old wooden mine ladder seen from directly above, two vertical side rails with five
+    horizontal rungs between them, weathered warm brown timber, running top to bottom, ...
+  ★한 장으로 세 방향을 다 쓴다 — **방향은 그림이 아니라 뒤에 깔린 구덩이/벽감 색이 가른다**
+    (내려감=검은 구덩이 / 올라감=밝은 벽감 / 나락 나감=청록 벽감). 사다리 그림으로는 위·아래가
+    안 갈리기 때문이고, 그래서 세로로 칸을 관통하는 폭 좁은 판이어야 한다.
+mine_chest   32×32 (콘텐츠 26×22) 채도×0.82·명도×0.96   배선: 10의 배수 보상 층 상자(1회성)
+  PROMPT: a small closed treasure chest, dark wood body with iron corner bands and a round brass
+    lock plate, lid shut, ...
+narak_seal   32×32 (콘텐츠 26×24) 채도×0.86·명도×0.92   배선: 나락 아레나 봉인 고리 8세그먼트 양 끝
+  PROMPT: a broken stone seal marker, a squat dark basalt block carved with a cracked circular ward
+    glyph that glows faint violet through the fracture, chipped and toppling, ...
+  ★이 한 장이 나락 아레나의 정체다. "깨진 봉인 고리"(CONTEXT 탈주 잡귀 누출)가 지금까지 ROCK 띠
+    **배치로만** 있었고 그림으로는 그냥 바위 담이었다 — 끊긴 끝마다 금 간 봉인석이 서야 "여기가
+    끊어진 자리"가 읽힌다. 금 간 원형 각인과 새어 나오는 빛이 빠지면 리젝.
+```
+
+### 16.5 건물 외관 2채 `buildings/{smithy,guild}_ext.png`
+
+```
+공통: §12.0 규약 그대로(정면 facade · 남향 문 · 박공 + 윗면 슬랩 · base 투명 · bottom-center 앵커 ·
+  아트 폭 = footprint 폭 정확히 · fit_facade가 규격에 앉힘 · 3/4 각도·구운 지면 금지).
+크기: 둘 다 192×160 = SMITHY_EXT_RECT(4,37,6,5) · GUILD_EXT_RECT(22,37,6,5) 폭 1:1(192)
+배선: main._draw_facade_smithy() / _draw_facade_guild() — EOPHWA_MINE 지상 드로우 분기
+
+★★ 이 두 장의 설계 규칙 = **채 간 대비**. 숲 2채(§15.4)는 구역이 갈려 대비를 구역 간에 뒀지만,
+   이 둘은 남단 입구 서·동에 **한 화면에 나란히 선다**. 톤이 비슷하면 두 창구가 한 건물로 읽힌다.
+
+16.5a 대장간 smithy_ext  채도×0.86 · 명도×0.92 (검댕 쪽으로 눌러 어둡게)
+  PROMPT: a Korean underworld blacksmith forge building carved into a mine canyon, flat front
+    elevation only, viewed straight on from the front so no side wall and no perspective is visible.
+    Heavy dark slate stone block walls with soot stains, a low tiled gable roof with a visible flat
+    roof-top slab receding behind the ridge, a tall stone chimney stack on the left breathing a faint
+    ember glow, a wide double wooden door dead center at the bottom of the front wall, a hanging iron
+    shop sign above the door showing a hammer and anvil, an anvil and a rack of tongs beside the door,
+    the window openings glowing hot orange from the furnace inside. + [§1.1] + 배경 투명·지면 금지
+  ★정체성: **불을 다루는 집**. 굴뚝 + 창에서 새는 화덕 주홍 + 망치·모루 현판이 리젝 기준이다.
+
+16.5b 길드 guild_ext     채도×0.84 · 명도×1.02 (대장간의 정확한 반대편 — 밝은 회백)
+  PROMPT: a Korean underworld adventurers guild hall carved into a mine canyon, flat front elevation
+    only, ... Pale grey cut-stone walls with dark timber posts, a tiled gable roof with a visible flat
+    roof-top slab, a wide double wooden door dead center, a carved stone name plaque mounted above the
+    door, two crossed swords mounted on the wall as a guild emblem, a pair of stone lanterns flanking
+    the doorway glowing faint pale blue, a notice board with pinned papers beside the door.
+  ★정체성: **사람이 모이는 집**. 교차한 검 문장 + 석등 창백한 혼불이 리젝 기준.
+  ⚠️ 1차 생성본은 간판에 **로마자 "Guild"**를 새겨 왔다(저승 세계관에 라틴 문자 금지). 글루의
+    `_scrub_roman_sign`이 판 안쪽을 덮고 각자(刻字) 세 덩이로 바꿔 두었다 — owner 재생성 시엔
+    프롬프트에서 글자 자체를 빼면 되고, 그러면 그 함수는 지워도 된다.
+
+★ `greybox_rects` → `building_rects` 짝 이동(§15.7 ④)은 **여기 해당 없다**: 갱도는
+  `_G16_REGION_PROFILES`에 없어 ground16 오버레이를 안 타므로 두 목록 자체가 없다. 다만 구역
+  프로파일이 갱도로 확장되는 날엔 두 rect를 **building_rects에** 넣어야 한다(아트가 이미 붙었다).
+```
+
+### 16.6 실내 프롭 2종 + 방 바닥 (대장간·길드)
+
+```
+smithy_anvil       64×32 (2×1칸) 채도×0.78·명도×0.96   배선: SMITHY_UPGRADE_TILE(조준 칸 = 아트 우측 칸)
+  PROMPT: a blacksmith anvil on a heavy stone block base, a black iron anvil with a pointed horn
+    facing right sitting on a squat grey stone plinth, a hammer resting on it, ...
+guild_weapon_rack  64×32 (2×1칸) 채도×0.80·명도×0.98   배선: 길드 서벽(GUILD_RECT 안쪽 x+1, y+1)
+  PROMPT: a wall mounted weapon rack against a wall, a horizontal dark timber bar holding three
+    straight swords hanging blade down side by side, plain steel blades with brass crossguards ...
+
+★ 방 바닥 = **오버레이**(아트 생성물 아님). `_draw_mine_room_floor(rect, tint)`가 `mine_floor_field`를
+  방 크기로 구워 벽 링 안쪽에 깐다. 대장간 tint (0.78,0.70,0.64) 검댕 / 길드 (0.92,0.94,0.98) 회백.
+  ★왜 타일을 안 갈았나: 두 방은 집(HOUSE)·카페(CAFE) 바닥 타일을 **공유**한다. 갱도 바위방으로
+    갈려면 타일 id 신설 = 그리드 변경이고, eophwa_mine_test ②c/②e가 두 방의 바닥 타일 id를
+    단언한다. 순수 시각 오버레이면 그리드·충돌·세이브·테스트가 한 줄도 안 바뀐다.
+  ★벽 링은 안 덮는다 — 목재 기둥·벽이 남아야 "바위를 깎아 들인 방"이 된다.
+★ 대장간 **업화로 화덕은 아직 코드 드로우**(붉은 사각 + 주홍 심지)다. 이 패스가 남긴 유일한
+  실내 그레이박스이고, 다음 패스나 owner Gemini의 후보다(64×32 `smithy_forge` 자리 예약).
+```
+
+### 16.7 이 패스가 바꾼 월드 렌더 (아트 생성물 아님 — 코드)
+
+```
+① `_build_mine_ground(in_floor)` 신설 + `_paint_grid` 분기 — 갱도·나락이 `_build_path_grass_fringe`
+   폴백에서 전용 지면 파이프라인으로 옮겼다. ⚠**갱도·나락 지상 렌더가 바뀐다**: 협곡 바닥이
+   잔디밭에서 암석으로 갈린다(1차 덤프 육안 = 갱도 한복판에 잔디 마당). 의도된 변경이며,
+   HOME·나루·삼도천/황천해·숲 6구역의 지면·건물 렌더는 **픽셀 불변**이다(톤 = 흰색 = 무변화).
+② `_facade_grass_backdrop` — 갱도·나락도 건너뛴다. 안 그러면 암석 협곡 위 대장간·길드 발치에만
+   **초록 사각형**이 되살아난다([ADR-0054] 회귀의 갱도판).
+③ `_stage_ground_tone()` 신설 — 무대 톤의 단일 출처. 타일맵·오버레이·프롭이 이 한 값을 쓴다.
+④ **잠복 버그 봉합**: `_g16_ground_tone`은 `_g16_resolve_profile`(= `_build_ground16` 안)에서만
+   갱신돼서, ground16 미이식 구역은 **직전 구역 톤을 물려받고 있었다**(숲 → 갱도로 워프하면 갱도
+   fringe가 숲 청록으로 물들었다). 이제 `_paint_grid`의 세 분기가 전부 명시적으로 잡는다.
+⑤ `_draw_{mine,narak}_floor` — 색 사각/마름모 그레이박스가 전부 프롭으로. 남은 코드 드로우는
+   구덩이·벽감(사다리 방향 구분)·타수 눈금·바닥 반짝이뿐이고, 넷 다 **상태 2개 이상을 한
+   텍스처로 굴려야 하는 것**이라 의도적으로 코드에 남겼다(덤불 열매 색점과 같은 판단).
+⑥ `_draw_narak_mouth` — 봉인 고리 8세그먼트의 끊긴 끝마다 `narak_seal`을 세운다(순수 시각 —
+   NARAK_ROCK_RECTS 좌표도 충돌도 한 칸 안 바뀐다, narak_test 단언 전량 보존).
+```

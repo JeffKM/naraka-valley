@@ -912,6 +912,28 @@ const FACADE_FISHSHOP := preload("res://assets/buildings/fishshop_ext.png")
 #     그림만으로 읽히게 하는 게 목적이라, 자물쇠·판자가 빠지면 리젝 대상이다.
 const FACADE_WOODSHOP := preload("res://assets/buildings/woodshop_ext.png")
 const FACADE_OKJA_HUT := preload("res://assets/buildings/okja_hut_ext.png")
+# ★[S5-T9 / ADR-0063 아트 스코프] 업화 갱도 남단 입구의 두 서비스 채. 위 여섯과 같은 간판 문법이되
+#   **이 둘만 한 화면에 나란히 선다**(SMITHY_EXT_RECT x4..9 / GUILD_EXT_RECT x22..27 — 같은 y37..41).
+#   숲 2채(§15.4)는 구역이 갈려 톤 대비를 구역 간에 뒀지만, 여기선 **채 간**으로 갈라야 한다:
+#   · 대장간 = 검댕 앉은 어두운 슬레이트 석벽 + 굴뚝 + 창에서 새는 화덕 주홍(불을 다루는 집).
+#   · 길드 = 밝은 회백 절석 + 교차한 검 문장 + 문 양옆 석등 창백한 혼불(사람이 모이는 집).
+#   둘 다 192×160 = footprint 6칸 폭과 1:1.
+const FACADE_SMITHY := preload("res://assets/buildings/smithy_ext.png")
+const FACADE_GUILD := preload("res://assets/buildings/guild_ext.png")
+# ★[S5-T9] 갱도·나락 프롭. 층 그레이박스(색 사각·마름모)를 대체한다.
+#   ★광맥은 **2층 구조**다(몸통 + 광물). 종이 11인데 갈리는 건 광물 색 하나뿐이라, 종마다 PNG를
+#     굽는 대신 광물 층만 `_MINE_NODE_COLORS`로 곱한다(씨앗 봉지 9종 = 원본 2 + 틴트와 같은 판단).
+const MINE_TEX_ROCK := preload("res://assets/props/mine_rock.png")
+const MINE_TEX_NODE_ORE := preload("res://assets/props/mine_node_ore.png")
+const MINE_TEX_NODE_ORE_VEIN := preload("res://assets/props/mine_node_ore_vein.png")
+const MINE_TEX_NODE_GEM := preload("res://assets/props/mine_node_gem.png")
+const MINE_TEX_NODE_GEM_CORE := preload("res://assets/props/mine_node_gem_core.png")
+const MINE_TEX_NODE_GEODE := preload("res://assets/props/mine_node_geode.png")
+const MINE_TEX_LADDER := preload("res://assets/props/mine_ladder.png")
+const MINE_TEX_CHEST := preload("res://assets/props/mine_chest.png")
+const NARAK_TEX_SEAL := preload("res://assets/props/narak_seal.png")
+const SMITHY_TEX_ANVIL := preload("res://assets/props/smithy_anvil.png")
+const GUILD_TEX_RACK := preload("res://assets/props/guild_weapon_rack.png")
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로).
 # ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
@@ -1799,6 +1821,30 @@ const _MINE_NODE_COLORS := {
 	# ★[S5-T8] 돌 — 광맥 종에는 없지만 **바닥 반짝이**로는 깔린다(같은 색 표를 반짝이 드로우가 공유).
 	"stone": Color(0.70, 0.68, 0.64),                 # 돌 — 잿빛 석재
 }
+# ★[S5-T9 / ADR-0063 결정 1·아트 스코프] 밴드 3톤 — **그리기 시점 곱셈**이다(S4-T9 §14.6 선례).
+#   밴드마다 지면 필드 PNG를 따로 굽는 길은 그 카드가 폐기했다(재시도 금지): 파생 필드는 owner
+#   교체 큐를 3배로 늘리는데 갈리는 건 톤 하나뿐이고, 곱셈은 합성 **결과 전부**(바닥·암반·프롭)에
+#   균일하게 걸려 한 무대가 한 톤으로 잠긴다. 여기 흰색을 넣으면 곧 "톤 없음"이다.
+#   · 잿길(1~20)   = 잿빛 흙. 기준 톤에 가깝게 두되 살짝 마르고 따뜻하게(첫 밴드 = 팔레트의 기준선).
+#   · 넋골(21~40)  = 뼈·그림자. 명도를 낮추고 **청록 쪽**으로 — "빛이 안 드는 층"이 색으로 먼저 온다.
+#   · 업화(41~60)  = 용암. 붉은 쪽으로 크게 밀고 청색을 죽여 달군 돌로.
+#   ※ 키는 MineFloors.BAND_* 와 같은 문자열이되 **리터럴로 둔다**(_MINE_NODE_COLORS와 같은 관례).
+const _MINE_BAND_TONES := {
+	"jaetgil": Color(0.94, 0.90, 0.84, 1.0),
+	"neokgol": Color(0.62, 0.72, 0.80, 1.0),
+	"eophwa": Color(1.00, 0.66, 0.46, 1.0),
+}
+# 갱도 **지상**(대장간·길드·게이트가 선 무대) — 층만큼 강하게 물들이면 건물 아트가 물든다.
+# 흙먼지 한 겹만 얹는 정도(라이브에서 "여긴 이미 갱도다"가 읽히는 최소치).
+const _MINE_SURFACE_TONE := Color(0.92, 0.88, 0.84, 1.0)
+# 나락 — 갱도 3밴드 어디와도 안 겹치는 **심연 자보라**. 런 층은 짙고(무대 밖), 지상 아레나는
+# 한 단 옅다(스테이징이라 봉인 고리·구멍이 읽혀야 한다).
+const _NARAK_FLOOR_TONE := Color(0.58, 0.46, 0.78, 1.0)
+const _NARAK_ARENA_TONE := Color(0.74, 0.64, 0.84, 1.0)
+# 광맥 몸통 틴트의 세기 — 몸통(회색 돌)을 종색 쪽으로 얼마나 당길지. 광물 층(너깃·결정)만
+# 물들이면 32px에서 종이 안 읽혀서(1차 산출 육안) 몸통도 함께 당긴다. 1.0 = 무변화(흰색).
+const _MINE_NODE_BODY_MIX := 0.55   # 몸통 = 종색을 흰색 쪽으로 55% 당긴 값으로 곱셈
+const _MINE_NODE_ORE_MIX := 0.12    # 광물 층 = 거의 종색 그대로
 # ★[S5-T5 / ADR-0063 결정 8] 잡귀 그레이박스 색 — 아키타입이 눈으로 갈리는 정도까지만(스프라이트
 #   아트 = S5-T10). 밤 바 잡귀(JOBGUI 탁한 청록)와 톤을 겹치지 않게 각자 다른 색상환에 앉혔다.
 #   ※ 키는 MobCatalog 종 id와 같은 문자열이되 **리터럴로 둔다**(_MINE_NODE_COLORS와 같은 관례).
@@ -5948,10 +5994,21 @@ func _paint_grid() -> void:
 	#   grid·충돌·terrain 로직 불변). 그 외 구역은 기존 fringe 유지.
 	# ★[S2-T3 / ADR-0060 결정 3] 이제 구역 프로파일이 있는 구역(HOME·나루 마을)이 단일출처 16px 지형
 	#   파이프라인을 탄다. 미이식 구역(삼도천·황천해 등)은 기존 fringe 폴백 유지 — 각자의 Slice에서 이식.
-	if _uses_ground16():
-		_build_ground16()
+	# ★[S5-T9] 무대 톤(곱셈)을 타일맵에 건다. 지상 4구역은 흰색이라 무변화(렌더 바이트 불변)이고,
+	#   갱도·나락에서만 값이 선다. 워프마다 다시 세팅하므로 무대를 벗어나면 자동으로 흰색이 된다.
+	var stage_tone := _stage_ground_tone()
+	ground.modulate = stage_tone
+	if _uses_mine_ground():
+		# ★[S5-T9] 갱도·나락 지면 = 바닥·암반 두 필드 한 장 베이크(층이든 지상이든 같은 파이프라인)
+		_build_mine_ground(_in_mine_floor() or _in_narak_floor())
+		_g16_ground_tone = stage_tone
+	elif _uses_ground16():
+		_build_ground16()         # (이 안에서 _g16_resolve_profile이 구역 ground_tone을 잡는다)
 	else:
 		_build_path_grass_fringe()
+		# ★미이식 구역은 프로파일 해석을 안 타므로 `_g16_ground_tone`이 **직전 구역 값으로 남는다**
+		#   (숲→갱도로 워프하면 갱도 fringe가 숲 청록으로 물들던 잠복 버그). 여기서 명시적으로 잡는다.
+		_g16_ground_tone = stage_tone
 
 # ── 지면 디테일(지형별 확률 시스템 — docs/design/ground-composition.md) ──────
 # 결정적 해시 좌표라 프레임·세이브·재방문에 고정(깜빡임 0). 구역 빌드 때 한 장으로 베이크해
@@ -6389,6 +6446,128 @@ func _build_path_grass_fringe() -> void:
 								continue
 							out.set_pixel(tx, ty, dp)
 	_ground_detail_tex = ImageTexture.create_from_image(out)
+
+# ═══ ★[S5-T9 / ADR-0063 아트 스코프] 갱도·나락 **층** 지면 베이크 ═══════════════════
+# 층 무대는 지상 구역들과 지면 파이프라인이 다르다. 지상은 잔디↔흙↔물 전환(Wang·shore 합성)이
+# 본질이지만 층은 **재질이 둘뿐**이다 — 걷는 바닥과 사방 암반. 그래서 Wang도 전환 타일도 필요
+# 없고, 두 장의 seamless 필드를 월드 위상으로 타일링해 한 장으로 굽는 게 전부다.
+#
+# ★왜 타일맵(PATH/ROCK/WALL 단색)이 아니라 오버레이인가: PATH·WALL 타일은 **전 구역 공유**다
+#   (마을 길·건물 외벽이 같은 id를 쓴다). 갱도만 다른 그림을 주려면 타일 id를 새로 파거나
+#   TileSet을 구역마다 다시 짜야 하는데, 전자는 그리드 변경(테스트 불변식 파손)이고 후자는
+#   워프마다 아틀라스 재조립이다. 오버레이 한 장은 **그리드·충돌·세이브를 한 칸도 안 건드린다**.
+#
+# ★깰 수 있는 돌(ROCK)은 여기 안 굽는다 — 캐면 사라지는 동적 대상이라 `_draw_mine_floor`가
+#   프롭으로 그린다. 그 자리도 바닥으로 구워 두면 돌이 깨진 순간 밑에서 바닥이 드러난다(재베이크 0).
+const _MINE_FIELD_FLOOR := "res://assets/terrain16/mine_floor_field.png"
+const _MINE_FIELD_ROCK := "res://assets/terrain16/mine_bedrock_field.png"
+var _mine_bf_floor: Image = null
+var _mine_bf_rock: Image = null
+
+func _mine_field(path: String, fallback: Color) -> Image:
+	if not ResourceLoader.exists(path):
+		var f := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+		f.fill(fallback)
+		return f
+	var img := (load(path) as Texture2D).get_image()
+	if img.get_format() != Image.FORMAT_RGBA8:
+		img.convert(Image.FORMAT_RGBA8)
+	return img
+
+func _load_mine_fields() -> void:
+	if _mine_bf_floor != null:
+		return
+	_mine_bf_floor = _mine_field(_MINE_FIELD_FLOOR, Color(0.42, 0.41, 0.39))
+	_mine_bf_rock = _mine_field(_MINE_FIELD_ROCK, Color(0.20, 0.20, 0.22))
+
+# 필드 한 장을 목적지 크기로 통째 타일링한다. **칸 단위로 잘라 붙이지 않는다** — 셀마다 필드
+# 원점을 다시 잡으면 32px 격자가 그대로 보인다(경계 셀 합성이 격자를 만든 지상 선례와 같은 함정).
+func _mine_tile_field(dst: Image, src: Image) -> void:
+	var per := src.get_width()
+	var y := 0
+	while y < dst.get_height():
+		var x := 0
+		while x < dst.get_width():
+			# 마지막 열·행은 잘라서 붙인다(목적지가 128의 배수가 아닐 수 있다 — 실내 방 크기).
+			var w: int = mini(per, dst.get_width() - x)
+			var h: int = mini(per, dst.get_height() - y)
+			dst.blit_rect(src, Rect2i(0, 0, w, h), Vector2i(x, y))
+			x += per
+		y += per
+
+# ★[S5-T9] 실내 방 바닥을 암석으로 덮는 오버레이(대장간·길드 전용). 방 크기로 한 번 구워 캐시한다.
+# ★왜 타일을 안 갈았나: 두 방은 집(HOUSE)·카페(CAFE) 바닥 타일을 **공유**한다. 갱도 바위방 톤으로
+#   갈려면 타일 id를 새로 파야 하고 그건 그리드 변경이다(eophwa_mine_test ②c/②e가 두 방의 바닥
+#   타일 id를 단언한다). 순수 시각 오버레이면 그리드·충돌·세이브·테스트가 한 줄도 안 바뀐다.
+# ★벽 링(rect 테두리 한 칸)은 안 덮는다 — 목재 기둥·벽이 남아야 "바위를 깎아 들인 방"이 된다.
+var _mine_room_tex: Dictionary = {}
+func _mine_room_floor_tex(rect: Rect2i) -> ImageTexture:
+	var key := str(rect)
+	if _mine_room_tex.has(key):
+		return _mine_room_tex[key]
+	_load_mine_fields()
+	var img := Image.create(rect.size.x * TILE, rect.size.y * TILE, false, Image.FORMAT_RGBA8)
+	_mine_tile_field(img, _mine_bf_floor)
+	var t := ImageTexture.create_from_image(img)
+	_mine_room_tex[key] = t
+	return t
+
+# 방 안쪽(벽 링 제외)에 암석 바닥을 깐다. tint로 방마다 결을 가른다(대장간=검댕·길드=회백).
+func _draw_mine_room_floor(rect: Rect2i, tint: Color) -> void:
+	var inner := rect.grow(-1)
+	draw_texture_rect(_mine_room_floor_tex(inner),
+		Rect2(Vector2(inner.position * TILE), Vector2(inner.size * TILE)), false, tint)
+
+# 갱도·나락이 이 지면 파이프라인을 타는가(층이든 지상이든). `_uses_ground16`의 짝이다.
+func _uses_mine_ground() -> bool:
+	return _region == RegionCatalog.EOPHWA_MINE or _region == RegionCatalog.NARAK
+
+# ★층과 지상은 **칸 매핑이 다르다**:
+#   · 층   — WALL=암반 / 나머지(PATH·ROCK)=바닥. ROCK까지 바닥으로 굽는 게 핵심이다: 깰 수 있는
+#            돌은 프롭으로 위에 얹으므로, 깨지는 순간 밑에서 바닥이 드러나 재베이크가 0이 된다.
+#   · 지상 — ROCK(바위 노두)=암반 / GROUND(협곡 바닥)=바닥 / **PATH·WATER·WALL은 투명 통과**.
+#            길은 타일맵 흙길 그대로 둬야 동선이 또렷하고(ADR-0043 "길 가시성 우선"), 호수는 물
+#            타일이, WALL은 외관 아트가 각자 그린다.
+#   ※ 지상을 안 덮으면 갱도·나락이 **잔디밭**이다(1차 덤프 육안 — 협곡 한복판에 잔디 마당).
+func _build_mine_ground(in_floor: bool) -> void:
+	_ground_detail_tex = null
+	_load_mine_fields()
+	var bw := _grid_w * TILE
+	var bh := _outdoor_h * TILE
+	if bw <= 0 or bh <= 0:
+		return
+	var floor_img := Image.create(bw, bh, false, Image.FORMAT_RGBA8)
+	_mine_tile_field(floor_img, _mine_bf_floor)
+	var rock_img := Image.create(bw, bh, false, Image.FORMAT_RGBA8)
+	_mine_tile_field(rock_img, _mine_bf_rock)
+	var out := Image.create(bw, bh, false, Image.FORMAT_RGBA8)   # 전부 투명에서 시작
+	for y in _outdoor_h:
+		for x in _grid_w:
+			var c: int = _grid[y][x]
+			var src: Image = null
+			if in_floor:
+				src = rock_img if c == WALL else floor_img
+			elif c == ROCK:
+				src = rock_img
+			elif c == GROUND:
+				src = floor_img
+			if src == null:
+				continue
+			var p := Vector2i(x * TILE, y * TILE)
+			out.blit_rect(src, Rect2i(p, Vector2i(TILE, TILE)), p)
+	_ground_detail_tex = ImageTexture.create_from_image(out)
+
+# 지금 무대의 지면 곱셈 톤. 타일맵(`ground.modulate`)과 지면 오버레이(`_g16_ground_tone`)가
+# **같은 한 값**을 쓴다 — 하나만 걸면 층에서 바닥과 암반이 다른 톤으로 갈려 한 무대로 안 읽힌다.
+# 그 외 구역은 흰색(무변화)이라 지상 4구역 렌더는 픽셀 불변이다.
+func _stage_ground_tone() -> Color:
+	if _region == RegionCatalog.EOPHWA_MINE:
+		if _mine_floor > 0:
+			return _MINE_BAND_TONES.get(MineFloors.band_of(_mine_floor), Color(1, 1, 1, 1))
+		return _MINE_SURFACE_TONE
+	if _region == RegionCatalog.NARAK:
+		return _NARAK_FLOOR_TONE if _narak_depth > 0 else _NARAK_ARENA_TONE
+	return Color(1, 1, 1, 1)
 
 # ★[ADR-0049 라이브 통합] 16px 소프트 지면 오버레이 베이크(home16_dump 로직 이식).
 #   필드(잔디·흙길·밭·물)를 월드좌표로 타일링(단위셀 반복 아님·격자 반복은 스캐터로 별도) +
@@ -12065,37 +12244,36 @@ func _try_open_geode() -> bool:
 #   이미 그린다). 진짜 아트(밴드별 지형 팔레트·사다리·엘리베이터 타일)는 S5-T9/T10 아트 패스.
 #   · 올라가는 사다리(입구) = 밝은 나무 가로장 + 위 방향 표식
 #   · 내려가는 사다리 = 어두운 구덩이 + 나무 가로장(확정 배치 1 + 돌을 깨 열린 것들)
+# ★[S5-T9] 위 그레이박스 주석의 예고가 이행됐다 — 색 사각이 전부 아트로 갈렸다:
+#   · 바닥·암반 = `_build_mine_ground` 오버레이 한 장(여긴 안 그린다)
+#   · 깰 수 있는 돌 = `MINE_TEX_ROCK` 프롭(오버레이가 그 자리도 바닥으로 구워 뒀으므로 깨면 그냥 사라진다)
+#   · 광맥 = 몸통 + 광물 2층 종색 곱셈(`_draw_node_at`)
+#   · 사다리·구멍·상자 = 각자 프롭 + 구덩이/벽감 도형(실루엣 구분은 그레이박스 시절 규약 그대로)
+#   밴드 3톤은 여기 없다 — `_stage_ground_tone`이 오버레이·타일맵에 곱셈으로 건다.
 func _draw_mine_floor() -> void:
 	if _mine_layout.is_empty():
 		return
-	# ★[S5-T2] 광맥 그레이박스 — ROCK 타일 위에 종별 색 결정(結) + 남은 타수 눈금. 진짜 아트
-	#   (밴드별 광맥 스프라이트)는 S5-T9/T10이라, 지금은 "저 돌은 다르다"만 읽히면 된다.
 	var nodes: Dictionary = _mine_layout.get("nodes", {})
+	# ① 남은 돌 — **광맥이 아닌 칸만**. 광맥도 rocks의 부분집합이라(MineFloors 주석) 안 거르면
+	#    광맥 위에 평범한 돌이 겹쳐 그려져 종색이 가려진다.
+	for t: Vector2i in mine_floors.rocks_left(clock.day, _mine_floor):
+		if nodes.has(t):
+			continue
+		_draw_mine_prop(MINE_TEX_ROCK, t, _mine_cast(1.0))
+	# ② 광맥 — 종색 + 남은 타수 눈금(친 만큼 아래 띠가 줄어든다 = 진행이 화면에 보인다).
 	for raw_t in nodes:
 		var t: Vector2i = raw_t
 		if mine_floors.is_mined(_mine_floor, t):
 			continue                                    # 이미 캔 광맥(빈 바닥)
 		var nid := String(nodes[t])
-		var col: Color = _MINE_NODE_COLORS.get(nid, Color(0.80, 0.80, 0.84))
-		var p := Vector2(t.x * TILE, t.y * TILE)
-		draw_rect(Rect2(p + Vector2(7, 7), Vector2(TILE - 14, TILE - 14)), col)                  # 결정 몸통
-		draw_rect(Rect2(p + Vector2(9, 9), Vector2(6, 6)), col.lightened(0.35))                  # NW 광원 하이라이트
-		# 남은 타수 눈금 — 친 만큼 아래 띠가 줄어든다(진행이 화면에 보인다).
+		_draw_node_at(t, nid, MineFloors.node_class(nid))
 		var need := MineFloors.node_hits(nid, pickaxe_tier())   # ★[S5-T3] 눈금도 든 곡괭이 기준으로
 		var done := mine_floors.node_hits_done(_mine_floor, t)
 		if done > 0 and need > 1:
-			var w := float(TILE - 12) * float(need - done) / float(need)
-			draw_rect(Rect2(p + Vector2(6, TILE - 7), Vector2(w, 3)), Color(0.92, 0.84, 0.42))
+			_draw_hit_gauge(t, float(need - done) / float(need))
 	for t: Vector2i in mine_floors.ladders(clock.day, _mine_floor):
-		var p := Vector2(t.x * TILE, t.y * TILE)
-		draw_rect(Rect2(p + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.06, 0.05, 0.06))  # 구덩이(내려감)
-		for i in 3:
-			draw_rect(Rect2(p + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.52, 0.38, 0.22))
-	var e: Vector2i = _mine_layout["entrance"]
-	var ep := Vector2(e.x * TILE, e.y * TILE)
-	draw_rect(Rect2(ep + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.30, 0.26, 0.22))     # 올라가는 사다리 벽감
-	for i in 3:
-		draw_rect(Rect2(ep + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.76, 0.60, 0.36))
+		_draw_mine_ladder(t, false)                      # 내려가는 사다리 = 어두운 구덩이 + 가로장
+	_draw_mine_ladder(_mine_layout["entrance"], true)    # 올라가는 사다리 = 밝은 벽감 + 가로장
 	# ★[S5-T8] 바닥 반짝이 — 아직 안 주웠을 때만 그린다(원장이 곧 렌더 상태 — 상자와 같은 결).
 	#   광맥(결정 몸통 큰 사각)과 실루엣이 갈리게 **작은 마름모 + 반짝임 점** 하나로 그린다:
 	#   "저건 캐는 게 아니라 줍는 것"이 한눈에 읽혀야 [F]와 곡괭이가 헷갈리지 않는다.
@@ -12110,18 +12288,88 @@ func _draw_mine_floor() -> void:
 			sp + Vector2(0, 6), sp + Vector2(-5, 0)]), scol)                     # 마름모 몸통
 		draw_rect(Rect2(sp + Vector2(-2, -4), Vector2(3, 3)), scol.lightened(0.55))  # NW 반짝임
 	# ★[S5-T6] 보상 층 상자 — 아직 안 열었을 때만 그린다(열면 자리에서 사라진다 = 원장이 곧 렌더 상태).
-	#   나무 궤 + 쇠 띠 + 자물쇠 점. 사다리(짙은 구덩이)·입구(밝은 벽감)와 실루엣이 갈린다.
+	#   사다리(짙은 구덩이)·입구(밝은 벽감)와 실루엣이 갈린다.
 	var chest_t: Vector2i = _mine_layout.get("chest", Vector2i(-1, -1))
 	if chest_t.x >= 0 and not mine_floors.is_chest_opened(_mine_floor):
-		var cp := Vector2(chest_t.x * TILE, chest_t.y * TILE)
-		draw_rect(Rect2(cp + Vector2(5, 9), Vector2(TILE - 10, TILE - 14)), Color(0.46, 0.32, 0.18))   # 궤 몸통
-		draw_rect(Rect2(cp + Vector2(5, 9), Vector2(TILE - 10, 5)), Color(0.60, 0.44, 0.26))           # 뚜껑(NW 광원)
-		draw_rect(Rect2(cp + Vector2(5, 16), Vector2(TILE - 10, 2)), Color(0.30, 0.28, 0.29))          # 쇠 띠
-		draw_rect(Rect2(cp + Vector2(TILE * 0.5 - 2, 15), Vector2(4, 5)), Color(0.88, 0.76, 0.36))     # 자물쇠
+		_draw_mine_prop(MINE_TEX_CHEST, chest_t, _mine_cast(0.5))
+
+# ── ★[S5-T9] 층 프롭 그리기 공용부(갱도·나락이 공유) ─────────────────────────────
+# 층 프롭은 전부 1칸(32×32) bottom-flush다. 야외 프롭(`_draw_props_for`)과 같은 결이되 여긴
+# 배치가 원장 파생이라 layout.json을 안 탄다 — 그래서 한 줄짜리 전용 헬퍼를 둔다.
+# ★발치 타원 그림자: 돌·광맥·상자는 부피가 있어 안 깔면 바닥에 뜬 스티커로 읽힌다([§11]).
+func _draw_mine_prop(tex: Texture2D, t: Vector2i, tint: Color = Color(1, 1, 1, 1)) -> void:
+	var sz := tex.get_size()
+	_draw_prop_shadow(self, t, 0, sz)
+	draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), sz), false, tint)
+
+# 밴드 톤을 프롭에 얹는 세기. 지면만 물들이면 업화 층에서 **잿빛 돌이 붉은 바닥 위에 떠 있다**
+# (1차 덤프 육안) — 돌은 그 층 암반과 같은 재질이므로 같은 빛을 받아야 한다.
+#   · 돌 = 암반과 한 재질 → 톤을 그대로(1.0)
+#   · 사다리·상자 = 반입한 물건(나무·쇠)이라 절반만 물들인다(자기 정체를 지킨다)
+#   · 광맥 = **안 물들인다** — 종 식별이 최우선이라 밴드 톤이 종색을 흔들면 안 된다.
+func _mine_cast(strength: float) -> Color:
+	return _stage_ground_tone().lerp(Color.WHITE, 1.0 - strength)
+
+# ★[S5-T9] 광맥 한 칸 = 몸통 + 광물 2층을 종색으로 곱해 그린다. 종이 11인데 갈리는 건 광물 색
+#   하나뿐이라 종별 PNG를 굽지 않는다(§_MINE_NODE_BODY_MIX 주석).
+#   ★몸통까지 함께 물들이는 이유: 광물 층만 물들이면 32px에서 너깃 서너 점이라 종이 안 읽힌다
+#     (1차 산출 육안). 몸통을 흰색 쪽으로 절반 당긴 값으로 곱하면 "구리빛 돌 / 강철빛 돌"이 된다.
+#   ★지오드는 통짜 한 재질이라 광물 층이 없다 — 몸통을 종색에 더 가깝게 당긴다.
+func _draw_node_at(t: Vector2i, nid: String, cls: String) -> void:
+	var col: Color = _MINE_NODE_COLORS.get(nid, _NARAK_NODE_COLORS.get(nid, Color(0.80, 0.80, 0.84)))
+	var body: Texture2D = MINE_TEX_NODE_ORE
+	var ore: Texture2D = MINE_TEX_NODE_ORE_VEIN
+	var mix := _MINE_NODE_BODY_MIX
+	if cls == MineFloors.NODE_GEM:
+		body = MINE_TEX_NODE_GEM
+		ore = MINE_TEX_NODE_GEM_CORE
+	elif cls == MineFloors.NODE_GEODE:
+		body = MINE_TEX_NODE_GEODE
+		ore = null
+		mix = 0.20
+	_draw_mine_prop(body, t, col.lerp(Color.WHITE, mix))
+	if ore != null:
+		draw_texture_rect(ore, Rect2(Vector2(t.x * TILE, t.y * TILE), ore.get_size()), false,
+			col.lerp(Color.WHITE, _MINE_NODE_ORE_MIX))
+
+# 남은 타수 눈금 — 광맥 발치 아래 띠. 어두운 홈 위에 금박 띠가 줄어든다(진행이 화면에 보인다).
+func _draw_hit_gauge(t: Vector2i, ratio: float) -> void:
+	var p := Vector2(t.x * TILE, t.y * TILE)
+	draw_rect(Rect2(p + Vector2(5, TILE - 7), Vector2(TILE - 10, 3)), Color(0.08, 0.07, 0.07, 0.7))
+	draw_rect(Rect2(p + Vector2(5, TILE - 7), Vector2(float(TILE - 10) * ratio, 3)),
+		Color(0.92, 0.84, 0.42))
+
+# 사다리 한 칸. `up`이면 올라가는 사다리(밝은 벽감 — 한 층 위) / 아니면 내려가는 사다리(어두운
+# 구덩이). 구덩이·벽감 도형은 그레이박스 시절 그대로다 — **실루엣으로 방향을 가르는 게 규약**이고
+# 사다리 그림 한 장으로는 위·아래가 안 갈리기 때문이다(같은 나무 가로장을 둘 다 쓴다).
+func _draw_mine_ladder(t: Vector2i, up: bool, exit_run: bool = false) -> void:
+	var p := Vector2(t.x * TILE, t.y * TILE)
+	var pit := Color(0.30, 0.26, 0.22) if up else Color(0.06, 0.05, 0.06)
+	if exit_run:
+		pit = Color(0.20, 0.30, 0.30)   # 나락 나가는 사다리 = 청록 벽감("무대 밖"이지 한 층 위가 아니다)
+	draw_rect(Rect2(p + Vector2(3, 3), Vector2(TILE - 6, TILE - 6)), pit)
+	draw_rect(Rect2(p + Vector2(3, 3), Vector2(TILE - 6, 3)), pit.darkened(0.35))   # 입구 그늘(NW 광원)
+	draw_texture_rect(MINE_TEX_LADDER, Rect2(p, MINE_TEX_LADDER.get_size()), false, _mine_cast(0.5))
+
+# 구멍(shaft) — 가로장이 없는 새까만 구덩이. 사다리와 실루엣으로 즉시 갈린다(가로장 유무가 전부).
+func _draw_mine_shaft(t: Vector2i) -> void:
+	var p := Vector2(t.x * TILE, t.y * TILE)
+	draw_rect(Rect2(p + Vector2(3, 3), Vector2(TILE - 6, TILE - 6)), Color(0.10, 0.07, 0.11))
+	draw_rect(Rect2(p + Vector2(6, 6), Vector2(TILE - 12, TILE - 12)), Color(0.01, 0.01, 0.02))
 
 # ★[S5-T7 / ADR-0063 결정 7] 나락 지상 아레나의 하강 구멍 — 봉인 고리 안 중앙 공동에 뚫린 검은 입.
 #   순수 시각이다(그리드·충돌 불변 — 사다리·상자와 같은 결로 통행을 막지 않는다).
+# ★[S5-T9] 여기에 **봉인석**이 붙었다. 아레나의 정체(깨진 봉인 고리 — CONTEXT의 탈주 잡귀 누출)는
+#   지금까지 ROCK 띠의 배치로만 있었고 그림으로는 그냥 바위 담이었다. 고리 8세그먼트의 **끊긴 끝**
+#   마다 금이 간 봉인석을 세우면 "여기가 끊어진 자리"가 배치가 아니라 그림으로 읽힌다.
+#   순수 시각이다 — 고리 좌표(NARAK_ROCK_RECTS)도 충돌도 한 칸 안 바뀐다(narak_test 단언 전량 보존).
 func _draw_narak_mouth() -> void:
+	for r: Rect2i in NARAK_ROCK_RECTS:
+		# 세그먼트 양 끝 위 칸 = 끊긴 자리. 고리 띠(3칸 두께) 안쪽 줄에 얹어 담 위에 세운 결로.
+		var mid := r.position.y + r.size.y / 2
+		for x in [r.position.x, r.end.x - 1]:
+			draw_texture_rect(NARAK_TEX_SEAL,
+				Rect2(Vector2(int(x) * TILE, mid * TILE), NARAK_TEX_SEAL.get_size()), false)
 	var p := Vector2(NARAK_SHAFT_TILE.x * TILE, NARAK_SHAFT_TILE.y * TILE)
 	draw_rect(Rect2(p + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), Color(0.12, 0.09, 0.13))   # 테두리 암반
 	draw_rect(Rect2(p + Vector2(5, 5), Vector2(TILE - 10, TILE - 10)), Color(0.02, 0.02, 0.03)) # 심연(바닥 없음)
@@ -12136,34 +12384,27 @@ func _draw_narak_floor() -> void:
 	if _narak_layout.is_empty():
 		return
 	var nodes: Dictionary = _narak_layout.get("nodes", {})
+	# ★[S5-T9] 남은 돌 — 갱도와 **같은 프롭**이다. 무대 정체는 지면 톤(심연 자보라)이 들고,
+	#   돌 그림까지 갈면 "같은 광물인데 다른 재질"로 읽혀 팔레트 규약이 깨진다.
+	for t: Vector2i in narak_floors.rocks_left(_narak_depth):
+		if nodes.has(t):
+			continue
+		_draw_mine_prop(MINE_TEX_ROCK, t, _mine_cast(1.0))
 	for raw_t in nodes:
 		var t: Vector2i = raw_t
 		if narak_floors.is_mined(_narak_depth, t):
 			continue
 		var nid := String(nodes[t])
-		var col: Color = _MINE_NODE_COLORS.get(nid, _NARAK_NODE_COLORS.get(nid, Color(0.80, 0.80, 0.84)))
-		var p := Vector2(t.x * TILE, t.y * TILE)
-		draw_rect(Rect2(p + Vector2(7, 7), Vector2(TILE - 14, TILE - 14)), col)
-		draw_rect(Rect2(p + Vector2(9, 9), Vector2(6, 6)), col.lightened(0.35))
+		_draw_node_at(t, nid, NarakFloors.node_class(nid))
 		var need := NarakFloors.node_hits(nid, pickaxe_tier())
 		var done := narak_floors.node_hits_done(_narak_depth, t)
 		if done > 0 and need > 1:
-			var w := float(TILE - 12) * float(need - done) / float(need)
-			draw_rect(Rect2(p + Vector2(6, TILE - 7), Vector2(w, 3)), Color(0.92, 0.84, 0.42))
+			_draw_hit_gauge(t, float(need - done) / float(need))
 	for t: Vector2i in narak_floors.ladders(_narak_depth):
-		var lp := Vector2(t.x * TILE, t.y * TILE)
-		draw_rect(Rect2(lp + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.06, 0.05, 0.06))
-		for i in 3:
-			draw_rect(Rect2(lp + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.52, 0.38, 0.22))
+		_draw_mine_ladder(t, false)
 	for t: Vector2i in narak_floors.shafts(_narak_depth):
-		var sp := Vector2(t.x * TILE, t.y * TILE)
-		draw_rect(Rect2(sp + Vector2(3, 3), Vector2(TILE - 6, TILE - 6)), Color(0.10, 0.07, 0.11))   # 갈라진 입
-		draw_rect(Rect2(sp + Vector2(6, 6), Vector2(TILE - 12, TILE - 12)), Color(0.01, 0.01, 0.02)) # 바닥 없음
-	var e: Vector2i = _narak_layout["entrance"]
-	var ep := Vector2(e.x * TILE, e.y * TILE)
-	draw_rect(Rect2(ep + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.20, 0.30, 0.30))       # 나가는 사다리 벽감
-	for i in 3:
-		draw_rect(Rect2(ep + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.56, 0.78, 0.74))
+		_draw_mine_shaft(t)
+	_draw_mine_ladder(_narak_layout["entrance"], true, true)   # 나가는 사다리 = 청록 벽감
 
 # ★[S5-T5 / ADR-0063 결정 8] 잡귀 + 화염구 그레이박스. 손님·밤 잡귀 그리기와 같은 결(노드 없이 main이
 #   직접)이되 **픽셀 연속 위치**라 타일 정렬이 아니다 — 그게 층 몹과 좌석 잡귀의 유일한 렌더 차이다.
@@ -12208,12 +12449,14 @@ func _draw_mine_mobs() -> void:
 func _draw_smithy_room() -> void:
 	if _indoor != "대장간":
 		return
+	# ★[S5-T9] 바위를 깎아 들인 방 — 허니 목재 마루(집과 공유하는 HOUSE 타일)를 암석 바닥으로 덮는다.
+	#   대장간은 화덕 검댕이 앉은 결이라 어둡고 따뜻한 쪽으로 눌렀다.
+	_draw_mine_room_floor(SMITHY_RECT, Color(0.78, 0.70, 0.64, 1.0))
 	var base := Vector2(SMITHY_UPGRADE_TILE.x * TILE, SMITHY_UPGRADE_TILE.y * TILE)
-	# 업그레이드대 — 2×1 돌 받침 + 그 위 모루(검은 쇠).
-	draw_rect(Rect2(base + Vector2(-TILE * 0.5, 8), Vector2(TILE * 2.0, TILE - 14)), Color(0.30, 0.29, 0.31))
-	draw_rect(Rect2(base + Vector2(-TILE * 0.5, 8), Vector2(TILE * 2.0, 5)), Color(0.42, 0.41, 0.43))
-	draw_rect(Rect2(base + Vector2(2, 2), Vector2(TILE - 4, 9)), Color(0.16, 0.16, 0.18))   # 모루 몸통
-	draw_rect(Rect2(base + Vector2(-2, 0), Vector2(TILE + 4, 4)), Color(0.22, 0.22, 0.25))  # 모루 상판
+	# ★[S5-T9] 업그레이드대 = 모루 프롭(2×1칸). 조준 칸(SMITHY_UPGRADE_TILE)이 아트의 **오른쪽**
+	#   칸이 되도록 왼쪽으로 한 칸 당겨 앉힌다 — 그레이박스 돌 받침이 -TILE*0.5로 걸쳐 있던 자리와
+	#   같은 폭이고, 상호작용 칸은 한 칸도 안 움직인다(순수 장식 교체).
+	draw_texture_rect(SMITHY_TEX_ANVIL, Rect2(base - Vector2(TILE, 0), SMITHY_TEX_ANVIL.get_size()), false)
 	# 업화로 — 북벽 서편의 화덕(돌 아궁이 + 붉은 불). 순수 분위기(상호작용 없음).
 	var forge := Vector2(float(SMITHY_RECT.position.x + 2) * TILE, float(SMITHY_RECT.position.y + 1) * TILE)
 	draw_rect(Rect2(forge, Vector2(TILE * 1.5, TILE)), Color(0.26, 0.24, 0.24))
@@ -12257,6 +12500,9 @@ func _draw_woodshop_room() -> void:
 func _draw_guild_room() -> void:
 	if _indoor != "길드":
 		return
+	# ★[S5-T9] "길드는 갱도 바위를 깎아 만든 방"이라는 아래 주석이 이제 바닥에도 선다 — 카페와
+	#   공유하던 월넛 파켓을 암석 바닥으로 덮는다. 대장간(검댕)과 달리 밝은 회백이다(채 대비의 짝).
+	_draw_mine_room_floor(GUILD_RECT, Color(0.92, 0.94, 0.98, 1.0))
 	# 카운터 — 응대 줄(x25..30, y50) 통짜 판 + 상판 하이라이트(NW 광원). 목공방 카운터와 같은 문법이되
 	# 돌 결(길드는 갱도 바위를 깎아 만든 방)이라 색만 갈린다.
 	var cx := float(GUILD_COUNTER_X0) * TILE
@@ -12264,13 +12510,9 @@ func _draw_guild_room() -> void:
 	var cw := float(GUILD_COUNTER_X1 - GUILD_COUNTER_X0 + 1) * TILE
 	draw_rect(Rect2(cx, cy + 8.0, cw, TILE - 12.0), Color(0.32, 0.30, 0.31))
 	draw_rect(Rect2(cx, cy + 8.0, cw, 5.0), Color(0.46, 0.44, 0.45))
-	# 서벽 무기 걸이 — 가로 걸대 + 걸린 검 3자루(칼날 세로줄 + 코등이). 방 서편 안쪽(x24..25, y47).
+	# ★[S5-T9] 서벽 무기 걸이 = 프롭(2×1칸). 자리·크기는 그레이박스 시절 그대로(x24..25, y47).
 	var rack := Vector2(float(GUILD_RECT.position.x + 1) * TILE, float(GUILD_RECT.position.y + 1) * TILE)
-	draw_rect(Rect2(rack + Vector2(0.0, 6.0), Vector2(TILE * 2.0, 4.0)), Color(0.36, 0.27, 0.17))
-	for i in 3:
-		var bx := rack.x + 6.0 + float(i) * 17.0
-		draw_rect(Rect2(bx, rack.y + 10.0, 3.0, TILE - 14.0), Color(0.62, 0.64, 0.70))   # 칼날
-		draw_rect(Rect2(bx - 3.0, rack.y + 9.0, 9.0, 3.0), Color(0.40, 0.33, 0.22))      # 코등이
+	draw_texture_rect(GUILD_TEX_RACK, Rect2(rack, GUILD_TEX_RACK.get_size()), false)
 	# 동벽 토벌 게시판 — 기둥 둘 + 판(쪽지 0장 = 서랍 예약. 만물상 게시판과 실루엣만 같고 기능 0).
 	var bd := Vector2(float(GUILD_RECT.end.x - 3) * TILE, float(GUILD_RECT.position.y + 1) * TILE)
 	draw_rect(Rect2(bd + Vector2(4.0, 20.0), Vector2(3.0, 10.0)), Color(0.30, 0.21, 0.13))
@@ -14079,6 +14321,8 @@ func _draw() -> void:
 				_draw_mine_floor()   # ★[S5-T1] 층 그레이박스(사다리 두 종 표식 — 돌은 ROCK 타일이 그린다)
 				_draw_mine_mobs()    # ★[S5-T5] 잡귀 + 화염구 그레이박스(아키타입별 색·HP 바)
 			else:
+				_draw_facade_smithy()  # ★[S5-T9] 대장간 외관(WALL 박스 위에 덮어 닫힌 건물로)
+				_draw_facade_guild()   # ★[S5-T9] 길드 외관(대장간과 나란히 — 톤을 정반대로 갈랐다)
 				_draw_smithy_room()  # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
 				_draw_guild_room()   # ★[S5-T6] 길드 실내 — 카운터·무기 걸이·빈 게시판(그레이박스)
 		RegionCatalog.NARAK:
@@ -14790,6 +15034,10 @@ func _facade_grass_backdrop(rect: Rect2i) -> void:
 	#   초록 사각형이 되살아난다([ADR-0054] 회귀). 미이식 구역은 초록 세계라 종전대로 백드롭 유지.
 	if _uses_ground16():
 		return
+	# ★[S5-T9] 갱도·나락도 건너뛴다 — 같은 이유다. 지면 오버레이가 협곡 바닥을 암석으로 덮은
+	#   위에 풀 백드롭을 덧그리면 대장간·길드 발치에만 **초록 사각형**이 되살아난다([ADR-0054] 회귀).
+	if _uses_mine_ground():
+		return
 	if _facade_grass_tex == null:
 		var src := ground.tile_set.get_source(0) as TileSetAtlasSource
 		var rs: int = src.texture_region_size.x
@@ -15077,6 +15325,19 @@ func _draw_facade_woodshop() -> void:
 #   카탈로그 항목도 없어 문에 닿아도 아무 일이 없다. 여긴 그 사실을 **그림으로** 말할 뿐이다).
 func _draw_facade_okja_hut() -> void:
 	_blit_facade_anchored(FACADE_OKJA_HUT, OKJA_HUT_EXT_RECT)
+
+# ★ [S5-T9] 업화 갱도 남단 입구 두 채(대장간·길드). 위 여섯 채와 완전 동형 — 그리기 전용이라
+#   WALL 충돌·문 트리거(SMITHY_EXT_DOOR·GUILD_EXT_DOOR)·실내 rect는 그레이박스 시절 그대로다.
+# ★**갱도는 `_G16_REGION_PROFILES`에 없다** — 그래서 S4-T10의 "greybox_rects → building_rects 짝
+#   이동" 규칙은 여기에 해당 사항이 없다(그 규칙은 ground16 오버레이가 WALL을 덮는 구역 전용이고,
+#   갱도는 `_build_path_grass_fringe` 폴백이라 오버레이가 WALL 칸을 아예 안 건드린다).
+#   구역 프로파일이 갱도로 확장되는 날엔 **두 rect를 building_rects에 넣어야 한다** — 아트가 이미
+#   붙었으므로 greybox_rects에 넣으면 오버레이가 facade를 tan으로 삼킨다(T9 1차 덤프 실측 선례).
+func _draw_facade_smithy() -> void:
+	_blit_facade_anchored(FACADE_SMITHY, SMITHY_EXT_RECT)
+
+func _draw_facade_guild() -> void:
+	_blit_facade_anchored(FACADE_GUILD, GUILD_EXT_RECT)
 
 # ★ [S2-T10] 주민 집 11채 외관. 아직 누가 사는 집인지 안 정했으므로([ADR-0060] 결정 2 "배정은 본체
 # 제작 시") 캐릭터색 없는 **공용 변주**를 돌려 쓴다 — 4칸 폭은 변주 3종을 index로 순환시키고,
