@@ -8074,18 +8074,22 @@ func _place_labels() -> void:
 			# 진입로는 잠긴 외관(비-enterable)이라 라벨로 위상 명시(옥자 집 컨벤션). 채광지 3·호수·두 워프 안내(64×44).
 			_add_label("대장간", _tile_center_px(Vector2i(6, 36)))
 			_add_label("모험가 길드", _tile_center_px(Vector2i(24, 36)))
-			for ore in MINE_ORE_LABEL_TILES:
-				_add_label("채광지(Phase 3)", _tile_center_px(ore))
+			# ★[S5-T11 폴리시] "채광지(Phase 3)" 라벨 제거 — 채광은 갱도 층 안(S5-T2)에 살았고, 지상
+			#   빈터에 이 라벨을 남기면 "여기서 캔다"로 오독된다(T9 라벨 정리 컨벤션). 빈터 자체(걷기
+			#   판정·MINE_ORE_LABEL_TILES)는 eophwa_mine_test ①d가 단언하므로 상수·지형은 불변.
 			_add_label("호수", _tile_center_px(Vector2i(6, 24)))
 			# ★[S5-T1 / ADR-0063 결정 1] 던전 입구 점등 — "잠김(전투 Phase 3)" 플레이스홀더 제거.
 			#   이제 이 문 칸에서 [F]를 누르면 갱도 층으로 내려간다(외관·좌표는 한 칸도 안 움직였다).
 			_add_label("갱도 입구 — [F] 층으로 내려간다", _tile_center_px(Vector2i(24, 8)))
-			_add_label("나락 진입로 (잠김 — 전투 Phase 3)", _tile_center_px(Vector2i(32, 8)))
+			# ★[S5-T11 폴리시] T7 점등 후 stale 문구 갱신 — 게이트 실태(_narak_key_found 단독)를 그대로
+			#   읽어 준다. 라벨은 _rebuild_region마다 다시 굽히므로 열쇠 획득 후 재진입 시 자동 전환.
+			_add_label("나락 진입로 — 봉인 해제됨" if _narak_key_found
+				else "나락 진입로 (봉인 — 60층 나락 열쇠)", _tile_center_px(Vector2i(32, 8)))
 			_add_label("산길 → 나루 마을", _tile_center_px(Vector2i(14, 40)))   # 남단 산길 워프(14,43) 안내
 			_add_label("숲길 → 저승 숲", _tile_center_px(Vector2i(40, 3)))       # 북단 숲길 워프(40,1) 안내
 		RegionCatalog.NARAK:
 			# ★ M5.2 — 독립 전투 던전 스테이지(헤드리스 빌드·검증). 인게임 진입은 잠긴 외관(업화 갱도)이라 없음.
-			_add_label("나락 (전투 — Phase 3)", _tile_center_px(Vector2i(32, 18)))   # ★C9: 중앙 위(spawn 32,22 비껴감)
+			_add_label("나락 심연 — 리셋 런(나갈 때마다 새 판)", _tile_center_px(Vector2i(32, 18)))   # ★C9: 중앙 위(spawn 32,22 비껴감) · [S5-T11] T7 점등 후 문구 현행화
 		RegionCatalog.MIHOK_FOREST:
 			# ★ M4.2 / ★C7 — 옥자 집은 잠긴 외관(비-enterable)이라 라벨로 위상 명시(축사 컨벤션). 특수 채집지 2곳·연못·복귀 워프 안내.
 			_add_label("옥자 집 (잠김 — 미결의 죄 해결 후)", _tile_center_px(Vector2i(57, 27)))  # ★C7 동쪽 깊은 끝
@@ -13017,7 +13021,9 @@ func _guild_text() -> String:
 	var hp_line := "체력 %d/%d" % [health.current, health.maximum] if health != null else ""
 	return "\n".join([
 		"── 무골의 모험가 길드 ──",
-		"골드 %d   ·   도달 깊이 %d층   ·   %s" % [wallet.gold, depth, hp_line],
+		# ★[S5-T11 폴리시] 넓은 구분자("   ·   ")+"도달 깊이" 표기로 줄이 프레임 폭을 넘어
+		#   체력 끝자리가 잘렸다("체력 100/10" 실측 — T6 owner 큐). 구분자·표기 축약으로 봉합.
+		"골드 %d · 깊이 %d층 · %s" % [wallet.gold, depth, hp_line],
 	])
 
 # 길드 품목 행 — **도달 깊이로 해금된 검**(티어 순) + 명부환 1행.
