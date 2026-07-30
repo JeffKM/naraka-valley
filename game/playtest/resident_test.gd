@@ -101,9 +101,10 @@ func _run_checks() -> void:
 	# ★ [S2-T8] 모찌가 여섯째로 붙었다(레코드 1건 — main.tscn 무수정). 앞 5인의 **순서는 불변**이라
 	#   facing 판정 순서·관계 탭 순서가 그대로다(신규는 뒤에만 붙는다).
 	# ★[S5-T3 / ADR-0063 결정 6] 8 → 9: 풀무(대장간 점주)가 아홉째로 붙었다(의도적 불변식 개정).
-	_check("③a 주민 9인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 추가)", m._residents.size() == 9)
-	_check("③b 9인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무",
-		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman", "ongi", "pulmu"])
+	_check("③a 주민 10인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 추가)",
+		m._residents.size() == 10)
+	_check("③b 10인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골",
+		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman", "ongi", "pulmu", "mugol"])
 	_check("③c id 조회", m._resident("mel") != null and m._resident("mel").display_name == "멜")
 	_check("③d 이름 조회", m._resident_named("바나") != null and m._resident_named("바나").id == "bana")
 	_check("③e 없는 id/이름 = null", m._resident("없음") == null and m._resident_named("없음") == null)

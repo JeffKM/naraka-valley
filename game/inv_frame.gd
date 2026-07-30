@@ -70,7 +70,10 @@ const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
 #   기어 매대 + 물고기 즉시 환전 두 서브탭을 든다(만물상은 물고기 비취급 — 서비스 분산 유지).
 # ★[S4-T7] CTX_WOODSHOP(옹이 목공방) — 생선가게와 **같은 셸·다른 재고·다른 점주 ♡**다(신규 UI
 #   언어 0). 건축 의뢰 / 가구·자재 두 서브탭을 든다. enum 끝에 붙여 기존 값 불변(좌표 의존 무영향).
-enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP }
+# ★[S5-T6] CTX_GUILD(무골 모험가 길드) — 만물상(CTX_STORE)과 **같은 셸·단일 목록**이다. 서브탭이
+#   없는 이유: 파는 게 검 + 환약 한 묶음뿐이라 가를 축이 없고(토벌 게시판은 서랍 — ADR-0063 결정 6),
+#   탭 하나짜리 탭바는 UI 소음이다. enum 끝에 붙여 기존 값 불변(좌표 의존 테스트 무영향).
+enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP, CTX_GUILD }
 # 생선가게 서브탭(기어 매대 / 물고기 환전).
 enum { FS_TAB_GEAR, FS_TAB_TRADE }
 # ★[S4-T7] 목공방 서브탭(건축 의뢰 / 가구·자재 매대) — 생선가게 서브탭과 같은 문법.
@@ -341,7 +344,7 @@ func _bp_max_first_row() -> int:
 # 백팩 하단 그리드가 그려지는 컨텍스트인가(관계·숙련·옵션 탭은 백팩을 안 그림).
 func _backpack_visible() -> bool:
 	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST or context == CTX_FISHSHOP \
-			or context == CTX_WOODSHOP:
+			or context == CTX_WOODSHOP or context == CTX_GUILD:
 		return true
 	return context == CTX_MENU and menu_tab == TAB_INV
 
@@ -394,6 +397,9 @@ func _draw() -> void:
 			_draw_backpack(panel)
 		CTX_WOODSHOP:
 			_draw_woodshop_top(panel)   # ★ [S4-T7] 옹이 목공방(건축 의뢰 + 가구·자재 서브탭)
+			_draw_backpack(panel)
+		CTX_GUILD:
+			_draw_guild_top(panel)      # ★ [S5-T6] 무골 모험가 길드(검 + 명부환 단일 목록)
 			_draw_backpack(panel)
 		CTX_CHEST:
 			_draw_chest_top(panel)
@@ -1167,6 +1173,36 @@ func _click_woodshop(p: Vector2, shift: bool) -> void:
 			_buy_store_row(e, shift)
 			return
 
+# ── ★ [S5-T6 / ADR-0063 결정 5·6] 모험가 길드 상단(무골) ─────────────────────
+# 만물상(`_draw_store_top`)과 **완전히 같은 셸**이다 — 헤더 2줄 + 단일 품목 목록. 생선가게·목공방과
+# 달리 서브탭이 없는 이유는 enum 주석 참조(가를 축이 없다).
+# ★ 목록에 무엇이 뜨는가는 여기가 안 정한다 — main._guild_items()가 도달 깊이로 걸러 넘긴다
+#   (미달 무기는 **행 자체가 없다** — 게잡이통 lvl3 선례. 프레임은 표시·클릭만 든다).
+func _draw_guild_top(panel: Rect2) -> void:
+	var y := panel.position.y + PAD + 14.0
+	for line in store_text.split("\n"):
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
+			panel.size.x - PAD * 2.0)
+		y += 18.0
+	_store_row_rects.clear()
+	var row_y := panel.position.y + PAD + 42.0
+	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0
+	_store_area_rect = Rect2(panel.position.x + PAD, row_y, panel.size.x - PAD * 2.0, max_y - row_y)
+	if store_items.is_empty():
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + 16.0),
+			"지금 살 수 있는 것이 없다", 12, HanjiUi.INK_DIM)
+		return
+	# 무기 행은 이름 뒤에 데미지 밴드가 붙어 길다 → 이름 칸 150px·가격 칸 156px(이 가게 한정).
+	_store_scroll = _draw_row_list(panel, store_items, row_y, max_y, _store_scroll,
+		_store_row_rects, "구매", 150.0, 156.0)
+
+# ★[S5-T6] 길드 클릭 라우팅 — 서브탭이 없어 품목 행 하나만 본다(만물상 라우팅과 같은 결).
+func _click_guild(p: Vector2, shift: bool) -> void:
+	for e in _store_row_rects:
+		if e["buy"].has_point(p) or e["row"].has_point(p):
+			_buy_store_row(e, shift)
+			return
+
 # ★ [S1R-T12] 매대 행 구매 라우팅 — 행/버튼 클릭 시 종류별 시그널. Shift=대량.
 func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 	match String(e.get("kind", "")):
@@ -1178,7 +1214,9 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 		#   3종(build=건축 의뢰 · deco=가구 세트 해금 · wood=원목 소매) — 일반 품목 구매 시그널.
 		#   목공방 3종은 "수량 n개 구매"가 아니지만(의뢰·해금은 1회성), 라우팅은 같은 신호를 태우고
 		#   main이 kind로 갈라 처리한다(프레임에 가게 규칙을 안 심는다 — 프레임은 표시·클릭만).
-		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood":
+		#   ★[S5-T6] 길드 2종(weapon=검 · potion=명부환)도 같은 신호를 탄다 — 무기는 유니크라 수량
+		#   개념이 없지만 그 규칙은 main이 안다(프레임에 가게 규칙을 안 심는다).
+		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion":
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
 
 # ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.
@@ -1219,8 +1257,9 @@ func _gui_input(event: InputEvent) -> void:
 	#   clamp는 그리기 시점(_draw_store_top)이 행수와 함께 수행.
 	# ★ [S3-T5] 생선가게도 같은 영역 문법을 쓴다(환전 탭이면 환전 리스트가 스크롤된다).
 	# ★ [S4-T7] 목공방도 같은 영역 문법(건축 탭이면 건축 리스트가 스크롤된다).
-	if event.pressed and (context == CTX_STORE or context == CTX_FISHSHOP or context == CTX_WOODSHOP) \
-			and _store_area_rect.has_point(event.position):
+	# ★ [S5-T6] 길드도 같은 영역 문법(서브탭이 없어 늘 품목 리스트가 스크롤된다).
+	if event.pressed and (context == CTX_STORE or context == CTX_FISHSHOP or context == CTX_WOODSHOP \
+			or context == CTX_GUILD) and _store_area_rect.has_point(event.position):
 		var trading := context == CTX_FISHSHOP and fishshop_tab == FS_TAB_TRADE
 		var building := context == CTX_WOODSHOP and woodshop_tab == WS_TAB_BUILD
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -1295,6 +1334,8 @@ func _gui_input(event: InputEvent) -> void:
 			_click_fishshop(p, event.shift_pressed)
 		CTX_WOODSHOP:
 			_click_woodshop(p, event.shift_pressed)   # ★ [S4-T7] 목공방(서브탭 + 의뢰·구매 행)
+		CTX_GUILD:
+			_click_guild(p, event.shift_pressed)      # ★ [S5-T6] 길드(검·환약 단일 목록)
 		CTX_CHEST:
 			_click_chest(p)
 	accept_event()
