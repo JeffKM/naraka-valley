@@ -97,9 +97,16 @@ func _initialize() -> void:
 	_check("① 목공방 = 저승 숲·woodshop", m._buildings["목공방"]["region"] == RegionCatalog.JEOSEUNG_FOREST and m._buildings["목공방"]["kind"] == "woodshop")
 	_check("① 대장간 = 업화 갱도·smithy", m._buildings["대장간"]["region"] == RegionCatalog.EOPHWA_MINE and m._buildings["대장간"]["kind"] == "smithy")
 	_check("① 길드 = 업화 갱도·guild", m._buildings["길드"]["region"] == RegionCatalog.EOPHWA_MINE and m._buildings["길드"]["kind"] == "guild")
-	# ★ M4.2 옥자 집(미혹의 숲)·M5.1 던전 입구·나락 진입로는 잠긴 외관(비-enterable, 축사 결)이라 카탈로그에 *없다*.
+	# ★ M4.2 옥자 집(미혹의 숲)·M5.1 던전 입구·나락 진입로는 비-enterable 외관(축사 결)이라 카탈로그에 *없다*.
+	# ★[S5-T7 / ADR-0063 결정 12] 던전 입구는 층 하강 [F](S5-T1), 나락 진입로는 구역 워프(열쇠 게이트)로
+	#   **둘 다 점등됐지만** 카탈로그 등록은 여전히 0이다 — 실내(_indoor)를 갖는 건물이 아니라서다.
+	#   즉 이 단언의 의미가 "잠겼다"에서 "실내가 없는 무대 전이다"로 바뀌었고, 값은 그대로다.
 	_check("① 옥자 집 카탈로그 미등록(잠김 — 비-enterable)", not m._buildings.has("옥자 집") and not m._buildings.has("옥자집"))
-	_check("① 던전 입구·나락 진입로 카탈로그 미등록(잠김 — 비-enterable)", not m._buildings.has("던전 입구") and not m._buildings.has("나락 진입로"))
+	_check("① 던전 입구·나락 진입로 카탈로그 미등록(실내 없는 무대 전이 — 건물 아님)",
+		not m._buildings.has("던전 입구") and not m._buildings.has("나락 진입로"))
+	# ★[S5-T7] 나락 런 층도 실내가 아니다(구역 NARAK + 깊이 축 — 갱도 층과 같은 결).
+	_check("①b 나락 구역 enterable 건물 0(런 층은 실내가 아니라 별 그리드)",
+		not m._buildings.has("나락") and _region_building_count(m, RegionCatalog.NARAK) == 0)
 	_check("① 카페 = 마을·cafe", m._buildings["카페"]["region"] == RegionCatalog.NARU_VILLAGE and m._buildings["카페"]["kind"] == "cafe")
 	_check("① 만물상 = 마을·store", m._buildings["만물상"]["region"] == RegionCatalog.NARU_VILLAGE and m._buildings["만물상"]["kind"] == "store")
 	for hid in m.HOUSE_IDS:
@@ -235,3 +242,11 @@ func _initialize() -> void:
 
 	print("══ 결과: %s ══" % ("PASS (실패 0)" if _fail == 0 else "FAIL (실패 %d)" % _fail))
 	quit(1 if _fail > 0 else 0)
+
+# ★[S5-T7] 이 구역에 등록된 enterable 건물 수(카탈로그 정합 검사용).
+func _region_building_count(m: Node, region: String) -> int:
+	var n := 0
+	for id in m._buildings:
+		if m._buildings[id]["region"] == region:
+			n += 1
+	return n

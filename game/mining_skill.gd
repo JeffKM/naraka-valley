@@ -84,9 +84,12 @@ static func crit_chance(level: int) -> float:
 
 # 이 칸을 부술 때 크리가 터지나. 시드에 **(day, 층, 칸)**을 물려 같은 자리면 몇 번을 물어도 같은
 # 답이다(MineFloors.roll_ladder와 같은 규율 — 헤드리스 재현성).
-static func roll_crit(day: int, floor_no: int, tile: Vector2i, level: int) -> bool:
+# ★[S5-T7] `ns`는 **무대 네임스페이스**다("mine" = 갱도 / "narak" = 나락). 나락은 (run, depth)를
+#   (day, floor) 자리에 넘기는데, 접두사가 없으면 run 3·깊이 7이 day 3·7층과 같은 시드를 받아
+#   두 무대의 결과가 붙어 버린다. 기본값이 "mine"이라 기존 호출부는 한 줄도 안 바뀐다(회귀 0).
+static func roll_crit(day: int, floor_no: int, tile: Vector2i, level: int, ns: String = "mine") -> bool:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("mine_crit:%d:%d:%d:%d" % [day, floor_no, tile.x, tile.y])
+	rng.seed = hash("%s_crit:%d:%d:%d:%d" % [ns, day, floor_no, tile.x, tile.y])
 	return rng.randf() < crit_chance(level)
 
 # ── 캔 것 → XP ──────────────────────────────────────────────────────────────
@@ -112,10 +115,11 @@ static func xp_for_node(node_id: String) -> int:
 #   ore_bonus_n / gem_pair = main이 `_perk_value`로 뽑아 넘긴 퍼크 값의 해석 결과
 #                            (광부 "광맥당 +1" · 지질사 "보석 쌍 확률" — 실 인코딩은 S5-T8)
 # ★ main이 인벤토리·알림·XP 적립을 하고, 여기선 "무엇이 몇 개 나오나"만 정한다(무상태).
+# ★[S5-T7] `ns` = 무대 네임스페이스(roll_crit 주석 참조 — 기본 "mine"이라 기존 호출부 불변).
 static func resolve_drop(node_id: String, day: int, floor_no: int, tile: Vector2i,
-		level: int, ore_bonus_n: int = 0, gem_pair: float = 0.0) -> Dictionary:
+		level: int, ore_bonus_n: int = 0, gem_pair: float = 0.0, ns: String = "mine") -> Dictionary:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("mine_drop:%d:%d:%d:%d" % [day, floor_no, tile.x, tile.y])
+	rng.seed = hash("%s_drop:%d:%d:%d:%d" % [ns, day, floor_no, tile.x, tile.y])
 	var drops: Array = []
 	var out := {"drops": drops, "xp": 0, "crit": false}
 	if node_id == "":
@@ -125,11 +129,15 @@ static func resolve_drop(node_id: String, day: int, floor_no: int, tile: Vector2
 			drops.append({"id": ItemCatalog.ORE_MYEONGDONG, "count": 1})
 			out["xp"] = XP_STONE_ORE
 		return out
+	# ★[S5-T7] 갱도 표에 없는 종은 나락 표에 되묻는다 — 나락철이 "광석"으로 굴러가는 유일한 접점이다
+	#   (없으면 나락철이 보석 취급을 받아 1개씩만 나온다: 이리듐 대응 티어가 조용히 반토막 나는 자리).
 	var cls := MineFloors.node_class(node_id)
+	if cls == "":
+		cls = NarakFloors.node_class(node_id)
 	var count := GEM_YIELD
 	if cls == MineFloors.NODE_ORE or cls == MineFloors.NODE_COAL:
 		count = rng.randi_range(ORE_MIN, ORE_MAX) + maxi(ore_bonus_n, 0)   # 광부 퍼크 +N
-		if roll_crit(day, floor_no, tile, level):
+		if roll_crit(day, floor_no, tile, level, ns):
 			count *= 2                                                     # ★크리 채굴 = 광석 2배
 			out["crit"] = true
 	elif cls == MineFloors.NODE_GEM and rng.randf() < clampf(gem_pair, 0.0, 1.0):
