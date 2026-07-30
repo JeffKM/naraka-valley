@@ -138,6 +138,94 @@ static func resolve_drop(node_id: String, day: int, floor_no: int, tile: Vector2
 	out["xp"] = xp_for_node(node_id)
 	return out
 
+# ── ★[S5-T3 / ADR-0063 결정 2·3] 지오드(알돌) 개봉 — 대장간 서비스 개당 25냥 ────
+# 클린트 1:1의 저승판. **여기 사는 이유**: 개봉은 "무엇이 몇 개 나오나"의 순수 롤이라 드랍
+# 규칙(resolve_drop)과 같은 축이고, 값(25냥)·차감·창구는 main과 점주 레코드의 몫이다.
+#
+# 설계 메모:
+#   - **결정적 시드 = 개봉 카운터**다(`hash("geode:<id>:<n>")`). day·좌표를 쓸 수 없다 —
+#     지오드는 인벤토리 아이템이라 "언제 어디서 깨나"가 플레이어 자유고, day 시드면 같은 날
+#     같은 종을 몇 개 깨도 전부 같은 결과가 나온다(재롤 없음이 아니라 **차이 없음**이라 나쁘다).
+#     카운터는 세이브 상태(main._geode_opened)이므로 한 번 쓴 시드는 다시 안 나온다 = 재롤 차단.
+#   - **두 종의 분포가 실제로 다르다**(업화알돌 = 상위 금속·상위 보석·명부금강 비중↑). 같은 표에
+#     가중치만 바꾼 게 아니라 **품목 자체가 갈린다** — 41층+ 알돌이 "더 깊은 것"으로 읽히게.
+#   - **유물(유품) 저확률**: ADR-0063 결정 2가 "내용 = 광물·보석·유물(유품 저확률 — 혼백관 기증
+#     사슬)"로 명시했다. RELICS 3종에서 결정 롤이라 혼백관 수집이 괭이질 외 경로를 하나 얻는다.
+#   - 발굴자(지오드 2배)·보석사(보석 등급) 퍼크는 **인자 자리만** 열려 있다(값 인코딩 = S5-T8).
+const GEODE_COST := 25          # 개봉 수수료(엽전 — 스타듀 클린트 25G 1:1)
+
+# 넋알돌(1~40층) 표 — {id, weight}. 하위·중위 금속과 흔한 보석이 주류다.
+static func geode_table_neokal() -> Array:
+	return [
+		{"id": ItemCatalog.STONE, "weight": 18},
+		{"id": ItemCatalog.ORE_MYEONGDONG, "weight": 20},
+		{"id": ItemCatalog.ORE_YUCHEOL, "weight": 14},
+		{"id": ItemCatalog.HONTAN, "weight": 14},
+		{"id": ItemCatalog.GEM_NEOKSUJEONG, "weight": 12},
+		{"id": ItemCatalog.GEM_MYEONGOK, "weight": 8},
+		{"id": ItemCatalog.GEM_YEOMJUSEOK, "weight": 4},
+		{"id": ItemCatalog.RELIC_BINYEO, "weight": 2},      # 유품 저확률(혼백관 기증 사슬)
+		{"id": ItemCatalog.RELIC_SPOON, "weight": 2},
+		{"id": ItemCatalog.RELIC_KKOTSIN, "weight": 2},
+	]
+
+# 업화알돌(41층+·나락) 표 — 상위 금속·상위 보석 중심. 하위 금속·돌은 **빠진다**(깊이의 값).
+static func geode_table_eophwa() -> Array:
+	return [
+		{"id": ItemCatalog.ORE_YUCHEOL, "weight": 16},
+		{"id": ItemCatalog.ORE_HWANGCHEONGEUM, "weight": 22},
+		{"id": ItemCatalog.HONTAN, "weight": 12},
+		{"id": ItemCatalog.GEM_MYEONGOK, "weight": 12},
+		{"id": ItemCatalog.GEM_YEOMJUSEOK, "weight": 16},
+		{"id": ItemCatalog.GEM_MYEONGBU_GEUMGANG, "weight": 8},
+		{"id": ItemCatalog.GEM_OSAEK_HONOK, "weight": 2},   # 오색혼옥의 **첫 획득 경로**(초희귀)
+		{"id": ItemCatalog.RELIC_BINYEO, "weight": 4},
+		{"id": ItemCatalog.RELIC_SPOON, "weight": 4},
+		{"id": ItemCatalog.RELIC_KKOTSIN, "weight": 4},
+	]
+
+# 이 지오드 id의 개봉 표(빈 배열 = 지오드가 아니다).
+static func geode_table(geode_id: String) -> Array:
+	match geode_id:
+		ItemCatalog.GEODE_NEOKAL:
+			return geode_table_neokal()
+		ItemCatalog.GEODE_EOPHWA:
+			return geode_table_eophwa()
+	return []
+
+static func is_geode(geode_id: String) -> bool:
+	return not geode_table(geode_id).is_empty()
+
+# 개봉 1회의 산출(순수·결정적). 반환 = {"id", "count"}({} = 지오드 아님).
+#   counter    = 이 세이브의 누적 개봉 횟수(시드 — 같은 값이면 같은 답, 늘어나면 새 롤)
+#   double_ch  = 발굴자 퍼크 "지오드 2배" 확률(0..1 — 값 인코딩 S5-T8까지 0.0)
+static func open_geode(geode_id: String, counter: int, double_ch: float = 0.0) -> Dictionary:
+	var table := geode_table(geode_id)
+	if table.is_empty():
+		return {}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("geode:%s:%d" % [geode_id, counter])
+	var total := 0
+	for e: Dictionary in table:
+		total += int(e["weight"])
+	var roll := rng.randi_range(0, total - 1)
+	var pick := String(table[table.size() - 1]["id"])   # 폴백(정수 롤이라 도달 안 함)
+	for e: Dictionary in table:
+		roll -= int(e["weight"])
+		if roll < 0:
+			pick = String(e["id"])
+			break
+	var n := 1
+	# 유품은 **절대 2개로 늘리지 않는다** — 혼백관은 종당 1점이라 두 번째는 죽은 판매품이 된다.
+	if not ItemCatalog._is_relic(pick) and rng.randf() < clampf(double_ch, 0.0, 1.0):
+		n = 2
+	return {"id": pick, "count": n}
+
+# 발굴자(DIM_EXCAVATE) — 지오드 개봉 2배 확률(0..1). ★차원 상수 자체는 S5-T8이 신설한다
+#   (지금은 main이 0.0을 넘기는 인자 자리 — ore_bonus·gem_pair 해석기와 같은 결).
+static func geode_double_chance(perk: float) -> float:
+	return clampf(perk, 0.0, 1.0)
+
 # ── 퍼크 해석(main._perk_value가 뽑은 float → 의미) ──────────────────────────
 # ★ 지금은 셋 다 0(중립)만 들어온다 — ProfessionCatalog의 채광 트리 perks가 아직 비어 있고
 #   그 인코딩이 S5-T8 소관이기 때문이다. ForageSkill의 "미배선 퍼크 3종"과 정확히 같은 자리로,

@@ -30,6 +30,7 @@ const RARE_SEED_YURYEONGCHO := "rare_seed_yuryeongcho"
 const RARE_SEED_MYEONGWOL := "rare_seed_myeongwol"
 const RARE_SEED_SEORI_HONBAEK := "rare_seed_seori_honbaek"
 const TAPPER := "tapper"
+const FURNACE := "furnace"   # ★[S5-T3] 업화로(ADR-0063 결정 3)
 
 # ── 카탈로그. 키 = 레시피 id ────────────────────────────────────────────────
 # 필드:
@@ -70,14 +71,29 @@ static func catalog() -> Dictionary:
 			"mats": [{"item": ItemCatalog.SEORI_HONBAEKCHO, "count": 2}]},
 		# 수액 채취기(ADR-0062 결정 4) — 아이템 산출까지가 T5. 설치·원장·주기는 S4-T6 소관.
 		# 재료: 원목 40 + 석화 목재 2(스타듀 목재40+구리주괴2 대응 — 갱도 금속 미빌드 대체, 잠정·owner 큐).
+		# ★[S5-T3] 명동 주괴가 실존하게 됐지만 **이 레시피는 석화 목재로 남긴다**(잠정 유지 결정):
+		#   채취기는 *채집 lvl4* 해금 레시피라 재료를 주괴로 바꾸면 S4 콘텐츠가 S5 채광 사슬(갱도
+		#   도달 + 업화로 제작 + 30분 제련) 뒤로 밀린다. "각 활동은 자기 축으로 완결"(ADR-0008
+		#   평평≠막힘)이 상위 원칙이라 교차 게이팅을 새로 만들지 않는다. ★owner 큐(재검토 대상).
 		TAPPER: {"name_ko": "수액 채취기", "out_item": ItemCatalog.TAPPER,
 			"out_count": 1, "unlock_level": 4, "unlock_species": "",
 			"mats": [{"item": ItemCatalog.WOOD, "count": 40}, {"item": ItemCatalog.PETRIFIED_WOOD, "count": 2}]},
+		# ★[S5-T3 / ADR-0063 결정 3] 업화로 — 돌 25 + 명동 광석 20(스타듀 Furnace 1:1).
+		# ★ `unlock_level: 0` = **무조건 노출**이다. 스타듀 문법은 "명동 광석 첫 획득 시 레시피 습득"
+		#   이지만, 이 카탈로그의 해금 축은 *채집 레벨*(ForageSkill) 하나뿐이라 채광 레시피에
+		#   채집 계단을 물리면 축이 어긋난다(제련이 채집 lvl에 인질). 그래서 그레이박스 단순화로
+		#   상시 노출하고, **재료 자체가 게이트**로 남는다 — 명동 광석 20개는 갱도에 내려가야만
+		#   모이므로 "광석을 처음 캔 뒤에야 만들 수 있다"는 결과는 스타듀와 같다(경로만 다르다).
+		#   ★잠정(owner 큐): "종 발견" 게이트(unlock_species)의 광물판을 여는 게 정석이다.
+		FURNACE: {"name_ko": "업화로", "out_item": ItemCatalog.FURNACE,
+			"out_count": 1, "unlock_level": 0, "unlock_species": "",
+			"mats": [{"item": ItemCatalog.STONE, "count": 25}, {"item": ItemCatalog.ORE_MYEONGDONG, "count": 20}]},
 	}
 
 # 레시피 id 목록(카탈로그 정의 순서 = 제작 탭 표시 순서 — 해금 레벨 오름 결).
 static func ids() -> Array:
-	return [WILD_SEEDS_PIAN, TAPPER, WILD_SEEDS_YUHWA, WILD_SEEDS_MANGYEON,
+	# ★ 업화로가 맨 앞 = 해금 레벨 0(오름 결 보존 — 상시 노출이라 목록 첫 줄이 자연스럽다).
+	return [FURNACE, WILD_SEEDS_PIAN, TAPPER, WILD_SEEDS_YUHWA, WILD_SEEDS_MANGYEON,
 		RARE_SEED_MIHOK_NANCHO, RARE_SEED_YURYEONGCHO, RARE_SEED_MYEONGWOL, RARE_SEED_SEORI_HONBAEK,
 		WILD_SEEDS_SEONGYA]
 

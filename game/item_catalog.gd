@@ -181,6 +181,30 @@ const MINERALS := {                      # 광물 id → {name_ko, price(품질 
 	GEODE_EOPHWA: {"name_ko": "업화알돌", "price": 150},
 }
 
+# ── ★[S5-T3 / ADR-0063 결정 3] 주괴 4종 — 업화로 제련 산출 ─────────────────────
+# 광석 5 + 혼탄 1을 업화로에 넣고 기다리면 나오는 금속 덩이. 도구 업그레이드(ToolTier)의 재료이자
+# 이 게임의 첫 **가공품**이다(투입 → 시간 경과 → 산출 — 손 제작 CraftCatalog와 다른 축).
+#
+# ★ **품질 유차원 CAT_MATERIAL 예외**(ADR-0063 결정 2 마지막 항이 명시적으로 기록한 그 예외다):
+#   자재는 원칙적으로 품질 무차원이다(원목·수액·이끼·광물 — "품질은 줍기의 축"). 주괴만 등급을
+#   싣는 근거는 [ADR-0052] 확정 로스터의 **제련공 퍼크 "잉곳 품질 티어"** 하나뿐이다 — 그 퍼크가
+#   실효할 자리가 아이템에 없으면 S5-T8이 배선할 곳 자체가 사라진다. 그래서 MINERALS(품질 무차원
+#   고정가)와 **별 dict로 가른다**(같은 dict에 넣으면 price_of의 등급 분기가 광물까지 물든다).
+# ★ 가격 = 스타듀 copper bar 60 / iron 120 / gold 250 / iridium 1000을 엽전 스케일에 1:1로 얹었다.
+#   광석(5/10/25/100)의 12배·12배·10배·10배라 "5개 녹여 1개"의 손실이 없다(제련 = 순수 상승 가공).
+# ★ 나락철 주괴도 **등록만**이 아니다 — 도구 4티어(ToolTier)의 최종 재료라 소지·제련·소모가 전부
+#   지금 산다. 다만 나락철 광석의 *출현*은 S5-T7(나락) 소관이다(광석 등록만 돼 있는 상태 계승).
+const INGOT_MYEONGDONG := "ingot_myeongdong"            # 명동 주괴 — 구리 주괴 대응
+const INGOT_YUCHEOL := "ingot_yucheol"                  # 유철 주괴 — 철 주괴 대응
+const INGOT_HWANGCHEONGEUM := "ingot_hwangcheongeum"    # 황천금 주괴 — 금 주괴 대응
+const INGOT_NARAKCHEOL := "ingot_narakcheol"            # 나락철 주괴 — 이리듐 주괴 대응
+const INGOTS := {                        # 주괴 id → {name_ko, price(기준가 — 등급 배수가 얹힌다)}
+	INGOT_MYEONGDONG: {"name_ko": "명동 주괴", "price": 60},
+	INGOT_YUCHEOL: {"name_ko": "유철 주괴", "price": 120},
+	INGOT_HWANGCHEONGEUM: {"name_ko": "황천금 주괴", "price": 250},
+	INGOT_NARAKCHEOL: {"name_ko": "나락철 주괴", "price": 1000},
+}
+
 # ── ★[S2-T5 / ADR-0060 결정 5] 유품(relic) — 혼백관 기증 수집물 ─────────────────────
 # 망자가 이승에 남긴 물건. 안식 괭이질 저확률 발굴(Museum.relic_roll — 스타듀 Artifact 대응)로 얻고
 # 혼백관에 기증한다(종당 1회 — 중복 발굴분은 판매 가능). 서사(누구의 유품인가)는 Slice 9 소관(봉인 법칙).
@@ -372,6 +396,10 @@ const LARGE_SUFFIX := "_large"
 const CRAB_POT := "crab_pot"
 const SPRINKLER := "sprinkler"
 const TAPPER := "sap_tapper"   # ★[S4-T5] 수액 채취기 — 제작 전용(CraftCatalog). 설치·원장은 S4-T6
+# ★[S5-T3 / ADR-0063 결정 3] 업화로 — 광석 5 + 혼탄 1을 넣고 **게임 내 분**만큼 기다리면 주괴가
+#   나오는 설치물. 수액 채취기 선례(제작 전용 CAT_PLACEABLE)를 그대로 따르되, 원장 축이 *일*이
+#   아니라 *분*이다(FurnaceLedger 머리말 참조). 아이템 정의는 여기, 원장은 furnace.gd.
+const FURNACE := "furnace"
 const PLACEABLES := {                    # 설치물 id → {name_ko, price(구매가)}
 	SPRINKLER: {"name_ko": "저승 스프링클러", "price": 60},
 	# 600G(잠정) — 스프링클러(60G) 10배. 낚시 lvl3까지 굴린 플레이어의 한나절 벌이 규모라
@@ -379,6 +407,9 @@ const PLACEABLES := {                    # 설치물 id → {name_ko, price(구�
 	CRAB_POT: {"name_ko": "게잡이통", "price": 600},
 	# ★[S4-T5] 수액 채취기 — 비매(제작 전용·CraftCatalog TAPPER 레시피). price = 잔가(출하 시).
 	TAPPER: {"name_ko": "수액 채취기", "price": 50},
+	# ★[S5-T3] 업화로 — 비매(제작 전용·CraftCatalog FURNACE 레시피). price = 잔가(돌 25 + 명동 광석
+	#   20의 원가 150엽전보다 낮게 둬 "만들어 팔기"가 차익이 되지 않게 한다 — ADR-0052 비-가치 원칙).
+	FURNACE: {"name_ko": "업화로", "price": 80},
 }
 
 # 씨앗 아이템 id 접미사("<작물군>_seed"). 작물군 id와 1:1 매핑.
@@ -471,6 +502,11 @@ static func _is_relic(id: String) -> bool:
 static func _is_mineral(id: String) -> bool:
 	return MINERALS.has(id)
 
+# ★[S5-T3] id가 주괴(제련 산출 4종)인가. 광물과 같은 CAT_MATERIAL이지만 **등급을 싣는다**
+#   (위 INGOTS 주석의 명시적 예외 — price_of가 quality_mult를 곱하는 유일한 자재군).
+static func _is_ingot(id: String) -> bool:
+	return INGOTS.has(id)
+
 # id가 채집물인가(ADR-0052 §118). 품질 유차원 CAT_HARVEST(작물 수확물 결 — 판매·서빙·선물 동급).
 static func _is_forageable(id: String) -> bool:
 	return FORAGEABLES.has(id)
@@ -506,7 +542,7 @@ static func has_item(id: String) -> bool:
 	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id) or _is_pot_good(id) \
-		or _is_sap_good(id) or _is_mineral(id)
+		or _is_sap_good(id) or _is_mineral(id) or _is_ingot(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -528,8 +564,8 @@ static func category_of(id: String) -> String:
 		return CAT_HARVEST   # 채집물(ADR-0052)·어획물(★S3-T2)·통용물(★S3-T7)·수액(★S4-T6)도 수확물 결 — 품질·판매·서빙 동급
 	if _is_fertilizer(id):
 		return CAT_FERTILIZER
-	if _is_hay(id) or _is_material(id) or _is_mineral(id):
-		return CAT_MATERIAL   # 건초(S1-7)·개간 드랍(S1-8)·★광물(S5-T2) = 재료 카테고리
+	if _is_hay(id) or _is_material(id) or _is_mineral(id) or _is_ingot(id):
+		return CAT_MATERIAL   # 건초(S1-7)·개간 드랍(S1-8)·★광물(S5-T2)·★주괴(S5-T3) = 재료 카테고리
 	if _is_placeable(id):
 		return CAT_PLACEABLE  # 설치물(S1R-T9 스프링클러) — 지면 설치·회수
 	if _is_relic(id):
@@ -558,6 +594,8 @@ static func name_of(id: String) -> String:
 		return MATERIALS[id]["name_ko"]
 	if _is_mineral(id):
 		return MINERALS[id]["name_ko"]   # ★S5-T2 광물 13종(광석 4·혼탄·돌·보석 5·지오드 2)
+	if _is_ingot(id):
+		return INGOTS[id]["name_ko"]     # ★S5-T3 주괴 4종(제련 산출)
 	if _is_forageable(id):
 		return FORAGEABLES[id]["name_ko"]
 	if _is_fish(id):
@@ -585,7 +623,7 @@ static func stackable_of(id: String) -> bool:
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_pot_good(id) or _is_sap_good(id) \
-		or _is_mineral(id)
+		or _is_mineral(id) or _is_ingot(id)
 
 # 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 비료=구매가(buy_cost),
 # 수확물/과일=판매가. 없으면 0. 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다.
@@ -613,6 +651,9 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return int(MATERIALS[id]["price"])   # ★S1-8 개간 드랍 = 품질 무차원 고정가(Phase 3 가공 예약)
 	if _is_mineral(id):
 		return int(MINERALS[id]["price"])    # ★S5-T2 광물 = 품질 무차원 고정가(등급 배수 없음)
+	if _is_ingot(id):
+		# ★S5-T3 주괴 = **자재 중 유일하게** 등급 배수를 받는다(INGOTS 주석의 명시적 예외).
+		return int(INGOTS[id]["price"] * quality_mult(quality))
 	if _is_forageable(id):
 		return int(FORAGEABLES[id]["price"] * quality_mult(quality))   # ★ADR-0052 채집물 = 기준가 × 등급 배수(수확물 결)
 	if _is_fish(id):

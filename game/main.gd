@@ -1727,6 +1727,12 @@ const SMITHY_CAM_RECT := Rect2i(2, 44, 20, 13)  # 대장간 방 둘레(외부·�
 #   기증대(MUSEUM_DONATE_TILE) 1:1 선례: 얼굴 없는 서비스로 먼저 열고 점주(클린트 대응 T2)는 S5에.
 #   [F] 즉시 구매 — **스타듀식 2일 대기 없음**(잠정, 무인 스텁 단순화. S5 점주 도입 때 재검토).
 const SMITHY_UPGRADE_TILE := Vector2i(13, 47)
+# ★[S5-T3 / ADR-0063 결정 6] 풀무(대장간 점주 T2) 자리 — 모루 서편 응대 칸. 무인 업그레이드대는
+#   **그대로 남는다**(모루가 곧 창구 — 옹이가 목공방 카운터 뒤에 서도 매대는 [F]인 것과 같은 결):
+#   ㉠ 업그레이드 = 모루 칸(SMITHY_UPGRADE_TILE) [F] — 든 도구가 동사(ADR-0024)
+#   ㉡ 지오드 개봉 = 풀무에게 [F] — 든 알돌이 동사(점주가 깨 주는 서비스, 클린트 1:1)
+#   ⚠️ 두 칸이 갈려 있어 상호작용이 겹치지 않는다(x11 ≠ x13). 업화로 장식(x10..11, y47)과도 행이 다르다.
+const PULMU_TILE := Vector2i(11, 49)
 # 모험가 길드(전투 장비, enterable 빈 방). 외관=남단 입구 동편, 실내=대장간 방 옆 칸(cam 비겹침).
 const GUILD_EXT_RECT := Rect2i(22, 37, 6, 5)    # x22..27, y37..41 (남단 입구 동편)
 const GUILD_EXT_DOOR := Vector2i(24, 41)        # 외관 길드 문(닿으면 진입) — 남단 apron으로 carve
@@ -1927,6 +1933,17 @@ var tree_ledger: TreeLedger = null
 #   공유하되 **서로를 모른다**(TreeLedger는 채취기를 모르고, 여기선 종만 스냅샷해 든다 — 벌목 차단·
 #   설치 자격 같은 두 원장의 교차 규칙은 전부 main이 든다).
 var tapper: TapperLedger = null
+# ★[S5-T3 / ADR-0063 결정 3] 업화로 원장(설치 칸 → 넣은 광석·남은 제련 분·나올 주괴·등급).
+#   채취기·게잡이통과 같은 RefCounted 순수 원장이되 **진행 축이 일이 아니라 분**이다 — 취침이 아니라
+#   시계가 굴린다(`_tick_furnaces`가 매 프레임 흐른 게임 분을 흘려 넣는다). 밤에도 제련이 돈다.
+var furnace: FurnaceLedger = null
+# ★[S5-T3] 업화로 분 진행의 기준점 = **절대 게임 분**((day-1)×1440 + minutes). 프레임마다 이 값의
+#   델타를 원장에 흘린다. 절대 분을 쓰는 이유는 하나다: 취침(22:00 → 다음날 06:00)이 그냥 큰 델타
+#   하나(480분)로 접혀 "밤에도 제련이 돈다"(스타듀 정합)가 특별 분기 없이 성립한다. −1 = 미초기화.
+var _furnace_abs_min := -1.0
+# ★[S5-T3 / ADR-0063 결정 2·3] 누적 지오드 개봉 횟수 — 개봉 롤의 **결정적 시드**다(같은 카운터면
+#   같은 답이라 헤드리스가 재현하고, 카운터가 늘어야 새 롤이라 재롤 exploit이 구조적으로 막힌다).
+var _geode_opened := 0
 # ★[S4-T4 / ADR-0062 결정 6] 도구 티어 원장(도구별 티어 정수 — S4 실효는 도끼 2티어, 나머지 3종은 키
 #   예약). ADR-0027이 코드에 처음 존재하게 되는 지점이다: 도끼 티어가 ①성숙목 타수(10/8/6)와
 #   ②큰 장애물 접근(큰 그루터기=명동 / 큰 통나무=유철)을 가른다. 무대는 업화 갱도 대장간의 **무인
@@ -2185,8 +2202,16 @@ var _professions := {}
 # ★ [S1R-T8 / ADR-0059 결정4] 물뿌리개 용량·리필(잠정 — owner 큐). 물주기 1회당 잔량 −1, 0이면 물주기 불가
 #   (혼우물·연못에서 풀충전). 에너지(혼력) 과금(결정3)과 독립 축 — 물은 자원 압박, 혼력은 행동 예산.
 #   용량 20은 그레이박스 값(도구 티어 ADR-0027로 상향 축 정합). 세이브 보존(구세이브 = 기본값 20, 하위호환).
+# ★[S5-T3 / ADR-0063 결정 3] **용량이 물뿌리개 티어로 실효됐다** — 상한의 단일 출처는
+#   `ToolTier.can_capacity(tier)`이고(20/30/40/55/70), 아래 상수는 그 **0티어 값**이자 구세이브
+#   폴백으로만 남는다(ToolTier.CAN_CAPACITY[0]과 반드시 같다 — tool_tier_test ⑩이 단언).
+#   조회는 전부 `_can_capacity()`를 거친다(티어가 오르면 그 프레임부터 상한이 넓어진다).
 const _CAN_CAPACITY := 20
 var _can_water := _CAN_CAPACITY
+
+# 지금 물뿌리개의 용량 상한(티어 파생 — 세이브 상태 아님). 원장이 없으면 0티어 폴백.
+func _can_capacity() -> int:
+	return ToolTier.can_capacity(tool_tier.tier_of(ToolTier.WATERING_CAN)) if tool_tier != null else _CAN_CAPACITY
 
 # T5.1 직전(현재) 대화 상대의 표시 이름 — 대화 종료 시 온보딩 전진을 '누구와의
 # 대화였나'로 가르는 데 쓴다. 멜이 카페에 상주하면서 온보딩 도중(미호 멘토 단계)에도
@@ -2285,8 +2310,10 @@ func _ready() -> void:
 	tree_ledger.changed.connect(_on_tree_ledger_changed)   # 벌목·성장·재성장·복원 시 충돌·드로우 갱신
 	tapper = TapperLedger.new()          # ★[S4-T6] 수액 채취기 원장(RefCounted — 나무 원장과 같은 결)
 	tapper.changed.connect(queue_redraw) # 설치·수거·회수·일일 진행·복원 시 그레이박스 갱신(게잡이통 결)
+	furnace = FurnaceLedger.new()        # ★[S5-T3] 업화로 원장(RefCounted — 채취기와 같은 결·축만 분)
+	furnace.changed.connect(queue_redraw)     # 설치·투입·완성·수거·회수·복원 시 그레이박스 갱신
 	tool_tier = ToolTier.new()           # ★[S4-T4] 도구 티어 원장(RefCounted — 나무 원장과 같은 결)
-	tool_tier.changed.connect(queue_redraw)   # 티어가 오르면 프롬프트 타수·대장간 안내가 즉시 갱신
+	tool_tier.changed.connect(_on_tool_tier_changed)   # 티어↑ → 프롬프트 타수·물뿌리개 용량 배지 갱신
 	carpenter = Carpenter.new()          # ★[S4-T7] 목공방 건축 의뢰 원장(RefCounted — 도구 티어와 같은 결)
 	carpenter.changed.connect(queue_redraw)   # 의뢰·완공·복원 시 매대 행·목공방 그레이박스 갱신
 	mine_floors = MineFloors.new()       # ★[S5-T1] 갱도 층 원장(RefCounted — 채집물 스폰 원장과 같은 결)
@@ -4407,7 +4434,9 @@ func _mining_energy_cost() -> int:
 # ★ 곡괭이로 층 안 돌 1타 — 일반 돌은 타수 1(즉발), **광맥은 3~5타**(MineFloors.node_hits).
 #   혼력은 매 타 과금(감산 반영), 산출·XP는 **부순 마지막 타에만** 실린다(벌목과 같은 결 —
 #   "사건에 값을 매긴다"). 돌이 깨지면 사다리 롤을 굴린다(ADR-0063 결정 1 ㉡).
-#   ⚠️ 곡괭이 티어의 타수 감산은 S5-T3 소관 — `MineFloors.node_hits` 위에 얹힌다(여긴 0티어).
+#   ★[S5-T3] 곡괭이 티어가 타수를 깎는다 — 접점은 `MineFloors.node_hits(node_id, tier)` **하나**다
+#     (도끼 `TreeLedger._effective_hp(e, tier)` 선례 동형 — 배선 손질은 인자 하나뿐).
+#     ⚠️ 혼력은 여전히 티어와 무관하다(감산은 스킬 축 — ADR-0027 경계).
 func _mine_rock(t: Vector2i) -> void:
 	if inventory.selected_id() != ItemCatalog.PICKAXE:
 		return                              # 든 게 곡괭이가 아니면 무동작(자동 분기 없음 — ADR-0024 §2)
@@ -4420,7 +4449,7 @@ func _mine_rock(t: Vector2i) -> void:
 	audio.sfx("hoe")                        # 곡괭이 타격 SFX는 아트 패스(S5-T9) — 흙 다지는 "턱" 재사용
 	# ── 다타수 광맥: 아직 안 부서졌으면 진행만 올리고 끝난다(산출·사다리 롤 없음) ──
 	var node_id := _mine_node_at(t)
-	var need := MineFloors.node_hits(node_id)
+	var need := MineFloors.node_hits(node_id, pickaxe_tier())
 	if need > 1:
 		var done := mine_floors.add_node_hit(_mine_floor, t)
 		if done < need:
@@ -7652,6 +7681,8 @@ func _save_game() -> void:
 		"forage_found": _forage_found.duplicate(),  # ★[S4-T5] 종 발견 원장(희소종 씨앗 레시피 해금 게이트)
 		"tree_ledger": tree_ledger.to_save(),  # ★[S4-T3] 나무 원장(구역별 좌표·종·단계·타수·그루터기 + 시드 완료 구역)
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
+		"furnace": furnace.to_save(),       # ★[S5-T3] 업화로(구역별 좌표·넣은 광석·남은 제련 분·주괴·등급)
+		"geode_opened": _geode_opened,       # ★[S5-T3] 누적 지오드 개봉 수(개봉 롤 시드 — 재롤 차단)
 		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
 		"carpenter": carpenter.to_save(),   # ★[S4-T7] 목공방 건축 의뢰(진행 1건 + 완공 이력 — 정원 승격은 ranch에)
 		"mine": mine_floors.to_save(),      # ★[S5-T1] 갱도 층 원장(도달 최심층=영구 + day-한정 채굴·사다리 기록)
@@ -7740,6 +7771,11 @@ func _load_game() -> void:
 		tree_ledger.load_save(data["tree_ledger"])   #   초기 배치를 결정적으로 재생성한다(종=좌표 해시·하위호환)
 	if data.has("tapper"):        # ★[S4-T6] — 키 없는 구세이브는 채취기 0(빈 원장·하위호환)
 		tapper.load_save(data["tapper"])
+	if data.has("furnace"):       # ★[S5-T3] — 키 없는 구세이브는 업화로 0(빈 원장·하위호환)
+		furnace.load_save(data["furnace"])
+	_furnace_abs_min = -1.0       # ★[S5-T3] 분 기준점 리셋 — 로드 직후 첫 프레임을 새 기준으로 잡는다
+	                              #   (안 하면 세이브된 day와 현재 day의 차가 통째로 제련 진행으로 샌다)
+	_geode_opened = maxi(int(data.get("geode_opened", 0)), 0)   # ★[S5-T3] 개봉 카운터(구세이브 = 0)
 	if data.has("tool_tiers"):    # ★[S4-T4] — 키 없는 구세이브는 전 도구 티어 0(기본 도끼 그대로·무막힘)
 		tool_tier.load_save(data["tool_tiers"])
 	if data.has("carpenter"):     # ★[S4-T7] — 키 없는 구세이브는 진행 의뢰 0·완공 0(하위호환)
@@ -7776,8 +7812,10 @@ func _load_game() -> void:
 	# ★[S5-T2] 채광 숙련 XP 복원 — 키 없는 구세이브는 0 = L0(무막힘·base 곡괭이 그대로). 음수는 0.
 	_mining_xp = maxi(int(data.get("mining_xp", 0)), 0)
 	_load_professions(data.get("professions", {}))
-	# ★ [S1R-T8] 물뿌리개 잔량 복원 — 키 없는 구세이브는 기본값 20(가득, 하위호환). 손상 방어로 0..20 클램프.
-	_can_water = clampi(int(data.get("watering_can", _CAN_CAPACITY)), 0, _CAN_CAPACITY)
+	# ★ [S1R-T8] 물뿌리개 잔량 복원 — 키 없는 구세이브는 기본값 20(가득, 하위호환).
+	# ★[S5-T3] 상한이 티어 파생이라 클램프 상한도 _can_capacity()다(tool_tier가 위에서 이미 복원됨 —
+	#   순서 역전 금지: 티어보다 먼저 클램프하면 4티어 세이브의 잔량 70이 20으로 잘린다).
+	_can_water = clampi(int(data.get("watering_can", _CAN_CAPACITY)), 0, _can_capacity())
 	_refresh_water_badge()
 	# ★ [S3-T5] 뱃사공 T1 증정 플래그 복원(키 없는 구세이브 = false → 첫 대화에서 인벤 보유 여부로
 	#   접힌다. 아직 안 만난 세이브는 그대로 증정 대기 = 무막힘).
@@ -7958,6 +7996,15 @@ func _skill_level(skill: String) -> int:
 #   — main의 다른 곳은 ToolTier 내부를 모른다(_skill_level이 XP 스칼라를 감싸는 것과 같은 결).
 func axe_tier() -> int:
 	return tool_tier.tier_of(ToolTier.AXE) if tool_tier != null else 0
+
+# ★[S5-T3] 지금 든 곡괭이의 티어(원장 부재 방어 = 0). 광맥 타수 환산·큰 바위 게이트의 단일 접점
+#   (axe_tier와 정확히 같은 자리 — `MineFloors.node_hits(node_id, tier)`에 이 값만 흘린다).
+func pickaxe_tier() -> int:
+	return tool_tier.tier_of(ToolTier.PICKAXE) if tool_tier != null else 0
+
+# ★[S5-T3] 지금 든 괭이·물뿌리개의 AoE(폭, 길이). 농사 동사 배선의 단일 접점.
+func tool_aoe(tool_id: String) -> Vector2i:
+	return ToolTier.aoe_of(tool_id, tool_tier.tier_of(tool_id)) if tool_tier != null else Vector2i(1, 1)
 
 # (skill,tier)에 이미 고른 전문직 id("" = 미선택).
 func _profession_at(skill: String, tier: int) -> String:
@@ -8190,6 +8237,9 @@ func _process(delta: float) -> void:
 	# (같은 phase면 즉시 반환, 라이팅과 같은 무상태 결). 시각이 멈춘 취침 연출 중에도 위치는
 	# 잠겨 있어(이동 잠금) phase가 안정적이다.
 	audio.update_music(clock.minutes, _run_over, _in_cafe())
+	# ★[S5-T3 / ADR-0063 결정 3] 업화로 제련 진행 — 흐른 게임 분을 원장에 흘린다. 입력 가드보다
+	#   **먼저** 둔다: 대화·모달·취침 연출 중에도 시계가 흐르면 화덕은 계속 돌아야 한다(스타듀 정합).
+	_tick_furnaces()
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
@@ -8483,10 +8533,10 @@ func _process(delta: float) -> void:
 	if facing_donate and Input.is_action_just_pressed("shop_toggle"):
 		_try_donate_selected()
 		return
-	# ★ [S4-T4] 대장간 무인 업그레이드(F): 업그레이드대를 바라보며 F — 다음 도끼 티어를 즉시 산다
-	#   (골드 차감 → 티어 +1. 대기 없음 — 무인 스텁 잠정). 기증대와 같은 무인 F 결.
+	# ★ [S4-T4 → S5-T3] 대장간 모루 업그레이드(F): 모루를 바라보며 F — **든 도구**의 다음 티어를
+	#   즉시 산다(골드 + 주괴 5 차감 → 티어 +1. 대기 없음 = ADR-0063 결정 3 QoL 승격).
 	if facing_upgrade and Input.is_action_just_pressed("shop_toggle"):
-		_try_upgrade_tool(ToolTier.AXE)
+		_try_upgrade_tool(_smithy_target_tool())
 		return
 	# ★ [S3-T7] 게잡이통(F): 물가의 통을 바라보며 F — 수거 / 미끼 장전 / 회수(상태별 한 동사).
 	#   주민·기증대 뒤에 둔다(설치 시 주민 칸을 배제하지만, 순서로도 한 번 더 안전하게).
@@ -8499,6 +8549,12 @@ func _process(delta: float) -> void:
 	if not _sleeping and tapper != null and _indoor == "" and tapper.has_at(_region, _target) \
 			and Input.is_action_just_pressed("shop_toggle"):
 		_use_tapper(_target)
+		return
+	# ★ [S5-T3] 업화로(F): 세워 둔 화덕을 바라보며 F — 수거 / 투입 / 회수(상태별 한 동사).
+	#   채취기와 같은 사다리이고, 화덕은 빈 지면 위라 [F]가 겹칠 상대가 없다(설치는 LMB).
+	if not _sleeping and furnace != null and _indoor == "" and furnace.has_at(_region, _target) \
+			and Input.is_action_just_pressed("shop_toggle"):
+		_use_furnace(_target)
 		return
 	# T5.4 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 보유 재료 1개를 자동 소모하고 정액 골드.
 	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
@@ -8659,6 +8715,11 @@ func _process(delta: float) -> void:
 	var holding_tapper := inventory.selected_id() == ItemCatalog.TAPPER
 	if not _sleeping and holding_tapper and Input.is_action_just_pressed("use_tool") and _can_place_tapper(_target):
 		_place_tapper(_target)
+	# ★ [S5-T3] 업화로 설치 — 화덕을 들고 빈 지면·길을 겨눠 LMB. 투입·수거·회수는 [F]다(같은 칸에서
+	#   세 동사를 쓰므로 상호작용 키로 모은다 — 게잡이통·채취기와 같은 판단).
+	var holding_furnace := inventory.selected_id() == ItemCatalog.FURNACE
+	if not _sleeping and holding_furnace and Input.is_action_just_pressed("use_tool") and _can_place_furnace(_target):
+		_place_furnace(_target)
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	#   ★ 스프링클러를 들었으면 위에서 설치/철거를 이미 처리했으니 밭 도구질로 흘리지 않는다(중복 방지).
 	if not _sleeping and _target_valid and not holding_sprinkler and Input.is_action_just_pressed("use_tool"):
@@ -8763,7 +8824,7 @@ func _process(delta: float) -> void:
 			if nid != "":
 				body = "%s 광맥 캐기 (혼력 %d · %d/%d타)" % [ItemCatalog.name_of(nid),
 					_mining_energy_cost(), mine_floors.node_hits_done(_mine_floor, _target),
-					MineFloors.node_hits(nid)]
+					MineFloors.node_hits(nid, pickaxe_tier())]   # ★[S5-T3] 든 곡괭이 티어 기준 타수
 			interact_prompt.text = ("[좌클릭] 곡괭이로 " + body) \
 				if inventory.selected_id() == ItemCatalog.PICKAXE else "곡괭이가 있어야 돌을 깰 수 있다"
 		else:
@@ -8813,9 +8874,9 @@ func _process(delta: float) -> void:
 			interact_prompt.text = "혼백관 기증대 — 유품을 들고 오자 (전시 %d/%d)" % [museum.donated_count(),
 				Museum.donatable_ids().size()]
 	elif facing_upgrade:
-		# ★ [S4-T4] 대장간 무인 업그레이드대: 현재 티어 · 다음 티어 · 가격을 한 줄로(무인 — 점주 후속).
+		# ★ [S4-T4 → S5-T3] 대장간 모루: **든 도구**의 현재 티어 · 다음 티어 · 가격 · 주괴를 한 줄로.
 		interact_prompt.visible = true
-		interact_prompt.text = _tool_upgrade_prompt(ToolTier.AXE)
+		interact_prompt.text = _tool_upgrade_prompt(_smithy_target_tool())
 	elif facing_board:
 		# ★ [S2-T6] 만물상 앞 게시판: 수락 중이면 납품 진행(보유/요구)을, 아니면 오늘 걸린 의뢰를 보인다.
 		#   무인 게시판이라 대화(RMB) 없이 F/G만 받는다(혼백관 기증대와 같은 결).
@@ -8883,6 +8944,16 @@ func _process(delta: float) -> void:
 		#   (빈손 흔들기가 벌칙처럼 읽히지 않게 — 절기 창을 프롬프트가 가르쳐 준다).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _bush_prompt(_target)
+	elif furnace != null and _indoor == "" and furnace.has_at(_region, _target):
+		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수). 채취기보다
+		#   먼저 볼 이유는 없지만(좌표가 안 겹친다) 설치물 프롬프트끼리 한자리에 모아 둔다.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _furnace_prompt(_target)
+	elif inventory.selected_id() == ItemCatalog.FURNACE and _can_place_furnace(_target):
+		# ★[S5-T3] 업화로를 들고 빈 지면을 겨눌 때: LMB로 설치.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 업화로 세우기 (광석 %d + 혼탄 %d → 주괴 1)" % [
+			FurnaceLedger.ORE_PER_BATCH, FurnaceLedger.FUEL_PER_BATCH]
 	elif tapper != null and _indoor == "" and tapper.has_at(_region, _target):
 		# ★[S4-T6] 채취기가 박힌 나무를 바라볼 때: 상태별 [F] 한 동사(수거 / 회수). **나무 프롬프트보다
 		#   먼저** 본다 — 그 칸의 지금 할 일은 벌목이 아니라 채취기이고, 벌목은 애초에 막혀 있다.
@@ -8908,8 +8979,8 @@ func _process(delta: float) -> void:
 	elif inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target):
 		# ★ [S1R-T8] 혼우물·연못을 물뿌리개로 겨눌 때: LMB로 잔량 풀충전(이미 가득이면 안내만).
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = "[좌클릭] 물뿌리개 채우기 (%d/%d)" % [_can_water, _CAN_CAPACITY] if _can_water < _CAN_CAPACITY \
-			else "물뿌리개 가득 참 (%d/%d)" % [_can_water, _CAN_CAPACITY]
+		interact_prompt.text = "[좌클릭] 물뿌리개 채우기 (%d/%d)" % [_can_water, _can_capacity()] if _can_water < _can_capacity() \
+			else "물뿌리개 가득 참 (%d/%d)" % [_can_water, _can_capacity()]
 	elif crab_pot != null and _indoor == "" and crab_pot.has_at(_region, _target):
 		# ★ [S3-T7] 물가의 게잡이통을 겨눌 때: 상태별 [F] 한 동사(수거 / 미끼 넣기 / 회수).
 		interact_prompt.visible = not _sleeping
@@ -8953,22 +9024,31 @@ func _is_refill_target(t: Vector2i) -> bool:
 		return true
 	return _grid[t.y][t.x] == WATER
 
-# ★ [S1R-T8] 물뿌리개를 잔량 20으로 풀충전. 이미 가득이면 안내만(무동작). 에너지 무과금(리필은 자원 회복이라
-#   행동 예산과 무관 — 결정4는 물 축만 도입). SFX는 water 재사용.
+# ★ [S1R-T8] 물뿌리개를 잔량 가득으로 풀충전. 이미 가득이면 안내만(무동작). 에너지 무과금(리필은 자원
+#   회복이라 행동 예산과 무관 — 결정4는 물 축만 도입). SFX는 water 재사용.
+# ★[S5-T3] 상한이 티어 파생(_can_capacity)이라, 벼린 직후 리필하면 그 자리에서 넓어진 통이 찬다.
 func _refill_watering_can() -> void:
-	if _can_water >= _CAN_CAPACITY:
-		_notice("물뿌리개가 이미 가득 찼다 (%d/%d)" % [_can_water, _CAN_CAPACITY])
+	var cap := _can_capacity()
+	if _can_water >= cap:
+		_notice("물뿌리개가 이미 가득 찼다 (%d/%d)" % [_can_water, cap])
 		return
-	_can_water = _CAN_CAPACITY
+	_can_water = cap
 	_refresh_water_badge()
 	audio.sfx("water")
-	_notice("물뿌리개를 가득 채웠다 (%d/%d)" % [_can_water, _CAN_CAPACITY])
+	_notice("물뿌리개를 가득 채웠다 (%d/%d)" % [_can_water, cap])
 
 # ★ [S1R-T8] 핫바 물뿌리개 슬롯 잔량 배지 갱신(잔량은 인벤토리 변화 없이 바뀌므로 별도 주입 — set_water_state가
 #   값 동일 시 조기 반환해 저비용). 리필·물주기 소모·세이브 로드·초기 셋업에서 부른다.
 func _refresh_water_badge() -> void:
 	if hotbar != null:
-		hotbar.set_water_state(_can_water, _CAN_CAPACITY)
+		hotbar.set_water_state(_can_water, _can_capacity())
+
+# ★[S5-T3] 도구 티어가 오른 프레임 훅 — 프롬프트 타수·대장간 안내(queue_redraw)에 더해 **물뿌리개
+#   용량 배지**를 다시 그린다. 상한이 티어 파생이라 벼리는 순간 배지의 분모가 갈리기 때문이다
+#   (잔량 자체는 안 채운다 — 넓어진 통은 비어 있고, 채우는 건 리필의 몫이다).
+func _on_tool_tier_changed() -> void:
+	_refresh_water_badge()
+	queue_redraw()
 
 # ★ [S1R-T10] 든 도구에 맞는 스윙 모션을 1회 재생(시각 전용). 4모션 시트가 있는 괭이·물뿌리개·낫만 —
 #   곡괭이·도끼(개간)는 전용 시트가 없어 무동작 폴백(player.swing_tool이 조용히 생략, 로직 불변).
@@ -8983,6 +9063,53 @@ func _swing_for_item(item: String) -> void:
 		return
 	player.swing_tool(motion, FarmSkill.speed_factor(FarmSkill.level_for_xp(_farming_xp)))
 
+# ★[S5-T3 / ADR-0063 결정 3] 도구 AoE가 실제로 덮는 칸 목록(조준 칸 t 기준·맵 안으로 클립).
+#   · (1,1) = [t] — 0·1티어(기존 거동과 **완전 동일**하다: 리스트가 한 칸이라 회귀 0)
+#   · (1,3) = 바라보는 방향으로 t, t+dir, t+2·dir 일렬 3칸(스타듀 차지드 괭이 문법 — 앞으로 뻗는다).
+#            방향은 `_target − 플레이어 칸`에서 파생한다. 대각·정지면 폴백 [t](방향이 없으면 못 뻗는다).
+#   · (3,3) = t를 중심으로 한 3×3(스타듀 금 괭이 문법 — 중심 대칭이라 방향을 안 본다).
+#   ★ 순서가 결정적이다(일렬은 가까운 칸부터, 3×3은 위→아래·왼→오른). 물뿌리개 잔량이 부족할 때
+#     "어느 칸까지 적셨나"가 프레임률·dict 순서에 흔들리지 않게 하는 규율이다.
+# ⚠️ **여기는 형태만 만든다.** 어느 칸이 실제로 밭이 될 수 있나는 `_farm_aoe_tiles`가 `_is_farmable`로
+#    한 번 더 걸러야 한다 — `FarmField.hoe()`는 좌표 검증을 하지 않으므로(조준 칸의 유효성은 늘
+#    `_target_valid`가 봤다) 필터 없이 넘기면 벽·물·맵 밖이 밭으로 갈린다.
+func _tool_aoe_tiles(t: Vector2i, aoe: Vector2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if aoe == Vector2i(1, 1):
+		out.append(t)
+		return out
+	if aoe.x <= 1:
+		# 일렬 — 바라보는 방향으로 aoe.y칸. dir은 축 하나만 남긴 단위 벡터(대각 배제).
+		var dir := t - _player_tile()
+		if dir == Vector2i.ZERO or (dir.x != 0 and dir.y != 0):
+			out.append(t)
+			return out
+		dir = Vector2i(signi(dir.x), signi(dir.y))
+		for i in aoe.y:
+			out.append(t + dir * i)
+		return out
+	# 사각 — 중심 대칭(짝수는 안 쓰지만 일반식으로 둔다).
+	var half_x := (aoe.x - 1) / 2
+	var half_y := (aoe.y - 1) / 2
+	for dy in range(-half_y, half_y + 1):
+		for dx in range(-half_x, half_x + 1):
+			out.append(t + Vector2i(dx, dy))
+	return out
+
+# ★[S5-T3] 농사 동사가 실제로 작용할 AoE 칸 목록 = 형태(_tool_aoe_tiles)에서 **조준 칸 밖을
+#   `_is_farmable`로 거른 것**. 이 필터가 없으면 3×3 괭이가 벽·물·맵 밖까지 밭으로 갈아 버린다
+#   (FarmField.hoe는 좌표를 안 본다 — 조준 칸의 유효성은 늘 호출 측 `_target_valid`가 봤다).
+#   미호 밭 칸(MIHO_FIELD_TILE) 배제까지 `_is_farmable`가 이미 들고 있어 규칙 복제가 0이다.
+# ★ **조준 칸(t) 자체는 안 거른다**: 그 칸의 판정은 여전히 호출 측 게이트의 책임이고(라이브 경로는
+#   `_target_valid`가 통과시킨 칸만 넘긴다), 여기서 한 번 더 거르면 0티어 거동이 기존과 달라진다
+#   (좌표를 직접 세팅해 `_use_tool`을 부르는 헤드리스 경로가 조용히 죽는다 — well_test가 실증).
+func _farm_aoe_tiles(t: Vector2i, aoe: Vector2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for at: Vector2i in _tool_aoe_tiles(t, aoe):
+		if at == t or _is_farmable(at):
+			out.append(at)
+	return out
+
 func _use_tool() -> void:
 	var item := inventory.selected_id()
 	var cat := ItemCatalog.category_of(item)
@@ -8994,22 +9121,41 @@ func _use_tool() -> void:
 		return
 	var verb := ""
 	if item == ItemCatalog.HOE:
-		if farm.hoe(_target):
-			verb = "괭이질"
+		# ★[S5-T3 / ADR-0063 결정 3] 괭이 티어 AoE — 조준 칸 하나가 아니라 티어 범위 전체를 간다
+		#   (1×1 → 1×3 → 3×3). 한 칸이라도 실제로 갈렸으면 동사가 성립한다(전부 이미 밭이면 무동작).
+		#   ★혼력은 **AoE 1회 = 단일 비용**이다(아래 free_verb/cost 로직 불변): 스타듀의 차지드 도구도
+		#     한 번의 스윙이라 한 번 값을 매기고, 그게 티어를 사는 이유(편의 축)다.
+		var hoed := 0
+		for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE)):
+			if not farm.hoe(at):
+				continue
+			hoed += 1
 			# ★ [S2-T5 / ADR-0060 결정 5] 유품 발굴 — 안식 괭이질 저확률(스타듀 Artifact Spot 대응).
 			#   (day, tile) 결정적 롤이라 같은 날 같은 칸 재롤 없음. 혼백관 기증 루프의 유일 시드 소스.
+			#   ★AoE 칸마다 각자 굴린다(칸별 시드라 넓은 괭이가 발굴을 더 자주 만난다 = 티어의 값).
 			if _region == RegionCatalog.HOME:
-				var relic_id := Museum.relic_roll(clock.day, _target)
+				var relic_id := Museum.relic_roll(clock.day, at)
 				if relic_id != "":
 					inventory.add_item(relic_id, 1)
 					_toast_item(relic_id, 1)
 					_notice("유품 발굴! %s — 삼도천 혼백관에 기증하자" % ItemCatalog.name_of(relic_id))
+		if hoed > 0:
+			verb = "괭이질"
 	elif item == ItemCatalog.WATERING_CAN:
 		# ★ [S1R-T8] 용량 축(에너지와 독립) — 잔량 있으면 물주기 1회당 −1, 없으면 물 줄 칸일 때만 안내(스퓨리어스 방지).
 		#   리필(혼우물·연못)은 SOIL 밖 별도 디스패치(_refill_watering_can)라 여기 도달하지 않는다.
+		# ★[S5-T3] 물뿌리개 티어 AoE — 괭이와 같은 범위 표를 쓴다. 다만 **물은 칸당 −1**이다
+		#   (혼력은 스윙당 1회지만 물은 뿌린 양이라 칸수만큼 든다 — 그래서 티어가 용량도 함께
+		#   올린다. 잔량이 모자라면 갈 수 있는 칸까지만 적시고 나머지는 그냥 마른다).
 		if _can_water > 0:
-			if farm.water(_target):
-				_can_water -= 1
+			var watered := 0
+			for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.WATERING_CAN)):
+				if _can_water <= 0:
+					break
+				if farm.water(at):
+					_can_water -= 1
+					watered += 1
+			if watered > 0:
 				_refresh_water_badge()
 				verb = "물주기"
 		elif farm.is_planted(_target) and not farm.is_watered(_target):
@@ -9565,6 +9711,184 @@ func _tapper_prompt(t: Vector2i) -> String:
 	return "[F] 수액 채취기 회수 (%s — %d일 남음)" % [
 		ItemCatalog.name_of(TapperLedger.product_for(tapper.species_at(_region, t))),
 		tapper.days_left(_region, t)]
+
+# ── ★ [S5-T3 / ADR-0063 결정 3] 업화로 설치/투입/수거/회수 + 분 진행 ─────────────
+# 이 칸에 업화로를 놓을 수 있는가. 스프링클러·게잡이통 배치 규칙의 **제련판**이다:
+#   ① 야외(실내 아님) + **지상**만 — 갱도 층(24×24 별 그리드)은 day마다 리필되므로 거기 놓으면
+#      다음 아침에 업화로가 좌표째로 사라진 것처럼 보인다(원장은 남는데 층이 갈린다 = 유령 화덕).
+#   ② 걸을 수 있는 빈 지면(GROUND·PATH)만 — 밭(SOIL)은 배제한다(경작지에 화덕을 세우면 괭이질·
+#      파종이 그 칸에서 조용히 막힌다. 스프링클러가 SOIL을 허용하는 것과 갈리는 지점이다).
+#   ③ 프롭·debris·다른 설치물(스프링클러·통·채취기)·연못 활동존과 겹치지 않는다.
+#   ④ 같은 칸 중복 설치 불가(원장이 멱등이지만 프롬프트·소모 판정을 위해 여기서도 본다).
+# ★ 업화로는 **비-SOLID**다(통행을 막지 않는다 — 스프링클러·통과 같은 결. 동선 soft-lock 0).
+func _can_place_furnace(t: Vector2i) -> bool:
+	if furnace == null or _indoor != "" or _mine_floor != 0:
+		return false
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
+		return false
+	if furnace.has_at(_region, t):
+		return false                          # 이미 설치됨(그 위엔 투입·수거·회수만)
+	var cell: int = _grid[t.y][t.x]
+	if cell != GROUND and cell != PATH:       # 빈 지면·길만(밭·물·벽·절벽·건물 패드 배제)
+		return false
+	if is_solid(cell):
+		return false                          # 방어(건물 패드·절벽·벽 = SOLID)
+	if sprinkler != null and sprinkler.has_at(t):
+		return false
+	if crab_pot != null and crab_pot.has_at(_region, t):
+		return false
+	if tapper != null and tapper.has_at(_region, t):
+		return false
+	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
+		return false
+	if _region == RegionCatalog.HOME:
+		if POND_ACTIVITY_RECT.has_point(t):   # 물가 활동존(연못 여백) → 배제
+			return false
+		if _home_occupied_tiles().has(t):     # 프롭 점유(나무·바위·꽃·울타리·허수아비) → 배제
+			return false
+	return true
+
+# 조준 칸에 업화로를 설치한다(아이템 1개 소모). 원장이 좌표를 든다(설치물 공통 결).
+func _place_furnace(t: Vector2i) -> void:
+	if not inventory.has_item(ItemCatalog.FURNACE):
+		return
+	if furnace.place(_region, t):
+		inventory.remove_item(ItemCatalog.FURNACE, 1)
+		audio.sfx("ui")
+		_notice("업화로를 세웠다 — 광석 %d개와 혼탄 %d개를 넣고 기다리면 주괴가 나온다"
+			% [FurnaceLedger.ORE_PER_BATCH, FurnaceLedger.FUEL_PER_BATCH])
+		queue_redraw()
+
+# 업화로 [F] 한 동사(상태별 사다리 — 채취기·게잡이통과 같은 문법):
+#   ㉠ 다 익었으면 → 수거(주괴 + 등급)
+#   ㉡ 제련 중이면 → 남은 시간 안내(무동작 — 서두를 방법은 없다)
+#   ㉢ 비었고 **든 것이 제련 가능한 광석**이면 → 투입(광석 5 + 혼탄 1 차감)
+#   ㉣ 비었고 든 게 광석이 아니면 → 회수(아이템 1개 반환)
+func _use_furnace(t: Vector2i) -> void:
+	if furnace == null or not furnace.has_at(_region, t):
+		return
+	if furnace.is_ready(_region, t):
+		# ★ **담기 먼저, 비우기 나중**이다 — 인벤이 가득이면 주괴가 증발하지 않고 화덕에 그대로
+		#   남는다(collect가 성공하면 화덕이 비므로 순서를 바꾸면 되돌릴 자리가 없다).
+		var id := furnace.product_at(_region, t)
+		var q := furnace.pending_quality(_region, t)
+		if not inventory.add_item(id, 1, q):
+			_notice("백팩이 가득 차 주괴를 담지 못했다 — 자리를 비우고 다시 [F]")
+			return
+		furnace.collect(_region, t)
+		_toast_item(id, 1)
+		audio.sfx("harvest")
+		_notice("업화로에서 %s(%s)를 꺼냈다" % [ItemCatalog.name_of(id), ItemCatalog.quality_name(q)])
+		queue_redraw()
+		return
+	if furnace.is_smelting(_region, t):
+		_notice("아직 달구는 중이다 — %s" % _minutes_text(furnace.minutes_left(_region, t)))
+		return
+	var held := inventory.selected_id()
+	if FurnaceLedger.is_smeltable(held):
+		_load_furnace(t, held)
+		return
+	if not inventory.add_item(ItemCatalog.FURNACE, 1):
+		_notice("백팩이 가득 차 업화로를 회수할 수 없다")
+		return
+	if furnace.remove(_region, t):
+		audio.sfx("ui")
+		_notice("업화로를 걷었다")
+		queue_redraw()
+	else:
+		inventory.remove_item(ItemCatalog.FURNACE, 1)   # 원장이 거절 → 방금 넣은 업화로를 되돈다(무해)
+
+# 든 광석을 업화로에 넣는다(광석 5 + 혼탄 1 차감). 부족하면 무엇이 모자란지 밝힌다.
+# ★ 제련공 퍼크(시간 −50%·잉곳 품질 티어)는 여기서 원장에 *주입*된다 — FurnaceLedger는 전문직을
+#   모른다(게잡이통·채취기 퍼크 주입과 정확히 같은 자리). 값 인코딩은 S5-T8 소관이라 지금은 0/0.0.
+func _load_furnace(t: Vector2i, ore_id: String) -> void:
+	var need_ore := FurnaceLedger.ORE_PER_BATCH
+	var need_fuel := FurnaceLedger.FUEL_PER_BATCH
+	if inventory.count_of(ore_id) < need_ore:
+		_notice("%s가 모자라다 — %d개 필요(보유 %d개)" % [ItemCatalog.name_of(ore_id), need_ore,
+			inventory.count_of(ore_id)])
+		return
+	if inventory.count_of(FurnaceLedger.FUEL_ITEM) < need_fuel:
+		_notice("%s이 없다 — 제련에는 %d개가 든다" % [ItemCatalog.name_of(FurnaceLedger.FUEL_ITEM), need_fuel])
+		return
+	if not furnace.load_ore(_region, t, ore_id, smelt_time_cut(), smelt_quality_step()):
+		return
+	inventory.remove_item(ore_id, need_ore)
+	inventory.remove_item(FurnaceLedger.FUEL_ITEM, need_fuel)
+	audio.sfx("ui")
+	_notice("업화로에 %s %d개를 넣었다 — %s 뒤에 %s가 나온다" % [ItemCatalog.name_of(ore_id), need_ore,
+		_minutes_text(furnace.minutes_left(_region, t)),
+		ItemCatalog.name_of(FurnaceLedger.ingot_for(ore_id))])
+	queue_redraw()
+
+# 업화로 프롬프트 — 상태별 한 줄(_use_furnace의 사다리와 같은 순서).
+func _furnace_prompt(t: Vector2i) -> String:
+	if furnace.is_ready(_region, t):
+		return "[F] 주괴 꺼내기 (%s · %s)" % [ItemCatalog.name_of(furnace.product_at(_region, t)),
+			ItemCatalog.quality_name(furnace.pending_quality(_region, t))]
+	if furnace.is_smelting(_region, t):
+		return "업화로 — %s 달구는 중 (%s 남음)" % [ItemCatalog.name_of(furnace.product_at(_region, t)),
+			_minutes_text(furnace.minutes_left(_region, t))]
+	var held := inventory.selected_id()
+	if FurnaceLedger.is_smeltable(held):
+		var have_ore := inventory.count_of(held)
+		var have_fuel := inventory.count_of(FurnaceLedger.FUEL_ITEM)
+		if have_ore >= FurnaceLedger.ORE_PER_BATCH and have_fuel >= FurnaceLedger.FUEL_PER_BATCH:
+			return "[F] %s 제련 (광석 %d + 혼탄 %d → %s · %s)" % [ItemCatalog.name_of(held),
+				FurnaceLedger.ORE_PER_BATCH, FurnaceLedger.FUEL_PER_BATCH,
+				ItemCatalog.name_of(FurnaceLedger.ingot_for(held)),
+				_minutes_text(FurnaceLedger.smelt_minutes(held, smelt_time_cut()))]
+		return "업화로 — %s %d/%d · 혼탄 %d/%d" % [ItemCatalog.name_of(held), have_ore,
+			FurnaceLedger.ORE_PER_BATCH, have_fuel, FurnaceLedger.FUEL_PER_BATCH]
+	return "[F] 업화로 회수 (빈 화덕 — 광석을 들고 오면 제련)"
+
+# 게임 내 분 → 사람이 읽는 시간 문구("30분" / "2시간" / "2시간 30분").
+func _minutes_text(mins: int) -> String:
+	var m := maxi(mins, 0)
+	if m < 60:
+		return "%d분" % m
+	if m % 60 == 0:
+		return "%d시간" % (m / 60)
+	return "%d시간 %d분" % [m / 60, m % 60]
+
+# ★[S5-T3] 제련공 퍼크 편의 조회 2종 — 채광 트리 perks가 아직 비어 있어(값 인코딩 = S5-T8) 지금은
+#   항상 0/중립을 돌려준다. 덫꾼 갈래 3종·채광 드랍 2종과 정확히 같은 자리다(T8은 카탈로그의
+#   perks 배열만 채우면 여기 손댈 게 없다). ★차원 상수 신설도 T8 소관이라 dim 이름을 문자열로
+#   직접 쓰지 않고 **0 폴백**만 둔다 — 존재하지 않는 상수를 참조하면 파싱이 깨진다.
+func smelt_time_cut() -> float:      # 제련공(lvl10) — 제련 시간 −50%
+	return 0.0
+
+func smelt_quality_step() -> int:    # 제련공(lvl10) — 잉곳 품질 티어 +1
+	return 0
+
+func geode_double_chance() -> float:  # 발굴자(lvl10) — 지오드 개봉 2배
+	return MiningSkill.geode_double_chance(0.0)
+
+# ★[S5-T3] 업화로 분 진행 — 절대 게임 분의 델타를 원장에 흘린다(매 프레임·_process 앞머리).
+#   ★ 취침 점프가 여기서 **공짜로** 처리된다: clock.sleep()이 day +1·minutes = 06:00으로 갈면
+#     절대 분은 (22:00 → 다음날 06:00) = +480분이라, 그 밤만큼 제련이 진행된다(스타듀 정합 —
+#     "밤에도 제련은 돈다"). 특별 분기가 한 줄도 없다.
+#   ★ 첫 호출(또는 로드 직후)은 기준점만 잡고 진행 0이다(_furnace_abs_min = -1 = 미초기화).
+#   ★ 역행(디버그로 day를 되감는 등)은 원장이 무동작 처리하고 기준점만 다시 잡는다.
+func _tick_furnaces() -> void:
+	if furnace == null or clock == null:
+		return
+	var now := float(clock.day - 1) * 1440.0 + clock.minutes
+	if _furnace_abs_min < 0.0:
+		_furnace_abs_min = now
+		return
+	var delta_min := now - _furnace_abs_min
+	if delta_min <= 0.0:
+		_furnace_abs_min = now              # 정지·역행 — 기준점만 갱신(진행 0)
+		return
+	# 정수 분만 소비하고 소수 잔여는 기준점에 남긴다(프레임률이 진행 속도를 흔들지 않게).
+	var whole: float = floor(delta_min)
+	if whole < 1.0:
+		return
+	_furnace_abs_min += whole
+	var done: Array = furnace.advance_minutes(whole)
+	if not done.is_empty():
+		_notice("업화로 %d기의 제련이 끝났다 — [F]로 주괴를 꺼내자" % done.size())
 
 # 스프링클러 1개를 네오 만물상에서 산다(그레이박스 획득 경로 — 카탈로그의 정식 제작 게이트는 채광 재료가
 # Slice 5 의존이라 구매로 대체). 씨앗 구매(_buy_seed_store_n)와 같은 결: 네오 호감도 할인가·골드 부족 방어.
@@ -10344,46 +10668,127 @@ func _try_donate_selected() -> void:
 		_toast_item(rid, n)
 		_notice("혼백관 답례 — %s ×%d (전시 %d점 달성)" % [ItemCatalog.name_of(rid), n, int(m["count"])])
 
-# ═══ ★[S4-T4 / ADR-0062 결정 6] 대장간 무인 도구 업그레이드 스텁 ═════════════════════
-# ADR-0027이 업그레이드 무대로 지목한 업화 대장간을, 점주 없이 **무인 서비스**로 먼저 연다
-# (Slice 2 혼백관 무인 기증대 선례 — 얼굴 없는 서비스로 열고 점주는 나중). 스코프는 딱 셋이다:
-#   ㉠ 골드 단독 구매(잠정 — 저승 금속 재료 요구는 S5 대장간 본무대)
-#   ㉡ 즉시 반영(스타듀식 2일 대기 없음 — 잠정. 대기를 넣으려면 "맡긴 도구" 상태가 필요한데 그건
-#      점주·수리대 UI가 있어야 읽히는 구조다. S5 재검토)
-#   ㉢ 도끼만 실효 — 나머지 3종은 "준비 중"으로 존재만 알린다(ADR-0027 축을 미리 보이게)
+# ═══ ★[S4-T4 → S5-T3 / ADR-0063 결정 3·6] 업화 대장간 서비스 ═════════════════════
+# S4가 점주 없이 연 무인 업그레이드대(혼백관 무인 기증대 선례)가 S5에서 **정식화**됐다:
+#   ㉠ 재료 = 골드 + **해당 주괴 5개**(ADR-0062 "골드 단독(잠정)"을 대체). ★소급 없음 — 이미 산
+#      티어는 그대로고 *다음* 계단부터 주괴를 요구한다(원장이 "무엇으로 샀나"를 안 들기 때문에
+#      이 성질은 구조적으로 공짜다).
+#   ㉡ 즉시 반영 유지(스타듀식 2일 대기 **비채택** — ADR-0063 결정 3이 QoL로 정식 승격했다).
+#   ㉢ **전 도구 4종 실효** — "준비 중" 문구가 사라졌다. 어느 도구를 벼릴지는 **든 도구가 정한다**
+#      (ADR-0024 §2 "든 도구가 동사" — 대장간에 도구 선택 UI를 새로 세우지 않는다).
+#   ㉣ 지오드 개봉(개당 25냥)은 점주 **풀무**의 [F]가 받는다(클린트 1:1 — `_try_open_geode`).
 
-# 업그레이드대 프롬프트 — 현재 티어 · 다음 티어 · 가격 · 지불 가능 여부를 한 줄로.
+# 지금 모루에서 벼릴 도구 = 든 것이 업그레이드 대상이면 그것, 아니면 ""(안내만).
+# ★ 낚싯대·태클도 CAT_TOOL이지만 ToolTier.TOOLS에 없어 자연히 걸러진다(무기 티어는 완전 별 축 —
+#   ADR-0031 결정 7. 대장간이 검을 벼리지 않는다).
+func _smithy_target_tool() -> String:
+	var held := inventory.selected_id() if inventory != null else ""
+	return held if ToolTier.is_upgradable(held) else ""
+
+# 업그레이드대 프롬프트 — 현재 티어 · 다음 티어 · 가격 · 주괴 · 지불 가능 여부를 한 줄로.
+# ★ tool_id "" = 든 게 도구가 아님 → 무엇을 들고 오라는 안내(어느 도구도 "준비 중"이 아니다).
 func _tool_upgrade_prompt(tool_id: String) -> String:
-	if not ToolTier.is_upgradable(tool_id):
-		return "업화 대장간 — %s 벼림은 준비 중" % ItemCatalog.name_of(tool_id)
+	if tool_id == "" or not ToolTier.is_upgradable(tool_id):
+		return "업화 대장간 모루 — 벼릴 도구(도끼·곡괭이·괭이·물뿌리개)를 들고 서자"
 	var cur := tool_tier.tier_of(tool_id)
 	var cur_nm := ToolTier.tier_name(tool_id, cur)
 	var nxt := tool_tier.pending_upgrade(tool_id)
 	if nxt.is_empty():
-		return "업화 대장간 — %s (최고 티어). 곡괭이·괭이·물뿌리개 벼림은 준비 중" % cur_nm
+		return "업화 대장간 — %s (최고 티어)" % cur_nm
 	var price := int(nxt["price"])
-	var line := "%s → %s · %d냥" % [cur_nm, String(nxt["name"]), price]
+	var ingot := String(nxt["ingot"])
+	var need := int(nxt["ingot_count"])
+	var have := inventory.count_of(ingot) if inventory != null else 0
+	var line := "%s → %s · %d냥 + %s %d" % [cur_nm, String(nxt["name"]), price,
+		ItemCatalog.name_of(ingot), need]
 	if wallet.gold < price:
 		return "업화 대장간 — %s (냥 부족 %d/%d)" % [line, wallet.gold, price]
+	if have < need:
+		return "업화 대장간 — %s (%s 부족 %d/%d)" % [line, ItemCatalog.name_of(ingot), have, need]
 	return "[F] 벼리기 — %s" % line
 
-# 무인 업그레이드 실행 — 골드 차감 → 티어 +1. 순차 강제(0→2 직행 없음)는 pending_upgrade가 구조적으로
-# 보장한다(다음 계단만 돌려주므로 두 계단을 한 번에 살 방법이 없다).
+# 업그레이드 실행 — **골드와 주괴가 둘 다 있어야** 티어 +1. 순차 강제(0→2 직행 없음)는
+# pending_upgrade가 구조적으로 보장한다(다음 계단만 돌려주므로 두 계단을 한 번에 살 방법이 없다).
+# ★ 차감 순서: 재료 검사를 **먼저 다 하고** 그 뒤에 둘을 함께 뺀다 — 골드만 나가고 주괴가 없어
+#   실패하는 반쯤 지불 상태를 만들지 않는다(wallet.spend를 검사로 쓰던 옛 코드의 함정).
 func _try_upgrade_tool(tool_id: String) -> bool:
 	if tool_tier == null or not ToolTier.is_upgradable(tool_id):
-		_notice("업화 대장간 — 아직 벼릴 수 없는 도구다 (준비 중)")
+		_notice("업화 대장간 — 벼릴 도구를 들고 모루 앞에 서자")
 		return false
 	var nxt := tool_tier.pending_upgrade(tool_id)
 	if nxt.is_empty():
 		_notice("%s — 더 벼릴 곳이 없다 (최고 티어)" % ToolTier.tier_name(tool_id, tool_tier.tier_of(tool_id)))
 		return false
 	var price := int(nxt["price"])
-	if not wallet.spend(price):
+	var ingot := String(nxt["ingot"])
+	var need := int(nxt["ingot_count"])
+	if wallet.gold < price:
 		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [String(nxt["name"]), price, wallet.gold])
 		return false
+	if inventory == null or inventory.count_of(ingot) < need:
+		_notice("%s %d개가 필요하다 (보유 %d개) — 업화로에서 광석을 녹여 오자"
+			% [ItemCatalog.name_of(ingot), need, inventory.count_of(ingot) if inventory != null else 0])
+		return false
+	if not wallet.spend(price):
+		return false                      # 방어(위 검사와 이중 — 도달하지 않는다)
+	inventory.remove_item(ingot, need)
 	tool_tier.upgrade(tool_id)
 	audio.sfx("ui")
-	_notice("업화로에서 %s를 벼렸다 — 더 굵은 것을 벨 수 있다" % String(nxt["name"]))
+	_notice("풀무가 %s를 벼렸다 — %s" % [String(nxt["name"]), _tier_effect_text(tool_id, int(nxt["tier"]))])
+	return true
+
+# 벼린 직후 "무엇이 달라졌나" 한 줄(도구별 효과 축이 달라 안내도 갈린다 — ADR-0027 차원 분리를
+# 플레이어가 읽는 형태). 순수 표시 파생.
+func _tier_effect_text(tool_id: String, tier: int) -> String:
+	match tool_id:
+		ToolTier.AXE:
+			return "성숙목 %d타 · 더 굵은 것을 벨 수 있다" % ToolTier.axe_mature_hp(tier)
+		ToolTier.PICKAXE:
+			return "광맥 %d타 · 보석 %d타" % [ToolTier.pickaxe_ore_hits(tier), ToolTier.pickaxe_gem_hits(tier)]
+		ToolTier.HOE, ToolTier.WATERING_CAN:
+			var a := ToolTier.aoe_of(tool_id, tier)
+			var span := "%d×%d칸" % [a.x, a.y]
+			if tool_id == ToolTier.WATERING_CAN:
+				return "%s · 물 %d칸" % [span, ToolTier.can_capacity(tier)]
+			return span
+	return ""
+
+# ── ★[S5-T3 / ADR-0063 결정 2·6] 지오드 개봉 — 풀무 [F] 서비스(개당 25냥) ─────────
+# 든 알돌 1개를 25냥 받고 깨 준다(클린트 1:1). 결과는 **개봉 카운터 시드**로 결정적이라
+# 헤드리스가 재현하고, 카운터가 늘어야 새 롤이라 같은 알돌을 다시 굴려 보는 exploit이 없다.
+func _geode_prompt() -> String:
+	var held := inventory.selected_id() if inventory != null else ""
+	if not MiningSkill.is_geode(held):
+		return "   [F] 알돌 개봉 (%d냥 — 알돌을 들고 오자)" % MiningSkill.GEODE_COST
+	if wallet.gold < MiningSkill.GEODE_COST:
+		return "   [F] %s 개봉 — 냥 부족 (%d/%d)" % [ItemCatalog.name_of(held), wallet.gold,
+			MiningSkill.GEODE_COST]
+	return "   [F] %s 개봉 (%d냥)" % [ItemCatalog.name_of(held), MiningSkill.GEODE_COST]
+
+# 개봉 실행. 반환 = 실제로 깼나(주민 shop_key 규약 — false면 F가 흘러간다).
+func _try_open_geode() -> bool:
+	var held := inventory.selected_id() if inventory != null else ""
+	if not MiningSkill.is_geode(held):
+		_notice("풀무 — 깨 줄 알돌을 들고 오게 (개당 %d냥)" % MiningSkill.GEODE_COST)
+		return true                       # 안내도 응대다(F를 소비 — 대화로 흘리지 않는다)
+	if wallet.gold < MiningSkill.GEODE_COST:
+		_notice("냥이 모자라다 — 알돌 개봉 %d냥 (보유 %d냥)" % [MiningSkill.GEODE_COST, wallet.gold])
+		return true
+	var res := MiningSkill.open_geode(held, _geode_opened, geode_double_chance())
+	if res.is_empty():
+		return true
+	var id := String(res["id"])
+	var n := int(res["count"])
+	if not inventory.add_item(id, n):
+		_notice("백팩이 가득 차 알돌을 깰 수 없다 — 자리를 비우고 오자")
+		return true                       # ★알돌·냥 둘 다 그대로다(부분 소모 0)
+	wallet.spend(MiningSkill.GEODE_COST)
+	inventory.remove_item(held, 1)
+	_geode_opened += 1                    # ★다음 개봉의 시드가 갈린다(재롤 차단)
+	_toast_item(id, n)
+	audio.sfx("harvest")
+	_notice("%s를 깼다 — %s ×%d" % [ItemCatalog.name_of(held), ItemCatalog.name_of(id), n])
+	queue_redraw()
 	return true
 
 # ★[S4-T4] 대장간 실내 그레이박스 — 업그레이드대(2×1 모루 대) + 북벽 업화로(붉은 불빛). 혼백관 진열과
@@ -10408,7 +10813,7 @@ func _draw_mine_floor() -> void:
 		draw_rect(Rect2(p + Vector2(7, 7), Vector2(TILE - 14, TILE - 14)), col)                  # 결정 몸통
 		draw_rect(Rect2(p + Vector2(9, 9), Vector2(6, 6)), col.lightened(0.35))                  # NW 광원 하이라이트
 		# 남은 타수 눈금 — 친 만큼 아래 띠가 줄어든다(진행이 화면에 보인다).
-		var need := MineFloors.node_hits(nid)
+		var need := MineFloors.node_hits(nid, pickaxe_tier())   # ★[S5-T3] 눈금도 든 곡괭이 기준으로
 		var done := mine_floors.node_hits_done(_mine_floor, t)
 		if done > 0 and need > 1:
 			var w := float(TILE - 12) * float(need - done) / float(need)
@@ -11274,6 +11679,38 @@ func _setup_residents() -> void:
 	#   중복 배정하면 "선물 경제 분산"이 깨지므로, 옹이는 일반 선물(GIFT_POINTS)만 받는 상태로 연다
 	#   (선물 채널 자체는 열려 있어 막힘 0 — ADR-0008 평평≠막힘). ★수액·원목 같은 *비-작물* 선물이
 	#   선물 채널에 편입되면(현재 선물은 수확물 전용) 옹이 선호는 명단풍꿀 결이 자연스럽다.
+
+	# ── ★ [S5-T3 / ADR-0063 결정 6] 풀무 — **업화 갱도 대장간 점주(T2 · 도깨비)**.
+	#    옹이와 **완전 동형**이다(선례 1:1): 점주 레이어(shop_key)와 관계 트랙(대화·선물·하트)이
+	#    서로를 게이팅하지 않는다([ADR-0060] 결정 8). S4의 무인 업그레이드대가 이 얼굴로 승격했다.
+	#    ★ADR-0008 관계-중립 불변 — 풀무 ♡은 **아무 메카닉 보정도 주지 않는다**(effect_fn 없음).
+	#      옹이·네오·뱃사공이 ♡→매대 할인을 먹는 것과 달리 대장간엔 매대가 없다: 도구 티어 가격은
+	#      *경제 곡선*이라 관계로 흔들리면 곡선 자체가 무의미해진다(pulmu.gd 주석의 그 근거).
+	#    ★두 창구가 **칸으로 갈린다**: 업그레이드 = 모루 칸(SMITHY_UPGRADE_TILE, 무인 [F] 유지) /
+	#      지오드 개봉 = 풀무 [F](점주가 깨 주는 서비스 — 클린트 1:1).
+	#    ★main.tscn 무수정 — script_path/needs_affinity로 노드·관계 트랙을 프레임워크가 낳는다.
+	var r_pulmu := Resident.new()
+	r_pulmu.id = "pulmu"
+	r_pulmu.display_name = "풀무"        # ★호칭 그대로(본명·설정은 서랍, owner 큐 — pulmu.gd 주석)
+	r_pulmu.script_path = "res://pulmu.gd"
+	r_pulmu.needs_affinity = true
+	r_pulmu.save_key = "pulmu_affinity"   # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_pulmu.can_gift = true               # T2 사귐 채널(선물)
+	r_pulmu.gift_target_ko = "풀무"
+	r_pulmu.portrait_stem = ""            # 초상화 없음 — 스프라이트·초상은 S5-T9/T10 아트 패스
+	# ★ 자리 = 대장간 **실내 모루 서편**(상시 영업 — 네오·옹이·뱃사공 선례 동형·"평평≠막힘" QoL).
+	# ⚠️ 옹이와 같은 이유로 스케줄 region을 **반드시 채운다**: 대장간 실내(y46..54)는 HOME 외부와
+	#   y가 겹쳐, region을 비우면 풀무가 안식 농원 마당에 서 보인다. require_indoor가 방까지 좁혀
+	#   이중으로 잠근다(갱도 지상에 있을 때도 실내에 들어와야 보인다).
+	r_pulmu.schedule = [{"from_min": 0, "tile": PULMU_TILE, "region": RegionCatalog.EOPHWA_MINE}]
+	r_pulmu.require_visible = true
+	r_pulmu.require_indoor = "대장간"
+	r_pulmu.prompt_extra = func() -> String: return _geode_prompt()
+	r_pulmu.shop_key = func() -> bool: return _try_open_geode()
+	_register_resident(r_pulmu)
+	# ★선호 선물 = **없음**(옹이와 같은 판단·잠정 owner 큐). 실존 작물 5종이 이미 전부 배정돼
+	#   남은 게 0이라 중복 배정으로 "선물 경제 분산"을 깨지 않는다(일반 선물은 그대로 받는다 —
+	#   막힘 0, ADR-0008). ★비-작물 선물이 편입되면 풀무 선호는 혼탄·주괴 결이 자연스럽다.
 
 # 옹이 하트(목공방 매대 할인의 유일한 입력). 레코드가 없거나 관계 트랙이 없으면 0 = 정가(방어).
 # ★네오·뱃사공 하트와 **서로 참조 0** — 세 가게 할인이 완전히 독립임을 이 조회로 못 박는다.
@@ -12166,6 +12603,7 @@ func _draw() -> void:
 			_draw_customers()
 			_draw_night_customers()
 			_draw_jobgui()
+	_draw_furnaces()        # ★[S5-T3] 세워 둔 업화로(구역 무관 — 전 지상 무대에 놓을 수 있다)
 	_draw_forage_detect()   # ★[S4-T2] 혼 감지 가장자리 여우불 + 추적자 ▼(대상 없으면 무동작 — 구역 무관)
 	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
 	if _edit_mode:          # ★ ADR-0025 ① 배치 모드 오버레이(선택·마우스 칸·팔레트 고스트)
@@ -12630,6 +13068,35 @@ func _draw_encroach_weeds() -> void:
 	for t in reclaim.weed_tiles():
 		var tex := _debris_variant_tex(PROP_DEBRIS_WEEDS, t)
 		draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), tsz), false)
+
+# ★[S5-T3 / ADR-0063 결정 3] 업화로 그레이박스 렌더(설치물 — 아트는 S5-T9/T10 아트 패스).
+#   돌 아궁이 + 상태 3색: 빈 화덕 = 식은 검정 / 제련 중 = 붉은 불 + 남은 시간 눈금 / 완성 = 금빛 덩이.
+#   "지금 저 화덕이 무슨 상태인가"가 프롬프트를 안 읽어도 보이는 게 이 렌더의 유일한 목적이다
+#   (게잡이통·채취기 상태 색 구분과 같은 결). 순수 시각 — 좌표·상태는 FurnaceLedger 소유.
+func _draw_furnaces() -> void:
+	if furnace == null or _indoor != "" or _mine_floor != 0:
+		return
+	for t: Vector2i in furnace.tiles(_region):
+		var base := Vector2(t.x * TILE, t.y * TILE)
+		# 아궁이 몸통(돌) + NW 광원 상판.
+		draw_rect(Rect2(base + Vector2(3, 6), Vector2(TILE - 6, TILE - 8)), Color(0.30, 0.28, 0.27))
+		draw_rect(Rect2(base + Vector2(3, 6), Vector2(TILE - 6, 4)), Color(0.42, 0.39, 0.37))
+		# 화구(아궁이 입) — 상태 3색.
+		var mouth := Rect2(base + Vector2(8, 14), Vector2(TILE - 16, TILE - 20))
+		if furnace.is_ready(_region, t):
+			draw_rect(mouth, Color(0.96, 0.80, 0.34))                     # 완성 = 금빛 덩이
+			draw_rect(Rect2(base + Vector2(11, 17), Vector2(TILE - 22, TILE - 26)), Color(1.0, 0.94, 0.66))
+		elif furnace.is_smelting(_region, t):
+			draw_rect(mouth, Color(0.78, 0.28, 0.12))                     # 제련 중 = 붉은 불
+			draw_rect(Rect2(base + Vector2(11, 18), Vector2(TILE - 22, TILE - 28)), Color(0.98, 0.62, 0.20))
+			# 남은 시간 눈금 — 익을수록 아래 띠가 찬다(진행이 화면에 보인다·광맥 타수 눈금과 같은 결).
+			var ore := furnace.ore_at(_region, t)
+			var total := maxi(FurnaceLedger.smelt_minutes(ore, smelt_time_cut()), 1)
+			var left := furnace.minutes_left(_region, t)
+			var w := float(TILE - 10) * float(total - left) / float(total)
+			draw_rect(Rect2(base + Vector2(5, TILE - 6), Vector2(w, 3)), Color(0.92, 0.72, 0.32))
+		else:
+			draw_rect(mouth, Color(0.12, 0.11, 0.12))                     # 빈 화덕 = 식은 검정
 
 # ★ [S1R-T9] 저승 스프링클러 그레이박스 렌더(설치물 — 아트는 후속 아트 패스). 각 설치 칸에 청록 몸통 +
 #   물방울 머리를 그리고, 급수 십자 4칸을 옅은 물빛 표식으로 얹어 "무엇을 적시는지" 보이게 한다(순수 시각).

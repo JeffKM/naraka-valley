@@ -2,7 +2,7 @@ extends SceneTree
 # ★[S4-T5 / ADR-0062 결정 5] 손 제작 시스템 헤드리스 단위검증.
 #
 # 무엇을 보증하나:
-#   ① 카탈로그 무결성 — 레시피 9종·산출/재료 아이템 전부 ItemCatalog 유효(오타 = 여기서 잡힘).
+#   ① 카탈로그 무결성 — 레시피 10종(★S5-T3 업화로 합류)·산출/재료 아이템 전부 ItemCatalog 유효.
 #   ② 레벨 해금 계단 — 야생 씨앗 lvl1/4/6/7·수액 채취기 lvl4(스타듀 상속).
 #   ③ 종 발견 게이트(ADR-0033 #4) — 희소종 씨앗은 그 종을 *주워 본* 뒤에만(발견 원장 주입).
 #   ④ can_craft — 재료 부족/충족 판정(보유량 콜백 주입 — 카탈로그는 인벤 무지).
@@ -42,7 +42,8 @@ func _run_checks() -> void:
 	# ── ① 카탈로그 무결성 ──
 	print("── ① 카탈로그 무결성 ──")
 	var ids: Array = CraftCatalog.ids()
-	_check("①a 레시피 9종", ids.size() == 9)
+	# ★[S5-T3 / ADR-0063 결정 3] 9 → 10: 업화로 레시피가 합류했다(의도적 불변식 개정).
+	_check("①a 레시피 10종(★S5-T3 업화로 합류)", ids.size() == 10)
 	var all_ok := true
 	for id in ids:
 		var r: Dictionary = CraftCatalog.get_recipe(id)
@@ -113,7 +114,7 @@ func _run_checks() -> void:
 	# ── ⑥ 제작 탭 행 데이터 ──
 	print("── ⑥ 제작 탭 행 ──")
 	var rows: Array = m._craft_rows()
-	_check("⑥a 9행·id/이름 채움", rows.size() == 9 and String(rows[0]["name"]) != "")
+	_check("⑥a 10행·id/이름 채움", rows.size() == 10 and String(rows[0]["name"]) != "")
 	var locked_seen := false
 	for row in rows:
 		if not bool(row["unlocked"]):

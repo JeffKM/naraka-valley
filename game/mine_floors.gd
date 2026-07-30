@@ -97,11 +97,13 @@ const N_GEM_MYEONGOK := "gem_myeongok"            # 명옥(21층+)
 const N_GEM_YEOMJUSEOK := "gem_yeomjuseok"        # 염주석(41층+)
 const N_GEM_MYEONGBU := "gem_myeongbu_geumgang"   # 명부금강(31층+ 희귀 — 다이아 대응)
 
-# 노드 타수(*잠정* — 곡괭이 티어 감산은 S5-T3 소관이라 지금은 0티어 고정값 하나뿐이다.
-# 도끼 `TreeLedger.HP_MATURE` 선례와 같은 자리 — 티어 배선은 T3가 이 함수 위에 얹는다).
-const ROCK_HITS := 1    # 일반 돌 = 즉발(S5-T1과 동일)
-const ORE_HITS := 3     # 광석·혼탄 광맥
-const GEM_HITS := 5     # 보석·지오드 노드
+# 노드 타수 — **0티어 기준값**(도끼 `TreeLedger.HP_MATURE` 선례와 같은 자리).
+# ★[S5-T3] 곡괭이 티어 감산이 `node_hits(node_id, tier)`로 이 위에 얹혔다. 감산 규칙표의 단일
+#   출처는 `ToolTier.PICK_ORE_HITS`/`PICK_GEM_HITS`이고, 그 [0]이 아래 두 상수와 같아야 한다
+#   (tool_tier_test ⑨가 단언 — TreeLedger.HP_MATURE ↔ AXE_MATURE_HP[0] 관계와 정확히 동형).
+const ROCK_HITS := 1    # 일반 돌 = 즉발(티어 무관 — 이미 1타라 깎을 게 없다)
+const ORE_HITS := 3     # 광석·혼탄 광맥(0티어)
+const GEM_HITS := 5     # 보석·지오드 노드(0티어)
 
 # 층당 노드 총수(*잠정*) — 3~7개. 가중치상 대부분이 광석이라 "층당 광석 노드 2~5 + 보석/지오드는
 # 가끔"이라는 스타듀 체감에 맞는다. 돌이 그보다 적은 층은 돌 수가 상한이다.
@@ -157,12 +159,15 @@ static func node_kinds() -> Array[String]:
 		out.append(String(e["id"]))
 	return out
 
-# 이 칸을 부수는 데 드는 타수. ""(일반 돌) = 1 · 광석/혼탄 = 3 · 보석/지오드 = 5.
-# ★ 곡괭이 티어 감산은 S5-T3 소관 — 여기 반환값 위에 얹힌다(이 함수는 0티어 기준값만 안다).
-static func node_hits(node_id: String) -> int:
+# 이 칸을 부수는 데 드는 타수. ""(일반 돌) = 1 · 광석/혼탄 = 3~1 · 보석/지오드 = 5~2.
+# ★[S5-T3 / ADR-0063 결정 3] **곡괭이 티어 감산의 유일한 접점**이다. 도끼가
+#   `TreeLedger._effective_hp(e, tier)` 하나로 접힌 것과 동형이라, main 배선은 인자 하나만 늘었다.
+#   감산 규칙표는 ToolTier가 들고(수치 복제 0) 여기선 부류 → 어느 표인지만 가른다.
+# ★ tier 기본값 0이라 **인자 없는 기존 호출은 거동 불변**이다(mining_test·드로우 호출부 회귀 0).
+static func node_hits(node_id: String, tier: int = 0) -> int:
 	match node_class(node_id):
-		NODE_ORE, NODE_COAL: return ORE_HITS
-		NODE_GEM, NODE_GEODE: return GEM_HITS
+		NODE_ORE, NODE_COAL: return ToolTier.pickaxe_ore_hits(tier)
+		NODE_GEM, NODE_GEODE: return ToolTier.pickaxe_gem_hits(tier)
 	return ROCK_HITS
 
 # ── 층·밴드 조회(순수 상수 함수) ─────────────────────────────────────────────
