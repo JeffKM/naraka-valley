@@ -302,6 +302,10 @@ const FISH_ICONS := {
 	# 전설 2종
 	FishCatalog.GEOMEUNYEOUL_DAEMEGI: preload("res://assets/fish/geomeunyeoul_daemegi.png"),
 	FishCatalog.SIMYEON_MANJANGEO: preload("res://assets/fish/simyeon_manjangeo.png"),
+	# ★[S5-T10] 업화 갱도 지상 호수 2종 — 삼도천·황천해 어종과 **같은 dict**다(어롱·매대·릴 격투
+	#   HUD가 전부 이 한 맵을 본다). 톤 계수도 같아(0.90/0.97) 한 목록에서 둘만 튀지 않는다.
+	FishCatalog.DOLBINEUL_CHI: preload("res://assets/fish/dolbineul_chi.png"),
+	FishCatalog.EOPHWA_BUNGJANGEO: preload("res://assets/fish/eophwa_bungjangeo.png"),
 	# ★[S3-T7] 게잡이통 통용물 3종(어획물과 같은 CAT_HARVEST — 흰박스 폴백을 메운다)
 	ItemCatalog.NEOK_GE: preload("res://assets/fish/neok_ge.png"),
 	ItemCatalog.HON_JOGAE: preload("res://assets/fish/hon_jogae.png"),
@@ -391,6 +395,57 @@ const MATERIAL_ICONS := {
 	ItemCatalog.EMBER_SHARD: preload("res://assets/materials/ember_shard.png"),
 	ItemCatalog.PETRIFIED_WOOD: preload("res://assets/materials/petrified_wood.png"),
 	ItemCatalog.ROTTEN_NET: preload("res://assets/materials/rotten_net.png"),
+}
+
+# ★ [S5-T10 / ADR-0063 아트 스코프] 갱도·나락 슬라이스 아이콘 27종 — 광물 5·주괴 4·보석 5·
+# 지오드 2·무기 5·소모품 3·잡귀 드랍 3. TOOL/FERT/SAPLING/FISH/GEAR/FORAGE/MATERIAL_ICONS와
+# **정확히 같은 결**이다: 한 dict를 `icons`에 병합하면 핫바·인벤·매대·토스트가 전부
+# `_draw_icon`/`_item_icon` 한 경로로 텍스처를 집는다. **드로우 분기 추가 0** —
+# 광물·주괴·드랍 = CAT_MATERIAL · 무기 = CAT_TOOL · 환약·계단 = CAT_CONSUMABLE ·
+# 열쇠 = CAT_MATERIAL 로 이미 전부 "텍스처 있으면 쓰고 없으면 색박스" 분기를 타고 있었다.
+#
+# ★색의 단일 출처는 `_MINE_NODE_COLORS`/`_NARAK_NODE_COLORS`/`WeaponCatalog.color`이고,
+#   아이콘은 그 색을 **틴트로 물려받는다**(tools/make_mob_art.py). 그래서 인벤 슬롯의 명동과
+#   층 광맥의 명동과 바닥 반짝이의 명동이 같은 붉은 구리다 — 세 곳이 갈리면 "같은 광물인데
+#   무대마다 다른 색"이 되어 플레이어가 광물 정체를 색으로 못 배운다.
+const MINE_ICONS := {
+	# 광물 5(광석 4 + 혼탄) — 원본 1장 + 종색 틴트 4(혼탄만 단품: 검정은 틴트로 안 나온다)
+	ItemCatalog.ORE_MYEONGDONG: preload("res://assets/materials/ore_myeongdong.png"),
+	ItemCatalog.ORE_YUCHEOL: preload("res://assets/materials/ore_yucheol.png"),
+	ItemCatalog.ORE_HWANGCHEONGEUM: preload("res://assets/materials/ore_hwangcheongeum.png"),
+	ItemCatalog.ORE_NARAKCHEOL: preload("res://assets/materials/ore_narakcheol.png"),
+	ItemCatalog.HONTAN: preload("res://assets/materials/hontan.png"),
+	# 주괴 4 — 원본 1장 + 틴트. 광석(덩이)과 **형태 계급이 다르다**(사다리꼴 바)라 제련 전후가
+	#   인벤에서 한눈에 갈린다(색만 갈면 같은 돌 여덟 개가 된다).
+	ItemCatalog.INGOT_MYEONGDONG: preload("res://assets/materials/ingot_myeongdong.png"),
+	ItemCatalog.INGOT_YUCHEOL: preload("res://assets/materials/ingot_yucheol.png"),
+	ItemCatalog.INGOT_HWANGCHEONGEUM: preload("res://assets/materials/ingot_hwangcheongeum.png"),
+	ItemCatalog.INGOT_NARAKCHEOL: preload("res://assets/materials/ingot_narakcheol.png"),
+	# 보석 5 — 원석 다발 3 + **가공석(브릴리언트) 2**. 넋수정(투명 백)과 명부금강(백청)은 종색이
+	#   거의 붙어 있어 같은 실루엣에 얹으면 슬롯에서 구분이 안 된다 → 최상위 2종만 형태를 갈랐다.
+	ItemCatalog.GEM_NEOKSUJEONG: preload("res://assets/materials/gem_neoksujeong.png"),
+	ItemCatalog.GEM_MYEONGOK: preload("res://assets/materials/gem_myeongok.png"),
+	ItemCatalog.GEM_YEOMJUSEOK: preload("res://assets/materials/gem_yeomjuseok.png"),
+	ItemCatalog.GEM_MYEONGBU_GEUMGANG: preload("res://assets/materials/gem_myeongbu_geumgang.png"),
+	ItemCatalog.GEM_OSAEK_HONOK: preload("res://assets/materials/gem_osaek_honok.png"),
+	# 지오드 2 — 원본 1장 + 틴트(넋알돌 흙빛 / 업화알돌 달군 흙빛)
+	ItemCatalog.GEODE_NEOKAL: preload("res://assets/materials/geode_neokal.png"),
+	ItemCatalog.GEODE_EOPHWA: preload("res://assets/materials/geode_eophwa.png"),
+	# 무기 5 — 곧은 검 원본 1장 + 티어 틴트 4 / 업화도만 **굽은 도(刀)** 별 원본(엔드게임 한 자루는
+	#   색이 아니라 실루엣으로 서야 한다). CAT_TOOL이라 도구 아이콘과 같은 칸에 뜬다.
+	ItemCatalog.SWORD_RUSTY: preload("res://assets/materials/sword_rusty.png"),
+	ItemCatalog.SWORD_MYEONGDONG: preload("res://assets/materials/sword_myeongdong.png"),
+	ItemCatalog.SWORD_YUCHEOL: preload("res://assets/materials/sword_yucheol.png"),
+	ItemCatalog.SWORD_HWANGCHEONGEUM: preload("res://assets/materials/sword_hwangcheongeum.png"),
+	ItemCatalog.SWORD_EOPHWADO: preload("res://assets/materials/sword_eophwado.png"),
+	# 소모품·열쇠 3
+	ItemCatalog.MYEONGBUHWAN: preload("res://assets/materials/myeongbuhwan.png"),
+	ItemCatalog.STAIRS: preload("res://assets/materials/stairs.png"),
+	ItemCatalog.NARAK_KEY: preload("res://assets/materials/narak_key.png"),
+	# 잡귀 드랍 3(넋가루·혼불씨 = 갱도/나락 잡귀 · 나락혼정 = 관문 보스 확정 드랍)
+	ItemCatalog.NEOKGARU: preload("res://assets/materials/neokgaru.png"),
+	ItemCatalog.HONBULSSI: preload("res://assets/materials/honbulssi.png"),
+	ItemCatalog.NARAK_HONJEONG: preload("res://assets/materials/narak_honjeong.png"),
 }
 
 # 야생·혼합·희귀 씨앗 봉지 9종. **키 = 작물 id**(위 주석 CAT_SEED 참조). 아홉 장 다 같은 봉지
@@ -934,6 +989,29 @@ const MINE_TEX_CHEST := preload("res://assets/props/mine_chest.png")
 const NARAK_TEX_SEAL := preload("res://assets/props/narak_seal.png")
 const SMITHY_TEX_ANVIL := preload("res://assets/props/smithy_anvil.png")
 const GUILD_TEX_RACK := preload("res://assets/props/guild_weapon_rack.png")
+# ★[S5-T10 / ADR-0063 아트 스코프] 업화로 화덕(64×32 = 2×1칸 · 모루와 같은 규격) — [§16.6]이
+#   자리를 예약해 둔 대장간 실내의 **마지막 그레이박스**(붉은 사각 + 주홍 심지)의 교체분.
+const SMITHY_TEX_FORGE := preload("res://assets/props/smithy_forge.png")
+# ★[S5-T10] 잡귀 스프라이트 12종 — 갱도 6 · 나락 강몹 3(전부 32²) · 관문 보스 3(64²).
+#   ※ 키는 MobCatalog 종 id와 같은 문자열이되 **리터럴로 둔다**(_MINE_NODE_COLORS와 같은 관례 —
+#     const 초기화식에서 타 클래스 상수를 안 읽는다). mob_test가 로스터 대조로 누락을 잡고,
+#     미등록 종은 드로우에서 옛 색박스로 폴백이라 조용히 깨지지도 않는다.
+#   ★프레임 크기가 곧 체급이다: 보스만 64²라 스프라이트를 늘리지 않아도 "저건 다른 급"이 읽힌다
+#     (그레이박스가 보스를 1.7배 사각으로 그리던 규칙의 아트판 — 배율 코드가 사라졌다).
+const MOB_TEX := {
+	"mob_heotgeot": preload("res://assets/mobs/heotgeot.png"),
+	"mob_eodukkaebi": preload("res://assets/mobs/eodukkaebi.png"),
+	"mob_dalgyal": preload("res://assets/mobs/dalgyal.png"),
+	"mob_geuseundae": preload("res://assets/mobs/geuseundae.png"),
+	"mob_bulgasari": preload("res://assets/mobs/bulgasari.png"),
+	"mob_hwagwi": preload("res://assets/mobs/hwagwi.png"),
+	"mob_yacha": preload("res://assets/mobs/yacha.png"),
+	"mob_nachal": preload("res://assets/mobs/nachal.png"),
+	"mob_agwi": preload("res://assets/mobs/agwi.png"),
+	"boss_okjol": preload("res://assets/mobs/boss_okjol.png"),
+	"boss_nachalwang": preload("res://assets/mobs/boss_nachalwang.png"),
+	"boss_daeagwi": preload("res://assets/mobs/boss_daeagwi.png"),
+}
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로).
 # ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
@@ -8145,6 +8223,8 @@ func _merge_t10_icons(icons: Dictionary) -> void:
 		icons[mat_id] = MATERIAL_ICONS[mat_id]
 	for crop_id in SEED_PACKET_ICONS:
 		icons[crop_id] = SEED_PACKET_ICONS[crop_id]
+	for mine_id in MINE_ICONS:
+		icons[mine_id] = MINE_ICONS[mine_id]       # ★ [S5-T10] 광물·주괴·보석·무기·소모품(색박스 대체)
 
 func _setup_hotbar() -> void:
 	hotbar = HotbarHud.new()
@@ -9141,6 +9221,8 @@ func _item_icon(id: String) -> Texture2D:
 		return FORAGE_ICONS[id]
 	if MATERIAL_ICONS.has(id):                 # ★ [S4-T10] 원목·수액·나무 씨앗(벌목·수거 토스트)
 		return MATERIAL_ICONS[id]
+	if MINE_ICONS.has(id):                     # ★ [S5-T10] 광물·주괴·보석·무기·드랍(채굴·제련·처치 토스트)
+		return MINE_ICONS[id]
 	# 씨앗은 아이템 id가 아니라 **작물 id**로 아이콘을 잡는다(SEED_PACKET_ICONS 주석 — 인벤과 같은 규약).
 	var packet_crop := ItemCatalog.crop_of(id)
 	if packet_crop != "" and SEED_PACKET_ICONS.has(packet_crop):
@@ -12422,21 +12504,47 @@ func _draw_mine_mobs() -> void:
 			col = COLORS[ROCK]                       # 위장 = 바위인 척(같은 톤이라 눈에 안 걸린다)
 		if m.hurt > 0.0:
 			col = col.lerp(Color.WHITE, 0.55)        # 피격 플래시
-		# ★[S5-T7] 관문 보스는 몸집이 1.7배다 — 스프라이트가 붙기 전까지 "저건 다른 급이다"를 실루엣이
-		#   먼저 말해야 한다(HP 바 하나로는 500·800·1200이 안 읽힌다).
-		var scale := 1.7 if MobCatalog.is_boss(m.kind) else 1.0
-		var body := Rect2(m.pos - Vector2(TILE * 0.34, TILE * 0.40) * scale,
-			Vector2(TILE * 0.68, TILE * 0.80) * scale)
-		draw_rect(body.grow(1.0), col.darkened(0.55))                                        # 외곽선
-		var top_h := body.size.y * 0.42
-		draw_rect(Rect2(body.position, Vector2(body.size.x, top_h)), col.lightened(0.14))     # 머리(밝게)
-		draw_rect(Rect2(body.position + Vector2(0, top_h),
-			Vector2(body.size.x, body.size.y - top_h)), col.darkened(0.20))                  # 몸통(어둡게)
+		# ★[S5-T10] 위장 중(달걀귀신)은 **층의 돌 프롭 그 자체**를 그린다. 그레이박스 시절엔 "바위색
+		#   사각"이 최선이었지만 이제 진짜 돌 그림이 있으므로, 옆 칸에 실제로 서 있는 돌과 **완전히
+		#   같은 그림**이어야 위장이 위장이 된다(색만 맞춘 사각은 자세히 보면 티가 난다).
+		#   ★타일 정렬이 아니라 m.pos 발치 기준이다 — 몹은 픽셀 연속 위치라 프롭 문법을 못 쓴다.
 		if not m.awake:
+			var rsz := MINE_TEX_ROCK.get_size()
+			var rp := m.pos - Vector2(rsz.x * 0.5, rsz.y - TILE * 0.40)
+			# ★발치 타원 그림자까지 함께 건다 — `_draw_mine_prop`이 진짜 돌마다 까는 그 그림자다.
+			#   빠뜨리면 "그림자 없는 돌 하나"가 되어 위장이 눈으로 들킨다(색만 맞춘 그레이박스
+			#   시절과 같은 실패). 타일 좌표가 아니라 픽셀 rect 기준이라 헬퍼 대신 두 줄을 편다.
+			draw_set_transform(Vector2(rp.x + rsz.x * 0.5 + 2.0, rp.y + rsz.y - 2.0), 0.0,
+				Vector2(1.0, 0.22))
+			draw_circle(Vector2.ZERO, rsz.x * 0.40, Color(0, 0, 0, 0.30))
+			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			draw_texture_rect(MINE_TEX_ROCK, Rect2(rp, rsz), false, _mine_cast(1.0))
 			continue                                  # 위장 중엔 HP 바·단서 없음(정말 바위처럼)
-		if MobCatalog.is_ranged(m.kind):
-			draw_rect(Rect2(body.position + body.size * 0.5 - Vector2(3, 3), Vector2(6, 6)),
-				_MOB_SHOT_COLOR)                      # 원거리 단서 = 몸통 속 불빛 심지
+		# ★[S5-T10] 몸통 = 종별 스프라이트. 프레임 크기가 곧 체급이라(보스만 64²) 그레이박스의
+		#   **1.7배 배율 코드가 사라졌다** — 체급을 코드가 아니라 아트가 든다.
+		#   발치선은 그레이박스와 **한 픽셀도 안 바뀐다**(m.pos.y + TILE*0.40) — 그래야 접촉 피해·
+		#   스윙 판정(원장이 m.pos로 보는 값)과 눈에 보이는 몸이 계속 같은 자리에 선다.
+		var tex: Texture2D = MOB_TEX.get(m.kind)
+		var body: Rect2
+		if tex != null:
+			var sz := tex.get_size()
+			body = Rect2(m.pos - Vector2(sz.x * 0.5, sz.y - TILE * 0.40), sz)
+			# 피격 플래시 = modulate를 1 위로 올려 **밝히는** 방식(곱셈이라 색을 섞을 수는 없다).
+			draw_texture_rect(tex, body, false,
+				Color(1.9, 1.9, 1.9) if m.hurt > 0.0 else Color.WHITE)
+		else:
+			# 옛 색박스 폴백(로스터 확장 중 아트 미도착 종 방어 — 조용히 안 깨진다).
+			var scale := 1.7 if MobCatalog.is_boss(m.kind) else 1.0
+			body = Rect2(m.pos - Vector2(TILE * 0.34, TILE * 0.40) * scale,
+				Vector2(TILE * 0.68, TILE * 0.80) * scale)
+			draw_rect(body.grow(1.0), col.darkened(0.55))                                    # 외곽선
+			var top_h := body.size.y * 0.42
+			draw_rect(Rect2(body.position, Vector2(body.size.x, top_h)), col.lightened(0.14)) # 머리(밝게)
+			draw_rect(Rect2(body.position + Vector2(0, top_h),
+				Vector2(body.size.x, body.size.y - top_h)), col.darkened(0.20))              # 몸통(어둡게)
+			if MobCatalog.is_ranged(m.kind):
+				draw_rect(Rect2(body.position + body.size * 0.5 - Vector2(3, 3), Vector2(6, 6)),
+					_MOB_SHOT_COLOR)                  # 원거리 단서 = 몸통 속 불빛 심지(스프라이트엔 불요)
 		var bar := Rect2(body.position.x, body.position.y - 5.0, body.size.x, 2.0)   # ★[S5-T7] 보스는 몸집 따라 넓어진다
 		draw_rect(bar, Color(0, 0, 0, 0.6))
 		var hp_col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), m.hp_ratio())
@@ -12457,11 +12565,12 @@ func _draw_smithy_room() -> void:
 	#   칸이 되도록 왼쪽으로 한 칸 당겨 앉힌다 — 그레이박스 돌 받침이 -TILE*0.5로 걸쳐 있던 자리와
 	#   같은 폭이고, 상호작용 칸은 한 칸도 안 움직인다(순수 장식 교체).
 	draw_texture_rect(SMITHY_TEX_ANVIL, Rect2(base - Vector2(TILE, 0), SMITHY_TEX_ANVIL.get_size()), false)
-	# 업화로 — 북벽 서편의 화덕(돌 아궁이 + 붉은 불). 순수 분위기(상호작용 없음).
+	# 업화로 — 북벽 서편의 화덕. 순수 분위기(상호작용 없음).
+	# ★[S5-T10] [§16.6]이 예약해 둔 자리에 프롭이 들어왔다(붉은 사각 3겹 → `smithy_forge` 64×32).
+	#   모루와 **같은 규격**이라 드로우 문법이 하나다. 좌표는 그레이박스와 같은 칸(rect+2, rect+1)이고,
+	#   높이 32라 §16.6의 "벽 링은 안 덮는다"(목재 기둥이 남아야 바위를 깎아 들인 방이 된다)를 지킨다.
 	var forge := Vector2(float(SMITHY_RECT.position.x + 2) * TILE, float(SMITHY_RECT.position.y + 1) * TILE)
-	draw_rect(Rect2(forge, Vector2(TILE * 1.5, TILE)), Color(0.26, 0.24, 0.24))
-	draw_rect(Rect2(forge + Vector2(6, 10), Vector2(TILE * 1.5 - 12, TILE - 16)), Color(0.72, 0.28, 0.14))
-	draw_rect(Rect2(forge + Vector2(10, 14), Vector2(TILE * 1.5 - 20, TILE - 24)), Color(0.95, 0.66, 0.24))
+	draw_texture_rect(SMITHY_TEX_FORGE, Rect2(forge, SMITHY_TEX_FORGE.get_size()), false)
 
 # ★[S4-T7 / ADR-0062 결정 7] 목공방 실내 그레이박스 — 카운터(옹이 앞 응대 줄) + 서벽 작업대 +
 #   동편 원목 더미. 대장간 `_draw_smithy_room`과 같은 결(순수 장식 · 충돌 없음 — 상호작용은 옹이
@@ -13400,7 +13509,10 @@ func _setup_residents() -> void:
 	r_pulmu.save_key = "pulmu_affinity"   # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_pulmu.can_gift = true               # T2 사귐 채널(선물)
 	r_pulmu.gift_target_ko = "풀무"
-	r_pulmu.portrait_stem = ""            # 초상화 없음 — 스프라이트·초상은 S5-T9/T10 아트 패스
+	# ★[S5-T10] 도트 초상화 도착(네오·뱃사공·옹이와 같은 **스톱갭** 지위 — owner Gemini 교체 큐).
+	#   표정 파일(smile/shy/sad)은 만들지 않는다 — `_set_portrait`가 없으면 idle로 떨어지므로
+	#   idle 한 장이 대사 전량을 덮는다(§15.6 옹이와 같은 규약).
+	r_pulmu.portrait_stem = "pulmu"
 	# ★ 자리 = 대장간 **실내 모루 서편**(상시 영업 — 네오·옹이·뱃사공 선례 동형·"평평≠막힘" QoL).
 	# ⚠️ 옹이와 같은 이유로 스케줄 region을 **반드시 채운다**: 대장간 실내(y46..54)는 HOME 외부와
 	#   y가 겹쳐, region을 비우면 풀무가 안식 농원 마당에 서 보인다. require_indoor가 방까지 좁혀
@@ -13433,7 +13545,10 @@ func _setup_residents() -> void:
 	r_mugol.save_key = "mugol_affinity"   # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_mugol.can_gift = true               # T2 사귐 채널(선물)
 	r_mugol.gift_target_ko = "무골"
-	r_mugol.portrait_stem = ""            # 초상화 없음 — 스프라이트·초상은 S5-T9/T10 아트 패스
+	# ★[S5-T10] 스프라이트는 도착했지만 **초상화는 아직 없다**. `character_to_portrait`가 비인간
+	#   재질을 사람 피부로 되돌리는 모델 한계(§15.6 옹이 선례)라 백골이 가장 불리한 입력이고,
+	#   gen 예산 상한(60) 안에서 실패 가능성이 큰 25 gen을 태우지 않았다 — owner Gemini 1순위.
+	r_mugol.portrait_stem = ""
 	# ★ 자리 = 길드 **실내 카운터 뒤**(상시 영업 — 네오·옹이·뱃사공·풀무 선례 동형·"평평≠막힘" QoL).
 	# ⚠️ 풀무와 같은 이유로 스케줄 region을 **반드시 채운다**: 길드 실내(y46..54)는 HOME 외부와 y가
 	#   겹쳐, region을 비우면 무골이 안식 농원 마당에 서 보인다. require_indoor가 방까지 좁혀 이중으로
