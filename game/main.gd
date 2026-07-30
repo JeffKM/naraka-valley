@@ -1796,6 +1796,8 @@ const _MINE_NODE_COLORS := {
 	"gem_myeongok": Color(0.42, 0.78, 0.62),          # 명옥 — 옥빛
 	"gem_yeomjuseok": Color(0.60, 0.36, 0.72),        # 염주석 — 자주
 	"gem_myeongbu_geumgang": Color(0.72, 0.90, 0.98), # 명부금강 — 백청
+	# ★[S5-T8] 돌 — 광맥 종에는 없지만 **바닥 반짝이**로는 깔린다(같은 색 표를 반짝이 드로우가 공유).
+	"stone": Color(0.70, 0.68, 0.64),                 # 돌 — 잿빛 석재
 }
 # ★[S5-T5 / ADR-0063 결정 8] 잡귀 그레이박스 색 — 아키타입이 눈으로 갈리는 정도까지만(스프라이트
 #   아트 = S5-T10). 밤 바 잡귀(JOBGUI 탁한 청록)와 톤을 겹치지 않게 각자 다른 색상환에 앉혔다.
@@ -2227,6 +2229,12 @@ var _cast_seed := 0              # ★[S3-T3] 이번 캐스팅의 시드(어종 
 # ★ 캐스팅 무대 = 삼도천·황천해 한정(ADR-0061 결정 9). 나루 배후 강·안식 연못은 이번 슬라이스에서
 #   비캐스팅("낚시의 집" 정체성 + 수면별 어종 테이블 스코프 억제 — 전 수면 개방은 owner 큐 서랍).
 const FISHING_REGIONS := [RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE]
+# ★[S5-T8 / ADR-0063 결정 10] **캐스팅** 무대만 갱도 호수로 넓힌다(ADR-0061 결정 9 부분 개정).
+#   ⚠️ FISHING_REGIONS와 **일부러 가른다**: 게잡이통(CrabPotLedger)의 어획 표는 서식지 무관 통용물
+#   표 하나뿐이라, 갱도까지 통을 열면 삼도천·황천해 산물이 지하 호수에서 나온다(무대 정체성 파손).
+#   통은 ADR-0061 결정 9의 두 무대에 그대로 남고, 넓어지는 건 낚싯대뿐이다.
+const CASTING_REGIONS := [RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE,
+	RegionCatalog.EOPHWA_MINE]
 # ★[S3-T3] 어종 추첨은 이제 FishCatalog(로스터 18종 · 절기/시간 잠금 · 체급 가중)가 한다 —
 #   S3-T2의 그레이박스 체급 컷(FISH_CLASS_CUTS)·_roll_fish_class는 그 가중에 흡수돼 제거됐다.
 # ★[S3-T6] 옛 중립 상수 FISHING_ENERGY_FACTOR는 폐기됐다 — 낚시 스킬이 실효되면서 혼력 절감·퍼펙트
@@ -4561,6 +4569,71 @@ func _open_mine_chest() -> void:
 		_notice("나락 열쇠를 손에 넣었다 — 갱도 지상의 나락 진입로가 열렸다", FLAVOR_SECS)
 	queue_redraw()
 
+# ── ★[S5-T8 / ADR-0063 결정 10] 바닥 반짝이 줍기(ADR-0033 무대 배정 이행) ─────
+# 층 바닥에 놓인 광물을 **손으로** 줍는다. 곡괭이질과 축이 통째로 갈린다:
+#   · 혼력 0(도구를 안 쓴다 — 든 것이 무엇이든 [F]로 줍는다)
+#   · **채집 XP 7**(채광 XP 아님 — ADR-0033/0063 확정. 꽃 패치·숲 줍기와 정확히 같은 값이고,
+#     "허리 굽혀 줍는 것은 전부 채집"이라는 이 코드베이스의 문법 그대로다)
+#   · 품질 무차원(광물은 등급 축이 없다 — ItemCatalog.MINERALS). 그래서 채집 품질 계단·약초학자
+#     하한·채집꾼 더블드랍이 **여기 안 낀다**: 채집물(FORAGEABLES)이 아니라 광물이라서다.
+#     ★잠정(owner 큐 — "갱도 줍기도 채집 퍼크를 받아야 하나"는 광물 품질 축 재론과 한 묶음이다).
+
+# 층 안 이 칸의 반짝이 종("" = 없거나 이미 주웠다). 배치 캐시에서 읽는다(`_mine_node_at` 결).
+func _mine_shimmer_at(t: Vector2i) -> String:
+	if not _in_mine_floor() or _mine_layout.is_empty():
+		return ""
+	if mine_floors.is_picked(_mine_floor, t):
+		return ""
+	for e: Dictionary in _mine_layout.get("shimmers", []):
+		if e["tile"] == t:
+			return String(e["id"])
+	return ""
+
+# 발밑 반짝이를 줍는다([F]). 인벤이 가득이면 **줍지 않는다** — 돌과 달리 되돌릴 자리가 있다
+# (물건이 바닥에 그대로 남아 비우고 다시 오면 된다). 그래서 XP도 이때는 안 준다.
+func _pick_mine_shimmer(t: Vector2i) -> void:
+	var id := _mine_shimmer_at(t)
+	if id == "" or inventory == null:
+		return
+	if not inventory.add_item(id, 1):
+		_notice("백팩이 가득 차 %s 를 줍지 못했다" % ItemCatalog.name_of(id))
+		return
+	mine_floors.mark_picked(_mine_floor, t)
+	_toast_item(id, 1)
+	_gain_forage_xp(ForageSkill.PICK_XP)   # ★채집 축(혼력 0 — 곡괭이질과 다른 동사)
+	audio.sfx("harvest")
+	queue_redraw()
+
+# ── ★[S5-T8 / ADR-0063 결정 10] 계단 소모품 ──────────────────────────────────
+# 든 채 LMB로 놓으면 그 자리에서 한 층 아래로 내려간다(사다리 탐색을 건너뛴다). 스타듀 Staircase 1:1.
+# ★ **갱도·나락 양쪽에서 쓴다**(결정 7의 리셋 런에서 계단은 사실상 유일한 가속 수단 — 해골동굴 1:1).
+#   나락에선 구멍 낙하(3~8층)와 달리 **낙하 피해가 없다**: 계단은 걸어 내려가는 물건이다.
+# ★ 소모는 **하강이 성립한 뒤**에 한다(전환 중·바닥 층에서 눌러 물건만 날리는 사고 방지).
+func _can_use_stairs() -> bool:
+	if _sleeping or _transitioning or _indoor != "":
+		return false
+	if _in_mine_floor():
+		return _mine_floor < MineFloors.MAX_FLOOR   # 60층 바닥 아래로는 계단도 못 놓는다
+	return _in_narak_floor()                        # 나락은 실질 무한 깊이(상한 판정은 NarakFloors)
+
+func _use_stairs() -> void:
+	if inventory == null or not _can_use_stairs():
+		if _in_mine_floor() and _mine_floor >= MineFloors.MAX_FLOOR:
+			_notice("갱도 바닥이다 — 계단을 놓을 자리가 없다")
+		elif not _sleeping and not _transitioning:
+			# 지상·농원·실내에서 눌렀을 때 — 조용히 무시하지 않는다(왜 안 되는지가 곧 쓰는 법이다).
+			_notice("계단은 갱도나 나락 층 안에서만 놓을 수 있다")
+		return
+	if not inventory.remove_item(ItemCatalog.STAIRS, 1):
+		return
+	if _in_mine_floor():
+		_notice("계단을 놓았다 — 갱도 %d층으로" % (_mine_floor + 1))
+		_descend_mine(_mine_floor + 1)
+	else:
+		_notice("계단을 놓았다 — 나락 %d층으로" % (_narak_depth + 1))
+		_descend_narak(_narak_depth + 1)          # fall_floors 0 = 낙하 피해 없음
+	audio.sfx("ui")
+
 # 지상에서 갱도 입구 문 칸에 서 있는가(층 진입 트리거). 잠긴 외관이라 _maybe_toggle_building은
 # 여전히 이 문을 모른다 — 진입은 [F] 전용이다(기증대·게시판과 같은 무인 F 결).
 func _at_dungeon_gate() -> bool:
@@ -4695,7 +4768,9 @@ func _mine_rock(t: Vector2i) -> void:
 #     (덤불 흔들기와 달리 되돌릴 자리가 없다 — 돌은 이미 부서졌다).
 func _award_mine_drop(t: Vector2i, node_id: String) -> void:
 	var res := MiningSkill.resolve_drop(node_id, clock.day, _mine_floor, t,
-		_skill_level(ProfessionCatalog.MINING), mining_ore_bonus(), mining_gem_pair_chance())
+		_skill_level(ProfessionCatalog.MINING), mining_ore_bonus(), mining_gem_pair_chance(), "mine",
+		# ★[S5-T8] 탐광자(혼탄 2배)·보석사(보석 한 계급 위) — 해석은 MiningSkill이, 보유는 여기가.
+		float(1.0 if mining_coal_double() else 0.0), mining_gem_rank_step())
 	var full := false
 	for d: Dictionary in res["drops"]:
 		var id := String(d["id"])
@@ -4925,7 +5000,9 @@ func _narak_rock(t: Vector2i) -> void:
 # (run, depth)가 (day, floor)와 같은 값이어도 결과가 안 겹친다.
 func _award_narak_drop(t: Vector2i, node_id: String) -> void:
 	var res := MiningSkill.resolve_drop(node_id, narak_floors.run_id(), _narak_depth, t,
-		_skill_level(ProfessionCatalog.MINING), mining_ore_bonus(), mining_gem_pair_chance(), "narak")
+		_skill_level(ProfessionCatalog.MINING), mining_ore_bonus(), mining_gem_pair_chance(), "narak",
+		# ★[S5-T8] 탐광자·보석사도 나락에서 똑같이 산다 — 곡괭이질의 문법은 무대가 달라도 하나다.
+		float(1.0 if mining_coal_double() else 0.0), mining_gem_rank_step())
 	var full := false
 	for d: Dictionary in res["drops"]:
 		var id := String(d["id"])
@@ -9124,10 +9201,9 @@ func crab_pot_no_junk() -> bool:         # 뱃사람(lvl10) — 잡동사니 배
 func crab_pot_bait_free() -> bool:       # 미끼장인(lvl10) — 미끼 불필요
 	return _perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_TRAP_NO_BAIT, 0.0) > 0.0
 
-# ── ★[S5-T2 / ADR-0063 결정 9] 채광 전문직 편의 조회 2종 ──────────────────────
-# 드랍 경로(_award_mine_drop → MiningSkill.resolve_drop)가 **이미 이 둘을 인자로 받는다**. 다만
-# ProfessionCatalog의 채광 트리 perks가 아직 비어 있어(값 인코딩 = S5-T8 소관) 지금은 항상 0/중립을
-# 돌려준다 — 덫꾼 갈래 3종과 정확히 같은 자리다(T8은 카탈로그만 채우면 여기 손댈 게 없다).
+# ── ★[S5-T2→T8 / ADR-0063 결정 9] 채광 전문직 편의 조회 4종 ──────────────────
+# T2가 만든 두 줄은 **시그니처가 한 글자도 안 바뀌었다** — 그때 예고한 대로 ProfessionCatalog의
+# 채광 트리 perks가 채워지자 그대로 실효됐다. T8이 더한 건 아래 두 줄(탐광자·보석사)뿐이다.
 func mining_ore_bonus() -> int:          # 광부(lvl5) — 광맥당 광석 +N
 	return MiningSkill.ore_bonus(
 		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_ORE_BONUS, 0.0))
@@ -9135,6 +9211,14 @@ func mining_ore_bonus() -> int:          # 광부(lvl5) — 광맥당 광석 +N
 func mining_gem_pair_chance() -> float:  # 지질사(lvl5) — 보석이 쌍으로 나올 확률
 	return MiningSkill.gem_pair_chance(
 		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_GEM_PAIR, 0.0))
+
+func mining_coal_double() -> bool:       # ★[S5-T8] 탐광자(lvl10) — 혼탄 광맥 산출 2배
+	return MiningSkill.coal_double(
+		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_COAL_DOUBLE, 0.0))
+
+func mining_gem_rank_step() -> int:      # ★[S5-T8] 보석사(lvl10) — 보석 계급 +N(승급 계단)
+	return MiningSkill.gem_rank_step(
+		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_GEM_RANK, 0.0))
 
 # ★ ADR-0052 채집물 기본 품질(채집 레벨 → 등급). L0~3 일반 / L4~6 은 / L7+ 금. 이리듐(최고)은 base로
 #   안 나오고 약초학자 전문직 하한으로만 닿는다. _pick_flower·_pick_forage가 하한과 max.
@@ -9668,6 +9752,11 @@ func _process(delta: float) -> void:
 		if _is_mine_chest(here):
 			_open_mine_chest()
 			return
+		# ★[S5-T8] 발밑 반짝이 줍기 — 상자 다음·사다리 앞이다. 반짝이는 사다리·상자 칸을 배제하고
+		#   깔리므로(MineFloors._scatter_shimmers) 실제로 겹치지 않지만, 순서를 못 박아 둔다.
+		if _mine_shimmer_at(here) != "":
+			_pick_mine_shimmer(here)
+			return
 		if _is_mine_ladder(here):
 			if _mine_floor >= MineFloors.MAX_FLOOR:
 				_notice(_mine_bottom_line())   # ★[S5-T6] 바닥 안내 = 상자·열쇠 상태에 따라 갈린다
@@ -9850,6 +9939,9 @@ func _process(delta: float) -> void:
 		if _is_mine_chest(here_t):
 			# ★[S5-T6] 보상 상자 — 발밑 우선(사다리보다 먼저 보는 [F] 디스패치와 같은 순서).
 			interact_prompt.text = "[F] 보상 상자를 연다"
+		elif _mine_shimmer_at(here_t) != "":
+			# ★[S5-T8] 바닥 반짝이 — 혼력 0이라 비용을 안 적는다(적을 게 없는 게 이 동사의 특징이다).
+			interact_prompt.text = "[F] %s 을(를) 줍는다" % ItemCatalog.name_of(_mine_shimmer_at(here_t))
 		elif _is_mine_ladder(here_t):
 			interact_prompt.text = "[F] 아래층으로" if _mine_floor < MineFloors.MAX_FLOOR else _mine_bottom_line()
 		elif _is_mine_entrance(here_t):
@@ -10201,6 +10293,11 @@ func _use_tool() -> void:
 	if ItemCatalog._is_potion(item):
 		_drink_potion(item)
 		return
+	# ★[S5-T8 / ADR-0063 결정 10] 계단 — 환약과 같은 이유로 혼력 게이트 위다(놓는 데 혼력이 안 든다.
+	#   혼력이 바닥났을 때야말로 남은 계단으로 한 층 더 내려갈지 정하는 순간이라 여기서 막으면 안 된다).
+	if item == ItemCatalog.STAIRS:
+		_use_stairs()
+		return
 	var cat := ItemCatalog.category_of(item)
 	# ★ ADR-0059 결정3(에너지 스타듀 정합) — 파종(씨앗)·시비(비료)는 무과금, 괭이·물·낫·개간·급여는 과금.
 	#   무과금 동사는 혼력 0에서도 굴러야 하므로 상단 can_act 게이트를 과금 동사에만 건다.
@@ -10325,9 +10422,15 @@ func _use_tool() -> void:
 # 격투 로직은 전부 FishingSession(fishing.gd)에 있고 main은 그 상태를 폴링만 한다 — 이 경계가
 # ADR-0061 결정 2의 핵심이다(main.gd 인라인 미니게임 금지 = 후속 미니게임의 구조 선례).
 
-# 지금 캐스팅 무대(삼도천·황천해)인가 — ADR-0061 결정 9(기타 수면은 이번 슬라이스에서 비캐스팅).
+# 지금 게잡이통 무대(삼도천·황천해)인가 — ADR-0061 결정 9(기타 수면은 비설치).
 func _is_fishing_region() -> bool:
 	return _region in FISHING_REGIONS
+
+# ★[S5-T8] 지금 **캐스팅** 무대인가 = 위 둘 + 갱도 **지상** 호수(ADR-0063 결정 10).
+#   층 안(`_in_mine_floor`)은 제외한다 — 층 그리드엔 WATER가 한 칸도 없어 어차피 못 던지지만,
+#   "지상 호수만"이라는 규칙을 술어에 못 박아 둔다(나중에 층에 물이 생겨도 조용히 안 새게).
+func _is_casting_region() -> bool:
+	return _region in CASTING_REGIONS and not _in_mine_floor()
 
 # 이 조준 칸으로 던질 수 있는 물 칸(못 던지면 (-1,-1)). 두 갈래다:
 #   ㉠ 조준 칸이 바로 물(WATER) — 잔교·부두 위, 백사장 물가.
@@ -10365,23 +10468,29 @@ func _has_any_rod() -> bool:
 # ★[S3-T5] 낚시터 물가를 겨눴는데 낚싯대가 아예 없는 상태인가(= 뱃사공 안내를 띄울 때).
 #   ADR-0061 결정 4가 T1을 뱃사공 증정으로 옮기면서 생긴 "삼도천 강 낚시터 선도달" 동선의 안전망이다.
 func _needs_rod_hint() -> bool:
-	if _sleeping or fishing != null or _indoor != "" or not _is_fishing_region():
+	if _sleeping or fishing != null or _indoor != "" or not _is_casting_region():
 		return false
 	if _has_any_rod():
 		return false
 	return _cast_water_tile(_target) != Vector2i(-1, -1)
 
 func _can_cast() -> bool:
-	if fishing != null or _indoor != "" or not _is_fishing_region():
+	if fishing != null or _indoor != "" or not _is_casting_region():
 		return false
 	# ★[S3-T4] 4티어 어느 낚싯대든 든 것이 곧 그 티어의 캐스팅이다(도구 4종 = 각각 아이템인 기존 관례).
 	if inventory == null or not ItemCatalog._is_rod(inventory.selected_id()):
 		return false
 	return _cast_water_tile(_target) != Vector2i(-1, -1)
 
-# ★[S3-T3] 지금 이 구역의 어종 서식지(캐스팅 무대 = 삼도천 강 / 황천해 바다, ADR-0061 결정 9).
+# ★[S3-T3] 지금 이 구역의 어종 서식지. ★[S5-T8] 갱도 호수가 세 번째 무대로 합류했다(ADR-0061
+#   결정 9 부분 개정 — 강/바다 판정은 한 줄도 안 바뀌므로 기존 32조합 산출이 그대로다).
 func _fishing_habitat() -> String:
-	return FishCatalog.HABITAT_SEA if _region == RegionCatalog.HWANGCHEONHAE else FishCatalog.HABITAT_RIVER
+	match _region:
+		RegionCatalog.HWANGCHEONHAE:
+			return FishCatalog.HABITAT_SEA
+		RegionCatalog.EOPHWA_MINE:
+			return FishCatalog.HABITAT_MINE
+	return FishCatalog.HABITAT_RIVER
 
 # ★[S3-T3] 이번 입질의 어종 추첨 — ①전설 특수 입질(극저확률·조건 충족 시) → ②일반 가중 롤(체급 파생)
 #   → ③방어 폴백(가용 0이라는 있어선 안 될 상태). 절기·시간 잠금은 clock에서 곧장 읽는다(결정 3
@@ -10960,18 +11069,23 @@ func _minutes_text(mins: int) -> String:
 		return "%d시간" % (m / 60)
 	return "%d시간 %d분" % [m / 60, m % 60]
 
-# ★[S5-T3] 제련공 퍼크 편의 조회 2종 — 채광 트리 perks가 아직 비어 있어(값 인코딩 = S5-T8) 지금은
-#   항상 0/중립을 돌려준다. 덫꾼 갈래 3종·채광 드랍 2종과 정확히 같은 자리다(T8은 카탈로그의
-#   perks 배열만 채우면 여기 손댈 게 없다). ★차원 상수 신설도 T8 소관이라 dim 이름을 문자열로
-#   직접 쓰지 않고 **0 폴백**만 둔다 — 존재하지 않는 상수를 참조하면 파싱이 깨진다.
+# ★[S5-T3→T8] 제련공·발굴자 퍼크 편의 조회 3종. T3이 "0 폴백"으로 자리만 잡아 뒀던 세 줄에
+#   T8이 실제 차원을 꽂았다 — **호출부(업화로 투입·지오드 개봉)는 한 줄도 안 바뀐다**.
+#   ★ 제련 시간 단축은 **투입 시점에만** 적용된다(`load_ore`가 left를 그 자리에서 확정한다).
+#     진행 중인 제련물엔 **소급되지 않는다** — 원장이 절대 게임 분 델타만 흘려 넣는 구조라
+#     소급하려면 "원래 몇 분이었나"를 따로 들어야 하고(기준점 오염), 스타듀도 소급하지 않는다.
+#     주괴 등급 스냅샷(수액 선례)과 같은 규칙이라 두 값이 한 시점에서 함께 굳는다. *잠정(owner 큐)*.
 func smelt_time_cut() -> float:      # 제련공(lvl10) — 제련 시간 −50%
-	return 0.0
+	return MiningSkill.smelt_time_cut(
+		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_SMELT_TIME, 0.0))
 
-func smelt_quality_step() -> int:    # 제련공(lvl10) — 잉곳 품질 티어 +1
-	return 0
+func smelt_quality_step() -> int:    # 제련공(lvl10) — 주괴 품질 티어 +1
+	return MiningSkill.ingot_quality_step(
+		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_INGOT_QUALITY, 0.0))
 
 func geode_double_chance() -> float:  # 발굴자(lvl10) — 지오드 개봉 2배
-	return MiningSkill.geode_double_chance(0.0)
+	return MiningSkill.geode_double_chance(
+		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_GEODE_DOUBLE, 0.0))
 
 # ★[S5-T3] 업화로 분 진행 — 절대 게임 분의 델타를 원장에 흘린다(매 프레임·_process 앞머리).
 #   ★ 취침 점프가 여기서 **공짜로** 처리된다: clock.sleep()이 day +1·minutes = 06:00으로 갈면
@@ -11131,7 +11245,7 @@ func _crow_target_tiles() -> Array:
 #   즉시 완성(손 제작)이라 시간·혼력 0. 기계 가공(§2-6)과 구분되는 결.
 func _on_frame_craft(recipe_id: String) -> void:
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
-	if not CraftCatalog.unlocked(recipe_id, lvl, _forage_found):
+	if not CraftCatalog.unlocked(recipe_id, lvl, _forage_found, _craft_skill_level(recipe_id)):
 		return
 	if not CraftCatalog.can_craft(recipe_id, func(id: String) -> int: return inventory.count_of(id)):
 		return
@@ -11150,12 +11264,24 @@ func _craft_rows() -> Array:
 	var rows: Array = []
 	for id in CraftCatalog.ids():
 		var r := CraftCatalog.get_recipe(id)
-		var unlocked := CraftCatalog.unlocked(id, lvl, _forage_found)
+		var unlocked := CraftCatalog.unlocked(id, lvl, _forage_found, _craft_skill_level(id))
 		rows.append({"id": id, "name": String(r["name_ko"]), "count": int(r["out_count"]),
 			"mats": CraftCatalog.mats_text(id), "unlock_level": int(r["unlock_level"]),
 			"needs_species": String(r["unlock_species"]), "unlocked": unlocked,
+			# ★[S5-T8] 2차 스킬 축(0 = 없음). 라벨을 함께 실어 보내 inv_frame이 스킬 이름을
+			#   하드코딩하지 않게 한다(제작 탭은 "어느 스킬"을 몰라도 문장을 만들 수 있다).
+			"skill_gate": CraftCatalog.skill_gate_of(id), "skill_gate_label": "채광",
 			"can": unlocked and CraftCatalog.can_craft(id, counts)})
 	return rows
+
+# ★[S5-T8] 이 레시피의 **2차 스킬 축** 현재 레벨(축이 없는 레시피는 0 = 무영향).
+#   지금 그 축을 쓰는 레시피는 계단 하나뿐이고 축은 채광이다 — 카탈로그가 "어느 스킬인가"를 모르는
+#   대신(craft_catalog.unlocked 주석) 여기서 값을 뽑아 넣는다. 축이 둘 이상 되면 레시피 키에 스킬
+#   id를 실어 이 함수가 그걸 읽으면 된다(그때까지 분기 하나로 충분하다).
+func _craft_skill_level(recipe_id: String) -> int:
+	if recipe_id == CraftCatalog.STAIRS:
+		return _skill_level(ProfessionCatalog.MINING)
+	return 0
 
 # ★[S4-T5] 잡초 낫질 혼합 씨앗 드랍 — 저확률(10% 잠정)·day+칸 해시 결정 롤(헤드리스 재현).
 #   잡초가 혼합 씨앗의 유일 소스다(스타듀 문법 — 잡초 정리에 작은 보상 결).
@@ -11970,6 +12096,19 @@ func _draw_mine_floor() -> void:
 	draw_rect(Rect2(ep + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.30, 0.26, 0.22))     # 올라가는 사다리 벽감
 	for i in 3:
 		draw_rect(Rect2(ep + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.76, 0.60, 0.36))
+	# ★[S5-T8] 바닥 반짝이 — 아직 안 주웠을 때만 그린다(원장이 곧 렌더 상태 — 상자와 같은 결).
+	#   광맥(결정 몸통 큰 사각)과 실루엣이 갈리게 **작은 마름모 + 반짝임 점** 하나로 그린다:
+	#   "저건 캐는 게 아니라 줍는 것"이 한눈에 읽혀야 [F]와 곡괭이가 헷갈리지 않는다.
+	for raw_s in _mine_layout.get("shimmers", []):
+		var s: Dictionary = raw_s
+		var st: Vector2i = s["tile"]
+		if mine_floors.is_picked(_mine_floor, st):
+			continue
+		var scol: Color = _MINE_NODE_COLORS.get(String(s["id"]), Color(0.82, 0.80, 0.72))
+		var sp := Vector2(st.x * TILE, st.y * TILE) + Vector2(TILE * 0.5, TILE * 0.62)
+		draw_colored_polygon(PackedVector2Array([sp + Vector2(0, -6), sp + Vector2(5, 0),
+			sp + Vector2(0, 6), sp + Vector2(-5, 0)]), scol)                     # 마름모 몸통
+		draw_rect(Rect2(sp + Vector2(-2, -4), Vector2(3, 3)), scol.lightened(0.55))  # NW 반짝임
 	# ★[S5-T6] 보상 층 상자 — 아직 안 열었을 때만 그린다(열면 자리에서 사라진다 = 원장이 곧 렌더 상태).
 	#   나무 궤 + 쇠 띠 + 자물쇠 점. 사다리(짙은 구덩이)·입구(밝은 벽감)와 실루엣이 갈린다.
 	var chest_t: Vector2i = _mine_layout.get("chest", Vector2i(-1, -1))

@@ -15,8 +15,9 @@ class_name ProfessionCatalog
 #   프레임워크가 5스킬에 일반적임을 증명하되 투기적 수치는 미리 안 박는다("한 시스템씩").
 #   ★갱신(2026-07-27 · S3-T6 / ADR-0061 결정 6): **낚시(FISHING) 퍼크 완비** — 예고대로 그 스킬의
 #   빌드 슬라이스에서 채웠다("각 스킬 빌드 슬라이스에서 채움" 이행).
-#   ★★갱신(2026-07-30 · S5-T4 / ADR-0063 결정 4·9): **전투(COMBAT) 퍼크 완비**. 남은 구조-only =
-#   농사·채광 2(채광 값 인코딩 = S5-T8 · 농사 = 그 스킬 슬라이스).
+#   ★★갱신(2026-07-30 · S5-T4 / ADR-0063 결정 4·9): **전투(COMBAT) 퍼크 완비**.
+#   ★★★갱신(2026-07-30 · S5-T8 / ADR-0063 결정 9): **채광(MINING) 퍼크 완비** — ADR-0052 확정
+#   로스터 이행 완료. 남은 구조-only = **농사 하나뿐**(그 스킬 슬라이스에서 채운다).
 
 # ── 스킬 id ───────────────────────────────────────────────────────────────────
 const FARMING := "farming"
@@ -42,13 +43,22 @@ const DIM_SALVAGE_DOUBLE := "salvage_double"   # 수량: 인양물 동반 롤 �
 const DIM_TRAP_SAVE := "trap_save"             # 효율: 게잡이통 자원/미끼 소모↓(0..1 비율) ★S3-T7 소비
 const DIM_TRAP_NO_JUNK := "trap_no_junk"       # 품질: 게잡이통에 잡동사니 안 걸림(flag=1) ★S3-T7 소비
 const DIM_TRAP_NO_BAIT := "trap_no_bait"       # 편의: 게잡이통 미끼 불필요(flag=1) ★S3-T7 소비
-# ── ★[S5-T2 / ADR-0063 결정 9] 채광 퍼크 차원 2종 — **이름만 예약**한다 ─────────
-# 아래 MINING 트리의 `perks`는 여전히 비어 있다(값 인코딩 = S5-T8 소관·이 태스크 스코프 밖).
-# 그럼에도 차원 이름을 먼저 잠그는 이유: T2가 만드는 드랍 경로(main._award_mine_drop →
-# MiningSkill.resolve_drop)가 **지금 이 두 값을 인자로 받게** 설계돼 있어, T8은 트리의 perks
-# 배열만 채우면 배선 손질 없이 효과가 실효된다(ForageSkill 미배선 퍼크 3종과 같은 자리).
+# ── ★[S5-T2→T8 / ADR-0063 결정 9] 채광 퍼크 차원 6종 — **값까지 인코딩된다**(아래 MINING 트리) ──
+# T2가 이름만 예약했던 두 줄(ore_bonus·gem_pair)에 T8이 나머지 넷을 얹고 값을 채웠다. 이로써
+# 5스킬 중 채집·낚시·전투·채광 4트리가 실효고, 남은 구조-only는 농사 하나다.
 const DIM_ORE_BONUS := "ore_bonus"             # 수량: 광맥당 광석 +N(광부)
 const DIM_GEM_PAIR := "gem_pair"               # 수량: 보석이 쌍으로 나올 확률(지질사)
+const DIM_COAL_DOUBLE := "coal_double"         # 수량: 혼탄 광맥 산출 2배(탐광자 — flag=1)
+const DIM_GEODE_DOUBLE := "geode_double"       # 수량: 지오드 개봉 산출 2배 확률(발굴자 — 0..1)
+const DIM_SMELT_TIME := "smelt_time"           # 효율: 제련 시간 단축 비율(제련공 0.5 = −50%)
+const DIM_INGOT_QUALITY := "ingot_quality"     # 품질: 주괴 등급 계단 +N(제련공 — 금에서 클램프)
+# ★ 보석사의 "보석 등급 +1"은 **품질 등급이 아니라 보석 계급(rank)**이다 — 광물은 품질 무차원이라
+#   (ItemCatalog.MINERALS 주석 "보석사 퍼크가 말하는 보석 등급은 별 축이라 S5-T8 인코딩 시점에
+#   재론한다"가 이 자리를 예약해 뒀다) 품질 축을 새로 실으면 광물 전체의 무차원 규약이 깨진다.
+#   대신 **드랍이 한 계단 위 보석으로 승급**한다(넋수정→명옥→염주석→명부금강, 상한 클램프).
+#   비-가치 축 준수: 판매가에 손대지 않고 *무엇이 나오나*만 바꾼다(약초학자 품질 하한과 같은 결).
+#   ★잠정(owner 큐 — ADR-0052 원문 "보석 품질 등급↑"의 재조준안이다).
+const DIM_GEM_RANK := "gem_rank"               # 품질: 보석 계급 +N(보석사 — 승급 계단)
 # ── ★[S5-T4 / ADR-0063 결정 4·9] 전투 퍼크 차원 5종 — **값까지 인코딩된다**(아래 COMBAT 트리) ──
 # 채광 트리(위 2종·값 인코딩 S5-T8)와 달리 전투는 이 태스크에서 데이터가 채워진다: HP·피해·크리가
 # 전부 T4가 만드는 판정(PlayerHealth·CombatSkill.resolve_hit) 안에 소비처를 갖기 때문이다.
@@ -94,14 +104,25 @@ const _TREE := {
 		{"id": "coopmaster", "tier": 10, "requires": "rancher", "name": "둥우리지기", "desc": "가축 우정 가속 + 부화 시간 절반", "perks": []},
 		{"id": "shepherd", "tier": 10, "requires": "rancher", "name": "목자", "desc": "가축 우정 가속 + 산물 주기 단축", "perks": []},
 	],
-	# ── 채광(구조만) ──────────────────────────────────────────────────────────
+	# ── ★[S5-T8 / ADR-0063 결정 9] 채광(퍼크 완비 — 네 번째 실효 트리) ────────────
+	# 광부 갈래 = **금속 사슬**(광맥 수량 → 제련 효율·주괴 품질 / 연료) · 지질사 갈래 = **돌 속의 것**
+	# (보석 쌍 → 알돌 개봉 / 보석 계급). 두 갈래가 서로 다른 축을 든다(전투 트리와 같은 결).
+	# ★ 전부 비-가치 4차원 안이다 — 판매가 배수는 한 줄도 없다(ADR-0052 §1 · ADR-0063 "폐기한 대안"의
+	#   "주괴 가치 +50% 미채택" 이행: 제련공은 **시간↓ + 품질 티어**로 재조준된 그대로다).
 	MINING: [
-		{"id": "miner", "tier": 5, "requires": "", "name": "광부", "desc": "광맥당 광석 +1", "perks": []},
-		{"id": "geologist", "tier": 5, "requires": "", "name": "지질사", "desc": "보석이 쌍으로 나올 확률", "perks": []},
-		{"id": "blacksmith", "tier": 10, "requires": "miner", "name": "제련공", "desc": "제련 시간↓ + 잉곳 품질 티어", "perks": []},
-		{"id": "prospector", "tier": 10, "requires": "miner", "name": "탐광자", "desc": "석탄/혼탄 2배 확률", "perks": []},
-		{"id": "excavator", "tier": 10, "requires": "geologist", "name": "발굴자", "desc": "지오드 2배 확률", "perks": []},
-		{"id": "gemologist", "tier": 10, "requires": "geologist", "name": "보석사", "desc": "보석 품질 등급↑", "perks": []},
+		{"id": "miner", "tier": 5, "requires": "", "name": "광부", "desc": "광맥당 광석 +1",
+			"perks": [{"dim": DIM_ORE_BONUS, "value": 1.0}]},
+		{"id": "geologist", "tier": 5, "requires": "", "name": "지질사", "desc": "보석이 50% 확률로 쌍",
+			"perks": [{"dim": DIM_GEM_PAIR, "value": 0.50}]},
+		{"id": "blacksmith", "tier": 10, "requires": "miner", "name": "제련공", "desc": "제련 시간 −50% + 주괴 등급↑",
+			# 두 차원을 한 전문직이 든다(투사의 피해+체력과 같은 결) — 어느 쪽도 판매가가 아니다.
+			"perks": [{"dim": DIM_SMELT_TIME, "value": 0.50}, {"dim": DIM_INGOT_QUALITY, "value": 1.0}]},
+		{"id": "prospector", "tier": 10, "requires": "miner", "name": "탐광자", "desc": "혼탄 광맥 산출 2배",
+			"perks": [{"dim": DIM_COAL_DOUBLE, "value": 1.0}]},
+		{"id": "excavator", "tier": 10, "requires": "geologist", "name": "발굴자", "desc": "알돌 개봉 산출 2배",
+			"perks": [{"dim": DIM_GEODE_DOUBLE, "value": 1.0}]},
+		{"id": "gemologist", "tier": 10, "requires": "geologist", "name": "보석사", "desc": "보석이 한 계급 위로",
+			"perks": [{"dim": DIM_GEM_RANK, "value": 1.0}]},
 	],
 	# ── ★[S3-T6 / ADR-0061 결정 6] 낚시(퍼크 완비 — 채집에 이은 두 번째 실효 트리) ──────
 	# 낚시꾼 갈래 = **릴 격투 산출물**(품질·인양) · 덫꾼 갈래 = **게잡이통**(패시브 어획, ★S3-T7 실배선).

@@ -483,8 +483,10 @@ func _initialize() -> void:
 				and ItemCatalog.category_of(fid) == ItemCatalog.CAT_HARVEST
 				and ItemCatalog.stackable_of(fid) and ItemCatalog.price_of(fid) > 0):
 			fish_ok = false
-	_check("ⓗ1 어획물 18종 = 품질 유차원 CAT_HARVEST·스택·유가",
-		fish_ok and FishCatalog.ids().size() == 18)
+	# ★[S5-T8 / ADR-0063 결정 10] 18 → 20: 갱도 호수 2종이 합류했다(ADR-0061 결정 9 부분 개정 —
+	#   의도적 불변식 개정. 강·바다 로스터는 한 종도 안 바뀌었다).
+	_check("ⓗ1 어획물 20종 = 품질 유차원 CAT_HARVEST·스택·유가",
+		fish_ok and FishCatalog.ids().size() == 20)
 	_check("ⓗ1 어획물 판매가에 등급 배수(수확물 결)",
 		ItemCatalog.price_of(FishCatalog.NEOK_BUNGEO, ItemCatalog.Q_GOLD)
 			> ItemCatalog.price_of(FishCatalog.NEOK_BUNGEO, ItemCatalog.Q_NORMAL))

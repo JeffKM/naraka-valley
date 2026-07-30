@@ -257,6 +257,24 @@ const POTIONS := {                          # 소모품 id → {name_ko, price(�
 	},
 }
 
+# ── ★[S5-T8 / ADR-0063 결정 10] 계단 — 층을 건너뛰는 1회용 소모품 ──────────────
+# 돌 99개로 만드는 스타듀 Staircase 1:1. 든 채 LMB로 놓으면 그 자리에서 한 층 아래로 내려간다
+# (사다리를 찾지 않는다) — **나락에서도 쓴다**(해골동굴 1:1. 결정 7의 리셋 런에서 계단은 사실상
+# 유일한 가속 수단이라, 갱도 전용으로 막으면 나락의 깊이 곡선이 통째로 손 채굴에 인질이 된다).
+#
+# ★ 카테고리 = CAT_CONSUMABLE(미끼·명부환이 쓰는 그 칸 — "들고 쓰면 사라지는 스택 물건"). 설치물
+#   (CAT_PLACEABLE)이 아닌 이유는 **원장에 남지 않기 때문**이다: 놓는 순간 층이 갈려 그 무대가
+#   사라진다(스프링클러·게잡이통처럼 회수할 대상이 없다).
+# ★ price 0 = **비매**(나락 열쇠와 같은 표현). 돌 99개(198냥 상당)를 굳혀 만드는 물건이라 값을
+#   매기면 재료 차익 판정이 하나 더 생기고, 스타듀도 계단은 팔 수 없다. *잠정(owner 큐)*.
+const STAIRS := "stairs"                    # 계단 — 층 스킵 1회용(채광 Lv2 제작 해금)
+const UTILITIES := {                        # 소모 장치 id → {name_ko, color}(비매·스택)
+	STAIRS: {
+		"name_ko": "계단",
+		"color": Color(0.62, 0.60, 0.58),   # 잿빛 석재(아이콘 아트 = S5-T10 — 색박스 폴백이 읽는다)
+	},
+}
+
 # ── ★[S5-T6 / ADR-0063 결정 7·10] 열쇠 — 나락 열쇠 ────────────────────────────
 # 갱도 60층 보상 상자에서 나오는 단 하나의 물건(Skull Key 1:1). 지상 `NARAK_GATE`(나락 진입로)의
 # 게이트 키다 — **점등 배선 자체는 S5-T7 소관**이고, 여기는 아이템 등록까지만 한다(결정 7의
@@ -588,6 +606,11 @@ static func _is_potion(id: String) -> bool:
 static func _is_key(id: String) -> bool:
 	return KEYS.has(id)
 
+# ★[S5-T8] id가 소모 장치(계단)인가. 환약과 같은 CAT_CONSUMABLE이되 dict를 가르는 이유는 환약과
+#   같다 — 소비 동사가 다르다(환약은 체력을 채우고, 계단은 무대를 바꾼다).
+static func _is_utility(id: String) -> bool:
+	return UTILITIES.has(id)
+
 # ★[S5-T6] 이 소모품 1개가 채우는 HP("" · 소모품 아님 = 0). 회복 수치의 단일 조회 창구다
 #   (main이 POTIONS dict를 직접 뒤지지 않게 — 카탈로그가 값의 주인).
 static func potion_heal(id: String) -> int:
@@ -629,7 +652,7 @@ static func has_item(id: String) -> bool:
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id) or _is_pot_good(id) \
 		or _is_sap_good(id) or _is_mineral(id) or _is_ingot(id) or _is_weapon(id) \
-		or _is_potion(id) or _is_key(id)
+		or _is_potion(id) or _is_key(id) or _is_utility(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -643,7 +666,8 @@ static func category_of(id: String) -> String:
 	if GearCatalog.is_bait(id):
 		return CAT_CONSUMABLE
 	# ★[S5-T6] 명부환 = 미끼와 같은 스택 소모품 칸(든 채 LMB로 마신다 — main._drink_potion).
-	if _is_potion(id):
+	# ★[S5-T8] 계단도 같은 칸(든 채 LMB로 놓는다 — main._use_stairs).
+	if _is_potion(id) or _is_utility(id):
 		return CAT_CONSUMABLE
 	# ★[S5-T4] 무기 = 유니크 장착물이라 도구·낚싯대와 같은 칸(CAT_TOOL). 새 카테고리를 안 만드는 이유는
 	#   "든 것이 곧 동사"(ADR-0024)라 핫바·인벤·툴팁·정렬이 도구와 완전히 같은 취급을 하면 되기 때문이다.
@@ -696,6 +720,8 @@ static func name_of(id: String) -> String:
 		return INGOTS[id]["name_ko"]     # ★S5-T3 주괴 4종(제련 산출)
 	if _is_potion(id):
 		return POTIONS[id]["name_ko"]    # ★S5-T6 회복 소모품(명부환 — 길드 판매)
+	if _is_utility(id):
+		return UTILITIES[id]["name_ko"]  # ★S5-T8 소모 장치(계단 — 손 제작)
 	if _is_key(id):
 		return KEYS[id]["name_ko"]       # ★S5-T6 열쇠(나락 열쇠 — 60층 보상 상자)
 	if _is_forageable(id):
@@ -726,8 +752,8 @@ static func stackable_of(id: String) -> bool:
 		return false   # ★S5-T4 무기 = 전부 유니크 장착물(검 5종 — 스택 0)
 	if _is_key(id):
 		return false   # ★S5-T6 열쇠 = 세상에 한 자루(개수 축 없음 — 도구·무기 결)
-	if _is_potion(id):
-		return true    # ★S5-T6 환약 = 스택 소모품(미끼 결 — 여러 개 들고 내려간다)
+	if _is_potion(id) or _is_utility(id):
+		return true    # ★S5-T6 환약 · ★S5-T8 계단 = 스택 소모품(미끼 결 — 여러 개 들고 내려간다)
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_pot_good(id) or _is_sap_good(id) \
@@ -806,4 +832,6 @@ static func tool_color_of(id: String) -> Color:
 		return WeaponCatalog.color_of(id)   # ★S5-T4 무기 색박스(아이콘 아트 = S5-T10)
 	if _is_potion(id):
 		return POTIONS[id]["color"]         # ★S5-T6 환약 색박스(CAT_CONSUMABLE 아이콘 폴백이 읽는다)
+	if _is_utility(id):
+		return UTILITIES[id]["color"]       # ★S5-T8 계단 색박스(환약과 같은 폴백 경로)
 	return Color.WHITE

@@ -32,13 +32,19 @@ func _initialize() -> void:
 	print("▶ fish_catalog_test (S3-T3 / ADR-0061 결정 3)")
 	var FC := FishCatalog
 	var IC := ItemCatalog
-	var HABITATS := [FC.HABITAT_RIVER, FC.HABITAT_SEA]
+	# ★[S5-T8 / ADR-0063 결정 10] 갱도 호수가 세 번째 무대로 합류(ADR-0061 결정 9 부분 개정).
+	#   HABITATS = 스키마·조합 커버리지의 축(3무대) / OPEN_HABITATS = **절기 밀도 규칙**의 축이다.
+	#   갱도를 밀도 규칙에서 뺀 이유: 지하 호수는 절기·시간 잠금이 아예 없어(둘 다 상시 2종) 그
+	#   규칙이 방어하려던 "절기 사막"이 구조적으로 발생하지 않는다(아래 ⓑ가 그걸 직접 단언한다).
+	var HABITATS := [FC.HABITAT_RIVER, FC.HABITAT_SEA, FC.HABITAT_MINE]
+	var OPEN_HABITATS := [FC.HABITAT_RIVER, FC.HABITAT_SEA]
 	var PHASES := [FC.PHASE_MORNING, FC.PHASE_DAY, FC.PHASE_EVENING, FC.PHASE_NIGHT]
 	# 체급별 가격 밴드(ADR-0061 결정 3 "체급·희소도 비례" — 스타듀 문법).
 	var PRICE_BAND := [[30, 55], [60, 120], [150, 250], [600, 900]]
 
 	# ══ ⓐ 스키마 완결성 ══════════════════════════════════════════════════════
-	_check("ⓐ 로스터 = 18종", FC.FISH.size() == 18 and FC.ids().size() == 18)
+	# ★[S5-T8] 18 → 20(갱도 호수 2종 합류 — 의도적 불변식 개정).
+	_check("ⓐ 로스터 = 20종", FC.FISH.size() == 20 and FC.ids().size() == 20)
 
 	var field_ok := true
 	var domain_ok := true
@@ -76,8 +82,8 @@ func _initialize() -> void:
 		% ("" if price_ok else " — " + str(bad)), price_ok)
 
 	# 서식지·체급 분포(결정 3: 강 8 + 바다 8 + 전설 2(강 1·바다 1) / 소~중 위주 + 대 2 + 전설 2).
-	var by_hab := {FC.HABITAT_RIVER: 0, FC.HABITAT_SEA: 0}
-	var by_hab_legend := {FC.HABITAT_RIVER: 0, FC.HABITAT_SEA: 0}
+	var by_hab := {FC.HABITAT_RIVER: 0, FC.HABITAT_SEA: 0, FC.HABITAT_MINE: 0}
+	var by_hab_legend := {FC.HABITAT_RIVER: 0, FC.HABITAT_SEA: 0, FC.HABITAT_MINE: 0}
 	var by_class := [0, 0, 0, 0]
 	for id in FC.ids():
 		var h := FC.habitat_of(id)
@@ -86,12 +92,16 @@ func _initialize() -> void:
 			by_hab_legend[h] += 1
 		else:
 			by_hab[h] += 1
-	_check("ⓐ 서식지 분포 = 강 8 · 바다 8(비-전설)",
-		by_hab[FC.HABITAT_RIVER] == 8 and by_hab[FC.HABITAT_SEA] == 8)
-	_check("ⓐ 전설 2종 = 강 1 · 바다 1",
-		by_hab_legend[FC.HABITAT_RIVER] == 1 and by_hab_legend[FC.HABITAT_SEA] == 1)
-	_check("ⓐ 체급 분포 = 소 8 · 중 6 · 대 2 · 전설 2 (소~중 위주·대 2~3·전설 2)",
-		by_class == [8, 6, 2, 2])
+	_check("ⓐ 서식지 분포 = 강 8 · 바다 8 · ★갱도 2(비-전설)",
+		by_hab[FC.HABITAT_RIVER] == 8 and by_hab[FC.HABITAT_SEA] == 8
+		and by_hab[FC.HABITAT_MINE] == 2)
+	# ★[S5-T8] 갱도엔 전설이 없다 — 전설은 "그 물의 주인"이라 무대마다 하나씩 늘릴 물건이 아니고,
+	#   ADR-0063 결정 10도 갱도엔 2종만 뒀다(4종의 1/2 큐레이션에 전설이 들어갈 자리가 없다).
+	_check("ⓐ 전설 2종 = 강 1 · 바다 1 · 갱도 0",
+		by_hab_legend[FC.HABITAT_RIVER] == 1 and by_hab_legend[FC.HABITAT_SEA] == 1
+		and by_hab_legend[FC.HABITAT_MINE] == 0)
+	_check("ⓐ 체급 분포 = 소 9 · 중 7 · 대 2 · 전설 2 (★갱도 소1·중1 합류)",
+		by_class == [9, 7, 2, 2])
 	# 표시명 유일(중복 이름 = 인벤에서 구분 불가).
 	var names := {}
 	var name_uniq := true
@@ -99,7 +109,7 @@ func _initialize() -> void:
 		if names.has(FC.name_of(id)):
 			name_uniq = false
 		names[FC.name_of(id)] = true
-	_check("ⓐ 표시명 18개 전부 유일", name_uniq and names.size() == 18)
+	_check("ⓐ 표시명 20개 전부 유일", name_uniq and names.size() == 20)
 	# session_params = FishingSession 접속 계약(id + 체급 + 종별 오버라이드).
 	var sp := FC.session_params(FC.MEOKBIT_JANGEO)
 	_check("ⓐ session_params = id·체급·fight 오버라이드 전달",
@@ -114,13 +124,20 @@ func _initialize() -> void:
 	# 밀도 하한 ①: 절기별·서식지당 비-전설 ≥3종(절기 잠금이 사막을 만들지 않는다).
 	var density_ok := true
 	var density_note: Array = []
-	for h in HABITATS:
+	for h in OPEN_HABITATS:
 		for s in range(4):
 			var n: int = FC.season_roster(h, s).size()
 			density_note.append("%s/%s=%d" % [h, GameClock.season_name(s), n])
 			if n < 3:
 				density_ok = false
-	_check("ⓑ 절기별 서식지당 비-전설 ≥3종 — %s" % str(density_note), density_ok)
+	_check("ⓑ 절기별 서식지당 비-전설 ≥3종(하늘 아래 두 무대) — %s" % str(density_note), density_ok)
+	# ★[S5-T8] 갱도는 밀도 규칙 대신 **무잠금**을 단언한다 — 2종 다 상시라 절기가 갈려도 로스터가
+	#   줄지 않는다(지하 호수는 하늘을 안 본다). 이게 위 ≥3 규칙을 면제받는 근거다.
+	var mine_open := true
+	for s in range(4):
+		if FC.season_roster(FC.HABITAT_MINE, s).size() != 2:
+			mine_open = false
+	_check("ⓑ ★갱도 호수 = 전 절기 상시 2종(절기 잠금 0 — 밀도 규칙 면제 근거)", mine_open)
 	# 밀도 하한 ②: 모든 (서식지 × 절기 × 시간대) 조합에 최소 1종(roll_fish가 ""를 뱉는 구멍 0).
 	var combo_ok := true
 	var empty_combos: Array = []
