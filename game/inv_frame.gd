@@ -35,6 +35,9 @@ signal save_pressed                    # ★ Phase B 옵션 탭: 저장(main이 
 signal quit_pressed                    # ★ Phase B 옵션 탭: 저장하고 나가기
 signal chest_store(slot_index: int)    # ★ Phase D 상자: 백팩 슬롯을 통째로 상자에 보관
 signal chest_take(chest_index: int)    # ★ Phase D 상자: 상자 슬롯을 통째로 백팩으로 회수
+# ★[S6-T1 / ADR-0064 결정 3] 곳간: 백팩 슬롯 클릭=적재 / 재고 행 클릭=회수(출하함 드롭·롤백 동형).
+signal larder_store(slot_index: int)
+signal larder_take(id: String)
 signal music_vol_changed(delta: float) # ★ Phase D 설정: 음악 볼륨 증감(옵션 탭 −/+)
 signal sfx_vol_changed(delta: float)   # ★ Phase D 설정: 효과음 볼륨 증감(옵션 탭 −/+)
 signal fullscreen_toggled              # ★ Phase D 설정: 전체화면 토글(옵션 탭 체크박스)
@@ -73,7 +76,10 @@ const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
 # ★[S5-T6] CTX_GUILD(무골 모험가 길드) — 만물상(CTX_STORE)과 **같은 셸·단일 목록**이다. 서브탭이
 #   없는 이유: 파는 게 검 + 환약 한 묶음뿐이라 가를 축이 없고(토벌 게시판은 서랍 — ADR-0063 결정 6),
 #   탭 하나짜리 탭바는 UI 소음이다. enum 끝에 붙여 기존 값 불변(좌표 의존 테스트 무영향).
-enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP, CTX_GUILD }
+# ★[S6-T1] CTX_LARDER(카페 곳간) — 출하함(CTX_BIN)과 **같은 셸·거울상 의미**다: 출하함은 "팔 것",
+#   곳간은 "메뉴로 키울 것"이라 같은 재고 행 UI를 쓰되 정산 골드 대신 *용량*과 *무슨 메뉴가 되나*를
+#   보인다(CONTEXT [곳간] 선택 텍스처). enum 끝에 붙여 기존 값 불변(좌표 의존 테스트 무영향).
+enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP, CTX_GUILD, CTX_LARDER }
 # 생선가게 서브탭(기어 매대 / 물고기 환전).
 enum { FS_TAB_GEAR, FS_TAB_TRADE }
 # ★[S4-T7] 목공방 서브탭(건축 의뢰 / 가구·자재 매대) — 생선가게 서브탭과 같은 문법.
@@ -97,6 +103,7 @@ const SCROLLBAR_W := 6.0         # 백팩 스크롤바 폭
 var inv: Inventory = null
 var bin: ShippingBin = null
 var chest: StorageChest = null   # ★ Phase D 저장 상자(CTX_CHEST 상단 그리드 — main이 set_chest로 주입)
+var larder: Larder = null        # ★[S6-T1] 카페 곳간(CTX_LARDER 상단 재고 행 — main이 attach_larder로 주입)
 var crop_icons: Dictionary = {}
 # main이 매 프레임 채워 넣는 보조 텍스트(매대 헤더·정산 미리보기 등) — 프레임은 표시만.
 var store_text: String = ""
@@ -130,6 +137,7 @@ var _bp_scroll_dragging := false # 스크롤바 썸을 잡고 드래그 중
 var _bp_rects: Array = []        # 백팩 12칸 Rect2
 var _bin_rects: Array = []       # 출하함 대기 슬롯 [{rect, id}]
 var _chest_rects: Array = []     # ★ Phase D 상자 슬롯 Rect2(인덱스=상자 슬롯 번호)
+var _larder_rects: Array = []    # ★[S6-T1] 곳간 재고 행 [{rect, id}](출하함 _bin_rects 동형)
 var _tab_rects: Array = []       # 메뉴 탭 4개 Rect2
 var _bp_track_rect := Rect2()    # ★ 백팩 스크롤바 트랙(_draw_backpack이 채움 — 없으면 size 0)
 var _bp_thumb_rect := Rect2()    # ★ 백팩 스크롤바 썸(드래그·점프 히트)
@@ -213,6 +221,15 @@ func set_chest(storage_chest: StorageChest) -> void:
 	chest = storage_chest
 	if chest != null and not chest.changed.is_connected(queue_redraw):
 		chest.changed.connect(queue_redraw)
+
+# ★[S6-T1] 카페 곳간을 주입한다(main이 _setup_larder 뒤 호출). 내용이 바뀌면 다시 그린다(bin 결).
+# ★ 이름이 `set_larder`가 아닌 이유: `set_*` static/메서드 이름은 엔진 setter에 먹혀 조용히 죽는
+#   전례가 있다([Godot static set_* 흡수 버그]). 여기선 인스턴스 메서드라 실제로는 안전하지만
+#   (`set_chest` 선례가 살아 있다) 새로 만드는 이름은 그 함정을 아예 피한다.
+func attach_larder(cafe_larder: Larder) -> void:
+	larder = cafe_larder
+	if larder != null and not larder.changed.is_connected(queue_redraw):
+		larder.changed.connect(queue_redraw)
 
 # 프레임을 연다(컨텍스트 지정). 메뉴는 마지막 탭을 유지한다.
 func open(ctx: int) -> void:
@@ -344,7 +361,7 @@ func _bp_max_first_row() -> int:
 # 백팩 하단 그리드가 그려지는 컨텍스트인가(관계·숙련·옵션 탭은 백팩을 안 그림).
 func _backpack_visible() -> bool:
 	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST or context == CTX_FISHSHOP \
-			or context == CTX_WOODSHOP or context == CTX_GUILD:
+			or context == CTX_WOODSHOP or context == CTX_GUILD or context == CTX_LARDER:
 		return true
 	return context == CTX_MENU and menu_tab == TAB_INV
 
@@ -403,6 +420,9 @@ func _draw() -> void:
 			_draw_backpack(panel)
 		CTX_CHEST:
 			_draw_chest_top(panel)
+			_draw_backpack(panel)
+		CTX_LARDER:
+			_draw_larder_top(panel)     # ★[S6-T1] 카페 곳간(재고 행 + 용량 — 출하함의 거울상)
 			_draw_backpack(panel)
 	# ★ [S1R-T12] 우상단 닫기 X — 모든 컨텍스트 공통(스타듀 패널 닫기 문법). 9-slice 테두리 안쪽 모서리.
 	_draw_close_x(panel)
@@ -941,6 +961,53 @@ func _draw_bin_top(panel: Rect2) -> void:
 		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + shown * ROW_H + 12.0),
 			"…외 %d종" % (ids.size() - shown), 12, HanjiUi.INK_DIM)
 
+# ── ★[S6-T1] 곳간 상단(재고 행 + 용량) ────────────────────────────────────────
+# 출하함(_draw_bin_top)의 **거울상**이다: 같은 [아이콘 | 이름×수량 | 우측 값] 행 문법을 쓰되,
+# 우측 값이 정산 골드가 아니라 *그 재료가 무슨 융합 메뉴가 되는가*다(CONTEXT [곳간] — "팔 것 vs
+# 메뉴로 키울 것"의 선택을 두 패널이 나란히 말하게). 우상단은 총액 대신 용량 n/CAPACITY.
+func _draw_larder_top(panel: Rect2) -> void:
+	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 18.0),
+		"곳간", 16, HanjiUi.GOLD_SOFT)
+	var used := larder.total() if larder != null else 0
+	# 용량(우측 상단) — 가득 차면 붉게 물려 "더 못 넣는다"를 색으로 먼저 읽히게. 닫기 X와 안 겹치게 물림.
+	var cap_str := "%d/%d" % [used, Larder.CAPACITY]
+	var cw := HanjiUi.text_width(cap_str, 15)
+	var cap_col: Color = HanjiUi.GOLD if used < Larder.CAPACITY else Color(0.86, 0.36, 0.32)
+	HanjiUi.draw_text(self, Vector2(panel.end.x - FRAME_MARGIN - 28.0 - cw,
+		panel.position.y + PAD + 20.0), cap_str, 15, cap_col)
+	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 38.0),
+		"융합 메뉴 재료  ·  백팩 클릭=적재 / 재고 클릭=회수", 12, HanjiUi.INK_DIM)
+	_larder_rects.clear()
+	if larder == null:
+		return
+	const ROW_H := 30.0
+	const ICON := 26.0
+	var row_y := panel.position.y + PAD + 52.0
+	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0   # 백팩 그리드 시작 직전까지
+	var ids: Array = larder.ids()
+	var max_rows := int((max_y - row_y) / ROW_H)
+	var shown := mini(ids.size(), max_rows)
+	for i in shown:
+		var id: String = ids[i]
+		var pos := Vector2(panel.position.x + PAD, row_y + i * ROW_H)
+		var icon_rect := Rect2(pos, Vector2(ICON, ICON))
+		_larder_rects.append({"rect": icon_rect, "id": id})
+		_draw_slot_box(icon_rect, false)
+		_draw_icon(id, icon_rect)
+		var ty := pos.y + ICON - 8.0
+		HanjiUi.draw_text(self, Vector2(pos.x + ICON + 10.0, ty),
+			"%s ×%d" % [ItemCatalog.name_of(id), larder.count_of(id)], 13, HanjiUi.INK_LIGHT, 150.0)
+		# 이 재료가 되는 융합 메뉴(없으면 "—"). 무엇을 쟁이면 무엇이 나가는지가 곳간의 값이다.
+		var menu_id := MenuCatalog.menu_for_signature(id)
+		var right := "—" if menu_id == "" else "%s  %d냥" % [
+			MenuCatalog.name_of(menu_id), MenuCatalog.price_of(menu_id)]
+		var rc: Color = HanjiUi.INK_DIM if menu_id == "" else HanjiUi.GOLD_SOFT
+		HanjiUi.draw_text(self, Vector2(panel.end.x - PAD - HanjiUi.text_width(right, 13), ty),
+			right, 13, rc)
+	if ids.size() > shown:
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + shown * ROW_H + 12.0),
+			"…외 %d종" % (ids.size() - shown), 12, HanjiUi.INK_DIM)
+
 # ── ★ Phase D 저장 상자 상단(보관 슬롯 그리드) ────────────────────────────────
 # 상단 컨텍스트 영역에 상자 슬롯을 백팩과 같은 6열 그리드로 그린다(하단=백팩, 상단=상자). 클릭은
 # _click_chest가 라우팅한다(백팩 슬롯 클릭=보관 / 상자 슬롯 클릭=회수 — bin 드롭의 양방향 판).
@@ -1348,6 +1415,8 @@ func _gui_input(event: InputEvent) -> void:
 			_click_guild(p, event.shift_pressed)      # ★ [S5-T6] 길드(검·환약 단일 목록)
 		CTX_CHEST:
 			_click_chest(p)
+		CTX_LARDER:
+			_click_larder(p)   # ★[S6-T1] 곳간(백팩=적재 / 재고 행=회수 — 출하함 동형)
 	accept_event()
 
 # ★ 마우스 호버 탭 갱신(메뉴 컨텍스트만) — 바뀔 때만 다시 그린다(툴팁 표시).
@@ -1438,6 +1507,18 @@ func _click_bin(p: Vector2) -> void:
 	for e in _bin_rects:
 		if e["rect"].has_point(p):
 			takeback_id.emit(e["id"])
+			return
+
+# ★[S6-T1] 곳간 클릭: 백팩 슬롯=적재(larder_store) / 재고 행=회수(larder_take). 출하함 _click_bin과
+# 정확히 같은 라우팅이다(적재 대상 제한·용량 판정은 main·Larder가 맡는다 — 프레임은 의도만 쏜다).
+func _click_larder(p: Vector2) -> void:
+	for i in _bp_rects.size():
+		if _bp_rects[i].has_point(p):
+			larder_store.emit(i)
+			return
+	for e in _larder_rects:
+		if e["rect"].has_point(p):
+			larder_take.emit(String(e["id"]))
 			return
 
 # ★ Phase D 저장 상자 클릭: 백팩 슬롯=보관(chest_store) / 상자 슬롯=회수(chest_take). 출하함과 달리

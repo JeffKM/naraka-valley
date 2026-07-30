@@ -290,6 +290,18 @@ const KEYS := {                             # 열쇠 id → {name_ko}(비매·�
 	NARAK_KEY: {"name_ko": "나락 열쇠"},
 }
 
+# ── ★[S6-T1 / ADR-0064 결정 2·9] 카페 메뉴 — 기본 4 + 융합 12 ────────────────
+# 데이터(이름·시그니처 재료·가격·색)는 **MenuCatalog가 단일 출처**이고 여기는 판정/표시 위임만
+# 한다(GearCatalog·WeaponCatalog·FishCatalog 위임 관례 동형 — 데이터 중복 0). id 상수도 안 박는다:
+# 메뉴 id를 코드에서 부르는 쪽은 카페·곳간이고 그쪽은 MenuCatalog를 직접 보는 게 정배다.
+#
+# ★ 카테고리 = **CAT_CONSUMABLE**(미끼·명부환·계단이 쓰는 그 칸 — 결정 9). 신규 카테고리 0.
+# ★ **품질 무차원**이다(메뉴는 품질 무영향 — catalog §1-B). 그래서 price_of가 등급 배수를 안 얹는다.
+# ★ 가격은 MenuCatalog가 시그니처 기본가 ×2.5로 파생한다(잠정 — owner 큐).
+# ★ 지금 실효 범위: 카탈로그 등록 + 곳간·메뉴 UI 열거까지다. **주문 롤·융합 매출·혼력 회복은
+#   T2 이후 소관**이라 아직 인벤토리에 실제로 들어오는 경로가 없다(광석·씨앗이 "등록만" 된 채
+#   슬라이스를 넘긴 선례 동형).
+
 # ── ★[S2-T5 / ADR-0060 결정 5] 유품(relic) — 혼백관 기증 수집물 ─────────────────────
 # 망자가 이승에 남긴 물건. 안식 괭이질 저확률 발굴(Museum.relic_roll — 스타듀 Artifact 대응)로 얻고
 # 혼백관에 기증한다(종당 1회 — 중복 발굴분은 판매 가능). 서사(누구의 유품인가)는 Slice 9 소관(봉인 법칙).
@@ -611,6 +623,11 @@ static func _is_key(id: String) -> bool:
 static func _is_utility(id: String) -> bool:
 	return UTILITIES.has(id)
 
+# ★[S6-T1] id가 카페 메뉴(기본 4 + 융합 12)인가. 환약·계단과 같은 CAT_CONSUMABLE이되 데이터는
+#   MenuCatalog가 든다(위 메뉴 블록 주석 — 위임 관례). 소비 동사는 *서빙*이라 또 갈린다.
+static func _is_menu(id: String) -> bool:
+	return MenuCatalog.has(id)
+
 # ★[S5-T6] 이 소모품 1개가 채우는 HP("" · 소모품 아님 = 0). 회복 수치의 단일 조회 창구다
 #   (main이 POTIONS dict를 직접 뒤지지 않게 — 카탈로그가 값의 주인).
 static func potion_heal(id: String) -> int:
@@ -652,7 +669,7 @@ static func has_item(id: String) -> bool:
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id) or _is_pot_good(id) \
 		or _is_sap_good(id) or _is_mineral(id) or _is_ingot(id) or _is_weapon(id) \
-		or _is_potion(id) or _is_key(id) or _is_utility(id)
+		or _is_potion(id) or _is_key(id) or _is_utility(id) or _is_menu(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -667,7 +684,8 @@ static func category_of(id: String) -> String:
 		return CAT_CONSUMABLE
 	# ★[S5-T6] 명부환 = 미끼와 같은 스택 소모품 칸(든 채 LMB로 마신다 — main._drink_potion).
 	# ★[S5-T8] 계단도 같은 칸(든 채 LMB로 놓는다 — main._use_stairs).
-	if _is_potion(id) or _is_utility(id):
+	# ★[S6-T1] 카페 메뉴도 같은 칸(결정 9 — 들고 쓰면 사라지는 스택 물건. 소비 동사만 서빙으로 다르다).
+	if _is_potion(id) or _is_utility(id) or _is_menu(id):
 		return CAT_CONSUMABLE
 	# ★[S5-T4] 무기 = 유니크 장착물이라 도구·낚싯대와 같은 칸(CAT_TOOL). 새 카테고리를 안 만드는 이유는
 	#   "든 것이 곧 동사"(ADR-0024)라 핫바·인벤·툴팁·정렬이 도구와 완전히 같은 취급을 하면 되기 때문이다.
@@ -722,6 +740,8 @@ static func name_of(id: String) -> String:
 		return POTIONS[id]["name_ko"]    # ★S5-T6 회복 소모품(명부환 — 길드 판매)
 	if _is_utility(id):
 		return UTILITIES[id]["name_ko"]  # ★S5-T8 소모 장치(계단 — 손 제작)
+	if _is_menu(id):
+		return MenuCatalog.name_of(id)   # ★S6-T1 카페 메뉴 16종(단일 출처 = MenuCatalog)
 	if _is_key(id):
 		return KEYS[id]["name_ko"]       # ★S5-T6 열쇠(나락 열쇠 — 60층 보상 상자)
 	if _is_forageable(id):
@@ -752,8 +772,8 @@ static func stackable_of(id: String) -> bool:
 		return false   # ★S5-T4 무기 = 전부 유니크 장착물(검 5종 — 스택 0)
 	if _is_key(id):
 		return false   # ★S5-T6 열쇠 = 세상에 한 자루(개수 축 없음 — 도구·무기 결)
-	if _is_potion(id) or _is_utility(id):
-		return true    # ★S5-T6 환약 · ★S5-T8 계단 = 스택 소모품(미끼 결 — 여러 개 들고 내려간다)
+	if _is_potion(id) or _is_utility(id) or _is_menu(id):
+		return true    # ★S5-T6 환약 · ★S5-T8 계단 · ★S6-T1 메뉴 = 스택 소모품(미끼 결)
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_pot_good(id) or _is_sap_good(id) \
@@ -776,6 +796,10 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 	#   되지 않은 id로 떨어져 0을 돌려받는다(팔 수도 살 수도 없다는 뜻이 값 0으로 표현된다).
 	if _is_potion(id):
 		return int(POTIONS[id]["price"])
+	# ★[S6-T1] 카페 메뉴 = **품질 무차원** 판매가(메뉴는 품질 무영향 — catalog §1-B). 융합 메뉴가는
+	#   MenuCatalog가 시그니처 기본가 ×2.5로 파생한다(단일 출처 — 여기서 배수를 또 얹지 않는다).
+	if _is_menu(id):
+		return MenuCatalog.price_of(id)
 	if _is_seed(id):
 		return CropCatalog.seed_cost(_seed_crop(id))
 	if _is_sapling(id):
@@ -814,6 +838,47 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return int(AnimalCatalog.product_sell(id) * quality_mult(quality))
 	return 0
 
+# ★[S6-T1 / ADR-0064 결정 11 ②] 그 카테고리에 속한 전 아이템 id(선언 순). 곳간·메뉴 UI가 "무엇을
+# 담을 수 있나 / 무엇을 파나"를 열거할 때 쓴다 — 지금까지는 그런 창구가 없어 호출 측이 로스터
+# dict를 하드코딩 목록으로 다시 세워야 했다(FORAGEABLES를 밖에서 순회하던 그 패턴의 해소).
+#
+# ★ 왜 dict 하나를 순회하지 않고 소스를 모아 붙이나: 이 카탈로그는 데이터를 **위임**해서 든다
+#   (작물=CropCatalog · 어종=FishCatalog · 기어=GearCatalog …). "전 아이템"이라는 단일 컬렉션이
+#   애초에 없으므로, 여기서 소스별로 모아 category_of로 거른다(단일 출처 원칙 불변).
+# ★ 도구·씨앗·묘목처럼 **파생 id**를 갖는 군은 파생해서 넣는다(씨앗 = 작물군 × _seed).
+# ★ 비용: 호출당 전 로스터 1회 순회다. 매 프레임 도는 자리(_draw·_process)에서 부르지 말고
+#   패널을 여는 순간처럼 이벤트 시점에 한 번 부른다.
+static func ids_in_category(category: String) -> Array:
+	var out: Array = []
+	var pools: Array = [
+		TOOLS.keys(), GearCatalog.RODS.keys(), GearCatalog.BAITS.keys(),
+		GearCatalog.TACKLES.keys(), WeaponCatalog.ids(),
+		MATERIALS.keys(), MINERALS.keys(), INGOTS.keys(), POTIONS.keys(),
+		UTILITIES.keys(), KEYS.keys(), RELICS.keys(), FORAGEABLES.keys(),
+		POT_GOODS.keys(), SAP_GOODS.keys(), PLACEABLES.keys(),
+		FertilizerCatalog.ids(), FishCatalog.ids(), MenuCatalog.ids(),
+		[HAY],
+	]
+	for pool in pools:
+		for id in pool:
+			var sid := str(id)
+			if category_of(sid) == category and not out.has(sid):
+				out.append(sid)
+	# 파생 id 군(씨앗·묘목·과일·짐승 산물) — 원본 로스터에 그 id로는 안 들어 있어 따로 만든다.
+	for crop_id in CropCatalog.ids():
+		for sid in [harvest_id(crop_id), seed_id(crop_id)]:
+			if category_of(sid) == category and not out.has(sid):
+				out.append(sid)
+	for fruit_id in FruitTreeCatalog.ids():
+		for sid in [fruit_id, sapling_id(fruit_id)]:
+			if category_of(sid) == category and not out.has(sid):
+				out.append(sid)
+	for product_id in AnimalCatalog.product_ids():
+		for sid in [product_id, large_product_id(product_id)]:
+			if category_of(sid) == category and not out.has(sid):
+				out.append(sid)
+	return out
+
 # 씨앗 아이템 → 작물군 id("" = 씨앗 아님). main이 "이 씨앗을 심으면 무슨 작물"을 알 때 쓴다.
 static func crop_of(id: String) -> String:
 	return _seed_crop(id) if _is_seed(id) else ""
@@ -834,4 +899,6 @@ static func tool_color_of(id: String) -> Color:
 		return POTIONS[id]["color"]         # ★S5-T6 환약 색박스(CAT_CONSUMABLE 아이콘 폴백이 읽는다)
 	if _is_utility(id):
 		return UTILITIES[id]["color"]       # ★S5-T8 계단 색박스(환약과 같은 폴백 경로)
+	if _is_menu(id):
+		return MenuCatalog.color_of(id)     # ★S6-T1 메뉴 색박스(아이콘 아트 = S6 후속)
 	return Color.WHITE

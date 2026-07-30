@@ -2033,6 +2033,13 @@ const NEO_TILE := Vector2i(27, 76)   # 만물상 방 뒷벽 가운데(★C3 +48 
 # (19,89)에 서서 위를 바라보며(facing_bin) 우클릭으로 출하함 패널을 연다. 카페 바닥(CAFE)이라
 # 농사 대상이 아니고(밭과 안 겹침), 좌석(y90)·NPC(x10/13/15/17)·문과도 칸이 갈린다.
 const SHIP_BIN_TILE := Vector2i(19, 88)   # 카페 직원 줄(y88) 오른쪽 끝(무인 출하함 자리)
+# ★[S6-T1 / ADR-0064 결정 3] 곳간 칸(카페 안 뒷줄 **왼쪽 끝** — 출하함의 대칭 자리).
+# 카페 실내 바닥은 x9..19 · y87..94이고, 직원 줄 y88은 옥자(10)·멜(13)·미호(15)·바나(17)·
+# 출하함(19)이 이미 쓴다 → 남은 왼쪽 끝 x9가 곳간 자리다. 아래 칸 (9,89)는 바 카운터
+# 프롭(x10..16)에도 안 걸려 서서 위를 바라볼 수 있다.
+# ★ 자리를 출하함 반대쪽 끝에 두는 것이 곧 설계다: 같은 수확물을 *오른쪽(출하대 = 팔 것)* 으로
+#   가져갈지 *왼쪽(곳간 = 메뉴로 키울 것)* 으로 가져갈지가 CONTEXT [곳간]이 말하는 그 선택이다.
+const LARDER_TILE := Vector2i(9, 88)
 
 @onready var ground: TileMapLayer = $Ground
 @onready var field_layer: TileMapLayer = $Field           # T2.1 밭 상태 오버레이
@@ -2270,6 +2277,11 @@ var hotbar: HotbarHud
 # ★ Phase 2.7 C2 — 무인 출하함(대기 재고 + 익일 정산). wallet·inventory 결의 상태 노드지만 코드
 # 생성으로 붙인다(lighting·hotbar 결 — 새 tscn 노드 추가 회피). 세이브는 별도 조각으로 main이 조율.
 var ship_bin: ShippingBin
+
+# ★[S6-T1 / ADR-0064 결정 3] 카페 곳간(융합 메뉴 재료 재고). ship_bin과 같은 결의 상태 노드 —
+# 코드 생성으로 붙이고(_setup_larder), 세이브는 별도 조각으로 main이 조율한다. 프레임 CTX_LARDER가 참조.
+# ★ 출하함과 **거울상**이다: 출하함은 넣으면 익일 골드, 곳간은 넣으면 융합 메뉴 재료가 된다.
+var larder: Larder
 
 # ★ ADR-0048 Phase D — 저장 상자(집 실내 순수 보관 컨테이너, 경제 0). ship_bin과 같은 결의 상태 노드 —
 # 코드 생성으로 붙이고(_setup_chest), 세이브는 별도 조각으로 main이 조율한다. 프레임 CTX_CHEST가 참조.
@@ -2588,6 +2600,7 @@ func _ready() -> void:
 	_setup_hotbar()
 	_setup_shipping_bin()   # ★ C2 무인 출하함(프레임이 참조 → 프레임보다 먼저)
 	_setup_chest()          # ★ Phase D 저장 상자(프레임이 참조 → 프레임보다 먼저)
+	_setup_larder()         # ★ S6-T1 카페 곳간(프레임이 참조 → 프레임보다 먼저)
 	_setup_hud_overlays()   # ★ C3 좌하단 알림 피드 + 우하단 혼력 바(프레임보다 먼저 → 모달이 위에)
 	_setup_frame()          # ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대/상자)
 	_setup_settings()       # ★ Phase D 설정(볼륨·전체화면 — audio·프레임 존재 후, 프레임 신호 연결·적용)
@@ -8273,6 +8286,14 @@ func _setup_chest() -> void:
 	add_child(storehouse_chest)
 	_active_chest = chest   # 기본 활성 = 집 상자(프레임 초기 참조와 정합)
 
+# ── ★[S6-T1 / ADR-0064 결정 3] 카페 곳간 ────────────────────────────────────────
+# ship_bin과 같은 결의 상태 노드(융합 메뉴 재료 재고). 프레임(CTX_LARDER)이 참조하므로 프레임보다 먼저.
+# 재고는 main 세이브에 한 조각("larder")으로 직렬화된다(출하함 대기분과 같은 관례).
+func _setup_larder() -> void:
+	larder = Larder.new()
+	larder.name = "Larder"
+	add_child(larder)
+
 # ── ★ ADR-0048 Phase D 설정(볼륨·전체화면) ──────────────────────────────────────
 # GameSettings를 붙여 디스크에서 읽고 즉시 적용한다(버스 볼륨·창모드). 옵션 탭 조작은 프레임 신호로 받아
 # 값 갱신→적용→영속한다(데이터/적용 디커플링 — GameSettings는 audio·DisplayServer를 모른다).
@@ -8372,6 +8393,7 @@ func _setup_frame() -> void:
 	_merge_t10_icons(icons)                         # ★ [S4-T10] 채집물·자재·씨앗 봉지(흰박스 대체)
 	frame.setup(inventory, ship_bin, icons)
 	frame.set_chest(chest)   # ★ Phase D 저장 상자 주입(CTX_CHEST 상단 그리드)
+	frame.attach_larder(larder)   # ★[S6-T1] 카페 곳간 주입(CTX_LARDER 상단 재고 행)
 	frame.deposit_slot.connect(_on_frame_deposit)
 	frame.takeback_id.connect(_on_frame_takeback)
 	frame.buy_pressed.connect(_on_frame_buy)
@@ -8386,6 +8408,8 @@ func _setup_frame() -> void:
 	frame.quit_pressed.connect(_on_frame_quit)
 	frame.chest_store.connect(_on_frame_chest_store)   # ★ Phase D 상자 보관
 	frame.chest_take.connect(_on_frame_chest_take)     # ★ Phase D 상자 회수
+	frame.larder_store.connect(_on_frame_larder_store) # ★[S6-T1] 곳간 적재
+	frame.larder_take.connect(_on_frame_larder_take)   # ★[S6-T1] 곳간 회수
 	frame.profession_chosen.connect(_on_frame_profession)   # ★ ADR-0052 숙련 탭 전문직 선택
 	frame.craft_chosen.connect(_on_frame_craft)             # ★[S4-T5] 제작 탭 레시피 실행
 	frame.craft_rows_fn = Callable(self, "_craft_rows")     # ★[S4-T5] 제작 탭 행 데이터 주입(프레임은 무상태)
@@ -8955,6 +8979,7 @@ func _save_game() -> void:
 		"shipping_bin": ship_bin.to_save(),   # ★ C2 출하 대기(롤백·익일 정산 보존)
 		"chest": chest.to_save(),   # ★ Phase D 저장 상자 보관 내용(순수 보관 — 세이브별 델타)
 		"storehouse_chest": storehouse_chest.to_save(),   # ★ Phase E 갈무리방(창고) 저장 상자(집 상자와 독립)
+		"larder": larder.to_save(),   # ★[S6-T1] 카페 곳간 재고(융합 메뉴 재료 — 출하함 대기분과 같은 결)
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
 		"farming_xp": _farming_xp,   # ★ S1-6 농사 숙련 XP(혼력 감산 파생원)
@@ -9067,6 +9092,8 @@ func _load_game() -> void:
 		chest.load_save(data["chest"])
 	if data.has("storehouse_chest"):   # ★ Phase E — 창고 상자(키 없는 구버전 = 빈 상자)
 		storehouse_chest.load_save(data["storehouse_chest"])
+	if data.has("larder"):   # ★[S6-T1] 카페 곳간 — 키 없는 구버전 세이브는 **빈 곳간**으로 시작(하위호환)
+		larder.load_save(data["larder"])
 	# ★ [S2-T7] 주민 호감도 복원 — 세이브 키가 없는 구버전은 그 주민만 ♡0으로 시작한다
 	#   (네오 M2.3 원문 규칙과 같은 결: 정가·무막힘. 옛 4갈래 if가 이 루프로 접혔다).
 	for r in _residents:
@@ -9763,6 +9790,9 @@ func _process(delta: float) -> void:
 	# ★ C2 무인 출하함: 카페 안에서 출하함 칸을 바라볼 때 우클릭으로 출하함 패널을 연다. NPC·좌석·
 	# 밭과 칸이 갈리고(SHIP_BIN_TILE 단일), _indoor로 가드해 다른 구역 같은 좌표에 닿아도 무반응.
 	var facing_bin := not _sleeping and _indoor == "카페" and _target == SHIP_BIN_TILE
+	# ★[S6-T1] 곳간: 카페 안에서 곳간 칸을 바라볼 때 우클릭으로 곳간 패널을 연다(출하함과 같은 결 —
+	# 같은 방 반대쪽 끝이라 칸이 갈리고, _indoor 가드로 다른 구역 같은 좌표엔 무반응).
+	var facing_larder := not _sleeping and _indoor == "카페" and _target == LARDER_TILE
 	# ★ Phase D 저장 상자: 집 실내에서 상자 칸을 바라볼 때 우클릭으로 상자 패널을 연다(_indoor로 가드해
 	# 다른 구역 같은 좌표에 닿아도 무반응 — facing_bin과 같은 결). 집 안 상호작용은 상자 하나뿐이라 안 겹친다.
 	var facing_chest := not _sleeping and _indoor == "집" and _target == CHEST_TILE
@@ -9850,6 +9880,14 @@ func _process(delta: float) -> void:
 	# 잡고 return — 출하함 칸은 다른 대상과 안 겹친다). 패널은 모달이라 위 frame.is_open 가드로 닫힌다.
 	if facing_bin and Input.is_action_just_pressed("action"):
 		_open_frame(InventoryFrame.CTX_BIN)
+		return
+	# ★[S6-T1] 곳간 열기 — 출하함과 **같은 방 안 반대쪽 끝**이라 같은 입력 문법(우클릭)을 쓴다.
+	#   [F](shop_toggle)도 받는다: 곳간은 사람이 아니라 설비라 F가 자연스럽다는 쪽과 상자·출하함이
+	#   전부 우클릭이라는 쪽이 둘 다 옳아, 배타적일 이유가 없는 자리에서만 둘 다 연다(다른 F 대상과
+	#   칸이 겹치지 않는다 — 카페 실내엔 게시판·기증대·모루가 없다).
+	if facing_larder and (Input.is_action_just_pressed("action") \
+			or Input.is_action_just_pressed("shop_toggle")):
+		_open_frame(InventoryFrame.CTX_LARDER)
 		return
 	# ★ Phase D 저장 상자 열기(RMB): 집 실내 상자 칸을 바라보며 우클릭으로 보관 패널을 연다(모달 —
 	# 위 frame.is_open 가드로 닫힌다). 집 안 취침(ui_accept)·상자(action)는 키가 갈려 안 겹친다.
@@ -10284,6 +10322,11 @@ func _process(delta: float) -> void:
 		# ★ C2 무인 출하함을 바라볼 때: 우클릭으로 패널을 연다(드롭→익일 정산, 멜 F 소멸).
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 무인 출하함 (수확물 드롭 → 다음 아침 정산)"
+	elif facing_larder:
+		# ★[S6-T1] 곳간을 바라볼 때: 적재하면 융합 메뉴 재료가 된다(출하함과 갈리는 선택을 문구가 말한다).
+		interact_prompt.visible = true
+		interact_prompt.text = "[우클릭/F] 곳간 (수확물 적재 → 융합 메뉴 재료 · %d/%d)" % [
+			larder.total(), Larder.CAPACITY]
 	elif faced_resident != null:
 		# ★ [S2-T7] 주민 프롬프트 — 옛 5갈래(미호·옥자·바나·멜·네오) 문구가 한 조립식으로 접혔다.
 		# 기본 "[우클릭] 대화" + (선물 채널이 있으면) "[G] <작물> 선물" + (특수 훅이 있으면) 꼬리
@@ -11901,6 +11944,44 @@ func _on_frame_takeback(id: String) -> void:
 	if restored > 0:
 		audio.sfx("ui")
 		_notice("출하함에서 %s %d개 회수" % [ItemCatalog.name_of(id), restored])
+
+# ── ★[S6-T1 / ADR-0064 결정 3] 곳간 적재/회수(프레임 시그널 핸들러) ────────────
+# 곳간 패널에서 백팩 수확물 슬롯을 클릭하면 그 슬롯을 통째로 곳간에 적재한다(인벤토리에서 빠짐).
+# **출하함 드롭과 정확히 같은 종류 제한**(CAT_HARVEST만)이다 — 두 창구가 같은 물건을 놓고 갈리는
+# 선택이라야 "팔까 / 키울까"가 성립한다(CONTEXT [곳간]). 등급은 여기서 지워진다(곳간 = 품질 무차원).
+func _on_frame_larder_store(slot_index: int) -> void:
+	var id := inventory.id_at(slot_index)
+	if id == "" or ItemCatalog.category_of(id) != ItemCatalog.CAT_HARVEST:
+		return   # 수확물 외(씨앗·도구·비료)는 메뉴 재료가 아니다 — 무동작(출하함 드롭과 같은 문법)
+	var n := inventory.count_at(slot_index)
+	var stored := larder.add(id, n)
+	if stored <= 0:
+		_notice("곳간이 가득 찼습니다 (%d/%d)" % [larder.total(), Larder.CAPACITY])
+		return
+	inventory.remove_at(slot_index, stored)   # 들어간 만큼만 차감(용량 부분 적재 안전)
+	audio.sfx("ui")
+	var menu_id := MenuCatalog.menu_for_signature(id)
+	var tail := "" if menu_id == "" else " → %s" % MenuCatalog.name_of(menu_id)
+	_notice("곳간에 %s %d개 적재%s" % [ItemCatalog.name_of(id), stored, tail])
+
+# 곳간 재고를 통째로 백팩에 도로 넣는다("잘못 쟁였네" 회수 — 출하함 롤백 결). 백팩이 가득 차
+# 일부만 들어가면 그만큼만 곳간에서 뺀다. ★ 되돌아오는 등급은 **일반**이다(곳간이 등급을 안 들므로
+# 은/금을 넣었다면 그 등급은 적재 시점에 사라진다 — 계약이 그렇고, 패널 안내가 그걸 말한다).
+func _on_frame_larder_take(id: String) -> void:
+	var cnt := larder.count_of(id)
+	if cnt <= 0:
+		return
+	var added := 0
+	for _i in cnt:
+		if not inventory.add_item(id, 1, ItemCatalog.Q_NORMAL):
+			break   # 백팩 가득 — 더는 못 받는다
+		added += 1
+	if added <= 0:
+		_notice("백팩이 가득 찼습니다")
+		return
+	larder.take_back(id, added)
+	audio.sfx("ui")
+	_notice("곳간에서 %s %d개 회수" % [ItemCatalog.name_of(id), added])
 
 # ★ Phase E — 상자를 연다. 활성 상자를 target으로 바꾸고(프레임에 주입) CTX_CHEST 패널을 연다. 집·창고
 # 상자가 같은 패널을 공유하되 여는 순간 대상이 갈린다(보관/회수 핸들러는 _active_chest를 조작).
@@ -13956,19 +14037,30 @@ func _try_serve(seat: int) -> void:
 	_cafe_revenue_total += revenue            # T7.2 카페 마일스톤 누적(서빙 매출 — 카페를 운영한 매출)
 	_total_income += revenue                  # ★ [S1R-T12] 누적 총수입(정보패널)
 	audio.sfx("serve")                        # P2.6 카운터 종 "딩"
-	_notice("%s 서빙 +%d골드" % [CropCatalog.name_of(material), revenue])
+	# ★[S6-T1 / ADR-0064 결정 11 ①] `CropCatalog.name_of` → `ItemCatalog.name_of`. 서빙 재료는
+	#   이미 작물만이 아니다(물고기·채집물·수액·산물이 전부 CAT_HARVEST) — 작물 카탈로그로 조회하면
+	#   비-작물 재료의 이름이 **빈 문자열**로 나와 " 서빙 +35골드"가 뜬다.
+	_notice("%s 서빙 +%d골드" % [ItemCatalog.name_of(material), revenue])
 
 # 보유 수확물이 하나라도 있는가(서빙 가능 판정·프롬프트용).
 func _has_any_harvest() -> bool:
 	return inventory.total_harvest() > 0
 
 # 서빙에 쓸 가장 싼 수확물 id("" = 보유 수확물 없음). 정액 서빙가라 비싼 작물은 raw
-# 판매로 남기고 싼 작물부터 서빙하는 게 합리적이라, 자동 소모는 최저가 작물을 고른다.
+# 판매로 남기고 싼 작물부터 서빙하는 게 합리적이라, 자동 소모는 최저가 수확물을 고른다.
+#
+# ★[S6-T1 / ADR-0064 결정 11 ①] `CropCatalog.sell_price` → `ItemCatalog.price_of`. CropCatalog는
+#   작물만 알아서 물고기·채집물·수액·짐승 산물의 값을 **전부 0으로** 돌려줬다 — 0이 최저가라
+#   "가장 싼 것부터"가 뒤집혀 *비싼 비-작물이 항상 먼저 소모*됐다(600엽전짜리 불사과가 20엽전
+#   혼령초보다 먼저 서빙에 들어가는 잠복 버그). 밤 바 약탈(_raid_inventory)도 같은 함수를 쓰므로
+#   손실의 결이 함께 바로잡힌다.
+# ★ 품질은 안 본다(일반 등급 기준가로 비교) — 등급까지 갈라 최저가를 고르면 "은 혼령초 vs 일반
+#   혼령초" 판정이 생기는데, 서빙은 정액가라 그 판정에 걸린 값이 없다(T2 융합 매출도 품질 무차원).
 func _cheapest_harvest() -> String:
 	var best := ""
 	var best_price := -1
 	for id in inventory.harvest_ids():
-		var price := CropCatalog.sell_price(id)
+		var price := ItemCatalog.price_of(id)
 		if best == "" or price < best_price:
 			best = id
 			best_price = price
@@ -14464,6 +14556,7 @@ func _draw() -> void:
 			_draw_props_for(_prop_layouts.get("VILLAGE_OUTDOOR", []), self, _PROP_PASS_BACK, _vsy)
 			_draw_props_for(_prop_layouts.get("CAFE", []), self)  # ★ ADR-0025 데이터: 카페 무대 가구·카페 등불
 			_draw_ship_bin()         # ★ C2 무인 출하함 상자(카페 안 — 카페 카메라에서만 보임)
+			_draw_larder()           # ★[S6-T1] 곳간 찬장(카페 안 반대쪽 끝 — 출하함과 같은 카메라)
 			# M2.4 — 이벤트 데이면 카페 무대를 축제 장식으로(가구 위에 가랜드·무대 카펫 덧그림).
 			if Festival.is_event_day(clock.day):
 				_draw_cafe_festival()
@@ -15332,6 +15425,28 @@ func _draw_ship_bin() -> void:
 	# 대기 중이면 살짝 열린 표시(밝은 점) — "넣어 둔 게 있다"를 눈에 보이게.
 	if ship_bin != null and not ship_bin.is_empty():
 		draw_rect(Rect2(ox + TILE * 0.5 - 2, oy + 4, 4, 4), Color(0.90, 0.82, 0.45))
+
+# ★[S6-T1] 곳간(그레이박스 — 진짜 아트는 후속). LARDER_TILE 칸에 선반 찬장을 절차 도형으로 그린다.
+# 출하함(궤짝)과 **한눈에 갈리게** 세로로 서고 칸이 나뉜 형태다 — 같은 방 안 두 창구가 헷갈리면
+# "팔까 / 키울까" 선택이 사고로 갈린다. 적재량이 늘수록 아래 칸부터 채워져 재고가 눈에 보인다.
+func _draw_larder() -> void:
+	var ox := LARDER_TILE.x * TILE
+	var oy := LARDER_TILE.y * TILE
+	var box := Rect2(ox + 4, oy + 2, TILE - 8, TILE - 6)
+	draw_rect(box.grow(1.0), Color(0.18, 0.13, 0.10))            # 외곽선(어두운 나무)
+	draw_rect(box, Color(0.38, 0.28, 0.20))                      # 찬장 본체(출하함보다 어두운 나무)
+	# 선반 3단(가로 칸막이) — 세로 찬장임을 읽히게.
+	var shelf_h := box.size.y / 3.0
+	for i in range(1, 3):
+		draw_rect(Rect2(box.position.x, box.position.y + shelf_h * i, box.size.x, 1),
+			Color(0.24, 0.17, 0.12))
+	# 재고를 아래 칸부터 채운다(용량 비율 → 채워진 단 수). 텅 비면 아무것도 안 찬다.
+	if larder != null and not larder.is_empty():
+		var filled := ceili(3.0 * float(larder.total()) / float(Larder.CAPACITY))
+		for i in mini(filled, 3):
+			var sy := box.end.y - shelf_h * (i + 1) + 2.0
+			draw_rect(Rect2(box.position.x + 2.0, sy, box.size.x - 4.0, shelf_h - 3.0),
+				Color(0.72, 0.60, 0.34))                         # 쟁여 둔 재료(따뜻한 곡물빛)
 
 # ★ ADR-0048 Phase D 저장 상자(그레이박스 — 진짜 아트는 후속 스프라이트). CHEST_TILE 칸에 나무 궤짝을
 # 절차 도형으로 그린다(출하함과 같은 결이되 자물쇠 걸쇠로 "보관함"임을 구분). 집 카메라(HOME_HOUSE_CAM_RECT)
