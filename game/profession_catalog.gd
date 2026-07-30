@@ -14,7 +14,9 @@ class_name ProfessionCatalog
 #   트리 *구조*(id·이름·tier·requires·설명)만 잠그고 perks=[](각 스킬 빌드 슬라이스에서 채움).
 #   프레임워크가 5스킬에 일반적임을 증명하되 투기적 수치는 미리 안 박는다("한 시스템씩").
 #   ★갱신(2026-07-27 · S3-T6 / ADR-0061 결정 6): **낚시(FISHING) 퍼크 완비** — 예고대로 그 스킬의
-#   빌드 슬라이스에서 채웠다("각 스킬 빌드 슬라이스에서 채움" 이행). 남은 구조-only = 농사·채광·전투 3.
+#   빌드 슬라이스에서 채웠다("각 스킬 빌드 슬라이스에서 채움" 이행).
+#   ★★갱신(2026-07-30 · S5-T4 / ADR-0063 결정 4·9): **전투(COMBAT) 퍼크 완비**. 남은 구조-only =
+#   농사·채광 2(채광 값 인코딩 = S5-T8 · 농사 = 그 스킬 슬라이스).
 
 # ── 스킬 id ───────────────────────────────────────────────────────────────────
 const FARMING := "farming"
@@ -47,6 +49,17 @@ const DIM_TRAP_NO_BAIT := "trap_no_bait"       # 편의: 게잡이통 미끼 불
 # 배열만 채우면 배선 손질 없이 효과가 실효된다(ForageSkill 미배선 퍼크 3종과 같은 자리).
 const DIM_ORE_BONUS := "ore_bonus"             # 수량: 광맥당 광석 +N(광부)
 const DIM_GEM_PAIR := "gem_pair"               # 수량: 보석이 쌍으로 나올 확률(지질사)
+# ── ★[S5-T4 / ADR-0063 결정 4·9] 전투 퍼크 차원 5종 — **값까지 인코딩된다**(아래 COMBAT 트리) ──
+# 채광 트리(위 2종·값 인코딩 S5-T8)와 달리 전투는 이 태스크에서 데이터가 채워진다: HP·피해·크리가
+# 전부 T4가 만드는 판정(PlayerHealth·CombatSkill.resolve_hit) 안에 소비처를 갖기 때문이다.
+# ★ 리듀서가 차원마다 다르다 — 아래 두 줄(합산)은 main._perk_sum, 나머지(배수)는 main._perk_value(max).
+#   합산인 이유는 tier10이 tier5를 **선행으로 요구**해 두 퍼크가 늘 함께 존재하기 때문이다
+#   (투사 15 + 수호자 25 = 40 · 투사 10% + 광전사 15% = 25% — 스타듀 누적 곡선 1:1).
+const DIM_MAX_HP := "max_hp"                   # 생존: 최대 체력 +N(투사 15 · 수호자 25 — **합산**)
+const DIM_DAMAGE_BONUS := "damage_bonus"       # 수량: 피해 +비율(투사 0.10 · 광전사 0.15 — **합산**)
+const DIM_CRIT_CHANCE := "crit_chance"         # 수량: 크리 확률 배수(척후 1.5 — 배수라 max)
+const DIM_CRIT_MULT := "crit_mult"             # 수량: 크리 배율의 배수(결사 2.0 — 배수라 max)
+const DIM_SPECIAL_COOLDOWN := "special_cooldown"  # 편의: 특수기 쿨다운 배수(곡예사 0.5) ★예약 퍼크
 
 # ── 트리 데이터: 스킬 → [전문직...] ────────────────────────────────────────────────
 # profession = {id, tier(5/10), requires(tier10만=부모 lvl5 id / tier5=""), name, desc, perks:[{dim,value}]}
@@ -116,14 +129,26 @@ const _TREE := {
 			"desc": "게잡이통 미끼 불필요",
 			"perks": [{"dim": DIM_TRAP_NO_BAIT, "value": 1.0}]},   # ★S3-T7 소비
 	],
-	# ── 전투(구조만) ──────────────────────────────────────────────────────────
+	# ── ★[S5-T4 / ADR-0063 결정 4·9] 전투(퍼크 완비 — 채집·낚시에 이은 세 번째 실효 트리) ──────
+	# 투사 갈래 = **정면 강화**(피해·체력) · 척후 갈래 = **크리 특화**(확률·배율). 갈래가 서로 다른
+	# 축을 건드려 "같은 +%의 반복"을 피한다(ADR-0008 결 — 곱셈기 종류가 캐릭터마다 다른 것과 동형).
+	# ★ 곡예사만 **예약 퍼크**다: 무기 특수동작(RMB)이 장비 클러스터 서랍에 묶여 소비처가 없다
+	#   (ADR-0063 결정 9 "선택은 가능하되 효과 보류 명시"). 값은 미리 박아 두고 해석기가 중립을
+	#   반환한다(CombatSkill.special_cooldown_factor) — 서랍이 열리면 그 한 줄만 실효된다.
 	COMBAT: [
-		{"id": "fighter", "tier": 5, "requires": "", "name": "투사", "desc": "피해 +10% + 최대 체력 +15", "perks": []},
-		{"id": "scout", "tier": 5, "requires": "", "name": "척후", "desc": "크리 확률 +50%", "perks": []},
-		{"id": "brute", "tier": 10, "requires": "fighter", "name": "광전사", "desc": "피해 +15%", "perks": []},
-		{"id": "defender", "tier": 10, "requires": "fighter", "name": "수호자", "desc": "최대 체력 +25", "perks": []},
-		{"id": "acrobat", "tier": 10, "requires": "scout", "name": "곡예사", "desc": "특수기 쿨다운 −50%", "perks": []},
-		{"id": "desperado", "tier": 10, "requires": "scout", "name": "결사", "desc": "크리 위력↑", "perks": []},
+		{"id": "fighter", "tier": 5, "requires": "", "name": "투사", "desc": "피해 +10% + 최대 체력 +15",
+			"perks": [{"dim": DIM_DAMAGE_BONUS, "value": 0.10}, {"dim": DIM_MAX_HP, "value": 15.0}]},
+		{"id": "scout", "tier": 5, "requires": "", "name": "척후", "desc": "크리 확률 +50%",
+			"perks": [{"dim": DIM_CRIT_CHANCE, "value": 1.5}]},        # 2% → 3%
+		{"id": "brute", "tier": 10, "requires": "fighter", "name": "광전사", "desc": "피해 +15%",
+			"perks": [{"dim": DIM_DAMAGE_BONUS, "value": 0.15}]},      # 투사와 **합산** = +25%
+		{"id": "defender", "tier": 10, "requires": "fighter", "name": "수호자", "desc": "최대 체력 +25",
+			"perks": [{"dim": DIM_MAX_HP, "value": 25.0}]},            # 투사와 **합산** = +40
+		{"id": "acrobat", "tier": 10, "requires": "scout", "name": "곡예사",
+			"desc": "특수기 쿨다운 절반 (무기 특수동작 도입 전까지 효과 보류)",
+			"perks": [{"dim": DIM_SPECIAL_COOLDOWN, "value": 0.5}]},   # ★예약 퍼크(해석기가 중립 반환)
+		{"id": "desperado", "tier": 10, "requires": "scout", "name": "결사", "desc": "크리 위력 2배",
+			"perks": [{"dim": DIM_CRIT_MULT, "value": 2.0}]},          # ×3 → ×6
 	],
 }
 

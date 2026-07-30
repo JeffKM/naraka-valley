@@ -169,6 +169,11 @@ var _heart_effects: Array = []   # ★ C3 각 캐릭터의 관계 곱셈기 효�
 var _skill_rows: Array = []
 # ★ ADR-0052 전문직 선택 버튼 클릭 영역 — _draw_skill_tab이 매 그리기마다 재구성 [{rect, skill, prof_id}].
 var _prof_choice_rects: Array = []
+# ★[S5-T4] 숙련 탭 첫 표시 행 인덱스(5스킬 + 동시 선택 대기 버튼이 패널을 넘길 때 흡수 — 매대
+#   리스트 _store_scroll과 같은 문법). 클램프는 그리기 시점(_draw_skill_tab)이 행수와 함께 수행한다.
+var _skill_scroll := 0
+# 휠 히트테스트 영역(_draw_skill_tab이 매 그리기마다 갱신 — _store_area_rect 결).
+var _skill_area_rect := Rect2()
 
 # ★ [S3-T5] 관계 탭 하트 행 수·간격. 곱셈기(effect_fn)를 가진 주민만 뜨므로 성장이 느리다
 # (메인 4인 + 점주 퍼크 — ADR-0008). 뱃사공이 다섯째로 붙으며 4 → 5로 늘렸고, 다섯 행이 패널
@@ -217,6 +222,7 @@ func open(ctx: int) -> void:
 	_trade_scroll = 0            # ★ [S3-T5] 환전 리스트도 맨 위로
 	fishshop_tab = FS_TAB_GEAR   # ★ [S3-T5] 생선가게는 항상 기어 매대부터(예측 가능한 첫 화면)
 	_build_scroll = 0            # ★ [S4-T7] 건축 리스트도 맨 위로
+	_skill_scroll = 0            # ★ [S5-T4] 숙련 탭 5행 리스트도 맨 위로
 	woodshop_tab = WS_TAB_BUILD  # ★ [S4-T7] 목공방은 항상 건축 의뢰부터(가게의 얼굴 = 로빈 건축)
 	visible = true
 	_apply_heart_visibility()
@@ -725,16 +731,24 @@ func _draw_rel_tab(panel: Rect2, font: Font) -> void:
 		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD + 12.0, ey), eff,
 			12, HanjiUi.INK_DIM, panel.size.x - PAD * 2.0 - 12.0)
 
-# ── 숙련 탭 행 치수(★[S3-T6] 상수화) ────────────────────────────────────────
+# ── 숙련 탭 행 치수(★[S3-T6] 상수화 → ★[S5-T4] 5행 봉합) ──────────────────
 # 패널 높이는 고정(_panel_rect)이라 숙련 행이 늘면 아래로 넘친다. **낚시가 3행째로 합류**하면서
-# (농사·채집·낚시 — S3-T6) 옛 치수(행 50 + 전문직 줄 20 + 여백 14 = 84/행)로는 3행이 안 들어갔다.
-# 그래서 ①전문직 요약을 XP 꼬리와 **같은 줄**로 접고(행당 −20) ②행 높이·여백을 조인다(−12).
-# ⚠️ 여러 스킬이 *동시에* 선택 대기(pending)면 버튼 묶음 때문에 여전히 빠듯하다 — 이는 2행 시절부터
-#    있던 제약이고(스킬 수와 무관), 스크롤 도입은 아트/UX 패스 소관이다(★owner 큐).
-const SK_ROW_H := 42.0      # 한 스킬 행(제목·진행바·XP 꼬리) 블록 높이
+# (농사·채집·낚시 — S3-T6) 옛 치수(행 50 + 전문직 줄 20 + 여백 14 = 84/행)로는 3행이 안 들어갔고,
+# 그래서 ①전문직 요약을 XP 꼬리와 같은 줄로 접고 ②행 높이·여백을 조였다(행당 46px).
+#
+# ★[S5-T4 / ADR-0063 결정 9] **전투가 5행째로 합류**하며(농사·채집·낚시·채광·전투 = 5스킬 전면 가동)
+#   46px × 5 = 230이 가용 높이 216을 넘겼다. 두 갈래로 봉합한다:
+#   ㉠ **한 행을 두 줄 → 한 줄**로 접는다(36px): XP 꼬리와 전문직 요약이 진행바 아래 별 줄을 쓰던 것을
+#      제목 줄 오른쪽으로 올렸다. 5행 = 180px → 여유 36px이 남아 6번째 스킬이 붙어도 안 넘친다.
+#   ㉡ **행 스크롤**(_skill_scroll): 여러 스킬이 *동시에* 선택 대기(pending)면 버튼 묶음이 붙어 어떤
+#      고정 치수로도 안 들어간다(2행 시절부터 있던 제약 — S3-T6 주석의 ★owner 큐 항목). 매대 리스트와
+#      **같은 문법**(_store_scroll = 첫 표시 행 인덱스 + 휠)으로 흡수하고, 넘치면 "▼ 더 있음"을 띄운다.
+#      들어가는 만큼만 그리므로 부분 행이 테두리를 물고 삐져나오는 일이 없다.
+const SK_ROW_H := 32.0      # 한 스킬 행(제목·XP 꼬리·전문직 요약 한 줄 + 진행바) 블록 높이
 const SK_ROW_GAP := 4.0     # 행 간 여백
 const SK_OPT_H := 28.0      # 전문직 선택 버튼 높이
-const SK_PROF_X := 118.0    # XP 꼬리 오른쪽에 붙는 "전문직:" 요약의 x 오프셋
+const SK_TAIL_X := 118.0    # 제목 오른쪽에 붙는 XP 꼬리의 x 오프셋
+const SK_PROF_X := 196.0    # XP 꼬리 오른쪽에 붙는 "전문직:" 요약의 x 오프셋
 
 # ★ Phase B 숙련 탭 — main이 넘긴 _skill_rows를 레벨·진행바로 그린다(읽기 전용, 관계 탭과 대칭).
 func _draw_skill_tab(panel: Rect2, font: Font) -> void:
@@ -745,7 +759,22 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 		HanjiUi.draw_text(self, Vector2(x, y), "숙련 정보 없음", 13, HanjiUi.INK_DIM)
 		return
 	var bar_w := panel.size.x - PAD * 2.0 - 24.0
-	for row in _skill_rows:
+	# ★[S5-T4] 가용 바닥 = 패널 하단에서 9-slice 나무 테두리(FRAME_MARGIN)를 뺀 자리. 이 선을 넘길
+	#   블록은 아예 안 그리고 스크롤로 넘긴다(옵션 탭 막줄이 테두리에 걸치던 버그와 같은 기준선).
+	var max_y := panel.end.y - FRAME_MARGIN
+	# 스크롤 인덱스 클램프 — 행 수가 줄어든 뒤(스킬 제거·데이터 교체)에도 빈 화면이 안 남게.
+	_skill_scroll = clampi(_skill_scroll, 0, maxi(_skill_rows.size() - 1, 0))
+	_skill_area_rect = Rect2(panel.position.x + PAD, y - 16.0, panel.size.x - PAD * 2.0, max_y - y + 16.0)
+	var shown := 0
+	for i in range(_skill_scroll, _skill_rows.size()):
+		var row: Dictionary = _skill_rows[i]
+		var options: Array = row.get("options", [])
+		# 이 행이 차지할 총 높이(제목·바 + 선택 대기 버튼 묶음). 미리 재서 **들어갈 때만** 그린다.
+		var block := SK_ROW_H + SK_ROW_GAP
+		if not options.is_empty():
+			block += 18.0 + float(options.size()) * (SK_OPT_H + 2.0)
+		if shown > 0 and y + block > max_y:
+			break   # 다음 행이 테두리를 물 것 → 스크롤로 넘긴다(첫 행은 늘 그린다 — 빈 탭 방지)
 		var lv := int(row.get("level", 0))
 		var mx := int(row.get("max", 10))
 		var xp := int(row.get("xp", 0))
@@ -753,23 +782,25 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 		var next_xp := int(row.get("next_xp", 0))
 		var maxed := next_xp <= 0
 		var head := "%s   Lv.%d%s" % [str(row.get("name", "")), lv, (" (MAX)" if maxed else "/%d" % mx)]
-		HanjiUi.draw_text(self, Vector2(x, y), head, 14, HanjiUi.INK_LIGHT)
-		# 진행바(한지 plate 트랙 + 앰버 채움).
-		var track := Rect2(x, y + 6.0, bar_w, 10.0)
+		HanjiUi.draw_text(self, Vector2(x, y), head, 14, HanjiUi.INK_LIGHT, SK_TAIL_X - 6.0)
+		# ★[S5-T4] XP 꼬리 — 옛 진행바 아래 별 줄에서 제목 줄 오른쪽으로 올렸다(행당 −10px).
+		var tail := "만렙" if maxed else "%d / %d XP" % [xp - floor_xp, next_xp - floor_xp]
+		HanjiUi.draw_text(self, Vector2(x + SK_TAIL_X, y), tail, 11, HanjiUi.INK_DIM,
+			SK_PROF_X - SK_TAIL_X - 6.0)
+		# ★ ADR-0052 — 고른 전문직 요약(★[S3-T6] 별 줄 → XP 꼬리와 같은 줄로 접음).
+		var prof := String(row.get("profession", ""))
+		if prof != "":
+			HanjiUi.draw_text(self, Vector2(x + SK_PROF_X, y), "전문직: %s" % prof, 11,
+				HanjiUi.GOLD_SOFT, bar_w - SK_PROF_X)
+		# 진행바(한지 plate 트랙 + 앰버 채움) — 제목 줄 바로 아래.
+		var track := Rect2(x, y + 8.0, bar_w, 9.0)
 		draw_rect(track, HanjiUi.INSET)
 		draw_rect(track, HanjiUi.BORDER, false, 1.0)
 		var frac := 1.0 if maxed else clampf(float(xp - floor_xp) / float(maxi(next_xp - floor_xp, 1)), 0.0, 1.0)
 		if frac > 0.0:
 			draw_rect(Rect2(track.position, Vector2(track.size.x * frac, track.size.y)), HanjiUi.GOLD)
-		var tail := "만렙" if maxed else "%d / %d XP" % [xp - floor_xp, next_xp - floor_xp]
-		HanjiUi.draw_text(self, Vector2(x, y + 30.0), tail, 12, HanjiUi.INK_DIM)
-		# ★ ADR-0052 — 고른 전문직 요약(★[S3-T6] 별 줄 → XP 꼬리와 같은 줄로 접음).
-		var prof := String(row.get("profession", ""))
-		if prof != "":
-			HanjiUi.draw_text(self, Vector2(x + SK_PROF_X, y + 30.0), "전문직: %s" % prof, 12, HanjiUi.GOLD_SOFT)
 		y += SK_ROW_H
 		# ★ ADR-0052 — 선택 대기(pending) 시 2갈래 버튼(name + desc). 클릭 영역을 _prof_choice_rects에 등록.
-		var options: Array = row.get("options", [])
 		if not options.is_empty():
 			var skill := String(row.get("skill", ""))
 			HanjiUi.draw_text(self, Vector2(x, y + 12.0), "▶ 전문직 선택 (Lv.%d):" % int(row.get("pending_tier", 0)), 12, HanjiUi.GOLD)
@@ -782,6 +813,14 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 				_prof_choice_rects.append({"rect": btn, "skill": skill, "prof_id": String(opt.get("id", ""))})
 				y += SK_OPT_H + 2.0
 		y += SK_ROW_GAP   # 행 간 여백
+		shown += 1
+	# ★[S5-T4] 넘치면 스크롤 안내(매대 리스트의 "▼" 결). 위/아래 어느 쪽이 잘렸는지 함께 보인다.
+	var hidden_below := _skill_rows.size() - _skill_scroll - shown
+	if _skill_scroll > 0 or hidden_below > 0:
+		var hint := "휠 스크롤 — %s%s" % [
+			("▲ %d " % _skill_scroll) if _skill_scroll > 0 else "",
+			("▼ %d" % hidden_below) if hidden_below > 0 else ""]
+		HanjiUi.draw_text(self, Vector2(x, max_y - 2.0), hint, 11, HanjiUi.INK_DIM, bar_w)
 
 # ★ Phase B 액션(저장·나가기) + ★ Phase D 설정 본체(음악·효과음 볼륨 −/+, 전체화면 토글, 언어=한국어 고정).
 # 값은 main이 GameSettings에서 set_settings로 주입한 것을 읽어 바·체크박스로만 그린다(무상태 — 조작은
@@ -1193,6 +1232,16 @@ func _gui_input(event: InputEvent) -> void:
 			if trading: _trade_scroll += 1
 			elif building: _build_scroll += 1
 			else: _store_scroll += 1
+			queue_redraw(); accept_event(); return
+	# ★[S5-T4] 숙련 탭 행 휠 스크롤 — 5스킬 + 동시 선택 대기 버튼이 패널을 넘길 때(매대 리스트와 같은
+	#   영역 문법). 숙련 탭은 백팩을 안 그리므로 아래 백팩 스크롤과 경합하지 않는다.
+	if event.pressed and context == CTX_MENU and menu_tab == TAB_SKILL \
+			and _skill_area_rect.has_point(event.position):
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_skill_scroll = maxi(_skill_scroll - 1, 0)
+			queue_redraw(); accept_event(); return
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_skill_scroll += 1   # 클램프는 그리기 시점(행수 파생)
 			queue_redraw(); accept_event(); return
 	# ★ 마우스 휠 = 백팩 세로 스크롤(백팩이 보이는 컨텍스트에서). 위=이전 행, 아래=다음 행.
 	if event.pressed and _backpack_visible():
