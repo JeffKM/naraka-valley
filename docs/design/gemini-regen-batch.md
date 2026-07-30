@@ -1717,3 +1717,278 @@ guild_weapon_rack  64×32 (2×1칸) 채도×0.80·명도×0.98   배선: 길드 
 ⑥ `_draw_narak_mouth` — 봉인 고리 8세그먼트의 끊긴 끝마다 `narak_seal`을 세운다(순수 시각 —
    NARAK_ROCK_RECTS 좌표도 충돌도 한 칸 안 바뀐다, narak_test 단언 전량 보존).
 ```
+
+---
+
+## 17. ★[S5-T10] 잡귀·점주·아이콘 아트 패스 2 — 스프라이트 12·점주 2·아이콘 29·화덕 1 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-07-30). §10~§16과 같은 [ADR-0048] 교체
+> 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰면 **코드 0줄 수정**으로 반영된다.
+>
+> **후처리 글루:** [`game/tools/make_mob_art.py`](../../game/tools/make_mob_art.py)
+> **raw 보관:** `game/assets/mobs/raw/*_raw.png`(12) · `game/assets/materials/raw/*_raw.png`(14) ·
+> `game/assets/fish/raw/*_raw.png`(2) · `game/assets/props/smithy_forge_raw.png` ·
+> `game/assets/characters/{pulmu,mugol}_raw/{south,north,east,west}.png` · `game/assets/portraits/pulmu_raw.png`
+> **육안 하네스:** `godot --path game --script res://playtest/t10_mine_icon_dump.gd`(★비-headless, 신설)
+> → `/tmp/t10m_inv_{1,2,3}.png`(인벤 슬롯 실렌더) · `/tmp/t10m_portrait.png`(대화창 초상화 슬롯)
+> 그리고 기존 `mob_dump.gd`·`mine_dump.gd`·`guild_dump.gd`가 그대로 이 패스의 판정면이 된다.
+>
+> **PixelLab 사용량 57 gen**(map_object 30 + character 2 + portrait 25). 목표 ~40·상한 60 안이고,
+> 초상화 한 장이 25를 먹는 구조라 **본체 31 gen + 초상 25**로 읽는 게 맞다. 파생 우선 설계:
+>   · 아이콘 29종 = 생성 raw **11장**(광석·주괴·보석 다발·브릴리언트·지오드·곧은검·굽은도 7 +
+>     단품 혼탄·환약·계단·열쇠·혼정·넋가루·혼불씨 7 중 겹치는 셈 — 실제 raw 14장) + 틴트 파생 18
+>   · 잡귀 12종 = 재사용 0(종마다 실루엣이 정체라 파생 불가 — 아래 ★)
+>   · 위장 상태·화염구·HP 바 = 신규 에셋 **0장**(기존 프롭·코드 드로우 재사용)
+>
+> **이 패스로 Slice 5의 그레이박스 시각 요소가 0이 됐다** — 잡귀 색박스 12종, 광물·주괴·보석·무기
+> 아이콘 색박스 27종, 대장간 화덕 붉은 사각, 점주 2인 그레이박스 몸이 전부 도트로 교체됐다.
+
+### 17.0 공통 규약
+
+```
+전부 [ADR-0050] 32-native · [§0.1] 2px 청키 · [§1.1] NW 광원 · [§8.1] 하드 알파 · [§9] 저승 muted.
+생성: 잡귀·화덕 = create_map_object(high detail / medium shading / single color outline)
+      아이콘     = create_map_object(medium detail / basic shading / single color outline)
+      점주       = create_character(mode=standard / n_directions=4 / **size=44** / low top-down /
+                   selective outline / basic shading / high detail / tgs=11 / §11.4 공통 proportions)
+      초상화     = create_portrait_character(character_to_portrait / low top-down / result_size=128)
+muted 계수(3층으로 잠겨 있다 — 한 목록에 나란히 서는 것끼리 같은 값이어야 새것만 안 튄다):
+  아이콘·어종 0.90/0.97(§13.0·§15.0과 **같은 값**) · 잡귀 0.90/0.98 · 점주 0.94/0.98(옹이와 같음) ·
+  화덕 0.86/0.94(대장간 외관 smithy_ext와 같은 검댕 계수)
+★★ 잡귀 muted를 프롭 계수(0.72~0.86)로 안 누른 이유: 몹은 **밴드 톤 곱셈 대상이 아니다**(돌·사다리와
+   갈리는 지점). 업화 밴드(주홍 지면) 위에서 한 단 더 눌린 잡귀는 배경에 잠겨 "무엇이 나를 때리는지"가
+   안 읽힌다 — 판정 대상은 무대색에 물들면 안 된다(광맥을 안 물들이는 §16.2 규칙과 같은 계열).
+★리젝 기준: 3/4 각도로 옆면이 보이면 재생성 · 프레임에 지면·그림자가 구워져 있으면 재생성 ·
+  이웃 슬롯과 실루엣이 안 갈리면 재생성(§15.0 리젝 ①).
+```
+
+### 17.1 ★잡귀 스프라이트 12종 `mobs/<종 id>.png` — 프레임 크기가 곧 체급
+
+```
+파일: game/assets/mobs/{heotgeot,eodukkaebi,dalgyal,geuseundae,bulgasari,hwagwi,
+                        yacha,nachal,agwi}.png (각 32×32)
+      game/assets/mobs/{boss_okjol,boss_nachalwang,boss_daeagwi}.png (각 64×64)
+배선: main.MOB_TEX(종 id → 텍스처) → `_draw_mine_mobs()`. 갱도 층·나락 런 층이 **같은 함수**를
+  쓴다(무대가 갈려도 몹 렌더 문법은 하나 — S5-T7이 잡아 둔 구조 그대로).
+  ★발치선은 그레이박스와 **한 픽셀도 안 바뀐다**(m.pos.y + TILE*0.40). 원장(접촉 피해·스윙 판정)이
+    보는 값과 눈에 보이는 몸이 계속 같은 자리에 서야 "맞을 것 같았는데 안 맞았다"가 안 생긴다.
+
+★★ **보스를 코드 배율로 키우던 규칙이 사라졌다**(그레이박스는 1.7배 사각이었다). 프레임을 64로
+   뽑아 아트가 체급을 들게 했다 — 32를 1.7배로 늘리면 청키가 3.4px로 깨져 [ADR-0050]("AI 축소본
+   금지")의 대칭 위반이 된다. **체급은 코드가 아니라 프레임이 든다**가 이 카드의 규약이다.
+★★ 잡귀만 **틴트 파생이 0**인 이유(아이콘과 갈리는 지점): 종의 정체가 색이 아니라 **실루엣**이다.
+   광석 4종은 "같은 돌덩이의 다른 금속"이라 색이 종을 가르지만, 헛것(둥근 젤리)과 그슨대(각진 석괴)를
+   한 실루엣의 색 변주로 만들면 아키타입(통통 ↔ 추적)이 눈에서 사라진다. ADR-0063 결정 8이 잡귀를
+   "아키타피 4 커버"로 짠 이상, 그 넷이 **몸으로** 갈려야 한다.
+
+갱도 6종(밴드당 2):
+  헛것       a small round gelatinous phantom blob monster, translucent dusty green jelly body with
+             a rounded dome top, two hollow dark eye holes, a wispy pale vapor wisp curling off its back
+  어둑깨비    a small dark goblin bat spirit hovering in flight with spread leathery wings, indigo black
+             fur, two short horns, two glowing pale blue eyes, tiny fanged mouth
+  달걀귀신    a faceless egg shaped ghost, a smooth featureless bone white oval spirit with no eyes and
+             no mouth at all, carrying a cracked grey boulder shell on its back like a hermit crab
+  그슨대      a tall looming shadow golem built of jointed dark slate stone slabs, heavy blocky arms and
+             shoulders, no neck, two narrow glowing red eye slits in a craggy stone head, moss in the cracks
+  불가사리    a chunky iron eating beast, a bulky four legged monster with dull grey riveted metal plating
+             over its hide, two curved tusks, jagged scrap iron shards embedded along its spine
+  화귀        a floating fire spirit ghost, a small hovering skull-like head wreathed in a mane of orange
+             and yellow flame, hollow black eye sockets glowing, a thin trailing wisp of embers below it
+나락 강몹 3종:
+  야차   a lean red skinned yaksha demon warrior crouched low in a dashing lunge, wild black hair, two
+         short curved horns, fanged snarling face, clawed hands, tattered dark loincloth
+  나찰   a violet skinned rakshasa demon sorcerer standing upright, long horns curving back over its
+         skull, dark purple ragged robe, one raised clawed hand holding a floating ball of dark flame
+  아귀   an emaciated hungry ghost preta, a starving grey brown corpse figure with a hugely swollen round
+         belly, a very thin needle neck, a gaping round mouth, long spindly arms hanging down, ribs showing
+관문 보스 3기(64² · 전부 "imposing boss monster" 꼬리말):
+  문지기 옥졸   a massive underworld prison guard ogre boss, brass lamellar plate armour over green grey
+               skin, a horned iron helmet with a face guard, gripping a heavy studded iron mace
+  업화 나찰왕   a towering rakshasa demon king boss wreathed in orange hellfire, a crown of black horns,
+               molten glowing cracks running through dark red skin, ornate black and gold robe
+  심연 대아귀   a colossal abyssal hungry ghost giant boss, a bloated dark violet corpse body with a
+               cavernous gaping mouth full of teeth, sunken glowing white eyes, long dragging arms
+후처리: 하드 알파 → muted(0.90/0.98) → 프레임 **바닥 정렬**(부유형 어둑깨비·화귀도 마찬가지 —
+  부유는 그림이 맡지 프레임 여백이 맡지 않는다. 여백으로 띄우면 무대마다 발치가 어긋난다).
+★ owner 교체 시 지킬 것: **아키타입 4개가 실루엣으로 갈릴 것**(둥근 젤리 / 날개 편 부유체 /
+  각진 석괴·중장 / 다리 없는 불꽃). 넷이 닮아지면 "저건 쫓아오나 제자리인가"가 맞아 보기 전엔 안 읽힌다.
+```
+
+### 17.2 위장·피격 플래시 (아트 생성물 아님 — 렌더 규칙 2개)
+
+```
+① **위장(달걀귀신 ARCH_DISGUISE)** = `MINE_TEX_ROCK` + 발치 타원 그림자. 그레이박스 시절엔 "바위색
+   사각"이 최선이었지만, 이제 진짜 돌 그림이 옆 칸에 서 있으므로 **완전히 같은 그림**이어야 한다.
+   ★그림자를 함께 걸어야 한다(`_draw_mine_prop`이 진짜 돌마다 까는 그것). 빠뜨리면 "그림자 없는
+     돌 하나"가 되어 위장이 눈으로 들킨다 — 색만 맞추던 그레이박스와 같은 실패의 재판이다.
+   ★타일 좌표가 아니라 m.pos 픽셀 rect 기준이라 `_draw_prop_shadow` 헬퍼 대신 두 줄을 편다
+     (몹은 픽셀 연속 위치라 프롭 문법을 못 쓴다 — 층 몹과 좌석 잡귀의 유일한 렌더 차이).
+② **피격 플래시** = modulate를 1 **위로** 올린다(Color(1.9,1.9,1.9)). 그레이박스는 색을 흰색으로
+   lerp 했지만 텍스처엔 그 수가 없다 — `draw_texture_rect`의 modulate는 곱셈이라 색을 *섞을* 수는
+   없고 *밝힐* 수만 있다. 1 이하로 두면 "맞으면 어두워지는" 반대 신호가 된다.
+③ 원거리 단서(몸통 속 주황 심지)는 **텍스처 경로에서 뺐다** — 화귀는 불꽃 몸, 나찰은 손의 암염구라
+   스프라이트가 이미 원거리를 말한다. 심지를 얹으면 그림 위에 주황 사각이 겹친다. 색박스 폴백
+   경로에는 그대로 남는다(로스터 확장 중 아트 미도착 종 방어).
+```
+
+### 17.3 ★아이템 아이콘 29종 = 생성 raw 14장 + 틴트 파생 18 (materials 27 · fish 2)
+
+```
+파일: game/assets/materials/<아이템 id>.png · game/assets/fish/<어종 id>.png (전부 32×32)
+배선: main.MINE_ICONS → `_merge_t10_icons()`가 `icons` dict에 병합(핫바·인벤 두 곳 공통) +
+  `_item_icon`(토스트). 어종 2종은 기존 `FISH_ICONS`에 얹었다.
+  ★**드로우 분기 추가 0**이다 — 광물·주괴·드랍·열쇠 = CAT_MATERIAL / 무기 = CAT_TOOL /
+    환약·계단 = CAT_CONSUMABLE 로 이미 전부 "텍스처 있으면 쓰고 없으면 색박스" 분기를 타고 있었다.
+    (무기가 CAT_TOOL인 건 S5-T4의 "든 것이 곧 동사" 판단 — 그 결정이 여기서 배선 비용 0으로 돌아왔다.)
+
+★★ 종색의 단일 출처 = `_MINE_NODE_COLORS`/`_NARAK_NODE_COLORS`/`WeaponCatalog.color`이고, 아이콘은
+   그 색을 **틴트로 물려받는다**. 그래서 인벤 슬롯의 명동과 층 광맥의 명동과 바닥 반짝이의 명동이
+   같은 붉은 구리다. 세 곳이 갈리면 "같은 광물인데 무대마다 다른 색"이 되어 플레이어가 광물 정체를
+   색으로 배우지 못한다 — 61종짜리 아이템 표에서 그건 치명적이다.
+   ⚠ 종색을 고칠 땐 `main._MINE_NODE_COLORS`와 `tools/make_mob_art.py`의 표를 **같이** 고친다.
+
+틴트 규칙 3개(㉠㉡은 §15.3이 두 실패로 얻은 것, ㉢이 이 카드의 몫):
+  ㉠ hue는 통째로 갈아끼운다(부분 lerp = "섞는" 게 아니라 "엉뚱한 데 멈추는" 것).
+  ㉡ 어두운 외곽선은 안 건드린다(v ≤ 0.35) — 검은 테가 색 테로 바뀌면 [§1] 단일 외곽선이 깨진다.
+  ㉢ ★**채도는 원본이 아니라 종색이 운전한다.** 원본(청록 결정·황금 주괴)의 채도를 그대로 곱하면
+     넋수정(거의 흰색)이 청록으로 남는다. 원본 채도는 *결의 세기*로만 쓰고 절대값은 종색이 준다
+     (`s = cs * (0.55 + 0.75 * s_src)`). [§16.1]이 램프를 "팔레트는 소스·단계는 글루"로 가른 것과
+     같은 분업이다.
+
+17.3a 광물 5 — ore_base 1장 + 틴트 4(명동·유철·황천금·나락철) + 단품 혼탄
+  ore_base   a mine ore chunk, a single rough grey stone nugget with bright metallic mineral flecks
+             embedded across its face, angular chipped facets
+  혼탄        a lump of black coal, a single chunky angular piece of glossy anthracite with sharp
+             fractured faces  ※검정은 틴트로 안 나온다(명도를 죽이면 실루엣이 사라진다) → 단품
+17.3b 주괴 4 — ingot_base 1장 + 틴트. 광석(덩이)과 **형태 계급이 다르다**(사다리꼴 바)라
+  제련 전후가 인벤에서 한눈에 갈린다. 색만 갈면 같은 돌 여덟 개가 된다.
+  ingot_base a chunky rectangular cast metal ingot bar lying on its side, a thick heavy brick shaped
+             bar with a broad flat top face and short bevelled sides, visible depth and thickness
+  ★리젝 1건(재생성): 1차는 view="side"로 뽑아 **납작한 마름모**(두께 0)가 나왔다. 주괴는 부피가
+    정체라 두께가 없으면 금박 조각으로 읽힌다. `low top-down` + "visible depth and thickness"로 해결.
+17.3c 보석 5 — ★**원본이 둘**인 유일한 계열
+  gem_base      a cluster of three sharp faceted gemstone crystals joined at the base, tall pointed
+                translucent shards  → 넋수정(투명 백)·명옥(옥빛)·염주석(자주)
+  gem_brilliant a single large cut brilliant gemstone, one solitary round faceted jewel with a flat
+                table top and many triangular facets  → 명부금강(백청)·오색혼옥(프리즈마틱)
+  ★★ 왜 둘인가: 넋수정(0.86,0.90,0.94)과 명부금강(0.72,0.90,0.98)은 _MINE_NODE_COLORS에서 색이
+     거의 붙어 있다. 같은 다발 실루엣에 그 둘을 얹으면 32² 슬롯에서 **같은 아이콘 두 개**가 된다
+     (§15.0 리젝 ① "같은 계열 두 종이 같은 실루엣"). 색으로 못 가르면 **형태 계급을 가른다** —
+     원석 다발 ↔ 가공 브릴리언트. 겸사겸사 최상위 2종이 "가공된 보석"으로 격이 올라간다.
+  ★오색혼옥은 **단색 틴트가 성립하지 않는 유일한 아이템**이라 세로 위치로 색상환을 한 바퀴 돌린다
+   (`prismatic_tint`). 한 색으로 칠하면 "오색"이 거짓말이 되고 나머지 넷과 같은 그림이 된다.
+17.3d 지오드 2 — geode_base 1장 + 틴트(넋알돌 흙빛 / 업화알돌 달군 흙빛)
+  geode_base a geode nodule, a rounded lumpy potato shaped stone with a rough bumpy crust and a thin
+             bright mineral seam running around its middle, unopened
+  ※ 둥근 알 모양이 「알돌」 작명과 그대로 맞아떨어진다(우연이지만 유지 가치가 있다).
+17.3e 무기 5 — sword_base(곧은 검) 1장 + 티어 틴트 4 · sword_dao(굽은 도) 1장 = 업화도
+  sword_base a straight double edged sword pointing up and to the right diagonally, plain steel blade
+             with a fuller groove, a simple crossguard, a cord wrapped grip and a round pommel
+  sword_dao  a single curved single edged sabre blade pointing up and to the right diagonally, a broad
+             gently curved dao blade, a round disc guard, a dark wrapped grip
+  ★검은 **통짜 틴트**다(칼자루까지). 날만 물들이면 티어가 32²에서 안 읽힌다 — [§16.3]이 광맥
+    몸통까지 물들여야 했던 것과 같은 이유. 그리고 **업화도만 형태부터 갈린다**: 엔드게임 한 자루는
+    색이 아니라 실루엣으로 서야 한다(5티어를 한 실루엣 색 변주로 두면 최종 무기가 "네 번째 색"이 된다).
+17.3f 단품 6 + 어종 2
+  명부환    a small round medicine pill of dark herbal paste with a faint red sheen, sitting in an open
+           folded square of white paper wrapping, a traditional east asian herbal remedy pellet
+  계단      a short flight of three grey stone steps descending, a compact staircase block of cut stone
+  나락 열쇠  an ornate ancient iron key with a large ring bow shaped like a cracked circular ward glyph,
+           faint violet light glowing in the glyph  ※봉인석(§16.4 narak_seal)의 각인 모티프를 물려받는다
+  나락혼정   a rare soul essence crystal, a smooth polished teardrop gem of deep violet with an inner
+           swirling glow and a faint gold filigree band around its waist
+  넋가루    a small heap of fine pale ash grey powder, a soft conical mound of ghostly bone white dust
+  혼불씨    a single small floating soul flame ember, a teardrop shaped blue and orange spirit fire seed
+  돌비늘치   a small stout armoured fish, a thick bodied cave fish covered in overlapping grey stone-like
+           scales, blunt rounded snout  (fish/ · [S3-T10] 어획물 20종과 같은 계수)
+  업화붕장어 a long slender eel curved into an S shape, smooth dark charcoal skin with glowing ember
+           orange streaks along its flank  ※코일 실루엣이라 길쭉한 기존 어종 18종과 안 겹친다
+★ 넋가루·혼불씨는 **스코프 밖이었다가 들어왔다**(§15.5 선례의 재판): 잡귀 드랍인데 CAT_MATERIAL
+  색박스로 남아 있었고, 나락혼정 바로 옆 칸에 서면 절반만 도트라 새 아이콘 쪽이 오히려 튄다.
+  이걸로 **CAT_MATERIAL 색박스 폴백이 다시 0**이 됐다.
+```
+
+### 17.4 점주 2인 `characters/{pulmu,mugol}.png` + 풀무 도트 초상화
+
+```
+파일: game/assets/characters/{pulmu,mugol}.png (각 80×320 = 프레임 80×80 · 1열 × 4행 down/up/right/left)
+배선: pulmu.gd / mugol.gd의 `CharSprite.make(...)` — **이미 있던 훅, 파일만 채웠다**(코드 0줄).
+  ★둘 다 상주 정지 NPC(풀무=모루 옆·무골=길드 카운터 뒤)라 walk_down 행만 재생된다 → 워크 4프레임을
+    안 뽑는 게 맞다(§11.4 네오·§13.3 뱃사공·§15.6 옹이와 같은 정지 rotation 1열).
+생성: create_character(standard / 4dir / size=44 / low top-down / selective outline / basic shading /
+      high detail / tgs=11 / proportions {"type":"custom","head_size":1.5,"arms_length":0.75,
+      "legs_length":0.9,"shoulder_width":0.72,"hip_width":0.75})
+  풀무 PROMPT: chibi Korean dokkaebi goblin blacksmith, his whole face and body are rough dark reddish-
+    brown ogre hide like heated iron, no human skin anywhere, one single thick horn growing straight up
+    from the center of his forehead, craggy scowling face with two glowing amber eyes and small tusks,
+    wild black beard, a heavy blacksmith hammer resting on his right shoulder, wearing a scorched dark
+    leather apron over a bare barrel chest, thick arms, soot smudges, stocky and sturdy, standing straight
+  무골 PROMPT: chibi undead skeleton warrior, his head is a bare bone white human skull with hollow black
+    eye sockets and pale blue soul flames burning in them, no hair and no flesh and no human skin anywhere,
+    bare bone arms and rib cage showing, wearing worn dark leather armour straps and a faded grey cloak
+    over the bones, a large two handed greatsword slung diagonally across his back, calm and still
+후처리: 하드 알파 → muted(0.94/0.98 — 출하 캐스트와 나란히 서므로 아주 얕게) → 80×80 발치정렬(FOOT_Y=74)
+★[§15.6 교훈 이행] "재질을 몸 전체에 못 박고 tgs=11" 규칙을 처음부터 적용해 **리젝 0**이었다
+  (옹이는 "bark skin"을 부드럽게 적어 1차가 초록 머리 노인 목수로 나왔다). "no human skin anywhere"가
+  비인간 캐릭터의 핵심 어구다.
+★[§15.6 알려진 결함이 여기선 안 났다] 옹이는 north(뒷모습) 프레임에 얼굴이 그려져 있었는데, 이 둘은
+  north가 정상(풀무=뒤통수·무골=민 두개골 뒷면)이다. size=44 + selective outline 조합의 편차로 보이며,
+  **교체 시에도 north를 반드시 눈으로 확인할 것**.
+★알려진 결함(교체 시 고칠 것): 풀무의 **이마 외뿔이 안 나왔다** — 검은 머리 볏으로 읽힌다. 그레이박스
+  실루엣 규약(pulmu.gd `_HORN_H` 주석 = "외뿔이 옹이의 갈래 뿔과의 구분점")이 아트에서 아직 미이행이다.
+  지금은 붉은 살갗 + 뾰족귀 + 망치가 도깨비 대장장이를 대신 팔고 있다.
+
+파일: game/assets/portraits/pulmu.png (raw: portraits/pulmu_raw.png 128×128) · 256×256 (raw ×2 nearest)
+배선: main `r_pulmu.portrait_stem = "pulmu"`. **표정 파일은 만들지 않는다**(`_set_portrait`가 없으면
+  idle로 떨어지므로 idle 한 장이 대사 전량을 덮는다 — §15.6과 같은 규약).
+생성: create_portrait_character(character_to_portrait / low top-down / result_size=128) —
+  위 시트 south 프레임을 **16색 양자화 P모드 PNG**로 입력.
+  ★★ [S3-T10 교훈의 정정] 입력이 거부되는 원인은 "base64가 길어서 잘린다"만이 아니다. 20색 RGBA
+     양자화본(b64 2588자)은 **전량 도착했는데도** 서버 PIL이 "broken data stream"으로 거부했다
+     (수신 1941바이트 = 2588×3/4 = 전량). 확실한 회피는 **팔레트(P) 모드 PNG**다 — 16색 P모드는
+     b64 884자에 라운드트립도 검증돼 한 번에 통과했다. 양자화는 길이가 아니라 **포맷**이 관건이다.
+★★ **무골 초상화는 안 만들었다**(이 패스의 유일한 미이행 스코프). 근거 둘:
+   ㉠ §15.6이 `character_to_portrait`의 **비인간 재질 → 사람 피부** 되돌림을 모델 한계로 박제했고
+      (옹이 2판 동일 실패), 백골은 그 실패에 가장 불리한 입력이다(두개골 → 얼굴).
+   ㉡ 초상 한 장이 **25 gen**이라, 실패 가능성이 큰 25를 더 태우면 상한 60을 넘는다(57 → 82).
+   풀무 쪽은 붉은 살갗·뾰족귀·염소수염이 살아남아 **도깨비로는 읽힌다**(네오·뱃사공·옹이와 같은
+   도트 스톱갭 지위). 무골은 `portrait_stem = ""`로 남아 대화창에 초상 칸이 안 뜬다 — 종전과 같다.
+★★ **owner Gemini 교체 1순위 = 무골 초상화**(2×3 표정 그리드). 요구할 것: 얼굴이 **맨 두개골**일 것 ·
+   안와의 창백한 혼불 · 사람 피부색 0. 2순위 = 풀무 초상화(외뿔 추가 + 사람 피부 → 도깨비 살갗).
+```
+
+### 17.5 업화로 화덕 `props/smithy_forge.png`
+
+```
+파일: game/assets/props/smithy_forge.png (64×32 = 2×1칸 · raw: props/smithy_forge_raw.png 64×48)
+배선: main._draw_smithy_room() — 좌표는 그레이박스와 **같은 칸**(SMITHY_RECT +2, +1)이고 모루
+  (smithy_anvil)와 같은 규격이라 드로우 문법이 하나다.
+  PROMPT: a blacksmith forge hearth, a wide squat stone masonry furnace with a deep arched fire opening
+    in the front glowing hot orange with burning coals, a heavy iron hood over the top, a small bellows
+    nozzle at the side, dark soot stained slate blocks, wide and low
+후처리: 하드 알파 → muted(0.86/0.94 — 대장간 외관 smithy_ext와 같은 검댕 계수라 안팎이 한 집으로
+  읽힌다) → **높이 32에 맞춰 비례 축소** 후 64×32 프레임 바닥 정렬.
+★raw를 64×48로 뽑고 32로 줄인 이유: 아치 + 후드가 세로로 서는 물건이라 그 비율로 생성해야 형태가
+  나오고, 배치는 §16.6의 "**벽 링은 안 덮는다**"(목재 기둥·벽이 남아야 바위를 깎아 들인 방이 된다)를
+  지켜야 한다. 늘리지 않고 줄이기만 하므로 청키는 보존된다.
+★정체성 기준: **불이 보일 것**. 아치 안의 주홍 잉걸이 이 프롭의 전부다(외관 smithy_ext의 "창에서
+  새는 화덕 주홍"이 안에 들어오면 이것이라는 약속의 이행). 불이 빠지면 그냥 돌 상자다.
+```
+
+### 17.6 이 패스가 바꾼 렌더 (아트 생성물 아님 — 코드)
+
+```
+① `_draw_mine_mobs` — 종별 색 3단 사각 → **MOB_TEX 텍스처**(위장 = mine_rock + 그림자 · 플래시 =
+   modulate 1.9 · 보스 1.7배 배율 코드 삭제). 아이콘 없는 종은 옛 색박스로 폴백(로스터 확장 방어).
+② `_draw_smithy_room` — 화덕 붉은 사각 3겹 → `SMITHY_TEX_FORGE` 한 장.
+③ `MINE_ICONS` 신설 + `_merge_t10_icons`·`_item_icon`에 각 한 줄 — 핫바·인벤·매대·토스트 4경로가
+   한 번에 텍스처를 집는다(두 곳에 같은 루프를 두 번 적는 S3-T10 사고의 정리판을 그대로 탄다).
+④ `FISH_ICONS` +2(갱도 어종) · `r_pulmu.portrait_stem` "" → "pulmu".
+★ **지상 구역 렌더 불변 확인**(T9 방식): 결정적 오프라인 합성 덤프 3면
+  (`tools/{home_full_dump,village_dump,map_dump}.png` = 안식 농원·나루 마을·전체 월드맵)이 HEAD와
+  **바이트 동일**. 숲 2구역(`playtest/forest_dump.gd`)은 라이브 화면 grab이라 **같은 코드로 2회
+  실행해도 바이트가 갈리는 비결정 하네스**임을 실측 확인했고(캐릭터 애니 위상·시계 분), HEAD↔본 패스
+  차분이 HEAD↔HEAD 노이즈와 **같은 크기대**(평균 0.0~1.7)임으로 갈음했다.
+  ⚠ 미래 세션 주의: forest_dump·mine_dump류 화면 grab 덤프는 **골든 비교에 못 쓴다**(육안 전용).
+    바이트 골든이 필요하면 오프라인 합성 덤프(tools/*_dump.gd)를 쓸 것.
+```
