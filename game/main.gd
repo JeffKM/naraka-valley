@@ -1787,6 +1787,19 @@ const _MINE_NODE_COLORS := {
 	"gem_yeomjuseok": Color(0.60, 0.36, 0.72),        # 염주석 — 자주
 	"gem_myeongbu_geumgang": Color(0.72, 0.90, 0.98), # 명부금강 — 백청
 }
+# ★[S5-T5 / ADR-0063 결정 8] 잡귀 그레이박스 색 — 아키타입이 눈으로 갈리는 정도까지만(스프라이트
+#   아트 = S5-T10). 밤 바 잡귀(JOBGUI 탁한 청록)와 톤을 겹치지 않게 각자 다른 색상환에 앉혔다.
+#   ※ 키는 MobCatalog 종 id와 같은 문자열이되 **리터럴로 둔다**(_MINE_NODE_COLORS와 같은 관례).
+#     미등록 종은 드로우에서 회색 폴백이라 조용히 깨지지 않고, mob_test가 로스터 대조로 잡는다.
+const _MOB_COLORS := {
+	"mob_heotgeot": Color(0.46, 0.62, 0.44),      # 헛것 — 흐린 녹빛(슬라임 결)
+	"mob_eodukkaebi": Color(0.34, 0.30, 0.46),     # 어둑깨비 — 어둑한 남빛(박쥐 결)
+	"mob_dalgyal": Color(0.84, 0.82, 0.74),        # 달걀귀신 — 뼛빛 흰 달걀(위장 시엔 바위색으로 그린다)
+	"mob_geuseundae": Color(0.30, 0.29, 0.32),     # 그슨대 — 돌빛 그림자
+	"mob_bulgasari": Color(0.62, 0.64, 0.70),      # 불가사리 — 쇠빛(쇠 먹는 괴물)
+	"mob_hwagwi": Color(0.88, 0.42, 0.20),         # 화귀 — 불빛
+}
+const _MOB_SHOT_COLOR := Color(0.96, 0.62, 0.22)  # 화염구
 
 # ── 나락(M5.2 빌드 → ADR-0018 C9 코지-와이드 재배치) ─────────────────────────────
 # 여덟째 실데이터 구역(독립 전투 전용). 전투 메카닉은 만들지 않는다(Phase 3) — 심연·업화·봉인 모티프의 빈
@@ -1983,9 +1996,21 @@ var _mine_descended_at: float = INVULN_NONE
 # ★ 최대 HP는 (전투 XP + 전문직)에서 **파생**되므로 세이브엔 current 하나만 들어간다.
 var health: PlayerHealth = null
 # 전투 숙련 XP(레벨 → 최대 HP 파생원). 이름 규약은 _farming_xp·_mining_xp와 같다.
-# ★ XP 소스(몹 처치)는 S5-T5 소관이라 지금 `_gain_combat_xp`를 부르는 라이브 경로가 없다 —
-#   적립 경로만 개통해 두고 T5가 몹 사망 훅에서 부르면 곧바로 실효된다.
+# ★[S5-T5] XP 소스(몹 처치)가 실배선됐다 — `_strike_mob`이 HP를 깎고 죽으면 `_gain_combat_xp`를 부른다.
 var _combat_xp := 0
+# ══ ★[S5-T5 / ADR-0063 결정 8] 잡귀 개체 — 층 한정 비영속 ════════════════════
+# 지금 층에 서 있는 잡귀들(Mob 객체 배열)과 날아다니는 화염구들(불투명 dict 배열).
+# ★ **세이브에 안 들어간다**(층 한정 비영속 — ADR-0063 결정 8). 층을 떠나거나 날이 갈리면 비우고,
+#   재진입하면 층 배치(`_mine_layout["mobs"]`)에서 다시 세운다. 그래서 to_save에 키가 한 줄도 안
+#   늘었고, 처치 원장도 없다(스타듀도 층 재진입 시 재생성 — 원장 없음이 곧 스타듀 정합이다).
+# ★ 왜 씬 노드가 아닌가: 손님·밤 잡귀 그레이박스가 노드 생성·해제 없이 main이 직접 그리는 선례를
+#   그대로 잇는다(_draw_customers·_draw_jobgui). 개체 수가 층당 3~6이라 노드로 승격할 이유가 없다.
+var _mobs: Array = []
+var _mob_shots: Array = []
+# ★ 이 층에 **원래 몇 마리가 섰나**(사체 청소와 무관한 고정값). `_mobs`는 죽은 개체를 틱 끝에서
+#   비우므로 그것만으로는 "전멸"과 "애초에 없었음"이 구별되지 않는다 — 마지막 한 마리를 잡는 순간
+#   목록이 비어 전멸 보너스가 **한 프레임도 못 살고 사라진다**(mob_test ⑩m이 실증한 버그).
+var _mobs_spawned: int = 0
 # 마지막 피격 시각(초·실시간). COMBAT_INVULN_SECS 동안 추가 피격을 무시한다(i-frame).
 var _hurt_at: float = INVULN_NONE
 # 누적 스윙 수 — **데미지 롤의 결정적 시드**다(CombatSkill.resolve_hit). 좌표 해시를 안 쓰는 이유는
@@ -3028,6 +3053,11 @@ func _build_grid() -> void:
 	_grid_w = sz.x
 	_outdoor_h = sz.y
 	_grid_h = _outdoor_h + INDOOR_BAND_H
+	# ★[S5-T5] 층 잡귀는 층 한정 비영속이라 **어떤 구역 빌드든 맨 앞에서 비운다** — 층을 벗어나는
+	#   모든 경로(워프·로드·기절 퇴장·날짜 전환)가 이 한 곳을 지나므로, 각 경로마다 청소를 심는 대신
+	#   빌드 앞단 한 줄로 스테일을 원천 차단한다(_ridge_body와 같은 판단). 층이면 _build_mine_floor가
+	#   곧바로 다시 세운다.
+	_clear_mine_mobs()
 	# ★[단계3] 고지 능선 충돌바는 HOME 전용 — 매 구역 빌드 전 비우고(스테일 방지), _build_home만 재생성.
 	if _ridge_body != null and is_instance_valid(_ridge_body):
 		_ridge_body.queue_free()
@@ -4353,6 +4383,7 @@ func _in_mine_floor() -> bool:
 func _build_mine_floor() -> void:
 	mine_floors.advance_day(clock.day)      # 날이 갈렸으면 day-한정 기록 소멸(취침 훅의 방어적 짝)
 	_mine_layout = MineFloors.generate(clock.day, _mine_floor)
+	_spawn_mine_mobs()                      # ★[S5-T5] 층 잡귀 재스폰(층 한정 비영속 — 들어설 때마다 새 판)
 	_grid = []
 	for y in _grid_h:
 		var row: Array = []
@@ -4425,6 +4456,7 @@ func _ascend_mine_to_surface() -> void:
 		return
 	_mine_floor = 0
 	_mine_layout = {}
+	_clear_mine_mobs()                      # ★[S5-T5] 층을 떠나면 잡귀는 소멸한다(비영속)
 	_warp_in_region(MINE_SURFACE_RETURN)
 	_notice("갱도 밖으로 나왔다")
 
@@ -4490,12 +4522,13 @@ func _mine_rock(t: Vector2i) -> void:
 	mine_floors.mark_mined(_mine_floor, t)  # day-한정 원장에 기록(같은 날 재진입 시 이 돌은 없다)
 	_sync_mine_tile(t)                      # 그리드·충돌 즉시 해제(재빌드 없이 — _sync_tree_tile 결)
 	_award_mine_drop(t, node_id)            # ★[S5-T2] 산출·XP·크리(부순 사건에만)
-	# 사다리 롤 — 남은 돌이 줄수록 확률이 오른다. 몹 전멸 보너스는 S5-T5까지 false 고정이고,
-	# 명부의 운 가산은 운 시스템 빌드 시 채운다(지금은 0.0 — 인자 자리만).
+	# 사다리 롤 — 남은 돌이 줄수록 확률이 오른다. ★[S5-T5] 몹 전멸 보너스(+4%)가 실배선됐다
+	# (`_mobs_cleared()` — 옛 false 고정 해소). 명부의 운 가산은 운 시스템 빌드 시 채운다(0.0 인자 자리).
 	var left := mine_floors.rocks_left_count(clock.day, _mine_floor)
-	if MineFloors.roll_ladder(clock.day, _mine_floor, t, left, false, 0.0):
+	if MineFloors.roll_ladder(clock.day, _mine_floor, t, left, _mobs_cleared(), 0.0):
 		mine_floors.add_ladder(_mine_floor, t)
 		_notice("돌 밑에서 사다리가 드러났다 — [F]로 더 내려간다")
+	_wake_mobs_near(t, 1)                   # ★[S5-T5] 곡괭이 진동이 옆칸 위장 잡귀를 깨운다
 	queue_redraw()
 
 # ★[S5-T2 / ADR-0063 결정 2·9] 부순 칸의 산출을 인벤에 담고 XP를 적립한다.
@@ -4587,22 +4620,38 @@ func _weapon_arc() -> Array[Vector2i]:
 		out.append(t)
 	return out
 
-# ★[S5-T5 훅] 지금 무대의 몹 레코드 목록([{tile, ...}]). 엔티티 프레임워크가 없어 **항상 빈 배열**이다
-#   — T5가 층 몹 스폰을 얹으면 이 한 함수만 채우면 스윙·사다리 보너스·전투 XP가 동시에 실효된다.
-#   (MiningSkill의 미배선 퍼크 인자·`roll_ladder`의 mobs_cleared=false와 같은 자리.)
+# ★[S5-T5] 지금 무대의 몹 레코드 목록([{tile, ...}]) — 층 안에서만 채워진다(지상·다른 구역은 빈 배열).
+#   레코드는 `CombatSkill.hits_in_arc`가 arc 겹침만 보는 **불투명 dict**이고, 개체 본체는 `ref`로
+#   들려 간다(Mob은 RefCounted라 dict에 담아도 사본이 안 생긴다 = `_strike_mob`의 차감이 원본에 닿는다).
+#   ★ 위장 중인 잡귀도 목록에 든다 — 검으로 후려치면 깨어나며 맞는 게 맞다(Mob.take_hit이 깨운다).
 func _mobs_in_region() -> Array:
-	return []
+	var out: Array = []
+	if not _in_mine_floor():
+		return out
+	for i in _mobs.size():
+		var m: Mob = _mobs[i]
+		if m == null or not m.is_alive():
+			continue
+		out.append({"tile": m.tile(), "kind": m.kind, "hp": m.hp, "xp": m.kill_xp(),
+			"index": i, "ref": m})
+	return out
 
-# 몹 하나를 때린다. 피해량은 순수 함수가 정하고(결정적 시드 = 스윙 카운터) 여기선 알림만 한다.
-# ★ 몹 HP 차감·사망 처리·전투 XP 지급은 **S5-T5** 소관이다 — 몹 레코드에 HP가 없어서 지금은 굴릴 수
-#   있는 것이 "몇 대미지인가"까지다. T5가 이 함수 안에서 `mob.hp -= dmg`를 하고 죽으면
-#   `_gain_combat_xp(mob.xp)`를 부른다(그 두 줄이 이 함수에 남은 전부다).
+# 몹 하나를 때린다. 피해량은 순수 함수가 정하고(결정적 시드 = 스윙 카운터) 여기선 차감·사망 처리만 한다.
+# ★[S5-T5] T4가 남긴 두 줄이 채워졌다: `hp -= damage` · 죽으면 `_gain_combat_xp(xp)`(+ 드랍·사다리 롤).
 func _strike_mob(weapon_id: String, mob: Dictionary) -> Dictionary:
 	var res := CombatSkill.resolve_hit(weapon_id, _combat_swings, combat_damage_bonus(),
 		combat_crit_chance_mult(), combat_crit_power_mult())
 	if bool(res["crit"]) and notice_feed != null:
 		notice_feed.push("치명타! %d" % int(res["damage"]), 1.5, false, null, false)
-	mob["last_damage"] = int(res["damage"])   # ★T5가 HP를 얹기 전까지의 관측 창(테스트가 읽는다)
+	mob["last_damage"] = int(res["damage"])   # 관측 창(테스트가 읽는다 — T4부터의 계약 보존)
+	var ref: Mob = mob.get("ref")
+	if ref == null:
+		return res                            # 레코드만 넘어온 순수 판정 호출(combat_test ⑤ 결)
+	ref.take_hit(int(res["damage"]))
+	mob["hp"] = ref.hp
+	if not ref.is_alive():
+		_on_mob_killed(ref, int(mob.get("index", -1)))
+	queue_redraw()
 	return res
 
 # ── ★ 피격(무적 창 · 넉백 · 기절) ────────────────────────────────────────────
@@ -4730,6 +4779,179 @@ func combat_crit_power_mult() -> float:
 func combat_special_cooldown() -> float:
 	return CombatSkill.special_cooldown_factor(
 		_perk_value(ProfessionCatalog.COMBAT, ProfessionCatalog.DIM_SPECIAL_COOLDOWN, 1.0))
+
+# ═══ ★[S5-T5 / ADR-0063 결정 8] 잡귀 엔티티 배선 ═══════════════════════════════════
+# main의 몫은 다섯뿐이다: ①층 배치 → 개체 세우기 ②틱 폴링(이동·발사·접촉 피해) ③지형 콜백 제공
+# ④처치 처리(XP·드랍·사다리 롤) ⑤그레이박스 렌더. *행동 규칙*(아키타입 스텝·속도·어그로)은 Mob이,
+# *종 데이터*(HP·데미지·XP·밴드·드랍표)는 MobCatalog가, *배치*는 MineFloors가 든다 —
+# `_mine_rock`↔MiningSkill 경계와 정확히 같은 결이다(main은 수치를 모른다).
+
+# 층 배치(`_mine_layout["mobs"]`)에서 개체를 세운다. 층에 들어설 때마다 **새로** 세운다(비영속).
+# ★ 시드에 day·층·스폰 인덱스를 엮는다 — 같은 날 같은 층이면 같은 궤적·같은 드랍이 나오고(결정성),
+#   좌표는 시드에 안 넣는다(이웃 몹이 연속값을 받는 걸 금지한 ADR-0063 결정 1의 규율 상속).
+func _spawn_mine_mobs() -> void:
+	_clear_mine_mobs()
+	if _mine_layout.is_empty():
+		return
+	var specs: Array = _mine_layout.get("mobs", [])
+	for i in specs.size():
+		var spec: Dictionary = specs[i]
+		var kind := String(spec.get("kind", ""))
+		if not MobCatalog.has(kind):
+			continue
+		_mobs.append(Mob.spawn(kind, spec["tile"], hash("%d:%d:%d" % [clock.day, _mine_floor, i])))
+	_mobs_spawned = _mobs.size()
+
+func _clear_mine_mobs() -> void:
+	_mobs = []
+	_mob_shots = []
+	_mobs_spawned = 0
+
+# 이 층의 몹을 전부 잡았나 — 사다리 롤 +4%의 유일한 판정(ADR-0063 결정 1 ㉡).
+# ★ "스폰이 있었고(`_mobs_spawned`) 지금 하나도 안 남았다"로 정의한다. 둘 다 필요하다:
+#   · 스폰 수를 **따로** 안 들면 마지막 한 마리를 잡는 순간 `_mobs`가 비어 전멸이 도로 false가 된다
+#     (사체를 틱 끝에서 청소하므로 — 보너스가 한 프레임도 못 산다).
+#   · 살아 있는 수만 보면 몹이 애초에 0인 층(보상 층 = 10의 배수)에서 공짜 +4%가 나온다.
+#     전멸 보너스는 *싸운 대가*여야 한다.
+func _mobs_cleared() -> bool:
+	return _in_mine_floor() and _mobs_spawned > 0 and _mobs_alive() == 0
+
+func _mobs_alive() -> int:
+	var n := 0
+	for m: Mob in _mobs:
+		if m != null and m.is_alive():
+			n += 1
+	return n
+
+# 지형 콜백 — Mob·화염구가 "이 칸을 지날 수 있나"를 묻는 유일한 창구(Mob은 _grid·타일 id를 모른다).
+# ★ 광맥(노드)은 **CELL_WALL로 준다**: 그슨대가 광맥을 부수면 플레이어가 캘 광석이 사라지고,
+#   그 파괴가 "몹이 부순 바위 = 채광 XP 0"(ADR-0063 결정 9)를 자원 손실로 바꿔 버린다. 일반 돌만
+#   부술 수 있게 해 두면 그 규칙이 무해하게 성립한다(부순 건 어차피 XP 0인 돌이다).
+func _mob_probe(t: Vector2i) -> int:
+	if t.x < 0 or t.y < 0 or t.y >= _grid.size() or t.x >= _grid[t.y].size():
+		return Mob.CELL_WALL
+	if _is_mine_rock(t):
+		return Mob.CELL_WALL if _mine_node_at(t) != "" else Mob.CELL_ROCK
+	return Mob.CELL_WALL if is_solid(_grid[t.y][t.x]) else Mob.CELL_FREE
+
+# ── 틱(‗_process 폴링 — night_bar.tick·cafe.tick과 같은 자리) ─────────────────
+# 층 안에서만 돈다. 순서: ①개체 스텝(이동·부수기·발사) ②접촉 피해 ③화염구 전진·명중 ④사체 청소.
+# ★ 피해는 전부 `take_damage(고정 데미지, 출처 px)` 하나로 나간다 — 무적 창 0.8s·넉백·기절이 그
+#   안에 이미 들어 있어 몹 쪽에 특별 분기가 없다(T4가 남긴 계약을 그대로 쓴다).
+func _tick_mobs(delta: float) -> void:
+	if not _in_mine_floor() or player == null or delta <= 0.0:
+		return
+	if _mobs.is_empty() and _mob_shots.is_empty():
+		return
+	var target := player.global_position
+	var probe := Callable(self, "_mob_probe")
+	for m: Mob in _mobs:
+		if m == null or not m.is_alive():
+			continue
+		var ev := m.step(delta, target, probe)
+		var broke: Vector2i = ev["broke"]
+		if broke.x >= 0:
+			_mob_break_rock(broke)
+		var fire: Vector2 = ev["fire"]
+		if fire != Vector2.ZERO:
+			_mob_shots.append(Mob.make_shot(m.pos, fire, m.kind))
+		if m.touches(target):
+			take_damage(m.touch_damage(), m.pos)
+	# ★ 틱 **도중** 무대를 떠났을 수 있다: 접촉 피해가 기절을 부르면 `_faint`가 그 자리에서 지상으로
+	#   퇴장시키고 `_clear_mine_mobs`가 목록을 비운다. 그대로 아래 되쓰기(`_mobs = live`)까지 가면
+	#   버린 층의 잡귀가 **되살아난다** — 여기서 끊는다(청소는 이미 끝났다).
+	if not _in_mine_floor():
+		return
+	var live_shots: Array = []
+	for shot: Dictionary in _mob_shots:
+		if not Mob.step_shot(shot, delta, probe):
+			continue                             # 수명 끝·지형 명중 → 소멸(바위 뒤로 숨으면 막힌다)
+		if Mob.shot_touches(shot, target):
+			take_damage(int(shot["damage"]), Vector2(shot["pos"]))
+			continue                             # 명중한 화염구는 사라진다(관통 없음)
+		live_shots.append(shot)
+	if not _in_mine_floor():
+		return                                   # 화염구 명중이 기절을 불렀을 때도 같은 이유로 끊는다
+	_mob_shots = live_shots
+	# 죽은 개체 청소는 **틱 끝에서 한 번**(위 루프 중 배열을 줄이면 순회가 어긋난다).
+	var live: Array = []
+	for m: Mob in _mobs:
+		if m != null and m.is_alive():
+			live.append(m)
+	_mobs = live
+	queue_redraw()                               # 픽셀 연속 이동이라 매 틱 다시 그린다
+
+# ★ 몹이 부순 일반 돌 — **채광 XP 0 · 산출 0 · 사다리 롤 0**(ADR-0063 결정 9 "몹이 부순 바위 XP 0").
+#   그래서 `_award_mine_drop`·`roll_ladder`를 타지 않고 원장 기록 + 그리드 해제만 한다. 광맥은
+#   `_mob_probe`가 WALL로 막아 애초에 여기 오지 않는다(자원 손실 0).
+func _mob_break_rock(t: Vector2i) -> void:
+	if not _is_mine_rock(t):
+		return
+	mine_floors.mark_mined(_mine_floor, t)
+	_sync_mine_tile(t)
+	audio.sfx("hoe")
+
+# ── 처치 ─────────────────────────────────────────────────────────────────────
+# ①전투 XP(관계-중립 base — 바나·affinity 참조 0) ②드랍(결정 롤 → **인벤 직행**) ③사다리 15% 롤.
+# ★ 드랍을 바닥에 떨구지 않고 인벤에 바로 넣는 이유: 이 게임엔 "바닥 아이템" 개체가 아직 없다
+#   (채집물·광맥 산출 전부 그 자리에서 인벤으로 들어간다 — `_pick_forage`·`_award_mine_drop`).
+#   T5에서 바닥 드랍 + [F] 줍기를 새로 만들면 엔티티 프레임워크가 둘(몹·아이템) 늘어난다.
+#   스타듀는 바닥 드랍이지만 그건 폴리시 축이라 그레이박스 단순함을 택했다(*스코프 판단 — 보고에 명시*).
+func _on_mob_killed(mob: Mob, spawn_index: int) -> void:
+	if mob == null:
+		return
+	_gain_combat_xp(mob.kill_xp())
+	var full := false
+	for d: Dictionary in MobCatalog.roll_drops(mob.kind,
+			hash("%d:%d:%d" % [clock.day, _mine_floor, spawn_index])):
+		var id := String(d["id"])
+		var n := int(d["count"])
+		if n <= 0:
+			continue
+		if inventory.add_item(id, n):
+			_toast_item(id, n)
+		else:
+			full = true
+	if full:
+		_notice("백팩이 가득 차 잡귀가 남긴 것을 다 담지 못했다")
+	_notice("%s을(를) 물리쳤다" % MobCatalog.name_of(mob.kind))
+	audio.sfx("harvest")
+	# ★ 처치 사다리 15%(ADR-0063 결정 1 ㉢) — 사다리는 **죽은 자리**에 열린다(돌 파괴 사다리와 같은
+	#   "그 자리에 구덩이가 드러난다" 문법). 롤 시드는 스폰 인덱스라 자리를 옮겨 리롤할 수 없다.
+	if spawn_index >= 0 and MineFloors.roll_mob_ladder(clock.day, _mine_floor, spawn_index):
+		var t := mob.tile()
+		if not _is_mine_rock(t) and not _is_mine_entrance(t):
+			mine_floors.add_ladder(_mine_floor, t)
+			_notice("잡귀가 흩어진 자리에 사다리가 드러났다 — [F]로 더 내려간다")
+
+# ── 위장 해제(곡괭이) ────────────────────────────────────────────────────────
+# 달걀귀신은 바위인 척 서 있다가 **곡괭이에 건드려지면** 깨어난다(Rock Crab 1:1). 두 경로가 있다:
+#   ㉠ 위장체 칸을 직접 겨눠 곡괭이 LMB(그 칸은 ROCK 타일이 아니라 `_mine_rock`이 안 걸린다 →
+#      LMB 디스패치가 이 함수를 따로 부른다). 혼력 0·피해 0 — "쿡 찔러 보는" 동작이다.
+#   ㉡ 이웃 돌을 캘 때의 진동(`_mine_rock` 끝에서 반경 1칸을 깨운다).
+# 반환 = 이 호출이 실제로 깨운 마리 수(0 = 무동작 — 프롬프트·디스패치 판정에 쓴다).
+func _wake_mobs_near(t: Vector2i, radius: int) -> int:
+	var woke := 0
+	for m: Mob in _mobs:
+		if m == null or not m.is_alive() or m.awake:
+			continue
+		var d := m.tile() - t
+		if absi(d.x) > radius or absi(d.y) > radius:
+			continue
+		if m.wake():
+			woke += 1
+	if woke > 0:
+		_notice("바위가 눈을 떴다 — 달걀귀신!")
+		audio.sfx("ui")
+		queue_redraw()
+	return woke
+
+# 이 칸에 위장 중인 잡귀가 서 있나(LMB 디스패치·프롬프트의 단일 판정).
+func _disguised_mob_at(t: Vector2i) -> bool:
+	for m: Mob in _mobs:
+		if m != null and m.is_alive() and not m.awake and m.tile() == t:
+			return true
+	return false
 
 # ★ M5.2 — 나락(독립 전투 던전 스테이지). 빈 전투장 — 외부 land 한 덩어리(VOID 스택 띠는 카메라 격리용으로
 # 유지하되 실내 방 없음). 전투 메카닉은 만들지 않는다(Phase 3) — 심연·업화·봉인 모티프의 바위(ROCK) 둘레만.
@@ -7472,6 +7694,7 @@ func _on_day_advanced(day: int) -> void:
 		if _in_mine_floor():
 			_mine_floor = 0
 			_mine_layout = {}
+			_clear_mine_mobs()   # ★[S5-T5] 지상으로 되돌리며 층 잡귀도 함께 소멸(비영속)
 			_rebuild_region(_region)
 			player.position = _tile_center_px(MINE_SURFACE_RETURN)
 			_apply_camera_limits()
@@ -8749,6 +8972,11 @@ func _process(delta: float) -> void:
 		night_bar.tick(delta, clock.minutes)
 	if night_bar.is_active():
 		queue_redraw()
+	# ★[S5-T5 / ADR-0063 결정 8] 갱도 층 잡귀 틱 — 이동·화염구·접촉 피해. 카페 손님·밤 바 잡귀 폴링과
+	#   같은 자리이고(연출 중 제외), 층 밖에선 `_tick_mobs`가 스스로 무동작이다. 위 `_transitioning`
+	#   early-return 뒤라 층 전환 fade 중엔 안 돈다(하강 무적 1초와 함께 착지 직후를 보호한다).
+	if not _sleeping:
+		_tick_mobs(delta)
 	# 바라보는 칸이 손님 좌석이면 그 좌석 인덱스(없으면 -1). 서빙 대상 판정·프롬프트에 쓴다.
 	# 낮 카페 손님(15–19시)·밤 바 손님(19–24시)이 같은 좌석 줄(y=7)을 시간대로 나눠 쓴다
 	# (둘은 시간이 겹치지 않아 한 번에 한쪽만 is_waiting — cafe/night_bar 활성으로 분기).
@@ -8953,6 +9181,13 @@ func _process(delta: float) -> void:
 	if _in_mine_floor() and not _sleeping and _is_mine_rock(_target) \
 			and Input.is_action_just_pressed("use_tool"):
 		_mine_rock(_target)
+	# ★[S5-T5 / ADR-0063 결정 8] 위장 잡귀 쿡 찌르기 — 달걀귀신이 선 칸은 ROCK 타일이 아니라 위 채굴
+	#   디스패치가 안 걸린다. 곡괭이를 든 채 그 칸을 겨눠 LMB = **위장만 풀린다**(피해 0·혼력 0).
+	#   무기를 들었으면 아래 `_use_tool` 갈래가 정상 스윙으로 처리하므로 여기 안 걸린다(도구 검사).
+	if _in_mine_floor() and not _sleeping and inventory.selected_id() == ItemCatalog.PICKAXE \
+			and _disguised_mob_at(_target) and Input.is_action_just_pressed("use_tool"):
+		_swing_for_item(ItemCatalog.PICKAXE)
+		_wake_mobs_near(_target, 0)
 	# ★[S4-T3 / ADR-0062 결정 3] 벌목 — 원장 나무·그루터기는 SOLID(비-SOIL)라 _target_valid 게이트 밖에서
 	#   따로 디스패치한다(개간 debris와 같은 결). LMB(도끼 든 채) = 1타. 도끼가 아니거나 혼력이 없으면
 	#   _chop_tree 안에서 무동작이다(자동 분기 없음 — ADR-0024 §2).
@@ -9094,6 +9329,11 @@ func _process(delta: float) -> void:
 			interact_prompt.text = "[F] 아래층으로" if _mine_floor < MineFloors.MAX_FLOOR else "갱도 바닥 — 더 내려갈 곳이 없다"
 		elif _is_mine_entrance(here_t):
 			interact_prompt.text = "[F] 갱도 밖으로 나간다"
+		elif _disguised_mob_at(_target):
+			# ★[S5-T5] 위장 잡귀 칸 — 겨눈 것이 "돌"처럼 보이지만 ROCK 타일이 아니다. 곡괭이를 들었을
+			#   때만 안내한다(정체를 미리 알려 주지 않는다 — 찔러 보는 것이 곧 판별이다).
+			interact_prompt.text = "[좌클릭] 곡괭이로 바위를 건드려 본다" \
+				if inventory.selected_id() == ItemCatalog.PICKAXE else "수상한 바위가 있다"
 		elif _is_mine_rock(_target):
 			# ★[S5-T2] 광맥이면 종·남은 타수를 함께 보인다(일반 돌은 종전대로 남은 돌 수만).
 			var nid := _mine_node_at(_target)
@@ -9106,8 +9346,11 @@ func _process(delta: float) -> void:
 			interact_prompt.text = ("[좌클릭] 곡괭이로 " + body) \
 				if inventory.selected_id() == ItemCatalog.PICKAXE else "곡괭이가 있어야 돌을 깰 수 있다"
 		else:
-			interact_prompt.text = "%s %d층 — 돌을 깨고 사다리를 찾아 내려간다" % [
-				MineFloors.band_name(MineFloors.band_of(_mine_floor)), _mine_floor]
+			# ★[S5-T5] 남은 잡귀 수를 함께 보인다 — 전멸 +4%가 사다리 확률의 축이라(ADR-0063 결정 1 ㉡)
+			#   "몇 마리 남았나"가 곧 "싸울까 캘까"의 판단 근거다(남은 돌 수를 보이는 것과 같은 이유).
+			var mob_line := "" if _mobs_alive() <= 0 else "   잡귀 %d" % _mobs_alive()
+			interact_prompt.text = "%s %d층 — 돌을 깨고 사다리를 찾아 내려간다%s" % [
+				MineFloors.band_name(MineFloors.band_of(_mine_floor)), _mine_floor, mob_line]
 	elif _can_cast():
 		# ★ [S3-T2 / ADR-0061 결정 9] 낚싯대를 들고 삼도천·황천해 물가를 겨눌 때: LMB = 캐스팅.
 		# ★ [S3-T4] 뒤에 기어 한 줄(미끼 잔량·적용 태클)을 붙인다 — 장전 UI가 없으니 "무엇이 걸려 있나"를
@@ -11113,6 +11356,41 @@ func _draw_mine_floor() -> void:
 	for i in 3:
 		draw_rect(Rect2(ep + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.76, 0.60, 0.36))
 
+# ★[S5-T5 / ADR-0063 결정 8] 잡귀 + 화염구 그레이박스. 손님·밤 잡귀 그리기와 같은 결(노드 없이 main이
+#   직접)이되 **픽셀 연속 위치**라 타일 정렬이 아니다 — 그게 층 몹과 좌석 잡귀의 유일한 렌더 차이다.
+#   진짜 스프라이트(9종 + 보스)는 S5-T10 아트 패스라, 지금은 아키타입이 눈으로 갈리면 된다:
+#     · 색 = 종별(_MOB_COLORS) · 머리 위 HP 바 = 남은 비율 · 피격 순간 흰 플래시
+#     · 위장 중(달걀귀신) = **바위색 사각**(ROCK 타일 색과 같은 톤 + HP 바 없음) → "저건 돌"로 읽힌다
+#     · 원거리(화귀) = 발밑에 사거리 링 대신 몸통에 불빛 심지(원거리라는 단서)
+func _draw_mine_mobs() -> void:
+	for m: Mob in _mobs:
+		if m == null or not m.is_alive():
+			continue
+		var col: Color = _MOB_COLORS.get(m.kind, Color(0.70, 0.70, 0.74))
+		if not m.awake:
+			col = COLORS[ROCK]                       # 위장 = 바위인 척(같은 톤이라 눈에 안 걸린다)
+		if m.hurt > 0.0:
+			col = col.lerp(Color.WHITE, 0.55)        # 피격 플래시
+		var body := Rect2(m.pos - Vector2(TILE * 0.34, TILE * 0.40), Vector2(TILE * 0.68, TILE * 0.80))
+		draw_rect(body.grow(1.0), col.darkened(0.55))                                        # 외곽선
+		var top_h := body.size.y * 0.42
+		draw_rect(Rect2(body.position, Vector2(body.size.x, top_h)), col.lightened(0.14))     # 머리(밝게)
+		draw_rect(Rect2(body.position + Vector2(0, top_h),
+			Vector2(body.size.x, body.size.y - top_h)), col.darkened(0.20))                  # 몸통(어둡게)
+		if not m.awake:
+			continue                                  # 위장 중엔 HP 바·단서 없음(정말 바위처럼)
+		if MobCatalog.is_ranged(m.kind):
+			draw_rect(Rect2(body.position + body.size * 0.5 - Vector2(3, 3), Vector2(6, 6)),
+				_MOB_SHOT_COLOR)                      # 원거리 단서 = 몸통 속 불빛 심지
+		var bar := Rect2(m.pos.x - TILE * 0.34, body.position.y - 5.0, TILE * 0.68, 2.0)
+		draw_rect(bar, Color(0, 0, 0, 0.6))
+		var hp_col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), m.hp_ratio())
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * m.hp_ratio(), bar.size.y)), hp_col)
+	for shot: Dictionary in _mob_shots:
+		var p: Vector2 = shot["pos"]
+		draw_rect(Rect2(p - Vector2(4, 4), Vector2(8, 8)), _MOB_SHOT_COLOR.darkened(0.45))
+		draw_rect(Rect2(p - Vector2(2.5, 2.5), Vector2(5, 5)), _MOB_SHOT_COLOR.lightened(0.25))
+
 func _draw_smithy_room() -> void:
 	if _indoor != "대장간":
 		return
@@ -12867,6 +13145,7 @@ func _draw() -> void:
 		RegionCatalog.EOPHWA_MINE:
 			if _in_mine_floor():
 				_draw_mine_floor()   # ★[S5-T1] 층 그레이박스(사다리 두 종 표식 — 돌은 ROCK 타일이 그린다)
+				_draw_mine_mobs()    # ★[S5-T5] 잡귀 + 화염구 그레이박스(아키타입별 색·HP 바)
 			else:
 				_draw_smithy_room()  # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
 		RegionCatalog.NARU_VILLAGE:

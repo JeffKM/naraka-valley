@@ -22,8 +22,11 @@ class_name MineFloors
 #   - **day-한정 채굴 원장**: 그날 깬 돌 좌표만 남는다. 같은 날 같은 층에 다시 내려가면 배치는
 #     동일하고 깬 돌만 빠져 있다(재파밍 차단). `advance_day`가 day를 갈면 전량 소멸한다.
 #   - **`mine_depth`(도달 최심층)만 영구**다. 엘리베이터 체크포인트가 이 값에서 파생된다.
-#   - **몹·HP는 여기 없다**(T4 HP / T5 몹 소관). 사다리 롤의 `mobs_cleared`·`luck_bonus`는 그
-#     시스템들이 붙을 자리를 미리 연 **인자 자리**일 뿐이다.
+#   - **HP는 여기 없다**(T4 소관). 사다리 롤의 `luck_bonus`는 운 시스템이 붙을 **인자 자리**다.
+#   - ★[S5-T5] **잡귀 스폰도 여기 합류**했다(아래 "잡귀 스폰" 절) — 노드와 정확히 같은 이유다:
+#     "논리 좌표 위에 무엇이 서는가"의 주인은 이 파일이다. 다만 개체 상태(HP·행동 위상)·틱 이동·
+#     피해는 여전히 밖이다(Mob·main). 그리고 롤은 **노드 뒤·스트림 맨 끝**이라 T1/T2 골든 서명이
+#     한 칸도 안 흔들린다(mining_test ②가 그 불변을 잠근다).
 #   - ★[S5-T2] **광석 노드는 여기 합류**했다(아래 "노드 로스터" 절) — 노드도 결국 "논리 좌표 위의
 #     돌"이라 배치의 주인은 이 파일이다. 다만 드랍·XP·혼력은 여전히 밖이다(MiningSkill·main).
 
@@ -49,7 +52,10 @@ const ELEVATOR_STEP := 5
 # chance = base 2% + 1/(남은 돌 + 1) + (몹 전멸 시 +4%) + 명부의 운 가산.
 # 남은 돌이 줄수록 단조 증가해 "마지막 돌까지 캐면 반드시 열린다"는 스타듀의 안전판이 된다.
 const LADDER_BASE := 0.02          # base 2%
-const LADDER_MOBS_CLEARED := 0.04  # 층의 몹을 전멸시켰을 때 가산(몹 본체는 S5-T5 — 지금은 인자만)
+const LADDER_MOBS_CLEARED := 0.04  # ★[S5-T5] 층의 몹을 전멸시켰을 때 가산(실배선 완료 — main._mobs_cleared)
+# ★[S5-T5 / ADR-0063 결정 1 ㉢] 몹 처치 시 사다리 15%. 돌 파괴 롤(남은 돌 역수)과 **별 축**이다 —
+#   싸워서 내려가는 길과 캐서 내려가는 길이 각자 열린다(스타듀 1:1).
+const LADDER_MOB_KILL := 0.15
 
 # ── 층 템플릿 풀(그레이박스 4종 — ADR-0063 "방 템플릿 풀 3~5종 결정 롤") ──────
 # 그레이박스라 형태는 전부 직사각 방이고 **크기·바위 밀도**만 갈린다(층마다 "좁고 빽빽" / "넓고
@@ -250,7 +256,11 @@ static func generate(day: int, floor_no: int) -> Dictionary:
 	if not _connected(rect, entrance, ladder, rocks):
 		rocks = _carve_corridor(entrance, ladder, rocks)
 	# ⑦ ★[S5-T2] 노드 승격(순차 소비 **맨 뒤** — 앞 롤을 한 번도 안 건드린다).
-	#    ⑥의 복도 파기는 RNG를 소비하지 않으므로, 여기가 rocks 확정 직후이자 스트림의 끝이다.
+	#    ⑥의 복도 파기는 RNG를 소비하지 않으므로, 여기가 rocks 확정 직후다.
+	var nodes := _scatter_nodes(rng, floor_no, rocks)
+	# ⑧ ★[S5-T5] 잡귀 스폰(순차 소비 **맨 뒤** — T2 노드 롤 뒤에 붙었다. 앞에 끼우면 노드·돌·방이
+	#    통째로 갈린다: mining_test ②/②b 골든 서명이 그 즉시 터진다 = 조기 경보).
+	var mobs := _scatter_mobs(rng, floor_no, rect, rocks, entrance, ladder)
 	return {
 		"floor": floor_no,
 		"band": band_of(floor_no),
@@ -259,8 +269,67 @@ static func generate(day: int, floor_no: int) -> Dictionary:
 		"entrance": entrance,
 		"ladder": ladder,
 		"rocks": rocks,
-		"nodes": _scatter_nodes(rng, floor_no, rocks),
+		"nodes": nodes,
+		"mobs": mobs,
 	}
+
+# ── ★[S5-T5 / ADR-0063 결정 8] 잡귀 스폰 ─────────────────────────────────────
+# 층 생성 시 3~6마리 결정 롤. 종 데이터·밴드 게이팅은 MobCatalog가 들고(수치 복제 0 — ToolTier에
+# 타수 표를 위임한 것과 같은 자리) 이 파일은 **어디에 서는가**만 정한다.
+#
+# ★ 왜 층 한정 비영속인가(ADR-0063 결정 8): 스타듀도 층 재진입 시 몹을 재생성한다. 그래서
+#   day-한정 *처치 원장*조차 없다 — 그날 다 잡은 층에 다시 내려가면 새 잡귀가 서 있는 게 맞고,
+#   그게 "몹 전멸 +4%"를 재파밍 exploit으로 만들지도 않는다(층을 나갔다 오는 왕복 비용이 더 크다).
+#   ⇒ 그래서 `_mined`/`_node_hits` 같은 원장 필드가 몹에는 **없다**(to_save에 한 줄도 안 늘었다).
+const MOB_MIN := 3
+const MOB_MAX := 6
+const MOB_PICK_TRIES := 8         # 좌표 중복·부적격 회피 재시도 상한(무한 루프 방지)
+const MOB_SPAWN_CLEAR := 3        # 입구에서 이 칸 수 안에는 안 세운다(착지 즉시 얻어맞지 않게)
+# ★ 보상 층(10의 배수) = **몹 없음**(ADR-0063 결정 10 "10의 배수 층 = 몹 없음·1회성 상자").
+#   상자 본체는 후속(T7/T10)이지만 "몹이 안 나온다"는 스폰 쪽 불변식이라 여기서 지킨다 — 5층마다
+#   엘리베이터, 10층마다 숨 돌리는 층이라는 리듬이 몹 배치와 함께 성립해야 의미가 있다.
+const MOB_FREE_FLOOR_STEP := 10
+
+# 이 층에 몹이 스폰되는 층인가(보상 층 제외).
+static func spawns_mobs(floor_no: int) -> bool:
+	return is_valid_floor(floor_no) and floor_no % MOB_FREE_FLOOR_STEP != 0
+
+# 잡귀 배치 = [{"kind": String, "tile": Vector2i}] — 순수 스펙이다(개체는 main이 Mob.spawn으로 세운다).
+#   ① 마리 수 롤(3~6) ② 마리마다 좌표 롤(돌·사다리·입구 둘레 배제) ③ 종 가중 롤.
+#   ②③을 마리 단위로 번갈아 소비한다(좌표 전부 → 종 전부 순서가 아니다 — 마리 수가 갈리면
+#   스트림이 어긋나는 건 어느 쪽이든 같고, 마리 단위가 읽기 쉽다).
+static func _scatter_mobs(rng: RandomNumberGenerator, floor_no: int, rect: Rect2i,
+		rocks: Array, entrance: Vector2i, ladder: Vector2i) -> Array:
+	var out: Array = []
+	if not spawns_mobs(floor_no):
+		return out
+	var pool := MobCatalog.spawn_pool(floor_no)
+	if pool.is_empty():
+		return out
+	var blocked: Dictionary = {}
+	for r: Vector2i in rocks:
+		blocked[r] = true
+	blocked[entrance] = true
+	blocked[ladder] = true
+	var quota := rng.randi_range(MOB_MIN, MOB_MAX)
+	var used: Dictionary = {}
+	for _i in range(quota):
+		var tile := Vector2i(-1, -1)
+		for _try in range(MOB_PICK_TRIES):
+			var t := Vector2i(rect.position.x + rng.randi_range(0, rect.size.x - 1),
+				rect.position.y + rng.randi_range(0, rect.size.y - 1))
+			if blocked.has(t) or used.has(t):
+				continue
+			if absi(t.x - entrance.x) + absi(t.y - entrance.y) <= MOB_SPAWN_CLEAR:
+				continue
+			tile = t
+			break
+		var kind := MobCatalog.roll_kind(pool, rng)   # ★자리를 못 찾아도 **롤은 굴린다**(스트림 고정)
+		if tile == Vector2i(-1, -1) or kind == "":
+			continue
+		used[tile] = true
+		out.append({"kind": kind, "tile": tile})
+	return out
 
 # ★[S5-T2] 확정된 돌 목록 일부를 노드로 승격 — {Vector2i: 노드 종 id}. rocks는 읽기만 한다.
 #   ① 노드 개수 롤(3~7, 돌 수 상한) ② 승격할 돌 인덱스 뽑기(중복은 건너뜀·재시도 상한 있음)
@@ -351,6 +420,16 @@ static func roll_ladder(day: int, floor_no: int, tile: Vector2i, stones_left: in
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("mine_ladder:%d:%d:%d:%d" % [day, floor_no, tile.x, tile.y])
 	return rng.randf() < ladder_chance(stones_left, mobs_cleared, luck_bonus)
+
+# ★[S5-T5 / ADR-0063 결정 1 ㉢] 몹을 잡았을 때 사다리가 열리는가 — 고정 15%.
+#   시드에 **스폰 인덱스**를 넣는다(좌표가 아니다): 몹은 죽는 자리가 매번 다르므로 좌표 시드면 같은
+#   몹을 다른 자리에서 잡아 리롤하는 exploit이 생긴다. 스폰 인덱스는 층 배치가 정한 불변값이라
+#   "저 잡귀를 잡으면 사다리가 나온다"가 그날 그 층에 대해 한 번 정해진다(결정성 + exploit 0).
+#   ★ 돌 파괴 롤(`roll_ladder`)과 별 축이라 `stones_left`·`mobs_cleared`가 여기 안 낀다.
+static func roll_mob_ladder(day: int, floor_no: int, spawn_index: int) -> bool:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("mine_mob_ladder:%d:%d:%d" % [day, floor_no, spawn_index])
+	return rng.randf() < LADDER_MOB_KILL
 
 # ── 원장 상태 ────────────────────────────────────────────────────────────────
 signal changed()   # 채굴·사다리 개통·깊이 갱신·리셋·복원한 프레임(main이 드로우·HUD 갱신)
