@@ -1740,6 +1740,13 @@ const GUILD_RECT := Rect2i(23, 46, 10, 9)       # x23..32, y46..54 (실내 방 �
 const GUILD_DOOR := Vector2i(27, 54)            # 실내 길드 문(닿으면 퇴장) — 아래벽
 const GUILD_IN_TILE := Vector2i(27, 53)         # 실내 문 안쪽(진입 착지)
 const GUILD_CAM_RECT := Rect2i(21, 44, 14, 13)  # 길드 방 둘레(대장간 CAM x2..21과 안 겹침)
+# ★[S5-T6 / ADR-0063 결정 6] 무골(길드 점주 T2) 자리 — 카운터 뒤 응대 칸. **문 열(x27)에 정렬**해서
+#   들어오자마자 정면으로 마주 보게 둔다(첫 방문 증정이 걸린 자리라 못 지나치는 게 중요하다).
+#   창구는 하나뿐이다 — 무골에게 [F] = 매대(검·명부환). 무인 칸(대장간 모루 결)은 길드에 없다.
+const MUGOL_TILE := Vector2i(27, 49)
+const GUILD_COUNTER_Y := 50                       # 카운터 줄(순수 장식 — 충돌 없음, 목공방 카운터 결)
+const GUILD_COUNTER_X0 := 25                      # 카운터 좌단(x25..x30 — 6칸)
+const GUILD_COUNTER_X1 := 30                      # 카운터 우단
 # 갱도 끝 전투 던전 입구 — 잠긴 외관(비-enterable). 북단 심연 포켓 서편. 채광으로 뚫고 내려가 전투(ADR-0015)는 Phase 3라 잠김.
 # WALL 박스 + 문 리세스만(실내·카탈로그 없음 — 옥자 집 결). 나락(별개 공간)과 다른 잠긴 외관.
 const DUNGEON_GATE_EXT_RECT := Rect2i(22, 2, 5, 5)  # x22..26, y2..6 (북단 심연 포켓 서, 잠긴 던전 입구)
@@ -2191,6 +2198,15 @@ var _cast_tackles: Array = []    # 이번 캐스팅에 적용된 태클 id 목�
 #   키 없는 구세이브 = false로 시작하되, 인벤에 이미 T1이 있으면 첫 대화에서 조용히 true로 접힌다
 #   (옛 자동 지급 경로로 받은 세이브 방어 — _grant_boatman_rod_lines 주석 참조).
 var _boatman_rod_given := false
+# ★[S5-T6 / ADR-0063 결정 5] 무골 첫 방문 녹슨 혼검 증정을 이미 받았는가(1회성 · 세이브 영속).
+#   뱃사공 T1 낚싯대 플래그와 **완전 동형**이다 — 키 없는 구세이브 = false로 시작하되, 인벤에 이미
+#   녹슨 혼검이 있으면 첫 대화에서 조용히 true로 접힌다(디버그 지급분 방어).
+var _mugol_sword_given := false
+# ★[S5-T6 / ADR-0063 결정 7] 나락 열쇠를 **한 번이라도 손에 넣었는가**(영구 마일스톤 · 세이브 영속).
+#   왜 인벤 보유(`inventory.has_item`)와 별도로 두는가: 열쇠는 CAT_MATERIAL이라 플레이어가 버릴 수
+#   있는데, 60층 상자는 1회성이라 버리면 재입수 경로가 없다 — 그러면 나락이 영구 봉인된다.
+#   그래서 **점등 게이트는 이 플래그가 본다**(S5-T7이 배선할 자리 — 지금은 기록·알림까지만).
+var _narak_key_found := false
 
 # T2.3 현재 심을 작물. Q로 카탈로그(빠른 성장 순)를 순환 선택한다.
 # 그레이박스에선 도구·씨앗 인벤토리 UI 없이 이 한 변수로 작물 종류를 고른다.
@@ -4416,6 +4432,77 @@ func _is_mine_ladder(t: Vector2i) -> bool:
 func _is_mine_entrance(t: Vector2i) -> bool:
 	return _in_mine_floor() and not _mine_layout.is_empty() and t == _mine_layout["entrance"]
 
+# ── ★[S5-T6 / ADR-0063 결정 10] 보상 층 상자 ─────────────────────────────────
+# 층 안 이 칸이 **아직 안 연** 보상 상자인가. 이미 열었으면 false다 — 상자는 자리에서 사라지고
+# (그리기도 안 하고) 칸이 그냥 바닥으로 돌아간다. 통행을 막지 않는 순수 상호작용 칸이라 그리드
+# (WALL/PATH/ROCK)에는 한 칸도 안 들어간다(사다리와 같은 결).
+func _is_mine_chest(t: Vector2i) -> bool:
+	if not _in_mine_floor() or _mine_layout.is_empty():
+		return false
+	var c: Vector2i = _mine_layout.get("chest", Vector2i(-1, -1))
+	return c.x >= 0 and t == c and not mine_floors.is_chest_opened(_mine_floor)
+
+# 발밑 상자를 연다([F]). **1회성·영구**다(원장 `open_chest`가 판정과 기록을 한 번에 접는다 —
+# 그 반환값이 곧 "내가 처음 열었다"). 열린 뒤엔 날이 바뀌어도 다시 안 생긴다.
+# ★내용물 규칙은 MineFloors.REWARD_TABLE이 들고, **중복 방지·적재는 여기가 든다**(원장은 인벤토리를
+#   모른다). 10층 명동검처럼 이미 가진 물건이 나오면 **길드 판매가만큼의 골드로 대체**한다 —
+#   무기는 스택 불가 유니크라 두 자루가 순수 손해고, 1회성 보상이 빈손이 되는 게 더 나쁘다.
+# ★백팩이 가득 차 못 받은 물건도 **골드로 대체**한다(바닥에 흘리는 개념이 이 게임에 없고, 1회성
+#   상자를 "가득 차서 날렸다"로 끝내면 되돌릴 수 없다). 값 없는 물건(나락 열쇠)은 대체가 불가하니
+#   그때만 개봉을 **취소**하고 다시 열 수 있게 둔다(진행 봉쇄 방지).
+func _open_mine_chest() -> void:
+	if not _is_mine_chest(_player_tile()):
+		return
+	var floor_no := _mine_floor
+	var rewards := MineFloors.chest_rewards(floor_no)
+	# ★선(先)검사: 대체가 불가능한 물건(비매 = 값 0)을 못 받을 상황이면 개봉 자체를 미룬다.
+	for row: Dictionary in rewards:
+		if String(row.get("kind", "")) != "item":
+			continue
+		var rid := String(row["id"])
+		if ItemCatalog.price_of(rid) > 0:
+			continue                                  # 값이 있으면 최악에도 골드로 대체된다
+		# 값 0 = 비매(나락 열쇠) → 골드 대체가 불가능하다. 자리가 없으면 **개봉 자체를 미룬다**.
+		# has_free_slot은 보수적이다(스택 가능한 물건이면 자리 없이도 들어갈 수 있지만, 지금 값 0
+		# 보상은 스택 불가 열쇠뿐이라 정확하다 — 틀리는 쪽이 늘 "비우고 오자"라 안전하다).
+		if not inventory.has_free_slot():
+			_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(rid))
+			return
+	if not mine_floors.open_chest(floor_no):
+		return                                        # 이미 열린 상자(경합 방어 — 판정·기록이 한 걸음)
+	var got: Array[String] = []
+	var gold_sum := 0
+	for row: Dictionary in rewards:
+		if String(row.get("kind", "")) == "gold":
+			gold_sum += int(row.get("amount", 0))
+			continue
+		var rid := String(row["id"])
+		var want := maxi(int(row.get("count", 1)), 1)
+		var taken := 0
+		# 유니크(스택 불가)는 이미 가지고 있으면 애초에 안 받는다 — 아래 골드 대체로 흘린다.
+		if not (not ItemCatalog.stackable_of(rid) and inventory.has_item(rid)):
+			for _i in want:
+				if not inventory.add_item(rid, 1):
+					break
+				taken += 1
+		if taken > 0:
+			got.append("%s ×%d" % [ItemCatalog.name_of(rid), taken])
+			_toast_item(rid, taken)
+		# 못 받은 몫은 판매가만큼 골드로(위 선검사가 값 0 물건은 이미 걸러냈다).
+		gold_sum += ItemCatalog.price_of(rid) * (want - taken)
+		# ★[ADR-0063 결정 7] 나락 열쇠는 **영구 마일스톤 플래그**도 함께 세운다(버려도 안 잠기게).
+		if taken > 0 and rid == ItemCatalog.NARAK_KEY:
+			_narak_key_found = true
+	if gold_sum > 0:
+		wallet.earn(gold_sum)
+		got.append("%d골드" % gold_sum)
+	audio.sfx("ui")
+	_notice("%d층 보상 상자 — %s" % [floor_no, " · ".join(got) if not got.is_empty() else "비어 있다"])
+	if _narak_key_found:
+		# ★나락 진입로(NARAK_GATE) 점등 배선은 S5-T7 소관이다 — 여기선 열쇠를 쥐었다는 사실만 알린다.
+		_notice("나락 열쇠를 손에 넣었다 — 갱도 지상의 나락 진입로로", FLAVOR_SECS)
+	queue_redraw()
+
 # 지상에서 갱도 입구 문 칸에 서 있는가(층 진입 트리거). 잠긴 외관이라 _maybe_toggle_building은
 # 여전히 이 문을 모른다 — 진입은 [F] 전용이다(기증대·게시판과 같은 무인 F 결).
 func _at_dungeon_gate() -> bool:
@@ -4449,6 +4536,18 @@ func _descend_mine(to_floor: int) -> void:
 	_mine_descended_at = float(Time.get_ticks_msec()) / 1000.0   # ★ 하강 직후 무적 1초(판정은 S5-T4)
 	_warp_in_region(layout["entrance"])
 	_notice("갱도 %d층 (%s) — 내려간다" % [to_floor, MineFloors.band_name(MineFloors.band_of(to_floor))])
+
+# ★[S5-T6 / ADR-0063 결정 10] 60층 바닥에서 "더 내려갈 곳이 없다"에 이어 붙는 안내. 세 상태로 갈린다:
+#   ㉠ 상자를 아직 안 열었다 → 이 층에 무엇이 남아 있는지 가리킨다(바닥까지 온 사람을 빈손으로 안 돌린다)
+#   ㉡ 열쇠를 쥐었다 → 다음 목적지(지상 나락 진입로)를 가리킨다. **점등 배선은 S5-T7 소관**이라
+#      지금은 문구뿐이고, 진입로에 가도 아직 잠겨 있다(그 연결이 T7의 첫 줄이 된다).
+#   ㉢ 그 외(열었는데 열쇠가 없다 = 있을 수 없음·방어) → 옛 문구 그대로.
+func _mine_bottom_line() -> String:
+	if mine_floors != null and not mine_floors.is_chest_opened(MineFloors.MAX_FLOOR):
+		return "갱도 바닥 — 더 내려갈 곳이 없다. 이 층 어딘가에 상자가 있다"
+	if _narak_key_found:
+		return "갱도 바닥 — 나락 열쇠를 쥐었다. 지상의 나락 진입로로"
+	return "갱도 바닥 — 더 내려갈 곳이 없다"
 
 # 층에서 지상으로 올라온다(입구 사다리). 갱도 입구 문 앞 곁가지 칸에 착지한다.
 func _ascend_mine_to_surface() -> void:
@@ -4603,6 +4702,31 @@ func _swing_weapon(weapon_id: String) -> void:
 	var hits := CombatSkill.hits_in_arc(arc, _mobs_in_region())
 	for mob in hits:
 		_strike_mob(weapon_id, mob)
+	queue_redraw()
+
+# ★[S5-T6 / ADR-0063 결정 6] 명부환을 마신다 — 든 채 LMB(칸을 안 본다·어디서든 마신다).
+#   ㉠ **풀피면 거절**한다(소모 0). 근거: 유일한 회복원이 150냥짜리 소모품이라 오조작 한 번이 곧
+#      한 판의 연료를 태운다. 스타듀도 최대치에서 먹으면 그냥 낭비지만, 여기선 회복원이 이것뿐이라
+#      "낭비 방지"가 "정직한 소모"보다 상위다. ★잠정(owner 큐 — 버프·해독 등 부가 효과가 붙으면
+#      풀피 사용에 의미가 생기므로 그때 재검토).
+#   ㉡ 회복 후 남은 잔량을 함께 알린다 — 갱도에서 "몇 개 남았나"가 곧 "더 내려갈까"의 판단이다.
+#   ㉢ 기절(HP 0) 처리는 여기 없다 — 기절하면 이미 무대 밖으로 나가 있고(depleted 훅), 그 뒤엔
+#      풀피라 ㉠에 걸린다(자연히 무해).
+func _drink_potion(item: String) -> void:
+	if _sleeping or _transitioning or health == null or inventory == null:
+		return
+	var heal := ItemCatalog.potion_heal(item)
+	if heal <= 0:
+		return
+	if health.current >= health.maximum:
+		_notice("체력이 가득하다 — %s 는 아껴 두자" % ItemCatalog.name_of(item))
+		return
+	if not inventory.remove_item(item, 1):
+		return
+	var healed := health.heal(heal)
+	audio.sfx("ui")
+	_notice("%s — 체력 +%d (%d/%d) · 남은 %d개" % [ItemCatalog.name_of(item), healed,
+		health.current, health.maximum, inventory.count_of(item)])
 	queue_redraw()
 
 # 지금 플레이어가 겨누는 스윙 부채꼴(벽 뒤 칸 제외). CombatSkill이 순수 기하를 주고, "그 칸이
@@ -8166,6 +8290,8 @@ func _save_game() -> void:
 		"hp": health.to_save(),
 		"professions": _professions_to_save(),   # ★ ADR-0052 전문직 선택 {skill:{tier:id}}
 		"boatman_rod_given": _boatman_rod_given,   # ★ [S3-T5] 뱃사공 T1 증정 1회 플래그(키 없는 구세이브 = false)
+		"mugol_sword_given": _mugol_sword_given,   # ★ [S5-T6] 무골 녹슨 혼검 증정 1회 플래그(구세이브 = false)
+		"narak_key_found": _narak_key_found,       # ★ [S5-T6] 나락 열쇠 획득 마일스톤(영구 — T7 점등 게이트)
 		"cafe_revenue_total": _cafe_revenue_total,
 		"total_income": _total_income,   # ★ [S1R-T12] 누적 총수입(정보패널 — 구세이브 키 없음=0)
 		"selected_crop": _selected_crop,
@@ -8293,6 +8419,8 @@ func _load_game() -> void:
 	# ★ [S3-T5] 뱃사공 T1 증정 플래그 복원(키 없는 구세이브 = false → 첫 대화에서 인벤 보유 여부로
 	#   접힌다. 아직 안 만난 세이브는 그대로 증정 대기 = 무막힘).
 	_boatman_rod_given = bool(data.get("boatman_rod_given", false))
+	_mugol_sword_given = bool(data.get("mugol_sword_given", false))   # ★[S5-T6] 구세이브 = 아직 안 받음
+	_narak_key_found = bool(data.get("narak_key_found", false))       # ★[S5-T6] 구세이브 = 열쇠 없음
 	# T7.2 카페 마일스톤 누적 서빙 매출. 손상 방어로 음수는 0으로 자른다(키 없는 구버전 세이브는 0).
 	_cafe_revenue_total = maxi(int(data.get("cafe_revenue_total", 0)), 0)
 	# ★ [S1R-T12] 누적 총수입 복원(키 없는 구세이브 = 0, 하위호환).
@@ -8852,6 +8980,8 @@ func _process(delta: float) -> void:
 			_refresh_fishshop()                  # ★ [S3-T5] 생선가게 매대·환전 행(구매·환전 즉시 반영)
 		elif frame.context == InventoryFrame.CTX_WOODSHOP:
 			_refresh_woodshop()                  # ★ [S4-T7] 목공방 건축·매대 행(의뢰·해금 즉시 반영)
+		elif frame.context == InventoryFrame.CTX_GUILD:
+			_refresh_guild()                     # ★ [S5-T6] 길드 매대 행(구매 즉시 "보유 중"으로 잠김)
 		return
 
 	# 건물 외관 문에 닿으면 실내로, 실내 문에 닿으면 밖으로 — 자동 fade 전환(스타듀식 출입).
@@ -9169,9 +9299,15 @@ func _process(delta: float) -> void:
 			return
 	if _in_mine_floor() and not _sleeping and Input.is_action_just_pressed("shop_toggle"):
 		var here := _player_tile()
+		# ★[S5-T6] 보상 상자를 **사다리보다 먼저** 본다: 상자는 방 중심 최근접 빈 칸이라 사다리와
+		#   겹치지 않지만(chest_tile이 배제한다), 우선순위를 명시해 두면 나중에 자리 규칙이 바뀌어도
+		#   "내려가려다 상자를 여는" 사고가 안 난다.
+		if _is_mine_chest(here):
+			_open_mine_chest()
+			return
 		if _is_mine_ladder(here):
 			if _mine_floor >= MineFloors.MAX_FLOOR:
-				_notice("갱도 바닥이다 — 더 내려갈 곳이 없다")   # 나락 열쇠·바닥 보상은 S5-T7/T10
+				_notice(_mine_bottom_line())   # ★[S5-T6] 바닥 안내 = 상자·열쇠 상태에 따라 갈린다
 			else:
 				_descend_mine(_mine_floor + 1)
 			return
@@ -9325,8 +9461,11 @@ func _process(delta: float) -> void:
 		#   플레이어가 "다 캐면 열린다"를 읽을 수 있게 함께 보인다(스타듀의 암묵 규칙을 명시화).
 		var here_t := _player_tile()
 		interact_prompt.visible = not _sleeping
-		if _is_mine_ladder(here_t):
-			interact_prompt.text = "[F] 아래층으로" if _mine_floor < MineFloors.MAX_FLOOR else "갱도 바닥 — 더 내려갈 곳이 없다"
+		if _is_mine_chest(here_t):
+			# ★[S5-T6] 보상 상자 — 발밑 우선(사다리보다 먼저 보는 [F] 디스패치와 같은 순서).
+			interact_prompt.text = "[F] 보상 상자를 연다"
+		elif _is_mine_ladder(here_t):
+			interact_prompt.text = "[F] 아래층으로" if _mine_floor < MineFloors.MAX_FLOOR else _mine_bottom_line()
 		elif _is_mine_entrance(here_t):
 			interact_prompt.text = "[F] 갱도 밖으로 나간다"
 		elif _disguised_mob_at(_target):
@@ -9638,6 +9777,12 @@ func _use_tool() -> void:
 	#   ㉡ 무기를 안 들면 이 줄은 **한 프레임도 실행되지 않는다** — 기존 도구 거동이 픽셀 단위로 불변.
 	if ItemCatalog._is_weapon(item):
 		_swing_weapon(item)
+		return
+	# ★[S5-T6 / ADR-0063 결정 6] 회복 소모품(명부환) — 무기와 같은 이유로 **혼력 게이트 위**에 둔다:
+	#   회복은 혼력을 쓰는 행동이 아니고(체력·혼력은 완전 별개 자원 — ADR-0011), 혼력이 바닥난
+	#   상태에서 체력을 못 채우면 갱도에서 나갈 길이 막힌다(막힘 0 — ADR-0008).
+	if ItemCatalog._is_potion(item):
+		_drink_potion(item)
 		return
 	var cat := ItemCatalog.category_of(item)
 	# ★ ADR-0059 결정3(에너지 스타듀 정합) — 파종(씨앗)·시비(비료)는 무과금, 괭이·물·낫·개간·급여는 과금.
@@ -10026,6 +10171,26 @@ func _grant_boatman_rod_lines() -> PackedStringArray:
 	_toast_item(ItemCatalog.ROD_T1, 1)
 	_notice("낡은 낚싯대를 받았다 — 물가를 겨누고 좌클릭으로 던져 보자")
 	return PackedStringArray(Boatman.LINES_ROD_GIFT)
+
+# ★[S5-T6 / ADR-0063 결정 5] 무골 첫 대화 = 녹슨 혼검 증정(말론 Rusty Sword 1:1).
+# `_grant_boatman_rod_lines`와 **한 줄씩 대응**하는 동형 구현이다 — 지급에 성공했을 때만 증정 대사를
+# 돌려주고(그 줄들이 평소 대화 앞에 붙는다), 실패하면 빈 배열이라 평소 대화만 나온다.
+#   ㉠ 이미 줬으면 무동작(1회성 — 플래그가 세이브에 남는다)
+#   ㉡ 이미 가지고 있으면 **조용히 플래그만 접는다**(디버그 지급분·구세이브 방어 — 두 자루 금지.
+#      무기는 스택 불가라 두 자루가 두 슬롯을 먹는 순수 손해다)
+#   ㉢ 백팩이 가득 차 못 받으면 플래그를 안 세운다 — 다음 대화에 다시 시도한다(막힘 0)
+func _grant_mugol_sword_lines() -> PackedStringArray:
+	if _mugol_sword_given or inventory == null:
+		return PackedStringArray()
+	if inventory.has_item(WeaponCatalog.SWORD_RUSTY):
+		_mugol_sword_given = true      # 구세이브·디버그 지급 하위호환 — 이미 가진 사람에게 두 번 주지 않는다
+		return PackedStringArray()
+	if not inventory.add_item(WeaponCatalog.SWORD_RUSTY, 1):
+		return PackedStringArray()     # 백팩 가득 — 다음 대화에 다시 시도(플래그 안 세움)
+	_mugol_sword_given = true
+	_toast_item(WeaponCatalog.SWORD_RUSTY, 1)
+	_notice("녹슨 혼검을 받았다 — 손에 들고 좌클릭으로 휘두른다")
+	return PackedStringArray(Mugol.LINES_SWORD_GIFT)
 
 # ── ★ [S1R-T9] 저승 스프링클러 설치/철거/구매 ─────────────────────────────────
 # 이 칸에 스프링클러를 설치할 수 있는가(⑤ 기존 배치 규칙 준수). 안식 농원 전용·빈 지면(GROUND) 또는
@@ -10877,6 +11042,8 @@ func _open_frame(ctx: int) -> void:
 		_refresh_fishshop()                # ★ [S3-T5] 생선가게(기어 매대 + 환전 행)
 	elif ctx == InventoryFrame.CTX_WOODSHOP:
 		_refresh_woodshop()                # ★ [S4-T7] 목공방(건축 의뢰 + 가구·자재 행)
+	elif ctx == InventoryFrame.CTX_GUILD:
+		_refresh_guild()                   # ★ [S5-T6] 길드(깊이 해금 검 + 명부환 행)
 	frame.open(ctx)
 	hotbar.visible = false
 	player.set_physics_process(false)   # 모달 — 이동 잠금
@@ -11062,6 +11229,35 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 			label = ItemCatalog.name_of(ItemCatalog.CRAB_POT)
 			hearts = _boatman_hearts()
 			shop = "생선가게"
+		"weapon":
+			# ★[S5-T6 / ADR-0063 결정 5] 검 = 길드 전용. **도달 깊이 게이트를 여기서 다시 본다** —
+			#   진열(_guild_items)과 같은 판정 함수(WeaponCatalog.unlocked)를 보므로 "안 보이는데
+			#   살 수 있는" 구멍이 없다(게잡이통 lvl3 선례의 그 규율).
+			if not WeaponCatalog.has(buy_id):
+				return
+			var reached := mine_floors.depth() if mine_floors != null else 0
+			if not WeaponCatalog.unlocked(buy_id, reached):
+				_notice("갱도 %d층까지 내려가야 살 수 있다" % WeaponCatalog.depth_of(buy_id))
+				return
+			base = WeaponCatalog.price_of(buy_id)
+			label = WeaponCatalog.name_of(buy_id)
+			hearts = 0   # ★관계-중립: 무골 ♡ 할인 0(무기 값 = 깊이 곡선과 한 몸 — 레코드 주석)
+			shop = "모험가 길드"
+			# ★유니크 = 각 1자루(스택 불가 장착물 — 낚싯대·태클 규약 1:1). 증정품 녹슨 혼검은
+			#   price 0이라 아래 `base <= 0` 가드에 걸려 애초에 살 수 없다.
+			if inventory.has_item(buy_id):
+				_notice("%s 은(는) 이미 가지고 있다" % label)
+				return
+			n = 1
+		"potion":
+			# ★[S5-T6] 명부환 = 길드 전용 상시 품목(깊이 게이트 없음 — 회복은 늘 살 수 있어야 한다).
+			#   스택 소모품이라 대량 구매(Shift)를 그대로 받는다(미끼 결).
+			if buy_id != ItemCatalog.MYEONGBUHWAN:
+				return
+			base = ItemCatalog.price_of(ItemCatalog.MYEONGBUHWAN)
+			label = ItemCatalog.name_of(ItemCatalog.MYEONGBUHWAN)
+			hearts = 0   # ★관계-중립(검과 같은 매대라 같은 규칙 — 정가)
+			shop = "모험가 길드"
 		"wood":
 			# ★[S4-T7] 원목 소매 = 목공방 전용(만물상·생선가게 취급 0 — 서비스 분산). 스택 자재라
 			#   대량 구매를 그대로 받는다. 소매가는 판매가의 2배(잠정) — 사는 게 늘 손해라야 벌목이
@@ -11092,6 +11288,8 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 				inventory.add_item(ItemCatalog.CRAB_POT, 1)   # ★[S3-T7] 설치물 스택 적재
 			"wood":
 				inventory.add_item(ItemCatalog.WOOD, 1)       # ★[S4-T7] 원목 소매 스택 적재
+			"weapon", "potion":
+				inventory.add_item(buy_id, 1)                 # ★[S5-T6] 검(유니크 1자루)·명부환(스택)
 		bought += 1
 	if bought == 0:
 		_notice("골드 부족(%d 필요)" % unit)
@@ -11355,6 +11553,15 @@ func _draw_mine_floor() -> void:
 	draw_rect(Rect2(ep + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.30, 0.26, 0.22))     # 올라가는 사다리 벽감
 	for i in 3:
 		draw_rect(Rect2(ep + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.76, 0.60, 0.36))
+	# ★[S5-T6] 보상 층 상자 — 아직 안 열었을 때만 그린다(열면 자리에서 사라진다 = 원장이 곧 렌더 상태).
+	#   나무 궤 + 쇠 띠 + 자물쇠 점. 사다리(짙은 구덩이)·입구(밝은 벽감)와 실루엣이 갈린다.
+	var chest_t: Vector2i = _mine_layout.get("chest", Vector2i(-1, -1))
+	if chest_t.x >= 0 and not mine_floors.is_chest_opened(_mine_floor):
+		var cp := Vector2(chest_t.x * TILE, chest_t.y * TILE)
+		draw_rect(Rect2(cp + Vector2(5, 9), Vector2(TILE - 10, TILE - 14)), Color(0.46, 0.32, 0.18))   # 궤 몸통
+		draw_rect(Rect2(cp + Vector2(5, 9), Vector2(TILE - 10, 5)), Color(0.60, 0.44, 0.26))           # 뚜껑(NW 광원)
+		draw_rect(Rect2(cp + Vector2(5, 16), Vector2(TILE - 10, 2)), Color(0.30, 0.28, 0.29))          # 쇠 띠
+		draw_rect(Rect2(cp + Vector2(TILE * 0.5 - 2, 15), Vector2(4, 5)), Color(0.88, 0.76, 0.36))     # 자물쇠
 
 # ★[S5-T5 / ADR-0063 결정 8] 잡귀 + 화염구 그레이박스. 손님·밤 잡귀 그리기와 같은 결(노드 없이 main이
 #   직접)이되 **픽셀 연속 위치**라 타일 정렬이 아니다 — 그게 층 몹과 좌석 잡귀의 유일한 렌더 차이다.
@@ -11433,6 +11640,36 @@ func _draw_woodshop_room() -> void:
 		var c := lg + Vector2(8.0 + float(i % 2) * 13.0, 20.0 - float(i / 2) * 11.0)
 		draw_circle(c, 6.0, Color(0.44, 0.32, 0.20))
 		draw_circle(c, 3.0, Color(0.60, 0.46, 0.29))
+
+# ★[S5-T6 / ADR-0063 결정 6] 길드 실내 그레이박스 — 카운터(무골 앞 응대 줄) + 서벽 무기 걸이 +
+#   동벽 토벌 게시판(**빈 판**). 목공방 `_draw_woodshop_room`과 같은 결(순수 장식 · 충돌 없음 —
+#   상호작용은 무골 레코드의 [F] 훅 하나뿐이다). 진짜 아트는 S5-T9/T10 아트 패스.
+#   ★게시판을 **빈 판으로 걸어 두는 것**이 ADR-0063 결정 6의 "위상만 예약"이다: 보상이 전부 반지·
+#     모자(장비 클러스터 서랍)라 의뢰 자체는 안 만들되, 그 자리가 어디인지는 방이 이미 알고 있다.
+#     쪽지 0장 = 상호작용 0(만물상 게시판과 달리 [F]가 없다 — 서랍이 열릴 때 여기에 배선한다).
+func _draw_guild_room() -> void:
+	if _indoor != "길드":
+		return
+	# 카운터 — 응대 줄(x25..30, y50) 통짜 판 + 상판 하이라이트(NW 광원). 목공방 카운터와 같은 문법이되
+	# 돌 결(길드는 갱도 바위를 깎아 만든 방)이라 색만 갈린다.
+	var cx := float(GUILD_COUNTER_X0) * TILE
+	var cy := float(GUILD_COUNTER_Y) * TILE
+	var cw := float(GUILD_COUNTER_X1 - GUILD_COUNTER_X0 + 1) * TILE
+	draw_rect(Rect2(cx, cy + 8.0, cw, TILE - 12.0), Color(0.32, 0.30, 0.31))
+	draw_rect(Rect2(cx, cy + 8.0, cw, 5.0), Color(0.46, 0.44, 0.45))
+	# 서벽 무기 걸이 — 가로 걸대 + 걸린 검 3자루(칼날 세로줄 + 코등이). 방 서편 안쪽(x24..25, y47).
+	var rack := Vector2(float(GUILD_RECT.position.x + 1) * TILE, float(GUILD_RECT.position.y + 1) * TILE)
+	draw_rect(Rect2(rack + Vector2(0.0, 6.0), Vector2(TILE * 2.0, 4.0)), Color(0.36, 0.27, 0.17))
+	for i in 3:
+		var bx := rack.x + 6.0 + float(i) * 17.0
+		draw_rect(Rect2(bx, rack.y + 10.0, 3.0, TILE - 14.0), Color(0.62, 0.64, 0.70))   # 칼날
+		draw_rect(Rect2(bx - 3.0, rack.y + 9.0, 9.0, 3.0), Color(0.40, 0.33, 0.22))      # 코등이
+	# 동벽 토벌 게시판 — 기둥 둘 + 판(쪽지 0장 = 서랍 예약. 만물상 게시판과 실루엣만 같고 기능 0).
+	var bd := Vector2(float(GUILD_RECT.end.x - 3) * TILE, float(GUILD_RECT.position.y + 1) * TILE)
+	draw_rect(Rect2(bd + Vector2(4.0, 20.0), Vector2(3.0, 10.0)), Color(0.30, 0.21, 0.13))
+	draw_rect(Rect2(bd + Vector2(24.0, 20.0), Vector2(3.0, 10.0)), Color(0.30, 0.21, 0.13))
+	draw_rect(Rect2(bd + Vector2(2.0, 4.0), Vector2(28.0, 17.0)), Color(0.38, 0.28, 0.18))
+	draw_rect(Rect2(bd + Vector2(2.0, 4.0), Vector2(28.0, 3.0)), Color(0.50, 0.37, 0.23))
 
 # ★ [S2-T6] 만물상 앞 게시판 그레이박스 — 두 기둥 + 나무 판 + 걸린 의뢰 쪽지(게시 수만큼). 수락 중이면
 #   쪽지 하나가 붉은 도장으로 바뀐다(진행 중 표식). 좌표 상태 없음 — 전부 원장·day 파생이다.
@@ -11804,6 +12041,57 @@ func _woodshop_items() -> Array:
 		"name": ItemCatalog.name_of(ItemCatalog.WOOD),
 		"price": StoreDiscount.price(wood_base, hearts), "base": wood_base,
 		"owned": inventory.count_of(ItemCatalog.WOOD),
+	})
+	return rows
+
+# ══ ★ [S5-T6 / ADR-0063 결정 5·6] 모험가 길드 매대(무골) — 검 5종 + 명부환 ══════
+# 생선가게·목공방과 대칭 — 프레임은 무상태고 main이 매 프레임 행을 파생해 넣는다. 다만 서브탭이
+# 없어 조각이 둘뿐이다(헤더 + 단일 목록).
+func _refresh_guild() -> void:
+	frame.store_text = _guild_text()
+	frame.store_items = _guild_items()
+
+# 길드 헤더 2줄(제목 + 골드·도달 깊이·체력). 만물상·생선가게·목공방 헤더와 대칭이되 **점주 ♡ 요약이
+# 없다** — 무골은 할인을 안 준다(관계-중립, 위 레코드 주석). 대신 그 자리에 이 가게에서만 의미 있는
+# 두 값을 얹는다: **도달 깊이**(무엇이 진열되는지의 유일한 입력)와 **체력**(명부환을 살지 말지의 근거).
+func _guild_text() -> String:
+	var depth := mine_floors.depth() if mine_floors != null else 0
+	var hp_line := "체력 %d/%d" % [health.current, health.maximum] if health != null else ""
+	return "\n".join([
+		"── 무골의 모험가 길드 ──",
+		"골드 %d   ·   도달 깊이 %d층   ·   %s" % [wallet.gold, depth, hp_line],
+	])
+
+# 길드 품목 행 — **도달 깊이로 해금된 검**(티어 순) + 명부환 1행.
+# ★깊이 미달 무기는 **행 자체가 없다**(ADR-0063 결정 5 "깊이 게이팅"·게잡이통 lvl3 선례 1:1).
+#   매대의 잠금 행(locked)은 "유니크 보유 중" 전용 어휘라 해금 게이트에 전용하면 두 의미가 섞인다.
+#   해금 사실은 알림이 아니라 **매대에 물건이 느는 것**으로 알린다(무골 첫 대사가 그 규칙을 예고한다).
+# ★녹슨 혼검(depth 0·price 0)은 **매대에서 뺀다** — 증정품이라 팔 물건이 아니다(생선가게가 T1
+#   낚싯대를 안 파는 것과 1:1). WeaponCatalog.unlocked_ids는 그것까지 돌려주므로 여기서 가격 0을 건다.
+# ★이미 가진 검은 "보유 중"으로 잠긴다(재구매 불가 — 스택 불가 유니크라 두 자루가 순수 손해).
+func _guild_items() -> Array:
+	var rows: Array = []
+	var depth := mine_floors.depth() if mine_floors != null else 0
+	for id: String in WeaponCatalog.unlocked_ids(depth):
+		var price := WeaponCatalog.price_of(id)
+		if price <= 0:
+			continue   # 비매(증정품 녹슨 혼검) — 진열 대상이 아니다
+		var owned := inventory.count_of(id)
+		rows.append({
+			"kind": "weapon", "buy_id": id, "icon_id": id,
+			"name": "%s (%s)" % [WeaponCatalog.name_of(id), WeaponCatalog.damage_band(id)],
+			"price": price, "base": price,   # ★할인 없음 = 정가 = base(병기 표시가 안 뜬다)
+			"owned": owned,
+			"locked": owned > 0, "locked_text": "보유 중",
+		})
+	# 명부환 — 상시 품목(깊이 무관). 목록 **끝**에 둔다: 검은 깊이에 따라 늘어나는 계단이고 환약은
+	# 늘 같은 자리에 있는 소모품이라, 위가 자라고 아래가 고정인 배치가 읽기 쉽다.
+	var potion_price := ItemCatalog.price_of(ItemCatalog.MYEONGBUHWAN)
+	rows.append({
+		"kind": "potion", "buy_id": ItemCatalog.MYEONGBUHWAN, "icon_id": ItemCatalog.MYEONGBUHWAN,
+		"name": "%s (체력 +%d)" % [ItemCatalog.name_of(ItemCatalog.MYEONGBUHWAN), ItemCatalog.MYEONGBUHWAN_HEAL],
+		"price": potion_price, "base": potion_price,
+		"owned": inventory.count_of(ItemCatalog.MYEONGBUHWAN),
 	})
 	return rows
 
@@ -12277,6 +12565,43 @@ func _setup_residents() -> void:
 	# ★선호 선물 = **없음**(옹이와 같은 판단·잠정 owner 큐). 실존 작물 5종이 이미 전부 배정돼
 	#   남은 게 0이라 중복 배정으로 "선물 경제 분산"을 깨지 않는다(일반 선물은 그대로 받는다 —
 	#   막힘 0, ADR-0008). ★비-작물 선물이 편입되면 풀무 선호는 혼탄·주괴 결이 자연스럽다.
+
+	# ── ★ [S5-T6 / ADR-0063 결정 5·6] 무골 — **모험가 길드 점주(T2 · 백골 무사)**.
+	#    풀무와 **완전 동형**이다(선례 1:1): 점주 레이어(shop_key = 길드 매대)와 관계 트랙(대화·선물·
+	#    하트)이 서로를 게이팅하지 않는다([ADR-0060] 결정 8).
+	#    ★ADR-0008 관계-중립 불변 — 무골 ♡은 **아무 메카닉 보정도 주지 않는다**(effect_fn 없음).
+	#      뱃사공·옹이·네오가 ♡→매대 할인을 먹는데 여기만 안 먹는 근거는 풀무와 같다: 무기 값은
+	#      **깊이 게이팅과 한 몸인 경제 곡선**이라(ADR-0063 결정 5) 관계로 흔들리면 "내려간 만큼 산다"는
+	#      곡선 자체가 무의미해진다. 명부환도 같은 매대라 함께 정가다. ★잠정(owner 큐 — 할인을 붙일지는
+	#      결정 5 수치 확정과 함께 재검토).
+	#    ★해금 축은 **도달 깊이 하나뿐**(ADR-0031 결정 2) — 관계·스킬 게이트 0.
+	#    ★main.tscn 무수정 — script_path/needs_affinity로 노드·관계 트랙을 프레임워크가 낳는다.
+	var r_mugol := Resident.new()
+	r_mugol.id = "mugol"
+	r_mugol.display_name = "무골"        # ★호칭 그대로(본명·설정은 서랍, owner 큐 — mugol.gd 주석)
+	r_mugol.script_path = "res://mugol.gd"
+	r_mugol.needs_affinity = true
+	r_mugol.save_key = "mugol_affinity"   # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_mugol.can_gift = true               # T2 사귐 채널(선물)
+	r_mugol.gift_target_ko = "무골"
+	r_mugol.portrait_stem = ""            # 초상화 없음 — 스프라이트·초상은 S5-T9/T10 아트 패스
+	# ★ 자리 = 길드 **실내 카운터 뒤**(상시 영업 — 네오·옹이·뱃사공·풀무 선례 동형·"평평≠막힘" QoL).
+	# ⚠️ 풀무와 같은 이유로 스케줄 region을 **반드시 채운다**: 길드 실내(y46..54)는 HOME 외부와 y가
+	#   겹쳐, region을 비우면 무골이 안식 농원 마당에 서 보인다. require_indoor가 방까지 좁혀 이중으로
+	#   잠근다(같은 갱도 구역의 대장간 안에 있을 때도 안 잡힌다 — 방 이름이 다르다).
+	r_mugol.schedule = [{"from_min": 0, "tile": MUGOL_TILE, "region": RegionCatalog.EOPHWA_MINE}]
+	r_mugol.require_visible = true
+	r_mugol.require_indoor = "길드"
+	r_mugol.prompt_extra = func() -> String: return "   [F] 모험가 길드"
+	r_mugol.shop_key = func() -> bool:
+		_open_frame(InventoryFrame.CTX_GUILD)
+		return true
+	# ★ 첫 대화 = 녹슨 혼검 증정(ADR-0063 결정 5 "첫 무기 = 길드 첫 방문 증정" — 뱃사공 T1 낚싯대
+	#   1:1). 지급·1회 플래그·대사를 훅 하나가 든다.
+	r_mugol.talk_intro = func() -> PackedStringArray: return _grant_mugol_sword_lines()
+	_register_resident(r_mugol)
+	# ★선호 선물 = **없음**(옹이·풀무와 같은 판단·잠정 owner 큐 — 실존 작물 5종이 이미 전부 배정돼
+	#   남은 게 0이다. 일반 선물 채널은 그대로 열려 있어 막힘 0).
 
 # 옹이 하트(목공방 매대 할인의 유일한 입력). 레코드가 없거나 관계 트랙이 없으면 0 = 정가(방어).
 # ★네오·뱃사공 하트와 **서로 참조 0** — 세 가게 할인이 완전히 독립임을 이 조회로 못 박는다.
@@ -13148,6 +13473,7 @@ func _draw() -> void:
 				_draw_mine_mobs()    # ★[S5-T5] 잡귀 + 화염구 그레이박스(아키타입별 색·HP 바)
 			else:
 				_draw_smithy_room()  # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
+				_draw_guild_room()   # ★[S5-T6] 길드 실내 — 카운터·무기 걸이·빈 게시판(그레이박스)
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관

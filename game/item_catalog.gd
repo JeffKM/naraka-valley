@@ -230,6 +230,40 @@ const INGOTS := {                        # 주괴 id → {name_ko, price(기준�
 	INGOT_NARAKCHEOL: {"name_ko": "나락철 주괴", "price": 1000},
 }
 
+# ── ★[S5-T6 / ADR-0063 결정 6] 회복 소모품 — 명부환(冥府丸) ────────────────────
+# 길드(무골) 상시 품목. **HP를 즉시 회복하는 유일한 물건**이다 — 취침 풀회복 말고는 회복원이 없어
+# (ADR-0063 결정 4) S6 요리가 붙기 전까지 갱도 런의 유일한 연장 수단이다. 스타듀 길드는 회복템을
+# 안 팔지만 결정 6이 명시적으로 이 예외를 뒀다.
+#
+# ★ 카테고리 = **CAT_CONSUMABLE**(미끼가 먼저 쓰던 그 칸). 근거: 미끼와 같이 "들고 쓰면 사라지는
+#   스택 물건"이고, 핫바·인벤·아이콘 경로가 이미 그 카테고리를 통째로 처리한다(신규 분기 0).
+# ★ 혼력(에너지)이 아니라 **체력(HP)**을 채운다 — 두 자원은 완전 별개다(ADR-0011). 혼력 회복
+#   소모품은 여기 없다(음식 = S6 요리 소관).
+# ★ 값·회복량 전부 *잠정*(owner 큐 — ADR-0063 결정 6 원문 "150냥·HP+40").
+const MYEONGBUHWAN := "myeongbuhwan"        # 명부환 — HP 회복 환약(길드 판매)
+const MYEONGBUHWAN_HEAL := 40               # 1회 회복량(HP) — 회복 수치의 **단일 출처**
+const POTIONS := {                          # 소모품 id → {name_ko, price(고정 매입가), heal(HP), color}
+	MYEONGBUHWAN: {
+		"name_ko": "명부환", "price": 150, "heal": MYEONGBUHWAN_HEAL,
+		"color": Color(0.72, 0.24, 0.30),   # 검붉은 환약(아이콘 아트 = S5-T10 — 색박스 폴백이 읽는다)
+	},
+}
+
+# ── ★[S5-T6 / ADR-0063 결정 7·10] 열쇠 — 나락 열쇠 ────────────────────────────
+# 갱도 60층 보상 상자에서 나오는 단 하나의 물건(Skull Key 1:1). 지상 `NARAK_GATE`(나락 진입로)의
+# 게이트 키다 — **점등 배선 자체는 S5-T7 소관**이고, 여기는 아이템 등록까지만 한다(결정 7의
+# "채광 깊이 = 유일 게이트"가 실물로 존재해야 T7이 그걸 볼 수 있다).
+#
+# ★ 왜 유품(RELICS)이 아닌가: 유품은 **혼백관 기증 대상**이라 그 dict에 넣는 순간 열쇠가 기증
+#   목록에 뜨고 기증하면 사라진다(진행 봉쇄 = 치명). 그래서 별 dict로 가른다.
+# ★ 카테고리 = CAT_MATERIAL(자재 칸)이되 **스택 불가**다 — 세상에 한 자루뿐인 물건이라 개수가
+#   의미 없고, 스택 뱃지 "×1"이 붙는 게 오히려 이상하다(도구·무기와 같은 유니크 취급).
+# ★ price 0 = **비매**(팔 수 없고 살 수도 없다 — 유일 입수 경로는 60층 상자다).
+const NARAK_KEY := "narak_key"              # 나락 열쇠 — 60층 보상 상자 산출(나락 진입로 해금 키)
+const KEYS := {                             # 열쇠 id → {name_ko}(비매·유니크·스택 불가)
+	NARAK_KEY: {"name_ko": "나락 열쇠"},
+}
+
 # ── ★[S2-T5 / ADR-0060 결정 5] 유품(relic) — 혼백관 기증 수집물 ─────────────────────
 # 망자가 이승에 남긴 물건. 안식 괭이질 저확률 발굴(Museum.relic_roll — 스타듀 Artifact 대응)로 얻고
 # 혼백관에 기증한다(종당 1회 — 중복 발굴분은 판매 가능). 서사(누구의 유품인가)는 Slice 9 소관(봉인 법칙).
@@ -537,6 +571,20 @@ static func _is_mineral(id: String) -> bool:
 static func _is_ingot(id: String) -> bool:
 	return INGOTS.has(id)
 
+# ★[S5-T6] id가 회복 소모품(명부환)인가. 미끼(GearCatalog)와 같은 CAT_CONSUMABLE이지만 dict를 가르는
+#   이유는 소비 동사가 다르기 때문이다 — 미끼는 캐스팅이 소모하고, 환약은 든 채 LMB가 소모한다.
+static func _is_potion(id: String) -> bool:
+	return POTIONS.has(id)
+
+# ★[S5-T6] id가 열쇠(나락 열쇠)인가. 자재와 같은 CAT_MATERIAL이지만 **스택 불가·비매**라 별 dict다.
+static func _is_key(id: String) -> bool:
+	return KEYS.has(id)
+
+# ★[S5-T6] 이 소모품 1개가 채우는 HP("" · 소모품 아님 = 0). 회복 수치의 단일 조회 창구다
+#   (main이 POTIONS dict를 직접 뒤지지 않게 — 카탈로그가 값의 주인).
+static func potion_heal(id: String) -> int:
+	return int(POTIONS[id]["heal"]) if _is_potion(id) else 0
+
 # id가 채집물인가(ADR-0052 §118). 품질 유차원 CAT_HARVEST(작물 수확물 결 — 판매·서빙·선물 동급).
 static func _is_forageable(id: String) -> bool:
 	return FORAGEABLES.has(id)
@@ -572,7 +620,8 @@ static func has_item(id: String) -> bool:
 	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id) or _is_pot_good(id) \
-		or _is_sap_good(id) or _is_mineral(id) or _is_ingot(id) or _is_weapon(id)
+		or _is_sap_good(id) or _is_mineral(id) or _is_ingot(id) or _is_weapon(id) \
+		or _is_potion(id) or _is_key(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -584,6 +633,9 @@ static func category_of(id: String) -> String:
 	if GearCatalog.is_rod(id) or GearCatalog.is_tackle(id):
 		return CAT_TOOL
 	if GearCatalog.is_bait(id):
+		return CAT_CONSUMABLE
+	# ★[S5-T6] 명부환 = 미끼와 같은 스택 소모품 칸(든 채 LMB로 마신다 — main._drink_potion).
+	if _is_potion(id):
 		return CAT_CONSUMABLE
 	# ★[S5-T4] 무기 = 유니크 장착물이라 도구·낚싯대와 같은 칸(CAT_TOOL). 새 카테고리를 안 만드는 이유는
 	#   "든 것이 곧 동사"(ADR-0024)라 핫바·인벤·툴팁·정렬이 도구와 완전히 같은 취급을 하면 되기 때문이다.
@@ -598,8 +650,10 @@ static func category_of(id: String) -> String:
 		return CAT_HARVEST   # 채집물(ADR-0052)·어획물(★S3-T2)·통용물(★S3-T7)·수액(★S4-T6)도 수확물 결 — 품질·판매·서빙 동급
 	if _is_fertilizer(id):
 		return CAT_FERTILIZER
-	if _is_hay(id) or _is_material(id) or _is_mineral(id) or _is_ingot(id):
-		return CAT_MATERIAL   # 건초(S1-7)·개간 드랍(S1-8)·★광물(S5-T2)·★주괴(S5-T3) = 재료 카테고리
+	if _is_hay(id) or _is_material(id) or _is_mineral(id) or _is_ingot(id) or _is_key(id):
+		# 건초(S1-7)·개간 드랍(S1-8)·★광물(S5-T2)·★주괴(S5-T3)·★열쇠(S5-T6) = 재료 카테고리.
+		# ★열쇠만 스택 불가다(stackable_of 참조) — 카테고리는 같아도 개수 축이 없다.
+		return CAT_MATERIAL
 	if _is_placeable(id):
 		return CAT_PLACEABLE  # 설치물(S1R-T9 스프링클러) — 지면 설치·회수
 	if _is_relic(id):
@@ -632,6 +686,10 @@ static func name_of(id: String) -> String:
 		return MINERALS[id]["name_ko"]   # ★S5-T2 광물 13종(광석 4·혼탄·돌·보석 5·지오드 2)
 	if _is_ingot(id):
 		return INGOTS[id]["name_ko"]     # ★S5-T3 주괴 4종(제련 산출)
+	if _is_potion(id):
+		return POTIONS[id]["name_ko"]    # ★S5-T6 회복 소모품(명부환 — 길드 판매)
+	if _is_key(id):
+		return KEYS[id]["name_ko"]       # ★S5-T6 열쇠(나락 열쇠 — 60층 보상 상자)
 	if _is_forageable(id):
 		return FORAGEABLES[id]["name_ko"]
 	if _is_fish(id):
@@ -658,6 +716,10 @@ static func stackable_of(id: String) -> bool:
 		return GearCatalog.stackable_of(id)   # ★S3-T4 미끼만 스택(낚싯대·태클 = 유니크 장착물)
 	if _is_weapon(id):
 		return false   # ★S5-T4 무기 = 전부 유니크 장착물(검 5종 — 스택 0)
+	if _is_key(id):
+		return false   # ★S5-T6 열쇠 = 세상에 한 자루(개수 축 없음 — 도구·무기 결)
+	if _is_potion(id):
+		return true    # ★S5-T6 환약 = 스택 소모품(미끼 결 — 여러 개 들고 내려간다)
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_pot_good(id) or _is_sap_good(id) \
@@ -676,6 +738,10 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 	# ★[S5-T4] 무기 = 품질 무차원 고정 매입가(녹슨 혼검 = 0 — 길드 첫 방문 증정, S5-T6).
 	if _is_weapon(id):
 		return WeaponCatalog.price_of(id)
+	# ★[S5-T6] 환약 = 품질 무차원 고정 매입가(파는 곳은 길드 매대). 열쇠는 **비매**라 여기 없다 — 등록
+	#   되지 않은 id로 떨어져 0을 돌려받는다(팔 수도 살 수도 없다는 뜻이 값 0으로 표현된다).
+	if _is_potion(id):
+		return int(POTIONS[id]["price"])
 	if _is_seed(id):
 		return CropCatalog.seed_cost(_seed_crop(id))
 	if _is_sapling(id):
@@ -730,4 +796,6 @@ static func tool_color_of(id: String) -> Color:
 		return GearCatalog.color_of(id)   # ★S3-T4 기어 색박스(아이콘 아트 = S3-T10)
 	if _is_weapon(id):
 		return WeaponCatalog.color_of(id)   # ★S5-T4 무기 색박스(아이콘 아트 = S5-T10)
+	if _is_potion(id):
+		return POTIONS[id]["color"]         # ★S5-T6 환약 색박스(CAT_CONSUMABLE 아이콘 폴백이 읽는다)
 	return Color.WHITE

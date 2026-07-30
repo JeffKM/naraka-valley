@@ -382,10 +382,13 @@ func _initialize() -> void:
 					subset_ok = false
 	_check("④c T2 노드 불변 — 노드 키 ⊆ 돌 좌표(2일 × 60층) · 서명 산출 정상",
 		subset_ok and node_sig_ok)
-	_check("④d 층 배치에 'mobs' 키가 늘었을 뿐 기존 7키는 그대로",
-		MineFloors.generate(5, 1).size() == 9
+	# ★[S5-T6] 'chest' 키가 하나 더 늘어 10키다(보상 층 상자 자리 — 비-보상 층은 (-1,-1)).
+	#   ★키가 늘어도 **배치 값은 안 흔들린다**: 상자 자리는 RNG를 안 쓰고 계산으로 나온다
+	#     (위 ④a/④b 골든 서명이 그 불변을 계속 잠근다 · guild_test ⓙ도 같은 표를 본다).
+	_check("④d 층 배치에 'mobs'·'chest' 키가 늘었을 뿐 기존 7키는 그대로",
+		MineFloors.generate(5, 1).size() == 10
 		and MineFloors.generate(5, 1).has("rocks") and MineFloors.generate(5, 1).has("nodes")
-		and MineFloors.generate(5, 1).has("mobs"))
+		and MineFloors.generate(5, 1).has("mobs") and MineFloors.generate(5, 1).has("chest"))
 	_check("④e 범위 밖 층은 여전히 빈 Dictionary(61층 거부)", MineFloors.generate(5, 61).is_empty())
 
 	# ── ⑤ 아키타입 ① 통통(멈춤 ↔ 돌진) ───────────────────────────────────────
@@ -789,8 +792,9 @@ func _initialize() -> void:
 			mob_key = true
 	_check("⑮b **세이브에 몹 키 0**(층 한정 비영속 — 처치 원장도 없다)",
 		not mob_key and not saved.has("mobs"))
-	_check("⑮c 층 원장 세이브 스키마 불변(depth·day·mined·ladders·node_hits 5키)",
-		(saved["mine"] as Dictionary).size() == 5)
+	# ★[S5-T6] 'chests'(연 보상 상자 — 영구)가 붙어 6키다. 몹은 여전히 0키다(비영속 — ⑮b가 잠근다).
+	_check("⑮c 층 원장 세이브 스키마(depth·day·mined·ladders·node_hits·chests 6키 · 몹 0키)",
+		(saved["mine"] as Dictionary).size() == 6 and (saved["mine"] as Dictionary).has("chests"))
 	# 층 이탈 → 소멸.
 	m._ascend_mine_to_surface()
 	await _settle(m)

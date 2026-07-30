@@ -261,7 +261,7 @@ static func generate(day: int, floor_no: int) -> Dictionary:
 	# ⑧ ★[S5-T5] 잡귀 스폰(순차 소비 **맨 뒤** — T2 노드 롤 뒤에 붙었다. 앞에 끼우면 노드·돌·방이
 	#    통째로 갈린다: mining_test ②/②b 골든 서명이 그 즉시 터진다 = 조기 경보).
 	var mobs := _scatter_mobs(rng, floor_no, rect, rocks, entrance, ladder)
-	return {
+	var out := {
 		"floor": floor_no,
 		"band": band_of(floor_no),
 		"template": String(tpl["id"]),
@@ -272,6 +272,10 @@ static func generate(day: int, floor_no: int) -> Dictionary:
 		"nodes": nodes,
 		"mobs": mobs,
 	}
+	# ⑨ ★[S5-T6] 보상 층 상자 자리 — **RNG를 안 쓴다**(방 중심 최근접 빈 칸 계산. chest_tile 주석 참조).
+	#    비-보상 층은 (-1,-1)이라 "상자 없음"이 값 하나로 표현된다.
+	out["chest"] = chest_tile(out)
+	return out
 
 # ── ★[S5-T5 / ADR-0063 결정 8] 잡귀 스폰 ─────────────────────────────────────
 # 층 생성 시 3~6마리 결정 롤. 종 데이터·밴드 게이팅은 MobCatalog가 들고(수치 복제 0 — ToolTier에
@@ -292,7 +296,81 @@ const MOB_FREE_FLOOR_STEP := 10
 
 # 이 층에 몹이 스폰되는 층인가(보상 층 제외).
 static func spawns_mobs(floor_no: int) -> bool:
-	return is_valid_floor(floor_no) and floor_no % MOB_FREE_FLOOR_STEP != 0
+	return is_valid_floor(floor_no) and not is_reward_floor(floor_no)
+
+# ── ★[S5-T6 / ADR-0063 결정 10] 보상 층 상자 ─────────────────────────────────
+# 10의 배수 층 = 몹 0(위 `spawns_mobs`가 이미 보장) + **1회성 상자 1개**. "5층마다 엘리베이터,
+# 10층마다 숨 돌리는 층"이라는 리듬의 나머지 반쪽이다.
+#
+# ★ **RNG를 한 번도 안 굴린다.** 상자 자리는 방 중심에서 가장 가까운 빈 칸으로 *계산*한다:
+#   ㉠ 스트림을 안 건드리니 T1/T2/T5 골든 서명(mining_test ②·mob_test ④)이 정의상 안전하다
+#   ㉡ 보물방의 상자는 한가운데 있는 게 읽히는 배치다(찾아 헤매는 층이 아니라 숨 돌리는 층이다)
+#   ㉢ 결정성 추론이 "정렬 규칙 하나"로 끝난다(재롤 루프 없음).
+# ★ 개봉 원장은 **영구**다(day-한정 아님 — `_chests`). 층 배치는 매일 리필되지만 상자는 한 번뿐이라
+#   `advance_day`가 이 기록만 안 지운다(재파밍 차단의 유일한 방어선).
+const REWARD_FLOOR_STEP := MOB_FREE_FLOOR_STEP   # 보상 층 간격 = 몹 없는 층 간격과 **같은 축**(10)
+
+# 보상 내용물의 아이템 id — ★ItemCatalog 상수와 *같은 문자열*이다(노드 id 규약 동형: 원장은
+# 인벤토리를 모르지만 문자열은 공유한다. guild_test가 `ItemCatalog.has_item`으로 전량 대조해
+# 두 로스터가 조용히 갈라지는 걸 막는다).
+const REWARD_SWORD := "sword_myeongdong"    # 명동검(깊이 10 해금분 — 10층 상자가 **대체 입수**를 준다)
+const REWARD_POTION := "myeongbuhwan"       # 명부환(회복 소모품 — 20~50층 상자의 뼈대)
+const REWARD_KEY := "narak_key"             # 나락 열쇠(60층 — Skull Key 1:1)
+
+# 층 → 보상 행 목록. 행 = {"kind": "item", "id": String, "count": int} 또는 {"kind": "gold", "amount": int}.
+# *구성·수치 전부 잠정*(owner 큐 — ADR-0063 결정 10 "내용 잠정 · 부츠·반지는 서랍이라 무기·소모품·
+# 골드로 대체"). 곡선 의도: 10층은 **물건**(다음 티어 검을 사는 대신 얻는다), 20~50층은 다음 밴드로
+# 내려갈 **연료**(환약)와 다음 검 값의 마중물(골드), 60층은 오직 열쇠 하나(엔드게임 문).
+const REWARD_TABLE := {
+	10: [{"kind": "item", "id": REWARD_SWORD, "count": 1}],
+	20: [{"kind": "item", "id": REWARD_POTION, "count": 3}, {"kind": "gold", "amount": 500}],
+	30: [{"kind": "item", "id": REWARD_POTION, "count": 5}, {"kind": "gold", "amount": 1000}],
+	40: [{"kind": "item", "id": REWARD_POTION, "count": 5}, {"kind": "gold", "amount": 2500}],
+	50: [{"kind": "item", "id": REWARD_POTION, "count": 8}, {"kind": "gold", "amount": 4000}],
+	60: [{"kind": "item", "id": REWARD_KEY, "count": 1}],
+}
+
+# 이 층이 보상 층(10의 배수)인가.
+static func is_reward_floor(floor_no: int) -> bool:
+	return is_valid_floor(floor_no) and floor_no % REWARD_FLOOR_STEP == 0
+
+# 이 층 상자의 내용물(보상 층이 아니면 빈 배열). 사본을 돌려준다 — 호출 측이 골드 대체(10층 중복
+# 방지) 같은 변형을 얹어도 상수 테이블이 오염되지 않게.
+static func chest_rewards(floor_no: int) -> Array:
+	if not is_reward_floor(floor_no):
+		return []
+	var out: Array = []
+	for row: Dictionary in REWARD_TABLE.get(floor_no, []):
+		out.append(row.duplicate())
+	return out
+
+# 상자가 놓이는 칸 — 방 중심에 가장 가까운 빈 칸(돌·입구·사다리 제외). 후보를 (중심거리, y, x)로
+# 정렬해 첫 칸을 고르므로 **완전 결정적**이고 RNG 소비가 0이다. 보상 층이 아니거나 빈 칸이 하나도
+# 없으면 Vector2i(-1, -1)(= 상자 없음 — 호출 측이 그 값으로 가른다).
+static func chest_tile(layout: Dictionary) -> Vector2i:
+	if layout.is_empty() or not is_reward_floor(int(layout.get("floor", 0))):
+		return Vector2i(-1, -1)
+	var rect: Rect2i = layout["rect"]
+	var entrance: Vector2i = layout["entrance"]
+	var ladder: Vector2i = layout["ladder"]
+	var blocked: Dictionary = {entrance: true, ladder: true}
+	for r: Vector2i in layout["rocks"]:
+		blocked[r] = true
+	# 중심은 짝수 폭에서 반 칸이 뜨므로 정수로 내린다(결정적 — 부동소수 비교를 안 만든다).
+	var cx := rect.position.x + rect.size.x / 2
+	var cy := rect.position.y + rect.size.y / 2
+	var best := Vector2i(-1, -1)
+	var best_d := 1 << 30
+	for y in range(rect.position.y, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			var t := Vector2i(x, y)
+			if blocked.has(t):
+				continue
+			var d := absi(x - cx) + absi(y - cy)
+			if d < best_d:      # 동률이면 먼저 만난 칸(위→아래·왼→오른) = y·x 순 tie-break
+				best_d = d
+				best = t
+	return best
 
 # 잡귀 배치 = [{"kind": String, "tile": Vector2i}] — 순수 스펙이다(개체는 main이 Mob.spawn으로 세운다).
 #   ① 마리 수 롤(3~6) ② 마리마다 좌표 롤(돌·사다리·입구 둘레 배제) ③ 종 가중 롤.
@@ -442,6 +520,10 @@ var _ladders: Dictionary = {}  # {floor(int) → {Vector2i: true}} 돌을 깨 �
 #   day-한정(깬 돌과 같은 결 — 날이 갈리면 층이 리필되므로 진행도 함께 소멸한다).
 var _node_hits: Dictionary = {}
 var _depth: int = 0            # 도달 최심층(영구 — 엘리베이터 체크포인트의 유일 파생원)
+# ★[S5-T6] {floor(int) → true} 이미 연 보상 상자. **영구**다(day-한정 아님 — `advance_day`가 안 지운다).
+#   층 배치·채굴 기록은 매일 리필되지만 상자는 세이브 전체를 통틀어 한 번뿐이라, 이 dict가 재파밍의
+#   유일한 차단선이다(그래서 `_mined`·`_ladders`·`_node_hits`와 **같은 자리에 두되 다른 수명**이다).
+var _chests: Dictionary = {}
 
 # ── 하루 경과(day 리셋 훅) ───────────────────────────────────────────────────
 # 날이 바뀌면 전 층이 리필된다 = day-한정 기록(깬 돌·열린 사다리)이 전량 소멸한다. 배치 자체는
@@ -453,6 +535,7 @@ func advance_day(day: int) -> void:
 	_mined = {}
 	_ladders = {}
 	_node_hits = {}   # ★[S5-T2] 반쯤 쪼갠 광맥도 함께 리셋(층 리필 = 노드도 새 판)
+	# ★[S5-T6] `_chests`는 **여기서 안 지운다** — 보상 상자는 영구 1회성이다(ADR-0063 결정 10).
 	changed.emit()
 
 func current_day() -> int:
@@ -550,6 +633,29 @@ func reach_floor(floor_no: int) -> void:
 func unlocked_elevators() -> Array[int]:
 	return elevator_floors(_depth)
 
+# ── ★[S5-T6] 보상 상자 개봉 원장(영구) ───────────────────────────────────────
+func is_chest_opened(floor_no: int) -> bool:
+	return _chests.has(floor_no)
+
+# 상자를 연 것으로 기록한다 → **처음 여는 것이었으면 true**. 이미 열었거나 보상 층이 아니면 false다
+# (mark_mined처럼 "기록만" 하는 게 아니라 판정까지 여기서 접는 이유: 개봉은 되돌릴 수 없는 1회성
+#  사건이라 "확인 후 기록" 두 걸음 사이에 끼어들 틈을 아예 안 만드는 게 안전하다).
+func open_chest(floor_no: int) -> bool:
+	if not is_reward_floor(floor_no) or _chests.has(floor_no):
+		return false
+	_chests[floor_no] = true
+	changed.emit()
+	return true
+
+# 지금까지 연 보상 층 목록(오름차순 — HUD·테스트·후속 슬라이스 조회용).
+func opened_chests() -> Array[int]:
+	var out: Array[int] = []
+	var keys: Array = _chests.keys()
+	keys.sort()
+	for f: int in keys:
+		out.append(f)
+	return out
+
 # ── 세이브/로드(ForageSpawns·TapperLedger 패턴 계승) — 슬라이스 키 "mine" ──────
 # depth = 영구 / day·mined·ladders = day-한정. day를 **함께** 저장해, 로드 뒤 첫 advance_day가
 # 날이 같으면 기록을 살리고 다르면 버린다(구세이브·손상 방어 = 지상 0층·depth 0, 무막힘).
@@ -560,6 +666,7 @@ func to_save() -> Dictionary:
 		"mined": _dump_tiles(_mined),
 		"ladders": _dump_tiles(_ladders),
 		"node_hits": _dump_counts(_node_hits),   # ★[S5-T2] 반쯤 쪼갠 광맥(키 없는 구세이브 = 진행 0)
+		"chests": opened_chests(),               # ★[S5-T6] 연 보상 상자(영구 — 키 없는 구세이브 = 전부 미개봉)
 	}
 
 func load_save(data: Dictionary) -> void:
@@ -568,7 +675,21 @@ func load_save(data: Dictionary) -> void:
 	_mined = _read_tiles(data.get("mined", {}))
 	_ladders = _read_tiles(data.get("ladders", {}))
 	_node_hits = _read_counts(data.get("node_hits", {}))
+	_chests = _read_chests(data.get("chests", []))
 	changed.emit()
+
+# ★[S5-T6] 개봉 원장 복원 — 보상 층 번호(10의 배수)만 받는다. 손상·구버전 값은 조용히 버린다
+#   (_read_tiles와 같은 방어). 버리는 쪽이 안전한 이유: 못 읽은 상자는 다시 열 수 있을 뿐이지만,
+#   엉뚱한 층을 "열림"으로 읽으면 되돌릴 수 없이 보상이 사라진다.
+static func _read_chests(raw: Variant) -> Dictionary:
+	var out: Dictionary = {}
+	if typeof(raw) != TYPE_ARRAY:
+		return out
+	for e in raw:
+		var floor_no := int(e)
+		if is_reward_floor(floor_no):
+			out[floor_no] = true
+	return out
 
 static func _dump_tiles(src: Dictionary) -> Dictionary:
 	var out: Dictionary = {}
