@@ -81,6 +81,16 @@ const BAIT_PLEDGE := GearCatalog.BAIT_PLEDGE      # 보장 미끼(가용 최고 
 const TACKLE_CORK := GearCatalog.TACKLE_CORK      # 코르크 보버(텐션 안전 여유)
 const TACKLE_SINKER := GearCatalog.TACKLE_SINKER  # 납추(발버둥 완화)
 const TACKLE_QUALITY := GearCatalog.TACKLE_QUALITY  # 퀄리티 보버(품질 보정)
+# ★[S5-T4 / ADR-0063 결정 5] 무기 5종(검 단일 계열) — 낚시 기어와 **정확히 같은 위임 문법**이다.
+#   데이터(이름·데미지 밴드·해금 깊이·가격·색)는 **WeaponCatalog가 단일 출처**이고 여기는 id 진실원 +
+#   판정/표시 위임만 한다. 분류 = CAT_TOOL(유니크 장착물 — 낚싯대와 같은 칸. 장착 전환 = 핫바에서
+#   드는 것이 곧 그 동사라는 ADR-0024 관례를 그대로 쓰므로 새 카테고리가 필요 없다).
+#   ★ 획득 경로(길드 매대·첫 방문 증정)는 S5-T6 소관 — 지금은 디버그 지급뿐이다.
+const SWORD_RUSTY := WeaponCatalog.SWORD_RUSTY                    # 녹슨 혼검(증정 · 2-5)
+const SWORD_MYEONGDONG := WeaponCatalog.SWORD_MYEONGDONG          # 명동검(깊이 10 · 8-15)
+const SWORD_YUCHEOL := WeaponCatalog.SWORD_YUCHEOL                # 유철검(깊이 25 · 12-25)
+const SWORD_HWANGCHEONGEUM := WeaponCatalog.SWORD_HWANGCHEONGEUM  # 황천금검(깊이 40 · 28-46)
+const SWORD_EOPHWADO := WeaponCatalog.SWORD_EOPHWADO              # 업화도(깊이 60 · 55-64)
 
 # ── 목축(S1-7) — 건초·대형 산물(§8.6) ────────────────────────────────────────
 # 건초(feed): 짐승 급여 재료(1마리/일 1개, §4.1). 품질 무차원 스택 아이템(CAT_MATERIAL 실사용 개시).
@@ -383,6 +393,11 @@ static func _is_gear(id: String) -> bool:
 static func _is_rod(id: String) -> bool:
 	return GearCatalog.is_rod(id)
 
+# ★[S5-T4] id가 무기(검 5종)인가. 데이터·판정은 WeaponCatalog 위임(_is_gear 결).
+#   main._use_tool이 이 술어 하나로 "휘두르기 동사"를 가른다("든 것이 곧 동사" — ADR-0024).
+static func _is_weapon(id: String) -> bool:
+	return WeaponCatalog.has(id)
+
 # 대형 산물 접미("<산물>_large"). 산물 아이템 id + 이 접미 = 대형 변이(판매가 ×2, §4.1). 씨앗:수확물 결.
 const LARGE_SUFFIX := "_large"
 
@@ -542,7 +557,7 @@ static func has_item(id: String) -> bool:
 	return TOOLS.has(id) or _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id) or _is_pot_good(id) \
-		or _is_sap_good(id) or _is_mineral(id) or _is_ingot(id)
+		or _is_sap_good(id) or _is_mineral(id) or _is_ingot(id) or _is_weapon(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -555,6 +570,10 @@ static func category_of(id: String) -> String:
 		return CAT_TOOL
 	if GearCatalog.is_bait(id):
 		return CAT_CONSUMABLE
+	# ★[S5-T4] 무기 = 유니크 장착물이라 도구·낚싯대와 같은 칸(CAT_TOOL). 새 카테고리를 안 만드는 이유는
+	#   "든 것이 곧 동사"(ADR-0024)라 핫바·인벤·툴팁·정렬이 도구와 완전히 같은 취급을 하면 되기 때문이다.
+	if _is_weapon(id):
+		return CAT_TOOL
 	if _is_seed(id):
 		return CAT_SEED
 	if _is_sapling(id):
@@ -578,6 +597,8 @@ static func name_of(id: String) -> String:
 		return TOOLS[id]["name_ko"]
 	if _is_gear(id):
 		return GearCatalog.name_of(id)   # ★S3-T4 낚시 기어 10종(단일 출처 = GearCatalog)
+	if _is_weapon(id):
+		return WeaponCatalog.name_of(id)   # ★S5-T4 무기 5종(단일 출처 = WeaponCatalog)
 	if _is_seed(id):
 		return "%s 씨앗" % CropCatalog.name_of(_seed_crop(id))
 	if _is_sapling(id):
@@ -620,6 +641,8 @@ static func stackable_of(id: String) -> bool:
 		return false
 	if _is_gear(id):
 		return GearCatalog.stackable_of(id)   # ★S3-T4 미끼만 스택(낚싯대·태클 = 유니크 장착물)
+	if _is_weapon(id):
+		return false   # ★S5-T4 무기 = 전부 유니크 장착물(검 5종 — 스택 0)
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_pot_good(id) or _is_sap_good(id) \
@@ -635,6 +658,9 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 	# ★[S3-T4] 낚시 기어 = 품질 무차원 고정 매입가(T1 = 0 — 뱃사공 증정, S3-T5). 파는 곳은 매대다.
 	if _is_gear(id):
 		return GearCatalog.price_of(id)
+	# ★[S5-T4] 무기 = 품질 무차원 고정 매입가(녹슨 혼검 = 0 — 길드 첫 방문 증정, S5-T6).
+	if _is_weapon(id):
+		return WeaponCatalog.price_of(id)
 	if _is_seed(id):
 		return CropCatalog.seed_cost(_seed_crop(id))
 	if _is_sapling(id):
@@ -687,4 +713,6 @@ static func tool_color_of(id: String) -> Color:
 		return TOOLS[id]["color"]
 	if _is_gear(id):
 		return GearCatalog.color_of(id)   # ★S3-T4 기어 색박스(아이콘 아트 = S3-T10)
+	if _is_weapon(id):
+		return WeaponCatalog.color_of(id)   # ★S5-T4 무기 색박스(아이콘 아트 = S5-T10)
 	return Color.WHITE

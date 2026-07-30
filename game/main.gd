@@ -1756,10 +1756,19 @@ const NARAK_GATE_DOOR := Vector2i(32, 6)            # 문 리세스(시각 일�
 const MINE_SURFACE_RETURN := Vector2i(DUNGEON_GATE_DOOR.x, DUNGEON_GATE_DOOR.y + 1)  # 층에서 지상 복귀 착지 칸(문 앞 곁가지)
 const MINE_ROCK_COST := 10       # 돌 1타 = 혼력 10(ADR-0063 결정 4 "채굴 1타 = COST_PER_ACTION" — 값 동기화. const 초기화식에서 타 클래스 상수를 안 읽는 관례상 숫자로 둔다)
                                  # ★[S5-T2] 이제 **감산 전 기준값**이다 — 실제 과금은 _mining_energy_cost()(채광 숙련 3%/lv 감산)
-# ★[ADR-0063 결정 1] 하강 직후 무적 1초(스타듀 상속). HP·피격 판정 자체가 S5-T4 소관이라 **지금은
-#   상수 자리만** 둔다 — 층 진입 시각(_mine_descended_at)만 기록해 두고, T4의 피격 판정이 이 값을
-#   읽어 "무적 창"을 가르게 한다(훅 자리·죽은 코드 아님).
+# ★[ADR-0063 결정 1] 하강 직후 무적 1초(스타듀 상속). ★[S5-T4]에서 예고대로 **실효**됐다 —
+#   `_is_invulnerable()`이 `_mine_descended_at`을 읽어 무적 창을 가른다(옛 "훅 자리" 주석 해소).
 const MINE_DESCEND_INVULN_SECS := 1.0
+# ══ ★[S5-T4 / ADR-0063 결정 4] 전투 판정 시간·거리 상수 ══════════════════════
+# ★ 시간 창은 **실시간(Time.get_ticks_msec)** 기준이다. 업화로(_furnace_abs_min)가 절대 *게임 분*을
+#   쓰는 것과 갈리는데, 이유는 축이 다르기 때문이다: 제련은 "밤이 지나면 익는" 게임 시계 사건이고
+#   무적 프레임은 "맞고 나서 잠깐 못 맞는" 조작 반응이라 게임 분(1분 ≈ 실제 0.083초)으로는 표현이
+#   안 된다. 대신 두 축 다 **기준점 리셋 규율**을 지킨다 — 세이브 로드 시 INVULN_NONE으로 되돌려
+#   (실행 간 ticks 연속성이 없으므로) 로드 직후 유령 무적이 남지 않게 한다.
+const COMBAT_INVULN_SECS := 0.8    # 피격 무적(위키 미발견 항목 — ADR-0063 결정 4 *잠정*)
+const COMBAT_KNOCKBACK_PX := 24.0  # 피격 넉백 고정 거리(px — TILE의 3/4. *잠정*)
+const FAINT_TIME_PENALTY_MIN := 120  # 기절 페널티 = 게임 시간 +2시간(ADR-0063 결정 4 *잠정*)
+const INVULN_NONE := -1.0          # 무적 기준점 미설정("아주 오래전" = 지금은 무적 아님)
 # ★[S5-T2 / ADR-0063 결정 2] 광맥 그레이박스 색(아이콘 아트 = S5-T9/T10 — 여긴 종 구분만).
 #   색 결은 로스터 명명을 따른다: 명동=붉은 구리 / 유철=푸른 강철 / 황천금=황금 / 혼탄=검정 /
 #   알돌=흙빛 덩어리 / 보석 4종은 각자 이름의 색(넋수정=투명 백, 명옥=옥빛, 염주석=자주, 명부금강=백청).
@@ -1967,8 +1976,27 @@ var _mine_layout: Dictionary = {}
 # ★[S5-T1] 갱도 입구에서 고른 진입 층(1 = 입구층, 그 외 = 해금된 엘리베이터 체크포인트).
 var _mine_entry_pick: int = 1
 # ★[S5-T1 / ADR-0063 결정 1] 마지막 하강 시각(초). 하강 직후 MINE_DESCEND_INVULN_SECS 동안은
-#   무적이다 — HP·피격 판정 본체가 S5-T4라 지금은 **기록만** 하고 읽는 쪽이 없다(T4의 훅 자리).
-var _mine_descended_at: float = -999.0
+#   무적이다 — ★[S5-T4]에서 `_is_invulnerable()`이 이 값을 읽어 실효됐다.
+var _mine_descended_at: float = INVULN_NONE
+# ══ ★[S5-T4 / ADR-0063 결정 4·5] HP·전투 판정 상태 ══════════════════════════
+# 체력 자원(RefCounted 원장 — 혼력 $SoulEnergy와 달리 씬 노드가 아니다. PlayerHealth 주석 참조).
+# ★ 최대 HP는 (전투 XP + 전문직)에서 **파생**되므로 세이브엔 current 하나만 들어간다.
+var health: PlayerHealth = null
+# 전투 숙련 XP(레벨 → 최대 HP 파생원). 이름 규약은 _farming_xp·_mining_xp와 같다.
+# ★ XP 소스(몹 처치)는 S5-T5 소관이라 지금 `_gain_combat_xp`를 부르는 라이브 경로가 없다 —
+#   적립 경로만 개통해 두고 T5가 몹 사망 훅에서 부르면 곧바로 실효된다.
+var _combat_xp := 0
+# 마지막 피격 시각(초·실시간). COMBAT_INVULN_SECS 동안 추가 피격을 무시한다(i-frame).
+var _hurt_at: float = INVULN_NONE
+# 누적 스윙 수 — **데미지 롤의 결정적 시드**다(CombatSkill.resolve_hit). 좌표 해시를 안 쓰는 이유는
+#   ADR-0063 결정 1의 "좌표 해시 이웃 연속값 금지"이고, 카운터라 같은 자리를 두 번 베도 값이 갈린다.
+#   ★세이브에 안 넣는다: 무기 스윙은 순간 사건이라 세션을 넘겨 이어질 상태가 없다(*잠정*).
+var _combat_swings := 0
+# 누적 기절 횟수 — `take_damage`가 "지금 이 타격이 기절이었나"를 알아내는 관측점이다(HP 0 처리가
+#   depleted 시그널로 *동기적으로* 끼어들기 때문에 반환값만으로는 구별이 안 된다). 세이브 안 함.
+var _faint_count := 0
+# 마지막으로 스윙한 프로세스 프레임 번호(중복 스윙 방지 — _swing_weapon 주석 참조).
+var _last_swing_frame := -1
 # ★ [S1-9] 집 꾸미기 상태(집 내부 3레이어 코스메틱 배치 + 해금 세트). F10 저작 도구(layout.json·
 #   _prop_layouts)와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). 플레이어 세이브 델타만 소유하고
 #   layout.json 시드는 안 건드린다(회귀 0). main이 유효 배치 칸을 주입하고 드로우/충돌 훅에서 질의(디커플링).
@@ -2318,6 +2346,9 @@ func _ready() -> void:
 	carpenter.changed.connect(queue_redraw)   # 의뢰·완공·복원 시 매대 행·목공방 그레이박스 갱신
 	mine_floors = MineFloors.new()       # ★[S5-T1] 갱도 층 원장(RefCounted — 채집물 스폰 원장과 같은 결)
 	mine_floors.changed.connect(queue_redraw)   # 채굴·사다리 개통·깊이 갱신·복원 시 층 그레이박스 갱신
+	health = PlayerHealth.new()          # ★[S5-T4] 체력 자원(RefCounted — 혼력과 완전 별도, ADR-0011)
+	health.depleted.connect(_on_health_depleted)   # HP 0 → 기절(무대 퇴장 + 시간 +2h · 손실 0)
+	_refresh_max_hp()                    # 최대 HP = base 100 + 전투 레벨 성장 + 전문직(부팅 시 100)
 	home_deco = HomeDeco.new()           # ★ [S1-9] 집 꾸미기 상태 노드(코드 생성 — 3레이어 배치 + 해금 델타)
 	home_deco.name = "HomeDeco"
 	add_child(home_deco)
@@ -4502,6 +4533,203 @@ func _sync_mine_tile(t: Vector2i) -> void:
 		ground.set_cell(t, PATH_SRC_ID, Vector2i(int(_gd_h01(t.x, t.y, 9) * PATH_VARIANTS) % PATH_VARIANTS, 0))
 	else:
 		ground.set_cell(t, 0, _terrain_base_atlas(TR_PATH))
+
+# ═══ ★[S5-T4 / ADR-0063 결정 4·5] HP·전투 판정 배선 ═══════════════════════════════
+# main의 몫은 다섯뿐이다: ①최대 HP 파생·갱신 ②무기 스윙 입력 → arc 판정 ③피격(무적 창·넉백)
+# ④기절(무대 퇴장 + 시간 페널티) ⑤전투 XP 적립. *판정 규칙*(밴드 롤·크리·arc 기하·HP 곡선)은
+# 전부 CombatSkill/WeaponCatalog/PlayerHealth에 있다(자원·카탈로그는 시계와 무대를 모르고, main은
+# 수치를 모른다 — MiningSkill↔_mine_rock 경계와 정확히 같은 결).
+
+# 지금 세이브의 최대 HP를 다시 계산해 자원에 심는다(레벨업·전문직 선택·로드·취침 후 호출).
+# ★ 최대치의 두 입력이 여기서 만난다: 전투 레벨 성장분(CombatSkill.hp_bonus)과 전문직 합산 몫.
+func _refresh_max_hp() -> void:
+	if health == null:
+		return
+	health.refresh_max(_skill_level(ProfessionCatalog.COMBAT), combat_max_hp_bonus())
+
+# ── ★ 무기 스윙(LMB — ADR-0063 결정 5 "검 스윙 = LMB 호 판정 하나") ──────────
+# 혼력·HP를 한 점도 안 쓴다(전투 행동비용 0 — ADR-0011). 판정 흐름:
+#   ①바라보는 방향의 부채꼴 4칸(CombatSkill.swing_arc) → ②벽 뒤 칸을 자른다(지형은 main의 몫) →
+#   ③그 칸들과 겹치는 몹을 고른다(★S5-T5까지 몹 목록은 늘 빈 배열) → ④몹마다 피해 롤.
+# ★ 몹이 0마리여도 스윙은 **성립한다**(애니·SFX 재생·카운터 증가) — 허공을 베는 것도 동작이다.
+#   그래서 T5가 몹을 얹기 전에도 이 경로가 라이브로 검증된다.
+func _swing_weapon(weapon_id: String) -> void:
+	if _sleeping or _transitioning:
+		return
+	# ★ 한 프레임 = 한 스윙. LMB 디스패치가 타일 종류별로 여러 갈래(밭·개간·잡초·사료풀·이끼·짐승)라
+	#   무기를 들고 그 칸들을 겨누면 같은 프레임에 `_use_tool`이 두 번 이상 불릴 수 있다 — 그때 검이
+	#   두 번 휘둘리면 안 된다(도구는 칸 상태가 게이트라 자연히 한 번이지만, 무기는 칸을 안 본다).
+	var frame_no := Engine.get_process_frames()
+	if frame_no == _last_swing_frame:
+		return
+	_last_swing_frame = frame_no
+	_combat_swings += 1
+	_swing_for_item(weapon_id)               # 스윙 애니(도구 모션 재사용 — 검 전용 모션은 S5-T10 아트)
+	audio.sfx("hoe")                         # 검 SFX는 아트 패스(S5-T10) — 둔탁한 "턱" 재사용
+	var arc := _weapon_arc()
+	var hits := CombatSkill.hits_in_arc(arc, _mobs_in_region())
+	for mob in hits:
+		_strike_mob(weapon_id, mob)
+	queue_redraw()
+
+# 지금 플레이어가 겨누는 스윙 부채꼴(벽 뒤 칸 제외). CombatSkill이 순수 기하를 주고, "그 칸이
+# 실제로 닿는가"(맵 밖·SOLID)를 여기서 자른다 — 벽 하나 사이로 몹을 베는 일이 없게.
+func _weapon_arc() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if player == null:
+		return out
+	var origin := _player_tile()
+	for t: Vector2i in CombatSkill.swing_arc(origin, Vector2i(player.get_facing().round())):
+		if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid.size():
+			continue
+		if t.y < _grid.size() and t.x < _grid[t.y].size() and is_solid(_grid[t.y][t.x]):
+			continue
+		out.append(t)
+	return out
+
+# ★[S5-T5 훅] 지금 무대의 몹 레코드 목록([{tile, ...}]). 엔티티 프레임워크가 없어 **항상 빈 배열**이다
+#   — T5가 층 몹 스폰을 얹으면 이 한 함수만 채우면 스윙·사다리 보너스·전투 XP가 동시에 실효된다.
+#   (MiningSkill의 미배선 퍼크 인자·`roll_ladder`의 mobs_cleared=false와 같은 자리.)
+func _mobs_in_region() -> Array:
+	return []
+
+# 몹 하나를 때린다. 피해량은 순수 함수가 정하고(결정적 시드 = 스윙 카운터) 여기선 알림만 한다.
+# ★ 몹 HP 차감·사망 처리·전투 XP 지급은 **S5-T5** 소관이다 — 몹 레코드에 HP가 없어서 지금은 굴릴 수
+#   있는 것이 "몇 대미지인가"까지다. T5가 이 함수 안에서 `mob.hp -= dmg`를 하고 죽으면
+#   `_gain_combat_xp(mob.xp)`를 부른다(그 두 줄이 이 함수에 남은 전부다).
+func _strike_mob(weapon_id: String, mob: Dictionary) -> Dictionary:
+	var res := CombatSkill.resolve_hit(weapon_id, _combat_swings, combat_damage_bonus(),
+		combat_crit_chance_mult(), combat_crit_power_mult())
+	if bool(res["crit"]) and notice_feed != null:
+		notice_feed.push("치명타! %d" % int(res["damage"]), 1.5, false, null, false)
+	mob["last_damage"] = int(res["damage"])   # ★T5가 HP를 얹기 전까지의 관측 창(테스트가 읽는다)
+	return res
+
+# ── ★ 피격(무적 창 · 넉백 · 기절) ────────────────────────────────────────────
+# 지금 무적인가 — 두 창의 합집합이다: ①직전 피격 후 COMBAT_INVULN_SECS(0.8s) ②층 하강 후
+# MINE_DESCEND_INVULN_SECS(1s). 기준점이 INVULN_NONE(-1)이면 그 창은 없다(로드 직후 상태).
+func _is_invulnerable() -> bool:
+	var now := float(Time.get_ticks_msec()) / 1000.0
+	if _hurt_at > INVULN_NONE and now - _hurt_at < COMBAT_INVULN_SECS:
+		return true
+	if _mine_descended_at > INVULN_NONE and now - _mine_descended_at < MINE_DESCEND_INVULN_SECS:
+		return true
+	return false
+
+# 몹에게 맞는다(★S5-T5가 몹 접촉 판정에서 부른다 — 지금 라이브 호출부 없음·헤드리스가 직접 검증).
+#   amount    = 몹별 **고정 데미지**(변동 롤 없음 — ADR-0063 결정 4)
+#   source_px = 넉백 방향의 출처(몹 위치). Vector2.ZERO면 넉백 없음(환경 피해·낙하 피해 자리).
+# 반환 = 실제로 깎인 HP(0 = 무적 창이라 튕김). 기절은 depleted 시그널이 이어받는다.
+func take_damage(amount: int, source_px: Vector2 = Vector2.ZERO) -> int:
+	if health == null or _sleeping or _transitioning or _run_over:
+		return 0
+	if _is_invulnerable():
+		return 0
+	# ★ 무적 창은 **피해 적용보다 먼저** 연다. `health.damage()`가 HP 0에서 depleted를 *동기적으로*
+	#   쏘고 그 핸들러(_faint)가 창을 닫으므로, 순서가 뒤집히면 기절 복귀 직후에 유령 무적이 남는다
+	#   (combat_test ⑨d가 실증한 버그). 반대로 피해가 0이면 창도 열지 않고 되돌린다.
+	_hurt_at = float(Time.get_ticks_msec()) / 1000.0
+	var faints_before := _faint_count
+	var dealt := health.damage(CombatSkill.incoming_damage(amount))
+	if dealt <= 0:
+		_hurt_at = INVULN_NONE
+		return 0
+	if _faint_count != faints_before:
+		return dealt                         # 이 타격으로 기절 — 넉백·알림은 _faint가 대신한다
+	audio.sfx("hoe")                         # 피격 SFX는 아트 패스(S5-T10)
+	if source_px != Vector2.ZERO:
+		_apply_knockback(source_px)
+	_notice("피해 %d — 체력 %d/%d" % [dealt, health.current, health.maximum])
+	return dealt
+
+# 넉백 — 출처 반대 방향으로 **고정 거리**(COMBAT_KNOCKBACK_PX). 밀려날 칸이 SOLID면 안 움직인다
+# (벽에 박히지 않게). 거리가 고정인 이유는 몹 체급별 넉백 차이가 장비 클러스터 서랍(넉백 저항)에
+# 묶여 있어서다 — ADR-0063 결정 8의 불가사리 "넉백 저항"이 그 서랍의 첫 소비자다.
+func _apply_knockback(source_px: Vector2) -> void:
+	if player == null:
+		return
+	var dir := (player.global_position - source_px).normalized()
+	if dir == Vector2.ZERO:
+		return
+	var dest := player.global_position + dir * COMBAT_KNOCKBACK_PX
+	var dt := Vector2i(int(dest.x) / TILE, int(dest.y) / TILE)
+	if dt.x < 0 or dt.x >= _grid_w or dt.y < 0 or dt.y >= _grid.size():
+		return
+	if dt.x >= _grid[dt.y].size() or is_solid(_grid[dt.y][dt.x]):
+		return
+	player.global_position = dest
+	player.velocity = Vector2.ZERO
+
+# HP 0 → 기절. **잃는 것은 시간뿐**이다(ADR-0011/0063 결정 4 — 스타듀의 골드 5~25%·아이템 3개
+# 손실·병원비는 전부 비채택. 번아웃 방지가 상위 결정이다).
+#   ① 무대 강제 퇴장: 갱도 층이면 갱도 입구로 올라온다(나락은 S5-T7이라 갱도만)
+#   ② 게임 시간 +2시간(FAINT_TIME_PENALTY_MIN)
+#   ③ HP 풀회복 — 대가를 시간으로 이미 냈으므로 반쯤 죽은 채 내보내지 않는다
+#   ④ 골드·아이템·진행(도달 깊이·XP·원장) **전부 불변** — 이 함수는 지갑·인벤을 건드리지 않는다
+func _on_health_depleted() -> void:
+	_faint()
+
+func _faint() -> void:
+	if health == null:
+		return
+	_faint_count += 1                        # take_damage가 "이 타격이 기절이었나"를 읽는 관측점
+	_hurt_at = INVULN_NONE                   # 기절로 창을 닫는다(복귀 직후 유령 무적 방지)
+	if _in_mine_floor():
+		_ascend_mine_to_surface()            # ①갱도 입구로 퇴장(fade 전환 — 워프 실행기 재사용)
+	_advance_clock_minutes(FAINT_TIME_PENALTY_MIN)   # ②시간 +2h
+	health.refill()                          # ③HP 회복(대가 = 시간뿐)
+	_notice("기절했다 — 눈을 뜨니 %d시간이 지났다 (잃은 것은 없다)" % (FAINT_TIME_PENALTY_MIN / 60))
+	audio.sfx("ui")
+
+# 게임 시계를 분 단위로 앞으로 민다(기절 페널티의 유일 소비자). 24:00 상한에서 자르고, 그 상한에
+# 닿으면 GameClock이 다음 프레임에 collapsed(강제 취침)를 쏜다 — 새벽에 기절하면 그대로 하루가
+# 끝나는 스타듀 결이 특별 분기 없이 성립한다.
+func _advance_clock_minutes(mins: int) -> void:
+	if clock == null or mins <= 0:
+		return
+	clock.minutes = minf(clock.minutes + float(mins), float(GameClock.END_MIN))
+
+# ★[S5-T4 / ADR-0063 결정 9] 전투 XP 적립 + 레벨업 감지(_gain_mining_xp 대칭). 레벨이 오르면 최대
+# HP가 함께 오른다(그 자리에서 즉시 — PlayerHealth.refresh_max가 늘어난 만큼 현재도 채운다).
+# ★ 소스는 몹 처치 하나뿐이고 그건 S5-T5 소관이라 지금 부르는 라이브 경로가 없다(적립 경로만 개통).
+func _gain_combat_xp(amount: int) -> void:
+	if amount <= 0:
+		return
+	var before := CombatSkill.level_for_xp(_combat_xp)
+	_combat_xp += amount
+	var after := CombatSkill.level_for_xp(_combat_xp)
+	_refresh_max_hp()
+	if after > before and notice_feed != null:
+		notice_feed.push("숙련 ▲ 전투 Lv %d" % after, 4.0, false, null, true)
+		audio.sfx("ui")
+
+# ── ★ 전투 전문직 편의 조회(채집·낚시 파일럿과 같은 결) ─────────────────────
+# ★ 채광 트리와 달리 **여기 넷은 실제 값을 돌려준다**(ProfessionCatalog COMBAT perks 인코딩 완료).
+# ① 투사 +15 · 수호자 +25 — **합산**(수호자가 투사를 선행 요구하므로 둘이 늘 함께 있다).
+func combat_max_hp_bonus() -> int:
+	return CombatSkill.max_hp_bonus(
+		_perk_sum(ProfessionCatalog.COMBAT, ProfessionCatalog.DIM_MAX_HP))
+
+# ② 투사 +10% · 광전사 +15% — **합산**(같은 이유).
+func combat_damage_bonus() -> float:
+	return CombatSkill.damage_bonus(
+		_perk_sum(ProfessionCatalog.COMBAT, ProfessionCatalog.DIM_DAMAGE_BONUS))
+
+# ③ 척후 ×1.5 — 배수라 max(중립 기본값 1.0).
+func combat_crit_chance_mult() -> float:
+	return CombatSkill.crit_chance_mult(
+		_perk_value(ProfessionCatalog.COMBAT, ProfessionCatalog.DIM_CRIT_CHANCE, 1.0))
+
+# ④ 결사 ×2 — 배수라 max(중립 기본값 1.0).
+func combat_crit_power_mult() -> float:
+	return CombatSkill.crit_power_mult(
+		_perk_value(ProfessionCatalog.COMBAT, ProfessionCatalog.DIM_CRIT_MULT, 1.0))
+
+# ⑤ 곡예사 — **예약 퍼크**. 무기 특수동작(RMB)이 서랍이라 해석기가 늘 중립(1.0)을 돌려준다.
+#    선택은 가능하고(트리에 살아 있다) 효과만 보류다(ADR-0063 결정 9 명시).
+func combat_special_cooldown() -> float:
+	return CombatSkill.special_cooldown_factor(
+		_perk_value(ProfessionCatalog.COMBAT, ProfessionCatalog.DIM_SPECIAL_COOLDOWN, 1.0))
 
 # ★ M5.2 — 나락(독립 전투 던전 스테이지). 빈 전투장 — 외부 land 한 덩어리(VOID 스택 띠는 카메라 격리용으로
 # 유지하되 실내 방 없음). 전투 메카닉은 만들지 않는다(Phase 3) — 심연·업화·봉인 모티프의 바위(ROCK) 둘레만.
@@ -7166,7 +7394,7 @@ func _setup_hud_overlays() -> void:
 	vitals = VitalsHud.new()
 	vitals.name = "VitalsHud"
 	$CanvasLayer.add_child(vitals)
-	vitals.setup(energy)
+	vitals.setup(energy, health)   # ★[S5-T4] 2바 복원(체력 위 · 혼력 아래 — placeholder 시절 예고 이행)
 	# ★ Phase C 우상단 시계 클러스터(raw ClockLabel/GoldLabel/MilestoneLabel을 한지 플레이트로 통합).
 	clock_hud = ClockHud.new()
 	clock_hud.name = "ClockHud"
@@ -7355,6 +7583,11 @@ func _on_day_advanced(day: int) -> void:
 	if not dropped.is_empty():
 		_notice("게시판 의뢰가 기한을 넘겼다 — %s (페널티 없음)" % QuestBoard.summary(dropped))
 	energy.refill()
+	# ★[S5-T4 / ADR-0063 결정 4] 취침 HP 풀회복 — 혼력과 나란히 붙는다(회복 = 취침 + 소모품 명부환).
+	#   최대치도 함께 맞춘다: 어제 오른 전투 레벨·고른 전문직이 아침에 정확히 반영되게(멱등).
+	if health != null:
+		_refresh_max_hp()
+		health.refill()
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
 		onboarding.crop_ready()
@@ -7703,6 +7936,11 @@ func _save_game() -> void:
 		"fishing_xp": _fishing_xp,
 		# ★[S5-T2] 채광 숙련 XP(혼력 감산·크리 채굴 파생원). 이름은 위 셋과 같은 규약이다.
 		"mining_xp": _mining_xp,
+		# ★[S5-T4] 전투 숙련 XP(최대 HP·전문직 게이트 파생원). 이름 규약은 위 넷과 같다.
+		"combat_xp": _combat_xp,
+		# ★[S5-T4] 체력 — **현재 HP 하나뿐**이다(최대는 combat_xp + 전문직에서 파생. PlayerHealth 주석).
+		#   그래서 로드 순서가 강제된다: combat_xp → _refresh_max_hp() → health.load_save().
+		"hp": health.to_save(),
 		"professions": _professions_to_save(),   # ★ ADR-0052 전문직 선택 {skill:{tier:id}}
 		"boatman_rod_given": _boatman_rod_given,   # ★ [S3-T5] 뱃사공 T1 증정 1회 플래그(키 없는 구세이브 = false)
 		"cafe_revenue_total": _cafe_revenue_total,
@@ -7811,7 +8049,19 @@ func _load_game() -> void:
 	_fishing_xp = maxi(int(data.get("fishing_xp", 0)), 0)
 	# ★[S5-T2] 채광 숙련 XP 복원 — 키 없는 구세이브는 0 = L0(무막힘·base 곡괭이 그대로). 음수는 0.
 	_mining_xp = maxi(int(data.get("mining_xp", 0)), 0)
+	# ★[S5-T4] 전투 숙련 XP 복원 — 키 없는 구세이브는 0 = L0(= 최대 HP 100·무막힘). 음수는 0.
+	_combat_xp = maxi(int(data.get("combat_xp", 0)), 0)
 	_load_professions(data.get("professions", {}))
+	# ★[S5-T4] 체력 복원 — **순서 강제**: 최대치가 (전투 XP + 전문직) 파생이므로 그 둘을 먼저 실은
+	#   뒤 최대를 다시 계산하고, 그 최대를 상한으로 현재 HP를 복원한다. 순서를 뒤집으면 Lv10 세이브의
+	#   HP 140이 100으로 잘린다(물뿌리개 잔량↔티어 순서 함정과 같은 자리).
+	#   키 없는 구세이브 = 풀 HP(PlayerHealth.load_save 기본값 = maximum · 하위호환).
+	_refresh_max_hp()
+	health.load_save(data.get("hp", {}))
+	# ★[S5-T4] 무적 창 기준점 리셋 — 실시간(ticks) 기준점은 실행 간 연속성이 없어서, 안 되돌리면
+	#   로드 직후 "이미 무적"이거나 반대로 유령 무적이 남는다(_furnace_abs_min = -1 리셋과 같은 규율).
+	_hurt_at = INVULN_NONE
+	_mine_descended_at = INVULN_NONE
 	# ★ [S1R-T8] 물뿌리개 잔량 복원 — 키 없는 구세이브는 기본값 20(가득, 하위호환).
 	# ★[S5-T3] 상한이 티어 파생이라 클램프 상한도 _can_capacity()다(tool_tier가 위에서 이미 복원됨 —
 	#   순서 역전 금지: 티어보다 먼저 클램프하면 4티어 세이브의 잔량 70이 20으로 잘린다).
@@ -7982,14 +8232,16 @@ func _gain_mining_xp(amount: int) -> void:
 		audio.sfx("ui")
 
 # ── ADR-0052 전문직 선택·조회 API ──────────────────────────────────────────────
-# 스킬의 현재 레벨(FarmSkill 곡선 공유 — FishSkill·MiningSkill도 그 곡선에 위임한다). 농사·채집·
-# 낚시·채광에 XP 소스가 있고 전투만 0이다(S5-T4/T5에서 배선).
+# 스킬의 현재 레벨(FarmSkill 곡선 공유 — FishSkill·MiningSkill·CombatSkill도 그 곡선에 위임한다).
+# ★[S5-T4] 5스킬 전부 여기서 파생된다. 다만 **전투 XP 소스는 S5-T5(몹 처치)**라 지금 _combat_xp를
+#   늘리는 라이브 경로가 없다 — 레벨·HP·전문직 게이트는 이미 실배선이고 XP만 대기 중이다.
 func _skill_level(skill: String) -> int:
 	match skill:
 		ProfessionCatalog.FARMING: return FarmSkill.level_for_xp(_farming_xp)
 		ProfessionCatalog.FORAGING: return ForageSkill.level_for_xp(_foraging_xp)   # ★[S4-T2]
 		ProfessionCatalog.FISHING: return FishSkill.level_for_xp(_fishing_xp)   # ★[S3-T6]
 		ProfessionCatalog.MINING: return MiningSkill.level_for_xp(_mining_xp)   # ★[S5-T2]
+		ProfessionCatalog.COMBAT: return CombatSkill.level_for_xp(_combat_xp)   # ★[S5-T4]
 		_: return 0
 
 # ★[S4-T4] 지금 든 도끼의 티어(원장 부재 방어 = 0). 타수 환산·큰 장애물 게이트·프롬프트의 단일 접점이다
@@ -8041,6 +8293,10 @@ func choose_profession(skill: String, prof_id: String) -> bool:
 	if not _professions.has(skill):
 		_professions[skill] = {}
 	_professions[skill][tier] = prof_id
+	# ★[S5-T4] 전투 전문직(투사·수호자)은 최대 HP를 얹으므로 고른 즉시 반영한다. 다른 스킬의 퍼크는
+	#   전부 판정 시점에 조회되는 값이라 이 훅이 필요 없다(HP만 *상태*를 가진 자원이다).
+	if skill == ProfessionCatalog.COMBAT:
+		_refresh_max_hp()
 	if notice_feed != null:
 		notice_feed.push("전문직 ▲ %s" % ProfessionCatalog.name_of(skill, prof_id), 4.0, false, null, true)
 		audio.sfx("ui")
@@ -8064,6 +8320,22 @@ func _perk_value(skill: String, dim: String, default_val: float) -> float:
 			if perk["dim"] == dim:
 				best = maxf(best, float(perk["value"]))
 	return best
+
+# ★[S5-T4] _perk_value의 **합산 짝**. 같은 차원을 tier5·tier10이 함께 얹는 *누적* 퍼크에 쓴다
+#   (전투 최대 HP: 투사 15 + 수호자 25 = 40 · 피해: 투사 10% + 광전사 15% = 25% — 스타듀 1:1).
+#   ★ 왜 max로는 안 되나: max로 접으면 tier10 값만 남아 tier5의 몫이 사라진다(HP가 40이 아니라 25).
+#   ★ 왜 안전한가: tier10은 `requires`로 부모 tier5를 강제하므로 "합산 대상이 하나만 있는" 상태가
+#     구조적으로 없고(_can_choose_profession·_load_professions 2패스가 그 정합을 지킨다), 같은 차원을
+#     *형제* tier10 둘이 얹는 경우도 없다(각 갈래가 서로 다른 축을 든다 — ADR-0052 §1).
+#   중립 기본값이 없다(0.0 시작) — 합산의 항등원은 0이고, 배수 차원은 이 함수를 쓰지 않는다.
+func _perk_sum(skill: String, dim: String) -> float:
+	var total := 0.0
+	var chosen: Dictionary = _professions.get(skill, {})
+	for tier in chosen:
+		for perk in ProfessionCatalog.perks_of(skill, String(chosen[tier])):
+			if perk["dim"] == dim:
+				total += float(perk["value"])
+	return total
 
 # 편의 조회(채집 파일럿) — 라이브 루프가 호출할 인터페이스. 약초학자 → Q_IRIDIUM, 채집꾼 → 0.20 등.
 # ★[S4-T2 / ADR-0062 결정 8] 시그니처는 그대로 두고 **해석만 ForageSkill로 이관**했다(호출부 무변경).
@@ -8722,7 +8994,13 @@ func _process(delta: float) -> void:
 		_place_furnace(_target)
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	#   ★ 스프링클러를 들었으면 위에서 설치/철거를 이미 처리했으니 밭 도구질로 흘리지 않는다(중복 방지).
-	if not _sleeping and _target_valid and not holding_sprinkler and Input.is_action_just_pressed("use_tool"):
+	# ★[S5-T4 / ADR-0063 결정 5] **무기를 들었으면 무대·조준 칸과 무관하게 이 갈래로 들어온다**
+	#   (`_target_valid`는 밭 흙(SOIL)만 통과시키는데 갱도 층 바닥은 PATH라, 이 or가 없으면 정작
+	#   전투가 벌어지는 무대에서 스윙이 한 번도 안 나간다). 무기와 도구를 가르는 것은 `_use_tool`
+	#   맨 앞의 한 갈래이고, 여러 LMB 디스패치가 같은 프레임에 겹쳐도 스윙은 하나다(_swing_weapon).
+	var holding_weapon := ItemCatalog._is_weapon(inventory.selected_id())
+	if not _sleeping and (_target_valid or holding_weapon) and not holding_sprinkler \
+			and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
 	if not _sleeping and _target_valid and Input.is_action_just_pressed("action"):
@@ -9112,6 +9390,12 @@ func _farm_aoe_tiles(t: Vector2i, aoe: Vector2i) -> Array[Vector2i]:
 
 func _use_tool() -> void:
 	var item := inventory.selected_id()
+	# ★[S5-T4 / ADR-0063 결정 4·5] 무기 분기 — **가장 먼저·완전히 갈라진다**. 두 가지 이유다:
+	#   ㉠ 전투 행동비용 0(ADR-0011): 아래 혼력 게이트(can_act)보다 위에 있어야 혼력 0에서도 휘두른다.
+	#   ㉡ 무기를 안 들면 이 줄은 **한 프레임도 실행되지 않는다** — 기존 도구 거동이 픽셀 단위로 불변.
+	if ItemCatalog._is_weapon(item):
+		_swing_weapon(item)
+		return
 	var cat := ItemCatalog.category_of(item)
 	# ★ ADR-0059 결정3(에너지 스타듀 정합) — 파종(씨앗)·시비(비료)는 무과금, 괭이·물·낫·개간·급여는 과금.
 	#   무과금 동사는 혼력 0에서도 굴러야 하므로 상단 can_act 게이트를 과금 동사에만 건다.
@@ -11320,13 +11604,17 @@ func _heart_rows() -> Array:
 func _skill_rows() -> Array:
 	# ★ ADR-0052 — 농사·채집 2행(FarmSkill 곡선 공유). 전문직 요약·선택가능 tier도 파생(읽기 전용).
 	# ★[S3-T6] 낚시 3행째 — XP 소스(포획)와 퍼크가 실효되면서 picker 경로도 그대로 열린다(행 추가만).
-	# ★[S5-T2] 채광 4행째 — XP 소스(갱도 채굴)가 실효됐다. 전투 5행째는 S5-T4/T5가 얹는다
-	#   (그러면 ADR-0063 결정 9의 "_skill_rows 5행 완성 = 5스킬 전면 가동"이 닫힌다).
+	# ★[S5-T2] 채광 4행째 — XP 소스(갱도 채굴)가 실효됐다.
+	# ★[S5-T4 / ADR-0063 결정 9] **전투 5행째 = "_skill_rows 5행 완성 = 5스킬 전면 가동"이 닫혔다.**
+	#   전문직 선택·레벨·HP 파생은 지금 실효고 XP 소스(몹 처치)만 S5-T5 대기다 — 그래서 이 행은
+	#   L0/0XP로 뜨지만 *구조적으로* 나머지 넷과 완전히 같다(행이 특별 취급을 안 받는다).
+	#   ⚠️ 5행이 패널 높이를 넘겨 inv_frame의 숙련 탭 치수·스크롤을 함께 봉합했다(SK_ROW_H 주석).
 	return [
 		_skill_row("농사", ProfessionCatalog.FARMING, _farming_xp),
 		_skill_row("채집", ProfessionCatalog.FORAGING, _foraging_xp),
 		_skill_row("낚시", ProfessionCatalog.FISHING, _fishing_xp),
 		_skill_row("채광", ProfessionCatalog.MINING, _mining_xp),
+		_skill_row("전투", ProfessionCatalog.COMBAT, _combat_xp),
 	]
 
 # 한 스킬 행 조립 — 레벨/진행바 + 고른 전문직 이름 요약 + 지금 고를 수 있는 tier(0=없음).

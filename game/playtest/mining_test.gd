@@ -17,7 +17,7 @@ extends SceneTree
 #   ⑥ 혼력 감산 — Lv0 = 10 · Lv10 = 7(3%/lv).
 #   ⑦ mining_xp 세이브/로드 왕복(구세이브 = 0, 무막힘).
 #   ⑧ 광물 아이템 13종 등록·가격·카테고리 + **노드 id = 아이템 id** 대조(두 로스터 분기 방지).
-#   ⑨ 숙련 탭 4행(농사·채집·낚시·채광).
+#   ⑨ 숙련 탭 — 채광이 4행째(★S5-T4에서 전투가 5행째로 붙어 총 5행. 채광 위치는 불변).
 # 실행: ./run_tests.sh mining
 
 var _fail := 0
@@ -346,7 +346,9 @@ func _initialize() -> void:
 
 	# ── ⑨ main 배선: 층에서 광맥 캐기 ────────────────────────────────────────
 	var m: Node = await _spawn_main()
-	_check("⑨ 숙련 탭 4행(농사·채집·낚시·채광)", (m._skill_rows() as Array).size() == 4 \
+	# ★[S5-T4] 4행 → **5행**으로 의도적 개정(ADR-0063 결정 9 "_skill_rows 5행 완성 = 5스킬 전면 가동").
+	#   T2가 채광을 4행째로 얹었고 T4가 전투를 5행째로 얹었다 — 채광 행의 *위치*(index 3)는 불변이다.
+	_check("⑨ 숙련 탭 5행 · 채광은 4행째(농사·채집·낚시·채광·전투)", (m._skill_rows() as Array).size() == 5 \
 		and String((m._skill_rows() as Array)[3]["name"]) == "채광" \
 		and String((m._skill_rows() as Array)[3]["skill"]) == ProfessionCatalog.MINING)
 	_check("⑨b 채광 레벨이 XP 스칼라에서 파생(초기 0)",
@@ -463,7 +465,8 @@ func _initialize() -> void:
 	var m3: Node = await _spawn_main()
 	_check("⑦e 구세이브 = 채광 XP 0·Lv0(무막힘)",
 		m3._mining_xp == 0 and m3._skill_level(ProfessionCatalog.MINING) == 0)
-	_check("⑦f 구세이브 = 숙련 탭 4행 그대로", (m3._skill_rows() as Array).size() == 4)
+	_check("⑦f 구세이브 = 숙련 탭 5행 그대로(★S5-T4 전투 합류 — 행 수는 세이브와 무관)",
+		(m3._skill_rows() as Array).size() == 5)
 	await _despawn(m3)
 
 	# ── 세이브 백업 복원 ──
