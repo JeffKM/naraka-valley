@@ -1751,10 +1751,13 @@ const GUILD_COUNTER_X1 := 30                      # 카운터 우단
 # WALL 박스 + 문 리세스만(실내·카탈로그 없음 — 옥자 집 결). 나락(별개 공간)과 다른 잠긴 외관.
 const DUNGEON_GATE_EXT_RECT := Rect2i(22, 2, 5, 5)  # x22..26, y2..6 (북단 심연 포켓 서, 잠긴 던전 입구)
 const DUNGEON_GATE_DOOR := Vector2i(24, 6)          # 문 리세스(시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
-# 나락 진입로 — 잠긴 외관(비-enterable). 독립 전투 던전(나락)으로 가는 '서랍' 진입로라 Phase 3 전투에서 점등.
-# WALL 박스 + 문 리세스만(실내·카탈로그 없음, 라이브 워프 없음 — 옥자 집 결).
-const NARAK_GATE_EXT_RECT := Rect2i(30, 2, 5, 5)    # x30..34, y2..6 (북단 심연 포켓 동, 잠긴 나락 진입로)
-const NARAK_GATE_DOOR := Vector2i(32, 6)            # 문 리세스(시각 일관 — 진입 트리거 아님, 카탈로그 미등록)
+# 나락 진입로 — 외관은 여전히 WALL 박스 + 문 리세스이고 **카탈로그 미등록**이다(비-enterable, 옥자 집 결).
+# ★[S5-T7 / ADR-0063 결정 7] 다만 이제 **잠긴 외관이 아니다**: 문 칸이 나락 구역 워프의 발동 칸(at)이고
+#   (region.gd EOPHWA_MINE warps), 열쇠 플래그(`_narak_key_found`)가 서야 열린다. 건물 진입(_indoor)이
+#   아니라 **구역 워프**라 `_maybe_toggle_building`은 여전히 이 문을 모른다 — eophwa_mine_test의
+#   "카탈로그 미등록·_indoor 불변" 단언이 그대로 성립하고, 갈린 건 워프 한 줄뿐이다.
+const NARAK_GATE_EXT_RECT := Rect2i(30, 2, 5, 5)    # x30..34, y2..6 (북단 심연 포켓 동, 나락 진입로)
+const NARAK_GATE_DOOR := Vector2i(32, 6)            # 문 리세스 = ★나락 워프 발동 칸(열쇠 게이트)
 # ★[S5-T1 / ADR-0063 결정 1] 갱도 층 시스템 배선 상수. 던전 입구(DUNGEON_GATE)는 이제 **잠긴 외관이
 #   아니라 층 하강 입구로 점등**한다 — 문 칸에서 [F]를 누르면 1층(또는 해금된 엘리베이터 층)으로
 #   내려간다. NARAK_GATE는 그대로 잠김 유지(나락 = S5-T7 소관).
@@ -1825,6 +1828,30 @@ const NARAK_ROCK_RECTS := [
 	# 우변(x55..57)
 	Rect2i(55, 12, 3, 8),  Rect2i(55, 25, 3, 8),
 ]
+# ── ★[S5-T7 / ADR-0063 결정 7] 나락 리셋 런 배선 상수 ────────────────────────────
+# 나락 아레나(깨진 봉인 고리)는 이제 **런의 스테이징**이다 — 싸우는 곳이 아니라 내려가기 전에 서는
+# 곳이다(갱도 지상이 대장간·길드를 낀 서비스 밴드인 것과 같은 자리). 고리·좌표·크기는 한 칸도 안
+# 바뀐다(narak_test의 봉인 고리·도달성 단언 전량 보존) — 그 위에 구멍 한 칸이 얹혔을 뿐이다.
+const NARAK_SHAFT_TILE := Vector2i(32, 26)      # 아레나 하강 구멍([F] = 런 시작 → 1층). 중앙 공동 안(걷기 O)
+# 런 종료·기절 복귀 착지 칸 = 구멍 **바로 아래**. 구멍 위에 떨구면 [F] 한 번에 다시 빨려 들어가
+# "나왔다"가 성립하지 않는다(갱도 MINE_SURFACE_RETURN이 문 앞 곁가지인 것과 같은 이유).
+const NARAK_SURFACE_RETURN := Vector2i(32, 27)
+# ★ 나락 강몹·보스 그레이박스 색(아트 = S5-T10). 갱도 6종(_MOB_COLORS)과 색상환을 안 겹치게
+#   붉은-보라 축에 몰았다 — "여긴 다른 무대다"가 색으로 먼저 읽힌다.
+#   ※ 키는 MobCatalog 종 id와 같은 문자열이되 리터럴로 둔다(_MINE_NODE_COLORS와 같은 관례).
+const _NARAK_MOB_COLORS := {
+	"mob_yacha": Color(0.74, 0.24, 0.30),          # 야차 — 핏빛(고속 돌진)
+	"mob_nachal": Color(0.52, 0.26, 0.62),         # 나찰 — 자줏빛(원거리)
+	"mob_agwi": Color(0.42, 0.36, 0.26),           # 아귀 — 마른 흙빛(탱커)
+	"boss_okjol": Color(0.86, 0.72, 0.30),         # 문지기 옥졸 — 놋빛 갑주
+	"boss_nachalwang": Color(0.90, 0.34, 0.18),    # 업화 나찰왕 — 업화
+	"boss_daeagwi": Color(0.30, 0.22, 0.34),       # 심연 대아귀 — 심연
+}
+# ★ 나락 광맥 그레이박스 색 — 갱도와 겹치는 종은 `_MINE_NODE_COLORS`가 그대로 쓰이고, **나락철만**
+#   여기 있다(갱도에 안 나오는 유일한 종). 이리듐 대응이라 보랏빛 금속.
+const _NARAK_NODE_COLORS := {
+	"ore_narakcheol": Color(0.72, 0.52, 0.86),     # 나락철 — 보랏빛 금속
+}
 # ★ M2.2 / ★[ADR-0060 결정 2 — S2-T2 주민집 11채] — 공유 집 실내(HOUSE_RECT)를 쓰는 나루 마을
 # 14채(메인 집 3 + 주민 집 11). 외관 문·퇴장 칸만 건물마다 다르고 실내 방·문·카메라는 한 방을
 # 공유한다(_build_building_catalog·가구 재사용). 실내 개별화는 캐릭터 본체가 붙을 때
@@ -1998,6 +2025,21 @@ var _mine_entry_pick: int = 1
 # ★[S5-T1 / ADR-0063 결정 1] 마지막 하강 시각(초). 하강 직후 MINE_DESCEND_INVULN_SECS 동안은
 #   무적이다 — ★[S5-T4]에서 `_is_invulnerable()`이 이 값을 읽어 실효됐다.
 var _mine_descended_at: float = INVULN_NONE
+# ══ ★[S5-T7 / ADR-0063 결정 7] 나락 리셋 런 상태 ═════════════════════════════
+# 나락 층 원장(런 한정 — `to_save`가 **없다**. NarakFloors 머리말 참조: 남길 게 없다는 것이 이
+# 시스템의 정의다). 갱도 원장과 나란히 서지만 수명이 정반대다.
+var narak_floors: NarakFloors = null
+# 지금 있는 나락 깊이(0 = 지상 아레나). `_mine_floor`와 정확히 같은 결의 직교 상태 축이고, 구역이
+# NARAK이면서 이 값이 >0일 때만 층 그리드를 빌드·렌더한다.
+# ★ **세이브에 안 들어간다** — 저장·종료도 런 종료다(취침·기절·퇴장과 같은 줄). 그래서 로드는 늘
+#   깊이 0(아레나)에서 재개한다(_restore_location이 그 규칙을 강제한다).
+var _narak_depth: int = 0
+var _narak_layout: Dictionary = {}
+# ★ 최고 격파 관문의 **깊이**(0 = 아직 없음 · 10/25/50). 나락에서 유일하게 **영구**한 값이고,
+#   세이브 키 `narak_best_boss`가 그 자리다(ADR-0063 결정 7 "최고 격파 보스 = 영구 마일스톤").
+#   ★ 종 id가 아니라 깊이를 드는 이유: "최고"는 순서 비교라 정수가 곧 그 의미이고(문자열이면 비교
+#     테이블이 하나 더 생긴다), 바나 매크로 눈금(S8)이 읽을 값도 결국 "어디까지 갔나"다.
+var _narak_best_boss: int = 0
 # ══ ★[S5-T4 / ADR-0063 결정 4·5] HP·전투 판정 상태 ══════════════════════════
 # 체력 자원(RefCounted 원장 — 혼력 $SoulEnergy와 달리 씬 노드가 아니다. PlayerHealth 주석 참조).
 # ★ 최대 HP는 (전투 XP + 전문직)에서 **파생**되므로 세이브엔 current 하나만 들어간다.
@@ -2387,6 +2429,8 @@ func _ready() -> void:
 	carpenter.changed.connect(queue_redraw)   # 의뢰·완공·복원 시 매대 행·목공방 그레이박스 갱신
 	mine_floors = MineFloors.new()       # ★[S5-T1] 갱도 층 원장(RefCounted — 채집물 스폰 원장과 같은 결)
 	mine_floors.changed.connect(queue_redraw)   # 채굴·사다리 개통·깊이 갱신·복원 시 층 그레이박스 갱신
+	narak_floors = NarakFloors.new()     # ★[S5-T7] 나락 런 원장(RefCounted — 로드/세이브 없음: 런 한정)
+	narak_floors.changed.connect(queue_redraw)  # 채굴·사다리/구멍 개통·런 시작 시 층 그레이박스 갱신
 	health = PlayerHealth.new()          # ★[S5-T4] 체력 자원(RefCounted — 혼력과 완전 별도, ADR-0011)
 	health.depleted.connect(_on_health_depleted)   # HP 0 → 기절(무대 퇴장 + 시간 +2h · 손실 0)
 	_refresh_max_hp()                    # 최대 HP = base 100 + 전투 레벨 성장 + 전문직(부팅 시 100)
@@ -2955,6 +2999,12 @@ func _solid_atlas(tile: int) -> Vector2i:
 
 # ★ [S1-2] 타일 id가 통과 불가(SOLID)인가 — 정준 predicate. 테스트(cliff_test 등)·충돌 정의가 공용한다.
 #   WATER(terrain corner)는 여기 없고 _has_water_corner로 따로 판정한다(회귀 보존). CLIFF_LIP은 걷기 O.
+# ★[S5-T7] 이 칸이 현재 그리드에서 막혀 있나(맵 밖도 막힘으로 본다) — 위치 복원 방어의 단일 술어.
+func _tile_blocked(t: Vector2i) -> bool:
+	if t.x < 0 or t.y < 0 or t.y >= _grid.size() or t.x >= _grid[t.y].size():
+		return true
+	return is_solid(_grid[t.y][t.x])
+
 func is_solid(id: int) -> bool:
 	return id in WORLD_SOLID_TILES
 
@@ -3066,6 +3116,10 @@ func _build_grid() -> void:
 	#   워프 좌표는 한 칸도 안 움직인다(ADR-0063 "지상 구역 재배치 없음").
 	if _in_mine_floor():
 		sz = Vector2i(MineFloors.FLOOR_W, MineFloors.FLOOR_H)
+	# ★[S5-T7] 나락 런 층도 같은 규율 — 구역 id는 그대로 NARAK이고 `_narak_depth`(>0)가 무대를 가른다.
+	#   지상 아레나(64×44·봉인 고리)는 한 칸도 안 움직인다(narak_test 좌표 단언 전량 보존).
+	if _in_narak_floor():
+		sz = Vector2i(NarakFloors.FLOOR_W, NarakFloors.FLOOR_H)
 	_grid_w = sz.x
 	_outdoor_h = sz.y
 	_grid_h = _outdoor_h + INDOOR_BAND_H
@@ -3097,7 +3151,10 @@ func _build_grid() -> void:
 			else:
 				_build_eophwa_mine()     # 지상 갱도 무대(불변)
 		RegionCatalog.NARAK:
-			_build_narak()
+			if _in_narak_floor():
+				_build_narak_floor()     # ★[S5-T7] 런 층 그리드(24×24 방 + 돌 + 나가는 사다리)
+			else:
+				_build_narak()           # 지상 아레나(스테이징 — 봉인 고리 불변)
 		_:
 			push_warning("알 수 없는 구역 '%s' — 홈베이스로 폴백" % _region)
 			_build_home()
@@ -4499,8 +4556,9 @@ func _open_mine_chest() -> void:
 	audio.sfx("ui")
 	_notice("%d층 보상 상자 — %s" % [floor_no, " · ".join(got) if not got.is_empty() else "비어 있다"])
 	if _narak_key_found:
-		# ★나락 진입로(NARAK_GATE) 점등 배선은 S5-T7 소관이다 — 여기선 열쇠를 쥐었다는 사실만 알린다.
-		_notice("나락 열쇠를 손에 넣었다 — 갱도 지상의 나락 진입로로", FLAVOR_SECS)
+		# ★[S5-T7] 이 플래그가 곧 나락 진입로(NARAK_GATE)의 점등 스위치다 — `_maybe_warp_edge`가
+		#   워프 직전에 이 값을 본다(인벤 보유가 아니라 플래그인 이유는 그 주석 참조).
+		_notice("나락 열쇠를 손에 넣었다 — 갱도 지상의 나락 진입로가 열렸다", FLAVOR_SECS)
 	queue_redraw()
 
 # 지상에서 갱도 입구 문 칸에 서 있는가(층 진입 트리거). 잠긴 외관이라 _maybe_toggle_building은
@@ -4666,6 +4724,225 @@ func _sync_mine_tile(t: Vector2i) -> void:
 	else:
 		ground.set_cell(t, 0, _terrain_base_atlas(TR_PATH))
 
+# ═══ ★[S5-T7 / ADR-0063 결정 7] 나락 리셋 런 배선 ═══════════════════════════════════
+# main의 몫은 갱도 층과 정확히 같은 다섯이다: ①층 그리드 세우기 ②진입·하강·퇴장 입력 ③채굴 디스패치
+# ④몹 배선(갱도와 **공유** — 아래 `_in_dungeon_floor` 참조) ⑤그레이박스 렌더. 규칙(층 생성·사다리/
+# 구멍 롤·낙하 공식·나락철 곡선)은 전부 NarakFloors가, 종 데이터는 MobCatalog가 든다.
+#
+# ★ 갱도와 **공유하는 것 / 갈리는 것**을 여기 한 번에 적어 둔다(둘을 헷갈리면 두 무대가 서로를 오염시킨다):
+#   공유 = 몹 틱·접촉 피해·스윙 arc·무적 창·기절 처리·혼력 과금·그리드 해제(`_sync_mine_tile`)·
+#          채광 XP/드랍 해석기(MiningSkill). 전투와 곡괭이질의 *문법*은 무대가 달라도 하나여야 한다.
+#   갈림 = 원장(수명)·시드 네임스페이스·층 생성 표·스폰 풀·하강 수단(사다리 확정 배치 없음 + 구멍)·
+#          퇴장 지점·보스·마일스톤. 이것들이 "나락은 갱도의 연장이 아니다"의 실체다.
+
+# 지금 나락 런 층 안인가(구역 = 나락 AND 깊이 > 0). `_in_mine_floor`와 완전 동형이다.
+func _in_narak_floor() -> bool:
+	return _region == RegionCatalog.NARAK and _narak_depth > 0
+
+# 지금 **던전 층**(갱도 층 또는 나락 층) 안인가 — 몹 틱·스윙 대상·전멸 판정처럼 두 무대가 문법을
+# 공유하는 배선의 단일 게이트다. 무대별로 갈리는 배선은 이 술어를 안 쓰고 각자 술어를 본다.
+func _in_dungeon_floor() -> bool:
+	return _in_mine_floor() or _in_narak_floor()
+
+# 지금 무대의 이 칸이 아직 안 깬 돌인가(갱도·나락 공용 — `_mob_probe`·화염구가 쓴다).
+func _floor_rock_at(t: Vector2i) -> bool:
+	return _is_narak_rock(t) if _in_narak_floor() else _is_mine_rock(t)
+
+# 지금 무대의 이 칸의 광맥 종("" = 일반 돌) — 갱도·나락 공용.
+func _floor_node_at(t: Vector2i) -> String:
+	return _narak_node_at(t) if _in_narak_floor() else _mine_node_at(t)
+
+# ★ 층 그리드 = 사방 WALL(암반) + 방 사각 PATH + 남은 돌 ROCK. 갱도 층 빌더와 같은 스택이라
+#   카메라·충돌·flood-fill 관례가 그대로 통한다. 다른 점은 하나뿐이다: **확정 하강 사다리가 없다**.
+func _build_narak_floor() -> void:
+	_narak_layout = NarakFloors.generate(narak_floors.run_id(), _narak_depth)
+	_spawn_narak_mobs()                     # 층 잡귀·보스(층 한정 비영속 — 들어설 때마다 새 판)
+	_grid = []
+	for y in _grid_h:
+		var row: Array = []
+		for x in _grid_w:
+			row.append(WALL if y < _outdoor_h else VOID)
+		_grid.append(row)
+	if _narak_layout.is_empty():
+		_build_border()
+		return
+	_fill_rect(_narak_layout["rect"], PATH)
+	for t: Vector2i in narak_floors.rocks_left(_narak_depth):
+		_set_tile(t.x, t.y, ROCK)
+	_build_border()
+
+func _is_narak_rock(t: Vector2i) -> bool:
+	if not _in_narak_floor() or _narak_layout.is_empty():
+		return false
+	if narak_floors.is_mined(_narak_depth, t):
+		return false
+	return _narak_layout["rocks"].has(t)
+
+# 이 칸이 **나가는 사다리**(= 착지 칸)인가. 갱도의 "올라가는 사다리"와 자리는 같지만 한 층 위가
+# 아니라 무대 밖(아레나)으로 나간다 = 런 종료.
+func _is_narak_exit(t: Vector2i) -> bool:
+	return _in_narak_floor() and not _narak_layout.is_empty() and t == _narak_layout["entrance"]
+
+func _is_narak_ladder(t: Vector2i) -> bool:
+	if not _in_narak_floor() or _narak_layout.is_empty():
+		return false
+	# 확정 배치는 **축퇴 층(돌 0)에서만** 있다 — 보통은 (-1,-1)이라 이 비교가 늘 거짓이다.
+	var fixed: Vector2i = _narak_layout["ladder"]
+	return narak_floors.has_ladder(_narak_depth, t) or (fixed.x >= 0 and t == fixed)
+
+func _is_narak_shaft(t: Vector2i) -> bool:
+	return _in_narak_floor() and narak_floors.has_shaft(_narak_depth, t)
+
+# 층 안 이 칸의 광맥 종("" = 일반 돌). 배치 캐시에서 바로 읽는다(갱도 `_mine_node_at`과 같은 이유).
+func _narak_node_at(t: Vector2i) -> String:
+	if _narak_layout.is_empty():
+		return ""
+	return String((_narak_layout.get("nodes", {}) as Dictionary).get(t, ""))
+
+# 지상 아레나에서 하강 구멍 칸에 서 있는가(런 시작 트리거). 갱도 `_at_dungeon_gate`와 같은 결의
+# 무인 [F]이고, 엘리베이터가 없으니 층 선택 UI도 없다 — 언제나 1층부터다(리셋 런의 정의).
+func _at_narak_mouth() -> bool:
+	return _region == RegionCatalog.NARAK and _narak_depth == 0 and _indoor == "" \
+		and not _sleeping and _player_tile() == NARAK_SHAFT_TILE
+
+# 새 런을 연다 — 원장이 이전 런 기록을 통째로 버리고 런 id를 올린다(= 새 시드 계열).
+func _start_narak_run() -> void:
+	if _transitioning or narak_floors == null:
+		return
+	narak_floors.begin_run()
+	_descend_narak(1)
+	_notice("나락으로 내려간다 — 여기서부터는 매번 1층부터다", FLAVOR_SECS)
+
+# 다음 깊이로 내려간다. `fall_floors > 0`이면 구멍으로 떨어진 것이다(건너뛴 층수).
+func _descend_narak(to_depth: int, fall_floors: int = 0) -> void:
+	if _transitioning or not NarakFloors.is_valid_depth(to_depth):
+		return
+	# ★ 낙하 피해는 **전환을 걸기 전에** 정산한다. 두 가지를 동시에 지키기 위해서다:
+	#   ㉠ 낙하는 *피격이 아니다* — 때린 사람이 없으니 넉백도 무적 프레임도 안 낀다(그 둘은 "누가
+	#      언제 때렸나"의 축이다). 그래서 `take_damage`가 아니라 자원을 직접 깎는다.
+	#   ㉡ `take_damage`는 `_transitioning`에서 통째로 튕기므로, 순서를 뒤집으면 낙하가 무해해진다.
+	#   그리고 이 낙하로 기절하면 하강 자체가 **없던 일이 된다** — `_faint`가 이미 아레나로 내보냈고,
+	#   그 위에 층 전환을 덧씌우면 두 tween이 겹쳐 무대가 어긋난다(_faint_count가 그 관측점이다).
+	if fall_floors > 0 and health != null:
+		var faints_before := _faint_count
+		var dealt := health.damage(CombatSkill.incoming_damage(NarakFloors.fall_damage(fall_floors)))
+		_notice("%d층을 곤두박질쳤다 — 낙하 피해 %d" % [fall_floors, dealt])
+		if _faint_count != faints_before:
+			return
+	var layout := NarakFloors.generate(narak_floors.run_id(), to_depth)
+	if layout.is_empty():
+		return
+	_narak_depth = to_depth
+	_mine_descended_at = float(Time.get_ticks_msec()) / 1000.0   # 하강 직후 무적 1초(갱도와 같은 창)
+	_warp_in_region(layout["entrance"])
+	var gate := NarakFloors.boss_at(to_depth)
+	if gate != "":
+		_notice("나락 %d층 — 관문. %s이(가) 길을 막는다" % [to_depth, MobCatalog.name_of(gate)], FLAVOR_SECS)
+	else:
+		_notice("나락 %d층" % to_depth)
+
+# 런을 접고 지상 아레나로 나온다(나가는 사다리 · 기절 · 취침이 전부 이 한 곳으로 모인다).
+func _exit_narak_run() -> void:
+	if _transitioning or _narak_depth == 0:
+		return
+	var reached := _narak_depth
+	_narak_depth = 0
+	_narak_layout = {}
+	_clear_mine_mobs()                      # 층을 떠나면 잡귀는 소멸한다(비영속 — 갱도와 같은 계약)
+	_warp_in_region(NARAK_SURFACE_RETURN)
+	_notice("나락에서 빠져나왔다 — 이번 런 최심 %d층" % reached)
+
+# ★ 관문 격파 마일스톤 — 나락에서 **유일하게 영구**한 값이다(런은 리셋돼도 이 눈금은 안 지워진다).
+#   S8 바나 도메인이 읽을 진척 축이라, 여기선 값만 세우고 곱셈기는 아래 훅 자리에 예약해 둔다.
+func _record_boss_kill(depth: int) -> void:
+	if depth <= _narak_best_boss:
+		return
+	_narak_best_boss = depth
+	_notice("관문을 깨뜨렸다 — 나락 %d층 (최고 기록)" % depth, FLAVOR_SECS)
+
+# ★[ADR-0063 결정 7] **바나 곱셈기 훅 자리** — 실효 0이다(관계 심화 본체 = S8).
+#   나락은 바나의 도메인(밤 경비 = 잡귀와 싸워 지켜 주는 속죄)이라 전투 XP 가속이 여기 붙을 자리인데,
+#   ♡ 성장·컷신·곱셈기 배선이 전부 S8 소관이라 지금은 **중립 1.0을 돌려주는 함수 하나**로 남긴다
+#   (ADR-0008 "평평 ≠ 막힘" — base 루프는 S5에서 이미 완결된다). 배선 시 `_gain_combat_xp` 호출부에서
+#   이 계수를 곱하면 되고, 그때까지 이 함수의 존재가 곧 "그 자리는 예약돼 있다"는 표시다.
+func narak_bana_xp_mult() -> float:
+	return 1.0
+
+# 층 배치에서 개체를 세운다(보스 층이면 보스 한 기뿐). 시드에 run·깊이·스폰 인덱스를 엮는다 —
+# 갱도가 day를 무는 자리에 런 카운터가 들어간 것뿐이고, 좌표는 여전히 시드에 안 넣는다.
+func _spawn_narak_mobs() -> void:
+	_clear_mine_mobs()
+	if _narak_layout.is_empty():
+		return
+	var specs: Array = _narak_layout.get("mobs", [])
+	for i in specs.size():
+		var spec: Dictionary = specs[i]
+		var kind := String(spec.get("kind", ""))
+		if not MobCatalog.has(kind):
+			continue
+		_mobs.append(Mob.spawn(kind, spec["tile"],
+			hash("narak:%d:%d:%d" % [narak_floors.run_id(), _narak_depth, i])))
+	_mobs_spawned = _mobs.size()
+
+# ★ 곡괭이로 나락 층의 돌 1타. `_mine_rock`과 문법이 같고 **꼬리 하나만 갈린다**: 사다리가 열릴 때
+#   그 20%가 구멍이다(NarakFloors.roll_shaft). 혼력 과금·다타수 광맥·산출은 전부 같은 규칙을 쓴다.
+func _narak_rock(t: Vector2i) -> void:
+	if inventory.selected_id() != ItemCatalog.PICKAXE:
+		return                              # 든 게 곡괭이가 아니면 무동작(자동 분기 없음 — ADR-0024 §2)
+	var cost := _mining_energy_cost()
+	if not energy.can_act(cost):
+		_notice("혼력이 모자라 곡괭이를 휘두를 수 없다")
+		return
+	energy.spend(cost)
+	_swing_for_item(ItemCatalog.PICKAXE)
+	audio.sfx("hoe")
+	var node_id := _narak_node_at(t)
+	var need := NarakFloors.node_hits(node_id, pickaxe_tier())
+	if need > 1:
+		var done := narak_floors.add_node_hit(_narak_depth, t)
+		if done < need:
+			_notice("%s 광맥을 쪼갠다 — %d/%d" % [ItemCatalog.name_of(node_id), done, need])
+			queue_redraw()
+			return
+	narak_floors.mark_mined(_narak_depth, t)
+	_sync_mine_tile(t)                      # 그리드·충돌 해제는 무대를 안 가린다(순수 그리드 연산 재사용)
+	_award_narak_drop(t, node_id)
+	# 사다리/구멍 롤 — 확률은 갱도와 같은 함수가 정하고(남은 돌이 줄수록 오른다 = 마지막 돌은 반드시
+	# 열린다), 열린 것이 무엇인지만 여기서 갈린다.
+	var run := narak_floors.run_id()
+	var left := narak_floors.rocks_left_count(_narak_depth)
+	if NarakFloors.roll_ladder(run, _narak_depth, t, left, _mobs_cleared(), 0.0):
+		if NarakFloors.roll_shaft(run, _narak_depth, t):
+			narak_floors.add_shaft(_narak_depth, t)
+			_notice("돌 밑이 뻥 뚫렸다 — 구멍이다. [F]로 뛰어내린다")
+		else:
+			narak_floors.add_ladder(_narak_depth, t)
+			_notice("돌 밑에서 사다리가 드러났다 — [F]로 더 내려간다")
+	_wake_mobs_near(t, 1)
+	queue_redraw()
+
+# 부순 칸의 산출·XP. `_award_mine_drop`과 같은 해석기를 쓰되 **네임스페이스가 "narak"**이라
+# (run, depth)가 (day, floor)와 같은 값이어도 결과가 안 겹친다.
+func _award_narak_drop(t: Vector2i, node_id: String) -> void:
+	var res := MiningSkill.resolve_drop(node_id, narak_floors.run_id(), _narak_depth, t,
+		_skill_level(ProfessionCatalog.MINING), mining_ore_bonus(), mining_gem_pair_chance(), "narak")
+	var full := false
+	for d: Dictionary in res["drops"]:
+		var id := String(d["id"])
+		var n := int(d["count"])
+		if n <= 0:
+			continue
+		if inventory.add_item(id, n):
+			_toast_item(id, n)
+		else:
+			full = true
+	if full:
+		_notice("백팩이 가득 차 캔 것을 다 담지 못했다")
+	if bool(res["crit"]):
+		_notice("광맥이 통째로 쏟아졌다!")
+	_gain_mining_xp(int(res["xp"]))
+	audio.sfx("harvest")
+
 # ═══ ★[S5-T4 / ADR-0063 결정 4·5] HP·전투 판정 배선 ═══════════════════════════════
 # main의 몫은 다섯뿐이다: ①최대 HP 파생·갱신 ②무기 스윙 입력 → arc 판정 ③피격(무적 창·넉백)
 # ④기절(무대 퇴장 + 시간 페널티) ⑤전투 XP 적립. *판정 규칙*(밴드 롤·크리·arc 기하·HP 곡선)은
@@ -4750,7 +5027,7 @@ func _weapon_arc() -> Array[Vector2i]:
 #   ★ 위장 중인 잡귀도 목록에 든다 — 검으로 후려치면 깨어나며 맞는 게 맞다(Mob.take_hit이 깨운다).
 func _mobs_in_region() -> Array:
 	var out: Array = []
-	if not _in_mine_floor():
+	if not _in_dungeon_floor():   # ★[S5-T7] 나락 층도 같은 스윙 판정을 쓴다(전투 문법은 무대를 안 가린다)
 		return out
 	for i in _mobs.size():
 		var m: Mob = _mobs[i]
@@ -4849,6 +5126,11 @@ func _faint() -> void:
 	_hurt_at = INVULN_NONE                   # 기절로 창을 닫는다(복귀 직후 유령 무적 방지)
 	if _in_mine_floor():
 		_ascend_mine_to_surface()            # ①갱도 입구로 퇴장(fade 전환 — 워프 실행기 재사용)
+	elif _in_narak_floor():
+		# ★[S5-T7 / ADR-0063 결정 7] 나락 기절 = **나락 진입로(아레나)로 퇴장**. 갱도와 완전 동형이다
+		#   — 시간 +2h만 잃고 골드·아이템·진행은 0이다. 다만 리셋 런이라 **그 런은 여기서 끝난다**
+		#   (잃는 것이 "이번 런의 깊이"인데, 그건 애초에 영구 기록이 아니라 페널티가 아니다).
+		_exit_narak_run()
 	_advance_clock_minutes(FAINT_TIME_PENALTY_MIN)   # ②시간 +2h
 	health.refill()                          # ③HP 회복(대가 = 시간뿐)
 	_notice("기절했다 — 눈을 뜨니 %d시간이 지났다 (잃은 것은 없다)" % (FAINT_TIME_PENALTY_MIN / 60))
@@ -4938,7 +5220,7 @@ func _clear_mine_mobs() -> void:
 #   · 살아 있는 수만 보면 몹이 애초에 0인 층(보상 층 = 10의 배수)에서 공짜 +4%가 나온다.
 #     전멸 보너스는 *싸운 대가*여야 한다.
 func _mobs_cleared() -> bool:
-	return _in_mine_floor() and _mobs_spawned > 0 and _mobs_alive() == 0
+	return _in_dungeon_floor() and _mobs_spawned > 0 and _mobs_alive() == 0
 
 func _mobs_alive() -> int:
 	var n := 0
@@ -4954,8 +5236,9 @@ func _mobs_alive() -> int:
 func _mob_probe(t: Vector2i) -> int:
 	if t.x < 0 or t.y < 0 or t.y >= _grid.size() or t.x >= _grid[t.y].size():
 		return Mob.CELL_WALL
-	if _is_mine_rock(t):
-		return Mob.CELL_WALL if _mine_node_at(t) != "" else Mob.CELL_ROCK
+	# ★[S5-T7] 무대(갱도 층/나락 층)에 따라 어느 원장을 보는지만 갈리고, 규칙은 한 줄도 안 갈린다.
+	if _floor_rock_at(t):
+		return Mob.CELL_WALL if _floor_node_at(t) != "" else Mob.CELL_ROCK
 	return Mob.CELL_WALL if is_solid(_grid[t.y][t.x]) else Mob.CELL_FREE
 
 # ── 틱(‗_process 폴링 — night_bar.tick·cafe.tick과 같은 자리) ─────────────────
@@ -4963,7 +5246,7 @@ func _mob_probe(t: Vector2i) -> int:
 # ★ 피해는 전부 `take_damage(고정 데미지, 출처 px)` 하나로 나간다 — 무적 창 0.8s·넉백·기절이 그
 #   안에 이미 들어 있어 몹 쪽에 특별 분기가 없다(T4가 남긴 계약을 그대로 쓴다).
 func _tick_mobs(delta: float) -> void:
-	if not _in_mine_floor() or player == null or delta <= 0.0:
+	if not _in_dungeon_floor() or player == null or delta <= 0.0:
 		return
 	if _mobs.is_empty() and _mob_shots.is_empty():
 		return
@@ -4984,7 +5267,7 @@ func _tick_mobs(delta: float) -> void:
 	# ★ 틱 **도중** 무대를 떠났을 수 있다: 접촉 피해가 기절을 부르면 `_faint`가 그 자리에서 지상으로
 	#   퇴장시키고 `_clear_mine_mobs`가 목록을 비운다. 그대로 아래 되쓰기(`_mobs = live`)까지 가면
 	#   버린 층의 잡귀가 **되살아난다** — 여기서 끊는다(청소는 이미 끝났다).
-	if not _in_mine_floor():
+	if not _in_dungeon_floor():
 		return
 	var live_shots: Array = []
 	for shot: Dictionary in _mob_shots:
@@ -4994,7 +5277,7 @@ func _tick_mobs(delta: float) -> void:
 			take_damage(int(shot["damage"]), Vector2(shot["pos"]))
 			continue                             # 명중한 화염구는 사라진다(관통 없음)
 		live_shots.append(shot)
-	if not _in_mine_floor():
+	if not _in_dungeon_floor():
 		return                                   # 화염구 명중이 기절을 불렀을 때도 같은 이유로 끊는다
 	_mob_shots = live_shots
 	# 죽은 개체 청소는 **틱 끝에서 한 번**(위 루프 중 배열을 줄이면 순회가 어긋난다).
@@ -5009,9 +5292,14 @@ func _tick_mobs(delta: float) -> void:
 #   그래서 `_award_mine_drop`·`roll_ladder`를 타지 않고 원장 기록 + 그리드 해제만 한다. 광맥은
 #   `_mob_probe`가 WALL로 막아 애초에 여기 오지 않는다(자원 손실 0).
 func _mob_break_rock(t: Vector2i) -> void:
-	if not _is_mine_rock(t):
+	if not _floor_rock_at(t):
 		return
-	mine_floors.mark_mined(_mine_floor, t)
+	# ★[S5-T7] 어느 원장에 기록하나만 갈린다 — "몹이 부순 바위는 XP·산출·사다리 롤 0"이라는 규칙
+	#   자체는 두 무대가 공유한다(그래서 여기서도 `_award_*`·`roll_ladder`를 안 탄다).
+	if _in_narak_floor():
+		narak_floors.mark_mined(_narak_depth, t)
+	else:
+		mine_floors.mark_mined(_mine_floor, t)
 	_sync_mine_tile(t)
 	audio.sfx("hoe")
 
@@ -5025,9 +5313,13 @@ func _on_mob_killed(mob: Mob, spawn_index: int) -> void:
 	if mob == null:
 		return
 	_gain_combat_xp(mob.kill_xp())
+	# ★[S5-T7] 드랍 시드의 두 축이 무대에 따라 갈린다: 갱도 = (day, 층) / 나락 = (런, 깊이).
+	#   접두사까지 갈라 두 무대가 같은 숫자 쌍에서 같은 답을 내지 않게 한다.
+	var in_narak := _in_narak_floor()
+	var drop_seed := hash("narak:%d:%d:%d" % [narak_floors.run_id(), _narak_depth, spawn_index]) \
+		if in_narak else hash("%d:%d:%d" % [clock.day, _mine_floor, spawn_index])
 	var full := false
-	for d: Dictionary in MobCatalog.roll_drops(mob.kind,
-			hash("%d:%d:%d" % [clock.day, _mine_floor, spawn_index])):
+	for d: Dictionary in MobCatalog.roll_drops(mob.kind, drop_seed):
 		var id := String(d["id"])
 		var n := int(d["count"])
 		if n <= 0:
@@ -5040,8 +5332,16 @@ func _on_mob_killed(mob: Mob, spawn_index: int) -> void:
 		_notice("백팩이 가득 차 잡귀가 남긴 것을 다 담지 못했다")
 	_notice("%s을(를) 물리쳤다" % MobCatalog.name_of(mob.kind))
 	audio.sfx("harvest")
-	# ★ 처치 사다리 15%(ADR-0063 결정 1 ㉢) — 사다리는 **죽은 자리**에 열린다(돌 파괴 사다리와 같은
-	#   "그 자리에 구덩이가 드러난다" 문법). 롤 시드는 스폰 인덱스라 자리를 옮겨 리롤할 수 없다.
+	if in_narak:
+		# ★[S5-T7] 관문 보스 격파 = 나락의 유일한 영구 마일스톤.
+		if MobCatalog.is_boss(mob.kind):
+			_record_boss_kill(_narak_depth)
+		# ★ 나락엔 **처치 사다리 롤이 없다**(갱도 결정 1 ㉢을 옮겨오지 않았다 — *스코프 판단*):
+		#   하강 수단을 돌 파괴 하나로 좁혀 두는 것이 "캐서 뚫고 내려간다"는 해골동굴의 긴장이고,
+		#   ADR-0063 결정 7이 나락 하강으로 명시한 것도 돌 파괴 사다리·구멍 둘뿐이다.
+		return
+	# ★ 처치 사다리 15%(ADR-0063 결정 1 ㉢ — 갱도 전용) — 사다리는 **죽은 자리**에 열린다(돌 파괴
+	#   사다리와 같은 "그 자리에 구덩이가 드러난다" 문법). 롤 시드는 스폰 인덱스라 리롤할 수 없다.
 	if spawn_index >= 0 and MineFloors.roll_mob_ladder(clock.day, _mine_floor, spawn_index):
 		var t := mob.tile()
 		if not _is_mine_rock(t) and not _is_mine_entrance(t):
@@ -7377,6 +7677,9 @@ func _place_labels() -> void:
 	if _in_mine_floor():
 		_place_mine_floor_labels()
 		return
+	if _in_narak_floor():   # ★[S5-T7] 나락 런 층 — 깊이·나가는 사다리·구멍만 안내한다
+		_place_narak_floor_labels()
+		return
 	# ★ M1.4 — 구역마다 자기 라벨만 깐다(_rebuild_region이 전환 시 _clear_labels로 걷어낸다).
 	match _region:
 		RegionCatalog.HOME:
@@ -7470,6 +7773,23 @@ func _place_mine_floor_labels() -> void:
 	_add_label("올라가는 사다리 [F]", _tile_center_px(_mine_layout["entrance"]))
 	_add_label("내려가는 사다리 [F]", _tile_center_px(_mine_layout["ladder"]))
 
+# ★[S5-T7] 나락 런 층 라벨 — 갱도와 갈리는 두 가지를 그대로 말한다: 여기 사다리는 **나가는** 것이고,
+#   내려가는 길은 돌을 깨야 생긴다(그래서 "내려가는 사다리" 라벨이 처음부터는 없다).
+func _place_narak_floor_labels() -> void:
+	if _narak_layout.is_empty():
+		return
+	var e: Vector2i = _narak_layout["entrance"]
+	var gate := NarakFloors.boss_at(_narak_depth)
+	var head := "나락 %d층" % _narak_depth
+	if gate != "":
+		head += " · 관문"
+	_add_label(head, _tile_center_px(e + Vector2i(0, -1)))
+	_add_label("나가는 사다리 [F]", _tile_center_px(e))
+	for t: Vector2i in narak_floors.ladders(_narak_depth):
+		_add_label("아래층 [F]", _tile_center_px(t))
+	for t: Vector2i in narak_floors.shafts(_narak_depth):
+		_add_label("구멍 [F]", _tile_center_px(t))
+
 func _add_label(text: String, center_px: Vector2) -> void:
 	var lbl := Label.new()
 	lbl.text = text
@@ -7507,6 +7827,8 @@ func _apply_camera_limits() -> void:
 	#   (지상 64×44로 두면 층 밖 검은 여백이 화면에 들어온다).
 	if _in_mine_floor():
 		r = Rect2i(Vector2i.ZERO, Vector2i(MineFloors.FLOOR_W, MineFloors.FLOOR_H))
+	elif _in_narak_floor():   # ★[S5-T7] 나락 런 층도 같은 이유로 층 크기(24×24)로 잡는다
+		r = Rect2i(Vector2i.ZERO, Vector2i(NarakFloors.FLOOR_W, NarakFloors.FLOOR_H))
 	# ★ M2.2 — 실내면 그 건물의 방 둘레로 격리한다(카탈로그가 건물별 cam을 들고 있다 —
 	# "집"→HOUSE_CAM·"카페"→CAFE_CAM·공유 집 6채→HOUSE_CAM·만물상→STORE_CAM, 한 데이터 흐름).
 	if _indoor != "" and _buildings.has(_indoor):
@@ -7822,6 +8144,17 @@ func _on_day_advanced(day: int) -> void:
 			_rebuild_region(_region)
 			player.position = _tile_center_px(MINE_SURFACE_RETURN)
 			_apply_camera_limits()
+	# ★[S5-T7 / ADR-0063 결정 7] 나락 런은 **취침으로 끝난다**(해골동굴 1:1). 갱도가 "층을 리필하고
+	#   지상으로 되돌린다"면 여기는 "런 자체를 접는다" — 원장이 기록을 통째로 버리고 아레나로 나온다.
+	#   위 갱도 블록과 같은 이유로 데일리 정산들보다 **먼저** 처리한다(그것들이 지상 그리드를 전제한다).
+	if narak_floors != null and _in_narak_floor():
+		_narak_depth = 0
+		_narak_layout = {}
+		_clear_mine_mobs()
+		narak_floors.begin_run()   # 다음 진입은 새 판(이번 런 기록 소멸 — 리셋 런의 정의)
+		_rebuild_region(_region)
+		player.position = _tile_center_px(NARAK_SURFACE_RETURN)
+		_apply_camera_limits()
 	# ★ [ADR-0051] 밤 까마귀(미련까마귀) 습격 — 성장(advance_day) *전에* 무방비 작물을 영구 소실시킨다
 	#   (밤새 쪼임 → 살아남은 작물만 아침에 자람). 허수아비 반경이 덮은 칸은 안전. 3중 안전장치
 	#   (작물 문턱·한 밤 상한·반경 보호)는 CrowRaid가 판정하고, day 시드로 결정적이다(헤드리스 재현).
@@ -8089,7 +8422,8 @@ func _maybe_toggle_building() -> void:
 		return
 	# ★[S5-T1] 갱도 층 안엔 건물이 없다(지상 대장간·길드의 외관 문 좌표는 층 그리드 밖이라 닿을 수도
 	#   없지만, 무대가 갈린 걸 명시적으로 가른다 — 좌표 우연에 안 기댄다).
-	if _in_mine_floor():
+	# ★[S5-T7] 나락 런 층도 같다(그 구역엔 enterable 건물이 애초에 0이지만, 무대가 갈린 걸 명시한다).
+	if _in_dungeon_floor():
 		return
 	var t := _player_tile()
 	if _indoor == "":
@@ -8121,7 +8455,8 @@ func _maybe_warp_edge() -> void:
 	if _transitioning or _sleeping or _indoor != "":
 		return
 	# ★[S5-T1] 층 안에서는 구역 가장자리 워프가 없다(지상으로 나가는 유일한 길 = 입구 사다리).
-	if _in_mine_floor():
+	# ★[S5-T7] 나락 런 층도 같다 — 나가는 길은 나가는 사다리 하나뿐이다.
+	if _in_dungeon_floor():
 		return
 	var t := _player_tile()
 	for w in RegionCatalog.warps_of(_region):
@@ -8129,6 +8464,13 @@ func _maybe_warp_edge() -> void:
 			continue
 		if not RegionCatalog.is_built(w["to"]):
 			return   # 목적 구역 미완 → 휴면. M1.4에서 산다.
+		# ★[S5-T7 / ADR-0063 결정 7] 나락 열쇠 게이트 — **세이브 플래그가 유일한 진실원**이다.
+		#   인벤토리 보유로 판정하지 않는다: 열쇠는 팔 수도 버릴 수도 있는 물건이라, 보유 기반이면
+		#   한 번 열린 문이 도로 잠겨 진행이 영구 봉인된다(60층 상자는 1회성이라 되찾을 길도 없다).
+		#   그래서 T6이 개봉 시점에 `_narak_key_found`를 세워 뒀고, 여기가 그 계약의 소비처다.
+		if w["to"] == RegionCatalog.NARAK and not _narak_key_found:
+			_notice("굳게 봉인돼 있다 — 나락 열쇠가 있어야 열린다")
+			return
 		_warp(w["to"], "", _warp_dest(w))
 		return
 
@@ -8292,6 +8634,10 @@ func _save_game() -> void:
 		"boatman_rod_given": _boatman_rod_given,   # ★ [S3-T5] 뱃사공 T1 증정 1회 플래그(키 없는 구세이브 = false)
 		"mugol_sword_given": _mugol_sword_given,   # ★ [S5-T6] 무골 녹슨 혼검 증정 1회 플래그(구세이브 = false)
 		"narak_key_found": _narak_key_found,       # ★ [S5-T6] 나락 열쇠 획득 마일스톤(영구 — T7 점등 게이트)
+		# ★[S5-T7 / ADR-0063 결정 7] 최고 격파 관문의 **깊이**(0/10/25/50). 나락에서 유일하게 영구한
+		#   값이고, 리셋되는 건 그날의 런뿐이다. 런 자체(깊이·채굴·열린 사다리)는 **저장하지 않는다** —
+		#   저장·종료도 런 종료라는 규칙이라, 키를 안 만드는 것이 곧 그 규칙의 구현이다.
+		"narak_best_boss": _narak_best_boss,
 		"cafe_revenue_total": _cafe_revenue_total,
 		"total_income": _total_income,   # ★ [S1R-T12] 누적 총수입(정보패널 — 구세이브 키 없음=0)
 		"selected_crop": _selected_crop,
@@ -8421,6 +8767,9 @@ func _load_game() -> void:
 	_boatman_rod_given = bool(data.get("boatman_rod_given", false))
 	_mugol_sword_given = bool(data.get("mugol_sword_given", false))   # ★[S5-T6] 구세이브 = 아직 안 받음
 	_narak_key_found = bool(data.get("narak_key_found", false))       # ★[S5-T6] 구세이브 = 열쇠 없음
+	# ★[S5-T7] 최고 격파 관문(구세이브 = 0 = 미격파). 손상 방어로 음수는 0으로 자르고, 보스 깊이가
+	#   아닌 값은 그 이하의 실제 관문으로 내린다(엉뚱한 깊이가 "격파"로 남아 눈금이 거짓이 되지 않게).
+	_narak_best_boss = NarakFloors.last_gate_at_or_before(maxi(int(data.get("narak_best_boss", 0)), 0))
 	# T7.2 카페 마일스톤 누적 서빙 매출. 손상 방어로 음수는 0으로 자른다(키 없는 구버전 세이브는 0).
 	_cafe_revenue_total = maxi(int(data.get("cafe_revenue_total", 0)), 0)
 	# ★ [S1R-T12] 누적 총수입 복원(키 없는 구세이브 = 0, 하위호환).
@@ -8450,6 +8799,13 @@ func _restore_location(data: Dictionary) -> void:
 	_mine_floor = int(data.get("mine_floor", 0))
 	if saved_region != RegionCatalog.EOPHWA_MINE or not MineFloors.is_valid_floor(_mine_floor):
 		_mine_floor = 0
+	# ★[S5-T7 / ADR-0063 결정 7] 나락 런은 **로드로 이어지지 않는다** — 저장·종료도 런 종료다(취침·
+	#   기절·퇴장과 같은 줄). 그래서 세이브에 깊이 키가 아예 없고, 여기서는 옛 런 상태를 지워 늘
+	#   아레나(깊이 0)에서 재개시킨다. 나락 구역에 저장된 위치는 아래 위치 복원이 그대로 쓰되, 층
+	#   그리드가 아니라 지상 아레나가 서므로 그 좌표가 유효하다(아레나는 64×44 통짜다).
+	var prev_depth := _narak_depth
+	_narak_depth = 0
+	_narak_layout = {}
 	if not RegionCatalog.is_built(saved_region):
 		push_warning("[M1.5] 미지/미빌드 구역 '%s' — 홈베이스 스폰으로 폴백" % saved_region)
 		_mine_floor = 0
@@ -8463,7 +8819,9 @@ func _restore_location(data: Dictionary) -> void:
 	# 현재 구역만 메모리, M1.2 구현 (b)). 같으면(HOME) 이미 빌드돼 있어 재빌드 불필요.
 	# ★[S5-T1] 층이 갈렸으면 구역 id가 같아도(갱도↔갱도 층) 재빌드해야 한다 — F9 재로드로 지상↔층을
 	#   오갈 때 옛 그리드가 남는 걸 막는다.
-	if saved_region != _region or prev_floor != _mine_floor:
+	# ★[S5-T7] 나락 깊이가 갈렸을 때도(런 중 F9 재로드) 같은 이유로 재빌드한다 — 옛 층 그리드가
+	#   남은 채 아레나 좌표에 떨어지면 24×24 방 밖 암반에 갇힌다.
+	if saved_region != _region or prev_floor != _mine_floor or prev_depth != _narak_depth:
 		_rebuild_region(saved_region)
 	# 실내 모드는 카탈로그로 방어한다(★ M2.2 — 8채로 늘어 화이트리스트 대신 _buildings 조회).
 	# 알 수 없는 id거나 복원 구역과 다른 구역의 건물이면 바깥("")으로 — 카메라가 외부 경계로
@@ -8478,6 +8836,11 @@ func _restore_location(data: Dictionary) -> void:
 	var raw_tile: Variant = data.get("player_tile", saved_tile)
 	if typeof(raw_tile) == TYPE_VECTOR2I:
 		saved_tile = raw_tile
+	# ★[S5-T7] 런 도중 저장했으면 저장된 칸이 **층 그리드(24×24) 좌표**다 — 런은 로드로 안 이어지므로
+	#   그 좌표를 아레나(64×44)에 그대로 놓으면 봉인 고리 암반이나 엉뚱한 구석에 떨어질 수 있다.
+	#   그래서 나락으로 복원할 땐 걸을 수 없는 칸이면 퇴장 지점으로 떨군다(빈 맵·갇힘 방지의 결).
+	if saved_region == RegionCatalog.NARAK and _tile_blocked(saved_tile):
+		saved_tile = NARAK_SURFACE_RETURN
 	player.position = _tile_center_px(saved_tile)
 	_apply_camera_limits()
 
@@ -9317,6 +9680,29 @@ func _process(delta: float) -> void:
 	if _in_mine_floor() and not _sleeping and _is_mine_rock(_target) \
 			and Input.is_action_just_pressed("use_tool"):
 		_mine_rock(_target)
+	# ★[S5-T7 / ADR-0063 결정 7] 나락 — 런 시작·하강·퇴장([F])과 곡괭이 채굴(LMB). 갱도와 같은 결이되
+	#   갈리는 셋: ㉠지상 트리거가 문이 아니라 **구멍**이고 층 선택이 없다(늘 1층부터) ㉡발밑 우선순위에
+	#   **구멍**이 끼며(사다리보다 먼저 — 같은 칸에 둘이 서지 않지만 순서를 못 박아 둔다) ㉢착지 칸
+	#   사다리는 한 층 위가 아니라 무대 밖으로 나간다(런 종료).
+	if _at_narak_mouth() and Input.is_action_just_pressed("shop_toggle"):
+		_start_narak_run()
+		return
+	if _in_narak_floor() and not _sleeping and Input.is_action_just_pressed("shop_toggle"):
+		var nhere := _player_tile()
+		if _is_narak_shaft(nhere):
+			var run := narak_floors.run_id()
+			var drop := NarakFloors.roll_fall_depth(run, _narak_depth, nhere)
+			_descend_narak(_narak_depth + drop, drop)
+			return
+		if _is_narak_ladder(nhere):
+			_descend_narak(_narak_depth + 1)
+			return
+		if _is_narak_exit(nhere):
+			_exit_narak_run()
+			return
+	if _in_narak_floor() and not _sleeping and _is_narak_rock(_target) \
+			and Input.is_action_just_pressed("use_tool"):
+		_narak_rock(_target)
 	# ★[S5-T5 / ADR-0063 결정 8] 위장 잡귀 쿡 찌르기 — 달걀귀신이 선 칸은 ROCK 타일이 아니라 위 채굴
 	#   디스패치가 안 걸린다. 곡괭이를 든 채 그 칸을 겨눠 LMB = **위장만 풀린다**(피해 0·혼력 0).
 	#   무기를 들었으면 아래 `_use_tool` 갈래가 정상 스윙으로 처리하므로 여기 안 걸린다(도구 검사).
@@ -9490,6 +9876,37 @@ func _process(delta: float) -> void:
 			var mob_line := "" if _mobs_alive() <= 0 else "   잡귀 %d" % _mobs_alive()
 			interact_prompt.text = "%s %d층 — 돌을 깨고 사다리를 찾아 내려간다%s" % [
 				MineFloors.band_name(MineFloors.band_of(_mine_floor)), _mine_floor, mob_line]
+	elif _at_narak_mouth():
+		# ★[S5-T7] 나락 아레나 구멍 — 층 선택이 없다(엘리베이터 0·늘 1층부터). 그 계약을 문구가 말한다.
+		interact_prompt.visible = true
+		var best_line := "" if _narak_best_boss <= 0 else "   최고 관문 %d층" % _narak_best_boss
+		interact_prompt.text = "[F] 나락으로 내려간다 (언제나 1층부터)%s" % best_line
+	elif _in_narak_floor():
+		# ★[S5-T7] 나락 층 프롬프트 — 발밑(구멍 > 사다리 > 나가는 사다리) > 겨눈 칸(돌) 순.
+		#   갱도와 문법이 같되, "내려가는 길은 아직 없다"가 기본 상태라 그걸 바닥 줄이 말해 준다.
+		var nt := _player_tile()
+		interact_prompt.visible = not _sleeping
+		if _is_narak_shaft(nt):
+			interact_prompt.text = "[F] 구멍으로 뛰어내린다 (여러 층 · 낙하 피해)"
+		elif _is_narak_ladder(nt):
+			interact_prompt.text = "[F] 아래층으로"
+		elif _is_narak_exit(nt):
+			interact_prompt.text = "[F] 나락에서 빠져나간다 (이번 런 종료)"
+		elif _is_narak_rock(_target):
+			var nnid := _narak_node_at(_target)
+			var nbody := "돌 깨기 (혼력 %d · 남은 돌 %d)" % [
+				_mining_energy_cost(), narak_floors.rocks_left_count(_narak_depth)]
+			if nnid != "":
+				nbody = "%s 광맥 캐기 (혼력 %d · %d/%d타)" % [ItemCatalog.name_of(nnid),
+					_mining_energy_cost(), narak_floors.node_hits_done(_narak_depth, _target),
+					NarakFloors.node_hits(nnid, pickaxe_tier())]
+			interact_prompt.text = ("[좌클릭] 곡괭이로 " + nbody) \
+				if inventory.selected_id() == ItemCatalog.PICKAXE else "곡괭이가 있어야 돌을 깰 수 있다"
+		else:
+			var nmob_line := "" if _mobs_alive() <= 0 else "   잡귀 %d" % _mobs_alive()
+			var gate_line := "" if NarakFloors.boss_at(_narak_depth) == "" else " · 관문"
+			interact_prompt.text = "나락 %d층%s — 돌을 깨야 내려갈 길이 열린다%s" % [
+				_narak_depth, gate_line, nmob_line]
 	elif _can_cast():
 		# ★ [S3-T2 / ADR-0061 결정 9] 낚싯대를 들고 삼도천·황천해 물가를 겨눌 때: LMB = 캐스팅.
 		# ★ [S3-T4] 뒤에 기어 한 줄(미끼 잔량·적용 태클)을 붙인다 — 장전 UI가 없으니 "무엇이 걸려 있나"를
@@ -11563,6 +11980,52 @@ func _draw_mine_floor() -> void:
 		draw_rect(Rect2(cp + Vector2(5, 16), Vector2(TILE - 10, 2)), Color(0.30, 0.28, 0.29))          # 쇠 띠
 		draw_rect(Rect2(cp + Vector2(TILE * 0.5 - 2, 15), Vector2(4, 5)), Color(0.88, 0.76, 0.36))     # 자물쇠
 
+# ★[S5-T7 / ADR-0063 결정 7] 나락 지상 아레나의 하강 구멍 — 봉인 고리 안 중앙 공동에 뚫린 검은 입.
+#   순수 시각이다(그리드·충돌 불변 — 사다리·상자와 같은 결로 통행을 막지 않는다).
+func _draw_narak_mouth() -> void:
+	var p := Vector2(NARAK_SHAFT_TILE.x * TILE, NARAK_SHAFT_TILE.y * TILE)
+	draw_rect(Rect2(p + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), Color(0.12, 0.09, 0.13))   # 테두리 암반
+	draw_rect(Rect2(p + Vector2(5, 5), Vector2(TILE - 10, TILE - 10)), Color(0.02, 0.02, 0.03)) # 심연(바닥 없음)
+	draw_rect(Rect2(p + Vector2(7, 6), Vector2(TILE - 14, 2)), Color(0.34, 0.22, 0.30))         # NW 광원 립
+
+# ★[S5-T7] 나락 런 층 그레이박스 — 갱도 층(`_draw_mine_floor`)과 같은 문법이되 셋이 갈린다:
+#   ① **나가는 사다리**(착지 칸)는 밝은 벽감이되 갱도의 "올라가는 사다리"와 색을 달리해(청록) "여긴
+#      한 층 위가 아니라 무대 밖"임을 구분한다.
+#   ② **구멍**은 가로장이 없는 새까만 구덩이다 — 사다리(가로장 3줄)와 실루엣으로 즉시 갈린다.
+#   ③ 광맥 색은 갱도 팔레트를 그대로 쓰고 나락철만 별 팔레트다(무대가 달라도 같은 광물은 같은 색).
+func _draw_narak_floor() -> void:
+	if _narak_layout.is_empty():
+		return
+	var nodes: Dictionary = _narak_layout.get("nodes", {})
+	for raw_t in nodes:
+		var t: Vector2i = raw_t
+		if narak_floors.is_mined(_narak_depth, t):
+			continue
+		var nid := String(nodes[t])
+		var col: Color = _MINE_NODE_COLORS.get(nid, _NARAK_NODE_COLORS.get(nid, Color(0.80, 0.80, 0.84)))
+		var p := Vector2(t.x * TILE, t.y * TILE)
+		draw_rect(Rect2(p + Vector2(7, 7), Vector2(TILE - 14, TILE - 14)), col)
+		draw_rect(Rect2(p + Vector2(9, 9), Vector2(6, 6)), col.lightened(0.35))
+		var need := NarakFloors.node_hits(nid, pickaxe_tier())
+		var done := narak_floors.node_hits_done(_narak_depth, t)
+		if done > 0 and need > 1:
+			var w := float(TILE - 12) * float(need - done) / float(need)
+			draw_rect(Rect2(p + Vector2(6, TILE - 7), Vector2(w, 3)), Color(0.92, 0.84, 0.42))
+	for t: Vector2i in narak_floors.ladders(_narak_depth):
+		var lp := Vector2(t.x * TILE, t.y * TILE)
+		draw_rect(Rect2(lp + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.06, 0.05, 0.06))
+		for i in 3:
+			draw_rect(Rect2(lp + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.52, 0.38, 0.22))
+	for t: Vector2i in narak_floors.shafts(_narak_depth):
+		var sp := Vector2(t.x * TILE, t.y * TILE)
+		draw_rect(Rect2(sp + Vector2(3, 3), Vector2(TILE - 6, TILE - 6)), Color(0.10, 0.07, 0.11))   # 갈라진 입
+		draw_rect(Rect2(sp + Vector2(6, 6), Vector2(TILE - 12, TILE - 12)), Color(0.01, 0.01, 0.02)) # 바닥 없음
+	var e: Vector2i = _narak_layout["entrance"]
+	var ep := Vector2(e.x * TILE, e.y * TILE)
+	draw_rect(Rect2(ep + Vector2(4, 4), Vector2(TILE - 8, TILE - 8)), Color(0.20, 0.30, 0.30))       # 나가는 사다리 벽감
+	for i in 3:
+		draw_rect(Rect2(ep + Vector2(6, 8 + i * 7), Vector2(TILE - 12, 3)), Color(0.56, 0.78, 0.74))
+
 # ★[S5-T5 / ADR-0063 결정 8] 잡귀 + 화염구 그레이박스. 손님·밤 잡귀 그리기와 같은 결(노드 없이 main이
 #   직접)이되 **픽셀 연속 위치**라 타일 정렬이 아니다 — 그게 층 몹과 좌석 잡귀의 유일한 렌더 차이다.
 #   진짜 스프라이트(9종 + 보스)는 S5-T10 아트 패스라, 지금은 아키타입이 눈으로 갈리면 된다:
@@ -11573,12 +12036,17 @@ func _draw_mine_mobs() -> void:
 	for m: Mob in _mobs:
 		if m == null or not m.is_alive():
 			continue
-		var col: Color = _MOB_COLORS.get(m.kind, Color(0.70, 0.70, 0.74))
+		# ★[S5-T7] 갱도 팔레트에 없으면 나락 팔레트를 본다(둘 다 없으면 회색 폴백 — 조용히 안 깨진다).
+		var col: Color = _MOB_COLORS.get(m.kind, _NARAK_MOB_COLORS.get(m.kind, Color(0.70, 0.70, 0.74)))
 		if not m.awake:
 			col = COLORS[ROCK]                       # 위장 = 바위인 척(같은 톤이라 눈에 안 걸린다)
 		if m.hurt > 0.0:
 			col = col.lerp(Color.WHITE, 0.55)        # 피격 플래시
-		var body := Rect2(m.pos - Vector2(TILE * 0.34, TILE * 0.40), Vector2(TILE * 0.68, TILE * 0.80))
+		# ★[S5-T7] 관문 보스는 몸집이 1.7배다 — 스프라이트가 붙기 전까지 "저건 다른 급이다"를 실루엣이
+		#   먼저 말해야 한다(HP 바 하나로는 500·800·1200이 안 읽힌다).
+		var scale := 1.7 if MobCatalog.is_boss(m.kind) else 1.0
+		var body := Rect2(m.pos - Vector2(TILE * 0.34, TILE * 0.40) * scale,
+			Vector2(TILE * 0.68, TILE * 0.80) * scale)
 		draw_rect(body.grow(1.0), col.darkened(0.55))                                        # 외곽선
 		var top_h := body.size.y * 0.42
 		draw_rect(Rect2(body.position, Vector2(body.size.x, top_h)), col.lightened(0.14))     # 머리(밝게)
@@ -11589,7 +12057,7 @@ func _draw_mine_mobs() -> void:
 		if MobCatalog.is_ranged(m.kind):
 			draw_rect(Rect2(body.position + body.size * 0.5 - Vector2(3, 3), Vector2(6, 6)),
 				_MOB_SHOT_COLOR)                      # 원거리 단서 = 몸통 속 불빛 심지
-		var bar := Rect2(m.pos.x - TILE * 0.34, body.position.y - 5.0, TILE * 0.68, 2.0)
+		var bar := Rect2(body.position.x, body.position.y - 5.0, body.size.x, 2.0)   # ★[S5-T7] 보스는 몸집 따라 넓어진다
 		draw_rect(bar, Color(0, 0, 0, 0.6))
 		var hp_col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), m.hp_ratio())
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * m.hp_ratio(), bar.size.y)), hp_col)
@@ -13474,6 +13942,12 @@ func _draw() -> void:
 			else:
 				_draw_smithy_room()  # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
 				_draw_guild_room()   # ★[S5-T6] 길드 실내 — 카운터·무기 걸이·빈 게시판(그레이박스)
+		RegionCatalog.NARAK:
+			if _in_narak_floor():
+				_draw_narak_floor()  # ★[S5-T7] 런 층 그레이박스(나가는 사다리·구멍·광맥)
+				_draw_mine_mobs()    # 잡귀·보스·화염구(갱도와 같은 렌더 — 색만 나락 팔레트)
+			else:
+				_draw_narak_mouth()  # 지상 아레나 — 하강 구멍 표식
 		RegionCatalog.NARU_VILLAGE:
 			_draw_facade_cafe()      # 카페 외관
 			_draw_facade_village_houses()   # ★ M2.5 메인 집 3채(미호·멜·바나) 외관

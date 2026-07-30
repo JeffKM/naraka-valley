@@ -126,10 +126,12 @@ func _initialize() -> void:
 		m._grid[m.GUILD_RECT.position.y + 1][m.GUILD_RECT.position.x + 1] == m.CAFE)
 	_check("②f 길드 실내 문 = 바닥(퇴장 통로)", m._grid[m.GUILD_DOOR.y][m.GUILD_DOOR.x] == m.CAFE)
 
-	# ── ③ 던전 입구·나락 진입로 = 잠긴 외관(WALL 박스 + 문 리세스), 카탈로그 미등록 ──
+	# ── ③ 던전 입구·나락 진입로 = 외관(WALL 박스 + 문 리세스), 카탈로그 미등록 ──
+	# ★[S5-T7] 외관 자체는 **한 칸도 안 바뀌었다**. 나락 진입로가 워프 발동 칸이 됐지만 그건 *구역
+	#   워프*라 건물 카탈로그(_buildings)와는 축이 다르다 — 아래 단언이 전부 그대로 성립하는 이유다.
 	_check_facade(m, m.DUNGEON_GATE_EXT_RECT, m.DUNGEON_GATE_DOOR, "③ 던전 입구")
 	_check_facade(m, m.NARAK_GATE_EXT_RECT, m.NARAK_GATE_DOOR, "③ 나락 진입로")
-	_check("③c 던전 입구·나락 진입로 카탈로그 미등록(잠김 — 진입 불가)",
+	_check("③c 던전 입구·나락 진입로 카탈로그 미등록(건물 진입 불가 — 워프와 별 축)",
 		not m._buildings.has("던전 입구") and not m._buildings.has("나락 진입로") and not m._buildings.has("나락"))
 
 	# ── ④ flood-fill 무 soft-lock: spawn에서 대장간/길드 문·두 워프 칸 도달 ──
@@ -139,7 +141,10 @@ func _initialize() -> void:
 	_check("④b 대장간 외관 문 도달", reach.has(m.SMITHY_EXT_DOOR))
 	_check("④c 길드 외관 문 도달", reach.has(m.GUILD_EXT_DOOR))
 	var warps: Array = RegionCatalog.warps_of(RegionCatalog.EOPHWA_MINE)
-	_check("④d 워프 2개(나루 마을·저승 숲)", warps.size() == 2)
+	# ★[S5-T7 / ADR-0063 결정 7·12] 나락 진입로 점등으로 워프가 2 → **3**이 됐다. 셋 다 spawn에서
+	#   도달 가능해야 한다(아래 ④e·④f가 나락 진입로 문 칸까지 전수 검사한다 — 열쇠 없이도 *걸어갈* 수는
+	#   있어야 잠긴 문을 두드려 보고 안내를 받는다).
+	_check("④d 워프 3개(나루 마을·저승 숲·나락)", warps.size() == 3)
 	for w in warps:
 		_check("④e 워프 발동 칸 도달 (→%s)" % w["to"], reach.has(w["at"]))
 		_check("④f 워프 발동 칸이 PATH (→%s)" % w["to"], m._grid[w["at"].y][w["at"].x] == m.PATH)
@@ -177,7 +182,23 @@ func _initialize() -> void:
 	m.player.position = m._tile_center_px(m.NARAK_GATE_DOOR)
 	m._maybe_toggle_building()
 	await _settle(m)
-	_check("⑤k 나락 진입로 문에 닿아도 진입 안 됨(_indoor='')", m._indoor == "")
+	_check("⑤k 나락 진입로 문에 닿아도 **건물 진입**은 안 됨(_indoor='')", m._indoor == "")
+	# ★[S5-T7 / ADR-0063 결정 7·12] 옛 "잠김" 단언을 **플래그 조건부**로 갈아 끼운다: 진입로는
+	#   이제 구역 워프이고 열쇠 플래그가 그 스위치다. 플래그가 없으면 여전히 못 간다(옛 거동 보존).
+	m._narak_key_found = false
+	m.player.position = m._tile_center_px(m.NARAK_GATE_DOOR)
+	m._maybe_warp_edge()
+	await _settle(m)
+	_check("⑤k′ 열쇠 플래그 off — 나락 워프 잠김(구역 불변)", m._region == RegionCatalog.EOPHWA_MINE)
+	m._narak_key_found = true
+	m.player.position = m._tile_center_px(m.NARAK_GATE_DOOR)
+	m._maybe_warp_edge()
+	await _settle(m)
+	_check("⑤k″ 열쇠 플래그 on — 나락으로 워프(진입로 점등)", m._region == RegionCatalog.NARAK)
+	m._narak_key_found = false
+	m._rebuild_region(RegionCatalog.EOPHWA_MINE)   # 아래 세이브 라운드트립을 위해 갱도로 되돌린다
+	m.player.position = m._tile_center_px(RegionCatalog.spawn_of(RegionCatalog.EOPHWA_MINE))
+	await _settle(m)
 	var smithy_in: Vector2i = m.SMITHY_IN_TILE   # m이 free되기 전에 상수 캡처(세이브 라운드트립용)
 	await _despawn(m)
 

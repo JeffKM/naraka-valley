@@ -15,8 +15,10 @@ class_name MobCatalog
 # 설계 메모(어기면 ADR-0063 결정 8·9 / ADR-0031 결정 3 위반):
 #   - **갱도 잡귀는 관계-중립**이다. 이 파일엔 바나·affinity·호감도 참조가 한 줄도 없고, 처치 보상은
 #     전투 base XP + 자재 드랍뿐이다(나락만 바나 도메인 — ADR-0031 결정 3).
-#   - **나락 강몹 3종(야차·나찰·아귀)·보스 3기는 여기 없다** — S5-T7 소관이다(ADR-0063 결정 8 후단).
-#     갱도 로스터에 섞으면 밴드 게이팅이 갱도 60층 축을 벗어나 버린다.
+#   - ★[S5-T7] **나락 강몹 3종·보스 3기가 합류했다**(아래 "나락 로스터" 절). 다만 `MOBS`에 섞지 않고
+#     `NARAK_MOBS`·`BOSSES` 별 dict에 둔다 — 갱도 밴드 게이팅(`spawn_pool`)이 60층 축을 도는데
+#     무한 깊이 종이 그 표에 끼면 축이 오염된다(ADR-0063 결정 8 후단이 경고한 그 지점).
+#     조회(`has`/`max_hp`/…)만 `_entry`로 세 dict를 아울러, Mob·main은 어느 dict인지 몰라도 된다.
 #   - **아키타입은 4개뿐**이다(통통·추적·위장·원거리). 표의 6종은 이 넷 위에 *플래그*(배회·넉백
 #     저항·돌 부수기)를 얹어 갈린다 — 새 아키타입을 만들지 않는 이유는 ADR-0063이 "아키타입 4 커버"로
 #     못 박았고, 행동 코드가 6갈래로 갈리면 결정적 스텝 검증이 6배로 늘기 때문이다.
@@ -123,6 +125,89 @@ const MOBS := {
 # 밴드 순 id 목록(테스트·아트 로스터 순회의 단일 출처 — dict 삽입 순서를 신뢰하지 않는다).
 const _ORDER := [HEOTGEOT, EODUKKAEBI, DALGYAL, GEUSEUNDAE, BULGASARI, HWAGWI]
 
+# ══ ★[S5-T7 / ADR-0063 결정 7·8] 나락 로스터 — 강몹 3종 + 관문 보스 3기 ═══════════
+# 불교 지옥 결(나락(奈落) = 나라카 정합). HP/데미지/XP는 ADR-0063 결정 8 후단 표 그대로이고,
+# 나머지(속도·어그로·사거리)는 갱도 6종과 같은 결로 이 태스크가 정한 *잠정치*다.
+#
+# ★ **새 아키타입을 만들지 않았다** — 셋 다 기존 4종(통통·추적·위장·원거리) 위에 플래그만 얹는다:
+#   · 야차 "고속 돌진" = 통통(HOP). 멈춤↔돌진 리듬 그대로에 속도만 갱도 최속(120)보다 위(150)다.
+#     평균 속도는 여전히 1/4로 깎여(HOP_PAUSE:HOP_DASH) 플레이어 160px/s에서 도망칠 수 있다.
+#   · 나찰 "원거리+고HP" = 원거리(RANGED). 화귀가 HP 1 유리대포인 것과 **정반대 극**(190)이라,
+#     같은 아키타입이 깊이에 따라 전혀 다른 문제로 읽힌다(새 갈래 0 · 행동 검증 비용 0).
+#   · 아귀 "탱커 추적" = 추적(CHASE) + `kb_resist`. 불가사리의 중장 축을 그대로 물려받는다.
+# ★ 보스도 같은 규율이다 — **페이즈 없음·미니언 없음**(ADR-0063 "패턴 단순" 서랍 준수). 고HP·고데미지
+#   + 넓은 어그로가 전부이고, 나찰왕만 원거리다. 미니언 스폰은 Mob.step 이벤트 축을 하나 늘려야 해서
+#   (순수 스텝 규율의 표면적 확대) 허용된 상한 안에서도 안 넣었다 — *스코프 판단, 보고에 명시*.
+
+# ── 나락 강몹 3종 ───────────────────────────────────────────────────────────
+const YACHA := "mob_yacha"        # 야차(夜叉) — 고속 돌진
+const NACHAL := "mob_nachal"      # 나찰(羅刹) — 원거리 + 고HP
+const AGWI := "mob_agwi"          # 아귀(餓鬼) — 탱커 추적
+
+# ── 관문 보스 3기(깊이 10/25/50 보장 출현 — NarakFloors.BOSS_BY_DEPTH와 같은 문자열) ──
+const BOSS_OKJOL := "boss_okjol"              # 문지기 옥졸(獄卒) — 깊이 10
+const BOSS_NACHALWANG := "boss_nachalwang"    # 업화 나찰왕(羅刹王) — 깊이 25
+const BOSS_DAEAGWI := "boss_daeagwi"          # 심연 대아귀(大餓鬼) — 깊이 50
+
+# 보스 드랍 = 카페 프리미엄 소재(★신설 아이템 1종 — ItemCatalog.MATERIALS에 등록).
+# *명명 잠정*(owner 큐): 「나락혼정(奈落魂精)」 — 기존 혼탄·혼불씨의 혼(魂) 계열 위에 얹은 최상위
+# 등급. 소비처는 S6(카페 가공)이라 지금은 **등록 + 드랍**까지다(ADR-0063 결정 7 "소비처는 S6").
+const DROP_NARAK_HONJEONG := "narak_honjeong"
+
+# 나락 강몹 표 — 스키마는 MOBS와 **완전 동일**하다(`_entry`가 둘을 구분 없이 읽는다).
+# ★ `floor_min`은 여기서 **나락 깊이**를 뜻한다(갱도 층이 아니다 — 축이 다른 표라 dict가 갈려 있다).
+const NARAK_MOBS := {
+	YACHA: {
+		"name_ko": "야차", "arch": ARCH_HOP,
+		"hp": 150, "damage": 23, "xp": 20,
+		"floor_min": 1, "floor_max": 0, "weight": 38,
+		"speed": 150.0, "aggro": 9.0, "wanders": true, "kb_resist": false, "breaks": false,
+		"reach": 0.0, "cooldown": 0.0, "shot_speed": 0.0,
+	},
+	NACHAL: {
+		"name_ko": "나찰", "arch": ARCH_RANGED,
+		"hp": 190, "damage": 25, "xp": 20,
+		"floor_min": 5, "floor_max": 0, "weight": 30,
+		"speed": 0.0, "aggro": 9.0, "wanders": false, "kb_resist": false, "breaks": false,
+		"reach": 8.0, "cooldown": 1.8, "shot_speed": 120.0,
+	},
+	AGWI: {
+		"name_ko": "아귀", "arch": ARCH_CHASE,
+		"hp": 260, "damage": 30, "xp": 20,
+		"floor_min": 15, "floor_max": 0, "weight": 26,
+		"speed": 70.0, "aggro": 10.0, "wanders": true, "kb_resist": true, "breaks": false,
+		"reach": 0.0, "cooldown": 0.0, "shot_speed": 0.0,
+	},
+}
+const _NARAK_ORDER := [YACHA, NACHAL, AGWI]
+
+# 관문 보스 표 — `floor_min`은 **보장 출현 깊이**이고 `weight`는 0이다(가중 롤에 안 들어간다 =
+# 확정 배치 경로로만 선다. NarakFloors._scatter_mobs가 보스 층에서 pool을 아예 안 본다).
+const BOSSES := {
+	BOSS_OKJOL: {
+		"name_ko": "문지기 옥졸", "arch": ARCH_CHASE,
+		"hp": 500, "damage": 28, "xp": 120,
+		"floor_min": 10, "floor_max": 0, "weight": 0,
+		"speed": 62.0, "aggro": 14.0, "wanders": false, "kb_resist": true, "breaks": false,
+		"reach": 0.0, "cooldown": 0.0, "shot_speed": 0.0,
+	},
+	BOSS_NACHALWANG: {
+		"name_ko": "업화 나찰왕", "arch": ARCH_RANGED,
+		"hp": 800, "damage": 34, "xp": 260,
+		"floor_min": 25, "floor_max": 0, "weight": 0,
+		"speed": 0.0, "aggro": 14.0, "wanders": false, "kb_resist": true, "breaks": false,
+		"reach": 10.0, "cooldown": 1.4, "shot_speed": 140.0,
+	},
+	BOSS_DAEAGWI: {
+		"name_ko": "심연 대아귀", "arch": ARCH_CHASE,
+		"hp": 1200, "damage": 42, "xp": 500,
+		"floor_min": 50, "floor_max": 0, "weight": 0,
+		"speed": 74.0, "aggro": 16.0, "wanders": false, "kb_resist": true, "breaks": false,
+		"reach": 0.0, "cooldown": 0.0, "shot_speed": 0.0,
+	},
+}
+const _BOSS_ORDER := [BOSS_OKJOL, BOSS_NACHALWANG, BOSS_DAEAGWI]
+
 # ── 드랍 표(*드랍률·수량 전부 잠정* — 스타듀 대응 몹 상속) ────────────────────
 # 스키마: [{id, chance(0~1), min, max}] — 항목마다 독립 롤(한 몹이 둘 다 흘릴 수 있다).
 # ★ 신규 아이템은 2종(넋가루·혼불씨)뿐이고 나머지는 **기존 광물 재사용**이다: 달걀귀신·그슨대가
@@ -148,57 +233,111 @@ const DROPS := {
 		{"id": DROP_HONBULSSI, "chance": 0.80, "min": 1, "max": 2},
 		{"id": DROP_NEOKGARU, "chance": 0.30, "min": 1, "max": 1},
 	],
+	# ── ★[S5-T7] 나락 강몹 — 갱도 잡귀보다 두꺼운 자재 + 심층 산출(혼불씨·나락철) ──
+	YACHA: [
+		{"id": DROP_HONBULSSI, "chance": 0.70, "min": 1, "max": 2},
+		{"id": DROP_NEOKGARU, "chance": 0.40, "min": 1, "max": 2},
+	],
+	NACHAL: [
+		{"id": DROP_HONBULSSI, "chance": 0.80, "min": 1, "max": 3},
+		{"id": "ore_narakcheol", "chance": 0.10, "min": 1, "max": 1},
+	],
+	AGWI: [
+		{"id": DROP_NEOKGARU, "chance": 0.85, "min": 2, "max": 4},
+		{"id": "ore_narakcheol", "chance": 0.15, "min": 1, "max": 1},
+	],
+	# ── ★[S5-T7] 관문 보스 — 나락혼정 **확정 드랍**(chance 1.0)이 마일스톤의 물질적 형태다.
+	#    깊을수록 수량이 는다(10/25/50 → 1/2/3). 서사 텍스트는 0이다(CONTEXT 확정).
+	BOSS_OKJOL: [{"id": DROP_NARAK_HONJEONG, "chance": 1.0, "min": 1, "max": 1}],
+	BOSS_NACHALWANG: [{"id": DROP_NARAK_HONJEONG, "chance": 1.0, "min": 2, "max": 2}],
+	BOSS_DAEAGWI: [{"id": DROP_NARAK_HONJEONG, "chance": 1.0, "min": 3, "max": 3}],
 }
 
 # ── 조회 ─────────────────────────────────────────────────────────────────────
-static func has(kind: String) -> bool:
-	return MOBS.has(kind)
+# ★[S5-T7] 세 표(갱도 6 · 나락 3 · 보스 3)를 아우르는 단일 진입점. 아래 조회들이 전부 이걸 지나므로
+#   Mob·main·CombatSkill은 "이 종이 어느 표에 있나"를 영영 모른다(로스터 확장이 조회 코드를 안 건드린다).
+#   ★ `set_*` 정적 이름을 안 쓰는 관례와 같은 이유로 이름을 `_entry`로 둔다(엔진 메서드 흡수 회피).
+static func _entry(kind: String) -> Dictionary:
+	if MOBS.has(kind):
+		return MOBS[kind]
+	if NARAK_MOBS.has(kind):
+		return NARAK_MOBS[kind]
+	if BOSSES.has(kind):
+		return BOSSES[kind]
+	return {}
 
+static func has(kind: String) -> bool:
+	return not _entry(kind).is_empty()
+
+# ★ 갱도 6종만이다(로스터 순회의 기존 계약 — mob_test가 이 크기를 잠근다). 나락·보스는 아래 별 함수.
 static func kinds() -> Array:
 	return _ORDER
 
+static func narak_kinds() -> Array:
+	return _NARAK_ORDER
+
+static func boss_kinds() -> Array:
+	return _BOSS_ORDER
+
+# 이 종이 관문 보스인가(드로우 크기·처치 마일스톤 판정의 단일 술어).
+static func is_boss(kind: String) -> bool:
+	return BOSSES.has(kind)
+
 static func name_of(kind: String) -> String:
-	return String(MOBS[kind]["name_ko"]) if has(kind) else ""
+	var e := _entry(kind)
+	return String(e["name_ko"]) if not e.is_empty() else ""
 
 static func arch_of(kind: String) -> String:
-	return String(MOBS[kind]["arch"]) if has(kind) else ""
+	var e := _entry(kind)
+	return String(e["arch"]) if not e.is_empty() else ""
 
 static func max_hp(kind: String) -> int:
-	return int(MOBS[kind]["hp"]) if has(kind) else 0
+	var e := _entry(kind)
+	return int(e["hp"]) if not e.is_empty() else 0
 
 # 플레이어에게 주는 고정 데미지(ADR-0063 결정 4 — 변동 롤 없음).
 static func damage_of(kind: String) -> int:
-	return int(MOBS[kind]["damage"]) if has(kind) else 0
+	var e := _entry(kind)
+	return int(e["damage"]) if not e.is_empty() else 0
 
 # 처치 전투 XP(관계-중립 base — ADR-0031 결정 3).
 static func xp_of(kind: String) -> int:
-	return int(MOBS[kind]["xp"]) if has(kind) else 0
+	var e := _entry(kind)
+	return int(e["xp"]) if not e.is_empty() else 0
 
 static func speed_of(kind: String) -> float:
-	return float(MOBS[kind]["speed"]) if has(kind) else 0.0
+	var e := _entry(kind)
+	return float(e["speed"]) if not e.is_empty() else 0.0
 
 static func aggro_tiles(kind: String) -> float:
-	return float(MOBS[kind]["aggro"]) if has(kind) else 0.0
+	var e := _entry(kind)
+	return float(e["aggro"]) if not e.is_empty() else 0.0
 
 static func wanders(kind: String) -> bool:
-	return bool(MOBS[kind]["wanders"]) if has(kind) else false
+	var e := _entry(kind)
+	return bool(e["wanders"]) if not e.is_empty() else false
 
 # 넉백 저항 — ★플래그 보관. 넉백 감쇠 배선은 장비 클러스터 서랍이 열릴 때(ADR-0063 결정 4).
 static func kb_resist(kind: String) -> bool:
-	return bool(MOBS[kind]["kb_resist"]) if has(kind) else false
+	var e := _entry(kind)
+	return bool(e["kb_resist"]) if not e.is_empty() else false
 
 # 길이 막히면 일반 돌을 부수나(★그슨대 하나 — 부순 바위 = 채광 XP 0, ADR-0063 결정 9).
 static func breaks_rocks(kind: String) -> bool:
-	return bool(MOBS[kind]["breaks"]) if has(kind) else false
+	var e := _entry(kind)
+	return bool(e["breaks"]) if not e.is_empty() else false
 
 static func reach_tiles(kind: String) -> float:
-	return float(MOBS[kind]["reach"]) if has(kind) else 0.0
+	var e := _entry(kind)
+	return float(e["reach"]) if not e.is_empty() else 0.0
 
 static func cooldown_of(kind: String) -> float:
-	return float(MOBS[kind]["cooldown"]) if has(kind) else 0.0
+	var e := _entry(kind)
+	return float(e["cooldown"]) if not e.is_empty() else 0.0
 
 static func shot_speed(kind: String) -> float:
-	return float(MOBS[kind]["shot_speed"]) if has(kind) else 0.0
+	var e := _entry(kind)
+	return float(e["shot_speed"]) if not e.is_empty() else 0.0
 
 static func is_ranged(kind: String) -> bool:
 	return arch_of(kind) == ARCH_RANGED
@@ -221,8 +360,23 @@ static func spawn_pool(floor_no: int) -> Array:
 		out.append(kind)
 	return out
 
+# ★[S5-T7 / ADR-0063 결정 7] **나락 전용 스폰 풀** — 갱도 `spawn_pool`을 재사용하지 않는다.
+#   저쪽 밴드 축은 60층 상한을 전제로 짜여 있어서, 무한 깊이를 그 표에 흘리면 41층+ 갱도 종이
+#   깊이 999에도 그대로 나오는(= 나락이 갱도의 연장이 되는) 오염이 생긴다. 표가 갈린 이상 풀도 갈린다.
+#   ★ 여기 나오는 건 나락 3종뿐이다 — 갱도 잡귀는 한 마리도 안 섞인다(narak_run_test가 단언).
+static func narak_pool(depth: int) -> Array:
+	var out: Array = []
+	if depth < 1:
+		return out
+	for kind: String in _NARAK_ORDER:
+		if depth < int(NARAK_MOBS[kind]["floor_min"]):
+			continue
+		out.append(kind)
+	return out
+
 static func weight_of(kind: String) -> int:
-	return int(MOBS[kind]["weight"]) if has(kind) else 0
+	var e := _entry(kind)
+	return int(e["weight"]) if not e.is_empty() else 0
 
 # 가중 롤 — rng를 **인자로 받는다**(시드 소유·순차 소비 순서는 배치 쪽 책임. WeaponCatalog.roll_damage
 # 와 같은 판단). 풀이 비면 ""(호출 측이 스폰을 건너뛴다).

@@ -138,6 +138,12 @@ const JEOSEUNG_IKKI := "jeoseung_ikki"            # 저승 이끼 — 성숙목 
 #   그래서 드랍률(55~80%)을 함께 계산해 기대값이 광맥 한 칸 근처에 앉게 잡았다.
 const NEOKGARU := "neokgaru"                      # 넋가루 — 흩어진 잡귀가 남기는 회백색 가루(범용)
 const HONBULSSI := "honbulssi"                    # 혼불씨 — 잡귀 속에 남은 불씨(심층 종 산출)
+# ★[S5-T7 / ADR-0063 결정 7] 관문 보스 확정 드랍 — 카페 프리미엄 소재. *명명 잠정*(owner 큐):
+#   「나락혼정(奈落魂精)」 = 혼탄·혼불씨의 혼(魂) 계열 위에 얹은 최상위 등급(불씨 → 정수).
+#   ★ **소비처는 S6**(카페 가공)이라 지금 실효 범위는 소지·판매까지다 — 벌목 씨앗 3종이 "팔리기만
+#     하는 상태"로 S4를 넘긴 선례 동형. 값 480은 보스 한 기의 시간 대가(수십 층 하강 + 500~1200 HP)를
+#     혼불씨 26의 십수 배로 잡은 *잠정치*이고, 지금은 판매 외 쓰임이 없어 되돌리기가 상수 수준이다.
+const NARAK_HONJEONG := "narak_honjeong"          # 나락혼정 — 관문 보스 확정 드랍(카페 프리미엄 소재)
 const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 별 상수라 여기 제외)
 	SOUL_FIBER: {"name_ko": "혼백 섬유", "price": 4},
 	EMBER_SHARD: {"name_ko": "업화석 조각", "price": 12},
@@ -156,6 +162,8 @@ const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 
 	# ★[S5-T5] 잡귀 부산물 2종(갱도 잡귀 처치 드랍)
 	NEOKGARU: {"name_ko": "넋가루", "price": 14},
 	HONBULSSI: {"name_ko": "혼불씨", "price": 26},
+	# ★[S5-T7] 관문 보스 드랍(나락 — 카페 프리미엄 소재. 소비처 S6)
+	NARAK_HONJEONG: {"name_ko": "나락혼정", "price": 480},
 }
 
 # ── ★[S5-T2 / ADR-0063 결정 2] 광물 로스터 — 금속 4티어·혼탄·돌·보석 4+1·지오드 2 ────

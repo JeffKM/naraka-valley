@@ -101,14 +101,27 @@ func _initialize() -> void:
 	_check("②e 바깥 여백(3,3) 도달(고리 틈으로 통함 — 봉인 갈라짐)", reach.has(Vector2i(3, 3)))
 	_check("②f 봉인 고리 ROCK 칸(10,6) 도달 불가(통과 X)", not reach.has(Vector2i(10, 6)))
 
-	# ── ③ 진입로 잠김: 나락은 라이브 워프 0(이웃 0) + 아무도 나락으로 워프 안 함(독립) ──
-	_check("③ 나락 워프 0(잠긴 진입로)", RegionCatalog.warps_of(RegionCatalog.NARAK).is_empty())
-	_check("③b 나락 이웃 0(독립)", RegionCatalog.neighbors(RegionCatalog.NARAK).is_empty())
-	var points_to_narak := false
+	# ── ③ ★[S5-T7 / ADR-0063 결정 7·12] 진입로 **점등** ──
+	# 옛 불변식("나락 워프 0 · 이웃 0 · 아무도 나락을 가리키지 않음")은 진입로가 서랍이던 시절의
+	# 위상이다. 지금은 업화 갱도 하나와만 이어진 막다른 구역이고, 인게임 개방 여부는 카탈로그가
+	# 아니라 실행기(`_maybe_warp_edge`의 열쇠 플래그)가 든다 — 그 게이트는 narak_run_test ⑦이 본다.
+	_check("③ 나락 워프 1개(갱도 복귀 — 막다른 구역)",
+		RegionCatalog.warps_of(RegionCatalog.NARAK).size() == 1)
+	_check("③b 나락 이웃 = 업화 갱도 하나",
+		RegionCatalog.neighbors(RegionCatalog.NARAK) == [RegionCatalog.EOPHWA_MINE])
+	var pointers: Array = []
 	for id in RegionCatalog.ids():
 		if RegionCatalog.neighbors(id).has(RegionCatalog.NARAK):
-			points_to_narak = true
-	_check("③c 어느 구역도 나락으로 워프 안 함(잠긴 진입로)", not points_to_narak)
+			pointers.append(id)
+	_check("③c 나락을 가리키는 구역 = 업화 갱도 하나(대칭 · 다른 경로 없음)",
+		pointers == [RegionCatalog.EOPHWA_MINE])
+	# 아레나 하강 구멍 — 런의 진입로다(순수 상호작용 칸이라 통행은 막지 않는다).
+	_check("③d 하강 구멍 칸이 아레나 안이고 걸을 수 있다(순수 상호작용 — 그리드 불변)",
+		_walkable(m, m.NARAK_SHAFT_TILE) and reach.has(m.NARAK_SHAFT_TILE))
+	_check("③e 런 퇴장 착지 칸도 걸을 수 있다(구멍 위가 아니다 — 되빨림 방지)",
+		_walkable(m, m.NARAK_SURFACE_RETURN) and m.NARAK_SURFACE_RETURN != m.NARAK_SHAFT_TILE)
+	_check("③f 갱도 쪽 워프 도착 칸도 아레나 안(진입 직후 안 갇힌다)",
+		_walkable(m, Vector2i(32, 10)))
 
 	# ── ④ 회귀 0: 나락 구역 enterable 건물 0 + 홈 집 출입 불변 ──
 	var narak_buildings := 0

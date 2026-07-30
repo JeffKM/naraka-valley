@@ -102,7 +102,9 @@ func _initialize() -> void:
 			else:
 				_check("④b'' '%s'→'%s' 도착 칸 TBD(목적 구역 미빌드)" % [id, w["to"]],
 					w["dest"] == RegionCatalog.TILE_TBD)
-	# 대칭: A가 B를 이웃으로 두면 B도 A를 둔다(나락 제외 — 진입로 미정).
+	# 대칭: A가 B를 이웃으로 두면 B도 A를 둔다.
+	# ★[S5-T7 / ADR-0063 결정 12] 옛 "나락 제외 — 진입로 미정" 단서가 **사라졌다**: 나락 진입로가
+	#   점등돼(열쇠 게이트) 나락도 대칭 간선을 갖는 정상 구역이다. 예외 없는 전수 검사가 됐다.
 	for id in ids:
 		for nb in RegionCatalog.neighbors(id):
 			_check("④c 토폴로지 대칭 '%s'↔'%s'" % [id, nb], RegionCatalog.neighbors(nb).has(id))
@@ -112,16 +114,24 @@ func _initialize() -> void:
 	_check("④d 나루 마을 = 허브(이웃 3)", RegionCatalog.neighbors(RegionCatalog.NARU_VILLAGE).size() == 3)
 	_check("④d2 워프 칸은 4개(삼도천 다리 남단 2칸) — 칸 수 ≠ 이웃 수",
 		RegionCatalog.warps_of(RegionCatalog.NARU_VILLAGE).size() == 4)
-	# 나락 = 독립(이웃 0, 진입로 빌드 시 확정).
-	_check("④e 나락 = 독립(이웃 0)", RegionCatalog.neighbors(RegionCatalog.NARAK).is_empty())
+	# ★[S5-T7 / ADR-0063 결정 7·12] **불변식 의도적 개정** — 옛 "나락 = 독립(이웃 0)"은 진입로가
+	#   서랍이던 시절의 위상이다. 이제 나락은 업화 갱도와만 이어진 **막다른 구역**이고(이웃 1),
+	#   갱도 쪽에서도 나락이 이웃으로 선다. 인게임 개방 여부(열쇠 플래그)는 카탈로그가 아니라
+	#   실행기가 들므로 위상 검사와는 축이 다르다 — 그 게이트는 narak_run_test ⑦이 본다.
+	_check("④e 나락 = 막다른 구역(이웃 1 = 업화 갱도)",
+		RegionCatalog.neighbors(RegionCatalog.NARAK) == [RegionCatalog.EOPHWA_MINE])
+	_check("④e2 나락 워프 1개(갱도 복귀) — 진입로 점등(옛 warps=[] 서랍 종료)",
+		RegionCatalog.warps_of(RegionCatalog.NARAK).size() == 1)
 	# home은 허브(나루 마을)와 이어진다.
 	_check("④f home↔나루 마을 연결", RegionCatalog.neighbors(RegionCatalog.HOME) == [RegionCatalog.NARU_VILLAGE])
 	# ★ M5.1 정규 토폴로지 복원: 나루 마을 ──(산길)── 업화 갱도 ──(숲길)── 저승 숲(M4.1 임시 우회 종료).
 	_check("④g 나루 마을 이웃에 업화 갱도(산길 정규 복원)", RegionCatalog.neighbors(RegionCatalog.NARU_VILLAGE).has(RegionCatalog.EOPHWA_MINE))
-	_check("④h 업화 갱도 이웃 = 나루 마을·저승 숲(2)",
+	# ★[S5-T7 / ADR-0063 결정 12] 갱도 이웃이 2 → **3**으로 늘었다(나락 진입로 점등).
+	_check("④h 업화 갱도 이웃 = 나루 마을·저승 숲·나락(3)",
 		RegionCatalog.neighbors(RegionCatalog.EOPHWA_MINE).has(RegionCatalog.NARU_VILLAGE)
 		and RegionCatalog.neighbors(RegionCatalog.EOPHWA_MINE).has(RegionCatalog.JEOSEUNG_FOREST)
-		and RegionCatalog.neighbors(RegionCatalog.EOPHWA_MINE).size() == 2)
+		and RegionCatalog.neighbors(RegionCatalog.EOPHWA_MINE).has(RegionCatalog.NARAK)
+		and RegionCatalog.neighbors(RegionCatalog.EOPHWA_MINE).size() == 3)
 	_check("④i 저승 숲↔나루 마을 직결 없음(임시 우회 종료)", not RegionCatalog.neighbors(RegionCatalog.JEOSEUNG_FOREST).has(RegionCatalog.NARU_VILLAGE))
 
 	# ── ⑤ 미지 id 방어: 조회가 안전한 빈값을 돌려준다(크래시 X) ──
