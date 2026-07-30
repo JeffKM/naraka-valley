@@ -15,7 +15,7 @@
 
 ## 🧭 지금 위치 & 남은 작업
 
-**현재:** **Slice 1R·2·3·4·5 ✅ 연속 종결**(1R=2026-07-27 리메이크 12/12 · 2=2026-07-27 나루 T1~T11·PR#266~276·옥자 데모 체크포인트 도달 · 3=2026-07-28 낚시 T1~T11·PR#277~287 · 4=2026-07-30 채집·목공 T1~T11·PR#288~297·[ADR-0062](./docs/adr/0062-slice4-forest-foraging-woodwork-kickoff.md) · **5=2026-07-31 업화 갱도·나락 채광·전투 T1~T11·PR#298~308**·[ADR-0063](./docs/adr/0063-slice5-mine-floors-combat-naraku-kickoff.md)) — **Slice 6 착수 self-grill ✅ 완료(2026-07-31 · [ADR-0064](./docs/adr/0064-slice6-cafe-fusion-menu-larder-serving-kickoff.md) 결정 12건·shrimp S6-T1~T10) — 다음 = S6-T1 메뉴·곳간·서빙 코어부터 빌드**. owner 큐 검토 대기 항목(라이브 확인·잠정 결정)은 `docs/owner-review-queue.md`. forward 진실원천 = 아래 [빌드 슬라이스 계획].
+**현재:** **Slice 1R·2·3·4·5 ✅ 연속 종결**(1R=2026-07-27 리메이크 12/12 · 2=2026-07-27 나루 T1~T11·PR#266~276·옥자 데모 체크포인트 도달 · 3=2026-07-28 낚시 T1~T11·PR#277~287 · 4=2026-07-30 채집·목공 T1~T11·PR#288~297·[ADR-0062](./docs/adr/0062-slice4-forest-foraging-woodwork-kickoff.md) · **5=2026-07-31 업화 갱도·나락 채광·전투 T1~T11·PR#298~308**·[ADR-0063](./docs/adr/0063-slice5-mine-floors-combat-naraku-kickoff.md)) — **Slice 6 진행 중(착수 self-grill ✅ 2026-07-31 · [ADR-0064](./docs/adr/0064-slice6-cafe-fusion-menu-larder-serving-kickoff.md) 결정 12건·shrimp S6-T1~T10) — S6-T1 메뉴·곳간·서빙 코어 ✅(PR#309), 다음 = S6-T2 주문 위상·폴백·해금**. owner 큐 검토 대기 항목(라이브 확인·잠정 결정)은 `docs/owner-review-queue.md`. forward 진실원천 = 아래 [빌드 슬라이스 계획].
 
 **다음 빌드 순서 (owner 확정 2026-07-22 개정 — Slice 1R 최우선 선행):**
 
@@ -216,6 +216,7 @@ graph TD
 - **의존:** **Slice 1(작물) + Slice 3(낚시)** — 융합 메뉴 합류점 [+ S4 채집·S5 채광 산출물 기회적] · **병렬:** W2의 Slice 7과 동시 가능 · **후행 차단:** S7·S8이 카페 루프 위에 얹힌다.
 - **메카닉([ADR-0029](./docs/adr/0029-cafe-relationship-stage-domain-aligned-rewards.md)):** 융합 메뉴(실제 컨셉카페 메뉴×저승 산출물)·곳간(larder)·소프트 시간 분할·플레이어=프리미엄 성장 엔진·도메인 일치 당근(멜=마진·바나=던전 공급·카페 일구기=옥자/미호/멜 affinity 게이트)·단골=조연 캐스트·체키 100%→칵테일. **작물+물고기 합류점**이라 낚시(Slice 3)·채집 뒤. 카페 내부 룩=작가주도.
 - **착수 grill ✅ ([ADR-0064](./docs/adr/0064-slice6-cafe-fusion-menu-larder-serving-kickoff.md), 2026-07-31 — 결정 12건):** ①카페 가공=곳간→융합 메뉴(개별 아티산 설비·벌통 비채택 서랍 — 주방요괴=백스테이지 추상·실내 가공기 구조 대공사 회피) ②메뉴 2단(기본 3~4종 35냥/융합 ~12종=시그니처 1종 1개 차감·×2.5 잠정·**명명=owner 실제 메뉴판 대조 대기 1순위**) ③곳간=larder.gd(품질 무차원 평 dict·냉장고 가상 연결 비채택 — 명시 적재=선택 텍스처) ④주문 결정 롤·기본 폴백(이탈 0) ⑤사슬 S6=응대+체키(ChekiSession)·그림/편지 후속 ⑥칵테일=체키 뒤 순차 ⑦**마일스톤 재정의: 하트=미호+멜(바나 제외)·옥자 축=매출 대변**(ADR-0032 해석 — owner 결재 대상) ⑧손님 풀=현행 주민 재사용+T3 볼륨·단골화=방문 가중치(♡ 분리) ⑨메뉴 CAT_CONSUMABLE·혼력 회복 일부·버프 서랍 ⑩해금=발견 게이트·관계 게이트 0·TV/우편 비채택 ⑪T1 실버그 2건(`_cheapest_harvest` CropCatalog 조회) ⑫서랍 경계·문서 부채(ADR-0009 게이트 언어=ADR-0028 폐지 확인). 리서치 3축(코드·위키 미러·문서) 근거. 카탈로그 §1-G 빌드 확정 블록 동반. **shrimp S6-T1~T10 등록 완료**(T1 메뉴·곳간 코어→T2 주문→T3 마일스톤→T4 손님 풀→T5 체키→T6 칵테일→T7 곁들이→T8/T9 아트→T10 통합 — 의존 그래프 포함).
+- **빌드 진행:** **T1 ✅(2026-07-31 · PR#309)** — menu_catalog.gd(기본 4종 정액 35냥·융합 12종=시그니처 1종 1개 차감·가격 ×2.5 런타임 파생·명명 잠정=`raw` 대조표)·larder.gd(shipping_bin 문법·품질 무차원 평 dict·용량 30·세이브 "larder")·main 배선(LARDER_TILE (9,88)=출하함 대칭·CTX_LARDER·[우클릭/F])·**실버그 2건 봉합**(`_cheapest_harvest`·서빙 알림 CropCatalog→ItemCatalog — 비-작물 가격 0으로 최저가 선택이 역전되던 잠복 버그·`_raid_inventory` 동시 수혜)·`ids_in_category()` 신설. 신규 91단언+회귀 13종+`cafe_larder_dump` 육안 하네스.
 
 ### Slice 7 — 계절·날씨·축제 (cross-cutting 얹기)
 - **의존:** Slice 1~6 (cross-cutting — 모든 루프에 절기 작물·어종·사멸·테마데이를 얹음) · **병렬:** Slice 8과 동시 가능(둘 다 활동 루프 위에 독립적으로 얹힘).
