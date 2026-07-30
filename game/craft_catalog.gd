@@ -31,6 +31,7 @@ const RARE_SEED_MYEONGWOL := "rare_seed_myeongwol"
 const RARE_SEED_SEORI_HONBAEK := "rare_seed_seori_honbaek"
 const TAPPER := "tapper"
 const FURNACE := "furnace"   # ★[S5-T3] 업화로(ADR-0063 결정 3)
+const STAIRS := "stairs"     # ★[S5-T8] 계단(ADR-0063 결정 10)
 
 # ── 카탈로그. 키 = 레시피 id ────────────────────────────────────────────────
 # 필드:
@@ -88,12 +89,20 @@ static func catalog() -> Dictionary:
 		FURNACE: {"name_ko": "업화로", "out_item": ItemCatalog.FURNACE,
 			"out_count": 1, "unlock_level": 0, "unlock_species": "",
 			"mats": [{"item": ItemCatalog.STONE, "count": 25}, {"item": ItemCatalog.ORE_MYEONGDONG, "count": 20}]},
+		# ★[S5-T8 / ADR-0063 결정 10] 계단 — 돌 99 → 1개(스타듀 Staircase 1:1).
+		# ★ **채광 레벨 축의 첫 레시피**다(unlock_skill_level — unlocked() 주석 참조). 업화로가
+		#   "채광 레시피에 채집 계단을 물리면 축이 어긋난다"며 상시 노출로 피해 갔던 문제를, 여기선
+		#   축을 하나 더 열어 정면으로 푼다 — 결정 10이 "채광 Lv2 해금"을 명시했고 재료 게이트로는
+		#   대체할 수 없다(돌 99개는 Lv0에도 모인다).
+		STAIRS: {"name_ko": "계단", "out_item": ItemCatalog.STAIRS,
+			"out_count": 1, "unlock_level": 0, "unlock_species": "", "unlock_skill_level": 2,
+			"mats": [{"item": ItemCatalog.STONE, "count": 99}]},
 	}
 
 # 레시피 id 목록(카탈로그 정의 순서 = 제작 탭 표시 순서 — 해금 레벨 오름 결).
 static func ids() -> Array:
 	# ★ 업화로가 맨 앞 = 해금 레벨 0(오름 결 보존 — 상시 노출이라 목록 첫 줄이 자연스럽다).
-	return [FURNACE, WILD_SEEDS_PIAN, TAPPER, WILD_SEEDS_YUHWA, WILD_SEEDS_MANGYEON,
+	return [FURNACE, STAIRS, WILD_SEEDS_PIAN, TAPPER, WILD_SEEDS_YUHWA, WILD_SEEDS_MANGYEON,
 		RARE_SEED_MIHOK_NANCHO, RARE_SEED_YURYEONGCHO, RARE_SEED_MYEONGWOL, RARE_SEED_SEORI_HONBAEK,
 		WILD_SEEDS_SEONGYA]
 
@@ -103,15 +112,27 @@ static func has(id: String) -> bool:
 static func get_recipe(id: String) -> Dictionary:
 	return catalog().get(id, {})
 
-# 해금됐는가 = 채집 레벨 + (있다면) 종 발견. found = main의 발견 원장 {species_id: true}.
-static func unlocked(id: String, forage_level: int, found: Dictionary) -> bool:
+# 해금됐는가 = 채집 레벨 + (있다면) 종 발견 + ★[S5-T8] (있다면) 그 레시피가 지정한 **다른 스킬 레벨**.
+#   skill_level = 그 세 번째 축의 현재 값(계단 = 채광 레벨). 인자 기본값 0이라 **무인자 기존 호출은
+#   거동 불변**이고(craft_test의 3인자 단언 전량 통과), `unlock_skill_level` 키가 없는 레시피 9종은
+#   이 축을 아예 안 본다. 축 이름을 레시피에 안 적는 이유: 지금 두 번째 축이 하나뿐이라 카탈로그가
+#   "어느 스킬인가"를 알 필요가 없다 — 값을 뽑아 넣는 쪽(main)이 그걸 안다(퍼크 _perk_value와 같은
+#   경계: 카탈로그는 float/int 하나를 받고 그 의미는 호출부가 든다). ★잠정(축이 둘 이상이 되면 키에
+#   스킬 id를 실어야 한다 — owner 큐).
+static func unlocked(id: String, forage_level: int, found: Dictionary, skill_level: int = 0) -> bool:
 	if not has(id):
 		return false
 	var r := get_recipe(id)
 	if forage_level < int(r["unlock_level"]):
 		return false
+	if skill_level < int(r.get("unlock_skill_level", 0)):
+		return false
 	var sp := String(r["unlock_species"])
 	return sp == "" or found.get(sp, false)
+
+# 이 레시피가 요구하는 2차 스킬 레벨(0 = 없음) — 제작 탭 행이 잠금 사유를 적을 때 읽는다.
+static func skill_gate_of(id: String) -> int:
+	return int(get_recipe(id).get("unlock_skill_level", 0))
 
 # 재료가 전부 있는가. counts = Callable(item_id) -> int (인벤 보유량 조회 주입 — 카탈로그는 인벤 무지).
 static func can_craft(id: String, counts: Callable) -> bool:

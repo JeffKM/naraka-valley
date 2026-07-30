@@ -283,8 +283,10 @@ func _run_checks() -> void:
 	_check("ⓖf 품질 배수도 어획물과 같은 공식",
 		ItemCatalog.price_of(ItemCatalog.NEOK_GE, ItemCatalog.Q_GOLD)
 		== int(ItemCatalog.POT_GOODS[ItemCatalog.NEOK_GE]["price"] * ItemCatalog.quality_mult(ItemCatalog.Q_GOLD)))
-	_check("ⓖg 어종 로스터는 안 오염된다(18종 불변 · 통용물은 _is_fish 아님)",
-		FishCatalog.ids().size() == 18 and not ItemCatalog._is_fish(ItemCatalog.NEOK_GE)
+	# ★[S5-T8] 18 → 20(갱도 호수 2종 합류 — ADR-0063 결정 10). 이 단언의 요지는 **통용물이 어종
+	#   로스터에 안 섞인다**는 것이지 로스터 크기가 아니다. 갱도 어종은 낚싯대 산출이라 정상 합류다.
+	_check("ⓖg 어종 로스터는 안 오염된다(20종 · 통용물은 _is_fish 아님)",
+		FishCatalog.ids().size() == 20 and not ItemCatalog._is_fish(ItemCatalog.NEOK_GE)
 		and ItemCatalog._is_seafood(ItemCatalog.NEOK_GE))
 	# 환전(생선가게) — 어획물과 같은 창구·같은 공식.
 	m.inventory.remove_item(ItemCatalog.NEOK_GE, m.inventory.count_of(ItemCatalog.NEOK_GE))

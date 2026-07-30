@@ -116,8 +116,13 @@ static func xp_for_node(node_id: String) -> int:
 #                            (광부 "광맥당 +1" · 지질사 "보석 쌍 확률" — 실 인코딩은 S5-T8)
 # ★ main이 인벤토리·알림·XP 적립을 하고, 여기선 "무엇이 몇 개 나오나"만 정한다(무상태).
 # ★[S5-T7] `ns` = 무대 네임스페이스(roll_crit 주석 참조 — 기본 "mine"이라 기존 호출부 불변).
+# ★[S5-T8 / ADR-0063 결정 9] 퍼크 인자 2개 추가(둘 다 기본값이 정확히 중립 — 무인자 기존 호출의
+#   결과열은 한 톨도 안 변한다. rng 소비 순서도 안 건드린다 = 결정성 보존):
+#   coal_double  = 탐광자 "혼탄 광맥 산출 2배"(flag > 0 = 2배) — 광석엔 안 걸린다(혼탄 전용 축)
+#   gem_rank     = 보석사 "보석 한 계급 위"(계단 N) — **드랍 종 자체가 갈린다**(품질 축이 아니다)
 static func resolve_drop(node_id: String, day: int, floor_no: int, tile: Vector2i,
-		level: int, ore_bonus_n: int = 0, gem_pair: float = 0.0, ns: String = "mine") -> Dictionary:
+		level: int, ore_bonus_n: int = 0, gem_pair: float = 0.0, ns: String = "mine",
+		coal_double: float = 0.0, gem_rank: int = 0) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("%s_drop:%d:%d:%d:%d" % [ns, day, floor_no, tile.x, tile.y])
 	var drops: Array = []
@@ -135,16 +140,45 @@ static func resolve_drop(node_id: String, day: int, floor_no: int, tile: Vector2
 	if cls == "":
 		cls = NarakFloors.node_class(node_id)
 	var count := GEM_YIELD
+	var drop_id := node_id
 	if cls == MineFloors.NODE_ORE or cls == MineFloors.NODE_COAL:
 		count = rng.randi_range(ORE_MIN, ORE_MAX) + maxi(ore_bonus_n, 0)   # 광부 퍼크 +N
 		if roll_crit(day, floor_no, tile, level, ns):
 			count *= 2                                                     # ★크리 채굴 = 광석 2배
 			out["crit"] = true
-	elif cls == MineFloors.NODE_GEM and rng.randf() < clampf(gem_pair, 0.0, 1.0):
-		count = 2                                                          # 지질사 퍼크 — 보석 쌍
-	drops.append({"id": node_id, "count": count})
-	out["xp"] = xp_for_node(node_id)
+		# ★[S5-T8] 탐광자 — 혼탄 **광맥에만** 2배(광석 티어엔 안 걸린다. 크리와 곱해져 최대 4배가
+		#   되지만 혼탄은 연료라 가격 곡선이 얇고, "연료 걱정 없이 제련한다"가 이 전문직의 값이다).
+		if cls == MineFloors.NODE_COAL and coal_double > 0.0:
+			count *= 2
+	elif cls == MineFloors.NODE_GEM:
+		if rng.randf() < clampf(gem_pair, 0.0, 1.0):
+			count = 2                                                      # 지질사 퍼크 — 보석 쌍
+		drop_id = gem_upgrade(node_id, gem_rank)                           # 보석사 퍼크 — 한 계급 위
+	drops.append({"id": drop_id, "count": count})
+	out["xp"] = xp_for_node(node_id)   # ★XP는 **캔 광맥**의 값이다(승급한 드랍이 아니라 — 퍼크가
+	                                   #   스킬 곡선을 가속하면 비-가치 축을 넘는다)
 	return out
+
+# ── ★[S5-T8] 보석 계급 사다리(보석사 퍼크의 유일한 규칙) ─────────────────────
+# 넋수정 → 명옥 → 염주석 → 명부금강. **오색혼옥은 사다리 밖**이다(초희귀 드랍이라 퍼크로 닿으면
+# "평생 몇 번" 이라는 위상이 무너진다 — 전설 어종을 미끼로 못 부르는 것과 같은 판단).
+# 계급 축을 여기 두는 이유: MineFloors.NODE_TABLE의 밴드 게이팅과 **다른 축**이라서다(그쪽은
+# "몇 층에 깔리나", 이쪽은 "깬 것이 무엇으로 나오나"). 상한은 명부금강에서 클램프된다.
+# ★ const가 아니라 static func인 이유 = FurnaceLedger.ingot_for와 같다 — const 초기화식에서 타
+#   클래스 상수를 참조하지 않는다(광물 id의 단일 출처는 MineFloors/ItemCatalog다).
+static func gem_ladder() -> Array[String]:
+	return [MineFloors.N_GEM_NEOKSUJEONG, MineFloors.N_GEM_MYEONGOK,
+		MineFloors.N_GEM_YEOMJUSEOK, MineFloors.N_GEM_MYEONGBU]
+
+# 이 보석 id를 step 계단 위로 승급시킨 id. step ≤ 0이거나 사다리 밖(지오드 등)이면 그대로다.
+static func gem_upgrade(gem_id: String, step: int) -> String:
+	if step <= 0:
+		return gem_id
+	var ladder := gem_ladder()
+	var i := ladder.find(gem_id)
+	if i < 0:
+		return gem_id
+	return String(ladder[mini(i + step, ladder.size() - 1)])
 
 # ── ★[S5-T3 / ADR-0063 결정 2·3] 지오드(알돌) 개봉 — 대장간 서비스 개당 25냥 ────
 # 클린트 1:1의 저승판. **여기 사는 이유**: 개봉은 "무엇이 몇 개 나오나"의 순수 롤이라 드랍
@@ -229,15 +263,14 @@ static func open_geode(geode_id: String, counter: int, double_ch: float = 0.0) -
 		n = 2
 	return {"id": pick, "count": n}
 
-# 발굴자(DIM_EXCAVATE) — 지오드 개봉 2배 확률(0..1). ★차원 상수 자체는 S5-T8이 신설한다
-#   (지금은 main이 0.0을 넘기는 인자 자리 — ore_bonus·gem_pair 해석기와 같은 결).
+# 발굴자(ProfessionCatalog.DIM_GEODE_DOUBLE) — 지오드 개봉 2배 확률(0..1). ★[S5-T8] 차원 상수가
+#   신설되며 실효됐다(카탈로그 값 1.0 = 유품을 뺀 전 산출이 2개 — open_geode가 유품을 제외한다).
 static func geode_double_chance(perk: float) -> float:
 	return clampf(perk, 0.0, 1.0)
 
 # ── 퍼크 해석(main._perk_value가 뽑은 float → 의미) ──────────────────────────
-# ★ 지금은 셋 다 0(중립)만 들어온다 — ProfessionCatalog의 채광 트리 perks가 아직 비어 있고
-#   그 인코딩이 S5-T8 소관이기 때문이다. ForageSkill의 "미배선 퍼크 3종"과 정확히 같은 자리로,
-#   T8은 카탈로그 데이터만 채우면 아래 해석기와 main의 조회가 그대로 실효된다(호출부 무변경).
+# ★[S5-T8] 예고대로 **카탈로그 데이터만 채워 실효됐다** — 아래 해석기 시그니처는 T2/T3 시점에서
+#   한 줄도 안 바뀌었고, main의 조회 함수도 `_perk_value` 인자만 실제 차원으로 채웠다.
 # 광부(DIM_ORE_BONUS) — 광맥당 광석 +N. 카탈로그 정의값이 곧 N이다(수치 복제 0).
 static func ore_bonus(perk: float) -> int:
 	return int(maxf(perk, 0.0))
@@ -245,3 +278,20 @@ static func ore_bonus(perk: float) -> int:
 # 지질사(DIM_GEM_PAIR) — 보석이 쌍으로 나올 확률(0..1).
 static func gem_pair_chance(perk: float) -> float:
 	return clampf(perk, 0.0, 1.0)
+
+# 탐광자(DIM_COAL_DOUBLE) — 혼탄 광맥 2배 여부(flag). 확률이 아니라 **확정 2배**다: 연료는 곡선의
+# 바닥이라 "가끔 두 배"보다 "늘 두 배"가 읽히고, 그 값이 곧 제련 회전율이다.
+static func coal_double(perk: float) -> bool:
+	return perk > 0.0
+
+# 보석사(DIM_GEM_RANK) — 보석 계급 계단 +N(gem_upgrade의 step 인자).
+static func gem_rank_step(perk: float) -> int:
+	return int(maxf(perk, 0.0))
+
+# 제련공(DIM_SMELT_TIME) — 제련 시간 단축 비율(0..0.9 — FurnaceLedger.smelt_minutes가 클램프한다).
+static func smelt_time_cut(perk: float) -> float:
+	return clampf(perk, 0.0, 0.9)
+
+# 제련공(DIM_INGOT_QUALITY) — 주괴 등급 계단 +N(FurnaceLedger.quality_for의 step 인자).
+static func ingot_quality_step(perk: float) -> int:
+	return int(maxf(perk, 0.0))

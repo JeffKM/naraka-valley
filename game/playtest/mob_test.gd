@@ -385,10 +385,13 @@ func _initialize() -> void:
 	# ★[S5-T6] 'chest' 키가 하나 더 늘어 10키다(보상 층 상자 자리 — 비-보상 층은 (-1,-1)).
 	#   ★키가 늘어도 **배치 값은 안 흔들린다**: 상자 자리는 RNG를 안 쓰고 계산으로 나온다
 	#     (위 ④a/④b 골든 서명이 그 불변을 계속 잠근다 · guild_test ⓙ도 같은 표를 본다).
-	_check("④d 층 배치에 'mobs'·'chest' 키가 늘었을 뿐 기존 7키는 그대로",
-		MineFloors.generate(5, 1).size() == 10
+	# ★[S5-T8] 'shimmers'(바닥 반짝이)가 하나 더 늘어 11키다. 반짝이 롤은 **스트림 맨 뒤**(몹 뒤)라
+	#   위 ④a/④b 골든 서명·④c 노드 서명이 그대로 통과한다 = 값이 안 흔들렸다는 직접 증거다.
+	_check("④d 층 배치에 'mobs'·'chest'·'shimmers' 키가 늘었을 뿐 기존 7키는 그대로",
+		MineFloors.generate(5, 1).size() == 11
 		and MineFloors.generate(5, 1).has("rocks") and MineFloors.generate(5, 1).has("nodes")
-		and MineFloors.generate(5, 1).has("mobs") and MineFloors.generate(5, 1).has("chest"))
+		and MineFloors.generate(5, 1).has("mobs") and MineFloors.generate(5, 1).has("chest")
+		and MineFloors.generate(5, 1).has("shimmers"))
 	_check("④e 범위 밖 층은 여전히 빈 Dictionary(61층 거부)", MineFloors.generate(5, 61).is_empty())
 
 	# ── ⑤ 아키타입 ① 통통(멈춤 ↔ 돌진) ───────────────────────────────────────
@@ -792,9 +795,11 @@ func _initialize() -> void:
 			mob_key = true
 	_check("⑮b **세이브에 몹 키 0**(층 한정 비영속 — 처치 원장도 없다)",
 		not mob_key and not saved.has("mobs"))
-	# ★[S5-T6] 'chests'(연 보상 상자 — 영구)가 붙어 6키다. 몹은 여전히 0키다(비영속 — ⑮b가 잠근다).
-	_check("⑮c 층 원장 세이브 스키마(depth·day·mined·ladders·node_hits·chests 6키 · 몹 0키)",
-		(saved["mine"] as Dictionary).size() == 6 and (saved["mine"] as Dictionary).has("chests"))
+	# ★[S5-T6] 'chests'(연 보상 상자 — 영구)가 붙어 6키. ★[S5-T8] 'picked'(주운 반짝이 — day-한정)가
+	#   붙어 7키다. 몹은 여전히 0키다(비영속 — ⑮b가 잠근다).
+	_check("⑮c 층 원장 세이브 스키마(depth·day·mined·ladders·node_hits·chests·picked 7키 · 몹 0키)",
+		(saved["mine"] as Dictionary).size() == 7 and (saved["mine"] as Dictionary).has("chests")
+		and (saved["mine"] as Dictionary).has("picked"))
 	# 층 이탈 → 소멸.
 	m._ascend_mine_to_surface()
 	await _settle(m)

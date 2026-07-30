@@ -43,7 +43,8 @@ func _run_checks() -> void:
 	print("── ① 카탈로그 무결성 ──")
 	var ids: Array = CraftCatalog.ids()
 	# ★[S5-T3 / ADR-0063 결정 3] 9 → 10: 업화로 레시피가 합류했다(의도적 불변식 개정).
-	_check("①a 레시피 10종(★S5-T3 업화로 합류)", ids.size() == 10)
+	# ★[S5-T8 / ADR-0063 결정 10] 10 → 11: 계단 레시피가 합류했다(같은 결의 의도적 개정).
+	_check("①a 레시피 11종(★S5-T3 업화로 · ★S5-T8 계단 합류)", ids.size() == 11)
 	var all_ok := true
 	for id in ids:
 		var r: Dictionary = CraftCatalog.get_recipe(id)
@@ -114,7 +115,7 @@ func _run_checks() -> void:
 	# ── ⑥ 제작 탭 행 데이터 ──
 	print("── ⑥ 제작 탭 행 ──")
 	var rows: Array = m._craft_rows()
-	_check("⑥a 10행·id/이름 채움", rows.size() == 10 and String(rows[0]["name"]) != "")
+	_check("⑥a 11행·id/이름 채움", rows.size() == 11 and String(rows[0]["name"]) != "")
 	var locked_seen := false
 	for row in rows:
 		if not bool(row["unlocked"]):

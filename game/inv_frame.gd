@@ -657,9 +657,19 @@ func _draw_craft_tab(panel: Rect2, _font: Font) -> void:
 				HanjiUi.INK_DIM)
 		else:
 			HanjiUi.draw_plate(self, r, 0.35)
-			var need := "채집 Lv.%d" % int(row.get("unlock_level", 0))
+			# ★[S5-T8] 해금 조건을 **항목 목록**으로 조립한다 — 채집 계단 외에 2차 스킬 축(계단
+			#   레시피의 채광 Lv)이 생겨, 옛 "채집 Lv.N" 한 줄 고정으로는 잠금 사유가 거짓이 된다
+			#   (계단은 채집 Lv.0이라 "채집 Lv.0 필요"라고 적히던 자리).
+			var need_parts: Array[String] = []
+			var need_forage := int(row.get("unlock_level", 0))
+			if need_forage > 0:
+				need_parts.append("채집 Lv.%d" % need_forage)
+			var need_skill := int(row.get("skill_gate", 0))
+			if need_skill > 0:
+				need_parts.append("%s Lv.%d" % [String(row.get("skill_gate_label", "숙련")), need_skill])
 			if String(row.get("needs_species", "")) != "":
-				need += " + 야생에서 먼저 발견"
+				need_parts.append("야생에서 먼저 발견")
+			var need := " + ".join(need_parts) if not need_parts.is_empty() else "-"
 			HanjiUi.draw_text(self, Vector2(x, y), "[잠김] %s" % String(row.get("name", "")), 13, HanjiUi.INK_DIM)
 			HanjiUi.draw_text(self, Vector2(x, y + 15.0), "해금: %s" % need, 11, HanjiUi.INK_DIM)
 		y += 40.0

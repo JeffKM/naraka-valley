@@ -212,6 +212,7 @@ static func elevator_floors(depth: int) -> Array[int]:
 #   · ladder   = 내려가는 사다리 1개 **확정 배치**(스타듀 95%→100% 단순화 — 갇힘 방지)
 #   · rocks    = 깰 수 있는 돌 좌표(★S5-T2에서도 **불변** — 노드는 이 목록 위의 오버레이다)
 #   · nodes    = ★[S5-T2] {Vector2i: 노드 종 id} — `rocks`의 부분집합만 키로 갖는다
+#   · shimmers = ★[S5-T8] [{"id","tile"}] 바닥 반짝이 0~2개(돌·사다리·입구·상자 칸과 배타)
 # 범위 밖 층은 **빈 Dictionary**를 돌려준다(61층 거부 — 호출 측이 is_empty로 가른다).
 static func generate(day: int, floor_no: int) -> Dictionary:
 	if not is_valid_floor(floor_no):
@@ -275,6 +276,10 @@ static func generate(day: int, floor_no: int) -> Dictionary:
 	# ⑨ ★[S5-T6] 보상 층 상자 자리 — **RNG를 안 쓴다**(방 중심 최근접 빈 칸 계산. chest_tile 주석 참조).
 	#    비-보상 층은 (-1,-1)이라 "상자 없음"이 값 하나로 표현된다.
 	out["chest"] = chest_tile(out)
+	# ⑩ ★[S5-T8] 바닥 반짝이(줍기 광물) — 순차 소비 **맨 뒤**다. T2 노드·T5 몹이 각자 "맨 뒤 승격"으로
+	#    붙은 그 규율 그대로라, T1/T2/T5 골든 서명(mining_test ②·②b, mob_test ④)이 한 칸도 안 흔들린다.
+	#    ⑨는 RNG를 안 쓰므로 몹 롤 직후가 곧 여기다(상자 자리를 알고 나서 굴려야 상자 칸을 피한다).
+	out["shimmers"] = _scatter_shimmers(rng, floor_no, rect, rocks, entrance, ladder, out["chest"])
 	return out
 
 # ── ★[S5-T5 / ADR-0063 결정 8] 잡귀 스폰 ─────────────────────────────────────
@@ -409,6 +414,83 @@ static func _scatter_mobs(rng: RandomNumberGenerator, floor_no: int, rect: Rect2
 		out.append({"kind": kind, "tile": tile})
 	return out
 
+# ── ★[S5-T8 / ADR-0063 결정 10] 바닥 반짝이(줍기 광물) ───────────────────────
+# ADR-0033이 배정해 두고 S4에서 이연된 "갱도 바닥 광물 줍기"의 무대 형태. 곡괭이가 아니라 **손**으로
+# 줍는 물건이라 축이 통째로 다르다:
+#   · 혼력 0 · **채집 XP 7**(채광 XP 아님 — ADR-0033/0063이 명시적으로 ForageSkill 축에 뒀다.
+#     "허리 굽혀 줍는 것"은 전부 채집이라는 이 코드베이스의 일관된 문법 — 꽃 패치·덤불과 같은 값이다)
+#   · 돌이 아니라 **바닥 위 물건**이라 그리드(WALL/PATH/ROCK)에 한 칸도 안 들어간다(사다리·상자 결)
+#
+# ★ 품목은 **기존 MINERALS 로스터에서만** 고른다(신규 아이템 0). ADR-0063 원문 "품목 = 혼탄·석영
+#   결 잡광물"의 이행이고, 넋수정이 ItemCatalog에서 이미 "석영 결"로 정의돼 있다. 돌이 섞이는 건
+#   계단(돌 99개) 사슬의 바닥을 조금 깔아 주기 위해서다(*가중치 전부 잠정 — owner 큐*).
+# ★ 반짝이 id도 **아이템 id와 같은 문자열**이다(노드 id 규약 동형 — 원장은 인벤토리를 모르지만
+#   문자열은 공유한다. mine_extras_test가 ItemCatalog.has_item으로 전량 대조한다).
+const S_HONTAN := "hontan"                    # 혼탄(= ItemCatalog.HONTAN)
+const S_STONE := "stone"                      # 돌(= ItemCatalog.STONE)
+const S_QUARTZ := "gem_neoksujeong"           # 넋수정 — 석영 결(= ItemCatalog.GEM_NEOKSUJEONG)
+
+const SHIMMER_MIN := 0                        # 층당 0~2개(ADR-0063 결정 10 원문)
+const SHIMMER_MAX := 2
+const SHIMMER_PICK_TRIES := 8                 # 좌표 중복·부적격 회피 재시도 상한(무한 루프 방지)
+const SHIMMER_TABLE := [
+	{"id": S_HONTAN, "weight": 45},
+	{"id": S_STONE, "weight": 35},
+	{"id": S_QUARTZ, "weight": 20},
+]
+
+# 반짝이 종 id 목록(테스트·아트 로스터 대조용).
+static func shimmer_kinds() -> Array[String]:
+	var out: Array[String] = []
+	for e: Dictionary in SHIMMER_TABLE:
+		out.append(String(e["id"]))
+	return out
+
+static func is_shimmer_kind(id: String) -> bool:
+	return shimmer_kinds().has(id)
+
+# 반짝이 배치 = [{"id": String, "tile": Vector2i}] — 몹 스캐터와 같은 문법이다(마리 단위 좌표→종
+# 번갈아 소비, 자리를 못 찾아도 종 롤은 굴려 스트림을 고정). 돌·입구·사다리·상자 칸은 배제한다
+# (상자 칸을 비우는 이유: 한 칸에서 [F]가 둘로 갈리면 어느 쪽이 먼저인지 규칙이 하나 더 는다).
+static func _scatter_shimmers(rng: RandomNumberGenerator, floor_no: int, rect: Rect2i,
+		rocks: Array, entrance: Vector2i, ladder: Vector2i, chest: Vector2i) -> Array:
+	var out: Array = []
+	if not is_valid_floor(floor_no):
+		return out
+	var blocked: Dictionary = {}
+	for r: Vector2i in rocks:
+		blocked[r] = true
+	blocked[entrance] = true
+	blocked[ladder] = true
+	if chest.x >= 0:
+		blocked[chest] = true
+	var total_w := 0
+	for e: Dictionary in SHIMMER_TABLE:
+		total_w += int(e["weight"])
+	var quota := rng.randi_range(SHIMMER_MIN, SHIMMER_MAX)
+	var used: Dictionary = {}
+	for _i in range(quota):
+		var tile := Vector2i(-1, -1)
+		for _try in range(SHIMMER_PICK_TRIES):
+			var t := Vector2i(rect.position.x + rng.randi_range(0, rect.size.x - 1),
+				rect.position.y + rng.randi_range(0, rect.size.y - 1))
+			if blocked.has(t) or used.has(t):
+				continue
+			tile = t
+			break
+		var roll := rng.randi_range(0, total_w - 1)   # ★자리를 못 찾아도 **롤은 굴린다**(스트림 고정)
+		var pick := String(SHIMMER_TABLE[SHIMMER_TABLE.size() - 1]["id"])
+		for e: Dictionary in SHIMMER_TABLE:
+			roll -= int(e["weight"])
+			if roll < 0:
+				pick = String(e["id"])
+				break
+		if tile == Vector2i(-1, -1):
+			continue
+		used[tile] = true
+		out.append({"id": pick, "tile": tile})
+	return out
+
 # ★[S5-T2] 확정된 돌 목록 일부를 노드로 승격 — {Vector2i: 노드 종 id}. rocks는 읽기만 한다.
 #   ① 노드 개수 롤(3~7, 돌 수 상한) ② 승격할 돌 인덱스 뽑기(중복은 건너뜀·재시도 상한 있음)
 #   ③ 인덱스 오름차순으로 종 가중 롤. 전 단계가 같은 rng를 정해진 순서로 소비한다(결정적).
@@ -519,6 +601,10 @@ var _ladders: Dictionary = {}  # {floor(int) → {Vector2i: true}} 돌을 깨 �
 #   — 노드는 3~5타라 "아직 안 깼지만 두 대 맞은" 중간 상태가 존재한다(TreeLedger의 나무 hp 선례).
 #   day-한정(깬 돌과 같은 결 — 날이 갈리면 층이 리필되므로 진행도 함께 소멸한다).
 var _node_hits: Dictionary = {}
+# ★[S5-T8] {floor(int) → {Vector2i: true}} 그날 주운 바닥 반짝이. **day-한정**이다(깬 돌과 정확히
+#   같은 수명 — 층이 매일 리필되면 바닥의 물건도 새로 놓인다). 배치는 순수 함수가 다시 파생하므로
+#   여기 남는 건 "무엇을 이미 주웠나"뿐이다(`_mined`와 완전 동형 — 재파밍 차단의 같은 문법).
+var _picked: Dictionary = {}
 var _depth: int = 0            # 도달 최심층(영구 — 엘리베이터 체크포인트의 유일 파생원)
 # ★[S5-T6] {floor(int) → true} 이미 연 보상 상자. **영구**다(day-한정 아님 — `advance_day`가 안 지운다).
 #   층 배치·채굴 기록은 매일 리필되지만 상자는 세이브 전체를 통틀어 한 번뿐이라, 이 dict가 재파밍의
@@ -535,6 +621,7 @@ func advance_day(day: int) -> void:
 	_mined = {}
 	_ladders = {}
 	_node_hits = {}   # ★[S5-T2] 반쯤 쪼갠 광맥도 함께 리셋(층 리필 = 노드도 새 판)
+	_picked = {}      # ★[S5-T8] 주운 반짝이도 리셋(바닥의 물건도 매일 새로 놓인다)
 	# ★[S5-T6] `_chests`는 **여기서 안 지운다** — 보상 상자는 영구 1회성이다(ADR-0063 결정 10).
 	changed.emit()
 
@@ -572,6 +659,39 @@ func add_node_hit(floor_no: int, tile: Vector2i) -> int:
 	_node_hits[floor_no][tile] = n
 	changed.emit()
 	return n
+
+# ── ★[S5-T8] 바닥 반짝이 줍기 원장(day-한정) ─────────────────────────────────
+func is_picked(floor_no: int, tile: Vector2i) -> bool:
+	return _picked.has(floor_no) and _picked[floor_no].has(tile)
+
+func mark_picked(floor_no: int, tile: Vector2i) -> void:
+	if not _picked.has(floor_no):
+		_picked[floor_no] = {}
+	_picked[floor_no][tile] = true
+	changed.emit()
+
+# 이 층에 **아직 안 주운** 반짝이 목록([{"id","tile"}] — 배치 − 그날 주운 것). `rocks_left` 동형.
+func shimmers_left(day: int, floor_no: int) -> Array:
+	var out: Array = []
+	var layout := generate(day, floor_no)
+	if layout.is_empty():
+		return out
+	for e: Dictionary in layout.get("shimmers", []):
+		if not is_picked(floor_no, e["tile"]):
+			out.append(e)
+	return out
+
+# 이 칸의 반짝이 종("" = 없거나 이미 주웠다). 라이브 경로는 main이 층 배치 캐시에서 직접 읽는다.
+func shimmer_at(day: int, floor_no: int, tile: Vector2i) -> String:
+	if is_picked(floor_no, tile):
+		return ""
+	var layout := generate(day, floor_no)
+	if layout.is_empty():
+		return ""
+	for e: Dictionary in layout.get("shimmers", []):
+		if e["tile"] == tile:
+			return String(e["id"])
+	return ""
 
 # 이 칸의 노드 종("" = 일반 돌이거나 층 밖). 배치는 순수 함수에서 다시 파생한다(rocks_left 결).
 func node_at(day: int, floor_no: int, tile: Vector2i) -> String:
@@ -667,6 +787,7 @@ func to_save() -> Dictionary:
 		"ladders": _dump_tiles(_ladders),
 		"node_hits": _dump_counts(_node_hits),   # ★[S5-T2] 반쯤 쪼갠 광맥(키 없는 구세이브 = 진행 0)
 		"chests": opened_chests(),               # ★[S5-T6] 연 보상 상자(영구 — 키 없는 구세이브 = 전부 미개봉)
+		"picked": _dump_tiles(_picked),          # ★[S5-T8] 주운 반짝이(day-한정 — 키 없는 구세이브 = 전부 미획득)
 	}
 
 func load_save(data: Dictionary) -> void:
@@ -676,6 +797,7 @@ func load_save(data: Dictionary) -> void:
 	_ladders = _read_tiles(data.get("ladders", {}))
 	_node_hits = _read_counts(data.get("node_hits", {}))
 	_chests = _read_chests(data.get("chests", []))
+	_picked = _read_tiles(data.get("picked", {}))   # ★[S5-T8] 주운 반짝이(깬 돌과 같은 직렬화 결)
 	changed.emit()
 
 # ★[S5-T6] 개봉 원장 복원 — 보상 층 번호(10의 배수)만 받는다. 손상·구버전 값은 조용히 버린다

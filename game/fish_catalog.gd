@@ -28,10 +28,13 @@ class_name FishCatalog
 #   저승 수식어를 붙여 합성한다(넋·잿빛·도깨비·상엿길·초롱·혼불·삿갓·만장). "저승/명계"를 직접 노출하지
 #   않는 건 기존 아이템 명명(혼령초·피안화·업화석)과 같은 절제다. ★owner 큐(잠정 명명 — ADR-0061 결정 3).
 
-# ── 서식지(무대, ADR-0061 결정 9) ────────────────────────────────────────────
-# 캐스팅 무대는 삼도천 강·황천해 바다 둘뿐이다(갱도 호수 = Slice 5·나락 = 후속).
+# ── 서식지(무대, ADR-0061 결정 9 → ★S5-T8 부분 개정) ─────────────────────────
+# ★[S5-T8 / ADR-0063 결정 10] **갱도 호수가 세 번째 무대로 합류**한다 — ADR-0061 결정 9의
+#   "삼도천·황천해 한정"을 그 결정이 예고한 대로(위 원문의 "갱도 호수 = Slice 5") 부분 개정한다.
+#   나락·안식 연못·나루 배후 강은 여전히 비캐스팅이다(전 수면 개방은 owner 큐 서랍 그대로).
 const HABITAT_RIVER := "river"   # 삼도천 강
 const HABITAT_SEA := "sea"       # 황천해 바다
+const HABITAT_MINE := "mine"     # ★[S5-T8] 업화 갱도 지상 호수(지하 물 — 절기·시간 무관)
 
 # ── 체급(FishingSession.WeightClass와 같은 눈금 0~3) ─────────────────────────
 # 여기 정수를 그대로 FishingSession에 넘긴다(enum 상호참조 대신 눈금 공유 — 순환 의존 0).
@@ -65,6 +68,9 @@ const JEONYEOKNOL_DOMI := "jeonyeoknol_domi"       # 저녁놀도미
 const SATGAT_OJINGEO := "satgat_ojingeo"           # 삿갓오징어
 const MULBINEUL_NONGEO := "mulbineul_nongeo"       # 물비늘농어
 const NEOUL_BEOMCHI := "neoul_beomchi"             # 너울범치 — 바다 대어
+# ★[S5-T8] 업화 갱도 호수 2종(스타듀 광산 어종 4종의 1/2 큐레이션 — *명명 잠정*)
+const DOLBINEUL_CHI := "dolbineul_chi"             # 돌비늘치 — 갱도 상시종
+const EOPHWA_BUNGJANGEO := "eophwa_bungjangeo"     # 업화붕장어 — 갱도 대물(중 체급)
 # 전설 2종(강 1·바다 1 — 일반 롤 제외)
 const GEOMEUNYEOUL_DAEMEGI := "geomeunyeoul_daemegi"  # 검은여울 대메기(강 전설)
 const SIMYEON_MANJANGEO := "simyeon_manjangeo"        # 심연 만장어(바다 전설)
@@ -166,6 +172,25 @@ const FISH := {
 		"name_ko": "너울범치", "habitat": HABITAT_SEA, "weight_class": WC_LARGE,
 		"seasons": [0, 1], "phases": [PHASE_DAY, PHASE_EVENING], "weather": [], "price": 230,
 		"fight": {"stamina": 76.0, "burst_mult": 3.4},   # 너울처럼 크게 한 번씩 쳐올린다
+	},
+	# ── ★[S5-T8 / ADR-0063 결정 10] 업화 갱도 호수(2) ──────────────────────
+	# 스타듀 광산 어종 4종(Ghostfish·Stonefish·Ice Pip·Lava Eel)의 **2종 큐레이션** — 어종 18종·
+	# 채집물 22종·갱도 60층과 같은 1/2 축소 원칙이다.
+	# ★ **절기·시간 전부 무잠금**(seasons·phases 둘 다 빈 배열): 지하 호수는 하늘을 안 본다.
+	#   그래서 밀도 규칙("절기별 ≥3종")의 근거인 *절기 사막*이 여기선 구조적으로 발생하지 않는다 —
+	#   2종만으로 16개 (절기×시간) 조합이 전부 채워진다(mine_extras_test가 그 불변을 단언한다).
+	# ★ 갱도 호수는 **지상 무대**다(층 안이 아니라 EOPHWA_MINE 64×44의 남서 호수). 층 그리드엔
+	#   물이 한 칸도 없어 "층에서 낚시"는 구조적으로 불가능하다.
+	# *명명 잠정*(owner 큐 — ADR-0063 결정 10 원문 "돌비늘치·업화붕장어").
+	DOLBINEUL_CHI: {
+		"name_ko": "돌비늘치", "habitat": HABITAT_MINE, "weight_class": WC_SMALL,
+		"seasons": [], "phases": [], "weather": [], "price": 48,
+		"fight": {"stamina": 26.0, "tension_rise": 30.0},   # 돌처럼 버틴다(Stonefish 결 — 짧고 뻣뻣)
+	},
+	EOPHWA_BUNGJANGEO: {
+		"name_ko": "업화붕장어", "habitat": HABITAT_MINE, "weight_class": WC_MEDIUM,
+		"seasons": [], "phases": [], "weather": [], "price": 118,
+		"fight": {"burst_mult": 3.3, "slack_rate": 5.2},   # 용암 속 장어 — 미끄럽고 사납다(Lava Eel 결)
 	},
 	# ── 전설 2(강 1·바다 1 — 일반 롤 제외·roll_legendary 전용) ──────────────
 	GEOMEUNYEOUL_DAEMEGI: {
@@ -371,7 +396,12 @@ static func roll_legendary(habitat: String, season_idx: int, phase: String,
 
 # 무대별 최후 폴백(가용 종 0이라는 있어선 안 될 상태의 방어 — 상시종을 준다).
 static func fallback_id(habitat: String) -> String:
-	return NEOK_MYEOLCHI if habitat == HABITAT_SEA else NEOK_BUNGEO
+	match habitat:
+		HABITAT_SEA:
+			return NEOK_MYEOLCHI
+		HABITAT_MINE:
+			return DOLBINEUL_CHI   # ★[S5-T8] 갱도 상시종(둘 다 상시라 폴백에 닿을 일 자체가 없다)
+	return NEOK_BUNGEO
 
 # ── FishingSession 접속(dict 하나가 유일한 접점) ─────────────────────────────
 # 어종 id → FishingSession 생성자에 넘길 fish_params. 체급만 넘겨도 CLASS_PRESETS가 채워지고,

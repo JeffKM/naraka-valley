@@ -86,6 +86,60 @@ func _initialize() -> void:
 	_check("③ 미지 스킬 = 빈 목록", ProfessionCatalog.professions_for("nope").is_empty())
 	_check("③ 미지 id tier=0·requires=\"\"", ProfessionCatalog.tier_of(ProfessionCatalog.FORAGING, "garbage") == 0 and ProfessionCatalog.requires_of(ProfessionCatalog.FORAGING, "garbage") == "")
 
+	# ── ★[S5-T8 / ADR-0063 결정 9] ⑫ 채광 트리 인코딩 + 5스킬 실효 감사 ──────
+	# ADR-0052 확정 로스터의 마지막 미인코딩 축(채광 6종)이 T8에서 채워졌다. 전투 5종의 *실효*는
+	# combat_test ⑥이 이미 잠그고 있으므로(HP·피해·크리 판정 경유) 여기선 **다시 만들지 않고**
+	# "값이 인코딩돼 있다"만 확인한다 — 두 스위트가 같은 걸 두 번 단언하지 않게.
+	print("── ⑫ 채광 퍼크 인코딩(ADR-0052 로스터 이행 완료) ──")
+	var M := ProfessionCatalog.MINING
+	_check("⑫a 광부 = ORE_BONUS 1", _perk_of(M, "miner", ProfessionCatalog.DIM_ORE_BONUS) == 1.0)
+	_check("⑫b 지질사 = GEM_PAIR 0.5", _perk_of(M, "geologist", ProfessionCatalog.DIM_GEM_PAIR) == 0.5)
+	_check("⑫c 제련공 = SMELT_TIME 0.5 + INGOT_QUALITY 1(한 전문직 2차원)",
+		_perk_of(M, "blacksmith", ProfessionCatalog.DIM_SMELT_TIME) == 0.5
+		and _perk_of(M, "blacksmith", ProfessionCatalog.DIM_INGOT_QUALITY) == 1.0
+		and ProfessionCatalog.perks_of(M, "blacksmith").size() == 2)
+	_check("⑫d 탐광자 = COAL_DOUBLE flag", _perk_of(M, "prospector", ProfessionCatalog.DIM_COAL_DOUBLE) == 1.0)
+	_check("⑫e 발굴자 = GEODE_DOUBLE flag", _perk_of(M, "excavator", ProfessionCatalog.DIM_GEODE_DOUBLE) == 1.0)
+	_check("⑫f 보석사 = GEM_RANK 1(품질이 아니라 **계급** — 광물 무차원 규약 보존)",
+		_perk_of(M, "gemologist", ProfessionCatalog.DIM_GEM_RANK) == 1.0)
+	_check("⑫g 채광 갈래 정합 — 제련공·탐광자←광부 / 발굴자·보석사←지질사",
+		ProfessionCatalog.requires_of(M, "blacksmith") == "miner"
+		and ProfessionCatalog.requires_of(M, "prospector") == "miner"
+		and ProfessionCatalog.requires_of(M, "excavator") == "geologist"
+		and ProfessionCatalog.requires_of(M, "gemologist") == "geologist")
+	# ★곡예사 = **예약 퍼크**(값은 박혀 있고 효과만 보류 — ADR-0063 결정 9). 선택 자체는 막지 않는다.
+	_check("⑫h 곡예사 = 선택 가능한 실존 전문직 + 값 인코딩(효과만 보류)",
+		ProfessionCatalog.is_valid(ProfessionCatalog.COMBAT, "acrobat")
+		and _perk_of(ProfessionCatalog.COMBAT, "acrobat", ProfessionCatalog.DIM_SPECIAL_COOLDOWN) == 0.5)
+	_check("⑫i 곡예사 해석기는 여전히 중립을 돌려준다(무기 특수동작 서랍 미개봉)",
+		is_equal_approx(CombatSkill.special_cooldown_factor(0.5), 1.0))
+	# 실효 트리 = 채집·낚시·전투·채광 4 / 구조-only = 농사 1(퍼크 배열이 전부 빈 트리).
+	var empty_trees: Array[String] = []
+	var value_dim_leak: Array[String] = []
+	for skill in ProfessionCatalog.SKILLS:
+		var any_perk := false
+		for p in ProfessionCatalog.professions_for(skill):
+			if not (p["perks"] as Array).is_empty():
+				any_perk = true
+			for perk in p["perks"]:
+				var d := String(perk["dim"])
+				if d.contains("price") or d.contains("margin") or d.contains("value"):
+					value_dim_leak.append("%s/%s" % [skill, String(p["id"])])
+		if not any_perk:
+			empty_trees.append(skill)
+	_check("⑫j 구조-only 트리 = 농사 하나뿐 — %s" % str(empty_trees),
+		empty_trees == [ProfessionCatalog.FARMING])
+	_check("⑫k **전 5트리** 퍼크에 +판매가/마진 차원 0(ADR-0052 §1) — %s" % str(value_dim_leak),
+		value_dim_leak.is_empty())
+	# 전 트리 6종·tier 2:4 구조 유지(채광이 인코딩되며 구조가 흔들리지 않았다).
+	var shape_ok := true
+	for skill in ProfessionCatalog.SKILLS:
+		if ProfessionCatalog.professions_for(skill).size() != 6 \
+				or ProfessionCatalog.tier_profs(skill, 5).size() != 2 \
+				or ProfessionCatalog.tier_profs(skill, 10).size() != 4:
+			shape_ok = false
+	_check("⑫l 전 5트리 구조 불변(6종 · tier5 2 · tier10 4)", shape_ok)
+
 	# ── Part B: main 스폰 ───────────────────────────────────────────────────
 	const SAVE := "user://save.dat"
 	const BAK := "user://save.dat.prof_bak"
