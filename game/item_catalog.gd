@@ -126,6 +126,18 @@ const SEED_NEOKCHAM := "seed_neokcham"            # 넋참나무 도토리
 # 가격 8(잠정 — owner 큐): 원목 5 ~ 석화 목재 15 사이 저가 밴드. 나무마다 며칠에 한 번씩 끼는
 # 상시 자원이라 개당 값이 크면 벌목·수액의 경제적 이유가 흐려진다.
 const JEOSEUNG_IKKI := "jeoseung_ikki"            # 저승 이끼 — 성숙목 낫 채취(TreeLedger.has_moss)
+# ── ★[S5-T5 / ADR-0063 결정 8] 잡귀 부산물 2종 — 갱도 잡귀 처치 드랍 ────────────────
+# "잡귀를 잡으면 무엇이 남는가"의 자리. **품질 무차원 스택 CAT_MATERIAL**(원목·수액·이끼·광물과
+# 같은 판단 — 품질은 줍기·릴 격투의 축이지 자재의 축이 아니다). id 상수의 진실원은 여기이고
+# MobCatalog.DROP_*가 같은 문자열을 리터럴로 든다(const 초기화식 관례 — mob_test가 두 쪽을 대조).
+# ★ 하류 소비처(카페 메뉴·제작 레시피)는 S6 소관이다 — 지금은 소지·판매까지가 실효 범위다
+#   (벌목 씨앗 3종이 "팔리기만 하는 상태"로 S4를 넘긴 선례 동형).
+# ★ 가격(*잠정* — owner 큐): 넋가루 14 · 혼불씨 26. 근거 = 스타듀 Slime 5 / Bat Wing 15 / Bone
+#   Fragment 상당의 비율을 엽전 스케일(개간 드랍 4~15 · 이끼 8 · 혼탄 15)에 얹었다. 잡귀 한 마리가
+#   광맥 한 칸(명동 5 × 1~3)보다 값이 나가면 "채굴 대신 사냥"이 최적이 되어 이중 시계가 무너진다 —
+#   그래서 드랍률(55~80%)을 함께 계산해 기대값이 광맥 한 칸 근처에 앉게 잡았다.
+const NEOKGARU := "neokgaru"                      # 넋가루 — 흩어진 잡귀가 남기는 회백색 가루(범용)
+const HONBULSSI := "honbulssi"                    # 혼불씨 — 잡귀 속에 남은 불씨(심층 종 산출)
 const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 별 상수라 여기 제외)
 	SOUL_FIBER: {"name_ko": "혼백 섬유", "price": 4},
 	EMBER_SHARD: {"name_ko": "업화석 조각", "price": 12},
@@ -141,6 +153,9 @@ const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 
 	SEED_NEOKCHAM: {"name_ko": "넋참나무 도토리", "price": 12},
 	# ★[S4-T8] 저승 이끼(낫 채취 상시 자원)
 	JEOSEUNG_IKKI: {"name_ko": "저승 이끼", "price": 8},
+	# ★[S5-T5] 잡귀 부산물 2종(갱도 잡귀 처치 드랍)
+	NEOKGARU: {"name_ko": "넋가루", "price": 14},
+	HONBULSSI: {"name_ko": "혼불씨", "price": 26},
 }
 
 # ── ★[S5-T2 / ADR-0063 결정 2] 광물 로스터 — 금속 4티어·혼탄·돌·보석 4+1·지오드 2 ────
