@@ -203,8 +203,9 @@ func _run_checks() -> void:
 	_check("ⓒf 전 행 kind = weapon|potion · 필수 필드 구비 · **price == base**(할인 0)", fields_ok)
 	_check("ⓒg 값은 WeaponCatalog 단일 출처(정가 그대로)",
 		int(rows60[0]["price"]) == WeaponCatalog.price_of(String(rows60[0]["buy_id"])))
+	# ★[S5-T11 폴리시] 헤더 표기 축약("도달 깊이 n층"→"깊이 n층" — 체력 끝자리 프레임 잘림 봉합)에 맞춰 갱신.
 	_check("ⓒh 헤더에 가게·도달 깊이·체력", m._guild_text().contains("모험가 길드")
-		and m._guild_text().contains("도달 깊이") and m._guild_text().contains("체력"))
+		and m._guild_text().contains("깊이") and m._guild_text().contains("체력"))
 	# ★관계-중립 실증 — ♡5여도 값이 한 냥도 안 바뀐다(뱃사공·옹이 매대와 갈리는 지점).
 	var price_h0: int = int(m._guild_items()[0]["price"])
 	r.affinity.points = 5 * Affinity.POINTS_PER_HEART
