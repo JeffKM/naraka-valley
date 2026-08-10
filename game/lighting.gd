@@ -42,6 +42,27 @@ const LAMP_STOPS := [
 	[1440.0, 1.0],   # 24:00
 ]
 
+# ── ★[S7-T8 / ADR-0065 결정 10] 날씨 틴트 ────────────────────────────────────
+# 시각 곡선(TINT_STOPS) 결과에 **곱해지는** 얇은 한 겹. 시각이 "몇 시인가"를 칠하고, 이 층이 그 위에
+# "어떤 하늘인가"를 얹는다 — 두 축을 더하지 않고 곱하는 이유는 밤이 낮보다 어둡다는 순서가 날씨와
+# 무관하게 보존돼야 하기 때문이다(비 오는 낮 > 맑은 밤).
+#
+# 설계 메모:
+#   - **소폭이 규칙이다**. 날씨는 하루 종일 켜져 있는 배경 조건이라, 세게 물들이면 도트 원색이
+#     하루 내내 죽는다(ADR-0012 인게임 가독성이 1순위). 그래서 목표색을 흰색 쪽으로 되섞는
+#     WEATHER_MIX를 따로 둬 강도를 한 숫자로 조인다.
+#   - 혼불 바람은 **지상 전조**다(CONTEXT "지상엔 전조로 보이되"). 실효는 던전에 있으므로 지상
+#     틴트는 넷 중 가장 약하다 — "무언가 어긋난 날"의 기미만 남긴다.
+# ⚠️ 수치 전부 잠정 레버(owner 큐). 인덱스 = Weather 눈금(0 평온·1 혼우·2 잿눈·3 혼불 바람).
+const WEATHER_TINT := [
+	Color(1.00, 1.00, 1.00),   # 평온 — 무보정(기준선)
+	Color(0.78, 0.86, 1.00),   # 혼우 — 한색(푸른 빗속)
+	Color(1.10, 1.10, 1.16),   # 잿눈 — 회백 밝음(눈 반사광 — 1 초과 = 곱해서 밝아진다)
+	Color(0.92, 0.84, 1.06),   # 혼불 바람 — 으스스한 보랏빛 기운
+]
+# 목표색을 흰색에서 얼마나 끌어오는가(0 = 무효·1 = 표 그대로). 혼불만 더 얕게.
+const WEATHER_MIX := [0.0, 0.65, 0.55, 0.40]
+
 # 등불 빛 색(따뜻한 앰버) — 차가운 인디고 밤과 대비돼 카페·길이 온기로 떠오른다.
 const LAMP_COLOR := Color(1.0, 0.74, 0.42)
 const LAMP_TEXTURE_SCALE := 3.2  # 환경 2배(TILE 32px)에 맞춰 2배 → 빛웅덩이 반경(칸 기준) 유지
@@ -68,14 +89,23 @@ func setup(lamp_positions: PackedVector2Array) -> void:
 		_lamps.append(lamp)
 
 # 매 프레임 시각으로 화면 색조와 등불 세기를 갱신한다(연속 float이라 부드럽게 흐른다).
-func apply(minutes: float) -> void:
-	color = tint_for(minutes)
+# ★[S7-T8] `weather`는 **가법 인자**다(기본 Weather.CALM = 옛 동작과 픽셀 동일). 날씨를 안 넘기는
+#   호출부(하네스·테스트)는 한 글자도 안 고쳐도 그대로 산다.
+func apply(minutes: float, weather: int = Weather.CALM) -> void:
+	color = tint_for(minutes, weather)
 	var e := lamp_energy_for(minutes)
 	for lamp in _lamps:
 		lamp.energy = e
 
-func tint_for(minutes: float) -> Color:
-	return _sample_color(TINT_STOPS, minutes)
+# 시각 틴트 × 날씨 틴트. weather 생략 = 평온 = 시각 곡선 그대로(회귀 안전).
+func tint_for(minutes: float, weather: int = Weather.CALM) -> Color:
+	return _sample_color(TINT_STOPS, minutes) * weather_tint(weather)
+
+# 그 날씨의 곱셈 틴트(평온·범위 밖 = 흰색 = 무보정). 순수 함수 — 헤드리스로 단언 가능.
+func weather_tint(weather: int) -> Color:
+	if weather < 0 or weather >= WEATHER_TINT.size():
+		return Color.WHITE
+	return Color.WHITE.lerp(WEATHER_TINT[weather], float(WEATHER_MIX[weather]))
 
 func lamp_energy_for(minutes: float) -> float:
 	return _sample_float(LAMP_STOPS, minutes)

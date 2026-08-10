@@ -2434,6 +2434,10 @@ var clock_hud: ClockHud             # ★ Phase C 우상단 시계 클러스터(
 var context_popup: ContextPopup     # ★ Phase C 좌하단 컨텍스트 팝업(근처 NPC 초상화 + 한 줄)
 var hud_tooltip: HudTooltip         # ★ Phase C 마우스 호버 툴팁(핫바 슬롯 아이템명)
 var onboarding_banner: OnboardingBanner  # ★ owner 2026-07-03 상단-중앙 온보딩 안내 팝업 배너
+# ★[S7-T8 / ADR-0065 결정 10] 절기 달력 패널(시계 판 클릭 토글·비-모달)과 날씨 파티클 오버레이.
+# 둘 다 위 HUD 조각들과 같은 결 — 코드 생성 자식 Control, 상태는 main이 매 프레임 흘려넣는다.
+var calendar_panel: CalendarPanel
+var weather_fx: WeatherFx
 # ★ 실내 카메라 격리 마스크(코지-와이드 회귀 수정) — 실내일 때 방 바깥을 검정으로 가린다.
 # 월드보다 위·다른 HUD/패널보다 아래 레이어(맨 앞 자식)에 깔아 외부 풀밭·이웃 방을 덮되 HUD·대화는
 # 그 위에 보이게 한다.
@@ -8505,7 +8509,7 @@ func _setup_lighting() -> void:
 	lighting = DayNightLighting.new()
 	add_child(lighting)
 	_setup_region_lamps()
-	lighting.apply(clock.minutes)
+	lighting.apply(clock.minutes, _weather_today())   # ★[S7-T8] 첫 프레임부터 날씨 틴트 포함
 
 # ★ M1.4 — 현재 구역(_region)의 등불 자리만 빛웅덩이로 깐다(카페 이주로 등불이 구역마다 갈렸다).
 # lighting.setup이 멱등이라(이전 등불 거두고 새로 깖) 구역 전환(_rebuild_region)마다 다시 부른다 —
@@ -8764,12 +8768,25 @@ func _setup_hud_overlays() -> void:
 	onboarding_banner.name = "OnboardingBanner"
 	$CanvasLayer.add_child(onboarding_banner)
 	onboarding_banner.setup()
+	# ★[S7-T8] 절기 달력 패널 — 시계 판을 클릭하면 열린다(비-모달 조회 오버레이). 시계 클러스터
+	#   *뒤*가 아니라 앞 자식으로 둬, 열렸을 때 화면 중앙 한지 프레임이 다른 HUD 위에 얹힌다.
+	calendar_panel = CalendarPanel.new()
+	calendar_panel.name = "CalendarPanel"
+	$CanvasLayer.add_child(calendar_panel)
+	calendar_panel.setup()
 	# 실내 마스크는 *맨 앞 자식*(index 0)으로 — 월드 위에 깔리되 씬 패널(대화·페이드)·HUD보다 아래라
 	# 방 바깥만 검게 가리고 그 위로 대화·HUD·페이드가 정상 표시된다.
 	indoor_mask = IndoorMask.new()
 	indoor_mask.name = "IndoorMask"
 	$CanvasLayer.add_child(indoor_mask)
 	$CanvasLayer.move_child(indoor_mask, 0)
+	# ★[S7-T8] 날씨 파티클(비·눈)은 실내 마스크 **바로 위**(index 1)에 깐다: 월드 위로 내리되
+	#   HUD·대화·페이드보다는 아래다(빗줄기가 글자를 긁지 않는다). 실내·지하에선 스스로 잠든다.
+	weather_fx = WeatherFx.new()
+	weather_fx.name = "WeatherFx"
+	$CanvasLayer.add_child(weather_fx)
+	$CanvasLayer.move_child(weather_fx, 1)
+	weather_fx.setup()
 
 # P2.6 BGM 위치 분기: 플레이어가 카페 안인가(밭↔카페 낮 BGM을 가른다). audio는 이 불리언만
 # 받고 출처(지금=구역 판정, 나중=건물 내부 전환)는 모른다 — Phase 3 내부 전환이 와도 불변.
@@ -10373,7 +10390,12 @@ func _process(delta: float) -> void:
 	# P2.3③ 밤 라이팅: 시각으로 화면 색조·등불 세기를 매 프레임 잇는다(연속 보간이라 부드럽게
 	# 흐른다). 입력 가드보다 먼저 둬, 대화·정산 패널 뒤로 보이는 월드도 밤이면 밤으로 유지된다.
 	# 취침 연출 중엔 시간이 멈춰(clock.running=false) 색조도 자연히 정지하고, 검은 페이드가 덮는다.
-	lighting.apply(clock.minutes)
+	# ★[S7-T8] 오늘 날씨를 같은 자리에 흘려넣는다 — 시각 색조 × 날씨 틴트(lighting이 곱한다).
+	lighting.apply(clock.minutes, _weather_today())
+	# ★[S7-T8] 날씨 파티클(비·눈) — 실내·지하는 하늘이 없으므로 끈다. 라이팅과 나란히 입력 가드
+	#   위에 둬, 대화·모달이 열려 있어도 창밖 비가 얼어붙지 않는다(라이팅과 같은 이유).
+	if weather_fx != null:
+		weather_fx.set_weather(_weather_today(), _weather_fx_suppressed())
 	# P2.6 BGM: 시각·종료·위치(카페 안인가)에서 phase(밭/카페/밤/엔딩)를 파생해 BGM을 잇는다
 	# (같은 phase면 즉시 반환, 라이팅과 같은 무상태 결). 시각이 멈춘 취침 연출 중에도 위치는
 	# 잠겨 있어(이동 잠금) phase가 안정적이다.
@@ -10439,6 +10461,10 @@ func _process(delta: float) -> void:
 	#   대화창 초상화와 컨텍스트 팝업 중복 회피). notice_feed는 정산 알림을 계속 보여야 해 제외(기존 결).
 	if clock_hud != null:
 		clock_hud.visible = not _hud_hidden
+	# ★[S7-T8] 달력 패널도 상시 HUD 취급 — 모달(메뉴·대화·정산·거울)이 열리면 접는다. 시계 판을
+	#   클릭해 여는 조회 오버레이라 모달과 나란히 뜰 이유가 없다(겹치면 둘 다 안 읽힌다).
+	if calendar_panel != null and _hud_hidden:
+		calendar_panel.close()
 	if context_popup != null:
 		context_popup.visible = not _hud_hidden
 	if hud_tooltip != null:
@@ -10514,6 +10540,22 @@ func _process(delta: float) -> void:
 			_refresh_night_market()              # ★[S7-T7] 야시장 행(구매 즉시 "해금됨/구입함"으로 잠김)
 		return
 
+	# ★[S7-T8 / ADR-0065 결정 10] 시계 판 클릭 = 절기 달력 토글(스타듀의 달력 게시판 자리 — 우리는
+	#   이미 우상단에 절기·일차가 떠 있으니 그 판이 곧 달력 입구다). 열려 있으면 Esc로도 닫힌다.
+	# ★ **LMB 소비자들보다 먼저** 둔다(빌드 중 걸러낸 함정). main은 도구·낚싯대·나무 베기·채집·
+	#   스프링클러 설치 등 열댓 갈래를 전부 `Input.is_action_just_pressed`(전역 폴링)로 받는데,
+	#   그건 HUD Control이 이벤트를 소비해도 그대로 뚫고 들어온다 — 판정이 그 갈래들 *뒤*에 있으면
+	#   나무 옆에 서서 시계를 누를 때 달력이 열리면서 도끼질도 같이 나간다. 그래서 여기서 한 번에
+	#   갈라 잡고 **그 프레임 입력을 통째로 소비한다**(대화·모달 가드와 같은 return 결).
+	if not _sleeping and Input.is_action_just_pressed("use_tool") \
+			and clock_hud != null and clock_hud.visible and calendar_panel != null \
+			and clock_hud.hit_test(get_viewport().get_mouse_position()):
+		calendar_panel.toggle()
+		return
+	if calendar_panel != null and calendar_panel.is_open() \
+			and Input.is_action_just_pressed("ui_cancel"):
+		calendar_panel.close()
+		return
 	# 건물 외관 문에 닿으면 실내로, 실내 문에 닿으면 밖으로 — 자동 fade 전환(스타듀식 출입).
 	_maybe_toggle_building()
 	# M1.3 구역 가장자리/길 워프 칸에 닿으면 인접 구역으로 전환(목적 구역이 지어졌을 때만 —
@@ -11042,11 +11084,17 @@ func _process(delta: float) -> void:
 	readout.visible = false
 	# ★ Phase C 시계 클러스터(우상단): raw ClockLabel/GoldLabel/MilestoneLabel을 한지 플레이트
 	# 하나로 통합했다(clock_hud). 절기 내 일차는 clock의 파생 하나로 수렴했다(요일은 도메인에 없음
-	# — clock_hud 주석). 날씨(☀)는 백엔드 부재로 보류(ADR-0048).
+	# — clock_hud 주석). ★[S7-T8] ADR-0048이 비워 뒀던 날씨(☀) 자리를 오늘 하늘로 채운다.
 	var _dos := GameClock.day_of_season(clock.day)
 	if clock_hud != null:
 		clock_hud.set_state(GameClock.season_name(clock.season_index()), _dos, clock.clock_string(),
-			clock.phase(), wallet.gold, CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()))
+			clock.phase(), wallet.gold,
+			CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()),
+			_weather_today())
+	# ★[S7-T8] 달력 패널 — 열려 있든 아니든 표시값을 흘려넣는다(값이 바뀔 때만 다시 파생·redraw).
+	#   해금 입력은 _festival_theme과 같은 다리(카페 단계·누적 서빙 매출)를 그대로 탄다.
+	if calendar_panel != null:
+		calendar_panel.set_state(clock.day, _cafe_stage(), _cafe_revenue_total)
 	clock_label.visible = false
 	# ★ owner 2026-07-03 HUD 가이드 A — 하단 중앙 날것 텍스트("핫바 N번 · 든 것…")는 화면을 가리고
 	#   몰입을 깬다. 핫바가 이제 단축키 인덱스·선택 금박·개수 배지를 다 보여줘 이 요약은 중복 → 숨김.
@@ -15939,6 +15987,14 @@ func _seed_starter_animal(species: String, building: String, room: Rect2i, age: 
 #   clock이 아직 없는 프레임(부팅 중 호출)은 평온으로 떨어진다.
 func _weather_today() -> int:
 	return Weather.weather_for_day(clock.day) if clock != null else Weather.CALM
+
+# ★[S7-T8 / ADR-0065 결정 10] 지금 이 무대에 하늘이 없는가 — 날씨 파티클(비·눈)을 끄는 판정.
+#   ㉠ 실내(_indoor) — 지붕 밑 ㉡ 업화 갱도·나락 — 지하다(입구 층 포함: 두 구역 전체가 굴 안이라
+#      "0층은 야외"라는 예외를 만들면 층마다 하늘 유무를 따지는 규칙이 하나 더 생긴다).
+# ★ 틴트(lighting)는 안 끈다: 화면 색조는 이미 실내 마스크·던전 톤이 덮고 있고, 던전에서 혼불
+#   바람의 기미가 남는 것은 오히려 결에 맞다(그날 굴이 사나운 날이라는 신호).
+func _weather_fx_suppressed() -> bool:
+	return _indoor != "" or _region == RegionCatalog.EOPHWA_MINE or _region == RegionCatalog.NARAK
 
 # ★[S7-T4 / ADR-0065 결정 5] 오늘의 명부의 운 가산값(파생 — 저장하지 않는다). `_weather_today`와
 # 정확히 같은 결이되, 반환이 "얼마를 더할까"라 지점별 계수를 인자로 받는다(계수 상수의 주인은
