@@ -151,6 +151,33 @@ static func color_of(id: String) -> Color:
 		return FUSIONS[id]["color"]
 	return Color.WHITE
 
+# ── ★[S6-T2 / ADR-0064 결정 2] 절기 창(판매 로테이션) ────────────────────────
+# 이 메뉴를 이 절기에 주문할 수 있나. ★ **별도 달력 데이터를 만들지 않는다** — 판매 창은
+# *시그니처 재료의 절기 창*에서 파생된다("작물 사멸이 곧 메뉴 로테이션", 결정 2). 그래서 이 함수는
+# 판정을 하지 않고 재료 종류별 주인에게 위임만 한다(어종=FishCatalog·채집물=ForageSpawns).
+#
+# 분기 순서는 menu_catalog_test ①의 구성 집계와 같은 순서다(작물 → 어종 → 수액 → 채집물 → 그 외).
+# ★ 작물: 절기 사멸은 **Slice 7 미구현**이라 지금은 전 절기 true다. ⚠️[S7 훅] 사멸 창이 들어오면
+#   여기서 CropCatalog의 절기 필드를 읽어 같은 모양으로 위임한다 — 그때도 이 파일에 달력이 생기지
+#   않는다(재료의 창이 곧 메뉴의 창이라는 규칙은 그대로).
+# ★ 수액·나락혼정·기본 메뉴 = 사철(패시브 채취·던전 산출·무재료라 하늘을 안 본다).
+static func in_season(id: String, season_idx: int) -> bool:
+	if is_basic(id):
+		return true
+	if not is_fusion(id):
+		return false
+	var sig := signature_of(id)
+	if CropCatalog.has_crop(sig):
+		return true                                   # ⚠️[S7 훅] 작물 절기 사멸이 들어올 자리
+	if FishCatalog.has(sig):
+		return FishCatalog.in_season(sig, season_idx)
+	if ItemCatalog.SAP_GOODS.has(sig):
+		return true                                   # 수액 = 채취기 패시브(절기 무관)
+	if ItemCatalog.FORAGEABLES.has(sig):
+		var s := ForageSpawns.season_of(sig)
+		return s < 0 or s == season_idx               # -1 = 사철(심층·해변종)
+	return true                                       # 나락혼정 등 자재 시그니처 = 사철
+
 # ── 열거(주문 롤·메뉴판 UI가 순회 — 정렬은 dict 선언 순서 그대로) ──────────────
 static func basic_ids() -> Array:
 	return BASICS.keys()

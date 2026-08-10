@@ -24,6 +24,13 @@ class_name Inventory
 #     Phase 2.7 새 포맷). load_save가 슬롯 형태가 아니면 빈 인벤토리로 방어한다.
 
 signal changed()  # 재고·선택이 바뀐 프레임(main이 HUD·핫바 갱신)
+# ★[S6-T2 / ADR-0064 결정 10] 아이템이 **실제로 들어온** 프레임(add_item 성공 경로에서만).
+# 왜 시그널인가: 융합 메뉴 해금이 "시그니처 산출물 첫 획득"이라(발견 게이트) 획득처 *전부*가
+# 기록 지점인데, 획득처는 수확·낚시·줍기·상자·상점·의뢰 보상 등 수십 곳이라 한 곳이라도 빠뜨리면
+# "그 메뉴만 영영 안 열리는" 조용한 구멍이 된다. 인벤토리는 모든 획득의 **유일한 관문**이므로
+# 여기서 한 번 쏘면 누락이 구조적으로 불가능하다. ★ 이 시그널은 **알리기만 한다** — 적재 판정·
+# 순서·반환값은 한 톨도 안 바뀌었다(듣는 이가 없어도 인벤토리는 종전과 동일하게 굴러간다).
+signal item_gained(id: String)
 
 const SIZE := 16                  # 시작 슬롯 수(가방 전체 칸). 확장은 이 값만 키운다(슬롯 위치 보존).
                                   # ★S1-8: 12→16(개간 도구 3종이 START에 합류 — 도구5+농사보급+수확물 여유).
@@ -162,6 +169,7 @@ func add_item(id: String, n: int = 1, quality: int = 0) -> bool:
 			return false
 		slots[e] = {"id": id, "count": 1, "quality": 0}
 		changed.emit()
+		item_gained.emit(id)     # ★S6-T2 발견 게이트(위 시그널 주석)
 		return true
 	# 스택(씨앗·수확물·묘목·비료): (id, quality) 일치 슬롯에 합치거나 새 빈 슬롯에.
 	var q := _norm_quality(id, quality)
@@ -169,12 +177,14 @@ func add_item(id: String, n: int = 1, quality: int = 0) -> bool:
 	if i >= 0:
 		slots[i]["count"] += n
 		changed.emit()
+		item_gained.emit(id)     # ★S6-T2 발견 게이트
 		return true
 	var empty := _first_empty()
 	if empty < 0:
 		return false
 	slots[empty] = {"id": id, "count": n, "quality": q}
 	changed.emit()
+	item_gained.emit(id)         # ★S6-T2 발견 게이트
 	return true
 
 # 아이템 n개 제거(전 품질 합산 원자적 — 모자라면 무변경 false). 소비는 ★최저 품질 우선(worst-first):

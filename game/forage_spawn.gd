@@ -107,6 +107,17 @@ static func species_for(kind: String, season: int) -> Array:
 				ItemCatalog.YURI_GODUNG, ItemCatalog.MULBINEUL_JOGAE]      # 절기 무관(조개·산호)
 	return []
 
+# ★[S6-T2] 종 → 그 종이 돋는 절기 인덱스 역조회(**-1 = 사철**: 심층·해변종이거나 로스터 밖).
+# species_for의 정반대 방향이고, 절기 풀의 주인이 이 파일이라 역조회도 여기 산다(데이터 중복 0 —
+# 카페 융합 메뉴의 판매 창이 "시그니처 재료의 절기 창" 파생이라 MenuCatalog가 이걸 읽는다,
+# ADR-0064 결정 2 "별도 달력 데이터 없음"). 한 종이 두 절기에 걸치지 않는 로스터라 반환은 단일 값이다.
+static func season_of(species: String) -> int:
+	for kind in [KIND_COMMON, KIND_RARE]:
+		for s in 4:
+			if species_for(kind, s).has(species):
+				return s
+	return -1
+
 # 전 로스터 id 목록(검증·도감·테스트용 — 22종). 절기·존을 가로질러 한 벌로 편다.
 static func all_species() -> Array:
 	var out: Array = []

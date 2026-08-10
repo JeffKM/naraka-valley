@@ -27,9 +27,16 @@ func _initialize() -> void:
 	_check("② 15–19시 진입 시 영업 시작", c.is_open())
 	_check("②b 곧 손님이 좌석에 앉음", c.is_waiting(0))
 
+	# ★[S6-T2] 손님은 앉을 때 희망 메뉴를 들고 온다. 주문 풀 주입이 없는 이 하네스에선 기본 메뉴만
+	#    나오고(base rate 안전판), 서빙은 종전처럼 정액가로 굴러간다(구계약 회귀 0).
+	_check("②c 손님이 희망 메뉴를 들고 앉는다(주입 없으면 기본 메뉴)",
+		MenuCatalog.is_basic(c.want_of(0)))
+	_check("②d 빈 자리의 희망은 \"\"", not c.is_waiting(1) and c.want_of(1) == "")
+
 	# ③ 서빙 → 정액 P × margin(=1.0) 매출 + 좌석 비움 + 정산 누적.
 	var rev := c.serve(0)
 	_check("③ 서빙가 = BASE_PRICE × 1.0", rev == Cafe.BASE_PRICE)
+	_check("③d 서빙 후 희망도 비워진다", c.want_of(0) == "")
 	_check("③b 서빙 후 좌석 비움", not c.is_waiting(0))
 	_check("③c 정산 누적(매출·인원)", c.today_revenue() == rev and c.today_served() == 1)
 
@@ -60,6 +67,11 @@ func _initialize() -> void:
 	f.margin = 2.0
 	f.tick(0.6, 16 * 60)
 	_check("⑥ margin=2.0 → 서빙가 2배(마진 seam)", f.serve(0) == Cafe.BASE_PRICE * 2)
+	# ★[S6-T2] 무엇을 냈는지를 인자로 받는다 — 융합을 내면 메뉴가 × margin(주문 위상은 cafe_order_test).
+	f.tick(3.1, 16 * 60)   # 다음 손님 착석(스폰 간격 경과)
+	_check("⑥b 융합 메뉴를 내면 프리미엄가 × margin",
+		f.serve(0, MenuCatalog.PIANHWA_ADE)
+		== int(round(MenuCatalog.price_of(MenuCatalog.PIANHWA_ADE) * 2.0)))
 
 	# ⑦ ★seam 1 — 인내심 파라미터: patience_secs를 키우면 손님이 더 오래 기다린다
 	#    (Sprint 6 바나 응대 보호가 얹힐 지점). 기본 인내심으론 이탈할 시간에도 버틴다.

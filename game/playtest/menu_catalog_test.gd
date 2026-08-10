@@ -158,9 +158,11 @@ func _initialize() -> void:
 		seen_ids[id7] = true
 	_check("⑥g 열거 결과에 중복 0", not dup_ids)
 
-	# ⑦ ★실버그 회귀(ADR-0064 결정 11 ①). 서빙 재료 선택·알림이 CropCatalog 조회라
-	#    **비-작물 재료가 가격 0·이름 빈 문자열**이 되던 잠복 버그. ItemCatalog 조회는 산다.
-	#    (main._cheapest_harvest / 서빙 알림이 이 두 함수로 갈아탔다 — 여기서 대조로 못 박는다.)
+	# ⑦ ★실버그 회귀(ADR-0064 결정 11 ①) — **ItemCatalog 가격·이름 계약**. 비-작물 산출물을
+	#    CropCatalog로 조회하면 가격 0·이름 빈 문자열이 되던 잠복 버그의 회귀 방어다.
+	#    ★[S6-T2] 소비자가 갈렸다: 서빙 알림은 이제 MenuCatalog.name_of(무엇을 냈나)를 쓰고,
+	#    이 계약을 읽는 건 **밤 바 약탈**(main._cheapest_harvest — 최저가부터 가져간다)과 곳간·
+	#    출하 알림이다. 함수가 바뀐 게 아니라 부르는 쪽이 넓어졌으므로 대조는 그대로 유효하다.
 	for nonc in [FishCatalog.NEOK_BUNGEO, ItemCatalog.NEOK_SONGI, ItemCatalog.MYEONGDANPUNG_KKUL]:
 		var cid := String(nonc)
 		_check("⑦ 비-작물 재료 %s — CropCatalog는 가격 0(버그 재현)" % cid,
@@ -177,6 +179,22 @@ func _initialize() -> void:
 		CropCatalog.sell_price(pricey_fish) < CropCatalog.sell_price(cheap_crop))
 	_check("⑦f 새 기준(ItemCatalog)에선 싼 작물이 먼저 소모된다",
 		ItemCatalog.price_of(cheap_crop) < ItemCatalog.price_of(pricey_fish))
+
+	# ⑧ ★[S6-T2 / 결정 2] 절기 창 = 시그니처 재료의 절기 창 파생 — **별도 달력 데이터 0**.
+	#    (판정 세부는 cafe_order_test ⑥이 든다. 여기선 카탈로그 계약만: 전 메뉴가 어느 절기엔가
+	#    반드시 팔린다 = "이 메뉴는 1년 내내 못 판다"는 죽은 항목이 없다.)
+	var never_sellable := ""
+	for mid8 in MenuCatalog.ids():
+		var sellable := false
+		for s in 4:
+			if MenuCatalog.in_season(String(mid8), s):
+				sellable = true
+		if not sellable:
+			never_sellable = String(mid8)
+	_check("⑧ 16종 전부 적어도 한 절기엔 팔린다(사철 죽은 메뉴 0)%s"
+		% ("" if never_sellable == "" else " (죽은 메뉴: %s)" % never_sellable), never_sellable == "")
+	_check("⑧b 기본 메뉴는 전 절기(무재료라 하늘을 안 본다)",
+		MenuCatalog.in_season(MenuCatalog.AMERICANO, 0) and MenuCatalog.in_season(MenuCatalog.AMERICANO, 3))
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(_fail)
