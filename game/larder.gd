@@ -24,7 +24,17 @@ class_name Larder
 signal changed()   # 재고가 바뀐 프레임(main이 곳간 패널·HUD 갱신)
 
 # 재고 상한(총 개수). ★ 잠정 레버 — 카페 일구기 2단이 이 값을 연다(ADR-0064 결정 7).
+# CAPACITY = 1단(기본) 용량 · CAPACITY_STAGE2 = 2단이 여는 용량.
 const CAPACITY := 30
+const CAPACITY_STAGE2 := 50
+
+# ★[S6-T3] 지금 걸려 있는 상한. main이 카페 일구기 단계에서 파생해 주입한다(CafeMilestone.
+# larder_capacity_of — cafe.margin·open_seats와 같은 다리. 이 노드는 마일스톤을 모른다).
+# 기본값 = 1단 용량 = 주입 없는 하네스의 base rate 안전판(거동 불변).
+# ★ 상한이 *줄어드는* 방향은 재고를 버리지 않는다 — 넘친 채로 두고 새 적재만 막는다(free_space가
+#   음수를 0으로 잘라 낸다). 코지 톤: 사다리가 뒤로 가는 일은 없지만, 레버를 낮춰 밸런싱해도
+#   플레이어의 물건이 사라지지 않는다.
+var capacity: int = CAPACITY
 
 # 적재 재고 {id: count}. 품질 무차원 평 dict(위 설계 메모). 빈 dict = 곳간 빔. 0이 된 id는 즉시 제거.
 var stock: Dictionary = {}
@@ -85,7 +95,7 @@ func total() -> int:
 	return sum
 
 func free_space() -> int:
-	return maxi(0, CAPACITY - total())
+	return maxi(0, capacity - total())
 
 func is_full() -> bool:
 	return free_space() <= 0
@@ -111,7 +121,9 @@ func load_save(data: Dictionary) -> void:
 			var c := int(raw[id])
 			if c <= 0:
 				continue
-			# 용량은 로드 때도 지킨다 — CAPACITY를 낮추는 밸런싱 후 옛 세이브를 열어도 상한이 선다.
+			# 용량은 로드 때도 지킨다 — 상한을 낮추는 밸런싱 후 옛 세이브를 열어도 상한이 선다.
+			# ★[S6-T3] main이 **load_save 전에** capacity를 단계에서 파생해 주입한다 — 2단 세이브를
+			#   이어받으면 2단 용량으로 온전히 복원된다(1단 상한에 잘리지 않는다).
 			var room := free_space()
 			if room <= 0:
 				break
