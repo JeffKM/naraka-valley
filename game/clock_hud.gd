@@ -54,8 +54,20 @@ const TIME_ICONS := {                       # GameClock.phase() 문자열 4
 const ICON_PX := 16.0      # 절기/시간대 심볼 렌더 변
 const ICON_GAP := 3.0      # 심볼↔글자 사이 여백
 
-# ★[S7-T8] 날씨 심볼 팔레트(절차 드로잉 — 에셋 0). 절기·시간대 심볼과 같은 16px 자리에 들어가되
-# 저것들은 PNG, 이것은 draw_rect 청크다(T9에서 아트로 교체되면 이 함수만 텍스처 blit으로 바뀐다).
+# ★[S7-T9 / ADR-0065 결정 12] 날씨 심볼 아트 4종 — T8이 예고한 교체가 여기서 이뤄졌다.
+#   **절기 아이콘과 같은 16px 규격·같은 preload 관례**라 한 줄에 나란히 서도 눈금이 맞는다
+#   (그게 생성 판단의 근거였다: 절기 심볼은 음영 있는 생성 아트인데 날씨만 평면 2색 청크라
+#    같은 줄에서 결이 갈렸다). 인덱스 = Weather.CALM/RAIN/SNOW/SOULWIND 0..3.
+const WEATHER_ICONS: Array[Texture2D] = [
+	preload("res://assets/ui/weather_icon_calm.png"),
+	preload("res://assets/ui/weather_icon_rain.png"),
+	preload("res://assets/ui/weather_icon_snow.png"),
+	preload("res://assets/ui/weather_icon_soulwind.png"),
+]
+
+# ★[S7-T8] 날씨 심볼 팔레트(절차 드로잉 — 에셋 0). 아트가 온 뒤에도 **지우지 않는다**:
+# `weather_chunks`는 오프라인 합성 덤프(tools/weather_dump.gd)가 읽는 데이터 표이자 아트가
+# 빠졌을 때의 폴백이다(아래 `_draw_weather_glyph` 참조).
 const WX_SUN := Color(0.98, 0.80, 0.34)      # 평온 — 낮은 해(금빛)
 const WX_RAIN := Color(0.62, 0.80, 0.98)     # 혼우 — 서늘한 물빛
 const WX_SNOW := Color(0.93, 0.95, 1.00)     # 잿눈 — 회백
@@ -232,6 +244,11 @@ static func weather_chunks(w: int) -> Array:
 	return []
 
 func _draw_weather_glyph(rect: Rect2, w: int) -> void:
+	# ★[S7-T9] 아트가 있으면 아트. 절기·시간대 심볼과 **같은 draw_texture_rect 한 줄**이라
+	#   레이아웃(icon_x 계산·ICON_PX)은 T8 그대로다 — 호출부는 한 글자도 안 바뀌었다.
+	if w >= 0 and w < WEATHER_ICONS.size():
+		draw_texture_rect(WEATHER_ICONS[w], rect, false)
+		return
 	var u := rect.size.x / WX_GRID
 	var v := rect.size.y / WX_GRID
 	for c in weather_chunks(w):

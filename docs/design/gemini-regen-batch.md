@@ -2251,3 +2251,174 @@ muted 계수: 주방요괴 0.94/0.98(= §17.0 점주·옹이와 같은 값 — �
   좋아진다. 틴트 표(GUEST_TINTS)는 그대로 쓸 수 있다.
 ※ 주방요괴 초상화는 **큐에 없다**(§19.1 — 안 만드는 것이 설계).
 ```
+
+---
+
+## 20. ★[S7-T9] 절기·날씨·축제 아트 패스 — 점괘 거울·행사 프롭 2·HUD 날씨 아이콘 4·절기 팔레트 12장 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 오프라인 리톤 베이크로 **인게임 배선 완료**(2026-08-11). §10~§19와 같은
+> [ADR-0048] 교체 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰면 **코드 0줄
+> 수정**으로 반영된다.
+>
+> **후처리 글루 2종(역할이 갈린다 — 한 파일로 합치지 않는다):**
+> · [`game/tools/make_s7_art.py`](../../game/tools/make_s7_art.py) — *생성물* 후처리(하드 알파·muted·앵커).
+>   규칙은 `make_s6_art.py`와 **같은 값**을 쓴다(새 규칙 0).
+> · [`game/tools/retone_seasons.py`](../../game/tools/retone_seasons.py) — *기존 필드*의 절기 변주
+>   베이크(색보정만·생성 0). `retone_pianjeol.py`의 직계 후속이다.
+>
+> **raw 보관:** `game/assets/props/raw/{fortune_mirror,derby_booth,night_market}_raw.png` ·
+> `game/assets/ui/raw/weather_icon_{calm,rain,snow,soulwind}_raw.png`
+>
+> **육안 하네스:** `godot --headless --path game -s res://tools/season_ground_dump.gd`(신설) →
+> `game/tools/season_ground_{pianhwa,yuhwa,mangyeon,seongya}.png` + `season_ground_sheet.png`(2×2 대조).
+> 기존 `home_full_dump.gd`·`weather_dump.gd`도 그대로 이 패스의 판정면이다.
+>
+> **PixelLab 사용량 8 gen**(create_image_pixen 8회 = 1 gen/장, 리젝 0). 내역:
+>   · 점괘 거울 1 · 행사 프롭 2 · HUD 날씨 아이콘 4 · **메이드 초상 화풍 프로브 1**(생성물은 폐기 —
+>     §20.5의 판단 근거로만 씀) · **절기 팔레트 12장 = 0 gen**(전부 기존 필드의 색보정 파생)
+>
+> **이 패스가 지운 그레이박스:** 점괘 거울 절차 도형(테·유리·광택선), 더비 부스·야시장 매대 절차
+> 도형, HUD 날씨 평면 청크 글리프 4. **남긴 그레이박스:** 테마 데이 의상(§20.5 — 의도적 유지).
+
+### 20.0 공통 규약
+
+```
+전부 [ADR-0050] 32-native · [§1.1] NW 광원 · [§8.1] 하드 알파 · [§9] 저승 muted · [§3] 발치 앵커.
+생성: create_image_pixen(selective outline 또는 single color black outline / low detail /
+      no_background=true / seed 고정) — §18.0이 세운 그 호출이다(32² 안팎 소품은 pixen이 가장
+      깨끗하고 1 gen이라 리젝-재생성이 싸다).
+muted 계수(한 자리에 나란히 서는 것끼리 같은 값이라야 새것만 안 튄다):
+  월드 프롭 0.85/0.95 (= §18.2 곳간·출하함과 **같은 값** — 같은 실내·야외 프롭 층)
+  HUD 아이콘 0.94/1.00 (= §18.0 미니게임 배지와 같은 값 — 어두운 한지 판 위 작은 표식)
+★청키화(enforce_chunk)는 **걸지 않는다**: 현행 shipping 프롭의 2×2 블록비가 larder 0.068 ·
+  ship_bin 0.136이라 이번 3장(0.10~0.11)과 같은 결이다. 여기만 2px로 굳히면 실내 한 벽에서
+  이 하나만 굵어진다 — [§0.1] 캐논보다 "한 화면 한 그레인"이 우선인 자리(S6 패스가 그은 선).
+```
+
+### 20.1 ★점괘 거울 `props/fortune_mirror.png` (32×64 = 세로 2칸) — 예보 매개체의 얼굴
+
+```
+배선: main._draw_fortune_mirror의 `_prop_tex("fortune_mirror")` 훅 — T4가 미리 깔아 둔 훅이다.
+  자리 = MIRROR_TILE(17,68) 집 실내 **북벽 flush**, 책장(15..16)과 화분(18) 사이.
+★앵커 교정 1건(T9에서 훅을 한 줄 고쳤다 — "코드 0줄"이 안 된 유일한 프롭):
+  T4의 아트 분기가 `oy + TILE - h`(oy에 `WALL_PROP_LIFT` -18 포함)로 적혀 있었는데, 그 리프트는
+  높이 48짜리 *그레이박스 도형*을 벽 띠 안으로 밀어 넣던 보정값이다. 32×64 아트에 그대로 먹이면
+  거울 관이 **벽 위 방 밖(타일이 없는 검은 띠)으로 18px 솟는다**(T9 배치 덤프에서 적발).
+  집 북벽 띠는 **y67·68 두 줄 = 정확히 64px**이라, 리프트 없이 타일 하단(y68 bottom)에 발치정렬하면
+  아트 상단이 벽 상단과 저절로 맞는다 → [§3] "북벽 = art 바텀을 벽 띠 하단 모서리에" 그대로.
+  ⇒ **교체판도 반드시 32×64**로 뽑을 것. 높이가 달라지면 이 flush가 깨진다.
+  PROMPT: tall vertical oval fortune-telling mirror hanging on a wall, dark ink-stained wood frame
+    wrapped with pale hanji paper strips, faint ghostly blue divination glow inside the oval glass,
+    small carved wooden base at the bottom, korean afterlife shrine object, [§1.1 광원 세트],
+    muted somber palette   (view=side / selective outline / low detail / seed 70901)
+후처리: 하드 알파 → muted(0.85/0.95) → 32×64 발치정렬.
+★★ **세로 타원 + 한지 감은 테**가 정체의 전부다 — 무녀 옥자의 점술 결이지 라디오·TV가 아니다
+   (ADR-0065 결정 6이 "점괘 거울"로 이름을 정한 그 이유의 그림판).
+★  **오늘의 운 등급 색은 굽지 않는다.** 그레이박스가 거울면에 깔던 등급 틴트(대흉 잿빛 → 대길 금박)는
+   날마다 바뀌는 상태라 아트에 박으면 늘 같은 운이 된다 — 재고 표식을 스프라이트에 안 굽는 곳간·
+   출하함(§18.2)과 **완전히 같은 규율**이다. 지금 아트판은 틴트를 얹지 않고 `return`하므로,
+   교체판에 등급을 얹고 싶으면 그때 코드가 위에 그린다(아트는 빈 거울만).
+★  거울 안의 푸른 빛은 **정체(점괘)**이지 상태가 아니라 구워도 된다 — 늘 켜져 있는 것이니까.
+```
+
+### 20.2 행사 프롭 2종 `props/derby_booth.png` · `props/night_market.png` (각 32×48) — 오버레이의 얼굴
+
+```
+배선: main._draw_derby_booth / _draw_night_market의 `_prop_tex(…)` 훅(신설 2줄씩). 자리 =
+  DERBY_BOOTH_TILE(강변 산책로) · NIGHT_MARKET_TILE(광장). 발치정렬로 차양이 위 칸으로 솟는다.
+더비 부스 = 판자 좌판 + **다홍 차양 + 금빛 띠**(Festival.BANNER_A/B와 같은 색계 = "잔치"). 피안 12일.
+  PROMPT: small festival market booth stall, wooden plank counter table with two legs, crimson red
+    cloth awning canopy with gold trim stripe, festive fishing derby prize stand, korean afterlife
+    festival, [§1.1 광원 세트], muted somber palette (view=low top-down / seed 70902)
+야시장 매대 = 짙은 남빛 좌판 + 검붉은 차일 + **등롱 두 알**. 성야 15일.
+  PROMPT: small night market vendor stall, dark indigo wooden counter table, deep crimson cloth
+    canopy, two glowing warm paper lanterns hanging from the canopy poles, korean afterlife night
+    bazaar, [§1.1 광원 세트], muted somber palette (view=low top-down / seed 70903)
+★★ **행사일이 아니면 한 픽셀도 안 그린다** — 두 `_draw_*`가 첫 줄에서 반환한다. 오버레이 전용
+   (ADR-0065 결정 9 "맵 잠금 0")이라는 정체성이 렌더 층에도 그대로 있다: 잔치가 끝나면 무대에
+   흔적이 0이다. 타일·충돌은 애초에 안 건드리므로 지울 상태도 없다.
+★  더비 부스 위 **금빛 태그 점**(지금 든 태그가 있을 때)은 코드가 아트 **위에** 얹는다 — 상자
+   "보관 중" 점·곳간 재고와 같은 규율(상태는 굽지 않는다).
+★  등롱 빛은 굽는다(늘 켜진 정체) — 거울의 푸른 빛과 같은 기준.
+★★ **교체 시 고칠 것(현행 PixelLab판의 알려진 약점):** 두 매대 모두 **측면 벽이 살짝 보이는
+   3/4 결**로 나왔다(특히 야시장 매대의 우측면). [ADR-0036] §2 "측면 벽 렌더 금지·정면 facade"는
+   건물 규칙이라 1칸 소품엔 강제되지 않고, 행사일에만 서는 임시 프롭이라 이번엔 통과시켰다.
+   다만 같은 무대의 다른 프롭이 전부 정면 평면이므로 **교체판은 정면 평면으로 뽑는 편이 낫다**
+   (프롬프트에 `front-facing, flat front elevation, NOT isometric, NOT angled`를 더할 것).
+```
+
+### 20.3 HUD 날씨 아이콘 4종 `ui/weather_icon_{calm,rain,snow,soulwind}.png` (각 16×16)
+
+```
+배선: clock_hud.WEATHER_ICONS 배열(인덱스 = Weather.CALM/RAIN/SNOW/SOULWIND 0..3) →
+  `_draw_weather_glyph`가 draw_texture_rect 한 줄로 찍는다. **레이아웃·호출부는 T8 그대로**
+  (icon_x 계산·ICON_PX=16 불변).
+  평온 calm  = 창백한 해 원반 + 짧은 빛살(muted warm gold)
+  혼우 rain  = 잿빛 구름 + 빗방울 세 줄기(muted blue grey)
+  잿눈 snow  = 재로 된 6방 눈송이(회백 결정)
+  혼불 soulwind = 보랏빛 도깨비불 + 흰 심지
+  PROMPT 공통 꼬리: flat 2D pixel art, light source from top-left, distinct step-shading,
+    no smooth gradients, dark outline, centered single object (view=side / black outline / seed 7091x)
+후처리: 하드 알파 → muted(0.94/1.00) → 16² 중앙정렬.
+★★ **왜 생성했나(스킵하지 않은 근거):** 이 심볼은 절기 심볼(`ui/season_icon_*.png` 16²)과 **같은
+   HUD 줄에 나란히** 선다. 절기 쪽은 음영 있는 생성 아트인데 날씨만 평면 2색 절차 청크라 한 줄
+   안에서 결이 갈렸다 — ADR-0065 결정 10이 처음부터 "절기 아이콘 선례 동형"이라 적은 자리다.
+★  T8의 절차 청크 표 `ClockHud.weather_chunks`는 **지우지 않았다**: 오프라인 합성 덤프
+   (`tools/weather_dump.gd`)가 그 표를 읽어 이미지에 찍는다(화면 grab 불가 = 덤프는 표를 공유해야
+   한다). 아트 교체는 HUD 렌더만 갈아탄 것이지 데이터를 버린 게 아니다.
+```
+
+### 20.4 ★절기 팔레트 파생 12장 `terrain16/seasons/{yuhwa,mangyeon,seongya}/*.png` — 생성 0, 색보정 파생
+
+```
+소스(런타임이 실제로 읽는 파일과 1:1 — 지금 _TERRAIN_SINGLE_SOURCE=true):
+  single_source/grass_field.png(_bf_grass) · single_source/dirt_field.png(_bf_earth 마당 맨흙) ·
+  single_source/path_field.png(_bf_dirt 흙길) · soil_field.png(_bf_soil 갈아엎은 밭흙)
+산출: 위 4장 × 3절기 = 12장. **피안절은 0장**(원본 그대로 = 경로 분기만 = 기존 골든 덤프 불변).
+배선: main._big_field 첫 줄의 `_seasonal_path(path)` — 단일출처든 shipping이든 밭흙 직접 로드든
+  **한 관문**에서 절기가 걸린다. 절기 전환·세이브 재개는 `_refresh_season_terrain(true)`가 base
+  필드 + 파생 캐시(Wang 전환 타일·물가 마스크·데칼 틴트)를 버리고 구역을 한 번 다시 굽는다.
+레버(retone_seasons.PROFILES — [색상목표°, 당김, 채도, 명도, R·G·B 캐스트]):
+  유화 grass [108, 0.58, 1.32, 0.89, 1.02/1.01/0.94] · earth [32, 0.35, 1.12, 1.02, 1.04/1.00/0.93]
+  망연 grass [ 34, 0.82, 1.14, 1.04, 1.04/1.00/0.92] · earth [22, 0.45, 1.00, 0.94, 1.03/0.99/0.93]
+  성야 grass [  –,    0, 0.22, 0.96, 0.94/0.98/1.10] · earth [ –,    0, 0.34, 0.88, 0.95/0.98/1.08]
+  (밭흙 soil은 계열마다 더 얕게 — 밭은 "방금 판 젖은 검은 흙"이 정체라 크게 물들이면 갈아엎은
+   칸과 안 갈아엎은 칸의 구분이 흐려진다.)
+★★ **색수 증가 0**(ADR-0057 저색 crisp 보존): 변환이 픽셀값→픽셀값 순수 함수라 출력 색수는 입력을
+   넘을 수 없다. 스크립트가 매번 in/out 색수를 찍는다 — 실측 13→13 · 11→11 · 9→9 · 45→45(성야만
+   충돌로 13→10 · 11→9 · 9→7로 **줄었다**).
+★  성야에 hue를 안 쓰는 이유: 갈색(35°)을 파랑(215°)으로 lerp하면 최단호가 초록을 지나 흙이
+   이끼색으로 착지한다. 한랭은 **채도를 걷고 쿨 캐스트를 얹어** 낸다.
+★  물·모래·포석·판자는 **안 굽는다**(결정 11 "최소 세트") — 물은 얼지 않고 마을 포석·백사장은
+   안식 마당 밖이다. seasons/에 파일이 없으면 자동으로 원본 폴백이라 코드 분기가 필요 없다.
+★★ **owner 교체 경로:** 이 12장은 손대지 마라. 베이스 필드(single_source/*)를 새로 뽑아 넣고
+   `python3 tools/retone_seasons.py` 한 번 돌리면 3절기가 통째로 따라온다 — 절기 변주를 사람이
+   4벌 그리는 게 아니라 **한 벌만 그리면 나머지가 파생**되는 구조다(이 패스의 최대 절약).
+★  지면 스캐터 데칼(잡초·tuft·잔돌)만 코드가 틴트한다(main._season_tint_decal) — 셀마다 골라
+   합성하는 것이라 갈아 끼울 파일이 없다. 레버 수치는 위 PROFILES와 **같은 값**이고, 수치가
+   둘인 유일한 자리다(한쪽을 고치면 다른 쪽도 고친다).
+```
+
+### 20.5 메이드 데이 초상 변형 — **미생성 확정**(그레이박스 유지 · Gemini 큐로 이관)
+
+```
+ADR-0065 결정 12가 "메이드 데이 초상 변형만 시도"라 적은 축이다. **시도했고, 중단했다.**
+근거(정량 실측 — PixelLab 프로브 1 gen, 생성물은 폐기):
+  현행 초상 assets/portraits/*.png = 320×320 · 고유색 35,521~45,628 · 부드러운 회화풍 음영(Gemini)
+  PixelLab 프로브(create_image_pixen 128², 메이드 버스트) = 128×128 · **고유색 52** · 경성 도트 엣지
+  → 해상도 2.5배 차 · 색수 ~900배 차. `create_portrait_character`의 상한 160으로 올려도 이 간극은
+    좁혀지지 않는다(모델 자체가 픽셀아트 산출이다).
+  테마 데이 **하루만** 이 그림으로 갈아 끼우면 그날만 딴사람이 된다 — 없느니만 못한 교체다.
+표준 결정과의 정합: [ADR-0047] / 메모리 [gemini-full-regen-batch](owner 2026-07-02)가 캐릭터·초상
+  트랙을 **Gemini 전담**으로 이미 못 박았다. S6-T9도 같은 이유로 주방요괴 초상을 안 만들었다.
+  이 판단은 그 결정의 재확인이지 새 결정이 아니다.
+유지되는 그레이박스: 테마 데이 의상 = `_refresh_festival` → `set_festive(true)` (월드 스프라이트
+  Festival.TINT + 모자). **초상은 평시 그대로**다. 코드는 손대지 않았다.
+★owner Gemini 큐(1순위) — 메이드 데이 초상 5장:
+  파일: assets/portraits/{okja,miho,mel,bana}_maid.png + player 몫 1장, 각 320² 투명.
+  요구: ㉠ 평시 초상과 **같은 얼굴·같은 채색 결**(같은 시트에서 뽑는 게 안전) ㉡ 의상만 메이드
+     (프릴 헤드밴드 + 앞치마) ㉢ 표정은 중립 1장부터(5표정 세트는 그 다음) ㉣ 배경 투명.
+  배선 예정: 테마 데이 당일에만 초상 stem을 `_maid`로 갈아 끼우는 스왑 1자리(Festival이 이미 당일을
+     아는 유일 관문이라 분기 지점은 하나다). **아트가 오기 전엔 배선도 넣지 않았다** — 빈 훅은
+     "곧 온다"는 약속만 남기고 검증할 것이 없다.
+```

@@ -2869,6 +2869,10 @@ func _begin_game(is_new_game: bool) -> void:
 	# ★[S7-T1 / ADR-0065 결정 1] 옛 T4.2 재개 게이트(RunSummary.is_over → _end_run)가 여기 있었다.
 	#   _on_day_advanced의 종료 게이트와 **같은 게이트의 다른 입구**라, 취침 쪽만 걷어내면 day 22+
 	#   세이브를 이어받는 순간 마무리 화면이 떠 달력이 도로 막힌다. 두 입구를 함께 닫는다.
+	# ★[S7-T9 / ADR-0065 결정 11] 이어받은 세이브의 절기로 땅의 낯빛을 맞춘다. `_ready`가 월드를
+	#   지을 때는 아직 세이브를 안 읽어 clock.day=1(피안)이라, 망연절 40일차 세이브를 열면 지면만
+	#   봄 톤으로 남던 자리다. 신규 게임(=피안)이면 판정에서 걸려 no-op이라 부팅 비용 0.
+	_refresh_season_terrain(true)
 	# T4.1 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다.
 	#   (is_intro 단계에서만 열리는 자체 가드가 있어 조건 없이 불러도 안전하다.)
 	_maybe_start_intro()
@@ -7066,6 +7070,57 @@ func _load_wang_pairs() -> void:
 const _TERRAIN_SINGLE_SOURCE := true
 const _SS_DIR := "res://assets/terrain16/single_source/"
 
+# ── ★[S7-T9 / ADR-0065 결정 11] 절기 팔레트 파생 ─────────────────────────────
+# 지형 필드 소스를 **절기가 고른다**. 파생본은 `tools/retone_seasons.py`가 오프라인으로 구워
+# `seasons/<슬러그>/`에 두고(원본 불변), 여기선 경로만 갈아 끼운다 — 합성·리컬러를 런타임에
+# 하지 않는 게 요점이다(구역 빌드가 이미 무거운 자리라 매 절기 픽셀 순회를 얹으면 취침 연출이
+# 끊긴다. ADR-0001 "생성은 오프라인, 코드는 배선"과도 같은 결).
+#
+# ★ 피안절(0)은 슬러그가 **빈 문자열**이라 어떤 파일도 안 찾고 원본 경로를 그대로 반환한다 —
+#   "피안 = 기존 파일 그대로"가 코드 층에서도 성립해 기존 골든 덤프가 한 픽셀도 안 움직인다.
+# ★ 안 구운 필드(물·모래·포석·판자)는 seasons/에 파일이 없어 자동으로 원본 폴백이다(결정 11
+#   "최소 세트" — 물은 얼지 않고 마을 포석·백사장은 안식 마당 밖이다).
+const _SEASON_FIELD_DIR := "res://assets/terrain16/seasons/"
+const _SEASON_FIELD_SLUGS := ["", "yuhwa", "mangyeon", "seongya"]   # GameClock.SEASON_NAMES와 같은 순서
+
+# 덤프 하네스가 절기를 못 박을 때만 0..3으로 올린다(-1 = clock을 따름). `_bf_grass_mute`가
+# ground_ab_dump에 쓰이는 것과 같은 결의 오버라이드 레버다.
+var _season_field_override := -1
+# 지금 메모리에 올라온 base 필드가 **어느 절기로** 구워졌나(-1 = 아직 안 올라옴). 이 값과 현재
+# 절기가 어긋난 순간이 곧 리로드가 필요한 순간이다(`_refresh_season_terrain`의 유일한 판정).
+var _bf_season := -1
+
+func _season_field_index() -> int:
+	if _season_field_override >= 0:
+		return _season_field_override % 4
+	return clock.season_index() if clock != null else 0
+
+# 준 경로를 현재 절기의 파생본으로 바꾼다(없으면 준 경로 그대로 — 폴백이 곧 피안).
+func _seasonal_path(p: String) -> String:
+	var slug: String = _SEASON_FIELD_SLUGS[_season_field_index()]
+	if slug == "":
+		return p
+	var sp := _SEASON_FIELD_DIR + slug + "/" + p.get_file()
+	return sp if ResourceLoader.exists(sp) else p
+
+# 절기가 바뀌면 base 필드와 **거기서 구운 파생 캐시가 전부** 낡는다(Wang 전환 타일·물가 마스크는
+# base 픽셀을 합성해 만든 것이라 잔디만 갈면 경계가 옛 톤으로 남는다). 통째로 버리고 구역을 한 번
+# 다시 굽는다 — ADR-0065 결정 11 "절기 전환 시 텍스처 스왑·구역 리빌드 1회".
+func _refresh_season_terrain(rebuild: bool) -> void:
+	if _season_field_index() == _bf_season:
+		return                       # 같은 절기 = 할 일 없음(취침마다 부르지만 절기 첫날만 일한다)
+	_bf_grass = null                 # `_load_big_fields`의 재로드 게이트
+	# 새 절기를 지금 새겨 둔다. 갱도처럼 base 필드를 안 쓰는 구역에 서 있으면 `_load_big_fields`가
+	# 안 불려 이 값이 옛 절기로 남고, 그러면 취침마다 같은 판정이 다시 참이 돼 매일 헛 리빌드를 한다.
+	# 지상으로 돌아오는 순간 `_bf_grass == null`이라 어차피 새 절기로 로드된다(정합 유지).
+	_bf_season = _season_field_index()
+	_wang_tiles.clear()              # 손그림 Wang + base 합성본(0_1)이 섞여 있다 → 통째로
+	_field_paint.clear()
+	_shore_mask.clear()
+	_season_decal_cache.clear()      # 스캐터 데칼 절기 틴트본(키에 절기가 들어가지만 메모리는 접는다)
+	if rebuild:
+		_rebuild_region(_region)     # 이 안의 _paint_grid → _build_ground16이 새 절기로 다시 굽는다
+
 # 단일출처 플래그가 켜져 있고 SS 파일이 있으면 그걸, 아니면 현행 shipping 소스를 로드(폴백=완전 불변).
 func _ss_or(name: String, ship_path: String, fallback: Color) -> Image:
 	if _TERRAIN_SINGLE_SOURCE:
@@ -7077,6 +7132,7 @@ func _ss_or(name: String, ship_path: String, fallback: Color) -> Image:
 func _load_big_fields() -> void:
 	if _bf_grass != null:
 		return
+	_bf_season = _season_field_index()   # ★[S7-T9] 이번에 굽는 절기를 새겨 둔다(리로드 판정의 기준)
 	_bf_grass = _ss_or("grass_field.png", "res://assets/terrain16/grass_field.png", Color(0.29, 0.42, 0.24))
 	# ★ 재생성 crisp 잔디 타일(PixelLab 저색, 형광 채도)을 muted somber green으로 톤 보정(owner "둘 다").
 	#   grass_field.png는 crisp 소스로 보존하고 런타임에서만 muted(ADR-0001). 파일럿(순수 톤 검증)은 off.
@@ -7104,6 +7160,9 @@ func _load_big_fields() -> void:
 	_bf_sand_wet = _ss_or("sand_wet_field.png", "res://assets/terrain16/dirt_field.png", Color(0.62, 0.55, 0.45))
 
 func _big_field(path: String, fallback: Color) -> Image:
+	# ★[S7-T9] 절기 파생 분기의 **유일한 관문**. `_ss_or`도 결국 여기로 내려오므로 단일출처든
+	#   shipping이든 밭흙 직접 로드든 한 자리에서 절기가 걸린다(분기가 여러 벌이면 어긋난다).
+	path = _seasonal_path(path)
 	var img: Image
 	if ResourceLoader.exists(path):
 		img = (load(path) as Texture2D).get_image()
@@ -7756,10 +7815,12 @@ func _g16_blend_scatter(out: Image, surf: Array) -> void:
 				continue   # 맨 타일(오버레이 없음)
 			var ctex: Texture2D = chosen[0] as Texture2D
 			var timg: Image
+			var soft_flip := false
 			if _GD_SOFT_SET.has(ctex):
 				# ★[ADR-0059 결정 2 티어2 #6] 고주파 fBm으로 좌우반전 변종 선택 → 공간상관 있는 변주(같은 방향
 				#   tuft가 뭉치는 자연스러움), 순수 per-cell 해시보다 손그림스러움. 결정적(seed).
-				timg = _gd_soft_image(ctex, _micro_noise01(float(x), float(y)) < 0.5)   # 소프트 tuft(저대비·변종)
+				soft_flip = _micro_noise01(float(x), float(y)) < 0.5
+				timg = _gd_soft_image(ctex, soft_flip)   # 소프트 tuft(저대비·변종)
 			else:
 				timg = ctex.get_image()
 				if timg.get_format() != Image.FORMAT_RGBA8:
@@ -7779,7 +7840,74 @@ func _g16_blend_scatter(out: Image, surf: Array) -> void:
 				var sx := x * TILE + TILE / 2 + jx - sw / 2 + 1
 				var sy := y * TILE + TILE - 1 + jy - sh / 2
 				out.blend_rect(shadow, Rect2i(0, 0, sw, sh), Vector2i(sx, sy))
+			# ★[S7-T9] 절기 팔레트를 데칼에도. 피안이면 준 이미지를 그대로 돌려준다(렌더 바이트 불변).
+			timg = _season_tint_decal(ctex, soft_flip, timg)
 			out.blend_rect(timg, Rect2i(0, 0, dw, dh), Vector2i(px, py))
+
+# ★[S7-T9 / ADR-0065 결정 11] 지면 스캐터 데칼(잡초·tuft·잔돌·잔가지)의 절기 틴트.
+#
+# 왜 여기만 코드에 남았나: 지형 *필드*는 오프라인 베이크(`tools/retone_seasons.py`)로 갈아 끼우면
+# 끝이지만, 데칼은 `_g16_blend_scatter`가 셀마다 **골라 합성**하는 것이라 파일을 갈아 끼울 자리가
+# 없다. 그리고 이걸 빼면 성야절 잿빛 마당 위에 봄 초록 잡풀만 형광으로 남는다(1차 4절기 덤프에서
+# 실제로 그렇게 떴다) — 땅은 겨울인데 풀만 봄인 화면이 된다.
+#
+# ★ 레버 수치는 `retone_seasons.py`의 PROFILES와 **같은 값**이다. 두 벌이 갈리면 같은 화면에서
+#   필드와 그 위 잡풀의 절기가 어긋난다. 저기를 고치면 여기도 고친다(수치가 둘인 유일한 자리).
+# ★ 픽셀별로 풀/흙을 갈라 태운다: 데칼 한 장에 초록 잎과 갈색 잔가지가 섞여 있어 파일 단위로는
+#   못 가른다(필드는 파일 하나가 통째로 한 계열이라 갈 필요가 없었다).
+# ★ 피안절(0)은 **첫 줄에서 반환** — 종전 렌더 바이트 불변(기존 골든 덤프 보호).
+const _SEASON_DECAL_GRASS := [   # [hue_to°, hue_w, sat, val, cast_r, cast_g, cast_b] — 인덱스=절기
+	[], [108.0, 0.58, 1.32, 0.89, 1.02, 1.01, 0.94],
+	[34.0, 0.82, 1.14, 1.04, 1.04, 1.00, 0.92],
+	[0.0, 0.0, 0.22, 0.96, 0.94, 0.98, 1.10],
+]
+const _SEASON_DECAL_EARTH := [
+	[], [32.0, 0.35, 1.12, 1.02, 1.04, 1.00, 0.93],
+	[22.0, 0.45, 1.00, 0.94, 1.03, 0.99, 0.93],
+	[0.0, 0.0, 0.34, 0.88, 0.95, 0.98, 1.08],
+]
+const _SEASON_DECAL_HUE_LO := 60.0    # 이 색상대(초록~청록)이면 풀 계열, 아니면 흙 계열
+const _SEASON_DECAL_HUE_HI := 190.0
+const _SEASON_DECAL_SAT_MIN := 0.12   # 거의 무채(그림자·잔돌)는 색상이 무의미 → 흙 계열로
+
+# ★ **제자리에서 고치지 않는다** — 데칼 Image는 캐시가 공유하는 물건이다(`_gd_soft_image`는 변종
+#   한 장을 캐시해 수천 셀이 돌려 쓰고, `get_image()`도 내부 이미지를 그대로 줄 수 있다). 1차 구현이
+#   in-place로 칠했다가 같은 이미지에 틴트가 셀마다 겹쳐 쌓여 잡풀이 새까맣게 탔다(4절기 덤프에서 적발).
+#   그래서 (텍스처, 좌우반전, 절기)마다 **복제본을 한 번만 굽고 캐시**한다 — 누적 불가 + 셀당 픽셀
+#   순회도 사라져 오히려 빨라진다.
+var _season_decal_cache: Dictionary = {}
+
+func _season_tint_decal(ctex: Texture2D, flip: bool, img: Image) -> Image:
+	var s := _bf_season
+	if s <= 0 or s >= _SEASON_DECAL_GRASS.size():
+		return img                    # 피안절(또는 미로드) = 준 것을 그대로(종전 경로와 동일)
+	var key := "%d:%d:%d" % [ctex.get_instance_id(), 1 if flip else 0, s]
+	if _season_decal_cache.has(key):
+		return _season_decal_cache[key]
+	var out_img: Image = img.duplicate()
+	var gl: Array = _SEASON_DECAL_GRASS[s]
+	var el: Array = _SEASON_DECAL_EARTH[s]
+	for yy in out_img.get_height():
+		for xx in out_img.get_width():
+			var c := out_img.get_pixel(xx, yy)
+			if c.a <= 0.01:
+				continue
+			var hd := c.h * 360.0
+			var green: bool = c.s > _SEASON_DECAL_SAT_MIN \
+				and hd >= _SEASON_DECAL_HUE_LO and hd <= _SEASON_DECAL_HUE_HI
+			var lv: Array = gl if green else el
+			# 색환 최단호 lerp(retone_seasons.hue_lerp와 같은 식 — 0°↔360° 경계 안전).
+			var w: float = lv[1]
+			if w > 0.0:
+				var d: float = fposmod(float(lv[0]) - hd + 180.0, 360.0) - 180.0
+				hd = fposmod(hd + d * w, 360.0)
+			var nc := Color.from_hsv(hd / 360.0, clampf(c.s * float(lv[2]), 0.0, 1.0),
+				clampf(c.v * float(lv[3]), 0.0, 1.0), c.a)
+			out_img.set_pixel(xx, yy, Color(clampf(nc.r * float(lv[4]), 0.0, 1.0),
+				clampf(nc.g * float(lv[5]), 0.0, 1.0),
+				clampf(nc.b * float(lv[6]), 0.0, 1.0), c.a))
+	_season_decal_cache[key] = out_img
+	return out_img
 
 # ★[스타듀 농장 룩] 지면 표면 결정 헬퍼(_build_ground16 전용) ─────────────────────────────
 const _G16_GRASS_THR := 0.68   # 잔디 패치 문턱(↑=잔디↓·흙↑). ★Forest Farm=흙지배(owner "너무 많아"→0.62→0.68).
@@ -9068,6 +9196,11 @@ func _on_day_advanced(day: int) -> void:
 	#   (날짜가 갈려 있어 한 아침에 둘이 겹치지 않는다: 행사 12/20/16/15 vs 테마 데이 25).
 	for line in _seasonal_morning_notices():
 		_notice(line, NOTICE_SECS * 2.0)
+	# ★[S7-T9 / ADR-0065 결정 11] 절기 팔레트 스왑 — 땅의 낯빛이 절기를 따라 바뀐다.
+	#   **하루 정산의 맨 끝**에 둔다: 이 호출 안의 `_rebuild_region`이 그리드를 다시 세우므로,
+	#   지상 그리드를 전제하는 위 정산들(재점령 후보·잡초 확산·나무 파종)이 전부 끝난 뒤라야
+	#   안전하다. 절기 첫날이 아니면 스스로 no-op이라 매일 불러도 공짜다(판정은 함수 안에 하나).
+	_refresh_season_terrain(true)
 
 # ★ [ADR-0051] 배치된 허수아비의 보호 중심 칸 목록 — 밤 까마귀 판정(CrowRaid) 입력.
 #   안식 농원 장식으로 세운 허수아비(_prop_layouts["HOME"]의 PROP_SCARECROW)가 곧 방어 인프라다
@@ -17297,6 +17430,16 @@ func _draw_derby_booth() -> void:
 		return
 	var ox := float(DERBY_BOOTH_TILE.x * TILE)
 	var oy := float(DERBY_BOOTH_TILE.y * TILE)
+	# ★[S7-T9] 아트 훅 — assets/props/derby_booth.png(32×48)이 있으면 그대로. [§3] 발치 앵커라
+	#   차양이 위 칸으로 솟는다(그레이박스는 한 칸 안에 접혀 있었다). 금빛 태그 점은 아트 위에
+	#   그대로 얹는다 — 재고 표식을 스프라이트에 안 굽는 곳간·출하함과 같은 규율이다.
+	var booth_tex := _prop_tex("derby_booth")
+	if booth_tex != null:
+		draw_texture(booth_tex, Vector2(ox, oy + TILE - booth_tex.get_size().y))
+		var held: int = seasonal_event.tags_on(clock.day) if seasonal_event != null and clock != null else 0
+		if held > 0:
+			draw_rect(Rect2(ox + TILE * 0.5 - 3, oy + 17, 6, 6), HanjiUi.GOLD)
+		return
 	draw_rect(Rect2(ox + 3, oy + 14, TILE - 6, TILE - 16), Color(0.42, 0.30, 0.18))   # 좌판 널
 	draw_rect(Rect2(ox + 1, oy + 6, TILE - 2, 9), Festival.BANNER_A)                  # 차양(홍)
 	draw_rect(Rect2(ox + 1, oy + 6, TILE - 2, 3), Festival.BANNER_B)                  # 차양 금빛 띠
@@ -17313,6 +17456,12 @@ func _draw_night_market() -> void:
 		return
 	var ox := float(NIGHT_MARKET_TILE.x * TILE)
 	var oy := float(NIGHT_MARKET_TILE.y * TILE)
+	# ★[S7-T9] 아트 훅 — assets/props/night_market.png(32×48). 더비 부스와 완전 동형(발치 앵커).
+	#   등롱은 아트에 구워져 있다(고정 형태 = [§1.3](b) 자기그림자와 같은 부류라 구워도 되는 것).
+	var stall_tex := _prop_tex("night_market")
+	if stall_tex != null:
+		draw_texture(stall_tex, Vector2(ox, oy + TILE - stall_tex.get_size().y))
+		return
 	draw_rect(Rect2(ox + 2, oy + 12, TILE - 4, TILE - 14), Color(0.22, 0.20, 0.28))   # 좌판(짙은 남)
 	draw_rect(Rect2(ox + 2, oy + 12, TILE - 4, 3), Color(0.40, 0.36, 0.48))           # 상판 밝은 띠
 	draw_rect(Rect2(ox + 1, oy + 4, TILE - 2, 7), Color(0.30, 0.14, 0.18))            # 차일(검붉은)
@@ -17325,7 +17474,12 @@ func _draw_fortune_mirror() -> void:
 	var oy := float(MIRROR_TILE.y * TILE) + float(WALL_PROP_LIFT)
 	var tex := _prop_tex("fortune_mirror")
 	if tex != null:
-		draw_texture(tex, Vector2(ox, oy + TILE - tex.get_size().y))
+		# ★[S7-T9] 아트는 **벽 띠에 flush**로 건다 — 바닥이 아니라 벽이 호스트다([§3] 벽 부착 표
+		#   "북벽 = art 바텀을 벽 띠 하단 모서리에"). 그래서 여기선 `WALL_PROP_LIFT`를 안 쓴다:
+		#   그 리프트는 *그레이박스 도형*(높이 48)을 벽 띠 안으로 밀어 넣던 보정값이고, 32×64 아트는
+		#   벽 띠 두 줄(y67·68)과 **높이가 정확히 같아** 타일 하단에 발치정렬하면 저절로 flush다.
+		#   리프트를 그대로 먹이면 거울 관이 벽 위 방 밖(타일 없는 검은 띠)으로 18px 솟는다(T9 덤프 적발).
+		draw_texture(tex, Vector2(ox, float(MIRROR_TILE.y * TILE + TILE) - tex.get_size().y))
 		return
 	var w := TILE * 0.72
 	var h := TILE * 1.5
