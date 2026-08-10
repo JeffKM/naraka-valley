@@ -104,8 +104,12 @@ func _initialize() -> void:
 		Weather.name_of(Weather.CALM) == "평온" and Weather.name_of(Weather.RAIN) == "혼우"
 		and Weather.name_of(Weather.SNOW) == "잿눈" and Weather.name_of(Weather.SOULWIND) == "혼불 바람"
 		and Weather.name_of(9) == "")
-	_check("①l 테마 데이 스텁 = 항상 false(T6에서 실효 — 지금은 거동 영향 0)",
-		not Weather._is_theme_day(5) and not Weather._is_theme_day(25))
+	# ★[S7-T6] T3의 스텁(항상 false)이 Festival 위임으로 실효화됐다 — 테마 데이 **슬롯**(절기 25일)이면
+	#   분포를 무시하고 평온이다. 해금은 안 본다(세이브 상태를 모르는 순수 파생 유지 — festival.gd 근거 주석).
+	_check("①l 테마 데이 = Festival 슬롯 위임(절기 25일만 true)",
+		not Weather._is_theme_day(5) and Weather._is_theme_day(25)
+		and Weather._is_theme_day(25 + GameClock.DAYS_PER_SEASON) and not Weather._is_theme_day(26))
+	_check("①m 테마 데이 당일 강제 평온", Weather.weather_for_day(25) == Weather.CALM)
 
 	# ★ 분포 균일성 가드 — 빌드 중 실제로 터진 함정의 회귀 방지다: `hash(...) % 100`을 직접 쓰면
 	#   순차 문자열의 하위 비트가 선형으로 남아 특정 10분위가 통째로 비고, 확률 5~20%로 배정한
@@ -245,13 +249,18 @@ func _initialize() -> void:
 	m.clock.day = d_snow
 	m._refresh_cafe_ladder()
 	var scale_snow: float = m.cafe.spawn_scale
+	# ★[S7-T6] 축제 배수는 이제 day가 아니라 *열리는 테마*에서 나온다(달력 슬롯 ∧ 해금).
+	var fest_calm: float = Festival.spawn_scale_of(
+		Festival.theme_for_day(d_calm, st, m._cafe_revenue_total))
+	var fest_snow: float = Festival.spawn_scale_of(
+		Festival.theme_for_day(d_snow, st, m._cafe_revenue_total))
 	_check("⑤a 잿눈 = 축제 × 단계 × 날씨 곱 그대로(별도 대입 0)",
-		is_equal_approx(scale_snow, Festival.spawn_scale(d_snow)
+		is_equal_approx(scale_snow, fest_snow
 			* CafeMilestone.spawn_scale_of(st) * Weather.cafe_spawn_scale(Weather.SNOW)))
 	_check("⑤b 평온 = 날씨 배수 1.0(종전 값 불변 — 회귀 0)",
-		is_equal_approx(scale_calm, Festival.spawn_scale(d_calm) * CafeMilestone.spawn_scale_of(st)))
+		is_equal_approx(scale_calm, fest_calm * CafeMilestone.spawn_scale_of(st)))
 	# 축제 상태가 같은 두 날끼리만 비율을 본다(축제일이 끼면 0.5가 섞여 비교가 무의미해진다).
-	if is_equal_approx(Festival.spawn_scale(d_calm), Festival.spawn_scale(d_snow)):
+	if is_equal_approx(fest_calm, fest_snow):
 		_check("⑤c 잿눈 손님 +50% = 스폰 간격 ×(1/1.5)",
 			is_equal_approx(scale_snow * Weather.SNOW_CAFE_GUESTS, scale_calm))
 	else:

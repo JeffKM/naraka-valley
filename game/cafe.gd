@@ -96,6 +96,13 @@ var margin: float = 1.0
 # 축제라 사람이 몰리는 시간 한정 보너스라 '활동 곱셈기' 불침범(ADR-0008, festival.gd 참조).
 # 기본값 1.0 = 주입 없을 때(평소·테스트)의 base rate 안전판.
 var spawn_scale: float = 1.0
+# ★seam 5(S7-T6 카페 이벤트 데이): 테마 프리미엄 단가 배수. main이 테마 데이에 Festival.
+# SERVE_PREMIUM(1.25)을 주입한다(평일 1.0). **margin과 별개 인자**로 곱해진다 — 관계 곱셈기(멜
+# 마진)는 관계에서, 프리미엄은 달력에서 파생되어 두 축이 섞이지 않는다(ADR-0065 결정 8).
+var theme_premium: float = 1.0
+# ★seam 6(S7-T6): 체키 보상 배수. 테마 데이에 Festival.CHEKI_PREMIUM(1.5) 주입(평일 1.0).
+# 서빙가에 이미 theme_premium이 얹힌 *위에* 한 겹 더 곱해진다(테마 데이 = 체키의 대목).
+var cheki_premium: float = 1.0
 # ★seam 4(S6-T2): 오늘 날짜. main이 매 프레임 clock.day를 흘려넣는다(margin·spawn_scale과 같은 다리).
 # 주문 롤 시드의 한 축이라 "같은 날 n번째 손님은 몇 번을 굴려도 같은 메뉴를 원한다"가 성립한다.
 var day: int = 1
@@ -375,9 +382,11 @@ func serve(seat: int, served_menu_id: String = "") -> int:
 # (CafeMargin) — ♡0이면 ×1.0(base 그대로), 친해질수록 같은 잔이 비싸진다. **멜 마진은 메뉴가
 # *위에* 곱한다**(관계=곱셈기이지 게이트가 아니다, ADR-0008 — ♡0에서도 융합 프리미엄은 온전하다).
 # 미지·빈 메뉴 id는 정액 BASE_PRICE로 떨어진다(옛 무주문 호출 경로의 base rate 보존).
+# ★[S7-T6 / ADR-0065 결정 8] 테마 프리미엄(seam 5)이 여기 **한 자리**에 합류했다 — 서빙가가
+# 매출의 단일 출처라(체키가 이 값을 다시 읽는다) 여기 곱하면 사슬 전체가 함께 물든다.
 func serve_price(menu_id: String = "") -> int:
 	var base := MenuCatalog.price_of(menu_id) if MenuCatalog.has(menu_id) else BASE_PRICE
-	return int(round(base * margin))
+	return int(round(base * margin * theme_premium))
 
 # ── ★[S6-T5 / ADR-0064 결정 5] 체키 = 서빙의 다음 단(프리미엄) ───────────────
 # 이 노드가 체키에 대해 아는 건 **등급 하나(0~2 정수)**뿐이다 — 미니게임도, 구도도, 손님 이름도
@@ -387,9 +396,12 @@ func serve_price(menu_id: String = "") -> int:
 # **체키에도 자동으로 얹힌다**(관계 = 곱셈기 — 사슬의 어느 단에서도 ♡0이 막지 않고, 친할수록 사슬
 # 전체가 두꺼워진다, ADR-0008). 하한 1냥 = 최저 등급·최저가 잔에서도 0이 안 나오게(무실패의 산술적
 # 보증 — 0냥은 "찍을 이유가 없다"는 뜻이 되어 실패 등급과 다를 바 없어진다).
+# ★[S7-T6] 테마 데이엔 cheki_premium(1.5)이 한 겹 더 곱해진다 — 서빙가에 이미 실린 테마 프리미엄
+# 위에 얹히므로 그날 체키는 평일의 1.25 × 1.5 = 1.875배다(테마 의상·테마 장식을 배경으로 찍는
+# 사진이 그날의 대목이라는 CONTEXT 결 — "체키 수요↑").
 func cheki_price(menu_id: String, grade: int) -> int:
 	var rate: float = CHEKI_RATE[clampi(grade, 0, CHEKI_RATE.size() - 1)]
-	return maxi(int(round(serve_price(menu_id) * rate)), 1)
+	return maxi(int(round(serve_price(menu_id) * rate * cheki_premium)), 1)
 
 # 체키 한 장을 오늘 장부에 적고 매출을 돌려준다(지갑 반영·단골 원장은 호출 측 — serve와 같은 결).
 # ★ 서빙 수(_today_served)는 안 건드린다 — 손님 한 명에 서빙 1·체키 0~1이라 두 눈금이 갈려야
