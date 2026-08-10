@@ -1005,8 +1005,13 @@ func _draw_larder_top(panel: Rect2) -> void:
 		var right := "—" if menu_id == "" else "%s  %d냥" % [
 			MenuCatalog.name_of(menu_id), MenuCatalog.price_of(menu_id)]
 		var rc: Color = HanjiUi.INK_DIM if menu_id == "" else HanjiUi.GOLD_SOFT
-		HanjiUi.draw_text(self, Vector2(panel.end.x - PAD - HanjiUi.text_width(right, 13), ty),
-			right, 13, rc)
+		var rx := panel.end.x - PAD - HanjiUi.text_width(right, 13)
+		HanjiUi.draw_text(self, Vector2(rx, ty), right, 13, rc)
+		# ★[S6-T8] 그 메뉴의 잔을 글자 왼쪽에 한 장 — "이 재료가 저 잔이 된다"가 이름을 읽기 전에
+		#   그림으로 먼저 닿는다(왼쪽 재료 아이콘 ↔ 오른쪽 메뉴 아이콘이 한 줄에서 마주 본다).
+		var mtex: Texture2D = crop_icons.get(menu_id)
+		if mtex != null:
+			draw_texture_rect(mtex, Rect2(rx - 22.0, pos.y + 3.0, 18.0, 18.0), false)
 	if ids.size() > shown:
 		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + shown * ROW_H + 12.0),
 			"…외 %d종" % (ids.size() - shown), 12, HanjiUi.INK_DIM)
