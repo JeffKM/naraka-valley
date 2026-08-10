@@ -15,7 +15,7 @@
 
 ## 🧭 지금 위치 & 남은 작업
 
-**현재:** **Slice 1R·2·3·4·5 ✅ 연속 종결**(1R=2026-07-27 리메이크 12/12 · 2=2026-07-27 나루 T1~T11·PR#266~276·옥자 데모 체크포인트 도달 · 3=2026-07-28 낚시 T1~T11·PR#277~287 · 4=2026-07-30 채집·목공 T1~T11·PR#288~297·[ADR-0062](./docs/adr/0062-slice4-forest-foraging-woodwork-kickoff.md) · **5=2026-07-31 업화 갱도·나락 채광·전투 T1~T11·PR#298~308**·[ADR-0063](./docs/adr/0063-slice5-mine-floors-combat-naraku-kickoff.md)) — **Slice 6 진행 중(착수 self-grill ✅ 2026-07-31 · [ADR-0064](./docs/adr/0064-slice6-cafe-fusion-menu-larder-serving-kickoff.md) 결정 12건·shrimp S6-T1~T10) — S6-T1 메뉴·곳간·서빙 코어 ✅(PR#309)·S6-T2 주문 위상·폴백·해금 ✅(PR#310)·S6-T3 마일스톤 재정의·일구기 사다리 2단 ✅(PR#311)·S6-T4 손님 풀·단골화 ✅(PR#312), 다음 = S6-T5 체키(ChekiSession)**. owner 큐 검토 대기 항목(라이브 확인·잠정 결정)은 `docs/owner-review-queue.md`. forward 진실원천 = 아래 [빌드 슬라이스 계획].
+**현재:** **Slice 1R·2·3·4·5 ✅ 연속 종결**(1R=2026-07-27 리메이크 12/12 · 2=2026-07-27 나루 T1~T11·PR#266~276·옥자 데모 체크포인트 도달 · 3=2026-07-28 낚시 T1~T11·PR#277~287 · 4=2026-07-30 채집·목공 T1~T11·PR#288~297·[ADR-0062](./docs/adr/0062-slice4-forest-foraging-woodwork-kickoff.md) · **5=2026-07-31 업화 갱도·나락 채광·전투 T1~T11·PR#298~308**·[ADR-0063](./docs/adr/0063-slice5-mine-floors-combat-naraku-kickoff.md)) — **Slice 6 진행 중(착수 self-grill ✅ 2026-07-31 · [ADR-0064](./docs/adr/0064-slice6-cafe-fusion-menu-larder-serving-kickoff.md) 결정 12건·shrimp S6-T1~T10) — S6-T1 메뉴·곳간·서빙 코어 ✅(PR#309)·S6-T2 주문 위상·폴백·해금 ✅(PR#310)·S6-T3 마일스톤 재정의·일구기 사다리 2단 ✅(PR#311)·S6-T4 손님 풀·단골화 ✅(PR#312)·S6-T5 체키 미니게임 ✅(PR#313 — ChekiSession·응대→체키 2단 사슬·61단언)·S6-T6 밤 바 칵테일 ✅(PR#314 — CocktailSession 믹싱/타이밍·67단언·바나 보호 축 무접촉), 다음 = S6-T7 곁들이**. owner 큐 검토 대기 항목(라이브 확인·잠정 결정)은 `docs/owner-review-queue.md`. forward 진실원천 = 아래 [빌드 슬라이스 계획].
 
 **다음 빌드 순서 (owner 확정 2026-07-22 개정 — Slice 1R 최우선 선행):**
 
