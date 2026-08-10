@@ -644,6 +644,13 @@ const DEBRIS_KIND := {
 	PROP_DEBRIS_EMBER: DebrisCatalog.EMBER,
 	PROP_DEBRIS_STUMP: DebrisCatalog.STUMP,
 }
+# ★[S7-T5 / ADR-0065 결정 7] 절기 전환 재스폰 debris의 kind → 텍스처(위 DEBRIS_KIND의 역방향, solid 2종만).
+#   재스폰 잡초는 좌표 원장(reclaim._weeds)이 들고 _draw_encroach_weeds가 그리므로 여기 없다 — 여기 실리는
+#   건 "프롭 엔트리로 병합해야 통행까지 막히는" 업화석·석화 고목뿐이다.
+const RESPAWN_DEBRIS_TEX := {
+	DebrisCatalog.EMBER: PROP_DEBRIS_EMBER,
+	DebrisCatalog.STUMP: PROP_DEBRIS_STUMP,
+}
 # ★ [roster §5.2 / ADR-0050] 32-native 재생성 — kind별 3변주(좌표해시로 결정적 선택 → 같은 kind가 맵에서
 #   3형태로 다양). 정체성 토큰(위 const=v1)은 DEBRIS_KIND·SOLID_PROPS·충돌·reclaim가 그대로 키잉하고,
 #   변주는 *순수 그리기 관심사*(3장 전부 32×32 동일 크기라 발치·그림자·Y-split·충돌 불변).
@@ -1346,6 +1353,10 @@ var _prop_layouts: Dictionary = {}
 #   _prop_entries_for()로 _prop_layouts["HOME"]와 병합해 그린다·충돌·점유·개간을 통일한다.
 var _home_scatter: Array = []
 var _home_scatter_built := false
+# ★[S7-T5] 절기 재스폰 solid debris의 프롭 엔트리 캐시(_respawn_debris_entries). 원장(reclaim)이 진실원이고
+#   이건 그 파생 뷰라, reclaim.changed마다 dirty로 찍고 다음 조회 때 다시 만든다(프레임 재할당 회피).
+var _respawn_debris_cache: Array = []
+var _respawn_debris_dirty := true
 
 # ★ ADR-0025 ① 인게임 배치 모드 상태(디버그/에디터 전용 저작 도구). _toggle_edit_mode·_unhandled_input·
 # _draw_edit_overlay가 참조. 등불(LANTERN)은 빛 좌표가 코드 상수(LANTERN_TILES_*)라 편집 팔레트서 제외
@@ -4013,6 +4024,9 @@ func _on_ranch_changed() -> void:
 # ★ [S1-8] reclaim 상태가 바뀐 프레임(개간·세이브 복원). 치운 debris는 드로우/충돌 skip-filter가
 # reclaim.is_cleared로 질의하므로, 프롭 충돌을 다시 세우고(치운 SOLID debris 통과) 화면·앞프롭을 갱신한다.
 func _on_reclaim_changed() -> void:
+	# ★[S7-T5] 재스폰 debris 프롭 엔트리 캐시 무효화 — 아래 충돌 재구성이 곧 새 목록을 읽어 간다
+	#   (순서 중요: dirty를 먼저 찍어야 _rebuild_prop_collision이 갱신된 병합을 본다).
+	_respawn_debris_dirty = true
 	if _region == RegionCatalog.HOME:
 		_rebuild_prop_collision()
 	queue_redraw()
@@ -6587,9 +6601,37 @@ func _gen_overgrown_debris(groups: Dictionary, claimed: Dictionary, w: int, h: i
 
 # ★ HOME 프롭 병합 접근자 — 손저작 _prop_layouts["HOME"] + 절차 _home_scatter. 그리기·충돌·점유·개간이
 #   이 병합을 단일 출처로 본다(편집 모드·직렬화는 raw _prop_layouts만 봐 시드-동등·layout.json 불변).
+#   ★[S7-T5] 세 번째 출처가 붙는다: 절기 전환에 **새로 돋은** solid debris(reclaim 원장 소유). 여기서
+#   병합하는 것만으로 드로우(_draw_props_for)·충돌(_rebuild_prop_collision)·점유(_home_occupied_tiles)·
+#   개간 조회(_debris_kind_at)가 전부 기존 경로로 돈다 — 재스폰 debris 전용 코드가 한 줄도 안 생긴다.
 func _home_prop_entries() -> Array:
 	_ensure_home_scatter()
-	return _prop_layouts.get("HOME", []) + _home_scatter
+	return _prop_layouts.get("HOME", []) + _home_scatter + _respawn_debris_entries()
+
+# ★[S7-T5] reclaim의 절기 재스폰 debris 원장 → 프롭 엔트리([tex, [tiles]]) 변환. kind별로 묶어 텍스처
+#   하나에 좌표 여럿을 태운다(_prop_layouts 엔트리와 바이트 동형이라 하류가 구분할 필요가 없다).
+#   ★ 캐시하는 이유: _home_prop_entries는 프레임마다(_debris_kind_at·프롬프트) 불린다. 원장은 취침·개간·
+#     세이브 복원에만 바뀌므로 reclaim.changed에서 무효화하고(_respawn_debris_dirty) 그때만 다시 만든다.
+func _respawn_debris_entries() -> Array:
+	if not _respawn_debris_dirty:
+		return _respawn_debris_cache
+	_respawn_debris_dirty = false
+	_respawn_debris_cache = []
+	if reclaim == null:
+		return _respawn_debris_cache
+	var by_kind: Dictionary = {}
+	for t: Vector2i in reclaim.respawned_debris_tiles():
+		var kind: String = reclaim.respawned_debris_kind(t)
+		if kind == "":
+			continue                       # 이미 치운 자리(원장이 걸러 준다)
+		if not by_kind.has(kind):
+			by_kind[kind] = []
+		by_kind[kind].append(t)
+	for kind: String in by_kind:
+		var tex: Texture2D = RESPAWN_DEBRIS_TEX.get(kind, null)
+		if tex != null:
+			_respawn_debris_cache.append([tex, by_kind[kind]])
+	return _respawn_debris_cache
 
 # 구역 프롭 키 → 엔트리. HOME만 절차 스캐터 병합, 나머지(CAFE·VILLAGE_HOUSE)는 raw.
 func _prop_entries_for(key: String) -> Array:
@@ -8777,7 +8819,27 @@ func _on_day_advanced(day: int) -> void:
 				withered += 1
 		if withered > 0:
 			_notice("절기 전환 — 지난 절기 작물 %d포기가 스러졌다" % withered)
-	# [S7-T5] 절기 재스폰 자리 — 빈 맨땅 잡초·debris 대량 재스폰.
+	# ★[S7-T5 / ADR-0065 결정 7] 절기 전환 아침의 마당 — 두 갈래가 절기에 따라 갈린다.
+	#   ㉠ 성야절(잿눈의 절기) 진입 = **잡초 소멸**. 밤새 스민 재점령 잡초가 눈 밑으로 사라진다(스타듀
+	#     겨울 동형). 재스폰은 없다 — 겨울은 마당이 한 번 쉬는 절기다(확산·재점령 정지와 같은 결).
+	#   ㉡ 그 밖의 절기 = **대량 재스폰**. 빈 맨땅 후보(=밤 재점령과 **같은** 성역 규칙)에 8~16칸이 돋고,
+	#     그중 3할은 도구 게이트(업화석·석화 고목)라 개간이 "한 번 끝나고 마는 일"이 되지 않는다.
+	#   ★ 이 자리가 사멸 패스 **바로 뒤·갱도 리셋 앞**인 이유: 후보 계산이 지상 그리드를 전제하고,
+	#     여기서 돋은 debris가 아래 확산 패스의 목적지 면제(프롭 점유)로 곧바로 반영돼야 한다.
+	if season_start:
+		if GameClock.season_index_for_day(day) == 3:
+			var purged := reclaim.purge_weeds() if reclaim != null else 0
+			if purged > 0:
+				_notice("성야의 잿눈이 마당을 덮었다 — 잡초 %d포기가 눈 밑으로 졌다" % purged)
+		elif reclaim != null:
+			var respawn := reclaim.season_respawn(_encroach_candidates(), day, false)
+			var r_ember: Array = respawn["ember"]
+			var r_stump: Array = respawn["stump"]
+			var r_weeds: Array = respawn["weeds"]
+			var solid_n: int = r_ember.size() + r_stump.size()
+			var weed_n: int = r_weeds.size()
+			if weed_n + solid_n > 0:
+				_notice("절기가 바뀌며 묵힌 땅이 거칠어졌다 — 잡초 %d·돌과 고목 %d" % [weed_n, solid_n])
 	# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 리셋 — 날이 바뀌면 전 층이 리필된다(그날 깬 돌·열린 사다리
 	#   기록이 전량 소멸하고, 배치는 시드가 day를 물고 있어 저절로 갈린다). 스타듀 "매일 리필" 정합.
 	#   ★ 층 안에서 날이 바뀌면 **지상으로 되돌린다**: 지금은 층 안 취침이 불가능하지만(_can_sleep은 집
@@ -8811,6 +8873,28 @@ func _on_day_advanced(day: int) -> void:
 		farm.remove_plant(et)                 # 작물만 제거·흙/비료 보존(tile_changed로 오버레이 갱신)
 	if eaten.size() > 0:
 		_notice("까마귀가 작물 %d개를 쪼아먹었다 — 허수아비로 막을 수 있다" % eaten.size())
+	# ★[S7-T5 / ADR-0065 결정 7] 잡초 확산 — 현존 잡초가 밤새 옆 칸으로 번진다(포기당 6%·혼우/절기 1일 ×2).
+	#   번진 칸의 작물·스프링클러는 **부서진다**. 까마귀와 같은 이유로 `farm.advance_day`(성장) *앞*에 둔다:
+	#   삼켜진 작물은 그날 자라지 않는다(밤에 벌어진 일 → 아침에 남은 것만 자란다는 하루 사이클 규율).
+	#   ★ 파괴 집행은 여기(main)가 한다 — Reclaim은 밭도 설치물도 모르고, 어디를 삼켰는지만 돌려준다.
+	#   ★ 혼우 ×2와 절기 1일 ×2가 겹칠 일은 없다(절기 첫날은 Weather가 평온으로 못 박는다) — 배수는 늘 2.0.
+	if reclaim != null and _region == RegionCatalog.HOME:
+		var wet: bool = Weather.waters_field(weather) or season_start
+		var spread := reclaim.spread_day(_seed_weed_sources(), _weed_spread_cb(), day,
+			GameClock.season_index_for_day(day) == 3,
+			Reclaim.SPREAD_WET_MULT if wet else 1.0)
+		var eaten_crops: Array = spread["crops"]
+		var broken_sprinklers: Array = spread["sprinklers"]
+		for ct in eaten_crops:
+			farm.remove_plant(ct)             # 작물만 제거·흙/비료 보존(까마귀·절기 사멸과 같은 API)
+		for pt in broken_sprinklers:
+			sprinkler.remove(pt)              # 설치물 소멸(회수 아님 — 인벤 반환 없음)
+		# 알림은 **파괴가 있었을 때만**. 그냥 번지기만 한 밤은 조용하다(아침 알림 줄 보호 — 잃은 게 없으면
+		# 말할 것도 없고, 거칠어진 마당은 화면이 이미 보여 준다).
+		if not eaten_crops.is_empty():
+			_notice("잡초가 작물 %d포기를 삼켰다 — 낫으로 잡초를 베어 두자" % eaten_crops.size())
+		if not broken_sprinklers.is_empty():
+			_notice("잡초가 스프링클러 %d개를 부쉈다" % broken_sprinklers.size())
 	# ★ [S1R-T9] 저승 스프링클러 자동 급수 — 성장(advance_day) *전에* 설치된 스프링클러의 십자 인접 칸을
 	#   적신다(혼력 0·물뿌리개 잔량 무관 — T8 축과 독립). 스타듀 문법: 아침에 뿌려 그날 성장할 칸을 미리
 	#   적시고, 바로 아래 advance_day가 젖은 심긴 칸을 자란다("급수 → 성장 판정" 순서 = 하루 사이클 정합).
@@ -15309,6 +15393,70 @@ func _encroach_candidates() -> Array:
 			if POND_ACTIVITY_RECT.has_point(t):     # ★[ADR-0059 결정1] 물가 활동존 = 잡초 없는 여백 → 배제
 				continue
 			out.append(t)
+	return out
+
+# ★[S7-T5 / ADR-0065 결정 7] 확산 목적지 한 칸의 분류 — Reclaim.spread_day가 Callable로 물어본다.
+#   *성역과 갈리는 지점*: `_encroach_candidates`(무에서 스폰)는 밭·작물을 통째로 배제하지만, 여기는
+#   작물·스프링클러를 **파괴 대상으로 통과시킨다**. 방치한 잡초가 옆으로 자라는 건 기습이 아니라
+#   플레이어가 어제부터 보고 있던 원인의 결과라, ADR-0065가 성역보다 파괴를 후행 채택했다.
+#   면제(DEST_BLOCK)로 남는 것: 길·물·벽·절벽·건물 패드 / 프롭 점유(건물·나무·바위·울타리·허수아비·
+#   기존 debris·꽃) / 과수 3×3 / 다른 설치물(업화로·게잡이통·수액 채취기) / 연못 활동존 / 이미 잡초.
+#   ※ 상자는 실내(집·창고) 바닥이라 이 야외 그리드에 아예 안 들어온다 — 자동 면제.
+func _weed_spread_class(t: Vector2i, occ: Dictionary) -> int:
+	if _region != RegionCatalog.HOME or reclaim == null:
+		return Reclaim.DEST_BLOCK
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
+		return Reclaim.DEST_BLOCK
+	var cell: int = _grid[t.y][t.x]
+	if cell != GROUND and cell != SOIL:      # 걸을 수 있는 맨땅·밭 흙만(길·물·벽·절벽·건물 패드 배제)
+		return Reclaim.DEST_BLOCK
+	if is_solid(cell):
+		return Reclaim.DEST_BLOCK            # 방어(SOLID 지형)
+	if occ.has(t):
+		return Reclaim.DEST_BLOCK            # 프롭 점유 = 면제(SOLID·기존 debris·장식 전부)
+	if POND_ACTIVITY_RECT.has_point(t):
+		return Reclaim.DEST_BLOCK            # 물가 활동 여백은 확산에도 안 내준다(낚시 앵커 보존)
+	if orchard != null and orchard.tree_at(t) != Orchard.TREE_NONE:
+		return Reclaim.DEST_BLOCK            # ★과수 = 면제(스타듀 동형·ADR-0045 불가침)
+	if reclaim.has_weed(t):
+		return Reclaim.DEST_BLOCK            # 이미 잡초(멱등)
+	if furnace != null and furnace.has_at(_region, t):
+		return Reclaim.DEST_BLOCK
+	if crab_pot != null and crab_pot.has_at(_region, t):
+		return Reclaim.DEST_BLOCK
+	if tapper != null and tapper.has_at(_region, t):
+		return Reclaim.DEST_BLOCK
+	# ★파괴 2종 — ADR-0065가 명시한 것만. 다른 설치물까지 삼키면 "잡초에 다 잃는다"가 되어 cozy를 넘는다.
+	if sprinkler != null and sprinkler.has_at(t):
+		return Reclaim.DEST_SPRINKLER
+	if farm.is_planted(t):
+		return Reclaim.DEST_CROP             # 트렐리스 작물도 심긴 칸이라 같은 갈래를 탄다
+	return Reclaim.DEST_OPEN                 # 빈 맨땅 · 갈아만 둔 흙(작물 없음) = 그냥 점유
+
+# 확산 분류 Callable(안식에 있을 때만 유효 — 다른 구역에서 자면 그 밤 확산은 스킵된다. 나무 자체 파종
+# `_tree_seed_free_cb`와 같은 결이고, 결정 롤이 day 시드라 손실이 아니라 스킵이다).
+# 프롭 점유(occ)는 칸마다 다시 계산하면 비싸므로 한 번 만들어 클로저에 캐시한다.
+func _weed_spread_cb() -> Callable:
+	if _region != RegionCatalog.HOME or reclaim == null:
+		return Callable()
+	var occ := _home_occupied_tiles()
+	return func(t: Vector2i) -> int:
+		return _weed_spread_class(t, occ)
+
+# ★[S7-T5] 확산의 **원장 밖 소스** — 아직 안 벤 시드/절차 배치 잡초 debris. reclaim._weeds가 밤 재점령분만
+#   담기 때문에, "현존 잡초"를 온전히 세려면 마당에 원래 깔려 있던 overgrown 잡초도 넣어야 한다
+#   (그게 확산의 주된 출발점이다 — 개간을 미룬 구역일수록 빨리 번진다는 인과가 여기서 선다).
+#   ENCROACH_SCAN_RECT로 좁히지 않는다: 시드 잡초는 마당 전역에 흩어져 있고, 목적지 판정이 어차피 성역을 건다.
+func _seed_weed_sources() -> Array:
+	var out: Array = []
+	if _region != RegionCatalog.HOME or reclaim == null:
+		return out
+	for entry in _home_prop_entries():
+		if DEBRIS_KIND.get(entry[0], "") != DebrisCatalog.WEEDS:
+			continue
+		for t: Vector2i in entry[1]:
+			if not reclaim.is_cleared(t):
+				out.append(t)
 	return out
 
 # ★ [B1-a.1 → Phase E/S1-15] 신규 게임 스타터 짐승 배치. ranch가 비었을 때만(멱등) 종별 소속 건물 실내에
