@@ -57,6 +57,15 @@ func take_back(id: String, n: int = 1) -> int:
 		changed.emit()
 	return moved
 
+# ★[S6-T2 / ADR-0064 결정 4] 서빙이 시그니처 재료를 **먹어 없앤다**. take_back과 갈리는 건 의도다 —
+# 회수는 물건이 백팩으로 돌아가지만(호출 측이 인벤에 넣는다) 소비는 메뉴가 되어 사라진다. 원자적:
+# 재고가 n보다 적으면 **한 개도 안 건드리고 0**을 돌려준다(호출 측은 그걸 보고 기본 메뉴로 폴백한다 —
+# 부분 차감이 되면 "재료를 먹었는데 기본 메뉴가 나가는" 손실 경로가 생긴다).
+func consume(id: String, n: int = 1) -> int:
+	if n <= 0 or count_of(id) < n:
+		return 0
+	return take_back(id, n)
+
 # ── 조회(서빙 차감·패널 렌더가 쓴다) ─────────────────────────────────────────
 func count_of(id: String) -> int:
 	return int(stock.get(id, 0))

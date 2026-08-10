@@ -9,9 +9,11 @@ extends SceneTree
 # 검증 세 축(verification criteria — 직조 전환·자원 합류·관계 환류 + 낮 안 기회비용):
 #   Ⓐ 직조 전환 — 한 GameClock 시각만 흘려도 세 루프의 깨우기/재우기가 파생된다: 아침=농사만,
 #      15–19시=카페 영업창 열림(미호 카페 출근), 19–24시=카페 닫힘·밤 무대(바나 등장·옵트인 가능).
-#   Ⓑ 자원 합류 — 낮에 거둔 *한 재고 풀*(inventory.harvested)을 카페 서빙(현재 자산 환전)과
-#      밤 약탈(미래 자산 손실)이 *함께 노린다*(둘 다 _cheapest_harvest 경유). 카페 매출·밤 매출은
-#      *같은 지갑*(wallet)으로 합류한다. → 밤이 밭→재고→서빙 사슬에 묶인다(§2.8 직조).
+#   Ⓑ 자원 합류 — 낮에 거둔 *한 재고 풀*(inventory.harvested)을 카페(현재 자산 환전)와 밤 약탈
+#      (미래 자산 손실)이 *함께 노린다*. 카페 매출·밤 매출은 *같은 지갑*(wallet)으로 합류한다.
+#      ★[S6-T2] 카페 쪽 경로가 한 칸 길어졌다: 서빙은 백팩이 아니라 **곳간**을 먹는다(기본 메뉴가
+#      무재료가 되면서 재료 소모가 곳간으로 옮겨감 — ADR-0064 결정 2·4). 사슬은 밭→재고→**곳간**→
+#      융합 서빙이고, 밤 약탈은 여전히 곳간에 넣기 *전* 백팩 재고를 노린다(적재가 곧 방어이기도 하다).
 #   Ⓒ 관계 환류 — 미호·멜·바나 세 호감도가 한 프레임에 각자 *종류가 다른* 루프 곱셈기로 환류한다:
 #      미호→Foxfire(자동화: 가속·범위)·멜→CafeMargin(마진: 단가 배수)·바나→BanaGuard(보호: 약탈량·
 #      자동차단·인내심). 같은 +%의 반복이 아니라 동사가 분화(ADR-0008) — 셋이 한 빌드에서 동시 가동.
@@ -117,9 +119,18 @@ func _run_checks() -> void:
 	_check("⑤pre 영업창에 카페 손님 착석", seat >= 0)
 	var gold_before_serve: int = m2.wallet.gold
 	var inv_before_serve: int = m2.inventory.total_harvest()
+	# ★[S6-T2] 낮 산출물 1개를 곳간에 쟁이고, 그걸 시킨 손님에게 융합 메뉴로 내준다.
+	#   (서빙 자체는 백팩을 한 톨도 안 건드린다 — 기본 메뉴가 무재료라 "재료 없어 못 판다"가 없다.)
+	var latte_sig := CropCatalog.HONRYEONGCHO
+	m2.inventory.take_harvest(latte_sig)          # 밭 산출물 → 곳간으로 이동
+	m2.larder.add(latte_sig, 1)
+	m2._menu_found[latte_sig] = true              # 발견 게이트(한 번 손에 넣어 봤다)
+	m2.cafe._seats[seat]["want"] = MenuCatalog.HONRYEONGCHO_LATTE
 	m2._try_serve(seat)
-	_check("⑤ 카페 서빙 → 재고 1개 소모(밭→재고→서빙 사슬)", m2.inventory.total_harvest() == inv_before_serve - 1)
-	_check("⑤b 카페 매출이 같은 지갑으로 합류", m2.wallet.gold == gold_before_serve + Cafe.BASE_PRICE)
+	_check("⑤ 카페 서빙 → 곳간 재료 1개 소모(밭→재고→곳간→융합 서빙 사슬)",
+		m2.larder.count_of(latte_sig) == 0 and m2.inventory.total_harvest() == inv_before_serve - 1)
+	_check("⑤b 카페 매출이 같은 지갑으로 합류(융합 프리미엄가)",
+		m2.wallet.gold == gold_before_serve + MenuCatalog.price_of(MenuCatalog.HONRYEONGCHO_LATTE))
 
 	# ── ⑥ 밤 약탈: *같은 재고 풀*을 잡귀가 노린다(미래 자산 손실) — 카페가 안 가져간 재고가 줄어든다 ──
 	m2.clock.minutes = NightBar.OPEN_MIN + 60  # 20:00(밤 창) — 카페는 닫히고 밤이 같은 재고를 노린다

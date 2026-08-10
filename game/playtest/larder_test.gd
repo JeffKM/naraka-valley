@@ -154,8 +154,22 @@ func _initialize() -> void:
 			break
 	if tool_slot >= 0:
 		mn._on_frame_larder_store(tool_slot)
-		_check("⑧f 도구는 적재 거절(수확물만 — 출하함 드롭과 같은 제한)",
+		_check("⑧f 도구는 적재 거절(어느 메뉴의 재료도 아니다)",
 			mn.inventory.id_at(tool_slot) == ItemCatalog.HOE and not mn.larder.has_stock(ItemCatalog.HOE))
+	# ★[S6-T2] 적재 조건이 CAT_HARVEST 카테고리 → **"융합 메뉴의 시그니처인가"**로 넓어졌다.
+	#    물고기·채집물·수액·나락혼정도 메뉴 재료라 곳간에 들어와야 한다(T1 잠복 격차 봉합 —
+	#    특히 나락혼정은 CAT_MATERIAL이라 옛 필터에 통째로 막혀 최상위 메뉴가 죽어 있었다).
+	var fish_id := FishCatalog.NEOK_BUNGEO
+	mn.inventory.add_item(fish_id, 2, 0)
+	var fish_slot := -1
+	for i in Inventory.SIZE:
+		if mn.inventory.id_at(i) == fish_id:
+			fish_slot = i
+			break
+	_check("⑧f2 백팩에 물고기 슬롯 있음", fish_slot >= 0)
+	mn._on_frame_larder_store(fish_slot)
+	_check("⑧f3 물고기 시그니처 적재 가능(카테고리 제한 폐지)", mn.larder.count_of(fish_id) == 2)
+	mn.larder.take_back(fish_id, 2)
 	# 회수: 곳간 → 백팩.
 	mn._on_frame_larder_take(hid)
 	_check("⑧g 회수 후 곳간에서 사라짐", mn.larder.count_of(hid) == 0)

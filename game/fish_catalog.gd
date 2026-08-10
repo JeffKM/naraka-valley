@@ -285,6 +285,15 @@ static func is_legendary(id: String) -> bool:
 static func season_name(idx: int) -> String:
 	return GameClock.season_name(idx)
 
+# ★[S6-T2] 이 어종이 이 절기에 잡히나(무대·시간 축은 안 본다). seasons가 빈 배열이면 상시종이라 true.
+# is_available의 절기 축만 떼어낸 얇은 조회다 — 카페 융합 메뉴의 판매 창이 "시그니처 재료의 절기 창"
+# 파생이라(ADR-0064 결정 2 "별도 달력 데이터 없음) MenuCatalog가 여기로 위임한다.
+static func in_season(id: String, season_idx: int) -> bool:
+	if not FISH.has(id):
+		return false
+	var seasons: Array = FISH[id]["seasons"]
+	return seasons.is_empty() or seasons.has(season_idx)
+
 # ── 가용 판정(절기·시간 잠금) ────────────────────────────────────────────────
 # 이 어종이 지금 이 무대·절기·시각에 물릴 수 있나. seasons/phases가 빈 배열이면 그 축은 무제한이다.
 # ★ 날씨는 평가하지 않는다(★[S7 점등] — 결정 3 "날씨 태그는 스키마만").

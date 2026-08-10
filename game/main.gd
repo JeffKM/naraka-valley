@@ -2112,6 +2112,12 @@ var berry_bushes: BerryBushes = null
 # ★[S4-T5 / ADR-0033 #4] 종 발견 원장 — {채집물 id: true}. 줍는 순간 기록되고, 희소종 씨앗 레시피의
 #   해금 게이트(CraftCatalog.unlocked)가 읽는다("탐험으로 먼저 발견해야 씨앗 제작"). 세이브 키 "forage_found".
 var _forage_found: Dictionary = {}
+# ★[S6-T2 / ADR-0064 결정 10] 메뉴 발견 원장 — {시그니처 산출물 id: true}. 융합 메뉴의 해금 게이트가
+#   읽는다("그 재료를 한 번이라도 손에 넣어 봤나" = 발견 게이트, _forage_found와 정확히 같은 결).
+#   기록은 inventory.item_gained 한 곳에서만 일어난다(획득처 수십 곳에 손을 대지 않는다 — 누락 0).
+#   ★ 관계(♡) 게이트는 여기 없다(ADR-0008 — 미호·멜 하트는 곱셈기이지 해금 조건이 아니다).
+#   세이브 키 "menu_found"(키 없는 구세이브 = 빈 원장 → 재료를 다시 손에 넣는 순간 열린다·무막힘).
+var _menu_found: Dictionary = {}
 # ★[S4-T3 / ADR-0062 결정 3] 나무 원장(벌목 가능한 *내부* 나무 — 종 3·성장 5단계·타수·그루터기·재성장).
 #   맵 경계 프레이밍 밴드(TREE_BORDER_BAND 안쪽 테두리)는 여기 안 들어온다 = 불벌목 벽(flood-fill·워프
 #   불변식 보존). ForageSpawns와 같은 RefCounted 순수 원장이고, 통행 판정·그리드 동기화·산출 적재는
@@ -2624,6 +2630,10 @@ func _ready() -> void:
 	# T5.4 카페 영업 마감(19시) → 일일 정산 팝업. 손님 상태 변화는 매 프레임 _draw에서
 	# 그리므로 changed는 따로 듣지 않는다(영업 중엔 _process가 queue_redraw로 바를 갱신).
 	cafe.closed.connect(_on_cafe_closed)
+	# ★[S6-T2 / ADR-0064 결정 10] 융합 메뉴 발견 게이트 — 인벤토리에 무언가 들어올 때마다 그것이
+	# 어느 메뉴의 시그니처인지 대조해 원장에 적는다. 획득처(수확·낚시·줍기·상자·상점·보상…)를
+	# 하나하나 고치지 않고 **모든 획득이 반드시 지나는 관문 하나**에 붙는다(누락이 구조적으로 불가능).
+	inventory.item_gained.connect(_on_item_gained)
 	# T6.3 밤 바 마감(취침 = 밤의 자연스러운 끝, end_day가 쏨) → 밤 정산 요약. 잡귀·손님 상태
 	# 변화는 카페 손님처럼 매 프레임 _draw에서 그리므로 changed는 따로 듣지 않는다(밤이면
 	# _process가 queue_redraw로 접근·인내심 바를 갱신).
@@ -8965,6 +8975,7 @@ func _save_game() -> void:
 		"forage_spawn": forage_spawns.to_save(),  # ★[S4-T1] 숲 채집물 스폰 원장(구역별 좌표·종 — 매일 굴러 나온 델타)
 		"berry_bush": berry_bushes.to_save(),   # ★[S4-T8] 덤불 열매(구역별 좌표 — 열매 달린 덤불만)
 		"forage_found": _forage_found.duplicate(),  # ★[S4-T5] 종 발견 원장(희소종 씨앗 레시피 해금 게이트)
+		"menu_found": _menu_found.duplicate(),      # ★[S6-T2] 메뉴 발견 원장(융합 메뉴 해금 게이트)
 		"tree_ledger": tree_ledger.to_save(),  # ★[S4-T3] 나무 원장(구역별 좌표·종·단계·타수·그루터기 + 시드 완료 구역)
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
 		"furnace": furnace.to_save(),       # ★[S5-T3] 업화로(구역별 좌표·넣은 광석·남은 제련 분·주괴·등급)
@@ -9065,6 +9076,9 @@ func _load_game() -> void:
 	if data.has("forage_found"):  # ★[S4-T5] — 키 없는 구세이브는 발견 0(주우면 그때부터 기록·무막힘)
 		var ff: Variant = data["forage_found"]
 		_forage_found = ff.duplicate() if typeof(ff) == TYPE_DICTIONARY else {}
+	if data.has("menu_found"):    # ★[S6-T2] — 키 없는 구세이브는 발견 0(재료를 다시 손에 넣으면 그때 열린다)
+		var mf: Variant = data["menu_found"]
+		_menu_found = mf.duplicate() if typeof(mf) == TYPE_DICTIONARY else {}
 	if data.has("tree_ledger"):   # ★[S4-T3] — 키 없는 구세이브는 원장 0 → 구역 첫 빌드의 seed_region이
 		tree_ledger.load_save(data["tree_ledger"])   #   초기 배치를 결정적으로 재생성한다(종=좌표 해시·하위호환)
 	if data.has("tapper"):        # ★[S4-T6] — 키 없는 구세이브는 채취기 0(빈 원장·하위호환)
@@ -9823,6 +9837,12 @@ func _process(delta: float) -> void:
 	# margin 파라미터만 받고 멜 호감도를 모른다(디커플링). 매 프레임 파생해 HUD 단가·
 	# serve_price가 항상 현재 하트를 반영한다(♡0 ×1.0 base → ♡5 ×2.0, 평평≠막힘).
 	cafe.margin = CafeMargin.margin(mel_affinity.hearts())
+	# ★[S6-T2 / ADR-0064 결정 4·10] 주문 위상 주입 — 오늘 날짜(롤 시드의 한 축)와 주문 가능한
+	# 융합 메뉴 풀(해금 ∧ 절기 ∧ 곳간 재고). margin·spawn_scale과 같은 다리다: cafe는 곳간도
+	# 해금 원장도 절기도 모른 채 값만 받는다. tick *전에* 흘려넣어야 이 프레임에 앉는 손님이
+	# 최신 재고로 주문한다(적재 직후 다음 손님부터 융합 가중치가 오른다).
+	cafe.day = clock.day
+	cafe.order_pool = _cafe_order_pool()
 	if not _sleeping:
 		cafe.tick(delta, clock.minutes)
 	if cafe.is_open():
@@ -9936,7 +9956,8 @@ func _process(delta: float) -> void:
 			and Input.is_action_just_pressed("shop_toggle"):
 		_use_furnace(_target)
 		return
-	# T5.4 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 보유 재료 1개를 자동 소모하고 정액 골드.
+	# T5.4 → ★S6-T2 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 손님이 시킨 메뉴가 융합이고
+	# 곳간에 재료가 있으면 곳간 1개를 먹고 프리미엄가, 아니면 무재료 기본 메뉴로 정액가(무막힘).
 	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
 		_try_serve(facing_seat)
 		return
@@ -10383,10 +10404,13 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 막기 (잡귀 격퇴 · 재고 지킴)"
 	elif facing_seat >= 0 and cafe.is_waiting(facing_seat):
-		# T5.4 기다리는 손님을 바라볼 때: 재료가 있으면 서빙, 없으면 막힌 이유를 안내.
+		# T5.4 → ★S6-T2: 기다리는 손님을 바라볼 때 **무엇을 시켰고 얼마가 들어오는지**를 보여 준다.
+		# 막힌 상태 안내는 사라졌다 — 재료가 없어도 기본 메뉴로 서빙된다(무막힘). 대신 곳간 재고가
+		# 있는 융합이면 프리미엄가가, 없으면 폴백 기본가가 그 자리에서 숫자로 갈린다(적재의 보상 노출).
+		var seat_served := _planned_menu(facing_seat)
 		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] 서빙 (+%d골드)" % cafe.serve_price() if _has_any_harvest() \
-			else "서빙할 재료 없음 — 수확물 필요"
+		interact_prompt.text = "[우클릭] %s 서빙 (+%d골드)" % [
+			MenuCatalog.name_of(seat_served), cafe.serve_price(seat_served)]
 	elif facing_seat >= 0 and night_bar.is_waiting(facing_seat):
 		# T6.4 밤 바 손님을 바라볼 때: 우클릭으로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
 		interact_prompt.visible = true
@@ -11946,13 +11970,19 @@ func _on_frame_takeback(id: String) -> void:
 		_notice("출하함에서 %s %d개 회수" % [ItemCatalog.name_of(id), restored])
 
 # ── ★[S6-T1 / ADR-0064 결정 3] 곳간 적재/회수(프레임 시그널 핸들러) ────────────
-# 곳간 패널에서 백팩 수확물 슬롯을 클릭하면 그 슬롯을 통째로 곳간에 적재한다(인벤토리에서 빠짐).
-# **출하함 드롭과 정확히 같은 종류 제한**(CAT_HARVEST만)이다 — 두 창구가 같은 물건을 놓고 갈리는
-# 선택이라야 "팔까 / 키울까"가 성립한다(CONTEXT [곳간]). 등급은 여기서 지워진다(곳간 = 품질 무차원).
+# 곳간 패널에서 백팩 슬롯을 클릭하면 그 슬롯을 통째로 곳간에 적재한다(인벤토리에서 빠짐).
+# 등급은 여기서 지워진다(곳간 = 품질 무차원).
+#
+# ★[S6-T2] 적재 조건이 **"융합 메뉴의 시그니처인가"**로 바뀌었다(종전 CAT_HARVEST 카테고리 제한).
+#   근거: ㉠ 카테고리 제한은 **나락혼정을 통째로 막고 있었다** — CAT_MATERIAL이라 최상위 메뉴의
+#   재료가 곳간에 영영 못 들어가는 잠복 격차였다(T1이 남긴 자리). ㉡ 반대로 CAT_HARVEST 중
+#   메뉴가 없는 산출물은 넣어 봐야 아무도 안 먹는다 = 죽은 재고다. 곳간의 정의가 "융합 메뉴의
+#   재료 창고"이므로(CONTEXT [곳간]) 판정도 메뉴 카탈로그가 하는 게 맞다 — 로스터가 넓어지면
+#   적재 가능 품목도 저절로 따라 넓어진다(수동 동기화 0).
 func _on_frame_larder_store(slot_index: int) -> void:
 	var id := inventory.id_at(slot_index)
-	if id == "" or ItemCatalog.category_of(id) != ItemCatalog.CAT_HARVEST:
-		return   # 수확물 외(씨앗·도구·비료)는 메뉴 재료가 아니다 — 무동작(출하함 드롭과 같은 문법)
+	if id == "" or MenuCatalog.menu_for_signature(id) == "":
+		return   # 어느 메뉴의 재료도 아니다(씨앗·도구·비료·비-시그니처 산출물) — 무동작
 	var n := inventory.count_at(slot_index)
 	var stored := larder.add(id, n)
 	if stored <= 0:
@@ -14020,34 +14050,89 @@ func _try_mel_gift() -> void:
 	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 처리는 공통 _try_resident_gift(레지스트리).
 	_try_resident_gift(_resident("mel"))
 
-# ── T5.4 카페 손님 서빙 ─────────────────────────────────────────────────────
-# 기다리는 손님이 앉은 좌석을 서빙한다. 보유 재료(농사 산출물) 1개를 자동 소모하고
-# 정액 P 골드를 즉시 번다(농사↔카페를 잇는 첫 매듭). 재료가 없으면 막지만 벌칙은 없다
-# (무막힘 — 손님은 인내심이 다하면 그냥 떠난다). 어떤 재료를 쓸지는 가장 싼 수확물부터
-# 고른다 — 정액가라 비싼 작물(피안화·영혼 호박)은 raw 판매로 남겨 두는 게 이득이므로
-# (공급사슬 긴장: raw 덤프 vs 서빙). 특정 작물 요구·손님 다양성은 2층 서랍(범위 밖).
+# ── T5.4 → ★[S6-T2 / ADR-0064 결정 4] 카페 손님 서빙(주문 위상·융합/기본 폴백) ──
+# 손님은 자리에 앉는 순간 **희망 메뉴**를 들고 온다(cafe.roll_want 결정 롤). 서빙은 그 희망을
+# 곳간 재고와 맞춰 두 갈래로 갈린다:
+#   ㉠ 희망이 융합 메뉴 ∧ 곳간에 시그니처 1개 있음 → 곳간에서 1개 차감 + **프리미엄가**(×2.5)
+#   ㉡ 그 외(희망이 기본 / 융합인데 재고 0)       → **기본 메뉴 폴백**(무재료·정액 35냥)
+# ★ 실패 경로가 없다 — 곳간이 텅 비어도 손님은 떠나지 않고 기본 잔을 받는다(결정 4 "하드 실패
+#   없음" · ADR-0008 평평≠막힘). 그래서 **백팩 수확물을 소모하던 옛 배선은 폐지됐다**: 기본 메뉴는
+#   주방요괴가 백스테이지에서 대는 무재료 음료이고(결정 2), 재료 소모는 곳간 한 곳으로 옮겨갔다.
+#   "무엇을 쟁여 뒀나"가 곧 매출 차이라, 공급사슬 긴장(raw 덤프 vs 곳간)은 곳간 적재로 이동한다.
 func _try_serve(seat: int) -> void:
-	var material := _cheapest_harvest()
-	if material == "":
-		_notice("서빙할 재료가 없다 — 수확물이 필요하다")
-		return
-	inventory.take_harvest(material)          # 서빙 재료 1개 소모(아무 재료 1회)
-	var revenue := cafe.serve(seat)           # 정액 P × margin(T5.5에서 마진 분화)
+	var served := _planned_menu(seat)
+	var sig := MenuCatalog.signature_of(served)
+	if sig != "" and larder.consume(sig, 1) <= 0:
+		served = _fallback_menu()             # 재고가 그새 비었다(방어 — _planned_menu가 이미 걸렀다)
+	var revenue := cafe.serve(seat, served)   # 메뉴가 × margin(멜 마진은 메뉴가 *위에* 곱한다)
+	if revenue <= 0:
+		return                                # 기다리는 손님이 없었다(방어 — 입력 분기가 이미 걸렀다)
 	wallet.earn(revenue)                      # 서빙 즉시 지갑 반영
-	_cafe_revenue_total += revenue            # T7.2 카페 마일스톤 누적(서빙 매출 — 카페를 운영한 매출)
+	_cafe_revenue_total += revenue            # T7.2 카페 마일스톤 누적(프리미엄 매출도 카페 운영 매출)
 	_total_income += revenue                  # ★ [S1R-T12] 누적 총수입(정보패널)
 	audio.sfx("serve")                        # P2.6 카운터 종 "딩"
-	# ★[S6-T1 / ADR-0064 결정 11 ①] `CropCatalog.name_of` → `ItemCatalog.name_of`. 서빙 재료는
-	#   이미 작물만이 아니다(물고기·채집물·수액·산물이 전부 CAT_HARVEST) — 작물 카탈로그로 조회하면
-	#   비-작물 재료의 이름이 **빈 문자열**로 나와 " 서빙 +35골드"가 뜬다.
-	_notice("%s 서빙 +%d골드" % [ItemCatalog.name_of(material), revenue])
+	_notice("%s 서빙 +%d골드" % [MenuCatalog.name_of(served), revenue])
 
-# 보유 수확물이 하나라도 있는가(서빙 가능 판정·프롬프트용).
-func _has_any_harvest() -> bool:
-	return inventory.total_harvest() > 0
+# 이 좌석에 **실제로 나갈 메뉴** id(부작용 없는 순수 판정). 서빙 실행과 프롬프트 표시가 같은 답을
+# 봐야 "보이는 값과 들어오는 값"이 어긋나지 않으므로 판정을 한 곳에 둔다. 기다리는 손님이 없으면
+# want가 ""라 폴백 기본이 나온다(호출 측이 is_waiting을 먼저 본다).
+func _planned_menu(seat: int) -> String:
+	var want := cafe.want_of(seat)
+	if MenuCatalog.is_basic(want):
+		return want                               # ㉡ 기본을 시켰다 — 그대로 낸다
+	var sig := MenuCatalog.signature_of(want)
+	if sig != "" and larder.has_stock(sig):
+		return want                               # ㉠ 융합 + 곳간 재고 → 프리미엄으로 나간다
+	return _fallback_menu()                       # 융합인데 재고 0 = 기본 폴백(손님은 안 떠난다)
 
-# 서빙에 쓸 가장 싼 수확물 id("" = 보유 수확물 없음). 정액 서빙가라 비싼 작물은 raw
-# 판매로 남기고 싼 작물부터 서빙하는 게 합리적이라, 자동 소모는 최저가 수확물을 고른다.
+# 폴백 기본 메뉴 — 희망이 융합인데 곳간 재고가 0일 때 대신 나가는 잔. ★잠정: 기본 4종의 1순위
+# (명부 아메리카노). **결정적**이라야 같은 상황이 같은 결과를 낸다(무작위 폴백 금지 — 재현성).
+# const가 아니라 함수인 건 클래스 상수 초기화식에서 타 클래스 상수를 참조하지 않는 관례다
+# (ForageSpawns.zones()가 RegionCatalog 상수를 함수로 감싼 그 자리 — 로드 순서 의존 0).
+func _fallback_menu() -> String:
+	return MenuCatalog.AMERICANO
+
+# ★[S6-T2] 지금 주문될 수 있는 융합 메뉴 풀 [{"id", "in_stock"}, …] — cafe에 주입한다.
+# 세 축을 여기서 합친다: ㉠ 해금(발견 게이트) ㉡ 절기 창(시그니처 재료 파생) ㉢ 곳간 재고 유무.
+# ★ 재고가 없어도 풀에 남긴다(가중치만 낮다) — 재고 0인 융합이 뽑혀야 폴백 경로가 실제로 굴러가고,
+#   "그 메뉴를 시켰는데 재료가 없었다"가 곳간을 채울 이유가 된다(주문이 수요 신호 역할).
+func _cafe_order_pool() -> Array:
+	var out: Array = []
+	var season := clock.season_index()
+	for mid in MenuCatalog.fusion_ids():
+		var id := String(mid)
+		if not _menu_unlocked(id) or not MenuCatalog.in_season(id, season):
+			continue
+		out.append({"id": id, "in_stock": larder.has_stock(MenuCatalog.signature_of(id))})
+	return out
+
+# 융합 메뉴 해금 판정(ADR-0064 결정 10 — **발견 게이트**, 관계 게이트 0).
+#   ㉠ 시그니처 산출물을 한 번이라도 손에 넣었나(_menu_found — 희소종 씨앗 레시피와 같은 결)
+#   ㉡ **최상위 나락혼정 아인슈페너만** 추가로 카페 일구기 1단 완료를 요구한다(결정 10 "상위 일부는
+#      카페 일구기 단계"). 로스터 꼭대기 한 잔이라 재료를 손에 넣는 것만으로는 안 열린다.
+# ★ 미호·멜 ♡는 여기 없다(ADR-0008 — 관계는 곱셈기이지 게이트가 아니다).
+func _menu_unlocked(menu_id: String) -> bool:
+	if not _menu_found.has(MenuCatalog.signature_of(menu_id)):
+		return false
+	if menu_id == MenuCatalog.HONJEONG_EINSPANNER:
+		return _milestone_complete()
+	return true
+
+# ★[S6-T2] 인벤토리에 아이템이 들어올 때마다(획득처 무관) 그것이 어느 융합 메뉴의 시그니처인지
+# 대조해 발견 원장에 적는다. 시그니처가 아닌 대부분의 아이템은 조용히 흘려보낸다.
+# 멱등이다(이미 true인 걸 다시 true로 써도 무해) — 로드 경로가 add_item을 경유해 시그널이 다시
+# 돌아도 원장이 흔들리지 않는다.
+func _on_item_gained(id: String) -> void:
+	if MenuCatalog.menu_for_signature(id) != "":
+		_menu_found[id] = true
+
+# ★[S6-T2] `_has_any_harvest()` 삭제 — 유일한 소비자였던 서빙 프롬프트가 사라졌다. 기본 메뉴가
+# 무재료가 되면서 "재료가 없어 서빙 불가"라는 상태 자체가 없어졌기 때문이다(결정 2·4 무막힘).
+# 약탈은 _cheapest_harvest가 ""를 돌려주는 것으로 빈 재고를 판정하므로 이 함수를 안 쓴다.
+
+# 보유 수확물 중 가장 싼 것의 id("" = 보유 수확물 없음). ★S6-T2부터 유일한 소비자는 **밤 바
+# 약탈**(_raid_inventory)이다 — 서빙은 곳간에서 시그니처를 먹으므로 백팩을 안 뒤진다. 약탈이
+# 최저가부터 가져가는 건 손실의 결이다(비싼 것은 그래도 남을 확률↑).
 #
 # ★[S6-T1 / ADR-0064 결정 11 ①] `CropCatalog.sell_price` → `ItemCatalog.price_of`. CropCatalog는
 #   작물만 알아서 물고기·채집물·수액·짐승 산물의 값을 **전부 0으로** 돌려줬다 — 0이 최저가라
@@ -15808,6 +15893,17 @@ func _draw_customers() -> void:
 	for i in SEAT_TILES.size():
 		if cafe.is_waiting(i):
 			_draw_graybox_figure(SEAT_TILES[i], CUST, cafe.patience_ratio(i))
+			_draw_want_bubble(SEAT_TILES[i], cafe.want_of(i))
+
+# ★[S6-T2] 손님 머리 위 주문 말풍선 자리 — 시킨 메뉴의 색을 작은 사각으로 띄운다(인내심 바 위).
+# 그레이박스 최소한이다: "무엇을 시켰나"가 화면에서 갈려 보이면 곳간 적재의 효과를 눈으로 확인할
+# 수 있다(진짜 말풍선 아트·메뉴 아이콘은 아트 패스 — ADR-0028 인터리브).
+func _draw_want_bubble(t: Vector2i, menu_id: String) -> void:
+	if menu_id == "":
+		return
+	var box := Rect2(t.x * TILE + TILE * 0.5 - 4, t.y * TILE - 12, 8, 8)
+	draw_rect(box.grow(1.0), Color(0.06, 0.05, 0.08, 0.85))   # 외곽선(어두운 테)
+	draw_rect(box, MenuCatalog.color_of(menu_id))
 
 # T6.4 바를 연 밤(옵트인)의 바 손님과 머리 위 인내심 바를 그린다. 낮 카페 손님과 같은 좌석 줄을
 # 시간대로 나눠 쓰므로(cafe 마감 후 밤 바) 그리기도 카페 손님과 똑같은 규격이고, 활성(밤 바 영업
