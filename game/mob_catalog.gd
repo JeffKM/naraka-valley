@@ -214,6 +214,12 @@ const _BOSS_ORDER := [BOSS_OKJOL, BOSS_NACHALWANG, BOSS_DAEAGWI]
 #   돌을 흘리고(Rock Crab·Stone Golem 1:1) 불가사리가 유철 광석을 흘린다(Metal Head 1:1).
 #   아이템 남발 없이 "잡귀도 채광 경제에 흘러든다"가 성립한다.
 # ★ id를 리터럴로 두는 이유 = DROP_* 상수와 같다(const 초기화식 관례).
+# ★[S7-T3 / ADR-0065 결정 4] "희귀 드랍"의 정의 = **표에 이 확률 이하로 걸린 항목**. 별도 rare 플래그를
+#   달지 않은 이유: 희귀함은 이미 chance 숫자가 말하고 있고, 플래그를 달면 표와 어긋날 수 있는 진실이
+#   둘 생긴다. 지금 이 문턱에 걸리는 건 나락철(0.10·0.15) — 심층 광석이라 결도 정확히 맞는다.
+#   새 드랍을 낮은 확률로 추가하면 자동으로 희귀 취급이 된다(데이터 주도 — 코드 수정 0).
+const RARE_DROP_CHANCE := 0.20
+
 const DROPS := {
 	HEOTGEOT: [{"id": DROP_NEOKGARU, "chance": 0.70, "min": 1, "max": 2}],
 	EODUKKAEBI: [{"id": DROP_HONBULSSI, "chance": 0.55, "min": 1, "max": 1}],
@@ -399,7 +405,13 @@ static func roll_kind(pool: Array, rng: RandomNumberGenerator) -> String:
 # 반환 = [{"id": String, "count": int}]. 시드는 호출 측이 만든다(main은 day·층·스폰 인덱스를 엮어
 # 넘긴다 — 좌표 해시 금지 규율은 몹에도 그대로 적용된다: 이웃 몹이 연속값을 받으면 안 된다).
 # ★ RNG 순차 소비: 표 순서대로 ①확률 롤 → ②수량 롤. 순서를 바꾸면 같은 시드가 다른 답을 낸다.
-static func roll_drops(kind: String, seed_value: int) -> Array:
+# ★[S7-T3 / ADR-0065 결정 4] 배수 2종(둘 다 기본 1.0 = 정확히 중립 — 무인자 호출 결과열 불변):
+#   drop_scale : 일반 항목 확률 배수 · rare_scale : **희귀** 항목 확률 배수(혼불 바람이 1.5/2.0을 건다).
+#   ★ 확률만 곱하고 **수량 롤은 안 건드린다** — 두 롤의 소비 순서·횟수가 그대로라 배수를 걸어도
+#     스트림이 안 흔들린다(같은 시드에서 "몇 개 나오나"는 같고 "나오나 마나"만 갈린다).
+#   ★ 확률은 1.0으로 클램프한다. 그래서 보스의 확정 드랍(chance 1.0)은 배수를 먹어도 그대로 1.0이다.
+static func roll_drops(kind: String, seed_value: int,
+		drop_scale: float = 1.0, rare_scale: float = 1.0) -> Array:
 	var out: Array = []
 	if not has(kind):
 		return out
@@ -409,7 +421,9 @@ static func roll_drops(kind: String, seed_value: int) -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("mob_drop:%s:%d" % [kind, seed_value])
 	for e: Dictionary in table:
-		var hit := rng.randf() < float(e["chance"])
+		var base := float(e["chance"])
+		var scale: float = rare_scale if base <= RARE_DROP_CHANCE else drop_scale
+		var hit := rng.randf() < minf(base * maxf(scale, 0.0), 1.0)
 		var n := rng.randi_range(int(e["min"]), int(e["max"]))
 		if hit and n > 0:
 			out.append({"id": String(e["id"]), "count": n})

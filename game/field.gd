@@ -230,14 +230,21 @@ func solid_crop_tiles() -> Array:
 # accel/reach 기본 0 = 여우불 잠듦(순수 스타듀 성장 — 기존 동작·T2.3 그대로). 세기
 # 매핑은 Foxfire(foxfire.gd)가 호감도 하트에서 파생하고, main이 값으로 넘긴다(디커플링).
 # 상태가 바뀐 칸마다 tile_changed를 발화해 main이 오버레이를 갱신한다.
-func advance_day(accel: int = 0, reach: int = 0) -> void:
+#
+# ★[S7-T3 / ADR-0065 결정 4] `grow` = 오늘 성장 판정을 굴리는가(기본 true = 종전 동작 그대로).
+#   잿눈(SNOW) 날 노지 작물이 **하루 멈추되 죽지는 않는** 규칙의 자리다. 왜 호출 자체를 스킵하지
+#   않고 인자를 열었나: advance_day는 성장과 **아침 마름**을 함께 하는데, 호출을 건너뛰면 젖은
+#   흙이 다음 날까지 남아 "눈 온 날 물을 준 셈"이 된다(결정 4의 "성장 정지 + 물 마름"과 정반대).
+#   그래서 마름은 그대로 돌리고 성장 두 갈래(물 준 칸 +1·여우불 범위)만 끈다 — field가 날씨를
+#   모른 채(Weather 참조 0) 값 하나만 받는 가법 확장이라 기존 호출부·테스트 시그니처는 불변이다.
+func advance_day(accel: int = 0, reach: int = 0, grow: bool = true) -> void:
 	# 여우불 범위 후보를 마름 전(밤 상태)에 먼저 고른다 — 물 안 준 심긴 미성숙 칸.
-	var foxfire_targets := _foxfire_targets(reach)
+	var foxfire_targets := _foxfire_targets(reach) if grow else []
 	# 1) 물 준 칸: 기본 +1 에 여우불 가속을 더해 자란다(성장일수는 작물 한계까지만).
 	for t in _tiles.keys():
 		var tile: Dictionary = _tiles[t]
 		var changed := false
-		if tile["planted"] and tile["watered"] and not is_mature(t):
+		if grow and tile["planted"] and tile["watered"] and not is_mature(t):
 			_grow(t, 1 + maxi(accel, 0))
 			changed = true
 		# 흙은 아침에 마른다.

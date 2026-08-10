@@ -14,8 +14,10 @@ class_name FishCatalog
 #     FishingSession 생성자에 넘긴다(fishing.gd 주석 "같은 스키마 dict를 넘길 뿐 이 파일은 안 바뀐다" 이행).
 #   - **절기 잠금 = 오늘 실효**(결정 3): `GameClock.season_index_for_day`(28일·4절기)가 이미 있어 신규
 #     시스템 0으로 굴러간다. seasons가 빈 배열이면 전 절기(상시종), phases가 빈 배열이면 전 시간대.
-#   - **날씨 태그는 스키마만**(결정 3 — 날씨 시스템 = Slice 7). `weather`는 지금 아무도 평가하지 않는다.
-#     ★[S7 점등] 혼우 입질↑·잿눈 둔화가 붙을 자리다(빈 배열 = 전 날씨).
+#   - **★[S7-T3 점등] 날씨 태그 평가 개시**(ADR-0065 결정 4). `weather`는 이제 is_available의 네 번째
+#     축이다(빈 배열 = 전 날씨). 혼우 한정 2종(도깨비메기·먹빛장어)이 첫 태그이고, 입질 속도 보정
+#     (혼우 +25%·잿눈 −15%)은 여기가 아니라 FishingSession 쪽(mods.weather_factor)에 붙었다 —
+#     이 표는 "무엇이 걸리나"만 들고 "얼마나 빨리 무나"는 세션의 축이라는 분담을 지킨다.
 #   - **전설 2종은 일반 롤에서 빠진다**(결정 3 "선택 프레스티지 미니보스"·ADR-0030). roll_fish는 전설을
 #     절대 반환하지 않고, roll_legendary만 극저확률(LEGEND_CHANCE)로 물린다. 체급 게이트(T4 낚싯대)가
 #     "걸어도 못 잡는다"를 자연 처리하므로 별도 서사 게이팅은 0이다.
@@ -48,6 +50,13 @@ const PHASE_MORNING := "아침"
 const PHASE_DAY := "낮"
 const PHASE_EVENING := "저녁"
 const PHASE_NIGHT := "밤"
+
+# ── ★[S7-T3 / ADR-0065 결정 4] 날씨 눈금(Weather의 타입 상수와 같은 정수) ────
+# 예약만 돼 있던 `weather` 필드가 여기서 처음 평가된다. Weather.RAIN을 직접 쓰지 않고 상수를 되받는
+# 이유는 이 카탈로그가 **어느 절기·시각·하늘에 무엇이 걸리나**만 드는 순수 표이기 때문이다 — 값의
+# 정의는 Weather가 갖고, 여기선 같은 눈금을 가리키기만 한다(GameClock에 절기명을 위임한 것과 같은 결).
+const WEATHER_RAIN := Weather.RAIN
+const WEATHER_ANY := -1   # 판정 인자 기본값 — "날씨 축을 보지 않는다"(하위호환·날씨 무관 조회)
 
 # ── 어종 id(코드·세이브용 안정 id — 아이템 id로도 그대로 쓰인다) ──────────────
 # 삼도천 강 8종
@@ -119,7 +128,8 @@ const FISH := {
 	},
 	DOKKAEBI_MEGI: {
 		"name_ko": "도깨비메기", "habitat": HABITAT_RIVER, "weight_class": WC_MEDIUM,
-		"seasons": [1, 3], "phases": [PHASE_EVENING, PHASE_NIGHT], "weather": [], "price": 96,
+		# ★[S7-T3 / ADR-0065 결정 4] 혼우 한정 — "비 오는 날 물가에 나타나는 도깨비"라는 이름 그대로다.
+		"seasons": [1, 3], "phases": [PHASE_EVENING, PHASE_NIGHT], "weather": [WEATHER_RAIN], "price": 96,
 		"fight": {"burst_mult": 3.1, "burst_period": 2.3},   # 심술궂은 발버둥(도깨비 결)
 	},
 	ANGAE_SSOGARI: {
@@ -129,7 +139,8 @@ const FISH := {
 	},
 	MEOKBIT_JANGEO: {
 		"name_ko": "먹빛장어", "habitat": HABITAT_RIVER, "weight_class": WC_LARGE,
-		"seasons": [1, 2], "phases": [PHASE_EVENING, PHASE_NIGHT], "weather": [], "price": 190,
+		# ★[S7-T3] 혼우 한정 — 흐린 물에서만 올라오는 먹빛(비로 강이 흐려지는 날의 대어).
+		"seasons": [1, 2], "phases": [PHASE_EVENING, PHASE_NIGHT], "weather": [WEATHER_RAIN], "price": 190,
 		"fight": {"slack_rate": 5.5, "burst_len": 1.5},   # 미끄덩 — 풀면 쑥쑥 달아난다
 	},
 	# ── 황천해 바다(8) ─────────────────────────────────────────────────────
@@ -255,6 +266,13 @@ static func quest_pool(season_idx: int, max_class: int) -> Array:
 		var seasons: Array = f["seasons"]
 		if not seasons.is_empty() and not seasons.has(season_idx):
 			continue
+		# ★[S7-T3 / ADR-0065 결정 4] **날씨 한정 어종은 출제하지 않는다.** 일일 의뢰 기한이 2일인데
+		#   그 안에 혼우가 안 오면 이행이 물리적으로 불가능해진다(하늘은 플레이어가 못 고른다 —
+		#   "노력하면 되는 어려움"이 아니라 뽑기 실패다). 절기·시간 축과 갈리는 지점이 여기다:
+		#   절기는 기한 안에 안 바뀌고 시각은 기다리면 오지만, 날씨는 둘 다 아니다.
+		#   대안(출제는 하되 기한 연장·비 오는 날 재출제)은 의뢰판에 날씨 상태를 들이게 되므로 접었다.
+		if not (f["weather"] as Array).is_empty():
+			continue
 		out.append(id)
 	out.sort()
 	return out
@@ -295,9 +313,12 @@ static func in_season(id: String, season_idx: int) -> bool:
 	return seasons.is_empty() or seasons.has(season_idx)
 
 # ── 가용 판정(절기·시간 잠금) ────────────────────────────────────────────────
-# 이 어종이 지금 이 무대·절기·시각에 물릴 수 있나. seasons/phases가 빈 배열이면 그 축은 무제한이다.
-# ★ 날씨는 평가하지 않는다(★[S7 점등] — 결정 3 "날씨 태그는 스키마만").
-static func is_available(id: String, habitat: String, season_idx: int, phase: String) -> bool:
+# 이 어종이 지금 이 무대·절기·시각·하늘에 물릴 수 있나. seasons/phases/weather가 빈 배열이면 그 축은
+# 무제한이다. ★[S7-T3] weather 인자 = **예약 필드의 첫 평가**(옛 주석 "날씨 태그는 스키마만" 해소).
+#   기본값 WEATHER_ANY(-1)는 "날씨 축 무시"라 무인자 호출의 답이 종전과 한 톨도 안 다르다 — 날씨를
+#   모르는 조회(로스터 밀도 점검·의뢰 풀·아이템 표시)는 그대로 굴러간다.
+static func is_available(id: String, habitat: String, season_idx: int, phase: String,
+		weather: int = WEATHER_ANY) -> bool:
 	if not FISH.has(id):
 		return false
 	var f: Dictionary = FISH[id]
@@ -309,17 +330,20 @@ static func is_available(id: String, habitat: String, season_idx: int, phase: St
 	var phases: Array = f["phases"]
 	if not phases.is_empty() and not phases.has(phase):
 		return false
+	var wx: Array = f["weather"]
+	if weather != WEATHER_ANY and not wx.is_empty() and not wx.has(weather):
+		return false
 	return true
 
 # 지금 물릴 수 있는 어종 id 목록. include_legendary=false(기본)면 전설은 빠진다 — 일반 입질 풀이다.
 # 반환 순서는 FISH 선언 순(결정적 — 가중 추첨의 재현성이 여기서 나온다).
 static func available_ids(habitat: String, season_idx: int, phase: String,
-		include_legendary := false) -> Array:
+		include_legendary := false, weather: int = WEATHER_ANY) -> Array:
 	var out: Array = []
 	for id in FISH:
 		if is_legendary(id) and not include_legendary:
 			continue
-		if is_available(id, habitat, season_idx, phase):
+		if is_available(id, habitat, season_idx, phase, weather):
 			out.append(id)
 	return out
 
@@ -348,8 +372,9 @@ static func season_roster(habitat: String, season_idx: int) -> Array:
 #                   균등 추첨한다(= "이 낚싯대로 잡을 수 있는 가장 큰 놈" 확정). cap = 낚싯대 허용
 #                   체급이라 보장 미끼가 확정 끊김 함정이 되지 않는다(GearCatalog.guarantee_cap_for).
 static func roll_fish(habitat: String, season_idx: int, phase: String,
-		rng: RandomNumberGenerator, class_shift: float = 0.0, guarantee_cap: int = -1) -> String:
-	var pool := available_ids(habitat, season_idx, phase)
+		rng: RandomNumberGenerator, class_shift: float = 0.0, guarantee_cap: int = -1,
+		weather: int = WEATHER_ANY) -> String:
+	var pool := available_ids(habitat, season_idx, phase, false, weather)
 	if pool.is_empty():
 		return ""
 	# ★ 보장 미끼 — 가중 추첨을 건너뛰고 "cap 이하 최고 체급" 안에서 균등 추첨한다(확정의 의미 보존).
@@ -392,10 +417,10 @@ static func roll_fish(habitat: String, season_idx: int, phase: String,
 # main은 이걸 먼저 굴리고 ""면 roll_fish로 떨어진다(전설 = 일반 풀 위에 얹힌 별개 사건).
 # ★ 체급 게이트(FishingSession)가 "T4 낚싯대가 아니면 걸어도 끊긴다"를 자연 처리하므로 기어 게이팅은 0이다.
 static func roll_legendary(habitat: String, season_idx: int, phase: String,
-		rng: RandomNumberGenerator) -> String:
+		rng: RandomNumberGenerator, weather: int = WEATHER_ANY) -> String:
 	var pool: Array = []
 	for id in FISH:
-		if is_legendary(id) and is_available(id, habitat, season_idx, phase):
+		if is_legendary(id) and is_available(id, habitat, season_idx, phase, weather):
 			pool.append(id)
 	if pool.is_empty():
 		return ""

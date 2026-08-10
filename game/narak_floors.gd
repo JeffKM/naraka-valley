@@ -186,7 +186,10 @@ const NODE_PICK_TRIES := 8
 #   · ladder   = 보통 (-1,-1) = **확정 하강 사다리 없음**(돌을 깨야 열린다 — 나락의 정의).
 #                예외: 돌이 하나도 안 깔린 축퇴 층에서만 한 칸을 확정 배치한다(막다른 층 방지).
 #   · boss     = 보스 좌표((-1,-1) = 보스 층 아님). 보스 층엔 일반 잡귀가 0이다.
-static func generate(run: int, depth: int) -> Dictionary:
+# ★[S7-T3 / ADR-0065 결정 4] `mob_scale` = 잡귀 마리 수 배수(기본 1.0 = 중립 — MineFloors.generate와
+#   같은 문법·같은 이유). **보스 층은 배수를 안 탄다**(아래 _scatter_mobs가 보스 한 기에서 조기
+#   반환한다) — 관문은 날씨로 늘어나는 물건이 아니다.
+static func generate(run: int, depth: int, mob_scale: float = 1.0) -> Dictionary:
 	if not is_valid_depth(depth):
 		return {}
 	var rng := RandomNumberGenerator.new()
@@ -217,7 +220,7 @@ static func generate(run: int, depth: int) -> Dictionary:
 	var nodes := _scatter_nodes(rng, depth, rocks)
 	# ⑥ 잡귀·보스(순차 소비 맨 뒤 — 앞 롤을 한 번도 안 건드린다).
 	var boss_tile := _boss_tile(rect, entrance, rocks) if is_boss_depth(depth) else Vector2i(-1, -1)
-	var mobs := _scatter_mobs(rng, depth, rect, rocks, entrance, boss_tile)
+	var mobs := _scatter_mobs(rng, depth, rect, rocks, entrance, boss_tile, mob_scale)
 	# ⑦ 축퇴 방어 — 돌이 하나도 없으면 사다리 롤을 굴릴 기회가 없다(막다른 층). 그때만 확정 하강
 	#    사다리를 한 칸 놓는다. RNG를 안 쓰는 계산이라 스트림이 안 흔들린다.
 	var ladder := Vector2i(-1, -1)
@@ -264,7 +267,7 @@ static func _far_free_tile(rect: Rect2i, from: Vector2i, rocks: Array, skip: Vec
 # 잡귀 배치 = [{"kind", "tile", "boss"}]. 보스 층이면 **보스 한 기뿐**이다(일반 잡귀 0 — ADR-0063
 # 결정 7 "보스 층 = 보스만"). 그 규칙이 여기 한 줄로 접혀 있어 main에 특별 분기가 없다.
 static func _scatter_mobs(rng: RandomNumberGenerator, depth: int, rect: Rect2i,
-		rocks: Array, entrance: Vector2i, boss_tile: Vector2i) -> Array:
+		rocks: Array, entrance: Vector2i, boss_tile: Vector2i, mob_scale: float = 1.0) -> Array:
 	var out: Array = []
 	if is_boss_depth(depth):
 		if boss_tile.x >= 0:
@@ -277,7 +280,9 @@ static func _scatter_mobs(rng: RandomNumberGenerator, depth: int, rect: Rect2i,
 	for r: Vector2i in rocks:
 		blocked[r] = true
 	var bonus := mini(depth / MOB_DEPTH_STEP, MOB_DEPTH_CAP)
-	var quota := rng.randi_range(MOB_MIN, MOB_MAX) + bonus
+	# ★[S7-T3] 마리 수 롤은 배수와 무관하게 먼저 굴린다(스트림 고정). 깊이 보너스까지 더한 **총량**에
+	#   배수를 건다 — 심층일수록 혼불 바람의 체감이 커진다(위험도 보상도 함께 부푸는 결).
+	var quota := int(round(float(rng.randi_range(MOB_MIN, MOB_MAX) + bonus) * maxf(mob_scale, 0.0)))
 	var used: Dictionary = {}
 	for _i in range(quota):
 		var tile := Vector2i(-1, -1)

@@ -214,7 +214,12 @@ static func elevator_floors(depth: int) -> Array[int]:
 #   · nodes    = ★[S5-T2] {Vector2i: 노드 종 id} — `rocks`의 부분집합만 키로 갖는다
 #   · shimmers = ★[S5-T8] [{"id","tile"}] 바닥 반짝이 0~2개(돌·사다리·입구·상자 칸과 배타)
 # 범위 밖 층은 **빈 Dictionary**를 돌려준다(61층 거부 — 호출 측이 is_empty로 가른다).
-static func generate(day: int, floor_no: int) -> Dictionary:
+# ★[S7-T3 / ADR-0065 결정 4] `mob_scale` = 잡귀 마리 수 배수(기본 1.0 = 정확히 중립). 혼불 바람이
+#   부는 날 main이 1.5를 넘긴다. **기본값 호출의 결과열은 한 비트도 안 변한다** — 마리 수 롤 자체는
+#   배수와 무관하게 같은 자리에서 한 번 굴러가고(⑧ 참조), 배수는 그 결과에 곱해질 뿐이다.
+#   ⚠️ 배수가 1.0이 아니면 몹 루프의 소비 횟수가 갈려 ⑩ 반짝이 배치가 함께 흔들린다. 이건 사고가
+#     아니라 정의다 — 날씨도 day 파생이라 "그날의 층"은 여전히 완전 결정적이다.
+static func generate(day: int, floor_no: int, mob_scale: float = 1.0) -> Dictionary:
 	if not is_valid_floor(floor_no):
 		return {}
 	var rng := RandomNumberGenerator.new()
@@ -261,7 +266,7 @@ static func generate(day: int, floor_no: int) -> Dictionary:
 	var nodes := _scatter_nodes(rng, floor_no, rocks)
 	# ⑧ ★[S5-T5] 잡귀 스폰(순차 소비 **맨 뒤** — T2 노드 롤 뒤에 붙었다. 앞에 끼우면 노드·돌·방이
 	#    통째로 갈린다: mining_test ②/②b 골든 서명이 그 즉시 터진다 = 조기 경보).
-	var mobs := _scatter_mobs(rng, floor_no, rect, rocks, entrance, ladder)
+	var mobs := _scatter_mobs(rng, floor_no, rect, rocks, entrance, ladder, mob_scale)
 	var out := {
 		"floor": floor_no,
 		"band": band_of(floor_no),
@@ -382,7 +387,7 @@ static func chest_tile(layout: Dictionary) -> Vector2i:
 #   ②③을 마리 단위로 번갈아 소비한다(좌표 전부 → 종 전부 순서가 아니다 — 마리 수가 갈리면
 #   스트림이 어긋나는 건 어느 쪽이든 같고, 마리 단위가 읽기 쉽다).
 static func _scatter_mobs(rng: RandomNumberGenerator, floor_no: int, rect: Rect2i,
-		rocks: Array, entrance: Vector2i, ladder: Vector2i) -> Array:
+		rocks: Array, entrance: Vector2i, ladder: Vector2i, mob_scale: float = 1.0) -> Array:
 	var out: Array = []
 	if not spawns_mobs(floor_no):
 		return out
@@ -394,7 +399,8 @@ static func _scatter_mobs(rng: RandomNumberGenerator, floor_no: int, rect: Rect2
 		blocked[r] = true
 	blocked[entrance] = true
 	blocked[ladder] = true
-	var quota := rng.randi_range(MOB_MIN, MOB_MAX)
+	# ★[S7-T3] 마리 수 롤은 배수와 **무관하게 먼저** 굴린다(스트림 고정) — 배수는 그 뒤에 곱한다.
+	var quota := int(round(float(rng.randi_range(MOB_MIN, MOB_MAX)) * maxf(mob_scale, 0.0)))
 	var used: Dictionary = {}
 	for _i in range(quota):
 		var tile := Vector2i(-1, -1)

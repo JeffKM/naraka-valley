@@ -97,8 +97,10 @@ var rod: Dictionary = {}        # 낚싯대 파라미터(ROD_T1 스키마)
 #   perfect_window_add : 퍼펙트 릴 창 가산(초, 0.0 = 중립 · 스킬 레벨이 키운다)
 #   burst_damp         : 발버둥 텐션 배수 감쇠(0.0 = 중립 · 태클 '납추'가 채운다 — ★S3-T4 실효)
 #   wait_factor        : 입질 대기 배수(1.0 = 중립 · 미끼가 낮춘다 — ★S3-T4 실효). cast()에서 한 번만 먹는다.
+#   weather_factor     : 입질 대기 배수(1.0 = 중립 · ★S7-T3 날씨). wait_factor와 **축이 다르다** —
+#                        아래 cast()의 클램프 규율 참조(기어는 순이득만·날씨는 양방향).
 var mods: Dictionary = {"energy_factor": 1.0, "perfect_window_add": 0.0, "burst_damp": 0.0,
-	"wait_factor": 1.0}
+	"wait_factor": 1.0, "weather_factor": 1.0}
 # ★ 후킹 게이트(→ bool). main이 "혼력을 낼 수 있나(내고 소모까지)"를 여기에 주입한다. 무효 Callable =
 #   항상 통과(순수 로직 단독 테스트 기본값 — 이 클래스는 혼력을 모른다).
 var hook_gate: Callable = Callable()
@@ -158,8 +160,12 @@ func cast() -> bool:
 	elapsed = 0.0
 	# ★[S3-T4] 미끼(일반 −40%·유인/보장 −20%)가 대기 시간을 줄인다. 하한 0.1로 클램프해 "즉시 입질"
 	#   같은 축퇴를 막고, 상한 1.0으로 막아 미끼가 대기를 *늘리는* 방향은 열지 않는다(기어 = 언제나 순이득).
+	# ★[S7-T3 / ADR-0065 결정 4] 날씨는 **별도 인자**다 — 기어 클램프(상한 1.0)를 함께 타면 잿눈의
+	#   둔화(−15% = 대기 1.18배)가 통째로 잘려 나간다. 기어는 "언제나 순이득"이라는 계약을 지키고,
+	#   날씨는 하늘이라 양방향으로 민다(하한 0.1·상한 3.0 = 축퇴·무한 대기 방어).
 	_wait_secs = _rng.randf_range(WAIT_MIN, WAIT_MAX) \
-		* clampf(float(mods.get("wait_factor", 1.0)), 0.1, 1.0)
+		* clampf(float(mods.get("wait_factor", 1.0)), 0.1, 1.0) \
+		* clampf(float(mods.get("weather_factor", 1.0)), 0.1, 3.0)
 	return true
 
 # 세션 취소(이동 입력 등). 종착 상태에서도 안전(멱등) — main이 세션 참조를 버리면 끝이다.

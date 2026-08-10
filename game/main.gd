@@ -4742,7 +4742,7 @@ func _in_mine_floor() -> bool:
 #   ★ 그날 이미 깬 돌은 원장이 빼 준다(같은 날 재진입 = 동일 배치 + 깬 돌 제외, 재파밍 차단).
 func _build_mine_floor() -> void:
 	mine_floors.advance_day(clock.day)      # 날이 갈렸으면 day-한정 기록 소멸(취침 훅의 방어적 짝)
-	_mine_layout = MineFloors.generate(clock.day, _mine_floor)
+	_mine_layout = MineFloors.generate(clock.day, _mine_floor, Weather.mob_spawn_scale(_weather_today()))
 	_spawn_mine_mobs()                      # ★[S5-T5] 층 잡귀 재스폰(층 한정 비영속 — 들어설 때마다 새 판)
 	_grid = []
 	for y in _grid_h:
@@ -4938,7 +4938,7 @@ func _descend_mine(to_floor: int) -> void:
 	if _transitioning or not MineFloors.is_valid_floor(to_floor):
 		return
 	mine_floors.advance_day(clock.day)
-	var layout := MineFloors.generate(clock.day, to_floor)
+	var layout := MineFloors.generate(clock.day, to_floor, Weather.mob_spawn_scale(_weather_today()))
 	if layout.is_empty():
 		return
 	_mine_floor = to_floor
@@ -5109,7 +5109,8 @@ func _floor_node_at(t: Vector2i) -> String:
 # ★ 층 그리드 = 사방 WALL(암반) + 방 사각 PATH + 남은 돌 ROCK. 갱도 층 빌더와 같은 스택이라
 #   카메라·충돌·flood-fill 관례가 그대로 통한다. 다른 점은 하나뿐이다: **확정 하강 사다리가 없다**.
 func _build_narak_floor() -> void:
-	_narak_layout = NarakFloors.generate(narak_floors.run_id(), _narak_depth)
+	_narak_layout = NarakFloors.generate(narak_floors.run_id(), _narak_depth,
+		Weather.mob_spawn_scale(_weather_today()))
 	_spawn_narak_mobs()                     # 층 잡귀·보스(층 한정 비영속 — 들어설 때마다 새 판)
 	_grid = []
 	for y in _grid_h:
@@ -5183,7 +5184,8 @@ func _descend_narak(to_depth: int, fall_floors: int = 0) -> void:
 		_notice("%d층을 곤두박질쳤다 — 낙하 피해 %d" % [fall_floors, dealt])
 		if _faint_count != faints_before:
 			return
-	var layout := NarakFloors.generate(narak_floors.run_id(), to_depth)
+	var layout := NarakFloors.generate(narak_floors.run_id(), to_depth,
+		Weather.mob_spawn_scale(_weather_today()))
 	if layout.is_empty():
 		return
 	_narak_depth = to_depth
@@ -5755,7 +5757,11 @@ func _on_mob_killed(mob: Mob, spawn_index: int) -> void:
 	var drop_seed := hash("narak:%d:%d:%d" % [narak_floors.run_id(), _narak_depth, spawn_index]) \
 		if in_narak else hash("%d:%d:%d" % [clock.day, _mine_floor, spawn_index])
 	var full := false
-	for d: Dictionary in MobCatalog.roll_drops(mob.kind, drop_seed):
+	# ★[S7-T3 / ADR-0065 결정 4] 혼불 바람이면 드랍 확률 ×1.5·희귀(나락철) ×2. 평온이면 두 값 다 1.0이라
+	#   기존 드랍 결과열이 한 톨도 안 변한다(수량 롤은 애초에 배수를 안 탄다 — MobCatalog 주석 참조).
+	var wx := _weather_today()
+	for d: Dictionary in MobCatalog.roll_drops(mob.kind, drop_seed,
+			Weather.drop_scale(wx), Weather.rare_drop_scale(wx)):
 		var id := String(d["id"])
 		var n := int(d["count"])
 		if n <= 0:
@@ -8723,6 +8729,12 @@ func _on_day_advanced(day: int) -> void:
 	#   한다(ADR-0065 결정 1 — 아래 시스템들이 이미 순서에 의존하므로 그 결을 지킨다).
 	#   지금은 판정만 세운다 — 실제 소비자는 후속 태스크가 이 자리에 순서대로 끼워 넣는다.
 	var season_start := GameClock.is_season_first_day(day)
+	# ★[S7-T3 / ADR-0065 결정 3] 오늘의 하늘 — day에서 파생되는 순수 롤이라 저장할 것도, 미리 굴려
+	#   둘 것도 없다(Weather는 상태 0). 이 한 값이 아래 아침 정산 순서를 따라 흐르며 각 seam에
+	#   배수/불리언으로 꽂힌다: 급수(혼우) → 성장(잿눈) → 방목(잿눈) → 카페 볼륨(잿눈).
+	#   ★ 절기 첫날은 Weather가 스스로 평온으로 못 박으므로(강제 평온), 사멸이 벌어지는 날에
+	#     잿눈·혼우가 겹치는 일은 정의상 없다 — 여기서 따로 가드하지 않는 이유다.
+	var weather := Weather.weather_for_day(day)
 	# ★[S7-T2 / ADR-0065 결정 2] 작물 절기 사멸 — 절기 첫날 아침, 밭의 **비제철·비다절기** 작물이
 	#   일괄로 스러진다. `farm.advance_day`보다 위라 스러진 칸은 그날 자라지 않는다(하루 사이클 정합 —
 	#   까마귀 습격이 성장 전에 오는 것과 같은 순서 규율).
@@ -8785,8 +8797,22 @@ func _on_day_advanced(day: int) -> void:
 	if sprinkler != null:
 		for st in sprinkler.watered_targets():
 			farm.sprinkle(st)
+	# ★[S7-T3 / ADR-0065 결정 4] 혼우(비) = **아침 자동 급수**. 스프링클러가 십자 인접 칸을 적시는
+	#   바로 그 API(`farm.sprinkle` — 경작만 됐으면 심김 무관·이미 젖었으면 무동작)를 밭 전 경작
+	#   칸에 돌린다. 그래서 **field.gd 급수 경로는 한 줄도 안 늘었고**, 스프링클러와 순서를 바꿔도
+	#   결과가 같다(멱등 — 둘 다 "젖음"이라는 같은 상태를 세운다).
+	#   ★ 알림은 안 붙인다: 취침 직후 알림 줄이 이미 여럿(출하 정산·까마귀·사멸·짐승)이라 매번 뜨는
+	#     "비가 내렸다"는 그 줄들을 밀어낸다. 하늘 상태의 상시 표시는 T8 HUD 날씨 아이콘의 몫이다.
+	if Weather.waters_field(weather):
+		for wt in farm.tilled_tiles():
+			farm.sprinkle(wt)
 	var h := affinity.hearts()
-	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h))
+	# ★[S7-T3] 잿눈 = 그날 노지 성장 정지(비살상). 세 번째 인자 grow=false면 **마름은 그대로 돌고**
+	#   성장 두 갈래만 꺼진다(field.advance_day 주석 참조 — 호출 스킵이 아니라 가법 인자인 이유).
+	#   ★ "노지"만이라는 단서가 지금 무의미한 건 밭이 전부 노지이기 때문이다(온실 = ADR-0065 서랍).
+	#     과수(orchard.advance_day)는 아래에서 따로 도는데, 눈이 와도 결실을 멈추지 않는다 — 절기가
+	#     결실을 가르는 건 ADR-0045의 불가침 영역이라 날씨가 끼어들지 않는다.
+	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h), Weather.grows_crops(weather))
 	orchard.advance_day(day)   # ★ [S1-5b] 성숙+제철 나무는 결실 +1(비제철 정지·영속). day는 무상태 절기 판정(ADR-0045)
 	# ★ [B1-a.2] 밤 pathing 정산 — advance_day 정산 *전에* 방목 짐승을 자동 귀가시켜(penned) 격리 성공을
 	#   확정하고, 문 닫혀 못 들어온 짐승은 실외 고립으로 남긴다(penned 미설정 → advance_day가 M_NIGHT_EXPOSED).
@@ -8795,7 +8821,8 @@ func _on_day_advanced(day: int) -> void:
 		_notice("짐승 %d마리가 밖에 갇혔다 — 문을 열어 둬야 귀가한다" % int(night["exposed"]))
 	ranch.advance_day()        # ★ [S1-7] 짐승 데일리 정산 — 케어 플래그로 우정·기분 갱신·산물 생성·플래그 리셋(§4.1)
 	# ★ [B1-a.2] 새 아침 방목 방출 — advance_day가 플래그를 리셋한 *뒤*, 문 열린 건물 짐승을 방목지로 내보낸다
-	#   (grazed=이번 새 날치). 평온·낮 게이트는 _release_open_buildings 안에서(_weather_calm 스텁=항상 평온).
+	#   (grazed=이번 새 날치). 평온·낮 게이트는 _release_open_buildings 안에서(★[S7-T3] _weather_calm이
+	#   이제 실제 날씨를 본다 — 잿눈 날 아침엔 방출 자체가 없다).
 	_release_open_buildings()
 	# ★ [B1-a.3] 사료풀 재생 — 벤 지 REGROW_DAYS 지난 풀이 다시 자란다. 겨울(성야절)엔 재생 정지(Q7 굶음 긴장).
 	forage.advance_day(day, GameClock.season_index_for_day(day) == 3)
@@ -11184,7 +11211,10 @@ func _fishing_habitat() -> String:
 
 # ★[S3-T3] 이번 입질의 어종 추첨 — ①전설 특수 입질(극저확률·조건 충족 시) → ②일반 가중 롤(체급 파생)
 #   → ③방어 폴백(가용 0이라는 있어선 안 될 상태). 절기·시간 잠금은 clock에서 곧장 읽는다(결정 3
-#   "절기-잠금 = 즉시 실효" — 신규 시스템 0). 날씨는 아직 안 본다(★[S7 점등]).
+#   "절기-잠금 = 즉시 실효" — 신규 시스템 0).
+#   ★[S7-T3 / ADR-0065 결정 4] 여기 날씨가 점등됐다 — 오늘 하늘도 같은 자리에서 곧장 읽어 넘긴다.
+#   혼우 한정 어종(도깨비메기·먹빛장어)은 비 오는 날에만 이 풀에 들어온다. 전설 롤도 같은 필터를
+#   탄다(전설 2종은 날씨 태그가 없어 실효 변화 0 — 인자를 빼면 두 롤의 가용 판정이 갈라진다).
 #   ★[S3-T4] 미끼 보정 2개가 여기로 들어온다: 유인 = 체급 가중 상향(class_shift) · 보장 = 낚싯대 허용
 #   체급 이하 최고 체급 확정(guarantee_cap). 전설 롤은 **미끼 무관**이다(ADR-0061 결정 4 — 전설은 기어가
 #   아니라 사건이고, 체급 게이트가 "T4가 아니면 걸려도 끊긴다"를 자연 처리한다 = 드라마 허용).
@@ -11194,9 +11224,10 @@ func _roll_fish_id(seed_value: int, class_shift: float = 0.0, guarantee_cap: int
 	var habitat := _fishing_habitat()
 	var season := clock.season_index()
 	var ph := clock.phase()
-	var id := FishCatalog.roll_legendary(habitat, season, ph, rng)
+	var wx := _weather_today()
+	var id := FishCatalog.roll_legendary(habitat, season, ph, rng, wx)
 	if id == "":
-		id = FishCatalog.roll_fish(habitat, season, ph, rng, class_shift, guarantee_cap)
+		id = FishCatalog.roll_fish(habitat, season, ph, rng, class_shift, guarantee_cap, wx)
 	return id if id != "" else FishCatalog.fallback_id(habitat)
 
 # ★[S3-T4] 지금 인벤에 든 낚시 기어 id 목록(태클·미끼 자동 적용의 입력). GearCatalog는 인벤토리를
@@ -11277,6 +11308,10 @@ func _fishing_mods() -> Dictionary:
 	return GearCatalog.mods_for(_cast_tackles, _cast_bait, {
 		"energy_factor": FishSkill.energy_factor(lv),
 		"perfect_window_add": FishSkill.perfect_window_add(lv),
+		# ★[S7-T3 / ADR-0065 결정 4] 혼우 입질 +25% · 잿눈 −15%. 낚시터(삼도천·황천해·갱도 호수)를
+		#   가리지 않고 전역으로 건다 — 캐스팅 무대가 전부 하늘 아래라 예외를 둘 자리가 없다(갱도
+		#   호수만 지하지만, 거기 한 무대를 위해 날씨-무관 축을 새로 만들 값이 아니다. *스코프 판단*).
+		"weather_factor": Weather.bite_wait_factor(_weather_today()),
 	})
 
 # ★ 후킹 게이트(FishingSession에 주입) — 이 세션에서 혼력이 나가는 유일한 순간(ADR-0061 결정 6:
@@ -14873,7 +14908,12 @@ func _refresh_cafe_ladder() -> void:
 	var st := _cafe_stage()
 	if cafe != null:
 		cafe.open_seats = CafeMilestone.seats_of(st)
-		cafe.spawn_scale = Festival.spawn_scale(clock.day) * CafeMilestone.spawn_scale_of(st)
+		# ★[S7-T3 / ADR-0065 결정 4] 날씨 배수가 이 **단일 곱**에 합류했다(축제 × 단계 × 날씨).
+		#   잿눈이면 손님이 1.5배 들어온다("추워서 카페로 든다") = 간격 ×(1/1.5). 세 배수는 곱해서
+		#   함께 걸린다 — ⚠️ spawn_scale에 따로 대입하는 자리를 절대 새로 만들지 말 것(먼저 쓴 값이
+		#   지워지는 사고가 이미 한 번 있었다. 이 함수가 spawn_scale의 유일한 주인이다).
+		cafe.spawn_scale = Festival.spawn_scale(clock.day) * CafeMilestone.spawn_scale_of(st) \
+			* Weather.cafe_spawn_scale(_weather_today())
 	if larder != null:
 		larder.capacity = CafeMilestone.larder_capacity_of(st)
 
@@ -15175,10 +15215,19 @@ func _seed_starter_animal(species: String, building: String, room: Rect2i, age: 
 				return
 
 # ── ★ [B1-a.2] 방목 pathing 배선 ──────────────────────────────────────────────
-# 방목 날씨 게이트. 혼우(비)·잿눈(눈)이면 짐승은 실내 잔류(Q5 스펙)지만, 날씨 시스템은 Phase 3라
-# 아직 없다 → 지금은 항상 평온(true). 날씨가 붙으면 여기서 clock.weather 등을 물어 게이팅한다(hook).
+# ★[S7-T3 / ADR-0065 결정 3] 오늘의 하늘(파생 — 저장하지 않는다). day가 곧 답이라 캐시도 무의미하다.
+#   clock이 아직 없는 프레임(부팅 중 호출)은 평온으로 떨어진다.
+func _weather_today() -> int:
+	return Weather.weather_for_day(clock.day) if clock != null else Weather.CALM
+
+# 방목 날씨 게이트. ★[S7-T3 / ADR-0065 결정 4] 스텁(항상 true)이 실효화됐다 — **잿눈이면 실내 잔류**다.
+# ★ 옛 B1-a Q5 스펙은 "혼우·잿눈 둘 다 실내"였는데 ADR-0065 결정 4가 **잿눈만** 지목했다. 근거:
+#   우리 혼우는 밭을 공짜로 적시는 *이득의 비*라, 그날 방목까지 막으면 비 오는 날이 순손실만 남는
+#   날이 된다(스타듀는 비에도 가축을 안 내보내지만 거긴 비에 급수 이득이 붙는 대신 방목이 순수
+#   손실 축이 아니다). 눈 덮인 방목지에 짐승을 세워 두지 않는 것으로 규칙의 의도는 충족된다.
+# ★ 판정은 Weather 단일 출처에 위임한다(수치·조건 복제 0). clock이 없는 상태(부팅 중)는 평온 취급.
 func _weather_calm() -> bool:
-	return true
+	return Weather.allows_grazing(_weather_today())
 
 # 방목지(PASTURE_SCAN_RECT) 안의 걸을 수 있는(비-SOLID) 타일 목록. 짐승 방목 목적지 슬롯이 된다.
 # 지형만 본다(그레이박스 — 방목지는 절벽으로 둘린 평면이라 프롭 거의 없음). _grid 경계도 방어.
