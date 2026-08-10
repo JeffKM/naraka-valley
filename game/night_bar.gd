@@ -73,6 +73,10 @@ const SPAWN_INTERVAL := 4.0       # 빈 스폿에 새 잡귀가 깃드는 간격
 const CUST_INTERVAL := 3.5        # 빈 좌석에 새 바 손님이 앉는 간격(초)
 const SERVE_PRICE := 30           # 밤 손님 정액 응대가(밤 매출 — 바나는 '마진'이 아니라 '보호'
                                   #   곱셈기라 단가 배수가 없다, 멜 카페와 분화 ADR-0008)
+# ★[S6-T6 / ADR-0064 결정 6] 칵테일 등급별 매출 배수(응대가 × 이 값). 낮 체키(Cafe.CHEKI_RATE)와
+# **같은 표**를 쓴다 — 밤낮 두 심화 미니게임의 보상 문법을 하나로 유지해 플레이어가 두 번 배우지
+# 않게 한다. ★[0]이 0이 아닌 것이 무실패의 경제적 표현이다(최저 등급도 프리미엄이 붙는다).
+const COCKTAIL_RATE := [0.5, 1.0, 1.5]
 const DEFAULT_APPROACH := 8.0     # 잡귀 기본 접근 시간(초) — ★seam ㉠: T6.5 보호가 키움(막을 여유↑)
 const DEFAULT_PATIENCE := 7.0     # 바 손님 기본 인내심(초) — ★seam ㉡: T6.5 보호가 키움(이탈↓)
 const DEFAULT_RAID := 3           # 잡귀 1마리 돌파 시 약탈 재고량(♡0 거친 base) — ★seam ㉠: T6.5
@@ -107,6 +111,10 @@ var _revenue := 0                 # 응대 성공 밤 매출(누적)
 var _left := 0                    # ㉯ 응대 실패(인내심 초과)로 떠난 손님 수(누적)
 var _auto_blocks_left := 0        # 이 밤 남은 바나 자동 차단 횟수(open_bar가 auto_block으로 채움)
 var _auto_blocked := 0            # 이 밤 바나가 자동 차단한 잡귀 수(누적, HUD·체감용)
+# ★[S6-T6] 오늘 밤 만든 칵테일 잔수(마감 요약 한 줄 — 응대 수와 별개 눈금이다. 응대는 전원에게
+# 하고 칵테일은 그 위의 *심화 단*이라, 둘의 비율이 곧 "깊이 vs 회전+방어"의 그 밤 성적표다.
+# cafe.gd `_today_cheki`와 정확히 같은 자리·같은 근거).
+var _cocktails := 0
 
 func _ready() -> void:
 	for i in N_SPOTS:
@@ -126,6 +134,7 @@ func open_bar(minutes: float) -> bool:
 	_revenue = 0
 	_left = 0
 	_auto_blocked = 0
+	_cocktails = 0                   # ★[S6-T6] 밤 잔수도 정산과 같은 하루 단위로 리셋
 	_auto_blocks_left = auto_block   # ★ 이 밤 바나가 받쳐줄 횟수를 현재 하트 보호값으로 채운다
 	_spawn_timer = SPAWN_INTERVAL
 	_cust_timer = CUST_INTERVAL
@@ -221,6 +230,7 @@ func end_day() -> void:
 	_revenue = 0
 	_left = 0
 	_auto_blocked = 0
+	_cocktails = 0
 	_auto_blocks_left = 0
 	_clear_spots()
 	_clear_seats()
@@ -275,6 +285,29 @@ func serve(seat: int) -> int:
 	_revenue += SERVE_PRICE
 	changed.emit()
 	return SERVE_PRICE
+
+# ── ★[S6-T6 / ADR-0064 결정 6] 칵테일 = 밤 응대의 다음 단(프리미엄) ───────────
+# 이 노드가 칵테일에 대해 아는 건 **등급 하나(0~2 정수)**뿐이다 — 믹싱도, 박자도, 커서도 모른다
+# (CocktailSession은 반대로 돈을 모른다. 두 파일이 등급 정수 하나로만 만난다 = 디커플링. 낮의
+# Cafe.record_cheki ↔ ChekiSession과 정확히 같은 접점 규약).
+#
+# ★ 바나 곱셈기가 여기에 *안* 붙는 것이 낮과의 차이다: 멜 마진은 serve_price 안에서 곱해져 체키에도
+#   자동으로 얹혔지만(관계=단가 축), 바나는 '마진'이 아니라 '보호' 곱셈기라 밤 응대가에 단가 배수가
+#   없다(위 SERVE_PRICE 주석·ADR-0008 곱셈기 분화). 바나의 값은 매출을 부풀리는 게 아니라 잔을 젓는
+#   동안 잡귀·손님을 대신 받쳐 주는 것으로 치러진다 — 그래서 칵테일이 바나 축을 건드릴 자리가 없다.
+func cocktail_price(grade: int) -> int:
+	var rate: float = COCKTAIL_RATE[clampi(grade, 0, COCKTAIL_RATE.size() - 1)]
+	return maxi(int(round(SERVE_PRICE * rate)), 1)   # 하한 1냥 = 무실패의 산술적 보증
+
+# 칵테일 한 잔을 오늘 밤 장부에 적고 매출을 돌려준다(지갑 반영은 호출 측 — serve와 같은 결).
+# ★ 응대 매출(_revenue)과 **같은 곳**에 쌓는다 — 새 귀속처를 발명하지 않는다. 그래야 마감 요약
+#   closed(revenue)와 마일스톤 축이 밤 매출을 한 눈금으로 계속 읽는다(귀속 일관성).
+func record_cocktail(grade: int) -> int:
+	var revenue := cocktail_price(grade)
+	_cocktails += 1
+	_revenue += revenue
+	changed.emit()
+	return revenue
 
 # ── 조회(main이 그리기·입력·HUD에 쓴다) ────────────────────────────────────
 # 지금 밤 창(19–24시) 안인가 — 옵트인 프롬프트를 띄울지 판단(창 밖이면 못 연다).
@@ -345,6 +378,10 @@ func tonight_left() -> int:
 # 오늘 밤 바나가 자동 차단한(내가 못 막았으나 약탈 0으로 막힌) 잡귀 수(★ ㉠ 누적). HUD·체감용.
 func tonight_auto_blocked() -> int:
 	return _auto_blocked
+
+# ★[S6-T6] 오늘 밤 만든 칵테일 잔수 — 마감 정산 요약·디버그(cafe.today_cheki와 같은 자리).
+func tonight_cocktails() -> int:
+	return _cocktails
 
 # 이 밤 남은 바나 자동 차단 횟수(HUD "자동차단 N/M"·디버그용).
 func auto_blocks_left() -> int:
