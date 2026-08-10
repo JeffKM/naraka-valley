@@ -2824,13 +2824,12 @@ func _begin_game(is_new_game: bool) -> void:
 	_milestone_celebrated = _milestone_complete()
 	_milestone2_celebrated = _milestone_stage2_complete()   # ★[S6-T3] 2단 래치도 같은 규칙
 	# (이어받은 단계에 맞춘 좌석·곳간 용량·손님 볼륨은 위 _refresh_festival이 사다리째 세워 둔다.)
-	# T4.2 이어받은 세이브가 이미 슬라이스를 넘겼으면(RUN_DAYS+1일째 아침) 바로 마무리 화면을 띄운다.
-	# 그 경우 온보딩 컷신은 띄우지 않는다(슬라이스가 끝났으므로).
-	if RunSummary.is_over(clock.day):
-		_end_run()
-	else:
-		# T4.1 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다.
-		_maybe_start_intro()
+	# ★[S7-T1 / ADR-0065 결정 1] 옛 T4.2 재개 게이트(RunSummary.is_over → _end_run)가 여기 있었다.
+	#   _on_day_advanced의 종료 게이트와 **같은 게이트의 다른 입구**라, 취침 쪽만 걷어내면 day 22+
+	#   세이브를 이어받는 순간 마무리 화면이 떠 달력이 도로 막힌다. 두 입구를 함께 닫는다.
+	# T4.1 신규 시작(또는 통보 단계 복원)이면 옥자 오프닝 통보를 자동으로 띄운다.
+	#   (is_intro 단계에서만 열리는 자체 가드가 있어 조건 없이 불러도 안전하다.)
+	_maybe_start_intro()
 	# ★ ADR-0025 ① 배치 모드 패널(좌상단, 디버그/에디터 전용). 맥 F키·단축키 없이 마우스로 조작.
 	# is_debug_build = 에디터·디버그 실행 true·릴리스 export만 false(run_game.sh=에디터 바이너리라 true).
 	if OS.is_debug_build():
@@ -8714,11 +8713,19 @@ func _on_day_advanced(day: int) -> void:
 		_total_income += ship_gold            # ★ [S1R-T12] 누적 총수입(정보패널)
 		audio.sfx("gold")                     # 출하 정산 골드 "치링"
 		_notice("출하함 정산 +%d골드" % ship_gold)
-	# T4.2 슬라이스의 끝. 취침으로 RUN_DAYS+1일째 아침이 오면 더 진행하지 않고(작물 성장·
-	# 혼력 회복도 생략) 마무리 화면을 띄운다. 끝 판정은 RunSummary가 day로 내린다.
-	if RunSummary.is_over(day):
-		_end_run()
-		return
+	# ★[S7-T1 / ADR-0065 결정 1] 옛 T4.2 런 종료 게이트(RunSummary.is_over → _end_run → return)가
+	#   여기 있었다. RUN_DAYS=21에서 하루를 더 자면 게임이 끝나 **절기 전환(day 29)에 영원히 도달
+	#   못 했다** — Slice 7(절기·날씨·축제)의 전제가 통째로 성립하지 않는 자리라 게이트만 걷어낸다.
+	#   RunSummary 상수·정산 화면·호감도 곡선 파생·봇의 21일 루프는 전부 보존한다(_end_run은 S9
+	#   엔딩이 재사용한다). 이제 날은 상한 없이 흐르고, 절기 달력이 그 위를 덮는다.
+	# ★[S7-T1] 절기 전환일 판정 — 절기의 첫날(day 1·29·57…)인가. 판정은 GameClock의 무상태 파생
+	#   하나로 통일했고(이중 발화 차단), 전파는 시그널이 아니라 이 day advance 체인의 **명시 순서**로
+	#   한다(ADR-0065 결정 1 — 아래 시스템들이 이미 순서에 의존하므로 그 결을 지킨다).
+	#   지금은 판정만 세운다 — 실제 소비자는 후속 태스크가 이 자리에 순서대로 끼워 넣는다.
+	#   (아직 소비자가 없어 이름을 `_` 로 시작해 미사용 경고를 막는다 — 첫 소비자가 붙을 때 벗긴다.)
+	var _season_start := GameClock.is_season_first_day(day)
+	# [S7-T2] 작물 사멸 패스 자리 — 비제철 작물 일괄 제거(farm.advance_day 직전, 과수 불참).
+	# [S7-T5] 절기 재스폰 자리 — 빈 맨땅 잡초·debris 대량 재스폰.
 	# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 리셋 — 날이 바뀌면 전 층이 리필된다(그날 깬 돌·열린 사다리
 	#   기록이 전량 소멸하고, 배치는 시드가 day를 물고 있어 저절로 갈린다). 스타듀 "매일 리필" 정합.
 	#   ★ 층 안에서 날이 바뀌면 **지상으로 되돌린다**: 지금은 층 안 취침이 불가능하지만(_can_sleep은 집
@@ -10475,9 +10482,9 @@ func _process(delta: float) -> void:
 	]
 	readout.visible = false
 	# ★ Phase C 시계 클러스터(우상단): raw ClockLabel/GoldLabel/MilestoneLabel을 한지 플레이트
-	# 하나로 통합했다(clock_hud). 절기 내 일차 = (day-1)%28+1(요일은 도메인에 없음 — clock_hud 주석).
-	# 날씨(☀)는 백엔드 부재로 보류(ADR-0048).
-	var _dos := (clock.day - 1) % GameClock.DAYS_PER_SEASON + 1
+	# 하나로 통합했다(clock_hud). 절기 내 일차는 clock의 파생 하나로 수렴했다(요일은 도메인에 없음
+	# — clock_hud 주석). 날씨(☀)는 백엔드 부재로 보류(ADR-0048).
+	var _dos := GameClock.day_of_season(clock.day)
 	if clock_hud != null:
 		clock_hud.set_state(GameClock.season_name(clock.season_index()), _dos, clock.clock_string(),
 			clock.phase(), wallet.gold, CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()))
@@ -13554,7 +13561,7 @@ func _try_buy_deco_set(set_id: String) -> bool:
 
 # ★ [S1R-T12] 인벤 정보패널 날짜 문자열("<절기> N일" — clock_hud와 같은 일차 파생, 요일 없음).
 func _inv_date_string() -> String:
-	var dos := (clock.day - 1) % GameClock.DAYS_PER_SEASON + 1
+	var dos := GameClock.day_of_season(clock.day)
 	return "%s %d일" % [GameClock.season_name(clock.season_index()), dos]
 
 # 관계 탭(메뉴) 하트 행 — 미호·멜·바나·네오 호감도를 읽기 전용으로 프레임에 넘긴다(HeartBar 재사용).
@@ -14247,6 +14254,9 @@ func _try_resident_gift(r: Resident) -> void:
 # 슬라이스가 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리
 # 점수판을 띄운다. 멱등(_run_over 가드)이라 취침 종료·로드 양쪽에서 불려도 한 번만
 # 세운다. 끝 판정·문구는 RunSummary가, 표시·잠금은 main이 맡는다(데이터/표시 디커플링).
+# ★[S7-T1 / ADR-0065 결정 1] **현재 호출부 없음 — S9 엔딩(해방) 재사용 대기.** 21일 런 종료
+#   게이트가 절기 달력을 막아 두 호출부(취침·재개)를 걷어냈지만, 이 화면 자체는 엔딩이 그대로
+#   쓸 자산이라 남겨 둔다. RunSummary(상수·문구)와 _run_over 가드도 같은 이유로 보존.
 func _end_run() -> void:
 	if _run_over:
 		return

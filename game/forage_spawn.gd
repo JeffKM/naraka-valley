@@ -200,7 +200,10 @@ func pick(region: String, t: Vector2i) -> String:
 #   · 결정적: day + 구역 + 좌표 시드. 구역·후보는 정렬 순회라 Dictionary 키 순서에 안 기댄다.
 func advance_day(day: int, season: int) -> Dictionary:
 	var out := {"spawned": [], "cleared": 0, "reset": false, "season_reset": false}
-	var season_reset := (day - 1) % GameClock.DAYS_PER_SEASON == 0
+	# ★[S7-T1 / ADR-0065 결정 1] 절기 전환 판정은 GameClock의 단일 파생을 부른다 — 예전엔 이 로컬
+	#   식이 게임에서 유일한 절기 전환 감지였지만, S7이 같은 날에 여러 시스템을 걸므로 판정이
+	#   흩어지면 이중 발화가 된다. 동작은 동일(day 1도 전환일 = 시작 절기의 첫날).
+	var season_reset := GameClock.is_season_first_day(day)
 	var cycle_reset := (day - 1) % RESET_DAYS == 0
 	if season_reset or cycle_reset:
 		out["cleared"] = total()

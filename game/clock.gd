@@ -35,6 +35,18 @@ const SEASON_NAMES := ["피안절", "유화절", "망연절", "성야절"]   # i
 static func season_index_for_day(d: int) -> int:
 	return ((d - 1) / DAYS_PER_SEASON) % 4
 
+# ★[S7-T1 / ADR-0065 결정 1] 이 날이 절기의 첫날인가(day 1 포함 — 게임 시작도 피안절 1일이라
+# 같은 전환 취급이다). 절기 전환 이벤트의 **단일 진실원**: 예전엔 forage_spawn이 이 식을 자기
+# 안에서 굴려 혼자 감지했지만, Slice 7이 여러 시스템(사멸·재스폰·날씨 강제 평온)을 같은 날에
+# 걸므로 판정을 여기로 승격해 이중 발화를 원천 차단한다.
+static func is_season_first_day(d: int) -> bool:
+	return (d - 1) % DAYS_PER_SEASON == 0
+
+# ★[S7-T1] 이 날의 절기 내 일차(1..28, 1-기반). HUD 날짜·덤불 절기 창 등이 각자 굴리던
+# `(day-1)%28+1` 중복 파생을 여기로 수렴한다(season_index_for_day와 같은 무상태 파생 관례).
+static func day_of_season(d: int) -> int:
+	return (d - 1) % DAYS_PER_SEASON + 1
+
 # 절기 인덱스 → 표시명("" = 범위 밖). flavor·프롬프트용.
 static func season_name(idx: int) -> String:
 	return SEASON_NAMES[idx] if idx >= 0 and idx < SEASON_NAMES.size() else ""

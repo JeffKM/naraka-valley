@@ -42,10 +42,11 @@ const BERRY_CHANCE := 0.20   # 덤불당 하룻밤 결실 확률(스타듀 상�
 var _berries: Dictionary = {}
 
 # ── 정적 규칙 ───────────────────────────────────────────────────────────────
-# 이 날의 절기 내 일차(1..28). GameClock에 헬퍼가 없어 여기서 파생한다(clock.gd 무수정 — 절기 게이트는
-# "기존 절기 파생으로 즉시 실효"가 ADR-0062 결정 9의 요구다).
+# 이 날의 절기 내 일차(1..28). ★[S7-T1] 옛 자체 파생(`(day-1)%28+1`)은 clock의 파생으로 수렴했다
+# (S7이 절기 전환을 정식 이벤트로 올리며 일차 계산이 세 곳에 흩어져 있던 걸 한 곳으로 모음).
+# 이름은 남긴다 — 아래 berry_for_day가 계속 부르는 이 파일의 읽기 좋은 창구다.
 static func day_of_season(day: int) -> int:
-	return ((day - 1) % GameClock.DAYS_PER_SEASON) + 1
+	return GameClock.day_of_season(day)
 
 # 이 날 덤불에 달릴 수 있는 열매 id("" = 절기 창 밖 = 결실 롤 없음).
 static func berry_for_day(day: int) -> String:
