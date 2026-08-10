@@ -410,8 +410,15 @@ static func roll_kind(pool: Array, rng: RandomNumberGenerator) -> String:
 #   ★ 확률만 곱하고 **수량 롤은 안 건드린다** — 두 롤의 소비 순서·횟수가 그대로라 배수를 걸어도
 #     스트림이 안 흔들린다(같은 시드에서 "몇 개 나오나"는 같고 "나오나 마나"만 갈린다).
 #   ★ 확률은 1.0으로 클램프한다. 그래서 보스의 확정 드랍(chance 1.0)은 배수를 먹어도 그대로 1.0이다.
+# ★[S7-T4 / ADR-0065 결정 5 ③] `luck_bonus` = 명부의 운 가산(기본 0.0 = 정확히 중립 — 무인자 호출
+#   결과열 불변). **순서가 계약이다: base에 운을 먼저 더하고, 그 합에 날씨 배수를 곱한다**
+#   ((base + luck) × scale). 운은 "명부가 오늘 나에게 얼마를 더 얹느냐"라 확률의 원점을 옮기는
+#   축이고, 날씨는 그렇게 정해진 확률을 통째로 키우는 축이다 — 순서를 뒤집으면 혼불 바람이 운까지
+#   1.5배로 증폭해 하루 변동폭이 두 축의 곱으로 튄다.
+#   ★ 확정 드랍(chance ≥ 1.0 = 보스 관문 보상)은 운도 배수도 **안 탄다**: 흉일에 관문 보상이 사라지면
+#     "관문을 넘으면 반드시 준다"는 계약이 깨진다(운은 곁다리를 흔들지 본상을 흔들지 않는다).
 static func roll_drops(kind: String, seed_value: int,
-		drop_scale: float = 1.0, rare_scale: float = 1.0) -> Array:
+		drop_scale: float = 1.0, rare_scale: float = 1.0, luck_bonus: float = 0.0) -> Array:
 	var out: Array = []
 	if not has(kind):
 		return out
@@ -423,7 +430,9 @@ static func roll_drops(kind: String, seed_value: int,
 	for e: Dictionary in table:
 		var base := float(e["chance"])
 		var scale: float = rare_scale if base <= RARE_DROP_CHANCE else drop_scale
-		var hit := rng.randf() < minf(base * maxf(scale, 0.0), 1.0)
+		# 확정 드랍은 base 그대로 통과(운·배수 면제) — 그 외만 (base + 운) × 배수.
+		var p: float = base if base >= 1.0 else (base + luck_bonus) * maxf(scale, 0.0)
+		var hit := rng.randf() < clampf(p, 0.0, 1.0)
 		var n := rng.randi_range(int(e["min"]), int(e["max"]))
 		if hit and n > 0:
 			out.append({"id": String(e["id"]), "count": n})

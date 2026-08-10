@@ -348,10 +348,25 @@ func _initialize() -> void:
 	m2._cast_tackles = []
 	m2._cast_bait = ""
 	var before_fish: int = m2.inventory.count_of(FishCatalog.NEOK_MYEOLCHI)
+	# ★[S7-T4 / ADR-0065 결정 5 ⑤] 인양 확률에 **명부의 운**이 가산됐다(계수 ×0.5 = ±50‰). 그래서
+	#   이 단계는 BASE_PERMIL이 아니라 **그날 실제로 굴릴 확률**(main.fishing_salvage_permil_today)로
+	#   시드를 찾아야 한다 — 안 그러면 흉한 날엔 "걸리는 시드"를 찾아 놓고도 라이브 롤이 그 확률을
+	#   안 써서 헛돈다. 검증 목적(인양이 격투 결과를 안 건드린다)은 운과 무관하므로, 운이 확률을
+	#   0 아래로 끌어내리지 않는 날 하나를 골라 그 위에서 본다(날짜 하드코딩 0 — 탐색).
+	var luck_day := 1
+	for d in range(1, 449):
+		if m2.fishing_salvage_permil() + int(roundf(DailyLuck.luck_for_day(d)
+				* DailyLuck.W_SALVAGE * 1000.0)) > 0:
+			luck_day = d
+			break
+	m2.clock.day = luck_day
+	var live_permil: int = m2.fishing_salvage_permil_today()
+	_check("ⓔ2pre 인양이 가능한 날 확보(day %d · 실효 %d‰ > 0)" % [luck_day, live_permil],
+		live_permil > 0)
 	# 인양이 **걸리는** 시드를 찾아 그 캐스팅으로 포획을 결착시킨다(무간섭의 최악 케이스).
 	var hit_seed := -1
 	for i in 5000:
-		if SalvageTable.roll(i ^ 0x51ed270b, SalvageTable.BASE_PERMIL) != "":
+		if SalvageTable.roll(i ^ 0x51ed270b, live_permil) != "":
 			hit_seed = i
 			break
 	_check("ⓔ2 인양이 걸리는 캐스팅 시드 확보", hit_seed >= 0)
@@ -366,7 +381,7 @@ func _initialize() -> void:
 		m2._fishing_xp == FishSkill.xp_for_catch(FishCatalog.WC_SMALL, perfects))
 	_check("ⓔ2 인양이 걸려도 어획물은 정확히 1마리(격투 결과 무간섭)",
 		m2.inventory.count_of(FishCatalog.NEOK_MYEOLCHI) == before_fish + 1)
-	var salvaged := String(SalvageTable.roll(hit_seed ^ 0x51ed270b, SalvageTable.BASE_PERMIL))
+	var salvaged := String(SalvageTable.roll(hit_seed ^ 0x51ed270b, live_permil))
 	_check("ⓔ2 인양물이 인벤에 실제 지급(%s)" % ItemCatalog.name_of(salvaged),
 		m2.inventory.has_item(salvaged))
 	# 놓친 격투(ESCAPED)는 XP 0 — "배움은 성공에만".

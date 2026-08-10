@@ -47,6 +47,13 @@ static func is_season_first_day(d: int) -> bool:
 static func day_of_season(d: int) -> int:
 	return (d - 1) % DAYS_PER_SEASON + 1
 
+# ★[S7-T4 / ADR-0065 결정 6] 이 날이 절기의 **마지막 날**(28일차)인가 — `is_season_first_day`의 짝.
+# 점괘 거울의 D-1 사멸 경고가 유일한 소비자다: 오늘이 마지막 날 = 내일이 전환일 = 오늘 밤 지난
+# 절기 작물이 스러진다. 판정을 여기 두는 이유는 첫날 판정과 같다 — 절기 경계를 아는 곳이 하나여야
+# 사멸(T2)·재스폰·경고가 서로 다른 식을 굴리다 하루씩 어긋나는 사고가 안 난다.
+static func is_season_last_day(d: int) -> bool:
+	return d >= 1 and day_of_season(d) == DAYS_PER_SEASON
+
 # 절기 인덱스 → 표시명("" = 범위 밖). flavor·프롬프트용.
 static func season_name(idx: int) -> String:
 	return SEASON_NAMES[idx] if idx >= 0 and idx < SEASON_NAMES.size() else ""
