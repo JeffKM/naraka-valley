@@ -70,6 +70,14 @@ const W_FUSION_EMPTY := 1
 # 없다** — 이름 없는 손님이 카페의 바탕이고(결정 8 "T3 익명 볼륨"), 명명 손님은 그 위의 사건이다.
 const W_ANON_GUEST := 12
 
+# ★[S6-T5 / ADR-0064 결정 5] 체키 매출 배수(그레이박스 레버) — 등급(ChekiSession.Grade 0/1/2)별로
+# **방금 낸 그 잔의 값에 얹는 프리미엄**이다. 서빙가를 기준으로 삼는 이유: 체키는 서빙의 *다음 단*
+# 이라(응대→체키 사슬) 값비싼 융합 잔을 낸 자리가 체키도 값지다 — 곳간에 쟁여 둔 보람이 사슬 끝까지
+# 이어진다(별도 정액이면 융합 서빙과 기본 서빙의 체키가 같은 값이 되어 사슬이 끊긴다).
+# ★ **최저 등급도 0이 아니다**(0.5배) — 실패 등급 없음(ChekiSession.Grade 주석 · ADR-0008).
+# ★ 인덱스가 곧 등급이라 **단조 증가**여야 한다(cheki_test ⓒ가 단언).
+const CHEKI_RATE := [0.5, 1.0, 1.5]
+
 # 좌석별 손님 상태. 빈 자리는 occupied=false. patience(남은 초)/max는 인내심 바·이탈 판정용.
 # want(★S6-T2) = 이 손님이 시킨 메뉴 id(빈 자리는 ""). 착석 시 결정 롤로 정해진다.
 # guest(★S6-T4) = 이 손님이 누구인가(명명 손님 id / "" = 익명). 역시 착석 시 결정 롤.
@@ -109,6 +117,9 @@ var guest_pool: Array = []
 var _today_revenue := 0
 var _today_served := 0
 var _today_left := 0
+# ★[S6-T5] 오늘 찍은 체키 장수(마감 요약 한 줄 — 서빙 수와 별개 눈금이다. 서빙은 전원에게 하고
+# 체키는 아는 얼굴에게만 여는 *심화 단*이라, 둘의 비율이 곧 "깊이 vs 회전"의 그날 성적표다).
+var _today_cheki := 0
 # 오늘 스폰 누계 = 주문 롤 시드의 serial 축(영업 시작 시 0). 좌석 인덱스가 아니라 *누계*인 이유:
 # 같은 좌석에 하루 여러 손님이 앉으므로 좌석으로 시드를 잡으면 세 손님이 영원히 같은 메뉴만 시킨다.
 var _spawned_today := 0
@@ -159,6 +170,7 @@ func _open_shop() -> void:
 	_today_revenue = 0
 	_today_served = 0
 	_today_left = 0
+	_today_cheki = 0      # ★S6-T5 오늘 찍은 체키 장수 리셋(정산과 같은 하루 단위)
 	_spawned_today = 0    # ★S6-T2 주문 롤 serial 리셋 — 하루의 주문열은 매일 새로 시작한다
 	_guests_today.clear() # ★S6-T4 오늘의 명명 손님 방문 기록 리셋(하루 1인 1회는 하루 단위 규칙)
 	_spawn_timer = 0.5
@@ -366,3 +378,29 @@ func serve(seat: int, served_menu_id: String = "") -> int:
 func serve_price(menu_id: String = "") -> int:
 	var base := MenuCatalog.price_of(menu_id) if MenuCatalog.has(menu_id) else BASE_PRICE
 	return int(round(base * margin))
+
+# ── ★[S6-T5 / ADR-0064 결정 5] 체키 = 서빙의 다음 단(프리미엄) ───────────────
+# 이 노드가 체키에 대해 아는 건 **등급 하나(0~2 정수)**뿐이다 — 미니게임도, 구도도, 손님 이름도
+# 모른다(ChekiSession은 반대로 돈을 모른다. 두 파일이 등급 정수 하나로만 만난다 = 디커플링).
+#
+# 체키 매출 = 방금 낸 잔의 서빙가 × 등급 배수. 멜 마진은 serve_price 안에서 이미 곱해졌으므로
+# **체키에도 자동으로 얹힌다**(관계 = 곱셈기 — 사슬의 어느 단에서도 ♡0이 막지 않고, 친할수록 사슬
+# 전체가 두꺼워진다, ADR-0008). 하한 1냥 = 최저 등급·최저가 잔에서도 0이 안 나오게(무실패의 산술적
+# 보증 — 0냥은 "찍을 이유가 없다"는 뜻이 되어 실패 등급과 다를 바 없어진다).
+func cheki_price(menu_id: String, grade: int) -> int:
+	var rate: float = CHEKI_RATE[clampi(grade, 0, CHEKI_RATE.size() - 1)]
+	return maxi(int(round(serve_price(menu_id) * rate)), 1)
+
+# 체키 한 장을 오늘 장부에 적고 매출을 돌려준다(지갑 반영·단골 원장은 호출 측 — serve와 같은 결).
+# ★ 서빙 수(_today_served)는 안 건드린다 — 손님 한 명에 서빙 1·체키 0~1이라 두 눈금이 갈려야
+#   "몇 명에게 팔았나"와 "몇 명과 사슬 끝까지 갔나"를 따로 읽는다.
+func record_cheki(menu_id: String, grade: int) -> int:
+	var revenue := cheki_price(menu_id, grade)
+	_today_cheki += 1
+	_today_revenue += revenue
+	changed.emit()
+	return revenue
+
+# 오늘 찍은 체키 장수 — 마감 정산 요약·디버그.
+func today_cheki() -> int:
+	return _today_cheki
