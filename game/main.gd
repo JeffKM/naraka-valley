@@ -1528,6 +1528,14 @@ const HOME_HOUSE_CAM_RECT := Rect2i(2, 65, 20, 13)  # 집 방 둘레 — HOUSE_C
 # 없는 순수 배치 — 상태는 chest 노드가 든다), _indoor=="집"으로 가드해 다른 구역 같은 좌표엔 무반응.
 const CHEST_TILE := Vector2i(11, 68)
 
+# ★[S7-T4 / ADR-0065 결정 6] 점괘 거울 칸 — 집 실내 **북벽 flush**. 북벽 가구는 침대(9) · 상자(11) ·
+# 벽난로(12..13) · 책장(15..16) · 화분(18)이 이미 물고 있어 남는 칸이 10·14·17뿐이고, 그중 17을
+# 골랐다(책장과 화분 사이 — 좌우로 한 칸씩 여백이 서서 실루엣이 안 붙는다).
+# ★ 상자와 정확히 같은 결로 만든다: 좌표 상수 + `_indoor=="집"` 가드 + 그레이박스 즉시모드 드로잉.
+#   `_prop_layouts`에 안 넣는 이유는 그 배열이 preload한 텍스처를 요구하는데 거울 아트는 T9 몫이라서다
+#   (상자·출하함도 같은 이유로 레이아웃 밖에 산다 — 아트가 오면 `_prop_tex` 훅으로 갈아 끼운다).
+const MIRROR_TILE := Vector2i(17, 68)
+
 # ── ★ ADR-0035 Phase B — 80×65 안식 비대칭 Overgrown 개간 재배치 ──────────────────
 # 본가+창고(북동 저지 병렬, 자재 동선) / 5×5 스타터 패치(본가/창고 남쪽, debris 0%·즉경작) /
 # 영혼빛 연못(중앙-약간서) / 고지 하늘 목장(NW, 절벽+계단으로만 진입 — debris 하드 게이트) /
@@ -2339,6 +2347,8 @@ var _residents_by_id: Dictionary = {}   # id → Resident(빠른 조회)
 @onready var milestone_label: Label = $CanvasLayer/MilestoneLabel             # T7.2 카페 마일스톤 진행 바 HUD
 @onready var milestone_panel: Panel = $CanvasLayer/MilestonePanel         # T7.2 "카페 2단계!" 달성 팝업 배경
 @onready var milestone_text: Label = $CanvasLayer/MilestonePanel/Text         # T7.2 달성 팝업 본문
+@onready var mirror_panel: Panel = $CanvasLayer/MirrorPanel                   # ★[S7-T4] 점괘 거울 예보 패널 배경
+@onready var mirror_text: Label = $CanvasLayer/MirrorPanel/Text               # ★[S7-T4] 예보 본문(운·날씨·경고)
 @onready var onboarding: Onboarding = $Onboarding             # T4.1 온보딩 단계 머신
 @onready var onboarding_label: Label = $CanvasLayer/OnboardingLabel  # T4.1 안내 배너
 @onready var ending_panel: ColorRect = $CanvasLayer/EndingPanel        # T4.2/T7.3 슬라이스 마무리 화면 배경
@@ -3817,8 +3827,10 @@ func _chop_tree(t: Vector2i) -> void:
 	if not energy.can_act(cost):
 		return
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
+	# ★[S7-T4 / ADR-0065 결정 5 ④] 명부의 운(계수 ×0.5)이 벌목 보너스 두 롤(단단한 원목·씨앗)에
+	#   가산된다. 원목·수액 *수량*은 안 탄다 — 그건 나무의 값이지 그날 운의 값이 아니다.
 	var res := tree_ledger.chop(_region, t, clock.day, lvl, forage_wood_bonus(),
-		forage_hardwood_chance(), axe_tier())
+		forage_hardwood_chance(), axe_tier(), _luck_bonus(DailyLuck.W_CHOP))
 	if res.is_empty():
 		return                                   # 대상 없음(디스패치가 걸렀지만 방어)
 	# ★[S4-T4] 도끼 티어 부족 — 큰 장애물은 튕겨 낸다. **혼력 미소모**(무효타는 값을 안 매긴다).
@@ -5032,9 +5044,11 @@ func _mine_rock(t: Vector2i) -> void:
 	_sync_mine_tile(t)                      # 그리드·충돌 즉시 해제(재빌드 없이 — _sync_tree_tile 결)
 	_award_mine_drop(t, node_id)            # ★[S5-T2] 산출·XP·크리(부순 사건에만)
 	# 사다리 롤 — 남은 돌이 줄수록 확률이 오른다. ★[S5-T5] 몹 전멸 보너스(+4%)가 실배선됐다
-	# (`_mobs_cleared()` — 옛 false 고정 해소). 명부의 운 가산은 운 시스템 빌드 시 채운다(0.0 인자 자리).
+	# (`_mobs_cleared()` — 옛 false 고정 해소). ★[S7-T4 / ADR-0065 결정 5 ①] 예약돼 있던 `luck_bonus`
+	# 인자 자리가 실효화됐다 — 계수 ×1.0(6지점 중 유일한 원배율. 운 좋은 날 깊이가 술술 내려간다).
 	var left := mine_floors.rocks_left_count(clock.day, _mine_floor)
-	if MineFloors.roll_ladder(clock.day, _mine_floor, t, left, _mobs_cleared(), 0.0):
+	if MineFloors.roll_ladder(clock.day, _mine_floor, t, left, _mobs_cleared(),
+			_luck_bonus(DailyLuck.W_LADDER)):
 		mine_floors.add_ladder(_mine_floor, t)
 		_notice("돌 밑에서 사다리가 드러났다 — [F]로 더 내려간다")
 	_wake_mobs_near(t, 1)                   # ★[S5-T5] 곡괭이 진동이 옆칸 위장 잡귀를 깨운다
@@ -5267,7 +5281,10 @@ func _narak_rock(t: Vector2i) -> void:
 	# 열린다), 열린 것이 무엇인지만 여기서 갈린다.
 	var run := narak_floors.run_id()
 	var left := narak_floors.rocks_left_count(_narak_depth)
-	if NarakFloors.roll_ladder(run, _narak_depth, t, left, _mobs_cleared(), 0.0):
+	# ★[S7-T4 / ADR-0065 결정 5 ①] 갱도와 같은 확률 함수를 쓰니 운도 같은 계수로 함께 탄다
+	#   (나락엔 확정 하강 사다리가 없어 이 롤이 곧 길이다 — 운의 체감이 갱도보다 크다).
+	if NarakFloors.roll_ladder(run, _narak_depth, t, left, _mobs_cleared(),
+			_luck_bonus(DailyLuck.W_LADDER)):
 		if NarakFloors.roll_shaft(run, _narak_depth, t):
 			narak_floors.add_shaft(_narak_depth, t)
 			_notice("돌 밑이 뻥 뚫렸다 — 구멍이다. [F]로 뛰어내린다")
@@ -5759,9 +5776,13 @@ func _on_mob_killed(mob: Mob, spawn_index: int) -> void:
 	var full := false
 	# ★[S7-T3 / ADR-0065 결정 4] 혼불 바람이면 드랍 확률 ×1.5·희귀(나락철) ×2. 평온이면 두 값 다 1.0이라
 	#   기존 드랍 결과열이 한 톨도 안 변한다(수량 롤은 애초에 배수를 안 탄다 — MobCatalog 주석 참조).
+	# ★[S7-T4 / ADR-0065 결정 5 ③] 명부의 운(계수 ×0.5)이 여기 합류했다. **순서 = (base + 운) × 날씨**
+	#   (MobCatalog 주석의 계약). 운은 확률의 원점을 옮기고 날씨는 그 결과를 통째로 키운다 —
+	#   뒤집으면 혼불 바람이 운까지 1.5배로 증폭해 하루 변동폭이 두 축의 곱으로 튄다.
 	var wx := _weather_today()
 	for d: Dictionary in MobCatalog.roll_drops(mob.kind, drop_seed,
-			Weather.drop_scale(wx), Weather.rare_drop_scale(wx)):
+			Weather.drop_scale(wx), Weather.rare_drop_scale(wx),
+			_luck_bonus(DailyLuck.W_MOB_DROP)):
 		var id := String(d["id"])
 		var n := int(d["count"])
 		if n <= 0:
@@ -8582,7 +8603,7 @@ const HANJI_INK := Color(0.16, 0.12, 0.085)   # 먹빛(대화 본문 DLG_INK와 
 func _skin_panel_text() -> void:
 	# ★ Phase D — 엔딩 본문도 포함. 옛 엔딩은 어두운 ColorRect라 흰 글자였으나, 이제 밝은 한지 카드
 	#   (EndingPanel/Card, 전역 Panel 테마 = hanji_frame) 위에 얹혀 먹빛이라야 읽힌다.
-	for lb in [milestone_text, shop_text, cafe_summary_text, ending_text]:
+	for lb in [milestone_text, shop_text, cafe_summary_text, ending_text, mirror_text]:
 		if lb != null:
 			lb.add_theme_color_override("font_color", HANJI_INK)
 	_skin_ending_button()
@@ -9784,6 +9805,16 @@ func fishing_salvage_permil() -> int:
 	return SalvageTable.permil_for(
 		_perk_value(ProfessionCatalog.FISHING, ProfessionCatalog.DIM_SALVAGE_DOUBLE, 0.0) > 0.0)
 
+# ★[S7-T4 / ADR-0065 결정 5 ⑤] **오늘 실제로 굴릴** 인양 확률(퍼밀) = 퍼크 + 명부의 운(계수 ×0.5를
+# 퍼밀 눈금으로 환산 — ±0.05 → ±50‰).
+# ★ 위 `fishing_salvage_permil`을 안 고치고 함수를 하나 더 여는 이유: 저 함수는 *보물잡이 퍼크 축*의
+#   주인이라 그대로 둬야 퍼크 단언(퍼크 = 정확히 2배)이 운에 흔들리지 않는다. 날짜가 섞인 값은
+#   이름이 달라야 호출부가 무엇을 묻는지 헷갈리지 않는다.
+# ★ 대흉 날엔 기본 30‰이 음수로 내려가 인양이 아예 안 걸린다 — SalvageTable.roll이 permil ≤ 0을
+#   빈 문자열로 접어 주므로 별도 방어가 필요 없다("흉일엔 물속이 조용하다").
+func fishing_salvage_permil_today() -> int:
+	return fishing_salvage_permil() + int(roundf(_luck_bonus(DailyLuck.W_SALVAGE) * 1000.0))
+
 # ── ★[S3-T7 게잡이통이 소비할 훅] 덫꾼 갈래 3종 — 퍼크 데이터는 이미 잠겼고, 여기 세 줄이 그 소비
 #   접점이다(게잡이통 시스템이 아직 없어 지금은 아무도 안 부른다 = 실배선은 S3-T7 소관).
 func crab_pot_cost_save() -> float:      # 덫꾼(lvl5) — 자원/미끼 소모 절감 비율(0..1)
@@ -9937,13 +9968,23 @@ func _process(delta: float) -> void:
 	if _deco_mode:
 		queue_redraw()
 		return
+	# ★[S7-T4] 점괘 거울 패널은 타이머가 아니라 **자리**가 접는다 — 집을 나가거나 잠들면 저절로
+	# 덮인다(거울 앞을 떠났는데 예보가 화면에 남아 상시 HUD를 가리는 사고 방지).
+	# ★ 아래 입력 가드(대화·연출·마무리)보다 **위**에 둔다: 이건 게임플레이 입력이 아니라 패널
+	#   위생이라, 대화가 열려 있다고 예보가 화면에 얼어붙으면 안 된다(부팅 온보딩 대화가 열린 채로
+	#   구역이 갈리는 경로에서 실제로 안 접혔다). 바로 아래 _hud_hidden이 이 결과를 읽으므로
+	#   순서상으로도 여기가 맞다.
+	if mirror_panel.visible and (_indoor != "집" or _sleeping):
+		_close_mirror()
+
 	# ★ 상시 HUD(우하단 혼력 바·하단 핫바)는 런타임 add_child라 씬 패널(대화·정산·마일스톤·마무리)
 	# 보다 위에 그려진다 → 그 패널들이 하단을 덮을 때 겹쳐 보였다(스크린샷 버그 — 대화창·초상화가
 	# 핫바를, 정산창이 혼력 바를 덮음). 모달/패널이 열린 동안 둘 다 숨겨 안 겹치게 한다(상시 HUD는
 	# 패널 밖에서만 — 미니멀 결). _process가 가시성 단일 출처라 _open/_close_frame의 hotbar 토글과
 	# 일관(프레임 열림도 아래 조건에 포함).
 	var _hud_hidden := dialogue.is_open() or frame.is_open() or _sleeping \
-		or cafe_summary_panel.visible or milestone_panel.visible or ending_panel.visible
+		or cafe_summary_panel.visible or milestone_panel.visible or ending_panel.visible \
+		or mirror_panel.visible                     # ★[S7-T4] 점괘 거울 패널도 상시 HUD를 덮는다
 	if vitals != null:
 		vitals.visible = not _hud_hidden
 	if hotbar != null:
@@ -10098,6 +10139,7 @@ func _process(delta: float) -> void:
 	# ★ Phase D 저장 상자: 집 실내에서 상자 칸을 바라볼 때 우클릭으로 상자 패널을 연다(_indoor로 가드해
 	# 다른 구역 같은 좌표에 닿아도 무반응 — facing_bin과 같은 결). 집 안 상호작용은 상자 하나뿐이라 안 겹친다.
 	var facing_chest := not _sleeping and _indoor == "집" and _target == CHEST_TILE
+	var facing_mirror := _facing_mirror()
 	# ★ Phase E 갈무리방(창고) 저장 상자: 창고 실내에서 상자 칸을 바라볼 때(_indoor로 가드해 다른 구역 같은
 	# 좌표 무반응). 집 상자와 좌표·건물이 갈려 안 겹친다.
 	var facing_storehouse_chest := not _sleeping and _indoor == "창고" and _target == STOREHOUSE_CHEST_TILE
@@ -10233,6 +10275,15 @@ func _process(delta: float) -> void:
 	# 위 frame.is_open 가드로 닫힌다). 집 안 취침(ui_accept)·상자(action)는 키가 갈려 안 겹친다.
 	if facing_chest and Input.is_action_just_pressed("action"):
 		_open_chest(chest)
+		return
+	# ★[S7-T4 / ADR-0065 결정 6] 점괘 거울 F: 펼쳐져 있으면 접고, 아니면 오늘의 예보를 펼친다(토글).
+	# 비차단 패널이라 시간도 안 멈추고 이동도 안 막는다 — "아침에 한 번 들여다보는" 리추얼이되
+	# **시간 제한은 걸지 않는다**(밤에 내일을 확인하러 와도 같은 화면. 결정 6 "언제든 열람").
+	if facing_mirror and Input.is_action_just_pressed("shop_toggle"):
+		if mirror_panel.visible:
+			_close_mirror()
+		else:
+			_open_mirror()
 		return
 	# ★ Phase E 창고 상자 열기(RMB): 집 상자와 같은 결 — 활성 상자만 바꿔 같은 CTX_CHEST 패널을 연다.
 	if facing_storehouse_chest and Input.is_action_just_pressed("action"):
@@ -10690,6 +10741,10 @@ func _process(delta: float) -> void:
 		#   낚시터는 뱃사공(황천해)보다 먼저 만나는 자리라, 여기서 막히면 어디로 가야 하는지 알려 준다.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "낚싯대가 없다 — 황천해 생선가게의 뱃사공을 찾아가자"
+	elif facing_mirror:
+		# ★[S7-T4] 점괘 거울을 바라볼 때. 펼침/접기를 같은 키가 맡으니 문구도 상태를 따라간다.
+		interact_prompt.visible = true
+		interact_prompt.text = "점괘 거울 [F] %s" % ("덮기" if mirror_panel.visible else "들여다보기")
 	elif facing_chest or facing_storehouse_chest:
 		# ★ Phase D/E 저장 상자를 바라볼 때: 우클릭으로 보관 패널을 연다(순수 보관 — 판매 아님).
 		interact_prompt.visible = true
@@ -11392,7 +11447,7 @@ func _finish_fishing() -> void:
 func _roll_salvage() -> void:
 	if inventory == null:
 		return
-	var id := SalvageTable.roll(_cast_seed ^ 0x51ed270b, fishing_salvage_permil())
+	var id := SalvageTable.roll(_cast_seed ^ 0x51ed270b, fishing_salvage_permil_today())
 	if id == "" or not ItemCatalog.has_item(id):
 		return
 	if not inventory.add_item(id, 1):
@@ -11919,6 +11974,17 @@ func _try_harvest() -> void:
 	#   ★ [S1-6 §8.5] 품질 격리: 주 수확분(첫 1개)만 roll 등급, 다수확 추가분은 Q0 강제.
 	var yr := CropCatalog.yield_range(harvested_crop)
 	var count := randi_range(yr.x, yr.y)
+	# ★[S7-T4 / ADR-0065 결정 5 ⑥] 명부의 운 — **다수확 작물의 상·하단 바이어스**(계수 ×0.5).
+	#   ★최소 침습을 택한 근거: 이 지점의 기존 롤은 순수 min~max 균등이라 "확률"이라 부를 값이
+	#     아예 없다(가산할 자리가 없다). 그래서 균등 롤은 한 톨도 안 건드린 채, 그 *결과*를 운만큼의
+	#     확률로 한 칸 밀어 올리거나(길) 내린다(흉). 새 산출 규칙을 만드는 게 아니라 이미 있는
+	#     범위 안에서만 움직이므로 yield_range를 넘는 수확은 영원히 안 나온다.
+	#   ★단수확(1~1) 작물은 밀 자리가 없어 통째로 면제 — 운이 밭 전체를 흔들지 않는다(결정 5의
+	#     "작물 성장 제외" 결: 운은 *수확 순간*의 곁다리지 성장 곡선이 아니다).
+	#   ★운 0이면 `randf()`를 아예 안 부른다 = 전역 RNG 소비 0 = 종전 결과열 완전 보존.
+	var crop_luck := _luck_bonus(DailyLuck.W_CROP)
+	if yr.y > yr.x and not is_zero_approx(crop_luck):
+		count = DailyLuck.biased_yield(count, yr.x, yr.y, crop_luck, randf())
 	for i in count:
 		inventory.add_harvest(harvested_crop, 1, quality if i == 0 else 0)
 	_toast_item(ItemCatalog.harvest_id(harvested_crop), count)   # ★ Phase C 획득 토스트(수확)
@@ -12811,7 +12877,14 @@ func _try_open_geode() -> bool:
 	if wallet.gold < MiningSkill.GEODE_COST:
 		_notice("냥이 모자라다 — 알돌 개봉 %d냥 (보유 %d냥)" % [MiningSkill.GEODE_COST, wallet.gold])
 		return true
-	var res := MiningSkill.open_geode(held, _geode_opened, geode_double_chance())
+	# ★[S7-T4 / ADR-0065 결정 5 ②] 명부의 운이 **개봉 2배 확률**에 가산된다(계수 ×0.5).
+	#   ★해석 메모: ADR이 적은 "지오드 드롭 확률"에 정확히 대응하는 롤이 우리 코드엔 없다 — 지오드는
+	#     층 노드로 *배치*되지(mine_floors.nodes) 확률로 떨어지지 않고, 그 배치는 월드 결정성이라
+	#     결정 5가 명시적으로 금지한 자리다. 그래서 지오드 축에서 유일한 *플레이어 액션 롤*인
+	#     개봉 2배 롤에 얹었다("운 좋은 날 깬 알돌은 한 몫 더 나온다"). open_geode는 유품이 아니면
+	#     항상 이 롤을 굴리므로 소비 횟수도 안 변한다.
+	var res := MiningSkill.open_geode(held, _geode_opened,
+		geode_double_chance() + _luck_bonus(DailyLuck.W_GEODE))
 	if res.is_empty():
 		return true
 	var id := String(res["id"])
@@ -14934,6 +15007,55 @@ func _show_milestone2_reached() -> void:
 	milestone_panel.visible = true
 	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
+# ── ★[S7-T4 / ADR-0065 결정 6] 점괘 거울 예보 ────────────────────────────────
+# 한 화면에 네 가지를 접는다: ㉠오늘의 명부의 운(등급 + 점괘 한 줄) ㉡내일 날씨(100% 확정)
+# ㉢절기 마지막 날이면 D-1 사멸 경고 ㉣다가오는 절기 행사·테마 데이 예고(T6/T7 자리).
+# ★ 자동 해제 타이머를 안 붙인다(마일스톤 팝업과 갈리는 지점): 읽는 속도가 사람마다 다른 정보성
+#   화면이라 F로 접을 때까지 남아 있는 게 맞다. 대신 집을 나가거나 잠들면 _process가 접는다.
+# 점괘 거울을 마주 보고 있나. 상자(우클릭)와 키가 갈려 안 겹치고, `_indoor` 가드라 다른 구역의
+# 같은 좌표에 닿아도 무반응이다(facing_chest와 같은 결).
+# ★ 판정을 함수로 뽑아 둔 이유: facing_chest류는 _process 지역 변수라 헤드리스가 손댈 수 없다.
+#   새로 여는 판정까지 그 아쉬움을 답습할 필요는 없어서 여기만 테스트 가능한 표면으로 연다.
+func _facing_mirror() -> bool:
+	return not _sleeping and _indoor == "집" and _target == MIRROR_TILE
+
+func _open_mirror() -> void:
+	mirror_text.text = _mirror_forecast_text()
+	mirror_panel.visible = true
+
+func _close_mirror() -> void:
+	mirror_panel.visible = false
+
+# 거울에 뜰 본문. **명부의 운은 등급·문구만 나간다** — DailyLuck.fortune_text가 수치를 안 담는 것이
+# 그 계약이고, 여기서 값을 다시 꺼내 붙이면 CONTEXT [명부의 운] "내부 연산은 숨김"이 깨진다.
+func _mirror_forecast_text() -> String:
+	var d: int = clock.day if clock != null else 1
+	var lines: Array[String] = ["◆ 점괘 거울 ◆", ""]
+	# ㉠ 오늘의 운(등급 + 점괘) — 수치 노출 0.
+	lines.append(DailyLuck.fortune_text(d))
+	lines.append("")
+	# ㉡ 내일 날씨 — Weather.forecast가 순수 함수라 예보가 곧 내일의 실제 하늘이다(빗나감 0).
+	var w := Weather.forecast(d)
+	lines.append("내일: %s — %s" % [Weather.name_of(w), _weather_hint(w)])
+	# ㉢ D-1 사멸 경고 — 오늘이 절기 마지막 날이면 오늘 밤이 마지막 밤이다.
+	if GameClock.is_season_last_day(d):
+		lines.append("")
+		lines.append("⚠ 내일 절기가 바뀐다 — 지난 절기 작물이 스러진다")
+	# ㉣ ★[S7-T6/T7 자리] 다가오는 절기 행사·테마 데이 예고. 축제 프레임워크가 절기 달력으로
+	#    교체되면 여기에 "3일 뒤: 메이드 데이" 한 줄이 붙는다(지금은 예고할 달력 자체가 없다).
+	return "\n".join(lines)
+
+# 날씨 한 줄 힌트 — "그 하늘이 나에게 무엇을 하는가"를 말한다(효과 수치가 아니라 행동 지침).
+func _weather_hint(w: int) -> String:
+	match w:
+		Weather.RAIN:
+			return "밭이 스스로 젖는다"
+		Weather.SNOW:
+			return "노지 작물이 하루 멈추고, 짐승은 안에 둔다"
+		Weather.SOULWIND:
+			return "갱도가 술렁인다 — 잡귀도, 그것들이 남기는 것도 많아진다"
+	return "여느 하늘"
+
 # T3.3 미호 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 호감도를 올린다.
 # 선호 작물(영혼 호박)이면 더 크게 오른다. 하루 1회만 가능(Affinity가 게이팅).
 func _try_gift() -> void:
@@ -15219,6 +15341,13 @@ func _seed_starter_animal(species: String, building: String, room: Rect2i, age: 
 #   clock이 아직 없는 프레임(부팅 중 호출)은 평온으로 떨어진다.
 func _weather_today() -> int:
 	return Weather.weather_for_day(clock.day) if clock != null else Weather.CALM
+
+# ★[S7-T4 / ADR-0065 결정 5] 오늘의 명부의 운 가산값(파생 — 저장하지 않는다). `_weather_today`와
+# 정확히 같은 결이되, 반환이 "얼마를 더할까"라 지점별 계수를 인자로 받는다(계수 상수의 주인은
+# daily_luck.gd 하나 — 여기에 0.5를 손으로 적는 자리를 만들지 말 것).
+# clock이 아직 없는 프레임(부팅 중 호출)은 0.0 = 완전 중립으로 떨어진다.
+func _luck_bonus(weight: float) -> float:
+	return DailyLuck.bonus_for_day(clock.day, weight) if clock != null else 0.0
 
 # 방목 날씨 게이트. ★[S7-T3 / ADR-0065 결정 4] 스텁(항상 true)이 실효화됐다 — **잿눈이면 실내 잔류**다.
 # ★ 옛 B1-a Q5 스펙은 "혼우·잿눈 둘 다 실내"였는데 ADR-0065 결정 4가 **잿눈만** 지목했다. 근거:
@@ -16494,6 +16623,37 @@ func _draw_chest() -> void:
 	#   뷰에 맞는 것만 화면에 든다(_draw_ranch와 같은 결 — 좌표로 자동 클립).
 	_draw_chest_at(CHEST_TILE, chest)
 	_draw_chest_at(STOREHOUSE_CHEST_TILE, storehouse_chest)
+	_draw_fortune_mirror()
+
+# ★[S7-T4 / ADR-0065 결정 6] 점괘 거울(그레이박스 — 진짜 아트는 T9). 북벽 flush 가구라 상자와 같은
+# 좌표 클립에 기댄다(집 카메라 밴드 밖에선 저절로 안 보인다).
+# 실루엣: 세로로 선 타원 거울면 + 나무 테 + 아래 받침. 거울면에 오늘의 운 등급 색을 옅게 깔아
+# "들여다볼 것이 있다"를 멀리서도 읽히게 한다(수치가 아니라 색 — 노출 규칙 위반 아님).
+func _draw_fortune_mirror() -> void:
+	# 아트 훅: assets/props/fortune_mirror.png(32×64) 있으면 그대로, 없으면 아래 그레이박스.
+	var ox := float(MIRROR_TILE.x * TILE)
+	var oy := float(MIRROR_TILE.y * TILE) + float(WALL_PROP_LIFT)
+	var tex := _prop_tex("fortune_mirror")
+	if tex != null:
+		draw_texture(tex, Vector2(ox, oy + TILE - tex.get_size().y))
+		return
+	var w := TILE * 0.72
+	var h := TILE * 1.5
+	var x := ox + (TILE - w) * 0.5
+	# 나무 테(바깥) → 거울면(안) 순으로 겹쳐 두께를 낸다.
+	draw_rect(Rect2(x, oy, w, h), Color(0.30, 0.21, 0.13))                       # 테
+	draw_rect(Rect2(x + 3, oy + 3, w - 6, h - 6), Color(0.16, 0.19, 0.26))       # 거울면(어두운 유리)
+	# 등급 색 — 대흉(잿빛) → 평(무채) → 대길(금박). 옅은 알파라 실루엣을 안 흐린다.
+	var g: int = DailyLuck.grade_for_day(clock.day) if clock != null else DailyLuck.PLAIN
+	var tints: Array[Color] = [Color(0.35, 0.33, 0.36), Color(0.42, 0.42, 0.46),
+		Color(0.55, 0.56, 0.60), Color(0.72, 0.66, 0.44), HanjiUi.GOLD]
+	var tint: Color = tints[clampi(g, 0, tints.size() - 1)]
+	draw_rect(Rect2(x + 5, oy + 5, w - 10, h - 10), Color(tint, 0.55))
+	# 사선 광택 한 줄 — "거울"로 읽히게 하는 최소 기호.
+	draw_line(Vector2(x + 6, oy + h * 0.62), Vector2(x + w - 6, oy + h * 0.22),
+		Color(0.95, 0.93, 0.86, 0.5), 2.0)
+	# 받침(바닥에 선 체경 결).
+	draw_rect(Rect2(x - 2, oy + h, w + 4, 4.0), Color(0.24, 0.17, 0.10))
 
 # 저장 상자 궤짝 하나를 타일에 그린다(그레이박스 — 잠금 걸쇠로 출하함과 시각 구분, 보관 중이면 뚜껑 점).
 func _draw_chest_at(t: Vector2i, box_chest: StorageChest) -> void:

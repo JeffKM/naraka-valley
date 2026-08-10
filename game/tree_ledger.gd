@@ -362,8 +362,15 @@ func large_tiles(region: String, kind: String = "") -> Array:
 # ★[S4-T4] 인자 둘이 늘었다: `tier`(든 도끼 티어 — 타수 환산 + 큰 장애물 게이트).
 #   게이트에 걸리면 **상태를 하나도 안 건드리고** {"blocked": true, "need_tier": N, "large": kind}만
 #   돌려준다 — 호출 측이 혼력을 쓰기 *전에* 거부할 수 있어야 "혼력 미소모"가 성립한다.
+# ★[S7-T4 / ADR-0065 결정 5 ④] `luck_bonus` = 명부의 운 가산(기본 0.0 = 정확히 중립 — 무인자 호출
+#   결과열 불변). **벌목 보너스 두 롤에만** 얹는다: 단단한 원목 확률 + 씨앗 한 톨. 원목·수액 수량
+#   롤은 안 건드린다(그건 나무의 값이지 그날 운의 값이 아니다).
+#   ★ 퍼크가 없어도(hardwood_chance = 0) 대길 날엔 단단한 원목이 섞일 수 있다. 벌목꾼 퍼크의 값을
+#     갉지 않는다고 본 근거: 퍼크는 *상시*이고 운은 그날치 ±5%p라, "오늘 운이 좋아 하나 나왔다"가
+#     "언제나 나온다"를 대체하지 못한다(ADR-0008 — 관계·퍼크가 항상 명백히 우월한 축).
 func chop(region: String, t: Vector2i, day: int, level: int = 0,
-		wood_bonus: int = 0, hardwood_chance: float = 0.0, tier: int = 0) -> Dictionary:
+		wood_bonus: int = 0, hardwood_chance: float = 0.0, tier: int = 0,
+		luck_bonus: float = 0.0) -> Dictionary:
 	if not is_occupied(region, t):
 		return {}
 	var e: Dictionary = _trees[region][t]
@@ -436,8 +443,15 @@ func chop(region: String, t: Vector2i, day: int, level: int = 0,
 			out["seed_id"] = seed_item_for(species)
 		_empty(region, t)
 	# 벌목꾼(DIM_HARDWOOD) — 원목이 난 벌목에만 단단한 원목이 섞인다(씨앗만 나오는 유목은 제외).
-	if out["wood"] > 0 and hardwood_chance > 0.0 and rng.randf() < hardwood_chance:
+	# ★[S7-T4] 명부의 운이 이 확률에 가산된다(운 0이면 종전 값 그대로 = 스트림 불변).
+	var hw_chance := hardwood_chance + luck_bonus
+	if out["wood"] > 0 and hw_chance > 0.0 and rng.randf() < hw_chance:
 		out["hardwood"] = 1
+	# ★[S7-T4] 씨앗 보너스 — 길한 날엔 씨앗이 한 톨 더 붙는다. **위 단단한 원목 롤 뒤에** 굴린다:
+	#   앞에 끼우면 운이 붙는 날마다 원목 롤의 시드 소비가 한 칸 밀려 두 롤이 서로를 흔든다.
+	#   운 ≤ 0이면 단락 평가로 `randf()`를 아예 안 부른다 = 소비 0 = 종전 결과열 완전 보존.
+	if int(out["seeds"]) > 0 and luck_bonus > 0.0 and rng.randf() < luck_bonus:
+		out["seeds"] = int(out["seeds"]) + 1
 	changed.emit()
 	return out
 
