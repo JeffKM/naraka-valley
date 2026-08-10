@@ -1446,6 +1446,10 @@ const MAIN_CORRIDOR_Y := 36
 #   중심 x=52(스파인)·y=36(복도) 대칭. 건물 rect·문 스포크·게시판·워프 스포크 어디와도 겹치지 않는다
 #   (가장 가까운 것 = 만물상 문 스포크 x60·주민 집 2 rect x58 y44 — 둘 다 광장 밖).
 const NARU_PLAZA_RECT := Rect2i(46, 31, 13, 11)   # x46..58, y31..41
+# ★[S7-T7 / ADR-0065 결정 9] 저승 야시장 **임시 매대** 칸 — 광장 한복판(스파인 x52) 바로 위 줄.
+#   메인 복도(y36)를 비켜 서서 지나다니는 길을 막지 않되, 광장에 들어서면 정면에 보인다.
+#   더비 부스와 같은 규율: 타일·충돌 무수정, 행사일에만 표식 + `_target` 일치 [F].
+const NIGHT_MARKET_TILE := Vector2i(52, 34)
 # 광장 남북 테두리 돌담이 앉는 줄(동서 진입은 복도 y36으로 열려 있다). 스파인 x51..54는 비운다.
 const NARU_PLAZA_WALL_Y := [30, 42]
 # 다리 데크 — 강둑(BACK_RIVER_BANK_Y)부터 강 남단까지 다리 폭(BRIDGE_X) 2칸. 이 칸들은 _carve가
@@ -1698,6 +1702,12 @@ const SAMDO_JETTY_DECK_RECT := Rect2i(28, 29, 1, 8)  # ★[S3-T1] 잔교 데크(
 const SAMDO_CORRIDOR_Y := 20                    # ★[S3-T1] 북부 밴드 가로 복도(혼백관 열 ~ 동편)
 const SAMDO_BANK_LANE_Y := 28                   # ★[S3-T1] 북안 물가 산책로(강둑 y29 바로 위 = 강 낚시터 밴드)
 const SAMDO_FISHING_LABEL_TILE := Vector2i(18, 28)  # ★[S3-T1] 강 낚시터 라벨 자리(북안 물가 — 캐스팅은 S3-T2)
+# ★[S7-T7 / ADR-0065 결정 9] 삼도천 낚시 더비 **교환 부스** 칸 — 북안 물가 산책로 위, 강 낚시터
+#   라벨(x18)과 잔교(x28) 사이. 낚던 자리에서 몇 걸음이면 닿고 동선(산책로)을 벗어나지 않는다.
+# ★ **타일도 충돌도 안 바꾼다**(오버레이 전용 잠금의 이행): 산책로 PATH 칸 위에 *행사일에만* 그레이박스
+#   표식을 덧그리고 `_target` 일치로 [F]를 받는다(곳간 LARDER_TILE·점괘 거울과 같은 문법). 그래서
+#   행사가 끝나면 흔적이 0이고 `_grid`·warp_test 불변식도 건드리지 않는다.
+const DERBY_BOOTH_TILE := Vector2i(21, 28)
 # 혼백관(enterable 빈 방) — 외관(land)·실내 방(삼도천 밴드). 창고·만물상 결의 데이터 주도 출입.
 # kind="museum"이라 _draw 가구 분기(house/cafe)에 안 걸려 빈 방으로 그려진다(분기 추가 0).
 # ★C4 — outdoor_h 40>26이라 공유 실내 띠(y26~)가 외부(둑)와 겹쳐 → 실내 방·문·카메라를 삼도천 밴드로
@@ -2389,6 +2399,12 @@ var ship_bin: ShippingBin
 # ★ 출하함과 **거울상**이다: 출하함은 넣으면 익일 골드, 곳간은 넣으면 융합 메뉴 재료가 된다.
 var larder: Larder
 
+# ★[S7-T7 / ADR-0065 결정 9] 절기 행사 원장(더비 태그·교환 · 장원제 출품 이력 · 야시장 한정 구매).
+# larder와 같은 결의 상태 노드 — 코드 생성으로 붙이고(_setup_seasonal_event) 세이브는 별도 조각
+# ("seasonal_event")으로 main이 조율한다. **달력·표·롤은 전부 static**이라 이 노드가 없어도 "오늘
+# 무슨 행사인가"는 답이 나온다(Festival·Weather와 같은 무상태 파생 — 상태는 결과만 든다).
+var seasonal_event: SeasonalEvent
+
 # ★[S6-T4 / ADR-0064 결정 8] 단골화 방문 가중치 원장(명명 손님 서빙 이력 → 재방문 확률↑).
 # RefCounted라 노드가 아니다(TreeLedger·TapperLedger 결) — `_ready`에서 한 벌 만들고 세이브
 # 조각("guest_pool")으로 main이 조율한다. ★호감도(Affinity)와 **서로 참조 0**이다(ADR-0017).
@@ -2759,6 +2775,7 @@ func _ready() -> void:
 	_setup_shipping_bin()   # ★ C2 무인 출하함(프레임이 참조 → 프레임보다 먼저)
 	_setup_chest()          # ★ Phase D 저장 상자(프레임이 참조 → 프레임보다 먼저)
 	_setup_larder()         # ★ S6-T1 카페 곳간(프레임이 참조 → 프레임보다 먼저)
+	_setup_seasonal_event() # ★ S7-T7 절기 행사 원장(더비·장원제·야시장 — 프레임/세이브 복원보다 먼저)
 	_setup_hud_overlays()   # ★ C3 좌하단 알림 피드 + 우하단 혼력 바(프레임보다 먼저 → 모달이 위에)
 	_setup_frame()          # ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대/상자)
 	_setup_settings()       # ★ Phase D 설정(볼륨·전체화면 — audio·프레임 존재 후, 프레임 신호 연결·적용)
@@ -8587,6 +8604,13 @@ func _setup_larder() -> void:
 	larder.name = "Larder"
 	add_child(larder)
 
+# ── ★[S7-T7 / ADR-0065 결정 9] 절기 행사 원장 ─────────────────────────────────
+# larder와 같은 결의 상태 노드(코드 생성 — 새 tscn 노드 0). 세이브 조각은 "seasonal_event".
+func _setup_seasonal_event() -> void:
+	seasonal_event = SeasonalEvent.new()
+	seasonal_event.name = "SeasonalEvent"
+	add_child(seasonal_event)
+
 # ── ★ ADR-0048 Phase D 설정(볼륨·전체화면) ──────────────────────────────────────
 # GameSettings를 붙여 디스크에서 읽고 즉시 적용한다(버스 볼륨·창모드). 옵션 탭 조작은 프레임 신호로 받아
 # 값 갱신→적용→영속한다(데이터/적용 디커플링 — GameSettings는 audio·DisplayServer를 모른다).
@@ -9023,6 +9047,10 @@ func _on_day_advanced(day: int) -> void:
 	# ★[S7-T6 / ADR-0065 결정 8] 축제 예고·개막 배너(당일 + D-1). 아침에 한 번 뜬다.
 	for line in _festival_morning_notices():
 		_notice(line, NOTICE_SECS * 2.0)
+	# ★[S7-T7 / ADR-0065 결정 9] 절기 행사 예고·개막 배너 — 테마 데이와 **같은 문법·다른 층**이다
+	#   (날짜가 갈려 있어 한 아침에 둘이 겹치지 않는다: 행사 12/20/16/15 vs 테마 데이 25).
+	for line in _seasonal_morning_notices():
+		_notice(line, NOTICE_SECS * 2.0)
 
 # ★ [ADR-0051] 배치된 허수아비의 보호 중심 칸 목록 — 밤 까마귀 판정(CrowRaid) 입력.
 #   안식 농원 장식으로 세운 허수아비(_prop_layouts["HOME"]의 PROP_SCARECROW)가 곧 방어 인프라다
@@ -9092,6 +9120,288 @@ func _festival_upcoming_line() -> String:
 		if th != Festival.NONE:
 			return Festival.upcoming_text(th, ahead)
 	return ""
+
+# ── ★[S7-T7 / ADR-0065 결정 9] 절기 행사 ────────────────────────────────────
+# 오늘 열리는 행사(-1 = 평일). ★ Festival과 달리 **해금 입력이 없다** — 절기 행사는 처음부터
+# 열려 있어(CONTEXT ㉢) 달력 하나가 곧 답이다. clock이 아직 없는 프레임(부팅 중)은 평일로 떨어진다.
+func _seasonal_event_today() -> int:
+	if clock == null:
+		return SeasonalEvent.NONE
+	return SeasonalEvent.event_for_day(clock.day)
+
+# 오늘 아침에 띄울 행사 배너들(0~2줄) — `_festival_morning_notices`와 **완전히 같은 문법**이다
+# (당일 개막 + D-1 예고). 해금 필터가 없는 것만 다르다: 못 여는 잔치가 없으므로 걸러낼 것도 없다.
+# 문자열 조립을 함수로 뽑아 둔 이유도 같다 — 헤드리스가 알림 큐를 뒤지지 않고 예고를 단언한다.
+func _seasonal_morning_notices() -> Array:
+	var out: Array = []
+	if clock == null:
+		return out
+	var today := SeasonalEvent.event_for_day(clock.day)
+	if today != SeasonalEvent.NONE:
+		out.append(SeasonalEvent.banner_text(today))
+	var tomorrow := SeasonalEvent.event_for_day(clock.day + 1)
+	if tomorrow != SeasonalEvent.NONE:
+		out.append(SeasonalEvent.preview_text(tomorrow))
+	return out
+
+# 점괘 거울 ㉤ — 다가오는 절기 행사 한 줄("3일 뒤: 저승 야시장"). `_festival_upcoming_line`과
+# **같은 문법의 형제 함수**다(한 절기 앞까지 훑어 첫 슬롯을 문구로 낸다).
+# ★ 한 함수에 합치지 않은 이유: 두 층은 *서로 다른 날짜·서로 다른 해금 규칙*을 갖고, 거울은 둘을
+#   **나란히 두 줄로** 보여 준다("테마 데이는 언제, 행사는 언제"). 하나로 접으면 둘 중 가까운 쪽만
+#   보이게 되어 예고의 값이 절반이 된다.
+func _event_upcoming_line() -> String:
+	if clock == null:
+		return ""
+	for ahead in range(0, GameClock.DAYS_PER_SEASON + 1):
+		var ev := SeasonalEvent.event_for_day(clock.day + ahead)
+		if ev != SeasonalEvent.NONE:
+			return SeasonalEvent.upcoming_text(ev, ahead)
+	return ""
+
+# ── ① 삼도천 낚시 더비 ──────────────────────────────────────────────────────
+# 어획 1건을 더비 원장에 태운다(행사일 · 삼도천에서만). 태그가 붙으면 알림 한 줄.
+# ★ 태그가 안 붙은 어획은 **조용하다** — 어획 알림이 이미 떴는데 "태그 없음"까지 말하면 33%짜리
+#   보너스가 67%짜리 실패 통보로 읽힌다(코지 톤 — 안 뜬 건 손실이 아니다).
+func _note_derby_catch() -> void:
+	if seasonal_event == null or clock == null:
+		return
+	if _seasonal_event_today() != SeasonalEvent.DERBY or _region != RegionCatalog.SAMDOCHEON:
+		return
+	if not seasonal_event.note_catch(clock.day):
+		return
+	_notice("금빛 태그가 붙었다 — 부두 곁 부스에서 바꿀 수 있다 (태그 %d)"
+		% seasonal_event.tags_on(clock.day))
+
+# 더비 교환 부스를 마주 보고 있나(행사일 · 삼도천 야외 · 그 칸). 게시판 판정과 같은 결이다 —
+# `_indoor == ""`로 실내를 배제하고, 행사일이 아니면 부스 자체가 없으므로 판정이 통째로 false다.
+# ★ 판정을 함수로 뽑은 이유는 `_facing_mirror`와 같다: 헤드리스가 손댈 수 있는 표면이 필요하다.
+func _facing_derby_booth() -> bool:
+	return not _sleeping and _region == RegionCatalog.SAMDOCHEON and _indoor == "" \
+		and _target == DERBY_BOOTH_TILE and _seasonal_event_today() == SeasonalEvent.DERBY
+
+# 태그 1개를 보상으로 바꾼다. 보상 지급(비료·씨앗·엽전)은 여기서만 일어난다 — SeasonalEvent는
+# 지갑도 인벤토리도 모른다(larder가 wallet을 모르는 그 디커플링).
+# ★ **지급이 성공한 뒤에 태그를 소비한다**(순서가 계약이다): 교환은 되돌릴 수 없으므로 백팩이
+#   가득해 못 받는 경우에도 태그가 사라지면 안 된다. 그래서 먼저 다음 보상을 *들여다보고*(소비 0)
+#   지급을 시도한 다음, 성공했을 때만 `exchange_tag`로 원장을 민다.
+func _try_derby_exchange() -> void:
+	if seasonal_event == null or clock == null:
+		return
+	if seasonal_event.tags_on(clock.day) <= 0:
+		_notice("금빛 태그가 없다 — 삼도천에서 낚으면 붙는다")
+		return
+	var reward: Dictionary = SeasonalEvent.derby_reward(seasonal_event.derby_exchanges + 1)
+	var rid := String(reward.get("id", ""))
+	var n := int(reward.get("n", 0))
+	var kind := String(reward.get("kind", ""))
+	var label := ""
+	match kind:
+		"fert":
+			if inventory == null or not inventory.add_item(rid, n):
+				_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % FertilizerCatalog.name_of(rid))
+				return
+			_toast_item(rid, n)
+			label = "%s ×%d" % [FertilizerCatalog.name_of(rid), n]
+		"seed":
+			var seed_item := ItemCatalog.seed_id(rid)
+			if inventory == null or not inventory.add_item(seed_item, n):
+				_notice("가방을 비우고 오자 — %s 씨앗을 받을 자리가 없다" % CropCatalog.name_of(rid))
+				return
+			_toast_item(seed_item, n)
+			label = "%s 씨앗 ×%d" % [CropCatalog.name_of(rid), n]
+		"gold":
+			wallet.earn(n)
+			_total_income += n
+			label = "%d냥" % n
+		_:
+			return
+	seasonal_event.exchange_tag(clock.day)   # 지급이 끝난 뒤에야 태그를 뗀다
+	audio.sfx("ui")
+	_notice("금빛 태그 교환 — %s (남은 태그 %d)" % [label, seasonal_event.tags_on(clock.day)])
+
+# 다음 교환에서 나올 보상의 한 줄 표기(프롬프트용 — 누르기 전에 무엇이 나오는지 보인다).
+func _derby_next_label() -> String:
+	if seasonal_event == null:
+		return ""
+	var r: Dictionary = SeasonalEvent.derby_reward(seasonal_event.derby_exchanges + 1)
+	var rid := String(r.get("id", ""))
+	var n := int(r.get("n", 0))
+	match String(r.get("kind", "")):
+		"fert":
+			return "%s ×%d" % [FertilizerCatalog.name_of(rid), n]
+		"seed":
+			return "%s 씨앗 ×%d" % [CropCatalog.name_of(rid), n]
+		"gold":
+			return "%d냥" % n
+	return ""
+
+# ── ③ 곳간 장원제 ───────────────────────────────────────────────────────────
+# 출품 목록 = 곳간 재고에서 **판매가 높은 순 9종**(같은 종 여러 개는 1종으로 센다 — 다양성 경연).
+# ★ 자동 선별인 이유: 곳간 재고 자체가 이미 플레이어의 선택이고(무엇을 쟁였나), 그 위에 "9칸 고르기"
+#   UI를 얹으면 이 층이 오버레이가 아니라 새 미니게임이 된다(결정 9 잠금 위반). 최적 선택을 대신
+#   해 주므로 플레이어가 손해 보는 방향도 없다.
+func _grange_entries() -> Array:
+	var rows: Array = []
+	if larder == null or clock == null:
+		return rows
+	var season := clock.season_index()
+	for id in larder.ids():
+		var sid := str(id)
+		rows.append({"id": sid, "price": ItemCatalog.price_of(sid),
+			"in_season": CropCatalog.has_crop(sid) and CropCatalog.in_season(sid, season)})
+	rows.sort_custom(func(a, b): return int(a["price"]) > int(b["price"]))
+	return rows.slice(0, SeasonalEvent.GRANGE_MAX_ENTRIES)
+
+# 곳간 앞 [F] — 행사일엔 적재 패널 대신 이 출품이 열린다. 하루 1회.
+# ★ **재고는 한 톨도 안 줄어든다**(전시 — SeasonalEvent 헤더의 근거). 그래서 출품하고 나면 그 재고로
+#   그날 카페 융합 메뉴를 그대로 판다(경연이 카페 공급망을 비우지 않는다).
+func _try_grange_entry() -> void:
+	if seasonal_event == null or clock == null or larder == null:
+		return
+	if seasonal_event.grange_entered(clock.day):
+		_notice("오늘 장원제 출품은 이미 마쳤다 — 곳간은 그대로다")
+		return
+	var entries := _grange_entries()
+	if entries.is_empty():
+		_notice("출품할 것이 없다 — 곳간에 수확물을 쟁여 두자")
+		return
+	var score := SeasonalEvent.score_entries(entries)
+	var rank := SeasonalEvent.grange_rank(score)
+	seasonal_event.record_grange(clock.day, rank)
+	var gold := SeasonalEvent.grange_gold(rank)
+	if gold > 0:
+		wallet.earn(gold)
+		_total_income += gold
+	if rank >= SeasonalEvent.GRANGE_TIER_NAMES.size() - 1 and inventory != null:
+		# 장원 = 품질 비료 5 추가. 백팩이 가득이면 골드만 챙기고 그 사실만 알린다(손실 안내).
+		if inventory.add_item(FertilizerCatalog.FERT_QUALITY, SeasonalEvent.GRANGE_CHAMPION_FERT):
+			_toast_item(FertilizerCatalog.FERT_QUALITY, SeasonalEvent.GRANGE_CHAMPION_FERT)
+		else:
+			_notice("가방이 가득 차 장원 부상(품질 비료)을 받지 못했다")
+	audio.sfx("gold" if gold > 0 else "ui")
+	_notice("장원제 출품 %d종 · %d점 — %s%s" % [entries.size(), score,
+		SeasonalEvent.grange_rank_name(rank),
+		"" if gold <= 0 else " (+%d냥)" % gold], FLAVOR_SECS, true)
+
+# ── ④ 저승 야시장 ───────────────────────────────────────────────────────────
+# 임시 매대를 마주 보고 있나(행사일 · 나루 마을 야외 · 그 칸). 더비 부스와 같은 판정 문법.
+func _facing_night_market() -> bool:
+	return not _sleeping and _region == RegionCatalog.NARU_VILLAGE and _indoor == "" \
+		and _target == NIGHT_MARKET_TILE and _seasonal_event_today() == SeasonalEvent.NIGHT_MARKET
+
+func _refresh_night_market() -> void:
+	frame.store_text = _night_market_text()
+	frame.store_items = _night_market_items()
+
+# 매대 헤더 2줄(제목 + 골드·할인). 만물상·길드 헤더와 대칭이되 **점주 ♡ 요약이 없다** — 야시장에
+# 점주가 없기 때문이다(하루짜리 임시 매대). 그 자리에 행사 할인율을 박아 "오늘만 싸다"를 말한다.
+func _night_market_text() -> String:
+	return "\n".join([
+		"── 저승 야시장 ──",
+		"골드 %d · 오늘만 전 품목 %d%% 할인" % [wallet.gold,
+			int(round((1.0 - SeasonalEvent.MARKET_DISCOUNT) * 100.0))],
+	])
+
+# 매대 품목 행. 로스터·정가는 SeasonalEvent가 들고, 표시명·아이콘·보유 판정은 여기서 붙인다
+# (그 클래스는 인벤토리도 해금 원장도 모른다 — 길드 매대가 WeaponCatalog에 위임하는 것과 같은 결).
+func _night_market_items() -> Array:
+	var rows: Array = []
+	for r in SeasonalEvent.market_rows():
+		var kind := String(r["kind"])
+		var buy_id := String(r["buy_id"])
+		var base := int(r["base"])
+		var price := SeasonalEvent.market_price(base)
+		match kind:
+			"fest_deco":
+				var owned := home_deco != null and home_deco.is_unlocked(buy_id)
+				rows.append({"kind": kind, "buy_id": buy_id,
+					"swatch": _deco_swatch(buy_id),
+					"name": "%s 가구 세트" % HomeDecoCatalog.name_of(buy_id),
+					"price": price, "base": base,
+					"locked": owned, "locked_text": "해금됨"})
+			"fest_item":
+				# 한정 물품 = 1회 한정(구매 이력이 진실원). 산 뒤엔 "구입함"으로 잠긴다.
+				var bought := seasonal_event != null and seasonal_event.has_bought(buy_id)
+				rows.append({"kind": kind, "buy_id": buy_id, "icon_id": buy_id,
+					"name": ItemCatalog.name_of(buy_id), "price": price, "base": base,
+					"locked": bought, "locked_text": "구입함"})
+			"fest_seed":
+				rows.append({"kind": kind, "buy_id": buy_id,
+					"icon_id": ItemCatalog.seed_id(buy_id),
+					"name": "%s 씨앗" % CropCatalog.name_of(buy_id),
+					"price": price, "base": base,
+					"count": inventory.seed_count(buy_id) if inventory != null else 0})
+	return rows
+
+# 가구 세트 대표색(매대 행의 swatch — 목공방이 쓰는 그 값의 재사용). 세트 첫 가구 색을 쓴다.
+func _deco_swatch(set_id: String) -> Color:
+	var items: Dictionary = HomeDecoCatalog.SETS.get(set_id, {}).get("items", {})
+	for key in items:
+		var c: Array = items[key]["color"]
+		return Color(float(c[0]), float(c[1]), float(c[2]))
+	return Color(0.5, 0.5, 0.5)
+
+# 야시장 가구 세트 구매 — 목공방(`_try_buy_deco_set`)과 **다른 할인 축**이라 별도 경로다:
+# 목공방은 옹이 ♡ 할인, 야시장은 행사 정액 할인. 같은 함수에 두 할인을 섞으면 어느 쪽이 먹었는지
+# 값만 봐선 알 수 없게 된다(그래서 함수를 가른다 — 해금 처리 자체는 home_deco 한 곳이 진실원).
+func _try_buy_market_deco(set_id: String) -> bool:
+	if home_deco == null or not HomeDecoCatalog.has_set(set_id):
+		return false
+	if home_deco.is_unlocked(set_id):
+		_notice("%s 세트는 이미 해금했다" % HomeDecoCatalog.name_of(set_id))
+		return false
+	var price := SeasonalEvent.market_price(HomeDecoCatalog.price_of(set_id))
+	if price <= 0 or not wallet.spend(price):
+		_notice("냥이 모자라다 — %s 세트 %d냥 (보유 %d냥)" % [HomeDecoCatalog.name_of(set_id), price, wallet.gold])
+		return false
+	home_deco.unlock(set_id)
+	audio.sfx("ui")
+	_notice("야시장에서 %s 가구 세트를 샀다 −%d냥 (2할 할인)" % [HomeDecoCatalog.name_of(set_id), price])
+	return true
+
+# 한정 물품(레어크로우 ②) 구매 — 1회 한정. 수집물이라 스택·대량 개념이 없다.
+func _try_buy_market_item(id: String) -> bool:
+	if seasonal_event == null or inventory == null or not ItemCatalog.has_item(id):
+		return false
+	if seasonal_event.has_bought(id):
+		_notice("%s 은(는) 이미 샀다" % ItemCatalog.name_of(id))
+		return false
+	var price := SeasonalEvent.market_price(SeasonalEvent.MARKET_RARECROW_PRICE)
+	if wallet.gold < price:
+		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [ItemCatalog.name_of(id), price, wallet.gold])
+		return false
+	# ★ 적재 먼저·결제 나중 — 백팩이 가득이면 **엽전이 안 나간다**(더비 교환의 그 순서 규율 1:1).
+	if not inventory.add_item(id, 1):
+		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(id))
+		return false
+	if not wallet.spend(price):
+		inventory.remove_item(id, 1)   # 방어(위 검사와 이중) — 결제 실패면 물건도 도로 뺀다
+		return false
+	seasonal_event.record_bought(id)
+	_toast_item(id, 1)
+	audio.sfx("ui")
+	_notice("야시장 한정 — %s 를 손에 넣었다 −%d냥" % [ItemCatalog.name_of(id), price])
+	return true
+
+# 씨앗 소매 — 스택 소모품이라 대량 구매(Shift)를 그대로 받는다(만물상 씨앗 결).
+# 골드 닿는 데까지 부분 구매(_buy_store_generic_n 관례).
+func _try_buy_market_seed(crop_id: String, n: int) -> void:
+	if inventory == null or not CropCatalog.has_crop(crop_id) or n <= 0:
+		return
+	var unit := SeasonalEvent.market_price(CropCatalog.seed_cost(crop_id))
+	var seed_item := ItemCatalog.seed_id(crop_id)
+	var bought := 0
+	for _i in n:
+		if wallet.gold < unit or not inventory.add_item(seed_item, 1):
+			break               # 냥이 떨어졌거나 자리가 없으면 여기까지만(부분 구매 — 결제 순서 보존)
+		wallet.spend(unit)
+		bought += 1
+	if bought == 0:
+		_notice("골드 부족(%d 필요)" % unit)
+		return
+	_toast_item(ItemCatalog.seed_id(crop_id), bought)
+	audio.sfx("ui")
+	_notice("야시장 — %s 씨앗 ×%d −%d냥" % [CropCatalog.name_of(crop_id), bought, unit * bought])
 
 func _on_collapsed() -> void:
 	_do_sleep()  # 어디서든 쓰러져 다음 날 아침으로
@@ -9411,6 +9721,9 @@ func _save_game() -> void:
 		"chest": chest.to_save(),   # ★ Phase D 저장 상자 보관 내용(순수 보관 — 세이브별 델타)
 		"storehouse_chest": storehouse_chest.to_save(),   # ★ Phase E 갈무리방(창고) 저장 상자(집 상자와 독립)
 		"larder": larder.to_save(),   # ★[S6-T1] 카페 곳간 재고(융합 메뉴 재료 — 출하함 대기분과 같은 결)
+		# ★[S7-T7] 절기 행사 원장 — **결과만** 든다(달력·날씨·운처럼 파생되는 것은 여기 없다).
+		#   더비 태그·교환 횟수(당일치) · 장원제 출품일·최고 등급 · 야시장 한정 구매 이력.
+		"seasonal_event": seasonal_event.to_save(),
 		# ★[S6-T4] 단골화 방문 원장(명명 손님별 누적 서빙 횟수). 호감도 조각들과 **완전히 다른 키**다 —
 		#   네임스페이스가 갈려 있는 것 자체가 "서빙 ≠ ♡"(ADR-0017)의 세이브 층위 표현이다.
 		"guest_pool": guests.to_save(),
@@ -9531,6 +9844,10 @@ func _load_game() -> void:
 		storehouse_chest.load_save(data["storehouse_chest"])
 	if data.has("larder"):   # ★[S6-T1] 카페 곳간 — 키 없는 구버전 세이브는 **빈 곳간**으로 시작(하위호환)
 		larder.load_save(data["larder"])
+	# ★[S7-T7] 절기 행사 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(행사는 처음부터 열려
+	#   있으므로 막히는 것이 0이고, 더비 태그는 어차피 당일치라 잃을 것도 없다).
+	if data.has("seasonal_event") and seasonal_event != null:
+		seasonal_event.load_save(data["seasonal_event"])
 	# ★[S6-T4] 단골 원장 — 키 없는 구세이브는 **전원 처음 오는 손님**으로 시작한다(빈 원장 = 기본
 	#   가중치. 아무것도 안 막힌다 — 명명 손님은 그대로 오고 이력만 0부터 쌓인다).
 	if data.has("guest_pool"):
@@ -10193,6 +10510,8 @@ func _process(delta: float) -> void:
 			_refresh_woodshop()                  # ★ [S4-T7] 목공방 건축·매대 행(의뢰·해금 즉시 반영)
 		elif frame.context == InventoryFrame.CTX_GUILD:
 			_refresh_guild()                     # ★ [S5-T6] 길드 매대 행(구매 즉시 "보유 중"으로 잠김)
+		elif frame.context == InventoryFrame.CTX_NIGHTMARKET:
+			_refresh_night_market()              # ★[S7-T7] 야시장 행(구매 즉시 "해금됨/구입함"으로 잠김)
 		return
 
 	# 건물 외관 문에 닿으면 실내로, 실내 문에 닿으면 밖으로 — 자동 fade 전환(스타듀식 출입).
@@ -10398,7 +10717,21 @@ func _process(delta: float) -> void:
 	#   칸이 겹치지 않는다 — 카페 실내엔 게시판·기증대·모루가 없다).
 	if facing_larder and (Input.is_action_just_pressed("action") \
 			or Input.is_action_just_pressed("shop_toggle")):
+		# ★[S7-T7 / ADR-0065 결정 9] 곳간 장원제 — 망연 16일엔 같은 칸·같은 키가 **출품 모드**로
+		#   바뀐다(적재 패널 대신). 새 무대·새 UI 0: 행사가 기존 창구의 의미만 하루 갈아 끼운다.
+		#   ★ 이미 출품한 뒤에도 이 분기에 머문다(안내만 뜬다) — 하루에 두 결과를 내는 경연은 없다.
+		if _seasonal_event_today() == SeasonalEvent.GRANGE:
+			_try_grange_entry()
+			return
 		_open_frame(InventoryFrame.CTX_LARDER)
+		return
+	# ★[S7-T7] 더비 교환 부스 [F] — 태그 1개를 보상으로 바꾼다(연타로 여러 개 교환 가능).
+	if _facing_derby_booth() and Input.is_action_just_pressed("shop_toggle"):
+		_try_derby_exchange()
+		return
+	# ★[S7-T7] 저승 야시장 임시 매대 [F] — 만물상과 같은 셸(CTX_NIGHTMARKET)을 연다.
+	if _facing_night_market() and Input.is_action_just_pressed("shop_toggle"):
+		_open_frame(InventoryFrame.CTX_NIGHTMARKET)
 		return
 	# ★ Phase D 저장 상자 열기(RMB): 집 실내 상자 칸을 바라보며 우클릭으로 보관 패널을 연다(모달 —
 	# 위 frame.is_open 가드로 닫힌다). 집 안 취침(ui_accept)·상자(action)는 키가 갈려 안 겹친다.
@@ -10885,8 +11218,28 @@ func _process(delta: float) -> void:
 	elif facing_larder:
 		# ★[S6-T1] 곳간을 바라볼 때: 적재하면 융합 메뉴 재료가 된다(출하함과 갈리는 선택을 문구가 말한다).
 		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭/F] 곳간 (수확물 적재 → 융합 메뉴 재료 · %d/%d)" % [
-			larder.total(), larder.capacity]
+		# ★[S7-T7] 장원제 당일엔 같은 칸이 출품 창구다 — 문구가 그 사실을 먼저 말한다(누른 뒤 놀라지 않게).
+		if _seasonal_event_today() == SeasonalEvent.GRANGE:
+			var done: bool = seasonal_event != null and clock != null and seasonal_event.grange_entered(clock.day)
+			if done:
+				interact_prompt.text = "곳간 장원제 — 오늘 출품을 마쳤다"
+			else:
+				interact_prompt.text = "[F] 곳간 장원제 출품 (재고 %d종 — 차감 없음)" % larder.ids().size()
+		else:
+			interact_prompt.text = "[우클릭/F] 곳간 (수확물 적재 → 융합 메뉴 재료 · %d/%d)" % [
+				larder.total(), larder.capacity]
+	elif _facing_derby_booth():
+		# ★[S7-T7] 더비 교환 부스 — 지금 든 태그 수를 그대로 보여 준다(다음 보상이 무엇인지도).
+		interact_prompt.visible = true
+		var tags: int = seasonal_event.tags_on(clock.day) if seasonal_event != null and clock != null else 0
+		if tags <= 0:
+			interact_prompt.text = "더비 교환 부스 — 금빛 태그가 없다 (삼도천에서 낚으면 붙는다)"
+		else:
+			interact_prompt.text = "[F] 더비 교환 부스 (금빛 태그 %d개 · 다음 = %s)" % [tags,
+				_derby_next_label()]
+	elif _facing_night_market():
+		interact_prompt.visible = true
+		interact_prompt.text = "[F] 저승 야시장 매대 (오늘만 2할 할인)"
 	elif faced_resident != null:
 		# ★ [S2-T7] 주민 프롬프트 — 옛 5갈래(미호·옥자·바나·멜·네오) 문구가 한 조립식으로 접혔다.
 		# 기본 "[우클릭] 대화" + (선물 채널이 있으면) "[G] <작물> 선물" + (특수 훅이 있으면) 꼬리
@@ -11413,6 +11766,16 @@ func _roll_fish_id(seed_value: int, class_shift: float = 0.0, guarantee_cap: int
 	var id := FishCatalog.roll_legendary(habitat, season, ph, rng, wx)
 	if id == "":
 		id = FishCatalog.roll_fish(habitat, season, ph, rng, class_shift, guarantee_cap, wx)
+	# ★[S7-T7 / ADR-0065 결정 9] 월광 혼불해파리 창구 — 유화 20일 저녁·밤 **황천해** 캐스팅이
+	#   55% 확률로 혼불해파리로 치환된다. **기존 롤 구조를 존중하는 최소 침습**이다:
+	#   ㉠ 가중표(class_weights)·가용 필터(available_ids)를 한 줄도 안 건드린다 — 평소 출목열 불변.
+	#   ㉡ 치환 롤은 주입 rng를 **소비하지 않는다**(rand_from_seed 별도 가지) — 위 두 롤이 rng를
+	#      몇 번 굴렸든 뒤따르는 품질·인양 롤의 스트림이 어긋나지 않는다(순차 소비 계약 보존).
+	#   ㉢ 전설이 걸린 캐스팅도 덮는다 — 창 안의 바다는 "오늘은 해파리의 밤"이 규칙이고, 전설은
+	#      LEGEND_CHANCE 자체가 극저확률이라 잃는 드라마가 사실상 없다(치환 = 사건의 교체).
+	if habitat == FishCatalog.HABITAT_SEA and SeasonalEvent.is_jelly_window(clock.day, ph) \
+			and SeasonalEvent.roll_jelly(seed_value):
+		return SeasonalEvent.JELLY_FISH_ID
 	return id if id != "" else FishCatalog.fallback_id(habitat)
 
 # ★[S3-T4] 지금 인벤에 든 낚시 기어 id 목록(태클·미끼 자동 적용의 입력). GearCatalog는 인벤토리를
@@ -11553,6 +11916,12 @@ func _finish_fishing() -> void:
 		audio.sfx("harvest")
 		# ★[S3-T6] 포획 XP(체급 비례 + 퍼펙트 보너스) — 레벨업 알림은 헬퍼가 띄운다.
 		_gain_fishing_xp(FishSkill.xp_for_catch(int(res["weight_class"]), perfects))
+		# ★[S7-T7 / ADR-0065 결정 9] 삼도천 낚시 더비 — 행사일 **삼도천 어획**마다 태그 롤(33%).
+		#   어획 결과(어종·품질·XP)는 한 톨도 안 바뀐다: 태그는 그 위에 얹힌 별개의 성적표다.
+		#   ★ 무대 판정은 habitat이 아니라 **region**으로 한다 — `_fishing_habitat()`은 바다·갱도가
+		#     아닌 곳을 전부 RIVER로 떨어뜨리는 폴백이 있어, 강이 아닌 무대의 어획까지 더비에
+		#     끼어들 수 있다(경연은 "삼도천에서 낚았는가"가 규칙이다).
+		_note_derby_catch()
 		# ★[S3-T6 / ADR-0061 결정 6] 인양물 동반 롤 — **결착 뒤**라 격투에 간섭하지 않는다(카탈로그
 		#   §1-D "난입 어색" 제외 취지 보존). 팝업은 한 줄이고, 실패해도 어획 결과엔 영향이 없다.
 		_roll_salvage()
@@ -12508,6 +12877,8 @@ func _open_frame(ctx: int) -> void:
 		_refresh_woodshop()                # ★ [S4-T7] 목공방(건축 의뢰 + 가구·자재 행)
 	elif ctx == InventoryFrame.CTX_GUILD:
 		_refresh_guild()                   # ★ [S5-T6] 길드(깊이 해금 검 + 명부환 행)
+	elif ctx == InventoryFrame.CTX_NIGHTMARKET:
+		_refresh_night_market()            # ★[S7-T7] 저승 야시장(가구 세트 2 + 한정 물품 + 씨앗)
 	frame.open(ctx)
 	hotbar.visible = false
 	player.set_physics_process(false)   # 모달 — 이동 잠금
@@ -12681,6 +13052,17 @@ func _on_frame_buy_store_item(buy_id: String, kind: String, bulk: bool) -> void:
 			return
 		"deco":
 			_try_buy_deco_set(buy_id)
+			return
+		# ★[S7-T7 / ADR-0065 결정 9] 저승 야시장 3종. 목공방과 **kind를 갈라** 두는 이유는 할인 축이
+		#   다르기 때문이다(옹이 ♡ vs 행사 정액 2할). 앞 둘은 1회성 행위라 수량 루프를 안 탄다.
+		"fest_deco":
+			_try_buy_market_deco(buy_id)
+			return
+		"fest_item":
+			_try_buy_market_item(buy_id)
+			return
+		"fest_seed":
+			_try_buy_market_seed(buy_id, STORE_BULK if bulk else 1)
 			return
 	_buy_store_generic_n(buy_id, kind, STORE_BULK if bulk else 1)
 
@@ -15186,11 +15568,15 @@ func _mirror_forecast_text() -> String:
 		lines.append("⚠ 내일 절기가 바뀐다 — 지난 절기 작물이 스러진다")
 	# ㉣ ★[S7-T6 / ADR-0065 결정 8] 다가오는 테마 데이 예고 — 축제가 절기 달력을 갖게 되면서
 	#    실효화됐다("3일 뒤: 메이드 데이"). 해금된 테마가 없으면 줄 자체가 안 붙는다.
-	#    ⚠️ 절기 행사(결정 9) 예고는 아직 T7 자리로 남아 있다.
 	var fest := _festival_upcoming_line()
 	if fest != "":
 		lines.append("")
 		lines.append("◇ " + fest)
+	# ㉤ ★[S7-T7 / ADR-0065 결정 9] 다가오는 절기 행사 예고 — 마지막 T7 자리가 여기서 닫혔다.
+	#    테마 데이 줄과 **나란히** 뜬다(둘은 다른 날짜의 다른 층이라 서로를 가리지 않는다).
+	var ev := _event_upcoming_line()
+	if ev != "":
+		lines.append("◇ " + ev)
 	return "\n".join(lines)
 
 # 날씨 한 줄 힌트 — "그 하늘이 나에게 무엇을 하는가"를 말한다(효과 수치가 아니라 행동 지침).
@@ -15689,6 +16075,7 @@ func _draw() -> void:
 			var _ssy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_prop_layouts.get("SAMDO_OUTDOOR", []), self, _PROP_PASS_BACK, _ssy)
 			_draw_crab_pots()        # ★ [S3-T7] 물가 게잡이통(설치물 — 미끼/어획 상태 색 구분, 그레이박스)
+			_draw_derby_booth()      # ★[S7-T7] 낚시 더비 교환 부스(행사일에만 서는 임시 표식)
 		RegionCatalog.HWANGCHEONHAE:
 			_draw_facade_fishshop()  # ★ [S3-T9] 생선가게 외관
 			var _hsy: float = player.global_position.y if player != null else 1.0e20
@@ -15733,6 +16120,7 @@ func _draw() -> void:
 			_draw_facade_store()            # ★ [S2-T10] 동편 만물상 외관
 			_draw_facade_resident_houses()  # ★ [S2-T10] 주민 집 11채 외관(공용 변주 재도색)
 			_draw_quest_board()      # ★ [S2-T6] 만물상 앞 게시판(SOLID 1칸 그레이박스 — 수락 중이면 표식)
+			_draw_night_market()     # ★[S7-T7] 저승 야시장 임시 매대(행사일에만 광장에 선다)
 			# ★[S2-T9] 마을 야외 장식(벚꽃 나무·돌담) — HOME과 같은 Y-split. 뒤 프롭만 여기서 그리고
 			#   앞 프롭은 _front_props가 플레이어 위에 다시 그린다(캐노피 뒤로 지나가기).
 			var _vsy: float = player.global_position.y if player != null else 1.0e20
@@ -16842,6 +17230,39 @@ func _draw_chest() -> void:
 # 좌표 클립에 기댄다(집 카메라 밴드 밖에선 저절로 안 보인다).
 # 실루엣: 세로로 선 타원 거울면 + 나무 테 + 아래 받침. 거울면에 오늘의 운 등급 색을 옅게 깔아
 # "들여다볼 것이 있다"를 멀리서도 읽히게 한다(수치가 아니라 색 — 노출 규칙 위반 아님).
+# ★[S7-T7 / ADR-0065 결정 9] 절기 행사 임시 표식 2종(그레이박스 — 진짜 프롭 아트는 T9 큐).
+# 행사일이 아니면 **아무것도 그리지 않는다** = 행사가 끝나면 무대에 흔적이 0이다(오버레이 정체성이
+# 렌더 층에서도 그대로 읽힌다). 타일·충돌은 애초에 안 건드렸으므로 지울 상태도 없다.
+#
+# 더비 부스 — 강변 산책로에 세운 천막 좌판. 축제 가랜드 색(Festival.BANNER_A/B)을 빌려 "잔치"로
+# 읽히게 하고, 지금 든 태그가 있으면 좌판 위에 금빛 점을 얹는다(상자 "보관 중" 점과 같은 문법).
+func _draw_derby_booth() -> void:
+	if _seasonal_event_today() != SeasonalEvent.DERBY:
+		return
+	var ox := float(DERBY_BOOTH_TILE.x * TILE)
+	var oy := float(DERBY_BOOTH_TILE.y * TILE)
+	draw_rect(Rect2(ox + 3, oy + 14, TILE - 6, TILE - 16), Color(0.42, 0.30, 0.18))   # 좌판 널
+	draw_rect(Rect2(ox + 1, oy + 6, TILE - 2, 9), Festival.BANNER_A)                  # 차양(홍)
+	draw_rect(Rect2(ox + 1, oy + 6, TILE - 2, 3), Festival.BANNER_B)                  # 차양 금빛 띠
+	draw_rect(Rect2(ox + 4, oy + 15, 3, TILE - 17), Color(0.28, 0.20, 0.12))          # 다리(좌)
+	draw_rect(Rect2(ox + TILE - 7, oy + 15, 3, TILE - 17), Color(0.28, 0.20, 0.12))   # 다리(우)
+	var tags: int = seasonal_event.tags_on(clock.day) if seasonal_event != null and clock != null else 0
+	if tags > 0:
+		draw_rect(Rect2(ox + TILE * 0.5 - 3, oy + 17, 6, 6), HanjiUi.GOLD)
+
+# 야시장 매대 — 광장에 선 등롱 좌판. 밤 장이라 좌판을 어둡게 깔고 등롱 두 알을 밝게 얹어, 낮에도
+# "여긴 야시장"으로 읽히게 한다(그레이박스 최소 기호).
+func _draw_night_market() -> void:
+	if _seasonal_event_today() != SeasonalEvent.NIGHT_MARKET:
+		return
+	var ox := float(NIGHT_MARKET_TILE.x * TILE)
+	var oy := float(NIGHT_MARKET_TILE.y * TILE)
+	draw_rect(Rect2(ox + 2, oy + 12, TILE - 4, TILE - 14), Color(0.22, 0.20, 0.28))   # 좌판(짙은 남)
+	draw_rect(Rect2(ox + 2, oy + 12, TILE - 4, 3), Color(0.40, 0.36, 0.48))           # 상판 밝은 띠
+	draw_rect(Rect2(ox + 1, oy + 4, TILE - 2, 7), Color(0.30, 0.14, 0.18))            # 차일(검붉은)
+	draw_circle(Vector2(ox + 7, oy + 8), 3.0, Color(0.98, 0.80, 0.42))                # 등롱(좌)
+	draw_circle(Vector2(ox + TILE - 7, oy + 8), 3.0, Color(0.98, 0.80, 0.42))         # 등롱(우)
+
 func _draw_fortune_mirror() -> void:
 	# 아트 훅: assets/props/fortune_mirror.png(32×64) 있으면 그대로, 없으면 아래 그레이박스.
 	var ox := float(MIRROR_TILE.x * TILE)
