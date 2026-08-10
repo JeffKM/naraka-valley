@@ -312,14 +312,20 @@ func _initialize() -> void:
 	_check("⑥c 내일 날씨 이름이 들어간다(100% 확정 예보)",
 		txt_great.contains(Weather.name_of(Weather.forecast(d_great))))
 	# ★ 수치 노출 0 — 본문 어디에도 운의 숫자가 없다(CONTEXT [명부의 운] "내부 연산은 숨김").
+	# ⚠️ **원본값에 `%d`를 쓰지 않는다**(S7-T7에서 오탐으로 드러난 자리): 운은 언제나 −0.1~+0.1이라
+	#   `"%d" % v2`가 항상 "0"(또는 "-0")으로 퇴화해, 사실상 "본문에 숫자 0이 있으면 실패"라는 뜻이
+	#   된다. 점괘 거울에 행사 예고("20일 뒤: …")가 붙자 그 0에 걸렸다 — 운 값은 어디에도 안 떴는데도.
+	#   정수 자리수가 의미를 갖는 건 ×100 표기("운 −9")뿐이라 거기만 `%d`를 남긴다.
 	var numeric_leak := false
 	for d4 in [d_great, d_terrible, 1, 28, 56]:
 		m.clock.day = int(d4)
 		var t2: String = m._mirror_forecast_text()
 		var v2 := DailyLuck.luck_for_day(int(d4))
-		for fmt in ["%.1f", "%.2f", "%.3f", "%.4f", "%d"]:
+		for fmt in ["%.1f", "%.2f", "%.3f", "%.4f"]:
 			if t2.contains(fmt % v2) or t2.contains(fmt % (v2 * 100.0)):
 				numeric_leak = true
+		if t2.contains("%d" % (v2 * 100.0)):
+			numeric_leak = true
 	_check("⑥d 수치 노출 0 — 어떤 자리수로도 운 값이 본문에 안 뜬다(등급·문구만)", not numeric_leak)
 	# D-1 경고 — 절기 마지막 날에만 뜬다.
 	m.clock.day = 28

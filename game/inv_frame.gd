@@ -79,7 +79,11 @@ const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
 # ★[S6-T1] CTX_LARDER(카페 곳간) — 출하함(CTX_BIN)과 **같은 셸·거울상 의미**다: 출하함은 "팔 것",
 #   곳간은 "메뉴로 키울 것"이라 같은 재고 행 UI를 쓰되 정산 골드 대신 *용량*과 *무슨 메뉴가 되나*를
 #   보인다(CONTEXT [곳간] 선택 텍스처). enum 끝에 붙여 기존 값 불변(좌표 의존 테스트 무영향).
-enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP, CTX_GUILD, CTX_LARDER }
+# ★[S7-T7 / ADR-0065 결정 9] CTX_NIGHTMARKET(저승 야시장 임시 매대) — 만물상·길드와 **완전히 같은
+#   셸·단일 목록**이다. 신규 UI 언어 0: 헤더 2줄(store_text) + 품목 행(store_items) + 백팩, 그리기도
+#   클릭도 만물상 경로를 그대로 탄다(전용 그리기 함수조차 안 만든다). "행사는 오버레이 전용"이라는
+#   잠금이 UI 층에서도 그대로 지켜지는 자리다. enum 끝에 붙여 기존 값 불변(좌표 의존 테스트 무영향).
+enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP, CTX_GUILD, CTX_LARDER, CTX_NIGHTMARKET }
 # 생선가게 서브탭(기어 매대 / 물고기 환전).
 enum { FS_TAB_GEAR, FS_TAB_TRADE }
 # ★[S4-T7] 목공방 서브탭(건축 의뢰 / 가구·자재 매대) — 생선가게 서브탭과 같은 문법.
@@ -361,7 +365,8 @@ func _bp_max_first_row() -> int:
 # 백팩 하단 그리드가 그려지는 컨텍스트인가(관계·숙련·옵션 탭은 백팩을 안 그림).
 func _backpack_visible() -> bool:
 	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST or context == CTX_FISHSHOP \
-			or context == CTX_WOODSHOP or context == CTX_GUILD or context == CTX_LARDER:
+			or context == CTX_WOODSHOP or context == CTX_GUILD or context == CTX_LARDER \
+			or context == CTX_NIGHTMARKET:
 		return true
 	return context == CTX_MENU and menu_tab == TAB_INV
 
@@ -406,8 +411,8 @@ func _draw() -> void:
 		CTX_BIN:
 			_draw_bin_top(panel)
 			_draw_backpack(panel)
-		CTX_STORE:
-			_draw_store_top(panel)
+		CTX_STORE, CTX_NIGHTMARKET:
+			_draw_store_top(panel)      # ★[S7-T7] 야시장은 만물상 셸을 그대로 쓴다(전용 렌더 0)
 			_draw_backpack(panel)
 		CTX_FISHSHOP:
 			_draw_fishshop_top(panel)   # ★ [S3-T5] 뱃사공 생선가게(기어 매대 + 환전 서브탭)
@@ -1344,7 +1349,7 @@ func _gui_input(event: InputEvent) -> void:
 	# ★ [S4-T7] 목공방도 같은 영역 문법(건축 탭이면 건축 리스트가 스크롤된다).
 	# ★ [S5-T6] 길드도 같은 영역 문법(서브탭이 없어 늘 품목 리스트가 스크롤된다).
 	if event.pressed and (context == CTX_STORE or context == CTX_FISHSHOP or context == CTX_WOODSHOP \
-			or context == CTX_GUILD) and _store_area_rect.has_point(event.position):
+			or context == CTX_GUILD or context == CTX_NIGHTMARKET) and _store_area_rect.has_point(event.position):
 		var trading := context == CTX_FISHSHOP and fishshop_tab == FS_TAB_TRADE
 		var building := context == CTX_WOODSHOP and woodshop_tab == WS_TAB_BUILD
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -1410,7 +1415,7 @@ func _gui_input(event: InputEvent) -> void:
 			_click_menu(p)
 		CTX_BIN:
 			_click_bin(p)
-		CTX_STORE:
+		CTX_STORE, CTX_NIGHTMARKET:
 			for e in _store_row_rects:   # ★ [S1R-T12] 행/버튼 클릭=개별 구매(Shift 대량)
 				if e["buy"].has_point(p) or e["row"].has_point(p):
 					_buy_store_row(e, event.shift_pressed)
