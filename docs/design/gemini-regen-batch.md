@@ -2127,3 +2127,127 @@ cocktail_shaker = 뚜껑 덮인 놋쇠 셰이커(밤 칵테일)
 ⚠ 이 패스의 판정면은 **화면 grab 하네스**(s6_art_dump)라 **골든 비교에 못 쓴다**(육안 전용 —
   §17.6 교훈). 카페 실내는 오프라인 합성 덤프의 대상 밖이라 바이트 골든이 원래 없었다.
 ```
+
+---
+
+## 19. ★[S6-T9] 카페 아트 패스 2 — 주방요괴 시트·손님 상 변주 2 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-08-10). §10~§18과 같은 [ADR-0048] 교체
+> 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw` 쪽만 덮어쓰면 **코드 0줄 수정**으로 반영된다.
+>
+> **후처리 글루:** [`game/tools/make_s6_art.py`](../../game/tools/make_s6_art.py) — §18의 그 파일에
+> `build_kitchen_youkai()` 한 절을 더했다(새 스크립트를 안 만든다: 같은 무대의 아트가 두 글루로
+> 갈리면 muted 계수가 서로 몰래 어긋난다). 매번 raw에서 새로 굽는 **멱등** 성질도 그대로다.
+> **raw 보관:** `game/assets/characters/kitchen_youkai_raw/{south,north,east,west}.png`(각 64²) ·
+> 익명 손님은 §18의 `guest_raw/guest_anon_{0,1}_raw.png`를 **그대로 재사용**(신규 raw 0).
+> **육안 하네스:** `godot --path game --script res://playtest/s6_art_dump.gd`(★비-headless, §18 신설분
+> 무수정) → `/tmp/s6art_cafe_room.png`(낮 직원 줄 = 주방요괴)·`/tmp/s6art_night_bar.png`(밤 좌석).
+>
+> **PixelLab 사용량 2 gen**(create_character 2회 = standard 1 gen/캐릭터). 목표 ~5 안이다. 내역:
+>   · 주방요괴 시트 = 2 gen(1차 리젝 — 아래 ★리젝) · **익명 손님 변주 2종 = 0 gen**(틴트 파생) ·
+>     초상화 = **0 gen**(안 만든다 — 관계 트랙 0)
+>
+> **이 패스로 카페 무대의 그레이박스 시각 요소가 정말 0이 됐다** — §18이 손님·설비·아이콘을 덮고
+> 남긴 마지막 색박스가 주방요괴 몸통이었다. 이제 `_draw_graybox_figure`는 **낮 카페·밤 바 어디서도
+> 호출되지 않는다**(§19.4 확인).
+
+### 19.0 공통 규약
+
+```
+전부 [ADR-0050] 32-native · [§1.1] NW 광원 · [§8.1] 하드 알파 · [§9] 저승 muted.
+생성: create_character(mode=standard / n_directions=4 / **size=44** / low top-down /
+      selective outline / basic shading / high detail / tgs=11 / §11.4 공통 proportions)
+      — §17.4 점주 2인(풀무·무골)과 **한 글자도 다르지 않은 호출**이다. 카페 직원 줄에서
+      옥자·멜·미호와 어깨를 나란히 하므로, 다른 값을 쓰면 이 한 사람만 덩치·선이 튄다.
+muted 계수: 주방요괴 0.94/0.98(= §17.0 점주·옹이와 같은 값 — 출하 캐스트와 나란히 서는 층) ·
+      익명 손님 0.90/0.97 + 혼빛 틴트(§18.0 그대로, 새 값 0)
+★리젝 기준(§18.0 3항 + 이번에 추가된 1항):
+  ④ **두건이 머리카락으로 읽히면 재생성.** 1차가 "회청 살갗 + 긴 검은 머리 + 앞치마"로 나와
+     주방 직원이 아니라 *기괴한 여인*으로 읽혔다(정체가 서랍인 캐릭터에서 가장 비싼 오독 —
+     보는 사람이 없는 사연을 지어낸다). 2차에서 `a pale cloth headscarf tied tightly over the
+     whole head hiding all hair`로 못 박아 두건이 나왔다. **머릿수건 + 앞치마 = 직업**이고
+     **잿빛 살갗 + 타는 눈 = 비인간**이다 — 이 둘만 있으면 정체는 계속 서랍에 남는다.
+```
+
+### 19.1 ★주방요괴 시트 `characters/kitchen_youkai.png` (80×320 = 프레임 80² · 1열 × 4행)
+
+```
+배선: kitchen_youkai.gd `CharSprite.make("res://assets/characters/kitchen_youkai.png")` —
+  **이미 있던 훅, 파일만 채웠다**(S6-T7이 깔아 둔 그 훅 = 코드 0줄. 네오·풀무·무골과 같은 결).
+  자리는 KITCHEN_TILE(11,88) = 카페 직원 줄, 곳간(9,88) 바로 옆. **1열(정지 rotation)**인 이유는
+  자리가 하나뿐이라 실제로 안 걷기 때문이다(워크 첫 프레임은 스트라이드라 서 있어야 할 NPC가
+  걷는 듯 보인다 — §11.4 네오와 같은 판단).
+  PROMPT: chibi underworld kitchen youkai cook standing straight, no human skin anywhere, ashen grey
+    blue hide, a pale cloth headscarf tied tightly over the whole head hiding all hair, the face
+    beneath it sunk in deep shadow with only two glowing amber lantern eyes showing, no nose and no
+    mouth visible, wearing a long off-white cook's apron over dark charcoal work clothes with rolled
+    up sleeves, arms straight down at the sides, stocky and sturdy, no horns and no tail,
+    muted underworld palette
+후처리: 하드 알파 → muted(0.94/0.98) → 80² 프레임 발치정렬(FOOT_Y=74). 실측 콘텐츠 높이 49px로
+  최근 NPC(옹이 49·무골 48·뱃사공 48)와 같은 체급에 들었다.
+★★ **정체를 특정하는 형태를 안 그린다**(CONTEXT [주방요괴] "구체 정체는 서랍" · [ADR-0064] 결정 8).
+   프롬프트의 `no horns and no tail`이 그 규칙의 생성 측 표현이다 — 뿔·귀·꼬리가 붙는 순간 종족이
+   정해지고, 종족이 정해지면 없는 서사가 딸려 온다(관계 트랙 0인 배경 직원에겐 빚이다).
+   그레이박스 `kitchen_youkai.gd _draw`가 남긴 식별 토큰 둘 — **오프화이트 앞치마**와 **등불빛 눈
+   한 쌍** — 이 도트에서도 그대로 살아 있다. 그레이박스가 아트의 스펙 카드였다는 뜻이다.
+★  **초상화는 만들지 않는다**(portrait_stem="" 유지). 무골과 같은 자리다: 대화창 초상 칸은 하트
+   단계 표정을 가진 캐릭터의 장치라, 트랙 0인 직원에게 칸을 열면 "깊이가 있는 사람"이라는 잘못된
+   약속이 된다. owner 교체 큐에도 **안 올린다**(안 만드는 것이 설계다 — 미이행이 아니다).
+★  north(뒷모습) 확인 완료 — 뒤통수 = 머릿수건 뒷면 + 허리끈이고 얼굴이 안 그려져 있다
+   (§17.4가 "교체 시 north를 반드시 눈으로 확인할 것"으로 남긴 그 점검).
+```
+
+### 19.2 익명 손님 상 6 → 8종 `characters/guest_anon_{a3,b3}.png` (각 32×48) — 신규 생성 0
+
+```
+파생: make_s6_art.GUEST_TINTS에 두 줄(a3 = raw 0의 hue 0.72 깊은 남보라 / b3 = raw 1의 hue 0.98
+  삭은 진홍). raw는 §18.4의 2장 그대로다.
+배선: main.GUEST_ANON 배열에 두 preload. 뽑기가 **좌석·날짜 결정적 해시 % 배열 크기**라 배열이
+  길어지는 것만으로 반영된다(추가 배선 0줄).
+★ 왜 늘렸나: 낮 좌석 5석과 밤 바 좌석이 같은 날 굴러가는데 6상이면 한 화면에 같은 혼빛이 겹쳐
+  앉는 일이 잦았다. 8상이면 그 확률이 눈에 띄게 준다(실루엣이 2종뿐이라 *혼빛*이 유일한 구별선인
+  이상, 겹침은 곧 "복사-붙여넣기"로 읽힌다).
+★ hue는 **기존 4색이 비워 둔 자리에만** 꽂았다(0.10 · 0.36 · 0.58 · 0.86 → 사이의 0.72 · 0.98).
+  두 손님의 혼빛이 서로 "같은 색의 다른 명도"로 보이면 변주를 늘린 값이 그대로 사라진다.
+★ 익명은 *정체가 없는 것*이 정의라 실루엣을 8가지로 벌릴 필요가 없다는 §18.4의 판단은 그대로다.
+```
+
+### 19.3 카페 실내 접지 판정 — **무변경**(손대지 않는 것이 결론)
+
+```
+곳간(32×64 찬장)·출하함(32² 궤짝)·주방요괴 자리 주변을 라이브 덤프로 확인한 결과 **부유 없음**:
+찬장은 밑단 굽이 칸 아래변에 닿고, 궤짝은 바닥 칸 안에 앉아 있으며, 직원 줄 셋(멜·주방요괴·미호)의
+발치선이 한 줄로 맞는다(전부 FOOT_Y=74 규약).
+★ 접지 그림자를 **안 얹은 것이 규칙 준수다**: main.PROP_SHADOW_SET 주석([asset-ruleset §11])이
+  "납작한 소품과 **실내 벽 가구는 제외** — 높이가 낮아 그림자가 어색하고 사인오프된 실내 배치를
+  건드리지 않기 위함"으로 대상을 야외 부피 프롭에 한정해 뒀다. 곳간은 벽에 기대선 실내 가구라
+  그 제외 항목에 정확히 해당한다. 실내에 타원 그림자를 하나 켜면 같은 방의 선반·액자·스툴이
+  전부 안 켜진 쪽으로 남아, 없을 때보다 오히려 튄다.
+```
+
+### 19.4 잔여 그레이박스 확인 — 낮 카페·밤 바 **0**
+
+```
+`_draw_graybox_figure`의 남은 호출부는 둘뿐이고 **둘 다 도달 불가**다(폴백으로만 남는다):
+  · `_draw_guest_figure` — GUEST_SHEETS(6) ⊇ GuestPool.GUEST_IDS(neo·boatman·ongi·mochi·pulmu·
+    mugol) 전량 + GUEST_ANON 8상이 비어 있지 않다 → 명명·익명 어느 쪽도 폴백에 안 떨어진다.
+  · `_draw_jobgui` — _BAR_JOBGUI 3종(허깨비·어둑깨비·그슨대)이 전부 MOB_TEX에 있다.
+  · `kitchen_youkai.gd _draw` — CharSprite.make가 시트를 찾으면 스스로 물러난다(이번에 그렇게 됐다).
+★ 폴백 자체는 **지우지 않는다**. 아트가 통째로 빠진 저장소(에셋 미임포트·부분 클론)에서도 게임이
+  굴러가야 하고, 그 성질이 §18·§19를 "코드 0줄 교체 큐"로 유지시키는 바로 그 장치다.
+```
+
+### 19.5 owner Gemini 무수정 교체 큐
+
+```
+1순위 **주방요괴 정식 시트** — `kitchen_youkai_raw/{south,north,east,west}.png`(각 64² 투명배경)를
+  덮어쓰고 `python3 tools/make_s6_art.py` 한 번. 요구할 것:
+  ㉠ 머릿수건 + 오프화이트 앞치마(직업) ㉡ 잿빛 살갗 + 등불빛 눈 한 쌍(비인간) ㉢ **뿔·귀·꼬리 0**
+     (정체는 서랍) ㉣ 사람 피부색 0 ㉤ 4방향 전부 정면 정지 자세(걷지 않는다) ㉥ north에 얼굴 금지.
+  ★현행 PixelLab판의 알려진 약점: 손에 든 도구(국자)가 1차에서만 나왔고 2차엔 빠졌다 — 카운터 뒤
+   상반신만 보이는 자리라 실플레이 손실은 없지만, 교체판에 국자·주걱이 들리면 "무엇을 하는 자리인가"가
+   한 겹 더 읽힌다.
+2순위 익명 손님 원본 2장(§18.4) 재생성 — 8상이 전부 그 2장의 파생이라 원본이 좋아지면 8상이 함께
+  좋아진다. 틴트 표(GUEST_TINTS)는 그대로 쓸 수 있다.
+※ 주방요괴 초상화는 **큐에 없다**(§19.1 — 안 만드는 것이 설계).
+```

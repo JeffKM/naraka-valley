@@ -11,6 +11,7 @@
 #   3) 출하함 궤짝 프롭        32×32   assets/props/ship_bin.png
 #   4) HUD 배지 2종            24×24   assets/ui/{cheki_camera,cocktail_shaker}.png
 #   5) 익명 손님 상 2종+변주   32×48   assets/characters/guest_anon_<n>.png
+#   6) 주방요괴 시트          80×320  assets/characters/kitchen_youkai.png   ★[S6-T9] 아트 패스 2
 #
 # ★ 멱등: raw에서 매번 새로 굽는다(최종 PNG를 재입력으로 쓰지 않음).
 # 사용: python3 tools/make_s6_art.py   (game/ 에서)
@@ -178,15 +179,21 @@ def build_badges() -> None:
 # ADR-0064 결정 8) 여기서 굽는 건 익명 볼륨용 상뿐이다.
 # ★ 32×48 = 한 칸 폭 · 한 칸 반 높이. 스툴(y90)에 발치정렬로 앉으면 상반신이 위 칸으로 올라와
 #   카운터 너머에서도 보인다(그레이박스 _draw_graybox_figure가 쓰던 자리와 같은 앵커).
-# ★ 변주는 **틴트 파생**이다(원본 2장 → 6인). 익명은 정체가 없으므로 실루엣이 갈릴 필요가 없고,
+# ★ 변주는 **틴트 파생**이다(원본 2장 → 8인). 익명은 정체가 없으므로 실루엣이 갈릴 필요가 없고,
 #   오히려 혼빛만 다른 무리가 "이름 없는 손님들"로 읽힌다(씨앗 봉지 9종과 같은 판단).
+# ★[S6-T9] a3·b3 추가 — **신규 생성 0**(같은 raw 2장의 틴트 파생). 좌석 5석 + 밤 바 5석이 같은
+#   날 굴러가므로 6상이면 한 화면에 같은 혼빛이 겹쳐 앉는 일이 잦았다. hue는 기존 4색이 비워 둔
+#   자리에만 꽂는다(0.10 · 0.36 · 0.58 · 0.86 → 사이의 0.72 · 0.98) — 두 손님의 혼빛이 서로
+#   "같은 색의 다른 명도"로 보이면 변주를 늘린 값이 사라진다.
 GUEST_TINTS = [
     ("a0", 0, None, 0.00, 1.00),   # 원본 톤(틴트 없음)
     ("a1", 0, 0.58, 0.16, 0.96),   # 서늘한 청
     ("a2", 0, 0.86, 0.14, 1.00),   # 옅은 자보라
+    ("a3", 0, 0.72, 0.15, 0.95),   # ★[S6-T9] 깊은 남보라(청 ↔ 자보라 사이)
     ("b0", 1, None, 0.00, 1.00),
     ("b1", 1, 0.10, 0.18, 0.94),   # 마른 갈금
     ("b2", 1, 0.36, 0.14, 0.98),   # 이끼빛 청록
+    ("b3", 1, 0.98, 0.16, 0.93),   # ★[S6-T9] 삭은 진홍(자보라 ↔ 갈금 사이)
 ]
 GUEST_W, GUEST_H = TILE, 48
 
@@ -213,9 +220,48 @@ def build_guests() -> None:
     print("  characters: 익명 손님 %d상(원본 2 + 틴트 파생)" % made)
 
 
+# ── 6) ★[S6-T9] 주방요괴 시트 ────────────────────────────────────────────────
+# 80×320 = 프레임 80² · **1열**(정지 rotation) × 4행(down/up/right/left). 주방요괴는 자리가
+# 하나뿐이라 실제로 안 걷는다 → 워크 4프레임을 안 뽑는 게 맞다(네오·풀무·무골·옹이와 같은
+# 상주 정지 NPC 규약 — 워크 첫 프레임은 스트라이드라 서 있어야 할 NPC가 걷는 듯 보인다).
+# 계수·발치선은 make_mob_art.build_shopkeeper와 **같은 값**이다(0.94/0.98 · FOOT_Y 74) —
+# 카페 무대에서 옥자·멜과 나란히 서므로 다른 값을 쓰면 이 한 사람만 톤이 튄다.
+CHAR_FRAME = 80        # char_sprite.gd FRAME=80
+CHAR_FOOT_Y = 74       # 출하 캐스트 5종 실측 발치선
+CHAR_ROWS = ["south", "north", "east", "west"]   # 행 순서 = down/up/right/left
+CAST_SAT, CAST_VAL = 0.94, 0.98
+
+
+def build_kitchen_youkai() -> None:
+    src = os.path.join(CHARS, "kitchen_youkai_raw")
+    if not os.path.isdir(src):
+        print("  ! kitchen_youkai_raw 폴더 없음(건너뜀)")
+        return
+    sheet = Image.new("RGBA", (CHAR_FRAME, CHAR_FRAME * len(CHAR_ROWS)), (0, 0, 0, 0))
+    for row, d in enumerate(CHAR_ROWS):
+        p = os.path.join(src, d + ".png")
+        if not os.path.exists(p):
+            print("  ! kitchen_youkai %s 없음 — 빈 행" % d)
+            continue
+        raw = Image.open(p).convert("RGBA")
+        hard_alpha(raw)
+        apply_px(raw, lambda c: mute(c, CAST_SAT, CAST_VAL))
+        box = raw.getbbox()
+        if box is None:
+            continue
+        content = raw.crop(box)
+        frame = Image.new("RGBA", (CHAR_FRAME, CHAR_FRAME), (0, 0, 0, 0))
+        frame.paste(content, ((CHAR_FRAME - content.width) // 2,
+                              max(0, CHAR_FOOT_Y - content.height)), content)
+        sheet.paste(frame, (0, row * CHAR_FRAME))
+    sheet.save(os.path.join(CHARS, "kitchen_youkai.png"))
+    print("  characters/kitchen_youkai.png %dx%d" % sheet.size)
+
+
 if __name__ == "__main__":
-    print("S6-T8 카페 아트 패스 1 후처리")
+    print("S6-T8·T9 카페 아트 패스 후처리")
     build_menu_icons()
     build_fixtures()
     build_badges()
     build_guests()
+    build_kitchen_youkai()

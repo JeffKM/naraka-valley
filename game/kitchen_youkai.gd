@@ -22,8 +22,9 @@ class_name KitchenYoukai
 #     [F] 훅은 한 줄도 여기 없다(전부 main `_setup_residents()`의 레코드 소관).
 #   - 대사 시그니처가 `lines_resident()`인 건 `plain_talk = true`이기 때문이다(옥자와 같은 경로 —
 #     하트·first_today 인자가 없는 일상 묶음. 프레임워크가 이 한 형태만 안다).
-#   - **초상화 없음**(portrait_stem="") — 스프라이트·초상화는 S6-T9 아트 패스 소관이다. 그때까지
-#     아래 그레이박스가 그려지고, 시트가 도착하면 `CharSprite.make`가 알아서 갈아끼운다.
+#   - **초상화 없음**(portrait_stem="") — ★[S6-T9] 스프라이트 시트는 도착했지만 **초상화는 끝까지
+#     안 만든다**. 대화창 초상 칸은 관계 트랙이 있는 캐릭터의 장치이고(하트 단계 표정), 이쪽은
+#     트랙 0이라 칸을 열면 "깊이가 있는 사람"이라는 잘못된 약속이 된다(무골과 같은 판단).
 
 # 대사 — 하트 단계가 없으므로 **한 묶음**이다(옥자 lines_resident와 같은 결). 주방 일과 곁들이
 # 창구만 말한다. 저승 카페의 주방이라는 공기와 "네 몫도 한 접시 있다"는 안내가 전부다.
@@ -41,8 +42,10 @@ func display_name() -> String:
 func lines_resident() -> PackedStringArray:
 	return PackedStringArray(LINES)
 
-# P2.3② 도색 스프라이트(있으면 그레이박스 대신). 주방요괴 시트는 S6-T9 아트 패스에서 들어온다 —
-# 파일이 없으면 CharSprite.make가 null을 돌려주므로 그때까진 아래 그레이박스가 그려진다.
+# P2.3② 도색 스프라이트(있으면 그레이박스 대신). ★[S6-T9] 시트가 들어왔다 — 80×320(프레임 80² ·
+# 1열 정지 rotation × 4행). 이 파일은 **한 줄도 안 바뀌었다**: `CharSprite.make`가 파일을 찾으면
+# 아래 `_draw`가 스스로 물러난다(S6-T7이 깔아 둔 그 훅의 이행). 아트가 통째로 빠져도 그레이박스로
+# 굴러가는 성질은 그대로 남는다.
 var _sprite: AnimatedSprite2D = null
 
 func _ready() -> void:
