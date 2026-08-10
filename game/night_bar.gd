@@ -104,6 +104,12 @@ var raid_amount: int = DEFAULT_RAID
 # ★seam ㉠: 내가 못 막은 돌파를 바나가 대신 막아주는 마리 수(밤당). 기본값(0)에서 시작하고 T6.5
 # 바나 보호가 키운다(창고 잡귀 자동 차단↑ — 여우불 '범위'의 밤판, 못 간 스폿을 바나가 받침).
 var auto_block: int = DEFAULT_AUTO_BLOCK
+# ★seam ㉢[S7-T6 / ADR-0065 결정 8]: 테마 프리미엄 단가 배수. main이 테마 데이에 Festival.
+# SERVE_PREMIUM(1.25)을 주입한다(평일 1.0) — CONTEXT ㉤ "테마 데이는 밤 [나라카 바]까지 물들인다"의
+# 메카닉 몫이다(장식·의상은 낮과 같은 출처를 공유하므로 밤에 따로 켤 것이 없다).
+# ★ 이건 **바나 축이 아니다**: 바나는 '마진'이 아니라 '보호' 곱셈기라 밤 응대가에 관계 배수가 없고
+#   (SERVE_PRICE 주석), 여기 들어온 배수도 관계가 아니라 달력에서 파생된다. 두 축은 여전히 안 만난다.
+var theme_premium: float = 1.0
 
 # 오늘 밤 정산 누적(세이브 무상태 — 매일 open_bar/end_day가 리셋, 일시 표시·요약용).
 var _raided := 0                  # ㉮ 막기 실패로 약탈당한 재고량(누적)
@@ -277,14 +283,20 @@ func block(spot: int) -> Dictionary:
 # 기다리는 손님이 없으면 0(잘못된 호출 방어 — main은 is_waiting 확인 후 부른다). 카페 서빙과
 # 달리 재료를 소모하지 않는다 — 응대 매출은 '현재 자산'이고, '미래 자산'(재고)은 잡귀 약탈
 # 쪽이 건드린다(ADR-0010 #5 현재/미래 분리, 바나는 마진 아닌 보호라 단가 배수도 없다).
+# ★[S7-T6] 정액 응대가에 테마 프리미엄(seam ㉢)이 곱해진다 — 밤 응대가의 단일 출처를 함수로
+# 뽑아 칵테일(cocktail_price)이 같은 값을 다시 읽게 한다(낮의 serve_price ↔ cheki_price 구조 1:1).
+func serve_price() -> int:
+	return maxi(int(round(SERVE_PRICE * theme_premium)), 1)
+
 func serve(seat: int) -> int:
 	if not is_waiting(seat):
 		return 0
 	_seats[seat]["occupied"] = false
 	_seats[seat]["patience"] = 0.0
-	_revenue += SERVE_PRICE
+	var revenue := serve_price()
+	_revenue += revenue
 	changed.emit()
-	return SERVE_PRICE
+	return revenue
 
 # ── ★[S6-T6 / ADR-0064 결정 6] 칵테일 = 밤 응대의 다음 단(프리미엄) ───────────
 # 이 노드가 칵테일에 대해 아는 건 **등급 하나(0~2 정수)**뿐이다 — 믹싱도, 박자도, 커서도 모른다
@@ -297,7 +309,7 @@ func serve(seat: int) -> int:
 #   동안 잡귀·손님을 대신 받쳐 주는 것으로 치러진다 — 그래서 칵테일이 바나 축을 건드릴 자리가 없다.
 func cocktail_price(grade: int) -> int:
 	var rate: float = COCKTAIL_RATE[clampi(grade, 0, COCKTAIL_RATE.size() - 1)]
-	return maxi(int(round(SERVE_PRICE * rate)), 1)   # 하한 1냥 = 무실패의 산술적 보증
+	return maxi(int(round(serve_price() * rate)), 1)   # 하한 1냥 = 무실패의 산술적 보증
 
 # 칵테일 한 잔을 오늘 밤 장부에 적고 매출을 돌려준다(지갑 반영은 호출 측 — serve와 같은 결).
 # ★ 응대 매출(_revenue)과 **같은 곳**에 쌓는다 — 새 귀속처를 발명하지 않는다. 그래야 마감 요약

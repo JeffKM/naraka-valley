@@ -9018,8 +9018,11 @@ func _on_day_advanced(day: int) -> void:
 	# T4.1 물 준 작물이 다 자라면 온보딩을 '수확하라' 단계로 넘긴다(그 단계일 때만).
 	if farm.any_mature():
 		onboarding.crop_ready()
-	# M2.4 새 날이 이벤트 데이(2주마다)면 메인 4인 의상·카페 보너스를 켠다(아니면 끈다).
+	# M2.4 새 날이 테마 데이면 메인 4인 의상·카페 보너스를 켠다(아니면 끈다).
 	_refresh_festival()
+	# ★[S7-T6 / ADR-0065 결정 8] 축제 예고·개막 배너(당일 + D-1). 아침에 한 번 뜬다.
+	for line in _festival_morning_notices():
+		_notice(line, NOTICE_SECS * 2.0)
 
 # ★ [ADR-0051] 배치된 허수아비의 보호 중심 칸 목록 — 밤 까마귀 판정(CrowRaid) 입력.
 #   안식 농원 장식으로 세운 허수아비(_prop_layouts["HOME"]의 PROP_SCARECROW)가 곧 방어 인프라다
@@ -9033,12 +9036,21 @@ func _scarecrow_tiles() -> Array:
 	return out
 
 # ── M2.4 카페 이벤트 데이 ────────────────────────────────────────────────────
-# 오늘(clock.day)이 이벤트 데이인가를 한 곳에서 파생해, 메인 4인(미호·멜·바나·옥자) 의상과
-# 카페 손님 보너스를 그 상태로 맞춘다. Festival은 세이브 무상태(day에서 파생, store_discount
-# 결)라 신규·복원·취침 어디서 불러도 멱등이다(set_festive·spawn_scale 모두 idempotent). 카페
-# 축제 장식(가랜드·카펫)은 _draw가 같은 Festival.is_event_day로 파생하므로 여기선 redraw만 친다.
+# ★[S7-T6 / ADR-0065 결정 8] 오늘 열리는 테마(-1 = 평일). Festival은 세이브 무상태라 해금 입력
+# (카페 단계·누적 서빙 매출)을 **여기서 주입**한다 — 진척을 아는 곳이 main뿐이기 때문이다
+# (`_weather_today`·`_luck_bonus`와 같은 결의 파생 헬퍼: 저장하지 않고 매번 계산한다).
+# clock이 아직 없는 프레임(부팅 중 호출)은 평일로 떨어진다.
+func _festival_theme() -> int:
+	if clock == null:
+		return Festival.NONE
+	return Festival.theme_for_day(clock.day, _cafe_stage(), _cafe_revenue_total)
+
+# 오늘이 테마 데이인가를 한 곳에서 파생해, 메인 4인(미호·멜·바나·옥자) 의상과 카페 보너스를 그
+# 상태로 맞춘다. Festival은 세이브 무상태(day + 진척값에서 파생, store_discount 결)라 신규·복원·
+# 취침 어디서 불러도 멱등이다(set_festive·주입 모두 idempotent). 카페 테마 장식(가랜드·카펫)은
+# _draw가 같은 `_festival_theme`으로 파생하므로 여기선 redraw만 친다.
 func _refresh_festival() -> void:
-	var f := Festival.is_event_day(clock.day)
+	var f := _festival_theme() != Festival.NONE
 	miho.set_festive(f)
 	mel.set_festive(f)
 	bana.set_festive(f)
@@ -9047,6 +9059,39 @@ func _refresh_festival() -> void:
 	# (_refresh_cafe_ladder)에서 곱해 얹는다(두 곳이 spawn_scale에 각자 쓰면 나중 것이 앞을 지운다).
 	_refresh_cafe_ladder()
 	queue_redraw()                                       # 카페 축제 장식(_draw)을 새 상태로 다시 그림
+
+# ★[S7-T6 / ADR-0065 결정 8] 오늘 아침에 띄울 축제 배너들(0~2줄). _on_day_advanced가 이 배열을
+# 그대로 알림에 흘린다 — 문자열 조립을 함수로 뽑아 둔 건 헤드리스가 알림 큐를 뒤지지 않고 "오늘
+# 무엇을 예고하는가"를 곧장 단언할 수 있게 하기 위해서다(_facing_mirror를 함수로 연 그 이유 1:1).
+#   ㉠ 당일 개막("오늘은 메이드 데이 —") · ㉡ D-1 예고("내일은 …" — 절기 24일 아침)
+# ★ **해금된 테마만 말한다**: 비해금 25일은 평일이라 예고할 것도 열릴 것도 없다(theme_for_day가
+#   이미 -1로 접었다). 해금 전 플레이어에게 못 여는 잔치를 광고하지 않는다(ADR-0008 "평평≠막힘"의
+#   문구판 — 안 열린 것을 결핍으로 보이게 하지 않는다).
+func _festival_morning_notices() -> Array:
+	var out: Array = []
+	if clock == null:
+		return out
+	var st := _cafe_stage()
+	var today := Festival.theme_for_day(clock.day, st, _cafe_revenue_total)
+	if today != Festival.NONE:
+		out.append(Festival.banner_text(today))
+	var tomorrow := Festival.theme_for_day(clock.day + 1, st, _cafe_revenue_total)
+	if tomorrow != Festival.NONE:
+		out.append(Festival.preview_text(tomorrow))
+	return out
+
+# ★[S7-T6] 점괘 거울 ㉣ — 다가오는 테마 데이 한 줄("3일 뒤: 메이드 데이"). 오늘부터 한 절기(28일)
+# 앞까지만 내다본다: 그 안에 반드시 슬롯이 하나 있으므로(절기당 1개) 못 찾는 경우는 곧 "그 테마가
+# 아직 안 열렸다"는 뜻이고, 그때는 조용히 빈 줄을 돌려준다(못 여는 잔치를 광고하지 않는다).
+func _festival_upcoming_line() -> String:
+	if clock == null:
+		return ""
+	var st := _cafe_stage()
+	for ahead in range(0, GameClock.DAYS_PER_SEASON + 1):
+		var th := Festival.theme_for_day(clock.day + ahead, st, _cafe_revenue_total)
+		if th != Festival.NONE:
+			return Festival.upcoming_text(th, ahead)
+	return ""
 
 func _on_collapsed() -> void:
 	_do_sleep()  # 어디서든 쓰러져 다음 날 아침으로
@@ -10931,7 +10976,8 @@ func _process(delta: float) -> void:
 	elif facing_seat >= 0 and night_bar.is_waiting(facing_seat):
 		# T6.4 밤 바 손님을 바라볼 때: 우클릭으로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
 		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] 응대 (+%d골드)" % NightBar.SERVE_PRICE
+		# ★[S7-T6] 정액이 아니라 night_bar에 주입된 값을 읽는다 — 테마 데이엔 프롬프트도 오른 값을 말한다.
+		interact_prompt.text = "[우클릭] 응대 (+%d골드)" % night_bar.serve_price()
 	elif _region == RegionCatalog.HOME and ranch.has_animal(_target):
 		# ★ [S1-7→B1-a.1] 짐승을 바라볼 때(실내): 산물 있으면 수집, 없으면 쓰다듬 / 든 게 건초면 급여 안내.
 		interact_prompt.visible = not _sleeping
@@ -15063,16 +15109,29 @@ func _cafe_stage() -> int:
 #   멱등이라 _ready·복원·취침 어디서 불러도 같은 값이 선다(_refresh_festival과 같은 결).
 func _refresh_cafe_ladder() -> void:
 	var st := _cafe_stage()
+	# ★[S7-T6 / ADR-0065 결정 8] 오늘의 테마(-1 = 평일). 사다리 단계를 이미 손에 들고 있으므로
+	#   여기서 한 번만 파생해 세 seam(붐빔·단가·체키)에 함께 흘려넣는다.
+	var theme := Festival.theme_for_day(clock.day, st, _cafe_revenue_total) if clock != null else Festival.NONE
 	if cafe != null:
 		cafe.open_seats = CafeMilestone.seats_of(st)
 		# ★[S7-T3 / ADR-0065 결정 4] 날씨 배수가 이 **단일 곱**에 합류했다(축제 × 단계 × 날씨).
 		#   잿눈이면 손님이 1.5배 들어온다("추워서 카페로 든다") = 간격 ×(1/1.5). 세 배수는 곱해서
 		#   함께 걸린다 — ⚠️ spawn_scale에 따로 대입하는 자리를 절대 새로 만들지 말 것(먼저 쓴 값이
 		#   지워지는 사고가 이미 한 번 있었다. 이 함수가 spawn_scale의 유일한 주인이다).
-		cafe.spawn_scale = Festival.spawn_scale(clock.day) * CafeMilestone.spawn_scale_of(st) \
+		cafe.spawn_scale = Festival.spawn_scale_of(theme) * CafeMilestone.spawn_scale_of(st) \
 			* Weather.cafe_spawn_scale(_weather_today())
+		# ★[S7-T6 / ADR-0065 결정 8] 테마 프리미엄 주입(seam 5·6) — 그날 전 메뉴 ×1.25, 체키는
+		#   그 위에 ×1.5. spawn_scale과 같은 자리에 둔 이유도 같다: **주입 지점이 하나여야** 두
+		#   곳이 각자 대입해 서로를 지우는 사고가 안 난다(위 경고 주석의 그 사고).
+		cafe.theme_premium = Festival.serve_premium_of(theme)
+		cafe.cheki_premium = Festival.cheki_premium_of(theme)
 	if larder != null:
 		larder.capacity = CafeMilestone.larder_capacity_of(st)
+	# ★[S7-T6] 밤 바까지 물든다(CONTEXT ㉤ "테마 데이는 밤 [나라카 바]까지 물들인다") — 낮 카페와
+	#   같은 배수를 같은 자리에서 흘려넣는다. 바나 보호 주입(_refresh_bana_protection)과 갈리는
+	#   축이라 서로를 안 밟는다(저긴 보호 파라미터, 여긴 단가).
+	if night_bar != null:
+		night_bar.theme_premium = Festival.serve_premium_of(theme)
 
 # 1단을 채우는 순간 "카페 2단계!" + 2단 미리보기 한 줄을 팝업으로 띄운다(비차단 자동 해제 —
 # 카페 마감 정산 팝업과 같은 결). ★[S6-T3] 미리보기가 말하는 2단 콘텐츠(좌석·곳간·메뉴판·손님)는
@@ -15125,8 +15184,13 @@ func _mirror_forecast_text() -> String:
 	if GameClock.is_season_last_day(d):
 		lines.append("")
 		lines.append("⚠ 내일 절기가 바뀐다 — 지난 절기 작물이 스러진다")
-	# ㉣ ★[S7-T6/T7 자리] 다가오는 절기 행사·테마 데이 예고. 축제 프레임워크가 절기 달력으로
-	#    교체되면 여기에 "3일 뒤: 메이드 데이" 한 줄이 붙는다(지금은 예고할 달력 자체가 없다).
+	# ㉣ ★[S7-T6 / ADR-0065 결정 8] 다가오는 테마 데이 예고 — 축제가 절기 달력을 갖게 되면서
+	#    실효화됐다("3일 뒤: 메이드 데이"). 해금된 테마가 없으면 줄 자체가 안 붙는다.
+	#    ⚠️ 절기 행사(결정 9) 예고는 아직 T7 자리로 남아 있다.
+	var fest := _festival_upcoming_line()
+	if fest != "":
+		lines.append("")
+		lines.append("◇ " + fest)
 	return "\n".join(lines)
 
 # 날씨 한 줄 힌트 — "그 하늘이 나에게 무엇을 하는가"를 말한다(효과 수치가 아니라 행동 지침).
@@ -15676,8 +15740,9 @@ func _draw() -> void:
 			_draw_props_for(_prop_layouts.get("CAFE", []), self)  # ★ ADR-0025 데이터: 카페 무대 가구·카페 등불
 			_draw_ship_bin()         # ★ C2 무인 출하함 상자(카페 안 — 카페 카메라에서만 보임)
 			_draw_larder()           # ★[S6-T1] 곳간 찬장(카페 안 반대쪽 끝 — 출하함과 같은 카메라)
-			# M2.4 — 이벤트 데이면 카페 무대를 축제 장식으로(가구 위에 가랜드·무대 카펫 덧그림).
-			if Festival.is_event_day(clock.day):
+			# M2.4 — 테마 데이면 카페 무대를 축제 장식으로(가구 위에 가랜드·무대 카펫 덧그림).
+			# ★[S7-T6] 판정이 달력+해금 파생으로 바뀌었다 — 비해금 테마의 25일엔 장식도 안 선다.
+			if _festival_theme() != Festival.NONE:
 				_draw_cafe_festival()
 			# ★ M2.2 — 공유 집 실내에 들어와 있으면 집 가구를 재사용해 그린다(HOUSE_RECT 방).
 			# 만물상 방·카페 방은 카메라 밖이라 같이 그려도 안 보이지만, 가구는 들어온 그 방만 둔다.

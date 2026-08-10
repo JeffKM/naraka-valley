@@ -255,9 +255,11 @@ func _run_checks() -> void:
 	mn.mel_affinity.points = 99999
 	mn._refresh_cafe_ladder()
 	_check("③e 2단 도달", mn._cafe_stage() == CafeMilestone.STAGE_2)
+	# ★[S7-T6] 축제 배수의 인자가 day → *열리는 테마*로 바뀌었다(달력 슬롯 ∧ 해금 — main이 파생).
 	_check("③f ★spawn_scale = 축제 배수 × 단계 배수 한 자리에서(두 레버가 곱해진다)",
 		is_equal_approx(mn.cafe.spawn_scale,
-			Festival.spawn_scale(mn.clock.day) * CafeMilestone.spawn_scale_of(CafeMilestone.STAGE_2)))
+			Festival.spawn_scale_of(mn._festival_theme())
+			* CafeMilestone.spawn_scale_of(CafeMilestone.STAGE_2)))
 	_check("③g 좌석도 함께 열린다(같은 자리에서 주입)", mn.cafe.open_seats == Cafe.SEATS_STAGE2)
 
 	# ── ⑦ 세이브 왕복 + 구세이브 하위호환 ──────────────────────────────────
