@@ -2297,6 +2297,11 @@ var ship_bin: ShippingBin
 # ★ 출하함과 **거울상**이다: 출하함은 넣으면 익일 골드, 곳간은 넣으면 융합 메뉴 재료가 된다.
 var larder: Larder
 
+# ★[S6-T4 / ADR-0064 결정 8] 단골화 방문 가중치 원장(명명 손님 서빙 이력 → 재방문 확률↑).
+# RefCounted라 노드가 아니다(TreeLedger·TapperLedger 결) — `_ready`에서 한 벌 만들고 세이브
+# 조각("guest_pool")으로 main이 조율한다. ★호감도(Affinity)와 **서로 참조 0**이다(ADR-0017).
+var guests := GuestPool.new()
+
 # ★ ADR-0048 Phase D — 저장 상자(집 실내 순수 보관 컨테이너, 경제 0). ship_bin과 같은 결의 상태 노드 —
 # 코드 생성으로 붙이고(_setup_chest), 세이브는 별도 조각으로 main이 조율한다. 프레임 CTX_CHEST가 참조.
 var chest: StorageChest
@@ -9005,6 +9010,9 @@ func _save_game() -> void:
 		"chest": chest.to_save(),   # ★ Phase D 저장 상자 보관 내용(순수 보관 — 세이브별 델타)
 		"storehouse_chest": storehouse_chest.to_save(),   # ★ Phase E 갈무리방(창고) 저장 상자(집 상자와 독립)
 		"larder": larder.to_save(),   # ★[S6-T1] 카페 곳간 재고(융합 메뉴 재료 — 출하함 대기분과 같은 결)
+		# ★[S6-T4] 단골화 방문 원장(명명 손님별 누적 서빙 횟수). 호감도 조각들과 **완전히 다른 키**다 —
+		#   네임스페이스가 갈려 있는 것 자체가 "서빙 ≠ ♡"(ADR-0017)의 세이브 층위 표현이다.
+		"guest_pool": guests.to_save(),
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
 		"farming_xp": _farming_xp,   # ★ S1-6 농사 숙련 XP(혼력 감산 파생원)
@@ -9122,6 +9130,10 @@ func _load_game() -> void:
 		storehouse_chest.load_save(data["storehouse_chest"])
 	if data.has("larder"):   # ★[S6-T1] 카페 곳간 — 키 없는 구버전 세이브는 **빈 곳간**으로 시작(하위호환)
 		larder.load_save(data["larder"])
+	# ★[S6-T4] 단골 원장 — 키 없는 구세이브는 **전원 처음 오는 손님**으로 시작한다(빈 원장 = 기본
+	#   가중치. 아무것도 안 막힌다 — 명명 손님은 그대로 오고 이력만 0부터 쌓인다).
+	if data.has("guest_pool"):
+		guests.load_save(data["guest_pool"])
 	# ★ [S2-T7] 주민 호감도 복원 — 세이브 키가 없는 구버전은 그 주민만 ♡0으로 시작한다
 	#   (네오 M2.3 원문 규칙과 같은 결: 정가·무막힘. 옛 4갈래 if가 이 루프로 접혔다).
 	for r in _residents:
@@ -9864,9 +9876,14 @@ func _process(delta: float) -> void:
 	# 최신 재고로 주문한다(적재 직후 다음 손님부터 융합 가중치가 오른다).
 	# ★[S6-T3 / ADR-0064 결정 7] 카페 일구기 사다리 주입(좌석·곳간 용량·손님 볼륨). tick *전에*
 	# 흘려넣어야 2단이 열리는 그 프레임부터 새 좌석에 손님이 앉는다(order_pool 주입과 같은 이유).
+	# ★[S6-T4 / ADR-0064 결정 8] 명명 손님 후보 주입 — 주문 풀과 같은 자리·같은 이유(tick 전에
+	# 흘려넣어야 이 프레임에 앉는 손님이 최신 후보·최신 단골 가중치로 정해진다). ★손님 *볼륨*은
+	# 바로 위 _refresh_cafe_ladder가 이미 소유하고(spawn_scale 단일 주인), 여기선 **누가 앉는가**만
+	# 얹는다 — 두 축을 섞으면 단골이 자랄 때 총 손님 수까지 흔들린다.
 	_refresh_cafe_ladder()
 	cafe.day = clock.day
 	cafe.order_pool = _cafe_order_pool()
+	cafe.guest_pool = _cafe_guest_pool()
 	if not _sleeping:
 		cafe.tick(delta, clock.minutes)
 	if cafe.is_open():
@@ -10436,9 +10453,11 @@ func _process(delta: float) -> void:
 		# T5.4 → ★S6-T2: 기다리는 손님을 바라볼 때 **무엇을 시켰고 얼마가 들어오는지**를 보여 준다.
 		# 막힌 상태 안내는 사라졌다 — 재료가 없어도 기본 메뉴로 서빙된다(무막힘). 대신 곳간 재고가
 		# 있는 융합이면 프리미엄가가, 없으면 폴백 기본가가 그 자리에서 숫자로 갈린다(적재의 보상 노출).
+		# ★[S6-T4] 명명 손님이면 **누구인지**가 앞에 붙는다(익명은 종전 문구 그대로 — 이름이 없다).
 		var seat_served := _planned_menu(facing_seat)
 		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] %s 서빙 (+%d골드)" % [
+		interact_prompt.text = "[우클릭] %s%s 서빙 (+%d골드)" % [
+			_guest_prefix(cafe.guest_of(facing_seat)),
 			MenuCatalog.name_of(seat_served), cafe.serve_price(seat_served)]
 	elif facing_seat >= 0 and night_bar.is_waiting(facing_seat):
 		# T6.4 밤 바 손님을 바라볼 때: 우클릭으로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
@@ -14093,14 +14112,21 @@ func _try_serve(seat: int) -> void:
 	var sig := MenuCatalog.signature_of(served)
 	if sig != "" and larder.consume(sig, 1) <= 0:
 		served = _fallback_menu()             # 재고가 그새 비었다(방어 — _planned_menu가 이미 걸렀다)
+	# ★[S6-T4] **누구에게 냈는지를 자리 비우기 전에** 읽는다(serve가 좌석의 guest를 지운다).
+	var guest_id := cafe.guest_of(seat)
 	var revenue := cafe.serve(seat, served)   # 메뉴가 × margin(멜 마진은 메뉴가 *위에* 곱한다)
 	if revenue <= 0:
 		return                                # 기다리는 손님이 없었다(방어 — 입력 분기가 이미 걸렀다)
 	wallet.earn(revenue)                      # 서빙 즉시 지갑 반영
 	_cafe_revenue_total += revenue            # T7.2 카페 마일스톤 누적(프리미엄 매출도 카페 운영 매출)
 	_total_income += revenue                  # ★ [S1R-T12] 누적 총수입(정보패널)
+	# ★[S6-T4 / ADR-0064 결정 8] 단골화 — 서빙 이력을 원장에 적어 그 손님의 재방문 확률을 올린다.
+	#   ★★ **호감도는 한 톨도 안 오른다**(ADR-0017 보호): 서빙·매출과 대화·선물은 별개 행동이라,
+	#   이 줄 옆에 affinity.add가 붙는 순간 "카페를 돌리면 저절로 친해진다"가 되어 관계 트랙이
+	#   활동 루프의 부산물로 전락한다. 익명 손님("")이면 record_serve가 조용히 흘려보낸다.
+	guests.record_serve(guest_id)
 	audio.sfx("serve")                        # P2.6 카운터 종 "딩"
-	_notice("%s 서빙 +%d골드" % [MenuCatalog.name_of(served), revenue])
+	_notice("%s%s 서빙 +%d골드" % [_guest_prefix(guest_id), MenuCatalog.name_of(served), revenue])
 
 # 이 좌석에 **실제로 나갈 메뉴** id(부작용 없는 순수 판정). 서빙 실행과 프롬프트 표시가 같은 답을
 # 봐야 "보이는 값과 들어오는 값"이 어긋나지 않으므로 판정을 한 곳에 둔다. 기다리는 손님이 없으면
@@ -14120,6 +14146,15 @@ func _planned_menu(seat: int) -> String:
 # (ForageSpawns.zones()가 RegionCatalog 상수를 함수로 감싼 그 자리 — 로드 순서 의존 0).
 func _fallback_menu() -> String:
 	return MenuCatalog.AMERICANO
+
+# ★[S6-T4] 손님 이름 조각("" = 익명이라 이름 없이 메뉴만 말한다 — 결정 8 "익명은 이름·호감도 없음").
+# 단골은 한 눈금 더 붙는다("단골 네오에게") — 원장이 자란 것이 서빙 순간 문장으로 보인다.
+func _guest_prefix(guest_id: String) -> String:
+	if guest_id == "":
+		return ""
+	var r := _resident(guest_id)
+	var nm := r.display_name if r != null else guest_id
+	return "단골 %s에게 " % nm if guests.is_regular(guest_id) else "%s에게 " % nm
 
 # ★[S6-T2] 지금 주문될 수 있는 융합 메뉴 풀 [{"id", "in_stock"}, …] — cafe에 주입한다.
 # 세 축을 여기서 합친다: ㉠ 해금(발견 게이트) ㉡ 절기 창(시그니처 재료 파생) ㉢ 곳간 재고 유무.
@@ -14149,6 +14184,43 @@ func _cafe_order_pool() -> Array:
 	out.append_array(empty)
 	var slots := CafeMilestone.fusion_slots_of(_cafe_stage())
 	return out.slice(0, slots) if out.size() > slots else out
+
+# ★[S6-T4 / ADR-0064 결정 8] 지금 카페에 들를 수 있는 **명명 손님 후보** [{"id","weight"}, …] —
+# cafe에 주입한다(order_pool과 같은 다리: cafe는 주민도 단골 원장도 모른 채 값만 받는다).
+# 두 축을 여기서 합친다: ㉠ 로스터(GuestPool.GUEST_IDS — 신규 캐릭터 발명 0) ㉡ 적격 필터.
+# 가중치는 단골 원장이 매긴다(서빙 이력↑ → 재방문 확률↑ — GuestPool.weight_of가 단일 출처).
+#
+# ★ 적격 필터 = **"지금 카페 안에 서 있는 사람은 뺀다"** 하나뿐이다. 근거: 손님은 그레이박스 좌석
+#   도형으로 앉고 주민의 *몸*은 스케줄이 소유하는데(프레임워크 불가침 — 이 태스크는 스케줄을 한 줄도
+#   안 고친다), 같은 사람이 한 방에 서서 + 앉아서 둘로 보이면 그림이 거짓말이 된다. 다른 구역의
+#   점주들(네오·뱃사공·옹이·풀무·무골)은 카메라가 갈라 놓아 동시에 보일 수 없으므로 통과한다.
+#   ⚠️ 실질 결과: **모찌는 영업창(15~19시) 내내 카페 홀에 서 있어 사실상 후보에서 빠진다** — 이미
+#   "카페에 온 손님"으로 무대에 있기 때문이다(중복 표현 회피). 모찌를 앉히려면 그의 저녁 스테이션을
+#   좌석으로 옮겨야 하는데 그건 스케줄 재설계라 이 태스크 밖이다(⚠️잠정 — owner 큐).
+# ★ 시각(영업창) 게이트를 여기 또 두지 않는 건 cafe가 이미 15~19시에만 손님을 앉히기 때문이다
+#   (게이트를 두 곳에 두면 창이 갈릴 수 있다 — 영업창의 단일 출처는 Cafe.OPEN_MIN/CLOSE_MIN).
+func _cafe_guest_pool() -> Array:
+	var out: Array = []
+	for raw_id in GuestPool.GUEST_IDS:
+		var gid := String(raw_id)
+		var r := _resident(gid)
+		if r == null:
+			continue                                  # 아직 등록 안 된 주민(방어)
+		if _is_stationed_in_cafe(r):
+			continue                                  # 지금 카페 안에 서 있다 → 손님으로 안 앉힌다
+		out.append({"id": gid, "weight": guests.weight_of(gid)})
+	return out
+
+# 이 주민의 *지금 시각 스테이션*이 카페 실내인가. 런타임 tile이 아니라 스케줄에서 파생하는 건
+# 프레임 갱신 순서에 안 기대기 위해서다(_update_resident_stations보다 먼저 불려도 같은 답).
+func _is_stationed_in_cafe(r: Resident) -> bool:
+	var e := r.station_at(clock.minutes)
+	if e.is_empty():
+		return false
+	var region := String(e.get("region", ""))
+	if region != "" and region != RegionCatalog.NARU_VILLAGE:
+		return false                                  # 구역이 박혀 있고 마을이 아니면 카페일 수 없다
+	return CAFE_RECT.has_point(e.get("tile", Resident.UNPLACED))
 
 # 융합 메뉴 해금 판정(ADR-0064 결정 10 — **발견 게이트**, 관계 게이트 0).
 #   ㉠ 시그니처 산출물을 한 번이라도 손에 넣었나(_menu_found — 희소종 씨앗 레시피와 같은 결)
@@ -14210,12 +14282,17 @@ func _cheapest_harvest() -> String:
 # 띄운다(비차단 — CAFE_SUMMARY_SECS 뒤 자동으로 사라진다). cafe는 끝남·수치만, 표시는
 # main이 맡는다(RunSummary 점수판과 같은 데이터/표시 디커플링).
 func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
-	cafe_summary_text.text = "\n".join([
+	# ★[S6-T4] 아는 얼굴이 몇이나 들렀는지 한 줄 — 한 명도 안 왔으면 줄 자체를 안 붙인다(빈 눈금
+	#   노출 0. 명명 손님이 없던 옛 세이브·초반 영업은 종전 3줄 그대로 보인다 = 거동 불변).
+	var lines := [
 		"── 오늘 카페 영업 마감 ──",
 		"매출  +%d골드" % revenue,
 		"서빙한 손님  %d명" % served,
 		"놓친 손님  %d명" % left,
-	])
+	]
+	if cafe.today_named() > 0:
+		lines.append("아는 얼굴  %d명" % cafe.today_named())
+	cafe_summary_text.text = "\n".join(lines)
 	cafe_summary_panel.visible = true
 	_cafe_summary_secs = CAFE_SUMMARY_SECS
 	if revenue > 0:
@@ -15989,6 +16066,7 @@ func _draw_customers() -> void:
 		if cafe.is_waiting(i):
 			_draw_graybox_figure(SEAT_TILES[i], CUST, cafe.patience_ratio(i))
 			_draw_want_bubble(SEAT_TILES[i], cafe.want_of(i))
+			_draw_guest_mark(SEAT_TILES[i], cafe.guest_of(i))
 
 # ★[S6-T2] 손님 머리 위 주문 말풍선 자리 — 시킨 메뉴의 색을 작은 사각으로 띄운다(인내심 바 위).
 # 그레이박스 최소한이다: "무엇을 시켰나"가 화면에서 갈려 보이면 곳간 적재의 효과를 눈으로 확인할
@@ -15999,6 +16077,19 @@ func _draw_want_bubble(t: Vector2i, menu_id: String) -> void:
 	var box := Rect2(t.x * TILE + TILE * 0.5 - 4, t.y * TILE - 12, 8, 8)
 	draw_rect(box.grow(1.0), Color(0.06, 0.05, 0.08, 0.85))   # 외곽선(어두운 테)
 	draw_rect(box, MenuCatalog.color_of(menu_id))
+
+# ★[S6-T4] 명명 손님 표식 — 주문 말풍선 왼쪽에 작은 등불 점 하나(익명은 안 그린다). 단골이 되면
+# 더 밝고 커진다: "아는 얼굴이 왔다 / 자주 오는 얼굴이 왔다"를 회색 무리 속에서 가르는 최소 신호다.
+# 진짜 얼굴(주민 도트 스프라이트를 좌석에 앉히기)은 아트 패스 소관이라 여기선 표식만 든다
+# (ADR-0028 그레이박스 → 아트 인터리브). 이름 문자열은 프롬프트·알림이 든다(폰트 드로우 회피).
+func _draw_guest_mark(t: Vector2i, guest_id: String) -> void:
+	if guest_id == "":
+		return
+	var regular := guests.is_regular(guest_id)
+	var s := 6.0 if regular else 4.0
+	var dot := Rect2(t.x * TILE + TILE * 0.5 - 8 - s, t.y * TILE - 11, s, s)
+	draw_rect(dot.grow(1.0), Color(0.06, 0.05, 0.08, 0.85))   # 말풍선과 같은 어두운 테
+	draw_rect(dot, Color(1.0, 0.86, 0.45) if regular else Color(0.86, 0.72, 0.44))
 
 # T6.4 바를 연 밤(옵트인)의 바 손님과 머리 위 인내심 바를 그린다. 낮 카페 손님과 같은 좌석 줄을
 # 시간대로 나눠 쓰므로(cafe 마감 후 밤 바) 그리기도 카페 손님과 똑같은 규격이고, 활성(밤 바 영업

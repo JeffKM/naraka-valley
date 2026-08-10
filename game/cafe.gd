@@ -30,8 +30,15 @@ class_name Cafe
 #     온다(want). 후보·가중치는 main이 order_pool로 *주입*하고 이 노드는 곳간·해금 원장·절기를
 #     하나도 모른다(margin·spawn_scale과 정확히 같은 다리 — 디커플링). 주입이 없으면 기본 메뉴만
 #     주문되므로 테스트 하네스에서도 카페가 base rate로 굴러간다.
-#   - 범위 밖(후속): 손님 다양성·체키·팁·단골 유입(T4~T6). T5.4는 "아무 재료 1개로 서빙 → 정액 P"
-#     까지였고, S6-T2가 그 자리에 주문·폴백·프리미엄을 얹었다(재료 소모는 곳간으로 옮겨갔다).
+#   - ★ seam 6 (S6-T4 손님 풀·단골화 — ADR-0064 결정 8): 앉는 손님은 **누구인가**를 함께 들고 온다
+#     (guest = 명명 손님 id / "" = 익명). 후보와 가중치는 main이 guest_pool로 *주입*하고 이 노드는
+#     주민 레지스트리도 단골 원장도 호감도도 모른다(order_pool·margin과 정확히 같은 다리). 주입이
+#     없으면 전원 익명이라 하네스·구경로가 종전 그대로 굴러간다(base rate 안전판).
+#     ★ **볼륨과 정체성은 다른 축이다**: 손님이 *얼마나 자주* 오는가는 spawn_scale 한 레버(축제 ×
+#     카페 일구기 단계 — main._refresh_cafe_ladder가 유일한 주인)고, 그 위에서 *누가* 앉는가만
+#     이 seam이 가른다. 두 축을 섞으면 단골이 늘 때 총 손님 수가 덩달아 흔들린다.
+#   - 범위 밖(후속): 체키·팁(T5~T6). T5.4는 "아무 재료 1개로 서빙 → 정액 P"까지였고, S6-T2가 그
+#     자리에 주문·폴백·프리미엄을, S6-T4가 손님의 얼굴을 얹었다(재료 소모는 곳간으로 옮겨갔다).
 
 signal changed()                                       # 좌석/손님 상태가 바뀐 프레임(main이 다시 그림)
 signal closed(revenue: int, served: int, left: int)   # 영업창 마감(19시) — 일일 정산 요약
@@ -57,8 +64,15 @@ const W_BASIC := 1
 const W_FUSION_STOCKED := 3
 const W_FUSION_EMPTY := 1
 
+# ★[S6-T4 / ADR-0064 결정 8] 익명 손님 가중치(그레이박스 레버). 명명 손님 후보들과 나란히 놓고
+# 뽑는다 — 처음 오는 명명 손님 5인(GuestPool.BASE_WEIGHT 2 × 5 = 10) 대비 12라 초반엔 익명이
+# 조금 더 잦고, 단골이 자라면(최대 8) 아는 얼굴 쪽으로 기운다. **익명이 후보에서 사라지는 일은
+# 없다** — 이름 없는 손님이 카페의 바탕이고(결정 8 "T3 익명 볼륨"), 명명 손님은 그 위의 사건이다.
+const W_ANON_GUEST := 12
+
 # 좌석별 손님 상태. 빈 자리는 occupied=false. patience(남은 초)/max는 인내심 바·이탈 판정용.
 # want(★S6-T2) = 이 손님이 시킨 메뉴 id(빈 자리는 ""). 착석 시 결정 롤로 정해진다.
+# guest(★S6-T4) = 이 손님이 누구인가(명명 손님 id / "" = 익명). 역시 착석 시 결정 롤.
 var _seats: Array = []
 var _open := false                # 현재 영업 중인가(영업창 안)
 var _spawn_timer := 0.0           # 다음 손님까지 남은 초
@@ -86,6 +100,10 @@ var order_pool: Array = []
 # 모른다). 기본값 = 1단 좌석 = 주입 없는 하네스의 base rate 안전판(ADR-0008 평평≠막힘).
 # ★ 좌석 *배열*은 항상 N_SEATS개다 — 여는 건 "앉힐 수 있는 앞쪽 n칸"이라 잠긴 칸은 영원히 빈 자리다.
 var open_seats: int = SEATS_STAGE1
+# ★seam 6(S6-T4): 명명 손님 후보 [{"id": 주민 id, "weight": int}, …]. main이 로스터·적격·단골 원장
+# 세 축을 합쳐 주입한다 — 이 노드는 주민도 단골 원장도 호감도도 모른다(order_pool과 같은 다리).
+# 빈 배열(기본값) = **전원 익명** = 주입 없는 하네스의 base rate 안전판(거동 불변).
+var guest_pool: Array = []
 
 # 오늘 정산 누적(세이브 무상태 — 매일 영업 시작 시 리셋, 일시 표시·요약용).
 var _today_revenue := 0
@@ -94,10 +112,16 @@ var _today_left := 0
 # 오늘 스폰 누계 = 주문 롤 시드의 serial 축(영업 시작 시 0). 좌석 인덱스가 아니라 *누계*인 이유:
 # 같은 좌석에 하루 여러 손님이 앉으므로 좌석으로 시드를 잡으면 세 손님이 영원히 같은 메뉴만 시킨다.
 var _spawned_today := 0
+# ★[S6-T4] 오늘 이미 다녀간 명명 손님 id들(영업 시작 시 리셋 — 세이브 무상태. 단골 *원장*은
+# GuestPool이 따로 영속으로 든다). **하루 1인 1회** 규칙의 상태다: 롤이 오늘 이미 온 사람을
+# 뽑으면 그 손님은 익명으로 앉는다. 근거 둘 — ㉠ 같은 얼굴이 두 자리에 동시에 앉는 그림을 막고
+# ㉡ 단골 가중치가 커져도 하루가 한 사람으로 도배되지 않는다(로스터가 죽지 않는다).
+var _guests_today: Array = []
 
 func _ready() -> void:
 	for i in N_SEATS:
-		_seats.append({"occupied": false, "patience": 0.0, "max_patience": patience_secs, "want": ""})
+		_seats.append({"occupied": false, "patience": 0.0, "max_patience": patience_secs,
+			"want": "", "guest": ""})
 
 # main이 매 프레임 호출한다. 실제 delta(초)로 인내심·스폰을 굴리고, 영업창 열림/닫힘은
 # 게임 분(minutes)으로 가른다. 마감(열림→닫힘 전이) 순간에 정산 요약(closed)을 쏜다.
@@ -136,6 +160,7 @@ func _open_shop() -> void:
 	_today_served = 0
 	_today_left = 0
 	_spawned_today = 0    # ★S6-T2 주문 롤 serial 리셋 — 하루의 주문열은 매일 새로 시작한다
+	_guests_today.clear() # ★S6-T4 오늘의 명명 손님 방문 기록 리셋(하루 1인 1회는 하루 단위 규칙)
 	_spawn_timer = 0.5
 	_clear_seats()
 	changed.emit()
@@ -152,6 +177,7 @@ func _clear_seats() -> void:
 		s["occupied"] = false
 		s["patience"] = 0.0
 		s["want"] = ""
+		s["guest"] = ""
 
 # 새 날 시작(취침) 시 호출. 영업 중 잠들어 카페를 abandon한 경우 등 상태를 조용히
 # 리셋한다(요약 없음 — 마감 요약은 19시 열림→닫힘 전이에서만 띄운다). 세이브 무상태라
@@ -164,6 +190,8 @@ func end_day() -> void:
 # 빈 자리 하나에 새 손님을 앉힌다(앞에서부터 첫 빈 자리). 자리가 다 차 있으면 false.
 # ★S6-T2: 앉는 순간 희망 메뉴를 결정 롤로 정한다(오늘 몇 번째 손님인가 = serial 시드).
 # ★S6-T3: **앞쪽 open_seats칸까지만** 앉힌다(seam 5 — 잠긴 뒷칸은 2단이 열어 준다).
+# ★S6-T4: 같은 serial로 **누구인가**도 정한다. 롤이 오늘 이미 다녀간 사람을 뽑으면 익명으로 앉는다
+#   (하루 1인 1회 — _guests_today 주석). 롤 자체는 순수하고, 이 걸러내기만 그날의 이력을 본다.
 func _seat_customer() -> bool:
 	var n := clampi(open_seats, 0, _seats.size())
 	for i in n:
@@ -173,6 +201,12 @@ func _seat_customer() -> bool:
 			s["patience"] = patience_secs
 			s["max_patience"] = patience_secs
 			s["want"] = roll_want(_spawned_today)
+			var g := roll_guest(_spawned_today)
+			if g != "" and _guests_today.has(g):
+				g = ""                       # 오늘 이미 다녀갔다 → 이 자리는 익명 손님
+			s["guest"] = g
+			if g != "":
+				_guests_today.append(g)
 			_spawned_today += 1
 			return true
 	return false
@@ -214,6 +248,40 @@ func roll_want(serial: int) -> String:
 			return String(ids[i])
 	return String(ids[ids.size() - 1])                 # 도달 X(가중 합 계산 방어)
 
+# ── ★[S6-T4 / ADR-0064 결정 8] 명명 손님 결정 롤 ─────────────────────────────
+# 오늘 serial번째 손님이 **누구인가**("" = 익명). 후보 = 익명 하나 + 주입된 명명 손님(guest_pool),
+# 가중치 = W_ANON_GUEST vs 단골 원장이 매긴 값(서빙 이력이 많을수록 큼 = 재방문 확률↑).
+#
+# ★ 시드 = **별도 네임스페이스** "cafe_guest:day:serial"다. 주문 롤("cafe_order:…")과 시드 문자열이
+#   갈리고 RNG 인스턴스도 각자라, 이 롤을 얹어도 **주문 결과열이 한 톨도 안 흔들린다**(순차 소비
+#   스트림 불침범 — 기존 결정성 단언이 그대로 산다. mine_floors·forage_spawn과 같은 규율).
+#   같은 이유로 새 롤을 또 얹을 땐 여기 뒤에 또 다른 네임스페이스로 붙인다(중간 삽입 금지).
+# ★ serial의 의미는 주문 롤과 **같다**(오늘 스폰 누계) — 한 손님의 "무엇을"과 "누가"가 같은 번호를
+#   공유해야 "오늘 3번째 손님"이라는 말이 두 축에서 같은 사람을 가리킨다.
+func roll_guest(serial: int) -> String:
+	var ids: Array = [""]                              # 익명이 언제나 첫 후보(사라지지 않는다)
+	var weights: Array = [W_ANON_GUEST]
+	for raw_e in guest_pool:
+		if typeof(raw_e) != TYPE_DICTIONARY:
+			continue
+		var e: Dictionary = raw_e
+		var gid := String(e.get("id", ""))
+		if gid == "" or ids.has(gid):
+			continue                                   # 빈 id·중복 주입 방어(후보를 두 번 세지 않는다)
+		ids.append(gid)
+		weights.append(maxi(int(e.get("weight", 1)), 1))   # 0·음수 가중치는 1로(뽑힐 여지를 남긴다)
+	var total := 0
+	for w in weights:
+		total += int(w)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("cafe_guest:%d:%d" % [day, serial])
+	var pick := rng.randi_range(0, total - 1)          # 순차 소비 ①(이 스트림은 이 롤 전용)
+	for i in ids.size():
+		pick -= int(weights[i])
+		if pick < 0:
+			return String(ids[i])
+	return ""                                          # 도달 X(가중 합 계산 방어 — 익명으로 떨어진다)
+
 # ── 조회(main이 그리기·입력에 쓴다) ─────────────────────────────────────────
 func is_open() -> bool:
 	return _open
@@ -227,6 +295,27 @@ func want_of(seat: int) -> String:
 	if not is_waiting(seat):
 		return ""
 	return String(_seats[seat].get("want", ""))
+
+# ★S6-T4: 이 좌석 손님이 누구인가(명명 손님 id · "" = 익명 또는 빈 자리). main이 이름 표시·
+# 프롬프트·단골 원장 기록에 쓴다. ★get 기본값이 있는 건 하네스가 손으로 심는 좌석 dict("guest"
+# 키가 없을 수 있다)를 위한 방어다 — want_of와 같은 관례.
+func guest_of(seat: int) -> String:
+	if not is_waiting(seat):
+		return ""
+	return String(_seats[seat].get("guest", ""))
+
+# 오늘 다녀간 명명 손님 수(= _guests_today 크기). 마감 정산 요약이 쓴다.
+func today_named() -> int:
+	return _guests_today.size()
+
+# 오늘 앉은 익명 손님 수(스폰 누계 − 명명). ★T3 익명 볼륨이 실제로 늘었는지 보는 눈금이다
+# (마일스톤 사다리 → spawn_scale → 이 수치. cafe_guest_test ③이 이 파생을 단언한다).
+func today_anonymous() -> int:
+	return maxi(_spawned_today - _guests_today.size(), 0)
+
+# 오늘 이 명명 손님이 이미 다녀갔는가(하루 1인 1회 규칙의 조회 창구).
+func came_today(id: String) -> bool:
+	return id != "" and _guests_today.has(id)
 
 # 이 좌석 손님의 인내심 잔량 비율(0~1) — 인내심 바 그리기용. 빈 자리면 0.
 func patience_ratio(seat: int) -> float:
@@ -259,6 +348,10 @@ func serve(seat: int, served_menu_id: String = "") -> int:
 	_seats[seat]["occupied"] = false
 	_seats[seat]["patience"] = 0.0
 	_seats[seat]["want"] = ""
+	# ★S6-T4: 자리는 비우되 **오늘 다녀간 기록(_guests_today)은 안 지운다** — 그게 하루 1인 1회의
+	#   뜻이다. 단골 원장 적립은 호출 측(main._try_serve)이 서빙 직전에 guest_of로 읽어 처리한다
+	#   (이 노드는 원장을 모른다 — 디커플링).
+	_seats[seat]["guest"] = ""
 	var revenue := serve_price(served_menu_id)
 	_today_served += 1
 	_today_revenue += revenue
