@@ -84,7 +84,11 @@
 
 ### 2.4 밤 경비·손님 응대 (바나) — 속죄: 밤의 침입자 → 밤의 경비
 
-> ⚠️ 이 절의 밤 경비 MVP 서술은 [ADR-0021](../adr/0021-relationship-reward-light-affinity-narrative-primary.md)로 폐기된 구 설계다(잡귀가 나락에 남고 바나가 근원에서 막는 구조로 개정 — CONTEXT '바나'·'잡귀'). 전투 무대·자원 정책의 현행 진실원천 = [ADR-0031](../adr/0031-mining-combat-woven-mine-graduation-naraku.md)·[ADR-0063](../adr/0063-slice5-mine-floors-combat-naraku-kickoff.md)(갱도=채광+잡몹 woven·나락=바나 전투 도메인·해골동굴형 리셋 런). 아래 서술은 로그 보존 목적으로 삭제하지 않는다.
+> 📜 **역사 기록 — 이 절은 구 설계 로그다**([ADR-0064](../adr/0064-slice6-cafe-fusion-menu-larder-serving-kickoff.md) 결정 12 "문서 부채", 2026-08-10 부착). 아래 서술은 *어떻게 여기까지 왔는가*의 기록이며 **현행 사양이 아니다**. 삭제하지 않는 이유는 밤 루프의 두 축(옵트인 손실-방어 · 바나 이중 보호)이 이 글에서 나왔고 그 골격은 지금도 코드에 살아 있기 때문이다. 갈라진 지점만 짚어 둔다:
+>
+> - **밤 경비 프레이밍 폐기 → 전투는 던전으로** ([ADR-0021](../adr/0021-relationship-reward-light-affinity-narrative-primary.md)): 잡귀는 나락에 남고 바나는 근원에서 막는다(CONTEXT '바나'·'잡귀'). 전투 무대·자원 정책의 현행 진실원천 = [ADR-0031](../adr/0031-mining-combat-woven-mine-graduation-naraku.md)·[ADR-0063](../adr/0063-slice5-mine-floors-combat-naraku-kickoff.md)(갱도=채광+잡몹 woven · 나락=바나 전투 도메인·해골동굴형 리셋 런).
+> - **밤의 내용물 = 나라카 바 서빙** ([ADR-0064](../adr/0064-slice6-cafe-fusion-menu-larder-serving-kickoff.md) 결정 6, Slice 6 빌드 완료): 밤 19~24시는 경비 시간이 아니라 **플레이어가 직접 바텐딩하는 서비스 창**이다 — 밤 응대 → 칵테일 미니게임(`CocktailSession` 액티브 믹싱/타이밍)이 낮의 응대→체키 사슬과 대칭을 이룬다. 아래 1층의 "막기 ↔ 응대 경쟁"·이중 손실 구조와 2층 바나 이중 보호 곱셈기는 **그대로 살아 코드에 있다**(`night_bar.gd`·`bana_guard.gd`) — 폐기된 건 *전투로 확장한다*는 3층 계획뿐이다.
+> - **§2.7 가공도 함께 갈렸다**: [ADR-0064](../adr/0064-slice6-cafe-fusion-menu-larder-serving-kickoff.md) 결정 1이 개별 아티산 설비(통·항아리류)를 비채택 서랍으로 보내, 카페 가공 = **곳간 재료 → 융합 메뉴** 그 자체가 됐다(주방요괴=백스테이지 추상).
 
 > 메카닉 골격은 [ADR-0010](../adr/0010-night-guard-combat-layering.md)에서 확정. 핵심: **플레이어가 수행하는 옵트인 손실-방어 루프 + 바나 보호 곱셈기**, 막기는 (B) 얇은 방어(전투 엔진 0), 진짜 전투는 Phase 3 구현 교체.
 

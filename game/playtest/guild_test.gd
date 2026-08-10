@@ -100,8 +100,10 @@ func _run_checks() -> void:
 	# ── ⓐ 무골 = Resident T2 등록 ────────────────────────────────────────────
 	print("── ⓐ 무골 등록 ──")
 	var r: Resident = m._resident("mugol")
+	# ★[S6-T7] size 10 → 11(주방요괴가 **맨 뒤**에 붙었다 — 의도적 불변식 개정). 무골의 인덱스 9는
+	#   그대로다: 신규는 뒤에만 붙는다는 규약이 지켜졌다는 것이 이 단언의 본체다.
 	_check("ⓐa 레지스트리에 등록 · 10인째(뒤에만 붙는다 — 앞 순서 불변)",
-		r != null and m._residents.size() == 10 and m._residents[9].id == "mugol")
+		r != null and m._residents.size() == 11 and m._residents[9].id == "mugol")
 	_check("ⓐb 표시명 = 무골(칭호)", r != null and r.display_name == "무골")
 	_check("ⓐc 몸이 런타임 생성돼 트리에 붙는다(main.tscn 무수정)",
 		r.node != null and r.node.is_inside_tree() and r.node is Mugol)
