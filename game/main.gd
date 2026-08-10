@@ -2401,6 +2401,29 @@ var _cheki_serial := 0           # 촬영 일련번호(시드 섞기 — 같은 
 # 손님이 그 자리에 앉기 전에 결정할 여유**를 준다 — 그래도 겹치면 아래 입력 분기가 제안을 우선한다.
 const CHEKI_OFFER_SECS := 6.0
 
+# ── ★[S6-T6 / ADR-0064 결정 6] 칵테일 세션(밤 바 = 응대 사슬 2단의 밤판) ───────
+# 진행 중인 제조 1건(없으면 null). 로직은 전부 cocktail.gd(CocktailSession — 체키와 같은 순수
+# 클래스)에 있고, main은 ①제안 창 ②입력 ③매출 반영 ④그레이박스 HUD만 맡는다.
+# **세이브 무상태**(세션도 제안 창도 비영속 — 저장되는 건 지갑뿐).
+#
+# ★ 사슬의 문법(체키와 대칭): 밤 응대 직후 그 좌석에 제안 창이 열리고, 창 안에 그 좌석을 다시
+#   우클릭하면 제조가 시작된다. 무시하면 조용히 닫힌다 — **벌칙 0**.
+# ★★ 낮과 갈리는 한 가지: **명명 게이트가 없다**. 밤 바 좌석은 지금 익명 몸뿐이라(night_bar._seats에
+#   guest 축이 아예 없다 — cafe._seats의 "guest" 자리에 해당하는 것이 없음) 걸러 낼 이름이 없다.
+#   그래서 밤엔 응대한 손님 누구에게나 제안이 열리고, 단골 원장(GuestPool)도 안 건드린다(적을 id가
+#   없다). 밤 손님 명명(CONTEXT [나라카 바] "밤 기우는 조연")은 이 슬라이스 범위 밖 — 그 축이 생기면
+#   여기에 _cheki_guest와 같은 자리로 얹으면 된다(구조는 이미 대칭이라 재설계 0).
+# ★★★ 제조 중에도 night_bar.tick은 계속 흐른다(_process의 밤 바 틱에 세션 가드를 절대 넣지 말 것) —
+#   잡귀는 계속 접근하고 다른 손님 인내심은 계속 닳는다. 그것이 밤판 **깊이 vs 회전+방어**
+#   트레이드오프의 본체다(ADR-0064 결정 6). 바나 보호(auto_block)는 그 사이에도 평소처럼 받쳐 준다.
+var cocktail: CocktailSession = null
+var _cocktail_seat := -1         # 제안이 열린 좌석(-1 = 제안 없음)
+var _cocktail_offer_secs := 0.0  # 제안 창 잔여(초) — 0 이하면 조용히 닫힌다
+var _cocktail_serial := 0        # 제조 일련번호(시드 섞기 — 같은 밤 반복 제조의 변주 고착 방지)
+# 제안 창 길이(초, 그레이박스 레버). 밤 손님 스폰 간격(NightBar.CUST_INTERVAL 3.5)보다 길게 잡아
+# **다음 손님이 그 자리에 앉기 전에 결정할 여유**를 준다(CHEKI_OFFER_SECS와 같은 근거·같은 값).
+const COCKTAIL_OFFER_SECS := 6.0
+
 var _cast_serial := 0            # 캐스팅 일련번호(시드 섞기 — 같은 분·같은 칸 반복 캐스팅의 어종 고착 방지)
 var _cast_seed := 0              # ★[S3-T3] 이번 캐스팅의 시드(어종 롤·품질 롤이 같은 뿌리에서 갈라진다)
 # ★ 캐스팅 무대 = 삼도천·황천해 한정(ADR-0061 결정 9). 나루 배후 강·안식 연못은 이번 슬라이스에서
@@ -9929,9 +9952,15 @@ func _process(delta: float) -> void:
 	# T6.3 밤 바 시뮬레이션을 굴린다(연출 중 제외). 잡귀는 *바를 연 밤(옵트인)* 의 19–24시
 	# 창 안에서만 깃들고 접근한다 — 안 열면 빈 밤이라 아무 일도 없다(ADR-0010 #6 옵트인).
 	# 활성(잡귀 접근 중)이면 접근 바가 매 프레임 줄어드므로 다시 그린다(카페 손님과 같은 결).
+	# ★★[S6-T6 / ADR-0064 결정 6] 이 틱에 칵테일 세션 가드를 **절대 넣지 말 것** — 잔을 젓는
+	#   동안에도 잡귀가 계속 접근하고 다른 손님의 인내심이 닳는 것이 밤판 "깊이 vs 회전+방어"
+	#   트레이드오프의 본체다(낮 cafe.tick의 그 규율 1:1). 미니게임이 시간을 멈추면 칵테일은 공짜
+	#   프리미엄이 되고 그 선택 자체가 사라진다. 바나 보호도 이 사이 평소처럼 받쳐 준다.
 	if not _sleeping:
 		night_bar.tick(delta, clock.minutes)
-	if night_bar.is_active():
+	# ★[S6-T6] 칵테일 제안 창 소진(밤 응대 직후 열린 6초). 세션이 시작되면 창은 이미 닫혀 있다.
+	_tick_cocktail_offer(delta)
+	if night_bar.is_active() or _cocktail_offer_secs > 0.0:
 		queue_redraw()
 	# ★[S5-T5 / ADR-0063 결정 8] 갱도 층 잡귀 틱 — 이동·화염구·접촉 피해. 카페 손님·밤 바 잡귀 폴링과
 	#   같은 자리이고(연출 중 제외), 층 밖에선 `_tick_mobs`가 스스로 무동작이다. 위 `_transitioning`
@@ -9953,6 +9982,11 @@ func _process(delta: float) -> void:
 	#   지키므로(_target 고정) 나머지 분기는 애초에 대상 칸이 안 걸린다.
 	if cheki != null:
 		_tick_cheki(delta)
+	# ★[S6-T6 / ADR-0064 결정 6] 칵테일 제조 진행(LMB = 붓기·셰이킹 · 이동 = 그만두기). 체키와
+	#   같은 자리·같은 이유로 **return하지 않는다**(HUD 갱신이 이 뒤로 이어진다). 낮 체키와 밤
+	#   칵테일은 시간대가 갈려(15–19 / 19–24) 한 프레임에 둘 다 살아 있을 수 없다.
+	if cocktail != null:
+		_tick_cocktail(delta)
 	# ── ADR-0024 RMB(action) 컨텍스트 체인 ───────────────────────────────────────
 	# RMB는 맨손 액션/대화 — 우선순위대로 하나만 잡고 return으로 가른다. 대상 칸 종류(NPC·좌석·
 	# 스폿·밭)는 서로 배타적이라 충돌하지 않는다. 선물(G)·바 열기/출하대(F)는 별개 키라 그대로 둔다.
@@ -10049,8 +10083,15 @@ func _process(delta: float) -> void:
 	if facing_spot >= 0 and night_bar.is_threat(facing_spot) and Input.is_action_just_pressed("action"):
 		_try_block(facing_spot)
 		return
+	# ★[S6-T6 / ADR-0064 결정 6] 칵테일 제안 수락(RMB) — **밤 응대보다 먼저** 잡는다(체키가 서빙보다
+	#   먼저인 그 이유 1:1: 제안 창 6초가 밤 손님 스폰 간격 3.5초보다 길어 그 사이 새 손님이 같은
+	#   자리에 앉을 수 있는데, 그때 우클릭이 응대로 가면 방금 낸 잔의 칵테일이 조용히 증발한다).
+	if _cocktail_offered_at(facing_seat) and Input.is_action_just_pressed("action"):
+		_start_cocktail()
+		return
 	# T6.4 밤 손님 응대(RMB): 바 손님 좌석을 바라보며 정액 밤 매출(재료 무소모 — 현재 자산, ADR-0010 #5).
-	if facing_seat >= 0 and night_bar.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
+	if facing_seat >= 0 and cocktail == null and night_bar.is_waiting(facing_seat) \
+			and Input.is_action_just_pressed("action"):
 		_try_night_serve(facing_seat)
 		return
 	# ★ [B1-a.2] 동물 건물 실내 방목 문 토글(F) — 문을 열면 짐승이 낮에 방목지로 나간다(즉시 방출·grazed),
@@ -10253,8 +10294,10 @@ func _process(delta: float) -> void:
 	#   전투가 벌어지는 무대에서 스윙이 한 번도 안 나간다). 무기와 도구를 가르는 것은 `_use_tool`
 	#   맨 앞의 한 갈래이고, 여러 LMB 디스패치가 같은 프레임에 겹쳐도 스윙은 하나다(_swing_weapon).
 	# ★[S6-T5] 체키 촬영 중엔 LMB가 **셔터**다 — 무기를 든 채 찍으면 스윙이 같이 나가므로 막는다.
+	# ★[S6-T6] 칵테일 제조 중의 LMB(붓기·셰이킹)도 같은 이유로 도구질로 흘리지 않는다.
 	var holding_weapon := ItemCatalog._is_weapon(inventory.selected_id())
-	if not _sleeping and cheki == null and (_target_valid or holding_weapon) and not holding_sprinkler \
+	if not _sleeping and cheki == null and cocktail == null \
+			and (_target_valid or holding_weapon) and not holding_sprinkler \
 			and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
@@ -10335,6 +10378,12 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = true
 		interact_prompt.text = "%s — [좌클릭]으로 %s   (이동하면 그만둠)" % [cheki.state_label(),
 			"구도 잡기" if cheki.state == ChekiSession.State.AIM else "찰칵"]
+	elif cocktail != null:
+		# ★[S6-T6] 칵테일 제조 중 — 다른 프롬프트를 전부 덮는다(체키와 같은 문법). 두 단의 동사가
+		#   다르므로 문구도 갈린다: 붓기는 "맞을 때 한 번", 셰이킹은 "박자마다".
+		interact_prompt.visible = true
+		interact_prompt.text = "%s — [좌클릭]으로 %s   (이동하면 그만둠)" % [cocktail.state_label(),
+			"붓기" if cocktail.state == CocktailSession.State.POUR else "박자에 맞춰 흔들기"]
 	elif fishing != null:
 		# ★ [S3-T2] 릴 격투 진행 중 — 다른 프롬프트를 전부 덮는다(미니게임이 화면을 소유). 조작 안내만.
 		interact_prompt.visible = true
@@ -10520,6 +10569,16 @@ func _process(delta: float) -> void:
 		interact_prompt.text = "[우클릭] %s%s 서빙 (+%d골드)" % [
 			_guest_prefix(cafe.guest_of(facing_seat)),
 			MenuCatalog.name_of(seat_served), cafe.serve_price(seat_served)]
+	elif _cocktail_offered_at(facing_seat):
+		# ★[S6-T6] 칵테일 제안 창 — **얼마를 더 받을 수 있는지**를 등급 폭(최저~최고)으로 보여 준다.
+		#   무시해도 되는 선택지라 남은 초를 함께 띄워 "기다려 준다"를 말한다(벌칙 문구 없음 — 창이
+		#   닫히는 건 손해가 아니라 그냥 안 만든 것이다). ★ 입력 분기와 같은 술어를 쓰므로 보이는
+		#   값과 눌리는 동작이 안 어긋난다(체키 프롬프트와 같은 규율).
+		interact_prompt.visible = true
+		interact_prompt.text = "[우클릭] 칵테일 한 잔 (+%d~%d골드 · %.0f초)" % [
+			night_bar.cocktail_price(CocktailSession.Grade.OK),
+			night_bar.cocktail_price(CocktailSession.Grade.PERFECT),
+			ceilf(_cocktail_offer_secs)]
 	elif facing_seat >= 0 and night_bar.is_waiting(facing_seat):
 		# T6.4 밤 바 손님을 바라볼 때: 우클릭으로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
 		interact_prompt.visible = true
@@ -14096,7 +14155,12 @@ func _open_night_bar() -> void:
 func _on_night_closed(raided: int, revenue: int, left: int) -> void:
 	if revenue > 0:
 		audio.sfx("gold")                     # P2.6 밤 바 정산 매출 골드
-	_notice("나라카 바 마감 · 밤 매출 %d골드 · 약탈 %d개 · 놓친 손님 %d명" % [revenue, raided, left])
+	# ★[S6-T6] 칵테일을 한 잔이라도 만든 밤만 잔수가 붙는다(카페 마감의 "체키 N장"과 같은 관례 —
+	#   빈 눈금 노출 0). ★end_day는 closed를 **쏘고 나서** 정산을 리셋하므로(night_bar.end_day) 이
+	#   핸들러가 도는 동안 tonight_cocktails()는 아직 오늘 밤 값이다(시그니처를 안 늘리려는 선택 —
+	#   기존 closed(raided, revenue, left) 계약을 쓰는 night_bar_test 하네스가 그대로 산다).
+	var tail := " · 칵테일 %d잔" % night_bar.tonight_cocktails() if night_bar.tonight_cocktails() > 0 else ""
+	_notice("나라카 바 마감 · 밤 매출 %d골드 · 약탈 %d개 · 놓친 손님 %d명%s" % [revenue, raided, left, tail])
 
 # T6.4 ★ 막기 해소 계약 소비(이중 손실 ㉮ — 막기 실패→재고 약탈). 잡귀가 돌파하면(resolved에
 # repelled=false) 약탈량만큼 낮에 쌓은 수확물을 덜어낸다 — *내일* 카페가 굶는 미래 자산 손실
@@ -14152,6 +14216,88 @@ func _try_night_serve(seat: int) -> void:
 		_total_income += revenue              # ★ [S1R-T12] 누적 총수입(정보패널)
 		audio.sfx("serve")                    # P2.6 밤 손님 응대도 같은 서빙 종
 		_notice("밤 손님 응대 +%d골드" % revenue)
+		_offer_cocktail(seat)                 # ★[S6-T6] 사슬 2단 — 그 자리에 칵테일 제안이 열린다
+
+# ── ★[S6-T6 / ADR-0064 결정 6] 칵테일 = 밤 응대 사슬의 둘째 단 ────────────────
+# 밤 응대 직후 호출된다. 낮 체키와 달리 **명명 게이트가 없다**(밤 좌석엔 손님 id 축 자체가 없다 —
+# 위 `cocktail` 선언부 주석). 창을 여는 것뿐이고 아무것도 강제하지 않는다: 무시하면 조용히 닫히고
+# 벌칙은 0이다. 손님은 이미 응대를 받고 값을 치렀다 — 칵테일은 그 위에 *더 받는* 선택지다
+# (무막힘, ADR-0008). 잔을 젓는 동안 잡귀가 다가오는 것이 이 선택의 진짜 값이다.
+func _offer_cocktail(seat: int) -> void:
+	if cocktail != null:
+		return                                # 이미 제조 중(다음 잔은 안 받는다)
+	_cocktail_seat = seat
+	_cocktail_offer_secs = COCKTAIL_OFFER_SECS
+
+# 제안 창이 지금 이 좌석에 열려 있나(입력 분기·프롬프트가 같은 답을 봐야 해서 술어를 한 곳에 둔다).
+func _cocktail_offered_at(seat: int) -> bool:
+	return cocktail == null and _cocktail_offer_secs > 0.0 and seat >= 0 and seat == _cocktail_seat
+
+# 제안 창 소진(매 프레임). 세션이 시작되면 창은 그 자리에서 닫힌다(_start_cocktail).
+# ★ 취침·자정 마감으로 바가 닫혀도 그냥 타이머로 닫힌다 — 창이 6초라 밤을 넘겨 살아남을 수 없다.
+func _tick_cocktail_offer(delta: float) -> void:
+	if _cocktail_offer_secs <= 0.0:
+		return
+	_cocktail_offer_secs = maxf(_cocktail_offer_secs - delta, 0.0)
+	if _cocktail_offer_secs <= 0.0:
+		_clear_cocktail_offer()               # 무시 = 조용히 닫힘(알림도 안 띄운다 — 벌칙이 아니다)
+
+func _clear_cocktail_offer() -> void:
+	_cocktail_offer_secs = 0.0
+	_cocktail_seat = -1
+
+# 제조 시작. 시드 = (날짜·일련번호) 파생 — **신규 네임스페이스** "bar_cocktail:…"라 체키
+# ("cafe_cheki:…")·주문("cafe_order:…")·손님("cafe_guest:…") 롤의 결과열을 한 톨도 안 흔든다
+# (시드 분리 규율 1:1). 일련번호를 섞는 건 같은 밤 반복 제조해도 변주가 굳지 않게.
+func _start_cocktail() -> void:
+	if _cocktail_seat < 0 or cocktail != null:
+		return
+	_cocktail_serial += 1
+	cocktail = CocktailSession.new(hash("bar_cocktail:%d:%d" % [clock.day, _cocktail_serial]))
+	cocktail.begin()
+	_cocktail_offer_secs = 0.0                # 창은 닫고 제조는 들고 간다
+	audio.sfx("ui")
+	queue_redraw()
+
+# 세션 1프레임 진행 — 이동 입력이면 취소(체키·릴 격투 문법 1:1: 만드는 동안엔 자리를 지킨다),
+# 아니면 LMB가 붓기·셰이킹 입력이다. **응대가 RMB, 제조가 LMB**라 제안 창에서 자리를 다시
+# 우클릭해 시작한 그 손가락이 그대로 첫 붓기를 확정하지 않는다(CocktailSession.ARM_SECS와 이중 방어).
+func _tick_cocktail(delta: float) -> void:
+	if cocktail == null:
+		return
+	if Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down") != Vector2.ZERO:
+		cocktail = null
+		_clear_cocktail_offer()
+		_notice("칵테일을 그만뒀다")          # 매출 0 — 벌칙이 아니라 만들다 만 것이다
+		queue_redraw()
+		return
+	cocktail.tick(delta, Input.is_action_pressed("use_tool"))
+	if cocktail.is_finished():
+		_finish_cocktail()
+	queue_redraw()                            # 커서·박자 창이 매 프레임 흐르게
+
+# 결착 수확 — 점수를 등급으로 매핑하고(세션은 등급을 모른다) 밤 매출에 반영한다.
+# ★ 실패 갈래가 없다: 최저 등급도 매출이 붙는다(NightBar.COCKTAIL_RATE 0.5배·하한 1냥).
+# ★★ 매출 귀속은 **밤 응대 매출과 정확히 같은 네 곳**이다(night_bar 밤 장부·지갑·마일스톤 누적·
+#    누적 총수입) — 새 귀속처를 발명하지 않는다(_try_night_serve와 나란히 놓고 읽어라).
+# ★★★ 단골 원장·호감도는 건드리지 않는다: 밤 좌석엔 적을 id가 없고(위 주석), 있더라도 서빙 사슬은
+#    ♡ 채널이 아니다(ADR-0017 보호 — _finish_cheki의 그 규율 1:1).
+func _finish_cocktail() -> void:
+	if cocktail == null:
+		return
+	var res := cocktail.result()
+	var grade := CocktailSession.grade_for(float(res["score"]))
+	cocktail = null
+	_clear_cocktail_offer()
+	var revenue := night_bar.record_cocktail(grade)   # 오늘 밤 장부에도 함께 오른다(마감 요약)
+	wallet.earn(revenue)
+	# ★ 마일스톤 누적 매출 축에 합류한다 — 밤 응대 매출이 이미 가는 그 축이다(ADR-0064 결정 7에서
+	#   이 축이 옥자 축을 대변한다. 칵테일만 다른 곳으로 새면 축이 갈라진다).
+	_cafe_revenue_total += revenue
+	_total_income += revenue                          # ★[S1R-T12] 누적 총수입(정보패널)
+	audio.sfx("gold")
+	_notice("칵테일 %s +%d골드" % [CocktailSession.grade_name(grade), revenue])
+	queue_redraw()
 
 # T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
 # 작물(피안화)이면 더 크게 오른다. 하루 1회만(MelAffinity가 게이팅). _try_gift와 대칭.
@@ -14981,6 +15127,7 @@ func _draw() -> void:
 	_draw_forage_detect()   # ★[S4-T2] 혼 감지 가장자리 여우불 + 추적자 ▼(대상 없으면 무동작 — 구역 무관)
 	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
 	_draw_cheki_hud()       # ★ [S6-T5] 체키 구도·셔터 그레이박스 트랙(세션 있을 때만)
+	_draw_cocktail_hud()    # ★ [S6-T6] 칵테일 붓기·셰이킹 그레이박스 트랙(세션 있을 때만)
 	if _edit_mode:          # ★ ADR-0025 ① 배치 모드 오버레이(선택·마우스 칸·팔레트 고스트)
 		_draw_edit_overlay()
 	if _deco_mode:          # ★ [S1-9] 집 꾸미기 모드 오버레이(마우스 칸·팔레트 고스트)
@@ -15138,6 +15285,55 @@ func _draw_cheki_hud() -> void:
 	for i in 2:
 		var lit := i == 0 or cheki.state == ChekiSession.State.SNAP
 		draw_circle(org + Vector2(_CHUD_W - 14.0 + i * 7.0, 5.0), 2.0,
+			HanjiUi.GOLD if lit else HanjiUi.INK_DIM)
+
+# ★[S6-T6] 칵테일 그레이박스 HUD — 체키 판(_draw_cheki_hud)의 문법을 그대로 쓰되 **창이 여럿**이다.
+#   ① 창(금박 띠)  — 붓기는 1개(목표), 셰이킹은 박자 수만큼. 이미 친 박자는 진한 금박으로 굳는다
+#      (친 창은 다시 쳐도 stray라 "끝났다"가 보여야 한다).
+#   ② 커서(먹빛 기둥) — 붓기는 왕복하는 커서 / 셰이킹은 왼→오 한 번 흐르는 *시간* 커서. 창 안이면
+#      금박으로 물든다("지금"). 두 단이 같은 트랙 위에서 다른 운동을 하는 것이 결의 차이다.
+#   ③ 잔여 시간(아래 실선) — 줄어들면 자동 확정(무실패라 위협이 아니라 *안내*다. 붉은색을 안 쓴다).
+#   ④ 단계 표식(판 위 점 셋) — 붓기1 → 붓기2 → 셰이킹.
+# main.gd는 _draw에서 텍스트를 안 쓰는 관례라(문구는 interact_prompt) 순수 도형만 그린다.
+const _KHUD_W := 92.0        # 체키 판과 같은 규격 — 두 미니게임 판이 같은 크기·같은 자리에 뜬다
+const _KHUD_H := 34.0
+const _KHUD_PAD := 11.0
+func _draw_cocktail_hud() -> void:
+	if cocktail == null or player == null:
+		return
+	var org: Vector2 = player.global_position + Vector2(-_KHUD_W * 0.5, -_KHUD_H - 26.0)
+	var panel := Rect2(org, Vector2(_KHUD_W, _KHUD_H))
+	HanjiUi.draw_plate(self, panel)
+	var track := Rect2(org + Vector2(_KHUD_PAD, _KHUD_PAD), Vector2(_KHUD_W - _KHUD_PAD * 2.0, 9.0))
+	draw_rect(track, HanjiUi.INSET)
+	var shaking := cocktail.state == CocktailSession.State.SHAKE
+	# ── ① 창 — 중심 ±반폭을 트랙 위에 실제 폭으로. 트랙 밖으로 넘치면 잘라 그린다.
+	var half := cocktail.zone_half_width()
+	for i in cocktail.zone_count():
+		var c := cocktail.zone_center(i)
+		var zx0 := clampf(c - half, 0.0, 1.0)
+		var zx1 := clampf(c + half, 0.0, 1.0)
+		var hit := shaking and cocktail.beat_hit(i)
+		draw_rect(Rect2(Vector2(track.position.x + zx0 * track.size.x, track.position.y),
+			Vector2((zx1 - zx0) * track.size.x, track.size.y)),
+			HanjiUi.GOLD if hit else HanjiUi.GOLD_SOFT)
+		# 정중앙(만점 지점) 한 줄 — 창이 넓어 "어디가 최고인가"가 안 보이면 겨눌 곳이 없다.
+		draw_rect(Rect2(Vector2(track.position.x + c * track.size.x - 0.5, track.position.y),
+			Vector2(1.0, track.size.y)), HanjiUi.GOLD)
+	draw_rect(track, HanjiUi.INK, false, 1.0)
+	# ── ② 커서 — 창 안이면 금박(칠 때다), 밖이면 먹빛.
+	var pos := cocktail.cursor_pos()
+	draw_rect(Rect2(Vector2(track.position.x + pos * track.size.x - 1.5, track.position.y - 3.0),
+		Vector2(3.0, track.size.y + 6.0)), HanjiUi.GOLD if cocktail.in_sweet_zone() else HanjiUi.INK)
+	# ── ③ 잔여 시간 — 자동 확정까지. 줄어드는 금박 실선(위협 색 없음 = 무실패의 시각적 약속).
+	var bar := Rect2(track.position + Vector2(0.0, track.size.y + 5.0), Vector2(track.size.x, 2.0))
+	draw_rect(bar, HanjiUi.INSET)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * cocktail.phase_left_ratio(), bar.size.y)), HanjiUi.GOLD)
+	# ── ④ 단계 표식 — 채워진 점 = 지나온/현재 단(붓기 회차들 → 셰이킹).
+	var steps := CocktailSession.POUR_ROUNDS + 1
+	for i in steps:
+		var lit := shaking or i <= cocktail.pour_round
+		draw_circle(org + Vector2(_KHUD_W - 7.0 - float(steps - 1 - i) * 7.0, 5.0), 2.0,
 			HanjiUi.GOLD if lit else HanjiUi.INK_DIM)
 
 func _draw_crops() -> void:
