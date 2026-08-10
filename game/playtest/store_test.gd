@@ -163,12 +163,35 @@ func _initialize() -> void:
 	# ── ⑨ 매대 그리드 승격(★ S1R-T12) + 누적 총수입 ──
 	print("── ⑨ 매대 그리드 + 총수입 ──")
 	var items: Array = m._store_items()
-	# ★[S2-T4] 씨앗 4(불사과 제외) + 묘목 1(혼백도) + 비료 5 + 건초 1 + 스프링클러 1 = 12행.
-	_check("⑨a _store_items = 씨앗4+묘목1+비료5+건초1+설치물1(12행)", items.size() == 12)
+	# ★[S2-T4] 묘목 1(혼백도) + 비료 5 + 건초 1 + 스프링클러 1 = 씨앗 밖 8행(불변).
+	# ★[S7-T2 / ADR-0065 결정 2] 씨앗은 이제 **제철만** 진열된다 — 옛 단언(4종 전량·12행)이 여기 있었다.
+	#   기대 목록을 카탈로그에서 뽑아 대조하므로 절기 배정이 바뀌어도 이 단언은 계속 이빨을 갖는다.
+	var season0: int = m.clock.season_index()
+	var seed_rows: Array = items.filter(func(it): return it["kind"] == "seed")
+	var want_seeds: Array = []
+	for cid in CropCatalog.ids():
+		if cid != CropCatalog.BULSAGWA and CropCatalog.in_season(String(cid), season0):
+			want_seeds.append(cid)
+	_check("⑨a _store_items = 제철 씨앗%d+묘목1+비료5+건초1+설치물1(%d행)"
+		% [want_seeds.size(), want_seeds.size() + 8], items.size() == want_seeds.size() + 8)
+	_check("⑨a1 ★제철 필터 — 진열 씨앗이 정확히 이번 절기 작물(그리고 최소 1종은 선다)",
+		seed_rows.map(func(it): return it["buy_id"]) == want_seeds and want_seeds.size() >= 1)
+	var off_season_row := false
+	for sr in seed_rows:
+		if not CropCatalog.in_season(String((sr as Dictionary)["buy_id"]), season0):
+			off_season_row = true
+	_check("⑨a1b 비제철 씨앗은 매대에 없다(단언에 이빨 — 4종 중 %d종이 빠졌다)"
+		% (CropCatalog.ids().size() - 1 - want_seeds.size()),
+		not off_season_row and want_seeds.size() < CropCatalog.ids().size() - 1)
+	_check("⑨a1c 씨앗 표시명에 절기 병기(\"… 씨앗 (피안절)\")",
+		String(seed_rows[0]["name"]).ends_with(" (%s)" % GameClock.season_name(season0)))
 	# 카테고리 순서 고정(씨앗 → 묘목 → 비료 → 건초 → 설치물) — 진열 묶음 규약.
 	var kinds_seq: Array = items.map(func(it): return it["kind"])
-	_check("⑨a2 카테고리 진열 순서", kinds_seq == ["seed", "seed", "seed", "seed",
-		"sapling", "fert", "fert", "fert", "fert", "fert", "hay", "placeable"])
+	var want_kinds: Array = []
+	for _i9 in want_seeds.size():
+		want_kinds.append("seed")
+	want_kinds.append_array(["sapling", "fert", "fert", "fert", "fert", "fert", "hay", "placeable"])
+	_check("⑨a2 카테고리 진열 순서", kinds_seq == want_kinds)
 	var has_fields := true
 	for it in items:
 		if not (it.has("icon_id") and it.has("name") and it.has("price") and it.has("kind") and it.has("buy_id")):
@@ -176,7 +199,8 @@ func _initialize() -> void:
 	_check("⑨b 각 행에 아이콘·이름·가격·종류·구매id", has_fields)
 	_check("⑨c 불사과(채집 전용)는 매대에 없음",
 		items.all(func(it): return it["buy_id"] != CropCatalog.BULSAGWA))
-	_check("⑨d 마지막 행 = 스프링클러(설치물)", items[11]["kind"] == "placeable" and items[11]["buy_id"] == ItemCatalog.SPRINKLER)
+	var last9: Dictionary = items[items.size() - 1]
+	_check("⑨d 마지막 행 = 스프링클러(설치물)", last9["kind"] == "placeable" and last9["buy_id"] == ItemCatalog.SPRINKLER)
 	# 행별 구매 = 선택 작물이 아니라 그 행의 작물을 산다(_on_frame_buy_seed).
 	m.neo_affinity.points = 0
 	m.wallet.gold = 1000

@@ -8722,9 +8722,28 @@ func _on_day_advanced(day: int) -> void:
 	#   하나로 통일했고(이중 발화 차단), 전파는 시그널이 아니라 이 day advance 체인의 **명시 순서**로
 	#   한다(ADR-0065 결정 1 — 아래 시스템들이 이미 순서에 의존하므로 그 결을 지킨다).
 	#   지금은 판정만 세운다 — 실제 소비자는 후속 태스크가 이 자리에 순서대로 끼워 넣는다.
-	#   (아직 소비자가 없어 이름을 `_` 로 시작해 미사용 경고를 막는다 — 첫 소비자가 붙을 때 벗긴다.)
-	var _season_start := GameClock.is_season_first_day(day)
-	# [S7-T2] 작물 사멸 패스 자리 — 비제철 작물 일괄 제거(farm.advance_day 직전, 과수 불참).
+	var season_start := GameClock.is_season_first_day(day)
+	# ★[S7-T2 / ADR-0065 결정 2] 작물 절기 사멸 — 절기 첫날 아침, 밭의 **비제철·비다절기** 작물이
+	#   일괄로 스러진다. `farm.advance_day`보다 위라 스러진 칸은 그날 자라지 않는다(하루 사이클 정합 —
+	#   까마귀 습격이 성장 전에 오는 것과 같은 순서 규율).
+	#   ★ **field.gd는 한 줄도 안 건드린다** — 까마귀가 쓰던 `remove_plant`(작물만 제거·흙/비료 보존)를
+	#     그대로 재사용한다(기존 밭 테스트 7종 무영향). 사멸은 영구다(씨앗·자란 날수 증발).
+	#   ★ **과수(orchard) 불참** — 혼의 나무는 절기가 결실을 멈출 뿐 죽지 않는다(ADR-0045 불가침).
+	#     여기서 순회하는 건 `farm`(밭 칸)뿐이고 트렐리스 작물도 밭 칸이라 같은 규칙을 탄다.
+	#   ★ day 1(게임 시작 아침)은 `_on_day_advanced`를 아예 안 타므로 첫 아침 사멸은 원천적으로 없다
+	#     (별도 가드 불요 — 밭도 비어 있다).
+	#   ⚠️ D-1 예고(사멸은 기습이 아니라 "예고된 의식")는 T4 점괘 거울의 몫이다 — 여기선 사후 알림만.
+	if season_start:
+		var new_season := GameClock.season_index_for_day(day)
+		var withered := 0
+		for pt in farm.planted_tiles():
+			var pcrop := farm.crop_of(pt)
+			if CropCatalog.is_multi_seasonal(pcrop) or CropCatalog.in_season(pcrop, new_season):
+				continue
+			if farm.remove_plant(pt):
+				withered += 1
+		if withered > 0:
+			_notice("절기 전환 — 지난 절기 작물 %d포기가 스러졌다" % withered)
 	# [S7-T5] 절기 재스폰 자리 — 빈 맨땅 잡초·debris 대량 재스폰.
 	# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 리셋 — 날이 바뀌면 전 층이 리필된다(그날 깬 돌·열린 사다리
 	#   기록이 전량 소멸하고, 배치는 시드가 day를 물고 있어 저절로 갈린다). 스타듀 "매일 리필" 정합.
@@ -13230,8 +13249,13 @@ func _store_text() -> String:
 
 # ★ [S1R-T12] 매대 품목 행 데이터(프레임이 [아이콘|이름|가격|구매] 행으로 그린다). 판매 씨앗 전종
 # (불사과=채집 전용 제외) + 저승 스프링클러. 가격은 네오 할인가(정가 base 병기 — 할인 체감).
+# ★[S7-T2 / ADR-0065 결정 2] 씨앗은 **제철만 진열**한다(스타듀 매대 동형). 심기 자체는 자유로우니
+#   창고에 쟁여 둔 지난 절기 씨앗은 여전히 심을 수 있고(그리고 다음 전환에 스러진다), 매대만 절기를
+#   따라 갈린다 — "이번 절기에 무엇을 기를까"가 가게 문을 여는 순간 읽힌다.
+#   ★ 다절기 씨앗(불사과)은 **원래 미판매**라 필터와 무관하다(기존 노출 규칙 그대로 — 아래 continue).
 func _store_items() -> Array:
 	var hearts := neo_affinity.hearts()
+	var season := clock.season_index()
 	var rows: Array = []
 	for crop_id in CropCatalog.ids():
 		if crop_id == CropCatalog.BULSAGWA:
@@ -13239,10 +13263,15 @@ func _store_items() -> Array:
 		var base := CropCatalog.seed_cost(crop_id)
 		if base <= 0:
 			continue
+		if not CropCatalog.in_season(crop_id, season):
+			continue   # ★[S7-T2] 비제철 — 이번 절기엔 매대에 안 선다
+		# 표시명에 절기를 병기해(예: "혼령초 씨앗 (유화절)") 산 씨앗이 언제 스러지는지 매대에서 읽힌다.
+		var season_tag := CropCatalog.season_label(crop_id)
 		rows.append({
 			"kind": "seed", "buy_id": crop_id,
 			"icon_id": ItemCatalog.seed_id(crop_id),
-			"name": "%s 씨앗" % CropCatalog.name_of(crop_id),
+			"name": "%s 씨앗%s" % [CropCatalog.name_of(crop_id),
+				"" if season_tag == "" else " (%s)" % season_tag],
 			"price": StoreDiscount.price(base, hearts), "base": base,
 			"owned": inventory.seed_count(crop_id),
 		})
