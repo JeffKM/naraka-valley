@@ -46,7 +46,7 @@ func _initialize() -> void:
 func _run_checks() -> void:
 	print("══ S6-T2 주문 위상·폴백·해금 단위검증 ══")
 
-	var ADE := MenuCatalog.PIANHWA_ADE          # 시그니처 = 피안화(작물 — 절기 무관)
+	var ADE := MenuCatalog.PIANHWA_ADE          # 시그니처 = 피안화(작물 — ★S7-T2부터 피안절 전용)
 	var PIAN := CropCatalog.PIANHWA
 
 	# ── ① 주문 롤 결정성 ────────────────────────────────────────────────────
@@ -139,12 +139,29 @@ func _run_checks() -> void:
 			if not MenuCatalog.in_season(String(mid), s6):
 				always = false
 	_check("⑥f 상시 어종·수액·나락혼정·기본 메뉴 = 사철", always)
-	# 작물 5종 = 지금은 전 절기(⚠️Slice 7 사멸 창이 들어오면 여기가 갈린다 — 훅 주석 참조).
-	var crops_always := true
-	for s7 in 4:
-		if not MenuCatalog.in_season(ADE, s7):
-			crops_always = false
-	_check("⑥g 작물 메뉴 = 현재 전 절기(Slice 7 사멸 훅 자리)", crops_always)
+	# ★[S7-T2 / ADR-0065 결정 2] 작물 메뉴 = 그 작물의 절기 그대로(예약돼 있던 훅이 채워졌다 —
+	#   "작물 사멸이 곧 메뉴 로테이션"). 옛 단언(작물=전 절기)이 여기 있었다.
+	var crops_match := true
+	var crop_menus := {
+		MenuCatalog.PIANHWA_ADE: 0, MenuCatalog.HONRYEONGCHO_LATTE: 1,
+		MenuCatalog.PODO_SMOOTHIE: 2, MenuCatalog.HOBAK_LATTE: 3,
+	}
+	for cm in crop_menus.keys():
+		for s7 in 4:
+			var want: bool = (int(crop_menus[cm]) == s7)
+			if MenuCatalog.in_season(String(cm), s7) != want:
+				crops_match = false
+	_check("⑥g 작물 메뉴 = 시그니처 작물의 절기 하나뿐(에이드 피안·라떼 유화·스무디 망연·호박 성야)",
+		crops_match)
+	_check("⑥g2 판정의 단일 출처 = CropCatalog.in_season(메뉴가 달력을 따로 안 든다)",
+		CropCatalog.in_season(CropCatalog.PIANHWA, 0)
+		and not CropCatalog.in_season(CropCatalog.PIANHWA, 1))
+	# 다절기 작물(불사과) 시그니처 메뉴는 사멸을 안 타 사철이다 — 작물이라고 다 잠기는 게 아니다.
+	var tart_always := true
+	for s8 in 4:
+		if not MenuCatalog.in_season(MenuCatalog.BULSAGWA_TART, s8):
+			tart_always = false
+	_check("⑥g3 다절기 작물(불사과) 메뉴는 사철 — 작물 축의 예외가 산다", tart_always)
 	_check("⑥h 메뉴 아닌 id는 false", not MenuCatalog.in_season("아무것도_아님", 0))
 
 	# ── ⑦ ♡0 중립 + 마진 곱 ────────────────────────────────────────────────
@@ -204,6 +221,9 @@ func _run_checks() -> void:
 	mn.larder.take_back(PIAN, 9)
 
 	# ── ⑤ 해금 = 발견 게이트 ───────────────────────────────────────────────
+	# ★[S7-T2] 주문 풀이 절기를 보게 됐다 — 세이브 재개 날짜에 따라 피안화 에이드가 비제철로 빠질 수
+	#   있으므로, *해금* 게이트만 보는 이 블록은 절기를 피안절로 고정한다(절기 축은 ⑥이 따로 본다).
+	mn.clock.day = 1
 	mn._menu_found.clear()
 	var pool_locked: Array = mn._cafe_order_pool()
 	var locked_has_ade := false

@@ -205,9 +205,10 @@ static func color_of(id: String) -> Color:
 # 판정을 하지 않고 재료 종류별 주인에게 위임만 한다(어종=FishCatalog·채집물=ForageSpawns).
 #
 # 분기 순서는 menu_catalog_test ①의 구성 집계와 같은 순서다(작물 → 어종 → 수액 → 채집물 → 그 외).
-# ★ 작물: 절기 사멸은 **Slice 7 미구현**이라 지금은 전 절기 true다. ⚠️[S7 훅] 사멸 창이 들어오면
-#   여기서 CropCatalog의 절기 필드를 읽어 같은 모양으로 위임한다 — 그때도 이 파일에 달력이 생기지
-#   않는다(재료의 창이 곧 메뉴의 창이라는 규칙은 그대로).
+# ★[S7-T2 / ADR-0065 결정 2] 작물도 이제 자기 절기를 든다(예약돼 있던 [S7 훅] 이행) — 어종·채집물과
+#   **완전 대칭**으로 CropCatalog에 위임한다. 사멸이 곧 메뉴 로테이션이라, 밭에서 스러진 작물의
+#   시그니처 메뉴는 같은 날 메뉴판에서도 내려간다. 이 파일엔 여전히 달력이 없다(위임만).
+#   다절기 작물(불사과)은 seasons가 빈 배열이라 사철로 떨어진다 — 판정은 CropCatalog가 든다.
 # ★ 수액·나락혼정·기본 메뉴 = 사철(패시브 채취·던전 산출·무재료라 하늘을 안 본다).
 static func in_season(id: String, season_idx: int) -> bool:
 	if is_basic(id):
@@ -216,7 +217,7 @@ static func in_season(id: String, season_idx: int) -> bool:
 		return false
 	var sig := signature_of(id)
 	if CropCatalog.has_crop(sig):
-		return true                                   # ⚠️[S7 훅] 작물 절기 사멸이 들어올 자리
+		return CropCatalog.in_season(sig, season_idx)  # ★[S7-T2] 작물 절기 = 사멸 창 그대로
 	if FishCatalog.has(sig):
 		return FishCatalog.in_season(sig, season_idx)
 	if ItemCatalog.SAP_GOODS.has(sig):

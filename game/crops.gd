@@ -48,6 +48,24 @@ const BULSAGWA := "bulsagwa"               # 불사과 — 다절기 프레스�
 #     yield_min/max: int   — yield_max>1이면 '다수확' 활성
 #   [직교 속성 태그 — 아키타입 아님]
 #     multi_seasonal : bool — 절기 전환 사멸 제외 프레스티지(§2.3, Slice 7 사멸 판정이 읽음)
+#     seasons        : Array — ★[S7-T2] 재배 절기 인덱스 배열(0 피안·1 유화·2 망연·3 성야).
+#                              **빈 배열 = 사철**(FishCatalog.seasons 동형 — 어종 표면을 그대로 상속해
+#                              읽는 쪽이 새 문법을 배울 게 없다). 절기 첫날 아침 사멸 패스와
+#                              만물상 제철 매대·카페 메뉴 로테이션이 이 한 필드를 읽는다.
+#
+# ── ★[S7-T2 / ADR-0065 결정 2] 작물 ↔ 절기 배정표(근거) ─────────────────────
+#   피안화       → 피안(0)  이름이 곧 절기다(피안화 = 피안절의 꽃). 중간 밴드(7일)라 절기의 허리.
+#   혼령초       → 유화(1)  ★ADR 앵커. FAST 4일 = 절기가 열리자마자 회전하는 진입 작물.
+#   황천포도     → 망연(2)  ★ADR 앵커. 트렐리스+재성장+다수확 = 거두는 절기(수확기)의 결.
+#   영혼 호박    → 성야(3)  ★ADR 앵커. SLOW 12일 대작이 절기 하나를 통째로 쓴다(겨울결 농사 존치 —
+#                            스타듀 "겨울 농사 불가"는 비채택, CONTEXT "성야절=영혼 호박이 어울림").
+#   불사과       → [] 사철  ★ADR 앵커. multi_seasonal 프레스티지라 **사멸 자체를 안 탄다**
+#                            (씨앗은 만물상 미판매 — 매대 필터와 무관).
+#   ⇒ 절기당 재배 가능 작물 **최소 1종**(다절기 제외) 보장: 0/1/2/3 각 1종 + 사철 1종.
+#   야생·혼합(제작 전용) = WILD_INFO의 절기와 **같은 값을 되쓴다**(모둠 4 + 희소종 모종 4).
+#     야생 모둠은 그 절기 숲 일반종을, 희소종 모종은 그 절기 희소종을 내므로 재배 창도 같은 절기다
+#     (ForageSpawns.species_for 절기 풀과 1:1 — 모순 0). 혼합 씨앗은 심는 순간 치환되는 유령
+#     엔트리라 사철([])로 둬 어떤 절기에 심어도 판정에 안 걸린다.
 # 주의: const 중첩 Dictionary는 런타임에 변경 가능하니 읽기 전용으로 다룬다(수정 금지).
 const CATALOG := {
 	HONRYEONGCHO: {
@@ -63,6 +81,7 @@ const CATALOG := {
 		"yield_min": 1,
 		"yield_max": 1,
 		"multi_seasonal": false,
+		"seasons": [1],         # 유화절 — FAST 진입 작물(배정표 참조)
 	},
 	PIANHWA: {
 		"name_ko": "피안화",
@@ -77,6 +96,7 @@ const CATALOG := {
 		"yield_min": 1,
 		"yield_max": 1,
 		"multi_seasonal": false,
+		"seasons": [0],         # 피안절 — 이름이 곧 절기
 	},
 	YEONGHON_HOBAK: {
 		"name_ko": "영혼 호박",
@@ -91,6 +111,7 @@ const CATALOG := {
 		"yield_min": 1,
 		"yield_max": 1,
 		"multi_seasonal": false,
+		"seasons": [3],         # 성야절 — SLOW 12일 대작이 절기를 통째로 쓴다
 	},
 	HWANGCHEON_PODO: {
 		"name_ko": "황천포도",
@@ -105,6 +126,7 @@ const CATALOG := {
 		"yield_min": 2,          # 다수확 아키타입(송이 2~3)
 		"yield_max": 3,
 		"multi_seasonal": false,
+		"seasons": [2],         # 망연절 — 거두는 절기(트렐리스·재성장·다수확)
 	},
 	BULSAGWA: {
 		"name_ko": "불사과",
@@ -123,37 +145,38 @@ const CATALOG := {
 		"yield_min": 1,
 		"yield_max": 1,
 		"multi_seasonal": true,  # 다절기 프레스티지 — 절기 전환 사멸 제외
+		"seasons": [],           # ★사철 — 빈 배열이자 multi_seasonal이라 사멸 패스가 두 번 비껴간다
 	},
 	# ── ★[S4-T5] 야생·혼합(제작 씨앗 전용 — ids() 밖, 위 WILD_INFO 주석 참조) ──
 	# 공통: 성장 7일(스타듀 Wild Seeds 3+4 상속)·SINGLE·sell_price 0(수확은 wild 분기가 치환).
 	# seed_cost = 씨앗 아이템 파생 price(제작 전용이라 상점가 아님 — 출하 판매 시 잔가).
 	MIXED: {"name_ko": "혼합", "stages": 2, "seed_cost": 5, "sell_price": 0,
 		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
-		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false, "seasons": []},
 	WILD_PIAN: {"name_ko": "야생 모둠(피안)", "stages": 2, "seed_cost": 12, "sell_price": 0,
 		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
-		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false, "seasons": [0]},
 	WILD_YUHWA: {"name_ko": "야생 모둠(유화)", "stages": 2, "seed_cost": 12, "sell_price": 0,
 		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
-		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false, "seasons": [1]},
 	WILD_MANGYEON: {"name_ko": "야생 모둠(망연)", "stages": 2, "seed_cost": 12, "sell_price": 0,
 		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
-		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false, "seasons": [2]},
 	WILD_SEONGYA: {"name_ko": "야생 모둠(성야)", "stages": 2, "seed_cost": 12, "sell_price": 0,
 		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
-		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false, "seasons": [3]},
 	WILD_MIHOK_NANCHO: {"name_ko": "미혹난초", "stages": 2, "seed_cost": 40, "sell_price": 0,
 		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
-		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false, "seasons": [0]},
 	WILD_YURYEONGCHO: {"name_ko": "유령초", "stages": 2, "seed_cost": 40, "sell_price": 0,
 		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
-		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false, "seasons": [1]},
 	WILD_MYEONGWOL: {"name_ko": "명월버섯", "stages": 2, "seed_cost": 40, "sell_price": 0,
 		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
-		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false, "seasons": [2]},
 	WILD_SEORI_HONBAEK: {"name_ko": "서리혼백초", "stages": 2, "seed_cost": 40, "sell_price": 0,
 		"growth_mode": "SINGLE", "base_growth_days": 7, "regrow_cooldown": 0,
-		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false},
+		"is_trellis": false, "giant_capable": false, "yield_min": 1, "yield_max": 1, "multi_seasonal": false, "seasons": [3]},
 }
 
 # ── ★[S4-T5 / ADR-0062 결정 5 · ADR-0033 #4] 야생·혼합 작물(제작 씨앗 전용) ────
@@ -251,6 +274,26 @@ static func giant_capable(id: String) -> bool:
 
 static func is_multi_seasonal(id: String) -> bool:
 	return CATALOG[id]["multi_seasonal"] if CATALOG.has(id) else false
+
+# ── ★[S7-T2 / ADR-0065 결정 2] 절기 표면(FishCatalog.seasons 조회 동형) ───────
+# 이 작물의 재배 절기 인덱스 배열(빈 배열 = 사철). 없는 id면 빈 배열 = 사철로 떨어진다
+# (미지 작물이 절기 전환에 조용히 사라지지 않는 안전 방향 — 사멸은 *명시된* 제철에만 근거한다).
+static func seasons_of(id: String) -> Array:
+	return CATALOG[id]["seasons"] if CATALOG.has(id) else []
+
+# 이 작물을 이 절기에 기를 수 있나. **빈 배열 = 항상 true**(사철). 사멸 패스·만물상 제철 매대·
+# 카페 메뉴 로테이션이 전부 이 하나를 읽는다(판정의 단일 출처 — FishCatalog.in_season 1:1).
+static func in_season(id: String, season_idx: int) -> bool:
+	var seasons: Array = seasons_of(id)
+	return seasons.is_empty() or seasons.has(season_idx)
+
+# 절기 표기 문자열("" = 사철). 만물상 매대 표시명이 씨앗 뒤에 붙인다("혼령초 씨앗 (유화절)").
+# 이름의 주인이 GameClock(SEASON_NAMES 단일 출처)이라 여기선 잇기만 한다(문자열 중복 0).
+static func season_label(id: String) -> String:
+	var parts: Array = []
+	for s in seasons_of(id):
+		parts.append(GameClock.season_name(int(s)))
+	return "·".join(parts)
 
 # 수확 산출 범위(min,max). 없는 id면 (1,1). yield_max>1 = 다수확.
 static func yield_range(id: String) -> Vector2i:
