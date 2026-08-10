@@ -1060,16 +1060,21 @@ const GUEST_SHEETS := {
 	"pulmu": preload("res://assets/characters/pulmu.png"),
 	"mugol": preload("res://assets/characters/mugol.png"),
 }
-# 익명 손님 상 6종(32×48) — 원본 2장(두건 쓴 혼 · 탈 쓴 요괴)의 혼빛 틴트 파생이다
-# (tools/make_s6_art.py). 익명은 *정체가 없는 것*이 정의라 실루엣을 6가지로 벌릴 필요가 없고,
+# 익명 손님 상 8종(32×48) — 원본 2장(두건 쓴 혼 · 탈 쓴 요괴)의 혼빛 틴트 파생이다
+# (tools/make_s6_art.py). 익명은 *정체가 없는 것*이 정의라 실루엣을 8가지로 벌릴 필요가 없고,
 # 오히려 혼빛만 다른 무리가 "이름 없는 손님들"로 읽힌다(씨앗 봉지 9종과 같은 판단).
+# ★[S6-T9] 6 → 8상(a3 남보라 · b3 진홍 추가, **신규 생성 0** = 같은 raw의 틴트 파생). 낮 좌석
+#   5석과 밤 바 5석이 같은 날 굴러가는데 6상이면 한 화면에서 혼빛이 겹쳐 앉는 일이 잦았다.
+#   뽑기가 좌석·날짜 결정적 해시라 배열이 길어지는 것만으로 반영된다(배선 0줄).
 const GUEST_ANON := [
 	preload("res://assets/characters/guest_anon_a0.png"),
 	preload("res://assets/characters/guest_anon_a1.png"),
 	preload("res://assets/characters/guest_anon_a2.png"),
+	preload("res://assets/characters/guest_anon_a3.png"),
 	preload("res://assets/characters/guest_anon_b0.png"),
 	preload("res://assets/characters/guest_anon_b1.png"),
 	preload("res://assets/characters/guest_anon_b2.png"),
+	preload("res://assets/characters/guest_anon_b3.png"),
 ]
 
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
@@ -14033,7 +14038,7 @@ func _setup_residents() -> void:
 	r_kitchen.affinity = null
 	r_kitchen.rel_text = "카페 주방 담당"
 	r_kitchen.plain_talk = true          # lines_resident() — 하트·first_today 인자 없는 일상 묶음
-	r_kitchen.portrait_stem = ""         # 초상화·스프라이트 = S6-T9 아트 패스
+	r_kitchen.portrait_stem = ""         # ★초상화는 만들지 않는다(관계 트랙 0 — kitchen_youkai.gd 주석)
 	# ★ 실내 가드 — 카페 방 안에서만 말 걸 수 있다(네오 "만물상" 선례). 멜·옥자는 카메라 격리에
 	#   기대 이 필드를 비웠지만, 새로 붙는 자리는 좁게 잠그는 쪽이 안전하다(다른 구역의 같은
 	#   좌표에 닿아도 무반응 — 좁히기만 하므로 기존 주민 거동엔 영향 0).
