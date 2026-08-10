@@ -2379,6 +2379,28 @@ var _target_valid := false       # 그 칸이 밭(SOIL)이라 상호작용 가�
 # 있고, main은 ①입력(캐스팅·당김 홀드·이동 취소) ②혼력 게이트 ③산출물 지급 ④그레이박스 HUD만 맡는다.
 # **세이브 무상태**(세션은 비영속 — ADR-0061 결정 2 "일시 상태"): 저장되는 건 어획물·혼력뿐이다.
 var fishing: FishingSession = null
+
+# ── ★[S6-T5 / ADR-0064 결정 5] 체키 세션(상업 체키 = 서빙 사슬 2단) ────────────
+# 진행 중인 촬영 1건(없으면 null). 로직은 전부 cheki.gd(ChekiSession — 낚시와 같은 순수 클래스)에
+# 있고, main은 ①제안 창 ②입력 ③매출·단골 원장 반영 ④그레이박스 HUD만 맡는다.
+# **세이브 무상태**(세션도 제안 창도 비영속 — 저장되는 건 지갑·단골 원장뿐).
+#
+# ★ 사슬의 문법: 서빙 직후 그 손님이 **명명 단골(비익명)이면** 제안 창이 열리고, 그 창 안에 그
+#   좌석을 다시 우클릭하면 촬영이 시작된다. 무시하면 조용히 닫힌다 — **벌칙 0**(CONTEXT [체키]
+#   상업 체키 = 프리미엄 *옵션*이지 의무가 아니다). 익명 손님에겐 열리지 않는다(결정 8 — 익명은
+#   이름도 관계도 없는 볼륨이라 "같이 찍는" 행위의 대상이 아니다).
+# ★★ 촬영 중에도 cafe.tick은 계속 흐른다(_process의 카페 틱에 세션 가드를 절대 넣지 말 것) —
+#   다른 손님 인내심이 그동안 닳는 것이 **깊이 vs 회전** 트레이드오프의 본체다(ADR-0064 결정 5).
+var cheki: ChekiSession = null
+var _cheki_seat := -1            # 제안이 열린 좌석(-1 = 제안 없음)
+var _cheki_offer_secs := 0.0     # 제안 창 잔여(초) — 0 이하면 조용히 닫힌다
+var _cheki_guest := ""           # 제안·촬영 대상 손님 id(명명 손님만 — 좌석이 비워져도 여기 남는다)
+var _cheki_menu := ""            # 방금 낸 잔의 메뉴 id(체키 매출의 기준가 — 사슬이 값을 물려받는다)
+var _cheki_serial := 0           # 촬영 일련번호(시드 섞기 — 같은 날 반복 촬영의 변주 고착 방지)
+# 제안 창 길이(초, 그레이박스 레버). 손님 스폰 간격(Cafe.SPAWN_INTERVAL 3.0)보다 길게 잡아 **다음
+# 손님이 그 자리에 앉기 전에 결정할 여유**를 준다 — 그래도 겹치면 아래 입력 분기가 제안을 우선한다.
+const CHEKI_OFFER_SECS := 6.0
+
 var _cast_serial := 0            # 캐스팅 일련번호(시드 섞기 — 같은 분·같은 칸 반복 캐스팅의 어종 고착 방지)
 var _cast_seed := 0              # ★[S3-T3] 이번 캐스팅의 시드(어종 롤·품질 롤이 같은 뿌리에서 갈라진다)
 # ★ 캐스팅 무대 = 삼도천·황천해 한정(ADR-0061 결정 9). 나루 배후 강·안식 연못은 이번 슬라이스에서
@@ -9884,9 +9906,15 @@ func _process(delta: float) -> void:
 	cafe.day = clock.day
 	cafe.order_pool = _cafe_order_pool()
 	cafe.guest_pool = _cafe_guest_pool()
+	# ★★[S6-T5 / ADR-0064 결정 5] 이 틱에 체키 세션 가드를 **절대 넣지 말 것** — 촬영 중에도 다른
+	#   손님의 인내심이 계속 닳는 것이 "깊이(사슬을 쏟기) vs 회전(다음 손님)" 트레이드오프의 본체다.
+	#   미니게임이 시간을 멈추면 체키는 공짜 프리미엄이 되고 그 선택 자체가 사라진다.
 	if not _sleeping:
 		cafe.tick(delta, clock.minutes)
-	if cafe.is_open():
+	# ★[S6-T5] 체키 제안 창 소진(서빙 직후 열린 6초). 촬영 중이 아닐 때만 돈다 — 세션이 시작되면
+	#   창은 이미 닫혀 있다(_start_cheki). 카페가 닫혀도 타이머로 조용히 만료된다(벌칙 0).
+	_tick_cheki_offer(delta)
+	if cafe.is_open() or _cheki_offer_secs > 0.0:
 		queue_redraw()
 	# T6.5 바나 이중 보호 곱셈기 주입(관계 곱셈기, ADR-0008·ADR-0010 #7): 바나 하트 → 밤 보호
 	# 세 축을 night_bar seam에 얹는다. cafe.margin과 같은 다리 — night_bar는 바나 호감도를 모르고
@@ -9918,6 +9946,13 @@ func _process(delta: float) -> void:
 	# 좌석 줄(y=7)·잡귀 스폿 줄(y=9)이 카페 통로(y=8)를 사이에 둬, 플레이어가 위를 보면 응대·
 	# 아래를 보면 막기 — 한 번에 한쪽만 마주본다(★ 막기↔응대 경쟁의 공간적 뿌리, ADR-0010 #4).
 	var facing_spot := NIGHT_SPOT_TILES.find(_target) if not _sleeping else -1
+	# ★[S6-T5 / ADR-0064 결정 5] 체키 촬영 진행(LMB = 셔터 · 이동 = 그만두기). 릴 격투와 같이
+	#   **return하지 않는다** — 이 뒤로 HUD 갱신(시계·골드·마일스톤)이 이어지므로 여기서 끊으면
+	#   촬영 몇 초 동안 시계가 멈춘 것처럼 보인다. 대신 촬영 중 겹칠 수 있는 두 분기(같은 좌석
+	#   서빙 · LMB 도구질)만 아래에서 `cheki == null`로 막는다. 촬영 중엔 플레이어가 자리를
+	#   지키므로(_target 고정) 나머지 분기는 애초에 대상 칸이 안 걸린다.
+	if cheki != null:
+		_tick_cheki(delta)
 	# ── ADR-0024 RMB(action) 컨텍스트 체인 ───────────────────────────────────────
 	# RMB는 맨손 액션/대화 — 우선순위대로 하나만 잡고 return으로 가른다. 대상 칸 종류(NPC·좌석·
 	# 스폿·밭)는 서로 배타적이라 충돌하지 않는다. 선물(G)·바 열기/출하대(F)는 별개 키라 그대로 둔다.
@@ -9999,7 +10034,15 @@ func _process(delta: float) -> void:
 		return
 	# T5.4 → ★S6-T2 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 손님이 시킨 메뉴가 융합이고
 	# 곳간에 재료가 있으면 곳간 1개를 먹고 프리미엄가, 아니면 무재료 기본 메뉴로 정액가(무막힘).
-	if facing_seat >= 0 and cafe.is_waiting(facing_seat) and Input.is_action_just_pressed("action"):
+	# ★[S6-T5 / ADR-0064 결정 5] 체키 제안 수락(RMB) — **서빙보다 먼저** 잡는다. 제안 창(6초)이 손님
+	#   스폰 간격(3초)보다 길어 그 사이 새 손님이 같은 자리에 앉을 수 있는데, 그때 우클릭이 서빙으로
+	#   가면 방금 낸 잔의 체키가 조용히 증발한다(플레이어는 같은 키를 같은 자리에 눌렀을 뿐인데).
+	#   제안이 이기고, 그동안 새 손님의 인내심이 닳는 것이 **깊이 vs 회전**의 값이다(결정 5).
+	if _cheki_offered_at(facing_seat) and Input.is_action_just_pressed("action"):
+		_start_cheki()
+		return
+	if facing_seat >= 0 and cheki == null and cafe.is_waiting(facing_seat) \
+			and Input.is_action_just_pressed("action"):
 		_try_serve(facing_seat)
 		return
 	# T6.4 막기(RMB): 밤에 잡귀가 깃든 스폿을 바라보며 즉시 격퇴(★ 막기↔응대 경쟁, ADR-0010 #2·#4).
@@ -10209,8 +10252,9 @@ func _process(delta: float) -> void:
 	#   (`_target_valid`는 밭 흙(SOIL)만 통과시키는데 갱도 층 바닥은 PATH라, 이 or가 없으면 정작
 	#   전투가 벌어지는 무대에서 스윙이 한 번도 안 나간다). 무기와 도구를 가르는 것은 `_use_tool`
 	#   맨 앞의 한 갈래이고, 여러 LMB 디스패치가 같은 프레임에 겹쳐도 스윙은 하나다(_swing_weapon).
+	# ★[S6-T5] 체키 촬영 중엔 LMB가 **셔터**다 — 무기를 든 채 찍으면 스윙이 같이 나가므로 막는다.
 	var holding_weapon := ItemCatalog._is_weapon(inventory.selected_id())
-	if not _sleeping and (_target_valid or holding_weapon) and not holding_sprinkler \
+	if not _sleeping and cheki == null and (_target_valid or holding_weapon) and not holding_sprinkler \
 			and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
@@ -10285,7 +10329,13 @@ func _process(delta: float) -> void:
 	# 우선순위: 상자 > 출하함 > ★주민(레지스트리 한 갈래) > 기증대 > 게시판 > 막기 > 손님 서빙 > 밭 동작.
 	# ★ [S2-T7] 주민 5갈래가 한 분기로 접혔다 — 대상 칸이 서로 배타적이라 순서 이동은 무해하다.
 	# ★ ADR-0024 — 대화·서빙·막기·수확은 RMB(우클릭), 도구질은 LMB(좌클릭). 선물(G)·바·매대(F)는 별개 키.
-	if fishing != null:
+	if cheki != null:
+		# ★[S6-T5] 체키 촬영 중 — 다른 프롬프트를 전부 덮는다(릴 격투와 같은 문법). 두 단의 동사가
+		#   다르므로 문구도 갈린다: 구도는 "겹칠 때", 셔터는 "지금".
+		interact_prompt.visible = true
+		interact_prompt.text = "%s — [좌클릭]으로 %s   (이동하면 그만둠)" % [cheki.state_label(),
+			"구도 잡기" if cheki.state == ChekiSession.State.AIM else "찰칵"]
+	elif fishing != null:
 		# ★ [S3-T2] 릴 격투 진행 중 — 다른 프롬프트를 전부 덮는다(미니게임이 화면을 소유). 조작 안내만.
 		interact_prompt.visible = true
 		interact_prompt.text = "[좌클릭 홀드] 당기기 · [놓기] 풀기   (이동하면 그만둠)" if fishing.state == FishingSession.State.FIGHT \
@@ -10449,6 +10499,17 @@ func _process(delta: float) -> void:
 		# 비운 사이 손님이 닳는 게 ★ 막기↔응대 경쟁의 비용이다(ADR-0010 #4).
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭] 막기 (잡귀 격퇴 · 재고 지킴)"
+	elif _cheki_offered_at(facing_seat):
+		# ★[S6-T5] 체키 제안 창 — 방금 낸 잔의 값을 기준으로 **얼마를 더 받을 수 있는지**를 등급
+		#   폭(최저~최고)으로 보여 준다. 무시해도 되는 선택지라 남은 초를 함께 띄워 "기다려 준다"를
+		#   말한다(벌칙 문구 없음 — 창이 닫히는 건 손해가 아니라 그냥 안 찍은 것이다).
+		#   ★ 입력 분기와 같은 술어(_cheki_offered_at)를 쓰므로 보이는 값과 눌리는 동작이 안 어긋난다.
+		interact_prompt.visible = true
+		interact_prompt.text = "[우클릭] %s체키 한 장 (+%d~%d골드 · %.0f초)" % [
+			_guest_prefix(_cheki_guest),
+			cafe.cheki_price(_cheki_menu, ChekiSession.Grade.OK),
+			cafe.cheki_price(_cheki_menu, ChekiSession.Grade.PERFECT),
+			ceilf(_cheki_offer_secs)]
 	elif facing_seat >= 0 and cafe.is_waiting(facing_seat):
 		# T5.4 → ★S6-T2: 기다리는 손님을 바라볼 때 **무엇을 시켰고 얼마가 들어오는지**를 보여 준다.
 		# 막힌 상태 안내는 사라졌다 — 재료가 없어도 기본 메뉴로 서빙된다(무막힘). 대신 곳간 재고가
@@ -14127,6 +14188,7 @@ func _try_serve(seat: int) -> void:
 	guests.record_serve(guest_id)
 	audio.sfx("serve")                        # P2.6 카운터 종 "딩"
 	_notice("%s%s 서빙 +%d골드" % [_guest_prefix(guest_id), MenuCatalog.name_of(served), revenue])
+	_offer_cheki(seat, guest_id, served)      # ★[S6-T5] 사슬 2단 — 아는 얼굴이면 체키 제안이 열린다
 
 # 이 좌석에 **실제로 나갈 메뉴** id(부작용 없는 순수 판정). 서빙 실행과 프롬프트 표시가 같은 답을
 # 봐야 "보이는 값과 들어오는 값"이 어긋나지 않으므로 판정을 한 곳에 둔다. 기다리는 손님이 없으면
@@ -14146,6 +14208,93 @@ func _planned_menu(seat: int) -> String:
 # (ForageSpawns.zones()가 RegionCatalog 상수를 함수로 감싼 그 자리 — 로드 순서 의존 0).
 func _fallback_menu() -> String:
 	return MenuCatalog.AMERICANO
+
+# ── ★[S6-T5 / ADR-0064 결정 5] 상업 체키 = 응대→체키 사슬의 둘째 단 ──────────
+# 서빙 직후 호출된다. **명명 손님(비익명)에게만** 제안 창을 연다 — 익명 볼륨(T3)은 이름도 관계도
+# 없는 분위기 몸이라 "같이 한 장"의 대상이 아니다(결정 8 · CONTEXT [단골 손님] 2층 구조).
+# ★ 창을 여는 것뿐이고 아무것도 강제하지 않는다: 무시하면 조용히 닫히고 벌칙은 0이다. 손님은 이미
+#   서빙을 받고 값을 치렀다 — 체키는 그 위에 *더 받는* 선택지다(무막힘, ADR-0008).
+func _offer_cheki(seat: int, guest_id: String, menu_id: String) -> void:
+	if guest_id == "" or cheki != null:
+		return                                # 익명 손님 / 이미 촬영 중(다음 장은 안 받는다)
+	_cheki_seat = seat
+	_cheki_guest = guest_id
+	_cheki_menu = menu_id
+	_cheki_offer_secs = CHEKI_OFFER_SECS
+
+# 제안 창이 지금 이 좌석에 열려 있나(입력 분기·프롬프트가 같은 답을 봐야 해서 술어를 한 곳에 둔다).
+func _cheki_offered_at(seat: int) -> bool:
+	return cheki == null and _cheki_offer_secs > 0.0 and seat >= 0 and seat == _cheki_seat
+
+# 제안 창 소진(매 프레임). 세션이 시작되면 창은 그 자리에서 닫힌다(_start_cheki가 0으로 만든다).
+# ★ 취침·마감으로 카페가 닫혀도 그냥 타이머로 닫힌다 — 창이 6초라 하루를 넘겨 살아남을 수 없다.
+func _tick_cheki_offer(delta: float) -> void:
+	if _cheki_offer_secs <= 0.0:
+		return
+	_cheki_offer_secs = maxf(_cheki_offer_secs - delta, 0.0)
+	if _cheki_offer_secs <= 0.0:
+		_clear_cheki_offer()                  # 무시 = 조용히 닫힘(알림도 안 띄운다 — 벌칙이 아니다)
+
+func _clear_cheki_offer() -> void:
+	_cheki_offer_secs = 0.0
+	_cheki_seat = -1
+	_cheki_guest = ""
+	_cheki_menu = ""
+
+# 촬영 시작. 시드 = (날짜·좌석·일련번호) 파생 — **신규 네임스페이스** "cafe_cheki:…"라 주문
+# ("cafe_order:…")·손님("cafe_guest:…") 롤의 결과열을 한 톨도 안 흔든다(cafe.gd roll_guest 주석의
+# 시드 분리 규율 1:1). 일련번호를 섞는 건 같은 날 같은 자리에서 반복 촬영해도 변주가 굳지 않게.
+func _start_cheki() -> void:
+	if _cheki_guest == "" or cheki != null:
+		return
+	_cheki_serial += 1
+	cheki = ChekiSession.new(hash("cafe_cheki:%d:%d" % [clock.day, _cheki_serial]))
+	cheki.begin()
+	_cheki_offer_secs = 0.0                   # 창은 닫고 대상(_cheki_guest·_cheki_menu)은 들고 간다
+	audio.sfx("ui")
+	queue_redraw()
+
+# 세션 1프레임 진행 — 이동 입력이면 취소(낚시 문법 1:1: 찍는 동안엔 자리를 지킨다), 아니면 LMB가
+# 셔터다. **서빙이 RMB, 체키가 LMB**라 제안 창에서 자리를 다시 우클릭해 시작한 그 손가락이
+# 그대로 셔터를 누르지 않는다(ChekiSession.ARM_SECS와 함께 이중 방어).
+func _tick_cheki(delta: float) -> void:
+	if cheki == null:
+		return
+	if Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down") != Vector2.ZERO:
+		cheki = null
+		_clear_cheki_offer()
+		_notice("체키를 그만뒀다")           # 매출 0 — 벌칙이 아니라 찍다 만 것이다
+		queue_redraw()
+		return
+	cheki.tick(delta, Input.is_action_pressed("use_tool"))
+	if cheki.is_finished():
+		_finish_cheki()
+	queue_redraw()                            # 구도·셔터 커서가 매 프레임 흐르게
+
+# 결착 수확 — 점수를 등급으로 매핑하고(세션은 등급을 모른다) 매출·단골 원장에 반영한다.
+# ★ 실패 갈래가 없다: 최저 등급도 매출이 붙고(Cafe.CHEKI_RATE 0.5배·하한 1냥) 단골 점수도 오른다.
+# ★★ 호감도는 여기서도 한 톨도 안 오른다(ADR-0017 보호 — _try_serve의 그 규율 1:1). 체키는 서빙
+#    사슬의 다음 단이지 대화·선물이 아니다.
+func _finish_cheki() -> void:
+	if cheki == null:
+		return
+	var res := cheki.result()
+	var grade := ChekiSession.grade_for(float(res["score"]))
+	var guest_id := _cheki_guest
+	var menu_id := _cheki_menu
+	cheki = null
+	_clear_cheki_offer()
+	var revenue := cafe.record_cheki(menu_id, grade)   # 오늘 카페 장부에도 함께 오른다(마감 요약)
+	wallet.earn(revenue)
+	# ★ 마일스톤 누적 매출 축에 합류한다 — 체키는 카페 *운영* 매출이고(서빙의 다음 단), 그 축이
+	#   ADR-0064 결정 7에서 **옥자 축을 대변**하기 때문이다(카페 실적 = 옥자의 인정).
+	_cafe_revenue_total += revenue
+	_total_income += revenue                          # ★[S1R-T12] 누적 총수입(정보패널)
+	guests.record_cheki(guest_id, grade)              # 단골화 가속(♡ 아님 — 방문 가중치)
+	audio.sfx("gold")
+	_notice("%s체키 %s +%d골드" % [_guest_prefix(guest_id),
+		ChekiSession.grade_name(grade), revenue])
+	queue_redraw()
 
 # ★[S6-T4] 손님 이름 조각("" = 익명이라 이름 없이 메뉴만 말한다 — 결정 8 "익명은 이름·호감도 없음").
 # 단골은 한 눈금 더 붙는다("단골 네오에게") — 원장이 자란 것이 서빙 순간 문장으로 보인다.
@@ -14292,6 +14441,10 @@ func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
 	]
 	if cafe.today_named() > 0:
 		lines.append("아는 얼굴  %d명" % cafe.today_named())
+	# ★[S6-T5] 체키를 한 장이라도 찍은 날만 붙는다(아는 얼굴 줄과 같은 관례 — 빈 눈금 노출 0).
+	#   서빙 수와 나란히 놓이면 그날 "깊이 vs 회전"을 어느 쪽으로 굴렸는지가 한눈에 읽힌다.
+	if cafe.today_cheki() > 0:
+		lines.append("체키  %d장" % cafe.today_cheki())
 	cafe_summary_text.text = "\n".join(lines)
 	cafe_summary_panel.visible = true
 	_cafe_summary_secs = CAFE_SUMMARY_SECS
@@ -14827,6 +14980,7 @@ func _draw() -> void:
 	_draw_furnaces()        # ★[S5-T3] 세워 둔 업화로(구역 무관 — 전 지상 무대에 놓을 수 있다)
 	_draw_forage_detect()   # ★[S4-T2] 혼 감지 가장자리 여우불 + 추적자 ▼(대상 없으면 무동작 — 구역 무관)
 	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
+	_draw_cheki_hud()       # ★ [S6-T5] 체키 구도·셔터 그레이박스 트랙(세션 있을 때만)
 	if _edit_mode:          # ★ ADR-0025 ① 배치 모드 오버레이(선택·마우스 칸·팔레트 고스트)
 		_draw_edit_overlay()
 	if _deco_mode:          # ★ [S1-9] 집 꾸미기 모드 오버레이(마우스 칸·팔레트 고스트)
@@ -14937,6 +15091,54 @@ func _draw_fishing_hud() -> void:
 		draw_rect(panel.grow(6.0), Color(1.0, 1.0, 1.0, 0.9), false, 3.0)
 	for i in mini(fishing.perfect_count, 5):
 		draw_rect(Rect2(org + Vector2(6.0 + i * 8.0, _FHUD_H + 2.0), Vector2(6.0, 3.0)), HanjiUi.GOLD)
+
+# ★[S6-T5 / ADR-0064 결정 5] 체키 HUD — **그레이박스**다(정식 아트는 후속: 그을린 양피지 + 검은
+# 나비 고딕 프레임, CONTEXT [체키]). 지금 필요한 건 "언제 누르나"가 읽히는 것뿐이라 한지 판 하나에
+# 가로 트랙 한 줄을 세운다(낚시 HUD의 세로 트랙과 일부러 축을 갈라, 두 미니게임이 한눈에 구별된다).
+#
+#   ① 스윗존(금박 띠)  — 목표 구도 / 셔터 스윗존. **폭이 곧 관대함**이라 tolerance를 실제 폭으로 그린다.
+#   ② 커서(먹빛 기둥)  — 표류하는 구도 프레임 / 왕복하는 셔터. 스윗존 안이면 금박으로 물든다("지금").
+#   ③ 잔여 시간(아래 실선) — 줄어들면 자동 확정(무실패라 위협이 아니라 *안내*다. 붉은색을 안 쓴다).
+#   ④ 단계 표식(판 위 점 둘) — 구도(1) → 셔터(2). 지금 어느 단인지가 문구 없이도 보인다.
+#
+# main.gd는 _draw에서 텍스트를 안 쓰는 관례라(문구는 interact_prompt) 순수 도형만 그린다.
+const _CHUD_W := 92.0        # 패널 폭 — 한지 판 9-slice(테두리 12) 안에 트랙이 여유 있게 눕는 최소치
+const _CHUD_H := 34.0        # 패널 높이 — 트랙 한 줄 + 잔여 시간 줄
+const _CHUD_PAD := 11.0      # 판 테두리 안쪽 여백
+func _draw_cheki_hud() -> void:
+	if cheki == null or player == null:
+		return
+	# 패널은 플레이어 **머리 위**에 눕힌다(가로형이라 낚시 세로 판과 자리가 안 겹친다).
+	var org: Vector2 = player.global_position + Vector2(-_CHUD_W * 0.5, -_CHUD_H - 26.0)
+	var panel := Rect2(org, Vector2(_CHUD_W, _CHUD_H))
+	HanjiUi.draw_plate(self, panel)
+	var track := Rect2(org + Vector2(_CHUD_PAD, _CHUD_PAD), Vector2(_CHUD_W - _CHUD_PAD * 2.0, 9.0))
+	draw_rect(track, HanjiUi.INSET)
+	var in_zone := cheki.in_sweet_zone()
+	var target := cheki.aim_target() if cheki.state == ChekiSession.State.AIM else cheki.snap_target()
+	var pos := cheki.aim_pos() if cheki.state == ChekiSession.State.AIM else cheki.snap_pos()
+	# ── ① 스윗존 — 중심 ±tolerance를 트랙 위에 실제 폭으로. 트랙 밖으로 넘치면 잘라 그린다.
+	var tol := cheki.tolerance()
+	var zx0 := clampf(target - tol, 0.0, 1.0)
+	var zx1 := clampf(target + tol, 0.0, 1.0)
+	draw_rect(Rect2(Vector2(track.position.x + zx0 * track.size.x, track.position.y),
+		Vector2((zx1 - zx0) * track.size.x, track.size.y)), HanjiUi.GOLD_SOFT)
+	# 정중앙(만점 지점) 한 줄 — 스윗존이 넓어 "어디가 최고인가"가 안 보이면 겨눌 곳이 없다.
+	draw_rect(Rect2(Vector2(track.position.x + target * track.size.x - 0.5, track.position.y),
+		Vector2(1.0, track.size.y)), HanjiUi.GOLD)
+	draw_rect(track, HanjiUi.INK, false, 1.0)
+	# ── ② 커서 — 스윗존 안이면 금박(누를 때다), 밖이면 먹빛.
+	draw_rect(Rect2(Vector2(track.position.x + pos * track.size.x - 1.5, track.position.y - 3.0),
+		Vector2(3.0, track.size.y + 6.0)), HanjiUi.GOLD if in_zone else HanjiUi.INK)
+	# ── ③ 잔여 시간 — 자동 확정까지. 줄어드는 금박 실선(위협 색 없음 = 무실패의 시각적 약속).
+	var bar := Rect2(track.position + Vector2(0.0, track.size.y + 5.0), Vector2(track.size.x, 2.0))
+	draw_rect(bar, HanjiUi.INSET)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * cheki.phase_left_ratio(), bar.size.y)), HanjiUi.GOLD)
+	# ── ④ 단계 표식 — 채워진 점 = 지나온/현재 단(구도 → 셔터).
+	for i in 2:
+		var lit := i == 0 or cheki.state == ChekiSession.State.SNAP
+		draw_circle(org + Vector2(_CHUD_W - 14.0 + i * 7.0, 5.0), 2.0,
+			HanjiUi.GOLD if lit else HanjiUi.INK_DIM)
 
 func _draw_crops() -> void:
 	for t in farm.planted_tiles():
