@@ -36,7 +36,12 @@ class_name Cafe
 signal changed()                                       # 좌석/손님 상태가 바뀐 프레임(main이 다시 그림)
 signal closed(revenue: int, served: int, left: int)   # 영업창 마감(19시) — 일일 정산 요약
 
-const N_SEATS := 3                # 좌석 수(그레이박스 ~3개)
+# ★[S6-T3 / ADR-0064 결정 7] 좌석은 **카페 일구기 사다리**가 여는 콘텐츠가 됐다. N_SEATS는 이제
+# *좌석 배열 크기 = 사다리 최대치*이고(좌석 칸·스툴 아트는 처음부터 다 놓여 있다 — 2단 예고를
+# 무대가 먼저 말한다), 실제로 손님이 앉는 칸 수는 seam 5 `open_seats`가 정한다.
+const N_SEATS := 5                # 좌석 배열 크기(= SEATS_STAGE2. SEAT_TILES 길이와 같아야 한다)
+const SEATS_STAGE1 := 3           # 1단 영업 좌석(종전 그레이박스 3개 — 거동 불변)
+const SEATS_STAGE2 := 5           # 2단 영업 좌석(잠정 레버 — ADR-0064 결정 7)
 const OPEN_MIN := 15 * 60         # 15:00 영업 시작(하루 3슬롯 중 카페 영업창)
 const CLOSE_MIN := 19 * 60        # 19:00 영업 마감(이후 빈 밤 → Sprint 6 바나 바)
 const BASE_PRICE := 35            # 정액 서빙가 P(재료 무관) — raw 판매가보다 높게 둬
@@ -76,6 +81,11 @@ var day: int = 1
 # 창·곳간 재고 세 축을 합쳐 주입한다 — 이 노드는 곳간도 해금도 절기도 모른다(디커플링 유지).
 # 빈 배열(기본값) = 기본 메뉴만 주문된다 = 주입 없는 하네스의 base rate 안전판(ADR-0008 평평≠막힘).
 var order_pool: Array = []
+# ★seam 5(S6-T3): 지금 영업에 쓰는 좌석 수. main이 카페 일구기 단계에서 파생해 주입한다
+# (CafeMilestone.seats_of — margin·spawn_scale·order_pool과 정확히 같은 다리. 이 노드는 마일스톤을
+# 모른다). 기본값 = 1단 좌석 = 주입 없는 하네스의 base rate 안전판(ADR-0008 평평≠막힘).
+# ★ 좌석 *배열*은 항상 N_SEATS개다 — 여는 건 "앉힐 수 있는 앞쪽 n칸"이라 잠긴 칸은 영원히 빈 자리다.
+var open_seats: int = SEATS_STAGE1
 
 # 오늘 정산 누적(세이브 무상태 — 매일 영업 시작 시 리셋, 일시 표시·요약용).
 var _today_revenue := 0
@@ -153,8 +163,11 @@ func end_day() -> void:
 
 # 빈 자리 하나에 새 손님을 앉힌다(앞에서부터 첫 빈 자리). 자리가 다 차 있으면 false.
 # ★S6-T2: 앉는 순간 희망 메뉴를 결정 롤로 정한다(오늘 몇 번째 손님인가 = serial 시드).
+# ★S6-T3: **앞쪽 open_seats칸까지만** 앉힌다(seam 5 — 잠긴 뒷칸은 2단이 열어 준다).
 func _seat_customer() -> bool:
-	for s in _seats:
+	var n := clampi(open_seats, 0, _seats.size())
+	for i in n:
+		var s: Dictionary = _seats[i]
 		if not s["occupied"]:
 			s["occupied"] = true
 			s["patience"] = patience_secs

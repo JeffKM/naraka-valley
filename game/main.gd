@@ -1164,7 +1164,8 @@ const PROP_LAYOUT_HOME := [
 #   작동 검증된 카페 내부 레이아웃이 상대 배치 그대로 내려간다(상대배치 무위험·회귀 0).
 const PROP_LAYOUT_CAFE := [
 	[PROP_COUNTER, [Vector2i(10, 89), Vector2i(11, 89), Vector2i(12, 89), Vector2i(13, 89), Vector2i(14, 89), Vector2i(15, 89), Vector2i(16, 89)]],  # 카페 바 카운터
-	[PROP_STOOL, [Vector2i(11, 90), Vector2i(14, 90), Vector2i(17, 90)]],                # 카페 좌석 스툴(= SEAT_TILES)
+	[PROP_STOOL, [Vector2i(11, 90), Vector2i(14, 90), Vector2i(17, 90),
+		Vector2i(9, 90), Vector2i(19, 90)]],                                             # 카페 좌석 스툴(= SEAT_TILES, ★S6-T3 5칸)
 	[PROP_SHELF, [Vector2i(11, 87), Vector2i(13, 87), Vector2i(15, 87)]],                # 카페 뒷벽 선반
 	[PROP_CLOCK, [Vector2i(9, 86)]],                                                     # 카페: 좌측 뒷벽 괘종시계
 	[PROP_FRAME, [Vector2i(10, 86), Vector2i(16, 86)]],                                  # 카페: 뒷벽 앤틱 액자 둘
@@ -2007,8 +2008,15 @@ const OKJA_CAFE_TILE := Vector2i(10, 88)   # 카페 직원 줄(y88, ★C3 +48), 
 const MEL_TILE := Vector2i(13, 88)   # 카페 직원 줄(y88, ★C3 +48) 가운데(카운터 얼굴)
 # T5.4 카페 손님 좌석 칸 — 카페 안 한 줄(멜 카운터 33,5 아래). 손님이 여기 앉고,
 # 플레이어가 아래 칸(y=8)에 서서 위를 바라보며 E로 서빙한다. 카페 바닥이라 농사 대상이
-# 아니고(밭과 안 겹침), 멜·문 동선과도 칸이 갈린다. 인덱스 = Cafe._seats 인덱스(좌석 0..2).
-const SEAT_TILES := [Vector2i(11, 90), Vector2i(14, 90), Vector2i(17, 90)]   # 카페 좌석 줄(y90, ★C3 +48)
+# 아니고(밭과 안 겹침), 멜·문 동선과도 칸이 갈린다. 인덱스 = Cafe._seats 인덱스(좌석 0..4).
+# ★[S6-T3 / ADR-0064 결정 7] 2단이 좌석을 3→5로 연다. **칸(과 스툴 아트)은 처음부터 다섯 개를
+#   깔아 둔다** — 잠긴 두 칸(3·4)은 손님이 안 앉을 뿐이라, 무대가 "여기가 더 넓어진다"를 먼저
+#   말한다(2단 미리보기의 공간판). 뒤에 붙이는 이유: 앞 세 칸의 인덱스·좌표가 그대로라 종전
+#   좌석 배선(스툴·서빙 프롬프트·밤 바 좌석 공유)이 픽셀 단위로 불변이다.
+# ★ 새 두 칸은 실내 바닥(x9..19) 양 끝 x9·x19 — 카운터 프롭(y89 x10..16)·손님 테이블(y93)과
+#   겹치지 않고, 아래 칸(9,91)·(19,91)에 서서 위를 바라볼 수 있다.
+const SEAT_TILES := [Vector2i(11, 90), Vector2i(14, 90), Vector2i(17, 90),
+	Vector2i(9, 90), Vector2i(19, 90)]                                       # 카페 좌석 줄(y90, ★C3 +48)
 const CUST := Color(0.55, 0.42, 0.50)  # 손님 그레이박스(회색 기조 + 옅은 자줏빛, NPC들과 구분)
 # T6.1 바나가 서는 밤 무대 칸 — 카페 뒷벽 직원 줄(옥자31·멜33·미호35,5) 맨 오른쪽 끝(미호
 # 옆, x37은 벽). 바나는 밤(빈 밤 슬롯 19시=Cafe.CLOSE_MIN)에만 드러나는 밤 무대 호스트라
@@ -2500,6 +2508,8 @@ var _total_income := 0
 # 일시 표시용으로, _ready에서 "이미 완료된 세이브를 이어받았으면 true"로 초기화해 재개 시
 # 팝업이 다시 터지지 않게 한다(완료 상태는 HUD가 상시 보여 줌 — RunSummary.is_over와 같은 결).
 var _milestone_celebrated := false
+# ★[S6-T3] 2단 달성 팝업 래치 — 1단 래치와 같은 규칙(세이브 무상태·_ready에서 재개 초기화).
+var _milestone2_celebrated := false
 # T7.2 달성 팝업 표시 잔여 시간(초). 카페 마감 정산 팝업과 같은 결(비차단 자동 해제).
 var _milestone_popup_secs := 0.0
 const MILESTONE_POPUP_SECS := 6.0  # 달성 팝업 표시 시간(2단 미리보기를 읽을 시간을 넉넉히)
@@ -2691,6 +2701,8 @@ func _begin_game(is_new_game: bool) -> void:
 	# 팝업이 다시 터지지 않게(완료 상태는 마일스톤 HUD가 상시 보여 준다). 신규/미완료면 false로,
 	# 플레이 중 채우는 순간 _process가 한 번 팝업을 띄운다(RunSummary.is_over 재개 안전과 같은 결).
 	_milestone_celebrated = _milestone_complete()
+	_milestone2_celebrated = _milestone_stage2_complete()   # ★[S6-T3] 2단 래치도 같은 규칙
+	# (이어받은 단계에 맞춘 좌석·곳간 용량·손님 볼륨은 위 _refresh_festival이 사다리째 세워 둔다.)
 	# T4.2 이어받은 세이브가 이미 슬라이스를 넘겼으면(RUN_DAYS+1일째 아침) 바로 마무리 화면을 띄운다.
 	# 그 경우 온보딩 컷신은 띄우지 않는다(슬라이스가 끝났으므로).
 	if RunSummary.is_over(clock.day):
@@ -8670,7 +8682,9 @@ func _refresh_festival() -> void:
 	mel.set_festive(f)
 	bana.set_festive(f)
 	okja.set_festive(f)
-	cafe.spawn_scale = Festival.spawn_scale(clock.day)   # ★seam 3: 이벤트일 손님 붐빔(단가 불침범)
+	# ★[S6-T3] seam 3(손님 붐빔)의 최종 주인은 사다리 주입이다 — 축제 배수 × 단계 배수를 한 자리
+	# (_refresh_cafe_ladder)에서 곱해 얹는다(두 곳이 spawn_scale에 각자 쓰면 나중 것이 앞을 지운다).
+	_refresh_cafe_ladder()
 	queue_redraw()                                       # 카페 축제 장식(_draw)을 새 상태로 다시 그림
 
 func _on_collapsed() -> void:
@@ -9162,7 +9176,14 @@ func _load_game() -> void:
 	# 그림) 같으면 그대로 둔다 — 그래서 farm 복원 뒤에 둔다(_save_game의 짝).
 	_restore_location(data)
 	# M2.4 F9 재로드(이 함수 직접 호출 경로)에서도 복원된 day로 의상·보너스를 맞춘다(멱등).
+	# ★[S6-T3] 이 호출이 카페 일구기 사다리(좌석·곳간 용량·손님 볼륨)도 함께 세운다 — 위에서
+	#   누적 매출·하트·거둔 영혼이 다 복원된 *뒤*라야 단계가 제대로 파생된다.
 	_refresh_festival()
+	# ★[S6-T3] 곳간을 **용량이 선 뒤 한 번 더** 로드한다. 위 larder.load_save는 누적 축이 아직
+	#   안 실린 시점이라 2단 세이브도 1단 용량(30)으로 잘렸다 — 31~50번째 재료가 조용히 증발하는
+	#   잠복 손실이었다. load_save는 재고를 비우고 다시 채우므로 두 번 불러도 멱등이다.
+	if data.has("larder"):
+		larder.load_save(data["larder"])
 	_notice("불러옴")
 
 # M1.5 — 세이브된 현재 구역·실내 모드·플레이어 위치를 복원한다. SaveManager는 IO만 책임지므로
@@ -9841,6 +9862,9 @@ func _process(delta: float) -> void:
 	# 융합 메뉴 풀(해금 ∧ 절기 ∧ 곳간 재고). margin·spawn_scale과 같은 다리다: cafe는 곳간도
 	# 해금 원장도 절기도 모른 채 값만 받는다. tick *전에* 흘려넣어야 이 프레임에 앉는 손님이
 	# 최신 재고로 주문한다(적재 직후 다음 손님부터 융합 가중치가 오른다).
+	# ★[S6-T3 / ADR-0064 결정 7] 카페 일구기 사다리 주입(좌석·곳간 용량·손님 볼륨). tick *전에*
+	# 흘려넣어야 2단이 열리는 그 프레임부터 새 좌석에 손님이 앉는다(order_pool 주입과 같은 이유).
+	_refresh_cafe_ladder()
 	cafe.day = clock.day
 	cafe.order_pool = _cafe_order_pool()
 	if not _sleeping:
@@ -10217,9 +10241,14 @@ func _process(delta: float) -> void:
 	milestone_label.visible = false
 	# 채우는 순간 한 번 "카페 2단계!" 팝업을 띄운다(래치 — 매 프레임 재팝업 방지). 달성 여부는
 	# 누적값에서 파생되므로(세이브 무상태), 재개 시엔 _ready가 래치를 미리 켜 둬 다시 안 터진다.
+	# ★[S6-T3] 2단도 같은 자리에서 같은 규칙으로(래치만 따로). elif라 두 단계가 한 프레임에 함께
+	# 닫혀도 1단을 먼저 보여 주고 2단은 다음 프레임에 뜬다(팝업이 팝업을 삼키지 않게).
 	if not _milestone_celebrated and _milestone_complete():
 		_milestone_celebrated = true
 		_show_milestone_reached()
+	elif not _milestone2_celebrated and _milestone_stage2_complete():
+		_milestone2_celebrated = true
+		_show_milestone2_reached()
 	# T4.1 온보딩 안내: 상시 중앙 배너가 "계속 떠서 불편"(피드백 2026-06-25) → 단계가 *바뀔 때만*
 	# 잠깐 띄운다. ★owner 2026-07-03 3차 HUD 가이드 — 좌하단 wide notice(화면 폭 날것 띠)를 폐기하고
 	# 전용 상단-중앙 팝업 배너(한지 플레이트·외곽선·페이드)로 교체. 매 프레임 guidance()를 보되 직전과
@@ -10347,7 +10376,7 @@ func _process(delta: float) -> void:
 		# ★[S6-T1] 곳간을 바라볼 때: 적재하면 융합 메뉴 재료가 된다(출하함과 갈리는 선택을 문구가 말한다).
 		interact_prompt.visible = true
 		interact_prompt.text = "[우클릭/F] 곳간 (수확물 적재 → 융합 메뉴 재료 · %d/%d)" % [
-			larder.total(), Larder.CAPACITY]
+			larder.total(), larder.capacity]
 	elif faced_resident != null:
 		# ★ [S2-T7] 주민 프롬프트 — 옛 5갈래(미호·옥자·바나·멜·네오) 문구가 한 조립식으로 접혔다.
 		# 기본 "[우클릭] 대화" + (선물 채널이 있으면) "[G] <작물> 선물" + (특수 훅이 있으면) 꼬리
@@ -11986,7 +12015,7 @@ func _on_frame_larder_store(slot_index: int) -> void:
 	var n := inventory.count_at(slot_index)
 	var stored := larder.add(id, n)
 	if stored <= 0:
-		_notice("곳간이 가득 찼습니다 (%d/%d)" % [larder.total(), Larder.CAPACITY])
+		_notice("곳간이 가득 찼습니다 (%d/%d)" % [larder.total(), larder.capacity])
 		return
 	inventory.remove_at(slot_index, stored)   # 들어간 만큼만 차감(용량 부분 적재 안전)
 	audio.sfx("ui")
@@ -14096,21 +14125,47 @@ func _fallback_menu() -> String:
 # 세 축을 여기서 합친다: ㉠ 해금(발견 게이트) ㉡ 절기 창(시그니처 재료 파생) ㉢ 곳간 재고 유무.
 # ★ 재고가 없어도 풀에 남긴다(가중치만 낮다) — 재고 0인 융합이 뽑혀야 폴백 경로가 실제로 굴러가고,
 #   "그 메뉴를 시켰는데 재료가 없었다"가 곳간을 채울 이유가 된다(주문이 수요 신호 역할).
+#
+# ★[S6-T3 / ADR-0064 결정 7] 여기에 **메뉴판 슬롯** 상한이 걸린다(2단이 여는 콘텐츠 넷째). 세 축을
+# 통과한 융합이 슬롯보다 많으면 앞쪽 slots개만 실제로 걸린다. 자르는 순서가 곧 규칙이다:
+#   ㉠ **곳간에 재고가 있는 메뉴 먼저** — 쟁여 둔 것이 메뉴판에 오른다("무엇을 기를까"가 곧 "무엇을
+#      팔까"가 되는 자리. 재고 가중치 W_FUSION_STOCKED가 주문 안에서 하던 일을 판 위에서도 한다).
+#   ㉡ 동률이면 카탈로그 선언 순(작물→물고기→채집→수액→나락혼정) — 결정적이라 같은 상태면 같은 판이다.
+# ★ 재고 0인 융합도 슬롯이 남으면 걸린다 — 폴백 경로(주문했는데 재료가 없다 = 곳간을 채울 이유)를
+#   죽이지 않기 위해서다(결정 4 무막힘. cafe.gd W_FUSION_EMPTY 주석과 같은 근거).
 func _cafe_order_pool() -> Array:
-	var out: Array = []
+	var stocked: Array = []
+	var empty: Array = []
 	var season := clock.season_index()
 	for mid in MenuCatalog.fusion_ids():
 		var id := String(mid)
 		if not _menu_unlocked(id) or not MenuCatalog.in_season(id, season):
 			continue
-		out.append({"id": id, "in_stock": larder.has_stock(MenuCatalog.signature_of(id))})
-	return out
+		if larder.has_stock(MenuCatalog.signature_of(id)):
+			stocked.append({"id": id, "in_stock": true})
+		else:
+			empty.append({"id": id, "in_stock": false})
+	var out: Array = stocked
+	out.append_array(empty)
+	var slots := CafeMilestone.fusion_slots_of(_cafe_stage())
+	return out.slice(0, slots) if out.size() > slots else out
 
 # 융합 메뉴 해금 판정(ADR-0064 결정 10 — **발견 게이트**, 관계 게이트 0).
 #   ㉠ 시그니처 산출물을 한 번이라도 손에 넣었나(_menu_found — 희소종 씨앗 레시피와 같은 결)
 #   ㉡ **최상위 나락혼정 아인슈페너만** 추가로 카페 일구기 1단 완료를 요구한다(결정 10 "상위 일부는
 #      카페 일구기 단계"). 로스터 꼭대기 한 잔이라 재료를 손에 넣는 것만으로는 안 열린다.
 # ★ 미호·멜 ♡는 여기 없다(ADR-0008 — 관계는 곱셈기이지 게이트가 아니다).
+#
+# ★[S6-T3 재배선 판정 — 2단이 생겨도 이 게이트는 **1단에 그대로 둔다**] 근거 셋:
+#   ① ADR-0064 결정 10의 원문이 "카페 일구기 단계"이고 그 단계는 T2 시점에 1단 하나뿐이었다 —
+#      2단을 지었다고 옛 게이트가 저절로 위 칸으로 따라 올라가야 할 이유가 없다(결정 7은 2단에
+#      *콘텐츠 넷*을 배정했지 이 해금을 재배정하지 않았다).
+#   ② 순환이 된다: 2단 문턱의 한 축이 **누적 서빙 매출**인데, 이 잔은 로스터 최고가라 그 매출을
+#      버는 주된 수단이다. 2단 뒤로 미루면 "매출을 벌 최고 수단이 매출을 다 번 뒤에 열리는" 보상이
+#      되어 해금이 무의미해진다(1단 게이트일 때만 "1단 → 최고가 잔 → 2단"의 사다리가 굴러간다).
+#   ③ ADR-0008 — 게이트는 이야기만이 원칙이고 이 한 잔이 이미 예외다. 예외를 더 깊게 만들지 않는다.
+#   그래서 `_milestone_complete()`(=1단 술어) 호출을 유지한다. 2단 술어는 `_milestone_stage2_complete`
+#   로 따로 있으며 콘텐츠 넷만 연다(메뉴 해금 축과 사다리 축을 섞지 않는다).
 func _menu_unlocked(menu_id: String) -> bool:
 	if not _menu_found.has(MenuCatalog.signature_of(menu_id)):
 		return false
@@ -14166,23 +14221,63 @@ func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
 	if revenue > 0:
 		audio.sfx("gold")                     # P2.6 카페 일일 정산 매출 골드
 
-# ── T7.2 카페 마일스톤 1단 ──────────────────────────────────────────────────
-# 관계 루프 산출물 = 세 동료 하트의 합(미호+멜+바나). 곱셈기들이 각자 하트를 곱셈기로 환류하듯
-# (Foxfire·CafeMargin·BanaGuard), 마일스톤은 같은 하트를 *관계 산출물*로 합산해 요구한다 —
-# 세 affinity 노드에서 매번 파생되므로 마일스톤이 따로 저장하는 관계 상태는 없다(세이브 무상태).
+# ── T7.2 카페 마일스톤 / ★[S6-T3] 카페 일구기 사다리 ────────────────────────
+# 관계 루프 산출물 = **미호+멜 두 사람의 하트 합**. 곱셈기들이 각자 하트를 곱셈기로 환류하듯
+# (Foxfire·CafeMargin), 마일스톤은 같은 하트를 *관계 산출물*로 합산해 요구한다 — affinity
+# 노드에서 매번 파생되므로 마일스톤이 따로 저장하는 관계 상태는 없다(세이브 무상태).
+#
+# ★[S6-T3 / ADR-0064 결정 7] **바나를 게이트에서 뺐다**(종전 미호+멜+바나 합). 근거는 ADR-0029 §4 —
+#   카페-도메인 3인은 옥자·미호·멜이고 바나는 *밤 경비·던전 공급* 축이다. 바나 하트가 카페 매크로
+#   목표를 밀면 "카페를 일구려면 밤 경비도 갈아야 한다"가 되어 도메인이 섞인다(바나의 보호 곱셈기는
+#   night_bar seam에 그대로 살아 있다 — 빠진 건 *게이트*지 보상이 아니다).
+# ★ 옥자 몫은 새 미터가 아니라 **누적 서빙 매출 축**이 대변한다(⚠️잠정 — ADR-0032 해석이라 owner
+#   결재 대상. 근거·대안은 cafe_milestone.gd 설계 메모 참조). 그래서 이 함수는 두 사람만 센다.
 func _milestone_hearts() -> int:
-	return affinity.hearts() + mel_affinity.hearts() + bana_affinity.hearts()
+	return affinity.hearts() + mel_affinity.hearts()
 
 # 카페 1단 완료 여부 — 세 루프 산출물이 *각각* 목표치를 넘었나(AND 게이트, CafeMilestone). 누적
-# 거둔 영혼·누적 서빙 매출·세 동료 하트 합에서 파생한다(끝남이 day에서 파생되는 RunSummary와 같은 결).
+# 거둔 영혼·누적 서빙 매출·미호+멜 하트 합에서 파생한다(끝남이 day에서 파생되는 RunSummary와 같은 결).
 func _milestone_complete() -> bool:
 	return CafeMilestone.is_complete(_run_harvested, _cafe_revenue_total, _milestone_hearts())
 
+# ★[S6-T3] 2단 완료 여부(1단과 같은 문법 — 같은 세 축의 더 높은 문턱).
+func _milestone_stage2_complete() -> bool:
+	return CafeMilestone.is_stage2_complete(_run_harvested, _cafe_revenue_total, _milestone_hearts())
+
+# ★[S6-T3] 현재 카페 일구기 단계(0/1/2). 좌석·곳간 용량·메뉴판 슬롯·손님 볼륨이 전부 이 한 값에서
+# 파생한다(_refresh_cafe_ladder가 각 시스템 seam에 주입). 누적값 파생이라 세이브 무상태다.
+func _cafe_stage() -> int:
+	return CafeMilestone.stage(_run_harvested, _cafe_revenue_total, _milestone_hearts())
+
+# ★[S6-T3 / ADR-0064 결정 7] 사다리 → 각 시스템 seam 주입. 단계가 여는 콘텐츠 넷을 한 자리에서
+# 흘려넣는다(cafe.margin·night_bar 보호 주입과 같은 다리 — cafe도 larder도 마일스톤을 모른다):
+#   ㉠ 좌석 3→5(cafe.open_seats) ㉡ 곳간 용량 30→50(larder.capacity)
+#   ㉢ 손님 볼륨(cafe.spawn_scale = 축제 배수 × 단계 배수 — 두 배수는 곱해서 함께 걸린다)
+#   ㉣ 메뉴판 슬롯은 _cafe_order_pool이 직접 읽는다(풀을 만드는 그 자리가 자를 자리라 — 아래 참조).
+# ★ 매 프레임 파생이라 단계가 오르는 *그 프레임*부터 새 좌석·용량이 실효한다(하루를 안 기다린다).
+#   멱등이라 _ready·복원·취침 어디서 불러도 같은 값이 선다(_refresh_festival과 같은 결).
+func _refresh_cafe_ladder() -> void:
+	var st := _cafe_stage()
+	if cafe != null:
+		cafe.open_seats = CafeMilestone.seats_of(st)
+		cafe.spawn_scale = Festival.spawn_scale(clock.day) * CafeMilestone.spawn_scale_of(st)
+	if larder != null:
+		larder.capacity = CafeMilestone.larder_capacity_of(st)
+
 # 1단을 채우는 순간 "카페 2단계!" + 2단 미리보기 한 줄을 팝업으로 띄운다(비차단 자동 해제 —
-# 카페 마감 정산 팝업과 같은 결). 진짜 2단 콘텐츠는 Phase 3 — 여기선 깊이를 *암시*만 한다
-# (ADR-0009, T3.5 사연 한 줄처럼 저비용). 측정 신호 "1단 깨니 2단 갈망하나"의 갈망을 거는 자리.
+# 카페 마감 정산 팝업과 같은 결). ★[S6-T3] 미리보기가 말하는 2단 콘텐츠(좌석·곳간·메뉴판·손님)는
+# 이제 실물이다 — 1단 팝업은 그 실물을 예고하고, 2단 팝업(_show_milestone2_reached)이 확인해 준다.
 func _show_milestone_reached() -> void:
 	milestone_text.text = CafeMilestone.reached_text()
+	milestone_panel.visible = true
+	_milestone_popup_secs = MILESTONE_POPUP_SECS
+
+# ★[S6-T3] 2단 달성 팝업 — **1단 래치 선례를 그대로** 따른다(별도 래치 1회·비차단 자동 해제·
+# 재개 시 _ready가 래치를 미리 켜 재팝업 0). 팝업 노드·타이머는 1단과 공유하고, 두 단계가 한
+# 프레임에 함께 닫히면(단번에 문턱을 뛰어넘는 세팅) _process의 elif가 1단을 먼저 보여 주고 2단은
+# 다음 프레임으로 미룬다 — 한 팝업이 다른 팝업을 덮어 삼키지 않는다.
+func _show_milestone2_reached() -> void:
+	milestone_text.text = CafeMilestone.reached2_text()
 	milestone_panel.visible = true
 	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
@@ -15527,7 +15622,7 @@ func _draw_larder() -> void:
 			Color(0.24, 0.17, 0.12))
 	# 재고를 아래 칸부터 채운다(용량 비율 → 채워진 단 수). 텅 비면 아무것도 안 찬다.
 	if larder != null and not larder.is_empty():
-		var filled := ceili(3.0 * float(larder.total()) / float(Larder.CAPACITY))
+		var filled := ceili(3.0 * float(larder.total()) / float(larder.capacity))
 		for i in mini(filled, 3):
 			var sy := box.end.y - shelf_h * (i + 1) + 2.0
 			draw_rect(Rect2(box.position.x + 2.0, sy, box.size.x - 4.0, shelf_h - 3.0),

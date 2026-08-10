@@ -969,10 +969,13 @@ func _draw_larder_top(panel: Rect2) -> void:
 	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 18.0),
 		"곳간", 16, HanjiUi.GOLD_SOFT)
 	var used := larder.total() if larder != null else 0
+	# ★[S6-T3] 상한은 상수가 아니라 *지금 걸린 용량*이다(카페 일구기 2단이 30→50으로 연다) —
+	#   판이 넓어지면 이 눈금도 저절로 따라 커진다.
+	var cap := larder.capacity if larder != null else Larder.CAPACITY
 	# 용량(우측 상단) — 가득 차면 붉게 물려 "더 못 넣는다"를 색으로 먼저 읽히게. 닫기 X와 안 겹치게 물림.
-	var cap_str := "%d/%d" % [used, Larder.CAPACITY]
+	var cap_str := "%d/%d" % [used, cap]
 	var cw := HanjiUi.text_width(cap_str, 15)
-	var cap_col: Color = HanjiUi.GOLD if used < Larder.CAPACITY else Color(0.86, 0.36, 0.32)
+	var cap_col: Color = HanjiUi.GOLD if used < cap else Color(0.86, 0.36, 0.32)
 	HanjiUi.draw_text(self, Vector2(panel.end.x - FRAME_MARGIN - 28.0 - cw,
 		panel.position.y + PAD + 20.0), cap_str, 15, cap_col)
 	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 38.0),
