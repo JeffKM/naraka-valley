@@ -42,6 +42,22 @@ func spend(cost: int = COST_PER_ACTION) -> bool:
 		depleted.emit()
 	return true
 
+# ★[S6-T7 / ADR-0064 결정 9·11 ③] 소모품 회복 — **곁들이(융합 메뉴 일부)를 먹었을 때** 혼력을
+# 채운다. `PlayerHealth.heal`(명부환 HP+40)의 **혼력 대칭**이라 계약을 글자 그대로 맞춘다:
+#   ㉠ 상한(MAX) 클램프 — 넘치는 분은 버린다(실제로 채워진 양을 반환하므로 호출 측이 알림에 쓴다).
+#   ㉡ 이미 가득(또는 amount ≤ 0)이면 **0을 돌려주고 아무 일도 안 한다** — 아이템을 태우지 않게
+#      호출 측(main._eat_side_dish)이 이 0을 보기 *전에* 풀혼력을 걸러 소비 자체를 거절한다
+#      (명부환 ㉠ "풀피면 거절"과 같은 규율. 여기 0 반환은 그 게이트가 뚫렸을 때의 이중 안전판).
+#   ㉢ depleted는 발화하지 않는다 — 채우는 동사라 바닥날 수 없다(damage/spend의 대칭항이 아니다).
+# ★ refill()과 갈리는 건 의도다: refill은 취침의 무조건 풀회복이고, restore는 *부분* 회복이다.
+func restore(amount: int) -> int:
+	if amount <= 0 or current >= MAX:
+		return 0
+	var gained := mini(amount, MAX - current)
+	current += gained
+	changed.emit(current, MAX)
+	return gained
+
 # 취침 회복: 혼력을 가득 채운다(GameClock.day_advanced에 연결).
 func refill() -> void:
 	current = MAX

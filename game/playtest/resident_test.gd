@@ -101,10 +101,14 @@ func _run_checks() -> void:
 	# ★ [S2-T8] 모찌가 여섯째로 붙었다(레코드 1건 — main.tscn 무수정). 앞 5인의 **순서는 불변**이라
 	#   facing 판정 순서·관계 탭 순서가 그대로다(신규는 뒤에만 붙는다).
 	# ★[S5-T3 / ADR-0063 결정 6] 8 → 9: 풀무(대장간 점주)가 아홉째로 붙었다(의도적 불변식 개정).
-	_check("③a 주민 10인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 추가)",
-		m._residents.size() == 10)
-	_check("③b 10인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골",
-		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman", "ongi", "pulmu", "mugol"])
+	# ★[S6-T7 / ADR-0064 결정 8] 10 → 11: 주방요괴(카페 T3 배경 직원)가 열한째로 붙었다(의도적
+	#   불변식 개정). **관계 트랙 0**인 첫 등록이라 이 한 건이 프레임워크의 "affinity 없이도 주민"
+	#   경로(옥자)를 script_path 생성 경로와 함께 처음으로 태운다.
+	_check("③a 주민 11인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 · ★S6-T7 주방요괴 추가)",
+		m._residents.size() == 11)
+	_check("③b 11인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골·주방요괴",
+		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman", "ongi", "pulmu",
+			"mugol", "kitchen_youkai"])
 	_check("③c id 조회", m._resident("mel") != null and m._resident("mel").display_name == "멜")
 	_check("③d 이름 조회", m._resident_named("바나") != null and m._resident_named("바나").id == "bana")
 	_check("③e 없는 id/이름 = null", m._resident("없음") == null and m._resident_named("없음") == null)

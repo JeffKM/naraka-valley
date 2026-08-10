@@ -2048,6 +2048,12 @@ const SHIP_BIN_TILE := Vector2i(19, 88)   # 카페 직원 줄(y88) 오른쪽 끝
 # ★ 자리를 출하함 반대쪽 끝에 두는 것이 곧 설계다: 같은 수확물을 *오른쪽(출하대 = 팔 것)* 으로
 #   가져갈지 *왼쪽(곳간 = 메뉴로 키울 것)* 으로 가져갈지가 CONTEXT [곳간]이 말하는 그 선택이다.
 const LARDER_TILE := Vector2i(9, 88)
+# ★[S6-T7 / ADR-0064 결정 8] 주방요괴 칸 — **곳간 바로 옆**(직원 줄 y88, 곳간 x9 · 옥자 x10 다음).
+# 자리가 곧 배선의 설명이다: 재료가 쌓이는 곳간(x9) 옆이 주방이고, 그 주방이 곁들이 한 접시를
+# 내준다(_make_side_dish가 곳간에서 차감한다). 직원 줄의 남은 칸 중 가장 왼쪽이라 멜(13)·미호(15)·
+# 바나(17)·출하함(19)과 안 겹치고, 아래 칸 (11,89)는 바 카운터 프롭(비-SOLID)이라 서서 위를
+# 바라볼 수 있다(멜을 (13,89)에서 마주보는 그 문법 1:1).
+const KITCHEN_TILE := Vector2i(11, 88)
 
 @onready var ground: TileMapLayer = $Ground
 @onready var field_layer: TileMapLayer = $Field           # T2.1 밭 상태 오버레이
@@ -5291,6 +5297,84 @@ func _drink_potion(item: String) -> void:
 	_notice("%s — 체력 +%d (%d/%d) · 남은 %d개" % [ItemCatalog.name_of(item), healed,
 		health.current, health.maximum, inventory.count_of(item)])
 	queue_redraw()
+
+# ★[S6-T7 / ADR-0064 결정 9] 곁들이를 먹는다 — 든 채 LMB(칸을 안 본다·어디서든 먹는다).
+# `_drink_potion`(명부환)의 **혼력 대칭**이라 세 규율을 글자 그대로 물려받는다:
+#   ㉠ **혼력이 가득하면 거절**한다(소모 0). 곁들이 한 접시는 곳간 재료 하나 = 포기한 프리미엄
+#      매출이라, 오조작 한 번이 그대로 손실이다("낭비 방지 > 정직한 소모" — 명부환 ㉠ 그 근거).
+#   ㉡ 회복 후 남은 잔량을 함께 알린다 — 갱도·밭에서 "몇 접시 남았나"가 곧 "더 할까"의 판단이다.
+#   ㉢ 체력(HP)은 한 톨도 안 건드린다 — 두 자원은 완전 별개다(ADR-0011). 음식 버프 축(스타듀
+#      10종 스탯)도 여기 없다: **비채택 서랍**이라 회복 한 축만 붙는다(ADR-0064 결정 9·12).
+func _eat_side_dish(item: String) -> void:
+	if _sleeping or _transitioning or energy == null or inventory == null:
+		return
+	var amount := MenuCatalog.restore_of(item)
+	if amount <= 0:
+		return
+	if energy.current >= SoulEnergy.MAX:
+		_notice("혼력이 가득하다 — %s 는 아껴 두자" % MenuCatalog.name_of(item))
+		return
+	if not inventory.remove_item(item, 1):
+		return
+	var gained := energy.restore(amount)
+	audio.sfx("ui")
+	_notice("%s — 혼력 +%d (%d/%d) · 남은 %d개" % [MenuCatalog.name_of(item), gained,
+		energy.current, SoulEnergy.MAX, inventory.count_of(item)])
+	queue_redraw()
+
+# ★[S6-T7 / ADR-0064 결정 8·9] 주방요괴 [F] = **곁들이 한 접시**. 곳간 재고에서 시그니처 1개를
+# 먹고 그 융합 메뉴를 백팩에 한 개 넣는다(먹는 건 위 `_eat_side_dish`가 따로 받는다 — 받는 것과
+# 먹는 것을 가르면 접시를 갱도·밭까지 들고 갈 수 있다).
+# ★ 이 창구가 **메뉴 아이템이 인벤토리에 들어오는 유일한 경로**다(T1이 "등록만 해 두고" 남긴 그 자리).
+# ★ 손님 주문 경로와 **같은 곳간·다른 출구**라 그 자체가 선택이다: 같은 넋송이 한 송이가 손님에게
+#   가면 매출이고 내게 오면 혼력이다(CONTEXT [곳간] "팔 것인가 키울 것인가"의 셋째 갈래).
+func _make_side_dish() -> bool:
+	if larder == null or inventory == null:
+		return true
+	var menu_id := _best_side_dish()
+	if menu_id == "":
+		_notice("주방요괴가 곳간을 들여다본다 — 곁들이로 낼 재료가 없다")
+		return true
+	var sig := MenuCatalog.signature_of(menu_id)
+	if larder.consume(sig, 1) <= 0:
+		return true                       # 방어(_best_side_dish가 이미 재고를 봤다)
+	if not inventory.add_item(menu_id, 1, ItemCatalog.Q_NORMAL):
+		larder.add(sig, 1)                # 원복 — 방금 한 칸 비웠으니 반드시 도로 들어간다
+		_notice("백팩이 가득 찼습니다")
+		return true
+	audio.sfx("ui")
+	_notice("%s 한 접시 (혼력 +%d · 곳간 %s 1개)" % [MenuCatalog.name_of(menu_id),
+		MenuCatalog.restore_of(menu_id), ItemCatalog.name_of(sig)])
+	queue_redraw()
+	return true
+
+# 지금 주방요괴가 내줄 수 있는 곁들이("" = 곳간에 곁들이 재료가 하나도 없다).
+# ★ **회복량이 가장 큰 것**을 고른다(동률·부재는 카탈로그 선언 순 — 결정적이라 같은 재고면 같은
+#   접시다. 무작위 금지 = 재현성). 고르는 UI를 안 만드는 게 판단이다: 곁들이의 효과 축이 혼력 하나뿐이라
+#   플레이어가 늘 최대치를 원한다 — 선택지가 없는 곳에 피커를 세우면 마찰만 는다. *진짜* 선택은
+#   "무엇을 곳간에 쟁일까"에서 이미 끝났다(공급 선택 게임 — 결정 10).
+# ★ 해금(발견 게이트)·절기 창은 **여기 안 건다**: ㉠ 곳간에 재고가 있다는 것 자체가 그 재료를 한 번
+#   손에 넣었다는 증명이라 발견 게이트가 자동 충족이고 ㉡ 절기 로테이션은 *메뉴판*(손님이 무엇을
+#   주문하나)의 규칙이지 내가 먹을 한 접시의 규칙이 아니다(재료는 이미 내 곳간에 있다).
+func _best_side_dish() -> String:
+	var best := ""
+	var best_n := 0
+	for raw_id in MenuCatalog.side_dish_ids():
+		var id := String(raw_id)
+		if not larder.has_stock(MenuCatalog.signature_of(id)):
+			continue
+		var n := MenuCatalog.restore_of(id)
+		if n > best_n:
+			best_n = n
+			best = id
+	return best
+
+# 주방요괴 프롬프트 꼬리 — 지금 무엇이 나오는지를 미리 말한다(바나 "[F] 나라카 바 열기" 결).
+func _side_dish_prompt() -> String:
+	var menu_id := _best_side_dish()
+	if menu_id == "":
+		return "   (곳간에 곁들이 재료가 없다)"
+	return "   [F] 곁들이 — %s" % MenuCatalog.name_of(menu_id)
 
 # 지금 플레이어가 겨누는 스윙 부채꼴(벽 뒤 칸 제외). CombatSkill이 순수 기하를 주고, "그 칸이
 # 실제로 닿는가"(맵 밖·SOLID)를 여기서 자른다 — 벽 하나 사이로 몹을 베는 일이 없게.
@@ -10793,6 +10877,13 @@ func _use_tool() -> void:
 	if ItemCatalog._is_potion(item):
 		_drink_potion(item)
 		return
+	# ★[S6-T7 / ADR-0064 결정 9] 곁들이(융합 메뉴 일부) — 환약과 **같은 자리**(혼력 게이트 위)다.
+	#   근거가 환약보다 더 강하다: 이건 *혼력을 채우는* 동사라, 혼력 게이트 아래 두면 바닥났을 때
+	#   먹을 수 없어 회복 수단이 자기 자신에 잠긴다(막힘 0 — ADR-0008). 환약이 CAT_CONSUMABLE의
+	#   "든 채 LMB" 문법을 이미 깔아 둬 신규 입력 축은 0이다.
+	if MenuCatalog.is_side_dish(item):
+		_eat_side_dish(item)
+		return
 	# ★[S5-T8 / ADR-0063 결정 10] 계단 — 환약과 같은 이유로 혼력 게이트 위다(놓는 데 혼력이 안 든다.
 	#   혼력이 바닥났을 때야말로 남은 계단으로 한 층 더 내려갈지 정하는 순간이라 여기서 막으면 안 된다).
 	if item == ItemCatalog.STAIRS:
@@ -13851,6 +13942,39 @@ func _setup_residents() -> void:
 	_register_resident(r_mugol)
 	# ★선호 선물 = **없음**(옹이·풀무와 같은 판단·잠정 owner 큐 — 실존 작물 5종이 이미 전부 배정돼
 	#   남은 게 0이다. 일반 선물 채널은 그대로 열려 있어 막힘 0).
+
+	# ── ★ [S6-T7 / ADR-0064 결정 8] 주방요괴 — **T3 배경 직원**(카페 주방 자리·곁들이 창구).
+	#    CONTEXT [주방요괴]가 정의만 해 두고 무대엔 없던 자리를 세운다: S6-T1부터 기본 메뉴는
+	#    "주방요괴가 백스테이지에서 대는 무재료 음료"로 나가고 있었는데, 정작 그 백스테이지가
+	#    비어 있었다.
+	#    ★ **관계 트랙 0**(옥자와 같은 경로 — affinity=null · plain_talk · can_gift 기본 false).
+	#      호감도도 선물도 하트 단계 대사도 없다: 깊이는 메인 4인 독점이고(ADR-0005) 이쪽은 조연
+	#      2층 구조의 아래층이다. `rel_text` 한 줄이 컨텍스트 팝업의 하트 자리를 대신한다.
+	#    ★ **정체는 서랍**(CONTEXT) — 호칭 「주방요괴」 그대로 쓰고 종족·내력은 안 정한다.
+	#    ★ [F] 훅 = 곁들이 한 접시(_make_side_dish). 점주와 **같은 필드(shop_key)를 쓰되 매대가
+	#      아니다** — 직원이라 파는 게 없고, 곳간 재고를 내 몫 한 접시로 바꿔 줄 뿐이다.
+	#    ★ **맨 끝에 등록한다** — 등록 순서가 곧 `_residents` 인덱스라, 중간에 끼우면 기존 주민
+	#      10인의 인덱스가 밀려 그걸 좌표로 쓰는 검증(guild_test `_residents[9] == mugol`)이
+	#      의미를 잃는다. 뒤에 붙이면 늘어나는 건 size 하나뿐이다.
+	#    ★ main.tscn 무수정 — script_path로 몸을 프레임워크가 낳는다(모찌가 깔아 둔 그 길).
+	var r_kitchen := Resident.new()
+	r_kitchen.id = "kitchen_youkai"
+	r_kitchen.display_name = "주방요괴"
+	r_kitchen.script_path = "res://kitchen_youkai.gd"
+	r_kitchen.needs_affinity = false     # ★관계 트랙 0 — Affinity 노드도, 세이브 키도 안 낳는다
+	r_kitchen.affinity = null
+	r_kitchen.rel_text = "카페 주방 담당"
+	r_kitchen.plain_talk = true          # lines_resident() — 하트·first_today 인자 없는 일상 묶음
+	r_kitchen.portrait_stem = ""         # 초상화·스프라이트 = S6-T9 아트 패스
+	# ★ 실내 가드 — 카페 방 안에서만 말 걸 수 있다(네오 "만물상" 선례). 멜·옥자는 카메라 격리에
+	#   기대 이 필드를 비웠지만, 새로 붙는 자리는 좁게 잠그는 쪽이 안전하다(다른 구역의 같은
+	#   좌표에 닿아도 무반응 — 좁히기만 하므로 기존 주민 거동엔 영향 0).
+	r_kitchen.require_indoor = "카페"
+	r_kitchen.schedule = [{"from_min": 0, "tile": KITCHEN_TILE, "region": ""}]
+	r_kitchen.prompt_extra = func() -> String: return _side_dish_prompt()
+	r_kitchen.shop_key = func() -> bool: return _make_side_dish()
+	# ★ effect_fn 없음 = 관계 탭에 아예 안 뜬다(곱셈기 0 — ADR-0008 메인 4인 독점).
+	_register_resident(r_kitchen)
 
 # 옹이 하트(목공방 매대 할인의 유일한 입력). 레코드가 없거나 관계 트랙이 없으면 0 = 정가(방어).
 # ★네오·뱃사공 하트와 **서로 참조 0** — 세 가게 할인이 완전히 독립임을 이 조회로 못 박는다.
