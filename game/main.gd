@@ -448,6 +448,41 @@ const MINE_ICONS := {
 	ItemCatalog.NARAK_HONJEONG: preload("res://assets/materials/narak_honjeong.png"),
 }
 
+# ★ [S6-T8 / ADR-0064 아트 스코프] 카페 메뉴 아이콘 16종(기본 4 + 융합 12) — 색박스 폴백 대체.
+# TOOL/FERT/SAPLING/FISH/GEAR/FORAGE/MATERIAL/MINE_ICONS와 **정확히 같은 결**이다: 한 dict를
+# `icons`에 병합하면 핫바·인벤(CTX_LARDER 포함)·매대·토스트가 전부 `_draw_icon`/`_item_icon`
+# 한 경로로 텍스처를 집는다. 메뉴는 CAT_CONSUMABLE(환약·계단·미끼가 쓰는 그 칸)이라 "텍스처
+# 있으면 쓰고 없으면 색박스" 분기를 이미 타고 있었다 — **드로우 분기 추가 0**.
+#
+# ★ 잔·접시가 곧 분류다: 기본 4종은 소박한 잔(머그·유리컵)이고 융합 음료 7종은 색이 든 잔,
+#   곁들이 요리 5종(MenuCatalog.SIDE_DISHES)은 **접시에 담긴 것**이다. "마시는 잔은 팔고 먹는
+#   것은 든든하다"는 S6-T7의 규칙이 아이콘 실루엣에서 그대로 읽힌다(별도 UI 설명 불요).
+# ★ 색의 단일 출처는 `MenuCatalog.color_of`(색박스)였고 아이콘은 그 색을 눈으로 잇는다 —
+#   손님 말풍선·인벤 슬롯·서빙 토스트가 같은 잔을 보여 준다(세 곳이 갈리면 "무엇을 시켰나"가
+#   무대마다 다른 그림이 된다).
+const MENU_ICONS := {
+	# 기본 4 — 무재료·항시(주방요괴가 대는 플레인 잔). 값이 싼 만큼 잔도 소박하다.
+	MenuCatalog.AMERICANO: preload("res://assets/menu/menu_americano.png"),
+	MenuCatalog.COLD_WATER: preload("res://assets/menu/menu_cold_water.png"),
+	MenuCatalog.BARLEY_TEA: preload("res://assets/menu/menu_barley_tea.png"),
+	MenuCatalog.HOT_MILK: preload("res://assets/menu/menu_hot_milk.png"),
+	# 융합 음료 7 — 판매 전용(플레이어가 못 먹는다). 시그니처 재료색이 잔에 들어 있다.
+	MenuCatalog.HONRYEONGCHO_LATTE: preload("res://assets/menu/menu_honryeongcho_latte.png"),
+	MenuCatalog.PIANHWA_ADE: preload("res://assets/menu/menu_pianhwa_ade.png"),
+	MenuCatalog.HOBAK_LATTE: preload("res://assets/menu/menu_hobak_latte.png"),
+	MenuCatalog.PODO_SMOOTHIE: preload("res://assets/menu/menu_podo_smoothie.png"),
+	MenuCatalog.HAEPARI_ADE: preload("res://assets/menu/menu_haepari_ade.png"),
+	MenuCatalog.DONGBAEK_MILKTEA: preload("res://assets/menu/menu_dongbaek_milktea.png"),
+	# 나락혼정 아인슈페너 = 로스터 최상위. 굽 달린 잔·금테로 **혼자 격이 다르게** 세웠다.
+	MenuCatalog.HONJEONG_EINSPANNER: preload("res://assets/menu/menu_honjeong_einspanner.png"),
+	# 곁들이 요리 5 — 접시·그릇에 담긴 것(먹으면 혼력이 돈다, S6-T7).
+	MenuCatalog.BULSAGWA_TART: preload("res://assets/menu/menu_bulsagwa_tart.png"),
+	MenuCatalog.BUNGEO_PPANG: preload("res://assets/menu/menu_bungeo_ppang.png"),
+	MenuCatalog.DOMI_PANINI: preload("res://assets/menu/menu_domi_panini.png"),
+	MenuCatalog.SONGI_SOUP: preload("res://assets/menu/menu_songi_soup.png"),
+	MenuCatalog.DANPUNG_PANCAKE: preload("res://assets/menu/menu_danpung_pancake.png"),
+}
+
 # 야생·혼합·희귀 씨앗 봉지 9종. **키 = 작물 id**(위 주석 CAT_SEED 참조). 아홉 장 다 같은 봉지
 # 실루엣의 절기 틴트 파생이다(tools/make_t10_icons.py) — 스타듀 야생 씨앗 문법 상속이자,
 # 아홉을 따로 그리면 실루엣이 흔들려 "한 계열"로 안 읽히기 때문이다([ADR-0001] 큐레이션).
@@ -1012,6 +1047,31 @@ const MOB_TEX := {
 	"boss_nachalwang": preload("res://assets/mobs/boss_nachalwang.png"),
 	"boss_daeagwi": preload("res://assets/mobs/boss_daeagwi.png"),
 }
+# ★ [S6-T8 / ADR-0064 결정 8] 카페 손님 상 — 좌석의 회색 그레이박스 형체를 대체한다.
+# ★ **명명 손님은 기존 주민 시트를 그대로 쓴다**(신규 캐릭터 생성 0 — 결정 8이 로스터를 현행
+#   주민 재사용으로 못 박은 그 이유가 아트에서도 그대로다). 키 = Resident.id = GuestPool.GUEST_IDS.
+#   시트 규약은 CharSprite와 같다(프레임 80² · 행 0 = 남향 = 얼굴). 얼굴이 보여야 "아는 사람이
+#   왔다"가 표식 없이도 읽히므로 뒷모습(북향 행)이 아니라 남향 행을 앉힌다.
+const GUEST_SHEETS := {
+	"neo": preload("res://assets/characters/neo.png"),
+	"boatman": preload("res://assets/characters/boatman.png"),
+	"ongi": preload("res://assets/characters/ongi.png"),
+	"mochi": preload("res://assets/characters/mochi.png"),
+	"pulmu": preload("res://assets/characters/pulmu.png"),
+	"mugol": preload("res://assets/characters/mugol.png"),
+}
+# 익명 손님 상 6종(32×48) — 원본 2장(두건 쓴 혼 · 탈 쓴 요괴)의 혼빛 틴트 파생이다
+# (tools/make_s6_art.py). 익명은 *정체가 없는 것*이 정의라 실루엣을 6가지로 벌릴 필요가 없고,
+# 오히려 혼빛만 다른 무리가 "이름 없는 손님들"로 읽힌다(씨앗 봉지 9종과 같은 판단).
+const GUEST_ANON := [
+	preload("res://assets/characters/guest_anon_a0.png"),
+	preload("res://assets/characters/guest_anon_a1.png"),
+	preload("res://assets/characters/guest_anon_a2.png"),
+	preload("res://assets/characters/guest_anon_b0.png"),
+	preload("res://assets/characters/guest_anon_b1.png"),
+	preload("res://assets/characters/guest_anon_b2.png"),
+]
+
 # P2.3③ 소울 등불 자리(단일 출처) — 가구 그리기(PROP_LAYOUT)와 밤 빛웅덩이(lighting)가
 # 이 배열을 공유한다(좌표가 어긋나면 등불 그림과 빛이 따로 놀므로).
 # ★ M1.4 — 카페가 나루 마을로 이주하며 등불도 구역이 갈렸다: 안식 농원 길가 둘 / 나루 마을 카페
@@ -5319,7 +5379,8 @@ func _eat_side_dish(item: String) -> void:
 	var gained := energy.restore(amount)
 	audio.sfx("ui")
 	_notice("%s — 혼력 +%d (%d/%d) · 남은 %d개" % [MenuCatalog.name_of(item), gained,
-		energy.current, SoulEnergy.MAX, inventory.count_of(item)])
+		energy.current, SoulEnergy.MAX, inventory.count_of(item)],
+		NOTICE_SECS, false, _item_icon(item))   # ★[S6-T8] 먹은 접시의 아이콘
 	queue_redraw()
 
 # ★[S6-T7 / ADR-0064 결정 8·9] 주방요괴 [F] = **곁들이 한 접시**. 곳간 재고에서 시그니처 1개를
@@ -5344,7 +5405,8 @@ func _make_side_dish() -> bool:
 		return true
 	audio.sfx("ui")
 	_notice("%s 한 접시 (혼력 +%d · 곳간 %s 1개)" % [MenuCatalog.name_of(menu_id),
-		MenuCatalog.restore_of(menu_id), ItemCatalog.name_of(sig)])
+		MenuCatalog.restore_of(menu_id), ItemCatalog.name_of(sig)],
+		NOTICE_SECS, false, _item_icon(menu_id))   # ★[S6-T8] 받은 접시의 아이콘
 	queue_redraw()
 	return true
 
@@ -8398,6 +8460,8 @@ func _merge_t10_icons(icons: Dictionary) -> void:
 		icons[crop_id] = SEED_PACKET_ICONS[crop_id]
 	for mine_id in MINE_ICONS:
 		icons[mine_id] = MINE_ICONS[mine_id]       # ★ [S5-T10] 광물·주괴·보석·무기·소모품(색박스 대체)
+	for menu_id in MENU_ICONS:
+		icons[menu_id] = MENU_ICONS[menu_id]       # ★ [S6-T8] 카페 메뉴 16종(색박스 대체)
 
 func _setup_hotbar() -> void:
 	hotbar = HotbarHud.new()
@@ -9390,9 +9454,11 @@ func _restore_location(data: Dictionary) -> void:
 # ★ C3 — 일시 이벤트 한 줄을 좌하단 알림 피드(큐)에 민다(저장됨·서빙·약탈·사연 한 줄 등).
 # 저장됨 등은 짧게(NOTICE_SECS), T3.5 사연 한 줄은 읽을 수 있게 길게(FLAVOR_SECS). 피드가 스스로
 # 시간 경과로 흐려지며 사라지므로(상시 라벨 폐기), 여기선 한 줄을 밀어 넣기만 한다.
-func _notice(msg: String, secs: float = NOTICE_SECS, wide: bool = false) -> void:
+# ★[S6-T8] `icon`은 아이템 획득 토스트(_toast_item)가 이미 쓰던 push의 넷째 인자를 열어 준 것이다.
+#   카페 사슬 알림(서빙·체키·곁들이)이 "무슨 잔이 나갔나"를 글자와 함께 그림으로도 말한다.
+func _notice(msg: String, secs: float = NOTICE_SECS, wide: bool = false, icon: Texture2D = null) -> void:
 	if notice_feed != null:
-		notice_feed.push(msg, secs, wide)
+		notice_feed.push(msg, secs, wide, icon)
 
 # ★ Phase C — 아이템 획득 토스트(좌하단 알림에 아이콘+이름 +수량). 게임플레이 획득 지점(수확·수집·
 # 개간 드랍)에서만 부른다 — 세이브 로드·구매·회수는 각자 알림/무알림이라 이중 토스트·로드 스팸 회피.
@@ -9430,6 +9496,8 @@ func _item_icon(id: String) -> Texture2D:
 		return MATERIAL_ICONS[id]
 	if MINE_ICONS.has(id):                     # ★ [S5-T10] 광물·주괴·보석·무기·드랍(채굴·제련·처치 토스트)
 		return MINE_ICONS[id]
+	if MENU_ICONS.has(id):                     # ★ [S6-T8] 카페 메뉴(서빙·체키·곁들이 토스트)
+		return MENU_ICONS[id]
 	# 씨앗은 아이템 id가 아니라 **작물 id**로 아이콘을 잡는다(SEED_PACKET_ICONS 주석 — 인벤과 같은 규약).
 	var packet_crop := ItemCatalog.crop_of(id)
 	if packet_crop != "" and SEED_PACKET_ICONS.has(packet_crop):
@@ -14457,7 +14525,8 @@ func _try_serve(seat: int) -> void:
 	#   활동 루프의 부산물로 전락한다. 익명 손님("")이면 record_serve가 조용히 흘려보낸다.
 	guests.record_serve(guest_id)
 	audio.sfx("serve")                        # P2.6 카운터 종 "딩"
-	_notice("%s%s 서빙 +%d골드" % [_guest_prefix(guest_id), MenuCatalog.name_of(served), revenue])
+	_notice("%s%s 서빙 +%d골드" % [_guest_prefix(guest_id), MenuCatalog.name_of(served), revenue],
+		NOTICE_SECS, false, _item_icon(served))   # ★[S6-T8] 나간 잔의 아이콘을 알림에 함께
 	_offer_cheki(seat, guest_id, served)      # ★[S6-T5] 사슬 2단 — 아는 얼굴이면 체키 제안이 열린다
 
 # 이 좌석에 **실제로 나갈 메뉴** id(부작용 없는 순수 판정). 서빙 실행과 프롬프트 표시가 같은 답을
@@ -14563,7 +14632,7 @@ func _finish_cheki() -> void:
 	guests.record_cheki(guest_id, grade)              # 단골화 가속(♡ 아님 — 방문 가중치)
 	audio.sfx("gold")
 	_notice("%s체키 %s +%d골드" % [_guest_prefix(guest_id),
-		ChekiSession.grade_name(grade), revenue])
+		ChekiSession.grade_name(grade), revenue], NOTICE_SECS, false, _HUD_BADGE_CHEKI)
 	queue_redraw()
 
 # ★[S6-T4] 손님 이름 조각("" = 익명이라 이름 없이 메뉴만 말한다 — 결정 8 "익명은 이름·호감도 없음").
@@ -15373,9 +15442,29 @@ func _draw_fishing_hud() -> void:
 #   ④ 단계 표식(판 위 점 둘) — 구도(1) → 셔터(2). 지금 어느 단인지가 문구 없이도 보인다.
 #
 # main.gd는 _draw에서 텍스트를 안 쓰는 관례라(문구는 interact_prompt) 순수 도형만 그린다.
-const _CHUD_W := 92.0        # 패널 폭 — 한지 판 9-slice(테두리 12) 안에 트랙이 여유 있게 눕는 최소치
+#
+# ★[S6-T8 아트 패스] 판은 처음부터 한지(HanjiUi.draw_plate)였고, 이번에 더한 건 **판 왼쪽 배지**다.
+#   체키 판과 칵테일 판은 규격(_CHUD_*/_KHUD_*)도 자리도 같아 트랙 모양만으로는 두 미니게임이
+#   갈리지 않았다 — 카메라(낮 체키) / 셰이커(밤 칵테일) 한 장이 "지금 무슨 결인가"를 말한다.
+#   배지 자리만큼 트랙이 오른쪽으로 밀리고 판이 넓어진다(트랙 폭은 그대로 = 판정 난이도 불변).
+const _HUD_BADGE_CHEKI: Texture2D = preload("res://assets/ui/cheki_camera.png")
+const _HUD_BADGE_COCKTAIL: Texture2D = preload("res://assets/ui/cocktail_shaker.png")
+const _HUD_BADGE := 24.0     # 배지 한 변(tools/make_s6_art.BADGE와 같은 값)
+const _HUD_BADGE_GAP := 6.0  # 배지 ↔ 트랙 사이
+
+const _CHUD_W := 92.0 + _HUD_BADGE + _HUD_BADGE_GAP   # 패널 폭 — 옛 판(92) + 배지 자리
 const _CHUD_H := 34.0        # 패널 높이 — 트랙 한 줄 + 잔여 시간 줄
 const _CHUD_PAD := 11.0      # 판 테두리 안쪽 여백
+# 트랙 왼쪽 시작(판 여백 + 배지 + 틈) — 배지가 없어도 판이 안 무너지게 한 상수로 둔다.
+const _HUD_TRACK_X := _CHUD_PAD + _HUD_BADGE + _HUD_BADGE_GAP
+
+# 판 왼쪽 세로 가운데에 배지 한 장(텍스처 없으면 조용히 건너뛴다 — 트랙 자리는 그대로).
+func _draw_hud_badge(org: Vector2, h: float, tex: Texture2D) -> void:
+	if tex == null:
+		return
+	draw_texture_rect(tex, Rect2(org + Vector2(_CHUD_PAD - 3.0, (h - _HUD_BADGE) * 0.5),
+		Vector2(_HUD_BADGE, _HUD_BADGE)), false)
+
 func _draw_cheki_hud() -> void:
 	if cheki == null or player == null:
 		return
@@ -15383,7 +15472,8 @@ func _draw_cheki_hud() -> void:
 	var org: Vector2 = player.global_position + Vector2(-_CHUD_W * 0.5, -_CHUD_H - 26.0)
 	var panel := Rect2(org, Vector2(_CHUD_W, _CHUD_H))
 	HanjiUi.draw_plate(self, panel)
-	var track := Rect2(org + Vector2(_CHUD_PAD, _CHUD_PAD), Vector2(_CHUD_W - _CHUD_PAD * 2.0, 9.0))
+	_draw_hud_badge(org, _CHUD_H, _HUD_BADGE_CHEKI)
+	var track := Rect2(org + Vector2(_HUD_TRACK_X, _CHUD_PAD), Vector2(_CHUD_W - _HUD_TRACK_X - _CHUD_PAD, 9.0))
 	draw_rect(track, HanjiUi.INSET)
 	var in_zone := cheki.in_sweet_zone()
 	var target := cheki.aim_target() if cheki.state == ChekiSession.State.AIM else cheki.snap_target()
@@ -15419,7 +15509,7 @@ func _draw_cheki_hud() -> void:
 #   ③ 잔여 시간(아래 실선) — 줄어들면 자동 확정(무실패라 위협이 아니라 *안내*다. 붉은색을 안 쓴다).
 #   ④ 단계 표식(판 위 점 셋) — 붓기1 → 붓기2 → 셰이킹.
 # main.gd는 _draw에서 텍스트를 안 쓰는 관례라(문구는 interact_prompt) 순수 도형만 그린다.
-const _KHUD_W := 92.0        # 체키 판과 같은 규격 — 두 미니게임 판이 같은 크기·같은 자리에 뜬다
+const _KHUD_W := _CHUD_W     # 체키 판과 같은 규격 — 두 미니게임 판이 같은 크기·같은 자리에 뜬다
 const _KHUD_H := 34.0
 const _KHUD_PAD := 11.0
 func _draw_cocktail_hud() -> void:
@@ -15428,7 +15518,8 @@ func _draw_cocktail_hud() -> void:
 	var org: Vector2 = player.global_position + Vector2(-_KHUD_W * 0.5, -_KHUD_H - 26.0)
 	var panel := Rect2(org, Vector2(_KHUD_W, _KHUD_H))
 	HanjiUi.draw_plate(self, panel)
-	var track := Rect2(org + Vector2(_KHUD_PAD, _KHUD_PAD), Vector2(_KHUD_W - _KHUD_PAD * 2.0, 9.0))
+	_draw_hud_badge(org, _KHUD_H, _HUD_BADGE_COCKTAIL)   # ★[S6-T8] 셰이커 = 밤 칵테일의 표식
+	var track := Rect2(org + Vector2(_HUD_TRACK_X, _KHUD_PAD), Vector2(_KHUD_W - _HUD_TRACK_X - _KHUD_PAD, 9.0))
 	draw_rect(track, HanjiUi.INSET)
 	var shaking := cocktail.state == CocktailSession.State.SHAKE
 	# ── ① 창 — 중심 ±반폭을 트랙 위에 실제 폭으로. 트랙 밖으로 넘치면 잘라 그린다.
@@ -16192,15 +16283,23 @@ func _draw_facade_cafe() -> void:
 # ★ C2 무인 출하함 상자(그레이박스 — 진짜 아트는 후속). SHIP_BIN_TILE 칸에 나무 궤짝 형태를
 # 절차 도형으로 그린다(가구 프롭과 같은 결 — 충돌·세이브 없는 순수 장식, 상태는 ship_bin이 든다).
 # 카페 카메라(CAFE_CAM_RECT)만 이 칸을 비추므로 카페 안에서만 보인다(손님·잡귀 그리기와 같은 결).
+# ★[S6-T8] 아트 훅: assets/props/ship_bin.png(32²) 있으면 칸 바닥정렬로 렌더, 없으면 옛 그레이박스.
+#   곳간과 **한 패스에서 함께** 굽는다 — 같은 방 양 끝에 선 두 창구 중 하나만 도트면 남은 쪽이
+#   오히려 튀어 보인다(S4-T10에서 "자재 카테고리 절반만 도트" 때 얻은 교훈과 같은 판단).
 func _draw_ship_bin() -> void:
 	var ox := SHIP_BIN_TILE.x * TILE
 	var oy := SHIP_BIN_TILE.y * TILE
-	var box := Rect2(ox + 3, oy + 8, TILE - 6, TILE - 12)
-	draw_rect(box.grow(1.0), Color(0.20, 0.14, 0.09))           # 외곽선(어두운 나무)
-	draw_rect(box, Color(0.46, 0.32, 0.18))                     # 궤짝 본체(나무빛)
-	draw_rect(Rect2(box.position, Vector2(box.size.x, 4)), Color(0.58, 0.42, 0.24))  # 뚜껑 밝은 띠
-	# 정면 빗금 두 줄(널판 이음새)로 "상자"임을 읽히게 한다.
-	draw_rect(Rect2(box.position.x, box.position.y + box.size.y * 0.5, box.size.x, 1), Color(0.28, 0.19, 0.11))
+	var tex := _prop_tex("ship_bin")
+	if tex != null:
+		var sz := tex.get_size()
+		draw_texture(tex, Vector2(ox + (TILE - sz.x) * 0.5, oy + TILE - sz.y))
+	else:
+		var box := Rect2(ox + 3, oy + 8, TILE - 6, TILE - 12)
+		draw_rect(box.grow(1.0), Color(0.20, 0.14, 0.09))           # 외곽선(어두운 나무)
+		draw_rect(box, Color(0.46, 0.32, 0.18))                     # 궤짝 본체(나무빛)
+		draw_rect(Rect2(box.position, Vector2(box.size.x, 4)), Color(0.58, 0.42, 0.24))  # 뚜껑 밝은 띠
+		# 정면 빗금 두 줄(널판 이음새)로 "상자"임을 읽히게 한다.
+		draw_rect(Rect2(box.position.x, box.position.y + box.size.y * 0.5, box.size.x, 1), Color(0.28, 0.19, 0.11))
 	# 대기 중이면 살짝 열린 표시(밝은 점) — "넣어 둔 게 있다"를 눈에 보이게.
 	if ship_bin != null and not ship_bin.is_empty():
 		draw_rect(Rect2(ox + TILE * 0.5 - 2, oy + 4, 4, 4), Color(0.90, 0.82, 0.45))
@@ -16208,19 +16307,32 @@ func _draw_ship_bin() -> void:
 # ★[S6-T1] 곳간(그레이박스 — 진짜 아트는 후속). LARDER_TILE 칸에 선반 찬장을 절차 도형으로 그린다.
 # 출하함(궤짝)과 **한눈에 갈리게** 세로로 서고 칸이 나뉜 형태다 — 같은 방 안 두 창구가 헷갈리면
 # "팔까 / 키울까" 선택이 사고로 갈린다. 적재량이 늘수록 아래 칸부터 채워져 재고가 눈에 보인다.
+# ★[S6-T8] 아트 훅: assets/props/larder.png(32×64 = 세로 2칸) 있으면 LARDER_TILE 바닥에 발치정렬로
+#   렌더한다 — 벽에 기대선 찬장이라 위 칸(9,87 = 빈 뒷벽)으로 솟는다(선반 프롭은 x11·13·15라 안 겹침).
+#   없으면 옛 절차 도형 그레이박스로 떨어진다.
+# ★ **재고 표식은 아트 위에 그대로 얹는다**: 스프라이트는 *빈 찬장*이고, 쟁여 둔 양은 코드가 아래
+#   칸부터 채운다. 재고가 그림에 박혀 있으면 텅 빈 곳간도 늘 차 보여 "무엇을 쟁였나"가 안 읽힌다.
 func _draw_larder() -> void:
 	var ox := LARDER_TILE.x * TILE
 	var oy := LARDER_TILE.y * TILE
 	var box := Rect2(ox + 4, oy + 2, TILE - 8, TILE - 6)
-	draw_rect(box.grow(1.0), Color(0.18, 0.13, 0.10))            # 외곽선(어두운 나무)
-	draw_rect(box, Color(0.38, 0.28, 0.20))                      # 찬장 본체(출하함보다 어두운 나무)
-	# 선반 3단(가로 칸막이) — 세로 찬장임을 읽히게.
-	var shelf_h := box.size.y / 3.0
-	for i in range(1, 3):
-		draw_rect(Rect2(box.position.x, box.position.y + shelf_h * i, box.size.x, 1),
-			Color(0.24, 0.17, 0.12))
+	var tex := _prop_tex("larder")
+	if tex != null:
+		var sz := tex.get_size()
+		draw_texture(tex, Vector2(ox + (TILE - sz.x) * 0.5, oy + TILE - sz.y))
+		# 재고 칸은 찬장 **아랫단**(바닥 칸 안쪽)에 얹는다 — 위 칸은 벽에 걸린 부분이라 가린다.
+		box = Rect2(ox + 6, oy + 6, TILE - 12, TILE - 12)
+	else:
+		draw_rect(box.grow(1.0), Color(0.18, 0.13, 0.10))            # 외곽선(어두운 나무)
+		draw_rect(box, Color(0.38, 0.28, 0.20))                      # 찬장 본체(출하함보다 어두운 나무)
+		# 선반 3단(가로 칸막이) — 세로 찬장임을 읽히게.
+		var shelf_h0 := box.size.y / 3.0
+		for i in range(1, 3):
+			draw_rect(Rect2(box.position.x, box.position.y + shelf_h0 * i, box.size.x, 1),
+				Color(0.24, 0.17, 0.12))
 	# 재고를 아래 칸부터 채운다(용량 비율 → 채워진 단 수). 텅 비면 아무것도 안 찬다.
 	if larder != null and not larder.is_empty():
+		var shelf_h := box.size.y / 3.0
 		var filled := ceili(3.0 * float(larder.total()) / float(larder.capacity))
 		for i in mini(filled, 3):
 			var sy := box.end.y - shelf_h * (i + 1) + 2.0
@@ -16586,32 +16698,71 @@ func _draw_customers() -> void:
 		return
 	for i in SEAT_TILES.size():
 		if cafe.is_waiting(i):
-			_draw_graybox_figure(SEAT_TILES[i], CUST, cafe.patience_ratio(i))
+			_draw_guest_figure(SEAT_TILES[i], cafe.guest_of(i), cafe.patience_ratio(i), 0)
 			_draw_want_bubble(SEAT_TILES[i], cafe.want_of(i))
 			_draw_guest_mark(SEAT_TILES[i], cafe.guest_of(i))
 
-# ★[S6-T2] 손님 머리 위 주문 말풍선 자리 — 시킨 메뉴의 색을 작은 사각으로 띄운다(인내심 바 위).
-# 그레이박스 최소한이다: "무엇을 시켰나"가 화면에서 갈려 보이면 곳간 적재의 효과를 눈으로 확인할
-# 수 있다(진짜 말풍선 아트·메뉴 아이콘은 아트 패스 — ADR-0028 인터리브).
+# ★[S6-T8] 좌석에 앉은 손님 한 상 — 옛 `_draw_graybox_figure(CUST)` 회색 형체의 교체분.
+#   ㉠ **명명 손님** = 그 주민의 시트(GUEST_SHEETS) 남향 첫 프레임. 얼굴이 그대로 나오므로
+#      "누가 왔나"를 등불 표식이 아니라 사람으로 읽는다.
+#   ㉡ **익명 손님** = GUEST_ANON 6상 중 하나. **좌석·날짜로 결정적**이라 한 손님이 앉아 있는
+#      동안 상이 안 바뀌고(매 프레임 굴리면 깜빡인다), 날이 바뀌면 다른 얼굴이 온다.
+#      ★ 시드에 `salt`를 섞어 낮 카페와 밤 바가 같은 좌석에서 다른 상을 뽑게 한다(같은 자리에
+#        같은 익명이 밤낮으로 앉아 있으면 "손님이 바뀌었다"가 안 읽힌다).
+# ★ 앵커: 발치를 **칸 아래변**에 맞춘다(시트는 프레임 80² 안 y≈76이 발치 — CharSprite 규약).
+#   그래서 상반신이 위 칸(바 카운터 y89)으로 올라와, 카운터에 앉은 사람으로 보인다. 손님은
+#   카운터보다 남쪽(가까운 쪽)이라 카운터를 가리는 것이 탑다운 위상상 맞다.
+const _GUEST_FRAME := 80.0        # 주민 시트 프레임(CharSprite.FRAME)
+const _GUEST_FOOT := 76.0         # 프레임 안 발치선(CharSprite.FOOT_OFFSET_Y 파생 — 40+36)
+func _draw_guest_figure(t: Vector2i, guest_id: String, ratio: float, salt: int) -> void:
+	var cx := t.x * TILE + TILE * 0.5
+	var bottom := float((t.y + 1) * TILE)
+	var sheet: Texture2D = GUEST_SHEETS.get(guest_id)
+	if sheet != null:
+		draw_texture_rect_region(sheet,
+			Rect2(cx - _GUEST_FRAME * 0.5, bottom - _GUEST_FOOT, _GUEST_FRAME, _GUEST_FRAME),
+			Rect2(0.0, 0.0, _GUEST_FRAME, _GUEST_FRAME))
+	elif not GUEST_ANON.is_empty():
+		var pick := absi(hash("cafe_anon:%d:%d:%d:%d" % [salt, clock.day, t.x, t.y])) % GUEST_ANON.size()
+		var tex: Texture2D = GUEST_ANON[pick]
+		var sz := tex.get_size()
+		draw_texture(tex, Vector2(cx - sz.x * 0.5, bottom - sz.y))
+	else:
+		_draw_graybox_figure(t, CUST, ratio)   # 아트가 통째로 빠져도 옛 형체로 굴러간다
+		return
+	_draw_state_bar(t, ratio)
+
+# ★[S6-T2] 손님 머리 위 주문 말풍선 — 시킨 메뉴를 인내심 바 위에 띄운다.
+# ★[S6-T8] 색 사각 → **메뉴 아이콘**(MENU_ICONS). 인벤 슬롯에서 본 그 잔이 손님 머리 위에 그대로
+#   뜨므로 "저 손님이 시킨 게 내 곳간의 무엇인가"가 대조 없이 읽힌다(색만으론 12색을 못 외운다).
+#   한지 판을 깔아 밝은 실내 바닥 위에서도 잔 실루엣이 뜬다(HUD 톤 통일 — HanjiUi.draw_plate).
+#   ★아이콘이 없으면 옛 색 사각으로 떨어진다(카탈로그에 메뉴가 늘어도 그림 없이 굴러간다).
+const _WANT_ICON := 16.0
 func _draw_want_bubble(t: Vector2i, menu_id: String) -> void:
 	if menu_id == "":
 		return
-	var box := Rect2(t.x * TILE + TILE * 0.5 - 4, t.y * TILE - 12, 8, 8)
-	draw_rect(box.grow(1.0), Color(0.06, 0.05, 0.08, 0.85))   # 외곽선(어두운 테)
-	draw_rect(box, MenuCatalog.color_of(menu_id))
-
-# ★[S6-T4] 명명 손님 표식 — 주문 말풍선 왼쪽에 작은 등불 점 하나(익명은 안 그린다). 단골이 되면
-# 더 밝고 커진다: "아는 얼굴이 왔다 / 자주 오는 얼굴이 왔다"를 회색 무리 속에서 가르는 최소 신호다.
-# 진짜 얼굴(주민 도트 스프라이트를 좌석에 앉히기)은 아트 패스 소관이라 여기선 표식만 든다
-# (ADR-0028 그레이박스 → 아트 인터리브). 이름 문자열은 프롬프트·알림이 든다(폰트 드로우 회피).
-func _draw_guest_mark(t: Vector2i, guest_id: String) -> void:
-	if guest_id == "":
+	var tex: Texture2D = MENU_ICONS.get(menu_id)
+	if tex == null:
+		var box := Rect2(t.x * TILE + TILE * 0.5 - 4, t.y * TILE - 12, 8, 8)
+		draw_rect(box.grow(1.0), Color(0.06, 0.05, 0.08, 0.85))   # 외곽선(어두운 테)
+		draw_rect(box, MenuCatalog.color_of(menu_id))
 		return
-	var regular := guests.is_regular(guest_id)
-	var s := 6.0 if regular else 4.0
-	var dot := Rect2(t.x * TILE + TILE * 0.5 - 8 - s, t.y * TILE - 11, s, s)
+	var icon := Rect2(t.x * TILE + TILE * 0.5 - _WANT_ICON * 0.5, t.y * TILE - 8.0 - _WANT_ICON,
+		_WANT_ICON, _WANT_ICON)
+	HanjiUi.draw_plate(self, icon.grow(4.0), 0.88)
+	draw_texture_rect(tex, icon, false)
+
+# ★[S6-T4] 명명 손님 표식 — 주문 말풍선 왼쪽에 작은 등불 점 하나(익명은 안 그린다).
+# ★[S6-T8] **단골에게만** 켠다. 좌석에 진짜 얼굴(주민 시트)이 앉은 뒤로는 "아는 얼굴이 왔다"를
+#   점이 아니라 사람이 말하므로, 남은 일은 얼굴로 못 읽는 눈금 하나 — *몇 번이나 왔나*뿐이다
+#   (처음 온 명명 손님까지 점을 켜면 그 점이 다시 아무 말도 안 하는 표식이 된다).
+#   자리는 말풍선 한지 판 왼쪽으로 옮겼다(판이 커져 옛 자리는 판 밑에 깔린다).
+func _draw_guest_mark(t: Vector2i, guest_id: String) -> void:
+	if guest_id == "" or not guests.is_regular(guest_id):
+		return
+	var dot := Rect2(t.x * TILE + TILE * 0.5 - _WANT_ICON * 0.5 - 11.0, t.y * TILE - _WANT_ICON, 6.0, 6.0)
 	draw_rect(dot.grow(1.0), Color(0.06, 0.05, 0.08, 0.85))   # 말풍선과 같은 어두운 테
-	draw_rect(dot, Color(1.0, 0.86, 0.45) if regular else Color(0.86, 0.72, 0.44))
+	draw_rect(dot, Color(1.0, 0.86, 0.45))                    # 단골 = 밝은 등불빛
 
 # T6.4 바를 연 밤(옵트인)의 바 손님과 머리 위 인내심 바를 그린다. 낮 카페 손님과 같은 좌석 줄을
 # 시간대로 나눠 쓰므로(cafe 마감 후 밤 바) 그리기도 카페 손님과 똑같은 규격이고, 활성(밤 바 영업
@@ -16621,17 +16772,34 @@ func _draw_night_customers() -> void:
 		return
 	for i in SEAT_TILES.size():
 		if night_bar.is_waiting(i):
-			_draw_graybox_figure(SEAT_TILES[i], CUST, night_bar.patience_ratio(i))
+			# ★[S6-T8] 밤 손님은 **전원 익명 확정**(S6-T6)이라 명명 시트 분기를 안 탄다 —
+			#   빈 id를 넘겨 익명 상만 뽑고, salt=1로 낮 카페와 같은 좌석에서 다른 상을 뽑는다.
+			_draw_guest_figure(SEAT_TILES[i], "", night_bar.patience_ratio(i), 1)
 
 # T6.3 바를 연 밤(옵트인)에 깃든 잡귀(탁한 청록)와 머리 위 접근 바를 그린다. 카페 손님 그리기와
 # 같은 결(노드 생성·해제 없이 main이 스폿 칸에 직접 — 그레이박스). 접근 바는 잔량이 줄수록
 # 짧아지고 붉어져 "곧 닿는다"가 눈에 보인다(막기 우선순위 판단의 근거).
+# ★[S6-T8] 잡귀도 **이미 있는 도트**로 갈아 끼운다(신규 생성 0 — S5-T10이 구운 MOB_TEX 재사용).
+#   같은 화면에서 손님만 도트고 잡귀는 회색 사각이면, 새 손님 상 쪽이 오히려 붕 떠 보인다
+#   (S4-T10 "한 카테고리에서 절반만 도트면 새것이 튄다"와 같은 판단).
+#   종은 **스폿·날짜로 결정적**이고 밤 바에 어울리는 셋으로 좁혔다(갱도 상층 잡귀 = 마을까지
+#   기어 나올 만한 체급 — 나락 강몹·보스는 여기 안 온다).
+const _BAR_JOBGUI := ["mob_heotgeot", "mob_eodukkaebi", "mob_geuseundae"]
 func _draw_jobgui() -> void:
 	if not night_bar.is_active():
 		return
 	for i in NIGHT_SPOT_TILES.size():
-		if night_bar.is_threat(i):
-			_draw_graybox_figure(NIGHT_SPOT_TILES[i], JOBGUI, night_bar.approach_ratio(i))
+		if not night_bar.is_threat(i):
+			continue
+		var t: Vector2i = NIGHT_SPOT_TILES[i]
+		var pick := absi(hash("bar_jobgui:%d:%d" % [clock.day, i])) % _BAR_JOBGUI.size()
+		var tex: Texture2D = MOB_TEX.get(_BAR_JOBGUI[pick])
+		if tex == null:
+			_draw_graybox_figure(t, JOBGUI, night_bar.approach_ratio(i))
+			continue
+		var sz := tex.get_size()
+		draw_texture(tex, Vector2(t.x * TILE + (TILE - sz.x) * 0.5, float((t.y + 1) * TILE) - sz.y))
+		_draw_state_bar(t, night_bar.approach_ratio(i))
 
 # P2.7 ㉠ 톤 패스 — 손님·잡귀 그레이박스를 도색 무대에 안 떠 보이게 최소 양식화한 공통 그리기.
 # 평면 사각형 대신 (1) 전경 캐릭터 컨벤션을 따르는 어두운 외곽선 한 겹 + (2) 상단 밝게·하단
@@ -16649,7 +16817,13 @@ func _draw_graybox_figure(t: Vector2i, base: Color, ratio: float) -> void:
 	var notch := base.darkened(0.55)                                                  # 어깨 둥글림(상단 모서리 노치)
 	draw_rect(Rect2(body.position, Vector2(2, 2)), notch)
 	draw_rect(Rect2(body.position + Vector2(body.size.x - 2, 0), Vector2(2, 2)), notch)
-	var bar_bg := Rect2(ox + 2, oy - 3, TILE - 4, 2)                                  # 머리 위 상태 바
+	_draw_state_bar(t, ratio)
+
+# ★[S6-T8] 머리 위 상태 바(인내심·접근) — 그레이박스 형체에 붙어 있던 것을 떼어 냈다. 이제 상이
+# 그레이박스든 도트든 **같은 바 하나**를 쓴다(두 벌로 갈리면 아트 상만 바가 없거나 위치가 어긋난다).
+# 잔량 비율만큼 채우고 초록→빨강으로 보간해 "곧 떠난다/닿는다"를 노출한다.
+func _draw_state_bar(t: Vector2i, ratio: float) -> void:
+	var bar_bg := Rect2(t.x * TILE + 2, t.y * TILE - 3, TILE - 4, 2)
 	draw_rect(bar_bg, Color(0, 0, 0, 0.6))
 	var col := Color(0.85, 0.30, 0.25).lerp(Color(0.35, 0.80, 0.35), ratio)
 	draw_rect(Rect2(bar_bg.position, Vector2(bar_bg.size.x * ratio, bar_bg.size.y)), col)
