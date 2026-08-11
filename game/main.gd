@@ -2862,6 +2862,7 @@ func _ready() -> void:
 	bana.visible = false
 	dialogue.changed.connect(_on_dialogue_changed)
 	dialogue.finished.connect(_on_dialogue_finished)
+	dialogue.choice_shown.connect(_on_dialogue_choice_shown)   # ★[S9-T1] 선택지 표기(줄 불변 재렌더)
 	_build_dialogue_ui()   # S0-6 「태운 한지」 대화창 룩(윈도우 아트 + 오버레이)
 	# T5.4 카페 영업 마감(19시) → 일일 정산 팝업. 손님 상태 변화는 매 프레임 _draw에서
 	# 그리므로 changed는 따로 듣지 않는다(영업 중엔 _process가 queue_redraw로 바를 갱신).
@@ -10854,6 +10855,16 @@ func _process(delta: float) -> void:
 				_confess_rid = ""       # 이 대화에선 접어 둔다(무벌칙 — 다음 대화에 다시 선다)
 				dialogue.advance()
 				return
+		# ★[S9-T1 / ADR-0067 결정 3] 선택지가 떠 있으면 숫자키 1~4로만 고른다. 핫바 액션을 그대로
+		#   빌려 쓴다 — 대화 중엔 이 분기가 입력을 다 삼켜 핫바 선택과 절대 겹치지 않고, 표기도
+		#   [1]~[4]로 화면과 키가 1:1이다. 고르기 전엔 넘기기([E]/우클릭)를 삼킨다(무벌칙 —
+		#   점수는 어느 선택에도 없다, 결정 4).
+		if dialogue.has_choice():
+			for i in dialogue.choices().size():
+				if Input.is_action_just_pressed("hotbar_%d" % i):
+					dialogue.choose(i)
+					return
+			return
 		if Input.is_action_just_pressed("action"):
 			dialogue.advance()
 		return
@@ -15620,8 +15631,28 @@ func _apply_spouse_home_station() -> void:
 # 남긴다. 비트 원장(_heart_bits)은 **잔존** — 재구애 시 관문 진급은 조용하다(본 비트 재지급 없음).
 # 연출(식·이삿날 장면)은 S9 스텁 — 여기는 상태 전이가 전부다.
 const DIVORCE_COST := 50000             # 인연 해소 의뢰비(스타듀 동가 — 잠정, owner 큐)
-# 전 배우자의 작별 한 줄(씁쓸·우호 placeholder — 캐릭터 훅 divorce_lines()가 생기면 S9가 대체).
+# 전 배우자의 작별 한 줄(씁쓸·우호 — 캐릭터 훅 divorce_lines()가 없을 때의 공용 폴백).
 const DIVORCE_FAREWELL_LINE := "…고마웠어. 함께였던 날들은, 여기 두고 갈게."
+
+# ★[S9-T1 / ADR-0067 결정 9] 작별 한 줄을 캐릭터화한다 — 노드가 `divorce_lines()`를 가지면 그
+#   **첫 줄**을, 없거나 비면 공용 폴백을 쓴다(관문·고백·생일 훅과 완전 동형의 이음매: 캐릭터
+#   파일에 본문이 들어와도 이혼 판정식은 한 줄도 안 바뀐다 — ADR-0005).
+#   · **표시 경로는 토스트 그대로**다(대화창 승격은 S9b 연출 등급 작업 — 결정 9 문면).
+#   · 여러 줄을 돌려줘도 지금 쓰는 건 첫 줄뿐이다(토스트는 한 줄짜리 창구). 나머지 줄은 대화창
+#     승격 때 살아난다 — 그래서 훅 계약은 처음부터 PackedStringArray다(String 단일도 관용 수용).
+#   · "씁쓸하되 적대 없음"(ADR-0022 결정 3)이 이 한 줄에 크게 좌우되므로 폴백도 그 톤을 지킨다.
+func _divorce_farewell_line(r: Resident) -> String:
+	if r == null or r.node == null or not r.node.has_method("divorce_lines"):
+		return DIVORCE_FAREWELL_LINE
+	var custom: Variant = r.node.divorce_lines()
+	if custom is String:
+		var s: String = custom
+		return s if s != "" else DIVORCE_FAREWELL_LINE
+	if custom is PackedStringArray or custom is Array:
+		var arr := PackedStringArray(custom)
+		if not arr.is_empty() and arr[0] != "":
+			return arr[0]
+	return DIVORCE_FAREWELL_LINE
 
 # 이혼 의뢰([F] 2타 확인). 1타 = 경고·래치 무장(50,000냥+♡0 리셋은 오타 한 번의 값이 아니다),
 # 2타 = 결행. 래치는 옥자에게서 시선을 떼면 접힌다(_process). 냥 부족은 무장 전에 끊는다 —
@@ -15660,7 +15691,8 @@ func _do_divorce() -> void:
 	_notice("부적의 혼이 풀렸다 — %s와의 혼인이 끝났다" % (r.display_name if r != null else rid),
 		NOTICE_SECS * 2.0)
 	# 적대 없음의 한 줄 — 해방은 그대로라 떠나는 게 아니라 *제자리로 돌아간다*(카페 잔류).
-	_notice("%s: 「%s」" % [r.display_name if r != null else rid, DIVORCE_FAREWELL_LINE],
+	# ★[S9-T1] 문구의 주인은 캐릭터다(divorce_lines 훅 — 없으면 공용 폴백).
+	_notice("%s: 「%s」" % [r.display_name if r != null else rid, _divorce_farewell_line(r)],
 		NOTICE_SECS * 3.0)
 
 # 이주 해제 — _apply_spouse_home_station의 역연산(안방 칸 스테이션만 제거·원 스케줄 무접촉).
@@ -16623,6 +16655,15 @@ func _dlg_texrect(tex: Texture2D, r: Rect2, nearest: bool) -> TextureRect:
 func _on_dialogue_changed(speaker: String, line: String) -> void:
 	dialogue_panel.visible = true
 	audio.sfx("dialogue")                     # P2.6 대사 한 줄 진행마다 부드러운 비프
+	_render_dialogue(speaker, line)
+
+# ★[S9-T1 / ADR-0067 결정 3] 같은 줄에 선택지가 섰다 — 줄은 그대로라 효과음 없이 패널만 다시
+#   그린다(대사 비프가 한 줄에 두 번 나지 않게 changed와 갈라 둔 이음매).
+func _on_dialogue_choice_shown() -> void:
+	_render_dialogue(dialogue.speaker(), dialogue.line())
+
+# 대화 패널 본문 렌더 — 표정 태그 파싱·초상화·이름판·본문 한 자리(changed·choice_shown 공용).
+func _render_dialogue(speaker: String, line: String) -> void:
 	# P2.4 인라인 표정 태그 파싱: 줄 맨 앞 [smile]/[shy]/[sad]/[talk]만 표정으로 떼고,
 	# 본문에서 제거한다. 화이트리스트 밖([E] 등)은 그대로 본문에 남긴다.
 	var expr := PORTRAIT_FALLBACK_EXPR
@@ -16637,6 +16678,20 @@ func _on_dialogue_changed(speaker: String, line: String) -> void:
 	_set_portrait(speaker, expr)
 	if _dlg_name:
 		_dlg_name.text = speaker                # 화자명 → 이름판(별도 탭)
+	# ★[S9-T1] 선택지가 떠 있으면 본문 아래에 지선을 세우고 진행 안내는 접는다 — 넘기기가 막혀
+	#   있어(DialogueBox.advance) "[E] 다음"은 거짓말이 된다. 표기는 기존 대괄호 키 관례 그대로
+	#   ([F]/[G] 고백 제안과 같은 결)라 새 UI 위젯이 필요 없다 — 한지 결의 본문 텍스트 그대로다.
+	if dialogue.has_choice():
+		var opts := dialogue.choices()
+		var rows := PackedStringArray()
+		for i in opts.size():
+			rows.append("[%d] %s" % [i + 1, opts[i]])
+		dialogue_text.text = "%s\n\n%s" % [body, "\n".join(rows)]
+		if _dlg_arrow:
+			_dlg_arrow.visible = false          # 고르기 전엔 넘길 수 없다 — 다음 화살표도 접는다
+		return
+	if _dlg_arrow:
+		_dlg_arrow.visible = true
 	var hint := "[E] 닫기" if dialogue.is_last() else "[E] 다음"
 	# 화자명은 이름판이 맡으므로 본문은 대사 + 진행/안내만
 	dialogue_text.text = "%s\n\n%s   %s" % [body, dialogue.progress(), hint]
