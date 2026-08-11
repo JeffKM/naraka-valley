@@ -243,6 +243,16 @@ func activity_gain(n: int, day: int) -> int:
 func add_points(n: int) -> void:
 	_add(n)
 
+# ★[S8-T8 / ADR-0066 결정 10] 이혼 리셋 — **points·stage를 함께** 0으로 되돌린다(ADR-0022
+# "♡0 리셋"의 실질 페널티). points만 지우면 stage가 남아 곱셈기·대사가 그대로고, stage만
+# 지우면 만충 점수가 즉시 재진급 대기라 리셋이 장부상 거짓말이 된다 — 둘은 항상 함께 진다.
+# 리듬 카운터(오늘 대화·선물·주간·활동)는 안 건드린다: 그건 관계의 깊이가 아니라 *날짜*의
+# 기록이라, 이혼한 날에 이미 쓴 기회가 되살아나면 그게 오히려 버그다.
+func reset_hearts() -> void:
+	points = 0
+	stage = 0
+	changed.emit(points, hearts())
+
 # 점수를 더하고 [0, MAX_POINTS]로 잘라 changed를 발화한다(음수·만렙 초과 방지).
 func _add(n: int) -> void:
 	points = clampi(points + n, 0, MAX_POINTS)
