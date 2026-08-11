@@ -76,8 +76,12 @@ func _initialize() -> void:
 		rel_names.append(String(row["name"]))
 	_check("③a′ 등록 순서 그대로", rel_names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골"])
 	_check("③b 각 행에 이름·하트", rows[0].has("name") and rows[0].has("filled") and rows[0].has("total"))
-	_check("③b′ 곱셈기 보유자만 효과 줄(미호=있음 · 모찌=빈 문자열)",
-		String(rows[0]["effect"]) != "" and String(rows[4]["effect"]) == "")
+	# ★[S8-T9] 효과 줄 뒤에 **선물 리듬 꼬리**("이번 주 선물 n/2")가 붙으면서 "곱셈기 없음 = 빈
+	#   문자열"이 아니게 됐다(선물 채널 보유자는 꼬리만으로도 줄이 선다 — 그게 이 꼬리의 목적).
+	#   곱셈기 유무는 이제 **꼬리 앞에 무엇이 붙었나**로 읽는다: 미호=곱셈기 · 꼬리 / 모찌=꼬리만.
+	_check("③b′ 곱셈기 보유자만 효과 줄(미호=곱셈기+꼬리 · 모찌=선물 꼬리만)",
+		String(rows[0]["effect"]).contains(" · 이번 주 선물")
+			and String(rows[4]["effect"]).begins_with("이번 주 선물"))
 	_check("③b″ 상태 배지 자리 예약 — 키는 있고 값은 아직 전부 빈 문자열(T5~T7이 채운다)",
 		rows[0].has("badge") and String(rows[0]["badge"]) == "")
 	m.frame.set_tab(InventoryFrame.TAB_REL)

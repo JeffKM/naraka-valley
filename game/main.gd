@@ -442,6 +442,8 @@ const MINE_ICONS := {
 	ItemCatalog.MYEONGBUHWAN: preload("res://assets/materials/myeongbuhwan.png"),
 	ItemCatalog.STAIRS: preload("res://assets/materials/stairs.png"),
 	ItemCatalog.NARAK_KEY: preload("res://assets/materials/narak_key.png"),
+	# ★[S8-T9] 혼례 부적 — 나락 열쇠와 같은 KEYS 결(세상에 하나뿐·선물 불가)이라 아이콘도 옆에 둔다.
+	ItemCatalog.WEDDING_CHARM: preload("res://assets/materials/wedding_charm.png"),
 	# 잡귀 드랍 3(넋가루·혼불씨 = 갱도/나락 잡귀 · 나락혼정 = 관문 보스 확정 드랍)
 	ItemCatalog.NEOKGARU: preload("res://assets/materials/neokgaru.png"),
 	ItemCatalog.HONBULSSI: preload("res://assets/materials/honbulssi.png"),
@@ -536,6 +538,10 @@ const COLORS := [
 # 가구는 순수 장식 — art 패스라 새 시스템·이동 변화 금지). 침대만 32×64(1×2칸), 나머지는
 # 32×32. 카운터=좌석(스툴) 뒤·직원 앞 줄(바 배치) / 선반=뒷벽 / 등불·화분=구역 분위기.
 const PROP_BED := preload("res://assets/props/house_bed.png")        # 32×64
+# ★[S8-T9 / ADR-0066 아트 스코프] 2인용 침대 — **안방(확장부)에만** 선다(_home_prop_entries가
+#   `_home_expanded()`일 때만 얹는다). 1인 침대와 같은 32×64(1×2칸)라 발치·lift·그림자 계산이
+#   그대로 유효하다. 취침은 종전대로 1인 침대 쪽 판정을 쓴다(순수 장식 — 새 시스템 0).
+const PROP_BED_DOUBLE := preload("res://assets/props/house_bed_double.png")   # 32×64
 const PROP_COUNTER := preload("res://assets/props/cafe_counter.png")
 const PROP_STOOL := preload("res://assets/props/cafe_stool.png")
 const PROP_SHELF := preload("res://assets/props/cafe_shelf.png")
@@ -1105,6 +1111,9 @@ const WALL_PROP_LIFT := -18
 # ★ T3③' — 통과 불가 실내 가구(젬나이 피드백). 러그(바닥 깔개)·등불·꽃·울타리 등은 제외(통과 O).
 #   이 텍스처들은 실내 레이아웃에만 쓰여(카페/외부 props는 다른 텍스처) 충돌이 실내 가구에만 걸린다.
 const SOLID_PROPS := [PROP_BED, PROP_FIREPLACE, PROP_BOOKSHELF, PROP_TABLE, PROP_POT,
+	# ★[S8-T9] 2인 침대 = 1인 침대와 물리 정합(같은 방에 물리가 갈린 침대 둘이면 규칙이 거짓말이
+	#   된다). 확장 시에만 그려지므로 미확장 세이브 충돌 영향 0 — 배우자 자리(22,71)와도 무겹침.
+	PROP_BED_DOUBLE,
 	PROP_TREE_A, PROP_TREE_B, PROP_ROCK,   # ★ T3⑤ 나무·바위 = 통과 불가(맵 경계 벽)
 	PROP_BUSH,                             # ★[roster] 덤불 = 능선 벽(풀 2×2 SOLID·FOOT_BAR 아님 = 전체 막음, owner "막 지나가지길 원해")
 	PROP_DEBRIS_EMBER, PROP_DEBRIS_STUMP,  # ★ ADR-0035 업화석·석화 고목 = 통과 불가(계단 하드 게이트·overgrown 장애물)
@@ -6734,7 +6743,26 @@ func _gen_overgrown_debris(groups: Dictionary, claimed: Dictionary, w: int, h: i
 #   개간 조회(_debris_kind_at)가 전부 기존 경로로 돈다 — 재스폰 debris 전용 코드가 한 줄도 안 생긴다.
 func _home_prop_entries() -> Array:
 	_ensure_home_scatter()
-	return _prop_layouts.get("HOME", []) + _home_scatter + _respawn_debris_entries()
+	return _prop_layouts.get("HOME", []) + _home_scatter + _respawn_debris_entries() \
+		+ _home_expansion_prop_entries()
+
+# ★[S8-T9 / ADR-0066 아트 스코프] 안방(확장부) 전용 가구 — **확장 완공일 때만** 얹는다. 미확장
+#   세이브는 빈 배열이라 거동이 바이트 단위로 불변이다(그 방 자체가 아직 VOID다).
+# ★ `_prop_layouts`/layout.json 밖에 사는 이유: 그 배열은 세이브에 무관한 *정적 시드*라 조건부
+#   항목을 담을 자리가 없고, 담으면 직렬화가 확장 여부에 따라 갈려 시드-동등 불변식(prop_layout_test)이
+#   깨진다. 상자·거울(CHEST_TILE·MIRROR_TILE)이 레이아웃 밖에 사는 것과 같은 결이다.
+# ★ 자리 (22,68) = 안방 북벽 밴드의 한가운데(확장 내부 x20..24) — 기존 북벽 가구(침대 9 · 상자 11 ·
+#   벽난로 12..13 · 책장 15..16 · 거울 17 · 화분 18)와 다섯 칸 떨어져 실루엣이 안 붙고, 바로 아래가
+#   배우자 자리(SPOUSE_HOME_TILE (22,71))라 "둘이 사는 방"이 한눈에 읽힌다. lift는 다른 북벽
+#   가구와 같은 WALL_PROP_LIFT(크림 트림 밀착).
+# ★ SOLID_PROPS에도 편입돼 통과 불가다(1인 침대와 물리 정합 — SOLID_PROPS 선언부 주석 참조).
+#   충돌 재조립은 기존 경로(_rebuild_prop_collision)가 프롭 엔트리에서 파생하므로 여기선 배선 0.
+const HOME_EXPANSION_PROPS := [
+	[PROP_BED_DOUBLE, [Vector2i(22, 68)], WALL_PROP_LIFT],   # 안방 북벽 2인용 침대(1×2칸)
+]
+
+func _home_expansion_prop_entries() -> Array:
+	return HOME_EXPANSION_PROPS if _home_expanded() else []
 
 # ★[S7-T5] reclaim의 절기 재스폰 debris 원장 → 프롭 엔트리([tex, [tiles]]) 변환. kind별로 묶어 텍스처
 #   하나에 좌표 여럿을 태운다(_prop_layouts 엔트리와 바이트 동형이라 하류가 구분할 필요가 없다).
@@ -10305,9 +10333,11 @@ func _restore_location(data: Dictionary) -> void:
 # 시간 경과로 흐려지며 사라지므로(상시 라벨 폐기), 여기선 한 줄을 밀어 넣기만 한다.
 # ★[S6-T8] `icon`은 아이템 획득 토스트(_toast_item)가 이미 쓰던 push의 넷째 인자를 열어 준 것이다.
 #   카페 사슬 알림(서빙·체키·곁들이)이 "무슨 잔이 나갔나"를 글자와 함께 그림으로도 말한다.
-func _notice(msg: String, secs: float = NOTICE_SECS, wide: bool = false, icon: Texture2D = null) -> void:
+# ★[S8-T9 아트 패스] tint = 글자 색 지정(알파 0 = 무틴트 = 종전 색) — 가법 인자라 기존 호출부 불변.
+func _notice(msg: String, secs: float = NOTICE_SECS, wide: bool = false, icon: Texture2D = null,
+		tint: Color = Color(0, 0, 0, 0)) -> void:
 	if notice_feed != null:
-		notice_feed.push(msg, secs, wide, icon)
+		notice_feed.push(msg, secs, wide, icon, false, tint)
 
 # ★ Phase C — 아이템 획득 토스트(좌하단 알림에 아이콘+이름 +수량). 게임플레이 획득 지점(수확·수집·
 # 개간 드랍)에서만 부른다 — 세이브 로드·구매·회수는 각자 알림/무알림이라 이중 토스트·로드 스팸 회피.
@@ -14631,11 +14661,27 @@ func _heart_rows() -> Array:
 	for r in _residents:
 		if r.affinity == null:
 			continue
+		var effect := String(r.effect_fn.call()) if r.effect_fn.is_valid() else ""
+		var rhythm := _gift_rhythm_text(r)
+		if rhythm != "":
+			effect = rhythm if effect == "" else effect + " · " + rhythm
 		rows.append({"name": r.display_name, "filled": r.affinity.hearts(),
 			"total": Affinity.MAX_HEARTS,
-			"effect": String(r.effect_fn.call()) if r.effect_fn.is_valid() else "",
+			"effect": effect,
 			"badge": _heart_badge(r)})
 	return rows
+
+# ★[S8-T9 / S8-T8 이월] 선물 리듬 꼬리 — "이번 주에 몇 번 남았나"가 관계 탭에서 보인다(옛 경로는
+#   벽에 부딪혀 거절 문구를 봐야 알 수 있었다 — 계획을 세울 수가 없었다). 선물 채널이 없는 주민
+#   (can_gift=false — 옥자·주방요괴)은 빈 문자열이라 줄이 생기지 않는다.
+# ★ 배우자는 주 2회가 해제(week_exempt)라 남은 횟수라는 개념 자체가 없다 — 숫자 대신 상태를 쓴다.
+#   프레임(inv_frame)은 effect가 ""면 줄을 건너뛰므로 렌더 수정 0이다.
+func _gift_rhythm_text(r: Resident) -> String:
+	if not r.can_gift or r.affinity == null:
+		return ""
+	if r.id == _spouse_id:
+		return "선물 매일 가능(부부)"
+	return "이번 주 선물 %d/%d" % [r.affinity.gifts_left_in_week(clock.day), Affinity.GIFTS_PER_WEEK]
 
 # ★ [S8-T1 / ADR-0066 결정 11] 관계 상태 배지 훅 — 연애(T6)·결혼(T7)이 마저 채울 자리다.
 # ★[S8-T5] 첫 실값: **진급 대기**(점수 만충·관문 미통과 — Affinity.pending_promotion). "다음 칸이
@@ -15720,6 +15766,16 @@ func _credit_mel_revenue(revenue: int) -> void:
 	_activity_credit("mel", due)
 
 # ── 선물(공통) ─────────────────────────────────────────────────────────────
+# ★[S8-T9 아트 패스] 선물 토스트 tier 색 — GiftPrefs 등급 5종을 알림 글자색으로 갈라, 태그를
+#   읽기 전에 "잘 골랐나"가 도착한다. 금박(선호)만 기존 강조 색(HanjiUi.GOLD_SOFT)을 재사용하고
+#   나머지는 등급 방향(초록=긍정 / 회색=무 / 탁적=부정)을 따른다. NEUTRAL은 **무틴트**다 —
+#   기본색이 곧 "특별할 것 없음"이라 색을 하나 더 만들면 축만 늘어난다.
+const GIFT_TIER_TINTS := {
+	GiftPrefs.LOVE: HanjiUi.GOLD_SOFT,
+	GiftPrefs.LIKE: Color(0.62, 0.78, 0.45),      # 연초록(긍정)
+	GiftPrefs.DISLIKE: Color(0.62, 0.62, 0.62),   # 회색(시큰둥)
+	GiftPrefs.HATE: Color(0.78, 0.40, 0.34),      # 탁한 적(질색)
+}
 # ★[S8-T2 / ADR-0066 결정 2] **든 아이템 1개를 건넨다** — 혼백관 기증(_try_donate_selected)과
 # 정확히 같은 문법이다(inventory.selected_id 기준). 옛 경로는 `_selected_crop` 수확 작물 전용
 # 이라 물고기·광물·요리가 구조적으로 선물이 안 됐고, 실존 작물 5종이 소진돼 옹이·풀무·무골은
@@ -15774,10 +15830,15 @@ func _try_resident_gift(r: Resident) -> void:
 	if birthday:
 		tag = "(생일!) " + tag                # 배율이 붙은 이유를 알림 한 줄이 말해 준다
 	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립
+	# ★[S8-T9 아트 패스] tier 색 — 태그 문자열을 읽기 전에 결과(선호/질색)가 도착한다. 생일(×8)도
+	#   tier 색 그대로다(문구에 이미 "(생일!)"이 붙어 배율은 글자가 말한다 — 색축이 둘이면 못 읽힌다).
+	var tint: Color = GIFT_TIER_TINTS.get(tier, Color(0, 0, 0, 0))
 	if who == "":
-		_notice("%s 선물 %s%+d 호감도" % [ItemCatalog.name_of(id), tag, gained])
+		_notice("%s 선물 %s%+d 호감도" % [ItemCatalog.name_of(id), tag, gained],
+			NOTICE_SECS, false, null, tint)
 	else:
-		_notice("%s에게 %s 선물 %s%+d 호감도" % [who, ItemCatalog.name_of(id), tag, gained])
+		_notice("%s에게 %s 선물 %s%+d 호감도" % [who, ItemCatalog.name_of(id), tag, gained],
+			NOTICE_SECS, false, null, tint)
 
 # ── T4.2/T7.3 슬라이스 종료 ─────────────────────────────────────────────────
 # 슬라이스가 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리

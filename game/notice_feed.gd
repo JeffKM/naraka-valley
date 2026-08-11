@@ -31,12 +31,17 @@ var _items: Array = []
 
 # 알림 한 줄을 큐에 민다(main._notice가 호출). secs 후 자동으로 사라진다. 큐가 가득 차면
 # 가장 오래된(앞) 항목을 밀어낸다 — 최신 이벤트가 항상 보이게.
-func push(text: String, secs: float, wide: bool = false, icon: Texture2D = null, gold: bool = false) -> void:
+func push(text: String, secs: float, wide: bool = false, icon: Texture2D = null, gold: bool = false,
+		tint: Color = Color(0, 0, 0, 0)) -> void:
 	if text == "":
 		return
 	# wide = 긴 안내(온보딩)용 — 좌측 컬럼(MAX_W) 대신 화면 폭 가까이 허용해 한 줄이 안 잘리게 한다.
 	# ★ Phase C — icon(아이템 획득 토스트의 좌측 아이콘)·gold(레벨업/숙련 알림 금박 강조)를 옵션으로 얹는다.
-	_items.append({"text": text, "secs": maxf(secs, 0.1), "wide": wide, "icon": icon, "gold": gold})
+	# ★[S8-T9 아트 패스] tint = 글자 색 지정(알파 0 = 무틴트 = 종전 색). 선물 토스트가 tier(선호·
+	#   좋아함·시큰둥·질색)를 색으로 먼저 말하는 데 쓴다 — 태그 문자열을 읽기 전에 결과가 도착한다.
+	#   가법 옵션이라 기존 호출부(전부 5인자 이하)는 한 줄도 안 바뀐다.
+	_items.append({"text": text, "secs": maxf(secs, 0.1), "wide": wide, "icon": icon, "gold": gold,
+		"tint": tint})
 	while _items.size() > MAX_ITEMS:
 		_items.pop_front()
 	queue_redraw()
@@ -98,6 +103,10 @@ func _draw() -> void:
 			draw_texture_rect(icon, Rect2(pos + Vector2(5.0, 3.0), Vector2(ROW_H - 8.0, ROW_H - 8.0)),
 				false, Color(1, 1, 1, a))
 			tx += icon_w
+		# 글자 색 — tint(알파>0)가 있으면 그 색, 없으면 종전(금박 or 한지 흰). gold 테두리는 그대로.
+		var tint: Color = item.get("tint", Color(0, 0, 0, 0))
 		var col := HanjiUi.GOLD_SOFT if gold else Color(0.96, 0.95, 0.92)
+		if tint.a > 0.0:
+			col = tint
 		draw_string(font, Vector2(tx, pos.y + 15.0), text, HORIZONTAL_ALIGNMENT_LEFT, w - 12.0 - icon_w, 14,
 			Color(col.r, col.g, col.b, a))

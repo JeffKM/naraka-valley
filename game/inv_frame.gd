@@ -825,6 +825,19 @@ func _draw_rel_tab(panel: Rect2, font: Font) -> void:
 # ★[S8-T1 / ADR-0066 결정 11] 하트 행 우측 상태 배지 — 진급 대기(♡ 만충·관문 미통과)·연애·결혼을
 # 한 칩으로 알린다. **지금은 main이 늘 빈 문자열을 넘기므로 아무것도 안 그린다**(T5~T7이 값을
 # 채우면 렌더 배선 수정 없이 그대로 뜬다 — 자리와 API만 먼저 여는 것이 이 함수의 일이다).
+#
+# ★[S8-T9 아트 패스] 상태별 칩 색 — 배지 넷이 전부 금박 한 색이면 "무슨 상태인가"를 매번 읽어야
+#   한다(색은 글자보다 먼저 도착한다). 관계 상태는 진홍 계열(부부=진한 진홍 / 혼례 준비=그 연한
+#   톤 = 아직 식 전이라는 예고), 연애는 달력 생일 마커(MARK_BIRTHDAY)와 같은 연분홍, 진행 상태
+#   (진급 대기)는 종전 금박 그대로다 — 한지 plate 바탕은 넷 다 공유한다(칩 형태는 한 종류).
+# ★ 키는 main._heart_badge()가 만드는 **그 문자열 그대로**다(안정 UI 문자열 — 이 넷이 전부이고,
+#   못 찾은 값은 금박으로 떨어져 새 배지가 생겨도 안 깨진다).
+const HEART_BADGE_COLORS := {
+	"부부": Color(0.85, 0.35, 0.42),            # 진홍(혼인)
+	"혼례 준비 중": Color(0.88, 0.55, 0.58),    # 같은 진홍의 연한 톤(식 전 예고)
+	"연애 중": Color(0.78, 0.42, 0.62),         # 연분홍(= calendar_panel.MARK_BIRTHDAY)
+}
+
 func _draw_heart_badge(font: Font, panel: Rect2, row_y: float, text: String) -> void:
 	if text == "":
 		return
@@ -832,8 +845,10 @@ func _draw_heart_badge(font: Font, panel: Rect2, row_y: float, text: String) -> 
 	var tw: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var box := Rect2(panel.end.x - PAD - minf(tw + 12.0, HEART_BADGE_W), row_y + 1.0,
 		minf(tw + 12.0, HEART_BADGE_W), 16.0)
+	var col: Color = HEART_BADGE_COLORS.get(text, HanjiUi.GOLD_SOFT)   # 기본 = 진급 대기·그 외
 	HanjiUi.draw_plate(self, box)
-	HanjiUi.draw_text(self, box.position + Vector2(6.0, 12.0), text, fs, HanjiUi.GOLD_SOFT,
+	draw_rect(box, col, false, 1.0)                                    # 테두리도 같은 색(글자만 물들면 약하다)
+	HanjiUi.draw_text(self, box.position + Vector2(6.0, 12.0), text, fs, col,
 		box.size.x - 12.0)
 
 # ── 숙련 탭 행 치수(★[S3-T6] 상수화 → ★[S5-T4] 5행 봉합) ──────────────────
