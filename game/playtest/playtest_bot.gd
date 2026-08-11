@@ -121,10 +121,11 @@ func _run(p: Persona) -> Dictionary:
 	var energy := SoulEnergy.new()
 	var wallet := Wallet.new()
 	var inv := Inventory.new()
-	# 세 호감도(미호 기본 선호=영혼 호박 · 멜=피안화 · 바나=혼령초 — T5.2/T6.2 선물 경제 분산).
+	# 세 호감도. ★[S8-T2] 선호는 인스턴스 필드가 아니라 GiftPrefs 테이블(캐릭터 id 키)이 든다 —
+	# 봇은 "가장 싼 재고를 건네는" 최소 전략이라 그 캐릭터의 등급으로 점수를 조회해 넣는다.
 	var miho := Affinity.new()
-	var mel := Affinity.new();  mel.preferred_crop = CropCatalog.PIANHWA
-	var bana := Affinity.new(); bana.preferred_crop = CropCatalog.HONRYEONGCHO
+	var mel := Affinity.new()
+	var bana := Affinity.new()
 	# 카페·밤 노드(트리 밖 생성이라 _ready를 손수 불러 좌석/스폿을 채운다 — 기존 봇 관례).
 	var cafe := Cafe.new();      cafe._ready()
 	var night := NightBar.new(); night._ready()
@@ -179,11 +180,11 @@ func _run(p: Persona) -> Dictionary:
 			if miho.can_gift(day):
 				var g := _cheapest_harvest(inv)
 				if g != "" and inv.take_harvest(g):
-					miho.gift(g, day)
+					miho.gift(GiftPrefs.gift_points("miho", g), day)
 			if p.cafe and mel.can_gift(day):
 				var g2 := _cheapest_harvest(inv)
 				if g2 != "" and inv.take_harvest(g2):
-					mel.gift(g2, day)
+					mel.gift(GiftPrefs.gift_points("mel", g2), day)
 
 		# ④ 낮 카페 서빙(혼력 무관, 시간 희소성) — 재고를 소모해 서빙 매출(멜 마진 ×)을 같은 지갑에.
 		#    실제 Cafe 노드를 영업창(15–19시) 동안 실시간 tick으로 굴린다(게임과 동일 경제).

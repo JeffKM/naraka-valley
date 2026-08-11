@@ -35,6 +35,15 @@ func _new_main() -> Node:
 	await process_frame
 	return m
 
+# ★[S8-T2] 그 아이템이 든 슬롯을 손에 든다(선물 입력 = 든 아이템 문법 — 없으면 1개 넣고 든다).
+func _hold(m: Node, id: String) -> void:
+	if not m.inventory.has_item(id):
+		m.inventory.add_item(id, 1)
+	for i in m.inventory.slots.size():
+		if m.inventory.id_at(i) == id:
+			m.inventory.select(i)
+			return
+
 func _initialize() -> void:
 	await _run_checks()
 
@@ -122,11 +131,12 @@ func _run_checks() -> void:
 		m._resident("okja").affinity == null and m._resident("okja").save_key == "")
 	_check("③h 캐릭터 노드가 레코드에 물려 있다",
 		m._resident("miho").node == m.miho and m._resident("neo").node == m.neo)
-	# 선호 선물이 인스턴스별로 갈린다(미호=영혼 호박 · 멜=피안화 · 바나=혼령초).
-	_check("③i 선호 선물 분산",
-		m.affinity.preferred_crop == CropCatalog.YEONGHON_HOBAK
-		and m.mel_affinity.preferred_crop == CropCatalog.PIANHWA
-		and m.bana_affinity.preferred_crop == CropCatalog.HONRYEONGCHO)
+	# ★[S8-T2] 선호는 인스턴스 필드(preferred_crop)가 아니라 GiftPrefs 테이블이 든다 — 옛 3인
+	#   배정은 러브 등급으로 그대로 승계됐다(선물 경제 분산 보존).
+	_check("③i 선호 선물 분산(GiftPrefs 러브 승계)",
+		GiftPrefs.tier_of("miho", CropCatalog.YEONGHON_HOBAK) == GiftPrefs.LOVE
+		and GiftPrefs.tier_of("mel", CropCatalog.PIANHWA) == GiftPrefs.LOVE
+		and GiftPrefs.tier_of("bana", CropCatalog.HONRYEONGCHO) == GiftPrefs.LOVE)
 
 	# ── ④ 스테이션 전환 = 논리 위치 즉시 스냅(보간은 시각 레이어 한정) ──
 	print("── ④ 논리 위치 스냅 ──")
@@ -189,7 +199,7 @@ func _run_checks() -> void:
 	m._indoor = "만물상"
 	var faced: Resident = m._facing_resident()
 	_check("⑥b 만물상 안에선 네오가 잡힌다", faced != null and faced.id == "neo")
-	_check("⑥c 네오는 선물 채널 없음(풀 T1 트랙은 후속)", not faced.can_gift)
+	_check("⑥c 네오도 선물 채널 보유(★S8-T2 개방 — 옛 단언 '채널 없음'을 뒤집는다)", faced.can_gift)
 	_check("⑥d 네오는 [F] 훅 보유(매대)", faced.shop_key.is_valid())
 	m._indoor = ""
 	m._target = m.BANA_NIGHT_TILE
@@ -224,7 +234,9 @@ func _run_checks() -> void:
 	_check("⑦a ♡0이어도 점주 레이어(매대 훅)는 살아 있다",
 		r_neo.shop_key.is_valid() and r_neo.affinity.hearts() == 0)
 	m.neo_affinity.points = r_neo.affinity.MAX_POINTS
-	_check("⑦b ♡만렙이어도 선물·하트 이벤트 채널이 자동으로 안 열린다", not r_neo.can_gift)
+	# ★[S8-T2] 선물 채널은 열렸지만 **하트에서 파생되지 않는다** — 레코드가 든 결정이라 ♡0에서도
+	#   ♡만렙에서도 같다(옛 단언 "만렙이어도 안 열린다"를 뒤집되 독립성 주장은 그대로 지킨다).
+	_check("⑦b 선물 채널은 하트 파생이 아니다(♡만렙·♡0 모두 같은 값)", r_neo.can_gift)
 	_check("⑦c 점주 훅과 관계 트랙이 별개 필드(상호 참조 없음)",
 		r_neo.shop_key.is_valid() and r_neo.affinity != null)
 	m.neo_affinity.points = 0
@@ -294,8 +306,8 @@ func _run_checks() -> void:
 		r_mochi.node != null and r_mochi.node.is_inside_tree() and r_mochi.node is Mochi)
 	_check("⑪c 관계 트랙(Affinity)도 함께 생긴다", r_mochi.affinity != null)
 	_check("⑪d 신규 세이브 키", r_mochi.save_key == "mochi_affinity")
-	_check("⑪e 선물 채널 있음 · 선호 = 황천포도(과일 = 모찌 정체성)",
-		r_mochi.can_gift and r_mochi.affinity.preferred_crop == CropCatalog.HWANGCHEON_PODO)
+	_check("⑪e 선물 채널 있음 · 선호 = 황천포도(과일 = 모찌 정체성 — ★S8-T2 GiftPrefs 러브)",
+		r_mochi.can_gift and GiftPrefs.tier_of("mochi", CropCatalog.HWANGCHEON_PODO) == GiftPrefs.LOVE)
 	_check("⑪f 초상화 없음(도트 눈입은 T10 아트)", r_mochi.portrait_stem == "")
 	_check("⑪g 관계 곱셈기 없음(ADR-0008 메인 4인 독점)", not r_mochi.effect_fn.is_valid())
 
@@ -379,33 +391,35 @@ func _run_checks() -> void:
 	_check("⑪D 끝까지 넘기면 닫힌다", not m2.dialogue.is_open())
 	m2.player.set_physics_process(true)
 
-	# 선물 → 호감도(선호 배수). 일반 작물과 선호 작물을 다른 날에 하나씩 건네 비교한다.
+	# 선물 → 호감도. ★[S8-T2] 입력이 **든 아이템**으로 바뀌었다(옛 경로 = _selected_crop 수확물).
+	#   등급별 점수·품질 배율의 전수 검증은 gift_test 소관이고, 여기서는 프레임워크가 그 경로로
+	#   실제 굴러가는지(소모·게이팅·캐릭터별 등급)만 본다.
 	r_mochi.affinity.points = 0
 	r_mochi.affinity.last_gift_day = -1
 	m2.clock.day = 3
-	m2._selected_crop = CropCatalog.HONRYEONGCHO      # 선호가 아닌 작물
-	m2.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 1)
+	m2.inventory.add_item(CropCatalog.HONRYEONGCHO, 1)   # 모찌에겐 선호가 아닌 작물
+	_hold(m2, CropCatalog.HONRYEONGCHO)
 	m2._try_resident_gift(r_mochi)
 	var plain_pts: int = r_mochi.affinity.points
-	_check("⑪E 일반 선물 = 기본 점수", plain_pts == Affinity.GIFT_POINTS)
-	_check("⑪F 선물한 수확물이 인벤에서 소모된다",
-		m2.inventory.harvest_count(CropCatalog.HONRYEONGCHO) == 0)
+	_check("⑪E 뉴트럴 선물 = 기본 점수", plain_pts == Affinity.GIFT_POINTS)
+	_check("⑪F 선물한 아이템이 인벤에서 소모된다",
+		m2.inventory.count_of(CropCatalog.HONRYEONGCHO) == 0)
 	# 하루 1회 게이팅 — 재고를 다시 채우고 같은 날 또 건네도 점수도 재고도 안 움직인다
 	# (재고 부족으로 반려되는 게 아니라 *게이트*에 막히는지를 본다).
-	m2.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 1)
+	m2.inventory.add_item(CropCatalog.HONRYEONGCHO, 1)
+	_hold(m2, CropCatalog.HONRYEONGCHO)
 	m2._try_resident_gift(r_mochi)
 	_check("⑪G 하루 1회 게이팅(같은 날 두 번째는 무점수·무소모)",
 		r_mochi.affinity.points == plain_pts
-		and m2.inventory.harvest_count(CropCatalog.HONRYEONGCHO) == 1)
+		and m2.inventory.count_of(CropCatalog.HONRYEONGCHO) == 1)
 	m2.clock.day = 4
-	m2._selected_crop = CropCatalog.HWANGCHEON_PODO   # 선호 작물
-	m2.inventory.add_harvest(CropCatalog.HWANGCHEON_PODO, 1)
+	_hold(m2, CropCatalog.HWANGCHEON_PODO)   # 모찌의 러브(황천포도)
 	m2._try_resident_gift(r_mochi)
-	_check("⑪H 선호 선물 = 배수 점수(황천포도)",
+	_check("⑪H 러브 선물 = 배수 점수(황천포도)",
 		r_mochi.affinity.points - plain_pts == Affinity.GIFT_PREFERRED_POINTS)
-	_check("⑪I 선호 판정이 모찌 인스턴스에만 걸린다(멜·바나 선호 불변)",
-		m2.mel_affinity.preferred_crop == CropCatalog.PIANHWA
-		and m2.bana_affinity.preferred_crop == CropCatalog.HONRYEONGCHO)
+	_check("⑪I 등급 판정이 캐릭터별로 갈린다(같은 황천포도가 멜에겐 뉴트럴)",
+		GiftPrefs.tier_of("mochi", CropCatalog.HWANGCHEON_PODO) == GiftPrefs.LOVE
+		and GiftPrefs.tier_of("mel", CropCatalog.HWANGCHEON_PODO) == GiftPrefs.NEUTRAL)
 
 	# ★ 기존 5인 거동 불변 — 신규 주민 등록이 앞사람 자리·하트·관계 탭을 건드리지 않는다.
 	# ★[S8-T1] 모찌도 관계 트랙 보유자라 이제 관계 탭에 뜬다(효과 줄만 없음 — 표시 자격 분리).

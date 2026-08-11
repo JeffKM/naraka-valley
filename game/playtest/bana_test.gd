@@ -27,6 +27,15 @@ func _new_main() -> Node:
 	await process_frame
 	return m
 
+# ★[S8-T2] 그 아이템이 든 슬롯을 손에 든다(선물 입력 = 든 아이템 문법).
+func _hold(m: Node, id: String) -> void:
+	if not m.inventory.has_item(id):
+		m.inventory.add_item(id, 1)
+	for i in m.inventory.slots.size():
+		if m.inventory.id_at(i) == id:
+			m.inventory.select(i)
+			return
+
 func _initialize() -> void:
 	await _run_checks()
 
@@ -110,9 +119,9 @@ func _run_checks() -> void:
 
 	# ══════════════ T6.2 호감도(일일 대화 · 선물 · 하트별 대사 · 세이브) ══════════════
 	var m4: Node = await _new_main()
-	# ── ⑧ 선호 작물 분화: 바나=혼령초(미호=영혼 호박·멜=피안화와 분리, affinity.gd 인스턴스
-	#     하나에 preferred_crop만 바꿔 재사용). 시작 호감도는 0 ──
-	_check("⑧ 바나 선호 작물이 혼령초", m4.bana_affinity.preferred_crop == CropCatalog.HONRYEONGCHO)
+	# ── ⑧ 선호 분화: 바나=혼령초(미호=영혼 호박·멜=피안화와 분리). ★[S8-T2] 선호의 주인이
+	#     Affinity 인스턴스 필드에서 GiftPrefs 테이블(캐릭터 id 키)로 옮겨졌다. 시작 호감도는 0 ──
+	_check("⑧ 바나 선호(러브)에 혼령초", GiftPrefs.tier_of("bana", CropCatalog.HONRYEONGCHO) == GiftPrefs.LOVE)
 	_check("⑧b 바나 호감도 시작 0", m4.bana_affinity.points == 0)
 
 	# ── ⑨ 일일 대화: 오늘 첫 대화면 호감도 소폭↑, 같은 날 두 번째는 점수 불변(하루 1회 게이팅) ──
@@ -135,24 +144,24 @@ func _run_checks() -> void:
 
 	# ── ⑩ 선물: 선호(혼령초)는 큰 폭, 비선호는 작은 폭. 하루 1회 게이팅, 막힌 선물은 무소모 ──
 	m4.clock.day = 2
-	m4.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 1)
-	m4.inventory.add_harvest(CropCatalog.PIANHWA, 1)
-	m4._selected_crop = CropCatalog.HONRYEONGCHO
+	m4.inventory.add_item(CropCatalog.HONRYEONGCHO, 1)
+	m4.inventory.add_item(CropCatalog.PIANHWA, 1)
+	_hold(m4, CropCatalog.HONRYEONGCHO)   # ★[S8-T2] 선물 입력 = 든 아이템
 	var pg0: int = m4.bana_affinity.points
 	m4._try_bana_gift()
 	var pref_gain: int = m4.bana_affinity.points - pg0
 	_check("⑩ 선호(혼령초) 선물로 호감도가 크게 오른다", pref_gain == Affinity.GIFT_PREFERRED_POINTS)
-	_check("⑩b 선물한 혼령초 1개가 소모됨", m4.inventory.harvest_count(CropCatalog.HONRYEONGCHO) == 0)
-	m4._selected_crop = CropCatalog.PIANHWA
+	_check("⑩b 선물한 혼령초 1개가 소모됨", m4.inventory.count_of(CropCatalog.HONRYEONGCHO) == 0)
+	_hold(m4, CropCatalog.PIANHWA)
 	var pg1: int = m4.bana_affinity.points
 	m4._try_bana_gift()  # 같은 날 두 번째 선물
 	_check("⑩c 같은 날 두 번째 선물은 막힌다", m4.bana_affinity.points == pg1)
-	_check("⑩d 막힌 선물은 작물을 소모하지 않음", m4.inventory.harvest_count(CropCatalog.PIANHWA) == 1)
+	_check("⑩d 막힌 선물은 작물을 소모하지 않음", m4.inventory.count_of(CropCatalog.PIANHWA) == 1)
 	m4.clock.day = 3  # 다음 날: 비선호(피안화) 선물
 	var pg2: int = m4.bana_affinity.points
 	m4._try_bana_gift()
 	var normal_gain: int = m4.bana_affinity.points - pg2
-	_check("⑩e 비선호 작물 선물은 작은 폭", normal_gain == Affinity.GIFT_POINTS)
+	_check("⑩e 뉴트럴 작물 선물은 작은 폭", normal_gain == Affinity.GIFT_POINTS)
 	_check("⑩f 선호 선물이 일반 선물보다 큼", pref_gain > normal_gain)
 	m4.free()
 
