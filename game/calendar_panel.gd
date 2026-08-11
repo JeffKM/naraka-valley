@@ -30,6 +30,7 @@ const PAD := 14.0              # 프레임 안쪽 여백
 const HEAD_SIZE := 15          # 표제("성야절 · 1년차")
 const DAY_SIZE := 10           # 칸 안 일차 숫자
 const LEG_SIZE := 10           # 하단 범례 줄
+const LEG_HEART_W := 11.0      # ★[S8-T10] 생일 줄 앞 그린 하트가 차지하는 폭(글자 들여쓰기 = 이 값)
 
 # ── 칸 팔레트(밝은 한지 위) ──────────────────────────────────────────────────
 const CELL_FILL := Color(0.86, 0.79, 0.63, 0.55)     # 앞으로 올 날
@@ -135,19 +136,31 @@ func header() -> String:
 # 하단 범례(절기 행사 / 테마 데이 / ★생일). 비해금 테마는 이름을 가리고 "?"로 남긴다.
 # ★생일은 가리지 않는다 — 테마 데이처럼 진척으로 여는 결실이 아니라 **달력에 원래 있는 날**이고,
 #   미리 알아야 선물을 챙길 수 있어 가리면 마커의 쓸모가 사라진다(스타듀 달력도 생일은 다 보인다).
-func legend() -> Array:
+# ★[S8-T10] 생일 줄의 머리표는 **문자가 아니라 그림**이다 — neodgm.ttf에 ♥ 글리프가 없어
+#   "♥ 7일 …"이 두부(□)로 뜬다(heart_bar.gd:4가 하트 막대를 스프라이트로 만든 그 리스크와 같다).
+#   ◆·●는 이 폰트에 실재하므로 그대로 두고, 생일 줄만 `_draw_heart_mark`(T9 절차 하트)를 앞에
+#   그린다. 그래서 행마다 "머리표를 그려야 하는가"(heart)를 함께 들고 다닌다.
+func _legend_rows() -> Array:
 	var out: Array = []
 	for c in _cells:
 		if int(c["event"]) != SeasonalEvent.NONE:
-			out.append("◆ %d일 — %s" % [int(c["dos"]), SeasonalEvent.name_of(int(c["event"]))])
+			out.append({"text": "◆ %d일 — %s" % [int(c["dos"]), SeasonalEvent.name_of(int(c["event"]))],
+				"heart": false})
 	for c in _cells:
 		if int(c["theme"]) != Festival.NONE:
 			var nm := Festival.name_of(int(c["theme"])) if bool(c["theme_unlocked"]) else "? (카페를 더 키우면)"
-			out.append("● %d일 — %s" % [int(c["dos"]), nm])
+			out.append({"text": "● %d일 — %s" % [int(c["dos"]), nm], "heart": false})
 	for c in _cells:
 		var rid := String(c.get("birthday", ""))
 		if rid != "":
-			out.append("♥ %d일 — %s 생일" % [int(c["dos"]), _res_name(rid)])
+			out.append({"text": "%d일 — %s 생일" % [int(c["dos"]), _res_name(rid)], "heart": true})
+	return out
+
+# 범례 텍스트만(외부 조회·테스트용 — 머리표 그림은 렌더 소관이라 문자열에 안 섞는다).
+func legend() -> Array:
+	var out: Array = []
+	for row in _legend_rows():
+		out.append(String(row["text"]))
 	return out
 
 func _view() -> Vector2:
@@ -164,7 +177,7 @@ func _draw() -> void:
 	var rows := int(ceil(float(_cells.size()) / float(COLS)))
 	var grid_w := COLS * CELL_W + (COLS - 1) * CELL_GAP
 	var grid_h := rows * CELL_H + (rows - 1) * CELL_GAP
-	var legs := legend()
+	var legs := _legend_rows()
 	var frame_w := grid_w + PAD * 2.0
 	var frame_h := PAD * 2.0 + float(HEAD_SIZE) + 8.0 + grid_h + 8.0 \
 		+ legs.size() * (LEG_SIZE + 3.0)
@@ -196,8 +209,10 @@ func _draw() -> void:
 		# 마커 — 절기 행사(청록 ◆) · 테마 데이(홍 ● / 비해금은 회색 "?").
 		# ★[S8-T3] 생일 — 색뿐 아니라 **형태도** 다르다(사각 마커 둘과 한눈에 갈리게).
 		#   행사·테마일을 피해 배치했으므로 같은 자리(칸 하단 중앙)를 써도 겹치지 않는다.
-		# ★[S8-T9 아트 패스] 작은 원 → **하트**. 범례가 "♥ %d일 — %s 생일"이라 마커가 원이면
-		#   범례와 칸이 서로 다른 물건처럼 보였다(형태가 곧 색인 마커에선 그 어긋남이 크다).
+		# ★[S8-T9 아트 패스] 작은 원 → **하트**. 범례의 생일 줄과 형태를 맞춘다(칸의 그 표시가
+		#   범례의 그 표시라는 것이 형태로 이어져야 한다 — 색만으론 셋을 못 가른다).
+		# ★[S8-T10] 이제 범례 쪽도 같은 `_draw_heart_mark`를 쓴다(옛 "♥ " 문자는 폰트에 글리프가
+		#   없어 두부였다 — _legend_rows 주석). 마커와 범례가 **한 함수 한 출처**가 됐다.
 		if String(c.get("birthday", "")) != "":
 			_draw_heart_mark(Vector2(cx + CELL_W * 0.5, cy + CELL_H - 6.0), MARK_BIRTHDAY)
 		if int(c["event"]) != SeasonalEvent.NONE:
@@ -209,9 +224,16 @@ func _draw() -> void:
 				HanjiUi.draw_text(self, Vector2(cx + CELL_W * 0.5 - 3.0, cy + CELL_H - 3.0),
 					"?", DAY_SIZE, MARK_LOCKED, -1.0, false)
 	y += grid_h + 8.0
-	for line in legs:
+	for row in legs:
 		y += LEG_SIZE + 3.0
-		HanjiUi.draw_text(self, Vector2(x0, y), line, LEG_SIZE, Color(0.34, 0.26, 0.18), -1.0, false)
+		var lx := x0
+		# ★[S8-T10] 생일 줄 머리표 = 그린 하트(폰트 ♥는 두부 — _legend_rows 주석). 칸 마커와
+		#   같은 함수·같은 색이라 "범례의 그 표시가 저 칸의 그 표시"가 형태로 이어진다.
+		if bool(row["heart"]):
+			_draw_heart_mark(Vector2(x0 + LEG_HEART_W * 0.5, y - LEG_SIZE * 0.35), MARK_BIRTHDAY)
+			lx += LEG_HEART_W
+		HanjiUi.draw_text(self, Vector2(lx, y), String(row["text"]), LEG_SIZE,
+			Color(0.34, 0.26, 0.18), -1.0, false)
 
 # ★[S8-T9 아트 패스] 생일 마커 ♥ — 절차 드로잉(에셋 0). 위 두 볼(원)과 아래 삼각을 겹쳐 폭 ~7px의
 #   작은 하트를 만든다. 이 치수보다 크면 칸(CELL_W)을 물고 작으면 뭉개져 원과 구분이 안 된다.

@@ -429,13 +429,16 @@ func _run_checks() -> void:
 	_check("⑩d 생일 칸엔 행사·테마가 겹치지 않는다",
 		bday_cells.all(func(c: Dictionary) -> bool:
 			return int(c["event"]) == SeasonalEvent.NONE and int(c["theme"]) == Festival.NONE))
-	_check("⑩e 범례에 생일 줄", "♥ 7일 — 미호 생일" in str(cal.legend())
-		and "♥ 26일 — 모찌 생일" in str(cal.legend()))
+	# ★[S8-T10] 머리표 "♥ "가 문자열에서 빠졌다 — 폰트에 그 글리프가 없어 두부로 떴고, 이제
+	#   렌더가 `_draw_heart_mark`로 **그린다**(calendar_panel._legend_rows 주석). 텍스트 단언은
+	#   날짜·이름만 본다(머리표는 그림이라 문자열에 안 섞인다).
+	_check("⑩e 범례에 생일 줄", "7일 — 미호 생일" in str(cal.legend())
+		and "26일 — 모찌 생일" in str(cal.legend()))
 	_check("⑩f 기존 범례(행사 1줄·테마 1줄)는 그대로 · 생일이 뒤에 붙는다",
 		cal.legend().size() == 4 and "월광 혼불해파리 창구" in str(cal.legend()))
 	cal.set_state(1, 1, 0)             # 피안절 — 옹이 4일·뱃사공 11일·네오 19일
 	_check("⑩g 이름 미주입 주민은 id로 폴백(범례가 죽지 않는다)",
-		"♥ 4일 — ongi 생일" in str(cal.legend()))
+		"4일 — ongi 생일" in str(cal.legend()))
 	cal.queue_free()
 
 	# ── ⑪ 구세이브 로드 무결(가법 키) ──

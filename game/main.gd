@@ -13194,9 +13194,11 @@ func _animal_prompt(t: Vector2i) -> String:
 		parts.append("[우클릭] %s 쓰다듬기" % label)
 	if inventory.selected_id() == ItemCatalog.HAY and not ranch.is_fed(t):
 		parts.append("[좌클릭] 건초 급여")   # 새끼도 급여로 우정을 쌓아 성체 되는 즉시 좋은 산물.
+	# ★[S8-T10] "♥%d" → "호감 %d" — neodgm.ttf에 ♥ 글리프가 없어 두부(□)로 떴다(heart_bar.gd:4가
+	#   하트 막대를 스프라이트로 만든 그 리스크와 같다). 프롬프트는 글리프 무의존 텍스트로 간다.
 	if parts.is_empty():
-		return "%s ♥%d — 오늘 돌봄 완료" % [label, hearts]
-	return "%s   (♥%d)" % ["  ".join(parts), hearts]
+		return "%s 호감 %d — 오늘 돌봄 완료" % [label, hearts]
+	return "%s   (호감 %d)" % ["  ".join(parts), hearts]
 
 # ★ [S1-8] 개간 프롬프트: 조준한 debris에 대해 맞는 도구면 [좌클릭] 개간, 아니면 필요한 도구를 안내한다.
 # 든 도구가 맞을 때만 동사를 보이는 ADR-0024 §2의 HUD 짝(틀린 도구 = "무슨 도구가 필요한지"만).
@@ -15592,7 +15594,9 @@ func _advance_wedding(day: int) -> void:
 	_apply_spouse_home_station()
 	var r := _resident(_spouse_id)
 	audio.sfx("ui")
-	_notice("혼례를 올렸다 — %s와 부부가 되었다 ♥" % (r.display_name if r != null else _spouse_id),
+	# ★[S8-T10] 끝의 " ♥"를 뗐다 — neodgm.ttf에 ♥ 글리프가 없어 두부(□)로 떴다(heart_bar.gd:4의
+	#   그 리스크). 이 배너에 그림 하트를 넣을 자리는 없고(알림 피드는 글자 한 줄), 문구만으로 충분하다.
+	_notice("혼례를 올렸다 — %s와 부부가 되었다" % (r.display_name if r != null else _spouse_id),
 		NOTICE_SECS * 3.0)
 
 # 배우자 HOME 이주 — 스케줄 배열에 귀가 스테이션 **1항목 append**(ADR-0066 결정 8 문면 그대로).
