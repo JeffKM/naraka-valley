@@ -2788,6 +2788,13 @@ func _ready() -> void:
 	# ★ [S2-T7] 주민 5인(미호·멜·바나·네오·옥자)을 레지스트리에 등록하고 각자의 첫 자리에 세운다.
 	#   옛 1인당 하드배선(위치·선호 선물·가시성 각각 따로)이 여기 한 호출로 접혔다.
 	_setup_residents()
+	# ★[S8-T3] 달력 생일 범례가 쓸 표시명 주입 — 등록 직후 1회(이름은 이후 안 바뀐다). 달력은
+	#   레지스트리를 모르는 무상태 조회자라, stage·revenue와 같은 결로 main이 다리를 놓아 준다.
+	if calendar_panel != null:
+		var res_names := {}
+		for r in _residents:
+			res_names[r.id] = r.display_name
+		calendar_panel.set_resident_names(res_names)
 	# T4.1 옥자를 통보 자리에 세우되 평소엔 숨긴다(오프닝 통보 때만 등장). 통보를 마치면
 	# T5.6 _refresh_okja_station이 카페 상주 자리로 옮겨 다시 드러낸다.
 	# ★ [S2-T7] 통보 배치는 **프레임워크 밖**이다 — 통보 흐름이 옥자의 위치·표시를 소유하고,
@@ -15038,6 +15045,11 @@ func _facing_resident() -> Resident:
 func _resident_rel_line(r: Resident) -> String:
 	return _rel_line(r.affinity) if r.affinity != null else r.rel_text
 
+# ★[S8-T3] 생일 당일 placeholder 한 줄 — 캐릭터가 `birthday_lines()`를 갖기 전까지의 임시 발화다
+#   (S9 서사가 캐릭터 파일에 본문을 넣으면 이 상수는 안 쓰이게 된다). 화자가 누구든 성립하도록
+#   이름·성격을 안 싣는다 — 캐릭터색을 여기 넣으면 그게 곧 "프레임워크가 든 서사"가 된다(ADR-0005).
+const BIRTHDAY_PLACEHOLDER_LINE := "…오늘이 내 생일이야."
+
 # ── 대화(공통) ─────────────────────────────────────────────────────────────
 # 말 걸면 텍스트박스가 뜨고, 우클릭으로 끝까지 넘기면 닫힌다. 대사 *내용*은 캐릭터가 들고
 # 오고(ADR-0005: 서사 텍스트는 캐릭터에만), 진행·열림은 DialogueBox가, 패널 표시·이동잠금은
@@ -15052,6 +15064,18 @@ func _start_resident_dialogue(r: Resident) -> void:
 	else:
 		var first_today := r.affinity.daily_talk(clock.day)
 		lines = r.node.lines(r.affinity.hearts(), first_today)
+	# ★[S8-T3 / ADR-0066 결정 3] 생일 당일 플레이버 — 평소 묶음 **앞**에 한 줄이 선다.
+	#   내용의 주인은 캐릭터다(ADR-0005): 노드가 `birthday_lines()`를 가지면 그걸 쓰고, 없으면
+	#   프레임워크 placeholder 한 줄로 때운다. S9가 캐릭터 파일에 그 메서드를 붙이는 것만으로
+	#   본문이 들어오고 **판정식(오늘이 생일인가)은 한 줄도 안 바뀐다**(ADR-0005 "활동 시스템은
+	#   플롯 글쓰기에 비의존" — placeholder 상태로도 전 파이프라인이 플레이 가능해야 한다).
+	if r.is_birthday_on(clock.day):
+		var bday: PackedStringArray = r.node.birthday_lines() if r.node.has_method("birthday_lines") \
+			else PackedStringArray([BIRTHDAY_PLACEHOLDER_LINE])
+		if not bday.is_empty():
+			var with_bday := PackedStringArray(bday)
+			with_bday.append_array(lines)
+			lines = with_bday
 	# ★ [S3-T5] 첫 대화 이벤트 훅(talk_intro) — 유효하면 이 대화에 *앞세울* 줄들을 받아 붙인다.
 	#   훅이 지급·1회 플래그까지 수행하고(뱃사공 T1 낚싯대 증정), 빈 배열이면 아무 일도 없다.
 	if r.talk_intro.is_valid():
@@ -15075,6 +15099,9 @@ func _start_resident_dialogue(r: Resident) -> void:
 # 선호를 배정할 자리조차 없었다 — 입력을 든 아이템으로 바꾸는 이 한 수가 둘 다 해소한다.
 #   · 등급·점수·품질 배율은 GiftPrefs가 소유(러브 40 / 라이크 25 / 뉴트럴 15 / 디스라이크 −10 /
 #     헤이트 −20 · 러브·라이크만 품질 ×1~×1.5). Affinity는 "하루 1회" 게이팅과 누적만.
+#   · ★[S8-T3] 리듬이 하나 더 얹혔다 — **인당 주 2회**(GameClock.week_of 파생)와 **생일 예외**
+#     (주 상한 면제 · 카운터 무소모 · 점수 ×8). 판정은 전부 Affinity·Resident가 들고, 여기선
+#     "오늘이 그 사람 생일인가" 한 줄을 물어 넘긴다.
 #   · **든 슬롯을 그대로 뺀다**(remove_at) — remove_item의 최저품질 우선 소비를 쓰면 손에 든
 #     이리듐 대신 가방 구석의 일반품이 사라져, 방금 계산한 품질 배율과 실제 소모가 어긋난다.
 # ★ 알림 문구는 레코드의 gift_target_ko로 원문 형태를 그대로 재현한다 — 미호만 이름이 빠진
@@ -15092,15 +15119,25 @@ func _try_resident_gift(r: Resident) -> void:
 		# 도구·무기·낚싯대(든 것이 곧 동사)와 나락 열쇠(유일 입수 경로)는 건네지 않는다.
 		_notice("%s은 선물할 수 없다" % ItemCatalog.name_of(id))
 		return
-	if not r.affinity.can_gift(clock.day):
-		_notice("오늘은 이미 선물했다" if who == "" else "오늘은 이미 %s에게 선물했다" % who)
+	# ★[S8-T3 / ADR-0066 결정 3] 생일이면 주 2회 상한을 통과하고 점수가 ×8이 된다(하루 1회는 유지).
+	var birthday := r.is_birthday_on(clock.day)
+	if not r.affinity.can_gift(clock.day, birthday):
+		# 두 리듬을 문구로 갈라 준다 — 어느 벽에 막혔는지 모르면 "왜 안 되지"가 남는다.
+		if clock.day == r.affinity.last_gift_day:
+			_notice("오늘은 이미 선물했다" if who == "" else "오늘은 이미 %s에게 선물했다" % who)
+		elif who == "":
+			_notice("이번 주 선물은 다 했다(주 %d회)" % Affinity.GIFTS_PER_WEEK)
+		else:
+			_notice("이번 주 %s에게 줄 선물은 다 했다(주 %d회)" % [who, Affinity.GIFTS_PER_WEEK])
 		return
 	var tier := GiftPrefs.tier_of(r.id, id)
 	var points := GiftPrefs.points_for(tier, id, inventory.quality_at(idx))
 	if not inventory.remove_at(idx, 1):       # 선물한 아이템 1개 소모(든 슬롯 그대로)
 		return
-	var gained := r.affinity.gift(points, clock.day)
+	var gained := r.affinity.gift(points, clock.day, birthday)
 	var tag := GiftPrefs.tag_of(tier)
+	if birthday:
+		tag = "(생일!) " + tag                # 배율이 붙은 이유를 알림 한 줄이 말해 준다
 	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립
 	if who == "":
 		_notice("%s 선물 %s%+d 호감도" % [ItemCatalog.name_of(id), tag, gained])

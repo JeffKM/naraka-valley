@@ -13,6 +13,12 @@ extends SceneTree
 #   ⑤ 음수(혐오) 채널이 실제로 깎고, 누적은 0 아래로 안 내려간다(영구 적대 없음).
 #   ⑥ 채널 개방: 네오(S8-T2 신규) · 옹이·풀무·무골(작물 소진으로 선호가 비어 있던 셋)의 러브 성립.
 #
+# ★ [S8-T3 / ADR-0066 결정 3] 주간·생일이 같은 파일에 이어 붙는다(선물의 *리듬* 축이라 한 스위트):
+#   ⑦ 주 파생(week_of)과 인당 주 2회 상한(같은 주 세 번째 거절·주가 바뀌면 재허용).
+#   ⑧ 9인 생일 배치 전수 — 테마 데이(25일)·절기 행사일(12/20/16/15) 무충돌 · 같은 날 중복 0.
+#   ⑨ 생일 ×8(러브 40→320 · 헤이트 −20→−160) · 주 상한 면제 + 카운터 미소모 · 하루 1회는 유지.
+#   ⑩ 달력 birthday 키·범례 줄 · ⑪ 주간 키 없는 구세이브 로드 무결 · ⑫ 생일 대사 placeholder.
+#
 # 실행: ./run_tests.sh gift   (헤드리스는 반드시 game/에서 · 순차)
 
 var _fail := 0
@@ -40,9 +46,15 @@ func _hold(m: Node, id: String, quality: int = 0) -> bool:
 	return false
 
 # 그 주민에게 든 것을 건네고 오른 점수를 돌려준다(막히면 0).
-func _give(m: Node, rid: String, day: int) -> int:
+# ★[S8-T3] `isolate=true`면 **주간 카운터를 먼저 되감는다** — 이 헬퍼를 쓰는 옛 절(④~⑥)은 "한 번
+#   건네면 무슨 일이 일어나는가"만 보는데, S8-T3의 주 2회 상한이 끼면 세 번째 호출부터 그 관심사와
+#   무관하게 막혀 버린다. 상한 자체는 아래 ⑦절이 격리 없이(isolate=false) 직접 본다.
+func _give(m: Node, rid: String, day: int, isolate: bool = true) -> int:
 	var r: Resident = m._resident(rid)
 	m.clock.day = day
+	if isolate:
+		r.affinity.gift_week = -1
+		r.affinity.gifts_this_week = 0
 	var before: int = r.affinity.points
 	m._try_resident_gift(r)
 	return r.affinity.points - before
@@ -264,6 +276,217 @@ func _run_checks() -> void:
 	_check("⑥g 관계 트랙 없는 주민은 선물 경로 무반응(무소모)",
 		r_okja.affinity == null and not r_okja.can_gift
 		and m.inventory.count_of(CropCatalog.YEONGHON_HOBAK) == hobak_before)
+
+	# ══════════ 여기서부터 S8-T3(주간·생일 — ADR-0066 결정 3) ══════════
+	# ── ⑦ 주(week) 파생 · 인당 주 2회 상한 ──
+	print("── ⑦ 주 2회 제한 ──")
+	_check("⑦a week = (day-1)/7 순수 파생(1~7=0주 · 8=1주 · 15=2주 · 29=4주)",
+		GameClock.week_of(1) == 0 and GameClock.week_of(7) == 0 and GameClock.week_of(8) == 1
+		and GameClock.week_of(15) == 2 and GameClock.week_of(29) == 4)
+	_check("⑦b 절기(28일) = 정확히 4주라 주 경계가 절기 경계와 어긋나지 않는다",
+		GameClock.DAYS_PER_SEASON % GameClock.DAYS_PER_WEEK == 0
+		and GameClock.week_of(29) - GameClock.week_of(1) == 4)
+	_check("⑦c 0·음수 day는 0주로 접힌다(손상 방어)",
+		GameClock.week_of(0) == 0 and GameClock.week_of(-5) == 0)
+	# 라이브 — 같은 주(50~56) 안에서 세 번째가 막히고, 주가 넘어가면(57) 다시 열린다.
+	var r_mochi: Resident = m._resident("mochi")
+	r_mochi.affinity.points = 0
+	r_mochi.affinity.last_gift_day = -1
+	r_mochi.affinity.gift_week = -1
+	r_mochi.affinity.gifts_this_week = 0
+	_hold(m, FishCatalog.NEOK_BUNGEO)
+	_check("⑦d 그 주 첫 번째 선물(+15)", _give(m, "mochi", 50, false) == 15)
+	_hold(m, FishCatalog.NEOK_BUNGEO)
+	_check("⑦e 두 번째도 통과(+15)", _give(m, "mochi", 51, false) == 15)
+	_check("⑦f 이제 이번 주 잔여 0", r_mochi.affinity.gifts_left_in_week(52) == 0)
+	_hold(m, FishCatalog.NEOK_BUNGEO)
+	var fish_n: int = m.inventory.count_of(FishCatalog.NEOK_BUNGEO)
+	_check("⑦g 같은 주 세 번째는 막힌다(무점수)", _give(m, "mochi", 52, false) == 0)
+	_check("⑦h 막힌 선물은 아이템을 소모하지 않는다",
+		m.inventory.count_of(FishCatalog.NEOK_BUNGEO) == fish_n)
+	_check("⑦i 주가 바뀌면 다시 열린다(day 57 = 8주차, +15)", _give(m, "mochi", 57, false) == 15)
+	_check("⑦j 새 주의 카운터는 1부터(잔여 1)",
+		r_mochi.affinity.gifts_used_in_week(57) == 1
+		and r_mochi.affinity.gifts_left_in_week(57) == 1)
+
+	# ── ⑧ 생일 테이블(9인 배치 전수 — 회피일·중복) ──
+	print("── ⑧ 생일 배치 ──")
+	var tracked: Array = []
+	for r in m._residents:
+		if r.affinity != null:
+			tracked.append(r.id)
+	_check("⑧a 관계 트랙 보유 9인 전원에게 생일이 있다(그리고 그 9인뿐)",
+		tracked.size() == 9 and Resident.BIRTHDAYS.size() == 9
+		and tracked.all(func(rid: String) -> bool: return Resident.BIRTHDAYS.has(rid)))
+	var range_ok := true       # 절기 0..3 · 일차 1..28
+	var avoid_theme := true    # 25일(테마 데이 고정 슬롯) 회피
+	var avoid_event := true    # 절기 행사일(12/20/16/15) 회피
+	var uniq: Array = []
+	var dup_ok := true
+	for rid in Resident.BIRTHDAYS:
+		var b: Array = Resident.birthday_of(String(rid))
+		var s := int(b[0])
+		var dos := int(b[1])
+		if s < 0 or s > 3 or dos < 1 or dos > GameClock.DAYS_PER_SEASON:
+			range_ok = false
+		if dos == Festival.DAY_OF_SEASON:
+			avoid_theme = false
+		if dos == int(SeasonalEvent.DAY_OF_SEASON[s]):
+			avoid_event = false
+		var key := "%d:%d" % [s, dos]
+		if uniq.has(key):
+			dup_ok = false
+		uniq.append(key)
+	_check("⑧b 전원 절기 0~3 · 일차 1~28 범위", range_ok)
+	_check("⑧c 테마 데이(각 절기 25일) 무충돌", avoid_theme)
+	_check("⑧d 절기 행사일(12/20/16/15) 무충돌", avoid_event)
+	_check("⑧e 같은 날 생일 둘 없음(달력 마커 1칸 1인)", dup_ok)
+	# 절대 날짜 조회 — 해마다 돌아온다(절기·일차로 비교하므로 112일 주기).
+	var miho_bday := 35      # 유화절 7일 = 28 + 7
+	var mugol_bday := 77     # 망연절 21일 = 56 + 21
+	_check("⑧f is_birthday = 절기·일차 일치(미호 day 35)",
+		Resident.is_birthday("miho", miho_bday)
+		and not Resident.is_birthday("miho", miho_bday - 1)
+		and not Resident.is_birthday("miho", miho_bday + 1))
+	_check("⑧g 해가 바뀌어도 같은 날 돌아온다(35 + 112)",
+		Resident.is_birthday("miho", miho_bday + 112))
+	_check("⑧h 역방향 조회(birthday_on_day)",
+		Resident.birthday_on_day(miho_bday) == "miho"
+		and Resident.birthday_on_day(mugol_bday) == "mugol"
+		and Resident.birthday_on_day(1) == "")
+	_check("⑧i 트랙 없는 주민·잘못된 id는 생일 없음",
+		not Resident.is_birthday("okja", miho_bday) and Resident.birthday_of("없는사람").is_empty())
+
+	# ── ⑨ 생일 ×8 · 주 상한 면제(카운터 미소모) · 하루 1회 유지 ──
+	print("── ⑨ 생일 선물 ──")
+	# 단위 — 반환은 **명목** 점수(플레이어가 본 "+320"이 사실이어야 한다).
+	var a_bd := Affinity.new()
+	_check("⑨a-1 러브 40 × 생일 8 = 320(명목 반환)",
+		a_bd.gift(Affinity.GIFT_PREFERRED_POINTS, miho_bday, true) == 320)
+	# ★잠정 경보(owner 큐): 우리 5-스케일에선 만렙이 300점이라 **생일 러브 선물 한 번이 미터를
+	#   통째로 채운다**(스타듀는 640/2500 ≈ 2.5하트). ADR-0066이 "×8 스타듀 동형"으로 확정한 값을
+	#   그대로 태웠고, 눈금 재조정은 곡선 소관(S8-T4)이라 여기선 사실만 단언해 박아 둔다.
+	_check("⑨a-2 ×8이 5-스케일 만렙(300)을 넘어 clamp된다 — 잠정 경보로 박제",
+		a_bd.points == Affinity.MAX_POINTS and 320 > Affinity.MAX_POINTS)
+	a_bd.free()
+	var r_miho2: Resident = m._resident("miho")
+	r_miho2.affinity.points = 0
+	r_miho2.affinity.last_gift_day = -1
+	# 그 주 두 번을 이미 다 썼는데도(면제) 생일 선물이 통과한다.
+	r_miho2.affinity.gift_week = GameClock.week_of(miho_bday)
+	r_miho2.affinity.gifts_this_week = Affinity.GIFTS_PER_WEEK
+	_hold(m, CropCatalog.YEONGHON_HOBAK)
+	var bday_gain: int = _give(m, "miho", miho_bday, false)
+	_check("⑨b 주 2회를 소진했어도 생일은 통과한다(면제 · 만렙까지 채움)",
+		bday_gain > Affinity.GIFT_PREFERRED_POINTS
+		and r_miho2.affinity.points == Affinity.MAX_POINTS)
+	_check("⑨c 생일 선물은 주 카운터를 소모하지 않는다",
+		r_miho2.affinity.gifts_this_week == Affinity.GIFTS_PER_WEEK)
+	# 하루 1회는 생일에도 유지된다(여덟 배를 하루 두 번 받는 날은 없다).
+	_hold(m, CropCatalog.YEONGHON_HOBAK)
+	var pts_bday: int = r_miho2.affinity.points
+	var hobak_n: int = m.inventory.count_of(CropCatalog.YEONGHON_HOBAK)
+	m._try_resident_gift(r_miho2)
+	_check("⑨d 생일에도 하루 1회는 유지(두 번째 무점수·무소모)",
+		r_miho2.affinity.points == pts_bday
+		and m.inventory.count_of(CropCatalog.YEONGHON_HOBAK) == hobak_n)
+	# 비생일 날은 배율이 안 붙는다(회귀 — ×8이 새지 않는지).
+	r_miho2.affinity.points = 0
+	_hold(m, CropCatalog.YEONGHON_HOBAK)
+	_check("⑨e 비생일은 배율 없음(러브 40)", _give(m, "miho", miho_bday + 1) == 40)
+	# 음수도 ×8(러브~헤이트 전 등급 — 스타듀 동형)이되 0 하한은 그대로.
+	r_mugol.affinity.points = Affinity.MAX_POINTS      # 만렙에서 시작(clamp에 안 걸리게)
+	r_mugol.affinity.last_gift_day = -1
+	_hold(m, CropCatalog.PIANHWA)
+	_check("⑨f 헤이트 −20 × 생일 8 = −160", _give(m, "mugol", mugol_bday, false) == -160
+		and r_mugol.affinity.points == Affinity.MAX_POINTS - 160)
+	r_mugol.affinity.points = 100
+	r_mugol.affinity.last_gift_day = -1
+	_hold(m, CropCatalog.PIANHWA)
+	m.clock.day = mugol_bday + 112     # 이듬해 같은 생일
+	m._try_resident_gift(r_mugol)
+	_check("⑨g 생일 ×8 음수도 0 아래로는 못 내려간다(영구 적대 없음)",
+		r_mugol.affinity.points == 0)
+
+	# ── ⑩ 달력 birthday 키 · 범례 ──
+	print("── ⑩ 달력 생일 마커 ──")
+	var cal := CalendarPanel.new()
+	get_root().add_child(cal)
+	cal.setup()
+	cal.set_resident_names({"miho": "미호", "mochi": "모찌"})
+	cal.set_state(miho_bday, 1, 0)     # 유화절 7일
+	var cal_cells: Array = cal.cells()
+	_check("⑩a 28칸 전부 birthday 키를 가진다(가법 1키)",
+		cal_cells.size() == GameClock.DAYS_PER_SEASON
+		and cal_cells.all(func(c: Dictionary) -> bool: return c.has("birthday")))
+	var bday_cells: Array = []
+	for c in cal_cells:
+		if String(c["birthday"]) != "":
+			bday_cells.append(c)
+	_check("⑩b 유화절엔 생일 2칸(미호 7일 · 모찌 26일)", bday_cells.size() == 2)
+	_check("⑩c 7일 칸이 미호",
+		String(cal_cells[6]["birthday"]) == "miho" and int(cal_cells[6]["dos"]) == 7)
+	_check("⑩d 생일 칸엔 행사·테마가 겹치지 않는다",
+		bday_cells.all(func(c: Dictionary) -> bool:
+			return int(c["event"]) == SeasonalEvent.NONE and int(c["theme"]) == Festival.NONE))
+	_check("⑩e 범례에 생일 줄", "♥ 7일 — 미호 생일" in str(cal.legend())
+		and "♥ 26일 — 모찌 생일" in str(cal.legend()))
+	_check("⑩f 기존 범례(행사 1줄·테마 1줄)는 그대로 · 생일이 뒤에 붙는다",
+		cal.legend().size() == 4 and "월광 혼불해파리 창구" in str(cal.legend()))
+	cal.set_state(1, 1, 0)             # 피안절 — 옹이 4일·뱃사공 11일·네오 19일
+	_check("⑩g 이름 미주입 주민은 id로 폴백(범례가 죽지 않는다)",
+		"♥ 4일 — ongi 생일" in str(cal.legend()))
+	cal.queue_free()
+
+	# ── ⑪ 구세이브 로드 무결(가법 키) ──
+	print("── ⑪ 세이브 하위호환 ──")
+	var a_old := Affinity.new()
+	a_old.load_save({"points": 100, "last_talk_day": 3, "last_gift_day": 4})   # 주간 키 없는 구세이브
+	_check("⑪a 주간 키 없는 딕셔너리도 크래시 없이 로드",
+		a_old.points == 100 and a_old.last_gift_day == 4)
+	_check("⑪b 기본값 = '이 주엔 아직 안 건넸다'(아무것도 안 막힌다)",
+		a_old.gift_week == -1 and a_old.gifts_this_week == 0
+		and a_old.can_gift(10) and a_old.gifts_left_in_week(10) == Affinity.GIFTS_PER_WEEK)
+	a_old.gift(15, 10)
+	a_old.gift(15, 11)
+	var round_trip: Dictionary = a_old.to_save()
+	var a_new := Affinity.new()
+	a_new.load_save(round_trip)
+	_check("⑪c 왕복 저장이 주간 카운터를 보존",
+		a_new.gift_week == GameClock.week_of(11) and a_new.gifts_this_week == 2
+		and not a_new.can_gift(12))
+	var a_bad := Affinity.new()
+	a_bad.load_save({"gifts_this_week": 99, "gift_week": 1})
+	_check("⑪d 손상값은 상한으로 잘린다", a_bad.gifts_this_week == Affinity.GIFTS_PER_WEEK)
+	a_old.free()
+	a_new.free()
+	a_bad.free()
+
+	# ── ⑫ 생일 당일 대사 플레이버(placeholder 1줄) ──
+	print("── ⑫ 생일 대사 ──")
+	# 부팅 직후엔 옥자 통보 대화가 이미 열려 있다 — DialogueBox.start는 열린 상태를 거절하므로
+	# (원문 가드) 먼저 끝까지 넘겨 닫아 둔다(플레이어 조작과 같은 경로).
+	var drain := 0
+	while m.dialogue.is_open() and drain < 64:
+		m.dialogue.advance()
+		drain += 1
+	m.clock.day = miho_bday
+	m._start_resident_dialogue(r_miho2)
+	_check("⑫a 생일엔 평소 대사 앞에 한 줄이 선다",
+		m.dialogue.is_open() and m.dialogue.line() == m.BIRTHDAY_PLACEHOLDER_LINE)
+	var guard := 0
+	while m.dialogue.is_open() and guard < 64:
+		m.dialogue.advance()
+		guard += 1
+	_check("⑫b 끝까지 넘기면 닫힌다(평소 묶음이 뒤에 이어졌다)",
+		not m.dialogue.is_open() and guard > 1)
+	m.clock.day = miho_bday + 1
+	m._start_resident_dialogue(r_miho2)
+	_check("⑫c 비생일엔 그 줄이 없다", m.dialogue.line() != m.BIRTHDAY_PLACEHOLDER_LINE)
+	guard = 0
+	while m.dialogue.is_open() and guard < 64:
+		m.dialogue.advance()
+		guard += 1
 
 	m.free()
 	cleaner.delete_save()

@@ -39,12 +39,18 @@ const CELL_EDGE := Color(0.50, 0.42, 0.30, 0.75)     # 칸 테두리
 const MARK_EVENT := Color(0.28, 0.58, 0.62)          # 절기 행사 마커(청록)
 const MARK_THEME := Color(0.86, 0.20, 0.24)          # 테마 데이 마커(홍 — Festival.BANNER_A 결)
 const MARK_LOCKED := Color(0.46, 0.42, 0.36)         # 비해금 테마 데이("?" 결의 회색)
+const MARK_BIRTHDAY := Color(0.78, 0.42, 0.62)       # ★[S8-T3] 생일 마커(연분홍 — 청록◆·홍●과 구별)
 
 var _open := false
 var _day := 0
 var _stage := -1
 var _revenue := -1
 var _cells: Array = []         # 28행 마킹 데이터(아래 _rebuild 참조 — 테스트가 이걸 단언한다)
+# ★[S8-T3] 주민 id → 표시명. **주입받는다** — 이 패널은 레지스트리를 모르고(무상태 조회자),
+#   표시명의 진실원은 main `_setup_residents`의 레코드다. stage·revenue를 main이 넘겨 주는
+#   그 다리를 그대로 탄다(파일 머리말 "해금 입력은 주입받는다"). 안 넣으면 id로 폴백해
+#   헤드리스에서도 범례가 성립한다(마커·칸 데이터는 이름과 무관하게 이미 완성이다).
+var _res_names: Dictionary = {}
 
 func setup() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -101,11 +107,23 @@ func _rebuild() -> void:
 			"event": SeasonalEvent.event_for_day(d),
 			"theme": slot,
 			"theme_unlocked": slot != Festival.NONE and Festival.is_unlocked(slot, _stage, _revenue),
+			# ★[S8-T3] 그날 생일인 주민 id("" = 없음). 생일 배치가 25일·행사일을 피해 잡혔으므로
+			#   한 칸에 마커 둘이 겹치는 경우는 없다(무충돌은 gift_test가 전수로 지킨다).
+			"birthday": Resident.birthday_on_day(d),
 		})
 
 # 테스트·디버그용 읽기 표면(복제 — 외부에서 못 흔든다).
 func cells() -> Array:
 	return _cells.duplicate(true)
+
+# ★[S8-T3] 주민 표시명 주입(main이 레지스트리 등록 직후 1회 — 이후 안 바뀐다).
+func set_resident_names(names: Dictionary) -> void:
+	_res_names = names.duplicate()
+	queue_redraw()
+
+# 생일 범례에 쓸 이름(주입 안 됐으면 id 폴백).
+func _res_name(rid: String) -> String:
+	return String(_res_names.get(rid, rid))
 
 # 표제 — "성야절 · 1년차". 연차는 112일(4절기)마다 오른다.
 func header() -> String:
@@ -114,7 +132,9 @@ func header() -> String:
 	var year := (_day - 1) / (GameClock.DAYS_PER_SEASON * 4) + 1
 	return "%s · %d년차" % [GameClock.season_name(GameClock.season_index_for_day(_day)), year]
 
-# 하단 범례 두 줄(절기 행사 / 테마 데이). 비해금 테마는 이름을 가리고 "?"로 남긴다.
+# 하단 범례(절기 행사 / 테마 데이 / ★생일). 비해금 테마는 이름을 가리고 "?"로 남긴다.
+# ★생일은 가리지 않는다 — 테마 데이처럼 진척으로 여는 결실이 아니라 **달력에 원래 있는 날**이고,
+#   미리 알아야 선물을 챙길 수 있어 가리면 마커의 쓸모가 사라진다(스타듀 달력도 생일은 다 보인다).
 func legend() -> Array:
 	var out: Array = []
 	for c in _cells:
@@ -124,6 +144,10 @@ func legend() -> Array:
 		if int(c["theme"]) != Festival.NONE:
 			var nm := Festival.name_of(int(c["theme"])) if bool(c["theme_unlocked"]) else "? (카페를 더 키우면)"
 			out.append("● %d일 — %s" % [int(c["dos"]), nm])
+	for c in _cells:
+		var rid := String(c.get("birthday", ""))
+		if rid != "":
+			out.append("♥ %d일 — %s 생일" % [int(c["dos"]), _res_name(rid)])
 	return out
 
 func _view() -> Vector2:
@@ -170,6 +194,10 @@ func _draw() -> void:
 		HanjiUi.draw_text(self, Vector2(cx + 3.0, cy + DAY_SIZE + 2.0), str(int(c["dos"])),
 			DAY_SIZE, HanjiUi.INK, -1.0, false)
 		# 마커 — 절기 행사(청록 ◆) · 테마 데이(홍 ● / 비해금은 회색 "?").
+		# ★[S8-T3] 생일 — 색뿐 아니라 **형태도** 다르다(사각 마커 둘과 한눈에 갈리게 작은 원).
+		#   행사·테마일을 피해 배치했으므로 같은 자리(칸 하단 중앙)를 써도 겹치지 않는다.
+		if String(c.get("birthday", "")) != "":
+			draw_circle(Vector2(cx + CELL_W * 0.5, cy + CELL_H - 5.5), 3.0, MARK_BIRTHDAY)
 		if int(c["event"]) != SeasonalEvent.NONE:
 			draw_rect(Rect2(cx + CELL_W * 0.5 - 3.0, cy + CELL_H - 8.0, 6.0, 5.0), MARK_EVENT)
 		if int(c["theme"]) != Festival.NONE:

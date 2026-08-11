@@ -21,6 +21,56 @@ class_name Resident
 #     상대를 게이팅하지 않는다 — 할인이 늘어도 하트 이벤트가 열리지 않고, ♡0이어도 매대는
 #     정상 동작한다(네오 선례를 규칙으로 승격). T1이 가게를 가져도 이 두 필드를 같이 채울 뿐이다.
 
+# ── ★[S8-T3 / ADR-0066 결정 3] 생일 달력 — 관계 트랙 보유 9인의 단일 출처 ──
+# 값 = [절기 인덱스(0 피안·1 유화·2 망연·3 성야), 절기 내 일차(1..28)].
+#
+# ★ **static 테이블인 이유**: 소비자가 인스턴스 밖에도 있다 — 달력 패널(CalendarPanel)은 무상태
+#   조회자라 레지스트리를 모르고 GameClock·Festival·SeasonalEvent를 static으로 읽는다. 생일만
+#   인스턴스 필드로 두면 그 패널이 main을 거쳐야 하고, 진실원이 "레코드"와 "달력"으로 갈린다.
+#   그래서 레코드·달력·선물 경로가 전부 이 dict 하나를 읽는다.
+# ★ **회피일**(달력 충돌 0): 각 절기 25일(테마 데이 고정 슬롯 — Festival.DAY_OF_SEASON)과 절기
+#   행사일(SeasonalEvent.DAY_OF_SEASON = 피안12·유화20·망연16·성야15). 28일 중 26일이 비어 있어
+#   9인을 흩어 놓아도 남는다. gift_test가 이 무충돌을 전수로 다시 단언한다(테이블이 바뀌어도 잡힌다).
+# ★ **전부 잠정**이다 — 실제 인물 생일 차용은 owner 협의 큐(ADR-0066 Consequences). 배치 근거는
+#   각 줄 주석의 캐릭터 결이고, 바꿀 땐 이 dict 한 줄만 고치면 달력·선물·대사가 함께 따라온다.
+const BIRTHDAYS := {
+	# 피안절(봄결) — 물이 풀리고 새순이 나는 절기.
+	"ongi": [0, 4],       # 옹이 = 목령. 나무가 그해 첫 나이테를 두르는 무렵(가장 이른 봄자리)
+	"boatman": [0, 11],   # 뱃사공 = 물길의 사공. 언 물이 풀려 배가 다시 뜨는 무렵
+	"neo": [0, 19],       # 네오 = 태엽 인형. 멈췄던 것이 다시 감기는 절기(시작의 결)
+	# 유화절(여름결) — 불볕과 결실의 절기.
+	"miho": [1, 7],       # 미호 = 여우불. 불의 성질이 가장 센 절기, 그걸 양육으로 뒤집는 자리(ADR-0004)
+	"mochi": [1, 26],     # 모찌 = 카페 과일에서 난 존재. 과일이 가장 단 늦여름
+	# 망연절(가을결) — 거두고 셈하는 절기.
+	"mel": [2, 8],        # 멜 = 카페의 돈줄. 한 해를 셈하는 절기의 초입(장부의 계절)
+	"mugol": [2, 21],     # 무골 = 백골 무사. 살이 스러지고 뼈만 남는 결의 늦가을
+	# 성야절(겨울결) — 밤이 가장 긴 절기.
+	"pulmu": [3, 6],      # 풀무 = 도깨비 대장장이. 화덕 불이 가장 반가워지는 초겨울
+	"bana": [3, 27],      # 바나 = 밤의 경비. 밤이 가장 긴 한겨울 끝자락
+}
+
+# 그 사람의 생일([절기, 일차] — 없으면 빈 배열).
+static func birthday_of(rid: String) -> Array:
+	return Array(BIRTHDAYS.get(rid, []))
+
+# 그 날이 그 사람의 생일인가. day는 절대 날짜(1부터) — 절기·일차로 풀어 비교한다(해마다 돌아온다).
+static func is_birthday(rid: String, day: int) -> bool:
+	var b := birthday_of(rid)
+	if b.size() != 2 or day < 1:
+		return false
+	return GameClock.season_index_for_day(day) == int(b[0]) \
+		and GameClock.day_of_season(day) == int(b[1])
+
+# 그 날이 생일인 주민 id("" = 없음). 달력 마커·대사 훅이 쓰는 역방향 조회.
+# ★ 하루에 두 명을 두지 않았으므로 첫 매치 하나면 된다(무충돌은 테스트가 지킨다).
+static func birthday_on_day(day: int) -> String:
+	if day < 1:
+		return ""
+	for rid in BIRTHDAYS:
+		if is_birthday(String(rid), day):
+			return String(rid)
+	return ""
+
 # ── 정체성 ────────────────────────────────────────────────────────────────
 var id := ""                   # 코드·세이브용 영문 id(예: "miho"). 레지스트리 조회 키.
 var display_name := ""         # 대화창·팝업에 뜨는 이름. 캐릭터 노드 display_name()과 일치시킨다.
@@ -115,3 +165,7 @@ func station_region(minutes: int) -> String:
 # 하트 단계(관계 트랙 없는 주민은 0).
 func hearts() -> int:
 	return affinity.hearts() if affinity != null else 0
+
+# ★[S8-T3] 오늘이 이 사람의 생일인가(레코드에서 바로 묻는 편의 창구 — 판정은 static 테이블 소관).
+func is_birthday_on(day: int) -> bool:
+	return is_birthday(id, day)
