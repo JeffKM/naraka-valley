@@ -194,10 +194,12 @@ func _draw() -> void:
 		HanjiUi.draw_text(self, Vector2(cx + 3.0, cy + DAY_SIZE + 2.0), str(int(c["dos"])),
 			DAY_SIZE, HanjiUi.INK, -1.0, false)
 		# 마커 — 절기 행사(청록 ◆) · 테마 데이(홍 ● / 비해금은 회색 "?").
-		# ★[S8-T3] 생일 — 색뿐 아니라 **형태도** 다르다(사각 마커 둘과 한눈에 갈리게 작은 원).
+		# ★[S8-T3] 생일 — 색뿐 아니라 **형태도** 다르다(사각 마커 둘과 한눈에 갈리게).
 		#   행사·테마일을 피해 배치했으므로 같은 자리(칸 하단 중앙)를 써도 겹치지 않는다.
+		# ★[S8-T9 아트 패스] 작은 원 → **하트**. 범례가 "♥ %d일 — %s 생일"이라 마커가 원이면
+		#   범례와 칸이 서로 다른 물건처럼 보였다(형태가 곧 색인 마커에선 그 어긋남이 크다).
 		if String(c.get("birthday", "")) != "":
-			draw_circle(Vector2(cx + CELL_W * 0.5, cy + CELL_H - 5.5), 3.0, MARK_BIRTHDAY)
+			_draw_heart_mark(Vector2(cx + CELL_W * 0.5, cy + CELL_H - 6.0), MARK_BIRTHDAY)
 		if int(c["event"]) != SeasonalEvent.NONE:
 			draw_rect(Rect2(cx + CELL_W * 0.5 - 3.0, cy + CELL_H - 8.0, 6.0, 5.0), MARK_EVENT)
 		if int(c["theme"]) != Festival.NONE:
@@ -210,3 +212,18 @@ func _draw() -> void:
 	for line in legs:
 		y += LEG_SIZE + 3.0
 		HanjiUi.draw_text(self, Vector2(x0, y), line, LEG_SIZE, Color(0.34, 0.26, 0.18), -1.0, false)
+
+# ★[S8-T9 아트 패스] 생일 마커 ♥ — 절차 드로잉(에셋 0). 위 두 볼(원)과 아래 삼각을 겹쳐 폭 ~7px의
+#   작은 하트를 만든다. 이 치수보다 크면 칸(CELL_W)을 물고 작으면 뭉개져 원과 구분이 안 된다.
+#   center = 하트가 앉는 자리의 대략 한가운데(칸 하단 중앙 — 옛 원 마커와 같은 자리).
+const HEART_LOBE_R := 2.0     # 위 두 볼 반지름
+const HEART_LOBE_DX := 1.7    # 볼 중심의 좌우 벌어짐
+const HEART_TIP_DY := 3.4     # 볼 중심선에서 아래 꼭짓점까지
+func _draw_heart_mark(center: Vector2, col: Color) -> void:
+	var ly := center.y - 1.2                      # 볼 중심선(하트는 위가 넓어 살짝 올려 앉힌다)
+	draw_circle(Vector2(center.x - HEART_LOBE_DX, ly), HEART_LOBE_R, col)
+	draw_circle(Vector2(center.x + HEART_LOBE_DX, ly), HEART_LOBE_R, col)
+	var half := HEART_LOBE_DX + HEART_LOBE_R      # 볼 바깥 끝 = 삼각 윗변 반폭(실루엣이 이어진다)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(center.x - half, ly), Vector2(center.x + half, ly),
+		Vector2(center.x, ly + HEART_TIP_DY)]), col)

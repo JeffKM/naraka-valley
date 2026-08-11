@@ -251,9 +251,14 @@ func _run_checks() -> void:
 	#   효과 줄이라 곱셈기 없는 주민 셋을 탭에서 지웠다). 옥자·주방요괴는 설계상 트랙이 없어 계속 제외.
 	_check("⑧a 관계 트랙 보유 9인 전원(옥자·주방요괴만 제외)",
 		names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골"])
-	_check("⑧b 곱셈기 보유자에게만 효과 줄(미호·옹이=있음 · 모찌·무골=빈 문자열)",
-		rows.size() == 9 and String(rows[0]["effect"]) != "" and String(rows[6]["effect"]) != ""
-		and String(rows[4]["effect"]) == "" and String(rows[8]["effect"]) == "")
+	# ★[S8-T9] 선물 리듬 꼬리("이번 주 선물 n/2")가 붙어 곱셈기 없는 주민도 줄이 선다 — 곱셈기
+	#   유무는 꼬리 **앞**에 무엇이 있느냐로 읽는다(frame_test ③b′와 같은 기준).
+	_check("⑧b 곱셈기 보유자에게만 효과 줄(미호·옹이=곱셈기+꼬리 · 모찌·무골=선물 꼬리만)",
+		rows.size() == 9
+		and String(rows[0]["effect"]).contains(" · 이번 주 선물")
+		and String(rows[6]["effect"]).contains(" · 이번 주 선물")
+		and String(rows[4]["effect"]).begins_with("이번 주 선물")
+		and String(rows[8]["effect"]).begins_with("이번 주 선물"))
 
 	# ── ⑨ 세이브 왕복: 4인 호감도가 옛 키로 저장·복원된다 ──
 	print("── ⑨ 세이브 왕복 ──")
@@ -433,7 +438,7 @@ func _run_checks() -> void:
 	var mochi_shown := false
 	for row in m2_rows:
 		if String(row["name"]) == "모찌":
-			mochi_shown = String(row["effect"]) == ""
+			mochi_shown = String(row["effect"]).begins_with("이번 주 선물")   # ★[S8-T9] 곱셈기 없음 = 꼬리만
 	_check("⑪J 관계 탭 = 관계 트랙 보유 9행이고 모찌는 효과 줄 없이 표시된다",
 		m2_rows.size() == 9 and mochi_shown)
 	_check("⑪K 기존 주민 자리 불변",

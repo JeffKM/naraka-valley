@@ -62,16 +62,19 @@ func _initialize() -> void:
 	m.frame._hover_tab = -1
 	# ★[S8-T1] 관계 트랙 보유 9인 — 곱셈기 없는 주민(모찌·풀무·무골)은 효과 줄 없이 하트만 뜨고,
 	#   패널을 넘치는 만큼은 세로 스크롤로 접힌다(하단 "▼ N" 안내가 함께 보이는지 확인용).
+	# ★[S8-T9] 배지 4종(부부·혼례 준비 중·연애 중·진급 대기)을 한 화면에 깔아 **상태색 분화**를
+	#   눈으로 대조한다 — 라이브에선 배우자·연인이 동시에 넷일 수 없어 이 덤프가 유일한 대조면이다.
+	#   선물 리듬 꼬리도 같이 태운다(곱셈기 있는 행 = "… · 이번 주 선물 n/2", 없는 행 = 꼬리만).
 	m.frame.set_hearts([
-		{"name": "미호", "filled": 1, "total": 5, "effect": "여우불: 잠듦 — 미호와 친해지면 깨어난다"},
-		{"name": "멜", "filled": 0, "total": 5, "effect": "멜 마진: ×1.0 — 멜과 친해지면 단가가 오른다"},
-		{"name": "바나", "filled": 0, "total": 5, "effect": "바나 경비: 잠듦 — 바나와 친해지면 밤을 지켜준다"},
-		{"name": "네오", "filled": 0, "total": 5, "effect": "네오 할인: 정가 — 네오와 친해지면 매대가 싸진다"},
-		{"name": "모찌", "filled": 2, "total": 5, "effect": ""},
-		{"name": "뱃사공", "filled": 0, "total": 5, "effect": "생선가게 할인: 정가"},
-		{"name": "옹이", "filled": 0, "total": 5, "effect": "목공방 할인: 정가"},
-		{"name": "풀무", "filled": 1, "total": 5, "effect": ""},
-		{"name": "무골", "filled": 0, "total": 5, "effect": ""},
+		{"name": "미호", "filled": 5, "total": 5, "effect": "여우불: 잠듦 — 미호와 친해지면 깨어난다 · 선물 매일 가능(부부)", "badge": "부부"},
+		{"name": "멜", "filled": 5, "total": 5, "effect": "멜 마진: ×1.0 — 멜과 친해지면 단가가 오른다 · 이번 주 선물 2/2", "badge": "혼례 준비 중"},
+		{"name": "바나", "filled": 5, "total": 5, "effect": "바나 경비: 잠듦 — 바나와 친해지면 밤을 지켜준다 · 이번 주 선물 1/2", "badge": "연애 중"},
+		{"name": "네오", "filled": 0, "total": 5, "effect": "네오 할인: 정가 — 네오와 친해지면 매대가 싸진다 · 이번 주 선물 2/2", "badge": "진급 대기"},
+		{"name": "모찌", "filled": 2, "total": 5, "effect": "이번 주 선물 0/2"},
+		{"name": "뱃사공", "filled": 0, "total": 5, "effect": "생선가게 할인: 정가 · 이번 주 선물 2/2"},
+		{"name": "옹이", "filled": 0, "total": 5, "effect": "목공방 할인: 정가 · 이번 주 선물 2/2"},
+		{"name": "풀무", "filled": 1, "total": 5, "effect": "이번 주 선물 2/2"},
+		{"name": "무골", "filled": 0, "total": 5, "effect": "이번 주 선물 2/2"},
 	])
 	m.frame.queue_redraw()
 	await _grab("frame_rel")

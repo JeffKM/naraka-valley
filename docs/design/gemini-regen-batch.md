@@ -2422,3 +2422,103 @@ ADR-0065 결정 12가 "메이드 데이 초상 변형만 시도"라 적은 축�
      아는 유일 관문이라 분기 지점은 하나다). **아트가 오기 전엔 배선도 넣지 않았다** — 빈 훅은
      "곧 온다"는 약속만 남기고 검증할 것이 없다.
 ```
+
+---
+
+## 21. ★[S8-T9] 관계 심화 아트 패스 — 혼례 부적 아이콘·2인용 침대 프롭 2종 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-08-11). §10~§20과 같은 [ADR-0048]
+> 교체 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰고
+> `cd game && python3 tools/make_s8_art.py`를 한 번 돌리면 **코드 0줄 수정**으로 반영된다.
+>
+> **후처리 글루:** [`game/tools/make_s8_art.py`](../../game/tools/make_s8_art.py) — 규칙·계수는
+> `make_s6_art.py`와 **같은 값**을 쓴다(새 규칙 0 · 하드 알파 → muted → 앵커 재정렬).
+>
+> **raw 보관:** `game/assets/materials/raw/wedding_charm_raw.png` ·
+> `game/assets/props/raw/house_bed_double_raw.png`
+>
+> **PixelLab 사용량 3 gen**(create_image_pixen — 부적 1 · 침대 v1 1<내려앉음으로 폐기> · 침대 v2 1).
+>
+> **이 패스가 지운 색박스·그레이박스:** 혼례 부적 인벤/핫바 색박스 폴백 1종. **아트 없이 끝낸
+> 나머지 항목**(에셋 0 · 절차 드로잉·색 분화로 해결): 관계 탭 상태 배지 색, 달력 생일 마커 ♥,
+> 선물 토스트 tier 색 — 전부 16px 미만 UI 표식이라 생성물이 아니라 코드가 그리는 편이 선명하다.
+
+### 21.0 공통 규약
+
+```
+전부 [ADR-0050] 32-native · [§1.1] NW 광원 · [§8.1] 하드 알파 · [§9] 저승 muted · [§3] 발치 앵커.
+생성: create_image_pixen(selective outline / low detail / no_background=true / seed 고정) —
+      §18.0·§20.0이 세운 그 호출이다(32² 안팎 소품은 pixen이 가장 깨끗하고 1 gen이라 싸다).
+muted 계수(한 자리에 나란히 서는 것끼리 같은 값이라야 새것만 안 튄다):
+  아이콘      0.90/0.97 (= §18.1 메뉴 아이콘·§17 광물 아이콘과 **같은 값** — 같은 인벤 격자)
+  월드 프롭   0.85/0.95 (= §18.2 곳간·§20.1 점괘 거울과 **같은 값** — 같은 실내 가구 층)
+★청키화(enforce_chunk)는 걸지 않는다 — §20.0이 그은 선 그대로(현행 실내 프롭 그레인과 정합).
+```
+
+### 21.1 ★혼례 부적 `materials/wedding_charm.png` (32×32 아이콘) — 청혼의 매개체
+
+```
+배선: main.MINE_ICONS에 한 줄(`ItemCatalog.WEDDING_CHARM: preload(...)`) — 나락 열쇠 바로 옆이다.
+  부적은 CAT_MATERIAL이라 인벤 슬롯·핫바·토스트가 이미 "텍스처 있으면 쓰고 없으면 색박스" 분기를
+  타고 있었다 → dict 한 줄로 세 자리가 동시에 낫는다(_merge_t10_icons·_item_icon 공용 경로).
+정체성: 옥자가 5,000냥에 혼(魂)을 엮어 접어 주는 **접힌 한지 부적**이다. 스타듀 인어 펜던트의
+  저승판이지만 보석이 아니라 **종이와 매듭**이라야 한다 — 무녀의 물건이지 장신구가 아니다.
+  PROMPT: folded korean hanji paper talisman charm, pale cream folded paper packet, red cinnabar
+    seal glyph brushed on the front, crimson silk cord tied in a knot around it with tassel ends,
+    tiny brass bell hanging from the cord, korean shamanic wedding amulet, [§1.1 광원 세트],
+    muted somber palette   (view=side / selective outline / low detail / seed 80801)
+후처리: 하드 알파 → muted(0.90/0.97) → 32² 중앙정렬. 현행판 고유색 38.
+★★ **붉은 끈 매듭**이 이 물건의 실루엣이다 — 32²에서 종이 몸통만 남으면 인벤에서 편지·씨앗 봉지와
+   구분이 안 된다(같은 격자에 실제로 그 둘이 있다). 교체판도 끈을 몸통 밖으로 흘릴 것.
+★  **하트·반지 도상은 쓰지 않는다** — 이 세계의 혼례 문법은 서양 결혼이 아니라 무속 의례다
+   (ADR-0004 저승 정체성). 붉은색은 매듭·인장에만 쓰고 형태로는 쓰지 않는다.
+★  **소유 상태는 굽지 않는다**(세상에 하나뿐인 물건이지만 아이콘은 늘 같다) — 곳간 재고·점괘
+   등급을 아트에 안 굽는 §18.2·§20.1과 같은 규율.
+```
+
+### 21.2 ★2인용 침대 `props/house_bed_double.png` (32×64 = 세로 2칸) — 안방의 얼굴
+
+```
+배선: main.HOME_EXPANSION_PROPS 한 줄 → `_home_prop_entries()`가 **`_home_expanded()`일 때만**
+  얹는다(미확장 세이브는 빈 배열 = 거동 바이트 불변 — 그 방 자체가 아직 VOID다).
+  자리 = (22,68) 안방 북벽 밴드 한가운데. 바로 아래가 배우자 자리 SPOUSE_HOME_TILE(22,71)이다.
+  lift = 다른 북벽 가구와 같은 `WALL_PROP_LIFT`(-18, 크림 트림 밀착).
+★  **반드시 32×64**로 뽑을 것 — 1인 침대(`props/house_bed.png`)와 같은 규격이라야 발치·lift·
+   그림자·Y-split 계산이 그대로 유효하다. 높이가 달라지면 벽 flush가 깨진다(§20.1이 겪은 그 함정).
+정체성: 같은 방에 1인 침대가 **나란히 남아 있다**(옛 침대는 안 치운다 — 취침 판정이 거기 있다).
+  그래서 이 침대는 1인 침대와 **같은 목재·같은 이불 결**이되 폭이 아니라 **베개 두 개**로 "둘"을
+  말해야 한다(32px 폭 안에서 폭을 늘릴 수 없다 — 한 칸이 규격이다).
+  PROMPT: cozy double bed seen from a low top-down view, dark stained wood headboard and footboard,
+    two white pillows side by side at the head, deep muted crimson plaid quilt blanket with warm
+    gold stitching, folded cream sheet at the foot, korean afterlife farmhouse bedroom furniture,
+    **tall sprite filling the entire canvas from top edge to bottom edge** (풀캔버스 지시 — v2가
+    이 구절로 내려앉음을 해소했다), [§1.1 광원 세트], muted somber palette
+    (view=high top-down / single color black outline / medium detail / seed 80803)
+후처리: 하드 알파 → muted(0.85/0.95) → 32×64 발치정렬. 현행판(v2) 고유색 54.
+★★ **베개 둘 + 붉은 이불**이 전부다 — 이 방에서 "결혼했다"를 말하는 유일한 그림이라 실루엣이
+   1인 침대와 확실히 갈려야 한다(혼례 연출은 배너 한 줄뿐이다 — 등급 연출은 S9).
+★  **SOLID_PROPS 편입 = 통과 불가**(오케스트레이터 확정 2026-08-11 — 같은 방에 물리가 갈린
+   침대 둘이면 규칙이 거짓말이 된다. 1인 침대와 정합·확장 시에만 그려져 미확장 세이브 영향 0).
+★  `_prop_layouts`/layout.json **밖**에 산다(조건부 항목이라 넣으면 직렬화가 확장 여부에 따라
+   갈려 시드-동등 불변식이 깨진다) — 상자·거울이 레이아웃 밖에 사는 것과 같은 결.
+★★ **v2로 재생성 완료(seed 80803 — 현행 raw):** v1(seed 80802)은 콘텐츠 실높이 46px이라
+   발치정렬 후 머리판이 벽 상단에 안 닿았다(1인 침대는 ~56px — 검수 합성에서 내려앉음 확인).
+   v2는 프롬프트에 "filling the entire canvas from top edge to bottom edge"를 박아 64px 풀캔버스로
+   해소. **교체판도 콘텐츠가 캔버스 세로를 채울 것**(캔버스 32×64 · 후처리 불변).
+```
+
+### 21.3 에셋 없이 끝낸 관계 UI 3종 (생성 0 — 절차 드로잉·색 분화)
+
+```
+전부 16px 미만의 UI 표식이라 **생성물보다 코드가 선명하다**(§20.3이 HUD 날씨 아이콘을 생성한
+기준의 반대편 — 그건 옆에 생성 아트가 나란히 서는 자리였고, 이 셋은 아니다).
+① 관계 탭 상태 배지 색(inv_frame.HEART_BADGE_COLORS) — 부부=진홍 (0.85,0.35,0.42) ·
+   혼례 준비 중=연한 진홍 (0.88,0.55,0.58) · 연애 중=연분홍 (0.78,0.42,0.62 = 달력 MARK_BIRTHDAY
+   와 같은 값) · 진급 대기=금박(현행 유지). 키 = main._heart_badge()가 만드는 문자열 그대로.
+② 달력 생일 마커 ♥(calendar_panel._draw_heart_mark) — 원 2개 + 아래 삼각, 폭 ~7px. 범례가
+   "♥ %d일 — %s 생일"이라 마커도 하트라야 둘이 같은 물건으로 읽힌다.
+③ 선물 토스트 tier 색(main.GIFT_TIER_TINTS → notice_feed.push의 가법 `tint` 인자) —
+   선호=금박 · 좋아함=연초록 (0.62,0.78,0.45) · 무난=무틴트 · 시큰둥=회색 (0.62,0.62,0.62) ·
+   질색=탁적 (0.78,0.40,0.34). 생일(×8)은 tier 색 그대로(문구가 "(생일!)"로 배율을 말한다).
+★ owner 교체 대상 아님(파일이 없다) — 값이 마음에 안 들면 위 상수 한 줄씩이 레버다.
+```
