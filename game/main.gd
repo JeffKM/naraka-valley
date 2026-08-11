@@ -2701,6 +2701,17 @@ var _confess_rid := ""
 # ("spouse_id"·"wedding_day") — 구세이브 = 미혼·예정 없음(하위호환).
 var _spouse_id := ""
 var _wedding_day := 0
+# ★[S8-T8 / ADR-0066 결정 10] **재혼 면제 원장** — rid → true("이 사람과 결혼한 적 있다").
+# 재혼 조건은 ♡5 재도달 + 정표 재수여**만**이다(ADR-0022 "해방·배우자 방은 이미 충족") — 안방
+# 확장·속죄 아크 게이트를 이 원장이 면제한다. 지금은 두 조건 다 물리적으로 잔존해(확장 = done
+# 파생·비트 원장 = 이혼에도 잔존) 관측상 중복이지만, S9가 아크에 실내용을 주입하거나 조건이
+# 늘 때 "재혼은 가볍다"는 계약을 이 플래그가 지킨다(판정식 불변의 짝). 혼례 아침에 적고 이혼
+# 경로에서도 방어로 적는다(키 도입 전에 결혼한 구세이브가 이혼하면 혼례 기록이 없다).
+# 세이브 가법 키 1개("ever_married") — 구세이브 = 빈 원장 = 초혼(하위호환).
+var _ever_married: Dictionary = {}
+# ★[S8-T8] 이혼 확정 대기 래치 — 옥자 [F] 1타 = 경고·2타 = 결행(50,000냥 + ♡0 리셋은 오타 한
+# 번에 치르기엔 너무 크다). 옥자에게서 시선을 떼면 접힌다(_process가 리셋 — 세이브 무상태).
+var _divorce_armed := false
 # T7.2 1단 달성("카페 2단계!") 팝업을 이미 띄웠는가(한 번만 뜨게 하는 래치). 달성 여부 자체는
 # 누적값에서 파생되므로(CafeMilestone.is_complete — 세이브 무상태) 저장하지 않는다. 이 래치는
 # 일시 표시용으로, _ready에서 "이미 완료된 세이브를 이어받았으면 true"로 초기화해 재개 시
@@ -10027,6 +10038,7 @@ func _save_game() -> void:
 		"jealousy": _jealousy.duplicate(true),     # ★[S8-T6] 질투 원장(rid → 복원 예정일·깎인 양)
 		"spouse_id": _spouse_id,                   # ★[S8-T7] 배우자("" = 미혼). 방 확장은 carpenter done 파생이라 키 없음
 		"wedding_day": _wedding_day,               # ★[S8-T7] 예정된 혼례 아침(0 = 없음)
+		"ever_married": _ever_married.duplicate(), # ★[S8-T8] 재혼 면제 원장(이혼에도 잔존하는 별도 축)
 		"selected_crop": _selected_crop,
 		# M1.5 — 현재 구역·실내 모드·플레이어 위치(껐다 켜도 '있던 자리'에서 재개). region은
 		# 영문 id(RegionCatalog 키, 가볍고 안정적), indoor는 ""/건물 id(_buildings 키), 위치는 타일 좌표.
@@ -10193,6 +10205,13 @@ func _load_game() -> void:
 		_spouse_id = ""
 	_wedding_day = maxi(int(data.get("wedding_day", 0)), 0)
 	_apply_spouse_home_station()   # 이주 스테이션 재적용(스케줄은 _ready마다 새로 조립 — 멱등)
+	# ★[S8-T8] 재혼 면제 원장 복원(구세이브 = 빈 원장 = 초혼). 키를 명시 재조립해 손상 세이브의
+	# 이물이 눕지 않게 하고, false 값 항목은 버린다(원장에 "면제 아님"을 적어 둘 이유가 없다).
+	_ever_married = {}
+	var em: Dictionary = data.get("ever_married", {})
+	for k in em:
+		if bool(em[k]):
+			_ever_married[String(k)] = true
 	_jealousy = {}
 	var jz: Dictionary = data.get("jealousy", {})
 	for k in jz:
@@ -10926,6 +10945,10 @@ func _process(delta: float) -> void:
 	# ★ [S2-T7] 지금 마주 본 주민(없으면 null). 옛 facing_miho/mel/bana/okja/neo 다섯 갈래가
 	# 이 한 줄로 접혔다 — 각 주민의 자리·실내/가시성 가드는 레지스트리 레코드가 들고 있다.
 	var faced_resident := _facing_resident()
+	# ★[S8-T8] 이혼 확정 래치는 옥자를 마주 보는 동안만 산다 — 시선을 떼면 접혀, 한참 뒤의
+	#   [F] 한 번이 묵은 경고를 확정으로 오독하는 일이 없다(2타 확인의 전제).
+	if faced_resident == null or faced_resident.id != "okja":
+		_divorce_armed = false
 	# ★ C2 무인 출하함: 카페 안에서 출하함 칸을 바라볼 때 우클릭으로 출하함 패널을 연다. NPC·좌석·
 	# 밭과 칸이 갈리고(SHIP_BIN_TILE 단일), _indoor로 가드해 다른 구역 같은 좌표에 닿아도 무반응.
 	var facing_bin := not _sleeping and _indoor == "카페" and _target == SHIP_BIN_TILE
@@ -14874,13 +14897,24 @@ func _setup_residents() -> void:
 	# ★[S8-T7 / ADR-0066 결정 8] 혼례 부적 의뢰 [F] — **연애 상태에서만 노출**된다(훅이 빈 문자열
 	#   이면 프롬프트 꼬리 없음·F 무동작). 옥자는 관계 트랙이 없는 서사 앵커라 이 훅이 유일한
 	#   거래 창구다(결정 8 "정표 = 옥자의 소울-바인딩 혼례 부적" — 네오 매대와 같은 shop_key 결).
+	# ★[S8-T8 / ADR-0066 결정 10] 같은 창구의 반대면 = **인연 해소(이혼) 의뢰** — 부적을 접은
+	#   이가 푸는 것도 맡는다(ADR-0022 "거울 해소자"). 결혼 상태에서만 노출되고, 두 의뢰는 상태로
+	#   상호배타라(_charm_quest_open은 미혼 전제) [F] 하나를 안전하게 나눠 쓴다.
 	r_okja.prompt_extra = func() -> String:
-		return "   [F] 혼례 부적 의뢰 (%d냥)" % WEDDING_CHARM_COST if _charm_quest_open() else ""
+		if _charm_quest_open():
+			return "   [F] 혼례 부적 의뢰 (%d냥)" % WEDDING_CHARM_COST
+		if _spouse_id != "":
+			return "   [F] 인연 해소 — 한 번 더 확정" if _divorce_armed \
+				else "   [F] 인연 해소 의뢰 (%d냥)" % DIVORCE_COST
+		return ""
 	r_okja.shop_key = func() -> bool:
-		if not _charm_quest_open():
-			return false
-		_order_wedding_charm()
-		return true
+		if _charm_quest_open():
+			_order_wedding_charm()
+			return true
+		if _spouse_id != "":
+			_request_divorce()
+			return true
+		return false
 	_register_resident(r_okja)
 
 	# ── ★ [S2-T8 / ADR-0060 결정 7] 모찌 — **첫 T1 주민이자 프레임워크 절차의 실증**.
@@ -15479,12 +15513,16 @@ func _try_propose(r: Resident) -> void:
 	if _wedding_day > 0:
 		_notice("혼례는 이미 정해졌다 — %d일 아침" % _wedding_day)
 		return
-	if not _home_expanded():
-		_notice("둘이 살 방이 없다 — 옹이의 목공방에서 「안방 확장」을 올리자")
-		return
-	if not _redemption_arc_complete(r.id):
-		_notice("%s의 이야기가 아직 남아 있다 — 속죄의 길을 끝까지 함께 걷자" % r.display_name)
-		return
+	# ★[S8-T8 / ADR-0066 결정 10] 재혼 면제 — 결혼한 적 있는 상대에겐 방·아크 게이트를 건너뛴다
+	#   (ADR-0022 "재혼 = ♡5 재도달 + 정표 재수여만"). ♡5 재도달은 위의 연인 판정이 이미 강제한다
+	#   (연애 슬롯은 고백 = ♡5 진급에서만 채워진다).
+	if not _ever_married.get(r.id, false):
+		if not _home_expanded():
+			_notice("둘이 살 방이 없다 — 옹이의 목공방에서 「안방 확장」을 올리자")
+			return
+		if not _redemption_arc_complete(r.id):
+			_notice("%s의 이야기가 아직 남아 있다 — 속죄의 길을 끝까지 함께 걷자" % r.display_name)
+			return
 	var idx := inventory.selected_index
 	if not inventory.remove_at(idx, 1):     # 정표 소모(든 슬롯 그대로 — 선물 문법과 동일)
 		return
@@ -15502,6 +15540,9 @@ func _advance_wedding(day: int) -> void:
 	if _romance_partner == "":
 		return
 	_spouse_id = _romance_partner
+	# ★[S8-T8 / ADR-0066 결정 10] 재혼 면제 원장 기록 — "이 사람과 결혼한 적 있다"의 진실원은
+	#   혼례 아침이다(이혼 경로의 기록은 구세이브 방어 — _ever_married 선언부 참조).
+	_ever_married[_spouse_id] = true
 	_apply_spouse_home_station()
 	var r := _resident(_spouse_id)
 	audio.sfx("ui")
@@ -15520,6 +15561,68 @@ func _apply_spouse_home_station() -> void:
 			return
 	r.schedule.append({"from_min": int(SPOUSE_HOME_MIN.get(_spouse_id, Cafe.CLOSE_MIN)),
 		"tile": SPOUSE_HOME_TILE, "region": RegionCatalog.HOME})
+
+# ── ★[S8-T8 / ADR-0066 결정 10] 이혼 = ADR-0022 이행(최소) ──────────────────
+# 옥자(부적을 접은 거울 해소자)에게 의뢰 — 50,000냥. 해소되는 것은 **혼인(곁의 형태)뿐**이다:
+# 해방·화해·진실은 불가역(재결박 없음 — 전 배우자는 해방된 영혼으로 카페에 그대로 잔류)이고,
+# 관계 수치만 ♡0으로 리셋된다(points·stage 모두 — 이혼의 실질 페널티). **적대 없음**(씁쓸·우호 —
+# 스타듀식 차가운 전배우자 기각·ADR-0022 결정 3): 대사 본문은 S9 소관이라 placeholder 1줄만
+# 남긴다. 비트 원장(_heart_bits)은 **잔존** — 재구애 시 관문 진급은 조용하다(본 비트 재지급 없음).
+# 연출(식·이삿날 장면)은 S9 스텁 — 여기는 상태 전이가 전부다.
+const DIVORCE_COST := 50000             # 인연 해소 의뢰비(스타듀 동가 — 잠정, owner 큐)
+# 전 배우자의 작별 한 줄(씁쓸·우호 placeholder — 캐릭터 훅 divorce_lines()가 생기면 S9가 대체).
+const DIVORCE_FAREWELL_LINE := "…고마웠어. 함께였던 날들은, 여기 두고 갈게."
+
+# 이혼 의뢰([F] 2타 확인). 1타 = 경고·래치 무장(50,000냥+♡0 리셋은 오타 한 번의 값이 아니다),
+# 2타 = 결행. 래치는 옥자에게서 시선을 떼면 접힌다(_process). 냥 부족은 무장 전에 끊는다 —
+# 낼 수 없는 값의 경고는 겁주기일 뿐이다.
+func _request_divorce() -> void:
+	if _spouse_id == "":
+		return
+	if wallet.gold < DIVORCE_COST:
+		_notice("인연 해소 — 냥 부족 (%d/%d)" % [wallet.gold, DIVORCE_COST])
+		return
+	if not _divorce_armed:
+		_divorce_armed = true
+		_notice("옥자: 「…정말인가. 한 번 더 청하면, 부적에 엮은 혼(魂)을 풀겠다」", NOTICE_SECS * 2.0)
+		return
+	_divorce_armed = false
+	_do_divorce()
+
+# 이혼 결행 — 상태 전이의 전부가 여기 모인다(호출부는 _request_divorce 하나).
+#   ㉠ 50,000냥 차감  ㉡ 결혼·연애 슬롯 해제(빈 슬롯 = 재고백 가능)  ㉢ ♡0 리셋(points·stage —
+#   비트 원장은 잔존)  ㉣ 이주 해제(HOME 귀가 스테이션 제거 = 스케줄 원복 — 잡일은 spouse_id
+#   파생이라 해제 즉시 정지)  ㉤ 재혼 면제 원장 기록  ㉥ 질투 원장에서 전 배우자 삭제(♡0 뒤에
+#   묵은 복원분이 얹히면 리셋이 새는 구멍이 된다 — 다른 이의 항목은 그대로).
+func _do_divorce() -> void:
+	var rid := _spouse_id
+	var r := _resident(rid)
+	wallet.spend(DIVORCE_COST)
+	_spouse_id = ""
+	_wedding_day = 0                     # 방어 — 기혼 중엔 언제나 0이지만 불변식을 못 박는다
+	_romance_partner = ""
+	_ever_married[rid] = true            # 구세이브 방어(혼례 기록이 없던 결혼 — 선언부 참조)
+	_remove_spouse_home_station(rid)
+	_jealousy.erase(rid)
+	if r != null and r.affinity != null:
+		r.affinity.reset_hearts()
+	audio.sfx("ui")
+	_notice("부적의 혼이 풀렸다 — %s와의 혼인이 끝났다" % (r.display_name if r != null else rid),
+		NOTICE_SECS * 2.0)
+	# 적대 없음의 한 줄 — 해방은 그대로라 떠나는 게 아니라 *제자리로 돌아간다*(카페 잔류).
+	_notice("%s: 「%s」" % [r.display_name if r != null else rid, DIVORCE_FAREWELL_LINE],
+		NOTICE_SECS * 3.0)
+
+# 이주 해제 — _apply_spouse_home_station의 역연산(안방 칸 스테이션만 제거·원 스케줄 무접촉).
+# 스케줄은 _ready마다 새로 조립되므로 다음 부팅은 자연히 원본이고, 이 제거는 **켜진 세션**의
+# 원복이다(제거 즉시 저녁 자리가 결혼 전 스테이션으로 파생된다 — 바나 visible_rule 포함).
+func _remove_spouse_home_station(rid: String) -> void:
+	var r := _resident(rid)
+	if r == null:
+		return
+	for i in range(r.schedule.size() - 1, -1, -1):
+		if r.schedule[i].get("tile", Resident.UNPLACED) == SPOUSE_HOME_TILE:
+			r.schedule.remove_at(i)
 
 # ── 대화(공통) ─────────────────────────────────────────────────────────────
 # 말 걸면 텍스트박스가 뜨고, 우클릭으로 끝까지 넘기면 닫힌다. 대사 *내용*은 캐릭터가 들고
