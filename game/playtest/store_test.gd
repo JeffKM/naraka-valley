@@ -111,6 +111,7 @@ func _initialize() -> void:
 	_check("④b 씨앗 +1", m.inventory.seed_count(crop) == seeds0 + 1)
 	# ♡5(할인) 구매 — 같은 씨앗이 더 싸다
 	m.neo_affinity.points = m.neo_affinity.MAX_POINTS   # ♡5
+	m.neo_affinity.stage = Affinity.MAX_HEARTS          # ★[S8-T5] 하트 = stage(진급 칸) — 함께 세팅
 	_check("④pre2 ♡5 도달", m.neo_affinity.hearts() == 5)
 	var discounted: int = StoreDiscount.price(base, 5)
 	m.wallet.gold = 1000
@@ -153,6 +154,7 @@ func _initialize() -> void:
 	print("── ⑧ 구매 일원화 + 대량 ──")
 	# ★ C2 — 씨앗 구매는 네오 매대로 일원화됐다(멜 출하대 _buy_seed 폐지). Shift 대량 구매 검증.
 	m.neo_affinity.points = 0   # ♡0 정가(환산 단순)
+	m.neo_affinity.stage = 0    # ★[S8-T5] 하트 = stage — ④의 ♡5를 되돌린다
 	m.wallet.gold = 1000
 	var seeds_b: int = m.inventory.seed_count(crop)
 	m._on_frame_buy(true)   # Shift 대량(STORE_BULK개)
@@ -203,6 +205,7 @@ func _initialize() -> void:
 	_check("⑨d 마지막 행 = 스프링클러(설치물)", last9["kind"] == "placeable" and last9["buy_id"] == ItemCatalog.SPRINKLER)
 	# 행별 구매 = 선택 작물이 아니라 그 행의 작물을 산다(_on_frame_buy_seed).
 	m.neo_affinity.points = 0
+	m.neo_affinity.stage = 0
 	m.wallet.gold = 1000
 	var target: String = CropCatalog.PIANHWA   # _selected_crop(혼령초)과 다른 작물로 검증
 	var tbase: int = CropCatalog.seed_cost(target)
@@ -214,6 +217,7 @@ func _initialize() -> void:
 	# ── ⑩ ★[S2-T4] 신규 입고 3종 구매(묘목·비료·건초) ──
 	print("── ⑩ 신규 입고 구매(S2-T4) ──")
 	m.neo_affinity.points = 0
+	m.neo_affinity.stage = 0
 	m.wallet.gold = 1000
 	var fert_id: String = ItemCatalog.FERT_DELUXE
 	var fert_base: int = FertilizerCatalog.buy_cost(fert_id)
@@ -232,12 +236,14 @@ func _initialize() -> void:
 	_check("⑩e 묘목 구매 골드 차감 = 정가", m.wallet.gold == 1000 - sap_base)
 	# 네오 ♡5 할인 = StoreDiscount 일관 적용(씨앗과 같은 규약).
 	m.neo_affinity.points = 5 * m.neo_affinity.POINTS_PER_HEART
+	m.neo_affinity.stage = Affinity.MAX_HEARTS
 	m.wallet.gold = 1000
 	var disc_unit: int = StoreDiscount.price(fert_base, 5)
 	m._on_frame_buy_store_item(fert_id, "fert", false)
 	_check("⑩f ♡5 할인 적용(비료)", m.wallet.gold == 1000 - disc_unit and disc_unit < fert_base)
 	# 골드 부족 = 부분 구매 후 중단(대량 구매 규약 — 씨앗과 동일).
 	m.neo_affinity.points = 0
+	m.neo_affinity.stage = 0
 	m.wallet.gold = fert_base * 2 + 1   # 5개 요청 중 2개만 살 수 있는 골드
 	var fert1: int = m.inventory.count_of(fert_id)
 	m._on_frame_buy_store_item(fert_id, "fert", true)   # bulk=STORE_BULK(5)

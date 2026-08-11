@@ -24,6 +24,12 @@ class_name Affinity
 #     Resident.BIRTHDAYS 테이블 조회다 — 이 노드는 결과 플래그 하나만 인자로 받는다.
 #   - ★[S8-T4] 채널이 넷이 됐다 — 대화·선물·의뢰(add_points)에 **활동 실적**(activity_gain)이
 #     붙는다(ADR-0066 결정 4). 무엇이 실적인지는 여전히 main이 알고, 여기는 일일 캡만 든다.
+#   - ★[S8-T5 / ADR-0066 결정 5] **stage(진급된 칸)와 points(점수)가 분리됐다.** 점수가 만충해도
+#     하트가 자동으로 오르지 않는다 — hearts()는 이제 점수 파생이 아니라 **진급된 칸(stage)**을
+#     돌려주고, 점수는 그 위에서 자유롭게 쌓인다("점수는 만충 상태로 대기"). 진급은 main의 단계
+#     관문(대화 트리거 + 메인 3인 deed AND)이 promote()를 불러야만 일어난다. 관문이 *무엇*인지
+#     (장소·deed·비트 원장)는 이 노드가 모른다 — 여기는 "대기 중인가(pending_promotion)"와
+#     "한 칸 올려라(promote)"라는 상태 전이만 소유한다(리듬·누적만 든다는 단일 책임 그대로).
 #   - T2.5 세이브/로드 — 상태가 정수 셋(점수·마지막 대화날·마지막 선물날)뿐이라
 #     그대로 직렬화된다. 복원 시 점수는 [0, MAX_POINTS]로 잘라 손상 세이브에 방어한다.
 
@@ -86,6 +92,10 @@ const GIFTS_PER_WEEK := 2
 const BIRTHDAY_MULT := 8
 
 var points: int = 0
+# ★[S8-T5 / ADR-0066 결정 5] 진급된 하트 칸(0..MAX_HEARTS). points에서 파생되지 않는 **독립 상태**다 —
+#   점수가 만충해도 관문(promote)을 지나기 전엔 안 오른다. 곱셈기(여우불·마진·경비·할인)·대사 묶음이
+#   전부 hearts()=stage를 읽으므로, "친해진 효과"는 관문을 지난 칸에서만 나온다.
+var stage: int = 0
 var last_talk_day: int = -1   # 마지막으로 일일 대화 보상을 받은 게임 날(-1 = 아직 없음)
 var last_gift_day: int = -1   # 마지막으로 선물한 게임 날(-1 = 아직 없음)
 # 주간 카운터(세이브 **가법 키** — 구세이브엔 없어 기본값으로 시작한다).
@@ -93,9 +103,28 @@ var gift_week: int = -1       # gifts_this_week가 속한 주(GameClock.week_of 
 var gifts_this_week: int = 0  # 그 주에 이미 건넨 횟수
 
 # ── 조회 ──────────────────────────────────────────────────────────────────
-# 현재 하트 단계(0..MAX_HEARTS). 점수를 칸당 점수로 나눈 내림값, 만렙에서 멈춘다.
+# 현재 하트 단계(0..MAX_HEARTS). ★[S8-T5] 점수 파생(points/60 내림)이 아니라 **진급된 칸**이다 —
+# 옛 의미가 필요한 곳(진급 대기 판정)은 points_hearts()를 쓴다.
 func hearts() -> int:
+	return mini(stage, MAX_HEARTS)
+
+# 점수가 *허용하는* 하트 단계(옛 hearts()의 파생식 그대로). stage와의 차가 곧 대기 중인 진급이다.
+func points_hearts() -> int:
 	return mini(points / POINTS_PER_HEART, MAX_HEARTS)
+
+# 진급 대기 중인가 — 점수는 다음 칸을 채웠는데 관문을 아직 안 지났다(관계 탭 "진급 대기" 배지의 값).
+func pending_promotion() -> bool:
+	return stage < points_hearts()
+
+# 한 칸 진급한다(관문을 지난 순간 main이 부른다). 대기 중이 아니면 아무 일도 없다(false) —
+# 점수가 안 받쳐 주는 진급은 존재하지 않는다("진급 = 만충 AND 관문"의 AND 한쪽을 여기서 지킨다).
+# 한 번에 한 칸만 오른다: 점수가 여러 칸치 쌓였어도(생일 ×8 등) 관문은 칸마다 하나씩이다.
+func promote() -> bool:
+	if not pending_promotion():
+		return false
+	stage += 1
+	changed.emit(points, hearts())
+	return true
 
 # 채운 하트 + 빈 하트 막대(HUD용). 예: 3/5 → "♥♥♥♡♡".
 func heart_bar() -> String:
@@ -220,6 +249,7 @@ func _add(n: int) -> void:
 func to_save() -> Dictionary:
 	return {
 		"points": points,
+		"stage": stage,
 		"last_talk_day": last_talk_day,
 		"last_gift_day": last_gift_day,
 		"gift_week": gift_week,
@@ -230,6 +260,10 @@ func to_save() -> Dictionary:
 
 func load_save(data: Dictionary) -> void:
 	points = clampi(int(data.get("points", 0)), 0, MAX_POINTS)
+	# ★[S8-T5] stage 키는 **가법**인데 기본값이 특별하다 — 구세이브(키 없음)는 관문 도입 전에 이미
+	#   그 하트로 플레이하던 세이브라, 옛 파생식(points_hearts)을 기본값으로 줘 **하트를 소급 강등하지
+	#   않는다**(관문 도입이 기존 플레이어의 곱셈기·대사를 빼앗으면 그건 하위호환 파손이다).
+	stage = clampi(int(data.get("stage", points_hearts())), 0, MAX_HEARTS)
 	last_talk_day = int(data.get("last_talk_day", -1))
 	last_gift_day = int(data.get("last_gift_day", -1))
 	gift_week = int(data.get("gift_week", -1))

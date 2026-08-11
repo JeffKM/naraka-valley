@@ -142,9 +142,13 @@ func _run_checks() -> void:
 	# 세 루프 산출물을 목표치로 채운다: 거둔 영혼·누적 서빙 매출·세 동료 하트 합(점수 직접 세팅).
 	m2._run_harvested = TH
 	m2._cafe_revenue_total = TR
+	# ★[S8-T5] 하트는 이제 stage(진급 칸)다 — 점수와 함께 stage도 세팅한다(관문은 heart_gate_test 소관).
 	m2.affinity.points = 3 * Affinity.POINTS_PER_HEART        # 미호 ♡3
+	m2.affinity.stage = 3
 	m2.mel_affinity.points = 3 * Affinity.POINTS_PER_HEART    # 멜 ♡3 → 합 6 = THE
+	m2.mel_affinity.stage = 3
 	m2.bana_affinity.points = 2 * Affinity.POINTS_PER_HEART   # 바나 ♡2 — ★게이트 밖(⑧이 단언)
+	m2.bana_affinity.stage = 2
 	_check("⑥ 관계 산출물 = 미호+멜 하트 합(★S6-T3 — 바나 제외)", m2._milestone_hearts() == 6)
 	_check("⑥b 세 산출물이 목표치 → _milestone_complete 참", m2._milestone_complete())
 	# _process 한 프레임 — 채우는 순간 팝업이 한 번 뜨고 래치가 켜진다.
@@ -168,8 +172,11 @@ func _run_checks() -> void:
 	m3._run_harvested = TH
 	m3._cafe_revenue_total = TR
 	m3.affinity.points = 3 * Affinity.POINTS_PER_HEART
+	m3.affinity.stage = 3
 	m3.mel_affinity.points = 3 * Affinity.POINTS_PER_HEART
+	m3.mel_affinity.stage = 3
 	m3.bana_affinity.points = 2 * Affinity.POINTS_PER_HEART
+	m3.bana_affinity.stage = 2
 	m3._save_game()  # 완료 상태를 디스크에 저장
 	m3.free()
 	var m4: Node = await _new_main()  # _ready가 자동 로드 + 래치 초기화
@@ -186,9 +193,12 @@ func _run_checks() -> void:
 	var m5: Node = await _new_main()
 	_dismiss_intro(m5)
 	m5.affinity.points = 3 * Affinity.POINTS_PER_HEART       # 미호 ♡3
+	m5.affinity.stage = 3
 	m5.mel_affinity.points = 3 * Affinity.POINTS_PER_HEART   # 멜 ♡3 → 합 6
+	m5.mel_affinity.stage = 3
 	var hearts_b0: int = m5._milestone_hearts()
 	m5.bana_affinity.points = Affinity.MAX_POINTS            # 바나 만렙
+	m5.bana_affinity.stage = Affinity.MAX_HEARTS
 	_check("⑧ 바나 ♡를 0→만렙으로 올려도 하트 축이 안 움직인다", m5._milestone_hearts() == hearts_b0)
 	_check("⑧b 하트 축 = 정확히 미호+멜 합",
 		hearts_b0 == m5.affinity.hearts() + m5.mel_affinity.hearts() and hearts_b0 == 6)
@@ -197,6 +207,7 @@ func _run_checks() -> void:
 	m5._cafe_revenue_total = TR
 	_check("⑧c 미호+멜만으로 1단 완료(바나 없이 닫힌다)", m5._milestone_complete())
 	m5.bana_affinity.points = 0
+	m5.bana_affinity.stage = 0
 	_check("⑧d 바나 ♡0으로 떨궈도 1단은 그대로 완료(게이트 무영향)", m5._milestone_complete())
 	# 문턱 하향(8→6)은 하트 축을 2인으로 좁힌 데 따른 잠정 레버다(owner 결재 대상).
 	_check("⑧e 1단 하트 문턱 = 6(잠정 — 2인 합 최대 10)",
@@ -245,7 +256,9 @@ func _run_checks() -> void:
 	m5._run_harvested = CafeMilestone.S2_TARGET_HARVEST
 	m5._cafe_revenue_total = CafeMilestone.S2_TARGET_REVENUE
 	m5.affinity.points = Affinity.MAX_POINTS
+	m5.affinity.stage = Affinity.MAX_HEARTS
 	m5.mel_affinity.points = Affinity.MAX_POINTS
+	m5.mel_affinity.stage = Affinity.MAX_HEARTS
 	_check("⑨i 2단 완료 판정", m5._milestone_stage2_complete() and m5._cafe_stage() == CafeMilestone.STAGE_2)
 	m5._refresh_cafe_ladder()
 	_check("⑨j 2단 — 좌석 3→5", m5.cafe.open_seats == Cafe.SEATS_STAGE2 and Cafe.SEATS_STAGE2 == 5)

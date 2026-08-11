@@ -2668,6 +2668,12 @@ var _total_income := 0
 # ★[S8-T4 / ADR-0066 결정 4] 멜 활동 채널의 **100냥 미만 잔돈**(_credit_mel_revenue 참조). 이 한
 # 조각만 저장하면 저장·재개로 잔돈이 리셋되는 세탁을 막을 수 있다(가법 키 — 구세이브 = 0).
 var _mel_revenue_carry := 0
+# ★[S8-T5 / ADR-0066 결정 5] 하트 이벤트 **비트 원장** — rid → 본 관문 이벤트의 비트마스크
+# (비트 N = ♡N 관문을 봤다). Affinity(점수·stage)와 **분리된 별도 원장**인 이유: 이혼(ADR-0022,
+# 결정 10)이 호감도를 ♡0으로 리셋해도 "이미 본 이벤트"는 잔존해야 한다(재구애 시 본 비트 재지급
+# 없음 — 조용히 진급만 된다). 결혼(결정 8)의 속죄 아크 판정도 이 원장을 읽는다.
+# 세이브 가법 키 1개("heart_bits") — 구세이브(키 없음) = 빈 원장 = 아무것도 안 본 상태(하위호환).
+var _heart_bits: Dictionary = {}
 # T7.2 1단 달성("카페 2단계!") 팝업을 이미 띄웠는가(한 번만 뜨게 하는 래치). 달성 여부 자체는
 # 누적값에서 파생되므로(CafeMilestone.is_complete — 세이브 무상태) 저장하지 않는다. 이 래치는
 # 일시 표시용으로, _ready에서 "이미 완료된 세이브를 이어받았으면 true"로 초기화해 재개 시
@@ -9930,6 +9936,7 @@ func _save_game() -> void:
 		"cafe_revenue_total": _cafe_revenue_total,
 		"total_income": _total_income,   # ★ [S1R-T12] 누적 총수입(정보패널 — 구세이브 키 없음=0)
 		"mel_revenue_carry": _mel_revenue_carry,   # ★[S8-T4] 멜 활동 채널 잔돈(<100냥)
+		"heart_bits": _heart_bits.duplicate(),     # ★[S8-T5] 하트 이벤트 비트 원장(이혼에도 잔존하는 별도 축)
 		"selected_crop": _selected_crop,
 		# M1.5 — 현재 구역·실내 모드·플레이어 위치(껐다 켜도 '있던 자리'에서 재개). region은
 		# 영문 id(RegionCatalog 키, 가볍고 안정적), indoor는 ""/건물 id(_buildings 키), 위치는 타일 좌표.
@@ -10079,6 +10086,12 @@ func _load_game() -> void:
 	_total_income = maxi(int(data.get("total_income", 0)), 0)
 	# ★[S8-T4] 멜 활동 채널 잔돈 — 손상 방어로 [0, 100)으로 자른다(음수·과대값이 점수를 낳지 않게).
 	_mel_revenue_carry = clampi(int(data.get("mel_revenue_carry", 0)), 0, MEL_REVENUE_PER_POINT - 1)
+	# ★[S8-T5] 하트 이벤트 비트 원장 복원(구세이브 = 빈 원장). 키·값을 명시 재조립해 손상 세이브의
+	# 이물(비문자열 키·비정수 값)이 원장에 눕지 않게 한다.
+	_heart_bits = {}
+	var hb: Dictionary = data.get("heart_bits", {})
+	for k in hb:
+		_heart_bits[String(k)] = int(hb[k])
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
 	# M1.5 — 마지막에 구역·실내 모드·위치를 되돌린다. farm.load_save가 칸마다 발화한 밭
@@ -14469,10 +14482,12 @@ func _heart_rows() -> Array:
 			"badge": _heart_badge(r)})
 	return rows
 
-# ★ [S8-T1 / ADR-0066 결정 11] 관계 상태 배지 훅 — 진급 대기(점수 만충·관문 미통과, T5)·연애(T6)·
-# 결혼(T7)이 채울 자리다. 지금은 그 상태들이 아직 없으므로 **항상 빈 문자열**이고, 프레임은 빈
-# 배지를 안 그린다(자리와 API만 먼저 열어 뒤 태스크가 판정식만 얹게 한다 — 렌더 배선 재작업 0).
-func _heart_badge(_r: Resident) -> String:
+# ★ [S8-T1 / ADR-0066 결정 11] 관계 상태 배지 훅 — 연애(T6)·결혼(T7)이 마저 채울 자리다.
+# ★[S8-T5] 첫 실값: **진급 대기**(점수 만충·관문 미통과 — Affinity.pending_promotion). "다음 칸이
+#   잠겨 있다"는 사실이 관계 탭에서 보여야 관문(대화·deed)을 찾으러 간다 — 배지가 그 표지판이다.
+func _heart_badge(r: Resident) -> String:
+	if r.affinity != null and r.affinity.pending_promotion():
+		return "진급 대기"
 	return ""
 
 # ★ Phase B 숙련 탭 행(_heart_rows와 대칭 — FarmSkill에서 레벨·진행 파생, 읽기 전용). 현재 농사 1종.
@@ -15091,6 +15106,64 @@ func _resident_rel_line(r: Resident) -> String:
 #   이름·성격을 안 싣는다 — 캐릭터색을 여기 넣으면 그게 곧 "프레임워크가 든 서사"가 된다(ADR-0005).
 const BIRTHDAY_PLACEHOLDER_LINE := "…오늘이 내 생일이야."
 
+# ── ★[S8-T5 / ADR-0066 결정 5] 단계 관문 — 진급 판정·비트 원장 ────────────────
+# 점수가 만충해도 하트는 자동으로 안 오른다(Affinity.stage/points 분리). 진급은 **그 사람과의
+# 대화 진입**이 관문 트리거고(스테이션에서만 마주 볼 수 있으니 "특정 장소 대화"가 자동으로
+# 성립한다), 메인 3인은 여기에 **deed 문턱 AND**(Deed.check — 기존 원장 읽기 전용)가 얹힌다.
+# 서브 주민은 이벤트만이다(deed 0 — 쉼터. Deed가 문턱표에 이름이 없으면 통과로 답한다).
+#
+# ★ 컷신·대사 본문은 S9 서사 소관(ADR-0005) — 지금은 placeholder 발화 1줄로 전 파이프라인이
+#   플레이된다. 캐릭터 노드가 `heart_gate_lines(target)`을 가지면 그걸 쓴다(생일 훅과 같은 이음매:
+#   S9가 캐릭터 파일에 본문을 넣어도 판정식은 한 줄도 안 바뀐다).
+# ★ ♡5 진급은 여기로 안 온다 — 그건 의지 시험(ADR-0066 결정 6, S8-T6 소관)이라 관문 이벤트가
+#   아니다. HEART_GATE_MAX에서 멈추고, ♡4 만충은 "진급 대기" 배지로 대기한다.
+const HEART_GATE_PLACEHOLDER_LINE := "…같이 보낸 시간이, 조금은 쌓인 것 같아."
+const HEART_GATE_MAX := 4   # 관문 이벤트로 오를 수 있는 최대 칸(♡5 = 의지 시험 — S8-T6)
+
+# 관문 판정 — 진급이 성사되면 stage를 올리고, 이 대화 **앞에 세울** 관문 발화를 돌려준다
+# (빈 배열 = 진급 없음 또는 이미 본 이벤트의 조용한 재진급). 대화 한 번에 한 칸만 오른다 —
+# 점수가 여러 칸치 쌓였어도(생일 ×8) 관문 이벤트는 칸마다 하나씩이다(Affinity.promote와 짝).
+func _try_heart_promotion(r: Resident) -> PackedStringArray:
+	if r.affinity == null or not r.affinity.pending_promotion():
+		return PackedStringArray()
+	var target: int = r.affinity.stage + 1
+	if target > HEART_GATE_MAX:
+		return PackedStringArray()      # ♡5 = 의지 시험 대기(S8-T6이 별도 관문을 연다)
+	if not Deed.check(r.id, target, _deed_ledgers()):
+		return PackedStringArray()      # 메인 3인 deed 미달 — 관문 잠금(점수는 만충 상태로 대기)
+	r.affinity.promote()
+	var already_seen := _heart_bit_seen(r.id, target)
+	_mark_heart_bit(r.id, target)
+	_notice("%s와의 사이가 깊어졌다 ♡%d" % [r.display_name, target])
+	if already_seen:
+		# 재구애(이혼 후 재도달) — 본 비트 재지급 없음(ADR-0022·ADR-0066 결정 10): 진급은 되지만
+		# 이벤트는 다시 틀지 않는다.
+		return PackedStringArray()
+	if r.node != null and r.node.has_method("heart_gate_lines"):
+		var custom: PackedStringArray = r.node.heart_gate_lines(target)
+		if not custom.is_empty():
+			return custom
+	return PackedStringArray([HEART_GATE_PLACEHOLDER_LINE])
+
+# deed 판정에 넘길 원장 스냅샷 — **읽기 전용 조립**이다(신규 원장 0, ADR-0066 결정 5).
+# 키 이름은 main 필드·세이브 키와 같은 규약(deed.gd 머리말 참조).
+func _deed_ledgers() -> Dictionary:
+	return {
+		"run_harvested": _run_harvested,
+		"cafe_revenue_total": _cafe_revenue_total,
+		"mine_depth": mine_floors.depth(),
+		"combat_xp": _combat_xp,
+		"narak_key_found": _narak_key_found,
+		"narak_best_boss": _narak_best_boss,
+	}
+
+# 비트 원장 조회·기록(비트 N = ♡N 관문 이벤트를 봤다).
+func _heart_bit_seen(rid: String, heart: int) -> bool:
+	return (int(_heart_bits.get(rid, 0)) & (1 << heart)) != 0
+
+func _mark_heart_bit(rid: String, heart: int) -> void:
+	_heart_bits[rid] = int(_heart_bits.get(rid, 0)) | (1 << heart)
+
 # ── 대화(공통) ─────────────────────────────────────────────────────────────
 # 말 걸면 텍스트박스가 뜨고, 우클릭으로 끝까지 넘기면 닫힌다. 대사 *내용*은 캐릭터가 들고
 # 오고(ADR-0005: 서사 텍스트는 캐릭터에만), 진행·열림은 DialogueBox가, 패널 표시·이동잠금은
@@ -15099,6 +15172,11 @@ const BIRTHDAY_PLACEHOLDER_LINE := "…오늘이 내 생일이야."
 #     Affinity가 게이팅), 보상 여부와 하트 단계로 어떤 묶음을 들려줄지 캐릭터가 고른다.
 #   · 관계 트랙이 없으면(옥자) 일일 게이팅·점수 없이 매번 같은 일상 묶음을 들려준다.
 func _start_resident_dialogue(r: Resident) -> void:
+	# ★[S8-T5 / ADR-0066 결정 5] 단계 관문 판정 — **대사 조립보다 먼저**다: 진급이 성사되면 이
+	#   대화의 묶음 선택(hearts 인자)부터 새 칸으로 이뤄진다("친해진 대사"가 진급 대화에서 바로
+	#   나온다). 오늘 대화 보상(daily_talk)으로 점수가 문턱을 *넘는* 경우는 다음 대화가 관문이
+	#   된다 — 판정은 언제나 대화 진입 순간의 스냅샷이다.
+	var gate_lines := _try_heart_promotion(r)
 	var lines: PackedStringArray
 	if r.plain_talk or r.affinity == null:
 		lines = r.node.lines_resident()
@@ -15125,6 +15203,11 @@ func _start_resident_dialogue(r: Resident) -> void:
 			var merged := PackedStringArray(intro)
 			merged.append_array(lines)
 			lines = merged
+	# ★[S8-T5] 관문 발화는 **맨 앞**에 선다 — 진급이 이 대화의 사건이다(생일·intro보다 먼저).
+	if not gate_lines.is_empty():
+		var with_gate := PackedStringArray(gate_lines)
+		with_gate.append_array(lines)
+		lines = with_gate
 	# 대사가 없으면 시작하지 않는다(이동을 잠근 채 못 닫는 상태 방지).
 	if lines.is_empty():
 		return

@@ -252,7 +252,9 @@ func _run_checks() -> void:
 	mn._run_harvested = CafeMilestone.S2_TARGET_HARVEST
 	mn._cafe_revenue_total = CafeMilestone.S2_TARGET_REVENUE
 	mn.affinity.points = 99999
+	mn.affinity.stage = Affinity.MAX_HEARTS       # ★[S8-T5] 하트 = stage(진급 칸) — 점수와 함께 세팅
 	mn.mel_affinity.points = 99999
+	mn.mel_affinity.stage = Affinity.MAX_HEARTS
 	mn._refresh_cafe_ladder()
 	_check("③e 2단 도달", mn._cafe_stage() == CafeMilestone.STAGE_2)
 	# ★[S7-T6] 축제 배수의 인자가 day → *열리는 테마*로 바뀌었다(달력 슬롯 ∧ 해금 — main이 파생).

@@ -211,6 +211,7 @@ func _run_checks() -> void:
 	# ★관계-중립 실증 — ♡5여도 값이 한 냥도 안 바뀐다(뱃사공·옹이 매대와 갈리는 지점).
 	var price_h0: int = int(m._guild_items()[0]["price"])
 	r.affinity.points = 5 * Affinity.POINTS_PER_HEART
+	r.affinity.stage = 5   # ★[S8-T5] 하트 = stage(진급 칸) — 실제 ♡5로 세워 관계-중립을 검증
 	_check("ⓒi ♡5여도 값 불변(무골 할인 0 — ADR-0008 관계-중립)",
 		int(m._guild_items()[0]["price"]) == price_h0)
 
@@ -444,6 +445,7 @@ func _run_checks() -> void:
 	# ── ⓗ 세이브 왕복 / 하위호환 ────────────────────────────────────────────
 	print("── ⓗ 세이브 ──")
 	r.affinity.points = 2 * Affinity.POINTS_PER_HEART
+	r.affinity.stage = 2   # ★[S8-T5] 하트 = stage — 세이브 왕복도 stage를 본다
 	# 앞 절들이 원장을 여러 번 비웠으므로(각 시나리오가 자기 전제를 세운다) 지금 열려 있는 건 60층뿐이다.
 	# 왕복이 **여러 층**을 보존하는지 보려고 10·20을 원장에 직접 연다(지급 경로는 ⓕ가 이미 검증했다).
 	m.mine_floors.open_chest(10)

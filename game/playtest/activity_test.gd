@@ -221,19 +221,24 @@ func _run_checks() -> void:
 		XpBoost.scaled(100, 5) == 125 and XpBoost.scaled(10, 5) == 13)
 	_check("④f 0 이하는 그대로 흘린다", XpBoost.scaled(0, 5) == 0 and XpBoost.scaled(-4, 5) == -4)
 	# 바나 훅(예약석)이 실제 하트를 읽는다.
+	# ★[S8-T5] 하트 = stage(진급 칸) — 점수와 함께 stage도 세팅한다(관문은 heart_gate_test 소관).
 	r_bana.affinity.points = 0
+	r_bana.affinity.stage = 0
 	_check("④g narak_bana_xp_mult ♡0 = 1.0", is_equal_approx(m.narak_bana_xp_mult(), 1.0))
 	r_bana.affinity.points = Affinity.MAX_POINTS
+	r_bana.affinity.stage = Affinity.MAX_HEARTS
 	_check("④h narak_bana_xp_mult ♡5 = 1.25", is_equal_approx(m.narak_bana_xp_mult(), 1.25))
 	# **실효** — 같은 몹을 같은 무대에서 잡아도 하트에 따라 XP가 다르다.
 	var kill_xp: int = Mob.spawn(MobCatalog.HEOTGEOT, Vector2i(5, 5), 99).kill_xp()
 	m._region = RegionCatalog.NARAK
 	m._narak_depth = 3
 	r_bana.affinity.points = 0
+	r_bana.affinity.stage = 0
 	var xp0: int = m._combat_xp
 	m._on_mob_killed(Mob.spawn(MobCatalog.HEOTGEOT, Vector2i(5, 5), 20), 20)
 	var gained_flat: int = m._combat_xp - xp0
 	r_bana.affinity.points = Affinity.MAX_POINTS
+	r_bana.affinity.stage = Affinity.MAX_HEARTS
 	xp0 = m._combat_xp
 	m._on_mob_killed(Mob.spawn(MobCatalog.HEOTGEOT, Vector2i(5, 5), 21), 21)
 	var gained_boost: int = m._combat_xp - xp0
@@ -251,10 +256,12 @@ func _run_checks() -> void:
 	var crop := CropCatalog.HONRYEONGCHO
 	var farm_base: int = CropCatalog.sell_price(crop)
 	r_miho.affinity.points = 0
+	r_miho.affinity.stage = 0
 	var fx0: int = m._farming_xp
 	_check("④k 밭 수확 재현(♡0)", _harvest_once(m, crop))
 	var farm_flat: int = m._farming_xp - fx0
 	r_miho.affinity.points = Affinity.MAX_POINTS
+	r_miho.affinity.stage = Affinity.MAX_HEARTS
 	fx0 = m._farming_xp
 	_check("④l 밭 수확 재현(♡5)", _harvest_once(m, crop))
 	var farm_boost: int = m._farming_xp - fx0

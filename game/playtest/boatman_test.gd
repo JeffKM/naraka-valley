@@ -150,15 +150,18 @@ func _run_checks() -> void:
 	var rod2_base: int = GearCatalog.price_of(GearCatalog.ROD_T2)
 	r.affinity.points = 0
 	m.neo_affinity.points = m.neo_affinity.MAX_POINTS      # 네오 ♡5(만물상만 싸져야 한다)
+	m.neo_affinity.stage = Affinity.MAX_HEARTS             # ★[S8-T5] 하트 = stage(진급 칸)
 	var row0: Dictionary = m._fishshop_items()[0]
 	_check("ⓓa 뱃사공 ♡0 = 정가(네오 ♡5여도 생선가게는 안 싸짐)",
 		int(row0["price"]) == rod2_base and int(row0["base"]) == rod2_base)
 	r.affinity.points = 3 * Affinity.POINTS_PER_HEART      # 뱃사공 ♡3
+	r.affinity.stage = 3
 	var row3: Dictionary = m._fishshop_items()[0]
 	_check("ⓓb 뱃사공 ♡3 = StoreDiscount 공식가",
 		int(row3["price"]) == StoreDiscount.price(rod2_base, 3) and int(row3["price"]) < rod2_base)
 	# 반대 방향 — 뱃사공 ♡가 만물상 가격을 건드리지 않는다.
 	m.neo_affinity.points = 0
+	m.neo_affinity.stage = 0
 	var store_rows: Array = m._store_items()
 	var seed_row: Dictionary = store_rows[0]
 	# ★[S8-T2 회귀 봉합] 옛 단언은 매대 첫 행이 늘 혼령초라고 가정했다 — S7-T2가 매대에 **제철
@@ -170,6 +173,7 @@ func _run_checks() -> void:
 		String(r.effect_fn.call()).contains("뱃사공")
 		and StoreDiscount.summary(0).contains("네오"))
 	r.affinity.points = 0
+	r.affinity.stage = 0
 
 	# ── ⓔ 유니크 구매 ──
 	print("── ⓔ 유니크 구매 ──")
@@ -270,6 +274,7 @@ func _run_checks() -> void:
 	var roll0: String = m._roll_fish_id(4242)
 	var gear0: String = m._fishing_gear_line(GearCatalog.ROD_T2)
 	r.affinity.points = r.affinity.MAX_POINTS   # ♡5
+	r.affinity.stage = Affinity.MAX_HEARTS      # ★[S8-T5] 하트 = stage — 실제 ♡5로 세워 중립을 검증
 	_check("ⓗa ♡5여도 같은 시드 = 같은 어종(입질·추첨 보정 0)", m._roll_fish_id(4242) == roll0)
 	_check("ⓗb ♡5여도 기어 파라미터 불변(격투 보정 0)",
 		m._fishing_gear_line(GearCatalog.ROD_T2) == gear0
@@ -277,6 +282,7 @@ func _run_checks() -> void:
 	_check("ⓗc ♡5가 바꾸는 건 매대 가격뿐",
 		int(m._fishshop_items()[0]["price"]) == StoreDiscount.price(rod2_base, 5))
 	r.affinity.points = 2 * Affinity.POINTS_PER_HEART   # 세이브 왕복용 값
+	r.affinity.stage = 2
 
 	# ── ⓑ' + ⓖ 세이브 왕복 / 하위호환 ──
 	print("── ⓖ 세이브 ──")

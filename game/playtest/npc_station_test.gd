@@ -80,6 +80,7 @@ func _run_checks() -> void:
 	# ── ⑥ 세이브 통합: 멜 호감도가 저장·복원된다(완료기준 — SaveManager 불변) ──
 	# 멜 호감도를 올리고 main이 모은 조각으로 저장한 뒤, 새 main이 자동 복원하는지 본다.
 	m.mel_affinity.points = 2 * Affinity.POINTS_PER_HEART  # ♡2(곡선 상수 파생 — RUN_DAYS 21↔14 무관)
+	m.mel_affinity.stage = 2                               # ★[S8-T5] 하트 = stage(진급 칸)
 	var mel_hearts: int = m.mel_affinity.hearts()
 	m._save_game()
 	m.free()
