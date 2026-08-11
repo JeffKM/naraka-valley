@@ -2665,6 +2665,9 @@ var _cafe_revenue_total := 0
 # "총수입"이 읽는다. wallet.gold는 현재 잔액이라 지출로 줄지만, 이 값은 번 만큼만 단조 증가한다.
 # 슬라이스를 넘어 보존(세이브 한 조각 — 하위호환 0). _cafe_revenue_total과 달리 raw 출하 판매도 센다.
 var _total_income := 0
+# ★[S8-T4 / ADR-0066 결정 4] 멜 활동 채널의 **100냥 미만 잔돈**(_credit_mel_revenue 참조). 이 한
+# 조각만 저장하면 저장·재개로 잔돈이 리셋되는 세탁을 막을 수 있다(가법 키 — 구세이브 = 0).
+var _mel_revenue_carry := 0
 # T7.2 1단 달성("카페 2단계!") 팝업을 이미 띄웠는가(한 번만 뜨게 하는 래치). 달성 여부 자체는
 # 누적값에서 파생되므로(CafeMilestone.is_complete — 세이브 무상태) 저장하지 않는다. 이 래치는
 # 일시 표시용으로, _ready에서 "이미 완료된 세이브를 이어받았으면 true"로 초기화해 재개 시
@@ -5281,8 +5284,17 @@ func _record_boss_kill(depth: int) -> void:
 #   ♡ 성장·컷신·곱셈기 배선이 전부 S8 소관이라 지금은 **중립 1.0을 돌려주는 함수 하나**로 남긴다
 #   (ADR-0008 "평평 ≠ 막힘" — base 루프는 S5에서 이미 완결된다). 배선 시 `_gain_combat_xp` 호출부에서
 #   이 계수를 곱하면 되고, 그때까지 이 함수의 존재가 곧 "그 자리는 예약돼 있다"는 표시다.
+# ★[S8-T4 / ADR-0066 결정 12] **예약석이 채워졌다** — 바나 하트가 나락 전투 XP를 가속한다
+#   (XpBoost 1 + 0.05/♡ · ♡0 = ×1.0이라 관계 0에서도 base가 그대로 굴러간다, ADR-0008).
+#   ★ 계수를 `_gain_combat_xp` **안**이 아니라 호출부(_on_mob_killed)에서 곱하는 이유: 이 가속은
+#     *나락 한정*이다(함수 이름이 곧 그 범위 — 갱도는 바나 도메인이 아니다). 안에 넣으면 갱도 몹까지
+#     따라 오르고, XP를 직접 넣는 테스트·디버그 경로의 값도 조용히 흔들린다.
+#   ★ 관계 트랙이 아직 없는 부팅 순간에도 안전하게 1.0(레지스트리 조회 실패 = 중립).
 func narak_bana_xp_mult() -> float:
-	return 1.0
+	var r := _resident("bana")
+	if r == null or r.affinity == null:
+		return 1.0
+	return XpBoost.mult(r.affinity.hearts())
 
 # 층 배치에서 개체를 세운다(보스 층이면 보스 한 기뿐). 시드에 run·깊이·스폰 인덱스를 엮는다 —
 # 갱도가 day를 무는 자리에 런 카운터가 들어간 것뿐이고, 좌표는 여전히 시드에 안 넣는다.
@@ -5813,10 +5825,18 @@ func _mob_break_rock(t: Vector2i) -> void:
 func _on_mob_killed(mob: Mob, spawn_index: int) -> void:
 	if mob == null:
 		return
-	_gain_combat_xp(mob.kill_xp())
 	# ★[S5-T7] 드랍 시드의 두 축이 무대에 따라 갈린다: 갱도 = (day, 층) / 나락 = (런, 깊이).
 	#   접두사까지 갈라 두 무대가 같은 숫자 쌍에서 같은 답을 내지 않게 한다.
+	# ★[S8-T4] 무대 판정이 XP·활동 채널보다 앞으로 올라왔다 — 둘 다 "여기가 나락인가"를 묻는다.
 	var in_narak := _in_narak_floor()
+	# ★[S8-T4 / ADR-0066 결정 12] 나락에서만 바나 하트가 전투 XP를 가속한다(갱도는 종전 그대로).
+	_gain_combat_xp(XpBoost.scaled_by(mob.kill_xp(), narak_bana_xp_mult()) if in_narak
+		else mob.kill_xp())
+	# ★[S8-T4 / ADR-0066 결정 4] 활동 → 하트: **나락 잡귀 처치당 바나 +1**(일일 캡 12).
+	#   나락 한정인 근거는 결정 4의 문구 그대로다("바나 = 나락 잡귀 처치당") — 갱도 채광 몹은
+	#   광부의 일이지 밤 경비의 일이 아니라, 같은 처치라도 그 사람의 도메인 실적이 아니다.
+	if in_narak:
+		_activity_credit("bana", 1)
 	var drop_seed := hash("narak:%d:%d:%d" % [narak_floors.run_id(), _narak_depth, spawn_index]) \
 		if in_narak else hash("%d:%d:%d" % [clock.day, _mine_floor, spawn_index])
 	var full := false
@@ -9909,6 +9929,7 @@ func _save_game() -> void:
 		"narak_best_boss": _narak_best_boss,
 		"cafe_revenue_total": _cafe_revenue_total,
 		"total_income": _total_income,   # ★ [S1R-T12] 누적 총수입(정보패널 — 구세이브 키 없음=0)
+		"mel_revenue_carry": _mel_revenue_carry,   # ★[S8-T4] 멜 활동 채널 잔돈(<100냥)
 		"selected_crop": _selected_crop,
 		# M1.5 — 현재 구역·실내 모드·플레이어 위치(껐다 켜도 '있던 자리'에서 재개). region은
 		# 영문 id(RegionCatalog 키, 가볍고 안정적), indoor는 ""/건물 id(_buildings 키), 위치는 타일 좌표.
@@ -10056,6 +10077,8 @@ func _load_game() -> void:
 	_cafe_revenue_total = maxi(int(data.get("cafe_revenue_total", 0)), 0)
 	# ★ [S1R-T12] 누적 총수입 복원(키 없는 구세이브 = 0, 하위호환).
 	_total_income = maxi(int(data.get("total_income", 0)), 0)
+	# ★[S8-T4] 멜 활동 채널 잔돈 — 손상 방어로 [0, 100)으로 자른다(음수·과대값이 점수를 낳지 않게).
+	_mel_revenue_carry = clampi(int(data.get("mel_revenue_carry", 0)), 0, MEL_REVENUE_PER_POINT - 1)
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
 	# M1.5 — 마지막에 구역·실내 모드·위치를 되돌린다. farm.load_save가 칸마다 발화한 밭
@@ -10192,9 +10215,17 @@ func _item_icon(id: String) -> Texture2D:
 # ★ Phase C — 농사 XP 적립 + 레벨업 감지(숙련 알림). _farming_xp를 직접 더하던 자리를 이 헬퍼로
 # 감싸, 더하기 전후 FarmSkill.level_for_xp를 비교해 레벨이 오른 순간만 금박 알림을 띄운다(래치 불요 —
 # 경계를 넘는 프레임에만 after>before). 숙련 탭(관계 탭과 대칭)에 진행은 상시 파생되므로 여기선 알림만.
+# ★[S8-T4 / ADR-0066 결정 12] **미호 하트가 농사 XP를 가속한다**(XpBoost 1 + 0.05/♡).
+#   ADR-0029 표엔 "미호 = 농사 가속"이 있었지만 코드의 여우불은 *작물 성장* 가속이라 XP 축은 비어
+#   있었다 — 그 문서-코드 불일치를 여기서 메운다(성장과 숙련은 별개 축이라 여우불이 대신 못 한다).
+#   ★ 바나(호출부에서 곱함)와 달리 **함수 안**에서 곱하는 이유: 농사 XP는 무대가 갈리지 않는다
+#     (밭 수확·과수 수확 전부 미호 도메인). 한 곳에서 곱해야 소스가 늘어도 자동으로 따라온다.
+#   ★ ♡0 = ×1.0이라 관계를 안 쌓아도 숙련은 종전 속도 그대로다(ADR-0008 "평평 ≠ 막힘").
+#     테스트가 직접 부르는 경로도 ♡0에서는 값이 한 톨도 안 변한다.
 func _gain_farm_xp(amount: int) -> void:
 	if amount <= 0:
 		return
+	amount = XpBoost.scaled(amount, affinity.hearts() if affinity != null else 0)
 	var before := FarmSkill.level_for_xp(_farming_xp)
 	_farming_xp += amount
 	var after := FarmSkill.level_for_xp(_farming_xp)
@@ -12648,6 +12679,12 @@ func _try_harvest() -> void:
 					inventory.add_item(picked["fruit_id"], 1, fq)   # 과일 = CAT_HARVEST(등급 실림)
 				_toast_item(str(picked["fruit_id"]), int(picked["count"]))   # ★ Phase C 획득 토스트
 				_gain_farm_xp(FruitTreeCatalog.fruit_sell(picked["fruit_id"]))  # ★ 과수 수확도 농사 XP(§8.9)+레벨업 감지
+				# ★[S8-T4 / ADR-0066 결정 4] 활동 → 하트: **과수 수확도 미호 +1**(밭 수확과 같은 "수확
+				#   액션당 1" 눈금 — 한 그루에서 과일 3개가 떨어져도 액션은 하나다). 바로 윗줄이 농사 XP를
+				#   주는 자리라, 여기만 빠지면 과수 위주로 노는 판에서 미호 채널이 조용히 죽는다.
+				#   ★ 야생 작물 수확은 반대로 **안 붙인다**: ADR-0033 #4가 그 수확을 채집 축으로 통째
+				#     가로채 농사 XP조차 안 주므로(_harvest_wild), 미호 도메인 실적이 아니다.
+				_activity_credit("miho", 1)
 				audio.sfx("harvest")
 				energy.spend(cost)
 				queue_redraw()
@@ -12683,6 +12720,10 @@ func _try_harvest() -> void:
 	_toast_item(ItemCatalog.harvest_id(harvested_crop), count)   # ★ Phase C 획득 토스트(수확)
 	_gain_farm_xp(CropCatalog.sell_price(harvested_crop))  # ★ 수확 성공 XP(§8.9)+레벨업 감지
 	_run_harvested += 1                       # T4.2 슬라이스 점수판: 거둔 영혼 총수(수확 액션당 1)
+	# ★[S8-T4 / ADR-0066 결정 4] 활동 → 하트: **수확 액션당 미호 +1**(일일 캡 12).
+	#   눈금을 `_run_harvested`와 같은 "액션당 1"로 맞춘다 — 다수확(황천포도 2~3)이 관계까지 3배로
+	#   불리면 작물 선택이 관계 최적화 문제로 변한다(수확은 밭을 돌본 *행위*이지 개수가 아니다).
+	_activity_credit("miho", 1)
 	_show_flavor(harvested_crop)              # T3.5 그 영혼의 생전 사연 한 줄을 띄운다
 	audio.sfx("harvest")                      # P2.6 수확은 밝은 팝
 	# ★ [S1R-T10] 맨손 수확 스윙 애니 1회 재생(시각 전용 — 위 수확 로직과 독립). 숙련 speed_factor로 속도 실효화.
@@ -15092,6 +15133,39 @@ func _start_resident_dialogue(r: Resident) -> void:
 	_talking_to = r.display_name
 	dialogue.start(r.display_name, lines)
 
+# ── ★[S8-T4 / ADR-0066 결정 4] 활동 → 하트 적립(메인 3인 전용) ──────────────
+# 배선점(수확·서빙·나락 처치)이 사건마다 이 창구로 점수를 흘린다. 캡·누적은 Affinity가 들고
+# (activity_gain), 여기는 "누구에게 얼마" 한 줄만 안다 — 선물이 GiftPrefs↔Affinity로 갈린 것과
+# 같은 분업이다. 관계 트랙이 없는 주민을 넘겨도 조용히 흘려보낸다(방어).
+# ★ 알림을 안 띄운다: 하루 12번까지 붙는 잔 적립이라 알림 피드를 도배한다. 하트가 오르는 순간은
+#   HeartBar·관계 탭이 이미 보여 주고, 진행의 결은 "일하다 보니 어느새 친해져 있다"가 맞다.
+func _activity_credit(rid: String, n: int) -> void:
+	if n <= 0:
+		return
+	var r := _resident(rid)
+	if r == null or r.affinity == null:
+		return
+	r.affinity.activity_gain(n, clock.day)
+
+# 멜 채널만 눈금이 "냥"이라 정수 환산이 한 겹 더 있다 — **100냥당 1점**, 잔돈은 이월한다.
+# ★ 이월이 필요한 이유: 기본 서빙 한 잔이 35냥이라 매번 100으로 나누면 세 잔을 내도 0점이 되어
+#   채널이 사실상 죽는다(105냥에서 1점이 나와야 한다).
+# ★ 잔돈만 남기고 **캡을 넘긴 몫은 버린다**: 캡에 막힌 점수를 carry에 쌓아 두면 자정을 넘긴 아침에
+#   어제치가 공짜로 붙어 일일 캡이 뜻을 잃는다(activity_gain 주석의 그 판단과 같은 결).
+# ★ 세이브 가법 키 1개(`mel_revenue_carry`) — carry를 저장 안 하면 저장·재개가 잔돈 세탁 수단이
+#   된다(99냥씩 벌고 저장하면 영원히 0점). 축의 주인이 main(_cafe_revenue_total)이라 키도 여기 둔다.
+const MEL_REVENUE_PER_POINT := 100
+
+func _credit_mel_revenue(revenue: int) -> void:
+	if revenue <= 0:
+		return
+	_mel_revenue_carry += revenue
+	var due := _mel_revenue_carry / MEL_REVENUE_PER_POINT   # 정수 나눗셈 = 100냥 묶음 수
+	if due <= 0:
+		return
+	_mel_revenue_carry -= due * MEL_REVENUE_PER_POINT       # 잔돈(<100)만 남긴다
+	_activity_credit("mel", due)
+
 # ── 선물(공통) ─────────────────────────────────────────────────────────────
 # ★[S8-T2 / ADR-0066 결정 2] **든 아이템 1개를 건넨다** — 혼백관 기증(_try_donate_selected)과
 # 정확히 같은 문법이다(inventory.selected_id 기준). 옛 경로는 `_selected_crop` 수확 작물 전용
@@ -15433,6 +15507,12 @@ func _try_serve(seat: int) -> void:
 	#   이 줄 옆에 affinity.add가 붙는 순간 "카페를 돌리면 저절로 친해진다"가 되어 관계 트랙이
 	#   활동 루프의 부산물로 전락한다. 익명 손님("")이면 record_serve가 조용히 흘려보낸다.
 	guests.record_serve(guest_id)
+	# ★[S8-T4 / ADR-0066 결정 4] 활동 → 하트: **서빙 매출 100냥당 멜 +1**(일일 캡 12 = 1,200냥).
+	#   ★★ 바로 위 줄의 ADR-0017 보호와 **모순이 아니다** — 그 규율이 막은 것은 "서빙이라는 *행위*가
+	#      손님(단골) 호감도를 채우는 것"이고, 이건 ADR-0032·ADR-0066 결정 4가 명시 개통한 **멜의
+	#      도메인 실적 채널**이다(카페 운영 = 멜의 속죄 무대라 매출이 그 사람의 실적이다). 여전히
+	#      손님 쪽 ♡는 0이고, 오르는 건 멜 하나뿐이며, 그마저 하루 12점에서 멈춘다.
+	_credit_mel_revenue(revenue)
 	audio.sfx("serve")                        # P2.6 카운터 종 "딩"
 	_notice("%s%s 서빙 +%d골드" % [_guest_prefix(guest_id), MenuCatalog.name_of(served), revenue],
 		NOTICE_SECS, false, _item_icon(served))   # ★[S6-T8] 나간 잔의 아이콘을 알림에 함께
