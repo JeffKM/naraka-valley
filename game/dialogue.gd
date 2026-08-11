@@ -38,6 +38,19 @@ func start(speaker: String, lines: PackedStringArray) -> void:
 	_index = 0
 	changed.emit(_speaker, _lines[_index])
 
+# ★[S8-T6] 진행 중 대사를 통째로 교체한다(고백 [F] 분기 — 선택의 결과가 이 대화의 나머지가 된다).
+# 화자는 유지한다. 빈 배열이면 그냥 닫는다(재구애의 조용한 진급 — 본 비트 재지급 없음, ADR-0022).
+# 닫혀 있으면 아무 일도 하지 않는다(start와 같은 방어 — 선택 UI가 늦게 눌려도 안전).
+func replace_lines(lines: PackedStringArray) -> void:
+	if not is_open():
+		return
+	if lines.is_empty():
+		_close()
+		return
+	_lines = lines
+	_index = 0
+	changed.emit(_speaker, _lines[_index])
+
 # 다음 줄로 넘긴다. 마지막 줄에서 넘기면 닫히고 finished를 발화한다.
 # 닫혀 있으면 아무 일도 하지 않는다(잘못된 입력 방어).
 func advance() -> void:

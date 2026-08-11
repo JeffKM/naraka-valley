@@ -2674,6 +2674,19 @@ var _mel_revenue_carry := 0
 # 없음 — 조용히 진급만 된다). 결혼(결정 8)의 속죄 아크 판정도 이 원장을 읽는다.
 # 세이브 가법 키 1개("heart_bits") — 구세이브(키 없음) = 빈 원장 = 아무것도 안 본 상태(하위호환).
 var _heart_bits: Dictionary = {}
+# ★[S8-T6 / ADR-0066 결정 6] **연애 슬롯 — 전 로스터 공유 단 1개**(빈 문자열 = 연애 없음).
+# 연애는 하트 위의 *상태*다(ADR-0066 "결혼은 하트 위 상태" — 연애도 같은 축): Affinity(점수·stage)에
+# 안 넣고 main이 든다. 슬롯이 하나뿐이라는 배타성이 곧 스타듀 꽃다발(아이템)의 대체물이다.
+# 세이브 가법 키("romance_partner") — 구세이브 = "" = 연애 없음(하위호환).
+var _romance_partner := ""
+# ★[S8-T6 / ADR-0066 결정 7] **질투 원장** — rid → {"restore_day": 복원 예정일, "amount": 실제 깎인
+# 점수}. 연애 개시 순간 1회 −30점(안 뽑힌 메인 2인), 7일 후 자동 복원. *실제 깎인 양*을 적는 이유:
+# 명목 30을 복원하면 바닥(0)에 눌려 덜 깎인 사람이 복원으로 공짜 점수를 얻는다 — "영구 손실 0"은
+# 깎인 만큼만 정확히 돌려줄 때 성립한다. 세이브 가법 키("jealousy") — 구세이브 = 빈 원장.
+var _jealousy: Dictionary = {}
+# ★[S8-T6] 이 대화에서 고백 제안([F])이 떠 있는 상대 rid("" = 없음). 대화와 같은 일시 상태라
+# 세이브하지 않는다(_talking_to와 같은 결 — 대화 시작에 세팅·종료에 리셋).
+var _confess_rid := ""
 # T7.2 1단 달성("카페 2단계!") 팝업을 이미 띄웠는가(한 번만 뜨게 하는 래치). 달성 여부 자체는
 # 누적값에서 파생되므로(CafeMilestone.is_complete — 세이브 무상태) 저장하지 않는다. 이 래치는
 # 일시 표시용으로, _ready에서 "이미 완료된 세이브를 이어받았으면 true"로 초기화해 재개 시
@@ -9211,6 +9224,9 @@ func _on_day_advanced(day: int) -> void:
 	var dropped := quest_board.advance_day(day)
 	if not dropped.is_empty():
 		_notice("게시판 의뢰가 기한을 넘겼다 — %s (페널티 없음)" % QuestBoard.summary(dropped))
+	# ★[S8-T6 / ADR-0066 결정 7] 질투 자동 복원 — 예정일(연애 개시 +7일)에 닿은 감점을 조용히
+	#   되돌린다(알림 없음·흔적 0 — ADR-0022 적대 없음).
+	_advance_jealousy(day)
 	energy.refill()
 	# ★[S5-T4 / ADR-0063 결정 4] 취침 HP 풀회복 — 혼력과 나란히 붙는다(회복 = 취침 + 소모품 명부환).
 	#   최대치도 함께 맞춘다: 어제 오른 전투 레벨·고른 전문직이 아침에 정확히 반영되게(멱등).
@@ -9937,6 +9953,8 @@ func _save_game() -> void:
 		"total_income": _total_income,   # ★ [S1R-T12] 누적 총수입(정보패널 — 구세이브 키 없음=0)
 		"mel_revenue_carry": _mel_revenue_carry,   # ★[S8-T4] 멜 활동 채널 잔돈(<100냥)
 		"heart_bits": _heart_bits.duplicate(),     # ★[S8-T5] 하트 이벤트 비트 원장(이혼에도 잔존하는 별도 축)
+		"romance_partner": _romance_partner,       # ★[S8-T6] 연애 슬롯(전 로스터 공유 1 — "" = 없음)
+		"jealousy": _jealousy.duplicate(true),     # ★[S8-T6] 질투 원장(rid → 복원 예정일·깎인 양)
 		"selected_crop": _selected_crop,
 		# M1.5 — 현재 구역·실내 모드·플레이어 위치(껐다 켜도 '있던 자리'에서 재개). region은
 		# 영문 id(RegionCatalog 키, 가볍고 안정적), indoor는 ""/건물 id(_buildings 키), 위치는 타일 좌표.
@@ -10092,6 +10110,16 @@ func _load_game() -> void:
 	var hb: Dictionary = data.get("heart_bits", {})
 	for k in hb:
 		_heart_bits[String(k)] = int(hb[k])
+	# ★[S8-T6] 연애 슬롯·질투 원장 복원(구세이브 = ""/빈 원장 — 하위호환). 원장은 키·값을 명시
+	# 재조립해 손상 세이브의 이물이 눕지 않게 한다(heart_bits와 같은 규율 — 음수 양은 0으로 자른다).
+	_romance_partner = String(data.get("romance_partner", ""))
+	_jealousy = {}
+	var jz: Dictionary = data.get("jealousy", {})
+	for k in jz:
+		var e: Dictionary = jz[k] if jz[k] is Dictionary else {}
+		var amt := maxi(int(e.get("amount", 0)), 0)
+		if amt > 0:
+			_jealousy[String(k)] = {"restore_day": int(e.get("restore_day", 0)), "amount": amt}
 	var sel: String = data.get("selected_crop", CropCatalog.HONRYEONGCHO)
 	_selected_crop = sel if CropCatalog.has_crop(sel) else CropCatalog.HONRYEONGCHO
 	# M1.5 — 마지막에 구역·실내 모드·위치를 되돌린다. farm.load_save가 칸마다 발화한 밭
@@ -10683,6 +10711,16 @@ func _process(delta: float) -> void:
 		onboarding_label.visible = false  # T4.1 대화가 화면을 채우는 동안 배너 숨김
 		if onboarding_banner != null:
 			onboarding_banner.hide_now()  # 대화가 화면을 채우면 상단 안내 배너도 즉시 숨김
+		# ★[S8-T6] 고백 제안이 떠 있으면 [F] = 결행(수락/거절 분기), [G] = 아직(제안만 접고 진행).
+		#   F(shop_toggle)·G(gift_item)는 대화 밖 전용 키라 대화 중엔 비어 있다 — 충돌 없음.
+		if _confess_rid != "":
+			if Input.is_action_just_pressed("shop_toggle"):
+				_resolve_confession(_confess_rid)
+				return
+			if Input.is_action_just_pressed("gift_item"):
+				_confess_rid = ""       # 이 대화에선 접어 둔다(무벌칙 — 다음 대화에 다시 선다)
+				dialogue.advance()
+				return
 		if Input.is_action_just_pressed("action"):
 			dialogue.advance()
 		return
@@ -14486,6 +14524,10 @@ func _heart_rows() -> Array:
 # ★[S8-T5] 첫 실값: **진급 대기**(점수 만충·관문 미통과 — Affinity.pending_promotion). "다음 칸이
 #   잠겨 있다"는 사실이 관계 탭에서 보여야 관문(대화·deed)을 찾으러 간다 — 배지가 그 표지판이다.
 func _heart_badge(r: Resident) -> String:
+	# ★[S8-T6] 연애 실값 — 슬롯의 주인이면 "연애 중"(연인은 ♡5 = 대기 없음이라 아래와 안 겹치지만,
+	#   상태 배지가 진행 배지보다 앞서는 게 옳아 순서로도 못 박는다). 결혼(T7)이 이 위에 한 줄 더 얹는다.
+	if _romance_partner == r.id:
+		return "연애 중"
 	if r.affinity != null and r.affinity.pending_promotion():
 		return "진급 대기"
 	return ""
@@ -15164,6 +15206,101 @@ func _heart_bit_seen(rid: String, heart: int) -> bool:
 func _mark_heart_bit(rid: String, heart: int) -> void:
 	_heart_bits[rid] = int(_heart_bits.get(rid, 0)) | (1 << heart)
 
+# ── ★[S8-T6 / ADR-0066 결정 6·7] 연애(♡5) = 의지 시험 + 단일 슬롯 + 질투 ──────
+# ♡4 만충(점수가 ♡5 칸을 채움) 뒤의 마지막 진급은 관문 이벤트가 아니라 **의지 시험 = 인-픽션 고백
+# 선택**이다: 대화에 제안 한 줄이 앞서고, [F]로 고백하면 그 자리에서 연애가 개시된다(♡5 진급과
+# 동일 시점 — 별도 아이템 없음, 슬롯 구조가 배타성 담당). [G]/우클릭 = 아직 — 무벌칙, 다음 대화에
+# 제안이 다시 선다(재시도 자유).
+#   · **S8 콘텐츠 개통은 메인 3인만**(ROMANCE_OPEN). 구조(제안·슬롯·질투)는 rid 무관 일반이라
+#     T1 주민은 S9가 캐릭터 묶음(초상화+대사+아크)과 함께 명단에 넣기만 하면 열린다(ADR-0014 완화).
+#   · 대사 본문은 S9 서사 소관(ADR-0005) — 캐릭터 노드가 `confession_lines(accepted)`를 가지면
+#     그걸 쓰고, 없으면 placeholder 1줄(관문·생일 훅과 같은 이음매).
+const ROMANCE_OPEN := ["miho", "mel", "bana"]   # S8 연애 개통 명단(T1 = S9 점진)
+const CONFESS_OFFER_LINE := "…(마음을 전하고 싶다 — [F] 고백한다 / [G] 아직은 담아 둔다)"
+const CONFESS_ACCEPT_LINE := "…나도, 같은 마음이었어."
+# 슬롯 점유 중 두 번째 시도 = **인-픽션 거절**(침묵 아님 — ADR-0066 결정 6). 무벌칙: 점수·stage·
+# 대기 상태 전부 그대로라, 이혼(슬롯 해제) 후 같은 자리에서 다시 고백할 수 있다.
+const CONFESS_REJECT_LINE := "…마음은 기뻐. 하지만 지금 네 곁엔 이미 다른 사람이 있잖아."
+const JEALOUSY_HIT := 30            # 질투 1회 감점(반 칸 — 잠정, owner 큐)
+const JEALOUSY_RESTORE_DAYS := 7    # 자동 복원까지의 날수(잠정, owner 큐)
+
+# 이 사람에게 지금 고백 제안이 서는가 — ♡4(마지막 칸 직전)에서 점수가 ♡5 칸을 채웠고, S8 연애
+# 명단에 있다. **슬롯 점유 중에도 제안은 선다**: 두 번째 시도의 인-픽션 거절(결정 6)은 시도가
+# 가능해야 존재하는 장면이다(제안을 숨기면 거절이 아니라 침묵이 된다).
+func _romance_offer_available(r: Resident) -> bool:
+	if r.affinity == null or not ROMANCE_OPEN.has(r.id):
+		return false
+	return r.affinity.stage == Affinity.MAX_HEARTS - 1 and r.affinity.pending_promotion()
+
+# 고백을 결행한다([F] — 대화 중 제안이 떠 있을 때만 온다). 결과 대사가 진행 중 대화를 교체한다.
+#   · 슬롯이 비었으면(또는 상대가 이미 연인이면 — 방어) 수락: ♡5 진급 + 연애 개시 + 질투 1회.
+#   · 다른 사람과 연애 중이면 거절: 상태 무변화(무벌칙 — 이혼 후 재시도 가능).
+# 재구애(이혼 후 재도달)의 수락은 **조용하다**: 본 비트(♡5) 재지급 없음(ADR-0022 — 진급·연애는
+# 되지만 이벤트 대사는 다시 틀지 않는다. replace_lines가 빈 배열이면 대화를 닫는다).
+func _resolve_confession(rid: String) -> void:
+	_confess_rid = ""
+	var r := _resident(rid)
+	if r == null or r.affinity == null:
+		return
+	if _romance_partner != "" and _romance_partner != rid:
+		dialogue.replace_lines(_confession_lines(r, false))
+		return
+	if not r.affinity.promote():
+		return                          # 방어 — 제안이 섰다면 대기 중이었어야 한다
+	_romance_partner = rid
+	var already_seen := _heart_bit_seen(rid, Affinity.MAX_HEARTS)
+	_mark_heart_bit(rid, Affinity.MAX_HEARTS)
+	_apply_jealousy(rid)
+	audio.sfx("ui")
+	_notice("%s와 연인이 되었다 ♡%d" % [r.display_name, Affinity.MAX_HEARTS])
+	dialogue.replace_lines(PackedStringArray() if already_seen else _confession_lines(r, true))
+
+# 고백 결과 대사 — 캐릭터 훅(confession_lines) 우선, 없으면 placeholder 1줄(관문 훅과 같은 이음매).
+func _confession_lines(r: Resident, accepted: bool) -> PackedStringArray:
+	if r.node != null and r.node.has_method("confession_lines"):
+		var custom: PackedStringArray = r.node.confession_lines(accepted)
+		if not custom.is_empty():
+			return custom
+	return PackedStringArray([CONFESS_ACCEPT_LINE if accepted else CONFESS_REJECT_LINE])
+
+# ★[S8-T6 / ADR-0066 결정 7] 질투 — 연애 개시 **순간 1회**, 안 뽑힌 메인 2인 −30점. 일상 선물엔
+# 질투가 없고(호출부가 여기뿐인 것이 그 구현), 스타듀 그룹 냉대(1주 선물 거부·분노)는 기각 확정
+# (ADR-0032 §3). 실제 깎인 양만 원장에 적어 7일 뒤 정확히 그만큼 돌려준다(_jealousy 선언부 참조).
+func _apply_jealousy(chosen: String) -> void:
+	for rid in ROMANCE_OPEN:
+		if rid == chosen:
+			continue
+		var r := _resident(rid)
+		if r == null or r.affinity == null:
+			continue
+		var before: int = r.affinity.points
+		r.affinity.add_points(-JEALOUSY_HIT)
+		var cut := before - r.affinity.points
+		if cut <= 0:
+			continue                    # 0점이라 깎일 게 없었다 — 복원할 것도 없다
+		# 기존 항목이 있으면 합친다(방어 — 이혼→재연애가 7일 안에 겹쳐도 먼저 깎인 몫이 증발하지 않게).
+		var prev: Dictionary = _jealousy.get(rid, {})
+		_jealousy[rid] = {
+			"restore_day": clock.day + JEALOUSY_RESTORE_DAYS,
+			"amount": cut + int(prev.get("amount", 0)),
+		}
+	# 질투 알림은 명단이 아니라 정서로 — 누가 얼마 깎였는지는 관계 탭 하트가 이미 보여 준다.
+	_notice("어디선가 서운한 기색이 느껴진다…")
+
+# 질투 자동 복원 — 아침 정산(_on_day_advanced)이 부른다. 예정일에 닿은 항목을 깎인 만큼 정확히
+# 돌려주고 원장에서 지운다. **알림 없음·흔적 0**(ADR-0022 적대 없음 — 복원된 아침은 그냥 평소다).
+# ⚠️ 7일 사이 점수가 만렙 근처까지 차오르면 복원분 일부가 상한에 눌린다(_add clamp) — 시스템
+# 사정으로 접는다(만렙은 어차피 잃을 게 없는 자리다).
+func _advance_jealousy(day: int) -> void:
+	for rid in _jealousy.keys():
+		var e: Dictionary = _jealousy[rid]
+		if day < int(e.get("restore_day", 0)):
+			continue
+		var r := _resident(String(rid))
+		if r != null and r.affinity != null:
+			r.affinity.add_points(int(e.get("amount", 0)))
+		_jealousy.erase(rid)
+
 # ── 대화(공통) ─────────────────────────────────────────────────────────────
 # 말 걸면 텍스트박스가 뜨고, 우클릭으로 끝까지 넘기면 닫힌다. 대사 *내용*은 캐릭터가 들고
 # 오고(ADR-0005: 서사 텍스트는 캐릭터에만), 진행·열림은 DialogueBox가, 패널 표시·이동잠금은
@@ -15208,6 +15345,16 @@ func _start_resident_dialogue(r: Resident) -> void:
 		var with_gate := PackedStringArray(gate_lines)
 		with_gate.append_array(lines)
 		lines = with_gate
+	# ★[S8-T6 / ADR-0066 결정 6] 고백 제안 — ♡4 만충이면 의지 시험(고백 선택) 한 줄이 맨 앞에 선다.
+	#   관문 진급이 성사된 대화에는 안 세운다(대화 한 번에 사건 하나 — ♡3→4 진급과 고백이 같은
+	#   대화에 겹치지 않는다. 다음 대화에 제안이 선다). 제안은 상태 변화가 아니라 *입력 창구*라
+	#   결행([F])은 _process의 대화 입력 분기가 받는다(_resolve_confession).
+	_confess_rid = ""
+	if gate_lines.is_empty() and _romance_offer_available(r):
+		_confess_rid = r.id
+		var with_offer := PackedStringArray([CONFESS_OFFER_LINE])
+		with_offer.append_array(lines)
+		lines = with_offer
 	# 대사가 없으면 시작하지 않는다(이동을 잠근 채 못 닫는 상태 방지).
 	if lines.is_empty():
 		return
@@ -16141,6 +16288,7 @@ func _on_dialogue_finished() -> void:
 	elif _talking_to == miho.display_name() and onboarding.step == Onboarding.MEET_MIHO:
 		onboarding.talked_to_miho()
 	_talking_to = ""
+	_confess_rid = ""   # ★[S8-T6] 고백 제안은 그 대화 한정 — 닫히면 접힌다(다음 대화에 다시 선다)
 
 # ── ADR-0024 상호작용 대상 칸(마우스 커서) / 시각화 ─────────────────────────
 # 대상 칸 = 마우스 커서 밑 타일. 단 플레이어 인접 1칸 반경(주변 8칸 + 발밑)으로 클램프한다 —
