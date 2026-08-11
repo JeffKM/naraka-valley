@@ -11428,7 +11428,13 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = true
 		var res_hint := "[우클릭] 대화"
 		if faced_resident.can_gift:
-			res_hint += "   [G] %s 선물" % CropCatalog.name_of(_selected_crop)
+			# ★[S8-T2] 든 아이템 이름으로 바뀌었다(옛 문구는 선택 작물 이름). 손이 비었거나
+			#   건넬 수 없는 물건(도구·열쇠)이면 그 사실을 프롬프트가 먼저 말한다.
+			var held_gift := inventory.selected_id()
+			if GiftPrefs.giftable(held_gift):
+				res_hint += "   [G] %s 선물" % ItemCatalog.name_of(held_gift)
+			else:
+				res_hint += "   [G] 선물 — 건넬 물건을 손에"
 		if faced_resident.prompt_extra.is_valid():
 			res_hint += String(faced_resident.prompt_extra.call())
 		interact_prompt.text = res_hint
@@ -14565,8 +14571,9 @@ func _setup_residents() -> void:
 	_register_resident(r_miho)
 
 	# ── 멜(T5.1/T5.2) — 카페 카운터 상주. 카페 방은 카메라로 격리돼 있어(구역 밖에선 못 닿는다)
-	#    가시성을 따로 가르지 않는다(region "" = 미터치, 항상 보임). 선호 선물 = 피안화
-	#    (미호=영혼 호박과 선물 경제 분산 — 곡선 상수는 affinity.gd를 공유하고 이 한 값만 다르다).
+	#    가시성을 따로 가르지 않는다(region "" = 미터치, 항상 보임).
+	#    ★[S8-T2] 선호 선물은 이제 레코드가 아니라 GiftPrefs 테이블이 든다(멜 = 피안화·간판 메뉴·
+	#    값진 것 러브 / 알돌 헤이트). 여기선 아무것도 안 물린다 — 캐릭터 id가 곧 조회 키다.
 	var r_mel := Resident.new()
 	r_mel.id = "mel"
 	r_mel.display_name = "멜"
@@ -14578,12 +14585,12 @@ func _setup_residents() -> void:
 	r_mel.portrait_stem = "mel"
 	r_mel.schedule = [{"from_min": 0, "tile": MEL_TILE, "region": ""}]
 	r_mel.effect_fn = func() -> String: return CafeMargin.summary(mel_affinity.hearts())
-	mel_affinity.preferred_crop = CropCatalog.PIANHWA
 	_register_resident(r_mel)
 
 	# ── 바나(T6.1/T6.2) — 밤 무대. 자리는 고정이고 **가시성만 시각으로** 토글한다(19시부터,
 	#    통보 중엔 숨김 — 오프닝 컷신에 밤 무대가 끼어들지 않게). ★특수 훅 = [F] 나라카 바
-	#    옵트인(ADR-0010 #6: 안 열면 빈 밤 — 매일 세금이 아니다). 선호 선물 = 혼령초.
+	#    옵트인(ADR-0010 #6: 안 열면 빈 밤 — 매일 세금이 아니다).
+	#    ★[S8-T2] 선호 = GiftPrefs(혼령초·혼불씨·명부환·서리혼백초·초롱치 러브 / 붉은 열매 헤이트).
 	var r_bana := Resident.new()
 	r_bana.id = "bana"
 	r_bana.display_name = "바나"
@@ -14605,14 +14612,15 @@ func _setup_residents() -> void:
 		_open_night_bar()
 		return true
 	r_bana.effect_fn = func() -> String: return BanaGuard.summary(bana_affinity.hearts())
-	bana_affinity.preferred_crop = CropCatalog.HONRYEONGCHO
 	_register_resident(r_bana)
 
 	# ── 네오(M2.3) — 만물상 점주. ★[ADR-0060 결정 8] **이중 신분**: 점주 레이어(shop_key = 매대·
 	#    ♡ 할인)와 T1 관계 트랙(affinity = 대화·하트)이 **서로를 게이팅하지 않는다** — 할인이
 	#    늘어도 하트 이벤트가 열리지 않고, ♡0이어도 매대 거래는 정상 동작한다. 두 축이 이 레코드
 	#    안에서도 독립 필드로 있는 게 그 규칙의 코드적 표현이다(네오 선례 → 일반 허용 패턴).
-	#    선물(G) 채널은 아직 없다 — 풀 T1 트랙(선물·하트 이벤트·결혼)은 후속(ADR-0014 한 명씩).
+	#    ★[S8-T2 / ADR-0066 결정 2] **선물(G) 채널 개방** — "풀 T1 트랙은 후속"이라던 그 후속이
+	#    지금이다. 선물 대상이 든 아이템으로 넓어지면서 상인에게 어울리는 러브(보석·좋은 재고·
+	#    수집물)를 배정할 수 있게 됐다(GiftPrefs "neo"). 하트 이벤트·결혼은 여전히 후속(S9).
 	#    실내 가드: 만물상 방 안에서만 말 걸 수 있다(다른 구역 같은 좌표에 닿아도 무반응).
 	var r_neo := Resident.new()
 	r_neo.id = "neo"
@@ -14620,7 +14628,8 @@ func _setup_residents() -> void:
 	r_neo.node = neo
 	r_neo.affinity = neo_affinity
 	r_neo.save_key = "neo_affinity"
-	r_neo.can_gift = false
+	r_neo.can_gift = true               # ★[S8-T2] 선물 채널 개방(ADR-0066 결정 2)
+	r_neo.gift_target_ko = "네오"
 	# ★[S2-T10] 초상화 제작 완료 → 대화창에 얼굴이 뜬다. 표정 파일(_smile 등)은 아직 없어
 	#   [smile]/[shy] 태그도 기본 stem으로 폴백한다(_set_portrait의 누락 폴백 — 대사는 무개정).
 	r_neo.portrait_stem = "neo"
@@ -14695,13 +14704,10 @@ func _setup_residents() -> void:
 	# ★ 관계 곱셈기(effect_fn)는 **안 준다** — [ADR-0008] 활동 곱셈기는 메인 4인 독점이다. 모찌는
 	#   대화·선물로 하트만 오르는 순수 T1 관계 트랙이다(하트 이벤트·결혼은 ADR-0032 소관 후속).
 	_register_resident(r_mochi)
-	# 선호 선물 = 황천포도. 근거: 모찌는 "카페 과일/푸딩에서 흡수해 태어난"([residents.md]) 존재라
-	# *과일*이 정체성과 직결되고, 실존 재배 작물 중 유일한 과일계다(불사과는 미혹의 숲 채집·다절기
-	# 프레스티지라 초반 접근 불가). 기존 3인(영혼 호박·피안화·혼령초)과도 겹치지 않아 선물 경제가
-	# 넷으로 분산된다. ★잠정(owner 큐) — 카페 연고 아이템(푸딩 등)이 카탈로그에 생기면 재검토.
-	# ⚠️ Affinity 노드가 `_register_resident` 안에서 태어나므로 선호는 **등록 뒤에** 물린다
-	#   (멜·바나는 tscn 노드라 등록 전에 물릴 수 있었다 — 순서만 다르고 결과는 같다).
-	r_mochi.affinity.preferred_crop = CropCatalog.HWANGCHEON_PODO
+	# ★[S8-T2] 선호 선물은 GiftPrefs "mochi"가 든다 — 황천포도(옛 preferred_crop 승계)에 더해
+	#   덤불 열매·달콤한 메뉴가 러브고, 쓰고 비린 것이 헤이트다("카페 과일/푸딩에서 흡수해 태어난"
+	#   [residents.md] 정체성 그대로). 옛 주석이 걱정하던 "카페 연고 아이템이 생기면 재검토"는
+	#   S6 메뉴 16종이 도착하면서 이미 반영됐다.
 
 	# ── ★ [S3-T5 / ADR-0061 결정 5] 뱃사공 — **황천해 생선가게 점주(T2)**.
 	#    네오와 같은 이중 신분 구조([ADR-0060] 결정 8): 점주 레이어(shop_key = 생선가게 매대·환전 ·
@@ -14741,13 +14747,9 @@ func _setup_residents() -> void:
 	# ★ 첫 대화 = T1 낚싯대 증정(ADR-0061 결정 4). 지급·1회 플래그·대사를 훅 하나가 든다.
 	r_boatman.talk_intro = func() -> PackedStringArray: return _grant_boatman_rod_lines()
 	_register_resident(r_boatman)
-	# 선호 선물 = 불사과. 근거: ㉠ 물고기를 선물로 받는 생선가게 점주는 어색하다(스펙 명시) ㉡ 기존
-	# 4인(영혼 호박·피안화·혼령초·황천포도)과 겹치지 않는 **유일하게 남은 작물**이라 선물 경제가
-	# 다섯으로 분산된다 ㉢ 미혹의 숲 채집 전용 프레스티지 과일이라 "귀한 손님이 가져오는 것" 결이고,
-	# 죽음의 물길을 젓는 사공에게 '불사(不死)'의 과일은 아이러니한 귀물이다.
-	# ★잠정(owner 큐) — 어물·건어물 등 뱃사공 연고 아이템이 카탈로그에 생기면 재검토.
-	# ⚠️ Affinity 노드가 `_register_resident` 안에서 태어나므로 선호는 **등록 뒤에** 물린다(모찌 동형).
-	r_boatman.affinity.preferred_crop = CropCatalog.BULSAGWA
+	# ★[S8-T2] 선호 선물은 GiftPrefs "boatman"이 든다 — 불사과(옛 preferred_crop 승계: 죽음의
+	#   물길을 젓는 사공에게 '불사(不死)'의 과일은 아이러니한 귀물)에 더해 바닷가 채집물이 러브다.
+	#   **어종은 러브에 안 넣는다** — 물고기를 선물로 받는 생선가게 점주는 어색하다는 옛 판단 유지.
 
 	# ── ★ [S4-T7 / ADR-0062 결정 7 ㉢] 옹이 — **저승 숲 목공방 점주(T2 · 목령)**.
 	#    뱃사공과 **완전 동형**이다(선례 1:1): 점주 레이어(shop_key = 목공방 매대 · effect_fn = ♡ 할인)와
@@ -14784,11 +14786,10 @@ func _setup_residents() -> void:
 	r_ongi.effect_fn = func() -> String:
 		return StoreDiscount.summary_for("옹이", "목공방 매대", _ongi_hearts())
 	_register_resident(r_ongi)
-	# ★선호 선물 = **없음**(기본값 유지 — 잠정, owner 큐). 근거: 실존 작물 5종이 이미 미호(영혼 호박)·
-	#   멜(피안화)·바나(혼령초)·모찌(황천포도)·뱃사공(불사과)에 전부 배정돼 남은 작물이 0이다. 여기서
-	#   중복 배정하면 "선물 경제 분산"이 깨지므로, 옹이는 일반 선물(GIFT_POINTS)만 받는 상태로 연다
-	#   (선물 채널 자체는 열려 있어 막힘 0 — ADR-0008 평평≠막힘). ★수액·원목 같은 *비-작물* 선물이
-	#   선물 채널에 편입되면(현재 선물은 수확물 전용) 옹이 선호는 명단풍꿀 결이 자연스럽다.
+	# ★[S8-T2] 선호 선물 **배정 완료**(GiftPrefs "ongi"). 옛 주석이 "비-작물 선물이 편입되면 옹이
+	#   선호는 명단풍꿀 결"이라 예고한 그대로다 — 수액 3종·나무 씨앗 3종이 러브, **잘린 나무**
+	#   (원목·단단한 원목)가 헤이트다(목령에게 동족의 주검). 작물 5종 소진으로 선호가 비어 있던
+	#   상태가 여기서 해소된다.
 
 	# ── ★ [S5-T3 / ADR-0063 결정 6] 풀무 — **업화 갱도 대장간 점주(T2 · 도깨비)**.
 	#    옹이와 **완전 동형**이다(선례 1:1): 점주 레이어(shop_key)와 관계 트랙(대화·선물·하트)이
@@ -14821,9 +14822,8 @@ func _setup_residents() -> void:
 	r_pulmu.prompt_extra = func() -> String: return _geode_prompt()
 	r_pulmu.shop_key = func() -> bool: return _try_open_geode()
 	_register_resident(r_pulmu)
-	# ★선호 선물 = **없음**(옹이와 같은 판단·잠정 owner 큐). 실존 작물 5종이 이미 전부 배정돼
-	#   남은 게 0이라 중복 배정으로 "선물 경제 분산"을 깨지 않는다(일반 선물은 그대로 받는다 —
-	#   막힘 0, ADR-0008). ★비-작물 선물이 편입되면 풀무 선호는 혼탄·주괴 결이 자연스럽다.
+	# ★[S8-T2] 선호 선물 **배정 완료**(GiftPrefs "pulmu") — 옛 주석의 예고 "혼탄·주괴 결" 그대로다.
+	#   화덕에 들어가는 것이 러브고, 얼어붙은 것(서리동백·언혼뿌리)이 헤이트다.
 
 	# ── ★ [S5-T6 / ADR-0063 결정 5·6] 무골 — **모험가 길드 점주(T2 · 백골 무사)**.
 	#    풀무와 **완전 동형**이다(선례 1:1): 점주 레이어(shop_key = 길드 매대)와 관계 트랙(대화·선물·
@@ -14862,8 +14862,9 @@ func _setup_residents() -> void:
 	#   1:1). 지급·1회 플래그·대사를 훅 하나가 든다.
 	r_mugol.talk_intro = func() -> PackedStringArray: return _grant_mugol_sword_lines()
 	_register_resident(r_mugol)
-	# ★선호 선물 = **없음**(옹이·풀무와 같은 판단·잠정 owner 큐 — 실존 작물 5종이 이미 전부 배정돼
-	#   남은 게 0이다. 일반 선물 채널은 그대로 열려 있어 막힘 0).
+	# ★[S8-T2] 선호 선물 **배정 완료**(GiftPrefs "mugol") — 나락혼정·넋가루·업화알돌·명부금강 러브
+	#   (무용담의 전리품), 피안화 헤이트(이미 백골인 무사에게는 성급한 조문이다). 무기는 애초에
+	#   선물 불가(GiftPrefs.giftable — 든 것이 곧 동사인 도구 칸)라 러브에 못 넣는다.
 
 	# ── ★ [S6-T7 / ADR-0064 결정 8] 주방요괴 — **T3 배경 직원**(카페 주방 자리·곁들이 창구).
 	#    CONTEXT [주방요괴]가 정의만 해 두고 무대엔 없던 자리를 세운다: S6-T1부터 기본 메뉴는
@@ -15068,29 +15069,43 @@ func _start_resident_dialogue(r: Resident) -> void:
 	dialogue.start(r.display_name, lines)
 
 # ── 선물(공통) ─────────────────────────────────────────────────────────────
-# 선택 작물(_selected_crop) 수확물 1개를 건네 호감도를 올린다. 선호 작물이면 더 크게 오르고
-# (미호=영혼 호박 · 멜=피안화 · 바나=혼령초), 하루 1회만 받는다(Affinity가 게이팅).
-# ★ 알림 문구는 레코드의 gift_target_ko로 원문을 그대로 재현한다 — 미호만 이름이 빠진 T3.3
-#   원문 형태를 유지한다(거동 불변 우선. 문구 통일은 별건).
+# ★[S8-T2 / ADR-0066 결정 2] **든 아이템 1개를 건넨다** — 혼백관 기증(_try_donate_selected)과
+# 정확히 같은 문법이다(inventory.selected_id 기준). 옛 경로는 `_selected_crop` 수확 작물 전용
+# 이라 물고기·광물·요리가 구조적으로 선물이 안 됐고, 실존 작물 5종이 소진돼 옹이·풀무·무골은
+# 선호를 배정할 자리조차 없었다 — 입력을 든 아이템으로 바꾸는 이 한 수가 둘 다 해소한다.
+#   · 등급·점수·품질 배율은 GiftPrefs가 소유(러브 40 / 라이크 25 / 뉴트럴 15 / 디스라이크 −10 /
+#     헤이트 −20 · 러브·라이크만 품질 ×1~×1.5). Affinity는 "하루 1회" 게이팅과 누적만.
+#   · **든 슬롯을 그대로 뺀다**(remove_at) — remove_item의 최저품질 우선 소비를 쓰면 손에 든
+#     이리듐 대신 가방 구석의 일반품이 사라져, 방금 계산한 품질 배율과 실제 소모가 어긋난다.
+# ★ 알림 문구는 레코드의 gift_target_ko로 원문 형태를 그대로 재현한다 — 미호만 이름이 빠진
+#   T3.3 원문을 유지한다(문구 통일은 별건).
 func _try_resident_gift(r: Resident) -> void:
 	if r.affinity == null:
 		return
 	var who := r.gift_target_ko
-	var crop := _selected_crop
-	if inventory.harvest_count(crop) <= 0:
-		_notice("%s 수확물이 없다" % CropCatalog.name_of(crop))
+	var idx := inventory.selected_index
+	var id := inventory.selected_id()
+	if id == "":
+		_notice("건넬 물건을 손에 들어야 한다")
+		return
+	if not GiftPrefs.giftable(id):
+		# 도구·무기·낚싯대(든 것이 곧 동사)와 나락 열쇠(유일 입수 경로)는 건네지 않는다.
+		_notice("%s은 선물할 수 없다" % ItemCatalog.name_of(id))
 		return
 	if not r.affinity.can_gift(clock.day):
 		_notice("오늘은 이미 선물했다" if who == "" else "오늘은 이미 %s에게 선물했다" % who)
 		return
-	inventory.take_harvest(crop)              # 선물한 수확물 1개 소모
-	var gained := r.affinity.gift(crop, clock.day)
-	var tag := "(선호!) " if r.affinity.is_preferred(crop) else ""
+	var tier := GiftPrefs.tier_of(r.id, id)
+	var points := GiftPrefs.points_for(tier, id, inventory.quality_at(idx))
+	if not inventory.remove_at(idx, 1):       # 선물한 아이템 1개 소모(든 슬롯 그대로)
+		return
+	var gained := r.affinity.gift(points, clock.day)
+	var tag := GiftPrefs.tag_of(tier)
 	audio.sfx("ui")                           # P2.6 선물 건넴 확인 블립
 	if who == "":
-		_notice("%s 선물 %s+%d 호감도" % [CropCatalog.name_of(crop), tag, gained])
+		_notice("%s 선물 %s%+d 호감도" % [ItemCatalog.name_of(id), tag, gained])
 	else:
-		_notice("%s에게 %s 선물 %s+%d 호감도" % [who, CropCatalog.name_of(crop), tag, gained])
+		_notice("%s에게 %s 선물 %s%+d 호감도" % [who, ItemCatalog.name_of(id), tag, gained])
 
 # ── T4.2/T7.3 슬라이스 종료 ─────────────────────────────────────────────────
 # 슬라이스가 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리
@@ -15185,8 +15200,8 @@ func _start_bana_dialogue() -> void:
 	#   호출부·헤드리스 테스트(store_test 등)가 이 이름을 계속 부르므로 이름만 남겨 둔다.
 	_start_resident_dialogue(_resident("bana"))
 
-# T6.2 바나 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 바나 호감도를 올린다. 선호
-# 작물(혼령초)이면 더 크게 오른다. 하루 1회만(BanaAffinity가 게이팅). _try_mel_gift와 대칭.
+# T6.2 바나 선물: ★[S8-T2] **든 아이템** 1개를 건네 바나 호감도를 올린다(등급은 GiftPrefs).
+# 하루 1회만(BanaAffinity가 게이팅). _try_mel_gift와 대칭.
 func _try_bana_gift() -> void:
 	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 처리는 공통 _try_resident_gift(레지스트리).
 	_try_resident_gift(_resident("bana"))
@@ -15348,8 +15363,8 @@ func _finish_cocktail() -> void:
 	_notice("칵테일 %s +%d골드" % [CocktailSession.grade_name(grade), revenue])
 	queue_redraw()
 
-# T5.2 멜 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 멜 호감도를 올린다. 선호
-# 작물(피안화)이면 더 크게 오른다. 하루 1회만(MelAffinity가 게이팅). _try_gift와 대칭.
+# T5.2 멜 선물: ★[S8-T2] **든 아이템** 1개를 건네 멜 호감도를 올린다(등급은 GiftPrefs).
+# 하루 1회만(MelAffinity가 게이팅). _try_gift와 대칭.
 func _try_mel_gift() -> void:
 	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 처리는 공통 _try_resident_gift(레지스트리).
 	_try_resident_gift(_resident("mel"))
@@ -15783,8 +15798,8 @@ func _weather_hint(w: int) -> String:
 			return "갱도가 술렁인다 — 잡귀도, 그것들이 남기는 것도 많아진다"
 	return "여느 하늘"
 
-# T3.3 미호 선물: 선택 작물(_selected_crop) 수확물 1개를 건네 호감도를 올린다.
-# 선호 작물(영혼 호박)이면 더 크게 오른다. 하루 1회만 가능(Affinity가 게이팅).
+# T3.3 미호 선물: ★[S8-T2] **든 아이템** 1개를 건네 호감도를 올린다(등급은 GiftPrefs).
+# 하루 1회만 가능(Affinity가 게이팅).
 func _try_gift() -> void:
 	# ★ [S2-T7] 얇은 위임 래퍼 — 실제 처리는 공통 _try_resident_gift(레지스트리).
 	_try_resident_gift(_resident("miho"))

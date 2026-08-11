@@ -62,7 +62,7 @@ func _run_checks() -> void:
 	_check("ⓐd 신규 세이브 키(구세이브엔 없음 = ♡0 시작)", r.save_key == "boatman_affinity")
 	_check("ⓐe 관계 트랙 보유 · 선물 채널 있음(T2 사귐)", r.affinity != null and r.can_gift)
 	_check("ⓐf 선호 선물 = 불사과(기존 4인과 안 겹침)",
-		r.affinity.preferred_crop == CropCatalog.BULSAGWA)
+		GiftPrefs.tier_of("boatman", CropCatalog.BULSAGWA) == GiftPrefs.LOVE)
 	# ★[S3-T10] 아트 패스 2에서 초상화가 붙었다(도트 스톱갭 — 스펙카드 §13.4 교체 큐).
 	_check("ⓐg 초상화 stem = boatman", r.portrait_stem == "boatman")
 	# 자리 — 황천해 생선가게 앞 백사장(문 열·산책로 레인을 둘 다 비껴간 칸).
@@ -159,10 +159,13 @@ func _run_checks() -> void:
 		int(row3["price"]) == StoreDiscount.price(rod2_base, 3) and int(row3["price"]) < rod2_base)
 	# 반대 방향 — 뱃사공 ♡가 만물상 가격을 건드리지 않는다.
 	m.neo_affinity.points = 0
-	var seed_base: int = CropCatalog.seed_cost(CropCatalog.HONRYEONGCHO)
 	var store_rows: Array = m._store_items()
 	var seed_row: Dictionary = store_rows[0]
-	_check("ⓓc 뱃사공 ♡3이어도 만물상은 정가(할인 독립)", int(seed_row["price"]) == seed_base)
+	# ★[S8-T2 회귀 봉합] 옛 단언은 매대 첫 행이 늘 혼령초라고 가정했다 — S7-T2가 매대에 **제철
+	#   필터**를 걸면서 그 가정이 깨졌다(이 테스트는 day 3 = 피안절이라 첫 행이 피안화다). 단언의
+	#   뜻("뱃사공 ♡가 만물상 가격을 안 건드린다")은 행의 제 base와 대조하면 절기 무관하게 선다.
+	_check("ⓓc 뱃사공 ♡3이어도 만물상은 정가(할인 독립)",
+		int(seed_row["price"]) == int(seed_row["base"]))
 	_check("ⓓd 할인 요약 문구가 점주별로 갈린다",
 		String(r.effect_fn.call()).contains("뱃사공")
 		and StoreDiscount.summary(0).contains("네오"))

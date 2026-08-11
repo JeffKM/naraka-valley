@@ -16,8 +16,8 @@ class_name Affinity
 #   - 하트 = 점수 / POINTS_PER_HEART(내림). MAX_HEARTS에서 멈춘다. CONTEXT '호감도'의
 #     이중 보상(농사 효율↑ = 여우불 강화 T3.4 / 서사↑ = 미호 대사 변화)이 이 하트
 #     단계 위에 얹힌다(여기서는 단계 값만 제공, 보상 연결은 각 시스템이 맡음).
-#   - 선호 작물은 영혼 호박(CONTEXT '영혼 호박' — 미호 호박밭 떡밥과 이어지는 상징
-#     작물). 데이터는 CropCatalog id를 그대로 쓴다(코드·세이브용).
+#   - ★[S8-T2] 선호 판정은 이 노드에 없다 — 무엇을 얼마나 좋아하는가는 GiftPrefs(전 아이템
+#     × 9인 테이블)가 소유하고, 여기는 그 결과 점수를 받아 "하루 1회"로 게이팅해 누적한다.
 #   - T2.5 세이브/로드 — 상태가 정수 셋(점수·마지막 대화날·마지막 선물날)뿐이라
 #     그대로 직렬화된다. 복원 시 점수는 [0, MAX_POINTS]로 잘라 손상 세이브에 방어한다.
 
@@ -46,14 +46,12 @@ const MAX_POINTS := MAX_HEARTS * POINTS_PER_HEART  # 만렙 점수(여기서 멈
 # T4.3 밸런싱: 5→8. 느린 대화 채널을 키워, 선물 없이 대화만으로도 14일에 ♡2 후반에
 # 닿게 한다(여우불 ♡2 '번짐'까지 보장). ♡3은 선물(영혼 호박 등)이 밀어 올린다.
 const DAILY_TALK_POINTS := 8         # 일일 대화 1회 소폭(느린 채널)
-const GIFT_POINTS := 15              # 일반 작물 선물
-const GIFT_PREFERRED_POINTS := 40    # 선호 작물 선물(빠른 채널)
-const PREFERRED_CROP := CropCatalog.YEONGHON_HOBAK  # 기본 선호(미호=영혼 호박)
-
-# T5.2 선호 선물 작물은 캐릭터마다 다르다(미호=영혼 호박 · 멜=피안화 — 선물 경제 분산,
-# CONTEXT '멜'). 같은 affinity.gd 틀을 캐릭터별 인스턴스로 재사용하되, 이 한 값만
-# main이 인스턴스별로 바꾼다(기본값은 미호의 PREFERRED_CROP — 미호 노드는 안 건드림).
-var preferred_crop: String = PREFERRED_CROP
+# ★[S8-T2 / ADR-0066 결정 2] 이 두 눈금은 이제 **GiftPrefs의 뉴트럴·러브 등급**이다(옛 "일반
+#   선물 / 선호 작물 선물"이 그대로 승계됐다). 값의 주인은 여기로 두되(quest_board가 "선물
+#   1회급" 눈금으로 GIFT_POINTS를 계속 참조한다 — 눈금이 갈리면 의뢰 보상이 조용히 어긋난다),
+#   **무엇이 몇 점인가의 판정은 GiftPrefs가 소유**한다. 이 노드는 판정에 관여하지 않는다.
+const GIFT_POINTS := 15              # 뉴트럴 등급(옛 일반 작물 선물)
+const GIFT_PREFERRED_POINTS := 40    # 러브 등급(옛 선호 작물 선물 — 빠른 채널)
 
 var points: int = 0
 var last_talk_day: int = -1   # 마지막으로 일일 대화 보상을 받은 게임 날(-1 = 아직 없음)
@@ -68,11 +66,6 @@ func hearts() -> int:
 func heart_bar() -> String:
 	var h := hearts()
 	return "♥".repeat(h) + "♡".repeat(MAX_HEARTS - h)
-
-# 이 작물이 이 캐릭터의 선호 선물인가(선호면 선물 점수가 크다). T5.2: 인스턴스별
-# preferred_crop으로 본다(미호=영혼 호박 · 멜=피안화).
-func is_preferred(crop_id: String) -> bool:
-	return crop_id == preferred_crop
 
 # ── 일일 대화(하루 1회 소폭) ────────────────────────────────────────────────
 # 오늘(이 게임 날) 아직 대화 보상을 안 받았으면 줄 수 있다.
@@ -93,15 +86,20 @@ func daily_talk(day: int) -> bool:
 func can_gift(day: int) -> bool:
 	return day != last_gift_day
 
-# 선물 1회를 적용한다. 오늘 이미 했으면 0(획득 없음). 성공 시 얻은 점수를 반환한다
-# (선호 작물이면 큰 폭). 선물 작물의 소모는 호출 측(main+Inventory)이 책임진다.
-func gift(crop_id: String, day: int) -> int:
+# 선물 1회를 적용한다. 오늘 이미 했으면 0(획득 없음). 성공 시 적용한 점수를 그대로 반환한다.
+# ★[S8-T2 / ADR-0066 결정 2] 인자가 "작물 id"에서 **점수**로 바뀌었다 — 무엇이 몇 점인지는
+#   GiftPrefs(캐릭터별 선호 테이블)가 알고, 이 노드는 "하루 1회"라는 리듬과 누적만 소유한다
+#   (affinity.gd 머리말의 단일 책임 그대로). 선물 아이템의 소모는 호출 측(main+Inventory) 책임.
+# ★ **음수(혐오) 채널이 여기로 열린다**: points가 음수면 누적이 줄되 _add의 clamp가 0 아래로는
+#   못 내려가게 잡는다(영구 적대 없음 — ADR-0022·ADR-0066 결정 2 "완만하고 영구 적대 없음").
+#   반환값은 *명목* 점수라 0에서 −20을 맞아도 −20으로 알린다(플레이어에겐 "싫어했다"가 사실이고,
+#   바닥에 눌린 건 시스템 사정이다).
+func gift(points_gained: int, day: int) -> int:
 	if not can_gift(day):
 		return 0
 	last_gift_day = day
-	var gained := GIFT_PREFERRED_POINTS if is_preferred(crop_id) else GIFT_POINTS
-	_add(gained)
-	return gained
+	_add(points_gained)
+	return points_gained
 
 # ── ★ [S2-T6] 외부 채널 가산(게시판 의뢰 보상 등) ──────────────────────────
 # 대화(하루 1회)·선물(하루 1회)과 다른 제3 채널이 호감도를 올릴 때 쓴다. 여기서는 날짜를 보지

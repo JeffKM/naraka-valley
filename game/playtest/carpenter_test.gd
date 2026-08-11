@@ -148,12 +148,17 @@ func _run_checks() -> void:
 		m.dialogue.is_open() and r.affinity.points > 0)
 	_close_dialogue(m)
 	# 선물 — 수확물 1개를 소모하고 호감도가 오른다(선호 미지정이라 일반 선물 점수).
-	m.inventory.add_harvest(CropCatalog.PIANHWA, 1)
-	m._selected_crop = CropCatalog.PIANHWA
+	# ★[S8-T2] 든 아이템 문법 + 옹이 선호 배정(명단풍꿀 = 러브. 옛 옹이는 선호가 비어 있었다).
+	m.inventory.add_item(ItemCatalog.MYEONGDANPUNG_KKUL, 1)
+	for i in m.inventory.slots.size():
+		if m.inventory.id_at(i) == ItemCatalog.MYEONGDANPUNG_KKUL:
+			m.inventory.select(i)
+			break
 	var pts_before: int = r.affinity.points
 	m._try_resident_gift(r)
-	_check("ⓑo 선물이 수확물 1개를 소모하고 호감도를 올린다",
-		m.inventory.harvest_count(CropCatalog.PIANHWA) == 0 and r.affinity.points > pts_before)
+	_check("ⓑo 선물이 든 아이템 1개를 소모하고 호감도를 올린다(명단풍꿀 = 옹이 러브)",
+		m.inventory.count_of(ItemCatalog.MYEONGDANPUNG_KKUL) == 0
+		and r.affinity.points - pts_before == Affinity.GIFT_PREFERRED_POINTS)
 
 	# ── ⓒ 건축 의뢰 지불 ──
 	print("── ⓒ 지불 ──")
