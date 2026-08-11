@@ -79,6 +79,24 @@ func _initialize() -> void:
 	m.frame.queue_redraw()
 	await _grab("frame_rel")
 
+	# ★[S8-T10] 달력 패널 — 생일 ♥ 마커(칸)와 범례 생일 줄의 **그린 하트 머리표**를 대조한다.
+	#   폰트(neodgm.ttf)에 ♥ 글리프가 없어 범례 "♥ " 문자가 두부(□)로 뜨던 것을 `_draw_heart_mark`
+	#   그림으로 바꾼 게 T10 봉합이라, 그 두 표시가 같은 형태로 보이는지는 눈으로만 판정된다.
+	#   유화절(절기 인덱스 1 = 29~56일)에 생일이 둘(미호 7일·모찌 26일) 있어 범례가 두 줄 뜬다.
+	m._close_frame()
+	# 인트로 대화를 먼저 넘긴다 — 대화가 떠 있으면 상시 HUD가 접히고(_hud_hidden) 달력도 매
+	# 프레임 close() 당해, 토글해도 다음 프레임에 사라진다.
+	var guard := 0
+	while m.dialogue.is_open() and guard < 50:
+		m.dialogue.advance()
+		guard += 1
+	m.clock.day = 35                      # 유화절 7일차 = 미호 생일 당일
+	for i in 4:                           # main._process가 set_state로 마킹을 다시 파생할 틈
+		await process_frame
+	m.calendar_panel.toggle()
+	await _grab("frame_calendar")
+	m.calendar_panel.close()
+
 	# ★ [S1R-T11] 상점 — 매대 본문 타이포·구매 버튼 2개(씨앗/스프링클러) 한지 plate 확인
 	m._close_frame()
 	m._open_frame(InventoryFrame.CTX_STORE)
