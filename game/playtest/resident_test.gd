@@ -235,13 +235,13 @@ func _run_checks() -> void:
 	var names := []
 	for row in rows:
 		names.append(String(row["name"]))
-	# ★[S3-T5] 뱃사공(생선가게 점주)이 다섯째로, ★[S4-T7] 옹이(목공방 점주)가 여섯째로 붙는다 —
-	#   관계 트랙 + 효과 줄(♡ 할인)을 둘 다 가진 주민만 뜨는 규칙 그대로다(옥자=관계 트랙 없음·
-	#   모찌=효과 줄 없음이라 여전히 제외).
-	_check("⑧a 관계 트랙+효과 줄 보유 6인만(옥자·모찌 제외)",
-		names == ["미호", "멜", "바나", "네오", "뱃사공", "옹이"])
-	_check("⑧b 곱셈기 효과 줄이 채워진다",
-		rows.size() == 6 and String(rows[0]["effect"]) != "" and String(rows[5]["effect"]) != "")
+	# ★[S8-T1 / ADR-0066 결정 11] 표시 자격 = **관계 트랙 보유 하나**로 갈렸다(옛 조건은 트랙 AND
+	#   효과 줄이라 곱셈기 없는 주민 셋을 탭에서 지웠다). 옥자·주방요괴는 설계상 트랙이 없어 계속 제외.
+	_check("⑧a 관계 트랙 보유 9인 전원(옥자·주방요괴만 제외)",
+		names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골"])
+	_check("⑧b 곱셈기 보유자에게만 효과 줄(미호·옹이=있음 · 모찌·무골=빈 문자열)",
+		rows.size() == 9 and String(rows[0]["effect"]) != "" and String(rows[6]["effect"]) != ""
+		and String(rows[4]["effect"]) == "" and String(rows[8]["effect"]) == "")
 
 	# ── ⑨ 세이브 왕복: 4인 호감도가 옛 키로 저장·복원된다 ──
 	print("── ⑨ 세이브 왕복 ──")
@@ -408,8 +408,14 @@ func _run_checks() -> void:
 		and m2.bana_affinity.preferred_crop == CropCatalog.HONRYEONGCHO)
 
 	# ★ 기존 5인 거동 불변 — 신규 주민 등록이 앞사람 자리·하트·관계 탭을 건드리지 않는다.
-	_check("⑪J 관계 탭은 곱셈기 보유 주민만(모찌는 곱셈기 없어 미표시 · ★S3-T5 뱃사공 · ★S4-T7 옹이 포함 6행)",
-		m2._heart_rows().size() == 6)
+	# ★[S8-T1] 모찌도 관계 트랙 보유자라 이제 관계 탭에 뜬다(효과 줄만 없음 — 표시 자격 분리).
+	var m2_rows: Array = m2._heart_rows()
+	var mochi_shown := false
+	for row in m2_rows:
+		if String(row["name"]) == "모찌":
+			mochi_shown = String(row["effect"]) == ""
+	_check("⑪J 관계 탭 = 관계 트랙 보유 9행이고 모찌는 효과 줄 없이 표시된다",
+		m2_rows.size() == 9 and mochi_shown)
 	_check("⑪K 기존 주민 자리 불변",
 		m2._resident("mel").tile == m2.MEL_TILE and m2._resident("neo").tile == m2.NEO_TILE)
 	_check("⑪L 기존 4인 호감도 불변(⑨ 복원값 그대로)",
