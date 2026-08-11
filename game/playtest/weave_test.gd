@@ -173,9 +173,13 @@ func _run_checks() -> void:
 	m3.onboarding.step = Onboarding.MEET_MIHO
 	m3.clock.minutes = NightBar.OPEN_MIN + 60  # 밤 시각(밤 곱셈기 주입까지 한 프레임에 보려고)
 	# 세 호감도를 서로 다른 단계로 올려, 각 곱셈기가 *그 캐릭터의* 하트에서 파생됨을 가른다.
+	# ★[S8-T5] 하트 = stage(진급 칸) — 점수와 함께 stage도 세팅한다(관문은 heart_gate_test 소관).
 	m3.affinity.points = 5 * Affinity.POINTS_PER_HEART       # 미호 ♡5
+	m3.affinity.stage = 5
 	m3.mel_affinity.points = 3 * Affinity.POINTS_PER_HEART   # 멜 ♡3
+	m3.mel_affinity.stage = 3
 	m3.bana_affinity.points = 2 * Affinity.POINTS_PER_HEART  # 바나 ♡2
+	m3.bana_affinity.stage = 2
 	await process_frame  # main._process가 멜 마진·바나 보호를 한 프레임에 주입(미호는 advance_day 경로)
 	var hm: int = m3.affinity.hearts()
 	var hl: int = m3.mel_affinity.hearts()
@@ -230,8 +234,11 @@ func _run_checks() -> void:
 	m5.clock.day = 1
 	# 세 호감도를 켜 둔 채(관계 환류 유지) 낮→밤을 흘린다.
 	m5.affinity.points = 4 * Affinity.POINTS_PER_HEART
+	m5.affinity.stage = 4
 	m5.mel_affinity.points = 2 * Affinity.POINTS_PER_HEART
+	m5.mel_affinity.stage = 2
 	m5.bana_affinity.points = 2 * Affinity.POINTS_PER_HEART
+	m5.bana_affinity.stage = 2
 	m5.inventory.add_harvest(CropCatalog.HONRYEONGCHO, 8)  # 낮 농사 재고
 	# (낮) 카페 영업창에서 서빙 한 번 → 매출·재고 소모.
 	m5.clock.minutes = Cafe.OPEN_MIN + 30

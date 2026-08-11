@@ -183,6 +183,7 @@ func _run_checks() -> void:
 	var m5: Node = await _new_main()
 	var pts_h2: int = 2 * Affinity.POINTS_PER_HEART + 15  # ♡2 칸 안(다음 칸 임계 미만)
 	m5.bana_affinity.points = pts_h2
+	m5.bana_affinity.stage = 2   # ★[S8-T5] 하트 = stage(진급 칸) — 점수와 함께 세팅
 	m5._save_game()
 	m5.free()
 	var m6: Node = await _new_main()  # _ready가 자동 복원
@@ -286,6 +287,7 @@ func _run_checks() -> void:
 	m10.onboarding.step = Onboarding.MEET_MIHO
 	m10.clock.minutes = NightBar.OPEN_MIN + 60        # 20:00(밤 창)
 	m10.bana_affinity.points = Affinity.MAX_POINTS    # ♡5(만렙)
+	m10.bana_affinity.stage = Affinity.MAX_HEARTS     # ★[S8-T5] 하트 = stage(진급 칸)
 	await process_frame                                # main._process가 주입을 한 번 굴리게
 	var h5: int = m10.bana_affinity.hearts()
 	_check("㉔ 주입: night_bar.raid_amount = BanaGuard.raid_amount(하트)", m10.night_bar.raid_amount == BanaGuard.raid_amount(h5))
@@ -349,6 +351,7 @@ func _run_checks() -> void:
 	# 이 한 밤에 자동 차단(돌파 1회)과 실제 약탈(다음 돌파)이 모두 나와 이중 보호·이중 손실을
 	# 한 흐름으로 보인다(♡5는 ㉕에서 자동 차단만, ♡0은 ⑱~⑳에서 약탈만 — ♡3이 둘을 잇는다).
 	m12.bana_affinity.points = 3 * Affinity.POINTS_PER_HEART  # ♡3(=120)
+	m12.bana_affinity.stage = 3                               # ★[S8-T5] 하트 = stage(진급 칸)
 	await process_frame                                  # main._process가 night_bar seam에 ♡3 보호 주입
 	_check("㉗ ♡3 보호가 night_bar에 주입됨(raid 2·자동차단 1·인내심 10)",
 		m12.night_bar.raid_amount == 2 and m12.night_bar.auto_block == 1

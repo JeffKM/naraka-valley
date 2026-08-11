@@ -257,10 +257,15 @@ func _run_checks() -> void:
 
 	# ── ⑨ 세이브 왕복: 4인 호감도가 옛 키로 저장·복원된다 ──
 	print("── ⑨ 세이브 왕복 ──")
+	# ★[S8-T5] 하트 = stage(진급 칸) — 점수와 함께 stage도 세팅해야 하트가 선다(관문은 heart_gate_test).
 	m.affinity.points = 1 * Affinity.POINTS_PER_HEART
+	m.affinity.stage = 1
 	m.mel_affinity.points = 2 * Affinity.POINTS_PER_HEART
+	m.mel_affinity.stage = 2
 	m.bana_affinity.points = 3 * Affinity.POINTS_PER_HEART
+	m.bana_affinity.stage = 3
 	m.neo_affinity.points = 4 * Affinity.POINTS_PER_HEART
+	m.neo_affinity.stage = 4
 	m._save_game()
 	m.free()
 
@@ -273,6 +278,7 @@ func _run_checks() -> void:
 	for res in m2._residents:
 		if res.affinity != null:
 			res.affinity.points = 0
+			res.affinity.stage = 0   # ★[S8-T5] 하트 = stage — 재로드 멱등 검증도 stage로 본다
 	m2._load_game()
 	_check("⑨e 재로드도 같은 값(멱등)",
 		m2.affinity.hearts() == 1 and m2.neo_affinity.hearts() == 4)
@@ -438,6 +444,7 @@ func _run_checks() -> void:
 
 	# 세이브 왕복 — 신규 키로 저장·복원된다.
 	r_mochi.affinity.points = 2 * Affinity.POINTS_PER_HEART
+	r_mochi.affinity.stage = 2   # ★[S8-T5] 하트 = stage(진급 칸) — 점수와 함께 세팅
 	m2._save_game()
 	var slot: int = m2._active_slot
 	m2.free()

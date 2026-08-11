@@ -68,7 +68,9 @@ func _set_progress(m: Node, harvested: int, revenue: int) -> void:
 	m._run_harvested = harvested
 	m._cafe_revenue_total = revenue
 	m.affinity.points = 99999
+	m.affinity.stage = Affinity.MAX_HEARTS       # ★[S8-T5] 하트 = stage(진급 칸) — 점수와 함께 세팅
 	m.mel_affinity.points = 99999
+	m.mel_affinity.stage = Affinity.MAX_HEARTS
 
 func _initialize() -> void:
 	print("══ S7-T6 카페 이벤트 데이(테마 데이 · 절기 달력) 검증 ══")

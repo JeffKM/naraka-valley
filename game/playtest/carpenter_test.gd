@@ -275,6 +275,7 @@ func _run_checks() -> void:
 		int(m._build_rows()[0]["price"]) == Carpenter.gold_cost(String(m._build_rows()[0]["buy_id"]))
 		and int(m._woodshop_items()[2]["price"]) == wood_unit)
 	r.affinity.points = 5 * Affinity.POINTS_PER_HEART
+	r.affinity.stage = 5   # ★[S8-T5] 하트 = stage(진급 칸) — 실제 ♡5로 세워 할인을 검증
 	var barn_price: int = 0
 	for row in m._build_rows():
 		if String(row["buy_id"]) == barn:

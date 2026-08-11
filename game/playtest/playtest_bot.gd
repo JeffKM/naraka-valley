@@ -236,6 +236,18 @@ func _run(p: Persona) -> Dictionary:
 			raid_attempt_cum += nres["raid_attempted"]
 			raid_actual_cum += nres["raid_actual"]
 
+		# ★[S8-T5 / ADR-0066 결정 5] 단계 관문 시뮬 — 봇에는 대화 트리거(main)가 없으므로 만충 시
+		#   그날 관문을 지난 것으로 친다(매일 말 거는 최적 플레이 가정). 미호·멜 deed는 봇이 실제로
+		#   추적하는 원장(수확·서빙 매출)으로 판정하고, 바나 축(갱도·전투·나락)과 ♡5 의지 시험은 봇이
+		#   시뮬하지 않아 통과로 가정한다(밤 축·경제 밸런스 관측이 이 봇의 목적).
+		var bot_ledgers := {"run_harvested": harvest_cum, "cafe_revenue_total": serving_rev_cum}
+		while miho.pending_promotion() and Deed.check("miho", miho.stage + 1, bot_ledgers):
+			miho.promote()
+		while mel.pending_promotion() and Deed.check("mel", mel.stage + 1, bot_ledgers):
+			mel.promote()
+		while bana.pending_promotion():
+			bana.promote()
+
 		# 일별 스냅샷(취침 직전 = 그날의 결과) + 하트 도달일·여우불 깸·마일스톤 달성일 기록.
 		var hm: int = miho.hearts()
 		var hl: int = mel.hearts()
