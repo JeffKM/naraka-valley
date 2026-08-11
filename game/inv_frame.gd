@@ -177,8 +177,13 @@ var _set_music := 0.8            # main이 set_settings로 매 프레임 주입(
 var _set_sfx := 0.9
 var _set_fullscreen := false
 
-var _hearts: Array = []          # HeartBar 4개(관계 탭 재사용)
+var _hearts: Array = []          # HeartBar 풀(관계 탭 재사용 — ★[S8-T1] 행 수만큼 동적으로 자란다)
 var _heart_effects: Array = []   # ★ C3 각 캐릭터의 관계 곱셈기 효과 줄(여우불·마진·경비·할인)
+# ★[S8-T1] 행별 상태 배지(진급 대기·연애·결혼) — main이 주입, 빈 문자열이면 안 그린다.
+var _heart_badges: Array = []
+var _heart_count := 0            # 실제 행 수(풀은 줄지 않으므로 _hearts.size()와 다를 수 있다)
+var _rel_scroll := 0             # ★[S8-T1] 관계 탭 첫 표시 행(숙련 탭 _skill_scroll과 같은 문법)
+var _rel_area_rect := Rect2()    # 휠 히트테스트 영역(_draw_rel_tab이 매 그리기마다 갱신)
 # ★ Phase B 숙련 탭: main이 FarmSkill에서 파생해 넘긴 행 [{name, level, max, xp, floor_xp, next_xp}].
 # 관계 탭 _heart_effects와 대칭 — 프레임은 값을 받아 진행바만 그린다(무상태).
 var _skill_rows: Array = []
@@ -190,21 +195,23 @@ var _skill_scroll := 0
 # 휠 히트테스트 영역(_draw_skill_tab이 매 그리기마다 갱신 — _store_area_rect 결).
 var _skill_area_rect := Rect2()
 
-# ★ [S3-T5] 관계 탭 하트 행 수·간격. 곱셈기(effect_fn)를 가진 주민만 뜨므로 성장이 느리다
-# (메인 4인 + 점주 퍼크 — ADR-0008). 뱃사공이 다섯째로 붙으며 4 → 5로 늘렸고, 다섯 행이 패널
-# 안에 들어가도록 간격을 48 → 44로 좁혔다(막줄 효과 텍스트가 하단 테두리를 넘지 않게).
-# ★owner 큐: 여섯 행 이상이 필요해지면 이 탭에 세로 스크롤을 붙여야 한다(지금은 고정 5행).
-const HEART_ROWS := 5
-const HEART_ROW_PITCH := 44.0
+# ── 관계 탭 행 치수(★[S3-T5] 상수화 → ★[S8-T1 / ADR-0066 결정 11] 고정 5행 폐지) ─────
+# 옛 구조는 `HEART_ROWS = 5` 고정이었다 — HeartBar를 _ready에서 딱 5개 만들어 두고 그 이상은
+# **말없이 버렸다**. 그래서 여섯째 주민(옹이)이 붙은 뒤로 관계 탭이 그를 무경고로 삼켰다(데이터
+# 층 _heart_rows()는 6행을 정확히 냈으므로 기존 테스트도 통과 — 렌더 층에만 있던 결함).
+# 이제 행은 rows 수만큼 **동적으로** 나고(풀 재사용), 패널을 넘치면 세로 스크롤로 흡수한다
+# (숙련 탭 _skill_scroll과 같은 문법 — 첫 표시 행 인덱스 + 휠, 클램프는 그리기 시점).
+#
+# 행 높이는 두 갈래다 — 효과 줄(곱셈기 요약)을 가진 주민은 하트 + 그 아래 한 줄이라 PITCH,
+# 효과 줄이 없는 주민(모찌·풀무·무골 — ADR-0008 관계-중립)은 하트만이라 PITCH_BARE로 접는다.
+# 치수 근거: HeartBar 실측 높이 16px(이름 + 하트 5 + 카운트 한 줄) + 효과 12px 한 줄. 옛 44는
+# 5행 고정 시절의 여유였고, 9인이 되면서 한 화면 행수가 곧 스크롤 횟수라 실측에 맞춰 조였다.
+const HEART_ROW_PITCH := 36.0
+const HEART_ROW_PITCH_BARE := 22.0
 const HEART_ROW_TOP := 56.0      # 패널 상단(+PAD)에서 첫 하트까지
-
-func _ready() -> void:
-	# 관계 탭용 HeartBar를 미리 붙여 둔다(평소 숨김 — 관계 탭일 때만 보임).
-	for _i in HEART_ROWS:
-		var hb := HeartBar.new()
-		hb.visible = false
-		add_child(hb)
-		_hearts.append(hb)
+const HEART_EFFECT_DY := 28.0    # 행 상단 → 효과 줄 베이스라인(하트 16px 아래로 2px 띄운 자리)
+const HEART_HINT_H := 14.0       # 하단 스크롤 안내 한 줄 예약(행이 안내를 물지 않게)
+const HEART_BADGE_W := 74.0      # ★[S8-T1] 상태 배지 칩 폭(행 우측 — T5~T7이 값을 채운다)
 
 # main이 인벤토리·출하함·작물 아이콘을 주입하고 changed 구독을 건다. 전체 화면 앵커로 깔되
 # 처음엔 닫혀 있다(보이지 않음). 마우스 STOP라 열렸을 때 클릭을 잡아 월드로 새지 않게 한다(모달).
@@ -247,6 +254,7 @@ func open(ctx: int) -> void:
 	fishshop_tab = FS_TAB_GEAR   # ★ [S3-T5] 생선가게는 항상 기어 매대부터(예측 가능한 첫 화면)
 	_build_scroll = 0            # ★ [S4-T7] 건축 리스트도 맨 위로
 	_skill_scroll = 0            # ★ [S5-T4] 숙련 탭 5행 리스트도 맨 위로
+	_rel_scroll = 0              # ★ [S8-T1] 관계 탭 하트 리스트도 맨 위로
 	woodshop_tab = WS_TAB_BUILD  # ★ [S4-T7] 목공방은 항상 건축 의뢰부터(가게의 얼굴 = 로빈 건축)
 	visible = true
 	_apply_heart_visibility()
@@ -303,34 +311,62 @@ func set_inv_info(gold: int, income: int, date_str: String, farm_name: String) -
 	if context == CTX_MENU and menu_tab == TAB_INV:
 		queue_redraw()
 
-# 관계 탭 하트 값 주입(읽기 전용). rows = [{name, filled, total, effect}]. main이 affinity들에서 파생해
-# 넘긴다. ★ C3 — effect(관계 곱셈기 한 줄)도 함께 받아 하트 아래에 그린다(_draw_menu_top REL 분기).
+# 관계 탭 하트 값 주입(읽기 전용). rows = [{name, filled, total, effect, badge}]. main이 affinity들에서
+# 파생해 넘긴다. ★ C3 — effect(관계 곱셈기 한 줄)도 함께 받아 하트 아래에 그린다(_draw_rel_tab).
+# ★[S8-T1] 행 수가 풀보다 많으면 **그 자리에서 HeartBar를 더 낳는다**(옛 고정 5개 풀이 여섯째부터
+#   말없이 버리던 자리). 풀은 줄이지 않고 재사용하며, 실제 행 수는 _heart_count가 든다.
 func set_hearts(rows: Array) -> void:
-	_heart_effects.resize(_hearts.size())
-	for i in _hearts.size():
+	_heart_count = rows.size()
+	while _hearts.size() < _heart_count:
+		var nb := HeartBar.new()
+		nb.visible = false
+		add_child(nb)
+		_hearts.append(nb)
+	_heart_effects.resize(_heart_count)
+	_heart_badges.resize(_heart_count)
+	for i in _heart_count:
+		var r: Dictionary = rows[i]
 		var hb: HeartBar = _hearts[i]
-		if i < rows.size():
-			var r: Dictionary = rows[i]
-			hb.render(str(r.get("name", "")), int(r.get("filled", 0)), int(r.get("total", 5)))
-			_heart_effects[i] = str(r.get("effect", ""))
-		else:
-			_heart_effects[i] = ""
+		hb.render(str(r.get("name", "")), int(r.get("filled", 0)), int(r.get("total", 5)))
+		_heart_effects[i] = str(r.get("effect", ""))
+		_heart_badges[i] = str(r.get("badge", ""))
+	_apply_heart_visibility()
 	queue_redraw()
 
-# 관계 탭일 때만 하트를 보이고, 패널 안 세로로 줄지어 배치한다(상단 컨텍스트 영역).
-func _apply_heart_visibility() -> void:
-	var show := context == CTX_MENU and menu_tab == TAB_REL
+# ★[S8-T1] 관계 탭 행 레이아웃 — 스크롤 위치에서 시작해 **패널에 들어가는 행만** [{i, y, effect}]로
+# 낸다. HeartBar 배치(_apply_heart_visibility)와 효과 줄·배지 그리기(_draw_rel_tab)가 이 한 출처를
+# 공유하므로 노드 위치와 텍스트가 어긋날 수 없다(옛 구조는 양쪽이 같은 식을 따로 계산했다).
+func _rel_layout() -> Array:
+	var out: Array = []
+	if _heart_count <= 0:
+		return out
+	_rel_scroll = clampi(_rel_scroll, 0, maxi(_heart_count - 1, 0))
 	var panel := _panel_rect()
-	for i in _hearts.size():
-		var hb: HeartBar = _hearts[i]
-		hb.visible = show
-		if show:
-			# 탭 바(y: PAD..PAD+32)·안내 문구(PAD+50) 아래로 내려 겹치지 않게 한다. ★ 기준을 PAD 반영으로
-			# 통일 — 옛 하드코딩 +64는 PAD를 안 타 안내 문구(PAD+44)와 겹쳤다(owner 리포트 2026-07-06).
-			# ★ C3 — 행마다 효과 줄을 한 칸 더 끼우므로 간격을 둔다(하트 + 그 아래 곱셈기 한 줄 =
-			#   한 캐릭터 묶음). ★[S3-T5] 5행이 패널에 들어가도록 상수화(HEART_ROW_*).
-			hb.position = Vector2(panel.position.x + PAD + 8.0,
-				panel.position.y + PAD + HEART_ROW_TOP + i * HEART_ROW_PITCH)
+	# 탭 바(y: PAD..PAD+32)·안내 문구(PAD+50) 아래에서 시작한다(owner 리포트 2026-07-06 겹침 교정).
+	var y := panel.position.y + PAD + HEART_ROW_TOP
+	# 가용 바닥 = 패널 하단에서 9-slice 나무 테두리 + 스크롤 안내 한 줄을 뺀 자리(숙련 탭과 같은 기준선).
+	var max_y := panel.end.y - FRAME_MARGIN - HEART_HINT_H
+	for i in range(_rel_scroll, _heart_count):
+		var eff: String = str(_heart_effects[i]) if i < _heart_effects.size() else ""
+		var block := HEART_ROW_PITCH if eff != "" else HEART_ROW_PITCH_BARE
+		if not out.is_empty() and y + block > max_y:
+			break        # 다음 행이 테두리를 물 것 → 스크롤로 넘긴다(첫 행은 늘 그린다 — 빈 탭 방지)
+		out.append({"i": i, "y": y, "effect": eff})
+		y += block
+	return out
+
+# 관계 탭일 때만 하트를 보이고, 패널 안 세로로 줄지어 배치한다(상단 컨텍스트 영역).
+# ★[S8-T1] 보이는 건 스크롤 창 안의 행뿐이다 — 창 밖 행은 노드가 있어도 숨긴다.
+func _apply_heart_visibility() -> void:
+	for hb in _hearts:
+		hb.visible = false
+	if not (context == CTX_MENU and menu_tab == TAB_REL):
+		return
+	var panel := _panel_rect()
+	for row in _rel_layout():
+		var hb: HeartBar = _hearts[int(row["i"])]
+		hb.visible = true
+		hb.position = Vector2(panel.position.x + PAD + 8.0, float(row["y"]))
 
 # ── 기하(패널·그리드) ─────────────────────────────────────────────────────────
 # 부모 CanvasLayer가 UI scale(ADR-0018 ×1.5)을 먹어, 전체화면 앵커 Control의 size(=960×540)는
@@ -762,15 +798,43 @@ func _draw_rel_tab(panel: Rect2, font: Font) -> void:
 	# (4탭이 상단 폭을 다 써 우측 여백이 없음 — 탭 아래로 내린다).
 	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD + 8.0, panel.position.y + PAD + 50.0),
 		"관계 — 읽기 전용(호감도는 대화·활동으로)", 12, HanjiUi.INK_DIM)
-	# ★ C3 각 하트 행 아래에 그 캐릭터의 관계 곱셈기(여우불·마진·경비·할인) 한 줄. HeartBar와 같은
-	# y 기준(_apply_heart_visibility와 동일 상수)에서 한 칸 내려 그린다.
-	for i in _heart_effects.size():
-		var eff: String = str(_heart_effects[i])
-		if eff == "":
-			continue
-		var ey := panel.position.y + PAD + HEART_ROW_TOP + i * HEART_ROW_PITCH + 34.0
-		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD + 12.0, ey), eff,
-			12, HanjiUi.INK_DIM, panel.size.x - PAD * 2.0 - 12.0)
+	var x := panel.position.x + PAD + 12.0
+	var max_y := panel.end.y - FRAME_MARGIN - HEART_HINT_H
+	_rel_area_rect = Rect2(panel.position.x + PAD, panel.position.y + PAD + HEART_ROW_TOP - 16.0,
+		panel.size.x - PAD * 2.0, max_y - (panel.position.y + PAD + HEART_ROW_TOP) + 16.0)
+	# ★ C3 각 하트 행 아래에 그 캐릭터의 관계 곱셈기(여우불·마진·경비·할인) 한 줄. 곱셈기가 없는
+	# 주민(ADR-0008 관계-중립)은 이 줄만 없고 하트는 그대로 뜬다 — ★[S8-T1] 표시 자격과 효과 줄의
+	# 분리가 여기서 눈에 보인다. 행 위치는 _rel_layout 단일 출처(HeartBar 배치와 같은 y).
+	var rows := _rel_layout()
+	for row in rows:
+		var ry := float(row["y"])
+		var eff := String(row["effect"])
+		if eff != "":
+			HanjiUi.draw_text(self, Vector2(x, ry + HEART_EFFECT_DY), eff,
+				12, HanjiUi.INK_DIM, panel.size.x - PAD * 2.0 - 12.0 - HEART_BADGE_W)
+		_draw_heart_badge(font, panel, ry, str(_heart_badges[int(row["i"])]))
+	# ★[S8-T1] 넘치면 스크롤 안내(숙련 탭·매대 리스트의 "▲▼" 결 — 어느 쪽이 잘렸는지 함께 보인다).
+	var hidden_below := _heart_count - _rel_scroll - rows.size()
+	if _rel_scroll > 0 or hidden_below > 0:
+		var hint := "휠 스크롤 — %s%s" % [
+			("▲ %d " % _rel_scroll) if _rel_scroll > 0 else "",
+			("▼ %d" % hidden_below) if hidden_below > 0 else ""]
+		HanjiUi.draw_text(self, Vector2(x, panel.end.y - FRAME_MARGIN - 2.0), hint, 11, HanjiUi.INK_DIM,
+			panel.size.x - PAD * 2.0 - 24.0)
+
+# ★[S8-T1 / ADR-0066 결정 11] 하트 행 우측 상태 배지 — 진급 대기(♡ 만충·관문 미통과)·연애·결혼을
+# 한 칩으로 알린다. **지금은 main이 늘 빈 문자열을 넘기므로 아무것도 안 그린다**(T5~T7이 값을
+# 채우면 렌더 배선 수정 없이 그대로 뜬다 — 자리와 API만 먼저 여는 것이 이 함수의 일이다).
+func _draw_heart_badge(font: Font, panel: Rect2, row_y: float, text: String) -> void:
+	if text == "":
+		return
+	var fs := 11
+	var tw: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var box := Rect2(panel.end.x - PAD - minf(tw + 12.0, HEART_BADGE_W), row_y + 1.0,
+		minf(tw + 12.0, HEART_BADGE_W), 16.0)
+	HanjiUi.draw_plate(self, box)
+	HanjiUi.draw_text(self, box.position + Vector2(6.0, 12.0), text, fs, HanjiUi.GOLD_SOFT,
+		box.size.x - 12.0)
 
 # ── 숙련 탭 행 치수(★[S3-T6] 상수화 → ★[S5-T4] 5행 봉합) ──────────────────
 # 패널 높이는 고정(_panel_rect)이라 숙련 행이 늘면 아래로 넘친다. **낚시가 3행째로 합류**하면서
@@ -1372,6 +1436,19 @@ func _gui_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_skill_scroll += 1   # 클램프는 그리기 시점(행수 파생)
 			queue_redraw(); accept_event(); return
+	# ★[S8-T1] 관계 탭 하트 휠 스크롤 — 관계 트랙 보유 9인이 패널을 넘긴다(숙련 탭과 같은 영역 문법).
+	#   관계 탭도 백팩을 안 그리므로 아래 백팩 스크롤과 경합하지 않는다. 스크롤은 HeartBar 노드의
+	#   가시성·위치까지 바꾸므로 재배치를 함께 부른다(그리기만으론 자식 노드가 안 따라온다).
+	if event.pressed and context == CTX_MENU and menu_tab == TAB_REL \
+			and _rel_area_rect.has_point(event.position):
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_rel_scroll = maxi(_rel_scroll - 1, 0)
+			_apply_heart_visibility(); queue_redraw(); accept_event(); return
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			# 아래로는 마지막 행이 창에 남을 때까지만(빈 화면 방지 — 클램프는 _rel_layout이 함께 수행).
+			if _heart_count - _rel_scroll > 1:
+				_rel_scroll += 1
+			_apply_heart_visibility(); queue_redraw(); accept_event(); return
 	# ★ 마우스 휠 = 백팩 세로 스크롤(백팩이 보이는 컨텍스트에서). 위=이전 행, 아래=다음 행.
 	if event.pressed and _backpack_visible():
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:

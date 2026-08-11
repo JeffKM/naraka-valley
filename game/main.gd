@@ -14398,16 +14398,28 @@ func _inv_date_string() -> String:
 # affinity 노드들에서 매번 파생하므로 별도 상태가 없다(여기서 호감도를 바꾸지 않는다 — 읽기 전용).
 # ★ C3 — 각 캐릭터의 관계 곱셈기(여우불·마진·경비·할인)를 effect 줄로 함께 넘긴다. 상시 HUD에서
 #   걷어낸 그 정보가 사라지지 않고 관계 탭에서 복기되게 한다(ADR-0008 관계=곱셈기를 한자리에).
-# ★ [S2-T7] 옛 4행 하드코딩이 레지스트리 순회로 접혔다 — 관계 트랙(affinity)과 곱셈기 훅(effect_fn)을
-#   둘 다 가진 주민만 뜬다(옥자는 관계 트랙이 없어 자동 제외). 행 순서 = 등록 순서(미호·멜·바나·네오).
+# ★ [S2-T7] 옛 4행 하드코딩이 레지스트리 순회로 접혔다 — 행 순서 = 등록 순서.
+# ★ [S8-T1 / ADR-0066 결정 11] **표시 자격과 효과 줄을 분리**했다. 옛 조건은 `affinity != null AND
+#   effect_fn.is_valid()`라 한 판정이 두 책임(탭에 뜨는가 / 곱셈기 줄이 있는가)을 겸했고, 그래서
+#   곱셈기 없는 관계 트랙 주민(모찌·풀무·무골)이 관계 탭에서 통째로 사라져 있었다.
+#   이제 **자격 = 관계 트랙 보유(affinity != null)** 하나뿐이고(9인 — 옥자·주방요괴는 설계상
+#   트랙이 없어 자연 비표시), effect_fn은 효과 줄의 유무만 정한다(없으면 하트만·빈 문자열).
 func _heart_rows() -> Array:
 	var rows := []
 	for r in _residents:
-		if r.affinity == null or not r.effect_fn.is_valid():
+		if r.affinity == null:
 			continue
 		rows.append({"name": r.display_name, "filled": r.affinity.hearts(),
-			"total": Affinity.MAX_HEARTS, "effect": String(r.effect_fn.call())})
+			"total": Affinity.MAX_HEARTS,
+			"effect": String(r.effect_fn.call()) if r.effect_fn.is_valid() else "",
+			"badge": _heart_badge(r)})
 	return rows
+
+# ★ [S8-T1 / ADR-0066 결정 11] 관계 상태 배지 훅 — 진급 대기(점수 만충·관문 미통과, T5)·연애(T6)·
+# 결혼(T7)이 채울 자리다. 지금은 그 상태들이 아직 없으므로 **항상 빈 문자열**이고, 프레임은 빈
+# 배지를 안 그린다(자리와 API만 먼저 열어 뒤 태스크가 판정식만 얹게 한다 — 렌더 배선 재작업 0).
+func _heart_badge(_r: Resident) -> String:
+	return ""
 
 # ★ Phase B 숙련 탭 행(_heart_rows와 대칭 — FarmSkill에서 레벨·진행 파생, 읽기 전용). 현재 농사 1종.
 # floor_xp=현 레벨 진입 임계, next_xp=다음 레벨 임계(만렙이면 0). 프레임이 (xp-floor)/(next-floor)로 진행바.
