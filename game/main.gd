@@ -1534,10 +1534,18 @@ const CAFE_OUT_TILE := CAFE_EXT_DOOR + Vector2i(0, 1)    # 외관 카페 문 앞
 # (방 12×9·문·카메라 폭)은 똑같이 보존하고 y만 띠 아래로 내린다. 마을 6채는 HOUSE_*(y26) 그대로 공유
 # → 마을·타 7구역 회귀 0. 외관(HOUSE_EXT_*·HOUSE_OUT_TILE)은 외부 NW라 +41 대상 아님(위 그대로).
 const HOME_HOUSE_RECT := Rect2i(8, 67, 12, 9)     # x8..19, y67..75 (HOUSE_RECT + (0,41))
+# ★[S8-T7 / ADR-0066 결정 8] 「안방 확장」 완공 후의 집 방 rect — 동쪽으로 6칸(x20..25) 넓힌다.
+#   동쪽인 이유: HOME 실내 밴드에서 집 방(x8..19)과 넋우릿간 방(x38..49) 사이가 비어 있고(창고는
+#   아래 줄 y79+), 서·남·북은 문(남벽 x13/14)·벽 밴드 좌표가 움직여 기존 프롭·트리거가 흔들린다.
+#   기존 방이 부분집합이라 침대·가구·문·취침 판정 좌표가 전부 보존된다(태스크 Notes의 보존 조건).
+#   실효 rect는 home_house_rect()가 고른다 — 확장 여부는 carpenter 완공 이력에서 파생(세이브 키 0).
+const HOME_HOUSE_RECT_EXPANDED := Rect2i(8, 67, 18, 9)   # x8..25, y67..75 (동쪽 +6칸 = 안방)
 const HOME_HOUSE_DOOR := Vector2i(13, 75)         # 실내 집 문 서칸(아래벽 중앙, 방 x8..19) — HOUSE_DOOR + (0,41)
 const HOME_HOUSE_DOOR_E := Vector2i(14, 75)       # ★[ADR-0046] 실내 본가 문 동칸 — 실내문≡외관문(2칸·중앙). 방 12폭 중앙 seam x13/x14 straddle. 퇴장 트리거 양 칸 수용.
 const HOME_HOUSE_IN_TILE := Vector2i(13, 74)      # 실내 집 문 안쪽(진입 착지) — HOUSE_IN_TILE + (0,41)
 const HOME_HOUSE_CAM_RECT := Rect2i(2, 65, 20, 13)  # 집 방 둘레 — HOUSE_CAM_RECT + (0,41)
+# ★[S8-T7] 안방 확장 후 집 카메라 둘레 — 방 동단(x25)이 원본 캠(x21)에 잘리므로 같은 여백으로 넓힌다.
+const HOME_HOUSE_CAM_RECT_EXPANDED := Rect2i(2, 65, 26, 13)  # x2..27 (동쪽 여백 2칸 동일)
 # ★ ADR-0048 Phase D — 저장 상자 칸(집 실내 북벽 flush, 침대(9,68) 옆). 플레이어가 (11,69)에서 위를
 # 바라보며(facing_chest) 우클릭으로 상자 패널을 연다. 집 바닥(HOUSE, 걷기 O)이라 좌표만 정하면 되고(충돌
 # 없는 순수 배치 — 상태는 chest 노드가 든다), _indoor=="집"으로 가드해 다른 구역 같은 좌표엔 무반응.
@@ -2687,6 +2695,12 @@ var _jealousy: Dictionary = {}
 # ★[S8-T6] 이 대화에서 고백 제안([F])이 떠 있는 상대 rid("" = 없음). 대화와 같은 일시 상태라
 # 세이브하지 않는다(_talking_to와 같은 결 — 대화 시작에 세팅·종료에 리셋).
 var _confess_rid := ""
+# ★[S8-T7 / ADR-0066 결정 8] **결혼 상태** — 연애 슬롯 위의 두 번째 상태다("결혼은 하트 위 상태").
+# spouse_id = 배우자 rid("" = 미혼) · wedding_day = 예정된 혼례 아침(0 = 없음 — 청혼 수락이
+# day+3으로 세팅, 그 아침 _on_day_advanced가 식을 올리고 0으로 되돌린다). 세이브 가법 키 2개
+# ("spouse_id"·"wedding_day") — 구세이브 = 미혼·예정 없음(하위호환).
+var _spouse_id := ""
+var _wedding_day := 0
 # T7.2 1단 달성("카페 2단계!") 팝업을 이미 띄웠는가(한 번만 뜨게 하는 래치). 달성 여부 자체는
 # 누적값에서 파생되므로(CafeMilestone.is_complete — 세이브 무상태) 저장하지 않는다. 이 래치는
 # 일시 표시용으로, _ready에서 "이미 완료된 세이브를 이어받았으면 true"로 초기화해 재개 시
@@ -4440,11 +4454,41 @@ func _deco_place(cell: Vector2i) -> void:
 func _deco_remove(cell: Vector2i) -> void:
 	home_deco.remove(_deco_cur_layer(), cell)
 
-# ★ [S1-9 §11.2] 유효 배치 칸을 계산해 home_deco에 주입한다. 좌표가 정적(HOME_HOUSE_RECT)이라 _ready에서
-# 1회. 바닥 칸(FLOOR·FURNITURE) = 룸 실내 바닥(북벽 2행 밴드·문 아래벽 제외), 벽 밴드 칸(WALL) = 북벽 2행.
+# ★[S8-T7 / ADR-0066 결정 8] 집 방이 넓어졌는가 — carpenter 완공 이력에서 **파생**한다(새 세이브
+# 키 0: carpenter 세이브의 done 목록이 이미 영속이라, 플래그를 따로 들면 진실원이 둘이 된다).
+func _home_expanded() -> bool:
+	return carpenter != null and carpenter.is_done(Carpenter.PROJ_MASTER_ROOM)
+
+# 현재 유효한 집 방 rect — 안방 확장 완공이면 확장 rect, 아니면 원본. 방 기하를 읽는 네 자리
+# (_build_home 방 세우기·home_deco bounds·북벽 오버레이·실내 판정)가 전부 이 하나를 본다.
+func home_house_rect() -> Rect2i:
+	return HOME_HOUSE_RECT_EXPANDED if _home_expanded() else HOME_HOUSE_RECT
+
+# 집 실내 카메라 둘레 — 방 rect와 같은 분기(잘린 안방이 안 생기게 짝으로 넓힌다).
+func home_house_cam_rect() -> Rect2i:
+	return HOME_HOUSE_CAM_RECT_EXPANDED if _home_expanded() else HOME_HOUSE_CAM_RECT
+
+# ★[S8-T7 / ADR-0066 결정 8] 안방 확장의 **실효 일괄 적용** — 완공 아침과 확장 세이브 로드,
+# rect가 넓어지는 두 순간에 부른다(멱등). ①deco bounds 재주입(기존 배치는 부분집합이라 무손실)
+# ②건물 카탈로그의 집 카메라 교체 ③현재 무대가 HOME이면 그리드 재빌드(다른 구역이면 다음 워프의
+# _rebuild_region이 자연히 새 rect로 세운다) ④지금 집 안이면 카메라 리밋 즉시 재적용.
+func _refresh_home_expansion() -> void:
+	if not _home_expanded():
+		return
+	_configure_home_deco_bounds()
+	if _buildings.has("집"):
+		_buildings["집"]["cam"] = home_house_cam_rect()
+	if _region == RegionCatalog.HOME:
+		_rebuild_region(RegionCatalog.HOME)
+		if _indoor == "집":
+			_apply_camera_limits()
+
+# ★ [S1-9 §11.2] 유효 배치 칸을 계산해 home_deco에 주입한다. 좌표가 방 rect 파생이라 _ready에서 1회
+# + ★[S8-T7] 안방 확장 완공·로드 시 **재주입**(rect가 넓어지는 두 순간 — 기존 배치는 부분집합이라 무손실).
+# 바닥 칸(FLOOR·FURNITURE) = 룸 실내 바닥(북벽 2행 밴드·문 아래벽 제외), 벽 밴드 칸(WALL) = 북벽 2행.
 # HomeDeco는 기하를 모르므로(디커플링) main이 여기서 유일하게 좌표를 안다.
 func _configure_home_deco_bounds() -> void:
-	var r := HOME_HOUSE_RECT
+	var r := home_house_rect()
 	var floor_cells: Array = []
 	# 바닥 = 내부 x(rect.x+1 .. rect.end.x-2), y(rect.y+2 .. rect.end.y-2). y+2로 북벽(y0)+밴드(y1) 건너뜀.
 	for x in range(r.position.x + 1, r.end.x - 1):
@@ -4537,12 +4581,14 @@ func _build_home() -> void:
 	_set_tile(NEOKDUNGURI_EXT_DOOR_W.x, NEOKDUNGURI_EXT_DOOR_W.y, PATH)  # 2패널 문 서칸도 리세스
 	_fill_rect(SILO_EXT_RECT, WALL)                            # ★ [B1-a.3] 여물광(비진입 저장 건물) WALL 박스 — 문·실내 없음(낫 채집·게이지=_draw_silo)
 	_fill_rect(WELL_RECT, WALL)                                # ★ [B2] 혼우물(비진입 리필 우물) WALL 박스 — 문·실내 없음(리필 메카닉=별도 grill, 드로우=_draw_well)
-	_build_room(HOME_HOUSE_RECT, HOUSE, HOUSE_WALL, HOME_HOUSE_DOOR)   # ★C2 실내 집 방(HOME 밴드 y67+, 마을 공유 방과 분리)
+	# ★[S8-T7] 방 rect는 home_house_rect() 파생 — 안방 확장 완공이면 동쪽 6칸이 넓은 방으로 선다
+	#   (문·가구·취침 좌표는 원본 rect 안이라 그대로 유효 — 확장은 순수 추가).
+	_build_room(home_house_rect(), HOUSE, HOUSE_WALL, HOME_HOUSE_DOOR)   # ★C2 실내 집 방(HOME 밴드 y67+, 마을 공유 방과 분리)
 	_set_tile(HOME_HOUSE_DOOR_E.x, HOME_HOUSE_DOOR_E.y, HOUSE)  # ★[ADR-0046] 실내 본가 문 동칸 개방(2칸·중앙 — 실내문≡외관문)
 	# ★ T3③ 북벽 2타일 밴드 — 상단 벽 한 행(y68 실내)을 더 벽으로(스타듀식 입체 벽, plank는 _draw 오버레이).
 	#   바닥은 y69~74로 한 줄 줄지만 충돌·취침(zone)·문·카메라 불변. 가구가 이 벽에 기대 윗부분이 벽을 덮는다.
-	for x in range(HOME_HOUSE_RECT.position.x + 1, HOME_HOUSE_RECT.end.x - 1):
-		_set_tile(x, HOME_HOUSE_RECT.position.y + 1, HOUSE_WALL)
+	for x in range(home_house_rect().position.x + 1, home_house_rect().end.x - 1):
+		_set_tile(x, home_house_rect().position.y + 1, HOUSE_WALL)
 	# ★[ADR-0048 §2] 건물별 실내 전용 바닥·벽(집 HOUSE/HOUSE_WALL 재사용 탈피). 문 개방 칸도 각 바닥으로.
 	_build_room(STOREHOUSE_RECT, STOREHOUSE_FLOOR, STOREHOUSE_WALL, STOREHOUSE_DOOR)  # ★ 실내 창고 방(돌 판석 — kind=storehouse)
 	_set_tile(STOREHOUSE_DOOR_E.x, STOREHOUSE_DOOR_E.y, STOREHOUSE_FLOOR)  # ★[ADR-0046] 실내 창고 문 동칸 개방(2칸·중앙 — 실내문≡외관문)
@@ -8993,6 +9039,14 @@ func _on_day_advanced(day: int) -> void:
 	# 매출이 아니라 마일스톤 누적(_cafe_revenue_total)엔 넣지 않는다(서빙 매출만 — ADR-0009).
 	var ship_gold := ship_bin.settle()
 	if ship_gold > 0:
+		# ★[S8-T7 / ADR-0066 결정 9] 배우자 잡일 ②멜 = **출하 정산 팁 +2%**(장부 손질 — 마진
+		#   곱셈기 CafeMargin과 같은 돈 축이되 소스가 다르다: 마진=서빙 매출·팁=출하 정산).
+		#   최소 1골드 보장(2% 절사로 0이 되면 "팁"이 장부에 안 보인다). 마일스톤 누적
+		#   (_cafe_revenue_total)엔 여전히 안 넣는다(raw 판매 — ADR-0009 그대로).
+		if _spouse_id == "mel":
+			var tip := maxi(1, ship_gold * SPOUSE_MEL_TIP_PCT / 100)
+			ship_gold += tip
+			_notice("멜이 장부를 손질했다 — 출하 팁 +%d골드" % tip)
 		wallet.earn(ship_gold)
 		_total_income += ship_gold            # ★ [S1R-T12] 누적 총수입(정보패널)
 		audio.sfx("gold")                     # 출하 정산 골드 "치링"
@@ -9133,6 +9187,14 @@ func _on_day_advanced(day: int) -> void:
 	#     과수(orchard.advance_day)는 아래에서 따로 도는데, 눈이 와도 결실을 멈추지 않는다 — 절기가
 	#     결실을 가르는 건 ADR-0045의 불가침 영역이라 날씨가 끼어들지 않는다.
 	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h), Weather.grows_crops(weather))
+	# ★[S8-T7 / ADR-0066 결정 9] 배우자 잡일 ①미호 = **아침 미급수 밭 8칸 물주기**. advance_day가
+	#   전 칸을 말린 *직후*라 "오늘 몫"의 손 노동을 대행하는 자리다(어제 성장 판정엔 불개입).
+	#   여우불(성장 가속·위 인자)과 별축 — 여우불은 못 준 칸도 자라게 하고, 이 물은 칸을 실제로
+	#   적신다(결정 9 "별축이라 중복 아님"). 대상 선정·수치는 field.water_dry(결정적 정렬·잠정 8칸).
+	if _spouse_id == "miho":
+		var watered_by_spouse := farm.water_dry(SPOUSE_MIHO_WATER_TILES)
+		if watered_by_spouse > 0:
+			_notice("미호가 아침 물주기를 도왔다 — %d칸" % watered_by_spouse)
 	orchard.advance_day(day)   # ★ [S1-5b] 성숙+제철 나무는 결실 +1(비제철 정지·영속). day는 무상태 절기 판정(ADR-0045)
 	# ★ [B1-a.2] 밤 pathing 정산 — advance_day 정산 *전에* 방목 짐승을 자동 귀가시켜(penned) 격리 성공을
 	#   확정하고, 문 닫혀 못 들어온 짐승은 실외 고립으로 남긴다(penned 미설정 → advance_day가 M_NIGHT_EXPOSED).
@@ -9212,7 +9274,12 @@ func _on_day_advanced(day: int) -> void:
 	#   여기서 배선한다 — Carpenter는 Ranch를 모르고 Ranch는 Carpenter를 모른다(양쪽 다 main만 안다).
 	if carpenter != null:
 		var built := carpenter.advance_day(day)
-		if built != "":
+		if built == Carpenter.PROJ_MASTER_ROOM:
+			# ★[S8-T7 / ADR-0066 결정 8] 안방 확장 — Ranch 무관 첫 프로젝트. 실효(방 rect 확장·
+			#   deco bounds 재주입·카메라)는 일괄 헬퍼가 진다(원장은 "다 지어졌다"까지만 안다).
+			_refresh_home_expansion()
+			_notice("안방 확장 완공 — 본가가 넓어졌다")
+		elif built != "":
 			var bld := Carpenter.building_of(built)
 			if bld != "" and ranch != null:
 				ranch.upgrade_building(bld)
@@ -9227,6 +9294,9 @@ func _on_day_advanced(day: int) -> void:
 	# ★[S8-T6 / ADR-0066 결정 7] 질투 자동 복원 — 예정일(연애 개시 +7일)에 닿은 감점을 조용히
 	#   되돌린다(알림 없음·흔적 0 — ADR-0022 적대 없음).
 	_advance_jealousy(day)
+	# ★[S8-T7 / ADR-0066 결정 8] 혼례 아침 — 청혼 수락 3일 뒤 예정일에 닿으면 식을 올린다
+	#   (간이 연출 = 알림 배너·연출 등급은 S9). 상태 전이(spouse_id)와 이주(HOME 스테이션)가 전부다.
+	_advance_wedding(day)
 	energy.refill()
 	# ★[S5-T4 / ADR-0063 결정 4] 취침 HP 풀회복 — 혼력과 나란히 붙는다(회복 = 취침 + 소모품 명부환).
 	#   최대치도 함께 맞춘다: 어제 오른 전투 레벨·고른 전문직이 아침에 정확히 반영되게(멱등).
@@ -9955,6 +10025,8 @@ func _save_game() -> void:
 		"heart_bits": _heart_bits.duplicate(),     # ★[S8-T5] 하트 이벤트 비트 원장(이혼에도 잔존하는 별도 축)
 		"romance_partner": _romance_partner,       # ★[S8-T6] 연애 슬롯(전 로스터 공유 1 — "" = 없음)
 		"jealousy": _jealousy.duplicate(true),     # ★[S8-T6] 질투 원장(rid → 복원 예정일·깎인 양)
+		"spouse_id": _spouse_id,                   # ★[S8-T7] 배우자("" = 미혼). 방 확장은 carpenter done 파생이라 키 없음
+		"wedding_day": _wedding_day,               # ★[S8-T7] 예정된 혼례 아침(0 = 없음)
 		"selected_crop": _selected_crop,
 		# M1.5 — 현재 구역·실내 모드·플레이어 위치(껐다 켜도 '있던 자리'에서 재개). region은
 		# 영문 id(RegionCatalog 키, 가볍고 안정적), indoor는 ""/건물 id(_buildings 키), 위치는 타일 좌표.
@@ -10113,6 +10185,14 @@ func _load_game() -> void:
 	# ★[S8-T6] 연애 슬롯·질투 원장 복원(구세이브 = ""/빈 원장 — 하위호환). 원장은 키·값을 명시
 	# 재조립해 손상 세이브의 이물이 눕지 않게 한다(heart_bits와 같은 규율 — 음수 양은 0으로 자른다).
 	_romance_partner = String(data.get("romance_partner", ""))
+	# ★[S8-T7] 결혼 상태 복원(구세이브 = 미혼·예정 없음). 배우자는 반드시 연애 슬롯의 주인이어야
+	# 한다는 불변식(결혼 = 연애 위의 상태)을 로드에서 재보증한다 — 손상 세이브가 "미지의 배우자"나
+	# "연인 아닌 배우자"를 실으면 결혼 쪽을 버린다(질투·이혼 로직이 슬롯 기준으로 돌기 때문).
+	_spouse_id = String(data.get("spouse_id", ""))
+	if _spouse_id != "" and _spouse_id != _romance_partner:
+		_spouse_id = ""
+	_wedding_day = maxi(int(data.get("wedding_day", 0)), 0)
+	_apply_spouse_home_station()   # 이주 스테이션 재적용(스케줄은 _ready마다 새로 조립 — 멱등)
 	_jealousy = {}
 	var jz: Dictionary = data.get("jealousy", {})
 	for k in jz:
@@ -10126,6 +10206,10 @@ func _load_game() -> void:
 	# 오버레이는 안식 농원 기준이라, 복원 구역이 다르면 _rebuild_region이 걷어내고(현재 구역만
 	# 그림) 같으면 그대로 둔다 — 그래서 farm 복원 뒤에 둔다(_save_game의 짝).
 	_restore_location(data)
+	# ★[S8-T7] 안방 확장 세이브 복원 — 부팅 그리드는 원본 rect로 섰고, 복원 구역이 HOME이면
+	# _restore_location이 재빌드를 건너뛰므로(같은 구역 최적화) 여기서 확장 실효를 다시 얹는다
+	# (완공 아침과 같은 헬퍼·멱등 — 미확장 세이브면 스스로 no-op).
+	_refresh_home_expansion()
 	# M2.4 F9 재로드(이 함수 직접 호출 경로)에서도 복원된 day로 의상·보너스를 맞춘다(멱등).
 	# ★[S6-T3] 이 호출이 카페 일구기 사다리(좌석·곳간 용량·손님 볼륨)도 함께 세운다 — 위에서
 	#   누적 매출·하트·거둔 영혼이 다 복원된 *뒤*라야 단계가 제대로 파생된다.
@@ -10912,6 +10996,12 @@ func _process(delta: float) -> void:
 	var bana_hearts := bana_affinity.hearts()
 	night_bar.raid_amount = BanaGuard.raid_amount(bana_hearts)      # ㉠ 약탈량↓
 	night_bar.auto_block = BanaGuard.auto_block(bana_hearts)        # ㉠ 창고 잡귀 자동 차단↑
+	# ★[S8-T7 / ADR-0066 결정 9] 배우자 잡일 ③바나 = **밤 약탈 추가 감쇄**(bana_guard 위 소폭).
+	#   ♡5 약탈량은 이미 하한 1(MIN_RAID — 무효화 아님 불가침)이라, 감쇄는 자동 차단 +1마리로
+	#   얹는다(돌파 1건이 통째로 무산 = 그 밤 약탈 총량 감소·하한 원칙 무접촉). 매 프레임 파생이라
+	#   결혼 아침부터 즉시 실효(세이브 무상태).
+	if _spouse_id == "bana":
+		night_bar.auto_block += SPOUSE_BANA_EXTRA_BLOCK
 	night_bar.patience_secs = BanaGuard.patience_secs(bana_hearts)  # ㉡ 카운터 빈 사이 인내심↑
 	# T6.3 밤 바 시뮬레이션을 굴린다(연출 중 제외). 잡귀는 *바를 연 밤(옵트인)* 의 19–24시
 	# 창 안에서만 깃들고 접근한다 — 안 열면 빈 밤이라 아무 일도 없다(ADR-0010 #6 옵트인).
@@ -11520,7 +11610,11 @@ func _process(delta: float) -> void:
 			# ★[S8-T2] 든 아이템 이름으로 바뀌었다(옛 문구는 선택 작물 이름). 손이 비었거나
 			#   건넬 수 없는 물건(도구·열쇠)이면 그 사실을 프롬프트가 먼저 말한다.
 			var held_gift := inventory.selected_id()
-			if GiftPrefs.giftable(held_gift):
+			# ★[S8-T7] 혼례 부적을 든 채 연인을 마주 보면 [G] = 청혼이다(선물 아님 — 인터셉트와 짝).
+			if held_gift == ItemCatalog.WEDDING_CHARM and faced_resident.id == _romance_partner \
+					and _spouse_id == "":
+				res_hint += "   [G] 혼례 부적 — 청혼"
+			elif GiftPrefs.giftable(held_gift):
 				res_hint += "   [G] %s 선물" % ItemCatalog.name_of(held_gift)
 			else:
 				res_hint += "   [G] 선물 — 건넬 물건을 손에"
@@ -14524,6 +14618,12 @@ func _heart_rows() -> Array:
 # ★[S8-T5] 첫 실값: **진급 대기**(점수 만충·관문 미통과 — Affinity.pending_promotion). "다음 칸이
 #   잠겨 있다"는 사실이 관계 탭에서 보여야 관문(대화·deed)을 찾으러 간다 — 배지가 그 표지판이다.
 func _heart_badge(r: Resident) -> String:
+	# ★[S8-T7] 결혼 실값 — 배우자가 최상위 상태(연애 슬롯보다 위의 상태라 배지도 위). 혼례 대기
+	#   (부적 수락~식 전)는 그 사이의 예고 배지다.
+	if _spouse_id == r.id:
+		return "부부"
+	if _wedding_day > 0 and _romance_partner == r.id:
+		return "혼례 준비 중"
 	# ★[S8-T6] 연애 실값 — 슬롯의 주인이면 "연애 중"(연인은 ♡5 = 대기 없음이라 아래와 안 겹치지만,
 	#   상태 배지가 진행 배지보다 앞서는 게 옳아 순서로도 못 박는다). 결혼(T7)이 이 위에 한 줄 더 얹는다.
 	if _romance_partner == r.id:
@@ -14707,8 +14807,15 @@ func _setup_residents() -> void:
 	r_bana.portrait_stem = "bana"
 	r_bana.require_visible = true       # 밤에 드러났을 때만 말 걸 수 있다
 	r_bana.schedule = [{"from_min": 0, "tile": BANA_NIGHT_TILE, "region": ""}]
+	# ★[S8-T7] 구역 인지 한 겹 추가 — 스케줄에 구역이 박힌 스테이션(결혼 후 HOME 귀가)에 서
+	#   있을 땐 그 구역에서만 보인다. visible_rule은 프레임워크의 구역 게이팅(㉡)을 통째로 덮는
+	#   훅이라, 이 겹이 없으면 밤 귀가한 바나가 다른 구역의 같은 좌표(마을 남단 강)에 떠 보인다.
+	#   미혼(스케줄 전 항목 region="")에선 판정이 늘 참이라 기존 거동 완전 불변.
 	r_bana.visible_rule = func() -> bool:
-		return clock.minutes >= Cafe.CLOSE_MIN and onboarding.step > Onboarding.NOTICE
+		if clock.minutes < Cafe.CLOSE_MIN or onboarding.step <= Onboarding.NOTICE:
+			return false
+		var reg := r_bana.station_region(int(clock.minutes))
+		return reg == "" or reg == _region
 	r_bana.prompt_extra = func() -> String:
 		return "   (나라카 바 영업 중)" if night_bar.is_opened() else "   [F] 나라카 바 열기"
 	r_bana.shop_key = func() -> bool:
@@ -14764,6 +14871,16 @@ func _setup_residents() -> void:
 	r_okja.station_gate = func() -> bool: return onboarding.step > Onboarding.NOTICE
 	r_okja.visible_rule = func() -> bool: return true
 	r_okja.schedule = [{"from_min": 0, "tile": OKJA_CAFE_TILE, "region": ""}]
+	# ★[S8-T7 / ADR-0066 결정 8] 혼례 부적 의뢰 [F] — **연애 상태에서만 노출**된다(훅이 빈 문자열
+	#   이면 프롬프트 꼬리 없음·F 무동작). 옥자는 관계 트랙이 없는 서사 앵커라 이 훅이 유일한
+	#   거래 창구다(결정 8 "정표 = 옥자의 소울-바인딩 혼례 부적" — 네오 매대와 같은 shop_key 결).
+	r_okja.prompt_extra = func() -> String:
+		return "   [F] 혼례 부적 의뢰 (%d냥)" % WEDDING_CHARM_COST if _charm_quest_open() else ""
+	r_okja.shop_key = func() -> bool:
+		if not _charm_quest_open():
+			return false
+		_order_wedding_charm()
+		return true
 	_register_resident(r_okja)
 
 	# ── ★ [S2-T8 / ADR-0060 결정 7] 모찌 — **첫 T1 주민이자 프레임워크 절차의 실증**.
@@ -15301,6 +15418,109 @@ func _advance_jealousy(day: int) -> void:
 			r.affinity.add_points(int(e.get("amount", 0)))
 		_jealousy.erase(rid)
 
+# ── ★[S8-T7 / ADR-0066 결정 8·9] 결혼 — 정표(혼례 부적)·혼례·이주·잡일 ─────────
+# 스타듀 인어 펜던트 문법의 저승판: 옥자에게 부적을 **의뢰**(5,000냥·연애 상태에서만 노출)하고,
+# 그 부적을 연인에게 [G]로 건네는 것이 **청혼**이다(선물 = 든 아이템 문법의 재사용 — 새 입력 0).
+# 수락 조건 = 연애 상태 + 배우자 방(안방 확장 완공) + [메인 한정] 속죄 아크 완료(비트 원장 참조).
+# 수락 3일 후 아침 혼례(간이 연출 — 등급은 S9) → 배우자 HOME 이주(스케줄 1항목) + 주 2회 해제 +
+# 도메인 잡일(미호=물주기 8칸·멜=출하 팁 2%·바나=자동 차단 +1 — 스타듀 균일 잡일 기각, 결정 9).
+const WEDDING_CHARM_COST := 5000        # 혼례 부적 의뢰비(스타듀 펜던트 동가 — 잠정, owner 큐)
+const WEDDING_WAIT_DAYS := 3            # 수락 → 혼례 아침까지의 날수(스타듀 동형)
+const SPOUSE_MIHO_WATER_TILES := 8      # 미호 잡일 — 아침 미급수 밭 물주기 칸 수(잠정)
+const SPOUSE_MEL_TIP_PCT := 2           # 멜 잡일 — 출하 정산 팁 %(잠정)
+const SPOUSE_BANA_EXTRA_BLOCK := 1      # 바나 잡일 — 밤 잡귀 자동 차단 추가 마리(잠정)
+# 배우자의 집 자리 — 안방(확장부 x20..25) 한가운데. 결혼 전엔 이 칸이 존재하지 않지만(원본 rect
+# 밖 VOID), 결혼 조건이 안방 완공을 포함하므로 배우자가 서는 순간엔 언제나 유효한 바닥이다.
+const SPOUSE_HOME_TILE := Vector2i(22, 71)
+# 귀가 시각(분) — 도메인이 밤인 바나만 다르다: 미호·멜은 카페 마감(19시)에 집으로, 바나는 밤
+# 경비(나라카 바 옵트인 창)를 지키다 22시에 들어온다(바 옵트인은 19~22시로 좁아진다 — 인-픽션).
+const SPOUSE_HOME_MIN := {"miho": Cafe.CLOSE_MIN, "mel": Cafe.CLOSE_MIN, "bana": 22 * 60}
+
+# [메인 한정] 속죄 아크 완료인가 — ♡1..♡4 관문 이벤트 비트를 전부 봤다(비트 원장 참조).
+# ★ S8은 관문이 placeholder 발화라 ♡5 연인은 **자연 통과**한다 — S9가 아크 내용을 주입해도 이
+#   판정식은 불변이다(ADR-0066 결정 8 "판정식 불변"). 문턱표에 없는 서브 주민은 무조건 통과
+#   (deed.gd와 같은 결 — 명단을 늘리지 않는다).
+func _redemption_arc_complete(rid: String) -> bool:
+	if not ROMANCE_OPEN.has(rid):
+		return true
+	for h in range(1, HEART_GATE_MAX + 1):
+		if not _heart_bit_seen(rid, h):
+			return false
+	return true
+
+# 옥자 [F] — 혼례 부적 의뢰. 연애 상태에서만 프롬프트가 노출되고(훅이 ""를 돌려주면 꼬리 없음),
+# 기혼·혼례 대기·이미 보유 중엔 다시 노출되지 않는다(부적은 세상에 하나 — 나락 열쇠와 같은 결).
+func _charm_quest_open() -> bool:
+	return _romance_partner != "" and _spouse_id == "" and _wedding_day == 0 \
+		and not inventory.has_item(ItemCatalog.WEDDING_CHARM)
+
+func _order_wedding_charm() -> void:
+	if not _charm_quest_open():
+		return
+	if wallet.gold < WEDDING_CHARM_COST:
+		_notice("혼례 부적 — 냥 부족 (%d/%d)" % [wallet.gold, WEDDING_CHARM_COST])
+		return
+	if not inventory.add_item(ItemCatalog.WEDDING_CHARM, 1):
+		_notice("가방이 가득 찼다")
+		return
+	wallet.spend(WEDDING_CHARM_COST)
+	audio.sfx("gold")
+	_notice("옥자가 혼(魂)을 엮어 부적을 접어 주었다 — 혼례 부적 (연인에게 [G]로 건네자)")
+
+# 청혼 — 혼례 부적을 든 채 주민에게 [G](선물 경로 인터셉트 — _try_resident_gift 참조).
+# 미충족 거절은 전부 **무소모·무벌칙**이다(부적 보존 — 조건을 채우고 다시 오면 된다).
+func _try_propose(r: Resident) -> void:
+	if _spouse_id != "":
+		_notice("이미 부부다 — 부적이 조용히 잠들어 있다")
+		return
+	if r.id != _romance_partner:
+		_notice("부적이 응하지 않는다 — 이건 연인과 나눌 물건이다")
+		return
+	if _wedding_day > 0:
+		_notice("혼례는 이미 정해졌다 — %d일 아침" % _wedding_day)
+		return
+	if not _home_expanded():
+		_notice("둘이 살 방이 없다 — 옹이의 목공방에서 「안방 확장」을 올리자")
+		return
+	if not _redemption_arc_complete(r.id):
+		_notice("%s의 이야기가 아직 남아 있다 — 속죄의 길을 끝까지 함께 걷자" % r.display_name)
+		return
+	var idx := inventory.selected_index
+	if not inventory.remove_at(idx, 1):     # 정표 소모(든 슬롯 그대로 — 선물 문법과 동일)
+		return
+	_wedding_day = clock.day + WEDDING_WAIT_DAYS
+	audio.sfx("ui")
+	_notice("%s가 혼례 부적을 받아들였다 — %d일 아침, 혼례를 올린다" % [r.display_name, _wedding_day],
+		NOTICE_SECS * 2.0)
+
+# 혼례 아침 — 예정일에 닿으면 식을 올린다(아침 정산 훅). 간이 연출 = 배너 한 줄(등급은 S9).
+# 대기 중 연애가 깨졌으면(이혼 스텁 등 — 방어) 예정을 조용히 접는다.
+func _advance_wedding(day: int) -> void:
+	if _wedding_day <= 0 or day < _wedding_day:
+		return
+	_wedding_day = 0
+	if _romance_partner == "":
+		return
+	_spouse_id = _romance_partner
+	_apply_spouse_home_station()
+	var r := _resident(_spouse_id)
+	audio.sfx("ui")
+	_notice("혼례를 올렸다 — %s와 부부가 되었다 ♥" % (r.display_name if r != null else _spouse_id),
+		NOTICE_SECS * 3.0)
+
+# 배우자 HOME 이주 — 스케줄 배열에 귀가 스테이션 **1항목 append**(ADR-0066 결정 8 문면 그대로).
+# 멱등(이미 붙어 있으면 무동작)이라 혼례 아침·세이브 로드 양쪽에서 부른다(스케줄은 _ready마다
+# _setup_residents가 새로 조립하므로 로드 복원이 이 재적용을 필요로 한다).
+func _apply_spouse_home_station() -> void:
+	var r := _resident(_spouse_id)
+	if r == null:
+		return
+	for e in r.schedule:
+		if e.get("tile", Resident.UNPLACED) == SPOUSE_HOME_TILE:
+			return
+	r.schedule.append({"from_min": int(SPOUSE_HOME_MIN.get(_spouse_id, Cafe.CLOSE_MIN)),
+		"tile": SPOUSE_HOME_TILE, "region": RegionCatalog.HOME})
+
 # ── 대화(공통) ─────────────────────────────────────────────────────────────
 # 말 걸면 텍스트박스가 뜨고, 우클릭으로 끝까지 넘기면 닫힌다. 대사 *내용*은 캐릭터가 들고
 # 오고(ADR-0005: 서사 텍스트는 캐릭터에만), 진행·열림은 DialogueBox가, 패널 표시·이동잠금은
@@ -15419,13 +15639,21 @@ func _try_resident_gift(r: Resident) -> void:
 	if id == "":
 		_notice("건넬 물건을 손에 들어야 한다")
 		return
+	# ★[S8-T7 / ADR-0066 결정 8] 혼례 부적을 건네는 것은 선물이 아니라 **청혼**이다 — giftable
+	#   판정(KEYS 배제)보다 먼저 가로채, "선물할 수 없다"가 청혼 동선을 가리지 않게 한다.
+	if id == ItemCatalog.WEDDING_CHARM:
+		_try_propose(r)
+		return
 	if not GiftPrefs.giftable(id):
 		# 도구·무기·낚싯대(든 것이 곧 동사)와 나락 열쇠(유일 입수 경로)는 건네지 않는다.
 		_notice("%s은 선물할 수 없다" % ItemCatalog.name_of(id))
 		return
 	# ★[S8-T3 / ADR-0066 결정 3] 생일이면 주 2회 상한을 통과하고 점수가 ×8이 된다(하루 1회는 유지).
+	# ★[S8-T7 / ADR-0066 결정 8] 배우자는 주 2회가 **해제**된다(하루 1회 유지·배율 없음 — 매일
+	#   하나씩은 건넬 수 있는 사이가 된다). 판정은 Affinity.can_gift의 예외 인자 하나로 끝난다.
 	var birthday := r.is_birthday_on(clock.day)
-	if not r.affinity.can_gift(clock.day, birthday):
+	var married := r.id == _spouse_id
+	if not r.affinity.can_gift(clock.day, birthday, married):
 		# 두 리듬을 문구로 갈라 준다 — 어느 벽에 막혔는지 모르면 "왜 안 되지"가 남는다.
 		if clock.day == r.affinity.last_gift_day:
 			_notice("오늘은 이미 선물했다" if who == "" else "오늘은 이미 %s에게 선물했다" % who)
@@ -15438,7 +15666,7 @@ func _try_resident_gift(r: Resident) -> void:
 	var points := GiftPrefs.points_for(tier, id, inventory.quality_at(idx))
 	if not inventory.remove_at(idx, 1):       # 선물한 아이템 1개 소모(든 슬롯 그대로)
 		return
-	var gained := r.affinity.gift(points, clock.day, birthday)
+	var gained := r.affinity.gift(points, clock.day, birthday, married)
 	var tag := GiftPrefs.tag_of(tier)
 	if birthday:
 		tag = "(생일!) " + tag                # 배율이 붙은 이유를 알림 한 줄이 말해 준다
@@ -17486,8 +17714,8 @@ func _draw_ranch() -> void:
 #   1타일 wainscoting(y68 걸레받이) 위에 입체 벽을 세운다. 가구(_draw_props)보다 *먼저* 그려
 #   침대·벽난로·책장이 그 위로 솟아 벽을 자연스럽게 덮는다(스타듀 2.5D). 집 실내(카메라 격리)에서만 보임.
 func _draw_house_wall_band() -> void:
-	var y0 := HOME_HOUSE_RECT.position.y                                 # y67 — 상단 벽 첫 행
-	for x in range(HOME_HOUSE_RECT.position.x + 1, HOME_HOUSE_RECT.end.x - 1):  # 내부 x9..18
+	var y0 := home_house_rect().position.y                               # y67 — 상단 벽 첫 행(★[S8-T7] rect 파생 — 확장이면 x25까지)
+	for x in range(home_house_rect().position.x + 1, home_house_rect().end.x - 1):  # 내부 x9..18(확장 시 x9..24)
 		for dy in 2:                                                     # 2행(y67·y68) = 입체 크림 벽 밴드
 			draw_texture_rect(TEX_HOUSE_WALL_BAND, Rect2(Vector2(x * TILE, (y0 + dy) * TILE), Vector2(TILE, TILE)), false)
 
@@ -18334,7 +18562,7 @@ func _zone_at(px: Vector2) -> String:
 	var t := Vector2i(int(px.x) / TILE, int(px.y) / TILE)
 	match _region:
 		RegionCatalog.HOME:
-			if HOME_HOUSE_RECT.has_point(t):   # ★C2 — HOME 집 실내(밴드 y67+)
+			if home_house_rect().has_point(t):   # ★C2 — HOME 집 실내(밴드 y67+ · ★[S8-T7] 안방 확장 포함)
 				return "집"
 			if STARTER_PATCH_RECT.has_point(t):
 				return "밭"

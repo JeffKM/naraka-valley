@@ -17,10 +17,12 @@ class_name Carpenter
 #   - **완공 이력을 든다**(`_done`). 같은 업그레이드를 두 번 팔지 않기 위한 최소 기억이고, 이게
 #     매대 진열(완공된 건 "완공" 잠금 행)의 유일한 출처다.
 #
-# ⚠️ **집 업그레이드 3단계는 여기 없다**(ADR-0062 결정 7 "서랍"). 스타듀 집 업그레이드의 효과
-#    소비처(주방 = 요리 Slice 6 · 방 = 결혼 Slice 8)가 아직 미빌드라, 지금 넣으면 소스 없는
-#    콘텐츠가 된다(ADR-0060 결정 6 선례). 카탈로그에 프로젝트를 한 건 더 얹는 것만으로 열리므로
-#    그 슬라이스에서 데이터만 추가하면 된다(구조 변경 0).
+# ★[S8-T7 / ADR-0066 결정 8] "방 = 결혼 Slice 8" 서랍의 **이행**: 「안방 확장」이 세 번째
+#    프로젝트로 붙었다 — 예고대로 데이터 1건 추가뿐이고 구조 변경 0이다. building이 ""인 첫
+#    프로젝트라(Ranch 승격 없음), 완공 실효(HOME 방 rect 확장·home_deco bounds 재주입)는 main의
+#    완공 배선이 id 분기로 잇는다(원장은 여전히 "무엇을 언제 짓는가"만 안다).
+#    주방(요리) 업그레이드는 여전히 서랍이다 — 요리 소비처(S6)가 곳간→접시 창구로 열려 있지만
+#    "주방 설비" 실내 콘텐츠가 없어 지금 넣으면 소스 없는 콘텐츠가 된다(ADR-0060 결정 6 선례).
 
 signal changed()   # 의뢰·완공·복원 프레임(main이 듣고 매대 행·알림·드로우 갱신)
 
@@ -37,8 +39,11 @@ signal changed()   # 의뢰·완공·복원 프레임(main이 듣고 매대 행�
 #   환산하면 두 경제가 어긋난다.
 const PROJ_BIG_COOP := "big_coop"
 const PROJ_BIG_BARN := "big_barn"
+# ★[S8-T7 / ADR-0066 결정 8] 안방 확장 — 결혼 조건 "배우자 방"의 실물. 10,000냥+원목 300·2일은
+#   잠정(owner 큐 적재분). building=""(Ranch 무관 — 완공 실효는 main의 HOME 방 rect 확장 분기).
+const PROJ_MASTER_ROOM := "master_room"
 
-# id → {name_ko, gold, wood, days, building(Ranch 건물 id), desc}
+# id → {name_ko, gold, wood, days, building(Ranch 건물 id — "" = 건물 무관), desc}
 const PROJECTS := {
 	PROJ_BIG_COOP: {
 		"name_ko": "큰 넋둥우리", "gold": 10000, "wood": 400, "days": 2,
@@ -49,6 +54,11 @@ const PROJECTS := {
 		"name_ko": "큰 넋우릿간", "gold": 12000, "wood": 450, "days": 2,
 		"building": "넋우릿간",
 		"desc": "우릿간을 넓혀 더 많은 넋을 들인다",
+	},
+	PROJ_MASTER_ROOM: {
+		"name_ko": "안방 확장", "gold": 10000, "wood": 300, "days": 2,
+		"building": "",
+		"desc": "본가에 두 사람의 방을 들인다",
 	},
 }
 

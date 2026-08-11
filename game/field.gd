@@ -168,6 +168,18 @@ func water(t: Vector2i) -> bool:
 	tile_changed.emit(t)
 	return true
 
+# ★[S8-T7 / ADR-0066 결정 9] 배우자(미호) 아침 물주기 — **미급수 심긴 미성숙 칸**을 (y,x) 정렬
+#   순으로 limit개까지 적신다. 대상 선정이 여우불 범위(_foxfire_targets)와 같은 결정적 정렬이라
+#   헤드리스 재현이 보장된다. ★여우불(성장 가속·main의 advance_day 인자)과는 **별축**이다 —
+#   여우불은 "못 준 칸도 자라게" 하고, 이 물주기는 "칸을 실제로 적셔"(watered=true) 오늘의 손
+#   노동을 대행한다(ADR-0066 결정 9 "여우불과 물주기는 별축이라 중복 아님"). 적신 칸 수 반환.
+func water_dry(limit: int) -> int:
+	var done := 0
+	for t in _foxfire_targets(limit):
+		if water(t):
+			done += 1
+	return done
+
 # ★ [S1R-T9] 스프링클러 자동 급수 — 경작된 칸(심겼든 아니든)을 적신다. 손 물주기(water)와 달리 빈
 #   경작 칸도 젖고(스타듀 문법 — 흙이 젖어 보임), 심긴 미성숙 칸은 그날 advance_day 성장에 반영된다.
 #   혼력·물뿌리개 무관(호출 측 게이트 없음 — 스프링클러 편익은 그 두 축과 독립, ADR-0059 결정4).

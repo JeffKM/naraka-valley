@@ -75,10 +75,17 @@ func _run_checks() -> void:
 
 	# ── ⓐ 카탈로그 정합(원장 무의존 — static) ──
 	print("── ⓐ 카탈로그 ──")
-	_check("ⓐa 초기 로스터 = 성장 티어 2건뿐(집 업그레이드 3단계 = 서랍)",
-		Carpenter.ids().size() == 2
+	# ★[S8-T7] 로스터 3건 — 성장 티어 2건 + 안방 확장(결혼 조건 "배우자 방" — 서랍의 이행).
+	_check("ⓐa 로스터 = 성장 티어 2건 + 안방 확장(주방 업그레이드 = 서랍 유지)",
+		Carpenter.ids().size() == 3
 		and Carpenter.has_project(Carpenter.PROJ_BIG_COOP)
-		and Carpenter.has_project(Carpenter.PROJ_BIG_BARN))
+		and Carpenter.has_project(Carpenter.PROJ_BIG_BARN)
+		and Carpenter.has_project(Carpenter.PROJ_MASTER_ROOM))
+	_check("ⓐa′ 안방 확장 = 10,000냥 · 원목 300 · 2일 · Ranch 무관(building 없음)",
+		Carpenter.gold_cost(Carpenter.PROJ_MASTER_ROOM) == 10000
+		and Carpenter.wood_cost(Carpenter.PROJ_MASTER_ROOM) == 300
+		and Carpenter.build_days(Carpenter.PROJ_MASTER_ROOM) == 2
+		and Carpenter.building_of(Carpenter.PROJ_MASTER_ROOM) == "")
 	_check("ⓐb 큰 넋둥우리 = 스타듀 Big Coop 1:1(10,000냥 · 원목 400 · 2일)",
 		Carpenter.gold_cost(Carpenter.PROJ_BIG_COOP) == 10000
 		and Carpenter.wood_cost(Carpenter.PROJ_BIG_COOP) == 400
@@ -196,7 +203,7 @@ func _run_checks() -> void:
 		if not bool(row.get("locked", false)):
 			all_locked = false
 	_check("ⓒf 진행 중이면 건축 행 전부 잠김(진열 = 판정과 같은 사실)",
-		rows.size() == 2 and all_locked)
+		rows.size() == 3 and all_locked)   # ★[S8-T7] 안방 확장이 붙어 3행
 
 	# ── ⓓ 완공 ──
 	print("── ⓓ 완공 ──")

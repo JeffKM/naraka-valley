@@ -159,10 +159,14 @@ func gifts_left_in_week(day: int) -> int:
 #   ㉠ 하루 1회 — 생일에도 유지된다(하루에 여덟 배를 두 번 받는 날은 없다).
 #   ㉡ 주 2회 — **생일은 면제**다(ADR-0066 결정 3). 1년에 하루뿐인 날을 "이번 주 두 번 썼다"로
 #      닫으면 달력 마커가 놀림이 된다. 면제된 선물은 주 카운터도 **소모하지 않는다**(gift 참조).
-func can_gift(day: int, birthday: bool = false) -> bool:
+# ★[S8-T7 / ADR-0066 결정 8] week_exempt = **결혼 면제**(하루 1회 유지·주 2회만 해제). GIFTS_PER_WEEK
+#   선언부가 예고한 "예외 인자 하나"가 이것이다 — 배우자 판정(spouse_id)은 main 소관이라 결과
+#   플래그만 받는다(생일 판정을 플래그로 받는 것과 같은 결). 생일과 달리 **배율은 없다**(×8은
+#   생일의 것). 미혼(false)이면 동작 완전 불변.
+func can_gift(day: int, birthday: bool = false, week_exempt: bool = false) -> bool:
 	if day == last_gift_day:
 		return false
-	return birthday or gifts_used_in_week(day) < GIFTS_PER_WEEK
+	return birthday or week_exempt or gifts_used_in_week(day) < GIFTS_PER_WEEK
 
 # 선물 1회를 적용한다. 오늘 이미 했으면 0(획득 없음). 성공 시 적용한 점수를 그대로 반환한다.
 # ★[S8-T2 / ADR-0066 결정 2] 인자가 "작물 id"에서 **점수**로 바뀌었다 — 무엇이 몇 점인지는
@@ -175,11 +179,13 @@ func can_gift(day: int, birthday: bool = false) -> bool:
 # ★[S8-T3 / ADR-0066 결정 3] birthday=true면 ㉠주 2회 상한을 통과하고 ㉡주 카운터를 안 쓰며
 #   ㉢점수에 BIRTHDAY_MULT(×8)가 곱해진다. 반환값도 곱한 뒤의 *명목* 점수다(플레이어가 본
 #   "+320"이 사실이어야 한다 — 0 하한에 눌린 건 여전히 시스템 사정이다).
-func gift(points_gained: int, day: int, birthday: bool = false) -> int:
-	if not can_gift(day, birthday):
+# ★[S8-T7] week_exempt(결혼)도 ㉠㉡은 같되 ㉢배율이 없다 — 상한이 풀린 사람의 선물이 카운터를
+#   쓰면 "해제"가 장부상 거짓말이 된다(생일이 안 쓰는 것과 같은 이유).
+func gift(points_gained: int, day: int, birthday: bool = false, week_exempt: bool = false) -> int:
+	if not can_gift(day, birthday, week_exempt):
 		return 0
 	last_gift_day = day
-	if not birthday:
+	if not birthday and not week_exempt:
 		# 주 카운터 소모 — 주가 바뀌었으면 이번 선물이 그 주의 첫 번째다.
 		if GameClock.week_of(day) != gift_week:
 			gift_week = GameClock.week_of(day)
