@@ -54,6 +54,18 @@ static func day_of_season(d: int) -> int:
 static func is_season_last_day(d: int) -> bool:
 	return d >= 1 and day_of_season(d) == DAYS_PER_SEASON
 
+# ★[S8-T3 / ADR-0066 결정 3] 이 날이 속한 **주**(0부터). 선물 "인당 주 2회" 제한의 유일한 눈금이다.
+# ★ 주는 **상태가 아니다** — clock에 주 카운터를 두지 않고 day 하나에서 파생한다(S7 무상태 날씨
+#   관례 그대로). 상태로 두면 ㉠세이브 키가 늘고 ㉡취침·로드·디버그 점프에서 day와 어긋날 여지가
+#   생기며 ㉢"주가 바뀌었다"를 누가 리셋하는가라는 순서 문제가 딸려 온다. 파생이면 비교 한 번
+#   (내가 마지막에 쓴 주 ≠ 오늘의 주)으로 리셋이 공짜다.
+# ★ 절기(28일)는 정확히 4주라 주 경계가 절기 경계와 어긋나지 않는다 — 달력이 7열인 것도 같은 이유.
+# 0·음수 day는 0주로 접는다(손상 방어 — GDScript 정수 나눗셈은 0으로 절사돼 -1/7=0이지만 명시한다).
+const DAYS_PER_WEEK := 7
+
+static func week_of(d: int) -> int:
+	return (d - 1) / DAYS_PER_WEEK if d >= 1 else 0
+
 # 절기 인덱스 → 표시명("" = 범위 밖). flavor·프롬프트용.
 static func season_name(idx: int) -> String:
 	return SEASON_NAMES[idx] if idx >= 0 and idx < SEASON_NAMES.size() else ""

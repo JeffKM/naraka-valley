@@ -18,6 +18,10 @@ class_name Affinity
 #     단계 위에 얹힌다(여기서는 단계 값만 제공, 보상 연결은 각 시스템이 맡음).
 #   - ★[S8-T2] 선호 판정은 이 노드에 없다 — 무엇을 얼마나 좋아하는가는 GiftPrefs(전 아이템
 #     × 9인 테이블)가 소유하고, 여기는 그 결과 점수를 받아 "하루 1회"로 게이팅해 누적한다.
+#   - ★[S8-T3] 그 "리듬" 축이 셋으로 늘었다 — **하루 1회 · 주 2회 · 생일 ×8**(ADR-0066 결정 3).
+#     셋 다 *날짜*로만 갈리는 판단이라 전부 이 노드가 든다(아이템은 여전히 GiftPrefs 소관).
+#     주(week)는 상태가 아니라 GameClock.week_of(day) 파생이고, 생일 판정도 상태가 아니라
+#     Resident.BIRTHDAYS 테이블 조회다 — 이 노드는 결과 플래그 하나만 인자로 받는다.
 #   - T2.5 세이브/로드 — 상태가 정수 셋(점수·마지막 대화날·마지막 선물날)뿐이라
 #     그대로 직렬화된다. 복원 시 점수는 [0, MAX_POINTS]로 잘라 손상 세이브에 방어한다.
 
@@ -53,9 +57,33 @@ const DAILY_TALK_POINTS := 8         # 일일 대화 1회 소폭(느린 채널)
 const GIFT_POINTS := 15              # 뉴트럴 등급(옛 일반 작물 선물)
 const GIFT_PREFERRED_POINTS := 40    # 러브 등급(옛 선호 작물 선물 — 빠른 채널)
 
+# ── ★[S8-T3 / ADR-0066 결정 3] 선물의 두 번째 리듬: 인당 주 2회 ─────────────
+# 스타듀 동형. "하루 1회"만 있으면 선물이 매일의 의무가 되어(28일 절기 = 28회) 관계가 출석
+# 체크로 굳는다 — 주 2회 상한이 그 그라인드를 끊고, 아낀 날을 대화·활동 채널이 채운다.
+# ★ 하루 1회를 대체하는 게 아니라 **위에 AND로 얹힌다**: 같은 날 두 번도 막고(옛 규칙),
+#   같은 주 세 번도 막는다(새 규칙).
+# ★ 결혼 후 이 상한이 풀린다(ADR-0066 결정 8 — S8-T7 소관). 그래서 판정을 can_gift 한 곳에
+#   모아 뒀다: 그때 예외 인자 하나가 늘 뿐 호출부는 안 바뀐다.
+const GIFTS_PER_WEEK := 2
+
+# 생일 배율(스타듀 1:1 — 러브부터 헤이트까지 전 등급에 곱한다. 음수도 ×8이지만 _add의 0 하한이
+# 받아 준다 — 영구 적대 없음). ★배율이 GiftPrefs가 아니라 **여기** 있는 이유: 무엇이 몇 점인가는
+# 아이템×사람의 판정(GiftPrefs 소유)이고, 오늘이 무슨 날인가는 **리듬**(하루 1회·주 2회와 같은
+# 날짜 축 = Affinity 소유)이다. 배율을 GiftPrefs.POINTS에 섞으면 quest_board가 "선물 1회급"으로
+# 참조하는 GIFT_POINTS 눈금이 날짜에 따라 흔들린다 — 그 결합을 건드리지 않으려면 여기가 맞다.
+# ★잠정 경보(owner 큐 — 값은 ADR-0066 결정 3이 "스타듀 동형"으로 확정한 그대로 태웠다): 우리
+#   5-스케일에선 만렙이 MAX_POINTS=300이라 **생일 러브 선물 한 번(40×8=320)이 미터를 통째로
+#   채운다**(스타듀는 80×8=640 / 만렙 2500 ≈ 2.5하트). 눈금을 맞추려면 ×8이 아니라 곡선 쪽
+#   (POINTS_PER_HEART)을 늘리는 게 맞고, 그건 S8-T4 소관이라 여기선 손대지 않는다. 초과분은
+#   _add의 상한이 조용히 흡수한다(반환값은 명목 320 그대로 — 플레이어에겐 그게 사실이다).
+const BIRTHDAY_MULT := 8
+
 var points: int = 0
 var last_talk_day: int = -1   # 마지막으로 일일 대화 보상을 받은 게임 날(-1 = 아직 없음)
 var last_gift_day: int = -1   # 마지막으로 선물한 게임 날(-1 = 아직 없음)
+# 주간 카운터(세이브 **가법 키** — 구세이브엔 없어 기본값으로 시작한다).
+var gift_week: int = -1       # gifts_this_week가 속한 주(GameClock.week_of · -1 = 아직 없음)
+var gifts_this_week: int = 0  # 그 주에 이미 건넨 횟수
 
 # ── 조회 ──────────────────────────────────────────────────────────────────
 # 현재 하트 단계(0..MAX_HEARTS). 점수를 칸당 점수로 나눈 내림값, 만렙에서 멈춘다.
@@ -82,9 +110,23 @@ func daily_talk(day: int) -> bool:
 	return true
 
 # ── 선물(선호 작물 큰 폭) ──────────────────────────────────────────────────
-# 오늘 아직 선물하지 않았으면 줄 수 있다(하루 1회).
-func can_gift(day: int) -> bool:
-	return day != last_gift_day
+# ★[S8-T3] 이 주에 이미 몇 번 건넸나. 주가 바뀌었으면 0 — **리셋 루프가 없다**(파생 비교 하나로
+#   되감긴다. 취침·로드·디버그 점프 어느 경로로 날이 넘어가도 자동이다).
+func gifts_used_in_week(day: int) -> int:
+	return gifts_this_week if GameClock.week_of(day) == gift_week else 0
+
+# 이 주에 남은 선물 횟수(0..GIFTS_PER_WEEK — 프롬프트·관계 탭 표시용).
+func gifts_left_in_week(day: int) -> int:
+	return maxi(GIFTS_PER_WEEK - gifts_used_in_week(day), 0)
+
+# 오늘 선물할 수 있는가. **두 리듬의 AND**다:
+#   ㉠ 하루 1회 — 생일에도 유지된다(하루에 여덟 배를 두 번 받는 날은 없다).
+#   ㉡ 주 2회 — **생일은 면제**다(ADR-0066 결정 3). 1년에 하루뿐인 날을 "이번 주 두 번 썼다"로
+#      닫으면 달력 마커가 놀림이 된다. 면제된 선물은 주 카운터도 **소모하지 않는다**(gift 참조).
+func can_gift(day: int, birthday: bool = false) -> bool:
+	if day == last_gift_day:
+		return false
+	return birthday or gifts_used_in_week(day) < GIFTS_PER_WEEK
 
 # 선물 1회를 적용한다. 오늘 이미 했으면 0(획득 없음). 성공 시 적용한 점수를 그대로 반환한다.
 # ★[S8-T2 / ADR-0066 결정 2] 인자가 "작물 id"에서 **점수**로 바뀌었다 — 무엇이 몇 점인지는
@@ -94,12 +136,22 @@ func can_gift(day: int) -> bool:
 #   못 내려가게 잡는다(영구 적대 없음 — ADR-0022·ADR-0066 결정 2 "완만하고 영구 적대 없음").
 #   반환값은 *명목* 점수라 0에서 −20을 맞아도 −20으로 알린다(플레이어에겐 "싫어했다"가 사실이고,
 #   바닥에 눌린 건 시스템 사정이다).
-func gift(points_gained: int, day: int) -> int:
-	if not can_gift(day):
+# ★[S8-T3 / ADR-0066 결정 3] birthday=true면 ㉠주 2회 상한을 통과하고 ㉡주 카운터를 안 쓰며
+#   ㉢점수에 BIRTHDAY_MULT(×8)가 곱해진다. 반환값도 곱한 뒤의 *명목* 점수다(플레이어가 본
+#   "+320"이 사실이어야 한다 — 0 하한에 눌린 건 여전히 시스템 사정이다).
+func gift(points_gained: int, day: int, birthday: bool = false) -> int:
+	if not can_gift(day, birthday):
 		return 0
 	last_gift_day = day
-	_add(points_gained)
-	return points_gained
+	if not birthday:
+		# 주 카운터 소모 — 주가 바뀌었으면 이번 선물이 그 주의 첫 번째다.
+		if GameClock.week_of(day) != gift_week:
+			gift_week = GameClock.week_of(day)
+			gifts_this_week = 0
+		gifts_this_week += 1
+	var applied := points_gained * (BIRTHDAY_MULT if birthday else 1)
+	_add(applied)
+	return applied
 
 # ── ★ [S2-T6] 외부 채널 가산(게시판 의뢰 보상 등) ──────────────────────────
 # 대화(하루 1회)·선물(하루 1회)과 다른 제3 채널이 호감도를 올릴 때 쓴다. 여기서는 날짜를 보지
@@ -115,15 +167,22 @@ func _add(n: int) -> void:
 
 # ── T2.5 세이브/로드 ──────────────────────────────────────────────────────
 # 상태가 정수 셋뿐이라 그대로 직렬화된다. 복원 시 점수를 잘라 손상 세이브에 방어한다.
+# ★[S8-T3] 주간 카운터 2키는 **가법**이다 — 구세이브엔 없어 기본값(-1 / 0)으로 로드되고,
+#   그 상태는 "이 주엔 아직 안 건넸다"라 아무것도 안 막힌다(무마이그레이션 하위호환).
 func to_save() -> Dictionary:
 	return {
 		"points": points,
 		"last_talk_day": last_talk_day,
 		"last_gift_day": last_gift_day,
+		"gift_week": gift_week,
+		"gifts_this_week": gifts_this_week,
 	}
 
 func load_save(data: Dictionary) -> void:
 	points = clampi(int(data.get("points", 0)), 0, MAX_POINTS)
 	last_talk_day = int(data.get("last_talk_day", -1))
 	last_gift_day = int(data.get("last_gift_day", -1))
+	gift_week = int(data.get("gift_week", -1))
+	# 손상 방어: 음수·상한 초과는 잘라 둔다(잘못된 값이 상한을 무력화하거나 영구 차단하지 않게).
+	gifts_this_week = clampi(int(data.get("gifts_this_week", 0)), 0, GIFTS_PER_WEEK)
 	changed.emit(points, hearts())
