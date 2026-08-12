@@ -113,14 +113,15 @@ func _run_checks() -> void:
 	# ★[S6-T7 / ADR-0064 결정 8] 10 → 11: 주방요괴(카페 T3 배경 직원)가 열한째로 붙었다(의도적
 	#   불변식 개정). **관계 트랙 0**인 첫 등록이라 이 한 건이 프레임워크의 "affinity 없이도 주민"
 	#   경로(옥자)를 script_path 생성 경로와 함께 처음으로 태운다.
-	# ★[S9b-T1 / ADR-0068 결정 3] 11 → 12: 깨비(조연 코러스 첫 온보딩)가 **주방요괴 바로 앞**에
-	#   붙었다(의도적 불변식 개정). 그 자리인 이유는 두 좌표 불변식의 교집합이라서다 — 앞 10인의
-	#   인덱스 불변(guild_test `_residents[9] == mugol`) + 주방요괴가 마지막(side_dish_test).
-	_check("③a 주민 12인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 · ★S6-T7 주방요괴 · ★S9b-T1 깨비 추가)",
-		m._residents.size() == 12)
-	_check("③b 12인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골·깨비·주방요괴",
+	# ★[S9b-T1 / ADR-0068 결정 3] 11 → 13: 깨비·켄(조연 코러스 첫 2인 풀 온보딩)이 **주방요괴
+	#   바로 앞**에 붙었다(의도적 불변식 개정). 그 자리인 이유는 두 좌표 불변식의 교집합이라서다 —
+	#   앞 10인의 인덱스 불변(guild_test `_residents[9] == mugol`) + 주방요괴가 마지막
+	#   (side_dish_test). 뒤따르는 조연 7인도 같은 자리에 붙는다.
+	_check("③a 주민 13인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 · ★S9b-T1 깨비·켄 · ★S6-T7 주방요괴 추가)",
+		m._residents.size() == 13)
+	_check("③b 13인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골·깨비·켄·주방요괴",
 		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman", "ongi", "pulmu",
-			"mugol", "kkaebi", "kitchen_youkai"])
+			"mugol", "kkaebi", "ken", "kitchen_youkai"])
 	_check("③c id 조회", m._resident("mel") != null and m._resident("mel").display_name == "멜")
 	_check("③d 이름 조회", m._resident_named("바나") != null and m._resident_named("바나").id == "bana")
 	_check("③e 없는 id/이름 = null", m._resident("없음") == null and m._resident_named("없음") == null)

@@ -15468,6 +15468,58 @@ func _setup_residents() -> void:
 	_register_resident(r_kkaebi)
 	# ★ 선호 선물은 GiftPrefs "kkaebi"가 든다(산이 주는 것·묵거리 러브 / 무쇠 헤이트 — 도깨비
 	#   설화의 금기). 생일은 Resident.BIRTHDAYS "kkaebi"(유화절 13일 — 잠정, owner 큐).
+	# ── ★ [S9b-T1 / ADR-0068 결정 3] 켄 — **조연 코러스 9인의 풀 온보딩**(언데드 거인·T1).
+	#    모찌가 깔아 둔 그 길을 그대로 탄다: 이 블록 하나 + `ken.gd` 한 파일이 주민 1인 추가의
+	#    전부다(main.tscn 무수정 — script_path·needs_affinity를 채우면 `_register_resident`가 몸과
+	#    관계 트랙 노드를 낳는다).
+	#
+	#    ★ **쉼터 2채널**([narrative-bible §6.1]): 대화·선물만으로 하트가 오른다. **활동 채널 0 ·
+	#      곱셈기(effect_fn) 0** — 활동 곱셈기는 메인 4인 독점이고([ADR-0008]), 조연은 활동 압박의
+	#      *쉼터*가 되어야 한다. deed 문턱도 없다(Deed가 문턱표에 이름이 없으면 통과로 답한다).
+	#
+	#    ★ 로스터 1:1 집 배정: **켄 = 주민 집 9**(RESIDENT_HOUSE_RECTS[8], 문 89,51 — 동편 중하단 우).
+	#      근거 ㉠ 마을 **동쪽 끝**이라 사람 왕래가 가장 적다 — "겉모습 때문에 괴물 취급받다"
+	#      ([residents.md] 생전 죄) 살아온 자가 스스로 고른 변두리다(자기 몸이 남을 놀라게 하는 걸
+	#      아는 사람의 주거 선택) ㉡ 산길 워프 스포크(x98)·마을 동편 나무들과 가까워 "식물 사랑"
+	#      (창가 화분 열둘)의 생활권이 맞는다 ㉢ 강변 2채(index 9·10)는 세레나(인어) 예약분이라
+	#      비켜 두고, 모찌(index 3)와도 겹치지 않는다.
+	#
+	#    ★ 하루 = 집 앞 → 광장 남서 구석 → 카페 홀 구석. 세 자리가 전부 나루 마을이라 보간 걷기가
+	#      실제로 돈다(모찌 선례). 스케줄은 바이블 "나라카 연결"에서 파생했다 — 힘쓰는 일로 남을
+	#      돕되(광장) **한복판이 아니라 가장자리**에 서고, 저녁엔 카페에 손님으로 앉는다(그 밤의
+	#      약방에서 무거운 걸 나르던 자리의 저승판 — 그가 매일 되돌아가는 곳).
+	var r_ken := Resident.new()
+	r_ken.id = "ken"
+	r_ken.display_name = "켄"
+	r_ken.script_path = "res://ken.gd"       # ★ 노드를 레코드가 낳는 길(main.tscn 무수정)
+	r_ken.needs_affinity = true
+	r_ken.save_key = "ken_affinity"          # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_ken.can_gift = true
+	r_ken.gift_target_ko = "켄"
+	r_ken.portrait_stem = ""                 # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
+	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 켄이 보인다 — 그래서 문 바로 아래
+	# 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌와 같은 규약).
+	var ken_home_tile: Vector2i = RESIDENT_HOUSE_DOORS[8] + Vector2i(0, 1)   # (89,52)
+	# 낮 = 마을 광장(NARU_PLAZA_RECT x46..58, y31..41)의 **남서 구석**. 메인 복도(y36)·다리 스파인
+	# (x52·53)·야시장 매대(NIGHT_MARKET_TILE 52,34)·모찌 자리(54,34)를 전부 비껴간다. 거구가
+	# 사거리 한복판을 막지 않으면서도 광장에 들어서면 눈에 들어오는 자리 = "반 발짝 물러선" 켄.
+	var ken_plaza_tile := Vector2i(48, 39)
+	# 저녁 = 카페(영업창 15:00~) **홀 남동 구석**. 직원 줄(y88)·카운터(y89)·좌석 스툴(y90)·손님
+	# 테이블(y93)·등불(18,91)·모찌 자리(13,92)를 전부 비껴간 칸이다. 일하는 자리가 아니라 **손님**
+	# 으로 앉는다(그 집에서 무거운 걸 나르던 사람이, 이제는 아무것도 안 나르고 앉아 있는 그림).
+	var ken_cafe_tile := Vector2i(17, 92)
+	r_ken.schedule = [
+		{"from_min": 0, "tile": ken_home_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": 9 * 60, "tile": ken_plaza_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": Cafe.OPEN_MIN, "tile": ken_cafe_tile, "region": RegionCatalog.NARU_VILLAGE},
+	]
+	# ★ effect_fn 없음 = 관계 탭에 곱셈기 줄이 안 붙는다(선물 리듬 꼬리만 — 모찌 선례 동형).
+	_register_resident(r_ken)
+	# ★ 선호 선물은 GiftPrefs "ken"이 든다 — 살아 있는 약초·화초가 러브, 다 타고 남은 것(혼탄·
+	#   업화석 조각)이 헤이트다. 생일은 Resident.BIRTHDAYS "ken"(피안절 23일 — 달력 마커 자동).
+	# ★ 연애·결혼은 **아직 안 연다**: ken.gd가 confession/divorce/spouse 본문을 이미 들고 있지만
+	#   ROMANCE_OPEN 명단은 S9b-T6(조연 연애·결혼 개통)이 고친다 — 명단 한 줄이 개통의 전부다.
 
 	# ── ★ [S6-T7 / ADR-0064 결정 8] 주방요괴 — **T3 배경 직원**(카페 주방 자리·곁들이 창구).
 	#    CONTEXT [주방요괴]가 정의만 해 두고 무대엔 없던 자리를 세운다: S6-T1부터 기본 메뉴는

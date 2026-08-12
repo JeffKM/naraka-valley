@@ -102,10 +102,11 @@ func _run_checks() -> void:
 	var r: Resident = m._resident("mugol")
 	# ★[S6-T7] size 10 → 11(주방요괴가 **맨 뒤**에 붙었다 — 의도적 불변식 개정). 무골의 인덱스 9는
 	#   그대로다: 신규는 뒤에만 붙는다는 규약이 지켜졌다는 것이 이 단언의 본체다.
-	# ★[S9b-T1 / ADR-0068 결정 3] size 11 → 12(깨비가 주방요괴 **바로 앞**에 끼어들었다). 인덱스 9는
-	#   여전히 무골이다 — 이 단언이 지키는 "앞 순서 불변"이 그 삽입 자리를 고른 이유다.
+	# ★[S9b-T1] 총원 단언은 뺐다 — 조연 9인이 한 명씩 붙는 슬라이스에서 **로스터 총원의 단일
+	#   출처는 resident_test ③a·③b**이고, 여기 사본이 있으면 주민 1인 추가가 매번 3파일 편집이
+	#   된다. 이 스위트가 지켜야 하는 불변식은 총원이 아니라 **"무골의 인덱스가 안 밀린다"**이다.
 	_check("ⓐa 레지스트리에 등록 · 10인째(뒤에만 붙는다 — 앞 순서 불변)",
-		r != null and m._residents.size() == 12 and m._residents[9].id == "mugol")
+		r != null and m._residents.size() > 9 and m._residents[9].id == "mugol")
 	_check("ⓐb 표시명 = 무골(칭호)", r != null and r.display_name == "무골")
 	_check("ⓐc 몸이 런타임 생성돼 트리에 붙는다(main.tscn 무수정)",
 		r.node != null and r.node.is_inside_tree() and r.node is Mugol)

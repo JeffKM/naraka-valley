@@ -137,14 +137,16 @@ func _run_checks() -> void:
 		GiftPrefs.tier_of("mel", CropCatalog.PIANHWA) == GiftPrefs.LOVE
 		and GiftPrefs.tier_of("mugol", CropCatalog.PIANHWA) == GiftPrefs.HATE
 		and GiftPrefs.tier_of("miho", CropCatalog.PIANHWA) == GiftPrefs.NEUTRAL)
-	# 10인 전원이 테이블을 가진다 — 규모(러브 4~6·헤이트 1~2)와 유효성(실존·건넬 수 있는 것).
-	# ★[S9b-T1 / ADR-0068 결정 3] 9 → 10: 깨비(조연 코러스 첫 온보딩)가 합류.
+	# 관계 트랙 보유자 전원이 테이블을 가진다 — 규모(러브 4~6·헤이트 1~2)와 유효성(실존·건넬 수
+	# 있는 것). ★[S9b-T1 / ADR-0068 결정 3] 9 → 11: 깨비·켄(조연 코러스 첫 2인)이 붙었다.
+	# ★ 이 스위트는 씬 없이 도는 구간이라 레지스트리를 못 읽는다(m은 아래 ⑤부터 산다) — 트랙
+	#   보유자와의 대응은 ⑧a가 레지스트리를 들고 다시 잰다.
 	var who: Array = GiftPrefs.residents_with_prefs()
-	_check("②f 관계 트랙 보유 10인 전원이 테이블 보유",
-		who.size() == 10 and who.has("miho") and who.has("mel") and who.has("bana")
+	_check("②f 관계 트랙 보유 11인 전원이 테이블 보유",
+		who.size() == 11 and who.has("miho") and who.has("mel") and who.has("bana")
 		and who.has("neo") and who.has("mochi") and who.has("boatman")
 		and who.has("ongi") and who.has("pulmu") and who.has("mugol")
-		and who.has("kkaebi"))
+		and who.has("kkaebi") and who.has("ken"))
 	var size_ok := true
 	var valid_ok := true
 	var overlap_ok := true
@@ -329,9 +331,11 @@ func _run_checks() -> void:
 	for r in m._residents:
 		if r.affinity != null:
 			tracked.append(r.id)
-	# ★[S9b-T1 / ADR-0068 결정 3] 9 → 10: 깨비(유화절 13일 — 잠정)가 합류.
-	_check("⑧a 관계 트랙 보유 10인 전원에게 생일이 있다(그리고 그 10인뿐)",
-		tracked.size() == 10 and Resident.BIRTHDAYS.size() == 10
+	# ★[S9b-T1] 총원 상수를 **레지스트리 파생 불변식**으로 바꿨다 — 재고 싶은 계약은 "9"라는
+	#   숫자가 아니라 *관계 트랙 보유자 집합 == 생일 테이블 집합*이다(조연이 한 명씩 붙어도
+	#   이 단언이 그대로 이빨을 유지한다).
+	_check("⑧a 관계 트랙 보유자 전원에게 생일이 있다(그리고 그들뿐)",
+		tracked.size() == Resident.BIRTHDAYS.size() and tracked.size() >= 11
 		and tracked.all(func(rid: String) -> bool: return Resident.BIRTHDAYS.has(rid)))
 	var range_ok := true       # 절기 0..3 · 일차 1..28
 	var avoid_theme := true    # 25일(테마 데이 고정 슬롯) 회피

@@ -198,6 +198,23 @@ const OVERRIDES := {
 		],
 		HATE: [ItemCatalog.INGOT_YUCHEOL, ItemCatalog.ORE_YUCHEOL],   # 무쇠 — 도깨비 설화의 금기
 	},
+	# ★[S9b-T1 / ADR-0068 결정 3] 켄 — **살아 있는 약초·화초**(그날 밤 약방의 조수였고, 지금은
+	# 창가에 화분 열둘을 기른다 — [narrative-bible §5.2]·[residents.md] "식물 사랑"). 손끝으로만
+	# 만지는 자에게 러브는 *살아 있는 것*이다.
+	# 헤이트 = **다 타고 남은 것**(혼탄·업화석 조각). 그 밤의 불이 남긴 결이라 켄의 손에 쥐여지면
+	# 안 되는 물건이다. ⚠️미호 헤이트(혼불씨·업화석 = *산 불*)와는 결이 갈린다 — 미호는 아직 타는
+	# 불이 무섭고, 켄은 이미 타 버린 뒤가 무섭다.
+	# ★옹이(목령 = 나무)와도 겹치지 않는다: 옹이 = 수액·나무 씨앗 / 켄 = 약재·화초.
+	"ken": {
+		LOVE: [
+			ItemCatalog.JEOSEUNG_SAM,        # 저승삼 — 약방의 으뜸 약재(그가 나르던 것)
+			ItemCatalog.EONHON_PPURI,        # 언혼뿌리
+			ItemCatalog.SEORI_HONBAEKCHO,    # 서리혼백초
+			ItemCatalog.MIHOK_NANCHO,        # 미혹난초 — 화분에 올리고 싶은 꽃
+			ItemCatalog.JEOSEUNG_IKKI,       # 저승 이끼 — 큰 손으로 기르기 가장 어려운 것
+		],
+		HATE: [ItemCatalog.HONTAN, ItemCatalog.EMBER_SHARD],
+	},
 }
 
 # ── 조회 ──────────────────────────────────────────────────────────────────────
