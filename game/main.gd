@@ -15521,6 +15521,66 @@ func _setup_residents() -> void:
 	# ★ 연애·결혼은 **아직 안 연다**: ken.gd가 confession/divorce/spouse 본문을 이미 들고 있지만
 	#   ROMANCE_OPEN 명단은 S9b-T6(조연 연애·결혼 개통)이 고친다 — 명단 한 줄이 개통의 전부다.
 
+	# ── ★ [S9b-T2 / ADR-0068 결정 3] 설화 — **조연 코러스 풀 온보딩**(설녀·T1).
+	#    깨비·켄과 같은 길을 그대로 탄다: 이 블록 하나 + `seolhwa.gd` 한 파일이 주민 1인 추가의
+	#    전부다(main.tscn 무수정 — script_path·needs_affinity를 채우면 `_register_resident`가 몸과
+	#    관계 트랙 노드를 낳는다).
+	#
+	#    ★ **등록 자리 = 주방요괴 바로 앞**(S9b-T1이 확립한 불변식). 앞 12인의 인덱스가 불변이고
+	#      (guild_test `_residents[9] == mugol`) 주방요괴가 마지막이라(side_dish_test) 늘어나는 건
+	#      size 하나뿐이다. 뒤따르는 조연 6인도 같은 자리에 붙는다.
+	#
+	#    ★ **쉼터 2채널**([narrative-bible §6.1]): 대화·선물만으로 하트가 오른다. **활동 채널 0 ·
+	#      곱셈기(effect_fn) 0** — 활동 곱셈기는 메인 4인 독점이고([ADR-0008]), 특히 설화의 냉기는
+	#      깨비의 불과 같은 백스토리 한정 가드레일이라 어떤 수치 보정도 붙이지 않는다.
+	#
+	#    ★ **집 배정 = 주민 집 1**(RESIDENT_HOUSE_RECTS[0] = Rect2i(80,14,5,4), 문 82,17).
+	#      근거 ㉠ [narrative-bible §5.3] 설화는 **설산의 냉기 존재**다 — 마을 주거 11채 중 가장
+	#      북쪽(y14)이자 가장 높은 자리라 "산에서 내려와 마을 어귀 맨 끝에 머문다"는 생활권이
+	#      좌표만으로 성립한다(같은 산 결의 깨비 집 6은 동쪽 산길 쪽, 설화는 북쪽 끝 — 둘이 산을
+	#      나눠 가진다) ㉡ 문(y17)이 메인 복도(y36)보다 한참 위라 문 스포크가 x82 한 열로 곧장
+	#      내려가 보간 걷기 경로가 실제 길과 겹친다(모찌·깨비 선례와 같은 성질) ㉢ 강변 2채
+	#      (index 9·10)는 세레나(인어) 예약분이라 비켜 두고, 모찌(3)·깨비(5)·켄(8)과도 안 겹친다.
+	#
+	#    ★ 하루 = 집 앞 → **광장 북서 구석** → **카페 홀 남서 구석**. 세 자리가 전부 나루 마을이라
+	#      보간 걷기가 실제로 돈다(모찌 선례). 스케줄은 바이블 「나라카 연결」("평소 차갑고 고고
+	#      하나 플레이어·옥자 앞에선 눈물 글썽")에서 파생했다 — 사람이 모이는 사거리 한복판을
+	#      비껴 **광장 가장자리**에 홀로 서고, 저녁엔 카페에 오되 카운터가 아니라 **가장 먼 구석**에
+	#      앉는다(옥자 곁까지는 오되 곁에 서지는 못하는 거리 — 이 캐릭터의 축이 곧 자리다).
+	var r_seolhwa := Resident.new()
+	r_seolhwa.id = "seolhwa"
+	r_seolhwa.display_name = "설화"
+	r_seolhwa.script_path = "res://seolhwa.gd"   # ★ 노드를 레코드가 낳는 길(main.tscn 무수정)
+	r_seolhwa.needs_affinity = true
+	r_seolhwa.save_key = "seolhwa_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_seolhwa.can_gift = true
+	r_seolhwa.gift_target_ko = "설화"
+	r_seolhwa.portrait_stem = ""                 # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
+	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 설화가 보인다 — 그래서 문 바로
+	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌·깨비·켄과 같은 규약).
+	var seolhwa_home_tile: Vector2i = RESIDENT_HOUSE_DOORS[0] + Vector2i(0, 1)   # (82,18)
+	# 낮 = 마을 광장(NARU_PLAZA_RECT x46..58, y31..41)의 **북서 구석**. 메인 복도(y36)·다리 스파인
+	# (x52·53)·야시장 매대(52,34)·모찌(54,34)·깨비(56,34)·켄(48,39)을 전부 비껴간다. 광장 안이면서
+	# 무리와 가장 먼 칸 = "섞이지 않는" 설화의 자리다.
+	var seolhwa_plaza_tile := Vector2i(47, 32)
+	# 저녁 = 카페(영업창 15:00~) **홀 남서 구석**. 직원 줄(y88)·카운터(y89)·좌석 스툴(y90)·손님
+	# 테이블(11,93)(15,93)·등불(18,91)·모찌(13,92)·깨비(16,91)·켄(17,92)을 전부 비껴간 칸이다.
+	# 일하는 자리가 아니라 손님으로, 그것도 문에서 가장 먼 구석에 앉는다.
+	var seolhwa_cafe_tile := Vector2i(10, 92)
+	r_seolhwa.schedule = [
+		{"from_min": 0, "tile": seolhwa_home_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": 11 * 60, "tile": seolhwa_plaza_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": Cafe.OPEN_MIN, "tile": seolhwa_cafe_tile, "region": RegionCatalog.NARU_VILLAGE},
+	]
+	# ★ effect_fn 없음 = 관계 탭에 곱셈기 줄이 안 붙는다(선물 리듬 꼬리만 — 모찌 선례 동형).
+	_register_resident(r_seolhwa)
+	# ★ 선호 선물은 GiftPrefs "seolhwa"가 든다 — 차고 맑은 것(서리동백·서리혼백초·넋수정·
+	#   은비늘청어·삼도천 냉수)이 러브, **김이 오르는 것**(넋 데운 우유·넋송이 수프)이 헤이트다.
+	#   생일은 Resident.BIRTHDAYS "seolhwa"(성야절 14일 — 달력 마커 자동).
+	# ★ 연애·결혼은 **아직 안 연다**: seolhwa.gd가 confession/divorce/spouse 본문을 이미 들고
+	#   있지만 ROMANCE_OPEN 명단은 S9b-T6이 고친다 — 명단 한 줄이 개통의 전부다.
+
 	# ── ★ [S6-T7 / ADR-0064 결정 8] 주방요괴 — **T3 배경 직원**(카페 주방 자리·곁들이 창구).
 	#    CONTEXT [주방요괴]가 정의만 해 두고 무대엔 없던 자리를 세운다: S6-T1부터 기본 메뉴는
 	#    "주방요괴가 백스테이지에서 대는 무재료 음료"로 나가고 있었는데, 정작 그 백스테이지가
@@ -15736,7 +15796,10 @@ const HEART_GATE_MAX := 4   # 관문 이벤트로 오를 수 있는 최대 칸(�
 # ★ "ken"은 **아직 레코드가 없어도 미리 넣어 둔다**: 로스터의 주인은 이 상수 한 곳이고, 병렬로
 #   붙는 인물 태스크가 각자 이 배열을 고치면 결합 때 충돌만 난다. 없는 id는 판정에서 그냥 안
 #   걸린다(무해). 뒤따르는 조연 7인도 여기에만 더한다.
-const CHORUS_GATE_ROSTER := ["mochi", "neo", "kkaebi", "ken"]
+# ★[S9b-T2] 그 요령을 그대로 이어 **"seolhwa"·"scarlet"을 한 워커가 함께 등재한다**(공유 코드는
+#   단독 소유 — 병렬 워커 둘이 같은 배열을 각자 고치면 cherry-pick 결합에서 충돌만 난다).
+#   "scarlet"은 이 시점에 레코드가 없지만 없는 id는 판정에 안 걸리므로 무해하다("ken" 선등재 선례).
+const CHORUS_GATE_ROSTER := ["mochi", "neo", "kkaebi", "ken", "seolhwa", "scarlet"]
 const CHORUS_GATE_HEART := 3          # 게이트가 걸리는 칸 = ♡3(그날 밤 고백)
 const CHORUS_GATE_MAINS := ["miho", "mel", "bana"]   # 대화재 접촉의 증인(세 조각 소유자)
 const CHORUS_GATE_MAIN_STAGE := 3     # 그 중 1인이 이 칸 이상이면 열린다(♡3 = 씨앗 컷신)

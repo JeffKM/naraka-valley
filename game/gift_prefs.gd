@@ -215,6 +215,24 @@ const OVERRIDES := {
 		],
 		HATE: [ItemCatalog.HONTAN, ItemCatalog.EMBER_SHARD],
 	},
+	# ★[S9b-T2 / ADR-0068 결정 3] 설화 — **차고 맑은 것**([narrative-bible §5.3] 설녀 · 냉기 존재).
+	# 러브의 축은 "그녀 손에서 상하지 않는 것" 하나다: 서리 낀 겨울 채집물·얼음 같은 결정·
+	# 은비늘 어종·카페에서 가장 값싼 냉수. ★냉수를 러브에 둔 것이 이 캐릭터의 결이다 — 가장
+	# 흔하고 싼 잔이 그녀에겐 가장 편한 잔이라(고고함이 사치가 아니라 결핍의 다른 이름) 선물
+	# 경제에서 **초반부터 닿을 수 있는 러브**가 하나 열린다("평평 ≠ 막힘" 결).
+	# 헤이트 = **김이 오르는 것**(넋 데운 우유·넋송이 수프). 미호(산 불)·켄(타 버린 재)과 결이
+	# 갈린다 — 설화가 못 견디는 건 불이 아니라 *온기 그 자체*이고, 그래서 이 헤이트는 반전 로맨스
+	# ([narrative-bible §5.3] "결혼 = 따뜻해지는 법을 연습")의 **출발선 표시**이기도 하다.
+	"seolhwa": {
+		LOVE: [
+			ItemCatalog.SEORI_DONGBAEK,      # 서리동백(성야절) — ♡2 관문이 세우는 그 꽃
+			ItemCatalog.SEORI_HONBAEKCHO,    # 서리혼백초(성야절 특수) — 서리가 이름에 든 약초
+			ItemCatalog.GEM_NEOKSUJEONG,     # 넋수정 — 얼음과 가장 닮은 결정
+			FishCatalog.EUNBINEUL_CHEONGEO,  # 은비늘청어 — 찬물의 은빛
+			MenuCatalog.COLD_WATER,          # 삼도천 냉수 — 가장 싼 잔이 그녀에겐 가장 편한 잔
+		],
+		HATE: [MenuCatalog.HOT_MILK, MenuCatalog.SONGI_SOUP],   # 김이 오르는 것
+	},
 }
 
 # ── 조회 ──────────────────────────────────────────────────────────────────────
