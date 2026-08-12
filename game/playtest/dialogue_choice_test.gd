@@ -202,9 +202,19 @@ func _run_checks() -> void:
 	print("── ⑦ divorce_lines 훅 ──")
 	var r_miho = m._resident("miho")
 	var orig: Node2D = r_miho.node
-	_check("⑦a 훅 없는 캐릭터 = 공용 폴백",
-		not orig.has_method("divorce_lines")
+	# ★[S9-T4 / ADR-0067 결정 11 재작성] 미호가 divorce_lines 훅을 갖게 되어 "훅 없는 캐릭터"의
+	#   실례로 쓸 수 없다. 폴백 계약은 그대로 유효하므로 전제를 **훅 없는 mock**으로 옮기고,
+	#   실파일 쪽은 반대 방향(훅 존재·본문이 폴백과 다름)으로 단언한다.
+	_check("⑦a-1 미호(실파일)는 작별 훅을 가진다(placeholder 폴백 아님)",
+		orig.has_method("divorce_lines")
+		and m._divorce_farewell_line(r_miho) == String(orig.divorce_lines()[0])
+		and m._divorce_farewell_line(r_miho) != m.DIVORCE_FAREWELL_LINE)
+	var mk_none := _mock_node("func lines(_h: int, _f: bool) -> PackedStringArray:\n\treturn PackedStringArray([\"x\"])\n")
+	r_miho.node = mk_none
+	_check("⑦a-2 훅 없는 캐릭터 = 공용 폴백",
+		not mk_none.has_method("divorce_lines")
 		and m._divorce_farewell_line(r_miho) == m.DIVORCE_FAREWELL_LINE)
+	mk_none.free()
 	var mk_arr := _mock_node("func divorce_lines() -> PackedStringArray:\n\treturn PackedStringArray([\"…원망은 없어. 정말로.\", \"둘째 줄\"])\n")
 	r_miho.node = mk_arr
 	_check("⑦b PackedStringArray 훅 = 첫 줄을 쓴다",

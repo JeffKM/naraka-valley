@@ -34,6 +34,18 @@ func _new_main() -> Node:
 	await process_frame
 	return m
 
+# ★[S9-T4] 열린 대화를 끝까지 넘겨 닫는다(넘긴 횟수를 돌려준다). 절기 물음 선택지가 떠 있으면
+# 첫 항을 고른다 — 넘기기로는 못 지나가기 때문이다(DialogueBox.advance의 선택지 가드).
+func _drain(m: Node) -> int:
+	var n := 0
+	while m.dialogue.is_open() and n < 64:
+		if m.dialogue.has_choice():
+			m.dialogue.choose(0)
+		else:
+			m.dialogue.advance()
+		n += 1
+	return n
+
 # 아이템 1개를 인벤에 넣고 **그 슬롯을 손에 든다**(선물 입력 = 든 아이템 문법).
 # ★ 유니크(도구)는 이미 갖고 있어 add_item이 거절한다 — 그 경우 갖고 있는 슬롯을 그냥 든다.
 func _hold(m: Node, id: String, quality: int = 0) -> bool:
@@ -473,23 +485,25 @@ func _run_checks() -> void:
 	while m.dialogue.is_open() and drain < 64:
 		m.dialogue.advance()
 		drain += 1
+	# ★[S9-T4 / ADR-0067 결정 11 재작성] 미호가 birthday_lines 훅을 갖게 되어 placeholder
+	#   **동일성**은 미호 경로에서 성립하지 않는다. 계약("생일엔 평소 대사 앞에 한 줄이 선다")은
+	#   그대로 두고 출처만 캐릭터 본문으로 바꾼다 — placeholder 폴백 경로는 훅 없는 다른 주민이
+	#   계속 지킨다(생일 판정식은 한 줄도 안 바뀌었다).
 	m.clock.day = miho_bday
 	m._start_resident_dialogue(r_miho2)
-	_check("⑫a 생일엔 평소 대사 앞에 한 줄이 선다",
-		m.dialogue.is_open() and m.dialogue.line() == m.BIRTHDAY_PLACEHOLDER_LINE)
-	var guard := 0
-	while m.dialogue.is_open() and guard < 64:
-		m.dialogue.advance()
-		guard += 1
+	_check("⑫a 생일엔 평소 대사 앞에 한 줄이 선다(캐릭터 본문)",
+		m.dialogue.is_open() and m.dialogue.line() == String(r_miho2.node.birthday_lines()[0])
+		and m.dialogue.line() != m.BIRTHDAY_PLACEHOLDER_LINE)
+	# ★[S9-T4] 절기 물음(주 첫날)이 마지막 줄에 붙으면 넘기기로는 못 지나간다 — 플레이어와 같이
+	#   첫 항을 고른다(DialogueBox.advance의 선택지 가드).
+	var guard := _drain(m)
 	_check("⑫b 끝까지 넘기면 닫힌다(평소 묶음이 뒤에 이어졌다)",
 		not m.dialogue.is_open() and guard > 1)
 	m.clock.day = miho_bday + 1
 	m._start_resident_dialogue(r_miho2)
-	_check("⑫c 비생일엔 그 줄이 없다", m.dialogue.line() != m.BIRTHDAY_PLACEHOLDER_LINE)
-	guard = 0
-	while m.dialogue.is_open() and guard < 64:
-		m.dialogue.advance()
-		guard += 1
+	_check("⑫c 비생일엔 그 줄이 없다",
+		m.dialogue.line() != String(r_miho2.node.birthday_lines()[0]))
+	_drain(m)
 
 	m.free()
 	cleaner.delete_save()
