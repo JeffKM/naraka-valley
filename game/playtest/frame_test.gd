@@ -73,13 +73,22 @@ func _initialize() -> void:
 	# ★[S9b-T1 / ADR-0068 결정 3] 9 → 11: 깨비·켄(조연 코러스 첫 2인 풀 온보딩)이 무골 뒤·주방요괴
 	#   앞에 붙었다. 둘 다 관계 트랙 보유자라 관계 탭에 뜨고, **곱셈기(effect_fn)는 없다**(조연 =
 	#   쉼터 2채널 · [ADR-0008] 곱셈기는 메인 4인 독점) — 그래서 효과 줄은 선물 꼬리만이다(③b′ 결).
-	_check("③a _heart_rows = 관계 트랙 보유 11인(옥자·주방요괴 제외)", rows.size() == 11)
+	# ★[S9b-T2] 총원 사본을 **레지스트리 파생 불변식**으로 바꿨다(gift_test ⑧a가 먼저 간 길) —
+	#   조연이 한 명씩 붙는 슬라이스에서 "11"이라는 숫자를 여기 박아 두면 인물 태스크마다 이 줄을
+	#   고치게 되고(병렬 결합 충돌원), 정작 재고 싶은 계약은 숫자가 아니라 **"자격 = affinity !=
+	#   null 하나"**다. 그래서 레지스트리에서 직접 세어 맞춘다.
+	var tracked_names := []
+	for res in m._residents:
+		if res.affinity != null:
+			tracked_names.append(String(res.display_name))
+	_check("③a _heart_rows = 관계 트랙 보유자 전원(옥자·주방요괴 제외 — 자격은 affinity 하나)",
+		rows.size() == tracked_names.size() and rows.size() >= 11)
 	var rel_names := []
 	for row in rows:
 		rel_names.append(String(row["name"]))
-	# ★[S9b-T1] 깨비·켄이 꼬리에 붙는다(등록 순서 = 표시 순서 — 신규는 뒤에만 붙는다).
-	_check("③a′ 등록 순서 그대로",
-		rel_names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골", "깨비", "켄"])
+	# ★[S9b-T2] 이름 사본도 레지스트리 파생으로 — 재는 것은 명단이 아니라 **등록 순서 = 표시 순서**
+	#   (신규 주민은 뒤에만 붙는다)다. 명단을 박아 두면 조연이 붙을 때마다 같은 줄이 충돌한다.
+	_check("③a′ 등록 순서 그대로(신규 주민은 꼬리에만 붙는다)", rel_names == tracked_names)
 	_check("③b 각 행에 이름·하트", rows[0].has("name") and rows[0].has("filled") and rows[0].has("total"))
 	# ★[S8-T9] 효과 줄 뒤에 **선물 리듬 꼬리**("이번 주 선물 n/2")가 붙으면서 "곱셈기 없음 = 빈
 	#   문자열"이 아니게 됐다(선물 채널 보유자는 꼬리만으로도 줄이 선다 — 그게 이 꼬리의 목적).

@@ -141,12 +141,16 @@ func _run_checks() -> void:
 	# 있는 것). ★[S9b-T1 / ADR-0068 결정 3] 9 → 11: 깨비·켄(조연 코러스 첫 2인)이 붙었다.
 	# ★ 이 스위트는 씬 없이 도는 구간이라 레지스트리를 못 읽는다(m은 아래 ⑤부터 산다) — 트랙
 	#   보유자와의 대응은 ⑧a가 레지스트리를 들고 다시 잰다.
+	# ★[S9b-T2] 총원 등식(== 11)을 뺐다 — 조연이 한 명씩 붙는 슬라이스에서 이 숫자를 박아 두면
+	#   인물 태스크마다 같은 줄을 고치게 되고(병렬 결합 충돌원), 정작 재고 싶은 계약은 "몇 명인가"가
+	#   아니라 **"트랙 보유자 전원이 테이블을 가진다"**이다. 총원-집합 대응은 ⑧a가 레지스트리를
+	#   들고 재고, 여기서는 하한 + 개별 보유만 본다(gift_test ⑧a·frame_test ③a와 같은 전환).
 	var who: Array = GiftPrefs.residents_with_prefs()
-	_check("②f 관계 트랙 보유 11인 전원이 테이블 보유",
-		who.size() == 11 and who.has("miho") and who.has("mel") and who.has("bana")
+	_check("②f 관계 트랙 보유자 전원이 테이블 보유",
+		who.size() >= 11 and who.has("miho") and who.has("mel") and who.has("bana")
 		and who.has("neo") and who.has("mochi") and who.has("boatman")
 		and who.has("ongi") and who.has("pulmu") and who.has("mugol")
-		and who.has("kkaebi") and who.has("ken") and who.has("seolhwa"))
+		and who.has("kkaebi") and who.has("ken") and who.has("seolhwa") and who.has("scarlet"))
 	var size_ok := true
 	var valid_ok := true
 	var overlap_ok := true
