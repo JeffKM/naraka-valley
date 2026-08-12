@@ -2522,3 +2522,147 @@ muted 계수(한 자리에 나란히 서는 것끼리 같은 값이라야 새것
    질색=탁적 (0.78,0.40,0.34). 생일(×8)은 tier 색 그대로(문구가 "(생일!)"로 배율을 말한다).
 ★ owner 교체 대상 아님(파일이 없다) — 값이 마음에 안 들면 위 상수 한 줄씩이 레버다.
 ```
+
+---
+
+## 22. ★[S9-T9] T1 2인 슬라이스 아트 패스 — 우편함·책 아이콘·혼백관 좌대·편지지 4종 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-08-13). §10~§21과 같은 [ADR-0048]
+> 교체 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰고
+> `cd game && python3 tools/make_s9_t9_art.py`를 한 번 돌리면 **코드 0줄 수정**으로 반영된다.
+> (PNG를 갈아 끼운 뒤에는 `cd game && godot --headless --import` 1회 — 임포트 캐시가 소스가
+> 아니라 `.godot/imported/*.ctex`를 읽는다.)
+>
+> **후처리 글루:** [`game/tools/make_s9_t9_art.py`](../../game/tools/make_s9_t9_art.py) — 규칙·계수는
+> `make_s8_art.py`와 **같은 값**을 쓴다(새 규칙 0 · 하드 알파 → muted → 앵커 재정렬). 새로 는
+> 것은 `crop_bottom`(생성물이 구워 온 접지 그림자 걷어내기) 하나뿐이다.
+>
+> **raw 보관:** `game/assets/props/raw/mailbox_raw.png` · `game/assets/props/raw/museum_shelf_raw.png` ·
+> `game/assets/books/raw/book_icon_raw.png` · `game/assets/books/raw/note_icon_raw.png`
+> (§22.4 편지지는 raw가 없다 — 생성물이 아니라 `assets/ui/dialog_window.png` 파생물이다.)
+>
+> **PixelLab 사용량 5 gen**(create_image_pixen — 우편함 1 · 책 1 · 노트 1 · 좌대 v1 1〈투명
+> 체커를 **불투명 픽셀로 그려 와** 폐기〉 · 좌대 v2 1). **초상화 신규 0**(모찌·네오 초상화는
+> 이 패스 범위 밖 — 여전히 `portrait_stem=""`/도트 버스트다).
+>
+> **이 패스가 지운 색박스·그레이박스:** ①우편함 draw_rect 4장 ②CAT_BOOK 23종 인벤/핫바 색박스
+> ③혼백관 서가 좌대 8좌 draw_rect. **아트 없이 끝낸 항목:** 집 책장(`props/house_bookshelf.png`
+> 64×64)은 **이미 아트가 있다** — 새로 굽지 않고 교체 후보로만 아래 §22.5에 적어 둔다.
+
+### 22.0 공통 규약
+
+```
+전부 [ADR-0050] 32-native · [§1.1] NW 광원 · [§8.1] 하드 알파 · [§9] 저승 muted · [§3] 발치 앵커.
+생성: create_image_pixen(selective outline / low detail / no_background=true / seed 고정) —
+      §18.0·§20.0·§21.0이 세운 그 호출이다(32² 안팎 소품은 pixen이 가장 깨끗하고 1 gen이라 싸다).
+muted 계수(한 자리에 나란히 서는 것끼리 같은 값이라야 새것만 안 튄다):
+  아이콘        0.90/0.97 (= §18.1 메뉴·§21.1 부적과 **같은 값** — 같은 인벤 격자)
+  월드 프롭     0.85/0.95 (= §18.2 곳간·§20.1 점괘 거울과 **같은 값** — 같은 야외/실내 기물 층)
+  혼백관 좌대   0.62/0.90 (**이 패스만 예외** — 생성물이 붉은 칠 목재로 나왔는데 그 방의 기존
+                좌대는 어두운 갈색 draw_rect다. 같은 방 같은 줄에 서므로 붉음을 눌러 합류시킨다)
+★청키화(enforce_chunk)는 걸지 않는다 — §20.0·§21.0이 그은 선 그대로.
+★★ 상태를 아트에 굽지 않는다: 우편함 미독 깃발·전시된 책등·되찾은 권수는 전부 코드가 그린다.
+```
+
+### 22.1 ★우편함 `props/mailbox.png` (32×32 프롭) — 편지가 오는 자리
+
+```
+배선: **코드 0줄.** `main._draw_mailbox`가 이미 `_prop_tex("mailbox")` 우선 분기라, 파일을
+  `game/assets/props/`에 놓는 것이 배선의 전부다(없으면 draw_rect 그레이박스로 자동 폴백).
+  자리 = HOME 야외 MAILBOX_TILE (46,10) 한 칸, 집 외관(y9) 바로 아래.
+정체성: 편지·관문 여진이 도착하는 **집 앞 함**이다(S9-T3 편지 채널의 유일한 물리 창구).
+  한옥 결의 어두운 판재 함 + 짧은 기둥 + 작은 기와 갓 + 한지 투입구. 서양 아메리칸 메일박스의
+  둥근 아치통이 아니라 **각진 나무 함**이라야 한다.
+  PROMPT: a single small korean traditional wooden mailbox letter box mounted on a short weathered
+    post, dark hanok timber planks with a pale hanji paper letter slot on the front, small tiled
+    roof cap over the box, thin cord wrapped around the post, [§1.1 광원 세트],
+    muted somber palette   (view=low top-down / selective outline / low detail / seed 90901)
+후처리: 하드 알파 → muted(0.85/0.95) → 32² bottom 앵커. 현행판 고유색 56.
+★★ **붉은 깃발을 굽지 마라.** 미독 배지(붉은 부적 깃발)는 `_draw_mailbox`가 상태를 보고 절차로
+   덧그린다(`ox+TILE*0.74, oy+TILE*0.1` 자리). 아트에 구우면 다 읽은 뒤에도 깃발이 남아 배지가
+   거짓말을 한다 — 상태를 아트에 안 굽는 §18.2·§21.1과 같은 규율이다.
+★★ **세로 32를 넘기지 마라.** 발치 앵커(`oy + TILE - h`)라 넘기면 위로 솟고, 솟은 함 몸통이
+   깃발 자리를 덮어 미독을 못 읽는다.
+★  붉은색은 **끈·매듭에만** 쓴다(깃발과 색이 겹치면 둘이 한 덩어리로 읽힌다).
+```
+
+### 22.2 ★책 아이콘 `books/book_icon.png` · 노트 아이콘 `books/note_icon.png` (각 32×32) — CAT_BOOK 2종
+
+```
+배선: main.BOOK_ICON/NOTE_ICON(preload) → `_merge_book_icons`(인벤·핫바 dict) + `_item_icon`
+  (토스트). **23 id가 이 두 장을 공유한다**(책 8권 + 비밀 노트 15장) — 키 목록의 단일 출처는
+  Books.book_ids()/note_ids()라 권수가 바뀌어도 이 파일들은 안 바뀐다.
+정체성: [옥자의 잃어버린 책] = 불에서 건진 **무거운 한 챕터** / [비밀 노트] = 누가 급히 접어 둔
+  **짧은 속삭임**. 두 장이 필요한 유일한 이유는 **인벤 격자에서 그 둘을 한눈에 가르는 것**이고,
+  어느 권인지는 툴팁·제목·즉독 대화창이 이미 말한다(권별 아트를 굽지 않는 근거).
+  PROMPT(책): a single closed thick old hardcover book lying at a slight angle, scorched dark navy
+    indigo cover, a gold gilt band along the spine, charred blackened page edges, a thin faded
+    ribbon bookmark, an inventory item icon, [§1.1 광원 세트], muted somber palette
+    (view=side / selective outline / low detail / seed 90902)
+  PROMPT(노트): a single small folded scrap of paper note, pale faded cream hanji paper, one deep
+    fold crease across it, one torn ragged corner, a few illegible smudged ink strokes, an
+    inventory item icon, [§1.1 광원 세트], muted somber palette
+    (view=side / selective outline / low detail / seed 90903)
+후처리: 하드 알파 → muted(0.90/0.97) → 32² 중앙정렬. 현행판 고유색 책 44 · 노트 33.
+★★ **두 장의 실루엣이 갈려야 한다** — 책 = 두껍고 각짐(직육면체) / 노트 = 얇고 찌그러짐(구겨진
+   평면). 32²에서 색만 다르고 형태가 닮으면 인벤에서 구분이 안 된다(23칸이 한 격자에 쌓인다).
+★  색 언어는 폴백 색박스를 잇는다: 책 = 그을린 남색 `#47403d`~`#3d3450` + 금박 띠 /
+   노트 = 바랜 종이 `#c7b894`. 이 두 색은 `item_catalog.tool_color_of`가 이미 쓰고 있다.
+★  **글씨를 읽히게 그리지 마라.** 본문은 대화창이 말한다 — 표지에 판독 가능한 문자를 넣으면
+   32²에서 노이즈가 되고, 로어를 아트에 굽는 것이 된다(봉인 법칙 정합).
+```
+
+### 22.3 ★혼백관 서가 좌대 `props/museum_shelf.png` (32×12 프롭) — 되찾은 책 8좌
+
+```
+배선: `main._draw_museum_room`의 서가 루프에 `_prop_tex("museum_shelf")` 분기(신규 3줄).
+  8좌가 **40px 간격**으로 늘어서고, 좌대는 슬롯 기준점 `bp`에서 좌우 6px씩 흘러 가운데 맞춘다.
+정체성: 유품 진열장(위 줄) 아래에 놓인 **되찾은 책 서가**. 어두운 목재 선반 널 + 앞면 구름 무늬
+  + 아래 받침 브래킷 둘. 벽 서가라 발밑 그림자가 없다.
+  PROMPT: a single wide low dark walnut wooden bookshelf ledge board filling the whole width of the
+    image, a thick horizontal plank with a carved korean cloud motif strip along its front face and
+    two stout brackets below it, museum display shelf, front view, solid opaque wood,
+    [§1.1 광원 세트], muted somber palette
+    (view=side / selective outline / low detail / seed 90914)
+후처리: 하드 알파 → muted(0.62/0.90) → 접지 그림자 3줄 crop → 32×12 **top 앵커**. 현행판 고유색 38.
+★★ **폭 40 초과 금지.** 좌대 간격이 40px이고 8좌 오른쪽 끝이 방(x8..19) 우측 벽과 52px밖에 안
+   떨어져 있다 — 넘기면 옆 좌대와 겹치고 벽을 뚫는다.
+★★ **위로 자라지 마라(top 앵커·높이 12).** 좌대 윗면(`bp.y`)이 꽂힌 책등(8×14)이 **서는 바닥**
+   이다. 아트가 그 선 위로 올라오면 책등을 가려 "전시됨"이 안 읽힌다.
+★  **꽂힌 책을 굽지 마라.** 책등 8좌는 기증 원장(Museum.is_donated)이 칸마다 그린다 — 좌대에
+   책을 구우면 기증 전에도 차 있는 것으로 보인다(§22.1 깃발과 같은 규율).
+★  붉은 칠 목재로 나오면 muted를 더 눌러 방의 어두운 갈색에 합류시킬 것(계수 §22.0).
+```
+
+### 22.4 ★편지지 대화창 `ui/letter_window.png` (1400×405) — 편지·책 전용 두 번째 종이
+
+```
+배선: main.DLG_LETTER_TEX + `_set_dialogue_skin("letter")`(편지 열람·책 즉독·책장 재읽기 3곳에서
+  start 직전 호출) + `_on_dialogue_finished`에서 자동 복귀. 스킨 파일이 없으면 무동작이다.
+정체성: **같은 창의 다른 종이**다. S9-T3이 "읽기 UI = 대화창 재사용"으로 못박았으므로 새 UI를
+  세우면 그 결정이 무효가 된다 — 위젯·조작·내부 칸을 전부 그대로 두고 종이만 바꾼다:
+  그을린 한지(사람이 말할 때) → 갓 접힌 편지지(글이 말할 때) + 3등분 접은 자국 두 줄.
+★ **생성물이 아니다.** `tools/make_s9_t9_art.py`가 `assets/ui/dialog_window.png`에서 파생한다
+  (muted 0.74/1.06 = 덜 붉고 한 단 밝게 · 접힌 골 0.86 / 능선 1.07). owner가 새로 그리려면
+  **dialog_window.png와 같은 원본 프레임에서** 출발해야 한다.
+★★ **1400×405를 절대 바꾸지 마라.** main의 DLG_F_TEXT / DLG_F_PORT / DLG_F_NAME은 창 크기 대비
+   **비율 상수** 한 벌이고 두 스킨이 그 한 벌을 공유한다 — 크기가 갈리는 순간 편지지 쪽에서
+   초상화 칸·이름판이 프레임 밖으로 샌다.
+★  **프레임 장식(그을린 테두리·먹 나비·모서리 못)은 그대로 둔다.** 창이 바뀐 게 아니라 종이가
+   바뀐 것으로 읽혀야 한다 — 프레임까지 갈면 플레이어가 "다른 UI"로 오독하고, T3의 "새 조작을
+   배울 것이 없다"는 이점이 사라진다.
+```
+
+### 22.5 집 책장 `props/house_bookshelf.png` (64×64) — 이 패스가 **안 만든** 것
+
+```
+★ 생성 0. 이미 아트가 있다(4단 선반에 책이 꽂힌 64×64 벽 가구 · HOME 실내 x15..16 · SOLID).
+  S9-T7이 신규 기물을 안 세우고 이 프롭에 [F](책 재읽기)만 얹었으므로, T9가 할 아트 작업이
+  구조적으로 없다 — 그래서 **교체 후보로만** 적어 둔다.
+교체 시: 같은 파일명·**같은 64×64**로 덮어쓰면 코드 0줄. 크기가 바뀌면 발치·WALL_PROP_LIFT(-18)·
+  Y-split·충돌 칸 수(`_rebuild_prop_collision`이 size/TILE로 센다)가 한꺼번에 어긋난다.
+★ **미결(owner 큐):** "되찾은 책이 꽂혀 간다"는 시각 피드백이 없다(수집 진행은 알림 문구로만
+  읽힌다). 우편함 깃발과 같은 절차 오버레이로 얹을 수 있지만, 현행 아트가 이미 책으로 가득 찬
+  4단 선반이라 그 위에 표식을 덧그리면 그림이 지저분해진다 — **빈 선반 판본으로 다시 그리고
+  칸이 채워지는 연출**을 함께 가는 편이 낫다는 판단이라 아트 결정과 묶어 미룬다.
+```

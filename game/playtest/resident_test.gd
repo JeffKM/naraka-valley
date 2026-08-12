@@ -397,7 +397,14 @@ func _run_checks() -> void:
 		m2.dialogue.is_open() and m2._talking_to == "모찌")
 	var guard := 0
 	while m2.dialogue.is_open() and guard < 32:   # 끝까지 넘겨 닫는다(플레이어 조작과 같은 경로)
-		m2.dialogue.advance()
+		# ★[S9-T9] 절기 물음 대응 — 모찌에게 `season_question` 훅이 생기면서(ADR-0067 결정 6)
+		#   주 첫날 첫 대화 마지막 줄에 선택지가 설 수 있다. 선택지는 넘기기로 못 지나가므로
+		#   (dialogue.advance의 has_choice 가드) 여기서 첫 항을 고른다 — miho/mel/bana 아크
+		#   테스트 드레인 헬퍼와 같은 처방이다. 0점 계약이라 어느 항을 골라도 관측값은 불변.
+		if m2.dialogue.has_choice():
+			m2.dialogue.choose(0)
+		else:
+			m2.dialogue.advance()
 		guard += 1
 	_check("⑪D 끝까지 넘기면 닫힌다", not m2.dialogue.is_open())
 	m2.player.set_physics_process(true)
