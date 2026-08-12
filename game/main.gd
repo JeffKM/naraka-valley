@@ -48,6 +48,12 @@ const PORTRAIT_FALLBACK_EXPR := ""  # 무태그 기본 = idle(기본 stem.png). 
 # ── 대화창 「태운 한지」 룩(S0-6, owner 제미나이 윈도우 아트) ──
 # 윈도우 1장(dialog_window.png) 위에 본문·초상화·이름을 오버레이. 내부칸 = 측정 비율.
 const DLG_WINDOW_TEX := "res://assets/ui/dialog_window.png"
+# ★[S9-T9 / ADR-0067 아트 스코프] **편지지 스킨** — 편지·책을 펼쳤을 때만 서는 두 번째 종이.
+# T3이 "읽기 UI = 대화창 재사용"으로 못박은 그 결정을 아트로 마감한 것이다: 위젯도 조작도 그대로
+# 두고 *종이만* 바꾼다(그을린 한지 → 갓 접힌 편지지 + 접은 자국 두 줄). 같은 원본에서 구운
+# 파생물이라 **크기·내부 칸 비율이 픽셀 단위로 동일**하다 — DLG_F_TEXT/PORT/NAME이 두 스킨에
+# 그대로 맞는 근거이자, 교체판도 1400×405를 지켜야 하는 이유다(tools/make_s9_t9_art.py §5).
+const DLG_LETTER_TEX := "res://assets/ui/letter_window.png"
 const DLG_ARROW_TEX := "res://assets/ui/ink_arrow.png"
 const DLG_FONT := "res://assets/fonts/neodgm.ttf"
 const DLG_WINDOW := Rect2(16, 172, 608, 176)          # 640×360 논리, CanvasLayer scale 1.5
@@ -58,6 +64,11 @@ const DLG_INK := Color(0.16, 0.12, 0.085)             # 먹빛 본문
 const DLG_NAME_INK := Color(0.20, 0.14, 0.09)         # 이름(먹빛)
 var _dlg_name: Label = null                            # 이름판(화자명)
 var _dlg_arrow: TextureRect = null                     # 다음 화살표(먹빛)
+# ★[S9-T9] 스킨 교체가 손대는 두 노드(본체 아트 + 그 그림자). 부팅 때 한 번 만들고 보관한다 —
+#   매번 새로 찾지 않는 이유는 대화가 열릴 때마다 도는 경로라서다(노드 탐색 0).
+var _dlg_art: TextureRect = null
+var _dlg_shadow: TextureRect = null
+var _dlg_skin := ""                                    # "" = 기본 한지 / "letter" = 편지지
 
 # ── 타일 종류(아틀라스 인덱스 = 이 순서) ──────────────────────────────────
 const GROUND := 0   # 바깥 바닥(걷기 O)
@@ -484,6 +495,27 @@ const MENU_ICONS := {
 	MenuCatalog.SONGI_SOUP: preload("res://assets/menu/menu_songi_soup.png"),
 	MenuCatalog.DANPUNG_PANCAKE: preload("res://assets/menu/menu_danpung_pancake.png"),
 }
+
+# ── ★[S9-T9 / ADR-0067 아트 스코프] CAT_BOOK 아이콘 2종 ─────────────────────
+# 책 8권 + 비밀 노트 15장 = **23 id가 이 두 장을 공유한다**(권별 아트 0). 근거는 세 가지다:
+#   ㉠ 인벤 32² 격자에서 필요한 판독은 "무엇인지"가 아니라 **"책인가 쪽지인가"**뿐이다 — 어느
+#      권인지는 툴팁·제목·즉독 대화창이 이미 말한다(같은 판단의 선례 = 씨앗 봉지 9종이 한 실루엣).
+#   ㉡ 23장을 따로 구우면 32²에서 서로 구분도 안 되면서 owner 교체 비용만 23배가 된다.
+#   ㉢ 폴백 색박스가 이미 두 색만 썼다(ItemCatalog.tool_color_of — 책 그을린 남색 / 노트 종이색).
+#      아트는 그 색 언어를 잇는 것이지 새 언어를 세우는 게 아니다.
+# ★ dict가 아니라 **텍스처 상수 두 개**인 이유: 키 목록의 단일 출처는 Books다(book_ids/note_ids).
+#   여기 23줄을 다시 적으면 T8이 권수를 바꿀 때 두 곳이 갈린다 — `_merge_book_icons`가 Books를
+#   훑어 런타임에 얹는다(그래서 이 파일은 권수를 모른다).
+const BOOK_ICON := preload("res://assets/books/book_icon.png")
+const NOTE_ICON := preload("res://assets/books/note_icon.png")
+
+# 아이콘 dict에 책·노트를 얹는다(키 = Books 원장의 id 전량). 인벤·핫바·토스트가 이 한 경로를
+# 공유하므로 여기 한 번이면 세 자리가 동시에 낫는다(`_merge_t10_icons`와 같은 결).
+func _merge_book_icons(icons: Dictionary) -> void:
+	for bid in Books.book_ids():
+		icons[String(bid)] = BOOK_ICON
+	for nid in Books.note_ids():
+		icons[String(nid)] = NOTE_ICON
 
 # 야생·혼합·희귀 씨앗 봉지 9종. **키 = 작물 id**(위 주석 CAT_SEED 참조). 아홉 장 다 같은 봉지
 # 실루엣의 절기 틴트 파생이다(tools/make_t10_icons.py) — 스타듀 야생 씨앗 문법 상속이자,
@@ -8872,6 +8904,7 @@ func _merge_t10_icons(icons: Dictionary) -> void:
 		icons[mine_id] = MINE_ICONS[mine_id]       # ★ [S5-T10] 광물·주괴·보석·무기·소모품(색박스 대체)
 	for menu_id in MENU_ICONS:
 		icons[menu_id] = MENU_ICONS[menu_id]       # ★ [S6-T8] 카페 메뉴 16종(색박스 대체)
+	_merge_book_icons(icons)                       # ★ [S9-T9] 책 8 + 비밀 노트 15(두 장 공유)
 
 func _setup_hotbar() -> void:
 	hotbar = HotbarHud.new()
@@ -10484,6 +10517,10 @@ func _item_icon(id: String) -> Texture2D:
 		return MINE_ICONS[id]
 	if MENU_ICONS.has(id):                     # ★ [S6-T8] 카페 메뉴(서빙·체키·곁들이 토스트)
 		return MENU_ICONS[id]
+	if Books.is_book(id):                      # ★ [S9-T9] 되찾은 책(입수 토스트) — 8권 공유 1장
+		return BOOK_ICON
+	if Books.is_note(id):                      # ★ [S9-T9] 비밀 노트(입수 토스트) — 15장 공유 1장
+		return NOTE_ICON
 	# 씨앗은 아이템 id가 아니라 **작물 id**로 아이콘을 잡는다(SEED_PACKET_ICONS 주석 — 인벤과 같은 규약).
 	var packet_crop := ItemCatalog.crop_of(id)
 	if packet_crop != "" and SEED_PACKET_ICONS.has(packet_crop):
@@ -14446,9 +14483,17 @@ func _draw_museum_room() -> void:
 	var bx := float(MUSEUM_RECT.position.x + 1) * TILE
 	var by := y0 + TILE * 2.0
 	var book_ids: Array = Books.book_ids()
+	# ★[S9-T9 아트 스코프] 좌대 아트(있으면). 폭 32는 좌대 간격 40 안에 들어가고, 높이 12는
+	#   `bp.y`에서 **아래로만** 자라 위에 꽂힌 책등(bp+(6,-14))을 안 가린다. 파일이 없으면
+	#   `_prop_tex`가 null을 주고 아래 draw_rect 폴백이 그대로 선다(그레이박스 무손실).
+	var shelf_tex := _prop_tex("museum_shelf")
 	for i in book_ids.size():
 		var bp := Vector2(bx + i * TILE * 1.25, by)
-		draw_rect(Rect2(bp, Vector2(20, 10)), Color(0.26, 0.24, 0.22))          # 선반 칸
+		if shelf_tex != null:
+			# 폭 32를 20폭 슬롯 위에 **가운데 맞춰** 얹는다(좌우 6px씩 흘러나온 만큼이 선반 두께로 읽힌다).
+			draw_texture(shelf_tex, bp - Vector2(6, 0))
+		else:
+			draw_rect(Rect2(bp, Vector2(20, 10)), Color(0.26, 0.24, 0.22))      # 선반 칸(폴백)
 		var bid: String = book_ids[i]
 		if museum.is_donated(bid):
 			# 전시된 책 — 세워 꽂은 책등(그을린 남색 = 인벤 색박스와 같은 색 언어).
@@ -16948,6 +16993,7 @@ func _read_next_letter() -> void:
 	mailbox.mark_read(id)
 	_talking_to = Mailbox.sender_of(id)
 	player.set_physics_process(false)   # 읽는 동안 이동 잠금(_on_dialogue_finished가 푼다)
+	_set_dialogue_skin("letter")        # ★[S9-T9] 편지지 스킨(종료 시 자동 복귀)
 	dialogue.start(_talking_to, lines)
 
 # ── ★[S9-T7 / ADR-0067 결정 8 · ADR-0034] Books 채널 — 입수 롤 · 인라인 즉독 · 책장 ─────
@@ -16993,6 +17039,7 @@ func _read_book_now(id: String) -> void:
 	books.mark_read(id)     # 기독은 **여는 순간**(편지와 같은 규약 — 중간에 닫아도 안 묻힌다)
 	_talking_to = Books.title_of(id)
 	player.set_physics_process(false)
+	_set_dialogue_skin("letter")   # ★[S9-T9] 종이에 쓰인 것은 편지지 스킨(편지 열람과 같은 결)
 	dialogue.start(_talking_to, lines)
 
 # 집 책장을 마주 보고 있나. 거울(MIRROR_TILE)과 같은 결의 판정 — `_indoor=="집"` 가드 + 좌표 일치.
@@ -17016,6 +17063,7 @@ func _read_from_bookshelf() -> void:
 	books.mark_read(id)
 	_talking_to = Books.title_of(id)
 	player.set_physics_process(false)
+	_set_dialogue_skin("letter")   # ★[S9-T9] 책장 재읽기도 같은 종이(즉독과 한 결)
 	dialogue.start(_talking_to, lines)
 
 # 거울에 뜰 본문. **명부의 운은 등급·문구만 나간다** — DailyLuck.fortune_text가 수치를 안 담는 것이
@@ -17080,6 +17128,8 @@ func _build_dialogue_ui() -> void:
 	var art := _dlg_texrect(wtex, Rect2(Vector2.ZERO, DLG_WINDOW.size), false)
 	dialogue_panel.add_child(art)
 	dialogue_panel.move_child(art, 1)
+	_dlg_art = art          # ★[S9-T9] 스킨 교체 대상(편지지 ↔ 한지)
+	_dlg_shadow = shadow
 	# ③ 본문(먹빛, 좌 텍스트칸 + 안쪽 여백)
 	var tr := _dlg_local(DLG_F_TEXT)
 	dialogue_text.position = tr.position + Vector2(30, 6)   # ★좌측 나비 장식 피해 첫 줄 안 잘리게(10→30, 나비 폭 회피)
@@ -17116,6 +17166,32 @@ func _build_dialogue_ui() -> void:
 	dialogue_portrait.clip_contents = true
 	dialogue_portrait.position = pr.position
 	dialogue_portrait.size = pr.size
+
+# ── ★[S9-T9 / ADR-0067 아트 스코프] 대화창 스킨 ──────────────────────────────
+# 대화창은 하나지만 **종이는 둘**이다: 사람이 말하면 그을린 한지, 편지·책을 펼치면 편지지.
+# 위젯·조작·내부 칸 비율은 전부 그대로고 텍스처 한 장만 갈린다(T3 "읽기 UI = 대화창 재사용"의
+# 아트 마감 — 새 UI를 세우면 그 결정이 무효가 된다).
+#
+# 계약 셋:
+#   ㉠ **여는 쪽이 건다**(편지·즉독·책장이 start 직전에 부른다) — 스킨을 아는 것은 무엇을 펼치는지
+#      아는 코드뿐이고, DialogueBox는 여전히 자기가 무슨 종이 위에 있는지 모른다(순수 진행기).
+#   ㉡ **닫히면 되돌린다**(_on_dialogue_finished) — 되돌리기를 종료 한 곳에 모아 두면 "누가
+#      리셋을 빠뜨렸나"가 생기지 않는다(사람 대화 시작마다 초기화하는 방식은 호출부가 늘 때마다
+#      구멍이 난다).
+#   ㉢ **파일이 없으면 무동작** — 스킨 텍스처가 없으면 기본 한지 그대로다(아트 없이도 플레이 가능).
+func _set_dialogue_skin(skin: String) -> void:
+	if _dlg_skin == skin or _dlg_art == null:
+		return
+	var path := DLG_LETTER_TEX if skin == "letter" else DLG_WINDOW_TEX
+	if not ResourceLoader.exists(path):
+		return
+	var tex := load(path) as Texture2D
+	if tex == null:
+		return
+	_dlg_skin = skin
+	_dlg_art.texture = tex
+	if _dlg_shadow != null:
+		_dlg_shadow.texture = tex
 
 func _dlg_local(f: Rect2) -> Rect2:
 	return Rect2(f.position * DLG_WINDOW.size, f.size * DLG_WINDOW.size)
@@ -17210,6 +17286,7 @@ func _set_portrait(speaker: String, expr: String) -> void:
 func _on_dialogue_finished() -> void:
 	dialogue_panel.visible = false
 	dialogue_portrait.visible = false  # P2.4 초상화 슬롯도 함께 닫는다
+	_set_dialogue_skin("")             # ★[S9-T9] 편지지 → 기본 한지 복귀(되돌리기는 여기 한 곳)
 	player.set_physics_process(true)
 	# T5.1 온보딩 전진은 '누구와의 대화였나'(_talking_to)로도 가른다 — 멜이 카페에
 	# 상주하며 미호 멘토 단계 도중에도 말 걸 수 있게 됐기 때문(화자 구분 없이 단계로만
