@@ -1580,6 +1580,12 @@ const CHEST_TILE := Vector2i(11, 68)
 #   (상자·출하함도 같은 이유로 레이아웃 밖에 산다 — 아트가 오면 `_prop_tex` 훅으로 갈아 끼운다).
 const MIRROR_TILE := Vector2i(17, 68)
 
+# ★[S9-T7 / ADR-0067 결정 8] 집 책장 칸 — 되찾은 책·노트의 **재읽기 창구**([ADR-0034] #5).
+# 신규 기물을 세우지 않는다: 북벽 책장 프롭(PROP_BOOKSHELF)이 x15..16을 이미 물고 있어 **그
+# 그림에 [F]만 붙인다**(우편함이 새 프롭을 세운 것과 갈리는 지점 — 저기는 집 앞에 아무것도
+# 없었고, 여기는 이미 책장이 서 있다. 없는 것만 만든다).
+const BOOKSHELF_TILES := [Vector2i(15, 68), Vector2i(16, 68)]
+
 # ── ★ ADR-0035 Phase B — 80×65 안식 비대칭 Overgrown 개간 재배치 ──────────────────
 # 본가+창고(북동 저지 병렬, 자재 동선) / 5×5 스타터 패치(본가/창고 남쪽, debris 0%·즉경작) /
 # 영혼빛 연못(중앙-약간서) / 고지 하늘 목장(NW, 절벽+계단으로만 진입 — debris 하드 게이트) /
@@ -2440,6 +2446,11 @@ var seasonal_event: SeasonalEvent
 # 도착"은 이 노드의 advance_day가 진다(main의 day 훅이 한 번 부른다).
 var mailbox: Mailbox
 
+# ★[S9-T7 / ADR-0067 결정 8 · ADR-0034] 옥자 Books 채널 원장(입수·기독). 우편함과 완전히 같은
+# 결의 상태 노드다 — 코드 생성으로 붙이고(_setup_books) 세이브 조각은 "books"이며, 무대 배선
+# (어디서 굴리나·무엇을 대화창에 띄우나·어느 좌대에 세우나)은 전부 main이 조율한다.
+var books: Books
+
 # ★[S6-T4 / ADR-0064 결정 8] 단골화 방문 가중치 원장(명명 손님 서빙 이력 → 재방문 확률↑).
 # RefCounted라 노드가 아니다(TreeLedger·TapperLedger 결) — `_ready`에서 한 벌 만들고 세이브
 # 조각("guest_pool")으로 main이 조율한다. ★호감도(Affinity)와 **서로 참조 0**이다(ADR-0017).
@@ -2877,6 +2888,7 @@ func _ready() -> void:
 	_setup_larder()         # ★ S6-T1 카페 곳간(프레임이 참조 → 프레임보다 먼저)
 	_setup_seasonal_event() # ★ S7-T7 절기 행사 원장(더비·장원제·야시장 — 프레임/세이브 복원보다 먼저)
 	_setup_mailbox()        # ★ S9-T3 편지 원장·발송 큐(세이브 복원보다 먼저 — 조각 "mailbox")
+	_setup_books()          # ★ S9-T7 Books 수집 원장(세이브 복원보다 먼저 — 조각 "books")
 	_setup_hud_overlays()   # ★ C3 좌하단 알림 피드 + 우하단 혼력 바(프레임보다 먼저 → 모달이 위에)
 	_setup_frame()          # ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대/상자)
 	_setup_settings()       # ★ Phase D 설정(볼륨·전체화면 — audio·프레임 존재 후, 프레임 신호 연결·적용)
@@ -5256,6 +5268,9 @@ func _award_mine_drop(t: Vector2i, node_id: String) -> void:
 		_notice("광맥이 통째로 쏟아졌다!")          # 크리 채굴(광석 2배) — 연출은 아트 패스
 	_gain_mining_xp(int(res["xp"]))
 	audio.sfx("harvest")
+	# ★[S9-T7 / ADR-0067 결정 8] Books 입수 ① 갱도 채굴 — 부순 사건마다 1롤(산출·XP 다음이라
+	#   광물 결과에 간섭이 0이다). serial = 층·칸의 좌표성 정수라 같은 날 같은 칸은 같은 결과다.
+	_roll_book_drop(Books.SRC_MINE, _mine_floor * 1000000 + t.y * 1000 + t.x)
 
 # 깬 돌 한 칸의 통행 상태를 즉시 반영한다(구역 재빌드 없이 — _sync_tree_tile과 같은 결).
 # 타일셋 물리 레이어가 ROCK에 충돌을 달고 있어, 셀을 길 변종으로 바꾸면 충돌도 같이 사라진다.
@@ -8925,6 +8940,15 @@ func _setup_mailbox() -> void:
 	add_child(mailbox)
 	mailbox.changed.connect(queue_redraw)
 
+# ── ★[S9-T7 / ADR-0067 결정 8] Books 수집 원장(옥자 채널) ────────────────────
+# 우편함과 한 줄씩 대응하는 상태 노드. changed에 redraw를 무는 이유도 같다 — 기증한 책이
+# 혼백관 좌대에 서고 책장 프롬프트가 바뀌므로 그림이 원장을 따라가야 한다.
+func _setup_books() -> void:
+	books = Books.new()
+	books.name = "Books"
+	add_child(books)
+	books.changed.connect(queue_redraw)
+
 # ── ★ ADR-0048 Phase D 설정(볼륨·전체화면) ──────────────────────────────────────
 # GameSettings를 붙여 디스크에서 읽고 즉시 적용한다(버스 볼륨·창모드). 옵션 탭 조작은 프레임 신호로 받아
 # 값 갱신→적용→영속한다(데이터/적용 디커플링 — GameSettings는 audio·DisplayServer를 모른다).
@@ -10095,6 +10119,10 @@ func _save_game() -> void:
 		#   서사 진행의 일부라 반드시 라운드트립한다(자고 일어나면 도착하는 편지가 세이브를 건너뛰면
 		#   "잘 때마다 사라지는 예고"가 된다).
 		"mailbox": mailbox.to_save(),
+		# ★[S9-T7 / ADR-0067 결정 8] Books 수집 원장 — 무엇을 주웠고 무엇을 읽었나.
+		#   유일한 능동 옥자-로어 채널의 진행이라 반드시 라운드트립한다(주운 책이 사라지면
+		#   혼백관 전시가 영구히 비고 수집 완주가 불가능해진다).
+		"books": books.to_save(),
 		# ★[S6-T4] 단골화 방문 원장(명명 손님별 누적 서빙 횟수). 호감도 조각들과 **완전히 다른 키**다 —
 		#   네임스페이스가 갈려 있는 것 자체가 "서빙 ≠ ♡"(ADR-0017)의 세이브 층위 표현이다.
 		"guest_pool": guests.to_save(),
@@ -10233,6 +10261,10 @@ func _load_game() -> void:
 	#   관례. 막히는 것은 0이다 — 앞으로의 사건이 보내는 편지는 그대로 도착한다).
 	if data.has("mailbox") and mailbox != null:
 		mailbox.load_save(data["mailbox"])
+	# ★[S9-T7] Books 수집 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(우편함과 같은
+	#   하위호환 관례). 막히는 것은 0이다: 앞으로의 채굴·낚시·채집·개간이 그대로 굴러 나온다.
+	if data.has("books") and books != null:
+		books.load_save(data["books"])
 	# ★[S6-T4] 단골 원장 — 키 없는 구세이브는 **전원 처음 오는 손님**으로 시작한다(빈 원장 = 기본
 	#   가중치. 아무것도 안 막힌다 — 명명 손님은 그대로 오고 이력만 0부터 쌓인다).
 	if data.has("guest_pool"):
@@ -11086,6 +11118,8 @@ func _process(delta: float) -> void:
 	var facing_mirror := _facing_mirror()
 	# ★[S9-T3] 우편함(집 앞 야외) — 거울과 같은 결의 [F] 창구. 판정은 함수가 진다(_facing_mailbox).
 	var facing_mailbox := _facing_mailbox()
+	# ★[S9-T7] 집 책장 — 되찾은 책·노트 재읽기 창구(거울과 같은 실내 [F]).
+	var facing_bookshelf := _facing_bookshelf()
 	# ★ Phase E 갈무리방(창고) 저장 상자: 창고 실내에서 상자 칸을 바라볼 때(_indoor로 가드해 다른 구역 같은
 	# 좌표 무반응). 집 상자와 좌표·건물이 갈려 안 겹친다.
 	var facing_storehouse_chest := not _sleeping and _indoor == "창고" and _target == STOREHOUSE_CHEST_TILE
@@ -11256,6 +11290,11 @@ func _process(delta: float) -> void:
 	#   모루가 없고, 우편함 칸은 주민 스테이션과도 갈린다).
 	if facing_mailbox and Input.is_action_just_pressed("shop_toggle"):
 		_read_next_letter()
+		return
+	# ★[S9-T7 / ADR-0067 결정 8] 집 책장 F: 미독을 먼저, 없으면 주운 순서대로 한 권씩 다시 펼친다.
+	#   실내 [F]라 거울(같은 방 북벽)과 좌표로 갈리고, 주민·설비 창구와도 안 겹친다.
+	if facing_bookshelf and Input.is_action_just_pressed("shop_toggle"):
+		_read_from_bookshelf()
 		return
 	# ★ Phase E 창고 상자 열기(RMB): 집 상자와 같은 결 — 활성 상자만 바꿔 같은 CTX_CHEST 패널을 연다.
 	if facing_storehouse_chest and Input.is_action_just_pressed("action"):
@@ -11731,6 +11770,19 @@ func _process(delta: float) -> void:
 			interact_prompt.text = "[F] 우편함 — 읽지 않은 편지 %d통" % unread
 		else:
 			interact_prompt.text = "우편함 — 새 편지가 없다"
+	elif facing_bookshelf:
+		# ★[S9-T7] 책장을 바라볼 때. 누르기 전에 무엇이 있는지 문구가 먼저 말한다(우편함 결).
+		interact_prompt.visible = true
+		var n_books: int = books.acquired_count() if books != null else 0
+		var n_unread: int = books.unread_count() if books != null else 0
+		if n_books <= 0:
+			interact_prompt.text = "책장 — 아직 꽂을 것이 없다"
+		elif n_unread > 0:
+			interact_prompt.text = "[F] 책장 — 아직 안 읽은 것 %d권 (소장 %d/%d)" % [
+				n_unread, n_books, Books.all_ids().size()]
+		else:
+			interact_prompt.text = "[F] 책장 — 다시 펼쳐 보기 (소장 %d/%d)" % [
+				n_books, Books.all_ids().size()]
 	elif facing_chest or facing_storehouse_chest:
 		# ★ Phase D/E 저장 상자를 바라볼 때: 우클릭으로 보관 패널을 연다(순수 보관 — 판매 아님).
 		interact_prompt.visible = true
@@ -11793,10 +11845,11 @@ func _process(delta: float) -> void:
 			interact_prompt.text = "[F] 기증 — %s (전시 %d/%d)" % [ItemCatalog.name_of(held_id),
 				museum.donated_count(), Museum.donatable_ids().size()]
 		elif museum.is_donated(held_id):
-			interact_prompt.text = "이미 전시된 유품 (전시 %d/%d)" % [museum.donated_count(), Museum.donatable_ids().size()]
+			interact_prompt.text = "이미 전시된 것이다 (전시 %d/%d)" % [museum.donated_count(), Museum.donatable_ids().size()]
 		else:
-			interact_prompt.text = "혼백관 기증대 — 유품을 들고 오자 (전시 %d/%d)" % [museum.donated_count(),
-				Museum.donatable_ids().size()]
+			# ★[S9-T7] 책이 기증 대상에 합류하며 안내 문구도 두 갈래를 말한다.
+			interact_prompt.text = "혼백관 기증대 — 유품이나 되찾은 책을 들고 오자 (전시 %d/%d)" % [
+				museum.donated_count(), Museum.donatable_ids().size()]
 	elif facing_upgrade:
 		# ★ [S4-T4 → S5-T3] 대장간 모루: **든 도구**의 현재 티어 · 다음 티어 · 가격 · 주괴를 한 줄로.
 		interact_prompt.visible = true
@@ -12186,6 +12239,12 @@ func _use_tool() -> void:
 				_toast_item(str(res["drop"]), int(res["count"]))   # ★ Phase C 획득 토스트
 				if kind == DebrisCatalog.WEEDS:
 					_roll_mixed_seed_drop(_target)   # ★[S4-T5] 잡초에서만 혼합 씨앗 저확률(스타듀)
+				# ★[S9-T7 / ADR-0067 결정 8] Books 입수 ④ 농장 debris — 개간 한 칸마다 1롤.
+				#   ★ 잡초 한정이 아니라 **debris 전 종**(잡초·업화석·석화 고목)이다: 개간은
+				#     "덮여 있던 것을 걷어내는" 동사이고, 흩어진 물건은 돌 밑에도 나무 밑에도 있다.
+				#   ★ 재점령 잡초(clear_weed)에는 안 붙인다 — 밤새 다시 돋는 무한 소스라 여기에
+				#     롤을 얹으면 유한·희소(ADR-0034 #4)가 깨진다. 첫 개간 한 번씩만이다.
+				_roll_book_drop(Books.SRC_DEBRIS, _target.y * 1000 + _target.x)
 				verb = "개간"
 		elif reclaim.has_weed(_target):
 			# ★ [ADR-0055] 밤새 돋은 재점령 잡초를 낫으로 벤다(WEEDS 드랍 = 혼백섬유 ×1). 낫 아니면 무동작.
@@ -12459,6 +12518,12 @@ func _finish_fishing() -> void:
 		# ★[S3-T6 / ADR-0061 결정 6] 인양물 동반 롤 — **결착 뒤**라 격투에 간섭하지 않는다(카탈로그
 		#   §1-D "난입 어색" 제외 취지 보존). 팝업은 한 줄이고, 실패해도 어획 결과엔 영향이 없다.
 		_roll_salvage()
+		# ★[S9-T7 / ADR-0067 결정 8] Books 입수 ② 낚시 보물 — 인양 롤 **바로 뒤**의 별 가지다.
+		#   ADR-0034 #5가 든 "낚시 보물상자"의 자리이되, 상자라는 새 물건을 만들지 않고 이미 있는
+		#   인양 문법에 얹는다(신규 시스템 0 — "책은 기존 채널의 얇은 배달"이라는 그 결).
+		#   ★ 새 롤은 **순차 소비의 맨 뒤**에 붙였다: 앞의 어종·품질·인양 롤이 쓰는 시드 스트림을
+		#     한 톨도 안 건드려야 기존 회귀(fishing_test 결정성)가 그대로 통과한다.
+		_roll_book_drop(Books.SRC_FISH, _cast_seed)
 	elif bool(res["hook_refused"]):
 		_notice("혼력이 모자라 챌 수 없었다 — 입질을 놓쳤다 (필요 %d)" % int(res["energy_cost"]))
 	elif bool(res["line_broke_by_class"]):
@@ -13182,6 +13247,11 @@ func _pick_forage(tile: Vector2i) -> void:
 	_toast_item(species, count)
 	_gain_forage_xp(ForageSkill.PICK_XP)   # ★[S4-T2] 줍기 고정 7 — 종·가격 무관(꽃 패치와 같은 값)
 	audio.sfx("harvest")
+	# ★[S9-T7 / ADR-0067 결정 8] Books 입수 ③ **미혹의 숲** 희소 채집 — 구역으로 가른다.
+	#   ADR-0034 #5가 지목한 자리가 "미혹의 숲 희소 채집지"라, 저승 숲·해변 줍기는 굴리지 않는다
+	#   (미혹은 하루 몇 자리뿐이라 퍼밀이 높은 대신 실효 빈도가 낮다 — DROP_PERMIL 주석의 밴드 근거).
+	if _region == RegionCatalog.MIHOK_FOREST:
+		_roll_book_drop(Books.SRC_FORAGE, tile.y * 1000 + tile.x)
 	queue_redraw()
 
 # ── ★[S4-T8 / ADR-0062 결정 9 ㉠] 채집 덤불 — 흔들기 ─────────────────────────
@@ -13812,7 +13882,8 @@ func _try_donate_selected() -> void:
 		if museum.is_donated(id):
 			_notice("이미 전시된 유품이다")
 		else:
-			_notice("기증할 유품을 손에 들어야 한다 (안식 괭이질로 발굴)")
+			# ★[S9-T7] 책 합류 — 유품(괭이질 발굴)과 책(세계 곳곳 발견) 두 갈래를 다 안내한다.
+			_notice("기증할 유품이나 되찾은 책을 손에 들어야 한다 (유품 = 안식 괭이질 발굴)")
 		return
 	if not inventory.remove_item(id, 1):
 		return
@@ -14355,26 +14426,46 @@ func _draw_museum_room() -> void:
 		ItemCatalog.RELIC_SPOON: Color(0.72, 0.58, 0.28),    # 놋빛
 		ItemCatalog.RELIC_KKOTSIN: Color(0.82, 0.42, 0.48),  # 꽃신 분홍
 	}
-	for i in slot_ids.size() + 2:   # 유품 좌대 + 책 좌대 2
+	# ── ① 북벽 유품 좌대 3좌(카탈로그 순 고정) ──
+	for i in ItemCatalog.RELICS.size():
 		var px := Vector2(x0 + i * TILE * 1.5, y0)
 		draw_rect(Rect2(px, Vector2(20, 12)), Color(0.30, 0.28, 0.26))          # 좌대
-		if i < slot_ids.size():
-			var sid: String = slot_ids[i]
-			if museum.is_donated(sid):
-				# 전시된 유품 — 좌대 위 색 다이아(그레이박스 아이콘 대응).
-				var c: Color = relic_colors.get(sid, Color.WHITE)
-				var cx := px + Vector2(10, -6)
-				draw_colored_polygon(PackedVector2Array([cx + Vector2(0, -6), cx + Vector2(6, 0),
-					cx + Vector2(0, 6), cx + Vector2(-6, 0)]), c)
-			else:
-				draw_rect(Rect2(px + Vector2(4, -8), Vector2(12, 8)), Color(0.2, 0.2, 0.2, 0.5), false, 1.0)  # 빈 자리 실루엣
+		var sid: String = slot_ids[i]
+		if museum.is_donated(sid):
+			# 전시된 유품 — 좌대 위 색 다이아(그레이박스 아이콘 대응).
+			var c: Color = relic_colors.get(sid, Color.WHITE)
+			var cx := px + Vector2(10, -6)
+			draw_colored_polygon(PackedVector2Array([cx + Vector2(0, -6), cx + Vector2(6, 0),
+				cx + Vector2(0, 6), cx + Vector2(-6, 0)]), c)
 		else:
-			draw_rect(Rect2(px + Vector2(4, -8), Vector2(12, 8)), Color(0.25, 0.22, 0.3, 0.5), false, 1.0)   # 책 그릇(Slice 9)
+			draw_rect(Rect2(px + Vector2(4, -8), Vector2(12, 8)), Color(0.2, 0.2, 0.2, 0.5), false, 1.0)  # 빈 자리 실루엣
+	# ── ★[S9-T7] ② 책 서가 8좌(그릇 2좌 → 실물 8좌) ──
+	# 유품 줄과 **한 줄 아래로 가른** 이유는 순전히 자리다: 11좌를 한 줄로 세우면 방(x8..19) 폭을
+	# 넘어 벽을 뚫는다. 겸사겸사 "유품 진열장 / 되찾은 책 서가"로 위계가 읽힌다.
+	# ★ 비밀 노트는 여기 없다 — 전시 대상이 아니다(Museum.donatable_ids 주석).
+	var bx := float(MUSEUM_RECT.position.x + 1) * TILE
+	var by := y0 + TILE * 2.0
+	var book_ids: Array = Books.book_ids()
+	for i in book_ids.size():
+		var bp := Vector2(bx + i * TILE * 1.25, by)
+		draw_rect(Rect2(bp, Vector2(20, 10)), Color(0.26, 0.24, 0.22))          # 선반 칸
+		var bid: String = book_ids[i]
+		if museum.is_donated(bid):
+			# 전시된 책 — 세워 꽂은 책등(그을린 남색 = 인벤 색박스와 같은 색 언어).
+			draw_rect(Rect2(bp + Vector2(6, -14), Vector2(8, 14)), Color(0.28, 0.24, 0.36))
+			draw_rect(Rect2(bp + Vector2(6, -14), Vector2(8, 3)), Color(0.62, 0.52, 0.30))   # 금박 띠
+		else:
+			draw_rect(Rect2(bp + Vector2(6, -14), Vector2(8, 14)), Color(0.25, 0.22, 0.3, 0.5), false, 1.0)  # 빈 자리
 
 # ★ [S1R-T12] 휴지통 버리기(프레임 확인 후) — 집은 백팩 슬롯을 통째로 폐기(경제 0 — 판매 아님).
 func _on_frame_discard(slot_index: int) -> void:
 	var id := inventory.id_at(slot_index)
 	if id == "":
+		return
+	# ★[S9-T7] 책·비밀 노트는 버릴 수 없다 — 중복 입수가 없어(Books 원장) 버리면 그 조각이
+	#   세상에서 영영 사라지고 수집 완주가 불가능해진다. 열쇠를 기증 목록에서 뺀 것과 같은 판단.
+	if ItemCatalog.category_of(id) == ItemCatalog.CAT_BOOK:
+		_notice("되찾은 것을 버릴 수는 없다 — 혼백관에 맡기거나 책장에 꽂아 두자")
 		return
 	var n := inventory.count_at(slot_index)
 	inventory.remove_at(slot_index, n)
@@ -16857,6 +16948,74 @@ func _read_next_letter() -> void:
 	mailbox.mark_read(id)
 	_talking_to = Mailbox.sender_of(id)
 	player.set_physics_process(false)   # 읽는 동안 이동 잠금(_on_dialogue_finished가 푼다)
+	dialogue.start(_talking_to, lines)
+
+# ── ★[S9-T7 / ADR-0067 결정 8 · ADR-0034] Books 채널 — 입수 롤 · 인라인 즉독 · 책장 ─────
+# main의 몫은 넷이다: ①네 입수 지점에서 롤을 부른다 ②적재 성공 시에만 원장에 적는다
+# ③주운 자리에서 바로 펼친다(인라인 즉독) ④집 책장 [F]로 다시 펼친다.
+# 무엇이 나오나·중복은 어떻게 막나는 전부 Books가 진다(_pick_forage : ForageSkill 관계와 같은 결).
+
+# 한 사건에서 책·노트가 나오는지 굴리고, 나오면 적재→원장→즉독까지 한 번에 처리한다.
+# `serial`은 그 사건의 좌표성 정수다(부순 칸·캐스팅 시드·주운 칸) — day와 함께 롤을 결정한다.
+#   ★ **인벤이 가득이면 원장에 적지 않는다**: 적어 버리면 그 책이 세상에서 영영 사라져 수집
+#     완주가 불가능해진다(열쇠를 기증 목록에서 뺀 것과 같은 판단). 알림만 하고 무를 뿐이다.
+#   ★ 굴림 자체는 **어떤 산출도 바꾸지 않는다**: 광석·어획·채집물·개간 드랍은 이미 지급된 뒤에
+#     얹히는 별개 가지다(인양 롤이 어획 결과를 안 건드리는 그 경계 1:1).
+func _roll_book_drop(source: String, serial: int) -> void:
+	if books == null or inventory == null or clock == null:
+		return
+	var id := books.pending_drop(source, clock.day, serial)
+	if id == "":
+		return
+	if not inventory.add_item(id, 1):
+		_notice("낡은 종이 뭉치가 보였지만 백팩이 가득했다 — 자리를 비우고 다시 오자")
+		return
+	books.acquire(id, clock.day)
+	_toast_item(id, 1)
+	audio.sfx("ui")
+	_notice("%s — %s을(를) 되찾았다 (수집 %d/%d)" % [
+		"[옥자의 잃어버린 책]" if Books.is_book(id) else "[비밀 노트]",
+		Books.title_of(id), books.acquired_count(), Books.all_ids().size()])
+	_read_book_now(id)
+
+# 인라인 즉독([ADR-0034] #5 — 혼백관 방문 게이트 기각의 이행). 주운 자리에서 그대로 펼쳐지고
+# 읽기 UI는 **기존 대화창 재사용**이다(신규 위젯 0 — 편지 열람과 동형). 이름판에는 책 제목이 서고
+# 초상화는 매핑이 없어 슬롯이 꺼진다(_set_portrait의 기존 폴백).
+#   ★ **대화 중이면 펼치지 않는다**: `DialogueBox.start`는 열려 있으면 no-op이라, 가드가 없으면
+#     "기독만 되고 화면엔 안 뜨는" 조용한 유실이 된다(T3에서 실증된 함정). 여기서 닫으면 그 책은
+#     **미독으로 남아** 집 책장이 먼저 집어 준다(next_reread가 미독 우선 — 손실 0).
+func _read_book_now(id: String) -> void:
+	if dialogue == null or dialogue.is_open():
+		return
+	var lines := Books.lines_of(id)
+	if lines.is_empty():
+		return              # 본문 없는 행은 열지 않는다(테이블 손상 방어 — 빈 대화창 차단)
+	books.mark_read(id)     # 기독은 **여는 순간**(편지와 같은 규약 — 중간에 닫아도 안 묻힌다)
+	_talking_to = Books.title_of(id)
+	player.set_physics_process(false)
+	dialogue.start(_talking_to, lines)
+
+# 집 책장을 마주 보고 있나. 거울(MIRROR_TILE)과 같은 결의 판정 — `_indoor=="집"` 가드 + 좌표 일치.
+# 책장 프롭은 x15..16 두 칸을 물므로 **두 칸 다 받는다**(한 칸만 받으면 옆에 서서 눌렀을 때
+# 아무 일도 안 일어나 고장으로 읽힌다).
+func _facing_bookshelf() -> bool:
+	return not _sleeping and _indoor == "집" and BOOKSHELF_TILES.has(_target)
+
+# [F] 한 번 = 한 권. **미독을 먼저** 펼치고(대화 중에 주워 놓친 것이 여기서 회수된다), 전부
+# 읽었으면 주운 순서대로 한 권씩 돌려 가며 다시 펼친다(연타 = 다음 권 — 편지 순차 열람의 결).
+func _read_from_bookshelf() -> void:
+	if books == null or dialogue == null or dialogue.is_open():
+		return
+	var id := books.next_reread()
+	if id == "":
+		_notice("책장이 비어 있다 — 세상 어딘가에 흩어진 것을 먼저 찾아야 한다")
+		return
+	var lines := Books.lines_of(id)
+	if lines.is_empty():
+		return
+	books.mark_read(id)
+	_talking_to = Books.title_of(id)
+	player.set_physics_process(false)
 	dialogue.start(_talking_to, lines)
 
 # 거울에 뜰 본문. **명부의 운은 등급·문구만 나간다** — DailyLuck.fortune_text가 수치를 안 담는 것이
