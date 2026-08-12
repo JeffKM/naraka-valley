@@ -1537,6 +1537,18 @@ const CAFE_IN_TILE := Vector2i(14, 94)      # 실내 카페 문 안쪽 (+48)
 const HOUSE_OUT_TILE := HOUSE_EXT_DOOR + Vector2i(0, 1)  # 외관 본가 문 앞 (44,10) — 저지 북중앙
 const CAFE_OUT_TILE := CAFE_EXT_DOOR + Vector2i(0, 1)    # 외관 카페 문 앞 (5,10) — 서편 카페 동선
 
+# ★[S9-T3 / ADR-0067 결정 7] 우편함 칸 — 본가 문 앞 레인(y10, x38..45)의 **동쪽 끝 바로 옆**.
+# 집에서 나오면 HOUSE_OUT_TILE(44,10)에 서고, 두 걸음 동쪽이 이 칸이다("나오는 길에 우편함을
+# 들여다본다"는 스타듀 동선 1:1). 화분 프롭(46,11)이 한 칸 남쪽에 이미 서 있어 집 앞 소품 무리로
+# 함께 읽히고, 레이아웃·길·재점령 어느 것과도 안 겹친다(ENCROACH_SCAN_RECT는 y18부터라 밖).
+# ★ 거울(MIRROR_TILE)과 정확히 같은 결로 만든다: 좌표 상수 + 구역/실내 가드 + 그레이박스 즉시모드
+#   드로잉. `layout.json`/PROP_LAYOUT_HOME에 안 넣는 이유도 같다 — 그 배열은 preload한 텍스처를
+#   요구하는데 우편함 아트는 T9 몫이다(상자·출하함·거울도 같은 이유로 레이아웃 밖에 산다).
+# ★ **SOLID로 만들지 않는다**: 야외 프롭을 충돌체로 세우면 길·스캐터·pathing 회귀 면적이 늘어난다.
+#   [F] 창구는 `_target` 일치로 서므로 통과 가능해도 열람에 아무 지장이 없다(게시판과 갈리는 지점 —
+#   게시판은 마을 광장 한복판이라 SOLID가 동선의 일부지만, 여기는 집 앞 여백이다).
+const MAILBOX_TILE := Vector2i(46, 10)
+
 # ── ★ C2 — 안식 농원 전용 집 실내(HOME 밴드 y67+) ─────────────────────────────
 # HOME outdoor_h이 24→65로 커져, 공유 HOUSE_RECT(y26 띠)는 이제 HOME *외부*(밭/여백)와 충돌한다.
 # → HOME 집 실내만 HOME 밴드(y65~92)로 분리: HOUSE_*(y26)에 +41(=65-24)을 더한 좌표. 내부 레이아웃
@@ -2422,6 +2434,12 @@ var larder: Larder
 # 무슨 행사인가"는 답이 나온다(Festival·Weather와 같은 무상태 파생 — 상태는 결과만 든다).
 var seasonal_event: SeasonalEvent
 
+# ★[S9-T3 / ADR-0067 결정 7] 편지 원장·발송 큐(저승식 전령). larder·seasonal_event와 같은 결의
+# 상태 노드 — 코드 생성으로 붙이고(_setup_mailbox) 세이브는 별도 조각("mailbox")으로 main이
+# 조율한다. 사건 코드(관문·컷신 여진)는 `mailbox.send("<id>")` 한 줄만 부르면 되고, "다음 아침
+# 도착"은 이 노드의 advance_day가 진다(main의 day 훅이 한 번 부른다).
+var mailbox: Mailbox
+
 # ★[S6-T4 / ADR-0064 결정 8] 단골화 방문 가중치 원장(명명 손님 서빙 이력 → 재방문 확률↑).
 # RefCounted라 노드가 아니다(TreeLedger·TapperLedger 결) — `_ready`에서 한 벌 만들고 세이브
 # 조각("guest_pool")으로 main이 조율한다. ★호감도(Affinity)와 **서로 참조 0**이다(ADR-0017).
@@ -2853,6 +2871,7 @@ func _ready() -> void:
 	_setup_chest()          # ★ Phase D 저장 상자(프레임이 참조 → 프레임보다 먼저)
 	_setup_larder()         # ★ S6-T1 카페 곳간(프레임이 참조 → 프레임보다 먼저)
 	_setup_seasonal_event() # ★ S7-T7 절기 행사 원장(더비·장원제·야시장 — 프레임/세이브 복원보다 먼저)
+	_setup_mailbox()        # ★ S9-T3 편지 원장·발송 큐(세이브 복원보다 먼저 — 조각 "mailbox")
 	_setup_hud_overlays()   # ★ C3 좌하단 알림 피드 + 우하단 혼력 바(프레임보다 먼저 → 모달이 위에)
 	_setup_frame()          # ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대/상자)
 	_setup_settings()       # ★ Phase D 설정(볼륨·전체화면 — audio·프레임 존재 후, 프레임 신호 연결·적용)
@@ -8892,6 +8911,15 @@ func _setup_seasonal_event() -> void:
 	seasonal_event.name = "SeasonalEvent"
 	add_child(seasonal_event)
 
+# ── ★[S9-T3 / ADR-0067 결정 7] 편지 원장(저승식 전령) ─────────────────────────
+# larder·seasonal_event와 같은 결의 상태 노드(코드 생성 — 새 tscn 노드 0). 세이브 조각은 "mailbox".
+# 미독 편지가 있으면 우편함 표식이 바뀌므로 changed에 redraw만 물린다(곳간이 패널을 갱신하는 자리).
+func _setup_mailbox() -> void:
+	mailbox = Mailbox.new()
+	mailbox.name = "Mailbox"
+	add_child(mailbox)
+	mailbox.changed.connect(queue_redraw)
+
 # ── ★ ADR-0048 Phase D 설정(볼륨·전체화면) ──────────────────────────────────────
 # GameSettings를 붙여 디스크에서 읽고 즉시 적용한다(버스 볼륨·창모드). 옵션 탭 조작은 프레임 신호로 받아
 # 값 갱신→적용→영속한다(데이터/적용 디커플링 — GameSettings는 audio·DisplayServer를 모른다).
@@ -9372,6 +9400,14 @@ func _on_day_advanced(day: int) -> void:
 	#   (날짜가 갈려 있어 한 아침에 둘이 겹치지 않는다: 행사 12/20/16/15 vs 테마 데이 25).
 	for line in _seasonal_morning_notices():
 		_notice(line, NOTICE_SECS * 2.0)
+	# ★[S9-T3 / ADR-0067 결정 7] 전령이 다녀갔다 — 어제 큐에 든 편지가 오늘 아침 우편함에 꽂힌다.
+	#   위 배너들 **뒤**에 두는 이유: 편지는 "오늘 하루의 예고"가 아니라 "가서 열어 볼 것"이라,
+	#   날씨·행사 안내를 밀어내지 않고 그 아래에 붙는 것이 읽는 순서에 맞다. 지면을 안 건드리므로
+	#   아래 `_refresh_season_terrain`(그리드 재빌드)의 맨 끝 규율과도 충돌하지 않는다.
+	if mailbox != null:
+		var arrived := mailbox.advance_day()
+		if arrived.size() > 0:
+			_notice("전령이 다녀갔다 — 우편함에 편지 %d통" % arrived.size(), NOTICE_SECS * 2.0)
 	# ★[S7-T9 / ADR-0065 결정 11] 절기 팔레트 스왑 — 땅의 낯빛이 절기를 따라 바뀐다.
 	#   **하루 정산의 맨 끝**에 둔다: 이 호출 안의 `_rebuild_region`이 그리드를 다시 세우므로,
 	#   지상 그리드를 전제하는 위 정산들(재점령 후보·잡초 확산·나무 파종)이 전부 끝난 뒤라야
@@ -10050,6 +10086,10 @@ func _save_game() -> void:
 		# ★[S7-T7] 절기 행사 원장 — **결과만** 든다(달력·날씨·운처럼 파생되는 것은 여기 없다).
 		#   더비 태그·교환 횟수(당일치) · 장원제 출품일·최고 등급 · 야시장 한정 구매 이력.
 		"seasonal_event": seasonal_event.to_save(),
+		# ★[S9-T3 / ADR-0067 결정 7] 편지 원장 — 발송 큐(아직 안 온 편지) + 보관함 + 기독 원장.
+		#   서사 진행의 일부라 반드시 라운드트립한다(자고 일어나면 도착하는 편지가 세이브를 건너뛰면
+		#   "잘 때마다 사라지는 예고"가 된다).
+		"mailbox": mailbox.to_save(),
 		# ★[S6-T4] 단골화 방문 원장(명명 손님별 누적 서빙 횟수). 호감도 조각들과 **완전히 다른 키**다 —
 		#   네임스페이스가 갈려 있는 것 자체가 "서빙 ≠ ♡"(ADR-0017)의 세이브 층위 표현이다.
 		"guest_pool": guests.to_save(),
@@ -10181,6 +10221,10 @@ func _load_game() -> void:
 	#   있으므로 막히는 것이 0이고, 더비 태그는 어차피 당일치라 잃을 것도 없다).
 	if data.has("seasonal_event") and seasonal_event != null:
 		seasonal_event.load_save(data["seasonal_event"])
+	# ★[S9-T3] 편지 원장 — 키 없는 구세이브는 **빈 우편함**으로 시작한다(곳간·출하함과 같은 하위호환
+	#   관례. 막히는 것은 0이다 — 앞으로의 사건이 보내는 편지는 그대로 도착한다).
+	if data.has("mailbox") and mailbox != null:
+		mailbox.load_save(data["mailbox"])
 	# ★[S6-T4] 단골 원장 — 키 없는 구세이브는 **전원 처음 오는 손님**으로 시작한다(빈 원장 = 기본
 	#   가중치. 아무것도 안 막힌다 — 명명 손님은 그대로 오고 이력만 0부터 쌓인다).
 	if data.has("guest_pool"):
@@ -11027,6 +11071,8 @@ func _process(delta: float) -> void:
 	# 다른 구역 같은 좌표에 닿아도 무반응 — facing_bin과 같은 결). 집 안 상호작용은 상자 하나뿐이라 안 겹친다.
 	var facing_chest := not _sleeping and _indoor == "집" and _target == CHEST_TILE
 	var facing_mirror := _facing_mirror()
+	# ★[S9-T3] 우편함(집 앞 야외) — 거울과 같은 결의 [F] 창구. 판정은 함수가 진다(_facing_mailbox).
+	var facing_mailbox := _facing_mailbox()
 	# ★ Phase E 갈무리방(창고) 저장 상자: 창고 실내에서 상자 칸을 바라볼 때(_indoor로 가드해 다른 구역 같은
 	# 좌표 무반응). 집 상자와 좌표·건물이 갈려 안 겹친다.
 	var facing_storehouse_chest := not _sleeping and _indoor == "창고" and _target == STOREHOUSE_CHEST_TILE
@@ -11191,6 +11237,12 @@ func _process(delta: float) -> void:
 			_close_mirror()
 		else:
 			_open_mirror()
+		return
+	# ★[S9-T3 / ADR-0067 결정 7] 우편함 F: 가장 오래된 미독 편지를 대화창으로 연다(연타 = 순차 열람).
+	#   기물이 야외에 서 있어도 [F]는 사람·설비 창구라 다른 대상과 안 겹친다(집 앞엔 게시판·기증대·
+	#   모루가 없고, 우편함 칸은 주민 스테이션과도 갈린다).
+	if facing_mailbox and Input.is_action_just_pressed("shop_toggle"):
+		_read_next_letter()
 		return
 	# ★ Phase E 창고 상자 열기(RMB): 집 상자와 같은 결 — 활성 상자만 바꿔 같은 CTX_CHEST 패널을 연다.
 	if facing_storehouse_chest and Input.is_action_just_pressed("action"):
@@ -11658,6 +11710,14 @@ func _process(delta: float) -> void:
 		# ★[S7-T4] 점괘 거울을 바라볼 때. 펼침/접기를 같은 키가 맡으니 문구도 상태를 따라간다.
 		interact_prompt.visible = true
 		interact_prompt.text = "점괘 거울 [F] %s" % ("덮기" if mirror_panel.visible else "들여다보기")
+	elif facing_mailbox:
+		# ★[S9-T3] 우편함을 바라볼 때. 미독 통수를 문구가 먼저 말한다(누르기 전에 무엇이 있는지 안다).
+		interact_prompt.visible = true
+		var unread: int = mailbox.unread_count() if mailbox != null else 0
+		if unread > 0:
+			interact_prompt.text = "[F] 우편함 — 읽지 않은 편지 %d통" % unread
+		else:
+			interact_prompt.text = "우편함 — 새 편지가 없다"
 	elif facing_chest or facing_storehouse_chest:
 		# ★ Phase D/E 저장 상자를 바라볼 때: 우클릭으로 보관 패널을 연다(순수 보관 — 판매 아님).
 		interact_prompt.visible = true
@@ -16665,6 +16725,45 @@ func _open_mirror() -> void:
 func _close_mirror() -> void:
 	mirror_panel.visible = false
 
+# ── ★[S9-T3 / ADR-0067 결정 7] 우편함 — 열람 창구 ────────────────────────────
+# 우편함을 마주 보고 있나. 거울과 같은 결의 판정이되 무대가 *야외*라 가드가 하나 더 붙는다:
+# `_region == HOME`(다른 구역의 같은 좌표 무반응) ∧ `_indoor == ""`(실내 밴드 배제 — 게시판이
+# 마을 야외를 `_indoor == ""`로 가드하는 그 문법 1:1). 함수로 여는 이유도 거울과 같다 —
+# _process 지역 변수는 헤드리스가 손댈 수 없어서다.
+func _facing_mailbox() -> bool:
+	return not _sleeping and _region == RegionCatalog.HOME and _indoor == "" \
+		and _target == MAILBOX_TILE
+
+# [F] 한 번 = 편지 한 통. **가장 오래된 미독**을 연다(결정 7 순차 열람) — 여러 통이 와 있으면
+# 연타로 차례차례 읽힌다. 읽을 것이 없으면 대화창을 열지 않고 알림 한 줄로 끝낸다(빈 대화창이
+# 뜨는 것이 가장 나쁜 결과다).
+#
+# ★ **읽기 UI = 기존 대화창 재사용**(신규 위젯 0 — 결정 7 "읽기 UI 신설"의 최소 이행). 발신인이
+#   화자명 자리에 서고 본문 줄들이 한 줄씩 넘어간다. 한지 패널·이름판·[E] 안내가 전부 그대로라
+#   플레이어가 새 조작을 배울 것이 없고, 표정 태그·선택지 문법(S9-T1)도 편지에 그대로 쓸 수 있다.
+#   초상화는 발신인 매핑이 있으면 뜨고 없으면 슬롯이 꺼진다(_set_portrait의 기존 폴백).
+# ★ 기독 처리는 **여는 순간**이다(닫는 순간이 아니라): 대화창은 어느 줄에서든 닫힐 수 있고,
+#   "끝까지 넘겨야 읽은 것"으로 치면 중간에 닫은 편지가 영원히 미독으로 남아 배지가 안 꺼진다.
+func _read_next_letter() -> void:
+	if mailbox == null:
+		return
+	# ★ 대화가 이미 떠 있으면 아무 일도 하지 않는다. `_process`의 대화 중 early-return이 실입력을
+	#   이미 막지만, 그 가드에만 기대면 "대화 중 호출 = 기독만 되고 화면엔 안 뜬다"는 조용한 유실
+	#   경로가 이 함수 안에 남는다(DialogueBox.start는 열려 있으면 no-op이다). 여기서 닫는다.
+	if dialogue.is_open():
+		return
+	var id := mailbox.next_unread()
+	if id == "":
+		_notice("우편함이 비어 있다")
+		return
+	var lines := Mailbox.lines_of(id)
+	if lines.is_empty():
+		return              # 본문 없는 편지는 열지 않는다(테이블 손상 방어 — 빈 대화창 차단)
+	mailbox.mark_read(id)
+	_talking_to = Mailbox.sender_of(id)
+	player.set_physics_process(false)   # 읽는 동안 이동 잠금(_on_dialogue_finished가 푼다)
+	dialogue.start(_talking_to, lines)
+
 # 거울에 뜰 본문. **명부의 운은 등급·문구만 나간다** — DailyLuck.fortune_text가 수치를 안 담는 것이
 # 그 계약이고, 여기서 값을 다시 꺼내 붙이면 CONTEXT [명부의 운] "내부 연산은 숨김"이 깨진다.
 func _mirror_forecast_text() -> String:
@@ -17200,6 +17299,7 @@ func _draw() -> void:
 			_draw_facade_barn()        # ★ [B1-a.1] 넋우릿간+넋둥우리 외관(동물 2건물 — barn 6×4·coop 4×2)
 			_draw_silo()               # ★ [B1-a.3] 여물광 외관(WALL 박스 그레이박스 + 건초 게이지)
 			_draw_well()               # ★ [B2] 혼우물 외관(WALL 박스 그레이박스 — 돌 우물, 리필 메카닉=별도 grill)
+			_draw_mailbox()            # ★[S9-T3] 집 앞 우편함(그레이박스 — 미독이면 부적 깃발이 선다)
 			_draw_forage()             # ★ [B1-a.3] 사료풀(다 자람=풀포기·벤 자리=밑동) — 낫 채집 대상
 			_draw_flower_regrow()      # ★ ADR-0052 딴 꽃 패치 자리 새싹(재생 대기 — 폄은 _draw_props_for가 풀 스프라이트로)
 			_draw_encroach_weeds()     # ★ ADR-0055 밤새 돋은 재점령 잡초(빈 맨땅 위 평면 데칼 — 낫 채집 대상)
@@ -18424,6 +18524,32 @@ func _draw_night_market() -> void:
 	draw_rect(Rect2(ox + 1, oy + 4, TILE - 2, 7), Color(0.30, 0.14, 0.18))            # 차일(검붉은)
 	draw_circle(Vector2(ox + 7, oy + 8), 3.0, Color(0.98, 0.80, 0.42))                # 등롱(좌)
 	draw_circle(Vector2(ox + TILE - 7, oy + 8), 3.0, Color(0.98, 0.80, 0.42))         # 등롱(우)
+
+# ★[S9-T3 / ADR-0067 결정 7] 집 앞 우편함(그레이박스 — 진짜 아트는 T9 큐).
+# 실루엣: 나무 기둥 + 그 위에 얹힌 함. 한 칸 안에 발치정렬로 들어가 집 외관(y9)과 안 겹친다.
+# ★ 미독 시각 신호 = **부적 깃발**(스타듀 우편함 붉은 깃발의 저승 번안). 미독이 있으면 함 옆으로
+#   붉은 부적이 서고, 다 읽으면 접힌다 — 멀리서도 "가 볼 일이 있나"가 한눈에 읽힌다(곳간 게이지·
+#   수액 채취기 고임 표식과 같은 문법: 상태를 도형 한 조각으로 말한다).
+# 아트 훅: assets/props/mailbox.png 있으면 그대로 쓰고 깃발만 위에 덧그린다(프롭 교체 관례).
+func _draw_mailbox() -> void:
+	var ox := float(MAILBOX_TILE.x * TILE)
+	var oy := float(MAILBOX_TILE.y * TILE)
+	var unread: bool = mailbox != null and mailbox.has_unread()
+	var tex := _prop_tex("mailbox")
+	if tex != null:
+		draw_texture(tex, Vector2(ox, oy + TILE - tex.get_size().y))
+	else:
+		draw_rect(Rect2(ox + TILE * 0.44, oy + TILE * 0.46, TILE * 0.12, TILE * 0.5),
+			Color(0.30, 0.21, 0.13))                                              # 기둥
+		draw_rect(Rect2(ox + TILE * 0.22, oy + TILE * 0.22, TILE * 0.56, TILE * 0.3).grow(1.0),
+			Color(0.12, 0.10, 0.14))                                              # 함 외곽선
+		draw_rect(Rect2(ox + TILE * 0.22, oy + TILE * 0.22, TILE * 0.56, TILE * 0.3),
+			Color(0.26, 0.24, 0.32))                                              # 함 몸통(짙은 남)
+		draw_rect(Rect2(ox + TILE * 0.28, oy + TILE * 0.3, TILE * 0.44, 2.0),
+			Color(0.42, 0.39, 0.50))                                              # 투입구 한 줄
+	if unread:
+		draw_rect(Rect2(ox + TILE * 0.74, oy + TILE * 0.1, TILE * 0.16, TILE * 0.26),
+			Color(0.78, 0.18, 0.20))                                              # 부적 깃발(미독)
 
 func _draw_fortune_mirror() -> void:
 	# 아트 훅: assets/props/fortune_mirror.png(32×64) 있으면 그대로, 없으면 아래 그레이박스.

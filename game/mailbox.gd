@@ -1,0 +1,191 @@
+extends Node
+class_name Mailbox
+# ★[S9-T3 / ADR-0067 결정 7] 편지(저승식 전령) 채널 — 원장·발송 큐·편지 데이터 테이블.
+#
+# 목적: 서사가 *대화 밖에서* 플레이어에게 닿는 저비용 채널을 연다(애셋 0·컷신 0). 용도는 셋이다 —
+#       ㉠ 관문 이벤트 **예고**(다음 비트로 가는 유도) ㉡ 사건의 **여진**(컷신 다음 날 아침 도착하는
+#       짧은 편지) ㉢ 레시피 문구 전달. 스타듀 우편의 자리이되, **메뉴 해금 경로로는 쓰지 않는다**
+#       (ADR-0064 발견 게이트 유지 — 결정 7이 그 한정을 명문화한 그대로다).
+#
+# 설계 메모:
+#   - larder.gd·shipping_bin.gd와 같은 결의 **상태 노드**다: 단일 책임(편지 원장) + 얇은
+#     to_save/load_save. 어느 칸에 우편함이 서는지·언제 [F]가 열리는지·무엇을 대화창에 띄우는지는
+#     전부 main이 조율하고, 이 노드는 "무엇이 오는 중이고 무엇이 와 있고 무엇을 읽었나"만 안다
+#     (DialogueBox를 모른다 — 곳간이 wallet을 모르는 그 디커플링).
+#   - ★ **큐 → 다음 날 아침 도착**(같은 날 즉시 도착 없음). 발송은 `_outbox`에 쌓이고
+#     `advance_day()`가 통째로 `_inbox`로 옮긴다. **도착 날짜를 계산하지 않는** 이유: 사건이 언제
+#     불렀든 "다음 아침"이면 충분한데, 날짜 산술을 넣으면 밤 12시 경계·구세이브 이월에서 어긋날
+#     여지만 생긴다. 큐에 있다 = 아직 안 왔다, advance_day를 한 번 탔다 = 왔다 — 그게 전부다.
+#   - ★ **중복 발송 = 무시**(택1의 근거): 편지 한 통은 서사 비트 하나이고 본문이 고유하다. 같은
+#     비트가 두 번 도착하면 그건 텍스처가 아니라 버그로 읽힌다. 그래서 `send`는 큐·보관함·기독
+#     원장 어디에든 그 id의 흔적이 있으면 false를 돌려주고 아무 일도 하지 않는다(멱등). 사건 코드가
+#     "이미 보냈나"를 스스로 기억할 필요가 없다는 뜻이기도 하다 — 관문이 여러 번 발화해도 안전하다.
+#   - ★ **읽은 편지도 보관함에 남는다**(도착 순서 그대로). 원장이 미독/기독만 가르므로 재열람 UI는
+#     나중에 같은 데이터 위에 얹힌다(지금 [F]는 *가장 오래된 미독*을 연다 — 결정 7의 순차 열람).
+#   - 데이터 테이블(LETTERS)은 **gift_prefs.gd 규약**을 그대로 따른다: 행을 더하는 것이 본문 반영의
+#     전부이고 코드는 0줄 바뀐다. T3은 파이프라인 + 중립 샘플 1통뿐이고, 메인 3인 × 3~5통(결정 12
+#     볼륨 상한)은 T4~T6이 이 dict에 행만 더한다.
+
+# ── 편지 데이터 테이블 ────────────────────────────────────────────────────────
+# id → {
+#   "from":  발신인(대화창 이름판에 그대로 선다 — 초상화 매핑이 없으면 슬롯이 꺼진다),
+#   "lines": 본문 줄들(대화창 한 줄씩 넘긴다. 표정 태그 [smile] 등도 대화창 문법 그대로 먹는다),
+#   "note":  트리거 메모(주석 층위 — 코드가 읽지 않는다. "누가 언제 이 편지를 보내는가"의 기록),
+# }
+#
+# ★ 샘플 1통은 **프레임워크 결의 중립 문구**다(캐릭터 본문 아님 — placeholder 결). 캐릭터의 말은
+#   ADR-0005대로 캐릭터 파일이 소유하므로, 채널 자체를 설명하는 이 한 통만 여기 산다.
+# ★ lines는 **평 Array**로 둔다(PackedStringArray 생성자는 const 표현식이 아니라 파스 에러가 난다).
+#   변환은 lines_of가 한 자리에서 하므로 테이블 작성자는 문자열만 나열하면 된다.
+const LETTERS := {
+	"herald_notice": {
+		"from": "저승 전령",
+		"lines": [
+			"우편함에 낡은 부적 봉투가 꽂혀 있다.",
+			"「전령이 다녀갔다. 앞으로 소식은 이 함으로 온다.」",
+			"…받을 편지가 쌓이면, 여기서 열어 보면 되겠다.",
+		],
+		"note": "T3 파이프라인 샘플(중립) — 캐릭터 본문은 T4~T6이 행으로 더한다",
+	},
+}
+
+# 재고가 바뀐 프레임(main이 우편함 표식·미독 배지를 다시 그린다). larder.changed와 같은 결.
+signal changed()
+
+# 발송 큐 — 보냈으나 아직 도착하지 않은 편지 id(도착은 다음 날 아침).
+var outbox: PackedStringArray = PackedStringArray()
+# 보관함 — 도착한 편지 id(도착 순서 = 오래된 것이 앞. 읽어도 남는다).
+var inbox: PackedStringArray = PackedStringArray()
+# 기독 원장 {id: true}. 보관함에 있으면서 여기 없는 id = 미독.
+var read_ledger: Dictionary = {}
+
+# ── 테이블 조회(정적 — 어디서든 Mailbox.has_letter(id)로 읽는다) ───────────────
+static func has_letter(id: String) -> bool:
+	return LETTERS.has(id)
+
+static func sender_of(id: String) -> String:
+	if not LETTERS.has(id):
+		return ""
+	return str(LETTERS[id].get("from", ""))
+
+static func lines_of(id: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	if not LETTERS.has(id):
+		return out
+	var raw: Variant = LETTERS[id].get("lines", [])
+	var t := typeof(raw)
+	if t != TYPE_ARRAY and t != TYPE_PACKED_STRING_ARRAY:
+		return out
+	for ln in raw:
+		out.append(str(ln))
+	return out
+
+# ── 발송(사건 코드가 부르는 공용 창구) ────────────────────────────────────────
+# 큐에 넣는다. **다음 날 아침에 도착**한다(같은 날 즉시 도착 없음).
+# 거절(false)하는 경우: 테이블에 없는 id · 이미 큐에 있음 · 이미 도착함(읽었든 안 읽었든).
+# ★ 거절이 곧 중복 방어다 — 호출 측은 "이미 보냈나"를 기억할 필요가 없다(위 설계 메모).
+func send(letter_id: String) -> bool:
+	if not has_letter(letter_id) or ever_sent(letter_id):
+		return false
+	outbox.append(letter_id)
+	changed.emit()
+	return true
+
+# 이 편지가 이 세이브에서 이미 발송된 적이 있는가(큐 중 · 도착함 둘 다 포함).
+func ever_sent(letter_id: String) -> bool:
+	return outbox.has(letter_id) or inbox.has(letter_id)
+
+# ── 아침 도착(main의 day advance 훅이 부른다) ─────────────────────────────────
+# 큐에 있던 편지를 통째로 보관함으로 옮기고, **이번 아침에 도착한 id들**을 돌려준다(빈 배열 = 무소식).
+# 도착분은 전부 미독이다(원장에 안 넣는다). 큐 순서가 곧 보관함 순서 = "오래된 것부터" 열람의 근거.
+func advance_day() -> PackedStringArray:
+	if outbox.is_empty():
+		return PackedStringArray()
+	var arrived := outbox.duplicate()
+	for id in arrived:
+		inbox.append(id)
+	outbox = PackedStringArray()
+	changed.emit()
+	return arrived
+
+# ── 열람 ──────────────────────────────────────────────────────────────────────
+# 가장 오래된 미독 편지 id(없으면 ""). main의 [F]가 이걸 열고, 프롬프트 문구도 이걸 본다.
+func next_unread() -> String:
+	for id in inbox:
+		if not read_ledger.has(id):
+			return id
+	return ""
+
+# 열람 처리(기독 원장 적재). 보관함에 없는 id는 무시한다(늦게 눌린 입력·깨진 호출 방어).
+# 이미 읽은 편지를 다시 넘겨도 조용히 통과한다(멱등).
+func mark_read(letter_id: String) -> bool:
+	if not inbox.has(letter_id) or read_ledger.has(letter_id):
+		return false
+	read_ledger[letter_id] = true
+	changed.emit()
+	return true
+
+func is_read(letter_id: String) -> bool:
+	return read_ledger.has(letter_id)
+
+# 미독 통수(우편함 시각 신호·프롬프트 표기).
+func unread_count() -> int:
+	var n := 0
+	for id in inbox:
+		if not read_ledger.has(id):
+			n += 1
+	return n
+
+# 우편함에 깃발이 서 있는가 = 읽을 것이 있는가(그레이박스 시각 신호의 술어).
+func has_unread() -> bool:
+	return unread_count() > 0
+
+# 큐 대기 통수(테스트·디버그 — "보냈지만 아직 안 온" 편지 수).
+func pending_count() -> int:
+	return outbox.size()
+
+# ── 세이브/로드 ───────────────────────────────────────────────────────────────
+# 가법 키 두 축(큐 · 보관함+기독 원장). ★ 세이브 키 자체가 없는 구버전은 main이 load_save를 아예
+# 안 불러 **빈 우편함**으로 시작한다(곳간·출하함·상자가 쓰는 그 하위호환 관례 — 마이그레이션 0).
+func to_save() -> Dictionary:
+	return {
+		"outbox": outbox.duplicate(),
+		"inbox": inbox.duplicate(),
+		"read": read_ledger.duplicate(),
+	}
+
+# 복원: 세 축을 정제해 갈아끼운다. 손상 방어(테이블에 없는 id·중복·형식 불일치)는 곳간 load_save의
+# 결 그대로다 — 편지 테이블에서 사라진 옛 id는 조용히 버린다(본문이 없는 편지는 열 수 없으므로,
+# 남겨 두면 [F]가 빈 대화를 여는 함정이 된다).
+func load_save(data: Dictionary) -> void:
+	outbox = _sanitize_ids(data.get("outbox", PackedStringArray()), {})
+	var seen: Dictionary = {}
+	for id in outbox:
+		seen[id] = true
+	inbox = _sanitize_ids(data.get("inbox", PackedStringArray()), seen)
+	read_ledger = {}
+	var raw_read: Variant = data.get("read", {})
+	if typeof(raw_read) == TYPE_DICTIONARY:
+		for id in raw_read:
+			var sid := str(id)
+			# 기독 원장은 **보관함에 있는 편지만** 든다 — 도착한 적 없는 id의 기독 기록은 의미가 없고,
+			# 남겨 두면 나중에 그 편지가 실제로 도착했을 때 미독 표시 없이 묻힌다.
+			if inbox.has(sid) and bool(raw_read[id]):
+				read_ledger[sid] = true
+	changed.emit()
+
+# id 배열 정제 — 테이블에 있는 id만·중복 제거(`claimed`에 이미 든 id도 제외). 형식이 배열이
+# 아니면 빈 배열. 큐와 보관함이 같은 id를 동시에 들지 않도록 호출 측이 claimed를 넘긴다.
+func _sanitize_ids(raw: Variant, claimed: Dictionary) -> PackedStringArray:
+	var out := PackedStringArray()
+	var t := typeof(raw)
+	if t != TYPE_PACKED_STRING_ARRAY and t != TYPE_ARRAY:
+		return out
+	var seen: Dictionary = claimed.duplicate()
+	for v in raw:
+		var sid := str(v)
+		if not has_letter(sid) or seen.has(sid):
+			continue
+		seen[sid] = true
+		out.append(sid)
+	return out
