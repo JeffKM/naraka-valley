@@ -15580,6 +15580,67 @@ func _setup_residents() -> void:
 	#   생일은 Resident.BIRTHDAYS "seolhwa"(성야절 14일 — 달력 마커 자동).
 	# ★ 연애·결혼은 **아직 안 연다**: seolhwa.gd가 confession/divorce/spouse 본문을 이미 들고
 	#   있지만 ROMANCE_OPEN 명단은 S9b-T6이 고친다 — 명단 한 줄이 개통의 전부다.
+	# ── ★ [S9b-T2 / ADR-0068 결정 3] 스칼렛 — **조연 코러스 풀 온보딩**(메두사·T1).
+	#    깨비·켄이 탄 그 길 그대로다: 이 블록 하나 + `scarlet.gd` 한 파일이 주민 1인 추가의 전부다
+	#    (main.tscn 무수정 — script_path·needs_affinity를 채우면 `_register_resident`가 몸과 관계
+	#    트랙 노드를 낳는다). **등록 자리 = 주방요괴 바로 앞**(T1이 세운 불변식 — ㉠ 기존 주민
+	#    인덱스 불변 ㉡ 주방요괴가 마지막. 그 사이에 끼우면 늘어나는 건 size 하나뿐이다).
+	#
+	#    ★ **쉼터 2채널**([narrative-bible §6.1]): 대화·선물만으로 하트가 오른다. **활동 채널 0 ·
+	#      곱셈기(effect_fn) 0** — 활동 곱셈기는 메인 4인 독점이고([ADR-0008]), 조연은 활동 압박의
+	#      *쉼터*가 되어야 한다. 특히 스칼렛의 도메인(값·판)은 매출·마진과 붙기 쉬운 결이라
+	#      **경제 수치에 손대지 않는 것**이 이 레코드의 가장 중요한 성질이다(멜의 마진 곱셈기 독점
+	#      침범 금지 — [narrative-bible §4] 링 2 "곱셈기·해결 열쇠 없음").
+	#
+	#    ★ **집 배정 = 주민 집 2**(RESIDENT_HOUSE_RECTS[1] = Rect2i(58,44,4,4), 문 59,47).
+	#      근거 ㉠ 광장 바로 남쪽 = 마을에서 **가장 눈에 띄는 주소**다. 사람을 모아 두고 시선을
+	#      즐기던 자([narrative-bible §5.3] 교만·소유)가 저승에서도 고른 자리 — 정작 본인은 낮에
+	#      집 앞을 떠나 광장 끄트머리에 서 있는 어긋남이 이 인물의 모양이다 ㉡ 문(y47)이 메인
+	#      복도(y36)보다 아래라 문 스포크가 x59 한 열로 곧장 위로 붙어 보간 걷기 경로가 실제 길과
+	#      겹친다 ㉢ 강변 2채(index 9·10)는 세레나(인어) 예약분이라 비켜 두고, 모찌(3)·깨비(5)·
+	#      켄(8)과도 겹치지 않는다([ADR-0068] 결정 3 "1인 1채").
+	#
+	#    ★ 하루 = 집 앞 → 광장 **북동 끝** → 카페 홀 **남서 구석**. 세 자리가 전부 나루 마을이라
+	#      보간 걷기가 실제로 돈다(모찌·깨비 선례). 스케줄은 바이블 「나라카 연결」에서 파생했다 —
+	#      **판이 벌어지는 자리에서 가장 먼 대각선**에 서고(야시장 매대 = 판돈 냄새), 저녁엔 카페
+	#      가장 안쪽 구석에서 카운터를 지켜본다("도도한 독설 뒤 눈치 보며 챙기는 츤데레").
+	var r_scarlet := Resident.new()
+	r_scarlet.id = "scarlet"
+	r_scarlet.display_name = "스칼렛"
+	r_scarlet.script_path = "res://scarlet.gd"   # ★ 노드를 레코드가 낳는 길(main.tscn 무수정)
+	r_scarlet.needs_affinity = true
+	r_scarlet.save_key = "scarlet_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_scarlet.can_gift = true
+	r_scarlet.gift_target_ko = "스칼렛"
+	r_scarlet.portrait_stem = ""                 # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
+	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 스칼렛이 보인다 — 그래서 문 바로
+	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌·깨비·켄과 같은 규약).
+	var scarlet_home_tile: Vector2i = RESIDENT_HOUSE_DOORS[1] + Vector2i(0, 1)   # (59,48)
+	# 낮 = 마을 광장(NARU_PLAZA_RECT x46..58, y31..41)의 **북동 끝**. 야시장 매대(52,34)에서 가장
+	# 먼 대각선 자리이고(판에서 물러선 결), 짧은 통나무(56~57,32 — 2×1 SOLID) 동쪽 끝에 붙어 기대
+	# 선 그림이 된다. 메인 복도(y36)·다리 스파인(x52·53)·모찌(54,34)·깨비(56,34)·켄(48,39)을
+	# 전부 비껴간다.
+	var scarlet_plaza_tile := Vector2i(58, 32)
+	# 저녁 = 카페(영업창 15:00~) **홀 남서 구석**. 문(14,95)에서 가장 먼 대각선 안쪽이라 들어오는
+	# 사람의 시선이 가장 늦게 닿고, 카운터(y89) 전체가 한눈에 들어온다(눈치 보며 챙기는 자리).
+	# 직원 줄(y88)·카운터(y89)·스툴(9,90)·손님 테이블(11,93)(15,93)·등불(18,91)·모찌(13,92)·
+	# 깨비(16,91)·켄(17,92)을 전부 비껴간 칸이다.
+	var scarlet_cafe_tile := Vector2i(9, 92)
+	r_scarlet.schedule = [
+		{"from_min": 0, "tile": scarlet_home_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": 11 * 60, "tile": scarlet_plaza_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": Cafe.OPEN_MIN, "tile": scarlet_cafe_tile, "region": RegionCatalog.NARU_VILLAGE},
+	]
+	# ★ effect_fn 없음 = 관계 탭에 곱셈기 줄이 안 붙는다(선물 리듬 꼬리만 — 모찌·켄 선례 동형).
+	_register_resident(r_scarlet)
+	# ★ 선호 선물은 GiftPrefs "scarlet"이 든다 — 값나가고 고운 것(명옥·넋수정·서리동백)이 러브,
+	#   **석화 목재**가 헤이트다(자기가 사람에게 한 짓이 굳은 형상 — [narrative-bible §5.3]).
+	#   생일은 Resident.BIRTHDAYS "scarlet"(망연절 12일 — 달력 마커 자동).
+	# ★ 연애·결혼은 **아직 안 연다**: scarlet.gd가 confession/divorce/spouse 본문을 이미 들고
+	#   있지만 ROMANCE_OPEN 명단은 S9b-T6(조연 연애·결혼 개통)이 고친다 — 명단 한 줄이 개통의 전부다.
+	# ★ 소프트 게이트 ㉠(♡3 = 대화재 접촉 후)의 로스터 등재(`CHORUS_GATE_ROSTER`)는 **S9b-T2의
+	#   병렬 짝 워커가 단독 소유**한다(결합 충돌 방지 — 로스터의 주인은 그 상수 한 곳뿐이다).
 
 	# ── ★ [S6-T7 / ADR-0064 결정 8] 주방요괴 — **T3 배경 직원**(카페 주방 자리·곁들이 창구).
 	#    CONTEXT [주방요괴]가 정의만 해 두고 무대엔 없던 자리를 세운다: S6-T1부터 기본 메뉴는

@@ -233,6 +233,24 @@ const OVERRIDES := {
 		],
 		HATE: [MenuCatalog.HOT_MILK, MenuCatalog.SONGI_SOUP],   # 김이 오르는 것
 	},
+	# ★[S9b-T2 / ADR-0068 결정 3] 스칼렛 — **값나가고 고운 것**([narrative-bible §5.3] 메두사·
+	# 옛 간판 타짜 · "치명적 매력"). 값을 아는 사람이라 물건의 급이 곧 예의고, 그중에서도 *맑은
+	# 것*(넋수정)은 그녀가 못 하는 일(속이 다 보이는 것)이라 더 좋아한다. 서리동백 ↔ 동백 밀크티는
+	# 재료-요리 한 쌍이고(미호 호박 ↔ 호박 라떼 선례), 혼정 아인슈페너는 겉이 달고 속이 쓴 잔이라
+	# 그대로 이 인물의 결이다(멜 러브와 겹치지만 근거가 다르다 — 멜=카페의 간판 / 스칼렛=그 맛).
+	# 헤이트 = **석화 목재**(자기가 사람에게 한 짓이 굳어 버린 형상 — §5.3 "돌처럼 가둬두고")와
+	# **업화알돌**(열어 봐야 아는 것 = 남의 전 재산이 걸려 있던 그 판). ⚠️멜 헤이트(알돌)와 한 종이
+	# 겹치나 결이 갈린다 — 멜은 *끊은 습관*이 무섭고, 스칼렛은 *자기가 쥐여 준 판*이 부끄럽다.
+	"scarlet": {
+		LOVE: [
+			ItemCatalog.GEM_MYEONGOK,             # 명옥 — 매끄럽고 값진 것
+			ItemCatalog.GEM_NEOKSUJEONG,          # 넋수정 — 속이 다 보이는 것(그녀가 못 하는 일)
+			ItemCatalog.SEORI_DONGBAEK,           # 서리동백 — 서리 속에서 붉은 꽃(이름값·츤데레)
+			MenuCatalog.DONGBAEK_MILKTEA,         # 동백 밀크티 — 그 꽃이 잔에 담겨 돌아온 것
+			MenuCatalog.HONJEONG_EINSPANNER,      # 혼정 아인슈페너 — 겉은 달고 속은 쓴 잔
+		],
+		HATE: [ItemCatalog.PETRIFIED_WOOD, ItemCatalog.GEODE_EOPHWA],
+	},
 }
 
 # ── 조회 ──────────────────────────────────────────────────────────────────────
