@@ -10,9 +10,12 @@ extends SceneTree
 #   ⑥ 집 책장 재읽기 — 미독 우선 → 순환. 좌표·실내 가드. 빈 책장은 대화창을 안 연다.
 #   ⑦ 혼백관 — 책은 기증되고 **노트는 안 된다**. 트래커 분모 11 · 마일스톤 산입 · 기존 행 보존.
 #   ⑧ 세이브 왕복 — 입수·기독 원장이 이어하기에 살아남고, 구세이브는 빈 원장, 손상은 정제된다.
-#   ⑨ 봉인 법칙 가드([ADR-0067] 결정 8 체크리스트 기계 판정분) — placeholder 본문 어디에도
-#      플레이어 죄목의 **중심 평결**·세 조각으로 읽힐 어휘가 없다.
+#   ⑨ 봉인 법칙 가드([ADR-0067] 결정 8 체크리스트 기계 판정분) — **T8이 부은 실본문** 어디에도
+#      플레이어 죄목의 **중심 평결**·세 조각으로 읽힐 어휘가 없고, 메인 3인 이름도 안 불린다.
 #   ⑩ main 배선 — 네 입수 지점이 실제로 롤을 부른다(소스 구조 검증).
+#
+# ★[S9-T8] 본문 주입에 맞춰 ②h(placeholder 단언 → 볼륨·위계)·②i·②j 재작성 + ⑨a 금칙어 확장
+#   + ⑨a2(메인 3인 이름 가드) 신설([ADR-0067] 결정 11 — 내용과 테스트는 한 묶음).
 #
 # 실행: TIMEOUT=180 ./run_tests.sh books   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -94,19 +97,41 @@ func _run_checks() -> void:
 	for id in Books.all_ids():
 		if not Books._row(str(id)).has("note"):
 			note_ok = false
-	_check("②e 전 행이 트리거/배치 메모를 갖췄다(T8 주입 자리 표식)", note_ok)
+	_check("②e 전 행이 작성 근거 메모를 갖췄다(T8 주입 근거 표식)", note_ok)
 	_check("②f 책과 노트는 서로 다른 집합",
 		Books.is_book(a_book) and not Books.is_note(a_book)
 		and Books.is_note(a_note) and not Books.is_book(a_note))
 	_check("②g 미지 id는 전부 빈값(조회 방어)",
 		not Books.has_text("__nope__") and Books.title_of("__nope__") == ""
 		and Books.lines_of("__nope__").is_empty())
-	# placeholder 성질 — T8이 본문을 채우기 전까지는 "아직 읽히지 않는다"가 살아 있어야 한다.
-	var placeholder_ok := true
+	# ★[S9-T8 재작성] T7의 "전 본문이 placeholder다" 단언을 **볼륨·위계 단언으로 교체**한다
+	#   ([ADR-0067] 결정 11 — 내용 주입과 테스트 재작성은 한 묶음). 본문이 들어온 지금 지켜야 할
+	#   성질은 "비어 있음"이 아니라 ㉠ 상한 준수(결정 12: 각 3~8줄) ㉡ **책이 노트보다 길다**
+	#   (책=무거운 한 챕터 / 노트=짧은 속삭임이라는 [ADR-0034] #1의 위계가 길이로도 서야 한다)
+	#   ㉢ placeholder 잔재 0(주입 누락분이 남으면 여기서 걸린다)이다.
+	var vol_ok := true
+	var min_book := 99
+	var max_note := 0
 	for id in Books.all_ids():
-		if not "\n".join(Books.lines_of(str(id))).contains("아직 읽히지 않는다"):
-			placeholder_ok = false
-	_check("②h 전 본문이 placeholder다(T8 주입 전 상태 — 그릇만)", placeholder_ok)
+		var n := Books.lines_of(str(id)).size()
+		if n < 3 or n > 8:
+			vol_ok = false
+			print("      ↳ 볼륨 위반: %s (%d줄)" % [str(id), n])
+		if Books.is_book(str(id)):
+			min_book = mini(min_book, n)
+		else:
+			max_note = maxi(max_note, n)
+	_check("②h 전 텍스트가 3~8줄이다([ADR-0067] 결정 12 볼륨 상한)", vol_ok)
+	_check("②i **책이 노트보다 길다**(답=무거운 챕터 / 떡밥=짧은 속삭임 — 길이로도 갈린다)",
+		min_book > max_note)
+	print("      · 책 최소 %d줄 / 노트 최대 %d줄" % [min_book, max_note])
+	var residue_ok := true
+	for id in Books.all_ids():
+		var body_txt := "\n".join(Books.lines_of(str(id)))
+		if body_txt.contains("아직 읽히지 않는다") or body_txt.contains("빛바랜 글씨"):
+			residue_ok = false
+			print("      ↳ placeholder 잔재: " + str(id))
+	_check("②j placeholder 잔재 0(T8 주입 누락분이 없다)", residue_ok)
 
 	# ── ① 카탈로그 속성 ──
 	print("── ① 카탈로그 속성 ──")
@@ -463,22 +488,53 @@ func _run_checks() -> void:
 	# ── ⑨ 봉인 법칙 가드(기계 판정분) ──
 	print("── ⑨ 봉인 법칙 ──")
 	# 책은 **타인의 말**이라 중심 평결을 서술하면 키스톤 위반이다(ADR-0034 #3 · ADR-0067 결정 8).
-	# placeholder도 그 규칙을 이미 지키지만, T8이 본문을 부을 때 이 가드가 회귀로 남는다.
-	var verdicts := ["네 죄는", "너의 죄는", "네가 지은 죄", "네 죄목", "그러니까 네가",
-		"너 때문에 옥자", "네가 옥자를 죽", "너는 외면했", "네가 외면한",
-		"감정의 조각", "사실의 조각", "행동의 조각"]
+	# ★[S9-T8 강화] 본문이 실제로 들어왔으니 스캔의 가치가 커졌다 — 금칙 어휘를 **2인칭 지목·
+	#   죄목 명명·봉인 사실 진술·세 조각 명명**의 네 묶음으로 확장한다. 판정은 여전히 기계적
+	#   부분문자열이라, 사람이 하는 검수(체크리스트 4항)를 *대체*하지 않고 회귀로 *잠글* 뿐이다.
+	var verdicts := [
+		# ㉠ 2인칭 지목 — 책이 독자를 겨누는 순간 "타인의 말"이 평결이 된다
+		"네 죄", "너의 죄", "당신의 죄", "네가 지은", "네 죄목", "그러니까 네가",
+		"너 때문에", "네가 옥자를", "옥자가 너를", "옥자는 너를", "네가 바로",
+		# ㉡ 죄목 명명(외면·망각·부재 계열의 평결형)
+		"너는 외면했", "네가 외면한", "네가 잊은", "네가 태운", "네가 방치한", "네가 버린",
+		"외면의 죄", "망각의 죄", "부재의 죄", "미결의 죄",
+		# ㉢ 봉인·희생의 사실 진술(본인이 스스로 닿아야 하는 것을 책이 먼저 말하지 않는다)
+		"기억을 봉인", "봉인을 풀", "너를 살리", "널 살리", "너 대신", "널 위해",
+		# ㉣ 세 조각 명명(미호·멜·바나 독점)
+		"감정의 조각", "사실의 조각", "행동의 조각", "세 조각",
+	]
 	var offender := ""
+	var offender_word := ""
 	for id in Books.all_ids():
 		var body := Books.title_of(str(id)) + "\n" + "\n".join(Books.lines_of(str(id)))
 		for w in verdicts:
 			if body.contains(String(w)):
-				offender = body
+				offender = str(id)
+				offender_word = String(w)
 				break
 		if offender != "":
 			break
-	_check("⑨a 중심 평결·세 조각 어휘 0(책이 평결을 먼저 말하지 않는다)", offender == "")
+	_check("⑨a 중심 평결·세 조각 어휘 0(책이 평결을 먼저 말하지 않는다 — 금칙 %d어)"
+		% verdicts.size(), offender == "")
 	if offender != "":
-		print("      ↳ 걸린 본문: " + offender)
+		print("      ↳ 걸린 텍스트: %s / 어휘: %s" % [offender, offender_word])
+	# ★ 세 조각 소유권 가드 — 조각은 **그 세 사람의 입으로만** 나온다. 책·노트가 그들의 이름을
+	#   부르는 순간 "누가 무엇을 안다"는 배분이 흐려지므로(코러스 모델·[ADR-0014] 독점), 본문에
+	#   메인 3인 이름을 두지 않는다. 옥자 이름은 허용된다 — 책의 *저자*이지 조각의 소유자가 아니다.
+	var owners := ["미호", "멜", "바나"]
+	var name_leak := ""
+	for id in Books.all_ids():
+		var body2 := Books.title_of(str(id)) + "\n" + "\n".join(Books.lines_of(str(id)))
+		for nm in owners:
+			if body2.contains(String(nm)):
+				name_leak = "%s ← %s" % [str(id), String(nm)]
+				break
+		if name_leak != "":
+			break
+	_check("⑨a2 본문이 메인 3인 이름을 부르지 않는다(조각은 그들 입으로만 — 코러스 경계)",
+		name_leak == "")
+	if name_leak != "":
+		print("      ↳ 걸린 텍스트: " + name_leak)
 	var src := _strip_comments("res://books.gd")
 	_check("⑨b 책은 호감도 미터를 만들지 않는다(옥자 = 무미터 앵커)",
 		not src.contains("Affinity") and not src.contains("add_points"))
