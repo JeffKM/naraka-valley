@@ -95,9 +95,15 @@ func _run_checks() -> void:
 	_check("⑥ 바나 대화가 열린다", m.dialogue.is_open())
 	_check("⑥b 화자가 바나로 잡힌다", m._talking_to == m.bana.display_name())
 	# E로 끝까지 넘기면 닫힌다(완료기준). 무한 루프 방어로 상한을 둔다.
+	# ★[S9-T6] 바나에게 절기 물음이 생겨 주 첫날(day 1)엔 마지막 줄에 선택지가 붙는다 —
+	#   선택지 줄은 넘기기로 못 지나가므로(DialogueBox.advance의 가드) 플레이어와 같이 첫 항을
+	#   고른다. 재는 계약("끝까지 진행하면 닫힌다")은 그대로다(miho·mel 스위트와 같은 처방).
 	var guard := 0
 	while m.dialogue.is_open() and guard < 50:
-		m.dialogue.advance()
+		if m.dialogue.has_choice():
+			m.dialogue.choose(0)
+		else:
+			m.dialogue.advance()
 		guard += 1
 	_check("⑥c 끝까지 넘기면 대화가 닫힌다", not m.dialogue.is_open())
 	_check("⑥d 대화 끝나도 온보딩 오전진 없음", m.onboarding.step == step_before)
@@ -165,8 +171,11 @@ func _run_checks() -> void:
 	_check("⑩f 선호 선물이 일반 선물보다 큼", pref_gain > normal_gain)
 	m4.free()
 
-	# ── ⑪ 하트별 대사 분기: ♡0 인트로 / ♡2–3 밤 경비 속죄 / ♡4+ '목격' 조각이 서로 다르고,
-	#     ♡4+엔 옥자 목격 떡밥이 깔린다(미호·멜과 같은 틀, 바나=목격 각도 ADR-0005) ──
+	# ── ⑪ 하트별 대사 분기: ♡0 인트로 / ♡1+ 속죄 / ♡3+ '목격' 씨앗이 서로 다르고,
+	#     ♡3+엔 옥자 목격 떡밥이 깔린다(미호·멜과 같은 틀, 바나=행동/목격 각도 ADR-0005).
+	#     ★[S9-T6] 바나 본문이 4단(♡0/♡1+/♡3+/♡5)으로 확장됐다 — 여기서 재는 ♡0·♡2·♡4는
+	#     각각 인트로·♡1+·♡3+ 묶음에 떨어지므로 "세 묶음이 서로 다르다"는 계약은 그대로다.
+	#     본문 검증(4단 경계·조각 내용)은 bana_arc_test 소관 ──
 	var b2 := Bana.new()
 	var intro := b2.lines(0, true)
 	var warming := b2.lines(2, true)
