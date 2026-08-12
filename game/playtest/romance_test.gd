@@ -30,6 +30,15 @@ func _new_main() -> Node:
 	await process_frame
 	return m
 
+# 훅 유무를 스스로 정하는 임시 캐릭터 노드(placeholder 폴백 계약을 실캐릭터와 무관하게 잰다).
+func _mock_node(body: String) -> Node2D:
+	var src := GDScript.new()
+	src.source_code = "extends Node2D\n" + body
+	src.reload()
+	var n := Node2D.new()
+	n.set_script(src)
+	return n
+
 # 신규 시작의 옥자 통보 대화를 끝까지 넘겨 닫는다.
 func _dismiss_intro(m: Node) -> void:
 	var guard := 0
@@ -159,8 +168,24 @@ func _run_checks() -> void:
 	m._start_resident_dialogue(r_mel)
 	var mel_pts: int = r_mel.affinity.points
 	m._resolve_confession("mel")
-	_check("⑤b 두 번째 고백 = 인-픽션 거절 발화",
-		m.dialogue.is_open() and m.dialogue.line() == m.CONFESS_REJECT_LINE)
+	# ★[S9-T5 / ADR-0067 결정 11 재작성] 멜이 confession_lines 훅을 갖게 되어 placeholder
+	#   (CONFESS_REJECT_LINE)는 멜 경로에서도 영구히 사라졌다. 계약("거절 발화가 대화를 교체한다")은
+	#   그대로 두고 출처를 캐릭터 본문으로 바꾼다. placeholder **폴백 경로**는 아래 ⑤b-2가
+	#   훅 없는 mock으로 지킨다 — 어느 캐릭터가 아직 훅을 안 가졌는지에 의존하지 않게 되어
+	#   (바나도 T6에서 훅을 받는다) 이 단언이 다시는 콘텐츠 태스크에 깨지지 않는다.
+	_check("⑤b 두 번째 고백 = 인-픽션 거절 발화(캐릭터 본문 — placeholder 아님)",
+		m.dialogue.is_open() and m.dialogue.line() == String(r_mel.node.confession_lines(false)[0])
+		and m.dialogue.line() != m.CONFESS_REJECT_LINE)
+	# 폴백 이음매 — 훅 없는 캐릭터는 프레임워크 placeholder 두 줄로 그대로 굴러간다.
+	var mk_bare := _mock_node("func lines(_h: int, _f: bool) -> PackedStringArray:\n\treturn PackedStringArray([\"mock 일상 대사\"])\n")
+	var mel_orig: Node2D = r_mel.node
+	r_mel.node = mk_bare
+	_check("⑤b-2 훅 없는 캐릭터 = placeholder 폴백(수락·거절 양쪽)",
+		not mk_bare.has_method("confession_lines")
+		and String(m._confession_lines(r_mel, false)[0]) == m.CONFESS_REJECT_LINE
+		and String(m._confession_lines(r_mel, true)[0]) == m.CONFESS_ACCEPT_LINE)
+	r_mel.node = mel_orig
+	mk_bare.free()
 	_check("⑤c 무벌칙 — 슬롯·stage·점수·대기 전부 불변",
 		m._romance_partner == "miho" and r_mel.affinity.hearts() == 4
 		and r_mel.affinity.points == mel_pts and r_mel.affinity.pending_promotion())
