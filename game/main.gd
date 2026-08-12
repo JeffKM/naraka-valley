@@ -2704,6 +2704,23 @@ var _jealousy: Dictionary = {}
 # ★[S8-T6] 이 대화에서 고백 제안([F])이 떠 있는 상대 rid("" = 없음). 대화와 같은 일시 상태라
 # 세이브하지 않는다(_talking_to와 같은 결 — 대화 시작에 세팅·종료에 리셋).
 var _confess_rid := ""
+# ── ★[S9-T2 / ADR-0067 결정 2] 컷신(연출 등급 2) 재생 상태 ────────────────────
+# 재생 중인 러너(null = 재생 없음). ★**세이브 키 0**: 컷신은 대화보다 더 짧은 일시 상태다
+# (_talking_to·_confess_rid와 같은 결). 특히 "시계 정지"가 세이브에 남으면 로드한 세이브의
+# 시간이 얼어붙는 사고가 되므로, 정지는 아래 _cutscene_clock_prev 스냅으로만 다룬다.
+var cutscene: CutsceneRunner = null
+var _cutscene_clock_prev := true                 # 재생 직전 clock.running(끝나면 이 값으로 되돌린다)
+var _cutscene_speaker := ""                      # 재생이 끝나면 이 화자로 대화를 연다("" = 대화 없음)
+var _cutscene_lines: PackedStringArray = PackedStringArray()
+# 컷신이 건드린 NPC의 원상태(id → {"pos": Vector2 px, "visible": bool}). 재생이 끝나면 그대로
+# 되돌린다 — 스테이션 갱신은 "논리 칸이 바뀌었을 때만" 위치를 다시 찍으므로(_update_resident_station),
+# 컷신이 옮긴 *그림*은 저절로 안 돌아온다. 복원의 책임은 옮긴 쪽에 있다.
+var _cutscene_npc_prev: Dictionary = {}
+# ★[S8-T5→S9-T2] 방금 성사된 관문 진급의 칸(0 = 없음). _try_heart_promotion이 판정 도중 남기는
+# 스냅샷으로, 호출부(_start_resident_dialogue)가 "몇 칸째 컷신인가"를 캐릭터 훅에 넘길 때 쓴다.
+# ★시그니처를 안 늘린 이유: 기존 호출부·테스트(heart_gate_test 등)가 PackedStringArray 반환을
+#   그대로 받는다 — 반환형을 dict로 넓히면 관계없는 단언 여러 건이 함께 깨진다.
+var _gate_target := 0
 # ★[S8-T7 / ADR-0066 결정 8] **결혼 상태** — 연애 슬롯 위의 두 번째 상태다("결혼은 하트 위 상태").
 # spouse_id = 배우자 rid("" = 미혼) · wedding_day = 예정된 혼례 아침(0 = 없음 — 청혼 수락이
 # day+3으로 세팅, 그 아침 _on_day_advanced가 식을 올리고 0으로 되돌린다). 세이브 가법 키 2개
@@ -10798,7 +10815,8 @@ func _process(delta: float) -> void:
 	# 일관(프레임 열림도 아래 조건에 포함).
 	var _hud_hidden := dialogue.is_open() or frame.is_open() or _sleeping \
 		or cafe_summary_panel.visible or milestone_panel.visible or ending_panel.visible \
-		or mirror_panel.visible                     # ★[S7-T4] 점괘 거울 패널도 상시 HUD를 덮는다
+		or mirror_panel.visible \
+		or cutscene != null                         # ★[S9-T2] 컷신 재생 중엔 상시 HUD를 접는다(연출 화면)
 	if vitals != null:
 		vitals.visible = not _hud_hidden
 	if hotbar != null:
@@ -10837,6 +10855,15 @@ func _process(delta: float) -> void:
 	# 건물 진입/퇴장 fade 연출 중엔 모든 게임 입력·시뮬을 멈춘다(취침 연출과 같은 결 — 이동은
 	# _transition_to에서 이미 잠갔다). lighting·BGM은 위에서 이미 이었으므로 그대로 흐른다.
 	if _transitioning:
+		return
+	# ★[S9-T2 / ADR-0067 결정 2] 컷신 재생 중엔 러너만 굴리고 모든 게임 입력·시뮬을 멈춘다
+	# (이동은 _begin_cutscene에서 이미 잠갔다 — 건물 전환 연출과 같은 결). 러너가 끝나는 프레임에
+	# _tick_cutscene이 화면을 원복하고 예약된 대화를 연다.
+	if cutscene != null:
+		onboarding_label.visible = false
+		if onboarding_banner != null:
+			onboarding_banner.hide_now()
+		_tick_cutscene(delta)
 		return
 	# T3.2 대화 중엔 다른 모든 입력을 막고 대사 넘기기(RMB=action)만 처리한다. 이동은 대화
 	# 시작 시 player 물리를 꺼 잠가 두었고(_start_dialogue), 끝나면 다시 켠다.
@@ -15376,6 +15403,7 @@ const HEART_GATE_MAX := 4   # 관문 이벤트로 오를 수 있는 최대 칸(�
 # (빈 배열 = 진급 없음 또는 이미 본 이벤트의 조용한 재진급). 대화 한 번에 한 칸만 오른다 —
 # 점수가 여러 칸치 쌓였어도(생일 ×8) 관문 이벤트는 칸마다 하나씩이다(Affinity.promote와 짝).
 func _try_heart_promotion(r: Resident) -> PackedStringArray:
+	_gate_target = 0                    # ★[S9-T2] 진급 스냅샷 초기화(판정마다 새로 찍는다)
 	if r.affinity == null or not r.affinity.pending_promotion():
 		return PackedStringArray()
 	var target: int = r.affinity.stage + 1
@@ -15384,6 +15412,7 @@ func _try_heart_promotion(r: Resident) -> PackedStringArray:
 	if not Deed.check(r.id, target, _deed_ledgers()):
 		return PackedStringArray()      # 메인 3인 deed 미달 — 관문 잠금(점수는 만충 상태로 대기)
 	r.affinity.promote()
+	_gate_target = target               # ★[S9-T2] 성사된 칸 — 호출부가 컷신 훅에 넘긴다
 	var already_seen := _heart_bit_seen(r.id, target)
 	_mark_heart_bit(r.id, target)
 	_notice("%s와의 사이가 깊어졌다 ♡%d" % [r.display_name, target])
@@ -15763,10 +15792,112 @@ func _start_resident_dialogue(r: Resident) -> void:
 	# 대사가 없으면 시작하지 않는다(이동을 잠근 채 못 닫는 상태 방지).
 	if lines.is_empty():
 		return
+	# ★[S9-T2 / ADR-0067 결정 2] 관문 컷신 — 진급이 성사된 대화에 한해, 캐릭터가 컷신 데이터를
+	#   들고 있으면 **대사보다 먼저** 연출 등급 2를 재생하고 끝난 뒤 이 대화를 연다.
+	#   ㉠ 데이터의 주인은 캐릭터다(ADR-0005) — heart_gate_lines·birthday_lines·divorce_lines와
+	#      **같은 has_method 이음매**라, 캐릭터 파일에 메서드 하나가 붙는 것만으로 컷신이 생긴다.
+	#   ㉡ 훅이 없거나 빈 데이터면 아무 일도 없다 = **기존 캐릭터 파일 무수정으로 현행 대화 그대로**
+	#      (하위호환. 지금 로스터 전원이 이 길이라 기존 테스트가 한 건도 안 깨지는 것이 그 증거).
+	#   ㉢ 판정부(_try_heart_promotion)가 아니라 여기 호출부에 거는 이유: 그쪽은 진급·비트 마킹의
+	#      순수 판정부라 재생·이동 잠금 같은 연출 부작용이 섞이면 안 된다(테스트도 그걸 단언한다).
+	if not gate_lines.is_empty() and _begin_gate_cutscene(r, _gate_target, lines):
+		return
 	player.set_physics_process(false)  # 대화 중 이동 잠금(취침 연출과 같은 결)
 	player.velocity = Vector2.ZERO
 	_talking_to = r.display_name
 	dialogue.start(r.display_name, lines)
+
+# ── ★[S9-T2 / ADR-0067 결정 2] 컷신(연출 등급 2) 배선 ────────────────────────
+# 러너(cutscene.gd)는 순수 스텝 머신이라 화면을 모른다 — 여기가 그 상태를 읽어 페이드·카메라·
+# NPC 그림·게임 시계에 바른다(FishingSession ↔ 낚시 HUD와 정확히 같은 분업).
+#
+# 컷신 데이터 훅 — 캐릭터 노드가 `heart_gate_cutscene(target)`을 가지면 그 칸의 스텝 배열을 준다.
+# 훅 없음·빈 배열·유효 스텝 0 = 컷신 없음(현행 대화 그대로). heart_gate_lines와 같은 이음매다.
+func _gate_cutscene_steps(r: Resident, target: int) -> Array:
+	if r == null or r.node == null or not r.node.has_method("heart_gate_cutscene"):
+		return []
+	var raw = r.node.heart_gate_cutscene(target)
+	return raw if typeof(raw) == TYPE_ARRAY else []
+
+# 관문 컷신을 건다. 재생을 시작했으면 true(호출부는 대화를 열지 않고 돌아간다 — 대화는 재생이
+# 끝난 뒤 _end_cutscene이 연다). 유효 스텝이 하나도 없으면 false = 평소 대화로 되돌아간다.
+func _begin_gate_cutscene(r: Resident, target: int, lines: PackedStringArray) -> bool:
+	var steps := _gate_cutscene_steps(r, target)
+	if steps.is_empty():
+		return false
+	return _begin_cutscene(steps, r.display_name, lines)
+
+# 컷신 재생 개시(공용 창구 — S9 후속의 편지 여진·절기 이벤트도 이 문으로 온다).
+# after_speaker/after_lines가 비어 있지 않으면 재생이 끝난 자리에서 그 대화를 연다.
+func _begin_cutscene(steps: Array, after_speaker: String, after_lines: PackedStringArray) -> bool:
+	if cutscene != null:
+		return false                       # 이미 재생 중 — 중첩 재생은 열지 않는다(방어)
+	var runner := CutsceneRunner.new(steps)
+	if not runner.start():
+		return false                       # 유효 스텝 0(전부 미지 동사이거나 빈 배열)
+	cutscene = runner
+	_cutscene_speaker = after_speaker
+	_cutscene_lines = after_lines
+	# ★ 시계 원복의 유일한 근거 — 재생 직전 상태를 스냅한다. "끝나면 무조건 running=true"로 두면
+	#   취침 연출·마무리 화면처럼 *다른 이유로* 멈춰 있던 시계를 컷신이 되살려 버린다.
+	_cutscene_clock_prev = clock.running
+	# ★ 컷신이 손댈 NPC의 원상태(그림 위치·가시성)를 미리 떠 둔다. 스테이션 갱신은 논리 칸이
+	#   바뀔 때만 위치를 다시 찍으므로(_update_resident_station), 옮긴 그림은 저절로 안 돌아온다.
+	_cutscene_npc_prev.clear()
+	for id in runner.cast_ids():   # ★등장 *전*에도 아는 전량 목록(npc_ids는 런타임 등록분뿐)
+		var rr := _resident(String(id))
+		if rr != null and rr.node != null:
+			_cutscene_npc_prev[String(id)] = {"pos": rr.node.position, "visible": rr.node.visible}
+	player.set_physics_process(false)      # 재생 중 이동 잠금(대화·취침 연출과 같은 결)
+	player.velocity = Vector2.ZERO
+	_apply_cutscene_frame()                # 첫 프레임부터 연출이 서 있게(암전 스텝의 깜빡임 방지)
+	return true
+
+# 매 프레임 진행 — _process의 컷신 가드가 부른다. 러너를 굴리고 그 상태를 화면에 바른다.
+func _tick_cutscene(delta: float) -> void:
+	cutscene.advance(delta)
+	_apply_cutscene_frame()
+	if cutscene.is_done():
+		_end_cutscene()
+
+# 러너 상태 → 화면. 네 동사가 정확히 네 줄로 내려앉는다(그 이상이 없다는 것이 이 함수의 요점).
+func _apply_cutscene_frame() -> void:
+	fade.modulate.a = cutscene.fade_alpha()                       # ③ 페이드
+	if _cam != null:
+		_cam.offset = cutscene.camera_offset()                    # ② 카메라 팬
+	clock.running = _cutscene_clock_prev and cutscene.clock_running()   # ④ 시계 정지
+	for id in cutscene.npc_ids():                                 # ① NPC 스폰/이동
+		var r := _resident(String(id))
+		if r == null or r.node == null:
+			continue
+		var t := cutscene.npc_tile(String(id))
+		r.node.position = Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
+		r.node.visible = cutscene.npc_visible(String(id))
+
+# 재생 종료 — 화면 효과를 **반드시** 원복하고(암전인 채로 끝나는 컷신 데이터가 게임을 못 세우게),
+# 예약된 대화가 있으면 그 자리에서 연다. 대화가 없으면 여기서 이동 잠금을 푼다.
+func _end_cutscene() -> void:
+	cutscene = null
+	fade.modulate.a = 0.0
+	if _cam != null:
+		_cam.offset = Vector2.ZERO
+	clock.running = _cutscene_clock_prev
+	for id in _cutscene_npc_prev:
+		var r := _resident(String(id))
+		if r != null and r.node != null:
+			r.node.position = _cutscene_npc_prev[id]["pos"]
+			r.node.visible = bool(_cutscene_npc_prev[id]["visible"])
+	_cutscene_npc_prev.clear()
+	var speaker := _cutscene_speaker
+	var lines := _cutscene_lines
+	_cutscene_speaker = ""
+	_cutscene_lines = PackedStringArray()
+	if lines.is_empty():
+		player.set_physics_process(true)
+		return
+	# 대화로 합류 — 이동 잠금은 그대로 이어지고 _on_dialogue_finished가 푼다(현행 대화 플로우).
+	_talking_to = speaker
+	dialogue.start(speaker, lines)
 
 # ── ★[S8-T4 / ADR-0066 결정 4] 활동 → 하트 적립(메인 3인 전용) ──────────────
 # 배선점(수확·서빙·나락 처치)이 사건마다 이 창구로 점수를 흘린다. 캡·누적은 Affinity가 들고
