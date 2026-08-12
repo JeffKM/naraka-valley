@@ -2722,6 +2722,11 @@ var _jealousy: Dictionary = {}
 # ★[S8-T6] 이 대화에서 고백 제안([F])이 떠 있는 상대 rid("" = 없음). 대화와 같은 일시 상태라
 # 세이브하지 않는다(_talking_to와 같은 결 — 대화 시작에 세팅·종료에 리셋).
 var _confess_rid := ""
+# ★[S9-T4 / ADR-0067 결정 6] **절기 물음 원장** — rid → 그 사람에게 마지막으로 물음을 받은 주
+# (GameClock.week_of 파생). "주 첫날 그 캐릭터와의 첫 대화에 하나"를 재는 유일한 눈금이고,
+# 비교 한 번(마지막 주 ≠ 오늘의 주)으로 리셋이 공짜다(주는 상태가 아니라 day 파생 — clock.gd).
+# 세이브 가법 키("season_q_week") — 구세이브(키 없음) = 빈 원장 = 다음 주 첫날에 처음 묻는다.
+var _season_q_week: Dictionary = {}
 # ── ★[S9-T2 / ADR-0067 결정 2] 컷신(연출 등급 2) 재생 상태 ────────────────────
 # 재생 중인 러너(null = 재생 없음). ★**세이브 키 0**: 컷신은 대화보다 더 짧은 일시 상태다
 # (_talking_to·_confess_rid와 같은 결). 특히 "시계 정지"가 세이브에 남으면 로드한 세이브의
@@ -10120,6 +10125,9 @@ func _save_game() -> void:
 		"total_income": _total_income,   # ★ [S1R-T12] 누적 총수입(정보패널 — 구세이브 키 없음=0)
 		"mel_revenue_carry": _mel_revenue_carry,   # ★[S8-T4] 멜 활동 채널 잔돈(<100냥)
 		"heart_bits": _heart_bits.duplicate(),     # ★[S8-T5] 하트 이벤트 비트 원장(이혼에도 잔존하는 별도 축)
+		# ★[S9-T4] 절기 물음 원장(rid → 마지막으로 물은 주). 저장하지 않으면 "저장·재개로 이번 주
+		#   물음이 다시 서는" 반복이 생긴다 — 주는 파생이라 원장은 이 한 조각뿐이다.
+		"season_q_week": _season_q_week.duplicate(),
 		"romance_partner": _romance_partner,       # ★[S8-T6] 연애 슬롯(전 로스터 공유 1 — "" = 없음)
 		"jealousy": _jealousy.duplicate(true),     # ★[S8-T6] 질투 원장(rid → 복원 예정일·깎인 양)
 		"spouse_id": _spouse_id,                   # ★[S8-T7] 배우자("" = 미혼). 방 확장은 carpenter done 파생이라 키 없음
@@ -10284,6 +10292,11 @@ func _load_game() -> void:
 	var hb: Dictionary = data.get("heart_bits", {})
 	for k in hb:
 		_heart_bits[String(k)] = int(hb[k])
+	# ★[S9-T4] 절기 물음 원장 복원(구세이브 = 빈 원장 = 다음 주 첫날에 처음 묻는다).
+	_season_q_week = {}
+	var sq: Dictionary = data.get("season_q_week", {})
+	for k in sq:
+		_season_q_week[String(k)] = int(sq[k])
 	# ★[S8-T6] 연애 슬롯·질투 원장 복원(구세이브 = ""/빈 원장 — 하위호환). 원장은 키·값을 명시
 	# 재조립해 손상 세이브의 이물이 눕지 않게 한다(heart_bits와 같은 규율 — 음수 양은 0으로 자른다).
 	_romance_partner = String(data.get("romance_partner", ""))
@@ -15476,6 +15489,7 @@ func _try_heart_promotion(r: Resident) -> PackedStringArray:
 	var already_seen := _heart_bit_seen(r.id, target)
 	_mark_heart_bit(r.id, target)
 	_notice("%s와의 사이가 깊어졌다 ♡%d" % [r.display_name, target])
+	_send_gate_letter(r, target)
 	if already_seen:
 		# 재구애(이혼 후 재도달) — 본 비트 재지급 없음(ADR-0022·ADR-0066 결정 10): 진급은 되지만
 		# 이벤트는 다시 틀지 않는다.
@@ -15485,6 +15499,18 @@ func _try_heart_promotion(r: Resident) -> PackedStringArray:
 		if not custom.is_empty():
 			return custom
 	return PackedStringArray([HEART_GATE_PLACEHOLDER_LINE])
+
+# ★[S9-T4 / ADR-0067 결정 7] 관문 여진 편지 — 관문이 성사되면 캐릭터가 지정한 편지를 큐에 넣는다
+# (도착은 **다음 날 아침** — mailbox의 큐 규약). 훅 없음·빈 id·테이블에 없는 id는 전부 무동작이고,
+# **중복 발송 방어도 mailbox.send가 진다**(같은 편지는 두 번 안 온다 — 재구애로 관문이 다시 성사돼도
+# 안전하다). 그래서 여기는 판정이 0줄이다 — heart_gate_lines·heart_gate_cutscene과 같은 이음매로
+# 캐릭터 파일에 메서드 하나가 붙는 것이 편지 개통의 전부다(ADR-0005).
+func _send_gate_letter(r: Resident, target: int) -> void:
+	if mailbox == null or r == null or r.node == null or not r.node.has_method("heart_gate_letter"):
+		return
+	var id := String(r.node.heart_gate_letter(target))
+	if id != "":
+		mailbox.send(id)
 
 # deed 판정에 넘길 원장 스냅샷 — **읽기 전용 조립**이다(신규 원장 0, ADR-0066 결정 5).
 # 키 이름은 main 필드·세이브 키와 같은 규약(deed.gd 머리말 참조).
@@ -15813,7 +15839,13 @@ func _start_resident_dialogue(r: Resident) -> void:
 		lines = r.node.lines_resident()
 	else:
 		var first_today := r.affinity.daily_talk(clock.day)
-		lines = r.node.lines(r.affinity.hearts(), first_today)
+		# ★[S9-T4 / ADR-0067 결정 12] 배우자 전용 묶음 — 결혼하면 일상 대사의 *출처가 바뀐다*
+		#   (하트 4단 위에 얹는 5단이 아니라 별도 축이다: 결혼은 하트의 연장이 아니라 관계의
+		#   다른 상태다). 훅 없음·빈 반환 = 평소 lines()로 되돌아간다(이음매 하위호환).
+		if _spouse_id == r.id and r.node.has_method("spouse_lines"):
+			lines = r.node.spouse_lines(clock.day, first_today)
+		if lines.is_empty():
+			lines = r.node.lines(r.affinity.hearts(), first_today)
 	# ★[S8-T3 / ADR-0066 결정 3] 생일 당일 플레이버 — 평소 묶음 **앞**에 한 줄이 선다.
 	#   내용의 주인은 캐릭터다(ADR-0005): 노드가 `birthday_lines()`를 가지면 그걸 쓰고, 없으면
 	#   프레임워크 placeholder 한 줄로 때운다. S9가 캐릭터 파일에 그 메서드를 붙이는 것만으로
@@ -15849,6 +15881,13 @@ func _start_resident_dialogue(r: Resident) -> void:
 		var with_offer := PackedStringArray([CONFESS_OFFER_LINE])
 		with_offer.append_array(lines)
 		lines = with_offer
+	# ★[S9-T4 / ADR-0067 결정 6] 절기 물음 — 주 첫날 그 캐릭터와의 첫 대화에 질문 한 줄이
+	#   **맨 뒤**에 붙는다(관문·생일·intro는 앞에 서고, 이건 대화를 닫는 자리다 — 선택지가
+	#   마지막 줄에 서는 queue_choice 기본형과 그대로 맞는다).
+	#   ★ 우선순위 = 관문 > 생일 > 물음(대화 한 번에 사건 하나 — _pending_season_question 참조).
+	var season_q := _pending_season_question(r, gate_lines)
+	if not season_q.is_empty():
+		lines.append(String(season_q["line"]))
 	# 대사가 없으면 시작하지 않는다(이동을 잠근 채 못 닫는 상태 방지).
 	if lines.is_empty():
 		return
@@ -15866,6 +15905,62 @@ func _start_resident_dialogue(r: Resident) -> void:
 	player.velocity = Vector2.ZERO
 	_talking_to = r.display_name
 	dialogue.start(r.display_name, lines)
+	# ★[S9-T4] 선택지 예약은 대화가 **열린 뒤**다(queue_choice는 닫힌 대화를 거부한다).
+	if not season_q.is_empty():
+		_pose_season_question(r, season_q)
+
+# ── ★[S9-T4 / ADR-0067 결정 6] 절기 물음 채널 ────────────────────────────────
+# 스타듀의 일요일 질문을 저승식으로 번안한 저비용 서사 채널이다 — **애셋 0·컷신 0**, 캐릭터
+# 파일에 훅 하나(`season_question(season)`)가 붙는 것이 개통의 전부다(관문·생일·이혼 훅과
+# 같은 has_method 이음매. 훅 없는 캐릭터 = 현행 거동 그대로).
+#
+# 설계 메모:
+#   · **점수 배선이 0줄이다**(결정 4 — 답은 전부 0점). 아래 콜백은 대사 교체만 하고 Affinity를
+#     쳐다보지도 않는다. 소폭 +조차 두지 않는 이유: 그 순간 대사가 "말 걸어 점수 버는 주간
+#     루틴"이라는 자원이 되고 일일 대화 채널과 위상이 겹친다.
+#   · **주는 상태가 아니다** — GameClock.week_of(day) 파생이고(clock.gd), 원장은 "그 사람에게
+#     마지막으로 물은 주" 하나뿐이다. 그래서 취침·로드·디버그 날짜 점프에서도 어긋날 데가 없다.
+#   · **대화 한 번에 사건 하나** — 관문(진급)·생일이 선 대화에는 물음이 안 붙는다. 그 둘은 이
+#     대화의 사건이고, 물음은 "아무 일 없는 주 첫날"의 텍스처다.
+
+# 오늘 이 사람이 물음을 던지는가. 던지면 그 물음 dict(캐릭터 소유), 아니면 빈 dict.
+# 판정만 하고 원장은 안 건드린다(기록은 실제로 물음이 선 뒤 — _pose_season_question).
+func _pending_season_question(r: Resident, gate_lines: PackedStringArray) -> Dictionary:
+	if r == null or r.node == null or not r.node.has_method("season_question"):
+		return {}
+	if not gate_lines.is_empty() or _confess_rid != "":
+		return {}                                   # 관문·의지 시험이 선 대화 = 오늘의 사건이 이미 있다
+	if r.is_birthday_on(clock.day):
+		return {}                                   # 생일 > 물음(우선순위 둘째 칸)
+	if (clock.day - 1) % GameClock.DAYS_PER_WEEK != 0:
+		return {}                                   # 주 첫날에만 묻는다
+	var week := GameClock.week_of(clock.day)
+	if int(_season_q_week.get(r.id, -1)) == week:
+		return {}                                   # 이번 주엔 이미 물었다(그날의 첫 대화 1회)
+	var q = r.node.season_question(GameClock.season_index_for_day(clock.day))
+	if typeof(q) != TYPE_DICTIONARY:
+		return {}
+	var d: Dictionary = q
+	var opts := PackedStringArray(d.get("options", PackedStringArray()))
+	var reps := PackedStringArray(d.get("replies", PackedStringArray()))
+	# 손상 방어 — 질문 줄이 없거나 지선 수가 DialogueBox 상한 밖이거나 반응 짝이 안 맞으면
+	# 물음 자체를 걸지 않는다(빈 선택지가 떠 대화가 못 닫히는 상태를 만들지 않는다).
+	if String(d.get("line", "")) == "" or opts.size() != reps.size():
+		return {}
+	if opts.size() < DialogueBox.CHOICE_MIN or opts.size() > DialogueBox.CHOICE_MAX:
+		return {}
+	return {"line": String(d["line"]), "options": opts, "replies": reps}
+
+# 물음을 실제로 건다(대화가 열린 뒤 호출). 마지막 줄(질문)에 선택지를 예약하고 원장에 기록한다.
+# 콜백은 **반응 한 줄로 대사를 교체**할 뿐이다 — 점수·플래그·아이템 어디에도 안 닿는다(결정 4).
+func _pose_season_question(r: Resident, q: Dictionary) -> void:
+	var replies := PackedStringArray(q.get("replies", PackedStringArray()))
+	var posed := dialogue.queue_choice(PackedStringArray(q.get("options", PackedStringArray())),
+		func(idx: int) -> void:
+			if idx >= 0 and idx < replies.size():
+				dialogue.replace_lines(PackedStringArray([replies[idx]])))
+	if posed:
+		_season_q_week[r.id] = GameClock.week_of(clock.day)
 
 # ── ★[S9-T2 / ADR-0067 결정 2] 컷신(연출 등급 2) 배선 ────────────────────────
 # 러너(cutscene.gd)는 순수 스텝 머신이라 화면을 모른다 — 여기가 그 상태를 읽어 페이드·카메라·

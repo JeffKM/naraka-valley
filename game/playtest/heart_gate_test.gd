@@ -36,10 +36,18 @@ func _dismiss_intro(m: Node) -> void:
 		guard += 1
 
 # 열린 대화를 끝까지 넘겨 닫는다(다음 대화 트리거를 위해).
+# ★[S9-T4] 플레이어와 같은 경로로 판을 비운다 — 관문 컷신이 서 있으면 먼저 끝까지 재생하고
+#   (S9-T4가 미호에 컷신 데이터를 넣은 뒤로 관문 대화는 컷신 뒤에 열린다), 절기 물음 선택지가
+#   떠 있으면 첫 항을 고른다(넘기기로는 못 지나간다 — DialogueBox.advance의 선택지 가드).
 func _close_dialogue(m: Node) -> void:
 	var guard := 0
-	while m.dialogue.is_open() and guard < 50:
-		m.dialogue.advance()
+	while (m.cutscene != null or m.dialogue.is_open()) and guard < 200:
+		if m.cutscene != null:
+			m._tick_cutscene(0.1)
+		elif m.dialogue.has_choice():
+			m.dialogue.choose(0)
+		else:
+			m.dialogue.advance()
 		guard += 1
 
 func _initialize() -> void:
@@ -118,8 +126,14 @@ func _run_checks() -> void:
 	m._run_harvested = 30
 	var gate: PackedStringArray = m._try_heart_promotion(r_miho)
 	_check("③b deed 충족 + 대화 = ♡1 진급", r_miho.affinity.hearts() == 1)
-	_check("③c 관문 발화 = placeholder 1줄(컷신 내용은 S9)",
-		gate.size() == 1 and String(gate[0]) == m.HEART_GATE_PLACEHOLDER_LINE)
+	# ★[S9-T4 / ADR-0067 결정 11 재작성] 원래는 placeholder **동일성**을 단언했는데, S9-T4가
+	#   miho.gd에 관문 본문을 넣으면서 그 문자열은 미호 경로에서 영구히 사라졌다. 판정부의 계약
+	#   ("진급이 성사되면 관문 발화가 나온다")은 그대로이므로 **훅 존재 판정**으로 바꾼다 —
+	#   비어 있지 않고 placeholder가 아니다(= 캐릭터 파일이 자기 본문을 냈다). 본문 내용 검증은
+	#   miho_arc_test 소관이고, placeholder 폴백 경로는 아래 ③g(훅 없는 서브 주민)가 계속 지킨다.
+	_check("③c 관문 발화 = 캐릭터 본문(placeholder 폴백 아님)",
+		not gate.is_empty() and String(gate[0]) != m.HEART_GATE_PLACEHOLDER_LINE
+		and String(gate[0]) == String(r_miho.node.heart_gate_lines(1)[0]))
 	_check("③d 대화 한 번에 한 칸만(점수 만충이어도 연쇄 진급 없음)",
 		r_miho.affinity.pending_promotion() and r_miho.affinity.hearts() == 1)
 	# ♡2 문턱(80) 미달 → 잠금, 충족 → 진급 — 실제 대화 경로로도 굴러간다.

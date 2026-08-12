@@ -30,10 +30,17 @@ func _new_main() -> Node:
 	await process_frame
 	return m
 
+# ★[S9-T4] 판을 비운다 — 관문 컷신이 서 있으면 끝까지 재생해 뒤따르는 대화를 열고(미호는 S9-T4부터
+# 관문 컷신 데이터를 가진다), 절기 물음 선택지가 떠 있으면 첫 항을 고른다(넘기기로는 못 지나간다).
 func _dismiss_intro(m: Node) -> void:
 	var guard := 0
-	while m.dialogue.is_open() and guard < 50:
-		m.dialogue.advance()
+	while (m.cutscene != null or m.dialogue.is_open()) and guard < 200:
+		if m.cutscene != null:
+			m._tick_cutscene(0.1)
+		elif m.dialogue.has_choice():
+			m.dialogue.choose(0)
+		else:
+			m.dialogue.advance()
 		guard += 1
 
 func _pass_day(m: Node) -> void:
@@ -179,8 +186,12 @@ func _run_checks() -> void:
 	m._run_harvested = Deed.MIHO_HARVEST[Deed.MIHO_HARVEST.size() - 1]   # ♡4 문턱까지 충족
 	r_miho.affinity.points = Affinity.MAX_POINTS
 	var gate: PackedStringArray = m._try_heart_promotion(r_miho)
-	_check("②a deed 충족 = 관문 통과(♡1) · 관문 발화 1줄",
-		gate.size() == 1 and r_miho.affinity.stage == 1)
+	# ★[S9-T4 재작성] 관문 발화가 placeholder 1줄이던 시절엔 `size() == 1`이 곧 "발화가 있다"였다.
+	#   S9-T4가 미호 본문을 넣어 줄 수가 늘었으므로, 재는 것을 **줄 수**에서 **발화의 존재와
+	#   출처**로 바꾼다(계약은 그대로 — 관문이 통과되면 캐릭터의 말이 앞에 선다).
+	_check("②a deed 충족 = 관문 통과(♡1) · 관문 발화가 캐릭터 본문으로 선다",
+		not gate.is_empty() and String(gate[0]) != m.HEART_GATE_PLACEHOLDER_LINE
+		and r_miho.affinity.stage == 1)
 	_check("②b 비트 원장에 ♡1 기록", m._heart_bit_seen("miho", 1))
 
 	m._start_resident_dialogue(r_miho)          # ★이음매 — 관문 트리거는 **대화 진입**이다

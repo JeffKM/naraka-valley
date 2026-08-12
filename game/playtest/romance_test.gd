@@ -37,10 +37,25 @@ func _dismiss_intro(m: Node) -> void:
 		m.dialogue.advance()
 		guard += 1
 
+# ★[S9-T4] 플레이어와 같은 경로로 판을 비운다 — 관문 컷신이 서 있으면 끝까지 재생하고(미호는
+#   S9-T4부터 관문 컷신 데이터를 가진다), 절기 물음 선택지가 떠 있으면 첫 항을 고른다(넘기기로는
+#   못 지나간다 — DialogueBox.advance의 선택지 가드).
 func _close_dialogue(m: Node) -> void:
 	var guard := 0
-	while m.dialogue.is_open() and guard < 50:
-		m.dialogue.advance()
+	while (m.cutscene != null or m.dialogue.is_open()) and guard < 200:
+		if m.cutscene != null:
+			m._tick_cutscene(0.1)
+		elif m.dialogue.has_choice():
+			m.dialogue.choose(0)
+		else:
+			m.dialogue.advance()
+		guard += 1
+
+# 관문 컷신이 섰으면 끝까지 재생해 뒤따르는 대화를 연다(대화는 안 닫는다 — 첫 줄을 재야 하므로).
+func _settle_cutscene(m: Node) -> void:
+	var guard := 0
+	while m.cutscene != null and guard < 200:
+		m._tick_cutscene(0.1)
 		guard += 1
 
 # 그 사람을 ♡4 만충(점수 = ♡5 칸까지 채움 = 의지 시험 대기)으로 세팅한다.
@@ -91,9 +106,15 @@ func _run_checks() -> void:
 	m._run_harvested = 300              # 미호 ♡4 deed(수확 300) 충족
 	m._heart_bits = {}                  # 관문 발화가 다시 틀리게 비트 리셋
 	m._start_resident_dialogue(r_miho)
+	# ★[S9-T4 / ADR-0067 결정 11 재작성] 미호가 관문 본문·컷신을 갖게 되어 두 가지가 바뀐다:
+	#   ㉠ 관문 대화는 **컷신이 끝난 뒤** 열린다(그래서 먼저 재생을 끝낸다) ㉡ 첫 줄은 placeholder가
+	#   아니라 캐릭터 본문이다. 단언의 요지(진급 대화엔 고백 제안이 안 선다)는 그대로 두고,
+	#   placeholder **동일성** 대신 **캐릭터 본문 일치**로 바꾼다.
+	_settle_cutscene(m)
 	_check("①f 관문 진급 대화엔 제안이 안 선다(다음 대화로 미룸)",
 		r_miho.affinity.hearts() == 4 and m._confess_rid == ""
-		and m.dialogue.line() == m.HEART_GATE_PLACEHOLDER_LINE)
+		and m.dialogue.line() == String(r_miho.node.heart_gate_lines(4)[0])
+		and m.dialogue.line() != m.HEART_GATE_PLACEHOLDER_LINE)
 	_close_dialogue(m)
 
 	# ── ② 보류 무벌칙 ──
@@ -118,8 +139,12 @@ func _run_checks() -> void:
 		and not r_miho.affinity.pending_promotion())
 	_check("③b 비트 5 마킹(의지 시험도 비트 원장에 든다)",
 		m._heart_bit_seen("miho", Affinity.MAX_HEARTS))
-	_check("③c 수락 발화가 대화를 교체한다",
-		m.dialogue.is_open() and m.dialogue.line() == m.CONFESS_ACCEPT_LINE)
+	# ★[S9-T4 재작성] 미호가 confession_lines 훅을 가져 placeholder(CONFESS_ACCEPT_LINE)는
+	#   미호 경로에서 안 나온다. 계약("수락 발화가 대화를 교체한다")은 그대로 두고 출처만 바꾼다.
+	#   placeholder 폴백 경로는 아래 ⑤b(훅 없는 멜의 거절)가 계속 지킨다.
+	_check("③c 수락 발화가 대화를 교체한다(캐릭터 본문 — placeholder 아님)",
+		m.dialogue.is_open() and m.dialogue.line() == String(r_miho.node.confession_lines(true)[0])
+		and m.dialogue.line() != m.CONFESS_ACCEPT_LINE)
 	_close_dialogue(m)
 	_check("④a 안 뽑힌 메인 2인 −30(멜 100→70)", r_mel.affinity.points == 70)
 	_check("④b 바닥 방어 — 10점이던 바나는 10만 깎인다(0 하한)", r_bana.affinity.points == 0)

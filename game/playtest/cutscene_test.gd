@@ -234,11 +234,20 @@ func _run_checks() -> void:
 
 	# ── ⑤ 관문 이음매 하위호환(훅 없는 캐릭터) ──
 	print("── ⑤ 하위호환 ──")
+	# ★[S9-T4 재작성] 원래 이 블록은 **실제 miho.gd가 훅을 안 가졌다**는 사실을 하위호환의 전제로
+	#   썼는데, S9-T4가 미호에 컷신 데이터를 넣으면서 그 전제가 미호에서 사라졌다. 계약 자체
+	#   ("훅 없는 캐릭터 = 현행 대화 그대로")는 그대로 유효하므로, 전제를 **훅 없는 mock 노드**로
+	#   옮긴다 — 어느 캐릭터가 아직 훅을 안 가졌는지에 의존하지 않게 되어(멜·바나도 T5·T6에서
+	#   훅을 받는다) 이 단언이 다시는 콘텐츠 태스크에 깨지지 않는다.
 	m.onboarding.step = Onboarding.MEET_MIHO
 	var r_miho: Resident = m._resident("miho")
 	var miho_orig: Node2D = r_miho.node
-	_check("⑤a 기존 캐릭터 파일엔 컷신 훅이 없다(무수정 하위호환의 전제)",
-		not miho_orig.has_method("heart_gate_cutscene"))
+	var mock_bare := _mock_node(
+		"func lines(_h: int, _f: bool) -> PackedStringArray:\n"
+		+ "\treturn PackedStringArray([\"mock 일상 대사\"])\n")
+	r_miho.node = mock_bare
+	_check("⑤a 훅 없는 캐릭터 파일(무수정 하위호환의 전제)",
+		not mock_bare.has_method("heart_gate_cutscene"))
 	r_miho.affinity.points = Affinity.MAX_POINTS
 	r_miho.affinity.stage = 0
 	m._run_harvested = 30                       # 미호 ♡1 deed 충족
@@ -249,6 +258,14 @@ func _run_checks() -> void:
 		m.dialogue.line() == m.HEART_GATE_PLACEHOLDER_LINE)
 	_check("⑤d 훅 조회 자체도 빈 배열(방어)", m._gate_cutscene_steps(r_miho, 1).is_empty())
 	_close_dialogue(m)
+	# ★[S9-T4 / ADR-0067 결정 11] 반대편 — **실제 캐릭터 파일은 이제 훅을 가진다**. placeholder
+	#   동일성 대신 "훅이 있고 4동사 안의 유효 스텝을 낸다"를 단언한다(본문 검증은 miho_arc_test).
+	r_miho.node = miho_orig
+	_check("⑤e 미호(실파일)는 관문 컷신 훅을 가진다", miho_orig.has_method("heart_gate_cutscene"))
+	var live1 := CutsceneRunner.new(m._gate_cutscene_steps(r_miho, 1))
+	_check("⑤f 그 데이터가 4동사 안이고 재생 가능하다(거절 0 · 유효 스텝 있음)",
+		live1.rejected_verbs().is_empty() and live1.step_count() > 0)
+	r_miho.node = mock_bare
 
 	# ── ⑥ 훅 있는 캐릭터 = 컷신 후 대화 개시 ──
 	print("── ⑥ 컷신 → 대화 ──")
@@ -309,6 +326,7 @@ func _run_checks() -> void:
 	r_miho.node = miho_orig
 	mock.free()
 	mock_empty.free()
+	mock_bare.free()
 	m.free()
 
 	# 뒷정리 — 이 테스트가 만든 세이브를 지운다(다른 테스트의 자동 복원 오염 방지).
