@@ -146,7 +146,7 @@ func _run_checks() -> void:
 		who.size() == 11 and who.has("miho") and who.has("mel") and who.has("bana")
 		and who.has("neo") and who.has("mochi") and who.has("boatman")
 		and who.has("ongi") and who.has("pulmu") and who.has("mugol")
-		and who.has("kkaebi") and who.has("ken"))
+		and who.has("kkaebi") and who.has("ken") and who.has("seolhwa"))
 	var size_ok := true
 	var valid_ok := true
 	var overlap_ok := true
