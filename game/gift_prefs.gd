@@ -188,11 +188,15 @@ const OVERRIDES := {
 #   ㉠ 도구 칸(CAT_TOOL = 괭이·낫·낚싯대·태클·무기) — 유니크 장착물이라 건네면 그 동사를 잃는다.
 #   ㉡ 열쇠(나락 열쇠) — 유일 입수 경로가 60층 상자라 건네면 **진행이 봉쇄된다**(혼백관 기증
 #      목록에서 열쇠를 뺀 것과 정확히 같은 판단 — item_catalog.gd KEYS 주석).
+#   ㉢ ★[S9-T7] 책(CAT_BOOK) — [ADR-0034] #7. 이건 진행 봉쇄가 아니라 **톤** 때문이다: 되찾은
+#      옥자의 유품 키프세이크를 남에게 건네는 것 자체가 이 게임의 결이 아니다(불태워진 사람의
+#      물건을 주워다 선물로 돌리는 그림). 노트도 같이 막는다 — 남의 비밀을 건네는 것도 같은 결.
 # 그 밖에는 전부 건넬 수 있다(싫어하는 물건도 *건네지긴* 한다 — 그게 음수 채널의 의미다).
 static func giftable(id: String) -> bool:
 	if id == "" or not ItemCatalog.has_item(id):
 		return false
-	if ItemCatalog.category_of(id) == ItemCatalog.CAT_TOOL:
+	var cat := ItemCatalog.category_of(id)
+	if cat == ItemCatalog.CAT_TOOL or cat == ItemCatalog.CAT_BOOK:
 		return false
 	if ItemCatalog.KEYS.has(id):
 		return false

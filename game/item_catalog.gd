@@ -34,6 +34,11 @@ const CAT_MATERIAL := "material"   # 재료 — 자리 예약(Phase 3 가공)
 const CAT_CONSUMABLE := "consumable"  # 소모품 — 자리 예약(Phase 3 조리)
 const CAT_PLACEABLE := "placeable"  # 설치물(스프링클러 등) — 지면 칸에 설치·회수, 스택(S1R-T9)
 const CAT_RELIC := "relic"         # ★[S2-T5] 유품 — 망자의 물건. 혼백관 기증 대상(안식 괭이질 발굴), 스택
+# ★[S9-T7 / ADR-0034 · ADR-0067 결정 8] 책 — [옥자의 잃어버린 책들] 8 + [비밀 노트] 15.
+#   유품과 **가르는 이유**: 유품은 판다(중복 발굴분 price>0)·건넨다(선물 가능)이지만, 책은
+#   **비매(price 0)·선물 불가**(되찾은 옥자의 유품 키프세이크 — ADR-0034 #7)·**스택 불가**
+#   (세상에 한 권씩)라 세 성질이 전부 다르다. 데이터는 Books가 단일 출처(MenuCatalog 위임 관례).
+const CAT_BOOK := "book"           # 책·비밀 노트 — 인라인 즉독 + 혼백관 전시(책만) + 집 책장 재읽기
 
 # ── 품질 등급(S1-6, §8.2) — 단일 진실원(orchard 나이·field 비료가 같은 enum·배수로 수렴) ──
 # 수확물·과일 슬롯에 실리는 등급. 도구·씨앗·묘목·비료는 항상 Q_NORMAL(품질 무차원).
@@ -612,6 +617,12 @@ static func _is_material(id: String) -> bool:
 static func _is_relic(id: String) -> bool:
 	return RELICS.has(id)   # ★[S2-T5] 유품 — 혼백관 기증 대상
 
+# ★[S9-T7] id가 책·비밀 노트인가. 데이터(제목·본문)는 **Books가 단일 출처**라 여기는 판정/표시
+#   위임만 한다(MenuCatalog·FishCatalog 위임 관례 동형 — 중복 0). id 상수도 안 박는다: 책 id를
+#   코드에서 부르는 쪽은 books.gd·혼백관이고 그쪽은 Books를 직접 보는 게 정배다.
+static func _is_book(id: String) -> bool:
+	return Books.has_text(id)
+
 # ★[S5-T2] id가 광물(광석·혼탄·돌·보석·지오드)인가. 개간 드랍(MATERIALS)과 같은 품질 무차원
 #   CAT_MATERIAL이지만 dict를 가르는 이유는 위 로스터 주석 참조(제련·개봉·퍼크가 종별로 순회한다).
 static func _is_mineral(id: String) -> bool:
@@ -682,7 +693,7 @@ static func has_item(id: String) -> bool:
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id) or _is_pot_good(id) \
 		or _is_sap_good(id) or _is_mineral(id) or _is_ingot(id) or _is_weapon(id) \
-		or _is_potion(id) or _is_key(id) or _is_utility(id) or _is_menu(id)
+		or _is_potion(id) or _is_key(id) or _is_utility(id) or _is_menu(id) or _is_book(id)
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -721,6 +732,8 @@ static func category_of(id: String) -> String:
 		return CAT_PLACEABLE  # 설치물(S1R-T9 스프링클러) — 지면 설치·회수
 	if _is_relic(id):
 		return CAT_RELIC      # ★[S2-T5] 유품 — 혼백관 기증 대상
+	if _is_book(id):
+		return CAT_BOOK       # ★[S9-T7] 책·비밀 노트 — 즉독·전시(책)·재읽기
 	return ""
 
 # 표시명(HUD·상점·툴팁). 씨앗="<작물명> 씨앗"·묘목="<과일명> 묘목"·수확물=작물명·과일=과일명·도구=도구명. 없으면 "".
@@ -767,6 +780,8 @@ static func name_of(id: String) -> String:
 		return SAP_GOODS[id]["name_ko"]   # ★S4-T6 수액 3종(솔넋진·넋수지·명단풍꿀)
 	if _is_placeable(id):
 		return PLACEABLES[id]["name_ko"]
+	if _is_book(id):
+		return Books.title_of(id)      # ★[S9-T7] 책·비밀 노트(단일 출처 = Books)
 	if _is_relic(id):
 		return RELICS[id]["name_ko"]   # ★[S2-T5] 유품
 	if _is_large_product(id):
@@ -785,6 +800,8 @@ static func stackable_of(id: String) -> bool:
 		return false   # ★S5-T4 무기 = 전부 유니크 장착물(검 5종 — 스택 0)
 	if _is_key(id):
 		return false   # ★S5-T6 열쇠 = 세상에 한 자루(개수 축 없음 — 도구·무기 결)
+	if _is_book(id):
+		return false   # ★S9-T7 책·노트 = 세상에 한 권씩(중복 입수 0이라 개수 축이 없다)
 	if _is_potion(id) or _is_utility(id) or _is_menu(id):
 		return true    # ★S5-T6 환약 · ★S5-T8 계단 · ★S6-T1 메뉴 = 스택 소모품(미끼 결)
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
@@ -842,6 +859,10 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return int(SAP_GOODS[id]["price"] * quality_mult(quality))   # ★S4-T6 수액 = 기준가 × 등급 배수(통용물 결)
 	if _is_placeable(id):
 		return int(PLACEABLES[id]["price"])   # ★S1R-T9 설치물 = 품질 무차원 고정 구매가(스프링클러)
+	if _is_book(id):
+		# ★S9-T7 책·노트 = **비매**. 값 0이 곧 "팔 수도 살 수도 없다"의 표현이다(열쇠와 같은 결).
+		#   유품과 갈리는 지점이기도 하다 — 유품은 중복 발굴분을 팔지만 책은 애초에 중복이 없다.
+		return 0
 	if _is_relic(id):
 		return int(RELICS[id]["price"])   # ★S2-T5 유품 = 품질 무차원 고정가(중복 발굴분 판매)
 	# ★ S1-7(§8.6): 대형 산물은 기준 판매가 ×2에 품질 배수를 얹는다(대형 = 품질과 별 축). 기준 산물은 품질 배수만.
@@ -870,6 +891,7 @@ static func ids_in_category(category: String) -> Array:
 		UTILITIES.keys(), KEYS.keys(), RELICS.keys(), FORAGEABLES.keys(),
 		POT_GOODS.keys(), SAP_GOODS.keys(), PLACEABLES.keys(),
 		FertilizerCatalog.ids(), FishCatalog.ids(), MenuCatalog.ids(),
+		Books.all_ids(),   # ★S9-T7 책 8 + 비밀 노트 15(수집 트래커·전시 UI 열거)
 		[HAY],
 	]
 	for pool in pools:
@@ -914,4 +936,8 @@ static func tool_color_of(id: String) -> Color:
 		return UTILITIES[id]["color"]       # ★S5-T8 계단 색박스(환약과 같은 폴백 경로)
 	if _is_menu(id):
 		return MenuCatalog.color_of(id)     # ★S6-T1 메뉴 색박스(아이콘 아트 = S6 후속)
+	if _is_book(id):
+		# ★S9-T7 책 색박스(아이콘 아트 = T9). 책 = 그을린 남색 표지 / 노트 = 바랜 종이색으로
+		#   두 형태가 한눈에 갈린다(그레이박스 단계의 최소 가독).
+		return Color(0.28, 0.24, 0.36) if Books.is_book(id) else Color(0.78, 0.72, 0.58)
 	return Color.WHITE

@@ -110,7 +110,10 @@ func _initialize() -> void:
 	_check("③c 유품 기증 성공", mus.donate(ItemCatalog.RELIC_BINYEO, 3))
 	_check("③d 같은 종 중복 거부", not mus.donate(ItemCatalog.RELIC_BINYEO, 4))
 	_check("③e 카운트 1·is_donated", mus.donated_count() == 1 and mus.is_donated(ItemCatalog.RELIC_BINYEO))
-	_check("③f 트래커 분모 = 기증 대상 전체(3)", Museum.donatable_ids().size() == 3)
+	# ★[S9-T7] 책 8권이 기증 대상에 합류해 분모가 3 → 11이 됐다(Museum.donatable_ids 주석).
+	#   유품 3종이 **앞쪽 3좌**를 그대로 지키는지까지 본다(진열 인덱스 안정 = 좌대가 안 밀린다).
+	_check("③f 트래커 분모 = 유품 3 + 책 8 = 11", Museum.donatable_ids().size() == 11)
+	_check("③g 유품이 여전히 앞쪽 3좌", Museum.donatable_ids().slice(0, 3) == ItemCatalog.RELICS.keys())
 
 	# ── ④ 마일스톤 ──
 	print("── ④ 마일스톤 ──")

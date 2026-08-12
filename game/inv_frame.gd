@@ -630,6 +630,14 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			else:
 				draw_rect(inner, Color(0.32, 0.52, 0.60))
 				draw_circle(inner.position + Vector2(inner.size.x * 0.5, inner.size.y * 0.28), inner.size.x * 0.14, Color(0.62, 0.82, 0.92))
+		ItemCatalog.CAT_BOOK:
+			# ★ [S9-T7] 책·비밀 노트 그레이박스(핫바와 동일 — 표지 색 + 왼쪽 금박 책등 띠).
+			var btex: Texture2D = crop_icons.get(id)
+			if btex != null:
+				draw_texture_rect(btex, inner, false)
+			else:
+				draw_rect(inner, ItemCatalog.tool_color_of(id))
+				draw_rect(Rect2(inner.position, Vector2(inner.size.x * 0.22, inner.size.y)), Color(0.62, 0.52, 0.30))
 		ItemCatalog.CAT_CONSUMABLE:
 			# ★ [S3-T10] 소모품(낚시 미끼) 아이콘 텍스처. 없으면 옛 색 통 + 흰 뚜껑 그레이박스 폴백.
 			var ctex: Texture2D = crop_icons.get(id)
