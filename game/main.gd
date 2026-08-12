@@ -15417,6 +15417,110 @@ func _setup_residents() -> void:
 	#   (무용담의 전리품), 피안화 헤이트(이미 백골인 무사에게는 성급한 조문이다). 무기는 애초에
 	#   선물 불가(GiftPrefs.giftable — 든 것이 곧 동사인 도구 칸)라 러브에 못 넣는다.
 
+	# ── ★ [S9b-T1 / ADR-0068 결정 3] 깨비 — **조연 코러스 9인의 첫 풀 온보딩**.
+	#    이 블록 하나 + `kkaebi.gd` 한 파일이 주민 1인 추가의 전부다(모찌가 깔아 둔 그 길 —
+	#    script_path·needs_affinity를 채우면 `_register_resident`가 몸과 관계 트랙 노드를 낳고
+	#    main.tscn은 안 고친다).
+	#
+	#    ★ **등록 자리 = 주방요괴 바로 앞**이다. 두 좌표 불변식을 동시에 지키기 위한 유일한 자리다:
+	#      ㉠ 기존 10인의 인덱스 불변(guild_test `_residents[9] == mugol`) ㉡ 주방요괴가 마지막
+	#      (side_dish_test `_residents[last] == kitchen_youkai`). 앞도 뒤도 아닌 이 사이에 끼우면
+	#      늘어나는 건 size 하나뿐이다. 뒤따르는 조연 8인도 같은 자리에 붙는다.
+	#
+	#    ★ **집 배정 = 주민 집 6**(RESIDENT_HOUSE_RECTS[5] = Rect2i(88,21,4,4), 문 89,24).
+	#      근거 ㉠ [narrative-bible §5.2] 깨비는 **약방 뒷산의 야생 도깨비**였다 — 산길 워프
+	#      스포크(x98) 바로 서쪽인 이 집이 "산에서 내려와 마을 어귀에 눌러앉은" 생활권을 그대로
+	#      만든다(마을 집들 중 산에 가장 가깝다) ㉡ 문(y24)이 메인 복도(y36)보다 위라 문 스포크가
+	#      x89 한 열로 곧장 내려가 보간 걷기 경로가 실제 길과 겹친다(모찌 선례와 같은 성질)
+	#      ㉢ 강변 2채(index 9·10)는 세레나(인어) 예약분이라 비켜 둔다([ADR-0068] 결정 3).
+	#
+	#    ★ 하루 = 집 앞 → 마을 광장 → **카페**. 세 자리가 전부 나루 마을이라 같은 구역 전환이고
+	#      (모찌와 동형 — 보간 걷기가 실제로 도는 동선), 저녁 카페 자리가 [narrative-bible §5.2]
+	#      "카운터 주변 서성"의 이행이다.
+	#    ★ **effect_fn 없음** — 조연은 쉼터 2채널(대화·선물)뿐이다([narrative-bible §6.1] ·
+	#      ADR-0008 활동 곱셈기는 메인 4인 독점). 특히 깨비의 불은 백스토리 한정이라(residents.md
+	#      가드레일) 어떤 수치 보정도 붙이지 않는다.
+	var r_kkaebi := Resident.new()
+	r_kkaebi.id = "kkaebi"
+	r_kkaebi.display_name = "깨비"
+	r_kkaebi.script_path = "res://kkaebi.gd"   # ★ 노드를 레코드가 낳는 길(main.tscn 무수정)
+	r_kkaebi.needs_affinity = true
+	r_kkaebi.save_key = "kkaebi_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_kkaebi.can_gift = true
+	r_kkaebi.gift_target_ko = "깨비"
+	r_kkaebi.portrait_stem = ""                # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 공유 방 하나라
+	# (HOUSE_RECT) 실내에 세우면 다른 집에 들어가도 깨비가 보인다 — 그래서 문 바로 아래 남향
+	# 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌 선례 그대로).
+	var kkaebi_home_tile: Vector2i = RESIDENT_HOUSE_DOORS[5] + Vector2i(0, 1)   # (89,25)
+	# 낮 = 마을 광장. 모찌 자리(54,34)에서 두 칸 동쪽 — 통행 레인(메인 복도 y36·다리 스파인
+	# x52·53)을 비껴 서면서 광장 한복판이 보이는 칸이다("씨름판 벌이는 자리" 결).
+	var kkaebi_plaza_tile := Vector2i(56, 34)
+	# 저녁 = 카페(영업창 15:00~). **카운터 바로 앞 줄**(y91) — 카운터(y89 x10~16)와 스툴 줄
+	# (y90 x9·11·14·17·19), 손님 테이블(y93), 모찌 자리(13,92)를 전부 비껴간 칸이다. 일하는
+	# 자리가 아니라 카운터 언저리를 서성이는 결([narrative-bible §5.2]).
+	var kkaebi_cafe_tile := Vector2i(16, 91)
+	r_kkaebi.schedule = [
+		{"from_min": 0, "tile": kkaebi_home_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": 10 * 60, "tile": kkaebi_plaza_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": Cafe.OPEN_MIN, "tile": kkaebi_cafe_tile, "region": RegionCatalog.NARU_VILLAGE},
+	]
+	_register_resident(r_kkaebi)
+	# ★ 선호 선물은 GiftPrefs "kkaebi"가 든다(산이 주는 것·묵거리 러브 / 무쇠 헤이트 — 도깨비
+	#   설화의 금기). 생일은 Resident.BIRTHDAYS "kkaebi"(유화절 13일 — 잠정, owner 큐).
+	# ── ★ [S9b-T1 / ADR-0068 결정 3] 켄 — **조연 코러스 9인의 풀 온보딩**(언데드 거인·T1).
+	#    모찌가 깔아 둔 그 길을 그대로 탄다: 이 블록 하나 + `ken.gd` 한 파일이 주민 1인 추가의
+	#    전부다(main.tscn 무수정 — script_path·needs_affinity를 채우면 `_register_resident`가 몸과
+	#    관계 트랙 노드를 낳는다).
+	#
+	#    ★ **쉼터 2채널**([narrative-bible §6.1]): 대화·선물만으로 하트가 오른다. **활동 채널 0 ·
+	#      곱셈기(effect_fn) 0** — 활동 곱셈기는 메인 4인 독점이고([ADR-0008]), 조연은 활동 압박의
+	#      *쉼터*가 되어야 한다. deed 문턱도 없다(Deed가 문턱표에 이름이 없으면 통과로 답한다).
+	#
+	#    ★ 로스터 1:1 집 배정: **켄 = 주민 집 9**(RESIDENT_HOUSE_RECTS[8], 문 89,51 — 동편 중하단 우).
+	#      근거 ㉠ 마을 **동쪽 끝**이라 사람 왕래가 가장 적다 — "겉모습 때문에 괴물 취급받다"
+	#      ([residents.md] 생전 죄) 살아온 자가 스스로 고른 변두리다(자기 몸이 남을 놀라게 하는 걸
+	#      아는 사람의 주거 선택) ㉡ 산길 워프 스포크(x98)·마을 동편 나무들과 가까워 "식물 사랑"
+	#      (창가 화분 열둘)의 생활권이 맞는다 ㉢ 강변 2채(index 9·10)는 세레나(인어) 예약분이라
+	#      비켜 두고, 모찌(index 3)와도 겹치지 않는다.
+	#
+	#    ★ 하루 = 집 앞 → 광장 남서 구석 → 카페 홀 구석. 세 자리가 전부 나루 마을이라 보간 걷기가
+	#      실제로 돈다(모찌 선례). 스케줄은 바이블 "나라카 연결"에서 파생했다 — 힘쓰는 일로 남을
+	#      돕되(광장) **한복판이 아니라 가장자리**에 서고, 저녁엔 카페에 손님으로 앉는다(그 밤의
+	#      약방에서 무거운 걸 나르던 자리의 저승판 — 그가 매일 되돌아가는 곳).
+	var r_ken := Resident.new()
+	r_ken.id = "ken"
+	r_ken.display_name = "켄"
+	r_ken.script_path = "res://ken.gd"       # ★ 노드를 레코드가 낳는 길(main.tscn 무수정)
+	r_ken.needs_affinity = true
+	r_ken.save_key = "ken_affinity"          # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
+	r_ken.can_gift = true
+	r_ken.gift_target_ko = "켄"
+	r_ken.portrait_stem = ""                 # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
+	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 켄이 보인다 — 그래서 문 바로 아래
+	# 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌와 같은 규약).
+	var ken_home_tile: Vector2i = RESIDENT_HOUSE_DOORS[8] + Vector2i(0, 1)   # (89,52)
+	# 낮 = 마을 광장(NARU_PLAZA_RECT x46..58, y31..41)의 **남서 구석**. 메인 복도(y36)·다리 스파인
+	# (x52·53)·야시장 매대(NIGHT_MARKET_TILE 52,34)·모찌 자리(54,34)를 전부 비껴간다. 거구가
+	# 사거리 한복판을 막지 않으면서도 광장에 들어서면 눈에 들어오는 자리 = "반 발짝 물러선" 켄.
+	var ken_plaza_tile := Vector2i(48, 39)
+	# 저녁 = 카페(영업창 15:00~) **홀 남동 구석**. 직원 줄(y88)·카운터(y89)·좌석 스툴(y90)·손님
+	# 테이블(y93)·등불(18,91)·모찌 자리(13,92)를 전부 비껴간 칸이다. 일하는 자리가 아니라 **손님**
+	# 으로 앉는다(그 집에서 무거운 걸 나르던 사람이, 이제는 아무것도 안 나르고 앉아 있는 그림).
+	var ken_cafe_tile := Vector2i(17, 92)
+	r_ken.schedule = [
+		{"from_min": 0, "tile": ken_home_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": 9 * 60, "tile": ken_plaza_tile, "region": RegionCatalog.NARU_VILLAGE},
+		{"from_min": Cafe.OPEN_MIN, "tile": ken_cafe_tile, "region": RegionCatalog.NARU_VILLAGE},
+	]
+	# ★ effect_fn 없음 = 관계 탭에 곱셈기 줄이 안 붙는다(선물 리듬 꼬리만 — 모찌 선례 동형).
+	_register_resident(r_ken)
+	# ★ 선호 선물은 GiftPrefs "ken"이 든다 — 살아 있는 약초·화초가 러브, 다 타고 남은 것(혼탄·
+	#   업화석 조각)이 헤이트다. 생일은 Resident.BIRTHDAYS "ken"(피안절 23일 — 달력 마커 자동).
+	# ★ 연애·결혼은 **아직 안 연다**: ken.gd가 confession/divorce/spouse 본문을 이미 들고 있지만
+	#   ROMANCE_OPEN 명단은 S9b-T6(조연 연애·결혼 개통)이 고친다 — 명단 한 줄이 개통의 전부다.
+
 	# ── ★ [S6-T7 / ADR-0064 결정 8] 주방요괴 — **T3 배경 직원**(카페 주방 자리·곁들이 창구).
 	#    CONTEXT [주방요괴]가 정의만 해 두고 무대엔 없던 자리를 세운다: S6-T1부터 기본 메뉴는
 	#    "주방요괴가 백스테이지에서 대는 무재료 음료"로 나가고 있었는데, 정작 그 백스테이지가
@@ -15608,6 +15712,46 @@ const BIRTHDAY_PLACEHOLDER_LINE := "…오늘이 내 생일이야."
 const HEART_GATE_PLACEHOLDER_LINE := "…같이 보낸 시간이, 조금은 쌓인 것 같아."
 const HEART_GATE_MAX := 4   # 관문 이벤트로 오를 수 있는 최대 칸(♡5 = 의지 시험 — S8-T6)
 
+# ── ★[S9b-T1 / ADR-0068 결정 6] 소프트 게이트 ㉠ — 조연 ♡3 고백은 대화재 접촉 후 ────────
+# [narrative-bible §6.2] 안전장치 ㉠: 조연의 ♡3 **그날 밤 고백**은 *플레이어가 대화재를 이미
+# 접한 뒤*에만 열린다(스포일러·순서 꼬임 방지 — 아무것도 모르는 플레이어에게 "그 밤"이 먼저
+# 도착하면 코러스가 아니라 폭로가 된다).
+#
+# ★ **기계 판정 = 메인 3인 중 1인 이상 stage≥3**([ADR-0068] 결정 6). 온보딩(B0)은 대화재를
+#   언급하지 않으므로(통보 + 범용 복선 한 줄뿐) 대변할 수 없고, **메인 ♡3 씨앗 컷신이 플레이어의
+#   첫 대화재 접촉**이다([narrative-bible §6.1] "♡3 = 씨앗(암시)"). 그래서 그 씨앗 하나라도
+#   봤는가가 곧 이 게이트다. OR(1인 이상)인 이유: 척추 해결 게이트가 AND(세 조각)인 것과 달리
+#   여기는 *스포일러 순서*만 지키면 되므로, 셋 다 요구하면 조연 아크가 메인 진행에 인질이 된다
+#   (ADR-0008 "이야기만 게이팅"의 최소 침습 해석).
+#
+# ★ **미충족 = 대기**(잠금 아님): 기존 `pending_promotion` 문법 그대로다 — 점수는 만충인 채
+#   남고(손실 0), 관문 발화도 편지도 안 나가며, 조건이 채워진 뒤 그 사람과 다시 대화하면 그
+#   자리에서 성사된다. 판정 위치가 `Deed.check` 바로 다음인 것도 같은 이유다(두 게이트가 같은
+#   "대기" 의미를 공유한다).
+#
+# ★ **로스터는 상수로 박제한다**([narrative-bible §6.2] 안전장치 ㉑ 로스터 고정의 결). 대상은
+#   바이블 T1 조연이고, **점주 5인(T2 — 뱃사공·옹이·풀무·무골 등)은 대상이 아니다**(그들에겐
+#   그날 밤 고백 자체가 없다). 모찌·네오의 기존 ♡3 비밀 비트에도 **소급 적용**된다([ADR-0068]
+#   결정 6 명문) — 비인간 3인의 ♡3도 §6.2의 그 자리이기 때문이다.
+# ★ "ken"은 **아직 레코드가 없어도 미리 넣어 둔다**: 로스터의 주인은 이 상수 한 곳이고, 병렬로
+#   붙는 인물 태스크가 각자 이 배열을 고치면 결합 때 충돌만 난다. 없는 id는 판정에서 그냥 안
+#   걸린다(무해). 뒤따르는 조연 7인도 여기에만 더한다.
+const CHORUS_GATE_ROSTER := ["mochi", "neo", "kkaebi", "ken"]
+const CHORUS_GATE_HEART := 3          # 게이트가 걸리는 칸 = ♡3(그날 밤 고백)
+const CHORUS_GATE_MAINS := ["miho", "mel", "bana"]   # 대화재 접촉의 증인(세 조각 소유자)
+const CHORUS_GATE_MAIN_STAGE := 3     # 그 중 1인이 이 칸 이상이면 열린다(♡3 = 씨앗 컷신)
+
+# 그 진급이 소프트 게이트 ㉠에 걸리는가(true = 통과 · false = 대기).
+# 조연 로스터의 ♡3이 아니면 언제나 통과다 — 판정이 이 한 곳이라 대상이 늘어도 식은 안 바뀐다.
+func _chorus_gate_ok(rid: String, target: int) -> bool:
+	if target != CHORUS_GATE_HEART or not CHORUS_GATE_ROSTER.has(rid):
+		return true
+	for main_id in CHORUS_GATE_MAINS:
+		var r := _resident(String(main_id))
+		if r != null and r.affinity != null and r.affinity.stage >= CHORUS_GATE_MAIN_STAGE:
+			return true
+	return false
+
 # 관문 판정 — 진급이 성사되면 stage를 올리고, 이 대화 **앞에 세울** 관문 발화를 돌려준다
 # (빈 배열 = 진급 없음 또는 이미 본 이벤트의 조용한 재진급). 대화 한 번에 한 칸만 오른다 —
 # 점수가 여러 칸치 쌓였어도(생일 ×8) 관문 이벤트는 칸마다 하나씩이다(Affinity.promote와 짝).
@@ -15620,6 +15764,10 @@ func _try_heart_promotion(r: Resident) -> PackedStringArray:
 		return PackedStringArray()      # ♡5 = 의지 시험 대기(S8-T6이 별도 관문을 연다)
 	if not Deed.check(r.id, target, _deed_ledgers()):
 		return PackedStringArray()      # 메인 3인 deed 미달 — 관문 잠금(점수는 만충 상태로 대기)
+	# ★[S9b-T1 / ADR-0068 결정 6] 소프트 게이트 ㉠ — 조연 ♡3 고백은 대화재 접촉 후에만.
+	#   미충족이면 deed 미달과 **완전히 같은 대기**다(점수 만충 유지·발화 0·편지 0·비트 0).
+	if not _chorus_gate_ok(r.id, target):
+		return PackedStringArray()
 	r.affinity.promote()
 	_gate_target = target               # ★[S9-T2] 성사된 칸 — 호출부가 컷신 훅에 넘긴다
 	var already_seen := _heart_bit_seen(r.id, target)

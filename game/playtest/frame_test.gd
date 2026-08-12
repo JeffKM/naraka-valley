@@ -70,11 +70,16 @@ func _initialize() -> void:
 	# ★[S8-T1 / ADR-0066 결정 11] 표시 자격이 `affinity != null` **하나**로 바뀌었다 — 곱셈기
 	#   (effect_fn)는 효과 줄의 유무만 정한다. 그래서 관계 트랙 보유 9인이 전부 뜬다(옥자·주방요괴는
 	#   설계상 트랙이 없어 계속 비표시). 옛 조건(트랙 AND 곱셈기)은 모찌·풀무·무골을 탭에서 지웠다.
-	_check("③a _heart_rows = 관계 트랙 보유 9인(옥자·주방요괴 제외)", rows.size() == 9)
+	# ★[S9b-T1 / ADR-0068 결정 3] 9 → 11: 깨비·켄(조연 코러스 첫 2인 풀 온보딩)이 무골 뒤·주방요괴
+	#   앞에 붙었다. 둘 다 관계 트랙 보유자라 관계 탭에 뜨고, **곱셈기(effect_fn)는 없다**(조연 =
+	#   쉼터 2채널 · [ADR-0008] 곱셈기는 메인 4인 독점) — 그래서 효과 줄은 선물 꼬리만이다(③b′ 결).
+	_check("③a _heart_rows = 관계 트랙 보유 11인(옥자·주방요괴 제외)", rows.size() == 11)
 	var rel_names := []
 	for row in rows:
 		rel_names.append(String(row["name"]))
-	_check("③a′ 등록 순서 그대로", rel_names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골"])
+	# ★[S9b-T1] 깨비·켄이 꼬리에 붙는다(등록 순서 = 표시 순서 — 신규는 뒤에만 붙는다).
+	_check("③a′ 등록 순서 그대로",
+		rel_names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골", "깨비", "켄"])
 	_check("③b 각 행에 이름·하트", rows[0].has("name") and rows[0].has("filled") and rows[0].has("total"))
 	# ★[S8-T9] 효과 줄 뒤에 **선물 리듬 꼬리**("이번 주 선물 n/2")가 붙으면서 "곱셈기 없음 = 빈
 	#   문자열"이 아니게 됐다(선물 채널 보유자는 꼬리만으로도 줄이 선다 — 그게 이 꼬리의 목적).
@@ -100,9 +105,12 @@ func _initialize() -> void:
 	# 옹이는 옛 6행 로스터의 여섯째였고, 풀 5개에 밀려 통째로 사라졌던 그 행이다(새 9행에선 일곱째).
 	_check("③ᴿb 옛 5행 고정이 삼키던 행(옹이)이 실제 노드로 렌더된다",
 		bars.size() >= 7 and bars[6]._name_label.text == "옹이")
-	_check("③ᴿc 막행(무골)까지 값이 실린다",
-		bars.size() == 9 and bars[8]._name_label.text == "무골")
-	# 스크롤 — 9행은 패널에 다 안 들어간다. 어느 행도 "어느 스크롤 위치에서도 안 보이는" 상태면 안 된다.
+	# ★[S9b-T1] 총원 사본을 지운다(로스터 총원의 단일 출처 = resident_test) — 여기서 재는 것은
+	#   "행 수만큼 노드가 실리고 **막행까지** 값이 붙는가"이지 인원수가 아니다.
+	_check("③ᴿc 막행까지 값이 실린다(무골 = 아홉째 · 막행 = 등록 순서 마지막)",
+		bars.size() == rows.size() and bars[8]._name_label.text == "무골"
+		and String(bars[bars.size() - 1]._name_label.text) == String(rows[rows.size() - 1]["name"]))
+	# 스크롤 — 전 행은 패널에 다 안 들어간다. 어느 행도 "어느 스크롤 위치에서도 안 보이는" 상태면 안 된다.
 	var seen := {}
 	var vis_first := 0
 	for s in rows.size():
@@ -116,11 +124,12 @@ func _initialize() -> void:
 		if s == 0:
 			vis_first = vis
 	_check("③ᴿd 스크롤 0에선 일부만 보인다(넘침을 스크롤이 흡수)", vis_first > 0 and vis_first < rows.size())
-	_check("③ᴿe 스크롤을 훑으면 9행 전부가 한 번씩 보인다(유실 0)", seen.size() == rows.size())
+	_check("③ᴿe 스크롤을 훑으면 전 행이 한 번씩 보인다(유실 0)", seen.size() == rows.size())
 	# 창 밖 행은 숨고, 보이는 행은 패널 안에 있다.
 	m.frame._rel_scroll = rows.size() - 1
 	m.frame._apply_heart_visibility()
-	_check("③ᴿf 끝까지 스크롤 = 막행이 보이고 첫 행은 숨는다", bars[8].visible and not bars[0].visible)
+	_check("③ᴿf 끝까지 스크롤 = 막행이 보이고 첫 행은 숨는다",
+		bars[bars.size() - 1].visible and not bars[0].visible)
 	var panel: Rect2 = m.frame._panel_rect()
 	var inside := true
 	for b in bars:

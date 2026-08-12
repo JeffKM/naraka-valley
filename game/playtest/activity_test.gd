@@ -198,15 +198,17 @@ func _run_checks() -> void:
 		m._on_mob_killed(Mob.spawn(MobCatalog.HEOTGEOT, Vector2i(5, 5), i), i)
 	_check("③k 라이브에서도 하루 캡 12에서 멈춘다",
 		r_bana.affinity.points == Affinity.ACTIVITY_DAILY_CAP)
-	# 서브 주민 6인은 채널 자체가 없다("쉼터" 결 — 성과 요구 0).
-	var subs := ["neo", "mochi", "boatman", "ongi", "pulmu", "mugol"]
+	# 서브 주민은 채널 자체가 없다("쉼터" 결 — 성과 요구 0).
+	# ★[S9b-T1 / ADR-0068 결정 3] 켄 추가 — 조연 코러스도 **쉼터 2채널**(대화·선물)뿐이라는
+	#   설계가 신규 온보딩에서도 지켜지는지 여기서 잰다([narrative-bible §6.1]).
+	var subs := ["neo", "mochi", "boatman", "ongi", "pulmu", "mugol", "ken"]
 	var subs_zero := true
 	for rid in subs:
 		var r: Resident = m._resident(rid)
 		if r == null or r.affinity == null or r.affinity.points != 0 \
 				or r.affinity.activity_used_on(3) != 0:
 			subs_zero = false
-	_check("③l 서브 주민 6인은 활동 적립 0(§6.1 쉼터 — 성과 요구 없음)", subs_zero)
+	_check("③l 서브 주민 전원은 활동 적립 0(§6.1 쉼터 — 성과 요구 없음)", subs_zero)
 
 	# ── ④ 도메인 XP 당근 ──
 	print("── ④ 도메인 XP 당근(1 + 0.05/♡) ──")

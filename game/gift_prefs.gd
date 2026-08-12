@@ -181,6 +181,40 @@ const OVERRIDES := {
 		],
 		HATE: [CropCatalog.PIANHWA],
 	},
+	# ── ★[S9b-T1 / ADR-0068 결정 3] 조연 코러스 개통분 ─────────────────────────
+	# 깨비 — 산이 주는 것 + 묵거리(도깨비·뒷산 야생 출신 · [narrative-bible §5.2] "메밀묵 얻어먹던
+	# 단골"). 메밀은 아직 카탈로그에 없으므로 **묵의 재료인 도토리**가 그 자리를 대신한다.
+	# 헤이트 = **무쇠**. 도깨비가 쇠를 못 견딘다는 설화 그대로라 캐릭터 정체성에서 곧장 나온다
+	# (풀무의 러브(주괴)와 정확히 반대편 — 선물 경제가 자연히 갈린다).
+	# ⚠️ 불붙은 것(혼불씨·업화석)은 **넣지 않는다**: 깨비의 불은 백스토리 한정이고(residents.md
+	#   가드레일), 미호의 헤이트와 겹쳐 "불 캐릭터 둘"로 읽히는 것을 피한다.
+	"kkaebi": {
+		LOVE: [
+			ItemCatalog.JAETBIT_DOTORI,      # 잿빛도토리 — 묵거리(산 밑에서 얻어먹던 그 접시)
+			ItemCatalog.NEOK_SONGI,          # 넋송이버섯 — 뒷산이 주는 것
+			ItemCatalog.SEONGYA_SOLBANGUL,   # 성야솔방울 — 주워서 던지기 좋은 것(장난)
+			MenuCatalog.SONGI_SOUP,          # 넋송이 수프 — 든든한 한 그릇
+			MenuCatalog.BUNGEO_PPANG,        # 붕어빵 — 장난꾸러기의 간식
+		],
+		HATE: [ItemCatalog.INGOT_YUCHEOL, ItemCatalog.ORE_YUCHEOL],   # 무쇠 — 도깨비 설화의 금기
+	},
+	# ★[S9b-T1 / ADR-0068 결정 3] 켄 — **살아 있는 약초·화초**(그날 밤 약방의 조수였고, 지금은
+	# 창가에 화분 열둘을 기른다 — [narrative-bible §5.2]·[residents.md] "식물 사랑"). 손끝으로만
+	# 만지는 자에게 러브는 *살아 있는 것*이다.
+	# 헤이트 = **다 타고 남은 것**(혼탄·업화석 조각). 그 밤의 불이 남긴 결이라 켄의 손에 쥐여지면
+	# 안 되는 물건이다. ⚠️미호 헤이트(혼불씨·업화석 = *산 불*)와는 결이 갈린다 — 미호는 아직 타는
+	# 불이 무섭고, 켄은 이미 타 버린 뒤가 무섭다.
+	# ★옹이(목령 = 나무)와도 겹치지 않는다: 옹이 = 수액·나무 씨앗 / 켄 = 약재·화초.
+	"ken": {
+		LOVE: [
+			ItemCatalog.JEOSEUNG_SAM,        # 저승삼 — 약방의 으뜸 약재(그가 나르던 것)
+			ItemCatalog.EONHON_PPURI,        # 언혼뿌리
+			ItemCatalog.SEORI_HONBAEKCHO,    # 서리혼백초
+			ItemCatalog.MIHOK_NANCHO,        # 미혹난초 — 화분에 올리고 싶은 꽃
+			ItemCatalog.JEOSEUNG_IKKI,       # 저승 이끼 — 큰 손으로 기르기 가장 어려운 것
+		],
+		HATE: [ItemCatalog.HONTAN, ItemCatalog.EMBER_SHARD],
+	},
 }
 
 # ── 조회 ──────────────────────────────────────────────────────────────────────
