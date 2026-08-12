@@ -137,12 +137,14 @@ func _run_checks() -> void:
 		GiftPrefs.tier_of("mel", CropCatalog.PIANHWA) == GiftPrefs.LOVE
 		and GiftPrefs.tier_of("mugol", CropCatalog.PIANHWA) == GiftPrefs.HATE
 		and GiftPrefs.tier_of("miho", CropCatalog.PIANHWA) == GiftPrefs.NEUTRAL)
-	# 9인 전원이 테이블을 가진다 — 규모(러브 4~6·헤이트 1~2)와 유효성(실존·건넬 수 있는 것).
+	# 10인 전원이 테이블을 가진다 — 규모(러브 4~6·헤이트 1~2)와 유효성(실존·건넬 수 있는 것).
+	# ★[S9b-T1 / ADR-0068 결정 3] 9 → 10: 깨비(조연 코러스 첫 온보딩)가 합류.
 	var who: Array = GiftPrefs.residents_with_prefs()
-	_check("②f 관계 트랙 보유 9인 전원이 테이블 보유",
-		who.size() == 9 and who.has("miho") and who.has("mel") and who.has("bana")
+	_check("②f 관계 트랙 보유 10인 전원이 테이블 보유",
+		who.size() == 10 and who.has("miho") and who.has("mel") and who.has("bana")
 		and who.has("neo") and who.has("mochi") and who.has("boatman")
-		and who.has("ongi") and who.has("pulmu") and who.has("mugol"))
+		and who.has("ongi") and who.has("pulmu") and who.has("mugol")
+		and who.has("kkaebi"))
 	var size_ok := true
 	var valid_ok := true
 	var overlap_ok := true
@@ -327,8 +329,9 @@ func _run_checks() -> void:
 	for r in m._residents:
 		if r.affinity != null:
 			tracked.append(r.id)
-	_check("⑧a 관계 트랙 보유 9인 전원에게 생일이 있다(그리고 그 9인뿐)",
-		tracked.size() == 9 and Resident.BIRTHDAYS.size() == 9
+	# ★[S9b-T1 / ADR-0068 결정 3] 9 → 10: 깨비(유화절 13일 — 잠정)가 합류.
+	_check("⑧a 관계 트랙 보유 10인 전원에게 생일이 있다(그리고 그 10인뿐)",
+		tracked.size() == 10 and Resident.BIRTHDAYS.size() == 10
 		and tracked.all(func(rid: String) -> bool: return Resident.BIRTHDAYS.has(rid)))
 	var range_ok := true       # 절기 0..3 · 일차 1..28
 	var avoid_theme := true    # 25일(테마 데이 고정 슬롯) 회피
@@ -435,7 +438,8 @@ func _run_checks() -> void:
 	for c in cal_cells:
 		if String(c["birthday"]) != "":
 			bday_cells.append(c)
-	_check("⑩b 유화절엔 생일 2칸(미호 7일 · 모찌 26일)", bday_cells.size() == 2)
+	# ★[S9b-T1] 2 → 3칸: 깨비(유화절 13일 — 잠정)가 같은 절기에 붙었다.
+	_check("⑩b 유화절엔 생일 3칸(미호 7일 · 깨비 13일 · 모찌 26일)", bday_cells.size() == 3)
 	_check("⑩c 7일 칸이 미호",
 		String(cal_cells[6]["birthday"]) == "miho" and int(cal_cells[6]["dos"]) == 7)
 	_check("⑩d 생일 칸엔 행사·테마가 겹치지 않는다",
@@ -447,7 +451,7 @@ func _run_checks() -> void:
 	_check("⑩e 범례에 생일 줄", "7일 — 미호 생일" in str(cal.legend())
 		and "26일 — 모찌 생일" in str(cal.legend()))
 	_check("⑩f 기존 범례(행사 1줄·테마 1줄)는 그대로 · 생일이 뒤에 붙는다",
-		cal.legend().size() == 4 and "월광 혼불해파리 창구" in str(cal.legend()))
+		cal.legend().size() == 5 and "월광 혼불해파리 창구" in str(cal.legend()))
 	cal.set_state(1, 1, 0)             # 피안절 — 옹이 4일·뱃사공 11일·네오 19일
 	_check("⑩g 이름 미주입 주민은 id로 폴백(범례가 죽지 않는다)",
 		"4일 — ongi 생일" in str(cal.legend()))

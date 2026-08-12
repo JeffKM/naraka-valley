@@ -17,6 +17,11 @@ extends SceneTree
 #   ⑧ 아트 배선(T9 아트 스코프) — 책·노트 아이콘이 인벤/토스트 경로에 잡히고, 우편함·혼백관
 #      좌대 프롭 텍스처가 실존하며, 편지·책 열람이 **편지지 스킨**으로 갈렸다가 닫히면 되돌아온다.
 #
+# ★[S9b-T1 / ADR-0068 결정 6] **소프트 게이트 ㉠ 소급분 반영**: 조연(모찌·네오 포함)의 ♡3 진급이
+#   이제 "메인 3인 중 1인 이상 stage≥3"을 요구한다. 이 스위트의 관심사는 ♡3 *본문·컷신*이라
+#   셋업에서 게이트를 한 번 열고 시작한다(`_open_chorus_gate`). 게이트 자체의 거동(대기·소급·
+#   점주 제외)은 kkaebi_arc_test ⑩이 소유한다 — 여기서 두 번 재지 않는다.
+#
 # 실행: ./run_tests.sh t1_arc   (헤드리스는 반드시 game/에서 · 순차)
 
 var _fail := 0
@@ -63,6 +68,14 @@ func _set_idle(r: Resident, stage: int) -> void:
 	r.affinity.stage = stage
 	r.affinity.points = stage * Affinity.POINTS_PER_HEART
 
+# ★[S9b-T1 / ADR-0068 결정 6] 소프트 게이트 ㉠를 연다 — 조연(모찌·네오 포함)의 **♡3 진급**은
+# 메인 3인 중 1인 이상이 stage≥3일 때만 성사된다(대화재 접촉 후에만 그날 밤/본질 비밀이 열린다).
+# 이 스위트는 ♡3 비트를 재는 것이 본론이라, 게이트를 셋업에서 한 번 열고 시작한다.
+# ★ `_set_idle`로 여는 이유: 만충(`_set_heart`)으로 두면 미호 쪽에 진급 대기가 서서, 뒤 검증이
+#   모찌·네오만 보고 있는 동안 엉뚱한 관문이 끼어들 여지가 생긴다(대화 한 번에 사건 하나 규약).
+func _open_chorus_gate(m: Node) -> void:
+	_set_idle(m._resident("miho"), m.CHORUS_GATE_MAIN_STAGE)
+
 func _initialize() -> void:
 	await _run_checks()
 
@@ -74,6 +87,7 @@ func _run_checks() -> void:
 	var m: Node = await _new_main()
 	_drain(m)                                   # 신규 시작의 옥자 통보 대화
 	m.onboarding.step = Onboarding.DONE
+	_open_chorus_gate(m)                        # ★[S9b-T1] 소프트 게이트 ㉠(♡3 진급의 전제)
 
 	for rid in ["mochi", "neo"]:
 		var r: Resident = m._resident(rid)

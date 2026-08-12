@@ -113,11 +113,14 @@ func _run_checks() -> void:
 	# ★[S6-T7 / ADR-0064 결정 8] 10 → 11: 주방요괴(카페 T3 배경 직원)가 열한째로 붙었다(의도적
 	#   불변식 개정). **관계 트랙 0**인 첫 등록이라 이 한 건이 프레임워크의 "affinity 없이도 주민"
 	#   경로(옥자)를 script_path 생성 경로와 함께 처음으로 태운다.
-	_check("③a 주민 11인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 · ★S6-T7 주방요괴 추가)",
-		m._residents.size() == 11)
-	_check("③b 11인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골·주방요괴",
+	# ★[S9b-T1 / ADR-0068 결정 3] 11 → 12: 깨비(조연 코러스 첫 온보딩)가 **주방요괴 바로 앞**에
+	#   붙었다(의도적 불변식 개정). 그 자리인 이유는 두 좌표 불변식의 교집합이라서다 — 앞 10인의
+	#   인덱스 불변(guild_test `_residents[9] == mugol`) + 주방요괴가 마지막(side_dish_test).
+	_check("③a 주민 12인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 · ★S6-T7 주방요괴 · ★S9b-T1 깨비 추가)",
+		m._residents.size() == 12)
+	_check("③b 12인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골·깨비·주방요괴",
 		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman", "ongi", "pulmu",
-			"mugol", "kitchen_youkai"])
+			"mugol", "kkaebi", "kitchen_youkai"])
 	_check("③c id 조회", m._resident("mel") != null and m._resident("mel").display_name == "멜")
 	_check("③d 이름 조회", m._resident_named("바나") != null and m._resident_named("바나").id == "bana")
 	_check("③e 없는 id/이름 = null", m._resident("없음") == null and m._resident_named("없음") == null)
@@ -249,12 +252,13 @@ func _run_checks() -> void:
 		names.append(String(row["name"]))
 	# ★[S8-T1 / ADR-0066 결정 11] 표시 자격 = **관계 트랙 보유 하나**로 갈렸다(옛 조건은 트랙 AND
 	#   효과 줄이라 곱셈기 없는 주민 셋을 탭에서 지웠다). 옥자·주방요괴는 설계상 트랙이 없어 계속 제외.
-	_check("⑧a 관계 트랙 보유 9인 전원(옥자·주방요괴만 제외)",
-		names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골"])
+	# ★[S9b-T1] 9 → 10: 깨비가 관계 트랙 보유자로 합류(등록 순서 = 표시 순서라 무골 뒤·꼬리에 선다).
+	_check("⑧a 관계 트랙 보유 10인 전원(옥자·주방요괴만 제외)",
+		names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골", "깨비"])
 	# ★[S8-T9] 선물 리듬 꼬리("이번 주 선물 n/2")가 붙어 곱셈기 없는 주민도 줄이 선다 — 곱셈기
 	#   유무는 꼬리 **앞**에 무엇이 있느냐로 읽는다(frame_test ③b′와 같은 기준).
 	_check("⑧b 곱셈기 보유자에게만 효과 줄(미호·옹이=곱셈기+꼬리 · 모찌·무골=선물 꼬리만)",
-		rows.size() == 9
+		rows.size() == 10
 		and String(rows[0]["effect"]).contains(" · 이번 주 선물")
 		and String(rows[6]["effect"]).contains(" · 이번 주 선물")
 		and String(rows[4]["effect"]).begins_with("이번 주 선물")
@@ -446,8 +450,9 @@ func _run_checks() -> void:
 	for row in m2_rows:
 		if String(row["name"]) == "모찌":
 			mochi_shown = String(row["effect"]).begins_with("이번 주 선물")   # ★[S8-T9] 곱셈기 없음 = 꼬리만
-	_check("⑪J 관계 탭 = 관계 트랙 보유 9행이고 모찌는 효과 줄 없이 표시된다",
-		m2_rows.size() == 9 and mochi_shown)
+	# ★[S9b-T1] 9 → 10행(깨비 합류). 모찌의 표시 성질(효과 줄 없음)은 그대로여야 한다.
+	_check("⑪J 관계 탭 = 관계 트랙 보유 10행이고 모찌는 효과 줄 없이 표시된다",
+		m2_rows.size() == 10 and mochi_shown)
 	_check("⑪K 기존 주민 자리 불변",
 		m2._resident("mel").tile == m2.MEL_TILE and m2._resident("neo").tile == m2.NEO_TILE)
 	_check("⑪L 기존 4인 호감도 불변(⑨ 복원값 그대로)",
