@@ -253,13 +253,15 @@ func _run_checks() -> void:
 		names.append(String(row["name"]))
 	# ★[S8-T1 / ADR-0066 결정 11] 표시 자격 = **관계 트랙 보유 하나**로 갈렸다(옛 조건은 트랙 AND
 	#   효과 줄이라 곱셈기 없는 주민 셋을 탭에서 지웠다). 옥자·주방요괴는 설계상 트랙이 없어 계속 제외.
-	# ★[S9b-T1] 9 → 10: 깨비가 관계 트랙 보유자로 합류(등록 순서 = 표시 순서라 무골 뒤·꼬리에 선다).
-	_check("⑧a 관계 트랙 보유 10인 전원(옥자·주방요괴만 제외)",
-		names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골", "깨비"])
+	# ★[S9b-T1 / ADR-0068 결정 3] 9 → 11행: 깨비·켄이 무골 뒤에 붙었다(등록 순서 그대로).
+	_check("⑧a 관계 트랙 보유 11인 전원(옥자·주방요괴만 제외)",
+		names == ["미호", "멜", "바나", "네오", "모찌", "뱃사공", "옹이", "풀무", "무골", "깨비", "켄"])
 	# ★[S8-T9] 선물 리듬 꼬리("이번 주 선물 n/2")가 붙어 곱셈기 없는 주민도 줄이 선다 — 곱셈기
 	#   유무는 꼬리 **앞**에 무엇이 있느냐로 읽는다(frame_test ③b′와 같은 기준).
-	_check("⑧b 곱셈기 보유자에게만 효과 줄(미호·옹이=곱셈기+꼬리 · 모찌·무골=선물 꼬리만)",
-		rows.size() == 10
+	# ★[S9b-T1] 깨비·켄(꼬리 2행)도 곱셈기 없는 쪽이다 — 조연 = 쉼터 2채널(ADR-0008).
+	_check("⑧b 곱셈기 보유자에게만 효과 줄(미호·옹이=곱셈기+꼬리 · 모찌·무골·깨비·켄=선물 꼬리만)",
+		rows.size() == names.size()
+		and String(rows[rows.size() - 1]["effect"]).begins_with("이번 주 선물")
 		and String(rows[0]["effect"]).contains(" · 이번 주 선물")
 		and String(rows[6]["effect"]).contains(" · 이번 주 선물")
 		and String(rows[4]["effect"]).begins_with("이번 주 선물")
@@ -451,9 +453,10 @@ func _run_checks() -> void:
 	for row in m2_rows:
 		if String(row["name"]) == "모찌":
 			mochi_shown = String(row["effect"]).begins_with("이번 주 선물")   # ★[S8-T9] 곱셈기 없음 = 꼬리만
-	# ★[S9b-T1] 9 → 10행(깨비 합류). 모찌의 표시 성질(효과 줄 없음)은 그대로여야 한다.
-	_check("⑪J 관계 탭 = 관계 트랙 보유 10행이고 모찌는 효과 줄 없이 표시된다",
-		m2_rows.size() == 10 and mochi_shown)
+	# ★[S9b-T1] 행 수 사본을 지운다(총원 단일 출처 = ③a·③b·⑧a) — 여기서 재는 것은 "모찌가
+	#   효과 줄 없이 뜨는가"이지 인원수가 아니다.
+	_check("⑪J 관계 탭 = 관계 트랙 보유 전원이고 모찌는 효과 줄 없이 표시된다",
+		m2_rows.size() == m2._heart_rows().size() and m2_rows.size() >= 10 and mochi_shown)
 	_check("⑪K 기존 주민 자리 불변",
 		m2._resident("mel").tile == m2.MEL_TILE and m2._resident("neo").tile == m2.NEO_TILE)
 	_check("⑪L 기존 4인 호감도 불변(⑨ 복원값 그대로)",
