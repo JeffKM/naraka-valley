@@ -6,6 +6,8 @@ extends SceneTree
 #      단 안에서는 같은 묶음이며, 오늘 두 번째 대화는 하트에 따라 온도만 다른 한 줄이다.
 #   ② ♡3 **비밀 비트** — 캐릭터 본문이 나오고(placeholder 폴백 아님) ♡1·♡2·♡4는 폴백이다
 #      (한 칸 집중 = 볼륨 상한 안의 선택. 나머지 칸은 owner 큐).
+#      ★[S9b-T6] 여기에 **연애 4축 소급분**이 합류했다(②c·②c-2) — [ADR-0068] 결정 2가 S9의
+#      "T1 2인은 연애 축 없음"을 뒤집어 모찌·네오에게 confession/divorce/spouse를 주입했다.
 #   ③ 컷신 — 4동사 안이고(거절 0) **캐릭터당 1개**이며, 재생이 끝난 뒤 관문 발화가 맨 앞에 선
 #      대화가 열린다(발화가 컷신에 삼켜지지 않는다). ★npc 동사 0 = 구역 순간이동 위험 0.
 #   ④ 절기 물음 — 4개·짝 맞음·주 첫날 1회·같은 주 재발동 없음·**0점 계약**(선택 전후 점수·
@@ -118,9 +120,23 @@ func _run_checks() -> void:
 		_check("②b ♡1·♡2·♡4는 본문 없음 = 프레임워크 폴백(한 칸 집중 — 결정 12 볼륨)",
 			who.heart_gate_lines(1).is_empty() and who.heart_gate_lines(2).is_empty()
 			and who.heart_gate_lines(4).is_empty())
-		_check("②c 관계·연애 훅은 없다(T1 2인 범위 — 결정 1㉣)",
-			not who.has_method("spouse_lines") and not who.has_method("confession_lines")
-			and not who.has_method("divorce_lines"))
+		# ★[S9b-T6 / ADR-0068 결정 2 재작성] 옛 ②c는 "연애 훅이 **없다**"(S9 결정 1㉣ 범위)였는데,
+		#   [ADR-0068] 결정 2가 그 범위를 **소급으로 뒤집었다**("S9에서 '깊은 단골'로 닫은 모찌·
+		#   네오도 소급 개통"). 그래서 단언의 방향을 뒤집고 **4축까지 함께 잰다** — 이 스위트가
+		#   T1 2인의 훅 인벤토리를 소유하므로, 소급이 반쪽으로 들어오면 여기서 걸려야 한다.
+		_check("②c ★연애·이혼·배우자 훅이 전부 있다(S9b-T6 소급 개통 — 옛 \"훅 없음\"의 반대편)",
+			who.has_method("spouse_lines") and who.has_method("confession_lines")
+			and who.has_method("divorce_lines")
+			and who.confession_lines(true).size() >= 4
+			and who.confession_lines(false).size() >= 4
+			and who.confession_lines(true) != who.confession_lines(false)
+			and who.divorce_lines().size() >= 3)
+		_check("②c-2 ★spouse_lines 4축(메인 8축의 절반 — day%4) · 결혼 후 대사가 ♡5 일상과 갈린다",
+			who.SPOUSE_AXES.size() == 4
+			and who.spouse_lines(0) == PackedStringArray(who.SPOUSE_AXES[0])
+			and who.spouse_lines(5) == PackedStringArray(who.SPOUSE_AXES[1])
+			and who.spouse_lines(3, false).size() == 1
+			and who.spouse_lines(1) != who.lines(5, true))
 
 		print("── [%s] ③ 컷신 → 대화 합류 ──" % name_ko)
 		var steps: Array = who.heart_gate_cutscene(3)
@@ -220,8 +236,11 @@ func _run_checks() -> void:
 		_check("⑥a 대사 볼륨이 상한 안(50~60줄 — 결정 12)", total >= 50 and total <= 60)
 		_check("⑥b 컷신 ≤2(♡3 한 칸)", _cutscene_count(who) == 1)
 		_check("⑥c 절기 물음 4개(절기당 1)", who.SEASON_QUESTIONS.size() == 4)
-		_check("⑥d 오늘 두 번째 한 줄이 두 종류(평소 · 깊은 단골)",
-			String(who.LINE_AGAIN) != String(who.LINE_AGAIN_BOND))
+		# ★[S9b-T6] 소급 개통으로 **세 번째 온도**(배우자)가 붙었다 — ♡5는 이제 연인 단이고
+		#   (♡5 진급의 유일한 경로가 고백 수락이다) 결혼 후엔 spouse_lines가 lines()를 대신한다.
+		_check("⑥d 오늘 두 번째 한 줄이 세 종류(평소 · 연인 · 배우자)",
+			String(who.LINE_AGAIN) != String(who.LINE_AGAIN_BOND)
+			and String(who.LINE_AGAIN_BOND) != String(who.LINE_AGAIN_SPOUSE))
 
 		print("── [%s] ⑦ 봉인 법칙 ──" % name_ko)
 		# 두 사람은 **자기 몸·자기 코어에 대한 관측**만 말한다 — 플레이어 죄목의 중심 평결도,

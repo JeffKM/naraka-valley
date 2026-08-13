@@ -1,50 +1,55 @@
 extends SceneTree
-# ★[S9b-T5 / ADR-0068 결정 3·4·5·6·12] 강림 풀 온보딩 + **전용 금칙어 세트** — 헤드리스 검증.
+# ★[S9b-T6 / ADR-0068 결정 2·3·4·5·6·12] 세레나 풀 온보딩 + **조연 연애·결혼 전원 개통** —
+# 헤드리스 검증.
 #
-# 규약은 kkaebi/ken/seolhwa/scarlet/mir/luca/frosty_arc_test를 그대로 상속한다(금칙어 31어 가드·
-# 볼륨 측정·훅 존재·관문 드레인·절기 물음·생일·편지). **이 스위트가 앞 일곱과 갈리는 자리는 ⑩**
-# — 조연 공통 31어 위에 얹는 **강림 전용 🔴 4축 가드**다.
+# 규약은 kkaebi/ken/seolhwa/scarlet/mir/luca/frosty/gangrim_arc_test를 그대로 상속한다(금칙어
+# 31어 가드·볼륨 측정·훅 존재·관문 드레인·절기 물음·생일·편지·소프트 게이트). **이 스위트가
+# 앞 여덟과 갈리는 자리는 둘**이다 — ⑩ **무호명 가드**(멜·바나 실명 평결 0)와 ⑫ **개통 계약**
+# (앞 여덟이 "아직 명단 밖"을 단언했다면 여기는 "명단이 열렸다"를 단언한다).
 #
-# ★ 왜 전용 가드가 따로 필요한가([narrative-bible §5.2] 3단 경계 · [ADR-0068] 결정 6):
-#   앞 일곱 조연은 *모르기 때문에* 중심 진실을 말하지 않는다 — 그들의 안전장치는 무지다. 강림은
-#   **봉인 계약의 집행자라 전부 안다.** 그를 막는 것은 무지가 아니라 봉인의 법칙(§2.2)뿐이고,
-#   그래서 손질 한 번이면 경계가 무너질 수 있는 유일한 인물이다. 🔴 사실 진술 4종(옥자 희생 /
-#   기억 봉인 / 마녀=연인 / 플레이어 죄목)을 **축별로 이름 붙인 단언 넷**으로 따로 잰다.
-#   ★ 축 설계의 핵심 = **「옥자」 전면 무호명**이다. §5.2 🟢 허용 예문에 옥자가 한 번도 안 나오고,
-#     🔴 4종이 전부 *옥자 또는 죄목의 명명*을 요구하므로 무호명이 가장 강한 기계 프록시다.
-#     서사상 호명이 필요해 보이면 **가드가 우선**이다(그 줄을 다시 쓴다).
+# ★ 왜 무호명 가드가 따로 필요한가([narrative-bible §5.3] · [ADR-0068] 결정 6):
+#   세레나는 **그 밤을 가장 많이 본 조연**이다(우물 안에서 실시간·처음부터 끝까지). 게다가
+#   §5.3이 "원흉(멜·바나) 보면 목격자로서 하악질"이라 적어 두었다 — 즉 **이름을 부를 동기가
+#   본문에 내장된 유일한 인물**이다. 이름을 붙이는 순간 그것은 코러스가 아니라 *다른 사람의
+#   아크에 대한 평결*이 되어 멜·바나 속죄 서사의 소유를 침범하므로(도박장 3자를 무호명으로
+#   세운 S9b-T3의 판단과 같은 자리), 하악질이 **결로만** 사는지를 기계로 잰다.
+#   ★ 동시에 **🟢 허용 상한이 실제로 서 있는지**도 잰다 — 침묵만 재면 그것은 가드가 아니라
+#     검열이고, 하악질이 아예 없는 본문도 통과해 버린다(S9b-T5가 남긴 교훈의 승계).
 #
 # 무엇을 보증하나:
 #   ① 인물 층 배선 — 레코드 1건이 실제로 등록되고(id·표시명·세이브 키·선물 채널·집/스케줄),
-#      세 스테이션이 서로 다르며 다른 주민 자리와 겹치지 않는다(칸 충돌 = 마주보기 판정 파손).
-#      집은 **T4가 명시 예약한 강림 몫**(index 4)이고, 이로써 **동편 8채가 전부 차고 남은 것은
-#      세레나 몫 강변 2채뿐**이다.
+#      세 스테이션이 서로 다르며 다른 주민 자리와 안 겹친다. 집은 **T1부터 여덟 블록이 비켜
+#      둔 강변 2채 중 서쪽**이고, 이로써 **남는 집이 강변 동 한 채(네오 몫)뿐**이다.
+#      ★ 세 자리가 **전부 물가**다(광장 0 · 카페 실내 0 — 이 인물만의 불변식).
 #   ② 일상 대사 **4단** 분기(♡0/♡1+/♡3+/♡5+) — 단 경계가 관문 경계와 맞고, 단 안에서는 같은
 #      묶음이며, 오늘 두 번째 대화는 하트에 따라 온도만 다른 한 줄이다.
 #   ③ 관문 발화 **♡1~4 네 칸 전부** 캐릭터 본문이다(placeholder 폴백 0 — 조연 4단 아크).
-#   ④ 컷신 — 4동사 안이고(거절 0) 칸마다 하나이며 **npc 동사 0**(세 구역-자리를 도는 인물이라
-#      순간이동 위험을 구조적으로 없앤다 — 앞 일곱 선례), 재생이 끝나면 관문 발화가 맨 앞에
-#      선 대화가 열린다. ♡3 암전은 **두 계단**으로 내려간다(이 인물의 카메라 문법).
-#   ⑤ 여진 편지 — ♡2·♡3·♡4가 각기 실존하는 편지를 지목하고(♡1은 없음) 발신인이 강림이며,
-#      관문 성사가 큐에 넣고 다음 날 아침 도착한다.
+#   ④ 컷신 — 4동사 안이고(거절 0) 칸마다 하나이며 **npc 동사 0**, 재생이 끝나면 관문 발화가
+#      맨 앞에 선 대화가 열린다. ★**가로(x) 오프셋을 쓰는 유일한 인물**(물결) · ♡3 암전은
+#      **한 계단**으로 떨어진다(강림의 두 계단과 정확한 대비).
+#   ⑤ 여진 편지 — ♡2·♡3·♡4가 각기 실존하는 편지를 지목하고(♡1은 없음) 발신인이 세레나이며,
+#      **세 통 다 끝에서 문장을 포기하고 노래로 넘어간다**. 관문 성사가 큐에 넣고 익일 도착.
 #   ⑥ 절기 물음 4개 — 짝이 맞고, 주 첫날 첫 대화에 서며, **0점 계약**(선택 전후 점수·stage 불변).
-#   ⑦ 생일 — 훅 본문 + Resident.BIRTHDAYS 배정(망연절 4일) + main 경로가 물린다.
+#   ⑦ 생일 — 훅 본문 + Resident.BIRTHDAYS 배정(피안절 26일) + main 경로가 물린다.
 #   ⑧ 볼륨([ADR-0068] 결정 5) — 대사 100~150줄 · 컷신 4 · 절기 4 · 편지 ≤3 · **spouse 4축**.
-#   ⑨ 봉인 법칙 구조 단언 — 31어 스캔 0 + 강림 고유 경계(불능 선언·계약 무언급·🟢 막연한 무게·
-#      무호명·♡4 자기 죄까지·Affinity 0·멜 장부 도메인 무침범).
-#   ⑩ ★★**전용 🔴 4축 가드**(이 태스크의 핵심) — 축① 옥자 희생 / 축② 기억 봉인 / 축③ 마녀=연인 /
-#      축④ 플레이어 죄목을 축별 단언으로 스캔하고, 🟢 허용 상한이 실제로 서 있는지와 🟡 확증선이
-#      **0줄**인지(T7 소유)를 함께 잰다.
-#   ⑪ 소프트 게이트 ㉠(결정 6) — 단독 태스크라 로스터 등재도 이 태스크가 했다. "미접촉이면 대기"
-#      까지 여기서 전부 잰다(프로스티 선례 동형).
-#   ⑫ 개통 계약 — confession/divorce/spouse 훅이 먼저 서 있었고, **S9b-T6이
-#      main `ROMANCE_OPEN`에 강림을 넣어 열었다**(콘텐츠 재작업 0).
+#   ⑨ 봉인 법칙 구조 단언 — 31어 스캔 0 + 세레나 고유 경계(판독 실패·자기 죄책감·1인칭·
+#      Affinity 0·낚시 도메인 무침범).
+#   ⑩ ★★**무호명 가드**(이 태스크의 핵심) — 「옥자」·「멜」·「바나」를 비롯한 전 로스터 실명이
+#      본문·편지 전량에서 0회이면서, **하악질의 결과 목격의 사실은 실제로 서 있다**.
+#   ⑪ 소프트 게이트 ㉠(결정 6) — 등재도 이 태스크가 했고, 이 한 줄로 **T1 11인 전원 등재**가
+#      완성된다("미접촉이면 대기"까지 여기서 전부 잰다).
+#   ⑫ ★★**개통 계약**([ADR-0068] 결정 2) — `ROMANCE_OPEN`이 **메인 3 + T1 11 = 14인**이고,
+#      모찌·네오 소급 훅이 실제로 붙었으며, **질투 명단은 갈라져 메인 3인 상호로 남았다**
+#      ([ADR-0066] 결정 7 자구 보존 — 조연 연애 개시 = 질투 0건).
+#   ⑬ 비약 = 세레나 **한정** 구조(명단이 아니라 한 명 · 옥자 트랙 무접촉). 실동작 사슬
+#      (의뢰 → 청혼 게이트 → 소모)은 marriage_test가 소유한다.
 #
-# 실행: ./run_tests.sh gangrim_arc   (헤드리스는 반드시 game/에서 · 순차)
+# 실행: ./run_tests.sh serena_arc   (헤드리스는 반드시 game/에서 · 순차)
 
-const KID := "gangrim"
-const NAME_KO := "강림"
-const HOUSE_IDX := 4        # 주민 집 5(RESIDENT_HOUSE_RECTS[4] — S9b-T4가 명시 예약한 강림 몫)
+const KID := "serena"
+const NAME_KO := "세레나"
+const HOUSE_IDX := 9        # 주민 집 10 = 강변 서(RESIDENT_HOUSE_RECTS[9] — T1부터 예약된 그 자리)
+const FREE_HOUSE_IDX := 10  # 남는 강변 동(네오 몫으로 비워 둔다 — 레코드 주석)
 
 var _fail := 0
 
@@ -98,7 +103,7 @@ func _initialize() -> void:
 	await _run_checks()
 
 func _run_checks() -> void:
-	print("══ S9b-T5 강림 풀 온보딩 + 전용 금칙어 세트 검증 ══")
+	print("══ S9b-T6 세레나 풀 온보딩 + 조연 연애·결혼 전원 개통 검증 ══")
 	var cleaner := SaveManager.new()
 	cleaner.delete_save()
 
@@ -119,12 +124,12 @@ func _run_checks() -> void:
 	print("── ① 인물 층 배선 ──")
 	_check("①b 표시명·세이브 키·관계 트랙·선물 채널",
 		r.display_name == NAME_KO and who.display_name() == NAME_KO
-		and r.save_key == "gangrim_affinity" and r.affinity != null and r.can_gift)
+		and r.save_key == "serena_affinity" and r.affinity != null and r.can_gift)
 	_check("①c 곱셈기 없음(조연 = 쉼터 2채널 — ADR-0008 메인 4인 독점)",
 		not r.effect_fn.is_valid())
 	_check("①d 초상화는 아직 없다(시트·초상 = S9b-T9 아트 패스)", r.portrait_stem == "")
 	var house_door: Vector2i = m.RESIDENT_HOUSE_DOORS[HOUSE_IDX]
-	_check("①e 스케줄 3단(집 앞 → 광장 → 카페) · 전부 나루 마을",
+	_check("①e 스케줄 3단(집 앞 → 낮 물가 → 저녁 물가) · 전부 나루 마을",
 		r.schedule.size() == 3
 		and r.schedule[0]["tile"] == house_door + Vector2i(0, 1)
 		and String(r.schedule[0]["region"]) == RegionCatalog.NARU_VILLAGE
@@ -134,37 +139,35 @@ func _run_checks() -> void:
 		and r.schedule[1]["tile"] != r.schedule[2]["tile"])
 	_check("①g 세 자리 어느 것도 다른 주민 자리와 안 겹친다(마주보기 판정 파손 방지)",
 		_no_station_clash(m, r))
-	var plaza_tile: Vector2i = r.schedule[1]["tile"]
-	_check("①h 낮 자리가 광장 안이다", m.NARU_PLAZA_RECT.has_point(plaza_tile))
-	_check("①i ★낮 자리가 북변 돌담 바로 아래 줄이면서 스파인 통로(x51~54)를 안 막는다",
-		plaza_tile.y == m.NARU_PLAZA_RECT.position.y
-		and (plaza_tile.x < 51 or plaza_tile.x > 54))
-	_check("①j 집 5는 동편 주거다(강변 2채 = 세레나 예약분을 안 쓴다)", _house_is_east(m, HOUSE_IDX))
-	_check("①k ★T4가 예약한 그 빈집을 쓴다(index 4 — frosty 블록 근거 ㉥)", HOUSE_IDX == 4)
-	_check("①l 앞 일곱 사람과 다른 집이다(1인 1채)", _house_unique(m, HOUSE_IDX))
-	# ★[S9b-T6 갱신] T5 시점의 단언은 "남은 빈집 = 강변 2채(세레나 몫)"였다. T6이 그 둘 중
-	#   **서쪽**을 세레나에게 주었으므로(강변 동 1채는 네오 몫으로 남는다 — 세레나 레코드 주석)
-	#   요지는 그대로 두고 수만 따라간다: **동편은 여전히 전부 찼고, 강변만 한 채 남는다.**
-	#   ⚠️ 이 단언이 이 스위트에서 T6에 영향받는 유일한 자리다(로스터 총원 단언은 resident_test
-	#   단일 출처라 여기 사본이 없다 — S9b-T1이 그렇게 정리해 둔 덕이다).
-	_check("①m ★동편이 전부 찼다 · 강변은 한 채만 남는다(서=세레나 S9b-T6 · 동=네오 몫)",
-		_east_houses_all_taken(m) and not _house_free(m, 9) and _house_free(m, 10))
+	# ★ 이 인물만의 불변식 — 물 밖에 서지 않는다(serena.gd ♡2 관문이 세우는 그 선).
+	var day_tile: Vector2i = r.schedule[1]["tile"]
+	var dusk_tile: Vector2i = r.schedule[2]["tile"]
+	_check("①h ★낮·저녁 자리가 강변 레인 위다(물가 — 광장·카페 실내에 안 선다)",
+		day_tile.y == m.RIVERSIDE_LANE_Y and dusk_tile.y == m.RIVERSIDE_LANE_Y)
+	_check("①i ★세 자리 어느 것도 광장 안이 아니다(로스터에서 유일 — 물 밖 좌표 금지)",
+		not m.NARU_PLAZA_RECT.has_point(Vector2i(r.schedule[0]["tile"]))
+		and not m.NARU_PLAZA_RECT.has_point(day_tile)
+		and not m.NARU_PLAZA_RECT.has_point(dusk_tile))
+	_check("①j ★다리 스파인(x52·53)을 한 칸도 안 막는다",
+		not m.BRIDGE_X.has(day_tile.x) and not m.BRIDGE_X.has(dusk_tile.x))
+	_check("①k ★집이 강변 주거다(T1부터 여덟 블록이 세레나 몫으로 비켜 둔 그 2채)",
+		_house_is_riverside(m, HOUSE_IDX))
+	_check("①l ★둘 중 **서쪽**이다(다리에서 가장 먼 물가 — 레코드 근거 ㉠)",
+		house_door.x < int(m.BRIDGE_X[0]))
+	_check("①m 앞 아홉 사람과 다른 집이다(1인 1채)", _house_unique(m, HOUSE_IDX))
+	_check("①n ★이제 남는 집은 강변 동 한 채뿐이다(네오 몫 — 레코드 주석 · owner 큐)",
+		_free_house_count(m) == 1 and _house_free(m, FREE_HOUSE_IDX))
 	# 선호 선물 — 러브/헤이트가 실존 아이템이고 전부 건넬 수 있어야 한다.
-	_check("①n 선호 선물 테이블(러브 5 · 헤이트 1 · 전부 실존·건넬 수 있음)",
+	_check("①o 선호 선물 테이블(러브 5 · 헤이트 1 · 전부 실존·건넬 수 있음)",
 		GiftPrefs.loves(KID).size() == 5 and GiftPrefs.hates(KID).size() == 1
 		and _prefs_valid())
-	_check("①o ★넋가루 헤이트가 유니버설(원자재=디스라이크)을 덮는다",
-		GiftPrefs.tier_of(KID, ItemCatalog.NEOKGARU) == GiftPrefs.HATE
-		and GiftPrefs.universal_tier(ItemCatalog.NEOKGARU) != GiftPrefs.HATE)
-	_check("①p ★같은 넋가루가 무골에겐 러브다(무용담의 전리품 ↔ 인도 실패의 재 — 판정은 캐릭터별 독립)",
-		GiftPrefs.tier_of("mugol", ItemCatalog.NEOKGARU) == GiftPrefs.LOVE)
-	_check("①q ★아메리카노 = 기본 4잔의 마지막 자리(초반부터 닿는 러브 — \"평평 ≠ 막힘\")",
-		GiftPrefs.tier_of(KID, MenuCatalog.AMERICANO) == GiftPrefs.LOVE
-		and MenuCatalog.BASICS.has(MenuCatalog.AMERICANO)
-		and _basics_all_claimed())
-	_check("①r 명부금강이 멜에게도 러브다(겹침 허용 — 근거가 다르면 같은 물건이 두 사람의 것)",
-		GiftPrefs.tier_of(KID, ItemCatalog.GEM_MYEONGBU_GEUMGANG) == GiftPrefs.LOVE
-		and GiftPrefs.tier_of("mel", ItemCatalog.GEM_MYEONGBU_GEUMGANG) == GiftPrefs.LOVE)
+	_check("①p ★혼불씨 헤이트가 유니버설(원자재=디스라이크)을 덮는다",
+		GiftPrefs.tier_of(KID, ItemCatalog.HONBULSSI) == GiftPrefs.HATE
+		and GiftPrefs.universal_tier(ItemCatalog.HONBULSSI) != GiftPrefs.HATE)
+	_check("①q ★같은 혼불씨가 프로스티에게도 헤이트다(까닭은 정반대 — 판정은 캐릭터별 독립)",
+		GiftPrefs.tier_of("frosty", ItemCatalog.HONBULSSI) == GiftPrefs.HATE)
+	_check("①r ★러브에 어종이 0개다(낚시 도메인 무침범 — 물고기는 선물이 아니라 기억이다)",
+		_loves_have_no_fish())
 
 	# ── ② 일상 대사 4단 ────────────────────────────────────────────────────
 	print("── ② 일상 대사 4단 ──")
@@ -212,15 +215,25 @@ func _run_checks() -> void:
 		if _has_verb(steps, "npc"):
 			npc_free = false
 	_check("④a 네 컷신 전부 4동사 안(거절 0 · 유효 스텝 있음)", verbs_ok)
-	_check("④b npc 동사 0(세 구역-자리를 도는 인물 — 순간이동 위험을 구조적으로 없앤다)", npc_free)
+	_check("④b npc 동사 0(세 물가 자리를 도는 인물 — 순간이동·물 밖 좌표 위험을 구조적으로 없앤다)",
+		npc_free)
 	_check("④c ♡3이 완전 암전이고 ♡1은 암전 0이다(등급 2의 표현력은 암전 길이뿐)",
 		_max_fade(who.heart_gate_cutscene(3)) >= 1.0
 		and _max_fade(who.heart_gate_cutscene(1)) <= 0.0)
-	_check("④d ★♡3 암전이 **두 계단**으로 내려간다(절차를 밟고 나서야 어두워지는 이 인물의 문법)",
-		_rising_fade_steps(who.heart_gate_cutscene(3)) >= 2)
-	_check("④e 카메라 이동 폭이 로스터에서 가장 작다(거의 안 움직인다 — 프로스티의 반대편)",
-		_max_cam(who.heart_gate_cutscene(3)) <= 12.0
-		and _max_cam(who.heart_gate_cutscene(1)) <= 4.0)
+	_check("④d ★♡3 암전이 **한 계단**으로 떨어진다(물은 계단을 안 밟는다 — 강림 두 계단의 대비)",
+		_rising_fade_steps(who.heart_gate_cutscene(3)) == 1)
+	var x_all := true
+	for t in [1, 2, 3, 4]:
+		if _max_cam_x(who.heart_gate_cutscene(t)) <= 0.0:
+			x_all = false
+	_check("④e ★★네 컷신 전부 **가로(x) 오프셋**을 쓴다 — 물결(로스터에서 유일)", x_all)
+	var gangrim_node: Node2D = m._resident("gangrim").node
+	var gangrim_flat := true
+	for t in [1, 2, 3, 4]:
+		if _max_cam_x(gangrim_node.heart_gate_cutscene(t)) > 0.0:
+			gangrim_flat = false
+	_check("④f ★그 유일함의 대조군 — 강림 컷신은 x가 전부 0이다(세로로만 움직인다)",
+		gangrim_flat)
 	# 실제 재생(소프트 게이트는 셋업에서 이미 열어 뒀다).
 	for t in [1, 2, 3, 4]:
 		var body: PackedStringArray = who.heart_gate_lines(t)
@@ -228,20 +241,20 @@ func _run_checks() -> void:
 		_set_heart(r, t - 1)
 		r.affinity.last_talk_day = 0
 		m._start_resident_dialogue(r)
-		_check("④f ♡%d 컷신이 대화보다 먼저 선다(진급은 이미 성사)" % t,
+		_check("④g ♡%d 컷신이 대화보다 먼저 선다(진급은 이미 성사)" % t,
 			m.cutscene != null and not m.dialogue.is_open() and r.affinity.hearts() == t)
 		_settle(m)
-		_check("④g ♡%d 재생이 끝나면 관문 발화가 맨 앞에 선 대화가 열린다" % t,
+		_check("④h ♡%d 재생이 끝나면 관문 발화가 맨 앞에 선 대화가 열린다" % t,
 			m.cutscene == null and m.dialogue.is_open()
 			and m.dialogue.line() == String(body[0]))
 		_drain(m)
-	_check("④h 네 번의 재생 뒤에도 화면·시계 원복(암전 잔류 0)",
+	_check("④i 네 번의 재생 뒤에도 화면·시계 원복(암전 잔류 0)",
 		is_equal_approx(m.fade.modulate.a, 0.0) and m.clock.running
 		and m._cam.offset.is_equal_approx(Vector2.ZERO) and m.cutscene == null)
 	# 재구애(본 비트 잔존) = 조용한 진급(ADR-0022).
 	_set_heart(r, 3)
 	var regate: PackedStringArray = m._try_heart_promotion(r)
-	_check("④i 본 비트는 재지급 없음(발화 0 · 진급은 됨)",
+	_check("④j 본 비트는 재지급 없음(발화 0 · 진급은 됨)",
 		regate.is_empty() and r.affinity.hearts() == 4)
 
 	# ── ⑤ 여진 편지 ────────────────────────────────────────────────────────
@@ -255,9 +268,9 @@ func _run_checks() -> void:
 	for t in [2, 3, 4]:
 		if Mailbox.sender_of(String(who.heart_gate_letter(t))) != NAME_KO:
 			sender_ok = false
-	_check("⑤b 세 통 다 발신인이 강림이다", sender_ok)
-	_check("⑤c ★세 통 다 공문 서식(「」)을 쓴다 — 편지가 이 인물의 갑옷이다",
-		_letters_use_formal_marks())
+	_check("⑤b 세 통 다 발신인이 세레나다", sender_ok)
+	_check("⑤c ★세 통 다 **끝에서 문장을 포기하고 노래로 넘어간다**(글보다 소리가 먼저인 존재)",
+		_letters_end_in_song())
 	# 실발송 — 판을 새로 깔고 ♡2 관문을 성사시켜 큐 → 익일 도착을 태운다.
 	m.mailbox.outbox = PackedStringArray()
 	m.mailbox.inbox = PackedStringArray()
@@ -317,12 +330,12 @@ func _run_checks() -> void:
 	_check("⑦a 생일 훅 본문(placeholder 폴백 아님)",
 		bday.size() >= 3 and String(bday[0]) != m.BIRTHDAY_PLACEHOLDER_LINE)
 	var b: Array = Resident.birthday_of(KID)
-	_check("⑦b 생일 배정이 살아 있다(망연절 4일 — 셈하는 절기 · 다들 비껴 두는 나흗날)",
-		b.size() == 2 and int(b[0]) == 2 and int(b[1]) == 4)
+	_check("⑦b 생일 배정이 살아 있다(피안절 26일 — 물길이 다 풀린 뒤의 자리)",
+		b.size() == 2 and int(b[0]) == 0 and int(b[1]) == 26)
 	var bday_day := _find_birthday_day(KID)
 	_check("⑦c 그 날짜가 실제로 이 사람 생일로 판정된다",
 		bday_day > 0 and r.is_birthday_on(bday_day))
-	_check("⑦d 그 날에 생일인 사람이 강림 하나다(달력 무충돌)",
+	_check("⑦d 그 날에 생일인 사람이 세레나 하나다(달력 무충돌)",
 		Resident.birthday_on_day(bday_day) == KID)
 	_set_idle(r, 3)                              # 관문이 안 서는 상태(생일이 대화의 사건이 되게)
 	m.clock.day = bday_day
@@ -350,92 +363,90 @@ func _run_checks() -> void:
 		String(who.LINE_AGAIN) != String(who.LINE_AGAIN_LOVER)
 		and String(who.LINE_AGAIN_LOVER) != String(who.LINE_AGAIN_SPOUSE))
 
-	# ── ⑨ 봉인 법칙 — 조연 공통 31어 + 강림 고유 구조 ──────────────────────
+	# ── ⑨ 봉인 법칙 — 조연 공통 31어 + 세레나 고유 구조 ────────────────────
 	print("── ⑨ 봉인 법칙(공통 31어 + 구조) ──")
-	# 기존 아크 스위트(미호·멜·바나·T1 2인·깨비·켄·설화·스칼렛·미르·루카·프로스티)의 금칙어
-	# **31어를 그대로 상속**한다. 검열이 아니라 회귀 가드다 — 나중 손질이 평결 문장을 흘려 넣으면 걸린다.
+	# 기존 아크 스위트(미호·멜·바나·T1 2인·깨비·켄·설화·스칼렛·미르·루카·프로스티·강림)의
+	# 금칙어 **31어를 그대로 상속**한다. 검열이 아니라 회귀 가드다.
 	var offender := _scan_forbidden(who, FORBIDDEN)
 	_check("⑨a 금칙어 %d어 스캔 0(본문 + 편지 전량)" % FORBIDDEN.size(), offender == "")
 	if offender != "":
 		print("      ↳ 걸린 줄: " + offender)
 	var g3 := _joined(who.GATE_HEART_3)
-	_check("⑨b ♡3은 **자기 파편**이다(🟢 허용 상한 = §5.2 자구 그대로)",
-		g3.contains("율법을 어긴 계약을 했다"))
-	_check("⑨c ★침묵이 성격이 아니라 **세계 규칙**임을 본인이 밝힌다(봉인의 법칙 §2.2)",
-		g3.contains("내 입도 같이 묶었다"))
-	_check("⑨d ★계약의 내용·대상을 말하지 않는다(못 하는 것이지 안 하는 것이 아니다)",
-		g3.contains("무엇을 걸었는지는 말하지 않는다") and g3.contains("누구와 했는지도"))
-	_check("⑨e 🟢 \"네게 빚이 있다\"는 **막연한 무게까지만**(근거를 끝내 안 붙인다)",
-		g3.contains("네게 빚이 있다") and g3.contains("무슨 빚인지는 말할 수 없다"))
-	_check("⑨f ★♡3이 아무도 호명하지 않는다(그 밤의 다른 조각은 그들 것 — 라쇼몽 구조)",
-		not _names_any(g3))
+	_check("⑨b ★♡3은 **판독하지 않는다**(본 것은 모양·색까지 · 그게 무엇이었는지는 모른다)",
+		g3.contains("뭐였는지는 아직도 몰라") and g3.contains("이름을 못 붙이겠어"))
+	_check("⑨c ★죄책감은 자기 것뿐이다(방관 = 생전 죄와 같은 모양 — ♡4로 이어지는 실)",
+		g3.contains("나는 물 밖으로 나가지 않았어"))
+	_check("⑨d 목격이 후회로만 남는다(코러스는 증거를 내놓지 판결을 내놓지 않는다)",
+		g3.contains("보기만 했어"))
 	var g4 := _joined(who.GATE_HEART_4)
-	_check("⑨g ♡4는 **자기 생전 죄까지만**(줄 수 있던 유예를 안 준 차가움)",
-		g4.contains("유예") and g4.contains("나는 주지 않았다") and g4.contains("내 죄다"))
-	_check("⑨h ♡4가 플레이어의 죄를 겨누지 않는다(메인 3인 조각의 독점 영역)",
-		not g4.contains("네 죄") and not g4.contains("네가 지은"))
-	_check("⑨i 본문은 Affinity를 모른다(0점 계약의 구조적 근거)",
+	_check("⑨e ♡4는 **자기 생전 죄까지만**(부르기만 하고 안 돌아본 방관)",
+		g4.contains("돌아본 적이 없어") and g4.contains("그게 내 죄야"))
+	_check("⑨f ★♡4가 끝까지 **1인칭**이다(\"너도\"·\"우리는\"으로 안 번진다 — 메인 조각의 독점 영역)",
+		not g4.contains("너도") and not g4.contains("우리는")
+		and not g4.contains("네 죄") and not g4.contains("네가 지은"))
+	_check("⑨g 본문은 Affinity를 모른다(0점 계약의 구조적 근거)",
 		not _src().contains("Affinity") and not _src().contains("add_points"))
-	_check("⑨j 명부·인도를 메카닉으로 쓰지 않는다(백스토리 한정 — effect_fn 0)",
+	_check("⑨h 목소리·물을 메카닉으로 쓰지 않는다(백스토리 한정 — effect_fn 0)",
 		not r.effect_fn.is_valid() and not _src().contains("effect_fn"))
-	# ⚠️ 화폐 단위 "냥"은 **키워드로 못 쓴다** — "그냥"에 부분 일치해 오탐이 난다(첫 실행이 검출).
-	#    값 어휘는 장부·매출·이자·탕감으로 잰다. "빚"도 단독으로는 못 쓴다(🟢 "네게 빚이 있다"가
-	#    정당한 본문이라 — 금액을 뜻하는 결합형만 넣는다).
-	_check("⑨k ★멜의 장부 도메인을 침범하지 않는다(세는 것은 언제나 사람 수 — 값·매출 0)",
-		_scan_words(_corpus(who), ["장부", "매출", "이자", "빚 탕감", "골드"]) == "")
+	# ⚠️ 낱말은 **서사상 정당한 쓰임과 충돌하지 않는 것만** 고른다 — 예: "물"은 이 인물의 전부라
+	#    당연히 못 쓰고, "찌"는 「모찌」·「어찌」에 부분 일치해 오탐이 난다(넣지 않는다).
+	_check("⑨i ★낚시 도메인을 침범하지 않는다(물에서 아는 것은 언제나 *소리*다)",
+		_scan_words(_corpus(who), ["낚시", "미끼", "물때", "어획", "손맛", "낚아"]) == "")
 
-	# ── ⑩ ★★전용 🔴 4축 가드([narrative-bible §5.2] · [ADR-0068] 결정 6) ───
-	print("── ⑩ 강림 전용 🔴 4축 가드 ──")
-	# ★ 이 절이 이 스위트의 존재 이유다. 조연 공통 31어(⑨a)는 *평결 문장*을 막는 목록이고, 여기는
-	#   **사실 진술 4종**을 축별로 막는다 — 강림만 그 넷을 실제로 알고 있기 때문이다.
-	#   축마다 이름을 붙여 따로 재는 것은, 걸렸을 때 *어느 경계가 무너졌는지*가 즉시 보이게 하려는
-	#   설계다(한 덩이 스캔이면 "무언가 걸렸다"까지밖에 안 나온다).
-	var corpus := _corpus(who)     # 대사 전량 + 절기 물음 + 강림 발신 편지 전량
-	for axis_name in TRUTH_AXES:
-		var hit := _scan_words(corpus, TRUTH_AXES[axis_name] as Array)
+	# ── ⑩ ★★무호명 가드([narrative-bible §5.3] · [ADR-0068] 결정 6) ────────
+	print("── ⑩ 무호명 가드 ──")
+	# ★ 이 절이 이 스위트의 존재 이유다. §5.3이 "원흉(멜·바나) 보면 하악질"이라 적어 둔 탓에
+	#   이 인물만 **이름을 부를 동기가 본문에 내장**돼 있다 — 그래서 실명을 축으로 따로 잰다.
+	var corpus := _corpus(who)     # 대사 전량 + 절기 물음 + 세레나 발신 편지 전량
+	for axis_name in NAME_AXES:
+		var hit := _scan_words(corpus, NAME_AXES[axis_name] as Array)
 		_check("⑩ %s 스캔 0" % axis_name, hit == "")
 		if hit != "":
-			print("      ↳ 걸린 낱말: " + hit)
-	_check("⑩e ★「옥자」 전면 무호명(4종이 전부 옥자의 명명을 요구한다 — 가장 강한 기계 프록시)",
-		not corpus.contains("옥자"))
-	_check("⑩f 🟢 허용 상한이 **실제로 서 있다**(파편까지는 말한다 — 침묵만 재면 가드가 아니다)",
-		corpus.contains("율법을 어긴 계약을 했다") and corpus.contains("네게 빚이 있다"))
-	_check("⑩g ★🟡 확증선이 **0줄**이다(B5 자각 후의 것 — S9b-T7 소유 · 주석 예약만)",
-		not corpus.contains("마침내") and not corpus.contains("닿았구나")
-		and not corpus.contains("이제 알겠구나"))
-	_check("⑩h ★척추를 이 파일이 소유하지 않는다(B4~B7·spine은 main/S9b-T7의 것)",
+			print("      ↳ 걸린 이름: " + hit)
+	# ★ 침묵만 재면 가드가 아니라 검열이다 — 하악질도 목격도 **실제로 서 있어야** 한다.
+	_check("⑩d ★🟢 하악질이 **결로** 실재한다(이름 없이 몸이 먼저 반응한다)",
+		corpus.contains("목이 저절로 닫혀") and corpus.contains("목이 잠깐 잠긴다"))
+	_check("⑩e ★🟢 목격의 사실도 실재한다(무호명이 곧 무내용이 아니다)",
+		corpus.contains("불이 났어") and corpus.contains("우물 테두리 위로"))
+	_check("⑩f ★척추를 이 파일이 소유하지 않는다(B4~B7·spine은 main/S9b-T7의 것)",
 		not _src().contains("SPINE") and not _src().contains("spine")
 		and not _src().contains("_spine_bits"))
 
-	# ── ⑪ ★소프트 게이트 ㉠(결정 6 — 등재도 이 태스크가 했다) ──────────────
+	# ── ⑪ ★소프트 게이트 ㉠(결정 6 — 이 한 줄로 T1 11인 전원 등재 완성) ────
 	print("── ⑪ 소프트 게이트 ㉠ ──")
-	_check("⑪a 로스터에 강림이 등재돼 있다", m.CHORUS_GATE_ROSTER.has(KID))
-	_check("⑪b ♡1·♡2는 언제나 게이트 밖(칸 자체가 대상이 아니다 — \"평평 ≠ 막힘\")",
+	_check("⑪a 로스터에 세레나가 등재돼 있다", m.CHORUS_GATE_ROSTER.has(KID))
+	_check("⑪b ★T1 11인이 **전원** 등재됐다(§6.2 안전장치 ㉠ 완성) · 점주는 밖이다",
+		_roster_has_all_t1(m) and m.CHORUS_GATE_ROSTER.size() == 11
+		and not m.CHORUS_GATE_ROSTER.has("boatman")
+		and not m.CHORUS_GATE_ROSTER.has("ongi")
+		and not m.CHORUS_GATE_ROSTER.has("pulmu")
+		and not m.CHORUS_GATE_ROSTER.has("mugol"))
+	_check("⑪c ♡1·♡2는 언제나 게이트 밖(칸 자체가 대상이 아니다 — \"평평 ≠ 막힘\")",
 		m._chorus_gate_ok(KID, 1) and m._chorus_gate_ok(KID, 2))
 	_set_mains(m, 0)
-	_check("⑪c ★메인 미접촉이면 ♡3 판정이 대기다(스포일러 순서 — 로스터 최고 수위라 가장 중요)",
+	_check("⑪d ★메인 미접촉이면 ♡3 판정이 대기다(스포일러 순서)",
 		not m._chorus_gate_ok(KID, m.CHORUS_GATE_HEART))
 	m._heart_bits = {}
 	_set_heart(r, 2)
 	r.affinity.last_talk_day = 0
 	var held: PackedStringArray = m._try_heart_promotion(r)
-	_check("⑪d ★대기 = 점수 만충 유지 · 발화 0 · 진급 0 · 비트 0(deed 미달과 같은 대기)",
+	_check("⑪e ★대기 = 점수 만충 유지 · 발화 0 · 진급 0 · 비트 0(deed 미달과 같은 대기)",
 		held.is_empty() and r.affinity.hearts() == 2
 		and r.affinity.points == Affinity.MAX_POINTS and not m._heart_bit_seen(KID, 3))
 	# 메인 1인만 ♡3이어도 열린다(AND 아님 — OR 1인).
 	_set_idle(m._resident("bana"), m.CHORUS_GATE_MAIN_STAGE)
-	_check("⑪e 메인 1인만 ♡3이어도 판정이 통과다(OR — 조연이 메인 진행의 인질이 되지 않는다)",
+	_check("⑪f 메인 1인만 ♡3이어도 판정이 통과다(OR — 조연이 메인 진행의 인질이 되지 않는다)",
 		m._chorus_gate_ok(KID, m.CHORUS_GATE_HEART))
 	r.affinity.last_talk_day = 0
 	m._start_resident_dialogue(r)
 	_settle(m)
-	_check("⑪f ★그 상태에서 ♡3 그날 밤 자기 파편이 실제로 열린다(비트 기록 포함)",
+	_check("⑪g ★그 상태에서 ♡3 그날 밤 목격이 실제로 열린다(비트 기록 포함)",
 		r.affinity.hearts() == 3 and m._heart_bit_seen(KID, 3)
 		and m.dialogue.line() == String(who.heart_gate_lines(3)[0]))
 	_drain(m)
 
-	# ── ⑫ 휴면 콘텐츠 계약 ─────────────────────────────────────────────────
-	print("── ⑫ 휴면 콘텐츠 ──")
+	# ── ⑫ ★★개통 계약([ADR-0068] 결정 2) ──────────────────────────────────
+	print("── ⑫ 조연 연애·결혼 전원 개통 ──")
 	_check("⑫a 연애·배우자·이혼 훅이 전부 있다(본문 선행)",
 		who.has_method("confession_lines") and who.has_method("divorce_lines")
 		and who.has_method("spouse_lines")
@@ -444,21 +455,91 @@ func _run_checks() -> void:
 		and who.divorce_lines().size() >= 3)
 	_check("⑫b 수락·거절 본문이 서로 다르다",
 		who.confession_lines(true) != who.confession_lines(false))
-	_check("⑫c ★[S9b-T6 개통 반영] main ROMANCE_OPEN에 **들어왔다** — 본문 재작업 0으로 열렸다(훅이 먼저·명단이 나중이라는 그 계약의 실물)",
-		m.ROMANCE_OPEN.has(KID))
+	# ★ 앞 여덟 스위트가 "아직 명단 밖"을 단언한 그 자리의 **반대편**이다.
+	_check("⑫c ★★ROMANCE_OPEN = 메인 3 + T1 11 = 14인(앞 여덟 태스크가 약속한 그 명단 한 줄)",
+		m.ROMANCE_OPEN.size() == 14 and _romance_open_has_all(m))
+	_check("⑫d 점주 4인·옥자·주방요괴는 명단 밖이다(T1 티어가 아니다 · 옥자는 deed 단독 채널)",
+		not m.ROMANCE_OPEN.has("boatman") and not m.ROMANCE_OPEN.has("ongi")
+		and not m.ROMANCE_OPEN.has("pulmu") and not m.ROMANCE_OPEN.has("mugol")
+		and not m.ROMANCE_OPEN.has("okja") and not m.ROMANCE_OPEN.has("kitchen_youkai"))
+	# 모찌·네오 소급 — 훅이 실제로 붙었고, 결혼 후 대사가 일상 대사와 갈린다.
+	var mochi_node: Node2D = m._resident("mochi").node
+	var neo_node: Node2D = m._resident("neo").node
+	_check("⑫e ★모찌·네오 소급 주입 — 4축 훅이 실제로 붙었다(비인간 결 유지)",
+		mochi_node.has_method("confession_lines") and mochi_node.has_method("divorce_lines")
+		and mochi_node.has_method("spouse_lines") and mochi_node.SPOUSE_AXES.size() == 4
+		and neo_node.has_method("confession_lines") and neo_node.has_method("divorce_lines")
+		and neo_node.has_method("spouse_lines") and neo_node.SPOUSE_AXES.size() == 4)
+	_check("⑫f ★결혼 후 대사가 ♡5 일상 대사와 다르다(연인 tier와 배우자 tier의 공존 정리)",
+		mochi_node.spouse_lines(1) != mochi_node.lines(5, true)
+		and neo_node.spouse_lines(1) != neo_node.lines(5, true)
+		and String(mochi_node.LINE_AGAIN_SPOUSE) != String(mochi_node.LINE_AGAIN_BOND)
+		and String(neo_node.LINE_AGAIN_SPOUSE) != String(neo_node.LINE_AGAIN_BOND))
+	# ★ 질투 — [ADR-0066] 결정 7 자구("안 뽑힌 **메인 2인**")를 개통이 안 넓혔는가.
+	_check("⑫g ★★질투 명단이 갈라져 메인 3인으로 남았다(결정 7 자구 — 임의 확장 금지)",
+		m.JEALOUSY_ROSTER.size() == 3 and m.JEALOUSY_ROSTER.has("miho")
+		and m.JEALOUSY_ROSTER.has("mel") and m.JEALOUSY_ROSTER.has("bana")
+		and m.ROMANCE_OPEN.size() != m.JEALOUSY_ROSTER.size())
+	# 실동작 — 조연(세레나)과 연애를 개시해도 메인 3인이 한 점도 안 깎인다.
+	_set_mains(m, 2)
+	m._romance_partner = ""
+	m._jealousy = {}
+	var mains_before := []
+	for mid in m.CHORUS_GATE_MAINS:
+		mains_before.append(m._resident(String(mid)).affinity.points)
+	_set_heart(r, Affinity.MAX_HEARTS - 1)
+	_check("⑫h 조연도 ♡4 만충이면 고백 제안이 선다(개통의 실물)",
+		m._romance_offer_available(r))
+	# ★ 플레이어와 같은 경로로 간다 — 제안이 선 대화를 열고 그 자리에서 [F]를 결행한다
+	#   (romance_test 선례. 대화가 안 열려 있으면 수락 발화를 잴 수 없다).
+	r.affinity.last_talk_day = 0
+	m._start_resident_dialogue(r)
+	_settle(m)
+	_check("⑫h-2 대화 첫 줄이 고백 제안이다(제안 rid 세팅)",
+		m.dialogue.is_open() and m.dialogue.line() == m.CONFESS_OFFER_LINE
+		and m._confess_rid == KID)
+	m._resolve_confession(KID)
+	var mains_after := []
+	for mid in m.CHORUS_GATE_MAINS:
+		mains_after.append(m._resident(String(mid)).affinity.points)
+	_check("⑫i ★조연 연애 개시 = 연인 성립 + **질투 0건**(뽑힌 자가 메인이 아니면 \"메인 2인\"이 없다)",
+		m._romance_partner == KID and r.affinity.hearts() == Affinity.MAX_HEARTS
+		and mains_after == mains_before and m._jealousy.is_empty())
+	_check("⑫j 수락 발화가 캐릭터 본문이다(placeholder 아님)",
+		m.dialogue.is_open()
+		and m.dialogue.line() == String(who.confession_lines(true)[0])
+		and m.dialogue.line() != m.CONFESS_ACCEPT_LINE)
+	_drain(m)
+
+	# ── ⑬ 비약 = 세레나 한정 구조([narrative-bible §5.3]) ───────────────────
+	print("── ⑬ 뭍의 비약(구조) ──")
+	# ★ 실동작 사슬(의뢰 → 청혼 게이트 → 소모)은 marriage_test가 소유한다. 여기서 재는 것은
+	#   **범위**다 — 명단이 아니라 한 명이고, 옥자 트랙을 한 칸도 안 건드린다.
+	_check("⑬a 비약이 필요한 사람은 **한 명**이다(명단이 아니라 rid 하나 — 과설계 금지)",
+		String(m.ELIXIR_RID) == KID)
+	_check("⑬b 아이템이 실존하고 이름이 쓰임을 따른다(KEYS = 비매·유니크·선물 불가)",
+		ItemCatalog.has_item(ItemCatalog.OKJA_ELIXIR)
+		and ItemCatalog.name_of(ItemCatalog.OKJA_ELIXIR) == "뭍의 비약"
+		and not GiftPrefs.giftable(ItemCatalog.OKJA_ELIXIR))
+	_check("⑬c 연애 전엔 의뢰가 안 열린다 · 세레나 연인 + 부적 보유 뒤에야 열린다(순서가 곧 안내)",
+		_elixir_gate_order(m))
+	_check("⑬d ★옥자 트랙 불가침 — 옥자는 여전히 관계 트랙이 없다(비약은 *서비스*다)",
+		m._resident("okja").affinity == null)
+	_check("⑬e ★척추 원장도 무접촉(비약이 B4~B7 비트를 한 칸도 안 건드린다)",
+		m._spine_bits == 0)
 
 	m.free()
 	cleaner.delete_save()
 	cleaner.free()
 
 	if _fail == 0:
-		print("══ gangrim_arc_test 전체 통과 ══")
+		print("══ serena_arc_test 전체 통과 ══")
 	else:
-		print("══ gangrim_arc_test 실패 %d건 ══" % _fail)
+		print("══ serena_arc_test 실패 %d건 ══" % _fail)
 	quit(1 if _fail > 0 else 0)
 
 # ── 금칙어(31어 — 조연 공통) ────────────────────────────────────────────────
-# 앞 일곱 조연 스위트와 **같은 배열**이다(조연 파일마다 상속하는 그 목록).
+# 앞 여덟 조연 스위트와 **같은 배열**이다(조연 파일마다 상속하는 그 목록).
 const FORBIDDEN := [
 	# 플레이어 죄목의 평결(공통 18어)
 	"네 죄는", "너의 죄는", "네가 지은 죄", "네 죄목", "그러니까 네가",
@@ -472,24 +553,21 @@ const FORBIDDEN := [
 	"기억을 봉인", "봉인된 기억", "옥자는 마녀가 됐", "옥자의 연인",
 ]
 
-# ── ★★강림 전용 🔴 4축([narrative-bible §5.2] 3단 경계 🔴 · [ADR-0068] 결정 6) ──
-# 공통 31어가 *특정 문장*을 막는다면 이쪽은 **개념 축**을 막는다 — 강림만 4종을 실제로 알고 있어
-# 우회 표현이 나올 수 있기 때문이다. 축마다 이름이 붙어 있어 걸리면 어느 경계가 무너졌는지가
-# 즉시 보인다. ⚠️ 낱말은 **서사상 정당한 쓰임과 충돌하지 않는 것만** 고른다(예: "기억"은 ♡4 편지의
-# "이름은 기억나지 않는다"가 정당하므로 단독으로 안 넣고 "기억을 …" 결합형만 넣는다).
-const TRUTH_AXES := {
-	"⑩a 축① 옥자의 희생": [
-		"옥자", "희생", "자기를 바쳐", "제 몸을 바쳐", "대신 죽", "목숨을 내어", "제 목숨을",
+# ── ★★무호명 축([narrative-bible §5.3] · [ADR-0068] 결정 6) ────────────────
+# 공통 31어가 *특정 문장*을 막는다면 이쪽은 **이름 그 자체**를 막는다 — 세레나만 부를 동기가
+# 본문에 내장돼 있기 때문이다(§5.3 "원흉을 보면 하악질" · 기다리던 사람 · 우물 위로 지나간 것).
+# 축마다 이름이 붙어 있어 걸리면 어느 경계가 무너졌는지가 즉시 보인다.
+# ⚠️ **세레나 자신의 이름은 넣지 않는다** — 지문("세레나가 …")이 정당한 쓰임이라서다
+#    (gangrim_arc_test가 "강림"을 뺀 것과 같은 규약).
+const NAME_AXES := {
+	"⑩a 축① 옥자 무호명(중심 진실 4종이 전부 이 명명을 요구한다)": [
+		"옥자", "마녀", "약사", "사장님",
 	],
-	"⑩b 축② 기억 봉인": [
-		"봉인", "기억을 지", "기억을 가라앉", "기억을 거둬", "기억을 묻", "잊게 만들", "잊게 했",
+	"⑩b 축② 원흉 무호명(멜·바나 아크의 소유 — 하악질은 결로만 산다)": [
+		"멜", "바나", "불을 낸", "문을 잠근", "습격한",
 	],
-	"⑩c 축③ 마녀 = 연인": [
-		"마녀", "연인", "정인", "사랑하던 사이", "혼례를 약속", "부부의 연",
-	],
-	"⑩d 축④ 플레이어의 죄목": [
-		"네 죄", "너의 죄", "네가 지은", "죄목", "네가 외면", "네가 잊", "네가 태운",
-		"네가 방치", "네가 버린",
+	"⑩c 축③ 그 밤의 다른 조각 무호명(라쇼몽 구조 — 남의 조각을 대신 말하지 않는다)": [
+		"미호", "깨비", "켄", "설화", "스칼렛", "미르", "루카", "프로스티", "모찌", "네오", "강림",
 	],
 }
 
@@ -508,7 +586,7 @@ func _max_fade(steps: Array) -> float:
 			top = maxf(top, float((s as Dictionary).get("to", 0.0)))
 	return top
 
-# 암전이 **올라가는** 단계의 수(0 → 0.7 → 1.0 이면 2). 한 번에 떨어뜨리지 않는 이 인물의 문법.
+# 암전이 **올라가는** 단계의 수(0 → 1.0 이면 1). 계단을 안 밟는 이 인물의 문법.
 func _rising_fade_steps(steps: Array) -> int:
 	var n := 0
 	var cur := 0.0
@@ -521,17 +599,17 @@ func _rising_fade_steps(steps: Array) -> int:
 		cur = to
 	return n
 
-# 그 컷신이 쓰는 카메라 오프셋의 최대 절댓값(픽셀).
-func _max_cam(steps: Array) -> float:
+# 그 컷신이 쓰는 카메라 **가로** 오프셋의 최대 절댓값(픽셀) — 물결의 기계 지표.
+func _max_cam_x(steps: Array) -> float:
 	var top := 0.0
 	for s in steps:
 		if typeof(s) != TYPE_DICTIONARY or String((s as Dictionary).get("verb", "")) != "cam":
 			continue
 		var off: Vector2 = (s as Dictionary).get("offset", Vector2.ZERO)
-		top = maxf(top, maxf(absf(off.x), absf(off.y)))
+		top = maxf(top, absf(off.x))
 	return top
 
-# 강림의 세 스테이션이 다른 주민 누구의 스케줄 칸과도 안 겹치는가.
+# 세레나의 세 스테이션이 다른 주민 누구의 스케줄 칸과도 안 겹치는가.
 func _no_station_clash(m: Node, mine: Resident) -> bool:
 	var mine_tiles := []
 	for e in mine.schedule:
@@ -544,10 +622,10 @@ func _no_station_clash(m: Node, mine: Resident) -> bool:
 				return false
 	return true
 
-# 그 집이 동편 주거(강변 예약분이 아님)인가 — 강변 판정은 main의 RIVERSIDE_ZONE_Y가 소유한다.
-func _house_is_east(m: Node, idx: int) -> bool:
+# 그 집이 강변 주거인가 — 판정은 main의 RIVERSIDE_ZONE_Y가 소유한다(사본을 안 만든다).
+func _house_is_riverside(m: Node, idx: int) -> bool:
 	var rect: Rect2i = m.RESIDENT_HOUSE_RECTS[idx]
-	return rect.position.y < m.RIVERSIDE_ZONE_Y
+	return rect.position.y >= m.RIVERSIDE_ZONE_Y
 
 # 그 집에 아무도 안 산다(어느 주민의 아침 자리도 그 문 아래 칸이 아니다).
 func _house_free(m: Node, idx: int) -> bool:
@@ -558,7 +636,7 @@ func _house_free(m: Node, idx: int) -> bool:
 				return false
 	return true
 
-# 그 집을 쓰는 주민이 강림 하나인가(1인 1채).
+# 그 집을 쓰는 주민이 세레나 하나인가(1인 1채).
 func _house_unique(m: Node, idx: int) -> bool:
 	var want: Vector2i = m.RESIDENT_HOUSE_DOORS[idx] + Vector2i(0, 1)
 	var n := 0
@@ -569,14 +647,13 @@ func _house_unique(m: Node, idx: int) -> bool:
 				break
 	return n == 1
 
-# 동편 주거 8채가 전부 찼는가(S9b-T5로 조연 8인이 동편을 다 채운다 — 남은 것은 강변 2채뿐).
-func _east_houses_all_taken(m: Node) -> bool:
+# 아직 아무도 안 사는 집의 수(S9b-T6 뒤엔 강변 동 한 채만 남는다 — 네오 몫).
+func _free_house_count(m: Node) -> int:
+	var n := 0
 	for i in m.RESIDENT_HOUSE_RECTS.size():
-		if not _house_is_east(m, i):
-			continue
 		if _house_free(m, i):
-			return false
-	return true
+			n += 1
+	return n
 
 # 러브·헤이트 전량이 실존 아이템이고 건넬 수 있는가(선물 채널이 실제로 성립하는가).
 func _prefs_valid() -> bool:
@@ -586,17 +663,67 @@ func _prefs_valid() -> bool:
 				return false
 	return true
 
-# 기본 4잔이 전부 누군가의 러브·헤이트로 배정됐는가(아메리카노가 마지막 빈자리였다 — ①q).
-func _basics_all_claimed() -> bool:
-	for drink in MenuCatalog.BASICS:
-		var claimed := false
-		for rid in GiftPrefs.OVERRIDES:
-			if GiftPrefs.loves(String(rid)).has(drink) or GiftPrefs.hates(String(rid)).has(drink):
-				claimed = true
-				break
-		if not claimed:
+# 러브에 어종이 하나도 없는가(낚시 도메인 무침범의 데이터 표현 — ①r).
+func _loves_have_no_fish() -> bool:
+	for id in GiftPrefs.loves(KID):
+		if FishCatalog.ids().has(String(id)):
 			return false
 	return true
+
+# 세레나 발신 편지 세 통이 전부 **끝줄에서 노래로 넘어가는가**(⑤c).
+func _letters_end_in_song() -> bool:
+	var n := 0
+	for id in Mailbox.LETTERS:
+		if String(Mailbox.LETTERS[id].get("from", "")) != NAME_KO:
+			continue
+		n += 1
+		var body: Array = Mailbox.LETTERS[id].get("lines", []) as Array
+		if body.is_empty():
+			return false
+		var last := String(body[body.size() - 1])
+		if not (last.contains("소절") or last.contains("음 높이")):
+			return false
+	return n >= 2
+
+# 소프트 게이트 로스터가 [narrative-bible] T1 11인을 전원 담고 있는가(⑪b).
+func _roster_has_all_t1(m: Node) -> bool:
+	for rid in ["mochi", "neo", "kkaebi", "ken", "seolhwa", "scarlet", "mir", "luca",
+			"frosty", "gangrim", "serena"]:
+		if not m.CHORUS_GATE_ROSTER.has(rid):
+			return false
+	return true
+
+# 연애 개통 명단이 메인 3 + T1 11을 전원 담고 있는가(⑫c).
+func _romance_open_has_all(m: Node) -> bool:
+	for rid in ["miho", "mel", "bana",
+			"mochi", "neo", "kkaebi", "ken", "seolhwa", "scarlet", "mir", "luca",
+			"frosty", "gangrim", "serena"]:
+		if not m.ROMANCE_OPEN.has(rid):
+			return false
+	return true
+
+# 비약 의뢰의 **노출 순서**가 서는가(⑬c) — 연애 전 잠금 / 부적 미보유면 부적이 먼저 /
+# 부적을 쥐고 나서야 비약. 상태를 직접 세우고 훅만 읽는다(구매는 marriage_test 소관).
+func _elixir_gate_order(m: Node) -> bool:
+	var saved_partner: String = m._romance_partner
+	var ok := true
+	m._romance_partner = ""
+	if m._elixir_quest_open():
+		ok = false                       # 연애 전엔 안 열린다
+	m._romance_partner = "miho"
+	if m._elixir_quest_open():
+		ok = false                       # 상대가 세레나가 아니면 영영 안 열린다
+	m._romance_partner = KID
+	if m._elixir_quest_open():
+		ok = false                       # 부적을 아직 안 받았으면 부적이 먼저다
+	if not m._charm_quest_open():
+		ok = false
+	m.inventory.add_item(ItemCatalog.WEDDING_CHARM, 1)
+	if not m._elixir_quest_open():
+		ok = false                       # 부적을 쥐면 그때 열린다
+	m.inventory.remove_item(ItemCatalog.WEDDING_CHARM, 1)
+	m._romance_partner = saved_partner
+	return ok
 
 # 지금 열린 대화에 그 절기 물음이 실려 있는가.
 func _has_question(m: Node, q: Dictionary) -> bool:
@@ -662,7 +789,7 @@ func _body_packs(who: Node2D) -> Array:
 		out.append(ax)
 	return out
 
-# 강림 발신 편지의 모든 줄(금칙어·4축 스캔에 합류 — 편지도 캐릭터의 몫이다).
+# 세레나 발신 편지의 모든 줄(금칙어·무호명 스캔에 합류 — 편지도 캐릭터의 몫이다).
 func _letter_lines() -> Array:
 	var out: Array = []
 	for id in Mailbox.LETTERS:
@@ -670,23 +797,8 @@ func _letter_lines() -> Array:
 			out.append_array(Mailbox.LETTERS[id].get("lines", []) as Array)
 	return out
 
-# 강림 발신 편지 세 통이 전부 공문 서식(「」)을 쓰는가(⑤c).
-func _letters_use_formal_marks() -> bool:
-	var n := 0
-	for id in Mailbox.LETTERS:
-		if String(Mailbox.LETTERS[id].get("from", "")) != NAME_KO:
-			continue
-		n += 1
-		var has_mark := false
-		for ln in Mailbox.LETTERS[id].get("lines", []) as Array:
-			if String(ln).contains("「"):
-				has_mark = true
-		if not has_mark:
-			return false
-	return n >= 2
-
-# ★ 스캔 대상 전량 = 대사 본문 + LINE_AGAIN 3종 + 절기 물음(문항·반응) + 강림 발신 편지.
-#   선택지(options)는 **플레이어의 말**이라 대상 밖이다(frosty_arc_test ⑨ 선례와 같은 경계).
+# ★ 스캔 대상 전량 = 대사 본문 + LINE_AGAIN 3종 + 절기 물음(문항·반응) + 세레나 발신 편지.
+#   선택지(options)는 **플레이어의 말**이라 대상 밖이다(gangrim_arc_test와 같은 경계).
 func _corpus(who: Node2D) -> String:
 	var all: Array = []
 	for pack in _body_packs(who):
@@ -699,14 +811,6 @@ func _corpus(who: Node2D) -> String:
 		all.append_array(q["replies"] as Array)
 	all.append_array(_letter_lines())
 	return "\n".join(PackedStringArray(all))
-
-# ♡3이 그 밤의 다른 인물을 호명하는가(라쇼몽 구조 — 남의 조각을 대신 말하면 안 된다).
-func _names_any(text: String) -> bool:
-	for n in ["옥자", "미호", "멜", "바나", "깨비", "켄", "설화", "스칼렛", "미르", "루카",
-			"프로스티", "모찌", "네오", "세레나"]:
-		if text.contains(String(n)):
-			return true
-	return false
 
 # 전 본문에서 금칙어를 찾는다(걸린 줄을 돌려준다 — 없으면 "").
 func _scan_forbidden(who: Node2D, words: Array) -> String:
@@ -723,7 +827,7 @@ func _scan_forbidden(who: Node2D, words: Array) -> String:
 				return String(ln)
 	return ""
 
-# 한 덩이 문자열에서 금칙어를 찾는다(축별 4축 가드용 — 걸린 낱말을 돌려준다).
+# 한 덩이 문자열에서 금칙어를 찾는다(무호명 축 가드용 — 걸린 낱말을 돌려준다).
 func _scan_words(text: String, words: Array) -> String:
 	for w in words:
 		if text.contains(String(w)):

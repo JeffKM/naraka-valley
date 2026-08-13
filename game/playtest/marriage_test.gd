@@ -12,6 +12,15 @@ extends SceneTree
 #   ⑦ 도메인 잡일 — 미호=아침 미급수 8칸 물주기 · 멜=출하 정산 팁 +2% · 바나=자동 차단 +1.
 #   ⑧ 세이브 왕복 — spouse_id·wedding_day 보존 · 확장 방 로드 복원 · 이주 스테이션 재적용 ·
 #      구세이브(키 없음) = 미혼.
+#   ⑨ ★[S9b-T6 / ADR-0068 결정 2] **뭍의 비약 = 세레나 결혼의 다리**([narrative-bible §5.3]) —
+#      의뢰 창구의 순서(부적 먼저 · 부적을 쥐어야 비약) · 비약 없는 청혼의 **무소모 거절** ·
+#      수락 시 **부적·비약 동반 소모** · 조연 혼례·이주가 메인과 같은 배관으로 도는가 ·
+#      **옥자 트랙 무접촉**(비약은 마녀 *서비스*이지 옥자 호감도가 아니다 — 결정 10).
+#
+# ★[S9b-T6] ③d가 재작성됐다 — 옛 대조군(모찌)이 `ROMANCE_OPEN`에 들어오며 "명단 밖 = 자연
+#   통과"의 표본이 아니게 됐다. 대조군은 점주(뱃사공)로 옮기고, 모찌는 같은 자리에서 **반대
+#   방향**으로 다시 잰다(③d-2·③d-3 — 조연도 아크 게이트 대상이며, 비인간의 placeholder 관문도
+#   비트가 진급에 찍히므로 자연 통과한다).
 #
 # 실행: ./run_tests.sh marriage   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -143,8 +152,21 @@ func _run_checks() -> void:
 	_check("③c [메인] 속죄 아크(비트 1..4) 미완 = 거절 · 부적 보존",
 		m._wedding_day == 0 and m.inventory.has_item(ItemCatalog.WEDDING_CHARM))
 	m._heart_bits = {"miho": (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)}
+	# ★[S9b-T6 / ADR-0068 결정 2 재작성] 옛 ③d는 "명단 밖이라 자연 통과"의 대조군으로 모찌를
+	#   썼는데, 모찌가 **명단 안으로 들어왔다**(T1 11인 전원 개통). 단언의 요지는 원문 그대로
+	#   두고 — *판정은 비트 원장 참조이고 명단 밖은 무조건 통과* — 대조군을 영영 명단 밖인
+	#   점주(뱃사공)로 옮긴다. ★그리고 모찌는 같은 자리에서 **반대 방향**으로 다시 잰다:
+	#   비트가 비면 막히고, 비트가 서면 통과한다(③d-2) — 지시서 ⓐ가 확인을 요구한 그 지점이다.
+	#   ㉠ 모찌는 ♡1·♡2·♡4 관문 **본문이 placeholder**인데, 비트는 *본문 유무*가 아니라 *진급*에
+	#     찍히므로(`_mark_heart_bit`는 폴백 경로에서도 돈다) 비인간 3인의 "♡3 한 칸 집중" 구조가
+	#     이 게이트에서 **자연 통과**한다. ㉡ 즉 판정식은 한 줄도 안 바뀌었고, 바뀐 것은 대상 집합뿐이다.
 	_check("③d 아크 판정 = 비트 원장 참조(placeholder 자연 통과 — S9 주입에도 판정식 불변)",
-		m._redemption_arc_complete("miho") and m._redemption_arc_complete("mochi"))
+		m._redemption_arc_complete("miho") and m._redemption_arc_complete("boatman"))
+	_check("③d-2 ★조연도 이제 아크 게이트 대상이다(모찌 = 비트 0이면 막히고 · 1~4가 서면 통과)",
+		m.ROMANCE_OPEN.has("mochi") and not m._redemption_arc_complete("mochi"))
+	m._heart_bits["mochi"] = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
+	_check("③d-3 ★비인간의 ♡3 한 칸 집중 구조도 자연 통과한다(비트는 본문이 아니라 진급에 찍힌다)",
+		m._redemption_arc_complete("mochi"))
 	_hold(m, ItemCatalog.WEDDING_CHARM)
 	var accept_day: int = m.clock.day
 	m._try_resident_gift(r_miho)
@@ -256,6 +278,70 @@ func _run_checks() -> void:
 	_check("⑧e 구세이브/신규 = 미혼·예정 없음·원본 방",
 		m3._spouse_id == "" and m3._wedding_day == 0
 		and m3.home_house_rect() == m3.HOME_HOUSE_RECT)
+
+	# ── ⑨ ★[S9b-T6 / ADR-0068 결정 2 · narrative-bible §5.3] 뭍의 비약 = 세레나 결혼의 다리 ──
+	# 물 밖에 못 나오는 인어라 청혼 수리에 **비약이 추가 전제**로 붙는다. 최소 기계화(아이템 1 +
+	# 의뢰 훅 1 + 청혼 게이트 1)이므로 여기서 재는 것도 셋이다: 의뢰 창구의 **순서**, 비약 없는
+	# 청혼의 **무소모 거절**, 그리고 수락 시 **부적·비약 동반 소모**.
+	# ★ 판을 새로 깐다(m3 = 신규 세이브) — 세레나 경로는 미호와 상태가 겹치면 안 된다.
+	print("── ⑨ 뭍의 비약(세레나 결혼) ──")
+	m3.onboarding.step = Onboarding.DONE
+	var r3_serena: Resident = m3._resident("serena")
+	var r3_okja: Resident = m3._resident("okja")
+	# 안방 확장 — ②가 태운 그 경로 그대로(공통 관문이라 세레나에게도 먼저 필요하다).
+	_stock(m3, 10000, 300)
+	m3._try_order_build(Carpenter.PROJ_MASTER_ROOM)
+	_pass_day(m3)
+	_pass_day(m3)
+	# 연애 개시 + 속죄 아크 비트(조연도 이제 아크 게이트 대상 — ③d-2).
+	r3_serena.affinity.points = Affinity.MAX_POINTS
+	r3_serena.affinity.stage = Affinity.MAX_HEARTS - 1
+	m3._resolve_confession("serena")
+	_dismiss_intro(m3)
+	m3._heart_bits = {"serena": (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)}
+	m3.wallet.gold = 20000
+	_check("⑨a 부적이 먼저다 — 부적 미보유면 비약 의뢰는 안 열린다(순서가 곧 안내)",
+		m3._charm_quest_open() and not m3._elixir_quest_open()
+		and String(r3_okja.prompt_extra.call()).contains("혼례 부적"))
+	m3._order_wedding_charm()
+	_check("⑨b 부적을 쥐면 그때 비약 의뢰가 열린다(같은 [F] 창구의 세 번째 얼굴)",
+		m3._elixir_quest_open()
+		and String(r3_okja.prompt_extra.call()).contains("뭍의 비약")
+		and String(r3_okja.prompt_extra.call()).contains(str(m3.ELIXIR_COST)))
+	# 비약 없이 청혼 — 인-픽션 거절 **무소모**(방·아크 게이트와 완전히 같은 결).
+	_hold(m3, ItemCatalog.WEDDING_CHARM)
+	m3._try_resident_gift(r3_serena)
+	_check("⑨c ★비약 없는 청혼 = 거절 · **부적 보존**(무소모 — 받아 와서 다시 청하면 된다)",
+		m3._wedding_day == 0 and m3._spouse_id == ""
+		and m3.inventory.has_item(ItemCatalog.WEDDING_CHARM))
+	var gold_before: int = m3.wallet.gold
+	m3._order_okja_elixir()
+	_check("⑨d 의뢰 = %d냥 차감 + 비약 입수 · 보유 중 재노출 없음(세상에 하나)" % m3.ELIXIR_COST,
+		m3.wallet.gold == gold_before - m3.ELIXIR_COST
+		and m3.inventory.has_item(ItemCatalog.OKJA_ELIXIR)
+		and not m3._elixir_quest_open())
+	_hold(m3, ItemCatalog.WEDDING_CHARM)
+	var accept3: int = m3.clock.day
+	m3._try_resident_gift(r3_serena)
+	_check("⑨e ★조건 충족 = 수락 — 혼례 예정(+3일) · **부적·비약 둘 다 소모**",
+		m3._wedding_day == accept3 + m3.WEDDING_WAIT_DAYS
+		and not m3.inventory.has_item(ItemCatalog.WEDDING_CHARM)
+		and not m3.inventory.has_item(ItemCatalog.OKJA_ELIXIR))
+	# 혼례·이주까지 — 조연에게도 메인과 같은 배관이 그대로 돈다(이주 스케줄 일반화 확인).
+	_pass_day(m3)
+	_pass_day(m3)
+	_pass_day(m3)
+	var last3: Dictionary = r3_serena.schedule[r3_serena.schedule.size() - 1]
+	_check("⑨f ★조연 혼례·이주가 메인과 같은 배관으로 돈다(귀가 스테이션 append · 기본 19시)",
+		m3._spouse_id == "serena" and m3._heart_badge(r3_serena) == "부부"
+		and last3["tile"] == m3.SPOUSE_HOME_TILE
+		and int(last3["from_min"]) == Cafe.CLOSE_MIN
+		and String(last3["region"]) == RegionCatalog.HOME)
+	_check("⑨g ★배우자 대사가 캐릭터 본문으로 갈린다(spouse_lines 4축 — 일상 묶음이 아니다)",
+		r3_serena.node.spouse_lines(m3.clock.day) != r3_serena.node.lines(5, true))
+	# ★ 옥자 게이트 불가침([ADR-0068] 결정 10) — 비약은 *마녀 서비스*이지 옥자 트랙이 아니다.
+	_check("⑨h ★옥자 트랙 무접촉 — 관계 트랙도 척추 원장도 한 칸 안 움직였다",
+		r3_okja.affinity == null and m3._spine_bits == 0)
 	m3.free()
 
 	# 뒷정리 — 이 테스트가 만든 세이브를 지운다(다른 테스트의 자동 복원 오염 방지).

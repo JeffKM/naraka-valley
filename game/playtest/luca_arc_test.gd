@@ -33,8 +33,8 @@ extends SceneTree
 #      이 스위트는 게이트가 **걸린 상태·안 걸린 상태 양쪽에서 똑같이 참인 것만** 잰다: ㉠ 메인
 #      접촉 상태에서 ♡3이 성사된다 ㉡ ♡1·♡2는 언제나 게이트 밖. 등재 후 "미접촉이면 대기"는
 #      짝 워커(미르) 스위트가 잰다.
-#   ⑪ 휴면 콘텐츠 계약 — confession/divorce/spouse 훅은 있는데 main `ROMANCE_OPEN`엔 아직
-#      루카가 없다(개통은 S9b-T6 소관 — 훅이 먼저, 명단이 나중).
+#   ⑪ 개통 계약 — confession/divorce/spouse 훅이 먼저 서 있었고, **S9b-T6이
+#      main `ROMANCE_OPEN`에 루카를 넣어 열었다**(콘텐츠 재작업 0).
 #
 # 실행: ./run_tests.sh luca_arc   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -402,8 +402,8 @@ func _run_checks() -> void:
 		and who.divorce_lines().size() >= 3)
 	_check("⑪b 수락·거절 본문이 서로 다르다",
 		who.confession_lines(true) != who.confession_lines(false))
-	_check("⑪c ★main ROMANCE_OPEN엔 아직 없다(개통은 S9b-T6 소관 — 이 태스크는 명단을 안 건드린다)",
-		not m.ROMANCE_OPEN.has(KID))
+	_check("⑪c ★[S9b-T6 개통 반영] main ROMANCE_OPEN에 **들어왔다** — 본문 재작업 0으로 열렸다(훅이 먼저·명단이 나중이라는 그 계약의 실물)",
+		m.ROMANCE_OPEN.has(KID))
 
 	m.free()
 	cleaner.delete_save()
