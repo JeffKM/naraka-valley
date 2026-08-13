@@ -11,7 +11,8 @@ extends SceneTree
 #   ⑥ **무실패** — 오답을 아무리 반복해도 상태가 안 상하고, 종료가 불가침이다.
 #   ⑦ 🟡 확증선 — 무입력 카운터(**tick 수**·벽시계 아님)가 차면 다음 파편을 지시하고,
 #      그 본문은 **전부 지문**(대사 0)이며 **gangrim.gd는 한 글자도 안 걸린다**.
-#   ⑧ 완료 = B5 비트 + 자동 저장 반영(세이브 왕복 보존) + 화면·시계·소리 원복.
+#   ⑧ 완료 = B5 비트 + 자동 저장 반영(세이브 왕복 보존) + **B6 이음매**(S9b-T8이 이어 붙인
+#      §6.5 5단 — 세계가 한 프레임도 안 보이고 S등급으로 넘어간다) + 그 장면이 끝난 뒤의 원복.
 #   ⑨ 금칙어 스캔 — 조연 31어 + 강림 🔴 4종을 척추 본문에 상속. 「옥자」 0회·중심 진실 0회.
 #   ⑩ 재진입 가드 — B5 기성립이면 같은 문 칸에서 재발동 0.
 #
@@ -50,6 +51,20 @@ func _drain(m: Node) -> void:
 	var guard := 0
 	while m.dialogue.is_open() and guard < 300:
 		if m.dialogue.has_choice():
+			m.dialogue.choose(0)
+		else:
+			m.dialogue.advance()
+		guard += 1
+
+# ★[S9b-T8] 컷신과 대화가 **번갈아** 오는 구간을 통째로 비운다(척추 S등급은 러너 → 대화 → 대화
+#   → 대화로 이어지므로, 위 `_drain`은 첫 컷신에서 멈춘다). 이 스위트가 B6 본문을 재지는 않고
+#   "이음매가 이어지고 끝나면 세계가 원복되는가"만 보므로 통짜 드레인이면 충분하다.
+func _drain_scene(m: Node) -> void:
+	var guard := 0
+	while (m.cutscene != null or m.dialogue.is_open()) and guard < 2000:
+		if m.cutscene != null:
+			m._tick_cutscene(0.2)
+		elif m.dialogue.has_choice():
 			m.dialogue.choose(0)
 		else:
 			m.dialogue.advance()
@@ -415,13 +430,22 @@ func _init() -> void:
 		and m.dialogue.line() == String(Spine.B5_DONE_LINES[0]))
 	_check("⑧d 지문이 도는 동안에도 화면은 내 안이다(세션 유지 = 암전 유지)", m.spine_puzzle != null)
 	_drain(m)
-	_check("⑧e ★지문이 닫히면 세계로 돌아온다(세션 해제 · 이동 · 시계 · 소리 원복)",
-		m.spine_puzzle == null and m.player.is_physics_processing()
-		and m.clock.running and m.audio.is_muted() == mute_before)
-	_check("⑧f 화면 잔류 0(암전·카메라 오프셋이 안 남는다)",
-		is_equal_approx(m.fade.modulate.a, 0.0) and m._cam.offset.is_equal_approx(Vector2.ZERO))
-	_check("⑧g 다른 척추 비트는 안 건드린다 — B4·B5만 서 있다(B6~B7은 S9b-T8 소관)",
-		m._spine_bits == ((1 << m.SPINE_B4) | (1 << m.SPINE_B5)))
+	# ★[S9b-T8 / ADR-0068 결정 9] **방향 반전 갱신** — 옛 ⑧e·⑧g는 "B5로 끝난다 · B6~B7은 아직
+	#   없다"를 재고 있었다(T7 시점의 사실). T8이 §6.5 5단 "카타르시스 전환"을 이어 붙였으므로,
+	#   같은 자리에서 재야 하는 계약이 **정반대**가 된다: 완료 지문이 닫히면 세계로 돌아오는 게
+	#   아니라 **곧바로 S등급 귀환이 이어 붙어야** 한다(세계가 한 프레임도 안 보이는 것이 요점).
+	#   세부(그림·화자 3막·앵커 트랙)는 spine_ending_test 소관이고, 여기서는 **이음매만** 잰다.
+	_check("⑧e ★완료 지문이 닫히면 내면 공간이 걷히고 그 자리에서 B6가 이어 붙는다(세계 복귀 0프레임)",
+		m.spine_puzzle == null and m._spine_bit_seen(m.SPINE_B6)
+		and (m.cutscene != null or m._illust_id != ""))
+	_drain_scene(m)
+	_check("⑧f ★S등급 장면이 끝나야 세계로 돌아온다(세션·그림·이동·시계·소리 원복 · 화면 잔류 0)",
+		m.spine_puzzle == null and m._illust_id == "" and m.player.is_physics_processing()
+		and m.clock.running and m.audio.is_muted() == mute_before
+		and is_equal_approx(m.fade.modulate.a, 0.0) and m._cam.offset.is_equal_approx(Vector2.ZERO))
+	_check("⑧g 척추 원장이 B4·B5·B6까지다 — **B7은 아직 안 선다**(궁극의 결혼 분기를 지나야 한다)",
+		m._spine_bits == ((1 << m.SPINE_B4) | (1 << m.SPINE_B5) | (1 << m.SPINE_B6))
+		and not m._spine_bit_seen(m.SPINE_B7))
 	_stand_at_door(m)   # 구역 재빌드 = 라벨 재배치
 	_check("⑧h ★라벨이 게이트 실태를 되쏜다(나락 진입로 점등과 같은 문법 — 잠김 문구가 걷힌다)",
 		m._spine_gate_ok() and not _label_with(m, "옥자 집").contains("잠김")
