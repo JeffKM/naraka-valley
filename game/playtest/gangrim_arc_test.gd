@@ -122,7 +122,9 @@ func _run_checks() -> void:
 		and r.save_key == "gangrim_affinity" and r.affinity != null and r.can_gift)
 	_check("①c 곱셈기 없음(조연 = 쉼터 2채널 — ADR-0008 메인 4인 독점)",
 		not r.effect_fn.is_valid())
-	_check("①d 초상화는 아직 없다(시트·초상 = S9b-T9 아트 패스)", r.portrait_stem == "")
+	# ★[S9b-T9] 아트 패스가 이 자리를 채웠다 — 시트(80×320)는 `<id>.gd`의 기존 훅이 집고,
+	#   초상은 그 시트 south 프레임에서 구운 도트 버스트다(표정 파일 없음 = idle 한 장이 전량).
+	_check("①d 초상화 stem = gangrim(도트 버스트 · S9b-T9 아트 패스)", r.portrait_stem == "gangrim")
 	var house_door: Vector2i = m.RESIDENT_HOUSE_DOORS[HOUSE_IDX]
 	_check("①e 스케줄 3단(집 앞 → 광장 → 카페) · 전부 나루 마을",
 		r.schedule.size() == 3

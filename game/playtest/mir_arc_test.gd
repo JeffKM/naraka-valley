@@ -113,7 +113,10 @@ func _run_checks() -> void:
 		and r.save_key == "mir_affinity" and r.affinity != null and r.can_gift)
 	_check("①c 곱셈기 없음(조연 = 쉼터 2채널 — ADR-0008 메인 4인 독점)",
 		not r.effect_fn.is_valid())
-	_check("①d 초상화는 아직 없다(시트·초상 = S9b-T9 아트 패스)", r.portrait_stem == "")
+	# ★[S9b-T9] **초상 미생성 확정** — 시트는 붙었지만 초상은 안 만든다(미이행이 아니라 결정이다).
+	#   `character_to_portrait`가 비인간 재질을 사람 피부로 되돌리는 모델 한계(§15.6 옹이 2판 실패)
+	#   때문이고, 한 장이 25 gen이다. owner-Gemini 2×3 표정 그리드 큐 1순위로 넘겼다.
+	_check("①d 초상화 미생성 확정(비인간 재질 → Gemini 큐 · S9b-T9)", r.portrait_stem == "")
 	# 집 배정 = 주민 집 7(index 6). 아침 자리가 그 집 문 바로 아래 칸이어야 동선이 성립한다.
 	var house_door: Vector2i = m.RESIDENT_HOUSE_DOORS[HOUSE_IDX]
 	_check("①e 스케줄 3단(집 앞 → 광장 → 카페) · 전부 나루 마을",
