@@ -215,6 +215,42 @@ const OVERRIDES := {
 		],
 		HATE: [ItemCatalog.HONTAN, ItemCatalog.EMBER_SHARD],
 	},
+	# ★[S9b-T2 / ADR-0068 결정 3] 설화 — **차고 맑은 것**([narrative-bible §5.3] 설녀 · 냉기 존재).
+	# 러브의 축은 "그녀 손에서 상하지 않는 것" 하나다: 서리 낀 겨울 채집물·얼음 같은 결정·
+	# 은비늘 어종·카페에서 가장 값싼 냉수. ★냉수를 러브에 둔 것이 이 캐릭터의 결이다 — 가장
+	# 흔하고 싼 잔이 그녀에겐 가장 편한 잔이라(고고함이 사치가 아니라 결핍의 다른 이름) 선물
+	# 경제에서 **초반부터 닿을 수 있는 러브**가 하나 열린다("평평 ≠ 막힘" 결).
+	# 헤이트 = **김이 오르는 것**(넋 데운 우유·넋송이 수프). 미호(산 불)·켄(타 버린 재)과 결이
+	# 갈린다 — 설화가 못 견디는 건 불이 아니라 *온기 그 자체*이고, 그래서 이 헤이트는 반전 로맨스
+	# ([narrative-bible §5.3] "결혼 = 따뜻해지는 법을 연습")의 **출발선 표시**이기도 하다.
+	"seolhwa": {
+		LOVE: [
+			ItemCatalog.SEORI_DONGBAEK,      # 서리동백(성야절) — ♡2 관문이 세우는 그 꽃
+			ItemCatalog.SEORI_HONBAEKCHO,    # 서리혼백초(성야절 특수) — 서리가 이름에 든 약초
+			ItemCatalog.GEM_NEOKSUJEONG,     # 넋수정 — 얼음과 가장 닮은 결정
+			FishCatalog.EUNBINEUL_CHEONGEO,  # 은비늘청어 — 찬물의 은빛
+			MenuCatalog.COLD_WATER,          # 삼도천 냉수 — 가장 싼 잔이 그녀에겐 가장 편한 잔
+		],
+		HATE: [MenuCatalog.HOT_MILK, MenuCatalog.SONGI_SOUP],   # 김이 오르는 것
+	},
+	# ★[S9b-T2 / ADR-0068 결정 3] 스칼렛 — **값나가고 고운 것**([narrative-bible §5.3] 메두사·
+	# 옛 간판 타짜 · "치명적 매력"). 값을 아는 사람이라 물건의 급이 곧 예의고, 그중에서도 *맑은
+	# 것*(넋수정)은 그녀가 못 하는 일(속이 다 보이는 것)이라 더 좋아한다. 서리동백 ↔ 동백 밀크티는
+	# 재료-요리 한 쌍이고(미호 호박 ↔ 호박 라떼 선례), 혼정 아인슈페너는 겉이 달고 속이 쓴 잔이라
+	# 그대로 이 인물의 결이다(멜 러브와 겹치지만 근거가 다르다 — 멜=카페의 간판 / 스칼렛=그 맛).
+	# 헤이트 = **석화 목재**(자기가 사람에게 한 짓이 굳어 버린 형상 — §5.3 "돌처럼 가둬두고")와
+	# **업화알돌**(열어 봐야 아는 것 = 남의 전 재산이 걸려 있던 그 판). ⚠️멜 헤이트(알돌)와 한 종이
+	# 겹치나 결이 갈린다 — 멜은 *끊은 습관*이 무섭고, 스칼렛은 *자기가 쥐여 준 판*이 부끄럽다.
+	"scarlet": {
+		LOVE: [
+			ItemCatalog.GEM_MYEONGOK,             # 명옥 — 매끄럽고 값진 것
+			ItemCatalog.GEM_NEOKSUJEONG,          # 넋수정 — 속이 다 보이는 것(그녀가 못 하는 일)
+			ItemCatalog.SEORI_DONGBAEK,           # 서리동백 — 서리 속에서 붉은 꽃(이름값·츤데레)
+			MenuCatalog.DONGBAEK_MILKTEA,         # 동백 밀크티 — 그 꽃이 잔에 담겨 돌아온 것
+			MenuCatalog.HONJEONG_EINSPANNER,      # 혼정 아인슈페너 — 겉은 달고 속은 쓴 잔
+		],
+		HATE: [ItemCatalog.PETRIFIED_WOOD, ItemCatalog.GEODE_EOPHWA],
+	},
 }
 
 # ── 조회 ──────────────────────────────────────────────────────────────────────
