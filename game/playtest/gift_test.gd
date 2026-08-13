@@ -447,7 +447,13 @@ func _run_checks() -> void:
 		if String(c["birthday"]) != "":
 			bday_cells.append(c)
 	# ★[S9b-T1] 2 → 3칸: 깨비(유화절 13일 — 잠정)가 같은 절기에 붙었다.
-	_check("⑩b 유화절엔 생일 3칸(미호 7일 · 깨비 13일 · 모찌 26일)", bday_cells.size() == 3)
+	# ★[S9b-T5] **레지스트리 파생으로 전환**한다(옛 하드코딩 "3칸"은 S9b-T3이 루카 15일·미르 17일을
+	#   유화절에 배정하면서 stale이 됐고, 그 절기를 안 건드린 T4·T5까지 이 자리를 물려받았다).
+	#   달력 마커는 `Resident.BIRTHDAYS`의 **파생**이지 사본이 아니므로, 재는 것도 파생이어야 한다 —
+	#   resident_test ⑧a가 총원 단일 출처에서 배운 것과 같은 교훈이다. 이제 생일이 늘어도 이 줄은
+	#   안 깨지고, 대신 **달력이 레지스트리를 그대로 비추는가**라는 진짜 계약만 남는다.
+	_check("⑩b 유화절 생일 칸 = 레지스트리의 그 절기 생일 수와 정확히 같다",
+		bday_cells.size() == _season_birthday_count(1))
 	_check("⑩c 7일 칸이 미호",
 		String(cal_cells[6]["birthday"]) == "miho" and int(cal_cells[6]["dos"]) == 7)
 	_check("⑩d 생일 칸엔 행사·테마가 겹치지 않는다",
@@ -458,8 +464,12 @@ func _run_checks() -> void:
 	#   날짜·이름만 본다(머리표는 그림이라 문자열에 안 섞인다).
 	_check("⑩e 범례에 생일 줄", "7일 — 미호 생일" in str(cal.legend())
 		and "26일 — 모찌 생일" in str(cal.legend()))
+	# ★[S9b-T5] 여기도 파생으로 전환(⑩b와 같은 근거). 범례 = 행사 1줄 + 테마 1줄 + **생일 N줄**
+	#   이고(calendar_panel._legend_rows 순서 그대로), 재는 것은 "생일이 그 뒤에 붙는다"는 구조지
+	#   N의 값이 아니다.
 	_check("⑩f 기존 범례(행사 1줄·테마 1줄)는 그대로 · 생일이 뒤에 붙는다",
-		cal.legend().size() == 5 and "월광 혼불해파리 창구" in str(cal.legend()))
+		cal.legend().size() == 2 + _season_birthday_count(1)
+		and "월광 혼불해파리 창구" in str(cal.legend()))
 	cal.set_state(1, 1, 0)             # 피안절 — 옹이 4일·뱃사공 11일·네오 19일
 	_check("⑩g 이름 미주입 주민은 id로 폴백(범례가 죽지 않는다)",
 		"4일 — ongi 생일" in str(cal.legend()))
@@ -523,3 +533,14 @@ func _run_checks() -> void:
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(_fail)
+
+# ★[S9b-T5] 그 절기에 생일이 배정된 주민 수 — 달력 마커 단언의 **단일 출처 파생**(⑩b·⑩f).
+# 하드코딩한 칸 수는 조연이 한 명 붙을 때마다 stale이 된다(S9b-T3이 실증). 재야 하는 계약은
+# "달력이 `Resident.BIRTHDAYS`를 그대로 비추는가"이지 그때그때의 수가 아니다.
+func _season_birthday_count(season: int) -> int:
+	var n := 0
+	for rid in Resident.BIRTHDAYS:
+		var b := Resident.birthday_of(String(rid))
+		if b.size() == 2 and int(b[0]) == season:
+			n += 1
+	return n
