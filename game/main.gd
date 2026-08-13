@@ -2767,6 +2767,23 @@ var _spine_bits := 0
 # `_arm_spine_b4`/`_fire_spine_b4` 머리말이 이 두 단계로 나눈 이유를 든다). **세이브 안 한다**:
 # 예약은 한 취침 사슬 안에서 반드시 소비되고, 그 사슬의 끝(`_on_sleep_done`)이 세이브보다 앞선다.
 var _spine_b4_armed := false
+# ── ★[S9b-T7 / ADR-0068 결정 8] B5 재구성 — 내면 공간 재생 상태 ────────────────
+# 진행 중인 재구성 세션(null = 내면 공간 밖). ★**세이브 키 0**: 컷신·낚시 세션과 같은 결로,
+# B5는 한 자리에서 시작해 한 자리에서 끝난다(무실패라 중간 이탈 유인 자체가 없다). 세이브에
+# 남는 것은 결과 한 칸(`_spine_bits`의 B5 비트)뿐이다.
+var spine_puzzle: SpineReconstruction = null
+# 발동 컷신이 끝나면 내면 공간을 열겠다는 예약(B4의 `_spine_b4_armed`와 같은 "판정과 재생을
+# 나눈다" 규율. 여기선 컷신 러너가 화면을 잡고 있는 동안 퍼즐이 겹쳐 서는 것을 막는다).
+var _spine_b5_pending := false
+# 완료 지문이 재생 중인가 — 이 대화가 닫히면 내면 공간을 접고 게임으로 돌려보낸다.
+var _spine_b5_closing := false
+# 내면 공간 진입 직전의 원복 근거(§6.5 2단 "모든 인게임 소음 소거"의 되돌리기).
+# ★ 컷신이 시계를 `_cutscene_clock_prev`로 스냅하는 것과 정확히 같은 규율이다: "끝나면 무조건
+#   켠다"로 두면 *다른 이유로* 멈춰 있던 것까지 되살린다.
+var _spine_b5_mute_prev := false
+var _spine_b5_clock_prev := true
+# 이번 재생의 파편 표(`Spine.fragments()` 스냅 — 그리기·이름 조회용). 세션과 함께 버려진다.
+var _spine_b5_frags: Array = []
 # ★[S8-T6 / ADR-0066 결정 6] **연애 슬롯 — 전 로스터 공유 단 1개**(빈 문자열 = 연애 없음).
 # 연애는 하트 위의 *상태*다(ADR-0066 "결혼은 하트 위 상태" — 연애도 같은 축): Affinity(점수·stage)에
 # 안 넣고 main이 든다. 슬롯이 하나뿐이라는 배타성이 곧 스타듀 꽃다발(아이템)의 대체물이다.
@@ -8780,7 +8797,11 @@ func _place_labels() -> void:
 			_add_label("나락 심연 — 리셋 런(나갈 때마다 새 판)", _tile_center_px(Vector2i(32, 18)))   # ★C9: 중앙 위(spawn 32,22 비껴감) · [S5-T11] T7 점등 후 문구 현행화
 		RegionCatalog.MIHOK_FOREST:
 			# ★ M4.2 / ★C7 — 옥자 집은 잠긴 외관(비-enterable)이라 라벨로 위상 명시(축사 컨벤션). 특수 채집지 2곳·연못·복귀 워프 안내.
-			_add_label("옥자 집 (잠김 — 미결의 죄 해결 후)", _tile_center_px(Vector2i(57, 27)))  # ★C7 동쪽 깊은 끝
+			# ★[S9b-T7 / ADR-0068 결정 8] 척추 해결 게이트가 차면 문구가 바뀐다 — **나락 진입로
+			#   점등(S5-T7·T11)과 같은 문법**이다(게이트 실태를 라벨이 그대로 되쏜다). 미충족일
+			#   때의 문구는 한 글자도 안 바뀌므로 게이트 전의 거동은 종전과 바이트 동일이다.
+			_add_label("옥자 집 (문이 열려 있다)" if _spine_gate_ok()
+				else "옥자 집 (잠김 — 미결의 죄 해결 후)", _tile_center_px(Vector2i(57, 27)))  # ★C7 동쪽 깊은 끝
 			# ★[S4-T1] 플레이스홀더 제거 — 희소종 스폰 빈터로 승격(좌표 불변).
 			_add_label("특수 채집지", _tile_center_px(MIHOK_FORAGE_LABEL_TILE))
 			_add_label("특수 채집지", _tile_center_px(MIHOK_FORAGE_LABEL_TILE_2))
@@ -10973,7 +10994,11 @@ func _process(delta: float) -> void:
 	var _hud_hidden := dialogue.is_open() or frame.is_open() or _sleeping \
 		or cafe_summary_panel.visible or milestone_panel.visible or ending_panel.visible \
 		or mirror_panel.visible \
-		or cutscene != null                         # ★[S9-T2] 컷신 재생 중엔 상시 HUD를 접는다(연출 화면)
+		or cutscene != null \
+		or spine_puzzle != null
+		# ★[S9-T2] 컷신 재생 중엔 상시 HUD를 접는다(연출 화면).
+		# ★[S9b-T7] 내면 공간(B5)도 같은 연출 화면이다 — 오히려 여기는 세계 자체가 사라진 자리라
+		#   상시 HUD가 한 조각이라도 남으면 "게임 화면 위에 퍼즐"이 되어 §6.5 2단이 무너진다.
 	if vitals != null:
 		vitals.visible = not _hud_hidden
 	if hotbar != null:
@@ -11053,6 +11078,14 @@ func _process(delta: float) -> void:
 			dialogue.advance()
 		return
 
+	# ★[S9b-T7 / ADR-0068 결정 8] 내면 공간(B5 재구성) — 세계가 사라진 자리라 게임 입력·시뮬을
+	# 전부 멈추고 퍼즐만 굴린다(컷신 가드와 같은 결·이동은 `_open_spine_puzzle`에서 이미 잠갔다).
+	# ★ **대화 가드보다 아래**에 둔다: 내면 지문(오프닝·완료)이 퍼즐 위에 서는 동안은 대화가
+	#   입력의 주인이어야 한다(지문이 안 넘어가면 그 자리에서 영영 멎는다).
+	if spine_puzzle != null:
+		_tick_spine_puzzle()
+		return
+
 	# ★ C2 메뉴 토글(Tab): 어디서든 메뉴를 열고/닫는다(대화·연출 밖에서만 — 위 가드 통과 후).
 	if not _sleeping and Input.is_action_just_pressed("menu_toggle"):
 		if frame.context == InventoryFrame.CTX_MENU:
@@ -11111,6 +11144,10 @@ func _process(delta: float) -> void:
 	# M1.3 구역 가장자리/길 워프 칸에 닿으면 인접 구역으로 전환(목적 구역이 지어졌을 때만 —
 	# M1.3 현재는 이웃이 stub이라 휴면). 문과 같은 _warp 실행기를 거친다.
 	_maybe_warp_edge()
+	# ★[S9b-T7 / ADR-0068 결정 8] 옥자 집 문에 닿으면 척추 B5 발동(게이트가 찼을 때만).
+	# 워프와 나란히 두는 이유: 이것도 **발밑 칸이 여는 문**이고, 게이트 미충족이면 워프가
+	# 휴면인 것과 똑같이 아무 일도 안 일어난다(거동 불변).
+	_maybe_spine_b5()
 
 	# 취침 입력: 집 안에서 Enter/Space(ui_accept)
 	if _can_sleep() and Input.is_action_just_pressed("ui_accept"):
@@ -16467,6 +16504,162 @@ func _fire_spine_b4() -> void:
 	_begin_cutscene(SPINE_B4_CUTSCENE.duplicate(true), SPINE_B4_SPEAKER,
 		PackedStringArray(SPINE_B4_LINES))
 
+# ── ★[S9b-T7 / ADR-0068 결정 8] 척추 B5 재구성 — 게이트 · 발동 · 내면 공간 ─────────
+# [narrative-bible §6.1]의 해결 게이트가 여기서 처음으로 **소비**된다. 판정식 자체는 `spine.gd`가
+# 순수 static으로 들고(deed.gd 결), main은 원장 스냅을 떠 넘기는 창구 노릇만 한다 — `Deed.check`에
+# `_deed_ledgers()`를 넘기는 그 분업 그대로다.
+#
+# ★ **발동 = 미혹 심층 옥자 집 진입**([ADR-0068] 결정 8 · §6.5 1단). 옥자 집은 처음부터
+#   "숨겨진·게이트, 미스터리 해결 후 열림"(world-map·CONTEXT)으로 잠긴 외관이었고, 그래서
+#   *척추 해결이 곧 옥자 집 도달*이 되어 지리와 서사가 한 점에서 만난다. 개방 배선은 **나락
+#   진입로 점등 스위치**(S5-T7 — `_maybe_warp_edge`가 워프 직전에 플래그를 본다)와 같은 문법이다:
+#   지형·외관·충돌은 한 칸도 안 바뀌고, 발밑 칸의 판정 하나가 열림/잠김을 가른다.
+# ★ **실내 방을 만들지 않는다.** 진입은 건물 출입이 아니라 *내면으로의 암전*이라, 카탈로그 등록도
+#   `_buildings` 항목도 없다(그것이 있으면 나중에 "옥자 집 안"을 걸어 다닐 수 있게 되어 §6.5가
+#   무너진다). 그래서 `_indoor`도 안 건드린다.
+
+# 게이트 판정 — 세 항의 AND. 원장 셋(메인 하트 칸 · B4 비트 · `_heart_bits`)을 떠서 넘긴다.
+func _spine_gate_ok() -> bool:
+	return Spine.gate_ok(_spine_main_stages(), _spine_bit_seen(SPINE_B4), _heart_bits)
+
+# 메인 3인의 하트 칸 스냅({rid: stage}) — 없는 주민·관계 트랙 없는 주민은 0으로 떨어진다(방어).
+func _spine_main_stages() -> Dictionary:
+	var out := {}
+	for rid in Spine.MAIN_ROSTER:
+		var r := _resident(String(rid))
+		out[String(rid)] = r.affinity.stage if r != null and r.affinity != null else 0
+	return out
+
+# 이번 판의 퍼즐 시드 — 세이브에 안 남기고 **날짜에서 파생**한다(B5는 한 세이브에 한 번뿐이라
+# 시드를 저장할 이유가 없고, 날짜 파생이면 같은 세이브·같은 날의 재현이 결정적이다).
+func _spine_b5_seed() -> int:
+	return int(clock.day) * 1000003 + 0x5B
+
+# 발밑 칸 판정 — `_maybe_warp_edge` 바로 뒤에서 매 프레임 불린다. 조건이 하나라도 어긋나면
+# **아무 일도 안 일어난다**(알림도 없다): 게이트 전의 옥자 집은 종전과 똑같이 그냥 잠긴 폐가여야
+# 하고, "여기서 뭔가 열릴 것"이라는 힌트는 이미 맵 라벨이 지고 있다.
+func _maybe_spine_b5() -> void:
+	if _region != RegionCatalog.MIHOK_FOREST or _indoor != "":
+		return
+	if _sleeping or _transitioning or _run_over:
+		return
+	if cutscene != null or spine_puzzle != null or _spine_b5_pending or dialogue.is_open():
+		return
+	if _spine_bit_seen(SPINE_B5):
+		return                          # 이미 지난 비트 — 재발동 0(비트가 유일한 방어선, B4와 동형)
+	if _player_tile() != OKJA_HUT_DOOR:
+		return
+	if not _spine_gate_ok():
+		return                          # 미충족 = 잠금 그대로(거동 불변)
+	_begin_spine_b5()
+
+# 발동 — §6.5 1~2단(소음 소거 → 적막 → 공허 → 암전). 소리는 컷신 4동사로 끌 수 없으므로
+# 여기서 직접 죽이고(원복 근거를 먼저 스냅한다 — 컷신의 시계 스냅과 같은 규율) 나머지는 러너에 맡긴다.
+func _begin_spine_b5() -> void:
+	_spine_b5_mute_prev = audio.is_muted()
+	audio.set_muted(true)               # §6.5 2단 "모든 인게임 소음(BGM·환경음) 소거 → 적막"
+	_spine_b5_pending = true
+	# 예약 대화 0으로 튼다 — 지문은 컷신이 끝난 뒤 **내면 공간 안에서** 선다(_end_cutscene 참조).
+	if not _begin_cutscene(Spine.B5_CUTSCENE.duplicate(true), "", PackedStringArray()):
+		_spine_b5_pending = false       # 러너가 거절(중첩 재생 등) — 소리를 되돌리고 없던 일로
+		audio.set_muted(_spine_b5_mute_prev)
+
+# 내면 공간 개시 — 세션을 세우고 오프닝 지문을 연다.
+func _open_spine_puzzle() -> void:
+	_spine_b5_frags = Spine.fragments()
+	var session := SpineReconstruction.new(_spine_b5_seed(), _spine_b5_frags.size(), Spine.HUB_INDEX)
+	if not session.start():
+		# 이을 것이 없는 판(파편 0~1) — 여기까지 올 수 없는 조합이지만, 조용히 원복한다.
+		audio.set_muted(_spine_b5_mute_prev)
+		player.set_physics_process(true)
+		return
+	spine_puzzle = session
+	_spine_b5_closing = false
+	_spine_b5_clock_prev = clock.running
+	clock.running = false               # 내면에는 시간이 흐르지 않는다
+	player.set_physics_process(false)   # 걸어 다니는 곳이 아니다
+	player.velocity = Vector2.ZERO
+	interact_prompt.visible = false      # 지문이 도는 동안엔 조작 안내를 안 세운다
+	_talking_to = ""
+	dialogue.start(Spine.INNER_SPEAKER, PackedStringArray(Spine.B5_OPEN_LINES))
+	queue_redraw()
+
+# 매 프레임 — `_process`의 내면 공간 가드가 부른다(대화가 닫혀 있을 때만 여기 온다).
+func _tick_spine_puzzle() -> void:
+	var hints_before := spine_puzzle.hint_count()
+	spine_puzzle.tick()
+	if spine_puzzle.hint_count() > hints_before:
+		# ★ 🟡 확증선 — 강림 파편의 지시. **본문의 주인은 `spine.gd`**이고(gangrim.gd 0줄 —
+		#   [ADR-0068] 결정 8 · gangrim_arc_test ⑩g·⑩h가 그것을 잠갔다) 여기는 알림 채널로
+		#   흘릴 뿐이다. 지문이라 화자가 없고, 화면 쪽 지시는 아래 그리기가 테 하나로 맡는다.
+		_notice(Spine.hint_line(spine_puzzle.hint_count() - 1), FLAVOR_SECS)
+	# 커서 — 방향키 넷을 ±1로 접는다(별자리는 고리라 좌우/상하가 같은 축이다).
+	if Input.is_action_just_pressed("ui_right") or Input.is_action_just_pressed("ui_down"):
+		spine_puzzle.move_cursor(1)
+	elif Input.is_action_just_pressed("ui_left") or Input.is_action_just_pressed("ui_up"):
+		spine_puzzle.move_cursor(-1)
+	# 잇기 — [Enter/Space] 또는 좌클릭(별을 직접 찍는다). ★틀려도 아무 일이 없다(무실패).
+	var linked := false
+	if Input.is_action_just_pressed("ui_accept"):
+		linked = spine_puzzle.confirm()
+	elif Input.is_action_just_pressed("use_tool"):
+		var hit := _spine_star_at(get_global_mouse_position())
+		if hit >= 0:
+			linked = spine_puzzle.link(hit)
+	if linked:
+		audio.sfx("ui")                 # 음소거 중이라 실제로는 안 들린다 — 적막의 이행(§6.5 2단)
+	interact_prompt.visible = true
+	interact_prompt.text = "빈자리 재구성 — [방향키] 파편 고르기 · [Enter/좌클릭] 잇기   (%d / %d)" \
+		% [spine_puzzle.linked_count(), spine_puzzle.need_count()]
+	if spine_puzzle.is_done():
+		_finish_spine_puzzle()
+	queue_redraw()
+
+# 마지막 선이 이어졌다 — 비트를 찍고 **즉시 저장**한 뒤 완료 지문을 연다.
+# ★ 비트를 지문보다 **먼저** 찍는 이유는 B4가 재생 시작에 찍는 것과 같다: 여기서 껐다 켜도
+#   같은 장면이 두 번 오지 않는다(무실패 퍼즐이라 "다시 풀기"는 보상이 아니라 사고다).
+func _finish_spine_puzzle() -> void:
+	if _spine_bit_seen(SPINE_B5):
+		return
+	_mark_spine_bit(SPINE_B5)
+	_save_game()
+	_spine_b5_closing = true
+	interact_prompt.visible = false
+	_talking_to = ""
+	dialogue.start(Spine.INNER_SPEAKER, PackedStringArray(Spine.B5_DONE_LINES))
+	# ★ B6 이음매(S9b-T8이 읽어 갈 자리) — 여기서 `_spine_bit_seen(SPINE_B5)`가 참이 된 직후가
+	#   §6.5 5단 "카타르시스 전환"의 지점이다. B6 귀환(S등급 `illust` 컷신 · [ADR-0068] 결정 9)은
+	#   이 완료 지문이 닫히는 자리(`_close_spine_puzzle` 끝)에서 이어 붙이면 된다 —
+	#   **중심 진실("당신이었군요")은 전부 그쪽 소유**라 B5는 여기서 입을 다문다(§2.2).
+
+# 내면 공간 종료 — 세계를 원상태로 돌려놓는다(스냅해 둔 값으로만 — 컷신 `_end_cutscene` 결).
+func _close_spine_puzzle() -> void:
+	spine_puzzle = null
+	_spine_b5_frags = []
+	_spine_b5_closing = false
+	clock.running = _spine_b5_clock_prev
+	audio.set_muted(_spine_b5_mute_prev)
+	interact_prompt.visible = false
+	if not _run_over:
+		player.set_physics_process(true)
+	queue_redraw()
+
+# 월드 좌표에 닿은 별의 인덱스(−1 = 없음). 그리기와 **같은 배치식**을 쓴다(자리의 진실원은
+# `Spine.star_pos` 하나 — 두 곳에서 따로 계산하면 눈에 보이는 별과 찍히는 별이 어긋난다).
+func _spine_star_at(world: Vector2) -> int:
+	if spine_puzzle == null:
+		return -1
+	var geo := _spine_field()
+	var best := -1
+	var best_d := _SPINE_PICK_RADIUS
+	for i in spine_puzzle.count():
+		var p: Vector2 = geo["center"] + Spine.star_pos(i, spine_puzzle.count()) * geo["span"]
+		var d := world.distance_to(p)
+		if d < best_d:
+			best_d = d
+			best = i
+	return best
+
 # ── ★[S8-T6 / ADR-0066 결정 6·7] 연애(♡5) = 의지 시험 + 단일 슬롯 + 질투 ──────
 # ♡4 만충(점수가 ♡5 칸을 채움) 뒤의 마지막 진급은 관문 이벤트가 아니라 **의지 시험 = 인-픽션 고백
 # 선택**이다: 대화에 제안 한 줄이 앞서고, [F]로 고백하면 그 자리에서 연애가 개시된다(♡5 진급과
@@ -17082,6 +17275,17 @@ func _end_cutscene() -> void:
 			r.node.position = _cutscene_npc_prev[id]["pos"]
 			r.node.visible = bool(_cutscene_npc_prev[id]["visible"])
 	_cutscene_npc_prev.clear()
+	# ★[S9b-T7 / ADR-0068 결정 8] 척추 B5 — 발동 컷신이 끝나는 **이 프레임에** 내면 공간을 연다.
+	#   여기서 여는 이유가 연출이다: 바로 위 두 줄이 `fade.modulate.a`를 0으로 되돌려 세계를
+	#   다시 밝히는데, 같은 프레임에 내면 공간이 화면을 통째로 덮으므로 그 복귀가 **한 프레임도
+	#   안 보인다**(암전이 안 끊긴다). 컷신 뒤에 대화를 세우는 평소 경로로 가면 세계가 한 번
+	#   드러났다가 다시 어두워져 §6.5 2단의 "적막 → 암전"이 깨진다.
+	if _spine_b5_pending:
+		_spine_b5_pending = false
+		_cutscene_speaker = ""
+		_cutscene_lines = PackedStringArray()   # 예약 대화 없음(B5 지문은 퍼즐이 연다) — 방어적 정리
+		_open_spine_puzzle()
+		return
 	var speaker := _cutscene_speaker
 	var lines := _cutscene_lines
 	_cutscene_speaker = ""
@@ -18204,6 +18408,16 @@ func _on_dialogue_finished() -> void:
 		onboarding.talked_to_miho()
 	_talking_to = ""
 	_confess_rid = ""   # ★[S8-T6] 고백 제안은 그 대화 한정 — 닫히면 접힌다(다음 대화에 다시 선다)
+	# ★[S9b-T7 / ADR-0068 결정 8] 내면 공간(B5)의 지문이 닫힌 것 — 화면은 아직 내 안이다.
+	#   오프닝이면 이제 플레이어가 잇기 시작하고(이동 잠금 유지), 완료 지문이면 세계로 돌아간다.
+	#   ★ 위에서 이미 `player.set_physics_process(true)`가 한 번 풀렸으므로 **다시 잠근다** —
+	#     내면 공간은 걸어 다니는 곳이 아니다(그대로 두면 암전 뒤에서 플레이어가 숲을 돌아다닌다).
+	if spine_puzzle != null:
+		if _spine_b5_closing:
+			_close_spine_puzzle()
+		else:
+			player.set_physics_process(false)
+			player.velocity = Vector2.ZERO
 
 # ── ADR-0024 상호작용 대상 칸(마우스 커서) / 시각화 ─────────────────────────
 # 대상 칸 = 마우스 커서 밑 타일. 단 플레이어 인접 1칸 반경(주변 8칸 + 발밑)으로 클램프한다 —
@@ -18624,6 +18838,7 @@ func _draw() -> void:
 	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
 	_draw_cheki_hud()       # ★ [S6-T5] 체키 구도·셔터 그레이박스 트랙(세션 있을 때만)
 	_draw_cocktail_hud()    # ★ [S6-T6] 칵테일 붓기·셰이킹 그레이박스 트랙(세션 있을 때만)
+	_draw_spine_puzzle()    # ★[S9b-T7] B5 내면 공간(세션 있을 때만 — 화면을 통째로 덮는다)
 	if _edit_mode:          # ★ ADR-0025 ① 배치 모드 오버레이(선택·마우스 칸·팔레트 고스트)
 		_draw_edit_overlay()
 	if _deco_mode:          # ★ [S1-9] 집 꾸미기 모드 오버레이(마우스 칸·팔레트 고스트)
@@ -18637,6 +18852,79 @@ func _draw() -> void:
 # 손님·잡귀 그리기와 같은 결(노드 생성·해제 없이 main이 직접). 침대(32×64)는 1×2칸을 덮고,
 # 나머지(32×32)는 한 칸을 채운다(ADR-0013 native). PROP_LAYOUT 순서대로
 # 그려 선반(뒷벽)→카운터→스툴이 자연스레 겹친다.
+# ── ★[S9b-T7 / ADR-0068 결정 8] B5 내면 공간 — 한지 결 그레이박스 별자리 ─────────
+# §6.5 3단: "암전된 공허 공간에 파편이 **밤하늘 별자리처럼** 떠오르고, 플레이어가 이를 직접
+# 선으로 잇는다." 그 문장을 도형으로만 옮긴 그레이박스다(아트 각론은 T9 소관 — 여기서 재는 것은
+# **형태와 가독**뿐이다).
+#
+# 읽는 법:
+#   · 가운데 큰 원 = **자신의 공허**(허브). 나머지 전부가 여기로 모인다.
+#   · 두 겹 고리의 점 = 파편 14(세 열쇠 + 열한 증거). 이은 것은 금박·못 이은 것은 흐린 먹빛.
+#   · 흰 테 = 지금 겨눈 것 · **금박 겹테 = 강림 파편의 지시**(🟡 확증선의 화면 쪽 절반 —
+#     지문은 알림으로 흐르고, 어디를 가리키는지는 이 테가 말한다. 말이 아니라 시선이라는 뜻).
+#
+# main.gd `_draw`는 텍스트를 안 쓰는 관례라(문구는 전부 Label — 여기선 interact_prompt가 조작을
+# 글로 낸다) 순수 도형만 그린다. 한지 팔레트(HanjiUi)를 그대로 써 나머지 화면과 한 살림이 된다.
+const _SPINE_PICK_RADIUS := 14.0   # 좌클릭으로 별을 집는 반경(px — 별 반지름의 두 배 남짓)
+const _SPINE_STAR_R := 5.0         # 파편 점 반지름
+const _SPINE_HUB_R := 9.0          # 허브(자기 공허) 반지름 — 다른 것보다 확실히 크다
+const _SPINE_VOID := Color(0.03, 0.025, 0.02, 0.985)   # 내면 = 거의 완전한 먹 암전
+const _SPINE_DIM := Color(0.42, 0.38, 0.31)            # 아직 안 이어진 파편(있지만 멀다)
+
+# 별자리가 놓일 자리 — 화면 한가운데를 원점으로, 짧은 변의 40%를 반지름으로 잡는다.
+# 그리기와 집기(`_spine_star_at`)가 **같은 함수**를 쓰는 것이 이 헬퍼의 존재 이유다.
+# 이 파편의 종류(Spine.KIND_*) — 표가 없거나 범위 밖이면 빈 문자열(그리기는 기본 크기로 떨어진다).
+func _spine_frag_kind(i: int) -> String:
+	if i < 0 or i >= _spine_b5_frags.size():
+		return ""
+	return String((_spine_b5_frags[i] as Dictionary).get("kind", ""))
+
+func _spine_field() -> Dictionary:
+	var zoom: Vector2 = _cam.zoom if _cam != null else Vector2.ONE
+	var view := Vector2(get_viewport_rect().size) / zoom
+	var center: Vector2 = _cam.get_screen_center_position() if _cam != null \
+		else (player.global_position if player != null else Vector2.ZERO)
+	return {"center": center, "view": view, "span": minf(view.x, view.y) * 0.40}
+
+func _draw_spine_puzzle() -> void:
+	if spine_puzzle == null:
+		return
+	var geo := _spine_field()
+	var center: Vector2 = geo["center"]
+	var view: Vector2 = geo["view"]
+	var span: float = geo["span"]
+	# ① 세계를 덮는다 — 여백을 넉넉히 키워(카메라 보간·정수 반올림) 가장자리가 새지 않게.
+	draw_rect(Rect2(center - view * 0.5 - Vector2(64, 64), view + Vector2(128, 128)), _SPINE_VOID)
+	var n := spine_puzzle.count()
+	var hub: int = spine_puzzle.hub_index()
+	var hub_p: Vector2 = center + Spine.star_pos(hub, n) * span
+	# ② 이어진 선 — 파편에서 내 공허로. 이 선이 곧 "내 봉인에 스스로 닿았다"의 그림이다(§6.5 3).
+	for i in n:
+		if i == hub or not spine_puzzle.is_linked(i):
+			continue
+		draw_line(center + Spine.star_pos(i, n) * span, hub_p, HanjiUi.GOLD, 1.0)
+	# ③ 별 — 허브를 마지막에 그려 선 위에 앉게 한다.
+	var hint: int = spine_puzzle.hint_index()
+	for i in n:
+		if i == hub:
+			continue
+		var p: Vector2 = center + Spine.star_pos(i, n) * span
+		var linked := spine_puzzle.is_linked(i)
+		# 세 **열쇠**(메인 조각)는 열한 **증거**보다 한 눈금 크다 — 라쇼몽 구조(§6.1 "메인은 죄의
+		# 열쇠 · 조연은 그날 밤 증거")를 크기 하나로 읽히게 한 그레이박스 구분이다.
+		var r: float = _SPINE_STAR_R + (2.0 if _spine_frag_kind(i) == Spine.KIND_KEY else 0.0)
+		draw_circle(p, r, HanjiUi.GOLD_SOFT if linked else _SPINE_DIM)
+		draw_circle(p, r, HanjiUi.INK_LIGHT if linked else HanjiUi.BORDER, false, 1.0)
+		if i == hint:
+			# 🟡 확증선의 화면 절반 — 겹테 둘로 "여기"를 말한다(말이 아니라 시선).
+			draw_circle(p, _SPINE_STAR_R + 4.0, HanjiUi.GOLD, false, 1.0)
+			draw_circle(p, _SPINE_STAR_R + 7.0, HanjiUi.GOLD_SOFT, false, 1.0)
+		if i == spine_puzzle.cursor:
+			draw_circle(p, _SPINE_STAR_R + 2.0, HanjiUi.INK_LIGHT, false, 1.0)
+	draw_circle(hub_p, _SPINE_HUB_R, _SPINE_VOID)
+	draw_circle(hub_p, _SPINE_HUB_R, HanjiUi.GOLD_SOFT, false, 1.0)
+	draw_circle(hub_p, _SPINE_HUB_R - 3.0, HanjiUi.BORDER, false, 1.0)
+
 # ★ [S3-T10 / ADR-0061 결정 10] 릴 격투 HUD — **스타듀 낚시 UI 문법 스킨**(S3-T2 그레이박스 리스킨).
 # 로직은 한 줄도 안 건드린다(FishingSession 불변) — 같은 네 수치를 다른 문법으로 그릴 뿐이다.
 #
