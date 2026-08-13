@@ -293,7 +293,10 @@ func _run_checks() -> void:
 	var hobak_before: int = m.inventory.count_of(CropCatalog.YEONGHON_HOBAK)
 	m.clock.day = 18
 	m._try_resident_gift(r_okja)
-	_check("⑥g 관계 트랙 없는 주민은 선물 경로 무반응(무소모)",
+	# ★[S9b-T8 / ADR-0068 결정 10] 옥자 트랙이 B6에서 열려도 **선물 채널은 영영 안 열린다**
+	#   (deed 단독 채널 — `can_gift`는 개통 후에도 false다). 그래서 이 단언의 뒷부분(선물 무반응·
+	#   무소모)은 척추와 무관하게 영구 유효하고, 앞부분(트랙 부재)만 "B6 전" 범위다.
+	_check("⑥g 관계 트랙 없는 주민은 선물 경로 무반응(무소모 — 옥자는 B6 후에도 `can_gift` false)",
 		r_okja.affinity == null and not r_okja.can_gift
 		and m.inventory.count_of(CropCatalog.YEONGHON_HOBAK) == hobak_before)
 

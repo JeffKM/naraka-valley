@@ -2784,6 +2784,29 @@ var _spine_b5_mute_prev := false
 var _spine_b5_clock_prev := true
 # 이번 재생의 파편 표(`Spine.fragments()` 스냅 — 그리기·이름 조회용). 세션과 함께 버려진다.
 var _spine_b5_frags: Array = []
+# ── ★[S9b-T8 / ADR-0068 결정 9·10·11] B6 귀환 · B7 해방 · 에필로그 ─────────────
+# **다화자 지문 열.** B6·B7은 한 장면인데 소유가 화자로 갈려 있다(내면 지문 = spine.gd · 앵커의
+# 말 = okja.gd · 주례 = 지문). DialogueBox는 한 번에 화자 하나뿐이라, 묶음을 순서대로 잇는 큐가
+# 필요하다. **세이브 안 한다** — B5 세션·컷신과 같은 결로 한 장면이 도는 동안만 살아 있다.
+var _spine_say: Array = []
+# ★ B7 발동 예약 — B4의 `_spine_b4_armed`와 **완전히 같은 두 단계**다. 혼례는 아침 훅
+# (`_advance_wedding`)에서 성립하는데 그 훅은 취침 연출 한가운데(fade 트윈이 화면을 덮은 상태)라
+# 거기서 컷신을 틀면 트윈과 러너가 같은 알파를 서로 덮어쓴다. 그래서 판정은 아침 훅 · 재생은
+# 눈을 뜨는 프레임(`_on_sleep_done`)이다. 세이브 안 하는 이유도 B4와 같다(한 취침 사슬 안 소비).
+var _spine_b7_armed := false
+# 지금 화면을 덮고 있는 풀스크린 일러스트(컷신 러너가 세우고, **재생이 끝난 뒤에도 남는다** —
+# S등급은 그림 위에서 대사가 도는 형식이라 러너보다 오래 산다). 장면의 마지막 묶음이 닫힐 때
+# `_close_spine_scene`이 거둔다. 세이브 안 함(연출 상태).
+var _illust_id := ""
+var _illust_a := 0.0
+# 마지막 묶음이 닫히면 에필로그를 띄우겠다는 예약(결정 11 "B7 해방 컷신 직후 1회성 에필로그").
+var _epilogue_pending := false
+# 에필로그 화면이 떠 있는가. ★`_run_over`와 **다른 축**이다: 저건 런이 끝나 되돌릴 수 없는
+# 상태고(옛 21일 게이트의 잔재), 이건 닫으면 **코지 샌드박스로 돌아가는** 1회성 화면이다
+# (결정 11 "게임 종료 아님" · RUN_DAYS 게이트 부활 없음). 그래서 `_run_over`를 재사용하지 않는다.
+var _epilogue_open := false
+var _epilogue_clock_prev := true
+var _epilogue_hearts: VBoxContainer = null   # 에필로그 하트 행(스프라이트 — HeartBar 재사용)
 # ★[S8-T6 / ADR-0066 결정 6] **연애 슬롯 — 전 로스터 공유 단 1개**(빈 문자열 = 연애 없음).
 # 연애는 하트 위의 *상태*다(ADR-0066 "결혼은 하트 위 상태" — 연애도 같은 축): Affinity(점수·stage)에
 # 안 넣고 main이 든다. 슬롯이 하나뿐이라는 배타성이 곧 스타듀 꽃다발(아이템)의 대체물이다.
@@ -2863,7 +2886,10 @@ func _ready() -> void:
 	ground.z_index = -1
 	field_layer.z_index = -1
 	farm.tile_changed.connect(_on_tile_changed)
-	ending_restart.pressed.connect(_delete_save_and_restart)   # 엔딩 화면 "처음부터 다시 시작" 버튼
+	# ★[S9b-T8 / ADR-0068 결정 11] 한 버튼이 두 화면을 진다 — 옛 런 종료 화면에서는 "처음부터 다시
+	#   시작"(파괴적)이고, 엔딩 에필로그에서는 "…돌아간다"(샌드박스 복귀)다. 라우터를 한 겹 두는
+	#   이유가 그것이다: 에필로그에서 실수로 세이브가 지워지는 일은 절대 없어야 한다.
+	ending_restart.pressed.connect(_on_ending_button)
 	_prop_body = StaticBody2D.new()   # ★ T3③' 가구 충돌체(_build_grid가 칸을 다시 채운다)
 	add_child(_prop_body)
 	_trellis_body = StaticBody2D.new()   # ★ [S1-5a] 트렐리스 넝쿨 충돌체(tile_changed·구역빌드가 재구성)
@@ -8800,8 +8826,11 @@ func _place_labels() -> void:
 			# ★[S9b-T7 / ADR-0068 결정 8] 척추 해결 게이트가 차면 문구가 바뀐다 — **나락 진입로
 			#   점등(S5-T7·T11)과 같은 문법**이다(게이트 실태를 라벨이 그대로 되쏜다). 미충족일
 			#   때의 문구는 한 글자도 안 바뀌므로 게이트 전의 거동은 종전과 바이트 동일이다.
-			_add_label("옥자 집 (문이 열려 있다)" if _spine_gate_ok()
-				else "옥자 집 (잠김 — 미결의 죄 해결 후)", _tile_center_px(Vector2i(57, 27)))  # ★C7 동쪽 깊은 끝
+			# ★[S9b-T8 / ADR-0068 결정 10] B6를 지나면 **상시 개방**이라 조건 문구 자체가 걷힌다 —
+			#   그때부터 이 집은 "열리는 곳"이 아니라 그냥 그 사람이 사는 곳이다(귀환의 지리 판).
+			_add_label("옥자 집" if _spine_bit_seen(SPINE_B6)
+				else ("옥자 집 (문이 열려 있다)" if _spine_gate_ok()
+				else "옥자 집 (잠김 — 미결의 죄 해결 후)"), _tile_center_px(Vector2i(57, 27)))  # ★C7 동쪽 깊은 끝
 			# ★[S4-T1] 플레이스홀더 제거 — 희소종 스폰 빈터로 승격(좌표 불변).
 			_add_label("특수 채집지", _tile_center_px(MIHOK_FORAGE_LABEL_TILE))
 			_add_label("특수 채집지", _tile_center_px(MIHOK_FORAGE_LABEL_TILE_2))
@@ -9484,6 +9513,10 @@ func _on_day_advanced(day: int) -> void:
 	#   아침이면 이 아침에 틀겠다고 예약한다. **재생은 취침 연출이 끝나는 프레임**이다
 	#   (`_fire_spine_b4` — 이 훅이 화면이 검게 덮인 연출 한가운데라서. 함수 머리말 참조).
 	_arm_spine_b4()
+	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 재계산 — deed는 **적립이 아니라 파생**이라 원장이
+	#   자란 만큼 아침마다 다시 잰다(트랙이 안 열렸으면 무동작). 대화 진입에서도 한 번 더 갱신해
+	#   "어제 판 밭이 오늘 대화에 반영되는" 결을 맞춘다(_start_resident_dialogue 첫 줄).
+	_refresh_okja_track()
 	energy.refill()
 	# ★[S5-T4 / ADR-0063 결정 4] 취침 HP 풀회복 — 혼력과 나란히 붙는다(회복 = 취침 + 소모품 명부환).
 	#   최대치도 함께 맞춘다: 어제 오른 전투 레벨·고른 전문직이 아침에 정확히 반영되게(멱등).
@@ -10148,6 +10181,10 @@ func _on_sleep_done() -> void:
 	#   프레임**에 튼다(판정과 재생을 나눈 이유는 `_arm_spine_b4` 머리말). 아래 자동 저장보다 앞이라
 	#   비트가 그 세이브에 실린다 — 중간에 껐다 켜도 같은 아침이 두 번 오지 않는다.
 	_fire_spine_b4()
+	# ★[S9b-T8 / ADR-0068 결정 10·11] 척추 B7 해방 — 혼례 아침 훅이 예약해 둔 컷신을 같은 프레임에
+	#   튼다(B4와 완전히 같은 두 단계). B4가 이미 재생 중이면 `_fire_spine_b7`이 조용히 접는다 —
+	#   두 비트가 같은 아침에 설 수 있는 조합은 없지만(B4는 B7보다 한참 앞이다) 가드는 둔다.
+	_fire_spine_b7()
 	# T2.5 스타듀식 자동 저장: 한 날이 끝나 잠들 때마다 진행을 보존한다.
 	_save_game()
 
@@ -10267,6 +10304,12 @@ func _load_game() -> void:
 	# ★ [S3-T2] 진행 중이던 릴 격투 세션은 로드에서 버린다(비영속 — 세이브에 낚시 키가 없는 것과 짝).
 	#   로드는 상태 하드 리셋이라, 옛 세션이 새 월드 위에 남아 있으면 안 된다.
 	fishing = null
+	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
+	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
+	#   값을 붓기 때문이다(없으면 저장돼 있던 칸이 조용히 사라진다). `_spine_bits` 복원은 아래
+	#   한참 뒤라 여기서는 원본 dict를 직접 본다 — 두 곳이 같은 키를 읽을 뿐 원장은 여전히 하나다.
+	if (int(data.get("spine_bits", 0)) & (1 << SPINE_B6)) != 0:
+		_open_okja_track()
 	# 옛 오버레이를 먼저 비운다(F9 재로드 대비). 이후 FarmField.load_save가
 	# 칸마다 tile_changed를 발화해 main이 새 상태로 다시 칠한다.
 	field_layer.clear()
@@ -10409,6 +10452,16 @@ func _load_game() -> void:
 	#   원장에 누우면 뒷 태스크(B5~B7)의 판정이 조용히 거짓이 된다.
 	_spine_bits = maxi(int(data.get("spine_bits", 0)), 0) & SPINE_BITS_MASK
 	_spine_b4_armed = false   # 예약은 취침 사슬 한정 — 로드는 언제나 예약 없음에서 시작한다
+	# ★[S9b-T8] B7 예약·S등급 장면 상태도 같은 이유로 전부 0에서 시작한다(연출은 세이브 대상이
+	#   아니다 — 컷신 러너·B5 세션과 같은 결). 에필로그는 1회성이라 되살아나면 안 되고, 그 1회성의
+	#   진실원은 플래그가 아니라 **B7 비트**다(이미 선 비트는 다시 안 서고, 그래서 화면도 안 뜬다).
+	_spine_b7_armed = false
+	_spine_say.clear()
+	_illust_id = ""
+	_illust_a = 0.0
+	_epilogue_pending = false
+	if _epilogue_open:
+		_close_epilogue()
 	# ★[S9-T4] 절기 물음 원장 복원(구세이브 = 빈 원장 = 다음 주 첫날에 처음 묻는다).
 	_season_q_week = {}
 	var sq: Dictionary = data.get("season_q_week", {})
@@ -10425,6 +10478,9 @@ func _load_game() -> void:
 		_spouse_id = ""
 	_wedding_day = maxi(int(data.get("wedding_day", 0)), 0)
 	_apply_spouse_home_station()   # 이주 스테이션 재적용(스케줄은 _ready마다 새로 조립 — 멱등)
+	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 점수 재계산 — **배우자 복원 뒤**여야 한다(잠금 판정이
+	#   현재 배우자를 본다). 저장된 점수를 믿지 않고 원장에서 다시 재는 것이 이 트랙의 규약이다.
+	_refresh_okja_track()
 	# ★[S8-T8] 재혼 면제 원장 복원(구세이브 = 빈 원장 = 초혼). 키를 명시 재조립해 손상 세이브의
 	# 이물이 눕지 않게 하고, false 값 항목은 버린다(원장에 "면제 아님"을 적어 둘 이유가 없다).
 	_ever_married = {}
@@ -10995,7 +11051,8 @@ func _process(delta: float) -> void:
 		or cafe_summary_panel.visible or milestone_panel.visible or ending_panel.visible \
 		or mirror_panel.visible \
 		or cutscene != null \
-		or spine_puzzle != null
+		or spine_puzzle != null \
+		or _illust_id != ""
 		# ★[S9-T2] 컷신 재생 중엔 상시 HUD를 접는다(연출 화면).
 		# ★[S9b-T7] 내면 공간(B5)도 같은 연출 화면이다 — 오히려 여기는 세계 자체가 사라진 자리라
 		#   상시 HUD가 한 조각이라도 남으면 "게임 화면 위에 퍼즐"이 되어 §6.5 2단이 무너진다.
@@ -11028,6 +11085,14 @@ func _process(delta: float) -> void:
 	# T4.2 슬라이스가 끝났으면 마무리 화면만 유지하고 모든 게임 입력을 막는다
 	# (이동은 _do_sleep/_end_run에서 이미 잠갔다). 마무리 화면은 _end_run이 한 번
 	# 세웠으므로 여기선 더 손대지 않는다.
+	# ★[S9b-T8 / ADR-0068 결정 11] 에필로그 화면 — 게임 입력을 전부 삼키되 **닫기 하나만** 받는다.
+	#   `_run_over`와 다른 축이라 가드도 따로 선다: 저건 되돌릴 수 없는 종료고 이건 닫으면 코지
+	#   샌드박스로 돌아가는 1회성 화면이다(§6.4 "머무름은 선택"). 세이브 삭제(F8)는 **안 받는다** —
+	#   여기는 게임의 끝이 아니라 한 장의 회고라, 그 자리에 파괴적 입력을 두지 않는다.
+	if _epilogue_open:
+		if Input.is_action_just_pressed("action") or Input.is_action_just_pressed("ui_accept"):
+			_close_epilogue()
+		return
 	if _run_over:
 		# 마무리 화면에서도 세이브 삭제+새 시작(F8)은 받는다 — 슬라이스가 끝나(보호할 진행이
 		# 없음) "다시 처음부터"가 가장 자연스러운 자리다. 여긴 곧바로 실행한다(2단 확인 없음).
@@ -11341,7 +11406,11 @@ func _process(delta: float) -> void:
 			_start_resident_dialogue(faced_resident)
 			return
 		# 선물(G): 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회 — Affinity가 게이팅).
-		if faced_resident.can_gift and Input.is_action_just_pressed("gift_item"):
+		# ★[S9b-T8 / ADR-0068 결정 10] 앵커는 `can_gift=false`가 그대로다(선물 채널은 영영 안 연다) —
+		#   다만 **명부 혼례 부적을 든 손만** 이 문을 통과한다. 그건 선물이 아니라 청혼이라
+		#   ([narrative-bible §6.3] 궁극의 결혼 분기), 채널을 여는 것이 아니라 예외를 하나 두는 것이다.
+		if (faced_resident.can_gift or _okja_charm_in_hand(faced_resident)) \
+				and Input.is_action_just_pressed("gift_item"):
 			_try_resident_gift(faced_resident)
 			return
 		# [F] 특수 훅(네오 매대 · 바나 나라카 바 옵트인). ★결정 8 — 이 채널은 관계 트랙과
@@ -11939,6 +12008,10 @@ func _process(delta: float) -> void:
 				res_hint += "   [G] %s 선물" % ItemCatalog.name_of(held_gift)
 			else:
 				res_hint += "   [G] 선물 — 건넬 물건을 손에"
+		# ★[S9b-T8 / ADR-0068 결정 10] 앵커는 선물 채널이 없어 위 블록을 통째로 건너뛴다 — 대신
+		#   명부 혼례 부적을 든 순간에만 청혼 안내가 붙는다(그 한 가지 예외의 프롬프트 판).
+		elif _okja_charm_in_hand(faced_resident):
+			res_hint += "   [G] 명부 혼례 부적 — 청혼"
 		if faced_resident.prompt_extra.is_valid():
 			res_hint += String(faced_resident.prompt_extra.call())
 		interact_prompt.text = res_hint
@@ -15993,6 +16066,21 @@ func _setup_residents() -> void:
 		{"from_min": Cafe.OPEN_MIN, "tile": gangrim_cafe_tile, "region": RegionCatalog.NARU_VILLAGE},
 	]
 	# ★ effect_fn 없음 = 관계 탭에 곱셈기 줄이 안 붙는다(선물 리듬 꼬리만 — 모찌·켄 선례 동형).
+	# ★[S9b-T8 / ADR-0068 결정 10 · narrative-bible §6.3] **명부 혼례 부적 창구** — 앵커 본인의
+	#   혼례만은 정표를 접는 사람이 바뀐다. 부적은 원래 앵커의 마녀 서비스인데 자기 것을 자기가
+	#   접을 수는 없고, §6.3이 "앵커의 혼례는 차사가 맺어 준다"고 못 박았으므로 **명부의 주인이
+	#   접는다**(계약으로 묶던 손이 사랑으로 묶는 거울 — 그가 곧 주례이기도 하다).
+	#   · **값이 없다**: 명부에 이름을 올리는 일은 사고팔 수 없다(부적 5,000냥·비약 3,000냥과 갈리는
+	#     자리 — 여기서 문턱을 지는 것은 냥이 아니라 다 갚은 deed 그 자체다).
+	#   · **이 레코드가 훅을 든다 — `gangrim.gd`는 여전히 척추를 한 글자도 안 든다**(⑩h 불변).
+	#     레코드는 main의 것이고 본문은 캐릭터의 것이라는 그 경계가 여기서도 그대로다.
+	r_gangrim.prompt_extra = func() -> String:
+		return "   [F] 명부 혼례 부적을 청한다" if _myeongbu_quest_open() else ""
+	r_gangrim.shop_key = func() -> bool:
+		if not _myeongbu_quest_open():
+			return false
+		_grant_myeongbu_charm()
+		return true
 	_register_resident(r_gangrim)
 	# ★ 선호 선물은 GiftPrefs "gangrim"이 든다 — **이름에 직무가 박힌 것·격식 그 자체**(아메리카노·
 	#   명부금강·염주석·삿갓오징어·저승삼)가 러브, **인도받지 못하고 흩어진 것의 재**(넋가루)가
@@ -16643,6 +16731,10 @@ func _close_spine_puzzle() -> void:
 	if not _run_over:
 		player.set_physics_process(true)
 	queue_redraw()
+	# ★[S9b-T8 / ADR-0068 결정 9·10] **B6 이음매의 이행** — S9b-T7이 "여기서 이어 붙이면 된다"고
+	#   남긴 그 자리다(§6.5 5단 "카타르시스 전환"). 위 세 줄이 세계를 되돌리자마자 S등급 그림이
+	#   화면을 다시 덮으므로 도트체 → 풀 컷신 전환에 세계가 한 프레임도 안 보인다.
+	_fire_spine_b6()
 
 # 월드 좌표에 닿은 별의 인덱스(−1 = 없음). 그리기와 **같은 배치식**을 쓴다(자리의 진실원은
 # `Spine.star_pos` 하나 — 두 곳에서 따로 계산하면 눈에 보이는 별과 찍히는 별이 어긋난다).
@@ -16659,6 +16751,297 @@ func _spine_star_at(world: Vector2) -> int:
 			best_d = d
 			best = i
 	return best
+
+# ── ★[S9b-T8 / ADR-0068 결정 9·10·11] B6 귀환 · 앵커 트랙 · B7 해방 · 에필로그 ────
+# [narrative-bible §6]의 남은 두 비트와 그 뒤에 오는 것들이 전부 여기 모인다. 이 블록이 게임에
+# **결말을 준다** — S9b 착수 grill이 "게임에 엔딩이 없다"를 최상위 격차로 지목한 그 자리다.
+#
+# ★ **소유 지도**(B4~B7을 관통하는 한 줄기 — 화자로 갈린다):
+#     · 화자 없는 내면 지문 → B4는 main · B5~B7은 `spine.gd`(등장인물 0명의 문장)
+#     · 앵커의 말           → `okja.gd`([ADR-0005] — 그 파일은 B0부터 자기 말을 들고 있었다)
+#     · 주례                → **지문뿐**(`Spine.B7_OFFICIANT_LINES`). 갓 쓴 그는 여기서도 한 줄도
+#       말하지 않는다 — [ADR-0068] 결정 6의 🔴 4축이 B6 이후에도 영구 금지이고, `gangrim.gd`는
+#       척추를 여전히 한 글자도 소유하지 않는다(gangrim_arc_test ⑩g·⑩h 불변).
+#     · 원장·발동·상태 전이 → main(여기)
+#
+# ★ **금칙어의 방향 반전**: B5까지의 본문은 중심 진실 4종을 한 줄도 말하면 안 됐고, B6부터는
+#   **말해야 한다**. 다만 플레이어 죄목을 대신 명명하는 **평결 18어는 여전히 0**이다(§2.2 —
+#   스스로 닿은 자에게 판결은 필요 없다). 기존 가드는 캐릭터 파일·B5 한정으로 그대로 살아 있고,
+#   B6·B7의 허용 상한은 spine_ending_test가 **실존 단언**으로 따로 잰다(침묵만 재면 검열이다).
+
+const OKJA_RID := "okja"
+
+# ── 다화자 지문 열(큐) ────────────────────────────────────────────────────────
+# 한 장면이 화자별로 두세 묶음으로 갈리므로 순서대로 잇는다. DialogueBox는 한 번에 화자 하나다.
+func _queue_spine_say(speaker: String, lines) -> void:
+	var pack := PackedStringArray(lines)
+	if not pack.is_empty():
+		_spine_say.append({"speaker": speaker, "lines": pack})
+
+# 다음 묶음을 연다(열었으면 true). 이동 잠금은 장면이 끝날 때까지 이어진다.
+func _advance_spine_say() -> bool:
+	if _spine_say.is_empty() or dialogue.is_open():
+		return false
+	var e: Dictionary = _spine_say.pop_front()
+	player.set_physics_process(false)
+	player.velocity = Vector2.ZERO
+	_talking_to = ""            # 척추 지문은 온보딩 화자가 아니다(B4·B5와 같은 규약)
+	dialogue.start(String(e["speaker"]), PackedStringArray(e["lines"]))
+	return true
+
+# 장면 종료 — 그림을 거두고 세계를 되돌린다(스냅 없이 원점으로: illust는 상태가 아니라 연출이다).
+func _close_spine_scene() -> void:
+	_illust_id = ""
+	_illust_a = 0.0
+	_spine_say.clear()
+	if not _run_over and not _epilogue_open and spine_puzzle == null:
+		player.set_physics_process(true)
+	queue_redraw()
+
+# ── B6 귀환([narrative-bible §6.5] 5단 "카타르시스 전환") ──────────────────────
+# 발동 자리 = **B5 내면 공간이 걷히는 그 프레임**(`_close_spine_puzzle` 끝 — S9b-T7이 남긴 이음매
+# 주석이 가리킨 정확히 그 지점). 세계가 한 번도 드러나지 않고 도트체에서 S등급으로 급전환한다.
+func _fire_spine_b6() -> void:
+	if _spine_bit_seen(SPINE_B6) or not _spine_bit_seen(SPINE_B5):
+		return                          # 재발동 0 · B5를 안 지난 귀환은 없다(비트가 유일한 방어선)
+	if _run_over or cutscene != null:
+		return
+	if not _begin_cutscene(Spine.B6_CUTSCENE.duplicate(true), "", PackedStringArray()):
+		return                          # 러너 거절 — 비트를 안 찍었으니 상태가 안 상한다
+	_mark_spine_bit(SPINE_B6)
+	_open_okja_track()                  # ★ 결정 10 "B6 후 트랙 개통" — 개통의 자리가 여기다
+	_save_game()                        # 비트를 즉시 굳힌다(B5 완료와 같은 규율)
+	var r := _resident(OKJA_RID)
+	# ★ §6.4 결혼 경로별 톤 — 이미 다른 이와 맺어졌으면 *씁쓸한 축복*이 온다. 분기 판정은 여기서
+	#   하고 본문은 캐릭터 파일이 든다(판정 = main · 말 = 캐릭터, 앞 아홉 태스크와 같은 이음매).
+	var married_elsewhere := _spouse_id != "" and _spouse_id != OKJA_RID
+	_spine_say.clear()
+	_queue_spine_say(Spine.INNER_SPEAKER, Spine.B6_RETURN_LINES)
+	if r != null and r.node != null and r.node.has_method("spine_lines"):
+		_queue_spine_say(r.display_name, r.node.spine_lines("b6", married_elsewhere))
+	_queue_spine_say(Spine.INNER_SPEAKER, Spine.B6_CLOSE_LINES)
+
+# ── ★ 앵커 트랙 = deed 단독 채널([ADR-0068] 결정 10 · [narrative-bible §6.1]) ────
+# 트랙이 열려 있는가. **현재 배우자가 있으면 잠근다**(결정 10-ⓓ): 이혼 *경력*은 막지 않는다
+# (ADR-0022 재구애 허용 · ADR-0032 "미혼 완주자"의 기계 해석은 *현재 상태*이지 이력이 아니다).
+# 억지력은 이미 이혼 의뢰비(50,000냥)가 지고 있으므로 여기에 두 번째 벌칙을 얹지 않는다.
+func _okja_track_open() -> bool:
+	if not _spine_bit_seen(SPINE_B6):
+		return false
+	return _spouse_id == "" or _spouse_id == OKJA_RID
+
+# 트랙 개통 — 이 순간에야 Affinity 노드가 **생긴다**. B6 전에는 아예 없다는 것이 "B6 후 개통"의
+# 가장 정직한 구현이고, 덕분에 개통 전 거동은 바이트 그대로다(관계 탭·세이브 키·선물 경로 전부).
+func _open_okja_track() -> void:
+	var r := _resident(OKJA_RID)
+	if r == null or r.affinity != null:
+		return
+	var aff := Affinity.new()
+	aff.name = "OkjaAffinity"
+	add_child(aff)
+	r.affinity = aff
+	r.save_key = "okja_affinity"   # 신규 가법 키 — 구세이브엔 없어 ♡0에서 시작(하위호환 자동)
+	# 관계 탭 효과 줄 = **세 반전의 진행**이다(다른 로스터의 곱셈기 자리를 이 트랙은 이렇게 쓴다 —
+	# 여기엔 곱셈기가 없고 갚아야 할 목록이 있다. ADR-0008 "곱셈기 종류가 다르다"의 극단 사례).
+	r.effect_fn = func() -> String:
+		var t := Spine.okja_deed_terms(
+			_spine_bit_seen(SPINE_B4) and _spine_bit_seen(SPINE_B5),
+			museum.donated_count(), Museum.donatable_ids().size(), _run_harvested)
+		return "되찾음 %d/%d · 마주함 %s · 돌봄 %d" % [
+			museum.donated_count(), Museum.donatable_ids().size(),
+			"○" if int(t["face"]) > 0 else "—", _run_harvested]
+	_refresh_okja_track()
+
+# ★ 점수를 **원장에서 다시 계산**한다(적립이 아니라 파생). 이것이 "선물·대화·활동 3채널 차단"의
+#   뿌리다 — 세 채널이 점수를 밀어 넣어도 다음 갱신에 덮여 사라지므로, 차단이 플래그가 아니라
+#   **구조**로 성립한다. 호출부 게이트 셋(아래 대화·선물·활동)은 그 위에 얹는 명시적 방어선이다.
+#   판정식은 `spine.gd`가 순수 static으로 들고(deed.gd 결) 여기는 원장 셋을 떠 넘기는 창구다.
+func _refresh_okja_track() -> void:
+	var r := _resident(OKJA_RID)
+	if r == null or r.affinity == null:
+		return
+	var pts := 0
+	if _okja_track_open():
+		pts = Spine.okja_deed_points(
+			_spine_bit_seen(SPINE_B4) and _spine_bit_seen(SPINE_B5),   # 외면 반전
+			museum.donated_count(), Museum.donatable_ids().size(),      # 망각 반전
+			_run_harvested)                                             # 부재 반전
+	r.affinity.points = clampi(pts, 0, Affinity.MAX_POINTS)
+	# ★ **칸도 함께 파생한다** — 이 트랙에는 관문 이벤트가 없다(deed 자체가 관문이다). 근거 둘:
+	#   ㉠ 다른 로스터의 ♡5는 **의지 시험**(인-픽션 고백)이 여는데(ADR-0066 결정 6) 앵커는
+	#      `ROMANCE_OPEN` 밖이라 그 문이 아예 없다 — 칸을 관문에 맡기면 ♡4에서 영영 멈춘다.
+	#   ㉡ 애초에 "세 죄를 다 갚았다"가 곧 의지의 증거다(§6.1 "행동으로 갚는 모델"). 다 갚고
+	#      나서 대화 한 번을 더 요구하는 것은 이 트랙의 성격에 어긋난다.
+	#   귀결: 점수와 칸이 언제나 같아 `_try_heart_promotion`은 이 사람에게 대기 상태를 못 만든다
+	#   (pending_promotion이 항상 false — 진급 알림도 편지도 안 뜬다). 배우자 잠금으로 점수가
+	#   0으로 내려가면 칸도 함께 내려오고, 곁이 비면 그 자리에서 되돌아온다.
+	r.affinity.stage = r.affinity.points_hearts()
+
+# 이 사람에게 대화·선물·활동 채널이 닫혀 있는가(호출부 게이트의 단일 판정 — 결정 10 자구).
+# ★ 명단이 아니라 한 사람이다: 이 트랙은 로스터의 한 칸이 아니라 게임에 하나뿐인 축이다.
+func _okja_deed_only(rid: String) -> bool:
+	return rid == OKJA_RID
+
+# ── B7 해방 + 궁극의 결혼 분기(§6.3 · [ADR-0068] 결정 10) ──────────────────────
+# 게이트 = **척추 해결(B6) + deed ♡max + 정표 특별판 + 배우자 방**. 기존 결혼 문법을 최대로
+# 재사용한다 — 혼례 대기(`_wedding_day`)·혼례 아침(`_advance_wedding`)·이주·재혼 원장이 전부
+# 그대로 돌고, 이 트랙이 새로 만드는 것은 **아이템 1 + 의뢰 훅 1 + 청혼 분기 1**뿐이다
+# (세레나 비약이 세운 "최소 기계화" 선례 동형 — 새 상태·새 입력 0).
+#
+# ★ **정표 특별판을 접는 사람이 앵커가 아니다.** 부적은 원래 앵커의 마녀 서비스인데, 자기 혼례
+#   부적을 자기가 접을 수는 없다. §6.3이 "앵커 본인의 혼례는 차사가 맺어 준다"고 못 박았으므로
+#   **명부의 주인이 접는다** — 그것이 곧 주례이기도 하다(계약으로 묶던 손이 사랑으로 묶는 거울).
+#   그래서 창구는 강림 [F]이고, **값은 냥이 아니다**(명부에 이름을 올리는 일은 사고팔 수 없다).
+# ★ 앵커는 `ROMANCE_OPEN` 명단 **밖**이라 고백(♡5 의지 시험) 문법을 타지 않는다 — deed를 다
+#   갚은 것이 곧 고백이기 때문이다. 그래서 연애 슬롯은 청혼이 성립하는 자리에서 직접 채운다.
+# 지금 앵커를 마주 본 채 명부 혼례 부적을 들고 있는가([G] 예외 하나의 판정 — 입력·프롬프트 공용).
+func _okja_charm_in_hand(r: Resident) -> bool:
+	return r != null and _okja_deed_only(r.id) and r.affinity != null \
+		and inventory.selected_id() == ItemCatalog.MYEONGBU_CHARM
+
+func _myeongbu_quest_open() -> bool:
+	var r := _resident(OKJA_RID)
+	return _okja_track_open() and _spouse_id == "" and _wedding_day == 0 \
+		and r != null and r.affinity != null and r.affinity.hearts() >= Affinity.MAX_HEARTS \
+		and not inventory.has_item(ItemCatalog.MYEONGBU_CHARM)
+
+func _grant_myeongbu_charm() -> void:
+	if not _myeongbu_quest_open():
+		return
+	if not inventory.add_item(ItemCatalog.MYEONGBU_CHARM, 1):
+		_notice("가방이 가득 찼다")
+		return
+	audio.sfx("ui")
+	_notice("명부에 두 이름이 나란히 적힐 자리가 비었다 — 명부 혼례 부적 (앵커에게 [G]로 건네자)",
+		NOTICE_SECS * 2.0)
+
+# 청혼(앵커 한정) — 명부 혼례 부적을 든 채 [G]. 거절은 전부 **무소모·무벌칙**이다(부적 보존).
+func _try_propose_okja() -> void:
+	if _spouse_id != "":
+		_notice("이미 부부다 — 부적이 조용히 잠들어 있다")
+		return
+	if _wedding_day > 0:
+		_notice("혼례는 이미 정해졌다 — %d일 아침" % _wedding_day)
+		return
+	if not _spine_bit_seen(SPINE_B6):
+		_notice("아직 아무것도 보지 못했다")     # 여기까지 올 수 없는 조합(부적의 전제) — 방어
+		return
+	var r := _resident(OKJA_RID)
+	if r == null or r.affinity == null or r.affinity.hearts() < Affinity.MAX_HEARTS:
+		_notice("갚아야 할 것이 아직 남아 있다 — 되찾고, 마주하고, 돌보는 일")
+		return
+	if not _home_expanded():
+		_notice("둘이 살 방이 없다 — 옹이의 목공방에서 「안방 확장」을 올리자")
+		return
+	var idx := inventory.selected_index
+	if not inventory.remove_at(idx, 1):     # 정표 소모(든 슬롯 그대로 — 선물 문법과 동일)
+		return
+	_romance_partner = OKJA_RID             # 연애 슬롯 = 청혼이 곧 고백이다(위 머리말)
+	_wedding_day = clock.day + WEDDING_WAIT_DAYS
+	audio.sfx("ui")
+	_notice("부적이 받아들여졌다 — %d일 아침, 혼례를 올린다" % _wedding_day, NOTICE_SECS * 2.0)
+
+# B7 재생 — 혼례 아침이 예약해 둔 해방 컷신을 눈을 뜨는 프레임에 튼다(B4와 완전히 같은 두 단계).
+func _fire_spine_b7() -> void:
+	if not _spine_b7_armed:
+		return
+	_spine_b7_armed = false
+	if _run_over or cutscene != null or _spine_bit_seen(SPINE_B7):
+		return
+	if not _begin_cutscene(Spine.B7_CUTSCENE.duplicate(true), "", PackedStringArray()):
+		return
+	_mark_spine_bit(SPINE_B7)
+	_spine_say.clear()
+	_queue_spine_say(Spine.INNER_SPEAKER, Spine.B7_OFFICIANT_LINES)   # 주례 = 전부 지문
+	var r := _resident(OKJA_RID)
+	if r != null and r.node != null and r.node.has_method("spine_lines"):
+		_queue_spine_say(r.display_name, r.node.spine_lines("b7"))
+	_queue_spine_say(Spine.INNER_SPEAKER, Spine.B7_RELEASE_LINES)
+	_epilogue_pending = true            # 마지막 묶음이 닫히면 에필로그(결정 11)
+
+# ── ★ 에필로그(결정 11) — 사장 `_end_run` 화면의 재목적화 ──────────────────────
+# 옛 21일 런 정산 화면(호출부 0)이 여기서 **엔딩 화면으로 부활**한다. 다만 성격이 정반대다:
+# 저건 게임이 끝나는 화면이었고 이건 **닫으면 코지 샌드박스로 돌아가는** 1회성 화면이다
+# (§6.4 "머무름은 선택" · RUN_DAYS 게이트 부활 없음). 그래서 `_run_over`를 안 쓰고 별도 축을 둔다.
+# ★ 하트는 **스프라이트**다(S8-T10 이월 소화) — neodgm.ttf에 ♥ 글리프가 없어 문자열 막대가
+#   두부(□)로 뜨던 그 마지막 잔재를, 관계 탭이 이미 쓰는 HeartBar로 갈아탄다(신규 아트 0).
+const EPILOGUE_HEART_ROWS := 4     # 화면에 세울 관계 행 수 상한(카드가 감당하는 높이)
+
+func _open_epilogue() -> void:
+	_epilogue_pending = false
+	if _epilogue_open or _run_over:
+		return
+	_epilogue_open = true
+	_epilogue_clock_prev = clock.running
+	clock.running = false
+	player.set_physics_process(false)
+	player.velocity = Vector2.ZERO
+	cafe_summary_panel.visible = false
+	if notice_feed != null:
+		notice_feed.visible = false
+	ending_text.text = RunSummary.epilogue_text(clock.day, wallet.gold, _run_harvested,
+		museum.donated_count(), Museum.donatable_ids().size(),
+		_display_name_of(_spouse_id))
+	ending_text.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	ending_text.offset_bottom = -168.0
+	_build_epilogue_hearts()
+	ending_restart.text = "…돌아간다"
+	ending_panel.visible = true
+
+# 엔딩 패널 버튼의 두 얼굴(위 `_ready` 연결 주석 참조).
+func _on_ending_button() -> void:
+	if _epilogue_open:
+		_close_epilogue()
+	else:
+		_delete_save_and_restart()
+
+func _close_epilogue() -> void:
+	if not _epilogue_open:
+		return
+	_epilogue_open = false
+	ending_panel.visible = false
+	if _epilogue_hearts != null:
+		_epilogue_hearts.visible = false
+	ending_text.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	ending_text.offset_bottom = -90.0
+	ending_restart.text = "처음부터 다시 시작"
+	if notice_feed != null:
+		notice_feed.visible = true
+	clock.running = _epilogue_clock_prev
+	player.set_physics_process(true)
+	_save_game()                      # 돌아간 자리를 굳힌다(에필로그는 1회성 — 다시 안 뜬다)
+
+# 관계 요약 행 — 진급한 칸이 있는 사람만, 높은 칸부터. 배우자·앵커가 늘 위에 오도록 정렬한다.
+func _build_epilogue_hearts() -> void:
+	if _epilogue_hearts == null:
+		_epilogue_hearts = VBoxContainer.new()
+		_epilogue_hearts.name = "EpilogueHearts"
+		_epilogue_hearts.position = Vector2(150.0, 190.0)
+		_epilogue_hearts.custom_minimum_size = Vector2(340.0, 76.0)
+		_epilogue_hearts.add_theme_constant_override("separation", 2)
+		ending_panel.add_child(_epilogue_hearts)
+	for c in _epilogue_hearts.get_children():
+		c.queue_free()
+	var rows := []
+	for r in _residents:
+		if r.affinity == null or r.affinity.hearts() <= 0:
+			continue
+		rows.append({"name": r.display_name, "filled": r.affinity.hearts(),
+			"rank": 100 if r.id == _spouse_id else (50 if r.id == OKJA_RID else 0)})
+	rows.sort_custom(func(a, b):
+		if int(a["rank"]) != int(b["rank"]):
+			return int(a["rank"]) > int(b["rank"])
+		return int(a["filled"]) > int(b["filled"]))
+	for i in mini(rows.size(), EPILOGUE_HEART_ROWS):
+		var bar := HeartBar.new()
+		_epilogue_hearts.add_child(bar)
+		bar.render(String(rows[i]["name"]), int(rows[i]["filled"]), Affinity.MAX_HEARTS)
+	_epilogue_hearts.visible = true
+
+# 표시 이름 조회(빈 rid = 빈 문자열 — 에필로그 요약이 "혼인 없음"을 그대로 말할 수 있게).
+func _display_name_of(rid: String) -> String:
+	var r := _resident(rid)
+	return r.display_name if r != null else ""
 
 # ── ★[S8-T6 / ADR-0066 결정 6·7] 연애(♡5) = 의지 시험 + 단일 슬롯 + 질투 ──────
 # ♡4 만충(점수가 ♡5 칸을 채움) 뒤의 마지막 진급은 관문 이벤트가 아니라 **의지 시험 = 인-픽션 고백
@@ -16956,6 +17339,13 @@ func _advance_wedding(day: int) -> void:
 	#   그 리스크). 이 배너에 그림 하트를 넣을 자리는 없고(알림 피드는 글자 한 줄), 문구만으로 충분하다.
 	_notice("혼례를 올렸다 — %s와 부부가 되었다" % (r.display_name if r != null else _spouse_id),
 		NOTICE_SECS * 3.0)
+	# ★[S9b-T8 / ADR-0068 결정 10] **궁극의 결혼 분기 = B7 해방.** 앵커와의 혼례 아침에만 선다 —
+	#   §6.4 "해방의 두 층" 중 ㉡(앵커의 해방)은 이 분기 한정이기 때문이다(㉠ 플레이어 자신의
+	#   해방은 결혼과 독립이라 B6가 이미 줬다). 여기서 재생하지 않고 **예약만** 하는 이유는 B4와
+	#   같다: 이 훅은 취침 연출 한가운데라 러너와 fade 트윈이 같은 알파를 서로 덮어쓴다.
+	if _spouse_id == OKJA_RID and not _spine_bit_seen(SPINE_B7):
+		_spine_b7_armed = true
+	_refresh_okja_track()   # 혼인 성립으로 잠금 판정이 바뀐다(앵커와의 혼인은 트랙을 안 닫는다)
 
 # 배우자 HOME 이주 — 스케줄 배열에 귀가 스테이션 **1항목 append**(ADR-0066 결정 8 문면 그대로).
 # 멱등(이미 붙어 있으면 무동작)이라 혼례 아침·세이브 로드 양쪽에서 부른다(스케줄은 _ready마다
@@ -17065,9 +17455,18 @@ func _start_resident_dialogue(r: Resident) -> void:
 	#   대화의 묶음 선택(hearts 인자)부터 새 칸으로 이뤄진다("친해진 대사"가 진급 대화에서 바로
 	#   나온다). 오늘 대화 보상(daily_talk)으로 점수가 문턱을 *넘는* 경우는 다음 대화가 관문이
 	#   된다 — 판정은 언제나 대화 진입 순간의 스냅샷이다.
+	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙은 원장 파생이라 **판정 직전에 다시 잰다** — 그래야
+	#   방금 기증한 책·오늘 거둔 수확이 이 대화의 진급 판정에 그대로 실린다(트랙 미개통이면 무동작).
+	if _okja_deed_only(r.id):
+		_refresh_okja_track()
 	var gate_lines := _try_heart_promotion(r)
 	var lines: PackedStringArray
-	if r.plain_talk or r.affinity == null:
+	# ★[S9b-T8 / ADR-0068 결정 10] **대화 채널 차단(호출부 게이트 ①)** — 트랙이 열려 Affinity가
+	#   생긴 뒤에도 이 사람의 점수는 `daily_talk`로 오르지 않는다. `plain_talk`가 이미 같은 결과를
+	#   내지만(일상 묶음 경로엔 일일 대화 보상이 없다) **의도를 코드에 적어 둔다**: 저건 "호감도
+	#   없는 앵커"라서 붙은 옛 플래그라, 누군가 앞으로 이 사람에게 하트 대사를 주려고 그것을 끄면
+	#   차단이 조용히 사라진다. 결정 10의 "deed 단독 채널"은 그때도 지켜져야 한다.
+	if r.plain_talk or r.affinity == null or _okja_deed_only(r.id):
 		lines = r.node.lines_resident()
 	else:
 		var first_today := r.affinity.daily_talk(clock.day)
@@ -17253,6 +17652,11 @@ func _apply_cutscene_frame() -> void:
 	if _cam != null:
 		_cam.offset = cutscene.camera_offset()                    # ② 카메라 팬
 	clock.running = _cutscene_clock_prev and cutscene.clock_running()   # ④ 시계 정지
+	# ★[S9b-T8 / ADR-0068 결정 9] ⑤ 풀스크린 일러스트 — 러너는 id와 불투명도만 알고, 파일 조회·
+	#   placeholder·픽셀은 여기서부터 아래(`_draw_illust`)가 진다. **재생이 끝나도 안 지운다**:
+	#   S등급은 그림 위에서 대사가 도는 형식이라 러너보다 오래 살아야 한다(_end_cutscene 참조).
+	_illust_id = cutscene.illust_id()
+	_illust_a = cutscene.illust_alpha()
 	for id in cutscene.npc_ids():                                 # ① NPC 스폰/이동
 		var r := _resident(String(id))
 		if r == null or r.node == null:
@@ -17286,6 +17690,19 @@ func _end_cutscene() -> void:
 		_cutscene_lines = PackedStringArray()   # 예약 대화 없음(B5 지문은 퍼즐이 연다) — 방어적 정리
 		_open_spine_puzzle()
 		return
+	# ★[S9b-T8] 척추 S등급(B6·B7) — 화자가 갈린 묶음 열이 예약돼 있으면 그 첫 묶음을 여기서 연다.
+	#   평소 경로(_cutscene_lines)를 안 쓰는 이유는 묶음이 **여럿**이기 때문이다: 그쪽은 화자 하나·
+	#   묶음 하나뿐이라 "내면 → 앵커의 말 → 내면"을 태울 수 없다. 그림(_illust_id)은 그대로 둔다 —
+	#   대사는 그림 위에서 돈다(S등급의 형식 그 자체).
+	if not _spine_say.is_empty():
+		_cutscene_speaker = ""
+		_cutscene_lines = PackedStringArray()
+		_advance_spine_say()
+		return
+	# ★ 안전망 — 그림이 선 채로 이을 묶음이 하나도 없으면 여기서 거둔다. 러너 데이터의 실수 하나가
+	#   화면을 영구히 덮는 사고만은 없어야 한다(암전인 채로 끝나는 컷신을 위 두 줄이 막는 것과 같은 결).
+	if _illust_id != "":
+		_close_spine_scene()
 	var speaker := _cutscene_speaker
 	var lines := _cutscene_lines
 	_cutscene_speaker = ""
@@ -17308,6 +17725,11 @@ func _activity_credit(rid: String, n: int) -> void:
 		return
 	var r := _resident(rid)
 	if r == null or r.affinity == null:
+		return
+	# ★[S9b-T8 / ADR-0068 결정 10] **활동 채널 차단(호출부 게이트 ③)** — 앵커의 트랙은 활동 실적이
+	#   아니라 deed로만 찬다. 지금은 이 rid로 오는 배선점이 하나도 없지만(메인 3인 전용 채널) 트랙이
+	#   열린 뒤 누가 배선을 얹으면 그 순간 결정 10이 깨지므로, 문을 여기서 미리 닫아 둔다.
+	if _okja_deed_only(rid):
 		return
 	r.affinity.activity_gain(n, clock.day)
 
@@ -17362,6 +17784,16 @@ func _try_resident_gift(r: Resident) -> void:
 	var id := inventory.selected_id()
 	if id == "":
 		_notice("건넬 물건을 손에 들어야 한다")
+		return
+	# ★[S9b-T8 / ADR-0068 결정 10] **선물 채널 차단(호출부 게이트 ②)** — 앵커의 마음은 물건으로
+	#   오르지 않는다(§6.1 "대화·선물이 아니라 이승에서 저버린 것을 저승에서 갚는 deed"). 단
+	#   **명부 혼례 부적만 통과**한다: 그건 선물이 아니라 청혼이기 때문이다(혼례 부적이 다른
+	#   로스터에게 그런 것과 정확히 같은 예외 — 아래 인터셉트와 짝).
+	if _okja_deed_only(r.id):
+		if id == ItemCatalog.MYEONGBU_CHARM:
+			_try_propose_okja()
+		else:
+			_notice("…물건은 됐다. 네가 무엇을 하며 사는지를 볼 뿐이야")
 		return
 	# ★[S8-T7 / ADR-0066 결정 8] 혼례 부적을 건네는 것은 선물이 아니라 **청혼**이다 — giftable
 	#   판정(KEYS 배제)보다 먼저 가로채, "선물할 수 없다"가 청혼 동선을 가리지 않게 한다.
@@ -18418,6 +18850,15 @@ func _on_dialogue_finished() -> void:
 		else:
 			player.set_physics_process(false)
 			player.velocity = Vector2.ZERO
+	# ★[S9b-T8 / ADR-0068 결정 9·11] 척추 S등급 장면(B6·B7)의 다화자 열 — 다음 묶음이 남아 있으면
+	#   그림을 유지한 채 이어 연다. `cutscene != null` 가드는 위 `_close_spine_puzzle`이 방금 B6
+	#   컷신을 띄운 경우를 위한 것이다(재생 위에 대화가 겹쳐 서면 러너가 화면을 잃는다).
+	if cutscene == null and _advance_spine_say():
+		return
+	if cutscene == null and _illust_id != "":
+		_close_spine_scene()            # 마지막 묶음이 닫혔다 — 그림을 거두고 세계로
+		if _epilogue_pending:
+			_open_epilogue()            # 해방 직후 **1회성** 에필로그(결정 11)
 
 # ── ADR-0024 상호작용 대상 칸(마우스 커서) / 시각화 ─────────────────────────
 # 대상 칸 = 마우스 커서 밑 타일. 단 플레이어 인접 1칸 반경(주변 8칸 + 발밑)으로 클램프한다 —
@@ -18839,6 +19280,7 @@ func _draw() -> void:
 	_draw_cheki_hud()       # ★ [S6-T5] 체키 구도·셔터 그레이박스 트랙(세션 있을 때만)
 	_draw_cocktail_hud()    # ★ [S6-T6] 칵테일 붓기·셰이킹 그레이박스 트랙(세션 있을 때만)
 	_draw_spine_puzzle()    # ★[S9b-T7] B5 내면 공간(세션 있을 때만 — 화면을 통째로 덮는다)
+	_draw_illust()          # ★[S9b-T8] S등급 풀스크린 일러스트(B6·B7 — 그 위에 대화창이 선다)
 	if _edit_mode:          # ★ ADR-0025 ① 배치 모드 오버레이(선택·마우스 칸·팔레트 고스트)
 		_draw_edit_overlay()
 	if _deco_mode:          # ★ [S1-9] 집 꾸미기 모드 오버레이(마우스 칸·팔레트 고스트)
@@ -18885,6 +19327,72 @@ func _spine_field() -> Dictionary:
 	var center: Vector2 = _cam.get_screen_center_position() if _cam != null \
 		else (player.global_position if player != null else Vector2.ZERO)
 	return {"center": center, "view": view, "span": minf(view.x, view.y) * 0.40}
+
+# ── ★[S9b-T8 / ADR-0068 결정 9] S등급 풀스크린 일러스트 ───────────────────────
+# 컷신 러너는 id와 불투명도만 안다(그 파일은 그림을 모른다). **파일을 찾고, 없으면 대신 세우는
+# 일이 전부 여기**다 — 그래서 원화가 `assets/cutscene/<id>.png`로 도착하는 날 코드가 0줄 바뀐다.
+#
+# placeholder = **먹 암전 + 세로 대형 제목**(한지 결). 세로로 세우는 이유는 붓글씨 제목의 문법이
+# 그렇기도 하고, 640×360 내부해상도(ADR-0012)에서 가로 대형 글자는 두세 자만 넣어도 화면을 가로
+# 지르기 때문이다. 부제만 가로로 작게 받친다.
+# ★ 월드 `_draw`라 대화창(CanvasLayer)이 **이 위에** 선다 — 그림 위에서 대사가 도는 S등급의 형식이
+#   레이어 순서만으로 성립한다(B5 별자리 위에 지문이 서던 그 구조 그대로).
+const _ILLUST_DIR := "res://assets/cutscene/"
+const _ILLUST_INK := Color(0.05, 0.04, 0.035)      # 먹 암전(그림이 없을 때의 바탕)
+const _ILLUST_TITLE_SIZE := 44                     # 세로 대형 제목 한 자 크기
+const _ILLUST_TITLE_STEP := 52.0                   # 글자 사이 세로 간격
+const _ILLUST_SUB_SIZE := 12
+var _illust_tex_cache: Dictionary = {}             # id → Texture2D or null(없음을 기억해 재조회 0)
+
+# 그 id의 원화(없으면 null). ★조회 결과를 **없음까지 캐시**한다 — 매 프레임 ResourceLoader.exists를
+# 때리면 placeholder 장면이 디스크를 초당 60번 두드린다.
+func _illust_texture(id: String) -> Texture2D:
+	if _illust_tex_cache.has(id):
+		return _illust_tex_cache[id]
+	var tex: Texture2D = null
+	var path := _ILLUST_DIR + id + ".png"
+	if ResourceLoader.exists(path):
+		var res := load(path)
+		if res is Texture2D:
+			tex = res
+	_illust_tex_cache[id] = tex
+	return tex
+
+func _draw_illust() -> void:
+	if _illust_id == "" or _illust_a <= 0.0:
+		return
+	var geo := _spine_field()                      # 화면 덮기 지오메트리는 B5와 **같은 출처**를 쓴다
+	var center: Vector2 = geo["center"]
+	var view: Vector2 = geo["view"]
+	var a := clampf(_illust_a, 0.0, 1.0)
+	var ink := _ILLUST_INK
+	ink.a = a
+	# 여백을 넉넉히 키운다(카메라 보간·정수 반올림에 가장자리가 새지 않게 — B5와 같은 이유·같은 값).
+	draw_rect(Rect2(center - view * 0.5 - Vector2(64, 64), view + Vector2(128, 128)), ink)
+	var tex := _illust_texture(_illust_id)
+	if tex != null:
+		# 원화 — 비율을 지켜 화면에 맞춘다(letterbox). 남는 자리는 위 먹 바탕이 그대로 진다.
+		var ts := Vector2(tex.get_size())
+		if ts.x > 0.0 and ts.y > 0.0:
+			var k := minf(view.x / ts.x, view.y / ts.y)
+			var sz := ts * k
+			draw_texture_rect(tex, Rect2(center - sz * 0.5, sz), false, Color(1, 1, 1, a))
+			return
+	# placeholder — 세로 대형 제목 + 가로 부제.
+	var title := Spine.illust_title(_illust_id)
+	var sub := Spine.illust_subtitle(_illust_id)
+	var n := title.length()
+	if n > 0:
+		var top := center.y - (float(n - 1) * _ILLUST_TITLE_STEP) * 0.5
+		for i in n:
+			var ch := title.substr(i, 1)
+			var w := HanjiUi.text_width(ch, _ILLUST_TITLE_SIZE)
+			HanjiUi.draw_text(self, Vector2(center.x - w * 0.5, top + float(i) * _ILLUST_TITLE_STEP),
+				ch, _ILLUST_TITLE_SIZE, HanjiUi.GOLD_SOFT)
+	if sub != "":
+		var sw := HanjiUi.text_width(sub, _ILLUST_SUB_SIZE)
+		HanjiUi.draw_text(self, Vector2(center.x - sw * 0.5, center.y + view.y * 0.32),
+			sub, _ILLUST_SUB_SIZE, HanjiUi.INK_DIM)
 
 func _draw_spine_puzzle() -> void:
 	if spine_puzzle == null:

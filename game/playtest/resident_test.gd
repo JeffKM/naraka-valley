@@ -146,8 +146,14 @@ func _run_checks() -> void:
 		and m._resident("mel").save_key == "mel_affinity"
 		and m._resident("bana").save_key == "bana_affinity"
 		and m._resident("neo").save_key == "neo_affinity")
-	_check("③g 옥자는 관계 트랙 없음(세이브 키도 없음)",
-		m._resident("okja").affinity == null and m._resident("okja").save_key == "")
+	# ★[S9b-T8 / ADR-0068 결정 10] **범위가 "B6 전"으로 좁아졌다.** 옥자 트랙은 척추 B6에서야
+	#   개통되고(그 순간 Affinity 노드와 세이브 키 "okja_affinity"가 생긴다), 이 스위트는 척추를
+	#   한 비트도 안 세우므로 여기서 재는 것은 **개통 전 상태**다 — 그리고 개통 전이 종전과
+	#   바이트 동일하다는 것이 그 설계의 요점이라 이 단언은 그대로 유효하다(개통 후는
+	#   spine_ending_test ②a·③a가 반대 방향으로 잰다).
+	_check("③g 옥자는 B6 전까지 관계 트랙 없음(세이브 키도 없음)",
+		m._resident("okja").affinity == null and m._resident("okja").save_key == ""
+		and not m._spine_bit_seen(m.SPINE_B6))
 	_check("③h 캐릭터 노드가 레코드에 물려 있다",
 		m._resident("miho").node == m.miho and m._resident("neo").node == m.neo)
 	# ★[S8-T2] 선호는 인스턴스 필드(preferred_crop)가 아니라 GiftPrefs 테이블이 든다 — 옛 3인

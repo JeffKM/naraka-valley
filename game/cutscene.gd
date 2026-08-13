@@ -6,12 +6,27 @@ class_name CutsceneRunner
 #       맡고, 등급 S(풀 컷신 원화)는 척추와 함께 S9b다. 그 사이의 "NPC가 걸어 들어오고 화면이
 #       어두워지며 시계가 멈추는" 인게임 연출만 여기가 담당한다.
 #
-# ★ 능력은 **정확히 4동사로 잠근다**(ADR-0067 결정 2 — 이 잠금이 이 파일의 존재 이유다):
+# ★ 능력은 **정확히 5동사로 잠근다**(ADR-0067 결정 2 → [ADR-0068] 결정 9가 개정):
 #     ① npc   — NPC 스폰/이동   ② cam  — 카메라 팬
 #     ③ fade  — 페이드 인/아웃  ④ clock — 시계 정지/재개
+#     ⑤ illust — 풀스크린 일러스트(**연출 등급 S** 전용)
 #   파티클 스크립트·연출 타임라인 편집기·사운드 큐·대사 삽입은 **만들지 않는다**. 스타듀 하트
-#   이벤트도 이 네 동사로 대부분이 성립하고, 다섯 번째 동사를 여는 순간 이 파일은 미니 엔진이
+#   이벤트도 앞 네 동사로 대부분이 성립하고, 여섯 번째 동사를 여는 순간 이 파일은 미니 엔진이
 #   되어 슬라이스를 삼킨다. 미지 동사는 무시하지 않고 **거절 기록 후 스킵**한다(아래 _init).
+#
+# ── ★[S9b-T8 / ADR-0068 결정 9] 다섯 번째 동사 `illust` ─────────────────────────
+# ADR-0067 결정 2가 "다섯 번째 동사 = ADR 개정 요구"로 못 박았고, [ADR-0068] 결정 9가 **그
+# 개정**이다. 열리는 것은 정확히 하나뿐이다 — 서사 바이블 §6.5 등급표의 **S(풀 컷신)**, 즉
+# B6 귀환·B7 해방이라는 게임의 정서 정점 둘.
+#   · **왜 다섯째가 필요했나:** 앞 네 동사는 전부 *월드를 조작*한다(사람을 옮기고 카메라를 밀고
+#     화면을 덮고 시계를 세운다). S등급은 월드를 조작하는 게 아니라 **월드를 치우고 그림 한 장을
+#     세운다** — 기존 넷의 어떤 조합으로도 표현되지 않는다(fade는 검게 만들 뿐 그림이 없다).
+#   · **여전히 이 파일은 그림을 모른다.** 여기가 드는 것은 **id 문자열과 불투명도**뿐이고, 파일을
+#     찾아 그리는 일도 없을 때 placeholder를 세우는 일도 전부 main이 한다(NPC 자리를 타일 좌표로만
+#     다루고 px 환산을 main에 맡기는 그 분업 그대로). 그래서 원화가 도착하는 날 이 파일은 0줄 바뀐다.
+#   · **에셋 훅** = `assets/cutscene/<id>.png` 드롭인(코드 0줄 교체 — 결정 9 자구). 파일이 없으면
+#     main이 먹 암전 + 세로 대형 텍스트로 대신 세워 게임을 상시 완성 상태로 유지한다.
+#   · **하위호환:** 이 동사를 안 쓰는 컷신은 한 프레임도 안 바뀐다(illust는 ""로 시작한다).
 #
 # 설계 메모(fishing.gd FishingSession 규범 그대로 — 이 코드베이스의 확립 관례):
 #   - **Node 아님·렌더 무의존**(RefCounted). 씬 트리에 안 붙고 _process도 없다 — main이 매 프레임
@@ -39,15 +54,19 @@ class_name CutsceneRunner
 #   {"verb": "cam",   "offset": Vector2(0, -48), "secs": 0.8}               # 카메라 팬(px 오프셋)
 #   {"verb": "fade",  "to": 1.0, "secs": 0.4}                               # 암전(0.0 = 밝아짐)
 #   {"verb": "clock", "running": false}                                     # 시계 정지(즉시)
+#   {"verb": "illust", "id": "b6_return", "secs": 1.2}                      # 일러스트 등장(불투명도 보간)
+#   {"verb": "illust", "id": "", "secs": 0.6}                               # 일러스트 퇴장(id를 비운다)
 
 enum State { IDLE, PLAYING, DONE }
 
-# ★ 허용 동사 4개 — 이 배열에 다섯 번째를 더하는 변경은 ADR-0067 결정 2의 개정을 요구한다.
+# ★ 허용 동사 5개 — 이 배열에 여섯 번째를 더하는 변경은 ADR-0067 결정 2(→ [ADR-0068] 결정 9)의
+#   또 한 번의 개정을 요구한다. 다섯째(illust)가 열린 근거는 위 머리말에 있다.
 const VERB_NPC := "npc"
 const VERB_CAM := "cam"
 const VERB_FADE := "fade"
 const VERB_CLOCK := "clock"
-const VERBS := [VERB_NPC, VERB_CAM, VERB_FADE, VERB_CLOCK]
+const VERB_ILLUST := "illust"
+const VERBS := [VERB_NPC, VERB_CAM, VERB_FADE, VERB_CLOCK, VERB_ILLUST]
 
 # 전이 기록의 실수 자릿수 — trace를 float 잡음(1e-7 오차)에서 떼어 놓아 두 번의 재생이
 # 문자열로 같아지게 한다(결정성 판정의 눈금).
@@ -61,6 +80,10 @@ var elapsed: float = 0.0        # 재생 시작부터의 누적 초(순수 누�
 var fade: float = 0.0           # 0.0 = 투명(평소) … 1.0 = 완전 암전
 var camera: Vector2 = Vector2.ZERO   # 카메라 팬 오프셋(px — Camera2D.offset 단위)
 var clock_on: bool = true       # 이 컷신이 게임 시계를 흐르게 두는가(false = 정지 요청)
+# ★[S9b-T8] 지금 세워진 풀스크린 일러스트의 id("" = 없음)와 불투명도(0..1). **그림을 모른다** —
+#   이 둘이 이 동사가 내놓는 전부이고, 파일 조회·placeholder·픽셀은 전부 main 몫이다.
+var illust: String = ""
+var illust_a: float = 0.0
 
 var _steps: Array = []          # 정규화된 스텝(미지 동사는 여기 안 들어온다)
 var _i: int = -1                # 지금 재생 중인 스텝 인덱스(-1 = 아직 시작 안 함)
@@ -77,6 +100,7 @@ var _trace: PackedStringArray = PackedStringArray()      # 전이열(결정성 �
 var _from_tile := Vector2.ZERO
 var _from_cam := Vector2.ZERO
 var _from_fade := 0.0
+var _from_illust_a := 0.0
 
 # 스텝 배열을 받아 **즉시 정규화**한다(재생 중 파싱 0 — 미지 동사 판정이 재생 타이밍에 좌우되면
 # 결정성이 깨진다). 미지 동사·비-딕셔너리 항목은 조용히 무시하지 않고 _rejected에 남기고 스킵한다:
@@ -119,6 +143,8 @@ func _normalized(verb: String, s: Dictionary) -> Dictionary:
 			out["to"] = clampf(float(s.get("to", 0.0)), 0.0, 1.0)
 		VERB_CLOCK:
 			out["running"] = bool(s.get("running", false))   # 기본은 정지(이 동사를 쓰는 이유)
+		VERB_ILLUST:
+			out["id"] = String(s.get("id", ""))              # "" = 퇴장(지금 세워진 그림을 거둔다)
 	return out
 
 # ── 진행 API ────────────────────────────────────────────────────────────────
@@ -203,6 +229,14 @@ func _begin_step(s: Dictionary) -> void:
 			_from_fade = fade
 		VERB_CLOCK:
 			clock_on = bool(s["running"])   # 즉시 동사(길이 무의미 — secs를 줘도 그냥 대기가 된다)
+		VERB_ILLUST:
+			_from_illust_a = illust_a
+			# ★ 가시성 타이밍은 **npc 동사와 정확히 같은 비대칭**이다: 등장(id 있음)은 시작
+			#   즉시 세우고(그래야 secs=0 컷신이 첫 프레임부터 그림을 든다 — 암전이 안 끊긴다),
+			#   퇴장(id 빈 문자열)은 보간이 끝난 뒤 거둔다(_finish_step). 그래서 "그림이 서서히
+			#   떠오른다"와 "서서히 스러진다"가 둘 다 자연스럽다.
+			if String(s["id"]) != "":
+				illust = String(s["id"])
 
 # 스텝 진행률 t(0..1) 적용 — 보간 동사만 여기서 값이 움직인다.
 func _apply(s: Dictionary, t: float) -> void:
@@ -216,6 +250,10 @@ func _apply(s: Dictionary, t: float) -> void:
 			camera = _from_cam.lerp(Vector2(s["offset"]), k)
 		VERB_FADE:
 			fade = lerpf(_from_fade, float(s["to"]), k)
+		VERB_ILLUST:
+			# 목표 불투명도는 **id에서 파생**한다(별도 인자 없음 — 있으면 "id는 있는데 안 보이는"
+			# 상태가 생겨 데이터가 거짓말을 할 수 있다). 있으면 1.0으로, 비었으면 0.0으로 간다.
+			illust_a = lerpf(_from_illust_a, 1.0 if String(s["id"]) != "" else 0.0, k)
 
 # 스텝 종료 — 퇴장(visible=false)이 여기서 확정되고, 전이열에 끝값 스냅샷을 남긴다.
 func _finish_step(s: Dictionary) -> void:
@@ -234,6 +272,10 @@ func _finish_step(s: Dictionary) -> void:
 			tail = _r(fade)
 		VERB_CLOCK:
 			tail = "1" if clock_on else "0"
+		VERB_ILLUST:
+			if String(s["id"]) == "":
+				illust = ""              # 퇴장 확정(등장은 _begin_step — 위 비대칭)
+			tail = "%s,%s" % [illust, _r(illust_a)]
 	_trace.append("end:%d:%s:%s" % [_i, verb, tail])
 
 # 전이열용 실수 표기(자릿수 고정 — 부동소수 잡음 제거).
@@ -250,6 +292,14 @@ func camera_offset() -> Vector2:
 # 이 컷신이 게임 시계를 흐르게 두는가(false = 정지 요청 — main이 clock.running에 반영).
 func clock_running() -> bool:
 	return clock_on
+
+# ★[S9b-T8] 지금 세워진 풀스크린 일러스트 id("" = 없음). main이 `assets/cutscene/<id>.png`를
+# 찾아 그리고, 없으면 placeholder(먹 암전 + 세로 대형 텍스트)를 세운다 — 이 파일은 둘 다 모른다.
+func illust_id() -> String:
+	return illust
+
+func illust_alpha() -> float:
+	return clampf(illust_a, 0.0, 1.0)
 
 # **지금까지 등장한** NPC id 목록. main의 매 프레임 적용 루프가 쓴다 — 아직 스폰 전인 NPC까지
 # 여기 실리면 main이 그 그림을 (0,0)으로 끌고 가 버린다.

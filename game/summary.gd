@@ -60,3 +60,26 @@ static func text(day: int, gold: int, heart_bar: String, hearts: int, max_hearts
 		"",
 		"[ 그레이박스 수직 슬라이스 · Phase 1 ]",
 	])
+
+# ── ★[S9b-T8 / ADR-0068 결정 11] 엔딩 에필로그 ──────────────────────────────
+# 위 `text()`(옛 21일 런 정산)와 **성격이 정반대**인 화면이다: 저건 런이 끝났다는 통보였고 이건
+# 척추가 닫힌 뒤의 **회고 한 장**이며, 닫으면 코지 샌드박스로 돌아간다(§6.4 "머무름은 선택").
+# 그래서 `RUN_DAYS`도 `is_over`도 안 쓴다 — 이 화면은 날짜 게이트와 아무 관계가 없다(게이트 부활
+# 금지). 여기 남는 것은 "며칠을 살았고 무엇을 되찾았나"뿐이다.
+#
+# ★ **하트 막대가 이 문자열에 없다.** 관계는 스프라이트 하트 행이 따로 진다(main `_build_epilogue_hearts`
+#   — HeartBar 재사용). neodgm.ttf에 ♥ 글리프가 없어 문자열 막대가 두부(□)로 뜨던 S8-T10 이월의
+#   소화이고, 그래서 이 함수는 `heart_bar` 인자를 아예 안 받는다.
+static func epilogue_text(day: int, gold: int, harvested: int,
+		donated: int, donatable: int, spouse_name: String) -> String:
+	var rows := [
+		"─────  머무름은 이제 선택이다  ─────",
+		"",
+		"살아낸 날      %d일" % maxi(day - 1, 0),
+		"모은 냥        %d" % gold,
+		"거둔 영혼      %d" % harvested,
+		"되찾아 세운 것  %d / %d" % [donated, donatable],
+	]
+	rows.append("곁에 있는 이    %s" % (spouse_name if spouse_name != "" else "— (혼자 걷는 길)"))
+	rows.append("")
+	return "\n".join(rows)
