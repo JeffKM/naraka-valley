@@ -120,11 +120,14 @@ func _run_checks() -> void:
 	# ★[S9b-T2 / ADR-0068 결정 3] 13 → 15: 설화·스칼렛(조연 코러스 3·4번째 풀 온보딩)이 **깨비·켄
 	#   뒤, 주방요괴 앞**에 붙었다(의도적 불변식 개정). 두 사람은 병렬 워커 둘이 각각 만들었고
 	#   등록 순서는 [ADR-0068] 결정 4의 점진 순서(설화 → 스칼렛) 그대로다.
-	_check("③a 주민 15인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 · ★S9b-T1 깨비·켄 · ★S9b-T2 설화·스칼렛 · ★S6-T7 주방요괴 추가)",
-		m._residents.size() == 15)
-	_check("③b 15인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골·깨비·켄·설화·스칼렛·주방요괴",
+	# ★[S9b-T3 / ADR-0068 결정 3] 15 → 17: 미르·루카(조연 코러스 5·6번째 풀 온보딩)가 **설화·
+	#   스칼렛 뒤, 주방요괴 앞**에 붙었다(의도적 불변식 개정). 두 사람도 병렬 워커 둘이 각각
+	#   만들었고 등록 순서는 [ADR-0068] 결정 4의 점진 순서(미르 → 루카) 그대로다.
+	_check("③a 주민 17인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 · ★S9b-T1 깨비·켄 · ★S9b-T2 설화·스칼렛 · ★S9b-T3 미르·루카 · ★S6-T7 주방요괴 추가)",
+		m._residents.size() == 17)
+	_check("③b 17인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골·깨비·켄·설화·스칼렛·미르·루카·주방요괴",
 		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman", "ongi", "pulmu",
-			"mugol", "kkaebi", "ken", "seolhwa", "scarlet", "kitchen_youkai"])
+			"mugol", "kkaebi", "ken", "seolhwa", "scarlet", "mir", "luca", "kitchen_youkai"])
 	_check("③c id 조회", m._resident("mel") != null and m._resident("mel").display_name == "멜")
 	_check("③d 이름 조회", m._resident_named("바나") != null and m._resident_named("바나").id == "bana")
 	_check("③e 없는 id/이름 = null", m._resident("없음") == null and m._resident_named("없음") == null)
