@@ -101,7 +101,9 @@ func _run_checks() -> void:
 		ken != null and ken.is_inside_tree() and ken is Ken)
 	_check("①c 관계 트랙(Affinity)도 함께 생긴다 · 신규 세이브 키",
 		r.affinity != null and r.save_key == "ken_affinity")
-	_check("①d 선물 채널 있음 · 초상화는 아직 없음(시트·초상 = S9b-T9 아트 패스)",
+	# ★[S9b-T9] 시트는 붙었고 **초상은 미생성 확정**이다(미이행이 아니라 결정 — 언데드 살갗이
+	#   `character_to_portrait`에서 사람 피부로 되돌아온다. §15.6 모델 한계 · owner-Gemini 큐).
+	_check("①d 선물 채널 있음 · 초상화 미생성 확정(비인간 재질 → Gemini 큐)",
 		r.can_gift and r.gift_target_ko == "켄" and r.portrait_stem == "")
 	_check("①e ★곱셈기 없음(조연 = 쉼터 2채널 · ADR-0008 곱셈기는 메인 4인 독점)",
 		not r.effect_fn.is_valid())

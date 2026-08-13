@@ -455,6 +455,10 @@ const MINE_ICONS := {
 	ItemCatalog.NARAK_KEY: preload("res://assets/materials/narak_key.png"),
 	# ★[S8-T9] 혼례 부적 — 나락 열쇠와 같은 KEYS 결(세상에 하나뿐·선물 불가)이라 아이콘도 옆에 둔다.
 	ItemCatalog.WEDDING_CHARM: preload("res://assets/materials/wedding_charm.png"),
+	# ★[S9b-T9] 명부 혼례 부적 — 혼례 부적 바로 옆(같은 청혼 문법·같은 KEYS 결)이되 **접는 손이
+	#   다르다**: 이건 앵커의 마녀 서비스가 아니라 명부의 주인이 접는 것이라(_grant_myeongbu_charm
+	#   = 강림 [F]) 종이도 먹빛 명부장이고 값도 냥이 아니다. 아이콘이 둘을 그렇게 갈라 놓는다.
+	ItemCatalog.MYEONGBU_CHARM: preload("res://assets/materials/myeongbu_charm.png"),
 	# 잡귀 드랍 3(넋가루·혼불씨 = 갱도/나락 잡귀 · 나락혼정 = 관문 보스 확정 드랍)
 	ItemCatalog.NEOKGARU: preload("res://assets/materials/neokgaru.png"),
 	ItemCatalog.HONBULSSI: preload("res://assets/materials/honbulssi.png"),
@@ -15598,7 +15602,7 @@ func _setup_residents() -> void:
 	r_kkaebi.save_key = "kkaebi_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_kkaebi.can_gift = true
 	r_kkaebi.gift_target_ko = "깨비"
-	r_kkaebi.portrait_stem = ""                # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	r_kkaebi.portrait_stem = "kkaebi"                # ★[S9b-T9] 도트 초상 배선(시트 south 프레임 → character_to_portrait). 표정 파일 없음 = idle 한 장이 전량.
 	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 공유 방 하나라
 	# (HOUSE_RECT) 실내에 세우면 다른 집에 들어가도 깨비가 보인다 — 그래서 문 바로 아래 남향
 	# 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌 선례 그대로).
@@ -15646,7 +15650,7 @@ func _setup_residents() -> void:
 	r_ken.save_key = "ken_affinity"          # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_ken.can_gift = true
 	r_ken.gift_target_ko = "켄"
-	r_ken.portrait_stem = ""                 # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	r_ken.portrait_stem = ""                # ★[S9b-T9] 초상 **미생성 확정** — 비인간 재질이라 character_to_portrait가 사람 피부로 되돌린다(§15.6 모델 한계). owner-Gemini 큐 1순위.
 	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
 	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 켄이 보인다 — 그래서 문 바로 아래
 	# 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌와 같은 규약).
@@ -15705,7 +15709,7 @@ func _setup_residents() -> void:
 	r_seolhwa.save_key = "seolhwa_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_seolhwa.can_gift = true
 	r_seolhwa.gift_target_ko = "설화"
-	r_seolhwa.portrait_stem = ""                 # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	r_seolhwa.portrait_stem = "seolhwa"                # ★[S9b-T9] 도트 초상 배선(시트 south 프레임 → character_to_portrait). 표정 파일 없음 = idle 한 장이 전량.
 	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
 	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 설화가 보인다 — 그래서 문 바로
 	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌·깨비·켄과 같은 규약).
@@ -15762,7 +15766,7 @@ func _setup_residents() -> void:
 	r_scarlet.save_key = "scarlet_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_scarlet.can_gift = true
 	r_scarlet.gift_target_ko = "스칼렛"
-	r_scarlet.portrait_stem = ""                 # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	r_scarlet.portrait_stem = "scarlet"                # ★[S9b-T9] 도트 초상 배선(시트 south 프레임 → character_to_portrait). 표정 파일 없음 = idle 한 장이 전량.
 	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
 	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 스칼렛이 보인다 — 그래서 문 바로
 	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌·깨비·켄과 같은 규약).
@@ -15829,7 +15833,7 @@ func _setup_residents() -> void:
 	r_mir.save_key = "mir_affinity"          # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_mir.can_gift = true
 	r_mir.gift_target_ko = "미르"
-	r_mir.portrait_stem = ""                 # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	r_mir.portrait_stem = ""                # ★[S9b-T9] 초상 **미생성 확정** — 비인간 재질이라 character_to_portrait가 사람 피부로 되돌린다(§15.6 모델 한계). owner-Gemini 큐 1순위.
 	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
 	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 미르가 보인다 — 그래서 문 바로
 	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌·깨비·켄·설화·스칼렛과 같은 규약).
@@ -15898,7 +15902,7 @@ func _setup_residents() -> void:
 	r_luca.save_key = "luca_affinity"        # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_luca.can_gift = true
 	r_luca.gift_target_ko = "루카"
-	r_luca.portrait_stem = ""                # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	r_luca.portrait_stem = ""                # ★[S9b-T9] 초상 **미생성 확정** — 비인간 재질이라 character_to_portrait가 사람 피부로 되돌린다(§15.6 모델 한계). owner-Gemini 큐 1순위.
 	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
 	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 루카가 보인다 — 그래서 문 바로
 	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌·깨비·켄·설화·스칼렛과 같은 규약).
@@ -15967,7 +15971,7 @@ func _setup_residents() -> void:
 	r_frosty.save_key = "frosty_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_frosty.can_gift = true
 	r_frosty.gift_target_ko = "프로스티"
-	r_frosty.portrait_stem = ""                # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	r_frosty.portrait_stem = ""                # ★[S9b-T9] 초상 **미생성 확정** — 비인간 재질이라 character_to_portrait가 사람 피부로 되돌린다(§15.6 모델 한계). owner-Gemini 큐 1순위.
 	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
 	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 프로스티가 보인다 — 그래서 문 바로
 	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(모찌·깨비·켄·설화·스칼렛·미르·루카 규약).
@@ -16044,7 +16048,7 @@ func _setup_residents() -> void:
 	r_gangrim.save_key = "gangrim_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_gangrim.can_gift = true
 	r_gangrim.gift_target_ko = "강림"
-	r_gangrim.portrait_stem = ""                 # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	r_gangrim.portrait_stem = "gangrim"                # ★[S9b-T9] 도트 초상 배선(시트 south 프레임 → character_to_portrait). 표정 파일 없음 = idle 한 장이 전량.
 	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
 	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 강림이 보인다 — 그래서 문 바로
 	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(앞 일곱 사람과 같은 규약).
@@ -16144,7 +16148,7 @@ func _setup_residents() -> void:
 	r_serena.save_key = "serena_affinity"      # 신규 키 — 구세이브엔 없어 ♡0으로 시작(하위호환 자동)
 	r_serena.can_gift = true
 	r_serena.gift_target_ko = "세레나"
-	r_serena.portrait_stem = ""                # 초상화 없음 — 시트·초상은 S9b-T9 아트 패스 소관
+	r_serena.portrait_stem = "serena"                # ★[S9b-T9] 도트 초상 배선(시트 south 프레임 → character_to_portrait). 표정 파일 없음 = idle 한 장이 전량.
 	# 아침(하루 시작 06:00부터) = 자기 집 문 앞 칸. 주민 집엔 개별 실내가 없고 11채가 한 방을
 	# 공유하므로(HOUSE_RECT), 실내에 세우면 다른 집에 들어가도 세레나가 보인다 — 그래서 문 바로
 	# 아래 남향 진입 칸(문 스포크가 지나는 칸)에 세운다(앞 여덟 사람과 같은 규약).

@@ -2666,3 +2666,378 @@ muted 계수(한 자리에 나란히 서는 것끼리 같은 값이라야 새것
   4단 선반이라 그 위에 표식을 덧그리면 그림이 지저분해진다 — **빈 선반 판본으로 다시 그리고
   칸이 채워지는 연출**을 함께 가는 편이 낫다는 판단이라 아트 결정과 묶어 미룬다.
 ```
+
+---
+
+## 23. ★[S9b-T9] 조연 코러스 9인 + 척추 아트 패스 — 워크 시트 9·도트 초상 5·부적 아이콘 1 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-08-14). §10~§22와 같은 [ADR-0048]
+> 교체 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw/` · `*_raw.png`만 덮어쓰고
+> `cd game && python3 tools/make_s9b_t9_art.py`를 한 번 돌리면 **코드 0줄 수정**으로 반영된다.
+> (PNG를 갈아 끼운 뒤에는 `cd game && godot --headless --import` 1회 — 임포트 캐시가 소스가
+> 아니라 `.godot/imported/*.ctex`를 읽는다.)
+>
+> **후처리 글루:** [`game/tools/make_s9b_t9_art.py`](../../game/tools/make_s9b_t9_art.py) — 규칙·계수는
+> `make_s6_art.py`(주방요괴 시트)와 **같은 값**이다(새 규칙 0 · 하드 알파 → muted → 80² 발치정렬).
+> 새로 는 것은 둘: `erase_north_face`(뒷모습 얼굴 지우기 — 아래 ★★) · `recolor_skin`(§11.4 네오의
+> 살빛 치환을 세레나에 재사용).
+>
+> **육안 하네스:** `godot --headless --path game -s res://tools/s9b_chorus_dump.gd`
+> → `game/tools/s9b_chorus_dump.png`(위 = 마을 광장에 선 8인 · 아래 = 9인 × 4방향 격자).
+> 이 하네스는 배선을 **기계로도** 잰다 — 각 노드의 `_sprite`가 null이면 그레이박스 색박스가
+> 그려지는 중이라는 뜻이라, 콘솔에 `색박스 잔존: 0 / 9`가 찍히는 것이 이 패스의 합격선이다.
+>
+> **raw 보관:** `game/assets/characters/{kkaebi,ken,seolhwa,scarlet,mir,luca,frosty,gangrim,serena}_raw/`
+> (각 `{south,north,east,west}.png`) · `game/assets/portraits/{kkaebi,seolhwa,scarlet,gangrim,serena}_raw.png`
+> (각 128²) · `game/assets/materials/raw/myeongbu_charm_raw.png`
+>
+> **PixelLab 사용량 136 gen**(상한 300 — create_character standard 8 · create_map_object 1 ·
+> create_character v3 회전 1 · create_image_pixen 1 · create_portrait_character 5×25=125).
+> ⚠ 이 세션에 `Generation failed due to heavy load` 7건이 났고(스칼렛·미르·루카·프로스티×2·강림×2)
+> **실패는 과금되지 않았다**(실측 — 잔량 차분이 성공분과 정확히 일치). 병렬 8발은 부하를 타므로
+> **2~3발씩 끊어 쏘는 편이 빠르다**.
+>
+> **이 패스가 지운 그레이박스:** 조연 9인 전원의 색박스 실루엣(`<id>.gd _draw()`) + 명부 혼례
+> 부적 인벤/핫바 색박스 1종. **이 패스가 안 만든 것:** 비인간 4인(켄·미르·루카·프로스티) 초상 —
+> 미이행이 아니라 **결정**이다(§23.3 ①).
+
+### 23.0 공통 규약
+
+```
+전부 [ADR-0050] 32-native · [§1.1] NW 광원 · [§8.1] 하드 알파 · [§9] 저승 muted · [§3] 발치 앵커.
+시트 규격: 80×320 = 프레임 80×80 · **1열**(정지 rotation) × 4행(down/up/right/left)
+  — §11.4 네오 · §15.6 옹이 · §17.4 점주 2인 · §19.1 주방요괴와 **동형**.
+  ★1열인 이유는 "안 걸어서"가 아니다(조연 9인은 셋 다 자리를 옮기는 스케줄이다). **워크 4프레임이
+    이 패스 밖**이기 때문이고, char_sprite가 열 수를 파일에서 읽으므로 나중에 워크 시트가 오면
+    **코드 무수정**으로 열이 는다(모찌가 서 있는 그 자리).
+생성(휴머노이드 8인): create_character(mode=standard / n_directions=4 / low top-down /
+  selective outline / basic shading / high detail / tgs=11 / §11.4 공통 proportions
+  {"type":"custom","head_size":1.5,"arms_length":0.75,"legs_length":0.9,
+   "shoulder_width":0.72,"hip_width":0.75})
+  — §17.4·§19.1과 **한 글자도 다르지 않은 호출**이다. 마을 광장에서 출하 캐스트와 어깨를
+    나란히 하므로, 다른 값을 쓰면 이 아홉만 덩치·선이 튄다.
+★ **size는 두 값뿐이다** — 사람 규격 7인 = **44**(§11.4가 실측으로 세운 정합값. 콘텐츠 45~51px로
+  출하 캐스트 41~46과 같은 체급) / **거인 2인(켄·프로스티) = 56**(콘텐츠 61~65px).
+  56을 고른 근거는 그레이박스가 이미 그렇게 말하고 있어서다: `ken.gd`·`frosty.gd`의
+  BODY_SIZE는 22×46·22×44로 사람형 16×32보다 한 뼘 크다. 그 비(46/32≈1.44)를 그대로 쓰면
+  size 63이라 캔버스(≈size×1.4)가 프레임 80을 넘는다 → **56이 프레임에 들어가는 최댓값**이다.
+muted 계수: 전원 0.94/0.98 (= §17.0 점주·§19.0 주방요괴와 **같은 값** — 출하 캐스트와 나란히
+  서는 층이라 아주 얕게. 다른 값을 쓰면 새로 온 아홉만 색이 죽는다)
+후처리: 하드 알파 → muted → (세레나만 살빛 치환) → (프로스티 north만 얼굴 지움) →
+  80² 프레임 발치정렬(FOOT_Y=74)
+★ **정체성의 단일 출처는 각 `<id>.gd`의 그레이박스 `_draw()`다**(+ [narrative-bible §5]).
+  아래 PROMPT는 전부 그 실루엣 설계(㉠~㉤ 범례)를 영어로 옮긴 것이고, 리젝 판정도 거기서 나온다 —
+  그레이박스가 아트의 스펙 카드라는 §19.1의 결이 아홉 번 반복됐다.
+★리젝 기준(§17.4·§19.0에서 이어받은 것 + 이 패스가 실증한 것):
+  ① **재질을 몸 전체에 못 박는다** — 비인간은 "no human skin anywhere"가 핵심 어구고 tgs=11이다
+     (옹이가 "bark skin"을 부드럽게 적어 초록 머리 노인으로 나온 그 실패의 예방). 이 패스는
+     루카·미르·프로스티·깨비에 그대로 걸어 **재질 리젝 0**이었다.
+  ② **금지 도상을 이름으로 적는다** — residents.md의 분리 가드레일은 프롬프트에 부정형으로
+     박아야 지켜진다: 켄 `NOT green, no neck bolts and no flat square head`(프랑켄슈타인 금지) ·
+     프로스티 `NOT a snowman`(눈사람 연상 금지) · 깨비 `no fire and no flames anywhere`
+     (불 = 백스토리 한정 · 미호 여우불과 중복 금지). 셋 다 1차에서 지켜졌다.
+  ③ **north(뒷모습)를 반드시 눈으로 확인한다** — 아래 ★★.
+★★ **north 결함이 이 패스에서 처음으로 "고쳐야 하는 것"이 됐다.** §15.6이 옹이에서 박제한
+   "north 프레임에 얼굴이 그려진다"는 결함을 그때는 **정지 NPC라 walk_down 행만 뜬다**는 이유로
+   넘겼다. 조연 9인은 아침(집 앞)→낮(광장)→저녁(카페)으로 **실제로 이동**해서 뒷모습이 화면에
+   든다. 9종을 전수 육안 검수한 결과:
+   · **8인은 정상** — 뒤통수가 머리카락(깨비·켄·설화·스칼렛·미르·세레나)·귀 달린 뒤통수(루카)·
+     갓 챙(강림)으로 갈려서, 모델이 얼굴을 그릴 자리가 없었다.
+   · **프로스티만 결함** — 앞뒤가 같은 흰 털이라 뒷면에도 눈·눈썹·주둥이가 그려졌다.
+     → `make_s9b_t9_art.erase_north_face(0.34, 200)`로 지운다: 머리 띠(콘텐츠 높이의 위 34%) 안의
+     **내부 픽셀**(외곽선 제외) 중 몸보다 어두운 것을 이웃 털색으로 반복 충전한다. 모찌 글루
+     (`make_naru_art2._move_face(hide=True)`)와 **같은 연산**이고, 털이 앞뒤 한 색인 인물에서만
+     성립하는 처방이라 나머지 8인에겐 안 건다.
+   ⚠ 교체판도 **north를 반드시 눈으로 확인할 것**. 위 하네스의 아래쪽 격자 2행이 그 판정면이다.
+```
+
+### 23.1 ★조연 9인 워크 시트 `characters/<id>.png` (각 80×320)
+
+```
+배선: **전원 코드 0줄.** 각 `<id>.gd`의 `CharSprite.make("res://assets/characters/<id>.png")`가
+  S9b-T1~T6이 깔아 둔 훅이라, 파일을 놓는 것이 배선의 전부다(없으면 그레이박스 `_draw()`로
+  자동 폴백 — 네오·풀무·무골·주방요괴와 같은 결).
+
+── ① 깨비 `kkaebi` (size 44 · 콘텐츠 49px) — 도깨비 ─────────────────────────────
+  실루엣 출처: kkaebi.gd ㉠ 넓은 어깨 / ㉡ 외뿔 하나 / ㉢ 어깨에 걸친 방망이 / ㉣ 불 색 금지
+  PROMPT: chibi Korean dokkaebi goblin trickster standing straight, his whole face and body are
+    warm earthen clay brown ogre hide, no human skin anywhere, ONE single short horn growing up
+    and tilted from the left side of his forehead, broad grinning face with narrow mischievous
+    slit eyes and a wide sly smile, wild dark hair, very broad shoulders much wider than his hips,
+    a thick knobbly wooden club resting on his right shoulder, wearing a dark teal green korean
+    hanbok jeogori jacket with an earth brown sash belt, sturdy and playful, no fire and no flames
+    anywhere, muted underworld palette
+★알려진 결함(교체 시 고칠 것): **이마 외뿔이 안 나왔다** — 뾰족귀 + 헝클어진 머리가 그 자리를
+  대신 팔고 있다. §17.4 풀무가 겪은 것과 **똑같은 실패**(44px 스케일에 뿔이 안 박힌다)라,
+  이제 "standard·size 44에서 작은 뿔은 안 나온다"를 규칙으로 봐야 한다. 지금은 흙빛 살갗 +
+  뾰족귀 + 방망이 + 능글 미소가 도깨비를 판다. ㉣(불 색 0)은 지켜졌다 — 몸은 청록이다.
+
+── ② 켄 `ken` (size 56 · 콘텐츠 62~64px) — 언데드 거인 ──────────────────────────
+  실루엣 출처: ken.gd _SKIN 창백한 회청 / 넓은 어깨 / 긴 팔 / 처진 눈매 / 왼 이마 흉터
+  PROMPT: chibi undead giant standing straight, a towering broad shouldered figure, his whole face
+    and body are pale cold grey blue undead skin, no human skin anywhere, NOT green, no neck bolts
+    and no flat square head, a gentle rounded head with sad drooping downturned eyes and a small
+    closed mouth, a thin faint scar running down the left side of his forehead and cheek, short
+    dark hair, extremely broad shoulders and very long heavy arms hanging down past his knees,
+    wearing a simple worn dark brown labourer tunic and rough trousers, huge and calm and gentle,
+    muted underworld palette
+★[residents.md §남요괴 2] "유니버설 프랑켄슈타인(녹색·볼트·납작머리) ✕"가 프롬프트의 부정형
+  셋으로 이행됐고 1차에서 지켜졌다. **거인은 키로 팔린다** — 광장에 서면 사람 규격 7인보다
+  머리 하나가 크다(하네스 위쪽 장면의 판정면).
+★알려진 결함: 어깨 폭이 그레이박스 ㉠("키보다 어깨 폭이 먼저 읽힌다")만큼 극단적이지 않다.
+  교체판은 어깨를 더 벌릴 것.
+
+── ③ 설화 `seolhwa` (size 44 · 콘텐츠 49~50px) — 설녀 ───────────────────────────
+  실루엣 출처: seolhwa.gd ㉠ 가장 세로로 긴 실루엣 / ㉡ 긴 백발 두 갈래 / ㉢ 정수리 서리 결정 /
+    ㉣ 따뜻한 색 한 점도 금지
+  PROMPT: chibi Korean snow woman yokai standing straight, a tall slender vertical silhouette,
+    pale blue white icy skin, no warm colours anywhere, long straight snow white hair falling in
+    two strands past her waist, a small pale ice crystal star resting on the very top of her head,
+    downcast narrow serene eyes and a small closed mouth, wearing a long pale indigo blue korean
+    jangot robe falling straight to her feet with a silver white sash, cold and aloof and elegant,
+    frost, muted underworld palette
+★[residents.md] "디자인 지브리 베끼기 ✕" — 프롬프트에 특정 작품을 안 적는 것으로 지킨다.
+★알려진 결함: 서리 결정이 **정수리가 아니라 이마 머리띠 위치**에 붙었다(㉢의 "도깨비 뿔 자리에
+  대응하는 종족 표식"이라는 의도가 절반만 이행). 장옷은 남빛보다 보랏빛으로 나왔지만 muted가
+  눌러 로스터 안에서는 합류한다. ㉣(난색 0)은 지켜졌다.
+
+── ④ 스칼렛 `scarlet` (size 44 · 콘텐츠 45~49px) — 메두사 ───────────────────────
+  실루엣 출처: scarlet.gd ㉠ 머리 위 뱀 세 가닥 / ㉡ 긴 소매로 덮인 손 / ㉢ 주홍 *비단*(불 아님) /
+    ㉣ 가늘고 붉은 눈 · 입 안 그림
+  PROMPT: chibi medusa gorgon woman standing straight, pale cool skin, THREE dark green snakes
+    rising from the top of her head instead of hair and splitting left centre and right, each snake
+    with a tiny head, narrow sharp crimson red eyes and a flat unsmiling mouth, wearing a deep
+    crimson scarlet silk korean robe with very long wide draping sleeves that completely hide both
+    hands, a black silk sash at the waist, poised and cold and glamorous, muted underworld palette
+★뱀은 **세 가닥이 아니라 두 가닥**이 머리를 감싸며 내려오는 형태로 나왔다. 다만 실루엣 상단이
+  다른 주민(둥근 머리)과 확실히 갈리므로 ㉠의 목적은 성립한다 — 교체판에서 셋으로.
+★㉢이 지켜졌다: 붉음이 **옷감**이지 빛이 아니라, 미호의 여우불·깨비 백스토리의 불과 안 겹친다.
+
+── ⑤ 미르 `mir` (size 44 · 콘텐츠 50~51px) — 이무기 ─────────────────────────────
+  실루엣 출처: mir.gd ㉠ 뒤로 누운 뿔 둘 / ㉡ 목까지 여민 옷깃 / ㉢ 짙은 남청(깨비 청록보다
+    어둡게) / ㉣ 옷자락 아래 비늘 꼬리 한 자락
+  PROMPT: chibi imugi serpent lord standing straight, his face and hands are pale cold grey blue
+    reptile skin with fine scales, no human skin anywhere, TWO dark horns sweeping backwards flat
+    against the back of his head and not upward, narrow golden serpent eyes with vertical slit
+    pupils and a flat unsmiling mouth, long dark hair, wearing a dark navy teal scaled robe with a
+    high stiff collar closed all the way up to the chin hiding his neck, a gold band at the waist,
+    one short blue green scaled serpent tail tip peeking out from under the hem near his feet,
+    proud and still, muted underworld palette
+★**꼬리(㉣)가 이 시트의 성공작이다** — 청록 비늘 꼬리가 옷자락 밖으로 크게 휘어 나와, 사람
+  형상인데 사람이 아님이 실루엣 하나로 읽힌다. ㉡ 높은 옷깃·금띠도 나왔다.
+★알려진 결함: ㉠ 뿔이 "뒤로 눕지" 않고 짧은 돌기로 섰다(깨비 외뿔과의 방향 대비가 약해졌다) ·
+  눈이 금빛 세로 동공이 아니라 옅은 청색이다. 둘 다 교체판 1순위 교정점.
+
+── ⑥ 루카 `luca` (size 44 · 콘텐츠 49~52px) — 늑대인간 ──────────────────────────
+  실루엣 출처: luca.gd ㉠ 뾰족 귀 둘 / ㉡ **낮게** 늘어진 꼬리 / ㉢ 잿빛 갈색(무채색에 가깝게) /
+    ㉣ 노란 눈 한 쌍 / ㉤ 손목의 밧줄 자국 두 줄
+  PROMPT: chibi werewolf man standing straight, his whole face and body are covered in ash grey
+    brown wolf fur, no human skin anywhere, a wolf muzzle and TWO tall pointed wolf ears standing
+    up on his head, sharp bright yellow eyes and a firmly closed mouth, a bushy tail hanging LOW
+    and down behind his right leg and not raised, wearing a plain dark grey worn shirt with rolled
+    up sleeves and dark trousers, two pale rope burn scar bands around each wrist, lean and quiet
+    and watchful, muted underworld palette
+★㉠~㉤이 **전부** 나온 유일한 시트다(늑대 주둥이 + 선 귀 + 내린 꼬리 + 노란 눈 + 손목 띠).
+  "LOW and down ... not raised"처럼 **방향을 대문자와 부정형으로 함께** 적은 것이 주효했다 —
+  쳐든 꼬리는 활기찬 개가 되고, 내린 꼬리라야 ㉡의 "억누르는 인물"이 된다.
+★사소한 결함: 손목 띠가 창백한 밧줄색이 아니라 푸른빛으로 나왔다(㉤의 '자국'보다 '팔찌'로 읽힐
+  여지). 교체판은 살빛에 가까운 흉터색으로.
+
+── ⑦ 프로스티 `frosty` (size 56 · 콘텐츠 61~65px) — 예티 ────────────────────────
+  실루엣 출처: frosty.gd ㉠ 로스터 최대 덩치 / ㉡ 둥근 어깨·**없는 목** / ㉢ 거의 흰 눈빛 털
+    (무채색 최상단 = 강림의 정확한 반대편) / ㉣ 큰 눈망울 + 처진 눈썹 · **입 없음** /
+    ㉤ 가슴 한가운데의 빈 자국
+  PROMPT: chibi giant yeti snow beast standing straight, an enormous rounded mass of soft snow
+    white shaggy fur covering the entire body, no human skin anywhere, NOT a snowman, the head sunk
+    directly into the round shoulders with no neck at all, two very large dark round eyes and two
+    short drooping sad eyebrows, NO mouth at all, short thick fur arms hanging at the sides and
+    wide flat feet, a small dark hollow dent in the very centre of its chest, huge and soft and
+    gentle, muted underworld palette
+★㉠~㉤ **전부 이행**. 특히 ㉣의 "입은 그리지 않는다"(말 못 하는 인물이라 그릴 이유가 없다)와
+  ㉤의 가슴 홈이 도트에서도 살아 있다 — ♡3 관문이 그 자리를 가리키므로 아트가 대사를 받친다.
+★★ **north 얼굴 결함 1건 = 후처리로 해소**(위 §23.0 ★★). raw에는 뒷면에도 얼굴이 있으니
+   `*_raw/north.png`를 그대로 다른 용도에 쓰지 말 것.
+
+── ⑧ 강림 `gangrim` (size 44 · 콘텐츠 48px) — 폐직 차사 ─────────────────────────
+  실루엣 출처: gangrim.gd ㉠ 넓은 갓 챙(실루엣 상단이 로스터에서 유일하게 가로로 넓다) /
+    ㉡ 검은 도포(무채색 최하단) / ㉢ 가슴께 흰 띠 / ㉣ 갓 그늘 아래 무채색 눈 / ㉤ 품에 낀 빈 명부
+  PROMPT: chibi Korean grim reaper jeoseung saja standing straight, wearing a wide brimmed black
+    korean gat hat with a low crown, the brim wider than his shoulders casting deep shadow over the
+    upper face, a narrow pale face beneath with faint colourless grey white eyes and a flat closed
+    mouth, wearing a long black korean dopo robe with a single white sash band across the chest, a
+    black worn ledger book tucked under his left arm, severe and still and colourless, muted
+    underworld palette
+★**갓 챙이 어깨보다 넓게** 나와 ㉠이 성립했다 — 광장에서 실루엣만으로 그를 찾을 수 있다.
+  ㉤ 명부도 팔 밑에 있다. 뒷모습이 갓으로 완전히 갈려 north 결함이 구조적으로 안 난다.
+★알려진 결함: 명부가 검정이 아니라 갈색 표지로 나왔다 · ㉢ 가슴 흰 띠가 남향에서 약하다
+  (북향에선 허리 띠로 보인다). 둘 다 교체판 교정점.
+
+── ⑨ 세레나 `serena` (v3 회전 · 콘텐츠 34~36px) — 인어 ──────────────────────────
+  실루엣 출처: serena.gd ㉠ **발이 없다**(로스터에서 유일) / ㉡ 앉은 자세라 키가 낮다 /
+    ㉢ 긴 머리 한 덩이 / ㉣ **두 색**(하반신 짙은 청록 / 상반신 창백한 물빛) / ㉤ 입을 그린다
+  ★★ **create_character(휴머노이드 골격)를 못 쓴다** — 다리가 없기 때문이다(§11.5 모찌가 세운
+     그 갈림길). 그런데 모찌 경로(단일 뷰 + 얼굴 이동)도 안 맞는다: 모찌는 방향에 무관한 덩이라
+     얼굴만 옮기면 됐지만, 인어는 꼬리 방향이 돌아야 한다. 그래서 **2단 생성**을 썼다.
+     ㉠ create_map_object(48×48 / low top-down / selective outline / basic shading / high detail)로
+       남향 한 장을 뽑고 → ㉡ 그 결과를 create_character(mode=v3 / reference_image_url=그 오브젝트의
+       다운로드 URL / size=48 / low top-down)로 **8방향 회전**시켜 south·north·east·west만 쓴다.
+     ⚠ v3 참조 입력은 **base64보다 URL이 안전하다**(MCP가 긴 base64를 무음 절단한다 — §17.4 교훈의
+       회전판). map_object 다운로드 URL이 무인증이라 그대로 넣으면 된다(8시간 내 사용).
+     ★결과가 좋다: 앉은 인어가 **네 방향 모두 꼬리·머리 덩이가 제대로 돌았고**, north는 머리
+       한 덩이만 보여 얼굴이 없다. 콘텐츠 34~36px = 사람 규격 49px의 0.70으로, 그레이박스
+       ㉡(_SIT_H 21 / BODY_SIZE.y 32 = 0.66)과 거의 같은 비다 — **앉은 키가 우연이 아니라 규격이다**.
+  PROMPT(㉠ map_object): a small mermaid sitting on the ground seen from a low three quarter view,
+    her lower body is a wide deep teal fish tail curled to the side with a broad fanned tail fin
+    resting flat on the ground, NO legs at all, pale watery blue white skin on her slender upper
+    body, very long flowing teal green hair falling in one single mass past her shoulders, a small
+    delicate face with dark teal eyes and a small open singing mouth, a simple pale shell top,
+    calm and languid, muted underworld palette
+  PROMPT(㉡ v3 회전 — 회전 안내용이라 짧게): a small mermaid sitting on the ground, her lower body
+    is a wide deep teal fish tail with a broad fanned tail fin resting flat on the ground, no legs
+    at all, pale watery blue white skin, very long flowing teal green hair, calm and languid
+후처리 추가 1건 — **살빛 치환**(`recolor_skin`, §11.4 네오의 그 연산):
+  v3 회전본이 상반신을 **따뜻한 갈색 살빛**으로 구워 왔다. 그레이박스 ㉣이 "두 색"을 정체성으로
+  못 박았고(강림의 무채색 최하단과 반대편에 서는 근거) 난색이 들어오면 로스터에서 세레나만
+  따뜻해진다 → 난색 창(h 5~40° · s>0.12)만 잡아 h=188°(그레이박스 상반신 Color(0.76,0.84,0.86)의
+  색상) · s×0.40 · v×1.06으로 옮긴다. **명도 계조는 보존**하므로 계단식 음영이 살아 있다.
+  ★청록 머리·꼬리(h≈160~180°)는 창 밖이라 안 건드린다 — 이 분리가 성립하는 것이 처방의 전제다.
+★교체 시: 위 2단 생성을 안 쓰고 owner가 4방향을 직접 그려 `serena_raw/`에 넣어도 된다.
+  글루는 폴더만 읽으므로 **출처를 안 가린다**.
+```
+
+### 23.2 ★도트 대화 초상화 5인 `portraits/{kkaebi,seolhwa,scarlet,gangrim,serena}.png` (각 256×256)
+
+```
+배선: main `r_<id>.portrait_stem` "" → "<id>" — 주민 레코드 **한 줄씩 5줄**이 전부다.
+생성: create_portrait_character(direction=character_to_portrait / low top-down / result_size=128) —
+  입력 = 위 §23.1 시트의 **south 프레임을 16색 P모드 PNG로 양자화**한 것(§17.4 풀무 경로 그대로).
+  ★★ [§17.4 교훈 재확인] 입력 거부를 피하는 확실한 길은 길이가 아니라 **포맷**이다 — 16색
+     팔레트(P) 모드 PNG는 b64 724~932자로 5장 전부 **한 번에 통과**했다(RGBA 양자화본은 전량
+     도착해도 서버 PIL이 "broken data stream"으로 거부한다).
+후처리: 하드 알파 → ×2 nearest(128→256). §15.6 옹이·§17.4 풀무와 같은 규격이다.
+★ **표정 파일은 만들지 않는다**(`<id>_talk/_smile/_shy/_sad/_surprised` 0장) — `_set_portrait`가
+  없는 파일을 만나면 idle로 떨어지므로 **idle 한 장이 대사 전량을 덮는다**. 조연 대사의
+  [smile]/[shy] 태그는 지금도 그 폴백을 타고 있고, 나중에 표정이 오면 **대사·코드 무개정**으로
+  붙는다(네오·뱃사공·옹이·풀무와 같은 규약).
+★ **다섯 다 정체성이 살아남았다**(§15.6 옹이가 겪은 "비인간 재질 → 사람 피부 되돌림"이 안 났다).
+  깨비=뾰족귀·흙빛 살갗·방망이·능글 미소 / 설화=백발·창백한 냉기·서리 머리띠 / 스칼렛=주홍 비단·
+  붉은 눈·머리를 감는 어두운 코일 / 강림=갓·백면·무채색(이 패스 최고 산출물 — 갓 챙과 흰 얼굴의
+  대비가 도트 버스트에서 오히려 강해졌다) / 세레나=청록 머리·물빛 살갗·주근깨.
+  ★공통 원인 분석: 이 다섯은 **사람 형상 + 비인간 *표식*** 조합이라(뿔·백발·뱀·갓·인어) 변환이
+  지울 것이 표식뿐이고 얼굴 자체는 사람이다. 옹이·무골처럼 **얼굴 재질 자체가 비인간**인 쪽이
+  실패한다 — 이것이 §23.3 ①의 판단 근거다.
+★★ **화풍 불일치 — 교체 대기:** 메인 4인(미호·멜·바나·옥자)은 owner-Gemini **소프트 일러스트**
+   버스트인데 이 다섯은 **도트 버스트**다. "얼굴 없음"을 메우는 스톱갭이라는 지위는 네오·뱃사공·
+   옹이·풀무와 같다 — owner가 [portrait-spec-card.md] §1 규격으로 다시 뽑아 덮으면 된다.
+```
+
+### 23.3 ★owner-Gemini 전용 큐 (PixelLab로 만들지 않는 것)
+
+```
+── ① 비인간 4인 초상 — **미생성이 결정이다**(2×3 표정 그리드로 요구) ─────────────
+대상: 켄 · 미르 · 루카 · 프로스티 (`portrait_stem = ""` 유지 · 대화창에 초상 칸이 안 뜬다).
+안 만든 근거 둘(§17.4 무골 초상을 안 만든 그 판단의 4인판):
+  ㉠ §15.6이 `character_to_portrait`의 **비인간 재질 → 사람 피부 되돌림**을 모델 한계로 박제했고
+     (옹이 2판 동일 실패), 이 넷은 그 실패에 가장 불리한 입력이다 — 얼굴 재질 자체가 비인간이다
+     (언데드 살갗 / 비늘 / 늑대 주둥이 / 털뭉치). §23.2가 성공한 다섯은 반대로 얼굴이 사람이었다.
+  ㉡ 한 장이 25 gen이라, 실패 가능성이 큰 100 gen을 더 태우면 이 패스가 236 → 상한을 위협한다.
+  ⚠ **미이행이 아니라 결정이다** — 각 `*_arc_test.gd` ①d가 그 결정을 단언으로 들고 있다.
+2×3 표정 그리드(정본: idle / talk / smile / shy / sad / surprised)로 요구할 것.
+**정체성 불가침 요소**(각 인물 파일·바이블이 정한 것 — 이걸 잃으면 다시 뽑아야 한다):
+  · **켄** = 창백한 회청 살갗(사람 살빛 0) · **처진 눈매**(순한 인상이 얼굴의 전부) · 왼 이마에서
+    볼로 내려오는 **옅은 흉터** · 큰 머리인데 **각지게**(프로스티의 둥근 덩이와 반대편) ·
+    ⚠ 녹색·목 볼트·납작머리 **금지**(프랑켄슈타인 회피 — residents.md 명시).
+  · **미르** = 청회색 **비늘 살갗** · **세로 동공의 금빛 눈** · **목까지 여민 높은 옷깃**(가리는
+    인물의 얼굴 — ♡2·♡3·spouse가 전부 이 옷깃을 쓴다) · **뒤로 누운 뿔 둘**(위로 뻗지 않는다 =
+    "아직 용이 아님") · 안 웃는 입.
+  · **루카** = **늑대 주둥이가 있는 얼굴**(사람 얼굴에 귀만 붙이지 말 것) · 잿빛 갈색 털 ·
+    **노란 눈 한 쌍**(얼굴에서 유일하게 채도가 높다) · 다문 입 · 사람 피부색 0.
+  · **프로스티** = 얼굴 전체가 **눈빛 흰 털** · **목이 없다**(머리가 어깨에 잠긴 한 덩이) ·
+    **아주 큰 눈망울 + 처진 눈썹**(이 둘이 표정 전부다) · **입을 그리지 않는다**(말 못 하는
+    인물이라 그릴 이유가 없다 — 표정 6칸을 **눈과 눈썹만으로** 갈라야 한다) ·
+    ⚠ 눈사람 연상 **금지**.
+
+── ② 인간형 초상 5인 교체본 ────────────────────────────────────────────────────
+§23.2의 도트 버스트를 [portrait-spec-card.md] §1 헤드&체스트 버스트(소프트 일러스트)로 교체.
+같은 파일명(`portraits/<id>.png` 256²)이면 **코드 0줄**. 우선순위는 대사량 순: 강림 > 스칼렛 >
+설화 > 깨비 > 세레나. 각 인물의 불가침 요소는 §23.1 실루엣 출처 줄이 단일 출처다.
+표정 6칸을 함께 그리면 `<id>_talk` 등 파일명만 맞춰 놓으면 되고 역시 코드 0줄이다.
+
+── ③ ★★S등급 원화 2장 `assets/cutscene/{b6_return,b7_release}.png` ─────────────
+⚠ **PixelLab로 생성하지 않는다**([ADR-0068] 결정 9 — 인스타툰체 풀스크린 원화는 owner-Gemini
+  전용이다. 도트로 구우면 이 게임에서 딱 두 번 뜨는 화면이 나머지 화면과 같은 급이 된다).
+배선: **코드 0줄 드롭인.** `cutscene.gd`의 다섯째 동사 `illust`가 이미 `assets/cutscene/<id>.png`를
+  찾고, 없으면 main이 placeholder(먹 암전 + 세로 대형 붓글씨 제목 + 가로 부제)를 세운다.
+  파일을 놓는 순간 placeholder가 원화로 바뀐다.
+규격: 내부해상도 640×360(ADR-0012)의 **풀스크린**이라 그 비(16:9)를 지킬 것. 불투명도만 보간되므로
+  (러너가 id와 알파만 안다) **가장자리까지 그려 채울 것** — 투명 여백을 남기면 암전이 비친다.
+장면 요구(본문에서 도출 — `spine.gd` B6_RETURN_LINES · B7_OFFICIANT_LINES · B7_RELEASE_LINES):
+
+ ㉠ `b6_return` — 제목 「귀환」 / 부제 「봉인이 풀리다」
+   그려야 하는 것: **불이 번지던 밤, 플레이어를 끌어안고 밖으로 나온 팔이 다시 안으로 들어가는
+   그 등**. 본문의 핵("나를 끌어안고 나온 팔이 있었다. 그 팔은 다시 안으로 들어갔다")이 이 한 컷이다.
+   ⚠ **얼굴을 보여 주지 않는다** — 본문이 끝까지 「옥자」를 0회로 두고 "당신"이라고만 부른다.
+     뒷모습·역광의 실루엣까지다. 얼굴을 그리면 본문이 참은 것을 그림이 말해 버린다.
+   결: 약방 뒷마당의 마른 약초 · 번지는 불빛 · 문지방을 넘어 *안으로* 향하는 발.
+   ★두 번째 층(선택): 명부의 한 줄에 그어진 붉은 선 위로 겹쳐 적힌 두 이름 — 본문 6번째 줄이
+     그것이라, 화면 어딘가에 종이 한 장으로 겹쳐 두면 두 문장이 한 그림에 든다.
+
+ ㉡ `b7_release` — 제목 「해방」 / 부제 「머무름은 선택이 되다」
+   그려야 하는 것: **명부의 「종신(終身)」 줄 위에 붉은 선이 그어지는 순간**, 그리고 그 옆에
+   **두 이름이 나란히 적히는 붓끝**. 계약으로 묶던 손이 사랑으로 묶는 거울이 이 장면의 전부다.
+   ⚠ **주례(갓 쓴 이)의 얼굴도 보여 주지 않는다** — 본문이 그를 전부 지문으로만 쓴다
+     ("갓 아래 그림자가 붓을 든다" · "말할 수 없는 사람이다"). 갓 챙과 붓을 든 손까지다.
+   결: 소리 없는 잔치 — 밖에서 폭죽 대신 **여우불**이 터진다(본문 6번째 줄). 죽은 자들의 혼례라
+     환호가 없다. 붉은 선 · 먹 · 여우불의 푸른빛, 세 색이면 충분하다.
+   ★이 그림은 **엔딩의 마지막 얼굴**이다(이어서 에필로그로 넘어간다) — 밝게 끝낼 것.
+```
+
+### 23.4 ★명부 혼례 부적 `materials/myeongbu_charm.png` (32×32 아이콘) — 앵커 청혼의 정표
+
+```
+배선: main.MINE_ICONS에 한 줄(`ItemCatalog.MYEONGBU_CHARM: preload(...)`) — [S8-T9] 혼례 부적
+  (`wedding_charm`) **바로 옆**이다. 부적은 CAT_MATERIAL이라 인벤 슬롯·핫바·토스트가 이미
+  "텍스처 있으면 쓰고 없으면 색박스" 분기를 타고 있었다 → dict 한 줄로 세 자리가 동시에 낫는다.
+정체성: **접는 손이 다르다.** 일반 혼례 부적은 앵커(무녀)가 5,000냥에 접어 주는 크림빛 한지지만,
+  자기 혼례 부적을 자기가 접을 수는 없다 — [narrative-bible §6.3]이 "앵커 본인의 혼례는 차사가
+  맺어 준다"고 못 박아, 이건 **명부의 주인이 명부장을 찢어 접는 것**이다(창구 = 강림 [F] ·
+  값은 냥이 아니다 — 명부에 이름을 올리는 일은 사고팔 수 없다).
+  그래서 종이가 **먹빛**이고, 그 위에 **두 이름이 흰 붓글씨로 나란히** 적히고, 그 두 줄을
+  가로질러 **주사(朱砂) 인장**이 찍힌다. 붉은 끈 매듭만 일반 부적과 공유한다(혼례의 문법).
+  PROMPT: folded korean hanji paper talisman made from a page torn out of a black ledger book of
+    the dead, deep ink black folded paper packet, two short vertical columns of white brush written
+    names side by side on the front, a vermilion cinnabar seal stamped across both columns, a
+    crimson silk cord tied in a knot around it with tassel ends hanging off the side, korean
+    shamanic wedding amulet, [§1.1 광원 세트], muted somber underworld palette
+    (create_image_pixen / view=side / selective outline / low detail / no_background / seed 90901)
+후처리: 하드 알파 → muted(0.90/0.97 = §21.1 혼례 부적과 **같은 아이콘 값** — 같은 인벤 격자에서
+  둘이 한 집으로 읽혀야 한다) → 32² 중앙정렬.
+★★ **명도가 두 부적을 가른다** — 혼례 부적은 크림빛(밝음), 명부판은 먹빛(어두움)이다. 32² 격자에서
+   색상이나 장식이 아니라 **값**으로 갈리는 것이 가장 확실하다(둘이 실제로 같은 가방에 함께 들 수
+   있는 물건은 아니지만, 도상이 같은 계열이라 한눈에 "혼례 문법의 다른 판본"으로 읽혀야 한다).
+★  §21.1의 두 금기를 그대로 승계한다: **하트·반지 도상 금지**(이 세계의 혼례 문법은 서양 결혼이
+   아니라 무속 의례다 — ADR-0004) · **붉은 끈 매듭을 몸통 밖으로 흘릴 것**(종이 몸통만 남으면
+   편지·씨앗 봉지와 구분이 안 된다).
+★  **상태를 굽지 않는다** — 세상에 하나뿐인 물건이지만 아이콘은 늘 같다(§18.2·§20.1·§21.1 규율).
+```
+
+### 23.5 이 패스가 바꾼 렌더 (아트 생성물 아님 — 코드)
+
+```
+① 조연 9인 `_draw()` 그레이박스 → **도색 스프라이트**. 코드 변경 0줄이다 — 각 파일의 `_draw()`
+   첫 줄이 `if _sprite != null: return`이라, 시트가 로드되는 순간 색박스가 스스로 물러난다.
+   ★그레이박스 코드는 **지우지 않는다**(폴백 유지). 시트를 못 읽는 상황에서 마을이 텅 비는 것이
+   색박스가 서 있는 것보다 나쁘다 — 네오·모찌 이래의 규약이다.
+② main `r_{kkaebi,seolhwa,scarlet,gangrim,serena}.portrait_stem` "" → "<id>" (5줄) ·
+   `r_{ken,mir,luca,frosty}.portrait_stem`은 ""를 **유지하되 주석을 갱신**(4줄 — "아직 없음"이
+   아니라 "미생성 확정 + Gemini 큐"로. 결정과 미이행은 다른 것이고, 주석이 그것을 말해야 한다).
+③ main.MINE_ICONS +1(명부 혼례 부적).
+④ 각 `*_arc_test.gd` ①d 단언 갱신(9줄) — 이 단언들은 원래 `portrait_stem == ""`를 "시트·초상 =
+   S9b-T9 아트 패스 소관"이라는 **예약**으로 들고 있었다. 이 패스가 그 자리를 채웠으므로 다섯은
+   stem 값을 재고, 넷은 **미생성이 결정임**을 잰다. ★예약 주석을 남긴 태스크가 그 예약을
+   회수하는 것까지가 한 태스크다(S9b-T7이 "예약 주석이 소스 스캔에 위반으로 잡힌다"로 배운 결).
+⑤ 신규 하네스 `tools/s9b_chorus_dump.gd`(육안 + `_sprite` null 기계 판정).
+★ **회귀 18스위트 통과**: resident · gift · {kkaebi,ken,seolhwa,scarlet,mir,luca,frosty,gangrim,
+  serena}_arc · spine_ending · inventory · npc_station · marriage · romance · s9_narrative_smoke ·
+  village. 아트만 바뀐 패스에서 arc 9종을 전부 돈 이유는 ④ 때문이다(단언이 실제로 바뀐다).
+```
