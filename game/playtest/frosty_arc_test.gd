@@ -31,8 +31,8 @@ extends SceneTree
 #      ㉦ Affinity를 모른다 ㉧ 추위·설산을 메카닉으로 안 쓴다
 #   ⑩ 소프트 게이트 ㉠(결정 6) — 이번엔 **단독 태스크라 로스터 등재도 이 태스크가 했다**.
 #      그래서 T1~T3과 달리 "미접촉이면 대기"까지 여기서 전부 잰다.
-#   ⑪ 휴면 콘텐츠 계약 — confession/divorce/spouse 훅은 있는데 main `ROMANCE_OPEN`엔 아직
-#      프로스티가 없다(개통은 S9b-T6 소관 — 훅이 먼저, 명단이 나중).
+#   ⑪ 개통 계약 — confession/divorce/spouse 훅이 먼저 서 있었고, **S9b-T6이
+#      main `ROMANCE_OPEN`에 프로스티를 넣어 열었다**(콘텐츠 재작업 0).
 #   ⑫ ★**척추 B4 + `_spine_bits`**([ADR-0068] 결정 7) — 트리거가 결정적이고(프로스티 ♡3 완료
 #      없이는 미발동 · 취침 1회 후 아침 정확히 1회), 중복 발화가 0이며, 세이브 왕복에 원장이
 #      보존되고, **B4를 frosty.gd가 소유하지 않는다**(아크와 척추의 소유 분리).
@@ -141,8 +141,16 @@ func _run_checks() -> void:
 		and house_door != m.RESIDENT_HOUSE_DOORS[2] and house_door != m.RESIDENT_HOUSE_DOORS[3]
 		and house_door != m.RESIDENT_HOUSE_DOORS[5] and house_door != m.RESIDENT_HOUSE_DOORS[6]
 		and house_door != m.RESIDENT_HOUSE_DOORS[8])
-	_check("①l 빈집 index 4가 남아 있다(강림 몫 — S9b-T5가 쓸 자리를 비워 뒀다)",
-		_house_free(m, 4))
+	# ★[S9b-T6 갱신 — 이월 부채 소거] 이 단언은 T4가 쓸 때 "index 4는 **강림 몫으로 비워 둔다**"의
+	#   기계 표현이었는데, **S9b-T5가 실제로 그 집을 채우면서 stale이 됐다**(T5의 선별 회귀 목록에
+	#   frosty_arc가 없어 그때 안 걸렸다 — S9b-T3의 ⑧a 누락과 같은 종류의 이월이다).
+	#   요지를 살려 방향을 뒤집는다: **예약이 실제로 이행됐는가**를 재고, 덤으로 T6이 로스터를
+	#   닫았다는 사실(남은 빈집 한 채 = 강변 동, 네오 몫)까지 한 줄로 못 박는다.
+	_check("①l ★T4가 예약한 index 4를 T5가 실제로 채웠다(강림) · 이제 빈집은 강변 동 한 채뿐",
+		not _house_free(m, 4)
+		and m._resident("gangrim") != null
+		and m._resident("gangrim").schedule[0]["tile"] == m.RESIDENT_HOUSE_DOORS[4] + Vector2i(0, 1)
+		and _house_free(m, 10) and not _house_free(m, 9))
 	# 선호 선물 — 러브/헤이트가 실존 아이템이고 전부 건넬 수 있어야 한다.
 	_check("①m 선호 선물 테이블(러브 5 · 헤이트 1 · 전부 실존·건넬 수 있음)",
 		GiftPrefs.loves(KID).size() == 5 and GiftPrefs.hates(KID).size() == 1
@@ -412,8 +420,8 @@ func _run_checks() -> void:
 		and who.divorce_lines().size() >= 3)
 	_check("⑪b 수락·거절 본문이 서로 다르다",
 		who.confession_lines(true) != who.confession_lines(false))
-	_check("⑪c ★main ROMANCE_OPEN엔 아직 없다(개통은 S9b-T6 소관 — 이 태스크는 명단을 안 건드린다)",
-		not m.ROMANCE_OPEN.has(KID))
+	_check("⑪c ★[S9b-T6 개통 반영] main ROMANCE_OPEN에 **들어왔다** — 본문 재작업 0으로 열렸다(훅이 먼저·명단이 나중이라는 그 계약의 실물)",
+		m.ROMANCE_OPEN.has(KID))
 
 	# ── ⑫ ★척추 B4 + `_spine_bits`([ADR-0068] 결정 7) ─────────────────────
 	print("── ⑫ 척추 B4 · _spine_bits ──")

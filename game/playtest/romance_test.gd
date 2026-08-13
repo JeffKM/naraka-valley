@@ -97,9 +97,21 @@ func _run_checks() -> void:
 	r_miho.affinity.stage = 4
 	r_miho.affinity.points = 5 * Affinity.POINTS_PER_HEART - 1
 	_check("①c ♡4라도 점수 미만충이면 제안 없음", not m._romance_offer_available(r_miho))
+	# ★[S9b-T6 / ADR-0068 결정 2 재작성] 옛 ①d는 "T1(네오)은 명단 밖이라 제안이 안 선다"였는데,
+	#   그 명단이 **T1 11인 전원으로 열렸다**(개통이 곧 이 태스크다). 단언의 요지는 원문 그대로
+	#   두고 — *명단이 자격을 가른다* — 대조군만 이제 영영 명단 밖인 쪽으로 옮긴다:
+	#   **점주(뱃사공)**는 관계 트랙은 있어도 T1 티어가 아니라 연애가 열리지 않는다(ADR-0014).
+	#   ★ 네오는 같은 자리에서 **반대 방향**으로 다시 잰다(개통의 실물 — ①d-2).
+	var r_boatman: Resident = m._resident("boatman")
+	_stage4_full(r_boatman)
+	_check("①d 점주(뱃사공)는 ♡4 만충이어도 제안 없음(연애 개통 = 메인 3 + T1 11 — 점주는 밖)",
+		not m._romance_offer_available(r_boatman)
+		and r_boatman.affinity != null and not m.ROMANCE_OPEN.has("boatman"))
+	r_boatman.affinity.points = 0
+	r_boatman.affinity.stage = 0
 	_stage4_full(r_neo)
-	_check("①d T1(네오)은 ♡4 만충이어도 제안 없음(S8 개통 = 메인 3인 — S9 점진)",
-		not m._romance_offer_available(r_neo))
+	_check("①d-2 ★T1(네오)은 이제 제안이 선다(S9b-T6 소급 개통 — 옛 단언의 정확한 반대편)",
+		m._romance_offer_available(r_neo) and m.ROMANCE_OPEN.has("neo"))
 	r_neo.affinity.points = 0
 	r_neo.affinity.stage = 0
 	# 대화 경로 — 제안 한 줄이 맨 앞에 선다.
@@ -252,6 +264,33 @@ func _run_checks() -> void:
 	_check("⑩b 조용한 수락 — 진급·연애는 되지만 발화 재지급 없음(대화 닫힘)",
 		m2._romance_partner == "miho" and r2_miho.affinity.hearts() == Affinity.MAX_HEARTS
 		and not m2.dialogue.is_open())
+
+	# ── ⑪ ★[S9b-T6 / ADR-0068 결정 2 · ADR-0066 결정 7] 조연 개시 = 질투 0건 ──
+	# 개통으로 `ROMANCE_OPEN`이 14인이 됐지만 **질투는 안 넓어졌다**. [ADR-0066] 결정 7의 자구는
+	# "연애 개시 순간 1회, 안 뽑힌 **메인 2인**에게 −30점"이고, "2인"이라는 수가 이 축을 메인 3인
+	# 상호로 못 박는다 — 조연을 골랐을 때 메인 3인이 *전원* 깎이는 것은 결정 7의 이행이 아니라
+	# 개정이므로(임의 확장 금지) 명단을 갈라 자구를 지켰다(main `JEALOUSY_ROSTER` 선언부 참조).
+	print("── ⑪ 조연 개시 = 질투 0 ──")
+	var r2_bana: Resident = m2._resident("bana")
+	var r2_mochi: Resident = m2._resident("mochi")
+	_check("⑪a 질투 명단이 연애 명단에서 갈렸다(메인 3인 — 결정 7 자구)",
+		m2.JEALOUSY_ROSTER.size() == 3 and m2.ROMANCE_OPEN.size() == 14)
+	m2._romance_partner = ""              # 슬롯 해제(이혼 스텁 — 조연에게 다시 고백해 본다)
+	m2._jealousy = {}
+	r2_miho.affinity.stage = Affinity.MAX_HEARTS - 1
+	r2_miho.affinity.points = 300
+	r2_mel.affinity.points = 300
+	r2_mel.affinity.stage = 2
+	r2_bana.affinity.points = 300
+	r2_bana.affinity.stage = 2
+	_stage4_full(r2_mochi)
+	m2._resolve_confession("mochi")
+	_check("⑪b ★조연(모찌)과 연애 개시 = 연인 성립 + 메인 3인 점수 불변 + 원장 0",
+		m2._romance_partner == "mochi"
+		and r2_mochi.affinity.hearts() == Affinity.MAX_HEARTS
+		and r2_miho.affinity.points == 300 and r2_mel.affinity.points == 300
+		and r2_bana.affinity.points == 300 and m2._jealousy.is_empty())
+	_close_dialogue(m2)
 	m2.free()
 
 	# 뒷정리 — 이 테스트가 만든 세이브를 지운다(다른 테스트의 자동 복원 오염 방지).

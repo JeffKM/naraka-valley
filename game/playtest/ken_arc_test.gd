@@ -14,8 +14,8 @@ extends SceneTree
 #   ⑤ 절기 물음 — 주 첫날 첫 대화에 1회 · 같은 주 재발동 없음 · **0점 계약** · 관문보다 뒤.
 #   ⑥ 편지 — 관문 성사로 큐에 들어가고 **다음 날 아침** 도착 · 중복 발송 없음 · 3통 · ♡2엔 없음 ·
 #      메인 3인분과 id 충돌 없음.
-#   ⑦ 휴면 콘텐츠 — confession/divorce/spouse 본문이 **이미 있고**(T6이 명단 한 줄만 고치면 개통),
-#      지금은 main의 ROMANCE_OPEN 밖이라 고백 **제안**이 안 선다.
+#   ⑦ 개통 계약 — confession/divorce/spouse 본문이 T1 때 **이미 있었고**, S9b-T6이 main의
+#      ROMANCE_OPEN에 "ken"을 넣자 고백 **제안**이 그대로 섰다(콘텐츠 재작업 0).
 #   ⑧ 볼륨 상한(결정 5) — 대사 100~150줄 · 관문 컷신 4개 · 편지 3통 · 절기 물음 4개 · spouse 4축.
 #   ⑨ 봉인 법칙 가드(결정 6) — 금칙어 31어 0 · ♡3이 **두 개의 공백을 스스로 선언** · 켄 본문에
 #      "옥자" 0회(조연은 이승의 약방 주인과 지금의 카페 사장을 자기 입으로 잇지 않는다).
@@ -342,17 +342,20 @@ func _run_checks() -> void:
 	_check("⑦b 작별 훅 — 첫 줄이 혼자 서는 한 문장(토스트 경로)",
 		not far.is_empty() and String(far[0]).length() >= 6
 		and m3._divorce_farewell_line(r3) == String(far[0]))
-	# ★ 지금은 **명단 밖**이라 고백 제안이 안 선다(S9b-T6이 ROMANCE_OPEN에 "ken"을 넣으면 열린다).
-	_check("⑦c 아직 ROMANCE_OPEN 밖 = 제안 미노출(개통은 T6 소관 · 본문은 이미 대기)",
-		not m3.ROMANCE_OPEN.has("ken"))
+	# ★[S9b-T6 / ADR-0068 결정 2 재작성] 이 두 단언은 **명단이 유일한 스위치**임을 재는 것이었고,
+	#   그 스위치가 켜졌다(개통 = S9b-T6). 요지는 그대로 두고 방향만 뒤집는다 — 켠 뒤에 제안이
+	#   실제로 서면 "명단이 스위치"라는 계약이 더 강하게 증명된다(본문은 T1 때 쓴 그대로다).
+	_check("⑦c ★ROMANCE_OPEN에 들어왔다(개통 = 명단 한 줄 · 본문 재작업 0)",
+		m3.ROMANCE_OPEN.has("ken"))
 	_set_heart(r3, Affinity.MAX_HEARTS - 1)
 	m3._romance_partner = ""
 	m3._heart_bits = {}
 	r3.affinity.last_talk_day = 0
 	m3.clock.day = 10
 	m3._start_resident_dialogue(r3)
-	_check("⑦d 제안 줄이 안 선다(명단 밖 — 구조는 rid 무관이라 명단이 유일한 스위치)",
-		m3.dialogue.is_open() and m3.dialogue.line() != m3.CONFESS_OFFER_LINE)
+	_check("⑦d ★제안 줄이 실제로 선다(구조는 rid 무관이라 명단이 유일한 스위치였다)",
+		m3.dialogue.is_open() and m3.dialogue.line() == m3.CONFESS_OFFER_LINE
+		and m3._confess_rid == "ken")
 	_drain(m3)
 
 	# ── ⑧ 볼륨 상한(ADR-0068 결정 5) ──
