@@ -83,7 +83,11 @@ func _run_checks() -> void:
 		and sum_done.contains("%d" % CafeMilestone.S2_TARGET_HARVEST))
 	var sum_top := CafeMilestone.summary(CafeMilestone.S2_TARGET_HARVEST,
 		CafeMilestone.S2_TARGET_REVENUE, CafeMilestone.S2_TARGET_HEARTS)
-	_check("④d' 2단을 채우면 '카페 2단 완료 ★'로 굳는다", sum_top.contains("2단 완료"))
+	# ★[S10-T5 / ADR-0069 결정 8] **꼭대기가 3단으로 올라갔다** — 2단을 채워도 줄이 "완료"로 굳지
+	#   않고 3단 문턱으로 갈아탄다(1단→2단이 그랬던 것과 같은 사다리 규칙). 이 단언은 그 이행에
+	#   맞춰 갱신됐고, 3단 자체의 표시 계층은 cafe_stage3_test가 전담한다.
+	_check("④d' 2단을 채우면 summary가 3단 문턱으로 갈아탄다(★S10-T5 — 꼭대기 = 3단)",
+		sum_top.contains("카페 3단") and not sum_top.contains("완료"))
 	# ★[S6-T3] 미리보기가 2단의 *실물*을 말한다(종전 "삼도천 낚시" 떡밥은 Slice 3 개통으로 소임 끝).
 	var prev := CafeMilestone.stage2_preview()
 	_check("④e 2단 미리보기는 열리는 콘텐츠를 이름으로 말한다(좌석·곳간·메뉴판)",
@@ -306,7 +310,9 @@ func _run_checks() -> void:
 	m5.milestone_panel.visible = false
 	await process_frame
 	_check("⑨s 래치 후엔 재팝업 안 됨(1회성 — 1단과 같은 규칙)", not m5.milestone_panel.visible)
-	_check("⑨t 2단 HUD는 '카페 2단 완료 ★'로 굳는다", m5.milestone_label.text.contains("2단 완료"))
+	# ★[S10-T5] 2단 HUD도 "완료"로 굳지 않고 **3단 진행**으로 갈아탄다(위 ④d'와 같은 이행).
+	_check("⑨t 2단 HUD는 3단 진행으로 갈아탄다(★S10-T5)",
+		m5.milestone_label.text.contains("카페 3단") and not m5.milestone_label.text.contains("완료"))
 	# 2단 세이브 왕복 — 세이브 무상태(누적 축 파생)라 새 키가 없고, 곳간은 2단 용량으로 온전히 산다.
 	m5.larder.add(CropCatalog.HONRYEONGCHO, 45)   # 1단 상한(30) 초과 = 2단에서만 가능한 재고
 	_check("⑨u 2단 곳간에 45개 적재(1단 상한 30 초과)", m5.larder.count_of(CropCatalog.HONRYEONGCHO) == 45)

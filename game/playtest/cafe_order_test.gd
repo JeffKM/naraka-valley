@@ -250,9 +250,16 @@ func _run_checks() -> void:
 	# 1단 세 축(거둔 영혼·누적 서빙 매출·미호+멜+바나 하트)을 채우면 열린다.
 	mn._run_harvested = CafeMilestone.TARGET_HARVEST
 	mn._cafe_revenue_total = CafeMilestone.TARGET_REVENUE
+	# ★[S10-T5 발견] `points`만 세우면 하트가 안 오른다 — [S8-T5 / ADR-0066]이 하트를 **stage(진급
+	#   칸)** 파생으로 바꾼 뒤(`Affinity.hearts() == stage`) 이 세팅이 갱신되지 않아 ⑤h가 잠복
+	#   실패해 있었다(S10-T5 선별 회귀가 검출 — 카페 3단·늘봄방과 무관). milestone_test가 쓰는
+	#   "점수와 stage를 함께 세운다" 관례를 그대로 따른다.
 	mn.affinity.points = 9999
+	mn.affinity.stage = Affinity.MAX_HEARTS
 	mn.mel_affinity.points = 9999
+	mn.mel_affinity.stage = Affinity.MAX_HEARTS
 	mn.bana_affinity.points = 9999
+	mn.bana_affinity.stage = Affinity.MAX_HEARTS
 	_check("⑤h 1단 완료 후 최상위 해금",
 		mn._milestone_complete() and mn._menu_unlocked(MenuCatalog.HONJEONG_EINSPANNER))
 	_check("⑤i 하트가 최상위 *한 잔*에만 걸린다 — 다른 융합은 ♡와 무관(ADR-0008)",

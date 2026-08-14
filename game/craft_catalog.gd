@@ -36,6 +36,7 @@ const STAIRS := "stairs"     # ★[S5-T8] 계단(ADR-0063 결정 10)
 const CRYSTALARIUM := "crystalarium"   # ★[S10-T1] 결정기(ADR-0069 결정 2)
 const SPRINKLER_T2 := "sprinkler_t2"   # ★[S10-T2] 넋비 스프링클러(ADR-0069 결정 3)
 const SPRINKLER_T3 := "sprinkler_t3"   # ★[S10-T2] 단비 스프링클러(ADR-0069 결정 3)
+const GARDEN_POT := "garden_pot"       # ★[S10-T5] 화분(ADR-0069 결정 8)
 
 # ── 카탈로그. 키 = 레시피 id ────────────────────────────────────────────────
 # 필드:
@@ -135,6 +136,19 @@ static func catalog() -> Dictionary:
 			"unlock_skill_id": ProfessionCatalog.FARMING, "unlock_skill_level": 8,
 			"mats": [{"item": ItemCatalog.SPRINKLER_T2, "count": 1},
 				{"item": ItemCatalog.INGOT_HWANGCHEONGEUM, "count": 1}]},
+		# ── ★[S10-T5 / ADR-0069 결정 8] 화분 ────────────────────────────────────────
+		# ★ 획득 경로 = **제작**이다(잠정 — owner 큐). 만물상 소매도 후보였으나 셋이 제작을 가리켰다:
+		#   ㉠ 재료가 원목·돌이라 이미 손에 있는 것으로 만들어지는 소품이고(구매할 이유가 약하다),
+		#   ㉡ 같은 "놓는 물건" 형제(수액 채취기·업화로·결정기)가 전부 제작 전용이라 획득 문법이
+		#      갈리지 않으며, ㉢ 실내 소품이라 상점 매대의 절기·재고 축에 얹을 필요가 없다.
+		# ★ `unlock_level: 0` = 상시 노출(업화로·결정기 선례 — 실내 소품에 채집 계단을 물리지 않는다).
+		#   화분의 실질 게이트는 **놓을 실내가 있는가**이고, 그건 게임 시작부터 집이 있으므로 없다 —
+		#   즉 화분은 처음부터 만들 수 있는 소품이다(늘봄방 해금과 무관한 별개 축 — 결정 8의 두 항목이
+		#   같은 결정에 묶였다고 해서 서로를 게이팅하지는 않는다. ADR-0008 "평평≠막힘").
+		# ★ 원목 20 + 돌 10은 잠정(owner 큐) — 수액 채취기(원목 40)의 절반 몸집.
+		GARDEN_POT: {"name_ko": "화분", "out_item": ItemCatalog.GARDEN_POT,
+			"out_count": 1, "unlock_level": 0, "unlock_species": "",
+			"mats": [{"item": ItemCatalog.WOOD, "count": 20}, {"item": ItemCatalog.STONE, "count": 10}]},
 	}
 
 # 레시피 id 목록(카탈로그 정의 순서 = 제작 탭 표시 순서 — 해금 레벨 오름 결).
@@ -144,9 +158,11 @@ static func ids() -> Array:
 	#   이 둘의 실질 게이트는 농사 레벨 + 주괴라 "채집 계단" 정렬과 같은 축이 아니고, 상위 티어
 	#   설치물끼리 붙어 있는 편이 제작 탭에서 읽힌다(업화로·계단이 앞머리를 이미 그렇게 쓰고 있다).
 	# ★[S10 결합] 결정기(T1)=해금 0 상시 노출 셋 앞줄 / 스프링클러 2티어(T2)=끝줄 — 두 워커 배치 철학 병존.
+	# ★[S10-T5] 화분 = 해금 0 상시 노출이라 앞줄(업화로·계단·결정기) 결이지만, 실내 소품이라
+	#   밭 설치물 무리와 섞이지 않게 끝줄에 둔다(스프링클러 2티어가 끝줄을 쓰는 그 판단 그대로).
 	return [FURNACE, STAIRS, CRYSTALARIUM, WILD_SEEDS_PIAN, TAPPER, WILD_SEEDS_YUHWA, WILD_SEEDS_MANGYEON,
 		RARE_SEED_MIHOK_NANCHO, RARE_SEED_YURYEONGCHO, RARE_SEED_MYEONGWOL, RARE_SEED_SEORI_HONBAEK,
-		WILD_SEEDS_SEONGYA, SPRINKLER_T2, SPRINKLER_T3]
+		WILD_SEEDS_SEONGYA, SPRINKLER_T2, SPRINKLER_T3, GARDEN_POT]
 
 static func has(id: String) -> bool:
 	return catalog().has(id)

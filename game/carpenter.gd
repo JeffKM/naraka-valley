@@ -47,6 +47,15 @@ const PROJ_MASTER_ROOM := "master_room"
 #   증정)는 main의 완공 배선이 id 분기로 잇는다 — 원장은 여전히 "무엇을 언제 짓는가"만 안다.
 #   ★ 비용 10,000냥 + 원목 100 + **유철 주괴 5** · 공기 2일은 [ADR-0069] 결정 6의 잠정치다.
 const PROJ_STABLE := "stable"
+# ★[S10-T5 / ADR-0069 결정 8] 늘봄방(온실) — **이 원장의 다섯 번째 항목**이다. 마구간(T4)이 그랬듯
+#   데이터 1건 추가가 전부이고, 완공 실효(실내 구역 개설·경작면 신설)는 main의 완공 배선이 id
+#   분기로 잇는다 — 원장은 여전히 "무엇을 언제 짓는가"만 안다.
+#   ★ 이 프로젝트만 **매대 노출에 선행 조건이 붙는다**(카페 마일스톤 3단 도달). 그 게이트는 여기가
+#     아니라 매대 쪽(main._build_rows)이 든다 — 원장은 카페도 마일스톤도 모른다(머리말의 경계).
+#   ★ 비용 35,000냥 + 원목 500 · 공기 3일은 [ADR-0069] 결정 8의 잠정치다(스타듀 Greenhouse가
+#     골드가 아니라 번들 보상인 자리라 1:1 상속할 값이 없다 — 큰 넋우릿간 12,000냥의 약 3배로
+#     "사다리 꼭대기의 보상을 실제로 세우는 마지막 목돈"에 맞췄다. owner 큐).
+const PROJ_GREENHOUSE := "greenhouse"
 
 # id → {name_ko, gold, wood, days, building(Ranch 건물 id — "" = 건물 무관), desc}
 #   + ★[S10-T4] ingot/ingot_id(주괴 자재 — 키 없으면 0/"" = 요구 없음. 기존 3건은 무영향).
@@ -74,6 +83,11 @@ const PROJECTS := {
 		"ingot": 5, "ingot_id": ItemCatalog.INGOT_YUCHEOL,
 		"building": "",
 		"desc": "저승 말이 머물 자리를 짓는다",
+	},
+	PROJ_GREENHOUSE: {
+		"name_ko": "늘봄방", "gold": 35000, "wood": 500, "days": 3,
+		"building": "",
+		"desc": "절기가 바뀌어도 시들지 않는 밭을 들인다",
 	},
 }
 

@@ -205,8 +205,18 @@ func _run_checks() -> void:
 	_check("③d 유화절 매대엔 혼령초만·피안화는 없다",
 		rows29.any(func(r): return r["buy_id"] == CropCatalog.HONRYEONGCHO)
 		and rows29.all(func(r): return r["buy_id"] != CropCatalog.PIANHWA))
-	_check("③e 씨앗 밖 품목(묘목·비료·건초·설치물 8행)은 절기와 무관하게 그대로",
-		rows29.filter(func(r): return r["kind"] != "seed").size() == 8)
+	# ★[S10-T5 발견] 8 → 9. 이 단언은 S7-T2 시점의 매대(묘목1·비료5·건초1·스프링클러1 = 8행)를
+	#   센 것인데, **[S10-T2]가 만물상에 레어크로우 상시 재고 1행을 얹으면서** 9행이 됐고 이 숫자가
+	#   같이 갱신되지 않아 잠복 실패로 남아 있었다(S10-T5 선별 회귀가 검출 — 늘봄방·화분과 무관).
+	#   ★ 재발 방지로 **행 종류를 명시**한다: 숫자만 세면 다음 슬라이스가 또 조용히 깨뜨린다.
+	var nonseed29: Array = rows29.filter(func(r): return r["kind"] != "seed")
+	var nonseed_kinds: Dictionary = {}
+	for r5 in nonseed29:
+		nonseed_kinds[String(r5["kind"])] = int(nonseed_kinds.get(String(r5["kind"]), 0)) + 1
+	_check("③e 씨앗 밖 품목(묘목·비료·건초·설치물·레어크로우)은 절기와 무관하게 그대로",
+		nonseed29.size() == 9 and nonseed_kinds.get("sapling", 0) == 1
+		and nonseed_kinds.get("fert", 0) == 5 and nonseed_kinds.get("hay", 0) == 1
+		and nonseed_kinds.get("placeable", 0) == 1 and nonseed_kinds.get("rarecrow", 0) == 1)
 
 	# ── ④ 카페 메뉴 로테이션(작물 사멸 = 메뉴 로테이션) ──────────────────────
 	print("── ④ 메뉴 절기 로테이션 ──")

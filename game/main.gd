@@ -1778,6 +1778,25 @@ const FORAGE_SCAN_RECT := Rect2i(14, 21, 6, 3)    # x14..19, y21..23 (여물광 
 #   ⚠️ 리필 메카닉은 아직 없다(유한 물뿌리개 = 별도 grill 후 도입) → 지금은 farm-infra 자리만 잡는 shell.
 #   스타터 밭(x40..44 y12..16) 남쪽 1칸 아래(y17 여백) — "밭에 물 대는 우물"로 읽히는 farm-infra 존.
 const WELL_RECT := Rect2i(40, 18, 3, 3)           # x40..42, y18..20 (밭 남쪽 — 중앙 스파인 x38 곁, 접근 스퍼로 연결)
+# ── ★[S10-T5 / ADR-0069 결정 8] 늘봄방(온실) — 카페 3단 보상 건축 ────────────────
+# 창고(STOREHOUSE_*) 패턴을 그대로 재사용한다: 외관 WALL 박스 + 남향 2칸 문 / HOME 실내 밴드에 방 /
+# `_build_building_catalog` dict 등록으로 출입·카메라·세이브가 데이터 주도 자동. **다른 점 하나** —
+# 이 건물은 **완공 전엔 아예 안 선다**(외관·방·카탈로그 등록 셋 다 `_greenhouse_built()` 게이트).
+# 그래서 짓기 전 세계는 종전과 픽셀 단위로 같고, 안 지은 세이브의 회귀가 0이다.
+# ★ 외관 자리 = 본가(x40..49) 동쪽 빈 저지. layout.json HOME 프롭 좌표를 실측해 8×7이 통째로 비는
+#   구획을 골랐다(프롭 밑에 건물이 겹치지 않게 — 겹치면 아트 패스에서 나무가 지붕을 뚫는다).
+const GREENHOUSE_EXT_RECT := Rect2i(64, 5, 8, 7)   # x64..71, y5..11 (본가 동쪽 빈 저지 — 프롭 무점유 실측)
+const GREENHOUSE_EXT_DOOR := Vector2i(67, 11)      # 외관 문 서패널(닿으면 진입) — 아래벽 x64..71 중심 straddle → 2칸 문 x67·x68
+const GREENHOUSE_EXT_DOOR_E := Vector2i(68, 11)    # 외관 2패널 문 동패널([ADR-0046] 짝수폭 정중앙 2칸)
+const GREENHOUSE_RECT := Rect2i(55, 67, 12, 11)    # 실내 x55..66, y67..77 (HOME 밴드 — 집 x8..25·창고 x23..32·동물 x38..49와 안 겹침)
+const GREENHOUSE_DOOR := Vector2i(60, 77)          # 실내 문 서칸(닿으면 퇴장) — 아래벽 중앙(방 x55..66, end.y-1)
+const GREENHOUSE_DOOR_E := Vector2i(61, 77)        # 실내 문 동칸(실내문≡외관문 2칸). 퇴장 트리거 양 칸 수용.
+const GREENHOUSE_IN_TILE := Vector2i(60, 76)       # 실내 문 안쪽(진입 착지) — ★경작면이 아니라 **통로 행**이다(아래)
+const GREENHOUSE_CAM_RECT := Rect2i(54, 66, 14, 13)  # 늘봄방 방 둘레(넋우릿간 CAM x37..50과 안 겹침)
+# ★ 경작면 10×8(ADR-0069 결정 8 잠정치) = 방 실내 바닥(x56..65 · y68..76) **중 위 8행**. 마지막 행
+#   y76은 통로로 비워 둔다 — 진입 착지 칸이 밭 한가운데면 들어서자마자 작물 위에 서게 된다.
+#   이 rect가 "어디가 늘봄방 밭인가"의 단일 출처다(SOIL 깔기·필드 라우터·테스트가 전부 여기만 읽는다).
+const GREENHOUSE_PLOT_RECT := Rect2i(56, 68, 10, 8)  # x56..65, y68..75 (10×8 경작면)
 # ── ★ M3.1 삼도천(강 낚시 무대 + 혼백관) ───────────────────────────────────────
 # 셋째 실데이터 구역(ADR-0015 "빌드는 한 구역씩"). 낚시 메카닉은 만들지 않는다(Phase 3) — 강(WATER)
 # 무대 + 강 낚시터(라벨만) + 혼백관(enterable 빈 방)까지 그레이박스로 깐다.
@@ -2286,6 +2305,17 @@ var reclaim: Reclaim = null
 #   .new()). 상점 구매→지면 설치→아침 자동 급수(십자 4칸)→세이브. FarmField/Reclaim와 디커플링(자동
 #   급수 시 main이 sprinkler.watered_targets를 farm.sprinkle로 흘려넣는다 — Sprinkler는 밭·화면을 모름).
 var sprinkler: Sprinkler = null
+# ── ★[S10-T5 / ADR-0069 결정 8] 늘봄방 경작면 + 화분 ──────────────────────────
+# **늘봄방 밭은 별개 FarmField 인스턴스**다(같은 노드에 좌표만 얹지 않는다). 근거는 하나뿐이고
+# 그 하나가 결정적이다: **절기 사멸·까마귀·잡초 재점령이 전부 `farm` 하나를 순회한다.** 인스턴스를
+# 가르면 "온실은 면제"가 필터·예외 없이 *구조로* 성립한다 — 순회 목록에 없으면 닿을 수가 없다.
+# (좌표로 거르는 필터를 쓰면 그 필터를 세 곳에 복제해야 하고, 넷째 순회가 생기는 날 조용히 샌다.)
+# ★ 좌표 공간은 겹치지 않는다(노지 = HOME 외부 y<65 / 늘봄방 = 실내 밴드 GREENHOUSE_PLOT_RECT)
+#   → 칸 하나를 받아 어느 밭인지 고르는 라우터(`_field_at`)가 전역·전순사(全順射)로 성립한다.
+var greenhouse_farm: FarmField = null
+# ★ 화분(실내 1×1 컨테이너). 밭도 온실도 아닌 **셋째 재배 축**이라 원장이 따로다 — 규칙 집합이
+#   다르기 때문이다(절기 무시 · 손 물주기만 · 스프링클러 불가 · 과수 불가, garden_pot.gd 머리말).
+var garden_pot: GardenPot = null
 # ★ [S10-T2 / ADR-0069 결정 4] 레어크로우 배치 원장(밑동 좌표 → 종 id). Sprinkler 결의 얇은 원장
 #   노드(코드 생성 — .new()). 획득(여섯 창구)→밭 배치→까마귀 보호 반경 합류→8종 완성 시 디럭스 반경.
 #   RarecrowLedger는 지형·인벤·까마귀를 모른다(배치 판정·보호 반경 주입은 전부 main).
@@ -2946,6 +2976,8 @@ var _divorce_armed := false
 var _milestone_celebrated := false
 # ★[S6-T3] 2단 달성 팝업 래치 — 1단 래치와 같은 규칙(세이브 무상태·_ready에서 재개 초기화).
 var _milestone2_celebrated := false
+# ★[S10-T5 / ADR-0069 결정 8] 3단 래치 — 1·2단 선례를 그대로(별도 래치 1회·재개 시 _ready가 미리 켬).
+var _milestone3_celebrated := false
 # T7.2 달성 팝업 표시 잔여 시간(초). 카페 마감 정산 팝업과 같은 결(비차단 자동 해제).
 var _milestone_popup_secs := 0.0
 const MILESTONE_POPUP_SECS := 6.0  # 달성 팝업 표시 시간(2단 미리보기를 읽을 시간을 넉넉히)
@@ -2988,6 +3020,16 @@ func _ready() -> void:
 	reclaim.name = "Reclaim"
 	add_child(reclaim)
 	reclaim.changed.connect(_on_reclaim_changed)   # 개간·복원 시 드로우/충돌 skip 반영
+	# ★[S10-T5] 늘봄방 경작면 = **둘째 FarmField 인스턴스**(같은 클래스·다른 순회 소속). 씬 노드인
+	#   노지 밭과 달리 코드 생성이다(완공 전에도 빈 채로 살아 있어 세이브·라우터가 null을 안 만난다).
+	greenhouse_farm = FarmField.new()
+	greenhouse_farm.name = "GreenhouseField"
+	add_child(greenhouse_farm)
+	greenhouse_farm.tile_changed.connect(_on_tile_changed)   # 오버레이 갱신 경로는 노지와 공유(칸 좌표가 갈려 안 섞인다)
+	garden_pot = GardenPot.new()         # ★[S10-T5] 화분 원장(코드 생성 — 스프링클러 결의 얇은 노드)
+	garden_pot.name = "GardenPot"
+	add_child(garden_pot)
+	garden_pot.changed.connect(queue_redraw)   # 배치·심기·물주기·수확·복원 시 그레이박스 갱신
 	sprinkler = Sprinkler.new()          # ★ [S1R-T9] 저승 스프링클러 상태 노드(코드 생성 — 설치 좌표 델타 원장)
 	sprinkler.name = "Sprinkler"
 	add_child(sprinkler)
@@ -3166,6 +3208,7 @@ func _begin_game(is_new_game: bool) -> void:
 	# 플레이 중 채우는 순간 _process가 한 번 팝업을 띄운다(RunSummary.is_over 재개 안전과 같은 결).
 	_milestone_celebrated = _milestone_complete()
 	_milestone2_celebrated = _milestone_stage2_complete()   # ★[S6-T3] 2단 래치도 같은 규칙
+	_milestone3_celebrated = _milestone_stage3_complete()   # ★[S10-T5] 3단 래치도 같은 규칙
 	# (이어받은 단계에 맞춘 좌석·곳간 용량·손님 볼륨은 위 _refresh_festival이 사다리째 세워 둔다.)
 	# ★[S7-T1 / ADR-0065 결정 1] 옛 T4.2 재개 게이트(RunSummary.is_over → _end_run)가 여기 있었다.
 	#   _on_day_advanced의 종료 게이트와 **같은 게이트의 다른 입구**라, 취침 쪽만 걷어내면 day 22+
@@ -4309,7 +4352,12 @@ func _rebuild_trellis_collision() -> void:
 		c.queue_free()
 	if _region != RegionCatalog.HOME:
 		return
-	for t in farm.solid_crop_tiles():
+	# ★[S10-T5] 늘봄방 경작면의 넝쿨도 같은 물리 배선을 받는다(합집합) — 온실 안이라고 트렐리스가
+	#   통과 가능해질 이유가 없다. 두 밭의 좌표가 안 겹쳐 단순 이어붙이기로 충분하다.
+	var solid_tiles: Array = farm.solid_crop_tiles()
+	if greenhouse_farm != null:
+		solid_tiles = solid_tiles + greenhouse_farm.solid_crop_tiles()
+	for t in solid_tiles:
 		var cs := CollisionShape2D.new()
 		var rect := RectangleShape2D.new()
 		rect.size = Vector2(TILE, TILE)
@@ -4717,6 +4765,37 @@ func _deco_remove(cell: Vector2i) -> void:
 func _home_expanded() -> bool:
 	return carpenter != null and carpenter.is_done(Carpenter.PROJ_MASTER_ROOM)
 
+# ── ★[S10-T5 / ADR-0069 결정 8] 늘봄방 ───────────────────────────────────────
+# 늘봄방이 서 있는가 — 안방 확장과 **같은 문법**으로 carpenter 완공 이력에서 파생한다(새 세이브
+# 키 0: 원장의 done 목록이 이미 영속이라 플래그를 따로 들면 진실원이 둘이 된다).
+func _greenhouse_built() -> bool:
+	return carpenter != null and carpenter.is_done(Carpenter.PROJ_GREENHOUSE)
+
+# 이 칸이 늘봄방 경작면인가. 지어졌는지까지 함께 본다 — 안 지어졌으면 그 좌표는 그냥 VOID다.
+func _in_greenhouse_plot(t: Vector2i) -> bool:
+	return _greenhouse_built() and GREENHOUSE_PLOT_RECT.has_point(t)
+
+# ★ 밭 라우터 — 이 칸의 주인 FarmField를 고른다. **두 좌표 공간이 겹치지 않아**(노지 = HOME 외부
+#   y<65 · 늘봄방 = 실내 밴드) 칸 하나만 보면 주인이 유일하게 정해진다. 밭 동사(괭이·물·심기·비료·
+#   수확)와 칸 단위 질의는 전부 이 함수를 거치고, **집합 순회**(절기 사멸·까마귀·잡초 확산)는 거치지
+#   않는다 — 순회가 `farm`만 도는 것이 곧 온실 면제의 구현이다(멤버 선언 주석 참조).
+func _field_at(t: Vector2i) -> FarmField:
+	return greenhouse_farm if _in_greenhouse_plot(t) else farm
+
+# 늘봄방 **실효 일괄 적용**(_refresh_home_expansion과 같은 결·같은 자리). 완공 아침과 늘봄방 세이브
+# 로드, 건물이 새로 서는 두 순간에 부른다(멱등). ①건물 카탈로그 재구성(늘봄방 행 등록 — 출입·카메라·
+# 세이브 복원이 전부 이 dict 주도) ②안방 확장 카메라 재적용(카탈로그를 다시 세웠으므로 짝으로)
+# ③현재 무대가 HOME이면 그리드 재빌드(다른 구역이면 다음 워프의 _rebuild_region이 자연히 세운다).
+func _refresh_greenhouse() -> void:
+	if not _greenhouse_built():
+		return
+	_build_building_catalog()
+	_refresh_home_expansion()   # 카탈로그를 다시 세우면 집 cam이 기본값으로 돌아간다 — 확장분 재주입
+	if _region == RegionCatalog.HOME:
+		_rebuild_region(RegionCatalog.HOME)
+		if _indoor == "늘봄방":
+			_apply_camera_limits()
+
 # 현재 유효한 집 방 rect — 안방 확장 완공이면 확장 rect, 아니면 원본. 방 기하를 읽는 네 자리
 # (_build_home 방 세우기·home_deco bounds·북벽 오버레이·실내 판정)가 전부 이 하나를 본다.
 func home_house_rect() -> Rect2i:
@@ -4855,6 +4934,19 @@ func _build_home() -> void:
 	_set_tile(NEOKURITGAN_DOOR_E.x, NEOKURITGAN_DOOR_E.y, BARN_FLOOR)
 	_build_room(NEOKDUNGURI_RECT, COOP_FLOOR, COOP_WALL, NEOKDUNGURI_DOOR)  # 넋둥우리 실내(밝은 볏짚)
 	_set_tile(NEOKDUNGURI_DOOR_E.x, NEOKDUNGURI_DOOR_E.y, COOP_FLOOR)
+	# ★[S10-T5 / ADR-0069 결정 8] 늘봄방 — **완공했을 때만 선다**(외관·방·경작면 셋 다 이 게이트 안).
+	#   짓기 전 세계는 이 블록이 통째로 실행되지 않아 종전과 픽셀 단위로 같다(구세이브 회귀 0).
+	#   ★ 바닥·벽은 갈무리방 타일(돌 판석/돌켜)을 빌린다 — 유리 온실 룩은 아트 패스(T9) 몫이고,
+	#     새 타일 id를 지금 열면 타일셋 빌드까지 손대게 된다(그레이박스 우선 — ADR-0001).
+	if _greenhouse_built():
+		_build_facade(GREENHOUSE_EXT_RECT, GREENHOUSE_EXT_DOOR)
+		_set_tile(GREENHOUSE_EXT_DOOR_E.x, GREENHOUSE_EXT_DOOR_E.y, PATH)  # 2칸 문 동칸도 리세스(문 폭 2칸 = 아트 정합)
+		_build_room(GREENHOUSE_RECT, STOREHOUSE_FLOOR, STOREHOUSE_WALL, GREENHOUSE_DOOR)
+		_set_tile(GREENHOUSE_DOOR_E.x, GREENHOUSE_DOOR_E.y, STOREHOUSE_FLOOR)  # 실내문≡외관문 2칸
+		# ★ 경작면 = SOIL로 깐다. 이 한 줄이 늘봄방 안 농사의 **전부**다 — `_is_farmable`가 이미
+		#   "SOIL이면 밭"이라 파종·괭이 AoE·커서·스프링클러 배치 판정이 코드 추가 없이 그대로 산다.
+		#   갈리는 건 *어느 FarmField가 그 칸을 드느냐*뿐이고, 그건 `_field_at` 라우터가 든다.
+		_fill_rect(GREENHOUSE_PLOT_RECT, SOIL)
 	_carve_paths()                         # 외부 동선(외관 문까지 — 맨 위에 덮어 길 강조)
 	_apply_pond_organic_mask()             # ★[S1R-T5] 연못 남·동·서 유기 확장(정적 마스크·rect/북벽/PATH 불변)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
@@ -6574,6 +6666,14 @@ func _carve_paths() -> void:
 	# ★ [B2] 혼우물 접근 스퍼 — 중앙 스파인(x38)에서 우물 서면(x40,y19)까지 한 칸 잇는 흙길(시각 안내).
 	#   우물 자체(x40..42)는 WALL이라 덮지 않는다(스퍼는 x39에서 멈춤 → 우물 서면과 인접).
 	_carve_h(19, 38, 39)                        # 스파인(38,19) → 우물 서면 앞(39,19)
+	# ★[S10-T5] 늘봄방 진입로 — **지었을 때만** 깐다(안 지었으면 아무 데도 안 닿는 길이 남는다).
+	#   본가 문 레인(y10)에서 동쪽으로 뻗어(y12 — 스타터 패치 x40..44 y12..16을 비껴 x45부터) 늘봄방
+	#   2칸 문 앞까지 잇고, 문 앞 두 칸을 세로로 내려 문 밑단과 이어 붙인다(동물 건물 진입로와 같은 결).
+	if _greenhouse_built():
+		_carve_v(45, 10, 12)                    # 본가 문 레인 동단(45,10) → 가로 복도(45,12)
+		_carve_h(12, 45, 69)                    # 늘봄방 가로 복도(y12, x45..68 — 문 2칸 폭까지)
+		_carve_v(GREENHOUSE_EXT_DOOR.x, 11, 12)      # 문 서칸(67,11) 진입로
+		_carve_v(GREENHOUSE_EXT_DOOR_E.x, 11, 12)    # 문 동칸(68,11) 진입로 — 2칸 문에 맞춘 2칸 폭
 
 # ★ M2.1 / ★C3 / ★[ADR-0060 결정 1] — 나루 마을 동선. 메인 가로 복도(MAIN_CORRIDOR_Y 36)가 서워프
 # (1,36)·도착(3,36)에서 동 가장자리(98,36)까지 **끊김 없이** 잇는다(옛 다리 분절 삭제 — 마을 통짜화).
@@ -9485,9 +9585,12 @@ func _on_day_advanced(day: int) -> void:
 	#   적신다(혼력 0·물뿌리개 잔량 무관 — T8 축과 독립). 스타듀 문법: 아침에 뿌려 그날 성장할 칸을 미리
 	#   적시고, 바로 아래 advance_day가 젖은 심긴 칸을 자란다("급수 → 성장 판정" 순서 = 하루 사이클 정합).
 	#   까마귀에 쪼여 비워진 칸(위 remove_plant)은 이제 미심김이라 급수해도 성장 없음(무해).
+	# ★[S10-T5] 급수 대상 칸을 **주인 밭으로 라우팅**한다 — 늘봄방 안에 세운 스프링클러가 온실
+	#   경작면을 그대로 적신다(ADR-0069 결정 8 "스프링클러 호환"). 원장·범위·시점은 한 줄도 안 바뀐다.
+	#   ★ 화분은 여기 안 닿는다: `GardenPot`엔 sprinkle에 해당하는 API가 없다(차별 자구 ㉢ = 구조).
 	if sprinkler != null:
 		for st in sprinkler.watered_targets():
-			farm.sprinkle(st)
+			_field_at(st).sprinkle(st)
 	# ★[S7-T3 / ADR-0065 결정 4] 혼우(비) = **아침 자동 급수**. 스프링클러가 십자 인접 칸을 적시는
 	#   바로 그 API(`farm.sprinkle` — 경작만 됐으면 심김 무관·이미 젖었으면 무동작)를 밭 전 경작
 	#   칸에 돌린다. 그래서 **field.gd 급수 경로는 한 줄도 안 늘었고**, 스프링클러와 순서를 바꿔도
@@ -9504,6 +9607,19 @@ func _on_day_advanced(day: int) -> void:
 	#     과수(orchard.advance_day)는 아래에서 따로 도는데, 눈이 와도 결실을 멈추지 않는다 — 절기가
 	#     결실을 가르는 건 ADR-0045의 불가침 영역이라 날씨가 끼어들지 않는다.
 	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h), Weather.grows_crops(weather))
+	# ★[S10-T5 / ADR-0069 결정 8] 늘봄방 경작면의 하루. 노지와 **갈리는 인자가 하나**다: 날씨를
+	#   안 본다(`grow`를 늘 true로 준다). 바로 위 주석이 "'노지'만이라는 단서가 지금 무의미한 건
+	#   밭이 전부 노지이기 때문(온실 = 서랍)"이라 적어 둔 그 서랍이 열린 자리다 — 잿눈은 하늘의
+	#   일이고 늘봄방엔 하늘이 없다. 혼우(아침 자동 급수)도 같은 이유로 온실에 안 든다(위 패스가
+	#   `farm.tilled_tiles()`만 돌므로 **구조로** 면제 — 실내에 비가 오지 않는다).
+	#   ★ 여우불 가속·범위는 **그대로 얹는다**: 관계 곱셈기는 활동 전역에 걸리는 축이고(ADR-0008),
+	#     온실이라고 미호의 불이 꺼질 이유가 없다.
+	if greenhouse_farm != null:
+		greenhouse_farm.advance_day(Foxfire.accel(h), Foxfire.reach(h), true)
+	# ★[S10-T5] 화분의 하루 — 젖은 화분만 자라고 **전부 마른다**(매일 손 물주기). 가속 인자를
+	#   안 받는다(garden_pot.gd advance_day 주석 — 화분은 곱셈기가 얹히는 밭이 아니다).
+	if garden_pot != null:
+		garden_pot.advance_day()
 	# ★[S8-T7 / ADR-0066 결정 9] 배우자 잡일 ①미호 = **아침 미급수 밭 8칸 물주기**. advance_day가
 	#   전 칸을 말린 *직후*라 "오늘 몫"의 손 노동을 대행하는 자리다(어제 성장 판정엔 불개입).
 	#   여우불(성장 가속·위 인자)과 별축 — 여우불은 못 준 칸도 자라게 하고, 이 물은 칸을 실제로
@@ -9614,6 +9730,11 @@ func _on_day_advanced(day: int) -> void:
 			#   id 분기 하나로 붙는다 — 새 건축 시스템이 0인 이유가 이 elif 한 줄이다.
 			#   가방이 꽉 차 있어도 잃지 않는다: 못 넣으면 다음 아침 정산이 다시 시도한다(아래 훅).
 			_grant_mount_whistle()
+		elif built == Carpenter.PROJ_GREENHOUSE:
+			# ★[S10-T5 / ADR-0069 결정 8] 늘봄방 완공 = **실내 구역 개설**. 안방 확장과 정확히 같은
+			#   자리·같은 문법(id 분기 하나 + 일괄 헬퍼) — 원장은 "다 지어졌다"까지만 안다.
+			_refresh_greenhouse()
+			_notice("늘봄방 완공 — 절기가 바뀌어도 시들지 않는 밭이 생겼다 (본가 동쪽)", NOTICE_SECS * 2.0)
 		elif built != "":
 			var bld := Carpenter.building_of(built)
 			if bld != "" and ranch != null:
@@ -10315,6 +10436,18 @@ func _build_building_catalog() -> void:
 		"ext_door": NEOKDUNGURI_EXT_DOOR, "ext_door2": NEOKDUNGURI_EXT_DOOR_W, "out_tile": NEOKDUNGURI_EXT_DOOR + Vector2i(0, 1),
 		"in_tile": NEOKDUNGURI_IN_TILE, "door": NEOKDUNGURI_DOOR, "door2": NEOKDUNGURI_DOOR_E, "cam": NEOKDUNGURI_CAM_RECT,
 	}
+	# ★[S10-T5 / ADR-0069 결정 8] 늘봄방(HOME 구역 — enterable). **완공 전엔 등록조차 안 한다** —
+	#   등록해 두면 아직 서지 않은 건물의 문 칸을 밟아 없는 방으로 워프하는 사고가 난다. 지은 뒤
+	#   `_refresh_greenhouse`가 이 함수를 다시 돌려 행을 세운다(창고와 같은 데이터 주도 자동 출입).
+	#   kind="greenhouse"라 _draw 가구 분기 어디에도 안 걸린다(밭·화분만 있는 방 — "그 외 graybox").
+	if _greenhouse_built():
+		_buildings["늘봄방"] = {
+			"region": RegionCatalog.HOME, "kind": "greenhouse",
+			"ext_door": GREENHOUSE_EXT_DOOR, "ext_door2": GREENHOUSE_EXT_DOOR_E,
+			"out_tile": GREENHOUSE_EXT_DOOR + Vector2i(0, 1),
+			"in_tile": GREENHOUSE_IN_TILE, "door": GREENHOUSE_DOOR, "door2": GREENHOUSE_DOOR_E,
+			"cam": GREENHOUSE_CAM_RECT,
+		}
 	# ★ M3.1 삼도천 혼백관(SAMDOCHEON 구역 — enterable 빈 방). kind="museum"이라 가구 분기 미적용(빈 방).
 	# 유품·기억 전시는 후속(서사 작업), 지금은 들어갔다 나오는 그레이박스 방까지. 세이브는 이 dict로 자동 복원.
 	_buildings["혼백관"] = {
@@ -10517,6 +10650,10 @@ func _rebuild_region(to_region: String) -> void:
 func _repaint_field_overlays() -> void:
 	for t in farm.tilled_tiles():
 		_on_tile_changed(t)
+	# ★[S10-T5] 늘봄방 경작면도 같은 field_layer에 칠한다(좌표가 실내 밴드라 노지와 안 겹친다).
+	if greenhouse_farm != null:
+		for gt in greenhouse_farm.tilled_tiles():
+			_on_tile_changed(gt)
 
 # 취침 가능 조건: 집 구역 안 + 연출 중이 아님. 그레이박스라 침대 오브젝트 없이
 # '집에 있으면 잘 수 있다'로 단순화한다(에셋·가구는 Phase 2).
@@ -10571,6 +10708,8 @@ func _save_game() -> void:
 		"clock": clock.to_save(),
 		"energy": energy.to_save(),
 		"farm": farm.to_save(),
+		"greenhouse": greenhouse_farm.to_save(),   # ★[S10-T5] 늘봄방 경작면(둘째 FarmField — 건물 유무는 carpenter가 든다)
+		"garden_pot": garden_pot.to_save(),        # ★[S10-T5] 놓은 화분 + 그 안의 작물 상태
 		"orchard": orchard.to_save(),   # ★ [S1-5b] 심긴 혼의 나무(앵커·나이·결실). 영속·나이가 planted_day 파생이라 최소
 		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
 		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
@@ -10705,6 +10844,10 @@ func _load_game() -> void:
 		energy.load_save(data["energy"])
 	if data.has("farm"):
 		farm.load_save(data["farm"])
+	if data.has("greenhouse"):   # ★[S10-T5] — 키 없는 구세이브는 늘봄방 경작 0(빈 밭). 건물 자체는
+		greenhouse_farm.load_save(data["greenhouse"])   # carpenter의 done 목록이 들므로 여기선 밭만 복원한다
+	if data.has("garden_pot"):   # ★[S10-T5] — 키 없는 구세이브는 화분 0(빈 원장·하위호환)
+		garden_pot.load_save(data["garden_pot"])
 	if data.has("orchard"):   # ★ [S1-5b] — 키 없는 구버전 세이브는 나무 0으로 시작(changed가 밑동 충돌 재구성)
 		orchard.load_save(data["orchard"])
 	if data.has("ranch"):     # ★ [S1-7] — 키 없는 구버전 세이브는 짐승 0으로 시작(changed가 화면·HUD 갱신)
@@ -10913,6 +11056,11 @@ func _load_game() -> void:
 	# M1.5 — 마지막에 구역·실내 모드·위치를 되돌린다. farm.load_save가 칸마다 발화한 밭
 	# 오버레이는 안식 농원 기준이라, 복원 구역이 다르면 _rebuild_region이 걷어내고(현재 구역만
 	# 그림) 같으면 그대로 둔다 — 그래서 farm 복원 뒤에 둔다(_save_game의 짝).
+	# ★[S10-T5] 늘봄방 세이브 복원 — **_restore_location보다 먼저**여야 한다. 저 함수가 저장된
+	#   실내 모드를 `_buildings` 조회로 방어하므로, 늘봄방 행이 아직 없으면 늘봄방 안에서 저장한
+	#   세이브가 바깥으로 튕긴다(부팅 시점의 카탈로그는 carpenter가 생기기 전에 세워진다).
+	#   미건축 세이브면 스스로 no-op이라 종전 부팅 경로는 한 줄도 안 바뀐다.
+	_refresh_greenhouse()
 	_restore_location(data)
 	# ★[S8-T7] 안방 확장 세이브 복원 — 부팅 그리드는 원본 rect로 섰고, 복원 구역이 HOME이면
 	# _restore_location이 재빌드를 건너뛰므로(같은 구역 최적화) 여기서 확장 실효를 다시 얹는다
@@ -12173,6 +12321,18 @@ func _process(delta: float) -> void:
 		_remove_sprinkler(_target)
 	elif not _sleeping and holding_sprinkler and Input.is_action_just_pressed("use_tool") and _can_place_sprinkler(_target):
 		_place_sprinkler(_target, inventory.selected_id())
+	# ★[S10-T5 / ADR-0069 결정 8] 화분 배치/회수 — 스프링클러와 **같은 문법**(LMB 하나로 설치·회수).
+	#   다른 점은 놓이는 자리뿐이다: 스프링클러가 바깥 지면이라면 화분은 **실내 바닥**이다.
+	# ⚠️ 이름에 `garden_`을 붙인 이유: 아래 게잡이통 분기가 `holding_pot`(=CRAB_POT)을 이미 쓴다.
+	var holding_garden_pot := inventory.selected_id() == ItemCatalog.GARDEN_POT
+	# 조준 칸에 화분이 서 있는가 — 아래 도구 디스패치 게이트가 읽는다. 화분은 SOIL이 아닌 실내
+	# 마룻바닥에도 서므로, `_target_valid`(=밭 흙) 하나로는 화분 위 물주기·심기가 영영 안 나간다.
+	var pot_at_target := garden_pot != null and garden_pot.has_at(_target)
+	var on_garden_pot := not _sleeping and holding_garden_pot and pot_at_target
+	if on_garden_pot and Input.is_action_just_pressed("use_tool"):
+		_remove_garden_pot(_target)
+	elif not _sleeping and holding_garden_pot and Input.is_action_just_pressed("use_tool") and _can_place_pot(_target):
+		_place_garden_pot(_target)
 	# ★[S10-T2 / ADR-0069 결정 4] 레어크로우 배치/회수 — 스프링클러와 **같은 문법**(LMB 하나로
 	#   설치·회수를 가른다). 세 동사를 쓰는 게잡이통·채취기·업화로와 달리 여기도 동사가 둘뿐이라
 	#   [F]로 모을 이유가 없다.
@@ -12216,11 +12376,13 @@ func _process(delta: float) -> void:
 	var holding_weapon := ItemCatalog._is_weapon(inventory.selected_id())
 	# ★[S10-T2] 레어크로우도 스프링클러와 같은 이유로 도구질로 흘리지 않는다(설치 LMB와 중복 방지).
 	if not _sleeping and cheki == null and cocktail == null \
-			and (_target_valid or holding_weapon) and not holding_sprinkler and held_rarecrow == "" \
+			and (_target_valid or holding_weapon or pot_at_target) \
+			and not holding_sprinkler and not holding_garden_pot and held_rarecrow == "" \
 			and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
-	if not _sleeping and _target_valid and Input.is_action_just_pressed("action"):
+	# ★[S10-T5] 화분 칸도 수확 대상이다(밭 흙이 아니어도 — 위 도구 게이트와 같은 이유).
+	if not _sleeping and (_target_valid or pot_at_target) and Input.is_action_just_pressed("action"):
 		_try_harvest()
 	# ★ ADR-0024 취침(RMB): 집 안이면 RMB로도 잠든다(위 ui_accept와 병행 — 어느 쪽이든).
 	if _can_sleep() and Input.is_action_just_pressed("action"):
@@ -12278,6 +12440,11 @@ func _process(delta: float) -> void:
 	elif not _milestone2_celebrated and _milestone_stage2_complete():
 		_milestone2_celebrated = true
 		_show_milestone2_reached()
+	elif not _milestone3_celebrated and _milestone_stage3_complete():
+		# ★[S10-T5] 3단(「저승의 명소」)도 같은 자리·같은 elif 사슬 — 세 단계가 한 프레임에 함께
+		#   닫혀도 아래 칸부터 한 프레임에 하나씩 뜬다(팝업이 팝업을 삼키지 않는다).
+		_milestone3_celebrated = true
+		_show_milestone3_reached()
 	# T4.1 온보딩 안내: 상시 중앙 배너가 "계속 떠서 불편"(피드백 2026-06-25) → 단계가 *바뀔 때만*
 	# 잠깐 띄운다. ★owner 2026-07-03 3차 HUD 가이드 — 좌하단 wide notice(화면 폭 날것 띠)를 폐기하고
 	# 전용 상단-중앙 팝업 배너(한지 플레이트·외곽선·페이드)로 교체. 매 프레임 guidance()를 보되 직전과
@@ -12854,7 +13021,9 @@ func _use_tool() -> void:
 		#     한 번의 스윙이라 한 번 값을 매기고, 그게 티어를 사는 이유(편의 축)다.
 		var hoed := 0
 		for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE)):
-			if not farm.hoe(at):
+			# ★[S10-T5] 칸의 주인 밭으로 라우팅(늘봄방 경작면이면 greenhouse_farm). 좌표 공간이
+			#   갈려 있어 노지 AoE는 한 칸도 늘봄방으로 새지 않는다(그 반대도 같다).
+			if not _field_at(at).hoe(at):
 				continue
 			hoed += 1
 			# ★ [S2-T5 / ADR-0060 결정 5] 유품 발굴 — 안식 괭이질 저확률(스타듀 Artifact Spot 대응).
@@ -12874,18 +13043,29 @@ func _use_tool() -> void:
 		# ★[S5-T3] 물뿌리개 티어 AoE — 괭이와 같은 범위 표를 쓴다. 다만 **물은 칸당 −1**이다
 		#   (혼력은 스윙당 1회지만 물은 뿌린 양이라 칸수만큼 든다 — 그래서 티어가 용량도 함께
 		#   올린다. 잔량이 모자라면 갈 수 있는 칸까지만 적시고 나머지는 그냥 마른다).
-		if _can_water > 0:
+		# ★[S10-T5] 화분 손 물주기 — **화분에 물이 드는 유일한 경로**다(ADR-0069 결정 8 "매일 손
+		#   물주기"). AoE를 안 태운다: 넓은 물뿌리개로 방 안을 한 번에 적시면 "매일 손이 간다"는
+		#   화분의 정체가 사라진다(화분 하나에 한 번 — 칸당 −1은 밭과 같다).
+		if _can_water > 0 and garden_pot != null and garden_pot.has_at(_target):
+			if garden_pot.water(_target):
+				_can_water -= 1
+				_refresh_water_badge()
+				verb = "물주기"
+		elif _can_water > 0:
 			var watered := 0
 			for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.WATERING_CAN)):
 				if _can_water <= 0:
 					break
-				if farm.water(at):
+				if _field_at(at).water(at):
 					_can_water -= 1
 					watered += 1
 			if watered > 0:
 				_refresh_water_badge()
 				verb = "물주기"
-		elif farm.is_planted(_target) and not farm.is_watered(_target):
+		elif garden_pot != null and garden_pot.is_planted(_target) and not garden_pot.is_watered(_target):
+			_notice("물이 없다 — 혼우물·연못에서 채우자")
+			return
+		elif _field_at(_target).is_planted(_target) and not _field_at(_target).is_watered(_target):
 			_notice("물이 없다 — 혼우물·연못에서 채우자")
 			return
 	elif cat == ItemCatalog.CAT_SEED:
@@ -12896,15 +13076,26 @@ func _use_tool() -> void:
 		var seed_crop := crop   # 인벤에서 빠질 씨앗의 작물군(치환 전 원본)
 		if CropCatalog.is_mixed(crop):
 			crop = _mixed_crop_for(clock.day, _target)
-		if inventory.has_seed(seed_crop) and farm.plant(_target, crop):
+		# ★[S10-T5] 화분이 우선이다 — 화분을 놓은 칸을 조준했으면 밭이 아니라 화분에 심는다
+		#   (화분은 실내 바닥 위에 서므로 밭 칸과 겹칠 일이 거의 없지만, 늘봄방 경작면 위에
+		#   놓을 수 있어 우선순위를 명시한다. 놓은 물건이 밑의 흙보다 앞이다).
+		if garden_pot != null and garden_pot.has_at(_target):
+			if inventory.has_seed(seed_crop) and garden_pot.plant(_target, crop):
+				inventory.take_seed(seed_crop)
+				verb = "심기"
+		elif inventory.has_seed(seed_crop) and _field_at(_target).plant(_target, crop):
 			inventory.take_seed(seed_crop)
 			verb = "심기"
 	elif cat == ItemCatalog.CAT_FERTILIZER:
 		# ★ [S1-6] 든 비료를 경작 칸에 뿌린다(§8.4 — 심김/빈칸 무관, 다른 비료면 overwrite). 뿌리면 1개 소모.
-		if farm.fertilize(_target, item):
+		# ★[S10-T5] 화분엔 비료를 못 준다(최소형 — GardenPot에 fertilize API가 없다). 라우터가
+		#   화분 칸의 *밑 타일* 밭으로 흘려보내지 않게, 화분이 선 칸은 여기서 통째로 배제한다.
+		if garden_pot != null and garden_pot.has_at(_target):
+			pass
+		elif _field_at(_target).fertilize(_target, item):
 			inventory.remove_item(item, 1)
 			verb = "비료"
-	elif cat == ItemCatalog.CAT_SAPLING and _region == RegionCatalog.HOME:
+	elif cat == ItemCatalog.CAT_SAPLING and _region == RegionCatalog.HOME and _indoor == "":
 		# ★ [S1-5b] 든 묘목으로 혼의 나무를 심는다(안식 농원 전용). 앵커=조준 칸, 3×3 판정 통과 시.
 		# is_blocked = 맵밖 or is_solid(절벽·프롭) or is_crop_solid(트렐리스) — 지형 게이팅을 여기서 합성해
 		# orchard에 주입한다(orchard는 지형을 모름, greybox-spec §7.4). 심으면 묘목 1개 소모.
@@ -13317,9 +13508,11 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
-	if farm.is_crop_solid(t):                 # 트렐리스 넝쿨 점유 → 배제
+	if _field_at(t).is_crop_solid(t):         # 트렐리스 넝쿨 점유 → 배제(★[S10-T5] 늘봄방 넝쿨 포함)
 		return false
 	if rarecrow != null and rarecrow.has_at(t):   # ★[S10-T2] 세워 둔 레어크로우 → 배제(겹침 방지)
+		return false
+	if garden_pot != null and garden_pot.has_at(t):   # ★[S10-T5] 놓아 둔 화분 → 배제(겹침 방지)
 		return false
 	return true
 
@@ -13349,6 +13542,45 @@ func _remove_sprinkler(t: Vector2i) -> void:
 		inventory.add_item(item_id, 1)
 		audio.sfx("ui")
 		_notice("%s를 회수했다" % ItemCatalog.name_of(item_id))
+		queue_redraw()
+
+# ── ★[S10-T5 / ADR-0069 결정 8] 화분 배치/회수 ────────────────────────────────
+# 이 칸에 화분을 놓을 수 있는가. 스프링클러 규칙의 **거울상**이다: 저쪽이 "바깥 지면"을 요구한다면
+# 이쪽은 "실내"를 요구한다(ADR-0069 결정 8 "배치 가능 위치 = 실내(집·늘봄방)").
+#   ㉠ 실내여야 한다(`_indoor != ""`) — 화분은 방 안 소품이다. 바깥에 놓는 건 그냥 밭이 하는 일이다.
+#   ㉡ 밟을 수 있는 바닥이어야 한다(비-SOLID) — 벽·문틀엔 못 놓는다.
+#   ㉢ 이미 화분이 선 칸엔 못 놓는다(그 위엔 회수만 — 스프링클러와 같은 멱등 규칙).
+#   ㉣ 늘봄방 경작면 위엔 놓되 **이미 경작된 칸**은 피한다(고랑을 화분이 덮어 밭이 죽는 사고 방지).
+func _can_place_pot(t: Vector2i) -> bool:
+	if garden_pot == null or _indoor == "":
+		return false
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
+		return false
+	if garden_pot.has_at(t):
+		return false
+	if is_solid(_grid[t.y][t.x]):
+		return false
+	if _field_at(t).is_tilled(t):
+		return false
+	return true
+
+# 조준 칸에 화분을 놓는다(아이템 1개 소모). 원장이 좌표를 든다(스프링클러와 같은 경계).
+func _place_garden_pot(t: Vector2i) -> void:
+	if not inventory.has_item(ItemCatalog.GARDEN_POT):
+		return
+	if garden_pot.place(t):
+		inventory.remove_item(ItemCatalog.GARDEN_POT, 1)
+		audio.sfx("ui")
+		_notice("화분을 놓았다 — 절기와 무관하게 기를 수 있다 (물은 매일 손으로)")
+		queue_redraw()
+
+# 화분을 회수한다. ★자라던 작물은 **함께 사라진다**(GardenPot.remove) — 회수 전에 알려 준다.
+func _remove_garden_pot(t: Vector2i) -> void:
+	var had := garden_pot.is_planted(t)
+	if garden_pot.remove(t):
+		inventory.add_item(ItemCatalog.GARDEN_POT, 1)
+		audio.sfx("ui")
+		_notice("화분을 회수했다 — 심긴 것도 함께 사라졌다" if had else "화분을 회수했다")
 		queue_redraw()
 
 # ── ★[S10-T2 / ADR-0069 결정 4] 레어크로우 배치/회수 ──────────────────────────
@@ -13979,16 +14211,23 @@ func _try_harvest() -> void:
 				energy.spend(cost)
 				queue_redraw()
 				return
-	if not farm.is_mature(_target):
+	# ★[S10-T5 / ADR-0069 결정 8] 화분 수확 — 밭 경로보다 **먼저** 본다(놓은 물건이 밑의 흙보다
+	#   앞이다·짐승·과수 우선 분기와 같은 규율). 수확 문법은 노지와 같다: 품질 roll → 적재 →
+	#   점수판·XP·사연. 갈리는 건 원장 하나뿐이라 이 분기는 얇다.
+	if garden_pot != null and garden_pot.has_at(_target) and garden_pot.is_mature(_target):
+		_harvest_pot()
 		return
-	var harvested_crop := farm.crop_of(_target)  # harvest 뒤엔 칸이 비거나(SINGLE) 되감기(REGROW) 되므로 미리 확보
+	var field := _field_at(_target)              # ★[S10-T5] 이 칸의 주인 밭(노지/늘봄방)
+	if not field.is_mature(_target):
+		return
+	var harvested_crop := field.crop_of(_target)  # harvest 뒤엔 칸이 비거나(SINGLE) 되감기(REGROW) 되므로 미리 확보
 	# ★[S4-T5 / ADR-0033 #4] 야생 작물 — "밭에서 길러도 채집"이다: 수확물·품질·XP 전부 채집 축으로
 	#   가로챈다(농사 XP·비료 품질·사연 미적용). 아래 일반 경로와 완전 분리(잔가 누수 0).
 	if CropCatalog.is_wild(harvested_crop):
 		_harvest_wild(harvested_crop)
 		return
-	var quality := farm.roll_quality(_target)    # ★ [S1-6 §8.5] 칸을 비우기 전에 품질 확보(비료→등급 roll)
-	farm.harvest(_target)
+	var quality := field.roll_quality(_target)   # ★ [S1-6 §8.5] 칸을 비우기 전에 품질 확보(비료→등급 roll)
+	field.harvest(_target)
 	# ★ [S1-5a] 다수확(황천포도 2~3) — yield_range를 굴려 그만큼 적재(greybox-spec §6.5, 데이터는 S1-4 검증).
 	#   기본형(1~1)은 1개 그대로. 점수판(_run_harvested)·사연은 수확 액션당 1(영혼 1 = 사연 1)로 둔다.
 	#   ★ [S1-6 §8.5] 품질 격리: 주 수확분(첫 1개)만 roll 등급, 다수확 추가분은 Q0 강제.
@@ -14021,6 +14260,29 @@ func _try_harvest() -> void:
 	_advance_onboarding("수확")               # T4.1 첫 수확 → 온보딩 완료(DONE)
 	# ★ ADR-0059 결정3 — 밭 작물 수확은 무과금(energy.spend 없음): "보람 액션 과세" 제거로 스타듀 체감 회복.
 	queue_redraw()                            # 새 상태가 바로 보이도록
+
+# ★[S10-T5 / ADR-0069 결정 8] 화분 수확 — **노지와 동일한 품질/XP 문법**(ADR 자구)이되 화분에
+#   없는 축은 빼고 간다. 밭 수확에서 덜어낸 것 셋과 그 이유:
+#     ㉠ 비료 품질 roll → 화분엔 비료 축이 없다. 무비료 등급(Q_NORMAL)이 곧 결과라 상수로 적는다.
+#     ㉡ 다수확 롤·명부의 운 바이어스 → 1×1 컨테이너의 한 포기는 "밭 규모"의 산출이 아니다(최소형).
+#     ㉢ 야생 작물 채집 가로채기 → 야생 씨앗은 밭 축이라 화분에서 기를 일이 없고, 여기서 분기를
+#        복제하면 규칙이 두 곳으로 갈린다(심을 수는 있으나 그때도 그냥 작물로 거둔다).
+#   ★ 반대로 **XP·점수판·미호 활동 크레딧·사연은 그대로 준다** — 심고 물 주고 거둔 행위 자체는
+#     같은 노동이라, 여기서 빼면 "화분으로 기르면 아무것도 안 배운다"가 되어 축이 죽는다.
+func _harvest_pot() -> void:
+	var crop := garden_pot.crop_of(_target)
+	if garden_pot.harvest(_target) == "":
+		return
+	inventory.add_harvest(crop, 1, ItemCatalog.Q_NORMAL)
+	_toast_item(ItemCatalog.harvest_id(crop), 1)
+	_gain_farm_xp(CropCatalog.sell_price(crop))
+	_run_harvested += 1
+	_activity_credit("miho", 1)
+	_show_flavor(crop)
+	audio.sfx("harvest")
+	player.swing_tool("harvest", FarmSkill.speed_factor(FarmSkill.level_for_xp(_farming_xp)))
+	_advance_onboarding("수확")
+	queue_redraw()
 
 # ★ ADR-0052 §118 · ADR-0033 — 안식 꽃 패치(피안화) 손수확. 라이브 채집 루프의 XP 소스이자 전문직 퍼크
 #   실효점. 전체 사슬을 살린다: 따기 → 채집물+채집 XP → 레벨업 → picker 전문직 선택 → 퍼크(품질 하한·2배)
@@ -14147,7 +14409,7 @@ func _harvest_wild(crop: String) -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = hash("wildharvest:%d:%d:%d" % [clock.day, _target.x, _target.y])
 		species = pool[rng.randi_range(0, pool.size() - 1)]
-	farm.harvest(_target)   # SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다)
+	_field_at(_target).harvest(_target)   # SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다)
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
 	var count := 1
@@ -14373,30 +14635,62 @@ func _farm_prompt() -> String:
 				if orchard.can_plant(_target, _is_tree_blocked):
 					return "[좌클릭] %s 묘목 심기 (3×3)" % FruitTreeCatalog.name_of(fruit)
 				return "여기엔 못 심음 — 3×3 빈 자리 필요"
+	# ★[S10-T5] 화분 안내 — 밭 프롬프트보다 먼저(동사 우선순위와 같은 순서). `_target_valid`(=SOIL
+	#   여부) 게이트 **위**에 둔다: 화분은 실내 마룻바닥 위에도 서므로 그 칸은 farmable이 아니다.
+	var pot_prompt := _pot_prompt()
+	if pot_prompt != "":
+		return pot_prompt
 	if not _target_valid:
 		return ""
+	var pfield := _field_at(_target)          # ★[S10-T5] 이 칸의 주인 밭(노지/늘봄방)
 	# ★ ADR-0059 결정3 — 수확은 무과금이라 혼력과 무관하게 항상 안내(0에서도 거둘 수 있다).
-	if farm.is_mature(_target):
+	if pfield.is_mature(_target):
 		return "[우클릭] 수확"
 	var item := inventory.selected_id()
 	# 과금 동사(괭이·물)만 혼력 부족 시 차단 안내한다(무과금 파종·시비는 아래에서 혼력 무관 안내).
-	if item == ItemCatalog.HOE and not farm.is_tilled(_target):
+	if item == ItemCatalog.HOE and not pfield.is_tilled(_target):
 		if not energy.can_act():
 			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 괭이질"
-	if item == ItemCatalog.WATERING_CAN and farm.is_planted(_target) and not farm.is_watered(_target):
+	if item == ItemCatalog.WATERING_CAN and pfield.is_planted(_target) and not pfield.is_watered(_target):
 		if not energy.can_act():
 			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 물주기"
-	if ItemCatalog.category_of(item) == ItemCatalog.CAT_SEED and farm.is_tilled(_target) and not farm.is_planted(_target):
+	if ItemCatalog.category_of(item) == ItemCatalog.CAT_SEED and pfield.is_tilled(_target) and not pfield.is_planted(_target):
 		var crop := ItemCatalog.crop_of(item)
 		if inventory.has_seed(crop):
 			return "[좌클릭] %s 심기" % CropCatalog.name_of(crop)
 		return "%s 씨앗 없음 — 카페·만물상에서 구매" % CropCatalog.name_of(crop)
 	# ★ [S1-6] 든 게 비료면 경작 칸에 뿌리기 안내(심김/빈칸 무관 — overwrite, §8.4).
-	if ItemCatalog.category_of(item) == ItemCatalog.CAT_FERTILIZER and farm.is_tilled(_target):
+	if ItemCatalog.category_of(item) == ItemCatalog.CAT_FERTILIZER and pfield.is_tilled(_target):
 		return "[좌클릭] %s 뿌리기" % ItemCatalog.name_of(item)
 	return ""
+
+# ★[S10-T5] 조준 칸의 화분 안내("" = 화분 아님/안내 없음). 밭 프롬프트에서 갈라 둔 이유는 화분이
+#   **밭 칸이 아닌 곳에도 서기 때문**이다(_target_valid 게이트 위에서 먼저 물어야 안내가 나온다).
+func _pot_prompt() -> String:
+	if garden_pot == null:
+		return ""
+	var item := inventory.selected_id()
+	# 화분을 든 채 빈 실내 바닥을 조준 → 놓기 안내(설치 동사 — 스프링클러 프롬프트와 같은 결).
+	if item == ItemCatalog.GARDEN_POT and _can_place_pot(_target):
+		return "[좌클릭] 화분 놓기"
+	if not garden_pot.has_at(_target):
+		return ""
+	if garden_pot.is_mature(_target):
+		return "[우클릭] 수확"
+	if item == ItemCatalog.GARDEN_POT:
+		return "[좌클릭] 화분 회수"
+	if item == ItemCatalog.WATERING_CAN and garden_pot.is_planted(_target) and not garden_pot.is_watered(_target):
+		return "[좌클릭] 물주기"
+	if ItemCatalog.category_of(item) == ItemCatalog.CAT_SEED and not garden_pot.is_planted(_target):
+		var pcrop := ItemCatalog.crop_of(item)
+		if inventory.has_seed(pcrop):
+			return "[좌클릭] %s 심기 (화분 — 절기 무관)" % CropCatalog.name_of(pcrop)
+		return "%s 씨앗 없음 — 카페·만물상에서 구매" % CropCatalog.name_of(pcrop)
+	if garden_pot.is_planted(_target):
+		return "화분 — %s (물은 매일 손으로)" % CropCatalog.name_of(garden_pot.crop_of(_target))
+	return "빈 화분 — 씨앗을 들고 심자"
 
 # ── T3.5 사연 한 줄 ────────────────────────────────────────────────────────
 # 방금 거둔 작물(영혼)의 생전 사연 한 줄을 팝업으로 띄운다(CONTEXT '사연 한 줄').
@@ -15751,12 +16045,28 @@ func _build_rows() -> Array:
 		if carpenter.is_done(pid):
 			row["locked"] = true
 			row["locked_text"] = "완공"
+		elif not _build_row_unlocked(pid):
+			# ★[S10-T5 / ADR-0069 결정 8] 마일스톤 게이트 — 늘봄방은 **카페 3단 도달 전엔 잠긴 행**
+			#   이다(행을 감추지 않고 잠가서 보인다: 목표가 보여야 사다리가 사다리로 읽힌다 —
+			#   완공·짓는 중 행을 남겨 두는 그 판단과 같다).
+			row["locked"] = true
+			row["locked_text"] = "카페 3단 필요"
 		elif carpenter.is_active():
 			row["locked"] = true
 			# 진행 중이면 **다른 프로젝트도** 잠긴다(동시 1건 — 스타듀 로빈 1:1).
 			row["locked_text"] = "짓는 중" if carpenter.active_id() == pid else "대기"
 		rows.append(row)
 	return rows
+
+# ★[S10-T5 / ADR-0069 결정 8] 이 건축 프로젝트가 **선행 조건까지 통과했는가**(가격·자재는 안 본다).
+#   지금 조건이 붙은 건 늘봄방 하나뿐이고(카페 마일스톤 3단), 나머지 넷은 늘 true라 기존 매대 표시가
+#   한 글자도 안 바뀐다. 게이트를 Carpenter가 아니라 여기 둔 이유는 원장 머리말의 경계다 — 원장은
+#   카페도 마일스톤도 모른다. **매대 표시와 결제(`_on_frame_buy_build`)가 같은 술어를 본다**(프레임
+#   신호는 신뢰하지 않는다 — 잠긴 행을 우회한 구매 요청이 와도 결제 쪽이 다시 막는다).
+func _build_row_unlocked(pid: String) -> bool:
+	if pid != Carpenter.PROJ_GREENHOUSE:
+		return true
+	return CafeMilestone.greenhouse_unlocked(_cafe_stage())
 
 # ★[S10-T4] 행 이름 = "이름 (원목 N)" 또는 "이름 (원목 N · 주괴 M)". 주괴를 요구하지 않는
 #   프로젝트는 **문자열이 한 글자도 안 바뀐다**(기존 3건의 매대 표시 회귀 0).
@@ -15861,6 +16171,11 @@ func _try_order_build(project_id: String) -> bool:
 		return false
 	if carpenter.is_done(project_id):
 		_notice("%s — 이미 지었다" % Carpenter.name_of(project_id))
+		return false
+	# ★[S10-T5] 선행 조건 재검증(매대가 잠근 행이라도 신호는 신뢰하지 않는다 — 손 제작·구매 경로가
+	#   다 이렇게 두 번 본다). 지금 걸리는 건 늘봄방 하나뿐이다.
+	if not _build_row_unlocked(project_id):
+		_notice("%s — 아직 도면이 없다 (카페 3단 「저승의 명소」에 닿아야 한다)" % Carpenter.name_of(project_id))
 		return false
 	if carpenter.is_active():
 		_notice("옹이는 한 번에 한 채만 짓는다 — %s" % carpenter.summary(clock.day))
@@ -19349,6 +19664,11 @@ func _milestone_complete() -> bool:
 func _milestone_stage2_complete() -> bool:
 	return CafeMilestone.is_stage2_complete(_run_harvested, _cafe_revenue_total, _milestone_hearts())
 
+# ★[S10-T5 / ADR-0069 결정 8] 3단 완료 여부 — 축이 **누적 서빙 매출 단독**이되 2단 완료를 AND로
+#   문다(사다리 단조성은 CafeMilestone.is_stage3_complete가 든다 — main은 값만 흘려넣는다).
+func _milestone_stage3_complete() -> bool:
+	return CafeMilestone.is_stage3_complete(_run_harvested, _cafe_revenue_total, _milestone_hearts())
+
 # ★[S6-T3] 현재 카페 일구기 단계(0/1/2). 좌석·곳간 용량·메뉴판 슬롯·손님 볼륨이 전부 이 한 값에서
 # 파생한다(_refresh_cafe_ladder가 각 시스템 seam에 주입). 누적값 파생이라 세이브 무상태다.
 func _cafe_stage() -> int:
@@ -19401,6 +19721,13 @@ func _show_milestone_reached() -> void:
 # 다음 프레임으로 미룬다 — 한 팝업이 다른 팝업을 덮어 삼키지 않는다.
 func _show_milestone2_reached() -> void:
 	milestone_text.text = CafeMilestone.reached2_text()
+	milestone_panel.visible = true
+	_milestone_popup_secs = MILESTONE_POPUP_SECS
+
+# ★[S10-T5 / ADR-0069 결정 8] 3단 달성 팝업 — 1·2단 래치 선례 그대로(팝업 노드·타이머 공유).
+#   사다리의 마지막 칸이라 문구가 다음을 예고하지 않고, 대신 **열린 것 하나**(늘봄방)를 말한다.
+func _show_milestone3_reached() -> void:
+	milestone_text.text = CafeMilestone.reached3_text()
 	milestone_panel.visible = true
 	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
@@ -20289,12 +20616,15 @@ func _on_tile_changed(t: Vector2i) -> void:
 # 인덱스 = 외형단계 × 2 + 젖음. 외형단계는 FarmField.growth_stage(씨앗/새싹/수확가능)
 # 에 빈 고랑(작물 없음)을 더해 매핑한다.
 func _overlay_index(t: Vector2i) -> int:
-	if not farm.is_tilled(t):
+	# ★[S10-T5] 칸의 주인 밭에서 읽는다 — 늘봄방 경작면도 노지와 **같은 오버레이 아틀라스**를 쓴다
+	#   (고랑·젖음·성장단계 그림이 갈릴 이유가 없다. 갈리는 건 규칙이지 흙의 생김새가 아니다).
+	var ofield := _field_at(t)
+	if not ofield.is_tilled(t):
 		return -1
-	var wet := 1 if farm.is_watered(t) else 0
+	var wet := 1 if ofield.is_watered(t) else 0
 	var appearance := AP_EMPTY
-	if farm.is_planted(t):
-		appearance = farm.growth_stage(t) + 1  # 0/1/2 → SEED/SPROUT/MATURE
+	if ofield.is_planted(t):
+		appearance = ofield.growth_stage(t) + 1  # 0/1/2 → SEED/SPROUT/MATURE
 	return appearance * 2 + wet
 
 # 대상 칸 강조 커서(흰 1px 테두리) + T5.4 카페 손님·인내심 바. main은 원점 0,0이라
@@ -20331,7 +20661,8 @@ func _draw() -> void:
 			_draw_props_for(_home_prop_entries(), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터 + S1R-T4 절차 스캐터(숲·능선·debris)
 			_draw_tree_ledger()      # ★[S4-T3] 벤 나무의 그루터기·자라는 유목(성숙목은 위 프롭이 그린다)
 			_draw_tappers()          # ★[S4-T6] 성숙목에 박힌 수액 채취기(밑동 표식 — 고임/대기 상태 구분)
-			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래)
+			_draw_crops()            # 밭의 작물 스프라이트(흙 오버레이 위·캐릭터 아래) — ★[S10-T5] 늘봄방 포함
+			_draw_garden_pots()      # ★[S10-T5] 실내 화분(그레이박스 — 테라코타 사각 + 그 안의 작물)
 			_draw_orchard()          # ★ [S1-5b/S1-10] 혼의 나무 과수 — 종별 3단계 스프라이트(묘목·성목·결실)
 			_draw_trackb_interiors() # ★ Phase E Track B 실내 가구(여물통·보관 크레이트 — 짐승 아래, 카메라로 방별 클립)
 			_draw_ranch()            # ★ [S1-7/S1-15] 혼의 짐승 — 전용 스프라이트(assets/livestock) 방목/실내 렌더
@@ -20788,13 +21119,19 @@ func _draw_cocktail_hud() -> void:
 			HanjiUi.GOLD if lit else HanjiUi.INK_DIM)
 
 func _draw_crops() -> void:
-	for t in farm.planted_tiles():
-		var crop_id := farm.crop_of(t)
+	# ★[S10-T5] 노지 + 늘봄방 두 밭을 한 패스로 그린다(좌표가 안 겹쳐 합집합이 안전하다). 실내
+	#   카메라가 방 둘레로 클립하므로 늘봄방 작물은 그 방에 들어갔을 때만 화면에 든다(창고 크레이트 결).
+	var draw_tiles: Array = farm.planted_tiles()
+	if greenhouse_farm != null:
+		draw_tiles = draw_tiles + greenhouse_farm.planted_tiles()
+	for t in draw_tiles:
+		var tfield := _field_at(t)
+		var crop_id := tfield.crop_of(t)
 		var frames: Variant = CROP_SPRITES.get(crop_id)
 		if frames == null:
 			continue
 		# growth_stage: 0=씨앗 / 1=새싹 / 2=수확가능 → 같은 인덱스 프레임. 칸(32×32)을 채운다.
-		var stage: int = clampi(farm.growth_stage(t), 0, frames.size() - 1)
+		var stage: int = clampi(tfield.growth_stage(t), 0, frames.size() - 1)
 		var tex: Texture2D = frames[stage]
 		if CropCatalog.is_trellis(crop_id):
 			# 트렐리스 작물(황천포도): 32×64 스프라이트 — 밑동을 타일 하단에 접지, 위로 1칸 솟음
@@ -20802,6 +21139,30 @@ func _draw_crops() -> void:
 			draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, (t.y - 1) * TILE), Vector2(TILE, TILE * 2)), false)
 		else:
 			draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), Vector2(TILE, TILE)), false)
+
+# ★[S10-T5 / ADR-0069 결정 8] 화분 그레이박스 — 테라코타 사각(빈 화분) + 젖음 테두리 + 그 위에
+#   작물 스프라이트(밭과 같은 3단계 프레임 재사용). 아트는 T9 몫이고 여기선 육안 확인용 도형이다.
+#   ★ 프롭 재생성 로스터의 "화분(사각 테라코타 + 새싹)"은 *장식* 프롭이고 이건 *기능* 컨테이너다 —
+#     같은 이름이지만 다른 물건이라 드로우도 갈라 둔다(장식 화분은 home_deco·프롭이 그린다).
+func _draw_garden_pots() -> void:
+	if garden_pot == null:
+		return
+	for t in garden_pot.tiles():
+		var org := Vector2(t.x * TILE, t.y * TILE)
+		# 몸통 — 칸보다 한 겹 작게 그려 바닥 타일 경계가 남게(놓인 물건으로 읽히게).
+		draw_rect(Rect2(org + Vector2(5, 12), Vector2(TILE - 10, TILE - 15)), Color(0.62, 0.36, 0.24))
+		draw_rect(Rect2(org + Vector2(4, 10), Vector2(TILE - 8, 4)), Color(0.72, 0.44, 0.30))   # 테두리(입구)
+		if garden_pot.is_watered(t):
+			draw_rect(Rect2(org + Vector2(6, 13), Vector2(TILE - 12, 3)), Color(0.35, 0.45, 0.70))  # 젖은 흙
+		var pcrop := garden_pot.crop_of(t)
+		if pcrop == "":
+			continue
+		var pframes: Variant = CROP_SPRITES.get(pcrop)
+		if pframes == null:
+			continue
+		var pstage: int = clampi(garden_pot.growth_stage(t), 0, pframes.size() - 1)
+		# 작물은 화분 입구 위로 반 칸 띄워 얹는다(화분 몸통에 파묻히지 않게).
+		draw_texture_rect(pframes[pstage], Rect2(org + Vector2(0, -8), Vector2(TILE, TILE)), false)
 
 # ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(greybox-spec §7.4 — 대형 스프라이트·Y-sort=S1-10 이관).
 # 묘목(미성숙)=밑동 작은 새싹 / 성숙=3×3 수관(반투명 초록) + 밑동(갈색) + 매달린 과일 점(fruit_count).

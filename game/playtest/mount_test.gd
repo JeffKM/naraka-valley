@@ -67,7 +67,9 @@ func _initialize() -> void:
 	var sid := Carpenter.PROJ_STABLE
 	_check("①a 마구간이 목공방 카탈로그에 있다(새 건축 시스템 0 — 원장 항목 1건 추가)",
 		Carpenter.has_project(sid) and Carpenter.ids().has(sid))
-	_check("①b 카탈로그 = 3건 → 4건(성장 2 + 안방 + 마구간)", Carpenter.ids().size() == 4)
+	# ★[S10-T5] 4 → 5: 늘봄방(ADR-0069 결정 8)이 다섯째 항목으로 붙었다. 마구간 행 자체는 바이트
+	#   불변이라 아래 ①c~①f는 그대로다(같은 결의 데이터 1건 추가).
+	_check("①b 카탈로그 = 4건 → 5건(성장 2 + 안방 + 마구간 + 늘봄방)", Carpenter.ids().size() == 5)
 	_check("①c 비용·공기 = ADR-0069 결정 6 잠정치(10,000냥 · 원목 100 · 유철 주괴 5 · 2일)",
 		Carpenter.gold_cost(sid) == 10000 and Carpenter.wood_cost(sid) == 100
 		and Carpenter.ingot_cost(sid) == 5
