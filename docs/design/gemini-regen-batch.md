@@ -3041,3 +3041,468 @@ muted 계수: 전원 0.94/0.98 (= §17.0 점주·§19.0 주방요괴와 **같은
   serena}_arc · spine_ending · inventory · npc_station · marriage · romance · s9_narrative_smoke ·
   village. 아트만 바뀐 패스에서 arc 9종을 전부 돈 이유는 ④ 때문이다(단언이 실제로 바뀐다).
 ```
+
+---
+
+## 24. ★[S10-T9] 엔드게임 롱테일 아트 패스 — 프롭 17·아이콘 3·시트 2·외관 2 스펙카드 (owner Gemini 무수정 교체 대기)
+
+> **상태:** PixelLab 생성 + 후처리로 **인게임 배선 완료**(2026-08-15). §10~§23과 같은 [ADR-0048]
+> 교체 큐다 — owner가 같은 파일명·크기로 다시 뽑아 `*_raw.png`만 덮어쓰고
+> `cd game && python3 tools/make_s10_t9_art.py`를 한 번 돌리면 **코드 0줄 수정**으로 반영된다.
+> (외관 둘만 별도: `python3 tools/facade_halfres_x2.py assets/buildings/raw/<x>_src.png assets/buildings/<x>.png`.)
+> (PNG를 갈아 끼운 뒤에는 `cd game && godot --headless --import` 1회 — 임포트 캐시가 소스가
+> 아니라 `.godot/imported/*.ctex`를 읽는다.)
+>
+> **후처리 글루:** [`game/tools/make_s10_t9_art.py`](../../game/tools/make_s10_t9_art.py) — 규칙·계수는
+> `make_s9_t9_art.py`·`make_s9b_t9_art.py`와 **같은 값**을 쓴다(새 규칙 0 · 하드 알파 → muted →
+> 앵커 재정렬). 새로 는 것은 셋뿐이다: `hue_to`(스프링클러 티어 틴트 파생) · `largest_blob`
+> (생성물이 캔버스 구석에 흘린 워터마크 부스러기 제거) · 레어크로우 아이콘 crop(생성 0 파생).
+>
+> **★raw 보관 — 덮어쓸 파일의 정확한 이름**(글루가 읽는 것이 이 목록의 전부다. ⚠️ 재생성한 셋은
+> `_v2_` 이름을 그대로 쓴다 — 폐기한 1차 raw도 옆에 남아 있으니 **이름을 정확히 보고 덮어쓸 것**):
+>
+> | 산출 | 덮어쓸 raw |
+> |---|---|
+> | `props/{codex_stand,firefly_stand,sapsari,pet_bowl,garden_pot,panning_spot,sprinkler,firefly_soul}.png` | `game/assets/props/raw/<같은 이름>_raw.png` |
+> | `props/crystalarium.png` | `game/assets/props/raw/`**`crystalarium_v2_raw.png`** ⚠️ |
+> | `props/trial_board.png` | `game/assets/props/raw/`**`trial_board_v2_raw.png`** ⚠️ |
+> | `props/peddler_stall.png` | `game/assets/props/raw/`**`peddler_stall_v2_raw.png`** ⚠️ |
+> | `props/trial_stall.png` | `game/assets/props/raw/trial_stall_raw.png` |
+> | `props/rarecrow_{1..8}.png` (+ `_icon` 자동 파생) | `game/assets/props/raw/rarecrow_{1..8}_raw.png` |
+> | `props/sprinkler_t{1,2,3}.png` (틴트 자동 파생) | `game/assets/props/raw/sprinkler_raw.png` **한 장** |
+> | `props/mount_horse.png` | `game/assets/props/raw/mount_horse_raw/{south,north,east,west}.png` |
+> | `characters/soul_child.png` | `game/assets/characters/`**`soul_child_v2_raw/`**`{south,north,east,west}.png` ⚠️ |
+> | `ui/trial_token.png` | `game/assets/ui/raw/trial_token_raw.png` |
+> | `materials/{crystalarium_part,mount_whistle}.png` | `game/assets/materials/raw/<같은 이름>_raw.png` |
+> | `buildings/{greenhouse,trial}_ext.png` | `game/assets/buildings/raw/{greenhouse,trial}_ext_src.png` (half-res) |
+>
+> 폐기 1차 raw(참고용 잔존 · 글루가 안 읽는다): `props/raw/crystalarium_raw.png`(안에 결정) ·
+> `props/raw/trial_board_raw.png`(순검정) · `props/raw/panning_spot_v2_raw.png`(배경 불투명) ·
+> `props/raw/peddler_stall_raw.png`(어두운 얼룩) · `characters/soul_child_raw/`(머리카락·옷) ·
+> `buildings/raw/`의 시련장 1차는 `trial_ext_src.png`를 **덮어썼다**(폭 156판 미보존).
+>
+> **PixelLab 사용량 32 gen**(create_image_pixen 18 · create_image_pixflux 9〈레어크로우 img2img〉 ·
+> create_character 3〈동행 혼 v1 폐기·v2 채택 · 먹갈기 4방향〉 · 그중 폐기 4 = 결정기 v1〈안에
+> 결정을 구워 왔다〉·팬닝 v2〈배경 불투명〉·시련 게시판 v1〈순검정 실루엣〉·동행 혼 v1〈머리카락·
+> 옷을 그려 와 설정선 위반〉). **생성 0으로 얻은 것 12장**: 스프링클러 상위 2티어(틴트) ·
+> 레어크로우 아이콘 8종(월드 스프라이트 위 절반 crop) · 화분/결정기 인벤 아이콘(월드 프롭 공용).
+>
+> **이 패스가 지운 색박스·그레이박스 17종:** 팬닝 스폿 · 결정기 · 스프링클러 3티어(월드+인벤) ·
+> 레어크로우 8종(밭+인벤) · 보부상 좌판 · 삽사리 · 물그릇 · 먹갈기 · 화분 · 도감 열람대 ·
+> 반딧넋 안치대 · 반딧넋 · 시련 게시판 · 시련패 매대 · 시련패 화폐 아이콘 · 결정기 부품 ·
+> 먹갈기 휘파람 · 동행 혼 · 늘봄방 외관 · 시련장 외관.
+>
+> **이 패스가 안 만든 것(이월 — §24.9):** 마구간 외관 · 늘봄방 실내 유리 룩 · 경지 유물 5종 아이콘.
+
+### 24.0 공통 규약
+
+```
+전부 [ADR-0050] 32-native · [§1.1] NW 광원 · [§8.1] 하드 알파 · [§9] 저승 muted · [§3] 발치 앵커.
+생성: create_image_pixen(selective outline / low detail / no_background=true / seed 고정) —
+      §18.0·§20.0·§21.0·§22.0이 세운 그 호출이다.
+muted 계수(한 자리에 나란히 서는 것끼리 같은 값이라야 새것만 안 튄다):
+  아이콘        0.90/0.97 (= §18.1 메뉴·§21.1 부적·§22.2 책과 **같은 값**)
+  월드 프롭     0.85/0.95 (= §18.2 곳간·§20.1 점괘 거울·§22.1 우편함과 **같은 값**)
+  캐릭터 시트   0.94/0.98 (= §23.0 조연 9인과 **같은 값**)
+  혼백관 창구   0.68/0.88 (**이 패스 예외** — §22.0이 museum_shelf에 0.62/0.90을 건 그 판단 1:1.
+                그 방의 기존 좌대·진열장이 draw_rect 어두운 갈색이라 밝은 목재·이끼 초록이 튄다)
+  레어크로우    0.74/0.90 (**이 패스 예외** — 8기가 한 밭에 나란히 선다. 종별 소품 색<등롱 금빛·
+                볏단 노랑·탈 붉음>을 생성물 그대로 두면 그 둘만 형광이라 "순수 스킨"이 아니라
+                등급으로 읽힌다. 기존 프롭 허수아비의 어두운 갈색에 8종을 통째로 합류시킨다)
+  반딧넋        **muted 안 걸음(1.0/1.0)** — [혼불](따뜻한 주홍)과 갈리는 차가운 넋빛이 정체
+                그 자체다. [§9] "물·영혼빛은 저승 액센트로 muted에서 제외" 조항의 이행.
+★청키화(enforce_chunk)는 걸지 않는다 — §20.0·§21.0·§22.0이 그은 선 그대로.
+★★ 상태를 아트에 굽지 않는다(이 패스가 가장 많이 적용한 규율 — 아래 개별 카드의 ★★가 전부 이것):
+   결정기 속 보석 · 화분 속 작물 · 물그릇 속 물 · 게시판 쪽지 · 매대 잔고 · 등롱 불빛 · 눈금 ·
+   완주 트로피 · 게이트 표식. 전부 원장 파생 코드가 아트 **위에** 그린다.
+★ 실루엣 계열 보존 규칙(이 패스가 새로 실증): 기능이 같은 N종은 **개별 생성 금지**다.
+   레어크로우 8종 = 기존 farm_scarecrow.png를 init 이미지로 삼은 img2img(strength 160·tgs 13) ·
+   스프링클러 3티어 = 한 장의 종색 틴트. 실루엣이 갈리면 플레이어가 성능 차이로 오독한다.
+   ⚠️ init strength 240은 **액세서리가 아예 안 붙는다**(레어크로우 ① 1차 실측). 160이 하한 검증값.
+```
+
+### 24.1 ★혼백관 두 창구 `props/{codex_stand,firefly_stand}.png` (각 32×27) — 같은 줄 세 창구의 둘
+
+```
+배선: **코드 0줄.** `_draw_museum_room`이 이미 `_prop_tex("codex_stand")`/`_prop_tex("firefly_stand")`
+  우선 분기다(T6·T7이 깔아 둔 훅). 자리 = 기증대(x13)와 한 줄, 열람대 동편 (17,46)·안치대 서편 (9,46).
+★★ **높이 32가 아니라 27이다.** 두 창구 모두 타일 **좌상단**에 그려지고(`draw_texture(tex, cpx)`),
+   진행 눈금 막대가 타일 하단 y27..30에 깔린다. 32를 다 쓰면 눈금이 아트를 가로질러 "여기까지
+   찼다"가 아니라 "받침에 그은 금"으로 읽힌다 — 그레이박스 도형도 y26에서 끝났다(같은 기하).
+정체성(열람대): 혼백관 서고의 **경사 독서대**. 어두운 호두목 상판에 명부 장부가 펼쳐져 있다.
+  PROMPT: a single small korean wooden lectern reading stand holding one open ledger book of the
+    dead, slanted dark walnut writing desk top, a pale hanji paper page spread open on it with faint
+    ink columns, a small brass ink stone beside it, temple archive furniture, [§1.1 광원 세트],
+    muted somber palette   (view=low top-down / selective outline / low detail / seed 101001)
+정체성(안치대): 넋을 눕히는 **돌 대좌 + 빈 등롱**. 석등(石燈) 실루엣이라 "바치는 자리"로 읽힌다.
+  PROMPT: a single small stone pedestal altar with a korean hanging lantern frame on top, dark grey
+    slate base block, a slender teal metal lantern cage with empty glass panes, no light inside,
+    a thin rope hanging from the frame, shrine offering stand, [§1.1 광원 세트], muted somber palette
+    (view=low top-down / selective outline / low detail / seed 101002)
+후처리: 하드 알파 → muted(0.68/0.88) → 32×27 bottom 앵커. 안치대만 crop_bottom=2(접지 그림자).
+★★ **등롱에 불을 켜지 마라.** 안치한 넋의 수만큼 뜨는 불빛은 `_draw_museum_room`이 원장에서
+   파생해 y8 자리에 그린다(한 점 = 다섯 넋) — 구우면 0개일 때도 켜져 있다.
+★★ **독서대에 진행 눈금·트로피를 굽지 마라.** 등재율 막대도 완주 상(像)도 전부 원장 파생이다.
+★ 판독 가능한 글씨를 넣지 마라(§22.2와 같은 이유 — 32px에서 노이즈 + 로어를 아트에 굽는 것).
+```
+
+### 24.2 ★저승 보부상 좌판 `props/peddler_stall.png` (32×48) — 7의 배수 날의 얼굴
+
+```
+배선: **코드 0줄.** `_draw_peddler`가 이미 `_prop_tex("peddler_stall")` 우선 분기다(T3의 훅).
+  자리 = 나루 다리 남단 부두 PEDDLER_TILE 한 칸. 야시장 매대(props/night_market.png)와
+  **완전 동형**이다 — 같은 32×48·같은 발치 앵커·같은 "임시 오버레이" 층.
+정체성: 지게(A자 운반대)에 봇짐을 지고 와 보자기를 펼친 **떠돌이 장수의 좌판**.
+★ **보부상 본인을 좌판에 함께 굽는다**(이 패스의 판단 — owner 큐): 대사 노드가 없는 임시
+  오버레이라 NPC 시트를 따로 두면 서 있기만 하는 몸이 하나 늘고, 그 몸은 스케줄도 초상도
+  하트도 없어 "말 없는 사람"이 된다(주민 레지스트리에 안 든 인물이 광장에 서는 첫 사례가 된다).
+  PROMPT: a korean peddler sitting behind a market ground stall, a large pale straw mat spread flat
+    on the ground taking the lower half, three clearly separated round bundles wrapped in cloth
+    resting on the mat, behind them a seated figure in a dark hemp jacket wearing a very large pale
+    conical straw hat that reads as a wide bright disc, simple bold shapes, strong contrast between
+    the pale straw and the dark goods, uncluttered, readable at small size, [§1.1 광원 세트],
+    muted somber palette   (view=low top-down / selective outline / low detail / seed 101023)
+후처리: 하드 알파 → muted(0.85/0.95) → 32×48 bottom 앵커.
+★★ ⚠️ **1차(seed 101003)는 어두워서 폐기했다.** 지게(A자 운반대)+봇짐+사람을 다 그려 넣었더니
+   32×48에서 **한 덩이 검은 얼룩**이 됐고, 무대가 하필 **어두운 판자 부두**라 dark-on-dark로
+   완전히 뭉갰다([asset-ruleset §17] "게임플레이 오브젝트는 명도로 구분" 위반 · 1차 덤프 실측).
+   ⇒ 교체판의 절대 요구는 **명도 대비**다: 밝은 삿갓 원반 + 밝은 짚 자리 두 조각이 어두운 봇짐·
+   몸을 사이에 끼워 형태를 판다. 디테일을 늘리지 말고 **덩어리 셋(삿갓/몸/자리)** 로 단순화할 것.
+★ 야시장 매대와 **한눈에 갈려야 한다**: 야시장 = 등롱 걸린 천막(절기 한정판) / 보부상 = 지게와
+  땅에 편 보자기(상시 리듬). [ADR-0069] 결정 5의 역할 분리를 실루엣이 말한다.
+```
+
+### 24.3 ★코지 펫 둘 `props/{sapsari,pet_bowl}.png` (각 32×32) — 집 앞 마당
+
+```
+배선: **코드 0줄**(삽사리·물그릇 둘 다 T4가 `_prop_tex` 훅을 깔아 뒀다). 단 물그릇은 **드로우
+  경로를 1줄 고쳤다** — §24.10 ③ 참조(아트가 상태 표식을 삼키던 회귀 봉합).
+정체성(삽사리): 귀신 쫓는 **삽살개**. 털이 길고 다리가 짧아 낮고 둥글넓적하며, 앞머리가 눈을 덮는다.
+  PROMPT: a single small shaggy long haired korean sapsali dog sitting facing the viewer, thick
+    tangled dusty tan and brown fur covering its whole body, very short legs hidden under the coat,
+    a long fringe of hair completely covering its eyes, a small dark nose, calm and cozy, a farmyard
+    pet, [§1.1 광원 세트], muted somber palette
+    (view=low top-down / selective outline / low detail / seed 101004)
+정체성(물그릇): 낮은 **질그릇 개밥그릇**. 두툼한 테두리 · 안은 말라 바닥이 보인다.
+  PROMPT: a single small empty shallow ceramic dog water bowl standing on the ground, dark grey
+    brown glazed stoneware, a thick rounded rim, completely empty and dry inside showing the bare
+    bottom of the bowl, no water, [§1.1 광원 세트], muted somber palette
+    (view=low top-down / selective outline / low detail / seed 101005)
+후처리: 하드 알파 → muted(0.85/0.95) → 32² bottom 앵커.
+★★ **그릇에 물을 굽지 마라.** 채운 물 띠는 `_draw_sapsari`가 `pet.can_fill_bowl(day)`를 보고
+   덧그린다 — 구우면 안 채운 날에도 차 보이고, 그러면 "오늘 몫을 했나"가 눈으로 안 읽힌다.
+★ ⚠️ 바나 사역마(박쥐·검은고양이)와 **위상이 다르다**([ADR-0069] 결정 7) — 전투 결의 검은 짐승이
+  아니라 순수 코지 존재다. 어둡고 날카롭게 그리면 그 분리가 무너진다.
+```
+
+### 24.4 ★팬닝·결정기 `props/{panning_spot,crystalarium}.png` (각 32×32) — T1의 두 얼굴
+
+```
+배선: **신규 3줄씩**(`_draw_panning_spots`·`_draw_crystalariums`에 `_prop_tex` 분기 — T1은 훅을
+  안 깔았다). 상태 드로우는 그대로 아트 위에 얹힌다.
+정체성(팬닝 스폿): 물가에 그날 반짝이는 **젖은 자갈 웅덩이**. 주울 물건이 아니라 "여기를 일면
+  뭔가 나온다"는 **표식**이라 종을 보여 줄 것이 없다(무엇이 나오는지는 일어야 안다).
+  PROMPT: a flat shallow patch of wet river gravel seen from directly above, a rounded pool of dark
+    damp pebbles and coarse grey sand lying flush on the ground, scattered tiny bright gold flecks
+    glinting among the stones, completely flat with no height, a riverbed panning spot,
+    [§1.1 광원 세트], muted somber palette
+    (view=high top-down / selective outline / low detail / seed 101008)
+정체성(결정기): 보석을 **불려 내는 빈 유리 상자**. 네 다리 철제 프레임 + 맑은 유리 + 평평한 뚜껑.
+  PROMPT: an empty transparent glass terrarium box on four thin dark iron legs, bare clear glass
+    panes on all sides showing straight through to the other side, a plain flat dark metal lid on
+    top, absolutely nothing inside the box, hollow and vacant, no crystals, no gems, no contents,
+    [§1.1 광원 세트], muted somber palette
+    (view=low top-down / selective outline / low detail / seed 101016)
+후처리: 하드 알파 → muted(0.85/0.95) → 팬닝 = 32² **center** 앵커 / 결정기 = 32² bottom 앵커.
+★★ **결정기 안을 비워 굽는다.** 든 보석·여문 정도·남은 일수 눈금은 전부 원장 파생이다
+   (1차 생성 seed 101006은 유리 안에 결정을 구워 와 **폐기**했다 — 빈 기계도 찬 것으로 보였다).
+★★ **팬닝은 center 앵커다**(발치 앵커 아님). 부피 있는 물건이 아니라 바닥에 깔린 표식이라
+   높이가 0이고, 따라서 [§11] 접지 그림자도 없다. 금빛 알갱이 한 점만 코드가 위에 남긴다.
+   ⚠️ 1차 재생성(seed 101018, lineless)은 **강둑 장면을 배경째 그려 와 폐기**했다 — 데칼은
+   `no_background`가 실제로 먹혔는지(투명 bbox가 캔버스보다 작은지) 반드시 확인할 것.
+```
+
+### 24.5 ★화분 `props/garden_pot.png` (32×32) — 실내 1×1 경작 컨테이너
+
+```
+배선: **신규 4줄**(`_draw_garden_pots`에 `_prop_tex` 분기). 이 한 장이 **월드 설치물과 인벤
+  아이콘을 공용**한다([asset-ruleset §15] — 인벤에서 든 그것이 방에 선 그것과 같은 그림).
+정체성: **마른 빈 테라코타 화분.** 굽지 않은 붉은 점토 · 두툼하게 만 테두리 · 안은 맨 흙.
+  PROMPT: a single small round terracotta flower pot filled with plain dark dry soil, an unglazed
+    reddish brown clay planter with a thick rolled rim, the soil surface is flat bare and empty,
+    nothing planted in it, no sprout, no plant, no flower, [§1.1 광원 세트], muted somber palette
+    (view=low top-down / selective outline / low detail / seed 101007)
+후처리: 하드 알파 → muted(0.85/0.95) → 32² bottom 앵커.
+★★ **심은 것도 젖은 흙도 굽지 마라.** 작물 스프라이트는 화분 입구 위로 코드가 얹고(org+(0,-8)),
+   젖은 흙 띠는 오늘 물 준 칸에만 그린다 — **매일 손 물주기**가 화분의 정체([ADR-0069] 결정 8
+   차별 자구 4개 중 둘)라 그 상태를 아트에 구우면 차별이 눈에서 사라진다.
+★ 늘봄방 경작면(SOIL 타일)과 **혼동되면 안 된다**: 화분은 놓인 그릇이라 칸 경계가 남게 그린다.
+```
+
+### 24.6 ★스프링클러 3티어 `props/sprinkler_t{1,2,3}.png` (각 32×32) — 생성 1 · 틴트 파생 3
+
+```
+배선: **신규 5줄**(`_draw_sprinklers`에 `_prop_tex("sprinkler_t%d")` 분기). 세 장 전부 **월드
+  설치물과 인벤 아이콘 공용**(S10_ICONS).
+★ **한 실루엣의 종색 셋**이다(개별 생성 금지 — §24.0 실루엣 계열 보존). 근거는 결정 3 그 자체다:
+  티어 차이는 이미 **급수 범위 크기**가 말하고(4/8/24칸 하이라이트) 색은 거드는 신호다. 실루엣을
+  셋으로 갈라 생성하면 "다른 기계 셋"으로 오독된다.
+★ 세 색의 단일 출처 = `main._draw_sprinklers`의 그레이박스 몸통 색이다(청록 → 남빛 → 금빛).
+  글루가 그 세 RGB에서 hue를 뽑아 쓰므로(SPRINKLER_HUES) 그레이박스와 아트가 같은 신호를 판다.
+  PROMPT: a single small farm sprinkler device standing on the ground, a squat verdigris teal bronze
+    cylinder base with a rounded spout head on top and three short nozzle arms fanning out sideways,
+    dry and not spraying, no water jets, no droplets, an irrigation machine, [§1.1 광원 세트],
+    muted somber palette   (view=low top-down / selective outline / low detail / seed 101013)
+후처리: 하드 알파 → muted(0.85/0.95) → hue_to(티어색, 채도 0.15 미만 픽셀은 불변) → 32² bottom.
+★★ **물을 뿌리는 모습을 굽지 마라.** 급수 십자/사각 하이라이트는 코드가 원장의 `targets_of`에서
+   파생해 그린다 — 구우면 범위가 티어와 어긋나고, 밭 위에 물이 늘 뿌려져 있는 그림이 된다.
+★ 외곽선을 물들이지 마라: 글루가 채도 0.15 미만(무채 선·하이라이트)은 안 건드린다. 생성물이
+  선까지 청록으로 칠해 오면 틴트 후 세 티어가 탁하게 뭉친다.
+```
+
+### 24.7 ★레어크로우 8종 `props/rarecrow_{1..8}.png` (각 32×64) + `_icon.png` (각 32×32)
+
+```
+배선: **신규 5줄**(`_draw_rarecrows`에 `_prop_tex(id)` 분기 — 파일명이 곧 아이템 id라 종이 늘어도
+  이 함수는 안 고친다) + S10_ICONS 8줄(인벤).
+★★ **8종은 img2img 파생이다**(개별 생성 금지). init = 기존 프롭 허수아비 `props/farm_scarecrow.png`,
+   create_image_pixflux(init_image_strength=160 · text_guidance_scale=13 · view=low top-down ·
+   selective outline · low detail). 근거 = [ADR-0051] 결정 5 "기능·반경 동일한 **순수 스킨**":
+   실루엣이 갈리면 플레이어가 성능 차이로 오독한다.
+   ⚠️ **strength 240은 액세서리가 아예 안 붙는다**(① 1차 실측 — 원본이 그대로 나왔다). 160이
+   "몸은 남고 소품은 붙는" 검증된 하한이다. 그보다 낮추면 몸이 흔들린다.
+★ 아이콘은 **생성 0** — 월드 스프라이트의 위 절반 crop이다(글루 `build_rarecrows`). 종을 가르는
+  것은 머리에 얹거나 문 소품 한 조각이고 그건 전부 위 절반에 있다. 32×64를 32²로 통째로
+  욱여넣으면(세로 압축) 8종이 다 같은 갈색 막대가 된다 — 형태가 아니라 압축이 정체를 지운다.
+공통 프롬프트 뼈대(소품 절만 갈아 끼운다):
+  "a straw scarecrow <소품 절>, burlap sack head, ragged brown coat, mounted on a single post,
+   muted somber underworld palette"
+  ① seed 102011 `wearing a very wide brimmed black korean gat horsehair hat sitting on top of its
+     burlap sack head, big round black hat brim`
+  ② seed 102012 `holding up a glowing paper lantern on a stick beside its head, a round warm amber
+     korean paper lantern hanging from the raised arm`
+  ③ seed 102013 `wearing a thick shaggy straw rain cape dorongi draped over its shoulders and back,
+     long loose straw fringes hanging all around its body`
+  ④ seed 102014 `with a big white folded letter envelope clamped in the mouth slit of its head,
+     a bright pale cream envelope with a red wax seal held between its jaws`
+  ⑤ seed 102015 `with a big bulging cloth bundle pack tied high on its back and rising above its
+     shoulders, a fat knotted wrapping cloth bojagi bundle strapped on`
+  ⑥ seed 102016 `holding a long thin bamboo fishing rod that leans diagonally far up past its head,
+     a taut fishing line running from the rod tip`
+  ⑦ seed 102017 `balancing a fat golden sheaf of harvested rice straw on top of its head, a thick
+     pale yellow bundle of grain stalks carried on the head and tied with cord`
+  ⑧ seed 102018 `with a bright red and white painted korean hahoe wooden festival mask covering the
+     whole front of its head, a grinning carved mask face with black eye holes`
+후처리: 하드 알파 → muted(0.74/0.90 — §24.0 계열 톤) → 32×64 bottom 앵커 → 위 32 crop = 아이콘.
+★알려진 결함(교체 시 고칠 것):
+  · **⑥ 낚싯대가 약하다** — 대각 획이 붉은 띠와 섞여 "낚싯대"로 안 읽힌다. 대를 머리 위로 더
+    길게, 색을 몸과 갈라 뽑을 것.
+  · **⑦ 볏단이 금발 머리로 읽힌다** — 머리 위 다발의 윤곽이 두피에 붙었다. 다발을 한 뼘 띄우고
+    묶은 끈을 굵게.
+  · **④ 편지가 작다** — 32폭에서 봉투가 손·입 어디에 있는지 모호하다. 가슴 앞으로 크게 들 것.
+  · ①의 갓이 서양 페도라 챙에 가깝다(정통 갓 = 원통 crown + 넓고 평평한 챙).
+```
+
+### 24.8 ★반딧넋 · 시련장 두 프롭 · 아이콘 3종
+
+```
+── 반딧넋 `props/firefly_soul.png` (32×32 · center 앵커) ──────────────────────
+배선: **신규 4줄**(`_draw_firefly_souls`). ★ **몸만 굽는다** — 둘레 할로는 코드가 반투명 원으로
+  먼저 깔고 그 위에 이 스프라이트를 얹는다([§8.1] 하드 알파 스프라이트에 번짐을 구울 수 없고,
+  발광은 런타임 몫이라는 [§8.3]의 결).
+  PROMPT: a single tiny lost soul wisp shaped like a firefly, a small pale mint white glowing core
+    with a soft rounded teal aqua body and two faint wing veils, a slender curved tail of light
+    trailing under it, cold spirit light, not fire, no orange, no flame, luminous teal spirit palette
+    (view=side / lineless / low detail / seed 101014)
+★★ **muted를 걸지 않는다**(1.0/1.0 — §24.0). [혼불](따뜻한 주홍 여우불)과 갈리는 **차가운 넋빛**이
+   정체 그 자체다(CONTEXT [반딧넋] "불이 아니라 넋이 주어다"). 채도를 누르면 그 색 언어가 죽는다.
+★ 기존 `ui/soul_moth.png`(대화창 먹 나비)와 **같은 결의 나방**이라 세계관 어휘가 이어진다.
+
+── 시련 게시판 `props/trial_board.png` (32×32) · 시련패 매대 `props/trial_stall.png` (32×22) ──
+배선: **신규 6줄씩**(`_draw_trial_room`). ⚠️ `quest_board.gd`는 한 바이트도 안 건드렸다(T8 계약).
+  PROMPT(게시판): a small empty notice board standing on two short legs, a wide charcoal grey
+    weathered wood plank panel with visible plank seams and a pale bone grey carved frame border
+    around it, the board face is bare and blank with no paper and no writing, mid grey and dark grey
+    two tone, clearly readable shape, [§1.1 광원 세트], muted somber palette
+    (view=low top-down / selective outline / low detail / seed 101019)
+  PROMPT(매대): a small empty dark stone counter shop stall, a low slab topped trading table of grey
+    purple slate with a plain apron below it, the counter top is completely bare and empty, no goods,
+    no coins, no wares on it, an underworld exchange counter, [§1.1 광원 세트], muted somber palette
+    (view=low top-down / selective outline / low detail / seed 101010)
+후처리: 하드 알파 → muted(0.85/0.95) → 게시판 32² bottom · 매대 32×22 bottom(그레이박스 몸통
+  y10..32와 같은 기하 — 잔고 패가 그 위 y8에 뜬다).
+★★ **판면·상판을 비워 굽는다.** 걸린 시련 쪽지·수락 중 붉은 도장·시련패 잔고는 전부 원장 파생이다.
+★ ⚠️ 1차 게시판(seed 101009, "ink black lacquered")은 **순검정 실루엣**으로 나와 폐기했다 —
+  저승 톤이라도 판면에 명도 2단은 있어야 32px에서 형태가 산다.
+
+── 아이콘 3종 `ui/trial_token.png` · `materials/{crystalarium_part,mount_whistle}.png` (각 32×32) ──
+배선: 시련패 = `_trial_token_icon()`(T8이 깐 훅 — 파일만 놓으면 엽전 폴백이 물러난다) ·
+  나머지 둘 = S10_ICONS(인벤·핫바·토스트 한 경로).
+  PROMPT(시련패): a single small rectangular wooden tally tag token, a pale bone coloured narrow
+    plaque with a rounded top and a small hole drilled through it, a short dark red cord knotted
+    through the hole, one bold vermilion ink seal stamp pressed on its face, an inventory item icon,
+    [§1.1 광원 세트], muted somber palette   (view=side / selective outline / low detail / seed 101011)
+  PROMPT(결정기 부품): a single small tarnished brass machine part lying flat, a toothed cog wheel
+    fused to a short bracket with a tiny cracked lens set in it, silt and grit still clinging to it,
+    a salvaged apparatus component, an inventory item icon, [§1.1 광원 세트], muted somber palette
+    (view=side / selective outline / low detail / seed 101012)
+  PROMPT(휘파람): a single small carved bone whistle hanging from a braided dark cord, a short pale
+    ivory tube with two finger holes and a mouthpiece end, a small horsehair tassel tied at one end,
+    an inventory item icon, [§1.1 광원 세트], muted somber palette
+    (view=side / selective outline / low detail / seed 101015)
+후처리: 하드 알파 → muted(0.90/0.97) → 32² center 앵커.
+★★ **시련패는 엽전(ui/gold_coin.png)과 한눈에 갈려야 한다** — 그것이 이 아이콘의 존재 이유다.
+   시련패 상점은 만물상 셸을 빌려 쓰므로, 값 옆 아이콘 하나가 "이건 냥이 아니다"를 말한다
+   ([ADR-0069] 결정 11 "시련패는 냥과 바꿀 수 없다"의 시각 이행). 둥근 금화 실루엣 금지.
+★ 결정기 부품이 **물에서 건진 것**으로 보여야 한다(팬닝 산출) — 진흙·녹이 정체의 절반이다.
+```
+
+### 24.9 ★동행 혼 시트 · 먹갈기 승마 시트 · 외관 둘
+
+```
+── 동행 혼 `characters/soul_child.png` (80×320 = 프레임 80² · 1열 × 4행) ────────
+배선: **코드 0줄.** `soul_child.gd`가 `CharSprite.make("res://assets/characters/soul_child.png")`
+  훅을 이미 깔아 뒀다(§23.1 조연 9인과 같은 결 — 파일을 놓는 것이 배선의 전부).
+생성: create_character(mode=standard / n_directions=4 / low top-down / selective outline /
+  flat shading / low detail / tgs=14 / §11.4 공통 proportions / **size 24**)
+★ **size 24인 이유 = 그레이박스가 스펙이다**: `soul_child.gd`의 `_BODY`가 사람형 16×32의 **절반
+  키**(12×16)라 "한눈에 작다"가 실루엣의 전부다. 사람 규격 44(§23.0)의 절반이 24다.
+정체성(CONTEXT [동행 혼] · [ADR-0069] 결정 12 — 어길 수 없는 설정선):
+  ⚠️ **성별·종족을 특정하는 형태를 그리지 마라**(머리 모양·옷·귀). 결속에서 깃든 혼이라 성별·
+  생물학과 무관하고(동성 부부 포함 전 부부 동일), "형상을 아직 다 얻지 못했다"가 실루엣의 전부다.
+  PROMPT: a small featureless spirit wisp in vague child height human shape, its entire body is one
+    smooth pale bluish white glowing substance with a softly blurred edge, completely bald with no
+    hair at all, entirely naked of any clothing with no dress no robe no garment no belt and no
+    shoes, no ears, no nose, no mouth, no hands detail, no gender markers of any kind, the only
+    feature anywhere is a pair of tiny dark grey dot eyes, a shape not yet finished forming,
+    muted somber underworld palette
+★★ ⚠️ **1차(seed 무지정 · tgs 11 · basic shading)는 단발머리와 원피스를 그려 와 폐기했다** —
+   위 설정선 정면 위반이다. 부정형을 **낱개로 나열**(no dress / no robe / no garment / no belt /
+   no shoes / no hair at all)하고 tgs를 14로 올려야 지켜진다(§23.0 리젝 기준 ② "금지 도상을
+   이름으로 적는다"의 재실증).
+후처리: 하드 알파 → muted(0.94/0.98) → 80² 프레임 발치정렬(FOOT_Y=74).
+★알려진 결함(교체 시 고칠 것): **north 프레임의 머리가 남면보다 넓은 쐐기꼴**이라 뒤에서 보면
+  두건을 쓴 것처럼 읽힌다(§23.0 ★★ "north를 반드시 눈으로 확인" 규율의 이번 적발분). 다만 이
+  존재는 집 안에 상주하고 이동 스케줄이 없어 실플레이 노출은 낮다.
+
+── 먹갈기 승마 시트 `props/mount_horse.png` (48×192 = 프레임 48² · 1열 × 4행) ──
+배선: **신규 8줄**(`_draw_mount` — 단일 텍스처 → 행 선택). [ADR-0069] 결정 6이 "승마 합성 시트는
+  아트 패스(T9)"로 넘긴 그 시트다. 행 순서 = `CharSprite.DIRS`(down/up/right/left)와 **같고**,
+  방향 판정도 `CharSprite.dir_anim(player.get_facing())`을 그대로 빌린다 — 규칙이 사람과 말에서
+  갈리면 몸통과 탈것이 같은 자리에서 서로 다른 데를 본다.
+생성: create_character(body_type=quadruped / template=horse / mode=standard / n_directions=4 /
+  low top-down / selective outline / basic shading / low detail / tgs=11 / size 40)
+  PROMPT: a small sturdy underworld pony horse with an ink black flowing mane and tail, its coat is
+    dark charcoal grey, a simple leather saddle and bridle fitted on it, calm and stocky, short legs,
+    no rider, muted somber underworld palette
+★ **프레임 48인 이유**: east/west 콘텐츠가 42px라 32에 안 들어가고, 캐릭터 규격 80을 쓰면 시트가
+  필요 이상으로 커진다(말은 사람보다 옆으로 넓다). 프레임 하단 = 말굽 = 플레이어 발치.
+★★ **탄 사람을 그리지 마라**(`no rider`). 플레이어 스프라이트가 이 위에 그려진다 —
+   구우면 사람이 둘이 된다.
+★ ⚠️ 생성물 south 프레임 좌상단에 워터마크 부스러기가 붙어 왔다 → 글루 `largest_blob`이 가장 큰
+  연결 성분만 남긴다(교체판도 같은 처리를 거치므로 owner가 지울 필요는 없다).
+
+── 늘봄방 외관 `buildings/greenhouse_ext.png` (250×216 · half-res 128×112 생성) ──
+── 명부 시련장 외관 `buildings/trial_ext.png` (188×144 · half-res 96×80 생성) ──
+배선: **신규 함수 2개 + 호출 2줄**(`_draw_facade_greenhouse`·`_draw_facade_trial`). T5·T8이
+  `_build_facade`로 WALL 박스만 세워 둔 자리를 이 두 장이 덮는다.
+생성: create_image_pixen(view=low top-down / selective outline / low detail / no_background) —
+  [§2] 규약 그대로 **half-res 네이티브**로 뽑아 `tools/facade_halfres_x2.py`(×2 nearest)로 굳힌다.
+  `place_facade.py`(÷2 청키화)는 **금지**(기와·판자를 뭉갠다 — §2 자구).
+  PROMPT(늘봄방): a front elevation of a wide korean timber and glass greenhouse building facing the
+    camera, symmetrical front wall of many small pale green glass panes held in a dark weathered wood
+    lattice frame, a gable triangular pitched roof of dark clay tiles with the flat roof top slab
+    receding visibly behind the ridge, one wide double door of two panels dead centre in the front
+    wall, a low stone foundation course, front-facing facade, facing camera, NOT isometric, NOT
+    angled, symmetrical front elevation, [§1.1 광원 세트], muted somber palette   (seed 103001)
+  PROMPT(시련장): a front elevation of a wide grim stone gatehouse hall **that fills the entire image
+    from the far left edge to the far right edge**, symmetrical front wall of dark violet grey hewn
+    stone blocks spanning the full width, a broad gable triangular pitched roof of black tiles whose
+    eaves reach both image edges, the flat roof top slab receding visibly behind the ridge, one wide
+    double door of two dark iron banded panels dead centre in the front wall, two small barred
+    windows flanking the door, a low stone step course along the whole base, carved stern trial hall,
+    front-facing facade, facing camera, NOT isometric, NOT angled, symmetrical front elevation,
+    no surrounding rocks, no ground, [§1.1 광원 세트], muted somber palette   (seed 103012)
+★★ ⚠️ **1차(seed 103002)는 폭이 156이라 폐기했다.** 건물을 바위에 박아 넣은 실루엣으로 나와
+   footprint 폭(6칸=192)보다 36px 좁았고, 그 차이만큼 **`_build_facade`가 세운 WALL 박스가
+   좌우로 노출돼 건물이 청회색 판때기 위에 얹힌 것처럼 보였다**(1차 덤프 실측). 같은 줄에 선
+   대장간·길드가 **정확히 192×160**인 것이 기준이다 — 갱도 건물은 footprint 폭을 꽉 채워야 한다.
+   ⇒ 교체판도 **폭 ≥ 188(≒192)** 을 지킬 것. 프롬프트의 "fills the entire image from the far left
+   edge to the far right edge" + "no surrounding rocks, no ground"가 그 강제어다.
+★★ **문은 2칸 폭 · 정중앙**([ADR-0046]): 늘봄방 8칸폭 → 문 x67·68 / 시련장 6칸폭 → 문 x46·47.
+   둘 다 짝수폭이라 2칸 문이 중앙 seam을 straddle한다 — 아트 문도 정확히 가운데여야 한다.
+★★ **지붕 윗면 슬랩이 노출돼야 한다**([§2] 필수 검증 — 삼각 실루엣만 있으면 리젝). 둘 다 통과.
+★ ⚠️ 늘봄방 rect를 `_HOME_BUILDING_RECTS`에 **넣지 않았다**: 그 배열은 조건 없는 const라 등록하는
+  순간 짓기 전에도 x64..71에 잔디억제 맨흙 패드가 깔린다(빈 들에 건물 자국이 미리 생긴다).
+  발치 패드를 잃는 대신 그 회귀를 산다 — HOME은 ground16이라 풀 백드롭도 어차피 건너뛴다.
+★ 시련장 art 폭 188은 footprint 192에 4px 모자란다(양옆 2px) — 대장간·길드의 192 정합 안이다.
+```
+
+### 24.10 이 패스가 바꾼 렌더 (아트 생성물 아님 — 코드)
+
+```
+① `_prop_tex` 드롭인 분기 **신규 7곳**: 결정기 · 팬닝 스폿 · 스프링클러(티어별) · 레어크로우
+   (id별) · 화분 · 시련 게시판 · 시련패 매대 · 반딧넋. 전부 "있으면 쓰고 없으면 그레이박스"라
+   **그레이박스 코드를 지우지 않는다**(§23.5 ①과 같은 규약 — 폴백이 사라지면 텍스처 로드 실패가
+   빈 화면이 된다).
+② main.S10_ICONS 신설(15키) + `_merge_t10_icons` 2줄 + `_item_icon` 2줄 — 핫바·인벤·매대·토스트
+   네 자리가 같은 한 경로를 쓰므로 여기 한 번이면 넷이 동시에 낫는다(§22.2와 같은 결).
+③ ★**회귀 봉합 1건**: `_draw_sapsari`의 물그릇 분기가 텍스처를 그린 뒤 **즉시 return**해서,
+   아트를 넣는 순간 "오늘 물을 채웠나" 표식이 함께 사라지고 있었다(아트 도입이 상태 판독을
+   지우는 회귀). 물 띠를 두 분기 **뒤**로 옮겨 한 번만 그리게 고쳤다 — "상태를 아트에 굽지
+   않는다"는 규율은 **"코드가 계속 그린다"까지가 한 짝**이라는 것이 이 봉합의 교훈이다.
+   ⚠️ 앞으로 `_prop_tex` 훅을 새로 깔 때 **early return 뒤에 상태 드로우가 남아 있지 않은지**
+   반드시 확인할 것(같은 형태의 잠복이 다른 프롭에도 생길 수 있다).
+④ `_draw_mount` 단일 텍스처 → 4행 시트 행 선택(§24.9).
+⑤ FACADE_GREENHOUSE·FACADE_TRIAL preload 2줄 + `_draw_facade_{greenhouse,trial}` 2함수 + 호출 2줄.
+⑥ 신규 글루 `tools/make_s10_t9_art.py`.
+★ **판정·시드·원장 로직 0줄** — 이 패스는 드로우 경로와 아이콘 테이블만 만졌다. 특히
+  `quest_board.gd`는 한 바이트도 안 건드렸고(T8 불침범 계약), 전역 RNG 소비도 안 바뀌었다
+  (골든 지문 보호 — 회귀가 확인한다).
+```
+
+### 24.11 이 패스가 **안 만든** 것 (이월 — 사유를 남긴다)
+
+```
+① **마구간 외관** — 아트 문제가 아니라 **무대가 없다**. `carpenter.gd`의 마구간은 완공하면
+   휘파람을 주는 원장 항목이고, 맵에 footprint(EXT rect)가 한 칸도 없다. 외관을 세우려면 WALL
+   박스·문·진입로·통행 집합을 새로 깔아야 하는데 그건 아트 패스의 권한 밖이다(레이아웃 변경 =
+   SOLID·pathing 회귀 면). **T10 또는 후속 폴리시에서 rect를 먼저 정하고 그 다음이 아트다.**
+② **늘봄방 실내 유리 룩** — 현재 갈무리방 타일(돌 판석/돌켜)을 빌려 쓴다(T5의 명시 선택).
+   유리 온실 실내를 만들려면 **새 타일 id**를 열어야 하고(바닥·벽 2종 + SOLID 등록 + 타일셋
+   빌드), 그건 tileset-ruleset 트랙이지 프롭 교체가 아니다. 외관만 이번에 세웠다.
+③ **경지 유물 5종 아이콘** — **필요 없다**(생성 0이 결론). `mastery.gd`의 유물 보상은
+   `reward_id`가 전부 **기존 아이템**(fert_deluxe·hardwood·bait_pledge·geode_eophwa·myeongbuhwan)
+   이라 아이콘이 이미 다 있다. 유물 자체는 인벤에 들어가는 물건이 아니라 **수령 이벤트의 이름**
+   이고(ADR-0019 % 금지를 스키마로 못 박은 그 구조), 숙련 탭은 이름·설명 텍스트만 띄운다.
+   T9 로스터의 "유물 아이콘 5종"은 코드 감사 결과 **실체가 없는 항목**이었다.
+④ **우편함** — 로스터에 "이월"로 적혀 있었으나 **이미 아트가 있다**(§22.1, S9-T9에서 생성·배선
+   완료). 재생성하지 않았다.
+⑤ **먹갈기 north(뒷모습) 승마 합성** — 시트는 4방향 다 있지만, 북향 프레임의 말은 콘텐츠 폭이
+   14px(정면에서 본 엉덩이)라 **플레이어 스프라이트(≈16px)에 완전히 가려진다**(T9 덤프 실측 —
+   down/right/left 셋은 정상). 근본 해법은 말·기수를 **한 장에 함께 구운 승마 시트**이고, 그건
+   플레이어 의상까지 아트에 굽는 결정이라 이 패스의 권한 밖이다. 지금은 북향으로 달릴 때만
+   말이 안 보인다(속도 버프·이동은 정상).
+```
+
+### 24.12 육안 판정면 (덤프 하네스)
+
+```
+`game/playtest/s10_art_dump.gd` — 비-headless 화면 grab 15장(s6_art_dump·s9b_chorus_dump 결).
+  실행: cd game && godot --path . --script res://playtest/s10_art_dump.gd  → /tmp/s10art_*.png
+  ① home_farm(레어크로우 8기 한 줄 + 스프링클러 3티어 급수 범위) ② home_yard(삽사리·물그릇·우편함)
+  ③ greenhouse_ext ④ home_indoor(화분 3상태 + 동행 혼) ⑤ museum_room(열람대·안치대 + 눈금·등롱)
+  ⑥ riverside(팬닝 스폿 2 + 결정기) ⑦ peddler ⑧ trial_ext ⑨ trial_room(게시판 쪽지·매대 잔고 패)
+  ⑩ trial_shop(화폐 아이콘) ⑪ inv_icons ⑫~⑮ mount 4방향.
+★ 하네스가 판정면을 세우며 배운 것 넷(교체판 검수 때도 그대로 필요하다):
+  ㉠ 삽사리는 **7일차 이후**라야 입양된다(`Pet.ADOPT_MIN_DAY`) — 1일차로 부르면 마당이 빈다.
+  ㉡ 시련장 실내는 **반딧넋 30(게이트)** 을 넘겨야 건물 카탈로그에 등재된다 — 안 그러면 실내
+     카메라가 갱도 암반을 비춘다(문이 없는 방에는 카메라도 못 들어간다).
+  ㉢ 팬닝 스폿은 day-해시라 **"그날 0개"가 정상**이다(25%) — 판정면은 원장에 직접 세운다.
+  ㉣ 보부상 좌판은 맵 최남단이라 카메라가 물려 **핫바 뒤로 내려간다** — 북쪽으로 물러서서 잡는다.
+
+★ 기계 판정(색박스 0)은 `game/playtest/s10_art_test.gd`가 든다 — 63단언. "그림이 예쁜가"가 아니라
+  **"폴백에 도달하지 않는가"**를 잰다: 파일 하나가 빠지면 게임은 조용히 그레이박스로 굴러가고
+  (폴백이 그러라고 있다) 그 침묵을 잡을 사람이 없다. 분모는 전부 레지스트리 파생이다
+  (S10_ICONS 크기 · ItemCatalog.RARECROWS · CharSprite.DIRS — 하드코딩 15/8/4 금지).
+```
