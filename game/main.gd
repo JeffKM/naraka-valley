@@ -513,6 +513,36 @@ const MENU_ICONS := {
 const BOOK_ICON := preload("res://assets/books/book_icon.png")
 const NOTE_ICON := preload("res://assets/books/note_icon.png")
 
+# ★ [S10-T9 / ADR-0069 아트 스코프] 엔드게임 롱테일 아이콘 13종 — 색박스 폴백 대체.
+# TOOL/FERT/SAPLING/FISH/GEAR/FORAGE/MATERIAL/MINE/MENU_ICONS와 **정확히 같은 결**이다: 한 dict를
+# `icons`에 병합하면 핫바·인벤·매대·토스트가 전부 `_draw_icon`/`_item_icon` 한 경로로 텍스처를
+# 집는다. 카테고리는 이미 전부 "텍스처 있으면 쓰고 없으면 색박스" 분기를 타고 있어 **드로우 분기
+# 추가 0**이다(설치물 = CAT_PLACEABLE · 부품/휘파람 = CAT_MATERIAL · 레어크로우 = CAT_MATERIAL).
+#
+# ★ 셋은 **월드 설치물과 텍스처를 공용**한다([asset-ruleset §15] "설치/드롭 아이템 = UI 아이콘
+#   공용" — 게잡이통 선례): 스프링클러 3티어·화분·결정기. 인벤에서 든 그 물건이 밭에 선 그 물건과
+#   같은 그림이라야 "이걸 놓으면 저게 선다"가 설명 없이 읽힌다.
+# ★ 레어크로우만 **월드와 아이콘이 다른 파일**이다(`_icon` 접미): 월드는 1×2칸(32×64) 말뚝 실루엣
+#   이고, 그 세로를 32²에 욱여넣으면 8종이 다 같은 갈색 막대가 된다. 아이콘은 월드 스프라이트의
+#   **위 절반 crop**(생성 0 — tools/make_s10_t9_art.py)이라 종을 가르는 소품이 그대로 남는다.
+const S10_ICONS := {
+	ItemCatalog.SPRINKLER: preload("res://assets/props/sprinkler_t1.png"),
+	ItemCatalog.SPRINKLER_T2: preload("res://assets/props/sprinkler_t2.png"),
+	ItemCatalog.SPRINKLER_T3: preload("res://assets/props/sprinkler_t3.png"),
+	ItemCatalog.GARDEN_POT: preload("res://assets/props/garden_pot.png"),
+	ItemCatalog.CRYSTALARIUM: preload("res://assets/props/crystalarium.png"),
+	ItemCatalog.CRYSTALARIUM_PART: preload("res://assets/materials/crystalarium_part.png"),
+	ItemCatalog.MOUNT_WHISTLE: preload("res://assets/materials/mount_whistle.png"),
+	ItemCatalog.RARECROW_1: preload("res://assets/props/rarecrow_1_icon.png"),
+	ItemCatalog.RARECROW_2: preload("res://assets/props/rarecrow_2_icon.png"),
+	ItemCatalog.RARECROW_3: preload("res://assets/props/rarecrow_3_icon.png"),
+	ItemCatalog.RARECROW_4: preload("res://assets/props/rarecrow_4_icon.png"),
+	ItemCatalog.RARECROW_5: preload("res://assets/props/rarecrow_5_icon.png"),
+	ItemCatalog.RARECROW_6: preload("res://assets/props/rarecrow_6_icon.png"),
+	ItemCatalog.RARECROW_7: preload("res://assets/props/rarecrow_7_icon.png"),
+	ItemCatalog.RARECROW_8: preload("res://assets/props/rarecrow_8_icon.png"),
+}
+
 # 아이콘 dict에 책·노트를 얹는다(키 = Books 원장의 id 전량). 인벤·핫바·토스트가 이 한 경로를
 # 공유하므로 여기 한 번이면 세 자리가 동시에 낫는다(`_merge_t10_icons`와 같은 결).
 func _merge_book_icons(icons: Dictionary) -> void:
@@ -1033,6 +1063,11 @@ const VILLAGE_HOUSE_CYCLE := [FACADE_VILLAGE_HOUSE_A, FACADE_VILLAGE_HOUSE_B, FA
 # footprint보다 위로 솟아(bottom-center 앵커) 본가와 지붕 시점 통일. 창고·동물 2건물 모두 enterable(실내 방).
 const FACADE_STOREHOUSE := preload("res://assets/buildings/storehouse_ext.png")
 const FACADE_BARN := preload("res://assets/buildings/barn_ext.png")
+# ★[S10-T9] 늘봄방(온실·HOME 8×7칸) · 명부 시련장(갱도 6×5칸) 외관. 둘 다 PixelLab half-res 생성 →
+#   `tools/facade_halfres_x2.py`(×2 nearest)로 굳혔다([§2] 정면 facade·박공 지붕 윗면 슬랩 노출·
+#   2칸 문 정중앙). T5·T8이 `_build_facade`로 WALL 박스만 세워 둔 자리를 이 두 장이 덮는다.
+const FACADE_GREENHOUSE := preload("res://assets/buildings/greenhouse_ext.png")
+const FACADE_TRIAL := preload("res://assets/buildings/trial_ext.png")
 const FACADE_COOP := preload("res://assets/buildings/coop_ext.png")
 # ★[S3-T9 / ADR-0061 결정 10] 삼도천·황천해의 마지막 그레이박스 두 채. 만물상(PR#275)과 같은 간판 문법
 #   (기와 박공 + 윗면 슬랩 노출 + 문 위 현판)으로, 폭 = footprint 7칸과 1:1(224px)·높이는 지붕이 위로 솟는다.
@@ -9244,6 +9279,8 @@ func _merge_t10_icons(icons: Dictionary) -> void:
 	for menu_id in MENU_ICONS:
 		icons[menu_id] = MENU_ICONS[menu_id]       # ★ [S6-T8] 카페 메뉴 16종(색박스 대체)
 	_merge_book_icons(icons)                       # ★ [S9-T9] 책 8 + 비밀 노트 15(두 장 공유)
+	for s10_id in S10_ICONS:
+		icons[s10_id] = S10_ICONS[s10_id]          # ★ [S10-T9] 설치물·부품·레어크로우 8종(색박스 대체)
 
 func _setup_hotbar() -> void:
 	hotbar = HotbarHud.new()
@@ -11328,6 +11365,8 @@ func _item_icon(id: String) -> Texture2D:
 		return MINE_ICONS[id]
 	if MENU_ICONS.has(id):                     # ★ [S6-T8] 카페 메뉴(서빙·체키·곁들이 토스트)
 		return MENU_ICONS[id]
+	if S10_ICONS.has(id):                      # ★ [S10-T9] 설치물·부품·휘파람·레어크로우(입수 토스트)
+		return S10_ICONS[id]
 	if Books.is_book(id):                      # ★ [S9-T9] 되찾은 책(입수 토스트) — 8권 공유 1장
 		return BOOK_ICON
 	if Books.is_note(id):                      # ★ [S9-T9] 비밀 노트(입수 토스트) — 15장 공유 1장
@@ -16258,10 +16297,17 @@ func _draw_trial_room() -> void:
 	_draw_mine_room_floor(TRIAL_RECT, Color(0.62, 0.58, 0.72, 1.0))
 	# 시련 게시판 — 만물상 게시판과 같은 실루엣(기둥 둘 + 판)이되 명부의 격식이라 먹빛이다.
 	var bp := Vector2(TRIAL_BOARD_TILE.x * TILE, TRIAL_BOARD_TILE.y * TILE)
-	draw_rect(Rect2(bp + Vector2(5, 20), Vector2(4, 12)), Color(0.22, 0.19, 0.24))    # 왼 기둥
-	draw_rect(Rect2(bp + Vector2(23, 20), Vector2(4, 12)), Color(0.22, 0.19, 0.24))   # 오른 기둥
-	draw_rect(Rect2(bp + Vector2(2, 4), Vector2(28, 18)), Color(0.30, 0.26, 0.34))    # 판
-	draw_rect(Rect2(bp + Vector2(2, 4), Vector2(28, 3)), Color(0.42, 0.37, 0.48))     # 상단 하이라이트(NW 광원)
+	# ★[S10-T9] 아트 훅 — assets/props/trial_board.png(32², 발치 앵커). 판면은 **비워** 굽는다:
+	#   걸린 시련 쪽지와 수락 중 붉은 도장은 아래 원장 파생 드로우가 그 위에 얹는다(만물상 게시판과
+	#   같은 규율 — 상태를 아트에 구우면 아무것도 안 걸린 주에도 종이가 붙어 있다).
+	var board_tex := _prop_tex("trial_board")
+	if board_tex != null:
+		draw_texture(board_tex, bp + Vector2(0, TILE - board_tex.get_size().y))
+	else:
+		draw_rect(Rect2(bp + Vector2(5, 20), Vector2(4, 12)), Color(0.22, 0.19, 0.24))    # 왼 기둥
+		draw_rect(Rect2(bp + Vector2(23, 20), Vector2(4, 12)), Color(0.22, 0.19, 0.24))   # 오른 기둥
+		draw_rect(Rect2(bp + Vector2(2, 4), Vector2(28, 18)), Color(0.30, 0.26, 0.34))    # 판
+		draw_rect(Rect2(bp + Vector2(2, 4), Vector2(28, 3)), Color(0.42, 0.37, 0.48))     # 상단 하이라이트(NW 광원)
 	if trial != null and trial.is_active():
 		# 수락 중 = 붉은 도장 한 장(만물상 게시판의 진행 표식과 같은 색 언어).
 		draw_rect(Rect2(bp + Vector2(11, 8), Vector2(10, 11)), Color(0.86, 0.84, 0.78))
@@ -16270,8 +16316,14 @@ func _draw_trial_room() -> void:
 		draw_rect(Rect2(bp + Vector2(11, 8), Vector2(10, 11)), Color(0.90, 0.88, 0.82))   # 걸린 시련 1장
 	# 시련패 매대 — 좌판 + 잔고 눈금(잔고가 없으면 테두리만 남아 "여기가 매대다"는 읽힌다).
 	var sp := Vector2(TRIAL_SHOP_TILE.x * TILE, TRIAL_SHOP_TILE.y * TILE)
-	draw_rect(Rect2(sp + Vector2(2, 10), Vector2(TILE - 4, TILE - 14)), Color(0.28, 0.25, 0.30))
-	draw_rect(Rect2(sp + Vector2(2, 10), Vector2(TILE - 4, 4)), Color(0.40, 0.36, 0.44))
+	# ★[S10-T9] 아트 훅 — assets/props/trial_stall.png(32×22, 발치 앵커 = 그레이박스 몸통 y10..32와
+	#   같은 기하). 상판은 **비워** 굽는다: 잔고 패는 아래에서 상판 위(y8)에 뜬다.
+	var stall_tex := _prop_tex("trial_stall")
+	if stall_tex != null:
+		draw_texture(stall_tex, sp + Vector2(0, TILE - stall_tex.get_size().y))
+	else:
+		draw_rect(Rect2(sp + Vector2(2, 10), Vector2(TILE - 4, TILE - 14)), Color(0.28, 0.25, 0.30))
+		draw_rect(Rect2(sp + Vector2(2, 10), Vector2(TILE - 4, 4)), Color(0.40, 0.36, 0.44))
 	var tok: int = trial.tokens if trial != null else 0
 	# 패는 5개 단위로 접어 그린다(잔고가 커도 한 칸을 안 넘게 — 안치대 등불과 같은 규율).
 	for i in mini(int(tok / 5), 10):
@@ -21395,6 +21447,7 @@ func _draw() -> void:
 			_draw_facade_home()      # 집 외관(WALL 박스 위에 덮어 닫힌 건물로)
 			_draw_facade_storehouse()  # ★ T3 창고 외관(NE)
 			_draw_facade_barn()        # ★ [B1-a.1] 넋우릿간+넋둥우리 외관(동물 2건물 — barn 6×4·coop 4×2)
+			_draw_facade_greenhouse()  # ★[S10-T9] 늘봄방 외관(완공 후에만 — T5가 세운 WALL 박스를 덮는다)
 			_draw_silo()               # ★ [B1-a.3] 여물광 외관(WALL 박스 그레이박스 + 건초 게이지)
 			_draw_well()               # ★ [B2] 혼우물 외관(WALL 박스 그레이박스 — 돌 우물, 리필 메카닉=별도 grill)
 			_draw_mailbox()            # ★[S9-T3] 집 앞 우편함(그레이박스 — 미독이면 부적 깃발이 선다)
@@ -21453,6 +21506,7 @@ func _draw() -> void:
 			else:
 				_draw_facade_smithy()  # ★[S5-T9] 대장간 외관(WALL 박스 위에 덮어 닫힌 건물로)
 				_draw_facade_guild()   # ★[S5-T9] 길드 외관(대장간과 나란히 — 톤을 정반대로 갈랐다)
+				_draw_facade_trial()   # ★[S10-T9] 시련장 외관(북단 포켓 — 문 개폐와 무관하게 늘 선다)
 				_draw_smithy_room()  # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
 				_draw_guild_room()   # ★[S5-T6] 길드 실내 — 카운터·무기 걸이·빈 게시판(그레이박스)
 				_draw_trial_room()   # ★[S10-T8] 시련장 실내 — 시련 게시판·시련패 매대(그레이박스)
@@ -21897,11 +21951,18 @@ func _draw_crops() -> void:
 func _draw_garden_pots() -> void:
 	if garden_pot == null:
 		return
+	# ★[S10-T9] 아트 훅 — assets/props/garden_pot.png(32², 발치 앵커·인벤 아이콘과 공용). 아트는
+	#   **마른 빈 화분**이다: 심은 작물은 아래에서 입구 위로 얹고, 젖은 흙 띠도 오늘 물 준 칸에만
+	#   그린다(매일 손 물주기가 화분의 정체라 그 상태를 아트에 구우면 차별 자구가 무너진다).
+	var pot_tex := _prop_tex("garden_pot")
 	for t in garden_pot.tiles():
 		var org := Vector2(t.x * TILE, t.y * TILE)
-		# 몸통 — 칸보다 한 겹 작게 그려 바닥 타일 경계가 남게(놓인 물건으로 읽히게).
-		draw_rect(Rect2(org + Vector2(5, 12), Vector2(TILE - 10, TILE - 15)), Color(0.62, 0.36, 0.24))
-		draw_rect(Rect2(org + Vector2(4, 10), Vector2(TILE - 8, 4)), Color(0.72, 0.44, 0.30))   # 테두리(입구)
+		if pot_tex != null:
+			draw_texture(pot_tex, org + Vector2(0, TILE - pot_tex.get_size().y))
+		else:
+			# 몸통 — 칸보다 한 겹 작게 그려 바닥 타일 경계가 남게(놓인 물건으로 읽히게).
+			draw_rect(Rect2(org + Vector2(5, 12), Vector2(TILE - 10, TILE - 15)), Color(0.62, 0.36, 0.24))
+			draw_rect(Rect2(org + Vector2(4, 10), Vector2(TILE - 8, 4)), Color(0.72, 0.44, 0.30))   # 테두리(입구)
 		if garden_pot.is_watered(t):
 			draw_rect(Rect2(org + Vector2(6, 13), Vector2(TILE - 12, 3)), Color(0.35, 0.45, 0.70))  # 젖은 흙
 		var pcrop := garden_pot.crop_of(t)
@@ -22285,12 +22346,19 @@ func _draw_furnaces() -> void:
 func _draw_crystalariums() -> void:
 	if crystalarium == null or _indoor != "" or _mine_floor != 0:
 		return
+	# ★[S10-T9] 아트 훅 — assets/props/crystalarium.png(32², 발치 앵커)이 있으면 유리 상자를 그것으로
+	#   갈아끼운다. **안에 든 것은 아트가 아니다**: 보석·여문 정도·남은 일수 눈금은 아래 원장 파생
+	#   드로우가 그대로 위에 얹는다(빈 기계에 결정을 구우면 안 넣은 기계도 찬 것으로 보인다).
+	var case_tex := _prop_tex("crystalarium")
 	for t: Vector2i in crystalarium.tiles(_region):
 		var base := Vector2(t.x * TILE, t.y * TILE)
-		# 유리 상자 몸통 + NW 광원 상판(업화로 실루엣과 갈리게 밝은 남빛으로).
-		draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, TILE - 8)), Color(0.24, 0.27, 0.38))
-		draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, 4)), Color(0.40, 0.44, 0.58))
-		draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, TILE - 8)), Color(0.68, 0.74, 0.92, 0.55), false, 1.0)
+		if case_tex != null:
+			draw_texture(case_tex, base + Vector2(0, TILE - case_tex.get_size().y))
+		else:
+			# 유리 상자 몸통 + NW 광원 상판(업화로 실루엣과 갈리게 밝은 남빛으로).
+			draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, TILE - 8)), Color(0.24, 0.27, 0.38))
+			draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, 4)), Color(0.40, 0.44, 0.58))
+			draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, TILE - 8)), Color(0.68, 0.74, 0.92, 0.55), false, 1.0)
 		var gem := crystalarium.gem_at(_region, t)
 		if gem == "":
 			continue                                   # 빈 기계 = 유리 상자만(안이 비어 보인다)
@@ -22315,8 +22383,17 @@ func _draw_crystalariums() -> void:
 func _draw_panning_spots() -> void:
 	if panning == null or _indoor != "" or _mine_floor != 0:
 		return
+	# ★[S10-T9] 아트 훅 — assets/props/panning_spot.png(32², **중앙 앵커**). 발치 앵커가 아닌 이유는
+	#   이것이 부피 있는 물건이 아니라 바닥에 깔린 표식이기 때문이다(높이 0 → [§11] 접지 그림자도
+	#   없다). 아트가 들어와도 금빛 알갱이 한 점은 코드가 남긴다 — 실배율에서 "여기가 반짝인다"를
+	#   파는 것이 그 한 점이고, 아트에 구우면 절기 톤이 바뀔 때 같이 눌린다.
+	var pan_tex := _prop_tex("panning_spot")
 	for t: Vector2i in panning.tiles(_region):
 		var c := Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
+		if pan_tex != null:
+			draw_texture(pan_tex, Vector2(t.x * TILE, t.y * TILE))
+			draw_circle(c, TILE * 0.06, Color(1.0, 0.97, 0.80))
+			continue
 		draw_circle(c, TILE * 0.30, Color(0.38, 0.44, 0.46, 0.55))          # 젖은 자갈 웅덩이
 		draw_circle(c, TILE * 0.30, Color(0.72, 0.78, 0.80, 0.65), false, 1.0)
 		# 반짝임 십자(사금 알갱이) — 금빛 네 획.
@@ -22334,9 +22411,16 @@ func _draw_panning_spots() -> void:
 func _draw_firefly_souls() -> void:
 	if fireflies == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
 		return
+	# ★[S10-T9] 아트 훅 — assets/props/firefly_soul.png(32², 중앙 앵커)는 **넋의 몸(나방)만** 든다.
+	#   둘레 할로는 아트가 아니라 코드다: [§8.1] 하드 알파 스프라이트에는 번짐을 구울 수 없고,
+	#   발광은 런타임 몫이라는 것이 [§8.3]의 결이다. 그래서 할로 원을 먼저 깔고 그 위에 몸을 얹는다.
+	var ff_tex := _prop_tex("firefly_soul")
 	for t: Vector2i in fireflies.live_tiles(_region):
 		var c := Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.4)
 		draw_circle(c, TILE * 0.34, Color(0.44, 0.86, 0.78, 0.20))          # 넋빛 무리(할로)
+		if ff_tex != null:
+			draw_texture(ff_tex, c - ff_tex.get_size() * 0.5)
+			continue
 		draw_circle(c, TILE * 0.18, Color(0.56, 0.94, 0.86, 0.45))
 		draw_circle(c, TILE * 0.07, Color(0.90, 1.0, 0.95))                 # 알갱이(핵)
 
@@ -22358,6 +22442,14 @@ func _draw_sprinklers() -> void:
 		#   구별이고, 범위 하이라이트가 이미 크기로 말하므로 색은 거드는 신호다.
 		var body: Color = [Color(0.30, 0.50, 0.58), Color(0.28, 0.36, 0.62), Color(0.62, 0.52, 0.24)][clampi(tier - 1, 0, 2)]
 		var base := Vector2(t.x * TILE, t.y * TILE)
+		# ★[S10-T9] 아트 훅 — assets/props/sprinkler_t{1,2,3}.png(32², 발치 앵커). 세 장은 **한 실루엣의
+		#   종색 틴트 파생**이고 그 세 색은 바로 위 `body`와 같은 값이다(tools/make_s10_t9_art.py
+		#   SPRINKLER_HUES) — 그레이박스와 아트가 같은 신호를 쓰므로 티어 판독이 갈리지 않는다.
+		#   이 세 장은 인벤 아이콘과도 공용이다(S10_ICONS · [asset-ruleset §15]).
+		var sp_tex := _prop_tex("sprinkler_t%d" % clampi(tier, 1, 3))
+		if sp_tex != null:
+			draw_texture(sp_tex, base + Vector2(0, TILE - sp_tex.get_size().y))
+			continue
 		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), body)
 		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), Color(0.16, 0.28, 0.34), false, 1.0)
 		draw_circle(base + Vector2(TILE * 0.5, TILE * 0.34), TILE * 0.16, Color(0.62, 0.84, 0.94))
@@ -22374,6 +22466,14 @@ func _draw_rarecrows() -> void:
 		# 종 인덱스 → 색상환 8분할(고정 채도·명도). 값이 아니라 *구별*이 목적이라 결정적 파생이면 족하다.
 		var head := Color.from_hsv(float(idx) / float(ItemCatalog.RARECROWS.size()), 0.55, 0.88)
 		var base := Vector2(t.x * TILE, t.y * TILE)
+		# ★[S10-T9] 아트 훅 — assets/props/<종 id>.png(32×64, 발치 앵커). 여덟 장 전부 **기존 프롭
+		#   허수아비(farm_scarecrow.png)를 init 이미지로 삼은 img2img 파생**이라 실루엣이 한 계열이고
+		#   소품 한 조각만 갈린다(결정 4 "기능·반경 동일한 순수 스킨"의 아트판 — 실루엣이 갈리면
+		#   플레이어가 성능 차이로 오독한다). 파일명이 곧 아이템 id라 종이 늘어도 여기는 안 고친다.
+		var crow_tex := _prop_tex(id)
+		if crow_tex != null:
+			draw_texture(crow_tex, base + Vector2(0, TILE - crow_tex.get_size().y))
+			continue
 		# 말뚝(밑동 칸 세로 기둥) + 가로 팔(위 칸) — 허수아비 실루엣.
 		draw_rect(Rect2(base + Vector2(TILE * 0.44, -TILE * 0.4), Vector2(TILE * 0.12, TILE * 1.3)), Color(0.42, 0.32, 0.22))
 		draw_rect(Rect2(base + Vector2(TILE * 0.14, -TILE * 0.28), Vector2(TILE * 0.72, TILE * 0.10)), Color(0.52, 0.42, 0.28))
@@ -22943,13 +23043,23 @@ func _draw_mailbox() -> void:
 # 시트가 도착하면 이 함수가 통째로 물러난다(`_prop_tex` 훅 = 우편함·거울과 같은 드롭인 규약).
 # ★ 플레이어 **아래**에 그린다(이 호출이 캐릭터 노드보다 먼저 돈다) — 탄 사람이 말 위에 앉은
 #   것으로 읽히는 최소 조건이다.
+const MOUNT_SHEET_FRAME := 48   # ★[S10-T9] 먹갈기 시트 프레임(1열 × 4행 — CharSprite.DIRS와 같은 행 순서)
+
 func _draw_mount() -> void:
 	if mount == null or not mount.is_mounted() or player == null:
 		return
 	var p := player.global_position
 	var tex := _prop_tex("mount_horse")
 	if tex != null:
-		draw_texture(tex, Vector2(p.x - tex.get_size().x * 0.5, p.y - tex.get_size().y))
+		# ★[S10-T9 / ADR-0069 결정 6] **승마 합성 시트가 도착했다** — 결정 6이 T9로 넘긴 그 시트다.
+		#   행 = 바라보는 방향(down/up/right/left)이라 `CharSprite.dir_anim`의 판정을 그대로 빌린다
+		#   (방향 규칙이 캐릭터와 말에서 갈리면 몸통과 탈것이 서로 다른 데를 본다 — 같은 한 자리에서).
+		#   가로 중앙·프레임 하단을 플레이어 발치에 맞춰 말굽과 사람 발치가 같은 선에 선다.
+		var row := CharSprite.DIRS.find(CharSprite.dir_anim(player.get_facing()).trim_prefix("walk_"))
+		var src := Rect2(0, maxi(row, 0) * MOUNT_SHEET_FRAME, MOUNT_SHEET_FRAME, MOUNT_SHEET_FRAME)
+		draw_texture_rect_region(tex,
+			Rect2(p.x - MOUNT_SHEET_FRAME * 0.5, p.y - MOUNT_SHEET_FRAME,
+				MOUNT_SHEET_FRAME, MOUNT_SHEET_FRAME), src)
 		return
 	var w := TILE * 1.1                      # 사람보다 옆으로 넓다(말이라는 것의 최소 신호)
 	var h := TILE * 0.62
@@ -22982,14 +23092,18 @@ func _draw_sapsari() -> void:
 	# 물그릇 — 채운 날이면 물이 찬 것으로 보인다(오늘 몫을 눈으로 확인하는 유일한 표면).
 	var bx := float(PET_BOWL_TILE.x * TILE)
 	var by := float(PET_BOWL_TILE.y * TILE)
+	# ★[S10-T9] 아트 훅 — assets/props/pet_bowl.png(32², 발치 앵커)는 **마른 빈 그릇**이다.
+	#   ⚠️ 이전 판은 텍스처가 있으면 바로 return해서 "오늘 물을 채웠나" 표식이 아트와 함께 사라졌다
+	#   (아트를 넣는 것이 상태 판독을 지우는 회귀). 물 띠는 두 분기 **뒤**에서 한 번만 그린다 —
+	#   상태를 아트에 굽지 않는다는 규율은 "코드가 계속 그린다"까지가 한 짝이다.
 	var bowl := _prop_tex("pet_bowl")
 	if bowl != null:
 		draw_texture(bowl, Vector2(bx, by + TILE - bowl.get_size().y))
-		return
-	draw_rect(Rect2(bx + TILE * 0.24, by + TILE * 0.6, TILE * 0.52, TILE * 0.22).grow(1.0),
-		Color(0.12, 0.10, 0.09))                                              # 그릇 외곽선
-	draw_rect(Rect2(bx + TILE * 0.24, by + TILE * 0.6, TILE * 0.52, TILE * 0.22),
-		Color(0.36, 0.30, 0.28))                                              # 그릇 몸통
+	else:
+		draw_rect(Rect2(bx + TILE * 0.24, by + TILE * 0.6, TILE * 0.52, TILE * 0.22).grow(1.0),
+			Color(0.12, 0.10, 0.09))                                          # 그릇 외곽선
+		draw_rect(Rect2(bx + TILE * 0.24, by + TILE * 0.6, TILE * 0.52, TILE * 0.22),
+			Color(0.36, 0.30, 0.28))                                          # 그릇 몸통
 	if clock != null and not pet.can_fill_bowl(clock.day):
 		draw_rect(Rect2(bx + TILE * 0.28, by + TILE * 0.62, TILE * 0.44, TILE * 0.1),
 			Color(0.42, 0.62, 0.74, 0.85))                                    # 채워진 물
@@ -23089,6 +23203,22 @@ func _draw_facade_smithy() -> void:
 
 func _draw_facade_guild() -> void:
 	_blit_facade_anchored(FACADE_GUILD, GUILD_EXT_RECT)
+
+# ★[S10-T9] 명부 시련장 외관 — 대장간·길드와 **같은 줄에 선 셋째 갱도 건물**이라 같은 호출을 쓴다.
+#   ⚠️ art 폭은 footprint 폭(6칸=192)을 **꽉 채워야 한다**(현행 188): 좁으면 그 차이만큼
+#   `_build_facade`가 세운 WALL 박스가 좌우로 노출돼 건물이 청회색 판때기 위에 얹혀 보인다
+#   (T9 1차 덤프에서 폭 156판이 그렇게 적발됐다). 대장간·길드가 정확히 192인 것이 그 기준이다.
+func _draw_facade_trial() -> void:
+	_blit_facade_anchored(FACADE_TRIAL, TRIAL_EXT_RECT)
+
+# ★[S10-T9] 늘봄방 외관 — **지었을 때만 그린다.** T5가 "완공 게이트 안에서만 선다"로 세운 규율
+#   그대로다(짓기 전 세계는 이 함수가 통째로 no-op이라 종전과 픽셀 동일).
+#   ⚠️ `_HOME_BUILDING_RECTS`에 넣지 않았다 — 그 배열은 조건 없는 const라 등록하는 순간 **짓기 전에도**
+#   x64..71에 잔디억제 맨흙 패드가 깔린다(빈 들에 건물 자국). 발치 패드를 잃는 대신 그 회귀를 산다.
+func _draw_facade_greenhouse() -> void:
+	if not _greenhouse_built():
+		return
+	_blit_facade_anchored(FACADE_GREENHOUSE, GREENHOUSE_EXT_RECT)
 
 # ★ [S2-T10] 주민 집 11채 외관. 아직 누가 사는 집인지 안 정했으므로([ADR-0060] 결정 2 "배정은 본체
 # 제작 시") 캐릭터색 없는 **공용 변주**를 돌려 쓴다 — 4칸 폭은 변주 3종을 index로 순환시키고,
