@@ -1500,6 +1500,16 @@ const NARU_PLAZA_WALL_Y := [30, 42]
 # 다리 데크 — 강둑(BACK_RIVER_BANK_Y)부터 강 남단까지 다리 폭(BRIDGE_X) 2칸. 이 칸들은 _carve가
 #   PATH로 깐 **물 위 구조물**이라 흙길이 아니라 목판으로 그린다(부두 BACK_RIVER_DOCK_RECT도 같은 데크).
 const NARU_BRIDGE_DECK_RECT := Rect2i(52, 65, 2, 7)   # x52..53, y65..71
+# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 **봇짐 좌판** 칸 — 다리 남단 부두(BACK_RIVER_DOCK_RECT
+#   x50..55·y69..71, 이미 PATH)의 다리 데크 동쪽 옆. 좌표 제약을 전부 비껴간다:
+#     · 삼도천 워프 발동 칸 (52,71)·(53,71) 밖 — 지나가다 실수로 구역이 바뀌지 않는다
+#     · 삼도천에서 돌아오는 착지 칸 (52,70) 밖 — 도착하자마자 좌판에 겹쳐 서지 않는다
+#     · 다리 데크 열(BRIDGE_X 52·53) 밖 — 폭 2칸 도하 동선을 한 칸도 안 막는다
+#     · layout.json 프롭 0(부두 일대엔 배치 프롭이 없다)
+#   ★ 무대 선택 자체가 야시장과의 분리를 말한다: 야시장은 *광장 한복판*(마을의 중심)에 서고
+#     보부상은 *마을 밖으로 나가는 길목*에 선다 — 떠도는 장수는 마을에 안 들어온다.
+#   더비 부스·야시장 매대와 같은 규율: 타일·충돌 무수정, 출현일에만 표식 + `_target` 일치 [F].
+const PEDDLER_TILE := Vector2i(54, 70)
 # 서편(도착·서워프 옆): 카페(도착 위, CAFE_EXT_RECT 위쪽 정의) + 메인 집 3(미호·멜·바나). 코지 여백으로 흩어 둔다.
 const MEL_HOUSE_RECT := Rect2i(20, 14, 5, 5)   # 멜 집 — 서편 상단 우
 const MEL_HOUSE_DOOR := Vector2i(22, 18)
@@ -2260,6 +2270,15 @@ var reclaim: Reclaim = null
 #   .new()). 상점 구매→지면 설치→아침 자동 급수(십자 4칸)→세이브. FarmField/Reclaim와 디커플링(자동
 #   급수 시 main이 sprinkler.watered_targets를 farm.sprinkle로 흘려넣는다 — Sprinkler는 밭·화면을 모름).
 var sprinkler: Sprinkler = null
+# ★ [S10-T2 / ADR-0069 결정 4] 레어크로우 배치 원장(밑동 좌표 → 종 id). Sprinkler 결의 얇은 원장
+#   노드(코드 생성 — .new()). 획득(여섯 창구)→밭 배치→까마귀 보호 반경 합류→8종 완성 시 디럭스 반경.
+#   RarecrowLedger는 지형·인벤·까마귀를 모른다(배치 판정·보호 반경 주입은 전부 main).
+var rarecrow: RarecrowLedger = null
+# ★ [S10-T2 / ADR-0069 결정 4] 획득처 ④(전령 우편 첨부)의 발송 조건. **수집이 스스로 창구를 연다** —
+#   두 종을 모은 다음 날 아침 전령이 셋째를 얹어 보낸다(문턱 잠정 — owner 큐). 편지 id의 진실원은
+#   Mailbox.LETTERS이고 여기선 그 키를 참조만 한다(mail_attach_test가 두 쪽을 대조).
+const RARECROW_HERALD_LETTER := "herald_rarecrow"
+const RARECROW_HERALD_THRESHOLD := 2
 # ★ [S3-T7 / ADR-0061 결정 7] 게잡이통 상태(구역별 설치 좌표·미끼·수거 대기 어획물). Sprinkler 결의
 #   얇은 원장 노드(코드 생성 — .new()). 생선가게 lvl3 구매→물가 인접 칸 설치→미끼 장전→밤 일일 롤→
 #   아침 수거→세이브. CrabPotLedger는 지형·인벤·혼력·전문직을 모른다(판정·주입은 전부 main).
@@ -2315,6 +2334,12 @@ var furnace: FurnaceLedger = null
 #   델타를 원장에 흘린다. 절대 분을 쓰는 이유는 하나다: 취침(22:00 → 다음날 06:00)이 그냥 큰 델타
 #   하나(480분)로 접혀 "밤에도 제련이 돈다"(스타듀 정합)가 특별 분기 없이 성립한다. −1 = 미초기화.
 var _furnace_abs_min := -1.0
+# ★[S10-T1 / ADR-0069 결정 2] 팬닝 사금 스폿 원장(오늘 삼도천·황천해 물가 어디가 반짝이나).
+#   ForageSpawns와 같은 RefCounted 순수 원장이고, "여기가 물가인가"는 main의 `_is_waterside`가 본다.
+var panning: PanningSpots = null
+# ★[S10-T1 / ADR-0069 결정 2] 결정기 원장(설치 칸 → 안에 든 보석·다음 복제까지 남은 일수).
+#   업화로와 같은 결이되 **진행 축이 분이 아니라 일**이라 취침 훅이 굴린다(채취기와 같은 자리).
+var crystalarium: CrystalariumLedger = null
 # ★[S5-T3 / ADR-0063 결정 2·3] 누적 지오드 개봉 횟수 — 개봉 롤의 **결정적 시드**다(같은 카운터면
 #   같은 답이라 헤드리스가 재현하고, 카운터가 늘어야 새 롤이라 재롤 exploit이 구조적으로 막힌다).
 var _geode_opened := 0
@@ -2475,6 +2500,13 @@ var larder: Larder
 # ("seasonal_event")으로 main이 조율한다. **달력·표·롤은 전부 static**이라 이 노드가 없어도 "오늘
 # 무슨 행사인가"는 답이 나온다(Festival·Weather와 같은 무상태 파생 — 상태는 결과만 든다).
 var seasonal_event: SeasonalEvent
+
+# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 원장(1회성 물품 구매 이력). seasonal_event와 완전히
+# 같은 결의 상태 노드다 — 코드 생성으로 붙이고(_setup_peddler) 세이브 조각은 "peddler"이며,
+# **달력·풀·재고 롤은 전부 static**이라 이 노드가 없어도 "이번 주에 뭘 가져오나"는 답이 나온다.
+# ⚠️ SeasonalEvent와 **서로를 참조하지 않는다** — 야시장(1년 1회 한정판)과 보부상(주 1회 랜덤)의
+#   리듬 분리가 코드 의존 층에서도 지켜지는 자리다(peddler.gd 헤더 표 참조).
+var peddler: Peddler
 
 # ★[S9-T3 / ADR-0067 결정 7] 편지 원장·발송 큐(저승식 전령). larder·seasonal_event와 같은 결의
 # 상태 노드 — 코드 생성으로 붙이고(_setup_mailbox) 세이브는 별도 조각("mailbox")으로 main이
@@ -2916,6 +2948,10 @@ func _ready() -> void:
 	sprinkler.name = "Sprinkler"
 	add_child(sprinkler)
 	sprinkler.changed.connect(_on_sprinkler_changed)   # 설치·철거·복원 시 드로우 갱신
+	rarecrow = RarecrowLedger.new()      # ★ [S10-T2] 레어크로우 배치 원장(코드 생성 — 밑동 좌표→종 델타)
+	rarecrow.name = "Rarecrow"
+	add_child(rarecrow)
+	rarecrow.changed.connect(_on_sprinkler_changed)    # 순수 시각 데칼 — 스프링클러와 같은 갱신(드로우만)
 	crab_pot = CrabPotLedger.new()       # ★ [S3-T7] 게잡이통 원장 노드(코드 생성 — 구역별 설치·미끼·어획 델타)
 	crab_pot.name = "CrabPot"
 	add_child(crab_pot)
@@ -2946,6 +2982,10 @@ func _ready() -> void:
 	tapper.changed.connect(queue_redraw) # 설치·수거·회수·일일 진행·복원 시 그레이박스 갱신(게잡이통 결)
 	furnace = FurnaceLedger.new()        # ★[S5-T3] 업화로 원장(RefCounted — 채취기와 같은 결·축만 분)
 	furnace.changed.connect(queue_redraw)     # 설치·투입·완성·수거·회수·복원 시 그레이박스 갱신
+	panning = PanningSpots.new()         # ★[S10-T1] 사금 스폿 원장(RefCounted — 채집물 스폰 원장과 같은 결)
+	panning.changed.connect(queue_redraw)     # 일일 재배치·채취·복원 시 반짝임 그레이박스 갱신
+	crystalarium = CrystalariumLedger.new()   # ★[S10-T1] 결정기 원장(RefCounted — 업화로와 같은 결·축만 일)
+	crystalarium.changed.connect(queue_redraw)  # 설치·투입·완성·수거·회수·복원 시 그레이박스 갱신
 	tool_tier = ToolTier.new()           # ★[S4-T4] 도구 티어 원장(RefCounted — 나무 원장과 같은 결)
 	tool_tier.changed.connect(_on_tool_tier_changed)   # 티어↑ → 프롬프트 타수·물뿌리개 용량 배지 갱신
 	carpenter = Carpenter.new()          # ★[S4-T7] 목공방 건축 의뢰 원장(RefCounted — 도구 티어와 같은 결)
@@ -2981,6 +3021,7 @@ func _ready() -> void:
 	_setup_chest()          # ★ Phase D 저장 상자(프레임이 참조 → 프레임보다 먼저)
 	_setup_larder()         # ★ S6-T1 카페 곳간(프레임이 참조 → 프레임보다 먼저)
 	_setup_seasonal_event() # ★ S7-T7 절기 행사 원장(더비·장원제·야시장 — 프레임/세이브 복원보다 먼저)
+	_setup_peddler()        # ★ S10-T3 저승 보부상 원장(1회성 구매 이력 — 프레임/세이브 복원보다 먼저)
 	_setup_mailbox()        # ★ S9-T3 편지 원장·발송 큐(세이브 복원보다 먼저 — 조각 "mailbox")
 	_setup_books()          # ★ S9-T7 Books 수집 원장(세이브 복원보다 먼저 — 조각 "books")
 	_setup_hud_overlays()   # ★ C3 좌하단 알림 피드 + 우하단 혼력 바(프레임보다 먼저 → 모달이 위에)
@@ -9033,6 +9074,15 @@ func _setup_seasonal_event() -> void:
 	seasonal_event.name = "SeasonalEvent"
 	add_child(seasonal_event)
 
+# ── ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 원장 ─────────────────────────────
+# seasonal_event와 같은 결의 상태 노드(코드 생성 — 새 tscn 노드 0). 세이브 조각은 "peddler".
+# 1회성 물품을 사면 좌판 행이 잠기고 봇짐 표식도 바뀌므로 changed에 redraw를 문다(우편함 결).
+func _setup_peddler() -> void:
+	peddler = Peddler.new()
+	peddler.name = "Peddler"
+	add_child(peddler)
+	peddler.changed.connect(queue_redraw)
+
 # ── ★[S9-T3 / ADR-0067 결정 7] 편지 원장(저승식 전령) ─────────────────────────
 # larder·seasonal_event와 같은 결의 상태 노드(코드 생성 — 새 tscn 노드 0). 세이브 조각은 "mailbox".
 # 미독 편지가 있으면 우편함 표식이 바뀌므로 changed에 redraw만 물린다(곳간이 패널을 갱신하는 자리).
@@ -9353,7 +9403,9 @@ func _on_day_advanced(day: int) -> void:
 	# ★ [ADR-0051] 밤 까마귀(미련까마귀) 습격 — 성장(advance_day) *전에* 무방비 작물을 영구 소실시킨다
 	#   (밤새 쪼임 → 살아남은 작물만 아침에 자람). 허수아비 반경이 덮은 칸은 안전. 3중 안전장치
 	#   (작물 문턱·한 밤 상한·반경 보호)는 CrowRaid가 판정하고, day 시드로 결정적이다(헤드리스 재현).
-	var eaten := CrowRaid.resolve(_crow_target_tiles(), _scarecrow_tiles(), CrowRaid.BASE_RADIUS, day)
+	# ★[S10-T2 / ADR-0069 결정 4] 반경이 상수에서 **파생**으로 바뀌었다 — 레어크로우 8종을 다 모으면
+	#   `_scarecrow_radius()`가 DELUXE_RADIUS(16)를 돌려준다(crows.gd:18 예약의 이행).
+	var eaten := CrowRaid.resolve(_crow_target_tiles(), _scarecrow_tiles(), _scarecrow_radius(), day)
 	for et in eaten:
 		farm.remove_plant(et)                 # 작물만 제거·흙/비료 보존(tile_changed로 오버레이 갱신)
 	if eaten.size() > 0:
@@ -9434,6 +9486,18 @@ func _on_day_advanced(day: int) -> void:
 		var forage_new := forage_spawns.advance_day(day, GameClock.season_index_for_day(day))
 		if bool(forage_new["season_reset"]) and int(forage_new["cleared"]) > 0:
 			_notice("절기가 바뀌어 숲의 채집물이 모두 졌다 — 새 절기의 것이 돋는다")
+	# ★[S10-T1 / ADR-0069 결정 2] 팬닝 사금 스폿 일일 재배치 — 삼도천·황천해 물가에 그날의 자리가
+	#   0~2씩 깔린다(어제 것은 전량 지운다 — 쌓이지 않는 것이 스폿의 정체성이다). 알림은 없다:
+	#   구역이 낚시터라 어차피 가야 보이고, 매일 아침 "강가가 반짝인다" 토스트가 뜨면 소음이 된다.
+	if panning != null:
+		panning.advance_day(day)
+	# ★[S10-T1 / ADR-0069 결정 2] 결정기 하루 — 복제 중인 기계의 남은 일수를 하루 깎고, 다 된 것을
+	#   수거 대기로 넘긴다(업화로의 분 진행과 같은 일이 일 단위로). 안 비운 기계는 카운트다운이 멈춘다.
+	if crystalarium != null:
+		var crystal_done: Array = crystalarium.advance_day()
+		if not crystal_done.is_empty():
+			_notice("결정기에서 %s이(가) 여물었다 — 들러서 꺼내자"
+				% ItemCatalog.name_of(String(crystal_done[0]["id"])))
 	# ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 밤 결실 — 절기 창(피안 15~18 / 망연 8~11) 안에서만 덤불당
 	#   20% 결정 롤로 열매가 달린다. 창을 벗어나면 롤이 없고 남은 열매도 진다(채집물 절기 전환과 같은 결).
 	#   절기 판정은 clock의 기존 파생을 그대로 쓴다 — 신규 시스템 0(ADR-0062 결정 9 마지막 줄).
@@ -9539,14 +9603,26 @@ func _on_day_advanced(day: int) -> void:
 	#   (날짜가 갈려 있어 한 아침에 둘이 겹치지 않는다: 행사 12/20/16/15 vs 테마 데이 25).
 	for line in _seasonal_morning_notices():
 		_notice(line, NOTICE_SECS * 2.0)
+	# ★[S10-T3 / ADR-0069 결정 5] 보부상이 왔다 — 절기 행사 배너와 **같은 문법·또 다른 층**이다.
+	#   행사 배너와 한 아침에 겹칠 수는 있지만(7의 배수 vs 12/20/16/15는 서로 소수가 아니다) 무대가
+	#   갈려 있어(광장 vs 다리 남단) 둘 다 뜨는 게 오히려 맞다 — "오늘 갈 데가 둘"이다.
+	var ped_line := _peddler_morning_notice()
+	if ped_line != "":
+		_notice(ped_line, NOTICE_SECS * 2.0)
 	# ★[S9-T3 / ADR-0067 결정 7] 전령이 다녀갔다 — 어제 큐에 든 편지가 오늘 아침 우편함에 꽂힌다.
 	#   위 배너들 **뒤**에 두는 이유: 편지는 "오늘 하루의 예고"가 아니라 "가서 열어 볼 것"이라,
 	#   날씨·행사 안내를 밀어내지 않고 그 아래에 붙는 것이 읽는 순서에 맞다. 지면을 안 건드리므로
 	#   아래 `_refresh_season_terrain`(그리드 재빌드)의 맨 끝 규율과도 충돌하지 않는다.
 	if mailbox != null:
+		# ★[S10-T2 / ADR-0069 결정 4] 획득처 ④ — 레어크로우를 두 종 모으면 전령이 하나를 얹어 보낸다.
+		#   **advance_day 앞**에 두면 오늘 아침 큐에 넣은 편지가 오늘 곧장 도착해 "다음 날 아침" 규약이
+		#   깨지므로, 반드시 도착 처리 *뒤*에 큐잉한다(내일 아침에 온다). `send`는 멱등이라 매일 불러도
+		#   한 번만 나간다 — 조건이 계속 참이어도 두 번째 호출부터는 조용히 false다.
 		var arrived := mailbox.advance_day()
 		if arrived.size() > 0:
 			_notice("전령이 다녀갔다 — 우편함에 편지 %d통" % arrived.size(), NOTICE_SECS * 2.0)
+		if _rarecrow_collected() >= RARECROW_HERALD_THRESHOLD:
+			mailbox.send(RARECROW_HERALD_LETTER)
 	# ★[S7-T9 / ADR-0065 결정 11] 절기 팔레트 스왑 — 땅의 낯빛이 절기를 따라 바뀐다.
 	#   **하루 정산의 맨 끝**에 둔다: 이 호출 안의 `_rebuild_region`이 그리드를 다시 세우므로,
 	#   지상 그리드를 전제하는 위 정산들(재점령 후보·잡초 확산·나무 파종)이 전부 끝난 뒤라야
@@ -9556,12 +9632,18 @@ func _on_day_advanced(day: int) -> void:
 # ★ [ADR-0051] 배치된 허수아비의 보호 중심 칸 목록 — 밤 까마귀 판정(CrowRaid) 입력.
 #   안식 농원 장식으로 세운 허수아비(_prop_layouts["HOME"]의 PROP_SCARECROW)가 곧 방어 인프라다
 #   (보이는 아트 = 실제 보호). 스프라이트는 1×2칸(위→아래)이라, 말뚝 밑동(앵커+아래 1칸)을 반경 중심으로 쓴다.
+# ★[S10-T2 / ADR-0069 결정 4] **플레이어가 세운 레어크로우가 여기 합류한다.** 프롭 허수아비는
+#   layout.json 시드(앵커 위, 밑동 = 앵커+(0,1))이고 레어크로우는 런타임 원장(겨눈 칸이 곧 밑동)이라
+#   좌표를 뽑는 방식만 다르고, 그 뒤로는 완전히 같은 목록에 섞여 같은 반경으로 판정된다 —
+#   [ADR-0051] 결정 5 "기능·반경 동일한 순수 스킨"의 코드 층 실물이다.
 func _scarecrow_tiles() -> Array:
 	var out: Array = []
 	for entry in _prop_layouts.get("HOME", []):
 		if entry[0] == PROP_SCARECROW:
 			for t in entry[1]:
 				out.append(t + Vector2i(0, 1))
+	if rarecrow != null:
+		out.append_array(rarecrow.tiles())
 	return out
 
 # ── M2.4 카페 이벤트 데이 ────────────────────────────────────────────────────
@@ -9719,6 +9801,10 @@ func _try_derby_exchange() -> void:
 	seasonal_event.exchange_tag(clock.day)   # 지급이 끝난 뒤에야 태그를 뗀다
 	audio.sfx("ui")
 	_notice("금빛 태그 교환 — %s (남은 태그 %d)" % [label, seasonal_event.tags_on(clock.day)])
+	# ★[S10-T2 / ADR-0069 결정 4] 획득처 ⑥ — 그날 교환이 문턱에 닿으면 특별 부상 1회 한정.
+	#   사다리 보상을 **먼저 지급하고 나서** 얹는다(부상이 사다리를 대체하지 않는다 — 덤이다).
+	if seasonal_event.derby_exchanges >= SeasonalEvent.DERBY_RARECROW_EXCHANGES:
+		_award_event_rarecrow(SeasonalEvent.DERBY_RARECROW, "낚시 더비")
 
 # 다음 교환에서 나올 보상의 한 줄 표기(프롬프트용 — 누르기 전에 무엇이 나오는지 보인다).
 func _derby_next_label() -> String:
@@ -9779,6 +9865,8 @@ func _try_grange_entry() -> void:
 			_toast_item(FertilizerCatalog.FERT_QUALITY, SeasonalEvent.GRANGE_CHAMPION_FERT)
 		else:
 			_notice("가방이 가득 차 장원 부상(품질 비료)을 받지 못했다")
+		# ★[S10-T2 / ADR-0069 결정 4] 획득처 ⑦ — 첫 장원에 특별 부상 1회 한정(이후 장원은 기존 보상만).
+		_award_event_rarecrow(SeasonalEvent.GRANGE_RARECROW, "곳간 장원제")
 	audio.sfx("gold" if gold > 0 else "ui")
 	_notice("장원제 출품 %d종 · %d점 — %s%s" % [entries.size(), score,
 		SeasonalEvent.grange_rank_name(rank),
@@ -9903,6 +9991,213 @@ func _try_buy_market_seed(crop_id: String, n: int) -> void:
 	_toast_item(ItemCatalog.seed_id(crop_id), bought)
 	audio.sfx("ui")
 	_notice("야시장 — %s 씨앗 ×%d −%d냥" % [CropCatalog.name_of(crop_id), bought, unit * bought])
+
+# ── ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 ─────────────────────────────────
+# 야시장 블록(위 ④)과 **한 줄씩 대응하는 형제 코드**다: facing 판정 → 헤더 → 품목 행 → 구매
+# 라우팅 → 좌판 표식. 같은 셸을 쓰되 **행동이 갈리는 세 자리**만 다르다.
+#   ㉠ 열리는 날: 절기 달력(1년 1회)이 아니라 7의 배수 날(주 1회) — `Peddler.is_open_day`
+#   ㉡ 가격: 행사 정액 2할 *할인*이 아니라 웃돈 ±변동 — `Peddler.priced`
+#   ㉢ 재고: 고정 로스터가 아니라 day-해시 롤 — `Peddler.rows_for`
+# ★ 이 세 자리가 갈려 있는 한 두 무대는 중복이 아니다(peddler.gd 헤더 표가 그 근거다).
+
+# 오늘 아침 보부상 한 줄("" = 안 오는 날). 문자열 조립을 함수로 뽑아 둔 이유는 절기 행사와 같다 —
+# 헤드리스가 알림 큐를 뒤지지 않고 예고를 단언한다(`_seasonal_morning_notices` 규율 계승).
+func _peddler_morning_notice() -> String:
+	if clock == null or not Peddler.is_open_day(clock.day):
+		return ""
+	return "오늘은 저승 보부상이 다리 남단에 봇짐을 폈다 — 재고는 오늘 하루뿐이다"
+
+# 봇짐 좌판을 마주 보고 있나(출현일 · 나루 마을 야외 · 그 칸). 야시장·더비 부스와 같은 판정 문법.
+func _facing_peddler() -> bool:
+	return not _sleeping and _region == RegionCatalog.NARU_VILLAGE and _indoor == "" \
+		and _target == PEDDLER_TILE and clock != null and Peddler.is_open_day(clock.day)
+
+func _refresh_peddler() -> void:
+	frame.store_text = _peddler_text()
+	frame.store_items = _peddler_items()
+
+# 매대 헤더 2줄. 야시장이 그 자리에 *할인율*을 박은 것과 대칭으로, 여기엔 **다음에 언제 오나**를
+# 박는다 — 보부상의 정체성은 "오늘만 싸다"가 아니라 "오늘 놓치면 이 재고는 다시 안 온다"라서,
+# 리듬을 말해 주는 것이 그 물건의 값을 설명한다.
+func _peddler_text() -> String:
+	return "\n".join([
+		"── 저승 보부상 ──",
+		"골드 %d · 봇짐은 %d일마다 이 길목에 선다(재고는 매번 다르다)" % [wallet.gold, Peddler.APPEAR_MODULUS],
+	])
+
+# 매대 품목 행. 로스터·정가·롤은 Peddler가 들고, 표시명·아이콘·보유 판정은 여기서 붙인다
+# (야시장이 SeasonalEvent에 위임하는 그 경계 1:1 — Peddler는 인벤토리도 해금 원장도 모른다).
+func _peddler_items() -> Array:
+	var rows: Array = []
+	if peddler == null or clock == null:
+		return rows
+	var owned: Dictionary = books.acquired if books != null else {}
+	for r in peddler.rows_for(clock.day, owned):
+		var src: Dictionary = r
+		var kind := String(src["kind"])
+		var buy_id := String(src["buy_id"])
+		var price := int(src["price"])
+		var base := int(src["base"])
+		# ★ match가 아니라 if/elif인 이유: 패턴 자리에 **타 클래스 상수**를 쓰는 문법을 피한다
+		#   (야시장 블록이 리터럴 match를 쓰는 것과 같은 이유 — 여기선 상수를 그대로 쓰되 비교로).
+		if kind == Peddler.KIND_SEED:
+			rows.append({"kind": kind, "buy_id": buy_id,
+				"icon_id": ItemCatalog.seed_id(buy_id),
+				"name": "%s 씨앗" % CropCatalog.name_of(buy_id),
+				"price": price, "base": base,
+				"count": inventory.seed_count(buy_id) if inventory != null else 0})
+		elif kind == Peddler.KIND_ITEM:
+			rows.append({"kind": kind, "buy_id": buy_id, "icon_id": buy_id,
+				"name": ItemCatalog.name_of(buy_id), "price": price, "base": base,
+				"count": inventory.count_of(buy_id) if inventory != null else 0})
+		elif kind == Peddler.KIND_DECO:
+			# 해금 판정은 home_deco가 진실원(야시장 행과 완전히 같은 규율 — 이중 원장 0).
+			var unlocked := home_deco != null and home_deco.is_unlocked(buy_id)
+			rows.append({"kind": kind, "buy_id": buy_id,
+				"swatch": _deco_swatch(buy_id),
+				"name": "%s 가구 세트" % HomeDecoCatalog.name_of(buy_id),
+				"price": price, "base": base,
+				"locked": unlocked, "locked_text": "해금됨"})
+		elif kind == Peddler.KIND_RARE:
+			# 1회성 수집물(레어크로우 ⑤) — 구매 이력이 진실원. 산 뒤엔 "구입함"으로 잠긴다.
+			var got := peddler.has_bought(buy_id)
+			rows.append({"kind": kind, "buy_id": buy_id, "icon_id": buy_id,
+				"name": ItemCatalog.name_of(buy_id), "price": price, "base": base,
+				"locked": got, "locked_text": "구입함"})
+		elif kind == Peddler.KIND_BOOK:
+			# 책·노트 — **Books 원장이 진실원**이다. 이름판도 ItemCatalog가 아니라 Books가 낸다
+			# (책 텍스트의 단일 출처 — 카탈로그는 이 id를 CAT_BOOK으로만 안다).
+			var had := books != null and books.has_acquired(buy_id)
+			rows.append({"kind": kind, "buy_id": buy_id, "icon_id": buy_id,
+				"name": Books.title_of(buy_id), "price": price, "base": base,
+				"locked": had, "locked_text": "이미 되찾음"})
+	return rows
+
+# 가구 세트 구매 — 야시장(`_try_buy_market_deco`)·목공방(`_try_buy_deco_set`)과 **또 다른 가격 축**이라
+# 별도 경로다(각각 행사 정액 할인 / 옹이 ♡ 할인 / 보부상 웃돈). 해금 처리 자체는 home_deco 한 곳이
+# 진실원이라, 갈리는 것은 값을 구하는 줄 하나뿐이다.
+func _try_buy_peddler_deco(set_id: String) -> bool:
+	if peddler == null or clock == null or home_deco == null or not HomeDecoCatalog.has_set(set_id):
+		return false
+	if home_deco.is_unlocked(set_id):
+		_notice("%s 세트는 이미 해금했다" % HomeDecoCatalog.name_of(set_id))
+		return false
+	var price := _peddler_price(set_id)
+	if price <= 0 or not wallet.spend(price):
+		_notice("냥이 모자라다 — %s 세트 %d냥 (보유 %d냥)" % [HomeDecoCatalog.name_of(set_id), price, wallet.gold])
+		return false
+	home_deco.unlock(set_id)
+	audio.sfx("ui")
+	_notice("보부상에게서 %s 가구 세트를 샀다 −%d냥" % [HomeDecoCatalog.name_of(set_id), price])
+	return true
+
+# 1회성 수집물(레어크로우 ⑤) 구매. ★ **적재 먼저·결제 나중** — 백팩이 가득이면 엽전이 안 나간다
+#   (더비 교환·야시장 한정 물품이 쓰는 그 순서 규율 1:1).
+func _try_buy_peddler_rare(id: String) -> bool:
+	if peddler == null or inventory == null or clock == null or not ItemCatalog.has_item(id):
+		return false
+	if peddler.has_bought(id):
+		_notice("%s 은(는) 이미 샀다" % ItemCatalog.name_of(id))
+		return false
+	var price := _peddler_price(id)
+	if price <= 0 or wallet.gold < price:
+		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [ItemCatalog.name_of(id), price, wallet.gold])
+		return false
+	if not inventory.add_item(id, 1):
+		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(id))
+		return false
+	if not wallet.spend(price):
+		inventory.remove_item(id, 1)   # 방어(위 검사와 이중) — 결제 실패면 물건도 도로 뺀다
+		return false
+	peddler.record_bought(id)
+	peddler.record_rare(clock.day, id)   # ★ 하루 한 점 — 희귀 슬롯 잠금(즉시 재충전 차단)
+	_toast_item(id, 1)
+	audio.sfx("ui")
+	_notice("보부상의 봇짐에서 %s 를 찾아냈다 −%d냥" % [ItemCatalog.name_of(id), price])
+	return true
+
+# 책·노트 구매([ADR-0034] "여행 상인 흡수"의 이행 — Books 미보유분 저확률 입수처).
+# ★ **즉독을 열지 않는다**: 지금 매대 패널이 모달로 떠 있어 대화창을 겹쳐 띄우면 조용히 묻힌다
+#   (`_read_book_now`가 `dialogue.is_open()`에서 되돌아가는 그 함정). 대신 **미독으로 남겨** 집
+#   책장이 먼저 집어 주게 둔다(`Books.next_reread`가 미독 우선 — 손실 0인 기존 회수 경로).
+func _try_buy_peddler_book(id: String) -> bool:
+	if peddler == null or books == null or inventory == null or clock == null:
+		return false
+	if not Books.has_text(id):
+		return false
+	if books.has_acquired(id):
+		_notice("%s 은(는) 이미 되찾았다" % Books.title_of(id))
+		return false
+	var price := _peddler_price(id)
+	if price <= 0 or wallet.gold < price:
+		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [Books.title_of(id), price, wallet.gold])
+		return false
+	if not inventory.add_item(id, 1):
+		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % Books.title_of(id))
+		return false
+	if not wallet.spend(price):
+		inventory.remove_item(id, 1)
+		return false
+	books.acquire(id, clock.day)
+	# ★ 하루 한 점 — 이게 없으면 산 책이 미보유 풀에서 빠지면서 **같은 날 같은 슬롯이 다른 책으로
+	#   즉시 다시 차** 연타로 23권을 하루에 쓸어 담을 수 있다([ADR-0034] "저확률 입수처"가 무너진다).
+	peddler.record_rare(clock.day, id)
+	_toast_item(id, 1)
+	audio.sfx("ui")
+	_notice("%s — %s을(를) 되찾았다 (수집 %d/%d)" % [
+		"[옥자의 잃어버린 책]" if Books.is_book(id) else "[비밀 노트]",
+		Books.title_of(id), books.acquired_count(), Books.all_ids().size()])
+	return true
+
+# 씨앗 소매 — 스택 소모품이라 대량 구매(Shift)를 그대로 받는다. 골드 닿는 데까지 부분 구매
+# (야시장 `_try_buy_market_seed` 결 1:1 — 결제 순서 보존).
+func _try_buy_peddler_seed(crop_id: String, n: int) -> void:
+	if inventory == null or not CropCatalog.has_crop(crop_id) or n <= 0:
+		return
+	var unit := _peddler_price(crop_id)
+	if unit <= 0:
+		return
+	var seed_item := ItemCatalog.seed_id(crop_id)
+	var bought := 0
+	for _i in n:
+		if wallet.gold < unit or not inventory.add_item(seed_item, 1):
+			break
+		wallet.spend(unit)
+		bought += 1
+	if bought == 0:
+		_notice("골드 부족(%d 필요)" % unit)
+		return
+	_toast_item(seed_item, bought)
+	audio.sfx("ui")
+	_notice("보부상 — %s 씨앗 ×%d −%d냥" % [CropCatalog.name_of(crop_id), bought, unit * bought])
+
+# 일반 스택 아이템 소매(채집물·재료·광물·통용물·수액) — 씨앗과 같은 결의 부분 구매.
+func _try_buy_peddler_item(id: String, n: int) -> void:
+	if inventory == null or not ItemCatalog.has_item(id) or n <= 0:
+		return
+	var unit := _peddler_price(id)
+	if unit <= 0:
+		return
+	var bought := 0
+	for _i in n:
+		if wallet.gold < unit or not inventory.add_item(id, 1):
+			break
+		wallet.spend(unit)
+		bought += 1
+	if bought == 0:
+		_notice("골드 부족(%d 필요)" % unit)
+		return
+	_toast_item(id, bought)
+	audio.sfx("ui")
+	_notice("보부상 — %s ×%d −%d냥" % [ItemCatalog.name_of(id), bought, unit * bought])
+
+# 오늘 그 물건의 표시가(0 = 오늘 봇짐에 없다). ★ **표시가와 결제가를 한 함수에서 되찾는** 이유:
+#   값을 두 번 계산하면 언젠가 어긋나고(할인·변동이 얹히는 매대일수록 확실히 어긋난다), 오늘
+#   재고에 없는 id를 프레임 밖에서 사 버리는 구멍도 같이 막힌다(값 0 = 결제 불성립).
+func _peddler_price(buy_id: String) -> int:
+	if peddler == null or clock == null:
+		return 0
+	return peddler.price_for(clock.day, books.acquired if books != null else {}, buy_id)
 
 func _on_collapsed() -> void:
 	_do_sleep()  # 어디서든 쓰러져 다음 날 아침으로
@@ -10205,7 +10500,8 @@ func _save_game() -> void:
 		"orchard": orchard.to_save(),   # ★ [S1-5b] 심긴 혼의 나무(앵커·나이·결실). 영속·나이가 planted_day 파생이라 최소
 		"ranch": ranch.to_save(),       # ★ [S1-7] 배치 짐승·우정·기분·대기 산물(데일리 돌봄 상태)
 		"reclaim": reclaim.to_save(),   # ★ [S1-8] 개간한 debris 좌표 델타(치운 것만 — 배치는 layout.json 시드)
-		"sprinkler": sprinkler.to_save(),   # ★ [S1R-T9] 설치한 스프링클러 좌표(플레이어 델타 — 슬라이스 키 네임스페이스)
+		"sprinkler": sprinkler.to_save(),   # ★ [S1R-T9] 설치한 스프링클러 좌표+★[S10-T2]티어(플레이어 델타 — 슬라이스 키 네임스페이스)
+		"rarecrow": rarecrow.to_save(),     # ★ [S10-T2] 밭에 세운 레어크로우(밑동 좌표 → 종 id)
 		"crab_pot": crab_pot.to_save(),   # ★ [S3-T7] 설치한 게잡이통(구역별 좌표·미끼·수거 대기 어획물)
 		"museum": museum.to_save(),   # ★ [S2-T5] 혼백관 기증 원장·마일스톤 지급 기록(수집 진행 보존)
 		"quest_board": quest_board.to_save(),   # ★ [S2-T6] 게시판 수락 계약·완료 이력·지급 기록(의뢰 내용은 day 파생이라 무상태)
@@ -10219,6 +10515,8 @@ func _save_game() -> void:
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
 		"furnace": furnace.to_save(),       # ★[S5-T3] 업화로(구역별 좌표·넣은 광석·남은 제련 분·주괴·등급)
 		"geode_opened": _geode_opened,       # ★[S5-T3] 누적 지오드 개봉 수(개봉 롤 시드 — 재롤 차단)
+		"panning": panning.to_save(),       # ★[S10-T1] 오늘의 사금 스폿(구역별 좌표 — 매일 새로 깔리는 델타)
+		"crystalarium": crystalarium.to_save(),   # ★[S10-T1] 결정기(구역별 좌표·든 보석·남은 일수)
 		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
 		"carpenter": carpenter.to_save(),   # ★[S4-T7] 목공방 건축 의뢰(진행 1건 + 완공 이력 — 정원 승격은 ranch에)
 		"mine": mine_floors.to_save(),      # ★[S5-T1] 갱도 층 원장(도달 최심층=영구 + day-한정 채굴·사다리 기록)
@@ -10233,6 +10531,10 @@ func _save_game() -> void:
 		# ★[S7-T7] 절기 행사 원장 — **결과만** 든다(달력·날씨·운처럼 파생되는 것은 여기 없다).
 		#   더비 태그·교환 횟수(당일치) · 장원제 출품일·최고 등급 · 야시장 한정 구매 이력.
 		"seasonal_event": seasonal_event.to_save(),
+		# ★[S10-T3 / ADR-0069 결정 5] 보부상 원장 — **1회성 구매 이력만** 든다. 재고·가격·출현일은
+		#   전부 day에서 파생되므로 적을 것이 없고(날씨·운과 같은 무상태 파생), 가구 해금은 home_deco가
+		#   책 입수는 books가 각자 자기 조각에 이미 적는다(이중 진실원 0).
+		"peddler": peddler.to_save(),
 		# ★[S9-T3 / ADR-0067 결정 7] 편지 원장 — 발송 큐(아직 안 온 편지) + 보관함 + 기독 원장.
 		#   서사 진행의 일부라 반드시 라운드트립한다(자고 일어나면 도착하는 편지가 세이브를 건너뛰면
 		#   "잘 때마다 사라지는 예고"가 된다).
@@ -10331,6 +10633,8 @@ func _load_game() -> void:
 		reclaim.load_save(data["reclaim"])
 	if data.has("sprinkler"):   # ★ [S1R-T9] — 키 없는 구버전은 설치 0(빈 목록). changed가 드로우 갱신
 		sprinkler.load_save(data["sprinkler"])
+	if data.has("rarecrow"):   # ★ [S10-T2] — 키 없는 구세이브는 배치 0(빈 원장·하위호환). changed가 드로우 갱신
+		rarecrow.load_save(data["rarecrow"])
 	if data.has("crab_pot"):   # ★ [S3-T7] — 키 없는 구세이브는 게잡이통 0(빈 원장·하위호환)
 		crab_pot.load_save(data["crab_pot"])
 	if data.has("museum"):   # ★ [S2-T5] — 키 없는 구버전은 기증 0(빈 원장·하위호환)
@@ -10360,6 +10664,10 @@ func _load_game() -> void:
 	_furnace_abs_min = -1.0       # ★[S5-T3] 분 기준점 리셋 — 로드 직후 첫 프레임을 새 기준으로 잡는다
 	                              #   (안 하면 세이브된 day와 현재 day의 차가 통째로 제련 진행으로 샌다)
 	_geode_opened = maxi(int(data.get("geode_opened", 0)), 0)   # ★[S5-T3] 개봉 카운터(구세이브 = 0)
+	if data.has("panning"):       # ★[S10-T1] — 키 없는 구세이브는 스폿 0(다음 취침이 그날 판을 깐다·무막힘)
+		panning.load_save(data["panning"])
+	if data.has("crystalarium"):  # ★[S10-T1] — 키 없는 구세이브는 결정기 0(빈 원장·하위호환)
+		crystalarium.load_save(data["crystalarium"])
 	if data.has("tool_tiers"):    # ★[S4-T4] — 키 없는 구세이브는 전 도구 티어 0(기본 도끼 그대로·무막힘)
 		tool_tier.load_save(data["tool_tiers"])
 	if data.has("carpenter"):     # ★[S4-T7] — 키 없는 구세이브는 진행 의뢰 0·완공 0(하위호환)
@@ -10384,6 +10692,10 @@ func _load_game() -> void:
 	#   있으므로 막히는 것이 0이고, 더비 태그는 어차피 당일치라 잃을 것도 없다).
 	if data.has("seasonal_event") and seasonal_event != null:
 		seasonal_event.load_save(data["seasonal_event"])
+	# ★[S10-T3] 보부상 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(야시장과 같은 하위호환
+	#   관례). 막히는 것은 0이다: 다음 7의 배수 날에 좌판이 그대로 서고 재고는 day에서 파생된다.
+	if data.has("peddler") and peddler != null:
+		peddler.load_save(data["peddler"])
 	# ★[S9-T3] 편지 원장 — 키 없는 구세이브는 **빈 우편함**으로 시작한다(곳간·출하함과 같은 하위호환
 	#   관례. 막히는 것은 0이다 — 앞으로의 사건이 보내는 편지는 그대로 도착한다).
 	if data.has("mailbox") and mailbox != null:
@@ -11190,6 +11502,8 @@ func _process(delta: float) -> void:
 			_refresh_guild()                     # ★ [S5-T6] 길드 매대 행(구매 즉시 "보유 중"으로 잠김)
 		elif frame.context == InventoryFrame.CTX_NIGHTMARKET:
 			_refresh_night_market()              # ★[S7-T7] 야시장 행(구매 즉시 "해금됨/구입함"으로 잠김)
+		elif frame.context == InventoryFrame.CTX_PEDDLER:
+			_refresh_peddler()                   # ★[S10-T3] 보부상 행(구매 즉시 잠김·골드 헤더 갱신)
 		return
 
 	# ★[S7-T8 / ADR-0065 결정 10] 시계 판 클릭 = 절기 달력 토글(스타듀의 달력 게시판 자리 — 우리는
@@ -11449,6 +11763,11 @@ func _process(delta: float) -> void:
 	if _facing_night_market() and Input.is_action_just_pressed("shop_toggle"):
 		_open_frame(InventoryFrame.CTX_NIGHTMARKET)
 		return
+	# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 봇짐 좌판 [F] — 야시장과 같은 셸(CTX_PEDDLER)을 연다.
+	#   두 칸은 무대가 갈려(광장 52,34 vs 다리 남단 54,70) 같은 날 겹쳐도 서로를 안 가린다.
+	if _facing_peddler() and Input.is_action_just_pressed("shop_toggle"):
+		_open_frame(InventoryFrame.CTX_PEDDLER)
+		return
 	# ★ Phase D 저장 상자 열기(RMB): 집 실내 상자 칸을 바라보며 우클릭으로 보관 패널을 연다(모달 —
 	# 위 frame.is_open 가드로 닫힌다). 집 안 취침(ui_accept)·상자(action)는 키가 갈려 안 겹친다.
 	if facing_chest and Input.is_action_just_pressed("action"):
@@ -11515,6 +11834,11 @@ func _process(delta: float) -> void:
 	if not _sleeping and furnace != null and _indoor == "" and furnace.has_at(_region, _target) \
 			and Input.is_action_just_pressed("shop_toggle"):
 		_use_furnace(_target)
+		return
+	# ★[S10-T1] 결정기(F): 세워 둔 결정기를 바라보며 F — 수거 / 투입 / 회수(업화로와 같은 사다리).
+	if not _sleeping and crystalarium != null and _indoor == "" and crystalarium.has_at(_region, _target) \
+			and Input.is_action_just_pressed("shop_toggle"):
+		_use_crystalarium(_target)
 		return
 	# T5.4 → ★S6-T2 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 손님이 시킨 메뉴가 융합이고
 	# 곳간에 재료가 있으면 곳간 1개를 먹고 프리미엄가, 아니면 무재료 기본 메뉴로 정액가(무막힘).
@@ -11623,6 +11947,17 @@ func _process(delta: float) -> void:
 			and is_bush_tile(_region, _target) and berry_bushes.has_berry(_region, _target)
 	if on_bush and Input.is_action_just_pressed("shop_toggle"):
 		_shake_bush(_target)
+	# ★[S10-T1 / ADR-0069 결정 2] 팬닝 — 반짝이는 물가 칸을 [F]. 스폿은 걸을 수 있는 지면(GROUND/PATH)
+	#   위라 채집물·덤불과 같은 결로 _target_valid 게이트 밖에서 따로 디스패치한다.
+	#   ★ **[F] 전용**이다(줍기의 RMB 겸용과 갈린다): "일다"는 도구 없이 하는 별개 동사이고, 무엇보다
+	#     RMB를 받으면 물가에서 낚싯대 캐스팅과 같은 손에 겹친다(같은 칸을 보고 같은 키를 누르는데
+	#     어떤 날은 캐스팅, 어떤 날은 팬닝이 되면 조작이 흔들린다).
+	#   ★ 게잡이통이 같은 칸에 놓여 있으면 위 [F] 사다리가 먼저 잡고 return한다(설치물 우선 — 통을
+	#     놓을 수 있는 칸과 스폿 칸이 둘 다 '물가'라 겹칠 수 있는 유일한 상대다).
+	var on_pan_spot := not _sleeping and _indoor == "" and panning != null \
+			and panning.has_at(_region, _target)
+	if on_pan_spot and Input.is_action_just_pressed("shop_toggle"):
+		_pan_spot(_target)
 	# ★[S4-T8 / ADR-0062 결정 9 ㉡] 이끼 낫 채취 — 이끼 낀 성숙목은 SOLID(비-SOIL)라 벌목과 같은 자리에서
 	#   디스패치한다. **든 게 낫일 때만** 걸리고(도끼면 아래 벌목이 잡는다), 둘은 서로 배타라 한 칸에서
 	#   충돌하지 않는다(각 함수가 자기 도구를 스스로 검사 — ADR-0024 §2 자동 분기 없음).
@@ -11713,12 +12048,23 @@ func _process(delta: float) -> void:
 	# ★ [S1R-T9] 스프링클러 설치/철거 — 설치물은 GROUND/SOIL 위(비-SOIL 포함)라 _target_valid 게이트 밖에서
 	#   따로 디스패치(개간·리필과 같은 결). 스프링클러 아이템을 들고 LMB: 이미 설치된 칸이면 회수, 빈 지면이면
 	#   설치. 허수아비 배치 결(보이는 아트=인프라)이되 런타임 델타라 Sprinkler 원장이 든다(layout.json 불변).
-	var holding_sprinkler := inventory.selected_id() == ItemCatalog.SPRINKLER
+	# ★[S10-T2] 티어가 셋이 됐지만 디스패치는 하나다 — 든 것이 스프링클러이기만 하면 되고,
+	#   *어느 티어*는 `_place_sprinkler`가 든 아이템에서 뽑는다(ADR-0024 §2 "든 도구가 동사").
+	var holding_sprinkler := ItemCatalog.is_sprinkler(inventory.selected_id())
 	var on_sprinkler := not _sleeping and holding_sprinkler and sprinkler != null and sprinkler.has_at(_target)
 	if on_sprinkler and Input.is_action_just_pressed("use_tool"):
 		_remove_sprinkler(_target)
 	elif not _sleeping and holding_sprinkler and Input.is_action_just_pressed("use_tool") and _can_place_sprinkler(_target):
-		_place_sprinkler(_target)
+		_place_sprinkler(_target, inventory.selected_id())
+	# ★[S10-T2 / ADR-0069 결정 4] 레어크로우 배치/회수 — 스프링클러와 **같은 문법**(LMB 하나로
+	#   설치·회수를 가른다). 세 동사를 쓰는 게잡이통·채취기·업화로와 달리 여기도 동사가 둘뿐이라
+	#   [F]로 모을 이유가 없다.
+	var held_rarecrow := inventory.selected_id() if ItemCatalog.is_rarecrow(inventory.selected_id()) else ""
+	var on_rarecrow := not _sleeping and held_rarecrow != "" and rarecrow != null and rarecrow.has_at(_target)
+	if on_rarecrow and Input.is_action_just_pressed("use_tool"):
+		_remove_rarecrow(_target)
+	elif not _sleeping and held_rarecrow != "" and Input.is_action_just_pressed("use_tool") and _can_place_rarecrow(_target):
+		_place_rarecrow(_target, held_rarecrow)
 	# ★ [S3-T7] 게잡이통 설치 — 통을 들고 물가 인접 칸(백사장·부두 목판)을 겨눠 LMB. 회수는 LMB가
 	#   아니라 [F]다(스프링클러와 갈린 지점): 통은 "미끼 넣기·수거·회수" 세 동사를 한 칸에서 쓰므로
 	#   상호작용 키 하나(F)로 모으는 게 자연스럽다(출하함·기증대·게시판과 같은 결).
@@ -11737,6 +12083,11 @@ func _process(delta: float) -> void:
 	var holding_furnace := inventory.selected_id() == ItemCatalog.FURNACE
 	if not _sleeping and holding_furnace and Input.is_action_just_pressed("use_tool") and _can_place_furnace(_target):
 		_place_furnace(_target)
+	# ★ [S10-T1] 결정기 설치 — 결정기를 들고 빈 지면·길을 겨눠 LMB(업화로와 같은 판정·같은 동사 분배).
+	var holding_crystalarium := inventory.selected_id() == ItemCatalog.CRYSTALARIUM
+	if not _sleeping and holding_crystalarium and Input.is_action_just_pressed("use_tool") \
+			and _can_place_crystalarium(_target):
+		_place_crystalarium(_target)
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	#   ★ 스프링클러를 들었으면 위에서 설치/철거를 이미 처리했으니 밭 도구질로 흘리지 않는다(중복 방지).
 	# ★[S5-T4 / ADR-0063 결정 5] **무기를 들었으면 무대·조준 칸과 무관하게 이 갈래로 들어온다**
@@ -11746,8 +12097,9 @@ func _process(delta: float) -> void:
 	# ★[S6-T5] 체키 촬영 중엔 LMB가 **셔터**다 — 무기를 든 채 찍으면 스윙이 같이 나가므로 막는다.
 	# ★[S6-T6] 칵테일 제조 중의 LMB(붓기·셰이킹)도 같은 이유로 도구질로 흘리지 않는다.
 	var holding_weapon := ItemCatalog._is_weapon(inventory.selected_id())
+	# ★[S10-T2] 레어크로우도 스프링클러와 같은 이유로 도구질로 흘리지 않는다(설치 LMB와 중복 방지).
 	if not _sleeping and cheki == null and cocktail == null \
-			and (_target_valid or holding_weapon) and not holding_sprinkler \
+			and (_target_valid or holding_weapon) and not holding_sprinkler and held_rarecrow == "" \
 			and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
@@ -11994,6 +12346,10 @@ func _process(delta: float) -> void:
 	elif _facing_night_market():
 		interact_prompt.visible = true
 		interact_prompt.text = "[F] 저승 야시장 매대 (오늘만 2할 할인)"
+	elif _facing_peddler():
+		# ★[S10-T3] 보부상 봇짐 — 야시장이 *할인*을 말하는 자리에 **재고의 일회성**을 말한다.
+		interact_prompt.visible = true
+		interact_prompt.text = "[F] 저승 보부상 봇짐 (오늘 재고는 오늘뿐)"
 	elif faced_resident != null:
 		# ★ [S2-T7] 주민 프롬프트 — 옛 5갈래(미호·옥자·바나·멜·네오) 문구가 한 조립식으로 접혔다.
 		# 기본 "[우클릭] 대화" + (선물 채널이 있으면) "[G] <작물> 선물" + (특수 훅이 있으면) 꼬리
@@ -12140,6 +12496,18 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 업화로 세우기 (광석 %d + 혼탄 %d → 주괴 1)" % [
 			FurnaceLedger.ORE_PER_BATCH, FurnaceLedger.FUEL_PER_BATCH]
+	elif crystalarium != null and _indoor == "" and crystalarium.has_at(_region, _target):
+		# ★[S10-T1] 세워 둔 결정기를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _crystalarium_prompt(_target)
+	elif inventory.selected_id() == ItemCatalog.CRYSTALARIUM and _can_place_crystalarium(_target):
+		# ★[S10-T1] 결정기를 들고 빈 지면을 겨눌 때: LMB로 설치.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 결정기 세우기 (보석 1개를 넣으면 며칠마다 복제)"
+	elif panning != null and _indoor == "" and panning.has_at(_region, _target):
+		# ★[S10-T1] 반짝이는 물가 칸을 바라볼 때: [F]로 일다(혼력 소량). 도구는 필요 없다.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[F] 사금 일기 (혼력 %d)" % PanningSpots.PAN_ENERGY
 	elif tapper != null and _indoor == "" and tapper.has_at(_region, _target):
 		# ★[S4-T6] 채취기가 박힌 나무를 바라볼 때: 상태별 [F] 한 동사(수거 / 회수). **나무 프롬프트보다
 		#   먼저** 본다 — 그 칸의 지금 할 일은 벌목이 아니라 채취기이고, 벌목은 애초에 막혀 있다.
@@ -12175,14 +12543,27 @@ func _process(delta: float) -> void:
 		# ★ [S3-T7] 통을 들고 물가 인접 칸을 겨눌 때: LMB로 설치(설치 후 [F]로 미끼 장전).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 게잡이통 놓기 (물가 — 미끼를 넣으면 밤새 어획)"
-	elif inventory.selected_id() == ItemCatalog.SPRINKLER and sprinkler != null and sprinkler.has_at(_target):
+	elif ItemCatalog.is_sprinkler(inventory.selected_id()) and sprinkler != null and sprinkler.has_at(_target):
 		# ★ [S1R-T9] 이미 설치된 스프링클러를 겨눌 때: LMB로 회수(허수아비 재회수 동형).
+		# ★[S10-T2] 회수되는 것은 **거기 선 티어**라 문구도 그 티어를 말한다(든 것이 아니라).
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = "[좌클릭] 저승 스프링클러 회수"
-	elif inventory.selected_id() == ItemCatalog.SPRINKLER and _can_place_sprinkler(_target):
-		# ★ [S1R-T9] 빈 지면·경작지를 스프링클러를 들고 겨눌 때: LMB로 설치(아침 인접 4칸 자동 급수).
+		interact_prompt.text = "[좌클릭] %s 회수" % Sprinkler.tier_name(sprinkler.tier_at(_target))
+	elif ItemCatalog.is_sprinkler(inventory.selected_id()) and _can_place_sprinkler(_target):
+		# ★ [S1R-T9] 빈 지면·경작지를 스프링클러를 들고 겨눌 때: LMB로 설치(아침 자동 급수).
+		# ★[S10-T2] 덮는 칸 수를 티어에서 파생해 적는다(4/8/24 — 무엇을 세우는지 값으로 읽힌다).
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = "[좌클릭] 저승 스프링클러 설치 (인접 4칸 자동 급수)"
+		var spr_held := inventory.selected_id()
+		interact_prompt.text = "[좌클릭] %s 설치 (%d칸 자동 급수)" % [ItemCatalog.name_of(spr_held),
+			Sprinkler.range_size(ItemCatalog.sprinkler_tier_of(spr_held))]
+	elif ItemCatalog.is_rarecrow(inventory.selected_id()) and rarecrow != null and rarecrow.has_at(_target):
+		# ★[S10-T2] 세워 둔 레어크로우를 겨눌 때: LMB로 회수(스프링클러 동형).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] %s 거두기" % ItemCatalog.name_of(rarecrow.id_at(_target))
+	elif ItemCatalog.is_rarecrow(inventory.selected_id()) and _can_place_rarecrow(_target):
+		# ★[S10-T2] 레어크로우를 들고 빈 지면·경작지를 겨눌 때: LMB로 세우기(까마귀 보호 반경).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] %s 세우기 (반경 %d칸 까마귀 방어)" % [
+			ItemCatalog.name_of(inventory.selected_id()), _scarecrow_radius()]
 	else:
 		# 밭 칸을 바라볼 때만 안내. 든 도구·칸 상태로 동사를 파생한다(LMB 도구질 / RMB 맨손 수확).
 		var prompt := _farm_prompt()
@@ -12802,25 +13183,96 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 		return false
 	if farm.is_crop_solid(t):                 # 트렐리스 넝쿨 점유 → 배제
 		return false
+	if rarecrow != null and rarecrow.has_at(t):   # ★[S10-T2] 세워 둔 레어크로우 → 배제(겹침 방지)
+		return false
 	return true
 
 # 조준 칸에 스프링클러를 설치한다(아이템 1개 소모). 원장이 좌표를 든다(허수아비처럼 보이는 아트=인프라).
-func _place_sprinkler(t: Vector2i) -> void:
-	if not inventory.has_item(ItemCatalog.SPRINKLER):
+# ★[S10-T2 / ADR-0069 결정 3] **어느 티어를 세우나는 든 아이템이 정한다**(ADR-0024 §2 "든 도구가 동사"
+#   1:1 — 티어 선택 UI를 새로 세우지 않는다). 인자 기본값이 티어1 아이템이라 기존 1인자 호출은 거동
+#   불변이고, 원장·급수 사슬은 한 줄도 안 바뀐다(범위만 Sprinkler.offsets_for가 갈라 준다).
+func _place_sprinkler(t: Vector2i, item_id: String = ItemCatalog.SPRINKLER) -> void:
+	var tier := ItemCatalog.sprinkler_tier_of(item_id)
+	if tier <= 0 or not inventory.has_item(item_id):
 		return
-	if sprinkler.place(t):
-		inventory.remove_item(ItemCatalog.SPRINKLER, 1)
+	if sprinkler.place(t, tier):
+		inventory.remove_item(item_id, 1)
 		audio.sfx("ui")
-		_notice("저승 스프링클러를 설치했다 — 아침마다 인접 4칸을 자동으로 적신다")
+		_notice("%s를 설치했다 — 아침마다 %d칸을 자동으로 적신다"
+			% [ItemCatalog.name_of(item_id), Sprinkler.range_size(tier)])
 		queue_redraw()
 
 # 조준 칸의 스프링클러를 회수한다(아이템 1개 인벤토리 반환 — 허수아비 재회수 동형). 없으면 무동작.
+# ★[S10-T2] **세운 티어 그대로 돌아온다** — 티어를 먼저 읽고 지운다(지운 뒤엔 무엇이 섰는지 알 수 없다).
 func _remove_sprinkler(t: Vector2i) -> void:
+	var tier := sprinkler.tier_at(t)
+	var item_id := ItemCatalog.sprinkler_item_for_tier(tier)
+	if item_id == "":
+		return
 	if sprinkler.remove(t):
-		inventory.add_item(ItemCatalog.SPRINKLER, 1)
+		inventory.add_item(item_id, 1)
 		audio.sfx("ui")
-		_notice("저승 스프링클러를 회수했다")
+		_notice("%s를 회수했다" % ItemCatalog.name_of(item_id))
 		queue_redraw()
+
+# ── ★[S10-T2 / ADR-0069 결정 4] 레어크로우 배치/회수 ──────────────────────────
+# 이 칸에 레어크로우를 세울 수 있는가. **스프링클러 배치 규칙을 그대로 상속**한다(안식 농원·빈
+# 지면/경작지·성역/프롭/설치물 비겹침) — 밭에 서는 말뚝이라 지켜야 할 것이 정확히 같고, 규칙을
+# 복제하면 두 벌이 따로 늙는다. 다른 조건은 "이미 다른 레어크로우가 선 칸"뿐인데 그건 위
+# `_can_place_sprinkler`에 합류시켜 **한 술어가 둘 다 막는다**(양방향 겹침 방지).
+func _can_place_rarecrow(t: Vector2i) -> bool:
+	return rarecrow != null and _can_place_sprinkler(t)
+
+# 조준 칸에 든 레어크로우를 세운다(아이템 1개 소모). 겨눈 칸 = **밑동**(보호 반경 중심)이고 그림만
+# 위로 1칸 자란다(프롭 허수아비 1×2 실루엣 상속 — rarecrow.gd 머리말).
+func _place_rarecrow(t: Vector2i, item_id: String) -> void:
+	if not ItemCatalog.is_rarecrow(item_id) or not inventory.has_item(item_id):
+		return
+	if rarecrow.place(t, item_id):
+		inventory.remove_item(item_id, 1)
+		audio.sfx("ui")
+		_notice("%s를 세웠다 — 반경 %d칸의 작물을 까마귀에게서 지킨다"
+			% [ItemCatalog.name_of(item_id), _scarecrow_radius()])
+		queue_redraw()
+
+# 조준 칸의 레어크로우를 거둔다(그 종 그대로 인벤토리 반환). 없으면 무동작.
+func _remove_rarecrow(t: Vector2i) -> void:
+	var id := rarecrow.remove(t)
+	if id == "":
+		return
+	inventory.add_item(id, 1)
+	audio.sfx("ui")
+	_notice("%s를 거뒀다" % ItemCatalog.name_of(id))
+	queue_redraw()
+
+# ── ★[S10-T2 / ADR-0069 결정 4] 레어크로우 수집 진척(원장 없는 파생) ──────────────
+# **소지(백팩) ∪ 배치(밭)** 가 수집의 정의다(ADR-0069 결정 4 "8종 소지/배치 완성 판정"). 별도
+# "획득 이력" 원장을 두지 않는 근거: 레어크로우는 세상에서 잃을 수 없는 물건이다 — 비매(price 0)라
+# 매대에 못 팔고, 출하함은 CAT_HARVEST만 받으며, 백팩 버리기는 책과 같은 이유로 막혀 있다
+# (`_on_frame_discard`). 그래서 합집합이 곧 단조 증가하는 이력이고, 원장을 하나 더 두면 같은
+# 사실의 진실원이 둘이 된다.
+func _rarecrow_owned(id: String) -> bool:
+	if inventory != null and inventory.count_of(id) > 0:
+		return true
+	return rarecrow != null and rarecrow.is_placed(id)
+
+# 모은 종 수(0~8). 분모는 ItemCatalog.RARECROWS 크기에서 파생한다(하드코딩 8 없음).
+func _rarecrow_collected() -> int:
+	var n := 0
+	for id in ItemCatalog.RARECROWS:
+		if _rarecrow_owned(String(id)):
+			n += 1
+	return n
+
+# 8종 완성인가 = 디럭스 반경 발효 조건([ADR-0051] 결정 5 · `crows.gd:18` DELUXE_RADIUS 예약의 이행).
+func _rarecrow_complete() -> bool:
+	return _rarecrow_collected() >= ItemCatalog.RARECROWS.size()
+
+# ★ 오늘 밤 까마귀 판정에 쓸 허수아비 보호 반경. 8종 완성 전엔 기본 8칸, 완성 후엔 16칸이다.
+#   **반경은 허수아비 종류가 아니라 수집 완주에 붙는다** — 그래야 8종이 순수 스킨으로 남는다
+#   (성능이 종마다 다르면 "예쁜 걸 세우면 손해"가 되어 코스메틱이 최적화 문제로 변한다).
+func _scarecrow_radius() -> int:
+	return CrowRaid.DELUXE_RADIUS if _rarecrow_complete() else CrowRaid.BASE_RADIUS
 
 # ── ★ [S3-T7 / ADR-0061 결정 7] 게잡이통 설치/장전/수거/회수 ────────────────────
 # 이 칸에 게잡이통을 놓을 수 있는가. 스프링클러 배치 규칙의 **낚시판**이다:
@@ -13017,6 +13469,8 @@ func _can_place_furnace(t: Vector2i) -> bool:
 		return false
 	if tapper != null and tapper.has_at(_region, t):
 		return false
+	if crystalarium != null and crystalarium.has_at(_region, t):
+		return false                          # ★[S10-T1] 결정기와 겹치지 않는다(_can_place_crystalarium 대칭)
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
 	if _region == RegionCatalog.HOME:
@@ -13119,6 +13573,150 @@ func _furnace_prompt(t: Vector2i) -> String:
 		return "업화로 — %s %d/%d · 혼탄 %d/%d" % [ItemCatalog.name_of(held), have_ore,
 			FurnaceLedger.ORE_PER_BATCH, have_fuel, FurnaceLedger.FUEL_PER_BATCH]
 	return "[F] 업화로 회수 (빈 화덕 — 광석을 들고 오면 제련)"
+
+# ── ★[S10-T1 / ADR-0069 결정 2] 팬닝(사금) ───────────────────────────────────
+# 반짝이는 물가 칸을 [F]로 인다. 혼력 소량(PanningSpots.PAN_ENERGY)을 내고 산출 한 건을 받는다.
+#   · 산출은 원장이 day+좌표 해시로 정한다(전역 randf 0) — 여기선 받아서 인벤·지갑에 얹기만 한다.
+#   · 도구 불요(ADR 결정 2 자구) — 든 것을 아예 안 본다. 그래서 낚싯대를 든 채로도 그냥 인다.
+#   · **혼력이 모자라면 스폿을 소모하지 않는다**(먼저 막고 나서 원장을 건드린다 — 조용한 손실 0).
+func _pan_spot(t: Vector2i) -> void:
+	if panning == null or not panning.has_at(_region, t):
+		return                                   # 없는 칸(디스패치가 걸렀지만 방어)
+	var cost := PanningSpots.PAN_ENERGY
+	if not energy.can_act(cost):
+		_notice("혼력이 모자라다 — 사금을 이려면 혼력 %d이 든다" % cost)
+		return
+	var got: Dictionary = panning.pan(clock.day, _region, t)
+	if got.is_empty():
+		return                                   # 원장이 거절(도달 불가 — 위에서 has_at을 봤다)
+	energy.spend(cost)
+	var gold := int(got.get("gold", 0))
+	var id := String(got.get("id", ""))
+	var n := int(got.get("count", 0))
+	if gold > 0:
+		wallet.earn(gold)
+		_notice("사금 한 줌을 건졌다 — %d냥" % gold)
+	if id != "" and n > 0:
+		if inventory.add_item(id, n):
+			_toast_item(id, n)
+		else:
+			_notice("가방이 가득 차 %s를 두고 왔다" % ItemCatalog.name_of(id))
+	audio.sfx("harvest")
+	queue_redraw()
+
+# ── ★[S10-T1 / ADR-0069 결정 2] 결정기 ───────────────────────────────────────
+# 결정기를 놓을 수 있는 칸인가. **업화로 `_can_place_furnace`의 쌍둥이**다(판정이 한 줄도 안 갈린다 —
+# 둘 다 "지상 야외의 걸을 수 있는 빈 지면"이 조건이라, 여기서 새 규칙을 만들면 그게 곧 특이 케이스가
+# 된다). 다른 설치물과 겹치지 않는 것만 서로를 한 줄씩 참조해 대칭으로 채운다.
+func _can_place_crystalarium(t: Vector2i) -> bool:
+	if crystalarium == null or _indoor != "" or _mine_floor != 0:
+		return false
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
+		return false
+	if crystalarium.has_at(_region, t):
+		return false                          # 이미 설치됨(그 위엔 투입·수거·회수만)
+	var cell: int = _grid[t.y][t.x]
+	if cell != GROUND and cell != PATH:       # 빈 지면·길만(밭·물·벽·절벽·건물 패드 배제)
+		return false
+	if is_solid(cell):
+		return false                          # 방어(건물 패드·절벽·벽 = SOLID)
+	if sprinkler != null and sprinkler.has_at(t):
+		return false
+	if crab_pot != null and crab_pot.has_at(_region, t):
+		return false
+	if tapper != null and tapper.has_at(_region, t):
+		return false
+	if furnace != null and furnace.has_at(_region, t):
+		return false
+	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
+		return false
+	if _region == RegionCatalog.HOME:
+		if POND_ACTIVITY_RECT.has_point(t):   # 물가 활동존(연못 여백) → 배제
+			return false
+		if _home_occupied_tiles().has(t):     # 프롭 점유(나무·바위·꽃·울타리·허수아비) → 배제
+			return false
+	return true
+
+# 조준 칸에 결정기를 설치한다(아이템 1개 소모). 원장이 좌표를 든다(설치물 공통 결).
+func _place_crystalarium(t: Vector2i) -> void:
+	if not inventory.has_item(ItemCatalog.CRYSTALARIUM):
+		return
+	if crystalarium.place(_region, t):
+		inventory.remove_item(ItemCatalog.CRYSTALARIUM, 1)
+		audio.sfx("ui")
+		_notice("결정기를 세웠다 — 보석을 하나 넣어 두면 며칠마다 같은 것이 하나씩 여문다")
+		queue_redraw()
+
+# 결정기 [F] 한 동사(상태별 사다리 — 업화로와 같은 문법):
+#   ㉠ 다 여물었으면 → 수거(복제본 1개). 안의 보석은 남아 **즉시 재가동**한다.
+#   ㉡ 비었고 **든 것이 복제 가능한 보석**이면 → 투입(보석 1개 차감)
+#   ㉢ 그 외(복제 중이거나 든 게 보석이 아니면) → 회수(결정기 1개 + 안에 든 보석 반환)
+# ★ ㉢이 업화로와 갈리는 지점이다: 결정기는 투입물이 소모되지 않아 "걷지 않으면 못 빼는 보석"이
+#   생기므로, 걷을 때 든 보석을 그대로 돌려준다(잃는 것은 진행뿐 — CrystalariumLedger.remove 주석).
+func _use_crystalarium(t: Vector2i) -> void:
+	if crystalarium == null or not crystalarium.has_at(_region, t):
+		return
+	if crystalarium.is_ready(_region, t):
+		var gem := crystalarium.gem_at(_region, t)
+		if not inventory.add_item(gem, 1):
+			_notice("가방이 가득 찼다 — 자리를 비우고 다시 꺼내자")
+			return
+		crystalarium.collect(_region, t)
+		_toast_item(gem, 1)
+		audio.sfx("harvest")
+		_notice("%s 하나를 꺼냈다 — 결정기가 다시 여물기 시작한다(%d일)"
+			% [ItemCatalog.name_of(gem), CrystalariumLedger.days_for(gem)])
+		queue_redraw()
+		return
+	var held := inventory.selected_id()
+	if crystalarium.is_idle(_region, t) and CrystalariumLedger.can_duplicate(held):
+		if inventory.count_of(held) < 1:
+			return
+		if not crystalarium.load_gem(_region, t, held):
+			return
+		inventory.remove_item(held, 1)
+		audio.sfx("ui")
+		_notice("%s을(를) 결정기에 넣었다 — %d일 뒤에 하나가 여문다"
+			% [ItemCatalog.name_of(held), crystalarium.days_left(_region, t)])
+		queue_redraw()
+		return
+	# ⚠️ ㉢ 앞의 안전 갈래 — **복제 불가 보석을 들고 있으면 회수로 흘리지 않는다**. 플레이어가 한 일은
+	#   "이 보석을 넣어 보려 한 것"인데 기계가 걷혀 버리면 의도와 정반대다(_crystalarium_prompt가 같은
+	#   상황에서 "복제할 수 없다"를 이미 말하고 있으므로, 그 말과 동작이 어긋나서도 안 된다).
+	if held == ItemCatalog.GEM_OSAEK_HONOK:
+		_notice("오색혼옥은 결정기가 흉내 낼 수 없다 — 세상에 그 하나뿐인 빛이다")
+		return
+	# ㉢ 회수 — 안에 든 보석까지 함께 돌려받는다(복제 진행만 사라진다).
+	var res: Dictionary = crystalarium.remove(_region, t)
+	if res.is_empty():
+		return                                    # 수거 대기 = 거절(먼저 꺼내라 — 원장의 이중 안전)
+	var inside := String(res.get("gem", ""))
+	if not inventory.add_item(ItemCatalog.CRYSTALARIUM, 1):
+		crystalarium.place(_region, t)            # 가방이 가득 → 원상 복구(빈 기계로 되돌린다)
+		if inside != "":
+			crystalarium.load_gem(_region, t, inside)   # 안의 보석·기간까지 되살린다(손실 0)
+		_notice("가방이 가득 차 결정기를 걷지 못했다")
+		return
+	if inside != "" and not inventory.add_item(inside, 1):
+		_notice("가방이 가득 차 안에 있던 %s를 두고 왔다" % ItemCatalog.name_of(inside))
+	audio.sfx("ui")
+	queue_redraw()
+
+# 결정기 프롬프트 — 상태별 한 줄(_use_crystalarium의 사다리와 같은 순서).
+func _crystalarium_prompt(t: Vector2i) -> String:
+	if crystalarium.is_ready(_region, t):
+		return "[F] %s 꺼내기 (결정기 — 꺼내면 다시 여문다)" % ItemCatalog.name_of(crystalarium.gem_at(_region, t))
+	if crystalarium.is_growing(_region, t):
+		return "결정기 — %s 여무는 중 (%d일 남음 · [F] 걷기)" % [
+			ItemCatalog.name_of(crystalarium.gem_at(_region, t)), crystalarium.days_left(_region, t)]
+	var held := inventory.selected_id()
+	if CrystalariumLedger.can_duplicate(held):
+		return "[F] %s 넣기 (%d일마다 하나씩 복제)" % [ItemCatalog.name_of(held),
+			CrystalariumLedger.days_for(held)]
+	if held == ItemCatalog.GEM_OSAEK_HONOK:
+		# ⚠️ ADR-0063 초희귀 지위 — 거절 사유를 프롬프트가 먼저 밝힌다(눌러 보고 무반응이 아니게).
+		return "결정기 — 오색혼옥은 복제할 수 없다 (세상에 그 하나뿐인 빛)"
+	return "[F] 결정기 회수 (빈 기계 — 보석을 들고 오면 복제)"
 
 # 게임 내 분 → 사람이 읽는 시간 문구("30분" / "2시간" / "2시간 30분").
 func _minutes_text(mins: int) -> String:
@@ -13351,18 +13949,33 @@ func _craft_rows() -> Array:
 			"needs_species": String(r["unlock_species"]), "unlocked": unlocked,
 			# ★[S5-T8] 2차 스킬 축(0 = 없음). 라벨을 함께 실어 보내 inv_frame이 스킬 이름을
 			#   하드코딩하지 않게 한다(제작 탭은 "어느 스킬"을 몰라도 문장을 만들 수 있다).
-			"skill_gate": CraftCatalog.skill_gate_of(id), "skill_gate_label": "채광",
+			# ★[S10-T2] 라벨이 "채광" 하드코딩에서 **레시피 파생**으로 바뀌었다 — 축이 둘이 됐다
+			#   (계단=채광 · 스프링클러 상위 2티어=농사). 축이 하나뿐이던 동안엔 하드코딩이 맞았지만
+			#   이제는 같은 문장이 레시피마다 다른 스킬을 가리켜야 한다.
+			"skill_gate": CraftCatalog.skill_gate_of(id),
+			"skill_gate_label": _skill_label(CraftCatalog.skill_gate_id_of(id)),
 			"can": unlocked and CraftCatalog.can_craft(id, counts)})
 	return rows
 
-# ★[S5-T8] 이 레시피의 **2차 스킬 축** 현재 레벨(축이 없는 레시피는 0 = 무영향).
-#   지금 그 축을 쓰는 레시피는 계단 하나뿐이고 축은 채광이다 — 카탈로그가 "어느 스킬인가"를 모르는
-#   대신(craft_catalog.unlocked 주석) 여기서 값을 뽑아 넣는다. 축이 둘 이상 되면 레시피 키에 스킬
-#   id를 실어 이 함수가 그걸 읽으면 된다(그때까지 분기 하나로 충분하다).
+# ★[S5-T8 → ★S10-T2] 이 레시피의 **2차 스킬 축** 현재 레벨(축이 없는 레시피는 0 = 무영향).
+#   S5-T8 주석이 예고한 그대로다 — "축이 둘 이상 되면 레시피 키에 스킬 id를 실어 이 함수가 그걸
+#   읽으면 된다". 스프링클러 상위 2티어(농사)가 붙으며 축이 둘이 됐고, 그래서 하드코딩 분기가
+#   사라지고 카탈로그가 실어 보낸 축 id를 그대로 `_skill_level`에 넘긴다(축이 셋이 돼도 0줄 변경).
+#   축 id가 ""(축 없음)이거나 모르는 값이면 `_skill_level`이 0을 돌려줘 게이트가 자연히 무영향이다.
 func _craft_skill_level(recipe_id: String) -> int:
-	if recipe_id == CraftCatalog.STAIRS:
-		return _skill_level(ProfessionCatalog.MINING)
-	return 0
+	var skill := CraftCatalog.skill_gate_id_of(recipe_id)
+	return _skill_level(skill) if skill != "" else 0
+
+# ★[S10-T2] 스킬 축 id → 표시 이름("" = 축 없음). 숙련 패널(`_skill_row`)이 쓰는 그 한국어 명칭과
+#   같은 문자열이다. 제작 탭 잠금 문구("농사 Lv.4")가 이걸 읽는다.
+func _skill_label(skill: String) -> String:
+	match skill:
+		ProfessionCatalog.FARMING: return "농사"
+		ProfessionCatalog.FORAGING: return "채집"
+		ProfessionCatalog.FISHING: return "낚시"
+		ProfessionCatalog.MINING: return "채광"
+		ProfessionCatalog.COMBAT: return "전투"
+	return ""
 
 # ★[S4-T5] 잡초 낫질 혼합 씨앗 드랍 — 저확률(10% 잠정)·day+칸 해시 결정 롤(헤드리스 재현).
 #   잡초가 혼합 씨앗의 유일 소스다(스타듀 문법 — 잡초 정리에 작은 보상 결).
@@ -13677,6 +14290,8 @@ func _open_frame(ctx: int) -> void:
 		_refresh_guild()                   # ★ [S5-T6] 길드(깊이 해금 검 + 명부환 행)
 	elif ctx == InventoryFrame.CTX_NIGHTMARKET:
 		_refresh_night_market()            # ★[S7-T7] 저승 야시장(가구 세트 2 + 한정 물품 + 씨앗)
+	elif ctx == InventoryFrame.CTX_PEDDLER:
+		_refresh_peddler()                 # ★[S10-T3] 저승 보부상(일반 10 + 가구 1 + 희귀 1)
 	frame.open(ctx)
 	hotbar.visible = false
 	player.set_physics_process(false)   # 모달 — 이동 잠금
@@ -13862,7 +14477,75 @@ func _on_frame_buy_store_item(buy_id: String, kind: String, bulk: bool) -> void:
 		"fest_seed":
 			_try_buy_market_seed(buy_id, STORE_BULK if bulk else 1)
 			return
+		# ★[S10-T2 / ADR-0069 결정 4] 만물상 레어크로우(③) — 목공방·야시장 한정 물품과 같이
+		#   **1회성 행위**라 수량 루프를 안 탄다(세상에 한 마리뿐이라 "n개 구매"라는 말이 성립 안 함).
+		"rarecrow":
+			_try_buy_rarecrow(buy_id)
+			return
+		# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 5종. 야시장과 **kind를 갈라** 두는 이유도 같다 —
+		#   가격 축이 다르다(행사 2할 할인 vs 보부상 웃돈 ±변동). 앞 셋은 1회성이라 수량 루프 밖이다.
+		#   ★ 문자열 리터럴을 쓰는 것은 위 "fest_*" 행과 같은 관례다(match 패턴 = 리터럴). id의
+		#     진실원은 `Peddler.KIND_*`이고 peddler_test ⑤a가 두 쪽을 대조해 오타를 잡는다.
+		"ped_deco":
+			_try_buy_peddler_deco(buy_id)
+			return
+		"ped_rare":
+			_try_buy_peddler_rare(buy_id)
+			return
+		"ped_book":
+			_try_buy_peddler_book(buy_id)
+			return
+		"ped_seed":
+			_try_buy_peddler_seed(buy_id, STORE_BULK if bulk else 1)
+			return
+		"ped_item":
+			_try_buy_peddler_item(buy_id, STORE_BULK if bulk else 1)
+			return
 	_buy_store_generic_n(buy_id, kind, STORE_BULK if bulk else 1)
+
+# ★[S10-T2 / ADR-0069 결정 4] 만물상 레어크로우 구매(획득처 ③) — 네오 ♡ 할인가·1회 한정.
+# 야시장 한정 물품(`_try_buy_market_item`)의 만물상판이고 **적재 먼저·결제 나중** 순서 규율도 그대로다
+# (백팩이 가득이면 냥이 안 나간다 — 더비 교환이 세운 그 계약).
+func _try_buy_rarecrow(id: String) -> bool:
+	if inventory == null or not ItemCatalog.is_rarecrow(id):
+		return false
+	if _rarecrow_owned(id):
+		_notice("%s 은(는) 이미 가지고 있다" % ItemCatalog.name_of(id))
+		return false
+	var price := StoreDiscount.price(ItemCatalog.RARECROW_STORE_PRICE, neo_affinity.hearts())
+	if wallet.gold < price:
+		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [ItemCatalog.name_of(id), price, wallet.gold])
+		return false
+	if not inventory.add_item(id, 1):
+		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(id))
+		return false
+	if not wallet.spend(price):
+		inventory.remove_item(id, 1)   # 방어(위 검사와 이중) — 결제 실패면 물건도 도로 뺀다
+		return false
+	_toast_item(id, 1)
+	audio.sfx("ui")
+	_notice("만물상에서 %s 를 샀다 −%d냥 (수집 %d/%d)" % [ItemCatalog.name_of(id), price,
+		_rarecrow_collected(), ItemCatalog.RARECROWS.size()])
+	return true
+
+# ★[S10-T2 / ADR-0069 결정 4] 행사 보상 레어크로우 1회 한정 지급(⑥ 더비 · ⑦ 장원제 공용 창구).
+# **한정 이력은 SeasonalEvent의 `market_bought` 원장을 그대로 쓴다** — 그 원장은 이름만 야시장이지
+# 실체가 "이 세이브에서 이미 받은 절기 행사 한정 물품 id 목록"이라, 같은 성질의 이력을 새 세이브
+# 키로 또 열면 가법 키가 둘로 갈린다(파생 가능한 것에 원장을 더하지 않는다는 그 규율).
+# 반환 = 실제로 지급했는가(false = 이미 가졌거나·백팩이 가득했거나·조건 미달).
+func _award_event_rarecrow(id: String, where: String) -> bool:
+	if seasonal_event == null or inventory == null or not ItemCatalog.is_rarecrow(id):
+		return false
+	if seasonal_event.has_bought(id) or _rarecrow_owned(id):
+		return false
+	if not inventory.add_item(id, 1):
+		_notice("가방이 가득 차 %s 부상을 받지 못했다 — 자리를 비우고 다시 오자" % where)
+		return false
+	seasonal_event.record_bought(id)
+	_toast_item(id, 1)
+	_notice("%s 특별 부상 — %s (수집 %d/%d)" % [where, ItemCatalog.name_of(id),
+		_rarecrow_collected(), ItemCatalog.RARECROWS.size()], FLAVOR_SECS, true)
+	return true
 
 # 매대 일반 품목을 점주 할인가로 n개까지 산다(골드 닿는 데까지 — 부분 구매 허용, _buy_seed_store_n 결).
 # kind가 기준가·인벤 적재 방법·**어느 가게인가**를 정한다(카탈로그가 진실원 — 여기선 라우팅만).
@@ -14646,6 +15329,25 @@ func _draw_museum_room() -> void:
 			draw_rect(Rect2(bp + Vector2(6, -14), Vector2(8, 3)), Color(0.62, 0.52, 0.30))   # 금박 띠
 		else:
 			draw_rect(Rect2(bp + Vector2(6, -14), Vector2(8, 14)), Color(0.25, 0.22, 0.3, 0.5), false, 1.0)  # 빈 자리
+	# ── ★[S10-T2 / ADR-0069 결정 4] ③ 레어크로우 추적 진열 8좌 ──
+	# ⚠️ **기증이 아니라 추적이다** — Museum 원장(donated/claimed)에 한 톨도 안 적는다. 레어크로우는
+	#   밭에 세워 두는 물건이라 전시대에 바치면 그 기능을 잃고, 무엇보다 마일스톤 문턱이 `count`(기증
+	#   점수)를 키로 claimed를 들고 있어 분모가 11 → 19로 늘면 이미 받은 답례가 어긋난다. 그래서
+	#   Museum은 바이트 하나 안 바뀌었고, 여기는 **소지 ∪ 배치**를 그대로 비추는 거울이다
+	#   (`_rarecrow_owned` — Books 트래커가 "분모 11"을 원장에서 파생해 그리는 그 문법 1:1).
+	var rx := float(MUSEUM_RECT.position.x + 1) * TILE
+	var ry := by + TILE * 2.0
+	for i in ItemCatalog.RARECROWS.size():
+		var rp := Vector2(rx + i * TILE * 1.25, ry)
+		draw_rect(Rect2(rp, Vector2(20, 10)), Color(0.26, 0.24, 0.22))          # 좌대
+		var rid: String = String(ItemCatalog.RARECROWS[i])
+		if _rarecrow_owned(rid):
+			# 모은 종 — 좌대 위 작은 말뚝 실루엣 + 종별 머리 색(밭 렌더와 같은 색 언어).
+			var hc := Color.from_hsv(float(i) / float(ItemCatalog.RARECROWS.size()), 0.55, 0.88)
+			draw_rect(Rect2(rp + Vector2(9, -12), Vector2(3, 12)), Color(0.42, 0.32, 0.22))
+			draw_circle(rp + Vector2(10, -14), 4.0, hc)
+		else:
+			draw_rect(Rect2(rp + Vector2(6, -12), Vector2(8, 12)), Color(0.25, 0.22, 0.2, 0.5), false, 1.0)  # 빈 자리
 
 # ★ [S1R-T12] 휴지통 버리기(프레임 확인 후) — 집은 백팩 슬롯을 통째로 폐기(경제 0 — 판매 아님).
 func _on_frame_discard(slot_index: int) -> void:
@@ -14656,6 +15358,12 @@ func _on_frame_discard(slot_index: int) -> void:
 	#   세상에서 영영 사라지고 수집 완주가 불가능해진다. 열쇠를 기증 목록에서 뺀 것과 같은 판단.
 	if ItemCatalog.category_of(id) == ItemCatalog.CAT_BOOK:
 		_notice("되찾은 것을 버릴 수는 없다 — 혼백관에 맡기거나 책장에 꽂아 두자")
+		return
+	# ★[S10-T2 / ADR-0069 결정 4] 레어크로우도 같은 이유로 못 버린다: 8종 각 한 마리뿐이고 중복
+	#   입수 경로가 없어(창구마다 1회 한정) 버리면 그 종이 세상에서 사라져 완주가 영영 불가능해진다.
+	#   이 금지가 곧 수집 판정을 원장 없이 파생으로 둘 수 있는 근거이기도 하다(`_rarecrow_owned`).
+	if ItemCatalog.is_rarecrow(id):
+		_notice("레어크로우는 버릴 수 없다 — 밭에 세워 두거나 백팩에 간직하자")
 		return
 	var n := inventory.count_at(slot_index)
 	inventory.remove_at(slot_index, n)
@@ -14760,6 +15468,21 @@ func _store_items() -> Array:
 		"name": ItemCatalog.name_of(ItemCatalog.SPRINKLER),
 		"price": StoreDiscount.price(spr_base, hearts), "base": spr_base,
 		"owned": inventory.count_of(ItemCatalog.SPRINKLER),
+	})
+	# ★[S10-T2 / ADR-0069 결정 4] 레어크로우 획득처 ③ — 만물상 상시 재고(1회 한정).
+	# ★ 상위 티어 스프링클러는 **여기 안 판다** — 제작 전용이다(CraftCatalog). 매대에 두면 농사
+	#   스킬·주괴 게이트(결정 3)를 냥으로 우회하게 되어 게이트가 사라진다.
+	# ★ 잠금 = 소지/배치 여부 그대로다(야시장 ②가 구매 이력을 따로 드는 것과 갈리는 지점): 레어크로우는
+	#   잃을 수 없는 물건이라(버리기 금지·비매·출하 불가) 보유 자체가 곧 "이미 샀다"의 증거이고,
+	#   원장을 하나 더 두면 같은 사실의 진실원이 둘이 된다.
+	var rc3 := ItemCatalog.RARECROW_3
+	var rc3_base := ItemCatalog.RARECROW_STORE_PRICE
+	rows.append({
+		"kind": "rarecrow", "buy_id": rc3, "icon_id": rc3,
+		"name": ItemCatalog.name_of(rc3),
+		"price": StoreDiscount.price(rc3_base, hearts), "base": rc3_base,
+		"owned": inventory.count_of(rc3),
+		"locked": _rarecrow_owned(rc3), "locked_text": "보유 중",
 	})
 	return rows
 
@@ -18533,11 +19256,62 @@ func _read_next_letter() -> void:
 	var lines := Mailbox.lines_of(id)
 	if lines.is_empty():
 		return              # 본문 없는 편지는 열지 않는다(테이블 손상 방어 — 빈 대화창 차단)
-	mailbox.mark_read(id)
+	# ★[S10-T2 / ADR-0069 결정 3] 봉투 속 첨부(물건·냥). **자리가 없으면 편지를 열지 않는다** —
+	#   기독은 여는 순간이라(위 주석) 열어 버리면 첨부만 허공에 사라진다. 미독으로 남겨 두면 백팩을
+	#   비우고 다시 와서 그대로 받을 수 있다(책 드랍이 "인벤이 가득이면 원장에 안 적는" 그 판단 1:1).
+	if not _letter_attachment_fits(id):
+		_notice("봉투가 불룩하다 — 백팩을 비우고 다시 열어 보자")
+		return
+	# ★ 지급은 `mark_read`가 true를 돌려준 **그 한 번**에만 일어난다. 기독 원장이 곧 지급 원장이라
+	#   재열람·세이브 왕복에서 두 번 나오지 않는다(첨부 전용 원장을 새로 열지 않는 근거).
+	if mailbox.mark_read(id):
+		_grant_letter_attachment(id)
 	_talking_to = Mailbox.sender_of(id)
 	player.set_physics_process(false)   # 읽는 동안 이동 잠금(_on_dialogue_finished가 푼다)
 	_set_dialogue_skin("letter")        # ★[S9-T9] 편지지 스킨(종료 시 자동 복귀)
 	dialogue.start(_talking_to, lines)
+
+# ★[S10-T2 / ADR-0069 결정 3] 이 편지의 첨부 물건이 백팩에 들어갈 자리가 있는가(첨부 없으면 늘 true).
+# 스택 아이템이 이미 백팩에 있으면 그 슬롯에 합쳐지므로 빈 칸을 안 먹는다(inventory.add_item 규칙).
+func _letter_attachment_fits(letter_id: String) -> bool:
+	if inventory == null:
+		return true
+	var items := Mailbox.attachment_items_of(letter_id)
+	if items.is_empty():
+		return true
+	var free := 0
+	for i in range(inventory.slots.size()):
+		if inventory.id_at(i) == "":
+			free += 1
+	for e in items:
+		var iid := String(e["id"])
+		if ItemCatalog.stackable_of(iid) and inventory.has_item(iid):
+			continue                      # 기존 스택에 합쳐진다 — 빈 슬롯을 안 먹는다
+		free -= 1
+	return free >= 0
+
+# ★[S10-T2 / ADR-0069 결정 3] 봉투 속 내용물을 준다(물건 → 백팩 · 냥 → 지갑). 호출은 `mark_read`가
+# true를 돌려준 프레임 한 번뿐이라 중복 지급이 구조적으로 불가능하다.
+# ⚠️ 여기서 하는 일은 **물건과 냥 전달뿐**이다 — 레시피·콘텐츠 해금은 편지 채널의 직무가 아니다
+#   (mailbox.gd:7 규약 · ADR-0064 발견 게이트 · ADR-0069 결정 3의 명시 자구).
+func _grant_letter_attachment(letter_id: String) -> void:
+	var parts: Array = []
+	for e in Mailbox.attachment_items_of(letter_id):
+		var iid := String(e["id"])
+		var n := int(e["n"])
+		if inventory == null or not inventory.add_item(iid, n):
+			continue                      # 위 `_letter_attachment_fits`가 이미 걸렀다(이중 방어)
+		_toast_item(iid, n)
+		parts.append("%s ×%d" % [ItemCatalog.name_of(iid), n])
+	var gold := Mailbox.attachment_gold_of(letter_id)
+	if gold > 0 and wallet != null:
+		wallet.earn(gold)
+		_total_income += gold
+		parts.append("%d냥" % gold)
+	if parts.is_empty():
+		return
+	audio.sfx("gold" if gold > 0 else "ui")
+	_notice("봉투에 든 것 — %s" % " · ".join(parts))
 
 # ── ★[S9-T7 / ADR-0067 결정 8 · ADR-0034] Books 채널 — 입수 롤 · 인라인 즉독 · 책장 ─────
 # main의 몫은 넷이다: ①네 입수 지점에서 롤을 부른다 ②적재 성공 시에만 원장에 적는다
@@ -19002,9 +19776,17 @@ func _weed_spread_class(t: Vector2i, occ: Dictionary) -> int:
 		return Reclaim.DEST_BLOCK            # 이미 잡초(멱등)
 	if furnace != null and furnace.has_at(_region, t):
 		return Reclaim.DEST_BLOCK
+	if crystalarium != null and crystalarium.has_at(_region, t):
+		return Reclaim.DEST_BLOCK            # ★[S10-T1] 결정기 = 면제(업화로와 같은 결 — 잡초가 기계를 안 삼킨다)
 	if crab_pot != null and crab_pot.has_at(_region, t):
 		return Reclaim.DEST_BLOCK
 	if tapper != null and tapper.has_at(_region, t):
+		return Reclaim.DEST_BLOCK
+	# ★[S10-T2] 세워 둔 레어크로우 = **면제**(파괴 아님). 아래 파괴 2종에 넣지 않는 근거는 그 주석
+	#   그대로다 — ADR-0065가 명시한 둘(작물·스프링클러) 말고는 삼키지 않는다. 게다가 레어크로우는
+	#   중복 입수가 없는 수집물이라 잡초에 부서지면 8종 완주가 영영 불가능해진다(책을 버릴 수 없게
+	#   막은 것과 같은 판단).
+	if rarecrow != null and rarecrow.has_at(t):
 		return Reclaim.DEST_BLOCK
 	# ★파괴 2종 — ADR-0065가 명시한 것만. 다른 설치물까지 삼키면 "잡초에 다 잃는다"가 되어 cozy를 넘는다.
 	if sprinkler != null and sprinkler.has_at(t):
@@ -19196,7 +19978,8 @@ func _draw() -> void:
 			_draw_forage()             # ★ [B1-a.3] 사료풀(다 자람=풀포기·벤 자리=밑동) — 낫 채집 대상
 			_draw_flower_regrow()      # ★ ADR-0052 딴 꽃 패치 자리 새싹(재생 대기 — 폄은 _draw_props_for가 풀 스프라이트로)
 			_draw_encroach_weeds()     # ★ ADR-0055 밤새 돋은 재점령 잡초(빈 맨땅 위 평면 데칼 — 낫 채집 대상)
-			_draw_sprinklers()         # ★ [S1R-T9] 저승 스프링클러(설치물 — 몸통 + 급수 십자 표식, 그레이박스)
+			_draw_sprinklers()         # ★ [S1R-T9] 저승 스프링클러(설치물 — 몸통 + 급수 범위 표식, 그레이박스)
+			_draw_rarecrows()          # ★ [S10-T2] 세워 둔 레어크로우(1×2 허수아비 실루엣, 그레이박스)
 			# ★[§6] Y-split: 뒤 프롭(플레이어 발치 위)만 여기서(플레이어 아래). 앞 프롭은 _front_props.
 			var _psy: float = player.global_position.y if player != null else 1.0e20
 			_draw_props_for(_home_prop_entries(), self, _PROP_PASS_BACK, _psy)  # ★ ADR-0025 데이터 + S1R-T4 절차 스캐터(숲·능선·debris)
@@ -19260,6 +20043,7 @@ func _draw() -> void:
 			_draw_facade_resident_houses()  # ★ [S2-T10] 주민 집 11채 외관(공용 변주 재도색)
 			_draw_quest_board()      # ★ [S2-T6] 만물상 앞 게시판(SOLID 1칸 그레이박스 — 수락 중이면 표식)
 			_draw_night_market()     # ★[S7-T7] 저승 야시장 임시 매대(행사일에만 광장에 선다)
+			_draw_peddler()          # ★[S10-T3] 저승 보부상 봇짐 좌판(7의 배수 날에만 다리 남단에 선다)
 			# ★[S2-T9] 마을 야외 장식(벚꽃 나무·돌담) — HOME과 같은 Y-split. 뒤 프롭만 여기서 그리고
 			#   앞 프롭은 _front_props가 플레이어 위에 다시 그린다(캐노피 뒤로 지나가기).
 			var _vsy: float = player.global_position.y if player != null else 1.0e20
@@ -19279,6 +20063,8 @@ func _draw() -> void:
 			_draw_night_customers()
 			_draw_jobgui()
 	_draw_furnaces()        # ★[S5-T3] 세워 둔 업화로(구역 무관 — 전 지상 무대에 놓을 수 있다)
+	_draw_crystalariums()   # ★[S10-T1] 세워 둔 결정기(업화로와 같은 결 — 구역 무관)
+	_draw_panning_spots()   # ★[S10-T1] 오늘의 사금 스폿 반짝임(삼도천·황천해 물가에만 있다)
 	_draw_forage_detect()   # ★[S4-T2] 혼 감지 가장자리 여우불 + 추적자 ▼(대상 없으면 무동작 — 구역 무관)
 	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
 	_draw_cheki_hud()       # ★ [S6-T5] 체키 구도·셔터 그레이박스 트랙(세션 있을 때만)
@@ -20035,23 +20821,92 @@ func _draw_furnaces() -> void:
 		else:
 			draw_rect(mouth, Color(0.12, 0.11, 0.12))                     # 빈 화덕 = 식은 검정
 
+# ★[S10-T1 / ADR-0069 결정 2] 결정기 그레이박스 렌더(아트는 S10-T9). 업화로와 같은 결로 "몸통 +
+#   상태 3색 창"이되, 몸통이 유리 상자라 밝고 창이 *안에 뜬 결정*이다. 순수 시각 — 상태는
+#   CrystalariumLedger가 소유하고 여긴 질의만 한다.
+func _draw_crystalariums() -> void:
+	if crystalarium == null or _indoor != "" or _mine_floor != 0:
+		return
+	for t: Vector2i in crystalarium.tiles(_region):
+		var base := Vector2(t.x * TILE, t.y * TILE)
+		# 유리 상자 몸통 + NW 광원 상판(업화로 실루엣과 갈리게 밝은 남빛으로).
+		draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, TILE - 8)), Color(0.24, 0.27, 0.38))
+		draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, 4)), Color(0.40, 0.44, 0.58))
+		draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, TILE - 8)), Color(0.68, 0.74, 0.92, 0.55), false, 1.0)
+		var gem := crystalarium.gem_at(_region, t)
+		if gem == "":
+			continue                                   # 빈 기계 = 유리 상자만(안이 비어 보인다)
+		# 안에 뜬 결정 — 보석 id 해시 파생 색이라 종마다 다르고 세션 간 고정이다(채집물 색점과 같은 결).
+		var col := _forage_species_color(gem)
+		var body := Rect2(base + Vector2(11, 13), Vector2(TILE - 22, TILE - 22))
+		if crystalarium.is_ready(_region, t):
+			draw_rect(body, col)                       # 다 여물었다 = 꽉 찬 결정 + 흰 하이라이트
+			draw_rect(Rect2(base + Vector2(13, 15), Vector2(4, 4)), Color(1.0, 1.0, 1.0, 0.85))
+		else:
+			draw_rect(body, Color(col.r, col.g, col.b, 0.45))   # 여무는 중 = 옅은 결정
+			# 남은 일수 눈금 — 여물수록 아래 띠가 찬다(업화로 분 눈금의 일 단위 판).
+			var total := maxi(CrystalariumLedger.days_for(gem), 1)
+			var left := crystalarium.days_left(_region, t)
+			var w := float(TILE - 10) * float(total - left) / float(total)
+			draw_rect(Rect2(base + Vector2(5, TILE - 6), Vector2(w, 3)), col)
+
+# ★[S10-T1 / ADR-0069 결정 2] 사금 스폿 그레이박스 렌더(아트는 S10-T9) — 물가 칸에 뜬 얕은 웅덩이 +
+#   반짝임 십자. **아이콘이 아니라 표식**인 이유: 스폿은 주울 물건이 아니라 "여기를 일면 뭔가 나온다"는
+#   자리라, 채집물처럼 종을 보여 줄 것이 없다(무엇이 나오는지는 일어야 안다 — 그게 팬닝의 결이다).
+#   순수 시각 — 좌표는 PanningSpots가 소유하고 여긴 질의만 한다.
+func _draw_panning_spots() -> void:
+	if panning == null or _indoor != "" or _mine_floor != 0:
+		return
+	for t: Vector2i in panning.tiles(_region):
+		var c := Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
+		draw_circle(c, TILE * 0.30, Color(0.38, 0.44, 0.46, 0.55))          # 젖은 자갈 웅덩이
+		draw_circle(c, TILE * 0.30, Color(0.72, 0.78, 0.80, 0.65), false, 1.0)
+		# 반짝임 십자(사금 알갱이) — 금빛 네 획.
+		var g := Color(0.98, 0.86, 0.40)
+		draw_line(c + Vector2(-TILE * 0.16, 0), c + Vector2(TILE * 0.16, 0), g, 2.0)
+		draw_line(c + Vector2(0, -TILE * 0.16), c + Vector2(0, TILE * 0.16), g, 2.0)
+		draw_circle(c, TILE * 0.06, Color(1.0, 0.97, 0.80))
+
 # ★ [S1R-T9] 저승 스프링클러 그레이박스 렌더(설치물 — 아트는 후속 아트 패스). 각 설치 칸에 청록 몸통 +
 #   물방울 머리를 그리고, 급수 십자 4칸을 옅은 물빛 표식으로 얹어 "무엇을 적시는지" 보이게 한다(순수 시각).
 func _draw_sprinklers() -> void:
 	if sprinkler == null or _region != RegionCatalog.HOME:
 		return
 	for t: Vector2i in sprinkler.tiles():
-		# 급수 범위(십자 4칸) 옅은 물빛 하이라이트 — 무엇을 적시는지 가독.
-		for d: Vector2i in Sprinkler.CROSS_OFFSETS:
-			var c: Vector2i = t + d
+		# 급수 범위 옅은 물빛 하이라이트 — 무엇을 적시는지 가독.
+		# ★[S10-T2] 티어별 범위(4/8/24)를 원장이 알려 준다(고정 십자 → `targets_of`).
+		var tier: int = sprinkler.tier_at(t)
+		for c: Vector2i in sprinkler.targets_of(t):
 			if c.x < 0 or c.x >= _grid_w or c.y < 0 or c.y >= _grid_h:
 				continue
 			draw_rect(Rect2(Vector2(c.x * TILE, c.y * TILE), Vector2(TILE, TILE)), Color(0.45, 0.72, 0.85, 0.20))
 		# 몸통(청록 사각) + 물방울 머리(밝은 물빛 원) — 설치물이 또렷이 보이게.
+		# ★[S10-T2] 티어가 **몸통 색**으로 읽힌다(청록 → 남빛 → 금빛). 아트 패스 전까지의 그레이박스
+		#   구별이고, 범위 하이라이트가 이미 크기로 말하므로 색은 거드는 신호다.
+		var body: Color = [Color(0.30, 0.50, 0.58), Color(0.28, 0.36, 0.62), Color(0.62, 0.52, 0.24)][clampi(tier - 1, 0, 2)]
 		var base := Vector2(t.x * TILE, t.y * TILE)
-		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), Color(0.30, 0.50, 0.58))
+		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), body)
 		draw_rect(Rect2(base + Vector2(TILE * 0.28, TILE * 0.40), Vector2(TILE * 0.44, TILE * 0.44)), Color(0.16, 0.28, 0.34), false, 1.0)
 		draw_circle(base + Vector2(TILE * 0.5, TILE * 0.34), TILE * 0.16, Color(0.62, 0.84, 0.94))
+
+# ★[S10-T2 / ADR-0069 결정 4] 레어크로우 그레이박스 렌더(아트는 T9 아트 패스). 프롭 허수아비의
+#   1×2 실루엣을 상속한다 — **겨눈 칸이 밑동**이고 몸통은 위로 1칸 자란다(rarecrow.gd 머리말).
+#   종별 구별은 머리 색 하나로만 준다(순수 스킨 — 기능은 전부 같으니 신호도 장식 한 점이면 족하다).
+func _draw_rarecrows() -> void:
+	if rarecrow == null or _region != RegionCatalog.HOME:
+		return
+	for t: Vector2i in rarecrow.tiles():
+		var id := rarecrow.id_at(t)
+		var idx := maxi(ItemCatalog.RARECROWS.find(id), 0)
+		# 종 인덱스 → 색상환 8분할(고정 채도·명도). 값이 아니라 *구별*이 목적이라 결정적 파생이면 족하다.
+		var head := Color.from_hsv(float(idx) / float(ItemCatalog.RARECROWS.size()), 0.55, 0.88)
+		var base := Vector2(t.x * TILE, t.y * TILE)
+		# 말뚝(밑동 칸 세로 기둥) + 가로 팔(위 칸) — 허수아비 실루엣.
+		draw_rect(Rect2(base + Vector2(TILE * 0.44, -TILE * 0.4), Vector2(TILE * 0.12, TILE * 1.3)), Color(0.42, 0.32, 0.22))
+		draw_rect(Rect2(base + Vector2(TILE * 0.14, -TILE * 0.28), Vector2(TILE * 0.72, TILE * 0.10)), Color(0.52, 0.42, 0.28))
+		# 머리(종별 색) — 팔 위에 얹는다.
+		draw_circle(base + Vector2(TILE * 0.5, -TILE * 0.5), TILE * 0.20, head)
+		draw_circle(base + Vector2(TILE * 0.5, -TILE * 0.5), TILE * 0.20, Color(0.14, 0.12, 0.12), false, 1.0)
 
 # ★ [S3-T7 / ADR-0061 결정 10] 게잡이통 렌더(★S3-T10에서 몸통만 도트 텍스처로 승격 — 상태 표식은
 #   그레이박스 때와 같은 도형이다). 상태 셋을 **톤과 표식으로** 갈라, 물가를 한 번 훑기만 해도 "어느
@@ -20558,6 +21413,30 @@ func _draw_night_market() -> void:
 	draw_rect(Rect2(ox + 1, oy + 4, TILE - 2, 7), Color(0.30, 0.14, 0.18))            # 차일(검붉은)
 	draw_circle(Vector2(ox + 7, oy + 8), 3.0, Color(0.98, 0.80, 0.42))                # 등롱(좌)
 	draw_circle(Vector2(ox + TILE - 7, oy + 8), 3.0, Color(0.98, 0.80, 0.42))         # 등롱(우)
+
+# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 봇짐 좌판(그레이박스 — 진짜 프롭 아트는 T9 큐).
+# 출현일이 아니면 **아무것도 그리지 않는다** = 떠난 뒤 무대에 흔적이 0이다(야시장·더비 부스와
+# 같은 규율. 타일·충돌은 애초에 안 건드렸으므로 지울 상태도 없다).
+# 실루엣: 지게 발채 + 그 위에 얹힌 봇짐 두 덩이 + 펼친 보자기 한 장. **야시장 매대와 형태를
+# 일부러 갈랐다** — 야시장은 *차일 친 좌판*(세워 놓는 가게)이고 보부상은 *짊어지고 온 짐*이라,
+# 멀리서 실루엣만 봐도 "이건 다른 장수"로 읽혀야 한다(리듬 분리를 렌더 층에서도 말한다).
+func _draw_peddler() -> void:
+	if clock == null or not Peddler.is_open_day(clock.day):
+		return
+	var ox := float(PEDDLER_TILE.x * TILE)
+	var oy := float(PEDDLER_TILE.y * TILE)
+	# ★ 아트 훅 — assets/props/peddler_stall.png(32×48)이 있으면 그대로(야시장 매대와 완전 동형·
+	#   발치 앵커). 프롭 교체 관례상 코드 0줄로 갈아 끼워진다.
+	var tex := _prop_tex("peddler_stall")
+	if tex != null:
+		draw_texture(tex, Vector2(ox, oy + TILE - tex.get_size().y))
+		return
+	draw_rect(Rect2(ox + 2, oy + 20, TILE - 4, TILE - 21), Color(0.36, 0.27, 0.17))   # 펼친 보자기(흙빛 천)
+	draw_rect(Rect2(ox + 5, oy + 17, TILE - 10, 4), Color(0.24, 0.18, 0.11))          # 지게 발채(가로대)
+	draw_rect(Rect2(ox + 6, oy + 9, 8, 9), Color(0.46, 0.36, 0.24))                   # 봇짐(좌)
+	draw_rect(Rect2(ox + TILE - 14, oy + 11, 8, 7), Color(0.55, 0.44, 0.30))          # 봇짐(우)
+	draw_rect(Rect2(ox + 6, oy + 9, 8, 2), Color(0.72, 0.62, 0.44))                   # 봇짐 매듭 띠
+	draw_rect(Rect2(ox + TILE * 0.5 - 1, oy + 4, 2, 6), Color(0.28, 0.21, 0.14))      # 지겟작대기
 
 # ★[S9-T3 / ADR-0067 결정 7] 집 앞 우편함(그레이박스 — 진짜 아트는 T9 큐).
 # 실루엣: 나무 기둥 + 그 위에 얹힌 함. 한 칸 안에 발치정렬로 들어가 집 외관(y9)과 안 겹친다.
