@@ -1842,6 +1842,11 @@ const MUSEUM_DONATE_TILE := Vector2i(13, 46)    # ★[S2-T5] 무인 기증대(�
 #   고른 이유: 방(x8..19)의 y45=유품 좌대·y47=책 서가·y49=레어크로우 좌대가 이미 차 있고, y46만
 #   기증대(x12.5~14.5 폭)를 빼면 비어 있다. x17은 그 폭에서 두 칸 넘게 떨어져 조준 칸이 안 겹친다.
 const MUSEUM_CODEX_TILE := Vector2i(17, 46)     # ★[S10-T6] 무인 열람대 — F 도감 펼치기
+# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 안치대 — 기증대·열람대와 **같은 줄 서편**(y46 x9). 세 창구가
+#   한 줄에 x9·x13·x17로 균등하게 서서 서로 네 칸씩 떨어진다(조준 칸 충돌 0 — 열람대가 기증대와
+#   갈린 그 근거 1:1). 안치 자체는 필드에서 줍는 순간 끝나므로 이 칸은 *보여 주는* 자리다
+#   (진행 눈금 + 시련장 개방 안내 + 밀린 마일스톤 답례 수령).
+const MUSEUM_FIREFLY_TILE := Vector2i(9, 46)    # ★[S10-T7] 무인 안치대 — F 반딧넋 진행 열람
 # ── ★ M3.2 황천해(바다 낚시 무대 + 생선가게) ──────────────────────────────────
 # 넷째 실데이터 구역(막다른 바다). 낚시 메카닉은 만들지 않는다(Phase 3) — 바다(WATER) 무대 + 부두(잔교)
 # + 바다 낚시터(라벨만) + 생선가게(enterable 빈 방)까지. ★[S3-T1] 삼도천 하구에서 **북단** spawn(28,2)에 도착.
@@ -2394,6 +2399,10 @@ var panning: PanningSpots = null
 # ★[S10-T1 / ADR-0069 결정 2] 결정기 원장(설치 칸 → 안에 든 보석·다음 복제까지 남은 일수).
 #   업화로와 같은 결이되 **진행 축이 분이 아니라 일**이라 취침 훅이 굴린다(채취기와 같은 자리).
 var crystalarium: CrystalariumLedger = null
+# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 원장(고정 배치 45 중 무엇을 안치했나 + [명부 시련장] 게이트).
+#   PanningSpots와 같은 RefCounted 순수 원장이고, **아이템이 아니다** — 줍는 즉시 여기에만 적힌다
+#   (인벤 경유 0 = 버리기·상자·출하 어느 처분 경로도 없다 = 잃을 수 없는 수집물. firefly_soul.gd 머리말).
+var fireflies: FireflySouls = null
 # ★[S5-T3 / ADR-0063 결정 2·3] 누적 지오드 개봉 횟수 — 개봉 롤의 **결정적 시드**다(같은 카운터면
 #   같은 답이라 헤드리스가 재현하고, 카운터가 늘어야 새 롤이라 재롤 exploit이 구조적으로 막힌다).
 var _geode_opened := 0
@@ -3084,6 +3093,8 @@ func _ready() -> void:
 	panning.changed.connect(queue_redraw)     # 일일 재배치·채취·복원 시 반짝임 그레이박스 갱신
 	crystalarium = CrystalariumLedger.new()   # ★[S10-T1] 결정기 원장(RefCounted — 업화로와 같은 결·축만 일)
 	crystalarium.changed.connect(queue_redraw)  # 설치·투입·완성·수거·회수·복원 시 그레이박스 갱신
+	fireflies = FireflySouls.new()       # ★[S10-T7] 반딧넋 원장(RefCounted — 사금 스폿 원장과 같은 결)
+	fireflies.changed.connect(queue_redraw)   # 안치·마일스톤·복원 시 필드 반짝임 + 혼백관 눈금 갱신
 	tool_tier = ToolTier.new()           # ★[S4-T4] 도구 티어 원장(RefCounted — 나무 원장과 같은 결)
 	tool_tier.changed.connect(_on_tool_tier_changed)   # 티어↑ → 프롬프트 타수·물뿌리개 용량 배지 갱신
 	carpenter = Carpenter.new()          # ★[S4-T7] 목공방 건축 의뢰 원장(RefCounted — 도구 티어와 같은 결)
@@ -4239,6 +4250,14 @@ func _chop_tree(t: Vector2i) -> void:
 	_grant_chop_drop(ItemCatalog.SAP, int(res.get("sap", 0)))
 	_grant_chop_drop(String(res.get("seed_id", "")), int(res.get("seeds", 0)))
 	_gain_forage_xp(int(res.get("xp", 0)))       # 0이면 _gain_forage_xp가 알아서 무동작
+	# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 드랍 ② 벌목 — 산출·XP 다음의 별 가지.
+	#   ★ **넘어간 타에만 굴린다**(중간 타는 안 굴린다). 벌목만 다타수라, 매 타 같은 serial로 굴리면
+	#     한 번 걸린 나무를 계속 때려 드랍 몫 15를 통째로 뽑아낼 수 있다(다른 셋은 한 사건 = 한 번:
+	#     부순 돌·거둔 포기·한 캐스팅). 그루터기 정리(cleared)는 나무 쓰러뜨리기와 **다른 serial**을
+	#     써 같은 칸에서 두 사건이 같은 답을 공유하지 않게 한다.
+	if bool(res.get("felled", false)):
+		var chop_serial := t.y * 1000 + t.x + (100000 if bool(res.get("cleared", false)) else 0)
+		_roll_firefly_drop(FireflySouls.SRC_CHOP, chop_serial)
 	var large := String(res.get("large", ""))
 	if large != "" and bool(res.get("felled", false)):
 		# ★[S4-T4] 큰 통나무는 영영 치워진다(재생성 없음 = 심층 개방) / 큰 그루터기는 밤에 되돌아온다.
@@ -5559,6 +5578,9 @@ func _award_mine_drop(t: Vector2i, node_id: String) -> void:
 	# ★[S9-T7 / ADR-0067 결정 8] Books 입수 ① 갱도 채굴 — 부순 사건마다 1롤(산출·XP 다음이라
 	#   광물 결과에 간섭이 0이다). serial = 층·칸의 좌표성 정수라 같은 날 같은 칸은 같은 결과다.
 	_roll_book_drop(Books.SRC_MINE, _mine_floor * 1000000 + t.y * 1000 + t.x)
+	# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 드랍 ③ 채광 — Books 롤 **바로 뒤**의 별 가지다(순차 소비의
+	#   맨 뒤 = 앞의 광물·XP·Books 시드 스트림을 한 톨도 안 건드린다. Books가 같은 이유로 맨 뒤에 붙은 그 자리).
+	_roll_firefly_drop(FireflySouls.SRC_MINE, _mine_floor * 1000000 + t.y * 1000 + t.x)
 
 # 깬 돌 한 칸의 통행 상태를 즉시 반영한다(구역 재빌드 없이 — _sync_tree_tile과 같은 결).
 # 타일셋 물리 레이어가 ROCK에 충돌을 달고 있어, 셀을 길 변종으로 바꾸면 충돌도 같이 사라진다.
@@ -10760,6 +10782,7 @@ func _save_game() -> void:
 		"geode_opened": _geode_opened,       # ★[S5-T3] 누적 지오드 개봉 수(개봉 롤 시드 — 재롤 차단)
 		"panning": panning.to_save(),       # ★[S10-T1] 오늘의 사금 스폿(구역별 좌표 — 매일 새로 깔리는 델타)
 		"crystalarium": crystalarium.to_save(),   # ★[S10-T1] 결정기(구역별 좌표·든 보석·남은 일수)
+		"fireflies": fireflies.to_save(),   # ★[S10-T7] 반딧넋(안치한 id → day + 마일스톤 지급 기록. 게이트는 파생이라 저장 안 함)
 		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
 		"carpenter": carpenter.to_save(),   # ★[S4-T7] 목공방 건축 의뢰(진행 1건 + 완공 이력 — 정원 승격은 ranch에)
 		"mount": mount.to_save(),           # ★[S10-T4] 승마 상태(bool 하나 — 휘파람 보유는 인벤이 든다)
@@ -10894,6 +10917,8 @@ func _load_game() -> void:
 		museum.load_save(data["museum"])
 	if data.has("codex"):    # ★ [S10-T6] — 키 없는 구세이브는 등재 0·트로피 없음(빈 원장·하위호환).
 		codex.load_save(data["codex"])   #   기존 플레이어도 다음 출하부터 자연히 채워 나간다(무막힘)
+	if data.has("fireflies"):  # ★ [S10-T7] — 키 없는 구세이브는 안치 0(전 반딧넋이 제자리에 있는 새 수집·하위호환)
+		fireflies.load_save(data["fireflies"])
 	if data.has("quest_board"):   # ★ [S2-T6] — 키 없는 구버전은 수락 0·완료 0(빈 원장·하위호환)
 		quest_board.load_save(data["quest_board"])
 	if data.has("forage"):    # ★ [B1-a.3] — 키 없는 구버전은 사료풀 0(부팅 후 _seed_forage_tiles가 맵에서 시드). changed가 드로우 갱신
@@ -11896,6 +11921,8 @@ func _process(delta: float) -> void:
 	var facing_donate := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_DONATE_TILE
 	# ★ [S10-T6] 혼백관 열람대: 같은 방 다른 칸이라 기증대와 좌표로 갈린다(기증대와 정확히 같은 결).
 	var facing_codex := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_CODEX_TILE
+	# ★ [S10-T7] 혼백관 반딧넋 안치대: 같은 방 서편 칸(기증대·열람대와 좌표로 갈린다).
+	var facing_firefly := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_FIREFLY_TILE
 	# ★ [S4-T4] 대장간 무인 업그레이드대: 대장간 안에서 업그레이드대 칸을 바라볼 때(_indoor 가드 —
 	#   기증대와 정확히 같은 결. 다른 구역의 같은 좌표에 닿아도 무반응).
 	var facing_upgrade := not _sleeping and _indoor == "대장간" and _target == SMITHY_UPGRADE_TILE
@@ -12100,6 +12127,12 @@ func _process(delta: float) -> void:
 	if facing_codex and Input.is_action_just_pressed("shop_toggle"):
 		_open_codex()
 		return
+	# ★ [S10-T7] 반딧넋 안치대(F): 진행·게이트를 펼치고, **밀린 마일스톤 답례가 있으면 여기서 준다**.
+	#   왜 필드가 아니라 여기인가 — 답례는 물건이라 백팩이 가득하면 못 받는데, 들에서 그 사고가 나면
+	#   답례가 조용히 증발한다. 안치대에서만 주면 "가방을 비우고 다시 오면 된다"가 늘 성립한다.
+	if facing_firefly and Input.is_action_just_pressed("shop_toggle"):
+		_open_firefly_stand()
+		return
 	# ★ [S4-T4 → S5-T3] 대장간 모루 업그레이드(F): 모루를 바라보며 F — **든 도구**의 다음 티어를
 	#   즉시 산다(골드 + 주괴 5 차감 → 티어 +1. 대기 없음 = ADR-0063 결정 3 QoL 승격).
 	if facing_upgrade and Input.is_action_just_pressed("shop_toggle"):
@@ -12255,6 +12288,15 @@ func _process(delta: float) -> void:
 			and panning.has_at(_region, _target)
 	if on_pan_spot and Input.is_action_just_pressed("shop_toggle"):
 		_pan_spot(_target)
+	# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 — 반짝이는 칸을 [F]로 거둔다(= 인도 = 안치).
+	#   ★ **팬닝 바로 뒤**에 둔다: 고정 배치 표가 팬닝 존을 비껴가도록 잠겼으므로 실제로 겹칠 일은
+	#     없지만, 존이 나중에 넓어져도 오늘의 사금이 먼저 잡히도록 순서로 한 번 더 못 박는다.
+	#   ★ 혼력·도구 **둘 다 안 든다**. 넋 하나를 제자리로 돌려보내는 일에 값을 매기지 않는다
+	#     (코지 — [ADR-0059] 결정 3 "보람 액션 무과금"의 결).
+	var on_firefly := not _sleeping and _indoor == "" and _mine_floor == 0 and _narak_depth == 0 \
+			and fireflies != null and fireflies.live_spot_at(_region, _target) != ""
+	if on_firefly and Input.is_action_just_pressed("shop_toggle"):
+		_gather_firefly(_target)
 	# ★[S4-T8 / ADR-0062 결정 9 ㉡] 이끼 낫 채취 — 이끼 낀 성숙목은 SOLID(비-SOIL)라 벌목과 같은 자리에서
 	#   디스패치한다. **든 게 낫일 때만** 걸리고(도끼면 아래 벌목이 잡는다), 둘은 서로 배타라 한 칸에서
 	#   충돌하지 않는다(각 함수가 자기 도구를 스스로 검사 — ADR-0024 §2 자동 분기 없음).
@@ -12730,6 +12772,18 @@ func _process(delta: float) -> void:
 		else:
 			interact_prompt.text = "[F] 명부 도감 (%d/%d)" % [
 				codex.shipped_count(), Codex.total_count()]
+	elif facing_firefly:
+		# ★ [S10-T7] 안치대를 바라볼 때: 진행 + **문이 열렸는지**가 누르기 전에 읽힌다.
+		#   문턱 전에는 남은 수를 말해 "무엇을 하면 열리나"가 자명하다(게이트의 절반은 안내다).
+		interact_prompt.visible = true
+		var ff_left := fireflies.remaining_to_gate() if fireflies != null else FireflySouls.GATE_COUNT
+		var ff_got: int = fireflies.collected_count() if fireflies != null else 0
+		if ff_left > 0:
+			interact_prompt.text = "[F] 반딧넋 안치대 (%d/%d · 명부 시련장까지 %d)" % [
+				ff_got, FireflySouls.total_count(), ff_left]
+		else:
+			interact_prompt.text = "[F] 반딧넋 안치대 (%d/%d · 명부 시련장 열림)" % [
+				ff_got, FireflySouls.total_count()]
 	elif facing_upgrade:
 		# ★ [S4-T4 → S5-T3] 대장간 모루: **든 도구**의 현재 티어 · 다음 티어 · 가격 · 주괴를 한 줄로.
 		interact_prompt.visible = true
@@ -12850,6 +12904,13 @@ func _process(delta: float) -> void:
 		# ★[S10-T1] 반짝이는 물가 칸을 바라볼 때: [F]로 일다(혼력 소량). 도구는 필요 없다.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[F] 사금 일기 (혼력 %d)" % PanningSpots.PAN_ENERGY
+	elif fireflies != null and _indoor == "" and _mine_floor == 0 and _narak_depth == 0 \
+			and fireflies.live_spot_at(_region, _target) != "":
+		# ★[S10-T7] 반딧불이 앉은 칸을 바라볼 때: [F]로 거두면 그대로 혼백관에 안치된다.
+		#   분모는 원장 파생이라 표가 늘면 이 줄이 저절로 따라 는다(45 하드코딩 0).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[F] 반딧넋 거두기 (%d/%d)" % [
+			fireflies.collected_count(), FireflySouls.total_count()]
 	elif tapper != null and _indoor == "" and tapper.has_at(_region, _target):
 		# ★[S4-T6] 채취기가 박힌 나무를 바라볼 때: 상태별 [F] 한 동사(수거 / 회수). **나무 프롬프트보다
 		#   먼저** 본다 — 그 칸의 지금 할 일은 벌목이 아니라 채취기이고, 벌목은 애초에 막혀 있다.
@@ -13463,6 +13524,9 @@ func _finish_fishing() -> void:
 		#   ★ 새 롤은 **순차 소비의 맨 뒤**에 붙였다: 앞의 어종·품질·인양 롤이 쓰는 시드 스트림을
 		#     한 톨도 안 건드려야 기존 회귀(fishing_test 결정성)가 그대로 통과한다.
 		_roll_book_drop(Books.SRC_FISH, _cast_seed)
+		# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 드랍 ④ 낚시 — 인양·Books 다음의 마지막 가지.
+		#   serial = 캐스팅 시드라 같은 날 같은 캐스팅이면 같은 답이다(되감기 재롤 차단).
+		_roll_firefly_drop(FireflySouls.SRC_FISH, _cast_seed)
 	elif bool(res["hook_refused"]):
 		_notice("혼력이 모자라 챌 수 없었다 — 입질을 놓쳤다 (필요 %d)" % int(res["energy_cost"]))
 	elif bool(res["line_broke_by_class"]):
@@ -14021,6 +14085,104 @@ func _pan_spot(t: Vector2i) -> void:
 	audio.sfx("harvest")
 	queue_redraw()
 
+# ── ★[S10-T7 / ADR-0069 결정 10] 반딧넋 — 거두기 · 활동 드랍 · 안치대 · 게이트 ──
+# main의 몫은 넷이다: ①반짝이는 칸을 [F]로 거둔다 ②네 활동의 확정 지점에서 드랍을 굴린다
+# ③혼백관 안치대에서 진행·게이트·밀린 답례를 편다 ④[명부 시련장] 개방 술어를 공개한다.
+# **무엇이 어디 있나·무엇이 나오나·문이 열렸나**는 전부 FireflySouls가 진다(PanningSpots 관계 동형).
+
+# 반짝이는 칸의 반딧넋을 거둔다 = 그대로 혼백관 안치다(인벤을 거치지 않는다 — 그래서 "백팩이 가득"이
+#   없고, 버릴 수도 팔 수도 없다. firefly_soul.gd 머리말 ★ 참조).
+#   · 혼력·도구 불요(무과금 — 넋을 제자리로 돌려보내는 일에 값을 매기지 않는다)
+#   · 마일스톤 답례는 여기서 안 준다 → 혼백관 안치대에서 준다(백팩 가득 시 답례 증발 차단)
+func _gather_firefly(t: Vector2i) -> void:
+	if fireflies == null or clock == null:
+		return
+	var id := fireflies.live_spot_at(_region, t)
+	if id == "":
+		return                                   # 없는 칸(디스패치가 걸렀지만 방어)
+	if not fireflies.collect(id, clock.day):
+		return                                   # 이미 안치(멱등 — 도달 불가)
+	audio.sfx("ui")
+	_notice_firefly_progress()
+	queue_redraw()
+
+# 안치 뒤 한 줄 — 진행과 **게이트 도달 순간**을 알린다. 문턱을 막 넘은 프레임에서만 문 이야기를
+# 하고(그 뒤로는 진행만), 완주하면 맺음말로 끝난다. 전부 원장 파생이라 저장할 문장이 없다.
+func _notice_firefly_progress() -> void:
+	if fireflies == null:
+		return
+	var got := fireflies.collected_count()
+	var total := FireflySouls.total_count()
+	if got == FireflySouls.GATE_COUNT:
+		_notice("반딧넋 %d/%d — 나락 깊은 곳에서 무언가 열리는 소리가 났다 (명부 시련장)" % [got, total])
+	elif fireflies.is_complete():
+		_notice("반딧넋 %d/%d — 길 잃은 넋을 모두 인도했다" % [got, total])
+	else:
+		_notice("반딧넋을 거두었다 — 혼백관에 안치된다 (%d/%d)" % [got, total])
+
+# ★ 활동 드랍 훅 — 네 확정 지점(수확·벌목·채광·낚시)이 **각각 한 곳씩만** 이 함수를 부른다.
+#   `serial`은 그 사건의 좌표성 정수다(수확·벌목 칸 / 부순 칸 / 캐스팅 시드) — day와 함께 롤을
+#   결정하므로 같은 날 같은 행위는 몇 번을 되감아도 같은 답이다(세이브 스컴 재롤 차단).
+#   ★ 굴림 자체는 **어떤 산출도 바꾸지 않는다**: 작물·원목·광석·어획은 이미 지급된 뒤에 얹히는
+#     별개 가지이고, `rand_from_seed` 순수 해시라 **전역 RNG를 한 톨도 안 쓴다**(기존 골든 서명 불침범).
+func _roll_firefly_drop(source: String, serial: int) -> void:
+	if fireflies == null or clock == null:
+		return
+	var id := fireflies.pending_drop(source, clock.day, serial)
+	if id == "":
+		return
+	if not fireflies.collect(id, clock.day):
+		return
+	audio.sfx("ui")
+	_notice_firefly_progress()
+
+# ★ [명부 시련장] 개방 술어 — **S10-T8이 소비하는 공개 API**. 저장 플래그가 아니라 원장 파생이라
+#   "카운트는 넘겼는데 문은 닫힘"이 구조적으로 불가능하다(firefly_soul.gd `gate_open` 주석).
+func trial_ground_open() -> bool:
+	return fireflies != null and fireflies.gate_open()
+
+# 혼백관 반딧넋 안치대([F]) — 진행·게이트를 편지지 대화창으로 펴고, 밀린 마일스톤 답례를 지급한다.
+func _open_firefly_stand() -> void:
+	if fireflies == null or dialogue == null or dialogue.is_open():
+		return
+	_claim_firefly_milestones()
+	_talking_to = "반딧넋 안치대"
+	player.set_physics_process(false)
+	_set_dialogue_skin("letter")
+	dialogue.start(_talking_to, _firefly_lines())
+
+# 안치대 본문(원장 파생 — 저장된 문장 0). 머리말 + 구역별 한 줄 + 드랍 몫 한 줄 + 게이트 한 줄.
+func _firefly_lines() -> PackedStringArray:
+	var out := PackedStringArray()
+	out.append("◆ 반딧넋 ◆   길 잃은 작은 넋을 인도해 이 자리에 앉힌다 (%d/%d)" % [
+		fireflies.collected_count(), FireflySouls.total_count()])
+	for region: String in FireflySouls.regions():
+		out.append("%s %d/%d" % [RegionCatalog.name_of(region),
+			fireflies.region_collected(region), FireflySouls.region_total(region)])
+	out.append("길 위에서 따라온 것 %d/%d — 밭·나무·바위·물가 어디서든 문득 따라붙는다" % [
+		fireflies.collected_drop_count(), FireflySouls.DROP_COUNT])
+	if fireflies.gate_open():
+		out.append("… 나락 깊은 곳의 문이 열려 있다 (명부 시련장)")
+	else:
+		out.append("… 나락 깊은 곳의 문은 아직 닫혀 있다 — %d만 더 (%d 필요)" % [
+			fireflies.remaining_to_gate(), FireflySouls.GATE_COUNT])
+	return out
+
+# 밀린 안치 마일스톤 답례를 지급한다(혼백관 답례 `_claim_museum_milestones` 1:1).
+#   ★ 백팩이 가득해 못 받으면 **claim하지 않는다** — 다음에 다시 오면 그대로 기다리고 있다.
+func _claim_firefly_milestones() -> void:
+	if fireflies == null or inventory == null:
+		return
+	for m in fireflies.pending_milestones():
+		var rid: String = String(m["reward_id"])
+		var n: int = int(m["n"])
+		if not inventory.add_item(rid, n):
+			_notice("답례를 받을 자리가 없다 — 백팩을 비우고 다시 오자")
+			return
+		fireflies.claim(int(m["count"]))
+		_toast_item(rid, n)
+		_notice("반딧넋 답례 — %s ×%d (안치 %d 달성)" % [ItemCatalog.name_of(rid), n, int(m["count"])])
+
 # ── ★[S10-T1 / ADR-0069 결정 2] 결정기 ───────────────────────────────────────
 # 결정기를 놓을 수 있는 칸인가. **업화로 `_can_place_furnace`의 쌍둥이**다(판정이 한 줄도 안 갈린다 —
 # 둘 다 "지상 야외의 걸을 수 있는 빈 지면"이 조건이라, 여기서 새 규칙을 만들면 그게 곧 특이 케이스가
@@ -14307,6 +14469,11 @@ func _try_harvest() -> void:
 	# ★ [S1R-T10] 맨손 수확 스윙 애니 1회 재생(시각 전용 — 위 수확 로직과 독립). 숙련 speed_factor로 속도 실효화.
 	player.swing_tool("harvest", FarmSkill.speed_factor(FarmSkill.level_for_xp(_farming_xp)))
 	_advance_onboarding("수확")               # T4.1 첫 수확 → 온보딩 완료(DONE)
+	# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 드랍 ① 수확 — 산출·XP·하트 다음의 별 가지(수확 결과 불변).
+	#   serial = 거둔 칸이라 같은 날 두 번 걸릴 수 없다(포기가 사라진다 = 한 사건 = 한 롤).
+	#   ★ **화분 수확(_harvest_pot)엔 안 건다**: 훅은 활동마다 확정 지점 한 곳씩이고, 실내 1×1
+	#     컨테이너에서 들의 넋이 따라붙는 그림도 맞지 않는다(밭이 수확 축의 대표 무대다).
+	_roll_firefly_drop(FireflySouls.SRC_HARVEST, _target.y * 1000 + _target.x)
 	# ★ ADR-0059 결정3 — 밭 작물 수확은 무과금(energy.spend 없음): "보람 액션 과세" 제거로 스타듀 체감 회복.
 	queue_redraw()                            # 새 상태가 바로 보이도록
 
@@ -15858,6 +16025,34 @@ func _draw_museum_room() -> void:
 		draw_rect(Rect2(tp - Vector2(5, 4), Vector2(10, 4)), Color(0.72, 0.60, 0.30))        # 받침
 		draw_circle(tp - Vector2(0, 10), 5.0, Color(0.94, 0.84, 0.44))                        # 잔
 		draw_rect(Rect2(tp - Vector2(1, 8), Vector2(2, 4)), Color(0.72, 0.60, 0.30))          # 기둥
+	# ── ★[S10-T7 / ADR-0069 결정 10] ⑤ 반딧넋 안치대 ──
+	# 기증대·열람대와 같은 줄 서편(MUSEUM_FIREFLY_TILE). 아트가 들어오면 그대로 갈아끼우고
+	#   (assets/props/firefly_stand.png), 없으면 그레이박스 폴백이 선다(열람대와 같은 훅 문법).
+	# ★ **안치된 넋의 수만큼 등롱 위에 불빛이 뜬다** — 진열도 눈금도 전부 원장 파생이라 저장 상태 0.
+	#   불빛을 45개 다 그리면 한 칸에 안 들어가므로 5개 단위로 접는다(한 점 = 다섯 넋).
+	var fpx := Vector2(MUSEUM_FIREFLY_TILE.x * TILE, MUSEUM_FIREFLY_TILE.y * TILE)
+	var ff_tex := _prop_tex("firefly_stand")
+	if ff_tex != null:
+		draw_texture(ff_tex, fpx)
+	else:
+		draw_rect(Rect2(fpx + Vector2(6, 10), Vector2(TILE - 12, TILE - 14)), Color(0.24, 0.26, 0.28))  # 돌 대좌
+		draw_rect(Rect2(fpx + Vector2(9, 4), Vector2(TILE - 18, 8)), Color(0.34, 0.46, 0.46))           # 등롱 몸
+	var ff_total := FireflySouls.total_count()
+	var ff_got: int = fireflies.collected_count() if fireflies != null else 0
+	for i in int(ff_got / 5):
+		# 타일 안에만 그린다(위로 뻗으면 바로 윗줄 유품 좌대와 겹친다 — 진열 위계 보존).
+		var lp := fpx + Vector2(4.0 + float(i % 5) * 6.0, 8.0 - float(i / 5) * 6.0)
+		draw_circle(lp, 2.0, Color(0.56, 0.94, 0.86, 0.85))
+	# 안치 눈금(폭 = 진행률) — 열람대 눈금과 같은 자리·같은 문법이되 색이 넋빛이다.
+	var fbar := Rect2(fpx + Vector2(2, TILE - 5), Vector2(TILE - 4, 3))
+	draw_rect(fbar, Color(0.16, 0.18, 0.18))
+	if ff_total > 0 and ff_got > 0:
+		draw_rect(Rect2(fbar.position, Vector2(fbar.size.x * float(ff_got) / float(ff_total), fbar.size.y)),
+			Color(0.52, 0.90, 0.82))
+	# 게이트 표식 — 문턱을 넘으면 대좌 앞에 작은 열린 문이 선다(순수 연출·원장 파생).
+	if fireflies != null and fireflies.gate_open():
+		draw_rect(Rect2(fpx + Vector2(TILE * 0.5 - 3, TILE - 14), Vector2(6, 9)), Color(0.10, 0.12, 0.14))
+		draw_rect(Rect2(fpx + Vector2(TILE * 0.5 - 3, TILE - 14), Vector2(6, 9)), Color(0.56, 0.94, 0.86), false, 1.0)
 
 # ★ [S1R-T12] 휴지통 버리기(프레임 확인 후) — 집은 백팩 슬롯을 통째로 폐기(경제 0 — 판매 아님).
 func _on_frame_discard(slot_index: int) -> void:
@@ -20871,6 +21066,7 @@ func _draw() -> void:
 	_draw_furnaces()        # ★[S5-T3] 세워 둔 업화로(구역 무관 — 전 지상 무대에 놓을 수 있다)
 	_draw_crystalariums()   # ★[S10-T1] 세워 둔 결정기(업화로와 같은 결 — 구역 무관)
 	_draw_panning_spots()   # ★[S10-T1] 오늘의 사금 스폿 반짝임(삼도천·황천해 물가에만 있다)
+	_draw_firefly_souls()   # ★[S10-T7] 아직 안 주운 반딧넋 반짝임(전 구역 고정 배치 — 주우면 영영 사라진다)
 	_draw_forage_detect()   # ★[S4-T2] 혼 감지 가장자리 여우불 + 추적자 ▼(대상 없으면 무동작 — 구역 무관)
 	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
 	_draw_cheki_hud()       # ★ [S6-T5] 체키 구도·셔터 그레이박스 트랙(세션 있을 때만)
@@ -21702,6 +21898,21 @@ func _draw_panning_spots() -> void:
 		draw_line(c + Vector2(-TILE * 0.16, 0), c + Vector2(TILE * 0.16, 0), g, 2.0)
 		draw_line(c + Vector2(0, -TILE * 0.16), c + Vector2(0, TILE * 0.16), g, 2.0)
 		draw_circle(c, TILE * 0.06, Color(1.0, 0.97, 0.80))
+
+# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 그레이박스 렌더(아트는 S10-T9) — **아직 안 주운 자리에만**
+#   뜨는 옅은 넋빛 원 + 반딧불 알갱이. 주우면 그 자리는 영영 비므로 "이 구역은 다 훑었다"가 눈으로
+#   읽힌다(수집물의 절반은 남은 자리가 보이는 것이다).
+#   ★ 색은 사금(금빛)·채집물과 갈리는 **차가운 넋빛(청록)** 이다 — [혼불](따뜻한 주홍 여우불)과도
+#     한눈에 갈려야 한다(CONTEXT [반딧넋] "불이 아니라 넋"의 색 언어 이행).
+#   ★ 순수 시각 — 좌표는 FireflySouls가 소유하고 여긴 질의만 한다(_draw_panning_spots와 같은 결).
+func _draw_firefly_souls() -> void:
+	if fireflies == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
+		return
+	for t: Vector2i in fireflies.live_tiles(_region):
+		var c := Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.4)
+		draw_circle(c, TILE * 0.34, Color(0.44, 0.86, 0.78, 0.20))          # 넋빛 무리(할로)
+		draw_circle(c, TILE * 0.18, Color(0.56, 0.94, 0.86, 0.45))
+		draw_circle(c, TILE * 0.07, Color(0.90, 1.0, 0.95))                 # 알갱이(핵)
 
 # ★ [S1R-T9] 저승 스프링클러 그레이박스 렌더(설치물 — 아트는 후속 아트 패스). 각 설치 칸에 청록 몸통 +
 #   물방울 머리를 그리고, 급수 십자 4칸을 옅은 물빛 표식으로 얹어 "무엇을 적시는지" 보이게 한다(순수 시각).
