@@ -43,6 +43,9 @@ signal sfx_vol_changed(delta: float)   # ★ Phase D 설정: 효과음 볼륨 �
 signal fullscreen_toggled              # ★ Phase D 설정: 전체화면 토글(옵션 탭 체크박스)
 signal profession_chosen(skill: String, prof_id: String)   # ★ ADR-0052 숙련 탭: 전문직 선택(main이 choose_profession)
 signal craft_chosen(recipe_id: String)   # ★[S4-T5] 제작 탭: 레시피 행 클릭(main이 _on_frame_craft — 재료 차감·산출 적재)
+# ★[S10-T8 / ADR-0069 결정 11] 숙련 탭 [경지] 유물 수령 버튼(main이 포인트 검증·백팩 적재·원장 기록).
+#   전문직 선택 버튼과 **같은 결**이다(프레임은 자격을 모르고 신호만 올린다 — 무상태 렌더 규율).
+signal mastery_claimed(skill: String)
 
 # ★ [S1R-T11 / ADR-0048 실행] 내부 스킨·타이포를 HanjiUi 공용 문법으로 통일한다(신규 에셋 0).
 # 셸(패널)·슬롯·버튼·탭·툴팁·바를 hanji_ui.gd 헬퍼(draw_frame/draw_plate/draw_text·팔레트 상수)로
@@ -88,7 +91,12 @@ const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
 #   일은 "헤더 2줄 + 품목 행 + 백팩"으로 똑같다. 그래서 전용 그리기 함수도 전용 클릭 라우팅도
 #   안 만들고 만물상 경로에 컨텍스트 하나만 얹는다(신규 UI 언어 0 — 야시장이 선 그 선례 그대로).
 #   enum 끝에 붙여 기존 값 불변(좌표 의존 테스트 무영향).
-enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP, CTX_GUILD, CTX_LARDER, CTX_NIGHTMARKET, CTX_PEDDLER }
+# ★[S10-T8 / ADR-0069 결정 11] CTX_TRIAL(명부 시련장 상점) — 야시장·보부상과 **같은 셸**이다.
+#   갈리는 것은 **값의 단위 하나뿐**: 엽전이 아니라 [시련패]로 산다(냥과 교환되지 않는 전용 화폐 —
+#   CONTEXT [시련패]). 그래서 신규 그리기 함수도 신규 클릭 라우팅도 안 만들고, 행 리스트가 그릴
+#   **화폐 아이콘만 갈아 끼운다**(store_coin — 기본값이 엽전이라 기존 매대는 픽셀 한 점도 안 바뀐다).
+#   enum 끝에 붙여 기존 값 불변(좌표 의존 테스트 무영향).
+enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP, CTX_GUILD, CTX_LARDER, CTX_NIGHTMARKET, CTX_PEDDLER, CTX_TRIAL }
 # 생선가게 서브탭(기어 매대 / 물고기 환전).
 enum { FS_TAB_GEAR, FS_TAB_TRADE }
 # ★[S4-T7] 목공방 서브탭(건축 의뢰 / 가구·자재 매대) — 생선가게 서브탭과 같은 문법.
@@ -119,6 +127,10 @@ var store_text: String = ""
 # ★ [S1R-T12] 매대 아이템 행 데이터(main이 _store_items로 주입 — 무상태 렌더). 각 항목:
 #   {icon_id, name, price, base, owned, kind("seed"/"placeable"), buy_id}. price<base면 할인 표시.
 var store_items: Array = []
+# ★[S10-T8] 매대 가격 옆 **화폐 아이콘**. 기본값 = 엽전이라 기존 여섯 매대는 한 점도 안 바뀌고,
+#   [명부 시련장]만 열 때 main이 [시련패] 표식으로 갈아 끼운다(CTX_TRIAL 주석 참조). 아트가
+#   들어오면 여기에 텍스처 하나만 주입하면 된다(T9 아트 패스 훅 — 지금은 엽전을 빌려 쓴다).
+var store_coin: Texture2D = COIN
 # ★ [S3-T5] 환전 탭 행 데이터(main이 _trade_items로 주입 — 무상태 렌더). 각 항목:
 #   {icon_id, name, price(1마리 환전가), count, quality, kind="fish", buy_id(=물고기 id)}.
 var trade_items: Array = []
@@ -194,6 +206,10 @@ var _rel_area_rect := Rect2()    # 휠 히트테스트 영역(_draw_rel_tab이 �
 var _skill_rows: Array = []
 # ★ ADR-0052 전문직 선택 버튼 클릭 영역 — _draw_skill_tab이 매 그리기마다 재구성 [{rect, skill, prof_id}].
 var _prof_choice_rects: Array = []
+# ★[S10-T8 / ADR-0069 결정 11] [경지] 유물 수령 버튼 클릭 영역 — 전문직 버튼과 **완전 동형**
+#   ([{rect, skill}] · 매 그리기마다 재구성). 경지가 "새 장소가 아니라 스킬 패널의 확장"이라는
+#   결정 11의 자구가 코드 층에서는 바로 이것이다 — 새 탭도 새 컨텍스트도 없이 같은 탭에 줄이 는다.
+var _mastery_rects: Array = []
 # ★[S5-T4] 숙련 탭 첫 표시 행 인덱스(5스킬 + 동시 선택 대기 버튼이 패널을 넘길 때 흡수 — 매대
 #   리스트 _store_scroll과 같은 문법). 클램프는 그리기 시점(_draw_skill_tab)이 행수와 함께 수행한다.
 var _skill_scroll := 0
@@ -407,7 +423,7 @@ func _bp_max_first_row() -> int:
 func _backpack_visible() -> bool:
 	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST or context == CTX_FISHSHOP \
 			or context == CTX_WOODSHOP or context == CTX_GUILD or context == CTX_LARDER \
-			or context == CTX_NIGHTMARKET or context == CTX_PEDDLER:
+			or context == CTX_NIGHTMARKET or context == CTX_PEDDLER or context == CTX_TRIAL:
 		return true
 	return context == CTX_MENU and menu_tab == TAB_INV
 
@@ -452,8 +468,9 @@ func _draw() -> void:
 		CTX_BIN:
 			_draw_bin_top(panel)
 			_draw_backpack(panel)
-		CTX_STORE, CTX_NIGHTMARKET, CTX_PEDDLER:
-			_draw_store_top(panel)      # ★[S7-T7] 야시장 · ★[S10-T3] 보부상도 만물상 셸 그대로(전용 렌더 0)
+		CTX_STORE, CTX_NIGHTMARKET, CTX_PEDDLER, CTX_TRIAL:
+			# ★[S7-T7] 야시장 · ★[S10-T3] 보부상 · ★[S10-T8] 시련장 상점도 만물상 셸 그대로(전용 렌더 0)
+			_draw_store_top(panel)
 			_draw_backpack(panel)
 		CTX_FISHSHOP:
 			_draw_fishshop_top(panel)   # ★ [S3-T5] 뱃사공 생선가게(기어 매대 + 환전 서브탭)
@@ -886,6 +903,7 @@ const SK_PROF_X := 196.0    # XP 꼬리 오른쪽에 붙는 "전문직:" 요약�
 # ★ Phase B 숙련 탭 — main이 넘긴 _skill_rows를 레벨·진행바로 그린다(읽기 전용, 관계 탭과 대칭).
 func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 	_prof_choice_rects.clear()   # ★ ADR-0052 — 클릭 영역은 매 그리기마다 재구성(레이아웃 파생)
+	_mastery_rects.clear()       # ★[S10-T8] 경지 수령 버튼도 같은 규율(레이아웃 파생 · 무상태)
 	var x := panel.position.x + PAD + 12.0
 	var y := panel.position.y + PAD + 48.0
 	if _skill_rows.is_empty():
@@ -903,9 +921,14 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 		var row: Dictionary = _skill_rows[i]
 		var options: Array = row.get("options", [])
 		# 이 행이 차지할 총 높이(제목·바 + 선택 대기 버튼 묶음). 미리 재서 **들어갈 때만** 그린다.
+		# ★[S10-T8] 경지 줄 — main이 주입한 {text, claimable, skill}({} = 안 그림 = 층 미개방).
+		var mst: Dictionary = row.get("mastery", {})
+		var mst_text := String(mst.get("text", ""))
 		var block := SK_ROW_H + SK_ROW_GAP
 		if not options.is_empty():
 			block += 18.0 + float(options.size()) * (SK_OPT_H + 2.0)
+		if mst_text != "":
+			block += 16.0 + (SK_OPT_H + 2.0 if bool(mst.get("claimable", false)) else 0.0)
 		if shown > 0 and y + block > max_y:
 			break   # 다음 행이 테두리를 물 것 → 스크롤로 넘긴다(첫 행은 늘 그린다 — 빈 탭 방지)
 		var lv := int(row.get("level", 0))
@@ -944,6 +967,22 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 				HanjiUi.draw_text(self, btn.position + Vector2(10.0, 12.0), String(opt.get("name", "")), 12, HanjiUi.INK_LIGHT)
 				HanjiUi.draw_text(self, btn.position + Vector2(10.0, 24.0), String(opt.get("desc", "")), 10, HanjiUi.INK_DIM)
 				_prof_choice_rects.append({"rect": btn, "skill": skill, "prof_id": String(opt.get("id", ""))})
+				y += SK_OPT_H + 2.0
+		# ★[S10-T8 / ADR-0069 결정 11] 경지 줄 — 스킬 행 **바로 아래**에 붙는다(별 탭이 아니라
+		#   "스킬 패널의 확장"이라는 결정 11의 자구 그대로). 수령 가능할 때만 버튼이 서고,
+		#   그 밖(미개방·포인트 부족·이미 수령)에는 상태 한 줄만 조용히 앉는다.
+		if mst_text != "":
+			var mst_col: Color = HanjiUi.GOLD if bool(mst.get("claimable", false)) else HanjiUi.INK_DIM
+			HanjiUi.draw_text(self, Vector2(x, y + 12.0), mst_text, 11, mst_col, bar_w)
+			y += 16.0
+			if bool(mst.get("claimable", false)):
+				var mbtn := Rect2(x + 8.0, y, bar_w - 16.0, SK_OPT_H)
+				_plate_btn(mbtn)
+				HanjiUi.draw_text(self, mbtn.position + Vector2(10.0, 12.0),
+					"[경지] %s 수령" % String(mst.get("artifact", "")), 12, HanjiUi.INK_LIGHT)
+				HanjiUi.draw_text(self, mbtn.position + Vector2(10.0, 24.0),
+					String(mst.get("desc", "")), 10, HanjiUi.INK_DIM)
+				_mastery_rects.append({"rect": mbtn, "skill": String(mst.get("skill", ""))})
 				y += SK_OPT_H + 2.0
 		y += SK_ROW_GAP   # 행 간 여백
 		shown += 1
@@ -1221,7 +1260,10 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 			var bs := "%d→" % base
 			HanjiUi.draw_text(self, Vector2(px, ty), bs, 11, HanjiUi.INK_DIM)
 			px += HanjiUi.text_width(bs, 11) + 2.0
-		draw_texture_rect(COIN, Rect2(px, ty - 11.0, 12.0, 12.0), false)
+		# ★[S10-T8] 화폐 아이콘은 `store_coin`이 정한다(기본 = 엽전). [명부 시련장]만 [시련패]로
+		#   바뀌므로 다른 매대의 픽셀은 한 점도 안 움직인다(null 방어 = 엽전 폴백).
+		draw_texture_rect(store_coin if store_coin != null else COIN,
+			Rect2(px, ty - 11.0, 12.0, 12.0), false)
 		HanjiUi.draw_text(self, Vector2(px + 15.0, ty), str(price), 13, HanjiUi.GOLD)
 		# 버튼(또는 잠김 표시).
 		if locked:
@@ -1403,7 +1445,9 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 		#     클릭해도 아무 일이 안 일어났다(S7-T7 잠복 결함 — seasonal_event_test가 프레임을
 		#     건너뛰고 `_on_frame_buy_store_item`을 직접 불러서 회귀에 안 잡혔다). 보부상이 같은
 		#     셸을 타면서 발견돼 여기서 함께 고친다. 아래 ⑫가 그 클래스의 결함을 소스 스캔으로 잠근다.
-		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion", "fest_deco", "fest_item", "fest_seed", "ped_item", "ped_seed", "ped_deco", "ped_rare", "ped_book":
+		#   ★[S10-T8] 시련장 3종("trial_shop_*")도 같은 신호를 탄다 — 화폐가 [시련패]라는 사실은
+		#     main만 알면 된다(프레임에 가게 규칙을 안 심는다는 그 규율 그대로).
+		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion", "fest_deco", "fest_item", "fest_seed", "ped_item", "ped_seed", "ped_deco", "ped_rare", "ped_book", "trial_shop_rarecrow", "trial_shop_deco", "trial_shop_item":
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
 
 # ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.
@@ -1445,8 +1489,10 @@ func _gui_input(event: InputEvent) -> void:
 	# ★ [S3-T5] 생선가게도 같은 영역 문법을 쓴다(환전 탭이면 환전 리스트가 스크롤된다).
 	# ★ [S4-T7] 목공방도 같은 영역 문법(건축 탭이면 건축 리스트가 스크롤된다).
 	# ★ [S5-T6] 길드도 같은 영역 문법(서브탭이 없어 늘 품목 리스트가 스크롤된다).
+	# ★[S10-T8] 시련장 상점도 같은 영역 문법(서브탭이 없어 늘 품목 리스트가 스크롤된다 — 길드 결).
 	if event.pressed and (context == CTX_STORE or context == CTX_FISHSHOP or context == CTX_WOODSHOP \
-			or context == CTX_GUILD or context == CTX_NIGHTMARKET or context == CTX_PEDDLER) \
+			or context == CTX_GUILD or context == CTX_NIGHTMARKET or context == CTX_PEDDLER \
+			or context == CTX_TRIAL) \
 			and _store_area_rect.has_point(event.position):
 		var trading := context == CTX_FISHSHOP and fishshop_tab == FS_TAB_TRADE
 		var building := context == CTX_WOODSHOP and woodshop_tab == WS_TAB_BUILD
@@ -1526,7 +1572,7 @@ func _gui_input(event: InputEvent) -> void:
 			_click_menu(p)
 		CTX_BIN:
 			_click_bin(p)
-		CTX_STORE, CTX_NIGHTMARKET, CTX_PEDDLER:
+		CTX_STORE, CTX_NIGHTMARKET, CTX_PEDDLER, CTX_TRIAL:
 			for e in _store_row_rects:   # ★ [S1R-T12] 행/버튼 클릭=개별 구매(Shift 대량)
 				if e["buy"].has_point(p) or e["row"].has_point(p):
 					_buy_store_row(e, event.shift_pressed)
@@ -1584,6 +1630,11 @@ func _click_menu(p: Vector2) -> void:
 		for e in _prof_choice_rects:
 			if e["rect"].has_point(p):
 				profession_chosen.emit(String(e["skill"]), String(e["prof_id"]))
+				return
+		# ★[S10-T8] 경지 유물 수령 — 전문직 버튼과 같은 결(프레임은 자격을 모르고 신호만 올린다).
+		for e2 in _mastery_rects:
+			if e2["rect"].has_point(p):
+				mastery_claimed.emit(String(e2["skill"]))
 				return
 		return
 	# ★[S4-T5] 제작 탭: 제작 가능 행 클릭 → 신호(main이 재료 차감·산출 적재·토스트). 숙련 탭과 같은 결.
