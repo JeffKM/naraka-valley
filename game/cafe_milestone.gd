@@ -56,10 +56,26 @@ const S2_TARGET_HARVEST := 40
 const S2_TARGET_REVENUE := 1800
 const S2_TARGET_HEARTS := 9
 
+# ── ★[S10-T5 / ADR-0069 결정 8] 3단 목표치 — 「저승의 명소」 ────────────────────
+# 3단은 앞의 두 단과 **축이 다르다**: 세 축 AND가 아니라 **누적 서빙 매출 단독**이다. 근거는
+# ADR-0029 "옥자=정점"의 이행이다 — 옥자에게 호감도 미터가 없으므로(ADR-0032) 그 자리를 이미
+# 3축에 있던 매출 축이 대신 들고([S6-T3] 결정 7이 깐 해석 그대로), 새 미터·새 세이브 조각을 0으로
+# 둔다. 수확·하트를 다시 요구하지 않는 이유도 같다: 2단에서 이미 요구했고, 3단이 묻는 것은
+# "이 카페가 얼마나 팔리는 곳이 되었나" 하나뿐이다.
+# ★ 단조성은 stage()가 **2단 완료를 AND로 물고** 성립시킨다(문턱 하나만으론 3단이 2단을 함의하지
+#   못하므로 — 매출만 높고 하트가 낮은 판이 3단으로 뛰는 사고를 구조로 막는다).
+# ★ 잠정(owner 큐): 1800 → 5000 ≈ 2.8배. 2단이 "융합 메뉴가 실제로 팔려야 닿는 자리"였다면
+#   3단은 **그 메뉴판으로 한 절기를 더 굴린 자리**다(2단 해금분 — 좌석 5·손님 볼륨 ×1/0.7 — 이
+#   붙은 뒤의 벌이라 체감 거리는 배수보다 짧다).
+const S3_TARGET_REVENUE := 5000
+
 # ── ★[S6-T3] 사다리 단계 ─────────────────────────────────────────────────────
 const STAGE_NONE := 0   # 1단 진행 중
 const STAGE_1 := 1      # 1단 완료(2단 진행 중)
-const STAGE_2 := 2      # 2단 완료(사다리 꼭대기 — 3단은 후속 슬라이스 서랍)
+const STAGE_2 := 2      # 2단 완료(3단 진행 중)
+# ★[S10-T5 / ADR-0069 결정 8] 3단 = 사다리의 **최종** 단계다(무한 사다리가 아니다 — 결정 8 자구
+#   "단수를 3으로 확정"). 4단을 예고하는 문구는 이 파일 어디에도 두지 않는다.
+const STAGE_3 := 3      # 3단 완료(사다리 꼭대기 — 「저승의 명소」)
 
 # ── 진행도(각 하위 목표의 채움 비율 [0,1]) ───────────────────────────────────
 # 목표가 0 이하면(방어) 이미 채운 것으로 본다(0 나눗셈 방지).
@@ -105,13 +121,32 @@ static func s2_overall_ratio(harvested: int, revenue: int, hearts: int) -> float
 static func is_stage2_complete(harvested: int, revenue: int, hearts: int) -> bool:
 	return harvested >= S2_TARGET_HARVEST and revenue >= S2_TARGET_REVENUE and hearts >= S2_TARGET_HEARTS
 
-# 현재 사다리 단계(STAGE_NONE / STAGE_1 / STAGE_2). 누적값에서 매번 파생 — 세이브 무상태.
+# ── ★[S10-T5] 3단 — 매출 단독 축이되 **2단 완료를 AND로 문다** ──────────────────
+# 이 AND가 사다리 단조성의 전부다(3단 완료 ⇒ 2단 완료 ⇒ 1단 완료). 1·2단처럼 세이브 무상태고,
+# 문턱 상수도 그대로라 **구세이브의 단계 판정은 한 칸도 안 움직인다**(3단 문턱을 못 넘으면 종전과
+# 똑같이 2단으로 읽힌다 — 세이브 키를 신설하지 않았으므로 마이그레이션 자체가 없다).
+static func is_stage3_complete(harvested: int, revenue: int, hearts: int) -> bool:
+	return is_stage2_complete(harvested, revenue, hearts) and revenue >= S3_TARGET_REVENUE
+
+# 3단 진행 비율(매출 단독 축 — 1·2단의 세 축 평균과 달리 축이 하나라 바가 곧 매출이다).
+static func s3_overall_ratio(revenue: int) -> float:
+	return _ratio(revenue, S3_TARGET_REVENUE)
+
+# 현재 사다리 단계(STAGE_NONE / STAGE_1 / STAGE_2 / ★STAGE_3). 누적값에서 매번 파생 — 세이브 무상태.
 static func stage(harvested: int, revenue: int, hearts: int) -> int:
+	if is_stage3_complete(harvested, revenue, hearts):
+		return STAGE_3
 	if is_stage2_complete(harvested, revenue, hearts):
 		return STAGE_2
 	if is_complete(harvested, revenue, hearts):
 		return STAGE_1
 	return STAGE_NONE
+
+# ★[S10-T5 / ADR-0069 결정 8] 3단이 여는 것 = **늘봄방 건축 해금**(목공방 매대 행의 잠금 해제).
+#   seats_of·larder_capacity_of와 같은 자리에 둔 이유도 같다 — "어느 단계에 무엇이 열리나"의
+#   단일 출처. 값(비용·공기)은 Carpenter가 자기 데이터로 들고, 여기선 *언제*만 고른다.
+static func greenhouse_unlocked(st: int) -> bool:
+	return st >= STAGE_3
 
 # ── ★[S6-T3 / ADR-0064 결정 7] 단계 → 콘텐츠 값(카페 일구기 사다리 표) ────────
 # "2단이 무엇을 여는가"의 단일 출처. main은 이 네 함수의 값을 각 시스템 seam에 *주입만* 한다
@@ -149,8 +184,14 @@ static func bar(ratio: float) -> String:
 # 꼭대기(2단 완료)에서만 달성 문구로 굳는다.
 static func summary(harvested: int, revenue: int, hearts: int) -> String:
 	var st := stage(harvested, revenue, hearts)
+	# ★[S10-T5] 꼭대기가 3단으로 올라갔다 — 2단을 채워도 줄은 굳지 않고 **3단 문턱으로 갈아탄다**
+	#   (사다리 규칙 1:1 승계). 3단은 축이 매출 하나라 하위 분해도 그 한 축만 적는다.
+	if st >= STAGE_3:
+		return "카페 3단 완료 ★ — 저승의 명소가 되었다"
 	if st >= STAGE_2:
-		return "카페 2단 완료 ★ — 저승 카페가 명소가 되었다"
+		var r3 := s3_overall_ratio(revenue)
+		return "카페 3단 %s %d%%  ·  매출 %d/%d" % [bar(r3), int(round(r3 * 100.0)),
+			revenue, S3_TARGET_REVENUE]
 	var r := s2_overall_ratio(harvested, revenue, hearts) if st >= STAGE_1 else overall_ratio(harvested, revenue, hearts)
 	var th := S2_TARGET_HARVEST if st >= STAGE_1 else TARGET_HARVEST
 	var tr := S2_TARGET_REVENUE if st >= STAGE_1 else TARGET_REVENUE
@@ -165,8 +206,11 @@ static func summary(harvested: int, revenue: int, hearts: int) -> String:
 # 신호 유지). 완료 전엔 바+%만(하위 분해는 완료 팝업/관계 탭이 든다), 완료 후엔 "완료 ★".
 static func compact(harvested: int, revenue: int, hearts: int) -> String:
 	var st := stage(harvested, revenue, hearts)
+	if st >= STAGE_3:
+		return "카페 3단 완료 ★"
 	if st >= STAGE_2:
-		return "카페 2단 완료 ★"
+		var r3 := s3_overall_ratio(revenue)
+		return "카페 3단 %s %d%%" % [bar(r3), int(round(r3 * 100.0))]
 	var r := s2_overall_ratio(harvested, revenue, hearts) if st >= STAGE_1 else overall_ratio(harvested, revenue, hearts)
 	return "카페 %d단 %s %d%%" % [st + 1, bar(r), int(round(r * 100.0))]
 
@@ -174,6 +218,12 @@ static func compact(harvested: int, revenue: int, hearts: int) -> String:
 # ★[S6-T3] 2단이 **진짜 콘텐츠**가 됐으므로(좌석·곳간·메뉴판·손님) 문구도 그 실물을 말한다.
 #   수치는 사다리 표에서 파생한다 — 레버를 돌리면 문구가 저절로 따라온다(문자열에 숫자 안 박음).
 #   종전의 "삼도천 낚시가 다음 재료" 떡밥은 Slice 3에서 낚시가 실제로 개통돼 소임을 다했다.
+# ★[S10-T5] 3단 미리보기 한 줄. 2단 미리보기와 같은 결이되 **축이 하나**라 문구도 한 축만 말한다
+#   ("무엇을 더 해야 하나"가 매출 하나로 또렷한 것이 3단의 성격이다). 수치는 상수 파생 — 문자열에
+#   숫자를 안 박는다(2단 미리보기와 같은 규칙).
+static func stage3_preview() -> String:
+	return "3단 미리보기: 누적 서빙 매출 %d → 「저승의 명소」 · 늘봄방(온실)을 지을 수 있게 된다" % S3_TARGET_REVENUE
+
 static func stage2_preview() -> String:
 	return "2단 미리보기: 좌석 %d→%d · 곳간 %d→%d · 메뉴판 %d→%d칸 · 손님이 더 몰린다" % [
 		seats_of(STAGE_1), seats_of(STAGE_2),
@@ -192,8 +242,8 @@ static func reached_text() -> String:
 
 # ★[S6-T3] 2단 달성 팝업 본문. 1단 래치 선례를 그대로 따른다(main이 별도 래치로 1회만 띄운다).
 # 1단이 "예고"였다면 2단은 *그 예고가 실제로 열렸음*을 확인해 준다 — 그래서 문구가 열린 것을 센다.
-# ★ 제목이 "3단계!"가 아닌 건 3단 콘텐츠가 아직 없기 때문이다 — 없는 칸을 약속하지 않는다(1단
-#   팝업이 "2단계!"를 걸 수 있었던 건 이 슬라이스가 그 2단을 실제로 지었기 때문).
+# ★[S10-T5] 종전의 "3단 콘텐츠가 아직 없어 3단계를 약속하지 않는다"는 단서는 **소임을 다했다** —
+#   이 슬라이스가 3단을 실제로 지었으므로, 1단 팝업이 2단을 걸었던 그 자격으로 3단을 예고한다.
 static func reached2_text() -> String:
 	return "\n".join([
 		"───  카페 2단 완성!  ───",
@@ -201,4 +251,17 @@ static func reached2_text() -> String:
 		"",
 		"좌석 %d칸 · 곳간 %d칸 · 메뉴판 %d칸이 열렸다." % [
 			seats_of(STAGE_2), larder_capacity_of(STAGE_2), fusion_slots_of(STAGE_2)],
+		"",
+		stage3_preview(),
+	])
+
+# ★[S10-T5 / ADR-0069 결정 8] 3단 달성 팝업 — 사다리의 **마지막 칸**이라 문구가 다음을 예고하지
+#   않고 도착을 말한다(무한 사다리가 아니다). 여는 것은 늘봄방 하나뿐이므로 그것만 정확히 센다.
+static func reached3_text() -> String:
+	return "\n".join([
+		"───  저승의 명소  ───",
+		"삼도천 건너에서까지 넋들이 이 등불을 찾아온다.",
+		"카페 일구기가 꼭대기에 닿았다.",
+		"",
+		"목공방에 늘봄방 도면이 걸렸다 — 절기가 바뀌어도 시들지 않는 밭.",
 	])

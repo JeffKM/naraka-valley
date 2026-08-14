@@ -614,6 +614,10 @@ const FURNACE := "furnace"
 #   (ADR-0052 비-가치 원칙). 값 전부 **잠정**(owner 큐).
 const SPRINKLER_T2 := "sprinkler_t2"   # 넋비 스프링클러 — 3×3
 const SPRINKLER_T3 := "sprinkler_t3"   # 단비 스프링클러 — 5×5
+# ★[S10-T5 / ADR-0069 결정 8] 화분 — **실내에 놓는** 1×1 재배 컨테이너. 설치물 문법(스프링클러·
+#   수액 채취기)을 그대로 쓰되 놓이는 자리가 바깥이 아니라 방 안이라는 점만 다르다(배치 판정은
+#   main._can_place_pot). 제작 전용(CraftCatalog GARDEN_POT) — price = 잔가.
+const GARDEN_POT := "garden_pot"
 const PLACEABLES := {                    # 설치물 id → {name_ko, price(구매가)}
 	SPRINKLER: {"name_ko": "저승 스프링클러", "price": 60},
 	SPRINKLER_T2: {"name_ko": "넋비 스프링클러", "price": 150},
@@ -626,6 +630,9 @@ const PLACEABLES := {                    # 설치물 id → {name_ko, price(구�
 	# ★[S5-T3] 업화로 — 비매(제작 전용·CraftCatalog FURNACE 레시피). price = 잔가(돌 25 + 명동 광석
 	#   20의 원가 150엽전보다 낮게 둬 "만들어 팔기"가 차익이 되지 않게 한다 — ADR-0052 비-가치 원칙).
 	FURNACE: {"name_ko": "업화로", "price": 80},
+	# ★[S10-T5] 화분 — 비매(제작 전용·CraftCatalog GARDEN_POT). price = 잔가(원목 20 + 돌 10의
+	#   원가보다 낮게 둬 "만들어 팔기"가 차익이 되지 않게 한다 — ADR-0052 비-가치 원칙).
+	GARDEN_POT: {"name_ko": "화분", "price": 30},
 }
 
 # 씨앗 아이템 id 접미사("<작물군>_seed"). 작물군 id와 1:1 매핑.

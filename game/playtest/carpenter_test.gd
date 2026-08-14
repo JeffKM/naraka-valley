@@ -80,12 +80,18 @@ func _run_checks() -> void:
 	#   건축 서비스의 3번째 항목 — 새 건축 시스템을 만들지 않는다"로 못 박은 그 자리이고, 안방
 	#   확장이 그랬듯 **데이터 1건 추가**가 전부다(주괴 필드는 옵션이라 기존 3건은 무영향 —
 	#   mount_test ①e가 그 하위호환을 따로 잰다). 주방 업그레이드는 여전히 서랍이다.
-	_check("ⓐa 로스터 = 성장 티어 2건 + 안방 확장 + 마구간(주방 업그레이드 = 서랍 유지)",
-		Carpenter.ids().size() == 4
+	# ★[S10-T5 / ADR-0069 결정 8] 4 → 5: **늘봄방**이 붙었다(의도적 불변식 개정 — 마구간과 같은 결).
+	#   결정 8이 "보상 = 늘봄방 건축 프로젝트 해금(목공방 건축)"으로 못 박은 그 자리이고, 여기서도
+	#   **데이터 1건 추가**가 전부다(기존 4건의 비용·공기·직렬화 불변 — greenhouse_test ①d가 잰다).
+	#   늘봄방만 매대 노출에 선행 조건(카페 3단)이 붙는데, 그 게이트는 원장이 아니라 main이 든다.
+	#   주방 업그레이드는 여전히 서랍이다(ADR-0069 결정 1 기각 ①로 **정식 기각**됐다).
+	_check("ⓐa 로스터 = 성장 티어 2건 + 안방 확장 + 마구간 + 늘봄방(주방 업그레이드 = 기각)",
+		Carpenter.ids().size() == 5
 		and Carpenter.has_project(Carpenter.PROJ_BIG_COOP)
 		and Carpenter.has_project(Carpenter.PROJ_BIG_BARN)
 		and Carpenter.has_project(Carpenter.PROJ_MASTER_ROOM)
-		and Carpenter.has_project(Carpenter.PROJ_STABLE))
+		and Carpenter.has_project(Carpenter.PROJ_STABLE)
+		and Carpenter.has_project(Carpenter.PROJ_GREENHOUSE))
 	_check("ⓐa′ 안방 확장 = 10,000냥 · 원목 300 · 2일 · Ranch 무관(building 없음)",
 		Carpenter.gold_cost(Carpenter.PROJ_MASTER_ROOM) == 10000
 		and Carpenter.wood_cost(Carpenter.PROJ_MASTER_ROOM) == 300
