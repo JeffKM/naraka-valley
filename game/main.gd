@@ -1838,6 +1838,10 @@ const MUSEUM_DOOR := Vector2i(13, 52)           # 실내 혼백관 문(닿으면
 const MUSEUM_IN_TILE := Vector2i(13, 51)        # 실내 문 안쪽(진입 착지, +18)
 const MUSEUM_CAM_RECT := Rect2i(2, 42, 20, 13)  # ★C4 혼백관 방 둘레(외부·다른 방 격리, +18)
 const MUSEUM_DONATE_TILE := Vector2i(13, 46)    # ★[S2-T5] 무인 기증대(방 중북부) — F 기증(ADR-0060 결정 5)
+# ★[S10-T6 / ADR-0069 결정 9] 명부 도감 열람대 — 기증대와 **같은 줄 동편**(y46 x17). 자리를 이렇게
+#   고른 이유: 방(x8..19)의 y45=유품 좌대·y47=책 서가·y49=레어크로우 좌대가 이미 차 있고, y46만
+#   기증대(x12.5~14.5 폭)를 빼면 비어 있다. x17은 그 폭에서 두 칸 넘게 떨어져 조준 칸이 안 겹친다.
+const MUSEUM_CODEX_TILE := Vector2i(17, 46)     # ★[S10-T6] 무인 열람대 — F 도감 펼치기
 # ── ★ M3.2 황천해(바다 낚시 무대 + 생선가게) ──────────────────────────────────
 # 넷째 실데이터 구역(막다른 바다). 낚시 메카닉은 만들지 않는다(Phase 3) — 바다(WATER) 무대 + 부두(잔교)
 # + 바다 낚시터(라벨만) + 생선가게(enterable 빈 방)까지. ★[S3-T1] 삼도천 하구에서 **북단** spawn(28,2)에 도착.
@@ -2332,6 +2336,10 @@ var crab_pot: CrabPotLedger = null
 # ★ [S2-T5 / ADR-0060 결정 5] 혼백관 전시 상태(기증 원장·마일스톤). Sprinkler 결의 얇은 원장 노드(코드
 #   생성 — .new()). 유품 발굴(괭이질)→기증대 기증→마일스톤 보상→세이브. 진열 그리기는 main이 원장에서 파생.
 var museum: Museum = null
+# ★ [S10-T6 / ADR-0069 결정 9] 명부 도감 원장(출하 이력 자동 기록). Museum과 **별개 노드**인 이유는
+#   codex.gd 머리말 참조(Museum.claimed가 기증 count를 키로 잠그고 있어 분모를 못 건드린다).
+#   기록 훅은 단 하나 — _on_day_advanced의 출하 정산 확정 직전이다.
+var codex: Codex = null
 # ★ [S2-T6 / ADR-0060 결정 6] 게시판 의뢰 원장(수락 1건·완료 이력·지급 기록). Museum 결의 얇은 노드
 #   (코드 생성 — .new()). 의뢰 *내용*은 day 시드 파생이라 무상태고, 계약·이력만 여기 산다.
 var quest_board: QuestBoard = null
@@ -3046,6 +3054,10 @@ func _ready() -> void:
 	museum.name = "Museum"
 	add_child(museum)
 	museum.changed.connect(queue_redraw)   # 기증·보상·복원 시 진열 갱신
+	codex = Codex.new()                  # ★ [S10-T6] 명부 도감 원장(코드 생성 — 출하 확정 id → 첫 출하 day)
+	codex.name = "Codex"
+	add_child(codex)
+	codex.changed.connect(queue_redraw)    # 등재·트로피·복원 시 열람대 진열 갱신(Museum과 같은 훅)
 	quest_board = QuestBoard.new()       # ★ [S2-T6] 게시판 의뢰 원장 노드(코드 생성 — 수락·완료 이력)
 	quest_board.name = "QuestBoard"
 	add_child(quest_board)
@@ -9452,6 +9464,14 @@ func _on_day_advanced(day: int) -> void:
 	# ★ C2 무인 출하함 익일 정산: 어젯밤 출하함에 넣어 둔 수확물을 판매가로 환산해 골드로 정산하고
 	# 상자를 비운다(즉시판매 제거 — 스타듀 출하상자 결, ADR-0021). ★ 이 raw 판매는 *카페를 운영한*
 	# 매출이 아니라 마일스톤 누적(_cafe_revenue_total)엔 넣지 않는다(서빙 매출만 — ADR-0009).
+	# ★[S10-T6 / ADR-0069 결정 9] 명부 도감 등재 — **settle 직전**이 유일한 기록 시점이다.
+	#   ㉠ 여기가 "출하 확정"의 자리다: 어젯밤 롤백 창(_on_frame_takeback)은 이미 닫혔고, 상자를
+	#      비우기(settle)는 아직 안 했다. 그래서 도로 빼낸 것은 도감에 안 남고(가드 0줄), 정산되는
+	#      것은 빠짐없이 남는다. deposit 시점에 적었다면 "넣었다 뺀 것"이 영구 등재됐을 자리다.
+	#   ㉡ 추적 대상 밖(자재·유품·책 등)은 codex.record가 스스로 거른다 — 여기서 필터하지 않는다.
+	if codex != null:
+		for sid in ship_bin.ids():
+			codex.record(String(sid), day)
 	var ship_gold := ship_bin.settle()
 	if ship_gold > 0:
 		# ★[S8-T7 / ADR-0066 결정 9] 배우자 잡일 ②멜 = **출하 정산 팁 +2%**(장부 손질 — 마진
@@ -9466,6 +9486,15 @@ func _on_day_advanced(day: int) -> void:
 		_total_income += ship_gold            # ★ [S1R-T12] 누적 총수입(정보패널)
 		audio.sfx("gold")                     # 출하 정산 골드 "치링"
 		_notice("출하함 정산 +%d골드" % ship_gold)
+	# ★[S10-T6 / ADR-0069 결정 9] 명부 도감 완주 트로피 — **연출뿐**이다. 아이템도, 퍼센트도, 스탯
+	#   보정도 없다(결정 1 ② 합산 퍼센트·진엔딩 금지 / [ADR-0034] #4 영구 % 곱셈 금지). 금박 알림 한
+	#   줄이 뜨고, 혼백관 열람대 위에 작은 상이 선다 — 그게 전부다.
+	#   ★ 1회성은 원장의 래치(trophy_day)가 진다 — 재정산·재로드에도 두 번 뜨지 않는다.
+	if codex != null and codex.trophy_pending():
+		codex.claim_trophy(day)
+		if notice_feed != null:
+			notice_feed.push("명부 도감 완주 — 이 땅의 것을 모두 명부에 올렸다", 5.0, false, null, true)
+		audio.sfx("ui")
 	# ★[S7-T1 / ADR-0065 결정 1] 옛 T4.2 런 종료 게이트(RunSummary.is_over → _end_run → return)가
 	#   여기 있었다. RUN_DAYS=21에서 하루를 더 자면 게임이 끝나 **절기 전환(day 29)에 영원히 도달
 	#   못 했다** — Slice 7(절기·날씨·축제)의 전제가 통째로 성립하지 않는 자리라 게이트만 걷어낸다.
@@ -10717,6 +10746,7 @@ func _save_game() -> void:
 		"rarecrow": rarecrow.to_save(),     # ★ [S10-T2] 밭에 세운 레어크로우(밑동 좌표 → 종 id)
 		"crab_pot": crab_pot.to_save(),   # ★ [S3-T7] 설치한 게잡이통(구역별 좌표·미끼·수거 대기 어획물)
 		"museum": museum.to_save(),   # ★ [S2-T5] 혼백관 기증 원장·마일스톤 지급 기록(수집 진행 보존)
+		"codex": codex.to_save(),     # ★ [S10-T6] 명부 도감(출하 확정 id → 첫 출하 day + 완주 트로피 래치)
 		"quest_board": quest_board.to_save(),   # ★ [S2-T6] 게시판 수락 계약·완료 이력·지급 기록(의뢰 내용은 day 파생이라 무상태)
 		"forage": forage.to_save(),     # ★ [B1-a.3] 사료풀 벤/재생 상태(여물광 건초 재고는 ranch에 포함)
 		"flower_patch": flower.to_save(),  # ★ ADR-0052 꽃 패치 딴/재생 상태(배치는 layout.json 시드, 델타만)
@@ -10862,6 +10892,8 @@ func _load_game() -> void:
 		crab_pot.load_save(data["crab_pot"])
 	if data.has("museum"):   # ★ [S2-T5] — 키 없는 구버전은 기증 0(빈 원장·하위호환)
 		museum.load_save(data["museum"])
+	if data.has("codex"):    # ★ [S10-T6] — 키 없는 구세이브는 등재 0·트로피 없음(빈 원장·하위호환).
+		codex.load_save(data["codex"])   #   기존 플레이어도 다음 출하부터 자연히 채워 나간다(무막힘)
 	if data.has("quest_board"):   # ★ [S2-T6] — 키 없는 구버전은 수락 0·완료 0(빈 원장·하위호환)
 		quest_board.load_save(data["quest_board"])
 	if data.has("forage"):    # ★ [B1-a.3] — 키 없는 구버전은 사료풀 0(부팅 후 _seed_forage_tiles가 맵에서 시드). changed가 드로우 갱신
@@ -11862,6 +11894,8 @@ func _process(delta: float) -> void:
 	var facing_storehouse_chest := not _sleeping and _indoor == "창고" and _target == STOREHOUSE_CHEST_TILE
 	# ★ [S2-T5] 혼백관 기증대: 혼백관 안에서 기증대 칸을 바라볼 때(_indoor 가드 — 무인 기증대, ADR-0060 결정 5).
 	var facing_donate := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_DONATE_TILE
+	# ★ [S10-T6] 혼백관 열람대: 같은 방 다른 칸이라 기증대와 좌표로 갈린다(기증대와 정확히 같은 결).
+	var facing_codex := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_CODEX_TILE
 	# ★ [S4-T4] 대장간 무인 업그레이드대: 대장간 안에서 업그레이드대 칸을 바라볼 때(_indoor 가드 —
 	#   기증대와 정확히 같은 결. 다른 구역의 같은 좌표에 닿아도 무반응).
 	var facing_upgrade := not _sleeping and _indoor == "대장간" and _target == SMITHY_UPGRADE_TILE
@@ -12060,6 +12094,11 @@ func _process(delta: float) -> void:
 	# ★ [S2-T5] 혼백관 기증(F): 기증대를 바라보며 F — 든 유품을 기증한다(무인 기증대·마일스톤 보상 즉시 지급).
 	if facing_donate and Input.is_action_just_pressed("shop_toggle"):
 		_try_donate_selected()
+		return
+	# ★ [S10-T6] 명부 도감 열람(F): 열람대를 바라보며 F — 카테고리별 진행을 편지지 대화창으로 펼친다.
+	#   무인 창구라 기증대·게시판과 같은 결이고, 읽기 전용이라 아무것도 소모·지급하지 않는다.
+	if facing_codex and Input.is_action_just_pressed("shop_toggle"):
+		_open_codex()
 		return
 	# ★ [S4-T4 → S5-T3] 대장간 모루 업그레이드(F): 모루를 바라보며 F — **든 도구**의 다음 티어를
 	#   즉시 산다(골드 + 주괴 5 차감 → 티어 +1. 대기 없음 = ADR-0063 결정 3 QoL 승격).
@@ -12681,6 +12720,16 @@ func _process(delta: float) -> void:
 			# ★[S9-T7] 책이 기증 대상에 합류하며 안내 문구도 두 갈래를 말한다.
 			interact_prompt.text = "혼백관 기증대 — 유품이나 되찾은 책을 들고 오자 (전시 %d/%d)" % [
 				museum.donated_count(), Museum.donatable_ids().size()]
+	elif facing_codex:
+		# ★ [S10-T6] 열람대를 바라볼 때: 누르기 전에 진행이 먼저 읽힌다(우편함·책장과 같은 결).
+		#   완주 뒤에는 문구가 트로피를 말한다 — 보상이 연출뿐이라 이 한 줄이 답례의 절반이다.
+		interact_prompt.visible = true
+		if codex.has_trophy():
+			interact_prompt.text = "[F] 명부 도감 — 완주 (%d/%d)" % [
+				codex.shipped_count(), Codex.total_count()]
+		else:
+			interact_prompt.text = "[F] 명부 도감 (%d/%d)" % [
+				codex.shipped_count(), Codex.total_count()]
 	elif facing_upgrade:
 		# ★ [S4-T4 → S5-T3] 대장간 모루: **든 도구**의 현재 티어 · 다음 티어 · 가격 · 주괴를 한 줄로.
 		interact_prompt.visible = true
@@ -14739,8 +14788,14 @@ func _close_frame() -> void:
 # day_advanced에서 settle이 골드로 정산한다(즉시판매 제거 — 스타듀 출하상자 결, ADR-0021).
 func _on_frame_deposit(slot_index: int) -> void:
 	var id := inventory.id_at(slot_index)
-	if id == "" or ItemCatalog.category_of(id) != ItemCatalog.CAT_HARVEST:
-		return   # 수확물 외(씨앗·도구·비료)는 출하 대상이 아니다 — 무동작
+	# ★[S10-T6] 출하 가능 판정이 "수확물" 하나에서 **수확물 ∪ 명부 도감 추적 대상**으로 넓어졌다.
+	#   근거: 도감이 세는 다섯 칸 중 광물(CAT_MATERIAL)·요리(CAT_CONSUMABLE) 두 칸은 종전 판정에
+	#   막혀 **출하대에 들어갈 경로가 코드에 아예 없었다**(=도감 분모의 5분의 2가 영영 미등재 →
+	#   완주 불가). 스타듀도 광석·조리품을 출하상자에 넣는다. 판정을 Codex에 위임했으므로 하드코딩
+	#   목록이 늘지 않고, 자재(원목·이끼)·주괴·유품·책·열쇠·설치물은 **여전히 거절**된다
+	#   (Codex.is_tracked가 다섯 카탈로그만 본다). 씨앗·도구 거절도 그대로다.
+	if id == "" or not (ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST or Codex.is_tracked(id)):
+		return   # 출하 대상 밖(씨앗·도구·비료·자재·유품·책)은 무동작
 	var n := inventory.count_at(slot_index)
 	var q := inventory.quality_at(slot_index)   # ★ S1-6 이 슬롯의 등급을 함께 출하(worst-first 오염 방지 = 슬롯 지정 제거)
 	if not inventory.remove_at(slot_index, n):
@@ -15778,6 +15833,31 @@ func _draw_museum_room() -> void:
 			draw_circle(rp + Vector2(10, -14), 4.0, hc)
 		else:
 			draw_rect(Rect2(rp + Vector2(6, -12), Vector2(8, 12)), Color(0.25, 0.22, 0.2, 0.5), false, 1.0)  # 빈 자리
+	# ── ★[S10-T6 / ADR-0069 결정 9] ④ 명부 도감 열람대 ──
+	# 기증대와 같은 줄 동편(MUSEUM_CODEX_TILE). 아트가 들어오면 그대로 갈아끼우고(assets/props/
+	#   codex_stand.png), 없으면 그레이박스 폴백이 선다(museum_shelf와 같은 훅 문법).
+	# ★ 진행 표시도 **원장 파생**이다 — 좌대 앞 눈금 막대가 등재율을 그대로 비춘다(저장 상태 0).
+	var cpx := Vector2(MUSEUM_CODEX_TILE.x * TILE, MUSEUM_CODEX_TILE.y * TILE)
+	var codex_tex := _prop_tex("codex_stand")
+	if codex_tex != null:
+		draw_texture(codex_tex, cpx)
+	else:
+		draw_rect(Rect2(cpx + Vector2(2, 8), Vector2(TILE - 4, TILE - 14)), Color(0.30, 0.24, 0.18))   # 경사 독서대
+		draw_rect(Rect2(cpx + Vector2(4, 6), Vector2(TILE - 8, 8)), Color(0.80, 0.76, 0.66))           # 펼친 종이
+	# 등재 눈금(폭 = 진행률). 0/총계여도 테두리는 남아 "여기가 도감이다"가 읽힌다.
+	var c_total := Codex.total_count()
+	var c_got: int = codex.shipped_count() if codex != null else 0
+	var bar := Rect2(cpx + Vector2(2, TILE - 5), Vector2(TILE - 4, 3))
+	draw_rect(bar, Color(0.18, 0.16, 0.14))
+	if c_total > 0 and c_got > 0:
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * float(c_got) / float(c_total), bar.size.y)),
+			Color(0.86, 0.74, 0.38))
+	# 완주 트로피 — 열람대 위 작은 금빛 상(순수 연출·원장 파생. 값도 효과도 없다).
+	if codex != null and codex.has_trophy():
+		var tp := cpx + Vector2(TILE * 0.5, -2)
+		draw_rect(Rect2(tp - Vector2(5, 4), Vector2(10, 4)), Color(0.72, 0.60, 0.30))        # 받침
+		draw_circle(tp - Vector2(0, 10), 5.0, Color(0.94, 0.84, 0.44))                        # 잔
+		draw_rect(Rect2(tp - Vector2(1, 8), Vector2(2, 4)), Color(0.72, 0.60, 0.30))          # 기둥
 
 # ★ [S1R-T12] 휴지통 버리기(프레임 확인 후) — 집은 백팩 슬롯을 통째로 폐기(경제 0 — 판매 아님).
 func _on_frame_discard(slot_index: int) -> void:
@@ -20047,6 +20127,54 @@ func _read_from_bookshelf() -> void:
 	player.set_physics_process(false)
 	_set_dialogue_skin("letter")   # ★[S9-T9] 책장 재읽기도 같은 종이(즉독과 한 결)
 	dialogue.start(_talking_to, lines)
+
+# ── ★[S10-T6 / ADR-0069 결정 9] 명부 도감 열람 ────────────────────────────────
+# 혼백관 열람대 [F]. **읽기 전용**이다 — 아무것도 소모하지 않고 아무것도 지급하지 않는다.
+# 읽기 UI는 편지·책과 같은 편지지 스킨 대화창 재사용이다(신규 위젯 0 — _read_book_now 관례 1:1).
+#   ★ 대화 중이면 열지 않는다(DialogueBox.start가 열려 있으면 no-op이라, 가드 없이 부르면
+#     "열린 줄 알았는데 안 뜬" 조용한 무동작이 된다 — S9-T3에서 실증된 함정).
+func _open_codex() -> void:
+	if codex == null or dialogue == null or dialogue.is_open():
+		return
+	_talking_to = "명부 도감"
+	player.set_physics_process(false)
+	_set_dialogue_skin("letter")
+	dialogue.start(_talking_to, _codex_lines())
+
+# 도감 본문(원장 파생 — 저장된 문장이 하나도 없다). 카테고리 한 줄씩 + 머리말 + (완주 시) 맺음말.
+# 한 줄에 다 적지 않는 이유는 순전히 폭이다: 어종만 스무 종이라 전부 나열하면 대화창 본문칸을 넘긴다.
+# 그래서 이름은 앞에서 CODEX_LIST_MAX개까지만 세우고 나머지는 "외 N종"으로 접되, **미등재는 항상
+# `???`로 수를 밝힌다** — 채운 것과 못 채운 것이 한눈에 갈리는 것이 도감의 전부이기 때문이다.
+const CODEX_LIST_MAX := 6
+
+func _codex_lines() -> PackedStringArray:
+	var out := PackedStringArray()
+	out.append("◆ 명부 도감 ◆   출하대에 올린 것이 스스로 이름을 얻는다 (%d/%d)" % [
+		codex.shipped_count(), Codex.total_count()])
+	for cat in Codex.CATEGORIES:
+		out.append(_codex_category_line(String(cat)))
+	if codex.has_trophy():
+		out.append("… 명부가 가득 찼다. 열람대 위에 작은 상이 하나 서 있다.")
+	return out
+
+func _codex_category_line(cat: String) -> String:
+	var total := Codex.category_total(cat)
+	var names: Array = codex.category_names_shipped(cat)
+	var got := names.size()
+	var parts := PackedStringArray()
+	if got <= 0:
+		parts.append("아직 아무 이름도 없다")
+	else:
+		var shown := PackedStringArray()
+		for i in mini(got, CODEX_LIST_MAX):
+			shown.append(String(names[i]))
+		parts.append(" · ".join(shown))
+		if got > CODEX_LIST_MAX:
+			parts.append("외 %d종" % (got - CODEX_LIST_MAX))
+	var missing := total - got
+	if missing > 0:
+		parts.append("%s ×%d" % [Codex.UNKNOWN_MARK, missing])
+	return "%s %d/%d — %s" % [Codex.category_name(cat), got, total, " · ".join(parts)]
 
 # 거울에 뜰 본문. **명부의 운은 등급·문구만 나간다** — DailyLuck.fortune_text가 수치를 안 담는 것이
 # 그 계약이고, 여기서 값을 다시 꺼내 붙이면 CONTEXT [명부의 운] "내부 연산은 숨김"이 깨진다.
