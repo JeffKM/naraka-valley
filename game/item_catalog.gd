@@ -250,6 +250,27 @@ const INGOTS := {                        # 주괴 id → {name_ko, price(기준�
 	INGOT_NARAKCHEOL: {"name_ko": "나락철 주괴", "price": 1000},
 }
 
+# ── ★[S10-T1 / ADR-0069 결정 2] 팬닝 산출 부품 + 결정기 ───────────────────────
+# 물가 사금(PanningSpots)이 저확률로 내주는 **결정기 부품**과, 그 부품 3개로 만드는 **결정기**
+# (보석을 넣어 두면 며칠마다 같은 보석을 복제하는 설치 기계 — CrystalariumLedger).
+#
+# ★ 왜 MINERALS·PLACEABLES에 안 넣고 별 dict인가:
+#   ㉠ 부품은 광맥에서 안 나온다 — MINERALS는 "갱도 광맥을 곡괭이로 부숴 얻는 자재군"이라는 정의를
+#      갖고 있고(그 로스터 주석), 제련·지오드 개봉·보석사 퍼크가 *그 정의를 믿고* 순회한다.
+#      물가에서만 나오는 부품을 섞으면 그 순회들이 조용히 오염된다.
+#   ㉡ 결정기는 지면 설치물이지만 PLACEABLES(농사·낚시 설치물 블록)와 획득 사슬이 완전히 갈린다
+#      (팬닝 → 부품 → 제작). 광물 계열 블록 끝에 자기 사슬을 통째로 모아 두는 편이 읽기 쉽다.
+#   ㉢ 두 아이템의 카테고리가 갈리므로(부품 = CAT_MATERIAL · 결정기 = CAT_PLACEABLE) dict에
+#      `placeable` 플래그 한 칸을 둬 category_of가 그 한 줄로 갈린다(새 판정 함수 증식 0).
+# ★ 값 전부 *잠정*(owner 큐 — ADR-0069 결정 1 "폴리시 이월"). price는 **잔가**다: 둘 다 비매라
+#   상점에 안 서고, 출하했을 때의 값만 갖는다(업화로 price = 잔가와 같은 판단).
+const CRYSTALARIUM_PART := "crystalarium_part"   # 결정기 부품 — 팬닝 저확률 산출(3개 = 결정기 1대)
+const CRYSTALARIUM := "crystalarium"             # 결정기 — 보석 복제 설치물(CraftCatalog 제작 전용)
+const MINE_DEVICES := {                  # id → {name_ko, price(잔가), placeable(설치물인가)}
+	CRYSTALARIUM_PART: {"name_ko": "결정기 부품", "price": 120, "placeable": false},
+	CRYSTALARIUM: {"name_ko": "결정기", "price": 400, "placeable": true},
+}
+
 # ── ★[S5-T6 / ADR-0063 결정 6] 회복 소모품 — 명부환(冥府丸) ────────────────────
 # 길드(무골) 상시 품목. **HP를 즉시 회복하는 유일한 물건**이다 — 취침 풀회복 말고는 회복원이 없어
 # (ADR-0063 결정 4) S6 요리가 붙기 전까지 갱도 런의 유일한 연장 수단이다. 스타듀 길드는 회복템을
@@ -653,6 +674,15 @@ static func _is_mineral(id: String) -> bool:
 static func _is_ingot(id: String) -> bool:
 	return INGOTS.has(id)
 
+# ★[S10-T1] id가 팬닝 부품·결정기인가(MINE_DEVICES 블록 주석 참조 — 광물·설치물 어느 쪽 dict에도
+#   안 넣은 이유가 거기 있다). 두 아이템의 카테고리는 아래 _is_mine_placeable 한 줄로 갈린다.
+static func _is_mine_device(id: String) -> bool:
+	return MINE_DEVICES.has(id)
+
+# ★[S10-T1] 그중 지면 설치물인가(결정기 = true · 부품 = false).
+static func _is_mine_placeable(id: String) -> bool:
+	return _is_mine_device(id) and bool(MINE_DEVICES[id]["placeable"])
+
 # ★[S5-T6] id가 회복 소모품(명부환)인가. 미끼(GearCatalog)와 같은 CAT_CONSUMABLE이지만 dict를 가르는
 #   이유는 소비 동사가 다르기 때문이다 — 미끼는 캐스팅이 소모하고, 환약은 든 채 LMB가 소모한다.
 static func _is_potion(id: String) -> bool:
@@ -713,7 +743,8 @@ static func has_item(id: String) -> bool:
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_gear(id) or _is_pot_good(id) \
 		or _is_sap_good(id) or _is_mineral(id) or _is_ingot(id) or _is_weapon(id) \
-		or _is_potion(id) or _is_key(id) or _is_utility(id) or _is_menu(id) or _is_book(id)
+		or _is_potion(id) or _is_key(id) or _is_utility(id) or _is_menu(id) or _is_book(id) \
+		or _is_mine_device(id)   # ★[S10-T1] 결정기 부품 · 결정기
 
 # 카테고리("" = 알 수 없는 id). 인벤토리가 수확물/씨앗을 가르거나 main이 동사를 정할 때 쓴다.
 # 과일(수확된 혼백도 등)은 작물 수확물과 동급 CAT_HARVEST(판매·서빙·정렬 동일 취급).
@@ -748,6 +779,9 @@ static func category_of(id: String) -> String:
 		# 건초(S1-7)·개간 드랍(S1-8)·★광물(S5-T2)·★주괴(S5-T3)·★열쇠(S5-T6) = 재료 카테고리.
 		# ★열쇠만 스택 불가다(stackable_of 참조) — 카테고리는 같아도 개수 축이 없다.
 		return CAT_MATERIAL
+	# ★[S10-T1] 결정기 부품 = 광물·주괴와 같은 재료 칸 / 결정기 = 설치물 칸. 한 dict에서 갈린다.
+	if _is_mine_device(id):
+		return CAT_PLACEABLE if _is_mine_placeable(id) else CAT_MATERIAL
 	if _is_placeable(id):
 		return CAT_PLACEABLE  # 설치물(S1R-T9 스프링클러) — 지면 설치·회수
 	if _is_relic(id):
@@ -782,6 +816,8 @@ static func name_of(id: String) -> String:
 		return MINERALS[id]["name_ko"]   # ★S5-T2 광물 13종(광석 4·혼탄·돌·보석 5·지오드 2)
 	if _is_ingot(id):
 		return INGOTS[id]["name_ko"]     # ★S5-T3 주괴 4종(제련 산출)
+	if _is_mine_device(id):
+		return MINE_DEVICES[id]["name_ko"]   # ★S10-T1 결정기 부품 · 결정기
 	if _is_potion(id):
 		return POTIONS[id]["name_ko"]    # ★S5-T6 회복 소모품(명부환 — 길드 판매)
 	if _is_utility(id):
@@ -827,7 +863,7 @@ static func stackable_of(id: String) -> bool:
 	return _is_seed(id) or _is_sapling(id) or CropCatalog.has_crop(id) or _is_fruit(id) \
 		or _is_fertilizer(id) or _is_hay(id) or _is_material(id) or _is_animal_product(id) or _is_forageable(id) \
 		or _is_placeable(id) or _is_relic(id) or _is_fish(id) or _is_pot_good(id) or _is_sap_good(id) \
-		or _is_mineral(id) or _is_ingot(id)
+		or _is_mineral(id) or _is_ingot(id) or _is_mine_device(id)   # ★S10-T1 부품·결정기 = 스택(설치물 결)
 
 # 기준 가격(골드). 도구=비매(0), 씨앗=구매가(seed_cost), 묘목=구매가(sapling_cost), 비료=구매가(buy_cost),
 # 수확물/과일=판매가. 없으면 0. 상점은 이 값으로 사고팔되, 할인 등 변형은 호출 측(store_discount 등)이 얹는다.
@@ -877,6 +913,8 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return int(POT_GOODS[id]["price"] * quality_mult(quality))   # ★S3-T7 통용물 = 기준가 × 등급 배수(어획물 결)
 	if _is_sap_good(id):
 		return int(SAP_GOODS[id]["price"] * quality_mult(quality))   # ★S4-T6 수액 = 기준가 × 등급 배수(통용물 결)
+	if _is_mine_device(id):
+		return int(MINE_DEVICES[id]["price"])   # ★S10-T1 부품·결정기 = 품질 무차원 잔가(비매 — 출하만)
 	if _is_placeable(id):
 		return int(PLACEABLES[id]["price"])   # ★S1R-T9 설치물 = 품질 무차원 고정 구매가(스프링클러)
 	if _is_book(id):
@@ -909,7 +947,7 @@ static func ids_in_category(category: String) -> Array:
 		GearCatalog.TACKLES.keys(), WeaponCatalog.ids(),
 		MATERIALS.keys(), MINERALS.keys(), INGOTS.keys(), POTIONS.keys(),
 		UTILITIES.keys(), KEYS.keys(), RELICS.keys(), FORAGEABLES.keys(),
-		POT_GOODS.keys(), SAP_GOODS.keys(), PLACEABLES.keys(),
+		POT_GOODS.keys(), SAP_GOODS.keys(), PLACEABLES.keys(), MINE_DEVICES.keys(),
 		FertilizerCatalog.ids(), FishCatalog.ids(), MenuCatalog.ids(),
 		Books.all_ids(),   # ★S9-T7 책 8 + 비밀 노트 15(수집 트래커·전시 UI 열거)
 		[HAY],

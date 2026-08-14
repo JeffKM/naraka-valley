@@ -2315,6 +2315,12 @@ var furnace: FurnaceLedger = null
 #   델타를 원장에 흘린다. 절대 분을 쓰는 이유는 하나다: 취침(22:00 → 다음날 06:00)이 그냥 큰 델타
 #   하나(480분)로 접혀 "밤에도 제련이 돈다"(스타듀 정합)가 특별 분기 없이 성립한다. −1 = 미초기화.
 var _furnace_abs_min := -1.0
+# ★[S10-T1 / ADR-0069 결정 2] 팬닝 사금 스폿 원장(오늘 삼도천·황천해 물가 어디가 반짝이나).
+#   ForageSpawns와 같은 RefCounted 순수 원장이고, "여기가 물가인가"는 main의 `_is_waterside`가 본다.
+var panning: PanningSpots = null
+# ★[S10-T1 / ADR-0069 결정 2] 결정기 원장(설치 칸 → 안에 든 보석·다음 복제까지 남은 일수).
+#   업화로와 같은 결이되 **진행 축이 분이 아니라 일**이라 취침 훅이 굴린다(채취기와 같은 자리).
+var crystalarium: CrystalariumLedger = null
 # ★[S5-T3 / ADR-0063 결정 2·3] 누적 지오드 개봉 횟수 — 개봉 롤의 **결정적 시드**다(같은 카운터면
 #   같은 답이라 헤드리스가 재현하고, 카운터가 늘어야 새 롤이라 재롤 exploit이 구조적으로 막힌다).
 var _geode_opened := 0
@@ -2946,6 +2952,10 @@ func _ready() -> void:
 	tapper.changed.connect(queue_redraw) # 설치·수거·회수·일일 진행·복원 시 그레이박스 갱신(게잡이통 결)
 	furnace = FurnaceLedger.new()        # ★[S5-T3] 업화로 원장(RefCounted — 채취기와 같은 결·축만 분)
 	furnace.changed.connect(queue_redraw)     # 설치·투입·완성·수거·회수·복원 시 그레이박스 갱신
+	panning = PanningSpots.new()         # ★[S10-T1] 사금 스폿 원장(RefCounted — 채집물 스폰 원장과 같은 결)
+	panning.changed.connect(queue_redraw)     # 일일 재배치·채취·복원 시 반짝임 그레이박스 갱신
+	crystalarium = CrystalariumLedger.new()   # ★[S10-T1] 결정기 원장(RefCounted — 업화로와 같은 결·축만 일)
+	crystalarium.changed.connect(queue_redraw)  # 설치·투입·완성·수거·회수·복원 시 그레이박스 갱신
 	tool_tier = ToolTier.new()           # ★[S4-T4] 도구 티어 원장(RefCounted — 나무 원장과 같은 결)
 	tool_tier.changed.connect(_on_tool_tier_changed)   # 티어↑ → 프롬프트 타수·물뿌리개 용량 배지 갱신
 	carpenter = Carpenter.new()          # ★[S4-T7] 목공방 건축 의뢰 원장(RefCounted — 도구 티어와 같은 결)
@@ -9434,6 +9444,18 @@ func _on_day_advanced(day: int) -> void:
 		var forage_new := forage_spawns.advance_day(day, GameClock.season_index_for_day(day))
 		if bool(forage_new["season_reset"]) and int(forage_new["cleared"]) > 0:
 			_notice("절기가 바뀌어 숲의 채집물이 모두 졌다 — 새 절기의 것이 돋는다")
+	# ★[S10-T1 / ADR-0069 결정 2] 팬닝 사금 스폿 일일 재배치 — 삼도천·황천해 물가에 그날의 자리가
+	#   0~2씩 깔린다(어제 것은 전량 지운다 — 쌓이지 않는 것이 스폿의 정체성이다). 알림은 없다:
+	#   구역이 낚시터라 어차피 가야 보이고, 매일 아침 "강가가 반짝인다" 토스트가 뜨면 소음이 된다.
+	if panning != null:
+		panning.advance_day(day)
+	# ★[S10-T1 / ADR-0069 결정 2] 결정기 하루 — 복제 중인 기계의 남은 일수를 하루 깎고, 다 된 것을
+	#   수거 대기로 넘긴다(업화로의 분 진행과 같은 일이 일 단위로). 안 비운 기계는 카운트다운이 멈춘다.
+	if crystalarium != null:
+		var crystal_done: Array = crystalarium.advance_day()
+		if not crystal_done.is_empty():
+			_notice("결정기에서 %s이(가) 여물었다 — 들러서 꺼내자"
+				% ItemCatalog.name_of(String(crystal_done[0]["id"])))
 	# ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 밤 결실 — 절기 창(피안 15~18 / 망연 8~11) 안에서만 덤불당
 	#   20% 결정 롤로 열매가 달린다. 창을 벗어나면 롤이 없고 남은 열매도 진다(채집물 절기 전환과 같은 결).
 	#   절기 판정은 clock의 기존 파생을 그대로 쓴다 — 신규 시스템 0(ADR-0062 결정 9 마지막 줄).
@@ -10219,6 +10241,8 @@ func _save_game() -> void:
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
 		"furnace": furnace.to_save(),       # ★[S5-T3] 업화로(구역별 좌표·넣은 광석·남은 제련 분·주괴·등급)
 		"geode_opened": _geode_opened,       # ★[S5-T3] 누적 지오드 개봉 수(개봉 롤 시드 — 재롤 차단)
+		"panning": panning.to_save(),       # ★[S10-T1] 오늘의 사금 스폿(구역별 좌표 — 매일 새로 깔리는 델타)
+		"crystalarium": crystalarium.to_save(),   # ★[S10-T1] 결정기(구역별 좌표·든 보석·남은 일수)
 		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
 		"carpenter": carpenter.to_save(),   # ★[S4-T7] 목공방 건축 의뢰(진행 1건 + 완공 이력 — 정원 승격은 ranch에)
 		"mine": mine_floors.to_save(),      # ★[S5-T1] 갱도 층 원장(도달 최심층=영구 + day-한정 채굴·사다리 기록)
@@ -10360,6 +10384,10 @@ func _load_game() -> void:
 	_furnace_abs_min = -1.0       # ★[S5-T3] 분 기준점 리셋 — 로드 직후 첫 프레임을 새 기준으로 잡는다
 	                              #   (안 하면 세이브된 day와 현재 day의 차가 통째로 제련 진행으로 샌다)
 	_geode_opened = maxi(int(data.get("geode_opened", 0)), 0)   # ★[S5-T3] 개봉 카운터(구세이브 = 0)
+	if data.has("panning"):       # ★[S10-T1] — 키 없는 구세이브는 스폿 0(다음 취침이 그날 판을 깐다·무막힘)
+		panning.load_save(data["panning"])
+	if data.has("crystalarium"):  # ★[S10-T1] — 키 없는 구세이브는 결정기 0(빈 원장·하위호환)
+		crystalarium.load_save(data["crystalarium"])
 	if data.has("tool_tiers"):    # ★[S4-T4] — 키 없는 구세이브는 전 도구 티어 0(기본 도끼 그대로·무막힘)
 		tool_tier.load_save(data["tool_tiers"])
 	if data.has("carpenter"):     # ★[S4-T7] — 키 없는 구세이브는 진행 의뢰 0·완공 0(하위호환)
@@ -11516,6 +11544,11 @@ func _process(delta: float) -> void:
 			and Input.is_action_just_pressed("shop_toggle"):
 		_use_furnace(_target)
 		return
+	# ★[S10-T1] 결정기(F): 세워 둔 결정기를 바라보며 F — 수거 / 투입 / 회수(업화로와 같은 사다리).
+	if not _sleeping and crystalarium != null and _indoor == "" and crystalarium.has_at(_region, _target) \
+			and Input.is_action_just_pressed("shop_toggle"):
+		_use_crystalarium(_target)
+		return
 	# T5.4 → ★S6-T2 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 손님이 시킨 메뉴가 융합이고
 	# 곳간에 재료가 있으면 곳간 1개를 먹고 프리미엄가, 아니면 무재료 기본 메뉴로 정액가(무막힘).
 	# ★[S6-T5 / ADR-0064 결정 5] 체키 제안 수락(RMB) — **서빙보다 먼저** 잡는다. 제안 창(6초)이 손님
@@ -11623,6 +11656,17 @@ func _process(delta: float) -> void:
 			and is_bush_tile(_region, _target) and berry_bushes.has_berry(_region, _target)
 	if on_bush and Input.is_action_just_pressed("shop_toggle"):
 		_shake_bush(_target)
+	# ★[S10-T1 / ADR-0069 결정 2] 팬닝 — 반짝이는 물가 칸을 [F]. 스폿은 걸을 수 있는 지면(GROUND/PATH)
+	#   위라 채집물·덤불과 같은 결로 _target_valid 게이트 밖에서 따로 디스패치한다.
+	#   ★ **[F] 전용**이다(줍기의 RMB 겸용과 갈린다): "일다"는 도구 없이 하는 별개 동사이고, 무엇보다
+	#     RMB를 받으면 물가에서 낚싯대 캐스팅과 같은 손에 겹친다(같은 칸을 보고 같은 키를 누르는데
+	#     어떤 날은 캐스팅, 어떤 날은 팬닝이 되면 조작이 흔들린다).
+	#   ★ 게잡이통이 같은 칸에 놓여 있으면 위 [F] 사다리가 먼저 잡고 return한다(설치물 우선 — 통을
+	#     놓을 수 있는 칸과 스폿 칸이 둘 다 '물가'라 겹칠 수 있는 유일한 상대다).
+	var on_pan_spot := not _sleeping and _indoor == "" and panning != null \
+			and panning.has_at(_region, _target)
+	if on_pan_spot and Input.is_action_just_pressed("shop_toggle"):
+		_pan_spot(_target)
 	# ★[S4-T8 / ADR-0062 결정 9 ㉡] 이끼 낫 채취 — 이끼 낀 성숙목은 SOLID(비-SOIL)라 벌목과 같은 자리에서
 	#   디스패치한다. **든 게 낫일 때만** 걸리고(도끼면 아래 벌목이 잡는다), 둘은 서로 배타라 한 칸에서
 	#   충돌하지 않는다(각 함수가 자기 도구를 스스로 검사 — ADR-0024 §2 자동 분기 없음).
@@ -11737,6 +11781,11 @@ func _process(delta: float) -> void:
 	var holding_furnace := inventory.selected_id() == ItemCatalog.FURNACE
 	if not _sleeping and holding_furnace and Input.is_action_just_pressed("use_tool") and _can_place_furnace(_target):
 		_place_furnace(_target)
+	# ★ [S10-T1] 결정기 설치 — 결정기를 들고 빈 지면·길을 겨눠 LMB(업화로와 같은 판정·같은 동사 분배).
+	var holding_crystalarium := inventory.selected_id() == ItemCatalog.CRYSTALARIUM
+	if not _sleeping and holding_crystalarium and Input.is_action_just_pressed("use_tool") \
+			and _can_place_crystalarium(_target):
+		_place_crystalarium(_target)
 	# ★ ADR-0024 LMB = 든 도구 사용(괭이질·물주기·씨앗 심기). 커서 밑 인접 1칸 밭에 작용.
 	#   ★ 스프링클러를 들었으면 위에서 설치/철거를 이미 처리했으니 밭 도구질로 흘리지 않는다(중복 방지).
 	# ★[S5-T4 / ADR-0063 결정 5] **무기를 들었으면 무대·조준 칸과 무관하게 이 갈래로 들어온다**
@@ -12140,6 +12189,18 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 업화로 세우기 (광석 %d + 혼탄 %d → 주괴 1)" % [
 			FurnaceLedger.ORE_PER_BATCH, FurnaceLedger.FUEL_PER_BATCH]
+	elif crystalarium != null and _indoor == "" and crystalarium.has_at(_region, _target):
+		# ★[S10-T1] 세워 둔 결정기를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _crystalarium_prompt(_target)
+	elif inventory.selected_id() == ItemCatalog.CRYSTALARIUM and _can_place_crystalarium(_target):
+		# ★[S10-T1] 결정기를 들고 빈 지면을 겨눌 때: LMB로 설치.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[좌클릭] 결정기 세우기 (보석 1개를 넣으면 며칠마다 복제)"
+	elif panning != null and _indoor == "" and panning.has_at(_region, _target):
+		# ★[S10-T1] 반짝이는 물가 칸을 바라볼 때: [F]로 일다(혼력 소량). 도구는 필요 없다.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = "[F] 사금 일기 (혼력 %d)" % PanningSpots.PAN_ENERGY
 	elif tapper != null and _indoor == "" and tapper.has_at(_region, _target):
 		# ★[S4-T6] 채취기가 박힌 나무를 바라볼 때: 상태별 [F] 한 동사(수거 / 회수). **나무 프롬프트보다
 		#   먼저** 본다 — 그 칸의 지금 할 일은 벌목이 아니라 채취기이고, 벌목은 애초에 막혀 있다.
@@ -13017,6 +13078,8 @@ func _can_place_furnace(t: Vector2i) -> bool:
 		return false
 	if tapper != null and tapper.has_at(_region, t):
 		return false
+	if crystalarium != null and crystalarium.has_at(_region, t):
+		return false                          # ★[S10-T1] 결정기와 겹치지 않는다(_can_place_crystalarium 대칭)
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
 	if _region == RegionCatalog.HOME:
@@ -13119,6 +13182,150 @@ func _furnace_prompt(t: Vector2i) -> String:
 		return "업화로 — %s %d/%d · 혼탄 %d/%d" % [ItemCatalog.name_of(held), have_ore,
 			FurnaceLedger.ORE_PER_BATCH, have_fuel, FurnaceLedger.FUEL_PER_BATCH]
 	return "[F] 업화로 회수 (빈 화덕 — 광석을 들고 오면 제련)"
+
+# ── ★[S10-T1 / ADR-0069 결정 2] 팬닝(사금) ───────────────────────────────────
+# 반짝이는 물가 칸을 [F]로 인다. 혼력 소량(PanningSpots.PAN_ENERGY)을 내고 산출 한 건을 받는다.
+#   · 산출은 원장이 day+좌표 해시로 정한다(전역 randf 0) — 여기선 받아서 인벤·지갑에 얹기만 한다.
+#   · 도구 불요(ADR 결정 2 자구) — 든 것을 아예 안 본다. 그래서 낚싯대를 든 채로도 그냥 인다.
+#   · **혼력이 모자라면 스폿을 소모하지 않는다**(먼저 막고 나서 원장을 건드린다 — 조용한 손실 0).
+func _pan_spot(t: Vector2i) -> void:
+	if panning == null or not panning.has_at(_region, t):
+		return                                   # 없는 칸(디스패치가 걸렀지만 방어)
+	var cost := PanningSpots.PAN_ENERGY
+	if not energy.can_act(cost):
+		_notice("혼력이 모자라다 — 사금을 이려면 혼력 %d이 든다" % cost)
+		return
+	var got: Dictionary = panning.pan(clock.day, _region, t)
+	if got.is_empty():
+		return                                   # 원장이 거절(도달 불가 — 위에서 has_at을 봤다)
+	energy.spend(cost)
+	var gold := int(got.get("gold", 0))
+	var id := String(got.get("id", ""))
+	var n := int(got.get("count", 0))
+	if gold > 0:
+		wallet.earn(gold)
+		_notice("사금 한 줌을 건졌다 — %d냥" % gold)
+	if id != "" and n > 0:
+		if inventory.add_item(id, n):
+			_toast_item(id, n)
+		else:
+			_notice("가방이 가득 차 %s를 두고 왔다" % ItemCatalog.name_of(id))
+	audio.sfx("harvest")
+	queue_redraw()
+
+# ── ★[S10-T1 / ADR-0069 결정 2] 결정기 ───────────────────────────────────────
+# 결정기를 놓을 수 있는 칸인가. **업화로 `_can_place_furnace`의 쌍둥이**다(판정이 한 줄도 안 갈린다 —
+# 둘 다 "지상 야외의 걸을 수 있는 빈 지면"이 조건이라, 여기서 새 규칙을 만들면 그게 곧 특이 케이스가
+# 된다). 다른 설치물과 겹치지 않는 것만 서로를 한 줄씩 참조해 대칭으로 채운다.
+func _can_place_crystalarium(t: Vector2i) -> bool:
+	if crystalarium == null or _indoor != "" or _mine_floor != 0:
+		return false
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
+		return false
+	if crystalarium.has_at(_region, t):
+		return false                          # 이미 설치됨(그 위엔 투입·수거·회수만)
+	var cell: int = _grid[t.y][t.x]
+	if cell != GROUND and cell != PATH:       # 빈 지면·길만(밭·물·벽·절벽·건물 패드 배제)
+		return false
+	if is_solid(cell):
+		return false                          # 방어(건물 패드·절벽·벽 = SOLID)
+	if sprinkler != null and sprinkler.has_at(t):
+		return false
+	if crab_pot != null and crab_pot.has_at(_region, t):
+		return false
+	if tapper != null and tapper.has_at(_region, t):
+		return false
+	if furnace != null and furnace.has_at(_region, t):
+		return false
+	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
+		return false
+	if _region == RegionCatalog.HOME:
+		if POND_ACTIVITY_RECT.has_point(t):   # 물가 활동존(연못 여백) → 배제
+			return false
+		if _home_occupied_tiles().has(t):     # 프롭 점유(나무·바위·꽃·울타리·허수아비) → 배제
+			return false
+	return true
+
+# 조준 칸에 결정기를 설치한다(아이템 1개 소모). 원장이 좌표를 든다(설치물 공통 결).
+func _place_crystalarium(t: Vector2i) -> void:
+	if not inventory.has_item(ItemCatalog.CRYSTALARIUM):
+		return
+	if crystalarium.place(_region, t):
+		inventory.remove_item(ItemCatalog.CRYSTALARIUM, 1)
+		audio.sfx("ui")
+		_notice("결정기를 세웠다 — 보석을 하나 넣어 두면 며칠마다 같은 것이 하나씩 여문다")
+		queue_redraw()
+
+# 결정기 [F] 한 동사(상태별 사다리 — 업화로와 같은 문법):
+#   ㉠ 다 여물었으면 → 수거(복제본 1개). 안의 보석은 남아 **즉시 재가동**한다.
+#   ㉡ 비었고 **든 것이 복제 가능한 보석**이면 → 투입(보석 1개 차감)
+#   ㉢ 그 외(복제 중이거나 든 게 보석이 아니면) → 회수(결정기 1개 + 안에 든 보석 반환)
+# ★ ㉢이 업화로와 갈리는 지점이다: 결정기는 투입물이 소모되지 않아 "걷지 않으면 못 빼는 보석"이
+#   생기므로, 걷을 때 든 보석을 그대로 돌려준다(잃는 것은 진행뿐 — CrystalariumLedger.remove 주석).
+func _use_crystalarium(t: Vector2i) -> void:
+	if crystalarium == null or not crystalarium.has_at(_region, t):
+		return
+	if crystalarium.is_ready(_region, t):
+		var gem := crystalarium.gem_at(_region, t)
+		if not inventory.add_item(gem, 1):
+			_notice("가방이 가득 찼다 — 자리를 비우고 다시 꺼내자")
+			return
+		crystalarium.collect(_region, t)
+		_toast_item(gem, 1)
+		audio.sfx("harvest")
+		_notice("%s 하나를 꺼냈다 — 결정기가 다시 여물기 시작한다(%d일)"
+			% [ItemCatalog.name_of(gem), CrystalariumLedger.days_for(gem)])
+		queue_redraw()
+		return
+	var held := inventory.selected_id()
+	if crystalarium.is_idle(_region, t) and CrystalariumLedger.can_duplicate(held):
+		if inventory.count_of(held) < 1:
+			return
+		if not crystalarium.load_gem(_region, t, held):
+			return
+		inventory.remove_item(held, 1)
+		audio.sfx("ui")
+		_notice("%s을(를) 결정기에 넣었다 — %d일 뒤에 하나가 여문다"
+			% [ItemCatalog.name_of(held), crystalarium.days_left(_region, t)])
+		queue_redraw()
+		return
+	# ⚠️ ㉢ 앞의 안전 갈래 — **복제 불가 보석을 들고 있으면 회수로 흘리지 않는다**. 플레이어가 한 일은
+	#   "이 보석을 넣어 보려 한 것"인데 기계가 걷혀 버리면 의도와 정반대다(_crystalarium_prompt가 같은
+	#   상황에서 "복제할 수 없다"를 이미 말하고 있으므로, 그 말과 동작이 어긋나서도 안 된다).
+	if held == ItemCatalog.GEM_OSAEK_HONOK:
+		_notice("오색혼옥은 결정기가 흉내 낼 수 없다 — 세상에 그 하나뿐인 빛이다")
+		return
+	# ㉢ 회수 — 안에 든 보석까지 함께 돌려받는다(복제 진행만 사라진다).
+	var res: Dictionary = crystalarium.remove(_region, t)
+	if res.is_empty():
+		return                                    # 수거 대기 = 거절(먼저 꺼내라 — 원장의 이중 안전)
+	var inside := String(res.get("gem", ""))
+	if not inventory.add_item(ItemCatalog.CRYSTALARIUM, 1):
+		crystalarium.place(_region, t)            # 가방이 가득 → 원상 복구(빈 기계로 되돌린다)
+		if inside != "":
+			crystalarium.load_gem(_region, t, inside)   # 안의 보석·기간까지 되살린다(손실 0)
+		_notice("가방이 가득 차 결정기를 걷지 못했다")
+		return
+	if inside != "" and not inventory.add_item(inside, 1):
+		_notice("가방이 가득 차 안에 있던 %s를 두고 왔다" % ItemCatalog.name_of(inside))
+	audio.sfx("ui")
+	queue_redraw()
+
+# 결정기 프롬프트 — 상태별 한 줄(_use_crystalarium의 사다리와 같은 순서).
+func _crystalarium_prompt(t: Vector2i) -> String:
+	if crystalarium.is_ready(_region, t):
+		return "[F] %s 꺼내기 (결정기 — 꺼내면 다시 여문다)" % ItemCatalog.name_of(crystalarium.gem_at(_region, t))
+	if crystalarium.is_growing(_region, t):
+		return "결정기 — %s 여무는 중 (%d일 남음 · [F] 걷기)" % [
+			ItemCatalog.name_of(crystalarium.gem_at(_region, t)), crystalarium.days_left(_region, t)]
+	var held := inventory.selected_id()
+	if CrystalariumLedger.can_duplicate(held):
+		return "[F] %s 넣기 (%d일마다 하나씩 복제)" % [ItemCatalog.name_of(held),
+			CrystalariumLedger.days_for(held)]
+	if held == ItemCatalog.GEM_OSAEK_HONOK:
+		# ⚠️ ADR-0063 초희귀 지위 — 거절 사유를 프롬프트가 먼저 밝힌다(눌러 보고 무반응이 아니게).
+		return "결정기 — 오색혼옥은 복제할 수 없다 (세상에 그 하나뿐인 빛)"
+	return "[F] 결정기 회수 (빈 기계 — 보석을 들고 오면 복제)"
 
 # 게임 내 분 → 사람이 읽는 시간 문구("30분" / "2시간" / "2시간 30분").
 func _minutes_text(mins: int) -> String:
@@ -19002,6 +19209,8 @@ func _weed_spread_class(t: Vector2i, occ: Dictionary) -> int:
 		return Reclaim.DEST_BLOCK            # 이미 잡초(멱등)
 	if furnace != null and furnace.has_at(_region, t):
 		return Reclaim.DEST_BLOCK
+	if crystalarium != null and crystalarium.has_at(_region, t):
+		return Reclaim.DEST_BLOCK            # ★[S10-T1] 결정기 = 면제(업화로와 같은 결 — 잡초가 기계를 안 삼킨다)
 	if crab_pot != null and crab_pot.has_at(_region, t):
 		return Reclaim.DEST_BLOCK
 	if tapper != null and tapper.has_at(_region, t):
@@ -19279,6 +19488,8 @@ func _draw() -> void:
 			_draw_night_customers()
 			_draw_jobgui()
 	_draw_furnaces()        # ★[S5-T3] 세워 둔 업화로(구역 무관 — 전 지상 무대에 놓을 수 있다)
+	_draw_crystalariums()   # ★[S10-T1] 세워 둔 결정기(업화로와 같은 결 — 구역 무관)
+	_draw_panning_spots()   # ★[S10-T1] 오늘의 사금 스폿 반짝임(삼도천·황천해 물가에만 있다)
 	_draw_forage_detect()   # ★[S4-T2] 혼 감지 가장자리 여우불 + 추적자 ▼(대상 없으면 무동작 — 구역 무관)
 	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
 	_draw_cheki_hud()       # ★ [S6-T5] 체키 구도·셔터 그레이박스 트랙(세션 있을 때만)
@@ -20034,6 +20245,52 @@ func _draw_furnaces() -> void:
 			draw_rect(Rect2(base + Vector2(5, TILE - 6), Vector2(w, 3)), Color(0.92, 0.72, 0.32))
 		else:
 			draw_rect(mouth, Color(0.12, 0.11, 0.12))                     # 빈 화덕 = 식은 검정
+
+# ★[S10-T1 / ADR-0069 결정 2] 결정기 그레이박스 렌더(아트는 S10-T9). 업화로와 같은 결로 "몸통 +
+#   상태 3색 창"이되, 몸통이 유리 상자라 밝고 창이 *안에 뜬 결정*이다. 순수 시각 — 상태는
+#   CrystalariumLedger가 소유하고 여긴 질의만 한다.
+func _draw_crystalariums() -> void:
+	if crystalarium == null or _indoor != "" or _mine_floor != 0:
+		return
+	for t: Vector2i in crystalarium.tiles(_region):
+		var base := Vector2(t.x * TILE, t.y * TILE)
+		# 유리 상자 몸통 + NW 광원 상판(업화로 실루엣과 갈리게 밝은 남빛으로).
+		draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, TILE - 8)), Color(0.24, 0.27, 0.38))
+		draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, 4)), Color(0.40, 0.44, 0.58))
+		draw_rect(Rect2(base + Vector2(4, 6), Vector2(TILE - 8, TILE - 8)), Color(0.68, 0.74, 0.92, 0.55), false, 1.0)
+		var gem := crystalarium.gem_at(_region, t)
+		if gem == "":
+			continue                                   # 빈 기계 = 유리 상자만(안이 비어 보인다)
+		# 안에 뜬 결정 — 보석 id 해시 파생 색이라 종마다 다르고 세션 간 고정이다(채집물 색점과 같은 결).
+		var col := _forage_species_color(gem)
+		var body := Rect2(base + Vector2(11, 13), Vector2(TILE - 22, TILE - 22))
+		if crystalarium.is_ready(_region, t):
+			draw_rect(body, col)                       # 다 여물었다 = 꽉 찬 결정 + 흰 하이라이트
+			draw_rect(Rect2(base + Vector2(13, 15), Vector2(4, 4)), Color(1.0, 1.0, 1.0, 0.85))
+		else:
+			draw_rect(body, Color(col.r, col.g, col.b, 0.45))   # 여무는 중 = 옅은 결정
+			# 남은 일수 눈금 — 여물수록 아래 띠가 찬다(업화로 분 눈금의 일 단위 판).
+			var total := maxi(CrystalariumLedger.days_for(gem), 1)
+			var left := crystalarium.days_left(_region, t)
+			var w := float(TILE - 10) * float(total - left) / float(total)
+			draw_rect(Rect2(base + Vector2(5, TILE - 6), Vector2(w, 3)), col)
+
+# ★[S10-T1 / ADR-0069 결정 2] 사금 스폿 그레이박스 렌더(아트는 S10-T9) — 물가 칸에 뜬 얕은 웅덩이 +
+#   반짝임 십자. **아이콘이 아니라 표식**인 이유: 스폿은 주울 물건이 아니라 "여기를 일면 뭔가 나온다"는
+#   자리라, 채집물처럼 종을 보여 줄 것이 없다(무엇이 나오는지는 일어야 안다 — 그게 팬닝의 결이다).
+#   순수 시각 — 좌표는 PanningSpots가 소유하고 여긴 질의만 한다.
+func _draw_panning_spots() -> void:
+	if panning == null or _indoor != "" or _mine_floor != 0:
+		return
+	for t: Vector2i in panning.tiles(_region):
+		var c := Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
+		draw_circle(c, TILE * 0.30, Color(0.38, 0.44, 0.46, 0.55))          # 젖은 자갈 웅덩이
+		draw_circle(c, TILE * 0.30, Color(0.72, 0.78, 0.80, 0.65), false, 1.0)
+		# 반짝임 십자(사금 알갱이) — 금빛 네 획.
+		var g := Color(0.98, 0.86, 0.40)
+		draw_line(c + Vector2(-TILE * 0.16, 0), c + Vector2(TILE * 0.16, 0), g, 2.0)
+		draw_line(c + Vector2(0, -TILE * 0.16), c + Vector2(0, TILE * 0.16), g, 2.0)
+		draw_circle(c, TILE * 0.06, Color(1.0, 0.97, 0.80))
 
 # ★ [S1R-T9] 저승 스프링클러 그레이박스 렌더(설치물 — 아트는 후속 아트 패스). 각 설치 칸에 청록 몸통 +
 #   물방울 머리를 그리고, 급수 십자 4칸을 옅은 물빛 표식으로 얹어 "무엇을 적시는지" 보이게 한다(순수 시각).

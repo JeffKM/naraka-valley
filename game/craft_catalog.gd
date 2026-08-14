@@ -32,6 +32,7 @@ const RARE_SEED_SEORI_HONBAEK := "rare_seed_seori_honbaek"
 const TAPPER := "tapper"
 const FURNACE := "furnace"   # ★[S5-T3] 업화로(ADR-0063 결정 3)
 const STAIRS := "stairs"     # ★[S5-T8] 계단(ADR-0063 결정 10)
+const CRYSTALARIUM := "crystalarium"   # ★[S10-T1] 결정기(ADR-0069 결정 2)
 
 # ── 카탈로그. 키 = 레시피 id ────────────────────────────────────────────────
 # 필드:
@@ -97,14 +98,25 @@ static func catalog() -> Dictionary:
 		STAIRS: {"name_ko": "계단", "out_item": ItemCatalog.STAIRS,
 			"out_count": 1, "unlock_level": 0, "unlock_species": "", "unlock_skill_level": 2,
 			"mats": [{"item": ItemCatalog.STONE, "count": 99}]},
+		# ★[S10-T1 / ADR-0069 결정 2] 결정기 — 결정기 부품 3(ADR 자구 "잠정 3부품을 모으면 제작").
+		# ★ 재료가 **부품 하나뿐**인 것은 의도다: 부품의 유일한 입수처가 팬닝 저확률 산출(5.5%)이라
+		#   재료 자체가 곧 게이트다(업화로가 "명동 광석 20개"로 같은 일을 하는 그 문법). 여기에
+		#   주괴 요구를 더하면 물가 활동의 결실이 갱도 사슬에 인질이 되어 [ADR-0008] "평평≠막힘"과
+		#   어긋난다 — 팬닝만 꾸준히 해도 언젠가 한 대는 선다.
+		# ★ `unlock_level: 0` = 상시 노출(업화로 선례 — 채광 계열 레시피에 채집 계단을 물리지 않는다).
+		# ★잠정(owner 큐): 부품 3이라는 수와 5.5% 드랍의 곱이 곧 첫 한 대까지의 거리다.
+		CRYSTALARIUM: {"name_ko": "결정기", "out_item": ItemCatalog.CRYSTALARIUM,
+			"out_count": 1, "unlock_level": 0, "unlock_species": "",
+			"mats": [{"item": ItemCatalog.CRYSTALARIUM_PART,
+				"count": CrystalariumLedger.PARTS_PER_UNIT}]},
 	}
 
 # 레시피 id 목록(카탈로그 정의 순서 = 제작 탭 표시 순서 — 해금 레벨 오름 결).
 static func ids() -> Array:
 	# ★ 업화로가 맨 앞 = 해금 레벨 0(오름 결 보존 — 상시 노출이라 목록 첫 줄이 자연스럽다).
-	return [FURNACE, STAIRS, WILD_SEEDS_PIAN, TAPPER, WILD_SEEDS_YUHWA, WILD_SEEDS_MANGYEON,
+	return [FURNACE, STAIRS, CRYSTALARIUM, WILD_SEEDS_PIAN, TAPPER, WILD_SEEDS_YUHWA, WILD_SEEDS_MANGYEON,
 		RARE_SEED_MIHOK_NANCHO, RARE_SEED_YURYEONGCHO, RARE_SEED_MYEONGWOL, RARE_SEED_SEORI_HONBAEK,
-		WILD_SEEDS_SEONGYA]
+		WILD_SEEDS_SEONGYA]   # ★[S10-T1] 결정기 합류(해금 레벨 0 — 상시 노출 셋이 앞줄)
 
 static func has(id: String) -> bool:
 	return catalog().has(id)
