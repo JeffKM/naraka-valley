@@ -190,9 +190,13 @@ func _initialize() -> void:
 		String(CraftCatalog.get_recipe(CraftCatalog.STAIRS)["out_item"]) == ItemCatalog.STAIRS
 		and int(CraftCatalog.get_recipe(CraftCatalog.STAIRS)["out_count"]) == 1
 		and int(CraftCatalog.get_recipe(CraftCatalog.STAIRS)["mats"][0]["count"]) == 99)
-	_check("⑤c 2차 축은 계단만 갖는다(기존 10종은 0 = 무영향)",
+	# ★[S10-T2] 2차 축을 쓰는 레시피가 셋이 됐다(계단=채광 · 스프링클러 2티어=농사). 그래서 단언을
+	#   "계단만 갖는다"에서 **"계단의 축은 채광이고, 축 없는 레시피는 여전히 0"**으로 좁힌다.
+	_check("⑤c 계단의 2차 축 = 채광 Lv2(축 없는 레시피는 0 = 무영향)",
 		CraftCatalog.skill_gate_of(CraftCatalog.STAIRS) == 2
+		and CraftCatalog.skill_gate_id_of(CraftCatalog.STAIRS) == ProfessionCatalog.MINING
 		and CraftCatalog.skill_gate_of(CraftCatalog.TAPPER) == 0
+		and CraftCatalog.skill_gate_id_of(CraftCatalog.TAPPER) == ""
 		and CraftCatalog.unlocked(CraftCatalog.TAPPER, 4, {}))
 	_check("⑤d 계단 아이템 = 스택 CAT_CONSUMABLE·비매",
 		ItemCatalog.has_item(ItemCatalog.STAIRS)

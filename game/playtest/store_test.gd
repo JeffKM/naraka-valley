@@ -174,8 +174,9 @@ func _initialize() -> void:
 	for cid in CropCatalog.ids():
 		if cid != CropCatalog.BULSAGWA and CropCatalog.in_season(String(cid), season0):
 			want_seeds.append(cid)
-	_check("⑨a _store_items = 제철 씨앗%d+묘목1+비료5+건초1+설치물1(%d행)"
-		% [want_seeds.size(), want_seeds.size() + 8], items.size() == want_seeds.size() + 8)
+	# ★[S10-T2 / ADR-0069 결정 4] 레어크로우 ③(만물상 재고) 1행이 끝에 붙어 씨앗 밖이 8 → 9행.
+	_check("⑨a _store_items = 제철 씨앗%d+묘목1+비료5+건초1+설치물1+레어크로우1(%d행)"
+		% [want_seeds.size(), want_seeds.size() + 9], items.size() == want_seeds.size() + 9)
 	_check("⑨a1 ★제철 필터 — 진열 씨앗이 정확히 이번 절기 작물(그리고 최소 1종은 선다)",
 		seed_rows.map(func(it): return it["buy_id"]) == want_seeds and want_seeds.size() >= 1)
 	var off_season_row := false
@@ -192,7 +193,8 @@ func _initialize() -> void:
 	var want_kinds: Array = []
 	for _i9 in want_seeds.size():
 		want_kinds.append("seed")
-	want_kinds.append_array(["sapling", "fert", "fert", "fert", "fert", "fert", "hay", "placeable"])
+	want_kinds.append_array(["sapling", "fert", "fert", "fert", "fert", "fert", "hay", "placeable",
+		"rarecrow"])   # ★[S10-T2] 레어크로우 ③이 진열 맨 끝(수집물 — 설치물 뒤)
 	_check("⑨a2 카테고리 진열 순서", kinds_seq == want_kinds)
 	var has_fields := true
 	for it in items:
@@ -202,7 +204,12 @@ func _initialize() -> void:
 	_check("⑨c 불사과(채집 전용)는 매대에 없음",
 		items.all(func(it): return it["buy_id"] != CropCatalog.BULSAGWA))
 	var last9: Dictionary = items[items.size() - 1]
-	_check("⑨d 마지막 행 = 스프링클러(설치물)", last9["kind"] == "placeable" and last9["buy_id"] == ItemCatalog.SPRINKLER)
+	# ★[S10-T2] 마지막 행이 레어크로우 ③으로 바뀌었고, 설치물(스프링클러)은 그 바로 앞줄이다.
+	_check("⑨d 마지막 행 = 레어크로우 ③(수집물)",
+		last9["kind"] == "rarecrow" and last9["buy_id"] == ItemCatalog.RARECROW_3)
+	var prev9: Dictionary = items[items.size() - 2]
+	_check("⑨d2 그 앞줄 = 스프링클러(설치물)",
+		prev9["kind"] == "placeable" and prev9["buy_id"] == ItemCatalog.SPRINKLER)
 	# 행별 구매 = 선택 작물이 아니라 그 행의 작물을 산다(_on_frame_buy_seed).
 	m.neo_affinity.points = 0
 	m.neo_affinity.stage = 0

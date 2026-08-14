@@ -46,9 +46,11 @@ func _run_checks() -> void:
 	# ★[S5-T3 / ADR-0063 결정 3] 9 → 10: 업화로 레시피가 합류했다(의도적 불변식 개정).
 	# ★[S5-T8 / ADR-0063 결정 10] 10 → 11: 계단 레시피가 합류했다(같은 결의 의도적 개정).
 	# ★[S10-T1 / ADR-0069 결정 2] 11 → 12: 결정기 레시피가 합류했다(같은 결의 의도적 개정).
+	# ★[S10-T2 / ADR-0069 결정 3] +2: 스프링클러 상위 2티어 합류(결합 시 T1 파생 단언 채택 — 분모 하드코딩 금지).
 	# ★ 분모를 손으로 안 적는다 — 카탈로그 dict 크기와 목록 크기가 서로를 검증한다(stale 단언 방지).
-	_check("①a 레시피 목록 = 카탈로그 전량(★S10-T1 결정기 합류)",
-		ids.size() == CraftCatalog.catalog().size() and ids.has(CraftCatalog.CRYSTALARIUM))
+	_check("①a 레시피 목록 = 카탈로그 전량(★S10-T1 결정기·★S10-T2 스프링클러 2티어 합류)",
+		ids.size() == CraftCatalog.catalog().size() and ids.has(CraftCatalog.CRYSTALARIUM)
+		and ids.has(CraftCatalog.SPRINKLER_T2) and ids.has(CraftCatalog.SPRINKLER_T3))
 	var all_ok := true
 	for id in ids:
 		var r: Dictionary = CraftCatalog.get_recipe(id)
@@ -119,7 +121,7 @@ func _run_checks() -> void:
 	# ── ⑥ 제작 탭 행 데이터 ──
 	print("── ⑥ 제작 탭 행 ──")
 	var rows: Array = m._craft_rows()
-	# ★[S10-T1] 분모는 카탈로그 파생(레시피가 늘 때마다 여기를 고치지 않게 — stale 단언 방지).
+	# ★[S10-T1·T2 합치] 분모는 카탈로그 파생(레시피가 늘 때마다 여기를 고치지 않게 — stale 단언 방지).
 	_check("⑥a 카탈로그 전량 행·id/이름 채움",
 		rows.size() == CraftCatalog.ids().size() and String(rows[0]["name"]) != "")
 	var locked_seen := false

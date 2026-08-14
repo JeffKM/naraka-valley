@@ -114,6 +114,36 @@ const RARECROW_1 := "rarecrow_1"        # ★[S2-T5] 레어크로우 ① — 혼
 #   ADR-0051 B 트랙(8종 수집 → 디럭스 허수아비)의 두 번째 입구다. **배치 메카닉은 여전히 서랍**
 #   (①이 그러하듯 지금은 소지까지가 실효 범위 — 신규 시스템 0).
 const RARECROW_2 := "rarecrow_2"        # 레어크로우 ② — 저승 야시장 한정
+# ── ★[S10-T2 / ADR-0069 결정 4] 레어크로우 나머지 6종 — **8종 로스터 완성** ────────────
+# [ADR-0051] 결정 5의 자구 그대로 **기능·반경이 완전히 같은 순수 스킨**이다: 방어 성능이 종마다
+# 다르면 "예쁜 걸 세우면 손해"가 되어 수집이 코스메틱이 아니라 최적화 문제로 변한다. 8종을 다
+# 모으면(소지 또는 배치) 반경이 2배가 되는데(CrowRaid.DELUXE_RADIUS), 그 보상조차 *한 종의 성능*이
+# 아니라 *수집 완주*에 붙어 있어 종 사이 우열이 생기지 않는다.
+# ★ 획득처 8슬롯([ADR-0069] 결정 4의 재분배 — 한 종에 한 창구, 창구가 곧 그 종의 정체성이다):
+#     ① 혼백관 마일스톤(기존 — Museum.MILESTONES count 3) ② 저승 야시장(기존 — S7-T7)
+#     ③ 만물상 재고(★T2) ④ 저승 전령 우편 첨부(★T2 — 결정 3 의존) ⑤ 저승 보부상(**T3 예약**)
+#     ⑥ 삼도천 낚시 더비 보상(★T2) ⑦ 곳간 장원제 보상(★T2) ⑧ 명부 시련장 상점(**T8 예약**)
+#   ⑤·⑧은 그 시스템 자체가 아직 없어 **아이템 등재까지만** 한다(획득 경로 0). 미등재로 두면 T3·T8이
+#   아이템 추가 + 배선을 같이 해야 하는데, 로스터 분모(8)가 태스크 사이에서 흔들리면 완성 판정·전시
+#   좌대·테스트 단언이 전부 같이 흔들린다 — 로스터는 지금 한 번에 닫고 창구만 나중에 연다.
+# ★ 전부 ①②와 같은 규칙을 그대로 탄다(품질 무차원 스택 CAT_MATERIAL·비매 price 0). 값이 0인 것은
+#   "팔 물건이 아니다"라는 뜻이다 — 출하함은 CAT_HARVEST만 받고(경로 없음), 백팩 버리기는 책과 같은
+#   이유로 막았다(main._on_frame_discard — 중복 입수가 없어 버리면 완주가 영영 불가능해진다).
+const RARECROW_3 := "rarecrow_3"        # 레어크로우 ③ — 만물상 재고
+const RARECROW_4 := "rarecrow_4"        # 레어크로우 ④ — 저승 전령 우편 첨부
+const RARECROW_5 := "rarecrow_5"        # 레어크로우 ⑤ — 저승 보부상(T3 예약)
+const RARECROW_6 := "rarecrow_6"        # 레어크로우 ⑥ — 삼도천 낚시 더비 보상
+const RARECROW_7 := "rarecrow_7"        # 레어크로우 ⑦ — 곳간 장원제 보상
+const RARECROW_8 := "rarecrow_8"        # 레어크로우 ⑧ — 명부 시련장 상점(T8 예약)
+# 8종 로스터 — **분모의 단일 출처**다. 수집 진척(x/8)·완성 판정·혼백관 추적 전시·테스트 단언이 전부
+# 이 배열 크기에서 파생된다(하드코딩 8을 어디에도 두지 않는다 — 로스터가 늘면 한 곳만 고친다).
+# 순서 = 획득처 슬롯 ①~⑧ 순(혼백관 추적 전시의 좌대 순서도 이 인덱스로 선다 — Museum.donatable_ids
+# 가 "순서가 흔들리면 채워진 좌대가 옆으로 밀린다"고 못 박은 그 규율 1:1).
+const RARECROWS := [RARECROW_1, RARECROW_2, RARECROW_3, RARECROW_4,
+	RARECROW_5, RARECROW_6, RARECROW_7, RARECROW_8]
+# ③ 만물상 판매가(잠정 — owner 큐). 야시장 ②의 정가 2,500냥(할인 후 2,000)보다 높게 잡았다:
+#   야시장은 1년에 하루뿐인 기회비용이 값의 일부라 싸고, 만물상은 상시 진열이라 그 편의만큼 비싸다.
+const RARECROW_STORE_PRICE := 4000
 # ★[S3-T6 / ADR-0061 결정 6] 삭은 그물 — 낚시 인양물 잡동사니(SalvageTable). 개간 드랍은 아니지만
 #   같은 결의 품질 무차원 재료라 여기 합류한다(카테고리 신설 0). ★S3-T7 게잡이통 잡동사니 표적으로도
 #   재사용된다(뱃사람 퍼크 = "게잡이통에 잡동사니 안 걸림"의 그 잡동사니 — 신규 아이템 남발 0).
@@ -162,6 +192,14 @@ const MATERIALS := {                    # 재료 id → {name_ko, price}(HAY는 
 	ROTTEN_NET: {"name_ko": "삭은 그물", "price": 5},   # ★S3-T6 인양 잡동사니(팔면 푼돈)
 	RARECROW_1: {"name_ko": "레어크로우 ① — 갓 쓴 허수아비", "price": 0},   # 비매품(수집물 — 배치·8종 디럭스는 후속 ADR-0051 B)
 	RARECROW_2: {"name_ko": "레어크로우 ② — 등롱 든 허수아비", "price": 0},  # ★S7-T7 야시장 한정(①과 같은 비매 수집물)
+	# ★[S10-T2] 나머지 6종(전부 비매 — 획득처가 값을 대신한다). 명명 = ①갓·②등롱의 결을 이어
+	#   **저승 소품 하나를 쥔 허수아비**로 통일했다(스킨의 정체성이 실루엣 한 조각으로 읽히게).
+	RARECROW_3: {"name_ko": "레어크로우 ③ — 도롱이 쓴 허수아비", "price": 0},
+	RARECROW_4: {"name_ko": "레어크로우 ④ — 편지 문 허수아비", "price": 0},
+	RARECROW_5: {"name_ko": "레어크로우 ⑤ — 봇짐 진 허수아비", "price": 0},
+	RARECROW_6: {"name_ko": "레어크로우 ⑥ — 낚싯대 든 허수아비", "price": 0},
+	RARECROW_7: {"name_ko": "레어크로우 ⑦ — 볏단 인 허수아비", "price": 0},
+	RARECROW_8: {"name_ko": "레어크로우 ⑧ — 탈 쓴 허수아비", "price": 0},
 	# ★[S4-T3] 벌목 산출 6종
 	WOOD: {"name_ko": "원목", "price": 5},
 	HARDWOOD: {"name_ko": "단단한 원목", "price": 35},
@@ -561,8 +599,18 @@ const TAPPER := "sap_tapper"   # ★[S4-T5] 수액 채취기 — 제작 전용(C
 #   나오는 설치물. 수액 채취기 선례(제작 전용 CAT_PLACEABLE)를 그대로 따르되, 원장 축이 *일*이
 #   아니라 *분*이다(FurnaceLedger 머리말 참조). 아이템 정의는 여기, 원장은 furnace.gd.
 const FURNACE := "furnace"
+# ── ★[S10-T2 / ADR-0069 결정 3] 스프링클러 상위 2티어 — 제작 전용 설치물 ─────────────
+# 티어별로 바뀌는 것은 **급수 범위 하나뿐**이다(Sprinkler.offsets_for — 급수 로직·배치·세이브 불변).
+# 아이템 쪽에서 바뀌는 것도 하나뿐이다: id가 티어를 싣는다(SPRINKLER_TIERS).
+# ★ 비매(제작 전용 — CraftCatalog). price = **잔가**다(수액 채취기·업화로가 쓰는 그 관례): 재료
+#   원가(유철 주괴 120 · 황천금 주괴 250 계열)보다 낮게 둬 "만들어 팔기"가 차익이 되지 않게 한다
+#   (ADR-0052 비-가치 원칙). 값 전부 **잠정**(owner 큐).
+const SPRINKLER_T2 := "sprinkler_t2"   # 넋비 스프링클러 — 3×3
+const SPRINKLER_T3 := "sprinkler_t3"   # 단비 스프링클러 — 5×5
 const PLACEABLES := {                    # 설치물 id → {name_ko, price(구매가)}
 	SPRINKLER: {"name_ko": "저승 스프링클러", "price": 60},
+	SPRINKLER_T2: {"name_ko": "넋비 스프링클러", "price": 150},
+	SPRINKLER_T3: {"name_ko": "단비 스프링클러", "price": 400},
 	# 600G(잠정) — 스프링클러(60G) 10배. 낚시 lvl3까지 굴린 플레이어의 한나절 벌이 규모라
 	# "해금 직후 하나, 이후 천천히 늘린다"가 되게 잡았다(패시브 수입의 초기 투자 게이트).
 	CRAB_POT: {"name_ko": "게잡이통", "price": 600},
@@ -731,6 +779,32 @@ static func _is_seafood(id: String) -> bool:
 # id가 설치물인가(S1R-T9 — 스프링클러). 품질 무차원 스택·CAT_PLACEABLE(구매·설치).
 static func _is_placeable(id: String) -> bool:
 	return PLACEABLES.has(id)
+
+# ── ★[S10-T2 / ADR-0069 결정 3] 스프링클러 티어 매핑 ────────────────────────────
+# **아이템 id → 티어**의 진실원은 여기이고, **티어 → 급수 범위**의 진실원은 Sprinkler다
+# (원장은 아이템을 모르고, 카탈로그는 오프셋을 모른다 — 도구:기어와 같은 삼각 디커플링).
+const SPRINKLER_TIERS := {SPRINKLER: 1, SPRINKLER_T2: 2, SPRINKLER_T3: 3}
+
+# id가 스프링클러(어느 티어든)인가 — 배치 디스패치·프롬프트가 종을 가리지 않고 쓴다.
+static func is_sprinkler(id: String) -> bool:
+	return SPRINKLER_TIERS.has(id)
+
+# 이 아이템의 스프링클러 티어(0 = 스프링클러가 아님).
+static func sprinkler_tier_of(id: String) -> int:
+	return int(SPRINKLER_TIERS.get(id, 0))
+
+# 이 티어의 아이템 id("" = 범위 밖). 철거가 "무엇을 돌려주나"를 여기서 뽑는다.
+static func sprinkler_item_for_tier(tier: int) -> String:
+	for id in SPRINKLER_TIERS:
+		if int(SPRINKLER_TIERS[id]) == tier:
+			return String(id)
+	return ""
+
+# ── ★[S10-T2 / ADR-0069 결정 4] 레어크로우 판정 ────────────────────────────────
+# id가 레어크로우 8종 중 하나인가. MATERIALS 안에 살지만(카테고리 신설 0) **버리기 금지·수집 추적·
+# 밭 배치**라는 셋을 위해 갈라 물어야 해서 술어를 연다(RELICS를 MATERIALS에서 가른 것과 같은 판단).
+static func is_rarecrow(id: String) -> bool:
+	return RARECROWS.has(id)
 
 # 기준 산물 id → 대형 변이 아이템 id("honbaek_ran" → "honbaek_ran_large"). livestock 대형 수집이 쓴다.
 static func large_product_id(product_id: String) -> String:
