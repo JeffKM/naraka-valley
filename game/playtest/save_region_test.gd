@@ -65,13 +65,17 @@ func _initialize() -> void:
 	print("══ M1.5 세이브 구역·위치 추적·복원 검증 ══")
 
 	# ── 실제 개발 세이브 백업(테스트 격리) ──
+	# ★[S10 결합] 백업과 동시에 **스폰 전에 삭제**한다. 옛 순서(스폰 → delete_save)는 m1의
+	#   _ready가 잔존 세이브를 이미 로드한 뒤라, 잔존 구역이 HOME이 아니면(예: 앞 스위트가
+	#   eophwa_mine을 남김) ①pre의 "동쪽 가장자리 = HOME" 전제가 무너진다 — 공유 save.dat
+	#   순서 의존이 이 테스트에 숨어 있던 격리 결함(앞 스위트가 HOME을 남기던 동안만 우연 통과).
 	var had_save := FileAccess.file_exists(SAVE)
 	if had_save:
 		_write_bytes(BAK, _read_bytes(SAVE))
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
 
 	# ── ① 라운드트립: 나루 마을 어느 칸에서 저장 → 새 인스턴스가 그대로 재개 ──
-	var m1: Node = await _spawn_main()
-	m1.saver.delete_save()   # 백업했으니 깨끗한 새 게임에서 시작
+	var m1: Node = await _spawn_main()   # 세이브 부재 → 새 게임(HOME 스폰) 보장
 	# 안식 농원 동쪽 길 워프(78,32, ★C2)에서 나루 마을로 길 워프(building_test와 같은 경로).
 	m1.player.position = m1._tile_center_px(Vector2i(78, 32))
 	m1._maybe_warp_edge()
