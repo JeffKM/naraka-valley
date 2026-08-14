@@ -83,7 +83,12 @@ const COIN: Texture2D = preload("res://assets/ui/gold_coin.png")
 #   셸·단일 목록**이다. 신규 UI 언어 0: 헤더 2줄(store_text) + 품목 행(store_items) + 백팩, 그리기도
 #   클릭도 만물상 경로를 그대로 탄다(전용 그리기 함수조차 안 만든다). "행사는 오버레이 전용"이라는
 #   잠금이 UI 층에서도 그대로 지켜지는 자리다. enum 끝에 붙여 기존 값 불변(좌표 의존 테스트 무영향).
-enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP, CTX_GUILD, CTX_LARDER, CTX_NIGHTMARKET }
+# ★[S10-T3 / ADR-0069 결정 5] CTX_PEDDLER(저승 보부상 봇짐 좌판) — 야시장과 **같은 셸**이다.
+#   두 무대는 리듬(1년 1회 vs 주 1회)과 재고 성격(한정판 vs 랜덤 롤)이 갈릴 뿐, 화면에서 하는
+#   일은 "헤더 2줄 + 품목 행 + 백팩"으로 똑같다. 그래서 전용 그리기 함수도 전용 클릭 라우팅도
+#   안 만들고 만물상 경로에 컨텍스트 하나만 얹는다(신규 UI 언어 0 — 야시장이 선 그 선례 그대로).
+#   enum 끝에 붙여 기존 값 불변(좌표 의존 테스트 무영향).
+enum { CTX_NONE, CTX_MENU, CTX_BIN, CTX_STORE, CTX_CHEST, CTX_FISHSHOP, CTX_WOODSHOP, CTX_GUILD, CTX_LARDER, CTX_NIGHTMARKET, CTX_PEDDLER }
 # 생선가게 서브탭(기어 매대 / 물고기 환전).
 enum { FS_TAB_GEAR, FS_TAB_TRADE }
 # ★[S4-T7] 목공방 서브탭(건축 의뢰 / 가구·자재 매대) — 생선가게 서브탭과 같은 문법.
@@ -402,7 +407,7 @@ func _bp_max_first_row() -> int:
 func _backpack_visible() -> bool:
 	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST or context == CTX_FISHSHOP \
 			or context == CTX_WOODSHOP or context == CTX_GUILD or context == CTX_LARDER \
-			or context == CTX_NIGHTMARKET:
+			or context == CTX_NIGHTMARKET or context == CTX_PEDDLER:
 		return true
 	return context == CTX_MENU and menu_tab == TAB_INV
 
@@ -447,8 +452,8 @@ func _draw() -> void:
 		CTX_BIN:
 			_draw_bin_top(panel)
 			_draw_backpack(panel)
-		CTX_STORE, CTX_NIGHTMARKET:
-			_draw_store_top(panel)      # ★[S7-T7] 야시장은 만물상 셸을 그대로 쓴다(전용 렌더 0)
+		CTX_STORE, CTX_NIGHTMARKET, CTX_PEDDLER:
+			_draw_store_top(panel)      # ★[S7-T7] 야시장 · ★[S10-T3] 보부상도 만물상 셸 그대로(전용 렌더 0)
 			_draw_backpack(panel)
 		CTX_FISHSHOP:
 			_draw_fishshop_top(panel)   # ★ [S3-T5] 뱃사공 생선가게(기어 매대 + 환전 서브탭)
@@ -1393,7 +1398,12 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 		#   main이 kind로 갈라 처리한다(프레임에 가게 규칙을 안 심는다 — 프레임은 표시·클릭만).
 		#   ★[S5-T6] 길드 2종(weapon=검 · potion=명부환)도 같은 신호를 탄다 — 무기는 유니크라 수량
 		#   개념이 없지만 그 규칙은 main이 안다(프레임에 가게 규칙을 안 심는다).
-		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion":
+		#   ★[S10-T3] 야시장 3종("fest_*")·보부상 5종("ped_*")도 같은 신호를 탄다.
+		#   ⚠️ **버그 봉합**: `fest_*` 세 kind가 이 허용 목록에서 빠져 있어 야시장 매대 행을
+		#     클릭해도 아무 일이 안 일어났다(S7-T7 잠복 결함 — seasonal_event_test가 프레임을
+		#     건너뛰고 `_on_frame_buy_store_item`을 직접 불러서 회귀에 안 잡혔다). 보부상이 같은
+		#     셸을 타면서 발견돼 여기서 함께 고친다. 아래 ⑫가 그 클래스의 결함을 소스 스캔으로 잠근다.
+		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion", "fest_deco", "fest_item", "fest_seed", "ped_item", "ped_seed", "ped_deco", "ped_rare", "ped_book":
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
 
 # ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.
@@ -1436,7 +1446,8 @@ func _gui_input(event: InputEvent) -> void:
 	# ★ [S4-T7] 목공방도 같은 영역 문법(건축 탭이면 건축 리스트가 스크롤된다).
 	# ★ [S5-T6] 길드도 같은 영역 문법(서브탭이 없어 늘 품목 리스트가 스크롤된다).
 	if event.pressed and (context == CTX_STORE or context == CTX_FISHSHOP or context == CTX_WOODSHOP \
-			or context == CTX_GUILD or context == CTX_NIGHTMARKET) and _store_area_rect.has_point(event.position):
+			or context == CTX_GUILD or context == CTX_NIGHTMARKET or context == CTX_PEDDLER) \
+			and _store_area_rect.has_point(event.position):
 		var trading := context == CTX_FISHSHOP and fishshop_tab == FS_TAB_TRADE
 		var building := context == CTX_WOODSHOP and woodshop_tab == WS_TAB_BUILD
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -1515,7 +1526,7 @@ func _gui_input(event: InputEvent) -> void:
 			_click_menu(p)
 		CTX_BIN:
 			_click_bin(p)
-		CTX_STORE, CTX_NIGHTMARKET:
+		CTX_STORE, CTX_NIGHTMARKET, CTX_PEDDLER:
 			for e in _store_row_rects:   # ★ [S1R-T12] 행/버튼 클릭=개별 구매(Shift 대량)
 				if e["buy"].has_point(p) or e["row"].has_point(p):
 					_buy_store_row(e, event.shift_pressed)

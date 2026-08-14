@@ -1500,6 +1500,16 @@ const NARU_PLAZA_WALL_Y := [30, 42]
 # 다리 데크 — 강둑(BACK_RIVER_BANK_Y)부터 강 남단까지 다리 폭(BRIDGE_X) 2칸. 이 칸들은 _carve가
 #   PATH로 깐 **물 위 구조물**이라 흙길이 아니라 목판으로 그린다(부두 BACK_RIVER_DOCK_RECT도 같은 데크).
 const NARU_BRIDGE_DECK_RECT := Rect2i(52, 65, 2, 7)   # x52..53, y65..71
+# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 **봇짐 좌판** 칸 — 다리 남단 부두(BACK_RIVER_DOCK_RECT
+#   x50..55·y69..71, 이미 PATH)의 다리 데크 동쪽 옆. 좌표 제약을 전부 비껴간다:
+#     · 삼도천 워프 발동 칸 (52,71)·(53,71) 밖 — 지나가다 실수로 구역이 바뀌지 않는다
+#     · 삼도천에서 돌아오는 착지 칸 (52,70) 밖 — 도착하자마자 좌판에 겹쳐 서지 않는다
+#     · 다리 데크 열(BRIDGE_X 52·53) 밖 — 폭 2칸 도하 동선을 한 칸도 안 막는다
+#     · layout.json 프롭 0(부두 일대엔 배치 프롭이 없다)
+#   ★ 무대 선택 자체가 야시장과의 분리를 말한다: 야시장은 *광장 한복판*(마을의 중심)에 서고
+#     보부상은 *마을 밖으로 나가는 길목*에 선다 — 떠도는 장수는 마을에 안 들어온다.
+#   더비 부스·야시장 매대와 같은 규율: 타일·충돌 무수정, 출현일에만 표식 + `_target` 일치 [F].
+const PEDDLER_TILE := Vector2i(54, 70)
 # 서편(도착·서워프 옆): 카페(도착 위, CAFE_EXT_RECT 위쪽 정의) + 메인 집 3(미호·멜·바나). 코지 여백으로 흩어 둔다.
 const MEL_HOUSE_RECT := Rect2i(20, 14, 5, 5)   # 멜 집 — 서편 상단 우
 const MEL_HOUSE_DOOR := Vector2i(22, 18)
@@ -2491,6 +2501,13 @@ var larder: Larder
 # 무슨 행사인가"는 답이 나온다(Festival·Weather와 같은 무상태 파생 — 상태는 결과만 든다).
 var seasonal_event: SeasonalEvent
 
+# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 원장(1회성 물품 구매 이력). seasonal_event와 완전히
+# 같은 결의 상태 노드다 — 코드 생성으로 붙이고(_setup_peddler) 세이브 조각은 "peddler"이며,
+# **달력·풀·재고 롤은 전부 static**이라 이 노드가 없어도 "이번 주에 뭘 가져오나"는 답이 나온다.
+# ⚠️ SeasonalEvent와 **서로를 참조하지 않는다** — 야시장(1년 1회 한정판)과 보부상(주 1회 랜덤)의
+#   리듬 분리가 코드 의존 층에서도 지켜지는 자리다(peddler.gd 헤더 표 참조).
+var peddler: Peddler
+
 # ★[S9-T3 / ADR-0067 결정 7] 편지 원장·발송 큐(저승식 전령). larder·seasonal_event와 같은 결의
 # 상태 노드 — 코드 생성으로 붙이고(_setup_mailbox) 세이브는 별도 조각("mailbox")으로 main이
 # 조율한다. 사건 코드(관문·컷신 여진)는 `mailbox.send("<id>")` 한 줄만 부르면 되고, "다음 아침
@@ -3004,6 +3021,7 @@ func _ready() -> void:
 	_setup_chest()          # ★ Phase D 저장 상자(프레임이 참조 → 프레임보다 먼저)
 	_setup_larder()         # ★ S6-T1 카페 곳간(프레임이 참조 → 프레임보다 먼저)
 	_setup_seasonal_event() # ★ S7-T7 절기 행사 원장(더비·장원제·야시장 — 프레임/세이브 복원보다 먼저)
+	_setup_peddler()        # ★ S10-T3 저승 보부상 원장(1회성 구매 이력 — 프레임/세이브 복원보다 먼저)
 	_setup_mailbox()        # ★ S9-T3 편지 원장·발송 큐(세이브 복원보다 먼저 — 조각 "mailbox")
 	_setup_books()          # ★ S9-T7 Books 수집 원장(세이브 복원보다 먼저 — 조각 "books")
 	_setup_hud_overlays()   # ★ C3 좌하단 알림 피드 + 우하단 혼력 바(프레임보다 먼저 → 모달이 위에)
@@ -9056,6 +9074,15 @@ func _setup_seasonal_event() -> void:
 	seasonal_event.name = "SeasonalEvent"
 	add_child(seasonal_event)
 
+# ── ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 원장 ─────────────────────────────
+# seasonal_event와 같은 결의 상태 노드(코드 생성 — 새 tscn 노드 0). 세이브 조각은 "peddler".
+# 1회성 물품을 사면 좌판 행이 잠기고 봇짐 표식도 바뀌므로 changed에 redraw를 문다(우편함 결).
+func _setup_peddler() -> void:
+	peddler = Peddler.new()
+	peddler.name = "Peddler"
+	add_child(peddler)
+	peddler.changed.connect(queue_redraw)
+
 # ── ★[S9-T3 / ADR-0067 결정 7] 편지 원장(저승식 전령) ─────────────────────────
 # larder·seasonal_event와 같은 결의 상태 노드(코드 생성 — 새 tscn 노드 0). 세이브 조각은 "mailbox".
 # 미독 편지가 있으면 우편함 표식이 바뀌므로 changed에 redraw만 물린다(곳간이 패널을 갱신하는 자리).
@@ -9576,6 +9603,12 @@ func _on_day_advanced(day: int) -> void:
 	#   (날짜가 갈려 있어 한 아침에 둘이 겹치지 않는다: 행사 12/20/16/15 vs 테마 데이 25).
 	for line in _seasonal_morning_notices():
 		_notice(line, NOTICE_SECS * 2.0)
+	# ★[S10-T3 / ADR-0069 결정 5] 보부상이 왔다 — 절기 행사 배너와 **같은 문법·또 다른 층**이다.
+	#   행사 배너와 한 아침에 겹칠 수는 있지만(7의 배수 vs 12/20/16/15는 서로 소수가 아니다) 무대가
+	#   갈려 있어(광장 vs 다리 남단) 둘 다 뜨는 게 오히려 맞다 — "오늘 갈 데가 둘"이다.
+	var ped_line := _peddler_morning_notice()
+	if ped_line != "":
+		_notice(ped_line, NOTICE_SECS * 2.0)
 	# ★[S9-T3 / ADR-0067 결정 7] 전령이 다녀갔다 — 어제 큐에 든 편지가 오늘 아침 우편함에 꽂힌다.
 	#   위 배너들 **뒤**에 두는 이유: 편지는 "오늘 하루의 예고"가 아니라 "가서 열어 볼 것"이라,
 	#   날씨·행사 안내를 밀어내지 않고 그 아래에 붙는 것이 읽는 순서에 맞다. 지면을 안 건드리므로
@@ -9959,6 +9992,213 @@ func _try_buy_market_seed(crop_id: String, n: int) -> void:
 	audio.sfx("ui")
 	_notice("야시장 — %s 씨앗 ×%d −%d냥" % [CropCatalog.name_of(crop_id), bought, unit * bought])
 
+# ── ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 ─────────────────────────────────
+# 야시장 블록(위 ④)과 **한 줄씩 대응하는 형제 코드**다: facing 판정 → 헤더 → 품목 행 → 구매
+# 라우팅 → 좌판 표식. 같은 셸을 쓰되 **행동이 갈리는 세 자리**만 다르다.
+#   ㉠ 열리는 날: 절기 달력(1년 1회)이 아니라 7의 배수 날(주 1회) — `Peddler.is_open_day`
+#   ㉡ 가격: 행사 정액 2할 *할인*이 아니라 웃돈 ±변동 — `Peddler.priced`
+#   ㉢ 재고: 고정 로스터가 아니라 day-해시 롤 — `Peddler.rows_for`
+# ★ 이 세 자리가 갈려 있는 한 두 무대는 중복이 아니다(peddler.gd 헤더 표가 그 근거다).
+
+# 오늘 아침 보부상 한 줄("" = 안 오는 날). 문자열 조립을 함수로 뽑아 둔 이유는 절기 행사와 같다 —
+# 헤드리스가 알림 큐를 뒤지지 않고 예고를 단언한다(`_seasonal_morning_notices` 규율 계승).
+func _peddler_morning_notice() -> String:
+	if clock == null or not Peddler.is_open_day(clock.day):
+		return ""
+	return "오늘은 저승 보부상이 다리 남단에 봇짐을 폈다 — 재고는 오늘 하루뿐이다"
+
+# 봇짐 좌판을 마주 보고 있나(출현일 · 나루 마을 야외 · 그 칸). 야시장·더비 부스와 같은 판정 문법.
+func _facing_peddler() -> bool:
+	return not _sleeping and _region == RegionCatalog.NARU_VILLAGE and _indoor == "" \
+		and _target == PEDDLER_TILE and clock != null and Peddler.is_open_day(clock.day)
+
+func _refresh_peddler() -> void:
+	frame.store_text = _peddler_text()
+	frame.store_items = _peddler_items()
+
+# 매대 헤더 2줄. 야시장이 그 자리에 *할인율*을 박은 것과 대칭으로, 여기엔 **다음에 언제 오나**를
+# 박는다 — 보부상의 정체성은 "오늘만 싸다"가 아니라 "오늘 놓치면 이 재고는 다시 안 온다"라서,
+# 리듬을 말해 주는 것이 그 물건의 값을 설명한다.
+func _peddler_text() -> String:
+	return "\n".join([
+		"── 저승 보부상 ──",
+		"골드 %d · 봇짐은 %d일마다 이 길목에 선다(재고는 매번 다르다)" % [wallet.gold, Peddler.APPEAR_MODULUS],
+	])
+
+# 매대 품목 행. 로스터·정가·롤은 Peddler가 들고, 표시명·아이콘·보유 판정은 여기서 붙인다
+# (야시장이 SeasonalEvent에 위임하는 그 경계 1:1 — Peddler는 인벤토리도 해금 원장도 모른다).
+func _peddler_items() -> Array:
+	var rows: Array = []
+	if peddler == null or clock == null:
+		return rows
+	var owned: Dictionary = books.acquired if books != null else {}
+	for r in peddler.rows_for(clock.day, owned):
+		var src: Dictionary = r
+		var kind := String(src["kind"])
+		var buy_id := String(src["buy_id"])
+		var price := int(src["price"])
+		var base := int(src["base"])
+		# ★ match가 아니라 if/elif인 이유: 패턴 자리에 **타 클래스 상수**를 쓰는 문법을 피한다
+		#   (야시장 블록이 리터럴 match를 쓰는 것과 같은 이유 — 여기선 상수를 그대로 쓰되 비교로).
+		if kind == Peddler.KIND_SEED:
+			rows.append({"kind": kind, "buy_id": buy_id,
+				"icon_id": ItemCatalog.seed_id(buy_id),
+				"name": "%s 씨앗" % CropCatalog.name_of(buy_id),
+				"price": price, "base": base,
+				"count": inventory.seed_count(buy_id) if inventory != null else 0})
+		elif kind == Peddler.KIND_ITEM:
+			rows.append({"kind": kind, "buy_id": buy_id, "icon_id": buy_id,
+				"name": ItemCatalog.name_of(buy_id), "price": price, "base": base,
+				"count": inventory.count_of(buy_id) if inventory != null else 0})
+		elif kind == Peddler.KIND_DECO:
+			# 해금 판정은 home_deco가 진실원(야시장 행과 완전히 같은 규율 — 이중 원장 0).
+			var unlocked := home_deco != null and home_deco.is_unlocked(buy_id)
+			rows.append({"kind": kind, "buy_id": buy_id,
+				"swatch": _deco_swatch(buy_id),
+				"name": "%s 가구 세트" % HomeDecoCatalog.name_of(buy_id),
+				"price": price, "base": base,
+				"locked": unlocked, "locked_text": "해금됨"})
+		elif kind == Peddler.KIND_RARE:
+			# 1회성 수집물(레어크로우 ⑤) — 구매 이력이 진실원. 산 뒤엔 "구입함"으로 잠긴다.
+			var got := peddler.has_bought(buy_id)
+			rows.append({"kind": kind, "buy_id": buy_id, "icon_id": buy_id,
+				"name": ItemCatalog.name_of(buy_id), "price": price, "base": base,
+				"locked": got, "locked_text": "구입함"})
+		elif kind == Peddler.KIND_BOOK:
+			# 책·노트 — **Books 원장이 진실원**이다. 이름판도 ItemCatalog가 아니라 Books가 낸다
+			# (책 텍스트의 단일 출처 — 카탈로그는 이 id를 CAT_BOOK으로만 안다).
+			var had := books != null and books.has_acquired(buy_id)
+			rows.append({"kind": kind, "buy_id": buy_id, "icon_id": buy_id,
+				"name": Books.title_of(buy_id), "price": price, "base": base,
+				"locked": had, "locked_text": "이미 되찾음"})
+	return rows
+
+# 가구 세트 구매 — 야시장(`_try_buy_market_deco`)·목공방(`_try_buy_deco_set`)과 **또 다른 가격 축**이라
+# 별도 경로다(각각 행사 정액 할인 / 옹이 ♡ 할인 / 보부상 웃돈). 해금 처리 자체는 home_deco 한 곳이
+# 진실원이라, 갈리는 것은 값을 구하는 줄 하나뿐이다.
+func _try_buy_peddler_deco(set_id: String) -> bool:
+	if peddler == null or clock == null or home_deco == null or not HomeDecoCatalog.has_set(set_id):
+		return false
+	if home_deco.is_unlocked(set_id):
+		_notice("%s 세트는 이미 해금했다" % HomeDecoCatalog.name_of(set_id))
+		return false
+	var price := _peddler_price(set_id)
+	if price <= 0 or not wallet.spend(price):
+		_notice("냥이 모자라다 — %s 세트 %d냥 (보유 %d냥)" % [HomeDecoCatalog.name_of(set_id), price, wallet.gold])
+		return false
+	home_deco.unlock(set_id)
+	audio.sfx("ui")
+	_notice("보부상에게서 %s 가구 세트를 샀다 −%d냥" % [HomeDecoCatalog.name_of(set_id), price])
+	return true
+
+# 1회성 수집물(레어크로우 ⑤) 구매. ★ **적재 먼저·결제 나중** — 백팩이 가득이면 엽전이 안 나간다
+#   (더비 교환·야시장 한정 물품이 쓰는 그 순서 규율 1:1).
+func _try_buy_peddler_rare(id: String) -> bool:
+	if peddler == null or inventory == null or clock == null or not ItemCatalog.has_item(id):
+		return false
+	if peddler.has_bought(id):
+		_notice("%s 은(는) 이미 샀다" % ItemCatalog.name_of(id))
+		return false
+	var price := _peddler_price(id)
+	if price <= 0 or wallet.gold < price:
+		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [ItemCatalog.name_of(id), price, wallet.gold])
+		return false
+	if not inventory.add_item(id, 1):
+		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(id))
+		return false
+	if not wallet.spend(price):
+		inventory.remove_item(id, 1)   # 방어(위 검사와 이중) — 결제 실패면 물건도 도로 뺀다
+		return false
+	peddler.record_bought(id)
+	peddler.record_rare(clock.day, id)   # ★ 하루 한 점 — 희귀 슬롯 잠금(즉시 재충전 차단)
+	_toast_item(id, 1)
+	audio.sfx("ui")
+	_notice("보부상의 봇짐에서 %s 를 찾아냈다 −%d냥" % [ItemCatalog.name_of(id), price])
+	return true
+
+# 책·노트 구매([ADR-0034] "여행 상인 흡수"의 이행 — Books 미보유분 저확률 입수처).
+# ★ **즉독을 열지 않는다**: 지금 매대 패널이 모달로 떠 있어 대화창을 겹쳐 띄우면 조용히 묻힌다
+#   (`_read_book_now`가 `dialogue.is_open()`에서 되돌아가는 그 함정). 대신 **미독으로 남겨** 집
+#   책장이 먼저 집어 주게 둔다(`Books.next_reread`가 미독 우선 — 손실 0인 기존 회수 경로).
+func _try_buy_peddler_book(id: String) -> bool:
+	if peddler == null or books == null or inventory == null or clock == null:
+		return false
+	if not Books.has_text(id):
+		return false
+	if books.has_acquired(id):
+		_notice("%s 은(는) 이미 되찾았다" % Books.title_of(id))
+		return false
+	var price := _peddler_price(id)
+	if price <= 0 or wallet.gold < price:
+		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [Books.title_of(id), price, wallet.gold])
+		return false
+	if not inventory.add_item(id, 1):
+		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % Books.title_of(id))
+		return false
+	if not wallet.spend(price):
+		inventory.remove_item(id, 1)
+		return false
+	books.acquire(id, clock.day)
+	# ★ 하루 한 점 — 이게 없으면 산 책이 미보유 풀에서 빠지면서 **같은 날 같은 슬롯이 다른 책으로
+	#   즉시 다시 차** 연타로 23권을 하루에 쓸어 담을 수 있다([ADR-0034] "저확률 입수처"가 무너진다).
+	peddler.record_rare(clock.day, id)
+	_toast_item(id, 1)
+	audio.sfx("ui")
+	_notice("%s — %s을(를) 되찾았다 (수집 %d/%d)" % [
+		"[옥자의 잃어버린 책]" if Books.is_book(id) else "[비밀 노트]",
+		Books.title_of(id), books.acquired_count(), Books.all_ids().size()])
+	return true
+
+# 씨앗 소매 — 스택 소모품이라 대량 구매(Shift)를 그대로 받는다. 골드 닿는 데까지 부분 구매
+# (야시장 `_try_buy_market_seed` 결 1:1 — 결제 순서 보존).
+func _try_buy_peddler_seed(crop_id: String, n: int) -> void:
+	if inventory == null or not CropCatalog.has_crop(crop_id) or n <= 0:
+		return
+	var unit := _peddler_price(crop_id)
+	if unit <= 0:
+		return
+	var seed_item := ItemCatalog.seed_id(crop_id)
+	var bought := 0
+	for _i in n:
+		if wallet.gold < unit or not inventory.add_item(seed_item, 1):
+			break
+		wallet.spend(unit)
+		bought += 1
+	if bought == 0:
+		_notice("골드 부족(%d 필요)" % unit)
+		return
+	_toast_item(seed_item, bought)
+	audio.sfx("ui")
+	_notice("보부상 — %s 씨앗 ×%d −%d냥" % [CropCatalog.name_of(crop_id), bought, unit * bought])
+
+# 일반 스택 아이템 소매(채집물·재료·광물·통용물·수액) — 씨앗과 같은 결의 부분 구매.
+func _try_buy_peddler_item(id: String, n: int) -> void:
+	if inventory == null or not ItemCatalog.has_item(id) or n <= 0:
+		return
+	var unit := _peddler_price(id)
+	if unit <= 0:
+		return
+	var bought := 0
+	for _i in n:
+		if wallet.gold < unit or not inventory.add_item(id, 1):
+			break
+		wallet.spend(unit)
+		bought += 1
+	if bought == 0:
+		_notice("골드 부족(%d 필요)" % unit)
+		return
+	_toast_item(id, bought)
+	audio.sfx("ui")
+	_notice("보부상 — %s ×%d −%d냥" % [ItemCatalog.name_of(id), bought, unit * bought])
+
+# 오늘 그 물건의 표시가(0 = 오늘 봇짐에 없다). ★ **표시가와 결제가를 한 함수에서 되찾는** 이유:
+#   값을 두 번 계산하면 언젠가 어긋나고(할인·변동이 얹히는 매대일수록 확실히 어긋난다), 오늘
+#   재고에 없는 id를 프레임 밖에서 사 버리는 구멍도 같이 막힌다(값 0 = 결제 불성립).
+func _peddler_price(buy_id: String) -> int:
+	if peddler == null or clock == null:
+		return 0
+	return peddler.price_for(clock.day, books.acquired if books != null else {}, buy_id)
+
 func _on_collapsed() -> void:
 	_do_sleep()  # 어디서든 쓰러져 다음 날 아침으로
 
@@ -10291,6 +10531,10 @@ func _save_game() -> void:
 		# ★[S7-T7] 절기 행사 원장 — **결과만** 든다(달력·날씨·운처럼 파생되는 것은 여기 없다).
 		#   더비 태그·교환 횟수(당일치) · 장원제 출품일·최고 등급 · 야시장 한정 구매 이력.
 		"seasonal_event": seasonal_event.to_save(),
+		# ★[S10-T3 / ADR-0069 결정 5] 보부상 원장 — **1회성 구매 이력만** 든다. 재고·가격·출현일은
+		#   전부 day에서 파생되므로 적을 것이 없고(날씨·운과 같은 무상태 파생), 가구 해금은 home_deco가
+		#   책 입수는 books가 각자 자기 조각에 이미 적는다(이중 진실원 0).
+		"peddler": peddler.to_save(),
 		# ★[S9-T3 / ADR-0067 결정 7] 편지 원장 — 발송 큐(아직 안 온 편지) + 보관함 + 기독 원장.
 		#   서사 진행의 일부라 반드시 라운드트립한다(자고 일어나면 도착하는 편지가 세이브를 건너뛰면
 		#   "잘 때마다 사라지는 예고"가 된다).
@@ -10448,6 +10692,10 @@ func _load_game() -> void:
 	#   있으므로 막히는 것이 0이고, 더비 태그는 어차피 당일치라 잃을 것도 없다).
 	if data.has("seasonal_event") and seasonal_event != null:
 		seasonal_event.load_save(data["seasonal_event"])
+	# ★[S10-T3] 보부상 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(야시장과 같은 하위호환
+	#   관례). 막히는 것은 0이다: 다음 7의 배수 날에 좌판이 그대로 서고 재고는 day에서 파생된다.
+	if data.has("peddler") and peddler != null:
+		peddler.load_save(data["peddler"])
 	# ★[S9-T3] 편지 원장 — 키 없는 구세이브는 **빈 우편함**으로 시작한다(곳간·출하함과 같은 하위호환
 	#   관례. 막히는 것은 0이다 — 앞으로의 사건이 보내는 편지는 그대로 도착한다).
 	if data.has("mailbox") and mailbox != null:
@@ -11254,6 +11502,8 @@ func _process(delta: float) -> void:
 			_refresh_guild()                     # ★ [S5-T6] 길드 매대 행(구매 즉시 "보유 중"으로 잠김)
 		elif frame.context == InventoryFrame.CTX_NIGHTMARKET:
 			_refresh_night_market()              # ★[S7-T7] 야시장 행(구매 즉시 "해금됨/구입함"으로 잠김)
+		elif frame.context == InventoryFrame.CTX_PEDDLER:
+			_refresh_peddler()                   # ★[S10-T3] 보부상 행(구매 즉시 잠김·골드 헤더 갱신)
 		return
 
 	# ★[S7-T8 / ADR-0065 결정 10] 시계 판 클릭 = 절기 달력 토글(스타듀의 달력 게시판 자리 — 우리는
@@ -11512,6 +11762,11 @@ func _process(delta: float) -> void:
 	# ★[S7-T7] 저승 야시장 임시 매대 [F] — 만물상과 같은 셸(CTX_NIGHTMARKET)을 연다.
 	if _facing_night_market() and Input.is_action_just_pressed("shop_toggle"):
 		_open_frame(InventoryFrame.CTX_NIGHTMARKET)
+		return
+	# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 봇짐 좌판 [F] — 야시장과 같은 셸(CTX_PEDDLER)을 연다.
+	#   두 칸은 무대가 갈려(광장 52,34 vs 다리 남단 54,70) 같은 날 겹쳐도 서로를 안 가린다.
+	if _facing_peddler() and Input.is_action_just_pressed("shop_toggle"):
+		_open_frame(InventoryFrame.CTX_PEDDLER)
 		return
 	# ★ Phase D 저장 상자 열기(RMB): 집 실내 상자 칸을 바라보며 우클릭으로 보관 패널을 연다(모달 —
 	# 위 frame.is_open 가드로 닫힌다). 집 안 취침(ui_accept)·상자(action)는 키가 갈려 안 겹친다.
@@ -12091,6 +12346,10 @@ func _process(delta: float) -> void:
 	elif _facing_night_market():
 		interact_prompt.visible = true
 		interact_prompt.text = "[F] 저승 야시장 매대 (오늘만 2할 할인)"
+	elif _facing_peddler():
+		# ★[S10-T3] 보부상 봇짐 — 야시장이 *할인*을 말하는 자리에 **재고의 일회성**을 말한다.
+		interact_prompt.visible = true
+		interact_prompt.text = "[F] 저승 보부상 봇짐 (오늘 재고는 오늘뿐)"
 	elif faced_resident != null:
 		# ★ [S2-T7] 주민 프롬프트 — 옛 5갈래(미호·옥자·바나·멜·네오) 문구가 한 조립식으로 접혔다.
 		# 기본 "[우클릭] 대화" + (선물 채널이 있으면) "[G] <작물> 선물" + (특수 훅이 있으면) 꼬리
@@ -14031,6 +14290,8 @@ func _open_frame(ctx: int) -> void:
 		_refresh_guild()                   # ★ [S5-T6] 길드(깊이 해금 검 + 명부환 행)
 	elif ctx == InventoryFrame.CTX_NIGHTMARKET:
 		_refresh_night_market()            # ★[S7-T7] 저승 야시장(가구 세트 2 + 한정 물품 + 씨앗)
+	elif ctx == InventoryFrame.CTX_PEDDLER:
+		_refresh_peddler()                 # ★[S10-T3] 저승 보부상(일반 10 + 가구 1 + 희귀 1)
 	frame.open(ctx)
 	hotbar.visible = false
 	player.set_physics_process(false)   # 모달 — 이동 잠금
@@ -14220,6 +14481,25 @@ func _on_frame_buy_store_item(buy_id: String, kind: String, bulk: bool) -> void:
 		#   **1회성 행위**라 수량 루프를 안 탄다(세상에 한 마리뿐이라 "n개 구매"라는 말이 성립 안 함).
 		"rarecrow":
 			_try_buy_rarecrow(buy_id)
+			return
+		# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 5종. 야시장과 **kind를 갈라** 두는 이유도 같다 —
+		#   가격 축이 다르다(행사 2할 할인 vs 보부상 웃돈 ±변동). 앞 셋은 1회성이라 수량 루프 밖이다.
+		#   ★ 문자열 리터럴을 쓰는 것은 위 "fest_*" 행과 같은 관례다(match 패턴 = 리터럴). id의
+		#     진실원은 `Peddler.KIND_*`이고 peddler_test ⑤a가 두 쪽을 대조해 오타를 잡는다.
+		"ped_deco":
+			_try_buy_peddler_deco(buy_id)
+			return
+		"ped_rare":
+			_try_buy_peddler_rare(buy_id)
+			return
+		"ped_book":
+			_try_buy_peddler_book(buy_id)
+			return
+		"ped_seed":
+			_try_buy_peddler_seed(buy_id, STORE_BULK if bulk else 1)
+			return
+		"ped_item":
+			_try_buy_peddler_item(buy_id, STORE_BULK if bulk else 1)
 			return
 	_buy_store_generic_n(buy_id, kind, STORE_BULK if bulk else 1)
 
@@ -19763,6 +20043,7 @@ func _draw() -> void:
 			_draw_facade_resident_houses()  # ★ [S2-T10] 주민 집 11채 외관(공용 변주 재도색)
 			_draw_quest_board()      # ★ [S2-T6] 만물상 앞 게시판(SOLID 1칸 그레이박스 — 수락 중이면 표식)
 			_draw_night_market()     # ★[S7-T7] 저승 야시장 임시 매대(행사일에만 광장에 선다)
+			_draw_peddler()          # ★[S10-T3] 저승 보부상 봇짐 좌판(7의 배수 날에만 다리 남단에 선다)
 			# ★[S2-T9] 마을 야외 장식(벚꽃 나무·돌담) — HOME과 같은 Y-split. 뒤 프롭만 여기서 그리고
 			#   앞 프롭은 _front_props가 플레이어 위에 다시 그린다(캐노피 뒤로 지나가기).
 			var _vsy: float = player.global_position.y if player != null else 1.0e20
@@ -21132,6 +21413,30 @@ func _draw_night_market() -> void:
 	draw_rect(Rect2(ox + 1, oy + 4, TILE - 2, 7), Color(0.30, 0.14, 0.18))            # 차일(검붉은)
 	draw_circle(Vector2(ox + 7, oy + 8), 3.0, Color(0.98, 0.80, 0.42))                # 등롱(좌)
 	draw_circle(Vector2(ox + TILE - 7, oy + 8), 3.0, Color(0.98, 0.80, 0.42))         # 등롱(우)
+
+# ★[S10-T3 / ADR-0069 결정 5] 저승 보부상 봇짐 좌판(그레이박스 — 진짜 프롭 아트는 T9 큐).
+# 출현일이 아니면 **아무것도 그리지 않는다** = 떠난 뒤 무대에 흔적이 0이다(야시장·더비 부스와
+# 같은 규율. 타일·충돌은 애초에 안 건드렸으므로 지울 상태도 없다).
+# 실루엣: 지게 발채 + 그 위에 얹힌 봇짐 두 덩이 + 펼친 보자기 한 장. **야시장 매대와 형태를
+# 일부러 갈랐다** — 야시장은 *차일 친 좌판*(세워 놓는 가게)이고 보부상은 *짊어지고 온 짐*이라,
+# 멀리서 실루엣만 봐도 "이건 다른 장수"로 읽혀야 한다(리듬 분리를 렌더 층에서도 말한다).
+func _draw_peddler() -> void:
+	if clock == null or not Peddler.is_open_day(clock.day):
+		return
+	var ox := float(PEDDLER_TILE.x * TILE)
+	var oy := float(PEDDLER_TILE.y * TILE)
+	# ★ 아트 훅 — assets/props/peddler_stall.png(32×48)이 있으면 그대로(야시장 매대와 완전 동형·
+	#   발치 앵커). 프롭 교체 관례상 코드 0줄로 갈아 끼워진다.
+	var tex := _prop_tex("peddler_stall")
+	if tex != null:
+		draw_texture(tex, Vector2(ox, oy + TILE - tex.get_size().y))
+		return
+	draw_rect(Rect2(ox + 2, oy + 20, TILE - 4, TILE - 21), Color(0.36, 0.27, 0.17))   # 펼친 보자기(흙빛 천)
+	draw_rect(Rect2(ox + 5, oy + 17, TILE - 10, 4), Color(0.24, 0.18, 0.11))          # 지게 발채(가로대)
+	draw_rect(Rect2(ox + 6, oy + 9, 8, 9), Color(0.46, 0.36, 0.24))                   # 봇짐(좌)
+	draw_rect(Rect2(ox + TILE - 14, oy + 11, 8, 7), Color(0.55, 0.44, 0.30))          # 봇짐(우)
+	draw_rect(Rect2(ox + 6, oy + 9, 8, 2), Color(0.72, 0.62, 0.44))                   # 봇짐 매듭 띠
+	draw_rect(Rect2(ox + TILE * 0.5 - 1, oy + 4, 2, 6), Color(0.28, 0.21, 0.14))      # 지겟작대기
 
 # ★[S9-T3 / ADR-0067 결정 7] 집 앞 우편함(그레이박스 — 진짜 아트는 T9 큐).
 # 실루엣: 나무 기둥 + 그 위에 얹힌 함. 한 칸 안에 발치정렬로 들어가 집 외관(y9)과 안 겹친다.
