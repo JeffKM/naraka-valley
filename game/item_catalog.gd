@@ -380,11 +380,18 @@ const OKJA_ELIXIR := "okja_elixir"          # 뭍의 비약 — 세레나 청혼
 #     사고팔 수 없고, 이 정표의 문턱은 냥이 아니라 **다 갚은 deed**(♡max)가 진다.
 #   KEYS인 이유 = 앞 둘과 같은 결(비매·유니크·스택 불가·기증 불가)이라 새 dict가 필요 없다.
 const MYEONGBU_CHARM := "myeongbu_charm"    # 명부 혼례 부적 — 옥자 청혼의 정표(강림 의뢰)
+# ★[S10-T4 / ADR-0069 결정 6] 먹갈기 휘파람 — **마구간 완공 시 증정**되는 소환 도구.
+#   CONTEXT [먹갈기] "목공방에 마구간을 지으면 곁에 오며"의 실물이다. 부는 순간 말이 오고,
+#   한 번 더 불면 내린다(main의 [F] 창구 — Mount 원장이 그 bool 하나를 든다).
+#   KEYS인 이유 = 앞 넷과 같은 결(비매·유니크·스택 불가·기증 불가). 팔 수 있게 두면 "팔았더니
+#   말이 안 온다"는 진행 봉쇄가 생기고, 기증 목록에 뜨면 혼백관에 넣고 못 찾는다(나락 열쇠 선례).
+const MOUNT_WHISTLE := "mount_whistle"      # 먹갈기 휘파람 — 탈것 소환·하차(마구간 완공 증정)
 const KEYS := {                             # 열쇠 id → {name_ko}(비매·유니크·스택 불가)
 	NARAK_KEY: {"name_ko": "나락 열쇠"},
 	WEDDING_CHARM: {"name_ko": "혼례 부적"},
 	OKJA_ELIXIR: {"name_ko": "뭍의 비약"},
 	MYEONGBU_CHARM: {"name_ko": "명부 혼례 부적"},
+	MOUNT_WHISTLE: {"name_ko": "먹갈기 휘파람"},
 }
 
 # ── ★[S6-T1 / ADR-0064 결정 2·9] 카페 메뉴 — 기본 4 + 융합 12 ────────────────

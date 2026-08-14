@@ -76,11 +76,16 @@ func _run_checks() -> void:
 	# ── ⓐ 카탈로그 정합(원장 무의존 — static) ──
 	print("── ⓐ 카탈로그 ──")
 	# ★[S8-T7] 로스터 3건 — 성장 티어 2건 + 안방 확장(결혼 조건 "배우자 방" — 서랍의 이행).
-	_check("ⓐa 로스터 = 성장 티어 2건 + 안방 확장(주방 업그레이드 = 서랍 유지)",
-		Carpenter.ids().size() == 3
+	# ★[S10-T4 / ADR-0069 결정 6] 3 → 4: **마구간**이 붙었다(의도적 불변식 개정). 결정 6이 "목공방
+	#   건축 서비스의 3번째 항목 — 새 건축 시스템을 만들지 않는다"로 못 박은 그 자리이고, 안방
+	#   확장이 그랬듯 **데이터 1건 추가**가 전부다(주괴 필드는 옵션이라 기존 3건은 무영향 —
+	#   mount_test ①e가 그 하위호환을 따로 잰다). 주방 업그레이드는 여전히 서랍이다.
+	_check("ⓐa 로스터 = 성장 티어 2건 + 안방 확장 + 마구간(주방 업그레이드 = 서랍 유지)",
+		Carpenter.ids().size() == 4
 		and Carpenter.has_project(Carpenter.PROJ_BIG_COOP)
 		and Carpenter.has_project(Carpenter.PROJ_BIG_BARN)
-		and Carpenter.has_project(Carpenter.PROJ_MASTER_ROOM))
+		and Carpenter.has_project(Carpenter.PROJ_MASTER_ROOM)
+		and Carpenter.has_project(Carpenter.PROJ_STABLE))
 	_check("ⓐa′ 안방 확장 = 10,000냥 · 원목 300 · 2일 · Ranch 무관(building 없음)",
 		Carpenter.gold_cost(Carpenter.PROJ_MASTER_ROOM) == 10000
 		and Carpenter.wood_cost(Carpenter.PROJ_MASTER_ROOM) == 300
@@ -202,8 +207,10 @@ func _run_checks() -> void:
 	for row in rows:
 		if not bool(row.get("locked", false)):
 			all_locked = false
-	_check("ⓒf 진행 중이면 건축 행 전부 잠김(진열 = 판정과 같은 사실)",
-		rows.size() == 3 and all_locked)   # ★[S8-T7] 안방 확장이 붙어 3행
+	# ★행 수는 **카탈로그에서 파생**한다 — 프로젝트가 붙을 때마다 이 줄을 고치지 않게(사본 제거).
+	#   재고 싶은 계약은 "몇 행이냐"가 아니라 *카탈로그 전량이 뜨고 전부 잠긴다*이다.
+	_check("ⓒf 진행 중이면 건축 행 전부 잠김(진열 = 판정과 같은 사실 · 행 수 = 카탈로그 파생)",
+		rows.size() == Carpenter.ids().size() and all_locked)
 
 	# ── ⓓ 완공 ──
 	print("── ⓓ 완공 ──")
