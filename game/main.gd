@@ -2078,6 +2078,25 @@ const DUNGEON_GATE_DOOR := Vector2i(24, 6)          # 문 리세스(시각 일�
 #   "카탈로그 미등록·_indoor 불변" 단언이 그대로 성립하고, 갈린 건 워프 한 줄뿐이다.
 const NARAK_GATE_EXT_RECT := Rect2i(30, 2, 5, 5)    # x30..34, y2..6 (북단 심연 포켓 동, 나락 진입로)
 const NARAK_GATE_DOOR := Vector2i(32, 6)            # 문 리세스 = ★나락 워프 발동 칸(열쇠 게이트)
+# ══ ★[S10-T8 / ADR-0069 결정 11] 명부 시련장 — 나락 진입로 **곁 방 1** ═══════════
+# 자리 근거(결정 11 "무대 = 나락 진입로 곁 방 1"): 북단 심연 포켓의 **동단**이다. 던전 입구(x22..26)
+#   ·나락 진입로(x30..34)와 같은 y2..6 줄에 세 번째 외관으로 서서, 한 화면에 "갱도 끝의 세 문"이
+#   나란히 읽힌다. ⚠️ 척추 채널(x40 세로 carve)을 **비껴야 한다** — 겹치면 carve가 외관 벽을
+#   PATH로 뚫어 방이 밖으로 새므로(carve가 facade 뒤에 도는 순서), x44부터 시작한다.
+# ★ 폭 6 = **짝수**다([ADR-0046] "기본 2칸 문 · 짝수폭 footprint"). 이웃 대장간·길드는 폭 5·1칸 문의
+#   구시대 유산이라 그대로 두되, 새로 세우는 건물은 규약을 지킨다(문폭 = 진입로폭 = 트리거폭).
+const TRIAL_EXT_RECT := Rect2i(44, 2, 6, 5)         # x44..49, y2..6 (북단 심연 포켓 동단 — 척추 x40 동쪽)
+const TRIAL_EXT_DOOR := Vector2i(46, 6)             # 외관 문 서칸(닿으면 진입) — 곁가지(y7)로 carve
+const TRIAL_EXT_DOOR_E := Vector2i(47, 6)           # 외관 문 동칸(2칸 문 정합)
+# 실내 방 = 갱도 실내 띠(y44+)의 세 번째 방. 대장간(x8..19)·길드(x23..32)와 x가 안 겹친다.
+const TRIAL_RECT := Rect2i(37, 46, 12, 11)          # x37..48, y46..56 (실내 방)
+const TRIAL_DOOR := Vector2i(42, 56)                # 실내 문 서칸(닿으면 퇴장) — 아래벽 정중앙 2칸
+const TRIAL_DOOR_E := Vector2i(43, 56)              # 실내 문 동칸([ADR-0046] 짝수폭 정중앙 2칸)
+const TRIAL_IN_TILE := Vector2i(42, 55)             # 실내 문 안쪽(진입 착지 — 통로 행)
+const TRIAL_CAM_RECT := Rect2i(36, 44, 14, 15)      # 시련장 방 둘레(길드 CAM x21..34와 안 겹침)
+# 무인 창구 둘(혼백관 기증대·열람대·안치대와 같은 결 — 사람이 없는 [F] 자리).
+const TRIAL_BOARD_TILE := Vector2i(40, 49)          # ★ 시련 게시판 — [F] 수락 / 완료
+const TRIAL_SHOP_TILE := Vector2i(45, 49)           # ★ 시련패 상점 — [F] 매대
 # ★[S5-T1 / ADR-0063 결정 1] 갱도 층 시스템 배선 상수. 던전 입구(DUNGEON_GATE)는 이제 **잠긴 외관이
 #   아니라 층 하강 입구로 점등**한다 — 문 칸에서 [F]를 누르면 1층(또는 해금된 엘리베이터 층)으로
 #   내려간다. NARAK_GATE는 그대로 잠김 유지(나락 = S5-T7 소관).
@@ -2403,6 +2422,13 @@ var crystalarium: CrystalariumLedger = null
 #   PanningSpots와 같은 RefCounted 순수 원장이고, **아이템이 아니다** — 줍는 즉시 여기에만 적힌다
 #   (인벤 경유 0 = 버리기·상자·출하 어느 처분 경로도 없다 = 잃을 수 없는 수집물. firefly_soul.gd 머리말).
 var fireflies: FireflySouls = null
+# ★[S10-T8 / ADR-0069 결정 11] 명부 시련장 원장(주간 시련 수락·완료 이력 + [시련패] 잔고 + 상점
+#   1회성 구매 이력). 개방 여부는 **여기 안 든다** — `trial_ground_open()`(반딧넋 카운트 파생)이
+#   유일한 진실원이라 원장이 열림 플래그를 갖는 순간 둘이 어긋날 자리가 생긴다.
+var trial: TrialGround = null
+# ★[S10-T8 / ADR-0069 결정 11] 경지 원장 — **수령한 유물 목록 하나뿐**이다. 포인트는 5스킬 XP
+#   스칼라에서 매번 파생하므로(만렙 초과분의 합) 저장할 것이 없다(mastery.gd 머리말 참조).
+var mastery: Mastery = null
 # ★[S5-T3 / ADR-0063 결정 2·3] 누적 지오드 개봉 횟수 — 개봉 롤의 **결정적 시드**다(같은 카운터면
 #   같은 답이라 헤드리스가 재현하고, 카운터가 늘어야 새 롤이라 재롤 exploit이 구조적으로 막힌다).
 var _geode_opened := 0
@@ -3095,6 +3121,9 @@ func _ready() -> void:
 	crystalarium.changed.connect(queue_redraw)  # 설치·투입·완성·수거·회수·복원 시 그레이박스 갱신
 	fireflies = FireflySouls.new()       # ★[S10-T7] 반딧넋 원장(RefCounted — 사금 스폿 원장과 같은 결)
 	fireflies.changed.connect(queue_redraw)   # 안치·마일스톤·복원 시 필드 반짝임 + 혼백관 눈금 갱신
+	trial = TrialGround.new()            # ★[S10-T8] 명부 시련장 원장(RefCounted — 반딧넋 원장과 같은 결)
+	trial.changed.connect(queue_redraw)       # 수락·완료·처치 진행·구매·복원 시 게시판·매대 갱신
+	mastery = Mastery.new()              # ★[S10-T8] 경지 원장(RefCounted — 무대가 없어 그릴 것도 없다)
 	tool_tier = ToolTier.new()           # ★[S4-T4] 도구 티어 원장(RefCounted — 나무 원장과 같은 결)
 	tool_tier.changed.connect(_on_tool_tier_changed)   # 티어↑ → 프롬프트 타수·물뿌리개 용량 배지 갱신
 	carpenter = Carpenter.new()          # ★[S4-T7] 목공방 건축 의뢰 원장(RefCounted — 도구 티어와 같은 결)
@@ -5209,8 +5238,16 @@ func _build_eophwa_mine() -> void:
 	_build_facade(GUILD_EXT_RECT, GUILD_EXT_DOOR)               # 모험가 길드 외관(통과 불가 박스 + 문)
 	_build_facade(DUNGEON_GATE_EXT_RECT, DUNGEON_GATE_DOOR)     # 갱도 끝 던전 입구 — 잠긴 외관(비-enterable, 카탈로그 미등록)
 	_build_facade(NARAK_GATE_EXT_RECT, NARAK_GATE_DOOR)         # 나락 진입로 — 잠긴 외관(비-enterable, 카탈로그·워프 없음)
+	# ★[S10-T8 / ADR-0069 결정 11] 명부 시련장 외관 — **늘 선다**(문이 열렸는지와 무관). 잠긴
+	#   외관이 서 있어야 "저기 뭔가 있다"가 반딧넋을 모으는 이유가 된다(나락 진입로가 열쇠 전에도
+	#   서 있던 그 선례 1:1). 진입 가능 여부는 카탈로그 등록으로 갈린다(_build_building_catalog).
+	_build_facade(TRIAL_EXT_RECT, TRIAL_EXT_DOOR)
+	_set_tile(TRIAL_EXT_DOOR_E.x, TRIAL_EXT_DOOR_E.y, PATH)     # 2칸 문 동칸도 리세스(문 폭 2칸 = 아트 정합)
 	_build_room(SMITHY_RECT, HOUSE, HOUSE_WALL, SMITHY_DOOR)    # 실내 대장간 빈 방(kind=smithy)
 	_build_room(GUILD_RECT, CAFE, CAFE_WALL, GUILD_DOOR)        # 실내 길드 빈 방(kind=guild — 만물상 결 상업 톤)
+	# ★[S10-T8] 실내 시련장 방(kind=trial) — 길드와 같은 상업 톤 벽(둘 다 갱도 바위를 깎아 들인 방).
+	_build_room(TRIAL_RECT, CAFE, CAFE_WALL, TRIAL_DOOR)
+	_set_tile(TRIAL_DOOR_E.x, TRIAL_DOOR_E.y, CAFE)             # 실내문 ≡ 외관문 2칸([ADR-0046])
 	_carve_eophwa_mine_paths()             # 동선(spawn·두 워프·대장간/길드 문·게이트 — 바위 군집을 덮어 길 보장)
 	_build_border()                        # 맵 4변 경계벽(마지막에 보장)
 
@@ -5231,6 +5268,11 @@ func _carve_eophwa_mine_paths() -> void:
 	_carve_h(7, 24, 40)                    # 곁가지(게이트 문 ~ 척추 x40)
 	_carve_v(DUNGEON_GATE_DOOR.x, DUNGEON_GATE_DOOR.y, 7)   # 던전 입구 문(24,6) → 곁가지(y7)
 	_carve_v(NARAK_GATE_DOOR.x, NARAK_GATE_DOOR.y, 7)       # 나락 진입로 문(32,6) → 곁가지(y7)
+	# ★[S10-T8] 곁가지 **동쪽 연장**(x40 → x47) + 시련장 2칸 문 진입로. 기존 곁가지(x24..40)는
+	#   한 칸도 안 건드리고 그 동단에서 이어 붙이기만 한다(기존 좌표 단언 전량 보존).
+	_carve_h(7, 40, TRIAL_EXT_DOOR_E.x)                     # 곁가지 연장(척추 x40 ~ 시련장 문 동칸)
+	_carve_v(TRIAL_EXT_DOOR.x, TRIAL_EXT_DOOR.y, 7)         # 시련장 문 서칸(46,6) → 곁가지(y7)
+	_carve_v(TRIAL_EXT_DOOR_E.x, TRIAL_EXT_DOOR_E.y, 7)     # 시련장 문 동칸(47,6) → 곁가지(y7)
 	# 남단 입구 두 서비스 문 → apron(y42, spawn 동선)
 	_carve_v(SMITHY_EXT_DOOR.x, SMITHY_EXT_DOOR.y, 42)     # 대장간 문(6,41) → apron(y42)
 	_carve_v(GUILD_EXT_DOOR.x, GUILD_EXT_DOOR.y, 42)       # 길드 문(24,41) → apron(y42)
@@ -6289,6 +6331,10 @@ func _on_mob_killed(mob: Mob, spawn_index: int) -> void:
 	#   광부의 일이지 밤 경비의 일이 아니라, 같은 처치라도 그 사람의 도메인 실적이 아니다.
 	if in_narak:
 		_activity_credit("bana", 1)
+	# ★[S10-T8 / ADR-0069 결정 11] 명부 시련장 처치형 진행 — **수락 중일 때만** 센다(아니면 무동작).
+	#   갱도·나락 어느 무대의 잡귀든 센다: 시련장은 나락 심층의 무대이지만 시련 자체는 "기량"을
+	#   재는 것이라, 어디서 싸웠는지로 자격을 가르면 갱도만 도는 사람이 통째로 막힌다(ADR-0008).
+	_note_trial_kill()
 	var drop_seed := hash("narak:%d:%d:%d" % [narak_floors.run_id(), _narak_depth, spawn_index]) \
 		if in_narak else hash("%d:%d:%d" % [clock.day, _mine_floor, spawn_index])
 	var full := false
@@ -9402,6 +9448,7 @@ func _setup_frame() -> void:
 	frame.larder_take.connect(_on_frame_larder_take)   # ★[S6-T1] 곳간 회수
 	frame.profession_chosen.connect(_on_frame_profession)   # ★ ADR-0052 숙련 탭 전문직 선택
 	frame.craft_chosen.connect(_on_frame_craft)             # ★[S4-T5] 제작 탭 레시피 실행
+	frame.mastery_claimed.connect(_on_frame_mastery)        # ★[S10-T8] 숙련 탭 [경지] 유물 수령
 	frame.craft_rows_fn = Callable(self, "_craft_rows")     # ★[S4-T5] 제작 탭 행 데이터 주입(프레임은 무상태)
 
 # ── ★ C3 미니멀 HUD 오버레이(좌하단 알림 피드 + 우하단 혼력 바) ─────────────────
@@ -9802,6 +9849,12 @@ func _on_day_advanced(day: int) -> void:
 	var dropped := quest_board.advance_day(day)
 	if not dropped.is_empty():
 		_notice("게시판 의뢰가 기한을 넘겼다 — %s (페널티 없음)" % QuestBoard.summary(dropped))
+	# ★[S10-T8 / ADR-0069 결정 11] 시련 만료 — 게시판과 **같은 규율**이다(미완료 무페널티·시련패
+	#   불변). 주가 갈리면 새 시련이 저절로 걸리므로 잃는 것은 이번 주 한 건뿐이다.
+	if trial != null:
+		var t_dropped := trial.advance_day(day)
+		if not t_dropped.is_empty():
+			_notice("시련이 기한을 넘겼다 — %s (페널티 없음)" % TrialGround.summary(t_dropped))
 	# ★[S8-T6 / ADR-0066 결정 7] 질투 자동 복원 — 예정일(연애 개시 +7일)에 닿은 감점을 조용히
 	#   되돌린다(알림 없음·흔적 0 — ADR-0022 적대 없음).
 	_advance_jealousy(day)
@@ -10536,6 +10589,20 @@ func _build_building_catalog() -> void:
 		"ext_door": GUILD_EXT_DOOR, "out_tile": GUILD_EXT_DOOR + Vector2i(0, 1),
 		"in_tile": GUILD_IN_TILE, "door": GUILD_DOOR, "cam": GUILD_CAM_RECT,
 	}
+	# ★[S10-T8 / ADR-0069 결정 11] 명부 시련장(EOPHWA_MINE 구역 — enterable). **문이 열렸을 때만
+	#   등록한다**(늘봄방이 완공 전엔 등록조차 안 하는 그 선례 1:1): 미등록이면 문 칸을 밟아도
+	#   `_maybe_toggle_building`이 그 좌표를 모르므로 아무 일도 안 난다 = 잠긴 외관이다.
+	#   ★ 게이트 술어는 T7이 낸 `trial_ground_open()`(반딧넋 카운트 파생 · 저장 플래그 0)이고
+	#     여기선 **소비만** 한다 — 열림 판정의 진실원을 두 곳에 두지 않는다.
+	#   kind="trial"이라 _draw 가구 분기 어디에도 안 걸린다(게시판·매대만 있는 방 — 길드 결).
+	if trial_ground_open():
+		_buildings["시련장"] = {
+			"region": RegionCatalog.EOPHWA_MINE, "kind": "trial",
+			"ext_door": TRIAL_EXT_DOOR, "ext_door2": TRIAL_EXT_DOOR_E,
+			"out_tile": TRIAL_EXT_DOOR + Vector2i(0, 1),
+			"in_tile": TRIAL_IN_TILE, "door": TRIAL_DOOR, "door2": TRIAL_DOOR_E,
+			"cam": TRIAL_CAM_RECT,
+		}
 	# 메인 집 3 + 주민 집 11 — 공유 집 실내(HOUSE_RECT). 외관 문은 건물마다, 실내는 한 방.
 	# ★[ADR-0060 결정 2 / S2-T2] 주민 집은 RESIDENT_HOUSE_DOORS에서 파생(id = HOUSE_IDS와 같은 순번) —
 	#   로스터가 늘 때 이 dict를 손댈 필요가 없다.
@@ -10803,6 +10870,13 @@ func _save_game() -> void:
 		#   전부 day에서 파생되므로 적을 것이 없고(날씨·운과 같은 무상태 파생), 가구 해금은 home_deco가
 		#   책 입수는 books가 각자 자기 조각에 이미 적는다(이중 진실원 0).
 		"peddler": peddler.to_save(),
+		# ★[S10-T8 / ADR-0069 결정 11] 명부 시련장 원장 — 수락 중 계약·완료 이력·[시련패] 잔고·
+		#   1회성 구매 이력. **개방 플래그는 없다**(반딧넋 카운트 파생이라 적을 것이 없다).
+		#   주간 시련 자체는 주 시드 파생이라 저장 대상이 아니다(QuestBoard와 같은 무상태 결).
+		"trial_ground": trial.to_save(),
+		# ★[S10-T8] 경지 원장 — **수령한 유물 목록 하나뿐**이다. 포인트는 이미 저장되는 5스킬 XP에서
+		#   다시 파생되므로(만렙 초과분의 합) 잔량을 적으면 두 수가 어긋날 자리만 생긴다.
+		"mastery": mastery.to_save(),
 		# ★[S9-T3 / ADR-0067 결정 7] 편지 원장 — 발송 큐(아직 안 온 편지) + 보관함 + 기독 원장.
 		#   서사 진행의 일부라 반드시 라운드트립한다(자고 일어나면 도착하는 편지가 세이브를 건너뛰면
 		#   "잘 때마다 사라지는 예고"가 된다).
@@ -10981,6 +11055,13 @@ func _load_game() -> void:
 	#   관례). 막히는 것은 0이다: 다음 7의 배수 날에 좌판이 그대로 서고 재고는 day에서 파생된다.
 	if data.has("peddler") and peddler != null:
 		peddler.load_save(data["peddler"])
+	# ★[S10-T8] 시련장·경지 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(보부상과 같은
+	#   하위호환 관례). 막히는 것은 0이다: 문은 반딧넋 카운트가 열고, 이번 주 시련은 주 시드에서
+	#   그대로 파생되며, 경지 포인트는 스킬 XP에서 다시 계산된다.
+	if data.has("trial_ground") and trial != null:
+		trial.load_save(data["trial_ground"])
+	if data.has("mastery") and mastery != null:
+		mastery.load_save(data["mastery"])
 	# ★[S9-T3] 편지 원장 — 키 없는 구세이브는 **빈 우편함**으로 시작한다(곳간·출하함과 같은 하위호환
 	#   관례. 막히는 것은 0이다 — 앞으로의 사건이 보내는 편지는 그대로 도착한다).
 	if data.has("mailbox") and mailbox != null:
@@ -11118,6 +11199,10 @@ func _load_game() -> void:
 	#   세이브가 바깥으로 튕긴다(부팅 시점의 카탈로그는 carpenter가 생기기 전에 세워진다).
 	#   미건축 세이브면 스스로 no-op이라 종전 부팅 경로는 한 줄도 안 바뀐다.
 	_refresh_greenhouse()
+	# ★[S10-T8] 시련장 문 복원 — 늘봄방과 **완전히 같은 이유로 _restore_location보다 먼저**다.
+	#   부팅 시점의 카탈로그는 반딧넋 원장이 복원되기 전에 섰으므로, 여기서 다시 세우지 않으면
+	#   시련장 안에서 저장한 세이브가 바깥으로 튕긴다. 미개방 세이브면 스스로 no-op이다.
+	_refresh_trial_gate()
 	_restore_location(data)
 	# ★[S8-T7] 안방 확장 세이브 복원 — 부팅 그리드는 원본 rect로 섰고, 복원 구역이 HOME이면
 	# _restore_location이 재빌드를 건너뛰므로(같은 구역 최적화) 여기서 확장 실효를 다시 얹는다
@@ -11810,6 +11895,8 @@ func _process(delta: float) -> void:
 			_refresh_night_market()              # ★[S7-T7] 야시장 행(구매 즉시 "해금됨/구입함"으로 잠김)
 		elif frame.context == InventoryFrame.CTX_PEDDLER:
 			_refresh_peddler()                   # ★[S10-T3] 보부상 행(구매 즉시 잠김·골드 헤더 갱신)
+		elif frame.context == InventoryFrame.CTX_TRIAL:
+			_refresh_trial_shop()                # ★[S10-T8] 시련장 행(구매 즉시 잠김·시련패 헤더 갱신)
 		return
 
 	# ★[S7-T8 / ADR-0065 결정 10] 시계 판 클릭 = 절기 달력 토글(스타듀의 달력 게시판 자리 — 우리는
@@ -11926,6 +12013,10 @@ func _process(delta: float) -> void:
 	# ★ [S4-T4] 대장간 무인 업그레이드대: 대장간 안에서 업그레이드대 칸을 바라볼 때(_indoor 가드 —
 	#   기증대와 정확히 같은 결. 다른 구역의 같은 좌표에 닿아도 무반응).
 	var facing_upgrade := not _sleeping and _indoor == "대장간" and _target == SMITHY_UPGRADE_TILE
+	# ★ [S10-T8] 명부 시련장 무인 창구 둘 — 시련 게시판(수락·완료)과 시련패 매대. 같은 방 두 칸이라
+	#   좌표로 갈리고, `_in_trial_room()`이 방 자체를 가드한다(문이 안 열렸으면 애초에 못 들어온다).
+	var facing_trial_board := _in_trial_room() and _target == TRIAL_BOARD_TILE
+	var facing_trial_shop := _in_trial_room() and _target == TRIAL_SHOP_TILE
 	# ★ [S2-T6] 만물상 앞 게시판: 나루 마을 *야외*에서 게시판 칸을 바라볼 때(_indoor==""로 실내 배제 —
 	#   기증대가 _indoor로 가드하는 것과 대칭. 다른 구역의 같은 좌표에 닿아도 무반응).
 	var facing_board := not _sleeping and _region == RegionCatalog.NARU_VILLAGE and _indoor == "" \
@@ -12132,6 +12223,15 @@ func _process(delta: float) -> void:
 	#   답례가 조용히 증발한다. 안치대에서만 주면 "가방을 비우고 다시 오면 된다"가 늘 성립한다.
 	if facing_firefly and Input.is_action_just_pressed("shop_toggle"):
 		_open_firefly_stand()
+		return
+	# ★ [S10-T8] 시련 게시판(F): 미수락이면 이번 주 시련 수락, 수락 중이면 완료 시도(만물상 게시판과
+	#   같은 한 키 사다리). 시련은 주당 1건뿐이라 게시판의 [G](중기 수락) 같은 둘째 키가 없다.
+	if facing_trial_board and Input.is_action_just_pressed("shop_toggle"):
+		_use_trial_board()
+		return
+	# ★ [S10-T8] 시련패 매대(F): 만물상과 같은 셸(CTX_TRIAL)을 연다 — 값만 [시련패]다.
+	if facing_trial_shop and Input.is_action_just_pressed("shop_toggle"):
+		_open_frame(InventoryFrame.CTX_TRIAL)
 		return
 	# ★ [S4-T4 → S5-T3] 대장간 모루 업그레이드(F): 모루를 바라보며 F — **든 도구**의 다음 티어를
 	#   즉시 산다(골드 + 주괴 5 차감 → 티어 +1. 대기 없음 = ADR-0063 결정 3 QoL 승격).
@@ -12784,6 +12884,25 @@ func _process(delta: float) -> void:
 		else:
 			interact_prompt.text = "[F] 반딧넋 안치대 (%d/%d · 명부 시련장 열림)" % [
 				ff_got, FireflySouls.total_count()]
+	elif facing_trial_board:
+		# ★ [S10-T8] 시련 게시판: 누르기 전에 "무엇을 얼마나 했나"가 읽힌다(만물상 게시판과 같은 결).
+		interact_prompt.visible = true
+		if trial != null and trial.is_active():
+			var t_need := trial.required_count()
+			var t_have := _trial_have()
+			var t_verb := "[F] 시련 완료" if t_have >= t_need else "시련 진행"
+			interact_prompt.text = "%s — %s (%d/%d)" % [
+				t_verb, TrialGround.summary(trial.active), t_have, t_need]
+		else:
+			var t_off := _trial_offer()
+			if t_off.is_empty():
+				interact_prompt.text = "명부 시련장 게시판 — 이번 주 시련은 끝났다 (다음 주에 새로 걸린다)"
+			else:
+				interact_prompt.text = "[F] 시련 수락 — %s" % TrialGround.summary(t_off)
+	elif facing_trial_shop:
+		# ★ [S10-T8] 시련패 매대: 잔고가 프롬프트에 먼저 뜬다(냥과 다른 화폐라 헷갈릴 자리를 없앤다).
+		interact_prompt.visible = true
+		interact_prompt.text = "[F] 시련패 매대 (보유 %d패)" % (trial.tokens if trial != null else 0)
 	elif facing_upgrade:
 		# ★ [S4-T4 → S5-T3] 대장간 모루: **든 도구**의 현재 티어 · 다음 티어 · 가격 · 주괴를 한 줄로.
 		interact_prompt.visible = true
@@ -14104,6 +14223,7 @@ func _gather_firefly(t: Vector2i) -> void:
 		return                                   # 이미 안치(멱등 — 도달 불가)
 	audio.sfx("ui")
 	_notice_firefly_progress()
+	_refresh_trial_gate()                        # ★[S10-T8] 30을 막 넘었으면 시련장 문이 이 프레임에 선다
 	queue_redraw()
 
 # 안치 뒤 한 줄 — 진행과 **게이트 도달 순간**을 알린다. 문턱을 막 넘은 프레임에서만 문 이야기를
@@ -14135,6 +14255,7 @@ func _roll_firefly_drop(source: String, serial: int) -> void:
 		return
 	audio.sfx("ui")
 	_notice_firefly_progress()
+	_refresh_trial_gate()                        # ★[S10-T8] 드랍으로 문턱을 넘는 길도 같은 훅을 탄다
 
 # ★ [명부 시련장] 개방 술어 — **S10-T8이 소비하는 공개 API**. 저장 플래그가 아니라 원장 파생이라
 #   "카운트는 넘겼는데 문은 닫힘"이 구조적으로 불가능하다(firefly_soul.gd `gate_open` 주석).
@@ -14182,6 +14303,260 @@ func _claim_firefly_milestones() -> void:
 		fireflies.claim(int(m["count"]))
 		_toast_item(rid, n)
 		_notice("반딧넋 답례 — %s ×%d (안치 %d 달성)" % [ItemCatalog.name_of(rid), n, int(m["count"])])
+
+# ══ ★[S10-T8 / ADR-0069 결정 11] 명부 시련장 — 게이트·게시판·상점 ═══════════════
+# main의 몫은 넷이다: ①문이 열린 순간 방을 카탈로그에 세운다 ②무인 게시판에서 주간 시련을 수락·
+# 완료한다 ③처치형 진행을 잡귀 처치 지점에서 센다 ④[시련패] 매대를 만물상 셸로 편다.
+# **무엇이 걸리나·얼마를 주나·무엇을 파나**는 전부 TrialGround가 진다(QuestBoard 관계 동형).
+
+# ★ 문 점등 — 반딧넋 카운트가 문턱을 넘었으면 방을 카탈로그에 세운다(늘봄방 `_refresh_greenhouse`
+#   1:1). 이미 서 있으면 무동작이고, 안 열렸으면 `_build_building_catalog`가 알아서 안 넣는다.
+#   ⚠️ **닫는 경로는 없다** — 반딧넋은 잃을 수 없는 수집물이라 카운트가 줄지 않는다(불가역).
+func _refresh_trial_gate() -> void:
+	if not trial_ground_open() or _buildings.has("시련장"):
+		return
+	_build_building_catalog()
+	queue_redraw()
+
+# 지금 시련장 실내에 있나(무인 창구 판정의 공통 전제).
+func _in_trial_room() -> bool:
+	return not _sleeping and _indoor == "시련장"
+
+# 오늘 걸린 시련({} = 없음 — 이번 주 완료분). 게시판 프롬프트·수락이 공유한다.
+func _trial_offer() -> Dictionary:
+	if trial == null or clock == null:
+		return {}
+	return trial.offer(clock.day)
+
+# 수락 중 시련의 진행 분자(처치형 = 원장 카운터 / 납품형 = 인벤 보유량).
+func _trial_have() -> int:
+	if trial == null or not trial.is_active():
+		return 0
+	if trial.kind_of_active() == TrialGround.KIND_SLAY:
+		return trial.progress()
+	return inventory.count_of(trial.required_item()) if inventory != null else 0
+
+# 시련 게시판 [F] — 미수락이면 이번 주 시련을 받고, 수락 중이면 완료를 시도한다(게시판 결 1:1).
+func _use_trial_board() -> void:
+	if trial == null or clock == null:
+		return
+	if trial.is_active():
+		_try_complete_trial()
+		return
+	var t := _trial_offer()
+	if t.is_empty():
+		_notice("이번 주 시련은 이미 마쳤다 — 다음 주에 새 시련이 걸린다")
+		return
+	if not trial.accept(t, clock.day):
+		return
+	audio.sfx("ui")
+	_notice("시련을 받았다 — %s" % TrialGround.summary(t))
+
+# 완료 — 납품형은 아이템을 차감하고, 처치형은 이미 원장이 센 진행으로 끝난다.
+# ★ **차감 먼저·기록 나중**: 원장 `complete`가 성공해야 시련패가 적립되므로, 아이템을 뺐는데
+#   보상이 안 들어오는 순서 사고가 없다(먼저 성립을 확인하고 → 빼고 → 원장에 적는다).
+func _try_complete_trial() -> void:
+	if trial == null or clock == null or not trial.is_active():
+		return
+	var have := _trial_have()
+	if not trial.can_complete(clock.day, have):
+		if trial.kind_of_active() == TrialGround.KIND_SLAY:
+			_notice("아직 모자라다 — 잡귀 %d/%d" % [have, trial.required_count()])
+		else:
+			_notice("아직 모자라다 — %s %d/%d" % [
+				ItemCatalog.name_of(trial.required_item()), have, trial.required_count()])
+		return
+	if trial.kind_of_active() == TrialGround.KIND_DELIVER:
+		inventory.remove_item(trial.required_item(), trial.required_count())
+	var done := trial.complete(clock.day, have)
+	if done.is_empty():
+		return
+	audio.sfx("ui")
+	_notice("시련을 마쳤다 — 시련패 +%d (보유 %d)" % [int(done.get("tokens", 0)), trial.tokens])
+
+# ★ 처치 진행 훅 — `_on_mob_killed`가 **한 곳에서만** 부른다. 수락 중인 처치형이 아니면 무동작이라
+#   평소 전투에는 어떤 영향도 없다(드랍·XP·하트 어느 것도 안 건드린다 — 별개 가지).
+func _note_trial_kill() -> void:
+	if trial == null or clock == null:
+		return
+	if not trial.note_kill(clock.day):
+		return
+	if trial.progress() >= trial.required_count():
+		_notice("시련 달성 — 게시판에서 시련패를 받자 (%d/%d)" % [
+			trial.progress(), trial.required_count()])
+
+# ── 시련패 상점(만물상 셸 · 화폐만 [시련패]) ──────────────────────────────────
+func _refresh_trial_shop() -> void:
+	frame.store_coin = _trial_token_icon()   # ★[S10-T8] 값의 단위가 엽전이 아니다(CTX_TRIAL 주석)
+	frame.store_text = _trial_shop_text()
+	frame.store_items = _trial_shop_items()
+
+# ★ 아트 훅 — assets/ui/trial_token.png가 들어오면 그대로 쓰고(T9 아트 패스), 없으면 **null**을
+#   돌려 프레임이 엽전으로 폴백한다(`store_coin` 주석). `_prop_tex`와 같은 "있으면 쓴다" 문법이라
+#   에셋 도착만으로 코드 0줄에 갈아 끼워진다.
+const TRIAL_TOKEN_ICON_PATH := "res://assets/ui/trial_token.png"
+
+func _trial_token_icon() -> Texture2D:
+	if ResourceLoader.exists(TRIAL_TOKEN_ICON_PATH):
+		return load(TRIAL_TOKEN_ICON_PATH) as Texture2D
+	return null
+
+func _trial_shop_text() -> String:
+	var got: int = trial.tokens if trial != null else 0
+	return "\n".join([
+		"── 명부 시련장 · 시련패 매대 ──",
+		"시련패 %d (냥과 바꿀 수 없다 · 주간 시련으로만 얻는다)" % got,
+	])
+
+# 매대 품목 행. 표·값은 TrialGround가 들고, 표시명·아이콘·보유 판정은 여기서 붙인다
+# (보부상이 Peddler에 위임하는 그 경계 1:1 — 원장은 인벤토리도 해금 원장도 모른다).
+func _trial_shop_items() -> Array:
+	var rows: Array = []
+	if trial == null:
+		return rows
+	for r in TrialGround.shop_rows():
+		var src: Dictionary = r
+		var kind := String(src["kind"])
+		var buy_id := String(src["buy_id"])
+		var price := int(src["price"])
+		if kind == TrialGround.SHOP_RARECROW:
+			# 1회성 수집 스킨(획득처 ⑧). 미등재면 행 자체를 안 세운다(방어 — T2가 이미 등재했다).
+			if not ItemCatalog.has_item(buy_id):
+				continue
+			rows.append({"kind": kind, "buy_id": buy_id, "icon_id": buy_id,
+				"name": ItemCatalog.name_of(buy_id), "price": price, "base": price,
+				"locked": trial.has_bought(buy_id), "locked_text": "구입함"})
+		elif kind == TrialGround.SHOP_DECO:
+			if not HomeDecoCatalog.has_set(buy_id):
+				continue
+			var unlocked := home_deco != null and home_deco.is_unlocked(buy_id)
+			rows.append({"kind": kind, "buy_id": buy_id, "swatch": _deco_swatch(buy_id),
+				"name": "%s 가구 세트" % HomeDecoCatalog.name_of(buy_id), "price": price, "base": price,
+				"locked": unlocked, "locked_text": "해금됨"})
+		else:
+			if not ItemCatalog.has_item(buy_id):
+				continue
+			rows.append({"kind": kind, "buy_id": buy_id, "icon_id": buy_id,
+				"name": ItemCatalog.name_of(buy_id), "price": price, "base": price,
+				"count": inventory.count_of(buy_id) if inventory != null else 0})
+	return rows
+
+# 결제 공통 — **적재 먼저·차감 나중**(보부상 `_try_buy_peddler_rare`가 세운 그 순서 규율 1:1:
+# 백팩이 가득이면 시련패가 안 나간다).
+func _try_buy_trial_item(buy_id: String) -> void:
+	if trial == null or inventory == null or not ItemCatalog.has_item(buy_id):
+		return
+	var price := TrialGround.price_of(buy_id)
+	if not trial.can_buy(buy_id):
+		_notice("시련패가 모자라다 — %s %d패 (보유 %d패)" % [
+			ItemCatalog.name_of(buy_id), price, trial.tokens])
+		return
+	if not inventory.add_item(buy_id, 1):
+		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(buy_id))
+		return
+	if trial.spend(buy_id) <= 0:
+		inventory.remove_item(buy_id, 1)   # 방어(위 검사와 이중) — 결제 실패면 물건도 도로 뺀다
+		return
+	_toast_item(buy_id, 1)
+	audio.sfx("ui")
+	_notice("시련패로 %s 를 바꿨다 −%d패" % [ItemCatalog.name_of(buy_id), price])
+
+# 가구 세트 — 해금 진실원은 **home_deco 한 곳**이다(야시장·목공방·보부상이 지키는 그 규율).
+func _try_buy_trial_deco(set_id: String) -> void:
+	if trial == null or home_deco == null or not HomeDecoCatalog.has_set(set_id):
+		return
+	if home_deco.is_unlocked(set_id):
+		_notice("%s 세트는 이미 해금했다" % HomeDecoCatalog.name_of(set_id))
+		return
+	var price := TrialGround.price_of(set_id)
+	if not trial.can_buy(set_id):
+		_notice("시련패가 모자라다 — %s 세트 %d패 (보유 %d패)" % [
+			HomeDecoCatalog.name_of(set_id), price, trial.tokens])
+		return
+	if trial.spend(set_id) <= 0:
+		return
+	home_deco.unlock(set_id)
+	audio.sfx("ui")
+	_notice("시련패로 %s 가구 세트를 바꿨다 −%d패" % [HomeDecoCatalog.name_of(set_id), price])
+
+# ══ ★[S10-T8 / ADR-0069 결정 11] 경지 — 만렙 초과 XP → 포인트 → 유물 ═══════════
+# main의 몫은 셋이다: ①5스킬 XP 스칼라를 원장에 넘겨 준다 ②숙련 탭에 경지 줄을 얹는다
+# ③수령 버튼이 눌리면 물건을 백팩에 넣고 원장에 적는다. **무대도 새 탭도 없다**(결정 11).
+
+# 5스킬 XP 스칼라 묶음(mastery.gd가 받는 유일한 입력). ★ 스킬 목록은 ProfessionCatalog 파생이라
+#   스킬이 늘면 여기 한 줄만 는다(분모 하드코딩 0 — `_skill_level` 스위치와 같은 규율).
+func _skill_xp_map() -> Dictionary:
+	return {
+		ProfessionCatalog.FARMING: _farming_xp,
+		ProfessionCatalog.FORAGING: _foraging_xp,
+		ProfessionCatalog.FISHING: _fishing_xp,
+		ProfessionCatalog.MINING: _mining_xp,
+		ProfessionCatalog.COMBAT: _combat_xp,
+	}
+
+# 5스킬 현재 레벨 묶음(개방 판정 입력). `_skill_level`이 이미 스킬별 파생의 단일 출처다.
+func _skill_level_map() -> Dictionary:
+	var out: Dictionary = {}
+	for s in ProfessionCatalog.SKILLS:
+		out[String(s)] = _skill_level(String(s))
+	return out
+
+# 지금 [경지]가 열렸나 = 5스킬 전부 만렙(결정 11). **UI 층의 게이트일 뿐** 기존 메카닉은 하나도
+# 이 뒤에 안 숨는다([ADR-0008] 평평≠막힘 — 유물을 0개 받아도 모든 동사가 100% 가동한다).
+func mastery_open() -> bool:
+	return Mastery.is_open(_skill_level_map())
+
+# 누적 만렙 초과 XP(포인트의 파생원 — 저장 상태 0).
+func mastery_overflow() -> int:
+	return Mastery.total_overflow(_skill_xp_map())
+
+# 숙련 탭 행에 얹을 경지 줄({} = 안 그림). 네 상태가 한 줄로 갈린다:
+#   ㉠ 미개방 — 아직 만렙이 아닌 스킬이 남았다(무엇이 남았나까지 말해 준다)
+#   ㉡ 수령 완료 — 이미 받은 유물 이름
+#   ㉢ 수령 가능 — 버튼이 선다(claimable)
+#   ㉣ 포인트 부족 — 다음 문턱까지 남은 초과 XP
+func _mastery_row(skill: String) -> Dictionary:
+	if mastery == null:
+		return {}
+	var art := Mastery.artifact_of(skill)
+	if art.is_empty():
+		return {}
+	var levels := _skill_level_map()
+	if not Mastery.is_open(levels):
+		# ★ 만렙 전에는 **아무 줄도 안 띄운다** — 다섯 행 전부에 "아직 못 연다"가 붙으면 패널이
+		#   잔소리가 된다. 층의 존재는 5스킬을 다 채운 사람에게만 조용히 드러난다.
+		return {}
+	var ov := mastery_overflow()
+	if mastery.has_claimed(skill):
+		return {"text": "[경지] %s — 수령함" % String(art["name"]), "claimable": false, "skill": skill}
+	if mastery.can_claim(skill, levels, ov):
+		return {"text": "[경지] 포인트 %d — 유물을 받을 수 있다" % mastery.available_points(ov),
+			"claimable": true, "skill": skill,
+			"artifact": String(art["name"]), "desc": String(art["desc"])}
+	var nxt := Mastery.next_threshold(ov)
+	if nxt <= 0:
+		return {"text": "[경지] %s — 포인트가 없다" % String(art["name"]), "claimable": false, "skill": skill}
+	return {"text": "[경지] %s — 다음 포인트까지 %d XP" % [String(art["name"]), nxt - ov],
+		"claimable": false, "skill": skill}
+
+# 수령 — 프레임 신호 핸들러. ★ **적재 먼저·기록 나중**: 백팩이 가득하면 원장에 안 적으므로
+#   다음에 다시 눌러도 그대로 기다린다(반딧넋 답례가 세운 그 규율 1:1).
+func _on_frame_mastery(skill: String) -> void:
+	if mastery == null or inventory == null:
+		return
+	if not mastery.can_claim(skill, _skill_level_map(), mastery_overflow()):
+		return
+	var art := Mastery.artifact_of(skill)
+	var rid := String(art["reward_id"])
+	var n := int(art["n"])
+	if not inventory.add_item(rid, n):
+		_notice("답례를 받을 자리가 없다 — 백팩을 비우고 다시 열자")
+		return
+	mastery.claim(skill)
+	_toast_item(rid, n)
+	audio.sfx("ui")
+	_notice("[경지] %s — %s ×%d" % [String(art["name"]), ItemCatalog.name_of(rid), n])
+	frame.set_skills(_skill_rows())   # 버튼이 바로 사라지고 줄이 "수령함"으로 갈린다
 
 # ── ★[S10-T1 / ADR-0069 결정 2] 결정기 ───────────────────────────────────────
 # 결정기를 놓을 수 있는 칸인가. **업화로 `_can_place_furnace`의 쌍둥이**다(판정이 한 줄도 안 갈린다 —
@@ -14925,6 +15300,9 @@ func _show_flavor(crop_id: String) -> void:
 # 그리므로 이중 표시 방지). 닫으면 되돌린다. 메뉴는 Tab 어디서든, 출하함은 facing_bin 우클릭,
 # 매대는 네오 레코드의 shop_key([F])가 부른다(위 _process 주민 입력 블록). 한 번에 한 컨텍스트만 열린다.
 func _open_frame(ctx: int) -> void:
+	# ★[S10-T8] 화폐 아이콘은 매대마다 다시 정한다(null = 엽전 폴백). [명부 시련장]만 [시련패]로
+	#   갈아 끼우므로, 여기서 먼저 되돌려 두면 시련장을 닫고 만물상을 열었을 때 표식이 안 샌다.
+	frame.store_coin = null
 	if ctx == InventoryFrame.CTX_STORE:
 		frame.store_text = _store_text()   # 첫 그림부터 매대 본문이 차 있게(한 프레임 빈 패널 방지)
 		frame.store_items = _store_items()   # ★ [S1R-T12] 첫 그림부터 품목 행이 차 있게
@@ -14938,6 +15316,8 @@ func _open_frame(ctx: int) -> void:
 		_refresh_night_market()            # ★[S7-T7] 저승 야시장(가구 세트 2 + 한정 물품 + 씨앗)
 	elif ctx == InventoryFrame.CTX_PEDDLER:
 		_refresh_peddler()                 # ★[S10-T3] 저승 보부상(일반 10 + 가구 1 + 희귀 1)
+	elif ctx == InventoryFrame.CTX_TRIAL:
+		_refresh_trial_shop()              # ★[S10-T8] 시련장 시련패 매대(레어크로우 ⑧ + 장식 + 편의)
 	frame.open(ctx)
 	hotbar.visible = false
 	player.set_physics_process(false)   # 모달 — 이동 잠금
@@ -15152,6 +15532,17 @@ func _on_frame_buy_store_item(buy_id: String, kind: String, bulk: bool) -> void:
 			return
 		"ped_item":
 			_try_buy_peddler_item(buy_id, STORE_BULK if bulk else 1)
+			return
+		# ★[S10-T8 / ADR-0069 결정 11] 명부 시련장 3종 — 화폐가 [시련패]라 지갑 경로를 아예 안 탄다.
+		#   ★ **대량 구매(Shift)를 받지 않는다**: 시련패는 주 3패씩만 들어오는 유한 화폐라 한 번의
+		#     오클릭이 몇 주치를 태울 수 있다(엽전과 달리 다시 벌 길이 시련 하나뿐이다).
+		#   ★ 리터럴 kind는 위 "fest_*"·"ped_*"와 같은 관례이고, 진실원은 `TrialGround.SHOP_*`이다
+		#     (trial_ground_test ⑤b가 두 쪽을 대조해 오타를 잡는다).
+		"trial_shop_deco":
+			_try_buy_trial_deco(buy_id)
+			return
+		"trial_shop_rarecrow", "trial_shop_item":
+			_try_buy_trial_item(buy_id)
 			return
 	_buy_store_generic_n(buy_id, kind, STORE_BULK if bulk else 1)
 
@@ -15855,6 +16246,37 @@ func _draw_guild_room() -> void:
 	draw_rect(Rect2(bd + Vector2(24.0, 20.0), Vector2(3.0, 10.0)), Color(0.30, 0.21, 0.13))
 	draw_rect(Rect2(bd + Vector2(2.0, 4.0), Vector2(28.0, 17.0)), Color(0.38, 0.28, 0.18))
 	draw_rect(Rect2(bd + Vector2(2.0, 4.0), Vector2(28.0, 3.0)), Color(0.50, 0.37, 0.23))
+
+# ★[S10-T8 / ADR-0069 결정 11] 명부 시련장 실내 그레이박스 — 시련 게시판 + 시련패 매대.
+#   길드와 같은 문법(암석 바닥 + 무인 창구 둘)이되 톤을 더 어둡게 눌렀다: 나락 심층에 붙은 방이라
+#   갱도 서비스 두 채(검댕 대장간 · 회백 길드)와 색으로도 갈려야 "여기는 다른 층"이 읽힌다.
+#   ★ 진열은 **전부 원장 파생**이다(저장 상태 0) — 게시판 쪽지는 수락 여부가, 매대 눈금은 시련패
+#     잔고가 그린다. 아트가 들어오면 프롭 훅으로 갈아 끼운다(T9 아트 패스).
+func _draw_trial_room() -> void:
+	if _indoor != "시련장":
+		return
+	_draw_mine_room_floor(TRIAL_RECT, Color(0.62, 0.58, 0.72, 1.0))
+	# 시련 게시판 — 만물상 게시판과 같은 실루엣(기둥 둘 + 판)이되 명부의 격식이라 먹빛이다.
+	var bp := Vector2(TRIAL_BOARD_TILE.x * TILE, TRIAL_BOARD_TILE.y * TILE)
+	draw_rect(Rect2(bp + Vector2(5, 20), Vector2(4, 12)), Color(0.22, 0.19, 0.24))    # 왼 기둥
+	draw_rect(Rect2(bp + Vector2(23, 20), Vector2(4, 12)), Color(0.22, 0.19, 0.24))   # 오른 기둥
+	draw_rect(Rect2(bp + Vector2(2, 4), Vector2(28, 18)), Color(0.30, 0.26, 0.34))    # 판
+	draw_rect(Rect2(bp + Vector2(2, 4), Vector2(28, 3)), Color(0.42, 0.37, 0.48))     # 상단 하이라이트(NW 광원)
+	if trial != null and trial.is_active():
+		# 수락 중 = 붉은 도장 한 장(만물상 게시판의 진행 표식과 같은 색 언어).
+		draw_rect(Rect2(bp + Vector2(11, 8), Vector2(10, 11)), Color(0.86, 0.84, 0.78))
+		draw_circle(bp + Vector2(16, 13), 3.0, Color(0.74, 0.24, 0.22))
+	elif trial != null and not _trial_offer().is_empty():
+		draw_rect(Rect2(bp + Vector2(11, 8), Vector2(10, 11)), Color(0.90, 0.88, 0.82))   # 걸린 시련 1장
+	# 시련패 매대 — 좌판 + 잔고 눈금(잔고가 없으면 테두리만 남아 "여기가 매대다"는 읽힌다).
+	var sp := Vector2(TRIAL_SHOP_TILE.x * TILE, TRIAL_SHOP_TILE.y * TILE)
+	draw_rect(Rect2(sp + Vector2(2, 10), Vector2(TILE - 4, TILE - 14)), Color(0.28, 0.25, 0.30))
+	draw_rect(Rect2(sp + Vector2(2, 10), Vector2(TILE - 4, 4)), Color(0.40, 0.36, 0.44))
+	var tok: int = trial.tokens if trial != null else 0
+	# 패는 5개 단위로 접어 그린다(잔고가 커도 한 칸을 안 넘게 — 안치대 등불과 같은 규율).
+	for i in mini(int(tok / 5), 10):
+		draw_circle(sp + Vector2(5.0 + float(i % 5) * 5.5, 8.0 - float(i / 5) * 5.0), 2.0,
+			Color(0.88, 0.80, 0.46, 0.9))
 
 # ★ [S2-T6] 만물상 앞 게시판 그레이박스 — 두 기둥 + 나무 판 + 걸린 의뢰 쪽지(게시 수만큼). 수락 중이면
 #   쪽지 하나가 붉은 도장으로 바뀐다(진행 중 표식). 좌표 상태 없음 — 전부 원장·day 파생이다.
@@ -16604,9 +17026,12 @@ func _skill_row(display_name: String, skill: String, xp: int) -> Dictionary:
 	for p in ProfessionCatalog.tier_profs(skill, pt):
 		if _can_choose_profession(skill, p["id"]):
 			options.append({"id": p["id"], "name": p["name"], "desc": p["desc"]})
+	# ★[S10-T8 / ADR-0069 결정 11] 경지 줄 — 5스킬 만렙 전에는 {}(프레임이 안 그린다). 스킬 행에
+	#   **얹히는** 것이지 새 탭이 아니라는 결정 11의 자구가 이 한 필드다.
 	return {"name": display_name, "level": lv, "max": FarmSkill.MAX_LEVEL, "xp": xp,
 		"floor_xp": floor_xp, "next_xp": next_xp,
-		"skill": skill, "profession": ", ".join(chosen), "pending_tier": pt, "options": options}
+		"skill": skill, "profession": ", ".join(chosen), "pending_tier": pt, "options": options,
+		"mastery": _mastery_row(skill)}
 
 # ★ Phase B 옵션 탭 핸들러 — 프레임은 신호만, 실제 저장·종료는 main이 수행(지갑·세이브 소유).
 # ★ ADR-0052 — 숙련 탭 전문직 선택 버튼 핸들러. choose_profession이 자격을 재검증(레벨/슬롯/부모)하므로
@@ -21030,6 +21455,7 @@ func _draw() -> void:
 				_draw_facade_guild()   # ★[S5-T9] 길드 외관(대장간과 나란히 — 톤을 정반대로 갈랐다)
 				_draw_smithy_room()  # ★[S4-T4] 대장간 실내 — 무인 업그레이드대·업화로(그레이박스)
 				_draw_guild_room()   # ★[S5-T6] 길드 실내 — 카운터·무기 걸이·빈 게시판(그레이박스)
+				_draw_trial_room()   # ★[S10-T8] 시련장 실내 — 시련 게시판·시련패 매대(그레이박스)
 		RegionCatalog.NARAK:
 			if _in_narak_floor():
 				_draw_narak_floor()  # ★[S5-T7] 런 층 그레이박스(나가는 사다리·구멍·광맥)
