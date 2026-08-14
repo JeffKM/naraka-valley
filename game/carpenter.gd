@@ -42,8 +42,17 @@ const PROJ_BIG_BARN := "big_barn"
 # ★[S8-T7 / ADR-0066 결정 8] 안방 확장 — 결혼 조건 "배우자 방"의 실물. 10,000냥+원목 300·2일은
 #   잠정(owner 큐 적재분). building=""(Ranch 무관 — 완공 실효는 main의 HOME 방 rect 확장 분기).
 const PROJ_MASTER_ROOM := "master_room"
+# ★[S10-T4 / ADR-0069 결정 6] 마구간 — **이 원장의 세 번째 항목**이다(결정 6 자구: "새 건축
+#   시스템을 만들지 않는다"). 안방 확장이 그랬듯 데이터 1건 추가가 전부이고, 완공 실효(휘파람
+#   증정)는 main의 완공 배선이 id 분기로 잇는다 — 원장은 여전히 "무엇을 언제 짓는가"만 안다.
+#   ★ 비용 10,000냥 + 원목 100 + **유철 주괴 5** · 공기 2일은 [ADR-0069] 결정 6의 잠정치다.
+const PROJ_STABLE := "stable"
 
 # id → {name_ko, gold, wood, days, building(Ranch 건물 id — "" = 건물 무관), desc}
+#   + ★[S10-T4] ingot/ingot_id(주괴 자재 — 키 없으면 0/"" = 요구 없음. 기존 3건은 무영향).
+#     원목 하나로 끝나던 자재 축에 주괴가 붙은 이유는 마구간이 **금속 부재를 쓰는 첫 건축**이기
+#     때문이다(경첩·재갈·편자). 필드를 옵션으로 둔 덕에 기존 프로젝트의 직렬화·매대·결제 경로가
+#     한 줄도 안 바뀐다(Ranch 티어가 `_tiers` 빈 dict로 구세이브를 흡수한 그 결).
 const PROJECTS := {
 	PROJ_BIG_COOP: {
 		"name_ko": "큰 넋둥우리", "gold": 10000, "wood": 400, "days": 2,
@@ -59,6 +68,12 @@ const PROJECTS := {
 		"name_ko": "안방 확장", "gold": 10000, "wood": 300, "days": 2,
 		"building": "",
 		"desc": "본가에 두 사람의 방을 들인다",
+	},
+	PROJ_STABLE: {
+		"name_ko": "마구간", "gold": 10000, "wood": 100, "days": 2,
+		"ingot": 5, "ingot_id": ItemCatalog.INGOT_YUCHEOL,
+		"building": "",
+		"desc": "저승 말이 머물 자리를 짓는다",
 	},
 }
 
@@ -95,6 +110,16 @@ static func wood_cost(id: String) -> int:
 
 static func build_days(id: String) -> int:
 	return int(PROJECTS[id]["days"]) if PROJECTS.has(id) else 0
+
+# ★[S10-T4] 주괴 요구량(0 = 요구 없음). 원목과 같은 이유로 **할인 대상이 아니다** — 할인은 값을
+#   깎는 정책이지 쇠를 덜 쓰게 하는 마법이 아니다(wood_cost 주석과 같은 결).
+static func ingot_cost(id: String) -> int:
+	return int(PROJECTS[id].get("ingot", 0)) if PROJECTS.has(id) else 0
+
+# 요구 주괴의 아이템 id("" = 요구 없음). 종을 데이터에 두는 이유는 다음 건축이 다른 주괴를
+# 쓸 수 있어서다 — 소비처(main)가 종을 하드코딩하면 그때 또 분기가 는다.
+static func ingot_id_of(id: String) -> String:
+	return String(PROJECTS[id].get("ingot_id", "")) if PROJECTS.has(id) else ""
 
 # 이 프로젝트가 승격시키는 Ranch 건물 id("" = 건물과 무관한 프로젝트).
 static func building_of(id: String) -> String:

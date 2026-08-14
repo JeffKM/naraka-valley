@@ -9,6 +9,11 @@ extends CharacterBody2D
 const SPEED := 160.0                # px/s. 환경 2배(TILE 32px)에 맞춰 2배 → 체감 속도(타일/초) 유지.
 const BODY_SIZE := Vector2(32, 64)  # 그레이박스 폴백 규격(환경 2배에 맞춤). 실사용은 도색 스프라이트.
 
+# ★[S10-T4 / ADR-0069 결정 6] 이동 속도 계수 — 승마 중에만 1.0이 아니다(Mount.speed_scale).
+# 주인은 main이고 여기는 곱하기만 한다: 이 노드는 탈것도 구역도 모른 채 "지금 몇 배로 걷나"만
+# 안다(SPEED 상수를 안 건드리는 이유 — 기본 보행 속도의 진실원은 여전히 그 const 하나다).
+var speed_scale := 1.0
+
 # 마지막으로 바라본 방향. 정지해도 유지되며, 방향 마커를 그리는 데 쓴다(이동 검증용).
 var _facing := Vector2.DOWN
 # P2.3② P2.1 도색 스프라이트. 있으면 그레이박스 대신 보여 주고 이동 시 워크 애니를 돌린다.
@@ -37,7 +42,7 @@ func _ready() -> void:
 func _physics_process(_delta: float) -> void:
 	# get_vector는 대각선 입력을 자동으로 정규화한다 → 대각선이 더 빨라지는 버그 방지.
 	var dir := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-	velocity = dir * SPEED
+	velocity = dir * SPEED * speed_scale
 	if dir != Vector2.ZERO and dir != _facing:
 		_facing = dir
 		queue_redraw()  # 방향이 바뀐 프레임에만 다시 그린다

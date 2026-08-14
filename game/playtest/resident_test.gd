@@ -131,12 +131,16 @@ func _run_checks() -> void:
 	#   "최고비용·마지막 추가"로 명문화한 자리)가 **강림 뒤, 주방요괴 앞**에 붙었다(의도적 불변식
 	#   개정). ★이로써 [narrative-bible] **T1 11인이 전원 무대에 섰다** — 조연 코러스 온보딩은
 	#   여기서 끝난다(남은 인물 층 작업은 T9 아트 패스뿐).
-	_check("③a 주민 20인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 · ★S9b-T1 깨비·켄 · ★S9b-T2 설화·스칼렛 · ★S9b-T3 미르·루카 · ★S9b-T4 프로스티 · ★S9b-T5 강림 · ★S9b-T6 세레나 · ★S6-T7 주방요괴 추가)",
-		m._residents.size() == 20)
-	_check("③b 20인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골·깨비·켄·설화·스칼렛·미르·루카·프로스티·강림·세레나·주방요괴",
+	# ★[S10-T4 / ADR-0069 결정 12] 20 → 21: **동행 혼**이 세레나 뒤, 주방요괴 앞에 붙었다(의도적
+	#   불변식 개정 — 조연 등재의 확립 자리 그대로). 조연 코러스가 아니라 *가정의 층*이라 인물
+	#   로스터가 늘어난 것이 아니고, 관계 트랙 0이라 아래 ⑧a(관계 탭 파생)는 **무영향**이다.
+	#   ⚠️ 그럼에도 ③a·③b는 파생이 아니라 **사본**이라 여기서 함께 고친다(S9b-T3 전례의 이행).
+	_check("③a 주민 21인 등록(★T8 모찌 · ★S3-T5 뱃사공 · ★S4-T7 옹이 · ★S5-T3 풀무 · ★S5-T6 무골 · ★S9b-T1 깨비·켄 · ★S9b-T2 설화·스칼렛 · ★S9b-T3 미르·루카 · ★S9b-T4 프로스티 · ★S9b-T5 강림 · ★S9b-T6 세레나 · ★S10-T4 동행 혼 · ★S6-T7 주방요괴 추가)",
+		m._residents.size() == 21)
+	_check("③b 21인 = 미호·멜·바나·네오·옥자·모찌·뱃사공·옹이·풀무·무골·깨비·켄·설화·스칼렛·미르·루카·프로스티·강림·세레나·동행 혼·주방요괴",
 		ids == ["miho", "mel", "bana", "neo", "okja", "mochi", "boatman", "ongi", "pulmu",
 			"mugol", "kkaebi", "ken", "seolhwa", "scarlet", "mir", "luca", "frosty", "gangrim",
-			"serena", "kitchen_youkai"])
+			"serena", "soul_child", "kitchen_youkai"])
 	_check("③c id 조회", m._resident("mel") != null and m._resident("mel").display_name == "멜")
 	_check("③d 이름 조회", m._resident_named("바나") != null and m._resident_named("바나").id == "bana")
 	_check("③e 없는 id/이름 = null", m._resident("없음") == null and m._resident_named("없음") == null)

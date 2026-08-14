@@ -1595,6 +1595,16 @@ const CAFE_OUT_TILE := CAFE_EXT_DOOR + Vector2i(0, 1)    # 외관 카페 문 앞
 #   게시판은 마을 광장 한복판이라 SOLID가 동선의 일부지만, 여기는 집 앞 여백이다).
 const MAILBOX_TILE := Vector2i(46, 10)
 
+# ── ★[S10-T4 / ADR-0069 결정 7] 삽사리 자리 — 집 앞 마당 ──────────────────────
+# 우편함(46,10)과 **정확히 같은 결**의 야외 [F] 창구 둘이다: 좌표 상수 + `_region==HOME` ∧
+# `_indoor==""` 가드 + 그레이박스 즉시모드 드로잉(아트는 T9 몫이라 레이아웃 밖에 산다).
+# ★ 자리 (44,12)·(45,12) = 우편함에서 남서로 두 칸. 집 앞 여백이라 길·밭·프롭 어느 것과도 안
+#   겹치고(집 앞 프롭은 (42,11)·(46,11)·(46,14)), 두 칸이 나란해 "개와 그릇"이 한눈에 읽힌다.
+# ★ **SOLID로 만들지 않는다**(우편함과 같은 판단) — 야외 프롭을 충돌체로 세우면 길·스캐터·
+#   pathing 회귀 면적이 늘어난다. [F]는 `_target` 일치로 서므로 통과 가능해도 지장이 없다.
+const PET_TILE := Vector2i(44, 12)        # 삽사리가 앉아 있는 칸([F] = 쓰다듬 1/일)
+const PET_BOWL_TILE := Vector2i(45, 12)   # 물그릇 칸([F] = 채우기 1/일)
+
 # ── ★ C2 — 안식 농원 전용 집 실내(HOME 밴드 y67+) ─────────────────────────────
 # HOME outdoor_h이 24→65로 커져, 공유 HOUSE_RECT(y26 띠)는 이제 HOME *외부*(밭/여백)와 충돌한다.
 # → HOME 집 실내만 HOME 밴드(y65~92)로 분리: HOUSE_*(y26)에 +41(=65-24)을 더한 좌표. 내부 레이아웃
@@ -1617,6 +1627,12 @@ const HOME_HOUSE_CAM_RECT_EXPANDED := Rect2i(2, 65, 26, 13)  # x2..27 (동쪽 �
 # 바라보며(facing_chest) 우클릭으로 상자 패널을 연다. 집 바닥(HOUSE, 걷기 O)이라 좌표만 정하면 되고(충돌
 # 없는 순수 배치 — 상태는 chest 노드가 든다), _indoor=="집"으로 가드해 다른 구역 같은 좌표엔 무반응.
 const CHEST_TILE := Vector2i(11, 68)
+
+# ★[S10-T4 / ADR-0069 결정 12] 동행 혼 상주 칸 — 집 방 한복판(x9..18 · y69..74 중 (16,72)).
+# **스케줄 없음·집 고정**(결정 12 자구)이라 자리가 하나뿐이고, 그래서 스케줄 배열도 1항목이다.
+# 북벽 가구 열(y68)·침대(11,71)·탁자(12,72)·문(13·14,75)·배우자 자리(22,71) 어느 것과도 안 겹친다.
+const SOUL_CHILD_TILE := Vector2i(16, 72)
+const SOUL_CHILD_RID := "soul_child"      # 주민 레코드 id(레지스트리 조회의 단일 출처)
 
 # ★[S7-T4 / ADR-0065 결정 6] 점괘 거울 칸 — 집 실내 **북벽 flush**. 북벽 가구는 침대(9) · 상자(11) ·
 # 벽난로(12..13) · 책장(15..16) · 화분(18)이 이미 물고 있어 남는 칸이 10·14·17뿐이고, 그중 17을
@@ -2352,6 +2368,13 @@ var tool_tier: ToolTier = null
 #   같은 RefCounted 순수 원장이고, **지불·완공 실효는 전부 main**이 든다 — 여기(main)가 골드·원목을
 #   차감하고, 완공된 프로젝트 id로 Ranch 정원을 승격시킨다(Carpenter는 지갑·인벤·Ranch를 모른다).
 var carpenter: Carpenter = null
+# ★[S10-T4 / ADR-0069 결정 6·7] 코지 동반자 두 원장(RefCounted — Carpenter와 같은 결).
+#   · mount = 저승 말 「먹갈기」 승마 상태(bool 하나). 속도는 player.speed_scale로 흘려넣고,
+#     실내·컷신·전투 무대 하차 강제는 매 프레임 `mount.enforce`가 본다.
+#   · pet = 삽살개 「삽사리」 우정. 만점이면 [명부의 운] **하한** 보정이 켜진다(_pet_luck_floor).
+#   두 원장 다 지갑·인벤·구역·플레이어를 모른다 — 증정·소환·[F]·그리기가 전부 여기(main)다.
+var mount: Mount = null
+var pet: Pet = null
 # ★[S5-T1 / ADR-0063 결정 1] 갱도 층 원장(60층·3밴드·day-한정 채굴 기록·도달 최심층). ForageSpawns·
 #   TreeLedger와 같은 RefCounted 순수 원장이고, **층을 실제 그리드로 세우는 것은 전부 main**이 든다
 #   (MineFloors는 타일 id·충돌·혼력·인벤을 모른다 — 논리 좌표 위의 방·돌·사다리만 안다).
@@ -2892,6 +2915,27 @@ var _wedding_day := 0
 # 경로에서도 방어로 적는다(키 도입 전에 결혼한 구세이브가 이혼하면 혼례 기록이 없다).
 # 세이브 가법 키 1개("ever_married") — 구세이브 = 빈 원장 = 초혼(하위호환).
 var _ever_married: Dictionary = {}
+# ── ★[S10-T4 / ADR-0069 결정 12] 동행 혼 — 혼례 결속에서 깃드는 작은 새 혼 ──────────
+# [ADR-0032] 결정 4의 이행이자 CONTEXT [동행 혼]의 실물. 상태는 **두 조각뿐**이다:
+#   · `_soul_due_day` = 형상화 예정 아침(0 = 예정 없음). 혼례 아침에 day+14로 선다.
+#   · `_soul_born`    = 이미 깃들었는가(**되돌아가지 않는 축**).
+# ★ **최대 1**(2호는 서랍): `_soul_born`이 true면 예정이 다시 서지 않는다 — 재혼해도 늘지 않는다.
+# ★ **이혼 시 잔류**([ADR-0022] 자녀 잔류 자구 그대로): `_do_divorce`가 `_soul_born`을 안 건드린다.
+#   다만 *아직 안 깃든 예정*은 접는다 — 결속에서 깃드는 존재라 결속이 풀리면 예정도 함께 풀린다
+#   (재혼하면 그 혼례 아침에 새로 14일이 선다).
+# ★ **옥자 혼인 포함**(결정 12): 예정을 세우는 자리가 `_advance_wedding` 하나라 앵커와의 혼례도
+#   같은 줄을 지난다 — 분기가 없다는 것이 곧 "두 경로 모두 커버"의 구현이다.
+# 세이브 가법 키 2개("soul_due_day"·"soul_born") — 구세이브 = 예정 없음·미탄생(하위호환).
+const SOUL_CHILD_WAIT_DAYS := 14        # 혼례 → 형상화 대기(잠정 — ADR-0069 결정 12)
+var _soul_due_day := 0
+var _soul_born := false
+# 탄생 컷신 발동 예약 — B4·B7과 **완전히 같은 두 단계**다(아침 훅이 판정하고 취침 연출이 끝나는
+# 프레임에 재생한다). 아침 훅은 fade 트윈이 화면을 덮은 한가운데라 거기서 틀면 러너와 트윈이
+# 같은 알파를 서로 덮어쓴다(`_arm_spine_b4` 머리말의 그 함정). 세이브 무상태(로드 = 예약 없음).
+var _soul_birth_armed := false
+# ★[S10-T4 / ADR-0069 결정 7] 삽사리 획득 이벤트 예약 — 나루 마을에 들어선 프레임에 서고,
+#   워프 연출(fade)이 완전히 걷힌 마지막 콜백에서 소비된다(위 두 단계와 같은 이유). 세이브 무상태.
+var _pet_event_armed := false
 # ★[S8-T8] 이혼 확정 대기 래치 — 옥자 [F] 1타 = 경고·2타 = 결행(50,000냥 + ♡0 리셋은 오타 한
 # 번에 치르기엔 너무 크다). 옥자에게서 시선을 떼면 접힌다(_process가 리셋 — 세이브 무상태).
 var _divorce_armed := false
@@ -2990,6 +3034,8 @@ func _ready() -> void:
 	tool_tier.changed.connect(_on_tool_tier_changed)   # 티어↑ → 프롬프트 타수·물뿌리개 용량 배지 갱신
 	carpenter = Carpenter.new()          # ★[S4-T7] 목공방 건축 의뢰 원장(RefCounted — 도구 티어와 같은 결)
 	carpenter.changed.connect(queue_redraw)   # 의뢰·완공·복원 시 매대 행·목공방 그레이박스 갱신
+	mount = Mount.new()                  # ★[S10-T4] 탈것 승마 상태(RefCounted — 시그널 없음: 상태가 bool 하나)
+	pet = Pet.new()                      # ★[S10-T4] 삽사리 우정 원장(RefCounted — 그리기는 main의 _draw)
 	mine_floors = MineFloors.new()       # ★[S5-T1] 갱도 층 원장(RefCounted — 채집물 스폰 원장과 같은 결)
 	mine_floors.changed.connect(queue_redraw)   # 채굴·사다리 개통·깊이 갱신·복원 시 층 그레이박스 갱신
 	narak_floors = NarakFloors.new()     # ★[S5-T7] 나락 런 원장(RefCounted — 로드/세이브 없음: 런 한정)
@@ -3048,6 +3094,9 @@ func _ready() -> void:
 	# T6.1 바나는 밤에만 등장한다(시각에서 파생되는 무상태 배치) — 자리는 _setup_residents가
 	# 잡았고 여기선 첫 프레임 전까지의 초기 가시성만 끈다(visible_rule이 매 프레임 갱신한다).
 	bana.visible = false
+	# ★[S10-T4] 동행 혼도 같은 결 — 첫 프레임 전에 몸을 상태에 맞춘다(빈 집에 아이가 한 프레임
+	#   서 있거나, 이미 깃든 세이브에서 아이가 한 프레임 사라지는 일이 없게).
+	_refresh_soul_child_body()
 	dialogue.changed.connect(_on_dialogue_changed)
 	dialogue.finished.connect(_on_dialogue_finished)
 	dialogue.choice_shown.connect(_on_dialogue_choice_shown)   # ★[S9-T1] 선택지 표기(줄 불변 재렌더)
@@ -9559,12 +9608,22 @@ func _on_day_advanced(day: int) -> void:
 			#   deco bounds 재주입·카메라)는 일괄 헬퍼가 진다(원장은 "다 지어졌다"까지만 안다).
 			_refresh_home_expansion()
 			_notice("안방 확장 완공 — 본가가 넓어졌다")
+		elif built == Carpenter.PROJ_STABLE:
+			# ★[S10-T4 / ADR-0069 결정 6] 마구간 완공 = **휘파람 증정**. 원장은 "다 지어졌다"까지만
+			#   알고, 그 실효(소환 도구를 손에 쥐여 주는 일)는 안방 확장과 정확히 같은 자리에서
+			#   id 분기 하나로 붙는다 — 새 건축 시스템이 0인 이유가 이 elif 한 줄이다.
+			#   가방이 꽉 차 있어도 잃지 않는다: 못 넣으면 다음 아침 정산이 다시 시도한다(아래 훅).
+			_grant_mount_whistle()
 		elif built != "":
 			var bld := Carpenter.building_of(built)
 			if bld != "" and ranch != null:
 				ranch.upgrade_building(bld)
 			_notice("%s 완공 — 이제 %d마리까지 들일 수 있다" % [Carpenter.name_of(built),
 				ranch.capacity_of(bld) if bld != "" and ranch != null else 0])
+		# ★[S10-T4] 휘파람 재지급 훅 — 멱등이라 매일 불러도 공짜다(이미 들고 있으면 즉시 false).
+		#   완공 아침에 가방이 꽉 차 증정이 밀렸거나, 어떤 경로로든 휘파람이 사라진 세이브를
+		#   **다음 아침이 스스로 복구한다**(마구간을 지었는데 말을 못 부르는 봉쇄가 남지 않게).
+		_grant_mount_whistle()
 	# ★ [S2-T6] 게시판 의뢰 만료 — 기한(일일 2일 / 중기 그 주 끝)이 지난 수락분을 조용히 버린다.
 	#   페널티는 없다(골드·호감도 불변 — ADR-0060 결정 6 "미완료 무페널티"). 알림도 벌칙이 아니라
 	#   "자리가 다시 비었다"는 안내다(ADR-0008 평평≠막힘).
@@ -9577,6 +9636,11 @@ func _on_day_advanced(day: int) -> void:
 	# ★[S8-T7 / ADR-0066 결정 8] 혼례 아침 — 청혼 수락 3일 뒤 예정일에 닿으면 식을 올린다
 	#   (간이 연출 = 알림 배너·연출 등급은 S9). 상태 전이(spouse_id)와 이주(HOME 스테이션)가 전부다.
 	_advance_wedding(day)
+	# ★[S10-T4 / ADR-0069 결정 12] 동행 혼 탄생 판정 — 혼례 아침이 세워 둔 예정일(+14일)에 닿았으면
+	#   이 아침에 틀겠다고 예약한다(재생은 취침 연출이 끝나는 프레임 — `_arm_soul_birth` 머리말).
+	#   **`_advance_wedding` 뒤**에 둔다: 오늘이 혼례 아침이면 예정이 방금 섰을 뿐이라 아직 멀고,
+	#   순서를 뒤집어도 결과는 같지만 "혼례가 먼저, 그 14일 뒤가 이것"이라는 읽는 순서가 맞다.
+	_arm_soul_birth(day)
 	# ★[S9b-T4 / ADR-0068 결정 7] 척추 B4(공허 직면) 판정 — 프로스티 ♡3 관문을 본 뒤 맞는 첫
 	#   아침이면 이 아침에 틀겠다고 예약한다. **재생은 취침 연출이 끝나는 프레임**이다
 	#   (`_fire_spine_b4` — 이 훅이 화면이 검게 덮인 연출 한가운데라서. 함수 머리말 참조).
@@ -10406,7 +10470,11 @@ func _warp(to_region: String, new_indoor: String, dest_tile: Vector2i) -> void:
 	tw.tween_callback(func() -> void:
 		_transitioning = false
 		if not _run_over:
-			player.set_physics_process(true))
+			player.set_physics_process(true)
+		# ★[S10-T4 / ADR-0069 결정 7] 삽사리 마을 이벤트 — **fade가 완전히 걷힌 뒤**에 소비한다
+		#   (예약은 위 콜백의 `_rebuild_region`이 세운다). 트윈 한가운데서 띄우면 진입 암전과
+		#   겹쳐 알림이 검은 화면 뒤에서 흘러간다(B4 예약/재생 분리와 같은 이유).
+		_fire_pet_event())
 
 # 건물 문 = 같은 구역 안의 특수 워프(구역 불변, 실내 모드만 토글). 기존 호출부(_maybe_toggle_
 # building)·테스트(building_test)가 그대로 이 시그니처를 쓴다 — "문=특수 워프"(_warp에 위임).
@@ -10435,6 +10503,8 @@ func _rebuild_region(to_region: String) -> void:
 		_front_props.queue_redraw()
 	if to_region == RegionCatalog.HOME:
 		_repaint_field_overlays()      # 안식 농원으로 복귀 → 밭 고랑·작물 오버레이 복원
+	# ★[S10-T4 / ADR-0069 결정 7] 삽사리 마을 이벤트 예약(재생은 워프 트윈의 마지막 콜백).
+	_arm_pet_event(to_region)
 	# ★ [S3-T2] 구역이 바뀌면 진행 중이던 캐스팅은 버린다(세션은 이 무대에 묶인 일시 상태).
 	fishing = null
 	# ★[S3-T5] 옛 구역 진입 자동 지급(`_grant_starter_rod`)은 **폐기**됐다 — T1 낚싯대는 이제
@@ -10484,6 +10554,10 @@ func _on_sleep_done() -> void:
 	#   튼다(B4와 완전히 같은 두 단계). B4가 이미 재생 중이면 `_fire_spine_b7`이 조용히 접는다 —
 	#   두 비트가 같은 아침에 설 수 있는 조합은 없지만(B4는 B7보다 한참 앞이다) 가드는 둔다.
 	_fire_spine_b7()
+	# ★[S10-T4 / ADR-0069 결정 12] 동행 혼 탄생 — 아침 훅이 예약해 둔 형상화 컷신을 같은 프레임에
+	#   튼다(B4·B7과 같은 두 단계). 척추 둘이 이미 재생 중이면 `_fire_soul_birth`가 조용히 접고
+	#   다음 아침에 다시 예약된다 — 이 층은 B7 *이후*라 실제로 겹칠 조합은 없다(결정 12).
+	_fire_soul_birth()
 	# T2.5 스타듀식 자동 저장: 한 날이 끝나 잠들 때마다 진행을 보존한다.
 	_save_game()
 
@@ -10519,6 +10593,8 @@ func _save_game() -> void:
 		"crystalarium": crystalarium.to_save(),   # ★[S10-T1] 결정기(구역별 좌표·든 보석·남은 일수)
 		"tool_tiers": tool_tier.to_save(),  # ★[S4-T4] 도구 티어(도끼 실효 + 곡괭이/괭이/물뿌리개 키 예약)
 		"carpenter": carpenter.to_save(),   # ★[S4-T7] 목공방 건축 의뢰(진행 1건 + 완공 이력 — 정원 승격은 ranch에)
+		"mount": mount.to_save(),           # ★[S10-T4] 승마 상태(bool 하나 — 휘파람 보유는 인벤이 든다)
+		"pet": pet.to_save(),               # ★[S10-T4] 삽사리 우정(입양·우정·오늘 쓰다듬/물그릇)
 		"mine": mine_floors.to_save(),      # ★[S5-T1] 갱도 층 원장(도달 최심층=영구 + day-한정 채굴·사다리 기록)
 		"mine_floor": _mine_floor,          # ★[S5-T1] 지금 있는 층(0=지상 — region/indoor와 같은 '있던 자리' 축)
 		"home_deco": home_deco.to_save(),   # ★ [S1-9] 집 꾸미기 3레이어 배치 + 해금 세트(세이브별 코스메틱 델타)
@@ -10584,6 +10660,10 @@ func _save_game() -> void:
 		"spouse_id": _spouse_id,                   # ★[S8-T7] 배우자("" = 미혼). 방 확장은 carpenter done 파생이라 키 없음
 		"wedding_day": _wedding_day,               # ★[S8-T7] 예정된 혼례 아침(0 = 없음)
 		"ever_married": _ever_married.duplicate(), # ★[S8-T8] 재혼 면제 원장(이혼에도 잔존하는 별도 축)
+		# ★[S10-T4 / ADR-0069 결정 12] 동행 혼 — 예정 아침 + 탄생 여부. 예약(_soul_birth_armed)은
+		#   취침 사슬 한정이라 저장하지 않는다(척추 B4·B7 예약과 같은 규약).
+		"soul_due_day": _soul_due_day,
+		"soul_born": _soul_born,
 		"selected_crop": _selected_crop,
 		# M1.5 — 현재 구역·실내 모드·플레이어 위치(껐다 켜도 '있던 자리'에서 재개). region은
 		# 영문 id(RegionCatalog 키, 가볍고 안정적), indoor는 ""/건물 id(_buildings 키), 위치는 타일 좌표.
@@ -10672,6 +10752,11 @@ func _load_game() -> void:
 		tool_tier.load_save(data["tool_tiers"])
 	if data.has("carpenter"):     # ★[S4-T7] — 키 없는 구세이브는 진행 의뢰 0·완공 0(하위호환)
 		carpenter.load_save(data["carpenter"])
+	# ★[S10-T4] 탈것·펫 — 키 없는 구세이브는 안 탄 상태·미입양(하위호환. 아무것도 안 막힌다).
+	if data.has("mount") and mount != null:
+		mount.load_save(data["mount"])
+	if data.has("pet") and pet != null:
+		pet.load_save(data["pet"])
 	if data.has("mine"):          # ★[S5-T1] — 키 없는 구세이브는 도달 깊이 0·채굴 기록 0(지상 시작·무막힘)
 		mine_floors.load_save(data["mine"])
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
@@ -10772,6 +10857,10 @@ func _load_game() -> void:
 	#   아니다 — 컷신 러너·B5 세션과 같은 결). 에필로그는 1회성이라 되살아나면 안 되고, 그 1회성의
 	#   진실원은 플래그가 아니라 **B7 비트**다(이미 선 비트는 다시 안 서고, 그래서 화면도 안 뜬다).
 	_spine_b7_armed = false
+	# ★[S10-T4] 동행 혼 탄생·삽사리 획득 예약도 같은 이유로 0에서 시작한다(연출은 세이브 대상이
+	#   아니다). 예정일이 이미 지난 세이브를 불러도 **다음 아침 훅**이 다시 예약하므로 유실 0이다.
+	_soul_birth_armed = false
+	_pet_event_armed = false
 	_spine_say.clear()
 	_illust_id = ""
 	_illust_a = 0.0
@@ -10804,6 +10893,14 @@ func _load_game() -> void:
 	for k in em:
 		if bool(em[k]):
 			_ever_married[String(k)] = true
+	# ★[S10-T4 / ADR-0069 결정 12] 동행 혼 복원(구세이브 = 예정 없음·미탄생 — 하위호환).
+	#   이미 깃들었으면 예정은 의미가 없으므로 0으로 정리한다(최대 1의 불변식을 로드에서 재보증 —
+	#   손상 세이브가 "태어났는데 또 예정이 잡혀 있다"를 실어도 2호가 서지 않는다).
+	_soul_born = bool(data.get("soul_born", false))
+	_soul_due_day = maxi(int(data.get("soul_due_day", 0)), 0)
+	if _soul_born:
+		_soul_due_day = 0
+	_refresh_soul_child_body()   # 이미 깃든 세이브면 부팅 첫 프레임부터 몸이 서 있어야 한다
 	_jealousy = {}
 	var jz: Dictionary = data.get("jealousy", {})
 	for k in jz:
@@ -11316,6 +11413,10 @@ func _process(delta: float) -> void:
 	# ★[S5-T3 / ADR-0063 결정 3] 업화로 제련 진행 — 흐른 게임 분을 원장에 흘린다. 입력 가드보다
 	#   **먼저** 둔다: 대화·모달·취침 연출 중에도 시계가 흐르면 화덕은 계속 돌아야 한다(스타듀 정합).
 	_tick_furnaces()
+	# ★[S10-T4 / ADR-0069 결정 6] 승마 동기화 — 속도 계수 대입 + 못 타는 자리 강제 하차.
+	#   입력 가드보다 **먼저** 둔다: 컷신·대화·취침 연출 중에 실내로 옮겨지는 경로(컷신 워프·
+	#   기절 퇴장)가 있어서, 가드 아래 두면 그 프레임들 동안 말을 탄 채로 실내에 서 있게 된다.
+	_sync_mount()
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
@@ -11840,6 +11941,15 @@ func _process(delta: float) -> void:
 			and Input.is_action_just_pressed("shop_toggle"):
 		_use_crystalarium(_target)
 		return
+	# ★[S10-T4 / ADR-0069 결정 7] 삽사리(F) — 쓰다듬 1/일. 우편함과 같은 결의 야외 [F] 창구라
+	#   구역·실내 가드가 판정 함수 안에 있다(집 앞 여백이라 다른 창구와 칸이 안 겹친다).
+	if _facing_pet() and Input.is_action_just_pressed("shop_toggle"):
+		_pet_sapsari()
+		return
+	# ★[S10-T4] 물그릇(F) — 채우기 1/일. 삽사리 바로 옆 칸이라 같은 자리에서 두 손짓이 이어진다.
+	if _facing_pet_bowl() and Input.is_action_just_pressed("shop_toggle"):
+		_fill_pet_bowl()
+		return
 	# T5.4 → ★S6-T2 손님 서빙(RMB): 기다리는 손님 좌석을 바라보며. 손님이 시킨 메뉴가 융합이고
 	# 곳간에 재료가 있으면 곳간 1개를 먹고 프리미엄가, 아니면 무재료 기본 메뉴로 정액가(무막힘).
 	# ★[S6-T5 / ADR-0064 결정 5] 체키 제안 수락(RMB) — **서빙보다 먼저** 잡는다. 제안 창(6초)이 손님
@@ -12023,6 +12133,13 @@ func _process(delta: float) -> void:
 		if _is_narak_exit(nhere):
 			_exit_narak_run()
 			return
+	# ★[S10-T4 / ADR-0069 결정 6] 휘파람(F) — **[F] 사슬의 맨 끝**이다. 위 모든 창구가 먼저 자기
+	#   [F]를 가져가고 아무도 안 집었을 때만 말을 부른다(든 물건이 창구를 이기지 않는다는 규약 —
+	#   휘파람을 든 채 우편함 앞에 서면 편지가 열리는 것이 맞다). 한 번 = 소환·승마, 두 번 = 하차.
+	if not _sleeping and mount != null and inventory.selected_id() == ItemCatalog.MOUNT_WHISTLE \
+			and Input.is_action_just_pressed("shop_toggle"):
+		_toggle_mount()
+		return
 	if _in_narak_floor() and not _sleeping and _is_narak_rock(_target) \
 			and Input.is_action_just_pressed("use_tool"):
 		_narak_rock(_target)
@@ -12300,6 +12417,15 @@ func _process(delta: float) -> void:
 			interact_prompt.text = "[F] 우편함 — 읽지 않은 편지 %d통" % unread
 		else:
 			interact_prompt.text = "우편함 — 새 편지가 없다"
+	elif _facing_pet():
+		# ★[S10-T4] 삽사리를 바라볼 때. 오늘 몫을 이미 받았는지 문구가 먼저 말한다(우편함 결).
+		interact_prompt.visible = true
+		interact_prompt.text = ("[F] 삽사리를 쓰다듬는다 — %s" % pet.summary()) \
+			if pet.can_pet(clock.day) else ("삽사리 — 오늘 인사는 받았다 · %s" % pet.summary())
+	elif _facing_pet_bowl():
+		interact_prompt.visible = true
+		interact_prompt.text = "[F] 물그릇을 채운다" if pet.can_fill_bowl(clock.day) \
+			else "물그릇 — 아직 가득하다"
 	elif facing_bookshelf:
 		# ★[S9-T7] 책장을 바라볼 때. 누르기 전에 무엇이 있는지 문구가 먼저 말한다(우편함 결).
 		interact_prompt.visible = true
@@ -12564,6 +12690,16 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] %s 세우기 (반경 %d칸 까마귀 방어)" % [
 			ItemCatalog.name_of(inventory.selected_id()), _scarecrow_radius()]
+	elif mount != null and inventory.selected_id() == ItemCatalog.MOUNT_WHISTLE:
+		# ★[S10-T4] 휘파람을 든 채 — **프롬프트 사슬의 맨 끝**이다(입력 사슬과 같은 자리·같은 이유:
+		#   든 물건이 창구를 이기지 않는다). 못 타는 자리에서는 왜 못 타는지를 먼저 말한다.
+		interact_prompt.visible = not _sleeping
+		if mount.is_mounted():
+			interact_prompt.text = "[F] 먹갈기에서 내리기"
+		elif Mount.ride_allowed(_indoor, _region, cutscene != null, _narak_depth):
+			interact_prompt.text = "[F] 휘파람 — 먹갈기를 부른다 (이동 %.1f배)" % Mount.SPEED_SCALE
+		else:
+			interact_prompt.text = "먹갈기는 바깥에서 기다린다 — 여기서는 탈 수 없다"
 	else:
 		# 밭 칸을 바라볼 때만 안내. 든 도구·칸 상태로 동사를 파생한다(LMB 도구질 / RMB 맨손 수확).
 		var prompt := _farm_prompt()
@@ -15609,7 +15745,7 @@ func _build_rows() -> Array:
 			"kind": "build", "buy_id": pid, "icon_id": ItemCatalog.WOOD,
 			# 공기(工期)는 이름에 안 넣는다 — 넣으면 행이 길어져 가격·상태 칸과 겹친다(육안 덤프 실측).
 			#   대신 헤더가 상시 안내하고(_woodshop_text), 의뢰 직후 알림이 정확한 날짜를 다시 말한다.
-			"name": "%s (원목 %d)" % [Carpenter.name_of(pid), wood],
+			"name": _build_row_name(pid, wood),
 			"price": StoreDiscount.price(gold, hearts), "base": gold,
 		}
 		if carpenter.is_done(pid):
@@ -15621,6 +15757,15 @@ func _build_rows() -> Array:
 			row["locked_text"] = "짓는 중" if carpenter.active_id() == pid else "대기"
 		rows.append(row)
 	return rows
+
+# ★[S10-T4] 행 이름 = "이름 (원목 N)" 또는 "이름 (원목 N · 주괴 M)". 주괴를 요구하지 않는
+#   프로젝트는 **문자열이 한 글자도 안 바뀐다**(기존 3건의 매대 표시 회귀 0).
+func _build_row_name(pid: String, wood: int) -> String:
+	var ingot := Carpenter.ingot_cost(pid)
+	if ingot <= 0:
+		return "%s (원목 %d)" % [Carpenter.name_of(pid), wood]
+	return "%s (원목 %d · %s %d)" % [Carpenter.name_of(pid), wood,
+		ItemCatalog.name_of(Carpenter.ingot_id_of(pid)), ingot]
 
 # 가구·자재 탭 품목 행 — 판매 가구 세트(해금 구매) + 원목 소매 1행.
 # ★[CONTEXT 집 꾸미기] "제작(재료) 게이트는 안 둔다" — 세트는 **골드 단독**이고 재료 요구가 0이다.
@@ -15723,19 +15868,35 @@ func _try_order_build(project_id: String) -> bool:
 	var gold := StoreDiscount.price(Carpenter.gold_cost(project_id), _ongi_hearts())
 	var wood := Carpenter.wood_cost(project_id)
 	var have := inventory.count_of(ItemCatalog.WOOD)
+	# ★[S10-T4 / ADR-0069 결정 6] 주괴 자재(마구간 = 유철 주괴 5). 요구가 0인 프로젝트는 아래
+	#   검사·차감이 통째로 통과라 기존 3건의 결제 경로가 바이트 단위로 불변이다.
+	var ingot_id := Carpenter.ingot_id_of(project_id)
+	var ingot := Carpenter.ingot_cost(project_id)
+	var have_ingot := inventory.count_of(ingot_id) if ingot > 0 else 0
 	if wallet.gold < gold:
 		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [Carpenter.name_of(project_id), gold, wallet.gold])
 		return false
 	if have < wood:
 		_notice("원목이 모자라다 — %d개 필요 (보유 %d개)" % [wood, have])
 		return false
+	# ★ 자재 검사는 **전부 차감 앞**에 모아 둔다 — 부분 결제 없음의 계약(함수 머리말)이라,
+	#   주괴가 모자란 걸 골드 차감 뒤에 알면 그 계약이 깨진다.
+	if ingot > 0 and have_ingot < ingot:
+		_notice("%s가 모자라다 — %d개 필요 (보유 %d개)" % [ItemCatalog.name_of(ingot_id),
+			ingot, have_ingot])
+		return false
 	if not wallet.spend(gold):
 		return false                       # 방어(위 검사와 이중) — 실패해도 원목은 아직 안 건드렸다
 	inventory.remove_item(ItemCatalog.WOOD, wood)
+	if ingot > 0:
+		inventory.remove_item(ingot_id, ingot)
 	carpenter.order(project_id, clock.day)
 	audio.sfx("ui")
-	_notice("%s 의뢰 — %d냥·원목 %d 지불, %d일 뒤 아침 완공" % [Carpenter.name_of(project_id),
-		gold, wood, Carpenter.build_days(project_id)])
+	var paid := "%d냥·원목 %d" % [gold, wood]
+	if ingot > 0:
+		paid += "·%s %d" % [ItemCatalog.name_of(ingot_id), ingot]
+	_notice("%s 의뢰 — %s 지불, %d일 뒤 아침 완공" % [Carpenter.name_of(project_id),
+		paid, Carpenter.build_days(project_id)])
 	return true
 
 # ★[S4-T7] 가구 테마세트 해금 구매 — 골드만 받고 세트를 연다(코스메틱, 재료 게이트 0).
@@ -16900,6 +17061,35 @@ func _setup_residents() -> void:
 	#   미뤄 둔 그 명단(`ROMANCE_OPEN`)을 여기서 T1 11인 전원으로 넓힌다([ADR-0068] 결정 2).
 	#   세레나의 청혼만 **뭍의 비약**이 추가 전제로 붙는데(§5.3), 그 기계는 `_elixir_quest_open`·
 	#   `_try_propose`가 든다 — 이 레코드는 한 줄도 안 안다(레코드는 자리를 알지 조건을 모른다).
+
+	# ── ★[S10-T4 / ADR-0069 결정 12] 동행 혼 — 혼례 결속에서 집에 깃든 작은 새 혼.
+	#    ★ **주방요괴 바로 앞**에 붙인다(조연 등재의 확립 자리 — S9b가 아홉 번 반복한 규약).
+	#      앞도 뒤도 아닌 이유는 둘이다: 기존 인덱스 좌표 단언(guild_test `_residents[9] == mugol`)
+	#      불변 + 주방요괴가 마지막(side_dish_test `_residents[last] == kitchen_youkai`) 불변.
+	#      ⚠️ 총원 단언(resident_test ③a·③b)은 파생이 아니라 사본이라 **함께 고친다**(S9b-T3이
+	#      빠뜨려 결합 회귀가 잡아낸 전례 — 관계 탭 ⑧a는 affinity 파생이라 여기선 무영향이다).
+	#    ★ **관계 트랙 0**(주방요괴와 같은 경로 — affinity=null · plain_talk · can_gift 기본 false).
+	#      선물도 생일도 하트도 없다: 결정 12가 "상호작용 1종(인사/쓰다듬)"으로 못 박은 그 최소값이
+	#      곧 대화 하나이고, 그래서 이 레코드에 [F] 훅(shop_key)도 매대도 없다.
+	#    ★ **스케줄 없음·집 고정**(결정 12) → 스케줄 배열이 1항목이다(자리가 하나뿐이라 걷지 않는다).
+	#      `require_indoor = "집"`으로 좁혀 다른 구역·다른 방의 같은 좌표에 닿아도 무반응이다.
+	#    ★ **가시성 = 탄생 여부 하나**(visible_rule) — 깃들기 전에는 몸이 세계에 서지 않는다.
+	#      레코드는 언제나 등록돼 있고(총원 불변) 보이는 것만 갈린다: 등록을 조건부로 만들면
+	#      `_residents` 크기가 세이브에 따라 흔들려 인덱스 좌표 단언이 통째로 흔들린다.
+	var r_soul := Resident.new()
+	r_soul.id = SOUL_CHILD_RID
+	r_soul.display_name = "동행 혼"
+	r_soul.script_path = "res://soul_child.gd"
+	r_soul.needs_affinity = false        # 관계 트랙 0 — Affinity 노드도, 세이브 키도 안 낳는다
+	r_soul.affinity = null
+	r_soul.rel_text = "집에 깃든 작은 혼"
+	r_soul.plain_talk = true             # lines_resident() — 하트·first_today 인자 없는 일상 묶음
+	r_soul.portrait_stem = ""            # 초상화 없음(트랙 0 — soul_child.gd 머리말)
+	r_soul.require_indoor = "집"
+	r_soul.require_visible = true        # ★깃들기 전에는 말도 못 건다(보이는 것만 상대할 수 있다)
+	r_soul.schedule = [{"from_min": 0, "tile": SOUL_CHILD_TILE, "region": ""}]
+	r_soul.visible_rule = func() -> bool: return _soul_born
+	_register_resident(r_soul)
 
 	# ── ★ [S6-T7 / ADR-0064 결정 8] 주방요괴 — **T3 배경 직원**(카페 주방 자리·곁들이 창구).
 	#    CONTEXT [주방요괴]가 정의만 해 두고 무대엔 없던 자리를 세운다: S6-T1부터 기본 메뉴는
@@ -18073,6 +18263,12 @@ func _advance_wedding(day: int) -> void:
 	if _spouse_id == OKJA_RID and not _spine_bit_seen(SPINE_B7):
 		_spine_b7_armed = true
 	_refresh_okja_track()   # 혼인 성립으로 잠금 판정이 바뀐다(앵커와의 혼인은 트랙을 안 닫는다)
+	# ★[S10-T4 / ADR-0069 결정 12] 동행 혼 예정 — 혼례 아침에 14일 뒤가 선다.
+	#   ★ **분기가 없다는 것이 곧 "옥자 혼인 포함"의 구현이다**(결정 12): 앵커와의 혼례도 이
+	#     함수를 지나므로 같은 줄에서 같은 14일이 걸린다. 척추 B7 *이후*의 층이라 서사 충돌도 없다.
+	#   ★ **최대 1**: 이미 깃들었으면(`_soul_born`) 예정이 다시 서지 않는다 — 재혼해도 2호는 없다.
+	if not _soul_born and _soul_due_day <= 0:
+		_soul_due_day = day + SOUL_CHILD_WAIT_DAYS
 
 # 배우자 HOME 이주 — 스케줄 배열에 귀가 스테이션 **1항목 append**(ADR-0066 결정 8 문면 그대로).
 # 멱등(이미 붙어 있으면 무동작)이라 혼례 아침·세이브 로드 양쪽에서 부른다(스케줄은 _ready마다
@@ -18148,6 +18344,11 @@ func _do_divorce() -> void:
 	_romance_partner = ""
 	_ever_married[rid] = true            # 구세이브 방어(혼례 기록이 없던 결혼 — 선언부 참조)
 	_remove_spouse_home_station(rid)
+	# ★[S10-T4 / ADR-0069 결정 12] 동행 혼 — **이미 깃든 혼은 잔류한다**([ADR-0022] 자녀 잔류
+	#   자구 그대로. `_soul_born`을 한 줄도 안 건드리는 것이 그 계약의 구현이다 — 불가역·비극
+	#   없음, 나라카에 깃든 존재라 가정에 남는다). 다만 **아직 안 깃든 예정은 접는다**: 결속에서
+	#   깃드는 존재이므로 결속이 풀리면 예정도 함께 풀린다. 재혼하면 그 혼례 아침에 새로 선다.
+	_soul_due_day = 0
 	_jealousy.erase(rid)
 	if r != null and r.affinity != null:
 		r.affinity.reset_hearts()
@@ -19222,6 +19423,143 @@ func _open_mirror() -> void:
 func _close_mirror() -> void:
 	mirror_panel.visible = false
 
+# ── ★[S10-T4 / ADR-0069 결정 6] 탈것 — 소환·하차·강제 하차 ────────────────────
+# 마구간 완공 증정. 멱등이라 완공 아침과 이후 매 아침이 함께 부른다(가방이 꽉 차 밀린 증정,
+# 어떤 경로로든 휘파람이 사라진 세이브를 다음 아침이 스스로 복구한다 — 진행 봉쇄 0).
+func _grant_mount_whistle() -> bool:
+	if carpenter == null or not carpenter.is_done(Carpenter.PROJ_STABLE):
+		return false
+	if inventory.has_item(ItemCatalog.MOUNT_WHISTLE):
+		return false
+	if not inventory.add_item(ItemCatalog.MOUNT_WHISTLE, 1):
+		_notice("마구간이 다 지어졌다 — 가방을 비우면 휘파람을 받는다")
+		return false
+	audio.sfx("ui")
+	_notice("마구간 완공 — 먹갈기 휘파람을 받았다 (들고 [F]를 누르면 먹갈기가 온다)",
+		NOTICE_SECS * 2.0)
+	return true
+
+# 휘파람 [F] — 한 번은 부르고, 한 번 더는 내린다. 못 타는 자리에서 부르면 **거절은 인-픽션**이다
+# (실내에 말을 들일 수는 없다). 소환·하차 어느 쪽도 혼력·시간을 쓰지 않는다(이동 편의 — ADR-0019).
+func _toggle_mount() -> void:
+	if mount == null:
+		return
+	if mount.is_mounted():
+		mount.dismount()
+		audio.sfx("ui")
+		_notice("먹갈기에서 내렸다")
+		return
+	if not Mount.ride_allowed(_indoor, _region, cutscene != null, _narak_depth):
+		_notice("여기서는 탈 수 없다 — 먹갈기는 바깥에서 기다린다")
+		return
+	mount.mount_up(_indoor, _region, cutscene != null, _narak_depth)
+	audio.sfx("ui")
+	_notice("먹갈기가 왔다 — 올라탔다")
+
+# 매 프레임 — 승마 계수를 플레이어에 흘려넣고, 탈 수 없는 자리로 들어갔으면 말없이 내린다.
+# ★ 계수 대입을 **강제 하차 뒤**에 두는 것이 중요하다: 순서가 반대면 실내로 들어간 첫 프레임에
+#   ×1.5가 한 번 실려 문틈에서 미끄러진다(한 프레임짜리 버그는 재현이 가장 어렵다).
+func _sync_mount() -> void:
+	if mount == null or player == null:
+		return
+	if mount.enforce(_indoor, _region, cutscene != null, _narak_depth):
+		_notice("먹갈기에서 내렸다 — 여기까지는 따라오지 못한다")
+	player.speed_scale = mount.speed_scale()
+
+# ── ★[S10-T4 / ADR-0069 결정 7] 삽사리 — 획득·쓰다듬·물그릇 ────────────────────
+# 획득 = **마을 이벤트 1회**. 예약은 나루 마을을 세우는 프레임에 서고(_rebuild_region), 소비는
+# 워프 연출이 완전히 걷힌 마지막 콜백이다 — 척추 B4·B7이 "판정과 재생을 나눈" 그 두 단계 1:1
+# (fade 트윈 한가운데서 컷신을 틀면 러너와 트윈이 같은 알파를 서로 덮어쓴다).
+func _arm_pet_event(to_region: String) -> void:
+	if pet == null or clock == null or to_region != RegionCatalog.NARU_VILLAGE:
+		return
+	if not pet.adopt_ready(clock.day):
+		return
+	_pet_event_armed = true
+
+func _fire_pet_event() -> void:
+	if not _pet_event_armed:
+		return
+	_pet_event_armed = false
+	if _run_over or cutscene != null or pet == null or clock == null:
+		return                          # 마무리 화면·재생 중이면 접는다(다음 진입에 다시 예약된다)
+	if not pet.adopt(clock.day):
+		return
+	audio.sfx("ui")
+	# ★ 최소 이벤트다(컷신 러너를 안 쓴다) — 이 장면에 옮길 NPC도 팬할 카메라도 없고, 워프
+	#   직후라 화면이 방금 밝아진 참이라 여기서 또 암전하면 진입 연출이 두 번 겹친다.
+	_notice("길목에 삽살개 강아지 한 마리가 앉아 있다 — 따라오겠다는 눈이다", NOTICE_SECS * 2.0)
+	_notice("삽사리를 안식 농원 마당에 들였다 (집 앞에서 [F]로 쓰다듬고 물그릇을 채우자)",
+		NOTICE_SECS * 3.0)
+
+# 삽사리를 마주 보고 있나 / 물그릇을 마주 보고 있나. 우편함과 같은 결의 야외 [F] 판정이다:
+# `_region == HOME` ∧ `_indoor == ""`(다른 구역·실내 밴드의 같은 좌표는 무반응) ∧ 칸 일치.
+# ★ 입양 전에는 아예 서지 않는다 — 없는 개를 쓰다듬는 프롬프트가 뜨는 것이 가장 나쁜 결과다.
+func _facing_pet() -> bool:
+	return not _sleeping and pet != null and pet.is_adopted() \
+		and _region == RegionCatalog.HOME and _indoor == "" and _target == PET_TILE
+
+func _facing_pet_bowl() -> bool:
+	return not _sleeping and pet != null and pet.is_adopted() \
+		and _region == RegionCatalog.HOME and _indoor == "" and _target == PET_BOWL_TILE
+
+# 쓰다듬(하루 1회). 이미 오늘 쓰다듬었으면 **거절이 아니라 안내**다(코지 — 벌칙이 없다).
+func _pet_sapsari() -> void:
+	if pet == null or clock == null:
+		return
+	if not pet.pet_today(clock.day):
+		_notice("삽사리는 오늘 몫의 인사를 이미 받았다")
+		return
+	audio.sfx("ui")
+	_notice("삽사리를 쓰다듬었다 — %s" % pet.summary())
+
+# 물그릇 채우기(하루 1회). 물뿌리개도 물도 요구하지 않는다 — 코지 리추얼이지 자원 관리가 아니다.
+func _fill_pet_bowl() -> void:
+	if pet == null or clock == null:
+		return
+	if not pet.can_fill_bowl(clock.day):
+		_notice("물그릇은 아직 가득하다")
+		return
+	pet.fill_bowl(clock.day)
+	audio.sfx("ui")
+	_notice("물그릇을 채웠다 — %s" % pet.summary())
+
+# ── ★[S10-T4 / ADR-0069 결정 12] 동행 혼 — 예정·탄생 ──────────────────────────
+# 아침 훅의 판정(예약만). B4와 완전히 같은 두 단계이고, 이유도 같다 — 이 훅은 취침 연출 한가운데
+# (fade 트윈이 화면을 덮은 상태)라 여기서 재생하면 러너와 트윈이 같은 알파를 서로 덮어쓴다.
+# 동행 혼의 몸을 상태에 맞춘다(멱등). `visible_rule`이 매 프레임 같은 답을 내지만 그 갱신은
+# `_process` 깊숙한 곳(모달·연출 가드 뒤)이라 **부팅·로드·탄생 직후 한 프레임이 비어 있다** —
+# 이 세 자리에서 직접 한 번 눌러 그 틈을 없앤다(배우자 이주 스테이션을 로드에서 재적용하는
+# `_apply_spouse_home_station`과 같은 결의 보정).
+func _refresh_soul_child_body() -> void:
+	var r := _resident(SOUL_CHILD_RID)
+	if r != null and r.node != null:
+		r.node.visible = _soul_born
+
+func _arm_soul_birth(day: int) -> void:
+	if _soul_born or _soul_due_day <= 0 or day < _soul_due_day:
+		return
+	_soul_birth_armed = true
+
+# 예약 소비 — 취침 연출이 끝나 눈을 뜨는 프레임(`_on_sleep_done`). 비트에 해당하는 `_soul_born`을
+# **재생 시작에** 세우는 것도 B4 규약 그대로다(그 직후 자동 저장이 돌아 세이브에 실린다 —
+# 중간에 껐다 켜도 같은 아침이 두 번 오지 않는다).
+func _fire_soul_birth() -> void:
+	if not _soul_birth_armed:
+		return
+	_soul_birth_armed = false
+	if _run_over or cutscene != null or _soul_born:
+		return                          # 마무리 화면·재생 중이면 접는다(다음 아침에 다시 예약된다)
+	var r := _resident(SOUL_CHILD_RID)
+	if r == null or r.node == null:
+		return
+	_soul_born = true
+	_soul_due_day = 0
+	_refresh_soul_child_body()   # 암전이 걷히는 순간 이미 거기 있어야 한다(한 프레임도 안 비게)
+	# 화자 없음(지문) — 이 순간을 말해 줄 사람이 방에 없다(soul_child.gd BIRTH_LINES 주석).
+	_begin_cutscene(SoulChild.BIRTH_CUTSCENE.duplicate(true), "",
+		PackedStringArray(r.node.birth_lines()))
+
 # ── ★[S9-T3 / ADR-0067 결정 7] 우편함 — 열람 창구 ────────────────────────────
 # 우편함을 마주 보고 있나. 거울과 같은 결의 판정이되 무대가 *야외*라 가드가 하나 더 붙는다:
 # `_region == HOME`(다른 구역의 같은 좌표 무반응) ∧ `_indoor == ""`(실내 밴드 배제 — 게시판이
@@ -19389,7 +19727,7 @@ func _mirror_forecast_text() -> String:
 	var d: int = clock.day if clock != null else 1
 	var lines: Array[String] = ["◆ 점괘 거울 ◆", ""]
 	# ㉠ 오늘의 운(등급 + 점괘) — 수치 노출 0.
-	lines.append(DailyLuck.fortune_text(d))
+	lines.append(DailyLuck.fortune_text(d, _pet_luck_floor()))
 	lines.append("")
 	# ㉡ 내일 날씨 — Weather.forecast가 순수 함수라 예보가 곧 내일의 실제 하늘이다(빗나감 0).
 	var w := Weather.forecast(d)
@@ -19865,7 +20203,14 @@ func _weather_fx_suppressed() -> bool:
 # daily_luck.gd 하나 — 여기에 0.5를 손으로 적는 자리를 만들지 말 것).
 # clock이 아직 없는 프레임(부팅 중 호출)은 0.0 = 완전 중립으로 떨어진다.
 func _luck_bonus(weight: float) -> float:
-	return DailyLuck.bonus_for_day(clock.day, weight) if clock != null else 0.0
+	return DailyLuck.bonus_for_day(clock.day, weight, _pet_luck_floor()) if clock != null else 0.0
+
+# ★[S10-T4 / ADR-0069 결정 7] [삽사리] 만점 보상이 켜져 있는가 — **명부의 운 6배선 전부의 단일
+#   입구**다. 여섯 지점이 이미 `_luck_bonus` 하나를 지나므로 배선점이 여기 한 줄로 끝난다
+#   (weather.gd 계수가 daily_luck.gd 한 곳에만 사는 것과 같은 결의 이득).
+#   ⚠️ 평균이 아니라 **바닥**만 올린다 — 구현 계약은 DailyLuck.floor_luck 머리말에 있다.
+func _pet_luck_floor() -> bool:
+	return pet != null and pet.luck_floor_active()
 
 # 방목 날씨 게이트. ★[S7-T3 / ADR-0065 결정 4] 스텁(항상 true)이 실효화됐다 — **잿눈이면 실내 잔류**다.
 # ★ 옛 B1-a Q5 스펙은 "혼우·잿눈 둘 다 실내"였는데 ADR-0065 결정 4가 **잿눈만** 지목했다. 근거:
@@ -19975,6 +20320,7 @@ func _draw() -> void:
 			_draw_silo()               # ★ [B1-a.3] 여물광 외관(WALL 박스 그레이박스 + 건초 게이지)
 			_draw_well()               # ★ [B2] 혼우물 외관(WALL 박스 그레이박스 — 돌 우물, 리필 메카닉=별도 grill)
 			_draw_mailbox()            # ★[S9-T3] 집 앞 우편함(그레이박스 — 미독이면 부적 깃발이 선다)
+			_draw_sapsari()            # ★[S10-T4] 집 앞 마당의 삽사리 + 물그릇(그레이박스 — 입양 후에만)
 			_draw_forage()             # ★ [B1-a.3] 사료풀(다 자람=풀포기·벤 자리=밑동) — 낫 채집 대상
 			_draw_flower_regrow()      # ★ ADR-0052 딴 꽃 패치 자리 새싹(재생 대기 — 폄은 _draw_props_for가 풀 스프라이트로)
 			_draw_encroach_weeds()     # ★ ADR-0055 밤새 돋은 재점령 잡초(빈 맨땅 위 평면 데칼 — 낫 채집 대상)
@@ -20062,6 +20408,7 @@ func _draw() -> void:
 			_draw_customers()
 			_draw_night_customers()
 			_draw_jobgui()
+	_draw_mount()           # ★[S10-T4] 승마 중 먹갈기(구역 무관 — 플레이어 발치를 따라다닌다)
 	_draw_furnaces()        # ★[S5-T3] 세워 둔 업화로(구역 무관 — 전 지상 무대에 놓을 수 있다)
 	_draw_crystalariums()   # ★[S10-T1] 세워 둔 결정기(업화로와 같은 결 — 구역 무관)
 	_draw_panning_spots()   # ★[S10-T1] 오늘의 사금 스폿 반짝임(삼도천·황천해 물가에만 있다)
@@ -21464,6 +21811,63 @@ func _draw_mailbox() -> void:
 		draw_rect(Rect2(ox + TILE * 0.74, oy + TILE * 0.1, TILE * 0.16, TILE * 0.26),
 			Color(0.78, 0.18, 0.20))                                              # 부적 깃발(미독)
 
+# ★[S10-T4 / ADR-0069 결정 6] 승마 중 먹갈기 — **추종 스프라이트의 그레이박스판**.
+# 결정 6이 "그레이박스 = 속도 버프 + 추종 스프라이트"로 못 박았고, **승마 합성 시트는 아트
+# 패스(T9)** 몫이다. 그래서 여기서 그리는 것은 플레이어 발치에 깔리는 먹빛 덩이 하나뿐이고,
+# 시트가 도착하면 이 함수가 통째로 물러난다(`_prop_tex` 훅 = 우편함·거울과 같은 드롭인 규약).
+# ★ 플레이어 **아래**에 그린다(이 호출이 캐릭터 노드보다 먼저 돈다) — 탄 사람이 말 위에 앉은
+#   것으로 읽히는 최소 조건이다.
+func _draw_mount() -> void:
+	if mount == null or not mount.is_mounted() or player == null:
+		return
+	var p := player.global_position
+	var tex := _prop_tex("mount_horse")
+	if tex != null:
+		draw_texture(tex, Vector2(p.x - tex.get_size().x * 0.5, p.y - tex.get_size().y))
+		return
+	var w := TILE * 1.1                      # 사람보다 옆으로 넓다(말이라는 것의 최소 신호)
+	var h := TILE * 0.62
+	draw_rect(Rect2(p.x - w * 0.5, p.y - h, w, h).grow(1.0), Color(0.08, 0.07, 0.10))  # 외곽선
+	draw_rect(Rect2(p.x - w * 0.5, p.y - h, w, h), Color(0.17, 0.16, 0.20))            # 몸통(먹빛)
+	# 갈기 — 이름의 근거라 한 줄만 짙게 얹는다(먹빛 갈기 = 「먹갈기」).
+	draw_rect(Rect2(p.x - w * 0.5 + 2.0, p.y - h + 2.0, w - 4.0, 3.0), Color(0.06, 0.05, 0.08))
+
+# ★[S10-T4 / ADR-0069 결정 7] 삽사리 + 물그릇 — 집 앞 마당의 그레이박스 둘.
+# 우편함과 같은 드롭인 규약(`_prop_tex` 훅 → 아트가 오면 도형이 물러난다). 입양 전에는 아무
+# 것도 안 그린다 — 세계에 없는 존재의 자리가 미리 비어 보이면 안 된다.
+func _draw_sapsari() -> void:
+	if pet == null or not pet.is_adopted():
+		return
+	var ox := float(PET_TILE.x * TILE)
+	var oy := float(PET_TILE.y * TILE)
+	var tex := _prop_tex("sapsari")
+	if tex != null:
+		draw_texture(tex, Vector2(ox, oy + TILE - tex.get_size().y))
+	else:
+		# 몸통 — 낮고 둥글넓적한 덩이(삽살개 = 털이 길고 다리가 짧다).
+		draw_rect(Rect2(ox + TILE * 0.14, oy + TILE * 0.46, TILE * 0.72, TILE * 0.42).grow(1.0),
+			Color(0.12, 0.10, 0.09))                                          # 외곽선
+		draw_rect(Rect2(ox + TILE * 0.14, oy + TILE * 0.46, TILE * 0.72, TILE * 0.42),
+			Color(0.46, 0.36, 0.26))                                          # 몸통(누런 털)
+		draw_rect(Rect2(ox + TILE * 0.58, oy + TILE * 0.3, TILE * 0.3, TILE * 0.28),
+			Color(0.40, 0.31, 0.22))                                          # 머리(털에 묻힌 덩이)
+		draw_rect(Rect2(ox + TILE * 0.66, oy + TILE * 0.4, TILE * 0.14, 2.0),
+			Color(0.14, 0.12, 0.10))                                          # 눈을 덮은 앞머리 한 줄
+	# 물그릇 — 채운 날이면 물이 찬 것으로 보인다(오늘 몫을 눈으로 확인하는 유일한 표면).
+	var bx := float(PET_BOWL_TILE.x * TILE)
+	var by := float(PET_BOWL_TILE.y * TILE)
+	var bowl := _prop_tex("pet_bowl")
+	if bowl != null:
+		draw_texture(bowl, Vector2(bx, by + TILE - bowl.get_size().y))
+		return
+	draw_rect(Rect2(bx + TILE * 0.24, by + TILE * 0.6, TILE * 0.52, TILE * 0.22).grow(1.0),
+		Color(0.12, 0.10, 0.09))                                              # 그릇 외곽선
+	draw_rect(Rect2(bx + TILE * 0.24, by + TILE * 0.6, TILE * 0.52, TILE * 0.22),
+		Color(0.36, 0.30, 0.28))                                              # 그릇 몸통
+	if clock != null and not pet.can_fill_bowl(clock.day):
+		draw_rect(Rect2(bx + TILE * 0.28, by + TILE * 0.62, TILE * 0.44, TILE * 0.1),
+			Color(0.42, 0.62, 0.74, 0.85))                                    # 채워진 물
+
 func _draw_fortune_mirror() -> void:
 	# 아트 훅: assets/props/fortune_mirror.png(32×64) 있으면 그대로, 없으면 아래 그레이박스.
 	var ox := float(MIRROR_TILE.x * TILE)
@@ -21484,7 +21888,8 @@ func _draw_fortune_mirror() -> void:
 	draw_rect(Rect2(x, oy, w, h), Color(0.30, 0.21, 0.13))                       # 테
 	draw_rect(Rect2(x + 3, oy + 3, w - 6, h - 6), Color(0.16, 0.19, 0.26))       # 거울면(어두운 유리)
 	# 등급 색 — 대흉(잿빛) → 평(무채) → 대길(금박). 옅은 알파라 실루엣을 안 흐린다.
-	var g: int = DailyLuck.grade_for_day(clock.day) if clock != null else DailyLuck.PLAIN
+	var g: int = DailyLuck.grade_for_day(clock.day, _pet_luck_floor()) if clock != null \
+		else DailyLuck.PLAIN
 	var tints: Array[Color] = [Color(0.35, 0.33, 0.36), Color(0.42, 0.42, 0.46),
 		Color(0.55, 0.56, 0.60), Color(0.72, 0.66, 0.44), HanjiUi.GOLD]
 	var tint: Color = tints[clampi(g, 0, tints.size() - 1)]
