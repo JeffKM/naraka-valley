@@ -26,7 +26,10 @@ const COLS := 7                # 28 = 7 × 4(주 개념은 없지만 7열이 눈
 const CELL_W := 30.0
 const CELL_H := 26.0
 const CELL_GAP := 4.0
-const PAD := 14.0              # 프레임 안쪽 여백
+# ★[폴리시 2026-08-15] PAD는 **9-slice 테두리(HanjiUi.FRAME_MARGIN=22)보다 커야 한다** — 14였던 탓에
+#   범례 막줄이 나무 테두리에 깔려 아래 절반이 잘려 있었다(육안 덤프 frame_calendar). inv_frame이
+#   PAD(26) > FRAME_MARGIN(22)로 지키던 그 규약을 여기도 따른다.
+const PAD := 24.0              # 프레임 안쪽 여백(> FRAME_MARGIN)
 const HEAD_SIZE := 15          # 표제("성야절 · 1년차")
 const DAY_SIZE := 10           # 칸 안 일차 숫자
 const LEG_SIZE := 10           # 하단 범례 줄
@@ -179,8 +182,10 @@ func _draw() -> void:
 	var grid_h := rows * CELL_H + (rows - 1) * CELL_GAP
 	var legs := _legend_rows()
 	var frame_w := grid_w + PAD * 2.0
+	# ★[폴리시] 범례 막줄의 descent를 높이에 얹는다 — 줄 높이를 폰트 크기로만 잡으면 baseline 아래
+	#   아랫배가 프레임 밖으로 밀려 테두리에 깔린다(clock_hud 마일스톤 줄과 같은 뿌리).
 	var frame_h := PAD * 2.0 + float(HEAD_SIZE) + 8.0 + grid_h + 8.0 \
-		+ legs.size() * (LEG_SIZE + 3.0)
+		+ legs.size() * (LEG_SIZE + 3.0) + HanjiUi.text_descent(LEG_SIZE)
 	# 화면 중앙(시계 클러스터와 안 겹치게 살짝 아래로).
 	var frame := Rect2(floorf((view.x - frame_w) * 0.5), floorf((view.y - frame_h) * 0.5) + 8.0,
 		frame_w, frame_h)

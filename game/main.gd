@@ -11942,6 +11942,11 @@ func _process(delta: float) -> void:
 	# 막는다(대화 모달과 같은 결). 관계 탭이면 하트 값을 매 프레임 흘려넣어 읽기 전용으로 보인다.
 	if frame.is_open():
 		onboarding_label.visible = false
+		# ★[폴리시 2026-08-15] 상단 안내 배너도 즉시 숨긴다 — 모달 프레임이 배너 위에 서면서
+		#   배너의 아랫부분만 프레임 위로 삐져나와, 글자 아래 절반이 잘린 띠로 남았다(육안 덤프
+		#   frame_inv·frame_store·곳간 상단). 대화·컷신이 이미 쓰던 그 가드와 같은 결.
+		if onboarding_banner != null:
+			onboarding_banner.hide_now()
 		if Input.is_action_just_pressed("ui_cancel") or (frame.context != InventoryFrame.CTX_MENU and Input.is_action_just_pressed("menu_toggle")):
 			_close_frame()
 		elif frame.context == InventoryFrame.CTX_MENU and Input.is_action_just_pressed("menu_tab"):

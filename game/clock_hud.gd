@@ -24,7 +24,11 @@ class_name ClockHud
 # ★ owner 2026-07-03 3차 HUD 가이드(C) — 플레이트 빈 여백 제거·전체 축소. PAD·폰트 압축 +
 #   플레이트 폭은 고정 W 폐기하고 *내용 최대폭*에 맞춰 동적 산출(_draw). 우상단 구석 밀착.
 const MARGIN := 8.0        # 화면 오른쪽·위 여백
-const PAD := 7.0           # 플레이트 안쪽 여백(11→7 압축)
+# ★[폴리시 2026-08-15] PAD는 **9-slice 테두리(HanjiUi.PLATE_MARGIN=12)보다 커야 한다** — 안 그러면
+#   글자가 판의 장식 테두리 위에 올라앉는다. 7로 압축했던 탓에 우변("피안절 7일"의 끝 글자)과
+#   막줄(마일스톤)이 테두리에 깔려 반쪽만 보였다(전 구역 캡처 상시 재현). inv_frame이 같은 이유로
+#   PAD(26) > FRAME_MARGIN(22)를 지키고 있던 그 규약을 여기에도 맞춘다.
+const PAD := 12.0          # 플레이트 안쪽 여백(= PLATE_MARGIN — 테두리 위에 글자가 안 얹히는 하한)
 const ROW_GAP := 4.0       # 줄 사이 여유(8→4 압축)
 const ROW_DATE := 13       # 절기·일차 글자 크기(16→13)
 const ROW_TIME := 11       # 시각·때(14→11)
@@ -143,8 +147,13 @@ func _plate_rect() -> Rect2:
 		wmax = maxf(wmax, HanjiUi.text_width(_mile, ROW_MILE))
 	var w := wmax + PAD * 2.0
 	var h := PAD * 2.0 + float(ROW_DATE) + ROW_GAP + float(ROW_TIME) + ROW_GAP + float(ROW_GOLD)
+	# ★[폴리시] 막줄은 baseline 아래로 descent만큼 더 내려간다 — 줄 높이를 폰트 크기 합으로만 잡으면
+	#   그 아랫배가 판 밖(=테두리)으로 밀린다. 마일스톤 줄이 그렇게 잘려 있었다.
+	var last_row := ROW_GOLD
 	if _mile != "":
 		h += ROW_GAP + float(ROW_MILE)
+		last_row = ROW_MILE
+	h += HanjiUi.text_descent(last_row)
 	return Rect2(view.x - w - MARGIN, MARGIN, w, h)
 
 # ★[S7-T8] 화면 좌표(get_viewport().get_mouse_position() 눈금)가 시계 판 안인가 — 달력 토글의 판정.
