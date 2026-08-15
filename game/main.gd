@@ -10256,11 +10256,22 @@ func _deco_swatch(set_id: String) -> Color:
 		return Color(float(c[0]), float(c[1]), float(c[2]))
 	return Color(0.5, 0.5, 0.5)
 
+# 오늘이 야시장 날인가(결제 재검증 전용). ★ **표시 층(`_facing_night_market`)과 따로 두는** 이유는
+#   보부상 `_peddler_price` 머리말이 적은 그 구멍과 같다: 매대 프레임은 자정을 넘겨도(쓰러져 하루가
+#   넘어가도) 닫히지 않을 수 있고, 그동안 행 갱신(`_refresh_night_market`)은 day를 안 보는 static을
+#   쓰므로 할인 로스터가 그대로 남는다. 그래서 **결제 순간에 오늘 날짜를 다시 묻는다** — 이 한 줄이
+#   "오늘 놓치면 내년"이라는 야시장 게이트의 진짜 잠금이다(프레임은 표시일 뿐 계약이 아니다).
+func _night_market_open_today() -> bool:
+	return _seasonal_event_today() == SeasonalEvent.NIGHT_MARKET
+
 # 야시장 가구 세트 구매 — 목공방(`_try_buy_deco_set`)과 **다른 할인 축**이라 별도 경로다:
 # 목공방은 옹이 ♡ 할인, 야시장은 행사 정액 할인. 같은 함수에 두 할인을 섞으면 어느 쪽이 먹었는지
 # 값만 봐선 알 수 없게 된다(그래서 함수를 가른다 — 해금 처리 자체는 home_deco 한 곳이 진실원).
 func _try_buy_market_deco(set_id: String) -> bool:
 	if home_deco == null or not HomeDecoCatalog.has_set(set_id):
+		return false
+	if not _night_market_open_today():
+		_notice("야시장은 파했다 — 매대는 성야절 그 하루뿐이다")
 		return false
 	if home_deco.is_unlocked(set_id):
 		_notice("%s 세트는 이미 해금했다" % HomeDecoCatalog.name_of(set_id))
@@ -10277,6 +10288,9 @@ func _try_buy_market_deco(set_id: String) -> bool:
 # 한정 물품(레어크로우 ②) 구매 — 1회 한정. 수집물이라 스택·대량 개념이 없다.
 func _try_buy_market_item(id: String) -> bool:
 	if seasonal_event == null or inventory == null or not ItemCatalog.has_item(id):
+		return false
+	if not _night_market_open_today():
+		_notice("야시장은 파했다 — 매대는 성야절 그 하루뿐이다")
 		return false
 	if seasonal_event.has_bought(id):
 		_notice("%s 은(는) 이미 샀다" % ItemCatalog.name_of(id))
@@ -10302,6 +10316,9 @@ func _try_buy_market_item(id: String) -> bool:
 # 골드 닿는 데까지 부분 구매(_buy_store_generic_n 관례).
 func _try_buy_market_seed(crop_id: String, n: int) -> void:
 	if inventory == null or not CropCatalog.has_crop(crop_id) or n <= 0:
+		return
+	if not _night_market_open_today():
+		_notice("야시장은 파했다 — 매대는 성야절 그 하루뿐이다")
 		return
 	var unit := SeasonalEvent.market_price(CropCatalog.seed_cost(crop_id))
 	var seed_item := ItemCatalog.seed_id(crop_id)
@@ -10818,6 +10835,13 @@ func _can_sleep() -> bool:
 func _do_sleep() -> void:
 	if _sleeping:
 		return
+	# ★ 하루를 넘기기 전에 열린 모달을 먼저 닫는다. 침대 취침·에필로그 경로는 `_process`의
+	#   `frame.is_open()` 가드 뒤라 애초에 프레임이 없지만, **쓰러짐**(`_on_collapsed`)은 매대를
+	#   연 채로도 들어온다 — 그러면 어제 매대가 오늘 아침까지 살아남아 하루짜리 무대(야시장·보부상)의
+	#   기한이 통째로 무효가 된다. 날짜에 매인 무대는 결제 층에서도 오늘을 다시 묻지만(이중 방어),
+	#   패널이 하루를 넘겨 떠 있는 것 자체가 화면의 거짓말이라 여기서 닫는다.
+	if frame.is_open():
+		_close_frame()
 	_sleeping = true
 	clock.running = false
 	audio.sfx("sleep")                 # P2.6 하루를 닫는 부드러운 하강 패드
@@ -11963,6 +11987,8 @@ func _process(delta: float) -> void:
 	# 워프와 나란히 두는 이유: 이것도 **발밑 칸이 여는 문**이고, 게이트 미충족이면 워프가
 	# 휴면인 것과 똑같이 아무 일도 안 일어난다(거동 불변).
 	_maybe_spine_b5()
+	# ★ 척추 사슬 재개 — 끊어진 이음매를 **원장에서 다시 잇는다**(아래 머리말).
+	_maybe_resume_spine()
 
 	# 취침 입력: 집 안에서 Enter/Space(ui_accept)
 	if _can_sleep() and Input.is_action_just_pressed("ui_accept"):
@@ -18950,6 +18976,17 @@ func _try_propose_okja() -> void:
 	if _wedding_day > 0:
 		_notice("혼례는 이미 정해졌다 — %d일 아침" % _wedding_day)
 		return
+	# ★ 연애 슬롯 배타성 — `_resolve_confession`·`_try_propose`가 지키는 그 불변식이 이 경로에도
+	#   선다. 앵커는 고백 문법(♡5 의지 시험) 밖이라 청혼이 곧 고백인데(위 머리말), 그 자리에서 슬롯을
+	#   말없이 덮어쓰면 **기존 연인이 알림 한 줄 없이 탈락하고 영구히 돌아올 수 없다**: 진급은 단조라
+	#   그 사람의 칸은 ♡5로 굳고, `_romance_offer_available`은 ♡4에서만 서므로 제안이 다시 안 뜨며,
+	#   `reset_hearts`는 배우자 이혼 경로에만 있어 칸이 내려갈 길도 없다. 곁을 정리하는 일은 이혼과
+	#   같은 무게라 여기서 대신 해 주지 않는다 — 거절은 다른 가지와 같이 **무소모·무벌칙**이다.
+	if _romance_partner != "" and _romance_partner != OKJA_RID:
+		var cur := _resident(_romance_partner)
+		_notice("곁에 이미 %s가 있다 — 명부는 한 번에 두 이름만 받는다"
+			% (cur.display_name if cur != null else _romance_partner))
+		return
 	if not _spine_bit_seen(SPINE_B6):
 		_notice("아직 아무것도 보지 못했다")     # 여기까지 올 수 없는 조합(부적의 전제) — 방어
 		return
@@ -18985,6 +19022,48 @@ func _fire_spine_b7() -> void:
 		_queue_spine_say(r.display_name, r.node.spine_lines("b7"))
 	_queue_spine_say(Spine.INNER_SPEAKER, Spine.B7_RELEASE_LINES)
 	_epilogue_pending = true            # 마지막 묶음이 닫히면 에필로그(결정 11)
+
+# ── ★ 척추 사슬 재개 — 끊어진 이음매를 원장에서 다시 잇는다 ────────────────────
+# 이 블록의 설계는 **비트가 단일 진실원 · 발화는 파생**이다(`_spine_bits`만 세이브에 실리고
+# 예약 플래그·다화자 열·컷신 러너는 전부 비영속 — 11197~11209가 로드에서 0으로 되돌린다).
+# 그런데 B6·B7의 발화는 그 규약을 반만 지키고 있었다: 다음 두 이음매가 **인메모리 연속선 하나**에만
+# 걸려 있어, 한 번 끊기면 원장이 멀쩡한데도 영영 다시 이어지지 않았다.
+#   ㉠ B5 완료 → B6 귀환: `_finish_spine_puzzle`이 B5 비트를 즉시 저장한 뒤 완료 지문 6줄을 여는데,
+#      B6를 부르는 자리는 그 지문이 닫히는 `_close_spine_puzzle` 끝 하나뿐이다. 지문 도중 앱을 닫으면
+#      재기동 시 `spine_puzzle`이 null이라 그 경로가 사멸하고, `_maybe_spine_b5`는 B5 비트로 재발동을
+#      막는다 → B6 귀환·앵커 트랙·B7 해방·에필로그가 그 세이브에서 영구 도달 불가.
+#   ㉡ 혼례 아침 → B7 해방: `_spine_b7_armed`를 세우는 곳은 `_advance_wedding` 하나이고, 그 함수는
+#      첫 줄에서 `_wedding_day = 0`으로 자신을 지운다. 그래서 `_fire_spine_b7`이 한 번이라도 접히면
+#      (재생 중첩·러너 거절) 예약이 되살아날 길이 없다 — 엔딩 연출이 통째로 사라진다.
+# ★ 대조군이 답을 이미 들고 있다: B4는 `_arm_spine_b4`가 **매 아침 원장을 다시 보고** 예약을 세우고,
+#   동행 혼도 `_arm_soul_birth`가 그렇게 한다. 그래서 그 둘은 접혀도 다음 아침에 복구된다. 여기서는
+#   두 비트의 전제가 아침이 아니라 상태이므로, 판정 자리를 아침 훅이 아니라 **조용한 프레임**으로 잡되
+#   조건은 똑같이 원장에서만 파생한다(새 세이브 키 0 — 그래야 구세이브도 그 자리에서 이어진다).
+# ★ 여기서 재는 것은 *발화가 아직 안 왔다*이지 *중간에 끊겼다*가 아니다. 두 `_fire_*`가 비트로 자기
+#   재발동을 막으므로, 정상 흐름에서 이 훅은 한 번도 발화하지 않는다(거동 불변).
+func _maybe_resume_spine() -> void:
+	if _run_over or _sleeping or _transitioning:
+		return
+	# 재생 중인 무엇이라도 있으면 물러난다 — 특히 `_spine_say`가 비어야 한다는 조건이 핵심이다.
+	# B6·B7은 비트를 장면 **시작**에 찍는데, 그 장면의 남은 묶음이 도는 동안에도 다음 비트의 전제는
+	# 이미 참이 되어 있다(B6 비트가 선 채 B6 지문이 도는 중). 이 줄이 없으면 진행 중인 장면 위로
+	# 다음 장면이 겹쳐 선다.
+	if cutscene != null or spine_puzzle != null or dialogue.is_open():
+		return
+	if not _spine_say.is_empty() or _spine_b5_pending:
+		return
+	if _epilogue_open or _epilogue_pending:
+		return
+	# ㉠ B5는 끝났는데 B6가 안 왔다 — 귀환을 다시 튼다(`_fire_spine_b6`가 전제·중복을 스스로 다시 잰다).
+	if _spine_bit_seen(SPINE_B5) and not _spine_bit_seen(SPINE_B6):
+		_fire_spine_b6()
+		return
+	# ㉡ 앵커와 부부인데 해방이 안 왔다 — 조건식은 `_advance_wedding`(혼례 아침)의 그 줄과 글자 그대로
+	#    같다. 예약을 세우고 곧바로 소비한다(예약과 재생을 나눈 이유는 취침 연출 한가운데를 피하려는
+	#    것이었는데, 여기는 이미 연출 밖이다).
+	if _spouse_id == OKJA_RID and _spine_bit_seen(SPINE_B6) and not _spine_bit_seen(SPINE_B7):
+		_spine_b7_armed = true
+		_fire_spine_b7()
 
 # ── ★ 에필로그(결정 11) — 사장 `_end_run` 화면의 재목적화 ──────────────────────
 # 옛 21일 런 정산 화면(호출부 0)이 여기서 **엔딩 화면으로 부활**한다. 다만 성격이 정반대다:
