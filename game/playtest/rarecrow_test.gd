@@ -192,6 +192,21 @@ func _part_main() -> void:
 	m._on_frame_discard(slot2)
 	_check("⑥c 레어크로우는 버릴 수 없다(수집 완주 보호)",
 		m.inventory.count_of(ItemCatalog.RARECROW_2) == 1)
+	# ★[S10 폴리시] 선물 채널도 같은 금지다 — 여기가 뚫려 있어 파생 판정의 단조 증가가 깨졌다
+	#   (건네면 DISLIKE로 소모 → `_rarecrow_owned`가 영영 false → 디럭스 반경 영구 미달성).
+	var r_gift: Resident = m._resident("miho")
+	r_gift.affinity.last_gift_day = -1
+	r_gift.affinity.gift_week = -1
+	r_gift.affinity.gifts_this_week = 0
+	var pts_pre: int = r_gift.affinity.points
+	var collected_pre: int = m._rarecrow_collected()
+	m.inventory.select(slot2)
+	m._try_resident_gift(r_gift)
+	_check("⑥d 레어크로우는 선물로도 못 잃는다(소지·수집 수·호감도 전부 불변)",
+		m.inventory.id_at(slot2) == ItemCatalog.RARECROW_2
+		and m.inventory.count_of(ItemCatalog.RARECROW_2) == 1
+		and m._rarecrow_collected() == collected_pre
+		and r_gift.affinity.points == pts_pre)
 
 	# ── ④⑤ 까마귀 보호 반경 · 디럭스 ──
 	print("── ④⑤ 까마귀 보호 · 8종 완성 디럭스 ──")

@@ -117,6 +117,31 @@ func _run_checks() -> void:
 	_check("⑤e 채취기 제작(원목 40+석화 2 소모·×1)",
 		inv.count_of(ItemCatalog.TAPPER) == 1 and inv.count_of(ItemCatalog.WOOD) == 0
 		and inv.count_of(ItemCatalog.PETRIFIED_WOOD) == 0)
+	# ★[S10 폴리시] 만재 제작 원자성 — **담기 먼저, 비우기 나중**(업화로 회수 `_use_furnace`와 같은
+	# 계약). 종전엔 재료를 먼저 뺐다가 산출 적재 실패를 버려, 재료 슬롯이 안 비는 조합(원목 50 중
+	# 40 소모)에서 **재료만 증발하고 산출은 0**이었다(그런데 획득 토스트는 떴다).
+	inv.remove_item(ItemCatalog.TAPPER, inv.count_of(ItemCatalog.TAPPER))   # 스택 합류 여지 제거
+	inv.add_item(ItemCatalog.WOOD, 50)
+	inv.add_item(ItemCatalog.PETRIFIED_WOOD, 3)
+	for i in range(inv.slots.size()):
+		if inv.slots[i] == null:
+			inv.slots[i] = {"id": ItemCatalog.STONE, "count": 1, "quality": 0}
+	_check("⑤f pre 백팩 포화(빈 칸 0 · 채취기 스택 0 — 적재는 반드시 실패한다)",
+		not inv.has_free_slot() and inv.count_of(ItemCatalog.TAPPER) == 0)
+	m._on_frame_craft(CraftCatalog.TAPPER)
+	_check("⑤g ★만재 제작 = 재료가 한 톨도 안 빠진다(원목 50·석화 3 그대로 · 채취기 0)",
+		inv.count_of(ItemCatalog.WOOD) == 50 and inv.count_of(ItemCatalog.PETRIFIED_WOOD) == 3
+		and inv.count_of(ItemCatalog.TAPPER) == 0)
+	# 대조군 — 막힌 게 아니라 자리가 없던 것이다. 돌 한 칸을 비우면 같은 제작이 성립하고
+	# 재료는 레시피 표대로만 빠진다(원목 40·석화 2).
+	for i in range(inv.slots.size()):
+		if inv.slots[i] != null and String(inv.slots[i]["id"]) == ItemCatalog.STONE:
+			inv.slots[i] = null
+			break
+	m._on_frame_craft(CraftCatalog.TAPPER)
+	_check("⑤h 한 칸 비면 제작 성립 · 재료는 레시피대로만 차감(원목 50→10 · 석화 3→1)",
+		inv.count_of(ItemCatalog.TAPPER) == 1 and inv.count_of(ItemCatalog.WOOD) == 10
+		and inv.count_of(ItemCatalog.PETRIFIED_WOOD) == 1)
 
 	# ── ⑥ 제작 탭 행 데이터 ──
 	print("── ⑥ 제작 탭 행 ──")

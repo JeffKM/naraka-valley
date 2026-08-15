@@ -1086,7 +1086,7 @@ func _draw_bin_top(panel: Rect2) -> void:
 		var n := bin.count_of(id)
 		var sub := 0
 		for q in bin.qualities_of(id):
-			sub += bin.count_of_quality(id, int(q)) * ItemCatalog.price_of(id, int(q))
+			sub += bin.count_of_quality(id, int(q)) * ItemCatalog.ship_price_of(id, int(q))   # 출하가(메뉴는 원물가)
 		var ty := pos.y + ICON - 8.0
 		HanjiUi.draw_text(self, Vector2(pos.x + ICON + 10.0, ty),
 			"%s ×%d" % [ItemCatalog.name_of(id), n], 13, HanjiUi.INK_LIGHT, 150.0)

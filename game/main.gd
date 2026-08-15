@@ -14772,13 +14772,21 @@ func buy_sprinkler(n: int = 1) -> int:
 		return 0
 	var unit := StoreDiscount.price(base, neo_affinity.hearts())
 	var bought := 0
+	var full := false                         # 백팩 만재로 멈췄나(알림 문구를 가른다)
 	for _i in n:
-		if not wallet.spend(unit):
+		# ★ 적재 먼저·결제 나중(`_try_buy_rarecrow`가 세운 그 계약) — 백팩이 가득이면 냥이 안 나간다.
+		if not wallet.can_afford(unit):
 			break
-		inventory.add_item(ItemCatalog.SPRINKLER, 1)
+		if not inventory.add_item(ItemCatalog.SPRINKLER, 1):
+			full = true
+			break
+		if not wallet.spend(unit):
+			inventory.remove_item(ItemCatalog.SPRINKLER, 1)   # 방어(위 can_afford와 이중)
+			break
 		bought += 1
 	if bought == 0:
-		_notice("골드 부족(%d 필요)" % unit)
+		_notice("가방을 비우고 오자 — 저승 스프링클러를 받을 자리가 없다" if full
+			else "골드 부족(%d 필요)" % unit)
 		return 0
 	audio.sfx("ui")                           # 매대 거래 블립
 	_notice("저승 스프링클러 ×%d −%d골드 (만물상)" % [bought, unit * bought])
@@ -14957,9 +14965,16 @@ func _on_frame_craft(recipe_id: String) -> void:
 	if not CraftCatalog.can_craft(recipe_id, func(id: String) -> int: return inventory.count_of(id)):
 		return
 	var r := CraftCatalog.get_recipe(recipe_id)
+	# ★ **담기 먼저, 비우기 나중**(업화로 회수 `_use_furnace`가 세운 그 순서 규율) — 백팩이 가득이면
+	#   재료가 증발하지 않고 그대로 남는다. 반대 순서였을 때, 재료를 뺀 자리가 안 비는 조합(돌 150개
+	#   중 99개처럼 슬롯이 살아남는 경우)에서 재료만 사라지고 산출은 0인 구멍이 있었다.
+	#   ★재료 롤백이 아니라 선적재를 고른 이유: 되돌려 담는 add_item은 등급을 못 싣는다(주괴 재료가
+	#   금→일반으로 깎인다). 되돌릴 일을 아예 안 만드는 쪽이 값을 잃지 않는다.
+	if not inventory.add_item(String(r["out_item"]), int(r["out_count"])):
+		_notice("백팩이 가득 차 %s 를 만들지 못했다 — 자리를 비우고 다시" % String(r["name_ko"]))
+		return
 	for m in r["mats"]:
 		inventory.remove_item(String(m["item"]), int(m["count"]))
-	inventory.add_item(String(r["out_item"]), int(r["out_count"]))
 	_toast_item(String(r["out_item"]), int(r["out_count"]))
 	audio.sfx("ui")
 	queue_redraw()
@@ -15725,27 +15740,46 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 		return
 	var unit := StoreDiscount.price(base, hearts)
 	var bought := 0
+	var full := false                         # 백팩 만재로 멈췄나(알림 문구를 가른다)
 	for _i in n:
-		if not wallet.spend(unit):
+		# ★ 적재 먼저·결제 나중 — `_try_buy_rarecrow`·`_try_buy_trial_item`이 세운 그 계약이다:
+		#   백팩이 가득이면 **냥이 안 나간다**. 반대 순서였을 때 결제만 되고 물건은 안 들어오는
+		#   구멍이 있었다(고가 유니크 = 낚싯대·태클·검일수록 손실이 컸다).
+		if not wallet.can_afford(unit):
 			break
+		var got_id := ""                      # 실제로 적재된 아이템 id("" = 적재 실패 = 백팩 만재)
 		match kind:
 			"sapling":
-				inventory.add_sapling(buy_id)
+				if inventory.add_sapling(buy_id):
+					got_id = ItemCatalog.sapling_id(buy_id)
 			"fert":
-				inventory.add_item(buy_id, 1)
+				if inventory.add_item(buy_id, 1):
+					got_id = buy_id
 			"hay":
-				inventory.add_item(ItemCatalog.HAY, 1)
+				if inventory.add_item(ItemCatalog.HAY, 1):
+					got_id = ItemCatalog.HAY
 			"gear":
-				inventory.add_item(buy_id, 1)
+				if inventory.add_item(buy_id, 1):
+					got_id = buy_id
 			"pot":
-				inventory.add_item(ItemCatalog.CRAB_POT, 1)   # ★[S3-T7] 설치물 스택 적재
+				if inventory.add_item(ItemCatalog.CRAB_POT, 1):   # ★[S3-T7] 설치물 스택 적재
+					got_id = ItemCatalog.CRAB_POT
 			"wood":
-				inventory.add_item(ItemCatalog.WOOD, 1)       # ★[S4-T7] 원목 소매 스택 적재
+				if inventory.add_item(ItemCatalog.WOOD, 1):       # ★[S4-T7] 원목 소매 스택 적재
+					got_id = ItemCatalog.WOOD
 			"weapon", "potion":
-				inventory.add_item(buy_id, 1)                 # ★[S5-T6] 검(유니크 1자루)·명부환(스택)
+				if inventory.add_item(buy_id, 1):                 # ★[S5-T6] 검(유니크 1자루)·명부환(스택)
+					got_id = buy_id
+		if got_id == "":
+			full = true
+			break
+		if not wallet.spend(unit):
+			inventory.remove_item(got_id, 1)   # 방어(위 can_afford와 이중) — 결제 실패면 물건도 도로 뺀다
+			break
 		bought += 1
 	if bought == 0:
-		_notice("골드 부족(%d 필요)" % unit)
+		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % label if full
+			else "골드 부족(%d 필요)" % unit)
 		return
 	audio.sfx("ui")                           # 매대 거래 블립
 	_notice("%s ×%d −%d골드 (%s)" % [label, bought, unit * bought, shop])
@@ -16561,13 +16595,22 @@ func _buy_seed_store_n(crop_id: String, n: int) -> void:
 		return
 	var unit := StoreDiscount.price(base, neo_affinity.hearts())
 	var bought := 0
+	var full := false                         # 백팩 만재로 멈췄나(알림 문구를 가른다)
 	for _i in n:
-		if not wallet.spend(unit):
+		# ★ 적재 먼저·결제 나중(`_buy_store_generic_n`과 같은 계약) — 씨앗도 백팩 슬롯을 먹으므로
+		#   가득이면 add_seed가 실패한다. 반대 순서면 냥만 나가고 씨앗은 안 들어온다.
+		if not wallet.can_afford(unit):
 			break
-		inventory.add_seed(crop_id)
+		if not inventory.add_seed(crop_id):
+			full = true
+			break
+		if not wallet.spend(unit):
+			inventory.remove_item(ItemCatalog.seed_id(crop_id), 1)   # 방어(위 can_afford와 이중)
+			break
 		bought += 1
 	if bought == 0:
-		_notice("골드 부족(%d 필요)" % unit)
+		_notice("가방을 비우고 오자 — %s 씨앗을 받을 자리가 없다" % CropCatalog.name_of(crop_id) if full
+			else "골드 부족(%d 필요)" % unit)
 		return
 	audio.sfx("ui")                           # 매대 거래 블립(씨앗 구매)
 	_notice("%s 씨앗 ×%d −%d골드 (만물상)" % [CropCatalog.name_of(crop_id), bought, unit * bought])

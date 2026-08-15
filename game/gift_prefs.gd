@@ -122,8 +122,12 @@ const OVERRIDES := {
 			ItemCatalog.GEM_OSAEK_HONOK,     # 오색혼옥 — 진열장의 꿈
 			ItemCatalog.GEM_YEOMJUSEOK,
 			ItemCatalog.HARDWOOD,            # 단단한 원목 — 좋은 재고
-			ItemCatalog.RARECROW_1,          # 레어크로우 ①·② — 상인이 탐내는 수집물(비매품)
-			ItemCatalog.RARECROW_2,
+			# ★[S10 폴리시] 옛 자리는 레어크로우 ①②였다 — 상인이 탐낼 물건인 건 맞지만, 건네는
+			#   순간 그 종이 세상에서 사라져 8종 완주가 막히므로 `giftable`이 이제 막는다(위 ㉣).
+			#   건넬 수 없는 물건을 러브 표에 두면 영영 도달 못 하는 죽은 칸이 된다 — 같은 결의
+			#   "팔릴 물건"으로 갈아 끼운다(진열장 보석 하나 · 값나가는 금속 하나).
+			ItemCatalog.GEM_NEOKSUJEONG,     # 넋수정 — 진열장에 놓기 좋은 결
+			ItemCatalog.INGOT_HWANGCHEONGEUM,  # 황천금 주괴 — 그냥 두어도 값이 오르는 재고
 		],
 		HATE: [ItemCatalog.STONE],
 	},
@@ -375,13 +379,17 @@ const OVERRIDES := {
 }
 
 # ── 조회 ──────────────────────────────────────────────────────────────────────
-# 이 아이템을 선물로 건넬 수 있는가. **막는 건 딱 두 부류**다:
+# 이 아이템을 선물로 건넬 수 있는가. **막는 건 네 부류**다:
 #   ㉠ 도구 칸(CAT_TOOL = 괭이·낫·낚싯대·태클·무기) — 유니크 장착물이라 건네면 그 동사를 잃는다.
 #   ㉡ 열쇠(나락 열쇠) — 유일 입수 경로가 60층 상자라 건네면 **진행이 봉쇄된다**(혼백관 기증
 #      목록에서 열쇠를 뺀 것과 정확히 같은 판단 — item_catalog.gd KEYS 주석).
 #   ㉢ ★[S9-T7] 책(CAT_BOOK) — [ADR-0034] #7. 이건 진행 봉쇄가 아니라 **톤** 때문이다: 되찾은
 #      옥자의 유품 키프세이크를 남에게 건네는 것 자체가 이 게임의 결이 아니다(불태워진 사람의
 #      물건을 주워다 선물로 돌리는 그림). 노트도 같이 막는다 — 남의 비밀을 건네는 것도 같은 결.
+#   ㉣ ★레어크로우(8종) — ㉡과 같은 **진행 봉쇄**다: 종마다 창구가 하나뿐이고 그 창구가 전부
+#      1회 한정 원장이라(마일스톤·행사·우편·보부상·시련장) 건네면 그 종이 세상에서 사라져
+#      8종 완주가 영영 불가능해진다. 백팩 버리기(main `_on_frame_discard`)를 막은 것과 정확히
+#      같은 판단이고, 소지∪배치 파생 원장(`_rarecrow_owned`)이 기대는 불변식이 바로 이것이다.
 # 그 밖에는 전부 건넬 수 있다(싫어하는 물건도 *건네지긴* 한다 — 그게 음수 채널의 의미다).
 static func giftable(id: String) -> bool:
 	if id == "" or not ItemCatalog.has_item(id):
@@ -390,6 +398,8 @@ static func giftable(id: String) -> bool:
 	if cat == ItemCatalog.CAT_TOOL or cat == ItemCatalog.CAT_BOOK:
 		return false
 	if ItemCatalog.KEYS.has(id):
+		return false
+	if ItemCatalog.is_rarecrow(id):
 		return false
 	return true
 

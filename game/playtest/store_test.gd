@@ -28,6 +28,22 @@ func _settle(m: Node) -> void:
 	await process_frame
 	await process_frame
 
+# 백팩 두 스냅샷이 **칸 단위로** 같은가(id·개수·등급까지 — 개수 합만 보면 교환이 안 잡힌다).
+func _slots_same(a: Array, b: Array) -> bool:
+	if a.size() != b.size():
+		return false
+	for i in a.size():
+		var x: Variant = a[i]
+		var y: Variant = b[i]
+		if x == null or y == null:
+			if x != y:
+				return false
+			continue
+		if String(x["id"]) != String(y["id"]) or int(x["count"]) != int(y["count"]) \
+				or int(x.get("quality", 0)) != int(y.get("quality", 0)):
+			return false
+	return true
+
 func _spawn_main() -> Node:
 	var m: Node = load("res://main.tscn").instantiate()
 	root.add_child(m)
@@ -260,6 +276,54 @@ func _initialize() -> void:
 	m._on_frame_buy_store_item("no_such_id", "fert", false)
 	m._on_frame_buy_store_item(fert_id, "no_such_kind", false)
 	_check("⑩h 미지 id/kind = 무동작", m.wallet.gold == g0)
+
+	# ── ⑪ ★[S10 폴리시] 백팩 만재 = **적재 먼저·결제 나중**(냥이 안 나간다) ──
+	# 종전엔 `wallet.spend`가 먼저 성공하고 `add_item` 실패를 버려, 만재 상태에서 냥만 증발하고
+	# 성공 알림까지 떴다. 만물상 4종(비료·건초·묘목·씨앗)과 스프링클러를 같은 계약으로 못 박는다.
+	print("── ⑪ 만재 구매 원자성(S10 폴리시) ──")
+	m.neo_affinity.points = 0
+	m.neo_affinity.stage = 0
+	m.wallet.gold = 100000
+	# 포화 만들기 — 살 물건과 같은 id가 남아 있으면 **스택에 합쳐져 들어가므로** 먼저 지우고,
+	# 남은 빈 칸을 전부 돌로 메운다(side_dish_test ⓓn 선례 — 루프 add로는 포화가 안 온다).
+	var seed_of_crop: String = ItemCatalog.seed_id(crop)
+	var sap_of_tree: String = ItemCatalog.sapling_id(FruitTreeCatalog.HONBAEKDO)
+	for gone in [fert_id, ItemCatalog.HAY, seed_of_crop, sap_of_tree, ItemCatalog.SPRINKLER]:
+		m.inventory.remove_item(String(gone), m.inventory.count_of(String(gone)))
+	for i in range(m.inventory.slots.size()):
+		if m.inventory.slots[i] == null:
+			m.inventory.slots[i] = {"id": ItemCatalog.STONE, "count": 1, "quality": 0}
+	_check("⑪pre 백팩 포화(빈 칸 0 · 스택 합류 여지 0)",
+		not m.inventory.has_free_slot() and not m.inventory.add_item(fert_id, 1))
+	var gold_pre: int = m.wallet.gold
+	var slots_pre: Array = m.inventory.slots.duplicate(true)
+	m._on_frame_buy_store_item(fert_id, "fert", true)      # 대량(5) 요청 — 한 개도 못 산다
+	_check("⑪a 만재 비료 대량 구매 = 골드 %d 그대로 · 비료 0개" % gold_pre,
+		m.wallet.gold == gold_pre and m.inventory.count_of(fert_id) == 0)
+	m._on_frame_buy_store_item(ItemCatalog.HAY, "hay", true)
+	_check("⑪b 만재 건초 구매 = 골드 불변 · 건초 0개",
+		m.wallet.gold == gold_pre and m.inventory.count_of(ItemCatalog.HAY) == 0)
+	m._on_frame_buy_store_item(FruitTreeCatalog.HONBAEKDO, "sapling", false)
+	_check("⑪c 만재 묘목 구매 = 골드 불변 · 묘목 0개",
+		m.wallet.gold == gold_pre and m.inventory.sapling_count(FruitTreeCatalog.HONBAEKDO) == 0)
+	m._buy_seed_store_n(crop, 5)
+	_check("⑪d 만재 씨앗 구매 = 골드 불변 · 씨앗 0개",
+		m.wallet.gold == gold_pre and m.inventory.seed_count(crop) == 0)
+	var spr_got: int = m.buy_sprinkler(3)
+	_check("⑪e 만재 스프링클러 구매 = 0개 반환 · 골드 불변 · 미보유",
+		spr_got == 0 and m.wallet.gold == gold_pre
+		and m.inventory.count_of(ItemCatalog.SPRINKLER) == 0)
+	_check("⑪f 백팩 16칸 **내용**이 한 칸도 안 바뀐다(개수 합이 아니라 슬롯 대조)",
+		_slots_same(slots_pre, m.inventory.slots))
+	# 대조군 — 막힌 게 아니라 자리가 없던 것이다. 한 칸 비우면 대량 5개가 그 칸의 스택으로 들어오고
+	# 결제도 정확히 5개분만 나간다(부분 구매 규약과 같은 결).
+	m.inventory.slots[0] = null
+	var g_before: int = m.wallet.gold
+	var unit_fert: int = StoreDiscount.price(FertilizerCatalog.buy_cost(fert_id), 0)
+	m._on_frame_buy_store_item(fert_id, "fert", true)
+	_check("⑪g 한 칸 비면 대량 5개 구매 성립 · 결제도 5개분(%d냥)" % (unit_fert * m.STORE_BULK),
+		m.inventory.count_of(fert_id) == m.STORE_BULK
+		and m.wallet.gold == g_before - unit_fert * m.STORE_BULK)
 	# 누적 총수입 — 출하 정산분이 _total_income에 쌓인다(_on_day_advanced 실경로).
 	m.ship_bin.pending.clear()
 	m.ship_bin.add(crop, 2)
