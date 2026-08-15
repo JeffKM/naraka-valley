@@ -44,6 +44,11 @@ func _initialize() -> void:
 	_check("①h peek = {id,count,quality}", pk.get("id") == hid and int(pk.get("count")) == 6 and int(pk.get("quality")) == 0)
 	_check("①i remove_at 2개 → 4 남음", c.remove_at(0, 2) and c.count_at(0) == 4)
 	_check("①j 미지 id 거절", c.store("__nope__", 1) == 0)
+	# ★[폴리시] count_of — "세상 어딘가에 그 물건이 있나"를 묻는 파생(레어크로우 8종 소유)이 상자를
+	#   들여다보는 창이다. 품질이 갈려 여러 슬롯에 흩어져도 **합산**이라야 그 질문에 답이 된다.
+	_check("①j-1 count_of = 품질 무관 합산(슬롯0 4 + 슬롯1 2)", c.count_of(hid) == 6)
+	_check("①j-2 없는 id는 0(유니크 도구는 1)",
+		c.count_of(ItemCatalog.HAY) == 0 and c.count_of(ItemCatalog.HOE) == 1)
 
 	# 가득 거절: 서로 다른 스택(같은 (id,q)는 병합되므로 품질 4종 + 유니크 id들)으로 SIZE칸을 채운 뒤 store=0.
 	var full := StorageChest.new()

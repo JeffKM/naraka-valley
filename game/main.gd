@@ -4885,7 +4885,7 @@ func _refresh_greenhouse() -> void:
 	if not _greenhouse_built():
 		return
 	_build_building_catalog()
-	_refresh_home_expansion()   # 카탈로그를 다시 세우면 집 cam이 기본값으로 돌아간다 — 확장분 재주입
+	_refresh_home_expansion()   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
 	if _region == RegionCatalog.HOME:
 		_rebuild_region(RegionCatalog.HOME)
 		if _indoor == "늘봄방":
@@ -10561,7 +10561,12 @@ func _build_building_catalog() -> void:
 		"ext_door": HOUSE_EXT_DOOR, "ext_door2": HOUSE_EXT_DOOR_E, "out_tile": HOUSE_OUT_TILE,
 		# ★C2 — HOME 집 실내는 HOME 밴드 전용 좌표(마을 6채는 HOUSE_* 공유, 아래 루프).
 		# ★[ADR-0046] 2칸 문 = ext_door2/door2로 양 칸 트리거 수용(진입·퇴장 어느 칸에서나).
-		"in_tile": HOME_HOUSE_IN_TILE, "door": HOME_HOUSE_DOOR, "door2": HOME_HOUSE_DOOR_E, "cam": HOME_HOUSE_CAM_RECT,
+		# ★[폴리시] 집 실내 카메라는 **상수가 아니라 파생**이다(`home_house_cam_rect()` — 안방 확장이면
+		#   넓은 rect). 상수를 박아 두면 카탈로그를 다시 세우는 경로마다(늘봄방 완공·시련장 개방)
+		#   확장분이 조용히 날아가 잘린 안방이 남았다 — 재주입을 짝으로 기억해야 하는 규율 대신
+		#   진실원을 하나로 접는다(carpenter 미생성 시점엔 스스로 원본 rect를 낸다).
+		"in_tile": HOME_HOUSE_IN_TILE, "door": HOME_HOUSE_DOOR, "door2": HOME_HOUSE_DOOR_E,
+		"cam": home_house_cam_rect(),
 	}
 	# 나루 마을 카페(실데이터 실내 — 시뮬·NPC·좌석). id·동작·카메라 불변(회귀 0).
 	_buildings["카페"] = {
@@ -11265,9 +11270,12 @@ func _load_game() -> void:
 	#   시련장 안에서 저장한 세이브가 바깥으로 튕긴다. 미개방 세이브면 스스로 no-op이다.
 	_refresh_trial_gate()
 	_restore_location(data)
-	# ★[S8-T7] 안방 확장 세이브 복원 — 부팅 그리드는 원본 rect로 섰고, 복원 구역이 HOME이면
-	# _restore_location이 재빌드를 건너뛰므로(같은 구역 최적화) 여기서 확장 실효를 다시 얹는다
-	# (완공 아침과 같은 헬퍼·멱등 — 미확장 세이브면 스스로 no-op).
+	# ★[폴리시] `_restore_location`의 재빌드가 삽사리 이벤트를 다시 예약할 수 있으므로(_arm_pet_event은
+	#   구역 빌드에 얹혀 있다), 위 "로드는 언제나 예약 없음에서 시작한다"는 규율을 여기서 다시 강제한다
+	#   — 연출은 세이브 대상이 아니고, 예정일이 지난 세이브는 다음 마을 진입이 알아서 다시 예약한다.
+	_pet_event_armed = false
+	# ★[S8-T7] 안방 확장 세이브 복원 — deco 배치 가능 칸을 확장 rect로 재주입한다(완공 아침과 같은
+	# 헬퍼·멱등 — 미확장 세이브면 스스로 no-op). 그리드·카메라는 위 재빌드와 카탈로그가 이미 세운다.
 	_refresh_home_expansion()
 	# M2.4 F9 재로드(이 함수 직접 호출 경로)에서도 복원된 day로 의상·보너스를 맞춘다(멱등).
 	# ★[S6-T3] 이 호출이 카페 일구기 사다리(좌석·곳간 용량·손님 볼륨)도 함께 세운다 — 위에서
@@ -11291,7 +11299,6 @@ func _restore_location(data: Dictionary) -> void:
 	# ★[S5-T1] 갱도 층은 구역 id가 아니라 **직교 상태 축**이라 여기서 함께 복원한다(_rebuild_region이
 	#   이 값을 읽어 지상 무대 대신 층 그리드를 세운다). 갱도가 아닌 구역에 층 값이 붙은 손상/구세이브는
 	#   지상 0층으로 자른다 — 다른 구역에서 24×24 층 그리드가 서는 사고를 원천 차단.
-	var prev_floor := _mine_floor
 	_mine_floor = int(data.get("mine_floor", 0))
 	if saved_region != RegionCatalog.EOPHWA_MINE or not MineFloors.is_valid_floor(_mine_floor):
 		_mine_floor = 0
@@ -11299,26 +11306,28 @@ func _restore_location(data: Dictionary) -> void:
 	#   기절·퇴장과 같은 줄). 그래서 세이브에 깊이 키가 아예 없고, 여기서는 옛 런 상태를 지워 늘
 	#   아레나(깊이 0)에서 재개시킨다. 나락 구역에 저장된 위치는 아래 위치 복원이 그대로 쓰되, 층
 	#   그리드가 아니라 지상 아레나가 서므로 그 좌표가 유효하다(아레나는 64×44 통짜다).
-	var prev_depth := _narak_depth
 	_narak_depth = 0
 	_narak_layout = {}
 	if not RegionCatalog.is_built(saved_region):
 		push_warning("[M1.5] 미지/미빌드 구역 '%s' — 홈베이스 스폰으로 폴백" % saved_region)
 		_mine_floor = 0
-		if _region != RegionCatalog.HOME:
-			_rebuild_region(RegionCatalog.HOME)
+		_rebuild_region(RegionCatalog.HOME)   # ★[폴리시] 아래 본 경로와 같은 이유로 무조건 재빌드
 		_indoor = ""
 		player.position = _tile_center_px(SPAWN_TILE)
 		_apply_camera_limits()
 		return
-	# 정상 복원: 저장 구역이 부팅 구역(HOME)과 다르면 그 구역을 재빌드한다(_warp과 같은 결 —
-	# 현재 구역만 메모리, M1.2 구현 (b)). 같으면(HOME) 이미 빌드돼 있어 재빌드 불필요.
-	# ★[S5-T1] 층이 갈렸으면 구역 id가 같아도(갱도↔갱도 층) 재빌드해야 한다 — F9 재로드로 지상↔층을
-	#   오갈 때 옛 그리드가 남는 걸 막는다.
-	# ★[S5-T7] 나락 깊이가 갈렸을 때도(런 중 F9 재로드) 같은 이유로 재빌드한다 — 옛 층 그리드가
-	#   남은 채 아레나 좌표에 떨어지면 24×24 방 밖 암반에 갇힌다.
-	if saved_region != _region or prev_floor != _mine_floor or prev_depth != _narak_depth:
-		_rebuild_region(saved_region)
+	# 정상 복원: 저장 구역을 **언제나** 재빌드한다(_warp과 같은 결 — 현재 구역만 메모리, M1.2 구현 (b)).
+	# 위에서 층·깊이를 먼저 되돌려 두었으므로(갱도 층·나락 깊이는 구역 id와 직교한 상태 축), 여기서
+	# 세우는 무대가 곧 세이브가 말하는 무대다 — 지상↔층이 갈린 F9 재로드에도 옛 그리드가 안 남는다.
+	# ★[폴리시] **"같은 구역·같은 층이면 이미 빌드돼 있다"는 최적화를 폐기했다.** 그 전제는 부팅
+	#   경로(항상 HOME·0층에서 출발)에서만 참이고, F9 인플레이스 재로드에는 거짓이다: 저장 뒤 깬
+	#   돌·벤 나무는 `_sync_mine_tile`·`_sync_tree_tile`이 `_grid`를 **직접** PATH/GROUND로 바꿔
+	#   두는데, 원장(mine_floors·tree_ledger)만 세이브 시점으로 되돌아가면 그려진 돌·나무를 그냥
+	#   통과해 걸어 들어간다(같은 칸을 다시 캐 산출도 중복). `_grid`에 돌·나무를 되놓는 코드는
+	#   `_build_grid` 안에만 있으므로, 로드 후 무대는 **반드시 원장에서 재파생**되어야 한다.
+	#   덤으로 `_clear_mine_mobs`(빌드 앞단)도 이 경로에서만 빠져 옛 세션의 잡귀가 살아남았다.
+	#   비용은 워프 한 번과 같고(로드는 드문 사건), 재빌드는 멱등이라 종전 경로의 결과는 불변이다.
+	_rebuild_region(saved_region)
 	# 실내 모드는 카탈로그로 방어한다(★ M2.2 — 8채로 늘어 화이트리스트 대신 _buildings 조회).
 	# 알 수 없는 id거나 복원 구역과 다른 구역의 건물이면 바깥("")으로 — 카메라가 외부 경계로
 	# 안전 복귀(예: region=홈인데 indoor=만물상 같은 손상/구버전 세이브로 격리방에 갇히지 않게).
@@ -12573,7 +12582,7 @@ func _process(delta: float) -> void:
 	var holding_garden_pot := inventory.selected_id() == ItemCatalog.GARDEN_POT
 	# 조준 칸에 화분이 서 있는가 — 아래 도구 디스패치 게이트가 읽는다. 화분은 SOIL이 아닌 실내
 	# 마룻바닥에도 서므로, `_target_valid`(=밭 흙) 하나로는 화분 위 물주기·심기가 영영 안 나간다.
-	var pot_at_target := garden_pot != null and garden_pot.has_at(_target)
+	var pot_at_target := _pot_at(_target)
 	var on_garden_pot := not _sleeping and holding_garden_pot and pot_at_target
 	if on_garden_pot and Input.is_action_just_pressed("use_tool"):
 		_remove_garden_pot(_target)
@@ -13340,7 +13349,7 @@ func _use_tool() -> void:
 		# ★[S10-T5] 화분 손 물주기 — **화분에 물이 드는 유일한 경로**다(ADR-0069 결정 8 "매일 손
 		#   물주기"). AoE를 안 태운다: 넓은 물뿌리개로 방 안을 한 번에 적시면 "매일 손이 간다"는
 		#   화분의 정체가 사라진다(화분 하나에 한 번 — 칸당 −1은 밭과 같다).
-		if _can_water > 0 and garden_pot != null and garden_pot.has_at(_target):
+		if _can_water > 0 and _pot_at(_target):
 			if garden_pot.water(_target):
 				_can_water -= 1
 				_refresh_water_badge()
@@ -13356,7 +13365,7 @@ func _use_tool() -> void:
 			if watered > 0:
 				_refresh_water_badge()
 				verb = "물주기"
-		elif garden_pot != null and garden_pot.is_planted(_target) and not garden_pot.is_watered(_target):
+		elif _pot_at(_target) and garden_pot.is_planted(_target) and not garden_pot.is_watered(_target):
 			_notice("물이 없다 — 혼우물·연못에서 채우자")
 			return
 		elif _field_at(_target).is_planted(_target) and not _field_at(_target).is_watered(_target):
@@ -13373,7 +13382,7 @@ func _use_tool() -> void:
 		# ★[S10-T5] 화분이 우선이다 — 화분을 놓은 칸을 조준했으면 밭이 아니라 화분에 심는다
 		#   (화분은 실내 바닥 위에 서므로 밭 칸과 겹칠 일이 거의 없지만, 늘봄방 경작면 위에
 		#   놓을 수 있어 우선순위를 명시한다. 놓은 물건이 밑의 흙보다 앞이다).
-		if garden_pot != null and garden_pot.has_at(_target):
+		if _pot_at(_target):
 			if inventory.has_seed(seed_crop) and garden_pot.plant(_target, crop):
 				inventory.take_seed(seed_crop)
 				verb = "심기"
@@ -13384,7 +13393,7 @@ func _use_tool() -> void:
 		# ★ [S1-6] 든 비료를 경작 칸에 뿌린다(§8.4 — 심김/빈칸 무관, 다른 비료면 overwrite). 뿌리면 1개 소모.
 		# ★[S10-T5] 화분엔 비료를 못 준다(최소형 — GardenPot에 fertilize API가 없다). 라우터가
 		#   화분 칸의 *밑 타일* 밭으로 흘려보내지 않게, 화분이 선 칸은 여기서 통째로 배제한다.
-		if garden_pot != null and garden_pot.has_at(_target):
+		if _pot_at(_target):
 			pass
 		elif _field_at(_target).fertilize(_target, item):
 			inventory.remove_item(item, 1)
@@ -13842,14 +13851,27 @@ func _remove_sprinkler(t: Vector2i) -> void:
 		queue_redraw()
 
 # ── ★[S10-T5 / ADR-0069 결정 8] 화분 배치/회수 ────────────────────────────────
+# ★[폴리시] 이 칸에 **지금 무대에서** 화분이 서 있는가. 화분 원장은 좌표만 키로 들고(구역 축 없음)
+#   실내 밴드 좌표는 구역끼리 겹치므로, 원장 질의는 전부 이 술어를 거친다 — 안 그러면 안식 농원
+#   집에 놓은 화분을 나루 마을 실내에서 같은 좌표로 원격 조작하게 된다(그림은 HOME에서만 그려져
+#   보이지도 않는다). 배치를 HOME으로 좁힌 `_can_place_pot`의 짝이다(놓는 곳과 만지는 곳이 같다).
+func _pot_at(t: Vector2i) -> bool:
+	return garden_pot != null and _region == RegionCatalog.HOME and garden_pot.has_at(t)
+
 # 이 칸에 화분을 놓을 수 있는가. 스프링클러 규칙의 **거울상**이다: 저쪽이 "바깥 지면"을 요구한다면
 # 이쪽은 "실내"를 요구한다(ADR-0069 결정 8 "배치 가능 위치 = 실내(집·늘봄방)").
 #   ㉠ 실내여야 한다(`_indoor != ""`) — 화분은 방 안 소품이다. 바깥에 놓는 건 그냥 밭이 하는 일이다.
 #   ㉡ 밟을 수 있는 바닥이어야 한다(비-SOLID) — 벽·문틀엔 못 놓는다.
 #   ㉢ 이미 화분이 선 칸엔 못 놓는다(그 위엔 회수만 — 스프링클러와 같은 멱등 규칙).
 #   ㉣ 늘봄방 경작면 위엔 놓되 **이미 경작된 칸**은 피한다(고랑을 화분이 덮어 밭이 죽는 사고 방지).
+#   ㉤ ★[폴리시] **안식 농원이어야 한다** — ADR-0069 결정 8이 든 자리가 정확히 "집·늘봄방"이고,
+#      그 둘은 모두 HOME이다. 이 가드가 빠져 있어 만물상·길드 같은 **다른 구역 실내**에도 놓였는데,
+#      원장(GardenPot._pots)은 좌표만 키로 들고 `_draw_garden_pots`는 HOME에서만 불린다 —
+#      놓은 방에서는 영영 안 보이고, 실내 밴드 좌표가 겹치는 HOME 쪽에는 유령 화분이 서서
+#      원격으로 심기·물주기·수확까지 먹혔다. 원장에 구역 축을 새로 세우는 대신(세이브 스키마가
+#      늘고 진실원이 갈린다) **문서화된 배치 범위로 좁혀** 좌표 하나가 주인을 유일하게 정하게 한다.
 func _can_place_pot(t: Vector2i) -> bool:
-	if garden_pot == null or _indoor == "":
+	if garden_pot == null or _region != RegionCatalog.HOME or _indoor == "":
 		return false
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
 		return false
@@ -13911,15 +13933,23 @@ func _remove_rarecrow(t: Vector2i) -> void:
 	queue_redraw()
 
 # ── ★[S10-T2 / ADR-0069 결정 4] 레어크로우 수집 진척(원장 없는 파생) ──────────────
-# **소지(백팩) ∪ 배치(밭)** 가 수집의 정의다(ADR-0069 결정 4 "8종 소지/배치 완성 판정"). 별도
-# "획득 이력" 원장을 두지 않는 근거: 레어크로우는 세상에서 잃을 수 없는 물건이다 — 비매(price 0)라
-# 매대에 못 팔고, 출하함은 CAT_HARVEST만 받으며, 백팩 버리기는 책과 같은 이유로 막혀 있다
-# (`_on_frame_discard`). 그래서 합집합이 곧 단조 증가하는 이력이고, 원장을 하나 더 두면 같은
-# 사실의 진실원이 둘이 된다.
+# **소지(백팩) ∪ 배치(밭) ∪ 보관(저장 상자)** 이 수집의 정의다(ADR-0069 결정 4 "8종 소지/배치 완성
+# 판정"). 별도 "획득 이력" 원장을 두지 않는 근거: 레어크로우는 세상에서 잃을 수 없는 물건이다 —
+# 비매(price 0)라 매대에 못 팔고, 출하함은 CAT_HARVEST만 받으며, 백팩 버리기·선물은 책과 같은
+# 이유로 막혀 있다(`_on_frame_discard`·선물 거절). 그래서 합집합이 곧 단조 증가하는 이력이고,
+# 원장을 하나 더 두면 같은 사실의 진실원이 둘이 된다.
+# ★[폴리시] **저장 상자를 합집합에 넣었다.** 상자만은 무엇이든 받는데(카테고리 필터 없음) 여기서
+#   빠져 있어, 상자에 넣는 순간 그 종을 안 가진 것으로 읽혔다 — 만물상 1회 한정 매대가 다시 열려
+#   같은 종을 또 결제하고(다른 매대는 has_bought 원장이 막는다), 8종 완주가 풀려 허수아비 보호
+#   반경이 디럭스에서 기본으로 조용히 되돌아갔다. 두 상자(집·갈무리방)는 서로 독립이라 둘 다 본다.
 func _rarecrow_owned(id: String) -> bool:
 	if inventory != null and inventory.count_of(id) > 0:
 		return true
-	return rarecrow != null and rarecrow.is_placed(id)
+	if rarecrow != null and rarecrow.is_placed(id):
+		return true
+	if chest != null and chest.count_of(id) > 0:
+		return true
+	return storehouse_chest != null and storehouse_chest.count_of(id) > 0
 
 # 모은 종 수(0~8). 분모는 ItemCatalog.RARECROWS 크기에서 파생한다(하드코딩 8 없음).
 func _rarecrow_collected() -> int:
@@ -14873,7 +14903,7 @@ func _try_harvest() -> void:
 	# ★[S10-T5 / ADR-0069 결정 8] 화분 수확 — 밭 경로보다 **먼저** 본다(놓은 물건이 밑의 흙보다
 	#   앞이다·짐승·과수 우선 분기와 같은 규율). 수확 문법은 노지와 같다: 품질 roll → 적재 →
 	#   점수판·XP·사연. 갈리는 건 원장 하나뿐이라 이 분기는 얇다.
-	if garden_pot != null and garden_pot.has_at(_target) and garden_pot.is_mature(_target):
+	if _pot_at(_target) and garden_pot.is_mature(_target):
 		_harvest_pot()
 		return
 	var field := _field_at(_target)              # ★[S10-T5] 이 칸의 주인 밭(노지/늘봄방)
@@ -15346,7 +15376,7 @@ func _pot_prompt() -> String:
 	# 화분을 든 채 빈 실내 바닥을 조준 → 놓기 안내(설치 동사 — 스프링클러 프롬프트와 같은 결).
 	if item == ItemCatalog.GARDEN_POT and _can_place_pot(_target):
 		return "[좌클릭] 화분 놓기"
-	if not garden_pot.has_at(_target):
+	if not _pot_at(_target):
 		return ""
 	if garden_pot.is_mature(_target):
 		return "[우클릭] 수확"

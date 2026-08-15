@@ -142,6 +142,51 @@ func _initialize() -> void:
 	_check("⑤b 복원 위치 = 저장한 갱도 칸", m6._player_tile() == Vector2i(20, 22))
 	await _despawn(m6)
 
+	# ── ⑥ ★[폴리시] 같은 구역·같은 층 **인플레이스 재로드**(F9)도 무대를 원장에서 재파생한다 ──
+	# 옛 최적화("저장 구역이 현재 구역과 같으면 이미 빌드돼 있다")는 부팅 경로에서만 참이었다.
+	# F9 재로드에는 거짓이다: 저장 뒤 깬 돌은 `_sync_mine_tile`이 `_grid`를 직접 PATH로 바꿔 두는데
+	# 원장만 세이브 시점으로 되돌아가면, **그려진 돌을 그냥 통과해 걸어 들어간다**(같은 돌 재채굴).
+	var m7: Node = await _spawn_main()
+	m7._rebuild_region(RegionCatalog.EOPHWA_MINE)
+	m7._descend_mine(1)
+	await _settle()
+	_check("⑥a 전제 — 갱도 1층 진입(24×24 층 그리드)",
+		m7._region == RegionCatalog.EOPHWA_MINE and m7._mine_floor == 1
+		and m7._grid_w == MineFloors.FLOOR_W)
+	# 광맥이 아닌 일반 돌 하나를 고른다(1타로 깨진다 — 채굴 규칙 자체는 mine_floor_test 소관).
+	var rock := Vector2i(-1, -1)
+	for r: Vector2i in m7.mine_floors.rocks_left(m7.clock.day, 1):
+		if m7._mine_node_at(r) == "":
+			rock = r
+			break
+	_check("⑥b 전제 — 깰 일반 돌을 찾았고 그 칸이 지금 ROCK(통행 X)",
+		rock != Vector2i(-1, -1) and m7._grid[rock.y][rock.x] == m7.ROCK and m7._tile_blocked(rock))
+	m7._save_game()
+	# 저장 **뒤** 그 돌을 깬다 — 원장에는 기록되고 그리드는 PATH로 열린다.
+	for i in range(m7.inventory.slots.size()):
+		if m7.inventory.id_at(i) == ItemCatalog.PICKAXE:
+			m7.inventory.select(i)
+	m7.energy.refill()
+	m7._target = rock
+	m7._mine_rock(rock)
+	_check("⑥c 저장 뒤 채굴 — 원장 기록 + 그리드가 PATH로 열림",
+		m7.mine_floors.is_mined(1, rock) and m7._grid[rock.y][rock.x] == m7.PATH)
+	# 옛 세션 잡귀가 남는지도 같은 자리에서 잰다(층 몹은 비영속 — 빌드 앞단이 비운다).
+	m7._mobs_spawned = 999
+	# F9 = 인플레이스 재로드(씬 리로드 아님). 구역·층이 저장 시점과 **같다**.
+	m7._load_game()
+	await _settle()
+	_check("⑥d 재로드 후에도 같은 구역·같은 층(무대는 안 바뀐다)",
+		m7._region == RegionCatalog.EOPHWA_MINE and m7._mine_floor == 1)
+	_check("⑥e 원장이 세이브 시점으로 돌아온다(그 돌은 다시 '안 깬 돌')",
+		not m7.mine_floors.is_mined(1, rock))
+	_check("⑥f ★그리드도 원장에서 재파생 — 돌이 되돌아와 통행이 다시 막힌다",
+		m7._grid[rock.y][rock.x] == m7.ROCK and m7._tile_blocked(rock))
+	_check("⑥g 그려진 돌 = 캘 수 있는 돌(그림·판정·통행 삼자 일치)", m7._is_mine_rock(rock))
+	_check("⑥h 층 잡귀도 다시 세워진다(옛 세션 마커 999 소멸)",
+		m7._mobs_spawned != 999 and m7._mobs_spawned == m7._mobs.size())
+	await _despawn(m7)
+
 	# ── 세이브 백업 복원(실제 개발 세이브 보존) ──
 	if had_save:
 		_write_bytes(SAVE, _read_bytes(BAK))

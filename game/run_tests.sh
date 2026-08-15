@@ -9,14 +9,17 @@
 # 사용:
 #   ./run_tests.sh                    # playtest/의 모든 *_test.gd 순차 실행
 #   ./run_tests.sh heart_bar lighting # 지정 테스트만 (접미사 _test.gd 자동 보정)
-#   TIMEOUT=90 ./run_tests.sh weave   # 워치독 시간 조정 (기본 60초)
+#   TIMEOUT=90 ./run_tests.sh weave   # 워치독 시간 조정 (기본 120초)
 #
 # 종료코드: 모두 통과면 0, 하나라도 실패/타임아웃이면 1.
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1
 
 GODOT="${GODOT:-godot}"
-TIMEOUT="${TIMEOUT:-60}"
+# 기본 120초 — garden_pot_test가 구역 이동·재빌드 단언 확장으로 실측 ~63초에 이르러
+# 60초 경계에서 flaky 오탐이 났다(2026-08-15 폴리시 루프 실측). 워치독 자체는 유지라
+# 행/좀비는 여전히 120초에 강제 종료된다.
+TIMEOUT="${TIMEOUT:-120}"
 PLAYTEST_DIR="playtest"
 
 # 인자가 없으면 모든 *_test.gd, 있으면 그 이름들(경로·.gd·_test 접미사 모두 허용)
