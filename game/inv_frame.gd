@@ -1050,17 +1050,23 @@ func _draw_options_tab(panel: Rect2, font: Font) -> void:
 # ★ Phase D 볼륨 한 줄(라벨 · [−] · 트랙바 · [+] · 백분율). [−]/[+] 버튼 Rect2 둘을 배열로 돌려준다.
 func _draw_volume_row(font: Font, x: float, yy: float, label: String, v01: float) -> Array:
 	HanjiUi.draw_text(self, Vector2(x, yy), label, 14, HanjiUi.INK_LIGHT)
-	var minus := Rect2(x + 92.0, yy - 14.0, 20.0, 18.0)
-	_plate_btn(minus)
-	HanjiUi.draw_text(self, minus.position + Vector2(7.0, 15.0), "-", 16, HanjiUi.INK_LIGHT)
+	# ★ 타이틀 설정 화면(title_screen._paint_vol_row)과 **같은 규격**으로 통일한다: 납작한 INSET
+	#   칸 + 테두리 한 줄 + 유니코드 −(U+2212)/+ 글리프. 옛 판은 두꺼운 한지 판 버튼(_plate_btn)
+	#   위에 ASCII 하이픈을 baseline 한 칸 아래로 얹어, 글리프가 판 테두리에 물리고 +의 아랫동이
+	#   판 밖으로 삐져나와 "아래 화살표"처럼 읽혔다(같은 설정을 두 화면이 다르게 그리던 것의 정리).
+	var minus := Rect2(x + 92.0, yy - 15.0, 22.0, 20.0)
+	draw_rect(minus, HanjiUi.INSET)
+	draw_rect(minus, HanjiUi.BORDER, false, 1.0)
+	HanjiUi.draw_text(self, Vector2(minus.position.x + 7.0, yy), "−", 18, HanjiUi.INK_LIGHT)
 	var track := Rect2(x + 118.0, yy - 12.0, 96.0, 12.0)
 	draw_rect(track, HanjiUi.INSET)
 	if v01 > 0.0:
 		draw_rect(Rect2(track.position, Vector2(track.size.x * clampf(v01, 0.0, 1.0), track.size.y)), HanjiUi.GOLD)
 	draw_rect(track, HanjiUi.BORDER, false, 1.0)
-	var plus := Rect2(x + 220.0, yy - 14.0, 20.0, 18.0)
-	_plate_btn(plus)
-	HanjiUi.draw_text(self, plus.position + Vector2(6.0, 15.0), "+", 15, HanjiUi.INK_LIGHT)
+	var plus := Rect2(x + 220.0, yy - 15.0, 22.0, 20.0)
+	draw_rect(plus, HanjiUi.INSET)
+	draw_rect(plus, HanjiUi.BORDER, false, 1.0)
+	HanjiUi.draw_text(self, Vector2(plus.position.x + 6.0, yy), "+", 17, HanjiUi.INK_LIGHT)
 	HanjiUi.draw_text(self, Vector2(x + 248.0, yy), "%d%%" % roundi(v01 * 100.0), 13, HanjiUi.INK_LIGHT)
 	return [minus, plus]
 

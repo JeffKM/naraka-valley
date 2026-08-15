@@ -27,15 +27,30 @@ func set_room(active_now: bool, room_px: Rect2) -> void:
 	world_rect_px = room_px
 	queue_redraw()
 
+# 방 월드 rect를 **이 노드의 로컬 좌표**로 투영한다(가림막 네 변이 두르는 "구멍").
+# 월드 → 화면(뷰포트 canvas_transform = 카메라) → 로컬(get_global_transform_with_canvas의 역).
+# ★ 로컬로 되돌리는 게 필수인 이유(길드↔시련장 누출 버그): main.tscn의 CanvasLayer는 scale 1.5다
+#   (640×360 논리 → 960×540 화면). 화면 픽셀을 로컬에 그대로 그리면 가림막이 1.5배로 부풀어
+#   방의 오른쪽·아래 가림막이 화면 밖으로 밀려나고, 그 자리로 이웃 방이 통째로 드러난다.
+# _draw와 회귀 테스트가 같은 식을 쓰도록 분리했다 — 보정이 빠지면 여기서 바로 드러난다.
+func hole_rect_local() -> Rect2:
+	var ct := get_viewport().get_canvas_transform()
+	var to_local := get_global_transform_with_canvas().affine_inverse()
+	var tl := to_local * (ct * world_rect_px.position)
+	var br := to_local * (ct * world_rect_px.end)
+	return Rect2(tl, br - tl)
+
+# 화면 끝을 같은 로컬 단위로(basis_xform = 원점 평행이동 제외한 순수 스케일·회전).
+func screen_size_local() -> Vector2:
+	return get_global_transform_with_canvas().affine_inverse().basis_xform(get_viewport_rect().size)
+
 func _draw() -> void:
 	if not active:
 		return
-	# 방 월드 rect → 화면 좌표(월드 캔버스 변환 = 카메라). CanvasLayer는 화면공간이라 직접 안 받으므로
-	# 뷰포트의 canvas_transform을 곱한다(카메라 이동·정렬을 그대로 반영).
-	var ct := get_viewport().get_canvas_transform()
-	var tl := ct * world_rect_px.position
-	var br := ct * world_rect_px.end
-	var screen := size
+	var hole := hole_rect_local()
+	var tl := hole.position
+	var br := hole.end
+	var screen := screen_size_local()
 	var black := Color(0.0, 0.0, 0.0, 1.0)
 	# 방 바깥 네 변(겹치지 않게 위·아래는 전체 폭, 좌·우는 방 높이 구간만). 음수 폭/높이는 0으로.
 	var top_h := clampf(tl.y, 0.0, screen.y)

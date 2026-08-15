@@ -92,6 +92,23 @@ func _initialize() -> void:
 		enterable += 1
 	_check("②b enterable 건물 25채 전부 검증", enterable == 25)
 
+	# ── ⑤ 가림막 기하가 CanvasLayer scale(1.5)을 보정한다 ──
+	# 왜(길드↔시련장 누출 버그): 마스크는 화면공간 CanvasLayer 자식인데 그 레이어가 scale 1.5다
+	# (640×360 논리 → 960×540). 화면 픽셀을 로컬에 그대로 그리면 가림막이 1.5배로 부풀어 방
+	# 오른쪽·아래를 못 덮고 이웃 방이 드러난다. **로컬 크기 × 레이어 스케일 = 화면 크기**가
+	# 그 보정의 불변식이다(카메라 zoom=1이라 방의 화면 크기 = 월드 rect 크기).
+	m._indoor = "길드"
+	m._process(0.0)
+	var mask: Control = m.indoor_mask
+	var lscale: Vector2 = mask.get_global_transform_with_canvas().get_scale()
+	_check("⑤ CanvasLayer 스케일이 1이 아님(보정이 필요한 상황 자체를 못박음)", lscale.x != 1.0)
+	var hole: Rect2 = mask.hole_rect_local()
+	_check("⑤ 구멍 로컬 크기 × 레이어 스케일 = 방 월드 크기", \
+		(hole.size * lscale - mask.world_rect_px.size).length() < 0.01)
+	var vp: Vector2 = m.get_viewport().get_visible_rect().size
+	_check("⑤ 화면 끝 로컬 크기 × 레이어 스케일 = 뷰포트 크기", \
+		(mask.screen_size_local() * lscale - vp).length() < 0.01)
+
 	# ── ③b 실내 → 외부 복귀 시 마스크 즉시 비활성(상태 안 샘) ──
 	m._indoor = ""
 	m._process(0.0)

@@ -49,16 +49,16 @@ func push(text: String, secs: float, wide: bool = false, icon: Texture2D = null,
 func _process(delta: float) -> void:
 	if _items.is_empty():
 		return
-	# 각 항목의 남은 시간을 줄이고, 끝난 것은 제거한다. 살아 있는 항목이 있으면 매 프레임
-	# 다시 그려(알파 페이드가 연속으로 흐르게) 한다.
-	var any_alive := false
+	# 각 항목의 남은 시간을 줄이고, 끝난 것은 제거한다. 항목이 하나라도 있던 프레임이면 **무조건**
+	# 다시 그린다(알파 페이드가 연속으로 흐르게 + 마지막 항목이 사라진 프레임의 지우기).
+	# ★ 옛 조건("살아 있는 게 남았을 때만 redraw")은 큐가 비는 바로 그 프레임의 redraw를 건너뛰어,
+	#   CanvasItem에 마지막으로 그려진 **반투명 알림 띠가 화면에 영구히 남았다**(CanvasItem은 다시
+	#   그리기 전까지 옛 그리기 명령을 유지한다). 다음 알림이 올 때까지 안 지워져, 갱도 층처럼
+	#   화면에 검은 여백이 있는 무대에서 "갱도 N층 …" 잔재가 또렷이 떠 있었다.
 	for item in _items:
 		item["secs"] -= delta
-		if item["secs"] > 0.0:
-			any_alive = true
 	_items = _items.filter(func(it): return it["secs"] > 0.0)
-	if any_alive or not _items.is_empty():
-		queue_redraw()
+	queue_redraw()
 
 # 부모 CanvasLayer scale을 되돌려 보이는 논리 영역(=640×360)을 얻는다(핫바와 동일).
 func _view() -> Vector2:

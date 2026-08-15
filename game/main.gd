@@ -2037,7 +2037,10 @@ const MIHOK_DEEP_STUMP_TILES := [
 #     (열매 자체가 나흘 이벤트라 그루 수로 총량을 더 죌 이유가 없다 — 잠정 수치, owner 큐).
 const FOREST_BUSH_TILES := [
 	Vector2i(16, 12), Vector2i(24, 12),   # 빈터①(x17..23,y6..10) 남쪽 언저리 좌우
-	Vector2i(41, 13),                     # 빈터②(x42..48,y8..12) 남서 모서리 밖
+	# ★ 빈터②(x42..48,y8..12) **서쪽** 언저리. 옛 자리 (41,13)은 내부 나무 군집(38,14,6,4) 바로
+	#   북쪽이라, 침엽수 수관이 밑동 위 ~2.5칸까지 솟아(밑동 y14 → 수관 끝 y11.5) 덤불 아랫도리를
+	#   통째로 덮었다 — 열매만 캐노피 한복판에 떠 있는 그림이 됐다. 수관 끝 위로 올린다.
+	Vector2i(41, 10),
 	Vector2i(46, 35),                     # 빈터③(x39..45,y32..36) 동쪽 언저리
 ]
 const MIHOK_BUSH_TILES := [
@@ -17717,7 +17720,9 @@ func _setup_residents() -> void:
 	# 저녁 = 카페(영업창 15:00~) **홀 남동 구석**. 직원 줄(y88)·카운터(y89)·좌석 스툴(y90)·손님
 	# 테이블(y93)·등불(18,91)·모찌 자리(13,92)를 전부 비껴간 칸이다. 일하는 자리가 아니라 **손님**
 	# 으로 앉는다(그 집에서 무거운 걸 나르던 사람이, 이제는 아무것도 안 나르고 앉아 있는 그림).
-	var ken_cafe_tile := Vector2i(17, 92)
+	# ★ 밤 잡귀 스폿(NIGHT_SPOT_TILES 11·14·17 @y92)도 비껴간다 — 옛 자리 (17,92)가 스폿 2와
+	#   같은 칸이라, 바를 연 밤이면 손님 상(좌석 17,90)·켄·잡귀 셋이 한 칸에 겹쳐 쌓였다.
+	var ken_cafe_tile := Vector2i(18, 92)
 	r_ken.schedule = [
 		{"from_min": 0, "tile": ken_home_tile, "region": RegionCatalog.NARU_VILLAGE},
 		{"from_min": 9 * 60, "tile": ken_plaza_tile, "region": RegionCatalog.NARU_VILLAGE},
@@ -21985,6 +21990,11 @@ const _CHUD_H := 34.0        # 패널 높이 — 트랙 한 줄 + 잔여 시간 
 const _CHUD_PAD := 11.0      # 판 테두리 안쪽 여백
 # 트랙 왼쪽 시작(판 여백 + 배지 + 틈) — 배지가 없어도 판이 안 무너지게 한 상수로 둔다.
 const _HUD_TRACK_X := _CHUD_PAD + _HUD_BADGE + _HUD_BADGE_GAP
+# 판 밑변을 플레이어 **머리 끝 위**로 띄우는 거리. 플레이어 노드 원점은 발치고(CharSprite
+# FOOT_OFFSET_Y −36 → 80프레임 안 발치 76이 원점), 머리 끝은 원점에서 ≈56px 위다. 옛 값 26은
+# 몸통 한복판이라 판이 스프라이트 뒤로 깔려 게이지가 가렸다(판은 main._draw, 플레이어는 별도
+# 노드라 그리기 순서로 못 이긴다 — 자리로 푼다). 56 + 여백 6.
+const _HUD_ABOVE_HEAD := 62.0
 
 # 판 왼쪽 세로 가운데에 배지 한 장(텍스처 없으면 조용히 건너뛴다 — 트랙 자리는 그대로).
 func _draw_hud_badge(org: Vector2, h: float, tex: Texture2D) -> void:
@@ -21997,7 +22007,7 @@ func _draw_cheki_hud() -> void:
 	if cheki == null or player == null:
 		return
 	# 패널은 플레이어 **머리 위**에 눕힌다(가로형이라 낚시 세로 판과 자리가 안 겹친다).
-	var org: Vector2 = player.global_position + Vector2(-_CHUD_W * 0.5, -_CHUD_H - 26.0)
+	var org: Vector2 = player.global_position + Vector2(-_CHUD_W * 0.5, -_CHUD_H - _HUD_ABOVE_HEAD)
 	var panel := Rect2(org, Vector2(_CHUD_W, _CHUD_H))
 	HanjiUi.draw_plate(self, panel)
 	_draw_hud_badge(org, _CHUD_H, _HUD_BADGE_CHEKI)
@@ -22043,7 +22053,7 @@ const _KHUD_PAD := 11.0
 func _draw_cocktail_hud() -> void:
 	if cocktail == null or player == null:
 		return
-	var org: Vector2 = player.global_position + Vector2(-_KHUD_W * 0.5, -_KHUD_H - 26.0)
+	var org: Vector2 = player.global_position + Vector2(-_KHUD_W * 0.5, -_KHUD_H - _HUD_ABOVE_HEAD)
 	var panel := Rect2(org, Vector2(_KHUD_W, _KHUD_H))
 	HanjiUi.draw_plate(self, panel)
 	_draw_hud_badge(org, _KHUD_H, _HUD_BADGE_COCKTAIL)   # ★[S6-T8] 셰이커 = 밤 칵테일의 표식
@@ -23671,9 +23681,13 @@ func _draw_want_bubble(t: Vector2i, menu_id: String) -> void:
 func _draw_guest_mark(t: Vector2i, guest_id: String) -> void:
 	if guest_id == "" or not guests.is_regular(guest_id):
 		return
-	var dot := Rect2(t.x * TILE + TILE * 0.5 - _WANT_ICON * 0.5 - 11.0, t.y * TILE - _WANT_ICON, 6.0, 6.0)
-	draw_rect(dot.grow(1.0), Color(0.06, 0.05, 0.08, 0.85))   # 말풍선과 같은 어두운 테
-	draw_rect(dot, Color(1.0, 0.86, 0.45))                    # 단골 = 밝은 등불빛
+	# ★ 사각형 → **둥근 등불 점**. 옛 모양(6×6 단색 사각 + 어두운 테)은 도트 무대에서 "테두리만
+	#   있는 빈 액자"로 읽혀, 옆의 한지 판 말풍선 곁에 미완성 플레이스홀더처럼 떠 보였다.
+	#   자리(중심)는 그대로 두고 형태만 등불로 바꾼다 — 무리 → 테 → 심지 순으로 겹쳐 칠한다.
+	var dot_c := Vector2(t.x * TILE + TILE * 0.5 - _WANT_ICON * 0.5 - 8.0, t.y * TILE - _WANT_ICON + 3.0)
+	draw_circle(dot_c, 5.5, Color(1.0, 0.86, 0.45, 0.18))     # 옅은 무리(불빛 번짐)
+	draw_circle(dot_c, 4.0, Color(0.06, 0.05, 0.08, 0.85))    # 말풍선과 같은 어두운 테
+	draw_circle(dot_c, 3.0, Color(1.0, 0.86, 0.45))           # 단골 = 밝은 등불빛
 
 # T6.4 바를 연 밤(옵트인)의 바 손님과 머리 위 인내심 바를 그린다. 낮 카페 손님과 같은 좌석 줄을
 # 시간대로 나눠 쓰므로(cafe 마감 후 밤 바) 그리기도 카페 손님과 똑같은 규격이고, 활성(밤 바 영업
