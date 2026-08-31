@@ -12,7 +12,8 @@ extends SceneTree
 #   band_neokgol   : 넋골 밴드(25층) — 청록 그림자 톤
 #   band_eophwa    : 업화 밴드(45층) — 달군 주홍 톤
 #   nodes          : 광맥 4광석 + 보석 + 지오드를 한 화면에 강제 배치(종 식별 판정 전용)
-#   narak_arena    : 나락 지상 아레나 — 깨진 봉인 고리 + 봉인석 + 하강 구멍
+#   narak_arena    : 나락 지상 아레나 — 깨진 봉인 고리(절석 담) + 끊긴 자리의 봉인석
+#   narak_shaft    : 같은 아레나 중앙 — 하강 구멍([F] = 런 시작). 고리와 20칸 넘게 떨어져 별도 컷
 #   narak_floor    : 나락 런 층 — 심연 자보라 톤 + 구멍 + 나락철
 #   smithy_room    : 대장간 실내(모루) / guild_room : 길드 실내(무기 걸이)
 
@@ -103,6 +104,12 @@ func _initialize() -> void:
 	m.player.global_position = Vector2(32, 12) * m.TILE
 	m.queue_redraw()
 	await _grab("narak_arena")
+	# ★[폴리시 2회차] 하강 구멍은 **따로 잡는다.** 고리 상변(y6..8)과 구멍(y26)은 20칸 넘게 떨어져
+	#   한 화면(세로 11칸)에 절대 같이 안 든다 — 1차 판정의 "구멍 식별 불가"는 아트가 아니라
+	#   프레이밍이었다(헤더는 둘 다 보인다고 적어 두고 아레나 한 장만 잡았다).
+	m.player.global_position = Vector2(32, 24) * m.TILE
+	m.queue_redraw()
+	await _grab("narak_shaft")
 	m._descend_narak(12)                                      # 나락철이 도는 깊이
 	await create_timer(2.0).timeout
 	var nr: Rect2i = m._narak_layout["rect"]
