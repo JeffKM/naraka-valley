@@ -21,7 +21,8 @@ class_name InventoryFrame
 
 signal deposit_slot(slot_index: int)   # 출하함: 백팩 슬롯을 통째로 드롭(판매 예약)
 signal takeback_id(id: String)         # 출하함: 대기분을 통째로 롤백(취침 전 회수)
-signal buy_pressed(bulk: bool)         # 매대: 선택 씨앗 구매(bulk=Shift 대량 — 회귀 호환 유지)
+# ★[폴리시 R3] `buy_pressed`(매대: 선택 씨앗 구매) 삭제 — **emit이 저장소에 0건**인 죽은 시그널이었다.
+#   매대가 행 그리드로 승격된 뒤(S1R-T12) 클릭은 아래 세 시그널로만 갈린다.
 signal buy_sprinkler_pressed(bulk: bool)  # ★ [S1R-T9] 매대: 저승 스프링클러 구매(bulk=Shift 대량)
 signal buy_seed(crop_id: String, bulk: bool)  # ★ [S1R-T12] 매대 그리드: 특정 작물 씨앗 구매(행별 버튼)
 signal buy_store_item(buy_id: String, kind: String, bulk: bool)  # ★ [S2-T4] 매대: 묘목·비료·건초 구매(행별)
@@ -1529,7 +1530,13 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 		#     셸을 타면서 발견돼 여기서 함께 고친다. 아래 ⑫가 그 클래스의 결함을 소스 스캔으로 잠근다.
 		#   ★[S10-T8] 시련장 3종("trial_shop_*")도 같은 신호를 탄다 — 화폐가 [시련패]라는 사실은
 		#     main만 알면 된다(프레임에 가게 규칙을 안 심는다는 그 규율 그대로).
-		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion", "fest_deco", "fest_item", "fest_seed", "ped_item", "ped_seed", "ped_deco", "ped_rare", "ped_book", "trial_shop_rarecrow", "trial_shop_deco", "trial_shop_item":
+		#   ★[폴리시 R3] **버그 봉합 재발분**: 만물상 상시 재고인 레어크로우 ③("rarecrow" —
+		#     main `_store_items`)이 이 목록에서 빠져 있어 그 행을 클릭해도 신호가 안 나갔다.
+		#     `_try_buy_rarecrow`는 rarecrow_test가 직접 불러 통과했고 store_test는 *진열*만 봐서
+		#     시그널 층이 통째로 무검증이었다 — S7-T7 `fest_*`와 **같은 클래스의 결함**이다.
+		#     획득처 ③이 안 열리면 레어크로우 8종 완주(=디럭스 반경)도 정상 플레이로 성립하지 않는다.
+		#     ⑫의 소스 스캔이 하드코딩 목록만 대조해 못 잡았으므로, 그 스캔도 함께 넓힌다.
+		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion", "rarecrow", "fest_deco", "fest_item", "fest_seed", "ped_item", "ped_seed", "ped_deco", "ped_rare", "ped_book", "trial_shop_rarecrow", "trial_shop_deco", "trial_shop_item":
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
 
 # ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.

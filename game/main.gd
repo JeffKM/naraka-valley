@@ -9541,7 +9541,6 @@ func _setup_frame() -> void:
 	frame.attach_larder(larder)   # ★[S6-T1] 카페 곳간 주입(CTX_LARDER 상단 재고 행)
 	frame.deposit_slot.connect(_on_frame_deposit)
 	frame.takeback_id.connect(_on_frame_takeback)
-	frame.buy_pressed.connect(_on_frame_buy)
 	frame.buy_sprinkler_pressed.connect(_on_frame_buy_sprinkler)   # ★ [S1R-T9] 매대 스프링클러 구매
 	frame.buy_seed.connect(_on_frame_buy_seed)   # ★ [S1R-T12] 매대 그리드 행별 씨앗 구매
 	frame.buy_store_item.connect(_on_frame_buy_store_item)   # ★ [S2-T4] 매대 묘목·비료·건초 + ★[S3-T5] 낚시 기어 구매
@@ -10035,6 +10034,14 @@ func _on_day_advanced(day: int) -> void:
 #   layout.json 시드(앵커 위, 밑동 = 앵커+(0,1))이고 레어크로우는 런타임 원장(겨눈 칸이 곧 밑동)이라
 #   좌표를 뽑는 방식만 다르고, 그 뒤로는 완전히 같은 목록에 섞여 같은 반경으로 판정된다 —
 #   [ADR-0051] 결정 5 "기능·반경 동일한 순수 스킨"의 코드 층 실물이다.
+# ★[폴리시 R3] **노지 밴드 필터** — 실내에 선 허수아비는 노지를 못 지킨다.
+#   `_can_place_rarecrow`는 `_can_place_sprinkler`의 별칭이라 `_indoor == ""` 가드가 없고(온실
+#   급수는 정당하므로 스프링클러 쪽에 그 가드를 달 수도 없다), 늘봄방 경작면은 SOIL이라 통과한다.
+#   그런데 `CrowRaid.is_protected`는 순수 유클리드 거리만 보므로, 실내 밴드(y ≥ _outdoor_h)에 선
+#   레어크로우가 **벽 너머 노지 작물**을 반경 안에 넣는다(디럭스 16이면 남동 개간지까지 닿는다).
+#   까마귀는 `_crow_target_tiles()`가 노지 farm만 돌아 온실 작물을 애초에 안 노리므로, 이 결합은
+#   보호가 *새어 나가기만* 한다 = 순수 이득 누수. 화분 원장이 좌표만 들어 구역을 넘어 샜던 것과
+#   같은 좌표공간 누수라, 배치를 막는 대신 **판정에서 거른다**(이미 실내에 세워 둔 세이브도 함께 낫는다).
 func _scarecrow_tiles() -> Array:
 	var out: Array = []
 	for entry in _prop_layouts.get("HOME", []):
@@ -10042,7 +10049,9 @@ func _scarecrow_tiles() -> Array:
 			for t in entry[1]:
 				out.append(t + Vector2i(0, 1))
 	if rarecrow != null:
-		out.append_array(rarecrow.tiles())
+		for t: Vector2i in rarecrow.tiles():
+			if t.y < _outdoor_h:
+				out.append(t)
 	return out
 
 # ── M2.4 카페 이벤트 데이 ────────────────────────────────────────────────────
@@ -14117,6 +14126,13 @@ func _can_place_pot(t: Vector2i) -> bool:
 		return false
 	if _field_at(t).is_tilled(t):
 		return false
+	# ★[폴리시 R3] **양방향 가드의 빠진 반쪽** — `_can_place_sprinkler`는 화분 칸을 막는데(그 함수
+	#   마지막 줄) 반대 방향인 여기엔 설치물 술어가 없었다. 늘봄방 경작면은 SOIL이면서 실내라
+	#   `_can_place_sprinkler`(GROUND/SOIL)와 이 함수(실내·비-SOLID)를 **동시에 통과**하므로,
+	#   괭이질 전 스프링클러·레어크로우 위에 화분이 겹쳐 놓였다(두 설치물이 한 칸에 그려진다).
+	#   R2가 `_installation_at`을 신설하며 세운 "한 칸에 둘 금지" 불변식을 이 줄이 마저 닫는다.
+	if _installation_at(t):
+		return false
 	return true
 
 # 조준 칸에 화분을 놓는다(아이템 1개 소모). 원장이 좌표를 든다(스프링클러와 같은 경계).
@@ -15002,10 +15018,14 @@ func _use_crystalarium(t: Vector2i) -> void:
 	if res.is_empty():
 		return                                    # 수거 대기 = 거절(먼저 꺼내라 — 원장의 이중 안전)
 	var inside := String(res.get("gem", ""))
+	# ★[폴리시 R3] 걷기 직전의 **남은 일수**를 함께 받아 둔다. 종전엔 롤백이 `load_gem` 기본값으로
+	#   되살려 `left`가 만기값으로 튀었다 — 자원을 한 톨도 안 쓴 실패한 입력이 며칠치 복제 진행을
+	#   조용히 태우는 구멍이었다(주석은 "손실 0"이라 적혀 있었지만 코드가 아니었다).
+	var inside_left := int(res.get("left", -1))
 	if not inventory.add_item(ItemCatalog.CRYSTALARIUM, 1):
 		crystalarium.place(_region, t)            # 가방이 가득 → 원상 복구(빈 기계로 되돌린다)
 		if inside != "":
-			crystalarium.load_gem(_region, t, inside)   # 안의 보석·기간까지 되살린다(손실 0)
+			crystalarium.load_gem(_region, t, inside, inside_left)   # 안의 보석·**잔여일**까지 되살린다(손실 0)
 		_notice("가방이 가득 차 결정기를 걷지 못했다")
 		return
 	# ★[폴리시 R2] 안의 보석이 안 들어가면 **회수 자체를 되돈다**. 종전엔 "두고 왔다"만 띄우고
@@ -15015,7 +15035,7 @@ func _use_crystalarium(t: Vector2i) -> void:
 	if inside != "" and not inventory.add_item(inside, 1):
 		inventory.remove_item(ItemCatalog.CRYSTALARIUM, 1)
 		crystalarium.place(_region, t)
-		crystalarium.load_gem(_region, t, inside)
+		crystalarium.load_gem(_region, t, inside, inside_left)   # ★[폴리시 R3] 잔여일 보존
 		_notice("가방이 가득 차 결정기를 걷지 못했다 — 안의 %s까지 담을 자리가 필요하다"
 			% ItemCatalog.name_of(inside))
 		return
@@ -15890,8 +15910,13 @@ func _on_frame_chest_take(chest_index: int) -> void:
 # 골드 닿는 데까지). ★ 만물상은 *구매 전용·구매 일원화* — 멜 출하대 씨앗 구매(_buy_seed)가
 # 사라져 씨앗은 네오 매대에서만 산다(ADR-0021 구매 네오 일원화). 판매는 무인 출하함.
 const STORE_BULK := 5   # Shift 대량 구매 묶음 크기(스타듀 묶음 결)
-func _on_frame_buy(bulk: bool) -> void:
-	_buy_seed_store_n(_selected_crop, STORE_BULK if bulk else 1)
+# ★[폴리시 R3] **죽은 핸들러 `_on_frame_buy` 제거.** 짝이던 `InventoryFrame.buy_pressed`는 저장소
+#   어디서도 emit되지 않았다(선언 1줄 + 여기 connect 1줄이 전부). S1R-T12가 매대를 행 그리드로
+#   승격시키면서 클릭은 전부 `buy_seed`/`buy_sprinkler_pressed`/`buy_store_item`으로 갈렸고,
+#   "선택 작물을 통째로 대량 구매"라는 동사는 UI에서 사라졌는데 핸들러만 남았다. 그런데
+#   store_test ⑧이 그 죽은 핸들러를 **직접 호출**해 "Shift 대량 구매가 산다"고 보고하고 있었다 —
+#   회귀가 라이브에 없는 경로를 지키던 자리라, 코드와 단언을 함께 살아 있는 경로(`_on_frame_buy_seed`)로
+#   옮긴다. 대량(Shift) 자체는 그 경로에 그대로 있다(행별 구매의 bulk 인자).
 
 # ★ [S1R-T9] 매대 스프링클러 구매(그레이박스 획득 경로). Shift=대량(STORE_BULK 묶음).
 func _on_frame_buy_sprinkler(bulk: bool) -> void:
@@ -18878,7 +18903,9 @@ const BIRTHDAY_PLACEHOLDER_LINE := "…오늘이 내 생일이야."
 # ★ ♡5 진급은 여기로 안 온다 — 그건 의지 시험(ADR-0066 결정 6, S8-T6 소관)이라 관문 이벤트가
 #   아니다. HEART_GATE_MAX에서 멈추고, ♡4 만충은 "진급 대기" 배지로 대기한다.
 const HEART_GATE_PLACEHOLDER_LINE := "…같이 보낸 시간이, 조금은 쌓인 것 같아."
-const HEART_GATE_MAX := 4   # 관문 이벤트로 오를 수 있는 최대 칸(♡5 = 의지 시험 — S8-T6)
+const HEART_GATE_MAX := Affinity.GATE_MAX   # 관문 이벤트로 오를 수 있는 최대 칸(♡5 = 의지 시험 — S8-T6)
+# ★[폴리시 R3] 상수의 집이 `Affinity`로 옮겨졌다(값 4 불변). 카페 2단 하트 문턱이 이 상한을 파생해야
+#   하는데 main.gd엔 class_name이 없어 CafeMilestone이 여기를 볼 수 없었기 때문이다.
 
 # ── ★[S9b-T1 / ADR-0068 결정 6] 소프트 게이트 ㉠ — 조연 ♡3 고백은 대화재 접촉 후 ────────
 # [narrative-bible §6.2] 안전장치 ㉠: 조연의 ♡3 **그날 밤 고백**은 *플레이어가 대화재를 이미
@@ -18949,8 +18976,22 @@ func _try_heart_promotion(r: Resident) -> PackedStringArray:
 	if r.affinity == null or not r.affinity.pending_promotion():
 		return PackedStringArray()
 	var target: int = r.affinity.stage + 1
-	if target > HEART_GATE_MAX:
+	# ★[폴리시 R3] 관문 상한은 **고백이라는 문이 실제로 있는 사람에게만** 건다.
+	#   종전엔 rid 무관 상한이라, `ROMANCE_OPEN` 밖이면서 관계 트랙을 가진 사람 — 점주 4인
+	#   (뱃사공·옹이·풀무·무골) — 의 ♡5가 **어떤 행동으로도 못 닿는 칸**이 됐다. 그들에겐
+    #   `_romance_offer_available`이 첫 줄에서 false를 돌려줘 의지 시험 자체가 존재하지 않기
+	#   때문이다. 귀결은 두 가지 거짓이었다: ㉠ 점수 만충(300) 뒤 관계 탭에 **영영 안 풀리는
+	#   "진급 대기" 배지**가 뜬다(_heart_badge) ㉡ `StoreDiscount`의 계약표·`summary()`가
+	#   "♡5 = 30% 할인"을 광고하는데 실할인 상한이 −24%에 묶인다(옹이 목공방·뱃사공 생선가게).
+	#   판정은 옥자 트랙이 같은 상황에서 이미 내린 그 판정이다(`_refresh_okja_track` 주석:
+	#   "그 문이 아예 없다 — 칸을 관문에 맡기면 ♡4에서 영영 멈춘다"). 앵커는 문이 없어 칸을
+	#   *파생*으로 풀었고, 점주는 관문이 유일한 문이므로 **관문이 끝까지 연다**.
+	#   ★ 연애가 열리는 건 아니다 — 슬롯·질투·결혼은 전부 `ROMANCE_OPEN` 술어를 따로 보므로
+	#     여기서 오르는 것은 하트 칸(=곱셈기)뿐이다(ADR-0008 "관계는 곱셈기").
+	if target > HEART_GATE_MAX and ROMANCE_OPEN.has(r.id):
 		return PackedStringArray()      # ♡5 = 의지 시험 대기(S8-T6이 별도 관문을 연다)
+	if target > Affinity.MAX_HEARTS:
+		return PackedStringArray()      # 만렙 방어(칸은 MAX_HEARTS를 못 넘는다)
 	if not Deed.check(r.id, target, _deed_ledgers()):
 		return PackedStringArray()      # 메인 3인 deed 미달 — 관문 잠금(점수는 만충 상태로 대기)
 	# ★[S9b-T1 / ADR-0068 결정 6] 소프트 게이트 ㉠ — 조연 ♡3 고백은 대화재 접촉 후에만.

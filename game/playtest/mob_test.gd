@@ -74,6 +74,14 @@ func _mobs_sig(layout: Dictionary) -> String:
 		parts.append("%s@%s" % [String(e["kind"]), e["tile"]])
 	return " ".join(parts)
 
+# ★[폴리시 R3] 반짝이 배치의 정규 서명(몹 서명과 같은 문법 — 배열이라 순서가 결정적).
+#   반짝이 롤은 RNG 스트림의 **맨 뒤**라, 앞 단계(돌·노드·몹) 어디에 한 롤이라도 끼면 여기가 먼저 터진다.
+func _shimmers_sig(layout: Dictionary) -> String:
+	var parts: Array[String] = []
+	for e: Dictionary in layout.get("shimmers", []):
+		parts.append("%s@%s" % [String(e["id"]), e["tile"]])
+	return " ".join(parts)
+
 # 여러 날·층을 훑어 나온 종 집합.
 func _kinds_over(days: Array, floors: Array) -> Dictionary:
 	var seen: Dictionary = {}
@@ -338,13 +346,25 @@ func _initialize() -> void:
 	print("── ④ T1/T2 골든 서명 불변(몹 롤이 스트림 맨 뒤) ──")
 	# 값은 mining_test ②의 골든 표와 **같은 값**이다(T1 시점 생성기에서 뜬 원본). 몹 롤이 노드보다
 	# 앞에 끼면 이 여섯 줄과 노드 서명이 동시에 터진다 = 전 층 배치 파손의 조기 경보.
+	# ★[폴리시 R3] 열 8·9·10 = **노드·몹·반짝이 서명 해시**를 추가로 박았다. 종전 표는 돌 좌표까지만
+	#   잠갔는데, RNG 소비 순서가 돌(258) → 노드(266) → 몹(269) → 반짝이(287)라 **돌 뒤·노드 앞**에
+	#   새 롤이 하나만 끼면 돌은 한 톨도 안 변한 채(=여섯 줄 전부 통과) 노드·몹·반짝이만 통째로
+	#   옮겨간다. 그 경우를 잡아야 할 ④c가 공회전이었으므로(아래 주석) 여기서 스트림 전 구간을 잠근다.
 	var golden := [
-		[5, 1, "wide", Rect2i(1, 1, 20, 14), Vector2i(13, 6), Vector2i(9, 11), 25, 630255240],
-		[5, 21, "wide", Rect2i(2, 1, 20, 14), Vector2i(9, 2), Vector2i(15, 12), 43, 1221722436],
-		[5, 41, "tall", Rect2i(10, 3, 13, 20), Vector2i(19, 20), Vector2i(13, 7), 47, 1516593986],
-		[9, 7, "narrow", Rect2i(3, 1, 11, 11), Vector2i(5, 2), Vector2i(9, 11), 27, 2127131022],
-		[1, 31, "wide", Rect2i(3, 5, 20, 14), Vector2i(9, 7), Vector2i(18, 18), 34, 1734108470],
-		[3, 60, "narrow", Rect2i(3, 3, 11, 11), Vector2i(4, 11), Vector2i(11, 6), 33, 2430958882],
+		[5, 1, "wide", Rect2i(1, 1, 20, 14), Vector2i(13, 6), Vector2i(9, 11), 25, 630255240,
+			1178938003, 3205640153, 4275688919],
+		[5, 21, "wide", Rect2i(2, 1, 20, 14), Vector2i(9, 2), Vector2i(15, 12), 43, 1221722436,
+			3680284948, 2015141837, 5381],
+		[5, 41, "tall", Rect2i(10, 3, 13, 20), Vector2i(19, 20), Vector2i(13, 7), 47, 1516593986,
+			1425635566, 3403447328, 161236413],
+		[9, 7, "narrow", Rect2i(3, 1, 11, 11), Vector2i(5, 2), Vector2i(9, 11), 27, 2127131022,
+			3609070941, 3479363085, 1744568156],
+		[1, 31, "wide", Rect2i(3, 5, 20, 14), Vector2i(9, 7), Vector2i(18, 18), 34, 1734108470,
+			945273409, 3417440, 2485895453],
+		# 보상 층(60) = 몹 0 · 이 날 반짝이도 0이라 두 서명이 빈 문자열 해시(5381)다 —
+		# **빈 값도 골든이다**(0마리라는 사실 자체가 ADR-0063 결정 10의 계약이므로).
+		[3, 60, "narrow", Rect2i(3, 3, 11, 11), Vector2i(4, 11), Vector2i(11, 6), 33, 2430958882,
+			3246771228, 5381, 5381],
 	]
 	var golden_ok := true
 	var golden_hash_ok := true
@@ -358,8 +378,15 @@ func _initialize() -> void:
 			golden_hash_ok = false
 	_check("④a T1 골든 서명 불변 — 템플릿·방·입구·사다리·돌 수(6표본)", golden_ok)
 	_check("④b T1 골든 서명 불변 — 돌 좌표 전량 해시(6표본)", golden_hash_ok)
-	# 노드 서명도 함께 잠근다(T2 불변 — 몹 롤이 노드 롤 뒤라는 사실의 직접 증거).
+	# 노드·몹·반짝이 서명도 함께 잠근다(T2 불변 — 몹 롤이 노드 롤 뒤라는 사실의 직접 증거).
+	# ⚠️[폴리시 R3] 종전 이 자리의 판정은 `if " ".join(parts).hash() == 0 and not keys.is_empty()`
+	#   였다 — **비어 있지 않은 문자열의 hash()가 0이 될 일이 사실상 없으므로 항상 통과하는
+	#   공회전 단언**이었고(라벨만 "서명 산출 정상"), 그 결과 노드·몹·반짝이 배치는 골든과 무관하게
+	#   조용히 바뀔 수 있었다. 세 스위트(mining ②·mob ④·mine_extras ①)의 "노드·몹 서명이 동시에
+	#   터진다 = 조기 경보"라는 주석이 코드로 뒷받침되지 않던 자리다. 실제 값 대조로 바꾼다.
 	var node_sig_ok := true
+	var mob_sig_ok := true
+	var shim_sig_ok := true
 	for g: Array in golden:
 		var l := MineFloors.generate(int(g[0]), int(g[1]))
 		var keys: Array = (l["nodes"] as Dictionary).keys()
@@ -367,8 +394,12 @@ func _initialize() -> void:
 		var parts: Array[String] = []
 		for k: Vector2i in keys:
 			parts.append("%s=%s" % [k, l["nodes"][k]])
-		if " ".join(parts).hash() == 0 and not keys.is_empty():
+		if " ".join(parts).hash() != int(g[8]):
 			node_sig_ok = false
+		if _mobs_sig(l).hash() != int(g[9]):
+			mob_sig_ok = false
+		if _shimmers_sig(l).hash() != int(g[10]):
+			shim_sig_ok = false
 	# ★ 진짜 잠금은 "노드 키가 여전히 돌의 부분집합"이다(mining_test ①c와 같은 불변).
 	var subset_ok := true
 	for d in [1, 4]:
@@ -380,8 +411,13 @@ func _initialize() -> void:
 			for t: Vector2i in (l["nodes"] as Dictionary):
 				if not rocks2.has(t):
 					subset_ok = false
-	_check("④c T2 노드 불변 — 노드 키 ⊆ 돌 좌표(2일 × 60층) · 서명 산출 정상",
-		subset_ok and node_sig_ok)
+	_check("④c T2 노드 불변 — 노드 키 ⊆ 돌 좌표(2일 × 60층)", subset_ok)
+	# ★[폴리시 R3] 여기가 "조기 경보"의 실체다 — 돌 서명이 멀쩡해도 이 셋 중 하나가 터지면
+	#   RNG 스트림 중간에 롤이 끼었다는 뜻이다(어느 단계인지도 어느 줄이 터지는가로 좁혀진다).
+	_check("④c2 노드 배치 서명 골든 불변(6표본 · 좌표+품목 전량 해시)", node_sig_ok)
+	_check("④c3 몹 배치 서명 골든 불변(6표본 · 종+좌표 전량 해시)", mob_sig_ok)
+	_check("④c4 반짝이 배치 서명 골든 불변(6표본 · 스트림 맨 뒤 = 앞 단계 변화의 최종 수신자)",
+		shim_sig_ok)
 	# ★[S5-T6] 'chest' 키가 하나 더 늘어 10키다(보상 층 상자 자리 — 비-보상 층은 (-1,-1)).
 	#   ★키가 늘어도 **배치 값은 안 흔들린다**: 상자 자리는 RNG를 안 쓰고 계산으로 나온다
 	#     (위 ④a/④b 골든 서명이 그 불변을 계속 잠근다 · guild_test ⓙ도 같은 표를 본다).

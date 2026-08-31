@@ -285,6 +285,149 @@ func _initialize() -> void:
 	_check("⑥c 릴 격투 세션이 접힌다(어제 물고기가 오늘 날짜로 결착되던 벡터)", m.fishing == null)
 	_check("⑥d 취침 자체는 정상 개시(연출 플래그·시계 정지)", m._sleeping and not m.clock.running)
 
+	# ══ 배치 B — 도달 불가 게이트 · 설치물 좌표 누수 · 매대 값 어긋남 ══════════════
+	# ⑪ #15 카페 2단 하트 문턱 · ⑫ #17 점주 ♡5 · ⑬ #19 보부상 매대 id 유일
+	# ⑭ #20 결정기 회수 롤백 잔여일 · ⑮ #21 화분 겹침 · ⑯ #22 실내 허수아비 보호 누수
+
+	# ── ⑪ #15 카페 2단 하트 문턱이 **관문 상한에서 파생**된다 ───────────────────
+	# 문턱 9는 "미호+멜 최대 10"을 전제했는데, 관문(GATE_MAX=4) 도입 뒤 실제 상한은 연애 상대에
+	# 따라 9(미호·멜과 연애) 또는 8(그 밖 전원)이다. 9면 **연애 상대 선택 하나가 2·3단을 영구
+	# 잠그는** 판이 생긴다(ADR-0008 "평평 ≠ 막힘" 위반).
+	print("── ⑪ #15 카페 2단 하트 문턱 ──")
+	var reach_no_romance: int = 2 * Affinity.GATE_MAX     # 아무와도 / 바나·조연과 연애한 판의 상한
+	_check("⑪a 문턱이 관문 상한에서 파생된다(하드코딩 눈금 0)",
+		CafeMilestone.S2_TARGET_HEARTS == reach_no_romance)
+	_check("⑪b 연애 선택과 무관하게 닿는 하트 합이 2단을 연다(미호4+멜4)",
+		CafeMilestone.is_stage2_complete(CafeMilestone.S2_TARGET_HARVEST,
+			CafeMilestone.S2_TARGET_REVENUE, reach_no_romance))
+	_check("⑪c 한 칸 모자라면 여전히 안 열린다(문턱이 사라진 게 아니다)",
+		not CafeMilestone.is_stage2_complete(CafeMilestone.S2_TARGET_HARVEST,
+			CafeMilestone.S2_TARGET_REVENUE, reach_no_romance - 1))
+	_check("⑪d 수확·매출 축은 그대로 AND로 문다(하트만 낮춘 것이지 게이트를 푼 게 아니다)",
+		not CafeMilestone.is_stage2_complete(CafeMilestone.S2_TARGET_HARVEST - 1,
+			CafeMilestone.S2_TARGET_REVENUE, reach_no_romance)
+		and not CafeMilestone.is_stage2_complete(CafeMilestone.S2_TARGET_HARVEST,
+			CafeMilestone.S2_TARGET_REVENUE - 1, reach_no_romance))
+	_check("⑪e 3단은 2단을 AND로 문 채 그대로다(단조성 불변)",
+		CafeMilestone.is_stage3_complete(CafeMilestone.S2_TARGET_HARVEST,
+			CafeMilestone.S3_TARGET_REVENUE, reach_no_romance)
+		and not CafeMilestone.is_stage3_complete(CafeMilestone.S2_TARGET_HARVEST,
+			CafeMilestone.S3_TARGET_REVENUE, reach_no_romance - 1))
+
+	# ── ⑫ #17 점주 ♡5 — 고백 문이 없는 사람은 관문이 끝까지 연다 ────────────────
+	print("── ⑫ #17 점주 관계 트랙 ♡5 도달 ──")
+	var r_ongi: Resident = m._resident("ongi")
+	_check("⑫⓪ 전제 — 옹이는 연애 명단 밖이라 고백(의지 시험) 문이 아예 없다",
+		r_ongi != null and not m.ROMANCE_OPEN.has("ongi"))
+	r_ongi.affinity.points = Affinity.MAX_POINTS
+	r_ongi.affinity.stage = Affinity.GATE_MAX
+	_check("⑫a 점수 만충 + 칸 4 = 진급 대기(관계 탭 배지가 서는 그 상태)",
+		r_ongi.affinity.pending_promotion() and not m._romance_offer_available(r_ongi))
+	m._try_heart_promotion(r_ongi)
+	_check("⑫b 관문이 ♡5까지 연다 — 영영 안 풀리던 '진급 대기'가 해소된다",
+		r_ongi.affinity.stage == Affinity.MAX_HEARTS and not r_ongi.affinity.pending_promotion())
+	_check("⑫c StoreDiscount의 '♡5 = 30%' 계약이 실제로 닿는다(종전 상한 −24%)",
+		m._ongi_hearts() == Affinity.MAX_HEARTS and StoreDiscount.percent(m._ongi_hearts()) == 30)
+	var r_miho: Resident = m._resident("miho")
+	r_miho.affinity.points = Affinity.MAX_POINTS
+	r_miho.affinity.stage = Affinity.GATE_MAX
+	m._try_heart_promotion(r_miho)
+	_check("⑫d 연애 명단 안(미호)은 관문이 ♡5를 안 연다 — 의지 시험 문법 그대로다",
+		r_miho.affinity.stage == Affinity.GATE_MAX and m._romance_offer_available(r_miho))
+
+	# ── ⑬ #19 보부상 매대에 같은 buy_id가 두 행 서지 않는다 ────────────────────
+	# 겹치면 표시가(희귀 슬롯)와 결제가(일반 슬롯)가 갈린다 — `price_for`가 id로 첫 매치를 준다.
+	print("── ⑬ #19 보부상 매대 id 유일 ──")
+	var dup_days: Array = []
+	var rare_slot_days := 0
+	for d in range(1, 281):                       # 40주치
+		var rows: Array = Peddler.stock_rows(d, [], {})
+		if rows.is_empty():
+			continue
+		var seen: Dictionary = {}
+		for r in rows:
+			var bid := str((r as Dictionary)["buy_id"])
+			if seen.has(bid):
+				dup_days.append(d)
+				break
+			seen[bid] = true
+		if int((rows[rows.size() - 1] as Dictionary).get("slot", -1)) == Peddler.SLOT_RARE:
+			rare_slot_days += 1
+	_check("⑬a 40주치 어느 날도 같은 buy_id가 두 행에 안 선다(중복일 %s)" % str(dup_days),
+		dup_days.is_empty())
+	_check("⑬b 그래도 희귀 슬롯은 계속 선다(중복 제거가 좌판을 비우지 않았다 · %d일)" % rare_slot_days,
+		rare_slot_days > 0)
+
+	# ── ⑭ #20 결정기 회수 실패 롤백이 **잔여일**을 되살린다 ────────────────────
+	print("── ⑭ #20 결정기 회수 롤백 ──")
+	var cx_t := Vector2i(3, 3)
+	# 명부금강 = 만기 8일(가장 긴 축) — 롤백이 태우는 진행이 가장 큰 자리라 여기서 잰다.
+	var cx_gem: String = ItemCatalog.GEM_MYEONGBU_GEUMGANG
+	var cx_days: int = CrystalariumLedger.days_for(cx_gem)
+	m.crystalarium.place(m._region, cx_t)
+	m.crystalarium.load_gem(m._region, cx_t, cx_gem)
+	for _i in range(cx_days - 1):
+		m.crystalarium.advance_day()
+	_check("⑭⓪ 전제 — %s가 %d일 중 1일만 남았다" % [cx_gem, cx_days],
+		m.crystalarium.days_left(m._region, cx_t) == 1)
+	var cx_res: Dictionary = m.crystalarium.remove(m._region, cx_t)
+	_check("⑭a remove가 남은 일수를 함께 돌려준다(롤백의 입력)",
+		int(cx_res.get("left", -1)) == 1 and String(cx_res.get("gem", "")) == cx_gem)
+	m.crystalarium.place(m._region, cx_t)
+	m.crystalarium.load_gem(m._region, cx_t, cx_gem, int(cx_res["left"]))
+	_check("⑭b 롤백이 잔여일을 그대로 되살린다(종전엔 만기값으로 튀어 진행이 조용히 탔다)",
+		m.crystalarium.days_left(m._region, cx_t) == 1)
+	m.crystalarium.remove(m._region, cx_t)
+	m.crystalarium.place(m._region, cx_t)
+	m.crystalarium.load_gem(m._region, cx_t, cx_gem, cx_days + 99)
+	_check("⑭c 복원 인자는 만기표를 못 넘는다(롤백이 진행을 *늘리는* 구멍 0)",
+		m.crystalarium.days_left(m._region, cx_t) == cx_days)
+	m.crystalarium.remove(m._region, cx_t)
+
+	# ── ⑮ #21 화분이 다른 설치물 위에 놓이지 않는다(양방향 가드) ────────────────
+	print("── ⑮ #21 화분 ⊗ 설치물 겹침 ──")
+	var pot_t := Vector2i(-1, -1)
+	m._region = RegionCatalog.HOME
+	m._indoor = "greenhouse"                       # 실내 술어만 세운다(방 전환 연출 불요)
+	for y in range(m._outdoor_h, m._grid_h):
+		for x in range(m._grid_w):
+			var c := Vector2i(x, y)
+			if not m.is_solid(m._grid[y][x]) and not m._field_at(c).is_tilled(c) \
+					and not m.garden_pot.has_at(c) and not m._installation_at(c):
+				pot_t = c
+				break
+		if pot_t.x >= 0:
+			break
+	_check("⑮⓪ 전제 — 실내 밴드에 화분을 놓을 수 있는 빈 칸을 찾았다 %s" % pot_t,
+		pot_t.x >= 0 and m._can_place_pot(pot_t))
+	m.sprinkler.place(pot_t)
+	_check("⑮a 스프링클러가 선 칸엔 화분을 못 놓는다(_can_place_sprinkler의 대칭 반쪽)",
+		not m._can_place_pot(pot_t))
+	m.sprinkler.remove(pot_t)
+	m.rarecrow.place(pot_t, ItemCatalog.RARECROW_3)
+	_check("⑮b 레어크로우가 선 칸에도 못 놓는다(같은 _installation_at 술어)",
+		not m._can_place_pot(pot_t))
+
+	# ── ⑯ #22 실내에 선 허수아비는 노지를 못 지킨다 ────────────────────────────
+	# `CrowRaid.is_protected`는 순수 유클리드 거리만 봐서, 실내 밴드(y ≥ _outdoor_h) 좌표가
+	# 벽 너머 노지 작물을 반경 안에 넣었다(보호가 새어 나가기만 하는 순수 이득 누수).
+	print("── ⑯ #22 실내 허수아비 보호 누수 ──")
+	# 실내 자리(pot_t)에서 몇 칸 위 = 벽 너머 노지 작물 자리. 종전엔 이 칸이 보호됐다.
+	var crop_t := Vector2i(pot_t.x, m._outdoor_h - 5)
+	_check("⑯a 실내 밴드 레어크로우는 허수아비 목록에 안 든다",
+		not m._scarecrow_tiles().has(pot_t))
+	_check("⑯b 그래서 벽 너머 노지 작물 %s이 보호되지 않는다(디럭스 반경 %d으로도)"
+			% [crop_t, CrowRaid.DELUXE_RADIUS],
+		not CrowRaid.is_protected(crop_t, m._scarecrow_tiles(), CrowRaid.DELUXE_RADIUS))
+	m.rarecrow.remove(pot_t)
+	var out_t := Vector2i(pot_t.x, m._outdoor_h - 3)
+	m.rarecrow.place(out_t, ItemCatalog.RARECROW_3)
+	_check("⑯c 노지 레어크로우는 그대로 합류하고 같은 작물을 지킨다(필터가 기능을 죽인 게 아니다)",
+		m._scarecrow_tiles().has(out_t)
+		and CrowRaid.is_protected(crop_t, m._scarecrow_tiles(), CrowRaid.DELUXE_RADIUS))
+	m.rarecrow.remove(out_t)
+	m._indoor = ""
+
 	if FileAccess.file_exists(save0):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(save0))
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])

@@ -617,6 +617,44 @@ func _initialize() -> void:
 	_check("⑫a 허용 목록 행을 찾았다", allow_line != "")
 	_check("⑫b 보부상 5종 + 야시장 3종이 전부 허용 목록에 있다(누락 %s)" % str(missing), missing.is_empty())
 
+	# ── ⑫c ★[폴리시 R3] 하드코딩 목록이 아니라 **main 소스에서 파생**한 전수 대조 ──────────
+	# ⑫b의 한계: 대조 대상이 손으로 적은 목록이라 **새로 생긴 kind는 영원히 안 걸린다**. 실제로
+	# 만물상 상시 재고 레어크로우 ③("rarecrow")이 그 사각에서 허용 목록에 안 들어간 채 살아남아,
+	# 획득처 하나가 인게임에서 통째로 죽어 있었다(= S7-T7 `fest_*`와 같은 클래스의 결함 재발).
+	# 그래서 여기서는 **main.gd가 실제로 내는 매대 행 kind 전부**를 소스에서 긁어 대조한다 —
+	# 매대 행은 예외 없이 `"kind": "…", "buy_id": …` 형태로 한 줄에 선다(그 관례가 곧 스캔의 문법).
+	var main_src := FileAccess.open("res://main.gd", FileAccess.READ).get_as_text()
+	var emitted: Dictionary = {}
+	for ln in main_src.split("\n"):
+		var s3 := String(ln).strip_edges()
+		if s3.begins_with("#") or not s3.contains("\"buy_id\""):
+			continue
+		var at := s3.find("\"kind\": \"")
+		if at < 0:
+			continue
+		var rest := s3.substr(at + 9)
+		var end := rest.find("\"")
+		if end > 0:
+			emitted[rest.substr(0, end)] = true
+	# 라우팅되는 kind = 허용 목록 + `_buy_store_row`가 앞에서 따로 가르는 두 갈래.
+	# ⚠️ "fish"만 예외다 — 생선가게 **환전 탭** 행이라 `_buy_store_row`가 아니라 `_trade_row_rects`
+	#    → `sell_fish` 시그널로 간다(구매 행이 아니다). 예외를 이 한 개로 못 박아 두면, 새 kind가
+	#    라우팅 없이 생기는 순간 아래 단언이 반드시 터진다.
+	var sell_only := ["fish"]
+	var unrouted: Array = []
+	for k in emitted.keys():
+		var ks := str(k)
+		if ks == "seed" or ks == "placeable" or sell_only.has(ks):
+			continue
+		if not allow_line.contains("\"%s\"" % ks):
+			unrouted.append(ks)
+	unrouted.sort()
+	_check("⑫c main이 내는 매대 kind를 소스에서 긁었다(%d종)" % emitted.size(), emitted.size() >= 10)
+	_check("⑫d 그중 라우팅 안 되는 kind 0(클릭이 죽는 행 0 · 미라우팅 %s)" % str(unrouted),
+		unrouted.is_empty())
+	_check("⑫e 회귀 잠금 — 만물상 레어크로우 ③ 행이 라우팅된다",
+		emitted.has("rarecrow") and allow_line.contains("\"rarecrow\""))
+
 	if had_save:
 		_write_bytes(SAVE, _read_bytes(BAK))
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(BAK))
