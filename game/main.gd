@@ -1106,6 +1106,10 @@ const MINE_TEX_NODE_GEODE := preload("res://assets/props/mine_node_geode.png")
 const MINE_TEX_LADDER := preload("res://assets/props/mine_ladder.png")
 const MINE_TEX_CHEST := preload("res://assets/props/mine_chest.png")
 const NARAK_TEX_SEAL := preload("res://assets/props/narak_seal.png")
+# ★[폴리시 2회차] 나락 아레나 봉인 고리의 석재 — **성벽 타일을 그대로 재사용한다**(심리스 32²).
+#   고리는 쌓아 올린 담이고, 이 세계의 담은 다 같은 절석이다. 밴드 톤은 그리기 시점에 얹는다
+#   (`_draw_narak_mouth` 주석) — 그래서 파생 PNG를 한 장도 안 굽는다.
+const NARAK_TEX_RING_STONE := preload("res://assets/tiles/wall.png")
 const SMITHY_TEX_ANVIL := preload("res://assets/props/smithy_anvil.png")
 const GUILD_TEX_RACK := preload("res://assets/props/guild_weapon_rack.png")
 # ★[S5-T10 / ADR-0063 아트 스코프] 업화로 화덕(64×32 = 2×1칸 · 모루와 같은 규격) — [§16.6]이
@@ -10272,7 +10276,7 @@ func _night_market_items() -> Array:
 			"fest_deco":
 				var owned := home_deco != null and home_deco.is_unlocked(buy_id)
 				rows.append({"kind": kind, "buy_id": buy_id,
-					"swatch": _deco_swatch(buy_id),
+					"icon_tex": _deco_icon(buy_id), "swatch": _deco_swatch(buy_id),
 					"name": "%s 가구 세트" % HomeDecoCatalog.name_of(buy_id),
 					"price": price, "base": base,
 					"locked": owned, "locked_text": "해금됨"})
@@ -10289,6 +10293,15 @@ func _night_market_items() -> Array:
 					"price": price, "base": base,
 					"count": inventory.seed_count(buy_id) if inventory != null else 0})
 	return rows
+
+# ★[폴리시 2회차] 가구 세트 매대 아이콘 — 아트 훅(`_prop_tex`·`_trial_token_icon`과 같은 "있으면
+#   쓴다" 문법). 세트는 **인벤 아이템이 아니라** ItemCatalog 아이콘 표에 없고, 그래서 지금까지 매대
+#   행이 `swatch`(대표색 사각) 하나로 버텼다 — 그 사각이 시련패 매대에서 "흰 빈 색박스"로 읽혔다
+#   (잿눈 대표색이 회백 0.72라 판 바탕과 안 갈렸다). 파일이 없으면 null → swatch 폴백 그대로.
+#   파일명 = 세트 id 소문자(`assets/ui/deco_jaetnun.png`) — 세트가 늘어도 여기는 안 고친다.
+func _deco_icon(set_id: String) -> Texture2D:
+	var p := "res://assets/ui/deco_%s.png" % set_id.to_lower()
+	return load(p) as Texture2D if ResourceLoader.exists(p) else null
 
 # 가구 세트 대표색(매대 행의 swatch — 목공방이 쓰는 그 값의 재사용). 세트 첫 가구 색을 쓴다.
 func _deco_swatch(set_id: String) -> Color:
@@ -10439,7 +10452,7 @@ func _peddler_items() -> Array:
 			# 해금 판정은 home_deco가 진실원(야시장 행과 완전히 같은 규율 — 이중 원장 0).
 			var unlocked := home_deco != null and home_deco.is_unlocked(buy_id)
 			rows.append({"kind": kind, "buy_id": buy_id,
-				"swatch": _deco_swatch(buy_id),
+				"icon_tex": _deco_icon(buy_id), "swatch": _deco_swatch(buy_id),
 				"name": "%s 가구 세트" % HomeDecoCatalog.name_of(buy_id),
 				"price": price, "base": base,
 				"locked": unlocked, "locked_text": "해금됨"})
@@ -14693,7 +14706,8 @@ func _trial_shop_items() -> Array:
 			if not HomeDecoCatalog.has_set(buy_id):
 				continue
 			var unlocked := home_deco != null and home_deco.is_unlocked(buy_id)
-			rows.append({"kind": kind, "buy_id": buy_id, "swatch": _deco_swatch(buy_id),
+			rows.append({"kind": kind, "buy_id": buy_id,
+				"icon_tex": _deco_icon(buy_id), "swatch": _deco_swatch(buy_id),
 				"name": "%s 가구 세트" % HomeDecoCatalog.name_of(buy_id), "price": price, "base": price,
 				"locked": unlocked, "locked_text": "해금됨"})
 		else:
@@ -16429,6 +16443,23 @@ func _draw_mine_shaft(t: Vector2i) -> void:
 #   마다 금이 간 봉인석을 세우면 "여기가 끊어진 자리"가 배치가 아니라 그림으로 읽힌다.
 #   순수 시각이다 — 고리 좌표(NARAK_ROCK_RECTS)도 충돌도 한 칸 안 바뀐다(narak_test 단언 전량 보존).
 func _draw_narak_mouth() -> void:
+	# ★[폴리시 2회차] 고리 암반 — ROCK 셀은 `SOLID_TEX`에 없어 `COLORS[ROCK]` **단색**으로 칠해진다.
+	#   그래서 고리가 무늬 없는 검은 직사각 밴드 둘로 보였다(육안 판정 "rect-fill"). 그리드·충돌은
+	#   한 칸도 안 건드리고 **띠 위에 석재를 덮어 깐다** — 순수 시각(narak_test의 고리 좌표·도달성
+	#   단언 전량 보존).
+	#   ★ 새 타일을 굽지 않고 `assets/tiles/wall.png`(심리스 절석 벽돌)를 **재사용**한다: 봉인 고리는
+	#     쌓아 올린 담이고 그 담은 이 세계의 성벽과 같은 재질이다. 밴드 톤은 `_mine_cast(1.0)`이
+	#     얹는다 — "돌 = 암반과 한 재질이니 같은 빛을 받는다"는 갱도 돌의 그 규율 1:1이라, 아레나
+	#     자보라가 자동으로 물든다(파생 PNG 0). 아트가 오면 `narak_ring_stone.png`가 앞선다.
+	var ring_tex: Texture2D = _prop_tex("narak_ring_stone")
+	if ring_tex == null:
+		ring_tex = NARAK_TEX_RING_STONE
+	var ring_tint := _mine_cast(1.0)
+	for r: Rect2i in NARAK_ROCK_RECTS:
+		for y in range(r.position.y, r.end.y):
+			for x in range(r.position.x, r.end.x):
+				draw_texture_rect(ring_tex,
+					Rect2(float(x * TILE), float(y * TILE), TILE, TILE), false, ring_tint)
 	for r: Rect2i in NARAK_ROCK_RECTS:
 		# 세그먼트 양 끝 위 칸 = 끊긴 자리. 고리 띠(3칸 두께) 안쪽 줄에 얹어 담 위에 세운 결로.
 		var mid := r.position.y + r.size.y / 2
@@ -16436,9 +16467,15 @@ func _draw_narak_mouth() -> void:
 			draw_texture_rect(NARAK_TEX_SEAL,
 				Rect2(Vector2(int(x) * TILE, mid * TILE), NARAK_TEX_SEAL.get_size()), false)
 	var p := Vector2(NARAK_SHAFT_TILE.x * TILE, NARAK_SHAFT_TILE.y * TILE)
-	draw_rect(Rect2(p + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), Color(0.12, 0.09, 0.13))   # 테두리 암반
-	draw_rect(Rect2(p + Vector2(5, 5), Vector2(TILE - 10, TILE - 10)), Color(0.02, 0.02, 0.03)) # 심연(바닥 없음)
-	draw_rect(Rect2(p + Vector2(7, 6), Vector2(TILE - 14, 2)), Color(0.34, 0.22, 0.30))         # NW 광원 립
+	# ★[폴리시 2회차] 하강 구멍 아트 훅 — assets/props/narak_shaft.png(32², 발치 앵커). 옛 그림은
+	#   검은 사각 안의 더 검은 사각이라 심연 자보라 지면 위에서 아예 안 읽혔다(육안 판정 "구멍 식별 불가").
+	var shaft_tex := _prop_tex("narak_shaft")
+	if shaft_tex != null:
+		draw_texture(shaft_tex, p + Vector2(0, TILE - shaft_tex.get_size().y))
+	else:
+		draw_rect(Rect2(p + Vector2(2, 2), Vector2(TILE - 4, TILE - 4)), Color(0.12, 0.09, 0.13))   # 테두리 암반
+		draw_rect(Rect2(p + Vector2(5, 5), Vector2(TILE - 10, TILE - 10)), Color(0.02, 0.02, 0.03)) # 심연(바닥 없음)
+		draw_rect(Rect2(p + Vector2(7, 6), Vector2(TILE - 14, 2)), Color(0.34, 0.22, 0.30))         # NW 광원 립
 
 # ★[S5-T7] 나락 런 층 그레이박스 — 갱도 층(`_draw_mine_floor`)과 같은 문법이되 셋이 갈린다:
 #   ① **나가는 사다리**(착지 칸)는 밝은 벽감이되 갱도의 "올라가는 사다리"와 색을 달리해(청록) "여긴
@@ -16564,24 +16601,46 @@ func _draw_woodshop_room() -> void:
 	if _indoor != "목공방":
 		return
 	# 카운터 — 응대 줄(x11..16, y49) 통짜 판 + 상판 하이라이트(NW 광원).
+	# ★[폴리시 2회차] 아트 훅 — assets/props/woodshop_counter.png. **폭이 응대 줄 그대로**(6칸=192px)
+	#   구워져 있다(단품 32px를 6번 붙이면 마구리가 여섯 벌 서서 "작은 카운터 여섯 개"로 읽힌다 —
+	#   `tools/make_polish_r2_art.py`의 3분할 반복이 그래서 있다). 폭이 안 맞으면 폴백으로 떨어져
+	#   늘어난 그림 대신 옛 통짜 판이 선다(치수 결합을 조용히 깨지 않는다 — woodshop_test 단언 동반).
 	var cx := float(WOODSHOP_COUNTER_X0) * TILE
 	var cy := float(WOODSHOP_COUNTER_Y) * TILE
 	var cw := float(WOODSHOP_COUNTER_X1 - WOODSHOP_COUNTER_X0 + 1) * TILE
-	draw_rect(Rect2(cx, cy + 8.0, cw, TILE - 12.0), Color(0.40, 0.29, 0.18))
-	draw_rect(Rect2(cx, cy + 8.0, cw, 5.0), Color(0.54, 0.40, 0.25))
+	var cnt_tex := _prop_tex("woodshop_counter")
+	if cnt_tex != null and cnt_tex.get_size().x == cw:
+		draw_texture(cnt_tex, Vector2(cx, cy + TILE - cnt_tex.get_size().y))
+	else:
+		draw_rect(Rect2(cx, cy + 8.0, cw, TILE - 12.0), Color(0.40, 0.29, 0.18))
+		draw_rect(Rect2(cx, cy + 8.0, cw, 5.0), Color(0.54, 0.40, 0.25))
 	# 서벽 작업대 — 톱질대(다리 둘 + 상판). 방 서편 안쪽(x9..10, y47).
 	var wb := Vector2(float(WOODSHOP_RECT.position.x + 1) * TILE, float(WOODSHOP_RECT.position.y + 1) * TILE)
-	draw_rect(Rect2(wb + Vector2(0.0, 10.0), Vector2(TILE * 2.0, 6.0)), Color(0.46, 0.34, 0.21))
-	draw_rect(Rect2(wb + Vector2(4.0, 16.0), Vector2(4.0, TILE - 18.0)), Color(0.33, 0.24, 0.15))
-	draw_rect(Rect2(wb + Vector2(TILE * 2.0 - 8.0, 16.0), Vector2(4.0, TILE - 18.0)), Color(0.33, 0.24, 0.15))
+	var wb_tex := _prop_tex("woodshop_workbench")
+	if wb_tex != null:
+		draw_texture(wb_tex, wb + Vector2(0.0, TILE - wb_tex.get_size().y))
+	else:
+		draw_rect(Rect2(wb + Vector2(0.0, 10.0), Vector2(TILE * 2.0, 6.0)), Color(0.46, 0.34, 0.21))
+		draw_rect(Rect2(wb + Vector2(4.0, 16.0), Vector2(4.0, TILE - 18.0)), Color(0.33, 0.24, 0.15))
+		draw_rect(Rect2(wb + Vector2(TILE * 2.0 - 8.0, 16.0), Vector2(4.0, TILE - 18.0)), Color(0.33, 0.24, 0.15))
+	# ★ 건축 중 작업물 — **상태 드로우라 아트 뒤에도 그대로 남는다**(작업대에 구우면 아무 의뢰도
+	#   없는 날에도 목재가 얹혀 있다 — 곳간 게이지·채취기 고임과 같은 규율).
 	if carpenter != null and carpenter.is_active():
-		draw_rect(Rect2(wb + Vector2(6.0, 4.0), Vector2(TILE * 2.0 - 12.0, 6.0)), Color(0.66, 0.52, 0.32))
+		var wp_tex := _prop_tex("woodshop_workpiece")
+		if wp_tex != null:
+			draw_texture(wp_tex, wb + Vector2(TILE - wp_tex.get_size().x * 0.5, -4.0))
+		else:
+			draw_rect(Rect2(wb + Vector2(6.0, 4.0), Vector2(TILE * 2.0 - 12.0, 6.0)), Color(0.66, 0.52, 0.32))
 	# 동편 원목 더미 — 쌓인 통나무 3개(마구리 원). 방 동편 안쪽(x17..18, y47).
 	var lg := Vector2(float(WOODSHOP_RECT.end.x - 3) * TILE, float(WOODSHOP_RECT.position.y + 1) * TILE)
-	for i in 3:
-		var c := lg + Vector2(8.0 + float(i % 2) * 13.0, 20.0 - float(i / 2) * 11.0)
-		draw_circle(c, 6.0, Color(0.44, 0.32, 0.20))
-		draw_circle(c, 3.0, Color(0.60, 0.46, 0.29))
+	var lg_tex := _prop_tex("woodshop_logs")
+	if lg_tex != null:
+		draw_texture(lg_tex, lg + Vector2(0.0, TILE - lg_tex.get_size().y))
+	else:
+		for i in 3:
+			var c := lg + Vector2(8.0 + float(i % 2) * 13.0, 20.0 - float(i / 2) * 11.0)
+			draw_circle(c, 6.0, Color(0.44, 0.32, 0.20))
+			draw_circle(c, 3.0, Color(0.60, 0.46, 0.29))
 
 # ★[S5-T6 / ADR-0063 결정 6] 길드 실내 그레이박스 — 카운터(무골 앞 응대 줄) + 서벽 무기 걸이 +
 #   동벽 토벌 게시판(**빈 판**). 목공방 `_draw_woodshop_room`과 같은 결(순수 장식 · 충돌 없음 —
@@ -16600,17 +16659,29 @@ func _draw_guild_room() -> void:
 	var cx := float(GUILD_COUNTER_X0) * TILE
 	var cy := float(GUILD_COUNTER_Y) * TILE
 	var cw := float(GUILD_COUNTER_X1 - GUILD_COUNTER_X0 + 1) * TILE
-	draw_rect(Rect2(cx, cy + 8.0, cw, TILE - 12.0), Color(0.32, 0.30, 0.31))
-	draw_rect(Rect2(cx, cy + 8.0, cw, 5.0), Color(0.46, 0.44, 0.45))
+	# ★[폴리시 2회차] 아트 훅 — assets/props/guild_counter.png(절석 벽돌). 목공방 카운터와 **같은
+	#   규약**이다: 응대 줄 전체 폭으로 구워 두고, 폭이 안 맞으면 옛 통짜 판으로 떨어진다.
+	var cnt_tex := _prop_tex("guild_counter")
+	if cnt_tex != null and cnt_tex.get_size().x == cw:
+		draw_texture(cnt_tex, Vector2(cx, cy + TILE - cnt_tex.get_size().y))
+	else:
+		draw_rect(Rect2(cx, cy + 8.0, cw, TILE - 12.0), Color(0.32, 0.30, 0.31))
+		draw_rect(Rect2(cx, cy + 8.0, cw, 5.0), Color(0.46, 0.44, 0.45))
 	# ★[S5-T9] 서벽 무기 걸이 = 프롭(2×1칸). 자리·크기는 그레이박스 시절 그대로(x24..25, y47).
 	var rack := Vector2(float(GUILD_RECT.position.x + 1) * TILE, float(GUILD_RECT.position.y + 1) * TILE)
 	draw_texture_rect(GUILD_TEX_RACK, Rect2(rack, GUILD_TEX_RACK.get_size()), false)
 	# 동벽 토벌 게시판 — 기둥 둘 + 판(쪽지 0장 = 서랍 예약. 만물상 게시판과 실루엣만 같고 기능 0).
+	# ★[폴리시 2회차] 시련 게시판 아트를 **그대로 재사용**한다(파생 0): 둘 다 명부의 게시판이고,
+	#   이 판은 정의상 **빈 판**이라 걸리는 쪽지도 없다 — 아트 한 장이 두 자리를 그대로 덮는다.
 	var bd := Vector2(float(GUILD_RECT.end.x - 3) * TILE, float(GUILD_RECT.position.y + 1) * TILE)
-	draw_rect(Rect2(bd + Vector2(4.0, 20.0), Vector2(3.0, 10.0)), Color(0.30, 0.21, 0.13))
-	draw_rect(Rect2(bd + Vector2(24.0, 20.0), Vector2(3.0, 10.0)), Color(0.30, 0.21, 0.13))
-	draw_rect(Rect2(bd + Vector2(2.0, 4.0), Vector2(28.0, 17.0)), Color(0.38, 0.28, 0.18))
-	draw_rect(Rect2(bd + Vector2(2.0, 4.0), Vector2(28.0, 3.0)), Color(0.50, 0.37, 0.23))
+	var gb_tex := _prop_tex("trial_board")
+	if gb_tex != null:
+		draw_texture(gb_tex, bd + Vector2(0.0, TILE - gb_tex.get_size().y))
+	else:
+		draw_rect(Rect2(bd + Vector2(4.0, 20.0), Vector2(3.0, 10.0)), Color(0.30, 0.21, 0.13))
+		draw_rect(Rect2(bd + Vector2(24.0, 20.0), Vector2(3.0, 10.0)), Color(0.30, 0.21, 0.13))
+		draw_rect(Rect2(bd + Vector2(2.0, 4.0), Vector2(28.0, 17.0)), Color(0.38, 0.28, 0.18))
+		draw_rect(Rect2(bd + Vector2(2.0, 4.0), Vector2(28.0, 3.0)), Color(0.50, 0.37, 0.23))
 
 # ★[S10-T8 / ADR-0069 결정 11] 명부 시련장 실내 그레이박스 — 시련 게시판 + 시련패 매대.
 #   길드와 같은 문법(암석 바닥 + 무인 창구 둘)이되 톤을 더 어둡게 눌렀다: 나락 심층에 붙은 방이라
@@ -16636,10 +16707,9 @@ func _draw_trial_room() -> void:
 		draw_rect(Rect2(bp + Vector2(2, 4), Vector2(28, 3)), Color(0.42, 0.37, 0.48))     # 상단 하이라이트(NW 광원)
 	if trial != null and trial.is_active():
 		# 수락 중 = 붉은 도장 한 장(만물상 게시판의 진행 표식과 같은 색 언어).
-		draw_rect(Rect2(bp + Vector2(11, 8), Vector2(10, 11)), Color(0.86, 0.84, 0.78))
-		draw_circle(bp + Vector2(16, 13), 3.0, Color(0.74, 0.24, 0.22))
+		_draw_pinned_note(bp + Vector2(11, 8), true)
 	elif trial != null and not _trial_offer().is_empty():
-		draw_rect(Rect2(bp + Vector2(11, 8), Vector2(10, 11)), Color(0.90, 0.88, 0.82))   # 걸린 시련 1장
+		_draw_pinned_note(bp + Vector2(11, 8), false)   # 걸린 시련 1장
 	# 시련패 매대 — 좌판 + 잔고 눈금(잔고가 없으면 테두리만 남아 "여기가 매대다"는 읽힌다).
 	var sp := Vector2(TRIAL_SHOP_TILE.x * TILE, TRIAL_SHOP_TILE.y * TILE)
 	# ★[S10-T9] 아트 훅 — assets/props/trial_stall.png(32×22, 발치 앵커 = 그레이박스 몸통 y10..32와
@@ -16668,12 +16738,27 @@ func _draw_quest_board() -> void:
 	draw_rect(Rect2(base + Vector2(2, 4), Vector2(28, 3)), Color(0.55, 0.40, 0.25))     # 판 상단 하이라이트(NW 광원)
 	# 쪽지 — 수락 중이면 그 계약 1장(붉은 도장), 아니면 오늘 걸린 의뢰 수만큼 흰 쪽지.
 	if quest_board.is_active():
-		draw_rect(Rect2(base + Vector2(8, 8), Vector2(9, 11)), Color(0.90, 0.87, 0.78))
-		draw_rect(Rect2(base + Vector2(10, 11), Vector2(5, 5)), Color(0.72, 0.20, 0.18))
+		_draw_pinned_note(base + Vector2(8, 8), true)
 	else:
 		var n := quest_board.offers(clock.day).size()
 		for i in n:
-			draw_rect(Rect2(base + Vector2(6 + i * 11, 8), Vector2(9, 11)), Color(0.90, 0.87, 0.78))
+			_draw_pinned_note(base + Vector2(6 + i * 11, 8), false)
+
+# ★[폴리시 2회차] 게시판에 걸린 쪽지 한 장 — 종이 + 먹줄 두 줄 + 압정(+ 수락 도장).
+# 옛 그림은 **흰 사각 하나**였다: 판면이 밝은 게시판(시련장 실내) 위에서는 판의 일부로 묻히고,
+# 판면이 어두운 게시판(만물상) 위에서는 아무것도 안 적힌 백지로 읽혔다(육안 판정). 먹줄 두 줄이
+# "글이 적힌 쪽지"를, 압정이 "걸려 있다"를 판다 — 둘 다 크기 한 칸을 안 늘리고 실루엣만 판다.
+# ★ 순수 시각·상태 파생(저장 0). 판면 아트가 갈아 끼워져도 이 드로우는 그대로 그 위에 얹힌다.
+func _draw_pinned_note(org: Vector2, stamped: bool) -> void:
+	draw_rect(Rect2(org, Vector2(10, 12)), Color(0.11, 0.09, 0.11))                   # 종이 외곽(판에서 뗀다)
+	draw_rect(Rect2(org + Vector2(1, 1), Vector2(8, 10)), Color(0.90, 0.87, 0.78))    # 종이
+	draw_rect(Rect2(org + Vector2(2, 3), Vector2(6, 1)), Color(0.34, 0.30, 0.28))     # 먹줄
+	draw_rect(Rect2(org + Vector2(2, 5), Vector2(4, 1)), Color(0.34, 0.30, 0.28))     # 먹줄
+	if stamped:
+		draw_circle(org + Vector2(5, 8), 2.5, Color(0.74, 0.24, 0.22))                # 수락 도장
+	else:
+		draw_rect(Rect2(org + Vector2(2, 7), Vector2(5, 1)), Color(0.34, 0.30, 0.28)) # 먹줄
+	draw_rect(Rect2(org + Vector2(4, 0), Vector2(2, 2)), Color(0.46, 0.44, 0.48))     # 압정
 
 # ★ [S2-T6 / ADR-0060 결정 6] 게시판 의뢰 수락 — 오늘 그 종류로 걸린 의뢰를 받는다(동시 1건).
 func _try_accept_quest(kind: String) -> void:
@@ -16732,8 +16817,13 @@ func _draw_museum_room() -> void:
 		return
 	var base := Vector2(MUSEUM_DONATE_TILE.x * TILE, MUSEUM_DONATE_TILE.y * TILE)
 	# 기증대 — 2×1 목대(나무 상판 + 어두운 다리 그림자). 순수 장식(충돌 없음 — 조준 칸 상호작용만).
-	draw_rect(Rect2(base + Vector2(-TILE * 0.5, 6), Vector2(TILE * 2.0, TILE - 12)), Color(0.32, 0.22, 0.14))
-	draw_rect(Rect2(base + Vector2(-TILE * 0.5, 6), Vector2(TILE * 2.0, 5)), Color(0.45, 0.32, 0.20))
+	# ★[폴리시 2회차] 아트 훅 — assets/props/museum_donate_table.png(64×32, 발치 앵커).
+	var donate_tex := _prop_tex("museum_donate_table")
+	if donate_tex != null:
+		draw_texture(donate_tex, base + Vector2(-TILE * 0.5, TILE - donate_tex.get_size().y))
+	else:
+		draw_rect(Rect2(base + Vector2(-TILE * 0.5, 6), Vector2(TILE * 2.0, TILE - 12)), Color(0.32, 0.22, 0.14))
+		draw_rect(Rect2(base + Vector2(-TILE * 0.5, 6), Vector2(TILE * 2.0, 5)), Color(0.45, 0.32, 0.20))
 	# 북벽 전시대 — 유품 좌대(기증 순서 무관·카탈로그 순 고정) + 책 좌대 2(빈 그릇, Slice 9 합류 자리).
 	var slot_ids: Array = Museum.donatable_ids()
 	var y0 := float(MUSEUM_RECT.position.y + 1) * TILE + 8.0
@@ -16744,16 +16834,30 @@ func _draw_museum_room() -> void:
 		ItemCatalog.RELIC_KKOTSIN: Color(0.82, 0.42, 0.48),  # 꽃신 분홍
 	}
 	# ── ① 북벽 유품 좌대 3좌(카탈로그 순 고정) ──
+	# ★[폴리시 2회차] 좌대 아트 훅 — assets/props/museum_pedestal.png. 20폭 슬롯 위에 32폭을
+	#   **가운데 맞춰**(-6) 얹는 것은 책 서가(museum_shelf)가 이미 쓰는 그 규약이다. 얹힌 유품·
+	#   레어크로우는 **아래 원장 파생 드로우가 그대로 위에 그린다** — 좌대에 굽지 않는다(빈 좌대와
+	#   찬 좌대가 같은 그림이면 진열이 진열이 아니다).
+	var ped_tex := _prop_tex("museum_pedestal")
 	for i in ItemCatalog.RELICS.size():
 		var px := Vector2(x0 + i * TILE * 1.5, y0)
-		draw_rect(Rect2(px, Vector2(20, 12)), Color(0.30, 0.28, 0.26))          # 좌대
+		if ped_tex != null:
+			draw_texture(ped_tex, px - Vector2(6, 0))
+		else:
+			draw_rect(Rect2(px, Vector2(20, 12)), Color(0.30, 0.28, 0.26))      # 좌대(폴백)
 		var sid: String = slot_ids[i]
 		if museum.is_donated(sid):
-			# 전시된 유품 — 좌대 위 색 다이아(그레이박스 아이콘 대응).
-			var c: Color = relic_colors.get(sid, Color.WHITE)
-			var cx := px + Vector2(10, -6)
-			draw_colored_polygon(PackedVector2Array([cx + Vector2(0, -6), cx + Vector2(6, 0),
-				cx + Vector2(0, 6), cx + Vector2(-6, 0)]), c)
+			# ★[폴리시 2회차] 전시된 유품 = **그 물건의 아이콘**을 좌대 위에 세운다(인벤·토스트가
+			#   쓰는 그 텍스처 한 장 — [§15] 아이콘 공용 규약). 아이콘이 없는 id는 옛 색 다이아로
+			#   떨어진다(그레이박스 무손실).
+			var ric := _item_icon(sid)
+			if ric != null:
+				draw_texture(ric, px + Vector2(10.0 - ric.get_size().x * 0.5, 2.0 - ric.get_size().y))
+			else:
+				var c: Color = relic_colors.get(sid, Color.WHITE)
+				var cx := px + Vector2(10, -6)
+				draw_colored_polygon(PackedVector2Array([cx + Vector2(0, -6), cx + Vector2(6, 0),
+					cx + Vector2(0, 6), cx + Vector2(-6, 0)]), c)
 		else:
 			draw_rect(Rect2(px + Vector2(4, -8), Vector2(12, 8)), Color(0.2, 0.2, 0.2, 0.5), false, 1.0)  # 빈 자리 실루엣
 	# ── ★[S9-T7] ② 책 서가 8좌(그릇 2좌 → 실물 8좌) ──
@@ -16791,13 +16895,23 @@ func _draw_museum_room() -> void:
 	var ry := by + TILE * 2.0
 	for i in ItemCatalog.RARECROWS.size():
 		var rp := Vector2(rx + i * TILE * 1.25, ry)
-		draw_rect(Rect2(rp, Vector2(20, 10)), Color(0.26, 0.24, 0.22))          # 좌대
+		if ped_tex != null:
+			draw_texture(ped_tex, rp - Vector2(6, 0))   # 유품 줄과 같은 좌대(진열 위계 = 줄 높이가 든다)
+		else:
+			draw_rect(Rect2(rp, Vector2(20, 10)), Color(0.26, 0.24, 0.22))      # 좌대(폴백)
 		var rid: String = String(ItemCatalog.RARECROWS[i])
 		if _rarecrow_owned(rid):
-			# 모은 종 — 좌대 위 작은 말뚝 실루엣 + 종별 머리 색(밭 렌더와 같은 색 언어).
-			var hc := Color.from_hsv(float(i) / float(ItemCatalog.RARECROWS.size()), 0.55, 0.88)
-			draw_rect(Rect2(rp + Vector2(9, -12), Vector2(3, 12)), Color(0.42, 0.32, 0.22))
-			draw_circle(rp + Vector2(10, -14), 4.0, hc)
+			# ★[폴리시 2회차] 모은 종 = **그 종의 아이콘**을 좌대 위에 세운다. 옛 그림은 갈색 말뚝 +
+			#   종별 색 원 하나라, 여덟이 나란히 서면 "단색 원점 여덟"으로 읽혔다(육안 판정). 8종을
+			#   가르는 것은 색이 아니라 소품(갓·등롱·도롱이·탈)이고, 그 소품은 이미
+			#   `rarecrow_N_icon.png`에 있다 — 인벤 격자가 쓰는 바로 그 파일이다([§15] 공용 규약).
+			var cic := _item_icon(rid)
+			if cic != null:
+				draw_texture(cic, rp + Vector2(10.0 - cic.get_size().x * 0.5, 2.0 - cic.get_size().y))
+			else:
+				var hc := Color.from_hsv(float(i) / float(ItemCatalog.RARECROWS.size()), 0.55, 0.88)
+				draw_rect(Rect2(rp + Vector2(9, -12), Vector2(3, 12)), Color(0.42, 0.32, 0.22))
+				draw_circle(rp + Vector2(10, -14), 4.0, hc)
 		else:
 			draw_rect(Rect2(rp + Vector2(6, -12), Vector2(8, 12)), Color(0.25, 0.22, 0.2, 0.5), false, 1.0)  # 빈 자리
 	# ── ★[S10-T6 / ADR-0069 결정 9] ④ 명부 도감 열람대 ──
@@ -17177,6 +17291,7 @@ func _woodshop_items() -> Array:
 		var pal: Array = HomeDecoCatalog.items_of_layer(set_id, HomeDecoCatalog.L_FURNITURE)
 		var row := {
 			"kind": "deco", "buy_id": set_id, "icon_id": "",
+			"icon_tex": _deco_icon(set_id),   # ★[폴리시 2회차] 세트 아트가 오면 대표색 사각을 대신한다
 			"swatch": HomeDecoCatalog.color_of(set_id, String(pal[0])) if not pal.is_empty() else Color(0.5, 0.5, 0.5),
 			"name": "%s 가구 세트" % HomeDecoCatalog.name_of(set_id),
 			"price": StoreDiscount.price(base, hearts), "base": base,
@@ -23554,11 +23669,17 @@ func _draw_chest_at(t: Vector2i, box_chest: StorageChest) -> void:
 	var ox := t.x * TILE
 	var oy := t.y * TILE
 	var box := Rect2(ox + 3, oy + 8, TILE - 6, TILE - 12)
-	draw_rect(box.grow(1.0), Color(0.18, 0.13, 0.08))           # 외곽선(어두운 나무)
-	draw_rect(box, Color(0.50, 0.35, 0.20))                     # 궤짝 본체(따뜻한 나무빛 — 출하함보다 밝은 톤)
-	draw_rect(Rect2(box.position, Vector2(box.size.x, 4)), Color(0.64, 0.46, 0.26))  # 뚜껑 밝은 띠
-	# 정면 금속 걸쇠(자물쇠) — "잠기는 보관함"으로 읽히게(출하함과 시각 구분).
-	draw_rect(Rect2(ox + TILE * 0.5 - 3, oy + 10, 6, 5), Color(0.82, 0.74, 0.42))
+	# ★[폴리시 2회차] 아트 훅 — assets/props/storage_chest.png(발치 앵커). **한 장이 두 자리를
+	#   덮는다**(집·갈무리방 — 같은 궤짝이다). 걸쇠까지 아트가 들고, 코드는 "보관 중" 표식만 남긴다.
+	var chest_tex := _prop_tex("storage_chest")
+	if chest_tex != null:
+		draw_texture(chest_tex, Vector2(ox, oy + TILE - chest_tex.get_size().y))
+	else:
+		draw_rect(box.grow(1.0), Color(0.18, 0.13, 0.08))           # 외곽선(어두운 나무)
+		draw_rect(box, Color(0.50, 0.35, 0.20))                     # 궤짝 본체(따뜻한 나무빛 — 출하함보다 밝은 톤)
+		draw_rect(Rect2(box.position, Vector2(box.size.x, 4)), Color(0.64, 0.46, 0.26))  # 뚜껑 밝은 띠
+		# 정면 금속 걸쇠(자물쇠) — "잠기는 보관함"으로 읽히게(출하함과 시각 구분).
+		draw_rect(Rect2(ox + TILE * 0.5 - 3, oy + 10, 6, 5), Color(0.82, 0.74, 0.42))
 	# 보관 중이면 뚜껑 위 밝은 점 — "넣어 둔 게 있다"(출하함과 같은 결).
 	if box_chest != null and not box_chest.is_empty():
 		draw_rect(Rect2(ox + TILE * 0.5 - 2, oy + 4, 4, 4), Color(0.92, 0.86, 0.52))

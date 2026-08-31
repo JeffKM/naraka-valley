@@ -117,6 +117,20 @@ const TOP_H := 132.0             # 상단 컨텍스트 영역 높이
 const BP_VIS_ROWS := 2           # 백팩 뷰포트에 한 번에 보이는 행 수(총 행 > 이 값이면 스크롤)
 const SCROLLBAR_W := 6.0         # 백팩 스크롤바 폭
 
+# ★[폴리시 2회차] 매대 행 칸 폭 — **가게가 정한다**(`_draw_store_top` 주석). 상수로 뺀 이유는
+#   회귀가 이 치수를 읽어 "가격이 [구매] 버튼 밑으로 파고들지 않는다"를 기하로 재기 때문이다
+#   (숫자를 테스트에 옮겨 적으면 한쪽만 고쳐도 조용히 통과한다 — 단일 출처).
+const STORE_NAME_W := 150.0      # 엽전 매대(만물상·야시장·보부상) 이름 칸
+const STORE_PRICE_DX := 156.0    # 〃 가격 칸 시작(행 시작 + 아이콘 + 여백 기준)
+const TRIAL_NAME_W := 180.0      # 시련패 매대 — 값이 한두 자리(최대 20)라 30px 더 준다
+const TRIAL_PRICE_DX := 186.0
+const ROW_ICON := 20.0           # 행 좌단 아이콘 한 변(이름 칸은 이 뒤 8px에서 시작)
+const ROW_ICON_GAP := 8.0
+const ROW_COIN_W := 12.0         # 화폐 아이콘 폭 + 숫자까지의 거리(가격 블록 기하)
+const ROW_COIN_DX := 15.0
+const ROW_BUY_W := 54.0          # [구매] 버튼 폭 · 버튼은 패널 오른끝에서 PAD + BUY_INSET 만큼 안쪽
+const ROW_BUY_INSET := 64.0
+
 var inv: Inventory = null
 var bin: ShippingBin = null
 var chest: StorageChest = null   # ★ Phase D 저장 상자(CTX_CHEST 상단 그리드 — main이 set_chest로 주입)
@@ -1242,8 +1256,13 @@ func _draw_store_top(panel: Rect2) -> void:
 	# ★[폴리시 2026-08-15] 이름 칸 118 → 150 / 가격 칸 124 → 156(길드가 이미 쓰는 그 치수).
 	#   씨앗은 절기 병기가 붙어 길다("저승감자 씨앗 (성야절)" = 13px에서 144px)라 118에서는 닫는
 	#   괄호가 잘려 "혼령초 씨앗 (유화"로 보였다(육안 덤프 frame_store).
+	# ★[폴리시 2회차] **시련장만 더 넓다.** 여기 값은 시련패라 한두 자리(최대 20)뿐이라 가격 칸을
+	#   30px 더 밀어도 [구매] 버튼(행 시작 +256)을 안 건드린다 — 엽전 매대는 네다섯 자리(12000 =
+	#   33px)라 같은 치수를 주면 가격이 버튼 밑으로 파고든다. 그래서 폭은 **가게가 정한다**.
+	var name_w := TRIAL_NAME_W if context == CTX_TRIAL else STORE_NAME_W
+	var price_dx := TRIAL_PRICE_DX if context == CTX_TRIAL else STORE_PRICE_DX
 	_store_scroll = _draw_row_list(panel, store_items, row_y, max_y, _store_scroll, _store_row_rects,
-		"구매", 150.0, 156.0)
+		"구매", name_w, price_dx)
 
 # ★ [S3-T5] 공용 품목 행 리스트 — [아이콘(+등급 점) | 이름(×N) | 가격 | 버튼] 행 + 미니 스크롤바.
 # rows 항목: {icon_id, name, price, base?, kind, buy_id, count?, quality?, locked?, locked_text?}
@@ -1259,7 +1278,7 @@ func _draw_store_top(panel: Rect2) -> void:
 func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scroll: int,
 		out_rects: Array, btn_label: String, name_w: float = 118.0, price_dx: float = 124.0) -> int:
 	const ROW_H := 22.0
-	const ICON := 20.0
+	var ICON := ROW_ICON
 	# ★ [S2-T4] 보이는 행수만큼 창을 내고 휠로 넘긴다(스타듀 상점 스크롤 리스트 결). 스크롤 상태는
 	#   여기서 clamp한다(행수·영역이 그리기 시점에 확정되므로 — 휠 핸들러는 ±1만 한다).
 	var vis := maxi(1, int((max_y - row_y) / ROW_H))
@@ -1268,7 +1287,7 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 		var item: Dictionary = rows[i]
 		var ry := row_y + (i - sc) * ROW_H
 		var rowrect := Rect2(panel.position.x + PAD, ry, panel.size.x - PAD * 2.0 - 10.0, ROW_H - 2.0)
-		var buyrect := Rect2(panel.end.x - PAD - 64.0, ry, 54.0, ROW_H - 4.0)
+		var buyrect := Rect2(panel.end.x - PAD - ROW_BUY_INSET, ry, ROW_BUY_W, ROW_H - 4.0)
 		var locked := bool(item.get("locked", false))
 		if not locked:
 			out_rects.append({"row": rowrect, "buy": buyrect,
@@ -1277,8 +1296,15 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 		# 아이콘(+ 등급 점). ★[S4-T7] 인벤 아이템이 아닌 품목(가구 테마세트)은 아이콘이 없으므로
 		#   `swatch`(세트 대표색) 한 칸으로 대신한다 — 빈 네모가 뜨는 것보다 낫고, 세트 아트가
 		#   들어오면 icon_id로 갈아끼우면 된다(S4-T9/T10 아트 패스).
+		# ★[폴리시 2회차] 그 "세트 아트"가 도착하는 자리 = `icon_tex`. 인벤 아이템이 아니라
+		#   ItemCatalog 아이콘 표에 없는 품목이라 `icon_id`로는 못 부르고, 호출부가 텍스처를 직접
+		#   물려 준다(있으면 그림 · 없으면 swatch — `_prop_tex`와 같은 "있으면 쓴다" 문법).
+		#   swatch 폴백을 남기는 이유: 세트 4종 중 아트가 온 것만 갈아 끼워도 나머지가 안 깨진다.
 		var icon_rect := Rect2(rowrect.position, Vector2(ICON, ICON))
-		if item.has("swatch"):
+		var icon_tex: Texture2D = item.get("icon_tex", null)
+		if icon_tex != null:
+			draw_texture_rect(icon_tex, icon_rect, false)
+		elif item.has("swatch"):
 			var sw: Color = item["swatch"]
 			draw_rect(icon_rect.grow(-3.0), sw)
 			draw_rect(icon_rect.grow(-3.0), HanjiUi.INK_DIM, false, 1.0)
@@ -1296,12 +1322,16 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 		# ★[폴리시 2026-08-15] 이름 칸을 넘치면 하드 컷이 아니라 말줄임 — 어떤 가게든 품목명이
 		#   길어질 수 있고(절기 병기·자재량·데미지 밴드), 소리 없이 끊기면 "(유화"처럼 문장이
 		#   깨진 채 남는다. 칸 폭 자체는 호출부가 가게별로 정한다(이 함수는 넘침만 흡수).
-		HanjiUi.draw_text(self, Vector2(rowrect.position.x + ICON + 8.0, ty),
-			HanjiUi.elide(label, 13, name_w), 13, HanjiUi.INK_LIGHT, name_w)
+		# ★[폴리시 2회차] 말줄임 **전에 먼저 줄인다**(`draw_text_fit` — 매대 헤더가 쓰는 그 문법).
+		#   레어크로우 8종 이름("레어크로우 ⑧ — 탈 쓴 허수아비" = 13px에서 204px)은 어느 칸 폭으로도
+		#   13px에 안 들어가, 옛 elide는 "레어크로우 ⑧ — 탈…"로 **정체를 말하는 뒷부분만** 잘라
+		#   먹었다. 한 단 줄이면 이름이 통째로 산다(잘린 이름보다 작은 이름이 낫다).
+		HanjiUi.draw_text_fit(self, Vector2(rowrect.position.x + ICON + ROW_ICON_GAP, ty),
+			label, 13, HanjiUi.INK_LIGHT, name_w)
 		# 가격(엽전 + 숫자). 할인 시 정가→할인가.
 		var price := int(item.get("price", 0))
 		var base := int(item.get("base", price))
-		var px := rowrect.position.x + ICON + 8.0 + price_dx
+		var px := rowrect.position.x + ICON + ROW_ICON_GAP + price_dx
 		if price < base:
 			# ★[폴리시] 정가 병기는 **자리가 남을 때만**. 이름 칸을 넓히면 가격 칸이 그만큼 짧아지는데
 			#   할인 병기는 가격 블록을 두 배로 불려(정가 + 화살표 + 할인가) 구매 버튼 밑으로 파고든다.
@@ -1315,8 +1345,8 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 		# ★[S10-T8] 화폐 아이콘은 `store_coin`이 정한다(기본 = 엽전). [명부 시련장]만 [시련패]로
 		#   바뀌므로 다른 매대의 픽셀은 한 점도 안 움직인다(null 방어 = 엽전 폴백).
 		draw_texture_rect(store_coin if store_coin != null else COIN,
-			Rect2(px, ty - 11.0, 12.0, 12.0), false)
-		HanjiUi.draw_text(self, Vector2(px + 15.0, ty), str(price), 13, HanjiUi.GOLD)
+			Rect2(px, ty - 11.0, ROW_COIN_W, ROW_COIN_W), false)
+		HanjiUi.draw_text(self, Vector2(px + ROW_COIN_DX, ty), str(price), 13, HanjiUi.GOLD)
 		# 버튼(또는 잠김 표시).
 		if locked:
 			HanjiUi.draw_text(self, buyrect.position + Vector2(4.0, 16.0),
