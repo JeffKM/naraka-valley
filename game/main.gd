@@ -17313,7 +17313,7 @@ func _store_items() -> Array:
 			"name": "%s 씨앗%s" % [CropCatalog.name_of(crop_id),
 				"" if season_tag == "" else " (%s)" % season_tag],
 			"price": StoreDiscount.price(base, hearts), "base": base,
-			"owned": inventory.seed_count(crop_id),
+			"count": inventory.seed_count(crop_id),
 		})
 	# ★ [S2-T4 / ADR-0060 결정 4] 묘목·비료·건초 정식 입고 — inventory.gd "정식 판매처(만물상=Slice 2)"
 	#   예고 이행. 카테고리 순서 고정: 씨앗 → 묘목 → 비료 → 건초 → 설치물(스타듀 매대 결의 묶음 진열).
@@ -17326,7 +17326,7 @@ func _store_items() -> Array:
 			"icon_id": ItemCatalog.sapling_id(fruit_id),
 			"name": "%s 묘목" % FruitTreeCatalog.name_of(fruit_id),
 			"price": StoreDiscount.price(sap_base, hearts), "base": sap_base,
-			"owned": inventory.sapling_count(fruit_id),
+			"count": inventory.sapling_count(fruit_id),
 		})
 	for fert_id in FertilizerCatalog.ids():
 		var fert_base := FertilizerCatalog.buy_cost(fert_id)
@@ -17337,14 +17337,14 @@ func _store_items() -> Array:
 			"icon_id": fert_id,
 			"name": FertilizerCatalog.name_of(fert_id),
 			"price": StoreDiscount.price(fert_base, hearts), "base": fert_base,
-			"owned": inventory.count_of(fert_id),
+			"count": inventory.count_of(fert_id),
 		})
 	rows.append({
 		"kind": "hay", "buy_id": ItemCatalog.HAY,
 		"icon_id": ItemCatalog.HAY,
 		"name": ItemCatalog.name_of(ItemCatalog.HAY),
 		"price": StoreDiscount.price(ItemCatalog.HAY_COST, hearts), "base": ItemCatalog.HAY_COST,
-		"owned": inventory.count_of(ItemCatalog.HAY),
+		"count": inventory.count_of(ItemCatalog.HAY),
 	})
 	var spr_base := ItemCatalog.price_of(ItemCatalog.SPRINKLER)
 	rows.append({
@@ -17352,7 +17352,7 @@ func _store_items() -> Array:
 		"icon_id": ItemCatalog.SPRINKLER,
 		"name": ItemCatalog.name_of(ItemCatalog.SPRINKLER),
 		"price": StoreDiscount.price(spr_base, hearts), "base": spr_base,
-		"owned": inventory.count_of(ItemCatalog.SPRINKLER),
+		"count": inventory.count_of(ItemCatalog.SPRINKLER),
 	})
 	# ★[S10-T2 / ADR-0069 결정 4] 레어크로우 획득처 ③ — 만물상 상시 재고(1회 한정).
 	# ★ 상위 티어 스프링클러는 **여기 안 판다** — 제작 전용이다(CraftCatalog). 매대에 두면 농사
@@ -17366,7 +17366,7 @@ func _store_items() -> Array:
 		"kind": "rarecrow", "buy_id": rc3, "icon_id": rc3,
 		"name": ItemCatalog.name_of(rc3),
 		"price": StoreDiscount.price(rc3_base, hearts), "base": rc3_base,
-		"owned": inventory.count_of(rc3),
+		"count": inventory.count_of(rc3),
 		"locked": _rarecrow_owned(rc3), "locked_text": "보유 중",
 	})
 	return rows
@@ -17409,7 +17409,7 @@ func _fishshop_items() -> Array:
 			"kind": "pot", "buy_id": ItemCatalog.CRAB_POT, "icon_id": ItemCatalog.CRAB_POT,
 			"name": ItemCatalog.name_of(ItemCatalog.CRAB_POT),
 			"price": StoreDiscount.price(pot_base, hearts), "base": pot_base,
-			"owned": inventory.count_of(ItemCatalog.CRAB_POT),
+			"count": inventory.count_of(ItemCatalog.CRAB_POT),
 		})
 	return rows
 
@@ -17427,7 +17427,7 @@ func _gear_row(gear_id: String, hearts: int) -> Dictionary:
 		"kind": "gear", "buy_id": gear_id, "icon_id": gear_id,
 		"name": GearCatalog.name_of(gear_id),
 		"price": StoreDiscount.price(base, hearts), "base": base,
-		"owned": owned,
+		"count": owned,
 		"locked": unique and owned > 0, "locked_text": "보유 중",
 	}
 
@@ -17562,7 +17562,7 @@ func _woodshop_items() -> Array:
 		"kind": "wood", "buy_id": ItemCatalog.WOOD, "icon_id": ItemCatalog.WOOD,
 		"name": ItemCatalog.name_of(ItemCatalog.WOOD),
 		"price": StoreDiscount.price(wood_base, hearts), "base": wood_base,
-		"owned": inventory.count_of(ItemCatalog.WOOD),
+		"count": inventory.count_of(ItemCatalog.WOOD),
 	})
 	return rows
 
@@ -17605,7 +17605,7 @@ func _guild_items() -> Array:
 			"kind": "weapon", "buy_id": id, "icon_id": id,
 			"name": "%s (%s)" % [WeaponCatalog.name_of(id), WeaponCatalog.damage_band(id)],
 			"price": price, "base": price,   # ★할인 없음 = 정가 = base(병기 표시가 안 뜬다)
-			"owned": owned,
+			"count": owned,
 			"locked": owned > 0, "locked_text": "보유 중",
 		})
 	# 명부환 — 상시 품목(깊이 무관). 목록 **끝**에 둔다: 검은 깊이에 따라 늘어나는 계단이고 환약은
@@ -17615,7 +17615,7 @@ func _guild_items() -> Array:
 		"kind": "potion", "buy_id": ItemCatalog.MYEONGBUHWAN, "icon_id": ItemCatalog.MYEONGBUHWAN,
 		"name": "%s (체력 +%d)" % [ItemCatalog.name_of(ItemCatalog.MYEONGBUHWAN), ItemCatalog.MYEONGBUHWAN_HEAL],
 		"price": potion_price, "base": potion_price,
-		"owned": inventory.count_of(ItemCatalog.MYEONGBUHWAN),
+		"count": inventory.count_of(ItemCatalog.MYEONGBUHWAN),
 	})
 	return rows
 

@@ -140,7 +140,12 @@ var crop_icons: Dictionary = {}
 # main이 매 프레임 채워 넣는 보조 텍스트(매대 헤더·정산 미리보기 등) — 프레임은 표시만.
 var store_text: String = ""
 # ★ [S1R-T12] 매대 아이템 행 데이터(main이 _store_items로 주입 — 무상태 렌더). 각 항목:
-#   {icon_id, name, price, base, owned, kind("seed"/"placeable"), buy_id}. price<base면 할인 표시.
+#   {icon_id, name, price, base, count, kind("seed"/"placeable"), buy_id}. price<base면 할인 표시.
+# ★[폴리시 R4] 보유 수량 키는 **`count`**다(옛 스키마 자구의 `owned`가 아니다). 공용 렌더러
+#   `_draw_row_list`가 `count` 하나만 읽는데 만물상·생선가게·목공방·길드 행만 `owned`로 넣어,
+#   같은 프레임·같은 렌더러가 매대마다 다른 답을 냈다 — 보부상 좌판은 "저승감자 씨앗 ×40"인데
+#   만물상은 같은 씨앗을 "보유 0"처럼 보여 중복 구매를 유도했다. `owned`는 파일 어디서도 읽히지
+#   않는 죽은 키였다(전 저장소 조회 0건).
 var store_items: Array = []
 # ★[S10-T8] 매대 가격 옆 **화폐 아이콘**. 기본값 = 엽전이라 기존 여섯 매대는 한 점도 안 바뀌고,
 #   [명부 시련장]만 열 때 main이 [시련패] 표식으로 갈아 끼운다(CTX_TRIAL 주석 참조). 아트가

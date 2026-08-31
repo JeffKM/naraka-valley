@@ -147,6 +147,14 @@ func _initialize() -> void:
 	_check("⑤ 홈 집 안 취침 가능(회귀 0)", m._can_sleep())
 
 	# ── ⑥ [S1R-T8 / ADR-0059 결정4] 물뿌리개 용량·리필(소진→차단→우물 리필→재개) ──
+	# ★[폴리시 R4 #17] 혼우물은 **안식 농원 마당의 야외 설비**라 `_is_refill_target`이 구역·실내를
+	#   본다(그 가드가 없던 동안엔 나루 마을 같은 좌표에서도 리필이 됐다). 바로 위 ⑤가 집 안으로
+	#   들어간 상태를 그대로 물려받으면 "실내에서 마당 우물에 닿는" 도달 불가 상황을 재게 되므로,
+	#   이 절의 전제로 먼저 밖으로 나온다(_target은 어차피 발밑 ±1로 클램프된다).
+	m.player.position = m._tile_center_px(m._buildings["집"]["door"])
+	m._maybe_toggle_building()
+	await _settle(m)
+	_check("⑥pre0 집 밖으로 나왔다(야외 설비를 재는 절의 전제)", m._indoor == "")
 	_check("⑥pre 부팅 잔량 = 용량 가득(20)", m._can_water == m._CAN_CAPACITY)
 	var wa := Vector2i(48, 30)   # farm._tiles 순수 좌표(지형 무관 — hoe/plant/water는 grid 안 봄)
 	var wb := Vector2i(48, 31)
