@@ -172,6 +172,54 @@ func _initialize() -> void:
 	m2.queue_free()
 	await process_frame
 
+	# ── ⑦ [폴리시 R2] 답례 지급 실패 시 claim 래치 금지 ──
+	# 종전엔 `add_item` 반환값을 안 보고 곧바로 `museum.claim`이 문턱을 영구 래치해서, 백팩이 가득한
+	# 채 3점을 채우면 답례(레어크로우 ① — 다른 획득처가 없다)가 지급 없이 증발하고 pending에서도
+	# 빠졌다. 반딧넋 답례(`_claim_firefly_milestones`)가 지키는 "못 받으면 claim 안 한다" 1:1.
+	print("── ⑦ [폴리시 R2] 답례 지급 실패 = claim 보류 ──")
+	var m3: Node = await _spawn_main()
+	await _settle(m3)
+	m3.museum.donated = {}
+	m3.museum.claimed = []
+	var relics: Array = Museum.donatable_ids()
+	# 전시 3점을 채운다(원장에 직접 — 기증 동작이 아니라 문턱 도달만 재현).
+	var staged: Array = []
+	for id in relics:
+		if staged.size() >= 3:
+			break
+		if ItemCatalog.has_item(String(id)):
+			m3.museum.donate(String(id), 1)
+			staged.append(String(id))
+	var reward_3 := ""
+	for row in Museum.MILESTONES:
+		if int(row["count"]) == 3:
+			reward_3 = String(row["reward_id"])
+	_check("⑦pre 전시 3점 도달 · count 3 답례가 레어크로우 ①(다른 획득처 없음)",
+		staged.size() == 3 and reward_3 == ItemCatalog.RARECROW_1)
+	_fill_backpack_full(m3.inventory)
+	_check("⑦a 준비 — 빈 슬롯 0 · 레어크로우 ①은 아직 미지급",
+		not m3.inventory.has_free_slot() and m3.inventory.count_of(ItemCatalog.RARECROW_1) == 0)
+	var pend_before: int = m3.museum.pending_milestones().size()
+	m3._claim_museum_milestones()
+	_check("⑦b **claim이 서지 않는다** — 문턱이 pending에 그대로 남고 답례도 안 사라졌다",
+		not m3.museum.claimed.has(1) and not m3.museum.claimed.has(3)
+		and m3.museum.pending_milestones().size() == pend_before
+		and m3.inventory.count_of(ItemCatalog.RARECROW_1) == 0)
+	# 자리를 비우고 다시 오면 밀린 답례가 순서대로 들어온다(count 1·2·3).
+	for i in range(m3.inventory.slots.size()):
+		m3.inventory.slots[i] = null
+	m3.inventory.changed.emit()
+	var acted: bool = m3._claim_museum_milestones()
+	_check("⑦c 자리를 비우면 밀린 답례가 전부 지급되고 claim이 선다",
+		acted and m3.museum.claimed.has(1) and m3.museum.claimed.has(2) and m3.museum.claimed.has(3)
+		and m3.inventory.count_of(ItemCatalog.RARECROW_1) == 1
+		and m3.inventory.seed_count(CropCatalog.HONRYEONGCHO) == 5
+		and m3.museum.pending_milestones().is_empty())
+	_check("⑦d 더 줄 것이 없으면 이 창구는 소비되지 않는다(기증 안내가 그대로 뜬다)",
+		not m3._claim_museum_milestones())
+	m3.queue_free()
+	await process_frame
+
 	# 정리 — 세이브 원복(다른 테스트·플레이 세이브 보호).
 	DirAccess.remove_absolute(SAVE)
 	if had_save:
@@ -183,3 +231,21 @@ func _initialize() -> void:
 	else:
 		print("══ 결과: FAIL (실패 %d) ══" % _fail)
 	quit(0 if _fail == 0 else 1)
+
+# ★[폴리시 R2 공용] 백팩을 **빈 슬롯 0**으로 채운다 — 되돌릴 수 없는 사건 앞의 무대 셋업.
+#   슬롯에 직접 쓴다: `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다.
+#   종을 서로 다르게 섞는 것이 핵심이다(합류할 스택이 하나도 없어야 "가득"이 실효한다).
+#   ★ `keep`에 든 슬롯 인덱스는 비워 둔다(자리를 하나만 남기는 함정 재현용).
+#   ★ 풀은 유품·책(전부 스택 가능·서로 다른 종)이라 레어크로우·설치물 카운트를 오염시키지 않는다.
+func _fill_backpack_full(inv: Inventory, keep: Array = []) -> void:
+	var pool: Array = []
+	for id in Museum.donatable_ids():
+		pool.append(String(id))
+	for i in range(inv.slots.size()):
+		if keep.has(i):
+			inv.slots[i] = null
+			continue
+		inv.slots[i] = {"id": String(pool[i]), "count": 1, "quality": 0} if i < pool.size() \
+			else {"id": ItemCatalog.harvest_id(CropCatalog.PIANHWA), "count": 1,
+				"quality": (i - pool.size()) % 4}
+	inv.changed.emit()

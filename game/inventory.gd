@@ -143,6 +143,18 @@ func _first_empty() -> int:
 func has_free_slot() -> bool:
 	return _first_empty() >= 0
 
+# ★[폴리시 R2] 이 물건을 지금 받을 수 있는가 — **되돌릴 수 없는 사건 앞의 정밀 선검사**다.
+#   판정식을 `add_item`에서 그대로 파생한다(유니크는 중복 거절 + 빈 슬롯 / 스택은 (id,quality)
+#   합칠 자리 또는 빈 슬롯). 위 `has_free_slot`이 보수적 근사라면 이쪽은 정확해서, 수확·발굴처럼
+#   "원장을 비운 뒤엔 되돌릴 자리가 없는" 자리에서 **적재 먼저**를 지키는 데 쓴다.
+#   ※ 규칙이 두 벌로 늙지 않도록 add_item과 같은 술어만 본다 — 새 규칙을 여기서 만들지 않는다.
+func can_add(id: String, n: int = 1, quality: int = 0) -> bool:
+	if n <= 0 or not ItemCatalog.has_item(id):
+		return false
+	if not ItemCatalog.stackable_of(id):
+		return _find_id(id) < 0 and _first_empty() >= 0
+	return _find_stack(id, _norm_quality(id, quality)) >= 0 or _first_empty() >= 0
+
 # 아이템 id의 보유 개수(전 품질 합산 — 선물·서빙·판매 가용 판정 불변). 도구는 0/1.
 func count_of(id: String) -> int:
 	var sum := 0
@@ -376,10 +388,13 @@ func take_sapling(fruit_id: String) -> bool:
 # ── 수확물(작물군 id = 수확물 아이템 id) ──────────────────────────────────────
 # ★ S1-6(§8.3): quality 인자로 등급을 실는다(기본 Q0라 무인자 기존 호출 회귀 0). 밭 수확 품질 roll이
 #   주 수확분에만 등급을 붙이고 다수확 추가분은 Q0로 넘긴다(§8.5 다수확 격리 — main이 조율).
-func add_harvest(crop_id: String, n: int = 1, quality: int = 0) -> void:
+# ★[폴리시 R2] **적재 성공 여부를 돌려준다**(종전 void). 호출부가 실패를 알 수조차 없어 백팩이
+#   가득한 수확이 조용히 증발하고 화면엔 "+N"이 뜨던 자리라, add_item과 같은 계약으로 맞춘다.
+#   기존 호출부는 반환값을 안 봐도 거동이 한 톨도 안 바뀐다(하위호환).
+func add_harvest(crop_id: String, n: int = 1, quality: int = 0) -> bool:
 	if not CropCatalog.has_crop(crop_id):
-		return
-	add_item(ItemCatalog.harvest_id(crop_id), n, quality)
+		return false
+	return add_item(ItemCatalog.harvest_id(crop_id), n, quality)
 
 func harvest_count(crop_id: String) -> int:
 	return count_of(ItemCatalog.harvest_id(crop_id))

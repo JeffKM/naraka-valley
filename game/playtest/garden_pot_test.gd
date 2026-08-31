@@ -280,8 +280,44 @@ func _run_checks() -> void:
 	_check("⑨c 구세이브(키 없음) 로드 — 화분 0·무손상", m3.garden_pot.count() == 0)
 	m3.free()
 
+	# ═══ ⑪ [폴리시 R2] 백팩이 가득한 채 회수 — 화분 소실 금지 ═══
+	# 화분은 원목20+돌10 제작물이다. 종전엔 원장을 먼저 지우고 `add_item` 반환값을 안 봐서, 백팩이
+	# 가득하면 방에서도 백팩에서도 사라지고 "회수했다" 알림까지 떴다(스프링클러·레어크로우 동형).
+	var m6: Node = await _new_main()
+	_dismiss_intro(m6)
+	var pot_tile := Vector2i(11, 72)     # 홈 집 실내 바닥
+	m6._indoor = "집"
+	m6.garden_pot.place(pot_tile)
+	_check("⑪pre 화분이 방에 섰다", m6.garden_pot.has_at(pot_tile))
+	_fill_backpack_full(m6.inventory)
+	_check("⑪a 준비 — 빈 슬롯 0 · 화분 스택 없음",
+		not m6.inventory.has_free_slot() and m6.inventory.count_of(ItemCatalog.GARDEN_POT) == 0)
+	m6._target = pot_tile
+	m6._remove_garden_pot(pot_tile)
+	_check("⑪b **회수가 성립하지 않는다** — 화분은 방에 그대로(소실 0)",
+		m6.garden_pot.has_at(pot_tile) and m6.inventory.count_of(ItemCatalog.GARDEN_POT) == 0)
+	_fill_backpack_full(m6.inventory, [0])   # 자리를 하나 비운다
+	m6._remove_garden_pot(pot_tile)
+	_check("⑪c 자리를 비우면 회수 성립 — 원장에서 내려오고 백팩에 1개",
+		not m6.garden_pot.has_at(pot_tile) and m6.inventory.count_of(ItemCatalog.GARDEN_POT) == 1)
+	m6.free()
+
 	cleaner.delete_save()
 	cleaner.free()
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(_fail)
+
+# ★[폴리시 R2 공용] 백팩을 **빈 슬롯 0**으로 채운다 — 되돌릴 수 없는 사건 앞의 무대 셋업.
+#   슬롯에 직접 쓴다: `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다.
+#   풀은 유품·책(전부 스택 가능·서로 다른 종)이라 설치물 카운트를 오염시키지 않는다.
+func _fill_backpack_full(inv: Inventory, keep: Array = []) -> void:
+	var pool: Array = Museum.donatable_ids()
+	for i in range(inv.slots.size()):
+		if keep.has(i):
+			inv.slots[i] = null
+			continue
+		inv.slots[i] = {"id": String(pool[i]), "count": 1, "quality": 0} if i < pool.size() \
+			else {"id": ItemCatalog.harvest_id(CropCatalog.PIANHWA), "count": 1,
+				"quality": (i - pool.size()) % 4}
+	inv.changed.emit()

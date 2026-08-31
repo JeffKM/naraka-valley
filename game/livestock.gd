@@ -396,15 +396,24 @@ func _set_flag(tile: Vector2i, flag: String) -> bool:
 # ── 산물 수집(§4.1) ──────────────────────────────────────────────────────────
 # 대기 산물을 거둔다. 있으면 {product_id, quality, is_large}를 반환하고 대기를 0으로 비운다.
 # 없으면 빈 Dictionary({}). main이 반환을 인벤토리에 적재한다(대형 = "<산물>_large" 아이템, ×2가).
-func collect(tile: Vector2i) -> Dictionary:
+# ★[폴리시 R2] 대기 산물을 **미리 본다**(원장 불변 — 게잡이통 `pending_catch`/`collect` 분리 1:1).
+#   호출부가 적재 자리를 먼저 확인하고 나중에 비우기 위한 창구다. `collect`가 이 값을 그대로
+#   돌려주므로 두 답이 갈릴 수 없다(같은 한 곳에서 파생).
+func pending_product(tile: Vector2i) -> Dictionary:
 	if not has_product(tile):
 		return {}
 	var a: Dictionary = _animals[tile]
-	var out := {
+	return {
 		"product_id": AnimalCatalog.product_of(a["species"]),
 		"quality": int(a["product_quality"]),
 		"is_large": bool(a["product_large"]),
 	}
+
+func collect(tile: Vector2i) -> Dictionary:
+	var out := pending_product(tile)
+	if out.is_empty():
+		return {}
+	var a: Dictionary = _animals[tile]
 	a["product"] = 0
 	a["product_large"] = false
 	changed.emit()

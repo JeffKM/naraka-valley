@@ -351,6 +351,35 @@ func _initialize() -> void:
 	var before: int = m.inventory.count_of(pid)
 	m.inventory.add_item(pid, 1, int(got["quality"]))
 	_check("⑫ 수집 산물 인벤토리 적재", m.inventory.count_of(pid) == before + 1)
+
+	# ── ⑭ [폴리시 R2] 백팩 만원 — 그날 산물 소실 금지 ──
+	# `collect`는 짐승의 대기 산물을 0으로 지운다. 종전엔 그걸 먼저 부르고 `add_item` 반환값을 안 봐서,
+	# 백팩이 가득하면 그날 산물이 사라지는데 혼력(`energy.spend`)은 그대로 집행됐다. 게잡이통·채취기가
+	# "인벤이 가득이면 통 안에 그대로 둔다"로 지키는 규율을 짐승에도 세웠다(`pending_product` 신설).
+	print("── ⑭ [폴리시 R2] 백팩 만원 목축 수집 ──")
+	m.ranch.feed(starter)
+	m.ranch.advance_day()
+	_check("⑭pre 다음 산물이 대기 중", m.ranch.has_product(starter))
+	var pend: Dictionary = m.ranch.pending_product(starter)
+	var want: String = ItemCatalog.large_product_id(pend["product_id"]) \
+		if bool(pend["is_large"]) else String(pend["product_id"])
+	_check("⑭a pending_product는 원장을 안 건드린다(collect와 같은 답을 미리 준다)",
+		m.ranch.has_product(starter) and want != "")
+	m._target = starter
+	m.energy.current = m.energy.MAX
+	var e0: int = m.energy.current
+	_fill_backpack_full(m.inventory)
+	m._try_harvest()
+	_check("⑭b **산물이 짐승에게 그대로**(혼력도 안 닳는다)",
+		m.ranch.has_product(starter) and m.energy.current == e0
+		and m.inventory.count_of(want) == 0)
+	_fill_backpack_full(m.inventory, [0])
+	m.energy.current = m.energy.MAX
+	m._try_harvest()
+	_check("⑭c 자리를 비우면 그 산물이 그대로 들어온다(혼력도 그때 나간다)",
+		not m.ranch.has_product(starter) and m.inventory.count_of(want) == 1
+		and m.energy.current < e0)
+
 	m.queue_free()
 	await process_frame
 	# 백업 복원(있었으면).
@@ -385,3 +414,17 @@ func _mk(species: String, friendship: int, mood: int) -> Dictionary:
 		"fed": false, "petted": false, "grazed": false, "penned": false, "cleaned": false,
 		"product": 0, "product_quality": 0, "product_large": false,
 	}
+
+# ★[폴리시 R2 공용] 백팩을 **빈 슬롯 0**으로 채운다 — 되돌릴 수 없는 사건 앞의 무대 셋업.
+#   슬롯에 직접 쓴다: `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다.
+#   풀은 유품·책(전부 스택 가능·서로 다른 종)이라 산물 카운트를 오염시키지 않는다.
+func _fill_backpack_full(inv: Inventory, keep: Array = []) -> void:
+	var pool: Array = Museum.donatable_ids()
+	for i in range(inv.slots.size()):
+		if keep.has(i):
+			inv.slots[i] = null
+			continue
+		inv.slots[i] = {"id": String(pool[i]), "count": 1, "quality": 0} if i < pool.size() \
+			else {"id": ItemCatalog.harvest_id(CropCatalog.PIANHWA), "count": 1,
+				"quality": (i - pool.size()) % 4}
+	inv.changed.emit()

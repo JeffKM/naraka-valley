@@ -231,6 +231,25 @@ func _run_checks() -> void:
 	_pass_day(m)
 	_check("⑤b ★아침 훅은 **예약만** 한다(취침 연출 한가운데라 안 튼다 — 재생 0 · 비트 0)",
 		m._spine_b4_armed and m.cutscene == null and not m._spine_bit_seen(m.SPINE_B4))
+	# ★[폴리시 R2] **대화가 열려 있으면 접는다.** 24:00 강제 취침(`_on_collapsed`)은 긴 편지·책·주민
+	#   대화를 연 채로도 아침을 넘기는데, 그 상태로 컷신을 틀면 `_end_cutscene`의 `dialogue.start`가
+	#   이미 열린 대화 때문에 조용히 no-op이 되고(dialogue.gd `if is_open(): return`), 비트는 장면
+	#   시작에 찍히므로 `_arm_spine_b4`가 그 뒤로 영영 early return = B4 10줄이 재생 경로 없이
+	#   유실됐다. 접으면 비트를 안 찍고 물러나므로 **다음 아침에 그대로 다시 예약된다**.
+	m.dialogue.start("", PackedStringArray(["가로막는 편지 한 줄"]))
+	m.player.set_physics_process(false)   # 취침 연출이 잠근 상태를 재현(_do_sleep이 하는 일)
+	m._on_sleep_done()
+	_check("⑤b-R2 대화가 열려 있으면 재생을 접는다 — 비트 0 · 컷신 0(유실 0)",
+		m.cutscene == null and not m._spine_bit_seen(m.SPINE_B4) and not m._spine_b4_armed)
+	_check("⑤b-R2′ 대화창이 뜬 채로 이동 잠금이 풀리지 않는다",
+		not m.player.is_physics_processing())
+	_drain(m)
+	_check("⑤b-R2″ 대화가 닫히면 이동 잠금이 풀린다(닫히는 프레임의 훅이 켠다)",
+		not m.dialogue.is_open() and m.player.is_physics_processing())
+	m._arm_spine_b4()
+	_check("⑤b-R2‴ 다음 아침 훅이 **그대로 다시 예약한다**(비트를 안 찍었으므로)",
+		m._spine_b4_armed and not m._spine_bit_seen(m.SPINE_B4))
+
 	m._on_sleep_done()
 	_check("⑤c ★눈을 뜨는 프레임에 정확히 1회 재생된다(비트 기록 · 예약 소진)",
 		m.cutscene != null and m._spine_bit_seen(m.SPINE_B4) and not m._spine_b4_armed)

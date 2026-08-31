@@ -173,15 +173,23 @@ static func _roll_count(rng: RandomNumberGenerator) -> int:
 # 반환 = {"id","count","gold"}({} = 스폿 없음). 인벤 적재·지갑·혼력·알림은 전부 호출 측(main)이 한다.
 #   · 산출 롤 = day + 구역 + 좌표 해시라 **스폿 자리마다 답이 이미 정해져 있다**. 세이브/로드로
 #     되감아도 같은 것이 나오므로 재롤 exploit이 구조적으로 막힌다(지오드 개봉 카운터 시드와 같은 규율).
-func pan(day: int, region: String, t: Vector2i) -> Dictionary:
+# ★[폴리시 R2] 이 칸의 산출을 **미리 본다**(원장 불변 — 게잡이통 `pending_catch`/`collect` 분리 1:1).
+#   호출부가 적재 자리를 먼저 확인하고 나중에 스폿을 소진시키기 위한 창구다. 롤이 (day·구역·좌표)
+#   결정적이라 여기서 본 답과 `pan`이 돌려주는 답은 언제나 같다(같은 시드·같은 표).
+func peek(day: int, region: String, t: Vector2i) -> Dictionary:
 	if not has_at(region, t):
+		return {}
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("panning:yield:%d:%s:%d:%d" % [day, region, t.x, t.y])
+	return _pick(yield_table(), rng)
+
+func pan(day: int, region: String, t: Vector2i) -> Dictionary:
+	var row := peek(day, region, t)
+	if row.is_empty():
 		return {}
 	_spots[region].erase(t)
 	if _spots[region].is_empty():
 		_spots.erase(region)         # 빈 구역 키는 남기지 않는다(세이브 군더더기 0 — CrabPotLedger 결)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("panning:yield:%d:%s:%d:%d" % [day, region, t.x, t.y])
-	var row := _pick(yield_table(), rng)
 	changed.emit()
 	return row
 

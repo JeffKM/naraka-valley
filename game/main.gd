@@ -2135,6 +2135,13 @@ const TRIAL_CAM_RECT := Rect2i(36, 44, 14, 15)      # 시련장 방 둘레(길�
 # 무인 창구 둘(혼백관 기증대·열람대·안치대와 같은 결 — 사람이 없는 [F] 자리).
 const TRIAL_BOARD_TILE := Vector2i(40, 49)          # ★ 시련 게시판 — [F] 수락 / 완료
 const TRIAL_SHOP_TILE := Vector2i(45, 49)           # ★ 시련패 상점 — [F] 매대
+# ★[폴리시 2026-08-26] 갱도 지상에서 **외관 아트가 붙은** footprint 목록 — 지면 오버레이가 이 칸들을
+#   주변 지면으로 메운다(`_build_mine_ground`). ground16 구역의 `building_rects`와 같은 역할이되,
+#   갱도는 프로파일이 없어 별도 목록으로 둔다([§16.5]가 예약해 둔 그 짝 이동의 갱도판).
+#   왜 필요한가: 지상 오버레이는 WALL을 투명 통과시켜 타일맵 벽 타일이 그대로 비치는데, 외관 아트는
+#   61~84%만 불투명이라 **지붕 위·처마 옆으로 청회색 직사각이 드러났다**(mine_surface_smithy 육안).
+#   ⚠️ 던전 입구·나락 진입로는 **넣지 않는다** — 아트가 없어 WALL 벽 타일이 곧 그 건물의 그림이다.
+const MINE_FACADE_RECTS := [SMITHY_EXT_RECT, GUILD_EXT_RECT, TRIAL_EXT_RECT]
 # ★[S5-T1 / ADR-0063 결정 1] 갱도 층 시스템 배선 상수. 던전 입구(DUNGEON_GATE)는 이제 **잠긴 외관이
 #   아니라 층 하강 입구로 점등**한다 — 문 칸에서 [F]를 누르면 1층(또는 해금된 엘리베이터 층)으로
 #   내려간다. NARAK_GATE는 그대로 잠김 유지(나락 = S5-T7 소관).
@@ -2163,10 +2170,15 @@ const INVULN_NONE := -1.0          # 무적 기준점 미설정("아주 오래�
 #     상수를 안 읽는 이 파일의 관례(MINE_ROCK_COST 주석 참조). mining_test ⑧f가 두 목록이 갈리는
 #     걸 잡고, 미등록 종은 드로우에서 회색 폴백이라 조용히 깨지지도 않는다.
 const _MINE_NODE_COLORS := {
-	"ore_myeongdong": Color(0.78, 0.44, 0.28),        # 명동 — 붉은 구리
-	"ore_yucheol": Color(0.58, 0.62, 0.70),           # 유철 — 푸른 강철
+	# ★[폴리시 2026-08-26] 광석 3종 채도 상향 — 몸통 틴트가 `_MINE_NODE_BODY_MIX`(0.55)로 흰색 쪽에
+	#   절반 넘게 끌려가므로, **채도가 낮은 종색은 그 한 번의 lerp에서 무채색으로 붕괴한다**. 옛
+	#   유철(s=0.17)·혼탄(s=0.15)이 그래서 둘 다 같은 암회색 상자로 나왔고(mine_nodes 육안), 명동도
+	#   구리 신호가 회색에 묻혔다. 종색을 "이름이 말하는 색"까지 밀어 올려야 lerp 뒤에도 종이 남는다.
+	#   ※ 세 값은 인벤 아이콘(tools/make_mob_art.py ORE_TINTS)과 **같이** 움직여야 한다(위 §단일 출처).
+	"ore_myeongdong": Color(0.86, 0.36, 0.16),        # 명동 — 붉은 구리
+	"ore_yucheol": Color(0.40, 0.56, 0.82),           # 유철 — 푸른 강철
 	"ore_hwangcheongeum": Color(0.90, 0.75, 0.30),    # 황천금 — 황금
-	"hontan": Color(0.18, 0.17, 0.20),                # 혼탄 — 검정
+	"hontan": Color(0.20, 0.14, 0.26),                # 혼탄 — 검정(탄 계열 흑자색 — 유철과 색상환 반대편)
 	"geode_neokal": Color(0.52, 0.46, 0.38),          # 넋알돌 — 흙빛 덩어리
 	"geode_eophwa": Color(0.62, 0.34, 0.24),          # 업화알돌 — 달군 흙빛
 	"gem_neoksujeong": Color(0.86, 0.90, 0.94),       # 넋수정 — 투명 백
@@ -7538,6 +7550,31 @@ func _build_mine_ground(in_floor: bool) -> void:
 	var rock_img := Image.create(bw, bh, false, Image.FORMAT_RGBA8)
 	_mine_tile_field(rock_img, _mine_bf_rock)
 	var out := Image.create(bw, bh, false, Image.FORMAT_RGBA8)   # 전부 투명에서 시작
+	# ★[폴리시 2026-08-26] 외관 아트가 붙은 footprint는 **이웃 지면으로 메운다**(MINE_FACADE_RECTS 주석).
+	#   무엇으로 메울지는 손으로 안 적는다 — rect 둘레 한 칸을 세어 다수 지면을 따른다. 대장간·시련장은
+	#   빈터(GROUND) 한복판이고 길드는 남단 암반(MINE_ROCK_RECTS)에 박혀 있어, 한 값으로 못 박으면
+	#   둘 중 하나에 또 직사각이 선다. 배치가 바뀌어도 이 셈이 따라온다.
+	var facade_fill: Dictionary = {}          # Vector2i → Image(둘레 다수 지면)
+	if not in_floor:
+		for r: Rect2i in MINE_FACADE_RECTS:
+			var rock_n := 0
+			var floor_n := 0
+			var ring := Rect2i(r).grow(1)
+			for y in range(ring.position.y, ring.end.y):
+				for x in range(ring.position.x, ring.end.x):
+					if Rect2i(r).has_point(Vector2i(x, y)):
+						continue
+					if x < 0 or y < 0 or x >= _grid_w or y >= _outdoor_h:
+						continue
+					var rc: int = _grid[y][x]
+					if rc == ROCK:
+						rock_n += 1
+					elif rc == GROUND:
+						floor_n += 1
+			var fill: Image = rock_img if rock_n > floor_n else floor_img
+			for y in range(maxi(r.position.y, 0), mini(r.end.y, _outdoor_h)):
+				for x in range(maxi(r.position.x, 0), mini(r.end.x, _grid_w)):
+					facade_fill[Vector2i(x, y)] = fill
 	for y in _outdoor_h:
 		for x in _grid_w:
 			var c: int = _grid[y][x]
@@ -7548,6 +7585,8 @@ func _build_mine_ground(in_floor: bool) -> void:
 				src = rock_img
 			elif c == GROUND:
 				src = floor_img
+			elif c == WALL and facade_fill.has(Vector2i(x, y)):
+				src = facade_fill[Vector2i(x, y)]
 			if src == null:
 				continue
 			var p := Vector2i(x * TILE, y * TILE)
@@ -10868,7 +10907,10 @@ func _on_sleep_done() -> void:
 	_sleeping = false
 	# T4.2 슬라이스가 끝났으면(이 취침이 RUN_DAYS+1일째를 불렀음) 이동 잠금을 풀지 않고
 	# 마무리 화면을 유지한다. 진행은 보존하므로 다시 켜도 마무리 화면이 뜬다.
-	if not _run_over:
+	# ★[폴리시 R2] **대화가 열려 있으면 잠금을 안 푼다** — 24:00 강제 취침(`_on_collapsed`)은 긴 편지·
+	#   책·주민 대화를 연 채로도 들어오는데, 여기서 무조건 물리를 켜면 모달 대화창이 떠 있는 상태로
+	#   플레이어가 걸어 다녔다. 대화가 닫히는 프레임에 `_on_dialogue_finished`가 어차피 다시 켠다.
+	if not _run_over and not dialogue.is_open():
 		player.set_physics_process(true)
 	# ★[S9b-T4 / ADR-0068 결정 7] 척추 B4 재생 — 아침 훅이 예약해 둔 공허 컷신을 **눈을 뜨는 이
 	#   프레임**에 튼다(판정과 재생을 나눈 이유는 `_arm_spine_b4` 머리말). 아래 자동 저장보다 앞이라
@@ -11267,6 +11309,14 @@ func _load_game() -> void:
 	#   실내 모드를 `_buildings` 조회로 방어하므로, 늘봄방 행이 아직 없으면 늘봄방 안에서 저장한
 	#   세이브가 바깥으로 튕긴다(부팅 시점의 카탈로그는 carpenter가 생기기 전에 세워진다).
 	#   미건축 세이브면 스스로 no-op이라 종전 부팅 경로는 한 줄도 안 바뀐다.
+	# ★[폴리시 R2] 카탈로그를 **원장에서 무조건 다시 판다**. 아래 두 `_refresh_*`는 "세워졌으면"
+	#   일 때만 도는 완공/개방 훅이라, 로드가 원장을 *되감는* 방향은 못 잡는다 — 늘봄방을 완공한
+	#   아침에 F9로 완공 전 세이브를 불러오면 carpenter는 미완공으로 돌아가는데 `_buildings`에는
+	#   늘봄방 행이 그대로 남아, `_build_grid`가 세우지 않은 방으로 문 칸이 워프시켜 실내 밴드
+	#   VOID에 갇혔다(퇴장 문에도 못 닿는 소프트락). 시련장도 반딧넋 카운트가 되감기면 동형이다.
+	#   `_build_building_catalog`는 `_buildings`를 통째로 다시 만들고 두 조건부 방을 스스로 다시
+	#   재므로, 앞에 한 번 두면 두 방향(생김·사라짐)이 모두 원장 파생이 된다(멱등).
+	_build_building_catalog()
 	_refresh_greenhouse()
 	# ★[S10-T8] 시련장 문 복원 — 늘봄방과 **완전히 같은 이유로 _restore_location보다 먼저**다.
 	#   부팅 시점의 카탈로그는 반딧넋 원장이 복원되기 전에 섰으므로, 여기서 다시 세우지 않으면
@@ -12334,13 +12384,16 @@ func _process(delta: float) -> void:
 		return
 	# ★ [S5-T3] 업화로(F): 세워 둔 화덕을 바라보며 F — 수거 / 투입 / 회수(상태별 한 동사).
 	#   채취기와 같은 사다리이고, 화덕은 빈 지면 위라 [F]가 겹칠 상대가 없다(설치는 LMB).
-	if not _sleeping and furnace != null and _indoor == "" and furnace.has_at(_region, _target) \
-			and Input.is_action_just_pressed("shop_toggle"):
+	# ★[폴리시 R2] `_mine_floor == 0 and _narak_depth == 0` 합류 — 층 그리드는 지상과 좌표 공간을
+	#   공유하고 `_region`도 그대로라, 층 안에서 지상 화덕 좌표를 겨누면 화면에 아무것도 없는 칸에서
+	#   주괴가 나오거나 지상 화덕이 통째로 회수됐다. 배치·드로우가 이미 보는 그 축이다(반딧넋 [F]
+	#   분기가 같은 두 술어를 명시하는 선례 1:1).
+	if not _sleeping and _furnace_at(_target) and Input.is_action_just_pressed("shop_toggle"):
 		_use_furnace(_target)
 		return
 	# ★[S10-T1] 결정기(F): 세워 둔 결정기를 바라보며 F — 수거 / 투입 / 회수(업화로와 같은 사다리).
-	if not _sleeping and crystalarium != null and _indoor == "" and crystalarium.has_at(_region, _target) \
-			and Input.is_action_just_pressed("shop_toggle"):
+	# ★[폴리시 R2] 업화로 [F]와 같은 층 가드.
+	if not _sleeping and _crystalarium_at(_target) and Input.is_action_just_pressed("shop_toggle"):
 		_use_crystalarium(_target)
 		return
 	# ★[S10-T4 / ADR-0069 결정 7] 삽사리(F) — 쓰다듬 1/일. 우편함과 같은 결의 야외 [F] 창구라
@@ -12579,7 +12632,7 @@ func _process(delta: float) -> void:
 	# ★[S10-T2] 티어가 셋이 됐지만 디스패치는 하나다 — 든 것이 스프링클러이기만 하면 되고,
 	#   *어느 티어*는 `_place_sprinkler`가 든 아이템에서 뽑는다(ADR-0024 §2 "든 도구가 동사").
 	var holding_sprinkler := ItemCatalog.is_sprinkler(inventory.selected_id())
-	var on_sprinkler := not _sleeping and holding_sprinkler and sprinkler != null and sprinkler.has_at(_target)
+	var on_sprinkler := not _sleeping and holding_sprinkler and _sprinkler_at(_target)
 	if on_sprinkler and Input.is_action_just_pressed("use_tool"):
 		_remove_sprinkler(_target)
 	elif not _sleeping and holding_sprinkler and Input.is_action_just_pressed("use_tool") and _can_place_sprinkler(_target):
@@ -12600,7 +12653,7 @@ func _process(delta: float) -> void:
 	#   설치·회수를 가른다). 세 동사를 쓰는 게잡이통·채취기·업화로와 달리 여기도 동사가 둘뿐이라
 	#   [F]로 모을 이유가 없다.
 	var held_rarecrow := inventory.selected_id() if ItemCatalog.is_rarecrow(inventory.selected_id()) else ""
-	var on_rarecrow := not _sleeping and held_rarecrow != "" and rarecrow != null and rarecrow.has_at(_target)
+	var on_rarecrow := not _sleeping and held_rarecrow != "" and _rarecrow_at(_target)
 	if on_rarecrow and Input.is_action_just_pressed("use_tool"):
 		_remove_rarecrow(_target)
 	elif not _sleeping and held_rarecrow != "" and Input.is_action_just_pressed("use_tool") and _can_place_rarecrow(_target):
@@ -13083,7 +13136,7 @@ func _process(delta: float) -> void:
 		#   (빈손 흔들기가 벌칙처럼 읽히지 않게 — 절기 창을 프롬프트가 가르쳐 준다).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _bush_prompt(_target)
-	elif furnace != null and _indoor == "" and furnace.has_at(_region, _target):
+	elif _furnace_at(_target):
 		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수). 채취기보다
 		#   먼저 볼 이유는 없지만(좌표가 안 겹친다) 설치물 프롬프트끼리 한자리에 모아 둔다.
 		interact_prompt.visible = not _sleeping
@@ -13093,7 +13146,7 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 업화로 세우기 (광석 %d + 혼탄 %d → 주괴 1)" % [
 			FurnaceLedger.ORE_PER_BATCH, FurnaceLedger.FUEL_PER_BATCH]
-	elif crystalarium != null and _indoor == "" and crystalarium.has_at(_region, _target):
+	elif _crystalarium_at(_target):
 		# ★[S10-T1] 세워 둔 결정기를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _crystalarium_prompt(_target)
@@ -13334,18 +13387,25 @@ func _use_tool() -> void:
 		for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE)):
 			# ★[S10-T5] 칸의 주인 밭으로 라우팅(늘봄방 경작면이면 greenhouse_farm). 좌표 공간이
 			#   갈려 있어 노지 AoE는 한 칸도 늘봄방으로 새지 않는다(그 반대도 같다).
-			if not _field_at(at).hoe(at):
+			var plot := _field_at(at)
+			# ★[폴리시 R2] 유품 롤을 **괭이질 앞으로** 옮겼다: 롤은 (day, 칸) 결정적인데 괭이질이
+			#   그 칸을 경작해 버리므로, 종전처럼 갈고 나서 적재에 실패하면 그 발굴은 그날 그 칸에서
+			#   영구 소실이었다(그런데 "유품 발굴!" 알림은 그대로 떴다). 자리가 없으면 **칸을 갈지
+			#   않아** 유품이 그 자리에 남는다 — 백팩을 비우고 다시 오면 같은 것이 나온다.
+			var relic_id := Museum.relic_roll(clock.day, at) \
+				if _region == RegionCatalog.HOME and not plot.is_tilled(at) else ""
+			if relic_id != "" and not inventory.can_add(relic_id, 1):
+				_notice("발밑에 무언가 걸린다 — 백팩이 가득 차 캘 수 없다 (자리를 비우고 다시)")
+				continue
+			if not plot.hoe(at):
 				continue
 			hoed += 1
 			# ★ [S2-T5 / ADR-0060 결정 5] 유품 발굴 — 안식 괭이질 저확률(스타듀 Artifact Spot 대응).
 			#   (day, tile) 결정적 롤이라 같은 날 같은 칸 재롤 없음. 혼백관 기증 루프의 유일 시드 소스.
 			#   ★AoE 칸마다 각자 굴린다(칸별 시드라 넓은 괭이가 발굴을 더 자주 만난다 = 티어의 값).
-			if _region == RegionCatalog.HOME:
-				var relic_id := Museum.relic_roll(clock.day, at)
-				if relic_id != "":
-					inventory.add_item(relic_id, 1)
-					_toast_item(relic_id, 1)
-					_notice("유품 발굴! %s — 삼도천 혼백관에 기증하자" % ItemCatalog.name_of(relic_id))
+			if relic_id != "" and inventory.add_item(relic_id, 1):
+				_toast_item(relic_id, 1)
+				_notice("유품 발굴! %s — 삼도천 혼백관에 기증하자" % ItemCatalog.name_of(relic_id))
 		if hoed > 0:
 			verb = "괭이질"
 	elif item == ItemCatalog.WATERING_CAN:
@@ -13616,6 +13676,14 @@ func _start_fishing(water: Vector2i) -> void:
 	_cast_tackles = GearCatalog.active_tackles(rod_id, owned)
 	_cast_bait = GearCatalog.active_bait(rod_id, owned)
 	_cast_bobber_bonus = GearCatalog.bobber_bonus_for(_cast_tackles)
+	# ★[폴리시 R2] **되돌릴 수 없는 사건 앞의 선검사** — 결착 시점엔 어획물을 되돌려 놓을 곳이
+	#   없다(게잡이통·채취기처럼 "통 안에 그대로 둔다"를 할 통이 없다). 그래서 자리를 캐스팅
+	#   앞에서 묻고, 없으면 미끼도 안 태우고 물러난다. 판정은 `has_free_slot`(보수적)이다 —
+	#   등급은 결착 때 굴려지므로 "이 어종 스택에 합칠 수 있나"를 지금은 알 수 없고, 빈 칸이
+	#   하나 있으면 어느 등급이 나와도 반드시 들어간다(틀리면 늘 안전한 쪽).
+	if inventory != null and not inventory.has_free_slot():
+		_notice("백팩이 가득 차 낚싯대를 던질 수 없다 — 자리를 비우고 다시")
+		return
 	if _cast_bait != "":
 		inventory.remove_item(_cast_bait, 1)   # 캐스팅 시 1개 소모(입질 결과와 무관 — 던진 값이다)
 	# ★[S3-T3] 어종 dict 주입 — FishingSession은 어종을 모르고(디커플링), 체급·격투 오버라이드가 실린
@@ -13701,7 +13769,15 @@ func _finish_fishing() -> void:
 		# ★[S3-T6] 그 축에 낚시꾼(lvl5) 퍼크가 합산되고, 명조사(lvl10)는 이리듐 몫을 따로 끌어올린다.
 		var quality := FishCatalog.quality_for(perfects, qrng,
 			_cast_bobber_bonus + fishing_quality_bonus(), fishing_top_quality_bonus())
-		inventory.add_item(fish_id, 1, quality)
+		# ★[폴리시 R2] 위 캐스팅 가드의 짝 — 그래도 자리가 없으면 **사실대로 알리고 여기서 끝낸다**.
+		#   종전엔 반환값을 안 봐서, 물고기는 어디에도 없는데 토스트·"낚았다!"·XP·더비 태그·인양·
+		#   Books·반딧넋 롤이 전부 돌았다(화면이 통째로 거짓말). 낚이지 않은 것으로 친다.
+		if not inventory.add_item(fish_id, 1, quality):
+			_notice("%s를 끌어올렸지만 백팩이 가득 차 놓쳐 버렸다 — 자리를 비우고 다시"
+				% ItemCatalog.name_of(fish_id))
+			audio.sfx("ui")
+			queue_redraw()
+			return
 		_toast_item(fish_id, 1)
 		_notice("%s%s 를 낚았다!%s" % [
 			"" if quality <= ItemCatalog.Q_NORMAL else "[%s] " % ItemCatalog.quality_name(quality),
@@ -13804,6 +13880,58 @@ func _grant_mugol_sword_lines() -> PackedStringArray:
 # 이 칸에 스프링클러를 설치할 수 있는가(⑤ 기존 배치 규칙 준수). 안식 농원 전용·빈 지면(GROUND) 또는
 # 경작지(SOIL)만 — 길·물·벽·절벽·건물 패드(SOLID)는 배제하고, POND_ACTIVITY_RECT(물가 활동존)·프롭 점유
 # (나무·바위·debris·꽃·울타리·허수아비)·트렐리스 넝쿨·이미 설치된 칸도 배제한다(성역·겹침 방지).
+# ★[폴리시 R2] 이 칸에 **지금 무대에서** 스프링클러가 서 있는가. 원장(Sprinkler._tiles)은 좌표만
+#   키로 들고 구역 축이 없는데, 배치(`_can_place_sprinkler`)와 렌더(`_draw_sprinklers`)는 HOME으로
+#   좁혀져 있었다 — 그래서 다른 구역의 같은 좌표를 겨눠 LMB를 누르면 화면엔 아무것도 없는데
+#   안식 농원의 스프링클러가 원장에서 지워지고(다음 아침 자동 급수가 원인 없이 끊긴다) 인벤에는
+#   한 개가 늘었다. 화분이 `_pot_at`으로 이미 봉합한 그 구멍이라 같은 수단으로 막는다:
+#   **놓는 곳과 만지는 곳을 같은 술어가 정한다.**
+# ★[폴리시 R2] 이 칸에 **지금 무대에서** 업화로가 서 있는가. 원장은 구역은 알지만 **층·깊이는
+#   모른다**(FurnaceLedger 키 = 구역+좌표). 그런데 갱도 층·나락 런 층은 구역 id를 지상과 그대로
+#   공유하고 좌표 공간도 겹치므로, 층 안에서 지상 화덕 좌표를 겨누면 화면에 아무것도 없는 칸에서
+#   주괴가 나오거나 지상 화덕이 통째로 회수됐다. 배치(`_can_place_furnace`)와 드로우(`_draw_furnaces`)가
+#   이미 보던 그 축을 [F]·프롬프트도 보게 하는 단일 술어다(`_pot_at`·`_sprinkler_at`과 같은 결).
+func _furnace_at(t: Vector2i) -> bool:
+	return furnace != null and _indoor == "" and _mine_floor == 0 and _narak_depth == 0 \
+		and furnace.has_at(_region, t)
+
+# 결정기도 같은 원장 모양·같은 구멍(CrystalariumLedger 키 = 구역+좌표).
+func _crystalarium_at(t: Vector2i) -> bool:
+	return crystalarium != null and _indoor == "" and _mine_floor == 0 and _narak_depth == 0 \
+		and crystalarium.has_at(_region, t)
+
+# ★[폴리시 R2] 이 칸에 **플레이어 설치물**이 하나라도 서 있는가(원장 파생 — 프롭 점유와 별개 축).
+#   `_home_occupied_tiles()`는 layout.json 프롭·절차 스캐터·재스폰 debris만 보므로 설치물 원장은
+#   거기 한 줄도 안 잡힌다. 그 탓에 두 곳의 규칙이 어긋나 있었다:
+#     ㉠ `_can_place_sprinkler`가 업화로·결정기·게잡이통·채취기 칸을 안 막아 한 칸에 둘이 겹쳤다
+#        (반대 방향인 `_can_place_furnace`·`_can_place_crystalarium`은 스프링클러를 막고 있어
+#         가드가 단방향이었다 — 레어크로우는 그 술어를 상속하므로 같은 구멍을 물려받았다).
+#     ㉡ `_encroach_candidates`가 설치물 칸을 후보로 넘겨, 절기 첫날 아침에 스프링클러·결정기 위로
+#        SOLID debris(잉걸·그루터기)가 돋아 그 칸이 통행 불가가 되고 설치물이 덮였다.
+#   두 곳이 **같은 하나**를 보게 해서 "한 칸에 둘"과 "설치물 위에 debris"를 함께 막는다.
+#   ※ 구역 축 없는 원장(sprinkler·rarecrow)은 호출부가 이미 HOME으로 좁혀져 있어 그대로 본다.
+func _installation_at(t: Vector2i) -> bool:
+	if sprinkler != null and sprinkler.has_at(t):
+		return true
+	if rarecrow != null and rarecrow.has_at(t):
+		return true
+	if furnace != null and furnace.has_at(_region, t):
+		return true
+	if crystalarium != null and crystalarium.has_at(_region, t):
+		return true
+	if crab_pot != null and crab_pot.has_at(_region, t):
+		return true
+	return tapper != null and tapper.has_at(_region, t)
+
+func _sprinkler_at(t: Vector2i) -> bool:
+	return sprinkler != null and _region == RegionCatalog.HOME and sprinkler.has_at(t)
+
+# 레어크로우도 같은 원장 모양·같은 구멍이다(rarecrow._tiles = 좌표 키). 여기 구멍은 특히 무거웠다 —
+# 보이지도 않는 곳에서 재획득 불가능한 수집물이 백팩으로 옮겨지거나(위 회수 가드 전엔 파괴됐다)
+# 8종 완주가 조용히 풀렸다.
+func _rarecrow_at(t: Vector2i) -> bool:
+	return rarecrow != null and _region == RegionCatalog.HOME and rarecrow.has_at(t)
+
 func _can_place_sprinkler(t: Vector2i) -> bool:
 	if _region != RegionCatalog.HOME or sprinkler == null:
 		return false
@@ -13824,8 +13952,8 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 		return false
 	if _field_at(t).is_crop_solid(t):         # 트렐리스 넝쿨 점유 → 배제(★[S10-T5] 늘봄방 넝쿨 포함)
 		return false
-	if rarecrow != null and rarecrow.has_at(t):   # ★[S10-T2] 세워 둔 레어크로우 → 배제(겹침 방지)
-		return false
+	if _installation_at(t):                   # ★[폴리시 R2] 다른 설치물(레어크로우·업화로·결정기·
+		return false                          #   게잡이통·채취기) → 배제(겹침 방지 · 양방향 가드)
 	if garden_pot != null and garden_pot.has_at(t):   # ★[S10-T5] 놓아 둔 화분 → 배제(겹침 방지)
 		return false
 	return true
@@ -13847,16 +13975,24 @@ func _place_sprinkler(t: Vector2i, item_id: String = ItemCatalog.SPRINKLER) -> v
 
 # 조준 칸의 스프링클러를 회수한다(아이템 1개 인벤토리 반환 — 허수아비 재회수 동형). 없으면 무동작.
 # ★[S10-T2] **세운 티어 그대로 돌아온다** — 티어를 먼저 읽고 지운다(지운 뒤엔 무엇이 섰는지 알 수 없다).
+# ★[폴리시 R2] **적재 먼저·원장 나중** — 게잡이통(`_use_crab_pot` ③)·채취기·업화로 회수가 지키는
+#   그 규율이다. 종전엔 원장을 먼저 지우고 `add_item` 반환값을 안 봐서, 백팩이 가득하면 스프링클러가
+#   필드에서도 백팩에서도 사라졌다(상위 티어는 400냥·제작물이라 손실이 크다). 원장이 거절하면
+#   방금 넣은 것을 되돌린다(게잡이통 회수의 롤백 1:1 — 무해).
 func _remove_sprinkler(t: Vector2i) -> void:
 	var tier := sprinkler.tier_at(t)
 	var item_id := ItemCatalog.sprinkler_item_for_tier(tier)
 	if item_id == "":
 		return
-	if sprinkler.remove(t):
-		inventory.add_item(item_id, 1)
-		audio.sfx("ui")
-		_notice("%s를 회수했다" % ItemCatalog.name_of(item_id))
-		queue_redraw()
+	if not inventory.add_item(item_id, 1):
+		_notice("백팩이 가득 차 %s를 회수할 수 없다 — 자리를 비우고 다시" % ItemCatalog.name_of(item_id))
+		return
+	if not sprinkler.remove(t):
+		inventory.remove_item(item_id, 1)   # 원장이 거절 → 방금 넣은 것을 되돈다(무해)
+		return
+	audio.sfx("ui")
+	_notice("%s를 회수했다" % ItemCatalog.name_of(item_id))
+	queue_redraw()
 
 # ── ★[S10-T5 / ADR-0069 결정 8] 화분 배치/회수 ────────────────────────────────
 # ★[폴리시] 이 칸에 **지금 무대에서** 화분이 서 있는가. 화분 원장은 좌표만 키로 들고(구역 축 없음)
@@ -13902,13 +14038,19 @@ func _place_garden_pot(t: Vector2i) -> void:
 		queue_redraw()
 
 # 화분을 회수한다. ★자라던 작물은 **함께 사라진다**(GardenPot.remove) — 회수 전에 알려 준다.
+# ★[폴리시 R2] 스프링클러 회수와 같은 "적재 먼저·원장 나중"(화분은 원목20+돌10 제작물이라
+#   백팩이 가득할 때 원장을 먼저 지우면 그 재료가 통째로 증발했다).
 func _remove_garden_pot(t: Vector2i) -> void:
 	var had := garden_pot.is_planted(t)
-	if garden_pot.remove(t):
-		inventory.add_item(ItemCatalog.GARDEN_POT, 1)
-		audio.sfx("ui")
-		_notice("화분을 회수했다 — 심긴 것도 함께 사라졌다" if had else "화분을 회수했다")
-		queue_redraw()
+	if not inventory.add_item(ItemCatalog.GARDEN_POT, 1):
+		_notice("백팩이 가득 차 화분을 회수할 수 없다 — 자리를 비우고 다시")
+		return
+	if not garden_pot.remove(t):
+		inventory.remove_item(ItemCatalog.GARDEN_POT, 1)   # 원장이 거절 → 되돈다(무해)
+		return
+	audio.sfx("ui")
+	_notice("화분을 회수했다 — 심긴 것도 함께 사라졌다" if had else "화분을 회수했다")
+	queue_redraw()
 
 # ── ★[S10-T2 / ADR-0069 결정 4] 레어크로우 배치/회수 ──────────────────────────
 # 이 칸에 레어크로우를 세울 수 있는가. **스프링클러 배치 규칙을 그대로 상속**한다(안식 농원·빈
@@ -13931,11 +14073,20 @@ func _place_rarecrow(t: Vector2i, item_id: String) -> void:
 		queue_redraw()
 
 # 조준 칸의 레어크로우를 거둔다(그 종 그대로 인벤토리 반환). 없으면 무동작.
+# ★[폴리시 R2] **적재 먼저·원장 나중**(게잡이통·채취기·업화로 회수와 같은 규율). 여기서 순서가
+#   특히 무거운 이유: 레어크로우는 재획득 경로가 전부 1회성으로 잠긴다(혼백관 마일스톤·절기 행사·
+#   보부상·시련패 매대는 모두 "샀다/받았다" 원장으로 한 번만 열린다). 그래서 백팩이 가득한 채
+#   원장을 먼저 지우면 그 종이 세상에서 사라져 8종 완주(= 디럭스 보호 반경)가 영구히 막혔다.
 func _remove_rarecrow(t: Vector2i) -> void:
-	var id := rarecrow.remove(t)
+	var id := rarecrow.id_at(t)
 	if id == "":
 		return
-	inventory.add_item(id, 1)
+	if not inventory.add_item(id, 1):
+		_notice("백팩이 가득 차 %s를 거둘 수 없다 — 자리를 비우고 다시" % ItemCatalog.name_of(id))
+		return
+	if rarecrow.remove(t) == "":
+		inventory.remove_item(id, 1)   # 원장이 거절 → 방금 넣은 것을 되돈다(무해)
+		return
 	audio.sfx("ui")
 	_notice("%s를 거뒀다" % ItemCatalog.name_of(id))
 	queue_redraw()
@@ -14155,7 +14306,11 @@ func _tapper_prompt(t: Vector2i) -> String:
 #   ④ 같은 칸 중복 설치 불가(원장이 멱등이지만 프롬프트·소모 판정을 위해 여기서도 본다).
 # ★ 업화로는 **비-SOLID**다(통행을 막지 않는다 — 스프링클러·통과 같은 결. 동선 soft-lock 0).
 func _can_place_furnace(t: Vector2i) -> bool:
-	if furnace == null or _indoor != "" or _mine_floor != 0:
+	# ★[폴리시 R2] `_narak_depth != 0` 합류 — 위 ①의 "유령 화덕"이 나락 런 층에서 그대로 재현됐다.
+	#   나락 층도 구역 id는 NARAK 그대로이고 깊이만 무대를 가르는데(`_in_narak_floor`), 원장은 깊이를
+	#   키로 갖지 않으므로 층에 세운 화덕이 다른 모든 깊이와 런 종료 뒤 아레나에까지 같은 좌표로 떠
+	#   있었다(그 칸이 암반이면 회수 불가 = 화덕과 안에 든 광석이 영구 유실).
+	if furnace == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
 		return false
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
 		return false
@@ -14289,21 +14444,26 @@ func _pan_spot(t: Vector2i) -> void:
 	if not energy.can_act(cost):
 		_notice("혼력이 모자라다 — 사금을 이려면 혼력 %d이 든다" % cost)
 		return
-	var got: Dictionary = panning.pan(clock.day, _region, t)
+	# ★[폴리시 R2] **적재 먼저·스폿 나중**. 스폿은 하루 한 자리씩만 깔리고 소진되므로(다음 취침의
+	#   재배치 전까지 그 자리는 못 되돌린다), 종전처럼 원장을 먼저 지우고 나서 적재에 실패하면
+	#   그 산출은 "두고 왔다" 한 줄만 남기고 영영 사라졌다. 롤이 (day·구역·좌표) 결정적이라
+	#   `peek`이 본 답과 `pan`이 돌려줄 답은 같다 — 자리를 비우고 다시 오면 그것이 그대로 나온다.
+	var got: Dictionary = panning.peek(clock.day, _region, t)
 	if got.is_empty():
 		return                                   # 원장이 거절(도달 불가 — 위에서 has_at을 봤다)
-	energy.spend(cost)
 	var gold := int(got.get("gold", 0))
 	var id := String(got.get("id", ""))
 	var n := int(got.get("count", 0))
+	if id != "" and n > 0 and not inventory.can_add(id, n):
+		_notice("가방이 가득 차 사금을 일 수 없다 — 자리를 비우고 다시 [F]")
+		return
+	panning.pan(clock.day, _region, t)            # 여기서 비로소 스폿이 소진된다
+	energy.spend(cost)
 	if gold > 0:
 		wallet.earn(gold)
 		_notice("사금 한 줌을 건졌다 — %d냥" % gold)
-	if id != "" and n > 0:
-		if inventory.add_item(id, n):
-			_toast_item(id, n)
-		else:
-			_notice("가방이 가득 차 %s를 두고 왔다" % ItemCatalog.name_of(id))
+	if id != "" and n > 0 and inventory.add_item(id, n):
+		_toast_item(id, n)
 	audio.sfx("harvest")
 	queue_redraw()
 
@@ -14666,7 +14826,8 @@ func _on_frame_mastery(skill: String) -> void:
 # 둘 다 "지상 야외의 걸을 수 있는 빈 지면"이 조건이라, 여기서 새 규칙을 만들면 그게 곧 특이 케이스가
 # 된다). 다른 설치물과 겹치지 않는 것만 서로를 한 줄씩 참조해 대칭으로 채운다.
 func _can_place_crystalarium(t: Vector2i) -> bool:
-	if crystalarium == null or _indoor != "" or _mine_floor != 0:
+	# ★[폴리시 R2] 업화로와 같은 이유로 `_narak_depth != 0` 합류(유령 결정기 + 안의 보석 유실).
+	if crystalarium == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
 		return false
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
 		return false
@@ -14754,8 +14915,17 @@ func _use_crystalarium(t: Vector2i) -> void:
 			crystalarium.load_gem(_region, t, inside)   # 안의 보석·기간까지 되살린다(손실 0)
 		_notice("가방이 가득 차 결정기를 걷지 못했다")
 		return
+	# ★[폴리시 R2] 안의 보석이 안 들어가면 **회수 자체를 되돈다**. 종전엔 "두고 왔다"만 띄우고
+	#   정상 종료했는데, 원장 행은 이미 지워졌으므로 두고 온 자리가 세상에 없었다 = 보석 영구 소실
+	#   (빈 슬롯이 정확히 1칸이면 기계가 그 칸을 먹어 위 원상복구 분기를 그냥 지나친다). 되돌림은
+	#   바로 위 분기와 같은 수단이고, 방금 넣은 기계는 게잡이통 회수의 롤백과 같이 다시 꺼낸다.
 	if inside != "" and not inventory.add_item(inside, 1):
-		_notice("가방이 가득 차 안에 있던 %s를 두고 왔다" % ItemCatalog.name_of(inside))
+		inventory.remove_item(ItemCatalog.CRYSTALARIUM, 1)
+		crystalarium.place(_region, t)
+		crystalarium.load_gem(_region, t, inside)
+		_notice("가방이 가득 차 결정기를 걷지 못했다 — 안의 %s까지 담을 자리가 필요하다"
+			% ItemCatalog.name_of(inside))
+		return
 	audio.sfx("ui")
 	queue_redraw()
 
@@ -14868,6 +15038,15 @@ func _try_harvest() -> void:
 		if not energy.can_act(cost):
 			return                            # 목축 계층 — 혼력 게이트 유지(불변)
 		if ranch.has_product(_target):
+			# ★[폴리시 R2] **적재 자리부터 본다** — `collect`는 짐승의 대기 산물을 0으로 지우므로,
+			#   백팩이 가득하면 그날 산물이 증발하는데 혼력은 그대로 집행됐다. 게잡이통·채취기가
+			#   "인벤이 가득이면 통 안에 그대로 둔다"로 지키는 그 규율을 짐승에도 세운다.
+			var pending := ranch.pending_product(_target)   # {product_id, quality, is_large}(원장 불변)
+			var want: String = ItemCatalog.large_product_id(pending["product_id"]) \
+				if bool(pending["is_large"]) else str(pending["product_id"])
+			if not inventory.can_add(want, 1, int(pending["quality"])):
+				_notice("백팩이 가득 차 산물을 담을 수 없다 — 자리를 비우고 다시")
+				return
 			var got := ranch.collect(_target)   # {product_id, quality, is_large}
 			if not got.is_empty():
 				# 대형 산물은 "<산물>_large" 아이템(판매가 ×2)으로, 아니면 기준 산물로 적재(§8.6). 품질 등급 실림.
@@ -14889,6 +15068,14 @@ func _try_harvest() -> void:
 		if orchard.has_tree(anchor):
 			if not energy.can_act(cost):
 				return                          # 과수 계층 — 혼력 게이트 유지(불변)
+			# ★[폴리시 R2] **적재 자리부터 본다** — `harvest`가 매달린 과일을 0으로 리셋하므로,
+			#   백팩이 가득하면 결실 주기(제철 하루 +1개)만큼의 수확이 통째로 사라졌다. 한 그루의
+			#   이번 결실은 전량 같은 등급이라(나이 파생) 슬롯 하나면 충분해서 판정도 한 번이다.
+			if orchard.fruit_count_of(anchor) > 0 and orchard.is_mature(anchor, clock.day) \
+					and not inventory.can_add(orchard.fruit_id_of(anchor), 1,
+						orchard.quality_tier_for_age(orchard.age_of(anchor, clock.day))):
+				_notice("백팩이 가득 차 과일을 딸 수 없다 — 자리를 비우고 다시")
+				return
 			var picked := orchard.harvest(anchor, clock.day)   # {fruit_id,count,quality_tier} / {} = 미성숙·무결실
 			if not picked.is_empty():
 				# ★ [S1-6 §8.8] 나이 등급(quality_tier)을 슬롯 quality로 실적재(§7.7 소비 실현). 나무 나이가
@@ -14924,6 +15111,12 @@ func _try_harvest() -> void:
 		_harvest_wild(harvested_crop)
 		return
 	var quality := field.roll_quality(_target)   # ★ [S1-6 §8.5] 칸을 비우기 전에 품질 확보(비료→등급 roll)
+	# ★[폴리시 R2] **적재 자리부터 본다** — `harvest`는 칸을 비우거나(SINGLE) 자란 날수를 되감으므로
+	#   (REGROW) 백팩이 가득하면 그 수확이 되찾을 곳 없이 사라졌는데, 화면엔 "+N" 토스트가 떠서
+	#   거짓말을 했다(add_harvest가 void였던 탓에 호출부는 실패를 알 수조차 없었다).
+	if not inventory.can_add(ItemCatalog.harvest_id(harvested_crop), 1, quality):
+		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
+		return
 	field.harvest(_target)
 	# ★ [S1-5a] 다수확(황천포도 2~3) — yield_range를 굴려 그만큼 적재(greybox-spec §6.5, 데이터는 S1-4 검증).
 	#   기본형(1~1)은 1개 그대로. 점수판(_run_harvested)·사연은 수확 액션당 1(영혼 1 = 사연 1)로 둔다.
@@ -14941,9 +15134,17 @@ func _try_harvest() -> void:
 	var crop_luck := _luck_bonus(DailyLuck.W_CROP)
 	if yr.y > yr.x and not is_zero_approx(crop_luck):
 		count = DailyLuck.biased_yield(count, yr.x, yr.y, crop_luck, randf())
+	# ★[폴리시 R2] 다수확 추가분(Q0)은 위 선검사가 못 덮는다 — 주 수확분이 등급 슬롯을 차지한 뒤
+	#   Q0 스택도 빈 칸도 없을 수 있다. 그 경우는 되돌릴 자리가 없으니 **사실대로 알린다**(토스트도
+	#   실제 들어간 수만 띄운다 — 화면이 거짓을 말하지 않는 것이 여기서 지킬 수 있는 전부다).
+	var dropped := 0
 	for i in count:
-		inventory.add_harvest(harvested_crop, 1, quality if i == 0 else 0)
-	_toast_item(ItemCatalog.harvest_id(harvested_crop), count)   # ★ Phase C 획득 토스트(수확)
+		if not inventory.add_harvest(harvested_crop, 1, quality if i == 0 else 0):
+			dropped += 1
+	if dropped > 0:
+		_notice("백팩이 가득 차 %s %d개를 두고 왔다"
+			% [ItemCatalog.name_of(ItemCatalog.harvest_id(harvested_crop)), dropped])
+	_toast_item(ItemCatalog.harvest_id(harvested_crop), count - dropped)   # ★ Phase C 획득 토스트(수확)
 	_gain_farm_xp(CropCatalog.sell_price(harvested_crop))  # ★ 수확 성공 XP(§8.9)+레벨업 감지
 	_run_harvested += 1                       # T4.2 슬라이스 점수판: 거둔 영혼 총수(수확 액션당 1)
 	# ★[S8-T4 / ADR-0066 결정 4] 활동 → 하트: **수확 액션당 미호 +1**(일일 캡 12).
@@ -14973,6 +15174,11 @@ func _try_harvest() -> void:
 #     같은 노동이라, 여기서 빼면 "화분으로 기르면 아무것도 안 배운다"가 되어 축이 죽는다.
 func _harvest_pot() -> void:
 	var crop := garden_pot.crop_of(_target)
+	# ★[폴리시 R2] 노지와 같은 "적재 자리부터" — `garden_pot.harvest`가 포기를 지우므로 백팩이
+	#   가득하면 그 한 포기가 되찾을 곳 없이 사라진다.
+	if crop != "" and not inventory.can_add(ItemCatalog.harvest_id(crop), 1, ItemCatalog.Q_NORMAL):
+		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
+		return
 	if garden_pot.harvest(_target) == "":
 		return
 	inventory.add_harvest(crop, 1, ItemCatalog.Q_NORMAL)
@@ -15924,6 +16130,12 @@ func _take_fish(id: String, quality: int, n: int) -> int:
 func _try_donate_selected() -> void:
 	var id := inventory.selected_id()
 	if not museum.can_donate(id):
+		# ★[폴리시 R2] 든 것이 기증감이 아니어도 **밀린 답례를 여기서 먼저 정산한다** — 아래 지급이
+		#   백팩이 가득해 미뤄졌으면, 자리를 비우고 다시 [F]를 누르는 것으로 되찾을 수 있어야 한다
+		#   (반딧넋 안치대가 진행 열람과 답례 지급을 한 창구에 둔 그 이유 1:1). 이 갈래가 없으면
+		#   미룬 답례는 "기증할 새 유품"이 또 나올 때까지 볼모가 되고, 유품은 유한하다.
+		if _claim_museum_milestones():
+			return
 		if museum.is_donated(id):
 			_notice("이미 전시된 유품이다")
 		else:
@@ -15937,13 +16149,29 @@ func _try_donate_selected() -> void:
 	_notice("%s 기증 — 전시 %d/%d" % [ItemCatalog.name_of(id),
 		museum.donated_count(), Museum.donatable_ids().size()])
 	# 도달 마일스톤 일괄 지급(한 번의 기증이 여러 문턱을 넘을 일은 없지만 방어적으로 전부).
+	_claim_museum_milestones()
+
+# ★[폴리시 R2] 밀린 기증 마일스톤 답례를 지급한다(반딧넋 답례 `_claim_firefly_milestones` 1:1 —
+#   그 함수 머리말이 이미 이 이름을 선례로 부르고 있었다).
+#   ★ 백팩이 가득해 못 받으면 **claim하지 않는다** — 종전엔 `add_item` 반환값을 안 보고 곧바로
+#     `museum.claim`이 문턱을 영구 래치해서, 답례가 지급 없이 증발하고 `pending_milestones`에서도
+#     빠졌다. 특히 전시 3점 답례가 레어크로우 ①(다른 획득처 없음)이라 8종 완주가 그대로 막혔다.
+#   반환 = 이 호출이 답례로 소비됐는가(true = 지급했거나 자리 없음을 알렸다).
+func _claim_museum_milestones() -> bool:
+	if museum == null or inventory == null:
+		return false
+	var acted := false
 	for m in museum.pending_milestones():
 		var rid: String = String(m["reward_id"])
 		var n: int = int(m["n"])
-		inventory.add_item(rid, n)
+		if not inventory.add_item(rid, n):
+			_notice("답례를 받을 자리가 없다 — 백팩을 비우고 다시 오자")
+			return true
 		museum.claim(int(m["count"]))
 		_toast_item(rid, n)
 		_notice("혼백관 답례 — %s ×%d (전시 %d점 달성)" % [ItemCatalog.name_of(rid), n, int(m["count"])])
+		acted = true
+	return acted
 
 # ═══ ★[S4-T4 → S5-T3 / ADR-0063 결정 3·6] 업화 대장간 서비스 ═════════════════════
 # S4가 점주 없이 연 무인 업그레이드대(혼백관 무인 기증대 선례)가 S5에서 **정식화**됐다:
@@ -18679,8 +18907,13 @@ func _fire_spine_b4() -> void:
 	if not _spine_b4_armed:
 		return
 	_spine_b4_armed = false
-	if _run_over or cutscene != null:
-		return                          # 마무리 화면·재생 중이면 접는다(다음 아침에 다시 예약된다)
+	# ★[폴리시 R2] `dialogue.is_open()` 합류 — 24:00 강제 취침은 대화를 연 채로도 아침을 넘기는데,
+	#   그 상태로 컷신을 틀면 `_end_cutscene`의 `dialogue.start`가 이미 열린 대화 때문에 조용히
+	#   no-op이 된다(dialogue.gd `if is_open(): return`). 비트는 장면 시작에 찍히므로 그 뒤로는
+	#   `_arm_spine_b4`가 영영 early return = B4 지문이 재생 경로 없이 유실됐다. 여기서 접으면
+	#   비트를 안 찍고 물러나므로 **다음 아침에 그대로 다시 예약된다**(위 두 가드와 같은 계약).
+	if _run_over or cutscene != null or dialogue.is_open():
+		return                          # 마무리 화면·재생 중·대화 중이면 접는다(다음 아침에 다시 예약된다)
 	_mark_spine_bit(SPINE_B4)
 	_begin_cutscene(SPINE_B4_CUTSCENE.duplicate(true), SPINE_B4_SPEAKER,
 		PackedStringArray(SPINE_B4_LINES))
@@ -19050,7 +19283,9 @@ func _fire_spine_b7() -> void:
 	if not _spine_b7_armed:
 		return
 	_spine_b7_armed = false
-	if _run_over or cutscene != null or _spine_bit_seen(SPINE_B7):
+	# ★[폴리시 R2] `dialogue.is_open()` 합류(B4와 같은 이유 — 열린 대화 위에서는 장면의 지문이
+	#   통째로 no-op이 된다). 접혀도 `_maybe_resume_spine`이 조용한 프레임에 다시 세운다.
+	if _run_over or cutscene != null or dialogue.is_open() or _spine_bit_seen(SPINE_B7):
 		return
 	if not _begin_cutscene(Spine.B7_CUTSCENE.duplicate(true), "", PackedStringArray()):
 		return
@@ -20789,8 +21024,10 @@ func _fire_soul_birth() -> void:
 	if not _soul_birth_armed:
 		return
 	_soul_birth_armed = false
-	if _run_over or cutscene != null or _soul_born:
-		return                          # 마무리 화면·재생 중이면 접는다(다음 아침에 다시 예약된다)
+	# ★[폴리시 R2] `dialogue.is_open()` 합류(B4·B7과 같은 이유). 접혀도 `_arm_soul_birth`가
+	#   예정일이 남아 있는 한 다음 아침에 다시 예약한다.
+	if _run_over or cutscene != null or dialogue.is_open() or _soul_born:
+		return                          # 마무리 화면·재생 중·대화 중이면 접는다(다음 아침에 다시 예약된다)
 	var r := _resident(SOUL_CHILD_RID)
 	if r == null or r.node == null:
 		return
@@ -21373,6 +21610,8 @@ func _encroach_candidates() -> Array:
 				continue
 			if POND_ACTIVITY_RECT.has_point(t):     # ★[ADR-0059 결정1] 물가 활동존 = 잡초 없는 여백 → 배제
 				continue
+			if _installation_at(t):                 # ★[폴리시 R2] 플레이어 설치물 → 배제(그 위에 SOLID
+				continue                            #   debris가 돋아 설치물을 덮고 칸을 막던 자리)
 			out.append(t)
 	return out
 
@@ -22483,7 +22722,9 @@ func _draw_encroach_weeds() -> void:
 #   "지금 저 화덕이 무슨 상태인가"가 프롬프트를 안 읽어도 보이는 게 이 렌더의 유일한 목적이다
 #   (게잡이통·채취기 상태 색 구분과 같은 결). 순수 시각 — 좌표·상태는 FurnaceLedger 소유.
 func _draw_furnaces() -> void:
-	if furnace == null or _indoor != "" or _mine_floor != 0:
+	# ★[폴리시 R2] `_narak_depth != 0` 합류 — 배치 가드와 **같은 축**이어야 나락 아레나(깊이 0)에
+	#   세운 화덕이 런 층 위에 유령으로 겹쳐 그려지지 않는다.
+	if furnace == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
 		return
 	for t: Vector2i in furnace.tiles(_region):
 		var base := Vector2(t.x * TILE, t.y * TILE)
@@ -22511,7 +22752,8 @@ func _draw_furnaces() -> void:
 #   상태 3색 창"이되, 몸통이 유리 상자라 밝고 창이 *안에 뜬 결정*이다. 순수 시각 — 상태는
 #   CrystalariumLedger가 소유하고 여긴 질의만 한다.
 func _draw_crystalariums() -> void:
-	if crystalarium == null or _indoor != "" or _mine_floor != 0:
+	# ★[폴리시 R2] 업화로 드로우와 같은 축(`_narak_depth != 0` 합류).
+	if crystalarium == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
 		return
 	# ★[S10-T9] 아트 훅 — assets/props/crystalarium.png(32², 발치 앵커)이 있으면 유리 상자를 그것으로
 	#   갈아끼운다. **안에 든 것은 아트가 아니다**: 보석·여문 정도·남은 일수 눈금은 아래 원장 파생

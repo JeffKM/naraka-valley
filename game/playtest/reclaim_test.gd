@@ -231,6 +231,35 @@ func _initialize() -> void:
 	_check("⑰ debris 잡초 자리(50,22) 후보 아님(프롭 점유)", not (Vector2i(50, 22) in cand))
 	_check("⑰ 스타터 패치(40,12) 후보 아님(SOIL/밖)", not (Vector2i(40, 12) in cand))
 
+	# ⑰b [폴리시 R2] **플레이어 설치물 칸은 후보가 아니다.** 종전엔 이 함수가 설치물 원장을 한 줄도
+	#   조회하지 않아(프롭 점유 = layout·스캐터·재스폰 debris뿐), 절기 첫날 아침에 스프링클러·결정기·
+	#   업화로 위로 SOLID debris(잉걸·그루터기)가 돋아 설치물을 덮고 그 칸이 통행 불가가 됐다.
+	#   형제 경로 `_weed_spread_class`는 같은 설치물들을 이미 DEST_BLOCK으로 면제하고 있어 규칙이
+	#   두 곳에서 어긋나 있었다 — 그 둘을 한 술어(`_installation_at`)로 합쳤다.
+	var probe: Vector2i = cand[0]
+	var installs := {
+		"스프링클러": func(): m.sprinkler.place(probe, Sprinkler.TIER_1),
+		"레어크로우": func(): m.rarecrow.place(probe, ItemCatalog.RARECROW_1),
+		"업화로": func(): m.furnace.place(m._region, probe),
+		"결정기": func(): m.crystalarium.place(m._region, probe),
+		"채취기": func(): m.tapper.place(m._region, probe, TreeLedger.SP_OAK, 0),
+	}
+	for label: String in installs:
+		installs[label].call()
+		var after: Array = m._encroach_candidates()
+		_check("⑰b %s를 세운 칸은 재점령 후보에서 빠진다(그 위에 debris가 안 돋는다)" % label,
+			not (probe in after) and after.size() == cand.size() - 1)
+		_check("⑰b %s 칸은 잡초 확산 목적지에서도 면제(두 경로가 같은 답)" % label,
+			m._weed_spread_class(probe, m._home_occupied_tiles()) == Reclaim.DEST_BLOCK
+			or label == "스프링클러")   # ★스프링클러만은 ADR-0065가 명시한 파괴 대상이다(확산 한정)
+		m.sprinkler.remove(probe)
+		m.rarecrow.remove(probe)
+		m.furnace.remove(m._region, probe)
+		m.crystalarium.remove(m._region, probe)
+		m.tapper.remove(m._region, probe)
+	_check("⑰b-z 전부 걷어내면 후보가 그대로 돌아온다(가드가 칸을 영구히 죽이지 않는다)",
+		probe in m._encroach_candidates() and m._encroach_candidates().size() == cand.size())
+
 	# ⑱ end-to-end — advance_day로 잡초 재점령 → 낫으로 베기(드랍 적립·has_weed 해제)
 	var weeds_added: Array = m.reclaim.advance_day(cand, 3, false)
 	_check("⑱ advance_day 잡초 1개 이상 재점령", weeds_added.size() >= 1)
