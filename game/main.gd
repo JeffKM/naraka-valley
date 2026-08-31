@@ -10431,7 +10431,9 @@ func _try_buy_market_seed(crop_id: String, n: int) -> void:
 	if not _night_market_open_today():
 		_notice("야시장은 파했다 — 매대는 성야절 그 하루뿐이다")
 		return
-	var unit := SeasonalEvent.market_price(CropCatalog.seed_cost(crop_id))
+	# ★[폴리시 R4] 결제가도 표시가와 **같은 출처**를 본다(R3 #19가 보부상에서 닫은 그 클래스 —
+	#   두 곳이 각자 base를 파생하면 표시가≠결제가가 언제든 다시 갈린다).
+	var unit := SeasonalEvent.market_price(SeasonalEvent.market_seed_price())
 	var seed_item := ItemCatalog.seed_id(crop_id)
 	var bought := 0
 	for _i in n:
@@ -15488,13 +15490,9 @@ func _roll_mixed_seed_drop(t: Vector2i) -> void:
 # ★[S4-T5] 혼합 씨앗 치환 롤 — 심는 절기의 일반 작물 풀에서 결정적으로 1종(스타듀 Mixed Seeds).
 #   풀은 절기당 1종(현 로스터 규모 — 절기 작물이 늘면 여기만 늘린다·잠정 매핑은 작물 절기 주석 기준).
 func _mixed_crop_for(day: int, t: Vector2i) -> String:
-	var pools := [
-		[CropCatalog.PIANHWA],           # 피안절
-		[CropCatalog.HONRYEONGCHO],      # 유화절
-		[CropCatalog.HWANGCHEON_PODO],   # 망연절
-		[CropCatalog.YEONGHON_HOBAK],    # 성야절
-	]
-	var pool: Array = pools[GameClock.season_index_for_day(day)]
+	# ★[폴리시 R4] 표의 주인은 CropCatalog다 — 야시장 소매가가 같은 표에서 파생돼야 가격 역전이
+	#   구조적으로 막힌다(`CropCatalog.MIXED_POOLS` 머리말).
+	var pool: Array = CropCatalog.MIXED_POOLS[GameClock.season_index_for_day(day)]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("mixedseed:%d:%d:%d" % [day, t.x, t.y])
 	return pool[rng.randi_range(0, pool.size() - 1)]

@@ -231,8 +231,19 @@ static func market_rows() -> Array:
 			"base": HomeDecoCatalog.price_of(set_id)})
 	rows.append({"kind": "fest_item", "buy_id": MARKET_RARECROW, "base": MARKET_RARECROW_PRICE})
 	rows.append({"kind": "fest_seed", "buy_id": MARKET_SEED_CROP,
-		"base": CropCatalog.seed_cost(MARKET_SEED_CROP)})
+		"base": market_seed_price()})
 	return rows
+
+# ★[폴리시 R4] 혼합 씨앗 소매 **정가**. 종전엔 `CropCatalog.seed_cost(MARKET_SEED_CROP)`를 그대로
+#   base로 썼는데, 그 값(5)은 crops.gd가 "제작 전용이라 상점가 아님 — 출하 판매 시 잔가"라고 명시한
+#   **잔가**다. 할인까지 먹어 4냥이 되면서, 심는 순간 그 절기 정규 작물로 확정 치환되는 씨앗이
+#   정가 씨앗(25~80냥)의 완전 대체품이 됐다(밭 60칸 기준 절기당 수천 냥 — 씨앗 매출이라는 주요 골드
+#   싱크가 통째로 무력화). 값의 주인을 **혼합이 될 수 있는 정규 작물의 최고 씨앗가**로 옮겨 어느
+#   절기에서도 역전이 안 나게 한다(레어크로우 행이 `MARKET_RARECROW_PRICE`를 따로 든 것과 같은 결).
+# ⚠️ 잠정 — owner 큐. 여기 정한 것은 "역전 금지"라는 구조뿐이고, 혼합에 얼마의 프리미엄/할인을
+#   붙일지(무작위성의 값)는 눈금 결정이다.
+static func market_seed_price() -> int:
+	return CropCatalog.mixed_pool_max_seed_cost()
 
 # ── 상태(여기서부터 인스턴스 — 파생 불가능한 것만 든다) ───────────────────────
 # 더비 원장은 **당일치**다: day가 바뀌면 통째로 0으로 되감긴다(태그 이월 없음 — 잠정. 이월을 열면

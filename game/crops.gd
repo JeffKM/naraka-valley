@@ -220,6 +220,28 @@ static func is_wild(id: String) -> bool:
 static func is_mixed(id: String) -> bool:
 	return id == MIXED
 
+# ★[S4-T5] 혼합 씨앗이 절기별로 치환되는 정규 작물 풀(인덱스 = 절기). 심을 때의 치환 롤(main
+#   `_mixed_crop_for`)과 야시장 소매 정가가 **같은 표**를 본다.
+# ★[폴리시 R4] 표를 여기로 옮긴 이유 = 가격 역전. 야시장 행이 `seed_cost(MIXED)`(=5)를 소매 base로
+#   잡았는데 그 값은 바로 위 주석이 "상점가가 아님 — 출하 판매 시 잔가"라고 못 박은 잔가라,
+#   4냥짜리 씨앗이 그 절기 정규 씨앗(25~80냥)의 확정 대체품이 됐다(풀이 절기당 1종이라 무작위성 0).
+const MIXED_POOLS := [
+	[PIANHWA],           # 피안절
+	[HONRYEONGCHO],      # 유화절
+	[HWANGCHEON_PODO],   # 망연절
+	[YEONGHON_HOBAK],    # 성야절
+]
+
+# 혼합 씨앗이 될 수 있는 정규 작물 중 **최고 씨앗가**. 혼합 소매 정가의 근거다 — 이보다 싸면
+# 어느 절기에선가 정가 씨앗을 살 이유가 사라진다(차익이 곧 정규 씨앗 매출의 소멸).
+# ⚠️ 이 값은 "역전이 안 나는 하한"일 뿐이고 **최종 눈금은 owner 큐**다(야시장 2할 할인은 그대로 탄다).
+static func mixed_pool_max_seed_cost() -> int:
+	var top := 0
+	for pool in MIXED_POOLS:
+		for cid in pool:
+			top = maxi(top, seed_cost(str(cid)))
+	return top
+
 # wild 작물의 절기 인덱스(-1 = wild 아님). "season"형의 수확 롤 풀 선택에 쓴다.
 static func wild_season(id: String) -> int:
 	return int(WILD_INFO[id]["season"]) if WILD_INFO.has(id) and WILD_INFO[id]["kind"] == "season" else -1
