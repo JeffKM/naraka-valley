@@ -174,10 +174,25 @@ func _initialize() -> void:
 		% [hw_base["hardwood"], hw_up["hardwood"], hw_base["seeds"], hw_up["seeds"]],
 		int(hw_up["hardwood"]) > int(hw_base["hardwood"]) and int(hw_up["seeds"]) > int(hw_base["seeds"]))
 
-	# ⑤ 낚시 인양 — 퍼밀 눈금 환산 가산.
+	# ⑤ 낚시 인양 — 퍼밀 눈금 환산 가산 + ★[폴리시 2회차] 하한 클램프.
+	# 옛 배선은 대흉 날 30 + (−50) = −20‰ → `roll`의 `permil <= 0` 가지에 걸려 **인양이 통째로
+	# 정지**했다. 여기서 라이브와 같은 파생(SalvageTable.clamp_permil)을 태워, 대흉에도 얇게나마
+	# 살아 있다는 계약을 경계값으로 못 박는다.
 	var permil_base := SalvageTable.permil_for(false)
-	var permil_up := permil_base + int(roundf(luck_up * DailyLuck.W_SALVAGE * 1000.0))
-	var permil_dn := permil_base + int(roundf(luck_dn * DailyLuck.W_SALVAGE * 1000.0))
+	var permil_up := SalvageTable.clamp_permil(
+		permil_base + int(roundf(luck_up * DailyLuck.W_SALVAGE * 1000.0)))
+	var permil_dn := SalvageTable.clamp_permil(
+		permil_base + int(roundf(luck_dn * DailyLuck.W_SALVAGE * 1000.0)))
+	var permil_dn_raw := permil_base + int(roundf(luck_dn * DailyLuck.W_SALVAGE * 1000.0))
+	_check("②-⑤a ★대흉 날 원값은 음수(%d‰ — 옛 결함의 재현)이고 클램프가 하한 %d‰로 받는다"
+		% [permil_dn_raw, SalvageTable.MIN_PERMIL],
+		permil_dn_raw <= 0 and permil_dn == SalvageTable.MIN_PERMIL)
+	_check("②-⑤b 하한은 기본보다 얇다(대흉은 손해로 남는다 — 하한이 보상이 되면 안 된다)",
+		SalvageTable.MIN_PERMIL > 0 and SalvageTable.MIN_PERMIL < permil_base)
+	# `roll` 자체의 "끄기" 의사는 그대로 살아 있다(하한이 roll 안으로 새지 않았다는 증거 —
+	# 클램프는 운이 섞이는 파생 지점 한 곳에만 있다. 라이브 단언은 fishing_skill_test ⓔ3).
+	_check("②-⑤c roll의 permil ≤ 0 = 명시적 끄기(하한이 roll 안으로 새지 않았다)",
+		SalvageTable.roll(1, 0) == "" and SalvageTable.roll(2, -5) == "")
 	var sal_base := 0
 	var sal_up := 0
 	var sal_dn := 0
@@ -191,6 +206,8 @@ func _initialize() -> void:
 	_check("②-⑤ 인양 — 대길↑ 대흉↓ (2000회 %d → 대길 %d · 대흉 %d · 퍼밀 %d/%d/%d)"
 		% [sal_base, sal_up, sal_dn, permil_base, permil_up, permil_dn],
 		sal_up > sal_base and sal_dn < sal_base)
+	_check("②-⑤e ★대흉에도 인양이 죽지 않는다(2000회 중 %d회 — 얇아질 뿐 0이 아니다)" % sal_dn,
+		sal_dn > 0)
 
 	# ⑥ 작물 다수확 — 순수 바이어스 함수. 범위를 절대 안 넘는다.
 	_check("②-⑥ 다수확 상단 바이어스 — 길한 날 r이 문턱 아래면 +1",

@@ -353,6 +353,9 @@ func _initialize() -> void:
 	#   시드를 찾아야 한다 — 안 그러면 흉한 날엔 "걸리는 시드"를 찾아 놓고도 라이브 롤이 그 확률을
 	#   안 써서 헛돈다. 검증 목적(인양이 격투 결과를 안 건드린다)은 운과 무관하므로, 운이 확률을
 	#   0 아래로 끌어내리지 않는 날 하나를 골라 그 위에서 본다(날짜 하드코딩 0 — 탐색).
+	# ★[폴리시 2회차] 하한 클램프(SalvageTable.MIN_PERMIL)가 들어와 이제 **어떤 날에도 0 아래로
+	#   안 내려간다** — 아래 탐색은 그래서 사실상 첫날에 걸리지만, "0보다 큰 날을 골라 본다"는
+	#   원래 의도를 지우지 않으려 그대로 둔다(클램프가 언젠가 빠지면 이 루프가 다시 일한다).
 	var luck_day := 1
 	for d in range(1, 449):
 		if m2.fishing_salvage_permil() + int(roundf(DailyLuck.luck_for_day(d)
@@ -360,6 +363,26 @@ func _initialize() -> void:
 			luck_day = d
 			break
 	m2.clock.day = luck_day
+	# ★ 대흉 경계 — 옛 배선은 30 + (−50) = −20‰ → 인양 시스템 완전 정지였다. 라이브 파생 지점이
+	#   하한으로 받는지 그 날을 실제로 찾아 단언한다(날짜 하드코딩 0 — 등급으로 탐색).
+	var terrible_day := -1
+	for d in range(1, 449):
+		if DailyLuck.grade_for_day(d) == DailyLuck.TERRIBLE:
+			terrible_day = d
+			break
+	var day_keep: int = m2.clock.day
+	m2.clock.day = terrible_day
+	_check("ⓔ3 ★대흉 날(day %d) 라이브 인양 퍼밀 = 하한 %d‰(옛 결함: 음수 → 완전 정지)"
+		% [terrible_day, SalvageTable.MIN_PERMIL],
+		terrible_day > 0 and m2.fishing_salvage_permil_today() == SalvageTable.MIN_PERMIL)
+	# 하한이 걸린 날에도 *걸리는 시드가 존재*한다 = 기능이 살아 있다(0‰이면 5000회 전탐색 실패).
+	var dim_hit := -1
+	for i in 5000:
+		if SalvageTable.roll(i ^ 0x51ed270b, m2.fishing_salvage_permil_today()) != "":
+			dim_hit = i
+			break
+	_check("ⓔ3b 대흉 날에도 인양이 걸리는 캐스팅 시드가 존재(얇아질 뿐 죽지 않는다)", dim_hit >= 0)
+	m2.clock.day = day_keep
 	var live_permil: int = m2.fishing_salvage_permil_today()
 	_check("ⓔ2pre 인양이 가능한 날 확보(day %d · 실효 %d‰ > 0)" % [luck_day, live_permil],
 		live_permil > 0)

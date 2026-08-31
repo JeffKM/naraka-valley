@@ -68,8 +68,8 @@ godot --headless --path game --script res://playtest/playtest_bot.gd   # 봇 근
 
 | 요소 | 구현 | 메모 |
 |---|---|---|
-| 슬라이스 경계 | `summary.gd`(`RunSummary`) — `RUN_DAYS=14`, `is_over(day)`=`day>14` | `crops.gd`처럼 static class_name(세이브 상태 아님). 끝남을 이미 저장되는 `GameClock.day`에서 **파생** → finished 플래그 불필요. 이어받은 세이브가 이미 넘겼으면 시작 시 바로 마무리 화면(재현·재개 안전) |
-| 마무리 점수판 | `RunSummary.text(...)` — 살아낸 날·미호 하트 막대·골드·거둔 영혼 총수 | `days_survived`는 [0,14] clamp. ADR-0005 경계: 점수판은 메인 서사도 캐릭터 속죄 서사도 아닌 슬라이스를 닫는 **메타 화면**이라 플롯 비의존(가벼운 마무리 톤만) |
+| 슬라이스 경계 | `summary.gd`(`RunSummary`) — `RUN_DAYS=21`(T7.3에서 14→21), `is_over(day)`=`day>21` | `crops.gd`처럼 static class_name(세이브 상태 아님). 끝남을 이미 저장되는 `GameClock.day`에서 **파생** → finished 플래그 불필요. ★S7-T1이 절기 달력을 열며 **런 종료 게이트를 폐지**해 라이브 경로에선 더 안 터진다(상수·화면은 엔딩 자산으로 보존·`playtest_bot`이 시뮬 길이로 사용). ★관계 곡선은 여기서 파생되지 않는다(S8-T4가 절단 — `POINTS_PER_HEART=60` 명시 상수) |
+| 마무리 점수판 | `RunSummary.text(...)` — 살아낸 날·미호 하트 막대·골드·거둔 영혼 총수 | `days_survived`는 [0,`RUN_DAYS`] clamp. ADR-0005 경계: 점수판은 메인 서사도 캐릭터 속죄 서사도 아닌 슬라이스를 닫는 **메타 화면**이라 플롯 비의존(가벼운 마무리 톤만) |
 | 종료 트리거 | `main._on_day_advanced`가 취침으로 15일째 아침이 오면 성장·회복 생략하고 `_end_run` | `_end_run`: 시계 정지·이동 잠금·전체화면 `EndingPanel`에 점수판 표시(`_run_over` 가드로 멱등). `_on_sleep_done`은 `_run_over`면 이동 잠금 안 풂, `_process`는 맨 앞 early-return으로 모든 게임 입력 차단 |
 | 거둔 영혼 누적 | `main._run_harvested`(수확마다 +1, **세이브**) | 일시 표시용 `_harvest_seen`(사연 순환 index, 세이브 안 함)과 달리 점수판이 재개에도 맞아야 해 저장. 음수 손상 방어 |
 | 무막힘 보장 | 구조로 보장 — 혼령초 `sell_price(20) ≥ seed_cost(10)` + `START_SEEDS` 혼령초 3 | 수확 1회로 씨앗을 되사 소순환이 닫힌다(soft-lock 불가). 여우불 없는 하트0이 최악 성장 조건이어도 14일이 돌아감 |
