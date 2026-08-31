@@ -1283,8 +1283,14 @@ const PROP_LAYOUT_HOME := [
 	# ── ★[roster 2026-07-04] 저승 봄나무 재도입(2×4칸·밑둥 1칸 SOLID·수관 통과+occlusion fade). owner가
 	#   2026-07-03에 옛 나무를 "안 어울림"으로 걷어냈으나, 스타듀 룩 2×4 재생성본으로 테두리 프레이밍 복귀.
 	#   전부 빈 코너·가장자리(밭·동선·건물·연못·debris·능선 회피 — 아래 좌표는 그 밖의 잔디 잉여지대). ──
+	# ★[폴리시 R4] (68,4) → (68,1). 나무 앵커는 좌상단이고 몸통이 아래로 뻗으므로(64×128 = 2×4칸)
+	#   옛 자리는 (68..69, 4..7)을 덮어 그중 6칸이 늘봄방 예정지 GREENHOUSE_EXT_RECT(x64..71, y5..11)
+	#   안이었다 — 그 rect 주석의 "프롭 무점유 실측"이 코드상 거짓이었고, 완공하면 온실 벽 안에서
+	#   나무가 지붕을 뚫고 그려지는 데다 발치바가 WALL 박스 **안**에 서고 TreeLedger 슬롯 하나가
+	#   영영 벌목 불가로 남았다. 세 칸 북쪽으로 올려 (68..69, 1..4)로 빼면 코너 클러스터 구도는
+	#   그대로이면서 rect와 한 칸도 안 겹친다(후보 8칸 전부 비-SOLID·프롭 미점유 실측).
 	[PROP_TREE_A, [
-		Vector2i(54, 3), Vector2i(68, 4), Vector2i(74, 3),   # 우상단 코너 클러스터
+		Vector2i(54, 3), Vector2i(68, 1), Vector2i(74, 3),   # 우상단 코너 클러스터
 		Vector2i(76, 54), Vector2i(70, 58),                  # 우하단 코너
 		Vector2i(44, 60), Vector2i(3, 50),                   # 하단·좌하단
 		Vector2i(4, 33),                                     # 좌중(넋우릿간 아래·연못 서편)
@@ -1306,7 +1312,10 @@ const PROP_LAYOUT_HOME := [
 	# ★[prop-regen-roster §5.3 / owner 2026-07-04] 통나무 5종 산재(통과 O 순수 장식·발치 타원 그림자만).
 	#   벌목/자연 쓰러진 나무 느낌으로 나무 클러스터 곁·빈 가장자리에 배치. 라이브 검증(SOLID·기존 프롭·건물
 	#   EXT·연못·패치·방목 겹침 0 — tools/logs_place_check.gd)으로 좌표 확정.
-	[PROP_LOG_LONG, [Vector2i(63, 6), Vector2i(6, 40), Vector2i(66, 55)]],                       # 긴 통나무(3×1) 3
+	# ★[폴리시 R4] (63,6) → (61,6). 긴 통나무는 96×32 = 3×1칸이라 옛 자리가 (64,6)(65,6) 두 칸을
+	#   늘봄방 예정지 안에 밀어 넣었다(위 나무와 같은 사유). 두 칸 서쪽으로 밀면 (61..63, 6)이라
+	#   rect 서쪽 경계(x64) 바로 앞에서 멈춘다 — 나무 클러스터 곁이라는 배치 의도도 그대로다.
+	[PROP_LOG_LONG, [Vector2i(61, 6), Vector2i(6, 40), Vector2i(66, 55)]],                       # 긴 통나무(3×1) 3
 	[PROP_LOG_SHORT, [Vector2i(50, 5), Vector2i(14, 50), Vector2i(56, 32)]],                     # 짧은 통나무(2×1) 3
 	[PROP_LOG_UPRIGHT, [Vector2i(58, 7), Vector2i(72, 50), Vector2i(7, 45), Vector2i(66, 29)]],  # 세워진 그루터기(1×1) 4
 	[PROP_LOG_DIAG_A, [Vector2i(60, 9), Vector2i(16, 50), Vector2i(12, 38)]],                    # 대각 통나무 밝은(1×1) 3
@@ -4923,6 +4932,19 @@ func _greenhouse_built() -> bool:
 func _in_greenhouse_plot(t: Vector2i) -> bool:
 	return _greenhouse_built() and GREENHOUSE_PLOT_RECT.has_point(t)
 
+# ★[폴리시 R4] 이 칸이 **아직 안 지은 늘봄방의 예정지**인가 — 설치물 배치가 배제하는 예약 부지다.
+#   GREENHOUSE_EXT_RECT는 완공 전까지 전부 GROUND(56/56 실측)라 스프링클러·레어크로우·업화로·결정기가
+#   전부 통과한다. 그런데 완공 아침 `_build_facade`가 그 8×7을 통째로 WALL로 채우므로, 안쪽 칸은
+#   8이웃이 전부 WALL이 되어 `_update_target`(발밑 ±1 클램프)으로 영영 겨눌 수 없다 — 원장엔 남고
+#   회수 경로만 사라져 **설치물과 안에 든 광석·보석이 영구 유실**된다(R2가 나락 층에서 봉합한
+#   "유령 화덕"의 신축 건물판). 되돌릴 수단(철거·자동 회수)을 새로 만드는 대신 **되돌릴 일을 안
+#   만드는 쪽**을 골랐다 — 업화로가 갱도 층을 애초에 거절하는 그 판단 1:1.
+#   ★ 완공 뒤엔 스스로 무해해진다: 그 칸들이 WALL이라 앞선 지면 검사에서 이미 걸린다(가드 이중화 0).
+#   ★ 막는 것은 *설치물 원장*뿐이다 — 괭이질·파종·수확 같은 밭 동사는 손대지 않는다(ADR-0008).
+func _greenhouse_lot_reserved(t: Vector2i) -> bool:
+	return _region == RegionCatalog.HOME and not _greenhouse_built() \
+		and GREENHOUSE_EXT_RECT.has_point(t)
+
 # ★ 밭 라우터 — 이 칸의 주인 FarmField를 고른다. **두 좌표 공간이 겹치지 않아**(노지 = HOME 외부
 #   y<65 · 늘봄방 = 실내 밴드) 칸 하나만 보면 주인이 유일하게 정해진다. 밭 동사(괭이·물·심기·비료·
 #   수확)와 칸 단위 질의는 전부 이 함수를 거치고, **집합 순회**(절기 사멸·까마귀·잡초 확산)는 거치지
@@ -7121,9 +7143,14 @@ func _scatter_footprint(tex: Texture2D, anchor: Vector2i) -> Array:
 	return out
 
 # 고정 인프라 rect(건물·연못·우물·패치·물가존) 위엔 절차 프롭 금지(존이 이미 비껴가나 belt-and-suspenders).
+# ★[폴리시 R4] GREENHOUSE_EXT_RECT 합류. 목록의 다른 rect는 첫날부터 WALL이라 지면 검사만으로도
+#   비껴가지만, 늘봄방 예정지만은 **완공 전까지 맨 GROUND**라 이 목록이 유일한 방어선이다(손저작
+#   프롭 2점이 실제로 그 안에 서 있었다 — 위 로스터 주석). 지금 좌표로는 스캐터가 그 안에 한 점도
+#   안 앉지만(실측), 스캐터 규칙이 넓어지는 날 조용히 다시 열리는 문이라 여기서 못 박는다.
 func _scatter_forbidden(t: Vector2i) -> bool:
 	for r in [HOUSE_EXT_RECT, STOREHOUSE_EXT_RECT, NEOKURITGAN_EXT_RECT, NEOKDUNGURI_EXT_RECT,
-			SILO_EXT_RECT, WELL_RECT, STARTER_PATCH_RECT, SPIRIT_POND_RECT, POND_ACTIVITY_RECT]:
+			SILO_EXT_RECT, WELL_RECT, STARTER_PATCH_RECT, SPIRIT_POND_RECT, POND_ACTIVITY_RECT,
+			GREENHOUSE_EXT_RECT]:
 		if r.has_point(t):
 			return true
 	return false
@@ -13415,10 +13442,16 @@ func _farming_energy_cost() -> int:
 # ★ [S1R-T8 / ADR-0059 결정4] 이 칸이 물뿌리개 리필 대상인가 — 혼우물(WELL_RECT·비진입 WALL 박스) 또는
 #   물타일(WATER — 손그림 마스크로 유기화된 연못 포함, SPIRIT_POND/POND_ACTIVITY 불문). _target은 발밑 인접
 #   1칸으로 클램프되므로(_update_target), 대상을 겨눈다 = 인접에 섰다는 뜻(별도 거리 판정 불요).
+# ★[폴리시 R4] 혼우물 가지에 **구역·실내 가드**를 세운다. WELL_RECT는 안식 농원 좌표 상수인데
+#   이 술어가 `_region`도 `_indoor`도 안 봐서, 그 좌표가 맨 지면인 모든 구역(나루 마을 (41,19) 등)
+#   에서 허공을 겨눠도 물뿌리개가 가득 찼다(실측 확인). 같은 파일의 다른 좌표 창구는 전부 이
+#   함정을 명시적으로 막아 둔 자리다(`_facing_mailbox`의 `_region == HOME and _indoor == ""`).
+#   ★ 물타일(WATER) 가지는 그대로 전 구역이다 — 물은 어느 무대에서나 물이라 좁힐 이유가 없다
+#     (ADR-0008 "평평 ≠ 막힘": 좁히는 것은 *다른 구역엔 없는 건물* 한 채뿐이다).
 func _is_refill_target(t: Vector2i) -> bool:
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
 		return false
-	if WELL_RECT.has_point(t):
+	if _region == RegionCatalog.HOME and _indoor == "" and WELL_RECT.has_point(t):
 		return true
 	return _grid[t.y][t.x] == WATER
 
@@ -14084,11 +14117,16 @@ func _crystalarium_at(t: Vector2i) -> bool:
 #     ㉡ `_encroach_candidates`가 설치물 칸을 후보로 넘겨, 절기 첫날 아침에 스프링클러·결정기 위로
 #        SOLID debris(잉걸·그루터기)가 돋아 그 칸이 통행 불가가 되고 설치물이 덮였다.
 #   두 곳이 **같은 하나**를 보게 해서 "한 칸에 둘"과 "설치물 위에 debris"를 함께 막는다.
-#   ※ 구역 축 없는 원장(sprinkler·rarecrow)은 호출부가 이미 HOME으로 좁혀져 있어 그대로 본다.
+# ★[폴리시 R4] 구역 축 없는 원장(sprinkler·rarecrow)을 **무대 술어**(`_sprinkler_at`·`_rarecrow_at`)로
+#   갈았다. R2 주석이 단 단서("호출부가 이미 HOME으로 좁혀져 있어")는 그때의 두 호출부에만 참이었고,
+#   아래에서 이 함수를 새로 부르는 업화로·결정기 배치는 **전 구역 지상**에서 돈다. 원장을 날로 보면
+#   안식 농원 (42,14)의 스프링클러가 나루 마을 (42,14)의 업화로 배치를 프롬프트도 알림도 없이 막는다
+#   (화면엔 아무것도 없는 칸이라 단서가 0). 두 술어는 이미 `_region == HOME`을 물고 있어 기존 두
+#   호출부(둘 다 HOME 한정)의 거동은 바이트 단위로 불변이다.
 func _installation_at(t: Vector2i) -> bool:
-	if sprinkler != null and sprinkler.has_at(t):
+	if _sprinkler_at(t):
 		return true
-	if rarecrow != null and rarecrow.has_at(t):
+	if _rarecrow_at(t):
 		return true
 	if furnace != null and furnace.has_at(_region, t):
 		return true
@@ -14130,6 +14168,8 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 	if _installation_at(t):                   # ★[폴리시 R2] 다른 설치물(레어크로우·업화로·결정기·
 		return false                          #   게잡이통·채취기) → 배제(겹침 방지 · 양방향 가드)
 	if garden_pot != null and garden_pot.has_at(t):   # ★[S10-T5] 놓아 둔 화분 → 배제(겹침 방지)
+		return false
+	if _greenhouse_lot_reserved(t):           # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
 		return false
 	return true
 
@@ -14503,20 +14543,20 @@ func _can_place_furnace(t: Vector2i) -> bool:
 		return false
 	if is_solid(cell):
 		return false                          # 방어(건물 패드·절벽·벽 = SOLID)
-	if sprinkler != null and sprinkler.has_at(t):
+	# ★[폴리시 R4] 원장을 한 줄씩 나열하던 자리를 **`_installation_at` 하나**로 접었다. 나열은 새
+	#   설치물이 붙을 때마다 두 함수를 손으로 따라가야 해서 결국 갈렸다 — 레어크로우가 빠져 있어
+	#   허수아비 위에 업화로가 겹쳐 섰다(반대 방향은 `_can_place_sprinkler`가 막아 가드가 단방향).
+	#   그 술어는 구역 축까지 함께 든다(위 `_installation_at` 주석).
+	if _installation_at(t):
 		return false
-	if crab_pot != null and crab_pot.has_at(_region, t):
-		return false
-	if tapper != null and tapper.has_at(_region, t):
-		return false
-	if crystalarium != null and crystalarium.has_at(_region, t):
-		return false                          # ★[S10-T1] 결정기와 겹치지 않는다(_can_place_crystalarium 대칭)
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
 	if _region == RegionCatalog.HOME:
 		if POND_ACTIVITY_RECT.has_point(t):   # 물가 활동존(연못 여백) → 배제
 			return false
 		if _home_occupied_tiles().has(t):     # 프롭 점유(나무·바위·꽃·울타리·허수아비) → 배제
+			return false
+		if _greenhouse_lot_reserved(t):       # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
 			return false
 	return true
 
@@ -15021,13 +15061,7 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 		return false
 	if is_solid(cell):
 		return false                          # 방어(건물 패드·절벽·벽 = SOLID)
-	if sprinkler != null and sprinkler.has_at(t):
-		return false
-	if crab_pot != null and crab_pot.has_at(_region, t):
-		return false
-	if tapper != null and tapper.has_at(_region, t):
-		return false
-	if furnace != null and furnace.has_at(_region, t):
+	if _installation_at(t):                   # ★[폴리시 R4] 업화로와 같은 단일 술어(레어크로우 포함·구역 축 포함)
 		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
@@ -15035,6 +15069,8 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 		if POND_ACTIVITY_RECT.has_point(t):   # 물가 활동존(연못 여백) → 배제
 			return false
 		if _home_occupied_tiles().has(t):     # 프롭 점유(나무·바위·꽃·울타리·허수아비) → 배제
+			return false
+		if _greenhouse_lot_reserved(t):       # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
 			return false
 	return true
 
