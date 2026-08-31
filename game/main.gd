@@ -15384,11 +15384,21 @@ func _harvest_pot() -> void:
 #   실효. ★혼력 0(ADR-0033 #1 "줍기=혼력0" — 유일 무비용 산출 루프, "평평≠막힘" 안전판). 품질·수량은
 #   채집 레벨/전문직이 소스(밭 비료 roll과 대비 — 스킬 주도 replace, ADR-0033 #3 개정).
 func _pick_flower(tile: Vector2i) -> void:
-	if not flower.pick(tile, clock.day):
+	# ★[폴리시 R4] **묻기 먼저·따기 나중**. 옛 순서는 `pick`이 곧 판정이라(안 폈으면 false) 편했지만,
+	#   그 호출이 이미 꽃을 소진시켜 되돌릴 자리가 없다 — 백팩이 가득하면 그 포기가 재생 타이머에
+	#   묻힌 채 사라지는데 화면엔 "야생 피안화 +2"가 떴다. 비소모 질의(`is_bloomed`)로 먼저 거르면
+	#   "패치가 아닌 칸"과 "자리가 없다"가 안 섞이고(엉뚱한 칸에서 백팩 알림이 안 뜬다) 소진 전에
+	#   적재 자리를 물을 수 있다. 덤불 흔들기가 원장을 되돌려 지키는 그 불변식을 선검사로 세운다.
+	if not flower.is_bloomed(tile):
 		return   # 안 폈거나 패치 아님(디스패치가 걸렀지만 방어)
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
 	# 품질 = 채집 레벨 기본 등급, 약초학자 하한(이리듐)과 max(퍼크가 base를 끌어올림). ADR-0052.
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	if not inventory.can_add(ItemCatalog.SPIRIT_FLOWER, 1, quality):
+		_notice("백팩이 가득 차 꽃을 딸 수 없다 — 자리를 비우고 다시")
+		return
+	if not flower.pick(tile, clock.day):
+		return   # 방어(위 질의와 이 호출 사이에 상태가 바뀔 경로는 없다)
 	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 채집물은 밭 다수확과 달리
 	#   품질 격리 없음: 한 포기에서 두 송이라 등급 동일). ADR-0052 DIM_DOUBLE_DROP.
 	var count := 1
@@ -15507,9 +15517,18 @@ func _harvest_wild(crop: String) -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = hash("wildharvest:%d:%d:%d" % [clock.day, _target.x, _target.y])
 		species = pool[rng.randi_range(0, pool.size() - 1)]
-	_field_at(_target).harvest(_target)   # SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다)
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	# ★[폴리시 R4] **적재 자리부터 본다** — 노지(`_try_harvest`)·화분(`_harvest_pot`) 두 형제가 R2에
+	#   세운 규율인데, 그 둘보다 위에서 갈라져 나오는 이 갈래만 옛 거동이 남아 있었다. `harvest`가
+	#   칸을 비운 뒤 `add_item` 반환값을 안 봐서, 백팩이 가득하면 그 포기가 영구 소실되는데 화면엔
+	#   "+N" 토스트가 뜨고 `_forage_found`가 **손에 쥔 적 없는 종을 발견 처리**해 희소종 씨앗 레시피
+	#   게이트까지 열렸다. 수량은 아래 더블드랍 롤이 정하지만 `can_add`는 스택 판정이라 1로 물어도
+	#   충분하다(첫 개가 들어가면 그 스택에 둘째도 합쳐진다).
+	if not inventory.can_add(species, 1, quality):
+		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
+		return
+	_field_at(_target).harvest(_target)   # SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다)
 	var count := 1
 	if randf() < forage_double_drop_chance():
 		count = 2
@@ -15523,12 +15542,18 @@ func _harvest_wild(crop: String) -> void:
 	queue_redraw()
 
 func _pick_forage(tile: Vector2i) -> void:
-	var species := forage_spawns.pick(_region, tile)
+	# ★[폴리시 R4] `pick`은 그 칸을 원장에서 **지우고** 종을 돌려주므로(되돌리는 경로 0), 꽃 패치와
+	#   같은 이유로 비소모 질의(`species_at`)로 먼저 종을 알아내고 적재 자리를 물은 뒤에 집는다.
+	var species := forage_spawns.species_at(_region, tile)
 	if species == "":
 		return   # 없는 칸(디스패치가 걸렀지만 방어)
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
 	# 품질 = 채집 레벨 기본 등급 ⊔ 약초학자 하한(이리듐). 꽃 패치와 같은 소스(ADR-0052).
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	if not inventory.can_add(species, 1, quality):
+		_notice("백팩이 가득 차 %s를 담을 수 없다 — 자리를 비우고 다시" % ItemCatalog.name_of(species))
+		return
+	forage_spawns.pick(_region, tile)   # 자리를 확인한 뒤에 집는다(스폰 칸 소멸 = 되돌릴 수 없는 사건)
 	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 한 자리에서 두 개).
 	var count := 1
 	if randf() < forage_double_drop_chance():
