@@ -10062,8 +10062,15 @@ func _scarecrow_tiles() -> Array:
 			for t in entry[1]:
 				out.append(t + Vector2i(0, 1))
 	if rarecrow != null:
+		# ★[폴리시 R4] 밴드 경계는 **HOME의 외부 세로**여야 한다 — `_outdoor_h`(=지금 서 있는 구역)를
+		#   보면 안 된다. 레어크로우 원장도 까마귀 판정도 HOME 좌표계인데(위 `_installation_at` 주석
+		#   "구역 축 없는 원장"), 까마귀 습격 줄에는 잡초 확산과 달리 구역 가드가 없다 — 집 밖에서
+		#   24:00을 맞아 `_on_collapsed → _do_sleep`으로 날이 바뀌면(R3 #7이 명시적으로 인정·처리한
+		#   경로다) 나룻터 40·숲/갱도 44 같은 남의 세로로 걸러져, HOME 남동 개간지(y 40~64)에 세운
+		#   레어크로우가 목록에서 통째로 빠지고 그 밤 반경 안 작물이 영구 소실됐다.
+		var home_outdoor_h: int = RegionCatalog.size_of(RegionCatalog.HOME).y
 		for t: Vector2i in rarecrow.tiles():
-			if t.y < _outdoor_h:
+			if t.y < home_outdoor_h:
 				out.append(t)
 	return out
 
@@ -11163,6 +11170,11 @@ func _load_game() -> void:
 	#   선택만 남으면 목록 밖 층을 가리킨다 — 소비처 `_descend_mine`은 is_valid_floor만 보므로 그대로
 	#   해금 안 한 깊이로 내려가고(진행 스킵), 프롬프트도 목록에 없는 층을 안내했다.
 	_mine_entry_pick = 1
+	# ★[폴리시 R4] **밀린 절기 재스폰 표도 같은 이유로 버린다.** 이 표는 세션 로컬인데(R3 #7),
+	#   로드는 `reclaim`을 세이브 시점으로 되감으므로 표만 살아남으면 절기 전환일도 아닌 날에
+	#   `_run_season_respawn`이 집행돼(11937~) 되돌린 세이브엔 없던 잡초와 **통행 불가 SOLID
+	#   debris**(잉걸·그루터기)가 마당에 영구로 박혔다. 잃는 것은 없다: 표가 없던 종전과 같은 결과다.
+	_season_respawn_pending_day = 0
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
 	#   값을 붓기 때문이다(없으면 저장돼 있던 칸이 조용히 사라진다). `_spine_bits` 복원은 아래
