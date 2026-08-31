@@ -5984,6 +5984,16 @@ func _award_narak_drop(t: Vector2i, node_id: String) -> void:
 		_notice("광맥이 통째로 쏟아졌다!")
 	_gain_mining_xp(int(res["xp"]))
 	audio.sfx("harvest")
+	# ★[폴리시 R4] 갱도 산출(`_award_mine_drop`)이 맨 뒤에 다는 두 훅이 여기엔 **한 줄도 없었다**.
+	#   두 원천 상수는 무대가 아니라 *활동*을 가리킨다("광맥/돌을 부순 사건마다") — 그리고 이 함수의
+	#   머리말 자체가 "같은 해석기를 쓰되 네임스페이스만 갈린다"고 선언한다. 그래서 해방 이후 나락만
+	#   도는 엔드게임 동선에서는 채광이 반딧넋 45 완주(드랍 몫 15)에 한 톨도 기여하지 못했다.
+	#   ★ serial에 **run_id를 얹는다**: 갱도 serial은 `floor*1e6 + …`이라 나락 깊이가 같은 값을 내면
+	#     같은 날 같은 롤이 나온다. run은 1부터라(begin_run) 자리 수가 겹치지 않고, 런이 갈리면
+	#     롤도 갈려 "리셋 런마다 새 판"이라는 나락의 정의와도 맞는다.
+	var narak_serial := narak_floors.run_id() * 1000000000 + _narak_depth * 1000000 + t.y * 1000 + t.x
+	_roll_book_drop(Books.SRC_MINE, narak_serial)
+	_roll_firefly_drop(FireflySouls.SRC_MINE, narak_serial)
 
 # ═══ ★[S5-T4 / ADR-0063 결정 4·5] HP·전투 판정 배선 ═══════════════════════════════
 # main의 몫은 다섯뿐이다: ①최대 HP 파생·갱신 ②무기 스윙 입력 → arc 판정 ③피격(무적 창·넉백)

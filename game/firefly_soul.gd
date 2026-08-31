@@ -93,7 +93,7 @@ const FIXED := [
 # 다만 Books가 *로어*의 배달이라면 이쪽은 *수집물*의 배달이라, 몫이 15로 유한하고 동나면 멈춘다.
 const SRC_HARVEST := "harvest"   # 수확 — 밭 한 포기를 거둘 때마다(화분 제외 — main 훅 주석 참조)
 const SRC_CHOP := "chop"         # 벌목 — 도끼가 나무·그루터기에 닿을 때마다
-const SRC_MINE := "mine"         # 채광 — 광맥/돌을 부순 사건마다
+const SRC_MINE := "mine"         # 채광 — 광맥/돌을 부순 사건마다(★[폴리시 R4] 갱도·나락 두 무대 공통)
 const SRC_FISH := "fish"         # 낚시 — 포획 성공마다
 
 # 원천별 드랍 확률(퍼밀 · 0..999 롤 대비). **잠정값 — owner 큐**(ADR-0069 결정 1 폴리시 이월).
