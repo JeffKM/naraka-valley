@@ -173,6 +173,50 @@ func _initialize() -> void:
 	_check("⑥ forage_double_drop = 0.20(채집꾼)", is_equal_approx(m.forage_double_drop_chance(), 0.20))
 	_check("⑥ forage_quality_floor = 3(약초학자 이리듐)", m.forage_quality_floor() == ItemCatalog.Q_IRIDIUM)
 
+	# ⑥b ★[폴리시 R3 · #16] **실효 0(perks 빈) 전문직은 고를 수 없다.**
+	#   농사 6종이 전부 `perks: []`인데 숙련 탭엔 desc가 실려 버튼이 섰고, 누르면 슬롯이 확정된
+	#   뒤 효과는 0이며 재선택도 불가했다(광고된 효과 0짜리 되돌릴 수 없는 소모).
+	#   판정을 `_can_choose_profession` 한 곳에 뒀으므로 세 소비처가 함께 닫힌다.
+	#   ★ 이 단언은 **농사 트리 이름을 안 박는다** — 퍼크가 빈 전문직 전체를 로스터에서 파생해
+	#     훑으므로, 나중에 농사가 배선되고 다른 트리가 빈 채로 생겨도 그대로 유효하다.
+	var inert: Array[String] = []
+	var inert_selectable: Array[String] = []
+	var live_blocked: Array[String] = []
+	m._farming_xp = 999999   # 전 스킬 만렙으로 올려 "레벨 때문에 막힌 것"과 구분한다
+	m._foraging_xp = 999999
+	m._fishing_xp = 999999
+	m._mining_xp = 999999
+	m._combat_xp = 999999
+	m._professions = {}
+	for skill in ProfessionCatalog.SKILLS:
+		for p in ProfessionCatalog.tier_profs(String(skill), 5):
+			var pid := String(p["id"])
+			var tag := "%s/%s" % [String(skill), pid]
+			if (ProfessionCatalog.perks_of(String(skill), pid) as Array).is_empty():
+				inert.append(tag)
+				if m._can_choose_profession(String(skill), pid):
+					inert_selectable.append(tag)
+			elif not m._can_choose_profession(String(skill), pid):
+				live_blocked.append(tag)
+	_check("⑥b⓪ 지금 실효 0인 tier5 전문직이 실제로 있다(전제 · %s)" % str(inert), not inert.is_empty())
+	_check("⑥b 실효 0 전문직은 만렙에서도 선택 불가(뚫린 것 %s)" % str(inert_selectable),
+		inert_selectable.is_empty())
+	_check("⑥c 퍼크가 있는 전문직은 그대로 선택 가능(막힌 것 %s)" % str(live_blocked),
+		live_blocked.is_empty())
+	_check("⑥d 그래서 농사 행엔 지금 고를 tier가 없다(버튼 미표시 = options [])",
+		m._pending_profession_tier(ProfessionCatalog.FARMING) == 0)
+	_check("⑥e 선택 시도 자체가 거절된다(슬롯이 안 탄다)",
+		not m.choose_profession(ProfessionCatalog.FARMING, "tiller")
+		and m._profession_at(ProfessionCatalog.FARMING, 5) == "")
+	m._professions = {}
+	m._farming_xp = 0
+	m._foraging_xp = 5500
+	m._fishing_xp = 0
+	m._mining_xp = 0
+	m._combat_xp = 0
+	m.choose_profession(F, "gatherer")
+	m.choose_profession(F, "botanist")
+
 	# ⑦ pending tier.
 	var m2 := await _spawn_main_fresh()
 	m2._foraging_xp = 1500; m2._professions = {}

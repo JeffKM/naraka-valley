@@ -96,6 +96,22 @@ const _TREE := {
 			"perks": [{"dim": DIM_TRACK, "value": 1.0}]},
 	],
 	# ── 농사(구조만·퍼크 후행 — 각 스킬 슬라이스에서 시맨틱 인코딩) ──────────────
+	# ★[폴리시 R3 · #16] `perks: []`인 동안 이 여섯은 **선택지로 서지 않는다**(main
+	#   `_can_choose_profession` 첫 관문). 종전엔 desc만 보고 고를 수 있어, 광고된 효과가 0인 채
+	#   되돌릴 수 없는 슬롯이 소모됐다. 아래 배열에 퍼크를 채우는 순간 저절로 다시 열린다 —
+	#   그러니 **배선 없이 perks만 채우지 말 것**(채우면 그 즉시 고를 수 있게 되는데 소비처가
+	#   없으면 같은 결함이 되돌아온다).
+	# ⚠️ owner 큐 — 배선 전 확인된 사실: 여섯 중 **셋은 붙일 시스템 자체가 없다**.
+	#   · artisan(가공품 품질·가공 속도) — 농사 가공 기계가 0종이다(항아리·통 미구현.
+	#     `main.gd`의 "POT: 항아리"는 *화분* 라벨이고, 손 제작은 즉시 완성이라 다른 축).
+	#     구현 시 템플릿 = `furnace.gd`(`smelt_minutes(ore, time_cut)` + `quality_for(step)`).
+	#   · coopmaster(부화 시간 절반) — 알→짐승 경로·부화기가 없다(`livestock.add_animal`로 직접
+	#     배치). 최소 침습 대안 = "새끼 성장 일수 −50%"로 재조준(`animal_catalog.grow_days`).
+	#   · shepherd(산물 주기 단축) — 산물 *주기* 개념이 없다(급여한 성체는 매일 산출).
+	#     템플릿 = `tapper_ledger.cycle_for(species, cut)`. 대안 = 대형 산물 확률(`large_chance`).
+	#   나머지 셋은 훅이 이미 있다: tiller → `field.roll_quality`(main 호출부 = `_try_harvest`),
+	#   agriculturist → `field.effective_growth_days`(성숙 임계 축소라 여우불과 자연 합성),
+	#   rancher/우정 가속 → `livestock.advance_day`(품질 상태·우정 델타 정산 지점).
 	FARMING: [
 		{"id": "tiller", "tier": 5, "requires": "", "name": "경작자", "desc": "작물 품질 등급 확률↑", "perks": []},
 		{"id": "rancher", "tier": 5, "requires": "", "name": "목축가", "desc": "축산물 품질 등급↑", "perks": []},

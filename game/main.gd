@@ -11652,6 +11652,17 @@ func has_profession(skill: String, prof_id: String) -> bool:
 func _can_choose_profession(skill: String, prof_id: String) -> bool:
 	if not ProfessionCatalog.is_valid(skill, prof_id):
 		return false
+	# ★[폴리시 R3 · #16] **실효 0인 전문직은 선택지로 서지 않는다.**
+	#   농사 트리 6종이 전부 `perks: []`인 채(카탈로그가 "구조만·퍼크 후행"이라 적어 둔 그대로)
+	#   숙련 탭엔 `desc`가 그대로 실려 "경작자 — 작물 품질 등급 확률↑" 버튼이 섰다. 누르면
+	#   `choose_profession`이 true를 돌려주고 슬롯이 확정되는데 수확 품질은 한 톨도 안 바뀌고,
+	#   `_profession_at(skill, tier) != ""` 때문에 **재선택도 불가**하다 — 광고된 효과 0짜리
+	#   되돌릴 수 없는 소모. 판정을 여기 한 곳에 두면 세 소비처가 함께 낫는다:
+	#   `_pending_profession_tier`(→ 0) · `_skill_row`의 options(→ [] = 버튼 미표시) ·
+	#   `choose_profession`(→ 거절). 퍼크가 배선되는 순간 저절로 다시 열리므로 명단·플래그가 없다.
+	#   ⚠️ 이건 농사 트리를 *지운* 게 아니다 — 배선(owner 큐)까지의 안전장치다.
+	if ProfessionCatalog.perks_of(skill, prof_id).is_empty():
+		return false
 	var tier := ProfessionCatalog.tier_of(skill, prof_id)
 	if _skill_level(skill) < tier:
 		return false
