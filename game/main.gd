@@ -2422,6 +2422,10 @@ var codex: Codex = null
 #   (코드 생성 — .new()). 의뢰 *내용*은 day 시드 파생이라 무상태고, 계약·이력만 여기 산다.
 var quest_board: QuestBoard = null
 var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌트를 한 번만 띄웠는지(세션 로컬 — 세이브 무관)
+# ★[폴리시 R3] 집 밖에서 날이 바뀌어 **밀린 절기 대량 재스폰**의 날짜(0 = 밀린 것 없음). 안식 농원에
+#   다시 서는 프레임에 `_process`가 소비한다. 세션 로컬이다(세이브 무관) — 그 아침에 껐다 켜면
+#   기회를 잃지만, 그건 이 표가 없던 종전과 같은 결과라 회귀가 아니다.
+var _season_respawn_pending_day := 0
 # ★ [B1-a.3] 사료풀 상태(낫으로 베어 건초를 얻는 고지 풀 — 재생·겨울정지). FarmField/Orchard/Ranch/
 #   Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). main이 고지 자유 풀밭을 시드하고, 벤 결과를
 #   여물광(Ranch.store_hay)에 적재한다(경제 양끝 잇기). 드로우는 main이 이 상태를 질의(디커플링).
@@ -2719,6 +2723,11 @@ var _grid_h := MAP_H          # 그리드 전체 세로 = _outdoor_h + INDOOR_BA
 # 걷어내고 새로 깔기 위해 _add_label이 여기 모은다(중복 누적 방지).
 var _labels: Array[Node] = []
 var _sleeping := false  # T1.5 취침 연출 중이면 이동·입력 잠금
+# ★[폴리시 R3] 워프 연출 중에 들어온 24:00 강제 취침을 미뤄 두는 자리. 두 연출은 같은 `fade`와
+#   같은 이동 잠금을 쓰므로 겹치면 서로를 덮는다(워프 트윈이 알파를 0으로 되돌려 취침 암전이
+#   안 보이고, 워프 마지막 콜백이 취침이 꺼 둔 물리를 도로 켠다). 그래서 겹치지 않게 **줄을
+#   세운다** — 워프가 걷히는 마지막 콜백이 이 표를 보고 취침을 그때 시작한다.
+var _sleep_pending := false
 
 # 외부↔실내 분리. _indoor = "" 바깥 / 건물 id(현재 어느 건물 안인가). 문 칸에 닿으면 fade로
 # 전환하며, _transitioning은 그 fade 연출 중 입력·중복 트리거를 막는다(취침 연출과 같은 결).
@@ -4793,6 +4802,18 @@ func _draw_edit_overlay() -> void:
 func _can_deco() -> bool:
 	return _region == RegionCatalog.HOME and _indoor == "집"
 
+# ★[폴리시 R3] 꾸미기 모드가 서 있으면 **안 되는** 상태 — `_process`의 모달 가드 전량과 같은 목록이다.
+#   토글이 그 가드들보다 **위**에 있고(그 아래 `return _deco_mode`가 프레임을 통째로 끊는다) 판정은
+#   위치만 봤기 때문에, 집에서 도는 연출·모달을 C 한 번으로 얼릴 수 있었다: 척추 B4 아침 컷신
+#   (집에서 눈뜨는 프레임에 재생)이 암전 스텝에서 멈춰 러너가 영영 안 굴고, 책장 대화·상자 프레임도
+#   넘기기·닫기 분기에 도달하지 못했다. 진입 게이트(`_can_deco`)와 나눠 둔 이유는 저건 **자리**를,
+#   이건 **때**를 보기 때문이다(자리 판정은 프롬프트·회귀가 그대로 쓴다).
+func _deco_blocked() -> bool:
+	return _sleeping or _transitioning or _run_over or _epilogue_open \
+		or cutscene != null or spine_puzzle != null \
+		or (dialogue != null and dialogue.is_open()) \
+		or (frame != null and frame.is_open())
+
 func _toggle_deco_mode() -> void:
 	_deco_mode = not _deco_mode
 	if _deco_mode:
@@ -5591,7 +5612,12 @@ func _warp_in_region(dest_tile: Vector2i) -> void:
 	tw.tween_callback(func() -> void:
 		_transitioning = false
 		if not _run_over:
-			player.set_physics_process(true))
+			player.set_physics_process(true)
+		# ★[폴리시 R3] 밀려 온 강제 취침 소비 — `_warp`의 마지막 콜백과 같은 자리·같은 이유다.
+		#   기절 퇴장(`_faint`)이 이 실행기를 세운 직후 시계를 24:00까지 미는 그 경로가 여기로 온다.
+		if _sleep_pending:
+			_sleep_pending = false
+			_do_sleep())
 
 # ★[S5-T2] 층 안 이 칸의 광맥 종("" = 일반 돌). 배치 캐시(_mine_layout)에서 바로 읽는다 —
 #   원장의 node_at(day,floor,tile)은 층을 매번 재생성하므로 라이브 경로는 캐시를 쓴다.
@@ -9697,14 +9723,15 @@ func _on_day_advanced(day: int) -> void:
 			if purged > 0:
 				_notice("성야의 잿눈이 마당을 덮었다 — 잡초 %d포기가 눈 밑으로 졌다" % purged)
 		elif reclaim != null:
-			var respawn := reclaim.season_respawn(_encroach_candidates(), day, false)
-			var r_ember: Array = respawn["ember"]
-			var r_stump: Array = respawn["stump"]
-			var r_weeds: Array = respawn["weeds"]
-			var solid_n: int = r_ember.size() + r_stump.size()
-			var weed_n: int = r_weeds.size()
-			if weed_n + solid_n > 0:
-				_notice("절기가 바뀌며 묵힌 땅이 거칠어졌다 — 잡초 %d·돌과 고목 %d" % [weed_n, solid_n])
+			# ★[폴리시 R3] **집 밖에서 날이 바뀌면 미룬다.** 후보 스캔(`_encroach_candidates`)은 첫 줄에서
+			#   `_region != HOME`이면 빈 배열을 돌려주는데, 쓰러짐(`_on_collapsed` → `_do_sleep`)은 어느
+			#   구역에서든 24:00에 들어온다 — 마을 광장에서 절기 마지막 밤을 넘기면 이 **1회성** 대량
+			#   재스폰이 빈 후보로 소진되고, 이 경로는 절기 첫날에만 열려 다음 기회가 28일 뒤였다.
+			#   그래서 여기선 표만 세우고, 안식 농원에 다시 서는 프레임에 그대로 집행한다.
+			if _region == RegionCatalog.HOME:
+				_run_season_respawn(day)
+			else:
+				_season_respawn_pending_day = day
 	# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 리셋 — 날이 바뀌면 전 층이 리필된다(그날 깬 돌·열린 사다리
 	#   기록이 전량 소멸하고, 배치는 시드가 day를 물고 있어 저절로 갈린다). 스타듀 "매일 리필" 정합.
 	#   ★ 층 안에서 날이 바뀌면 **지상으로 되돌린다**: 지금은 층 안 취침이 불가능하지만(_can_sleep은 집
@@ -10836,6 +10863,11 @@ func _warp(to_region: String, new_indoor: String, dest_tile: Vector2i) -> void:
 		_transitioning = false
 		if not _run_over:
 			player.set_physics_process(true)
+		# ★[폴리시 R3] 연출 중에 밀려 온 24:00 강제 취침을 여기서 소비한다(_sleep_pending 머리말) —
+		#   두 페이드가 겹치지 않도록 워프가 완전히 걷힌 이 자리에서 취침을 시작한다.
+		if _sleep_pending:
+			_sleep_pending = false
+			_do_sleep()
 		# ★[S10-T4 / ADR-0069 결정 7] 삽사리 마을 이벤트 — **fade가 완전히 걷힌 뒤**에 소비한다
 		#   (예약은 위 콜백의 `_rebuild_region`이 세운다). 트윈 한가운데서 띄우면 진입 암전과
 		#   겹쳐 알림이 검은 화면 뒤에서 흘러간다(B4 예약/재생 분리와 같은 이유).
@@ -10895,6 +10927,13 @@ func _can_sleep() -> bool:
 func _do_sleep() -> void:
 	if _sleeping:
 		return
+	# ★[폴리시 R3] 워프 연출 중이면 **줄을 선다**(_sleep_pending 머리말). 정상 취침·에필로그 경로는
+	#   `_can_sleep`·프롬프트가 이미 연출 밖이지만, 쓰러짐(`_on_collapsed`)은 워프 트윈 한가운데로도
+	#   들어온다 — 기절 퇴장(`_faint`)은 워프를 세운 **직후** 시계를 24:00까지 밀어 그 충돌을 확정
+	#   발생시켰다. 놓치는 취침은 없다: 워프의 마지막 콜백이 이 표를 그 자리에서 소비한다.
+	if _transitioning:
+		_sleep_pending = true
+		return
 	# ★ 하루를 넘기기 전에 열린 모달을 먼저 닫는다. 침대 취침·에필로그 경로는 `_process`의
 	#   `frame.is_open()` 가드 뒤라 애초에 프레임이 없지만, **쓰러짐**(`_on_collapsed`)은 매대를
 	#   연 채로도 들어온다 — 그러면 어제 매대가 오늘 아침까지 살아남아 하루짜리 무대(야시장·보부상)의
@@ -10902,6 +10941,19 @@ func _do_sleep() -> void:
 	#   패널이 하루를 넘겨 떠 있는 것 자체가 화면의 거짓말이라 여기서 닫는다.
 	if frame.is_open():
 		_close_frame()
+	# ★[폴리시 R3] 진행 중이던 **미니게임 세션 셋도 함께 접는다**(체키·칵테일·릴 격투). 매대와 같은
+	#   이유이되 손해가 더 크다: 세 세션은 최대 8초짜리라 1.1초 취침 트윈을 넘겨 살아남고, `_process`의
+	#   틱 세 줄에는 `not _sleeping` 가드가 없어 페이드 뒤에서 계속 굴렀다. 그 결착이 `clock.sleep`
+	#   **뒤**에 떨어지면 ㉠닫힌 밤 장부(`end_day`가 이미 0으로 리셋)에 매출이 오르고 ㉡어제가 더비였던
+	#   낚시 결과가 오늘 날짜로 판정되며 ㉢세션이 안 끝나면 다음 날 아침 HUD가 뜬 채 LMB(괭이질·물주기)가
+	#   통째로 막혔다. 세션은 원래 무대에 묶인 비영속 상태라(구역 전환·로드가 이미 버린다) 여기서도 버린다.
+	if cheki != null:
+		cheki = null
+		_clear_cheki_offer()
+	if cocktail != null:
+		cocktail = null
+		_clear_cocktail_offer()
+	fishing = null
 	_sleeping = true
 	clock.running = false
 	audio.sfx("sleep")                 # P2.6 하루를 닫는 부드러운 하강 패드
@@ -10923,7 +10975,11 @@ func _on_sleep_done() -> void:
 	# ★[폴리시 R2] **대화가 열려 있으면 잠금을 안 푼다** — 24:00 강제 취침(`_on_collapsed`)은 긴 편지·
 	#   책·주민 대화를 연 채로도 들어오는데, 여기서 무조건 물리를 켜면 모달 대화창이 떠 있는 상태로
 	#   플레이어가 걸어 다녔다. 대화가 닫히는 프레임에 `_on_dialogue_finished`가 어차피 다시 켠다.
-	if not _run_over and not dialogue.is_open():
+	# ★[폴리시 R3] **컷신도 같다** — 23시 이후 시작한 컷신은 재생 중에 24:00을 넘긴다(러너의 clock_on
+	#   기본값이 true라 시계가 계속 흐른다). 여기서 무조건 물리를 켜면 `_begin_cutscene`이 걸어 둔
+	#   잠금이 풀려, 배우들이 연기하는 동안 플레이어가 걸어 다니다 `_end_cutscene`의 NPC 원위치와
+	#   어긋난 자리에 남는다. 재생이 끝나는 프레임에 `_end_cutscene`(또는 이어지는 대화)이 다시 켠다.
+	if not _run_over and not dialogue.is_open() and cutscene == null:
 		player.set_physics_process(true)
 	# ★[S9b-T4 / ADR-0068 결정 7] 척추 B4 재생 — 아침 훅이 예약해 둔 공허 컷신을 **눈을 뜨는 이
 	#   프레임**에 튼다(판정과 재생을 나눈 이유는 `_arm_spine_b4` 머리말). 아래 자동 저장보다 앞이라
@@ -11080,6 +11136,11 @@ func _load_game() -> void:
 	# ★ [S3-T2] 진행 중이던 릴 격투 세션은 로드에서 버린다(비영속 — 세이브에 낚시 키가 없는 것과 짝).
 	#   로드는 상태 하드 리셋이라, 옛 세션이 새 월드 위에 남아 있으면 안 된다.
 	fishing = null
+	# ★[폴리시 R3] 갱도 진입 층 선택도 같은 이유로 1층에서 다시 시작한다. 이 값은 `_cycle_mine_entry`가
+	#   **해금된 엘리베이터 목록 안에서만** 돌리는데, 로드는 `mine_floors._depth`(=해금 파생)를 되감으므로
+	#   선택만 남으면 목록 밖 층을 가리킨다 — 소비처 `_descend_mine`은 is_valid_floor만 보므로 그대로
+	#   해금 안 한 깊이로 내려가고(진행 스킵), 프롬프트도 목록에 없는 층을 안내했다.
+	_mine_entry_pick = 1
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
 	#   값을 붓기 때문이다(없으면 저장돼 있던 칸이 조용히 사라진다). `_spine_bits` 복원은 아래
@@ -11163,14 +11224,15 @@ func _load_game() -> void:
 		wallet.load_save(data["wallet"])
 	if data.has("inventory"):
 		inventory.load_save(data["inventory"])
-	if data.has("shipping_bin"):   # ★ C2 — 키 없는 구버전 세이브는 빈 출하함으로 시작(롤백·정산 무상태)
-		ship_bin.load_save(data["shipping_bin"])
-	if data.has("chest"):   # ★ Phase D — 키 없는 구버전 세이브는 빈 상자로 시작(보관 무상태)
-		chest.load_save(data["chest"])
-	if data.has("storehouse_chest"):   # ★ Phase E — 창고 상자(키 없는 구버전 = 빈 상자)
-		storehouse_chest.load_save(data["storehouse_chest"])
-	if data.has("larder"):   # ★[S6-T1] 카페 곳간 — 키 없는 구버전 세이브는 **빈 곳간**으로 시작(하위호환)
-		larder.load_save(data["larder"])
+	# ★[폴리시 R3] 아이템 원장 넷은 `has` 가드 없이 **무조건** 부른다(`.get`으로 빈 dict 폴백).
+	#   가드가 있으면 키 없는 구세이브를 F9로 *실행 중에* 다시 읽을 때 load_save가 아예 안 불려
+	#   살아 있는 노드의 내용물이 롤백되지 않는다 — 인벤토리만 되감기고 상자는 그대로라 같은
+	#   아이템이 양쪽에 남는다(복제). 넷 다 빈 dict를 받으면 자기 원장을 비우므로(각 load_save의
+	#   첫 줄) "키 없는 구세이브 = 빈 원장"이라는 종전 계약은 그대로다.
+	ship_bin.load_save(data.get("shipping_bin", {}))          # ★ C2 무인 출하함
+	chest.load_save(data.get("chest", {}))                    # ★ Phase D 집 상자
+	storehouse_chest.load_save(data.get("storehouse_chest", {}))   # ★ Phase E 창고 상자
+	larder.load_save(data.get("larder", {}))                  # ★[S6-T1] 카페 곳간
 	# ★[S7-T7] 절기 행사 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(행사는 처음부터 열려
 	#   있으므로 막히는 것이 0이고, 더비 태그는 어차피 당일치라 잃을 것도 없다).
 	if data.has("seasonal_event") and seasonal_event != null:
@@ -11848,6 +11910,15 @@ func _process(delta: float) -> void:
 	#   입력 가드보다 **먼저** 둔다: 컷신·대화·취침 연출 중에 실내로 옮겨지는 경로(컷신 워프·
 	#   기절 퇴장)가 있어서, 가드 아래 두면 그 프레임들 동안 말을 탄 채로 실내에 서 있게 된다.
 	_sync_mount()
+	# ★[폴리시 R3] 밀린 절기 대량 재스폰 소비 — 집 밖에서 날이 바뀌어 후보 스캔이 불가능했던 그
+	#   1회성 패스를, 안식 농원 그리드가 다시 선 첫 프레임에 집행한다(`_season_respawn_pending_day`
+	#   머리말). 연출 중엔 건드리지 않는다: 그리드·프롭이 재빌드 도중일 수 있고, 한 프레임 늦어도
+	#   결과가 같다.
+	if _season_respawn_pending_day != 0 and _region == RegionCatalog.HOME \
+			and not _sleeping and not _transitioning:
+		var pending_day := _season_respawn_pending_day
+		_season_respawn_pending_day = 0
+		_run_season_respawn(pending_day)
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
@@ -11876,7 +11947,12 @@ func _process(delta: float) -> void:
 		return
 	# ★ [S1-9] 집 꾸미기 모드 토글(C) — 집 실내("집")에서만. 켜면 게임플레이 입력·시뮬을 멈추고(코스메틱
 	#   저작 전용, 배치 모드와 같은 결) 마우스·키로 3레이어를 꾸민다. 나가면 다시 게임(멱등 토글).
-	if Input.is_action_just_pressed("deco_mode") and (_deco_mode or _can_deco()):
+	# ★[폴리시 R3] 진입은 자리(_can_deco) **와** 때(_deco_blocked)를 함께 본다. 끄기는 언제나 받는다
+	#   (모드가 켜져 있는 한 이 줄이 유일한 탈출구다). 켜 둔 채로 연출·모달이 들어오는 경로도 있어
+	#   (취침 트윈 뒤 아침 컷신·에필로그) 그때는 스스로 접는다 — 안 접으면 그 연출이 통째로 멎는다.
+	if Input.is_action_just_pressed("deco_mode") and (_deco_mode or (_can_deco() and not _deco_blocked())):
+		_toggle_deco_mode()
+	if _deco_mode and _deco_blocked():
 		_toggle_deco_mode()
 	if _deco_mode:
 		queue_redraw()
@@ -12255,12 +12331,12 @@ func _process(delta: float) -> void:
 	#   촬영 몇 초 동안 시계가 멈춘 것처럼 보인다. 대신 촬영 중 겹칠 수 있는 두 분기(같은 좌석
 	#   서빙 · LMB 도구질)만 아래에서 `cheki == null`로 막는다. 촬영 중엔 플레이어가 자리를
 	#   지키므로(_target 고정) 나머지 분기는 애초에 대상 칸이 안 걸린다.
-	if cheki != null:
+	if cheki != null and not _sleeping:   # ★[폴리시 R3] 취침 연출 뒤에서 굴지 않는다(_do_sleep이 이미 접지만 이중 방어)
 		_tick_cheki(delta)
 	# ★[S6-T6 / ADR-0064 결정 6] 칵테일 제조 진행(LMB = 붓기·셰이킹 · 이동 = 그만두기). 체키와
 	#   같은 자리·같은 이유로 **return하지 않는다**(HUD 갱신이 이 뒤로 이어진다). 낮 체키와 밤
 	#   칵테일은 시간대가 갈려(15–19 / 19–24) 한 프레임에 둘 다 살아 있을 수 없다.
-	if cocktail != null:
+	if cocktail != null and not _sleeping:   # ★[폴리시 R3] 체키와 같은 이유·같은 이중 방어
 		_tick_cocktail(delta)
 	# ── ADR-0024 RMB(action) 컨텍스트 체인 ───────────────────────────────────────
 	# RMB는 맨손 액션/대화 — 우선순위대로 하나만 잡고 return으로 가른다. 대상 칸 종류(NPC·좌석·
@@ -12479,7 +12555,7 @@ func _process(delta: float) -> void:
 		return
 	# ★ [S3-T2 / ADR-0061 결정 2] 릴 격투 — 물(WATER)은 _target_valid(SOIL) 게이트 밖이라 짐승·debris와
 	#   같은 결로 따로 디스패치한다. 세션이 살아 있으면 tick(LMB 홀드 = 당김)만 굴리고, 없으면 캐스팅 판정.
-	if fishing != null:
+	if fishing != null and not _sleeping:   # ★[폴리시 R3] 체키·칵테일과 같은 이유·같은 이중 방어
 		_tick_fishing(delta)
 	elif not _sleeping and _can_cast() and Input.is_action_just_pressed("use_tool"):
 		_start_fishing(_cast_water_tile(_target))
@@ -20158,10 +20234,15 @@ func _tick_cutscene(delta: float) -> void:
 
 # 러너 상태 → 화면. 네 동사가 정확히 네 줄로 내려앉는다(그 이상이 없다는 것이 이 함수의 요점).
 func _apply_cutscene_frame() -> void:
-	fade.modulate.a = cutscene.fade_alpha()                       # ③ 페이드
+	# ★[폴리시 R3] **취침 연출 중엔 페이드·시계의 주인이 취침 쪽이다.** 23시 이후 시작한 컷신은
+	#   재생 중 24:00을 넘기는데(러너 clock_on 기본값 true), 그때 이 두 줄이 매 프레임 다시 쓰이면
+	#   `_do_sleep`이 세운 `clock.running=false`가 프레임마다 무효화되고 취침 암전도 컷신 알파에
+	#   덮여 안 보인다 — 날짜 전환·아침 정산 전량이 컷신 화면 뒤에서 무음으로 지나갔다.
+	if not _sleeping:
+		fade.modulate.a = cutscene.fade_alpha()                   # ③ 페이드
+		clock.running = _cutscene_clock_prev and cutscene.clock_running()   # ④ 시계 정지
 	if _cam != null:
 		_cam.offset = cutscene.camera_offset()                    # ② 카메라 팬
-	clock.running = _cutscene_clock_prev and cutscene.clock_running()   # ④ 시계 정지
 	# ★[S9b-T8 / ADR-0068 결정 9] ⑤ 풀스크린 일러스트 — 러너는 id와 불투명도만 알고, 파일 조회·
 	#   placeholder·픽셀은 여기서부터 아래(`_draw_illust`)가 진다. **재생이 끝나도 안 지운다**:
 	#   S등급은 그림 위에서 대사가 도는 형식이라 러너보다 오래 살아야 한다(_end_cutscene 참조).
@@ -20179,10 +20260,14 @@ func _apply_cutscene_frame() -> void:
 # 예약된 대화가 있으면 그 자리에서 연다. 대화가 없으면 여기서 이동 잠금을 푼다.
 func _end_cutscene() -> void:
 	cutscene = null
-	fade.modulate.a = 0.0
 	if _cam != null:
 		_cam.offset = Vector2.ZERO
-	clock.running = _cutscene_clock_prev
+	# ★[폴리시 R3] 취침 연출이 돌고 있으면 화면·시계를 원복하지 않는다(`_apply_cutscene_frame`의
+	#   그 규율 1:1) — 여기서 알파를 0으로 되돌리면 취침 암전 한가운데서 세계가 한 번 드러난다.
+	#   취침 트윈이 자기 페이드를 끝까지 몰고, 시계는 `clock.sleep`이 아침에 다시 흐르게 한다.
+	if not _sleeping:
+		fade.modulate.a = 0.0
+		clock.running = _cutscene_clock_prev
 	for id in _cutscene_npc_prev:
 		var r := _resident(String(id))
 		if r != null and r.node != null:
@@ -20218,7 +20303,8 @@ func _end_cutscene() -> void:
 	_cutscene_speaker = ""
 	_cutscene_lines = PackedStringArray()
 	if lines.is_empty():
-		player.set_physics_process(true)
+		# ★[폴리시 R3] 취침 연출 중이면 잠금을 그대로 둔다 — `_on_sleep_done`이 눈뜨는 프레임에 푼다.
+		player.set_physics_process(not _sleeping)
 		return
 	# 대화로 합류 — 이동 잠금은 그대로 이어지고 _on_dialogue_finished가 푼다(현행 대화 플로우).
 	_talking_to = speaker
@@ -21077,6 +21163,14 @@ func _fire_pet_event() -> void:
 	_pet_event_armed = false
 	if _run_over or cutscene != null or pet == null or clock == null:
 		return                          # 마무리 화면·재생 중이면 접는다(다음 진입에 다시 예약된다)
+	# ★[폴리시 R3] **무대 검증** — 예약이 `_rebuild_region`에 얹혀 있어 워프가 아닌 재빌드로도 선다
+	#   (부팅 `_refresh_season_terrain(true)`, 절기 전환 아침의 같은 호출). 그 예약엔 짝이 되는
+	#   소비가 없어 스테일로 남았다가, *아무 워프나* 끝나는 순간 엉뚱한 무대에서 터졌다 — 만물상
+	#   실내나 황천해 바닷가에서 "길목에 삽살개…"가 뜨고 1회성 입양이 확정되는 형태다. 소비 조건을
+	#   무대에 못 박으면(나루 마을 야외) 예약이 어디서 서든 장면은 항상 맞는 자리에서만 선다.
+	#   여기서 접혀도 손실 0이다: 다음 마을 진입이 다시 예약한다(위 두 가드와 같은 계약).
+	if _region != RegionCatalog.NARU_VILLAGE or _indoor != "":
+		return
 	if not pet.adopt(clock.day):
 		return
 	audio.sfx("ui")
@@ -21706,6 +21800,20 @@ func _home_occupied_tiles() -> Dictionary:
 #   순수 빈 GROUND(밭 SOIL·길·벽·물·절벽 아님)이고, 프롭 미점유(건물·나무·바위·debris·꽃·울타리 등)이며,
 #   밭(경작·심음)도 아니고, 개간(치운 debris) 자리도 아닌 타일만 모은다 = 아직 안 다듬은 잔디 여백.
 #   → 밭·작물·구조물·이미 연 땅은 절대 재점령 안 됨(진보·cozy 성역). HOME 전용.
+# ★[폴리시 R3] 절기 대량 재스폰 집행 — 날이 바뀌는 아침(집에 있을 때)과 밀린 표를 소비하는
+#   귀가 프레임이 **같은 한 함수**를 부른다(두 자리에 같은 코드를 두면 언젠가 갈라진다).
+func _run_season_respawn(d: int) -> void:
+	if reclaim == null:
+		return
+	var respawn := reclaim.season_respawn(_encroach_candidates(), d, false)
+	var r_ember: Array = respawn["ember"]
+	var r_stump: Array = respawn["stump"]
+	var r_weeds: Array = respawn["weeds"]
+	var solid_n: int = r_ember.size() + r_stump.size()
+	var weed_n: int = r_weeds.size()
+	if weed_n + solid_n > 0:
+		_notice("절기가 바뀌며 묵힌 땅이 거칠어졌다 — 잡초 %d·돌과 고목 %d" % [weed_n, solid_n])
+
 func _encroach_candidates() -> Array:
 	var out: Array = []
 	if _region != RegionCatalog.HOME or reclaim == null:
