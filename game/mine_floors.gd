@@ -576,6 +576,12 @@ static func ladder_chance(stones_left: int, mobs_cleared: bool = false, luck_bon
 	var c := LADDER_BASE + 1.0 / float(maxi(stones_left, 0) + 1)
 	if mobs_cleared:
 		c += LADDER_MOBS_CLEARED
+	# ★[폴리시 R3] 운 가산은 **안전판을 깰 수 없다**. 운을 얹기 전에 이미 1.0을 넘겼다면(= 마지막 돌,
+	#   1/(0+1)) 그대로 확정이다. 종전엔 `c += luck_bonus` 뒤 상한 클램프만 있어, 대흉 날(−0.10)
+	#   마지막 돌의 확률이 0.92로 내려갔다 — 확정 하강 사다리가 없는 나락 깊이에서 그 8%가 곧
+	#   "하강 수단이 하나도 없는 층"이라(narak_floors.roll_ladder 머리말이 명시한 불변식) 런이 막혔다.
+	if c >= 1.0:
+		return 1.0
 	c += luck_bonus
 	return clampf(c, 0.0, 1.0)
 
@@ -677,9 +683,13 @@ func mark_picked(floor_no: int, tile: Vector2i) -> void:
 	changed.emit()
 
 # 이 층에 **아직 안 주운** 반짝이 목록([{"id","tile"}] — 배치 − 그날 주운 것). `rocks_left` 동형.
-func shimmers_left(day: int, floor_no: int) -> Array:
+# ★[폴리시 R3] `mob_scale`을 받는다 — 반짝이(⑩)는 몹 롤(⑧) **뒤**라 배수가 1.0이 아니면 배치가
+#   함께 갈린다(머리말 "배수가 1.0이 아니면 … ⑩ 반짝이 배치가 함께 흔들린다"). 라이브 배치는
+#   `Weather.mob_spawn_scale`을 넘겨 굴리므로, 이 조회로 그 층을 되물으려면 **같은 배수**를 줘야
+#   같은 답이 나온다(안 주면 혼불 바람 날 라이브와 어긋난 목록을 돌려준다).
+func shimmers_left(day: int, floor_no: int, mob_scale: float = 1.0) -> Array:
 	var out: Array = []
-	var layout := generate(day, floor_no)
+	var layout := generate(day, floor_no, mob_scale)
 	if layout.is_empty():
 		return out
 	for e: Dictionary in layout.get("shimmers", []):
@@ -688,10 +698,11 @@ func shimmers_left(day: int, floor_no: int) -> Array:
 	return out
 
 # 이 칸의 반짝이 종("" = 없거나 이미 주웠다). 라이브 경로는 main이 층 배치 캐시에서 직접 읽는다.
-func shimmer_at(day: int, floor_no: int, tile: Vector2i) -> String:
+# ★[폴리시 R3] `mob_scale`은 `shimmers_left`와 같은 이유·같은 계약이다(위 머리말 참조).
+func shimmer_at(day: int, floor_no: int, tile: Vector2i, mob_scale: float = 1.0) -> String:
 	if is_picked(floor_no, tile):
 		return ""
-	var layout := generate(day, floor_no)
+	var layout := generate(day, floor_no, mob_scale)
 	if layout.is_empty():
 		return ""
 	for e: Dictionary in layout.get("shimmers", []):

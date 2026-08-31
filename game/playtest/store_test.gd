@@ -173,7 +173,11 @@ func _initialize() -> void:
 	m.neo_affinity.stage = 0    # ★[S8-T5] 하트 = stage — ④의 ♡5를 되돌린다
 	m.wallet.gold = 1000
 	var seeds_b: int = m.inventory.seed_count(crop)
-	m._on_frame_buy(true)   # Shift 대량(STORE_BULK개)
+	# ★[폴리시 R3] 종전엔 `m._on_frame_buy(true)`를 불렀는데 그 핸들러의 짝인 `buy_pressed` 시그널은
+	#   **저장소 어디서도 emit되지 않는 죽은 시그널**이었다 — 즉 이 단언은 라이브에 없는 경로를
+	#   지키고 있었다(핸들러·시그널 모두 제거됨). 플레이어가 실제로 밟는 경로인 행별 구매의
+	#   bulk 인자로 옮긴다(같은 "Shift 대량" 계약을 살아 있는 문법으로 검증).
+	m._on_frame_buy_seed(crop, true)   # Shift 대량(STORE_BULK개) — 행별 구매의 라이브 경로
 	_check("⑧a Shift 대량 구매 = STORE_BULK개", m.inventory.seed_count(crop) == seeds_b + m.STORE_BULK)
 	_check("⑧a2 대량 구매 골드 차감 = 정가×묶음", m.wallet.gold == 1000 - base * m.STORE_BULK)
 	_check("⑧b 만물상 카탈로그 = store 종류 불변", m._buildings["만물상"]["kind"] == "store")

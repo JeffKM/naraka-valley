@@ -234,17 +234,28 @@ static func remaining_books(owned_books: Dictionary) -> Array:
 
 # 폴백 = 일반 풀의 **정가 상위 N**에서 한 점(로스터 파생 — 고가 목록 하드코딩 0).
 # general_rows와 같은 이유로 sort_custom을 안 쓰고 부분 선택으로 상위 N만 집는다(동률은 id 사전순).
+#
+# ★[폴리시 R3] **오늘 일반 10슬롯에 이미 선 종은 후보에서 뺀다.** 안 빼면 같은 buy_id가 두 행에
+#   서고, 두 행의 값은 `priced`의 jitter 시드가 slot별이라 서로 다르다 — 그런데 `price_for`는
+#   buy_id로 **첫 매치**를 돌려주고 일반 슬롯(0..9)이 희귀 슬롯(11)보다 앞이라, 귀물 좌판 행을
+#   눌러도 일반 슬롯 값이 청구된다(프레임은 slot을 안 실어 보내 어느 행인지 구분할 수단조차 없다).
+#   머리말이 "표시가와 결제가가 각자 계산되면 언젠가 어긋난다"고 못 박은 그 상황이라, 값 조회를
+#   고치는 대신 **중복 자체를 구조로 없앤다**(id가 매대에서 유일하면 id 키 조회가 다시 안전해진다).
+#   day 순수 함수라 결정성도 그대로다 — 제외된 자리는 다음 고가 종이 올라와 후보 수가 안 준다.
 static func _fallback_row(day: int) -> Dictionary:
 	var pool := stock_pool()
 	if pool.is_empty():
 		return {}
+	var listed: Dictionary = {}
+	for r in general_rows(day):
+		listed[str((r as Dictionary)["buy_id"])] = true
 	var top := mini(RARE_FALLBACK_TOP, pool.size())
 	var taken: Dictionary = {}
 	var picks: Array = []
 	for _s in top:
 		var best := -1
 		for i in pool.size():
-			if taken.has(i):
+			if taken.has(i) or listed.has(str((pool[i] as Dictionary)["buy_id"])):
 				continue
 			if best < 0:
 				best = i
@@ -255,8 +266,12 @@ static func _fallback_row(day: int) -> Dictionary:
 			var pb := int(cur["base"])
 			if pc > pb or (pc == pb and str(cand["buy_id"]) < str(cur["buy_id"])):
 				best = i
+		if best < 0:
+			break                      # 후보 고갈(풀이 일반 슬롯보다 작은 극단) — 음수 인덱스 방어
 		taken[best] = true
 		picks.append(best)
+	if picks.is_empty():
+		return {}                      # 오늘 세울 수 있는 폴백이 없다 = 귀물 좌판이 비는 날
 	var src: Dictionary = pool[int(picks[_roll("peddler:fallback", day, 0, picks.size())])]
 	var row := src.duplicate()
 	row["slot"] = SLOT_RARE

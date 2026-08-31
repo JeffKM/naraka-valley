@@ -142,21 +142,31 @@ func remove(region: String, t: Vector2i) -> Dictionary:
 	if not has_at(region, t) or is_ready(region, t):
 		return {}
 	var gem := gem_at(region, t)
+	# ★[폴리시 R3] 남은 일수도 함께 돌려준다 — 호출부(main)의 **회수 실패 롤백**이 이 값을 필요로
+	#   한다. 없으면 load_gem이 만기값으로 되살려 "아무 자원도 안 쓴 실패한 입력"이 며칠치 진행을
+	#   조용히 태운다(가방이 가득 찬 상태의 [F] 한 번 = 7일 소실). 반환 계약은 가법이라 기존
+	#   호출부(`res["gem"]`)는 한 줄도 안 바뀐다.
+	var left := days_left(region, t)
 	_units[region].erase(t)
 	if _units[region].is_empty():
 		_units.erase(region)              # 빈 구역 키는 남기지 않는다(세이브 군더더기 0)
 	changed.emit()
-	return {"gem": gem}
+	return {"gem": gem, "left": left}
 
 # ── 투입 ────────────────────────────────────────────────────────────────────
 # 보석을 넣는다(아이템 1개 차감은 호출 측). 빈 기계 + 복제 가능한 보석일 때만 true.
 # ⚠️ 오색혼옥은 여기서 막힌다(can_duplicate false) — 표를 따로 안 보고 days_for 하나로 갈린다.
-func load_gem(region: String, t: Vector2i, gem_id: String) -> bool:
+# ★[폴리시 R3] `left_override`(>0) = **진행 복원용** 인자다. 기본값 −1이면 종전 그대로 만기값으로
+#   시작하므로 3인자 호출부는 거동이 한 줄도 안 바뀐다. 회수 실패 롤백만 이 인자를 써서 걷기 직전의
+#   잔여일을 그대로 되살린다(만기표를 넘길 수 없게 상한도 함께 문다 — 롤백이 진행을 *늘리는* 구멍 0).
+func load_gem(region: String, t: Vector2i, gem_id: String, left_override: int = -1) -> bool:
 	if not is_idle(region, t):
 		return false
 	var days := days_for(gem_id)
 	if days <= 0:
 		return false
+	if left_override > 0:
+		days = mini(left_override, days)
 	_units[region][t] = {"gem": gem_id, "left": days}
 	changed.emit()
 	return true
