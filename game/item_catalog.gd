@@ -491,7 +491,16 @@ const MULBINEUL_JOGAE := "mulbineul_jogae"      # 물비늘조개
 const NEOK_DALGI := "neok_dalgi"                # 넋딸기(피안절 15~18일 — salmonberry 대응)
 const JAETBIT_BOKBUNJA := "jaetbit_bokbunja"    # 잿빛복분자(망연절 8~11일 — blackberry 대응)
 const FORAGEABLES := {                   # 채집물 id → {name_ko, price(기준 판매가)}
-	SPIRIT_FLOWER: {"name_ko": "피안화", "price": 30},
+	# ★[폴리시 R4] 표시명을 "피안화" → "야생 피안화"로 가른다. `spirit_flower`(안식 꽃 패치 채집물)와
+	#   `CropCatalog.PIANHWA`(밭에서 기르는 저승 작물)는 **id가 다른 별개 아이템인데 같은 이름**이라,
+	#   화면에 그 이름밖에 안 뜨는 자리에서 플레이어가 구분할 단서가 0이었다. 실제 실패 둘:
+	#   ㉠ 게시판 의뢰 풀은 `CropCatalog.ids() + FORAGEABLES.keys()`라 둘 다 후보인데 요약은
+	#      `ItemCatalog.name_of`뿐 — "피안화 ×3" 의뢰를 밭 피안화 99개를 들고도 못 낸다.
+	#   ㉡ 선물표(gift_prefs)엔 작물 쪽만 등재 — 같은 이름의 꽃을 멜에게 주면 러브 40이 아니라
+	#      중립 15, 무골에겐 헤이트 −20이 아니라 +15가 들어간다.
+	#   ⚠️ 잠정 — owner 큐: "둘을 한 아이템으로 합친다"는 더 깊은 선택지는 가격(30 vs 60)·도감 칸·
+	#      선물표가 걸린 **눈금 결정**이라 여기서 하지 않는다. 지금 닫는 것은 "이름이 거짓말을 한다"뿐.
+	SPIRIT_FLOWER: {"name_ko": "야생 피안화", "price": 30},
 	# 저승 숲 일반 12
 	NEOK_GOSARI: {"name_ko": "넋고사리", "price": 35},
 	JAETBIT_NAENGI: {"name_ko": "잿빛냉이", "price": 30},
