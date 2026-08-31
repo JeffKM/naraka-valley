@@ -109,13 +109,14 @@ func total() -> int:
 func is_empty() -> bool:
 	return pending.is_empty()
 
-# 지금 정산하면 받을 골드(미리보기). 각 (id,quality)분 개수 × 품질 배수 판매가(ItemCatalog.price_of).
+# 지금 정산하면 받을 골드(미리보기). 각 (id,quality)분 개수 × 품질 배수 출하가(ItemCatalog.ship_price_of
+# — 카페 메뉴만 즉석 서빙 프리미엄을 뺀 원물가로 갈리고 나머지는 price_of 그대로다).
 func preview_gold() -> int:
 	var total_gold := 0
 	for id in pending:
 		var by_q: Dictionary = pending[id]
 		for q in by_q:
-			total_gold += int(by_q[q]) * ItemCatalog.price_of(id, int(q))
+			total_gold += int(by_q[q]) * ItemCatalog.ship_price_of(id, int(q))
 	return total_gold
 
 # 익일 정산: 대기분을 골드로 환산해 그 금액을 돌려주고 상자를 비운다(day_advanced에서 호출).

@@ -123,6 +123,48 @@ func _initialize() -> void:
 	_check("④a 정산 = wallet에 판매가 합 입금", m.wallet.gold == gold_before + expect_gold)
 	_check("④b 정산 후 출하함 비워짐", m.ship_bin.is_empty())
 
+	# ── ⑥ ★[S10 폴리시] 메뉴 출하가 = 시그니처 **원물가**(즉석 서빙 프리미엄 배제) ──
+	# 주방요괴 곁들이(_make_side_dish)가 곳간 원물 1개를 **무비용으로** 메뉴 1개로 바꾸므로,
+	# 출하함이 메뉴가(원물가 ×2.5)를 그대로 쳐주면 "곳간 → 곁들이 → 출하"가 원물 출하의 2.5배가
+	# 되는 상시·무제한 증식이 된다(카페 서빙은 손님·좌석·절기·메뉴판 슬롯으로 율속되는데 이 사슬은
+	# 율속이 하나도 없다). 채널은 그대로 두고(도감 요리 칸이 출하 이력으로만 채워진다) 값만 맞춘다.
+	print("── ⑥ 메뉴 출하가(폴리시) ──")
+	var tart: String = MenuCatalog.BULSAGWA_TART
+	var raw_sig: String = MenuCatalog.signature_of(tart)
+	var raw_price: int = ItemCatalog.price_of(raw_sig)
+	_check("⑥a 카페 판매가는 여전히 원물가 ×%s(서빙 프리미엄 불변)" % str(MenuCatalog.PRICE_MULT),
+		ItemCatalog.price_of(tart) == int(round(raw_price * MenuCatalog.PRICE_MULT))
+		and ItemCatalog.price_of(tart) > raw_price)
+	_check("⑥b 출하 정산가 = 원물가 %d냥 그대로(프리미엄 0)" % raw_price,
+		ItemCatalog.ship_price_of(tart) == raw_price and raw_price > 0)
+	_check("⑥c 메뉴 아닌 품목은 출하가 = 판매가(등급 배수까지 회귀 0)",
+		ItemCatalog.ship_price_of(crop) == ItemCatalog.price_of(crop)
+		and ItemCatalog.ship_price_of(crop, ItemCatalog.Q_GOLD)
+			== ItemCatalog.price_of(crop, ItemCatalog.Q_GOLD))
+	# 총액 대조 — 같은 원물 N개를 raw로 내나 곁들이로 구워 내나 정산액이 같다(차익 0).
+	var bin2 := ShippingBin.new()
+	var n_probe := 30
+	bin2.add(raw_sig, n_probe)
+	var raw_total: int = bin2.preview_gold()
+	bin2.settle()
+	bin2.add(tart, n_probe)
+	var cooked_total: int = bin2.preview_gold()
+	_check("⑥d 원물 %d개 출하 총액(%d냥) == 같은 수의 곁들이 출하 총액(무비용 증식 0)"
+			% [n_probe, n_probe * raw_price],
+		raw_total == cooked_total and raw_total == n_probe * raw_price)
+	bin2.free()
+	# 라이브 — 곁들이는 여전히 출하함에 **들어간다**(도감 요리 칸 경로 보존). 값만 원물가다.
+	m.ship_bin.pending.clear()
+	m.inventory.add_item(tart, 2)
+	var tslot := _slot_of(m, tart)
+	_check("⑥pre 곁들이 슬롯 확보", tslot >= 0)
+	m._on_frame_deposit(tslot)
+	_check("⑥e 곁들이 출하 가능(거절 아님 — 도감 채널 유지)", m.ship_bin.count_of(tart) == 2)
+	var gold_pre6: int = m.wallet.gold
+	m._on_day_advanced(m.clock.day)
+	_check("⑥f 정산액 = 원물가 ×2 (%d냥 — ×2.5 프리미엄이 안 붙는다)" % (2 * raw_price),
+		m.wallet.gold == gold_pre6 + 2 * raw_price and m.ship_bin.is_empty())
+
 	# ── ⑤ 세이브 라운드트립 ──
 	print("── ⑤ 세이브 라운드트립 ──")
 	m.ship_bin.pending.clear()

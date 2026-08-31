@@ -1018,6 +1018,21 @@ static func price_of(id: String, quality: int = Q_NORMAL) -> int:
 		return int(AnimalCatalog.product_sell(id) * quality_mult(quality))
 	return 0
 
+# ★[S10 폴리시] **출하 정산가** — 무인 출하함(ShippingBin)이 쓰는 값. 메뉴를 뺀 전 품목은 price_of
+# 그대로다. 갈리는 건 카페 메뉴 하나뿐이고, 이유는 배수의 정의에 있다: 융합 메뉴가의 ×2.5는
+# [ADR-0064] 결정 4가 못 박은 **즉석 서빙 프리미엄**이다 — 손님 앞에서 내는 값이지 도매값이 아니다.
+# 출하함이 그 프리미엄을 쳐주면 "곳간 재료 → 곁들이 한 접시 → 출하"가 원물 출하의 2.5배가 되어,
+# 손님·좌석·절기·메뉴판 슬롯으로 율속되는 카페 영업이 아무 율속 없는 사슬에 지배당한다
+# (CONTEXT [곳간] "팔 것인가 쟁일 것인가"의 선택이 죽는다). 그래서 출하함은 **시그니처 원물의
+# 값으로** 산다 — 조리해서 넣어도 원물 그대로 넣은 것과 총액이 같아 차익이 0이 된다.
+# ★ 도감 등재 경로는 건드리지 않는다(메뉴는 여전히 출하대에 들어간다 — [ADR-0069] 결정 9의
+#   요리 칸이 출하 이력으로만 채워지므로, 값만 깎고 채널은 그대로 둔다).
+static func ship_price_of(id: String, quality: int = Q_NORMAL) -> int:
+	if _is_menu(id):
+		# 메뉴는 품질 무차원이라 등급 인자를 흘리지 않는다(원물 등급은 곳간이 이미 지웠다).
+		return price_of(MenuCatalog.signature_of(id), Q_NORMAL)   # 기본 메뉴는 시그니처 "" → 0(비매)
+	return price_of(id, quality)
+
 # ★[S6-T1 / ADR-0064 결정 11 ②] 그 카테고리에 속한 전 아이템 id(선언 순). 곳간·메뉴 UI가 "무엇을
 # 담을 수 있나 / 무엇을 파나"를 열거할 때 쓴다 — 지금까지는 그런 창구가 없어 호출 측이 로스터
 # dict를 하드코딩 목록으로 다시 세워야 했다(FORAGEABLES를 밖에서 순회하던 그 패턴의 해소).

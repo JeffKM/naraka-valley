@@ -379,6 +379,22 @@ func _run_checks() -> void:
 	_check("④d 정표를 쥐면 의뢰가 다시 안 뜬다(세상에 하나뿐 — 열쇠·부적과 같은 결)",
 		not m._myeongbu_quest_open())
 	_expand_home(m)
+	# ★ 연애 슬롯 배타성 — `_resolve_confession`이 지키는 그 불변식이 앵커 청혼 경로에도 서는가.
+	#   앵커는 고백 문법 밖이라 청혼이 곧 고백인데, 여기서 슬롯을 말없이 덮어쓰면 기존 연인이
+	#   알림 0으로 탈락한 뒤 **영구히 돌아올 수 없다**(진급은 단조 · 제안은 ♡4에서만 선다 ·
+	#   `reset_hearts`는 배우자 이혼 경로 전용). 거절은 다른 가지와 같이 무소모여야 한다.
+	var r_miho: Resident = m._resident("miho")
+	_set_heart(r_miho, Affinity.MAX_HEARTS)
+	m._romance_partner = "miho"
+	_hold(m, ItemCatalog.MYEONGBU_CHARM)
+	m._try_propose_okja()
+	_check("④e1 ★곁에 연인이 있으면 앵커 청혼도 거절이다(슬롯 배타성 — 고백 경로와 같은 규율)",
+		m._romance_partner == "miho" and m._wedding_day == 0 and m._spouse_id == "")
+	_check("④e2 ★거절은 무소모·무벌칙이다(부적 보존 · 기존 연인의 칸·점수 불변)",
+		m.inventory.has_item(ItemCatalog.MYEONGBU_CHARM)
+		and r_miho.affinity.hearts() == Affinity.MAX_HEARTS
+		and r_miho.affinity.points == Affinity.MAX_POINTS)
+	m._romance_partner = ""   # 곁을 정리한 뒤에야(플레이어가 직접 할 일) 청혼이 성립한다
 	_hold(m, ItemCatalog.MYEONGBU_CHARM)
 	m._try_propose_okja()
 	_check("④e ★네 항이 다 차면 혼례가 정해진다(척추 B6 · deed ♡max · 정표 특별판 · 배우자 방)",
@@ -392,6 +408,16 @@ func _run_checks() -> void:
 		m._spouse_id == "okja" and m._spine_b7_armed and not m._spine_bit_seen(m.SPINE_B7))
 	_check("④h 앵커와의 혼인은 트랙을 안 닫는다(잠금은 *다른* 배우자에 대한 것이다)",
 		m._okja_track_open() and r_okja.affinity.hearts() == Affinity.MAX_HEARTS)
+	# ★ 예약이 **한 번 접혀도** 사슬이 끊기지 않는가. `_spine_b7_armed`를 세우는 곳은 혼례 아침
+	#   하나뿐이고 그 함수는 첫 줄에서 `_wedding_day`를 지워 두 번 안 돈다 — 그래서 `_fire_spine_b7`이
+	#   재생 중첩·러너 거절로 한 번이라도 접히면 엔딩 연출이 통째로 사라졌다. 재개 훅이 그 자리를
+	#   원장(배우자 = 앵커 · B6 기성립 · B7 미기록)에서 다시 잇는다.
+	m._spine_b7_armed = false                   # = `_fire_spine_b7`이 조기 반환으로 예약만 태운 상태
+	_check("④h1 pre 예약이 접혔다(옛 코드라면 여기서 엔딩이 영구 소실된다)",
+		not m._spine_b7_armed and not m._spine_bit_seen(m.SPINE_B7) and m._spouse_id == "okja")
+	m._maybe_resume_spine()
+	_check("④h2 ★재개 훅이 해방을 되찾는다(예약 재무장 + 그 자리에서 재생)",
+		m._spine_bit_seen(m.SPINE_B7) and m.cutscene != null and not m._spine_b7_armed)
 	m._fire_spine_b7()
 	_check("④i ★해방 비트가 서고 S등급 컷신이 돈다", m._spine_bit_seen(m.SPINE_B7)
 		and m.cutscene != null and not m._spine_b7_armed)

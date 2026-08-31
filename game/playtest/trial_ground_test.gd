@@ -294,6 +294,13 @@ func _initialize() -> void:
 		m.trial != null and m.mastery != null and m.trial.tokens == 0 and not m.trial.is_active())
 	_check("⑥b ★게이트 전 — 문이 닫혀 있고 방은 **카탈로그에 등록조차 안 된다**(잠긴 외관)",
 		not m.trial_ground_open() and not m._buildings.has("시련장"))
+	# ★[폴리시] 게이트가 열리는 프레임은 **건물 카탈로그를 통째로 다시 세운다** — 그 재구성이 집
+	#   실내 카메라의 안방 확장분을 날려 먹던 결함의 자리다(잘린 안방·화면 밖으로 걸어 나감). 먼저
+	#   안방을 확장해 두고, 아래 ⑥d에서 문이 열린 *뒤*에 카메라가 살아남는지 잰다.
+	m.carpenter.load_save({"done": [Carpenter.PROJ_MASTER_ROOM]})
+	m._refresh_home_expansion()
+	_check("⑥b-1 전제 — 안방 확장 완공 · 집 카메라가 확장 rect",
+		m._home_expanded() and m._buildings["집"]["cam"] == m.HOME_HOUSE_CAM_RECT_EXPANDED)
 	_fill_fireflies(m, FireflySouls.GATE_COUNT - 1)
 	m._refresh_trial_gate()
 	_check("⑥c 문턱 −1(반딧넋 %d) — 여전히 닫힘(경계 단언)" % (FireflySouls.GATE_COUNT - 1),
@@ -302,6 +309,20 @@ func _initialize() -> void:
 	m._refresh_trial_gate()
 	_check("⑥d 문턱 도달(반딧넋 %d) — 열리고 방이 카탈로그에 선다" % FireflySouls.GATE_COUNT,
 		m.trial_ground_open() and m._buildings.has("시련장"))
+	# ★[폴리시] 문이 열려도 **집 카메라의 안방 확장분이 살아 있다** — 카탈로그는 이제 상수 대신
+	#   `home_house_cam_rect()`를 파생해 담으므로, 어느 재구성 경로를 타든 확장분이 안 날아간다.
+	#   방 rect와 짝이 맞는지도 함께 본다(카메라만 좁으면 안방 동쪽이 화면 밖으로 잘린다).
+	_check("⑥d-1 ★게이트 갱신이 집 실내 카메라의 안방 확장분을 안 지운다",
+		m._buildings["집"]["cam"] == m.HOME_HOUSE_CAM_RECT_EXPANDED)
+	_check("⑥d-2 카메라가 확장 방 rect를 통째로 담는다(잘린 안방 0)",
+		(m._buildings["집"]["cam"] as Rect2i).encloses(m.home_house_rect()))
+	# 미확장 세이브에선 같은 경로가 원본 rect를 낸다(파생이 확장을 *발명*하지 않는다는 대조군).
+	m.carpenter.load_save({"done": []})
+	m._build_building_catalog()
+	_check("⑥d-3 대조군 — 미확장이면 카탈로그가 원본 카메라 rect를 낸다",
+		not m._home_expanded() and m._buildings["집"]["cam"] == m.HOME_HOUSE_CAM_RECT)
+	m.carpenter.load_save({"done": [Carpenter.PROJ_MASTER_ROOM]})
+	m._refresh_home_expansion()
 	var b: Dictionary = m._buildings["시련장"]
 	_check("⑥e 방 레코드 — 갱도 구역 · kind=trial · 2칸 문(외관·실내 모두)",
 		String(b["region"]) == RegionCatalog.EOPHWA_MINE and String(b["kind"]) == "trial"

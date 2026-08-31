@@ -104,6 +104,25 @@ func _part_b() -> void:
 	_check("① 구매 2개 성공", bought == 2)
 	_check("① 인벤토리 적재(2)", m.inventory.count_of(sp) == 2)
 	_check("① 골드 차감(−120)", m.wallet.gold == g0 - 120)
+	# ★[S10 폴리시] 만재 구매 = **적재 먼저·결제 나중**(냥이 안 나간다 — 종전엔 spend가 먼저
+	# 성공하고 add_item 실패를 버려 냥만 증발했다). 포화를 만들려면 기존 스프링클러 스택부터
+	# 지워야 한다 — 스택이 남으면 빈 칸 없이도 합쳐져 들어간다.
+	var held: int = m.inventory.count_of(sp)
+	m.inventory.remove_item(sp, held)
+	var filled: Array = []
+	for i in range(m.inventory.slots.size()):
+		if m.inventory.slots[i] == null:
+			m.inventory.slots[i] = {"id": ItemCatalog.STONE, "count": 1, "quality": 0}
+			filled.append(i)
+	var g_full: int = m.wallet.gold
+	var got_full: int = m.buy_sprinkler(2)
+	_check("①만재 구매 = 0개 반환 · 골드 %d 그대로 · 미보유" % g_full,
+		got_full == 0 and m.wallet.gold == g_full and m.inventory.count_of(sp) == 0)
+	for i in filled:
+		m.inventory.slots[i] = null       # 포화 원복(아래 절은 여유 있는 백팩을 전제)
+	m.inventory.add_item(sp, held)        # 지웠던 스택 원복
+	_check("①만재 원복 확인(스프링클러 %d개 · 골드 불변)" % held,
+		m.inventory.count_of(sp) == held and m.wallet.gold == g_full)
 	var a1 := _find_placeable(m)
 	_check("①pre 설치 가능한 빈 지면 존재", a1.x >= 0)
 	_select(m, sp)

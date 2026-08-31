@@ -110,6 +110,17 @@ func _run_checks() -> void:
 		not GiftPrefs.giftable(ItemCatalog.HOE) and not GiftPrefs.giftable(ItemCatalog.SWORD_RUSTY)
 		and not GiftPrefs.giftable(ItemCatalog.ROD_T1) and not GiftPrefs.giftable(ItemCatalog.TACKLE_CORK))
 	_check("①h 나락 열쇠는 선물 불가(진행 봉쇄 방지)", not GiftPrefs.giftable(ItemCatalog.NARAK_KEY))
+	# ★[S10 폴리시] 레어크로우 8종 전부 선물 불가 — 창구가 1회 한정이라 건네면 완주가 영영 막힌다
+	#   (버리기 금지와 같은 근거). **분모 하드코딩 없이 로스터를 순회**해 새 종이 늘어도 따라온다.
+	var giftable_crows: Array = []
+	for cid in ItemCatalog.RARECROWS:
+		if GiftPrefs.giftable(String(cid)):
+			giftable_crows.append(String(cid))
+	_check("①h2 레어크로우 %d종 전부 선물 불가(수집 완주 보호)" % ItemCatalog.RARECROWS.size(),
+		ItemCatalog.RARECROWS.size() > 0 and giftable_crows.is_empty())
+	_check("①h3 그래도 같은 CAT_MATERIAL 자재는 건넬 수 있다(레어크로우만 갈린다)",
+		ItemCatalog.category_of(ItemCatalog.RARECROW_1) == ItemCatalog.CAT_MATERIAL
+		and GiftPrefs.giftable(ItemCatalog.NEOKGARU))
 	_check("①i 빈손·없는 id도 불가", not GiftPrefs.giftable("") and not GiftPrefs.giftable("없는아이템"))
 	_check("①j 싫어하는 물건도 *건네지긴* 한다(혐오 = 반려가 아니라 음수)",
 		GiftPrefs.giftable(ItemCatalog.ROTTEN_NET) and GiftPrefs.giftable(ItemCatalog.STONE))
@@ -242,6 +253,14 @@ func _run_checks() -> void:
 	var hoe_held: bool = m.inventory.selected_id() == ItemCatalog.HOE
 	_check("④l 도구는 반려하고 소모도 안 한다",
 		hoe_held and _give(m, "miho", 9) == 0 and m.inventory.count_of(ItemCatalog.HOE) >= 1)
+	# ★[S10 폴리시] 레어크로우도 같은 반려 — 종전엔 통과해 **DISLIKE(−10)로 소모**되어 그 종이
+	#   세상에서 사라졌다(재획득 창구가 전부 1회 한정). 아이템 잔존 + 호감도 불변을 함께 못 박는다.
+	var crow_held: bool = _hold(m, ItemCatalog.RARECROW_1)   # _hold가 1개를 넣고 그 슬롯을 든다
+	var crow_pts: int = r_miho.affinity.points
+	_check("④m 레어크로우는 반려 — 백팩에 그대로 남고 호감도도 안 깎인다",
+		crow_held and _give(m, "miho", 10) == 0
+		and m.inventory.count_of(ItemCatalog.RARECROW_1) == 1
+		and r_miho.affinity.points == crow_pts)
 
 	# ── ⑤ 음수(혐오) 채널 · 0 하한 ──
 	print("── ⑤ 음수 채널 ──")

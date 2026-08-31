@@ -232,7 +232,11 @@ const HEART_ROW_PITCH_BARE := 22.0
 const HEART_ROW_TOP := 56.0      # 패널 상단(+PAD)에서 첫 하트까지
 const HEART_EFFECT_DY := 28.0    # 행 상단 → 효과 줄 베이스라인(하트 16px 아래로 2px 띄운 자리)
 const HEART_HINT_H := 14.0       # 하단 스크롤 안내 한 줄 예약(행이 안내를 물지 않게)
-const HEART_BADGE_W := 74.0      # ★[S8-T1] 상태 배지 칩 폭(행 우측 — T5~T7이 값을 채운다)
+# ★[S8-T1] 상태 배지 칩 폭(행 우측 — T5~T7이 값을 채운다).
+# ★[폴리시 2026-08-15] 74 → 88. 가장 긴 배지 "혼례 준비 중"(11px 기준 67 + 좌우 여백 12 = 79)이
+#   74에 걸려 마지막 글자가 통째로 잘려 "혼례 준비"로 보였다(육안 덤프 frame_rel). 상한은 *가장 긴
+#   배지가 들어가는 값*이어야 한다 — 칩 폭 자체는 여전히 글자 폭에 맞춰 줄어든다(min).
+const HEART_BADGE_W := 88.0
 
 # main이 인벤토리·출하함·작물 아이콘을 주입하고 changed 구독을 건다. 전체 화면 앵커로 깔되
 # 처음엔 닫혀 있다(보이지 않음). 마우스 STOP라 열렸을 때 클릭을 잡아 월드로 새지 않게 한다(모달).
@@ -514,8 +518,10 @@ func _draw_trash_confirm(panel: Rect2) -> void:
 	var name := ""
 	if inv != null and _trash_pending < Inventory.SIZE:
 		name = ItemCatalog.name_of(inv.id_at(_trash_pending))
+	# ★[폴리시 2026-08-15] "괭이 을(를) 버릴까요?" → "괭이를 버릴까요?". 이름 뒤 군더더기 공백과
+	#   조사 병기를 걷어낸다(받침 판별은 HanjiUi.josa_eul 한 곳 — 다른 문구도 여기로 모으면 된다).
 	HanjiUi.draw_text(self, box.position + Vector2(24.0, 34.0),
-		"%s 을(를) 버릴까요?" % name, 14, HanjiUi.INK_LIGHT, w - 40.0)
+		"%s%s 버릴까요?" % [name, HanjiUi.josa_eul(name)], 14, HanjiUi.INK_LIGHT, w - 40.0)
 	_trash_yes_rect = Rect2(box.position.x + 24.0, box.end.y - 40.0, 96.0, 26.0)
 	_plate_btn(_trash_yes_rect)
 	draw_rect(_trash_yes_rect, Color(0.72, 0.40, 0.34), false, 1.0)   # 파괴적 액센트
@@ -839,10 +845,19 @@ func _draw_rel_tab(panel: Rect2, font: Font) -> void:
 	for row in rows:
 		var ry := float(row["y"])
 		var eff := String(row["effect"])
+		var badge := str(_heart_badges[int(row["i"])])
 		if eff != "":
-			HanjiUi.draw_text(self, Vector2(x, ry + HEART_EFFECT_DY), eff,
-				12, HanjiUi.INK_DIM, panel.size.x - PAD * 2.0 - 12.0 - HEART_BADGE_W)
-		_draw_heart_badge(font, panel, ry, str(_heart_badges[int(row["i"])]))
+			# ★[폴리시 2026-08-15] 두 가지를 고친다:
+			#   ㉠ 배지 자리는 **배지가 있는 행만** 뺀다(옛 코드는 늘 뺐다 — 배지 없는 행이 공연히
+			#      88px을 잃고 먼저 잘렸다).
+			#   ㉡ 그래도 넘치면 하드 컷이 아니라 **말줄임**이다(옛 코드는 max_w로 글자를 뚝 잘라
+			#      "…친해지면 단가가"처럼 문장이 소리 없이 끊겼다 — 잘렸다는 사실조차 안 보였다).
+			var eff_max := panel.size.x - PAD * 2.0 - 12.0
+			if badge != "":
+				eff_max -= HEART_BADGE_W + 6.0
+			HanjiUi.draw_text(self, Vector2(x, ry + HEART_EFFECT_DY),
+				HanjiUi.elide(eff, 12, eff_max), 12, HanjiUi.INK_DIM, eff_max)
+		_draw_heart_badge(font, panel, ry, badge)
 	# ★[S8-T1] 넘치면 스크롤 안내(숙련 탭·매대 리스트의 "▲▼" 결 — 어느 쪽이 잘렸는지 함께 보인다).
 	var hidden_below := _heart_count - _rel_scroll - rows.size()
 	if _rel_scroll > 0 or hidden_below > 0:
@@ -1035,17 +1050,23 @@ func _draw_options_tab(panel: Rect2, font: Font) -> void:
 # ★ Phase D 볼륨 한 줄(라벨 · [−] · 트랙바 · [+] · 백분율). [−]/[+] 버튼 Rect2 둘을 배열로 돌려준다.
 func _draw_volume_row(font: Font, x: float, yy: float, label: String, v01: float) -> Array:
 	HanjiUi.draw_text(self, Vector2(x, yy), label, 14, HanjiUi.INK_LIGHT)
-	var minus := Rect2(x + 92.0, yy - 14.0, 20.0, 18.0)
-	_plate_btn(minus)
-	HanjiUi.draw_text(self, minus.position + Vector2(7.0, 15.0), "-", 16, HanjiUi.INK_LIGHT)
+	# ★ 타이틀 설정 화면(title_screen._paint_vol_row)과 **같은 규격**으로 통일한다: 납작한 INSET
+	#   칸 + 테두리 한 줄 + 유니코드 −(U+2212)/+ 글리프. 옛 판은 두꺼운 한지 판 버튼(_plate_btn)
+	#   위에 ASCII 하이픈을 baseline 한 칸 아래로 얹어, 글리프가 판 테두리에 물리고 +의 아랫동이
+	#   판 밖으로 삐져나와 "아래 화살표"처럼 읽혔다(같은 설정을 두 화면이 다르게 그리던 것의 정리).
+	var minus := Rect2(x + 92.0, yy - 15.0, 22.0, 20.0)
+	draw_rect(minus, HanjiUi.INSET)
+	draw_rect(minus, HanjiUi.BORDER, false, 1.0)
+	HanjiUi.draw_text(self, Vector2(minus.position.x + 7.0, yy), "−", 18, HanjiUi.INK_LIGHT)
 	var track := Rect2(x + 118.0, yy - 12.0, 96.0, 12.0)
 	draw_rect(track, HanjiUi.INSET)
 	if v01 > 0.0:
 		draw_rect(Rect2(track.position, Vector2(track.size.x * clampf(v01, 0.0, 1.0), track.size.y)), HanjiUi.GOLD)
 	draw_rect(track, HanjiUi.BORDER, false, 1.0)
-	var plus := Rect2(x + 220.0, yy - 14.0, 20.0, 18.0)
-	_plate_btn(plus)
-	HanjiUi.draw_text(self, plus.position + Vector2(6.0, 15.0), "+", 15, HanjiUi.INK_LIGHT)
+	var plus := Rect2(x + 220.0, yy - 15.0, 22.0, 20.0)
+	draw_rect(plus, HanjiUi.INSET)
+	draw_rect(plus, HanjiUi.BORDER, false, 1.0)
+	HanjiUi.draw_text(self, Vector2(plus.position.x + 6.0, yy), "+", 17, HanjiUi.INK_LIGHT)
 	HanjiUi.draw_text(self, Vector2(x + 248.0, yy), "%d%%" % roundi(v01 * 100.0), 13, HanjiUi.INK_LIGHT)
 	return [minus, plus]
 
@@ -1086,7 +1107,7 @@ func _draw_bin_top(panel: Rect2) -> void:
 		var n := bin.count_of(id)
 		var sub := 0
 		for q in bin.qualities_of(id):
-			sub += bin.count_of_quality(id, int(q)) * ItemCatalog.price_of(id, int(q))
+			sub += bin.count_of_quality(id, int(q)) * ItemCatalog.ship_price_of(id, int(q))   # 출하가(메뉴는 원물가)
 		var ty := pos.y + ICON - 8.0
 		HanjiUi.draw_text(self, Vector2(pos.x + ICON + 10.0, ty),
 			"%s ×%d" % [ItemCatalog.name_of(id), n], 13, HanjiUi.INK_LIGHT, 150.0)
@@ -1134,15 +1155,29 @@ func _draw_larder_top(panel: Rect2) -> void:
 		_draw_slot_box(icon_rect, false)
 		_draw_icon(id, icon_rect)
 		var ty := pos.y + ICON - 8.0
-		HanjiUi.draw_text(self, Vector2(pos.x + ICON + 10.0, ty),
-			"%s ×%d" % [ItemCatalog.name_of(id), larder.count_of(id)], 13, HanjiUi.INK_LIGHT, 150.0)
+		var left_x := pos.x + ICON + 10.0
+		var left_txt := "%s ×%d" % [ItemCatalog.name_of(id), larder.count_of(id)]
+		HanjiUi.draw_text(self, Vector2(left_x, ty), HanjiUi.elide(left_txt, 13, 150.0),
+			13, HanjiUi.INK_LIGHT, 150.0)
 		# 이 재료가 되는 융합 메뉴(없으면 "—"). 무엇을 쟁이면 무엇이 나가는지가 곳간의 값이다.
 		var menu_id := MenuCatalog.menu_for_signature(id)
 		var right := "—" if menu_id == "" else "%s  %d냥" % [
 			MenuCatalog.name_of(menu_id), MenuCatalog.price_of(menu_id)]
 		var rc: Color = HanjiUi.INK_DIM if menu_id == "" else HanjiUi.GOLD_SOFT
-		var rx := panel.end.x - PAD - HanjiUi.text_width(right, 13)
-		HanjiUi.draw_text(self, Vector2(rx, ty), right, 13, rc)
+		# ★[폴리시 2026-08-15] 메뉴 이름은 **13px에서 크게** 뜬다. 육안 판정에서 "혼령초 라떼"의 끝
+		#   글자가 잘린 것처럼 보였는데, 실제로는 잘린 게 아니라 neodgm 13px + 외곽선이 겹받침 글자
+		#   (떼 = ㄸ+ㅔ)의 1px 속공간을 메워 통짜 네모로 뭉갠 것이었다(15px에선 또렷하게 갈린다).
+		#   그래서 자리가 남는 줄은 15px로 키워 읽히게 하고, 긴 메뉴명이라 자리가 모자라면 13px까지
+		#   되내려온다. 남는 자리는 **왼쪽 재료 라벨의 실제 폭** 기준이라 두 글자 블록이 겹치지 않는다
+		#   (옛 코드는 오른쪽을 늘 13px 전폭으로 잡아 긴 메뉴명이 왼쪽 라벨·메뉴 아이콘을 덮었다).
+		var right_budget: float = maxf(60.0, (panel.end.x - PAD)
+			- (left_x + HanjiUi.text_width(left_txt, 13) + 12.0 + 22.0))
+		var mfs := 15
+		while mfs > 13 and HanjiUi.text_width(right, mfs) > right_budget:
+			mfs -= 1
+		var rtext := HanjiUi.elide(right, mfs, right_budget)
+		var rx := panel.end.x - PAD - HanjiUi.text_width(rtext, mfs)
+		HanjiUi.draw_text(self, Vector2(rx, ty), rtext, mfs, rc)
 		# ★[S6-T8] 그 메뉴의 잔을 글자 왼쪽에 한 장 — "이 재료가 저 잔이 된다"가 이름을 읽기 전에
 		#   그림으로 먼저 닿는다(왼쪽 재료 아이콘 ↔ 오른쪽 메뉴 아이콘이 한 줄에서 마주 본다).
 		var mtex: Texture2D = crop_icons.get(menu_id)
@@ -1187,9 +1222,13 @@ func _draw_chest_top(panel: Rect2) -> void:
 func _draw_store_top(panel: Rect2) -> void:
 	# ★ [S1R-T12] 매대 그리드 — 헤더(골드·할인) 2줄 + 품목 행 리스트 [아이콘|이름|가격(엽전)|구매].
 	# store_text는 헤더(제목·골드·할인 요약)만, 품목은 store_items 데이터로 행을 그린다(평문 → 그리드).
+	# ★[폴리시 2026-08-15] 헤더는 `draw_text_fit` — 할인 안내는 상태에 따라 길이가 두 배로 갈린다
+	#   (♡0 "네오 할인: 정가 — 네오와 친해지면 매대가 싸진다" = 13px에서 415px > 가용 320px). 옛
+	#   `draw_text(max_w)`는 이걸 소리 없이 하드 컷 해 "…네오와 친해지"에서 끊었다. 이제 들어갈
+	#   때까지 글자를 줄이고, 그래도 넘치면 말줄임으로 "끊겼다"를 보이게 한다.
 	var y := panel.position.y + PAD + 14.0
 	for line in store_text.split("\n"):
-		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
+		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
 			panel.size.x - PAD * 2.0)
 		y += 18.0
 	# 품목 행(아이콘·이름·가격·구매 버튼). 행 클릭 or 버튼 클릭으로 구매(Shift=대량).
@@ -1200,7 +1239,11 @@ func _draw_store_top(panel: Rect2) -> void:
 	var row_y := panel.position.y + PAD + 42.0
 	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0   # 백팩 그리드 시작(_grid_origin) 직전까지
 	_store_area_rect = Rect2(panel.position.x + PAD, row_y, panel.size.x - PAD * 2.0, max_y - row_y)
-	_store_scroll = _draw_row_list(panel, store_items, row_y, max_y, _store_scroll, _store_row_rects, "구매")
+	# ★[폴리시 2026-08-15] 이름 칸 118 → 150 / 가격 칸 124 → 156(길드가 이미 쓰는 그 치수).
+	#   씨앗은 절기 병기가 붙어 길다("저승감자 씨앗 (성야절)" = 13px에서 144px)라 118에서는 닫는
+	#   괄호가 잘려 "혼령초 씨앗 (유화"로 보였다(육안 덤프 frame_store).
+	_store_scroll = _draw_row_list(panel, store_items, row_y, max_y, _store_scroll, _store_row_rects,
+		"구매", 150.0, 156.0)
 
 # ★ [S3-T5] 공용 품목 행 리스트 — [아이콘(+등급 점) | 이름(×N) | 가격 | 버튼] 행 + 미니 스크롤바.
 # rows 항목: {icon_id, name, price, base?, kind, buy_id, count?, quality?, locked?, locked_text?}
@@ -1250,16 +1293,25 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 		var cnt := int(item.get("count", 0))
 		if cnt > 0:
 			label += " ×%d" % cnt
-		HanjiUi.draw_text(self, Vector2(rowrect.position.x + ICON + 8.0, ty), label, 13,
-			HanjiUi.INK_LIGHT, name_w)
+		# ★[폴리시 2026-08-15] 이름 칸을 넘치면 하드 컷이 아니라 말줄임 — 어떤 가게든 품목명이
+		#   길어질 수 있고(절기 병기·자재량·데미지 밴드), 소리 없이 끊기면 "(유화"처럼 문장이
+		#   깨진 채 남는다. 칸 폭 자체는 호출부가 가게별로 정한다(이 함수는 넘침만 흡수).
+		HanjiUi.draw_text(self, Vector2(rowrect.position.x + ICON + 8.0, ty),
+			HanjiUi.elide(label, 13, name_w), 13, HanjiUi.INK_LIGHT, name_w)
 		# 가격(엽전 + 숫자). 할인 시 정가→할인가.
 		var price := int(item.get("price", 0))
 		var base := int(item.get("base", price))
 		var px := rowrect.position.x + ICON + 8.0 + price_dx
 		if price < base:
+			# ★[폴리시] 정가 병기는 **자리가 남을 때만**. 이름 칸을 넓히면 가격 칸이 그만큼 짧아지는데
+			#   할인 병기는 가격 블록을 두 배로 불려(정가 + 화살표 + 할인가) 구매 버튼 밑으로 파고든다.
+			#   자리가 없으면 병기를 접고 할인가만 남긴다(겹침 0 — 정가는 어차피 보조 정보다).
 			var bs := "%d→" % base
-			HanjiUi.draw_text(self, Vector2(px, ty), bs, 11, HanjiUi.INK_DIM)
-			px += HanjiUi.text_width(bs, 11) + 2.0
+			var pre_w := HanjiUi.text_width(bs, 11) + 2.0
+			var block_max := buyrect.position.x - 6.0 - px
+			if pre_w + 15.0 + HanjiUi.text_width(str(price), 13) <= block_max:
+				HanjiUi.draw_text(self, Vector2(px, ty), bs, 11, HanjiUi.INK_DIM)
+				px += pre_w
 		# ★[S10-T8] 화폐 아이콘은 `store_coin`이 정한다(기본 = 엽전). [명부 시련장]만 [시련패]로
 		#   바뀌므로 다른 매대의 픽셀은 한 점도 안 움직인다(null 방어 = 엽전 폴백).
 		draw_texture_rect(store_coin if store_coin != null else COIN,
@@ -1287,7 +1339,7 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 func _draw_fishshop_top(panel: Rect2) -> void:
 	var y := panel.position.y + PAD + 14.0
 	for line in store_text.split("\n"):
-		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
+		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
 			panel.size.x - PAD * 2.0 - 116.0)   # 우측은 서브탭 자리로 비워 둔다
 		y += 18.0
 	# 서브탭 2개(헤더 우측 상단 — 메뉴 탭과 같은 plate 문법).
@@ -1344,7 +1396,7 @@ func _draw_fishshop_top(panel: Rect2) -> void:
 func _draw_woodshop_top(panel: Rect2) -> void:
 	var y := panel.position.y + PAD + 14.0
 	for line in store_text.split("\n"):
-		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
+		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
 			panel.size.x - PAD * 2.0 - 126.0)   # 우측은 서브탭 자리로 비워 둔다
 		y += 18.0
 	# 서브탭 2개(헤더 우측 상단 — 생선가게와 같은 plate 문법·같은 좌표계).
@@ -1405,7 +1457,7 @@ func _click_woodshop(p: Vector2, shift: bool) -> void:
 func _draw_guild_top(panel: Rect2) -> void:
 	var y := panel.position.y + PAD + 14.0
 	for line in store_text.split("\n"):
-		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
+		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
 			panel.size.x - PAD * 2.0)
 		y += 18.0
 	_store_row_rects.clear()

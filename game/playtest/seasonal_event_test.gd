@@ -360,6 +360,46 @@ func _initialize() -> void:
 	_check("⑨i 매대 facing = 행사일 · 마을 야외 · 그 칸", m._facing_night_market())
 	m.clock.day = d_market + 1
 	_check("⑨j 행사일이 아니면 매대가 없다(facing false)", not m._facing_night_market())
+	# ★ 결제 층의 행사일 재검증 — facing(표시)만 재던 자리의 공백을 메운다. 매대 프레임은 자정을
+	#   넘겨도 안 닫히므로(쓰러지면 그대로 하루가 간다) **결제 순간에 오늘을 다시 묻지 않으면**
+	#   행사가 파한 날에도 2할 할인·한정 물품이 계속 나간다. 보부상 `_peddler_price`가 이미 막아 둔
+	#   그 구멍이라, 여기서도 세 경로(가구·한정 물품·씨앗) 전부를 같은 문법으로 잰다.
+	#   ★ 값을 세 축으로 대조한다: 지갑 불변 · 해금 원장 불변 · 인벤 수량 불변(카운트 하나만 세면
+	#     "샀는데 알림만 없다"를 못 잡는다).
+	var gold_k: int = m.wallet.gold
+	var seed_k: int = m.inventory.count_of(seed_item)
+	var rare_k: int = m.inventory.count_of(ItemCatalog.RARECROW_2)
+	_check("⑨k pre 행사 다음 날 · 미해금 세트가 남아 있다",
+		m._seasonal_event_today() != SeasonalEvent.NIGHT_MARKET
+		and not m.home_deco.is_unlocked("JAETNUN"))
+	m._on_frame_buy_store_item("JAETNUN", "fest_deco", false)
+	_check("⑨l ★행사 다음 날 가구 세트 구매 불성립(해금 0 · 엽전 0)",
+		not m.home_deco.is_unlocked("JAETNUN") and m.wallet.gold == gold_k)
+	m.seasonal_event.market_bought.clear()   # 1회 한정 가드를 걷어 **날짜 가드만** 남긴다
+	m._on_frame_buy_store_item(ItemCatalog.RARECROW_2, "fest_item", false)
+	_check("⑨m ★행사 다음 날 한정 물품 구매 불성립(수량·엽전·구매 이력 전부 불변)",
+		m.inventory.count_of(ItemCatalog.RARECROW_2) == rare_k and m.wallet.gold == gold_k
+		and not m.seasonal_event.has_bought(ItemCatalog.RARECROW_2))
+	m._on_frame_buy_store_item(SeasonalEvent.MARKET_SEED_CROP, "fest_seed", false)
+	_check("⑨n ★행사 다음 날 씨앗 소매 불성립(씨앗 수·엽전 불변)",
+		m.inventory.count_of(seed_item) == seed_k and m.wallet.gold == gold_k)
+	# 근원 봉합 — 매대를 연 채 자정을 넘기면(쓰러짐 → `_do_sleep`) 프레임이 하루를 못 넘긴다.
+	m.clock.day = d_market
+	m.seasonal_event.load_save({})
+	m._open_frame(InventoryFrame.CTX_NIGHTMARKET)
+	_check("⑨o pre 야시장 프레임이 열렸다",
+		m.frame.is_open() and m.frame.context == InventoryFrame.CTX_NIGHTMARKET)
+	m._do_sleep()
+	_check("⑨p ★취침(쓰러짐)이 열린 매대를 닫는다 — 어제 매대가 오늘 아침까지 남지 않는다",
+		not m.frame.is_open())
+	# 하네스 원복 — 취침 연출 트윈을 죽여 **하루가 실제로 넘어가지 않게** 한다(넘어가면 아래
+	# ⑩·⑪ 블록이 재는 지갑·곳간 원장이 정산으로 흔들린다).
+	for tw in get_processed_tweens():
+		tw.kill()
+	m._sleeping = false
+	m.fade.modulate.a = 0.0
+	m.player.set_physics_process(true)
+	m.clock.running = true
 
 	# ── ⑩ 비참여 무손실 ──
 	print("── ⑩ 비참여 무손실 ──")

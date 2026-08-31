@@ -2037,7 +2037,10 @@ const MIHOK_DEEP_STUMP_TILES := [
 #     (열매 자체가 나흘 이벤트라 그루 수로 총량을 더 죌 이유가 없다 — 잠정 수치, owner 큐).
 const FOREST_BUSH_TILES := [
 	Vector2i(16, 12), Vector2i(24, 12),   # 빈터①(x17..23,y6..10) 남쪽 언저리 좌우
-	Vector2i(41, 13),                     # 빈터②(x42..48,y8..12) 남서 모서리 밖
+	# ★ 빈터②(x42..48,y8..12) **서쪽** 언저리. 옛 자리 (41,13)은 내부 나무 군집(38,14,6,4) 바로
+	#   북쪽이라, 침엽수 수관이 밑동 위 ~2.5칸까지 솟아(밑동 y14 → 수관 끝 y11.5) 덤불 아랫도리를
+	#   통째로 덮었다 — 열매만 캐노피 한복판에 떠 있는 그림이 됐다. 수관 끝 위로 올린다.
+	Vector2i(41, 10),
 	Vector2i(46, 35),                     # 빈터③(x39..45,y32..36) 동쪽 언저리
 ]
 const MIHOK_BUSH_TILES := [
@@ -4885,7 +4888,7 @@ func _refresh_greenhouse() -> void:
 	if not _greenhouse_built():
 		return
 	_build_building_catalog()
-	_refresh_home_expansion()   # 카탈로그를 다시 세우면 집 cam이 기본값으로 돌아간다 — 확장분 재주입
+	_refresh_home_expansion()   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
 	if _region == RegionCatalog.HOME:
 		_rebuild_region(RegionCatalog.HOME)
 		if _indoor == "늘봄방":
@@ -10256,11 +10259,22 @@ func _deco_swatch(set_id: String) -> Color:
 		return Color(float(c[0]), float(c[1]), float(c[2]))
 	return Color(0.5, 0.5, 0.5)
 
+# 오늘이 야시장 날인가(결제 재검증 전용). ★ **표시 층(`_facing_night_market`)과 따로 두는** 이유는
+#   보부상 `_peddler_price` 머리말이 적은 그 구멍과 같다: 매대 프레임은 자정을 넘겨도(쓰러져 하루가
+#   넘어가도) 닫히지 않을 수 있고, 그동안 행 갱신(`_refresh_night_market`)은 day를 안 보는 static을
+#   쓰므로 할인 로스터가 그대로 남는다. 그래서 **결제 순간에 오늘 날짜를 다시 묻는다** — 이 한 줄이
+#   "오늘 놓치면 내년"이라는 야시장 게이트의 진짜 잠금이다(프레임은 표시일 뿐 계약이 아니다).
+func _night_market_open_today() -> bool:
+	return _seasonal_event_today() == SeasonalEvent.NIGHT_MARKET
+
 # 야시장 가구 세트 구매 — 목공방(`_try_buy_deco_set`)과 **다른 할인 축**이라 별도 경로다:
 # 목공방은 옹이 ♡ 할인, 야시장은 행사 정액 할인. 같은 함수에 두 할인을 섞으면 어느 쪽이 먹었는지
 # 값만 봐선 알 수 없게 된다(그래서 함수를 가른다 — 해금 처리 자체는 home_deco 한 곳이 진실원).
 func _try_buy_market_deco(set_id: String) -> bool:
 	if home_deco == null or not HomeDecoCatalog.has_set(set_id):
+		return false
+	if not _night_market_open_today():
+		_notice("야시장은 파했다 — 매대는 성야절 그 하루뿐이다")
 		return false
 	if home_deco.is_unlocked(set_id):
 		_notice("%s 세트는 이미 해금했다" % HomeDecoCatalog.name_of(set_id))
@@ -10277,6 +10291,9 @@ func _try_buy_market_deco(set_id: String) -> bool:
 # 한정 물품(레어크로우 ②) 구매 — 1회 한정. 수집물이라 스택·대량 개념이 없다.
 func _try_buy_market_item(id: String) -> bool:
 	if seasonal_event == null or inventory == null or not ItemCatalog.has_item(id):
+		return false
+	if not _night_market_open_today():
+		_notice("야시장은 파했다 — 매대는 성야절 그 하루뿐이다")
 		return false
 	if seasonal_event.has_bought(id):
 		_notice("%s 은(는) 이미 샀다" % ItemCatalog.name_of(id))
@@ -10302,6 +10319,9 @@ func _try_buy_market_item(id: String) -> bool:
 # 골드 닿는 데까지 부분 구매(_buy_store_generic_n 관례).
 func _try_buy_market_seed(crop_id: String, n: int) -> void:
 	if inventory == null or not CropCatalog.has_crop(crop_id) or n <= 0:
+		return
+	if not _night_market_open_today():
+		_notice("야시장은 파했다 — 매대는 성야절 그 하루뿐이다")
 		return
 	var unit := SeasonalEvent.market_price(CropCatalog.seed_cost(crop_id))
 	var seed_item := ItemCatalog.seed_id(crop_id)
@@ -10544,7 +10564,12 @@ func _build_building_catalog() -> void:
 		"ext_door": HOUSE_EXT_DOOR, "ext_door2": HOUSE_EXT_DOOR_E, "out_tile": HOUSE_OUT_TILE,
 		# ★C2 — HOME 집 실내는 HOME 밴드 전용 좌표(마을 6채는 HOUSE_* 공유, 아래 루프).
 		# ★[ADR-0046] 2칸 문 = ext_door2/door2로 양 칸 트리거 수용(진입·퇴장 어느 칸에서나).
-		"in_tile": HOME_HOUSE_IN_TILE, "door": HOME_HOUSE_DOOR, "door2": HOME_HOUSE_DOOR_E, "cam": HOME_HOUSE_CAM_RECT,
+		# ★[폴리시] 집 실내 카메라는 **상수가 아니라 파생**이다(`home_house_cam_rect()` — 안방 확장이면
+		#   넓은 rect). 상수를 박아 두면 카탈로그를 다시 세우는 경로마다(늘봄방 완공·시련장 개방)
+		#   확장분이 조용히 날아가 잘린 안방이 남았다 — 재주입을 짝으로 기억해야 하는 규율 대신
+		#   진실원을 하나로 접는다(carpenter 미생성 시점엔 스스로 원본 rect를 낸다).
+		"in_tile": HOME_HOUSE_IN_TILE, "door": HOME_HOUSE_DOOR, "door2": HOME_HOUSE_DOOR_E,
+		"cam": home_house_cam_rect(),
 	}
 	# 나루 마을 카페(실데이터 실내 — 시뮬·NPC·좌석). id·동작·카메라 불변(회귀 0).
 	_buildings["카페"] = {
@@ -10818,6 +10843,13 @@ func _can_sleep() -> bool:
 func _do_sleep() -> void:
 	if _sleeping:
 		return
+	# ★ 하루를 넘기기 전에 열린 모달을 먼저 닫는다. 침대 취침·에필로그 경로는 `_process`의
+	#   `frame.is_open()` 가드 뒤라 애초에 프레임이 없지만, **쓰러짐**(`_on_collapsed`)은 매대를
+	#   연 채로도 들어온다 — 그러면 어제 매대가 오늘 아침까지 살아남아 하루짜리 무대(야시장·보부상)의
+	#   기한이 통째로 무효가 된다. 날짜에 매인 무대는 결제 층에서도 오늘을 다시 묻지만(이중 방어),
+	#   패널이 하루를 넘겨 떠 있는 것 자체가 화면의 거짓말이라 여기서 닫는다.
+	if frame.is_open():
+		_close_frame()
 	_sleeping = true
 	clock.running = false
 	audio.sfx("sleep")                 # P2.6 하루를 닫는 부드러운 하강 패드
@@ -11241,9 +11273,12 @@ func _load_game() -> void:
 	#   시련장 안에서 저장한 세이브가 바깥으로 튕긴다. 미개방 세이브면 스스로 no-op이다.
 	_refresh_trial_gate()
 	_restore_location(data)
-	# ★[S8-T7] 안방 확장 세이브 복원 — 부팅 그리드는 원본 rect로 섰고, 복원 구역이 HOME이면
-	# _restore_location이 재빌드를 건너뛰므로(같은 구역 최적화) 여기서 확장 실효를 다시 얹는다
-	# (완공 아침과 같은 헬퍼·멱등 — 미확장 세이브면 스스로 no-op).
+	# ★[폴리시] `_restore_location`의 재빌드가 삽사리 이벤트를 다시 예약할 수 있으므로(_arm_pet_event은
+	#   구역 빌드에 얹혀 있다), 위 "로드는 언제나 예약 없음에서 시작한다"는 규율을 여기서 다시 강제한다
+	#   — 연출은 세이브 대상이 아니고, 예정일이 지난 세이브는 다음 마을 진입이 알아서 다시 예약한다.
+	_pet_event_armed = false
+	# ★[S8-T7] 안방 확장 세이브 복원 — deco 배치 가능 칸을 확장 rect로 재주입한다(완공 아침과 같은
+	# 헬퍼·멱등 — 미확장 세이브면 스스로 no-op). 그리드·카메라는 위 재빌드와 카탈로그가 이미 세운다.
 	_refresh_home_expansion()
 	# M2.4 F9 재로드(이 함수 직접 호출 경로)에서도 복원된 day로 의상·보너스를 맞춘다(멱등).
 	# ★[S6-T3] 이 호출이 카페 일구기 사다리(좌석·곳간 용량·손님 볼륨)도 함께 세운다 — 위에서
@@ -11267,7 +11302,6 @@ func _restore_location(data: Dictionary) -> void:
 	# ★[S5-T1] 갱도 층은 구역 id가 아니라 **직교 상태 축**이라 여기서 함께 복원한다(_rebuild_region이
 	#   이 값을 읽어 지상 무대 대신 층 그리드를 세운다). 갱도가 아닌 구역에 층 값이 붙은 손상/구세이브는
 	#   지상 0층으로 자른다 — 다른 구역에서 24×24 층 그리드가 서는 사고를 원천 차단.
-	var prev_floor := _mine_floor
 	_mine_floor = int(data.get("mine_floor", 0))
 	if saved_region != RegionCatalog.EOPHWA_MINE or not MineFloors.is_valid_floor(_mine_floor):
 		_mine_floor = 0
@@ -11275,26 +11309,28 @@ func _restore_location(data: Dictionary) -> void:
 	#   기절·퇴장과 같은 줄). 그래서 세이브에 깊이 키가 아예 없고, 여기서는 옛 런 상태를 지워 늘
 	#   아레나(깊이 0)에서 재개시킨다. 나락 구역에 저장된 위치는 아래 위치 복원이 그대로 쓰되, 층
 	#   그리드가 아니라 지상 아레나가 서므로 그 좌표가 유효하다(아레나는 64×44 통짜다).
-	var prev_depth := _narak_depth
 	_narak_depth = 0
 	_narak_layout = {}
 	if not RegionCatalog.is_built(saved_region):
 		push_warning("[M1.5] 미지/미빌드 구역 '%s' — 홈베이스 스폰으로 폴백" % saved_region)
 		_mine_floor = 0
-		if _region != RegionCatalog.HOME:
-			_rebuild_region(RegionCatalog.HOME)
+		_rebuild_region(RegionCatalog.HOME)   # ★[폴리시] 아래 본 경로와 같은 이유로 무조건 재빌드
 		_indoor = ""
 		player.position = _tile_center_px(SPAWN_TILE)
 		_apply_camera_limits()
 		return
-	# 정상 복원: 저장 구역이 부팅 구역(HOME)과 다르면 그 구역을 재빌드한다(_warp과 같은 결 —
-	# 현재 구역만 메모리, M1.2 구현 (b)). 같으면(HOME) 이미 빌드돼 있어 재빌드 불필요.
-	# ★[S5-T1] 층이 갈렸으면 구역 id가 같아도(갱도↔갱도 층) 재빌드해야 한다 — F9 재로드로 지상↔층을
-	#   오갈 때 옛 그리드가 남는 걸 막는다.
-	# ★[S5-T7] 나락 깊이가 갈렸을 때도(런 중 F9 재로드) 같은 이유로 재빌드한다 — 옛 층 그리드가
-	#   남은 채 아레나 좌표에 떨어지면 24×24 방 밖 암반에 갇힌다.
-	if saved_region != _region or prev_floor != _mine_floor or prev_depth != _narak_depth:
-		_rebuild_region(saved_region)
+	# 정상 복원: 저장 구역을 **언제나** 재빌드한다(_warp과 같은 결 — 현재 구역만 메모리, M1.2 구현 (b)).
+	# 위에서 층·깊이를 먼저 되돌려 두었으므로(갱도 층·나락 깊이는 구역 id와 직교한 상태 축), 여기서
+	# 세우는 무대가 곧 세이브가 말하는 무대다 — 지상↔층이 갈린 F9 재로드에도 옛 그리드가 안 남는다.
+	# ★[폴리시] **"같은 구역·같은 층이면 이미 빌드돼 있다"는 최적화를 폐기했다.** 그 전제는 부팅
+	#   경로(항상 HOME·0층에서 출발)에서만 참이고, F9 인플레이스 재로드에는 거짓이다: 저장 뒤 깬
+	#   돌·벤 나무는 `_sync_mine_tile`·`_sync_tree_tile`이 `_grid`를 **직접** PATH/GROUND로 바꿔
+	#   두는데, 원장(mine_floors·tree_ledger)만 세이브 시점으로 되돌아가면 그려진 돌·나무를 그냥
+	#   통과해 걸어 들어간다(같은 칸을 다시 캐 산출도 중복). `_grid`에 돌·나무를 되놓는 코드는
+	#   `_build_grid` 안에만 있으므로, 로드 후 무대는 **반드시 원장에서 재파생**되어야 한다.
+	#   덤으로 `_clear_mine_mobs`(빌드 앞단)도 이 경로에서만 빠져 옛 세션의 잡귀가 살아남았다.
+	#   비용은 워프 한 번과 같고(로드는 드문 사건), 재빌드는 멱등이라 종전 경로의 결과는 불변이다.
+	_rebuild_region(saved_region)
 	# 실내 모드는 카탈로그로 방어한다(★ M2.2 — 8채로 늘어 화이트리스트 대신 _buildings 조회).
 	# 알 수 없는 id거나 복원 구역과 다른 구역의 건물이면 바깥("")으로 — 카메라가 외부 경계로
 	# 안전 복귀(예: region=홈인데 indoor=만물상 같은 손상/구버전 세이브로 격리방에 갇히지 않게).
@@ -11909,6 +11945,11 @@ func _process(delta: float) -> void:
 	# 막는다(대화 모달과 같은 결). 관계 탭이면 하트 값을 매 프레임 흘려넣어 읽기 전용으로 보인다.
 	if frame.is_open():
 		onboarding_label.visible = false
+		# ★[폴리시 2026-08-15] 상단 안내 배너도 즉시 숨긴다 — 모달 프레임이 배너 위에 서면서
+		#   배너의 아랫부분만 프레임 위로 삐져나와, 글자 아래 절반이 잘린 띠로 남았다(육안 덤프
+		#   frame_inv·frame_store·곳간 상단). 대화·컷신이 이미 쓰던 그 가드와 같은 결.
+		if onboarding_banner != null:
+			onboarding_banner.hide_now()
 		if Input.is_action_just_pressed("ui_cancel") or (frame.context != InventoryFrame.CTX_MENU and Input.is_action_just_pressed("menu_toggle")):
 			_close_frame()
 		elif frame.context == InventoryFrame.CTX_MENU and Input.is_action_just_pressed("menu_tab"):
@@ -11963,6 +12004,8 @@ func _process(delta: float) -> void:
 	# 워프와 나란히 두는 이유: 이것도 **발밑 칸이 여는 문**이고, 게이트 미충족이면 워프가
 	# 휴면인 것과 똑같이 아무 일도 안 일어난다(거동 불변).
 	_maybe_spine_b5()
+	# ★ 척추 사슬 재개 — 끊어진 이음매를 **원장에서 다시 잇는다**(아래 머리말).
+	_maybe_resume_spine()
 
 	# 취침 입력: 집 안에서 Enter/Space(ui_accept)
 	if _can_sleep() and Input.is_action_just_pressed("ui_accept"):
@@ -12547,7 +12590,7 @@ func _process(delta: float) -> void:
 	var holding_garden_pot := inventory.selected_id() == ItemCatalog.GARDEN_POT
 	# 조준 칸에 화분이 서 있는가 — 아래 도구 디스패치 게이트가 읽는다. 화분은 SOIL이 아닌 실내
 	# 마룻바닥에도 서므로, `_target_valid`(=밭 흙) 하나로는 화분 위 물주기·심기가 영영 안 나간다.
-	var pot_at_target := garden_pot != null and garden_pot.has_at(_target)
+	var pot_at_target := _pot_at(_target)
 	var on_garden_pot := not _sleeping and holding_garden_pot and pot_at_target
 	if on_garden_pot and Input.is_action_just_pressed("use_tool"):
 		_remove_garden_pot(_target)
@@ -13314,7 +13357,7 @@ func _use_tool() -> void:
 		# ★[S10-T5] 화분 손 물주기 — **화분에 물이 드는 유일한 경로**다(ADR-0069 결정 8 "매일 손
 		#   물주기"). AoE를 안 태운다: 넓은 물뿌리개로 방 안을 한 번에 적시면 "매일 손이 간다"는
 		#   화분의 정체가 사라진다(화분 하나에 한 번 — 칸당 −1은 밭과 같다).
-		if _can_water > 0 and garden_pot != null and garden_pot.has_at(_target):
+		if _can_water > 0 and _pot_at(_target):
 			if garden_pot.water(_target):
 				_can_water -= 1
 				_refresh_water_badge()
@@ -13330,7 +13373,7 @@ func _use_tool() -> void:
 			if watered > 0:
 				_refresh_water_badge()
 				verb = "물주기"
-		elif garden_pot != null and garden_pot.is_planted(_target) and not garden_pot.is_watered(_target):
+		elif _pot_at(_target) and garden_pot.is_planted(_target) and not garden_pot.is_watered(_target):
 			_notice("물이 없다 — 혼우물·연못에서 채우자")
 			return
 		elif _field_at(_target).is_planted(_target) and not _field_at(_target).is_watered(_target):
@@ -13347,7 +13390,7 @@ func _use_tool() -> void:
 		# ★[S10-T5] 화분이 우선이다 — 화분을 놓은 칸을 조준했으면 밭이 아니라 화분에 심는다
 		#   (화분은 실내 바닥 위에 서므로 밭 칸과 겹칠 일이 거의 없지만, 늘봄방 경작면 위에
 		#   놓을 수 있어 우선순위를 명시한다. 놓은 물건이 밑의 흙보다 앞이다).
-		if garden_pot != null and garden_pot.has_at(_target):
+		if _pot_at(_target):
 			if inventory.has_seed(seed_crop) and garden_pot.plant(_target, crop):
 				inventory.take_seed(seed_crop)
 				verb = "심기"
@@ -13358,7 +13401,7 @@ func _use_tool() -> void:
 		# ★ [S1-6] 든 비료를 경작 칸에 뿌린다(§8.4 — 심김/빈칸 무관, 다른 비료면 overwrite). 뿌리면 1개 소모.
 		# ★[S10-T5] 화분엔 비료를 못 준다(최소형 — GardenPot에 fertilize API가 없다). 라우터가
 		#   화분 칸의 *밑 타일* 밭으로 흘려보내지 않게, 화분이 선 칸은 여기서 통째로 배제한다.
-		if garden_pot != null and garden_pot.has_at(_target):
+		if _pot_at(_target):
 			pass
 		elif _field_at(_target).fertilize(_target, item):
 			inventory.remove_item(item, 1)
@@ -13816,14 +13859,27 @@ func _remove_sprinkler(t: Vector2i) -> void:
 		queue_redraw()
 
 # ── ★[S10-T5 / ADR-0069 결정 8] 화분 배치/회수 ────────────────────────────────
+# ★[폴리시] 이 칸에 **지금 무대에서** 화분이 서 있는가. 화분 원장은 좌표만 키로 들고(구역 축 없음)
+#   실내 밴드 좌표는 구역끼리 겹치므로, 원장 질의는 전부 이 술어를 거친다 — 안 그러면 안식 농원
+#   집에 놓은 화분을 나루 마을 실내에서 같은 좌표로 원격 조작하게 된다(그림은 HOME에서만 그려져
+#   보이지도 않는다). 배치를 HOME으로 좁힌 `_can_place_pot`의 짝이다(놓는 곳과 만지는 곳이 같다).
+func _pot_at(t: Vector2i) -> bool:
+	return garden_pot != null and _region == RegionCatalog.HOME and garden_pot.has_at(t)
+
 # 이 칸에 화분을 놓을 수 있는가. 스프링클러 규칙의 **거울상**이다: 저쪽이 "바깥 지면"을 요구한다면
 # 이쪽은 "실내"를 요구한다(ADR-0069 결정 8 "배치 가능 위치 = 실내(집·늘봄방)").
 #   ㉠ 실내여야 한다(`_indoor != ""`) — 화분은 방 안 소품이다. 바깥에 놓는 건 그냥 밭이 하는 일이다.
 #   ㉡ 밟을 수 있는 바닥이어야 한다(비-SOLID) — 벽·문틀엔 못 놓는다.
 #   ㉢ 이미 화분이 선 칸엔 못 놓는다(그 위엔 회수만 — 스프링클러와 같은 멱등 규칙).
 #   ㉣ 늘봄방 경작면 위엔 놓되 **이미 경작된 칸**은 피한다(고랑을 화분이 덮어 밭이 죽는 사고 방지).
+#   ㉤ ★[폴리시] **안식 농원이어야 한다** — ADR-0069 결정 8이 든 자리가 정확히 "집·늘봄방"이고,
+#      그 둘은 모두 HOME이다. 이 가드가 빠져 있어 만물상·길드 같은 **다른 구역 실내**에도 놓였는데,
+#      원장(GardenPot._pots)은 좌표만 키로 들고 `_draw_garden_pots`는 HOME에서만 불린다 —
+#      놓은 방에서는 영영 안 보이고, 실내 밴드 좌표가 겹치는 HOME 쪽에는 유령 화분이 서서
+#      원격으로 심기·물주기·수확까지 먹혔다. 원장에 구역 축을 새로 세우는 대신(세이브 스키마가
+#      늘고 진실원이 갈린다) **문서화된 배치 범위로 좁혀** 좌표 하나가 주인을 유일하게 정하게 한다.
 func _can_place_pot(t: Vector2i) -> bool:
-	if garden_pot == null or _indoor == "":
+	if garden_pot == null or _region != RegionCatalog.HOME or _indoor == "":
 		return false
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
 		return false
@@ -13885,15 +13941,23 @@ func _remove_rarecrow(t: Vector2i) -> void:
 	queue_redraw()
 
 # ── ★[S10-T2 / ADR-0069 결정 4] 레어크로우 수집 진척(원장 없는 파생) ──────────────
-# **소지(백팩) ∪ 배치(밭)** 가 수집의 정의다(ADR-0069 결정 4 "8종 소지/배치 완성 판정"). 별도
-# "획득 이력" 원장을 두지 않는 근거: 레어크로우는 세상에서 잃을 수 없는 물건이다 — 비매(price 0)라
-# 매대에 못 팔고, 출하함은 CAT_HARVEST만 받으며, 백팩 버리기는 책과 같은 이유로 막혀 있다
-# (`_on_frame_discard`). 그래서 합집합이 곧 단조 증가하는 이력이고, 원장을 하나 더 두면 같은
-# 사실의 진실원이 둘이 된다.
+# **소지(백팩) ∪ 배치(밭) ∪ 보관(저장 상자)** 이 수집의 정의다(ADR-0069 결정 4 "8종 소지/배치 완성
+# 판정"). 별도 "획득 이력" 원장을 두지 않는 근거: 레어크로우는 세상에서 잃을 수 없는 물건이다 —
+# 비매(price 0)라 매대에 못 팔고, 출하함은 CAT_HARVEST만 받으며, 백팩 버리기·선물은 책과 같은
+# 이유로 막혀 있다(`_on_frame_discard`·선물 거절). 그래서 합집합이 곧 단조 증가하는 이력이고,
+# 원장을 하나 더 두면 같은 사실의 진실원이 둘이 된다.
+# ★[폴리시] **저장 상자를 합집합에 넣었다.** 상자만은 무엇이든 받는데(카테고리 필터 없음) 여기서
+#   빠져 있어, 상자에 넣는 순간 그 종을 안 가진 것으로 읽혔다 — 만물상 1회 한정 매대가 다시 열려
+#   같은 종을 또 결제하고(다른 매대는 has_bought 원장이 막는다), 8종 완주가 풀려 허수아비 보호
+#   반경이 디럭스에서 기본으로 조용히 되돌아갔다. 두 상자(집·갈무리방)는 서로 독립이라 둘 다 본다.
 func _rarecrow_owned(id: String) -> bool:
 	if inventory != null and inventory.count_of(id) > 0:
 		return true
-	return rarecrow != null and rarecrow.is_placed(id)
+	if rarecrow != null and rarecrow.is_placed(id):
+		return true
+	if chest != null and chest.count_of(id) > 0:
+		return true
+	return storehouse_chest != null and storehouse_chest.count_of(id) > 0
 
 # 모은 종 수(0~8). 분모는 ItemCatalog.RARECROWS 크기에서 파생한다(하드코딩 8 없음).
 func _rarecrow_collected() -> int:
@@ -14772,13 +14836,21 @@ func buy_sprinkler(n: int = 1) -> int:
 		return 0
 	var unit := StoreDiscount.price(base, neo_affinity.hearts())
 	var bought := 0
+	var full := false                         # 백팩 만재로 멈췄나(알림 문구를 가른다)
 	for _i in n:
-		if not wallet.spend(unit):
+		# ★ 적재 먼저·결제 나중(`_try_buy_rarecrow`가 세운 그 계약) — 백팩이 가득이면 냥이 안 나간다.
+		if not wallet.can_afford(unit):
 			break
-		inventory.add_item(ItemCatalog.SPRINKLER, 1)
+		if not inventory.add_item(ItemCatalog.SPRINKLER, 1):
+			full = true
+			break
+		if not wallet.spend(unit):
+			inventory.remove_item(ItemCatalog.SPRINKLER, 1)   # 방어(위 can_afford와 이중)
+			break
 		bought += 1
 	if bought == 0:
-		_notice("골드 부족(%d 필요)" % unit)
+		_notice("가방을 비우고 오자 — 저승 스프링클러를 받을 자리가 없다" if full
+			else "골드 부족(%d 필요)" % unit)
 		return 0
 	audio.sfx("ui")                           # 매대 거래 블립
 	_notice("저승 스프링클러 ×%d −%d골드 (만물상)" % [bought, unit * bought])
@@ -14839,7 +14911,7 @@ func _try_harvest() -> void:
 	# ★[S10-T5 / ADR-0069 결정 8] 화분 수확 — 밭 경로보다 **먼저** 본다(놓은 물건이 밑의 흙보다
 	#   앞이다·짐승·과수 우선 분기와 같은 규율). 수확 문법은 노지와 같다: 품질 roll → 적재 →
 	#   점수판·XP·사연. 갈리는 건 원장 하나뿐이라 이 분기는 얇다.
-	if garden_pot != null and garden_pot.has_at(_target) and garden_pot.is_mature(_target):
+	if _pot_at(_target) and garden_pot.is_mature(_target):
 		_harvest_pot()
 		return
 	var field := _field_at(_target)              # ★[S10-T5] 이 칸의 주인 밭(노지/늘봄방)
@@ -14957,9 +15029,16 @@ func _on_frame_craft(recipe_id: String) -> void:
 	if not CraftCatalog.can_craft(recipe_id, func(id: String) -> int: return inventory.count_of(id)):
 		return
 	var r := CraftCatalog.get_recipe(recipe_id)
+	# ★ **담기 먼저, 비우기 나중**(업화로 회수 `_use_furnace`가 세운 그 순서 규율) — 백팩이 가득이면
+	#   재료가 증발하지 않고 그대로 남는다. 반대 순서였을 때, 재료를 뺀 자리가 안 비는 조합(돌 150개
+	#   중 99개처럼 슬롯이 살아남는 경우)에서 재료만 사라지고 산출은 0인 구멍이 있었다.
+	#   ★재료 롤백이 아니라 선적재를 고른 이유: 되돌려 담는 add_item은 등급을 못 싣는다(주괴 재료가
+	#   금→일반으로 깎인다). 되돌릴 일을 아예 안 만드는 쪽이 값을 잃지 않는다.
+	if not inventory.add_item(String(r["out_item"]), int(r["out_count"])):
+		_notice("백팩이 가득 차 %s 를 만들지 못했다 — 자리를 비우고 다시" % String(r["name_ko"]))
+		return
 	for m in r["mats"]:
 		inventory.remove_item(String(m["item"]), int(m["count"]))
-	inventory.add_item(String(r["out_item"]), int(r["out_count"]))
 	_toast_item(String(r["out_item"]), int(r["out_count"]))
 	audio.sfx("ui")
 	queue_redraw()
@@ -15305,7 +15384,7 @@ func _pot_prompt() -> String:
 	# 화분을 든 채 빈 실내 바닥을 조준 → 놓기 안내(설치 동사 — 스프링클러 프롬프트와 같은 결).
 	if item == ItemCatalog.GARDEN_POT and _can_place_pot(_target):
 		return "[좌클릭] 화분 놓기"
-	if not garden_pot.has_at(_target):
+	if not _pot_at(_target):
 		return ""
 	if garden_pot.is_mature(_target):
 		return "[우클릭] 수확"
@@ -15725,27 +15804,46 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 		return
 	var unit := StoreDiscount.price(base, hearts)
 	var bought := 0
+	var full := false                         # 백팩 만재로 멈췄나(알림 문구를 가른다)
 	for _i in n:
-		if not wallet.spend(unit):
+		# ★ 적재 먼저·결제 나중 — `_try_buy_rarecrow`·`_try_buy_trial_item`이 세운 그 계약이다:
+		#   백팩이 가득이면 **냥이 안 나간다**. 반대 순서였을 때 결제만 되고 물건은 안 들어오는
+		#   구멍이 있었다(고가 유니크 = 낚싯대·태클·검일수록 손실이 컸다).
+		if not wallet.can_afford(unit):
 			break
+		var got_id := ""                      # 실제로 적재된 아이템 id("" = 적재 실패 = 백팩 만재)
 		match kind:
 			"sapling":
-				inventory.add_sapling(buy_id)
+				if inventory.add_sapling(buy_id):
+					got_id = ItemCatalog.sapling_id(buy_id)
 			"fert":
-				inventory.add_item(buy_id, 1)
+				if inventory.add_item(buy_id, 1):
+					got_id = buy_id
 			"hay":
-				inventory.add_item(ItemCatalog.HAY, 1)
+				if inventory.add_item(ItemCatalog.HAY, 1):
+					got_id = ItemCatalog.HAY
 			"gear":
-				inventory.add_item(buy_id, 1)
+				if inventory.add_item(buy_id, 1):
+					got_id = buy_id
 			"pot":
-				inventory.add_item(ItemCatalog.CRAB_POT, 1)   # ★[S3-T7] 설치물 스택 적재
+				if inventory.add_item(ItemCatalog.CRAB_POT, 1):   # ★[S3-T7] 설치물 스택 적재
+					got_id = ItemCatalog.CRAB_POT
 			"wood":
-				inventory.add_item(ItemCatalog.WOOD, 1)       # ★[S4-T7] 원목 소매 스택 적재
+				if inventory.add_item(ItemCatalog.WOOD, 1):       # ★[S4-T7] 원목 소매 스택 적재
+					got_id = ItemCatalog.WOOD
 			"weapon", "potion":
-				inventory.add_item(buy_id, 1)                 # ★[S5-T6] 검(유니크 1자루)·명부환(스택)
+				if inventory.add_item(buy_id, 1):                 # ★[S5-T6] 검(유니크 1자루)·명부환(스택)
+					got_id = buy_id
+		if got_id == "":
+			full = true
+			break
+		if not wallet.spend(unit):
+			inventory.remove_item(got_id, 1)   # 방어(위 can_afford와 이중) — 결제 실패면 물건도 도로 뺀다
+			break
 		bought += 1
 	if bought == 0:
-		_notice("골드 부족(%d 필요)" % unit)
+		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % label if full
+			else "골드 부족(%d 필요)" % unit)
 		return
 	audio.sfx("ui")                           # 매대 거래 블립
 	_notice("%s ×%d −%d골드 (%s)" % [label, bought, unit * bought, shop])
@@ -16561,13 +16659,22 @@ func _buy_seed_store_n(crop_id: String, n: int) -> void:
 		return
 	var unit := StoreDiscount.price(base, neo_affinity.hearts())
 	var bought := 0
+	var full := false                         # 백팩 만재로 멈췄나(알림 문구를 가른다)
 	for _i in n:
-		if not wallet.spend(unit):
+		# ★ 적재 먼저·결제 나중(`_buy_store_generic_n`과 같은 계약) — 씨앗도 백팩 슬롯을 먹으므로
+		#   가득이면 add_seed가 실패한다. 반대 순서면 냥만 나가고 씨앗은 안 들어온다.
+		if not wallet.can_afford(unit):
 			break
-		inventory.add_seed(crop_id)
+		if not inventory.add_seed(crop_id):
+			full = true
+			break
+		if not wallet.spend(unit):
+			inventory.remove_item(ItemCatalog.seed_id(crop_id), 1)   # 방어(위 can_afford와 이중)
+			break
 		bought += 1
 	if bought == 0:
-		_notice("골드 부족(%d 필요)" % unit)
+		_notice("가방을 비우고 오자 — %s 씨앗을 받을 자리가 없다" % CropCatalog.name_of(crop_id) if full
+			else "골드 부족(%d 필요)" % unit)
 		return
 	audio.sfx("ui")                           # 매대 거래 블립(씨앗 구매)
 	_notice("%s 씨앗 ×%d −%d골드 (만물상)" % [CropCatalog.name_of(crop_id), bought, unit * bought])
@@ -17613,7 +17720,9 @@ func _setup_residents() -> void:
 	# 저녁 = 카페(영업창 15:00~) **홀 남동 구석**. 직원 줄(y88)·카운터(y89)·좌석 스툴(y90)·손님
 	# 테이블(y93)·등불(18,91)·모찌 자리(13,92)를 전부 비껴간 칸이다. 일하는 자리가 아니라 **손님**
 	# 으로 앉는다(그 집에서 무거운 걸 나르던 사람이, 이제는 아무것도 안 나르고 앉아 있는 그림).
-	var ken_cafe_tile := Vector2i(17, 92)
+	# ★ 밤 잡귀 스폿(NIGHT_SPOT_TILES 11·14·17 @y92)도 비껴간다 — 옛 자리 (17,92)가 스폿 2와
+	#   같은 칸이라, 바를 연 밤이면 손님 상(좌석 17,90)·켄·잡귀 셋이 한 칸에 겹쳐 쌓였다.
+	var ken_cafe_tile := Vector2i(18, 92)
 	r_ken.schedule = [
 		{"from_min": 0, "tile": ken_home_tile, "region": RegionCatalog.NARU_VILLAGE},
 		{"from_min": 9 * 60, "tile": ken_plaza_tile, "region": RegionCatalog.NARU_VILLAGE},
@@ -18907,6 +19016,17 @@ func _try_propose_okja() -> void:
 	if _wedding_day > 0:
 		_notice("혼례는 이미 정해졌다 — %d일 아침" % _wedding_day)
 		return
+	# ★ 연애 슬롯 배타성 — `_resolve_confession`·`_try_propose`가 지키는 그 불변식이 이 경로에도
+	#   선다. 앵커는 고백 문법(♡5 의지 시험) 밖이라 청혼이 곧 고백인데(위 머리말), 그 자리에서 슬롯을
+	#   말없이 덮어쓰면 **기존 연인이 알림 한 줄 없이 탈락하고 영구히 돌아올 수 없다**: 진급은 단조라
+	#   그 사람의 칸은 ♡5로 굳고, `_romance_offer_available`은 ♡4에서만 서므로 제안이 다시 안 뜨며,
+	#   `reset_hearts`는 배우자 이혼 경로에만 있어 칸이 내려갈 길도 없다. 곁을 정리하는 일은 이혼과
+	#   같은 무게라 여기서 대신 해 주지 않는다 — 거절은 다른 가지와 같이 **무소모·무벌칙**이다.
+	if _romance_partner != "" and _romance_partner != OKJA_RID:
+		var cur := _resident(_romance_partner)
+		_notice("곁에 이미 %s가 있다 — 명부는 한 번에 두 이름만 받는다"
+			% (cur.display_name if cur != null else _romance_partner))
+		return
 	if not _spine_bit_seen(SPINE_B6):
 		_notice("아직 아무것도 보지 못했다")     # 여기까지 올 수 없는 조합(부적의 전제) — 방어
 		return
@@ -18942,6 +19062,48 @@ func _fire_spine_b7() -> void:
 		_queue_spine_say(r.display_name, r.node.spine_lines("b7"))
 	_queue_spine_say(Spine.INNER_SPEAKER, Spine.B7_RELEASE_LINES)
 	_epilogue_pending = true            # 마지막 묶음이 닫히면 에필로그(결정 11)
+
+# ── ★ 척추 사슬 재개 — 끊어진 이음매를 원장에서 다시 잇는다 ────────────────────
+# 이 블록의 설계는 **비트가 단일 진실원 · 발화는 파생**이다(`_spine_bits`만 세이브에 실리고
+# 예약 플래그·다화자 열·컷신 러너는 전부 비영속 — 11197~11209가 로드에서 0으로 되돌린다).
+# 그런데 B6·B7의 발화는 그 규약을 반만 지키고 있었다: 다음 두 이음매가 **인메모리 연속선 하나**에만
+# 걸려 있어, 한 번 끊기면 원장이 멀쩡한데도 영영 다시 이어지지 않았다.
+#   ㉠ B5 완료 → B6 귀환: `_finish_spine_puzzle`이 B5 비트를 즉시 저장한 뒤 완료 지문 6줄을 여는데,
+#      B6를 부르는 자리는 그 지문이 닫히는 `_close_spine_puzzle` 끝 하나뿐이다. 지문 도중 앱을 닫으면
+#      재기동 시 `spine_puzzle`이 null이라 그 경로가 사멸하고, `_maybe_spine_b5`는 B5 비트로 재발동을
+#      막는다 → B6 귀환·앵커 트랙·B7 해방·에필로그가 그 세이브에서 영구 도달 불가.
+#   ㉡ 혼례 아침 → B7 해방: `_spine_b7_armed`를 세우는 곳은 `_advance_wedding` 하나이고, 그 함수는
+#      첫 줄에서 `_wedding_day = 0`으로 자신을 지운다. 그래서 `_fire_spine_b7`이 한 번이라도 접히면
+#      (재생 중첩·러너 거절) 예약이 되살아날 길이 없다 — 엔딩 연출이 통째로 사라진다.
+# ★ 대조군이 답을 이미 들고 있다: B4는 `_arm_spine_b4`가 **매 아침 원장을 다시 보고** 예약을 세우고,
+#   동행 혼도 `_arm_soul_birth`가 그렇게 한다. 그래서 그 둘은 접혀도 다음 아침에 복구된다. 여기서는
+#   두 비트의 전제가 아침이 아니라 상태이므로, 판정 자리를 아침 훅이 아니라 **조용한 프레임**으로 잡되
+#   조건은 똑같이 원장에서만 파생한다(새 세이브 키 0 — 그래야 구세이브도 그 자리에서 이어진다).
+# ★ 여기서 재는 것은 *발화가 아직 안 왔다*이지 *중간에 끊겼다*가 아니다. 두 `_fire_*`가 비트로 자기
+#   재발동을 막으므로, 정상 흐름에서 이 훅은 한 번도 발화하지 않는다(거동 불변).
+func _maybe_resume_spine() -> void:
+	if _run_over or _sleeping or _transitioning:
+		return
+	# 재생 중인 무엇이라도 있으면 물러난다 — 특히 `_spine_say`가 비어야 한다는 조건이 핵심이다.
+	# B6·B7은 비트를 장면 **시작**에 찍는데, 그 장면의 남은 묶음이 도는 동안에도 다음 비트의 전제는
+	# 이미 참이 되어 있다(B6 비트가 선 채 B6 지문이 도는 중). 이 줄이 없으면 진행 중인 장면 위로
+	# 다음 장면이 겹쳐 선다.
+	if cutscene != null or spine_puzzle != null or dialogue.is_open():
+		return
+	if not _spine_say.is_empty() or _spine_b5_pending:
+		return
+	if _epilogue_open or _epilogue_pending:
+		return
+	# ㉠ B5는 끝났는데 B6가 안 왔다 — 귀환을 다시 튼다(`_fire_spine_b6`가 전제·중복을 스스로 다시 잰다).
+	if _spine_bit_seen(SPINE_B5) and not _spine_bit_seen(SPINE_B6):
+		_fire_spine_b6()
+		return
+	# ㉡ 앵커와 부부인데 해방이 안 왔다 — 조건식은 `_advance_wedding`(혼례 아침)의 그 줄과 글자 그대로
+	#    같다. 예약을 세우고 곧바로 소비한다(예약과 재생을 나눈 이유는 취침 연출 한가운데를 피하려는
+	#    것이었는데, 여기는 이미 연출 밖이다).
+	if _spouse_id == OKJA_RID and _spine_bit_seen(SPINE_B6) and not _spine_bit_seen(SPINE_B7):
+		_spine_b7_armed = true
+		_fire_spine_b7()
 
 # ── ★ 에필로그(결정 11) — 사장 `_end_run` 화면의 재목적화 ──────────────────────
 # 옛 21일 런 정산 화면(호출부 0)이 여기서 **엔딩 화면으로 부활**한다. 다만 성격이 정반대다:
@@ -21828,6 +21990,11 @@ const _CHUD_H := 34.0        # 패널 높이 — 트랙 한 줄 + 잔여 시간 
 const _CHUD_PAD := 11.0      # 판 테두리 안쪽 여백
 # 트랙 왼쪽 시작(판 여백 + 배지 + 틈) — 배지가 없어도 판이 안 무너지게 한 상수로 둔다.
 const _HUD_TRACK_X := _CHUD_PAD + _HUD_BADGE + _HUD_BADGE_GAP
+# 판 밑변을 플레이어 **머리 끝 위**로 띄우는 거리. 플레이어 노드 원점은 발치고(CharSprite
+# FOOT_OFFSET_Y −36 → 80프레임 안 발치 76이 원점), 머리 끝은 원점에서 ≈56px 위다. 옛 값 26은
+# 몸통 한복판이라 판이 스프라이트 뒤로 깔려 게이지가 가렸다(판은 main._draw, 플레이어는 별도
+# 노드라 그리기 순서로 못 이긴다 — 자리로 푼다). 56 + 여백 6.
+const _HUD_ABOVE_HEAD := 62.0
 
 # 판 왼쪽 세로 가운데에 배지 한 장(텍스처 없으면 조용히 건너뛴다 — 트랙 자리는 그대로).
 func _draw_hud_badge(org: Vector2, h: float, tex: Texture2D) -> void:
@@ -21840,7 +22007,7 @@ func _draw_cheki_hud() -> void:
 	if cheki == null or player == null:
 		return
 	# 패널은 플레이어 **머리 위**에 눕힌다(가로형이라 낚시 세로 판과 자리가 안 겹친다).
-	var org: Vector2 = player.global_position + Vector2(-_CHUD_W * 0.5, -_CHUD_H - 26.0)
+	var org: Vector2 = player.global_position + Vector2(-_CHUD_W * 0.5, -_CHUD_H - _HUD_ABOVE_HEAD)
 	var panel := Rect2(org, Vector2(_CHUD_W, _CHUD_H))
 	HanjiUi.draw_plate(self, panel)
 	_draw_hud_badge(org, _CHUD_H, _HUD_BADGE_CHEKI)
@@ -21886,7 +22053,7 @@ const _KHUD_PAD := 11.0
 func _draw_cocktail_hud() -> void:
 	if cocktail == null or player == null:
 		return
-	var org: Vector2 = player.global_position + Vector2(-_KHUD_W * 0.5, -_KHUD_H - 26.0)
+	var org: Vector2 = player.global_position + Vector2(-_KHUD_W * 0.5, -_KHUD_H - _HUD_ABOVE_HEAD)
 	var panel := Rect2(org, Vector2(_KHUD_W, _KHUD_H))
 	HanjiUi.draw_plate(self, panel)
 	_draw_hud_badge(org, _KHUD_H, _HUD_BADGE_COCKTAIL)   # ★[S6-T8] 셰이커 = 밤 칵테일의 표식
@@ -23514,9 +23681,13 @@ func _draw_want_bubble(t: Vector2i, menu_id: String) -> void:
 func _draw_guest_mark(t: Vector2i, guest_id: String) -> void:
 	if guest_id == "" or not guests.is_regular(guest_id):
 		return
-	var dot := Rect2(t.x * TILE + TILE * 0.5 - _WANT_ICON * 0.5 - 11.0, t.y * TILE - _WANT_ICON, 6.0, 6.0)
-	draw_rect(dot.grow(1.0), Color(0.06, 0.05, 0.08, 0.85))   # 말풍선과 같은 어두운 테
-	draw_rect(dot, Color(1.0, 0.86, 0.45))                    # 단골 = 밝은 등불빛
+	# ★ 사각형 → **둥근 등불 점**. 옛 모양(6×6 단색 사각 + 어두운 테)은 도트 무대에서 "테두리만
+	#   있는 빈 액자"로 읽혀, 옆의 한지 판 말풍선 곁에 미완성 플레이스홀더처럼 떠 보였다.
+	#   자리(중심)는 그대로 두고 형태만 등불로 바꾼다 — 무리 → 테 → 심지 순으로 겹쳐 칠한다.
+	var dot_c := Vector2(t.x * TILE + TILE * 0.5 - _WANT_ICON * 0.5 - 8.0, t.y * TILE - _WANT_ICON + 3.0)
+	draw_circle(dot_c, 5.5, Color(1.0, 0.86, 0.45, 0.18))     # 옅은 무리(불빛 번짐)
+	draw_circle(dot_c, 4.0, Color(0.06, 0.05, 0.08, 0.85))    # 말풍선과 같은 어두운 테
+	draw_circle(dot_c, 3.0, Color(1.0, 0.86, 0.45))           # 단골 = 밝은 등불빛
 
 # T6.4 바를 연 밤(옵트인)의 바 손님과 머리 위 인내심 바를 그린다. 낮 카페 손님과 같은 좌석 줄을
 # 시간대로 나눠 쓰므로(cafe 마감 후 밤 바) 그리기도 카페 손님과 똑같은 규격이고, 활성(밤 바 영업

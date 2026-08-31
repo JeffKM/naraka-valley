@@ -94,10 +94,14 @@ func _initialize() -> void:
 		await process_frame
 
 	# 옹이 도트 초상화 — 대화창 슬롯에 실제로 얹혀 그려지는지(파일 존재가 아니라 *배선* 확인).
-	m._set_portrait("옹이", "talk")
-	m.dialogue_panel.visible = true
-	m.dialogue_text.text = "…손님이군. 여긴 목공방일세. 나는 옹이라 부르면 되네."
+	# ★ 패널·초상화를 손으로 세우지 않고 **진짜 대화 경로**로 연다(dialogue.start). 손으로 세우면
+	#   dialogue.is_open()이 false로 남아 _process의 상시 HUD 접기(_hud_hidden)가 안 걸리고,
+	#   덤프에만 혼력 바·핫바가 대화창 위로 겹쳐 찍힌다 — 실플레이에 없는 결함을 육안 판정이
+	#   오탐하게 된다(2026-08-15 폴리시 루프에서 실제로 오탐).
+	m.dialogue.start("옹이", PackedStringArray(["…손님이군. 여긴 목공방일세. 나는 옹이라 부르면 되네."]))
+	await process_frame
 	await _grab("t10_portrait")
+	m.dialogue._close()
 
 	if had:
 		_write(sp, bak)

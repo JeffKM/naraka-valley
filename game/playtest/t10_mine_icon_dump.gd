@@ -93,10 +93,12 @@ func _initialize() -> void:
 		await process_frame
 
 	# 풀무 도트 초상화 — 대화창 슬롯에 실제로 얹혀 그려지는지(파일 존재가 아니라 *배선* 확인).
-	m._set_portrait("풀무", "talk")
-	m.dialogue_panel.visible = true
-	m.dialogue_text.text = "…사람이 내려왔군. 여긴 화덕일세. 나는 풀무라 하네."
+	# ★ 손으로 패널을 세우면 dialogue.is_open()이 false로 남아 상시 HUD 접기가 안 걸린다
+	#   (덤프에만 혼력 바·핫바가 대화창 위로 겹쳐 찍히는 오탐) — 진짜 대화 경로로 연다.
+	m.dialogue.start("풀무", PackedStringArray(["…사람이 내려왔군. 여긴 화덕일세. 나는 풀무라 하네."]))
+	await process_frame
 	await _grab("t10m_portrait")
+	m.dialogue._close()
 
 	if had:
 		_write(sp, bak)

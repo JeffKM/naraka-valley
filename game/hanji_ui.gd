@@ -78,3 +78,56 @@ static func draw_text(ci: CanvasItem, pos: Vector2, text: String, size: int, col
 # 글자 폭(레이아웃 계산용).
 static func text_width(text: String, size: int) -> float:
 	return FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+
+# ── ★[폴리시] 글자 세로 치수·가변 길이 흡수 ──────────────────────────────────
+# 왜 있나: `draw_text`가 **baseline** 기준이라 호출부가 "한 줄이 세로로 몇 px을 먹는가"를
+# 폰트 크기(size)로 어림하고 있었다. 실제로는 baseline 아래로 descent가 더 내려가므로, 판 높이를
+# size 합으로만 잡으면 막줄의 아랫배가 9-slice 테두리에 깔린다(시계 HUD 마일스톤 줄·달력 범례
+# 막줄이 그렇게 잘려 있었다). 판 기하를 계산하는 쪽은 이 두 함수를 쓴다.
+static func text_ascent(size: int) -> float:
+	return FONT.get_ascent(size)
+
+static func text_descent(size: int) -> float:
+	return FONT.get_descent(size)
+
+# 폭에 안 들어가는 꼬리를 잘라 말줄임(…)을 붙인다. 이미 들어가면 원문 그대로.
+# ★ '…'(U+2026)은 neodgm.ttf **자체에 있는** 글리프다(♥처럼 폰트에 없어 두부가 되는 문자가
+#   아니다 — calendar_panel의 ♥ 선례 참조). 곳간의 "…외 N종"이 이미 쓰고 있으므로 이건
+#   "새 특수문자를 들이지 않는다"는 규약 안의 선택이다.
+static func elide(text: String, size: int, max_w: float) -> String:
+	if max_w <= 0.0 or text_width(text, size) <= max_w:
+		return text
+	var ell := "…"
+	var ew := text_width(ell, size)
+	if ew > max_w:
+		return ""
+	# 들어가는 최대 글자 수를 이분 탐색(한 글자씩 줄이면 긴 줄에서 폭 계산이 수십 번 돈다).
+	var lo := 0
+	var hi := text.length()
+	while lo < hi:
+		@warning_ignore("integer_division")
+		var mid := (lo + hi + 1) / 2
+		if text_width(text.substr(0, mid), size) + ew <= max_w:
+			lo = mid
+		else:
+			hi = mid - 1
+	return text.substr(0, lo).strip_edges(false, true) + ell
+
+# 폭에 맞춰 **먼저 줄이고(글자 크기), 그래도 안 되면 자른다(말줄임)**. 가변 길이 한 줄
+# (매대 헤더처럼 문구가 상태에 따라 길어지는 줄)의 기본 그리기.
+static func draw_text_fit(ci: CanvasItem, pos: Vector2, text: String, size: int, color: Color,
+		max_w: float, min_size: int = 10) -> void:
+	var s := size
+	while s > min_size and text_width(text, s) > max_w:
+		s -= 1
+	draw_text(ci, pos, elide(text, s, max_w), s, color, max_w)
+
+# 목적격 조사 — 받침 있으면 "을", 없으면 "를"(한글이 아니면 "를"로 떨어진다).
+# ★ 확인 문구가 "%s 을(를)"처럼 이름 뒤 공백 + 병기로 떠 있던 걸 대신한다.
+static func josa_eul(word: String) -> String:
+	if word.is_empty():
+		return "를"
+	var cp := word.unicode_at(word.length() - 1)
+	if cp < 0xAC00 or cp > 0xD7A3:
+		return "를"
+	return "를" if (cp - 0xAC00) % 28 == 0 else "을"

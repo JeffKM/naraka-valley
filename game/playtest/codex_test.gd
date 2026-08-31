@@ -106,15 +106,31 @@ func _initialize() -> void:
 		mineral_ids.has(ItemCatalog.STONE) and mineral_ids.has(ItemCatalog.GEM_NEOKSUJEONG)
 		and not mineral_ids.has(ItemCatalog.INGOT_MYEONGDONG))
 
-	# ①i 요리 — 크기 + 구성(융합 실존 · **기본 메뉴 4종 전부 불포함**).
+	# ①i 요리 — 크기 + 구성(곁들이 실존 · **기본 메뉴 4종·판매 전용 음료 전부 불포함**).
 	var no_basics := true
 	for bid in MenuCatalog.basic_ids():
 		if cook_ids.has(String(bid)):
 			no_basics = false
-	_check("①i 요리 분모 = fusion_ids() 크기(%d)" % MenuCatalog.fusion_ids().size(),
-		cook_ids.size() == MenuCatalog.fusion_ids().size())
-	_check("①j 요리 칸 구성(혼령초 라떼·넋붕어빵 실존 · 기본 메뉴 4종 0개)", no_basics
-		and cook_ids.has(MenuCatalog.HONRYEONGCHO_LATTE) and cook_ids.has(MenuCatalog.BUNGEO_PPANG))
+	_check("①i 요리 분모 = side_dish_ids() 크기(%d) — 융합 %d종보다 좁다" % [
+		MenuCatalog.side_dish_ids().size(), MenuCatalog.fusion_ids().size()],
+		cook_ids.size() == MenuCatalog.side_dish_ids().size()
+		and cook_ids.size() < MenuCatalog.fusion_ids().size())
+	_check("①j 요리 칸 구성(넋붕어빵·불사과 타르트 실존 · 기본 메뉴 4종 0개)", no_basics
+		and cook_ids.has(MenuCatalog.BUNGEO_PPANG) and cook_ids.has(MenuCatalog.BULSAGWA_TART))
+	# ★ 분모 = "획득 가능한 것"의 불변식(이 스위트가 못 잡던 자리 — 분모가 획득 경로보다 넓으면
+	#   완주가 원리적으로 불가능해진다). 두 방향으로 잰다: ㉠ 요리 칸 전 id가 곁들이다(= 주방요괴
+	#   창구가 실제로 구울 수 있다) ㉡ 판매 전용 음료는 한 종도 분모에 없다(대표 3종 실존 단언).
+	var cook_all_makeable := true
+	for kid in cook_ids:
+		if not MenuCatalog.is_side_dish(String(kid)) or MenuCatalog.restore_of(String(kid)) <= 0:
+			cook_all_makeable = false
+	_check("①j2 ★요리 칸 전 id = 곁들이(주방요괴 창구로 획득 가능 — 분모 ⊆ 획득 경로)",
+		cook_all_makeable and not cook_ids.is_empty())
+	_check("①j3 ★판매 전용 음료는 분모 밖(혼령초 라떼·서리동백 밀크티·나락혼정 아인슈페너)",
+		not cook_ids.has(MenuCatalog.HONRYEONGCHO_LATTE)
+		and not cook_ids.has(MenuCatalog.DONGBAEK_MILKTEA)
+		and not cook_ids.has(MenuCatalog.HONJEONG_EINSPANNER)
+		and not Codex.is_tracked(MenuCatalog.HONRYEONGCHO_LATTE))
 
 	# ①k 총 분모 = 다섯 칸 합(중복 0) · 전 id가 유효 아이템(이름 있음).
 	var sum_cat := crop_ids.size() + fish_ids.size() + forage_ids.size() + mineral_ids.size() + cook_ids.size()
@@ -131,7 +147,7 @@ func _initialize() -> void:
 	_check("①m category_of 소속(작물·어종·요리)",
 		Codex.category_of(CropCatalog.HONRYEONGCHO) == Codex.CAT_CROP
 		and Codex.category_of(FishCatalog.NEOK_BUNGEO) == Codex.CAT_FISH
-		and Codex.category_of(MenuCatalog.HONRYEONGCHO_LATTE) == Codex.CAT_COOK)
+		and Codex.category_of(MenuCatalog.BUNGEO_PPANG) == Codex.CAT_COOK)
 	_check("①n 풀 밖 미추적(유품·도구·씨앗·건초)",
 		not Codex.is_tracked(ItemCatalog.RELIC_BINYEO) and not Codex.is_tracked(ItemCatalog.HOE)
 		and not Codex.is_tracked(ItemCatalog.seed_id(CropCatalog.HONRYEONGCHO))
@@ -178,18 +194,24 @@ func _initialize() -> void:
 	m.ship_bin.pending.clear()
 	m.inventory.add_item(ItemCatalog.GEM_NEOKSUJEONG, 1)
 	var mslot := _slot_of(m, ItemCatalog.GEM_NEOKSUJEONG)
-	m.inventory.add_item(MenuCatalog.HONRYEONGCHO_LATTE, 1)
-	var kslot := _slot_of(m, MenuCatalog.HONRYEONGCHO_LATTE)
-	_check("②pre2 광물·요리 슬롯 확보", mslot >= 0 and kslot >= 0)
+	# ★ 요리는 **실제 획득 경로**로 손에 넣는다(`inventory.add_item` 주입이 아니라 주방요괴 창구
+	#   `_make_side_dish` — 메뉴 아이템이 인벤토리에 들어오는 유일한 길). 분모가 획득 경로보다
+	#   넓으면 그 칸은 영영 안 차므로, 요리 칸의 대표 하나는 그 길을 실제로 통과해 봐야 한다.
+	var cook_id: String = MenuCatalog.BULSAGWA_TART   # 회복량 최대 = `_best_side_dish`가 고를 접시
+	m.larder.add(MenuCatalog.signature_of(cook_id), 1)
+	var made: bool = m._make_side_dish()
+	var kslot := _slot_of(m, cook_id)
+	_check("②pre2 광물 슬롯 + 주방요괴 창구가 실제로 구워 낸 요리 슬롯",
+		mslot >= 0 and made and kslot >= 0 and m.inventory.count_of(cook_id) == 1)
 	m._on_frame_deposit(mslot)
 	m._on_frame_deposit(kslot)
 	_check("②f 광물·요리도 출하 가능(도감 추적 대상)",
 		m.ship_bin.count_of(ItemCatalog.GEM_NEOKSUJEONG) == 1
-		and m.ship_bin.count_of(MenuCatalog.HONRYEONGCHO_LATTE) == 1)
+		and m.ship_bin.count_of(cook_id) == 1)
 	m._on_day_advanced(day1 + 6)
 	_check("②g 광물·요리 등재 + 칸 분자 1씩",
 		m.codex.is_shipped(ItemCatalog.GEM_NEOKSUJEONG)
-		and m.codex.is_shipped(MenuCatalog.HONRYEONGCHO_LATTE)
+		and m.codex.is_shipped(cook_id)
 		and m.codex.category_shipped(Codex.CAT_MINERAL) == 1
 		and m.codex.category_shipped(Codex.CAT_COOK) == 1)
 

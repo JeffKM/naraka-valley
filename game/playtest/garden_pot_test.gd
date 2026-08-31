@@ -224,6 +224,45 @@ func _run_checks() -> void:
 	_check("⑧c ㉠ 절기 전환 아침에도 화분 작물은 **살아남는다**",
 		m.garden_pot.is_planted(house_tile) and m.garden_pot.crop_of(house_tile) == off_crop)
 
+	# ═══ ⑩ ★[폴리시] 배치 범위 = 안식 농원 실내(구역 네임스페이스) ═══
+	# 화분 원장은 좌표만 키로 들고(구역 축 없음) 실내 밴드 좌표는 구역끼리 겹친다. 그래서 배치를
+	# ADR-0069 결정 8이 든 자리("집·늘봄방" = 둘 다 HOME)로 좁히지 않으면, 다른 구역 실내에 놓은
+	# 화분이 그 방에서는 안 보이고(그리기는 HOME에서만) 안식 농원 쪽에 유령으로 서서 원격으로
+	# 심기·물주기·수확까지 먹힌다. 여기서 보는 건 그 두 방향 모두다.
+	_select(m, ItemCatalog.GARDEN_POT)            # 화분을 든 채로 물어야 배치 안내가 뜬다
+	m._rebuild_region(RegionCatalog.NARU_VILLAGE)
+	m._indoor = "만물상"
+	var store_tile: Vector2i = m.STORE_IN_TILE   # 만물상 진입 착지 = 방 안 바닥(걷기 O)
+	_check("⑩ 전제 — 만물상 실내 · 그 칸은 밟을 수 있는 바닥 · 화분을 들고 있다",
+		m._region == RegionCatalog.NARU_VILLAGE
+		and not m.is_solid(m._grid[store_tile.y][store_tile.x])
+		and m.inventory.selected_id() == ItemCatalog.GARDEN_POT)
+	_check("⑩b ★다른 구역 실내엔 못 놓는다(스프링클러의 HOME 가드와 같은 결)",
+		not m._can_place_pot(store_tile))
+	m._target = store_tile
+	_check("⑩c 배치 안내도 안 뜬다(설치 동사가 그 방에선 아예 없다)",
+		not m._pot_prompt().contains("화분 놓기"))
+	# 실내이기만 하면 통과하던 옛 술어와의 대조 — 같은 칸이 '실내·비-SOLID·빈 칸' 조건은 다 만족한다.
+	_check("⑩d 막은 축은 정확히 구역 하나다(실내 여부·바닥·빈 칸은 전부 만족)",
+		m._indoor != "" and not m.garden_pot.has_at(store_tile)
+		and not m._field_at(store_tile).is_tilled(store_tile))
+	# 역방향 — 안식 농원 집에 선 화분을 **다른 구역에서 같은 좌표로** 만질 수 없다.
+	m._target = house_tile
+	_check("⑩e ★HOME 화분이 다른 구역에서는 원장 질의에 안 잡힌다(원격 조작 차단)",
+		m.garden_pot.has_at(house_tile) and not m._pot_at(house_tile))
+	_check("⑩f 그 칸 화분 프롬프트도 비어 있다", m._pot_prompt() == "")
+	_select(m, ItemCatalog.WATERING_CAN)
+	m._can_water = 5
+	var wet_before: bool = m.garden_pot.is_watered(house_tile)
+	m._use_tool()
+	_check("⑩g 다른 구역에서 물뿌리개를 휘둘러도 HOME 화분은 안 젖는다",
+		m.garden_pot.is_watered(house_tile) == wet_before)
+	# 대조군 — 안식 농원으로 돌아오면 같은 칸이 그대로 다시 화분이다(가드가 기능을 안 죽였다).
+	m._rebuild_region(RegionCatalog.HOME)
+	m._indoor = "집"
+	_check("⑩h 대조군 — 안식 농원 실내로 돌아오면 그 화분을 다시 만진다",
+		m._pot_at(house_tile) and m._pot_prompt() != "")
+
 	# ═══ ⑨ main 세이브 — 신규 슬라이스 키 + 구세이브 무손상 ═══
 	m._save_game()
 	var save_blob: Dictionary = cleaner.load_game()

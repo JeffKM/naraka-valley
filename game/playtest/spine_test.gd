@@ -15,6 +15,9 @@ extends SceneTree
 #      §6.5 5단 — 세계가 한 프레임도 안 보이고 S등급으로 넘어간다) + 그 장면이 끝난 뒤의 원복.
 #   ⑨ 금칙어 스캔 — 조연 31어 + 강림 🔴 4종을 척추 본문에 상속. 「옥자」 0회·중심 진실 0회.
 #   ⑩ 재진입 가드 — B5 기성립이면 같은 문 칸에서 재발동 0.
+#   ⑪ **끊어진 이음매 복구** — B5만 선 세이브(완료 지문 도중 종료)를 부팅하면 B6 귀환이 원장에서
+#      다시 이어진다. 발화는 파생이고 비트가 진실원이라는 규약의 실증이며, 사슬이 멀쩡할 땐
+#      그 훅이 한 번도 안 문다(거동 불변).
 #
 # ★ 관례(기존 스위트 상속): 하트는 points·stage **동반** 세팅 · 드레인은 컷신 재생 +
 #   선택지 `has_choice → choose(0)` 동반 · 헤드리스는 반드시 game/에서 · 순차 실행.
@@ -494,7 +497,49 @@ func _init() -> void:
 		m2.cutscene == null and m2.spine_puzzle == null and not m2._spine_b5_pending
 		and not m2.dialogue.is_open())
 	_check("⑩c 원장도 안 늘어난다(B4·B5 그대로)", m2._spine_bits == bits_before)
+
+	# ── ⑪ ★끊어진 이음매 복구 — B5만 선 세이브가 B6를 되찾는다 ────────────────
+	# 실제 시나리오: `_finish_spine_puzzle`이 B5 비트를 **디스크에 즉시** 굳힌 뒤 완료 지문 6줄을
+	# 여는데, B6를 부르는 자리는 그 지문이 닫히는 `_close_spine_puzzle` 끝 하나뿐이다. 그 6줄 사이에
+	# 앱을 닫으면 재기동 시 `spine_puzzle`이 null이라 그 경로가 사멸하고, `_maybe_spine_b5`는 B5
+	# 비트로 재발동을 막는다 → B6·앵커 트랙·B7·에필로그가 그 세이브에서 영구 도달 불가였다.
+	# 여기서는 그 세이브를 **글자 그대로 만들어** 디스크에 얹고(B6 비트만 내린 원장), 부팅이 사슬을
+	# 스스로 다시 잇는지를 라이브 `_process`로 잰다.
+	print("── ⑪ 끊어진 이음매 복구 ──")
+	m2._spine_bits &= ~(1 << m2.SPINE_B6)      # = B5 완료 지문 도중 종료한 세이브의 원장
+	m2._save_game()
+	var saved_orphan: Dictionary = m2.saver.load_game()
+	_check("⑪a pre 디스크 원장이 B5까지다(B6 미기록 — 끊어진 그 상태)",
+		(int(saved_orphan.get("spine_bits", 0)) & (1 << m2.SPINE_B5)) != 0
+		and (int(saved_orphan.get("spine_bits", 0)) & (1 << m2.SPINE_B6)) == 0)
 	m2.free()
+	var m3: Node = await _new_main()
+	# 라이브 훅 — `_process`가 조용한 프레임에 사슬을 다시 잇는다(직접 호출이 아니라 프레임을 돌린다).
+	# ★ 드레인을 **먼저 하지 않는다**: 재개는 부팅 몇 프레임 안에 일어나므로, 여기서 대화를 비우면
+	#   되찾은 장면까지 같이 비워져 "복구됐다"가 사후 상태로만 보인다(장면이 실제로 섰음을 못 잰다).
+	var wait := 0
+	while not m3._spine_bit_seen(m3.SPINE_B6) and wait < 120:
+		await process_frame
+		wait += 1
+	_check("⑪b ★부팅이 B6 귀환을 되찾는다(원장 파생 재개 — 발화가 아니라 비트가 진실원)",
+		m3._spine_bit_seen(m3.SPINE_B6)
+		and (m3.cutscene != null or m3._illust_id != "" or not m3._spine_say.is_empty()))
+	_check("⑪c 내면 공간은 되살아나지 않는다(재개되는 것은 *다음* 비트뿐 — 퍼즐 재탕 0)",
+		m3.spine_puzzle == null and not m3._spine_b5_pending and not m3._spine_b5_closing)
+	_check("⑪d 되찾은 장면이 트랙까지 개통한다(끊기기 전과 같은 결과 상태)",
+		m3._okja_track_open() and m3._resident("okja").affinity != null)
+	_drain_scene(m3)
+	_check("⑪e 장면이 끝나면 세계로 돌아온다(잔류 0 — 정상 경로와 같은 원복)",
+		m3._illust_id == "" and m3._spine_say.is_empty() and m3.player.is_physics_processing()
+		and m3.spine_puzzle == null)
+	# 정상 흐름에서는 이 훅이 한 번도 안 문다(거동 불변) — 사슬이 이어진 뒤 몇 프레임을 더 돌려 잰다.
+	var bits_resumed: int = m3._spine_bits
+	for _i in 10:
+		m3._maybe_resume_spine()
+	_check("⑪f ★재개 훅은 사슬이 이어져 있으면 아무 일도 안 한다(중복 발화 0 · 원장 불변)",
+		m3._spine_bits == bits_resumed and m3.cutscene == null and m3._illust_id == ""
+		and m3._spine_say.is_empty() and not m3._spine_b7_armed)
+	m3.free()
 
 	cleaner.delete_save()
 	cleaner.free()

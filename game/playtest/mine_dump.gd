@@ -84,7 +84,10 @@ func _initialize() -> void:
 	# ── ④ 실내 2방 ────────────────────────────────────────────────────────────
 	m._ascend_mine_to_surface()                 # 층 → 지상(입구 사다리)
 	await create_timer(3.0).timeout
-	m._transition_to("대장간", Vector2i(6, 51))
+	# ★ 착지 칸은 **방 안**(SMITHY_RECT x8..19)이어야 한다. 옛 (6,51)은 방 서쪽 벽 밖·cam rect
+	#   여백(VOID)이라, 실내 격리 마스크가 제 크기로 고쳐진 뒤 플레이어만 검은 여백에 서 있는
+	#   그림이 됐다(옛 마스크가 1.5배로 부푼 덕에 우연히 가려져 있었을 뿐이다).
+	m._transition_to("대장간", Vector2i(11, 51))
 	await create_timer(3.0).timeout
 	await _grab("smithy_room")
 	m._transition_to("길드", Vector2i(27, 51))

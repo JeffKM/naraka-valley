@@ -43,6 +43,17 @@ func quality_at(i: int) -> int:
 		return 0
 	return int(slots[i].get("quality", 0))
 
+# 이 id를 몇 개 보관 중인가(품질 무관 합산 — 백팩 `Inventory.count_of`와 같은 시그니처·같은 뜻).
+# ★[폴리시] "세상 어딘가에 그 물건이 있는가"를 파생으로 묻는 판정(레어크로우 8종 소유)이 상자를
+#   못 보면 상자에 넣는 순간 그 물건이 없어진 것으로 읽힌다 — 상자는 카테고리 필터가 없어 무엇이든
+#   받으므로(store), 그런 판정이 볼 수 있게 접근자를 연다(보관 규칙은 한 줄도 안 바뀐다).
+func count_of(id: String) -> int:
+	var n := 0
+	for s in slots:
+		if s != null and s["id"] == id:
+			n += int(s["count"])
+	return n
+
 func is_empty() -> bool:
 	for s in slots:
 		if s != null:

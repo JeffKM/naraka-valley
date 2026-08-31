@@ -192,6 +192,60 @@ func _part_main() -> void:
 	m._on_frame_discard(slot2)
 	_check("⑥c 레어크로우는 버릴 수 없다(수집 완주 보호)",
 		m.inventory.count_of(ItemCatalog.RARECROW_2) == 1)
+	# ★[S10 폴리시] 선물 채널도 같은 금지다 — 여기가 뚫려 있어 파생 판정의 단조 증가가 깨졌다
+	#   (건네면 DISLIKE로 소모 → `_rarecrow_owned`가 영영 false → 디럭스 반경 영구 미달성).
+	var r_gift: Resident = m._resident("miho")
+	r_gift.affinity.last_gift_day = -1
+	r_gift.affinity.gift_week = -1
+	r_gift.affinity.gifts_this_week = 0
+	var pts_pre: int = r_gift.affinity.points
+	var collected_pre: int = m._rarecrow_collected()
+	m.inventory.select(slot2)
+	m._try_resident_gift(r_gift)
+	_check("⑥d 레어크로우는 선물로도 못 잃는다(소지·수집 수·호감도 전부 불변)",
+		m.inventory.id_at(slot2) == ItemCatalog.RARECROW_2
+		and m.inventory.count_of(ItemCatalog.RARECROW_2) == 1
+		and m._rarecrow_collected() == collected_pre
+		and r_gift.affinity.points == pts_pre)
+
+	# ★[폴리시] 저장 상자도 같은 단조 증가에 속한다 — 상자는 카테고리 필터가 없어 레어크로우를
+	#   그대로 받는데(집·갈무리방 둘 다), 소유 판정이 상자를 못 봐 넣는 순간 "안 가진 것"이 됐다.
+	#   ⓐ 집 상자 · ⓑ 갈무리방 상자를 각각 태워 두 저장소 모두가 합집합에 드는지 본다.
+	var owned_pre: int = m._rarecrow_collected()
+	m._active_chest = m.chest
+	m._on_frame_chest_store(slot2)
+	_check("⑥e 전제 — 레어크로우 ②가 백팩을 떠나 집 상자에 들어갔다",
+		m.inventory.count_of(ItemCatalog.RARECROW_2) == 0
+		and m.chest.count_of(ItemCatalog.RARECROW_2) == 1)
+	_check("⑥f ★집 상자에 넣어도 소유는 유지(수집 수 불변)",
+		m._rarecrow_owned(ItemCatalog.RARECROW_2) and m._rarecrow_collected() == owned_pre)
+	# ⓑ 집 상자에서 빼 갈무리방 상자로 옮긴다 — 두 상자는 서로 독립된 저장소다.
+	m._on_frame_chest_take(0)
+	var slot2b := -1
+	for i in range(m.inventory.slots.size()):
+		if m.inventory.id_at(i) == ItemCatalog.RARECROW_2:
+			slot2b = i
+	m._active_chest = m.storehouse_chest
+	m._on_frame_chest_store(slot2b)
+	_check("⑥g 전제 — 같은 레어크로우가 갈무리방 상자로 옮겨 갔다(집 상자는 비었다)",
+		m.storehouse_chest.count_of(ItemCatalog.RARECROW_2) == 1
+		and m.chest.count_of(ItemCatalog.RARECROW_2) == 0
+		and m.inventory.count_of(ItemCatalog.RARECROW_2) == 0)
+	_check("⑥h ★갈무리방 상자도 소유로 친다(두 저장소 모두 합집합)",
+		m._rarecrow_owned(ItemCatalog.RARECROW_2) and m._rarecrow_collected() == owned_pre)
+	# 만물상 1회 한정이 상자 보관분을 본다 — 여기가 뚫려 있어 같은 종을 또 결제할 수 있었다.
+	m.wallet.earn(ItemCatalog.RARECROW_STORE_PRICE * 2)
+	var gold_pre: int = m.wallet.gold
+	_check("⑥i ★상자에 넣어 둔 종은 만물상에서 재구매되지 않는다(냥·개수 불변)",
+		not m._try_buy_rarecrow(ItemCatalog.RARECROW_2)
+		and m.wallet.gold == gold_pre
+		and m.storehouse_chest.count_of(ItemCatalog.RARECROW_2) == 1
+		and m.inventory.count_of(ItemCatalog.RARECROW_2) == 0)
+	# 되돌려 놓는다(아래 ④⑤ 반경 단언은 '백팩 ∪ 밭' 상태를 전제로 센다).
+	m._on_frame_chest_take(0)
+	_check("⑥j 회수하면 다시 백팩으로(왕복 무손실)",
+		m.inventory.count_of(ItemCatalog.RARECROW_2) == 1
+		and m.storehouse_chest.count_of(ItemCatalog.RARECROW_2) == 0)
 
 	# ── ④⑤ 까마귀 보호 반경 · 디럭스 ──
 	print("── ④⑤ 까마귀 보호 · 8종 완성 디럭스 ──")

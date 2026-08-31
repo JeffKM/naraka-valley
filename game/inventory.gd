@@ -339,10 +339,12 @@ func _cat_rank(id: String) -> int:
 		_: return 5
 
 # ── 씨앗(작물군 id 기반 — 내부적으로 "<작물군>_seed" 아이템에 매핑) ──────────────
-func add_seed(crop_id: String, n: int = 1) -> void:
+# ★적재 성공 여부를 돌려준다(옛 void) — 백팩이 가득이면 씨앗도 못 들어오는데 실패가 안 보이면
+#   호출 측(매대 구매)이 "냥만 나가는" 구멍을 만든다. 기존 호출은 반환값을 안 봐도 그대로 동작한다.
+func add_seed(crop_id: String, n: int = 1) -> bool:
 	if not CropCatalog.has_crop(crop_id):
-		return
-	add_item(ItemCatalog.seed_id(crop_id), n)
+		return false
+	return add_item(ItemCatalog.seed_id(crop_id), n)
 
 func seed_count(crop_id: String) -> int:
 	return count_of(ItemCatalog.seed_id(crop_id))
@@ -355,10 +357,11 @@ func take_seed(crop_id: String) -> bool:
 	return remove_item(ItemCatalog.seed_id(crop_id), 1)
 
 # ── 묘목(과일 종 id 기반 — 내부적으로 "<과일종>_sapling" 아이템에 매핑, S1-5b) ──────
-func add_sapling(fruit_id: String, n: int = 1) -> void:
+# ★add_seed와 같은 이유로 적재 성공 여부를 돌려준다(옛 void — 묘목 구매도 같은 계약을 탄다).
+func add_sapling(fruit_id: String, n: int = 1) -> bool:
 	if not FruitTreeCatalog.has(fruit_id):
-		return
-	add_item(ItemCatalog.sapling_id(fruit_id), n)
+		return false
+	return add_item(ItemCatalog.sapling_id(fruit_id), n)
 
 func sapling_count(fruit_id: String) -> int:
 	return count_of(ItemCatalog.sapling_id(fruit_id))
