@@ -450,6 +450,8 @@ func _initialize() -> void:
 		_fingerprint(m2.panning) == live_pan)
 	await _despawn(m2)
 
+	await _part_r2()
+
 	if had_save:
 		_write_bytes(SAVE, _read_bytes(BAK))
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(BAK))
@@ -470,3 +472,87 @@ func _no_op_pan(m: Node, t: Vector2i) -> bool:
 	var e0: int = m.energy.current
 	m._pan_spot(t)
 	return m.energy.current == e0
+
+# ══ [폴리시 R2] 팬닝 산출 소실 · 결정기 회수 롤백 ═════════════════════════════
+#   ⑩ 백팩이 가득하면 **스폿을 소진하지 않는다**(스폿은 하루 한 자리씩만 깔려 되찾을 길이 없다).
+#   ⑪ 결정기 회수는 안에 든 보석까지 담을 자리가 있어야 성립한다(빈 칸 1개짜리 함정).
+func _part_r2() -> void:
+	print("── ⑩⑪ [폴리시 R2] 팬닝 산출 · 결정기 안의 보석 ──")
+	var m: Node = await _spawn_main()
+
+	# ── ⑩ 팬닝 ──
+	# 산출이 **아이템**인 스폿을 찾는다(금화만 나오는 자리는 이 결함의 무대가 아니다).
+	var region := ""
+	var spot := Vector2i(-1, -1)
+	for r: String in PanningSpots.spawn_regions():
+		for t: Vector2i in m.panning.tiles(r):
+			var row: Dictionary = m.panning.peek(m.clock.day, r, t)
+			if String(row.get("id", "")) != "" and int(row.get("count", 0)) > 0:
+				region = r
+				spot = t
+				break
+		if spot != Vector2i(-1, -1):
+			break
+	_check("⑩pre 아이템 산출 스폿 확보", spot != Vector2i(-1, -1))
+	var row0: Dictionary = m.panning.peek(m.clock.day, region, spot)
+	var yid := String(row0["id"])
+	_check("⑩a peek는 원장을 안 건드린다(같은 답을 두 번 준다)",
+		m.panning.has_at(region, spot)
+		and String(m.panning.peek(m.clock.day, region, spot)["id"]) == yid)
+	m._region = region
+	m._indoor = ""
+	_fill_backpack_full(m.inventory)
+	var e0: int = m.energy.current
+	m._pan_spot(spot)
+	_check("⑩b **스폿이 그대로 남는다** — 혼력도 안 닳고 산출도 안 사라진다",
+		m.panning.has_at(region, spot) and m.energy.current == e0
+		and m.inventory.count_of(yid) == 0)
+	_fill_backpack_full(m.inventory, [0])   # 자리를 하나 비운다
+	m._pan_spot(spot)
+	_check("⑩c 자리를 비우면 그때 성립 — 같은 산출이 그대로 들어온다(롤 결정적)",
+		not m.panning.has_at(region, spot) and m.inventory.count_of(yid) == int(row0["count"])
+		and m.energy.current == e0 - PanningSpots.PAN_ENERGY)
+
+	# ── ⑪ 결정기 회수 — 빈 칸이 정확히 1개일 때 ──
+	await _despawn(m)
+	var m3: Node = await _spawn_main()
+	var slot := _placeable_tile(m3)
+	_check("⑪pre 결정기 설치 칸 확보", slot != Vector2i(-1, -1))
+	var gem := ItemCatalog.GEM_MYEONGBU_GEUMGANG
+	m3.crystalarium.place(m3._region, slot)
+	m3.crystalarium.load_gem(m3._region, slot, gem)
+	_check("⑪pre2 보석이 들어가 복제 진행 중", m3.crystalarium.gem_at(m3._region, slot) == gem)
+	_fill_backpack_full(m3.inventory, [0])   # ★ 빈 칸이 정확히 하나 — 기계가 그 칸을 먹으면 보석이 갈 곳이 없다
+	m3._target = slot
+	m3.inventory.select(1)            # 든 것은 보석이 아니다 → 회수 갈래
+	m3._use_crystalarium(slot)
+	_check("⑪a **회수가 통째로 되돌려진다** — 기계도 보석도 제자리(보석 소실 0)",
+		m3.crystalarium.has_at(m3._region, slot)
+		and m3.crystalarium.gem_at(m3._region, slot) == gem
+		and m3.inventory.count_of(ItemCatalog.CRYSTALARIUM) == 0
+		and m3.inventory.count_of(gem) == 0)
+	_fill_backpack_full(m3.inventory, [0, 1])   # 자리가 둘이면 기계와 보석이 함께 들어온다
+	m3._use_crystalarium(slot)
+	_check("⑪b 자리가 둘이면 회수 성립 — 기계 1 + 안의 보석 1이 함께 온다",
+		not m3.crystalarium.has_at(m3._region, slot)
+		and m3.inventory.count_of(ItemCatalog.CRYSTALARIUM) == 1
+		and m3.inventory.count_of(gem) == 1)
+	await _despawn(m3)
+
+# ★[폴리시 R2 공용] 백팩을 **빈 슬롯 0**으로 채운다 — 되돌릴 수 없는 사건 앞의 무대 셋업.
+#   슬롯에 직접 쓴다: `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다.
+#   종을 서로 다르게 섞는 것이 핵심이다(합류할 스택이 하나도 없어야 "가득"이 실효한다).
+#   ★ `keep`에 든 슬롯 인덱스는 비워 둔다(자리를 하나만 남기는 함정 재현용).
+#   ★ 풀은 유품·책(전부 스택 가능·서로 다른 종)이라 레어크로우·설치물 카운트를 오염시키지 않는다.
+func _fill_backpack_full(inv: Inventory, keep: Array = []) -> void:
+	var pool: Array = []
+	for id in Museum.donatable_ids():
+		pool.append(String(id))
+	for i in range(inv.slots.size()):
+		if keep.has(i):
+			inv.slots[i] = null
+			continue
+		inv.slots[i] = {"id": String(pool[i]), "count": 1, "quality": 0} if i < pool.size() \
+			else {"id": ItemCatalog.harvest_id(CropCatalog.PIANHWA), "count": 1,
+				"quality": (i - pool.size()) % 4}
+	inv.changed.emit()

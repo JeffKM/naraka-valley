@@ -738,9 +738,74 @@ func _initialize() -> void:
 	_check("ⓙ4 T1은 슬롯이 없어 기어 줄도 없다(맨몸 티어)",
 		m._fishing_gear_line(ItemCatalog.ROD_T1) == "")
 
+	# ── ⓚ [폴리시 R2] 백팩 만원 — 어획물 소실 금지 ──
+	# 결착 시점엔 어획물을 되돌려 놓을 곳이 없다(게잡이통·채취기처럼 "통 안에 그대로 둔다"를 할
+	# 통이 없다). 그래서 ㉠ 캐스팅 앞에서 자리를 묻고 ㉡ 그래도 못 담으면 사실대로 알리고 끝낸다.
+	# 종전엔 `add_item` 반환값을 안 봐서, 물고기는 어디에도 없는데 토스트·"낚았다!"·XP·더비 태그·
+	# 인양·Books·반딧넋 롤이 전부 돌았다(화면이 통째로 거짓말).
+	print("── ⓚ [폴리시 R2] 백팩 만원 어획 ──")
+	# ★ 낚싯대는 손에 남겨 둔다 — 안 그러면 `_start_fishing`이 "든 게 낚싯대가 아니다"로 물러나
+	#   가드가 아니라 그 방어에 걸려 단언이 헛돈다(0번 칸을 비우고 그 자리에 대를 꽂는다).
+	_fill_backpack_full(m.inventory, [0])
+	m.inventory.slots[0] = {"id": ItemCatalog.ROD_T1, "count": 1, "quality": 0}
+	m.inventory.select(0)
+	m.inventory.changed.emit()
+	_check("ⓚa 준비 — 빈 슬롯 0 · 손엔 낚싯대",
+		not m.inventory.has_free_slot() and GearCatalog.is_rod(m.inventory.selected_id()))
+	m.fishing = null
+	m._start_fishing(cast_water)
+	_check("ⓚb **캐스팅 자체가 안 나간다** — 세션이 안 열리고 미끼도 안 탄다",
+		m.fishing == null)
+	# ㉡ 결착 백스톱 — 세션을 직접 주입해 "그래도 자리가 없는" 상태를 만든다. 어종·시드는 위 ⓔ2와
+	#   같은 값이라 포획이 결정적이다(무엇이 낚이는지가 단언의 변수가 되지 않게).
+	var xp0: int = m._fishing_xp
+	_cast_fixed(m)
+	m._finish_fishing()
+	_check("ⓚc 결착에서도 어획물이 유령으로 남지 않는다 — 인벤 0 · XP 불변 · 세션 폐기",
+		m.inventory.count_of(FishCatalog.NEOK_MYEOLCHI) == 0
+		and m._fishing_xp == xp0 and m.fishing == null)
+	# 자리를 비우면 종전대로 낚인다(막는 것이 아니라 미루는 것).
+	_fill_backpack_full(m.inventory, [0, 1])
+	m.inventory.slots[0] = {"id": ItemCatalog.ROD_T1, "count": 1, "quality": 0}
+	m.inventory.select(0)
+	m.inventory.changed.emit()
+	m.energy.refill()
+	m._start_fishing(cast_water)
+	_check("ⓚd 자리를 비우면 캐스팅이 다시 나간다(가드가 풀린다)", m.fishing != null)
+	m.fishing = null                       # 그 세션은 버리고 결정적 세션으로 다시 건다
+	_cast_fixed(m)
+	m._finish_fishing()
+	_check("ⓚe 자리가 있으면 어획물이 그대로 들어온다 — 빈 칸을 먹고 XP도 붙는다",
+		m.inventory.count_of(FishCatalog.NEOK_MYEOLCHI) == 1
+		and not m.inventory.has_free_slot() and m._fishing_xp > xp0)
+
 	await _despawn(m)
 	if FileAccess.file_exists(SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
+
+# ★[폴리시 R2 공용] 백팩을 **빈 슬롯 0**으로 채운다 — 되돌릴 수 없는 사건 앞의 무대 셋업.
+#   슬롯에 직접 쓴다: `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다.
+#   풀은 유품·책(전부 스택 가능·서로 다른 종)이라 어종·기어 카운트를 오염시키지 않는다.
+func _fill_backpack_full(inv: Inventory, keep: Array = []) -> void:
+	var pool: Array = Museum.donatable_ids()
+	for i in range(inv.slots.size()):
+		if keep.has(i):
+			inv.slots[i] = null
+			continue
+		inv.slots[i] = {"id": String(pool[i]), "count": 1, "quality": 0} if i < pool.size() \
+			else {"id": ItemCatalog.harvest_id(CropCatalog.PIANHWA), "count": 1,
+				"quality": (i - pool.size()) % 4}
+	inv.changed.emit()
+
+# 결정적 포획 세션 하나(어종·시드 고정 — ⓔ2가 쓰는 그 조합). 격투까지 진행해 결착 직전에 둔다.
+func _cast_fixed(m: Node) -> void:
+	m.energy.refill()
+	m.fishing = FishingSession.new(11, FishCatalog.session_params(FishCatalog.NEOK_MYEOLCHI),
+		FishingSession.ROD_T1, m._fishing_mods())
+	m.fishing.hook_gate = m._fishing_hook_gate
+	m.fishing.cast()
+	_advance_to_fight(m.fishing)
+	_run_holding(m.fishing)

@@ -29,6 +29,7 @@ func _initialize() -> void:
 	_test_corruption_defense()
 	_test_start_kit()
 	_test_move_and_sort()
+	_test_can_add()
 	print("══ %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -224,3 +225,49 @@ func _test_start_kit() -> void:
 	_check("⑦a 괭이 지급", inv.count_of(ItemCatalog.HOE) == 1)
 	_check("⑦b 물뿌리개 지급", inv.count_of(ItemCatalog.WATERING_CAN) == 1)
 	_check("⑦c 혼령초 씨앗 지급", inv.seed_count(CropCatalog.HONRYEONGCHO) == Inventory.START_SEEDS[CropCatalog.HONRYEONGCHO])
+
+# ── ⑨ [폴리시 R2] can_add 선검사 · add_harvest 반환 계약 ──────────────────────
+# 되돌릴 수 없는 사건(수확·발굴·포획·회수) 앞에서 "적재 먼저"를 지키는 창구다. 판정이 add_item과
+# 어긋나면 그 자리들이 전부 조용히 틀리므로, **두 답이 언제나 같다**를 직접 맞대어 본다.
+func _test_can_add() -> void:
+	print("── ⑨ can_add 선검사(적재 먼저의 근거) ──")
+	var inv := Inventory.new()
+	var hid := ItemCatalog.harvest_id(CropCatalog.HONRYEONGCHO)
+	var hid2 := ItemCatalog.harvest_id(CropCatalog.PIANHWA)
+	_check("⑨a 빈 백팩 — 스택·유니크 둘 다 받을 수 있다",
+		inv.can_add(hid) and inv.can_add(ItemCatalog.HOE))
+	_check("⑨b 없는 id·0개는 거짓", not inv.can_add("garbage_xyz") and not inv.can_add(hid, 0))
+	_fill_backpack_full(inv)
+	_check("⑨c 준비 — 빈 슬롯 0(서로 다른 종 %d칸)" % inv.slots.size(), not inv.has_free_slot())
+	_check("⑨d 가득 찬 백팩 — 새 종은 거절(add_item과 같은 답)",
+		not inv.can_add(hid) and not inv.add_item(hid, 1))
+	var stacked := inv.id_at(0)
+	_check("⑨e 가득 차도 **이미 있는 스택**은 받는다(합류 자리 = 슬롯 불요)",
+		inv.can_add(stacked, 1, 0) and inv.add_item(stacked, 1, 0) and inv.count_of(stacked) == 2)
+	_check("⑨f 유니크는 자리가 없으면 거절", not inv.can_add(ItemCatalog.HOE))
+	# add_harvest 반환 계약 — void였던 탓에 호출부가 실패를 알 수조차 없던 자리.
+	var inv2 := Inventory.new()
+	_check("⑨g add_harvest = 성공하면 true", inv2.add_harvest(CropCatalog.HONRYEONGCHO, 1, 0)
+		and inv2.harvest_count(CropCatalog.HONRYEONGCHO) == 1)
+	_check("⑨h 없는 작물은 false", not inv2.add_harvest("garbage_xyz", 1))
+	_fill_backpack_full(inv2)
+	_check("⑨i **가득 차면 false**(호출부가 소실을 감지할 수 있다)",
+		not inv2.has_free_slot() and not inv2.add_harvest(CropCatalog.HONRYEONGCHO, 1, 0))
+
+# ★[폴리시 R2 공용] 백팩을 **빈 슬롯 0**으로 채운다 — 되돌릴 수 없는 사건 앞의 무대 셋업.
+#   슬롯에 직접 쓴다: `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다.
+#   종을 서로 다르게 섞는 것이 핵심이다(합류할 스택이 하나도 없어야 "가득"이 실효한다).
+#   ★ `keep`에 든 슬롯 인덱스는 비워 둔다(자리를 하나만 남기는 함정 재현용).
+func _fill_backpack_full(inv: Inventory, keep: Array = []) -> void:
+	var pool: Array = []
+	for id in Museum.donatable_ids():
+		pool.append(String(id))
+	for i in range(inv.slots.size()):
+		if keep.has(i):
+			inv.slots[i] = null
+			continue
+		# 풀이 모자라면 **같은 수확물의 다른 등급**으로 메운다(등급이 다르면 다른 슬롯이다).
+		inv.slots[i] = {"id": String(pool[i]), "count": 1, "quality": 0} if i < pool.size() \
+			else {"id": ItemCatalog.harvest_id(CropCatalog.PIANHWA), "count": 1,
+				"quality": (i - pool.size()) % 4}
+	inv.changed.emit()

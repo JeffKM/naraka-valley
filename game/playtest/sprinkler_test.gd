@@ -76,6 +76,7 @@ func _initialize() -> void:
 
 	_part_a()
 	await _part_b()
+	await _part_r2()
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	if FileAccess.file_exists(SAVE):
@@ -228,3 +229,79 @@ func _part_b() -> void:
 	_check("④ 철거 후 재파종 칸 미급수(급수 중단)", not any_watered_after)
 
 	await _despawn(m)
+
+# ══ [폴리시 R2] 회수 손실 · 구역 가드 · 설치물 겹침 ═══════════════════════════
+# 세 결함을 한 무대에서 재현하고 봉합을 확인한다:
+#   ⑥ 백팩이 가득한 채 회수 → **원장에도 백팩에도 없는 상태**가 되면 안 된다(적재 먼저·원장 나중).
+#   ⑦ 다른 구역에서 같은 좌표를 겨눠도 안식 농원 설치물이 원격 철거되면 안 된다(원장에 구역 축 없음).
+#   ⑧ 업화로·결정기·게잡이통·채취기 칸엔 스프링클러를 못 놓는다(단방향이던 가드의 양방향화).
+func _part_r2() -> void:
+	print("── ⑥⑦⑧ [폴리시 R2] 회수 손실 · 구역 가드 · 설치물 겹침 ──")
+	var m: Node = await _spawn_main()
+	var t := _find_placeable(m)
+	_check("⑥pre 설치 가능한 빈 지면 확보", t != Vector2i(-1, -1))
+	m.sprinkler.place(t, Sprinkler.TIER_1)
+	_check("⑥pre2 원장에 티어1이 섰다", m.sprinkler.has_at(t) and m.sprinkler.tier_at(t) == Sprinkler.TIER_1)
+
+	# ── ⑥ 백팩 만원 회수 ──
+	_fill_backpack_full(m.inventory)
+	_check("⑥a 준비 — 빈 슬롯 0 · 스프링클러 스택 없음",
+		not m.inventory.has_free_slot() and m.inventory.count_of(ItemCatalog.SPRINKLER) == 0)
+	m._remove_sprinkler(t)
+	_check("⑥b **회수가 성립하지 않는다** — 원장에 그대로 서 있고 백팩엔 안 들어갔다(소실 0)",
+		m.sprinkler.has_at(t) and m.sprinkler.tier_at(t) == Sprinkler.TIER_1
+		and m.inventory.count_of(ItemCatalog.SPRINKLER) == 0)
+	# 자리를 하나 비우면 그대로 회수된다(막는 것이 아니라 미루는 것).
+	_fill_backpack_full(m.inventory, [0])   # 자리를 하나 비운다
+	m._remove_sprinkler(t)
+	_check("⑥c 자리를 비우면 회수 성립 — 원장에서 사라지고 백팩에 1개",
+		not m.sprinkler.has_at(t) and m.inventory.count_of(ItemCatalog.SPRINKLER) == 1)
+
+	# ── ⑦ 구역 가드 ──
+	m.sprinkler.place(t, Sprinkler.TIER_1)
+	_check("⑦a 안식 농원에서는 그 칸이 \"설치된 칸\"으로 읽힌다",
+		m._region == RegionCatalog.HOME and m._sprinkler_at(t))
+	var home_region: String = m._region
+	m._region = RegionCatalog.NARU_VILLAGE      # 원장은 그대로 두고 무대만 옮긴다(좌표 축 공유 재현)
+	_check("⑦b **다른 구역에서는 같은 좌표가 비어 보인다** — 원격 철거 디스패치가 안 걸린다",
+		not m._sprinkler_at(t) and m.sprinkler.has_at(t))
+	m._region = home_region
+	_check("⑦c 돌아오면 다시 읽힌다(가드는 무대 축이지 원장을 안 건드린다)", m._sprinkler_at(t))
+	m.sprinkler.remove(t)
+
+	# ── ⑧ 설치물 겹침(양방향) ──
+	var t2 := _find_placeable(m)
+	_check("⑧pre 빈 지면 확보", t2 != Vector2i(-1, -1))
+	var probes := {
+		"업화로": func(): m.furnace.place(m._region, t2),
+		"결정기": func(): m.crystalarium.place(m._region, t2),
+		"채취기": func(): m.tapper.place(m._region, t2, TreeLedger.SP_OAK, 0),
+	}
+	for label: String in probes:
+		probes[label].call()
+		_check("⑧%s 칸엔 스프링클러·레어크로우를 못 놓는다" % label,
+			not m._can_place_sprinkler(t2) and not m._can_place_rarecrow(t2))
+		m.furnace.remove(m._region, t2)
+		m.crystalarium.remove(m._region, t2)
+		m.tapper.remove(m._region, t2)
+	_check("⑧z 전부 걷어내면 다시 놓을 수 있다(가드가 칸을 영구히 죽이지 않는다)",
+		m._can_place_sprinkler(t2))
+	await _despawn(m)
+
+# ★[폴리시 R2 공용] 백팩을 **빈 슬롯 0**으로 채운다 — 되돌릴 수 없는 사건 앞의 무대 셋업.
+#   슬롯에 직접 쓴다: `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다.
+#   종을 서로 다르게 섞는 것이 핵심이다(합류할 스택이 하나도 없어야 "가득"이 실효한다).
+#   ★ `keep`에 든 슬롯 인덱스는 비워 둔다(자리를 하나만 남기는 함정 재현용).
+#   ★ 풀은 유품·책(전부 스택 가능·서로 다른 종)이라 레어크로우·설치물 카운트를 오염시키지 않는다.
+func _fill_backpack_full(inv: Inventory, keep: Array = []) -> void:
+	var pool: Array = []
+	for id in Museum.donatable_ids():
+		pool.append(String(id))
+	for i in range(inv.slots.size()):
+		if keep.has(i):
+			inv.slots[i] = null
+			continue
+		inv.slots[i] = {"id": String(pool[i]), "count": 1, "quality": 0} if i < pool.size() \
+			else {"id": ItemCatalog.harvest_id(CropCatalog.PIANHWA), "count": 1,
+				"quality": (i - pool.size()) % 4}
+	inv.changed.emit()

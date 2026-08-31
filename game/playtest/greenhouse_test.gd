@@ -237,6 +237,30 @@ func _run_checks() -> void:
 	_check("⑨d 구세이브 로드 — 노지 밭 사슬은 멀쩡", m4.farm != null and m4._field_at(Vector2i(41, 13)) == m4.farm)
 	m4.free()
 
+	# ═══ ⑩ [폴리시 R2] 로드가 원장을 **되감는** 방향 — 유령 늘봄방 행 ═══
+	# 완공한 세션 안에서 F9로 완공 전 세이브를 되불러 오면 carpenter는 미완공으로 돌아가는데,
+	# `_refresh_greenhouse`는 첫 줄에서 그냥 return이라 `_buildings`에 늘봄방 행이 그대로 남았다.
+	# 그리드는 방을 안 세우므로(`_build_grid`의 조건부 블록) 문 칸을 밟으면 없는 방으로 워프해
+	# 실내 밴드 VOID에 갇혔다(퇴장 문에도 못 닿는 소프트락). 카탈로그를 로드에서 **무조건 다시
+	# 파는 것**으로 두 방향(생김·사라짐)이 모두 원장 파생이 됐다.
+	var m5: Node = await _new_main()
+	_dismiss_intro(m5)
+	m5.carpenter.load_save({"active": [], "done": []})
+	m5._save_game()                       # ← 완공 **전** 세이브를 만든다
+	_build_greenhouse(m5)                 # 그 세션 안에서 완공
+	_check("⑩pre 완공 직후 — 카탈로그에 늘봄방 행이 섰다",
+		m5._greenhouse_built() and m5._buildings.has("늘봄방"))
+	m5._load_game()                       # F9 — 완공 전 세이브를 되불러 온다
+	_check("⑩a 로드로 원장이 되감겼다(미완공)", not m5._greenhouse_built())
+	_check("⑩b **유령 늘봄방 행이 남지 않는다** — 없는 방으로 워프할 문이 사라졌다",
+		not m5._buildings.has("늘봄방"))
+	_check("⑩c 그리드와 카탈로그가 같은 답을 한다(둘 다 방을 안 세운다)",
+		not m5._buildings.has("늘봄방") and not m5._greenhouse_built())
+	_build_greenhouse(m5)
+	_check("⑩d 다시 완공하면 행이 되돌아온다(가드가 한 방향으로만 굳지 않는다)",
+		m5._buildings.has("늘봄방") and m5._greenhouse_built())
+	m5.free()
+
 	cleaner.delete_save()
 	cleaner.free()
 

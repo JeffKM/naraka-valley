@@ -16,6 +16,7 @@ extends SceneTree
 # Part A(⑦~⑪)는 노드 단위(main 불필요), Part B(⑫~⑭)만 main 스폰(orchard_test 골격).
 # 좀비 방지: 끝에 quit(). run_tests 워치독. 세이브 파일은 백업/원복(shipping_bin_test 결).
 
+
 var _fail := 0
 
 func _check(label: String, ok: bool) -> void:
@@ -177,6 +178,31 @@ func _initialize() -> void:
 	_check("⑫ 과일 인벤토리 적재", m.inventory.count_of(HB) > fruit_before)
 	_check("⑫ 슬롯 quality = 나이84 등급(2=금)", _quality_count(m.inventory, HB, 2) >= 1)
 
+	# ── ⑫b [폴리시 R2] 백팩 만원 — 매달린 과일 소실 금지 ──
+	# `orchard.harvest`가 fruit_count를 0으로 리셋하므로, 백팩이 가득하면 결실 주기(제철 하루 +1개)
+	# 만큼의 수확이 되찾을 곳 없이 사라졌다(혼력은 그대로 집행). **적재 자리부터 보는** 순서로
+	# 뒤집었다 — 한 그루의 이번 결실은 전량 같은 등급이라(나이 파생) 슬롯 하나면 충분해 판정도 한 번.
+	# ★ 바로 위 ⑫가 쓴 그 나무를 그대로 재사용한다(앵커 재탐색 0 — 헤드리스 예산 보존).
+	m.orchard._trees[anchor]["fruit_count"] = 2
+	_check("⑫b-pre 같은 나무에 과일 2개를 다시 달았다",
+		m.orchard.is_mature(anchor, m.clock.day) and m.orchard.fruit_count_of(anchor) == 2)
+	m._target = anchor
+	m.energy.current = m.energy.MAX
+	_fill_backpack_full(m.inventory)
+	m._try_harvest()
+	_check("⑫b **과일이 나무에 그대로**(결실 주기가 안 날아간다) · 인벤 증가 0",
+		m.orchard.fruit_count_of(anchor) == 2 and m.inventory.count_of(HB) == 0)
+	_fill_backpack_full(m.inventory, [0])
+	m.energy.current = m.energy.MAX
+	m._try_harvest()
+	_check("⑫c 자리를 비우면 전량 그대로 딴다(두 개가 한 스택으로)",
+		m.orchard.fruit_count_of(anchor) == 0 and m.inventory.count_of(HB) == 2)
+	# ★ 무대 원복 — 아래 ⑭ 세이브 왕복이 슬롯을 새로 쓰므로 백팩을 비워 둔다(이 블록이 남긴
+	#   "가득 찬 백팩"이 다음 절의 적재를 조용히 막지 않게).
+	for i in range(m.inventory.slots.size()):
+		m.inventory.slots[i] = null
+	m.inventory.changed.emit()
+
 	# ── ⑭ 세이브 왕복(§8.11) — farming_xp·타일 fertilizer·슬롯 quality·ship pending 품질 ──
 	var st := _free_home_soil(m)
 	m.farm.hoe(st)
@@ -209,8 +235,33 @@ func _initialize() -> void:
 	_check("⑭ 구세이브 슬롯(quality 결측) → Q0 방어", legacy_inv.quality_at(0) == 0 and legacy_inv.count_of(ItemCatalog.harvest_id(CROP)) == 3)
 	legacy_inv.free()
 
+	# ── ⑮ [폴리시 R2] 백팩 만원 — 밭 수확 소실 금지 ──
+	# `field.harvest`가 칸을 비우거나(SINGLE) 자란 날수를 되감으므로(REGROW), 백팩이 가득하면 그
+	# 수확이 되찾을 곳 없이 사라졌는데 화면엔 "+N" 토스트가 떴다(add_harvest가 void라 호출부는
+	# 실패를 알 수조차 없었다). **적재 자리부터 보는** 순서로 뒤집었다 — 막는 것이 아니라 미루는 것.
+	# ※ 같은 결함의 과수·목축 갈래는 orchard_test·livestock_test가 각자 무대에서 본다.
+	print("── ⑮ [폴리시 R2] 백팩 만원 밭 수확 ──")
+	var ft := _free_home_soil(m2)
+	m2.farm.hoe(ft)
+	m2.farm.plant(ft, CROP)
+	m2.farm._tiles[ft]["grown_days"] = 99
+	m2._target = ft
+	_fill_backpack_full(m2.inventory)
+	var xp0: int = m2._farming_xp
+	var run0: int = m2._run_harvested
+	m2._try_harvest()
+	_check("⑮a 밭 — **작물이 칸에 그대로 있다**(수확 미성립 · XP·점수판도 안 움직였다)",
+		m2.farm.is_mature(ft) and m2._farming_xp == xp0 and m2._run_harvested == run0
+		and m2.inventory.count_of(ItemCatalog.harvest_id(CROP)) == 0)
+	_fill_backpack_full(m2.inventory, [0])
+	m2._try_harvest()
+	_check("⑮b 자리를 비우면 그대로 거둬진다(막는 것이 아니라 미루는 것)",
+		not m2.farm.is_mature(ft) and m2.inventory.count_of(ItemCatalog.harvest_id(CROP)) >= 1
+		and m2._farming_xp > xp0)
+
 	m2.queue_free()
 	await process_frame
+
 
 	# 세이브 원복.
 	if had_save:
@@ -268,3 +319,17 @@ func _free_home_anchor(m: Node) -> Vector2i:
 			if ok:
 				return Vector2i(x, y)
 	return Vector2i(-1, -1)
+
+# ★[폴리시 R2 공용] 백팩을 **빈 슬롯 0**으로 채운다 — 되돌릴 수 없는 사건 앞의 무대 셋업.
+#   슬롯에 직접 쓴다: `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다.
+#   풀은 유품·책(전부 스택 가능·서로 다른 종)이라 수확물·과일 카운트를 오염시키지 않는다.
+func _fill_backpack_full(inv: Inventory, keep: Array = []) -> void:
+	var pool: Array = Museum.donatable_ids()
+	for i in range(inv.slots.size()):
+		if keep.has(i):
+			inv.slots[i] = null
+			continue
+		inv.slots[i] = {"id": String(pool[i]), "count": 1, "quality": 0} if i < pool.size() \
+			else {"id": ItemCatalog.harvest_id(CropCatalog.PIANHWA), "count": 1,
+				"quality": (i - pool.size()) % 4}
+	inv.changed.emit()

@@ -74,6 +74,7 @@ func _run() -> void:
 
 	_part_pure()
 	await _part_main()
+	await _part_r2()
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	if FileAccess.file_exists(SAVE):
@@ -367,4 +368,57 @@ func _part_main() -> void:
 	_check("⑧f 구세이브(rarecrow 키 없음) 로드 = 크래시 없음 · 인메모리 원장 유지",
 		m.rarecrow.id_at(p2) == ItemCatalog.RARECROW_3)
 
+	await _despawn(m)
+
+# ══ [폴리시 R2] 회수 손실 · 구역 가드 ════════════════════════════════════════
+# 레어크로우는 재획득 경로가 전부 1회성으로 잠기므로(마일스톤·행사·보부상·시련패 매대), 한 마리를
+# 잃으면 8종 완주 = 디럭스 반경이 영구히 막힌다. 그 두 유실 경로를 재현하고 봉합을 확인한다.
+func _part_r2() -> void:
+	print("── ⑨⑩ [폴리시 R2] 백팩 만원 회수 · 타 구역 원격 철거 ──")
+	var m: Node = await _spawn_main()
+	_dismiss_dialogue(m)
+	_clear_backpack(m)
+	var spots := _find_spots(m, 1)
+	_check("⑨pre 세울 칸 확보", spots.size() >= 1)
+	var t: Vector2i = spots[0]
+	m.rarecrow.place(t, ItemCatalog.RARECROW_1)
+	_check("⑨pre2 ①이 밭에 섰다 · 수집 판정 1종",
+		m.rarecrow.id_at(t) == ItemCatalog.RARECROW_1 and m._rarecrow_collected() == 1)
+
+	# ── ⑨ 백팩이 가득한 채 회수 ──
+	# 남은 종을 백팩에 담고(수집 판정이 소지 ∪ 배치임을 함께 잠근다) 나머지 칸을 유품·책으로 메운다.
+	var others := 0
+	for id in ItemCatalog.RARECROWS:
+		if String(id) != ItemCatalog.RARECROW_1 and m.inventory.add_item(String(id), 1):
+			others += 1
+	var pool: Array = Museum.donatable_ids()
+	var pi := 0
+	for i in range(m.inventory.slots.size()):
+		if m.inventory.slots[i] == null and pi < pool.size():
+			m.inventory.slots[i] = {"id": String(pool[pi]), "count": 1, "quality": 0}
+			pi += 1
+	m.inventory.changed.emit()
+	_check("⑨a 준비 — 빈 슬롯 0 · 다른 %d종 소지 · ①은 밭에" % others,
+		not m.inventory.has_free_slot() and m.inventory.count_of(ItemCatalog.RARECROW_1) == 0)
+	m._remove_rarecrow(t)
+	_check("⑨b **①이 세상에서 사라지지 않는다** — 밭에 그대로 서 있고 수집 판정도 유지",
+		m.rarecrow.id_at(t) == ItemCatalog.RARECROW_1
+		and m._rarecrow_owned(ItemCatalog.RARECROW_1)
+		and m._rarecrow_collected() == ItemCatalog.RARECROWS.size())
+	m.inventory.slots[m.inventory.slots.size() - 1] = null   # 자리를 하나 비운다
+	m.inventory.changed.emit()
+	m._remove_rarecrow(t)
+	_check("⑨c 자리를 비우면 회수 성립 — 원장에서 내려오고 백팩에 그 종 그대로",
+		not m.rarecrow.has_at(t) and m.inventory.count_of(ItemCatalog.RARECROW_1) == 1
+		and m._rarecrow_collected() == ItemCatalog.RARECROWS.size())
+
+	# ── ⑩ 타 구역 원격 철거 금지 ──
+	m.rarecrow.place(t, ItemCatalog.RARECROW_1)
+	var home_region: String = m._region
+	_check("⑩a 안식 농원에서는 선 칸으로 읽힌다", m._rarecrow_at(t))
+	m._region = RegionCatalog.MIHOK_FOREST
+	_check("⑩b **다른 구역에서는 비어 보인다** — 보이지도 않는 곳에서 수집물이 옮겨지지 않는다",
+		not m._rarecrow_at(t) and m.rarecrow.id_at(t) == ItemCatalog.RARECROW_1)
+	m._region = home_region
+	_check("⑩c 돌아오면 다시 읽힌다", m._rarecrow_at(t))
 	await _despawn(m)
