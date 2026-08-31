@@ -123,7 +123,7 @@ func hoe(t: Vector2i) -> bool:
 func remove_plant(t: Vector2i) -> bool:
 	if not is_planted(t):
 		return false
-	var fert: String = _tiles[t]["fertilizer"]
+	var fert: String = str(_tiles[t].get("fertilizer", ""))   # ★[폴리시 R3] 구세이브 방어(39행 규약)
 	_tiles[t] = {"planted": false, "watered": false, "crop": "", "grown_days": 0, "fertilizer": fert}
 	tile_changed.emit(t)
 	return true
@@ -302,4 +302,11 @@ func load_save(data: Dictionary) -> void:
 	var tiles: Variant = data.get("tiles", {})
 	_tiles = tiles.duplicate(true) if typeof(tiles) == TYPE_DICTIONARY else {}
 	for t in _tiles.keys():
+		# ★[폴리시 R3] 스키마 백필 — S1-6 이전(비료 필드 도입 전)에 괭이질된 칸은 4필드만 들고
+		#   온다. `hoe()`는 *새* 칸에만 기본 dict를 만들므로 옛 칸엔 키가 영영 안 생기고, 그 칸을
+		#   심었다가 제거하는 경로(절기 사멸·까마귀·잡초 확산)가 하드 인덱싱에서 멎었다.
+		#   livestock.load_save의 age/location 백필과 같은 자리·같은 규율(구세이브 = 무비료).
+		var c: Dictionary = _tiles[t]
+		if not c.has("fertilizer"):
+			c["fertilizer"] = ""
 		tile_changed.emit(t)
