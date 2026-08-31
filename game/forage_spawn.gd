@@ -129,6 +129,17 @@ static func all_species() -> Array:
 	out.append_array(species_for(KIND_BEACH, 0))
 	return out
 
+# ★[폴리시 R4] 이 id가 **깊이 게이트 너머의 산출**인가(= 미혹 심층 존에서만 돋는 종).
+# 소매 창구가 "무엇을 팔면 안 되나"를 물을 때 쓰는 단일 술어다. 심층 존은 큰 통나무 2칸(유철 도끼
+# 티어) 너머라 걸어 닿는 것 자체가 보상인데, 판매가만 보고 재고 풀을 짜는 매대(만물상·보부상)가
+# 그 산출을 냥으로 팔아 게이트를 통째로 우회시켰다. 로스터가 진실원이라 심층종이 늘면 매대 쪽
+# 코드 0줄로 함께 막힌다(peddler.POOL_EXCLUDE가 광물·보스 드랍을 손으로 적어 두고 이 축을
+# 놓쳤던 자리 — 이제 손 목록이 아니라 표에서 파생한다).
+# ★ 반환 종에는 **작물 id(불사과)도 섞인다** — 심층 로스터가 CropCatalog 기존 종을 재사용하므로
+#   씨앗 매대(작물 id 루프)와 아이템 매대(채집물 id 루프) 양쪽이 같은 술어 하나로 걸린다.
+static func is_deep_gated(id: String) -> bool:
+	return species_for(KIND_DEEP, 0).has(id)
+
 # ── 존 질의 ─────────────────────────────────────────────────────────────────
 # 이 구역·이 칸이 속한 빈터 존의 종류("" = 존 밖). 스폰 필터·프롬프트·테스트가 쓴다.
 static func zone_kind_at(region: String, t: Vector2i) -> String:

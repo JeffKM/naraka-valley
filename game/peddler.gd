@@ -103,6 +103,15 @@ const POOL_EXCLUDE := [
 	"narak_honjeong",      # ItemCatalog.NARAK_HONJEONG
 ]
 
+# ★[폴리시 R4] 위 셋은 **손으로 적은 목록**이라 같은 사유(깊이 게이트)의 넷째 부류를 놓쳤다:
+#   미혹 심층 존 산출(불사과·저승삼)이다. 그 존은 큰 통나무 2칸 = 유철 도끼 티어 너머라 걸어
+#   닿는 것 자체가 보상인데, 둘 다 price/seed_cost > 0이라 필터를 그냥 통과했다. 특히 불사과는
+#   **씨앗 루프**로 들어와(seed_cost 200) 다절기 REGROW 프레스티지 작물을 440냥에 무한 재배할 수
+#   있게 했다 — crops.gd가 "씨앗은 미판매라 재배 익스플로잇 경로가 없다"고 못 박은 그 자구가
+#   코드상 거짓이었다. 손 목록을 늘리는 대신 **로스터에서 파생**한다(심층종이 늘면 0줄로 따라온다).
+static func pool_excluded(id: String) -> bool:
+	return POOL_EXCLUDE.has(id) or ForageSpawns.is_deep_gated(id)
+
 # ── 달력(day만 아는 순수 파생 — SeasonalEvent.event_for_day와 같은 결) ──────────
 # 오늘 보부상이 서는가. day는 1부터(0·음수는 false — 손상 방어).
 static func is_open_day(d: int) -> bool:
@@ -138,9 +147,12 @@ static func stock_pool() -> Array:
 	var out: Array = []
 	# 씨앗 — 작물군 파생(매입가 = 씨앗 원가). 여행 상인이 철 지난 씨앗을 파는 그 자리.
 	for cid in CropCatalog.ids():
-		var seed_cost := int(CropCatalog.seed_cost(str(cid)))
+		var sid_crop := str(cid)
+		if pool_excluded(sid_crop):
+			continue                     # ★[폴리시 R4] 심층 채집 전용 작물(불사과) — 씨앗을 팔지 않는다
+		var seed_cost := int(CropCatalog.seed_cost(sid_crop))
 		if seed_cost > 0:
-			out.append({"kind": KIND_SEED, "buy_id": str(cid), "base": seed_cost})
+			out.append({"kind": KIND_SEED, "buy_id": sid_crop, "base": seed_cost})
 	# 스택 아이템 — 채집물·재료·광물·통용물·수액. 전부 {id: {price}} 스키마라 한 루프로 접힌다.
 	var tables: Array = [ItemCatalog.FORAGEABLES, ItemCatalog.MATERIALS, ItemCatalog.MINERALS,
 		ItemCatalog.POT_GOODS, ItemCatalog.SAP_GOODS]
@@ -148,7 +160,7 @@ static func stock_pool() -> Array:
 		var src: Dictionary = t
 		for id in src:
 			var sid := str(id)
-			if POOL_EXCLUDE.has(sid):
+			if pool_excluded(sid):
 				continue
 			var row: Dictionary = src[id]
 			var price := int(row.get("price", 0))

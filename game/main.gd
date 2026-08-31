@@ -17224,8 +17224,11 @@ func _store_items() -> Array:
 	var season := clock.season_index()
 	var rows: Array = []
 	for crop_id in CropCatalog.ids():
-		if crop_id == CropCatalog.BULSAGWA:
-			continue   # 채집 전용 — 만물상 미판매(crops.gd 주석)
+		# ★[폴리시 R4] 옛 `crop_id == BULSAGWA` 하드코딩을 **로스터 파생 술어**로 갈았다. 같은 규칙이
+		#   보부상 좌판엔 없어 거기서만 불사과 씨앗이 팔렸는데(게이트 우회), 두 매대가 이제 한 술어를
+		#   본다 — 심층 게이트 너머의 종이 늘어도 두 매대가 함께 막힌다(사유가 곧 술어다).
+		if ForageSpawns.is_deep_gated(crop_id):
+			continue   # 채집 전용(미혹 심층 = 도끼 티어 게이트 너머) — 매대 미판매
 		var base := CropCatalog.seed_cost(crop_id)
 		if base <= 0:
 			continue
