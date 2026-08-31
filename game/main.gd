@@ -2135,6 +2135,13 @@ const TRIAL_CAM_RECT := Rect2i(36, 44, 14, 15)      # 시련장 방 둘레(길�
 # 무인 창구 둘(혼백관 기증대·열람대·안치대와 같은 결 — 사람이 없는 [F] 자리).
 const TRIAL_BOARD_TILE := Vector2i(40, 49)          # ★ 시련 게시판 — [F] 수락 / 완료
 const TRIAL_SHOP_TILE := Vector2i(45, 49)           # ★ 시련패 상점 — [F] 매대
+# ★[폴리시 2026-08-26] 갱도 지상에서 **외관 아트가 붙은** footprint 목록 — 지면 오버레이가 이 칸들을
+#   주변 지면으로 메운다(`_build_mine_ground`). ground16 구역의 `building_rects`와 같은 역할이되,
+#   갱도는 프로파일이 없어 별도 목록으로 둔다([§16.5]가 예약해 둔 그 짝 이동의 갱도판).
+#   왜 필요한가: 지상 오버레이는 WALL을 투명 통과시켜 타일맵 벽 타일이 그대로 비치는데, 외관 아트는
+#   61~84%만 불투명이라 **지붕 위·처마 옆으로 청회색 직사각이 드러났다**(mine_surface_smithy 육안).
+#   ⚠️ 던전 입구·나락 진입로는 **넣지 않는다** — 아트가 없어 WALL 벽 타일이 곧 그 건물의 그림이다.
+const MINE_FACADE_RECTS := [SMITHY_EXT_RECT, GUILD_EXT_RECT, TRIAL_EXT_RECT]
 # ★[S5-T1 / ADR-0063 결정 1] 갱도 층 시스템 배선 상수. 던전 입구(DUNGEON_GATE)는 이제 **잠긴 외관이
 #   아니라 층 하강 입구로 점등**한다 — 문 칸에서 [F]를 누르면 1층(또는 해금된 엘리베이터 층)으로
 #   내려간다. NARAK_GATE는 그대로 잠김 유지(나락 = S5-T7 소관).
@@ -2163,10 +2170,15 @@ const INVULN_NONE := -1.0          # 무적 기준점 미설정("아주 오래�
 #     상수를 안 읽는 이 파일의 관례(MINE_ROCK_COST 주석 참조). mining_test ⑧f가 두 목록이 갈리는
 #     걸 잡고, 미등록 종은 드로우에서 회색 폴백이라 조용히 깨지지도 않는다.
 const _MINE_NODE_COLORS := {
-	"ore_myeongdong": Color(0.78, 0.44, 0.28),        # 명동 — 붉은 구리
-	"ore_yucheol": Color(0.58, 0.62, 0.70),           # 유철 — 푸른 강철
+	# ★[폴리시 2026-08-26] 광석 3종 채도 상향 — 몸통 틴트가 `_MINE_NODE_BODY_MIX`(0.55)로 흰색 쪽에
+	#   절반 넘게 끌려가므로, **채도가 낮은 종색은 그 한 번의 lerp에서 무채색으로 붕괴한다**. 옛
+	#   유철(s=0.17)·혼탄(s=0.15)이 그래서 둘 다 같은 암회색 상자로 나왔고(mine_nodes 육안), 명동도
+	#   구리 신호가 회색에 묻혔다. 종색을 "이름이 말하는 색"까지 밀어 올려야 lerp 뒤에도 종이 남는다.
+	#   ※ 세 값은 인벤 아이콘(tools/make_mob_art.py ORE_TINTS)과 **같이** 움직여야 한다(위 §단일 출처).
+	"ore_myeongdong": Color(0.86, 0.36, 0.16),        # 명동 — 붉은 구리
+	"ore_yucheol": Color(0.40, 0.56, 0.82),           # 유철 — 푸른 강철
 	"ore_hwangcheongeum": Color(0.90, 0.75, 0.30),    # 황천금 — 황금
-	"hontan": Color(0.18, 0.17, 0.20),                # 혼탄 — 검정
+	"hontan": Color(0.20, 0.14, 0.26),                # 혼탄 — 검정(탄 계열 흑자색 — 유철과 색상환 반대편)
 	"geode_neokal": Color(0.52, 0.46, 0.38),          # 넋알돌 — 흙빛 덩어리
 	"geode_eophwa": Color(0.62, 0.34, 0.24),          # 업화알돌 — 달군 흙빛
 	"gem_neoksujeong": Color(0.86, 0.90, 0.94),       # 넋수정 — 투명 백
@@ -7538,6 +7550,31 @@ func _build_mine_ground(in_floor: bool) -> void:
 	var rock_img := Image.create(bw, bh, false, Image.FORMAT_RGBA8)
 	_mine_tile_field(rock_img, _mine_bf_rock)
 	var out := Image.create(bw, bh, false, Image.FORMAT_RGBA8)   # 전부 투명에서 시작
+	# ★[폴리시 2026-08-26] 외관 아트가 붙은 footprint는 **이웃 지면으로 메운다**(MINE_FACADE_RECTS 주석).
+	#   무엇으로 메울지는 손으로 안 적는다 — rect 둘레 한 칸을 세어 다수 지면을 따른다. 대장간·시련장은
+	#   빈터(GROUND) 한복판이고 길드는 남단 암반(MINE_ROCK_RECTS)에 박혀 있어, 한 값으로 못 박으면
+	#   둘 중 하나에 또 직사각이 선다. 배치가 바뀌어도 이 셈이 따라온다.
+	var facade_fill: Dictionary = {}          # Vector2i → Image(둘레 다수 지면)
+	if not in_floor:
+		for r: Rect2i in MINE_FACADE_RECTS:
+			var rock_n := 0
+			var floor_n := 0
+			var ring := Rect2i(r).grow(1)
+			for y in range(ring.position.y, ring.end.y):
+				for x in range(ring.position.x, ring.end.x):
+					if Rect2i(r).has_point(Vector2i(x, y)):
+						continue
+					if x < 0 or y < 0 or x >= _grid_w or y >= _outdoor_h:
+						continue
+					var rc: int = _grid[y][x]
+					if rc == ROCK:
+						rock_n += 1
+					elif rc == GROUND:
+						floor_n += 1
+			var fill: Image = rock_img if rock_n > floor_n else floor_img
+			for y in range(maxi(r.position.y, 0), mini(r.end.y, _outdoor_h)):
+				for x in range(maxi(r.position.x, 0), mini(r.end.x, _grid_w)):
+					facade_fill[Vector2i(x, y)] = fill
 	for y in _outdoor_h:
 		for x in _grid_w:
 			var c: int = _grid[y][x]
@@ -7548,6 +7585,8 @@ func _build_mine_ground(in_floor: bool) -> void:
 				src = rock_img
 			elif c == GROUND:
 				src = floor_img
+			elif c == WALL and facade_fill.has(Vector2i(x, y)):
+				src = facade_fill[Vector2i(x, y)]
 			if src == null:
 				continue
 			var p := Vector2i(x * TILE, y * TILE)
