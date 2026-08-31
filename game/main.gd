@@ -12373,13 +12373,16 @@ func _process(delta: float) -> void:
 		return
 	# ★ [S5-T3] 업화로(F): 세워 둔 화덕을 바라보며 F — 수거 / 투입 / 회수(상태별 한 동사).
 	#   채취기와 같은 사다리이고, 화덕은 빈 지면 위라 [F]가 겹칠 상대가 없다(설치는 LMB).
-	if not _sleeping and furnace != null and _indoor == "" and furnace.has_at(_region, _target) \
-			and Input.is_action_just_pressed("shop_toggle"):
+	# ★[폴리시 R2] `_mine_floor == 0 and _narak_depth == 0` 합류 — 층 그리드는 지상과 좌표 공간을
+	#   공유하고 `_region`도 그대로라, 층 안에서 지상 화덕 좌표를 겨누면 화면에 아무것도 없는 칸에서
+	#   주괴가 나오거나 지상 화덕이 통째로 회수됐다. 배치·드로우가 이미 보는 그 축이다(반딧넋 [F]
+	#   분기가 같은 두 술어를 명시하는 선례 1:1).
+	if not _sleeping and _furnace_at(_target) and Input.is_action_just_pressed("shop_toggle"):
 		_use_furnace(_target)
 		return
 	# ★[S10-T1] 결정기(F): 세워 둔 결정기를 바라보며 F — 수거 / 투입 / 회수(업화로와 같은 사다리).
-	if not _sleeping and crystalarium != null and _indoor == "" and crystalarium.has_at(_region, _target) \
-			and Input.is_action_just_pressed("shop_toggle"):
+	# ★[폴리시 R2] 업화로 [F]와 같은 층 가드.
+	if not _sleeping and _crystalarium_at(_target) and Input.is_action_just_pressed("shop_toggle"):
 		_use_crystalarium(_target)
 		return
 	# ★[S10-T4 / ADR-0069 결정 7] 삽사리(F) — 쓰다듬 1/일. 우편함과 같은 결의 야외 [F] 창구라
@@ -12618,7 +12621,7 @@ func _process(delta: float) -> void:
 	# ★[S10-T2] 티어가 셋이 됐지만 디스패치는 하나다 — 든 것이 스프링클러이기만 하면 되고,
 	#   *어느 티어*는 `_place_sprinkler`가 든 아이템에서 뽑는다(ADR-0024 §2 "든 도구가 동사").
 	var holding_sprinkler := ItemCatalog.is_sprinkler(inventory.selected_id())
-	var on_sprinkler := not _sleeping and holding_sprinkler and sprinkler != null and sprinkler.has_at(_target)
+	var on_sprinkler := not _sleeping and holding_sprinkler and _sprinkler_at(_target)
 	if on_sprinkler and Input.is_action_just_pressed("use_tool"):
 		_remove_sprinkler(_target)
 	elif not _sleeping and holding_sprinkler and Input.is_action_just_pressed("use_tool") and _can_place_sprinkler(_target):
@@ -12639,7 +12642,7 @@ func _process(delta: float) -> void:
 	#   설치·회수를 가른다). 세 동사를 쓰는 게잡이통·채취기·업화로와 달리 여기도 동사가 둘뿐이라
 	#   [F]로 모을 이유가 없다.
 	var held_rarecrow := inventory.selected_id() if ItemCatalog.is_rarecrow(inventory.selected_id()) else ""
-	var on_rarecrow := not _sleeping and held_rarecrow != "" and rarecrow != null and rarecrow.has_at(_target)
+	var on_rarecrow := not _sleeping and held_rarecrow != "" and _rarecrow_at(_target)
 	if on_rarecrow and Input.is_action_just_pressed("use_tool"):
 		_remove_rarecrow(_target)
 	elif not _sleeping and held_rarecrow != "" and Input.is_action_just_pressed("use_tool") and _can_place_rarecrow(_target):
@@ -13122,7 +13125,7 @@ func _process(delta: float) -> void:
 		#   (빈손 흔들기가 벌칙처럼 읽히지 않게 — 절기 창을 프롬프트가 가르쳐 준다).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _bush_prompt(_target)
-	elif furnace != null and _indoor == "" and furnace.has_at(_region, _target):
+	elif _furnace_at(_target):
 		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수). 채취기보다
 		#   먼저 볼 이유는 없지만(좌표가 안 겹친다) 설치물 프롬프트끼리 한자리에 모아 둔다.
 		interact_prompt.visible = not _sleeping
@@ -13132,7 +13135,7 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 업화로 세우기 (광석 %d + 혼탄 %d → 주괴 1)" % [
 			FurnaceLedger.ORE_PER_BATCH, FurnaceLedger.FUEL_PER_BATCH]
-	elif crystalarium != null and _indoor == "" and crystalarium.has_at(_region, _target):
+	elif _crystalarium_at(_target):
 		# ★[S10-T1] 세워 둔 결정기를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _crystalarium_prompt(_target)
@@ -13843,6 +13846,58 @@ func _grant_mugol_sword_lines() -> PackedStringArray:
 # 이 칸에 스프링클러를 설치할 수 있는가(⑤ 기존 배치 규칙 준수). 안식 농원 전용·빈 지면(GROUND) 또는
 # 경작지(SOIL)만 — 길·물·벽·절벽·건물 패드(SOLID)는 배제하고, POND_ACTIVITY_RECT(물가 활동존)·프롭 점유
 # (나무·바위·debris·꽃·울타리·허수아비)·트렐리스 넝쿨·이미 설치된 칸도 배제한다(성역·겹침 방지).
+# ★[폴리시 R2] 이 칸에 **지금 무대에서** 스프링클러가 서 있는가. 원장(Sprinkler._tiles)은 좌표만
+#   키로 들고 구역 축이 없는데, 배치(`_can_place_sprinkler`)와 렌더(`_draw_sprinklers`)는 HOME으로
+#   좁혀져 있었다 — 그래서 다른 구역의 같은 좌표를 겨눠 LMB를 누르면 화면엔 아무것도 없는데
+#   안식 농원의 스프링클러가 원장에서 지워지고(다음 아침 자동 급수가 원인 없이 끊긴다) 인벤에는
+#   한 개가 늘었다. 화분이 `_pot_at`으로 이미 봉합한 그 구멍이라 같은 수단으로 막는다:
+#   **놓는 곳과 만지는 곳을 같은 술어가 정한다.**
+# ★[폴리시 R2] 이 칸에 **지금 무대에서** 업화로가 서 있는가. 원장은 구역은 알지만 **층·깊이는
+#   모른다**(FurnaceLedger 키 = 구역+좌표). 그런데 갱도 층·나락 런 층은 구역 id를 지상과 그대로
+#   공유하고 좌표 공간도 겹치므로, 층 안에서 지상 화덕 좌표를 겨누면 화면에 아무것도 없는 칸에서
+#   주괴가 나오거나 지상 화덕이 통째로 회수됐다. 배치(`_can_place_furnace`)와 드로우(`_draw_furnaces`)가
+#   이미 보던 그 축을 [F]·프롬프트도 보게 하는 단일 술어다(`_pot_at`·`_sprinkler_at`과 같은 결).
+func _furnace_at(t: Vector2i) -> bool:
+	return furnace != null and _indoor == "" and _mine_floor == 0 and _narak_depth == 0 \
+		and furnace.has_at(_region, t)
+
+# 결정기도 같은 원장 모양·같은 구멍(CrystalariumLedger 키 = 구역+좌표).
+func _crystalarium_at(t: Vector2i) -> bool:
+	return crystalarium != null and _indoor == "" and _mine_floor == 0 and _narak_depth == 0 \
+		and crystalarium.has_at(_region, t)
+
+# ★[폴리시 R2] 이 칸에 **플레이어 설치물**이 하나라도 서 있는가(원장 파생 — 프롭 점유와 별개 축).
+#   `_home_occupied_tiles()`는 layout.json 프롭·절차 스캐터·재스폰 debris만 보므로 설치물 원장은
+#   거기 한 줄도 안 잡힌다. 그 탓에 두 곳의 규칙이 어긋나 있었다:
+#     ㉠ `_can_place_sprinkler`가 업화로·결정기·게잡이통·채취기 칸을 안 막아 한 칸에 둘이 겹쳤다
+#        (반대 방향인 `_can_place_furnace`·`_can_place_crystalarium`은 스프링클러를 막고 있어
+#         가드가 단방향이었다 — 레어크로우는 그 술어를 상속하므로 같은 구멍을 물려받았다).
+#     ㉡ `_encroach_candidates`가 설치물 칸을 후보로 넘겨, 절기 첫날 아침에 스프링클러·결정기 위로
+#        SOLID debris(잉걸·그루터기)가 돋아 그 칸이 통행 불가가 되고 설치물이 덮였다.
+#   두 곳이 **같은 하나**를 보게 해서 "한 칸에 둘"과 "설치물 위에 debris"를 함께 막는다.
+#   ※ 구역 축 없는 원장(sprinkler·rarecrow)은 호출부가 이미 HOME으로 좁혀져 있어 그대로 본다.
+func _installation_at(t: Vector2i) -> bool:
+	if sprinkler != null and sprinkler.has_at(t):
+		return true
+	if rarecrow != null and rarecrow.has_at(t):
+		return true
+	if furnace != null and furnace.has_at(_region, t):
+		return true
+	if crystalarium != null and crystalarium.has_at(_region, t):
+		return true
+	if crab_pot != null and crab_pot.has_at(_region, t):
+		return true
+	return tapper != null and tapper.has_at(_region, t)
+
+func _sprinkler_at(t: Vector2i) -> bool:
+	return sprinkler != null and _region == RegionCatalog.HOME and sprinkler.has_at(t)
+
+# 레어크로우도 같은 원장 모양·같은 구멍이다(rarecrow._tiles = 좌표 키). 여기 구멍은 특히 무거웠다 —
+# 보이지도 않는 곳에서 재획득 불가능한 수집물이 백팩으로 옮겨지거나(위 회수 가드 전엔 파괴됐다)
+# 8종 완주가 조용히 풀렸다.
+func _rarecrow_at(t: Vector2i) -> bool:
+	return rarecrow != null and _region == RegionCatalog.HOME and rarecrow.has_at(t)
+
 func _can_place_sprinkler(t: Vector2i) -> bool:
 	if _region != RegionCatalog.HOME or sprinkler == null:
 		return false
@@ -13863,8 +13918,8 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 		return false
 	if _field_at(t).is_crop_solid(t):         # 트렐리스 넝쿨 점유 → 배제(★[S10-T5] 늘봄방 넝쿨 포함)
 		return false
-	if rarecrow != null and rarecrow.has_at(t):   # ★[S10-T2] 세워 둔 레어크로우 → 배제(겹침 방지)
-		return false
+	if _installation_at(t):                   # ★[폴리시 R2] 다른 설치물(레어크로우·업화로·결정기·
+		return false                          #   게잡이통·채취기) → 배제(겹침 방지 · 양방향 가드)
 	if garden_pot != null and garden_pot.has_at(t):   # ★[S10-T5] 놓아 둔 화분 → 배제(겹침 방지)
 		return false
 	return true
@@ -14194,7 +14249,11 @@ func _tapper_prompt(t: Vector2i) -> String:
 #   ④ 같은 칸 중복 설치 불가(원장이 멱등이지만 프롬프트·소모 판정을 위해 여기서도 본다).
 # ★ 업화로는 **비-SOLID**다(통행을 막지 않는다 — 스프링클러·통과 같은 결. 동선 soft-lock 0).
 func _can_place_furnace(t: Vector2i) -> bool:
-	if furnace == null or _indoor != "" or _mine_floor != 0:
+	# ★[폴리시 R2] `_narak_depth != 0` 합류 — 위 ①의 "유령 화덕"이 나락 런 층에서 그대로 재현됐다.
+	#   나락 층도 구역 id는 NARAK 그대로이고 깊이만 무대를 가르는데(`_in_narak_floor`), 원장은 깊이를
+	#   키로 갖지 않으므로 층에 세운 화덕이 다른 모든 깊이와 런 종료 뒤 아레나에까지 같은 좌표로 떠
+	#   있었다(그 칸이 암반이면 회수 불가 = 화덕과 안에 든 광석이 영구 유실).
+	if furnace == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
 		return false
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
 		return false
@@ -14705,7 +14764,8 @@ func _on_frame_mastery(skill: String) -> void:
 # 둘 다 "지상 야외의 걸을 수 있는 빈 지면"이 조건이라, 여기서 새 규칙을 만들면 그게 곧 특이 케이스가
 # 된다). 다른 설치물과 겹치지 않는 것만 서로를 한 줄씩 참조해 대칭으로 채운다.
 func _can_place_crystalarium(t: Vector2i) -> bool:
-	if crystalarium == null or _indoor != "" or _mine_floor != 0:
+	# ★[폴리시 R2] 업화로와 같은 이유로 `_narak_depth != 0` 합류(유령 결정기 + 안의 보석 유실).
+	if crystalarium == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
 		return false
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _outdoor_h:
 		return false
@@ -21412,6 +21472,8 @@ func _encroach_candidates() -> Array:
 				continue
 			if POND_ACTIVITY_RECT.has_point(t):     # ★[ADR-0059 결정1] 물가 활동존 = 잡초 없는 여백 → 배제
 				continue
+			if _installation_at(t):                 # ★[폴리시 R2] 플레이어 설치물 → 배제(그 위에 SOLID
+				continue                            #   debris가 돋아 설치물을 덮고 칸을 막던 자리)
 			out.append(t)
 	return out
 
@@ -22522,7 +22584,9 @@ func _draw_encroach_weeds() -> void:
 #   "지금 저 화덕이 무슨 상태인가"가 프롬프트를 안 읽어도 보이는 게 이 렌더의 유일한 목적이다
 #   (게잡이통·채취기 상태 색 구분과 같은 결). 순수 시각 — 좌표·상태는 FurnaceLedger 소유.
 func _draw_furnaces() -> void:
-	if furnace == null or _indoor != "" or _mine_floor != 0:
+	# ★[폴리시 R2] `_narak_depth != 0` 합류 — 배치 가드와 **같은 축**이어야 나락 아레나(깊이 0)에
+	#   세운 화덕이 런 층 위에 유령으로 겹쳐 그려지지 않는다.
+	if furnace == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
 		return
 	for t: Vector2i in furnace.tiles(_region):
 		var base := Vector2(t.x * TILE, t.y * TILE)
@@ -22550,7 +22614,8 @@ func _draw_furnaces() -> void:
 #   상태 3색 창"이되, 몸통이 유리 상자라 밝고 창이 *안에 뜬 결정*이다. 순수 시각 — 상태는
 #   CrystalariumLedger가 소유하고 여긴 질의만 한다.
 func _draw_crystalariums() -> void:
-	if crystalarium == null or _indoor != "" or _mine_floor != 0:
+	# ★[폴리시 R2] 업화로 드로우와 같은 축(`_narak_depth != 0` 합류).
+	if crystalarium == null or _indoor != "" or _mine_floor != 0 or _narak_depth != 0:
 		return
 	# ★[S10-T9] 아트 훅 — assets/props/crystalarium.png(32², 발치 앵커)이 있으면 유리 상자를 그것으로
 	#   갈아끼운다. **안에 든 것은 아트가 아니다**: 보석·여문 정도·남은 일수 눈금은 아래 원장 파생

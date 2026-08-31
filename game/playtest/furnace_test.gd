@@ -329,6 +329,8 @@ func _initialize() -> void:
 	_check("⑦g '저승'을 날것으로 부르지 않는다(주민 톤 정합)", not joined.contains("저승"))
 	await _despawn(m)
 
+	await _part_r2()
+
 	if had_save:
 		_write_bytes(SAVE, _read_bytes(BAK))
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(BAK))
@@ -337,3 +339,71 @@ func _initialize() -> void:
 
 	print("══ 결과: %s ══" % ("PASS (실패 0)" if _fail == 0 else "FAIL (실패 %d)" % _fail))
 	quit(1 if _fail > 0 else 0)
+
+# ══ [폴리시 R2] 던전 층 가드 — 유령 설치물 · 보이지 않는 [F] ═════════════════
+# 두 결함이 같은 뿌리다: 층(갱도 층·나락 런 층)은 지상과 **구역 id를 공유하고 좌표 공간도 겹치는데**
+# 설치물 원장은 층·깊이를 키로 갖지 않는다. 그래서
+#   ⑫ 나락 런 층에 설치가 성립했고(원장 주석이 "유령 화덕"이라 부른 그 사고가 나락에서 재현),
+#   ⑬ 층 안에서 지상 좌표를 겨눈 [F]가 보이지도 않는 지상 설비를 조작했다.
+# 배치·드로우가 이미 보던 축(`_mine_floor`)에 `_narak_depth`를 합류시키고, [F] 디스패치에 그 둘을
+# 세운다 — 세 창구(놓기·그리기·만지기)가 같은 술어를 본다.
+func _part_r2() -> void:
+	print("── ⑫⑬ [폴리시 R2] 던전 층 배치·[F] 가드 ──")
+	var m: Node = await _spawn_main()
+
+	# ── ⑫ 나락 런 층 배치 금지 ──
+	# 원장은 깊이를 키로 갖지 않으므로, 층에 세운 화덕은 다른 모든 깊이와 런 종료 뒤 아레나에까지
+	# 같은 좌표로 떠 있었다(그 칸이 봉인 고리 암반이면 회수 불가 = 화덕 + 안의 광석 영구 유실).
+	# 판정은 **같은 칸**을 깊이만 바꿔 가며 묻는다 — 갈리는 축이 깊이 하나임이 그대로 보인다.
+	m._rebuild_region(RegionCatalog.NARAK)
+	m._mine_floor = 0
+	m._narak_depth = 0
+	m._indoor = ""
+	await _settle_frames()
+	var arena := _placeable_tile(m)
+	_check("⑫a 나락 **아레나**(깊이 0)에는 종전대로 놓을 수 있다(거동 불변)",
+		arena != Vector2i(-1, -1))
+	m._narak_depth = 1
+	_check("⑫b **런 층 안에서는 같은 칸도 막힌다** — 업화로·결정기 둘 다",
+		not m._can_place_furnace(arena) and not m._can_place_crystalarium(arena))
+	m._narak_depth = 7
+	_check("⑫c 깊이가 얼마든 같다(원장이 깊이를 안 들기 때문)",
+		not m._can_place_furnace(arena) and not m._can_place_crystalarium(arena))
+	m._narak_depth = 0
+	_check("⑫d 런이 끝나 아레나로 나오면 다시 놓을 수 있다",
+		m._can_place_furnace(arena) and m._can_place_crystalarium(arena))
+
+	# ── ⑬ 층 안에서 지상 설비 [F] 금지 ──
+	# 갱도로 옮겨 지상에 화덕·결정기를 세우고, 같은 좌표를 층 안에서 겨눈다. [F] 디스패치와
+	# 프롬프트가 모두 이 술어 하나를 보므로(둘의 불일치 0), 술어를 직접 맞대어 본다.
+	m._narak_depth = 0
+	m._rebuild_region(RegionCatalog.EOPHWA_MINE)
+	m._mine_floor = 0
+	await _settle_frames()
+	var ground := _placeable_tile(m)
+	_check("⑬pre 갱도 지상 설치 칸 확보", ground != Vector2i(-1, -1))
+	var gem_tile := ground + Vector2i(1, 0)
+	m.furnace.place(m._region, ground)
+	m.crystalarium.place(m._region, gem_tile)
+	_check("⑬a 지상에서는 [F]가 걸린다(종전 거동 그대로)",
+		m._furnace_at(ground) and m._crystalarium_at(gem_tile))
+	m._mine_floor = 1                       # ★ 층으로 내려간 상태만 재현(구역 id·좌표는 그대로)
+	_check("⑬b **갱도 층 안에서는 안 걸린다** — 원장은 여전히 그 좌표를 아는데도",
+		not m._furnace_at(ground) and not m._crystalarium_at(gem_tile)
+		and m.furnace.has_at(m._region, ground))
+	m._mine_floor = 0
+	m._narak_depth = 3                      # ★ 나락 런 층도 같은 구조(구역 id 공유 + 깊이만 갈림)
+	_check("⑬c **나락 런 층 안에서도 안 걸린다**(같은 축을 함께 본다)",
+		not m._furnace_at(ground) and not m._crystalarium_at(gem_tile))
+	m._narak_depth = 0
+	m._indoor = "대장간"
+	_check("⑬d 실내에서도 안 걸린다(종전 가드 보존)",
+		not m._furnace_at(ground) and not m._crystalarium_at(gem_tile))
+	m._indoor = ""
+	_check("⑬e 지상으로 돌아오면 다시 걸린다 — 설비도 원장도 무손상",
+		m._furnace_at(ground) and m._crystalarium_at(gem_tile))
+	await _despawn(m)
+
+func _settle_frames() -> void:
+	await process_frame
+	await process_frame
