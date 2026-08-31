@@ -576,7 +576,8 @@ func _print_verdict(results: Array) -> void:
 			day_only_day = d["day"]
 			break
 	print("\n── 손절 사다리 참고(NO-GO 시) ──")
-	print("  · ① 21→14 복귀: RUN_DAYS 한 줄(현재 %d). 곡선이 함께 비례 복귀(손절 ①)." % RUN_DAYS)
+	print("  · ① 21→14 복귀: RUN_DAYS 한 줄(현재 %d). 시뮬 길이만 줄고, 관계 곡선(%d점/칸)은 불변." % [
+		RUN_DAYS, Affinity.POINTS_PER_HEART])   # ★[폴리시 2회차] S8-T4가 곡선 파생을 끊어 "비례 복귀"는 옛말
 	print("  · ② 마일스톤 제거: 순간 직조(자원·관계 합류 ⑦)만으로 판정 — ⑦ %s." % [
 		"✓(합류 산다)" if (weaver["serve_consumed_cum"] as int) > 0 else "✗"])
 	print("  · ③ 바나 제거: 미호+멜 2루프만으로 친밀 목표 %d 도달 = %s%s." % [

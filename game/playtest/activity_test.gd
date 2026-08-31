@@ -84,6 +84,14 @@ func _run_checks() -> void:
 	_check("①c affinity.gd 코드 줄에 RunSummary 참조 0(사장 상수 절단)", not code_ref)
 	# 사장 상수 자체는 **지우지 않았다**(S9 엔딩 자산 — season_calendar_test와 같은 입장).
 	_check("①d RunSummary.RUN_DAYS 상수는 그대로 보존", RunSummary.RUN_DAYS == 21)
+	# ★[폴리시 2회차] "죽은 앵커면 함께 절단"의 판정 결과를 박제한다 — **죽은 건 곡선 파생뿐이고
+	#   상수 자체는 살아 있다**: playtest_bot이 이 값을 시뮬레이션 길이로 실사용한다(①c와 같은
+	#   소스 스캔 방식). 이 단언이 서 있는 한 "RUN_DAYS는 아무도 안 쓴다"는 오판으로 지울 수 없다.
+	var bot_src := FileAccess.open("res://playtest/playtest_bot.gd", FileAccess.READ)
+	var bot_uses := "RunSummary.RUN_DAYS" in bot_src.get_as_text()
+	bot_src.close()
+	_check("①e RUN_DAYS는 죽은 앵커가 아니다 — playtest_bot이 시뮬 길이로 실사용(삭제 금지 근거)",
+		bot_uses)
 
 	# ── ② 활동 채널(Affinity 단위 — 노드만) ──
 	print("── ② 활동 채널·일일 캡 ──")

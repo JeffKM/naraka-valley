@@ -11711,10 +11711,13 @@ func fishing_salvage_permil() -> int:
 # ★ 위 `fishing_salvage_permil`을 안 고치고 함수를 하나 더 여는 이유: 저 함수는 *보물잡이 퍼크 축*의
 #   주인이라 그대로 둬야 퍼크 단언(퍼크 = 정확히 2배)이 운에 흔들리지 않는다. 날짜가 섞인 값은
 #   이름이 달라야 호출부가 무엇을 묻는지 헷갈리지 않는다.
-# ★ 대흉 날엔 기본 30‰이 음수로 내려가 인양이 아예 안 걸린다 — SalvageTable.roll이 permil ≤ 0을
-#   빈 문자열로 접어 주므로 별도 방어가 필요 없다("흉일엔 물속이 조용하다").
+# ★[폴리시 2회차] **하한 클램프**(SalvageTable.MIN_PERMIL = 5‰). 옛 주석은 "대흉 날엔 음수로
+#   내려가 안 걸린다 — roll이 permil ≤ 0을 접어 주므로 방어가 필요 없다"였는데, 그건 방어가 아니라
+#   **인양 시스템의 완전 정지**였다(30 + (−50) = −20‰). 여기가 운이 섞이는 유일한 파생 지점이라
+#   하한도 여기 한 줄뿐이다 — `SalvageTable.roll`은 여전히 permil ≤ 0을 "롤 끄기"로 존중한다.
 func fishing_salvage_permil_today() -> int:
-	return fishing_salvage_permil() + int(roundf(_luck_bonus(DailyLuck.W_SALVAGE) * 1000.0))
+	return SalvageTable.clamp_permil(
+		fishing_salvage_permil() + int(roundf(_luck_bonus(DailyLuck.W_SALVAGE) * 1000.0)))
 
 # ── ★[S3-T7 게잡이통이 소비할 훅] 덫꾼 갈래 3종 — 퍼크 데이터는 이미 잠겼고, 여기 세 줄이 그 소비
 #   접점이다(게잡이통 시스템이 아직 없어 지금은 아무도 안 부른다 = 실배선은 S3-T7 소관).

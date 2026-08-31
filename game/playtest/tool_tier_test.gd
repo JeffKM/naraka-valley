@@ -426,14 +426,35 @@ func _initialize() -> void:
 
 	# ── ★[S5-T3] ⑫ 괭이·물뿌리개 AoE + 물뿌리개 용량 ──
 	print("── ⑫ AoE · 용량 ──")
-	_check("⑫a AoE 표 = 1×1 / 1×1 / 1×3 / 1×3 / 3×3(*잠정* — 티어1은 범위 이득 0)",
+	# ★[폴리시 2회차] 옛 표 [1×1, 1×1, 1×3, 1×3, 3×3]은 티어 1·3의 범위 이득이 0이었다(명동
+	#   괭이 2,000냥 + 주괴 5의 실효 이득 = 정확히 0). 단조 사다리로 교정한 뒤의 표를 못 박는다.
+	_check("⑫a AoE 표 = 1×1 / 1×3 / 1×5 / 1×7 / 3×3(단조 — 옛 평평 구간 제거)",
 		ToolTier.aoe_of(ToolTier.HOE, 0) == Vector2i(1, 1)
-		and ToolTier.aoe_of(ToolTier.HOE, 1) == Vector2i(1, 1)
-		and ToolTier.aoe_of(ToolTier.HOE, 2) == Vector2i(1, 3)
-		and ToolTier.aoe_of(ToolTier.HOE, 3) == Vector2i(1, 3)
+		and ToolTier.aoe_of(ToolTier.HOE, 1) == Vector2i(1, 3)
+		and ToolTier.aoe_of(ToolTier.HOE, 2) == Vector2i(1, 5)
+		and ToolTier.aoe_of(ToolTier.HOE, 3) == Vector2i(1, 7)
 		and ToolTier.aoe_of(ToolTier.HOE, 4) == Vector2i(3, 3))
+	# ★ 결함 재현 방지 단언: **모든 인접 티어가 실효 이득을 갖는다**(칸 수가 매 계단 순증).
+	#   표를 하드코딩해 세지 않고 상수에서 파생시킨다 — 표를 다시 손대도 이 계약은 살아 있다.
+	var hoe_mono := true
+	var can_mono := true
+	var hoe_cells: Array[int] = []
+	for t in range(1, ToolTier.MAX_TIER + 1):
+		var prev: Vector2i = ToolTier.aoe_of(ToolTier.HOE, t - 1)
+		var cur: Vector2i = ToolTier.aoe_of(ToolTier.HOE, t)
+		var prev_can: Vector2i = ToolTier.aoe_of(ToolTier.WATERING_CAN, t - 1)
+		var cur_can: Vector2i = ToolTier.aoe_of(ToolTier.WATERING_CAN, t)
+		hoe_cells.append(cur.x * cur.y)
+		if cur.x * cur.y <= prev.x * prev.y:
+			hoe_mono = false
+		if cur_can.x * cur_can.y <= prev_can.x * prev_can.y:
+			can_mono = false
+	_check("⑫a-2 ★괭이 AoE는 티어마다 순증(칸 1→%s) — 실효 이득 0인 계단이 없다"
+		% ", ".join(hoe_cells.map(func(n: int) -> String: return str(n))), hoe_mono)
+	_check("⑫a-3 ★물뿌리개 AoE도 티어마다 순증(용량 축과 별개로 범위 이득이 존재)", can_mono)
 	_check("⑫b 물뿌리개 AoE = 괭이와 동형 · 도끼·곡괭이는 항상 1×1(차원 분리)",
 		ToolTier.aoe_of(ToolTier.WATERING_CAN, 4) == Vector2i(3, 3)
+		and ToolTier.aoe_of(ToolTier.WATERING_CAN, 1) == ToolTier.aoe_of(ToolTier.HOE, 1)
 		and ToolTier.aoe_of(ToolTier.AXE, 4) == Vector2i(1, 1)
 		and ToolTier.aoe_of(ToolTier.PICKAXE, 4) == Vector2i(1, 1))
 	# 칸 집합 — 조준 칸을 플레이어 기준 남쪽 한 칸으로 두고 1×3이 그 방향으로 뻗는지 본다.
@@ -443,12 +464,20 @@ func _initialize() -> void:
 	_check("⑫c 1×3 = 바라보는 방향으로 일렬 3칸(가까운 칸부터·결정적 순서)",
 		line3.size() == 3 and line3[0] == aim and line3[1] == aim + Vector2i(0, 1)
 		and line3[2] == aim + Vector2i(0, 2))
+	# ★[폴리시 2회차] 새로 사다리에 낀 1×5·1×7도 같은 일렬 규칙을 그대로 탄다(형태 어휘 무증설 —
+	#   길이만 다른 같은 분기다). 끝 칸까지 방향을 지키는지 명시적으로 본다.
+	var line5: Array = m3._tool_aoe_tiles(aim, Vector2i(1, 5))
+	_check("⑫c-2 1×5 = 같은 방향 일렬 5칸(끝 칸 = 조준 +4)",
+		line5.size() == 5 and line5[0] == aim and line5[4] == aim + Vector2i(0, 4))
+	var line7: Array = m3._tool_aoe_tiles(aim, Vector2i(1, 7))
+	_check("⑫c-3 1×7 = 같은 방향 일렬 7칸(끝 칸 = 조준 +6)",
+		line7.size() == 7 and line7[0] == aim and line7[6] == aim + Vector2i(0, 6))
 	var sq: Array = m3._tool_aoe_tiles(aim, Vector2i(3, 3))
 	_check("⑫d 3×3 = 조준 칸 중심 9칸(중심 포함)",
 		sq.size() == 9 and sq.has(aim) and sq.has(aim + Vector2i(-1, -1))
 		and sq.has(aim + Vector2i(1, 1)))
 	var one: Array = m3._tool_aoe_tiles(aim, Vector2i(1, 1))
-	_check("⑫e 1×1 = 조준 칸 하나(0·1티어 거동 = 기존과 완전 동일)",
+	_check("⑫e 1×1 = 조준 칸 하나(0티어 거동 = 기존과 완전 동일 — 사다리 교정 후에도 불변)",
 		one.size() == 1 and one[0] == aim)
 	_check("⑫f 방향이 없으면(자기 칸 조준) 1×3도 한 칸으로 폴백",
 		m3._tool_aoe_tiles(pt, Vector2i(1, 3)).size() == 1)

@@ -16,7 +16,8 @@ extends SceneTree
 # ★ [S8-T3 / ADR-0066 결정 3] 주간·생일이 같은 파일에 이어 붙는다(선물의 *리듬* 축이라 한 스위트):
 #   ⑦ 주 파생(week_of)과 인당 주 2회 상한(같은 주 세 번째 거절·주가 바뀌면 재허용).
 #   ⑧ 9인 생일 배치 전수 — 테마 데이(25일)·절기 행사일(12/20/16/15) 무충돌 · 같은 날 중복 0.
-#   ⑨ 생일 ×8(러브 40→320 · 헤이트 −20→−160) · 주 상한 면제 + 카운터 미소모 · 하루 1회는 유지.
+#   ⑨ 생일 ×8 + **보정분 상한**(BIRTHDAY_BONUS_CAP = 하트 2칸): 러브 40→160 · 헤이트 −20→−140 ·
+#      등급 순서 엄격 보존 · 한 번으로 만렙 불가 · 주 상한 면제 + 카운터 미소모 · 하루 1회는 유지.
 #   ⑩ 달력 birthday 키·범례 줄 · ⑪ 주간 키 없는 구세이브 로드 무결 · ⑫ 생일 대사 placeholder.
 #
 # 실행: ./run_tests.sh gift   (헤드리스는 반드시 game/에서 · 순차)
@@ -404,16 +405,44 @@ func _run_checks() -> void:
 
 	# ── ⑨ 생일 ×8 · 주 상한 면제(카운터 미소모) · 하루 1회 유지 ──
 	print("── ⑨ 생일 선물 ──")
-	# 단위 — 반환은 **명목** 점수(플레이어가 본 "+320"이 사실이어야 한다).
+	# ★[폴리시 2회차] 옛 단언은 "러브 40 × 8 = 320 = 만렙(300) 초과 clamp"를 *잠정 경보로 박제*한
+	#   것이었다. 그 결함(선물 한 번이 미터를 통째로 채움)을 BIRTHDAY_BONUS_CAP으로 봉합했으므로
+	#   여기서 새 계약을 못 박는다: **배율은 그대로 ×8, 다만 보정분이 하트 2칸까지만 얹힌다.**
+	# 단위 — 반환은 상한을 먹인 뒤의 값(플레이어에게 알리는 수와 실제 적립이 같아야 한다).
 	var a_bd := Affinity.new()
-	_check("⑨a-1 러브 40 × 생일 8 = 320(명목 반환)",
-		a_bd.gift(Affinity.GIFT_PREFERRED_POINTS, miho_bday, true) == 320)
-	# ★잠정 경보(owner 큐): 우리 5-스케일에선 만렙이 300점이라 **생일 러브 선물 한 번이 미터를
-	#   통째로 채운다**(스타듀는 640/2500 ≈ 2.5하트). ADR-0066이 "×8 스타듀 동형"으로 확정한 값을
-	#   그대로 태웠고, 눈금 재조정은 곡선 소관(S8-T4)이라 여기선 사실만 단언해 박아 둔다.
-	_check("⑨a-2 ×8이 5-스케일 만렙(300)을 넘어 clamp된다 — 잠정 경보로 박제",
-		a_bd.points == Affinity.MAX_POINTS and 320 > Affinity.MAX_POINTS)
+	var love_bd: int = a_bd.gift(Affinity.GIFT_PREFERRED_POINTS, miho_bday, true)
+	var love_expect: int = Affinity.GIFT_PREFERRED_POINTS + Affinity.BIRTHDAY_BONUS_CAP
+	_check("⑨a-1 러브 %d + 생일 보정 상한 %d = %d(명목 반환 = 실제 적립)"
+		% [Affinity.GIFT_PREFERRED_POINTS, Affinity.BIRTHDAY_BONUS_CAP, love_expect],
+		love_bd == love_expect and a_bd.points == love_expect)
+	_check("⑨a-2 ★한 번으로 만렙을 못 채운다(%d < %d) — 옛 결함(320 ≥ 300)의 봉합"
+		% [love_bd, Affinity.MAX_POINTS],
+		love_bd < Affinity.MAX_POINTS and a_bd.points < Affinity.MAX_POINTS)
+	_check("⑨a-3 그래도 단일 행동 중 압도적으로 굵다(평시 러브 %d · 일일 대화 %d · 활동 캡 %d)"
+		% [Affinity.GIFT_PREFERRED_POINTS, Affinity.DAILY_TALK_POINTS, Affinity.ACTIVITY_DAILY_CAP],
+		love_bd > Affinity.GIFT_PREFERRED_POINTS * 3
+		and love_bd > Affinity.DAILY_TALK_POINTS + Affinity.ACTIVITY_DAILY_CAP)
 	a_bd.free()
+	# ★ 상한이 *총액*이 아니라 *보정분*인 이유의 단언: 생일에도 선호 등급 순서가 **엄격히** 산다
+	#   (총액 상한이면 러브·라이크·뉴트럴이 전부 상한값으로 붙어 생일에 선호 테이블이 무의미해진다).
+	var a_love := Affinity.new()
+	var a_like := Affinity.new()
+	var a_neut := Affinity.new()
+	var g_love: int = a_love.gift(GiftPrefs.POINTS[GiftPrefs.LOVE], miho_bday, true)
+	var g_like: int = a_like.gift(GiftPrefs.POINTS[GiftPrefs.LIKE], miho_bday, true)
+	var g_neut: int = a_neut.gift(GiftPrefs.POINTS[GiftPrefs.NEUTRAL], miho_bday, true)
+	_check("⑨a-4 생일에도 등급 순서 엄격 보존(러브 %d > 라이크 %d > 뉴트럴 %d)"
+		% [g_love, g_like, g_neut], g_love > g_like and g_like > g_neut)
+	a_love.free()
+	a_like.free()
+	a_neut.free()
+	# 비생일은 배율도 상한도 안 탄다(기존 거동 한 점 불변).
+	var a_plain := Affinity.new()
+	_check("⑨a-5 비생일은 배율·상한 둘 다 무개입(러브 = %d 그대로)"
+		% Affinity.GIFT_PREFERRED_POINTS,
+		a_plain.gift(Affinity.GIFT_PREFERRED_POINTS, miho_bday, false)
+			== Affinity.GIFT_PREFERRED_POINTS)
+	a_plain.free()
 	var r_miho2: Resident = m._resident("miho")
 	r_miho2.affinity.points = 0
 	r_miho2.affinity.last_gift_day = -1
@@ -422,9 +451,10 @@ func _run_checks() -> void:
 	r_miho2.affinity.gifts_this_week = Affinity.GIFTS_PER_WEEK
 	_hold(m, CropCatalog.YEONGHON_HOBAK)
 	var bday_gain: int = _give(m, "miho", miho_bday, false)
-	_check("⑨b 주 2회를 소진했어도 생일은 통과한다(면제 · 만렙까지 채움)",
+	_check("⑨b 주 2회를 소진했어도 생일은 통과한다(면제 · 평시보다 굵되 만렙엔 못 미침)",
 		bday_gain > Affinity.GIFT_PREFERRED_POINTS
-		and r_miho2.affinity.points == Affinity.MAX_POINTS)
+		and r_miho2.affinity.points == bday_gain
+		and r_miho2.affinity.points < Affinity.MAX_POINTS)
 	_check("⑨c 생일 선물은 주 카운터를 소모하지 않는다",
 		r_miho2.affinity.gifts_this_week == Affinity.GIFTS_PER_WEEK)
 	# 하루 1회는 생일에도 유지된다(여덟 배를 하루 두 번 받는 날은 없다).
@@ -443,8 +473,13 @@ func _run_checks() -> void:
 	r_mugol.affinity.points = Affinity.MAX_POINTS      # 만렙에서 시작(clamp에 안 걸리게)
 	r_mugol.affinity.last_gift_day = -1
 	_hold(m, CropCatalog.PIANHWA)
-	_check("⑨f 헤이트 −20 × 생일 8 = −160", _give(m, "mugol", mugol_bday, false) == -160
-		and r_mugol.affinity.points == Affinity.MAX_POINTS - 160)
+	# ★[폴리시 2회차] 음수도 **대칭으로** 상한을 탄다(−20 → −20 + max(−140, −120) = −140).
+	#   한쪽만 자르면 "×8이 전 등급에 걸린다"는 규칙이 반쪽이 된다.
+	var hate_expect: int = GiftPrefs.POINTS[GiftPrefs.HATE] - Affinity.BIRTHDAY_BONUS_CAP
+	_check("⑨f 헤이트 %d + 생일 보정 상한(음수쪽) = %d"
+		% [GiftPrefs.POINTS[GiftPrefs.HATE], hate_expect],
+		_give(m, "mugol", mugol_bday, false) == hate_expect
+		and r_mugol.affinity.points == Affinity.MAX_POINTS + hate_expect)
 	r_mugol.affinity.points = 100
 	r_mugol.affinity.last_gift_day = -1
 	_hold(m, CropCatalog.PIANHWA)
