@@ -2426,6 +2426,14 @@ var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌�
 #   다시 서는 프레임에 `_process`가 소비한다. 세션 로컬이다(세이브 무관) — 그 아침에 껐다 켜면
 #   기회를 잃지만, 그건 이 표가 없던 종전과 같은 결과라 회귀가 아니다.
 var _season_respawn_pending_day := 0
+# ★[폴리시 R4] **입력 디스패치 단계에서 세계를 바꾼 프레임의 폴링을 한 번 삼킨다.** Godot은 한
+#   iteration에서 입력 디스패치(`_input`·`_gui_input`)를 `_process`보다 **먼저** 흘리는데, main은
+#   모든 월드 동사를 `Input.is_action_just_pressed`(전역 폴링)로 받는다 — 그래서 디스패치 단계에서
+#   상태를 갈아 끼운 창구의 그 키가 같은 프레임 `_process`의 월드 게이트에 그대로 다시 걸린다
+#   (타이틀 [이어하기]의 Enter → 집 안 취침 / 모달 우상단 [X] 클릭 → 괭이질·설치물). 12146 머리말이
+#   시계 판 클릭에 대해 이미 적어 둔 그 함정이고, `accept_event()`는 폴링에 아무 효과가 없다.
+#   두 창구가 여기에 표를 세우면 `_process`가 입력 구간 맨 앞에서 그 한 프레임을 통째로 건너뛴다.
+var _swallow_input_once := false
 # ★ [B1-a.3] 사료풀 상태(낫으로 베어 건초를 얻는 고지 풀 — 재생·겨울정지). FarmField/Orchard/Ranch/
 #   Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). main이 고지 자유 풀밭을 시드하고, 벤 결과를
 #   여물광(Ranch.store_hay)에 적재한다(경제 양끝 잇기). 드로우는 main이 이 상태를 질의(디커플링).
@@ -3373,6 +3381,11 @@ func _on_title_start(slot: int, is_new: bool) -> void:
 		t.queue_free()
 	get_tree().paused = false
 	_begin_game(is_new)
+	# ★[폴리시 R4] 여기까지가 **타이틀의 입력 디스패치 안**이다 — 키보드 [이어하기]의 Enter/Space가
+	#   같은 프레임 `_process`에서 `ui_accept`로 다시 읽혀, 세이브가 되세운 집 안 좌표 위에서
+	#   `_can_sleep()`(위치만 본다)을 통과해 **이어하기를 누른 그 프레임에 하루가 통째로 소비됐다**
+	#   (`_do_sleep` 끝의 자동 저장이 그 상태를 덮어써 되돌릴 수도 없다). 그 한 프레임을 삼킨다.
+	_swallow_input_once = true
 
 # 타이틀 [종료].
 func _on_title_quit() -> void:
@@ -9546,7 +9559,7 @@ func _setup_frame() -> void:
 	frame.buy_store_item.connect(_on_frame_buy_store_item)   # ★ [S2-T4] 매대 묘목·비료·건초 + ★[S3-T5] 낚시 기어 구매
 	frame.sell_fish.connect(_on_frame_sell_fish)         # ★ [S3-T5] 생선가게 환전(행별 1마리·Shift 전량)
 	frame.sell_fish_all.connect(_on_frame_sell_fish_all) # ★ [S3-T5] 생선가게 전량 환전
-	frame.close_pressed.connect(_close_frame)    # ★ [S1R-T12] 우상단 X 닫기
+	frame.close_pressed.connect(_on_frame_close_pressed)    # ★ [S1R-T12] 우상단 X 닫기
 	frame.discard_slot.connect(_on_frame_discard)   # ★ [S1R-T12] 휴지통 버리기(확인 후)
 	frame.save_pressed.connect(_on_frame_save)   # ★ Phase B 옵션 탭
 	frame.quit_pressed.connect(_on_frame_quit)
@@ -12033,6 +12046,12 @@ func _process(delta: float) -> void:
 	#   `_run_over`와 다른 축이라 가드도 따로 선다: 저건 되돌릴 수 없는 종료고 이건 닫으면 코지
 	#   샌드박스로 돌아가는 1회성 화면이다(§6.4 "머무름은 선택"). 세이브 삭제(F8)는 **안 받는다** —
 	#   여기는 게임의 끝이 아니라 한 장의 회고라, 그 자리에 파괴적 입력을 두지 않는다.
+	# ★[폴리시 R4] 입력 디스패치 단계가 세운 표를 여기서 소비한다(`_swallow_input_once` 머리말).
+	#   **아래 모든 입력 폴링보다 먼저**여야 뜻이 산다. 위 mute·전체화면·배치/꾸미기 토글은 이 표와
+	#   겹칠 키가 없어 그대로 둔다(삼키는 범위를 실제로 새는 축으로만 좁힌다).
+	if _swallow_input_once:
+		_swallow_input_once = false
+		return
 	if _epilogue_open:
 		if Input.is_action_just_pressed("action") or Input.is_action_just_pressed("ui_accept"):
 			_close_epilogue()
@@ -12612,10 +12631,17 @@ func _process(delta: float) -> void:
 	#   게이트 밖에서 따로 디스패치한다(꽃 패치와 정확히 같은 결). RMB(맨손) 또는 [F] 어느 쪽이든 줍는다
 	#   — 줍기는 도구가 필요 없고(혼력 0, ADR-0033 #1), 물가 게잡이통·기증대처럼 [F]로 손이 가는 동선도
 	#   있어 둘 다 받는다. 실내에선 안 돈다(_indoor 게이트).
+	# ★[폴리시 R4] 이 프레임의 [F]를 아래 채집 창구 넷(채집물·덤불·팬닝·반딧넋)이 이미 가져갔는가.
+	#   그 넷은 자기 일을 하고도 return을 하지 않는다(뒤따르는 갱도·나락 사다리 순서를 지키려고) —
+	#   그래서 [F]가 사슬 맨 끝의 휘파람(12712 머리말)까지 그대로 흘러, 반딧넋을 거두면서 먹갈기에서
+	#   내리고 다시 누르면 거두면서 다시 타는 토글이 됐다. 그 머리말이 선언한 "위 창구가 아무도 안
+	#   집었을 때만 말을 부른다"를 표 하나로 실제로 집행한다(순서는 그대로 두고 규약만 켠다).
+	var f_taken := false
 	var on_forage_spawn := not _sleeping and _indoor == "" and forage_spawns != null \
 			and forage_spawns.has_at(_region, _target)
 	if on_forage_spawn and (Input.is_action_just_pressed("action") or Input.is_action_just_pressed("shop_toggle")):
 		_pick_forage(_target)
+		f_taken = Input.is_action_just_pressed("shop_toggle")
 	# ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 흔들기 — 채집 덤불은 통행 가능 GROUND 위(비-SOIL)라 꽃 패치·
 	#   채집물 줍기와 같은 결로 _target_valid 게이트 밖에서 따로 디스패치한다. **[F] 전용**이다:
 	#   줍기(RMB/F 겸용)와 달리 "흔든다"는 별개 동사이고, 덤불 자리는 빈터 존 밖이라 같은 칸에서 줍기와
@@ -12624,6 +12650,7 @@ func _process(delta: float) -> void:
 			and is_bush_tile(_region, _target) and berry_bushes.has_berry(_region, _target)
 	if on_bush and Input.is_action_just_pressed("shop_toggle"):
 		_shake_bush(_target)
+		f_taken = true
 	# ★[S10-T1 / ADR-0069 결정 2] 팬닝 — 반짝이는 물가 칸을 [F]. 스폿은 걸을 수 있는 지면(GROUND/PATH)
 	#   위라 채집물·덤불과 같은 결로 _target_valid 게이트 밖에서 따로 디스패치한다.
 	#   ★ **[F] 전용**이다(줍기의 RMB 겸용과 갈린다): "일다"는 도구 없이 하는 별개 동사이고, 무엇보다
@@ -12635,6 +12662,7 @@ func _process(delta: float) -> void:
 			and panning.has_at(_region, _target)
 	if on_pan_spot and Input.is_action_just_pressed("shop_toggle"):
 		_pan_spot(_target)
+		f_taken = true
 	# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 — 반짝이는 칸을 [F]로 거둔다(= 인도 = 안치).
 	#   ★ **팬닝 바로 뒤**에 둔다: 고정 배치 표가 팬닝 존을 비껴가도록 잠겼으므로 실제로 겹칠 일은
 	#     없지만, 존이 나중에 넓어져도 오늘의 사금이 먼저 잡히도록 순서로 한 번 더 못 박는다.
@@ -12644,6 +12672,7 @@ func _process(delta: float) -> void:
 			and fireflies != null and fireflies.live_spot_at(_region, _target) != ""
 	if on_firefly and Input.is_action_just_pressed("shop_toggle"):
 		_gather_firefly(_target)
+		f_taken = true
 	# ★[S4-T8 / ADR-0062 결정 9 ㉡] 이끼 낫 채취 — 이끼 낀 성숙목은 SOLID(비-SOIL)라 벌목과 같은 자리에서
 	#   디스패치한다. **든 게 낫일 때만** 걸리고(도끼면 아래 벌목이 잡는다), 둘은 서로 배타라 한 칸에서
 	#   충돌하지 않는다(각 함수가 자기 도구를 스스로 검사 — ADR-0024 §2 자동 분기 없음).
@@ -12712,7 +12741,8 @@ func _process(delta: float) -> void:
 	# ★[S10-T4 / ADR-0069 결정 6] 휘파람(F) — **[F] 사슬의 맨 끝**이다. 위 모든 창구가 먼저 자기
 	#   [F]를 가져가고 아무도 안 집었을 때만 말을 부른다(든 물건이 창구를 이기지 않는다는 규약 —
 	#   휘파람을 든 채 우편함 앞에 서면 편지가 열리는 것이 맞다). 한 번 = 소환·승마, 두 번 = 하차.
-	if not _sleeping and mount != null and inventory.selected_id() == ItemCatalog.MOUNT_WHISTLE \
+	if not _sleeping and not f_taken and mount != null \
+			and inventory.selected_id() == ItemCatalog.MOUNT_WHISTLE \
 			and Input.is_action_just_pressed("shop_toggle"):
 		_toggle_mount()
 		return
@@ -12802,18 +12832,26 @@ func _process(delta: float) -> void:
 	# ★[S6-T5] 체키 촬영 중엔 LMB가 **셔터**다 — 무기를 든 채 찍으면 스윙이 같이 나가므로 막는다.
 	# ★[S6-T6] 칵테일 제조 중의 LMB(붓기·셰이킹)도 같은 이유로 도구질로 흘리지 않는다.
 	var holding_weapon := ItemCatalog._is_weapon(inventory.selected_id())
+	var holding_free_use := _is_free_use_item(inventory.selected_id())
 	# ★[S10-T2] 레어크로우도 스프링클러와 같은 이유로 도구질로 흘리지 않는다(설치 LMB와 중복 방지).
 	if not _sleeping and cheki == null and cocktail == null \
-			and (_target_valid or holding_weapon or pot_at_target) \
+			and (_target_valid or holding_weapon or pot_at_target or holding_free_use) \
 			and not holding_sprinkler and not holding_garden_pot and held_rarecrow == "" \
 			and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
 	# ★[S10-T5] 화분 칸도 수확 대상이다(밭 흙이 아니어도 — 위 도구 게이트와 같은 이유).
+	var harvest_took_rmb := false
 	if not _sleeping and (_target_valid or pot_at_target) and Input.is_action_just_pressed("action"):
 		_try_harvest()
+		harvest_took_rmb = true
 	# ★ ADR-0024 취침(RMB): 집 안이면 RMB로도 잠든다(위 ui_accept와 병행 — 어느 쪽이든).
-	if _can_sleep() and Input.is_action_just_pressed("action"):
+	# ★[폴리시 R4] 바로 위 수확이 이 프레임의 RMB를 이미 썼으면 취침은 건너뛴다. S10-T5 화분이
+	#   **실내에 서면서 "수확 칸"과 "취침 가능 구역"이 처음으로 겹쳤다** — 집 안 화분을 겨눠
+	#   우클릭하면 수확 직후 `_do_sleep()`이 그대로 이어져 그 자리에서 하루가 끝났다(`_can_sleep`은
+	#   위치만 보고, 집 실내는 늘 `_zone_at == "집"`이다). 위 상자 분기(12418)가 return으로 막아 둔
+	#   바로 그 사고이고, 나중에 얹힌 화분 수확에는 그 방어가 없었다.
+	if not harvest_took_rmb and _can_sleep() and Input.is_action_just_pressed("action"):
 		_do_sleep()
 
 	# ★ C2 — 멜 출하대(_process_shop)·만물상 매대(_process_store) 폴링은 폐기됐다. 판매는 무인
@@ -13455,6 +13493,17 @@ func _farm_aoe_tiles(t: Vector2i, aoe: Vector2i) -> Array[Vector2i]:
 		if at == t or _is_farmable(at):
 			out.append(at)
 	return out
+
+# ★[폴리시 R4] **조준 칸을 보지 않는 손 물건**인가(명부환·곁들이·계단). 아래 `_use_tool` 맨 앞이
+#   이 셋을 혼력 게이트 *위에서* 갈라 두었는데, 정작 `_process`의 LMB 디스패치 게이트가
+#   `_target_valid`(=밭 흙 SOIL)를 요구해 **갱도·나락 층에서는 한 번도 여기 못 닿았다** — 층 바닥은
+#   PATH·WALL·ROCK뿐이라 SOIL이 한 칸도 없다(같은 게이트에 `holding_weapon` or-항이 선 그 사실).
+#   결과가 정확히 뒤집혔었다: 계단은 쓸 수 있는 유일한 무대에서 100% 불발이고(`_can_use_stairs`는
+#   층 안에서만 참), 회복원이 그것뿐인 무대에서 명부환·곁들이가 잠겼다(ADR-0008 "막힘 0" 위반).
+#   게이트와 회귀가 **같은 술어**를 보도록 이름을 붙여 둔다(회귀가 못 잡은 이유가 곧, playtest가
+#   전부 `_use_tool()`을 직접 불러 그 게이트를 건너뛴 것이었다).
+func _is_free_use_item(id: String) -> bool:
+	return ItemCatalog._is_potion(id) or MenuCatalog.is_side_dish(id) or id == ItemCatalog.STAIRS
 
 func _use_tool() -> void:
 	var item := inventory.selected_id()
@@ -15776,6 +15825,15 @@ func _close_frame() -> void:
 	frame.close()
 	hotbar.visible = true
 	player.set_physics_process(true)
+
+# ★[폴리시 R4] 우상단 [X] **마우스 클릭** 전용 닫기. `_gui_input`(입력 디스패치 단계)에서 곧바로
+#   프레임을 접으면, 같은 프레임 `_process`가 12105의 모달 가드에 닿았을 때 이미 닫혀 있어 월드
+#   디스패치까지 그대로 내려갔다 — 괭이를 들었으면 인접 칸이 갈리고, 스프링클러·화분·레어크로우·
+#   게잡이통·업화로·결정기를 들었으면 그 자리에 설치물이 놓였다. Esc 닫기(12115)는 그 자리에서
+#   return하므로 안 새고, 오직 이 경로만 샜다. 닫기는 그대로 즉시 하되 그 프레임 폴링을 삼킨다.
+func _on_frame_close_pressed() -> void:
+	_close_frame()
+	_swallow_input_once = true
 
 # ── ★ C2 무인 출하함 드롭/롤백(프레임 시그널 핸들러) ──────────────────────────
 # 출하함 패널에서 백팩 수확물 슬롯을 클릭하면 그 슬롯을 통째로 출하 대기에 넣는다(인벤토리에서
