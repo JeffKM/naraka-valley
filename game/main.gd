@@ -4422,10 +4422,15 @@ func _chop_tree(t: Vector2i) -> void:
 	energy.spend(cost)
 	audio.sfx("hoe")                             # 도끼질 = 둔탁한 "턱"(전용 SFX는 아트 패스)
 	# 산출 적재(마지막 타가 아니면 전부 0이라 아무것도 안 들어온다).
-	_grant_chop_drop(ItemCatalog.WOOD, int(res.get("wood", 0)))
-	_grant_chop_drop(ItemCatalog.HARDWOOD, int(res.get("hardwood", 0)))
-	_grant_chop_drop(ItemCatalog.SAP, int(res.get("sap", 0)))
-	_grant_chop_drop(String(res.get("seed_id", "")), int(res.get("seeds", 0)))
+	# ★[폴리시 R9] 담기 실패를 **모아서 한 번 알린다** — 형제 창구 둘(`_award_mine_drop`·처치 드랍)이
+	#   이미 드는 그 문법이다. 벌목은 산출이 네 갈래라 갈래마다 알리면 알림 줄이 도배된다.
+	var chop_full := false
+	chop_full = not _grant_chop_drop(ItemCatalog.WOOD, int(res.get("wood", 0))) or chop_full
+	chop_full = not _grant_chop_drop(ItemCatalog.HARDWOOD, int(res.get("hardwood", 0))) or chop_full
+	chop_full = not _grant_chop_drop(ItemCatalog.SAP, int(res.get("sap", 0))) or chop_full
+	chop_full = not _grant_chop_drop(String(res.get("seed_id", "")), int(res.get("seeds", 0))) or chop_full
+	if chop_full:
+		_notice("백팩이 가득 차 벤 것을 다 담지 못했다")
 	_gain_forage_xp(int(res.get("xp", 0)))       # 0이면 _gain_forage_xp가 알아서 무동작
 	# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 드랍 ② 벌목 — 산출·XP 다음의 별 가지.
 	#   ★ **넘어간 타에만 굴린다**(중간 타는 안 굴린다). 벌목만 다타수라, 매 타 같은 serial로 굴리면
@@ -4446,11 +4451,20 @@ func _chop_tree(t: Vector2i) -> void:
 	_sync_tree_tile(t)                           # 숲: 슬롯이 비었으면 그 칸이 즉시 걸을 수 있게 된다
 	queue_redraw()
 
-func _grant_chop_drop(id: String, n: int) -> void:
+# ★[폴리시 R9] 반환 = **이 갈래가 통째로 들어갔는가**(줄 것이 없으면 true — 실패가 아니다).
+#   종전엔 `add_item`의 반환값을 버리고 곧바로 토스트를 띄웠다: 나무는 `tree_ledger.chop`이 이미
+#   쓰러뜨린 뒤라 되돌릴 자리가 없는데, 백팩이 가득하면 원목·단단한 원목·수액·나무 씨앗이 **조용히
+#   증발**하면서 화면엔 "원목 +2"가 떴다(나무 재생성 축이 따로라 그 타의 산출은 되찾을 수 없다).
+#   형제 창구 둘 — 채굴 `_award_mine_drop`·처치 드랍 — 은 같은 "되돌릴 수 없는 사건" 앞에서
+#   예외 없이 담기 성공을 보고 실패를 알린다(스택은 빈 슬롯 하나면 통째로 들어가므로 판정도
+#   그 둘과 같은 all-or-nothing이다 — 토스트는 실제로 들어갔을 때만 뜬다).
+func _grant_chop_drop(id: String, n: int) -> bool:
 	if id == "" or n <= 0:
-		return
-	inventory.add_item(id, n)
+		return true
+	if not inventory.add_item(id, n):
+		return false
 	_toast_item(id, n)
+	return true
 
 # 안식 자체 파종의 "빈 칸인가" 판정(TreeLedger.advance_day에 Callable로 주입 — 원장은 지형을 모른다).
 # 성역: 밭 흙·길·벽·물·절벽(GROUND 아님) / 프롭 점유(건물·나무·바위·debris·꽃·울타리) / 경작·심긴 칸 /
@@ -21153,8 +21167,17 @@ func _try_propose(r: Resident) -> void:
 		# ★[S9b-T6 / narrative-bible §5.3] 세레나 한정 추가 전제 = **뭍의 비약**. 물 밖에 못
 		#   나오는 몸이라 혼례·이주가 성립하지 않는다 — 거절은 **인-픽션·무소모**다(부적 보존.
 		#   비약을 받아 오면 같은 자리에서 다시 청혼할 수 있다. 위 두 게이트와 완전히 같은 결).
+		# ★[폴리시 R9] 판정은 **손에 든 것**을 묻는 게 맞다(비약은 이 자리에서 소모되고, 상자
+		#   속 물건을 소모할 경로는 없다 — 정표와 같은 문법). 갈린 것은 안내다: 발급 창구
+		#   `_elixir_quest_open`은 R7에서 `_stored_anywhere`(백팩 ∪ 상자)로 갈아탔으므로, 비약을
+		#   집 상자에 넣어 둔 플레이어에겐 **청혼도 막히고 옥자의 재발급 창구도 안 열린다**.
+		#   그러면 "옥자에게 청하자"는 문구가 창구가 없는 곳을 가리키는 막다른 안내가 된다.
+		#   두 술어를 억지로 맞추는 대신 **어디에 있는지를 화면이 말하게** 갈랐다.
 		if r.id == ELIXIR_RID and not inventory.has_item(ItemCatalog.OKJA_ELIXIR):
-			_notice("세레나가 물가 선에서 손을 멈춘다 — 뭍에서 견딜 몸이 먼저다 (옥자에게 청하자)")
+			if _stored_anywhere(ItemCatalog.OKJA_ELIXIR):
+				_notice("세레나가 물가 선에서 손을 멈춘다 — 상자에 넣어 둔 뭍의 비약을 꺼내 오자")
+			else:
+				_notice("세레나가 물가 선에서 손을 멈춘다 — 뭍에서 견딜 몸이 먼저다 (옥자에게 청하자)")
 			return
 	var idx := inventory.selected_index
 	if not inventory.remove_at(idx, 1):     # 정표 소모(든 슬롯 그대로 — 선물 문법과 동일)
