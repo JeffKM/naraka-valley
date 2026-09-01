@@ -23137,7 +23137,17 @@ func _release_open_buildings() -> bool:
 	# 밤엔 방출하지 않는다(방목=낮). day_advanced는 06:00 리셋 직후라 낮이지만, 문 토글은 언제든 눌리므로 가드.
 	if clock != null and clock.phase() == "밤":
 		return false
-	var slots := _free_pasture_tiles()
+	# ★[폴리시 R8] **이미 방목 나간 짐승이 선 칸은 후보에서 뺀다.** 라운드로빈 인덱스는 매 호출
+	#   0에서 다시 돌고 `releasable()`은 실내 짐승만 주므로, 아침에 한 건물이 방출된 뒤 낮에 다른
+	#   건물 문을 열면 두 번째 방출이 **첫 번째와 똑같은 slots[0]·slots[1]** 을 다시 집었다. 겹친
+	#   두 마리 중 `animal_key_at`이 잡는 건 첫 매치 하나뿐이라 나머지는 그날 급여·쓰다듬·수집이
+	#   전부 막히고(실내 앵커도 `has_animal_at`이 false), 그 산물은 다음 advance_day에 덮여 사라진다.
+	#   밤 정산이 문 닫힌 짐승의 방목 좌표를 유지하므로 겹침은 다음 날 아침까지 이어졌다.
+	var taken: Dictionary = ranch.occupied_pasture_tiles()
+	var slots: Array = []
+	for t: Vector2i in _free_pasture_tiles():
+		if not taken.has(t):
+			slots.append(t)
 	if slots.is_empty():
 		return false
 	var i := 0

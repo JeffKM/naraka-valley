@@ -330,6 +330,20 @@ func releasable() -> Array:
 			out.append(tile)
 	return out
 
+# ★[폴리시 R8] 지금 방목지에 **이미 서 있는** 짐승들의 타일 집합(키 = 방목 타일). main이 새 방출
+# 목적지를 고를 때 이 칸들을 후보에서 뺀다 — `releasable()`은 실내 짐승만 주므로 호출부가 자기
+# 배정 이력만 봐서는 *이전 호출*이 세워 둔 짐승을 절대 알 수 없다(라운드로빈 인덱스가 매 호출 0에서
+# 다시 도므로 두 번째 방출이 첫 번째와 같은 칸을 그대로 다시 집는다).
+# ★겹치면 `animal_key_at`이 첫 매치 하나만 돌려주므로 나머지 한 마리는 그날 급여·쓰다듬·수집이
+#   전부 불가능해진다(밤 정산이 위치를 유지하니 다음 날까지 이어진다).
+func occupied_pasture_tiles() -> Dictionary:
+	var out: Dictionary = {}
+	for tile in _animals.keys():
+		var a: Dictionary = _animals[tile]
+		if str(a.get("location", LOC_INDOOR)) == LOC_PASTURE:
+			out[Vector2i(a.get("pasture_tile", tile))] = true
+	return out
+
 # 짐승을 방목지 dest 타일로 내보낸다(아침 방출·문 여는 즉시 방출). 방목=F_GRAZE라 grazed 플래그를 세운다.
 func send_to_pasture(tile: Vector2i, dest: Vector2i) -> bool:
 	if not _animals.has(tile):
