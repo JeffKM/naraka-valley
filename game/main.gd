@@ -2448,6 +2448,15 @@ var _season_respawn_pending_day := 0
 #   서는 프레임에 `_process`가 소비한다 — 다만 **실제로 방출까지 간 프레임에만** 지운다(밤에
 #   돌아오면 그 프레임은 아무것도 안 하므로, 표를 소비하면 그날 방목을 잃는다).
 var _pasture_release_pending := false
+# ★[폴리시 R9] 집 밖에서 날이 바뀌어 **밀린 그 밤의 잡초 두 줄**의 날짜(0 = 밀린 것 없음).
+#   확산(`_run_weed_spread`)과 재점령(`_run_weed_encroach`)을 한 표가 함께 든다 — 둘 다 안식
+#   그리드를 전제하고(`_weed_spread_cb`·`_encroach_candidates`가 HOME이 아니면 빈 값을 돌려준다)
+#   같은 밤의 짝이라 갈라 미룰 이유가 없다. 위 두 표와 같은 결의 세션 로컬 값이고(세이브 무관·
+#   로드가 버린다), 안식 농원에 다시 서는 프레임에 `_process`가 순서대로 소비한다.
+#   ★ 밀린 밤이 여러 날이어도 표는 **마지막 하루**만 든다(절기 재스폰 표와 같은 계약) — 두 원장 다
+#     day 시드라 같은 날을 두 번 굴려도 결과가 같고, 밀린 밤 수만큼 곱해 물리는 건 페널티 설계
+#     결정이라 여기서 새로 만들지 않는다(OWNER 큐).
+var _weed_day_pending_day := 0
 # ★[폴리시 R4] **입력 디스패치 단계에서 세계를 바꾼 프레임의 폴링을 한 번 삼킨다.** Godot은 한
 #   iteration에서 입력 디스패치(`_input`·`_gui_input`)를 `_process`보다 **먼저** 흘리는데, main은
 #   모든 월드 동사를 `Input.is_action_just_pressed`(전역 폴링)로 받는다 — 그래서 디스패치 단계에서
@@ -4468,7 +4477,8 @@ func _grant_chop_drop(id: String, n: int) -> bool:
 
 # 안식 자체 파종의 "빈 칸인가" 판정(TreeLedger.advance_day에 Callable로 주입 — 원장은 지형을 모른다).
 # 성역: 밭 흙·길·벽·물·절벽(GROUND 아님) / 프롭 점유(건물·나무·바위·debris·꽃·울타리) / 경작·심긴 칸 /
-# 개간해 연 땅 / 재점령 잡초 / 스프링클러 / 혼의 나무 밑동. = 아직 아무것도 없는 잔디 여백만 통과.
+# 개간해 연 땅 / 재점령 잡초 / 설치물 전부(`_installation_at`) / 혼의 나무 밑동.
+# = 아직 아무것도 없는 잔디 여백만 통과.
 # ★ occ(프롭 점유)는 호출마다 새로 계산하면 비싸므로 클로저에 캐시해 넘긴다(_tree_seed_free_cb).
 func _is_tree_seed_free(region: String, t: Vector2i, occ: Dictionary) -> bool:
 	if region != RegionCatalog.HOME or _region != RegionCatalog.HOME:
@@ -4489,7 +4499,15 @@ func _is_tree_seed_free(region: String, t: Vector2i, occ: Dictionary) -> bool:
 		return false
 	if reclaim != null and (reclaim.is_cleared(t) or reclaim.has_weed(t)):
 		return false
-	if sprinkler != null and sprinkler.has_at(t):
+	# ★[폴리시 R9] 설치물 성역을 **스프링클러 한 종에서 `_installation_at` 전체로** 넓혔다. R2/R4가
+	#   그 술어를 신설하며 레어크로우·업화로·결정기·게잡이통·채취기를 합류시켰는데 이 줄만 옛
+	#   원장 직행으로 남아, 반대 방향(`_encroach_candidates`)이 이미 `_installation_at`을 물고
+	#   있는데도 가드가 단방향이었다 — 성숙목 반경 3칸 안에 세운 레어크로우·업화로 칸은 `_grid`가
+	#   GROUND이고 occ(=`_home_prop_entries`)에도 설치물이 없어 자체 파종이 그 칸을 빈 여백으로
+	#   봤고, 밤새 그 위에 stage1이 돋아 "한 칸에 둘 금지" 불변식이 깨졌다(그 뒤론 배치 가드 전부가
+	#   그 칸을 거절해 원상 복구 경로도 없다). 술어는 이미 `_region == HOME`을 물고 있고 이 함수의
+	#   첫 줄이 같은 조건을 요구하므로 스프링클러 항의 거동은 바이트 단위로 불변이다.
+	if _installation_at(t):
 		return false
 	if orchard != null and t in orchard.trunk_tiles():
 		return false
@@ -5254,8 +5272,12 @@ func _reclaim_greenhouse_lot() -> void:
 	if cleared_trees > 0:
 		_notice("늘봄방 부지에 돋아 있던 나무 %d그루를 치웠다" % cleared_trees, NOTICE_SECS * 2.0)
 	if not stuck.is_empty():
-		_notice("보관할 자리가 없어 늘봄방 부지의 %s은(는) 걷지 못했다 — 백팩·상자를 비우면 다음 아침에 다시 걷는다"
-			% ", ".join(PackedStringArray(stuck)), NOTICE_SECS * 3.0)
+		# ★[폴리시 R9] 병기("은(는)")를 HanjiUi 조사 헬퍼로 갈았다 — 저장소에 하나 남아 있던 자리다
+		#   (hanji_ui.gd 머리말이 "병기로 물러서지 않는다"를 규약으로 못 박고, main의 동적 이름 문구
+		#   40여 곳이 이미 이 헬퍼를 쓴다). `", ".join(...)`의 끝글자가 곧 마지막 이름의 끝글자라
+		#   합친 문자열에 그대로 얹으면 된다.
+		_notice("보관할 자리가 없어 늘봄방 부지의 %s 걷지 못했다 — 백팩·상자를 비우면 다음 아침에 다시 걷는다"
+			% HanjiUi.with_eun(", ".join(PackedStringArray(stuck))), NOTICE_SECS * 3.0)
 
 # ★[폴리시 R6] 완공이 예정지를 WALL로 덮기 전에 **그 안에 서 있는 플레이어를 밖으로 옮긴다.**
 #   GREENHOUSE_EXT_RECT는 완공 전까지 전부 GROUND라 걸어 들어갈 수 있고, 24:00 기절 취침
@@ -6664,18 +6686,30 @@ func _faint() -> void:
 		#   — 시간 +2h만 잃고 골드·아이템·진행은 0이다. 다만 리셋 런이라 **그 런은 여기서 끝난다**
 		#   (잃는 것이 "이번 런의 깊이"인데, 그건 애초에 영구 기록이 아니라 페널티가 아니다).
 		_exit_narak_run()
-	_advance_clock_minutes(FAINT_TIME_PENALTY_MIN)   # ②시간 +2h
+	var lost := _advance_clock_minutes(FAINT_TIME_PENALTY_MIN)   # ②시간 +2h(24:00에서 잘린다)
 	health.refill()                          # ③HP 회복(대가 = 시간뿐)
-	_notice("기절했다 — 눈을 뜨니 %d시간이 지났다 (잃은 것은 없다)" % (FAINT_TIME_PENALTY_MIN / 60))
+	# ★[폴리시 R9] 문구를 **상수가 아니라 실제로 흐른 시간**에서 파생한다. 종전엔 늘
+	#   "2시간이 지났다 (잃은 것은 없다)"였는데, `_advance_clock_minutes`가 END_MIN에서 자르므로
+	#   23:00 기절은 실제로 1시간만 흘렀고(화면이 시간을 두 배로 말했다), 그렇게 상한에 닿은 순간
+	#   다음 프레임의 `collapsed`가 하루를 통째로 끝내는데 "잃은 것은 없다"가 함께 떴다. 두 방향의
+	#   거짓말을 각각 그 자리에서 맞춘다 — 남은 하루를 잃는 밤은 그렇다고 말한다.
+	if clock != null and clock.minutes >= float(GameClock.END_MIN):
+		_notice("기절했다 — 눈을 뜨니 날이 저물어 있었다 (오늘 남은 시간을 잃었다)")
+	else:
+		_notice("기절했다 — 눈을 뜨니 %s 지났다 (잃은 것은 없다)" % HanjiUi.with_i(_minutes_text(lost)))
 	audio.sfx("ui")
 
 # 게임 시계를 분 단위로 앞으로 민다(기절 페널티의 유일 소비자). 24:00 상한에서 자르고, 그 상한에
 # 닿으면 GameClock이 다음 프레임에 collapsed(강제 취침)를 쏜다 — 새벽에 기절하면 그대로 하루가
 # 끝나는 스타듀 결이 특별 분기 없이 성립한다.
-func _advance_clock_minutes(mins: int) -> void:
+# ★[폴리시 R9] 반환 = **실제로 흐른 분**(요청분이 아니다). 상한에서 잘리는 밤이 흔한데 호출부가
+#   상수에서 문구를 파생하면 화면이 시간을 부풀려 말한다 — 잘린 값을 돌려주면 그 자리에서 맞는다.
+func _advance_clock_minutes(mins: int) -> int:
 	if clock == null or mins <= 0:
-		return
+		return 0
+	var before := clock.minutes
 	clock.minutes = minf(clock.minutes + float(mins), float(GameClock.END_MIN))
+	return int(round(clock.minutes - before))
 
 # ★[S5-T4 / ADR-0063 결정 9] 전투 XP 적립 + 레벨업 감지(_gain_mining_xp 대칭). 레벨이 오르면 최대
 # HP가 함께 오른다(그 자리에서 즉시 — PlayerHealth.refresh_max가 늘어난 만큼 현재도 채운다).
@@ -10229,23 +10263,16 @@ func _on_day_advanced(day: int) -> void:
 	#   삼켜진 작물은 그날 자라지 않는다(밤에 벌어진 일 → 아침에 남은 것만 자란다는 하루 사이클 규율).
 	#   ★ 파괴 집행은 여기(main)가 한다 — Reclaim은 밭도 설치물도 모르고, 어디를 삼켰는지만 돌려준다.
 	#   ★ 혼우 ×2와 절기 1일 ×2가 겹칠 일은 없다(절기 첫날은 Weather가 평온으로 못 박는다) — 배수는 늘 2.0.
-	if reclaim != null and _region == RegionCatalog.HOME:
-		var wet: bool = Weather.waters_field(weather) or season_start
-		var spread := reclaim.spread_day(_seed_weed_sources(), _weed_spread_cb(), day,
-			GameClock.season_index_for_day(day) == 3,
-			Reclaim.SPREAD_WET_MULT if wet else 1.0)
-		var eaten_crops: Array = spread["crops"]
-		var broken_sprinklers: Array = spread["sprinklers"]
-		for ct in eaten_crops:
-			farm.remove_plant(ct)             # 작물만 제거·흙/비료 보존(까마귀·절기 사멸과 같은 API)
-		for pt in broken_sprinklers:
-			sprinkler.remove(pt)              # 설치물 소멸(회수 아님 — 인벤 반환 없음)
-		# 알림은 **파괴가 있었을 때만**. 그냥 번지기만 한 밤은 조용하다(아침 알림 줄 보호 — 잃은 게 없으면
-		# 말할 것도 없고, 거칠어진 마당은 화면이 이미 보여 준다).
-		if not eaten_crops.is_empty():
-			_notice("잡초가 작물 %d포기를 삼켰다 — 낫으로 잡초를 베어 두자" % eaten_crops.size())
-		if not broken_sprinklers.is_empty():
-			_notice("잡초가 스프링클러 %d개를 부쉈다" % broken_sprinklers.size())
+	# ★[폴리시 R9] **집 밖에서 날이 바뀌면 미룬다**(절기 대량 재스폰·아침 방목 방출과 같은 문법).
+	#   종전엔 이 `_region == HOME` 가드가 곧 스킵이라, 매일 밤 마을 광장에 서서 24:00 강제 취침을
+	#   맞기만 하면 확산·재점령이 **영구히 0**이 됐다(ADR-0055 차등 재점령의 매일치 라임과 잡초에
+	#   의한 작물·스프링클러 손실이 통째로 면제되는, 반복 가능한 무비용 악용). 날을 넘기는 다른
+	#   경로는 전부 HOME이므로(`_can_sleep`이 "집"을 요구) 이 구멍의 유일한 입구가 강제 취침이다.
+	if reclaim != null:
+		if _region == RegionCatalog.HOME:
+			_run_weed_spread(day)
+		else:
+			_weed_day_pending_day = day
 	var h := affinity.hearts()
 	# ★[S7-T3] 잿눈 = 그날 노지 성장 정지(비살상). 세 번째 인자 grow=false면 **마름은 그대로 돌고**
 	#   성장 두 갈래만 꺼진다(field.advance_day 주석 참조 — 호출 스킵이 아니라 가법 인자인 이유).
@@ -10374,11 +10401,10 @@ func _on_day_advanced(day: int) -> void:
 			_notice("마당에 어린 나무가 %d그루 돋았다" % tree_day["seeded"].size())
 	# ★ [ADR-0055] 안식 재점령 — 빈 맨땅 1~2칸에 밤새 잡초(이승의 미련)가 다시 돋는다(구조물·밭·작물 성역).
 	#   겨울(잿눈)엔 정지(Forage와 같은 저승 성장정지). 자격 빈 맨땅 후보는 main이 계산해 전달(디커플링).
-	if reclaim != null:
-		var new_weeds := reclaim.advance_day(_encroach_candidates(), day, GameClock.season_index_for_day(day) == 3)
-		if new_weeds.size() > 0 and not _hinted_encroach:
-			_hinted_encroach = true          # 첫 재점령 1회만 멘토 힌트(봉인 법칙 — 순수 앰비언트, ADR-0055 §5)
-			_notice("땅은 잠깐만 안 돌봐도 금세 거칠어진다 — 낫으로 잡초를 벨 수 있다")
+	#   ★[폴리시 R9] 집 밖이면 위 확산과 **함께** 미룬다(`_weed_day_pending_day` — 한 표가 그 밤의
+	#     잡초 두 줄을 같이 든다. 표를 세우는 자리는 확산 쪽 한 곳뿐이다).
+	if reclaim != null and _region == RegionCatalog.HOME:
+		_run_weed_encroach(day)
 	# ★ [S3-T7 / ADR-0061 결정 7] 게잡이통 일일 롤 — 미끼 든 통마다 하룻밤 어획을 얹는다(혼력 0·완전
 	#   패시브). 걸린 건 통 안에 남고, 플레이어가 물가에 들러 F로 수거해야 인벤에 들어온다(스타듀
 	#   문법 — "수거가 곧 재가동"이라 안 비운 통은 다음 밤을 쉰다). 덫꾼·뱃사람·미끼장인 퍼크 3종이
@@ -11736,6 +11762,7 @@ func _load_game() -> bool:
 	# ★[폴리시 R6] 밀린 방목 방출 표도 같은 이유로 버린다 — 세션 로컬이고, 로드는 `ranch`를 세이브
 	#   시점으로 되감으므로 표만 살아남으면 되감긴 날의 짐승이 로드 직후 방목지로 나간다.
 	_pasture_release_pending = false
+	_weed_day_pending_day = 0   # ★[폴리시 R9] 밀린 잡초 밤도 같은 이유로 버린다(위 두 표와 같은 계약)
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
 	#   값을 붓기 때문이다(없으면 저장돼 있던 칸이 조용히 사라진다). `_spine_bits` 복원은 아래
@@ -12622,6 +12649,15 @@ func _process(delta: float) -> void:
 			and not _sleeping and not _transitioning:
 		if _release_open_buildings():
 			_pasture_release_pending = false
+	# ★[폴리시 R9] 밀린 **그 밤의 잡초 두 줄** 소비 — 절기 재스폰 표와 같은 자리·같은 조건이되
+	#   순서가 계약이다: 확산(현존 잡초가 번지며 작물·스프링클러를 부순다) 다음에 재점령(빈 여백에
+	#   새 포기가 돋는다). 아침 정산의 두 자리와 같은 상대 순서라 결과가 갈리지 않는다.
+	if _weed_day_pending_day != 0 and _region == RegionCatalog.HOME \
+			and not _sleeping and not _transitioning:
+		var pending_weed_day := _weed_day_pending_day
+		_weed_day_pending_day = 0
+		_run_weed_spread(pending_weed_day)
+		_run_weed_encroach(pending_weed_day)
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
@@ -14460,11 +14496,15 @@ func _cast_water_tile(t: Vector2i) -> Vector2i:
 # ★ 혼력은 여기서 안 본다 — 캐스팅·대기 = 혼력 0이고(결정 6), 소모는 후킹 순간뿐이다.
 # ★[S3-T5] 낚싯대를 **하나도** 안 가졌는가(4티어 중 아무거나). 안내 프롬프트 판정용 — "든 것"이
 #   아니라 "가진 것"을 본다(핫바에서 다른 걸 든 채 물가에 선 상황은 안내 대상이 아니다).
+# ★[폴리시 R9] 보유 판정을 `_stored_anywhere`(백팩 ∪ 집 상자 ∪ 갈무리방)로 갈았다. 아래
+#   `_best_rod_class`는 R6에서 이미 그 술어로 옮겨 갔는데 여기만 백팩 직행이라, **같은 사실을 두
+#   술어가 다르게 답했다**: 뱃사공에게 받은 T1 낚싯대를 집 상자에 넣어 두면 물가 프롬프트가
+#   "낚싯대가 없다 — 뱃사공을 찾아가자"를 띄우는데, 뱃사공은 지급 플래그가 서 있어 두 번째 대를
+#   주지 않는다(따라가도 아무 일이 없는 막다른 안내). 같은 순간 게시판은 그 낚싯대 체급의 물고기
+#   의뢰를 정상 출제해, 한 화면 안에서 두 값이 어긋났다.
 func _has_any_rod() -> bool:
-	if inventory == null:
-		return false
 	for rod_id in GearCatalog.RODS:
-		if inventory.has_item(rod_id):
+		if _stored_anywhere(String(rod_id)):
 			return true
 	return false
 
@@ -14834,6 +14874,19 @@ func _installation_at(t: Vector2i) -> bool:
 		return true
 	return tapper != null and tapper.has_at(_region, t)
 
+# ★[폴리시 R9] 이 칸을 **런타임 나무 원장**이 쥐고 있는가(묘목·성숙목·밑동·큰 장애물).
+#   왜 별도 술어가 필요한가: 안식 마당의 자연목은 *어느 기존 술어에도 안 걸린다*. `_sync_tree_tile`은
+#   숲 구역에서만 그리드를 만지므로 파종목 칸의 `_grid`는 GROUND 그대로고, `_home_occupied_tiles()`
+#   (=`_home_prop_entries`)는 layout.json 프롭·절차 스캐터·재스폰 debris·확장 가구만 병합해 원장을
+#   한 줄도 안 본다. 그래서 배치 가드 셋(`_can_place_sprinkler`·`_can_place_furnace`·
+#   `_can_place_crystalarium`)은 "나무 점유"를 `_home_occupied_tiles().has(t)` 하나로 막는다고 적어
+#   놓고도 밤새 돋은 묘목 위에 설치물을 겹쳐 세웠다 — 위 `_is_tree_seed_free`가 봉합한 그 비대칭의
+#   반대 방향이다. R6는 같은 사실을 `_encroach_candidates` 주석에 적고 그쪽만 이 원장을 물렸다.
+#   ★ 숲 구역에서는 실효 분기가 아니다(그쪽은 그리드가 이미 SOLID라 앞줄에서 걸린다) — 구역 축은
+#     원장이 스스로 든다(`is_occupied(region, t)`).
+func _tree_occupied_at(t: Vector2i) -> bool:
+	return tree_ledger != null and tree_ledger.is_occupied(_region, t)
+
 # ★[폴리시 R8] 이 칸이 **[F] 창구 좌표**인가 — 좌표 상수 하나로 열리는 야외 상호작용 자리다.
 # 왜 배치 가드가 이걸 물어야 하나: 설치물의 투입·수거·회수는 전부 [F] 한 동사인데, 입력 사다리에서
 # 우편함(`facing_mailbox`)이 업화로·결정기보다 **70줄 앞에서 잡고 return**한다. 그래서 우편함 칸에
@@ -14877,6 +14930,8 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 		return false
 	if _home_occupied_tiles().has(t):         # 프롭 점유(나무·바위·debris·꽃·울타리·허수아비) → 배제
 		return false
+	if _tree_occupied_at(t):                  # ★[폴리시 R9] 밤새 돋은 런타임 파종목 → 배제
+		return false                          #   (위 occ는 원장을 안 본다 — 그 술어 머리말)
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
 	if _field_at(t).is_crop_solid(t):         # 트렐리스 넝쿨 점유 → 배제(★[S10-T5] 늘봄방 넝쿨 포함)
@@ -15291,6 +15346,8 @@ func _can_place_furnace(t: Vector2i) -> bool:
 	#   허수아비 위에 업화로가 겹쳐 섰다(반대 방향은 `_can_place_sprinkler`가 막아 가드가 단방향).
 	#   그 술어는 구역 축까지 함께 든다(위 `_installation_at` 주석).
 	if _installation_at(t):
+		return false
+	if _tree_occupied_at(t):                  # ★[폴리시 R9] 런타임 파종목 → 배제(아래 occ는 원장을 안 본다)
 		return false
 	# ★[폴리시 R8] [F] 창구 좌표 → 배제. **이 결함의 진원지**다 — 우편함 칸에 세운 업화로는 그 칸의
 	#   [F]가 입력 사다리에서 편지 열람에 먼저 잡혀, 화덕도 안에 든 광석도 영구 유실됐다.
@@ -15816,6 +15873,8 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 		return false                          # 방어(건물 패드·절벽·벽 = SOLID)
 	if _installation_at(t):                   # ★[폴리시 R4] 업화로와 같은 단일 술어(레어크로우 포함·구역 축 포함)
 		return false
+	if _tree_occupied_at(t):                  # ★[폴리시 R9] 런타임 파종목 → 배제(업화로와 완전 동형)
+		return false
 	if _f_window_tile(t):                     # ★[폴리시 R8] [F] 창구 좌표 → 배제(업화로와 완전 동형)
 		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
@@ -16181,7 +16240,8 @@ func _try_harvest() -> bool:
 
 # ★[S10-T5 / ADR-0069 결정 8] 화분 수확 — **노지와 동일한 품질/XP 문법**(ADR 자구)이되 화분에
 #   없는 축은 빼고 간다. 밭 수확에서 덜어낸 것 셋과 그 이유:
-#     ㉠ 비료 품질 roll → 화분엔 비료 축이 없다. 무비료 등급(Q_NORMAL)이 곧 결과라 상수로 적는다.
+#     ㉠ 비료 품질 roll → 화분엔 비료 축이 없다. **무비료 상태(STATE_NONE)를 그대로 굴린다** —
+#        상수 Q_NORMAL이 아니다(폴리시 R9: 무비료도 은 18%·금 2%다).
 #     ㉡ 다수확 롤·명부의 운 바이어스 → 1×1 컨테이너의 한 포기는 "밭 규모"의 산출이 아니다(최소형).
 #     ㉢ 야생 작물 채집 가로채기 → 분기를 **복제**하지는 않는다. 다만 야생 씨앗도 화분에 심을 수
 #        있으므로(카탈로그 검증만 통과하면 된다) 그 수확은 `_harvest_wild`에 **위임**한다 —
@@ -16201,14 +16261,24 @@ func _harvest_pot() -> void:
 	if CropCatalog.is_wild(crop):
 		_harvest_wild(crop, true)
 		return
+	# ★[폴리시 R9] **무비료 등급은 상수가 아니다.** 위 ㉠의 근거는 "화분엔 비료 축이 없으니 무비료
+	#   등급이 곧 결과"였는데, 그 무비료 등급이 곧 Q_NORMAL이라고 한 자리가 틀렸다 —
+	#   `FertilizerCatalog.QUALITY_TABLE[STATE_NONE] = [80, 18, 2, 0]`이라 노지의 무비료 칸은
+	#   `roll_quality` → `tier_for_roll(STATE_NONE, roll)`로 **20%가 은/금**으로 나온다. 상수로
+	#   적은 탓에 화분만 그 20%를 잃어, ADR-0069 결정 8의 "노지와 동일한 품질 문법"과 어긋나고
+	#   화분이 무비료 흙보다 구조적으로 열등해졌다. 밭이 부르는 그 함수를 같은 state로 부른다.
+	#   ★ 사건 시드도 노지 문법 그대로다(day·칸) — F9 로드로 등급을 재롤하는 통로를 안 연다.
+	#     밭 태그와 갈리도록 "pot"을 물리고, 화분 원장은 좌표만 키로 쓰므로 칸이 곧 유일 이름이다.
+	var pot_tag := "%d:pot:%d:%d" % [clock.day, _target.x, _target.y]
+	var pot_quality := FertilizerCatalog.roll_quality_seeded(FertilizerCatalog.STATE_NONE, pot_tag)
 	# ★[폴리시 R2] 노지와 같은 "적재 자리부터" — `garden_pot.harvest`가 포기를 지우므로 백팩이
 	#   가득하면 그 한 포기가 되찾을 곳 없이 사라진다.
-	if crop != "" and not inventory.can_add(ItemCatalog.harvest_id(crop), 1, ItemCatalog.Q_NORMAL):
+	if crop != "" and not inventory.can_add(ItemCatalog.harvest_id(crop), 1, pot_quality):
 		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
 		return
 	if garden_pot.harvest(_target) == "":
 		return
-	inventory.add_harvest(crop, 1, ItemCatalog.Q_NORMAL)
+	inventory.add_harvest(crop, 1, pot_quality)
 	_toast_item(ItemCatalog.harvest_id(crop), 1)
 	_gain_farm_xp(CropCatalog.sell_price(crop))
 	_run_harvested += 1
@@ -16835,6 +16905,7 @@ func _on_frame_larder_store(slot_index: int) -> void:
 	if id == "" or MenuCatalog.menu_for_signature(id) == "":
 		return   # 어느 메뉴의 재료도 아니다(씨앗·도구·비료·비-시그니처 산출물) — 무동작
 	var n := inventory.count_at(slot_index)
+	var q := inventory.quality_at(slot_index)   # ★[폴리시 R9] 지우기 *전에* 이 슬롯의 등급을 본다
 	var stored := larder.add(id, n)
 	if stored <= 0:
 		_notice("곳간이 가득 찼습니다 (%d/%d)" % [larder.total(), larder.capacity])
@@ -16843,11 +16914,21 @@ func _on_frame_larder_store(slot_index: int) -> void:
 	audio.sfx("ui")
 	var menu_id := MenuCatalog.menu_for_signature(id)
 	var tail := "" if menu_id == "" else " → %s" % MenuCatalog.name_of(menu_id)
-	_notice("곳간에 %s %d개 적재%s" % [ItemCatalog.name_of(id), stored, tail])
+	# ★[폴리시 R9] **등급 소거를 실제로 알린다.** 아래 회수 주석이 "패널 안내가 그걸 말한다"로
+	#   일반품 반환을 정당화해 왔는데, 곳간 패널 텍스트는 "융합 메뉴 재료 · 백팩 클릭=적재 / 재고
+	#   클릭=회수" 한 줄뿐이고 등급을 말하는 글자가 저장소에 없었다 — 이리듐 황천포도를 쟁였다
+	#   되찾으면 판매가가 320→160으로 반토막 나는데 사전 경고도 사후 알림도 없었다(같은 왕복에서
+	#   출하함은 등급별로 정확히 되돌려 준다 = 두 그릇의 계약이 갈리는데 화면이 그걸 안 말했다).
+	#   말하는 자리는 **등급이 실제로 사라진 적재**뿐이다 — 일반품에까지 붙이면 아침 알림 줄만 먹는다.
+	var qtail := "" if q <= 0 else " (%s 등급은 곳간에서 사라진다)" % ItemCatalog.quality_name(q)
+	_notice("곳간에 %s %d개 적재%s%s" % [ItemCatalog.name_of(id), stored, tail, qtail],
+		NOTICE_SECS if q <= 0 else NOTICE_SECS * 2.0)
 
 # 곳간 재고를 통째로 백팩에 도로 넣는다("잘못 쟁였네" 회수 — 출하함 롤백 결). 백팩이 가득 차
 # 일부만 들어가면 그만큼만 곳간에서 뺀다. ★ 되돌아오는 등급은 **일반**이다(곳간이 등급을 안 들므로
-# 은/금을 넣었다면 그 등급은 적재 시점에 사라진다 — 계약이 그렇고, 패널 안내가 그걸 말한다).
+# 은/금을 넣었다면 그 등급은 적재 시점에 사라진다 — 계약이 그렇고, ★[폴리시 R9] 등급이 실린 물건을
+# 쟁이는 순간 위 `_on_frame_larder_store`의 알림이 그걸 말한다. 종전 주석은 "패널 안내가 말한다"고
+# 적었지만 그런 글자가 저장소에 없었다).
 func _on_frame_larder_take(id: String) -> void:
 	var cnt := larder.count_of(id)
 	if cnt <= 0:
@@ -22531,8 +22612,15 @@ func _fire_pet_event() -> void:
 	if not _pet_event_armed:
 		return
 	_pet_event_armed = false
-	if _run_over or cutscene != null or pet == null or clock == null:
-		return                          # 마무리 화면·재생 중이면 접는다(다음 진입에 다시 예약된다)
+	# ★[폴리시 R9] `_sleeping` 합류 — 형제 판정들(`_facing_pet`·`_facing_pet_bowl`·`_facing_mirror`)이
+	#   전부 든 그 가드가 여기만 없었다. `_warp`의 마지막 콜백은 **밀린 강제 취침을 소비한 직후**에
+	#   이 함수를 부르므로(그 자리 주석의 순서), 23:55경 나루 마을로 워프해 들어가 24:00을 맞으면
+	#   `_do_sleep`이 이미 취침 페이드를 건 뒤에 입양이 성사됐다 — 1회성 안내 두 줄이 검게 덮이는
+	#   화면 뒤로 흘러가고 입양은 래치라 다시 뜨지 않는다. 그 호출 자리(11402~)와 아래 주석이
+	#   "암전과 겹치면 알림이 검은 화면 뒤에서 흘러간다"고 못 박은 바로 그 조건이다.
+	#   여기서 접혀도 손실 0인 이유는 형제 가드들과 같다: 다음 마을 진입이 다시 예약한다.
+	if _run_over or _sleeping or cutscene != null or pet == null or clock == null:
+		return                          # 마무리 화면·재생·취침 중이면 접는다(다음 진입에 다시 예약된다)
 	# ★[폴리시 R3] **무대 검증** — 예약이 `_rebuild_region`에 얹혀 있어 워프가 아닌 재빌드로도 선다
 	#   (부팅 `_refresh_season_terrain(true)`, 절기 전환 아침의 같은 호출). 그 예약엔 짝이 되는
 	#   소비가 없어 스테일로 남았다가, *아무 워프나* 끝나는 순간 엉뚱한 무대에서 터졌다 — 만물상
@@ -23223,6 +23311,39 @@ func _run_season_respawn(d: int) -> void:
 	var weed_n: int = r_weeds.size()
 	if weed_n + solid_n > 0:
 		_notice("절기가 바뀌며 묵힌 땅이 거칠어졌다 — 잡초 %d·돌과 고목 %d" % [weed_n, solid_n])
+
+# ★[폴리시 R9] 그 밤의 잡초 확산 집행 — 아침 정산(집에 있을 때)과 밀린 표를 소비하는 귀가 프레임이
+#   같은 한 함수를 부른다(`_run_season_respawn`이 세운 그 규율). 하루의 입력은 day 하나뿐이라
+#   날씨·절기·겨울 여부를 전부 여기서 파생한다 — 그래야 미뤄 둔 밤도 그 밤의 값으로 굴러간다.
+#   ★ 파괴 집행이 여기(main)에 있는 이유는 종전과 같다: Reclaim은 밭도 설치물도 모른다.
+func _run_weed_spread(d: int) -> void:
+	if reclaim == null or _region != RegionCatalog.HOME:
+		return
+	var wet: bool = Weather.waters_field(Weather.weather_for_day(d)) or GameClock.is_season_first_day(d)
+	var spread := reclaim.spread_day(_seed_weed_sources(), _weed_spread_cb(), d,
+		GameClock.season_index_for_day(d) == 3,
+		Reclaim.SPREAD_WET_MULT if wet else 1.0)
+	var eaten_crops: Array = spread["crops"]
+	var broken_sprinklers: Array = spread["sprinklers"]
+	for ct in eaten_crops:
+		farm.remove_plant(ct)             # 작물만 제거·흙/비료 보존(까마귀·절기 사멸과 같은 API)
+	for pt in broken_sprinklers:
+		sprinkler.remove(pt)              # 설치물 소멸(회수 아님 — 인벤 반환 없음)
+	# 알림은 **파괴가 있었을 때만**. 그냥 번지기만 한 밤은 조용하다(아침 알림 줄 보호 — 잃은 게 없으면
+	# 말할 것도 없고, 거칠어진 마당은 화면이 이미 보여 준다).
+	if not eaten_crops.is_empty():
+		_notice("잡초가 작물 %d포기를 삼켰다 — 낫으로 잡초를 베어 두자" % eaten_crops.size())
+	if not broken_sprinklers.is_empty():
+		_notice("잡초가 스프링클러 %d개를 부쉈다" % broken_sprinklers.size())
+
+# ★[폴리시 R9] 그 밤의 재점령 집행 — 위 확산의 짝(같은 표가 둘을 함께 미룬다).
+func _run_weed_encroach(d: int) -> void:
+	if reclaim == null or _region != RegionCatalog.HOME:
+		return
+	var new_weeds := reclaim.advance_day(_encroach_candidates(), d, GameClock.season_index_for_day(d) == 3)
+	if new_weeds.size() > 0 and not _hinted_encroach:
+		_hinted_encroach = true          # 첫 재점령 1회만 멘토 힌트(봉인 법칙 — 순수 앰비언트, ADR-0055 §5)
+		_notice("땅은 잠깐만 안 돌봐도 금세 거칠어진다 — 낫으로 잡초를 벨 수 있다")
 
 func _encroach_candidates() -> Array:
 	var out: Array = []
