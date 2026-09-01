@@ -2435,6 +2435,12 @@ var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌�
 #   다시 서는 프레임에 `_process`가 소비한다. 세션 로컬이다(세이브 무관) — 그 아침에 껐다 켜면
 #   기회를 잃지만, 그건 이 표가 없던 종전과 같은 결과라 회귀가 아니다.
 var _season_respawn_pending_day := 0
+# ★[폴리시 R6] 집 밖에서 날이 바뀌어 **밀린 아침 방목 방출**(false = 밀린 것 없음). 방목 슬롯 스캔은
+#   HOME 좌표 상수(PASTURE_SCAN_RECT)를 지금 실린 그리드로 훑으므로 다른 구역에서는 집행할 수 없다.
+#   위 절기 재스폰 표와 같은 결의 세션 로컬 값이고(세이브 무관·로드가 버린다), 안식 농원에 다시
+#   서는 프레임에 `_process`가 소비한다 — 다만 **실제로 방출까지 간 프레임에만** 지운다(밤에
+#   돌아오면 그 프레임은 아무것도 안 하므로, 표를 소비하면 그날 방목을 잃는다).
+var _pasture_release_pending := false
 # ★[폴리시 R4] **입력 디스패치 단계에서 세계를 바꾼 프레임의 폴링을 한 번 삼킨다.** Godot은 한
 #   iteration에서 입력 디스패치(`_input`·`_gui_input`)를 `_process`보다 **먼저** 흘리는데, main은
 #   모든 월드 동사를 `Input.is_action_just_pressed`(전역 폴링)로 받는다 — 그래서 디스패치 단계에서
@@ -10196,7 +10202,12 @@ func _on_day_advanced(day: int) -> void:
 	# ★ [B1-a.2] 새 아침 방목 방출 — advance_day가 플래그를 리셋한 *뒤*, 문 열린 건물 짐승을 방목지로 내보낸다
 	#   (grazed=이번 새 날치). 평온·낮 게이트는 _release_open_buildings 안에서(★[S7-T3] _weather_calm이
 	#   이제 실제 날씨를 본다 — 잿눈 날 아침엔 방출 자체가 없다).
-	_release_open_buildings()
+	# ★[폴리시 R6] 집 밖에서 날이 바뀌면 **미룬다**(절기 대량 재스폰과 같은 문법 — `_pasture_release_pending`
+	#   머리말). 방출은 HOME 그리드를 전제하므로 그 자리에서 집행할 수 없고, 그냥 건너뛰면 그날치
+	#   방목 가산(F_GRAZE·M_GRAZE)을 통째로 잃는다.
+	_pasture_release_pending = _region != RegionCatalog.HOME
+	if not _pasture_release_pending:
+		_release_open_buildings()
 	# ★ [B1-a.3] 사료풀 재생 — 벤 지 REGROW_DAYS 지난 풀이 다시 자란다. 겨울(성야절)엔 재생 정지(Q7 굶음 긴장).
 	forage.advance_day(day, GameClock.season_index_for_day(day) == 3)
 	# ★ ADR-0052 꽃 패치 재생 — 딴 지 REGROW_DAYS 지난 패치가 다시 핀다(절기 무관 — 피안화는 저승 꽃).
@@ -11552,6 +11563,9 @@ func _load_game() -> bool:
 	#   `_run_season_respawn`이 집행돼(11937~) 되돌린 세이브엔 없던 잡초와 **통행 불가 SOLID
 	#   debris**(잉걸·그루터기)가 마당에 영구로 박혔다. 잃는 것은 없다: 표가 없던 종전과 같은 결과다.
 	_season_respawn_pending_day = 0
+	# ★[폴리시 R6] 밀린 방목 방출 표도 같은 이유로 버린다 — 세션 로컬이고, 로드는 `ranch`를 세이브
+	#   시점으로 되감으므로 표만 살아남으면 되감긴 날의 짐승이 로드 직후 방목지로 나간다.
+	_pasture_release_pending = false
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
 	#   값을 붓기 때문이다(없으면 저장돼 있던 칸이 조용히 사라진다). `_spine_bits` 복원은 아래
@@ -11841,6 +11855,14 @@ func _load_game() -> bool:
 	#   부팅 시점의 카탈로그는 반딧넋 원장이 복원되기 전에 섰으므로, 여기서 다시 세우지 않으면
 	#   시련장 안에서 저장한 세이브가 바깥으로 튕긴다. 미개방 세이브면 스스로 no-op이다.
 	_refresh_trial_gate()
+	# ★[폴리시 R6] **절기 지형도 여기서 맞춘다.** `_refresh_season_terrain`은 부팅과 아침 훅 끝
+	#   두 곳에만 있었는데, base 필드·Wang 합성·물가 마스크·데칼 틴트 캐시를 버리는 곳은 그
+	#   함수뿐이다 — 피안절 세션에서 F9로 망연절 세이브를 불러오면 `_load_big_fields`가 첫 줄
+	#   `if _bf_grass != null: return`에서 빠져 **옛 절기 팔레트로 다시 칠했고**, `_bf_season`이
+	#   낡은 채라 다음 취침의 아침 훅이 어긋남을 처음 볼 때까지 하루가 통째로 그 톤으로 돌았다.
+	#   `rebuild=false`인 이유: 바로 아래 `_restore_location`이 저장 구역을 **언제나** 재빌드하므로
+	#   여기서 또 구우면 같은 일을 두 번 한다(캐시만 버리고 굽기는 그쪽에 맡긴다).
+	_refresh_season_terrain(false)
 	_restore_location(data)
 	# ★[폴리시] `_restore_location`의 재빌드가 삽사리 이벤트를 다시 예약할 수 있으므로(_arm_pet_event은
 	#   구역 빌드에 얹혀 있다), 위 "로드는 언제나 예약 없음에서 시작한다"는 규율을 여기서 다시 강제한다
@@ -12399,6 +12421,13 @@ func _process(delta: float) -> void:
 		var pending_day := _season_respawn_pending_day
 		_season_respawn_pending_day = 0
 		_run_season_respawn(pending_day)
+	# ★[폴리시 R6] 밀린 아침 방목 방출 소비 — 위와 같은 자리·같은 조건이되, 표는 **방출이 실제로
+	#   일어난 프레임에만** 지운다(`_release_open_buildings` 반환값). 밤에 돌아오면 그 프레임은
+	#   밤 가드에 걸려 아무 일도 안 하는데, 거기서 표를 버리면 밀린 하루를 잃기 때문이다.
+	if _pasture_release_pending and _region == RegionCatalog.HOME \
+			and not _sleeping and not _transitioning:
+		if _release_open_buildings():
+			_pasture_release_pending = false
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
@@ -22573,6 +22602,15 @@ func _encroach_candidates() -> Array:
 				continue
 			if _installation_at(t):                 # ★[폴리시 R2] 플레이어 설치물 → 배제(그 위에 SOLID
 				continue                            #   debris가 돋아 설치물을 덮고 칸을 막던 자리)
+			# ★[폴리시 R6] 런타임 나무 원장 → 배제. 안식 마당의 자연목은 **어느 기존 술어에도 안
+			#   걸린다**: `_sync_tree_tile`이 숲 구역에서만 그리드를 만지므로 유목 칸의 `_grid`는
+			#   GROUND 그대로고, `_home_prop_entries()`(=occ)는 레이아웃 시드·절차 스캐터·재스폰
+			#   debris만 병합해 파종목이 없다. 그런데 같은 아침 훅이 파종(tree_ledger.advance_day)을
+			#   **먼저** 하고 열여섯 줄 뒤 이 후보로 잡초를 돋우므로, 갓 심긴 유목 칸에 잡초가 겹쳐
+			#   돋았다(통행 불가인 채 낫질 대상). 반대 방향(`_is_tree_seed_free`)은 이미
+			#   `reclaim.has_weed`로 잡초를 배제하고 있어, 두 원장이 한쪽만 서로를 보던 자리다.
+			if tree_ledger != null and tree_ledger.is_occupied(_region, t):
+				continue
 			out.append(t)
 	return out
 
@@ -22599,6 +22637,11 @@ func _weed_spread_class(t: Vector2i, occ: Dictionary) -> int:
 		return Reclaim.DEST_BLOCK            # 물가 활동 여백은 확산에도 안 내준다(낚시 앵커 보존)
 	if orchard != null and orchard.tree_at(t) != Orchard.TREE_NONE:
 		return Reclaim.DEST_BLOCK            # ★과수 = 면제(스타듀 동형·ADR-0045 불가침)
+	# ★[폴리시 R6] 마당 나무는 **두 원장이 나눠 갖는다**(혼의 나무=orchard · 자연목=tree_ledger).
+	#   위 한 줄만 있던 탓에 확산 목적지로 자체 파종 유목 칸이 뚫려, 나무와 잡초가 한 칸에 겹쳤다
+	#   (`_encroach_candidates`의 같은 누락과 한 뿌리 — 스폰·확산 두 입구를 함께 막는다).
+	if tree_ledger != null and tree_ledger.is_occupied(_region, t):
+		return Reclaim.DEST_BLOCK
 	if reclaim.has_weed(t):
 		return Reclaim.DEST_BLOCK            # 이미 잡초(멱등)
 	if furnace != null and furnace.has_at(_region, t):
@@ -22726,19 +22769,28 @@ func _free_pasture_tiles() -> Array:
 
 # 문 열린 건물의 실내 짐승을 방목지로 방출한다(아침 경계·문 여는 즉시). 평온·낮일 때만. 방목 슬롯을
 # 짐승마다 하나씩 배정(라운드로빈)한다. ranch가 releasable(문+실내)을 판정하고, main이 지형을 배정한다.
-func _release_open_buildings() -> void:
-	if ranch == null or not _weather_calm():
-		return
+# ★[폴리시 R6] **안식 농원에서만** 배정한다. `_free_pasture_tiles`가 훑는 PASTURE_SCAN_RECT는 HOME
+#   좌표 상수인데 이 훅에는 형제들(잡초 확산 `_region == HOME` · 재점령 후보 · 나무 자체 파종)이
+#   전부 달고 있는 구역 술어가 없었다 — 숲에서 24:00 쓰러짐으로 날이 바뀌면 *숲 그리드*의 같은
+#   사각을 훑어, 나무 밴드에 걸린 만큼만 남은 부분집합에 짐승을 겹쳐 배정하거나(편향) 아예
+#   슬롯 0으로 방출을 통째로 잃었다(그 하루치 우정·기분 가산 소멸). `_scarecrow_tiles`가 `_outdoor_h`를
+#   봐서 터졌던 R4 결함과 같은 좌표공간 누수라 처방도 같다.
+# 반환 = 실제로 배정 루프까지 갔는가(false = 구역·날씨·밤·슬롯 게이트에 걸려 아무것도 안 했다).
+#   호출부가 이 값으로 "밀린 방출"을 언제 소비할지 정한다.
+func _release_open_buildings() -> bool:
+	if ranch == null or _region != RegionCatalog.HOME or not _weather_calm():
+		return false
 	# 밤엔 방출하지 않는다(방목=낮). day_advanced는 06:00 리셋 직후라 낮이지만, 문 토글은 언제든 눌리므로 가드.
 	if clock != null and clock.phase() == "밤":
-		return
+		return false
 	var slots := _free_pasture_tiles()
 	if slots.is_empty():
-		return
+		return false
 	var i := 0
 	for tile in ranch.releasable():
 		ranch.send_to_pasture(tile, slots[i % slots.size()])
 		i += 1
+	return true
 
 # ★ [B1-a.3] 사료풀 시드 — FORAGE_SCAN_RECT 안의 걸을 수 있는(비-SOLID) 고지 풀 타일을 Forage에 등록.
 #   여물광 footprint(SILO_EXT_RECT=WALL)는 is_solid로 자동 제외된다. seed는 멱등(복원 상태 보존).
