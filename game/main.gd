@@ -5239,6 +5239,33 @@ func _evict_from_greenhouse_lot() -> void:
 	player.position = _tile_center_px(GREENHOUSE_EXT_DOOR + Vector2i(0, 1))
 	_notice("늘봄방이 서면서 부지 밖으로 밀려났다", NOTICE_SECS * 2.0)
 
+# ★[폴리시 R7] 삽사리 자리 밭 상태 **이행**(늘봄방 부지 회수와 정확히 같은 결의 자기 복구다).
+#   R6이 `_is_farmable`에서 PET_TILE(44,12)을 뺐는데, 그 칸은 STARTER_PATCH_RECT(x40..44·y12..16)의
+#   북동 모서리라 **R6 이전 모든 세이브에서 정상 밭**이었다. 그래서 그 칸에 심어 둔 작물이
+#   `_target_valid = _is_farmable(...)`에서 false가 되어 LMB·RMB 디스패치를 둘 다 못 통과하고,
+#   물도 못 주고 다 자라도 수확할 수 없는 채 `_draw_crops`에만 남아 개를 덮었다 — 커밋 머리말이
+#   "원천적으로 안 생긴다"고 선언한 갈래가 구세이브에서만 굳었다. 가드는 앞으로만 막으므로
+#   이행 경로가 따로 있어야 한다.
+#   ★ 정산 원칙은 화덕 회수 그대로 **"되돌릴 수 있는 것만 되돌린다"**: 넣은 씨앗 1개를 돌려주고
+#     자란 날수는 버린다(까마귀 소실과 같은 결). 적재 자리가 없으면 **아무것도 안 건드리고** 물러난다
+#     — 다음 아침·다음 로드가 다시 시도한다(멱등).
+#   ★ 심기지 않은 경작 칸도 흙을 지운다: 더는 밭이 아닌 칸에 젖은 흙이 남으면 화면이 거짓말을 한다.
+func _reclaim_pet_tile_farm() -> void:
+	if farm == null or not farm.is_tilled(PET_TILE):
+		return
+	var crop := farm.crop_of(PET_TILE)
+	if crop != "":
+		var seed := ItemCatalog.seed_id(crop)
+		if _reclaim_to_storage(seed, 1) == "":
+			_notice("보관할 자리가 없어 삽사리 자리의 %s 돌려주지 못했다 — 자리를 비우면 다시 돌려준다"
+				% HanjiUi.with_eul(ItemCatalog.name_of(seed)), NOTICE_SECS * 3.0)
+			return
+		farm.remove_plant(PET_TILE)
+		_notice("삽사리가 앉은 칸은 더 이상 밭이 아니다 — 심겨 있던 %s 돌려받았다"
+			% HanjiUi.with_eul(ItemCatalog.name_of(seed)), NOTICE_SECS * 2.0)
+	farm.untill(PET_TILE)
+	queue_redraw()
+
 # ★ 밭 라우터 — 이 칸의 주인 FarmField를 고른다. **두 좌표 공간이 겹치지 않아**(노지 = HOME 외부
 #   y<65 · 늘봄방 = 실내 밴드) 칸 하나만 보면 주인이 유일하게 정해진다. 밭 동사(괭이·물·심기·비료·
 #   수확)와 칸 단위 질의는 전부 이 함수를 거치고, **집합 순회**(절기 사멸·까마귀·잡초 확산)는 거치지
@@ -10322,8 +10349,15 @@ func _on_day_advanced(day: int) -> void:
 		#   보관처가 전부 가득이면 회수는 물건을 그 자리에 남기는데(적재 먼저·차감 나중), 완공 뒤
 		#   그 칸은 벽 밑이라 손으로는 영영 못 걷는다. 멱등이라 매일 불러도 공짜고(걷을 것이 없으면
 		#   즉시 반환), 자리를 비운 다음 아침이 스스로 나머지를 걷는다.
-		if _greenhouse_built():
+		# ★[폴리시 R7] **완공 당일은 건너뛴다** — 위 `PROJ_GREENHOUSE` 분기의 `_refresh_greenhouse`가
+		#   첫 줄에서 이미 같은 회수를 돌렸다. 그 1회차가 자리 부족으로 실패했다면 같은 프레임의
+		#   재시도도 반드시 같은 실패라(그 사이 보관 공간이 늘 리 없다) 긴 "걷지 못했다" 알림만
+		#   두 줄로 겹쳤다. 재시도가 값을 갖는 건 **자리를 비운 다음 아침**부터다.
+		if _greenhouse_built() and built != Carpenter.PROJ_GREENHOUSE:
 			_reclaim_greenhouse_lot()
+	# ★[폴리시 R7] 삽사리 자리 밭 이행 — 늘봄방 부지 재시도와 같은 자리·같은 결(멱등이라 매일
+	#   불러도 공짜다). `carpenter` 블록 밖인 이유는 이 이행이 건축과 아무 상관이 없어서다.
+	_reclaim_pet_tile_farm()
 	# ★ [S2-T6] 게시판 의뢰 만료 — 기한(일일 2일 / 중기 그 주 끝)이 지난 수락분을 조용히 버린다.
 	#   페널티는 없다(골드·호감도 불변 — ADR-0060 결정 6 "미완료 무페널티"). 알림도 벌칙이 아니라
 	#   "자리가 다시 비었다"는 안내다(ADR-0008 평평≠막힘).
@@ -11896,6 +11930,10 @@ func _load_game() -> bool:
 	#   잠복 손실이었다. load_save는 재고를 비우고 다시 채우므로 두 번 불러도 멱등이다.
 	if data.has("larder"):
 		larder.load_save(data["larder"])
+	# ★[폴리시 R7] 삽사리 자리 밭 이행 — 아침 훅과 **같은 헬퍼·같은 멱등**이다(늘봄방 부지 회수가
+	#   완공 아침과 로드 양쪽을 지나는 것과 똑같은 이유). 로드 직후에 한 번 눌러야 R6 이전 세이브를
+	#   불러온 그 화면에서 이미 고립이 풀려 있다(다음 아침까지 기다리지 않는다).
+	_reclaim_pet_tile_farm()
 	_notice("불러옴")
 	return true
 

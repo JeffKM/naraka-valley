@@ -225,6 +225,12 @@ func _run_checks() -> void:
 			if planted >= 10:
 				break
 			var t := Vector2i(patch.position.x + dx, patch.position.y + dy)
+			# ★[폴리시 R7] **경작 가능한 칸에만 심는다.** 종전엔 원장(hoe/plant)을 직접 불러
+			#   `_is_farmable`을 우회했고, 패치 안의 예외 칸(미호 자리·삽사리 자리)까지 심어
+			#   실제 플레이로는 만들 수 없는 상태를 세웠다. R7 이행 훅이 아침마다 삽사리 칸의
+			#   밭 상태를 정리하므로(구세이브 구제), 그 칸을 세어 두면 잡일 계측이 흔들린다.
+			if not m._is_farmable(t):
+				continue
 			if m.farm.hoe(t) and m.farm.plant(t, CropCatalog.HONRYEONGCHO):
 				planted += 1
 	_pass_day(m)
