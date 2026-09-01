@@ -181,19 +181,39 @@ func _part_b() -> void:
 	_check("② 혼력 불변(자동급수는 혼력 0)", m.energy.current == e0)
 	_check("② 물뿌리개 잔량 불변(T8 축과 독립)", m._can_water == w0)
 
-	# ── ③ 급수된 칸이 그날 성장 반영(실 배선 _on_day_advanced — 급수 후 성장 순서) ──
+	# ── ③ 급수된 칸이 **다음 아침** 성장에 반영(실 배선 _on_day_advanced) ──
+	# ★[폴리시 R9] 급수 지점이 `farm.advance_day` **뒤**로 옮겨졌다(혼우가 R8에서 옮겨 간 그 자리와
+	#   나란히). 종전엔 성장 판정 앞이라 같은 아침에 +1이 붙었지만, 그 뒤 같은 루프의 마름 패스가
+	#   곧바로 칸을 말려 **정산이 끝난 시점의 밭이 종일 dry**였다 — 오버레이가 마른 흙을 그려
+	#   플레이어가 물뿌리개·혼력을 헛되이 쓰고, 배우자 아침 물주기 8칸이 그 칸을 잠식했다.
+	#   그래서 이 단언도 "그날 +1"에서 **"오늘 젖고 내일 +1"**로 바뀐다. 정상상태 속도는 그대로
+	#   하루 +1이고(아래 ③c), 설치 첫날 하루만 뒤로 밀린다.
 	var a3 := Vector2i(58, 45)
 	m.sprinkler.place(a3)
 	for c in _cross(a3):
 		_plant(m, c)                        # dry·grown_days 0
 	var diag3 := a3 + Vector2i(1, 1)
 	_plant(m, diag3)                        # 미덮임 대조군
-	m._on_day_advanced(2)                   # 실 하루 사이클: 스프링클러 급수 → advance_day 성장
+	m._on_day_advanced(2)                   # 실 하루 사이클: advance_day 성장 → 스프링클러 급수
+	var all_cross_wet := true
+	var all_cross_zero := true
+	for c in _cross(a3):
+		if not m.farm.is_watered(c):
+			all_cross_wet = false
+		if m.farm.grown_days_of(c) != 0:
+			all_cross_zero = false
+	_check("③a 첫 아침 정산이 끝난 시점에 십자 4칸이 **젖어 있다**(종일 dry였던 그 자리)",
+		all_cross_wet and all_cross_zero)
+	m._on_day_advanced(3)                   # 그 물이 다음 아침의 성장 판정에 실린다
 	var all_cross_grew := true
+	var all_cross_rewet := true
 	for c in _cross(a3):
 		if m.farm.grown_days_of(c) != 1:
 			all_cross_grew = false
-	_check("③ 급수된 십자 4칸 그날 성장(+1)", all_cross_grew)
+		if not m.farm.is_watered(c):
+			all_cross_rewet = false
+	_check("③b 다음 아침에 그 4칸이 +1 자란다(급수 → 성장의 하루 사이클)", all_cross_grew)
+	_check("③c 같은 아침에 다시 젖는다 — 정상상태 속도는 여전히 하루 +1이다", all_cross_rewet)
 	_check("③ 미덮인 대각 칸은 성장 없음(급수원=스프링클러 입증)", m.farm.grown_days_of(diag3) == 0)
 
 	# ── ④ 철거 후 급수 중단 ──
