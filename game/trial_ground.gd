@@ -75,16 +75,20 @@ const SHOP_ITEM := "trial_shop_item"           # 편의 소모품(반복 구매 
 #   ㉠kind 화이트리스트 ㉡아이템 카테고리 ㉡낫·잡초·개간 계열 id 부재로 삼중 단언한다.
 const SHOP_KINDS := [SHOP_RARECROW, SHOP_DECO, SHOP_ITEM]
 
-# ★ 재점령을 멈추는 상품이 아님을 **코드로** 못 박는 금지 목록(테스트가 이 배열과 상점표를 대조).
+# ★ 재점령을 멈추는 상품이 아님을 **코드로** 못 박는 금지 목록(테스트가 이 목록과 상점표를 대조).
 #   여기 적힌 것은 "팔면 안 되는 물건"이 아니라 **"팔면 안 되는 축"의 표본**이다 — 개간·잡초
-#   도메인에 속한 어떤 id도 상점표에 못 선다는 뜻이다(DebrisCatalog 계열 · 낫 · 혼백섬유).
-const RECLAIM_BANNED_IDS := [
-	"scythe",            # ItemCatalog.SCYTHE — 낫(잡초 대응 도구)
-	"honbaek_seomyu",    # 잡초 드랍(혼백섬유) — 재점령 도메인의 산출
-	"weeds",             # DebrisCatalog.WEEDS
-	"eophwaseok",        # DebrisCatalog 업화석
-	"petrified_stump",   # DebrisCatalog 석화 고목
-]
+#   도메인에 속한 어떤 id도 상점표에 못 선다는 뜻이다(DebrisCatalog 계열 · 낫 · 그 드랍).
+# ★[폴리시 R4] **카탈로그 파생으로 바꿨다.** 손으로 적은 옛 배열은 5개 중 3개가 어느 카탈로그에도
+#   없는 유령 id였고("honbaek_seomyu"·"eophwaseok"·"petrified_stump" — 실제 id는 각각
+#   `soul_fiber`·`ember_shard`·`petrified_wood`), 유일한 소비처가 **정확 문자열 일치** 검사라
+#   불변식을 실제로 지키는 건 "scythe" 한 줄뿐이었다(잡초 드랍·업화석 조각·석화 목재를 파는
+#   행을 넣어도 삼중 단언이 그대로 통과한다). 이제 debris가 늘면 금지 축도 저절로 는다.
+static func reclaim_banned_ids() -> Array:
+	var out: Array = [ItemCatalog.SCYTHE]   # 잡초 대응 도구
+	for kind in DebrisCatalog.CATALOG:
+		out.append(str(kind))                          # debris kind 키 자체(weeds·ember·stump)
+		out.append(DebrisCatalog.drop_for(str(kind)))  # 그 드랍(혼백 섬유·업화석 조각·석화 목재)
+	return out
 
 # 상점표 — **선언 순이 곧 진열 순**이다(레어크로우 → 장식 → 편의: 희소한 것이 위).
 # 값은 전부 [시련패] 단위이고 **잠정 — owner 큐**다. 밴드 근거:

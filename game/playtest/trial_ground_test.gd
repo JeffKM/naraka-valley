@@ -241,12 +241,25 @@ func _initialize() -> void:
 	var off_kind: Array = []
 	var banned_hit: Array = []
 	var effect_field: Array = []
+	# ★[폴리시 R4] 금지 목록은 이제 카탈로그 파생이다(옛 하드코딩 배열은 5개 중 3개가 유령 id라
+	#   ⑤b가 사실상 "scythe" 한 줄만 지켰다). 여기서 **구성 요소를 명시 대조**해 파생이 실제로
+	#   실물 id를 담고 있는지부터 잠근다 — 카운트만 세면 같은 함정을 되밟는다.
+	var banned: Array = TrialGround.reclaim_banned_ids()
+	var banned_must: Array = [ItemCatalog.SCYTHE, DebrisCatalog.WEEDS, DebrisCatalog.EMBER,
+		DebrisCatalog.STUMP, ItemCatalog.SOUL_FIBER, ItemCatalog.EMBER_SHARD,
+		ItemCatalog.PETRIFIED_WOOD]
+	var banned_missing: Array = []
+	for want in banned_must:
+		if not banned.has(want):
+			banned_missing.append(str(want))
+	_check("⑤b0 ★금지 목록이 실물 id를 전부 담는다 — 낫·debris kind 3·그 드랍 3(누락: %s)"
+		% str(banned_missing), banned_missing.is_empty())
 	for r2 in rows:
 		var row: Dictionary = r2
 		var k := String(row["kind"])
 		if not TrialGround.SHOP_KINDS.has(k):
 			off_kind.append(k)
-		if TrialGround.RECLAIM_BANNED_IDS.has(String(row["buy_id"])):
+		if banned.has(String(row["buy_id"])):
 			banned_hit.append(String(row["buy_id"]))
 		# ★[ADR-0019] 배수·확률·지속 효과를 담을 칸이 **행 스키마에 아예 없다**.
 		for key in row.keys():

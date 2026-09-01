@@ -353,9 +353,14 @@ func _initialize() -> void:
 	var seed_pre: int = m.inventory.count_of(seed_item)
 	var gold_e: int = m.wallet.gold
 	m._on_frame_buy_store_item(SeasonalEvent.MARKET_SEED_CROP, "fest_seed", false)
-	var seed_unit := SeasonalEvent.market_price(CropCatalog.seed_cost(SeasonalEvent.MARKET_SEED_CROP))
-	_check("⑨h 씨앗 1개 소매(할인가)", m.inventory.count_of(seed_item) == seed_pre + 1
+	# ★[폴리시 R4 #1] 단가 출처는 `market_seed_price()` 하나다 — 종전엔 이 줄이 `seed_cost(MIXED)`를
+	#   따로 굴려, 그 값이 "상점가 아님(출하 잔가)"인 5냥이라는 사실을 테스트가 함께 못 보고 통과했다.
+	var seed_unit := SeasonalEvent.market_price(SeasonalEvent.market_seed_price())
+	_check("⑨h 씨앗 1개 소매(할인가 %d냥)" % seed_unit, m.inventory.count_of(seed_item) == seed_pre + 1
 		and m.wallet.gold == gold_e - seed_unit)
+	_check("⑨h2 그 단가가 잔가 파생(seed_cost(MIXED) %d냥)이 아니다 — 정규 씨앗 대체품 차단"
+			% CropCatalog.seed_cost(SeasonalEvent.MARKET_SEED_CROP),
+		seed_unit > SeasonalEvent.market_price(CropCatalog.seed_cost(SeasonalEvent.MARKET_SEED_CROP)))
 	m._target = NIGHT_MARKET_TILE_OF(m)
 	_check("⑨i 매대 facing = 행사일 · 마을 야외 · 그 칸", m._facing_night_market())
 	m.clock.day = d_market + 1

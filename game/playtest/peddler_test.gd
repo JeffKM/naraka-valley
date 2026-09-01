@@ -169,8 +169,13 @@ func _initialize() -> void:
 	print("── ③ 재고 풀 로스터 파생 ──")
 	var pool := Peddler.stock_pool()
 	# 분모를 **카탈로그에서 독립 계산**해 대조한다(표를 손으로 옮겨 적으면 stale이 된다).
+	# ★[폴리시 R4] 배제 술어가 `POOL_EXCLUDE`(손 목록) → `Peddler.pool_excluded`(목록 ∪ 심층 로스터
+	#   파생)로 넓어졌고, **씨앗 루프도 같은 술어를 탄다**(불사과 = 심층 채집 전용). 여기 독립 계산도
+	#   같은 축을 따라간다 — 손 목록만 보면 분모가 다시 stale이 된다.
 	var want := 0
 	for cid in CropCatalog.ids():
+		if Peddler.pool_excluded(str(cid)):
+			continue
 		if int(CropCatalog.seed_cost(str(cid))) > 0:
 			want += 1
 	var tables: Array = [ItemCatalog.FORAGEABLES, ItemCatalog.MATERIALS, ItemCatalog.MINERALS,
@@ -179,7 +184,7 @@ func _initialize() -> void:
 		var tbl: Dictionary = t
 		for id in tbl:
 			var row: Dictionary = tbl[id]
-			if Peddler.POOL_EXCLUDE.has(str(id)):
+			if Peddler.pool_excluded(str(id)):
 				continue
 			if int(row.get("price", 0)) > 0:
 				want += 1
@@ -189,6 +194,13 @@ func _initialize() -> void:
 		not pool_ids.has(ItemCatalog.GEM_OSAEK_HONOK)
 		and not pool_ids.has(ItemCatalog.ORE_NARAKCHEOL)
 		and not pool_ids.has(ItemCatalog.NARAK_HONJEONG))
+	# ★[폴리시 R4] 같은 사유(깊이 게이트)의 넷째 부류 — 미혹 심층 존 산출. 불사과는 **씨앗 행**으로
+	#   흘러들어 다절기 REGROW 프레스티지를 무한 재배시켰고, 저승삼은 아이템 행으로 도감 칸을 채웠다.
+	var deep_gated: Array = ForageSpawns.species_for(ForageSpawns.KIND_DEEP, 0)
+	var deep_in_pool: Array = deep_gated.filter(func(id): return pool_ids.has(id))
+	_check("③b2 미혹 심층 산출 %s도 부재 — 씨앗 루프·아이템 루프 양쪽에서(적발: %s)"
+			% [str(deep_gated), str(deep_in_pool)],
+		deep_gated.size() >= 2 and deep_in_pool.is_empty())
 	_check("③c 비매 수집물(레어크로우 ①②) 부재 — price 0 필터가 곧 규칙",
 		not pool_ids.has(ItemCatalog.RARECROW_1) and not pool_ids.has(ItemCatalog.RARECROW_2))
 	var kinds_ok := true

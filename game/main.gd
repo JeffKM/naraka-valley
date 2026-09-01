@@ -1283,8 +1283,14 @@ const PROP_LAYOUT_HOME := [
 	# ── ★[roster 2026-07-04] 저승 봄나무 재도입(2×4칸·밑둥 1칸 SOLID·수관 통과+occlusion fade). owner가
 	#   2026-07-03에 옛 나무를 "안 어울림"으로 걷어냈으나, 스타듀 룩 2×4 재생성본으로 테두리 프레이밍 복귀.
 	#   전부 빈 코너·가장자리(밭·동선·건물·연못·debris·능선 회피 — 아래 좌표는 그 밖의 잔디 잉여지대). ──
+	# ★[폴리시 R4] (68,4) → (68,1). 나무 앵커는 좌상단이고 몸통이 아래로 뻗으므로(64×128 = 2×4칸)
+	#   옛 자리는 (68..69, 4..7)을 덮어 그중 6칸이 늘봄방 예정지 GREENHOUSE_EXT_RECT(x64..71, y5..11)
+	#   안이었다 — 그 rect 주석의 "프롭 무점유 실측"이 코드상 거짓이었고, 완공하면 온실 벽 안에서
+	#   나무가 지붕을 뚫고 그려지는 데다 발치바가 WALL 박스 **안**에 서고 TreeLedger 슬롯 하나가
+	#   영영 벌목 불가로 남았다. 세 칸 북쪽으로 올려 (68..69, 1..4)로 빼면 코너 클러스터 구도는
+	#   그대로이면서 rect와 한 칸도 안 겹친다(후보 8칸 전부 비-SOLID·프롭 미점유 실측).
 	[PROP_TREE_A, [
-		Vector2i(54, 3), Vector2i(68, 4), Vector2i(74, 3),   # 우상단 코너 클러스터
+		Vector2i(54, 3), Vector2i(68, 1), Vector2i(74, 3),   # 우상단 코너 클러스터
 		Vector2i(76, 54), Vector2i(70, 58),                  # 우하단 코너
 		Vector2i(44, 60), Vector2i(3, 50),                   # 하단·좌하단
 		Vector2i(4, 33),                                     # 좌중(넋우릿간 아래·연못 서편)
@@ -1306,7 +1312,10 @@ const PROP_LAYOUT_HOME := [
 	# ★[prop-regen-roster §5.3 / owner 2026-07-04] 통나무 5종 산재(통과 O 순수 장식·발치 타원 그림자만).
 	#   벌목/자연 쓰러진 나무 느낌으로 나무 클러스터 곁·빈 가장자리에 배치. 라이브 검증(SOLID·기존 프롭·건물
 	#   EXT·연못·패치·방목 겹침 0 — tools/logs_place_check.gd)으로 좌표 확정.
-	[PROP_LOG_LONG, [Vector2i(63, 6), Vector2i(6, 40), Vector2i(66, 55)]],                       # 긴 통나무(3×1) 3
+	# ★[폴리시 R4] (63,6) → (61,6). 긴 통나무는 96×32 = 3×1칸이라 옛 자리가 (64,6)(65,6) 두 칸을
+	#   늘봄방 예정지 안에 밀어 넣었다(위 나무와 같은 사유). 두 칸 서쪽으로 밀면 (61..63, 6)이라
+	#   rect 서쪽 경계(x64) 바로 앞에서 멈춘다 — 나무 클러스터 곁이라는 배치 의도도 그대로다.
+	[PROP_LOG_LONG, [Vector2i(61, 6), Vector2i(6, 40), Vector2i(66, 55)]],                       # 긴 통나무(3×1) 3
 	[PROP_LOG_SHORT, [Vector2i(50, 5), Vector2i(14, 50), Vector2i(56, 32)]],                     # 짧은 통나무(2×1) 3
 	[PROP_LOG_UPRIGHT, [Vector2i(58, 7), Vector2i(72, 50), Vector2i(7, 45), Vector2i(66, 29)]],  # 세워진 그루터기(1×1) 4
 	[PROP_LOG_DIAG_A, [Vector2i(60, 9), Vector2i(16, 50), Vector2i(12, 38)]],                    # 대각 통나무 밝은(1×1) 3
@@ -2426,6 +2435,14 @@ var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌�
 #   다시 서는 프레임에 `_process`가 소비한다. 세션 로컬이다(세이브 무관) — 그 아침에 껐다 켜면
 #   기회를 잃지만, 그건 이 표가 없던 종전과 같은 결과라 회귀가 아니다.
 var _season_respawn_pending_day := 0
+# ★[폴리시 R4] **입력 디스패치 단계에서 세계를 바꾼 프레임의 폴링을 한 번 삼킨다.** Godot은 한
+#   iteration에서 입력 디스패치(`_input`·`_gui_input`)를 `_process`보다 **먼저** 흘리는데, main은
+#   모든 월드 동사를 `Input.is_action_just_pressed`(전역 폴링)로 받는다 — 그래서 디스패치 단계에서
+#   상태를 갈아 끼운 창구의 그 키가 같은 프레임 `_process`의 월드 게이트에 그대로 다시 걸린다
+#   (타이틀 [이어하기]의 Enter → 집 안 취침 / 모달 우상단 [X] 클릭 → 괭이질·설치물). 12146 머리말이
+#   시계 판 클릭에 대해 이미 적어 둔 그 함정이고, `accept_event()`는 폴링에 아무 효과가 없다.
+#   두 창구가 여기에 표를 세우면 `_process`가 입력 구간 맨 앞에서 그 한 프레임을 통째로 건너뛴다.
+var _swallow_input_once := false
 # ★ [B1-a.3] 사료풀 상태(낫으로 베어 건초를 얻는 고지 풀 — 재생·겨울정지). FarmField/Orchard/Ranch/
 #   Reclaim와 완전 분리된 얇은 원장 노드(코드 생성 — .new()). main이 고지 자유 풀밭을 시드하고, 벤 결과를
 #   여물광(Ranch.store_hay)에 적재한다(경제 양끝 잇기). 드로우는 main이 이 상태를 질의(디커플링).
@@ -3373,6 +3390,11 @@ func _on_title_start(slot: int, is_new: bool) -> void:
 		t.queue_free()
 	get_tree().paused = false
 	_begin_game(is_new)
+	# ★[폴리시 R4] 여기까지가 **타이틀의 입력 디스패치 안**이다 — 키보드 [이어하기]의 Enter/Space가
+	#   같은 프레임 `_process`에서 `ui_accept`로 다시 읽혀, 세이브가 되세운 집 안 좌표 위에서
+	#   `_can_sleep()`(위치만 본다)을 통과해 **이어하기를 누른 그 프레임에 하루가 통째로 소비됐다**
+	#   (`_do_sleep` 끝의 자동 저장이 그 상태를 덮어써 되돌릴 수도 없다). 그 한 프레임을 삼킨다.
+	_swallow_input_once = true
 
 # 타이틀 [종료].
 func _on_title_quit() -> void:
@@ -4910,6 +4932,19 @@ func _greenhouse_built() -> bool:
 func _in_greenhouse_plot(t: Vector2i) -> bool:
 	return _greenhouse_built() and GREENHOUSE_PLOT_RECT.has_point(t)
 
+# ★[폴리시 R4] 이 칸이 **아직 안 지은 늘봄방의 예정지**인가 — 설치물 배치가 배제하는 예약 부지다.
+#   GREENHOUSE_EXT_RECT는 완공 전까지 전부 GROUND(56/56 실측)라 스프링클러·레어크로우·업화로·결정기가
+#   전부 통과한다. 그런데 완공 아침 `_build_facade`가 그 8×7을 통째로 WALL로 채우므로, 안쪽 칸은
+#   8이웃이 전부 WALL이 되어 `_update_target`(발밑 ±1 클램프)으로 영영 겨눌 수 없다 — 원장엔 남고
+#   회수 경로만 사라져 **설치물과 안에 든 광석·보석이 영구 유실**된다(R2가 나락 층에서 봉합한
+#   "유령 화덕"의 신축 건물판). 되돌릴 수단(철거·자동 회수)을 새로 만드는 대신 **되돌릴 일을 안
+#   만드는 쪽**을 골랐다 — 업화로가 갱도 층을 애초에 거절하는 그 판단 1:1.
+#   ★ 완공 뒤엔 스스로 무해해진다: 그 칸들이 WALL이라 앞선 지면 검사에서 이미 걸린다(가드 이중화 0).
+#   ★ 막는 것은 *설치물 원장*뿐이다 — 괭이질·파종·수확 같은 밭 동사는 손대지 않는다(ADR-0008).
+func _greenhouse_lot_reserved(t: Vector2i) -> bool:
+	return _region == RegionCatalog.HOME and not _greenhouse_built() \
+		and GREENHOUSE_EXT_RECT.has_point(t)
+
 # ★ 밭 라우터 — 이 칸의 주인 FarmField를 고른다. **두 좌표 공간이 겹치지 않아**(노지 = HOME 외부
 #   y<65 · 늘봄방 = 실내 밴드) 칸 하나만 보면 주인이 유일하게 정해진다. 밭 동사(괭이·물·심기·비료·
 #   수확)와 칸 단위 질의는 전부 이 함수를 거치고, **집합 순회**(절기 사멸·까마귀·잡초 확산)는 거치지
@@ -5949,6 +5984,16 @@ func _award_narak_drop(t: Vector2i, node_id: String) -> void:
 		_notice("광맥이 통째로 쏟아졌다!")
 	_gain_mining_xp(int(res["xp"]))
 	audio.sfx("harvest")
+	# ★[폴리시 R4] 갱도 산출(`_award_mine_drop`)이 맨 뒤에 다는 두 훅이 여기엔 **한 줄도 없었다**.
+	#   두 원천 상수는 무대가 아니라 *활동*을 가리킨다("광맥/돌을 부순 사건마다") — 그리고 이 함수의
+	#   머리말 자체가 "같은 해석기를 쓰되 네임스페이스만 갈린다"고 선언한다. 그래서 해방 이후 나락만
+	#   도는 엔드게임 동선에서는 채광이 반딧넋 45 완주(드랍 몫 15)에 한 톨도 기여하지 못했다.
+	#   ★ serial에 **run_id를 얹는다**: 갱도 serial은 `floor*1e6 + …`이라 나락 깊이가 같은 값을 내면
+	#     같은 날 같은 롤이 나온다. run은 1부터라(begin_run) 자리 수가 겹치지 않고, 런이 갈리면
+	#     롤도 갈려 "리셋 런마다 새 판"이라는 나락의 정의와도 맞는다.
+	var narak_serial := narak_floors.run_id() * 1000000000 + _narak_depth * 1000000 + t.y * 1000 + t.x
+	_roll_book_drop(Books.SRC_MINE, narak_serial)
+	_roll_firefly_drop(FireflySouls.SRC_MINE, narak_serial)
 
 # ═══ ★[S5-T4 / ADR-0063 결정 4·5] HP·전투 판정 배선 ═══════════════════════════════
 # main의 몫은 다섯뿐이다: ①최대 HP 파생·갱신 ②무기 스윙 입력 → arc 판정 ③피격(무적 창·넉백)
@@ -7108,9 +7153,14 @@ func _scatter_footprint(tex: Texture2D, anchor: Vector2i) -> Array:
 	return out
 
 # 고정 인프라 rect(건물·연못·우물·패치·물가존) 위엔 절차 프롭 금지(존이 이미 비껴가나 belt-and-suspenders).
+# ★[폴리시 R4] GREENHOUSE_EXT_RECT 합류. 목록의 다른 rect는 첫날부터 WALL이라 지면 검사만으로도
+#   비껴가지만, 늘봄방 예정지만은 **완공 전까지 맨 GROUND**라 이 목록이 유일한 방어선이다(손저작
+#   프롭 2점이 실제로 그 안에 서 있었다 — 위 로스터 주석). 지금 좌표로는 스캐터가 그 안에 한 점도
+#   안 앉지만(실측), 스캐터 규칙이 넓어지는 날 조용히 다시 열리는 문이라 여기서 못 박는다.
 func _scatter_forbidden(t: Vector2i) -> bool:
 	for r in [HOUSE_EXT_RECT, STOREHOUSE_EXT_RECT, NEOKURITGAN_EXT_RECT, NEOKDUNGURI_EXT_RECT,
-			SILO_EXT_RECT, WELL_RECT, STARTER_PATCH_RECT, SPIRIT_POND_RECT, POND_ACTIVITY_RECT]:
+			SILO_EXT_RECT, WELL_RECT, STARTER_PATCH_RECT, SPIRIT_POND_RECT, POND_ACTIVITY_RECT,
+			GREENHOUSE_EXT_RECT]:
 		if r.has_point(t):
 			return true
 	return false
@@ -9546,7 +9596,7 @@ func _setup_frame() -> void:
 	frame.buy_store_item.connect(_on_frame_buy_store_item)   # ★ [S2-T4] 매대 묘목·비료·건초 + ★[S3-T5] 낚시 기어 구매
 	frame.sell_fish.connect(_on_frame_sell_fish)         # ★ [S3-T5] 생선가게 환전(행별 1마리·Shift 전량)
 	frame.sell_fish_all.connect(_on_frame_sell_fish_all) # ★ [S3-T5] 생선가게 전량 환전
-	frame.close_pressed.connect(_close_frame)    # ★ [S1R-T12] 우상단 X 닫기
+	frame.close_pressed.connect(_on_frame_close_pressed)    # ★ [S1R-T12] 우상단 X 닫기
 	frame.discard_slot.connect(_on_frame_discard)   # ★ [S1R-T12] 휴지통 버리기(확인 후)
 	frame.save_pressed.connect(_on_frame_save)   # ★ Phase B 옵션 탭
 	frame.quit_pressed.connect(_on_frame_quit)
@@ -10049,8 +10099,15 @@ func _scarecrow_tiles() -> Array:
 			for t in entry[1]:
 				out.append(t + Vector2i(0, 1))
 	if rarecrow != null:
+		# ★[폴리시 R4] 밴드 경계는 **HOME의 외부 세로**여야 한다 — `_outdoor_h`(=지금 서 있는 구역)를
+		#   보면 안 된다. 레어크로우 원장도 까마귀 판정도 HOME 좌표계인데(위 `_installation_at` 주석
+		#   "구역 축 없는 원장"), 까마귀 습격 줄에는 잡초 확산과 달리 구역 가드가 없다 — 집 밖에서
+		#   24:00을 맞아 `_on_collapsed → _do_sleep`으로 날이 바뀌면(R3 #7이 명시적으로 인정·처리한
+		#   경로다) 나룻터 40·숲/갱도 44 같은 남의 세로로 걸러져, HOME 남동 개간지(y 40~64)에 세운
+		#   레어크로우가 목록에서 통째로 빠지고 그 밤 반경 안 작물이 영구 소실됐다.
+		var home_outdoor_h: int = RegionCatalog.size_of(RegionCatalog.HOME).y
 		for t: Vector2i in rarecrow.tiles():
-			if t.y < _outdoor_h:
+			if t.y < home_outdoor_h:
 				out.append(t)
 	return out
 
@@ -10411,7 +10468,9 @@ func _try_buy_market_seed(crop_id: String, n: int) -> void:
 	if not _night_market_open_today():
 		_notice("야시장은 파했다 — 매대는 성야절 그 하루뿐이다")
 		return
-	var unit := SeasonalEvent.market_price(CropCatalog.seed_cost(crop_id))
+	# ★[폴리시 R4] 결제가도 표시가와 **같은 출처**를 본다(R3 #19가 보부상에서 닫은 그 클래스 —
+	#   두 곳이 각자 base를 파생하면 표시가≠결제가가 언제든 다시 갈린다).
+	var unit := SeasonalEvent.market_price(SeasonalEvent.market_seed_price())
 	var seed_item := ItemCatalog.seed_id(crop_id)
 	var bought := 0
 	for _i in n:
@@ -11150,6 +11209,11 @@ func _load_game() -> void:
 	#   선택만 남으면 목록 밖 층을 가리킨다 — 소비처 `_descend_mine`은 is_valid_floor만 보므로 그대로
 	#   해금 안 한 깊이로 내려가고(진행 스킵), 프롬프트도 목록에 없는 층을 안내했다.
 	_mine_entry_pick = 1
+	# ★[폴리시 R4] **밀린 절기 재스폰 표도 같은 이유로 버린다.** 이 표는 세션 로컬인데(R3 #7),
+	#   로드는 `reclaim`을 세이브 시점으로 되감으므로 표만 살아남으면 절기 전환일도 아닌 날에
+	#   `_run_season_respawn`이 집행돼(11937~) 되돌린 세이브엔 없던 잡초와 **통행 불가 SOLID
+	#   debris**(잉걸·그루터기)가 마당에 영구로 박혔다. 잃는 것은 없다: 표가 없던 종전과 같은 결과다.
+	_season_respawn_pending_day = 0
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
 	#   값을 붓기 때문이다(없으면 저장돼 있던 칸이 조용히 사라진다). `_spine_bits` 복원은 아래
@@ -12033,6 +12097,12 @@ func _process(delta: float) -> void:
 	#   `_run_over`와 다른 축이라 가드도 따로 선다: 저건 되돌릴 수 없는 종료고 이건 닫으면 코지
 	#   샌드박스로 돌아가는 1회성 화면이다(§6.4 "머무름은 선택"). 세이브 삭제(F8)는 **안 받는다** —
 	#   여기는 게임의 끝이 아니라 한 장의 회고라, 그 자리에 파괴적 입력을 두지 않는다.
+	# ★[폴리시 R4] 입력 디스패치 단계가 세운 표를 여기서 소비한다(`_swallow_input_once` 머리말).
+	#   **아래 모든 입력 폴링보다 먼저**여야 뜻이 산다. 위 mute·전체화면·배치/꾸미기 토글은 이 표와
+	#   겹칠 키가 없어 그대로 둔다(삼키는 범위를 실제로 새는 축으로만 좁힌다).
+	if _swallow_input_once:
+		_swallow_input_once = false
+		return
 	if _epilogue_open:
 		if Input.is_action_just_pressed("action") or Input.is_action_just_pressed("ui_accept"):
 			_close_epilogue()
@@ -12612,10 +12682,17 @@ func _process(delta: float) -> void:
 	#   게이트 밖에서 따로 디스패치한다(꽃 패치와 정확히 같은 결). RMB(맨손) 또는 [F] 어느 쪽이든 줍는다
 	#   — 줍기는 도구가 필요 없고(혼력 0, ADR-0033 #1), 물가 게잡이통·기증대처럼 [F]로 손이 가는 동선도
 	#   있어 둘 다 받는다. 실내에선 안 돈다(_indoor 게이트).
+	# ★[폴리시 R4] 이 프레임의 [F]를 아래 채집 창구 넷(채집물·덤불·팬닝·반딧넋)이 이미 가져갔는가.
+	#   그 넷은 자기 일을 하고도 return을 하지 않는다(뒤따르는 갱도·나락 사다리 순서를 지키려고) —
+	#   그래서 [F]가 사슬 맨 끝의 휘파람(12712 머리말)까지 그대로 흘러, 반딧넋을 거두면서 먹갈기에서
+	#   내리고 다시 누르면 거두면서 다시 타는 토글이 됐다. 그 머리말이 선언한 "위 창구가 아무도 안
+	#   집었을 때만 말을 부른다"를 표 하나로 실제로 집행한다(순서는 그대로 두고 규약만 켠다).
+	var f_taken := false
 	var on_forage_spawn := not _sleeping and _indoor == "" and forage_spawns != null \
 			and forage_spawns.has_at(_region, _target)
 	if on_forage_spawn and (Input.is_action_just_pressed("action") or Input.is_action_just_pressed("shop_toggle")):
 		_pick_forage(_target)
+		f_taken = Input.is_action_just_pressed("shop_toggle")
 	# ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 흔들기 — 채집 덤불은 통행 가능 GROUND 위(비-SOIL)라 꽃 패치·
 	#   채집물 줍기와 같은 결로 _target_valid 게이트 밖에서 따로 디스패치한다. **[F] 전용**이다:
 	#   줍기(RMB/F 겸용)와 달리 "흔든다"는 별개 동사이고, 덤불 자리는 빈터 존 밖이라 같은 칸에서 줍기와
@@ -12624,6 +12701,7 @@ func _process(delta: float) -> void:
 			and is_bush_tile(_region, _target) and berry_bushes.has_berry(_region, _target)
 	if on_bush and Input.is_action_just_pressed("shop_toggle"):
 		_shake_bush(_target)
+		f_taken = true
 	# ★[S10-T1 / ADR-0069 결정 2] 팬닝 — 반짝이는 물가 칸을 [F]. 스폿은 걸을 수 있는 지면(GROUND/PATH)
 	#   위라 채집물·덤불과 같은 결로 _target_valid 게이트 밖에서 따로 디스패치한다.
 	#   ★ **[F] 전용**이다(줍기의 RMB 겸용과 갈린다): "일다"는 도구 없이 하는 별개 동사이고, 무엇보다
@@ -12635,6 +12713,7 @@ func _process(delta: float) -> void:
 			and panning.has_at(_region, _target)
 	if on_pan_spot and Input.is_action_just_pressed("shop_toggle"):
 		_pan_spot(_target)
+		f_taken = true
 	# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 — 반짝이는 칸을 [F]로 거둔다(= 인도 = 안치).
 	#   ★ **팬닝 바로 뒤**에 둔다: 고정 배치 표가 팬닝 존을 비껴가도록 잠겼으므로 실제로 겹칠 일은
 	#     없지만, 존이 나중에 넓어져도 오늘의 사금이 먼저 잡히도록 순서로 한 번 더 못 박는다.
@@ -12644,6 +12723,7 @@ func _process(delta: float) -> void:
 			and fireflies != null and fireflies.live_spot_at(_region, _target) != ""
 	if on_firefly and Input.is_action_just_pressed("shop_toggle"):
 		_gather_firefly(_target)
+		f_taken = true
 	# ★[S4-T8 / ADR-0062 결정 9 ㉡] 이끼 낫 채취 — 이끼 낀 성숙목은 SOLID(비-SOIL)라 벌목과 같은 자리에서
 	#   디스패치한다. **든 게 낫일 때만** 걸리고(도끼면 아래 벌목이 잡는다), 둘은 서로 배타라 한 칸에서
 	#   충돌하지 않는다(각 함수가 자기 도구를 스스로 검사 — ADR-0024 §2 자동 분기 없음).
@@ -12712,7 +12792,8 @@ func _process(delta: float) -> void:
 	# ★[S10-T4 / ADR-0069 결정 6] 휘파람(F) — **[F] 사슬의 맨 끝**이다. 위 모든 창구가 먼저 자기
 	#   [F]를 가져가고 아무도 안 집었을 때만 말을 부른다(든 물건이 창구를 이기지 않는다는 규약 —
 	#   휘파람을 든 채 우편함 앞에 서면 편지가 열리는 것이 맞다). 한 번 = 소환·승마, 두 번 = 하차.
-	if not _sleeping and mount != null and inventory.selected_id() == ItemCatalog.MOUNT_WHISTLE \
+	if not _sleeping and not f_taken and mount != null \
+			and inventory.selected_id() == ItemCatalog.MOUNT_WHISTLE \
 			and Input.is_action_just_pressed("shop_toggle"):
 		_toggle_mount()
 		return
@@ -12802,18 +12883,26 @@ func _process(delta: float) -> void:
 	# ★[S6-T5] 체키 촬영 중엔 LMB가 **셔터**다 — 무기를 든 채 찍으면 스윙이 같이 나가므로 막는다.
 	# ★[S6-T6] 칵테일 제조 중의 LMB(붓기·셰이킹)도 같은 이유로 도구질로 흘리지 않는다.
 	var holding_weapon := ItemCatalog._is_weapon(inventory.selected_id())
+	var holding_free_use := _is_free_use_item(inventory.selected_id())
 	# ★[S10-T2] 레어크로우도 스프링클러와 같은 이유로 도구질로 흘리지 않는다(설치 LMB와 중복 방지).
 	if not _sleeping and cheki == null and cocktail == null \
-			and (_target_valid or holding_weapon or pot_at_target) \
+			and (_target_valid or holding_weapon or pot_at_target or holding_free_use) \
 			and not holding_sprinkler and not holding_garden_pot and held_rarecrow == "" \
 			and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
 	# ★[S10-T5] 화분 칸도 수확 대상이다(밭 흙이 아니어도 — 위 도구 게이트와 같은 이유).
+	var harvest_took_rmb := false
 	if not _sleeping and (_target_valid or pot_at_target) and Input.is_action_just_pressed("action"):
 		_try_harvest()
+		harvest_took_rmb = true
 	# ★ ADR-0024 취침(RMB): 집 안이면 RMB로도 잠든다(위 ui_accept와 병행 — 어느 쪽이든).
-	if _can_sleep() and Input.is_action_just_pressed("action"):
+	# ★[폴리시 R4] 바로 위 수확이 이 프레임의 RMB를 이미 썼으면 취침은 건너뛴다. S10-T5 화분이
+	#   **실내에 서면서 "수확 칸"과 "취침 가능 구역"이 처음으로 겹쳤다** — 집 안 화분을 겨눠
+	#   우클릭하면 수확 직후 `_do_sleep()`이 그대로 이어져 그 자리에서 하루가 끝났다(`_can_sleep`은
+	#   위치만 보고, 집 실내는 늘 `_zone_at == "집"`이다). 위 상자 분기(12418)가 return으로 막아 둔
+	#   바로 그 사고이고, 나중에 얹힌 화분 수확에는 그 방어가 없었다.
+	if not harvest_took_rmb and _can_sleep() and Input.is_action_just_pressed("action"):
 		_do_sleep()
 
 	# ★ C2 — 멜 출하대(_process_shop)·만물상 매대(_process_store) 폴링은 폐기됐다. 판매는 무인
@@ -13363,10 +13452,16 @@ func _farming_energy_cost() -> int:
 # ★ [S1R-T8 / ADR-0059 결정4] 이 칸이 물뿌리개 리필 대상인가 — 혼우물(WELL_RECT·비진입 WALL 박스) 또는
 #   물타일(WATER — 손그림 마스크로 유기화된 연못 포함, SPIRIT_POND/POND_ACTIVITY 불문). _target은 발밑 인접
 #   1칸으로 클램프되므로(_update_target), 대상을 겨눈다 = 인접에 섰다는 뜻(별도 거리 판정 불요).
+# ★[폴리시 R4] 혼우물 가지에 **구역·실내 가드**를 세운다. WELL_RECT는 안식 농원 좌표 상수인데
+#   이 술어가 `_region`도 `_indoor`도 안 봐서, 그 좌표가 맨 지면인 모든 구역(나루 마을 (41,19) 등)
+#   에서 허공을 겨눠도 물뿌리개가 가득 찼다(실측 확인). 같은 파일의 다른 좌표 창구는 전부 이
+#   함정을 명시적으로 막아 둔 자리다(`_facing_mailbox`의 `_region == HOME and _indoor == ""`).
+#   ★ 물타일(WATER) 가지는 그대로 전 구역이다 — 물은 어느 무대에서나 물이라 좁힐 이유가 없다
+#     (ADR-0008 "평평 ≠ 막힘": 좁히는 것은 *다른 구역엔 없는 건물* 한 채뿐이다).
 func _is_refill_target(t: Vector2i) -> bool:
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
 		return false
-	if WELL_RECT.has_point(t):
+	if _region == RegionCatalog.HOME and _indoor == "" and WELL_RECT.has_point(t):
 		return true
 	return _grid[t.y][t.x] == WATER
 
@@ -13455,6 +13550,17 @@ func _farm_aoe_tiles(t: Vector2i, aoe: Vector2i) -> Array[Vector2i]:
 		if at == t or _is_farmable(at):
 			out.append(at)
 	return out
+
+# ★[폴리시 R4] **조준 칸을 보지 않는 손 물건**인가(명부환·곁들이·계단). 아래 `_use_tool` 맨 앞이
+#   이 셋을 혼력 게이트 *위에서* 갈라 두었는데, 정작 `_process`의 LMB 디스패치 게이트가
+#   `_target_valid`(=밭 흙 SOIL)를 요구해 **갱도·나락 층에서는 한 번도 여기 못 닿았다** — 층 바닥은
+#   PATH·WALL·ROCK뿐이라 SOIL이 한 칸도 없다(같은 게이트에 `holding_weapon` or-항이 선 그 사실).
+#   결과가 정확히 뒤집혔었다: 계단은 쓸 수 있는 유일한 무대에서 100% 불발이고(`_can_use_stairs`는
+#   층 안에서만 참), 회복원이 그것뿐인 무대에서 명부환·곁들이가 잠겼다(ADR-0008 "막힘 0" 위반).
+#   게이트와 회귀가 **같은 술어**를 보도록 이름을 붙여 둔다(회귀가 못 잡은 이유가 곧, playtest가
+#   전부 `_use_tool()`을 직접 불러 그 게이트를 건너뛴 것이었다).
+func _is_free_use_item(id: String) -> bool:
+	return ItemCatalog._is_potion(id) or MenuCatalog.is_side_dish(id) or id == ItemCatalog.STAIRS
 
 func _use_tool() -> void:
 	var item := inventory.selected_id()
@@ -14021,11 +14127,16 @@ func _crystalarium_at(t: Vector2i) -> bool:
 #     ㉡ `_encroach_candidates`가 설치물 칸을 후보로 넘겨, 절기 첫날 아침에 스프링클러·결정기 위로
 #        SOLID debris(잉걸·그루터기)가 돋아 그 칸이 통행 불가가 되고 설치물이 덮였다.
 #   두 곳이 **같은 하나**를 보게 해서 "한 칸에 둘"과 "설치물 위에 debris"를 함께 막는다.
-#   ※ 구역 축 없는 원장(sprinkler·rarecrow)은 호출부가 이미 HOME으로 좁혀져 있어 그대로 본다.
+# ★[폴리시 R4] 구역 축 없는 원장(sprinkler·rarecrow)을 **무대 술어**(`_sprinkler_at`·`_rarecrow_at`)로
+#   갈았다. R2 주석이 단 단서("호출부가 이미 HOME으로 좁혀져 있어")는 그때의 두 호출부에만 참이었고,
+#   아래에서 이 함수를 새로 부르는 업화로·결정기 배치는 **전 구역 지상**에서 돈다. 원장을 날로 보면
+#   안식 농원 (42,14)의 스프링클러가 나루 마을 (42,14)의 업화로 배치를 프롬프트도 알림도 없이 막는다
+#   (화면엔 아무것도 없는 칸이라 단서가 0). 두 술어는 이미 `_region == HOME`을 물고 있어 기존 두
+#   호출부(둘 다 HOME 한정)의 거동은 바이트 단위로 불변이다.
 func _installation_at(t: Vector2i) -> bool:
-	if sprinkler != null and sprinkler.has_at(t):
+	if _sprinkler_at(t):
 		return true
-	if rarecrow != null and rarecrow.has_at(t):
+	if _rarecrow_at(t):
 		return true
 	if furnace != null and furnace.has_at(_region, t):
 		return true
@@ -14067,6 +14178,8 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 	if _installation_at(t):                   # ★[폴리시 R2] 다른 설치물(레어크로우·업화로·결정기·
 		return false                          #   게잡이통·채취기) → 배제(겹침 방지 · 양방향 가드)
 	if garden_pot != null and garden_pot.has_at(t):   # ★[S10-T5] 놓아 둔 화분 → 배제(겹침 방지)
+		return false
+	if _greenhouse_lot_reserved(t):           # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
 		return false
 	return true
 
@@ -14440,20 +14553,20 @@ func _can_place_furnace(t: Vector2i) -> bool:
 		return false
 	if is_solid(cell):
 		return false                          # 방어(건물 패드·절벽·벽 = SOLID)
-	if sprinkler != null and sprinkler.has_at(t):
+	# ★[폴리시 R4] 원장을 한 줄씩 나열하던 자리를 **`_installation_at` 하나**로 접었다. 나열은 새
+	#   설치물이 붙을 때마다 두 함수를 손으로 따라가야 해서 결국 갈렸다 — 레어크로우가 빠져 있어
+	#   허수아비 위에 업화로가 겹쳐 섰다(반대 방향은 `_can_place_sprinkler`가 막아 가드가 단방향).
+	#   그 술어는 구역 축까지 함께 든다(위 `_installation_at` 주석).
+	if _installation_at(t):
 		return false
-	if crab_pot != null and crab_pot.has_at(_region, t):
-		return false
-	if tapper != null and tapper.has_at(_region, t):
-		return false
-	if crystalarium != null and crystalarium.has_at(_region, t):
-		return false                          # ★[S10-T1] 결정기와 겹치지 않는다(_can_place_crystalarium 대칭)
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
 	if _region == RegionCatalog.HOME:
 		if POND_ACTIVITY_RECT.has_point(t):   # 물가 활동존(연못 여백) → 배제
 			return false
 		if _home_occupied_tiles().has(t):     # 프롭 점유(나무·바위·꽃·울타리·허수아비) → 배제
+			return false
+		if _greenhouse_lot_reserved(t):       # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
 			return false
 	return true
 
@@ -14958,13 +15071,7 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 		return false
 	if is_solid(cell):
 		return false                          # 방어(건물 패드·절벽·벽 = SOLID)
-	if sprinkler != null and sprinkler.has_at(t):
-		return false
-	if crab_pot != null and crab_pot.has_at(_region, t):
-		return false
-	if tapper != null and tapper.has_at(_region, t):
-		return false
-	if furnace != null and furnace.has_at(_region, t):
+	if _installation_at(t):                   # ★[폴리시 R4] 업화로와 같은 단일 술어(레어크로우 포함·구역 축 포함)
 		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
@@ -14972,6 +15079,8 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 		if POND_ACTIVITY_RECT.has_point(t):   # 물가 활동존(연못 여백) → 배제
 			return false
 		if _home_occupied_tiles().has(t):     # 프롭 점유(나무·바위·꽃·울타리·허수아비) → 배제
+			return false
+		if _greenhouse_lot_reserved(t):       # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
 			return false
 	return true
 
@@ -15321,11 +15430,21 @@ func _harvest_pot() -> void:
 #   실효. ★혼력 0(ADR-0033 #1 "줍기=혼력0" — 유일 무비용 산출 루프, "평평≠막힘" 안전판). 품질·수량은
 #   채집 레벨/전문직이 소스(밭 비료 roll과 대비 — 스킬 주도 replace, ADR-0033 #3 개정).
 func _pick_flower(tile: Vector2i) -> void:
-	if not flower.pick(tile, clock.day):
+	# ★[폴리시 R4] **묻기 먼저·따기 나중**. 옛 순서는 `pick`이 곧 판정이라(안 폈으면 false) 편했지만,
+	#   그 호출이 이미 꽃을 소진시켜 되돌릴 자리가 없다 — 백팩이 가득하면 그 포기가 재생 타이머에
+	#   묻힌 채 사라지는데 화면엔 "야생 피안화 +2"가 떴다. 비소모 질의(`is_bloomed`)로 먼저 거르면
+	#   "패치가 아닌 칸"과 "자리가 없다"가 안 섞이고(엉뚱한 칸에서 백팩 알림이 안 뜬다) 소진 전에
+	#   적재 자리를 물을 수 있다. 덤불 흔들기가 원장을 되돌려 지키는 그 불변식을 선검사로 세운다.
+	if not flower.is_bloomed(tile):
 		return   # 안 폈거나 패치 아님(디스패치가 걸렀지만 방어)
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
 	# 품질 = 채집 레벨 기본 등급, 약초학자 하한(이리듐)과 max(퍼크가 base를 끌어올림). ADR-0052.
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	if not inventory.can_add(ItemCatalog.SPIRIT_FLOWER, 1, quality):
+		_notice("백팩이 가득 차 꽃을 딸 수 없다 — 자리를 비우고 다시")
+		return
+	if not flower.pick(tile, clock.day):
+		return   # 방어(위 질의와 이 호출 사이에 상태가 바뀔 경로는 없다)
 	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 채집물은 밭 다수확과 달리
 	#   품질 격리 없음: 한 포기에서 두 송이라 등급 동일). ADR-0052 DIM_DOUBLE_DROP.
 	var count := 1
@@ -15427,13 +15546,9 @@ func _roll_mixed_seed_drop(t: Vector2i) -> void:
 # ★[S4-T5] 혼합 씨앗 치환 롤 — 심는 절기의 일반 작물 풀에서 결정적으로 1종(스타듀 Mixed Seeds).
 #   풀은 절기당 1종(현 로스터 규모 — 절기 작물이 늘면 여기만 늘린다·잠정 매핑은 작물 절기 주석 기준).
 func _mixed_crop_for(day: int, t: Vector2i) -> String:
-	var pools := [
-		[CropCatalog.PIANHWA],           # 피안절
-		[CropCatalog.HONRYEONGCHO],      # 유화절
-		[CropCatalog.HWANGCHEON_PODO],   # 망연절
-		[CropCatalog.YEONGHON_HOBAK],    # 성야절
-	]
-	var pool: Array = pools[GameClock.season_index_for_day(day)]
+	# ★[폴리시 R4] 표의 주인은 CropCatalog다 — 야시장 소매가가 같은 표에서 파생돼야 가격 역전이
+	#   구조적으로 막힌다(`CropCatalog.MIXED_POOLS` 머리말).
+	var pool: Array = CropCatalog.MIXED_POOLS[GameClock.season_index_for_day(day)]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("mixedseed:%d:%d:%d" % [day, t.x, t.y])
 	return pool[rng.randi_range(0, pool.size() - 1)]
@@ -15448,9 +15563,18 @@ func _harvest_wild(crop: String) -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = hash("wildharvest:%d:%d:%d" % [clock.day, _target.x, _target.y])
 		species = pool[rng.randi_range(0, pool.size() - 1)]
-	_field_at(_target).harvest(_target)   # SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다)
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	# ★[폴리시 R4] **적재 자리부터 본다** — 노지(`_try_harvest`)·화분(`_harvest_pot`) 두 형제가 R2에
+	#   세운 규율인데, 그 둘보다 위에서 갈라져 나오는 이 갈래만 옛 거동이 남아 있었다. `harvest`가
+	#   칸을 비운 뒤 `add_item` 반환값을 안 봐서, 백팩이 가득하면 그 포기가 영구 소실되는데 화면엔
+	#   "+N" 토스트가 뜨고 `_forage_found`가 **손에 쥔 적 없는 종을 발견 처리**해 희소종 씨앗 레시피
+	#   게이트까지 열렸다. 수량은 아래 더블드랍 롤이 정하지만 `can_add`는 스택 판정이라 1로 물어도
+	#   충분하다(첫 개가 들어가면 그 스택에 둘째도 합쳐진다).
+	if not inventory.can_add(species, 1, quality):
+		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
+		return
+	_field_at(_target).harvest(_target)   # SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다)
 	var count := 1
 	if randf() < forage_double_drop_chance():
 		count = 2
@@ -15464,12 +15588,18 @@ func _harvest_wild(crop: String) -> void:
 	queue_redraw()
 
 func _pick_forage(tile: Vector2i) -> void:
-	var species := forage_spawns.pick(_region, tile)
+	# ★[폴리시 R4] `pick`은 그 칸을 원장에서 **지우고** 종을 돌려주므로(되돌리는 경로 0), 꽃 패치와
+	#   같은 이유로 비소모 질의(`species_at`)로 먼저 종을 알아내고 적재 자리를 물은 뒤에 집는다.
+	var species := forage_spawns.species_at(_region, tile)
 	if species == "":
 		return   # 없는 칸(디스패치가 걸렀지만 방어)
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
 	# 품질 = 채집 레벨 기본 등급 ⊔ 약초학자 하한(이리듐). 꽃 패치와 같은 소스(ADR-0052).
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	if not inventory.can_add(species, 1, quality):
+		_notice("백팩이 가득 차 %s를 담을 수 없다 — 자리를 비우고 다시" % ItemCatalog.name_of(species))
+		return
+	forage_spawns.pick(_region, tile)   # 자리를 확인한 뒤에 집는다(스폰 칸 소멸 = 되돌릴 수 없는 사건)
 	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 한 자리에서 두 개).
 	var count := 1
 	if randf() < forage_double_drop_chance():
@@ -15776,6 +15906,15 @@ func _close_frame() -> void:
 	frame.close()
 	hotbar.visible = true
 	player.set_physics_process(true)
+
+# ★[폴리시 R4] 우상단 [X] **마우스 클릭** 전용 닫기. `_gui_input`(입력 디스패치 단계)에서 곧바로
+#   프레임을 접으면, 같은 프레임 `_process`가 12105의 모달 가드에 닿았을 때 이미 닫혀 있어 월드
+#   디스패치까지 그대로 내려갔다 — 괭이를 들었으면 인접 칸이 갈리고, 스프링클러·화분·레어크로우·
+#   게잡이통·업화로·결정기를 들었으면 그 자리에 설치물이 놓였다. Esc 닫기(12115)는 그 자리에서
+#   return하므로 안 새고, 오직 이 경로만 샜다. 닫기는 그대로 즉시 하되 그 프레임 폴링을 삼킨다.
+func _on_frame_close_pressed() -> void:
+	_close_frame()
+	_swallow_input_once = true
 
 # ── ★ C2 무인 출하함 드롭/롤백(프레임 시그널 핸들러) ──────────────────────────
 # 출하함 패널에서 백팩 수확물 슬롯을 클릭하면 그 슬롯을 통째로 출하 대기에 넣는다(인벤토리에서
@@ -17156,8 +17295,11 @@ func _store_items() -> Array:
 	var season := clock.season_index()
 	var rows: Array = []
 	for crop_id in CropCatalog.ids():
-		if crop_id == CropCatalog.BULSAGWA:
-			continue   # 채집 전용 — 만물상 미판매(crops.gd 주석)
+		# ★[폴리시 R4] 옛 `crop_id == BULSAGWA` 하드코딩을 **로스터 파생 술어**로 갈았다. 같은 규칙이
+		#   보부상 좌판엔 없어 거기서만 불사과 씨앗이 팔렸는데(게이트 우회), 두 매대가 이제 한 술어를
+		#   본다 — 심층 게이트 너머의 종이 늘어도 두 매대가 함께 막힌다(사유가 곧 술어다).
+		if ForageSpawns.is_deep_gated(crop_id):
+			continue   # 채집 전용(미혹 심층 = 도끼 티어 게이트 너머) — 매대 미판매
 		var base := CropCatalog.seed_cost(crop_id)
 		if base <= 0:
 			continue
@@ -17171,7 +17313,7 @@ func _store_items() -> Array:
 			"name": "%s 씨앗%s" % [CropCatalog.name_of(crop_id),
 				"" if season_tag == "" else " (%s)" % season_tag],
 			"price": StoreDiscount.price(base, hearts), "base": base,
-			"owned": inventory.seed_count(crop_id),
+			"count": inventory.seed_count(crop_id),
 		})
 	# ★ [S2-T4 / ADR-0060 결정 4] 묘목·비료·건초 정식 입고 — inventory.gd "정식 판매처(만물상=Slice 2)"
 	#   예고 이행. 카테고리 순서 고정: 씨앗 → 묘목 → 비료 → 건초 → 설치물(스타듀 매대 결의 묶음 진열).
@@ -17184,7 +17326,7 @@ func _store_items() -> Array:
 			"icon_id": ItemCatalog.sapling_id(fruit_id),
 			"name": "%s 묘목" % FruitTreeCatalog.name_of(fruit_id),
 			"price": StoreDiscount.price(sap_base, hearts), "base": sap_base,
-			"owned": inventory.sapling_count(fruit_id),
+			"count": inventory.sapling_count(fruit_id),
 		})
 	for fert_id in FertilizerCatalog.ids():
 		var fert_base := FertilizerCatalog.buy_cost(fert_id)
@@ -17195,14 +17337,14 @@ func _store_items() -> Array:
 			"icon_id": fert_id,
 			"name": FertilizerCatalog.name_of(fert_id),
 			"price": StoreDiscount.price(fert_base, hearts), "base": fert_base,
-			"owned": inventory.count_of(fert_id),
+			"count": inventory.count_of(fert_id),
 		})
 	rows.append({
 		"kind": "hay", "buy_id": ItemCatalog.HAY,
 		"icon_id": ItemCatalog.HAY,
 		"name": ItemCatalog.name_of(ItemCatalog.HAY),
 		"price": StoreDiscount.price(ItemCatalog.HAY_COST, hearts), "base": ItemCatalog.HAY_COST,
-		"owned": inventory.count_of(ItemCatalog.HAY),
+		"count": inventory.count_of(ItemCatalog.HAY),
 	})
 	var spr_base := ItemCatalog.price_of(ItemCatalog.SPRINKLER)
 	rows.append({
@@ -17210,7 +17352,7 @@ func _store_items() -> Array:
 		"icon_id": ItemCatalog.SPRINKLER,
 		"name": ItemCatalog.name_of(ItemCatalog.SPRINKLER),
 		"price": StoreDiscount.price(spr_base, hearts), "base": spr_base,
-		"owned": inventory.count_of(ItemCatalog.SPRINKLER),
+		"count": inventory.count_of(ItemCatalog.SPRINKLER),
 	})
 	# ★[S10-T2 / ADR-0069 결정 4] 레어크로우 획득처 ③ — 만물상 상시 재고(1회 한정).
 	# ★ 상위 티어 스프링클러는 **여기 안 판다** — 제작 전용이다(CraftCatalog). 매대에 두면 농사
@@ -17224,7 +17366,7 @@ func _store_items() -> Array:
 		"kind": "rarecrow", "buy_id": rc3, "icon_id": rc3,
 		"name": ItemCatalog.name_of(rc3),
 		"price": StoreDiscount.price(rc3_base, hearts), "base": rc3_base,
-		"owned": inventory.count_of(rc3),
+		"count": inventory.count_of(rc3),
 		"locked": _rarecrow_owned(rc3), "locked_text": "보유 중",
 	})
 	return rows
@@ -17267,7 +17409,7 @@ func _fishshop_items() -> Array:
 			"kind": "pot", "buy_id": ItemCatalog.CRAB_POT, "icon_id": ItemCatalog.CRAB_POT,
 			"name": ItemCatalog.name_of(ItemCatalog.CRAB_POT),
 			"price": StoreDiscount.price(pot_base, hearts), "base": pot_base,
-			"owned": inventory.count_of(ItemCatalog.CRAB_POT),
+			"count": inventory.count_of(ItemCatalog.CRAB_POT),
 		})
 	return rows
 
@@ -17285,7 +17427,7 @@ func _gear_row(gear_id: String, hearts: int) -> Dictionary:
 		"kind": "gear", "buy_id": gear_id, "icon_id": gear_id,
 		"name": GearCatalog.name_of(gear_id),
 		"price": StoreDiscount.price(base, hearts), "base": base,
-		"owned": owned,
+		"count": owned,
 		"locked": unique and owned > 0, "locked_text": "보유 중",
 	}
 
@@ -17420,7 +17562,7 @@ func _woodshop_items() -> Array:
 		"kind": "wood", "buy_id": ItemCatalog.WOOD, "icon_id": ItemCatalog.WOOD,
 		"name": ItemCatalog.name_of(ItemCatalog.WOOD),
 		"price": StoreDiscount.price(wood_base, hearts), "base": wood_base,
-		"owned": inventory.count_of(ItemCatalog.WOOD),
+		"count": inventory.count_of(ItemCatalog.WOOD),
 	})
 	return rows
 
@@ -17463,7 +17605,7 @@ func _guild_items() -> Array:
 			"kind": "weapon", "buy_id": id, "icon_id": id,
 			"name": "%s (%s)" % [WeaponCatalog.name_of(id), WeaponCatalog.damage_band(id)],
 			"price": price, "base": price,   # ★할인 없음 = 정가 = base(병기 표시가 안 뜬다)
-			"owned": owned,
+			"count": owned,
 			"locked": owned > 0, "locked_text": "보유 중",
 		})
 	# 명부환 — 상시 품목(깊이 무관). 목록 **끝**에 둔다: 검은 깊이에 따라 늘어나는 계단이고 환약은
@@ -17473,7 +17615,7 @@ func _guild_items() -> Array:
 		"kind": "potion", "buy_id": ItemCatalog.MYEONGBUHWAN, "icon_id": ItemCatalog.MYEONGBUHWAN,
 		"name": "%s (체력 +%d)" % [ItemCatalog.name_of(ItemCatalog.MYEONGBUHWAN), ItemCatalog.MYEONGBUHWAN_HEAL],
 		"price": potion_price, "base": potion_price,
-		"owned": inventory.count_of(ItemCatalog.MYEONGBUHWAN),
+		"count": inventory.count_of(ItemCatalog.MYEONGBUHWAN),
 	})
 	return rows
 
