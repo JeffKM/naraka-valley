@@ -6450,6 +6450,20 @@ func _make_side_dish() -> bool:
 #   손에 넣었다는 증명이라 발견 게이트가 자동 충족이고 ㉡ 절기 로테이션은 *메뉴판*(손님이 무엇을
 #   주문하나)의 규칙이지 내가 먹을 한 접시의 규칙이 아니다(재료는 이미 내 곳간에 있다).
 func _best_side_dish() -> String:
+	# ★[폴리시 R7] **손에 든 시그니처가 곧 주문서다.** 아래 "회복량 최대치 자동 선택"은 위 주석대로
+	#   "곁들이의 효과 축이 혼력 하나뿐이라 플레이어가 늘 최대치를 원한다"는 전제 위에 섰는데,
+	#   그 전제는 선물 선호표(GiftPrefs)가 하위 곁들이를 러브로 지정하면서 깨졌다 — 깨비의 러브가
+	#   붕어빵(15)·넋송이 수프(20)이고 루카가 도미 파니니(20)라, 곳간에 불사과(30)나 명단풍꿀(25)이
+	#   한 개라도 남아 있으면 그 러브 칸들이 "곳간에서 상위 시그니처를 전부 빼내는" 우회 없이는
+	#   영영 안 나온다(축이 둘이 되면 '늘 최대치'가 더 이상 참이 아니다).
+	#   ★그래서 피커 UI를 새로 세우는 대신 **이미 있는 입력 축**(선택 슬롯)에 얹는다 — "든 것이 곧
+	#     동사"(ADR-0024)는 이 게임이 이미 쓰는 문법이라 신규 UI 언어가 0이고, 안 들면 종전 거동이
+	#     한 글자도 안 바뀐다(도구·빈손·비-시그니처 = 전부 아래 최대치 경로).
+	#   ★재료는 여전히 **곳간에서** 나간다(손에 든 것은 소모되지 않는다 — 이 창구의 계약 불변).
+	if inventory != null:
+		var want := MenuCatalog.menu_for_signature(inventory.selected_id())
+		if MenuCatalog.is_side_dish(want) and larder.has_stock(MenuCatalog.signature_of(want)):
+			return want
 	var best := ""
 	var best_n := 0
 	for raw_id in MenuCatalog.side_dish_ids():
@@ -6467,7 +6481,20 @@ func _side_dish_prompt() -> String:
 	var menu_id := _best_side_dish()
 	if menu_id == "":
 		return "   (곳간에 곁들이 재료가 없다)"
+	# ★[폴리시 R7] 고를 것이 둘 이상일 때만 고르는 법을 알린다(하나뿐이면 안내가 곧 소음이다).
+	if _side_dish_choices() >= 2:
+		return "   [F] 곁들이 — %s (재료를 들면 그 접시)" % MenuCatalog.name_of(menu_id)
 	return "   [F] 곁들이 — %s" % MenuCatalog.name_of(menu_id)
+
+# 지금 곳간 재고로 구울 수 있는 곁들이 가짓수(프롬프트가 "고를 것이 있는가"를 묻는 데만 쓴다).
+func _side_dish_choices() -> int:
+	if larder == null:
+		return 0
+	var n := 0
+	for raw_id in MenuCatalog.side_dish_ids():
+		if larder.has_stock(MenuCatalog.signature_of(String(raw_id))):
+			n += 1
+	return n
 
 # 지금 플레이어가 겨누는 스윙 부채꼴(벽 뒤 칸 제외). CombatSkill이 순수 기하를 주고, "그 칸이
 # 실제로 닿는가"(맵 밖·SOLID)를 여기서 자른다 — 벽 하나 사이로 몹을 베는 일이 없게.
@@ -18324,8 +18351,17 @@ func _heart_rows() -> Array:
 func _gift_rhythm_text(r: Resident) -> String:
 	if not r.can_gift or r.affinity == null:
 		return ""
+	# ★[폴리시 R7] **생일은 주 상한이 면제된다**(Affinity.can_gift ㉡ — ADR-0066 결정 3). 종전엔
+	#   남은 횟수만 찍어, 달력 마커가 "이 날 챙기라"고 가리키는 바로 그 날에 관계 탭이 "0/2"로
+	#   불가능을 알렸다 — 그런데 그날 G를 누르면 선물은 성립하고 생일 보정까지 들어간다. 이 꼬리를
+	#   붙인 이유가 "벽에 부딪혀야 아는" 것을 없애는 것이었으니, 표시가 판정과 같은 예외를 봐야 한다.
+	#   ★배율은 글자로 말하지 않는다 — 보정분에 상한(BIRTHDAY_BONUS_CAP)이 걸려 "×8"이 늘 참은
+	#     아니다(같은 자리에 새 거짓말을 세우지 않는다).
+	var bday := r.is_birthday_on(clock.day)
 	if r.id == _spouse_id:
-		return "선물 매일 가능(부부)"
+		return "선물 매일 가능(부부) · 오늘 생일" if bday else "선물 매일 가능(부부)"
+	if bday:
+		return "오늘 생일 — 주 상한 면제"
 	return "이번 주 선물 %d/%d" % [r.affinity.gifts_left_in_week(clock.day), Affinity.GIFTS_PER_WEEK]
 
 # ★ [S8-T1 / ADR-0066 결정 11] 관계 상태 배지 훅 — 연애(T6)·결혼(T7)이 마저 채울 자리다.
