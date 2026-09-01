@@ -68,6 +68,13 @@ func _first_empty() -> int:
 			return i
 	return -1
 
+# 이 id가 든 첫 슬롯 인덱스(품질 무관 · -1 = 없음). 유니크 중복 거절이 쓴다(Inventory._find_id의 상자판).
+func _find_id(id: String) -> int:
+	for i in slots.size():
+		if slots[i] != null and slots[i]["id"] == id:
+			return i
+	return -1
+
 # (id, quality) 정확 일치 스택 인덱스(-1 = 없음). add가 합칠 스택을 찾는다.
 func _find_stack(id: String, quality: int) -> int:
 	for i in slots.size():
@@ -84,6 +91,14 @@ func store(id: String, n: int = 1, quality: int = 0) -> int:
 		return 0
 	var q := clampi(quality, 0, 3) if ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST else 0
 	if not ItemCatalog.stackable_of(id):
+		# ★[폴리시 R6] **유니크는 한 상자에 하나뿐이다.** 적재에는 이 거절이 없었는데(Inventory.add_item의
+		#   `if _find_id(id) >= 0: return false`가 여기엔 없었다) 복원은 `seen_unique`로 둘째 슬롯을
+		#   버린다 — 즉 **적재가 허용하는 상태를 복원이 삭제**해, 값을 치른 태클·검이 세이브 왕복에서
+		#   알림 없이 사라졌다. 두 방향의 규약을 load_save 쪽으로 맞춘다(그쪽이 유니크의 정의다).
+		#   ★ 애초에 같은 유니크를 두 개 갖게 되던 입구(상자에 넣으면 매대 보유 판정이 풀리던 자리)는
+		#     main의 `_stored_anywhere` 배선이 함께 막는다 — 여기는 그 마지막 방벽이다.
+		if _find_id(id) >= 0:
+			return 0
 		var e := _first_empty()
 		if e < 0:
 			return 0
@@ -109,7 +124,7 @@ func can_store(id: String, n: int = 1, quality: int = 0) -> bool:
 	if n <= 0 or not ItemCatalog.has_item(id):
 		return false
 	if not ItemCatalog.stackable_of(id):
-		return _first_empty() >= 0
+		return _find_id(id) < 0 and _first_empty() >= 0   # ★[폴리시 R6] store의 유니크 거절을 그대로 복창
 	var q := clampi(quality, 0, 3) if ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST else 0
 	return _find_stack(id, q) >= 0 or _first_empty() >= 0
 

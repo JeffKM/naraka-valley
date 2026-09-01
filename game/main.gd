@@ -14806,11 +14806,20 @@ func _rarecrow_owned(id: String) -> bool:
 # 종류 제한이 없어 도구·열쇠도 그대로 받으므로(chest.store), **백팩만 보는 1회성 판정은 "상자에
 # 넣으면 안 가진 것"** 이 되어 증정·발급이 무한히 다시 열린다. 새 1회성 창구는 이 술어를 쓴다.
 func _stored_anywhere(id: String) -> bool:
-	if inventory != null and inventory.count_of(id) > 0:
-		return true
-	if chest != null and chest.count_of(id) > 0:
-		return true
-	return storehouse_chest != null and storehouse_chest.count_of(id) > 0
+	return _count_anywhere(id) > 0
+
+# ★[폴리시 R6] 위 술어의 개수판 — 백팩 ∪ 집 상자 ∪ 갈무리방 상자에 이 물건이 몇 개인가. 매대가
+#   유니크 행에 "보유 중"을 걸면서 개수는 백팩만 세면 **"보유 중인데 0개"** 라는 어긋난 행이 뜨므로,
+#   잠금과 개수가 같은 원장에서 나오게 한다(두 값의 진실원을 하나로).
+func _count_anywhere(id: String) -> int:
+	var n := 0
+	if inventory != null:
+		n += inventory.count_of(id)
+	if chest != null:
+		n += chest.count_of(id)
+	if storehouse_chest != null:
+		n += storehouse_chest.count_of(id)
+	return n
 
 # 모은 종 수(0~8). 분모는 ItemCatalog.RARECROWS 크기에서 파생한다(하드코딩 8 없음).
 func _rarecrow_collected() -> int:
@@ -16539,7 +16548,13 @@ func _on_frame_chest_store(slot_index: int) -> void:
 	var q := inventory.quality_at(slot_index)
 	var stored := _active_chest.store(id, n, q)
 	if stored <= 0:
-		_notice("저장 상자가 가득 찼습니다")
+		# ★[폴리시 R6] 거절 사유가 둘로 갈렸다(가득 참 / 유니크 중복) — 한 문구로 뭉뚱그리면
+		#   "자리를 비웠는데도 안 들어간다"가 되어 플레이어가 원인을 못 찾는다.
+		if not ItemCatalog.stackable_of(id) and _active_chest.count_of(id) > 0:
+			_notice("%s 이미 이 상자에 들어 있다 — 같은 물건은 한 자리뿐"
+				% HanjiUi.with_i(ItemCatalog.name_of(id)))
+		else:
+			_notice("저장 상자가 가득 찼습니다")
 		return
 	inventory.remove_at(slot_index, stored)   # 넣은 만큼만 차감(상자 가득 부분 이동 안전)
 	audio.sfx("ui")
@@ -16730,8 +16745,11 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 			# ★유니크 규약(잠정): 낚싯대·태클은 스택 불가 장착물이라 **각 1개 한정**이다. 이미 가진
 			#   티어·태클은 재구매 불가(같은 태클을 두 개 사도 GearCatalog.active_tackles가 중복을
 			#   지워 효과가 0 = 돈만 버리는 함정). 미끼만 스택 소모품이라 대량 구매를 받는다.
+			# ★[폴리시 R6] 보유 판정이 **상자까지** 본다(`_stored_anywhere`). 백팩만 보면 산 태클을
+			#   집 상자에 넣는 순간 행이 다시 열려 같은 물건을 정가로 또 결제했다 — 상자는 종류
+			#   제한이 없어 도구·무기를 그대로 받으므로(chest.store) "넣으면 안 가진 것"이 됐다.
 			if not GearCatalog.is_bait(buy_id):
-				if inventory.has_item(buy_id):
+				if _stored_anywhere(buy_id):
 					_notice("%s 이미 가지고 있다" % HanjiUi.with_eun(label))
 					return
 				n = 1
@@ -16763,7 +16781,9 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 			shop = "모험가 길드"
 			# ★유니크 = 각 1자루(스택 불가 장착물 — 낚싯대·태클 규약 1:1). 증정품 녹슨 혼검은
 			#   price 0이라 아래 `base <= 0` 가드에 걸려 애초에 살 수 없다.
-			if inventory.has_item(buy_id):
+			# ★[폴리시 R6] 기어와 같은 이유로 상자까지 본다 — 17835 주석이 "두 자루가 순수 손해"라고
+			#   스스로 못 박은 상태가, 검을 집 상자에 넣는 것만으로 그대로 성립했다.
+			if _stored_anywhere(buy_id):
 				_notice("%s 이미 가지고 있다" % HanjiUi.with_eun(label))
 				return
 			n = 1
@@ -17933,8 +17953,11 @@ func _crab_pot_unlocked() -> bool:
 # 기어 한 행(만물상 행 스키마 + locked). 미끼는 스택 소모품이라 보유해도 안 잠긴다.
 func _gear_row(gear_id: String, hearts: int) -> Dictionary:
 	var base := GearCatalog.price_of(gear_id)
-	var owned := inventory.count_of(gear_id)
 	var unique := not GearCatalog.is_bait(gear_id)
+	# ★[폴리시 R6] 유니크 행의 보유 개수는 **상자까지** 센다 — 잠금(구매 가드)과 같은 원장을 봐야
+	#   "보유 중인데 0개"·"0개인데 못 산다"가 안 생긴다. 미끼는 스택 소모품이라 종전대로 백팩만
+	#   센다(핫바에 든 잔량이 그 행의 뜻이다).
+	var owned := _count_anywhere(gear_id) if unique else inventory.count_of(gear_id)
 	return {
 		"kind": "gear", "buy_id": gear_id, "icon_id": gear_id,
 		"name": GearCatalog.name_of(gear_id),
@@ -18112,7 +18135,7 @@ func _guild_items() -> Array:
 		var price := WeaponCatalog.price_of(id)
 		if price <= 0:
 			continue   # 비매(증정품 녹슨 혼검) — 진열 대상이 아니다
-		var owned := inventory.count_of(id)
+		var owned := _count_anywhere(id)   # ★[폴리시 R6] 상자에 넣어 둔 검도 보유다(기어 행과 같은 원장)
 		rows.append({
 			"kind": "weapon", "buy_id": id, "icon_id": id,
 			"name": "%s (%s)" % [WeaponCatalog.name_of(id), WeaponCatalog.damage_band(id)],
