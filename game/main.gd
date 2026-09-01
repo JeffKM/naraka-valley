@@ -18586,7 +18586,14 @@ func _setup_residents() -> void:
 	r_okja.require_visible = true
 	r_okja.facing_gate = func() -> bool: return onboarding.step > Onboarding.NOTICE
 	r_okja.station_gate = func() -> bool: return onboarding.step > Onboarding.NOTICE
-	r_okja.visible_rule = func() -> bool: return true
+	# ★[폴리시 R7] 바나가 S8-T7에 받은 **구역 겹을 앵커에도** 얹는다(같은 실패 모드·같은 한 줄).
+	#   `visible_rule`은 프레임워크의 구역 게이팅(㉡)을 통째로 덮는 훅이라, 상수 true이던 종전엔
+	#   앵커 혼인(S9b-T8)으로 붙는 19:00 HOME 귀가 스테이션이 **다른 구역에서도 그려졌다** —
+	#   나루 마을 남단에 서 있어도 SPOUSE_HOME_TILE(22,71) 자리에 옥자가 떠 보였다.
+	#   미혼(스케줄 전 항목 region="")에선 판정이 늘 참이라 기존 거동 완전 불변.
+	r_okja.visible_rule = func() -> bool:
+		var reg := r_okja.station_region(int(clock.minutes))
+		return reg == "" or reg == _region
 	r_okja.schedule = [{"from_min": 0, "tile": OKJA_CAFE_TILE, "region": ""}]
 	# ★[S8-T7 / ADR-0066 결정 8] 혼례 부적 의뢰 [F] — **연애 상태에서만 노출**된다(훅이 빈 문자열
 	#   이면 프롬프트 꼬리 없음·F 무동작). 옥자는 관계 트랙이 없는 서사 앵커라 이 훅이 유일한
@@ -19544,11 +19551,19 @@ func _update_resident_station(r: Resident) -> void:
 		r.node.position = _tile_center_px(t)
 		_begin_resident_walk(r, prev, prev_region, t, r.tile_region)
 	# 가시성: ㉠ 훅이 있으면 훅 ㉡ 없고 스케줄에 구역이 박혀 있으면 같은 구역일 때만
-	#          ㉢ 둘 다 없으면 손대지 않는다(멜·네오 — 카메라 격리로 자연히 안 보인다).
+	#          ㉢ 둘 다 없으면 **드러낸다**(멜·네오·주방요괴 — 카메라 격리로 자연히 안 보인다).
+	# ★[폴리시 R7] ㉢가 "손대지 않는다"이던 종전엔 **혼인이 가시성을 false로 굳혔다**: 멜·네오는
+	#   스케줄이 region "" 한 항목뿐인데 혼인이 region HOME 귀가 스테이션을 append하므로,
+	#   19:00~24:00 동안만 ㉡이 돌아 HOME 밖에서 false가 되고 → 24:00 강제 취침 → 다음 날 06:00엔
+	#   다시 region "" 항목이 잡혀 ㉢가 아무것도 안 하는 바람에 그 false가 하루 종일 래치됐다
+	#   (카페 카운터의 멜이 영업창 내내 사라진 채 대화·선물만 되는 투명 NPC). "구역을 안 가른다"의
+	#   올바른 실효는 미터치가 아니라 **참**이다 — 노드 초기 가시성이 애초에 true라 미혼 거동은 불변.
 	if r.visible_rule.is_valid():
 		r.node.visible = r.visible_rule.call()
 	elif String(e.get("region", "")) != "":
 		r.node.visible = _region == String(e["region"])
+	else:
+		r.node.visible = true
 
 # ── 보간 걷기(시각 전용) ────────────────────────────────────────────────────
 # 스테이션이 바뀌면 길 스포크를 따라 걸어온 것처럼 보이게 한다. 논리 위치는 이미 목적지로
@@ -19631,6 +19646,17 @@ func _facing_resident() -> Resident:
 		return null
 	for r in _residents:
 		if r.tile == Resident.UNPLACED or _target != r.tile:
+			continue
+		# ★[폴리시 R7] **구역 술어** — 좌표만 보던 종전엔 다른 구역의 같은 칸에서 유령 창구가
+		#   열렸다: 조연 11인은 뱃사공·옹이·풀무·무골과 달리 `require_visible`·`require_indoor`를
+		#   안 걸었는데(온보딩 누락), 그들의 마을 좌표가 전부 안식 농원(80×65) 범위 안이라
+		#   예컨대 안식에서 (39,61)에 서서 남쪽을 겨누면 **화면엔 아무도 없는데** 세레나와 대화가
+		#   열리고 [G] 선물까지 실제로 소모·가산됐다(`_try_resident_gift`는 존재를 안 본다).
+		#   판정은 `station_region`(스케줄 파생)이라 걷기용 `tile_region` 캐시와 무관하게 늘 지금
+		#   시각의 답이고, region ""(멜·네오·주방요괴·미혼 옥자 = 카메라 격리 자리)은 종전대로
+		#   구역을 안 가른다 — **좁히기만 하므로 같은 구역의 정상 대화는 한 건도 안 막힌다.**
+		var st_region := r.station_region(int(clock.minutes))
+		if st_region != "" and st_region != _region:
 			continue
 		if r.require_indoor != "" and _indoor != r.require_indoor:
 			continue
