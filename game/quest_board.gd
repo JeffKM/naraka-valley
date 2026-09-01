@@ -55,7 +55,8 @@ const WEEKLY_FISH_COUNT_MIN := 4
 const WEEKLY_FISH_COUNT_MAX := 6
 
 var active: Dictionary = {}     # 수락 중인 의뢰 1건({} = 없음). 계약 스냅샷이라 통째 직렬화한다.
-var completed: Array = []       # 완료한 의뢰 key 목록(같은 의뢰 중복 완료 방지)
+var completed: Array = []       # 완료한 의뢰 key 목록(같은 의뢰 중복 완료 방지 — **살아 있는 키만**)
+var completed_total: int = 0    # ★[폴리시 R9] 누적 완료 건수(위 배열은 죽은 키를 버린다 — _prune_completed)
 var paid_gold: int = 0          # 지급 누적 골드(정보·검증용 지급 기록)
 var paid_affinity: int = 0      # 지급 누적 호감도 포인트
 
@@ -305,17 +306,47 @@ func complete(day: int, have: int) -> Dictionary:
 		return {}
 	var done := active
 	completed.append(String(done["key"]))
+	completed_total += 1
 	paid_gold += int(done.get("gold", 0))
 	paid_affinity += int(done.get("affinity", 0))
+	_prune_completed(day)
 	active = {}
 	changed.emit()
 	return done
 
+# ★[폴리시 R9] **죽은 키를 버린다.** 종전엔 이 배열을 줄이는 코드가 저장소에 한 줄도 없어(erase·
+#   clear 0) 완료할 때마다 영원히 자랐다 — 10년차면 1,280개 문자열이 매 저장마다 세이브 blob에
+#   실리고, `offer`의 선형 조회가 그 길이를 매번 훑는다. 그런데 실제로 조회되는 키는 **오늘의
+#   `daily:<day>`와 이번 주의 `weekly:<week>` 딱 둘**뿐이다.
+#   지우는 것이 안전한 근거(재출제 억제 계약을 깨지 않는다): 키는 `kind:seed_n`이고 seed_n이
+#   **절대 day / 절대 week**라(`daily_quest(day)`·`weekly_quest(week)`) 해가 바뀌어도 절대
+#   재사용되지 않는다. 즉 지난 기간의 키는 어떤 경로로도 다시 물어볼 수 없는 죽은 항목이다.
+#   기한이 이틀이라 어제 게시분을 오늘 완료하는 경로가 있지만(`daily:113`을 day 115에 완료),
+#   그 키도 완료 즉시 죽는다 — day 115의 게시판은 `daily:115`만 묻기 때문이다.
+#   ★ 누적 완료 건수는 **스칼라로 따로 든다**(`completed_total` — paid_gold·paid_affinity가 이미
+#     쓰는 그 관례). 원장이 세는 것과 원장이 *기억해야 하는* 것을 갈라 둔다.
+func _prune_completed(day: int) -> void:
+	var week := week_of(day)
+	var live: Array = []
+	for k in completed:
+		var s := String(k)
+		var sep := s.rfind(":")
+		if sep < 0:
+			continue                     # 형식 밖 키(손상 세이브) → 버린다
+		var kind := s.substr(0, sep)
+		var n := int(s.substr(sep + 1))
+		if kind == KIND_DAILY and n >= day:
+			live.append(s)
+		elif kind == KIND_WEEKLY and n >= week:
+			live.append(s)
+	completed = live
+
 func is_completed(key: String) -> bool:
 	return completed.has(key)
 
+# 지금까지 완료한 총 건수(**누적** — 위 `_prune_completed`가 죽은 키를 버리므로 배열 길이가 아니다).
 func completed_count() -> int:
-	return completed.size()
+	return completed_total
 
 # ── 세이브/로드(슬라이스 키 "quest_board" 네임스페이스 — Museum 결) ─────────────
 # 수락 상태(계약 스냅샷)·완료 이력·지급 기록만 든다. 게시 의뢰 자체는 day 파생이라 저장 대상이
@@ -324,6 +355,7 @@ func to_save() -> Dictionary:
 	return {
 		"active": active.duplicate(true),
 		"completed": completed.duplicate(),
+		"completed_total": completed_total,
 		"paid_gold": paid_gold,
 		"paid_affinity": paid_affinity,
 	}
@@ -334,6 +366,9 @@ func load_save(data: Dictionary) -> void:
 	completed = []
 	for k in data.get("completed", []):
 		completed.append(String(k))
+	# ★[폴리시 R9] 누적 건수 키가 없는 세이브(= 정리 전 원장)는 배열 길이가 곧 누적이다 — 그때는
+	#   죽은 키가 안 지워져 있었으므로 그 값이 정확하다(하위호환의 정확한 대응점).
+	completed_total = int(data.get("completed_total", completed.size()))
 	paid_gold = int(data.get("paid_gold", 0))
 	paid_affinity = int(data.get("paid_affinity", 0))
 	changed.emit()

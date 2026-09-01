@@ -107,8 +107,20 @@ func to_save() -> Dictionary:
 
 func load_save(data: Dictionary) -> void:
 	donated = {}
+	# ★[폴리시 R9] **분모 밖 id는 안 싣는다.** 형제 원장 셋(`Codex.load_save`의 `is_tracked`·
+	#   `FireflySouls.load_save`의 `is_valid_id`·`Mastery.load_save`의 `ARTIFACTS.has`)이 전부
+	#   막아 둔 자리가 여기만 비어 있었다. 로스터가 한 번이라도 갈리면(유품 id 개명·`Books.book_ids()`
+	#   에서 한 권 제외) 이미 기증해 둔 세이브의 죽은 키가 그대로 남아 `donated_count()`가 실제
+	#   전시 수를 넘기고, 그 값이 ㉠`pending_milestones()`를 통해 11칸 완주 답례를 **11점을 채우기
+	#   전에** 지급하고 ㉡`Spine.okja_deed_points(...)`로 앵커 트랙 deed까지 부풀리며 ㉢표시가
+	#   "전시 12/11"을 낸다. 분자와 분모가 같은 로스터에서 나오게 한다.
+	var valid: Dictionary = {}
+	for id in donatable_ids():
+		valid[String(id)] = true
 	for k in data.get("donated", {}):
-		donated[String(k)] = int(data["donated"][k])
+		var sid := String(k)
+		if valid.has(sid):
+			donated[sid] = int(data["donated"][k])
 	claimed = []
 	for c in data.get("claimed", []):
 		claimed.append(int(c))
