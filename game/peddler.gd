@@ -109,8 +109,20 @@ const POOL_EXCLUDE := [
 #   **씨앗 루프**로 들어와(seed_cost 200) 다절기 REGROW 프레스티지 작물을 440냥에 무한 재배할 수
 #   있게 했다 — crops.gd가 "씨앗은 미판매라 재배 익스플로잇 경로가 없다"고 못 박은 그 자구가
 #   코드상 거짓이었다. 손 목록을 늘리는 대신 **로스터에서 파생**한다(심층종이 늘면 0줄로 따라온다).
+#
+# ★[폴리시 R9] 같은 사유의 **다섯째 부류 = 갱도 깊이 밴드 너머의 광물**이다. 위 주석이 나락철을
+#   뺀 근거로 적은 "사지면 채광 깊이 곡선이 통째로 무의미해진다"가 그대로 걸리는 축인데, 손
+#   목록이 나락철 하나만 담고 있어 나머지가 전부 좌판에 섰다 — 유철 광석(21층+, 도구 2티어
+#   재료)·명옥(21층+)·명부금강(31층+ 희귀 노드)·황천금 광석(41층+, 3티어 재료)·염주석(41층+)·
+#   업화알돌(41층+). 특히 명부금강(정가 750)은 풀 최고가군이라 `_fallback_row`의 상위 후보에
+#   상시 들어 귀물 좌판에도 자주 섰고, 사서 결정기에 물리면 8일마다 750냥짜리 보석이 **31층에
+#   한 번도 안 내려간 채** 영구 복제된다(crystalarium.gd "게이트는 시간이 아니라 투입물의
+#   희소성이 진다"의 정면 위반). 팬닝이 같은 보석을 저확률로 흘리는 것과는 다른 축이다 —
+#   그쪽 게이트는 희소성이라 냥으로 밀 수 없다.
+#   ★ 여기서도 손 목록을 안 늘린다: `MineFloors.NODE_TABLE`이 밴드의 진실원이라 밴드가 바뀌면
+#     0줄로 따라온다(ForageSpawns.is_deep_gated를 들여온 R4와 같은 규율).
 static func pool_excluded(id: String) -> bool:
-	return POOL_EXCLUDE.has(id) or ForageSpawns.is_deep_gated(id)
+	return POOL_EXCLUDE.has(id) or ForageSpawns.is_deep_gated(id) or MineFloors.is_depth_gated(id)
 
 # ── 달력(day만 아는 순수 파생 — SeasonalEvent.event_for_day와 같은 결) ──────────
 # 오늘 보부상이 서는가. day는 1부터(0·음수는 false — 손상 방어).

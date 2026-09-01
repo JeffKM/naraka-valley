@@ -16742,6 +16742,19 @@ func _relic_sellable(id: String) -> bool:
 	return ItemCatalog.category_of(id) == ItemCatalog.CAT_RELIC \
 		and museum != null and museum.is_donated(id)
 
+# ★[폴리시 R9] 결정기 부품·결정기 — **카탈로그가 "출하했을 때의 값"이라 선언한 물건**이다
+# (item_catalog.gd MINE_DEVICES 머리말: "둘 다 비매라 상점에 안 서고, 출하했을 때의 값만 갖는다").
+# 그 선언을 실제로 받는 창구가 코드에 한 곳도 없었다: `category_of`가 부품을 CAT_MATERIAL·결정기를
+# CAT_PLACEABLE로 떨어뜨리는데 출하 술어는 CAT_HARVEST ∪ Codex 추적 ∪ 중복 유품뿐이고, `Codex`의
+# 광물 칸은 `ItemCatalog.MINERALS`만 보므로 별 dict인 MINE_DEVICES는 추적 대상이 아니다. 생선가게
+# 환전은 어패류만 받고 매대는 전부 판매 전용이라, 팬닝이 흔하게 흘리는(weight 55) 부품의 잉여분은
+# 120냥으로 표기된 채 **유일한 처분 경로가 휴지통**이었다 — R8이 중복 유품에서 봉합한 "카탈로그가
+# 값을 매긴 물건에 판매 창구가 0"과 같은 클래스라 답도 같다(출하함으로 판다).
+# ★ 설치물 일반을 여는 게 아니다: 스프링클러·상자 같은 PLACEABLES는 여전히 거절된다. 여기 실린
+#   둘만 카탈로그가 명시적으로 "출하값"을 선언했고, `value_of`도 이미 그 값을 돌려준다(1018행).
+func _mine_device_sellable(id: String) -> bool:
+	return ItemCatalog._is_mine_device(id)
+
 func _on_frame_deposit(slot_index: int) -> void:
 	var id := inventory.id_at(slot_index)
 	# ★[S10-T6] 출하 가능 판정이 "수확물" 하나에서 **수확물 ∪ 명부 도감 추적 대상**으로 넓어졌다.
@@ -16757,8 +16770,10 @@ func _on_frame_deposit(slot_index: int) -> void:
 	#   물건의 유일한 처분 경로가 휴지통뿐이었고, 갱도 지오드 표에도 유품이 섞이는 후반에는 중복분이
 	#   백팩 칸만 계속 먹었다. ADR-0021의 "판매 = 출하대 단일 창구"와 카탈로그의 "판매 가능"을 같이
 	#   지키면 답이 하나로 떨어진다 — 중복 유품은 출하함으로 판다.
+	# ★[폴리시 R9] 결정기 부품·결정기(`_mine_device_sellable`)가 넷째 갈래로 합류했다 — 사유는
+	#   유품과 정확히 같다(카탈로그가 값을 선언했는데 그 값을 받는 창구가 0). 술어 참조.
 	if id == "" or not (ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST
-			or Codex.is_tracked(id) or _relic_sellable(id)):
+			or Codex.is_tracked(id) or _relic_sellable(id) or _mine_device_sellable(id)):
 		return   # 출하 대상 밖(씨앗·도구·비료·자재·미기증 유품·책)은 무동작
 	var n := inventory.count_at(slot_index)
 	var q := inventory.quality_at(slot_index)   # ★ S1-6 이 슬롯의 등급을 함께 출하(worst-first 오염 방지 = 슬롯 지정 제거)
