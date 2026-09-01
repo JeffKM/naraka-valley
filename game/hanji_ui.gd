@@ -122,12 +122,46 @@ static func draw_text_fit(ci: CanvasItem, pos: Vector2, text: String, size: int,
 		s -= 1
 	draw_text(ci, pos, elide(text, s, max_w), s, color, max_w)
 
-# 목적격 조사 — 받침 있으면 "을", 없으면 "를"(한글이 아니면 "를"로 떨어진다).
-# ★ 확인 문구가 "%s 을(를)"처럼 이름 뒤 공백 + 병기로 떠 있던 걸 대신한다.
-static func josa_eul(word: String) -> String:
+# ── 한글 조사 — 앞말의 받침에 따라 갈리는 짝(을/를 · 이/가 · 은/는 · 과/와) ──
+# 왜 한 곳에 모으나: 알림·프롬프트 문구는 대부분 `%s` 자리에 **런타임 이름**(아이템·수종·산출물·
+# 사람)을 끼우는데, 그 이름의 받침은 문자열을 적는 쪽이 알 수 없다. 그래서 문구마다 조사를 고정해
+# 두면 다른 이름이 들어오는 순간 틀리고("넋알돌를 깼다"·"명동 광석가 모자라다"), 병기로 피하면
+# 문장이 딱딱해진다("%s 을(를)"). 판정은 여기 한 곳에만 둔다.
+#
+# 받침 판정 = 한글 음절의 (코드포인트 − 0xAC00) % 28 (0 = 받침 없음).
+# ★ 한글이 아닌 끝글자(영문·숫자·기호)는 **받침 없는 쪽**으로 떨어진다 — 병기("을(를)")로 물러서지
+#   않는 것이 이 헬퍼를 세운 이유고, 지금 카탈로그의 표시명은 전부 한글이라 실효 분기도 아니다.
+static func _has_batchim(word: String) -> bool:
 	if word.is_empty():
-		return "를"
+		return false
 	var cp := word.unicode_at(word.length() - 1)
 	if cp < 0xAC00 or cp > 0xD7A3:
-		return "를"
-	return "를" if (cp - 0xAC00) % 28 == 0 else "을"
+		return false
+	return (cp - 0xAC00) % 28 != 0
+
+# 조사만 — 이름과 조사를 따로 그려야 하는 자리(inv_frame 확인 문구)가 쓴다.
+static func josa_eul(word: String) -> String:
+	return "을" if _has_batchim(word) else "를"
+
+static func josa_i(word: String) -> String:
+	return "이" if _has_batchim(word) else "가"
+
+static func josa_eun(word: String) -> String:
+	return "은" if _has_batchim(word) else "는"
+
+static func josa_gwa(word: String) -> String:
+	return "과" if _has_batchim(word) else "와"
+
+# 이름 + 조사 — 문구 대부분이 쓰는 형태다. `"%s를 깼다" % name`을 `"%s 깼다" % with_eul(name)`으로
+# 바꾸면 서식 인자 수가 그대로라(조사용 %s를 새로 끼우지 않는다) 호출부가 한 글자만 움직인다.
+static func with_eul(word: String) -> String:
+	return word + josa_eul(word)
+
+static func with_i(word: String) -> String:
+	return word + josa_i(word)
+
+static func with_eun(word: String) -> String:
+	return word + josa_eun(word)
+
+static func with_gwa(word: String) -> String:
+	return word + josa_gwa(word)

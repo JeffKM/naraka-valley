@@ -4375,11 +4375,11 @@ func _chop_tree(t: Vector2i) -> void:
 	var large := String(res.get("large", ""))
 	if large != "" and bool(res.get("felled", false)):
 		# ★[S4-T4] 큰 통나무는 영영 치워진다(재생성 없음 = 심층 개방) / 큰 그루터기는 밤에 되돌아온다.
-		_notice("%s를 치웠다 — %s" % [TreeLedger.large_name(large),
+		_notice("%s 치웠다 — %s" % [HanjiUi.with_eul(TreeLedger.large_name(large)),
 			"밤이 지나면 다시 자리를 잡는다" if TreeLedger.respawns_large(large) else "길이 열렸다"])
 	elif bool(res.get("felled", false)) and not bool(res.get("cleared", false)):
-		_notice("%s를 쓰러뜨렸다 — 그루터기는 도끼로 마저 치울 수 있다"
-			% TreeLedger.species_name(String(res.get("species", ""))))
+		_notice("%s 쓰러뜨렸다 — 그루터기는 도끼로 마저 치울 수 있다"
+			% HanjiUi.with_eul(TreeLedger.species_name(String(res.get("species", "")))))
 	_sync_tree_tile(t)                           # 숲: 슬롯이 비었으면 그 칸이 즉시 걸을 수 있게 된다
 	queue_redraw()
 
@@ -5565,7 +5565,7 @@ func _open_mine_chest() -> void:
 		# has_free_slot은 보수적이다(스택 가능한 물건이면 자리 없이도 들어갈 수 있지만, 지금 값 0
 		# 보상은 스택 불가 열쇠뿐이라 정확하다 — 틀리는 쪽이 늘 "비우고 오자"라 안전하다).
 		if not inventory.has_free_slot():
-			_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(rid))
+			_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(ItemCatalog.name_of(rid)))
 			return
 	if not mine_floors.open_chest(floor_no):
 		return                                        # 이미 열린 상자(경합 방어 — 판정·기록이 한 걸음)
@@ -5630,7 +5630,7 @@ func _pick_mine_shimmer(t: Vector2i) -> void:
 	if id == "" or inventory == null:
 		return
 	if not inventory.add_item(id, 1):
-		_notice("백팩이 가득 차 %s 를 줍지 못했다" % ItemCatalog.name_of(id))
+		_notice("백팩이 가득 차 %s 줍지 못했다" % HanjiUi.with_eul(ItemCatalog.name_of(id)))
 		return
 	mine_floors.mark_picked(_mine_floor, t)
 	_toast_item(id, 1)
@@ -5961,7 +5961,7 @@ func _descend_narak(to_depth: int, fall_floors: int = 0) -> void:
 	_warp_in_region(layout["entrance"])
 	var gate := NarakFloors.boss_at(to_depth)
 	if gate != "":
-		_notice("나락 %d층 — 관문. %s이(가) 길을 막는다" % [to_depth, MobCatalog.name_of(gate)], FLAVOR_SECS)
+		_notice("나락 %d층 — 관문. %s 길을 막는다" % [to_depth, HanjiUi.with_i(MobCatalog.name_of(gate))], FLAVOR_SECS)
 	else:
 		_notice("나락 %d층" % to_depth)
 
@@ -6144,7 +6144,7 @@ func _drink_potion(item: String) -> void:
 	if heal <= 0:
 		return
 	if health.current >= health.maximum:
-		_notice("체력이 가득하다 — %s 는 아껴 두자" % ItemCatalog.name_of(item))
+		_notice("체력이 가득하다 — %s 아껴 두자" % HanjiUi.with_eun(ItemCatalog.name_of(item)))
 		return
 	if not inventory.remove_item(item, 1):
 		return
@@ -6168,7 +6168,7 @@ func _eat_side_dish(item: String) -> void:
 	if amount <= 0:
 		return
 	if energy.current >= SoulEnergy.MAX:
-		_notice("혼력이 가득하다 — %s 는 아껴 두자" % MenuCatalog.name_of(item))
+		_notice("혼력이 가득하다 — %s 아껴 두자" % HanjiUi.with_eun(MenuCatalog.name_of(item)))
 		return
 	if not inventory.remove_item(item, 1):
 		return
@@ -6578,7 +6578,7 @@ func _on_mob_killed(mob: Mob, spawn_index: int) -> void:
 			full = true
 	if full:
 		_notice("백팩이 가득 차 잡귀가 남긴 것을 다 담지 못했다")
-	_notice("%s을(를) 물리쳤다" % MobCatalog.name_of(mob.kind))
+	_notice("%s 물리쳤다" % HanjiUi.with_eul(MobCatalog.name_of(mob.kind)))
 	audio.sfx("harvest")
 	if in_narak:
 		# ★[S5-T7] 관문 보스 격파 = 나락의 유일한 영구 마일스톤.
@@ -10014,16 +10014,16 @@ func _on_day_advanced(day: int) -> void:
 	if crystalarium != null:
 		var crystal_done: Array = crystalarium.advance_day()
 		if not crystal_done.is_empty():
-			_notice("결정기에서 %s이(가) 여물었다 — 들러서 꺼내자"
-				% ItemCatalog.name_of(String(crystal_done[0]["id"])))
+			_notice("결정기에서 %s 여물었다 — 들러서 꺼내자"
+				% HanjiUi.with_i(ItemCatalog.name_of(String(crystal_done[0]["id"]))))
 	# ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 밤 결실 — 절기 창(피안 15~18 / 망연 8~11) 안에서만 덤불당
 	#   20% 결정 롤로 열매가 달린다. 창을 벗어나면 롤이 없고 남은 열매도 진다(채집물 절기 전환과 같은 결).
 	#   절기 판정은 clock의 기존 파생을 그대로 쓴다 — 신규 시스템 0(ADR-0062 결정 9 마지막 줄).
 	if berry_bushes != null:
 		var berry_day := berry_bushes.advance_day(day, bush_map())
 		if not berry_day["berried"].is_empty():
-			_notice("숲 덤불에 %s가 달렸다 — 덤불을 [F]로 흔들어 보자"
-				% ItemCatalog.name_of(String(berry_day["item"])))
+			_notice("숲 덤불에 %s 달렸다 — 덤불을 [F]로 흔들어 보자"
+				% HanjiUi.with_i(ItemCatalog.name_of(String(berry_day["item"]))))
 	# ★[S4-T3 / ADR-0062 결정 3] 나무 원장 하루 — ①미성숙목 20% 한 단계 성장 ②숲 빈 슬롯 20% stage3
 	#   재출현 ③안식 성숙목 15% 반경 3칸 자체 파종. "코지 재성장"(ADR-0033)의 실수치라 민둥산이 안 남는다.
 	#   숲 재출현은 그 칸의 통행이 다시 막히는 것이므로 현재 구역이면 그리드를 즉시 동기화한다.
@@ -10342,7 +10342,7 @@ func _try_derby_exchange() -> void:
 	match kind:
 		"fert":
 			if inventory == null or not inventory.add_item(rid, n):
-				_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % FertilizerCatalog.name_of(rid))
+				_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(FertilizerCatalog.name_of(rid)))
 				return
 			_toast_item(rid, n)
 			label = "%s ×%d" % [FertilizerCatalog.name_of(rid), n]
@@ -10537,7 +10537,7 @@ func _try_buy_market_item(id: String) -> bool:
 		_notice("야시장은 파했다 — 매대는 성야절 그 하루뿐이다")
 		return false
 	if seasonal_event.has_bought(id):
-		_notice("%s 은(는) 이미 샀다" % ItemCatalog.name_of(id))
+		_notice("%s 이미 샀다" % HanjiUi.with_eun(ItemCatalog.name_of(id)))
 		return false
 	var price := SeasonalEvent.market_price(SeasonalEvent.MARKET_RARECROW_PRICE)
 	if wallet.gold < price:
@@ -10545,7 +10545,7 @@ func _try_buy_market_item(id: String) -> bool:
 		return false
 	# ★ 적재 먼저·결제 나중 — 백팩이 가득이면 **엽전이 안 나간다**(더비 교환의 그 순서 규율 1:1).
 	if not inventory.add_item(id, 1):
-		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(id))
+		_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(ItemCatalog.name_of(id)))
 		return false
 	if not wallet.spend(price):
 		inventory.remove_item(id, 1)   # 방어(위 검사와 이중) — 결제 실패면 물건도 도로 뺀다
@@ -10553,7 +10553,7 @@ func _try_buy_market_item(id: String) -> bool:
 	seasonal_event.record_bought(id)
 	_toast_item(id, 1)
 	audio.sfx("ui")
-	_notice("야시장 한정 — %s 를 손에 넣었다 −%d냥" % [ItemCatalog.name_of(id), price])
+	_notice("야시장 한정 — %s 손에 넣었다 −%d냥" % [HanjiUi.with_eul(ItemCatalog.name_of(id)), price])
 	return true
 
 # 씨앗 소매 — 스택 소모품이라 대량 구매(Shift)를 그대로 받는다(만물상 씨앗 결).
@@ -10686,14 +10686,14 @@ func _try_buy_peddler_rare(id: String) -> bool:
 	if peddler == null or inventory == null or clock == null or not ItemCatalog.has_item(id):
 		return false
 	if peddler.has_bought(id):
-		_notice("%s 은(는) 이미 샀다" % ItemCatalog.name_of(id))
+		_notice("%s 이미 샀다" % HanjiUi.with_eun(ItemCatalog.name_of(id)))
 		return false
 	var price := _peddler_price(id)
 	if price <= 0 or wallet.gold < price:
 		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [ItemCatalog.name_of(id), price, wallet.gold])
 		return false
 	if not inventory.add_item(id, 1):
-		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(id))
+		_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(ItemCatalog.name_of(id)))
 		return false
 	if not wallet.spend(price):
 		inventory.remove_item(id, 1)   # 방어(위 검사와 이중) — 결제 실패면 물건도 도로 뺀다
@@ -10702,7 +10702,7 @@ func _try_buy_peddler_rare(id: String) -> bool:
 	peddler.record_rare(clock.day, id)   # ★ 하루 한 점 — 희귀 슬롯 잠금(즉시 재충전 차단)
 	_toast_item(id, 1)
 	audio.sfx("ui")
-	_notice("보부상의 봇짐에서 %s 를 찾아냈다 −%d냥" % [ItemCatalog.name_of(id), price])
+	_notice("보부상의 봇짐에서 %s 찾아냈다 −%d냥" % [HanjiUi.with_eul(ItemCatalog.name_of(id)), price])
 	return true
 
 # 책·노트 구매([ADR-0034] "여행 상인 흡수"의 이행 — Books 미보유분 저확률 입수처).
@@ -10715,14 +10715,14 @@ func _try_buy_peddler_book(id: String) -> bool:
 	if not Books.has_text(id):
 		return false
 	if books.has_acquired(id):
-		_notice("%s 은(는) 이미 되찾았다" % Books.title_of(id))
+		_notice("%s 이미 되찾았다" % HanjiUi.with_eun(Books.title_of(id)))
 		return false
 	var price := _peddler_price(id)
 	if price <= 0 or wallet.gold < price:
 		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [Books.title_of(id), price, wallet.gold])
 		return false
 	if not inventory.add_item(id, 1):
-		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % Books.title_of(id))
+		_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(Books.title_of(id)))
 		return false
 	if not wallet.spend(price):
 		inventory.remove_item(id, 1)
@@ -10733,9 +10733,9 @@ func _try_buy_peddler_book(id: String) -> bool:
 	peddler.record_rare(clock.day, id)
 	_toast_item(id, 1)
 	audio.sfx("ui")
-	_notice("%s — %s을(를) 되찾았다 (수집 %d/%d)" % [
+	_notice("%s — %s 되찾았다 (수집 %d/%d)" % [
 		"[옥자의 잃어버린 책]" if Books.is_book(id) else "[비밀 노트]",
-		Books.title_of(id), books.acquired_count(), Books.all_ids().size()])
+		HanjiUi.with_eul(Books.title_of(id)), books.acquired_count(), Books.all_ids().size()])
 	return true
 
 # 씨앗 소매 — 스택 소모품이라 대량 구매(Shift)를 그대로 받는다. 골드 닿는 데까지 부분 구매
@@ -13117,7 +13117,7 @@ func _process(delta: float) -> void:
 			interact_prompt.text = "[F] 보상 상자를 연다"
 		elif _mine_shimmer_at(here_t) != "":
 			# ★[S5-T8] 바닥 반짝이 — 혼력 0이라 비용을 안 적는다(적을 게 없는 게 이 동사의 특징이다).
-			interact_prompt.text = "[F] %s 을(를) 줍는다" % ItemCatalog.name_of(_mine_shimmer_at(here_t))
+			interact_prompt.text = "[F] %s 줍는다" % HanjiUi.with_eul(ItemCatalog.name_of(_mine_shimmer_at(here_t)))
 		elif _is_mine_ladder(here_t):
 			interact_prompt.text = "[F] 아래층으로" if _mine_floor < MineFloors.MAX_FLOOR else _mine_bottom_line()
 		elif _is_mine_entrance(here_t):
@@ -14089,15 +14089,15 @@ func _finish_fishing() -> void:
 		#   종전엔 반환값을 안 봐서, 물고기는 어디에도 없는데 토스트·"낚았다!"·XP·더비 태그·인양·
 		#   Books·반딧넋 롤이 전부 돌았다(화면이 통째로 거짓말). 낚이지 않은 것으로 친다.
 		if not inventory.add_item(fish_id, 1, quality):
-			_notice("%s를 끌어올렸지만 백팩이 가득 차 놓쳐 버렸다 — 자리를 비우고 다시"
-				% ItemCatalog.name_of(fish_id))
+			_notice("%s 끌어올렸지만 백팩이 가득 차 놓쳐 버렸다 — 자리를 비우고 다시"
+				% HanjiUi.with_eul(ItemCatalog.name_of(fish_id)))
 			audio.sfx("ui")
 			queue_redraw()
 			return
 		_toast_item(fish_id, 1)
-		_notice("%s%s 를 낚았다!%s" % [
+		_notice("%s%s 낚았다!%s" % [
 			"" if quality <= ItemCatalog.Q_NORMAL else "[%s] " % ItemCatalog.quality_name(quality),
-			ItemCatalog.name_of(fish_id),
+			HanjiUi.with_eul(ItemCatalog.name_of(fish_id)),
 			"" if perfects == 0 else " 퍼펙트 릴 ×%d" % perfects])
 		audio.sfx("harvest")
 		# ★[S3-T6] 포획 XP(체급 비례 + 퍼펙트 보너스) — 레벨업 알림은 헬퍼가 띄운다.
@@ -14292,8 +14292,8 @@ func _place_sprinkler(t: Vector2i, item_id: String = ItemCatalog.SPRINKLER) -> v
 	if sprinkler.place(t, tier):
 		inventory.remove_item(item_id, 1)
 		audio.sfx("ui")
-		_notice("%s를 설치했다 — 아침마다 %d칸을 자동으로 적신다"
-			% [ItemCatalog.name_of(item_id), Sprinkler.range_size(tier)])
+		_notice("%s 설치했다 — 아침마다 %d칸을 자동으로 적신다"
+			% [HanjiUi.with_eul(ItemCatalog.name_of(item_id)), Sprinkler.range_size(tier)])
 		queue_redraw()
 
 # 조준 칸의 스프링클러를 회수한다(아이템 1개 인벤토리 반환 — 허수아비 재회수 동형). 없으면 무동작.
@@ -14308,13 +14308,13 @@ func _remove_sprinkler(t: Vector2i) -> void:
 	if item_id == "":
 		return
 	if not inventory.add_item(item_id, 1):
-		_notice("백팩이 가득 차 %s를 회수할 수 없다 — 자리를 비우고 다시" % ItemCatalog.name_of(item_id))
+		_notice("백팩이 가득 차 %s 회수할 수 없다 — 자리를 비우고 다시" % HanjiUi.with_eul(ItemCatalog.name_of(item_id)))
 		return
 	if not sprinkler.remove(t):
 		inventory.remove_item(item_id, 1)   # 원장이 거절 → 방금 넣은 것을 되돈다(무해)
 		return
 	audio.sfx("ui")
-	_notice("%s를 회수했다" % ItemCatalog.name_of(item_id))
+	_notice("%s 회수했다" % HanjiUi.with_eul(ItemCatalog.name_of(item_id)))
 	queue_redraw()
 
 # ── ★[S10-T5 / ADR-0069 결정 8] 화분 배치/회수 ────────────────────────────────
@@ -14398,8 +14398,8 @@ func _place_rarecrow(t: Vector2i, item_id: String) -> void:
 	if rarecrow.place(t, item_id):
 		inventory.remove_item(item_id, 1)
 		audio.sfx("ui")
-		_notice("%s를 세웠다 — 반경 %d칸의 작물을 까마귀에게서 지킨다"
-			% [ItemCatalog.name_of(item_id), _scarecrow_radius()])
+		_notice("%s 세웠다 — 반경 %d칸의 작물을 까마귀에게서 지킨다"
+			% [HanjiUi.with_eul(ItemCatalog.name_of(item_id)), _scarecrow_radius()])
 		queue_redraw()
 
 # 조준 칸의 레어크로우를 거둔다(그 종 그대로 인벤토리 반환). 없으면 무동작.
@@ -14412,13 +14412,13 @@ func _remove_rarecrow(t: Vector2i) -> void:
 	if id == "":
 		return
 	if not inventory.add_item(id, 1):
-		_notice("백팩이 가득 차 %s를 거둘 수 없다 — 자리를 비우고 다시" % ItemCatalog.name_of(id))
+		_notice("백팩이 가득 차 %s 거둘 수 없다 — 자리를 비우고 다시" % HanjiUi.with_eul(ItemCatalog.name_of(id)))
 		return
 	if rarecrow.remove(t) == "":
 		inventory.remove_item(id, 1)   # 원장이 거절 → 방금 넣은 것을 되돈다(무해)
 		return
 	audio.sfx("ui")
-	_notice("%s를 거뒀다" % ItemCatalog.name_of(id))
+	_notice("%s 거뒀다" % HanjiUi.with_eul(ItemCatalog.name_of(id)))
 	queue_redraw()
 
 # ── ★[S10-T2 / ADR-0069 결정 4] 레어크로우 수집 진척(원장 없는 파생) ──────────────
@@ -14521,7 +14521,7 @@ func _use_crab_pot(t: Vector2i) -> void:
 		crab_pot.collect(_region, t)
 		_toast_item(got, 1)
 		audio.sfx("harvest")
-		_notice("게잡이통에서 %s 를 거뒀다" % ItemCatalog.name_of(got))
+		_notice("게잡이통에서 %s 거뒀다" % HanjiUi.with_eul(ItemCatalog.name_of(got)))
 		queue_redraw()
 		return
 	# ② 미끼 장전 — 일반 미끼 1개 소모(미끼장인이면 이 단계 자체가 없다).
@@ -14581,9 +14581,9 @@ func _place_tapper(t: Vector2i) -> void:
 	if tapper.place(_region, t, species, forage_tap_cycle_cut()):
 		inventory.remove_item(ItemCatalog.TAPPER, 1)
 		audio.sfx("ui")
-		_notice("%s에 수액 채취기를 박았다 — %d일 뒤 %s가 고인다" % [
+		_notice("%s에 수액 채취기를 박았다 — %d일 뒤 %s 고인다" % [
 			TreeLedger.species_name(species), tapper.days_left(_region, t),
-			ItemCatalog.name_of(TapperLedger.product_for(species))])
+			HanjiUi.with_i(ItemCatalog.name_of(TapperLedger.product_for(species)))])
 		queue_redraw()
 
 # 수액 채취기 [F] 상호작용 — 게잡이통과 같은 "상태 하나에 동사 하나" 사다리(미끼 단계만 없다).
@@ -14725,20 +14725,20 @@ func _load_furnace(t: Vector2i, ore_id: String) -> void:
 	var need_ore := FurnaceLedger.ORE_PER_BATCH
 	var need_fuel := FurnaceLedger.FUEL_PER_BATCH
 	if inventory.count_of(ore_id) < need_ore:
-		_notice("%s가 모자라다 — %d개 필요(보유 %d개)" % [ItemCatalog.name_of(ore_id), need_ore,
+		_notice("%s 모자라다 — %d개 필요(보유 %d개)" % [HanjiUi.with_i(ItemCatalog.name_of(ore_id)), need_ore,
 			inventory.count_of(ore_id)])
 		return
 	if inventory.count_of(FurnaceLedger.FUEL_ITEM) < need_fuel:
-		_notice("%s이 없다 — 제련에는 %d개가 든다" % [ItemCatalog.name_of(FurnaceLedger.FUEL_ITEM), need_fuel])
+		_notice("%s 없다 — 제련에는 %d개가 든다" % [HanjiUi.with_i(ItemCatalog.name_of(FurnaceLedger.FUEL_ITEM)), need_fuel])
 		return
 	if not furnace.load_ore(_region, t, ore_id, smelt_time_cut(), smelt_quality_step()):
 		return
 	inventory.remove_item(ore_id, need_ore)
 	inventory.remove_item(FurnaceLedger.FUEL_ITEM, need_fuel)
 	audio.sfx("ui")
-	_notice("업화로에 %s %d개를 넣었다 — %s 뒤에 %s가 나온다" % [ItemCatalog.name_of(ore_id), need_ore,
+	_notice("업화로에 %s %d개를 넣었다 — %s 뒤에 %s 나온다" % [ItemCatalog.name_of(ore_id), need_ore,
 		_minutes_text(furnace.minutes_left(_region, t)),
-		ItemCatalog.name_of(FurnaceLedger.ingot_for(ore_id))])
+		HanjiUi.with_i(ItemCatalog.name_of(FurnaceLedger.ingot_for(ore_id)))])
 	queue_redraw()
 
 # 업화로 프롬프트 — 상태별 한 줄(_use_furnace의 사다리와 같은 순서).
@@ -15051,14 +15051,14 @@ func _try_buy_trial_item(buy_id: String) -> void:
 			ItemCatalog.name_of(buy_id), price, trial.tokens])
 		return
 	if not inventory.add_item(buy_id, 1):
-		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(buy_id))
+		_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(ItemCatalog.name_of(buy_id)))
 		return
 	if trial.spend(buy_id) <= 0:
 		inventory.remove_item(buy_id, 1)   # 방어(위 검사와 이중) — 결제 실패면 물건도 도로 뺀다
 		return
 	_toast_item(buy_id, 1)
 	audio.sfx("ui")
-	_notice("시련패로 %s 를 바꿨다 −%d패" % [ItemCatalog.name_of(buy_id), price])
+	_notice("시련패로 %s 바꿨다 −%d패" % [HanjiUi.with_eul(ItemCatalog.name_of(buy_id)), price])
 
 # 가구 세트 — 해금 진실원은 **home_deco 한 곳**이다(야시장·목공방·보부상이 지키는 그 규율).
 func _try_buy_trial_deco(set_id: String) -> void:
@@ -15226,8 +15226,8 @@ func _use_crystalarium(t: Vector2i) -> void:
 			return
 		inventory.remove_item(held, 1)
 		audio.sfx("ui")
-		_notice("%s을(를) 결정기에 넣었다 — %d일 뒤에 하나가 여문다"
-			% [ItemCatalog.name_of(held), crystalarium.days_left(_region, t)])
+		_notice("%s 결정기에 넣었다 — %d일 뒤에 하나가 여문다"
+			% [HanjiUi.with_eul(ItemCatalog.name_of(held)), crystalarium.days_left(_region, t)])
 		queue_redraw()
 		return
 	# ⚠️ ㉢ 앞의 안전 갈래 — **복제 불가 보석을 들고 있으면 회수로 흘리지 않는다**. 플레이어가 한 일은
@@ -15601,7 +15601,7 @@ func _on_frame_craft(recipe_id: String) -> void:
 	#   ★재료 롤백이 아니라 선적재를 고른 이유: 되돌려 담는 add_item은 등급을 못 싣는다(주괴 재료가
 	#   금→일반으로 깎인다). 되돌릴 일을 아예 안 만드는 쪽이 값을 잃지 않는다.
 	if not inventory.add_item(String(r["out_item"]), int(r["out_count"])):
-		_notice("백팩이 가득 차 %s 를 만들지 못했다 — 자리를 비우고 다시" % String(r["name_ko"]))
+		_notice("백팩이 가득 차 %s 만들지 못했다 — 자리를 비우고 다시" % HanjiUi.with_eul(String(r["name_ko"])))
 		return
 	for m in r["mats"]:
 		inventory.remove_item(String(m["item"]), int(m["count"]))
@@ -16269,21 +16269,21 @@ func _try_buy_rarecrow(id: String) -> bool:
 	if inventory == null or not ItemCatalog.is_rarecrow(id):
 		return false
 	if _rarecrow_owned(id):
-		_notice("%s 은(는) 이미 가지고 있다" % ItemCatalog.name_of(id))
+		_notice("%s 이미 가지고 있다" % HanjiUi.with_eun(ItemCatalog.name_of(id)))
 		return false
 	var price := StoreDiscount.price(ItemCatalog.RARECROW_STORE_PRICE, neo_affinity.hearts())
 	if wallet.gold < price:
 		_notice("냥이 모자라다 — %s %d냥 (보유 %d냥)" % [ItemCatalog.name_of(id), price, wallet.gold])
 		return false
 	if not inventory.add_item(id, 1):
-		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % ItemCatalog.name_of(id))
+		_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(ItemCatalog.name_of(id)))
 		return false
 	if not wallet.spend(price):
 		inventory.remove_item(id, 1)   # 방어(위 검사와 이중) — 결제 실패면 물건도 도로 뺀다
 		return false
 	_toast_item(id, 1)
 	audio.sfx("ui")
-	_notice("만물상에서 %s 를 샀다 −%d냥 (수집 %d/%d)" % [ItemCatalog.name_of(id), price,
+	_notice("만물상에서 %s 샀다 −%d냥 (수집 %d/%d)" % [HanjiUi.with_eul(ItemCatalog.name_of(id)), price,
 		_rarecrow_collected(), ItemCatalog.RARECROWS.size()])
 	return true
 
@@ -16344,7 +16344,7 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 			#   지워 효과가 0 = 돈만 버리는 함정). 미끼만 스택 소모품이라 대량 구매를 받는다.
 			if not GearCatalog.is_bait(buy_id):
 				if inventory.has_item(buy_id):
-					_notice("%s 는 이미 가지고 있다" % label)
+					_notice("%s 이미 가지고 있다" % HanjiUi.with_eun(label))
 					return
 				n = 1
 		"pot":
@@ -16376,7 +16376,7 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 			# ★유니크 = 각 1자루(스택 불가 장착물 — 낚싯대·태클 규약 1:1). 증정품 녹슨 혼검은
 			#   price 0이라 아래 `base <= 0` 가드에 걸려 애초에 살 수 없다.
 			if inventory.has_item(buy_id):
-				_notice("%s 은(는) 이미 가지고 있다" % label)
+				_notice("%s 이미 가지고 있다" % HanjiUi.with_eun(label))
 				return
 			n = 1
 		"potion":
@@ -16440,7 +16440,7 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 			break
 		bought += 1
 	if bought == 0:
-		_notice("가방을 비우고 오자 — %s 를 받을 자리가 없다" % label if full
+		_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(label) if full
 			else "골드 부족(%d 필요)" % unit)
 		return
 	audio.sfx("ui")                           # 매대 거래 블립
@@ -16631,7 +16631,7 @@ func _try_upgrade_tool(tool_id: String) -> bool:
 	inventory.remove_item(ingot, need)
 	tool_tier.upgrade(tool_id)
 	audio.sfx("ui")
-	_notice("풀무가 %s를 벼렸다 — %s" % [String(nxt["name"]), _tier_effect_text(tool_id, int(nxt["tier"]))])
+	_notice("풀무가 %s 벼렸다 — %s" % [HanjiUi.with_eul(String(nxt["name"])), _tier_effect_text(tool_id, int(nxt["tier"]))])
 	return true
 
 # 벼린 직후 "무엇이 달라졌나" 한 줄(도구별 효과 축이 달라 안내도 갈린다 — ADR-0027 차원 분리를
@@ -16691,7 +16691,7 @@ func _try_open_geode() -> bool:
 	_geode_opened += 1                    # ★다음 개봉의 시드가 갈린다(재롤 차단)
 	_toast_item(id, n)
 	audio.sfx("harvest")
-	_notice("%s를 깼다 — %s ×%d" % [ItemCatalog.name_of(held), ItemCatalog.name_of(id), n])
+	_notice("%s 깼다 — %s ×%d" % [HanjiUi.with_eul(ItemCatalog.name_of(held)), ItemCatalog.name_of(id), n])
 	queue_redraw()
 	return true
 
@@ -17171,7 +17171,7 @@ func _try_deliver_quest() -> void:
 	var need := int(q["count"])
 	var have := inventory.count_of(id)
 	if have < need:
-		_notice("납품 진행 %d/%d — %s가 더 필요하다" % [have, need, ItemCatalog.name_of(id)])
+		_notice("납품 진행 %d/%d — %s 더 필요하다" % [have, need, HanjiUi.with_i(ItemCatalog.name_of(id))])
 		return
 	var done := quest_board.complete(clock.day, have)
 	if done.is_empty():
@@ -17790,7 +17790,7 @@ func _try_order_build(project_id: String) -> bool:
 	# ★ 자재 검사는 **전부 차감 앞**에 모아 둔다 — 부분 결제 없음의 계약(함수 머리말)이라,
 	#   주괴가 모자란 걸 골드 차감 뒤에 알면 그 계약이 깨진다.
 	if ingot > 0 and have_ingot < ingot:
-		_notice("%s가 모자라다 — %d개 필요 (보유 %d개)" % [ItemCatalog.name_of(ingot_id),
+		_notice("%s 모자라다 — %d개 필요 (보유 %d개)" % [HanjiUi.with_i(ItemCatalog.name_of(ingot_id)),
 			ingot, have_ingot])
 		return false
 	if not wallet.spend(gold):
@@ -19292,7 +19292,7 @@ func _try_heart_promotion(r: Resident) -> PackedStringArray:
 	_gate_target = target               # ★[S9-T2] 성사된 칸 — 호출부가 컷신 훅에 넘긴다
 	var already_seen := _heart_bit_seen(r.id, target)
 	_mark_heart_bit(r.id, target)
-	_notice("%s와의 사이가 깊어졌다 ♡%d" % [r.display_name, target])
+	_notice("%s의 사이가 깊어졌다 ♡%d" % [HanjiUi.with_gwa(r.display_name), target])
 	_send_gate_letter(r, target)
 	if already_seen:
 		# 재구애(이혼 후 재도달) — 본 비트 재지급 없음(ADR-0022·ADR-0066 결정 10): 진급은 되지만
@@ -19782,8 +19782,8 @@ func _try_propose_okja() -> void:
 	#   같은 무게라 여기서 대신 해 주지 않는다 — 거절은 다른 가지와 같이 **무소모·무벌칙**이다.
 	if _romance_partner != "" and _romance_partner != OKJA_RID:
 		var cur := _resident(_romance_partner)
-		_notice("곁에 이미 %s가 있다 — 명부는 한 번에 두 이름만 받는다"
-			% (cur.display_name if cur != null else _romance_partner))
+		_notice("곁에 이미 %s 있다 — 명부는 한 번에 두 이름만 받는다"
+			% HanjiUi.with_i(cur.display_name if cur != null else _romance_partner))
 		return
 	if not _spine_bit_seen(SPINE_B6):
 		_notice("아직 아무것도 보지 못했다")     # 여기까지 올 수 없는 조합(부적의 전제) — 방어
@@ -20020,7 +20020,7 @@ func _resolve_confession(rid: String) -> void:
 	_mark_heart_bit(rid, Affinity.MAX_HEARTS)
 	_apply_jealousy(rid)
 	audio.sfx("ui")
-	_notice("%s와 연인이 되었다 ♡%d" % [r.display_name, Affinity.MAX_HEARTS])
+	_notice("%s 연인이 되었다 ♡%d" % [HanjiUi.with_gwa(r.display_name), Affinity.MAX_HEARTS])
 	dialogue.replace_lines(PackedStringArray() if already_seen else _confession_lines(r, true))
 
 # 고백 결과 대사 — 캐릭터 훅(confession_lines) 우선, 없으면 placeholder 1줄(관문 훅과 같은 이음매).
@@ -20223,7 +20223,7 @@ func _try_propose(r: Resident) -> void:
 		inventory.remove_item(ItemCatalog.OKJA_ELIXIR, 1)
 	_wedding_day = clock.day + WEDDING_WAIT_DAYS
 	audio.sfx("ui")
-	_notice("%s가 혼례 부적을 받아들였다 — %d일 아침, 혼례를 올린다" % [r.display_name, _wedding_day],
+	_notice("%s 혼례 부적을 받아들였다 — %d일 아침, 혼례를 올린다" % [HanjiUi.with_i(r.display_name), _wedding_day],
 		NOTICE_SECS * 2.0)
 
 # 혼례 아침 — 예정일에 닿으면 식을 올린다(아침 정산 훅). 간이 연출 = 배너 한 줄(등급은 S9).
@@ -20243,7 +20243,7 @@ func _advance_wedding(day: int) -> void:
 	audio.sfx("ui")
 	# ★[S8-T10] 끝의 " ♥"를 뗐다 — neodgm.ttf에 ♥ 글리프가 없어 두부(□)로 떴다(heart_bar.gd:4의
 	#   그 리스크). 이 배너에 그림 하트를 넣을 자리는 없고(알림 피드는 글자 한 줄), 문구만으로 충분하다.
-	_notice("혼례를 올렸다 — %s와 부부가 되었다" % (r.display_name if r != null else _spouse_id),
+	_notice("혼례를 올렸다 — %s 부부가 되었다" % HanjiUi.with_gwa(r.display_name if r != null else _spouse_id),
 		NOTICE_SECS * 3.0)
 	# ★[S9b-T8 / ADR-0068 결정 10] **궁극의 결혼 분기 = B7 해방.** 앵커와의 혼례 아침에만 선다 —
 	#   §6.4 "해방의 두 층" 중 ㉡(앵커의 해방)은 이 분기 한정이기 때문이다(㉠ 플레이어 자신의
@@ -20342,7 +20342,7 @@ func _do_divorce() -> void:
 	if r != null and r.affinity != null:
 		r.affinity.reset_hearts()
 	audio.sfx("ui")
-	_notice("부적의 혼이 풀렸다 — %s와의 혼인이 끝났다" % (r.display_name if r != null else rid),
+	_notice("부적의 혼이 풀렸다 — %s의 혼인이 끝났다" % HanjiUi.with_gwa(r.display_name if r != null else rid),
 		NOTICE_SECS * 2.0)
 	# 적대 없음의 한 줄 — 해방은 그대로라 떠나는 게 아니라 *제자리로 돌아간다*(카페 잔류).
 	# ★[S9-T1] 문구의 주인은 캐릭터다(divorce_lines 훅 — 없으면 공용 폴백).
@@ -20729,7 +20729,7 @@ func _try_resident_gift(r: Resident) -> void:
 		return
 	if not GiftPrefs.giftable(id):
 		# 도구·무기·낚싯대(든 것이 곧 동사)와 나락 열쇠(유일 입수 경로)는 건네지 않는다.
-		_notice("%s은 선물할 수 없다" % ItemCatalog.name_of(id))
+		_notice("%s 선물할 수 없다" % HanjiUi.with_eun(ItemCatalog.name_of(id)))
 		return
 	# ★[S8-T3 / ADR-0066 결정 3] 생일이면 주 2회 상한을 통과하고 점수가 ×8이 된다(하루 1회는 유지).
 	# ★[S8-T7 / ADR-0066 결정 8] 배우자는 주 2회가 **해제**된다(하루 1회 유지·배율 없음 — 매일
@@ -21695,9 +21695,9 @@ func _roll_book_drop(source: String, serial: int) -> void:
 	books.acquire(id, clock.day)
 	_toast_item(id, 1)
 	audio.sfx("ui")
-	_notice("%s — %s을(를) 되찾았다 (수집 %d/%d)" % [
+	_notice("%s — %s 되찾았다 (수집 %d/%d)" % [
 		"[옥자의 잃어버린 책]" if Books.is_book(id) else "[비밀 노트]",
-		Books.title_of(id), books.acquired_count(), Books.all_ids().size()])
+		HanjiUi.with_eul(Books.title_of(id)), books.acquired_count(), Books.all_ids().size()])
 	_read_book_now(id)
 
 # 인라인 즉독([ADR-0034] #5 — 혼백관 방문 게이트 기각의 이행). 주운 자리에서 그대로 펼쳐지고
