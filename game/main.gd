@@ -5819,7 +5819,12 @@ func _open_mine_chest() -> void:
 		var want := maxi(int(row.get("count", 1)), 1)
 		var taken := 0
 		# 유니크(스택 불가)는 이미 가지고 있으면 애초에 안 받는다 — 아래 골드 대체로 흘린다.
-		if not (not ItemCatalog.stackable_of(rid) and inventory.has_item(rid)):
+		# ★[폴리시 R8] 보유 판정은 **백팩 ∪ 집 상자 ∪ 갈무리방**(`_stored_anywhere`)이다. 상자는
+		#   종류 제한 없이 무기를 받으므로 백팩만 보면 "상자에 넣어 두면 안 가진 것"이 되어, 길드에서
+		#   산 명동검을 상자에 둔 채 10층 상자를 열면 세상에 하나뿐이어야 할 검이 **두 자루**가 되고
+		#   750냥 골드 대체가 통째로 불발됐다(chest.gd가 선언한 그 입구가 여기 그대로 남아 있었다).
+		#   같은 계열 판정은 길드 매대·기어 행이 이미 이 술어로 통일돼 있다.
+		if not (not ItemCatalog.stackable_of(rid) and _stored_anywhere(rid)):
 			for _i in want:
 				if not inventory.add_item(rid, 1):
 					break
@@ -5834,6 +5839,7 @@ func _open_mine_chest() -> void:
 			_narak_key_found = true
 	if gold_sum > 0:
 		wallet.earn(gold_sum)
+		_total_income += gold_sum             # ★[폴리시 R8] 누적 총수입(정보패널) — 출하 정산과 같은 결
 		got.append("%d골드" % gold_sum)
 	audio.sfx("ui")
 	_notice("%d층 보상 상자 — %s" % [floor_no, " · ".join(got) if not got.is_empty() else "비어 있다"])
@@ -6254,7 +6260,7 @@ func _spawn_narak_mobs() -> void:
 		if not MobCatalog.has(kind):
 			continue
 		_mobs.append(Mob.spawn(kind, spec["tile"],
-			hash("narak:%d:%d:%d" % [narak_floors.run_id(), _narak_depth, i])))
+			hash("narak:%d:%d:%d" % [narak_floors.run_id(), _narak_depth, i]), i))
 	_mobs_spawned = _mobs.size()
 
 # ★ 곡괭이로 나락 층의 돌 1타. `_mine_rock`과 문법이 같고 **꼬리 하나만 갈린다**: 사다리가 열릴 때
@@ -6528,8 +6534,10 @@ func _mobs_in_region() -> Array:
 		var m: Mob = _mobs[i]
 		if m == null or not m.is_alive():
 			continue
+		# ★[폴리시 R8] `index`는 **개체가 든 스폰 인덱스**다(배열 위치가 아니다 — 사체 청소가
+		#   배열을 압축하므로 위치는 처치마다 밀려 처치 시드가 중복 재사용됐다).
 		out.append({"tile": m.tile(), "kind": m.kind, "hp": m.hp, "xp": m.kill_xp(),
-			"index": i, "ref": m})
+			"index": m.spawn_index, "ref": m})
 	return out
 
 # 몹 하나를 때린다. 피해량은 순수 함수가 정하고(결정적 시드 = 스윙 카운터) 여기선 차감·사망 처리만 한다.
@@ -6700,7 +6708,7 @@ func _spawn_mine_mobs() -> void:
 		var kind := String(spec.get("kind", ""))
 		if not MobCatalog.has(kind):
 			continue
-		_mobs.append(Mob.spawn(kind, spec["tile"], hash("%d:%d:%d" % [clock.day, _mine_floor, i])))
+		_mobs.append(Mob.spawn(kind, spec["tile"], hash("%d:%d:%d" % [clock.day, _mine_floor, i]), i))
 	_mobs_spawned = _mobs.size()
 
 func _clear_mine_mobs() -> void:
@@ -15300,6 +15308,7 @@ func _pan_spot(t: Vector2i) -> bool:
 	energy.spend(cost)
 	if gold > 0:
 		wallet.earn(gold)
+		_total_income += gold                 # ★[폴리시 R8] 누적 총수입(정보패널) — 출하 정산과 같은 결
 		_notice("사금 한 줌을 건졌다 — %d냥" % gold)
 	if id != "" and n > 0 and inventory.add_item(id, n):
 		_toast_item(id, n)

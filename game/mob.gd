@@ -58,12 +58,19 @@ var dashing: bool = false      # 통통 — 지금 돌진 중인가
 var burst: Vector2 = Vector2.ZERO  # 돌진·배회 방향(정규화)
 var cool: float = 0.0          # 원거리 발사 쿨다운(초)
 var hurt: float = 0.0          # 피격 플래시 잔량(초 — 렌더 전용 관측값)
+# ★[폴리시 R8] **스폰 인덱스** — 이 층에서 몇 번째로 세워졌나(-1 = 미지정). 처치 드랍·처치 사다리
+#   시드가 이 값에서 나온다. 종전엔 main이 `_mobs` **배열 위치**를 시드로 넘겼는데, 틱 끝의 사체
+#   청소가 배열을 압축하므로 두 번째로 잡는 놈이 다시 0번이 됐다 — 같은 시드로 사다리·드랍을 다시
+#   굴려 "15% 독립 롤"이 층 단위 all-or-nothing이 되고 드랍이 글자 그대로 복제됐다. 개체가 제 번호를
+#   들고 있으면 청소가 몇 번 돌든 시드는 그 층에서 한 번 정해진 값 그대로다(6853~ 주석의 불변식).
+var spawn_index := -1
 var _rng := RandomNumberGenerator.new()
 
 # 스폰 — 종·타일·결정적 시드를 받아 개체를 세운다. 위치는 타일 중심이다.
-static func spawn(mob_kind: String, tile: Vector2i, seed_value: int) -> Mob:
+static func spawn(mob_kind: String, tile: Vector2i, seed_value: int, index: int = -1) -> Mob:
 	var m := Mob.new()
 	m.kind = mob_kind
+	m.spawn_index = index
 	m.home = tile
 	m.pos = Vector2(tile.x * TILE_PX + TILE_PX * 0.5, tile.y * TILE_PX + TILE_PX * 0.5)
 	m.hp = MobCatalog.max_hp(mob_kind)
