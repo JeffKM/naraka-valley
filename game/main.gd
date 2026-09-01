@@ -11344,12 +11344,13 @@ func _do_sleep() -> void:
 	#   **뒤**에 떨어지면 ㉠닫힌 밤 장부(`end_day`가 이미 0으로 리셋)에 매출이 오르고 ㉡어제가 더비였던
 	#   낚시 결과가 오늘 날짜로 판정되며 ㉢세션이 안 끝나면 다음 날 아침 HUD가 뜬 채 LMB(괭이질·물주기)가
 	#   통째로 막혔다. 세션은 원래 무대에 묶인 비영속 상태라(구역 전환·로드가 이미 버린다) 여기서도 버린다.
-	if cheki != null:
-		cheki = null
-		_clear_cheki_offer()
-	if cocktail != null:
-		cocktail = null
-		_clear_cocktail_offer()
+	# ★[폴리시 R6] 제안 창은 **세션 유무와 무관하게** 버린다. R3의 원래 형태는 `cheki != null`
+	#   안에 창 정리를 넣어 둬, 세션 없이 창만 열린 채 하루가 넘어가면 그 좌석·손님 표가 다음
+	#   날까지 살아남았다(로드 경로에서 실제 매출로 터진 그 둘째 갈래와 같은 뿌리).
+	cheki = null
+	_clear_cheki_offer()
+	cocktail = null
+	_clear_cocktail_offer()
 	fishing = null
 	_sleeping = true
 	clock.running = false
@@ -11553,6 +11554,17 @@ func _load_game() -> bool:
 	# ★ [S3-T2] 진행 중이던 릴 격투 세션은 로드에서 버린다(비영속 — 세이브에 낚시 키가 없는 것과 짝).
 	#   로드는 상태 하드 리셋이라, 옛 세션이 새 월드 위에 남아 있으면 안 된다.
 	fishing = null
+	# ★[폴리시 R6] **체키·칵테일도 같은 줄에 세운다.** 취침(`_do_sleep`)은 R3에서 세 세션을 나란히
+	#   접었는데 로드 경로만 그 짝이 빠져 있었다 — F9 분기(`_process`)에는 `cheki == null` 가드가
+	#   없고 세션 틱보다 **앞**이라, 촬영 중 로드하면 되감긴 장부 위에서 다음 프레임의 `_finish_cheki`가
+	#   `cafe.record_cheki` → `wallet.earn` → `_total_income` → `guests.record_cheki`를 그대로 얹었다
+	#   (존재한 적 없는 손님의 사진값·단골 가중치 적립). 제안 창도 함께 버린다: `_cheki_offered_at`은
+	#   세션 없이 `_cheki_offer_secs`·`_cheki_seat`만 보므로, 창만 열린 채 로드하면 **손님이 앉아
+	#   있지도 않은 좌석**에서 촬영이 열려 매출이 발행됐다(칵테일도 완전 대칭).
+	cheki = null
+	_clear_cheki_offer()
+	cocktail = null
+	_clear_cocktail_offer()
 	# ★[폴리시 R3] 갱도 진입 층 선택도 같은 이유로 1층에서 다시 시작한다. 이 값은 `_cycle_mine_entry`가
 	#   **해금된 엘리베이터 목록 안에서만** 돌리는데, 로드는 `mine_floors._depth`(=해금 파생)를 되감으므로
 	#   선택만 남으면 목록 밖 층을 가리킨다 — 소비처 `_descend_mine`은 is_valid_floor만 보므로 그대로
@@ -16280,10 +16292,16 @@ func _tree_prompt(t: Vector2i) -> String:
 func _farm_prompt() -> String:
 	# ★ [S1-5b] 혼의 나무 우선(밭 SOIL 판정과 무관 — 과수는 풋프린트 조준). 성숙+결실이면 수확 안내,
 	# 든 게 묘목이면 심기 안내(안식 농원 전용). _target_valid(SOIL) 게이트보다 먼저 본다.
+	# ★[폴리시 R6] 아래 네 자리의 혼력 판정은 **실행 게이트와 같은 비용**을 본다. 옛 무인자
+	#   `energy.can_act()`는 기본 COST_PER_ACTION(10)으로 물었는데 실행부는 숙련 감산 비용
+	#   (`_farming_energy_cost` = round(10 × FarmSkill.energy_factor))을 쓴다 — 농사 Lv2·잔량 9면
+	#   화면은 "혼력 부족 — 집에서 취침"인데 LMB는 그대로 먹혔다(하루 마지막 한 동작 구간에서
+	#   HUD가 막혔다고 거짓말한다). 오차는 늘 한 방향이라(cost ≤ 10) 프롬프트만 엄격했다.
+	var farm_cost := _farming_energy_cost()
 	if _region == RegionCatalog.HOME:
 		var anchor := orchard.tree_at(_target)
 		if orchard.has_tree(anchor):
-			if not energy.can_act():
+			if not energy.can_act(farm_cost):
 				return "혼력 부족 — 집에서 취침"
 			var n := orchard.fruit_count_of(anchor)
 			if orchard.is_mature(anchor, clock.day) and n > 0:
@@ -16293,7 +16311,7 @@ func _farm_prompt() -> String:
 		if ItemCatalog.category_of(held) == ItemCatalog.CAT_SAPLING:
 			var fruit := ItemCatalog.fruit_of(held)
 			if inventory.has_sapling(fruit):
-				if not energy.can_act():
+				if not energy.can_act(farm_cost):
 					return "혼력 부족 — 집에서 취침"
 				if orchard.can_plant(_target, _is_tree_blocked):
 					return "[좌클릭] %s 묘목 심기 (3×3)" % FruitTreeCatalog.name_of(fruit)
@@ -16312,11 +16330,11 @@ func _farm_prompt() -> String:
 	var item := inventory.selected_id()
 	# 과금 동사(괭이·물)만 혼력 부족 시 차단 안내한다(무과금 파종·시비는 아래에서 혼력 무관 안내).
 	if item == ItemCatalog.HOE and not pfield.is_tilled(_target):
-		if not energy.can_act():
+		if not energy.can_act(farm_cost):
 			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 괭이질"
 	if item == ItemCatalog.WATERING_CAN and pfield.is_planted(_target) and not pfield.is_watered(_target):
-		if not energy.can_act():
+		if not energy.can_act(farm_cost):
 			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 물주기"
 	if ItemCatalog.category_of(item) == ItemCatalog.CAT_SEED and pfield.is_tilled(_target) and not pfield.is_planted(_target):
