@@ -1,5 +1,6 @@
 extends SceneTree
-# ★[폴리시 8회차] 버그 헌트 확정분 회귀 — 배치 A(#1~#11: R7 diff 리뷰 · 낚시/채광 사슬 · 컷신 러너).
+# ★[폴리시 8회차] 버그 헌트 확정분 회귀 — 배치 A(#1~#11: R7 diff 리뷰 · 낚시/채광 사슬 · 컷신 러너)
+# + 배치 B(#12~#23: 컷신 무대 · 날씨 행렬 · 행사 무대 · 도감/기증 · 편지 채널).
 #
 # polish_r7_test가 "R6이 세운 가드가 옛 세이브를 어떻게 버리는가"를 쟀다면, 여기는 **R7이 세운
 # 좌표 해석·창 라우팅이 무엇을 새로 가렸는가 · 한 칸에 둘이 서면 누가 먼저 잡는가 · 화면은 언제
@@ -33,6 +34,28 @@ extends SceneTree
 #         총수입은 그대로였다(다른 골드 수입은 예외 없이 짝을 이룬다 — 환불만 의도적 제외).
 #   ⑪ #11 `_apply_cutscene_frame`이 `queue_redraw()`를 안 불러, S등급 일러스트(B6·B7)가 알파 1.0에
 #         올라도 화면에 한 번도 안 그려졌다(컷신 중 _process는 그 자리에서 프레임을 끊는다).
+#
+# 배치 B(#12~#23) — **"화면이 말하는 것과 원장이 아는 것이 언제 갈리는가"**를 잰다:
+#   ⑫ #12 컷신이 배우를 세울 때 얼어붙은 `walk_offset`을 안 지워, 논리 칸은 무대 위인데 그림은
+#         최대 1,900px 밖에 굳어 있었다(반쯤 밝아진 광장이 텅 빔 — "이동은 암전 뒤에서만" 위반).
+#   ⑬ #13 동행 혼 형상화를 암전 *전에* 세워, 환한 안방에서 0.7초 팝인한 뒤에야 암전이 내려왔다.
+#   ⑭ #14 도깨비메기의 성야절 태그가 **구조적으로 도달 불가**였다(그 절기 혼우 확률이 0) —
+#         실효 창이 연 2~3일로 좁아져 도감 완주가 한 종에 병목되고 체급 대비 희귀도가 역전됐다.
+#   ⑮ #15 혼우 자동 급수가 `advance_day` **앞**에 있어 비가 "어제 몫"을 대신하고 그날 밭은 종일
+#         말라 있었다 — HUD·점괘가 "밭이 스스로 젖는다"고 말하는데 따르면 성장 하루를 잃었다.
+#   ⑯ #16 행사 예고가 28일만 내다봐, 최대 간격 36일(피안 12일 → 유화 20일) 구간인 매년 피안
+#         13~19일 7일 동안 ◇ 줄이 통째로 사라졌다(달력도 다음 절기를 안 그린다 = 표면 0).
+#   ⑰ #17 테마 데이가 낮에 해금되면 카페 장식·프리미엄만 켜지고 **4인 의상만** 그날 내내 꺼져
+#         있었다(의상 주입 지점만 아침 세 자리에 묶여 있었다).
+#   ⑱ #18 기증이 옥자 deed 트랙을 안 다시 파, 원장은 "다 갚음"인데 ♡는 stale로 남아 「명부 혼례
+#         부적」 게이트가 이유 없이 잠겨 보였다(관계 탭 한 행 안에서 두 값이 어긋난다).
+#   ⑲ #19 생선가게 즉시 환전이 도감에 안 올라, 그 창구만 쓰면 전 어종을 낚아 팔아도 완주 불가였다
+#         (도감이 전제한 "판매 창구 단일"이 S3-T5부터 이미 거짓이었다).
+#   ⑳ #20 "중복 발굴분은 판매 가능"이라 문서화된 유품에 매입 창구가 코드에 한 곳도 없었다.
+#   ㉑ #21 우편함 [F]가 같은 칸의 업화로·결정기 [F]를 사다리에서 가려, 그 칸에 세운 설치물과 안에
+#         든 광석이 **영구 유실**됐다(프롬프트도 우편함 것이라 무엇을 잃었는지도 안 보였다).
+#   ㉒ #22 본문이 물건을 건네는 편지 셋(호박씨·화분·엽전)의 첨부가 비어 있어 백팩·지갑이 안 움직였다.
+#   ㉓ #23 채널 개통 안내 `herald_notice`를 보내는 코드가 한 줄도 없어 영영 도착하지 않았다.
 
 var _fail := 0
 var _src: PackedStringArray = PackedStringArray()
@@ -86,7 +109,7 @@ func _wipe_slot(slot: int) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 
 func _initialize() -> void:
-	print("══ 폴리시 8회차 — 배치 A(#1~#11: R7 diff · 낚시/채광 사슬 · 컷신) ══")
+	print("══ 폴리시 8회차 — A(#1~#11: R7 diff · 낚시/채광 · 컷신) + B(#12~#23: 무대 · 날씨 · 행사 · 도감 · 편지) ══")
 	_src = FileAccess.open("res://main.gd", FileAccess.READ).get_as_text().split("\n")
 	for s in SaveManager.SLOT_COUNT:
 		_wipe_slot(s)
@@ -439,6 +462,339 @@ func _initialize() -> void:
 	m._illust_id = ""
 	m._illust_a = 0.0
 	m.clock.running = clock_prev
+
+	# ── ⑫ #12 컷신 배우는 얼어붙은 걷기 오프셋을 끌고 오지 않는다 ─────────────
+	print("── ⑫ #12 컷신이 배우를 세울 때 stale walk_offset을 지운다 ──")
+	var ken: Resident = m._resident("ken")
+	_check("⑫pre 켄 레코드와 노드가 있고 걷기 오프셋 훅을 든다",
+		ken != null and ken.node != null and ken.node.has_method("set_walk_offset"))
+	if ken != null and ken.node != null:
+		# 진행 중인 마을 걷기를 만든다 — 스포크가 길수록 오프셋이 크다(켄의 09:00 이동 재현).
+		if ken.walk == null:
+			ken.walk = ResidentWalk.new()
+		var far := Vector2(89.0 * m.TILE, 36.0 * m.TILE)
+		ken.walk.start(far, PackedVector2Array([Vector2(48.0 * m.TILE, 36.0 * m.TILE),
+			Vector2(48.0 * m.TILE, 39.0 * m.TILE)]))
+		ken.walk.advance(0.5)
+		ken.node.set_walk_offset(ken.walk.offset())
+		var stale: Vector2 = ken.node.walk_offset
+		_check("⑫pre 걷기가 진행 중이고 그림 오프셋이 실제로 얹혀 있다(%dpx)" % int(stale.length()),
+			ken.walk.is_walking() and stale.length() > 100.0)
+		var steps: Array = [{"verb": "npc", "id": "ken", "tile": Vector2i(48, 39), "secs": 0.0}]
+		var began: bool = m._begin_cutscene(steps, "", PackedStringArray())
+		_check("⑫a 켄을 세우는 컷신이 실제로 시작된다(cast에 켄이 든다)",
+			began and m.cutscene != null and "ken" in m.cutscene.cast_ids())
+		_check("⑫b 재생 개시가 걷기를 끄고 그림 오프셋을 0으로 되돌린다"
+				+ " — 배우가 화면 밖에서 연기하지 않는다",
+			not ken.walk.is_walking() and ken.node.walk_offset == Vector2.ZERO)
+		m._end_cutscene()
+		_check("⑫c 종료가 원위치를 되돌리고 재생 상태를 비운다",
+			m.cutscene == null and m._cutscene_npc_prev.is_empty())
+
+	# ── ⑬ #13 동행 혼의 몸은 암전이 다 내려온 뒤에 선다 ──────────────────────
+	print("── ⑬ #13 형상화가 밝은 방에서 팝인하지 않는다 ──")
+	_check("⑬a `_fire_soul_birth`는 몸을 **예약만** 한다(직접 세우는 줄이 없다)",
+		_in_func("func _fire_soul_birth", "_soul_body_pending = true"))
+	_check("⑬b 소비는 `_apply_cutscene_frame`의 암전 판정이 진다",
+		_in_func("func _apply_cutscene_frame", "cutscene.fade_alpha() >= 1.0"))
+	var soul: Resident = m._resident(m.SOUL_CHILD_RID)
+	_check("⑬pre 동행 혼 레코드·노드가 있다", soul != null and soul.node != null)
+	if soul != null and soul.node != null:
+		var born_prev: bool = m._soul_born
+		m._soul_born = true
+		soul.node.visible = false
+		m._soul_body_pending = true
+		# 탄생 컷신의 첫 페이드(0 → 1.0, 0.7초)를 그대로 흉내 낸다.
+		var fade_runner := CutsceneRunner.new([{"verb": "fade", "to": 1.0, "secs": 0.7}])
+		m.cutscene = fade_runner
+		m._cutscene_clock_prev = m.clock.running
+		fade_runner.start()
+		fade_runner.advance(0.2)
+		m._apply_cutscene_frame()
+		_check("⑬c 암전이 내려오는 중(알파 %.2f)에는 몸이 아직 안 선다"
+				% m.cutscene.fade_alpha(),
+			m.cutscene.fade_alpha() < 1.0 and m._soul_body_pending and not soul.node.visible)
+		fade_runner.advance(1.0)
+		m._apply_cutscene_frame()
+		_check("⑬d 알파가 1.0에 닿는 프레임에 몸이 선다(암전이 걷힐 땐 이미 거기 있다)",
+			m.cutscene.fade_alpha() >= 1.0 and not m._soul_body_pending and soul.node.visible)
+		m.cutscene = null
+		m._soul_born = born_prev
+		m._refresh_soul_child_body()
+		m.clock.running = m._cutscene_clock_prev
+
+	# ── ⑭ #14 어종의 (절기 × 날씨) 조합이 전부 도달 가능하다 ─────────────────
+	print("── ⑭ #14 날씨 한정 어종의 절기 태그가 죽은 데이터가 아니다 ──")
+	# 분모·절기 수는 전부 레지스트리 파생이다(FishCatalog.ids · Weather.DISTRIBUTION).
+	var dead_tags: Array = []
+	for fid in FishCatalog.ids():
+		var wx: Array = FishCatalog.FISH[fid]["weather"]
+		if wx.is_empty():
+			continue                        # 날씨 무관 어종은 이 검사의 대상이 아니다
+		var fs: Array = FishCatalog.FISH[fid]["seasons"]
+		var seasons: Array = fs if not fs.is_empty() else range(Weather.DISTRIBUTION.size())
+		for s in seasons:
+			var reachable := false
+			for w in wx:
+				if int(Weather.DISTRIBUTION[int(s)][int(w)]) > 0:
+					reachable = true
+			if not reachable:
+				dead_tags.append("%s@%s" % [FishCatalog.name_of(fid), GameClock.SEASON_NAMES[int(s)]])
+	_check("⑭a 날씨 한정 어종의 절기 태그 중 확률 0인 조합이 없다(죽은 태그: %s)" % str(dead_tags),
+		dead_tags.is_empty())
+	_check("⑭b 도깨비메기는 성야절(혼우 0)이 아니라 실제로 비가 오는 절기에 산다",
+		not (FishCatalog.FISH[FishCatalog.DOKKAEBI_MEGI]["seasons"] as Array).has(3)
+		and FishCatalog.is_available(FishCatalog.DOKKAEBI_MEGI, FishCatalog.HABITAT_RIVER,
+			0, "밤", Weather.RAIN))
+	_check("⑭c 로스터 밀도는 그대로 — 성야절 강 비-전설 종이 여전히 3종 이상",
+		FishCatalog.season_roster(FishCatalog.HABITAT_RIVER, 3).size() >= 3)
+
+	# ── ⑮ #15 혼우는 그날 하루 밭을 적신다 ──────────────────────────────────
+	print("── ⑮ #15 비 오는 날 밭이 실제로 젖어 있다 ──")
+	m._region = RegionCatalog.HOME
+	m._rebuild_region(RegionCatalog.HOME)
+	var till_targets: Array = []
+	for ty in range(12, 16):
+		for tx in range(40, 44):
+			var tt := Vector2i(tx, ty)
+			if m._is_farmable(tt) and m.farm.hoe(tt):
+				till_targets.append(tt)
+			if till_targets.size() >= 4:
+				break
+		if till_targets.size() >= 4:
+			break
+	_check("⑮pre 경작 칸 %d개 확보" % till_targets.size(), till_targets.size() >= 2)
+	var rain_day := -1
+	var calm_day2 := -1
+	for d in range(m.clock.day + 1, m.clock.day + 200):
+		if rain_day < 0 and Weather.weather_for_day(d) == Weather.RAIN:
+			rain_day = d
+		if calm_day2 < 0 and Weather.weather_for_day(d) == Weather.CALM:
+			calm_day2 = d
+	_check("⑮pre 혼우일 %d · 평온일 %d 확보" % [rain_day, calm_day2],
+		rain_day > 0 and calm_day2 > 0)
+	if rain_day > 0 and calm_day2 > 0 and till_targets.size() >= 2:
+		m.clock.day = calm_day2
+		m._on_day_advanced(calm_day2)
+		var calm_wet := 0
+		for tt: Vector2i in m.farm.tilled_tiles():
+			if m.farm.is_watered(tt):
+				calm_wet += 1
+		_check("⑮a 평온일 아침 정산 뒤 밭은 마른 상태다(대조군 — 젖은 칸 %d)" % calm_wet,
+			calm_wet == 0)
+		m.clock.day = rain_day
+		m._on_day_advanced(rain_day)
+		var tilled: Array = m.farm.tilled_tiles()
+		var dry: Array = []
+		for tt: Vector2i in tilled:
+			if not m.farm.is_watered(tt):
+				dry.append(tt)
+		_check("⑮b 혼우일 아침 정산 뒤 경작 %d칸이 **전부 젖어 있다**(마른 칸: %s)"
+				% [tilled.size(), str(dry)],
+			tilled.size() >= 2 and dry.is_empty())
+		_check("⑮c 그래서 점괘 거울의 안내가 참이 된다 — '%s'" % m._weather_hint(Weather.RAIN),
+			m._weather_hint(Weather.RAIN) != "")
+
+	# ── ⑯ #16 절기 행사 예고가 한 해의 모든 날에 선다 ────────────────────────
+	print("── ⑯ #16 점괘 거울의 ◇ 행사 줄에 빈 구간이 없다 ──")
+	# 왜 28일 창이 모자랐는지를 **표에서 파생해** 못 박는다(눈금 하드코딩 없음).
+	var max_gap := 0
+	var events_per_year: Array = []
+	for s in SeasonalEvent.DAY_OF_SEASON.size():
+		events_per_year.append(s * GameClock.DAYS_PER_SEASON + int(SeasonalEvent.DAY_OF_SEASON[s]))
+	for i in events_per_year.size():
+		var nxt: int = int(events_per_year[(i + 1) % events_per_year.size()])
+		var cur: int = int(events_per_year[i])
+		var gap: int = nxt - cur if nxt > cur else nxt + events_per_year.size() * GameClock.DAYS_PER_SEASON - cur
+		max_gap = maxi(max_gap, gap)
+	_check("⑯a 연속 두 행사의 최대 간격 %d일이 한 절기(%d일)를 넘는다 — 28일 창이 모자랐던 이유"
+			% [max_gap, GameClock.DAYS_PER_SEASON],
+		max_gap > GameClock.DAYS_PER_SEASON)
+	var day_prev: int = m.clock.day
+	var blank_days: Array = []
+	for d in range(1, events_per_year.size() * GameClock.DAYS_PER_SEASON + 1):
+		m.clock.day = d
+		if m._event_upcoming_line() == "":
+			blank_days.append(d)
+	_check("⑯b 한 해 %d일 어느 날에도 예고 줄이 비지 않는다(빈 날: %s)"
+			% [events_per_year.size() * GameClock.DAYS_PER_SEASON, str(blank_days)],
+		blank_days.is_empty())
+	m.clock.day = day_prev
+
+	# ── ⑰ #17 하루 중 테마 데이가 해금되면 의상이 그 프레임에 켜진다 ─────────
+	print("── ⑰ #17 낮에 문턱을 넘으면 4인 의상도 따라붙는다 ──")
+	# 힙합 데이를 쓰는 이유: 해금 축이 **누적 매출 하나뿐**이라(UNLOCK_STAGE 0) 하트·수확을 안 건드리고
+	# 문턱을 넘는 순간만 재현할 수 있다. 슬롯 날짜·문턱은 전부 Festival 표에서 파생한다.
+	var hip_day: int = Festival.HIPHOP * GameClock.DAYS_PER_SEASON + Festival.DAY_OF_SEASON
+	var rev_prev: int = m._cafe_revenue_total
+	m.clock.day = hip_day
+	m._cafe_revenue_total = 0
+	m._refresh_festival()
+	_check("⑰pre %d일 = 힙합 데이 슬롯인데 매출 0이라 아직 평일이다(평상복)" % hip_day,
+		Festival.theme_slot_for_day(hip_day) == Festival.HIPHOP
+		and m._festival_theme() == Festival.NONE
+		and not m.miho.festive and not m.mel.festive
+		and not m.bana.festive and not m.okja.festive)
+	m._cafe_revenue_total = int(Festival.UNLOCK_REVENUE[Festival.HIPHOP])
+	_check("⑰a 문턱을 넘는 순간 테마는 곧장 열린다(파생값이라 즉시)",
+		m._festival_theme() == Festival.HIPHOP)
+	m._sync_festive_costumes()
+	_check("⑰b 같은 프레임의 동기화가 **메인 4인 전원**에게 축제 의상을 입힌다",
+		m.miho.festive and m.mel.festive and m.bana.festive and m.okja.festive)
+	_check("⑰c 동기화는 `_process`가 사다리 주입과 같은 자리에서 부른다",
+		_in_func("func _process", "_sync_festive_costumes()"))
+	m._cafe_revenue_total = rev_prev
+	m.clock.day = day_prev
+	m._refresh_festival()
+
+	# ── ⑱ #18 기증이 앵커 트랙을 그 자리에서 다시 판다 ───────────────────────
+	print("── ⑱ #18 기증 직후의 ♡가 원장과 어긋나지 않는다 ──")
+	m._mark_spine_bit(m.SPINE_B4)
+	m._mark_spine_bit(m.SPINE_B5)
+	m._mark_spine_bit(m.SPINE_B6)
+	m._open_okja_track()
+	var okja_r: Resident = m._resident(m.OKJA_RID)
+	_check("⑱pre 앵커 트랙이 열려 있다(B6 이후·배우자 없음)",
+		m._okja_track_open() and okja_r != null and okja_r.affinity != null)
+	if okja_r != null and okja_r.affinity != null:
+		m._refresh_okja_track()
+		var pts_before: int = okja_r.affinity.points
+		var donated_before: int = m.museum.donated_count()
+		# 아직 안 바친 기증감 하나를 손에 들고 기증대 동사를 그대로 태운다(⑳이 쓸 유품으로 고른다).
+		var target_relic := ""
+		for rid2 in Museum.donatable_ids():
+			var sid2 := String(rid2)
+			if not m.museum.is_donated(sid2) \
+					and ItemCatalog.category_of(sid2) == ItemCatalog.CAT_RELIC:
+				target_relic = sid2
+				break
+		m.inventory.add_item(target_relic, 1)
+		for i in range(m.inventory.slots.size()):
+			if m.inventory.id_at(i) == target_relic:
+				m.inventory.select(i)
+				break
+		_check("⑱pre 기증감 %s를 들었다" % target_relic, m.inventory.selected_id() == target_relic)
+		m._try_donate_selected()
+		_check("⑱a 기증이 원장에 실제로 올랐다(%d → %d)"
+				% [donated_before, m.museum.donated_count()],
+			m.museum.donated_count() == donated_before + 1)
+		_check("⑱b 그 프레임에 트랙 점수가 원장과 다시 맞는다(♡ %d — 취침을 안 기다린다)"
+				% okja_r.affinity.hearts(),
+			okja_r.affinity.points == Spine.okja_deed_points(true,
+				m.museum.donated_count(), Museum.donatable_ids().size(), m._run_harvested)
+			and okja_r.affinity.points > pts_before)
+		_check("⑱c 관계 탭의 하트도 파생과 같은 값이다(effect 줄만 앞서가지 않는다)",
+			okja_r.affinity.hearts() == okja_r.affinity.points_hearts())
+
+	# ── ⑲ #19 생선가게 즉시 환전도 도감에 등재된다 ──────────────────────────
+	print("── ⑲ #19 두 판매 창구가 같은 도감 원장으로 온다 ──")
+	var fish_id := ""
+	for f2 in FishCatalog.ids():
+		if Codex.is_tracked(String(f2)):
+			fish_id = String(f2)
+			break
+	_check("⑲pre 도감 추적 어종 %s 확보" % fish_id,
+		fish_id != "" and not m.codex.is_shipped(fish_id))
+	m.inventory.add_item(fish_id, 1)
+	var sold: Dictionary = m._sell_fish_n(fish_id, 0, 1, true)
+	_check("⑲a 환전이 실제로 성사됐다(%d마리 · %d냥)" % [int(sold["count"]), int(sold["gold"])],
+		int(sold["count"]) == 1 and int(sold["gold"]) > 0)
+	_check("⑲b 그 어획이 도감에 이름을 올린다 — 환전 탭만 쓰는 플레이어도 완주에 닿는다",
+		m.codex.is_shipped(fish_id))
+
+	# ── ⑳ #20 중복 유품에 실제 판매 창구가 있다 ────────────────────────────
+	print("── ⑳ #20 '중복 발굴분은 판매 가능'이 코드에서도 참이다 ──")
+	var relic_done := ""
+	var relic_todo := ""
+	for rid3 in Museum.donatable_ids():
+		var sid3 := String(rid3)
+		if ItemCatalog.category_of(sid3) != ItemCatalog.CAT_RELIC:
+			continue
+		if m.museum.is_donated(sid3) and relic_done == "":
+			relic_done = sid3
+		elif not m.museum.is_donated(sid3) and relic_todo == "":
+			relic_todo = sid3
+	_check("⑳pre 전시된 유품 %s · 미전시 유품 %s 확보" % [relic_done, relic_todo],
+		relic_done != "" and relic_todo != "")
+	if relic_done != "" and relic_todo != "":
+		_check("⑳a 미전시 유품은 여전히 출하 거절 — 하나뿐인 수집물이 안 새어 나간다",
+			not m._relic_sellable(relic_todo))
+		_check("⑳b 전시가 끝난 종의 중복분은 출하 대상이다(카탈로그 판매가 %d냥)"
+				% ItemCatalog.price_of(relic_done),
+			m._relic_sellable(relic_done) and ItemCatalog.price_of(relic_done) > 0)
+		m.inventory.add_item(relic_done, 1)
+		var relic_slot := -1
+		for i in range(m.inventory.slots.size()):
+			if m.inventory.id_at(i) == relic_done:
+				relic_slot = i
+				break
+		var bin_before: int = m.ship_bin.count_of(relic_done)
+		m._on_frame_deposit(relic_slot)
+		_check("⑳c 출하함이 실제로 받는다(%d → %d) — 처분 경로가 휴지통뿐이 아니게 됐다"
+				% [bin_before, m.ship_bin.count_of(relic_done)],
+			m.ship_bin.count_of(relic_done) == bin_before + 1)
+
+	# ── ㉑ #21 [F] 창구 좌표에는 설치물을 세울 수 없다 ───────────────────────
+	print("── ㉑ #21 우편함 칸의 [F]를 설치물이 가로채지 못한다 ──")
+	m._region = RegionCatalog.HOME
+	m._indoor = ""
+	m._rebuild_region(RegionCatalog.HOME)
+	var f_tiles: Array = [m.MAILBOX_TILE, m.PET_TILE, m.PET_BOWL_TILE]
+	var leaks: Array = []
+	for ft: Vector2i in f_tiles:
+		if m._can_place_furnace(ft) or m._can_place_crystalarium(ft) \
+				or m._can_place_sprinkler(ft) or m._can_place_pot(ft):
+			leaks.append(ft)
+	_check("㉑a [F] 창구 칸 %d개에 업화로·결정기·스프링클러·화분이 전부 안 놓인다(새는 칸: %s)"
+			% [f_tiles.size(), str(leaks)],
+		leaks.is_empty())
+	_check("㉑b 레어크로우도 같은 가드를 받는다(`_can_place_sprinkler` 경유)",
+		not m._can_place_rarecrow(m.MAILBOX_TILE))
+	# 가드가 과하지 않다 — 우편함 **옆** 평범한 GROUND 칸은 여전히 설치 가능해야 한다.
+	var neighbor: Vector2i = m.MAILBOX_TILE + Vector2i(-1, 0)
+	_check("㉑c 바로 옆 칸(%s)은 그대로 설치 가능하다 — 가드가 좌표 셋에만 걸린다" % str(neighbor),
+		m._can_place_furnace(neighbor) or m._can_place_crystalarium(neighbor))
+	_check("㉑d 술어는 구역·실내 축을 함께 든다(다른 무대의 같은 좌표는 무관)",
+		_in_func("func _f_window_tile", "_region != RegionCatalog.HOME"))
+
+	# ── ㉒ #22 본문이 건넨 물건이 실제로 봉투에서 나온다 ─────────────────────
+	print("── ㉒ #22 편지 첨부가 본문과 어긋나지 않는다 ──")
+	_check("㉒a 물건을 명시적으로 건네는 관문 편지 셋에 첨부가 섰다",
+		Mailbox.has_attachment("miho_gate3_pumpkin")
+		and Mailbox.has_attachment("ken_gate1_pot")
+		and Mailbox.has_attachment("scarlet_gate2_coin"))
+	_check("㉒b 호박씨 = 실재 작물의 씨앗 id(진실원 대조 — 리터럴이 카탈로그와 맞는다)",
+		String(Mailbox.attachment_items_of("miho_gate3_pumpkin")[0]["id"])
+			== ItemCatalog.seed_id(CropCatalog.YEONGHON_HOBAK)
+		and String(Mailbox.attachment_items_of("ken_gate1_pot")[0]["id"]) == ItemCatalog.GARDEN_POT)
+	# 백팩을 비운다 — `_read_next_letter`는 첨부가 안 들어가면 편지를 **안 연다**(자리 가드).
+	for i in range(m.inventory.slots.size()):
+		if m.inventory.id_at(i) != "":
+			m.inventory.remove_at(i, m.inventory.count_at(i))
+	m.mailbox.send("ken_gate1_pot")
+	m.mailbox.advance_day()
+	var pot_before: int = m.inventory.count_of(ItemCatalog.GARDEN_POT)
+	while m.mailbox.next_unread() != "" and m.mailbox.next_unread() != "ken_gate1_pot":
+		m._read_next_letter()
+		_dismiss_dialogue(m)
+	m._read_next_letter()
+	_dismiss_dialogue(m)
+	_check("㉒c 켄의 편지를 읽으면 화분이 실제로 백팩에 들어온다(%d → %d)"
+			% [pot_before, m.inventory.count_of(ItemCatalog.GARDEN_POT)],
+		m.inventory.count_of(ItemCatalog.GARDEN_POT) == pot_before + 1)
+
+	# ── ㉓ #23 채널 개통 안내가 실제로 도착한다 ─────────────────────────────
+	print("── ㉓ #23 우편함 사용 설명이 영영 안 오던 자리 ──")
+	_check("㉓pre herald_notice가 테이블에 있고 본문을 든다",
+		m.mailbox.has_letter(m.HERALD_NOTICE_LETTER)
+		and not Mailbox.lines_of(m.HERALD_NOTICE_LETTER).is_empty())
+	_check("㉓a 발송 조건이 없다 — 하루 정산이 무조건 큐에 넣는다(멱등)",
+		m.mailbox.ever_sent(m.HERALD_NOTICE_LETTER))
+	# 도착 증명 = ㉒에서 우편함을 비우며 이 통이 실제로 열렸다는 사실(기독 원장은 도착분에만 선다).
+	_check("㉓b 다음 아침 우편함에 실제로 꽂혀 열린다(기독 원장에 올랐다)",
+		m.mailbox.is_read(m.HERALD_NOTICE_LETTER))
+	_check("㉓c 두 번 보내지 않는다(ever_sent 멱등)",
+		not m.mailbox.send(m.HERALD_NOTICE_LETTER))
 
 	for s in SaveManager.SLOT_COUNT:
 		_wipe_slot(s)

@@ -4,7 +4,9 @@ extends SceneTree
 # 무엇을 보증하나:
 #   ① 롤 — 같은 day는 언제나 같은 하늘(결정성)·타입 범위·절기별 분포 규칙(절기 첫날 강제 평온·
 #      성야절 혼우 0·잿눈은 성야절에만)·예보 = 내일 롤.
-#   ② 혼우(비) — 아침 자동 급수. 물을 한 방울도 안 준 밭이 비 오는 날엔 자란다(스프링클러와
+#   ② 혼우(비) — 아침 자동 급수. ★[폴리시 R8 / #15] 급수 시점이 `advance_day` **뒤**로 옮겨져,
+#      비는 "어제 못 준 물"의 소급이 아니라 **오늘 몫의 물주기**다(그날 밭이 종일 젖어 있고
+#      그 물로 다음 아침에 자란다 — 배우자 미호 물주기가 이미 든 그 규율). 스프링클러와
 #      같은 `field.sprinkle` 경로 재사용의 증거). 평온한 날엔 안 자란다(대조군).
 #   ③ 잿눈 — 그날 성장 정지 + **물은 마른다**(비살상·물 남기지 않음). 작물은 안 죽는다.
 #   ④ 방목 게이트 — `_weather_calm()`이 잿눈에만 false(혼우·혼불 바람은 방목 허용).
@@ -170,10 +172,26 @@ func _initialize() -> void:
 	m.clock.day = d_rain
 	m._on_day_advanced(d_rain)
 	await process_frame
-	_check("②b 혼우 — 물 안 준 밭이 자랐다(비가 `field.sprinkle`로 적셨다는 증거)",
-		m.farm.grown_days_of(t_a) == 1 and m.farm.grown_days_of(t_b) == 1)
-	_check("②c 아침 마름은 그대로 — 비 온 날에도 흙은 다음 날까지 젖어 있지 않다",
-		not m.farm.is_watered(t_a) and not m.farm.is_watered(t_b))
+	# ★[폴리시 R8 / #15] 두 단언이 종전엔 **비를 어제 몫으로 치는** 옛 순서를 고정하고 있었다
+	#   ("혼우일 아침에 자라고 그 즉시 마른다"). 그 순서에서는 비 오는 날 밭이 종일 마른 상태라,
+	#   HUD 비 아이콘과 점괘 거울의 "밭이 스스로 젖는다"를 그대로 믿고 물을 안 준 플레이어가
+	#   성장 하루를 확정으로 잃었다(스타듀는 비 오는 날 물주기를 건너뛰어도 손실 0). 급수를
+	#   `advance_day` 뒤로 옮겨 **비 = 오늘 몫의 물주기**가 됐고, 단언도 그 계약으로 바뀐다.
+	_check("②b 혼우 — 아침 정산이 끝난 시점에 밭이 **젖어 있다**(그날 하루 물을 안 줘도 된다)",
+		m.farm.is_watered(t_a) and m.farm.is_watered(t_b))
+	_check("②c 어제 몫은 여전히 어제 몫 — 비가 지난밤 미급수를 소급해서 자라게 하지 않는다",
+		m.farm.grown_days_of(t_a) == 0 and m.farm.grown_days_of(t_b) == 0)
+	# 비의 물이 사라진 게 아니라 하루 뒤로 옮겨졌다는 증거 — 다음 정산에서 그 물로 자란다.
+	var d_after := _first_day_with(Weather.CALM, d_rain + 1, 28)
+	if d_after > 0:
+		m.clock.day = d_after
+		m._on_day_advanced(d_after)
+		await process_frame
+		_check("②c2 그 물로 **다음 아침에** +1 자란다(비는 오늘 준 물이고, 성장 판정은 하루 뒤다)",
+			m.farm.grown_days_of(t_a) == 1 and m.farm.grown_days_of(t_b) == 1
+			and not m.farm.is_watered(t_a))
+	else:
+		_check("②c2 혼우 다음 평온일이 28일 안에 있다(후속 성장 검증 전제)", false)
 	_check("②d 심지 않은 경작 칸도 무해하게 적셨다(급수 경로가 심김을 안 가린다)",
 		m.farm.is_tilled(t_bare) and not m.farm.is_planted(t_bare))
 	# 멱등 — 스프링클러가 이미 적신 칸에 비가 또 와도 이중 성장은 없다.
@@ -191,15 +209,20 @@ func _initialize() -> void:
 
 	# ── ③ 잿눈 = 성장 정지 + 물 마름 ────────────────────────────────────────
 	print("── ③ 잿눈 성장 정지·물 마름 ──")
+	# ★[폴리시 R8 / #15] 기준선을 **칸마다 따로** 잡는다. 종전엔 t_a 하나로 두 칸을 함께 쟀는데,
+	#   위 ②e가 t_a에만 스프링클러를 돌리므로 급수가 `advance_day` 뒤로 옮겨진 지금은 두 칸의
+	#   성장일수가 갈린다(그 프레임에 젖어 있던 칸만 자란다 = 이 시스템의 정의). 잿눈이 재는 것은
+	#   "정지"지 "두 칸이 같은 값"이 아니므로, 각자 자기 값과 비교하는 것이 원래 의도에 맞다.
 	var grown_before: int = m.farm.grown_days_of(t_a)
+	var grown_before_b: int = m.farm.grown_days_of(t_b)
 	m.farm.water(t_a)                                   # 손수 물까지 줬는데도
 	m.farm.water(t_b)
 	_check("③pre 두 칸 다 젖은 채로 잠든다", m.farm.is_watered(t_a) and m.farm.is_watered(t_b))
 	m.clock.day = d_snow
 	m._on_day_advanced(d_snow)
 	await process_frame
-	_check("③a 잿눈 날엔 물을 줬어도 안 자란다(성장 정지)",
-		m.farm.grown_days_of(t_a) == grown_before and m.farm.grown_days_of(t_b) == grown_before)
+	_check("③a 잿눈 날엔 물을 줬어도 안 자란다(성장 정지 — 두 칸 각자 자기 값 그대로)",
+		m.farm.grown_days_of(t_a) == grown_before and m.farm.grown_days_of(t_b) == grown_before_b)
 	_check("③b 그래도 흙은 마른다 — 눈 온 날이 '물 준 상태 저장'이 되지 않는다",
 		not m.farm.is_watered(t_a) and not m.farm.is_watered(t_b))
 	_check("③c 비살상 — 작물은 죽지 않는다(사멸은 절기 전환의 몫이지 날씨가 아니다)",
