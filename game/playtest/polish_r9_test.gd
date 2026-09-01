@@ -1,5 +1,5 @@
 extends SceneTree
-# ★[폴리시 9회차] 버그 헌트 확정분 회귀 — 배치 A(#1~#12).
+# ★[폴리시 9회차] 버그 헌트 확정분 회귀 — 배치 A(#1~#12) + 배치 B(#13~#25).
 #
 # 렌즈: 농사 사슬(화분·급수 시점·비료·손상 세이브) · 카페 사슬(F9 되감기) · 상점 창구 교차
 #       (클릭 라우팅·게이트 우회·처분 창구) · 신규 API 스윕(산출 적재·술어 일관성).
@@ -25,6 +25,29 @@ extends SceneTree
 #         토스트가 "원목 +2"라고 거짓말을 했다.
 #   ⑫ #12 청혼 게이트의 뭍의 비약 판정만 `inventory.has_item` 직행이라, 비약을 상자에 넣으면
 #         청혼도 막히고 안내가 가리킨 옥자의 재발급 창구도 안 열렸다(막다른 안내).
+#
+# 배치 B(렌즈: 신규 API 스윕 · 페널티 경로 · 롱호라이즌 원장 · 품질 축):
+#   ⑬ #13 안식 자체 파종이 **스프링클러 한 종만** 성역으로 보아, 레어크로우·업화로·결정기 위에
+#         밤새 나무가 돋았다(그 뒤론 배치 가드 전부가 그 칸을 거절해 복구 경로도 없었다).
+#   ⑭ #14 그 반대 방향 — 설치물 배치 3종이 밤새 돋은 **런타임 파종목**을 못 봐서, 묘목 위에
+#         설치물이 겹쳐 섰다(`_grid`는 GROUND · occ는 원장을 안 본다 = 어느 술어에도 안 걸렸다).
+#   ⑮ #15 낚싯대 보유 힌트만 백팩 직행이라, 상자에 넣어 둔 대를 두고 "낚싯대가 없다 — 뱃사공을
+#         찾아가자"는 **막다른 안내**가 떴다(뱃사공은 두 번째 대를 주지 않는다).
+#   ⑯ #16 저장소에 하나 남아 있던 조사 병기("은(는)") — HanjiUi 규약의 예외 자리.
+#   ⑰ #17 자정 강제 취침을 집 밖에서 맞으면 그 밤의 확산·재점령이 통째로 죽어, 매일 밤 마을에
+#         서 있기만 하면 잡초 손실이 **영구히 0**이 됐다(반복 가능한 무비용 면역).
+#   ⑱ #18 기절 알림이 시계 클램프를 무시하고 늘 "2시간"을 말했고, 하루가 끝나는 밤에도
+#         "잃은 것은 없다"가 함께 떴다(두 방향의 거짓말).
+#   ⑲ #19 밀린 강제 취침을 소비한 **뒤**에 삽사리 입양이 성사돼, 1회성 안내 두 줄이 취침 암전
+#         뒤로 흘러갔다(입양은 래치라 다시 안 뜬다).
+#   ⑳ #20 완료 의뢰 원장이 죽은 키를 한 번도 안 버려 영구 단조 증식했다(조회되는 키는 둘뿐).
+#   ㉑ #21 시련 완료 원장도 같은 증식 — 주당 1건씩 영구 적재.
+#   ㉒ #22 혼백관 기증 원장만 로드 시 미지 id를 안 걸러, 분자 인플레가 마일스톤 답례·앵커 deed·
+#         "전시 12/11" 표시로 샜다(형제 원장 셋은 전부 그 자리를 막아 뒀다).
+#   ㉓ #23 주괴 등급이 **인벤 적재 순간 소거**돼 제련공 퍼크 절반이 값을 못 냈고, 프롬프트·알림은
+#         "명동 주괴(은)"를 말하는데 슬롯엔 등급 점이 없었다.
+#   ㉔ #24 화분 수확만 Q_NORMAL 상수라, 노지 무비료의 은 18%·금 2%가 화분에서만 사라졌다.
+#   ㉕ #25 곳간 적재의 등급 소거를 알리는 글자가 저장소에 없었다(주석의 전제가 거짓).
 
 var _fail := 0
 var _src: PackedStringArray = PackedStringArray()
@@ -82,7 +105,7 @@ func _wipe_slot(slot: int) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 
 func _initialize() -> void:
-	print("══ 폴리시 9회차 배치 A — 농사 사슬 · 카페 사슬 · 상점 교차 · 신규 API 스윕 ══")
+	print("══ 폴리시 9회차 — 농사·카페·상점·신규 API(A) + 페널티·원장·품질 축(B) ══")
 	_src = FileAccess.open("res://main.gd", FileAccess.READ).get_as_text().split("\n")
 	for s in SaveManager.SLOT_COUNT:
 		_wipe_slot(s)
@@ -563,6 +586,397 @@ func _initialize() -> void:
 	_check("⑫e 판정은 손에 든 것을 묻되(소모 지점과 같은 원장) 안내만 갈린다",
 		_in_func("func _try_propose(r: Resident)", "_stored_anywhere(ItemCatalog.OKJA_ELIXIR)"))
 
+
+	# ── ⑬ #13 안식 자체 파종 — 설치물 칸은 성역이다(양방향 가드의 한쪽) ────────
+	print("── ⑬ #13 자체 파종 성역 = 설치물 전부 ──")
+	m._region = RegionCatalog.HOME
+	m._rebuild_region(RegionCatalog.HOME)
+	m._indoor = ""
+	m._pet_event_armed = false                # 재빌드가 걸었을 수 있는 예약을 접는다(이 절 밖 상태)
+	var occ13: Dictionary = m._home_occupied_tiles()
+	var free13 := _first_seedable_tile(m, occ13)
+	_check("⑬pre 자체 파종이 통과시키는 빈 잔디 여백 %s를 찾았다" % str(free13),
+		free13 != Vector2i(-1, -1) and m._is_tree_seed_free(RegionCatalog.HOME, free13, occ13))
+	_check("⑬pre' 그 칸은 GROUND이고 프롭 점유도 아니다 = 다른 술어는 하나도 안 막는다",
+		m._grid[free13.y][free13.x] == m.GROUND and not occ13.has(free13))
+	var crow_id := String(ItemCatalog.RARECROWS[0])
+	m.rarecrow.place(free13, crow_id)
+	_check("⑬a 레어크로우를 세운 칸엔 밤새 나무가 안 돋는다(R2/R4가 신설한 술어가 여기까지 온다)",
+		not m._is_tree_seed_free(RegionCatalog.HOME, free13, occ13))
+	m.rarecrow.remove(free13)
+	m.furnace.place(RegionCatalog.HOME, free13)
+	_check("⑬b 업화로 칸도 성역이다",
+		not m._is_tree_seed_free(RegionCatalog.HOME, free13, occ13))
+	m.furnace.remove(RegionCatalog.HOME, free13)
+	m.crystalarium.place(RegionCatalog.HOME, free13)
+	_check("⑬c 결정기 칸도 성역이다",
+		not m._is_tree_seed_free(RegionCatalog.HOME, free13, occ13))
+	m.crystalarium.remove(RegionCatalog.HOME, free13)
+	m.sprinkler.place(free13)
+	_check("⑬d 스프링클러(종전 유일 가드)는 회귀 없이 그대로 막힌다",
+		not m._is_tree_seed_free(RegionCatalog.HOME, free13, occ13))
+	m.sprinkler.remove(free13)
+	_check("⑬e 전부 걷으면 그 칸은 다시 빈 여백이다(가드가 원장에서 파생 = 걷으면 풀린다)",
+		m._is_tree_seed_free(RegionCatalog.HOME, free13, occ13))
+	_check("⑬f 판정이 원장 직행이 아니라 단일 술어 하나다(다음 설치물이 또 빠지지 않는다)",
+		_in_func("func _is_tree_seed_free", "_installation_at(t)")
+		and not _in_func("func _is_tree_seed_free", "sprinkler.has_at(t)"))
+
+	# ── ⑭ #14 설치물 배치 3종이 런타임 파종목을 본다(같은 가드의 반대 방향) ────
+	print("── ⑭ #14 배치 가드 ↔ 런타임 파종목 ──")
+	var free14 := _first_seedable_tile(m, m._home_occupied_tiles())
+	_check("⑭pre 빈 여백 %s엔 스프링클러·업화로·결정기가 다 설 수 있다" % str(free14),
+		free14 != Vector2i(-1, -1) and m._can_place_sprinkler(free14)
+		and m._can_place_furnace(free14) and m._can_place_crystalarium(free14))
+	# 밤새 돋은 묘목 한 그루 — 원장이 쥔 그대로의 모양(TreeLedger.advance_day ③ 자체 파종 항).
+	m.tree_ledger._put(RegionCatalog.HOME, free14, {
+		"species": TreeLedger.species_at_tile(RegionCatalog.HOME, free14), "stage": 1,
+		"hp": TreeLedger.hp_for_stage(1), "stump": false, "moss": false})
+	_check("⑭pre' 그 묘목은 **다른 어느 술어에도 안 걸린다** — _grid는 GROUND 그대로고 occ에도 없다",
+		m.tree_ledger.is_occupied(RegionCatalog.HOME, free14)
+		and m._grid[free14.y][free14.x] == m.GROUND
+		and not m._home_occupied_tiles().has(free14)
+		and not m._installation_at(free14))
+	_check("⑭a 스프링클러가 묘목 위에 겹쳐 서지 않는다", not m._can_place_sprinkler(free14))
+	_check("⑭b 업화로도", not m._can_place_furnace(free14))
+	_check("⑭c 결정기도", not m._can_place_crystalarium(free14))
+	_check("⑭d 레어크로우는 스프링클러 규칙 상속이라 같은 가드를 함께 받는다",
+		not m._can_place_rarecrow(free14))
+	m.tree_ledger.clear_slot(RegionCatalog.HOME, free14)
+	_check("⑭e 나무를 치우면 셋 다 다시 설 수 있다(가드가 원장 파생 = 영구 봉인이 아니다)",
+		m._can_place_sprinkler(free14) and m._can_place_furnace(free14)
+		and m._can_place_crystalarium(free14))
+
+	# ── ⑮ #15 낚싯대 보유 힌트 — 상자에 넣어 둔 대도 "가진 것"이다 ─────────────
+	print("── ⑮ #15 낚싯대 보유 술어 일관성 ──")
+	for rid15 in GearCatalog.RODS:
+		var rs := String(rid15)
+		m.inventory.remove_item(rs, m.inventory.count_of(rs))
+		_chest_purge(m.chest, rs)
+	_check("⑮pre 낚싯대를 백팩에도 상자에도 하나도 안 가진 상태",
+		not m._has_any_rod() and m._best_rod_class() < 0)
+	var rod15 := String(GearCatalog.RODS.keys()[0])
+	m.chest.store(rod15, 1)
+	_check("⑮a 상자에 넣어 둔 낚싯대도 '가진 것'이다(안내가 안 뜬다)", m._has_any_rod())
+	_check("⑮b 그래서 게시판 체급 술어와 답이 어긋나지 않는다(한 화면 두 값 문제의 봉합)",
+		m._has_any_rod() == (m._best_rod_class() >= 0))
+	_chest_purge(m.chest, rod15)
+	m.inventory.add_item(rod15, 1)
+	_check("⑮c 백팩에 든 경우의 종전 거동은 불변",
+		m._has_any_rod() and m._best_rod_class() >= 0)
+	m.inventory.remove_item(rod15, 1)
+	_check("⑮d 둘 다 없으면 다시 안내가 선다(가드를 넓히기만 하고 무력화하지 않았다)",
+		not m._has_any_rod())
+	_check("⑮e 판정은 보유의 단일 술어를 쓴다(`_best_rod_class`와 같은 원장)",
+		_in_func("func _has_any_rod", "_stored_anywhere")
+		and not _in_func("func _has_any_rod", "inventory.has_item"))
+
+	# ── ⑯ #16 늘봄방 회수 실패 알림 — 조사 병기가 저장소에서 사라졌다 ──────────
+	print("── ⑯ #16 조사 병기 ──")
+	var paren_josa := _paren_josa_lines()
+	_check("⑯a main.gd 표시 문구에 조사 병기가 한 자리도 안 남았다(HanjiUi 머리말의 규약) — %s"
+			% str(paren_josa),
+		paren_josa.is_empty())
+	_check("⑯b 그 자리는 합친 이름 문자열에 헬퍼를 얹는다(끝글자 = 마지막 이름의 끝글자)",
+		_line_of("HanjiUi.with_eun(\", \".join(PackedStringArray(stuck)))") >= 0)
+	_check("⑯c 헬퍼가 받침 유무를 실제로 가른다(%s → 는 · %s → 은)"
+			% [ItemCatalog.name_of(ItemCatalog.FURNACE), ItemCatalog.name_of(ItemCatalog.WOOD)],
+		HanjiUi.with_eun(ItemCatalog.name_of(ItemCatalog.FURNACE)).ends_with("는")
+		and HanjiUi.with_eun(ItemCatalog.name_of(ItemCatalog.WOOD)).ends_with("은"))
+
+	# ── ⑰ #17 강제 취침을 집 밖에서 맞아도 그 밤의 잡초는 안 사라진다 ─────────
+	print("── ⑰ #17 집 밖 강제 취침 = 잡초 면역 악용 ──")
+	var wday := 30                            # 절기 첫날 아님 · 성야 아님(그날치 두 줄만 본다)
+	_check("⑰⓪ 전제 — day %d는 절기 첫날이 아니고 성야절도 아니다" % wday,
+		not GameClock.is_season_first_day(wday) and GameClock.season_index_for_day(wday) != 3)
+	m._rebuild_region(RegionCatalog.NARU_VILLAGE)
+	m._indoor = ""
+	m._pet_event_armed = false
+	m.clock.day = wday
+	m._weed_day_pending_day = 0
+	var weed_before17: int = m.reclaim.weed_count()
+	_check("⑰a 집 밖에선 후보 스캔도 확산 분류기도 비어 있다(그 밤이 통째로 죽던 뿌리)",
+		m._encroach_candidates().is_empty() and not m._weed_spread_cb().is_valid())
+	m._on_day_advanced(wday)
+	_check("⑰b 마당은 아직 그대로고(잡초 %d 불변) 표만 선다" % weed_before17,
+		m.reclaim.weed_count() == weed_before17 and m._weed_day_pending_day == wday)
+	m._pet_event_armed = false
+	m._rebuild_region(RegionCatalog.HOME)
+	m._indoor = ""
+	m._sleeping = false
+	m._transitioning = false
+	await process_frame
+	_check("⑰c 안식 농원에 다시 서는 프레임에 표가 소비된다", m._weed_day_pending_day == 0)
+	_check("⑰d 그 밤의 재점령이 실제로 돋았다(잡초 %d → %d) — 면역이 아니라 유예다"
+			% [weed_before17, m.reclaim.weed_count()],
+		m.reclaim.weed_count() > weed_before17)
+	_check("⑰e 확산·재점령이 **한 표**로 함께 미뤄진다(둘 중 하나만 살아남지 않는다)",
+		_in_func("func _process", "_run_weed_spread(pending_weed_day)")
+		and _in_func("func _process", "_run_weed_encroach(pending_weed_day)"))
+	_check("⑰f 로드는 그 표를 버린다(되감긴 날의 밤이 로드 직후 터지지 않는다)",
+		_in_func("func _load_game", "_weed_day_pending_day = 0"))
+
+	# ── ⑱ #18 기절 알림이 시계 클램프를 말한다 ────────────────────────────────
+	print("── ⑱ #18 기절 알림 진실성 ──")
+	var penalty: int = m.FAINT_TIME_PENALTY_MIN
+	var half := int(GameClock.END_MIN) - penalty / 2   # 페널티의 절반만 남은 밤
+	m.clock.minutes = float(half)
+	_check("⑱pre 남은 시간(%d분)이 페널티(%d분)보다 짧다 = 클램프가 걸리는 밤"
+			% [int(GameClock.END_MIN) - half, penalty],
+		int(GameClock.END_MIN) - half < penalty)
+	m._faint()
+	var faint_clamped := _last_notice(m)
+	_check("⑱a 안 흐른 시간을 흘렀다고 말하지 않는다 — '%s'" % faint_clamped,
+		not faint_clamped.contains("%d시간" % (penalty / 60)))
+	_check("⑱b 하루가 끝나는 밤에 '잃은 것은 없다'가 안 뜬다(실제 손실 = 남은 하루 전부)",
+		not faint_clamped.contains("잃은 것은 없다") and faint_clamped.contains("저물"))
+	m.clock.minutes = float(int(GameClock.END_MIN) - penalty * 2)
+	var before_min: float = m.clock.minutes
+	m._faint()
+	var faint_full := _last_notice(m)
+	_check("⑱c 여유가 있는 밤은 종전 그대로다 — 실제로 %d분 흘렀고 문구도 그 값이다('%s')"
+			% [int(m.clock.minutes - before_min), faint_full],
+		is_equal_approx(m.clock.minutes - before_min, float(penalty))
+		and faint_full.contains("%d시간" % (penalty / 60))
+		and faint_full.contains("잃은 것은 없다"))
+	m.clock.minutes = float(int(GameClock.END_MIN) - penalty)
+	_check("⑱d 시계 밀기가 **실제로 흐른 분**을 돌려준다(문구가 상수에서 파생되지 않는 근거)",
+		m._advance_clock_minutes(penalty * 3) == penalty)
+	m.clock.minutes = 600.0                    # 다음 절로 넘어가기 전에 낮으로 되돌린다
+
+	# ── ⑲ #19 삽사리 입양이 취침 암전 뒤에서 안 터진다 ────────────────────────
+	print("── ⑲ #19 입양 이벤트 ↔ 취침 암전 ──")
+	m._rebuild_region(RegionCatalog.NARU_VILLAGE)
+	m._indoor = ""
+	m.clock.day = maxi(m.clock.day, Pet.ADOPT_MIN_DAY)
+	_check("⑲pre 무대·조건이 다 찼다(나루 마을 야외 · 입양 자격일 · 아직 미입양)",
+		m._region == RegionCatalog.NARU_VILLAGE and m._indoor == ""
+		and m.pet != null and m.pet.adopt_ready(m.clock.day))
+	m._sleeping = true
+	m._pet_event_armed = true
+	m._fire_pet_event()
+	_check("⑲a 취침 페이드가 걸린 프레임에선 입양이 성사되지 않는다(안내가 검은 화면 뒤로 안 흐른다)",
+		not m.pet.is_adopted())
+	_check("⑲b 예약은 소비된다 — 형제 가드(재생 중·마무리 화면)와 같은 계약이고 손실은 0이다"
+			+ "(다음 마을 진입이 다시 예약한다)",
+		not m._pet_event_armed)
+	m._sleeping = false
+	m._pet_event_armed = true
+	m._fire_pet_event()
+	_check("⑲c 깨어 있으면 그 자리에서 성사되고 안내가 보인다 — '%s'" % _last_notice(m),
+		m.pet.is_adopted() and _last_notice(m).contains("삽사리"))
+	_check("⑲d 판정이 형제 술어들과 같은 가드를 든다(`_facing_pet`의 그 한 줄)",
+		_in_func("func _fire_pet_event", "_sleeping"))
+
+	# ── ⑳ #20 완료 의뢰 원장이 죽은 키를 버린다 ───────────────────────────────
+	print("── ⑳ #20 게시판 완료 원장 정리 ──")
+	var qb: QuestBoard = m.quest_board
+	var qday := 113
+	var qweek := QuestBoard.week_of(qday)
+	qb.active = {}
+	qb.completed = ["daily:1", "daily:2", "weekly:0", "weekly:%d" % qweek]
+	qb.completed_total = 4
+	var q20 := QuestBoard.daily_quest(qday)
+	_check("⑳pre day %d의 일일 의뢰(%s)를 수락한다 · 이번 주(%d) 키는 이미 완료 이력에 있다"
+			% [qday, String(q20.get("key", "")), qweek],
+		not q20.is_empty() and qb.accept(q20, qday))
+	var q20_item := String(q20["item_id"])
+	var q20_need := int(q20["count"])
+	m.inventory.add_item(q20_item, maxi(q20_need - m.inventory.count_of(q20_item), 0))
+	_check("⑳a 완료가 성립한다", not qb.complete(qday, m.inventory.count_of(q20_item)).is_empty())
+	var live20: Array = qb.completed.duplicate()
+	live20.sort()
+	var want20: Array = ["daily:%d" % qday, "weekly:%d" % qweek]
+	want20.sort()
+	_check("⑳b 지난 날·지난 주 키 셋이 지워지고 **오늘 것과 이번 주 것만** 남는다(%s)" % str(live20),
+		live20 == want20)
+	_check("⑳c 누적 완료 건수는 안 줄어든다 — 스칼라로 따로 든다(paid_gold와 같은 관례)",
+		qb.completed_count() == 5)
+	_check("⑳d 재출제 억제는 그대로 — 오늘 일일 의뢰는 다시 안 걸린다",
+		qb.offer(qday, QuestBoard.KIND_DAILY).is_empty())
+	_check("⑳e 살아 있던 이번 주 키도 그대로 억제한다(정리가 산 키를 안 건드렸다)",
+		qb.offer(qday, QuestBoard.KIND_WEEKLY).is_empty())
+	_check("⑳f 다음 날은 정상 출제된다(정리가 미래를 막지 않는다)",
+		not qb.offer(qday + 1, QuestBoard.KIND_DAILY).is_empty())
+	var qsave := qb.to_save()
+	var qb2 := QuestBoard.new()
+	qb2.load_save(qsave)
+	_check("⑳g 세이브 왕복에서 누적 건수와 산 키가 함께 보존된다",
+		qb2.completed_count() == 5 and qb2.completed.size() == 2)
+	var qb3 := QuestBoard.new()
+	qb3.load_save({"completed": ["daily:5", "daily:6", "weekly:0"]})
+	_check("⑳h 누적 키가 없는 구버전 세이브는 배열 길이가 곧 누적이다(하위호환의 정확한 대응점)",
+		qb3.completed_count() == 3)
+	qb2.free()
+	qb3.free()
+
+	# ── ㉑ #21 시련 완료 원장도 같은 정리 ─────────────────────────────────────
+	print("── ㉑ #21 시련장 완료 원장 정리 ──")
+	var tg: TrialGround = m.trial
+	var tday := 113
+	var tweek := TrialGround.week_of(tday)
+	tg.active = {}
+	tg.completed = ["trial:0", "trial:1", "trial:2"]
+	tg.completed_total = 3
+	var t21 := TrialGround.weekly_trial(tweek)
+	_check("㉑pre %d주 시련(%s)을 수락한다" % [tweek, String(t21.get("key", ""))],
+		not t21.is_empty() and tg.accept(t21, tday))
+	var have21 := 999
+	if String(t21.get("kind", "")) == TrialGround.KIND_SLAY:
+		tg.active["progress"] = int(t21["count"])
+	else:
+		m.inventory.add_item(String(t21["item_id"]),
+			maxi(int(t21["count"]) - m.inventory.count_of(String(t21["item_id"])), 0))
+		have21 = m.inventory.count_of(String(t21["item_id"]))
+	_check("㉑a 완료가 성립한다", not tg.complete(tday, have21).is_empty())
+	_check("㉑b 지난 주 키 셋이 지워지고 이번 주 것만 남는다(%s)" % str(tg.completed),
+		tg.completed == ["trial:%d" % tweek])
+	_check("㉑c 누적 완료 건수는 안 줄어든다", tg.completed_count() == 4)
+	_check("㉑d 재출제 억제 그대로 — 이번 주 시련은 다시 안 걸린다", tg.offer(tday).is_empty())
+	_check("㉑e 다음 주는 정상 출제된다", not tg.offer(tday + 7).is_empty())
+	var tsave := tg.to_save()
+	var tg2 := TrialGround.new()
+	tg2.load_save(tsave)
+	_check("㉑f 세이브 왕복에서 누적 건수·산 키·시련패가 함께 보존된다",
+		tg2.completed_count() == 4 and tg2.completed.size() == 1 and tg2.tokens == tg.tokens)
+
+	# ── ㉒ #22 혼백관 기증 원장이 분모 밖 id를 안 싣는다 ──────────────────────
+	print("── ㉒ #22 기증 원장 로드 필터 ──")
+	var donatable: Array = Museum.donatable_ids()
+	var real_ids: Array = []
+	for i22 in mini(donatable.size() - 1, donatable.size()):
+		real_ids.append(String(donatable[i22]))   # 분모에서 **한 칸 모자란** 만큼만 실제 기증
+	var raw22: Dictionary = {}
+	for rid22 in real_ids:
+		raw22[rid22] = 1
+	raw22["__gone_relic__"] = 1                  # 로스터에서 사라진 죽은 id(개명·제외의 잔재)
+	m.museum.load_save({"donated": raw22, "claimed": []})
+	_check("㉒a 미지 id는 안 실린다 — 전시 %d/%d(분자가 분모를 못 넘긴다)"
+			% [m.museum.donated_count(), donatable.size()],
+		m.museum.donated_count() == real_ids.size()
+		and m.museum.donated_count() < donatable.size()
+		and not m.museum.is_donated("__gone_relic__"))
+	var full_pending := false
+	for mrow in m.museum.pending_milestones():
+		if int(mrow["count"]) >= donatable.size():
+			full_pending = true
+	_check("㉒b 그래서 완주 답례가 **채우기 전에** 지급되지 않는다(마일스톤 누수 봉합)",
+		not full_pending)
+	_check("㉒c 실제 기증분은 전부 살아 있다(필터가 산 id를 안 버린다)",
+		m.museum.is_donated(String(real_ids[0]))
+		and m.museum.is_donated(String(real_ids[real_ids.size() - 1])))
+
+	# ── ㉓ #23 주괴 등급이 적재·상자·세이브를 건너 살아남는다 ─────────────────
+	print("── ㉓ #23 주괴 등급 소거 ──")
+	var ingot := ItemCatalog.INGOT_MYEONGDONG
+	var pending_q := FurnaceLedger.quality_for(1)   # 제련공 퍼크 1단이 원장에 넣는 등급
+	_check("㉓pre 제련공 1단 = 은 등급 주괴이고 카탈로그가 그 등급을 값으로 판다",
+		pending_q == ItemCatalog.Q_SILVER
+		and ItemCatalog.price_of(ingot, pending_q) > ItemCatalog.price_of(ingot, ItemCatalog.Q_NORMAL))
+	m.inventory.remove_item(ingot, m.inventory.count_of(ingot))
+	_chest_purge(m.chest, ingot)
+	_check("㉓a 화덕이 건넨 등급이 백팩 슬롯에 그대로 실린다(원장↔슬롯 인계 지점 — 회귀 공백이던 자리)",
+		m.inventory.add_item(ingot, 1, pending_q)
+		and _slot_quality_of(m.inventory, ingot) == pending_q)
+	_check("㉓b 등급별로 스택이 갈린다(수확물과 같은 문법 — 은과 일반이 섞이지 않는다)",
+		m.inventory.add_item(ingot, 1, ItemCatalog.Q_NORMAL)
+		and _slot_count_of(m.inventory, ingot, pending_q) == 1
+		and _slot_count_of(m.inventory, ingot, ItemCatalog.Q_NORMAL) == 1)
+	m.chest.store(ingot, 1, pending_q)
+	_check("㉓c 상자 왕복도 등급을 안 지운다(두 그릇이 같은 술어를 본다)",
+		m.chest.count_of(ingot) == 1 and _slot_quality_of(m.chest, ingot) == pending_q)
+	_chest_purge(m.chest, ingot)
+	m.inventory.remove_item(ingot, m.inventory.count_of(ingot))
+	_check("㉓d 광물·자재는 여전히 품질 무차원이다(근사를 통째로 넓히지 않았다)",
+		m.inventory.add_item(String(ItemCatalog.MINERALS.keys()[0]), 1, ItemCatalog.Q_GOLD)
+		and _slot_quality_of(m.inventory, String(ItemCatalog.MINERALS.keys()[0])) == 0)
+	m.inventory.remove_item(String(ItemCatalog.MINERALS.keys()[0]),
+		m.inventory.count_of(String(ItemCatalog.MINERALS.keys()[0])))
+	_check("㉓e 등급을 싣는 집합의 정의가 **값을 매기는 쪽과 같다**(price_of가 배수를 얹는 id)",
+		ItemCatalog.carries_quality(ingot)
+		and ItemCatalog.carries_quality(ItemCatalog.harvest_id(CropCatalog.HWANGCHEON_PODO))
+		and not ItemCatalog.carries_quality(String(ItemCatalog.MINERALS.keys()[0])))
+
+	# ── ㉔ #24 화분 수확이 노지의 무비료 등급표를 그대로 굴린다 ───────────────
+	print("── ㉔ #24 화분 품질 롤 ──")
+	var none_row: Array = FertilizerCatalog.QUALITY_TABLE[FertilizerCatalog.STATE_NONE]
+	_check("㉔pre 무비료 등급은 상수가 아니다 — 표가 일반 %d / 은 %d / 금 %d를 말한다"
+			% [int(none_row[0]), int(none_row[1]), int(none_row[2])],
+		int(none_row[0]) < 100 and int(none_row[1]) + int(none_row[2]) > 0)
+	var pot24 := Vector2i(5, 5)
+	var crop24: String = CropCatalog.HWANGCHEON_PODO
+	var hit_day := -1
+	for d24 in range(1, 200):
+		if FertilizerCatalog.roll_quality_seeded(FertilizerCatalog.STATE_NONE,
+				"%d:pot:%d:%d" % [d24, pot24.x, pot24.y]) > ItemCatalog.Q_NORMAL:
+			hit_day = d24
+			break
+	_check("㉔pre' 그 표가 은/금을 내는 (날·칸)이 실재한다(day %d) — 시드 결정적이라 재현된다" % hit_day,
+		hit_day > 0)
+	m.clock.day = hit_day
+	var want_q24 := FertilizerCatalog.roll_quality_seeded(FertilizerCatalog.STATE_NONE,
+		"%d:pot:%d:%d" % [hit_day, pot24.x, pot24.y])
+	m.inventory.remove_item(ItemCatalog.harvest_id(crop24),
+		m.inventory.count_of(ItemCatalog.harvest_id(crop24)))
+	m.garden_pot.remove(pot24)
+	_check("㉔pre2 화분을 놓고 %s를 심어 손 물주기로 키운다" % CropCatalog.name_of(crop24),
+		m.garden_pot.place(pot24) and m.garden_pot.plant(pot24, crop24))
+	var g24 := 0
+	while not m.garden_pot.is_mature(pot24) and g24 < 40:
+		m.garden_pot.water(pot24)
+		m.garden_pot.advance_day()
+		g24 += 1
+	m.clock.day = hit_day                     # advance_day는 원장만 민다 — 사건 날짜를 다시 못 박는다
+	_check("㉔pre3 %d일 만에 성숙" % g24, m.garden_pot.is_mature(pot24))
+	m._target = pot24
+	m._harvest_pot()
+	_check("㉔a 화분 수확이 %s 등급으로 나온다(노지 무비료와 같은 표·같은 롤)"
+			% ItemCatalog.quality_name(want_q24),
+		want_q24 > ItemCatalog.Q_NORMAL
+		and _slot_quality_of(m.inventory, ItemCatalog.harvest_id(crop24)) == want_q24)
+	_check("㉔b 그래서 판매가가 실제로 올라간다(%d냥 → %d냥 — 잃던 20%%가 돌아온다)"
+			% [ItemCatalog.price_of(ItemCatalog.harvest_id(crop24), ItemCatalog.Q_NORMAL),
+				ItemCatalog.price_of(ItemCatalog.harvest_id(crop24), want_q24)],
+		ItemCatalog.price_of(ItemCatalog.harvest_id(crop24), want_q24)
+			> ItemCatalog.price_of(ItemCatalog.harvest_id(crop24), ItemCatalog.Q_NORMAL))
+	var upper24 := 0
+	for d25 in range(1, 1001):
+		if FertilizerCatalog.roll_quality_seeded(FertilizerCatalog.STATE_NONE,
+				"%d:pot:%d:%d" % [d25, pot24.x, pot24.y]) > ItemCatalog.Q_NORMAL:
+			upper24 += 1
+	_check("㉔c 1000회 롤 중 은/금이 %d회 — 표의 %d%%대에 앉는다(상수 0이 아니다)"
+			% [upper24, int(none_row[1]) + int(none_row[2])],
+		upper24 > 120 and upper24 < 280)
+	m.garden_pot.remove(pot24)
+	m.inventory.remove_item(ItemCatalog.harvest_id(crop24),
+		m.inventory.count_of(ItemCatalog.harvest_id(crop24)))
+
+	# ── ㉕ #25 곳간 적재가 등급 소거를 실제로 알린다 ─────────────────────────
+	print("── ㉕ #25 곳간 등급 소거 안내 ──")
+	var sig25: String = ItemCatalog.harvest_id(CropCatalog.HWANGCHEON_PODO)
+	_check("㉕pre %s는 융합 메뉴 시그니처이고 등급을 싣는 물건이다" % ItemCatalog.name_of(sig25),
+		MenuCatalog.menu_for_signature(sig25) != "" and ItemCatalog.carries_quality(sig25))
+	m.larder.take_back(sig25, m.larder.count_of(sig25))
+	m.inventory.remove_item(sig25, m.inventory.count_of(sig25))
+	m.inventory.add_item(sig25, 1, ItemCatalog.Q_IRIDIUM)
+	var slot25 := _slot_index_of(m.inventory, sig25, ItemCatalog.Q_IRIDIUM)
+	_check("㉕pre' 이리듐 등급으로 백팩에 들어 있다(판매가 %d냥)"
+			% ItemCatalog.price_of(sig25, ItemCatalog.Q_IRIDIUM), slot25 >= 0)
+	m._on_frame_larder_store(slot25)
+	var notice25 := _last_notice(m)
+	_check("㉕a 등급이 실린 물건을 쟁이면 소거를 말한다 — '%s'" % notice25,
+		notice25.contains("사라진다")
+		and notice25.contains(ItemCatalog.quality_name(ItemCatalog.Q_IRIDIUM)))
+	_check("㉕b 회수는 계약대로 일반품이다(주석이 말하던 그 사실 — 이제 화면도 말한다)",
+		m.larder.count_of(sig25) == 1)
+	m.inventory.add_item(sig25, 1, ItemCatalog.Q_NORMAL)
+	var slot25b := _slot_index_of(m.inventory, sig25, ItemCatalog.Q_NORMAL)
+	m._on_frame_larder_store(slot25b)
+	_check("㉕c 일반품엔 그 꼬리가 안 붙는다(잃은 게 없으면 말하지 않는다 — 알림 줄 보호) — '%s'"
+			% _last_notice(m),
+		slot25b >= 0 and not _last_notice(m).contains("사라진다"))
+	m.larder.take_back(sig25, m.larder.count_of(sig25))
+
 	for s8 in SaveManager.SLOT_COUNT:
 		_wipe_slot(s8)
 	print("── 결과: %s (실패 %d)" % ["PASS" if _fail == 0 else "FAIL", _fail])
@@ -580,3 +994,60 @@ func _gift_rated_drinks(drinks: Array) -> int:
 				n += 1
 				break
 	return n
+
+
+# ⑬⑭ 자체 파종이 통과시키는 첫 빈 잔디 칸((-1,-1) = 없음). 마당 여백을 실제 술어로 훑는다 —
+# 좌표를 손으로 적어 두면 레이아웃이 바뀌는 순간 단언이 조용히 무의미해진다.
+func _first_seedable_tile(m: Node, occ: Dictionary) -> Vector2i:
+	for y in range(0, m._outdoor_h):
+		for x in range(0, m._grid_w):
+			var t := Vector2i(x, y)
+			if m._is_tree_seed_free(RegionCatalog.HOME, t, occ) and m._can_place_sprinkler(t) \
+					and m._can_place_furnace(t) and m._can_place_crystalarium(t):
+				return t
+	return Vector2i(-1, -1)
+
+# ㉓㉔㉕ 그릇(Inventory/Chest)에서 그 id가 실제로 든 등급(-1 = 없음). 슬롯 층을 직접 물어야
+# "카탈로그는 등급을 파는데 슬롯은 0"이라는 이 결함류가 잡힌다.
+func _slot_quality_of(holder: Node, id: String) -> int:
+	for i in holder.slots.size():
+		var s: Variant = holder.slots[i]
+		if s != null and String(s["id"]) == id:
+			return int(s.get("quality", 0))
+	return -1
+
+func _slot_count_of(holder: Node, id: String, quality: int) -> int:
+	var n := 0
+	for i in holder.slots.size():
+		var s: Variant = holder.slots[i]
+		if s != null and String(s["id"]) == id and int(s.get("quality", 0)) == quality:
+			n += int(s["count"])
+	return n
+
+func _slot_index_of(holder: Node, id: String, quality: int) -> int:
+	for i in holder.slots.size():
+		var s: Variant = holder.slots[i]
+		if s != null and String(s["id"]) == id and int(s.get("quality", 0)) == quality:
+			return i
+	return -1
+
+# ⑮㉓ 상자에서 그 id를 전량 걷어낸다(Chest엔 remove_item이 없다 — 슬롯 지정 remove_at만 있다).
+func _chest_purge(c: Node, id: String) -> void:
+	for i in range(c.slots.size() - 1, -1, -1):
+		var s: Variant = c.slots[i]
+		if s != null and String(s["id"]) == id:
+			c.remove_at(i, int(s["count"]))
+
+# ⑯ main.gd에서 조사 병기가 남은 **표시 문구 줄**(주석 줄은 뺀다 — 결함을 설명하는 주석 자체가
+# 그 패턴을 인용하므로, 주석까지 세면 봉합할수록 단언이 실패하는 자기모순이 된다).
+func _paren_josa_lines() -> Array:
+	var out: Array = []
+	for i in _src.size():
+		var line := String(_src[i])
+		if line.strip_edges().begins_with("#"):
+			continue
+		for pat in ["은(는)", "을(를)", "이(가)", "과(와)"]:
+			if line.contains(pat):
+				out.append(i + 1)
+				break
+	return out
