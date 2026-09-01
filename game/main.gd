@@ -3092,6 +3092,15 @@ var _pet_event_armed := false
 # ★[S8-T8] 이혼 확정 대기 래치 — 옥자 [F] 1타 = 경고·2타 = 결행(50,000냥 + ♡0 리셋은 오타 한
 # 번에 치르기엔 너무 크다). 옥자에게서 시선을 떼면 접힌다(_process가 리셋 — 세이브 무상태).
 var _divorce_armed := false
+# ★[폴리시 R5] 마일스톤 하트 축의 **최고 수위**. 세 축 중 수확·매출은 누적이라 단조인데 하트만
+# 단조가 아니다 — `_do_divorce`의 `reset_hearts()`가 그 사람 칸을 0으로 떨어뜨린다. 그래서 래치를
+# 부팅 때 현재 상태에서 다시 파생하는 설계(아래 주석의 "누적값에서 파생")의 전제가 하트에서만
+# 깨져 있었다: 이혼 → 재접속하면 래치가 false로 되돌아가 **이미 지난 1회성 축하가 다시 터지고**,
+# 그보다 무겁게는 `_cafe_stage()`가 함께 내려앉아 좌석·곳간 용량이 줄고 늘봄방 도면이 도로 잠겼다
+# (지나간 도달을 되돌리는 것은 ADR-0008 "평평 ≠ 막힘"에 정면으로 어긋난다).
+# 래치를 세이브에 싣는 대신 **입력을 단조로 만든다** — 그러면 팝업·단계·HUD가 한 소스에서 함께
+# 낫는다(래치만 저장하면 단계 퇴행은 그대로 남는다). 세이브 키 하나 추가(구세이브 = 0에서 시작).
+var _milestone_hearts_peak := 0
 # T7.2 1단 달성("카페 2단계!") 팝업을 이미 띄웠는가(한 번만 뜨게 하는 래치). 달성 여부 자체는
 # 누적값에서 파생되므로(CafeMilestone.is_complete — 세이브 무상태) 저장하지 않는다. 이 래치는
 # 일시 표시용으로, _ready에서 "이미 완료된 세이브를 이어받았으면 true"로 초기화해 재개 시
@@ -11234,6 +11243,7 @@ func _save_game() -> void:
 		"guest_pool": guests.to_save(),
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
+		"milestone_hearts_peak": _milestone_hearts_peak,   # ★[폴리시 R5] 하트 축 최고 수위(단조 보장)
 		"farming_xp": _farming_xp,   # ★ S1-6 농사 숙련 XP(혼력 감산 파생원)
 		"watering_can": _can_water,   # ★ [S1R-T8] 물뿌리개 잔량(구세이브 = 기본값 20, 하위호환)
 		"foraging_xp": _foraging_xp,   # ★ ADR-0052 채집 숙련 XP(전문직 게이트·퍼크 파생원)
@@ -11438,6 +11448,8 @@ func _load_game() -> void:
 		onboarding.load_save(data["onboarding"])
 	# T4.2 슬라이스 점수판 누적(거둔 영혼 총수). 손상 방어로 음수는 0으로 자른다.
 	_run_harvested = maxi(int(data.get("run_harvested", 0)), 0)
+	# ★[폴리시 R5] 구세이브엔 키가 없다 → 0. 첫 `_milestone_hearts()` 호출이 현재 합으로 채운다.
+	_milestone_hearts_peak = maxi(int(data.get("milestone_hearts_peak", 0)), 0)
 	# ★ S1-6 농사 숙련 XP 복원(키 없는 구세이브는 0 = L0, 무막힘). 손상 방어로 음수는 0.
 	_farming_xp = maxi(int(data.get("farming_xp", 0)), 0)
 	# ★ ADR-0052 채집 숙련 XP·전문직 복원(키 없는 구세이브 = 0/미선택, 무막힘·정합 재검증은 _load_professions).
@@ -14432,9 +14444,16 @@ func _remove_rarecrow(t: Vector2i) -> void:
 #   같은 종을 또 결제하고(다른 매대는 has_bought 원장이 막는다), 8종 완주가 풀려 허수아비 보호
 #   반경이 디럭스에서 기본으로 조용히 되돌아갔다. 두 상자(집·갈무리방)는 서로 독립이라 둘 다 본다.
 func _rarecrow_owned(id: String) -> bool:
-	if inventory != null and inventory.count_of(id) > 0:
-		return true
 	if rarecrow != null and rarecrow.is_placed(id):
+		return true
+	return _stored_anywhere(id)
+
+# ★[폴리시 R5] 이 물건을 **어디든 가지고 있는가** = 백팩 ∪ 집 상자 ∪ 갈무리방 상자.
+# 위 `_rarecrow_owned`가 먼저 겪고 세 곳 판정으로 봉합한 함정을 술어 하나로 뽑아낸 것이다: 상자는
+# 종류 제한이 없어 도구·열쇠도 그대로 받으므로(chest.store), **백팩만 보는 1회성 판정은 "상자에
+# 넣으면 안 가진 것"** 이 되어 증정·발급이 무한히 다시 열린다. 새 1회성 창구는 이 술어를 쓴다.
+func _stored_anywhere(id: String) -> bool:
+	if inventory != null and inventory.count_of(id) > 0:
 		return true
 	if chest != null and chest.count_of(id) > 0:
 		return true
@@ -19754,7 +19773,7 @@ func _myeongbu_quest_open() -> bool:
 	var r := _resident(OKJA_RID)
 	return _okja_track_open() and _spouse_id == "" and _wedding_day == 0 \
 		and r != null and r.affinity != null and r.affinity.hearts() >= Affinity.MAX_HEARTS \
-		and not inventory.has_item(ItemCatalog.MYEONGBU_CHARM)
+		and not _stored_anywhere(ItemCatalog.MYEONGBU_CHARM)   # ★[폴리시 R5] 상자 보관 = 재발급 차단
 
 func _grant_myeongbu_charm() -> void:
 	if not _myeongbu_quest_open():
@@ -21336,8 +21355,12 @@ func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
 #   night_bar seam에 그대로 살아 있다 — 빠진 건 *게이트*지 보상이 아니다).
 # ★ 옥자 몫은 새 미터가 아니라 **누적 서빙 매출 축**이 대변한다(⚠️잠정 — ADR-0032 해석이라 owner
 #   결재 대상. 근거·대안은 cafe_milestone.gd 설계 메모 참조). 그래서 이 함수는 두 사람만 센다.
+# ★[폴리시 R5] **읽으면서 최고 수위를 기록한다** — 하트는 이혼으로 내려갈 수 있으므로 마일스톤이
+#   보는 값은 "지금까지 닿은 최고"다(_milestone_hearts_peak 선언부 참조). 파생 지점이 여럿이라
+#   (팝업 래치·카페 사다리·HUD compact) 갱신을 이 한 곳에 두는 것이 순서 사고를 없앤다.
 func _milestone_hearts() -> int:
-	return affinity.hearts() + mel_affinity.hearts()
+	_milestone_hearts_peak = maxi(_milestone_hearts_peak, affinity.hearts() + mel_affinity.hearts())
+	return _milestone_hearts_peak
 
 # 카페 1단 완료 여부 — 세 루프 산출물이 *각각* 목표치를 넘었나(AND 게이트, CafeMilestone). 누적
 # 거둔 영혼·누적 서빙 매출·미호+멜 하트 합에서 파생한다(끝남이 day에서 파생되는 RunSummary와 같은 결).
@@ -21440,7 +21463,10 @@ func _close_mirror() -> void:
 func _grant_mount_whistle() -> bool:
 	if carpenter == null or not carpenter.is_done(Carpenter.PROJ_STABLE):
 		return false
-	if inventory.has_item(ItemCatalog.MOUNT_WHISTLE):
+	# ★[폴리시 R5] 상자에 넣어 둔 휘파람도 "가진 것"이다 — 백팩만 보면 매일 아침이 두 번째, 세 번째
+	#   휘파람을 찍어 낸다(스택 불가 KEY라 상자 슬롯을 한 개당 하나씩 영구 점유). 매일 부르는
+	#   재지급 훅에서 멱등의 근거는 이 술어 하나뿐이므로, 그 범위가 곧 복제 방지 범위다.
+	if _stored_anywhere(ItemCatalog.MOUNT_WHISTLE):
 		return false
 	if not inventory.add_item(ItemCatalog.MOUNT_WHISTLE, 1):
 		_notice("마구간이 다 지어졌다 — 가방을 비우면 휘파람을 받는다")
