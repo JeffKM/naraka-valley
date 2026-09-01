@@ -257,7 +257,13 @@ const QUALITY_TABLE := [
 #   시간대(밤 전용 등) 잠금 어종도 포함한다 — 일일 기한이 게시일 포함 2일이라 밤 창이 두 번 오고,
 #   스타듀 게시판도 시간대 어종을 그대로 낸다. 전설은 max_class 상한이 자연 배제한다
 #   (결정 3 "전설 = 선택 프레스티지" — 의뢰가 전설을 강제하면 서사·의뢰 게이팅 금지 취지가 깨진다).
-static func quest_pool(season_idx: int, max_class: int) -> Array:
+# ★[폴리시 R5] `due_season_idx` — **기한 마지막 날의 절기**(< 0 = 게시일 절기와 같다 = 종전 거동).
+#   위 자구가 근거로 든 "절기는 기한 안에 안 바뀐다"가 일일 의뢰에서만 거짓이었다: 게시일이 절기
+#   마지막 날(dos 28)이면 기한 이틀째는 다음 절기 1일이라, 절기-잠금 어종은 `is_available`이
+#   그날 아예 막는다(그 하루는 물리적으로 이행 불가). 그래서 **두 절기 모두에서 낚이는 어종만**
+#   출제한다 — 날씨 한정 어종을 배제한 바로 그 이유(뽑기 실패는 어려움이 아니다)의 절기판이다.
+#   ★ 두 절기가 같으면(= 절기 안에 온전히 든 기한) 조건이 중복이라 풀이 한 톨도 안 바뀐다.
+static func quest_pool(season_idx: int, max_class: int, due_season_idx: int = -1) -> Array:
 	var out: Array = []
 	for id in FISH.keys():
 		var f: Dictionary = FISH[id]
@@ -265,6 +271,8 @@ static func quest_pool(season_idx: int, max_class: int) -> Array:
 			continue
 		var seasons: Array = f["seasons"]
 		if not seasons.is_empty() and not seasons.has(season_idx):
+			continue
+		if due_season_idx >= 0 and not seasons.is_empty() and not seasons.has(due_season_idx):
 			continue
 		# ★[S7-T3 / ADR-0065 결정 4] **날씨 한정 어종은 출제하지 않는다.** 일일 의뢰 기한이 2일인데
 		#   그 안에 혼우가 안 오면 이행이 물리적으로 불가능해진다(하늘은 플레이어가 못 고른다 —

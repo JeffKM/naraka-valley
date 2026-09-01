@@ -141,11 +141,15 @@ func fertilize(t: Vector2i, fert_id: String) -> bool:
 # ── S1-6 품질 roll(§8.5) — 수확 시 main이 칸을 비우기 전에 호출 ─────────────────
 # 칸의 비료 → 품질 상태(quality군 → BASIC/QUALITY/DELUXE · 성장촉진군/무비료 → NONE) → 등급 0..3 난수.
 # 성장촉진 비료 칸은 품질 NONE(품질과 별 축, §3.1). 미경작 칸은 Q_NORMAL(안전).
-func roll_quality(t: Vector2i) -> int:
+# ★[폴리시 R5] `seed_tag`는 **이 수확 사건의 이름**이다(호출부가 day+구역+칸으로 짓는다). 전역
+#   RNG를 쓰던 종전엔 F9 로드마다 같은 칸의 등급이 다시 굴러, 이리듐이 나올 때까지 반복하면
+#   확률이 무의미해졌다(fertilizer_catalog.roll_quality_seeded 머리말). 인자에 기본값을 안 둔
+#   것이 의도다 — 시드 없는 호출이 조용히 옛 거동으로 돌아가는 문을 남기지 않는다.
+func roll_quality(t: Vector2i, seed_tag: String) -> int:
 	if not is_tilled(t):
 		return ItemCatalog.Q_NORMAL
 	var state := FertilizerCatalog.state_of(str(_tiles[t].get("fertilizer", "")))
-	return FertilizerCatalog.roll_quality(state)
+	return FertilizerCatalog.roll_quality_seeded(state, seed_tag)
 
 func plant(t: Vector2i, crop_id: String) -> bool:
 	# 경작된 빈 칸에, 카탈로그에 있는 작물만 심는다(괭이질 → 심기 순서 강제).

@@ -163,6 +163,14 @@ func feed_from_silo_in(building: String) -> int:
 #                age >= grow_days_of(species)면 성체(is_adult) — 그전엔 새끼(산물 안 냄, 우정만 쌓임).
 var _animals: Dictionary = {}
 
+# ★[폴리시 R5] 정산 회차 — 산물 품질·대형 롤의 시드 축이다(세이브에 실린다 = 재롤 차단).
+# 종전 두 롤은 전역 `randi/randf`였는데, 전역 스트림은 세이브에 안 실리고 `_load_game`이 되감지도
+# 않아 **자기 전에 저장 → 아침에 등급을 보고 → F9 → 다시 취침**을 반복하면 전 축사의 산물을
+# 이리듐·대형으로 확정할 수 있었다. 지오드 개봉 수(`geode_opened`)가 세운 그 규율 1:1 —
+# *진행에 실리는 롤의 시드는 세이브가 든다*. clock을 안 들이고 자체 카운터를 두는 이유는 이 노드가
+# 시계를 모르기 때문이다(주입 다리 0 = 디커플링 유지). 로드가 이 값을 되감으므로 같은 밤은 같은 답.
+var _settle_no := 0
+
 # ── 배치·조회 ────────────────────────────────────────────────────────────────
 # 타일에 짐승을 추가한다(유효 종 + 빈 타일). 초기 우정 0·기분 중립·케어 플래그 전부 false·산물 0.
 # home_building = 소속 건물 id(넋둥우리/넋우릿간). B1-a "진입 실내" — 짐승은 실내에 거주하고 돌봄도
@@ -441,6 +449,7 @@ static func large_chance(hearts: int) -> float:
 func advance_day() -> void:
 	if _animals.is_empty():
 		return
+	_settle_no += 1                 # ★[폴리시 R5] 이 밤의 롤 시드 축(세이브가 든다 — 선언부 참조)
 	for tile in _animals.keys():
 		var a: Dictionary = _animals[tile]
 		# ★ [Phase E/S1-15] ⓪ 나이 +1(새끼→성체 성장). 하루가 지났으니 먼저 늙힌 뒤 성체 여부로 산물을 게이팅
@@ -462,8 +471,13 @@ func advance_day() -> void:
 			var hearts := int(a["friendship"]) / FRIEND_PER_HEART
 			var state := quality_state_for(hearts, int(a["mood"]))
 			a["product"] = 1
-			a["product_quality"] = FertilizerCatalog.roll_quality(state)
-			a["product_large"] = AnimalCatalog.large_capable(a["species"]) and randf() < large_chance(hearts)
+			# ★[폴리시 R5] 두 롤 다 **정산 회차·짐승 칸 결정 시드**다(선언부 `_settle_no` 참조).
+			var tag := "%d:%d:%d" % [_settle_no, tile.x, tile.y]
+			a["product_quality"] = FertilizerCatalog.roll_quality_seeded(state, tag)
+			var lrng := RandomNumberGenerator.new()
+			lrng.seed = hash("animal_large:%s" % tag)
+			a["product_large"] = AnimalCatalog.large_capable(a["species"]) \
+				and lrng.randf() < large_chance(hearts)
 		# ③ 데일리 케어 플래그 리셋(새 하루).
 		for flag in ["fed", "petted", "grazed", "penned", "cleaned"]:
 			a[flag] = false
@@ -474,8 +488,9 @@ func advance_day() -> void:
 # 깊은 복사로 넘겨 호출 측이 들고 있어도 상태가 새지 않게 한다.
 func to_save() -> Dictionary:
 	# ★ B1-a.2: 방목 문 · B1-a.3: 여물광 건초 재고 · ★[S4-T7] B1-b: 건물 티어(정원)도 보존.
+	# ★[폴리시 R5] settle_no = 산물 롤 시드 축(재롤 차단 — 선언부 참조).
 	return {"animals": _animals.duplicate(true), "doors": _doors.duplicate(true),
-		"silo_hay": _silo_hay, "tiers": _tiers.duplicate(true)}
+		"silo_hay": _silo_hay, "tiers": _tiers.duplicate(true), "settle_no": _settle_no}
 
 # 복원: _animals·_doors를 통째로 갈아끼운다. changed로 main이 화면·HUD를 다시 세우게 한다(디커플링).
 # ★ B1-a: home_building이 없는 구버전 세이브는 ""로 백필한다(building_of/animals_in 방어).
@@ -489,6 +504,8 @@ func load_save(data: Dictionary) -> void:
 	# ★[S4-T7] B1-b 건물 티어(구버전 = 키 없음 = 전 건물 기본 티어·정원 4 — 하위호환 자동).
 	var tiers: Variant = data.get("tiers", {})
 	_tiers = tiers.duplicate(true) if typeof(tiers) == TYPE_DICTIONARY else {}
+	# ★[폴리시 R5] 정산 회차(구세이브 = 0에서 다시 센다 — 롤이 갈릴 뿐 진행과 모순 없다).
+	_settle_no = maxi(int(data.get("settle_no", 0)), 0)
 	for tile in _animals.keys():
 		var a: Dictionary = _animals[tile]
 		if not a.has("home_building"):

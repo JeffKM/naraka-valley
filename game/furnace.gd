@@ -169,6 +169,24 @@ func remove(region: String, t: Vector2i) -> bool:
 	changed.emit()
 	return true
 
+# ★[폴리시 R5] 강제 회수 — **무대가 그 칸을 삼킬 때**만 쓰는 진입점이다(늘봄방 완공이 예정지를
+#   벽으로 덮는 자리). `remove`가 달구는 중·수거 대기 화덕을 거절하는 것은 옳다("먼저 꺼내라") —
+#   그러나 그 칸이 곧 사라지는 상황에선 그 거절이 곧 영구 매장이라, 안에 든 것을 **돌려주면서**
+#   걷는 길을 따로 연다(Crystalarium.remove가 보석을 함께 돌려주는 계약과 같은 결).
+#   반환: {} = 없는 칸 / {"ore": 넣은 광석 id, "product": 다 익은 주괴 id(""=미완), "quality": 등급}.
+#   ★ 무엇을 돌려줄지는 호출 측이 정한다 — 이 원장은 인벤토리를 모른다(머리말 경계 불변).
+func evict(region: String, t: Vector2i) -> Dictionary:
+	if not has_at(region, t):
+		return {}
+	var out := {"ore": ore_at(region, t),
+		"product": product_at(region, t) if is_ready(region, t) else "",
+		"quality": pending_quality(region, t)}
+	_forges[region].erase(t)
+	if _forges[region].is_empty():
+		_forges.erase(region)
+	changed.emit()
+	return out
+
 # ── 투입 ────────────────────────────────────────────────────────────────────
 # 광석을 넣는다(재료 차감은 호출 측). 빈 화덕 + 제련 가능한 광석일 때만 true.
 #   · time_cut     = 제련공 퍼크 시간 단축 비율(0.0~0.9 — S5-T8까지 0.0)

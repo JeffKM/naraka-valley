@@ -72,5 +72,7 @@ static func summary(hearts: int) -> String:
 #   who = 점주 이름("뱃사공") · where = 매대 이름("생선가게 매대").
 static func summary_for(who: String, where: String, hearts: int) -> String:
 	if _clamp_hearts(hearts) <= 0:
-		return "%s 할인: 정가 — %s와 친해지면 %s가 싸진다" % [who, who, where]
+		# 점주·매대 이름이 인자로 들어오므로 조사를 고정할 수 없다("뱃사공와" — HanjiUi 조사 헬퍼).
+		return "%s 할인: 정가 — %s 친해지면 %s 싸진다" \
+			% [who, HanjiUi.with_gwa(who), HanjiUi.with_i(where)]
 	return "%s 할인: −%d%% (%s)" % [who, percent(hearts), where]

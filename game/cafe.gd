@@ -135,6 +135,10 @@ var _spawned_today := 0
 # 뽑으면 그 손님은 익명으로 앉는다. 근거 둘 — ㉠ 같은 얼굴이 두 자리에 동시에 앉는 그림을 막고
 # ㉡ 단골 가중치가 커져도 하루가 한 사람으로 도배되지 않는다(로스터가 죽지 않는다).
 var _guests_today: Array = []
+# ★[폴리시 R5] 위 하루치 원장이 **어느 날 것인가**. 영업 시작이 무조건 리셋하던 것을 이 값으로
+# 가른다 — 같은 날 안에서 재시작·로드가 그 원장을 처음으로 되돌리면 결정 롤(day+serial)이 손님 열을
+# 재생해 영속 단골 원장이 두 번 적립되기 때문이다(_open_shop 머리말). 0 = 아직 아무 날도 안 열었다.
+var _ledger_day := 0
 
 func _ready() -> void:
 	for i in N_SEATS:
@@ -174,15 +178,51 @@ func tick(delta: float, minutes: float) -> void:
 # 영업 시작: 정산을 리셋하고 첫 손님 스폰 타이머를 짧게 잡아 곧바로 손님이 들어오게 한다.
 func _open_shop() -> void:
 	_open = true
+	# ★[폴리시 R5] **그 원장이 오늘 것이 아닐 때만** 리셋한다. 종전엔 무조건 0으로 밀었는데,
+	#   영업 중(15:00~19:00)에 저장하고 게임을 껐다 이어 하면 새 Cafe 노드는 `_was_open = false`라
+	#   복원된 시각의 첫 tick이 여기를 다시 태웠다 — `_spawned_today`가 0으로 돌아가고 손님 롤이
+	#   `day + serial` 결정 롤이라 **그날의 손님 열이 처음부터 재생**되어, 이미 서빙한 명명 손님이
+	#   같은 날 두 번째로 앉고 **영속 단골 원장(GuestPool._visits)이 같은 하루에 두 번 적립**됐다
+	#   (저장·재시작 반복 = 단골화 무한 가속). 덤으로 마감 정산이 로드 이후 매출만 보고했다.
+	if _ledger_day != day:
+		_reset_day_ledger()
+	_spawn_timer = 0.5
+	_clear_seats()
+	changed.emit()
+
+# 하루치 원장 초기화 — 영업창은 하루에 한 번뿐이라(OPEN_MIN..CLOSE_MIN 단일 창) 날이 갈릴 때만 돈다.
+func _reset_day_ledger() -> void:
+	_ledger_day = day
 	_today_revenue = 0
 	_today_served = 0
 	_today_left = 0
 	_today_cheki = 0      # ★S6-T5 오늘 찍은 체키 장수 리셋(정산과 같은 하루 단위)
 	_spawned_today = 0    # ★S6-T2 주문 롤 serial 리셋 — 하루의 주문열은 매일 새로 시작한다
 	_guests_today.clear() # ★S6-T4 오늘의 명명 손님 방문 기록 리셋(하루 1인 1회는 하루 단위 규칙)
-	_spawn_timer = 0.5
-	_clear_seats()
-	changed.emit()
+
+# ── ★[폴리시 R5] 세이브/로드 — **하루치 접객 상태만** 든다 ────────────────────
+# 좌석·세션은 안 싣는다(껐다 켜는 사이에 그 손님들은 떠났다 — `_clear_seats`가 곧 맞는 답이다).
+# 실리는 것은 "오늘 이미 일어난 일"의 원장뿐이고, 그것이 영속 단골 원장의 중복 적립을 막는 가드다.
+func to_save() -> Dictionary:
+	return {"ledger_day": _ledger_day, "spawned_today": _spawned_today,
+		"guests_today": _guests_today.duplicate(),
+		"revenue": _today_revenue, "served": _today_served,
+		"left": _today_left, "cheki": _today_cheki}
+
+func load_save(data: Dictionary) -> void:
+	_ledger_day = maxi(int(data.get("ledger_day", 0)), 0)
+	_spawned_today = maxi(int(data.get("spawned_today", 0)), 0)
+	_guests_today = []
+	var gl: Variant = data.get("guests_today", [])
+	if typeof(gl) == TYPE_ARRAY:
+		for g in (gl as Array):
+			var gid := String(g)
+			if gid != "" and not _guests_today.has(gid):
+				_guests_today.append(gid)
+	_today_revenue = maxi(int(data.get("revenue", 0)), 0)
+	_today_served = maxi(int(data.get("served", 0)), 0)
+	_today_left = maxi(int(data.get("left", 0)), 0)
+	_today_cheki = maxi(int(data.get("cheki", 0)), 0)
 
 # 영업 마감: 자리를 비우고 일일 정산 요약을 쏜다(main이 팝업으로 띄운다).
 func _close_shop() -> void:
