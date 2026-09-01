@@ -2419,6 +2419,9 @@ var rarecrow: RarecrowLedger = null
 #   두 종을 모은 다음 날 아침 전령이 셋째를 얹어 보낸다(문턱 잠정 — owner 큐). 편지 id의 진실원은
 #   Mailbox.LETTERS이고 여기선 그 키를 참조만 한다(mail_attach_test가 두 쪽을 대조).
 const RARECROW_HERALD_LETTER := "herald_rarecrow"
+# ★[폴리시 R8] 채널 개통 안내(발송 조건 없음 — 전령은 자격이 아니라 개통을 알린다). 종전엔 이 통을
+#   보내는 코드가 저장소 어디에도 없어 우편함의 유일한 사용 설명이 영영 안 왔다.
+const HERALD_NOTICE_LETTER := "herald_notice"
 const RARECROW_HERALD_THRESHOLD := 2
 # ★ [S3-T7 / ADR-0061 결정 7] 게잡이통 상태(구역별 설치 좌표·미끼·수거 대기 어획물). Sprinkler 결의
 #   얇은 원장 노드(코드 생성 — .new()). 생선가게 lvl3 구매→물가 인접 칸 설치→미끼 장전→밤 일일 롤→
@@ -3050,6 +3053,11 @@ var _confess_rid := ""
 # 비교 한 번(마지막 주 ≠ 오늘의 주)으로 리셋이 공짜다(주는 상태가 아니라 day 파생 — clock.gd).
 # 세이브 가법 키("season_q_week") — 구세이브(키 없음) = 빈 원장 = 다음 주 첫날에 처음 묻는다.
 var _season_q_week: Dictionary = {}
+# ★[폴리시 R8] **이 대화에서 물음이 서 있고 아직 안 골라진 상대 rid**("" = 없음). 원장은 물음을
+# *건 순간* 찍히는데, 같은 대화의 고백 [F]가 `replace_lines`로 대사를 통째로 갈면 선택지 예약이
+# 함께 사라져(dialogue `_clear_choice`) 물음은 화면에 뜨지도 못한 채 그 주가 통째로 닫혔다.
+# 이 값이 그 되감기의 유일한 근거다(대화·선택과 같은 일시 상태라 세이브 대상 아님).
+var _season_q_posed_rid := ""
 # ── ★[S9-T2 / ADR-0067 결정 2] 컷신(연출 등급 2) 재생 상태 ────────────────────
 # 재생 중인 러너(null = 재생 없음). ★**세이브 키 0**: 컷신은 대화보다 더 짧은 일시 상태다
 # (_talking_to·_confess_rid와 같은 결). 특히 "시계 정지"가 세이브에 남으면 로드한 세이브의
@@ -3099,6 +3107,14 @@ var _soul_born := false
 # 프레임에 재생한다). 아침 훅은 fade 트윈이 화면을 덮은 한가운데라 거기서 틀면 러너와 트윈이
 # 같은 알파를 서로 덮어쓴다(`_arm_spine_b4` 머리말의 그 함정). 세이브 무상태(로드 = 예약 없음).
 var _soul_birth_armed := false
+# ★[폴리시 R8] 형상화한 몸을 **아직 안 세웠다**는 래치. 탄생 컷신의 암전은 0.7초에 걸쳐 *나중에*
+#   내려오는데(soul_child.gd BIRTH_CUTSCENE 두 번째 스텝), 몸을 재생 *전에* 세우면 취침 트윈이
+#   방금 걷어 낸 환한 안방에서 작은 혼이 허공에 튀어나오는 것을 0.7초간 보게 된다 —
+#   "암전 뒤에서 일어나는 일이라 화면에 옮길 것이 없다"(soul_child.gd:33~35)는 이 컷신의 계약과
+#   정면으로 어긋난다. 그래서 예약만 걸고, 알파가 1.0에 닿는 프레임에 `_apply_cutscene_frame`이
+#   소비한다(암전이 걷힐 땐 이미 서 있다 = 종전 주석이 노린 결과는 그대로 충족된다).
+#   세이브 무상태 — 로드는 `_refresh_soul_child_body`가 `_soul_born`에서 곧장 파생한다.
+var _soul_body_pending := false
 # ★[S10-T4 / ADR-0069 결정 7] 삽사리 획득 이벤트 예약 — 나루 마을에 들어선 프레임에 서고,
 #   워프 연출(fade)이 완전히 걷힌 마지막 콜백에서 소비된다(위 두 단계와 같은 이유). 세이브 무상태.
 var _pet_event_armed := false
@@ -3123,6 +3139,11 @@ var _milestone_celebrated := false
 var _milestone2_celebrated := false
 # ★[S10-T5 / ADR-0069 결정 8] 3단 래치 — 1·2단 선례를 그대로(별도 래치 1회·재개 시 _ready가 미리 켬).
 var _milestone3_celebrated := false
+# ★[폴리시 R8] 지금 4인 의상에 **발라 둔** 테마(-1 = 평상복). `_refresh_festival`이 찍고
+#   `_sync_festive_costumes`가 매 프레임 대조한다 — 테마 데이 해금은 카페 단계·누적 매출 파생이라
+#   **하루 중에도 성립**하는데(festival.gd:113~115의 명시 계약), 의상 주입만 아침 세 자리에
+#   묶여 있어 그날 단 한 프레임도 안 켜졌다. 세이브 무상태(파생값의 캐시일 뿐).
+var _festive_theme_applied := Festival.NONE
 # T7.2 달성 팝업 표시 잔여 시간(초). 카페 마감 정산 팝업과 같은 결(비차단 자동 해제).
 var _milestone_popup_secs := 0.0
 const MILESTONE_POPUP_SECS := 6.0  # 달성 팝업 표시 시간(2단 미리보기를 읽을 시간을 넉넉히)
@@ -5814,7 +5835,12 @@ func _open_mine_chest() -> void:
 		var want := maxi(int(row.get("count", 1)), 1)
 		var taken := 0
 		# 유니크(스택 불가)는 이미 가지고 있으면 애초에 안 받는다 — 아래 골드 대체로 흘린다.
-		if not (not ItemCatalog.stackable_of(rid) and inventory.has_item(rid)):
+		# ★[폴리시 R8] 보유 판정은 **백팩 ∪ 집 상자 ∪ 갈무리방**(`_stored_anywhere`)이다. 상자는
+		#   종류 제한 없이 무기를 받으므로 백팩만 보면 "상자에 넣어 두면 안 가진 것"이 되어, 길드에서
+		#   산 명동검을 상자에 둔 채 10층 상자를 열면 세상에 하나뿐이어야 할 검이 **두 자루**가 되고
+		#   750냥 골드 대체가 통째로 불발됐다(chest.gd가 선언한 그 입구가 여기 그대로 남아 있었다).
+		#   같은 계열 판정은 길드 매대·기어 행이 이미 이 술어로 통일돼 있다.
+		if not (not ItemCatalog.stackable_of(rid) and _stored_anywhere(rid)):
 			for _i in want:
 				if not inventory.add_item(rid, 1):
 					break
@@ -5829,6 +5855,7 @@ func _open_mine_chest() -> void:
 			_narak_key_found = true
 	if gold_sum > 0:
 		wallet.earn(gold_sum)
+		_total_income += gold_sum             # ★[폴리시 R8] 누적 총수입(정보패널) — 출하 정산과 같은 결
 		got.append("%d골드" % gold_sum)
 	audio.sfx("ui")
 	_notice("%d층 보상 상자 — %s" % [floor_no, " · ".join(got) if not got.is_empty() else "비어 있다"])
@@ -6249,7 +6276,7 @@ func _spawn_narak_mobs() -> void:
 		if not MobCatalog.has(kind):
 			continue
 		_mobs.append(Mob.spawn(kind, spec["tile"],
-			hash("narak:%d:%d:%d" % [narak_floors.run_id(), _narak_depth, i])))
+			hash("narak:%d:%d:%d" % [narak_floors.run_id(), _narak_depth, i]), i))
 	_mobs_spawned = _mobs.size()
 
 # ★ 곡괭이로 나락 층의 돌 1타. `_mine_rock`과 문법이 같고 **꼬리 하나만 갈린다**: 사다리가 열릴 때
@@ -6523,8 +6550,10 @@ func _mobs_in_region() -> Array:
 		var m: Mob = _mobs[i]
 		if m == null or not m.is_alive():
 			continue
+		# ★[폴리시 R8] `index`는 **개체가 든 스폰 인덱스**다(배열 위치가 아니다 — 사체 청소가
+		#   배열을 압축하므로 위치는 처치마다 밀려 처치 시드가 중복 재사용됐다).
 		out.append({"tile": m.tile(), "kind": m.kind, "hp": m.hp, "xp": m.kill_xp(),
-			"index": i, "ref": m})
+			"index": m.spawn_index, "ref": m})
 	return out
 
 # 몹 하나를 때린다. 피해량은 순수 함수가 정하고(결정적 시드 = 스윙 카운터) 여기선 차감·사망 처리만 한다.
@@ -6695,7 +6724,7 @@ func _spawn_mine_mobs() -> void:
 		var kind := String(spec.get("kind", ""))
 		if not MobCatalog.has(kind):
 			continue
-		_mobs.append(Mob.spawn(kind, spec["tile"], hash("%d:%d:%d" % [clock.day, _mine_floor, i])))
+		_mobs.append(Mob.spawn(kind, spec["tile"], hash("%d:%d:%d" % [clock.day, _mine_floor, i]), i))
 	_mobs_spawned = _mobs.size()
 
 func _clear_mine_mobs() -> void:
@@ -10213,15 +10242,6 @@ func _on_day_advanced(day: int) -> void:
 	if sprinkler != null:
 		for st in sprinkler.watered_targets():
 			_field_at(st).sprinkle(st)
-	# ★[S7-T3 / ADR-0065 결정 4] 혼우(비) = **아침 자동 급수**. 스프링클러가 십자 인접 칸을 적시는
-	#   바로 그 API(`farm.sprinkle` — 경작만 됐으면 심김 무관·이미 젖었으면 무동작)를 밭 전 경작
-	#   칸에 돌린다. 그래서 **field.gd 급수 경로는 한 줄도 안 늘었고**, 스프링클러와 순서를 바꿔도
-	#   결과가 같다(멱등 — 둘 다 "젖음"이라는 같은 상태를 세운다).
-	#   ★ 알림은 안 붙인다: 취침 직후 알림 줄이 이미 여럿(출하 정산·까마귀·사멸·짐승)이라 매번 뜨는
-	#     "비가 내렸다"는 그 줄들을 밀어낸다. 하늘 상태의 상시 표시는 T8 HUD 날씨 아이콘의 몫이다.
-	if Weather.waters_field(weather):
-		for wt in farm.tilled_tiles():
-			farm.sprinkle(wt)
 	var h := affinity.hearts()
 	# ★[S7-T3] 잿눈 = 그날 노지 성장 정지(비살상). 세 번째 인자 grow=false면 **마름은 그대로 돌고**
 	#   성장 두 갈래만 꺼진다(field.advance_day 주석 참조 — 호출 스킵이 아니라 가법 인자인 이유).
@@ -10242,6 +10262,24 @@ func _on_day_advanced(day: int) -> void:
 	#   안 받는다(garden_pot.gd advance_day 주석 — 화분은 곱셈기가 얹히는 밭이 아니다).
 	if garden_pot != null:
 		garden_pot.advance_day()
+	# ★[S7-T3 / ADR-0065 결정 4] 혼우(비) = **아침 자동 급수**. 스프링클러가 십자 인접 칸을 적시는
+	#   바로 그 API(`farm.sprinkle` — 경작만 됐으면 심김 무관·이미 젖었으면 무동작)를 밭 전 경작
+	#   칸에 돌린다. 그래서 **field.gd 급수 경로는 한 줄도 안 늘었다**.
+	#   ★ 알림은 안 붙인다: 취침 직후 알림 줄이 이미 여럿(출하 정산·까마귀·사멸·짐승)이라 매번 뜨는
+	#     "비가 내렸다"는 그 줄들을 밀어낸다. 하늘 상태의 상시 표시는 T8 HUD 날씨 아이콘의 몫이다.
+	# ★[폴리시 R8] **advance_day 뒤로 옮겼다** — 바로 아래 배우자 물주기가 이미 든 그 규율이다
+	#   ("advance_day가 전 칸을 말린 직후라 '오늘 몫'의 손 노동을 대행하는 자리"). 종전엔 성장 판정
+	#   *앞*에 있어 비가 **어제 몫의 물주기**를 대신했고, `field.advance_day`가 젖은 칸을 자란 직후
+	#   같은 루프에서 말려 버리므로 **혼우일 아침 정산이 끝난 시점엔 밭이 이미 전부 마른 상태**였다.
+	#   그러면 HUD 비 아이콘과 점괘 거울의 "밭이 스스로 젖는다"(`_weather_hint`)를 그대로 믿고 물을
+	#   안 준 플레이어가 그날 성장 하루를 확정으로 잃는다(밭 오버레이도 종일 wet=0을 그렸다).
+	#   스프링클러는 위에 그대로 둔다: 매일 도는 상시 설비라 정상상태에서 순서가 성장 결과를
+	#   안 바꾸지만, 혼우는 **간헐**이라 순서가 곧 그날의 손익이다.
+	# ★ 순서 — 비가 배우자 물주기보다 **앞**이라야 미호가 이미 젖은 칸에 8칸을 낭비하지 않는다
+	#   (`water_dry`가 마른 칸만 고르므로 비 오는 날엔 자연히 0칸 = 도울 일이 없다).
+	if Weather.waters_field(weather):
+		for wt in farm.tilled_tiles():
+			farm.sprinkle(wt)
 	# ★[S8-T7 / ADR-0066 결정 9] 배우자 잡일 ①미호 = **아침 미급수 밭 8칸 물주기**. advance_day가
 	#   전 칸을 말린 *직후*라 "오늘 몫"의 손 노동을 대행하는 자리다(어제 성장 판정엔 불개입).
 	#   여우불(성장 가속·위 인자)과 별축 — 여우불은 못 준 칸도 자라게 하고, 이 물은 칸을 실제로
@@ -10454,6 +10492,16 @@ func _on_day_advanced(day: int) -> void:
 			_notice("전령이 다녀갔다 — 우편함에 편지 %d통" % arrived.size(), NOTICE_SECS * 2.0)
 		if _rarecrow_collected() >= RARECROW_HERALD_THRESHOLD:
 			mailbox.send(RARECROW_HERALD_LETTER)
+		# ★[폴리시 R8] **채널 개통 안내**를 보내는 코드가 한 줄도 없었다. LETTERS 41행 중 39행은 각
+		#   캐릭터 GATE_LETTERS가, 1행은 바로 위 레어크로우 훅이 보내는데 `herald_notice`만 발송처가
+		#   저장소 어디에도 없어(테이블 정의와 playtest 두 파일이 grep의 전부였다) 영영 도착하지
+		#   않았다. 그 결과 우편함 프롭은 1일차부터 마당에 서 있는데 "앞으로 소식은 이 함으로 온다"는
+		#   **유일한 채널 설명**이 안 오고, 첫 편지는 어떤 캐릭터든 ♡1 관문을 성사시킨 다음 날에야
+		#   왔다(그때까지 [F]는 "우편함이 비어 있다"만 돌려준다).
+		#   ★ 조건이 없는 것이 맞다 — 전령은 아크를 가진 캐릭터가 아니라 **채널 그 자체**라(mailbox.gd
+		#     머리말) 자격이 아니라 개통을 알린다. `send`는 멱등이라(ever_sent) 매일 불러도 한 번만
+		#     나가고, 이 자리에 두면 옛 세이브를 이어받아도 다음 아침에 뒤늦게 도착한다.
+		mailbox.send(HERALD_NOTICE_LETTER)
 	# ★[S7-T9 / ADR-0065 결정 11] 절기 팔레트 스왑 — 땅의 낯빛이 절기를 따라 바뀐다.
 	#   **하루 정산의 맨 끝**에 둔다: 이 호출 안의 `_rebuild_region`이 그리드를 다시 세우므로,
 	#   지상 그리드를 전제하는 위 정산들(재점령 후보·잡초 확산·나무 파종)이 전부 끝난 뒤라야
@@ -10509,7 +10557,8 @@ func _festival_theme() -> int:
 # 취침 어디서 불러도 멱등이다(set_festive·주입 모두 idempotent). 카페 테마 장식(가랜드·카펫)은
 # _draw가 같은 `_festival_theme`으로 파생하므로 여기선 redraw만 친다.
 func _refresh_festival() -> void:
-	var f := _festival_theme() != Festival.NONE
+	_festive_theme_applied = _festival_theme()   # ★[폴리시 R8] 발라 둔 테마를 찍는다(아래 동기화의 기준선)
+	var f := _festive_theme_applied != Festival.NONE
 	miho.set_festive(f)
 	mel.set_festive(f)
 	bana.set_festive(f)
@@ -10518,6 +10567,22 @@ func _refresh_festival() -> void:
 	# (_refresh_cafe_ladder)에서 곱해 얹는다(두 곳이 spawn_scale에 각자 쓰면 나중 것이 앞을 지운다).
 	_refresh_cafe_ladder()
 	queue_redraw()                                       # 카페 축제 장식(_draw)을 새 상태로 다시 그림
+
+# ★[폴리시 R8] 테마 데이 판정이 **하루 중에 갈리면** 의상도 그 프레임에 따라붙는다.
+# 왜 필요했나: `_refresh_festival`(= `set_festive`의 유일한 주인)의 호출부는 `_ready`·`_on_day_advanced`·
+#   세이브 복원 셋뿐이라 아침에 한 번 정해지고 하루가 끝날 때까지 안 바뀌었다. 그런데 같은 판정을
+#   쓰는 다른 소비처는 전부 매 프레임 파생이다 — `_refresh_cafe_ladder`(손님 볼륨·단가·체키)도,
+#   `_draw`의 가랜드·카펫도. 해금 입력인 `_cafe_stage()`·`_cafe_revenue_total`은 서빙마다 자라므로
+#   25일 낮에 문턱을 넘는 일이 실제로 일어나고, 그때 카페는 그 프레임부터 잔치인데 **4인만 평상복**으로
+#   남았다(다음 호출은 이튿날 아침이라 그 테마 데이엔 의상이 단 한 프레임도 안 켜졌다).
+#   festival.gd:113~115가 못 박은 "낮에 문턱을 넘으면 그 순간부터 테마 데이 — 주입 지점들이 다음
+#   프레임에 따라붙는다"가 의상 주입 지점에서만 깨져 있던 자리다.
+# ★ 값이 갈릴 때만 부른다 — `_refresh_festival`은 `queue_redraw`와 사다리 재주입을 함께 하므로
+#   매 프레임 무조건 부르면 공짜가 아니다. 함수로 연 이유는 `_facing_mirror`와 같다(헤드리스 표면).
+func _sync_festive_costumes() -> void:
+	if _festival_theme() == _festive_theme_applied:
+		return
+	_refresh_festival()
 
 # ★[S7-T6 / ADR-0065 결정 8] 오늘 아침에 띄울 축제 배너들(0~2줄). _on_day_advanced가 이 배열을
 # 그대로 알림에 흘린다 — 문자열 조립을 함수로 뽑아 둔 건 헤드리스가 알림 큐를 뒤지지 않고 "오늘
@@ -10583,7 +10648,16 @@ func _seasonal_morning_notices() -> Array:
 func _event_upcoming_line() -> String:
 	if clock == null:
 		return ""
-	for ahead in range(0, GameClock.DAYS_PER_SEASON + 1):
+	# ★[폴리시 R8] **창이 형제 함수보다 한 절기 넓다.** 테마 데이는 절기마다 *같은 25일*이라 28일
+	#   창 안에 반드시 하나가 들지만, 절기 행사는 `SeasonalEvent.DAY_OF_SEASON`이 [12, 20, 16, 15]로
+	#   일차가 제각각이라 연속 두 행사 사이가 절기 길이를 넘는다 — 피안 12일(더비) 다음은 유화
+	#   20일(해파리 창구)이라 **36일** 뒤다. 그래서 28일 창은 매년 피안 13~19일 7일 동안 하나도
+	#   못 찾아 ◇ 행사 줄이 통째로 사라졌고, 달력 패널은 다음 절기를 안 그리므로(calendar_panel.gd:18)
+	#   그 이레 동안 다음 행사를 미리 아는 표면이 게임 안에 한 곳도 없었다("예고 = 준비할 시간을
+	#   준다"는 seasonal_event.gd 계약이 그 구간에서만 무효).
+	#   ★ 눈금이 아니라 **파생**이다: 행사가 절기당 정확히 하나라 어떤 두 행사의 간격도 두 절기보다
+	#     짧다(최악 = 절기 마지막날 → 다음 절기 첫날 직전). 표를 어떻게 다시 짜도 이 창이 덮는다.
+	for ahead in range(0, 2 * GameClock.DAYS_PER_SEASON):
 		var ev := SeasonalEvent.event_for_day(clock.day + ahead)
 		if ev != SeasonalEvent.NONE:
 			return SeasonalEvent.upcoming_text(ev, ahead)
@@ -12877,6 +12951,9 @@ func _process(delta: float) -> void:
 	# 바로 위 _refresh_cafe_ladder가 이미 소유하고(spawn_scale 단일 주인), 여기선 **누가 앉는가**만
 	# 얹는다 — 두 축을 섞으면 단골이 자랄 때 총 손님 수까지 흔들린다.
 	_refresh_cafe_ladder()
+	# ★[폴리시 R8] 사다리와 **같은 프레임**에 의상도 맞춘다(위 주입이 손님 볼륨·단가를 이미 새 테마로
+	#   바꿔 놓은 참이라, 4인만 평상복으로 남으면 그 프레임부터 화면과 수치가 어긋난다).
+	_sync_festive_costumes()
 	cafe.day = clock.day
 	cafe.order_pool = _cafe_order_pool()
 	cafe.guest_pool = _cafe_guest_pool()
@@ -13884,6 +13961,16 @@ func _process(delta: float) -> void:
 		#   (빈손 흔들기가 벌칙처럼 읽히지 않게 — 절기 창을 프롬프트가 가르쳐 준다).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _bush_prompt(_target)
+	elif crab_pot != null and _indoor == "" and crab_pot.has_at(_region, _target):
+		# ★ [S3-T7] 물가의 게잡이통을 겨눌 때: 상태별 [F] 한 동사(수거 / 미끼 넣기 / 회수).
+		# ★[폴리시 R8] **[F] 입력 사다리와 같은 순서로 올렸다.** 통은 그 사다리에서 화덕·결정기·
+		#   팬닝·반딧넋보다 먼저 잡고 return하는데, 이 안내 사슬만 순서가 반대라 겹치는 칸에서
+		#   화면과 동작이 갈렸다 — "[F] 사금 일기"를 보고 눌렀는데 미끼가 타거나 통이 회수됐다
+		#   (팬닝 존·반딧넋 고정 배치는 둘 다 물가 지면이라 통을 놓을 수 있는 칸과 실제로 겹친다).
+		#   설치 겹침 자체는 `_can_place_crab_pot`의 `_installation_at` 가드가 앞으로 막지만,
+		#   순서를 사다리와 일치시켜 **어떤 원장 상태에서도** 화면이 동작을 말하게 둔다.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _crab_pot_prompt(_target)
 	elif _furnace_at(_target):
 		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수). 채취기보다
 		#   먼저 볼 이유는 없지만(좌표가 안 겹친다) 설치물 프롬프트끼리 한자리에 모아 둔다.
@@ -13950,10 +14037,6 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 물뿌리개 채우기 (%d/%d)" % [_can_water, _can_capacity()] if _can_water < _can_capacity() \
 			else "물뿌리개 가득 참 (%d/%d)" % [_can_water, _can_capacity()]
-	elif crab_pot != null and _indoor == "" and crab_pot.has_at(_region, _target):
-		# ★ [S3-T7] 물가의 게잡이통을 겨눌 때: 상태별 [F] 한 동사(수거 / 미끼 넣기 / 회수).
-		interact_prompt.visible = not _sleeping
-		interact_prompt.text = _crab_pot_prompt(_target)
 	elif inventory.selected_id() == ItemCatalog.CRAB_POT and _can_place_crab_pot(_target):
 		# ★ [S3-T7] 통을 들고 물가 인접 칸을 겨눌 때: LMB로 설치(설치 후 [F]로 미끼 장전).
 		interact_prompt.visible = not _sleeping
@@ -14718,6 +14801,24 @@ func _installation_at(t: Vector2i) -> bool:
 		return true
 	return tapper != null and tapper.has_at(_region, t)
 
+# ★[폴리시 R8] 이 칸이 **[F] 창구 좌표**인가 — 좌표 상수 하나로 열리는 야외 상호작용 자리다.
+# 왜 배치 가드가 이걸 물어야 하나: 설치물의 투입·수거·회수는 전부 [F] 한 동사인데, 입력 사다리에서
+# 우편함(`facing_mailbox`)이 업화로·결정기보다 **70줄 앞에서 잡고 return**한다. 그래서 우편함 칸에
+# 세운 업화로는 그 칸의 [F]가 영영 편지 열람으로 가, 화덕과 안에 든 광석이 **영구 유실**됐다
+# (다른 회수 경로는 늘봄방 예정지 전용 구제뿐이다). 프롬프트 사슬도 같은 순서라 화면엔 "우편함 —
+# 새 편지가 없다"만 떠, 플레이어가 무엇을 잃었는지 알 방법조차 없었다.
+# 좌표가 열려 있던 이유: MAILBOX_TILE(46,10)은 본가 문 레인(x38..45 PATH) **밖**의 순수 GROUND이고
+# 프롭은 한 칸 아래(46,11)에 서 있어 `_home_occupied_tiles()`에도 안 잡힌다.
+# ★ 삽사리·물그릇도 함께 막는다: 그쪽은 입력 사다리가 화덕보다 뒤라 유실까지는 안 갔지만
+#   프롬프트 사슬은 앞이라 "쓰다듬기"가 뜬 채 [F]가 화덕을 여는 프롬프트↔동작 불일치가 남는다
+#   (`_is_farmable`이 R6에 PET_TILE을 뺀 그 판단의 설치물 판).
+# ★ 거울(MIRROR_TILE)은 여기 안 든다 — 실내 좌표이고 배치 가드는 전부 `_indoor == ""`를 요구해
+#   구조로 이미 막혀 있다. 구역 술어를 다는 이유도 같다(HOME 좌표 상수라 다른 무대엔 무의미).
+func _f_window_tile(t: Vector2i) -> bool:
+	if _region != RegionCatalog.HOME or _indoor != "":
+		return false
+	return t == MAILBOX_TILE or t == PET_TILE or t == PET_BOWL_TILE
+
 func _sprinkler_at(t: Vector2i) -> bool:
 	return sprinkler != null and _region == RegionCatalog.HOME and sprinkler.has_at(t)
 
@@ -14749,6 +14850,8 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 		return false
 	if _installation_at(t):                   # ★[폴리시 R2] 다른 설치물(레어크로우·업화로·결정기·
 		return false                          #   게잡이통·채취기) → 배제(겹침 방지 · 양방향 가드)
+	if _f_window_tile(t):                     # ★[폴리시 R8] [F] 창구 좌표(우편함·삽사리·물그릇) → 배제
+		return false                          #   (레어크로우도 이 함수를 통해 같은 가드를 받는다)
 	if garden_pot != null and garden_pot.has_at(t):   # ★[S10-T5] 놓아 둔 화분 → 배제(겹침 방지)
 		return false
 	if _greenhouse_lot_reserved(t):           # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
@@ -14828,6 +14931,8 @@ func _can_place_pot(t: Vector2i) -> bool:
 	#   괭이질 전 스프링클러·레어크로우 위에 화분이 겹쳐 놓였다(두 설치물이 한 칸에 그려진다).
 	#   R2가 `_installation_at`을 신설하며 세운 "한 칸에 둘 금지" 불변식을 이 줄이 마저 닫는다.
 	if _installation_at(t):
+		return false
+	if _f_window_tile(t):                     # ★[폴리시 R8] [F] 창구 좌표 → 배제(그 칸의 [F]는 남의 것)
 		return false
 	return true
 
@@ -14966,6 +15071,13 @@ func _can_place_crab_pot(t: Vector2i) -> bool:
 		return false                          # 이미 통이 있다(그 위엔 상호작용만)
 	var cell: int = _grid[t.y][t.x]
 	if cell != GROUND and cell != PATH:        # 백사장·물가 지면 + 부두/잔교 목판만
+		return false
+	# ★[폴리시 R8] 다른 설치물 위에는 못 놓는다. 가드가 **단방향**이었다 — 업화로·결정기는
+	#   `_installation_at`(그 안에 게잡이통 항이 있다)으로 통을 막는데 통 쪽엔 그 호출이 없어서,
+	#   물가 인접 PATH(잔교 스파인)에 세워 둔 화덕 위에 통이 그대로 얹혔다. 그러면 그 칸의 [F]를
+	#   입력 사다리에서 통이 화덕보다 **먼저 잡고 return**하므로 화덕 수거·투입·회수가 전부
+	#   불가능해지고, 화면엔 화덕 프롬프트가 뜬 채 [F]는 통을 회수한다(프롬프트↔동작 불일치).
+	if _installation_at(t):
 		return false
 	# ⑤ 주민이 선 칸엔 못 놓는다 — 뱃사공 자리(12,27)가 마침 물가 인접이라, 통을 깔면 그 칸의 [F]가
 	#   가게 열기와 겹쳐 통이 영영 안 열린다(입력 사다리에서 주민이 먼저 잡는다). 아예 못 놓게 막는다.
@@ -15147,6 +15259,10 @@ func _can_place_furnace(t: Vector2i) -> bool:
 	#   그 술어는 구역 축까지 함께 든다(위 `_installation_at` 주석).
 	if _installation_at(t):
 		return false
+	# ★[폴리시 R8] [F] 창구 좌표 → 배제. **이 결함의 진원지**다 — 우편함 칸에 세운 업화로는 그 칸의
+	#   [F]가 입력 사다리에서 편지 열람에 먼저 잡혀, 화덕도 안에 든 광석도 영구 유실됐다.
+	if _f_window_tile(t):
+		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
 	if _region == RegionCatalog.HOME:
@@ -15282,6 +15398,7 @@ func _pan_spot(t: Vector2i) -> bool:
 	energy.spend(cost)
 	if gold > 0:
 		wallet.earn(gold)
+		_total_income += gold                 # ★[폴리시 R8] 누적 총수입(정보패널) — 출하 정산과 같은 결
 		_notice("사금 한 줌을 건졌다 — %d냥" % gold)
 	if id != "" and n > 0 and inventory.add_item(id, n):
 		_toast_item(id, n)
@@ -15665,6 +15782,8 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 	if is_solid(cell):
 		return false                          # 방어(건물 패드·절벽·벽 = SOLID)
 	if _installation_at(t):                   # ★[폴리시 R4] 업화로와 같은 단일 술어(레어크로우 포함·구역 축 포함)
+		return false
+	if _f_window_tile(t):                     # ★[폴리시 R8] [F] 창구 좌표 → 배제(업화로와 완전 동형)
 		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
@@ -16571,16 +16690,32 @@ func _on_frame_close_pressed() -> void:
 # 출하함 패널에서 백팩 수확물 슬롯을 클릭하면 그 슬롯을 통째로 출하 대기에 넣는다(인벤토리에서
 # 빠짐 → ship_bin pending). 수확물만 받는다(씨앗·도구는 드롭 불가 — 출하 = 판매). 익일 아침
 # day_advanced에서 settle이 골드로 정산한다(즉시판매 제거 — 스타듀 출하상자 결, ADR-0021).
+# ★[폴리시 R8] 이 유품이 **팔 수 있는 중복 발굴분**인가 = 유품 ∧ 이미 전시됨.
+# 기증 여부를 물어야 하는 이유가 곧 안전장치다: 아직 안 바친 유품까지 받으면 하나뿐인 수집물을
+# 출하함에 넣어 전시 진행이 막힌다(전시대 분모는 유한하고, 발굴 확률은 3%다). 전시가 끝난
+# 뒤에야 그 종은 "중복"이 되고, 그때부터 카탈로그가 적어 둔 판매가가 실제 값이 된다.
+func _relic_sellable(id: String) -> bool:
+	return ItemCatalog.category_of(id) == ItemCatalog.CAT_RELIC \
+		and museum != null and museum.is_donated(id)
+
 func _on_frame_deposit(slot_index: int) -> void:
 	var id := inventory.id_at(slot_index)
 	# ★[S10-T6] 출하 가능 판정이 "수확물" 하나에서 **수확물 ∪ 명부 도감 추적 대상**으로 넓어졌다.
 	#   근거: 도감이 세는 다섯 칸 중 광물(CAT_MATERIAL)·요리(CAT_CONSUMABLE) 두 칸은 종전 판정에
 	#   막혀 **출하대에 들어갈 경로가 코드에 아예 없었다**(=도감 분모의 5분의 2가 영영 미등재 →
 	#   완주 불가). 스타듀도 광석·조리품을 출하상자에 넣는다. 판정을 Codex에 위임했으므로 하드코딩
-	#   목록이 늘지 않고, 자재(원목·이끼)·주괴·유품·책·열쇠·설치물은 **여전히 거절**된다
+	#   목록이 늘지 않고, 자재(원목·이끼)·주괴·책·열쇠·설치물은 **여전히 거절**된다
 	#   (Codex.is_tracked가 다섯 카탈로그만 본다). 씨앗·도구 거절도 그대로다.
-	if id == "" or not (ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST or Codex.is_tracked(id)):
-		return   # 출하 대상 밖(씨앗·도구·비료·자재·유품·책)은 무동작
+	# ★[폴리시 R8] **이미 전시된 유품의 중복 발굴분**만 여기 합류했다(`_relic_sellable`). 카탈로그가
+	#   유품마다 "(중복 발굴분 판매가)"라는 값을 달아 두고 머리말도 "종당 1회 — 중복 발굴분은 판매
+	#   가능"이라 선언하는데(item_catalog.gd), 그 판매 창구가 코드에 **한 곳도 없었다**: 출하함은
+	#   여기서 거절하고 환전 탭은 어패류만 받으며 매대는 전부 판매 전용이다. 그래서 30냥으로 표기된
+	#   물건의 유일한 처분 경로가 휴지통뿐이었고, 갱도 지오드 표에도 유품이 섞이는 후반에는 중복분이
+	#   백팩 칸만 계속 먹었다. ADR-0021의 "판매 = 출하대 단일 창구"와 카탈로그의 "판매 가능"을 같이
+	#   지키면 답이 하나로 떨어진다 — 중복 유품은 출하함으로 판다.
+	if id == "" or not (ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST
+			or Codex.is_tracked(id) or _relic_sellable(id)):
+		return   # 출하 대상 밖(씨앗·도구·비료·자재·미기증 유품·책)은 무동작
 	var n := inventory.count_at(slot_index)
 	var q := inventory.quality_at(slot_index)   # ★ S1-6 이 슬롯의 등급을 함께 출하(worst-first 오염 방지 = 슬롯 지정 제거)
 	if not inventory.remove_at(slot_index, n):
@@ -17026,6 +17161,18 @@ func _sell_fish_n(id: String, quality: int, n: int, quiet: bool = false) -> Dict
 	var gold := ItemCatalog.price_of(id, quality) * took   # ★출하함 정산과 동일 공식
 	wallet.earn(gold)
 	_total_income += gold                     # ★ [S1R-T12] 누적 총수입(정보패널) — 출하 정산과 같은 결
+	# ★[폴리시 R8] **도감에도 올린다.** `Codex`의 등재 기준은 "판매 이력"이고, 그 근거로 "[ADR-0021]이
+	#   판매를 출하대 단일 창구로 못 박아 판매 이력 축이 코드에 하나뿐"이라고 적어 뒀다(codex.gd:9~14).
+	#   그 전제는 도감(S10-T6)이 서기 전인 S3-T5부터 이미 거짓이었다 — 바로 위 두 줄이 두 번째
+	#   판매 창구이고, 주석 자체가 "가격은 출하함 정산과 **동일 공식**이라 어느 채널로 팔아도 총액이
+	#   같다 — 편의만 다르다"고 못 박는다. 그런데 등재는 출하 정산 한 자리뿐이라, 물고기를 늘 이
+	#   탭에서 파는 플레이어는 20종을 다 낚아 다 팔아도 열람대가 "어종 0/20"을 계속 띄웠고
+	#   `Codex.is_complete()`가 영영 거짓이라 완주 트로피에 도달할 수 없었다.
+	#   ★ 시점이 갈리는 것은 무해하다: 출하대는 롤백 창이 있어 **정산 확정**에 찍지만, 즉시 환전은
+	#     되돌릴 창 자체가 없어 이 줄이 곧 확정이다(codex.gd ㉡의 규약을 창구별로 지킨 결과).
+	#   ★ 추적 대상 밖은 `codex.record`가 스스로 거른다 — 게잡이통 통용물이 섞여도 안전하다.
+	if codex != null and clock != null:
+		codex.record(id, clock.day)
 	if not quiet:
 		audio.sfx("ui")
 		var qtag := (ItemCatalog.quality_name(quality) + " ") if quality > 0 else ""
@@ -17083,6 +17230,15 @@ func _try_donate_selected() -> void:
 	audio.sfx("ui")
 	_notice("%s 기증 — 전시 %d/%d" % [ItemCatalog.name_of(id),
 		museum.donated_count(), Museum.donatable_ids().size()])
+	# ★[폴리시 R8] **앵커 트랙을 그 자리에서 다시 판다.** deed 점수의 세 축 중 "망각 반전"이 곧
+	#   기증 원장 파생인데(`Spine.okja_deed_points(..., museum.donated_count(), ...)`), 그 값을
+	#   ♡에 옮기는 `_refresh_okja_track`의 호출부는 취침·로드·트랙 개통·혼인·옥자 대화 진입 다섯
+	#   곳뿐이라 기증만으로는 하트가 안 움직였다. `Affinity.hearts()`는 파생이 아니라 마지막 갱신
+	#   때 찍힌 값이라(affinity.gd) 그 사이 원장과 ♡가 갈렸다 — 관계 탭은 effect 줄을 실시간으로
+	#   읽어 "되찾음 11/11"을 띄우는데 같은 행의 하트는 ♡4로 남고, 강림의 「명부 혼례 부적」
+	#   프롬프트(`_myeongbu_quest_open` = ♡max 요구)가 다 갚은 뒤에도 이유 없이 잠겨 보였다.
+	#   `_refresh_okja_track`은 트랙 미개통이면 스스로 0으로 접으므로 조건 없이 불러도 안전하다.
+	_refresh_okja_track()
 	# 도달 마일스톤 일괄 지급(한 번의 기증이 여러 문턱을 넘을 일은 없지만 방어적으로 전부).
 	_claim_museum_milestones()
 
@@ -20724,6 +20880,14 @@ func _romance_offer_available(r: Resident) -> bool:
 # 되지만 이벤트 대사는 다시 틀지 않는다. replace_lines가 빈 배열이면 대화를 닫는다).
 func _resolve_confession(rid: String) -> void:
 	_confess_rid = ""
+	# ★[폴리시 R8] 이 [F]는 아래 두 갈래 모두 `replace_lines`로 대사를 통째로 간다 = 마지막 줄에
+	#   걸어 둔 절기 물음의 선택지 예약이 함께 버려진다(dialogue `_clear_choice`). 그런데 원장은
+	#   물음을 *건 순간* 이미 이번 주로 찍혀 있어, 화면에 뜨지도 못한 물음이 그 주 남은 날을 전부
+	#   막았다(R7 #8이 되살린 바로 그 채널이 새 경로로 한 주씩 소실). **버릴 물음은 원장에서도
+	#   되감는다** — 다음 대화에 다시 선다(고를 기회를 안 준 것을 "물었다"로 세지 않는다).
+	if _season_q_posed_rid != "":
+		_season_q_week.erase(_season_q_posed_rid)
+		_season_q_posed_rid = ""
 	var r := _resident(rid)
 	if r == null or r.affinity == null:
 		return
@@ -21153,6 +21317,7 @@ func _start_resident_dialogue(r: Resident) -> void:
 	#   대화에 겹치지 않는다. 다음 대화에 제안이 선다). 제안은 상태 변화가 아니라 *입력 창구*라
 	#   결행([F])은 _process의 대화 입력 분기가 받는다(_resolve_confession).
 	_confess_rid = ""
+	_season_q_posed_rid = ""     # ★[폴리시 R8] 새 대화 = 아직 선 물음 없음(옛 대화의 값이 안 샌다)
 	if gate_lines.is_empty() and _romance_offer_available(r):
 		_confess_rid = r.id
 		var with_offer := PackedStringArray([CONFESS_OFFER_LINE])
@@ -21255,10 +21420,12 @@ func _pose_season_question(r: Resident, q: Dictionary) -> void:
 	var replies := PackedStringArray(q.get("replies", PackedStringArray()))
 	var posed := dialogue.queue_choice(PackedStringArray(q.get("options", PackedStringArray())),
 		func(idx: int) -> void:
+			_season_q_posed_rid = ""    # 골랐다 = 물음이 실제로 소비됐다(되감을 것이 없다)
 			if idx >= 0 and idx < replies.size():
 				dialogue.replace_lines(PackedStringArray([replies[idx]])))
 	if posed:
 		_season_q_week[r.id] = GameClock.week_of(clock.day)
+		_season_q_posed_rid = r.id      # ★[폴리시 R8] 아직 안 골라진 물음 — 대사가 갈리면 되감는다
 
 # ── ★[S9-T2 / ADR-0067 결정 2] 컷신(연출 등급 2) 배선 ────────────────────────
 # 러너(cutscene.gd)는 순수 스텝 머신이라 화면을 모른다 — 여기가 그 상태를 읽어 페이드·카메라·
@@ -21301,6 +21468,20 @@ func _begin_cutscene(steps: Array, after_speaker: String, after_lines: PackedStr
 		var rr := _resident(String(id))
 		if rr != null and rr.node != null:
 			_cutscene_npc_prev[String(id)] = {"pos": rr.node.position, "visible": rr.node.visible}
+			# ★[폴리시 R8] **걷기 오프셋을 끈다.** 주민 그림은 논리 위치 위에 `walk_offset`이 얹혀
+			#   그려지는데(ken.gd `draw_set_transform(walk_offset)`·자식 스프라이트 위치), 컷신 중
+			#   `_process`는 프레임을 끊으므로 `_advance_resident_walk`가 안 돌아 그 오프셋이 재생
+			#   내내 **얼어붙은 값 그대로** 남는다. 그러면 아래 npc 동사가 논리 칸을 아무리 옮겨도
+			#   배우는 원래 자리에 굳어 있다 — 켄의 09:00 이동(집앞 (89,52) → 광장 (48,39) = 60칸
+			#   ≈ 34초)이 도는 중에 ♡3 관문이 서면, 논리 칸은 이미 광장이라 말을 걸 수 있는데
+			#   그림은 1,900px 밖에 있어 **암전을 반쯤 걷은 광장이 텅 비었다**("NPC 이동은 암전
+			#   뒤에서만"이라는 컷신 규약이 그 장면에서 통째로 깨진다).
+			#   `_begin_resident_walk`가 R7에 세운 역연산(cancel + 오프셋 0)을 그대로 쓴다. 취소해도
+			#   손실 0이다 — 걷기는 시각 전용이고 논리 칸은 이미 목적지로 스냅돼 있다(ADR-0060 결정 7).
+			if rr.walk != null and rr.walk.is_walking():
+				rr.walk.cancel()
+			if rr.node.has_method("set_walk_offset"):
+				rr.node.set_walk_offset(Vector2.ZERO)
 	player.set_physics_process(false)      # 재생 중 이동 잠금(대화·취침 연출과 같은 결)
 	player.velocity = Vector2.ZERO
 	_apply_cutscene_frame()                # 첫 프레임부터 연출이 서 있게(암전 스텝의 깜빡임 방지)
@@ -21324,6 +21505,12 @@ func _apply_cutscene_frame() -> void:
 		clock.running = _cutscene_clock_prev and cutscene.clock_running()   # ④ 시계 정지
 	if _cam != null:
 		_cam.offset = cutscene.camera_offset()                    # ② 카메라 팬
+	# ★[폴리시 R8] 동행 혼의 몸은 **암전이 완전히 내려온 프레임**에 선다(`_soul_body_pending` 머리말).
+	#   `_fire_soul_birth`가 예약만 걸고 여기서 소비하는 이유가 곧 그 컷신의 계약이다 — 형상화는
+	#   암전 뒤에서 일어나므로 화면에 옮길 것이 없다(soul_child.gd:33~35).
+	if _soul_body_pending and cutscene.fade_alpha() >= 1.0:
+		_soul_body_pending = false
+		_refresh_soul_child_body()
 	# ★[S9b-T8 / ADR-0068 결정 9] ⑤ 풀스크린 일러스트 — 러너는 id와 불투명도만 알고, 파일 조회·
 	#   placeholder·픽셀은 여기서부터 아래(`_draw_illust`)가 진다. **재생이 끝나도 안 지운다**:
 	#   S등급은 그림 위에서 대사가 도는 형식이라 러너보다 오래 살아야 한다(_end_cutscene 참조).
@@ -21336,11 +21523,24 @@ func _apply_cutscene_frame() -> void:
 		var t := cutscene.npc_tile(String(id))
 		r.node.position = Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
 		r.node.visible = cutscene.npc_visible(String(id))
+	# ★[폴리시 R8] **그린다.** 위 `_illust_id`·`_illust_a`를 읽는 곳은 main의 월드 `_draw` 하나뿐인데
+	#   (`_draw_illust`), 컷신 중 `_process`는 여기서 프레임을 끊으므로 다시 그릴 것을 요청하는
+	#   경로가 하나도 없었다 — 카페·밤바 재그리기 줄에는 도달조차 못 하고, 타일 y 변화 조건은
+	#   `_begin_cutscene`이 이동을 잠가 영원히 거짓이다. 그래서 S등급 일러스트(B6 대면·B7 해방)는
+	#   알파가 1.0으로 올라도 화면에 한 번도 안 올라오고, 이어지는 페이드 해제가 그림 대신 평소
+	#   세계를 드러냈다(대사 묶음은 `dialogue.is_open()` 가드에 막혀 역시 재그리기가 없다).
+	#   같은 화면-덮기 연출인 B5 내면 공간은 `_tick_spine_puzzle`이 매 프레임 이 줄을 갖고 있다.
+	queue_redraw()
 
 # 재생 종료 — 화면 효과를 **반드시** 원복하고(암전인 채로 끝나는 컷신 데이터가 게임을 못 세우게),
 # 예약된 대화가 있으면 그 자리에서 연다. 대화가 없으면 여기서 이동 잠금을 푼다.
 func _end_cutscene() -> void:
 	cutscene = null
+	# ★[폴리시 R8] 예약이 남은 채로 재생이 끝났으면(암전이 1.0에 한 번도 안 닿는 손상 데이터) 여기서
+	#   세운다 — 연출을 잃는 것보다 몸이 안 서는 편이 나쁘다(래치가 세이브에 안 실리므로 방어 필수).
+	if _soul_body_pending:
+		_soul_body_pending = false
+		_refresh_soul_child_body()
 	if _cam != null:
 		_cam.offset = Vector2.ZERO
 	# ★[폴리시 R3] 취침 연출이 돌고 있으면 화면·시계를 원복하지 않는다(`_apply_cutscene_frame`의
@@ -22333,10 +22533,18 @@ func _fire_soul_birth() -> void:
 		return
 	_soul_born = true
 	_soul_due_day = 0
-	_refresh_soul_child_body()   # 암전이 걷히는 순간 이미 거기 있어야 한다(한 프레임도 안 비게)
+	# ★[폴리시 R8] 몸은 **암전이 완전히 내려온 뒤에** 세운다(`_soul_body_pending` 머리말). 종전엔
+	#   여기서 곧장 `_refresh_soul_child_body()`를 불렀는데, 호출부가 취침 트윈의 마지막 콜백이라
+	#   그 시점 화면은 완전히 밝다(직전 단계가 fade→0.0). 그래서 안방에서 작은 혼이 0.7초간 팝인한
+	#   뒤에야 암전이 내려왔다. 예약으로 바꾸면 "암전이 걷히는 순간 이미 거기 있다"는 원래 의도는
+	#   그대로 지켜지면서 팝인만 사라진다.
+	_soul_body_pending = true
 	# 화자 없음(지문) — 이 순간을 말해 줄 사람이 방에 없다(soul_child.gd BIRTH_LINES 주석).
-	_begin_cutscene(SoulChild.BIRTH_CUTSCENE.duplicate(true), "",
-		PackedStringArray(r.node.birth_lines()))
+	if not _begin_cutscene(SoulChild.BIRTH_CUTSCENE.duplicate(true), "",
+			PackedStringArray(r.node.birth_lines())):
+		# 재생이 안 서면(러너 거절 = 유효 스텝 0) 가릴 암전도 없다 — 종전대로 그 자리에서 세운다.
+		_soul_body_pending = false
+		_refresh_soul_child_body()
 
 # ── ★[S9-T3 / ADR-0067 결정 7] 우편함 — 열람 창구 ────────────────────────────
 # 우편함을 마주 보고 있나. 거울과 같은 결의 판정이되 무대가 *야외*라 가드가 하나 더 붙는다:
@@ -23137,7 +23345,17 @@ func _release_open_buildings() -> bool:
 	# 밤엔 방출하지 않는다(방목=낮). day_advanced는 06:00 리셋 직후라 낮이지만, 문 토글은 언제든 눌리므로 가드.
 	if clock != null and clock.phase() == "밤":
 		return false
-	var slots := _free_pasture_tiles()
+	# ★[폴리시 R8] **이미 방목 나간 짐승이 선 칸은 후보에서 뺀다.** 라운드로빈 인덱스는 매 호출
+	#   0에서 다시 돌고 `releasable()`은 실내 짐승만 주므로, 아침에 한 건물이 방출된 뒤 낮에 다른
+	#   건물 문을 열면 두 번째 방출이 **첫 번째와 똑같은 slots[0]·slots[1]** 을 다시 집었다. 겹친
+	#   두 마리 중 `animal_key_at`이 잡는 건 첫 매치 하나뿐이라 나머지는 그날 급여·쓰다듬·수집이
+	#   전부 막히고(실내 앵커도 `has_animal_at`이 false), 그 산물은 다음 advance_day에 덮여 사라진다.
+	#   밤 정산이 문 닫힌 짐승의 방목 좌표를 유지하므로 겹침은 다음 날 아침까지 이어졌다.
+	var taken: Dictionary = ranch.occupied_pasture_tiles()
+	var slots: Array = []
+	for t: Vector2i in _free_pasture_tiles():
+		if not taken.has(t):
+			slots.append(t)
 	if slots.is_empty():
 		return false
 	var i := 0

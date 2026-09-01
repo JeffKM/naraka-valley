@@ -125,6 +125,12 @@ var _burst_left := 0.0          # 진행 중인 발버둥의 남은 초(>0 = 발
 var _perfect_left := 0.0        # 퍼펙트 릴 창의 남은 초(>0 = 창 열림)
 var _perfect_armed := false     # 이번 발버둥에서 아직 퍼펙트를 못 땄고, 시작 시점에 '당기는 중'이었나
 var _perfect_flash := 0.0       # 퍼펙트 성공 연출 잔여(초) — HUD 플래시 전용(로직 무영향)
+# ★[폴리시 R8] 직전 프레임의 홀드 상태 — 입질 후킹을 **누르는 순간(rising edge)** 으로 좁히는 축.
+#   main이 넘기는 값은 `Input.is_action_pressed`(레벨)라, 캐스팅한 LMB를 놓지 않고 그대로 쥐고
+#   있으면 BITE 진입 첫 프레임에 무조건 후킹됐다 = BITE_WINDOW의 반응 판정도 missed_bite 경로도
+#   그 플레이 패턴에서 한 번도 실행되지 않았다(격투가 "홀드 = 당기기"라 홀드는 자연스러운 조작이고,
+#   대기 구간엔 텐션·혼력 소모가 없어 리스크도 0이었다). 챈다 = 누르는 동작이다.
+var _was_reeling := false
 var _class_break_left := 0.0    # 체급 게이트 확정 끊김까지 남은 초(>0 = 이미 끊김 확정된 연출 구간)
 
 # rng_seed = 결정성의 단일 출처. fish/rod/mods는 부분 dict를 넘겨도 기본값과 병합된다(호출 측 편의).
@@ -158,6 +164,7 @@ func cast() -> bool:
 	state = State.CASTING
 	_phase_t = 0.0
 	elapsed = 0.0
+	_was_reeling = false     # 캐스팅의 그 클릭은 후킹의 근거가 못 된다(다음 누름부터 센다)
 	# ★[S3-T4] 미끼(일반 −40%·유인/보장 −20%)가 대기 시간을 줄인다. 하한 0.1로 클램프해 "즉시 입질"
 	#   같은 축퇴를 막고, 상한 1.0으로 막아 미끼가 대기를 *늘리는* 방향은 열지 않는다(기어 = 언제나 순이득).
 	# ★[S7-T3 / ADR-0065 결정 4] 날씨는 **별도 인자**다 — 기어 클램프(상한 1.0)를 함께 타면 잿눈의
@@ -189,6 +196,9 @@ func tick(delta: float, reeling: bool) -> void:
 	_phase_t += delta
 	if _perfect_flash > 0.0:
 		_perfect_flash = maxf(_perfect_flash - delta, 0.0)
+	# ★[폴리시 R8] 후킹만 **누르는 순간**을 본다(격투의 당기기는 그대로 레벨 — 홀드가 곧 당김이다).
+	var struck := reeling and not _was_reeling
+	_was_reeling = reeling
 	match state:
 		State.CASTING:
 			if _phase_t >= CAST_SECS:
@@ -200,13 +210,15 @@ func tick(delta: float, reeling: bool) -> void:
 				state = State.BITE
 				_phase_t = 0.0
 		State.BITE:
-			_tick_bite(reeling)
+			_tick_bite(struck)
 		State.FIGHT:
 			_tick_fight(delta, reeling)
 
-# 입질 창: 당기면 후킹 시도(게이트 통과 시 FIGHT), 창을 넘기면 놓침(ESCAPED·혼력 0 소모).
-func _tick_bite(reeling: bool) -> void:
-	if reeling:
+# 입질 창: **채면**(누르는 순간) 후킹 시도(게이트 통과 시 FIGHT), 창을 넘기면 놓침(ESCAPED·혼력 0 소모).
+# ★[폴리시 R8] 인자가 "홀드 중인가"에서 "이 프레임에 눌렀는가"로 좁혀졌다 — 쥐고만 있으면 창이
+#   그냥 흐르고 놓친다(HUD가 안내하는 "[좌클릭]으로 챈다"의 반응 게이트가 그제야 실제 게이트가 된다).
+func _tick_bite(struck: bool) -> void:
+	if struck:
 		_try_hook()
 		return
 	if _phase_t >= BITE_WINDOW:

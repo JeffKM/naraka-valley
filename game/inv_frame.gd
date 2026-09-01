@@ -195,6 +195,12 @@ var _store_area_rect := Rect2()  # ★ [S2-T4] 매대 행 영역(휠 라우팅 �
 #   행에서만 나므로 클릭할 자리 자체가 없었다).
 var _top_scroll := 0
 var _top_area_rect := Rect2()
+# ★[폴리시 R8] 지금 그 창이 든 **총 품목 수**(그리기가 찍는다 — 재고의 단일 출처는 bin·larder다).
+#   휠 라우팅이 이 값을 봐야 "넘길 것이 없으면 안 삼킨다"가 성립한다: R7의 분기는 품목 수를 안 봐서
+#   창이 비어 있어도 상단 영역의 휠을 통째로 먹었고(`_top_area_rect`는 재고와 무관하게 늘 채워지고
+#   그 영역이 패널 상단 절반을 덮는다), 클램프가 _top_scroll을 0에 고정하므로 화면은 한 픽셀도 안
+#   움직였다 — 그 자리에서 백팩(16칸 = 스크롤 필수)이 안 굴러가는 사각이 생겼다.
+var _top_rows_total := 0
 const TOP_ROW_H := 30.0          # 내역 한 행의 높이(두 패널 공용)
 # ★ [S3-T5] 생선가게 — 서브탭 히트 2개 + 환전 행 히트 + [전량 환전] 버튼 + 환전 리스트 스크롤.
 var _fs_tab_rects: Array = []
@@ -304,6 +310,7 @@ func open(ctx: int) -> void:
 	_store_scroll = 0            # ★ [S2-T4] 열 때 매대 리스트도 맨 위로
 	_top_scroll = 0              # ★[폴리시 R7] 출하함·곳간 내역 리스트도 맨 위로
 	_top_area_rect = Rect2()
+	_top_rows_total = 0          # ★[폴리시 R8] 아직 안 그렸다 = 넘길 것이 없다(첫 프레임 방어)
 	_trade_scroll = 0            # ★ [S3-T5] 환전 리스트도 맨 위로
 	fishshop_tab = FS_TAB_GEAR   # ★ [S3-T5] 생선가게는 항상 기어 매대부터(예측 가능한 첫 화면)
 	_build_scroll = 0            # ★ [S4-T7] 건축 리스트도 맨 위로
@@ -1145,6 +1152,7 @@ func _draw_bin_top(panel: Rect2) -> void:
 	var max_rows := top_rows_visible()
 	_top_scroll = clampi(_top_scroll, 0, maxi(0, ids.size() - max_rows))
 	_top_area_rect = area
+	_top_rows_total = ids.size()   # ★[폴리시 R8] 휠 라우팅이 볼 총 품목 수(넘길 것이 있는가)
 	var shown := mini(ids.size() - _top_scroll, max_rows)
 	for i in shown:
 		var id: String = ids[_top_scroll + i]
@@ -1201,6 +1209,7 @@ func _draw_larder_top(panel: Rect2) -> void:
 	var max_rows := top_rows_visible()
 	_top_scroll = clampi(_top_scroll, 0, maxi(0, ids.size() - max_rows))
 	_top_area_rect = area
+	_top_rows_total = ids.size()   # ★[폴리시 R8] 휠 라우팅이 볼 총 품목 수(넘길 것이 있는가)
 	var shown := mini(ids.size() - _top_scroll, max_rows)
 	for i in shown:
 		var id: String = ids[_top_scroll + i]
@@ -1662,7 +1671,11 @@ func _gui_input(event: InputEvent) -> void:
 	# ★[폴리시 R7] 출하함·곳간 상단 내역 리스트 휠 — 매대와 **같은 영역 문법**(행 영역 위에서만;
 	#   그 밖은 아래 백팩 스크롤 유지). 두 컨텍스트 모두 `_backpack_visible()`이 참이라, 이 분기가
 	#   없으면 휠이 무조건 백팩만 굴려 내역을 넘길 방법이 전혀 없었다. 클램프는 그리기 시점.
+	# ★[폴리시 R8] **넘길 것이 있을 때만 삼킨다.** 품목이 창에 다 들어가면 이 자리의 휠은 아래
+	#   백팩 스크롤로 그대로 흘러야 한다(R7 이전의 거동 — 그 사각이 패널 상단 절반이었다).
+	#   판정은 그리기가 찍은 재고 수 ↔ 같은 단일 출처에서 파생한 가시 행수의 비교다(치수 복제 0).
 	if event.pressed and (context == CTX_BIN or context == CTX_LARDER) \
+			and _top_rows_total > top_rows_visible() \
 			and _top_area_rect.has_point(event.position):
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_top_scroll -= 1

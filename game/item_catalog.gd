@@ -409,6 +409,10 @@ const KEYS := {                             # 열쇠 id → {name_ko}(비매·�
 # ── ★[S2-T5 / ADR-0060 결정 5] 유품(relic) — 혼백관 기증 수집물 ─────────────────────
 # 망자가 이승에 남긴 물건. 안식 괭이질 저확률 발굴(Museum.relic_roll — 스타듀 Artifact 대응)로 얻고
 # 혼백관에 기증한다(종당 1회 — 중복 발굴분은 판매 가능). 서사(누구의 유품인가)는 Slice 9 소관(봉인 법칙).
+# ★[폴리시 R8] "판매 가능"의 **창구는 출하함**이다(main._relic_sellable → _on_frame_deposit). 종전엔
+#   이 문장과 아래 price가 가리키는 판매 경로가 코드에 한 곳도 없어(출하함·환전 탭 모두 거절·매대는
+#   판매 전용) 중복분의 유일한 처분이 휴지통이었다. **이미 전시된 종만** 받는다 — 안 바친 유품까지
+#   출하하면 하나뿐인 수집물이 사라져 전시 진행이 막힌다.
 const RELIC_BINYEO := "relic_binyeo"      # 은비녀 유품
 const RELIC_SPOON := "relic_spoon"        # 놋숟가락 유품
 const RELIC_KKOTSIN := "relic_kkotsin"    # 꽃신 유품

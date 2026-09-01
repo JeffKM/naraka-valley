@@ -68,7 +68,7 @@ func _run() -> void:
 	if FileAccess.file_exists(SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
 
-	var attached := "herald_rarecrow"   # 첨부를 가진 유일한 편지(획득처 ④)
+	var attached := "herald_rarecrow"   # 레어크로우 획득처 ④(첨부 스키마의 첫 실사용)
 	var plain := "herald_notice"        # 첨부 없는 샘플(중립 프레임워크 문구)
 
 	# ── ① 첨부 스키마 ──
@@ -103,9 +103,27 @@ func _run() -> void:
 			if not (String(key) in ["from", "lines", "note", "items", "gold"]):
 				schema_ok = false
 	_check("②a 전 첨부 아이템 id가 유효하고 개수가 양수", items_ok)
-	_check("⑥a 첨부를 가진 편지는 %d통뿐 — 나머지 %d통은 빈 첨부(가법 확장)"
-		% [attached_ids.size(), Mailbox.LETTERS.size() - attached_ids.size()],
-		attached_ids.size() == 1 and attached_ids[0] == attached)
+	# ★[폴리시 R8] 종전 단언은 "첨부를 가진 편지는 1통뿐"을 그대로 고정해, 본문이 물건을 건네는데
+	#   첨부가 빈 편지를 회귀가 오히려 **지키고** 있었다. 이제 명단을 구성으로 못 박는다(수만 세지
+	#   않는다): 전령 레어크로우 + 본문이 물건을 건네고 그 물건이 실재 아이템인 관문 편지 셋.
+	#   ⚠️ 나머지 관문 편지의 봉투 속 물건(매듭·조약돌·마른 이끼·눈 한 줌…)은 **정서적 소품**이라
+	#     일부러 첨부가 없다 — 인벤에 들어갈 종류가 아니고, 넣으려면 없는 아이템을 새로 만들어야
+	#     한다(그건 첨부 결함이 아니라 신규 아이템 결정 = owner 몫).
+	var expect_sorted: Array = [attached,
+		"miho_gate3_pumpkin", "ken_gate1_pot", "scarlet_gate2_coin"]
+	attached_ids.sort()
+	expect_sorted.sort()
+	_check("⑥a 첨부를 가진 편지 = %s (나머지 %d통은 빈 첨부 — 정서적 소품)"
+		% [str(expect_sorted), Mailbox.LETTERS.size() - expect_sorted.size()],
+		attached_ids == expect_sorted)
+	_check("⑥b 관문 첨부 셋의 내용물이 본문이 건넨 그 물건이다(호박씨·화분·엽전 한 닢)",
+		Mailbox.attachment_items_of("miho_gate3_pumpkin").size() == 1
+		and String(Mailbox.attachment_items_of("miho_gate3_pumpkin")[0]["id"])
+			== ItemCatalog.seed_id(CropCatalog.YEONGHON_HOBAK)
+		and Mailbox.attachment_items_of("ken_gate1_pot").size() == 1
+		and String(Mailbox.attachment_items_of("ken_gate1_pot")[0]["id"]) == ItemCatalog.GARDEN_POT
+		and Mailbox.attachment_items_of("scarlet_gate2_coin").is_empty()
+		and Mailbox.attachment_gold_of("scarlet_gate2_coin") > 0)
 	_check("⑧a 편지 스키마 = from·lines·note·items·gold뿐(해금 키 0 — ADR-0064 발견 게이트)", schema_ok)
 
 	# ── ③ 진실원 대조 ──
