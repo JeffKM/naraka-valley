@@ -27,6 +27,16 @@ func _spawn_main() -> Node:
 	await process_frame
 	return m
 
+# ★[폴리시 R7] 오프닝 대화를 **반드시 닫고 시작한다.** 이 하네스는 종전에 대화를 연 채로 진행했고,
+#   폴리시 R2가 `_fire_soul_birth`에 `dialogue.is_open()` 가드를 얹은 뒤로는 형상화 재생이 매번
+#   그 첫 줄에서 접혀 ②e·②f·③a·③b·⑦c·⑧a 여섯 단언이 **제품과 무관하게** 계속 실패했다
+#   (다른 하네스는 전부 이 정리 절차를 갖고 있다 — 여기만 빠져 있었다).
+func _dismiss_dialogue(m: Node) -> void:
+	var guard := 0
+	while m.dialogue.is_open() and guard < 60:
+		m.dialogue.advance()
+		guard += 1
+
 func _despawn(m: Node) -> void:
 	m.queue_free()
 	await process_frame
@@ -80,6 +90,7 @@ func _initialize() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
 
 	var m: Node = await _spawn_main()
+	_dismiss_dialogue(m)
 
 	# ── ① 등재 ──
 	print("── ① 주민 프레임 최소 등재 ──")
@@ -178,6 +189,7 @@ func _initialize() -> void:
 	# ── ⑥ 아직 안 깃든 예정은 이혼이 접는다 · ⑦ 옥자 혼인 경로 ──
 	print("── ⑥ 미탄생 예정은 이혼이 접는다 · 재혼하면 새로 선다 ──")
 	var m2: Node = await _spawn_main()
+	_dismiss_dialogue(m2)
 	m2.wallet.gold = 999999
 	_wed(m2, "mochi", 30)
 	_check("⑥a 예정이 섰다", m2._soul_due_day == 30 + m2.SOUL_CHILD_WAIT_DAYS)
@@ -214,6 +226,7 @@ func _initialize() -> void:
 	m2._save_game()
 	await _despawn(m2)
 	var m3: Node = await _spawn_main()
+	_dismiss_dialogue(m3)
 	_check("⑧a 재부팅 후 탄생 여부 복원 · 몸이 선다",
 		m3._soul_born == live_born and live_born
 		and m3._resident(m3.SOUL_CHILD_RID).node.visible)
