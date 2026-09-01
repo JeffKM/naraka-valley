@@ -4945,6 +4945,99 @@ func _greenhouse_lot_reserved(t: Vector2i) -> bool:
 	return _region == RegionCatalog.HOME and not _greenhouse_built() \
 		and GREENHOUSE_EXT_RECT.has_point(t)
 
+# ★[폴리시 R5] 예정지 안에 **지금 서 있는 설치물 칸들**. 위 예약 가드는 *앞으로의 배치*만 막으므로
+#   가드 이전 세이브의 원장 행은 아무도 안 본다 — 그 행을 세는 자리가 여기다.
+#   ⚠️ 무대를 `_region`으로 묻지 않고 **안식 농원을 명시로 본다**: 목공방 발주는 나루 마을에서
+#      일어나므로 `_installation_at`(현재 무대 기준)으로는 한 칸도 못 센다.
+#   ★ 게잡이통·수액 채취기는 뺐다 — 통은 물가 인접(안식 연못 밖 낚시 무대 한정), 채취기는 성숙목
+#     위에만 서므로 이 8×7 맨 지면에 놓일 수 없다(놓을 수 없는 것을 세면 규칙이 두 곳으로 갈린다).
+func _greenhouse_lot_occupants() -> Array:
+	var out: Array = []
+	for y in range(GREENHOUSE_EXT_RECT.position.y, GREENHOUSE_EXT_RECT.end.y):
+		for x in range(GREENHOUSE_EXT_RECT.position.x, GREENHOUSE_EXT_RECT.end.x):
+			var t := Vector2i(x, y)
+			if (sprinkler != null and sprinkler.has_at(t)) \
+					or (rarecrow != null and rarecrow.has_at(t)) \
+					or (furnace != null and furnace.has_at(RegionCatalog.HOME, t)) \
+					or (crystalarium != null and crystalarium.has_at(RegionCatalog.HOME, t)):
+				out.append(t)
+	return out
+
+# 예정지 안에 심긴 혼의 나무가 있는가(발주 게이트 전용). 나무는 3×3 풋프린트라 앵커가 rect 밖이어도
+# 가지가 걸릴 수 있으므로, 칸마다 그 칸의 주인 나무를 되물어 본다.
+func _greenhouse_lot_has_tree() -> bool:
+	if orchard == null:
+		return false
+	for y in range(GREENHOUSE_EXT_RECT.position.y, GREENHOUSE_EXT_RECT.end.y):
+		for x in range(GREENHOUSE_EXT_RECT.position.x, GREENHOUSE_EXT_RECT.end.x):
+			if orchard.has_tree(orchard.tree_at(Vector2i(x, y))):
+				return true
+	return false
+
+# 자동 회수분의 반환처 사다리 — 백팩 → 집 상자 → 갈무리방 상자. **플레이어가 부른 동사가 아니므로**
+# 가득 찬 백팩에 억지로 밀어 넣는 대신 보관처로 흘린다(_remove_rarecrow가 "자리를 비우고 다시"로
+# 되돌리는 것과 갈리는 지점 — 여기선 되돌릴 자리가 곧 사라진다). 상자는 종류 제한이 없다.
+func _reclaim_to_storage(id: String, n: int, quality: int = 0) -> bool:
+	if id == "" or n <= 0:
+		return false
+	if inventory != null and inventory.add_item(id, n, quality):
+		return true
+	if chest != null and chest.store(id, n, quality) > 0:
+		return true
+	return storehouse_chest != null and storehouse_chest.store(id, n, quality) > 0
+
+# ★[폴리시 R5] 완공이 예정지를 WALL로 덮기 **전에** 그 안의 설치물을 걷어 돌려준다.
+#   왜 필요한가: R4의 배치 가드는 앞으로만 막으므로, 가드 이전에 그 자리에 세운 세이브·가드 이전에
+#   발주가 걸려 있던 세이브는 완공 아침에 그대로 매장된다(안쪽 칸은 8이웃이 전부 WALL이라
+#   `_update_target`으로 영영 겨눌 수 없고, 원장엔 남은 채 회수 경로만 사라진다).
+#   완공 아침과 늘봄방 세이브 로드가 **둘 다** `_refresh_greenhouse`를 지나므로 이행 경로는 여기
+#   하나면 족하다(멱등 — 두 번째부터는 걷을 것이 없다).
+func _reclaim_greenhouse_lot() -> void:
+	var tiles := _greenhouse_lot_occupants()
+	if tiles.is_empty():
+		return
+	var names: Array = []
+	for t in tiles:
+		if sprinkler != null and sprinkler.has_at(t):
+			var s_id := ItemCatalog.sprinkler_item_for_tier(sprinkler.tier_at(t))
+			if sprinkler.remove(t) and _reclaim_to_storage(s_id, 1):
+				names.append(ItemCatalog.name_of(s_id))
+		if rarecrow != null and rarecrow.has_at(t):
+			# 레어크로우가 이 회수의 무게중심이다 — 재획득 경로가 전부 1회성이라 여기서 잃으면
+			# 8종 완주(디럭스 보호 반경)가 영구히 깨진다(_remove_rarecrow 주석).
+			var r_id := rarecrow.id_at(t)
+			if rarecrow.remove(t) != "" and _reclaim_to_storage(r_id, 1):
+				names.append(ItemCatalog.name_of(r_id))
+		if furnace != null and furnace.has_at(RegionCatalog.HOME, t):
+			# 달구는 중·수거 대기 화덕은 `remove`가 거절하므로 강제 회수 진입점을 쓴다(FurnaceLedger.evict).
+			var f := furnace.evict(RegionCatalog.HOME, t)
+			if not f.is_empty():
+				var prod := String(f.get("product", ""))
+				if prod != "":
+					_reclaim_to_storage(prod, 1, int(f.get("quality", ItemCatalog.Q_NORMAL)))
+				elif String(f.get("ore", "")) != "":
+					# 미완이면 넣은 광석을 그대로 돌려준다(연료는 이미 탄 것으로 둔다 — 되돌릴 수
+					# 있는 것만 되돌린다).
+					_reclaim_to_storage(String(f["ore"]), FurnaceLedger.ORE_PER_BATCH)
+				if _reclaim_to_storage(ItemCatalog.FURNACE, 1):
+					names.append(ItemCatalog.name_of(ItemCatalog.FURNACE))
+		if crystalarium != null and crystalarium.has_at(RegionCatalog.HOME, t):
+			# 수거 대기면 `remove`가 거절하므로 먼저 꺼낸다(꺼내면 같은 보석으로 재가동 → 회수 가능).
+			if crystalarium.is_ready(RegionCatalog.HOME, t):
+				var ready_gem := crystalarium.collect(RegionCatalog.HOME, t)
+				if ready_gem != "":
+					_reclaim_to_storage(ready_gem, 1)
+			var res: Dictionary = crystalarium.remove(RegionCatalog.HOME, t)
+			if not res.is_empty():
+				var inside := String(res.get("gem", ""))
+				if inside != "":
+					_reclaim_to_storage(inside, 1)
+				if _reclaim_to_storage(ItemCatalog.CRYSTALARIUM, 1):
+					names.append(ItemCatalog.name_of(ItemCatalog.CRYSTALARIUM))
+	if not names.is_empty():
+		_notice("늘봄방 부지에 있던 것을 걷어 두었다 — %s (백팩·상자를 확인하자)"
+			% ", ".join(PackedStringArray(names)), NOTICE_SECS * 2.0)
+
 # ★ 밭 라우터 — 이 칸의 주인 FarmField를 고른다. **두 좌표 공간이 겹치지 않아**(노지 = HOME 외부
 #   y<65 · 늘봄방 = 실내 밴드) 칸 하나만 보면 주인이 유일하게 정해진다. 밭 동사(괭이·물·심기·비료·
 #   수확)와 칸 단위 질의는 전부 이 함수를 거치고, **집합 순회**(절기 사멸·까마귀·잡초 확산)는 거치지
@@ -4959,6 +5052,9 @@ func _field_at(t: Vector2i) -> FarmField:
 func _refresh_greenhouse() -> void:
 	if not _greenhouse_built():
 		return
+	# ★[폴리시 R5] 그리드를 다시 세우기 **전에** 예정지를 비운다 — _rebuild_region → _build_facade가
+	#   이 8×7을 WALL로 채우는 순간 안쪽 설치물은 겨눌 수도 회수할 수도 없어진다(머리말 참조).
+	_reclaim_greenhouse_lot()
 	_build_building_catalog()
 	_refresh_home_expansion()   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
 	if _region == RegionCatalog.HOME:
@@ -17636,6 +17732,19 @@ func _try_order_build(project_id: String) -> bool:
 	if carpenter.is_active():
 		_notice("옹이는 한 번에 한 채만 짓는다 — %s" % carpenter.summary(clock.day))
 		return false
+	# ★[폴리시 R5] 늘봄방은 **부지가 비어 있어야 발주된다**. 완공이 예정지 8×7을 벽으로 덮으므로,
+	#   그 안에 선 설치물·나무는 완공 아침에 손 닿지 않는 곳으로 들어간다. 완공 시점 자동 회수가
+	#   뒤를 받치지만(_reclaim_greenhouse_lot), 돌아가는 업화로를 말없이 걷어 오는 것보다 **짓기
+	#   전에 치우게 하는 쪽**이 옳다 — 냥·원목을 치르기 전에 알린다(부분 결제 없음의 계약과 같은 줄).
+	if project_id == Carpenter.PROJ_GREENHOUSE:
+		var lot := _greenhouse_lot_occupants()
+		if not lot.is_empty():
+			_notice("늘봄방 부지(본가 동쪽)에 설치물이 %d개 서 있다 — 먼저 치우자 (%s 등)"
+				% [lot.size(), str(lot[0])])
+			return false
+		if _greenhouse_lot_has_tree():
+			_notice("늘봄방 부지(본가 동쪽)에 심긴 나무가 있다 — 먼저 베어 내자")
+			return false
 	var gold := StoreDiscount.price(Carpenter.gold_cost(project_id), _ongi_hearts())
 	var wood := Carpenter.wood_cost(project_id)
 	var have := inventory.count_of(ItemCatalog.WOOD)
@@ -21958,6 +22067,10 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
 		return true
 	if t == MIHO_FIELD_TILE:
+		return true
+	# ★[폴리시 R5] 늘봄방 예정지는 나무에도 예약 부지다 — R4가 설치물 셋만 막고 여기를 비워 둬,
+	#   완공이 3×3 과수를 통째로 벽 밑에 묻을 수 있었다(설치물과 달리 회수 수단조차 없다).
+	if _greenhouse_lot_reserved(t):
 		return true
 	if is_solid(_grid[t.y][t.x]):
 		return true
