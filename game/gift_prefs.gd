@@ -432,13 +432,16 @@ static func universal_tier(id: String) -> int:
 	return NEUTRAL         # 수확물·과일·채집물·어획물·통용물·수액·산물·유품·설치물·환약·계단
 
 # 그 선물이 주는 호감도 점수(음수 = 혐오 채널). 품질 배율은 **러브·라이크에만**, 그리고
-# 품질을 실제로 싣는 아이템(CAT_HARVEST — 인벤 슬롯이 등급을 보존하는 유일한 카테고리)에만
-# 얹는다. 무품질 아이템은 언제나 ×1이라 quality 인자를 무시한다.
+# 품질을 실제로 싣는 아이템에만 얹는다. 무품질 아이템은 언제나 ×1이라 quality 인자를 무시한다.
+# ★[폴리시 R9] 판정을 `ItemCatalog.carries_quality`로 갈았다 — "CAT_HARVEST가 등급을 보존하는
+#   유일한 카테고리"라던 옛 전제가 거짓이었다(주괴는 자재인데 price_of가 등급 배수를 얹는다).
+#   지금은 거동이 안 바뀐다(주괴는 어느 러브·라이크 목록에도 없어 CAT_MATERIAL → DISLIKE로 떨어지고,
+#   이 함수는 러브·라이크에만 배율을 얹는다) — 값을 매기는 집합과 배율을 얹는 집합을 미리 맞춰 둔다.
 static func points_for(tier: int, item_id: String = "", quality: int = ItemCatalog.Q_NORMAL) -> int:
 	var base: int = int(POINTS.get(tier, POINTS[NEUTRAL]))
 	if not (tier == LOVE or tier == LIKE):
 		return base
-	if ItemCatalog.category_of(item_id) != ItemCatalog.CAT_HARVEST:
+	if not ItemCatalog.carries_quality(item_id):
 		return base
 	return int(base * QUALITY_SCALE[clampi(quality, 0, 3)])
 

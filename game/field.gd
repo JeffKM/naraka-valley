@@ -145,6 +145,13 @@ func untill(t: Vector2i) -> bool:
 func fertilize(t: Vector2i, fert_id: String) -> bool:
 	if not is_tilled(t) or not FertilizerCatalog.has(fert_id):
 		return false
+	# ★[폴리시 R9] **같은 비료 재도포는 무동작**(멱등). 이 파일의 다른 동사는 예외 없이 이 가드를
+	#   드는데(`hoe`·`water`·`plant`·`sprinkle`, 그리고 `Sprinkler.place`) 비료만 빠져 있었고,
+	#   하필 유일하게 값비싼 소모품이다 — 호출부(main)가 이 true를 곧바로 차감에 쓰므로 이미
+	#   디럭스 비료가 깔린 칸을 한 번 더 누르면 **칸 상태가 바이트 단위로 같은 채** 120냥짜리
+	#   한 개가 사라졌다. 다른 비료로의 overwrite는 그대로 성립한다(단일 필드 XOR 문법 불변).
+	if str(_tiles[t].get("fertilizer", "")) == fert_id:
+		return false
 	_tiles[t]["fertilizer"] = fert_id
 	tile_changed.emit(t)
 	return true
@@ -324,4 +331,15 @@ func load_save(data: Dictionary) -> void:
 		var c: Dictionary = _tiles[t]
 		if not c.has("fertilizer"):
 			c["fertilizer"] = ""
+		# ★[폴리시 R9] **모르는 작물 id를 실은 칸은 빈 경작 칸으로 되돌린다**(손상 세이브 방어 —
+		#   `GardenPot.load_save`가 이미 드는 그 가드의 밭판). 안 걸러 내면 그 칸이 영구 불능으로
+		#   굳는다: `effective_growth_days`가 base −1을 그대로 돌려줘 `is_mature`의 `need >= 0`
+		#   계약에 걸려 **절대 성숙하지 않고**, `_grow`가 need=−1로 grown_days를 −1로 밀며,
+		#   절기 사멸 패스는 미지 id의 `seasons_of`가 빈 배열이라 `in_season`이 늘 참이 되어 지우지
+		#   못하고, `plant`는 `is_planted`에서 막힌다. 흙·비료는 남기므로 그 자리는 곧장 다시
+		#   심을 수 있다(까마귀·절기 사멸이 쓰는 `remove_plant`와 같은 되돌림 폭).
+		if bool(c.get("planted", false)) and not CropCatalog.has_crop(str(c.get("crop", ""))):
+			c["planted"] = false
+			c["crop"] = ""
+			c["grown_days"] = 0
 		tile_changed.emit(t)

@@ -1586,7 +1586,13 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 		#     시그널 층이 통째로 무검증이었다 — S7-T7 `fest_*`와 **같은 클래스의 결함**이다.
 		#     획득처 ③이 안 열리면 레어크로우 8종 완주(=디럭스 반경)도 정상 플레이로 성립하지 않는다.
 		#     ⑫의 소스 스캔이 하드코딩 목록만 대조해 못 잡았으므로, 그 스캔도 함께 넓힌다.
-		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion", "rarecrow", "fest_deco", "fest_item", "fest_seed", "ped_item", "ped_seed", "ped_deco", "ped_rare", "ped_book", "trial_shop_rarecrow", "trial_shop_deco", "trial_shop_item":
+		#   ★[폴리시 R9] **같은 클래스의 결함 3회차**: R7이 목공방에 연 「짐승 새끼」 행("livestock" —
+		#     main `_woodshop_items`)이 이 목록에서 빠져, 5번째 짐승이 들어올 유일한 경로가 신호
+		#     층에서 그대로 죽어 있었다(냥도 안 나가고 짐승도 안 들어온다). 그러면 「큰 넋둥우리」
+		#     10,000냥·「큰 넋우릿간」 12,000냥이 다시 실효 0이 된다 — R7이 봉합한 그 자리다.
+		#     ⚠️ 아래 ⑫d(peddler_test)의 소스 스캔은 이 누락을 **실제로 잡았다**. 놓친 것은 스캔이
+		#       아니라 R7 배치가 그 스위트를 다시 안 돌린 일이었다(선별 회귀의 사각).
+		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion", "rarecrow", "livestock", "fest_deco", "fest_item", "fest_seed", "ped_item", "ped_seed", "ped_deco", "ped_rare", "ped_book", "trial_shop_rarecrow", "trial_shop_deco", "trial_shop_item":
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
 
 # ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.

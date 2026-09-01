@@ -158,6 +158,19 @@ static func node_class(node_id: String) -> String:
 static func is_node_kind(node_id: String) -> bool:
 	return node_class(node_id) != ""
 
+# ★[폴리시 R9] 이 산출물이 **깊이 밴드 너머**에서만 나오는가(= floor_min > 1인 노드의 산출).
+# `ForageSpawns.is_deep_gated`의 갱도판이고 쓰임새도 같다 — 소매 창구가 "무엇을 팔면 안 되나"를
+# 물을 때 쓰는 단일 술어다. 손 목록이 아니라 **NODE_TABLE에서 파생**하므로 밴드가 바뀌거나
+# 노드 종이 늘면 매대 쪽 코드 0줄로 따라온다(POOL_EXCLUDE가 손으로 셋만 적어 두고 이 축을
+# 통째로 놓쳤던 자리 — 보부상 일반 재고가 명옥·염주석·명부금강·유철·황천금을 그대로 팔았다).
+# ★ 전층 노드(명동·혼탄·넋수정·넋알돌)는 여기 안 걸린다 — 1층에서 손에 넣을 수 있는 물건이라
+#   좌판에 서도 게이트를 넘기는 것이 없다.
+static func is_depth_gated(item_id: String) -> bool:
+	for e: Dictionary in NODE_TABLE:
+		if String(e["id"]) == item_id:
+			return int(e["floor_min"]) > 1
+	return false
+
 # 전 노드 종 id 목록(테스트·아트 로스터 대조용).
 static func node_kinds() -> Array[String]:
 	var out: Array[String] = []

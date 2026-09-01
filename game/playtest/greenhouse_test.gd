@@ -166,14 +166,23 @@ func _run_checks() -> void:
 	m.sprinkler.place(spr_at)
 	var grown_before: int = m.greenhouse_farm.grown_days_of(spr_target)
 	m._on_day_advanced(m.clock.day + 1)
-	_check("⑥b ㉢ 늘봄방 스프링클러가 급수해 그날 작물이 자란다(지상과 같은 동작)",
-		m.greenhouse_farm.grown_days_of(spr_target) > grown_before)
+	# ★[폴리시 R9] 급수 지점이 `advance_day` **뒤**로 옮겨졌다(#2 — 혼우가 R8에서 옮겨 간 그 자리와
+	#   나란히). 그래서 설치 첫 아침은 "젖은 채 끝나고", +1은 다음 아침에 붙는다. 지상 밭의
+	#   `sprinkler_test` ③a~③c가 잠근 그 계약을 늘봄방에서도 같은 모양으로 확인한다 —
+	#   ㉢("스프링클러 호환")이 보증하는 건 *같은 날 성장*이 아니라 **지상과 같은 사이클**이다.
+	_check("⑥b ㉢ 첫 아침 정산이 끝난 시점에 늘봄방 스프링클러 칸이 젖어 있다(지상과 같은 시점)",
+		m.greenhouse_farm.is_watered(spr_target)
+		and m.greenhouse_farm.grown_days_of(spr_target) == grown_before)
+	m._on_day_advanced(m.clock.day + 2)
+	_check("⑥b' ㉢ 그 물이 다음 아침 성장에 실리고 같은 아침에 다시 젖는다(정상상태 = 하루 +1)",
+		m.greenhouse_farm.grown_days_of(spr_target) > grown_before
+		and m.greenhouse_farm.is_watered(spr_target))
 	# 손 물주기·성장 사슬도 그대로 산다(급수 없는 칸은 안 자란다 = 급수가 실효라는 반증).
 	var dry_t := Vector2i(m.GREENHOUSE_PLOT_RECT.position.x + 8, m.GREENHOUSE_PLOT_RECT.position.y + 5)
 	m.greenhouse_farm.hoe(dry_t)
 	m.greenhouse_farm.plant(dry_t, CropCatalog.HONRYEONGCHO)
 	var dry_before: int = m.greenhouse_farm.grown_days_of(dry_t)
-	m._on_day_advanced(m.clock.day + 2)
+	m._on_day_advanced(m.clock.day + 3)
 	_check("⑥c 물 안 준 늘봄방 칸은 안 자란다(급수가 진짜 원인)",
 		m.greenhouse_farm.grown_days_of(dry_t) == dry_before)
 	_check("⑥d 늘봄방 칸에 손 물주기가 든다", m.greenhouse_farm.water(dry_t))

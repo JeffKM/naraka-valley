@@ -112,7 +112,8 @@ const SHOP := [
 
 # ── 원장(세이브 대상 — 파생 불가능한 것만) ────────────────────────────────────
 var active: Dictionary = {}   # 수락 중인 시련 1건({} = 없음). 계약 스냅샷이라 통째 직렬화한다.
-var completed: Array = []     # 완료한 시련 key 목록(같은 주 중복 완료 방지 — QuestBoard.completed 결)
+var completed: Array = []     # 완료한 시련 key 목록(같은 주 중복 완료 방지 — **살아 있는 키만**)
+var completed_total: int = 0  # ★[폴리시 R9] 누적 완료 건수(위 배열은 죽은 키를 버린다 — _prune_completed)
 var tokens: int = 0           # [시련패] 잔고(전용 화폐 — 냥과 교환되지 않는다)
 var earned_tokens: int = 0    # 누적 획득 시련패(정보·검증용 지급 기록 — QuestBoard.paid_gold 결)
 var bought: Array = []        # 1회성 상점 구매 이력(레어크로우 ⑧·가구 세트)
@@ -250,18 +251,38 @@ func complete(day: int, have: int) -> Dictionary:
 		return {}
 	var done := active
 	completed.append(String(done["key"]))
+	completed_total += 1
 	var pay := int(done.get("tokens", TOKEN_REWARD))
 	tokens += pay
 	earned_tokens += pay
+	_prune_completed(day)
 	active = {}
 	changed.emit()
 	return done
 
+# ★[폴리시 R9] **죽은 키를 버린다** — QuestBoard._prune_completed와 완전 동형이고 근거도 같다.
+#   키가 `trial:<절대 주 인덱스>`(weekly_trial)라 연차가 돌아도 재사용되지 않고, 조회하는 자리는
+#   `offer(day)`·`accept`의 **이번 주 키 하나**뿐이다 — 지난 주 키는 어떤 경로로도 다시 물어볼 수
+#   없는 죽은 항목인데, 이 배열을 줄이는 코드가 없어 주당 1건씩 영원히 쌓이고 매 저장마다 전량이
+#   직렬화됐다. 누적 완료 건수는 `completed_total` 스칼라가 든다(earned_tokens와 같은 관례).
+func _prune_completed(day: int) -> void:
+	var week := week_of(day)
+	var live: Array = []
+	for k in completed:
+		var s := String(k)
+		var sep := s.rfind(":")
+		if sep < 0:
+			continue                     # 형식 밖 키(손상 세이브) → 버린다
+		if int(s.substr(sep + 1)) >= week:
+			live.append(s)
+	completed = live
+
 func is_completed(key: String) -> bool:
 	return completed.has(key)
 
+# 지금까지 완료한 총 건수(**누적** — 위 `_prune_completed`가 죽은 키를 버리므로 배열 길이가 아니다).
 func completed_count() -> int:
-	return completed.size()
+	return completed_total
 
 # ── 상점(표 파생 — 잔고·구매 이력은 원장) ─────────────────────────────────────
 static func shop_row(buy_id: String) -> Dictionary:
@@ -313,6 +334,7 @@ func to_save() -> Dictionary:
 	return {
 		"active": active.duplicate(true),
 		"completed": completed.duplicate(),
+		"completed_total": completed_total,
 		"tokens": tokens,
 		"earned_tokens": earned_tokens,
 		"bought": bought.duplicate(),
@@ -324,6 +346,8 @@ func load_save(data: Dictionary) -> void:
 	completed = []
 	for k in data.get("completed", []):
 		completed.append(String(k))
+	# ★[폴리시 R9] 누적 건수 키가 없는 세이브(= 정리 전 원장)는 배열 길이가 곧 누적이다.
+	completed_total = maxi(int(data.get("completed_total", completed.size())), 0)
 	tokens = maxi(int(data.get("tokens", 0)), 0)
 	earned_tokens = maxi(int(data.get("earned_tokens", 0)), 0)
 	bought = []
