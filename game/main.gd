@@ -20665,8 +20665,12 @@ func _redemption_arc_complete(rid: String) -> bool:
 # 옥자 [F] — 혼례 부적 의뢰. 연애 상태에서만 프롬프트가 노출되고(훅이 ""를 돌려주면 꼬리 없음),
 # 기혼·혼례 대기·이미 보유 중엔 다시 노출되지 않는다(부적은 세상에 하나 — 나락 열쇠와 같은 결).
 func _charm_quest_open() -> bool:
+	# ★[폴리시 R7] 보유 판정은 **백팩만이 아니라 어디든**이다 — `_myeongbu_quest_open`이 R5에
+	#   먼저 겪은 그 함정(상자에 넣으면 "안 가진 것" → 유니크 재발급)이 정표 두 창구에 그대로
+	#   남아 있었다. 집 상자에 부적을 넣어 두면 창구가 되살아나 두 번째 부적이 발급됐다
+	#   (item_catalog.gd "비매·유니크" · main "부적은 세상에 하나" 불변식 위반).
 	return _romance_partner != "" and _spouse_id == "" and _wedding_day == 0 \
-		and not inventory.has_item(ItemCatalog.WEDDING_CHARM)
+		and not _stored_anywhere(ItemCatalog.WEDDING_CHARM)
 
 func _order_wedding_charm() -> void:
 	if not _charm_quest_open():
@@ -20691,7 +20695,7 @@ func _elixir_quest_open() -> bool:
 	return _romance_partner == ELIXIR_RID and _spouse_id == "" and _wedding_day == 0 \
 		and not _charm_quest_open() \
 		and not _ever_married.get(ELIXIR_RID, false) \
-		and not inventory.has_item(ItemCatalog.OKJA_ELIXIR)
+		and not _stored_anywhere(ItemCatalog.OKJA_ELIXIR)   # ★[폴리시 R7] 부적과 같은 이유(상자 = 재발급 차단)
 
 func _order_okja_elixir() -> void:
 	if not _elixir_quest_open():
@@ -21011,8 +21015,16 @@ func _week_first_day(d: int) -> int:
 func _pending_season_question(r: Resident, gate_lines: PackedStringArray) -> Dictionary:
 	if r == null or r.node == null or not r.node.has_method("season_question"):
 		return {}
-	if not gate_lines.is_empty() or _confess_rid != "":
-		return {}                                   # 관문·의지 시험이 선 대화 = 오늘의 사건이 이미 있다
+	if not gate_lines.is_empty():
+		return {}                                   # 관문이 선 대화 = 오늘의 사건이 이미 있다
+	# ★[폴리시 R7] 고백 제안이 "오늘의 사건"인 것은 **결행이 가능할 때뿐**이다. 슬롯이 이미 다른
+	#   사람에게 잡혀 있으면 `_try_heart_promotion`의 `HEART_GATE_MAX` 가드가 그 사람을 stage 4 /
+	#   점수 만충에 영구 고정하므로 `pending_promotion()`이 영원히 참이고, 제안도 상시로 선다
+	#   (ADR-0066 결정 6의 의도 — 제안을 숨기면 인-픽션 거절이 침묵이 된다). 종전 가드는 그
+	#   *상시 상태*를 일시적 사건으로 오독해, 혼인·연애 중이면 ♡4 만충 주민의 절기 물음(ADR-0067
+	#   결정 6 채널)이 **두 번 다시 안 나왔다**. 제안·거절 장면은 그대로 두고 물음만 되살린다.
+	if _confess_rid != "" and (_romance_partner == "" or _romance_partner == r.id):
+		return {}                                   # 의지 시험이 선 대화 = 오늘의 사건이 이미 있다
 	if r.is_birthday_on(clock.day):
 		return {}                                   # 생일 > 물음(우선순위 둘째 칸)
 	# 주 첫날에만 묻는다.
