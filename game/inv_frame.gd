@@ -189,6 +189,13 @@ var _buy_sprinkler_rect := Rect2()   # ★ [S1R-T9] 매대 스프링클러 구�
 var _store_row_rects: Array = []
 var _store_scroll := 0           # ★ [S2-T4] 매대 리스트 첫 표시 행(12행 확장 — 휠 스크롤, 스타듀 상점 결)
 var _store_area_rect := Rect2()  # ★ [S2-T4] 매대 행 영역(휠 라우팅 판정 — 이 안=매대, 밖=백팩)
+# ★[폴리시 R7] 출하함·곳간 **상단 내역** 리스트의 같은 두 짝(매대 결 그대로). 두 패널이 한 번에
+#   하나만 열리므로 상태를 나눠 쓴다. 이게 없던 종전엔 상단 영역 높이(100px)가 ROW_H 30px로
+#   3행에서 잘리고 스크롤이 없어, 4번째 이후 품목이 표시도 회수도 안 됐다(히트 rect가 그려진
+#   행에서만 나므로 클릭할 자리 자체가 없었다).
+var _top_scroll := 0
+var _top_area_rect := Rect2()
+const TOP_ROW_H := 30.0          # 내역 한 행의 높이(두 패널 공용)
 # ★ [S3-T5] 생선가게 — 서브탭 히트 2개 + 환전 행 히트 + [전량 환전] 버튼 + 환전 리스트 스크롤.
 var _fs_tab_rects: Array = []
 var _ws_tab_rects: Array = []    # ★[S4-T7] 목공방 서브탭 2개 Rect2(생선가게 _fs_tab_rects 동형)
@@ -295,6 +302,8 @@ func open(ctx: int) -> void:
 	_bp_first_row = 0            # ★ 열 때 백팩 스크롤 맨 위로
 	_bp_scroll_dragging = false
 	_store_scroll = 0            # ★ [S2-T4] 열 때 매대 리스트도 맨 위로
+	_top_scroll = 0              # ★[폴리시 R7] 출하함·곳간 내역 리스트도 맨 위로
+	_top_area_rect = Rect2()
 	_trade_scroll = 0            # ★ [S3-T5] 환전 리스트도 맨 위로
 	fishshop_tab = FS_TAB_GEAR   # ★ [S3-T5] 생선가게는 항상 기어 매대부터(예측 가능한 첫 화면)
 	_build_scroll = 0            # ★ [S4-T7] 건축 리스트도 맨 위로
@@ -444,6 +453,19 @@ func _bp_max_first_row() -> int:
 	return maxi(0, _bp_total_rows() - BP_VIS_ROWS)
 
 # 백팩 하단 그리드가 그려지는 컨텍스트인가(관계·숙련·옵션 탭은 백팩을 안 그림).
+# ★[폴리시 R7] 상단 내역 리스트(출하함·곳간)의 **행 영역** — 두 패널이 같은 창을 쓰고, 그리기·
+#   휠 라우팅·회귀가 전부 이 하나에서 기하를 읽는다(숫자를 세 곳에 옮겨 적으면 한쪽만 고쳐도
+#   조용히 통과한다 — 매대 행 칸 폭 상수와 같은 규율). 첫 행은 머리말 두 줄 밑(+52), 창의 끝은
+#   백팩 그리드 시작 직전이다.
+func top_list_area(panel: Rect2) -> Rect2:
+	var row_y := panel.position.y + PAD + 52.0
+	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0
+	return Rect2(panel.position.x + PAD, row_y, panel.size.x - PAD * 2.0, max_y - row_y)
+
+# 그 창에 한 번에 보이는 행 수. 패널 위치가 상쇄되므로 치수(TOP_H·PAD·TOP_ROW_H)만으로 정해진다.
+func top_rows_visible() -> int:
+	return maxi(1, int(top_list_area(_panel_rect()).size.y / TOP_ROW_H))
+
 func _backpack_visible() -> bool:
 	if context == CTX_BIN or context == CTX_STORE or context == CTX_CHEST or context == CTX_FISHSHOP \
 			or context == CTX_WOODSHOP or context == CTX_GUILD or context == CTX_LARDER \
@@ -1110,16 +1132,23 @@ func _draw_bin_top(panel: Rect2) -> void:
 	_bin_rects.clear()
 	if bin == null:
 		return
-	const ROW_H := 30.0
 	const ICON := 26.0
-	var row_y := panel.position.y + PAD + 52.0
-	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0   # 백팩 그리드 시작 직전까지
+	# ★[폴리시 R7] 창 기하는 **단일 출처**(top_list_area)에서 온다 — 휠 라우팅·회귀가 같은 값을
+	#   읽어야 "N종 적재 시 전 항목에 닿는가"를 숫자를 옮겨 적지 않고 잴 수 있다.
+	var area := top_list_area(panel)
+	var row_y := area.position.y
 	var ids: Array = bin.ids()
-	var max_rows := int((max_y - row_y) / ROW_H)
-	var shown := mini(ids.size(), max_rows)
+	# ★[폴리시 R7] 창에 안 들어가는 품목을 **휠로 넘긴다**(매대 리스트와 같은 문법 — 클램프는
+	#   행수가 확정되는 그리기 시점에서, 휠 핸들러는 ±1만). 종전엔 넘치면 "…외 N종" 회색 글자
+	#   하나로 끝났는데, 히트 rect는 그려진 행에서만 나므로 그 N종은 **회수할 자리가 아예 없었다**
+	#   ("취침 전 잘못 넣었네 회수"라는 이 패널의 계약이 4번째 품목부터 성립하지 않았다).
+	var max_rows := top_rows_visible()
+	_top_scroll = clampi(_top_scroll, 0, maxi(0, ids.size() - max_rows))
+	_top_area_rect = area
+	var shown := mini(ids.size() - _top_scroll, max_rows)
 	for i in shown:
-		var id: String = ids[i]
-		var pos := Vector2(panel.position.x + PAD, row_y + i * ROW_H)
+		var id: String = ids[_top_scroll + i]
+		var pos := Vector2(panel.position.x + PAD, row_y + i * TOP_ROW_H)
 		var icon_rect := Rect2(pos, Vector2(ICON, ICON))
 		_bin_rects.append({"rect": icon_rect, "id": id})
 		_draw_slot_box(icon_rect, false)
@@ -1134,9 +1163,10 @@ func _draw_bin_top(panel: Rect2) -> void:
 		var subs := "+%d" % sub
 		HanjiUi.draw_text(self, Vector2(panel.end.x - PAD - HanjiUi.text_width(subs, 13), ty),
 			subs, 13, HanjiUi.GOLD_SOFT)
-	if ids.size() > shown:
-		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + shown * ROW_H + 12.0),
-			"…외 %d종" % (ids.size() - shown), 12, HanjiUi.INK_DIM)
+	if ids.size() > max_rows:
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + shown * TOP_ROW_H + 12.0),
+			"%d–%d / %d종  ·  휠로 넘김" % [_top_scroll + 1, _top_scroll + shown, ids.size()],
+			12, HanjiUi.INK_DIM)
 
 # ── ★[S6-T1] 곳간 상단(재고 행 + 용량) ────────────────────────────────────────
 # 출하함(_draw_bin_top)의 **거울상**이다: 같은 [아이콘 | 이름×수량 | 우측 값] 행 문법을 쓰되,
@@ -1160,16 +1190,21 @@ func _draw_larder_top(panel: Rect2) -> void:
 	_larder_rects.clear()
 	if larder == null:
 		return
-	const ROW_H := 30.0
 	const ICON := 26.0
-	var row_y := panel.position.y + PAD + 52.0
-	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0   # 백팩 그리드 시작 직전까지
+	var area := top_list_area(panel)      # ★[폴리시 R7] 출하함과 같은 단일 출처 기하
+	var row_y := area.position.y
 	var ids: Array = larder.ids()
-	var max_rows := int((max_y - row_y) / ROW_H)
-	var shown := mini(ids.size(), max_rows)
+	# ★[폴리시 R7] 출하함과 **글자 그대로 같은 치수·같은 봉합**이다(3행 상한 + 스크롤 부재).
+	#   곳간 쪽 손해가 더 컸다: 재고는 날을 넘겨 영속하고 회수 창구가 이 패널 하나뿐이라, 4번째
+	#   이후로 쟁인 재료는 서빙이 앞 3종을 다 먹어 키가 지워질 때까지 존재 자체가 안 보였다
+	#   (용량 헤더 %d/%d는 총계만 세므로 "무엇으로 찼는가"를 읽을 근거가 3종에서 끊겼다).
+	var max_rows := top_rows_visible()
+	_top_scroll = clampi(_top_scroll, 0, maxi(0, ids.size() - max_rows))
+	_top_area_rect = area
+	var shown := mini(ids.size() - _top_scroll, max_rows)
 	for i in shown:
-		var id: String = ids[i]
-		var pos := Vector2(panel.position.x + PAD, row_y + i * ROW_H)
+		var id: String = ids[_top_scroll + i]
+		var pos := Vector2(panel.position.x + PAD, row_y + i * TOP_ROW_H)
 		var icon_rect := Rect2(pos, Vector2(ICON, ICON))
 		_larder_rects.append({"rect": icon_rect, "id": id})
 		_draw_slot_box(icon_rect, false)
@@ -1203,9 +1238,10 @@ func _draw_larder_top(panel: Rect2) -> void:
 		var mtex: Texture2D = crop_icons.get(menu_id)
 		if mtex != null:
 			draw_texture_rect(mtex, Rect2(rx - 22.0, pos.y + 3.0, 18.0, 18.0), false)
-	if ids.size() > shown:
-		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + shown * ROW_H + 12.0),
-			"…외 %d종" % (ids.size() - shown), 12, HanjiUi.INK_DIM)
+	if ids.size() > max_rows:
+		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + shown * TOP_ROW_H + 12.0),
+			"%d–%d / %d종  ·  휠로 넘김" % [_top_scroll + 1, _top_scroll + shown, ids.size()],
+			12, HanjiUi.INK_DIM)
 
 # ── ★ Phase D 저장 상자 상단(보관 슬롯 그리드) ────────────────────────────────
 # 상단 컨텍스트 영역에 상자 슬롯을 백팩과 같은 6열 그리드로 그린다(하단=백팩, 상단=상자). 클릭은
@@ -1623,6 +1659,17 @@ func _gui_input(event: InputEvent) -> void:
 			if _heart_count - _rel_scroll > 1:
 				_rel_scroll += 1
 			_apply_heart_visibility(); queue_redraw(); accept_event(); return
+	# ★[폴리시 R7] 출하함·곳간 상단 내역 리스트 휠 — 매대와 **같은 영역 문법**(행 영역 위에서만;
+	#   그 밖은 아래 백팩 스크롤 유지). 두 컨텍스트 모두 `_backpack_visible()`이 참이라, 이 분기가
+	#   없으면 휠이 무조건 백팩만 굴려 내역을 넘길 방법이 전혀 없었다. 클램프는 그리기 시점.
+	if event.pressed and (context == CTX_BIN or context == CTX_LARDER) \
+			and _top_area_rect.has_point(event.position):
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_top_scroll -= 1
+			queue_redraw(); accept_event(); return
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_top_scroll += 1
+			queue_redraw(); accept_event(); return
 	# ★ 마우스 휠 = 백팩 세로 스크롤(백팩이 보이는 컨텍스트에서). 위=이전 행, 아래=다음 행.
 	if event.pressed and _backpack_visible():
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
