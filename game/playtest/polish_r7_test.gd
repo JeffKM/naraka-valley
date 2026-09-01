@@ -325,9 +325,17 @@ func _initialize() -> void:
 	# 휠 라우팅 — 두 컨텍스트 모두 `_backpack_visible()`이 참이라, 분기가 없으면 백팩만 굴렀다.
 	var panel: Rect2 = m.frame._panel_rect()
 	var area: Rect2 = m.frame.top_list_area(panel)
+	# 곳간에도 같은 넘침을 만든다 — 이 회귀가 재는 것은 "넘칠 때 내역이 넘어가는가"이고,
+	# ★[폴리시 R8] 휠 분기가 품목 수를 함께 보게 되면서 두 컨텍스트 모두 실재 넘침이 전제가 됐다
+	# (넘칠 것이 없으면 그 자리의 휠은 백팩으로 흘러야 한다 — R8 #4).
+	for hid in ship_ids:
+		m.larder.add(String(hid), 1)
 	for ctx in [InventoryFrame.CTX_BIN, InventoryFrame.CTX_LARDER]:
 		m.frame.open(int(ctx))
 		m.frame._top_area_rect = area          # 그리기가 매 프레임 세우는 값(헤드리스는 그리기가 없다)
+		# ★[폴리시 R8] 같은 이유로 총 품목 수도 그리기가 세운다 — 헤드리스는 원장에서 직접 읽는다.
+		m.frame._top_rows_total = (m.ship_bin.ids() if int(ctx) == InventoryFrame.CTX_BIN
+			else m.larder.ids()).size()
 		var bp_keep: int = m.frame._bp_first_row
 		m.frame._gui_input(_wheel(area.get_center(), false))
 		var down_ok: bool = m.frame._top_scroll == 1 and m.frame._bp_first_row == bp_keep
