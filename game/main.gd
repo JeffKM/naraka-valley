@@ -21374,6 +21374,14 @@ func _apply_cutscene_frame() -> void:
 		var t := cutscene.npc_tile(String(id))
 		r.node.position = Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
 		r.node.visible = cutscene.npc_visible(String(id))
+	# ★[폴리시 R8] **그린다.** 위 `_illust_id`·`_illust_a`를 읽는 곳은 main의 월드 `_draw` 하나뿐인데
+	#   (`_draw_illust`), 컷신 중 `_process`는 여기서 프레임을 끊으므로 다시 그릴 것을 요청하는
+	#   경로가 하나도 없었다 — 카페·밤바 재그리기 줄에는 도달조차 못 하고, 타일 y 변화 조건은
+	#   `_begin_cutscene`이 이동을 잠가 영원히 거짓이다. 그래서 S등급 일러스트(B6 대면·B7 해방)는
+	#   알파가 1.0으로 올라도 화면에 한 번도 안 올라오고, 이어지는 페이드 해제가 그림 대신 평소
+	#   세계를 드러냈다(대사 묶음은 `dialogue.is_open()` 가드에 막혀 역시 재그리기가 없다).
+	#   같은 화면-덮기 연출인 B5 내면 공간은 `_tick_spine_puzzle`이 매 프레임 이 줄을 갖고 있다.
+	queue_redraw()
 
 # 재생 종료 — 화면 효과를 **반드시** 원복하고(암전인 채로 끝나는 컷신 데이터가 게임을 못 세우게),
 # 예약된 대화가 있으면 그 자리에서 연다. 대화가 없으면 여기서 이동 잠금을 푼다.
