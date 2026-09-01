@@ -416,11 +416,18 @@ func _run_checks() -> void:
 	_check("④h1 pre 예약이 접혔다(옛 코드라면 여기서 엔딩이 영구 소실된다)",
 		not m._spine_b7_armed and not m._spine_bit_seen(m.SPINE_B7) and m._spouse_id == "okja")
 	m._maybe_resume_spine()
-	_check("④h2 ★재개 훅이 해방을 되찾는다(예약 재무장 + 그 자리에서 재생)",
-		m._spine_bit_seen(m.SPINE_B7) and m.cutscene != null and not m._spine_b7_armed)
+	_check("④h2 ★재개 훅이 해방을 되찾는다(예약 재무장 + 그 자리에서 재생 + 에필로그 예약)",
+		m.cutscene != null and not m._spine_b7_armed and m._epilogue_pending)
+	# ★[폴리시 R6] 비트는 **아직 안 선다** — 찍는 자리를 장면 시작에서 에필로그가 열리는 자리로
+	#   옮겼다. 옛 자리에서는 혼례 아침의 자동 저장(`_on_sleep_done`의 바로 다음 줄)이 *미완의*
+	#   장면을 완료로 굳혔고, 대사 열·에필로그 예약은 비영속이라 그 사이에 앱이 꺼지면 재개 훅의
+	#   두 갈래가 모두 거짓이 되어 주례 지문·앵커 대사·해방 대사·에필로그가 영구 도달 불가였다.
+	#   이제 그 상태는 "아직 안 왔다"로 읽혀 이 훅이 장면을 처음부터 다시 튼다(polish_r6_test ⑧).
+	_check("④h3 그런데 비트는 아직 안 선다 — 끊기면 다시 이어야 하므로(서는 자리는 ⑤a 에필로그)",
+		not m._spine_bit_seen(m.SPINE_B7))
 	m._fire_spine_b7()
-	_check("④i ★해방 비트가 서고 S등급 컷신이 돈다", m._spine_bit_seen(m.SPINE_B7)
-		and m.cutscene != null and not m._spine_b7_armed)
+	_check("④i ★다시 불러도 장면이 겹치지 않는다(예약은 이미 소비됐다) — S등급 컷신이 그대로 돈다",
+		m.cutscene != null and not m._spine_b7_armed)
 	_settle(m)
 	_check("④j 그림이 바뀐다(귀환 → 해방)", m._illust_id == Spine.ILLUST_B7)
 	_check("④k ★주례는 **지문뿐**이다 — 첫 묶음이 화자 없이 선다(말하는 순간 §5.2가 깨진다)",

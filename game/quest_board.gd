@@ -69,6 +69,45 @@ static func item_pool() -> Array:
 	out.sort()
 	return out
 
+# ★[폴리시 R6] **기한 안에 돋을 수 있는 것만** 남긴 출제 풀. 물고기 갈래가 `FishCatalog.quest_pool`로
+#   이미 세워 둔 규율("기한 안에 이행이 물리적으로 불가능해진다 … 뽑기 실패다")의 채집물판이다.
+#   FORAGEABLES 26종 중 16종은 절기 전용인데(ForageSpawns가 절기 첫날 전량 소거 후 그 절기 종만
+#   돋우고, 덤불 열매 2종은 나흘 창에서만 달린다) 옛 풀은 그것을 한 번도 안 봤다 — 피안절 3일에
+#   서리동백(성야절 전용) ×3이 걸리면 그 종은 세계 어디에도 없다.
+#   ★ **작물은 그대로 둔다.** 작물은 절기 밖이어도 재고·다절기 축이 있어 "돋을 자리 자체가 없다"와
+#     결이 다르고, 어느 폭까지 낼 것인가는 눈금 결정(owner 큐)이다 — 여기서 닫는 것은 획득 경로가
+#     구조적으로 0인 경우 하나뿐이다.
+#   ★ 전량이 걸러지는 일은 정의상 없다(작물이 늘 남는다) — 그래도 방어로 빈 결과는 전체 풀로 돌린다.
+static func item_pool_for(post_day: int, due_day: int) -> Array:
+	var out: Array = []
+	for id in item_pool():
+		if _obtainable_between(String(id), post_day, due_day):
+			out.append(String(id))
+	return out if not out.is_empty() else item_pool()
+
+# 이 대상이 [post_day, due_day] 안에 세계에 나올 수 있나. 채집물만 따지고 나머지는 통과시킨다.
+static func _obtainable_between(id: String, post_day: int, due_day: int) -> bool:
+	if not ItemCatalog.FORAGEABLES.has(id):
+		return true                                   # 작물 = 재배·재고 축(위 머리말)
+	# 덤불 열매 — 절기 창(피안 15~18 / 망연 8~11) 안의 날이 기한에 걸쳐 있어야 달린다.
+	if _is_berry(id):
+		for d in range(maxi(post_day, 1), maxi(due_day, 1) + 1):
+			if BerryBushes.berry_for_day(d) == id:
+				return true
+		return false
+	var s := ForageSpawns.season_of(id)
+	if s < 0:
+		return true                                   # 사철(심층·해변종·로스터 밖)
+	return s == GameClock.season_index_for_day(post_day) \
+		or s == GameClock.season_index_for_day(due_day)
+
+# 덤불 전용 열매인가(빈터 스폰이 아니라 흔들기 산출 — 절기 창 판정이 따로다).
+static func _is_berry(id: String) -> bool:
+	for w in BerryBushes.WINDOWS:
+		if String(w["item"]) == id:
+			return true
+	return false
+
 # 시드 문자열 → 결정적 RNG. 같은 문자열이면 항상 같은 수열이라, 같은 day는 몇 번을 조회해도
 # 같은 의뢰가 나온다(비결정 랜덤·Time 계열 금지 — 헤드리스가 정확히 재현한다).
 static func _rng(tag: String) -> RandomNumberGenerator:
@@ -87,7 +126,7 @@ static func week_last_day(week: int) -> int:
 # 공통 생성기 — 시드에서 아이템·수량·의뢰인을 뽑고 보상까지 파생해 계약 dict를 만든다.
 static func _make(kind: String, seed_n: int, post_day: int, due_day: int,
 		count_min: int, count_max: int, affinity_points: int) -> Dictionary:
-	var pool := item_pool()
+	var pool := item_pool_for(post_day, due_day)   # ★[폴리시 R6] 기한 안에 못 얻는 대상은 안 낸다
 	if pool.is_empty():
 		return {}
 	var r := _rng("%s:%d" % [kind, seed_n])
@@ -112,9 +151,21 @@ static func _is_fish_day(kind: String, seed_n: int) -> bool:
 
 # ★ [S3-T8] 물고기 의뢰 생성기 — 현 절기 가용 어종(전설·기한 대비 과체급 배제)에서 시드 결정적으로
 #   뽑는다. 절기는 post_day에서 파생하므로(주=7일·절기=28일이라 한 주가 절기를 못 걸침) 순수 함수다.
-static func _make_fish(kind: String, seed_n: int, post_day: int, due_day: int) -> Dictionary:
+static func _make_fish(kind: String, seed_n: int, post_day: int, due_day: int,
+		rod_class: int = FishCatalog.WC_LEGEND) -> Dictionary:
 	# 체급 상한 — 일일 = 중까지(이틀 기한에 대어 요구는 가혹·잠정) / 중기 = 소 한정(다수 납품 무게 조절).
 	var max_class: int = FishCatalog.WC_MEDIUM if kind == KIND_DAILY else FishCatalog.WC_SMALL
+	# ★[폴리시 R6] **든 줄이 감당하는 체급까지만** 낸다. 낚싯대의 `max_class`는 취향이 아니라 확정
+	#   끊김이다(FishingSession: 초과 어종은 CLASS_BREAK 연출 뒤 ESCAPED 확정) — 증정품 T1이
+	#   소(WC_SMALL) 한정인데 일일 상한만 중이라, T2(500냥)를 사기 전 초반에 중 체급이 뽑히면 그
+	#   이틀은 이행 확률이 **0**이었다. 절기·날씨가 이미 걸러지는 그 축(=물리적 이행 불가)에
+	#   낚싯대 티어를 얹는 것이고, 상한 눈금(일일=중) 자체는 한 줄도 안 건드린다.
+	#   ★ 낚싯대가 아예 없으면 rod_class < 0 → 풀이 비고 호출부가 작물 의뢰로 폴백한다(뱃사공을
+	#     만나기 전에 물고기 의뢰가 걸리던 자리도 함께 닫힌다).
+	#   ★ 기본값은 상한 없음이라 인자를 안 주는 호출부(순수 파생 단위 테스트)는 종전 그대로다.
+	max_class = mini(max_class, rod_class)
+	if max_class < FishCatalog.WC_SMALL:
+		return {}
 	# ★[폴리시 R5] 기한 마지막 날의 절기까지 넘긴다 — 절기 마지막 날에 게시된 일일 의뢰의 기한
 	#   이틀째는 다음 절기라, 게시일 절기만 보면 그날 못 잡는 어종을 낼 수 있었다(FishCatalog.
 	#   quest_pool 머리말). 중기 의뢰는 주가 절기 안에 온전히 들어 두 값이 언제나 같다.
@@ -146,22 +197,22 @@ static func _make_fish(kind: String, seed_n: int, post_day: int, due_day: int) -
 # 그날 게시되는 일일 의뢰. 기한 = 게시일 포함 2일(수락 여부 무관 — 지나면 조용히 소멸).
 # ★ [S3-T8] 물고기 날이면 물고기 계약으로 파생(풀이 비면 기존 경로 폴백 — 현 로스터엔 전 절기
 #   상시종이 있어 실제로 비지 않는다).
-static func daily_quest(day: int) -> Dictionary:
+static func daily_quest(day: int, rod_class: int = FishCatalog.WC_LEGEND) -> Dictionary:
 	if day < 1:
 		return {}
 	if _is_fish_day(KIND_DAILY, day):
-		var fq := _make_fish(KIND_DAILY, day, day, day + DAILY_SPAN_DAYS - 1)
+		var fq := _make_fish(KIND_DAILY, day, day, day + DAILY_SPAN_DAYS - 1, rod_class)
 		if not fq.is_empty():
 			return fq
 	return _make(KIND_DAILY, day, day, day + DAILY_SPAN_DAYS - 1,
 		DAILY_COUNT_MIN, DAILY_COUNT_MAX, DAILY_AFFINITY)
 
 # 그 주에 걸리는 중기 의뢰. 기한 = 그 주 마지막 날까지(주당 1건). ★ [S3-T8] 물고기 갈래 동형.
-static func weekly_quest(week: int) -> Dictionary:
+static func weekly_quest(week: int, rod_class: int = FishCatalog.WC_LEGEND) -> Dictionary:
 	if week < 0:
 		return {}
 	if _is_fish_day(KIND_WEEKLY, week):
-		var fq := _make_fish(KIND_WEEKLY, week, week * WEEK_DAYS + 1, week_last_day(week))
+		var fq := _make_fish(KIND_WEEKLY, week, week * WEEK_DAYS + 1, week_last_day(week), rod_class)
 		if not fq.is_empty():
 			return fq
 	return _make(KIND_WEEKLY, week, week * WEEK_DAYS + 1, week_last_day(week),
@@ -173,13 +224,17 @@ static func reward_gold(item_id: String, count: int) -> int:
 
 # ── 게시판 조회 ───────────────────────────────────────────────────────────────
 # 오늘 그 종류로 걸린 의뢰({} = 없음 — 이미 완료했거나 미지 종류). 수락 UI·프롬프트가 쓴다.
-func offer(day: int, kind: String) -> Dictionary:
+# ★[폴리시 R6] `rod_class` = 지금 가진 최고 낚싯대의 허용 체급(main이 파생해 넣는다 · 기본 = 상한
+#   없음). 이 원장은 낚싯대도 인벤토리도 모른다 — 값 하나를 *주입*받을 뿐이라 디커플링은 그대로다
+#   (Reclaim이 후보 칸을 main에서 받는 그 결). 수락한 계약은 스냅샷이라(`accept`가 duplicate)
+#   나중에 낚싯대를 바꿔도 이미 맡은 의뢰는 흔들리지 않는다.
+func offer(day: int, kind: String, rod_class: int = FishCatalog.WC_LEGEND) -> Dictionary:
 	var q: Dictionary = {}
 	match kind:
 		KIND_DAILY:
-			q = daily_quest(day)
+			q = daily_quest(day, rod_class)
 		KIND_WEEKLY:
-			q = weekly_quest(week_of(day))
+			q = weekly_quest(week_of(day), rod_class)
 		_:
 			return {}
 	if q.is_empty() or completed.has(String(q["key"])):
@@ -187,10 +242,10 @@ func offer(day: int, kind: String) -> Dictionary:
 	return q
 
 # 오늘 게시판에 걸린 의뢰 전부(일일 → 중기 순). 완료분은 빠진다.
-func offers(day: int) -> Array:
+func offers(day: int, rod_class: int = FishCatalog.WC_LEGEND) -> Array:
 	var out: Array = []
 	for kind in [KIND_DAILY, KIND_WEEKLY]:
-		var q := offer(day, kind)
+		var q := offer(day, kind, rod_class)
 		if not q.is_empty():
 			out.append(q)
 	return out

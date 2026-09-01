@@ -375,6 +375,12 @@ func slot_label(slot: int) -> String:
 		return "빈 슬롯"
 	var meta := _saver.slot_meta(slot)
 	if meta.is_empty() or not meta.has("day"):
+		# ★[폴리시 R6] 메타가 비는 이유는 둘이다 — ㉠ 헤더 없는 옛 세이브(정상 이어하기) ㉡ 아예
+		#   안 읽히는 슬롯(잘린 파일·VERSION 불일치). 종전엔 둘 다 "저장됨"이라, ㉡을 고른
+		#   플레이어는 day 1 반쪽 새 게임으로 떨어지고도 이유를 몰랐다. 파일 읽기는 이 드문
+		#   가지에서만 한 번 더 한다(정상 슬롯은 위 slot_meta 한 번으로 끝난다).
+		if not _saver.can_load(slot):
+			return "읽을 수 없는 세이브"
 		return "저장됨"
 	var day := int(meta.get("day", 1))
 	var soul := int(meta.get("soul", 0))

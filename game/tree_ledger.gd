@@ -563,6 +563,20 @@ func _put(region: String, t: Vector2i, entry: Dictionary) -> void:
 		_trees[region] = {}
 	_trees[region][t] = entry
 
+# ★[폴리시 R6] 슬롯을 **통째로 지운다** — 무대가 그 칸을 삼킬 때만 쓰는 강제 진입점이다(늘봄방
+#   완공이 예정지를 벽으로 덮는 자리 · FurnaceLedger.evict와 같은 결). `_empty`가 "벤 자리"의
+#   기억을 남기는 것과 갈린다: 그 칸은 이제 벽이라 나무 자리였다는 기억이 쓸모가 없고, 남기면
+#   슬롯 원장만 축낸다. 산출물은 없다 — 걷어 주는 게 아니라 사라지는 무대를 치우는 일이다.
+#   지웠으면 true(없는 칸이면 false — 멱등).
+func clear_slot(region: String, t: Vector2i) -> bool:
+	if not has_slot(region, t):
+		return false
+	_trees[region].erase(t)
+	if _trees[region].is_empty():
+		_trees.erase(region)      # 빈 구역 키는 남기지 않는다(세이브 군더더기 0 — 다른 원장과 같은 결)
+	changed.emit()
+	return true
+
 # 슬롯을 비운다(벤 자리 — 키는 남긴다. 숲 재성장 후보이자 "여긴 원래 나무 자리"의 기억).
 func _empty(region: String, t: Vector2i) -> void:
 	if not has_slot(region, t):
