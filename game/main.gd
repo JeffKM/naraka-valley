@@ -13889,6 +13889,16 @@ func _process(delta: float) -> void:
 		#   (빈손 흔들기가 벌칙처럼 읽히지 않게 — 절기 창을 프롬프트가 가르쳐 준다).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _bush_prompt(_target)
+	elif crab_pot != null and _indoor == "" and crab_pot.has_at(_region, _target):
+		# ★ [S3-T7] 물가의 게잡이통을 겨눌 때: 상태별 [F] 한 동사(수거 / 미끼 넣기 / 회수).
+		# ★[폴리시 R8] **[F] 입력 사다리와 같은 순서로 올렸다.** 통은 그 사다리에서 화덕·결정기·
+		#   팬닝·반딧넋보다 먼저 잡고 return하는데, 이 안내 사슬만 순서가 반대라 겹치는 칸에서
+		#   화면과 동작이 갈렸다 — "[F] 사금 일기"를 보고 눌렀는데 미끼가 타거나 통이 회수됐다
+		#   (팬닝 존·반딧넋 고정 배치는 둘 다 물가 지면이라 통을 놓을 수 있는 칸과 실제로 겹친다).
+		#   설치 겹침 자체는 `_can_place_crab_pot`의 `_installation_at` 가드가 앞으로 막지만,
+		#   순서를 사다리와 일치시켜 **어떤 원장 상태에서도** 화면이 동작을 말하게 둔다.
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _crab_pot_prompt(_target)
 	elif _furnace_at(_target):
 		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수). 채취기보다
 		#   먼저 볼 이유는 없지만(좌표가 안 겹친다) 설치물 프롬프트끼리 한자리에 모아 둔다.
@@ -13955,10 +13965,6 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 물뿌리개 채우기 (%d/%d)" % [_can_water, _can_capacity()] if _can_water < _can_capacity() \
 			else "물뿌리개 가득 참 (%d/%d)" % [_can_water, _can_capacity()]
-	elif crab_pot != null and _indoor == "" and crab_pot.has_at(_region, _target):
-		# ★ [S3-T7] 물가의 게잡이통을 겨눌 때: 상태별 [F] 한 동사(수거 / 미끼 넣기 / 회수).
-		interact_prompt.visible = not _sleeping
-		interact_prompt.text = _crab_pot_prompt(_target)
 	elif inventory.selected_id() == ItemCatalog.CRAB_POT and _can_place_crab_pot(_target):
 		# ★ [S3-T7] 통을 들고 물가 인접 칸을 겨눌 때: LMB로 설치(설치 후 [F]로 미끼 장전).
 		interact_prompt.visible = not _sleeping
@@ -14971,6 +14977,13 @@ func _can_place_crab_pot(t: Vector2i) -> bool:
 		return false                          # 이미 통이 있다(그 위엔 상호작용만)
 	var cell: int = _grid[t.y][t.x]
 	if cell != GROUND and cell != PATH:        # 백사장·물가 지면 + 부두/잔교 목판만
+		return false
+	# ★[폴리시 R8] 다른 설치물 위에는 못 놓는다. 가드가 **단방향**이었다 — 업화로·결정기는
+	#   `_installation_at`(그 안에 게잡이통 항이 있다)으로 통을 막는데 통 쪽엔 그 호출이 없어서,
+	#   물가 인접 PATH(잔교 스파인)에 세워 둔 화덕 위에 통이 그대로 얹혔다. 그러면 그 칸의 [F]를
+	#   입력 사다리에서 통이 화덕보다 **먼저 잡고 return**하므로 화덕 수거·투입·회수가 전부
+	#   불가능해지고, 화면엔 화덕 프롬프트가 뜬 채 [F]는 통을 회수한다(프롬프트↔동작 불일치).
+	if _installation_at(t):
 		return false
 	# ⑤ 주민이 선 칸엔 못 놓는다 — 뱃사공 자리(12,27)가 마침 물가 인접이라, 통을 깔면 그 칸의 [F]가
 	#   가게 열기와 겹쳐 통이 영영 안 열린다(입력 사다리에서 주민이 먼저 잡는다). 아예 못 놓게 막는다.
