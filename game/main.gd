@@ -19570,6 +19570,18 @@ func _update_resident_station(r: Resident) -> void:
 # 스냅됐으므로 여기서 만드는 건 **그림 오프셋**뿐이다(ADR-0060 결정 7 — 게임플레이 판정 불변).
 func _begin_resident_walk(r: Resident, from_tile: Vector2i, from_region: String,
 		to_tile: Vector2i, to_region: String) -> void:
+	# ★[폴리시 R7] **먼저 옛 걷기를 끈다.** 아래 세 갈래(첫 배치·구역 넘기·스포크 없음)는 새 걷기를
+	#   시작하지 않고 그냥 돌아가는데, 종전엔 그때 *진행 중이던* 걷기가 그대로 살아 있었다.
+	#   `_advance_resident_walk`는 매 프레임 오프셋을 계속 얹고 그 오프셋은 **폐기된 옛 목적지**
+	#   기준이라(resident_walk `offset()` = _pos − _dest), 논리 위치가 이미 새 칸으로 스냅된 뒤엔
+	#   그림 = 새 칸 + 옛 오프셋이 된다. 실제 재현: 세레나의 17:00 마을 이동(1,888px = 33.7실초)이
+	#   19:00 배우자 귀가 스테이션(구역 HOME)에 잘리면, 안방(22,71)으로 스냅된 몸에 (−160,−560)이
+	#   얹혀 농원 야외 한복판에 서 있는 것으로 그려졌다(가시성은 HOME이라 켜져 있어 실제로 보인다).
+	#   ★새 걷기를 실제로 거는 정상 경로에서도 무해하다 — 바로 아래 `start()`가 다시 켠다.
+	if r.walk != null and r.walk.is_walking():
+		r.walk.cancel()
+		if r.node != null and r.node.has_method("set_walk_offset"):
+			r.node.set_walk_offset(Vector2.ZERO)
 	if from_tile == Resident.UNPLACED:
 		return                          # 첫 배치는 걷지 않는다(부팅·게이트 개방 = 그냥 거기 있다)
 	if from_region != to_region:
