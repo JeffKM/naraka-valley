@@ -86,10 +86,13 @@ func _find_stack(id: String, quality: int) -> int:
 # 아이템을 상자에 n개 넣는다(품질 보존). 같은 (id,quality) 스택에 합치거나 빈 슬롯에. 유니크(도구)는
 # stackable=false라 항상 새 슬롯(1개)로 들어간다. 카탈로그에 없거나 n<=0이거나 상자가 가득이면 거절.
 # 넣은 개수를 돌려준다(0 = 못 넣음). main이 백팩에서 그만큼만 뺀다(가득 부분 이동 안전).
+# ★[폴리시 R9] 등급 보존 판정을 `ItemCatalog.carries_quality`로 갈았다(백팩 `_norm_quality`와 같은
+#   술어 — 두 그릇이 같은 집합을 봐야 왕복이 등급을 안 지운다). 종전 CAT_HARVEST 근사는 주괴를
+#   빠뜨려, 백팩이 등급을 실어도 상자에 한 번 넣으면 일반품으로 돌아왔다.
 func store(id: String, n: int = 1, quality: int = 0) -> int:
 	if n <= 0 or not ItemCatalog.has_item(id):
 		return 0
-	var q := clampi(quality, 0, 3) if ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST else 0
+	var q := clampi(quality, 0, 3) if ItemCatalog.carries_quality(id) else 0
 	if not ItemCatalog.stackable_of(id):
 		# ★[폴리시 R6] **유니크는 한 상자에 하나뿐이다.** 적재에는 이 거절이 없었는데(Inventory.add_item의
 		#   `if _find_id(id) >= 0: return false`가 여기엔 없었다) 복원은 `seen_unique`로 둘째 슬롯을
@@ -125,7 +128,7 @@ func can_store(id: String, n: int = 1, quality: int = 0) -> bool:
 		return false
 	if not ItemCatalog.stackable_of(id):
 		return _find_id(id) < 0 and _first_empty() >= 0   # ★[폴리시 R6] store의 유니크 거절을 그대로 복창
-	var q := clampi(quality, 0, 3) if ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST else 0
+	var q := clampi(quality, 0, 3) if ItemCatalog.carries_quality(id) else 0
 	return _find_stack(id, q) >= 0 or _first_empty() >= 0
 
 # 상자 슬롯 index를 통째로 빼내 그 내용을 돌려준다({id,count,quality} 또는 빈 dict). main이 백팩에
@@ -167,7 +170,7 @@ func load_save(data: Dictionary) -> void:
 			var n := int(s.get("count", 0))
 			if not ItemCatalog.has_item(id) or n <= 0:
 				continue
-			var q := clampi(int(s.get("quality", 0)), 0, 3) if ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST else 0
+			var q := clampi(int(s.get("quality", 0)), 0, 3) if ItemCatalog.carries_quality(id) else 0
 			if not ItemCatalog.stackable_of(id):
 				if seen_unique.has(id):
 					continue

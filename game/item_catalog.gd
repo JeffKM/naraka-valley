@@ -891,6 +891,16 @@ static func category_of(id: String) -> String:
 		return CAT_BOOK       # ★[S9-T7] 책·비밀 노트 — 즉독·전시(책)·재읽기
 	return ""
 
+# ★[폴리시 R9] 이 물건이 **등급을 실을 수 있는가** — 슬롯·상자가 quality를 보존할 id 집합의 술어.
+# 정의는 하나다: `price_of`가 `quality_mult`를 얹는 물건이 곧 등급을 싣는 물건이다. 그동안 저장
+# 계층은 그 사실을 `category_of(id) == CAT_HARVEST` 한 줄로 근사했는데, **주괴가 그 근사의 예외**라
+# (INGOTS 주석이 "자재 중 유일하게 등급 배수를 받는다"를 명시하고 price_of가 실제로 그렇게 판다)
+# 등급이 인벤 적재 순간 0으로 눌렸다. 그 결과 제련공 퍼크의 절반("주괴 등급↑")이 원장에서만 살고
+# 코드 어디에서도 값을 못 냈고, 프롬프트·알림은 "명동 주괴(은)"를 말하는데 슬롯엔 등급 점이 없었다.
+# 근사를 술어로 승격해, 값을 매기는 쪽과 값을 보관하는 쪽이 같은 집합을 보게 한다.
+static func carries_quality(id: String) -> bool:
+	return category_of(id) == CAT_HARVEST or _is_ingot(id)
+
 # 표시명(HUD·상점·툴팁). 씨앗="<작물명> 씨앗"·묘목="<과일명> 묘목"·수확물=작물명·과일=과일명·도구=도구명. 없으면 "".
 static func name_of(id: String) -> String:
 	if TOOLS.has(id):

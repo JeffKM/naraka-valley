@@ -124,9 +124,12 @@ func _lowest_quality_slot(id: String) -> int:
 				best = i
 	return best
 
-# 아이템 id의 품질을 정규화(수확물·과일만 등급 실음 0..3, 그 외 품질 무차원=0). add/_sanitize가 쓴다.
+# 아이템 id의 품질을 정규화(등급을 싣는 물건만 0..3, 그 외 품질 무차원=0). add/_sanitize가 쓴다.
+# ★[폴리시 R9] 판정을 `ItemCatalog.carries_quality`(= price_of가 등급 배수를 얹는 집합)로 갈았다 —
+#   종전 `CAT_HARVEST` 근사는 주괴를 빠뜨려, 제련공 퍼크가 만든 은/금 주괴의 등급이 업화로에서
+#   꺼내 담는 순간 사라졌다(그 술어 머리말).
 func _norm_quality(id: String, quality: int) -> int:
-	if ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST:
+	if ItemCatalog.carries_quality(id):
 		return clampi(quality, 0, 3)
 	return 0
 
