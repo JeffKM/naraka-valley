@@ -223,6 +223,21 @@ func load_save(data: Dictionary) -> void:
 	_today_served = maxi(int(data.get("served", 0)), 0)
 	_today_left = maxi(int(data.get("left", 0)), 0)
 	_today_cheki = maxi(int(data.get("cheki", 0)), 0)
+	# ★[폴리시 R9] **세션 상태(좌석·영업창 래치)도 함께 0에서 다시 시작한다** — 위 머리말이
+	#   "좌석·세션은 안 싣는다 … `_clear_seats`가 곧 맞는 답이다"라고 전제한 그 거동은 부팅
+	#   경로에서만 성립했다(새 Cafe 노드가 `_was_open=false`로 시작하니 첫 영업 전이가 반드시
+	#   `_open_shop`을 태워 좌석을 비웠다). 세션 내 F9는 **같은 노드**를 재사용하므로 그 전제가
+	#   깨지고 둘이 함께 어긋났다:
+	#     ① 16:00(영업 중)에 08:00 세이브를 로드하면 `open_now=false·_was_open=true`라 다음 틱이
+	#        `_close_shop()`을 태워 **아침 8시에 "오늘 카페 영업 마감 — 매출 +0골드" 정산 팝업**이 떴다.
+	#     ② 좌석이 안 지워져, 되감긴 `_guests_today`에는 없는 명명 손님이 그대로 앉아 있었다.
+	#        그 손님을 서빙하면 영속 단골 원장(`GuestPool._visits`)에 +1이 적히고, 같은 사람이
+	#        오늘 다시 뽑혀 앉을 수 있어 **하루 1인 1회 규칙이 깨진다**(R5가 `_ledger_day`로
+	#        막은 바로 그 중복 적립이 좌석 쪽 문으로 재발).
+	#   되감는 값은 `end_day()`와 정확히 같은 셋이다(취침도 로드도 "그 손님들은 이제 없다").
+	_open = false
+	_was_open = false
+	_clear_seats()
 
 # 영업 마감: 자리를 비우고 일일 정산 요약을 쏜다(main이 팝업으로 띄운다).
 func _close_shop() -> void:

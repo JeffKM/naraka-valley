@@ -12046,6 +12046,20 @@ func _load_game() -> bool:
 	#   완공 아침과 로드 양쪽을 지나는 것과 똑같은 이유). 로드 직후에 한 번 눌러야 R6 이전 세이브를
 	#   불러온 그 화면에서 이미 고립이 풀려 있다(다음 아침까지 기다리지 않는다).
 	_reclaim_pet_tile_farm()
+	# ★[폴리시 R9] 카페 1~3단 **달성 래치를 이어받은 원장에서 다시 판다** — 부팅 경로가 이미
+	#   드는 그 세 줄이다(`_ready` "재개 때 팝업이 다시 터지지 않게"). 세션 내 F9는 형제 세션
+	#   래치를 전부 되감으면서(`_divorce_armed`·`_spine_b4_armed`·`_pet_event_armed` …) 이 셋만
+	#   빠뜨려, 같은 래치가 양방향으로 어긋났다:
+	#     ① **중복 발화** — 1단 미달로 부팅(래치 3개 false)한 뒤 3단까지 채운 세이브를 F9로 불러오면
+	#        누적 축(`_run_harvested`·`_cafe_revenue_total`·`_milestone_hearts_peak`)이 전부 복원돼
+	#        `_process`의 elif 사슬이 오래전에 지난 1·2·3단 팝업을 연달아 재생했다.
+	#     ② **영구 억제** — 플레이 중 1단을 채워 팝업을 본 뒤 1단 이전 세이브를 불러오면 누적 축만
+	#        되감기고 래치는 true로 남아, 다시 채워도 축하가 영영 안 떴다.
+	#   위치가 `_refresh_festival`(사다리)·곳간 재로드 **뒤**인 것이 요건이다 — 단계 판정이 읽는
+	#   누적 축이 그 시점에야 전부 복원돼 있다(`_ready`가 같은 이유로 사다리 뒤에 두는 그 순서).
+	_milestone_celebrated = _milestone_complete()
+	_milestone2_celebrated = _milestone_stage2_complete()
+	_milestone3_celebrated = _milestone_stage3_complete()
 	_notice("불러옴")
 	return true
 
