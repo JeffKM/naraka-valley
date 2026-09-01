@@ -12787,8 +12787,8 @@ func _process(delta: float) -> void:
 	var on_forage_spawn := not _sleeping and _indoor == "" and forage_spawns != null \
 			and forage_spawns.has_at(_region, _target)
 	if on_forage_spawn and (Input.is_action_just_pressed("action") or Input.is_action_just_pressed("shop_toggle")):
-		_pick_forage(_target)
-		f_taken = Input.is_action_just_pressed("shop_toggle")
+		if _pick_forage(_target):
+			f_taken = Input.is_action_just_pressed("shop_toggle")
 	# ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 흔들기 — 채집 덤불은 통행 가능 GROUND 위(비-SOIL)라 꽃 패치·
 	#   채집물 줍기와 같은 결로 _target_valid 게이트 밖에서 따로 디스패치한다. **[F] 전용**이다:
 	#   줍기(RMB/F 겸용)와 달리 "흔든다"는 별개 동사이고, 덤불 자리는 빈터 존 밖이라 같은 칸에서 줍기와
@@ -12796,8 +12796,8 @@ func _process(delta: float) -> void:
 	var on_bush := not _sleeping and _indoor == "" and berry_bushes != null \
 			and is_bush_tile(_region, _target) and berry_bushes.has_berry(_region, _target)
 	if on_bush and Input.is_action_just_pressed("shop_toggle"):
-		_shake_bush(_target)
-		f_taken = true
+		if _shake_bush(_target):
+			f_taken = true
 	# ★[S10-T1 / ADR-0069 결정 2] 팬닝 — 반짝이는 물가 칸을 [F]. 스폿은 걸을 수 있는 지면(GROUND/PATH)
 	#   위라 채집물·덤불과 같은 결로 _target_valid 게이트 밖에서 따로 디스패치한다.
 	#   ★ **[F] 전용**이다(줍기의 RMB 겸용과 갈린다): "일다"는 도구 없이 하는 별개 동사이고, 무엇보다
@@ -12808,8 +12808,8 @@ func _process(delta: float) -> void:
 	var on_pan_spot := not _sleeping and _indoor == "" and panning != null \
 			and panning.has_at(_region, _target)
 	if on_pan_spot and Input.is_action_just_pressed("shop_toggle"):
-		_pan_spot(_target)
-		f_taken = true
+		if _pan_spot(_target):
+			f_taken = true
 	# ★[S10-T7 / ADR-0069 결정 10] 반딧넋 — 반짝이는 칸을 [F]로 거둔다(= 인도 = 안치).
 	#   ★ **팬닝 바로 뒤**에 둔다: 고정 배치 표가 팬닝 존을 비껴가도록 잠겼으므로 실제로 겹칠 일은
 	#     없지만, 존이 나중에 넓어져도 오늘의 사금이 먼저 잡히도록 순서로 한 번 더 못 박는다.
@@ -12818,8 +12818,8 @@ func _process(delta: float) -> void:
 	var on_firefly := not _sleeping and _indoor == "" and _mine_floor == 0 and _narak_depth == 0 \
 			and fireflies != null and fireflies.live_spot_at(_region, _target) != ""
 	if on_firefly and Input.is_action_just_pressed("shop_toggle"):
-		_gather_firefly(_target)
-		f_taken = true
+		if _gather_firefly(_target):
+			f_taken = true
 	# ★[S4-T8 / ADR-0062 결정 9 ㉡] 이끼 낫 채취 — 이끼 낀 성숙목은 SOLID(비-SOIL)라 벌목과 같은 자리에서
 	#   디스패치한다. **든 게 낫일 때만** 걸리고(도끼면 아래 벌목이 잡는다), 둘은 서로 배타라 한 칸에서
 	#   충돌하지 않는다(각 함수가 자기 도구를 스스로 검사 — ADR-0024 §2 자동 분기 없음).
@@ -12988,10 +12988,12 @@ func _process(delta: float) -> void:
 		_use_tool()
 	# ★ ADR-0024 RMB 맨손 수확: 다 자란 칸을 바라보며 거둔다(낫 없음 — 수확=맨손).
 	# ★[S10-T5] 화분 칸도 수확 대상이다(밭 흙이 아니어도 — 위 도구 게이트와 같은 이유).
+	# ★[폴리시 R5] 표를 세우는 근거가 "게이트를 통과했다"에서 **"수확 창구가 그 RMB를 실제로 썼다"**로
+	#   바뀌었다(_try_harvest 머리말). 빈 화분·안 자란 화분은 이 함수가 무동작이라 false를 돌려주고,
+	#   그 프레임의 RMB는 아래 취침으로 정상으로 흘러간다.
 	var harvest_took_rmb := false
 	if not _sleeping and (_target_valid or pot_at_target) and Input.is_action_just_pressed("action"):
-		_try_harvest()
-		harvest_took_rmb = true
+		harvest_took_rmb = _try_harvest()
 	# ★ ADR-0024 취침(RMB): 집 안이면 RMB로도 잠든다(위 ui_accept와 병행 — 어느 쪽이든).
 	# ★[폴리시 R4] 바로 위 수확이 이 프레임의 RMB를 이미 썼으면 취침은 건너뛴다. S10-T5 화분이
 	#   **실내에 서면서 "수확 칸"과 "취침 가능 구역"이 처음으로 겹쳤다** — 집 안 화분을 겨눠
@@ -14765,26 +14767,27 @@ func _furnace_prompt(t: Vector2i) -> String:
 #   · 산출은 원장이 day+좌표 해시로 정한다(전역 randf 0) — 여기선 받아서 인벤·지갑에 얹기만 한다.
 #   · 도구 불요(ADR 결정 2 자구) — 든 것을 아예 안 본다. 그래서 낚싯대를 든 채로도 그냥 인다.
 #   · **혼력이 모자라면 스폿을 소모하지 않는다**(먼저 막고 나서 원장을 건드린다 — 조용한 손실 0).
-func _pan_spot(t: Vector2i) -> void:
+# ★[폴리시 R5] 반환값 = 이 [F]를 소비했는가(_pick_forage와 같은 계약).
+func _pan_spot(t: Vector2i) -> bool:
 	if panning == null or not panning.has_at(_region, t):
-		return                                   # 없는 칸(디스패치가 걸렀지만 방어)
+		return false                             # 없는 칸(디스패치가 걸렀지만 방어)
 	var cost := PanningSpots.PAN_ENERGY
 	if not energy.can_act(cost):
 		_notice("혼력이 모자라다 — 사금을 이려면 혼력 %d이 든다" % cost)
-		return
+		return true
 	# ★[폴리시 R2] **적재 먼저·스폿 나중**. 스폿은 하루 한 자리씩만 깔리고 소진되므로(다음 취침의
 	#   재배치 전까지 그 자리는 못 되돌린다), 종전처럼 원장을 먼저 지우고 나서 적재에 실패하면
 	#   그 산출은 "두고 왔다" 한 줄만 남기고 영영 사라졌다. 롤이 (day·구역·좌표) 결정적이라
 	#   `peek`이 본 답과 `pan`이 돌려줄 답은 같다 — 자리를 비우고 다시 오면 그것이 그대로 나온다.
 	var got: Dictionary = panning.peek(clock.day, _region, t)
 	if got.is_empty():
-		return                                   # 원장이 거절(도달 불가 — 위에서 has_at을 봤다)
+		return false                             # 원장이 거절(도달 불가 — 위에서 has_at을 봤다)
 	var gold := int(got.get("gold", 0))
 	var id := String(got.get("id", ""))
 	var n := int(got.get("count", 0))
 	if id != "" and n > 0 and not inventory.can_add(id, n):
 		_notice("가방이 가득 차 사금을 일 수 없다 — 자리를 비우고 다시 [F]")
-		return
+		return true
 	panning.pan(clock.day, _region, t)            # 여기서 비로소 스폿이 소진된다
 	energy.spend(cost)
 	if gold > 0:
@@ -14794,6 +14797,7 @@ func _pan_spot(t: Vector2i) -> void:
 		_toast_item(id, n)
 	audio.sfx("harvest")
 	queue_redraw()
+	return true
 
 # ── ★[S10-T7 / ADR-0069 결정 10] 반딧넋 — 거두기 · 활동 드랍 · 안치대 · 게이트 ──
 # main의 몫은 넷이다: ①반짝이는 칸을 [F]로 거둔다 ②네 활동의 확정 지점에서 드랍을 굴린다
@@ -14804,18 +14808,21 @@ func _pan_spot(t: Vector2i) -> void:
 #   없고, 버릴 수도 팔 수도 없다. firefly_soul.gd 머리말 ★ 참조).
 #   · 혼력·도구 불요(무과금 — 넋을 제자리로 돌려보내는 일에 값을 매기지 않는다)
 #   · 마일스톤 답례는 여기서 안 준다 → 혼백관 안치대에서 준다(백팩 가득 시 답례 증발 차단)
-func _gather_firefly(t: Vector2i) -> void:
+# ★[폴리시 R5] 반환값 = 이 [F]를 소비했는가(_pick_forage와 같은 계약). 이 창구는 실패 알림이
+#   없어(넋 거두기는 백팩을 안 쓴다) 성공만 true다.
+func _gather_firefly(t: Vector2i) -> bool:
 	if fireflies == null or clock == null:
-		return
+		return false
 	var id := fireflies.live_spot_at(_region, t)
 	if id == "":
-		return                                   # 없는 칸(디스패치가 걸렀지만 방어)
+		return false                             # 없는 칸(디스패치가 걸렀지만 방어)
 	if not fireflies.collect(id, clock.day):
-		return                                   # 이미 안치(멱등 — 도달 불가)
+		return false                             # 이미 안치(멱등 — 도달 불가)
 	audio.sfx("ui")
 	_notice_firefly_progress()
 	_refresh_trial_gate()                        # ★[S10-T8] 30을 막 넘었으면 시련장 문이 이 프레임에 선다
 	queue_redraw()
+	return true
 
 # 안치 뒤 한 줄 — 진행과 **게이트 도달 순간**을 알린다. 문턱을 막 넘은 프레임에서만 문 이야기를
 # 하고(그 뒤로는 진행만), 완주하면 맺음말로 끝난다. 전부 원장 파생이라 저장할 문장이 없다.
@@ -15357,7 +15364,14 @@ func buy_sprinkler(n: int = 1) -> int:
 
 # RMB 맨손 수확(ADR-0024 §3 — 낫 없음, 수확=맨손). 다 자란 칸만 거두고, 거둔 영혼을 인벤토리에
 # 쌓아 경제의 양끝을 잇는다(밭→재고→판매·서빙). 다 안 자랐거나 혼력 부족이면 무동작.
-func _try_harvest() -> void:
+# ★[폴리시 R5] 반환값 = **이 프레임의 RMB를 수확 창구가 소비했는가**(집행 성공 ∪ 실패를 알림).
+#   호출부(디스패치)가 이 값으로 취침을 건너뛸지 정한다. R4가 세운 표는 "게이트를 통과했는가"만
+#   봐서, 집 안 **빈 화분·안 자란 화분**을 겨누면 이 함수가 아무 일도 안 하고 나오는데도 표가 서서
+#   그 방향을 본 채로는 우클릭 취침이 영영 안 먹었다(sleep_prompt는 계속 "잘 수 있다"고 안내 —
+#   화면과 동작의 불일치). 그래서 **완전 무동작만 false**로 떨어뜨린다.
+#   ★ 실패 알림(백팩 만재 등)은 true다 — 그 RMB는 이미 화면에 답을 냈고, false로 흘리면 "거둘 수
+#     없다" 한 줄과 함께 그 자리에서 하루가 끝난다(원래 결함보다 무거운 사고).
+func _try_harvest() -> bool:
 	# ★ ADR-0059 결정3 — 밭 작물 수확은 무과금(하단 can_act 가드·spend 없음). 목축·과수는 다른 계층이라
 	#   에너지 행동을 그대로 유지(각 분기에서 자체 게이트·소모 — 계층 불변).
 	var cost := _farming_energy_cost()        # ★ 목축·과수 동사용(밭 수확엔 미사용)
@@ -15365,7 +15379,7 @@ func _try_harvest() -> void:
 	# 없으면 쓰다듬(우정·기분 데일리 케어). 밭·과수보다 먼저 본다(짐승 타일은 방목지라 겹침 없음). 안식 농원 전용.
 	if _region == RegionCatalog.HOME and ranch.has_animal(_target):
 		if not energy.can_act(cost):
-			return                            # 목축 계층 — 혼력 게이트 유지(불변)
+			return false                      # 목축 계층 — 혼력 게이트 유지(불변)
 		if ranch.has_product(_target):
 			# ★[폴리시 R2] **적재 자리부터 본다** — `collect`는 짐승의 대기 산물을 0으로 지우므로,
 			#   백팩이 가득하면 그날 산물이 증발하는데 혼력은 그대로 집행됐다. 게잡이통·채취기가
@@ -15375,7 +15389,7 @@ func _try_harvest() -> void:
 				if bool(pending["is_large"]) else str(pending["product_id"])
 			if not inventory.can_add(want, 1, int(pending["quality"])):
 				_notice("백팩이 가득 차 산물을 담을 수 없다 — 자리를 비우고 다시")
-				return
+				return true
 			var got := ranch.collect(_target)   # {product_id, quality, is_large}
 			if not got.is_empty():
 				# 대형 산물은 "<산물>_large" 아이템(판매가 ×2)으로, 아니면 기준 산물로 적재(§8.6). 품질 등급 실림.
@@ -15385,18 +15399,22 @@ func _try_harvest() -> void:
 				audio.sfx("harvest")
 				energy.spend(cost)
 				queue_redraw()
+				return true
 		elif ranch.pet(_target):                # 산물 없음 → 쓰다듬(하루 1회 실효)
 			audio.sfx("ui")
 			energy.spend(cost)
 			queue_redraw()
-		return   # 짐승 칸이면 밭·과수로 흘려보내지 않는다(이미 처리했거나 오늘 케어 완료)
+			return true
+		# 짐승 칸이면 밭·과수로 흘려보내지 않는다(이미 처리했거나 오늘 케어 완료).
+		# 여기까지 왔으면 오늘 케어가 끝난 칸이라 아무 일도 안 일어났다 → RMB는 아직 안 쓰였다.
+		return false
 	# ★ [S1-5b] 혼의 나무 과수 수확 우선(greybox-spec §7.6) — 조준 칸이 성숙+결실 나무 풋프린트에 들면
 	# 매달린 과일을 전량 거둔다. 작물 밭(SOIL)이 아니라 과수라 farm 경로보다 먼저 본다. 안식 농원 전용.
 	if _region == RegionCatalog.HOME:
 		var anchor := orchard.tree_at(_target)
 		if orchard.has_tree(anchor):
 			if not energy.can_act(cost):
-				return                          # 과수 계층 — 혼력 게이트 유지(불변)
+				return false                    # 과수 계층 — 혼력 게이트 유지(불변)
 			# ★[폴리시 R2] **적재 자리부터 본다** — `harvest`가 매달린 과일을 0으로 리셋하므로,
 			#   백팩이 가득하면 결실 주기(제철 하루 +1개)만큼의 수확이 통째로 사라졌다. 한 그루의
 			#   이번 결실은 전량 같은 등급이라(나이 파생) 슬롯 하나면 충분해서 판정도 한 번이다.
@@ -15404,7 +15422,7 @@ func _try_harvest() -> void:
 					and not inventory.can_add(orchard.fruit_id_of(anchor), 1,
 						orchard.quality_tier_for_age(orchard.age_of(anchor, clock.day))):
 				_notice("백팩이 가득 차 과일을 딸 수 없다 — 자리를 비우고 다시")
-				return
+				return true
 			var picked := orchard.harvest(anchor, clock.day)   # {fruit_id,count,quality_tier} / {} = 미성숙·무결실
 			if not picked.is_empty():
 				# ★ [S1-6 §8.8] 나이 등급(quality_tier)을 슬롯 quality로 실적재(§7.7 소비 실현). 나무 나이가
@@ -15423,29 +15441,31 @@ func _try_harvest() -> void:
 				audio.sfx("harvest")
 				energy.spend(cost)
 				queue_redraw()
-				return
+				return true
 	# ★[S10-T5 / ADR-0069 결정 8] 화분 수확 — 밭 경로보다 **먼저** 본다(놓은 물건이 밑의 흙보다
 	#   앞이다·짐승·과수 우선 분기와 같은 규율). 수확 문법은 노지와 같다: 품질 roll → 적재 →
 	#   점수판·XP·사연. 갈리는 건 원장 하나뿐이라 이 분기는 얇다.
 	if _pot_at(_target) and garden_pot.is_mature(_target):
 		_harvest_pot()
-		return
+		return true
 	var field := _field_at(_target)              # ★[S10-T5] 이 칸의 주인 밭(노지/늘봄방)
 	if not field.is_mature(_target):
-		return
+		# ★[폴리시 R5] 여기가 집 안 빈 화분·안 자란 화분이 떨어지는 자리다 — 아무 일도 안 했으므로
+		#   RMB를 소비하지 않았다고 답해, 같은 프레임의 취침이 정상으로 이어지게 한다.
+		return false
 	var harvested_crop := field.crop_of(_target)  # harvest 뒤엔 칸이 비거나(SINGLE) 되감기(REGROW) 되므로 미리 확보
 	# ★[S4-T5 / ADR-0033 #4] 야생 작물 — "밭에서 길러도 채집"이다: 수확물·품질·XP 전부 채집 축으로
 	#   가로챈다(농사 XP·비료 품질·사연 미적용). 아래 일반 경로와 완전 분리(잔가 누수 0).
 	if CropCatalog.is_wild(harvested_crop):
 		_harvest_wild(harvested_crop)
-		return
+		return true
 	var quality := field.roll_quality(_target)   # ★ [S1-6 §8.5] 칸을 비우기 전에 품질 확보(비료→등급 roll)
 	# ★[폴리시 R2] **적재 자리부터 본다** — `harvest`는 칸을 비우거나(SINGLE) 자란 날수를 되감으므로
 	#   (REGROW) 백팩이 가득하면 그 수확이 되찾을 곳 없이 사라졌는데, 화면엔 "+N" 토스트가 떠서
 	#   거짓말을 했다(add_harvest가 void였던 탓에 호출부는 실패를 알 수조차 없었다).
 	if not inventory.can_add(ItemCatalog.harvest_id(harvested_crop), 1, quality):
 		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
-		return
+		return true
 	field.harvest(_target)
 	# ★ [S1-5a] 다수확(황천포도 2~3) — yield_range를 굴려 그만큼 적재(greybox-spec §6.5, 데이터는 S1-4 검증).
 	#   기본형(1~1)은 1개 그대로. 점수판(_run_harvested)·사연은 수확 액션당 1(영혼 1 = 사연 1)로 둔다.
@@ -15492,6 +15512,7 @@ func _try_harvest() -> void:
 	_roll_firefly_drop(FireflySouls.SRC_HARVEST, _target.y * 1000 + _target.x)
 	# ★ ADR-0059 결정3 — 밭 작물 수확은 무과금(energy.spend 없음): "보람 액션 과세" 제거로 스타듀 체감 회복.
 	queue_redraw()                            # 새 상태가 바로 보이도록
+	return true
 
 # ★[S10-T5 / ADR-0069 결정 8] 화분 수확 — **노지와 동일한 품질/XP 문법**(ADR 자구)이되 화분에
 #   없는 축은 빼고 간다. 밭 수확에서 덜어낸 것 셋과 그 이유:
@@ -15683,18 +15704,22 @@ func _harvest_wild(crop: String) -> void:
 	player.swing_tool("harvest", FarmSkill.speed_factor(FarmSkill.level_for_xp(_farming_xp)))
 	queue_redraw()
 
-func _pick_forage(tile: Vector2i) -> void:
+# ★[폴리시 R5] 반환값 = **이 창구가 그 [F]를 소비했는가**(_try_harvest와 같은 계약: 집행 성공 ∪
+#   실패를 알림). 종전엔 호출부가 입력만 보고 표를 세워, 스폰이 없어 조용히 되돌아온 프레임에서도
+#   사슬 맨 끝의 휘파람(하차)이 막혔다. 만재 알림처럼 **화면에 답을 낸 실패는 소비로 친다** —
+#   그 [F]는 이미 쓰였고, 흘려보내면 알림과 함께 말에서 내리는 엉뚱한 겹동작이 된다.
+func _pick_forage(tile: Vector2i) -> bool:
 	# ★[폴리시 R4] `pick`은 그 칸을 원장에서 **지우고** 종을 돌려주므로(되돌리는 경로 0), 꽃 패치와
 	#   같은 이유로 비소모 질의(`species_at`)로 먼저 종을 알아내고 적재 자리를 물은 뒤에 집는다.
 	var species := forage_spawns.species_at(_region, tile)
 	if species == "":
-		return   # 없는 칸(디스패치가 걸렀지만 방어)
+		return false   # 없는 칸(디스패치가 걸렀지만 방어) — 무동작이라 [F]를 안 썼다
 	var lvl := _skill_level(ProfessionCatalog.FORAGING)
 	# 품질 = 채집 레벨 기본 등급 ⊔ 약초학자 하한(이리듐). 꽃 패치와 같은 소스(ADR-0052).
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
 	if not inventory.can_add(species, 1, quality):
-		_notice("백팩이 가득 차 %s를 담을 수 없다 — 자리를 비우고 다시" % ItemCatalog.name_of(species))
-		return
+		_notice("백팩이 가득 차 %s 담을 수 없다 — 자리를 비우고 다시" % HanjiUi.with_eul(ItemCatalog.name_of(species)))
+		return true
 	forage_spawns.pick(_region, tile)   # 자리를 확인한 뒤에 집는다(스폰 칸 소멸 = 되돌릴 수 없는 사건)
 	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 한 자리에서 두 개).
 	var count := 1
@@ -15711,6 +15736,7 @@ func _pick_forage(tile: Vector2i) -> void:
 	if _region == RegionCatalog.MIHOK_FOREST:
 		_roll_book_drop(Books.SRC_FORAGE, tile.y * 1000 + tile.x)
 	queue_redraw()
+	return true
 
 # ── ★[S4-T8 / ADR-0062 결정 9 ㉠] 채집 덤불 — 흔들기 ─────────────────────────
 # 구역별 덤불 자리(맵이 소유 — 원장은 열매 유무만 든다). 숲 2구역 밖은 빈 배열이다.
@@ -15735,22 +15761,24 @@ func is_bush_tile(region: String, t: Vector2i) -> bool:
 #   수량 = 채집 레벨 계단(L0~3 1개 / L4~7 2개 / L8+ 3개, ForageSkill.bush_yield) · XP = 개당 1.
 #   ★ 품질은 안 실린다: 열매는 절기 창 나흘의 이벤트 산출이라 등급 롤을 태우면 "언제 흔드느냐"가
 #     아니라 "레벨이 몇이냐"가 값을 정하게 된다(수량 계단만으로 이미 레벨 보상이 있다). Q_NORMAL 고정.
-func _shake_bush(t: Vector2i) -> void:
+# ★[폴리시 R5] 반환값 = 이 [F]를 소비했는가(_pick_forage와 같은 계약).
+func _shake_bush(t: Vector2i) -> bool:
 	if berry_bushes == null or not berry_bushes.has_berry(_region, t):
-		return
+		return false
 	var id := berry_bushes.shake(_region, t, clock.day)
 	if id == "":
-		return                                    # 창 밖 잔여 플래그였다(원장이 정리만 하고 빈손)
+		return false                              # 창 밖 잔여 플래그였다(원장이 정리만 하고 빈손)
 	var n := ForageSkill.bush_yield(_skill_level(ProfessionCatalog.FORAGING))
 	if not inventory.add_item(id, n):
 		berry_bushes.set_berry(_region, t, true)  # 인벤 가득 — 열매를 덤불에 되돌린다(증발 방지)
 		_notice("백팩이 가득 차 열매를 담을 수 없다 — 자리를 비우고 다시 [F]")
-		return
+		return true
 	_toast_item(id, n)
 	_gain_forage_xp(ForageSkill.BUSH_SHAKE_XP * n)   # ★ 개당 1XP(스타듀 상속 — 수량만큼 배움도 는다)
 	audio.sfx("harvest")
 	_notice("덤불을 흔들어 %s ×%d를 얻었다" % [ItemCatalog.name_of(id), n])
 	queue_redraw()
+	return true
 
 # 덤불을 겨눴을 때의 안내(상태 = 열매 있음 / 창 안이나 아직 안 달림 / 창 밖 — 셋이 다 읽혀야 한다).
 func _bush_prompt(t: Vector2i) -> String:
