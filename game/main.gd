@@ -20156,7 +20156,13 @@ func _fire_spine_b7() -> void:
 		return
 	if not _begin_cutscene(Spine.B7_CUTSCENE.duplicate(true), "", PackedStringArray()):
 		return
-	_mark_spine_bit(SPINE_B7)
+	# ★[폴리시 R6] **비트를 여기서 찍지 않는다** — 사슬의 마지막 마디를 장면 *끝*(에필로그가 열리는
+	#   자리)으로 옮겼다. 호출부가 `_on_sleep_done`이고 그 바로 다음 줄이 `_save_game()`이라, 장면
+	#   시작에 찍은 비트는 대사가 도는 도중에 이미 디스크로 굳었다. 그런데 대사 열·에필로그 예약은
+	#   전부 비영속이라(로드가 0으로 되돌린다) 그 사이에 앱이 꺼지면 재기동 시 `_maybe_resume_spine`의
+	#   두 갈래가 모두 거짓이 되어(B7 비트가 이미 섰으므로) 주례 지문·앵커 대사·해방 대사·에필로그가
+	#   **그 세이브에서 영영 못 뜬다**. 이제 그 상황은 "B7이 아직 안 왔다"로 읽혀 ㉡가 장면을 처음부터
+	#   다시 튼다(세이브 키 0 — 판정은 여전히 원장 파생이다).
 	_spine_say.clear()
 	_queue_spine_say(Spine.INNER_SPEAKER, Spine.B7_OFFICIANT_LINES)   # 주례 = 전부 지문
 	var r := _resident(OKJA_RID)
@@ -20187,9 +20193,12 @@ func _maybe_resume_spine() -> void:
 	if _run_over or _sleeping or _transitioning:
 		return
 	# 재생 중인 무엇이라도 있으면 물러난다 — 특히 `_spine_say`가 비어야 한다는 조건이 핵심이다.
-	# B6·B7은 비트를 장면 **시작**에 찍는데, 그 장면의 남은 묶음이 도는 동안에도 다음 비트의 전제는
+	# B6은 비트를 장면 **시작**에 찍는데, 그 장면의 남은 묶음이 도는 동안에도 다음 비트의 전제는
 	# 이미 참이 되어 있다(B6 비트가 선 채 B6 지문이 도는 중). 이 줄이 없으면 진행 중인 장면 위로
 	# 다음 장면이 겹쳐 선다.
+	# ★[폴리시 R6] B7은 이제 비트를 장면 **끝**(에필로그가 열리는 자리)에 찍으므로, 재생 도중엔
+	#   ㉡의 전제가 계속 참이다 — 그 구간을 덮는 것이 아래 세 줄의 가드다(컷신 → `_spine_say` →
+	#   `_epilogue_pending`이 빈틈없이 이어져, 끊긴 재생만 이 훅에 도달한다).
 	if cutscene != null or spine_puzzle != null or dialogue.is_open():
 		return
 	if not _spine_say.is_empty() or _spine_b5_pending:
@@ -20220,6 +20229,10 @@ func _open_epilogue() -> void:
 	if _epilogue_open or _run_over:
 		return
 	_epilogue_open = true
+	# ★[폴리시 R6] **B7 비트가 서는 자리**(옛 자리 = `_fire_spine_b7`의 장면 시작). 해방은 여기서
+	#   비로소 "왔다" — 그 전에 끊긴 재생은 `_maybe_resume_spine` ㉡이 처음부터 다시 튼다.
+	#   여기 도달했다는 것은 컷신·세 대사 묶음이 전부 닫혔다는 뜻이다(`_epilogue_pending` 소비 경로).
+	_mark_spine_bit(SPINE_B7)
 	_epilogue_clock_prev = clock.running
 	clock.running = false
 	player.set_physics_process(false)

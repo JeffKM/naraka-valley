@@ -394,8 +394,8 @@ func _run_checks() -> void:
 	_check("⑧f ★혼례 아침이 예약만 한다(B4와 완전히 같은 두 단계 — 재생 0 · 비트 0)",
 		m._spouse_id == "okja" and m._spine_b7_armed and not m._spine_bit_seen(m.SPINE_B7))
 	m._on_sleep_done()
-	_check("⑧g ★눈을 뜨는 프레임에 해방이 재생된다(비트 · S등급)",
-		m._spine_bit_seen(m.SPINE_B7) and m.cutscene != null and not m._spine_b7_armed)
+	_check("⑧g ★눈을 뜨는 프레임에 해방이 재생된다(S등급 컷신 · 예약 소비)",
+		m.cutscene != null and not m._spine_b7_armed)
 	_settle(m)
 	_check("⑧h 그림이 바뀌고(귀환 → 해방) 주례는 **지문뿐**이다(화자 없이 선다)",
 		m._illust_id == Spine.ILLUST_B7 and m.dialogue.speaker() == ""
@@ -406,16 +406,23 @@ func _run_checks() -> void:
 	_check("⑧j 셋째 묶음이 해방의 내면이고 에필로그가 예약된다",
 		m.dialogue.speaker() == "" and m.dialogue.line() == String(Spine.B7_RELEASE_LINES[0])
 		and m._epilogue_pending and not m._epilogue_open)
-	_check("⑧k ★척추 원장이 B4~B7 네 비트로 닫힌다(게임에 결말이 섰다)",
-		m._spine_bits == ((1 << m.SPINE_B4) | (1 << m.SPINE_B5) | (1 << m.SPINE_B6)
-			| (1 << m.SPINE_B7)))
+	# ★[폴리시 R6] B7 비트가 서는 자리를 장면 **끝**(에필로그가 열리는 자리)으로 옮겼다 — 혼례
+	#   아침의 자동 저장(`_on_sleep_done`의 바로 다음 줄)이 *미완의* 장면을 완료로 굳혀, 대사가
+	#   도는 도중에 앱이 꺼지면 재개 훅의 두 갈래가 모두 거짓이 되어 주례 지문·앵커 대사·해방
+	#   대사·에필로그가 그 세이브에서 영구 도달 불가였다. 그래서 **여기(마지막 묶음이 아직 안 닫힌
+	#   시점)의 원장은 B4~B6 셋**이고, 넷째 비트는 아래 ⑨a에서 닫힌다.
+	_check("⑧k ★척추 원장이 B4~B6까지 서 있고 해방은 아직 재생 중이다(에필로그 예약이 그 증거)",
+		m._spine_bits == ((1 << m.SPINE_B4) | (1 << m.SPINE_B5) | (1 << m.SPINE_B6))
+		and m._epilogue_pending)
 
 	# ── ⑨ 에필로그([ADR-0068] 결정 11) ───────────────────────────────────────
 	print("── ⑨ 에필로그 ──")
 	_drain(m)
-	_check("⑨a ★마지막 묶음이 닫히면 에필로그가 뜬다(회고 화면 · 시계·이동 잠금)",
+	_check("⑨a ★마지막 묶음이 닫히면 에필로그가 뜨고 **그 자리에서 B7 비트가 선다**(척추 원장이 B4~B7 넷으로 닫힌다 = 게임에 결말이 섰다)",
 		m._epilogue_open and m.ending_panel.visible and not m._epilogue_pending
-		and not m.clock.running and not m.player.is_physics_processing())
+		and not m.clock.running and not m.player.is_physics_processing()
+		and m._spine_bits == ((1 << m.SPINE_B4) | (1 << m.SPINE_B5) | (1 << m.SPINE_B6)
+			| (1 << m.SPINE_B7)))
 	_check("⑨b ★`_run_over`가 아니다 — 이건 게임의 끝이 아니다", not m._run_over)
 	_check("⑨c 하트가 **스프라이트**다(문자열 ♥ 막대가 아니다) · 배우자가 맨 윗줄이다",
 		m._epilogue_hearts != null and m._epilogue_hearts.get_child_count() > 0
