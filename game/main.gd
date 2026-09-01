@@ -5083,13 +5083,18 @@ func home_house_rect() -> Rect2i:
 func home_house_cam_rect() -> Rect2i:
 	return HOME_HOUSE_CAM_RECT_EXPANDED if _home_expanded() else HOME_HOUSE_CAM_RECT
 
-# ★[S8-T7 / ADR-0066 결정 8] 안방 확장의 **실효 일괄 적용** — 완공 아침과 확장 세이브 로드,
-# rect가 넓어지는 두 순간에 부른다(멱등). ①deco bounds 재주입(기존 배치는 부분집합이라 무손실)
-# ②건물 카탈로그의 집 카메라 교체 ③현재 무대가 HOME이면 그리드 재빌드(다른 구역이면 다음 워프의
-# _rebuild_region이 자연히 새 rect로 세운다) ④지금 집 안이면 카메라 리밋 즉시 재적용.
+# ★[S8-T7 / ADR-0066 결정 8] 안방 확장의 **실효 일괄 적용** — 완공 아침과 세이브 로드에 부른다
+# (멱등). ①deco bounds 재주입 ②건물 카탈로그의 집 카메라 교체 ③현재 무대가 HOME이면 그리드
+# 재빌드(다른 구역이면 다음 워프의 _rebuild_region이 자연히 새 rect로 세운다) ④지금 집 안이면
+# 카메라 리밋 즉시 재적용.
+# ★[폴리시 R5] `if not _home_expanded(): return` **철거** — 넓어지는 방향만 잡던 편도 가드였다.
+#   확장한 세션에서 확장 *전* 세이브를 로드하면 여기서 즉시 return 해 `home_deco`의 배치 가능 칸이
+#   확장 rect 그대로 남는데, 무대는 `_rebuild_region`이 작은 rect로 다시 지었다 — 배치 검증이
+#   그 칸 집합 하나뿐이라(home_deco.gd) **줄어든 방의 벽 너머·집 바깥 칸에 바닥재·가구를 놓을 수
+#   있었고**, 그 배치가 그대로 세이브에 굳었다. 아래 세 줄은 전부 `home_house_rect()` 파생이라
+#   가드만 걷으면 좁아지는 방향도 같은 식이 잡는다(배치 dict 자체는 `home_deco.load_save`가 이미
+#   세이브 시점으로 되감으므로 잘라 낼 것이 없다 — 걷을 것은 경계뿐이었다).
 func _refresh_home_expansion() -> void:
-	if not _home_expanded():
-		return
 	_configure_home_deco_bounds()
 	if _buildings.has("집"):
 		_buildings["집"]["cam"] = home_house_cam_rect()
@@ -11253,6 +11258,10 @@ func _save_game() -> void:
 		# ★[S6-T4] 단골화 방문 원장(명명 손님별 누적 서빙 횟수). 호감도 조각들과 **완전히 다른 키**다 —
 		#   네임스페이스가 갈려 있는 것 자체가 "서빙 ≠ ♡"(ADR-0017)의 세이브 층위 표현이다.
 		"guest_pool": guests.to_save(),
+		# ★[폴리시 R5] 카페의 **하루치 접객 원장**(단골 원장과 짝이다 — 저쪽이 영속 누계라면 이쪽은
+		#   "오늘 이미 다녀갔다"의 가드다). 이 조각이 없어 영업 중 저장→재시작이 손님 열을 처음부터
+		#   재생하고 위 단골 원장에 같은 하루를 두 번 적립했다(cafe._open_shop 머리말).
+		"cafe_day": cafe.to_save(),
 		"onboarding": onboarding.to_save(),
 		"run_harvested": _run_harvested,
 		"milestone_hearts_peak": _milestone_hearts_peak,   # ★[폴리시 R5] 하트 축 최고 수위(단조 보장)
@@ -11338,6 +11347,14 @@ func _load_game() -> void:
 	#   한참 뒤라 여기서는 원본 dict를 직접 본다 — 두 곳이 같은 키를 읽을 뿐 원장은 여전히 하나다.
 	if (int(data.get("spine_bits", 0)) & (1 << SPINE_B6)) != 0:
 		_open_okja_track()
+	else:
+		# ★[폴리시 R5] **역연산이 없던 자리.** 개통은 멱등이지만 편도였다 — B6를 지나 트랙이 열린
+		#   세션에서 B6 *이전* 세이브를 로드하면 `_spine_bits`는 0으로 되감기는데 `r.affinity`는
+		#   non-null로 남았고, 관계 탭 표시 자격이 그 하나뿐이라 **척추를 시작도 안 한 세이브의
+		#   관계 탭에 앵커 트랙과 deed 효과 줄이 떠서** 게임 최대의 서사 반전이 통째로 선노출됐다
+		#   (뒤따르는 `_refresh_okja_track`은 점수만 0으로 만들 뿐 노드를 못 지운다).
+		#   R2가 `_build_building_catalog()`로 늘봄방·시련장에 세운 "로드는 양방향"과 같은 계열이다.
+		_close_okja_track()
 	# 옛 오버레이를 먼저 비운다(F9 재로드 대비). 이후 FarmField.load_save가
 	# 칸마다 tile_changed를 발화해 main이 새 상태로 다시 칠한다.
 	field_layer.clear()
@@ -11457,6 +11474,9 @@ func _load_game() -> void:
 	#   가중치. 아무것도 안 막힌다 — 명명 손님은 그대로 오고 이력만 0부터 쌓인다).
 	if data.has("guest_pool"):
 		guests.load_save(data["guest_pool"])
+	# ★[폴리시 R5] 카페 하루치 접객 원장(키 없는 구세이브 = 오늘 아무도 안 다녀갔다 = 종전 거동).
+	if data.has("cafe_day"):
+		cafe.load_save(data["cafe_day"])
 	# ★ [S2-T7] 주민 호감도 복원 — 세이브 키가 없는 구버전은 그 주민만 ♡0으로 시작한다
 	#   (네오 M2.3 원문 규칙과 같은 결: 정가·무막힘. 옛 4갈래 if가 이 루프로 접혔다).
 	for r in _residents:
@@ -11548,6 +11568,14 @@ func _load_game() -> void:
 	if _spouse_id != "" and _spouse_id != _romance_partner:
 		_spouse_id = ""
 	_wedding_day = maxi(int(data.get("wedding_day", 0)), 0)
+	# ★[폴리시 R5] **재적용 전에 전원에게서 걷는다.** 옛 주석("스케줄은 _ready마다 새로 조립")은
+	#   부팅 경로에서만 참이고 F9 인플레이스 로드에는 거짓이다 — `_apply_…`는 추가 전용이라,
+	#   혼인한 세션에서 혼인 *전* 세이브를 로드하면 `_spouse_id`가 ""로 되감겨 그 함수가 즉시
+	#   return 하고 배우자의 스케줄엔 안방 스테이션이 그대로 남았다(미혼 세이브인데 저녁마다
+	#   플레이어 안방에 사람이 서 있다). 다른 이와 결혼한 슬롯을 로드하면 **둘이 겹쳐 선다** —
+	#   `_apply_…`의 중복 가드가 새 배우자의 스케줄만 보기 때문이다. 이혼(`_do_divorce`)이 이미
+	#   `_remove_spouse_home_station`으로 세워 둔 역연산을 로드 경로에도 세운다.
+	_clear_all_spouse_home_stations()
 	_apply_spouse_home_station()   # 이주 스테이션 재적용(스케줄은 _ready마다 새로 조립 — 멱등)
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 점수 재계산 — **배우자 복원 뒤**여야 한다(잠금 판정이
 	#   현재 배우자를 본다). 저장된 점수를 믿지 않고 원장에서 다시 재는 것이 이 트랙의 규약이다.
@@ -19766,6 +19794,20 @@ func _open_okja_track() -> void:
 			"○" if int(t["face"]) > 0 else "—", _run_harvested]
 	_refresh_okja_track()
 
+# ★[폴리시 R5] 트랙 폐쇄 — `_open_okja_track`의 역연산. 개통 전 상태로 **바이트 그대로** 되돌린다
+# (Affinity 노드 해제 · 세이브 키 반납 · 효과 줄 훅 해제): 셋 다 개통이 새로 만든 것이라, 하나라도
+# 남으면 "개통 전 거동은 바이트 그대로"라는 개통 함수의 계약이 로드 방향에서만 거짓이 된다.
+# ★ 저장은 걱정하지 않아도 된다 — 세이브 루프가 `save_key != ""`인 레코드만 적으므로, 키를 반납한
+#   순간 이 트랙은 다음 저장에서 조용히 빠진다(다시 열리면 그때 ♡0부터 = 구세이브 하위호환과 동형).
+func _close_okja_track() -> void:
+	var r := _resident(OKJA_RID)
+	if r == null or r.affinity == null:
+		return
+	r.affinity.queue_free()
+	r.affinity = null
+	r.save_key = ""
+	r.effect_fn = Callable()
+
 # ★ 점수를 **원장에서 다시 계산**한다(적립이 아니라 파생). 이것이 "선물·대화·활동 3채널 차단"의
 #   뿌리다 — 세 채널이 점수를 밀어 넣어도 다음 갱신에 덮여 사라지므로, 차단이 플래그가 아니라
 #   **구조**로 성립한다. 호출부 게이트 셋(아래 대화·선물·활동)은 그 위에 얹는 명시적 방어선이다.
@@ -20411,6 +20453,14 @@ func _do_divorce() -> void:
 	# ★[S9-T1] 문구의 주인은 캐릭터다(divorce_lines 훅 — 없으면 공용 폴백).
 	_notice("%s: 「%s」" % [r.display_name if r != null else rid, _divorce_farewell_line(r)],
 		NOTICE_SECS * 3.0)
+
+# ★[폴리시 R5] 로스터 **전원**의 안방 스테이션을 걷는다(로드 직전의 상태 하드 리셋).
+# 한 사람만 걷는 `_remove_spouse_home_station`으론 부족한 이유는 호출부 주석 참조 — 로드는 어느
+# 세이브에서 어느 세이브로 갈지 모르므로, "지금 배우자"가 아니라 "누구든 서 있는 사람"을 걷어야
+# 한다. 명단이 아니라 술어(스테이션 칸 일치)로 도는 것도 같은 이유다.
+func _clear_all_spouse_home_stations() -> void:
+	for r in _residents:
+		_remove_spouse_home_station(r.id)
 
 # 이주 해제 — _apply_spouse_home_station의 역연산(안방 칸 스테이션만 제거·원 스케줄 무접촉).
 # 스케줄은 _ready마다 새로 조립되므로 다음 부팅은 자연히 원본이고, 이 제거는 **켜진 세션**의
