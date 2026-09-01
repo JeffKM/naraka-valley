@@ -3315,9 +3315,18 @@ func _ready() -> void:
 #   is_new_game=true면 세이브가 있어도 신규 셋업(타이틀 [새 게임]/빈 슬롯). ──
 func _begin_game(is_new_game: bool) -> void:
 	# T2.5 세이브가 있으면(이어하기) 복원, 아니면(신규) 스타터 셋업 → "껐다 켜도 그대로".
+	# ★[폴리시 R6] 갈림길을 **파일 존재**가 아니라 **실제로 불러왔는가**로 판정한다. `has_save`는
+	#   `FileAccess.file_exists`뿐이고 검증은 `_read_wrapped`가 따로 하므로, 잘린 save.dat이나
+	#   VERSION이 다른 구세이브는 "있지만 안 읽히는 슬롯"이 된다 — 종전엔 그 슬롯으로 [이어하기]를
+	#   누르면 `_load_game`이 조용히 반환하고 else 가지도 안 타, **스타터 짐승 0마리·스타터 꾸미기
+	#   세트 0개인 반쪽 새 게임**이 시작됐다(그마저도 아무 말 없이). 이제는 사실을 알리고 신규
+	#   셋업을 온전히 태운다. 세이브 파일은 건드리지 않는다(덮어쓰기는 다음 저장, 삭제는 F8 몫).
+	var loaded := false
 	if not is_new_game and saver.has_save(_active_slot):
-		_load_game()
-	else:
+		loaded = _load_game()
+		if not loaded:
+			_notice("세이브를 읽지 못했다(손상 또는 옛 버전) — 새 게임으로 시작한다", NOTICE_SECS * 3.0)
+	if not loaded:
 		# ★ [S1-7] 신규 게임: 하늘 목장에 스타터 짐승을 배치한다(START_KIT 결 — 세이브가 없을 때만,
 		# _grid는 부팅 HOME 그대로라 방목지 좌표계가 유효). 세이브에 짐승이 있으면 load_save가 복원한다.
 		_ensure_starter_animals()
@@ -3325,6 +3334,17 @@ func _begin_game(is_new_game: bool) -> void:
 		#   세이브가 있으면 home_deco.load_save가 해금 집합을 복원한다(구세이브=해금 0, 방어적).
 		for sid in HomeDecoCatalog.STARTER_SETS:
 			home_deco.unlock(sid)
+		# ★[폴리시 R6] 신규 게임 **첫날치 일일 롤**을 여기서 한 번 굴린다. 이 두 원장의 유일한
+		#   갱신처가 `_on_day_advanced`라, 신규 게임 day 1에는 숲 채집물이 한 칸도 없고 사금 스폿도
+		#   0이었다(첫 취침으로 day 2가 되어야 두 시스템이 켜졌다 — 세이브를 이어받으면 원장이
+		#   복원돼 이 구멍이 안 보인다). 위의 사료풀·꽃 패치·안식 나무 시드와 같은 자리·같은 뜻이다.
+		#   ⚠️ **신규 가지 안에서만** 부른다: 두 advance_day는 그날 시드로 결정적이라 같은 날 다시
+		#      부르면 같은 배치를 재생성하는데, 그러면 그날 이미 줍거나 인 자리까지 되살아난다
+		#      (`ForageSpawns.has_at` 재롤 · `PanningLedger.pan`이 지운 스폿 부활 = 자원 복제).
+		if forage_spawns != null:
+			forage_spawns.advance_day(clock.day, GameClock.season_index_for_day(clock.day))
+		if panning != null:
+			panning.advance_day(clock.day)
 	# ★ [B1-a.3] 사료풀 시드 — 고지 자유 풀밭(FORAGE_SCAN_RECT 비-SOLID)을 Forage에 등록한다. 신규·복원
 	#   양쪽에서 부른다: seed는 멱등이라 복원된 사료풀 상태(cut_day)를 보존하고 맵상 새 타일만 더한다.
 	_seed_forage_tiles()
@@ -11509,10 +11529,16 @@ func _save_game() -> void:
 	if saver.save_game(data, _active_slot, {"day": clock.day, "soul": energy.current}):
 		_notice("저장됨")
 
-func _load_game() -> void:
+# ★[폴리시 R6] 반환값이 void → **불러왔는가**로 바뀌었다. `saver.has_save`는 파일 존재만 보고
+#   실제 파싱·검증(`_read_wrapped`)은 따로 갈리므로 "파일은 있는데 안 읽히는 슬롯"이 존재한다
+#   (저장 중 크래시로 잘린 save.dat · VERSION을 올린 뒤의 구세이브 전량). 그때 이 함수는 조용히
+#   반환했고 호출부는 그것을 성공으로 읽어, 신규 셋업(스타터 짐승·꾸미기 세트)을 건너뛴 **반쪽
+#   새 게임**이 시작됐다. 성패를 돌려주면 그 갈림길을 호출부가 볼 수 있다(세이브 파일은 한 바이트도
+#   안 건드린다 — 손상 슬롯을 덮어쓰거나 지우는 일은 여기서 하지 않는다).
+func _load_game() -> bool:
 	var data := saver.load_game(_active_slot)
 	if data.is_empty():
-		return
+		return false
 	# ★ [S3-T2] 진행 중이던 릴 격투 세션은 로드에서 버린다(비영속 — 세이브에 낚시 키가 없는 것과 짝).
 	#   로드는 상태 하드 리셋이라, 옛 세션이 새 월드 위에 남아 있으면 안 된다.
 	fishing = null
@@ -11659,9 +11685,15 @@ func _load_game() -> void:
 	#   가중치. 아무것도 안 막힌다 — 명명 손님은 그대로 오고 이력만 0부터 쌓인다).
 	if data.has("guest_pool"):
 		guests.load_save(data["guest_pool"])
-	# ★[폴리시 R5] 카페 하루치 접객 원장(키 없는 구세이브 = 오늘 아무도 안 다녀갔다 = 종전 거동).
-	if data.has("cafe_day"):
-		cafe.load_save(data["cafe_day"])
+	# ★[폴리시 R5] 카페 하루치 접객 원장(키 없는 구세이브 = 오늘 아무도 안 다녀갔다).
+	# ★[폴리시 R6] **`has` 가드를 걷어 빈 dict로 무조건 되감는다.** R5가 하루치 리셋 책임을
+	#   `_open_shop`의 무조건 리셋에서 `_ledger_day != day` 비교로 옮긴 순간, "안 되감는다"의 뜻이
+	#   "리셋"에서 **"직전 세션 값 유지"**로 뒤집혔다 — D일에 영업하던 세션에서 키 없는 구세이브를
+	#   같은 D일로 로드하면 `_ledger_day == day`가 되어 리셋이 한 번도 안 돌고, 주문 serial·오늘
+	#   다녀간 손님·매출이 로드 전 값을 그대로 이어받았다. `load_save({})`는 원장을 0(=아직 아무 날도
+	#   안 연 상태)으로 되돌리므로 구세이브의 뜻이 다시 "오늘 아무도 안 다녀갔다"가 된다.
+	if cafe != null:
+		cafe.load_save(data.get("cafe_day", {}))
 	# ★ [S2-T7] 주민 호감도 복원 — 세이브 키가 없는 구버전은 그 주민만 ♡0으로 시작한다
 	#   (네오 M2.3 원문 규칙과 같은 결: 정가·무막힘. 옛 4갈래 if가 이 루프로 접혔다).
 	for r in _residents:
@@ -11827,6 +11859,7 @@ func _load_game() -> void:
 	if data.has("larder"):
 		larder.load_save(data["larder"])
 	_notice("불러옴")
+	return true
 
 # M1.5 — 세이브된 현재 구역·실내 모드·플레이어 위치를 복원한다. SaveManager는 IO만 책임지므로
 # (불변), '무엇을 어떻게 되돌리나'의 조율은 main이 맡는다(_save_game·_warp과 같은 결).
@@ -12610,7 +12643,11 @@ func _process(delta: float) -> void:
 	if not _sleeping and Input.is_action_just_pressed("save_game"):
 		_save_game()
 	if not _sleeping and Input.is_action_just_pressed("load_game"):
-		_load_game()
+		# ★[폴리시 R6] 실패를 말한다 — 종전엔 세이브가 없거나 안 읽히면 F9가 **아무 반응 없이**
+		#   지나가, 눌렀는데 아무 일도 안 일어난 것인지 불러왔는데 같은 상태인지 알 수 없었다
+		#   (성공은 `_load_game` 끝의 "불러옴"이 이미 말한다).
+		if not _load_game():
+			_notice("불러올 세이브가 없다(또는 읽을 수 없다)", NOTICE_SECS * 2.0)
 	# 세이브 삭제+새 시작(F8). 되돌릴 수 없어 2단 확인 — 첫 F8은 무장만, 무장 중 다시 F8이면
 	# 실행. 연출(취침) 중엔 받지 않는다(저장/불러오기와 같은 결).
 	if not _sleeping and Input.is_action_just_pressed("delete_save"):

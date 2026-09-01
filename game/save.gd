@@ -37,6 +37,13 @@ static func slot_path(slot: int) -> String:
 func has_save(slot: int = 0) -> bool:
 	return FileAccess.file_exists(slot_path(slot))
 
+# ★[폴리시 R6] 이 슬롯을 **실제로 불러올 수 있는가**. `has_save`(파일 존재)와 갈릴 수 있다 —
+#   저장 중 크래시로 잘린 save.dat, VERSION을 올린 뒤의 구세이브 전량이 "파일은 있는데 안 읽히는
+#   슬롯"이다. 두 술어가 갈려 있는 것을 아무도 안 물어봐서, 타이틀은 그런 슬롯을 "저장됨"으로
+#   띄우고 [이어하기]는 조용히 반쪽 새 게임으로 떨어졌다. 파일은 한 바이트도 안 건드린다.
+func can_load(slot: int = 0) -> bool:
+	return not _read_wrapped(slot).is_empty()
+
 # 어느 슬롯에든 세이브가 하나라도 있는가(부팅/타이틀 판단 보조).
 func any_save() -> bool:
 	for s in SLOT_COUNT:
