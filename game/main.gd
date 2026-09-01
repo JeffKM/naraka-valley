@@ -2578,7 +2578,10 @@ var _mobs_spawned: int = 0
 var _hurt_at: float = INVULN_NONE
 # 누적 스윙 수 — **데미지 롤의 결정적 시드**다(CombatSkill.resolve_hit). 좌표 해시를 안 쓰는 이유는
 #   ADR-0063 결정 1의 "좌표 해시 이웃 연속값 금지"이고, 카운터라 같은 자리를 두 번 베도 값이 갈린다.
-#   ★세이브에 안 넣는다: 무기 스윙은 순간 사건이라 세션을 넘겨 이어질 상태가 없다(*잠정*).
+#   ★[폴리시 R5] **세이브에 넣는다**(옛 주석: "순간 사건이라 이어질 상태가 없다"). 이어질 상태가
+#   없다는 판단은 맞았으나 그 결과가 문제였다 — 로드가 이 카운터를 안 되감아, 저장·타격·F9를
+#   반복하면 같은 일격의 데미지·치명을 원하는 값이 나올 때까지 다시 굴릴 수 있었다(지오드 개봉
+#   수를 세이브에 실어 재롤을 막은 그 규율의 반대 사례). 시드 축은 **되감겨야** 결정적이다.
 var _combat_swings := 0
 # 누적 기절 횟수 — `take_damage`가 "지금 이 타격이 기절이었나"를 알아내는 관측점이다(HP 0 처리가
 #   depleted 시그널로 *동기적으로* 끼어들기 때문에 반환값만으로는 구별이 안 된다). 세이브 안 함.
@@ -11200,6 +11203,15 @@ func _save_game() -> void:
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
 		"furnace": furnace.to_save(),       # ★[S5-T3] 업화로(구역별 좌표·넣은 광석·남은 제련 분·주괴·등급)
 		"geode_opened": _geode_opened,       # ★[S5-T3] 누적 지오드 개봉 수(개봉 롤 시드 — 재롤 차단)
+		# ★[폴리시 R5] 나머지 **일련번호 시드 4종**도 같은 이유로 실린다. 이들은 세이브에도 없고
+		#   `_load_game`이 리셋하지도 않아 F9 인플레이스 로드에서 홀로 살아남았다 — 시계·혼력·
+		#   인벤이 전부 되감기는데 시드만 +1로 남으니, 같은 칸·같은 분의 캐스팅이 매번 다른 어종·
+		#   다른 등급·다른 인양물을 냈다(전설·이리듐이 나올 때까지 공짜 재시도). geode_opened가
+		#   이미 홀로 지키던 계약을 형제 넷에도 세운다.
+		"cast_serial": _cast_serial,         # 캐스팅 시드 축(어종·품질·인양·Books/반딧넋이 여기서 갈린다)
+		"cheki_serial": _cheki_serial,       # 체키 변주 시드 축
+		"cocktail_serial": _cocktail_serial, # 칵테일 변주 시드 축
+		"combat_swings": _combat_swings,     # 타격 롤 시드 축(데미지·치명)
 		"panning": panning.to_save(),       # ★[S10-T1] 오늘의 사금 스폿(구역별 좌표 — 매일 새로 깔리는 델타)
 		"crystalarium": crystalarium.to_save(),   # ★[S10-T1] 결정기(구역별 좌표·든 보석·남은 일수)
 		"fireflies": fireflies.to_save(),   # ★[S10-T7] 반딧넋(안치한 id → day + 마일스톤 지급 기록. 게이트는 파생이라 저장 안 함)
@@ -11382,6 +11394,12 @@ func _load_game() -> void:
 	_furnace_abs_min = -1.0       # ★[S5-T3] 분 기준점 리셋 — 로드 직후 첫 프레임을 새 기준으로 잡는다
 	                              #   (안 하면 세이브된 day와 현재 day의 차가 통째로 제련 진행으로 샌다)
 	_geode_opened = maxi(int(data.get("geode_opened", 0)), 0)   # ★[S5-T3] 개봉 카운터(구세이브 = 0)
+	# ★[폴리시 R5] 일련번호 시드 4종 복원(구세이브 = 0 — 롤이 갈릴 뿐 진행과 모순 없다).
+	#   이 네 줄이 곧 "로드해도 같은 답"의 구현이다(선언부 주석 참조).
+	_cast_serial = maxi(int(data.get("cast_serial", 0)), 0)
+	_cheki_serial = maxi(int(data.get("cheki_serial", 0)), 0)
+	_cocktail_serial = maxi(int(data.get("cocktail_serial", 0)), 0)
+	_combat_swings = maxi(int(data.get("combat_swings", 0)), 0)
 	if data.has("panning"):       # ★[S10-T1] — 키 없는 구세이브는 스폿 0(다음 취침이 그날 판을 깐다·무막힘)
 		panning.load_save(data["panning"])
 	if data.has("crystalarium"):  # ★[S10-T1] — 키 없는 구세이브는 결정기 0(빈 원장·하위호환)
@@ -11908,6 +11926,22 @@ func forage_quality_floor() -> int:
 func forage_double_drop_chance() -> float:
 	return ForageSkill.double_drop_chance(
 		_perk_value(ProfessionCatalog.FORAGING, ProfessionCatalog.DIM_DOUBLE_DROP, 0.0))
+
+# ★[폴리시 R5] 채집 더블드랍 판정 — **day·구역·칸 결정 시드**(창구 셋의 단일 창구).
+# 종전엔 세 갈래(`_pick_flower`·`_harvest_wild`·`_pick_forage`)가 각자 `randf()`를 불렀는데, 전역
+# 스트림은 세이브에 안 실리고 로드가 되감지도 않아 **[F] → F9 → 다시 [F]**를 2가 나올 때까지
+# 반복하면 채집꾼 퍼크 확률이 100%가 됐다. 같은 함수 옆의 혼합 씨앗 롤(`_roll_mixed_seed_drop`)이
+# 이미 이 규율로 결정화돼 있어, 한 파일 안에서 두 롤의 규율이 갈려 있던 자리다.
+#   ★ `src`로 창구를 가른다 — 셋은 서로 다른 원장이라 같은 칸을 물 수 있고(꽃 패치 ↔ 야생 작물),
+#     한 시드를 공유하면 한쪽 결과가 다른 쪽을 미리 알려 주는 꼴이 된다.
+func _forage_double_drop(src: String, tile: Vector2i) -> bool:
+	var chance := forage_double_drop_chance()
+	if chance <= 0.0:
+		return false                      # 퍼크 없음 = 롤 자체가 없다(종전 거동 보존)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("foragedouble:%s:%d:%s:%d:%d"
+		% [src, clock.day if clock != null else 0, _region, tile.x, tile.y])
+	return rng.randf() < chance
 
 # ── ★[S4-T2 / ADR-0062 결정 8] 채집 퍼크 조회 3종 — 표적(벌목·수액)이 아직 없어 **지금은 아무도 안
 #   부른다**(실배선은 S4-T3 벌목 · S4-T6 수액 소관). FishSkill의 덫꾼 갈래 3종 선례와 정확히 같은
@@ -15478,7 +15512,12 @@ func _try_harvest() -> bool:
 	if CropCatalog.is_wild(harvested_crop):
 		_harvest_wild(harvested_crop)
 		return true
-	var quality := field.roll_quality(_target)   # ★ [S1-6 §8.5] 칸을 비우기 전에 품질 확보(비료→등급 roll)
+	# ★[폴리시 R5] 이 수확 사건의 이름 = day·구역·칸. 품질 롤과 다수확 롤이 **둘 다** 여기서 갈린다
+	#   (앞서는 전역 RNG라 세이브에 안 실리고 로드가 되감지도 않아, 저장→수확→F9를 반복하면 등급과
+	#   개수를 둘 다 상한까지 재롤할 수 있었다 — 같은 파일의 혼합 씨앗 롤이 이미 쓰는 그 규율이다).
+	#   ★ 같은 칸을 같은 날 두 번 거둘 수는 없다: SINGLE은 칸이 비고 REGROW는 되감긴 날수만큼 기다린다.
+	var harvest_tag := "%d:%s:%d:%d" % [clock.day, _region, _target.x, _target.y]
+	var quality := field.roll_quality(_target, harvest_tag)   # ★ [S1-6 §8.5] 칸을 비우기 전에 품질 확보(비료→등급 roll)
 	# ★[폴리시 R2] **적재 자리부터 본다** — `harvest`는 칸을 비우거나(SINGLE) 자란 날수를 되감으므로
 	#   (REGROW) 백팩이 가득하면 그 수확이 되찾을 곳 없이 사라졌는데, 화면엔 "+N" 토스트가 떠서
 	#   거짓말을 했다(add_harvest가 void였던 탓에 호출부는 실패를 알 수조차 없었다).
@@ -15490,7 +15529,9 @@ func _try_harvest() -> bool:
 	#   기본형(1~1)은 1개 그대로. 점수판(_run_harvested)·사연은 수확 액션당 1(영혼 1 = 사연 1)로 둔다.
 	#   ★ [S1-6 §8.5] 품질 격리: 주 수확분(첫 1개)만 roll 등급, 다수확 추가분은 Q0 강제.
 	var yr := CropCatalog.yield_range(harvested_crop)
-	var count := randi_range(yr.x, yr.y)
+	var yrng := RandomNumberGenerator.new()
+	yrng.seed = hash("harvestyield:%s" % harvest_tag)   # ★[폴리시 R5] 위 harvest_tag와 같은 사건·다른 축
+	var count := yrng.randi_range(yr.x, yr.y)
 	# ★[S7-T4 / ADR-0065 결정 5 ⑥] 명부의 운 — **다수확 작물의 상·하단 바이어스**(계수 ×0.5).
 	#   ★최소 침습을 택한 근거: 이 지점의 기존 롤은 순수 min~max 균등이라 "확률"이라 부를 값이
 	#     아예 없다(가산할 자리가 없다). 그래서 균등 롤은 한 톨도 안 건드린 채, 그 *결과*를 운만큼의
@@ -15498,10 +15539,13 @@ func _try_harvest() -> bool:
 	#     범위 안에서만 움직이므로 yield_range를 넘는 수확은 영원히 안 나온다.
 	#   ★단수확(1~1) 작물은 밀 자리가 없어 통째로 면제 — 운이 밭 전체를 흔들지 않는다(결정 5의
 	#     "작물 성장 제외" 결: 운은 *수확 순간*의 곁다리지 성장 곡선이 아니다).
-	#   ★운 0이면 `randf()`를 아예 안 부른다 = 전역 RNG 소비 0 = 종전 결과열 완전 보존.
+	#   ★[폴리시 R5] 바이어스 롤도 같은 시드 스트림에서 뽑는다 — 종전 주석("운 0이면 randf()를 아예
+	#     안 부른다 = 전역 RNG 소비 0")은 *전역 스트림*을 전제했는데, 그 스트림 자체가 로드로 안
+	#     되감겨 재롤의 통로였다. 시드가 사건에 묶인 지금은 소비 순서가 곧 결정성이라 무조건 뽑아도
+	#     된다(운 0이면 `biased_yield`가 값을 안 움직인다 — 결과 불변).
 	var crop_luck := _luck_bonus(DailyLuck.W_CROP)
 	if yr.y > yr.x and not is_zero_approx(crop_luck):
-		count = DailyLuck.biased_yield(count, yr.x, yr.y, crop_luck, randf())
+		count = DailyLuck.biased_yield(count, yr.x, yr.y, crop_luck, yrng.randf())
 	# ★[폴리시 R2] 다수확 추가분(Q0)은 위 선검사가 못 덮는다 — 주 수확분이 등급 슬롯을 차지한 뒤
 	#   Q0 스택도 빈 칸도 없을 수 있다. 그 경우는 되돌릴 자리가 없으니 **사실대로 알린다**(토스트도
 	#   실제 들어간 수만 띄운다 — 화면이 거짓을 말하지 않는 것이 여기서 지킬 수 있는 전부다).
@@ -15584,7 +15628,7 @@ func _pick_flower(tile: Vector2i) -> void:
 	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 채집물은 밭 다수확과 달리
 	#   품질 격리 없음: 한 포기에서 두 송이라 등급 동일). ADR-0052 DIM_DOUBLE_DROP.
 	var count := 1
-	if randf() < forage_double_drop_chance():
+	if _forage_double_drop("flower", tile):   # ★[폴리시 R5] day·칸 결정 시드(전역 randf 재롤 차단)
 		count = 2
 	inventory.add_item(ItemCatalog.SPIRIT_FLOWER, count, quality)
 	_toast_item(ItemCatalog.SPIRIT_FLOWER, count)   # ★ Phase C 획득 토스트
@@ -15712,7 +15756,7 @@ func _harvest_wild(crop: String) -> void:
 		return
 	_field_at(_target).harvest(_target)   # SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다)
 	var count := 1
-	if randf() < forage_double_drop_chance():
+	if _forage_double_drop("wild", _target):   # ★[폴리시 R5] day·칸 결정 시드(전역 randf 재롤 차단)
 		count = 2
 	inventory.add_item(species, count, quality)
 	_forage_found[species] = true   # 재배 수확도 발견(밭에서 길러도 채집 — 씨앗 사슬이 자가 확장)
@@ -15742,7 +15786,7 @@ func _pick_forage(tile: Vector2i) -> bool:
 	forage_spawns.pick(_region, tile)   # 자리를 확인한 뒤에 집는다(스폰 칸 소멸 = 되돌릴 수 없는 사건)
 	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 한 자리에서 두 개).
 	var count := 1
-	if randf() < forage_double_drop_chance():
+	if _forage_double_drop("pick", tile):   # ★[폴리시 R5] day·칸 결정 시드(전역 randf 재롤 차단)
 		count = 2
 	inventory.add_item(species, count, quality)
 	_forage_found[species] = true   # ★[S4-T5] 종 발견 기록 — 희소종 씨앗 레시피 해금 게이트(ADR-0033 #4)

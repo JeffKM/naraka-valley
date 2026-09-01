@@ -97,5 +97,19 @@ static func tier_for_roll(state: String, roll: int) -> int:
 	return 3   # 행합<100 잔여는 최고 등급으로 흡수(경계 안전)
 
 # state에 대한 품질 등급 난수(0..3). = tier_for_roll(state, 0..99 균등).
+# ★ 전역 RNG 래퍼 — **분포 표본용**이다(확률행이 실제로 그 비율을 내는가를 재는 하네스). 게임
+#   진행에 실리는 롤은 아래 seeded 쪽을 써야 한다(전역 스트림은 세이브에 안 실린다 — 그 사유는
+#   `roll_quality_seeded` 머리말).
 static func roll_quality(state: String) -> int:
 	return tier_for_roll(state, randi() % 100)
+
+# ★[폴리시 R5] 시드 결정 품질 롤 — 같은 tag면 언제 몇 번을 물어도 같은 등급이다.
+# 전역 `randi()`는 세이브에 실리지도, `_load_game`이 되감지도 않아 **F9 한 번마다 같은 칸의 등급이
+# 다시 굴렀다**(고급 비료 밭 앞에서 저장·수확·로드를 반복하면 전 작물을 이리듐 = 판매가 ×2로 확정
+# 수확할 수 있었다). 이 저장소는 같은 위험을 다른 곳에선 이미 막아 두었다 — 지오드 개봉은 누적
+# 개봉 수를 세이브에 실어 재롤을 차단하고(`geode_opened`), 갱도·나락·게잡이통·나무 원장·카페는
+# 전부 `rng.seed = hash("<ns>:<day>:<좌표>")`로 결정화돼 있다. 품질 롤만 그 규율 밖에 남아 있었다.
+static func roll_quality_seeded(state: String, tag: String) -> int:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("fertq:%s:%s" % [state, tag])
+	return tier_for_roll(state, int(rng.randi() % 100))

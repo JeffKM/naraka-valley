@@ -69,11 +69,19 @@ func _initialize() -> void:
 	# roll_quality 유효 범위(DELUXE·무비료 300표본).
 	farm.fertilize(t, ItemCatalog.FERT_DELUXE)
 	var q_ok := true
-	for _i in 300:
-		var q := farm.roll_quality(t)
+	for i in 300:
+		# ★[폴리시 R5] 시드가 곧 사건 이름이라 표본마다 갈아 준다(같은 tag는 같은 등급 — 그게 계약이다).
+		var q := farm.roll_quality(t, "sample:%d" % i)
 		if q < 0 or q > 3:
 			q_ok = false
 	_check("⑧ roll_quality(DELUXE) 항상 0..3", q_ok)
+	# ★[폴리시 R5] 같은 tag = 같은 답(F9 재롤 차단의 계약). 다른 tag는 실제로 갈린다(상수 반환이 아니다).
+	var same_tag := farm.roll_quality(t, "fixed") == farm.roll_quality(t, "fixed")
+	var tag_varies := false
+	for i in 64:
+		if farm.roll_quality(t, "vary:%d" % i) != farm.roll_quality(t, "vary:0"):
+			tag_varies = true
+	_check("⑧ 같은 tag는 같은 등급 · 다른 tag는 갈린다(결정적이되 상수가 아니다)", same_tag and tag_varies)
 	# 성장촉진 비료 칸은 품질 NONE 상태(품질과 별 축) — roll이 NONE 확률행을 먹는다.
 	var tsp := Vector2i(5, 3)
 	farm.hoe(tsp)
