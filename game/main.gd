@@ -7266,6 +7266,13 @@ func _scatter_footprint(tex: Texture2D, anchor: Vector2i) -> Array:
 	return out
 
 # 고정 인프라 rect(건물·연못·우물·패치·물가존) 위엔 절차 프롭 금지(존이 이미 비껴가나 belt-and-suspenders).
+# ★[폴리시 R5] FORAGE_SCAN_RECT 합류 — 늘봄방 예정지와 **같은 사유**(첫날부터 맨 GROUND라 지면
+#   검사가 안 걸러 낸다)인데 목록에서 빠져 있었고, 이쪽은 belt-and-suspenders가 아니라 실제로
+#   터져 있었다: 능선 생성기(`_gen_ridge_line`)가 x18/19를 훑게 되면서 앵커 (18,22)에 2×4칸
+#   혼의 나무가 서서 사료풀 밭 18칸 중 네 칸((18,22)·(18,23)·(19,22)·(19,23))을 수관 밑에 깔았다.
+#   `_seed_forage_tiles`는 지형만 보므로 그 네 칸도 그대로 시드되는데, 발치 바가 마지막 한 행뿐이라
+#   통행은 되고 스프라이트만 안 보인다 — "낫질은 되는데 자란 건지 벤 건지 안 보이는" 칸이 된다.
+#   게다가 절차 스캐터 앵커는 TreeLedger 슬롯이 아니라 벌목으로 치울 수도 없어 **영구**였다.
 # ★[폴리시 R4] GREENHOUSE_EXT_RECT 합류. 목록의 다른 rect는 첫날부터 WALL이라 지면 검사만으로도
 #   비껴가지만, 늘봄방 예정지만은 **완공 전까지 맨 GROUND**라 이 목록이 유일한 방어선이다(손저작
 #   프롭 2점이 실제로 그 안에 서 있었다 — 위 로스터 주석). 지금 좌표로는 스캐터가 그 안에 한 점도
@@ -7273,7 +7280,7 @@ func _scatter_footprint(tex: Texture2D, anchor: Vector2i) -> Array:
 func _scatter_forbidden(t: Vector2i) -> bool:
 	for r in [HOUSE_EXT_RECT, STOREHOUSE_EXT_RECT, NEOKURITGAN_EXT_RECT, NEOKDUNGURI_EXT_RECT,
 			SILO_EXT_RECT, WELL_RECT, STARTER_PATCH_RECT, SPIRIT_POND_RECT, POND_ACTIVITY_RECT,
-			GREENHOUSE_EXT_RECT]:
+			GREENHOUSE_EXT_RECT, FORAGE_SCAN_RECT]:
 		if r.has_point(t):
 			return true
 	return false
