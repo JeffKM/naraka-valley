@@ -13694,8 +13694,9 @@ func _process(delta: float) -> void:
 			else:
 				interact_prompt.text = "의뢰 진행 %d/%d — %s" % [have, need, QuestBoard.summary(q)]
 		else:
-			var daily := quest_board.offer(clock.day, QuestBoard.KIND_DAILY)
-			var weekly := quest_board.offer(clock.day, QuestBoard.KIND_WEEKLY)
+			var rod_cap := _best_rod_class()   # ★[폴리시 R6] 못 잡는 체급은 애초에 안 걸린다
+			var daily := quest_board.offer(clock.day, QuestBoard.KIND_DAILY, rod_cap)
+			var weekly := quest_board.offer(clock.day, QuestBoard.KIND_WEEKLY, rod_cap)
 			var board_text := ""
 			if not daily.is_empty():
 				board_text = "[F] 일일 — %s" % QuestBoard.summary(daily)
@@ -14229,6 +14230,18 @@ func _has_any_rod() -> bool:
 		if inventory.has_item(rod_id):
 			return true
 	return false
+
+# ★[폴리시 R6] **가진 낚싯대 중 가장 센 줄이 감당하는 체급**(-1 = 낚싯대 없음). 게시판 물고기 의뢰
+#   출제 풀의 상한으로 주입한다 — 낚싯대의 max_class는 확정 끊김이라(FishingSession) 초과 어종은
+#   기한 안에 절대 못 잡는다. "든 것"이 아니라 "가진 것"을 보는 이유는 `_has_any_rod`와 같다:
+#   핫바에 무엇을 들었는지는 이틀 기한과 무관하고, 플레이어는 언제든 바꿔 든다.
+#   ★ 상자에 넣어 둔 낚싯대도 가진 것이다(`_stored_anywhere` — 보유 판정의 단일 술어).
+func _best_rod_class() -> int:
+	var best := -1
+	for rod_id in GearCatalog.RODS:
+		if _stored_anywhere(String(rod_id)):
+			best = maxi(best, GearCatalog.max_class_of(String(rod_id)))
+	return best
 
 # ★[S3-T5] 낚시터 물가를 겨눴는데 낚싯대가 아예 없는 상태인가(= 뱃사공 안내를 띄울 때).
 #   ADR-0061 결정 4가 T1을 뱃사공 증정으로 옮기면서 생긴 "삼도천 강 낚시터 선도달" 동선의 안전망이다.
@@ -17475,7 +17488,7 @@ func _draw_quest_board() -> void:
 	if quest_board.is_active():
 		_draw_pinned_note(base + Vector2(8, 8), true)
 	else:
-		var n := quest_board.offers(clock.day).size()
+		var n := quest_board.offers(clock.day, _best_rod_class()).size()
 		for i in n:
 			_draw_pinned_note(base + Vector2(6 + i * 11, 8), false)
 
@@ -17501,7 +17514,7 @@ func _try_accept_quest(kind: String) -> void:
 	if quest_board.is_active():
 		_notice("이미 맡은 의뢰가 있다 — %s" % QuestBoard.summary(quest_board.active))
 		return
-	var q := quest_board.offer(clock.day, kind)
+	var q := quest_board.offer(clock.day, kind, _best_rod_class())
 	if q.is_empty():
 		_notice("%s 의뢰는 지금 걸린 게 없다" % kind_ko)
 		return
