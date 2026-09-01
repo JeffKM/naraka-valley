@@ -3050,6 +3050,11 @@ var _confess_rid := ""
 # 비교 한 번(마지막 주 ≠ 오늘의 주)으로 리셋이 공짜다(주는 상태가 아니라 day 파생 — clock.gd).
 # 세이브 가법 키("season_q_week") — 구세이브(키 없음) = 빈 원장 = 다음 주 첫날에 처음 묻는다.
 var _season_q_week: Dictionary = {}
+# ★[폴리시 R8] **이 대화에서 물음이 서 있고 아직 안 골라진 상대 rid**("" = 없음). 원장은 물음을
+# *건 순간* 찍히는데, 같은 대화의 고백 [F]가 `replace_lines`로 대사를 통째로 갈면 선택지 예약이
+# 함께 사라져(dialogue `_clear_choice`) 물음은 화면에 뜨지도 못한 채 그 주가 통째로 닫혔다.
+# 이 값이 그 되감기의 유일한 근거다(대화·선택과 같은 일시 상태라 세이브 대상 아님).
+var _season_q_posed_rid := ""
 # ── ★[S9-T2 / ADR-0067 결정 2] 컷신(연출 등급 2) 재생 상태 ────────────────────
 # 재생 중인 러너(null = 재생 없음). ★**세이브 키 0**: 컷신은 대화보다 더 짧은 일시 상태다
 # (_talking_to·_confess_rid와 같은 결). 특히 "시계 정지"가 세이브에 남으면 로드한 세이브의
@@ -20724,6 +20729,14 @@ func _romance_offer_available(r: Resident) -> bool:
 # 되지만 이벤트 대사는 다시 틀지 않는다. replace_lines가 빈 배열이면 대화를 닫는다).
 func _resolve_confession(rid: String) -> void:
 	_confess_rid = ""
+	# ★[폴리시 R8] 이 [F]는 아래 두 갈래 모두 `replace_lines`로 대사를 통째로 간다 = 마지막 줄에
+	#   걸어 둔 절기 물음의 선택지 예약이 함께 버려진다(dialogue `_clear_choice`). 그런데 원장은
+	#   물음을 *건 순간* 이미 이번 주로 찍혀 있어, 화면에 뜨지도 못한 물음이 그 주 남은 날을 전부
+	#   막았다(R7 #8이 되살린 바로 그 채널이 새 경로로 한 주씩 소실). **버릴 물음은 원장에서도
+	#   되감는다** — 다음 대화에 다시 선다(고를 기회를 안 준 것을 "물었다"로 세지 않는다).
+	if _season_q_posed_rid != "":
+		_season_q_week.erase(_season_q_posed_rid)
+		_season_q_posed_rid = ""
 	var r := _resident(rid)
 	if r == null or r.affinity == null:
 		return
@@ -21153,6 +21166,7 @@ func _start_resident_dialogue(r: Resident) -> void:
 	#   대화에 겹치지 않는다. 다음 대화에 제안이 선다). 제안은 상태 변화가 아니라 *입력 창구*라
 	#   결행([F])은 _process의 대화 입력 분기가 받는다(_resolve_confession).
 	_confess_rid = ""
+	_season_q_posed_rid = ""     # ★[폴리시 R8] 새 대화 = 아직 선 물음 없음(옛 대화의 값이 안 샌다)
 	if gate_lines.is_empty() and _romance_offer_available(r):
 		_confess_rid = r.id
 		var with_offer := PackedStringArray([CONFESS_OFFER_LINE])
@@ -21255,10 +21269,12 @@ func _pose_season_question(r: Resident, q: Dictionary) -> void:
 	var replies := PackedStringArray(q.get("replies", PackedStringArray()))
 	var posed := dialogue.queue_choice(PackedStringArray(q.get("options", PackedStringArray())),
 		func(idx: int) -> void:
+			_season_q_posed_rid = ""    # 골랐다 = 물음이 실제로 소비됐다(되감을 것이 없다)
 			if idx >= 0 and idx < replies.size():
 				dialogue.replace_lines(PackedStringArray([replies[idx]])))
 	if posed:
 		_season_q_week[r.id] = GameClock.week_of(clock.day)
+		_season_q_posed_rid = r.id      # ★[폴리시 R8] 아직 안 골라진 물음 — 대사가 갈리면 되감는다
 
 # ── ★[S9-T2 / ADR-0067 결정 2] 컷신(연출 등급 2) 배선 ────────────────────────
 # 러너(cutscene.gd)는 순수 스텝 머신이라 화면을 모른다 — 여기가 그 상태를 읽어 페이드·카메라·
