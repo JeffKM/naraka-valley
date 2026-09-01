@@ -11828,6 +11828,12 @@ func _load_game() -> bool:
 	#   아니다). 예정일이 이미 지난 세이브를 불러도 **다음 아침 훅**이 다시 예약하므로 유실 0이다.
 	_soul_birth_armed = false
 	_pet_event_armed = false
+	# ★[폴리시 R7] 이혼 2타 확인 래치도 같은 이유로 반드시 0에서 시작한다 — 세션 로컬 래치인데
+	#   이 줄이 없으면 **로드가 경고 단계를 통째로 건너뛴다**: 옥자를 마주 본 채 [F] 1타(경고) →
+	#   F9 로드(`_restore_location`이 같은 칸으로 되돌리므로 여전히 마주 봄) → 로드 후 첫 [F]가
+	#   곧장 결행(50,000냥·♡0 리셋·불가역)이었다. 시선을 떼면 접히는 `_process` 훅은 F9 분기보다
+	#   뒷줄이라 그 프레임을 못 막는다.
+	_divorce_armed = false
 	_spine_say.clear()
 	_illust_id = ""
 	_illust_a = 0.0
