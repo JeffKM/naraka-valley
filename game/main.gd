@@ -13169,22 +13169,34 @@ func _process(delta: float) -> void:
 		_tick_fishing(delta)
 	elif not _sleeping and _can_cast() and Input.is_action_just_pressed("use_tool"):
 		_start_fishing(_cast_water_tile(_target))
+	# ★[폴리시 R7] **칸을 안 보는 손 물건(명부환·곁들이·계단)은 아래 타일 술어 갈래들이 건드리지
+	#   않는다.** 이 넷(짐승·debris·잡초·사료풀)은 `if`(elif 아님)에 return도 없고, 맨 아래 일반
+	#   갈래가 `holding_free_use`를 or-항으로 들고 있어 **어차피 한 번 더 돈다** — 그래서 개간
+	#   대상이나 짐승을 겨눈 채 곁들이를 들고 LMB를 한 번 누르면 `_use_tool()`이 두 번 실행돼
+	#   `_eat_side_dish`가 접시를 2개 태웠다(명부환도 동일). 두 동사의 유일한 거절 조건이 "이미
+	#   가득"뿐이라 1회차 뒤에도 잔량 < MAX면 2회차가 그대로 통과한다.
+	#   ★같은 사유의 프레임 가드를 `_swing_weapon`이 이미 들고 있으나(6324~ 주석), 헤드리스 회귀가
+	#     `_use_tool()`을 같은 프레임에 연달아 부르는 경로(side_dish_test ⓔc/ⓔe·guild_test ⓔe/ⓔf)라
+	#     같은 처방을 여기 세 동사에 쓸 수 없다. 대신 **디스패치에서 겹침 자체를 없앤다** — 이 넷은
+	#     타일 동사의 갈래이고, 손 물건을 들었을 땐 `_use_tool`이 타일 동사에 닿지도 않으므로
+	#     (맨 앞에서 갈라져 return) 여기서 거르는 것이 의미 손실 0이다.
+	var free_use_hand := _is_free_use_item(inventory.selected_id())
 	# ★ [S1-7→B1-a.1] 짐승 상호작용 — 짐승은 실내 바닥(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치한다.
 	#   LMB=건초 급여(_use_tool 내 hay 분기)·RMB=쓰다듬/산물 수집(_try_harvest 내 짐승 분기). 건물 실내에서 이뤄진다.
-	var on_animal := not _sleeping and _region == RegionCatalog.HOME and ranch.has_animal(_target)
-	if on_animal and Input.is_action_just_pressed("use_tool"):
+	var on_animal := not _sleeping and _region == RegionCatalog.HOME and ranch.has_animal_at(_target)
+	if on_animal and not free_use_hand and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	if on_animal and Input.is_action_just_pressed("action"):
 		_try_harvest()
 	# ★ [S1-8 §10.1] 개간 — debris는 GROUND(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치한다.
 	#   LMB(맞는 도구 든 채)=개간(_use_tool 내 개간 분기). 도구·debris 매칭은 그 안에서 판정(틀린 도구=무동작).
 	var on_debris := not _sleeping and _debris_kind_at(_target) != ""
-	if on_debris and Input.is_action_just_pressed("use_tool"):
+	if on_debris and not free_use_hand and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ [ADR-0055] 재점령 잡초 낫질 — 잡초는 GROUND(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치.
 	#   LMB(낫 든 채)=베기(_use_tool 내 개간 분기 → clear_weed). 낫 아니면 그 안에서 무동작.
 	var on_weed := not _sleeping and _region == RegionCatalog.HOME and reclaim != null and reclaim.has_weed(_target)
-	if on_weed and Input.is_action_just_pressed("use_tool"):
+	if on_weed and not free_use_hand and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	# ★ [B1-a.3] 낫 풀베기 — 사료풀은 GROUND(비-SOIL·비-짐승) 위라 _target_valid 게이트 밖에서 따로 디스패치.
 	#   LMB(낫 든 채)=베기(_use_tool 내 사료풀 분기 → 여물광 +1). 낫 아니거나 안 자란 풀이면 그 안에서 무동작.
@@ -13916,9 +13928,19 @@ func _process(delta: float) -> void:
 		# ★[S4-T8] 이끼 낀 성숙목을 바라볼 때: 낫을 들었으면 [좌클릭] 채취, 아니면 낫 안내.
 		#   **채취기 프롬프트 뒤·벌목 프롬프트 앞**이다 — 고인 수액은 시한이 있는 일이라 먼저 알려야 하고
 		#   (그 칸은 어차피 벌목이 막혀 있다), 이끼는 벌목보다 지금 할 수 있는 가벼운 일이라 먼저다.
+		# ★[폴리시 R7] 이끼 채취도 **과금 동사**다(`_scrape_moss`가 `COST_PER_ACTION`을 쓴다) —
+		#   혼력이 모자라면 그 함수는 알림 없이 그냥 돌아간다. 바로 다음 elif인 벌목(_tree_prompt)은
+		#   **같은 고정 비용**에 이미 "혼력 부족" 안내를 세워 뒀으므로, 안내를 안 걸면 같은 나무
+		#   앞에서 도끼를 들면 "혼력 부족"이 뜨고 낫을 들면 "채취 가능"이 뜨는 모순이 남는다.
+		#   ★안내를 갈아 끼우는 것은 **낫을 들었을 때뿐**이다 — 안 들었을 때의 줄은 동사 약속이
+		#     아니라 "무엇이 필요한가"의 안내라 혼력과 무관하다(`_debris_prompt`가 세운 그 표).
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = "[좌클릭] 저승 이끼 채취 (낫)" if inventory.selected_id() == ItemCatalog.SCYTHE \
-			else "저승 이끼가 끼었다 — 낫으로 긁어낼 수 있다"
+		if inventory.selected_id() != ItemCatalog.SCYTHE:
+			interact_prompt.text = "저승 이끼가 끼었다 — 낫으로 긁어낼 수 있다"
+		elif not energy.can_act(SoulEnergy.COST_PER_ACTION):
+			interact_prompt.text = "혼력 부족 — 집에서 취침"
+		else:
+			interact_prompt.text = "[좌클릭] 저승 이끼 채취 (낫)"
 	elif tree_ledger != null and _indoor == "" and tree_ledger.is_occupied(_region, _target):
 		# ★[S4-T3] 원장 나무·그루터기를 바라볼 때: 도끼를 들었으면 [좌클릭] 남은 타수, 아니면 도끼 안내.
 		interact_prompt.visible = not _sleeping
@@ -16472,6 +16494,14 @@ func _pot_prompt() -> String:
 	if item == ItemCatalog.GARDEN_POT:
 		return "[좌클릭] 화분 회수"
 	if item == ItemCatalog.WATERING_CAN and garden_pot.is_planted(_target) and not garden_pot.is_watered(_target):
+		# ★[폴리시 R7] 물주기는 **과금 동사**다 — 화분 물주기의 실행 경로도 노지와 같은 `_use_tool`
+		#   물뿌리개 갈래라, 혼력이 `_farming_energy_cost()` 미만이면 상단 `can_act` 게이트에
+		#   **알림 하나 없이** 걸린다. 노지 밭(`_farm_prompt`)은 같은 동사에 이 안내를 이미 세워
+		#   뒀는데(R6이 세운 규율) 화분만 그 표에서 빠져, 화면은 "[좌클릭] 물주기"인데 LMB가
+		#   아무 일도 안 하고 화분이 마른 채 하루가 끝났다.
+		#   ★ 바로 아래 씨앗 심기 갈래는 무과금 동사라 안내가 없는 게 맞다(free_verb — 그대로 둔다).
+		if not energy.can_act(_farming_energy_cost()):
+			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 물주기"
 	if ItemCatalog.category_of(item) == ItemCatalog.CAT_SEED and not garden_pot.is_planted(_target):
 		var pcrop := ItemCatalog.crop_of(item)
