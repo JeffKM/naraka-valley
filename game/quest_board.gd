@@ -115,7 +115,11 @@ static func _is_fish_day(kind: String, seed_n: int) -> bool:
 static func _make_fish(kind: String, seed_n: int, post_day: int, due_day: int) -> Dictionary:
 	# 체급 상한 — 일일 = 중까지(이틀 기한에 대어 요구는 가혹·잠정) / 중기 = 소 한정(다수 납품 무게 조절).
 	var max_class: int = FishCatalog.WC_MEDIUM if kind == KIND_DAILY else FishCatalog.WC_SMALL
-	var pool := FishCatalog.quest_pool(GameClock.season_index_for_day(post_day), max_class)
+	# ★[폴리시 R5] 기한 마지막 날의 절기까지 넘긴다 — 절기 마지막 날에 게시된 일일 의뢰의 기한
+	#   이틀째는 다음 절기라, 게시일 절기만 보면 그날 못 잡는 어종을 낼 수 있었다(FishCatalog.
+	#   quest_pool 머리말). 중기 의뢰는 주가 절기 안에 온전히 들어 두 값이 언제나 같다.
+	var pool := FishCatalog.quest_pool(GameClock.season_index_for_day(post_day), max_class,
+		GameClock.season_index_for_day(due_day))
 	if pool.is_empty():
 		return {}
 	var r := _rng("%s_fish:%d" % [kind, seed_n])

@@ -10420,16 +10420,19 @@ func _grange_entries() -> Array:
 # 곳간 앞 [F] — 행사일엔 적재 패널 대신 이 출품이 열린다. 하루 1회.
 # ★ **재고는 한 톨도 안 줄어든다**(전시 — SeasonalEvent 헤더의 근거). 그래서 출품하고 나면 그 재고로
 #   그날 카페 융합 메뉴를 그대로 판다(경연이 카페 공급망을 비우지 않는다).
-func _try_grange_entry() -> void:
+# ★[폴리시 R5] 반환값 = **이 [F]로 출품이 실제로 성립했는가**. false면 호출부가 평소의 적재 패널로
+#   흘려보낸다(위 디스패치 머리말 — 행사일에 곳간이 봉쇄되던 자리). 안내 문구는 그대로 뜬다:
+#   "왜 출품 화면이 아니라 적재 화면인가"를 그 한 줄이 설명한다.
+func _try_grange_entry() -> bool:
 	if seasonal_event == null or clock == null or larder == null:
-		return
+		return false
 	if seasonal_event.grange_entered(clock.day):
 		_notice("오늘 장원제 출품은 이미 마쳤다 — 곳간은 그대로다")
-		return
+		return false
 	var entries := _grange_entries()
 	if entries.is_empty():
 		_notice("출품할 것이 없다 — 곳간에 수확물을 쟁여 두자")
-		return
+		return false
 	var score := SeasonalEvent.score_entries(entries)
 	var rank := SeasonalEvent.grange_rank(score)
 	seasonal_event.record_grange(clock.day, rank)
@@ -10449,6 +10452,7 @@ func _try_grange_entry() -> void:
 	_notice("장원제 출품 %d종 · %d점 — %s%s" % [entries.size(), score,
 		SeasonalEvent.grange_rank_name(rank),
 		"" if gold <= 0 else " (+%d냥)" % gold], FLAVOR_SECS, true)
+	return true
 
 # ── ④ 저승 야시장 ───────────────────────────────────────────────────────────
 # 임시 매대를 마주 보고 있나(행사일 · 나루 마을 야외 · 그 칸). 더비 부스와 같은 판정 문법.
@@ -10609,9 +10613,16 @@ func _try_buy_market_seed(crop_id: String, n: int) -> void:
 # 오늘 아침 보부상 한 줄("" = 안 오는 날). 문자열 조립을 함수로 뽑아 둔 이유는 절기 행사와 같다 —
 # 헤드리스가 알림 큐를 뒤지지 않고 예고를 단언한다(`_seasonal_morning_notices` 규율 계승).
 func _peddler_morning_notice() -> String:
-	if clock == null or not Peddler.is_open_day(clock.day):
+	if clock == null:
 		return ""
-	return "오늘은 저승 보부상이 다리 남단에 봇짐을 폈다 — 재고는 오늘 하루뿐이다"
+	if Peddler.is_open_day(clock.day):
+		return "오늘은 저승 보부상이 다리 남단에 봇짐을 폈다 — 재고는 오늘 하루뿐이다"
+	# ★[폴리시 R5] D-1 예고 — 형제 층 둘(`_seasonal_morning_notices`·`_festival_morning_notices`)이
+	#   전부 day+1 예고를 붙이는데 여기만 당일 통보뿐이라, 좌판의 정체성("오늘 놓치면 이 재고는
+	#   다시 안 온다" — 아래 `_peddler_text` 자구)을 미리 알 방법이 한 곳도 없었다.
+	if Peddler.is_open_day(clock.day + 1):
+		return "내일 저승 보부상이 다리 남단에 선다 — 봇짐은 그날 하루뿐이다"
+	return ""
 
 # 봇짐 좌판을 마주 보고 있나(출현일 · 나루 마을 야외 · 그 칸). 야시장·더비 부스와 같은 판정 문법.
 func _facing_peddler() -> bool:
@@ -12635,10 +12646,14 @@ func _process(delta: float) -> void:
 		# ★[S7-T7 / ADR-0065 결정 9] 곳간 장원제 — 망연 16일엔 같은 칸·같은 키가 **출품 모드**로
 		#   바뀐다(적재 패널 대신). 새 무대·새 UI 0: 행사가 기존 창구의 의미만 하루 갈아 끼운다.
 		#   ★ 이미 출품한 뒤에도 이 분기에 머문다(안내만 뜬다) — 하루에 두 결과를 내는 경연은 없다.
-		if _seasonal_event_today() == SeasonalEvent.GRANGE:
-			_try_grange_entry()
-			return
-		_open_frame(InventoryFrame.CTX_LARDER)
+		# ★[폴리시 R5] 출품이 **실제로 일어난 프레임만** 창구를 가로챈다. 종전엔 행사일이면 무조건
+		#   가로채고 return 해서, 출품을 마친 뒤에도(또 곳간이 비어 출품할 것이 없을 때도) 그날
+		#   하루 종일 적재·회수 패널에 닿을 수 없었다 — 그동안 카페는 시그니처를 팔 때마다
+		#   `larder.consume`으로 재고를 깎는데 보충 경로가 하나뿐이라(CTX_LARDER 프레임), 재고가
+		#   바닥나는 순간부터 그날 남은 시간 내내 융합 메뉴를 못 팔았다. 이는 `_try_grange_entry`
+		#   머리말이 못 박은 설계 의도("경연이 카페 공급망을 비우지 않는다")와 정면으로 어긋난다.
+		if _seasonal_event_today() != SeasonalEvent.GRANGE or not _try_grange_entry():
+			_open_frame(InventoryFrame.CTX_LARDER)
 		return
 	# ★[S7-T7] 더비 교환 부스 [F] — 태그 1개를 보상으로 바꾼다(연타로 여러 개 교환 가능).
 	if _facing_derby_booth() and Input.is_action_just_pressed("shop_toggle"):
@@ -13310,7 +13325,10 @@ func _process(delta: float) -> void:
 		if _seasonal_event_today() == SeasonalEvent.GRANGE:
 			var done: bool = seasonal_event != null and clock != null and seasonal_event.grange_entered(clock.day)
 			if done:
-				interact_prompt.text = "곳간 장원제 — 오늘 출품을 마쳤다"
+				# ★[폴리시 R5] 출품을 마친 뒤엔 같은 키가 평소 적재 창구로 되돌아온다 — 문구도
+				#   그 사실을 말한다(누르면 아무 일도 안 나는 죽은 안내였던 자리).
+				interact_prompt.text = "[우클릭/F] 곳간 (장원제 출품은 마쳤다 · %d/%d)" % [
+					larder.total(), larder.capacity]
 			else:
 				interact_prompt.text = "[F] 곳간 장원제 출품 (재고 %d종 — 차감 없음)" % larder.ids().size()
 		else:
@@ -20584,6 +20602,11 @@ func _start_resident_dialogue(r: Resident) -> void:
 #   · **대화 한 번에 사건 하나** — 관문(진급)·생일이 선 대화에는 물음이 안 붙는다. 그 둘은 이
 #     대화의 사건이고, 물음은 "아무 일 없는 주 첫날"의 텍스처다.
 
+# ★[폴리시 R5] 그 날이 속한 주의 첫날(= dos 1/8/15/22에 해당하는 절대 day). `GameClock.week_of`와
+# 같은 식에서 파생하므로 주 경계 정의가 두 곳으로 갈리지 않는다.
+func _week_first_day(d: int) -> int:
+	return maxi(d, 1) - ((maxi(d, 1) - 1) % GameClock.DAYS_PER_WEEK)
+
 # 오늘 이 사람이 물음을 던지는가. 던지면 그 물음 dict(캐릭터 소유), 아니면 빈 dict.
 # 판정만 하고 원장은 안 건드린다(기록은 실제로 물음이 선 뒤 — _pose_season_question).
 func _pending_season_question(r: Resident, gate_lines: PackedStringArray) -> Dictionary:
@@ -20593,8 +20616,16 @@ func _pending_season_question(r: Resident, gate_lines: PackedStringArray) -> Dic
 		return {}                                   # 관문·의지 시험이 선 대화 = 오늘의 사건이 이미 있다
 	if r.is_birthday_on(clock.day):
 		return {}                                   # 생일 > 물음(우선순위 둘째 칸)
-	if (clock.day - 1) % GameClock.DAYS_PER_WEEK != 0:
-		return {}                                   # 주 첫날에만 묻는다
+	# 주 첫날에만 묻는다.
+	# ★[폴리시 R5] **단, 그 주 첫날이 이 사람 생일이었다면 그 주의 남은 날로 미룬다.** 위 생일
+	#   게이트는 "대화 한 번에 사건 하나"라 물음을 *미루는* 뜻인데, 날짜 게이트가 주 첫날 고정이라
+	#   미룰 다음 날이 그 주에 없었다 — 절기 28일이 정확히 4주라 주 첫날은 늘 dos∈{1,8,15,22}로
+	#   고정이고, 생일이 그 자리에 앉은 주민은 **매년 같은 주의 물음을 통째로 잃었다**(로스터에서
+	#   실제로 그런 주민이 나온다 — polish_r5_test가 술어 교집합으로 그 day를 직접 센다).
+	#   미룬 물음은 같은 주 안에 서므로 아래 주-단위 원장(`_season_q_week`)이 그대로 1회를 지킨다.
+	if (clock.day - 1) % GameClock.DAYS_PER_WEEK != 0 \
+			and not r.is_birthday_on(_week_first_day(clock.day)):
+		return {}
 	var week := GameClock.week_of(clock.day)
 	if int(_season_q_week.get(r.id, -1)) == week:
 		return {}                                   # 이번 주엔 이미 물었다(그날의 첫 대화 1회)
@@ -21936,7 +21967,24 @@ func _mirror_forecast_text() -> String:
 	var ev := _event_upcoming_line()
 	if ev != "":
 		lines.append("◇ " + ev)
+	# ㉥ ★[폴리시 R5] 다가오는 보부상 — 위 두 줄과 **같은 문법의 셋째 형제**다. `Peddler.next_open_day`
+	#    ·`days_until`은 머리말에 "안내 문구·점괘 결의 예고가 쓴다"고 계약이 적힌 채 런타임 호출부가
+	#    한 곳도 없었다(달력 패널에도 마커가 없고 아침 알림엔 D-1이 없어, 좌판을 미리 아는 길이
+	#    아예 없었다). 예고 표면 중 **가장 넓게 읽히는 이 자리**에서 그 계약을 실효화한다.
+	var ped := _peddler_upcoming_line()
+	if ped != "":
+		lines.append("◇ " + ped)
 	return "\n".join(lines)
+
+# 다가오는 보부상 한 줄("오늘"/"내일"/"N일 뒤"). 문자열 조립을 함수로 뽑아 둔 이유는 형제들과 같다 —
+# 헤드리스가 거울 텍스트를 통째로 파싱하지 않고 예고 한 줄을 그대로 단언한다.
+func _peddler_upcoming_line() -> String:
+	if clock == null:
+		return ""
+	var n := Peddler.days_until(clock.day)
+	if n == 0:
+		return "오늘: 저승 보부상 (다리 남단 — 재고는 오늘 하루뿐)"
+	return "%s: 저승 보부상 (다리 남단)" % ("내일" if n == 1 else "%d일 뒤" % n)
 
 # 날씨 한 줄 힌트 — "그 하늘이 나에게 무엇을 하는가"를 말한다(효과 수치가 아니라 행동 지침).
 func _weather_hint(w: int) -> String:
