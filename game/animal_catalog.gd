@@ -48,6 +48,7 @@ const CATALOG := {
 		"product_id": HONBAEK_RAN,
 		"product_name": "노을알",
 		"product_sell": 50,       # 알 = 저단가 데일리(placeholder)
+		"buy_price": 800,         # ★[폴리시 R7] SDV Chicken 800g 1:1(엽전=골드 1:1 — carpenter.gd 머리말)
 		"large_capable": true,
 		"grow_days": 3,           # 소형 = 빠른 성숙(SDV 병아리 결)
 	},
@@ -57,6 +58,7 @@ const CATALOG := {
 		"product_id": HONBAEK_YU,
 		"product_name": "안개젖",
 		"product_sell": 125,      # 젖 = 고단가 데일리(placeholder)
+		"buy_price": 1500,        # ★[폴리시 R7] SDV Cow 1,500g 1:1(엽전=골드 1:1 — carpenter.gd 머리말)
 		"large_capable": true,
 		"grow_days": 5,           # 대형 = 느린 성숙(더 긴 투자)
 	},
@@ -77,6 +79,15 @@ static func name_of(id: String) -> String:
 
 static func kind_of(id: String) -> String:
 	return CATALOG[id]["kind"] if CATALOG.has(id) else ""
+
+# ★[폴리시 R7] 새끼 한 마리 정가(0 = 안 파는 종). 목공방 짐승 매대의 유일한 가격 출처다.
+# 왜 이 값이 여기 사는가: "얼마인가"는 *종의 불변 참조 데이터*이지 매대의 기억이 아니다
+# (product_sell이 여기 사는 것과 같은 이유). 할인(옹이 ♡)은 *가게 정책*이라 소비처가 얹는다.
+# ⚠️ 수치는 **잠정(owner 큐)** — 스타듀 Chicken 800g / Cow 1,500g 1:1 상속이고, 그 환산 근거는
+#    carpenter.gd 머리말이 못 박은 "엽전 = 골드 1:1 스케일"이다(건축비만 따로 환산하면 두 경제가
+#    어긋난다는 그 판단을 짐승 값에도 그대로 적용한다).
+static func buy_price(id: String) -> int:
+	return int(CATALOG[id].get("buy_price", 0)) if CATALOG.has(id) else 0
 
 # 종 id → 산물 아이템 id("" = 없는 종). livestock가 산물 적재 시 쓴다.
 static func product_of(id: String) -> String:

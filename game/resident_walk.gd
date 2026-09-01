@@ -68,6 +68,15 @@ func offset() -> Vector2:
 func is_walking() -> bool:
 	return _walking
 
+# ★[폴리시 R7] 걷기를 **중도 폐기**한다(오프셋 즉시 0 · 남은 경로 버림). 호출부(main
+# `_begin_resident_walk`)가 새 스테이션 전환을 걸어갈 길이 없다고 판단해 그냥 돌아갈 때 쓴다:
+# 그때 옛 걷기를 안 끄면 `offset()`이 **폐기된 옛 목적지 기준**(_pos − 옛 _dest) 값을 계속
+# 내주는데, 논리 위치는 이미 새 칸으로 스냅돼 있어 그림이 논리 칸에서 통째로 떨어진 자리에
+# 그려진다. `start()`가 빈 경로를 받았을 때와 정확히 같은 상태로 되돌린다.
+func cancel() -> void:
+	_walking = false
+	_path = PackedVector2Array()
+
 # 남은 경로 길이(px). 테스트·디버그용.
 func remaining_px() -> float:
 	if not _walking:

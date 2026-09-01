@@ -128,6 +128,17 @@ func remove_plant(t: Vector2i) -> bool:
 	tile_changed.emit(t)
 	return true
 
+# ★[폴리시 R7] 경작 자체를 **되돌린다**(키를 지워 맨 흙으로). `remove_plant`가 흙을 남기는 것과
+#   정반대 방향이라 이름도 반대다 — 쓰는 곳은 "이 칸이 더는 밭이 아니게 된" 이행 경로 하나다
+#   (삽사리 자리 제외가 소급 적용되는 구세이브 정리 — main `_reclaim_pet_tile_farm`). 심긴 칸도
+#   그대로 지우므로 호출부가 먼저 작물을 정산한다. 미경작 칸이면 false(멱등).
+func untill(t: Vector2i) -> bool:
+	if not is_tilled(t):
+		return false
+	_tiles.erase(t)
+	tile_changed.emit(t)
+	return true
+
 # ── S1-6 비료(§8.4) ─────────────────────────────────────────────────────────
 # 경작된 칸(심김/빈칸 무관)에 유효 비료를 뿌린다. 단일 fertilizer 필드라 다른 비료 투입 시 overwrite —
 # XOR가 자연 성립(한 칸에 한 비료). 성공 시 tile_changed·true(비료 소모는 호출 측 main). 미경작·무효 비료면 false.

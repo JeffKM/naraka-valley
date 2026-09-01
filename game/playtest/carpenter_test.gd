@@ -262,7 +262,23 @@ func _run_checks() -> void:
 	# ── ⓕ 매대(가구 세트·원목 소매·♡ 할인) ──
 	print("── ⓕ 매대 ──")
 	var deco_rows: Array = m._woodshop_items()
-	_check("ⓕa 매대 = 판매 가구 세트 2 + 원목 소매 1", deco_rows.size() == 3)
+	# ★[폴리시 R7] 옛 단언은 `size() == 3` 하나였다 — 카운트만 세는 표라 **무엇이 늘었는지**를 못
+	#   말하고, 목공방에 짐승 새끼 행(#19 실효 배선)이 붙는 순간 이유 없이 터졌다. 구성 요소를
+	#   레지스트리에서 파생해 종류별로 명시한다(분모 하드코딩 0).
+	var kind_ct := {}
+	for row0 in deco_rows:
+		var k := String(row0.get("kind", ""))
+		kind_ct[k] = int(kind_ct.get(k, 0)) + 1
+	var want_livestock := 0
+	for raw_sp in AnimalCatalog.ids():
+		if AnimalCatalog.buy_price(String(raw_sp)) > 0:
+			want_livestock += 1
+	_check("ⓕa 매대 구성 = 판매 가구 세트 %d + 원목 소매 1 + 짐승 새끼 %d (실제 %s)"
+			% [HomeDecoCatalog.purchasable_ids().size(), want_livestock, str(kind_ct)],
+		int(kind_ct.get("deco", 0)) == HomeDecoCatalog.purchasable_ids().size()
+		and int(kind_ct.get("wood", 0)) == 1
+		and int(kind_ct.get("livestock", 0)) == want_livestock
+		and deco_rows.size() == HomeDecoCatalog.purchasable_ids().size() + 1 + want_livestock)
 	var starter_listed := false
 	for row in deco_rows:
 		if String(row.get("kind", "")) == "deco" and HomeDecoCatalog.STARTER_SETS.has(String(row["buy_id"])):

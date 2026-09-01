@@ -96,6 +96,11 @@ func _plant_some(m: Node, n: int) -> int:
 			if planted >= n:
 				return planted
 			var t := Vector2i(patch.position.x + dx, patch.position.y + dy)
+			# ★[폴리시 R7] **경작 가능한 칸에만 심는다**(marriage_test의 같은 루프와 짝). 원장을
+			#   직접 부르면 `_is_farmable`을 우회해 패치 안의 예외 칸(미호 자리·삽사리 자리)까지
+			#   심겨, 실제 플레이로는 만들 수 없는 상태가 잡일 계측에 섞인다.
+			if not m._is_farmable(t):
+				continue
 			if m.farm.hoe(t) and m.farm.plant(t, CropCatalog.HONRYEONGCHO):
 				planted += 1
 	return planted
