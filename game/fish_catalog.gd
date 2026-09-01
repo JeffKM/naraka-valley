@@ -129,7 +129,16 @@ const FISH := {
 	DOKKAEBI_MEGI: {
 		"name_ko": "도깨비메기", "habitat": HABITAT_RIVER, "weight_class": WC_MEDIUM,
 		# ★[S7-T3 / ADR-0065 결정 4] 혼우 한정 — "비 오는 날 물가에 나타나는 도깨비"라는 이름 그대로다.
-		"seasons": [1, 3], "phases": [PHASE_EVENING, PHASE_NIGHT], "weather": [WEATHER_RAIN], "price": 96,
+		# ★[폴리시 R8] 절기 태그가 [1, 3]이었는데 **성야절(3)은 구조적으로 도달 불가**였다:
+		#   `Weather.DISTRIBUTION` 성야절 행의 혼우 몫이 0이라(그 몫이 잿눈으로 간다) 그 절기엔
+		#   `is_available`이 영영 false다 = 태그 절반이 죽은 데이터. 그 결과 실효 창이 유화절
+		#   혼우일(10%)의 저녁·밤뿐이라 연 2~3일로 좁아져, ㉠도감 완주가 이 한 종에 병목되고
+		#   ㉡체급이 낮은데도 상위 체급 먹빛장어(seasons [1,2] = 10%+30%)보다 4배 이상 희귀해졌다.
+		#   혼우가 실제로 내리는 절기는 {0, 1, 2}뿐이므로 그 안에서 고른다 — 3을 **0(피안절 25% =
+		#   비가 가장 흔한 절기)** 으로 바꿔, 태그 수도 어종의 성격도 그대로 두고 도달만 연다.
+		#   먹빛장어와 창을 안 겹치게 나눈 것도 같은 판단(둘 다 혼우 한정 강 어종).
+		# ⚠️ 절기 선택은 잠정 — 다른 두 후보(2 = 망연절 30%)도 성립한다(ADR-0065 결정 4 · owner 큐).
+		"seasons": [0, 1], "phases": [PHASE_EVENING, PHASE_NIGHT], "weather": [WEATHER_RAIN], "price": 96,
 		"fight": {"burst_mult": 3.1, "burst_period": 2.3},   # 심술궂은 발버둥(도깨비 결)
 	},
 	ANGAE_SSOGARI: {
