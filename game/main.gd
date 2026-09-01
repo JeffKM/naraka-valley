@@ -10232,16 +10232,6 @@ func _on_day_advanced(day: int) -> void:
 			_notice("잡초가 작물 %d포기를 삼켰다 — 낫으로 잡초를 베어 두자" % eaten_crops.size())
 		if not broken_sprinklers.is_empty():
 			_notice("잡초가 스프링클러 %d개를 부쉈다" % broken_sprinklers.size())
-	# ★ [S1R-T9] 저승 스프링클러 자동 급수 — 성장(advance_day) *전에* 설치된 스프링클러의 십자 인접 칸을
-	#   적신다(혼력 0·물뿌리개 잔량 무관 — T8 축과 독립). 스타듀 문법: 아침에 뿌려 그날 성장할 칸을 미리
-	#   적시고, 바로 아래 advance_day가 젖은 심긴 칸을 자란다("급수 → 성장 판정" 순서 = 하루 사이클 정합).
-	#   까마귀에 쪼여 비워진 칸(위 remove_plant)은 이제 미심김이라 급수해도 성장 없음(무해).
-	# ★[S10-T5] 급수 대상 칸을 **주인 밭으로 라우팅**한다 — 늘봄방 안에 세운 스프링클러가 온실
-	#   경작면을 그대로 적신다(ADR-0069 결정 8 "스프링클러 호환"). 원장·범위·시점은 한 줄도 안 바뀐다.
-	#   ★ 화분은 여기 안 닿는다: `GardenPot`엔 sprinkle에 해당하는 API가 없다(차별 자구 ㉢ = 구조).
-	if sprinkler != null:
-		for st in sprinkler.watered_targets():
-			_field_at(st).sprinkle(st)
 	var h := affinity.hearts()
 	# ★[S7-T3] 잿눈 = 그날 노지 성장 정지(비살상). 세 번째 인자 grow=false면 **마름은 그대로 돌고**
 	#   성장 두 갈래만 꺼진다(field.advance_day 주석 참조 — 호출 스킵이 아니라 가법 인자인 이유).
@@ -10273,13 +10263,28 @@ func _on_day_advanced(day: int) -> void:
 	#   같은 루프에서 말려 버리므로 **혼우일 아침 정산이 끝난 시점엔 밭이 이미 전부 마른 상태**였다.
 	#   그러면 HUD 비 아이콘과 점괘 거울의 "밭이 스스로 젖는다"(`_weather_hint`)를 그대로 믿고 물을
 	#   안 준 플레이어가 그날 성장 하루를 확정으로 잃는다(밭 오버레이도 종일 wet=0을 그렸다).
-	#   스프링클러는 위에 그대로 둔다: 매일 도는 상시 설비라 정상상태에서 순서가 성장 결과를
-	#   안 바꾸지만, 혼우는 **간헐**이라 순서가 곧 그날의 손익이다.
 	# ★ 순서 — 비가 배우자 물주기보다 **앞**이라야 미호가 이미 젖은 칸에 8칸을 낭비하지 않는다
 	#   (`water_dry`가 마른 칸만 고르므로 비 오는 날엔 자연히 0칸 = 도울 일이 없다).
 	if Weather.waters_field(weather):
 		for wt in farm.tilled_tiles():
 			farm.sprinkle(wt)
+	# ★ [S1R-T9] 저승 스프링클러 자동 급수 — 설치된 스프링클러의 십자 인접 칸을 적신다(혼력 0·
+	#   물뿌리개 잔량 무관 — T8 축과 독립).
+	# ★[S10-T5] 급수 대상 칸을 **주인 밭으로 라우팅**한다 — 늘봄방 안에 세운 스프링클러가 온실
+	#   경작면을 그대로 적신다(ADR-0069 결정 8 "스프링클러 호환"). 원장·범위는 한 줄도 안 바뀐다.
+	#   ★ 화분은 여기 안 닿는다: `GardenPot`엔 sprinkle에 해당하는 API가 없다(차별 자구 ㉢ = 구조).
+	# ★[폴리시 R9] **혼우와 나란히 advance_day 뒤로 옮겼다**(R8이 비를 옮긴 그 자리·같은 사유).
+	#   종전엔 성장 판정 *앞*이라 그 칸이 같은 아침에 젖었다가 `field.advance_day`의 마름 패스에
+	#   곧바로 말랐다 — 성장 개수는 같지만(매일 도는 상시 설비라 하루씩 밀릴 뿐) 정산이 끝난
+	#   시점의 상태가 **종일 dry**여서 셋이 어긋났다: ①밭 오버레이가 스프링클러 칸을 종일 마른
+	#   흙으로 그려, 그걸 믿고 손으로 물을 준 플레이어가 칸당 물뿌리개 −1 + 혼력을 헛되이 쓴다
+	#   ②배우자 아침 물주기(`water_dry`)가 마른 칸만 고르므로 스프링클러 칸이 8칸 예산을 잠식
+	#   하는데, 다음 아침 `sprinkle`이 어차피 그 칸을 적셔 성장 결과가 **한 칸도 안 달라진다**
+	#   (알림은 "도왔다 — N칸"이라 말한다) ③혼우가 뒤로 간 뒤로 같은 급수 API를 쓰는 두 창구의
+	#   시점만 갈려 있었다. 뒤로 옮기면 젖은 상태가 하루 종일 남아 화면·형제 창구와 다시 맞는다.
+	if sprinkler != null:
+		for st in sprinkler.watered_targets():
+			_field_at(st).sprinkle(st)
 	# ★[S8-T7 / ADR-0066 결정 9] 배우자 잡일 ①미호 = **아침 미급수 밭 8칸 물주기**. advance_day가
 	#   전 칸을 말린 *직후*라 "오늘 몫"의 손 노동을 대행하는 자리다(어제 성장 판정엔 불개입).
 	#   여우불(성장 가속·위 인자)과 별축 — 여우불은 못 준 칸도 자라게 하고, 이 물은 칸을 실제로
@@ -16150,12 +16155,24 @@ func _try_harvest() -> bool:
 #   없는 축은 빼고 간다. 밭 수확에서 덜어낸 것 셋과 그 이유:
 #     ㉠ 비료 품질 roll → 화분엔 비료 축이 없다. 무비료 등급(Q_NORMAL)이 곧 결과라 상수로 적는다.
 #     ㉡ 다수확 롤·명부의 운 바이어스 → 1×1 컨테이너의 한 포기는 "밭 규모"의 산출이 아니다(최소형).
-#     ㉢ 야생 작물 채집 가로채기 → 야생 씨앗은 밭 축이라 화분에서 기를 일이 없고, 여기서 분기를
-#        복제하면 규칙이 두 곳으로 갈린다(심을 수는 있으나 그때도 그냥 작물로 거둔다).
+#     ㉢ 야생 작물 채집 가로채기 → 분기를 **복제**하지는 않는다. 다만 야생 씨앗도 화분에 심을 수
+#        있으므로(카탈로그 검증만 통과하면 된다) 그 수확은 `_harvest_wild`에 **위임**한다 —
+#        규칙은 한 곳에 남고, 화분이 넘기는 것은 "어느 원장을 비우나"뿐이다(폴리시 R9).
 #   ★ 반대로 **XP·점수판·미호 활동 크레딧·사연은 그대로 준다** — 심고 물 주고 거둔 행위 자체는
 #     같은 노동이라, 여기서 빼면 "화분으로 기르면 아무것도 안 배운다"가 되어 축이 죽는다.
 func _harvest_pot() -> void:
 	var crop := garden_pot.crop_of(_target)
+	# ★[폴리시 R9] 위 ㉢의 이행을 **분기 복제가 아니라 위임**으로 바꿨다. 종전엔 이 갈래가 아예
+	#   없어서(옛 ㉢ "심을 수는 있으나 그때도 그냥 작물로 거둔다") 야생 씨앗을 화분에 심으면
+	#   7일치 손 물주기가 **판매가 0·XP 0의 유령 아이템** 하나로 끝났다 — 야생 작물은 sell_price
+	#   0이 정상이고(crops.gd 머리말 "수확은 wild 분기가 치환") 그 치환이 없으면 값이 남지 않기
+	#   때문이다. 게다가 화분 프롬프트는 그 심기를 적극적으로 권한다(`_pot_prompt`).
+	#   ★ 규칙은 여전히 **한 곳**에 있다(㉢가 경계한 "규칙이 두 곳으로 갈린다"의 회피): 종 롤·
+	#     채집 품질·더블드랍·채집 XP·발견 등재는 전부 `_harvest_wild` 안이고, 여기서 넘기는 건
+	#     "어느 원장을 비우나"뿐이다.
+	if CropCatalog.is_wild(crop):
+		_harvest_wild(crop, true)
+		return
 	# ★[폴리시 R2] 노지와 같은 "적재 자리부터" — `garden_pot.harvest`가 포기를 지우므로 백팩이
 	#   가득하면 그 한 포기가 되찾을 곳 없이 사라진다.
 	if crop != "" and not inventory.can_add(ItemCatalog.harvest_id(crop), 1, ItemCatalog.Q_NORMAL):
@@ -16305,7 +16322,10 @@ func _mixed_crop_for(day: int, t: Vector2i) -> String:
 # ★[S4-T5 / ADR-0033 #4] 야생 작물 수확 — 채집 축 가로채기(_try_harvest 분기 전용).
 #   수확물: 절기 모둠형 = 그 작물 절기의 저승 숲 일반종 3종 중 결정 롤 / 희소종 모종 = 단일 종.
 #   품질 = 채집 레벨 ⊔ 약초학자 하한 · 수량 = 채집꾼 더블드롭 · XP = 줍기 고정 7(전부 _pick_forage 동형).
-func _harvest_wild(crop: String) -> void:
+#   ★[폴리시 R9] `from_pot` = 이 포기가 선 원장이 화분인가(기본 false = 노지 밭). 야생 씨앗은
+#     화분에도 심기므로 그 수확이 이 치환을 못 타면 판매가 0의 유령 아이템이 된다 — 규칙을
+#     복제하는 대신 **비울 원장만** 인자로 갈랐다(품질·수량·XP·발견은 한 줄도 안 갈린다).
+func _harvest_wild(crop: String, from_pot: bool = false) -> void:
 	var species := CropCatalog.wild_species(crop)
 	if species == "":
 		var pool := ForageSpawns.species_for(ForageSpawns.KIND_COMMON, CropCatalog.wild_season(crop))
@@ -16323,7 +16343,11 @@ func _harvest_wild(crop: String) -> void:
 	if not inventory.can_add(species, 1, quality):
 		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
 		return
-	_field_at(_target).harvest(_target)   # SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다)
+	# SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다). 화분이면 화분 원장이 빈다.
+	if from_pot:
+		garden_pot.harvest(_target)
+	else:
+		_field_at(_target).harvest(_target)
 	var count := 1
 	if _forage_double_drop("wild", _target):   # ★[폴리시 R5] day·칸 결정 시드(전역 randf 재롤 차단)
 		count = 2
@@ -16593,7 +16617,13 @@ func _farm_prompt() -> String:
 			return "[좌클릭] %s 심기" % CropCatalog.name_of(crop)
 		return "%s 씨앗 없음 — 카페·만물상에서 구매" % CropCatalog.name_of(crop)
 	# ★ [S1-6] 든 게 비료면 경작 칸에 뿌리기 안내(심김/빈칸 무관 — overwrite, §8.4).
+	# ★[폴리시 R9] **칸에 이미 뿌린 비료를 화면이 말한다.** 종전엔 `fertilizer_of`를 참조하는
+	#   곳이 playtest뿐이라(main 0건·오버레이 인덱스는 성장단계×2+젖음뿐) 무엇이 깔렸는지 알
+	#   길이 아예 없었고, 그래서 같은 비료를 두 번 뿌려 한 개를 헛되이 태우기 쉬웠다. 재도포는
+	#   이제 `FarmField.fertilize`가 멱등으로 막으므로, 그 무동작의 **이유**를 여기서 읽힌다.
 	if ItemCatalog.category_of(item) == ItemCatalog.CAT_FERTILIZER and pfield.is_tilled(_target):
+		if pfield.fertilizer_of(_target) == item:
+			return "%s — 이미 뿌려 둔 칸" % ItemCatalog.name_of(item)
 		return "[좌클릭] %s 뿌리기" % ItemCatalog.name_of(item)
 	return ""
 
