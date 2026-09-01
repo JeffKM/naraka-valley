@@ -102,6 +102,17 @@ func store(id: String, n: int = 1, quality: int = 0) -> int:
 	changed.emit()
 	return n
 
+# ★[폴리시 R6] 이 물건을 n개 받을 수 있는가 — **상태는 한 톨도 안 건드리고** 묻는다(store와 같은
+#   판정을 그대로 복창한다). 되돌릴 수 없는 걷기를 하기 *전에* 둘 자리를 확인해야 하는 회수 사다리
+#   (main._reclaim_can_store)가 쓴다. Inventory.can_add의 상자판이라 두 그릇의 질문이 같아진다.
+func can_store(id: String, n: int = 1, quality: int = 0) -> bool:
+	if n <= 0 or not ItemCatalog.has_item(id):
+		return false
+	if not ItemCatalog.stackable_of(id):
+		return _first_empty() >= 0
+	var q := clampi(quality, 0, 3) if ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST else 0
+	return _find_stack(id, q) >= 0 or _first_empty() >= 0
+
 # 상자 슬롯 index를 통째로 빼내 그 내용을 돌려준다({id,count,quality} 또는 빈 dict). main이 백팩에
 # 넣고, 실제로 들어간 만큼만 되돌린다(백팩 가득 부분 이동 = remove_at으로 정확히 차감).
 func peek(index: int) -> Dictionary:

@@ -4416,6 +4416,12 @@ func _is_tree_seed_free(region: String, t: Vector2i, occ: Dictionary) -> bool:
 		return false
 	if farm != null and (farm.is_tilled(t) or farm.is_planted(t)):
 		return false
+	# ★[폴리시 R6] 늘봄방 예정지는 **자체 파종에도** 예약 부지다. R5는 `_is_tree_blocked`(=심은
+	#   혼의 나무)에만 이 가드를 걸었는데, 마당 자연목은 그 술어를 안 지나고 여기로 온다 —
+	#   그래서 예정지 반경 3칸 안에 성숙목이 있으면 밤새 그 8×7 안에 나무가 돋았고, 완공 아침이
+	#   그것을 벽 밑에 묻었다(겨눌 수 없어 벌목 불가 · HOME 상한만 영구 점유).
+	if _greenhouse_lot_reserved(t):
+		return false
 	if reclaim != null and (reclaim.is_cleared(t) or reclaim.has_weed(t)):
 		return false
 	if sprinkler != null and sprinkler.has_at(t):
@@ -4977,26 +4983,94 @@ func _greenhouse_lot_occupants() -> Array:
 
 # 예정지 안에 심긴 혼의 나무가 있는가(발주 게이트 전용). 나무는 3×3 풋프린트라 앵커가 rect 밖이어도
 # 가지가 걸릴 수 있으므로, 칸마다 그 칸의 주인 나무를 되물어 본다.
+# ★[폴리시 R6] **자연목(TreeLedger)도 함께 본다.** 마당 나무는 두 원장이 나눠 갖는데(심은 혼의
+#   나무 = orchard · 밤새 자체 파종된 저승 나무 = tree_ledger) 이 게이트는 앞의 하나만 봤다 —
+#   예정지에 어린 자연목이 돋아도 발주가 정상 결제됐고, 완공 아침이 그 나무를 벽 밑에 묻었다.
+#   ⚠️ 무대를 `_region`으로 묻지 않고 안식 농원을 명시로 본다(발주는 나루 마을에서 일어난다 —
+#      `_greenhouse_lot_occupants`가 같은 이유로 같은 선택을 한다).
 func _greenhouse_lot_has_tree() -> bool:
-	if orchard == null:
-		return false
 	for y in range(GREENHOUSE_EXT_RECT.position.y, GREENHOUSE_EXT_RECT.end.y):
 		for x in range(GREENHOUSE_EXT_RECT.position.x, GREENHOUSE_EXT_RECT.end.x):
-			if orchard.has_tree(orchard.tree_at(Vector2i(x, y))):
+			var t := Vector2i(x, y)
+			if orchard != null and orchard.has_tree(orchard.tree_at(t)):
+				return true
+			if tree_ledger != null and tree_ledger.is_occupied(RegionCatalog.HOME, t):
 				return true
 	return false
+
+# 예정지 안에 서 있는 자연목 칸들(회수 전용 — 완공이 덮기 전에 치울 대상). 혼의 나무는 여기 없다:
+# 그쪽은 발주 게이트(_greenhouse_lot_has_tree)와 배치 가드(_is_tree_blocked)가 이미 막는다.
+func _greenhouse_lot_trees() -> Array:
+	var out: Array = []
+	if tree_ledger == null:
+		return out
+	for y in range(GREENHOUSE_EXT_RECT.position.y, GREENHOUSE_EXT_RECT.end.y):
+		for x in range(GREENHOUSE_EXT_RECT.position.x, GREENHOUSE_EXT_RECT.end.x):
+			var t := Vector2i(x, y)
+			if tree_ledger.is_occupied(RegionCatalog.HOME, t):
+				out.append(t)
+	return out
 
 # 자동 회수분의 반환처 사다리 — 백팩 → 집 상자 → 갈무리방 상자. **플레이어가 부른 동사가 아니므로**
 # 가득 찬 백팩에 억지로 밀어 넣는 대신 보관처로 흘린다(_remove_rarecrow가 "자리를 비우고 다시"로
 # 되돌리는 것과 갈리는 지점 — 여기선 되돌릴 자리가 곧 사라진다). 상자는 종류 제한이 없다.
-func _reclaim_to_storage(id: String, n: int, quality: int = 0) -> bool:
+# ★[폴리시 R6] 반환값이 bool → **어디에 넣었는지**로 바뀌었다("" = 세 곳 다 거절). 회수가
+#   "적재 먼저·차감 나중"을 지키려면 원장을 지우다 실패했을 때 **넣은 것을 도로 빼야** 하고,
+#   그러려면 어느 그릇에 들어갔는지를 알아야 한다(_reclaim_undo의 입력). 가법이 아니라 교체지만
+#   호출부는 `_reclaim_greenhouse_lot` 하나뿐이라 파급이 없다.
+const RECLAIM_INV := "inv"
+const RECLAIM_CHEST := "chest"
+const RECLAIM_STOREHOUSE := "storehouse"
+
+func _reclaim_to_storage(id: String, n: int, quality: int = 0) -> String:
+	if id == "" or n <= 0:
+		return ""
+	if inventory != null and inventory.add_item(id, n, quality):
+		return RECLAIM_INV
+	if chest != null and chest.store(id, n, quality) > 0:
+		return RECLAIM_CHEST
+	if storehouse_chest != null and storehouse_chest.store(id, n, quality) > 0:
+		return RECLAIM_STOREHOUSE
+	return ""
+
+# 위 사다리가 이것을 받아 줄 자리가 있는가 — **아무것도 안 건드리고** 묻는다. 되돌릴 수 없는 걷기
+# (FurnaceLedger.evict·CrystalariumLedger.remove는 안에 든 것을 함께 뱉는다)를 하기 *전에*, 뱉을
+# 것을 둘 자리가 있는지 먼저 확인하는 자리다 — 없으면 아예 걷지 않는다(걷고 나서 흘리면 소실).
+func _reclaim_can_store(id: String, n: int, quality: int = 0) -> bool:
 	if id == "" or n <= 0:
 		return false
-	if inventory != null and inventory.add_item(id, n, quality):
+	if inventory != null and inventory.can_add(id, n, quality):
 		return true
-	if chest != null and chest.store(id, n, quality) > 0:
+	if chest != null and chest.can_store(id, n, quality):
 		return true
-	return storehouse_chest != null and storehouse_chest.store(id, n, quality) > 0
+	return storehouse_chest != null and storehouse_chest.can_store(id, n, quality)
+
+# 적재 롤백 — 원장 차감이 실패했을 때 방금 넣은 것을 그 그릇에서 도로 뺀다(_remove_rarecrow의
+# `inventory.remove_item` 롤백과 같은 계약을 상자까지 넓힌 것). 상자는 인덱스 API뿐이라 (id,quality)
+# 일치 슬롯을 찾아 그만큼만 덜어낸다.
+func _reclaim_undo(where: String, id: String, n: int, quality: int = 0) -> void:
+	match where:
+		RECLAIM_INV:
+			if inventory != null:
+				inventory.remove_item(id, n)
+		RECLAIM_CHEST:
+			_chest_take_back(chest, id, n, quality)
+		RECLAIM_STOREHOUSE:
+			_chest_take_back(storehouse_chest, id, n, quality)
+
+#   ★ 등급은 상자가 정규화해 담으므로(수확물만 실효) 요청 등급과 어긋날 수 있다 — 정확 일치를
+#     먼저 찾고, 없으면 같은 id의 아무 슬롯에서 덜어낸다(롤백은 "넣은 만큼"이 정확하면 족하다).
+func _chest_take_back(box: StorageChest, id: String, n: int, quality: int) -> void:
+	if box == null or n <= 0:
+		return
+	for pass_exact in [true, false]:
+		for i in box.slots.size():
+			if box.id_at(i) != id or box.count_at(i) < n:
+				continue
+			if pass_exact and box.quality_at(i) != quality:
+				continue
+			box.remove_at(i, n)
+			return
 
 # ★[폴리시 R5] 완공이 예정지를 WALL로 덮기 **전에** 그 안의 설치물을 걷어 돌려준다.
 #   왜 필요한가: R4의 배치 가드는 앞으로만 막으므로, 가드 이전에 그 자리에 세운 세이브·가드 이전에
@@ -5004,51 +5078,136 @@ func _reclaim_to_storage(id: String, n: int, quality: int = 0) -> bool:
 #   `_update_target`으로 영영 겨눌 수 없고, 원장엔 남은 채 회수 경로만 사라진다).
 #   완공 아침과 늘봄방 세이브 로드가 **둘 다** `_refresh_greenhouse`를 지나므로 이행 경로는 여기
 #   하나면 족하다(멱등 — 두 번째부터는 걷을 것이 없다).
+# ★[폴리시 R6] 순서를 **적재 먼저·차감 나중**으로 뒤집었다. 종전 코드는 네 갈래 모두 원장을 먼저
+#   비운 뒤 적재를 시도했고(`sprinkler.remove(t) and _reclaim_to_storage(...)` = 좌→우 단축평가),
+#   백팩·집 상자·갈무리방이 전부 가득이면 걷힌 물건이 **어디에도 없이 사라졌다**(레어크로우는
+#   재획득 창구가 전부 1회성이라 8종 완주가 영구히 깨진다). 같은 파일의 `_remove_rarecrow`·
+#   `_remove_sprinkler`가 쓰는 "넣고 나서 빼고, 못 빼면 되돌린다"를 여기서도 그대로 쓴다.
+# ★ 되돌릴 수 없는 걷기(evict·remove가 안에 든 것을 함께 뱉는다)는 **뱉을 자리를 먼저 확인**하고
+#   들어간다 — 자리가 없으면 기계째 그 자리에 남긴다(다음 회수 기회가 다시 온다).
+# ★ 못 걷은 것은 조용히 넘기지 않는다: `stuck` 줄이 이유와 복구법("자리를 비우면 다시 걷는다")을
+#   말하고, `_on_day_advanced`의 아침 재시도 훅이 실제로 다시 걷는다(벽 밑이라 손으로는 못 걷는다).
 func _reclaim_greenhouse_lot() -> void:
 	var tiles := _greenhouse_lot_occupants()
-	if tiles.is_empty():
+	var lot_trees := _greenhouse_lot_trees()
+	if tiles.is_empty() and lot_trees.is_empty():
 		return
 	var names: Array = []
+	var stuck: Array = []
 	for t in tiles:
 		if sprinkler != null and sprinkler.has_at(t):
 			var s_id := ItemCatalog.sprinkler_item_for_tier(sprinkler.tier_at(t))
-			if sprinkler.remove(t) and _reclaim_to_storage(s_id, 1):
+			var s_where := _reclaim_to_storage(s_id, 1)
+			if s_where == "":
+				stuck.append(ItemCatalog.name_of(s_id))
+			elif sprinkler.remove(t):
 				names.append(ItemCatalog.name_of(s_id))
+			else:
+				_reclaim_undo(s_where, s_id, 1)   # has_at이 보장하므로 도달 X(계약 대칭 방어)
+				stuck.append(ItemCatalog.name_of(s_id))
 		if rarecrow != null and rarecrow.has_at(t):
 			# 레어크로우가 이 회수의 무게중심이다 — 재획득 경로가 전부 1회성이라 여기서 잃으면
 			# 8종 완주(디럭스 보호 반경)가 영구히 깨진다(_remove_rarecrow 주석).
 			var r_id := rarecrow.id_at(t)
-			if rarecrow.remove(t) != "" and _reclaim_to_storage(r_id, 1):
+			var r_where := _reclaim_to_storage(r_id, 1)
+			if r_where == "":
+				stuck.append(ItemCatalog.name_of(r_id))
+			elif rarecrow.remove(t) != "":
 				names.append(ItemCatalog.name_of(r_id))
+			else:
+				_reclaim_undo(r_where, r_id, 1)
+				stuck.append(ItemCatalog.name_of(r_id))
 		if furnace != null and furnace.has_at(RegionCatalog.HOME, t):
 			# 달구는 중·수거 대기 화덕은 `remove`가 거절하므로 강제 회수 진입점을 쓴다(FurnaceLedger.evict).
-			var f := furnace.evict(RegionCatalog.HOME, t)
-			if not f.is_empty():
-				var prod := String(f.get("product", ""))
-				if prod != "":
-					_reclaim_to_storage(prod, 1, int(f.get("quality", ItemCatalog.Q_NORMAL)))
-				elif String(f.get("ore", "")) != "":
-					# 미완이면 넣은 광석을 그대로 돌려준다(연료는 이미 탄 것으로 둔다 — 되돌릴 수
-					# 있는 것만 되돌린다).
-					_reclaim_to_storage(String(f["ore"]), FurnaceLedger.ORE_PER_BATCH)
-				if _reclaim_to_storage(ItemCatalog.FURNACE, 1):
+			# ★ evict는 되돌릴 수 없으므로 **안에 든 것을 미리 되물어** 자리를 확인하고 들어간다.
+			var f_pay_id := ""
+			var f_pay_n := 0
+			var f_pay_q := ItemCatalog.Q_NORMAL
+			if furnace.is_ready(RegionCatalog.HOME, t):
+				f_pay_id = furnace.product_at(RegionCatalog.HOME, t)
+				f_pay_n = 1
+				f_pay_q = furnace.pending_quality(RegionCatalog.HOME, t)
+			elif furnace.ore_at(RegionCatalog.HOME, t) != "":
+				# 미완이면 넣은 광석을 그대로 돌려준다(연료는 이미 탄 것으로 둔다 — 되돌릴 수
+				# 있는 것만 되돌린다).
+				f_pay_id = furnace.ore_at(RegionCatalog.HOME, t)
+				f_pay_n = FurnaceLedger.ORE_PER_BATCH
+			var f_where := _reclaim_to_storage(ItemCatalog.FURNACE, 1)
+			if f_where == "":
+				stuck.append(ItemCatalog.name_of(ItemCatalog.FURNACE))
+			elif f_pay_id != "" and not _reclaim_can_store(f_pay_id, f_pay_n, f_pay_q):
+				_reclaim_undo(f_where, ItemCatalog.FURNACE, 1)
+				stuck.append(ItemCatalog.name_of(ItemCatalog.FURNACE))
+			else:
+				var f := furnace.evict(RegionCatalog.HOME, t)
+				if f.is_empty():
+					_reclaim_undo(f_where, ItemCatalog.FURNACE, 1)
+					stuck.append(ItemCatalog.name_of(ItemCatalog.FURNACE))
+				else:
+					if f_pay_id != "":
+						_reclaim_to_storage(f_pay_id, f_pay_n, f_pay_q)   # 위에서 자리를 확인했다
+						names.append(ItemCatalog.name_of(f_pay_id))
 					names.append(ItemCatalog.name_of(ItemCatalog.FURNACE))
 		if crystalarium != null and crystalarium.has_at(RegionCatalog.HOME, t):
 			# 수거 대기면 `remove`가 거절하므로 먼저 꺼낸다(꺼내면 같은 보석으로 재가동 → 회수 가능).
-			if crystalarium.is_ready(RegionCatalog.HOME, t):
-				var ready_gem := crystalarium.collect(RegionCatalog.HOME, t)
-				if ready_gem != "":
-					_reclaim_to_storage(ready_gem, 1)
-			var res: Dictionary = crystalarium.remove(RegionCatalog.HOME, t)
-			if not res.is_empty():
-				var inside := String(res.get("gem", ""))
-				if inside != "":
-					_reclaim_to_storage(inside, 1)
-				if _reclaim_to_storage(ItemCatalog.CRYSTALARIUM, 1):
+			# 그래서 대기 중인 기계는 보석이 **2개**(복제본 + 넣어 둔 씨 보석) 나온다 — 그 2개가
+			# 들어갈 자리까지 확인한 뒤에 걷는다.
+			var c_gem := crystalarium.gem_at(RegionCatalog.HOME, t)
+			var c_gem_n := 0
+			if c_gem != "":
+				c_gem_n = 2 if crystalarium.is_ready(RegionCatalog.HOME, t) else 1
+			var c_where := _reclaim_to_storage(ItemCatalog.CRYSTALARIUM, 1)
+			if c_where == "":
+				stuck.append(ItemCatalog.name_of(ItemCatalog.CRYSTALARIUM))
+			elif c_gem_n > 0 and not _reclaim_can_store(c_gem, c_gem_n):
+				_reclaim_undo(c_where, ItemCatalog.CRYSTALARIUM, 1)
+				stuck.append(ItemCatalog.name_of(ItemCatalog.CRYSTALARIUM))
+			else:
+				if crystalarium.is_ready(RegionCatalog.HOME, t):
+					crystalarium.collect(RegionCatalog.HOME, t)
+				var res: Dictionary = crystalarium.remove(RegionCatalog.HOME, t)
+				if res.is_empty():
+					_reclaim_undo(c_where, ItemCatalog.CRYSTALARIUM, 1)
+					stuck.append(ItemCatalog.name_of(ItemCatalog.CRYSTALARIUM))
+				else:
+					if c_gem_n > 0:
+						_reclaim_to_storage(c_gem, c_gem_n)   # 위에서 자리를 확인했다
+						names.append("%s ×%d" % [ItemCatalog.name_of(c_gem), c_gem_n])
 					names.append(ItemCatalog.name_of(ItemCatalog.CRYSTALARIUM))
+	# ★[폴리시 R6] 예정지에 돋은 **자연목**도 여기서 치운다. 배치 가드(`_is_tree_seed_free`)가
+	#   앞으로의 파종을 막아도, 가드 이전 세이브의 나무는 완공 아침에 그대로 벽 밑에 묻혀
+	#   겨눌 수도 벨 수도 없는 채 HOME 상한(`occupied_count`)만 영구히 축낸다. 산출은 없다 —
+	#   걷어 주는 게 아니라 사라지는 무대를 치우는 일이다(OWNER 큐: 원목 보상 지급 여부).
+	var cleared_trees := 0
+	if tree_ledger != null:
+		for t: Vector2i in lot_trees:
+			if tree_ledger.clear_slot(RegionCatalog.HOME, t):
+				cleared_trees += 1
 	if not names.is_empty():
 		_notice("늘봄방 부지에 있던 것을 걷어 두었다 — %s (백팩·상자를 확인하자)"
 			% ", ".join(PackedStringArray(names)), NOTICE_SECS * 2.0)
+	if cleared_trees > 0:
+		_notice("늘봄방 부지에 돋아 있던 나무 %d그루를 치웠다" % cleared_trees, NOTICE_SECS * 2.0)
+	if not stuck.is_empty():
+		_notice("보관할 자리가 없어 늘봄방 부지의 %s은(는) 걷지 못했다 — 백팩·상자를 비우면 다음 아침에 다시 걷는다"
+			% ", ".join(PackedStringArray(stuck)), NOTICE_SECS * 3.0)
+
+# ★[폴리시 R6] 완공이 예정지를 WALL로 덮기 전에 **그 안에 서 있는 플레이어를 밖으로 옮긴다.**
+#   GREENHOUSE_EXT_RECT는 완공 전까지 전부 GROUND라 걸어 들어갈 수 있고, 24:00 기절 취침
+#   (`_on_collapsed`)은 자리를 안 가리므로 예정지 한복판에서 완공 아침을 맞을 수 있다. 그러면 눈뜨는
+#   순간 8이웃이 전부 WALL이라 이동·워프·문이 전부 막히고, 취침은 `_can_sleep`이 "집"을 요구해
+#   거절한다 — 게다가 `_on_sleep_done`의 자동 저장이 그 좌표를 굳혀 F9 재로드도 같은 벽 안이다
+#   (남는 것은 세이브 삭제뿐인 영구 소프트락). 목적지는 늘봄방 문 바로 앞 칸 = 카탈로그가 쓰는
+#   `out_tile`과 같은 좌표라, 새 좌표를 발명하지 않고 "문에서 나온 자리"를 그대로 쓴다.
+#   ★ 옮길 대상은 플레이어뿐이다: 삽사리는 PET_TILE(44,12) 고정이라 이 rect 밖이고, 먹갈기는
+#     승마 상태(bool)라 별도 좌표가 없다(플레이어를 옮기면 함께 옮겨진다).
+func _evict_from_greenhouse_lot() -> void:
+	if player == null or _region != RegionCatalog.HOME or _indoor != "":
+		return
+	if not GREENHOUSE_EXT_RECT.has_point(_player_tile()):
+		return
+	player.position = _tile_center_px(GREENHOUSE_EXT_DOOR + Vector2i(0, 1))
+	_notice("늘봄방이 서면서 부지 밖으로 밀려났다", NOTICE_SECS * 2.0)
 
 # ★ 밭 라우터 — 이 칸의 주인 FarmField를 고른다. **두 좌표 공간이 겹치지 않아**(노지 = HOME 외부
 #   y<65 · 늘봄방 = 실내 밴드) 칸 하나만 보면 주인이 유일하게 정해진다. 밭 동사(괭이·물·심기·비료·
@@ -5067,6 +5226,8 @@ func _refresh_greenhouse() -> void:
 	# ★[폴리시 R5] 그리드를 다시 세우기 **전에** 예정지를 비운다 — _rebuild_region → _build_facade가
 	#   이 8×7을 WALL로 채우는 순간 안쪽 설치물은 겨눌 수도 회수할 수도 없어진다(머리말 참조).
 	_reclaim_greenhouse_lot()
+	# ★[폴리시 R6] 비우는 것은 물건만이 아니다 — **그 안에 서 있는 플레이어도** 함께 내보낸다.
+	_evict_from_greenhouse_lot()
 	_build_building_catalog()
 	_refresh_home_expansion()   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
 	if _region == RegionCatalog.HOME:
@@ -10122,6 +10283,12 @@ func _on_day_advanced(day: int) -> void:
 		#   완공 아침에 가방이 꽉 차 증정이 밀렸거나, 어떤 경로로든 휘파람이 사라진 세이브를
 		#   **다음 아침이 스스로 복구한다**(마구간을 지었는데 말을 못 부르는 봉쇄가 남지 않게).
 		_grant_mount_whistle()
+		# ★[폴리시 R6] 늘봄방 부지 회수 **아침 재시도** — 위 휘파람 훅과 정확히 같은 결의 자기 복구다.
+		#   보관처가 전부 가득이면 회수는 물건을 그 자리에 남기는데(적재 먼저·차감 나중), 완공 뒤
+		#   그 칸은 벽 밑이라 손으로는 영영 못 걷는다. 멱등이라 매일 불러도 공짜고(걷을 것이 없으면
+		#   즉시 반환), 자리를 비운 다음 아침이 스스로 나머지를 걷는다.
+		if _greenhouse_built():
+			_reclaim_greenhouse_lot()
 	# ★ [S2-T6] 게시판 의뢰 만료 — 기한(일일 2일 / 중기 그 주 끝)이 지난 수락분을 조용히 버린다.
 	#   페널티는 없다(골드·호감도 불변 — ADR-0060 결정 6 "미완료 무페널티"). 알림도 벌칙이 아니라
 	#   "자리가 다시 비었다"는 안내다(ADR-0008 평평≠막힘).
@@ -11719,6 +11886,14 @@ func _restore_location(data: Dictionary) -> void:
 	#   그래서 나락으로 복원할 땐 걸을 수 없는 칸이면 퇴장 지점으로 떨군다(빈 맵·갇힘 방지의 결).
 	if saved_region == RegionCatalog.NARAK and _tile_blocked(saved_tile):
 		saved_tile = NARAK_SURFACE_RETURN
+	# ★[폴리시 R6] **나락 밖에서도 같은 구제를 건다.** 저장된 칸이 지금 세운 무대에서 SOLID면 그
+	#   좌표는 복원이 아니라 갇힘이다 — 늘봄방 완공이 예정지 위에서 자던 플레이어를 벽으로 덮은
+	#   그 자리가 정확히 이 경우고(자동 저장이 그 좌표를 굳히면 F9 재로드마저 같은 벽 안으로
+	#   돌아온다), 앞으로 어떤 건물이 서든 같은 사고를 낼 수 있다. 실내는 방 바닥이 곧 유효
+	#   좌표라 바깥일 때만 보고, 폴백은 그 구역의 스폰이다(구역 밖으로 밀지 않는다).
+	elif _indoor == "" and _tile_blocked(saved_tile):
+		push_warning("[폴리시 R6] 복원 좌표 %s가 막힌 칸 — %s 스폰으로 구제" % [saved_tile, saved_region])
+		saved_tile = RegionCatalog.spawn_of(saved_region)
 	player.position = _tile_center_px(saved_tile)
 	_apply_camera_limits()
 
