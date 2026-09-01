@@ -13150,7 +13150,7 @@ func _process(delta: float) -> void:
 	#   자동으로 세우므로(문 방출→grazed·밤 귀가→penned), 실내 돌봄은 급여+청소만 남는다(SDV 건물 안 돌봄).
 	#   급여는 여물광(Ranch._silo_hay)에서 짐승당 1단 뽑는다 — 비면 굶는다(낫으로 미리 쌓아야, Q7). 짐승을
 	#   직접 바라볼 땐 아래 on_animal의 쓰다듬/수집(손급여)이 우선 → 여기선 짐승 밖 실내 칸에서만.
-	if not _sleeping and _indoor in ANIMAL_BUILDINGS and not ranch.has_animal(_target) \
+	if not _sleeping and _indoor in ANIMAL_BUILDINGS and not ranch.has_animal_at(_target) \
 			and Input.is_action_just_pressed("action"):
 		var fed_ct := ranch.feed_from_silo_in(_indoor)
 		var cleaned := ranch.clean_all_in(_indoor)
@@ -13833,14 +13833,23 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = true
 		# ★[S7-T6] 정액이 아니라 night_bar에 주입된 값을 읽는다 — 테마 데이엔 프롬프트도 오른 값을 말한다.
 		interact_prompt.text = "[우클릭] 응대 (+%d골드)" % night_bar.serve_price()
-	elif _region == RegionCatalog.HOME and ranch.has_animal(_target):
-		# ★ [S1-7→B1-a.1] 짐승을 바라볼 때(실내): 산물 있으면 수집, 없으면 쓰다듬 / 든 게 건초면 급여 안내.
+	elif _region == RegionCatalog.HOME and ranch.has_animal_at(_target):
+		# ★ [S1-7→B1-a.1] 짐승을 바라볼 때: 산물 있으면 수집, 없으면 쓰다듬 / 든 게 건초면 급여 안내.
+		# ★[폴리시 R7] 겨눈 칸 → 짐승 키 해석 — 방목지의 짐승도 이 안내가 잡고, 비어 있는 실내
+		#   앵커는 더 이상 안 잡는다(집행부 `_try_harvest`·건초 급여와 같은 술어를 본다).
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = _animal_prompt(_target)
+		interact_prompt.text = _animal_prompt(ranch.animal_key_at(_target))
 	elif _indoor in ANIMAL_BUILDINGS and ranch.animals_in(_indoor).size() > 0:
-		# ★ [B1-a.1] 동물 건물 실내(짐승 밖 칸): 우클릭으로 그 건물 방목·격리·청결 일괄(실내 돌봄 리추얼).
+		# ★ [B1-a.1] 동물 건물 실내(짐승 밖 칸): 우클릭으로 그 건물 돌봄 일괄.
+		# ★[폴리시 R7] **실제 동작을 말한다.** 종전 문구는 "방목·격리·청결"이었는데, 이 우클릭이
+		#   집행하는 것은 `feed_from_silo_in`(여물광 건초 소모) + `clean_all_in` 둘뿐이다 —
+		#   방목(grazed)·격리(penned)는 B1-a.2 이후 pathing이 자동으로 세우므로(문 방출·밤 귀가)
+		#   이 창구가 손대지 않는다(livestock.gd `tend_all_in` 주석). 즉 프롬프트는 **건초를 태우는
+		#   급여를 한 글자도 안 알리고**, 대신 이 조작으로는 절대 서지 않는 두 동사를 약속했다.
+		#   여물광이 비면 급여가 성립하지 않으므로 그 사실도 미리 말한다(누르고 나서 알 일이 아니다).
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = "[우클릭] %s 돌봄 (방목·격리·청결)" % _indoor
+		interact_prompt.text = "[우클릭] %s 돌봄 (여물 급여 · 잠자리 청소 — 여물광 %d단)" % [_indoor, ranch.silo_hay()] \
+			if ranch.silo_hay() > 0 else "[우클릭] %s 잠자리 청소 (여물광이 비어 급여 불가)" % _indoor
 	elif _debris_kind_at(_target) != "":
 		# ★ [S1-8] 개간 대상 debris를 바라볼 때: 맞는 도구를 들었으면 [좌클릭] 개간, 아니면 필요한 도구 안내.
 		interact_prompt.visible = not _sleeping
@@ -14220,7 +14229,10 @@ func _use_tool() -> void:
 			verb = "심기"
 	elif item == ItemCatalog.HAY and _region == RegionCatalog.HOME:
 		# ★ [S1-7] 든 건초로 조준 칸의 짐승을 급여한다(§4.1 — 하늘 목장 전용, 하루 1회). 급여 시 건초 1개 소모.
-		if ranch.has_animal(_target) and ranch.feed(_target):
+		# ★[폴리시 R7] 겨눈 칸 → 짐승 키 해석(`animal_key_at`) — 방목 나간 짐승은 그 칸에 *몸이*
+		#   있고 원장 주소는 실내 앵커라, 좌표 두 개를 잇지 않으면 보이는 짐승에게 손이 안 닿는다.
+		var fed_key := ranch.animal_key_at(_target)
+		if fed_key != Ranch.NO_ANIMAL and ranch.feed(fed_key):
 			inventory.remove_item(ItemCatalog.HAY, 1)
 			verb = "급여"
 	elif item == ItemCatalog.SCYTHE and _region == RegionCatalog.HOME and forage.is_grown(_target):
@@ -15833,30 +15845,43 @@ func _try_harvest() -> bool:
 	var cost := _farming_energy_cost()        # ★ 목축·과수 동사용(밭 수확엔 미사용)
 	# ★ [S1-7] 혼의 짐승 RMB 우선(§4.1) — 조준 칸에 짐승이 있으면: 대기 산물이 있으면 수집(인벤토리 적재),
 	# 없으면 쓰다듬(우정·기분 데일리 케어). 밭·과수보다 먼저 본다(짐승 타일은 방목지라 겹침 없음). 안식 농원 전용.
-	if _region == RegionCatalog.HOME and ranch.has_animal(_target):
+	# ★[폴리시 R7] 겨눈 칸 → 짐승 키 해석(`animal_key_at`). 종전 `has_animal(_target)`은 실내 앵커만
+	#   봐서, 문을 열어 둔 정상 플레이(= 아침마다 방출)에서는 **보이는 짐승엔 손이 안 닿고 빈 실내
+	#   바닥이 산물을 내주는** 상태가 상시였다. 아래 조회·집행도 전부 이 키를 쓴다(원장 좌표계 불변).
+	var animal := ranch.animal_key_at(_target) if _region == RegionCatalog.HOME else Ranch.NO_ANIMAL
+	if animal != Ranch.NO_ANIMAL:
 		if not energy.can_act(cost):
 			return false                      # 목축 계층 — 혼력 게이트 유지(불변)
-		if ranch.has_product(_target):
+		if ranch.has_product(animal):
 			# ★[폴리시 R2] **적재 자리부터 본다** — `collect`는 짐승의 대기 산물을 0으로 지우므로,
 			#   백팩이 가득하면 그날 산물이 증발하는데 혼력은 그대로 집행됐다. 게잡이통·채취기가
 			#   "인벤이 가득이면 통 안에 그대로 둔다"로 지키는 그 규율을 짐승에도 세운다.
-			var pending := ranch.pending_product(_target)   # {product_id, quality, is_large}(원장 불변)
+			var pending := ranch.pending_product(animal)   # {product_id, quality, is_large}(원장 불변)
 			var want: String = ItemCatalog.large_product_id(pending["product_id"]) \
 				if bool(pending["is_large"]) else str(pending["product_id"])
 			if not inventory.can_add(want, 1, int(pending["quality"])):
 				_notice("백팩이 가득 차 산물을 담을 수 없다 — 자리를 비우고 다시")
 				return true
-			var got := ranch.collect(_target)   # {product_id, quality, is_large}
+			var got := ranch.collect(animal)   # {product_id, quality, is_large}
 			if not got.is_empty():
 				# 대형 산물은 "<산물>_large" 아이템(판매가 ×2)으로, 아니면 기준 산물로 적재(§8.6). 품질 등급 실림.
 				var pid: String = ItemCatalog.large_product_id(got["product_id"]) if bool(got["is_large"]) else str(got["product_id"])
 				inventory.add_item(pid, 1, int(got["quality"]))
 				_toast_item(pid, 1)                 # ★ Phase C 획득 토스트(산물 수집)
+				# ★[폴리시 R7] **농사 XP** — 밭·과수 수확과 갈리지 않게 여기서도 적립한다. 12041의
+				#   "농사 XP는 무대가 갈리지 않는다(밭 수확·과수 수확 전부 미호 도메인)"가 목축만
+				#   빠뜨린 자리였다: 목축 전문직 3종(rancher/coopmaster/shepherd)이 FARMING 트리
+				#   tier 5/10에 사는데(profession_catalog.gd), 목축만 하는 플레이는 그 트리의 XP가
+				#   한 톨도 안 올라 자기 전문직에 영영 못 닿았다.
+				#   ★배율은 형제 분기의 관례 파생 그대로 = **기준 판매가**(밭 `CropCatalog.sell_price`
+				#     · 과수 `FruitTreeCatalog.fruit_sell`). 품질·대형 배수는 안 얹는다 — 형제들도
+				#     품질 무관 기준가라, 여기만 배수를 태우면 새 눈금을 만드는 것이 된다.
+				_gain_farm_xp(AnimalCatalog.product_sell(str(got["product_id"])))
 				audio.sfx("harvest")
 				energy.spend(cost)
 				queue_redraw()
 				return true
-		elif ranch.pet(_target):                # 산물 없음 → 쓰다듬(하루 1회 실효)
+		elif ranch.pet(animal):                # 산물 없음 → 쓰다듬(하루 1회 실효)
 			audio.sfx("ui")
 			energy.spend(cost)
 			queue_redraw()
@@ -16691,6 +16716,11 @@ func _on_frame_buy_store_item(buy_id: String, kind: String, bulk: bool) -> void:
 			return
 		"deco":
 			_try_buy_deco_set(buy_id)
+			return
+		# ★[폴리시 R7] 목공방 짐승 새끼 — 위 둘과 같이 **1회성 행위**다(수량 루프를 타면 빈 칸을
+		#   찾는 배치가 루프 안에서 연쇄로 도는데, 정원 한 칸 남은 건물에 두 마리를 청구하게 된다).
+		"livestock":
+			_try_buy_animal(buy_id)
 			return
 		# ★[S7-T7 / ADR-0065 결정 9] 저승 야시장 3종. 목공방과 **kind를 갈라** 두는 이유는 할인 축이
 		#   다르기 때문이다(옹이 ♡ vs 행사 정액 2할). 앞 둘은 1회성 행위라 수량 루프를 안 탄다.
@@ -18174,7 +18204,44 @@ func _woodshop_items() -> Array:
 		"price": StoreDiscount.price(wood_base, hearts), "base": wood_base,
 		"count": inventory.count_of(ItemCatalog.WOOD),
 	})
+	# ★[폴리시 R7] **짐승 새끼 2종** — B1-b 성장 티어의 잃어버린 짝이다. 종전엔 `livestock.add_animal`의
+	#   게임 내 호출부가 `_ensure_starter_animals`(신규 게임 1회·건물당 2마리) 하나뿐이라, 5번째 짐승이
+	#   들어올 수 있는 코드 경로가 **0**이었다 — 그런데 목공방은 「큰 넋둥우리」(10,000냥+원목 400)와
+	#   「큰 넋우릿간」(12,000냥+원목 450)을 아무 선행 조건 없이 팔면서 완공 알림으로 "이제 8마리까지
+	#   들일 수 있다"고 약속한다. 22,000냥+원목 850을 치르고 정확히 아무 것도 얻지 못하는 자리였다.
+	#   ★ 창구를 여기 두는 이유: **정원을 파는 사람이 정원을 채울 수단도 팔아야** 그 사다리가 사다리가
+	#     된다(옹이가 두 건물을 짓고 두수를 알리는 바로 그 매대다). 새 시스템·새 UI 언어 0 — 기존 매대
+	#     행 스키마와 `_on_frame_buy_store_item` 분기 하나로 끝난다(레어크로우·세트 해금과 같은 결).
+	#   ★ 정원이 차면 **감추지 않고 잠근다** — 목표가 보여야 큰 건물이 목표로 읽힌다(늘봄방 잠금 행과
+	#     같은 판단). 그래서 이 두 행이 곧 "왜 큰 건물을 짓는가"의 상시 표지판이 된다.
+	#   ★ 사는 것은 늘 **새끼**(age 0)다 — 성체를 바로 사면 grow_days(ADR-0048 Phase E)가 통째로
+	#     의미를 잃는다(스타듀도 산 짐승은 어리게 온다).
+	for raw_species in AnimalCatalog.ids():
+		var species := String(raw_species)
+		var base_price := AnimalCatalog.buy_price(species)
+		if base_price <= 0:
+			continue                       # 안 파는 종(방어 — 카탈로그가 값을 안 들면 진열도 안 한다)
+		var bld := _animal_building_of(species)
+		var row := {
+			"kind": "livestock", "buy_id": species,
+			"icon_id": AnimalCatalog.product_of(species),   # 종 아이콘 전까지 산물 아이콘으로 읽힌다
+			"name": "%s 새끼 (%s)" % [AnimalCatalog.name_of(species), bld],
+			"price": StoreDiscount.price(base_price, hearts), "base": base_price,
+		}
+		if ranch != null and ranch.is_full(bld):
+			row["locked"] = true
+			row["locked_text"] = "정원 %d/%d" % [ranch.occupancy_of(bld), ranch.capacity_of(bld)]
+		rows.append(row)
 	return rows
+
+# 종 → 소속 건물 id(진입 실내). `_ensure_starter_animals`가 손으로 짝지어 둔 대응을 술어 하나로
+# 모은다 — 매대·구매·스타터가 같은 표를 보게 하려는 것이다(짝이 두 곳에 흩어지면 어긋난다).
+func _animal_building_of(species: String) -> String:
+	return "넋둥우리" if AnimalCatalog.kind_of(species) == "coop" else "넋우릿간"
+
+# 종의 방 rect(실내 배치 스캔용). 위 짝과 같은 이유로 한 곳에 모은다.
+func _animal_room_of(species: String) -> Rect2i:
+	return NEOKDUNGURI_RECT if AnimalCatalog.kind_of(species) == "coop" else NEOKURITGAN_RECT
 
 # ══ ★ [S5-T6 / ADR-0063 결정 5·6] 모험가 길드 매대(무골) — 검 5종 + 명부환 ══════
 # 생선가게·목공방과 대칭 — 프레임은 무상태고 main이 매 프레임 행을 파생해 넣는다. 다만 서브탭이
@@ -18312,6 +18379,56 @@ func _try_buy_deco_set(set_id: String) -> bool:
 	audio.sfx("ui")
 	_notice("%s 가구 세트 해금 −%d냥 — 집에서 [F10] 꾸미기로 놓을 수 있다" % [HomeDecoCatalog.name_of(set_id), price])
 	return true
+
+# ★[폴리시 R7] 목공방 짐승 새끼 구매 — B1-b 성장 티어(큰 넋둥우리·큰 넋우릿간)를 **실효로 잇는**
+# 유일한 경로다(그전엔 `add_animal`의 게임 내 호출부가 신규 게임 스타터 하나뿐이라 정원 확장이
+# 살 수 없는 물건이었다). 순서 규율은 건축 결제와 같다 — **검사 전부 → 차감 → 배치**, 어느 하나가
+# 모자라면 아무것도 소모하지 않는다(부분 결제 없음).
+# ★ 배치는 스타터와 **같은 스캔**(방 안쪽 첫 빈 칸)이다: 좌표를 고르는 규칙이 두 벌이면 어긋난다.
+# ★ 정원 게이트는 여기서 손으로 세지 않는다 — `add_animal`이 이미 `is_full`로 막고 있어(livestock.gd)
+#   여기서 다시 세면 정원 규칙의 출처가 둘이 된다. 다만 **알림을 위해** 미리 물어본다(차감 앞).
+func _try_buy_animal(species: String) -> bool:
+	if ranch == null or wallet == null or not AnimalCatalog.has(species):
+		return false
+	var base := AnimalCatalog.buy_price(species)
+	if base <= 0:
+		return false                       # 안 파는 종(매대에 안 뜨지만 이중 방어 — 신호는 안 믿는다)
+	var nm := AnimalCatalog.name_of(species)
+	var bld := _animal_building_of(species)
+	if ranch.is_full(bld):
+		_notice("%s 정원이 찼다 (%d/%d) — 목공방에서 「큰 %s」을 지어야 한다"
+			% [bld, ranch.occupancy_of(bld), ranch.capacity_of(bld), bld])
+		return false
+	var spot := _free_animal_spot(species)
+	if spot == Ranch.NO_ANIMAL:
+		_notice("%s 안에 자리가 없다 — 짐승을 들일 빈 칸이 없다" % bld)
+		return false
+	var price := StoreDiscount.price(base, _ongi_hearts())
+	if wallet.gold < price:
+		_notice("냥이 모자라다 — %s 새끼 %d냥 (보유 %d냥)" % [nm, price, wallet.gold])
+		return false
+	if not wallet.spend(price):
+		return false                       # 방어(위 검사와 이중)
+	if not ranch.add_animal(spot, species, bld, 0):
+		wallet.earn(price)                 # 배치 실패 = 환불(정원·중복 게이트에 걸린 경우 — 부분 결제 없음)
+		return false
+	audio.sfx("ui")
+	_notice("%s 새끼를 들였다 −%d냥 — %s (%d/%d) · %d일 뒤 성체"
+		% [nm, price, bld, ranch.occupancy_of(bld), ranch.capacity_of(bld),
+			AnimalCatalog.grow_days_of(species)])
+	queue_redraw()
+	return true
+
+# 그 종의 건물 실내에서 짐승을 놓을 첫 빈 칸(없으면 Ranch.NO_ANIMAL). 스타터 배치
+# (`_seed_starter_animal`)와 **같은 스캔 규칙**을 한 곳에 모은 것이다(방 둘레는 벽이라 안쪽으로).
+func _free_animal_spot(species: String) -> Vector2i:
+	var room := _animal_room_of(species)
+	for y in range(room.position.y + 2, room.end.y - 1):
+		for x in range(room.position.x + 2, room.end.x - 2):
+			var t := Vector2i(x, y)
+			if not ranch.has_animal(t):
+				return t
+	return Ranch.NO_ANIMAL
 
 # ★ [S1R-T12] 인벤 정보패널 날짜 문자열("<절기> N일" — clock_hud와 같은 일차 파생, 요일 없음).
 func _inv_date_string() -> String:
@@ -22908,22 +23025,20 @@ func _ensure_starter_animals() -> void:
 	if ranch == null or ranch.count() > 0:
 		return
 	# 넋우릿간(안개소·대형·barn형) — 성체 + 새끼.
-	_seed_starter_animal(AnimalCatalog.HONBAEK_SO, "넋우릿간", NEOKURITGAN_RECT, AnimalCatalog.grow_days_of(AnimalCatalog.HONBAEK_SO))
-	_seed_starter_animal(AnimalCatalog.HONBAEK_SO, "넋우릿간", NEOKURITGAN_RECT, 0)
+	_seed_starter_animal(AnimalCatalog.HONBAEK_SO, AnimalCatalog.grow_days_of(AnimalCatalog.HONBAEK_SO))
+	_seed_starter_animal(AnimalCatalog.HONBAEK_SO, 0)
 	# 넋둥우리(노을닭·소형·coop형) — 성체 + 새끼.
-	_seed_starter_animal(AnimalCatalog.HONBAEK_DAK, "넋둥우리", NEOKDUNGURI_RECT, AnimalCatalog.grow_days_of(AnimalCatalog.HONBAEK_DAK))
-	_seed_starter_animal(AnimalCatalog.HONBAEK_DAK, "넋둥우리", NEOKDUNGURI_RECT, 0)
+	_seed_starter_animal(AnimalCatalog.HONBAEK_DAK, AnimalCatalog.grow_days_of(AnimalCatalog.HONBAEK_DAK))
+	_seed_starter_animal(AnimalCatalog.HONBAEK_DAK, 0)
 
-# 건물 실내 바닥(벽 1칸 안쪽) 첫 빈 칸에 종을 소속 건물째 배치. 방 rect는 둘레가 벽이라 안쪽으로 파고든다.
+# 건물 실내 바닥(벽 1칸 안쪽) 첫 빈 칸에 종을 소속 건물째 배치.
 # ★ Phase E: age 파라미터로 성체(grow_days)/새끼(0)를 구분 배치(같은 건물 두 번 호출 시 다음 빈 칸에 놓임).
-func _seed_starter_animal(species: String, building: String, room: Rect2i, age: int = 0) -> void:
-	for y in range(room.position.y + 2, room.end.y - 1):
-		for x in range(room.position.x + 2, room.end.x - 2):
-			var t := Vector2i(x, y)
-			if ranch.has_animal(t):
-				continue
-			if ranch.add_animal(t, species, building, age):
-				return
+# ★[폴리시 R7] 빈 칸 스캔·건물 짝은 `_free_animal_spot`/`_animal_building_of`로 접었다 —
+#   목공방 짐승 구매(`_try_buy_animal`)가 같은 규칙으로 배치해야 하는데, 규칙이 두 벌이면 어긋난다.
+func _seed_starter_animal(species: String, age: int = 0) -> void:
+	var spot := _free_animal_spot(species)
+	if spot != Ranch.NO_ANIMAL:
+		ranch.add_animal(spot, species, _animal_building_of(species), age)
 
 # ── ★ [B1-a.2] 방목 pathing 배선 ──────────────────────────────────────────────
 # ★[S7-T3 / ADR-0065 결정 3] 오늘의 하늘(파생 — 저장하지 않는다). day가 곧 답이라 캐시도 무의미하다.

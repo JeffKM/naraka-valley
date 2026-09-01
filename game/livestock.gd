@@ -57,6 +57,10 @@ const DELUXE_MOOD_GATE := 200     # DELUXE 산물 = 5하트 + 당일 기분 ≥2
 const LOC_INDOOR := "indoor"      # 실내 거주(기본) — 소속 건물 방 안
 const LOC_PASTURE := "pasture"    # 방목 중 — 문 아래 고지 방목지(pasture_tile 좌표)
 
+# ★[폴리시 R7] "그 칸엔 짐승이 없다"를 뜻하는 좌표 센티널(Vector2i엔 null이 없다). 맵 밖 음수라
+#   어떤 실좌표와도 겹치지 않는다 — `animal_key_at`의 부재 반환값.
+const NO_ANIMAL := Vector2i(-1, -1)
+
 # 방목 문 상태. 키 = 건물 id, 값 = bool(열림). 키 없음/false = 닫힘(기본 — 스타듀 헛간 문 결).
 # 세이브 왕복(to_save/load_save)으로 보존한다(문 열어 둔 채 자면 다음 아침도 열림).
 var _doors: Dictionary = {}
@@ -200,6 +204,30 @@ func add_animal(tile: Vector2i, species: String, home_building: String = "", age
 
 func has_animal(tile: Vector2i) -> bool:
 	return _animals.has(tile)
+
+# ★[폴리시 R7] 지금 그 칸에 **실제로 서 있는** 짐승의 키 타일(없으면 NO_ANIMAL).
+# `has_animal`은 `_animals` 키 = *실내 앵커*만 보는데, 방목 나간 짐승은 그림도 몸도 방목지 타일에
+# 있다(main `_draw_ranch`가 `pasture_tile_of`로 그리는 그 좌표). 두 좌표를 같은 것으로 오인하면
+# 양방향으로 깨진다 — ①방목지에서 짐승을 정면으로 겨눠도 프롬프트·우클릭이 죽고(머리 위엔 대기
+# 산물 점이 "수집하라"고 떠 있는데) ②실내에서는 아무것도 없는 빈 바닥 칸이 산물을 내준다.
+# 문을 열어 둔 정상 플레이에선 아침마다 산물 생성 직후 방출이 일어나므로 이 상태가 상시다.
+# ★키를 돌려주는 이유: 우정·산물·플래그의 주소는 여전히 키 타일 하나이고(그게 이 노드의 좌표계),
+#   바뀌는 건 "플레이어가 무엇을 겨눴는가"의 해석뿐이다.
+# ★실내/방목 좌표는 서로 다른 카메라 밴드라(방목 y18~ · 실내 y74+) 두 갈래가 겹치지 않는다.
+func animal_key_at(tile: Vector2i) -> Vector2i:
+	if _animals.has(tile) and not is_outside(tile):
+		return tile                       # 실내 거주 = 키 타일이 곧 서 있는 자리
+	for key in _animals.keys():
+		var a: Dictionary = _animals[key]
+		if str(a.get("location", LOC_INDOOR)) != LOC_PASTURE:
+			continue
+		if Vector2i(a.get("pasture_tile", key)) == tile:
+			return key
+	return NO_ANIMAL
+
+# 그 칸에 지금 짐승이 서 있는가(방목 포함). main의 프롬프트·급여·수집 게이트가 본다.
+func has_animal_at(tile: Vector2i) -> bool:
+	return animal_key_at(tile) != NO_ANIMAL
 
 func species_at(tile: Vector2i) -> String:
 	return str(_animals[tile]["species"]) if _animals.has(tile) else ""
