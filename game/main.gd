@@ -13879,7 +13879,13 @@ func _process(delta: float) -> void:
 		#   여기서만 읽을 수 있다(★[owner 큐: 슬롯 장전 UI는 아트/UX 패스에서 재검토]).
 		interact_prompt.visible = not _sleeping
 		var gear_line := _fishing_gear_line(inventory.selected_id())
-		interact_prompt.text = "[좌클릭] 낚싯줄 던지기" + ("" if gear_line == "" else "   " + gear_line)
+		# ★[폴리시 R10] 혼력이 후킹 하한에도 못 미치면 **던지기 안내 자체를 걷는다** — 형제 창구
+		#   (나무·밭·화분·개간)의 "혼력 부족 — 집에서 취침"과 같은 문법. 집행부(`_start_fishing`)의
+		#   사전 판정과 같은 술어를 읽으므로 화면과 동작이 갈리지 않는다.
+		if energy != null and not energy.can_act(FishingSession.MIN_HOOK_ENERGY):
+			interact_prompt.text = "혼력 부족 — 챌 힘이 없다 (집에서 취침)"
+		else:
+			interact_prompt.text = "[좌클릭] 낚싯줄 던지기" + ("" if gear_line == "" else "   " + gear_line)
 	elif _needs_rod_hint():
 		# ★ [S3-T5] 낚싯대 없이 낚시터에 먼저 닿은 동선의 안내(옛 자동 지급 폐기의 짝). 삼도천 강
 		#   낚시터는 뱃사공(황천해)보다 먼저 만나는 자리라, 여기서 막히면 어디로 가야 하는지 알려 준다.
@@ -14745,6 +14751,16 @@ func _start_fishing(water: Vector2i) -> void:
 	#   하나 있으면 어느 등급이 나와도 반드시 들어간다(틀리면 늘 안전한 쪽).
 	if inventory != null and not inventory.has_free_slot():
 		_notice("백팩이 가득 차 낚싯대를 던질 수 없다 — 자리를 비우고 다시")
+		return
+	# ★[폴리시 R10] **혼력 사전 판정** — 바로 위 R2 선검사와 같은 자리·같은 이유다(되돌릴 수 없는
+	#   소모가 곧 다음 줄에 있다: 미끼는 캐스팅 순간 확정 소모되고 입질 결과와 무관하게 안 돌아온다).
+	#   후킹 비용의 하한이 `MIN_HOOK_ENERGY`라, 그마저 못 내면 어떤 어종이 걸리든 후킹 게이트가
+	#   **반드시** 실패한다 — 보장 미끼(150냥)를 바닥날 때까지 태우며 100% "입질을 놓쳤다"를 반복할
+	#   수 있었다. 형제 동사(곡괭이 `_mine_rock`·팬닝 `_pan_spot`)는 소모 **전에** 막고 알린다.
+	#   ★ ADR-0008과 충돌하지 않는다: 이건 저혼력을 막는 게이트가 아니라(캐스팅·대기는 여전히 무과금)
+	#     "확정 실패 + 자원 소각"만 걷어내는 판정이다. 혼력 1이면 그대로 던진다.
+	if energy != null and not energy.can_act(FishingSession.MIN_HOOK_ENERGY):
+		_notice("혼력이 바닥나 챌 힘이 없다 — 미끼만 버린다. 집에서 취침")
 		return
 	if _cast_bait != "":
 		inventory.remove_item(_cast_bait, 1)   # 캐스팅 시 1개 소모(입질 결과와 무관 — 던진 값이다)
@@ -16735,6 +16751,13 @@ func _animal_prompt(t: Vector2i) -> String:
 	#   하트 막대를 스프라이트로 만든 그 리스크와 같다). 프롬프트는 글리프 무의존 텍스트로 간다.
 	if parts.is_empty():
 		return "%s 호감 %d — 오늘 돌봄 완료" % [label, hearts]
+	# ★[폴리시 R10] 혼력 게이트 안내 — 위 두 동사는 **둘 다 과금**이고(산물 수집·쓰다듬 = `_try_harvest`
+	#   목축 갈래의 `can_act` · 건초 급여 = `_use_tool`의 과금 갈래. 건초는 씨앗·비료 어느 무과금
+	#   카테고리도 아니다), 두 집행부 모두 **알림 없이 조용히 돌아간다**. 형제 창구(나무·밭·화분·
+	#   개간·이끼)가 전부 세워 둔 이 안내가 목축에만 없어, 하루 마지막 혼력 구간에서 화면이 가능하다고
+	#   말한 동사가 침묵으로 실패했다. 비용 출처도 집행부와 같은 하나다(`_farming_energy_cost`).
+	if not energy.can_act(_farming_energy_cost()):
+		return "%s 호감 %d — 혼력 부족 (집에서 취침)" % [label, hearts]
 	return "%s   (호감 %d)" % ["  ".join(parts), hearts]
 
 # ★ [S1-8] 개간 프롬프트: 조준한 debris에 대해 맞는 도구면 [좌클릭] 개간, 아니면 필요한 도구를 안내한다.
