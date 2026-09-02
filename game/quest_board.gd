@@ -374,10 +374,14 @@ func load_save(data: Dictionary) -> void:
 	changed.emit()
 
 # ── 표시 도우미(프롬프트 한 줄) ────────────────────────────────────────────────
-# "혼령초 ×2 — 미호 · 3일까지 · +120골드" 결의 요약 한 줄. main 프롬프트·알림이 공유한다.
+# "혼령초 ×2 — 미호 · 피안절 3일까지 · +120골드" 결의 요약 한 줄. main 프롬프트·알림이 공유한다.
+# ★[폴리시 R11] 기한을 **절대 day가 아니라 화면 눈금**으로 찍는다(`GameClock.date_label`). due_day는
+#   단조 증가하는 원장 값이라 day 29부터 절기 일차와 어긋났고("30일까지"인데 HUD는 "유화절 1일"),
+#   플레이어가 남은 날을 대조할 표면이 게임 안에 없었다. 원장은 그대로 절대 day다 — 접는 것은
+#   표시 계층뿐이고, 접는 규칙은 GameClock 하나가 든다(수치·산식 복제 0).
 static func summary(quest: Dictionary) -> String:
 	if quest.is_empty():
 		return ""
-	return "%s ×%d — %s · %d일까지 · +%d골드" % [
+	return "%s ×%d — %s · %s까지 · +%d골드" % [
 		ItemCatalog.name_of(String(quest["item_id"])), int(quest["count"]),
-		String(quest["client"]), int(quest["due_day"]), int(quest["gold"])]
+		String(quest["client"]), GameClock.date_label(int(quest["due_day"])), int(quest["gold"])]

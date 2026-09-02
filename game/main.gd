@@ -20977,7 +20977,7 @@ func _try_propose_okja() -> void:
 		_notice("이미 부부다 — 부적이 조용히 잠들어 있다")
 		return
 	if _wedding_day > 0:
-		_notice("혼례는 이미 정해졌다 — %d일 아침" % _wedding_day)
+		_notice("혼례는 이미 정해졌다 — %s 아침" % GameClock.date_label(_wedding_day))
 		return
 	# ★ 연애 슬롯 배타성 — `_resolve_confession`·`_try_propose`가 지키는 그 불변식이 이 경로에도
 	#   선다. 앵커는 고백 문법(♡5 의지 시험) 밖이라 청혼이 곧 고백인데(위 머리말), 그 자리에서 슬롯을
@@ -21006,7 +21006,10 @@ func _try_propose_okja() -> void:
 	_romance_partner = OKJA_RID             # 연애 슬롯 = 청혼이 곧 고백이다(위 머리말)
 	_wedding_day = clock.day + WEDDING_WAIT_DAYS
 	audio.sfx("ui")
-	_notice("부적이 받아들여졌다 — %d일 아침, 혼례를 올린다" % _wedding_day, NOTICE_SECS * 2.0)
+	# ★[폴리시 R11] 고지를 **화면 눈금**으로 찍는다(`GameClock.date_label` — 게시판·시련과 같은 처방).
+	#   `_wedding_day`는 절대 day라 종전엔 "148일 아침"처럼 HUD·달력 어디에도 없는 숫자를 말했다.
+	#   이 알림이 게임 유일의 혼례 날짜 고지다(달력에 혼례 마커가 없다). 같은 문자열 넷 전부 교체.
+	_notice("부적이 받아들여졌다 — %s 아침, 혼례를 올린다" % GameClock.date_label(_wedding_day), NOTICE_SECS * 2.0)
 
 # B7 재생 — 혼례 아침이 예약해 둔 해방 컷신을 눈을 뜨는 프레임에 튼다(B4와 완전히 같은 두 단계).
 func _fire_spine_b7() -> void:
@@ -21426,7 +21429,7 @@ func _try_propose(r: Resident) -> void:
 		_notice("부적이 응하지 않는다 — 이건 연인과 나눌 물건이다")
 		return
 	if _wedding_day > 0:
-		_notice("혼례는 이미 정해졌다 — %d일 아침" % _wedding_day)
+		_notice("혼례는 이미 정해졌다 — %s 아침" % GameClock.date_label(_wedding_day))
 		return
 	# ★[S8-T8 / ADR-0066 결정 10] 재혼 면제 — 결혼한 적 있는 상대에겐 방·아크 게이트를 건너뛴다
 	#   (ADR-0022 "재혼 = ♡5 재도달 + 정표 재수여만"). ♡5 재도달은 위의 연인 판정이 이미 강제한다
@@ -21464,7 +21467,7 @@ func _try_propose(r: Resident) -> void:
 		inventory.remove_item(ItemCatalog.OKJA_ELIXIR, 1)
 	_wedding_day = clock.day + WEDDING_WAIT_DAYS
 	audio.sfx("ui")
-	_notice("%s 혼례 부적을 받아들였다 — %d일 아침, 혼례를 올린다" % [HanjiUi.with_i(r.display_name), _wedding_day],
+	_notice("%s 혼례 부적을 받아들였다 — %s 아침, 혼례를 올린다" % [HanjiUi.with_i(r.display_name), GameClock.date_label(_wedding_day)],
 		NOTICE_SECS * 2.0)
 
 # 혼례 아침 — 예정일에 닿으면 식을 올린다(아침 정산 훅). 간이 연출 = 배너 한 줄(등급은 S9).
