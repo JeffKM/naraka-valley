@@ -176,8 +176,18 @@ func _run_checks() -> void:
 	for id in want_letters:
 		if not m.mailbox.inbox.has(String(id)):
 			arrived_ok = false
-	_check("②c 다음 날 아침 = 열두 통이 한꺼번에 도착(미독 12 · 지목한 그 편지들)",
-		m.mailbox.pending_count() == 0 and m.mailbox.unread_count() == 12 and arrived_ok)
+	# ★[폴리시 R11 #31] 큐를 **총량이 아니라 구성으로** 잰다. 이 자리가 재던 것은 "지목한 열두 통이
+	#   큐를 떠나 보관함에 들어왔는가"인데, `pending_count() == 0`은 *다른 층*의 편지까지 함께 세어
+	#   버렸다 — R8이 아침 훅 끝에 채널 개통 안내(`herald_notice`)를 조건 없이 큐잉하면서(멱등) 이
+	#   단언이 baseline에서 깨졌고, 그 실패는 계약 오독이지 결함이 아니었다.
+	var still_queued := PackedStringArray()
+	for id in want_letters:
+		if m.mailbox.outbox.has(String(id)):
+			still_queued.append(String(id))
+	_check("②c 다음 날 아침 = 열두 통이 한꺼번에 도착(미독 12 · 지목한 그 편지들 · 큐 잔류 0)",
+		still_queued.is_empty() and m.mailbox.unread_count() == 12 and arrived_ok)
+	_check("②c2 큐에 남은 것은 관문과 무관한 채널 개통 안내 한 통뿐이다(R8 — 내일 아침 도착)",
+		Array(m.mailbox.outbox) == [m.HERALD_NOTICE_LETTER])
 	var first_letter: String = m.mailbox.next_unread()
 	m._read_next_letter()
 	_check("②d 열람 = 대화창(발신인이 화자 · 본문 첫 줄) · 여는 순간 기독",

@@ -316,8 +316,11 @@ func _run_checks() -> void:
 	print("── ⑦ B6 귀환 · 앵커 트랙 ──")
 	var r_okja: Resident = m._resident("okja")
 	_drain_one(m)                               # 완료 지문 → _close_spine_puzzle → B6
-	_check("⑦a ★완료 지문이 닫히는 **그 자리**에서 B6가 이어 붙는다(내면 공간 해제 · 비트 · 재생)",
-		m._spine_bit_seen(m.SPINE_B6) and m.spine_puzzle == null and m.cutscene != null)
+	# ★[폴리시 R11] 비트는 이제 장면 **끝**에 선다(#7) — 이 자리의 증거는 예약 + 재생이고,
+	#   비트·트랙은 아래 ⑦f·⑦h(장면이 닫힌 뒤)가 잰다.
+	_check("⑦a ★완료 지문이 닫히는 **그 자리**에서 B6가 이어 붙는다(내면 공간 해제 · 예약 · 재생)",
+		m._spine_b6_pending and not m._spine_bit_seen(m.SPINE_B6)
+		and m.spine_puzzle == null and m.cutscene != null)
 	_settle(m)
 	_check("⑦b 그림이 화면을 덮고(S등급) 첫 묶음은 화자 없는 내면이다",
 		m._illust_id == Spine.ILLUST_B6 and m._illust_a > 0.0
@@ -337,6 +340,9 @@ func _run_checks() -> void:
 	_check("⑦f ★장면이 끝나면 그림을 거두고 세계로 돌아온다(잔류 0 · 소리 복귀)",
 		m._illust_id == "" and is_zero_approx(m._illust_a) and m._spine_say.is_empty()
 		and m.player.is_physics_processing() and m.clock.running and not m.audio.is_muted())
+	_check("⑦f′ ★[폴리시 R11] 그 자리에서 비트가 서고 **디스크에도 실린다**(재생 중 종료 = 처음부터 다시)",
+		m._spine_bit_seen(m.SPINE_B6) and not m._spine_b6_pending
+		and (_saved_spine_bits() & (1 << m.SPINE_B6)) != 0)
 	_stand_at_door(m)
 	_check("⑦g ★앵커 집이 상시 개방으로 바뀐다(조건 문구 자체가 걷힌다)",
 		_label_with(m, "옥자 집") == "옥자 집")

@@ -340,10 +340,26 @@ func is_perfect_window() -> bool:
 func perfect_flash() -> bool:
 	return _perfect_flash > 0.0
 
-# ★[폴리시 R10] 후킹 비용의 **구조적 하한**. 스킬 절감이 아무리 세도 이 아래로는 안 내려가므로,
-#   혼력이 이 값에 못 미치면 *어떤 어종이 걸리든* 후킹 게이트가 반드시 실패한다 — main이 캐스팅
-#   사전 판정에 그대로 쓰는 단일 출처다(수치 복제 0).
+# ★[폴리시 R10] 후킹 비용식의 **클램프 하한**(비용이 0으로 내려가 후킹이 공짜가 되는 것만 막는다).
 const MIN_HOOK_ENERGY := 1
+
+# ★[폴리시 R11] 이번 캐스팅에서 **실제로 도달 가능한 최저 후킹 비용**. R10은 캐스팅 사전 판정에
+#   위 클램프 하한(1)을 그대로 썼는데, 그 값은 **도달 불가능**하다: base는 늘 CLASS_PRESETS 폴백이고
+#   (어종 dict에 "energy" 오버라이드가 한 종도 없다) 최저 체급이 4, 절감 계수의 하한이 0.70이라
+#   맨 아래 비용도 round(4×0.70)=3이다. 그래서 혼력 1~3에서는 사전 판정이 통과시켜 놓고 후킹
+#   게이트가 **반드시** 실패했다 — 미끼만 태우고 100% "입질을 놓쳤다"를 반복할 수 있었다(R10이
+#   걷어내겠다고 선언한 바로 그 손실이 혼력 0 한 칸만 빼고 남아 있었다).
+#   ★ 최저 체급을 손으로 적지 않고 프리셋 표 전체에서 파생한다(표가 늘거나 순서가 바뀌어도 따라온다).
+#   ★ ADR-0008과 충돌하지 않는다: 저혼력을 막는 게이트가 아니라 "확정 실패 + 자원 소각"만 걷는다.
+#     이 값을 낼 수 있으면 그대로 던진다(어떤 어종이 걸릴지는 여전히 굴려 봐야 안다).
+static func min_hook_energy(mods: Dictionary) -> int:
+	var factor := float(mods.get("energy_factor", 1.0))
+	var lowest := -1
+	for p in CLASS_PRESETS:
+		var c := maxi(int(round(float(p["energy"]) * factor)), MIN_HOOK_ENERGY)
+		if lowest < 0 or c < lowest:
+			lowest = c
+	return lowest if lowest > 0 else MIN_HOOK_ENERGY
 
 # 이 세션의 후킹 혼력 비용(체급 기준값 × 스킬 절감 계수, 하한 MIN_HOOK_ENERGY). main이 사전 판정·소모에 쓴다.
 func energy_cost() -> int:

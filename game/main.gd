@@ -2446,20 +2446,24 @@ var codex: Codex = null
 var quest_board: QuestBoard = null
 var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌트를 한 번만 띄웠는지(세션 로컬 — 세이브 무관)
 # ★[폴리시 R3] 집 밖에서 날이 바뀌어 **밀린 절기 대량 재스폰**의 날짜(0 = 밀린 것 없음). 안식 농원에
-#   다시 서는 프레임에 `_process`가 소비한다. 세션 로컬이다(세이브 무관) — 그 아침에 껐다 켜면
-#   기회를 잃지만, 그건 이 표가 없던 종전과 같은 결과라 회귀가 아니다.
+#   다시 서는 프레임에 `_process`가 소비한다.
+#   ★[폴리시 R11 정정] 종전 머리말의 "세션 로컬이다 — 그 아침에 껐다 켜면 기회를 잃지만 표가 없던
+#     종전과 같은 결과라 회귀가 아니다"는 **거짓이었다**(#1·#4·#8): 표가 서는 그 프레임에 취침 자동
+#     세이브가 떨어지고 그 파일의 `reclaim`은 *재스폰 전*이라, 표를 버리면 되감기가 아니라 그
+#     절기치의 영구 스킵(다음 기회 28일 뒤)이다. 이제 세이브를 왕복한다(`_save_game` 머리말).
 var _season_respawn_pending_day := 0
 # ★[폴리시 R6] 집 밖에서 날이 바뀌어 **밀린 아침 방목 방출**(false = 밀린 것 없음). 방목 슬롯 스캔은
 #   HOME 좌표 상수(PASTURE_SCAN_RECT)를 지금 실린 그리드로 훑으므로 다른 구역에서는 집행할 수 없다.
-#   위 절기 재스폰 표와 같은 결의 세션 로컬 값이고(세이브 무관·로드가 버린다), 안식 농원에 다시
+#   위 절기 재스폰 표와 같은 결이고(★[폴리시 R11] 셋 다 세이브를 왕복한다 — 파일의 `ranch`가
+#   *방출 전*이라 표를 버리면 그날치 F_GRAZE·M_GRAZE 가산을 통째로 잃었다), 안식 농원에 다시
 #   서는 프레임에 `_process`가 소비한다 — 다만 **실제로 방출까지 간 프레임에만** 지운다(밤에
 #   돌아오면 그 프레임은 아무것도 안 하므로, 표를 소비하면 그날 방목을 잃는다).
 var _pasture_release_pending := false
 # ★[폴리시 R9] 집 밖에서 날이 바뀌어 **밀린 그 밤의 잡초 두 줄**의 날짜(0 = 밀린 것 없음).
 #   확산(`_run_weed_spread`)과 재점령(`_run_weed_encroach`)을 한 표가 함께 든다 — 둘 다 안식
 #   그리드를 전제하고(`_weed_spread_cb`·`_encroach_candidates`가 HOME이 아니면 빈 값을 돌려준다)
-#   같은 밤의 짝이라 갈라 미룰 이유가 없다. 위 두 표와 같은 결의 세션 로컬 값이고(세이브 무관·
-#   로드가 버린다), 안식 농원에 다시 서는 프레임에 `_process`가 순서대로 소비한다.
+#   같은 밤의 짝이라 갈라 미룰 이유가 없다. 위 두 표와 같은 결이고(★[폴리시 R10·R11] 셋 다
+#   세이브를 왕복한다), 안식 농원에 다시 서는 프레임에 `_process`가 순서대로 소비한다.
 #   ★ 밀린 밤이 여러 날이어도 표는 **마지막 하루**만 든다(절기 재스폰 표와 같은 계약) — 두 원장 다
 #     day 시드라 같은 날을 두 번 굴려도 결과가 같고, 밀린 밤 수만큼 곱해 물리는 건 페널티 설계
 #     결정이라 여기서 새로 만들지 않는다(OWNER 큐).
@@ -2911,6 +2915,11 @@ const FLAVOR_SECS := 3.5          # T3.5 사연 한 줄은 읽을 시간을 더 
 var _delete_armed_secs := 0.0
 const DELETE_CONFIRM_SECS := 3.0  # 2단 확인 대기 시간(이 안에 다시 F8이면 실행)
 
+# ★[폴리시 R11] 옵션 탭 [종료]가 저장에 실패했음을 한 번 알린 뒤 무장하는 래치(_on_frame_quit).
+# 시간 만료가 없는 것은 F8과 다른 점이다 — 저장 실패는 순간의 오타가 아니라 **환경의 상태**라,
+# 3초 뒤에 다시 눌러도 여전히 실패한다(그 사이 고쳤다면 저장이 성공해 이 래치를 안 본다).
+var _quit_unsaved_armed := false
+
 # T3.5 작물(영혼)별 수확 누적 횟수. 수확마다 +1 해 SoulMemory.line의 index로 넘겨
 # 사연이 순환되게 한다(같은 작물을 거둘 때마다 다음 사연으로). 일시적 표시용 진척이라
 # 세이브하지 않는다(대화와 같은 결 — SaveManager·main 세이브 불변).
@@ -2982,6 +2991,9 @@ var _talking_to := ""
 # 같은 결로 일시 표시용이라 세이브하지 않는다(cafe.gd 세이브 무상태와 일관).
 var _cafe_summary_secs := 0.0
 const CAFE_SUMMARY_SECS := 5.0  # 마감 정산 팝업 표시 시간(읽을 시간을 넉넉히)
+# ★[폴리시 R11] 마일스톤 팝업에 가려질까 봐 미뤄 둔 마감 정산 본문("" = 미룬 것 없음).
+# 팝업 타이머가 끝나는 프레임에 소비된다(_process) — 근거는 `_on_cafe_closed`의 그 자리.
+var _cafe_summary_pending := ""
 
 # T7.2 카페 마일스톤 1단의 "누적 서빙 매출"(카페 손님 서빙 + 밤 바 응대). 출하대 raw 판매는
 # 빼고 *카페를 운영한* 매출만 센다(ADR-0009 — 마일스톤은 카페를 굴리는 쪽으로 당긴다). 매크로
@@ -3051,6 +3063,11 @@ var _illust_id := ""
 var _illust_a := 0.0
 # 마지막 묶음이 닫히면 에필로그를 띄우겠다는 예약(결정 11 "B7 해방 컷신 직후 1회성 에필로그").
 var _epilogue_pending := false
+# ★[폴리시 R11] B6 장면이 **아직 닫히지 않았다**는 예약(비영속 — `_epilogue_pending`과 완전히 같은 결).
+#   B6도 R6가 B7에 준 처방을 받는다: 비트·트랙 개통·세이브를 장면 *시작*이 아니라 *끝*에 둔다.
+#   이 표가 서 있는 동안 원장은 아직 "B6가 안 왔다"이므로, 재생 도중에 앱이 꺼져도 재기동 시
+#   `_maybe_resume_spine` ㉠이 장면을 처음부터 다시 튼다(세이브 키 0 — 판정은 여전히 비트 파생).
+var _spine_b6_pending := false
 # 에필로그 화면이 떠 있는가. ★`_run_over`와 **다른 축**이다: 저건 런이 끝나 되돌릴 수 없는
 # 상태고(옛 21일 게이트의 잔재), 이건 닫으면 **코지 샌드박스로 돌아가는** 1회성 화면이다
 # (결정 11 "게임 종료 아님" · RUN_DAYS 게이트 부활 없음). 그래서 `_run_over`를 재사용하지 않는다.
@@ -4990,6 +5007,17 @@ func _deco_blocked() -> bool:
 func _toggle_deco_mode() -> void:
 	_deco_mode = not _deco_mode
 	if _deco_mode:
+		# ★[폴리시 R11] 켜는 그 자리에서 **조회 패널을 먼저 접는다**(점괘 거울·달력). 꾸미기
+		#   편집면은 월드 캔버스의 `_draw` 오버레이라 CanvasLayer 패널 **아래**에 그려지는데,
+		#   두 패널을 접는 경로(거울 자동 접기·[F] 토글·달력 Esc·달력 자동 접기)가 전부
+		#   `if _deco_mode: return`(프레임 절단) **아래**에 있어, 열어 둔 채 C를 누르면 편집면이
+		#   통째로 가린 채 모드를 끄기 전에는 어떤 입력으로도 못 닫혔다. R3가 연출·모달에 세운
+		#   `_deco_blocked` 게이트와 갈리는 이유: 저건 **때**가 아니라 열어 둔 조회 창이라,
+		#   진입을 막으면 C가 죽은 키가 된다(닫고 켜 주는 것이 플레이어가 하려던 일이다).
+		if mirror_panel != null and mirror_panel.visible:
+			_close_mirror()
+		if calendar_panel != null:
+			calendar_panel.close()
 		_notice("집 꾸미기 (C=끄기 · 좌클릭=놓기 · 우클릭=지우기 · Q/E=레이어 · [/]=세트 · ,/.=아이템 · R=회전)", 4.0, true)
 	queue_redraw()
 
@@ -5384,7 +5412,10 @@ func _field_at(t: Vector2i) -> FarmField:
 # 로드, 건물이 새로 서는 두 순간에 부른다(멱등). ①건물 카탈로그 재구성(늘봄방 행 등록 — 출입·카메라·
 # 세이브 복원이 전부 이 dict 주도) ②안방 확장 카메라 재적용(카탈로그를 다시 세웠으므로 짝으로)
 # ③현재 무대가 HOME이면 그리드 재빌드(다른 구역이면 다음 워프의 _rebuild_region이 자연히 세운다).
-func _refresh_greenhouse() -> void:
+# ★[폴리시 R11] `rebuild=false` = 로드 경로(뒤따르는 `_restore_location`이 어차피 재빌드한다).
+#   늘봄방을 세운 세이브에서는 이 함수와 그 안의 `_refresh_home_expansion`이 각각 한 번씩 더 구워
+#   로드 한 번에 HOME 그리드가 넉 번 섰다 — 아래로 넘겨 둘 다 접는다(완공 아침 경로는 기본값 그대로).
+func _refresh_greenhouse(rebuild: bool = true) -> void:
 	if not _greenhouse_built():
 		return
 	# ★[폴리시 R5] 그리드를 다시 세우기 **전에** 예정지를 비운다 — _rebuild_region → _build_facade가
@@ -5393,9 +5424,10 @@ func _refresh_greenhouse() -> void:
 	# ★[폴리시 R6] 비우는 것은 물건만이 아니다 — **그 안에 서 있는 플레이어도** 함께 내보낸다.
 	_evict_from_greenhouse_lot()
 	_build_building_catalog()
-	_refresh_home_expansion()   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
+	_refresh_home_expansion(rebuild)   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
 	if _region == RegionCatalog.HOME:
-		_rebuild_region(RegionCatalog.HOME)
+		if rebuild:
+			_rebuild_region(RegionCatalog.HOME)
 		if _indoor == "늘봄방":
 			_apply_camera_limits()
 
@@ -5419,12 +5451,20 @@ func home_house_cam_rect() -> Rect2i:
 #   있었고**, 그 배치가 그대로 세이브에 굳었다. 아래 세 줄은 전부 `home_house_rect()` 파생이라
 #   가드만 걷으면 좁아지는 방향도 같은 식이 잡는다(배치 dict 자체는 `home_deco.load_save`가 이미
 #   세이브 시점으로 되감으므로 잘라 낼 것이 없다 — 걷을 것은 경계뿐이었다).
-func _refresh_home_expansion() -> void:
+# ★[폴리시 R11] `rebuild` 인자는 **로드 경로 전용**이다(`_refresh_season_terrain(false)`와 같은 뜻·
+#   같은 자리). `_load_game`은 `_restore_location`이 저장 구역을 *언제나* 재빌드한 **뒤에** 이 함수를
+#   부르는데, 여기서 또 부르면 같은 HOME 그리드를 연달아 두 번 굽는다 — 재빌드는 `home_house_rect()`
+#   파생이고 그 진실원인 `carpenter.load_save`는 `_restore_location`보다 한참 앞에서 끝나므로, 두 번째
+#   결과는 첫 번째와 **바이트 단위로 같다**(순수 낭비). 실측: 재빌드 1회 ≈ 2.5s라 로드 1회가 5s→2.5s.
+#   카메라만은 여전히 여기서 잡는다 — 위 `_buildings["집"]["cam"]` 교체가 `_restore_location`의 카메라
+#   적용 **뒤**라, 그 줄을 건너뛰면 확장 안방에서 옛 둘레가 남는다.
+func _refresh_home_expansion(rebuild: bool = true) -> void:
 	_configure_home_deco_bounds()
 	if _buildings.has("집"):
 		_buildings["집"]["cam"] = home_house_cam_rect()
 	if _region == RegionCatalog.HOME:
-		_rebuild_region(RegionCatalog.HOME)
+		if rebuild:
+			_rebuild_region(RegionCatalog.HOME)
 		if _indoor == "집":
 			_apply_camera_limits()
 
@@ -10230,7 +10270,7 @@ func _on_day_advanced(day: int) -> void:
 		#   곱셈기 CafeMargin과 같은 돈 축이되 소스가 다르다: 마진=서빙 매출·팁=출하 정산).
 		#   최소 1골드 보장(2% 절사로 0이 되면 "팁"이 장부에 안 보인다). 마일스톤 누적
 		#   (_cafe_revenue_total)엔 여전히 안 넣는다(raw 판매 — ADR-0009 그대로).
-		if _spouse_id == "mel":
+		if _spouse_of_morning(day) == "mel":
 			var tip := maxi(1, ship_gold * SPOUSE_MEL_TIP_PCT / 100)
 			ship_gold += tip
 			_notice("멜이 장부를 손질했다 — 출하 팁 +%d골드" % tip)
@@ -10245,7 +10285,10 @@ func _on_day_advanced(day: int) -> void:
 	if codex != null and codex.trophy_pending():
 		codex.claim_trophy(day)
 		if notice_feed != null:
-			notice_feed.push("명부 도감 완주 — 이 땅의 것을 모두 명부에 올렸다", 5.0, false, null, true)
+			# ★[폴리시 R11] `keep` — 이 줄은 세이브 전체에서 딱 한 번 발화하는 래치(trophy_day)의
+			#   유일한 표면이라, 뒤이어 미는 아침 알림 열 줄에 밀려 사라지면 영영 안 뜬다.
+			notice_feed.push("명부 도감 완주 — 이 땅의 것을 모두 명부에 올렸다", 5.0, false, null, true,
+				Color(0, 0, 0, 0), true)
 		audio.sfx("ui")
 	# ★[S7-T1 / ADR-0065 결정 1] 옛 T4.2 런 종료 게이트(RunSummary.is_over → _end_run → return)가
 	#   여기 있었다. RUN_DAYS=21에서 하루를 더 자면 게임이 끝나 **절기 전환(day 29)에 영원히 도달
@@ -10413,8 +10456,16 @@ func _on_day_advanced(day: int) -> void:
 	#   전 칸을 말린 *직후*라 "오늘 몫"의 손 노동을 대행하는 자리다(어제 성장 판정엔 불개입).
 	#   여우불(성장 가속·위 인자)과 별축 — 여우불은 못 준 칸도 자라게 하고, 이 물은 칸을 실제로
 	#   적신다(결정 9 "별축이라 중복 아님"). 대상 선정·수치는 field.water_dry(결정적 정렬·잠정 8칸).
-	if _spouse_id == "miho":
+	# ★[폴리시 R11] **늘봄방 경작면도 함께 돈다.** 같은 아침의 형제 창구 둘은 이미 두 밭을 다
+	#   보는데(스프링클러는 `_field_at`으로 칸의 주인 밭에 라우팅되고, 성장은 `greenhouse_farm.
+	#   advance_day`가 따로 집행) 배우자 잡일만 노지 `farm` 하나에 묶여 있었다. 늘봄방은 실내라
+	#   혼우(비) 급수도 안 닿으므로, 재배를 온실로 옮긴 엔드게임 플레이어에게 결혼 잡일 ①이 통째로
+	#   무효였다(칸 0개 → 알림도 안 뜬다). 예산은 **한 몫을 나눠 쓴다**(노지 먼저, 남는 만큼 온실) —
+	#   미호의 하루 손 노동이 밭이 늘었다고 곱절이 되지는 않는다(수치는 SPOUSE_MIHO_WATER_TILES 그대로).
+	if _spouse_of_morning(day) == "miho":
 		var watered_by_spouse := farm.water_dry(SPOUSE_MIHO_WATER_TILES)
+		if greenhouse_farm != null and watered_by_spouse < SPOUSE_MIHO_WATER_TILES:
+			watered_by_spouse += greenhouse_farm.water_dry(SPOUSE_MIHO_WATER_TILES - watered_by_spouse)
 		if watered_by_spouse > 0:
 			_notice("미호가 아침 물주기를 도왔다 — %d칸" % watered_by_spouse)
 	orchard.advance_day(day)   # ★ [S1-5b] 성숙+제철 나무는 결실 +1(비제철 정지·영속). day는 무상태 절기 판정(ADR-0045)
@@ -10600,6 +10651,10 @@ func _on_day_advanced(day: int) -> void:
 	#   (날짜가 갈려 있어 한 아침에 둘이 겹치지 않는다: 행사 12/20/16/15 vs 테마 데이 25).
 	for line in _seasonal_morning_notices():
 		_notice(line, NOTICE_SECS * 2.0)
+	# ★[폴리시 R11] 생일 배너(당일 + D-1) — 위 두 층과 같은 자리·같은 길이. 날짜에 매인 네 층 중
+	#   이것만 push 채널이 없어, 상한 면제라는 그 주 최대치 기회가 조용히 지나갔다.
+	for line in _birthday_morning_notices():
+		_notice(line, NOTICE_SECS * 2.0)
 	# ★[S10-T3 / ADR-0069 결정 5] 보부상이 왔다 — 절기 행사 배너와 **같은 문법·또 다른 층**이다.
 	#   행사 배너와 한 아침에 겹칠 수는 있지만(7의 배수 vs 12/20/16/15는 서로 소수가 아니다) 무대가
 	#   갈려 있어(광장 vs 다리 남단) 둘 다 뜨는 게 오히려 맞다 — "오늘 갈 데가 둘"이다.
@@ -10767,6 +10822,39 @@ func _seasonal_morning_notices() -> Array:
 	if tomorrow != SeasonalEvent.NONE:
 		out.append(SeasonalEvent.preview_text(tomorrow))
 	return out
+
+# ★[폴리시 R11] 생일 아침 배너(당일 + D-1) — 테마 데이·절기 행사·보부상과 **같은 문법의 넷째
+# 형제**다. 날짜에 매인 네 층 중 생일만 push 채널이 통째로 없어서, 남은 표면이 플레이어가 직접
+# 열어야 보이는 것 둘(달력 마커·관계 탭 꼬리)뿐이었다. 그게 손해로 이어지는 이유: 선물은 인당
+# 주 2회 상한인데 **생일만 그 상한이 면제**되고 보정도 따로 붙는다 — 그 주 최대치 기회가 아무
+# 고지 없이 지나갔다. 조회 방향은 `Resident.birthday_on_day`(달력 마커가 쓰는 그 함수)라 날짜
+# 표는 여전히 한 곳(Resident.BIRTHDAYS)이고, 이름은 로스터에서 뜬다(레코드가 없으면 줄 없음).
+func _birthday_morning_notices() -> Array:
+	var out: Array = []
+	if clock == null:
+		return out
+	var today := _display_name_of(Resident.birthday_on_day(clock.day))
+	if today != "":
+		out.append("오늘은 %s의 생일이다 — 선물 주 상한이 면제된다" % today)
+	var tomorrow := _display_name_of(Resident.birthday_on_day(clock.day + 1))
+	if tomorrow != "":
+		out.append("내일은 %s의 생일이다 — 선물을 미리 챙겨 두자" % tomorrow)
+	return out
+
+# 점괘 거울 ◇ — 다가오는 생일 한 줄. 형제 셋(테마 데이·절기 행사·보부상)과 같은 자리·같은 문법.
+# ★ 창은 한 절기(28일)다: 생일이 절기마다 여럿이라 그 안에 반드시 하나가 들고, 더 넓히면 늘
+#   같은 사람이 걸려 예고가 아니라 상시 표시가 된다.
+func _birthday_upcoming_line() -> String:
+	if clock == null:
+		return ""
+	for ahead in range(0, GameClock.DAYS_PER_SEASON):
+		var nm := _display_name_of(Resident.birthday_on_day(clock.day + ahead))
+		if nm == "":
+			continue
+		if ahead == 0:
+			return "오늘: %s의 생일 (선물 주 상한 면제)" % nm
+		return "%s: %s의 생일" % ["내일" if ahead == 1 else "%d일 뒤" % ahead, nm]
+	return ""
 
 # 점괘 거울 ㉤ — 다가오는 절기 행사 한 줄("3일 뒤: 저승 야시장"). `_festival_upcoming_line`과
 # **같은 문법의 형제 함수**다(한 절기 앞까지 훑어 첫 슬롯을 문구로 낸다).
@@ -11675,7 +11763,10 @@ func _on_sleep_done() -> void:
 # SaveManager에 넘기고(파일 IO), 불러올 땐 받은 조각을 각 노드에 분배한다.
 # T3.1 경제가 붙으며 "wallet"(골드)·"inventory"(수확물·씨앗) 두 조각이 추가됐다.
 # SaveManager는 IO만 책임지므로 저장 항목이 늘어도 손대지 않는다(설계대로).
-func _save_game() -> void:
+# ★[폴리시 R11] 반환값이 void → **저장됐는가**로 바뀌었다(`_load_game`이 R6에서 받은 그 처방).
+#   IO 성패를 아는 자리는 여기 하나인데 옵션 탭 [저장]·[종료]는 그것을 안 보고 성공 문구를 얹거나
+#   그대로 앱을 닫았다 — 쓰기가 실패해도(경로 읽기 전용·디스크 가득) 플레이어는 저장됐다고 믿었다.
+func _save_game() -> bool:
 	var data := {
 		"clock": clock.to_save(),
 		"energy": energy.to_save(),
@@ -11701,14 +11792,21 @@ func _save_game() -> void:
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
 		"furnace": furnace.to_save(),       # ★[S5-T3] 업화로(구역별 좌표·넣은 광석·남은 제련 분·주괴·등급)
 		"geode_opened": _geode_opened,       # ★[S5-T3] 누적 지오드 개봉 수(개봉 롤 시드 — 재롤 차단)
-		# ★[폴리시 R10] 밀린 **그 밤의 잡초 표**. 형제 표 둘(절기 재스폰·방목 방출)과 계약이 갈리는
-		#   유일한 자리라 실어 보낸다. 저 둘은 "표를 버려도 잃는 것이 없다"가 근거였는데(로드가
-		#   되감는 원장이 *이미 집행된* 상태라 표만 버리면 그만), 잡초는 정반대다: 취침 자동 세이브가
-		#   `_on_day_advanced` **뒤**에 뜨므로 파일에 실리는 `reclaim`은 *확산 전*이고, 표까지 버리면
-		#   되감기가 아니라 그 밤의 영구 스킵이 된다. 마을에 서서 강제 취침 → F9 한 번이면 ADR-0055
-		#   차등 재점령과 잡초 손실이 매일 밤 면제되는, R9가 막았던 그 무비용 악용이 그대로 열렸다.
-		#   표를 원장과 같은 파일에 담으면 둘이 늘 같은 시점을 가리켜 그 갈림이 사라진다.
+		# ★[폴리시 R10 → R11 정정] 밀린 **밤·아침 표 3종**. R10은 잡초 표만 실으며 형제 둘(절기
+		#   재스폰·방목 방출)은 "로드가 되감는 원장이 *이미 집행된* 상태라 표만 버려도 잃는 것이
+		#   없다"고 적어 제외했는데, **그 논증이 거짓이었다**(R11 #1·#4·#6·#8). 세 표는 같은 함수
+		#   (`_on_day_advanced`)에서 같은 문법으로 서고, 취침 자동 세이브(`_on_sleep_done`의
+		#   `_save_game`)는 `clock.sleep` **뒤**에 떨어진다 — 그래서 파일에 실리는 `reclaim`·`ranch`는
+		#   셋 다 *집행 전* 상태다. 표까지 버리면 되감기가 아니라 **그 날치의 영구 스킵**이 된다:
+		#   절기 재스폰은 1회성이라 다음 기회가 28일 뒤이고(ADR-0055 개간 롱테일이 절기마다 무비용
+		#   면제), 방목 방출은 그날 F_GRAZE·M_GRAZE 가산이 전 마리 소실된다. 입구도 같다 —
+		#   집 밖 강제 취침 + F9 한 번.
+		#   ★ 계약의 판별식: 세이브 시점에 원장이 *이미 집행됐으면* 표는 버려도 되고, *집행 전*이면
+		#     왕복해야 한다. 셋 다 후자다. 표를 원장과 같은 파일에 담으면 둘이 늘 같은 시점을
+		#     가리켜 그 갈림 자체가 사라진다.
 		"weed_pending_day": _weed_day_pending_day,
+		"season_respawn_pending_day": _season_respawn_pending_day,
+		"pasture_release_pending": _pasture_release_pending,
 		# ★[폴리시 R5] 나머지 **일련번호 시드 4종**도 같은 이유로 실린다. 이들은 세이브에도 없고
 		#   `_load_game`이 리셋하지도 않아 F9 인플레이스 로드에서 홀로 살아남았다 — 시계·혼력·
 		#   인벤이 전부 되감기는데 시드만 +1로 남으니, 같은 칸·같은 분의 캐스팅이 매번 다른 어종·
@@ -11822,8 +11920,10 @@ func _save_game() -> void:
 			data[r.save_key] = r.affinity.to_save()
 	# ★ 활성 슬롯에 저장 + 코지 다이어리 메타(날짜·혼력) 헤더를 얹는다(타이틀 슬롯 UI가
 	#   전체 로드 없이 [N년차 절기 D일 / 혼력]을 읽도록). meta는 SaveManager엔 불투명 blob.
-	if saver.save_game(data, _active_slot, {"day": clock.day, "soul": energy.current}):
-		_notice("저장됨")
+	if not saver.save_game(data, _active_slot, {"day": clock.day, "soul": energy.current}):
+		return false
+	_notice("저장됨")
+	return true
 
 # ★[폴리시 R6] 반환값이 void → **불러왔는가**로 바뀌었다. `saver.has_save`는 파일 존재만 보고
 #   실제 파싱·검증(`_read_wrapped`)은 따로 갈리므로 "파일은 있는데 안 읽히는 슬롯"이 존재한다
@@ -11849,21 +11949,27 @@ func _load_game() -> bool:
 	_clear_cheki_offer()
 	cocktail = null
 	_clear_cocktail_offer()
+	# ★[폴리시 R11] **밤 바 세션도 같은 줄에 세운다.** night_bar는 세이브 무상태라 로드가 한 줄도
+	#   안 건드렸는데, 옵트인 플래그·잡귀 접근 타이머·바나 자동 차단 잔량·그 밤의 정산 카운터는
+	#   전부 로드를 그대로 통과했다 — 바를 연 밤에 F9를 누르면 되감긴 그날 19:00에 `tick`이 곧바로
+	#   활성으로 판정해 **열지도 않은 바**에서 약탈이 집행됐다(근거 전문은 `NightBar.abandon`).
+	#   `end_day`가 아니라 `abandon`인 이유: 저건 정산 요약을 쏘는데, 되감긴 밤의 매출·약탈은
+	#   존재한 적이 없으므로 알릴 것이 없다.
+	if night_bar != null:
+		night_bar.abandon()
 	# ★[폴리시 R3] 갱도 진입 층 선택도 같은 이유로 1층에서 다시 시작한다. 이 값은 `_cycle_mine_entry`가
 	#   **해금된 엘리베이터 목록 안에서만** 돌리는데, 로드는 `mine_floors._depth`(=해금 파생)를 되감으므로
 	#   선택만 남으면 목록 밖 층을 가리킨다 — 소비처 `_descend_mine`은 is_valid_floor만 보므로 그대로
 	#   해금 안 한 깊이로 내려가고(진행 스킵), 프롬프트도 목록에 없는 층을 안내했다.
 	_mine_entry_pick = 1
-	# ★[폴리시 R4] **밀린 절기 재스폰 표도 같은 이유로 버린다.** 이 표는 세션 로컬인데(R3 #7),
-	#   로드는 `reclaim`을 세이브 시점으로 되감으므로 표만 살아남으면 절기 전환일도 아닌 날에
-	#   `_run_season_respawn`이 집행돼(11937~) 되돌린 세이브엔 없던 잡초와 **통행 불가 SOLID
-	#   debris**(잉걸·그루터기)가 마당에 영구로 박혔다. 잃는 것은 없다: 표가 없던 종전과 같은 결과다.
-	_season_respawn_pending_day = 0
-	# ★[폴리시 R6] 밀린 방목 방출 표도 같은 이유로 버린다 — 세션 로컬이고, 로드는 `ranch`를 세이브
-	#   시점으로 되감으므로 표만 살아남으면 되감긴 날의 짐승이 로드 직후 방목지로 나간다.
-	_pasture_release_pending = false
-	# ★[폴리시 R10] 밀린 잡초 밤만 **버리지 않고 파일에서 되살린다** — 위 두 표와 갈리는 자리다
-	#   (근거는 `_save_game`의 그 키 머리말). 키 없는 구세이브 = 0이라 하위호환은 종전과 같다.
+	# ★[폴리시 R10 → R11 정정] 밀린 표 3종은 **버리지 않고 파일에서 되살린다.** R4·R6는 이 둘을
+	#   "세션 로컬이라 버려도 잃는 것이 없다"고 0으로 지웠는데, 그 논증은 *다른* 세이브를 열 때만
+	#   참이고 **표가 선 그 프레임에 찍힌 자동 세이브**에는 거짓이었다(근거 전문은 `_save_game`의
+	#   그 세 키 머리말). 파일에서 읽으면 표와 원장이 늘 같은 시점을 가리키므로, R4·R6가 걱정한
+	#   "되감긴 날에 엉뚱하게 집행된다"도 함께 사라진다(그 표는 그 파일의 표다).
+	#   키 없는 구세이브 = 0/false라 하위호환은 종전과 같다.
+	_season_respawn_pending_day = maxi(int(data.get("season_respawn_pending_day", 0)), 0)
+	_pasture_release_pending = bool(data.get("pasture_release_pending", false))
 	_weed_day_pending_day = maxi(int(data.get("weed_pending_day", 0)), 0)
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
@@ -12087,6 +12193,10 @@ func _load_game() -> bool:
 	_illust_id = ""
 	_illust_a = 0.0
 	_epilogue_pending = false
+	# ★[폴리시 R11] B6 장면 예약도 형제 예약들과 같이 0에서 시작한다 — 표를 든 채 다른 세이브를
+	#   열면 그 세이브의 장면이 아닌 것이 닫히며 비트를 찍는다. 표가 없어도 손실이 아니다:
+	#   비트가 아직 안 섰으므로 `_maybe_resume_spine` ㉠이 장면을 처음부터 다시 튼다.
+	_spine_b6_pending = false
 	if _epilogue_open:
 		_close_epilogue()
 	# ★[S9-T4] 절기 물음 원장 복원(구세이브 = 빈 원장 = 다음 주 첫날에 처음 묻는다).
@@ -12155,7 +12265,9 @@ func _load_game() -> bool:
 	#   `_build_building_catalog`는 `_buildings`를 통째로 다시 만들고 두 조건부 방을 스스로 다시
 	#   재므로, 앞에 한 번 두면 두 방향(생김·사라짐)이 모두 원장 파생이 된다(멱등).
 	_build_building_catalog()
-	_refresh_greenhouse()
+	# ★[폴리시 R11] `rebuild=false` — 아래 `_restore_location`이 저장 구역을 언제나 재빌드한다
+	#   (`_refresh_season_terrain(false)`와 같은 이유·같은 자리: 카탈로그만 다시 파고 굽기는 그쪽 몫).
+	_refresh_greenhouse(false)
 	# ★[S10-T8] 시련장 문 복원 — 늘봄방과 **완전히 같은 이유로 _restore_location보다 먼저**다.
 	#   부팅 시점의 카탈로그는 반딧넋 원장이 복원되기 전에 섰으므로, 여기서 다시 세우지 않으면
 	#   시련장 안에서 저장한 세이브가 바깥으로 튕긴다. 미개방 세이브면 스스로 no-op이다.
@@ -12175,7 +12287,10 @@ func _load_game() -> bool:
 	_pet_event_armed = false
 	# ★[S8-T7] 안방 확장 세이브 복원 — deco 배치 가능 칸을 확장 rect로 재주입한다(완공 아침과 같은
 	# 헬퍼·멱등 — 미확장 세이브면 스스로 no-op). 그리드·카메라는 위 재빌드와 카탈로그가 이미 세운다.
-	_refresh_home_expansion()
+	# ★[폴리시 R11] 바로 윗줄이 종전에도 이미 "그리드는 위 재빌드가 세운다"고 적어 두었는데 호출은
+	#   그 말을 안 지켰다 — 기본값이 재빌드라 `_restore_location` 직후 같은 HOME 그리드를 한 번 더
+	#   구웠다(`carpenter`는 훨씬 앞에서 복원되므로 두 결과는 동일). `false`로 그 말대로 만든다.
+	_refresh_home_expansion(false)
 	# M2.4 F9 재로드(이 함수 직접 호출 경로)에서도 복원된 day로 의상·보너스를 맞춘다(멱등).
 	# ★[S6-T3] 이 호출이 카페 일구기 사다리(좌석·곳간 용량·손님 볼륨)도 함께 세운다 — 위에서
 	#   누적 매출·하트·거둔 영혼이 다 복원된 *뒤*라야 단계가 제대로 파생된다.
@@ -12281,10 +12396,12 @@ func _restore_location(data: Dictionary) -> void:
 # ★[S6-T8] `icon`은 아이템 획득 토스트(_toast_item)가 이미 쓰던 push의 넷째 인자를 열어 준 것이다.
 #   카페 사슬 알림(서빙·체키·곁들이)이 "무슨 잔이 나갔나"를 글자와 함께 그림으로도 말한다.
 # ★[S8-T9 아트 패스] tint = 글자 색 지정(알파 0 = 무틴트 = 종전 색) — 가법 인자라 기존 호출부 불변.
+# ★[폴리시 R11] `keep` = 밀려나면 다시 오지 않는 줄(NoticeFeed.push 머리말 — 1회성 래치 전용).
+#   기본값 false라 기존 호출부 전량은 한 글자도 안 바뀐다.
 func _notice(msg: String, secs: float = NOTICE_SECS, wide: bool = false, icon: Texture2D = null,
-		tint: Color = Color(0, 0, 0, 0)) -> void:
+		tint: Color = Color(0, 0, 0, 0), keep: bool = false) -> void:
 	if notice_feed != null:
-		notice_feed.push(msg, secs, wide, icon, false, tint)
+		notice_feed.push(msg, secs, wide, icon, false, tint, keep)
 
 # ★ Phase C — 아이템 획득 토스트(좌하단 알림에 아이콘+이름 +수량). 게임플레이 획득 지점(수확·수집·
 # 개간 드랍)에서만 부른다 — 세이브 로드·구매·회수는 각자 알림/무알림이라 이중 토스트·로드 스팸 회피.
@@ -12814,11 +12931,20 @@ func _process(delta: float) -> void:
 	# 패널 밖에서만 — 미니멀 결). _process가 가시성 단일 출처라 _open/_close_frame의 hotbar 토글과
 	# 일관(프레임 열림도 아래 조건에 포함).
 	var _hud_hidden := dialogue.is_open() or frame.is_open() or _sleeping \
+		or _transitioning \
 		or cafe_summary_panel.visible or milestone_panel.visible or ending_panel.visible \
 		or mirror_panel.visible \
 		or cutscene != null \
 		or spine_puzzle != null \
 		or _illust_id != ""
+		# ★[폴리시 R11] 건물·구역 전환 암전도 같은 연출 화면이다. Fade는 **씬 자식**(main.tscn)이고
+		#   상시 HUD 다섯(핫바·혼력바·시계·컨텍스트 팝업·툴팁)과 달력은 전부 그 뒤에 런타임
+		#   add_child된 $CanvasLayer 자식이라 Fade 위에 그려진다 — 같은 fade 노드를 쓰는 취침이
+		#   `_sleeping` 덕에 깨끗이 암전되는 반면, 모든 문 출입·가장자리 워프에서는 검은 화면 위에
+		#   하단 핫바·우하단 혼력바·우상단 시계가 그대로 떠 있었다. `if _transitioning: return`은
+		#   이 가시성 대입보다 **아래**라 그 줄이 막아 주지도 못한다.
+		#   ★ 곁따라 달력도 문을 지날 때 접힌다 — 대화·프레임·정산·거울이 이미 접는 그 규약을
+		#     암전에도 똑같이 적용한 것이라(열어 둔 채 걷는 것은 여전히 자유, 문 하나가 예외).
 		# ★[S9-T2] 컷신 재생 중엔 상시 HUD를 접는다(연출 화면).
 		# ★[S9b-T7] 내면 공간(B5)도 같은 연출 화면이다 — 오히려 여기는 세계 자체가 사라진 자리라
 		#   상시 HUD가 한 조각이라도 남으면 "게임 화면 위에 퍼즐"이 되어 §6.5 2단이 무너진다.
@@ -12918,7 +13044,14 @@ func _process(delta: float) -> void:
 					dialogue.choose(i)
 					return
 			return
-		if Input.is_action_just_pressed("action"):
+		# ★[폴리시 R11] **[E]도 받는다.** 대화창은 매 줄 "[E] 다음 / [E] 닫기"를 그리는데(23382)
+		#   진행을 받는 폴링은 여기 하나였고 `action`에 묶인 이벤트는 우클릭뿐이라, 화면이 지시한
+		#   키를 눌러도 대사가 한 줄도 안 넘어갔다(위 선택지 주석의 "넘기기([E]/우클릭)"가 이미
+		#   E를 전제하고 있어 의도가 아님이 분명하다). E는 `menu_tab`인데 **대화 중엔 그 액션이
+		#   비어 있다** — 메뉴 분기는 이 가드 아래라 도달할 수 없고, 프레임 탭 순환도 대화 중엔
+		#   못 돈다. 그래서 새 액션을 만들지 않고 그 키를 이 자리에서만 빌려 쓴다(입력맵 무접촉).
+		#   선택지·고백 제안 분기는 **위**에서 이미 return 하므로 삼킴 규약도 그대로다.
+		if Input.is_action_just_pressed("action") or Input.is_action_just_pressed("menu_tab"):
 			dialogue.advance()
 		return
 
@@ -13039,6 +13172,11 @@ func _process(delta: float) -> void:
 		_milestone_popup_secs -= delta
 		if _milestone_popup_secs <= 0.0:
 			milestone_panel.visible = false
+			# ★[폴리시 R11] 가려질까 봐 미뤄 둔 카페 마감 정산이 있으면 이제 띄운다(_on_cafe_closed).
+			if _cafe_summary_pending != "":
+				var pending := _cafe_summary_pending
+				_cafe_summary_pending = ""
+				_show_cafe_summary(pending)
 
 	# ★ ADR-0024 핫바 선택: 숫자키(1~0,-,=)로 슬롯 직접 선택 + 휠로 순환. 든 것이 LMB 동사를 정한다.
 	# Q 작물 순환은 폐기 — 씨앗은 이제 핫바 아이템(ADR-0020 데이터 주도 아이템 위에서).
@@ -13762,7 +13900,10 @@ func _process(delta: float) -> void:
 	# 잠깐 띄운다. ★owner 2026-07-03 3차 HUD 가이드 — 좌하단 wide notice(화면 폭 날것 띠)를 폐기하고
 	# 전용 상단-중앙 팝업 배너(한지 플레이트·외곽선·페이드)로 교체. 매 프레임 guidance()를 보되 직전과
 	# 다를 때만 show_guide(=단계 전환 1회). 모달 중엔 위 early-return이라 비교 보존.
-	var guide := onboarding.guidance()
+	# ★[폴리시 R11] 미호의 **지금 스테이션 구역**을 함께 넘긴다(onboarding.guidance 머리말 — 15:00에
+	#   카페로 출근하면 "밭(위쪽)"이 거짓이 된다). 런타임 tile이 아니라 스케줄에서 파생하는 건
+	#   `_is_stationed_in_cafe`가 든 그 규율이다(프레임 갱신 순서에 안 기댄다).
+	var guide := onboarding.guidance(_miho_stationed_away())
 	if guide != _last_onboarding_guide:
 		_last_onboarding_guide = guide
 		if guide != "" and onboarding_banner != null:
@@ -13882,7 +14023,10 @@ func _process(delta: float) -> void:
 		# ★[폴리시 R10] 혼력이 후킹 하한에도 못 미치면 **던지기 안내 자체를 걷는다** — 형제 창구
 		#   (나무·밭·화분·개간)의 "혼력 부족 — 집에서 취침"과 같은 문법. 집행부(`_start_fishing`)의
 		#   사전 판정과 같은 술어를 읽으므로 화면과 동작이 갈리지 않는다.
-		if energy != null and not energy.can_act(FishingSession.MIN_HOOK_ENERGY):
+		# ★[폴리시 R11] 그 술어가 이제 **도달 가능한 최저 비용**을 본다(FishingSession.min_hook_energy —
+		#   옛 MIN_HOOK_ENERGY는 클램프 하한 1이라 도달 불가였고, 혼력 1~3에서 화면이 "던지기"라
+		#   말해 놓고 후킹이 확정 실패했다). 두 자리가 같은 함수를 부르므로 갈림이 여전히 0이다.
+		if energy != null and not energy.can_act(FishingSession.min_hook_energy(_fishing_mods())):
 			interact_prompt.text = "혼력 부족 — 챌 힘이 없다 (집에서 취침)"
 		else:
 			interact_prompt.text = "[좌클릭] 낚싯줄 던지기" + ("" if gear_line == "" else "   " + gear_line)
@@ -14758,8 +14902,11 @@ func _start_fishing(water: Vector2i) -> void:
 	#   **반드시** 실패한다 — 보장 미끼(150냥)를 바닥날 때까지 태우며 100% "입질을 놓쳤다"를 반복할
 	#   수 있었다. 형제 동사(곡괭이 `_mine_rock`·팬닝 `_pan_spot`)는 소모 **전에** 막고 알린다.
 	#   ★ ADR-0008과 충돌하지 않는다: 이건 저혼력을 막는 게이트가 아니라(캐스팅·대기는 여전히 무과금)
-	#     "확정 실패 + 자원 소각"만 걷어내는 판정이다. 혼력 1이면 그대로 던진다.
-	if energy != null and not energy.can_act(FishingSession.MIN_HOOK_ENERGY):
+	#     "확정 실패 + 자원 소각"만 걷어내는 판정이다.
+	#   ★[폴리시 R11] 하한을 **도달 가능한 최저 비용**으로 고쳤다(`FishingSession.min_hook_energy`).
+	#     옛 `MIN_HOOK_ENERGY`(=1)는 어떤 어종·어떤 숙련에서도 나올 수 없는 값이라(최저가 소 체급
+	#     4 × 절감 하한 0.70 = 3), 혼력 1~3의 확정 실패 구간이 그대로 열려 있었다.
+	if energy != null and not energy.can_act(FishingSession.min_hook_energy(_fishing_mods())):
 		_notice("혼력이 바닥나 챌 힘이 없다 — 미끼만 버린다. 집에서 취침")
 		return
 	if _cast_bait != "":
@@ -16797,6 +16944,20 @@ func _tree_prompt(t: Vector2i) -> String:
 	return "[좌클릭] %s %s (%d타 남음)" % [label, "치우기" if stump else "벌목",
 		tree_ledger.hp_at(_region, t, axe_tier())]
 
+# ★[폴리시 R11] 겨눈 칸이 **주민·짐승의 예약 칸이라** 밭일에서 빠졌는가("" = 그냥 밭이 아닌 칸).
+# `_is_farmable`의 두 예외와 **한 줄씩 대응**한다(술어를 복제하지 않고 같은 상수를 읽는다).
+# 흙으로 보이는 칸에서만 말한다 — 길·벽·물 위에서 "누구의 자리"라고 말할 이유가 없다.
+func _reserved_tile_reason(t: Vector2i) -> String:
+	if _region != RegionCatalog.HOME:
+		return ""
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h or _grid[t.y][t.x] != SOIL:
+		return ""
+	if t == MIHO_FIELD_TILE:
+		return "미호의 자리 — 밭일은 못 한다 (15시부터는 나루 마을 카페)"
+	if t == PET_TILE:
+		return "삽사리의 자리 — 밭일은 못 한다 (개가 누울 자리)"
+	return ""
+
 # 밭 칸 프롬프트: 든 도구·칸 상태에서 다음에 할 수 있는 동작을 파생한다("" = 안내 없음).
 # 맨손 수확(RMB)은 도구와 무관하게 다 자란 칸이면 항상 안내한다. 그 외엔 든 도구가 칸 상태에
 # 맞을 때만 [좌클릭] 동사를 보인다(안 맞으면 "" — 자동 분기 없음의 HUD 짝, ADR-0024 §2).
@@ -16833,7 +16994,13 @@ func _farm_prompt() -> String:
 	if pot_prompt != "":
 		return pot_prompt
 	if not _target_valid:
-		return ""
+		# ★[폴리시 R11] **예약 칸의 침묵을 걷는다.** 미호 자리(42,14)와 삽사리 자리(44,12)는 둘 다
+		#   스타터 밭(STARTER_PATCH_RECT) 안이라 다른 23칸과 똑같은 흙으로 칠해지는데, `_is_farmable`이
+		#   무조건 뺀다. 주인이 화면에 서 있는 동안엔 그 그림이 곧 사유였지만 — 미호는 15:00에 카페로
+		#   출근하고 삽사리는 입양 전엔 한 픽셀도 안 그려진다 — 그 시간엔 프롬프트가 통째로 사라져
+		#   day 1 튜토리얼 밭 정중앙에서 괭이질이 **무알림 무동작**이었다(R6가 PET_TILE 배제를 넣으며
+		#   적어 둔 "화면이 가능한 동사를 숨김"의 거울상). 동사는 그대로 막되 이유는 읽힌다.
+		return _reserved_tile_reason(_target)
 	var pfield := _field_at(_target)          # ★[S10-T5] 이 칸의 주인 밭(노지/늘봄방)
 	# ★ ADR-0059 결정3 — 수확은 무과금이라 혼력과 무관하게 항상 안내(0에서도 거둘 수 있다).
 	if pfield.is_mature(_target):
@@ -18359,7 +18526,12 @@ func _on_frame_discard(slot_index: int) -> void:
 	#   버리면 그 동사가 세이브에서 영구 차단된다(괭이 = 밭갈이·파종·물주기·수확 사슬 전체).
 	#   판정은 그 유일한 지급 목록에서 파생한다(수치·id 복제 0). 낚싯대·태클·무기는 같은 CAT_TOOL
 	#   이지만 상점 재구매가 있어 여기서 안 막는다 — 16칸 백팩에서 여분을 못 버리면 그게 새 압박이다.
-	if Inventory.START_TOOLS.has(id):
+	# ★[폴리시 R11] 그 "상점 재구매가 있어"가 **T1 낚싯대에는 거짓**이었다: 뱃사공 증정품이라
+	#   `price 0`이고 생선가게 매대 행은 T2~T4뿐이며, 유일한 지급처는 `_boatman_rod_given`(세이브
+	#   영속)이 두 번 주지 않는다 — 버리면 T2(500냥)를 살 때까지 낚시 사슬 전체가 그 세이브에서
+	#   막힌다. 그래서 **매대 가격 0인 기어**를 같은 표에 세운다(id를 손으로 안 적는다 — 앞으로
+	#   생길 증정 기어도 저절로 따라오고, 값이 붙어 매대에 서는 순간 저절로 풀린다).
+	if Inventory.START_TOOLS.has(id) or (GearCatalog.is_rod(id) and GearCatalog.price_of(id) <= 0):
 		_notice("%s는 버릴 수 없다 — 다시 구할 곳이 없다" % ItemCatalog.name_of(id))
 		return
 	var n := inventory.count_at(slot_index)
@@ -19036,12 +19208,21 @@ func _on_frame_profession(skill: String, prof_id: String) -> void:
 	if choose_profession(skill, prof_id):
 		frame.set_skills(_skill_rows())
 
+# ★[폴리시 R11] 성패를 **말한다**. 종전엔 반환값을 안 보고 "저장했습니다"를 무조건 얹어, 성공하면
+#   "저장됨"과 두 줄이 겹치고(같은 사건의 두 문구) 실패하면 **거짓 성공**을 알렸다. 성공 문구의
+#   주인은 `_save_game` 하나로 모으고 여기는 실패만 덧붙인다.
 func _on_frame_save() -> void:
-	_save_game()
-	_notice("저장했습니다")
+	if not _save_game():
+		_notice("저장하지 못했다 — 저장 공간·쓰기 권한을 확인하자", NOTICE_SECS * 2.0)
 
+# ★[폴리시 R11] 저장 실패면 **첫 [종료]는 멈춘다** — 안 그러면 경고를 띄울 화면이 이미 닫힌 뒤라
+#   플레이어가 진행을 잃은 것을 영영 모른다(이혼 [F] 2타·F8 삭제와 같은 2단 확인 문법). 두 번째
+#   [종료]는 그대로 나간다: 못 고칠 환경에 갇힌 플레이어를 앱 안에 붙잡아 두지 않는다.
 func _on_frame_quit() -> void:
-	_save_game()
+	if not _save_game() and not _quit_unsaved_armed:
+		_quit_unsaved_armed = true
+		_notice("저장하지 못했다 — 한 번 더 [종료]를 누르면 저장 없이 나간다", NOTICE_SECS * 3.0)
+		return
 	get_tree().quit()
 
 # ── T4.1 온보딩 ────────────────────────────────────────────────────────────
@@ -19180,7 +19361,10 @@ func _setup_residents() -> void:
 			return false                # 이미 열었으면 F를 흘려보낸다(원문 가드 그대로)
 		_open_night_bar()
 		return true
-	r_bana.effect_fn = func() -> String: return BanaGuard.summary(bana_affinity.hearts())
+	# ★[폴리시 R11] 배우자 잡일 ③(자동 차단 +1)까지 함께 말한다 — 주입부(_process)와 같은 조건을
+	#   같은 상수로 묻는다(수치 복제 0). 관계 탭이 그 밤의 실효 보호와 어긋나지 않게 하는 유일한 자리.
+	r_bana.effect_fn = func() -> String: return BanaGuard.summary(bana_affinity.hearts(),
+		SPOUSE_BANA_EXTRA_BLOCK if _spouse_id == "bana" else 0)
 	_register_resident(r_bana)
 
 	# ── 네오(M2.3) — 만물상 점주. ★[ADR-0060 결정 8] **이중 신분**: 점주 레이어(shop_key = 매대·
@@ -20792,6 +20976,17 @@ func _close_spine_scene() -> void:
 	_illust_id = ""
 	_illust_a = 0.0
 	_spine_say.clear()
+	# ★[폴리시 R11] **B6 비트가 서는 자리**(옛 자리 = `_fire_spine_b6`의 장면 시작 — B7이 R6에서
+	#   `_open_epilogue`로 옮겨간 것과 같은 이동). 여기 도달했다는 것은 컷신과 세 대사 묶음이 전부
+	#   닫혔다는 뜻이다. 두 종료 경로(대사가 다 닫힌 `_on_dialogue_finished` · 이을 묶음이 하나도
+	#   없을 때의 컷신 안전망) 어느 쪽으로 나가든 여기를 지나므로, 비트를 안 찍은 채 장면만 끝나
+	#   `_maybe_resume_spine`이 같은 장면을 무한히 다시 트는 갈래가 생기지 않는다.
+	if _spine_b6_pending:
+		_spine_b6_pending = false
+		if not _spine_bit_seen(SPINE_B6):
+			_mark_spine_bit(SPINE_B6)
+			_open_okja_track()          # ★ 결정 10 "B6 후 트랙 개통" — 개통의 자리가 여기로 따라왔다
+			_save_game()                # 장면이 끝난 그 프레임에 굳힌다(B7 = `_open_epilogue`와 같은 규율)
 	if not _run_over and not _epilogue_open and spine_puzzle == null:
 		player.set_physics_process(true)
 	queue_redraw()
@@ -20806,9 +21001,13 @@ func _fire_spine_b6() -> void:
 		return
 	if not _begin_cutscene(Spine.B6_CUTSCENE.duplicate(true), "", PackedStringArray()):
 		return                          # 러너 거절 — 비트를 안 찍었으니 상태가 안 상한다
-	_mark_spine_bit(SPINE_B6)
-	_open_okja_track()                  # ★ 결정 10 "B6 후 트랙 개통" — 개통의 자리가 여기다
-	_save_game()                        # 비트를 즉시 굳힌다(B5 완료와 같은 규율)
+	# ★[폴리시 R11] **비트·트랙 개통·세이브를 여기서 하지 않는다** — R6가 B7에 준 처방을 형제인
+	#   B6에도 그대로 적용했다(그 근거는 `_fire_spine_b7`의 R6 머리말). 옛 자리(장면 시작)는 비트를
+	#   즉시 디스크에 굳혔는데 대사 열(`_spine_say`)은 비영속이라, 세 묶음이 도는 동안 앱이 꺼지면
+	#   재기동 시 `_maybe_resume_spine` ㉠(B5 있고 B6 없음)이 거짓·㉡(앵커와 부부)도 거짓이 되어
+	#   §6.5 카타르시스 전환의 지문·앵커 대사·마무리가 **그 세이브에서 영영 못 떴다**.
+	#   이제 표만 세우고, 마지막 묶음이 닫히는 `_close_spine_scene`이 셋을 함께 집행한다.
+	_spine_b6_pending = true
 	var r := _resident(OKJA_RID)
 	# ★ §6.4 결혼 경로별 톤 — 이미 다른 이와 맺어졌으면 *씁쓸한 축복*이 온다. 분기 판정은 여기서
 	#   하고 본문은 캐릭터 파일이 든다(판정 = main · 말 = 캐릭터, 앞 아홉 태스크와 같은 이음매).
@@ -20933,7 +21132,7 @@ func _try_propose_okja() -> void:
 		_notice("이미 부부다 — 부적이 조용히 잠들어 있다")
 		return
 	if _wedding_day > 0:
-		_notice("혼례는 이미 정해졌다 — %d일 아침" % _wedding_day)
+		_notice("혼례는 이미 정해졌다 — %s 아침" % GameClock.date_label(_wedding_day))
 		return
 	# ★ 연애 슬롯 배타성 — `_resolve_confession`·`_try_propose`가 지키는 그 불변식이 이 경로에도
 	#   선다. 앵커는 고백 문법(♡5 의지 시험) 밖이라 청혼이 곧 고백인데(위 머리말), 그 자리에서 슬롯을
@@ -20962,7 +21161,10 @@ func _try_propose_okja() -> void:
 	_romance_partner = OKJA_RID             # 연애 슬롯 = 청혼이 곧 고백이다(위 머리말)
 	_wedding_day = clock.day + WEDDING_WAIT_DAYS
 	audio.sfx("ui")
-	_notice("부적이 받아들여졌다 — %d일 아침, 혼례를 올린다" % _wedding_day, NOTICE_SECS * 2.0)
+	# ★[폴리시 R11] 고지를 **화면 눈금**으로 찍는다(`GameClock.date_label` — 게시판·시련과 같은 처방).
+	#   `_wedding_day`는 절대 day라 종전엔 "148일 아침"처럼 HUD·달력 어디에도 없는 숫자를 말했다.
+	#   이 알림이 게임 유일의 혼례 날짜 고지다(달력에 혼례 마커가 없다). 같은 문자열 넷 전부 교체.
+	_notice("부적이 받아들여졌다 — %s 아침, 혼례를 올린다" % GameClock.date_label(_wedding_day), NOTICE_SECS * 2.0)
 
 # B7 재생 — 혼례 아침이 예약해 둔 해방 컷신을 눈을 뜨는 프레임에 튼다(B4와 완전히 같은 두 단계).
 func _fire_spine_b7() -> void:
@@ -21022,7 +21224,9 @@ func _maybe_resume_spine() -> void:
 		return
 	if not _spine_say.is_empty() or _spine_b5_pending:
 		return
-	if _epilogue_open or _epilogue_pending:
+	# ★[폴리시 R11] `_spine_b6_pending`도 같은 줄에 세운다 — B6가 이제 비트를 장면 끝에 찍으므로,
+	#   재생 도중엔 ㉠의 전제(B5 있고 B6 없음)가 계속 참이다(B7이 R6에서 받은 그 가드와 같은 이유).
+	if _epilogue_open or _epilogue_pending or _spine_b6_pending:
 		return
 	# ㉠ B5는 끝났는데 B6가 안 왔다 — 귀환을 다시 튼다(`_fire_spine_b6`가 전제·중복을 스스로 다시 잰다).
 	if _spine_bit_seen(SPINE_B5) and not _spine_bit_seen(SPINE_B6):
@@ -21057,6 +21261,7 @@ func _open_epilogue() -> void:
 	player.set_physics_process(false)
 	player.velocity = Vector2.ZERO
 	cafe_summary_panel.visible = false
+	_cafe_summary_pending = ""   # ★[폴리시 R11] 미뤄 둔 정산도 함께 버린다(회고 화면 위로 뒤늦게 뜨지 않게)
 	if notice_feed != null:
 		notice_feed.visible = false
 	ending_text.text = RunSummary.epilogue_text(clock.day, wallet.gold, _run_harvested,
@@ -21380,7 +21585,7 @@ func _try_propose(r: Resident) -> void:
 		_notice("부적이 응하지 않는다 — 이건 연인과 나눌 물건이다")
 		return
 	if _wedding_day > 0:
-		_notice("혼례는 이미 정해졌다 — %d일 아침" % _wedding_day)
+		_notice("혼례는 이미 정해졌다 — %s 아침" % GameClock.date_label(_wedding_day))
 		return
 	# ★[S8-T8 / ADR-0066 결정 10] 재혼 면제 — 결혼한 적 있는 상대에겐 방·아크 게이트를 건너뛴다
 	#   (ADR-0022 "재혼 = ♡5 재도달 + 정표 재수여만"). ♡5 재도달은 위의 연인 판정이 이미 강제한다
@@ -21418,8 +21623,22 @@ func _try_propose(r: Resident) -> void:
 		inventory.remove_item(ItemCatalog.OKJA_ELIXIR, 1)
 	_wedding_day = clock.day + WEDDING_WAIT_DAYS
 	audio.sfx("ui")
-	_notice("%s 혼례 부적을 받아들였다 — %d일 아침, 혼례를 올린다" % [HanjiUi.with_i(r.display_name), _wedding_day],
+	_notice("%s 혼례 부적을 받아들였다 — %s 아침, 혼례를 올린다" % [HanjiUi.with_i(r.display_name), GameClock.date_label(_wedding_day)],
 		NOTICE_SECS * 2.0)
+
+# ★[폴리시 R11] 그 아침의 배우자 — **오늘 식을 올릴 연인까지 포함**한다. 아침 잡일 둘(멜 출하
+# 팁 · 미호 물주기)은 `_on_day_advanced`에서 `_advance_wedding`보다 **앞줄**에 있어, 혼례 아침엔
+# `_spouse_id`가 아직 ""이었다 — 두 잡일이 하루 늦게 시작했다. 반면 바나 잡일은 `_process` 매
+# 프레임 파생이라 혼례 당일 밤부터 실효라(주석: "결혼 아침부터 즉시 실효") 세 잡일의 개시가
+# 하루 어긋났다. 순서를 뒤집는 대신(혼례 배너가 아침 알림 맨 앞으로 올라가 뒤따르는 열 줄에
+# 밀린다) 두 잡일만 이 술어로 묻는다 — 조건은 `_advance_wedding`의 첫 두 줄과 글자 그대로 같고,
+# 그 함수가 예정을 접기 *전에* 불리므로 답이 갈리지 않는다.
+func _spouse_of_morning(day: int) -> String:
+	if _spouse_id != "":
+		return _spouse_id
+	if _wedding_day > 0 and day >= _wedding_day:
+		return _romance_partner
+	return ""
 
 # 혼례 아침 — 예정일에 닿으면 식을 올린다(아침 정산 훅). 간이 연출 = 배너 한 줄(등급은 S9).
 # 대기 중 연애가 깨졌으면(이혼 스텁 등 — 방어) 예정을 조용히 접는다.
@@ -21438,8 +21657,10 @@ func _advance_wedding(day: int) -> void:
 	audio.sfx("ui")
 	# ★[S8-T10] 끝의 " ♥"를 뗐다 — neodgm.ttf에 ♥ 글리프가 없어 두부(□)로 떴다(heart_bar.gd:4의
 	#   그 리스크). 이 배너에 그림 하트를 넣을 자리는 없고(알림 피드는 글자 한 줄), 문구만으로 충분하다.
+	# ★[폴리시 R11] `keep` — 혼례 아침은 세이브에 한 번뿐인 사건이고(예정일을 방금 0으로 접었다)
+	#   이 배너가 그 유일한 고지인데, 뒤이어 아침 알림 여덟 줄이 더 밀려 4칸 큐에서 축출됐다.
 	_notice("혼례를 올렸다 — %s 부부가 되었다" % HanjiUi.with_gwa(r.display_name if r != null else _spouse_id),
-		NOTICE_SECS * 3.0)
+		NOTICE_SECS * 3.0, false, null, Color(0, 0, 0, 0), true)
 	# ★[S9b-T8 / ADR-0068 결정 10] **궁극의 결혼 분기 = B7 해방.** 앵커와의 혼례 아침에만 선다 —
 	#   §6.4 "해방의 두 층" 중 ㉡(앵커의 해방)은 이 분기 한정이기 때문이다(㉠ 플레이어 자신의
 	#   해방은 결혼과 독립이라 B6가 이미 줬다). 여기서 재생하지 않고 **예약만** 하는 이유는 B4와
@@ -21536,6 +21757,13 @@ func _do_divorce() -> void:
 	_jealousy.erase(rid)
 	if r != null and r.affinity != null:
 		r.affinity.reset_hearts()
+	# ★[폴리시 R11] **앵커 트랙을 그 자리에서 다시 잰다** — 혼인 성립(`_advance_wedding` 끝)이 이미
+	#   갖고 있던 그 한 줄의 역방향 짝이다. `_okja_track_open()`은 `_spouse_id`를 보므로 이혼 순간
+	#   곧바로 참이 되는데, 하트 실값은 이 갱신이 원장에서 다시 찍어야만 따라온다. 없으면 트랙은
+	#   열렸는데 ♡는 0에 멎어(잠금 판정으로 0이 찍힌 상태 그대로) 다음 취침·기증·옥자 대화 중
+	#   하나가 올 때까지 명부 부적 창구가 이유 없이 잠겨 보였다 — R8이 기증 경로에 정확히 같은
+	#   이유로 한 줄을 더한 그 선례(`_donate_*`)의 셋째 자리다. 트랙 미개통이면 무동작.
+	_refresh_okja_track()
 	audio.sfx("ui")
 	_notice("부적의 혼이 풀렸다 — %s의 혼인이 끝났다" % HanjiUi.with_gwa(r.display_name if r != null else rid),
 		NOTICE_SECS * 2.0)
@@ -22040,6 +22268,7 @@ func _end_run() -> void:
 	player.velocity = Vector2.ZERO
 	# T5.4 카페 정산 팝업은 마무리 화면보다 위에 그려질 수 있어 명시적으로 숨긴다.
 	cafe_summary_panel.visible = false
+	_cafe_summary_pending = ""   # ★[폴리시 R11] 미뤄 둔 정산도 함께 버린다(마무리 화면 위로 뒤늦게 뜨지 않게)
 	# 알림 피드·디버그 리드아웃은 코드로 $CanvasLayer에 나중 추가돼 EndingPanel 위에
 	# 그려지므로(트리순서상 위), 마무리 화면이 깔끔히 덮이게 같이 숨긴다.
 	if notice_feed != null:
@@ -22494,6 +22723,19 @@ func _cafe_guest_pool() -> Array:
 		out.append({"id": gid, "weight": guests.weight_of(gid)})
 	return out
 
+# ★[폴리시 R11] 미호의 지금 스테이션이 **안식 농원 밖**인가(온보딩 MEET_MIHO 안내의 유일한 입력).
+# 스케줄에서 파생하므로 시각·카페 영업시간·좌표를 여기서 복제하지 않는다 — 미호 레코드가 없거나
+# 스케줄 항목이 비면 false(= 옛 문구 그대로)라 실패해도 안전한 쪽으로 접힌다.
+func _miho_stationed_away() -> bool:
+	var r := _resident("miho")
+	if r == null:
+		return false
+	var e := r.station_at(clock.minutes)
+	if e.is_empty():
+		return false
+	var region := String(e.get("region", ""))
+	return region != "" and region != RegionCatalog.HOME
+
 # 이 주민의 *지금 시각 스테이션*이 카페 실내인가. 런타임 tile이 아니라 스케줄에서 파생하는 건
 # 프레임 갱신 순서에 안 기대기 위해서다(_update_resident_stations보다 먼저 불려도 같은 답).
 func _is_stationed_in_cafe(r: Resident) -> bool:
@@ -22579,11 +22821,25 @@ func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
 	#   서빙 수와 나란히 놓이면 그날 "깊이 vs 회전"을 어느 쪽으로 굴렸는지가 한눈에 읽힌다.
 	if cafe.today_cheki() > 0:
 		lines.append("체키  %d장" % cafe.today_cheki())
-	cafe_summary_text.text = "\n".join(lines)
-	cafe_summary_panel.visible = true
-	_cafe_summary_secs = CAFE_SUMMARY_SECS
+	# ★[폴리시 R11] 마일스톤 팝업이 떠 있으면 **미룬다.** 두 팝업은 같은 CanvasLayer의 씬 형제고
+	#   정산 패널이 뒤에 선언돼 위에 그려지는데, 사각형이 MilestonePanel 본문을 거의 전부 덮고
+	#   전역 Panel 테마가 불투명 한지라 비쳐 보이지도 않는다. 마일스톤은 래치(1단·2단·3단 각각
+	#   1회)라 가려지면 그 축하 문구가 세이브에서 영영 사라진다 — 반면 정산은 매일 뜨는 줄이라
+	#   몇 초 미뤄도 잃는 것이 없다. 1단↔2단 팝업이 이미 세운 "한 팝업이 다른 팝업을 덮어 삼키지
+	#   않는다"(_show_milestone2_reached 머리말)의 확장이다: 저긴 같은 노드, 여긴 겹치는 두 노드.
+	#   ★ 매출 골드 사운드는 여기 그대로 둔다 — 마감 그 자체의 신호라 패널과 묶인 소리가 아니다.
+	if _milestone_popup_secs > 0.0:
+		_cafe_summary_pending = "\n".join(lines)
+	else:
+		_show_cafe_summary("\n".join(lines))
 	if revenue > 0:
 		audio.sfx("gold")                     # P2.6 카페 일일 정산 매출 골드
+
+# 마감 정산 패널을 띄운다(본문은 호출부가 조립 — 즉시/미룸 두 경로가 이 한 자리를 공유한다).
+func _show_cafe_summary(text: String) -> void:
+	cafe_summary_text.text = text
+	cafe_summary_panel.visible = true
+	_cafe_summary_secs = CAFE_SUMMARY_SECS
 
 # ── T7.2 카페 마일스톤 / ★[S6-T3] 카페 일구기 사다리 ────────────────────────
 # 관계 루프 산출물 = **미호+멜 두 사람의 하트 합**. 곱셈기들이 각자 하트를 곱셈기로 환류하듯
@@ -23116,6 +23372,10 @@ func _mirror_forecast_text() -> String:
 	var ped := _peddler_upcoming_line()
 	if ped != "":
 		lines.append("◇ " + ped)
+	# ㉦ ★[폴리시 R11] 다가오는 생일 — 형제 셋과 나란히 서는 넷째 줄(`_birthday_upcoming_line`).
+	var bday := _birthday_upcoming_line()
+	if bday != "":
+		lines.append("◇ " + bday)
 	return "\n".join(lines)
 
 # 다가오는 보부상 한 줄("오늘"/"내일"/"N일 뒤"). 문자열 조립을 함수로 뽑아 둔 이유는 형제들과 같다 —

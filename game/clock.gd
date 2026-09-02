@@ -70,6 +70,15 @@ static func week_of(d: int) -> int:
 static func season_name(idx: int) -> String:
 	return SEASON_NAMES[idx] if idx >= 0 and idx < SEASON_NAMES.size() else ""
 
+# ★[폴리시 R11] **절대 day → 화면 눈금**("피안절 3일"). 원장은 단조 증가하는 절대 day 하나지만
+# 게임의 어떤 표면도 그 숫자를 안 보여 준다 — HUD·인벤 정보패널은 "<절기> N일", 달력은 1..28 +
+# "N년차", 점괘 거울은 전부 상대 표기다. 그래서 기한을 절대 day로 찍던 표면들(게시판 의뢰·시련·
+# 혼례 고지)은 29일차부터 게임 안에 존재하지 않는 눈금을 말했다("30일까지" / "119일까지" —
+# 절기는 28일이 끝이고 달력엔 그런 칸이 없다). 접는 규칙을 여기 한 번만 두어 표시 계층 전체가
+# 같은 눈금을 쓰게 한다(day_of_season·season_name의 조합 파생 — 새 상태 0).
+static func date_label(d: int) -> String:
+	return "%s %d일" % [season_name(season_index_for_day(d)), day_of_season(d)]
+
 # 현재 절기 인덱스(현재 day 기준 편의 메서드).
 func season_index() -> int:
 	return season_index_for_day(day)

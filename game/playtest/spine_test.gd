@@ -438,8 +438,10 @@ func _init() -> void:
 	#   같은 자리에서 재야 하는 계약이 **정반대**가 된다: 완료 지문이 닫히면 세계로 돌아오는 게
 	#   아니라 **곧바로 S등급 귀환이 이어 붙어야** 한다(세계가 한 프레임도 안 보이는 것이 요점).
 	#   세부(그림·화자 3막·앵커 트랙)는 spine_ending_test 소관이고, 여기서는 **이음매만** 잰다.
+	# ★[폴리시 R11] B6 비트가 장면 **끝**으로 옮겨갔으므로(#7), 이음매의 증거는 비트가 아니라
+	#   **예약 + 재생**이다. 비트는 아래 ⑧f(장면이 끝난 뒤)에서 잰다.
 	_check("⑧e ★완료 지문이 닫히면 내면 공간이 걷히고 그 자리에서 B6가 이어 붙는다(세계 복귀 0프레임)",
-		m.spine_puzzle == null and m._spine_bit_seen(m.SPINE_B6)
+		m.spine_puzzle == null and m._spine_b6_pending and not m._spine_bit_seen(m.SPINE_B6)
 		and (m.cutscene != null or m._illust_id != ""))
 	_drain_scene(m)
 	_check("⑧f ★S등급 장면이 끝나야 세계로 돌아온다(세션·그림·이동·시계·소리 원복 · 화면 잔류 0)",
@@ -517,18 +519,21 @@ func _init() -> void:
 	# 라이브 훅 — `_process`가 조용한 프레임에 사슬을 다시 잇는다(직접 호출이 아니라 프레임을 돌린다).
 	# ★ 드레인을 **먼저 하지 않는다**: 재개는 부팅 몇 프레임 안에 일어나므로, 여기서 대화를 비우면
 	#   되찾은 장면까지 같이 비워져 "복구됐다"가 사후 상태로만 보인다(장면이 실제로 섰음을 못 잰다).
+	# ★[폴리시 R11] 기다리는 신호가 비트에서 **예약**으로 바뀌었다(#7 — 비트는 이제 장면 끝에 선다).
+	#   그래서 트랙 개통(⑪d)도 장면이 닫힌 뒤로 함께 내려간다. 재개가 실제로 섰는지는 그대로 잰다.
 	var wait := 0
-	while not m3._spine_bit_seen(m3.SPINE_B6) and wait < 120:
+	while not m3._spine_b6_pending and wait < 120:
 		await process_frame
 		wait += 1
 	_check("⑪b ★부팅이 B6 귀환을 되찾는다(원장 파생 재개 — 발화가 아니라 비트가 진실원)",
-		m3._spine_bit_seen(m3.SPINE_B6)
+		m3._spine_b6_pending and not m3._spine_bit_seen(m3.SPINE_B6)
 		and (m3.cutscene != null or m3._illust_id != "" or not m3._spine_say.is_empty()))
 	_check("⑪c 내면 공간은 되살아나지 않는다(재개되는 것은 *다음* 비트뿐 — 퍼즐 재탕 0)",
 		m3.spine_puzzle == null and not m3._spine_b5_pending and not m3._spine_b5_closing)
-	_check("⑪d 되찾은 장면이 트랙까지 개통한다(끊기기 전과 같은 결과 상태)",
-		m3._okja_track_open() and m3._resident("okja").affinity != null)
 	_drain_scene(m3)
+	_check("⑪d 되찾은 장면이 **끝까지 가서** 비트와 트랙을 굳힌다(끊기기 전과 같은 결과 상태)",
+		m3._spine_bit_seen(m3.SPINE_B6) and not m3._spine_b6_pending
+		and m3._okja_track_open() and m3._resident("okja").affinity != null)
 	_check("⑪e 장면이 끝나면 세계로 돌아온다(잔류 0 — 정상 경로와 같은 원복)",
 		m3._illust_id == "" and m3._spine_say.is_empty() and m3.player.is_physics_processing()
 		and m3.spine_puzzle == null)

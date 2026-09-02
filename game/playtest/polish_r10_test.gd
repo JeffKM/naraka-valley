@@ -111,9 +111,12 @@ func _initialize() -> void:
 	await process_frame
 	_check("①e 집에 있는 프레임이 그 표를 소비해 0으로 돌아간다(확산·재점령이 그 밤 값으로 굴렀다)",
 		m._weed_day_pending_day == 0)
-	_check("①f 형제 표 둘은 계약이 그대로다(로드가 버린다 — 저쪽은 버려도 잃는 것이 없다)",
-		_line_of("_season_respawn_pending_day = 0") > 0
-		and _line_of("_pasture_release_pending = false") > 0)
+	# ★[폴리시 R11 정정] 여기 있던 "형제 표 둘은 로드가 버린다"는 **R10의 잘못된 논증을 잠근**
+	#   단언이었다(R11 #1·#4·#6·#8이 반증 — 그 둘도 세이브 시점엔 *집행 전*이라 버리면 손실이다).
+	#   같은 자리에서 이제 셋이 **모두** 왕복하는 것을 잠근다(계약이 하나로 합쳐졌다).
+	_check("①f 형제 표 둘도 R11에서 같은 계약으로 합류했다(셋 다 파일에서 되살아난다)",
+		_line_of("data.get(\"season_respawn_pending_day\", 0)") > 0
+		and _line_of("data.get(\"pasture_release_pending\", false)") > 0)
 
 	# ── ② #2 주괴 선물 배율 — R9의 "거동 불변" 전제가 거짓이었다 ────────────────
 	print("── ② #2 주괴 선물 — 러브 목록에 실재하고 등급 배율이 얹힌다 ──")
@@ -485,9 +488,12 @@ func _initialize() -> void:
 	_check("⑳a 혼력 0에서는 캐스팅이 서지 않는다 — 세션 없음 + 미끼 %d개 그대로(종전엔 1개씩 탔다)"
 			% bait_before,
 		m.fishing == null and m.inventory.count_of(bait) == bait_before)
+	# ★[폴리시 R11 정정] 술어가 클램프 하한(MIN_HOOK_ENERGY = 1)에서 **도달 가능한 최저 비용**으로
+	#   바뀌었다(#2 — 옛 값은 어떤 어종·어떤 숙련에서도 나올 수 없어 혼력 1~3의 확정 실패가 남았다).
+	#   여기서 잠그는 계약은 그대로다: 화면과 집행부가 *같은* 술어를 읽는다.
 	_check("⑳b 프롬프트도 같은 술어를 읽어 화면이 먼저 말한다(집행부와 안내가 안 갈린다)",
 		_line_of("interact_prompt.text = \"혼력 부족 — 챌 힘이 없다 (집에서 취침)\"") > 0
-		and _line_of("if energy != null and not energy.can_act(FishingSession.MIN_HOOK_ENERGY):") > 0)
+		and _line_of("energy.can_act(FishingSession.min_hook_energy(_fishing_mods()))") > 0)
 	m.energy.restore(SoulEnergy.MAX)
 	m._start_fishing(Vector2i(5, 5))
 	_check("⑳c 혼력이 있으면 종전 그대로 던진다 — 세션이 서고 미끼 1개가 나간다(거동 축소 0)",

@@ -254,16 +254,21 @@ func _run_checks() -> void:
 	_check("⑤b 관문 ♡1 성사 = 편지가 큐에 든다(같은 날 도착은 없다)",
 		lid != "" and m3.mailbox.pending_count() == 1 and not m3.mailbox.has_unread())
 	m3._on_day_advanced(m3.clock.day + 1)
-	_check("⑤c 다음 날 아침 도착 = 미독 1통",
-		m3.mailbox.pending_count() == 0 and m3.mailbox.unread_count() == 1
+	# ★[폴리시 R11 #31] 큐를 **총량이 아니라 구성으로** 잰다(miho_arc ⑤c와 같은 정정). 재는 것은
+	#   "그 관문 편지가 도착했는가"인데 `pending_count() == 0`은 R8이 아침 훅 끝에 조건 없이 큐잉하는
+	#   채널 개통 안내(`herald_notice` — 관문과 무관한 다른 층)까지 함께 세었다.
+	_check("⑤c 다음 날 아침 도착 = 미독 1통(그 편지가 큐를 떠나 보관함에 들어왔다)",
+		not m3.mailbox.outbox.has(lid) and m3.mailbox.unread_count() == 1
 		and m3.mailbox.next_unread() == lid)
+	_check("⑤c2 큐에 남은 것은 채널 개통 안내 한 통뿐이다(R8 — 관문 편지가 아니다)",
+		Array(m3.mailbox.outbox) == [m3.HERALD_NOTICE_LETTER])
 	_check("⑤d 본문·발신인이 실려 있다",
 		Mailbox.sender_of(lid) == "멜" and Mailbox.lines_of(lid).size() >= 3)
 	# 재구애(비트 잔존)로 같은 관문이 다시 성사돼도 편지는 두 번 안 온다.
 	_set_heart(r3, 0)
 	m3._try_heart_promotion(r3)
 	_check("⑤e 중복 발송 없음(mailbox가 방어 — 사건 코드는 기억 불요)",
-		m3.mailbox.pending_count() == 0 and m3.mailbox.unread_count() == 1)
+		not m3.mailbox.outbox.has(lid) and m3.mailbox.unread_count() == 1)
 	# 네 칸이 각기 다른 편지를 부르고, 전부 테이블에 있다.
 	var ids := {}
 	for t in [1, 2, 3, 4]:

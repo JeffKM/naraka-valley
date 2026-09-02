@@ -362,12 +362,16 @@ func load_save(data: Dictionary) -> void:
 	changed.emit()
 
 # ── 표시 도우미(프롬프트 한 줄 — QuestBoard.summary 결) ────────────────────────
+# ★[폴리시 R11] 기한을 화면 눈금으로 접는다(`GameClock.date_label` — QuestBoard.summary와 같은 처방·
+#   같은 이유). 여기가 어긋남이 더 컸다: due_day = `(week+1)*7`이라 늘 절대 day이고, 2년차 첫 주만
+#   돼도 "119일까지"처럼 달력에 존재하지 않는 눈금을 말했다.
 static func summary(trial: Dictionary) -> String:
 	if trial.is_empty():
 		return ""
+	var due := GameClock.date_label(int(trial["due_day"]))
 	if String(trial["kind"]) == KIND_SLAY:
-		return "잡귀 %d마리 처치 — %d일까지 · 시련패 +%d" % [
-			int(trial["count"]), int(trial["due_day"]), int(trial.get("tokens", TOKEN_REWARD))]
-	return "%s ×%d 납품 — %d일까지 · 시련패 +%d" % [
+		return "잡귀 %d마리 처치 — %s까지 · 시련패 +%d" % [
+			int(trial["count"]), due, int(trial.get("tokens", TOKEN_REWARD))]
+	return "%s ×%d 납품 — %s까지 · 시련패 +%d" % [
 		ItemCatalog.name_of(String(trial["item_id"])), int(trial["count"]),
-		int(trial["due_day"]), int(trial.get("tokens", TOKEN_REWARD))]
+		due, int(trial.get("tokens", TOKEN_REWARD))]
