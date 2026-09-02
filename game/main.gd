@@ -10367,6 +10367,13 @@ func _on_day_advanced(day: int) -> void:
 			_mine_floor = 0
 			_mine_layout = {}
 			_clear_mine_mobs()   # ★[S5-T5] 지상으로 되돌리며 층 잡귀도 함께 소멸(비영속)
+			# ★[폴리시 R12] **절기 파생 캐시를 굽기 전에 버린다**(rebuild=false = "정리만, 굽기는 호출
+			#   측이" — R6/R11 로드 경로가 쓰는 그 관용구). 절기 첫날 밤 층 안에서 24:00 쓰러짐으로
+			#   날이 넘어가면 이 재빌드와 하루 정산 맨 끝의 `_refresh_season_terrain(true)`가 같은
+			#   프레임에 같은 `_region`을 두 번 구웠다 — 그 사이 그리드 입력이 안 바뀌고 1차 결과는
+			#   2차가 캐시를 비우며 통째로 버렸으므로 둘 중 하나가 순수 낭비였다. 여기서 먼저 비워
+			#   두면 아래 한 번의 굽기가 곧 새 절기의 굽기가 되고, 맨 끝 호출은 스스로 no-op이 된다.
+			_refresh_season_terrain(false)
 			_rebuild_region(_region)
 			player.position = _tile_center_px(MINE_SURFACE_RETURN)
 			_apply_camera_limits()
@@ -10378,6 +10385,7 @@ func _on_day_advanced(day: int) -> void:
 		_narak_layout = {}
 		_clear_mine_mobs()
 		narak_floors.begin_run()   # 다음 진입은 새 판(이번 런 기록 소멸 — 리셋 런의 정의)
+		_refresh_season_terrain(false)   # ★[폴리시 R12] 위 갱도 블록과 같은 이유·같은 자리(이중 굽기 제거)
 		_rebuild_region(_region)
 		player.position = _tile_center_px(NARAK_SURFACE_RETURN)
 		_apply_camera_limits()
@@ -11071,14 +11079,28 @@ func _night_market_items() -> Array:
 					"count": inventory.seed_count(buy_id) if inventory != null else 0})
 	return rows
 
+# ★[폴리시 R12] UI 아트 훅의 **공용 1회 조회 캐시**(`_prop_tex`·`_livestock_sprite`·`_idle_portrait`가
+#   각자 들고 있는 그 딕셔너리를 매대 쪽에도 세운다. 없음=null까지 담아 "없는 파일"도 한 번만 묻는다).
+#   왜 필요한가: `_deco_icon`·`_trial_token_icon`의 호출부는 전부 `_process`가 매 프레임 돌리는 매대 행
+#   조립기다(목공방·야시장·보부상·시련패). 매대를 열고 가만히 서 있기만 해도 판매 행 수 × 60fps의
+#   `ResourceLoader.exists` + `load` 경로 해석이 돌았다 — `_illust_texture` 주석이 "매 프레임
+#   ResourceLoader.exists를 때리면 디스크를 초당 60번 두드린다"고 이미 금지해 둔 그 형태다.
+#   값이 변하는 사건(세트 로스터 변경·에셋 도착)은 실행 중에 없으므로 세션 수명 캐시가 맞다.
+var _ui_tex_cache: Dictionary = {}
+func _ui_tex(path: String) -> Texture2D:
+	if _ui_tex_cache.has(path):
+		return _ui_tex_cache[path]
+	var tex: Texture2D = load(path) as Texture2D if ResourceLoader.exists(path) else null
+	_ui_tex_cache[path] = tex
+	return tex
+
 # ★[폴리시 2회차] 가구 세트 매대 아이콘 — 아트 훅(`_prop_tex`·`_trial_token_icon`과 같은 "있으면
 #   쓴다" 문법). 세트는 **인벤 아이템이 아니라** ItemCatalog 아이콘 표에 없고, 그래서 지금까지 매대
 #   행이 `swatch`(대표색 사각) 하나로 버텼다 — 그 사각이 시련패 매대에서 "흰 빈 색박스"로 읽혔다
 #   (잿눈 대표색이 회백 0.72라 판 바탕과 안 갈렸다). 파일이 없으면 null → swatch 폴백 그대로.
 #   파일명 = 세트 id 소문자(`assets/ui/deco_jaetnun.png`) — 세트가 늘어도 여기는 안 고친다.
 func _deco_icon(set_id: String) -> Texture2D:
-	var p := "res://assets/ui/deco_%s.png" % set_id.to_lower()
-	return load(p) as Texture2D if ResourceLoader.exists(p) else null
+	return _ui_tex("res://assets/ui/deco_%s.png" % set_id.to_lower())
 
 # 가구 세트 대표색(매대 행의 swatch — 목공방이 쓰는 그 값의 재사용). 세트 첫 가구 색을 쓴다.
 func _deco_swatch(set_id: String) -> Color:
@@ -12110,10 +12132,19 @@ func _load_game() -> bool:
 	if data.has("carpenter"):     # ★[S4-T7] — 키 없는 구세이브는 진행 의뢰 0·완공 0(하위호환)
 		carpenter.load_save(data["carpenter"])
 	# ★[S10-T4] 탈것·펫 — 키 없는 구세이브는 안 탄 상태·미입양(하위호환. 아무것도 안 막힌다).
-	if data.has("mount") and mount != null:
-		mount.load_save(data["mount"])
-	if data.has("pet") and pet != null:
-		pet.load_save(data["pet"])
+	# ★[폴리시 R12] **`has` 가드를 걷어 빈 dict로 무조건 되감는다**(같은 함수 아래 아이템 원장 넷이
+	#   폴리시 R3에서 받은 그 처방 — 삽사리·승마만 안 받았다). 가드가 있으면 키 없는 구세이브를
+	#   F9로 *실행 중에* 다시 읽을 때 `load_save`가 아예 안 불려 **살아 있는 노드가 롤백되지 않는다**:
+	#   S10-T4 이전 세이브를 슬롯에 둔 채 삽사리를 입양하고 우정을 쌓은 뒤 그 파일을 부르면
+	#   `_adopted`·`_friend`·`_pet_day`·`_bowl_day`가 그대로 남아, 입양 전이어야 할 세이브에서
+	#   `_draw_sapsari`가 개를 계속 그리고 [F] 창구도 열려 있었다(만점 시 `_pet_luck_floor`까지
+	#   되감기지 않은 우정에서 파생됐다). Mount도 동형이라 `_mounted`가 유지돼 로드 직후 이동
+	#   속도가 ×1.5로 다시 실렸다. 두 `load_save`는 `data.get`으로 기본값을 채우므로 빈 dict가
+	#   곧 "미입양·안 탄 상태"다 — 구세이브의 뜻과 정확히 같다.
+	if mount != null:
+		mount.load_save(data.get("mount", {}))
+	if pet != null:
+		pet.load_save(data.get("pet", {}))
 	if data.has("mine"):          # ★[S5-T1] — 키 없는 구세이브는 도달 깊이 0·채굴 기록 0(지상 시작·무막힘)
 		mine_floors.load_save(data["mine"])
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
@@ -15229,6 +15260,15 @@ func _installation_at(t: Vector2i) -> bool:
 		return true
 	return tapper != null and tapper.has_at(_region, t)
 
+# ★[폴리시 R12] 이 칸에 **방목 나온 짐승이 서 있는가**(설치물 원장과 별개 축 — 몸은 원장이 아니다).
+#   `_free_pasture_tiles`가 슬롯을 고를 때 설치물을 피하는 것과 **짝을 이루는 반대 방향**이다:
+#   그쪽만 고치면 이미 풀밭에 나와 있는 짐승 위에 낮 동안 화덕을 세울 수 있고, 그러면 그 칸의
+#   프롬프트가 `has_animal_at` 갈래에서 끊겨(14296) 제련 진행을 읽을 수단이 그날 0이 된다.
+#   HOME 한정인 이유: 방목은 안식 농원 평면 하나뿐이고(PASTURE_SCAN_RECT), `has_animal_at`은
+#   구역 축이 없는 좌표 원장이라 다른 구역의 같은 좌표를 막으면 그게 새 유령 가드가 된다.
+func _grazing_animal_at(t: Vector2i) -> bool:
+	return ranch != null and _region == RegionCatalog.HOME and _indoor == "" and ranch.has_animal_at(t)
+
 # ★[폴리시 R9] 이 칸을 **런타임 나무 원장**이 쥐고 있는가(묘목·성숙목·밑동·큰 장애물).
 #   왜 별도 술어가 필요한가: 안식 마당의 자연목은 *어느 기존 술어에도 안 걸린다*. `_sync_tree_tile`은
 #   숲 구역에서만 그리드를 만지므로 파종목 칸의 `_grid`는 GROUND 그대로고, `_home_occupied_tiles()`
@@ -15284,6 +15324,8 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 	if POND_ACTIVITY_RECT.has_point(t):       # 물가 활동존(연못 여백) → 배제
 		return false
 	if _home_occupied_tiles().has(t):         # 프롭 점유(나무·바위·debris·꽃·울타리·허수아비) → 배제
+		return false
+	if _grazing_animal_at(t):                 # ★[폴리시 R12] 방목 나온 짐승이 선 칸 → 배제(그 술어 머리말)
 		return false
 	if _tree_occupied_at(t):                  # ★[폴리시 R9] 밤새 돋은 런타임 파종목 → 배제
 		return false                          #   (위 occ는 원장을 안 본다 — 그 술어 머리말)
@@ -15715,6 +15757,8 @@ func _can_place_furnace(t: Vector2i) -> bool:
 			return false
 		if _home_occupied_tiles().has(t):     # 프롭 점유(나무·바위·꽃·울타리·허수아비) → 배제
 			return false
+		if _grazing_animal_at(t):             # ★[폴리시 R12] 방목 나온 짐승이 선 칸 → 배제(그 술어 머리말)
+			return false
 		if _greenhouse_lot_reserved(t):       # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
 			return false
 	return true
@@ -16047,9 +16091,10 @@ func _refresh_trial_shop() -> void:
 const TRIAL_TOKEN_ICON_PATH := "res://assets/ui/trial_token.png"
 
 func _trial_token_icon() -> Texture2D:
-	if ResourceLoader.exists(TRIAL_TOKEN_ICON_PATH):
-		return load(TRIAL_TOKEN_ICON_PATH) as Texture2D
-	return null
+	# ★[폴리시 R12] `_prop_tex`의 "있으면 쓴다" 문법을 인용하면서 **그 캐시만** 빠져 있었다.
+	#   `_refresh_trial_shop`의 첫 줄이라 매대가 열려 있는 모든 프레임에 도달한다(호출 블록이
+	#   `return`으로 끝나 조건부 스킵이 없다) — 파일이 실제로 존재해 load 경로까지 매번 탔다.
+	return _ui_tex(TRIAL_TOKEN_ICON_PATH)
 
 func _trial_shop_text() -> String:
 	var got: int = trial.tokens if trial != null else 0
@@ -16238,6 +16283,8 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 		if POND_ACTIVITY_RECT.has_point(t):   # 물가 활동존(연못 여백) → 배제
 			return false
 		if _home_occupied_tiles().has(t):     # 프롭 점유(나무·바위·꽃·울타리·허수아비) → 배제
+			return false
+		if _grazing_animal_at(t):             # ★[폴리시 R12] 방목 나온 짐승이 선 칸 → 배제(그 술어 머리말)
 			return false
 		if _greenhouse_lot_reserved(t):       # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
 			return false
@@ -24078,17 +24125,34 @@ func _weather_calm() -> bool:
 	return Weather.allows_grazing(_weather_today())
 
 # 방목지(PASTURE_SCAN_RECT) 안의 걸을 수 있는(비-SOLID) 타일 목록. 짐승 방목 목적지 슬롯이 된다.
-# 지형만 본다(그레이박스 — 방목지는 절벽으로 둘린 평면이라 프롭 거의 없음). _grid 경계도 방어.
+# ★[폴리시 R12] **지형만 보던 한 줄에 형제 후보 함수의 술어를 붙인다.** `_encroach_candidates`가
+#   `occ`(프롭 점유)·`_installation_at`·나무 원장을 전부 거는데 이쪽은 `is_solid` 하나뿐이라,
+#   방목지 첫 줄(y18)에 업화로·결정기·스프링클러·레어크로우를 세우면 다음 아침 라운드로빈의
+#   slots[0]이 곧 그 칸이 돼 첫 마리가 설치물 위에 섰다. 그러면 프롬프트 사슬이 `has_animal_at`
+#   갈래(14296)에서 먼저 끊겨 `_furnace_prompt`·`_crystalarium_prompt`에 영영 도달하지 못하고,
+#   화면엔 종일 "쓰다듬기"만 뜨는데 [F]는 입력 사다리에서 제련 창구로 먹혀 **화면과 동작이 갈렸다**
+#   (R8 주석이 못 박은 "어떤 원장 상태에서도 화면이 동작을 말한다" 규약이 이 조합에서 깨졌다).
+#   [F] 창구 좌표까지 빼는 이유도 같다 — 그 칸의 안내는 짐승이 서는 순간 통째로 판독 불가가 된다.
+# 슬롯이 0으로 줄면 `_release_open_buildings`가 스스로 false로 접는다(방출 없음 — 겹침보다 낫다).
 func _free_pasture_tiles() -> Array:
 	var out: Array = []
+	var occ := _home_occupied_tiles() if _region == RegionCatalog.HOME else {}
 	for y in range(PASTURE_SCAN_RECT.position.y, PASTURE_SCAN_RECT.end.y):
 		if y < 0 or y >= _grid.size():
 			continue
 		for x in range(PASTURE_SCAN_RECT.position.x, PASTURE_SCAN_RECT.end.x):
 			if x < 0 or x >= _grid[y].size():
 				continue
-			if not is_solid(_grid[y][x]):
-				out.append(Vector2i(x, y))
+			var t := Vector2i(x, y)
+			if is_solid(_grid[y][x]):
+				continue
+			if occ.has(t):                # 프롭 점유(바위·꽃무리·울타리·허수아비 등) → 배제
+				continue
+			if _installation_at(t):       # 플레이어 설치물(업화로·결정기·스프링클러·레어크로우…) → 배제
+				continue
+			if _f_window_tile(t):         # [F] 창구(우편함·게시판 등) → 배제
+				continue
+			out.append(t)
 	return out
 
 # 문 열린 건물의 실내 짐승을 방목지로 방출한다(아침 경계·문 여는 즉시). 평온·낮일 때만. 방목 슬롯을
