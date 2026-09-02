@@ -251,8 +251,11 @@ func _run_checks() -> void:
 	_check("②c B5 비트가 서고 완료 지문이 돈다",
 		m._spine_bit_seen(m.SPINE_B5) and m.dialogue.is_open() and not m._spine_bit_seen(m.SPINE_B6))
 	_drain_one(m)                       # 완료 지문 → _close_spine_puzzle → B6 발동
-	_check("②d ★완료 지문이 닫히는 **그 자리**에서 B6가 이어 붙는다(비트 · 재생 · 내면 공간 해제)",
-		m._spine_bit_seen(m.SPINE_B6) and m.cutscene != null and m.spine_puzzle == null)
+	# ★[폴리시 R11] 비트가 장면 **끝**으로 옮겨갔다(#7 — 재생 도중 종료 시 §6.5가 영영 못 뜨던 구멍).
+	#   그래서 여기서 잠그는 것은 "비트가 섰다"가 아니라 "장면이 실제로 이어 붙고 예약이 섰다"다.
+	_check("②d ★완료 지문이 닫히는 **그 자리**에서 B6가 이어 붙는다(예약 · 재생 · 내면 공간 해제)",
+		m._spine_b6_pending and not m._spine_bit_seen(m.SPINE_B6)
+		and m.cutscene != null and m.spine_puzzle == null)
 	_settle(m)
 	_check("②e ★그림이 화면을 덮는다(S등급 — 이 위에서 대사가 돈다)",
 		m._illust_id == Spine.ILLUST_B6 and m._illust_a > 0.0)
@@ -271,6 +274,8 @@ func _run_checks() -> void:
 	_check("②j ★마지막 묶음이 닫히면 그림을 거두고 세계로 돌아온다(잔류 0)",
 		m._illust_id == "" and is_zero_approx(m._illust_a) and m._spine_say.is_empty()
 		and m.player.is_physics_processing() and not m._epilogue_open)
+	_check("②j′ ★[폴리시 R11] **비트가 서는 자리가 바로 여기다** — 예약이 소비되고 원장이 굳는다",
+		m._spine_bit_seen(m.SPINE_B6) and not m._spine_b6_pending)
 	_stand_at_door(m)   # 구역 재빌드 = 라벨 재배치
 	_check("②k ★앵커 집이 **상시 개방**으로 바뀐다(조건 문구 자체가 걷힌다)",
 		_label_with(m, "옥자 집") == "옥자 집")
