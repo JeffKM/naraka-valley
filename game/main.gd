@@ -11157,13 +11157,21 @@ func _try_buy_market_seed(crop_id: String, n: int) -> void:
 	var unit := SeasonalEvent.market_price(SeasonalEvent.market_seed_price())
 	var seed_item := ItemCatalog.seed_id(crop_id)
 	var bought := 0
+	# ★[폴리시 R12] 만재와 냥 부족을 **가른다**(`_buy_store_generic_n`·만물상 씨앗·스프링클러가 쓰는
+	#   그 삼항 1:1). 두 사유를 한 조건에 뭉치면 자리가 없어 멈춘 첫 회전이 "골드 부족"으로 보고돼,
+	#   냥이 만 단위로 남은 플레이어가 가방을 비울 이유를 영영 못 찾는다.
+	var full := false                         # 백팩 만재로 멈췄나(알림 문구를 가른다)
 	for _i in n:
-		if wallet.gold < unit or not inventory.add_item(seed_item, 1):
-			break               # 냥이 떨어졌거나 자리가 없으면 여기까지만(부분 구매 — 결제 순서 보존)
+		if wallet.gold < unit:
+			break               # 냥이 떨어졌으면 여기까지만(부분 구매 — 결제 순서 보존)
+		if not inventory.add_item(seed_item, 1):
+			full = true
+			break
 		wallet.spend(unit)
 		bought += 1
 	if bought == 0:
-		_notice("골드 부족(%d 필요)" % unit)
+		_notice("가방을 비우고 오자 — %s 씨앗을 받을 자리가 없다" % CropCatalog.name_of(crop_id) if full
+			else "골드 부족(%d 필요)" % unit)
 		return
 	_toast_item(ItemCatalog.seed_id(crop_id), bought)
 	audio.sfx("ui")
@@ -11343,13 +11351,18 @@ func _try_buy_peddler_seed(crop_id: String, n: int) -> void:
 		return
 	var seed_item := ItemCatalog.seed_id(crop_id)
 	var bought := 0
+	var full := false                         # ★[폴리시 R12] 만재/냥 부족을 가른다(야시장 씨앗과 같은 결)
 	for _i in n:
-		if wallet.gold < unit or not inventory.add_item(seed_item, 1):
+		if wallet.gold < unit:
+			break
+		if not inventory.add_item(seed_item, 1):
+			full = true
 			break
 		wallet.spend(unit)
 		bought += 1
 	if bought == 0:
-		_notice("골드 부족(%d 필요)" % unit)
+		_notice("가방을 비우고 오자 — %s 씨앗을 받을 자리가 없다" % CropCatalog.name_of(crop_id) if full
+			else "골드 부족(%d 필요)" % unit)
 		return
 	_toast_item(seed_item, bought)
 	audio.sfx("ui")
@@ -11363,13 +11376,18 @@ func _try_buy_peddler_item(id: String, n: int) -> void:
 	if unit <= 0:
 		return
 	var bought := 0
+	var full := false                         # ★[폴리시 R12] 만재/냥 부족을 가른다(위 씨앗 행과 같은 결)
 	for _i in n:
-		if wallet.gold < unit or not inventory.add_item(id, 1):
+		if wallet.gold < unit:
+			break
+		if not inventory.add_item(id, 1):
+			full = true
 			break
 		wallet.spend(unit)
 		bought += 1
 	if bought == 0:
-		_notice("골드 부족(%d 필요)" % unit)
+		_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(ItemCatalog.name_of(id)) if full
+			else "골드 부족(%d 필요)" % unit)
 		return
 	_toast_item(id, bought)
 	audio.sfx("ui")
@@ -14179,6 +14197,13 @@ func _process(delta: float) -> void:
 				museum.donated_count(), Museum.donatable_ids().size()]
 		elif museum.is_donated(held_id):
 			interact_prompt.text = "이미 전시된 것이다 (전시 %d/%d)" % [museum.donated_count(), Museum.donatable_ids().size()]
+		elif _museum_complete():
+			# ★[폴리시 R12] **완주 분기.** 로스터가 유품 3 + 책 8로 고정(`donatable_ids`)이라 11점이
+			#   종점인데, 다 바친 뒤에도 "들고 오자"가 남아 "전시 11/11"과 나란히 도달 불가 지시를
+			#   했다. 같은 방의 형제 창구 둘(열람대 "완주"·안치대 "시련장 열림")은 진작 이 분기를
+			#   갖고 있었다 — 기증대만 자기 끝을 몰랐다.
+			interact_prompt.text = "혼백관 기증대 — 완주 (전시 %d/%d)" % [
+				museum.donated_count(), Museum.donatable_ids().size()]
 		else:
 			# ★[S9-T7] 책이 기증 대상에 합류하며 안내 문구도 두 갈래를 말한다.
 			interact_prompt.text = "혼백관 기증대 — 유품이나 되찾은 책을 들고 오자 (전시 %d/%d)" % [
@@ -14726,6 +14751,14 @@ func _use_tool() -> void:
 		# 드랍을 반환한다(틀린 도구·미지 kind·이미 치움이면 {} → 무동작). 드랍은 인벤토리에 적재(경제 양끝 잇기).
 		var kind := _debris_kind_at(_target)
 		if kind != "":
+			# ★[폴리시 R12] **적재 자리부터 본다** — `_try_harvest`가 쓰는 그 계약 1:1. `reclaim.clear`는
+			#   `_cleared[t] = true`로 그 칸을 영구히 개간 완료로 굳히는 멱등 동사라(같은 칸 재수확 불가),
+			#   백팩이 가득이면 드랍이 되찾을 곳 없이 사라지는데 화면엔 "+N" 토스트가 조건 없이 떴다.
+			#   형제 창구는 예외 없이 이 계약을 지킨다(벌목·채굴·나락·처치 드랍·낚시·수확).
+			if DebrisCatalog.tool_for(kind) == item \
+					and not inventory.can_add(DebrisCatalog.drop_for(kind), DebrisCatalog.drop_count(kind)):
+				_notice("백팩이 가득 차 치울 수 없다 — 자리를 비우고 다시")
+				return
 			var res := reclaim.clear(_target, kind, item)
 			if not res.is_empty():
 				inventory.add_item(str(res["drop"]), int(res["count"]))
@@ -14741,6 +14774,13 @@ func _use_tool() -> void:
 				verb = "개간"
 		elif reclaim.has_weed(_target):
 			# ★ [ADR-0055] 밤새 돋은 재점령 잡초를 낫으로 벤다(WEEDS 드랍 = 혼백섬유 ×1). 낫 아니면 무동작.
+			# ★[폴리시 R12] 위 개간 갈래와 **같은 적재 선검사** — `clear_weed`도 원장에서 그 칸을 지우는
+			#   비가역 동사라, 가득이면 드랍이 증발하고 토스트만 남았다(잡초는 다시 돋지만 그 낫질은 아니다).
+			if DebrisCatalog.tool_for(DebrisCatalog.WEEDS) == item \
+					and not inventory.can_add(DebrisCatalog.drop_for(DebrisCatalog.WEEDS),
+						DebrisCatalog.drop_count(DebrisCatalog.WEEDS)):
+				_notice("백팩이 가득 차 벨 수 없다 — 자리를 비우고 다시")
+				return
 			var wres := reclaim.clear_weed(_target, item)
 			if not wres.is_empty():
 				inventory.add_item(str(wres["drop"]), int(wres["count"]))
@@ -16719,8 +16759,14 @@ func _roll_mixed_seed_drop(t: Vector2i) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash("mixdrop:%d:%d:%d" % [clock.day, t.x, t.y])
 	if rng.randf() < MIXED_SEED_DROP_CHANCE:
-		inventory.add_seed(CropCatalog.MIXED)
-		_toast_item(ItemCatalog.seed_id(CropCatalog.MIXED), 1)
+		# ★[폴리시 R12] `add_seed`가 R2에서 bool로 바뀐 뜻을 **여기서도 본다**. 낫질 드랍(혼백 섬유)은
+		#   스택이 있어 적재되는데 빈 슬롯이 없으면 씨앗만 못 들어오는 조합이 남는다 — 그때 종전엔
+		#   토스트가 조건 없이 "혼합 씨앗 +1"을 알렸고, 롤 시드는 (날·칸) 결정적이라 그날 그 칸의
+		#   롤은 이미 소비된 셈이었다. 동사를 막지 않고 사실만 갈라 말한다.
+		if inventory.add_seed(CropCatalog.MIXED):
+			_toast_item(ItemCatalog.seed_id(CropCatalog.MIXED), 1)
+		else:
+			_notice("백팩이 가득 차 혼합 씨앗이 흩어졌다")
 
 # ★[S4-T5] 혼합 씨앗 치환 롤 — 심는 절기의 일반 작물 풀에서 결정적으로 1종(스타듀 Mixed Seeds).
 #   풀은 절기당 1종(현 로스터 규모 — 절기 작물이 늘면 여기만 늘린다·잠정 매핑은 작물 절기 주석 기준).
@@ -17703,6 +17749,12 @@ func _take_fish(id: String, quality: int, n: int) -> int:
 		left -= take
 	return took
 
+# ★[폴리시 R12] 혼백관 로스터를 다 채웠는가 — 기증대 프롬프트와 [F] 알림이 **같은 술어**를 본다
+#   (도감 `has_trophy`·안치대 `remaining_to_gate`가 각자 완주를 아는 것과 같은 자리). 분모는
+#   `donatable_ids()` 파생이라 유품·책이 늘어도 여기는 안 고친다.
+func _museum_complete() -> bool:
+	return museum != null and museum.donated_count() >= Museum.donatable_ids().size()
+
 # ★ [S2-T5] 든 유품을 혼백관에 기증한다 — 원장 기록 → 아이템 1개 소모 → 도달 마일스톤 즉시 지급.
 # 무인 기증대(큐레이터 없음 — ADR-0060 결정 5). 보상은 인벤토리로 바로(스타듀 군터 수령 대응 간소화).
 func _try_donate_selected() -> void:
@@ -17716,6 +17768,10 @@ func _try_donate_selected() -> void:
 			return
 		if museum.is_donated(id):
 			_notice("이미 전시된 유품이다")
+		elif _museum_complete():
+			# ★[폴리시 R12] 프롬프트와 **같은 완주 분기** — 누른 뒤에도 죽은 지시를 반복하지 않는다.
+			_notice("혼백관은 다 찼다 — 유품도 책도 모두 전시됐다 (전시 %d/%d)" % [
+				museum.donated_count(), Museum.donatable_ids().size()])
 		else:
 			# ★[S9-T7] 책 합류 — 유품(괭이질 발굴)과 책(세계 곳곳 발견) 두 갈래를 다 안내한다.
 			_notice("기증할 유품이나 되찾은 책을 손에 들어야 한다 (유품 = 안식 괭이질 발굴)")
@@ -18568,7 +18624,9 @@ func _on_frame_discard(slot_index: int) -> void:
 	#   막힌다. 그래서 **매대 가격 0인 기어**를 같은 표에 세운다(id를 손으로 안 적는다 — 앞으로
 	#   생길 증정 기어도 저절로 따라오고, 값이 붙어 매대에 서는 순간 저절로 풀린다).
 	if Inventory.START_TOOLS.has(id) or (GearCatalog.is_rod(id) and GearCatalog.price_of(id) <= 0):
-		_notice("%s는 버릴 수 없다 — 다시 구할 곳이 없다" % ItemCatalog.name_of(id))
+		# ★[폴리시 R12] 런타임 이름 옆 **고정 조사**를 걷는다(R5 ④i 전수 스캔이 잡던 마지막 한 자리 —
+		#   R10이 이 안내를 새로 쓰며 고정 "는"이 다시 들어왔다). "괭이는"/"저승 낚싯대는" 둘 다 한 식에서.
+		_notice("%s 버릴 수 없다 — 다시 구할 곳이 없다" % HanjiUi.with_eun(ItemCatalog.name_of(id)))
 		return
 	var n := inventory.count_at(slot_index)
 	inventory.remove_at(slot_index, n)
@@ -22289,6 +22347,10 @@ func _try_resident_gift(r: Resident) -> void:
 	var points := GiftPrefs.points_for(tier, id, inventory.quality_at(idx))
 	if not inventory.remove_at(idx, 1):       # 선물한 아이템 1개 소모(든 슬롯 그대로)
 		return
+	# ★[폴리시 R12] **천장을 건네기 전에 기억한다** — `gift()`는 명목 점수를 돌려주므로(0 하한이
+	#   미터 바닥인 것과 달리 MAX_POINTS 천장은 관계의 *끝*이다) 이미 만점인 상대에게 건넨 선물이
+	#   "+160 호감도"라고 보고됐다. 아이템은 그대로 소모한다(ADR-0008 — 선물 자체는 안 막는다).
+	var was_maxed: bool = r.affinity.is_maxed()
 	var gained := r.affinity.gift(points, clock.day, birthday, married)
 	var tag := GiftPrefs.tag_of(tier)
 	if birthday:
@@ -22297,11 +22359,13 @@ func _try_resident_gift(r: Resident) -> void:
 	# ★[S8-T9 아트 패스] tier 색 — 태그 문자열을 읽기 전에 결과(선호/질색)가 도착한다. 생일(×8)도
 	#   tier 색 그대로다(문구에 이미 "(생일!)"이 붙어 배율은 글자가 말한다 — 색축이 둘이면 못 읽힌다).
 	var tint: Color = GIFT_TIER_TINTS.get(tier, Color(0, 0, 0, 0))
+	# ★[폴리시 R12] 만점 상대에게는 **점수 대신 사실**을 말한다(주간 횟수도 안 쓰였다 — affinity.gift 참조).
+	var effect := "%s%+d 호감도" % [tag, gained] if not was_maxed else "%s호감도는 이미 가득하다" % tag
 	if who == "":
-		_notice("%s 선물 %s%+d 호감도" % [ItemCatalog.name_of(id), tag, gained],
+		_notice("%s 선물 %s" % [ItemCatalog.name_of(id), effect],
 			NOTICE_SECS, false, null, tint)
 	else:
-		_notice("%s에게 %s 선물 %s%+d 호감도" % [who, ItemCatalog.name_of(id), tag, gained],
+		_notice("%s에게 %s 선물 %s" % [who, ItemCatalog.name_of(id), effect],
 			NOTICE_SECS, false, null, tint)
 
 # ── T4.2/T7.3 슬라이스 종료 ─────────────────────────────────────────────────
