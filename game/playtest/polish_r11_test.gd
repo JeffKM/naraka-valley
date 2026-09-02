@@ -1,7 +1,8 @@
 extends SceneTree
-# ★[폴리시 11회차] 버그 헌트 확정분 회귀 — 배치 A(#1~#15).
+# ★[폴리시 11회차] 버그 헌트 확정분 회귀 — 배치 A(#1~#15) + 배치 B(#16~#30 · 추가 조사 #31).
 #
-# 렌즈: R10 diff 리뷰 · 자동 세이브 위상 · 연 넘김(절대 day 표시) · 초반 아크 · 배우자 일과.
+# 렌즈: R10 diff 리뷰 · 자동 세이브 위상 · 연 넘김(절대 day 표시) · 초반 아크 · 배우자 일과(A) /
+#       배우자 일과 · 패널 스택 · 세이브 생애주기 · 알림 도달(B).
 #
 # 무엇을 보증하나(발견 번호 = 11회차 헌트 배치 A):
 #   ① #4(=#1·#8) 밀린 **절기 대량 재스폰 표**가 세이브에 안 실리고 로드가 지워, 집 밖 강제 취침
@@ -23,6 +24,29 @@ extends SceneTree
 #         사라져, day 1 튜토리얼 밭에서 괭이질이 **무알림 무동작**이었다.
 #   ⑨ #15 배우자(미호) 아침 물주기가 노지 `farm`만 쳐, 재배를 늘봄방으로 옮기면 결혼 잡일 ①이
 #         완전히 무효였다(늘봄방은 실내라 혼우 급수도 안 닿는다).
+#
+#
+# 배치 B(#16~#30 · #31):
+#   ⑩ #16 이혼이 앵커 트랙 재계산을 안 불러, 트랙은 열렸는데 ♡가 0에 멎었다(명부 부적 창구가
+#         다음 취침·기증·대화까지 이유 없이 잠김). ★#17은 REFUTED — 그 자리에서 계약을 잠근다.
+#   ⑪ #18 바나 관계 탭이 배우자 잡일 ③(자동 차단 +1)을 못 세어, 화면이 그 밤 실효 횟수보다
+#         한 마리 적게 말했다(결혼으로 얻은 보호를 확인할 창구가 없었다).
+#   ⑫ #19 아침 잡일 둘이 `_advance_wedding`보다 앞줄이라 혼례 아침엔 `_spouse_id`가 아직 ""였다
+#         — 멜·미호 잡일만 하루 늦게 시작하고 바나만 즉효였다.
+#   ⑬ #20 대화창이 매 줄 "[E] 다음"을 그리는데 `action`엔 우클릭뿐이라 그 키가 죽어 있었다.
+#   ⑭ #21 조회 패널(거울·달력)을 연 채 C를 누르면 편집면이 통째로 가린 채 못 닫혔다(닫기 경로
+#         전량이 `if _deco_mode: return` 아래).
+#   ⑮ #22 `_hud_hidden`에 `_transitioning`이 없어 문 출입 암전 위에 핫바·혼력바·시계가 남았다.
+#   ⑯ #24 세이브가 대상 파일을 먼저 절단해, 쓰기 중 크래시가 유일한 슬롯을 파괴했다(복구 0).
+#   ⑰ #26 옵션 탭 [저장]이 실패에도 "저장했습니다"라 말하고 [종료]는 실패해도 그대로 나갔다.
+#   ⑱ #28 개수 축출뿐인 알림 큐에서 1회성 래치(도감 트로피·혼례 배너)가 영영 사라졌다.
+#   ⑲ #29 카페 마감 정산 패널이 마일스톤 축하 팝업을 통째로 덮었다(둘 다 래치는 축하 쪽).
+#   ⑳ #30 날짜에 매인 네 층 중 생일만 아침 배너·거울 예고가 없어 상한 면제 기회가 조용히 지났다.
+#   ㉑ #31 추가 조사 — miho/mel/bana/ken 아크 ⑤c·⑤e와 s9 스모크 ②c의 baseline 실패는 **결함이
+#         아니라 계약 오독**이다(R8이 아침 훅 끝에 채널 개통 안내를 조건 없이 큐잉하면서
+#         `pending_count() == 0`이 다른 층의 편지까지 세게 됐다). 다섯 자리를 구성 단언으로 정정.
+#   ㉒ #23 (high) 밤 바 세션이 로드를 그대로 통과해, 열지도 않은 바에서 되감긴 19:00에 약탈이
+#         집행됐다(ADR-0010 #6 옵트인이 F9 한 번으로 무효).
 #
 # 미봉합(판정만 남긴다): #5 = OWNER-DECISION. 밀린 밤 표의 단일 슬롯 덮어쓰기는 R9 머리말이
 #   "밀린 밤 수만큼 곱해 물리는 건 페널티 설계 결정이라 여기서 새로 만들지 않는다(OWNER 큐)"로
@@ -66,6 +90,25 @@ func _in_func(fn_needle: String, needle: String) -> bool:
 		if _src[i].contains(needle):
 			return true
 	return false
+
+# 다른 파일의 소스 한 줄 검사(save.gd·형제 스위트 — main.gd는 _src·_in_func가 든다).
+func _file_has(path: String, needle: String) -> bool:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return false
+	return f.get_as_text().contains(needle)
+
+# `_hud_hidden` 대입식을 이어 붙인 한 줄(백슬래시 연속줄 — 항목이 여러 줄에 걸쳐 있다).
+func _hud_hidden_expr() -> String:
+	var i := _line_of("var _hud_hidden :=")
+	if i < 0:
+		return ""
+	var out := _src[i]
+	var j := i
+	while _src[j].strip_edges().ends_with("\\") and j + 1 < _src.size():
+		j += 1
+		out += " " + _src[j].strip_edges()
+	return out
 
 func _wipe_slot(slot: int) -> void:
 	var p := SaveManager.slot_path(slot)
@@ -350,6 +393,348 @@ func _initialize() -> void:
 		wet == m.SPOUSE_MIHO_WATER_TILES and wet < gh_tiles.size())
 	_check("⑨e 예산은 **한 몫**이다 — 밭이 늘었다고 곱절이 되지 않는다",
 		outdoor_first + gh_watered == m.SPOUSE_MIHO_WATER_TILES)
+
+	# ══ 배치 B(#16~#30 · #31) ══════════════════════════════════════════════════
+	# ── ⑩ #16 이혼이 앵커 트랙을 그 자리에서 되돌린다 / #17 판정(REFUTED) ───────
+	print("── ⑩ #16 이혼 → 앵커 트랙 재계산이 같은 프레임에 온다 ──")
+	_check("⑩a 이혼 결행에 트랙 재계산이 있다(혼인 성립이 이미 갖고 있던 그 한 줄의 역방향 짝)",
+		_in_func("func _do_divorce", "_refresh_okja_track()")
+		and _in_func("func _advance_wedding", "_refresh_okja_track()"))
+	m._mark_spine_bit(m.SPINE_B4)
+	m._mark_spine_bit(m.SPINE_B5)
+	m._mark_spine_bit(m.SPINE_B6)
+	m._run_harvested = 100000
+	m._spouse_id = ""
+	m._open_okja_track()      # 앞 블록(⑤ #7)이 이미 열어 뒀을 수 있다 — 개통은 멱등
+	m._refresh_okja_track()   # 그래서 점수는 여기서 명시적으로 다시 잰다(파생 = 원장 스냅샷)
+	var r_okja: Resident = m._resident("okja")
+	var deed_pts: int = Spine.okja_deed_points(true, m.museum.donated_count(),
+		Museum.donatable_ids().size(), m._run_harvested)
+	_check("⑩b 전제: 트랙이 열렸고 deed가 원장에서 파생돼 있다 — 외면+돌봄 %d점(♡%d)"
+			% [deed_pts, r_okja.affinity.hearts()],
+		r_okja.affinity != null and deed_pts > 0 and r_okja.affinity.points == deed_pts
+		and r_okja.affinity.hearts() > 0)
+	var deed_hearts: int = r_okja.affinity.hearts()
+	m._romance_partner = "mel"
+	m._wedding_day = m.clock.day
+	m._advance_wedding(m.clock.day)
+	_check("⑩c 다른 이와 혼인하면 잠금 판정으로 앵커 ♡가 0으로 내려간다(결정 10-ⓓ)",
+		m._spouse_id == "mel" and r_okja.affinity.points == 0 and r_okja.affinity.hearts() == 0)
+	m.wallet.earn(m.DIVORCE_COST)
+	m._do_divorce()
+	_check("⑩d 이혼 그 프레임에 ♡%d가 되돌아온다(종전엔 취침·기증·옥자 대화 중 하나가 올 때까지 0에 멎었다)"
+			% deed_hearts,
+		m._spouse_id == "" and r_okja.affinity.points == deed_pts
+		and r_okja.affinity.hearts() == deed_hearts)
+	_check("⑩e 그래서 명부 부적 창구의 잠금·해제가 곁의 상태와 같은 프레임에 맞는다",
+		m._okja_track_open() and (r_okja.affinity.hearts() >= Affinity.MAX_HEARTS)
+			== m._myeongbu_quest_open())
+	# ★#17 REFUTED — 앵커와 이혼하면 `reset_hearts`가 파생에 덮이는데, 그것이 이 트랙의 **명시된
+	#   계약**이다(`_refresh_okja_track` "곁이 비면 그 자리에서 되돌아온다" · `_okja_track_open`
+	#   "억지력은 이미 이혼 의뢰비가 지고 있으므로 두 번째 벌칙을 얹지 않는다"). 여기선 그 계약을
+	#   *잠근다* — 앵커의 ♡는 재등반 통화가 아니라 갚은 것의 파생이라 되감을 대상이 아니다.
+	m._romance_partner = "okja"
+	m._wedding_day = m.clock.day
+	m._advance_wedding(m.clock.day)
+	var anchor_married_hearts: int = r_okja.affinity.hearts()
+	m.wallet.earn(m.DIVORCE_COST)
+	m._do_divorce()
+	_check("⑩f #17 판정 — 앵커와의 이혼 뒤 ♡는 원장 파생으로 되돌아온다(설계 계약 · 벌칙 없음)",
+		anchor_married_hearts == deed_hearts and r_okja.affinity.points == deed_pts
+		and _in_func("func _okja_track_open", "_spouse_id == \"\" or _spouse_id == OKJA_RID"))
+	m._romance_partner = ""
+	m._wedding_day = 0
+
+	# ── ⑪ #18 바나 요약이 배우자 잡일을 함께 말한다 ─────────────────────────────
+	print("── ⑪ #18 관계 탭 바나 줄 — 화면이 그 밤의 실효 차단을 말한다 ──")
+	var ab5: int = BanaGuard.auto_block(Affinity.MAX_HEARTS)
+	_check("⑪a 매핑은 그대로다 — ♡%d의 base 자동 차단 %d마리(수치 이동 0)"
+			% [Affinity.MAX_HEARTS, ab5],
+		BanaGuard.summary(Affinity.MAX_HEARTS).contains("자동차단 %d마리" % ab5))
+	_check("⑪b 얹힌 몫을 더해 말한다 — %d + %d = %d마리"
+			% [ab5, m.SPOUSE_BANA_EXTRA_BLOCK, ab5 + m.SPOUSE_BANA_EXTRA_BLOCK],
+		BanaGuard.summary(Affinity.MAX_HEARTS, m.SPOUSE_BANA_EXTRA_BLOCK)
+			.contains("자동차단 %d마리" % (ab5 + m.SPOUSE_BANA_EXTRA_BLOCK)))
+	_check("⑪c 주입부와 표시부가 **같은 상수**를 본다(수치 복제 0)",
+		_in_func("func _process", "night_bar.auto_block += SPOUSE_BANA_EXTRA_BLOCK")
+		and _in_func("func _setup_residents", "SPOUSE_BANA_EXTRA_BLOCK if _spouse_id == \"bana\" else 0"))
+	var r_bana: Resident = m._resident("bana")
+	var bana_saved: int = r_bana.affinity.points
+	r_bana.affinity.points = Affinity.MAX_POINTS
+	r_bana.affinity.stage = r_bana.affinity.points_hearts()
+	var solo_line: String = r_bana.effect_fn.call()
+	m._spouse_id = "bana"
+	var wed_line: String = r_bana.effect_fn.call()
+	m._spouse_id = ""
+	_check("⑪d 라이브 — 결혼 전/후 같은 하트에서 줄이 갈린다: 「%s」 → 「%s」" % [solo_line, wed_line],
+		solo_line != wed_line
+		and solo_line.contains("자동차단 %d마리" % ab5)
+		and wed_line.contains("자동차단 %d마리" % (ab5 + m.SPOUSE_BANA_EXTRA_BLOCK)))
+	r_bana.affinity.points = bana_saved
+	r_bana.affinity.stage = r_bana.affinity.points_hearts()
+
+	# ── ⑫ #19 혼례 아침 잡일이 하루 늦지 않는다 ────────────────────────────────
+	print("── ⑫ #19 혼례 아침 — 세 잡일의 개시 아침이 같아진다 ──")
+	_check("⑫a 두 잡일이 아침 술어로 묻는다(멜 팁 · 미호 물주기)",
+		_in_func("func _on_day_advanced", "_spouse_of_morning(day) == \"mel\"")
+		and _in_func("func _on_day_advanced", "_spouse_of_morning(day) == \"miho\""))
+	_check("⑫b 잡일 자리는 여전히 `_advance_wedding`보다 **앞줄**이다(그래서 술어가 필요했다)",
+		_line_of("_spouse_of_morning(day) == \"mel\"") < _line_of("\t_advance_wedding(day)")
+		and _line_of("_spouse_of_morning(day) == \"miho\"") < _line_of("\t_advance_wedding(day)"))
+	var wd: int = m.clock.day + 3
+	m._spouse_id = ""
+	m._romance_partner = "miho"
+	m._wedding_day = wd
+	_check("⑫c 혼례 전날 아침은 아직 아무도 아니다(예정만 서 있다)",
+		m._spouse_of_morning(wd - 1) == "" and m._spouse_id == "")
+	_check("⑫d 혼례 아침 — `_spouse_id`는 아직 \"\"인데 잡일은 이미 미호를 본다(하루의 어긋남이 사라진다)",
+		m._spouse_id == "" and m._spouse_of_morning(wd) == "miho")
+	m._advance_wedding(wd)
+	_check("⑫e 같은 아침 뒤엔 두 값이 일치한다(술어가 혼인 성립을 앞당기지 않는다 — 읽기만 한다)",
+		m._spouse_id == "miho" and m._spouse_of_morning(wd) == "miho" and m._wedding_day == 0)
+	_check("⑫f 바나 잡일은 종전 그대로 매 프레임 파생이다(주입부 불변 — 셋의 개시가 같은 아침)",
+		_in_func("func _process", "if _spouse_id == \"bana\":"))
+	m.wallet.earn(m.DIVORCE_COST)
+	m._do_divorce()
+	m._romance_partner = ""
+
+	# ── ⑬ #20 대화창이 안내한 [E]가 실제로 대사를 넘긴다 ───────────────────────
+	print("── ⑬ #20 대화 넘기기 — 화면이 지시한 키가 살아난다 ──")
+	var e_bound := false
+	for ev in InputMap.action_get_events("menu_tab"):
+		if ev is InputEventKey and ev.physical_keycode == KEY_E:
+			e_bound = true
+	var action_has_key := false
+	for ev in InputMap.action_get_events("action"):
+		if ev is InputEventKey:
+			action_has_key = true
+	_check("⑬a 전제: E는 `menu_tab`에만 묶여 있고 `action`(넘기기)엔 키 이벤트가 하나도 없다(우클릭뿐)",
+		e_bound and not action_has_key)
+	_check("⑬b 화면은 매 줄 [E]를 안내한다(그 문구가 여전히 있다 — 고친 것은 배선이지 문구가 아니다)",
+		_line_of("\"[E] 닫기\" if dialogue.is_last() else \"[E] 다음\"") >= 0)
+	_check("⑬c 대화 진행 폴링이 두 키를 함께 받는다(우클릭 ∪ E)",
+		_line_of("if Input.is_action_just_pressed(\"action\") or Input.is_action_just_pressed(\"menu_tab\"):") >= 0)
+	_check("⑬d 선택지·고백 삼킴 규약은 그대로다(그 분기가 넘기기 폴링보다 **위**에서 return)",
+		_line_of("if dialogue.has_choice():")
+			< _line_of("if Input.is_action_just_pressed(\"action\") or Input.is_action_just_pressed(\"menu_tab\"):"))
+	_check("⑬e 같은 뿌리 — 미호 온보딩 대사도 실제 키를 말한다(괭이질 = 좌클릭 `use_tool`)",
+		_file_has("res://miho.gd", "[좌클릭]으로 갈고") and not _file_has("res://miho.gd", "[E]로 갈고"))
+
+	# ── ⑭ #21 꾸미기 진입이 조회 패널을 박제하지 않는다 ────────────────────────
+	print("── ⑭ #21 꾸미기 모드 — 열어 둔 조회 패널을 먼저 접는다 ──")
+	if m._deco_mode:
+		m._toggle_deco_mode()
+	m._region = RegionCatalog.HOME
+	m._indoor = "집"
+	m._open_mirror()
+	_check("⑭a 전제: 거울 패널이 떠 있다(이 상태로 C를 누르면 종전엔 못 닫았다)",
+		m.mirror_panel.visible)
+	m._toggle_deco_mode()
+	_check("⑭b C를 누르면 거울이 접히고 꾸미기가 켜진다(입력이 죽지 않는다)",
+		m._deco_mode and not m.mirror_panel.visible)
+	m._toggle_deco_mode()
+	m.calendar_panel.toggle()
+	_check("⑭c 전제: 달력이 열려 있다($CanvasLayer의 마지막 자식 — 그 위에 그릴 것이 없다)",
+		m.calendar_panel.is_open())
+	m._toggle_deco_mode()
+	_check("⑭d 달력도 같은 자리에서 접힌다", m._deco_mode and not m.calendar_panel.is_open())
+	m._toggle_deco_mode()
+	_check("⑭e 끄기는 언제나 받는다(R3가 세운 유일한 탈출구 — 불변)", not m._deco_mode)
+	_check("⑭f 진입 게이트(`_deco_blocked`)엔 아무것도 안 더했다 — 접는 것이지 막는 것이 아니다",
+		not _in_func("func _deco_blocked", "mirror_panel")
+		and not _in_func("func _deco_blocked", "calendar_panel"))
+
+	# ── ⑮ #22 전환 암전 위에 상시 HUD가 안 남는다 ──────────────────────────────
+	print("── ⑮ #22 전환 암전 — HUD 가드가 `_transitioning`을 센다 ──")
+	var hud_expr := _hud_hidden_expr()
+	_check("⑮a `_hud_hidden`이 전환 연출을 항목으로 센다(취침 `_sleeping`과 나란히)",
+		hud_expr.contains("_transitioning") and hud_expr.contains("_sleeping"))
+	_check("⑮b 다른 연출 항목은 그대로다(컷신·내면 공간·일러스트·모달 넷 — 축소 0)",
+		hud_expr.contains("cutscene != null") and hud_expr.contains("spine_puzzle != null")
+		and hud_expr.contains("_illust_id != \"\"") and hud_expr.contains("mirror_panel.visible")
+		and hud_expr.contains("frame.is_open()") and hud_expr.contains("dialogue.is_open()"))
+	m._transitioning = true
+	await process_frame
+	await process_frame
+	_check("⑮c 라이브 — 암전 중엔 핫바·혼력바·시계가 함께 접힌다",
+		not m.hotbar.visible and not m.vitals.visible and not m.clock_hud.visible)
+	m._transitioning = false
+	await process_frame
+	await process_frame
+	_check("⑮d 암전이 걷히면 그대로 되돌아온다(전환은 상태가 아니라 연출이다)",
+		m.hotbar.visible and m.vitals.visible and m.clock_hud.visible)
+
+	# ── ⑯ #24 세이브 쓰기가 원자적이다 ─────────────────────────────────────────
+	print("── ⑯ #24 세이브 — 임시본에 다 쓰고 한 번의 rename으로 자리를 바꾼다 ──")
+	_check("⑯a 대상 슬롯 파일을 WRITE로 여는 코드가 없다(절단 지점 소멸)",
+		not _file_has("res://save.gd", "FileAccess.open(path, FileAccess.WRITE)")
+		and _file_has("res://save.gd", "FileAccess.open(tmp, FileAccess.WRITE)"))
+	_check("⑯b 자리 바꾸기는 rename 한 번이고, 실패하면 반쪽 임시본을 지운다",
+		_file_has("res://save.gd", "DirAccess.rename_absolute")
+		and _file_has("res://save.gd", "DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))"))
+	var sm := SaveManager.new()
+	var probe_slot := SaveManager.SLOT_COUNT - 1
+	_wipe_slot(probe_slot)
+	var wrote_ok: bool = sm.save_game({"r11_probe": 7}, probe_slot, {"day": 3})
+	var tmp_path := SaveManager.slot_path(probe_slot) + SaveManager.TMP_SUFFIX
+	_check("⑯c 저장 성공 · 임시본이 남지 않는다 · 그 슬롯이 실제로 읽힌다",
+		wrote_ok and not FileAccess.file_exists(tmp_path) and sm.can_load(probe_slot))
+	var back: Dictionary = sm.load_game(probe_slot)
+	_check("⑯d 왕복 — 내용이 그대로다(포맷·버전 래핑 불변)", int(back.get("r11_probe", 0)) == 7)
+	var wrote2: bool = sm.save_game({"r11_probe": 9}, probe_slot, {"day": 4})
+	var back2: Dictionary = sm.load_game(probe_slot)
+	_check("⑯e 덮어쓰기도 온전한 한 벌로 바뀐다(직전 파일은 교체되는 순간까지 그대로)",
+		wrote2 and int(back2.get("r11_probe", 0)) == 9
+		and not FileAccess.file_exists(tmp_path))
+	_wipe_slot(probe_slot)
+	sm.free()
+
+	# ── ⑰ #26 저장 성패를 화면이 말한다 ────────────────────────────────────────
+	print("── ⑰ #26 옵션 탭 [저장]·[종료] — 실패를 삼키지 않는다 ──")
+	_check("⑰a `_save_game`이 성패를 돌려준다(IO 성패를 아는 유일한 자리 — `_load_game`의 R6 처방)",
+		_line_of("func _save_game() -> bool:") >= 0)
+	_check("⑰b [저장]은 실패에만 말을 얹는다(성공 문구의 주인은 `_save_game` 하나 — 이중 토스트 소멸)",
+		_in_func("func _on_frame_save", "if not _save_game():")
+		and not _in_func("func _on_frame_save", "_notice(\"저장했습니다\")"))
+	_check("⑰c [종료]는 저장 실패면 첫 타를 멈춘다(2단 확인 — 두 번째는 그대로 나간다)",
+		_in_func("func _on_frame_quit", "if not _save_game() and not _quit_unsaved_armed:")
+		and _in_func("func _on_frame_quit", "get_tree().quit()"))
+	_check("⑰d 라이브 — 정상 슬롯 저장은 true를 돌려준다", m._save_game())
+
+	# ── ⑱ #28 1회성 래치 알림이 4칸 큐에서 축출되지 않는다 ──────────────────────
+	print("── ⑱ #28 알림 피드 — 다시 오지 않을 줄은 밀려나지 않는다 ──")
+	var nf: NoticeFeed = m.notice_feed
+	nf._items.clear()
+	nf.push("래치 한 줄", 60.0, false, null, true, Color(0, 0, 0, 0), true)
+	for i in range(NoticeFeed.MAX_ITEMS + 2):
+		nf.push("휘발 %d" % i, 60.0)
+	var feed_texts: Array = []
+	for it in nf._items:
+		feed_texts.append(String(it["text"]))
+	_check("⑱a 래치 줄이 살아남고 최신 줄도 보인다 — 큐: %s" % [feed_texts],
+		feed_texts.has("래치 한 줄")
+		and feed_texts.has("휘발 %d" % (NoticeFeed.MAX_ITEMS + 1))
+		and nf._items.size() == NoticeFeed.MAX_ITEMS)
+	nf._items.clear()
+	for i in range(NoticeFeed.MAX_ITEMS + 2):
+		nf.push("고정 %d" % i, 60.0, false, null, false, Color(0, 0, 0, 0), true)
+	_check("⑱b 전부 래치여도 상한은 안 무너진다(%d칸 계약 불변 — 그때만 맨 앞을 버린다)"
+			% NoticeFeed.MAX_ITEMS,
+		nf._items.size() == NoticeFeed.MAX_ITEMS)
+	nf._items.clear()
+	_check("⑱c 도감 완주 트로피가 그 표를 단다(세이브에 박히는 `trophy_day` 래치의 유일한 표면)",
+		_in_func("func _on_day_advanced", "notice_feed.push(\"명부 도감 완주"))
+	_check("⑱d 혼례 배너도 같은 표를 단다(예정일을 방금 0으로 접은 1회성 고지)",
+		_in_func("func _advance_wedding", "Color(0, 0, 0, 0), true)"))
+
+	# ── ⑲ #29 마일스톤 축하가 마감 정산에 덮이지 않는다 ────────────────────────
+	print("── ⑲ #29 두 팝업 — 래치가 있는 쪽이 먼저 읽힌다 ──")
+	_check("⑲a 전제: 두 패널 사각형이 실제로 겹친다(정산이 마일스톤 본문을 덮는다)",
+		m.cafe_summary_panel.get_rect().intersects(m.milestone_text.get_global_rect()))
+	m.milestone_panel.visible = true
+	m._milestone_popup_secs = 5.0
+	m.cafe_summary_panel.visible = false
+	m._cafe_summary_pending = ""
+	m._on_cafe_closed(120, 3, 1)
+	_check("⑲b 마일스톤이 떠 있으면 정산은 미뤄진다(본문은 보관 — 잃는 것 0)",
+		not m.cafe_summary_panel.visible and m._cafe_summary_pending.contains("오늘 카페 영업 마감")
+		and m.milestone_panel.visible)
+	m._milestone_popup_secs = 0.02
+	await process_frame
+	await process_frame
+	await process_frame
+	_check("⑲c 축하가 끝나는 프레임에 정산이 이어서 뜬다(순서가 생기고 둘 다 읽힌다)",
+		not m.milestone_panel.visible and m.cafe_summary_panel.visible
+		and m._cafe_summary_pending == ""
+		and m.cafe_summary_text.text.contains("매출  +120골드"))
+	m.cafe_summary_panel.visible = false
+	m._cafe_summary_secs = 0.0
+	m._on_cafe_closed(50, 1, 0)
+	_check("⑲d 마일스톤이 없으면 종전 그대로 즉시 뜬다(거동 불변)",
+		m.cafe_summary_panel.visible and m._cafe_summary_pending == ""
+		and m.cafe_summary_text.text.contains("매출  +50골드"))
+	m.cafe_summary_panel.visible = false
+	m._cafe_summary_secs = 0.0
+
+	# ── ⑳ #30 생일도 예고 문법을 갖는다 ────────────────────────────────────────
+	print("── ⑳ #30 생일 — 아침 배너 + 거울 예고(네 번째 형제) ──")
+	var bd_day := -1
+	var bd_name := ""
+	for d in range(2, GameClock.DAYS_PER_SEASON * 4 + 1):
+		var rid := Resident.birthday_on_day(d)
+		if rid != "" and m._display_name_of(rid) != "":
+			bd_day = d
+			bd_name = m._display_name_of(rid)
+			break
+	_check("⑳a 전제: 생일 표에서 로스터에 있는 첫 생일을 뜬다(날짜 표는 여전히 Resident 한 곳) — %s / day %d"
+			% [bd_name, bd_day],
+		bd_day > 1 and bd_name != "")
+	var day_saved: int = m.clock.day
+	m.clock.day = bd_day - 1
+	var eve_lines: Array = m._birthday_morning_notices()
+	_check("⑳b D-1 아침에 예고가 온다 — %s" % [eve_lines],
+		eve_lines.size() >= 1 and String(eve_lines[eve_lines.size() - 1]).contains(bd_name)
+		and String(eve_lines[eve_lines.size() - 1]).contains("내일"))
+	m.clock.day = bd_day
+	var today_lines: Array = m._birthday_morning_notices()
+	_check("⑳c 당일 아침 배너가 상한 면제를 말한다 — %s" % [today_lines],
+		today_lines.size() >= 1 and String(today_lines[0]).contains(bd_name)
+		and String(today_lines[0]).contains("상한이 면제"))
+	_check("⑳d 점괘 거울에도 형제 셋과 나란히 한 줄이 선다",
+		m._birthday_upcoming_line().contains(bd_name)
+		and m._mirror_forecast_text().contains(m._birthday_upcoming_line()))
+	var all_named := true
+	for rid in Resident.BIRTHDAYS:
+		var b: Array = Resident.birthday_of(String(rid))
+		if m._display_name_of(String(rid)) == "":
+			continue
+		var d2: int = int(b[0]) * GameClock.DAYS_PER_SEASON + int(b[1])
+		var got: Array = []
+		m.clock.day = d2
+		got = m._birthday_morning_notices()
+		if got.is_empty() or not String(got[0]).contains(m._display_name_of(String(rid))):
+			all_named = false
+	_check("⑳e 표에 오른 로스터 전원이 자기 날에 이름으로 불린다(총원 하드코딩 0 — 표에서 파생)",
+		all_named)
+	m.clock.day = day_saved
+	_check("⑳f 아침 훅이 그 배너를 실제로 민다(행사·테마 배너와 같은 자리)",
+		_in_func("func _on_day_advanced", "for line in _birthday_morning_notices():"))
+
+	# ── ㉑ #31 우편 계약 정정(추가 조사 — 결함 아님) ────────────────────────────
+	print("── ㉑ #31 아침 뒤 큐 잔류 — 계약 오독이지 결함이 아니다 ──")
+	_check("㉑a 아침 훅은 채널 개통 안내를 **조건 없이** 민다(R8 — 멱등이라 한 번만 나간다)",
+		_in_func("func _on_day_advanced", "mailbox.send(HERALD_NOTICE_LETTER)"))
+	_check("㉑b 그래서 '아침 뒤 큐가 비어 있다'는 총량 단언은 거짓이 됐다 — 두 스위트가 구성으로 다시 잰다",
+		_file_has("res://playtest/miho_arc_test.gd", "HERALD_NOTICE_LETTER")
+		and _file_has("res://playtest/s9_narrative_smoke_test.gd", "HERALD_NOTICE_LETTER"))
+
+	# ── ㉒ #23 밤 바 세션이 로드에서 폐기된다(마지막 — 월드를 되감는다) ─────────
+	print("── ㉒ #23 F9 — 열지도 않은 바에서 약탈이 집행되지 않는다 ──")
+	_check("㉒a 로드가 밤 바 세션을 폐기한다(낚시·체키·칵테일과 같은 줄)",
+		_in_func("func _load_game", "night_bar.abandon()"))
+	_check("㉒b `end_day`는 그 리셋을 재사용하되 정산을 먼저 쏜다(요약 경로 불변)",
+		_in_func("func end_day", "closed.emit(_raided, _revenue, _left)") == false
+			or _file_has("res://night_bar.gd", "\tabandon()"))
+	m._transitioning = false
+	var saved_before: bool = m._save_game()
+	m.night_bar.open_bar(19 * 60)
+	m.night_bar._auto_blocks_left = 0
+	m.night_bar._raided = 5
+	m.night_bar._revenue = 900
+	var opened_before: bool = m.night_bar.is_opened()
+	var closed_hits: Array = [0]
+	m.night_bar.closed.connect(func(_r: int, _v: int, _l: int) -> void: closed_hits[0] += 1)
+	var loaded_ok: bool = m._load_game()
+	_check("㉒c 전제: 바를 연 밤이었다(옵트인·정산 카운터가 세션에 서 있었다)",
+		saved_before and opened_before and loaded_ok)
+	_check("㉒d 로드 뒤 바는 닫혀 있다 — 되감긴 19:00에 잡귀가 저절로 깃들지 않는다",
+		not m.night_bar.is_opened())
+	_check("㉒e 그 밤의 정산 카운터·바나 자동 차단 잔량도 함께 비워진다(약탈 %d·매출 %d → 0)"
+			% [5, 900],
+		m.night_bar._raided == 0 and m.night_bar._revenue == 0
+		and m.night_bar._auto_blocks_left == 0)
+	_check("㉒f 폐기는 정산 요약을 쏘지 않는다(존재한 적 없는 매출·약탈을 합산해 알리지 않는다)",
+		closed_hits[0] == 0)
 
 	print("── 결과: %s (실패 %d)" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
