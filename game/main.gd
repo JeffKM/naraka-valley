@@ -12837,7 +12837,14 @@ func _process(delta: float) -> void:
 			if Input.is_action_just_pressed("shop_toggle"):
 				_resolve_confession(_confess_rid)
 				return
-			if Input.is_action_just_pressed("gift_item"):
+			# ★[폴리시 R10 #7] 선택지가 떠 있으면 [G]는 **삼키지 않는다**. `dialogue.advance()`는
+			#   `has_choice()`면 확정 no-op이라, 종전엔 화면이 한 글자도 안 바뀌는데 제안만 사라져
+			#   [F]가 죽었다(입력이 아무 일도 안 한 것처럼 보이면서 상태만 파괴). 아래 선택지
+			#   분기로 흘려보내면 제안은 그대로 서 있고, 고르는 순간 대화가 닫히며
+			#   `_on_dialogue_finished`가 어차피 접는다 — [G]가 하려던 것과 결과가 같다.
+			#   [F]는 여기 그대로 둔다: `_resolve_confession`이 `replace_lines`로 화면을 갈아
+			#   피드백을 남기고 물음 원장까지 되감는다(R8이 세운 그 경로).
+			if Input.is_action_just_pressed("gift_item") and not dialogue.has_choice():
 				_confess_rid = ""       # 이 대화에선 접어 둔다(무벌칙 — 다음 대화에 다시 선다)
 				dialogue.advance()
 				return
@@ -13603,10 +13610,16 @@ func _process(delta: float) -> void:
 	#   맨 앞의 한 갈래이고, 여러 LMB 디스패치가 같은 프레임에 겹쳐도 스윙은 하나다(_swing_weapon).
 	# ★[S6-T5] 체키 촬영 중엔 LMB가 **셔터**다 — 무기를 든 채 찍으면 스윙이 같이 나가므로 막는다.
 	# ★[S6-T6] 칵테일 제조 중의 LMB(붓기·셰이킹)도 같은 이유로 도구질로 흘리지 않는다.
+	# ★[폴리시 R10 #5] **릴 격투도 같은 줄에 세운다.** LMB를 세션 입력으로 쓰는 셋째 세션인데
+	#   이 가드만 빠져 있었다 — `_tick_fishing` 분기는 return을 안 하므로 그대로 여기까지 흘러,
+	#   격투 중 핫바로 곁들이·명부환을 들면 릴을 당길 때마다 `_use_tool`이 함께 돌아 접시·환약을
+	#   누른 횟수만큼 태웠고(퍼펙트 릴은 한 격투에서 LMB를 여러 번 다시 누른다), 무기를 들었으면
+	#   `_combat_swings`(세이브에 실리는 타격 롤 시드 축)가 릴 입력마다 밀렸다. 역방향도 같다:
+	#   입질 대기 중 곁들이를 먹으면 그 누름이 후킹으로도 들어갔다.
 	var holding_weapon := ItemCatalog._is_weapon(inventory.selected_id())
 	var holding_free_use := _is_free_use_item(inventory.selected_id())
 	# ★[S10-T2] 레어크로우도 스프링클러와 같은 이유로 도구질로 흘리지 않는다(설치 LMB와 중복 방지).
-	if not _sleeping and cheki == null and cocktail == null \
+	if not _sleeping and cheki == null and cocktail == null and fishing == null \
 			and (_target_valid or holding_weapon or pot_at_target or holding_free_use) \
 			and not holding_sprinkler and not holding_garden_pot and held_rarecrow == "" \
 			and Input.is_action_just_pressed("use_tool"):
@@ -23206,7 +23219,14 @@ func _on_dialogue_finished() -> void:
 	dialogue_panel.visible = false
 	dialogue_portrait.visible = false  # P2.4 초상화 슬롯도 함께 닫는다
 	_set_dialogue_skin("")             # ★[S9-T9] 편지지 → 기본 한지 복귀(되돌리기는 여기 한 곳)
-	player.set_physics_process(true)
+	# ★[폴리시 R10 #6] **취침 연출 중이면 잠금을 안 푼다.** `_on_sleep_done`의 R2 가드("대화가 열려
+	#   있으면 물리를 안 켠다 — 닫히는 프레임에 여기가 어차피 켠다")가 세운 불변식을 이 *닫힘*
+	#   경로가 무조건 켜기로 되뚫었다: 23:5x에 편지·대화를 연 채 24:00 강제 취침에 걸리면 `_process`의
+	#   대화 분기엔 `_sleeping` 가드가 없어 암전 트윈이 도는 동안에도 [E]가 먹히고, 마지막 줄을
+	#   넘기는 순간 여기서 물리가 켜져 검은 화면 뒤에서 걸어 다녔다(쓰러진 자리가 아닌 곳에서
+	#   아침을 맞는다). `_end_cutscene`이 이미 쓰는 형태(`set_physics_process(not _sleeping)`)와
+	#   같다 — 잠들어 있으면 `_on_sleep_done`이 눈뜨는 프레임에 켠다.
+	player.set_physics_process(not _sleeping)
 	# T5.1 온보딩 전진은 '누구와의 대화였나'(_talking_to)로도 가른다 — 멜이 카페에
 	# 상주하며 미호 멘토 단계 도중에도 말 걸 수 있게 됐기 때문(화자 구분 없이 단계로만
 	# 가르면 멜 대화가 미호 단계를 잘못 전진시킨다). 멜 대화는 온보딩과 무관하다.
