@@ -6560,19 +6560,52 @@ func _side_dish_choices() -> int:
 	return n
 
 # 지금 플레이어가 겨누는 스윙 부채꼴(벽 뒤 칸 제외). CombatSkill이 순수 기하를 주고, "그 칸이
-# 실제로 닿는가"(맵 밖·SOLID)를 여기서 자른다 — 벽 하나 사이로 몹을 베는 일이 없게.
+# 실제로 닿는가"(맵 밖·SOLID·가림)를 여기서 자른다 — 벽 하나 사이로 몹을 베는 일이 없게.
+# ★[폴리시 R10 #3] **선 자리(origin)가 맨 앞에 든다.** 순수 기하는 origin을 절대 안 담는데
+#   (`swing_arc`는 f*1부터 시작한다) 추적 아키타입에는 접촉 시 정지가 없어 몹이 플레이어 픽셀
+#   좌표로 계속 수렴한다 — 붙잡히면 `m.tile()`이 곧 `_player_tile()`이라, 몸을 겹친 채 접촉
+#   피해를 받으면서 검은 한 대도 안 들어갔다(한 칸 물러서야만 판정이 살았다). 겹친 적을 베는
+#   것은 부채꼴 *모양*의 문제가 아니라 "그 칸이 닿는가"의 문제라 여기가 그 자리다.
+# ★[폴리시 R10 #4] **가림(shadowing)도 여기서 자른다.** 종전엔 SOLID 칸을 *빼기만* 해서 정면
+#   1칸이 막혀도 정면 2칸이 arc에 남았다 — 머리말이 선언한 "벽 하나 사이로 못 벤다"와 정반대로,
+#   안 깬 돌 뒤의 제자리형(화귀·나찰·위장 잡귀)을 일방적으로 처리할 수 있었다(화염구는 돌에
+#   막히는데 검만 통과). 날개(대각)는 사이에 낀 칸이 없어 가림 대상이 아니다.
 func _weapon_arc() -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	if player == null:
 		return out
 	var origin := _player_tile()
-	for t: Vector2i in CombatSkill.swing_arc(origin, Vector2i(player.get_facing().round())):
-		if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid.size():
+	var cells: Array[Vector2i] = [origin]
+	cells.append_array(CombatSkill.swing_arc(origin, Vector2i(player.get_facing().round())))
+	for t: Vector2i in cells:
+		if _blocks_swing(t):
 			continue
-		if t.y < _grid.size() and t.x < _grid[t.y].size() and is_solid(_grid[t.y][t.x]):
+		if _swing_shadowed(origin, t):
 			continue
 		out.append(t)
 	return out
+
+# 그 칸이 스윙을 막나 — 맵 밖이거나 SOLID(벽·바위·절벽·프롭). 두 술어가 한 곳에 있어야
+# arc 산출과 가림 판정이 같은 기준을 본다.
+func _blocks_swing(t: Vector2i) -> bool:
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid.size():
+		return true
+	if t.x >= _grid[t.y].size():
+		return true
+	return is_solid(_grid[t.y][t.x])
+
+# origin에서 t까지 **사이에 낀 칸**이 하나라도 막혔나(끝점 둘은 제외 — 자기 칸은 위에서 이미 봤다).
+# 축 정렬이 아닌 칸(날개 대각)은 사이 칸이 정의되지 않으므로 늘 false다 — 정면 직선만 가려진다.
+func _swing_shadowed(origin: Vector2i, t: Vector2i) -> bool:
+	var d := t - origin
+	if d.x != 0 and d.y != 0:
+		return false
+	var step := Vector2i(signi(d.x), signi(d.y))
+	var n := maxi(absi(d.x), absi(d.y))
+	for k in range(1, n):
+		if _blocks_swing(origin + step * k):
+			return true
+	return false
 
 # ★[S5-T5] 지금 무대의 몹 레코드 목록([{tile, ...}]) — 층 안에서만 채워진다(지상·다른 구역은 빈 배열).
 #   레코드는 `CombatSkill.hits_in_arc`가 arc 겹침만 보는 **불투명 dict**이고, 개체 본체는 `ref`로
