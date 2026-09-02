@@ -2891,6 +2891,12 @@ var _mugol_sword_given := false
 #   있는데, 60층 상자는 1회성이라 버리면 재입수 경로가 없다 — 그러면 나락이 영구 봉인된다.
 #   그래서 **점등 게이트는 이 플래그가 본다**(S5-T7이 배선할 자리 — 지금은 기록·알림까지만).
 var _narak_key_found := false
+# ★[폴리시 R10] 잠긴 나락 문 안내를 이미 낸 칸(= 그 칸에 서 있는 동안 재알림 억제 래치).
+#   `_maybe_warp_edge`는 매 프레임 도는데 판정이 "들어선 순간"이 아니라 "지금 밟고 있는 칸"이고,
+#   그 문 칸은 `_carve_v`로 뚫려 있어 **거기 서 있을 수 있다**. 래치가 없으면 60회/초로 같은
+#   줄이 밀려 들어가 알림 피드(MAX_ITEMS 4·중복 제거 없음)가 포화되고, 직전 수확 토스트·XP·정산
+#   알림이 네 프레임 만에 전부 밀려났다. 칸을 벗어나면 아래에서 다시 무장한다(sentinel).
+var _gate_notice_tile := Vector2i(-9999, -9999)
 
 # T2.3 현재 심을 작물. Q로 카탈로그(빠른 성장 순)를 순환 선택한다.
 # 그레이박스에선 도구·씨앗 인벤토리 UI 없이 이 한 변수로 작물 종류를 고른다.
@@ -11473,6 +11479,10 @@ func _maybe_warp_edge() -> void:
 	if _in_dungeon_floor():
 		return
 	var t := _player_tile()
+	# ★[폴리시 R10] 잠금 안내 래치 재무장 — 다른 칸으로 한 칸이라도 나가면 다음 진입에 다시 알린다
+	#   (래치를 안 풀면 한 번 본 문은 영영 침묵한다 — 억제가 소실로 넘어가는 자리).
+	if t != _gate_notice_tile:
+		_gate_notice_tile = Vector2i(-9999, -9999)
 	for w in RegionCatalog.warps_of(_region):
 		if w["at"] == RegionCatalog.TILE_TBD or t != w["at"]:
 			continue
@@ -11483,7 +11493,12 @@ func _maybe_warp_edge() -> void:
 		#   한 번 열린 문이 도로 잠겨 진행이 영구 봉인된다(60층 상자는 1회성이라 되찾을 길도 없다).
 		#   그래서 T6이 개봉 시점에 `_narak_key_found`를 세워 뒀고, 여기가 그 계약의 소비처다.
 		if w["to"] == RegionCatalog.NARAK and not _narak_key_found:
-			_notice("굳게 봉인돼 있다 — 나락 열쇠가 있어야 열린다")
+			# ★[폴리시 R10] 그 칸에 **들어선 프레임에만** 한 번 알린다(매 프레임 push = 피드 포화).
+			#   이 문엔 `interact_prompt` 분기가 없어 이 알림이 유일한 피드백이라, 억제가 아니라
+			#   1회화가 정답이다 — 안내는 그대로 남고 다른 알림을 밀어내지만 않는다.
+			if _gate_notice_tile != t:
+				_gate_notice_tile = t
+				_notice("굳게 봉인돼 있다 — 나락 열쇠가 있어야 열린다")
 			return
 		_warp(w["to"], "", _warp_dest(w))
 		return
