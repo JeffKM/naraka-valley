@@ -2367,6 +2367,13 @@ const KITCHEN_TILE := Vector2i(11, 88)
 #   플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 나눠 그린다(매 프레임 아님 — 값싸게).
 var _front_props: Node2D = null
 var _last_player_tile_y: int = -9999
+# ★[폴리시 R10] main 캔버스가 **타일 눈금으로만** 갱신되는 구조(위 행 넘김 + `_update_target`의 발
+#   타일 변화)의 예외 창구. 이 캔버스 위에 그려지는 것 중 둘은 소스가 타일보다 잘게 움직인다 —
+#   ㉠ 승마 스프라이트(`_draw_mount` = 플레이어 **픽셀** 좌표) ㉡ 혼 감지 가장자리 마커·추적자 ▼
+#   (`_draw_forage_detect` = **카메라** rect). 타일 눈금만 있으면 최대 한 칸(32px) 묵은 그림이
+#   남아, 말이 32px씩 순간이동해 사람과 분리되고 여백 14px짜리 마커는 화면 밖으로 밀려났다.
+#   여기 담는 값 = 마지막으로 재드로우를 건 그 소스 좌표(Vector2.INF = 그릴 것이 꺼져 있음).
+var _live_canvas_src: Vector2 = Vector2.INF
 # ★[roster] 나무 occlusion fade — key=나무 앵커 타일(Vector2i), value=현재 알파(1.0=불투명). 매 프레임
 #   플레이어 겹침을 판정해 target(TREE_FADE_MIN/1.0)으로 lerp, 변화가 있으면 _front_props를 다시 그린다.
 var _tree_fade: Dictionary = {}
@@ -3244,7 +3251,11 @@ func _ready() -> void:
 	tree_ledger = TreeLedger.new()       # ★[S4-T3] 나무 원장(RefCounted — 채집물 스폰 원장과 같은 결)
 	tree_ledger.changed.connect(_on_tree_ledger_changed)   # 벌목·성장·재성장·복원 시 충돌·드로우 갱신
 	tapper = TapperLedger.new()          # ★[S4-T6] 수액 채취기 원장(RefCounted — 나무 원장과 같은 결)
-	tapper.changed.connect(queue_redraw) # 설치·수거·회수·일일 진행·복원 시 그레이박스 갱신(게잡이통 결)
+	# ★[폴리시 R10] 설치·수거·회수·일일 진행·복원 시 갱신 — 단 **두 캔버스 모두**(_redraw_world).
+	#   채취기는 형제 원장들과 달리 Y-split을 타서 플레이어보다 앞이면 `_front_props`가 그린다
+	#   (`_draw_tappers_front`). main만 갱신하면 앞 패스에 옛 그림이 남아, 이미 거둔 채취기에
+	#   "수거 대기" 방울이 계속 떠 있고 회수한 채취기가 플레이어 위 레이어에 유령으로 남았다.
+	tapper.changed.connect(_redraw_world)
 	furnace = FurnaceLedger.new()        # ★[S5-T3] 업화로 원장(RefCounted — 채취기와 같은 결·축만 분)
 	furnace.changed.connect(queue_redraw)     # 설치·투입·완성·수거·회수·복원 시 그레이박스 갱신
 	panning = PanningSpots.new()         # ★[S10-T1] 사금 스폿 원장(RefCounted — 채집물 스폰 원장과 같은 결)
@@ -4390,6 +4401,39 @@ func _seed_home_trees() -> void:
 # 원장이 바뀐 프레임(벌목·성장·재성장·파종·세이브 복원). 안식 프롭 나무의 충돌(벤 나무는 통과 O)과
 # 화면을 다시 세운다. 숲 그리드 동기화는 호출부(_chop_tree·_on_day_advanced)가 칸 단위로 처리한다
 # (원장 신호는 "어느 칸"을 안 실어 나르므로 — FarmField.tile_changed와 갈리는 지점).
+# ★[폴리시 R10] 월드 두 캔버스를 함께 다시 그린다 — main(플레이어 아래)과 `_front_props`(위).
+#   Y-split을 타는 그림(프롭·채취기)은 플레이어 위치에 따라 **어느 캔버스가 그리는지가 갈리므로**,
+#   그 원장이 바뀌면 두 쪽 다 무효화해야 한다. main만 갱신하는 `queue_redraw` 직결은 앞 패스에
+#   옛 그림을 남긴다(유령 스프라이트·사라진 상태 표식).
+func _redraw_world() -> void:
+	queue_redraw()
+	if _front_props != null:
+		_front_props.queue_redraw()
+
+# ★[폴리시 R10] "매 프레임 파생" 그림의 소스 좌표(Vector2.INF = 지금 그런 그림이 없다).
+#   ㉠ 승마 = 플레이어 픽셀 좌표(`_draw_mount`가 그 자리에 48px 시트를 얹는다)
+#   ㉡ 혼 감지·추적자 = 카메라 중심(`_forage_view_rect`가 그 값으로 화면 rect를 만든다)
+#   승마 중이면 카메라도 플레이어를 따르므로 앞의 하나면 두 그림이 함께 신선해진다.
+#   ★ 게이트는 전부 **퍼크·상태 파생**이다(반경 0·추적 없음 = 그릴 것이 없다 → 요청 0).
+func _live_canvas_source() -> Vector2:
+	if player == null:
+		return Vector2.INF
+	if mount != null and mount.is_mounted():
+		return player.global_position
+	if _indoor == "" and _cam != null and forage_spawns != null \
+			and (forage_track_enabled() or forage_detect_radius() != 0):
+		return _cam.get_screen_center_position()
+	return Vector2.INF
+
+# 소스가 **실제로 바뀐 프레임에만** 재드로우를 건다 — 제자리에 서 있으면 요청이 0이라 종전
+# 타일 눈금 비용을 그대로 유지하고, 켜고 끈 프레임(승·하차, 무대 이탈)도 한 번은 반드시 지난다.
+func _tick_live_canvas() -> void:
+	var src := _live_canvas_source()
+	if src == _live_canvas_src:
+		return
+	_live_canvas_src = src
+	queue_redraw()
+
 func _on_tree_ledger_changed() -> void:
 	_rebuild_prop_collision()
 	_mark_forest_art_dirty()   # ★[S4-T9] 단계·그루터기·이끼가 바뀌면 폼이 바뀐다(순수 시각·지연 재빌드)
@@ -12712,6 +12756,7 @@ func _process(delta: float) -> void:
 			if _front_props != null:
 				_front_props.queue_redraw()
 		_update_tree_fade(delta)   # ★[roster] 수관 뒤 캐릭터 occlusion fade(행 넘김과 별개 — 매 프레임 부드럽게)
+	_tick_live_canvas()   # ★[폴리시 R10] 타일보다 잘게 움직이는 그림(승마·혼 감지 마커)의 재드로우
 	# 음소거 토글(M) — 연출·대화·마무리 화면 어디서든 받는다(입력 가드보다 위, UX 토글이라
 	# 게임 상태와 무관). audio가 Music·SFX 버스를 함께 음소거한다.
 	if Input.is_action_just_pressed("mute_audio"):
@@ -22635,6 +22680,7 @@ func _toggle_mount() -> void:
 		mount.dismount()
 		audio.sfx("ui")
 		_notice("먹갈기에서 내렸다")
+		queue_redraw()   # ★[폴리시 R10] Mount는 시그널이 없다 — 상태를 바꾼 이 자리가 갱신 책임자다
 		return
 	if not Mount.ride_allowed(_indoor, _region, cutscene != null, _narak_depth):
 		_notice("여기서는 탈 수 없다 — 먹갈기는 바깥에서 기다린다")
@@ -22642,6 +22688,10 @@ func _toggle_mount() -> void:
 	mount.mount_up(_indoor, _region, cutscene != null, _narak_depth)
 	audio.sfx("ui")
 	_notice("먹갈기가 왔다 — 올라탔다")
+	# ★[폴리시 R10] 시그널 없는 원장(bool 하나)이라 화면 반영이 호출부 몫이다. 이게 없으면 제자리
+	#   휘파람에서 속도만 ×1.5가 되고 말은 **첫 타일을 건널 때까지** 안 나타났다(하차도 대칭으로
+	#   말 그림이 남았다). `_notice`는 알림 Label만 건드려 월드 캔버스와 무관하다.
+	queue_redraw()
 
 # 매 프레임 — 승마 계수를 플레이어에 흘려넣고, 탈 수 없는 자리로 들어갔으면 말없이 내린다.
 # ★ 계수 대입을 **강제 하차 뒤**에 두는 것이 중요하다: 순서가 반대면 실내로 들어간 첫 프레임에
@@ -22651,6 +22701,7 @@ func _sync_mount() -> void:
 		return
 	if mount.enforce(_indoor, _region, cutscene != null, _narak_depth):
 		_notice("먹갈기에서 내렸다 — 여기까지는 따라오지 못한다")
+		queue_redraw()   # ★[폴리시 R10] 강제 하차도 상태 변이다(_toggle_mount 두 갈래와 같은 책임)
 	player.speed_scale = mount.speed_scale()
 
 # ── ★[S10-T4 / ADR-0069 결정 7] 삽사리 — 획득·쓰다듬·물그릇 ────────────────────
@@ -22725,6 +22776,11 @@ func _fill_pet_bowl() -> void:
 	pet.fill_bowl(clock.day)
 	audio.sfx("ui")
 	_notice("물그릇을 채웠다 — %s" % pet.summary())
+	# ★[폴리시 R10] Pet도 시그널이 없는 원장이라 갱신이 이 자리 몫이다. 물 띠(`_draw_sapsari` 끝줄)는
+	#   "오늘 몫을 눈으로 확인하는 유일한 표면"인데, 이게 없으면 그 칸에 선 채로는 재드로우 트리거가
+	#   0이라 "채웠다"는 알림과 "빈 그릇" 그림이 화면에 동시에 남았다(아트 훅 주석이 막으려던 그 회귀가
+	#   시그널 쪽 구멍으로 재발). 쓰다듬은 그리는 상태가 없어 여기만 필요하다.
+	queue_redraw()
 
 # ── ★[S10-T4 / ADR-0069 결정 12] 동행 혼 — 예정·탄생 ──────────────────────────
 # 아침 훅의 판정(예약만). B4와 완전히 같은 두 단계이고, 이유도 같다 — 이 훅은 취침 연출 한가운데
