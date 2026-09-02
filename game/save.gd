@@ -75,7 +75,22 @@ func save_game(data: Dictionary, slot: int = 0, meta: Dictionary = {}) -> bool:
 		push_warning("[SaveManager] 저장 실패: %s (%d)" % [tmp, FileAccess.get_open_error()])
 		return false
 	f.store_string(var_to_str(wrapped))
+	# ★[폴리시 R12] **쓰기의 성패를 묻는다** — 위 두 단계가 계약이 되려면 여기가 있어야 한다.
+	#   `store_string`·`close`는 둘 다 값을 안 돌려주므로, 머리말이 스스로 지목한 실패 모드
+	#   ("디스크 가득")에서는 ①`open`이 성공해 위 null 가드를 통과하고 ②쓰기가 일부만 되고
+	#   ③rename이 정상 종료해 ④`return true`가 났다. 그 결과가 정확히 계약의 반대다: 온전하던
+	#   직전 세이브가 **잘린 tmp로 교체**되고(그 슬롯은 `_read_wrapped`가 형식 불일치로 버려
+	#   `can_load` false — 복구본 0), 보고 층까지 함께 무너져 `_save_game`은 "저장됨"을,
+	#   옵션 탭 [종료]의 2단 확인은 "성공"을 읽고 그대로 나갔다.
+	#   `flush`를 먼저 부르는 이유: 버퍼가 남아 있으면 실패가 close 시점에야 나타나므로,
+	#   내려보낸 **뒤에** 마지막 에러를 읽어야 잘림을 실제로 잡는다.
+	f.flush()
+	var werr := f.get_error()
 	f.close()
+	if werr != OK:
+		push_warning("[SaveManager] 쓰기 실패: %s (%d) — 슬롯은 직전 세이브 그대로 둔다" % [tmp, werr])
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))   # 잘린 임시본을 남기지 않는다
+		return false
 	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp),
 		ProjectSettings.globalize_path(path))
 	if err != OK:

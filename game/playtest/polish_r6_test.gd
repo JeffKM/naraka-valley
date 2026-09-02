@@ -402,7 +402,10 @@ func _initialize() -> void:
 	var inv_i := _line_after(load_i, "inventory.load_save(data[\"inventory\"])")
 	var chest_i := _line_after(load_i, "chest.load_save(data.get(\"chest\", {}))")
 	var store_i := _line_after(load_i, "storehouse_chest.load_save(data.get(\"storehouse_chest\", {}))")
-	var refresh_i := _line_after(load_i, "_refresh_greenhouse()")
+	# ★[폴리시 R12] 니들 정정 — R11이 로드 경로를 `_refresh_greenhouse(false)`로 바꾸면서(재빌드
+	#   금지 인자 신설) 이 `contains` 니들이 아무 줄에도 안 걸려 -1이 됐고, 계약은 그대로인데
+	#   순서 비교만 거짓이 됐다. 인자를 안 보는 형태로 좁혀 두 세대를 함께 잡는다.
+	var refresh_i := _line_after(load_i, "_refresh_greenhouse(")
 	_check("⑨a 백팩·집 상자·갈무리방이 로드 안에서 **회수보다 먼저** 파일에서 되감긴다 — %d·%d·%d < %d"
 			% [inv_i + 1, chest_i + 1, store_i + 1, refresh_i + 1],
 		load_i > 0 and inv_i > load_i and chest_i > inv_i and store_i > chest_i
@@ -844,8 +847,17 @@ func _initialize() -> void:
 		not m._is_farmable(m.PET_TILE))
 	m._target = m.PET_TILE
 	m._target_valid = m._is_farmable(m.PET_TILE)
-	_check("⑳c 겨눠도 밭 프롬프트가 없다 — 화면이 숨긴 동사가 애초에 존재하지 않는다",
-		m._farm_prompt() == "")
+	# ★[폴리시 R12 정정] R6이 잠근 계약은 "프롬프트가 **빈 문자열**"이었는데, R11(a5088f7)이 그
+	#   침묵을 일부러 걷었다 — 예약 칸 둘(미호·삽사리)은 스타터 밭 한가운데의 흙으로 칠해지는데
+	#   주인이 화면에 없는 시간대(미호 15:00 출근·삽사리 입양 전)엔 괭이질이 무알림 무동작이라,
+	#   day 1 튜토리얼 밭에서 "왜 안 되지"만 남았다. 그래서 **동사는 그대로 막되 이유는 읽힌다**.
+	#   R6이 지키려던 것은 "화면이 숨긴 동사를 제안하지 않는다"이므로 그 뜻으로 다시 잰다:
+	#   ㉠ 클릭 동사를 한 개도 안 내밀고 ㉡ 나오는 문구는 예약 사유 그 자체다(제3의 문구 아님).
+	var pet_prompt: String = m._farm_prompt()
+	_check("⑳c 겨눠도 밭 **동사**는 없다 — 화면이 숨긴 동사를 제안하지 않는다(문구: %s)" % pet_prompt,
+		not pet_prompt.contains("[좌클릭]") and not pet_prompt.contains("[우클릭]"))
+	_check("⑳c2 대신 R11의 예약 사유가 그대로 나온다 — 침묵이 아니라 설명이다",
+		pet_prompt == m._reserved_tile_reason(m.PET_TILE) and pet_prompt != "")
 	var patch_ok := 0
 	for yy2 in range(m.STARTER_PATCH_RECT.position.y, m.STARTER_PATCH_RECT.end.y):
 		for xx2 in range(m.STARTER_PATCH_RECT.position.x, m.STARTER_PATCH_RECT.end.x):
