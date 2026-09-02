@@ -2915,6 +2915,11 @@ const FLAVOR_SECS := 3.5          # T3.5 사연 한 줄은 읽을 시간을 더 
 var _delete_armed_secs := 0.0
 const DELETE_CONFIRM_SECS := 3.0  # 2단 확인 대기 시간(이 안에 다시 F8이면 실행)
 
+# ★[폴리시 R11] 옵션 탭 [종료]가 저장에 실패했음을 한 번 알린 뒤 무장하는 래치(_on_frame_quit).
+# 시간 만료가 없는 것은 F8과 다른 점이다 — 저장 실패는 순간의 오타가 아니라 **환경의 상태**라,
+# 3초 뒤에 다시 눌러도 여전히 실패한다(그 사이 고쳤다면 저장이 성공해 이 래치를 안 본다).
+var _quit_unsaved_armed := false
+
 # T3.5 작물(영혼)별 수확 누적 횟수. 수확마다 +1 해 SoulMemory.line의 index로 넘겨
 # 사연이 순환되게 한다(같은 작물을 거둘 때마다 다음 사연으로). 일시적 표시용 진척이라
 # 세이브하지 않는다(대화와 같은 결 — SaveManager·main 세이브 불변).
@@ -11703,7 +11708,10 @@ func _on_sleep_done() -> void:
 # SaveManager에 넘기고(파일 IO), 불러올 땐 받은 조각을 각 노드에 분배한다.
 # T3.1 경제가 붙으며 "wallet"(골드)·"inventory"(수확물·씨앗) 두 조각이 추가됐다.
 # SaveManager는 IO만 책임지므로 저장 항목이 늘어도 손대지 않는다(설계대로).
-func _save_game() -> void:
+# ★[폴리시 R11] 반환값이 void → **저장됐는가**로 바뀌었다(`_load_game`이 R6에서 받은 그 처방).
+#   IO 성패를 아는 자리는 여기 하나인데 옵션 탭 [저장]·[종료]는 그것을 안 보고 성공 문구를 얹거나
+#   그대로 앱을 닫았다 — 쓰기가 실패해도(경로 읽기 전용·디스크 가득) 플레이어는 저장됐다고 믿었다.
+func _save_game() -> bool:
 	var data := {
 		"clock": clock.to_save(),
 		"energy": energy.to_save(),
@@ -11857,8 +11865,10 @@ func _save_game() -> void:
 			data[r.save_key] = r.affinity.to_save()
 	# ★ 활성 슬롯에 저장 + 코지 다이어리 메타(날짜·혼력) 헤더를 얹는다(타이틀 슬롯 UI가
 	#   전체 로드 없이 [N년차 절기 D일 / 혼력]을 읽도록). meta는 SaveManager엔 불투명 blob.
-	if saver.save_game(data, _active_slot, {"day": clock.day, "soul": energy.current}):
-		_notice("저장됨")
+	if not saver.save_game(data, _active_slot, {"day": clock.day, "soul": energy.current}):
+		return false
+	_notice("저장됨")
+	return true
 
 # ★[폴리시 R6] 반환값이 void → **불러왔는가**로 바뀌었다. `saver.has_save`는 파일 존재만 보고
 #   실제 파싱·검증(`_read_wrapped`)은 따로 갈리므로 "파일은 있는데 안 읽히는 슬롯"이 존재한다
@@ -11884,6 +11894,14 @@ func _load_game() -> bool:
 	_clear_cheki_offer()
 	cocktail = null
 	_clear_cocktail_offer()
+	# ★[폴리시 R11] **밤 바 세션도 같은 줄에 세운다.** night_bar는 세이브 무상태라 로드가 한 줄도
+	#   안 건드렸는데, 옵트인 플래그·잡귀 접근 타이머·바나 자동 차단 잔량·그 밤의 정산 카운터는
+	#   전부 로드를 그대로 통과했다 — 바를 연 밤에 F9를 누르면 되감긴 그날 19:00에 `tick`이 곧바로
+	#   활성으로 판정해 **열지도 않은 바**에서 약탈이 집행됐다(근거 전문은 `NightBar.abandon`).
+	#   `end_day`가 아니라 `abandon`인 이유: 저건 정산 요약을 쏘는데, 되감긴 밤의 매출·약탈은
+	#   존재한 적이 없으므로 알릴 것이 없다.
+	if night_bar != null:
+		night_bar.abandon()
 	# ★[폴리시 R3] 갱도 진입 층 선택도 같은 이유로 1층에서 다시 시작한다. 이 값은 `_cycle_mine_entry`가
 	#   **해금된 엘리베이터 목록 안에서만** 돌리는데, 로드는 `mine_floors._depth`(=해금 파생)를 되감으므로
 	#   선택만 남으면 목록 밖 층을 가리킨다 — 소비처 `_descend_mine`은 is_valid_floor만 보므로 그대로
@@ -19123,12 +19141,21 @@ func _on_frame_profession(skill: String, prof_id: String) -> void:
 	if choose_profession(skill, prof_id):
 		frame.set_skills(_skill_rows())
 
+# ★[폴리시 R11] 성패를 **말한다**. 종전엔 반환값을 안 보고 "저장했습니다"를 무조건 얹어, 성공하면
+#   "저장됨"과 두 줄이 겹치고(같은 사건의 두 문구) 실패하면 **거짓 성공**을 알렸다. 성공 문구의
+#   주인은 `_save_game` 하나로 모으고 여기는 실패만 덧붙인다.
 func _on_frame_save() -> void:
-	_save_game()
-	_notice("저장했습니다")
+	if not _save_game():
+		_notice("저장하지 못했다 — 저장 공간·쓰기 권한을 확인하자", NOTICE_SECS * 2.0)
 
+# ★[폴리시 R11] 저장 실패면 **첫 [종료]는 멈춘다** — 안 그러면 경고를 띄울 화면이 이미 닫힌 뒤라
+#   플레이어가 진행을 잃은 것을 영영 모른다(이혼 [F] 2타·F8 삭제와 같은 2단 확인 문법). 두 번째
+#   [종료]는 그대로 나간다: 못 고칠 환경에 갇힌 플레이어를 앱 안에 붙잡아 두지 않는다.
 func _on_frame_quit() -> void:
-	_save_game()
+	if not _save_game() and not _quit_unsaved_armed:
+		_quit_unsaved_armed = true
+		_notice("저장하지 못했다 — 한 번 더 [종료]를 누르면 저장 없이 나간다", NOTICE_SECS * 3.0)
+		return
 	get_tree().quit()
 
 # ── T4.1 온보딩 ────────────────────────────────────────────────────────────

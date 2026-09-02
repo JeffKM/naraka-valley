@@ -26,6 +26,9 @@ const LEGACY_PATH := "user://save.dat"
 const SLOT_COUNT := 3
 # 포맷 버전. 저장 구조가 바뀌면 올려서 옛 세이브를 안전하게 무시/이관한다.
 const VERSION := 1
+# ★[폴리시 R11] 원자적 쓰기의 임시 파일 꼬리표(save_game 참조). 슬롯 경로와 같은 디렉터리라야
+# rename이 같은 파일시스템 안에서 일어난다 — 그래서 경로 뒤에 붙이는 접미사다.
+const TMP_SUFFIX := ".tmp"
 
 # 슬롯 → user:// 경로. 잘못된(범위 밖) 슬롯은 slot 0으로 클램프(깨진 호출 방어).
 static func slot_path(slot: int) -> String:
@@ -54,15 +57,31 @@ func any_save() -> bool:
 # 상태 Dictionary를 버전·메타로 감싸 슬롯 파일에 쓴다. 성공 시 true.
 # data에는 직렬화 가능한 값만 담겨야 한다(Vector2i 키 Dictionary는 허용).
 # meta = 슬롯 UI가 읽을 경량 헤더(예: {"day": 34, "soul": 85}) — 없으면 {}.
+#
+# ★[폴리시 R11] **쓰기는 임시 파일 → 이름 바꾸기 두 단계다**(원자성). 종전엔 대상 슬롯 파일을
+#   `FileAccess.WRITE`로 즉시 절단한 뒤 통째로 덮어썼다 — 그 사이(취침 자동 저장 한가운데)에 앱이
+#   죽거나 디스크가 차면 슬롯에 **잘린 문자열만** 남고, 슬롯당 파일이 하나뿐이라 복구 수단이 0이었다
+#   (`can_load`·타이틀 "읽을 수 없는 세이브"는 R6가 그 상태를 *감지*만 했지 *발생*을 못 막았다).
+#   이제 온전한 내용이 `.tmp`에 다 적힌 뒤에야 한 번의 rename으로 자리를 바꾸므로, 어느 시점에
+#   끊겨도 슬롯 파일은 **직전 세이브 그대로** 남는다(POSIX rename = 원자적 교체).
+#   ★ 백업 세대(.bak)·쓰기 후 재파싱 검증은 **일부러 안 한다** — 여기서 필요한 것은 "유일한 파일이
+#     반쯤 쓰인 채 남지 않는다"뿐이고, 그건 이 두 단계가 이미 준다.
 func save_game(data: Dictionary, slot: int = 0, meta: Dictionary = {}) -> bool:
 	var wrapped := {"version": VERSION, "meta": meta, "data": data}
 	var path := slot_path(slot)
-	var f := FileAccess.open(path, FileAccess.WRITE)
+	var tmp := path + TMP_SUFFIX
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
-		push_warning("[SaveManager] 저장 실패: %s (%d)" % [path, FileAccess.get_open_error()])
+		push_warning("[SaveManager] 저장 실패: %s (%d)" % [tmp, FileAccess.get_open_error()])
 		return false
 	f.store_string(var_to_str(wrapped))
 	f.close()
+	var err := DirAccess.rename_absolute(ProjectSettings.globalize_path(tmp),
+		ProjectSettings.globalize_path(path))
+	if err != OK:
+		push_warning("[SaveManager] 교체 실패: %s → %s (%d)" % [tmp, path, err])
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp))   # 반쪽 임시본을 남기지 않는다
+		return false
 	return true
 
 # 슬롯 세이브를 읽어 상태 Dictionary를 돌려준다. 없거나 깨졌으면 빈 Dictionary({}).
