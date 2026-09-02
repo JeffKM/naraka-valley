@@ -5424,7 +5424,14 @@ func _refresh_greenhouse(rebuild: bool = true) -> void:
 	# ★[폴리시 R6] 비우는 것은 물건만이 아니다 — **그 안에 서 있는 플레이어도** 함께 내보낸다.
 	_evict_from_greenhouse_lot()
 	_build_building_catalog()
-	_refresh_home_expansion(rebuild)   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
+	# ★[폴리시 R12] 안쪽 호출에는 **언제나 `false`를 넘긴다** — 굽기는 아래 세 줄이 어차피 같은
+	#   프레임에 한다. R11이 로드 경로만 `_refresh_greenhouse(false)`로 접어 완공 아침(기본값 true)에는
+	#   같은 HOME 그리드가 연달아 두 번 구워지고 있었다: 두 호출 사이에 재빌드 입력이 하나도 안 바뀌므로
+	#   (`_build_building_catalog`는 위에서 끝났고, 기하의 진실원 `home_house_rect()`는 carpenter 원장
+	#   파생이라 `advance_day`에서 이미 확정) 2차 결과는 1차와 바이트 단위로 같다. 실측 재빌드 1회 ≈ 2.5s가
+	#   `clock.sleep` 콜백 안(취침 페이드 한가운데)에서 순수 낭비돼 하루 전환이 그만큼 더 멎었다.
+	#   ★ `false`가 접는 것은 굽기뿐이다 — deco 배치 경계·집 카메라 둘레는 그 안에서 여전히 재주입된다.
+	_refresh_home_expansion(false)   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
 	if _region == RegionCatalog.HOME:
 		if rebuild:
 			_rebuild_region(RegionCatalog.HOME)
@@ -11716,6 +11723,10 @@ func _do_sleep() -> void:
 	cocktail = null
 	_clear_cocktail_offer()
 	fishing = null
+	# ★[폴리시 R12] 카페 팝업 둘도 같은 줄에 세운다(위 세 세션과 완전히 같은 이유 — 무대에 묶인
+	#   비영속 상태가 1.1초 트윈을 넘겨 살아남고, 그 틱에는 `_sleeping` 가드가 없다). 어제 밤의
+	#   마감 장부가 오늘 아침 화면 위에 뜨는 것이 그 구체적 형태다(`_drop_cafe_popups` 머리말 ㉠).
+	_drop_cafe_popups()
 	_sleeping = true
 	clock.running = false
 	audio.sfx("sleep")                 # P2.6 하루를 닫는 부드러운 하강 패드
@@ -11741,7 +11752,15 @@ func _on_sleep_done() -> void:
 	#   기본값이 true라 시계가 계속 흐른다). 여기서 무조건 물리를 켜면 `_begin_cutscene`이 걸어 둔
 	#   잠금이 풀려, 배우들이 연기하는 동안 플레이어가 걸어 다니다 `_end_cutscene`의 NPC 원위치와
 	#   어긋난 자리에 남는다. 재생이 끝나는 프레임에 `_end_cutscene`(또는 이어지는 대화)이 다시 켠다.
-	if not _run_over and not dialogue.is_open() and cutscene == null:
+	# ★[폴리시 R12] **엔딩 화면과 내면 공간도 같은 목록에 든다.** 두 화면은 스스로 물리를 잠그고
+	#   (`_open_epilogue`·척추 B5) main에는 다시 거는 경로가 없다 — `_process`는 `if _epilogue_open:
+	#   … return`으로 프레임을 끊으므로 한 번 켜지면 화면을 닫을 때까지 그대로다. 재현: B7 해방 대사
+	#   중 24:00 강제 취침 → 1.1초 트윈이 도는 동안 마지막 묶음을 [E]로 닫으면 에필로그가 뜨고 물리가
+	#   꺼지는데, 트윈이 끝나는 프레임의 이 줄이 (대화 닫힘·컷신 null·`_run_over` false) 그대로
+	#   실행돼 **회고 화면 뒤에서 캐릭터가 월드를 돌아다녔다**. 두 화면이 닫히는 자리
+	#   (`_close_epilogue`·`_close_spine_scene`)가 어차피 다시 켠다 — 위 대화·컷신 둘과 같은 규율.
+	if not _run_over and not dialogue.is_open() and cutscene == null \
+			and not _epilogue_open and spine_puzzle == null:
 		player.set_physics_process(true)
 	# ★[S9b-T4 / ADR-0068 결정 7] 척추 B4 재생 — 아침 훅이 예약해 둔 공허 컷신을 **눈을 뜨는 이
 	#   프레임**에 튼다(판정과 재생을 나눈 이유는 `_arm_spine_b4` 머리말). 아래 자동 저장보다 앞이라
@@ -11922,6 +11941,13 @@ func _save_game() -> bool:
 	#   전체 로드 없이 [N년차 절기 D일 / 혼력]을 읽도록). meta는 SaveManager엔 불투명 blob.
 	if not saver.save_game(data, _active_slot, {"day": clock.day, "soul": energy.current}):
 		return false
+	# ★[폴리시 R12] [종료] 2단 확인 래치를 **여기서 푼다** — 그래야 선언부 머리말의 논증
+	#   ("그 사이 고쳤다면 저장이 성공해 이 래치를 안 본다")이 실제로 참이 된다. 종전엔 세우기만
+	#   하고 해제하는 자리가 저장소 어디에도 없어, 한 세션에 실패 에피소드가 **둘** 있으면 두 번째
+	#   [종료]가 경고 한 줄 없이 곧장 나갔다(일시적 원인으로 한 번 실패 → 무장 → 원인 해소 →
+	#   저장 성공 → 몇 시간 뒤 다시 실패 → 그 사이 진행이 조용히 사라진다). 형제 둘도 각자 해제
+	#   경로를 갖는다(F8 삭제 = `_delete_armed_secs` 시간 만료 · 이혼 [F] 2타 = 옥자에게서 시선을 떼면 접힘).
+	_quit_unsaved_armed = false
 	_notice("저장됨")
 	return true
 
@@ -11957,6 +11983,16 @@ func _load_game() -> bool:
 	#   존재한 적이 없으므로 알릴 것이 없다.
 	if night_bar != null:
 		night_bar.abandon()
+	# ★[폴리시 R12] 카페 팝업 둘(마감 정산·마일스톤)과 그 타이머·미룬 본문도 같은 줄에 세운다 —
+	#   화면을 갈아엎는 세 경로(`_open_epilogue`·`_end_run`·로드) 중 로드만 그 줄이 빠져 있었다.
+	#   근거 전문은 `_drop_cafe_popups` 머리말 ㉡(폐기된 타임라인의 매출이 복원된 아침에 뜬다).
+	# ★ 점괘 거울도 여기서 덮는다. 본문은 **열 때 한 번만** 스냅샷하는 그날 파생인데(오늘의 운·
+	#   내일 날씨·절기 D-1 경고·다가오는 행사), 자동 접기는 자리 조건뿐이라(`_indoor != "집"`)
+	#   집 안에서 찍은 세이브를 F9로 열면 `_restore_location`이 다시 집 안에 세워 그 가드가
+	#   발동하지 않는다 — 20일차 예보가 3일차 화면에 남고 프롬프트는 '덮기'라 최신인 척했다.
+	#   매 프레임 값을 다시 흘려넣는 달력(`calendar_panel.set_state`)과 갈라져 있던 유일한 조회 패널이다.
+	_drop_cafe_popups()
+	_close_mirror()
 	# ★[폴리시 R3] 갱도 진입 층 선택도 같은 이유로 1층에서 다시 시작한다. 이 값은 `_cycle_mine_entry`가
 	#   **해금된 엘리베이터 목록 안에서만** 돌리는데, 로드는 `mine_floors._depth`(=해금 파생)를 되감으므로
 	#   선택만 남으면 목록 밖 층을 가리킨다 — 소비처 `_descend_mine`은 is_valid_floor만 보므로 그대로
@@ -20987,7 +21023,15 @@ func _close_spine_scene() -> void:
 			_mark_spine_bit(SPINE_B6)
 			_open_okja_track()          # ★ 결정 10 "B6 후 트랙 개통" — 개통의 자리가 여기로 따라왔다
 			_save_game()                # 장면이 끝난 그 프레임에 굳힌다(B7 = `_open_epilogue`와 같은 규율)
-	if not _run_over and not _epilogue_open and spine_puzzle == null:
+	# ★[폴리시 R12] `not _sleeping`이 이 줄의 **네 번째 항**이다. 이 함수를 부르는 자리는
+	#   `_on_dialogue_finished`의 마지막 묶음 종료인데, 바로 그 위에서 R10 #6이 세운
+	#   `player.set_physics_process(not _sleeping)`("취침 트윈 중엔 안 푼다")를 여기가 무조건
+	#   되뚫었다 — B6 귀환 대사 중 24:00에 걸리면(`_on_collapsed` → `_do_sleep`) 1.1초 암전
+	#   트윈이 도는 동안 [E]가 그대로 먹히고(대화 분기에 `_sleeping` 가드가 없다), 마지막 줄을
+	#   넘기는 순간 여기서 물리가 켜져 검은 화면 뒤에서 걸어 다녔다. B6는 `_epilogue_pending`이
+	#   거짓이라 다시 잠그는 유일한 보정(`_open_epilogue`)도 안 탄다. 잠들어 있으면
+	#   `_on_sleep_done`이 눈뜨는 프레임에 켠다 — 대화 종료 경로와 완전히 같은 규율이다.
+	if not _run_over and not _epilogue_open and spine_puzzle == null and not _sleeping:
 		player.set_physics_process(true)
 	queue_redraw()
 
@@ -21256,7 +21300,15 @@ func _open_epilogue() -> void:
 	#   비로소 "왔다" — 그 전에 끊긴 재생은 `_maybe_resume_spine` ㉡이 처음부터 다시 튼다.
 	#   여기 도달했다는 것은 컷신·세 대사 묶음이 전부 닫혔다는 뜻이다(`_epilogue_pending` 소비 경로).
 	_mark_spine_bit(SPINE_B7)
-	_epilogue_clock_prev = clock.running
+	# ★[폴리시 R12] 취침 트윈 한가운데면 `clock.running`은 **일시적으로** false다 — `_do_sleep`이
+	#   세우고 0.4초 뒤 트윈 콜백 `clock.sleep`이 다시 true로 돌린다. 그 순간을 그대로 뜨면
+	#   (B7 해방 마지막 묶음이 24:00 강제 취침 첫 0.4초 안에 닫히는 조합) `_close_epilogue`가
+	#   false를 복원해 **샌드박스로 돌아온 뒤 시간이 영영 멎는다**(분 틱·NPC 스케줄·카페 영업창·
+	#   날씨 phase 전부 정지 — 복구는 다시 취침뿐). 이 스냅이 기억해야 할 값은 "이 연출이 끝나면
+	#   시계가 어떤 상태여야 하는가"이고, 취침 중이면 그 답은 언제나 true다(컷신의
+	#   `_cutscene_clock_prev`가 지키려던 "다른 이유로 멈춘 시계를 되살리지 않는다"는 그대로다 —
+	#   취침은 *멈춰 있는 상태*가 아니라 곧 되살아나는 연출 구간이라 예외가 아니라 정정이다).
+	_epilogue_clock_prev = clock.running or _sleeping
 	clock.running = false
 	player.set_physics_process(false)
 	player.velocity = Vector2.ZERO
@@ -22840,6 +22892,24 @@ func _show_cafe_summary(text: String) -> void:
 	cafe_summary_text.text = text
 	cafe_summary_panel.visible = true
 	_cafe_summary_secs = CAFE_SUMMARY_SECS
+
+# ★[폴리시 R12] 두 비차단 팝업(마감 정산 · 마일스톤 축하)을 **패널·타이머·미룬 본문까지 통째로**
+# 버린다. 이 다섯 조각은 전부 "지금 이 화면 위의 몇 초"라, 화면 밑의 세계가 갈아엎히면 가리키는
+# 대상이 사라진다 — 그런데 R11이 미룸(`_cafe_summary_pending`)을 들이면서 버리는 자리를
+# `_open_epilogue`·`_end_run` 둘에만 넣어, **매일 지나가는 두 경로**가 빠졌다:
+#   ㉠취침 — `_process`의 마일스톤 타이머(:13171)에는 `_sleeping` 가드가 없어 1.1초 암전 트윈
+#     동안에도 계속 깎이고, 0을 지나는 프레임에 미뤄 둔 어제 장부를 **새 아침 위로** 5초간
+#     띄웠다(그동안 `_hud_hidden`이 참이라 핫바·혼력바·시계까지 함께 사라진다).
+#   ㉡F9 로드 — 팝업은 모달이 아니라 F9 폴링(:13150)에 그대로 도달한다. 로드가 세계·지갑·장부를
+#     되감아도 이 다섯은 그대로 남아, **폐기된 타임라인**의 매출·서빙·체키 수가 복원된 아침에 뜬다.
+# 타이머 둘을 0으로 되돌리면서 패널 둘을 함께 숨기는 것이 짝이다 — 타이머만 죽이면 그 패널을
+# 거두는 유일한 손이 사라져 화면에 영영 남는다.
+func _drop_cafe_popups() -> void:
+	_cafe_summary_pending = ""
+	_cafe_summary_secs = 0.0
+	_milestone_popup_secs = 0.0
+	cafe_summary_panel.visible = false
+	milestone_panel.visible = false
 
 # ── T7.2 카페 마일스톤 / ★[S6-T3] 카페 일구기 사다리 ────────────────────────
 # 관계 루프 산출물 = **미호+멜 두 사람의 하트 합**. 곱셈기들이 각자 하트를 곱셈기로 환류하듯

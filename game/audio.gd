@@ -178,9 +178,16 @@ func set_phase(phase: String) -> void:
 	if not _silent:
 		incoming.play()
 	_music_on_a = not _music_on_a
-	# 크로스페이드: 새 곡 올리고 옛 곡 내린다. 음소거 중이면 둘 다 무음 유지(상태만 교대).
-	if not _muted:
-		_fade(incoming, FULL_DB, false)
+	# 크로스페이드: 새 곡 올리고 옛 곡 내린다.
+	# ★[폴리시 R12] `if not _muted` **철거** — 음소거의 주인은 버스 하나뿐이라는 계약을 되찾는다.
+	#   `set_muted`는 `AudioServer.set_bus_mute`만 건드리고 플레이어별 `volume_db`는 손대지 않는데,
+	#   여기서 음소거 중이라고 페이드인을 아예 **생성하지 않으면** 새 곡이 SILENT_DB에 박힌 채
+	#   남고(옛 곡은 바로 아래 줄이 정지시킨다) 나중에 음소거를 풀어도 버스만 열려 **다음 phase
+	#   전환까지 완전 무음**이 됐다. 재현 둘: ㉠낮에 M으로 음소거 → 19:00에 밤 phase로 넘어감 →
+	#   해제해도 취침까지 무음. ㉡척추 B5가 `audio.set_muted(true)`로 강제 음소거한 구간이 19:00을
+	#   넘으면 `_close_spine_puzzle`의 원복 뒤에도 음악이 안 돌아온다.
+	#   음소거 중에 올려도 들리지 않는다(버스가 막는다) — 대신 해제하는 순간 제 볼륨이 이미 서 있다.
+	_fade(incoming, FULL_DB, false)
 	_fade(outgoing, SILENT_DB, true)
 
 func _enable_loop(stream: AudioStream) -> void:
