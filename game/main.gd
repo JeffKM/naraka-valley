@@ -10422,8 +10422,16 @@ func _on_day_advanced(day: int) -> void:
 	#   전 칸을 말린 *직후*라 "오늘 몫"의 손 노동을 대행하는 자리다(어제 성장 판정엔 불개입).
 	#   여우불(성장 가속·위 인자)과 별축 — 여우불은 못 준 칸도 자라게 하고, 이 물은 칸을 실제로
 	#   적신다(결정 9 "별축이라 중복 아님"). 대상 선정·수치는 field.water_dry(결정적 정렬·잠정 8칸).
+	# ★[폴리시 R11] **늘봄방 경작면도 함께 돈다.** 같은 아침의 형제 창구 둘은 이미 두 밭을 다
+	#   보는데(스프링클러는 `_field_at`으로 칸의 주인 밭에 라우팅되고, 성장은 `greenhouse_farm.
+	#   advance_day`가 따로 집행) 배우자 잡일만 노지 `farm` 하나에 묶여 있었다. 늘봄방은 실내라
+	#   혼우(비) 급수도 안 닿으므로, 재배를 온실로 옮긴 엔드게임 플레이어에게 결혼 잡일 ①이 통째로
+	#   무효였다(칸 0개 → 알림도 안 뜬다). 예산은 **한 몫을 나눠 쓴다**(노지 먼저, 남는 만큼 온실) —
+	#   미호의 하루 손 노동이 밭이 늘었다고 곱절이 되지는 않는다(수치는 SPOUSE_MIHO_WATER_TILES 그대로).
 	if _spouse_id == "miho":
 		var watered_by_spouse := farm.water_dry(SPOUSE_MIHO_WATER_TILES)
+		if greenhouse_farm != null and watered_by_spouse < SPOUSE_MIHO_WATER_TILES:
+			watered_by_spouse += greenhouse_farm.water_dry(SPOUSE_MIHO_WATER_TILES - watered_by_spouse)
 		if watered_by_spouse > 0:
 			_notice("미호가 아침 물주기를 도왔다 — %d칸" % watered_by_spouse)
 	orchard.advance_day(day)   # ★ [S1-5b] 성숙+제철 나무는 결실 +1(비제철 정지·영속). day는 무상태 절기 판정(ADR-0045)
