@@ -3055,6 +3055,11 @@ var _illust_id := ""
 var _illust_a := 0.0
 # 마지막 묶음이 닫히면 에필로그를 띄우겠다는 예약(결정 11 "B7 해방 컷신 직후 1회성 에필로그").
 var _epilogue_pending := false
+# ★[폴리시 R11] B6 장면이 **아직 닫히지 않았다**는 예약(비영속 — `_epilogue_pending`과 완전히 같은 결).
+#   B6도 R6가 B7에 준 처방을 받는다: 비트·트랙 개통·세이브를 장면 *시작*이 아니라 *끝*에 둔다.
+#   이 표가 서 있는 동안 원장은 아직 "B6가 안 왔다"이므로, 재생 도중에 앱이 꺼져도 재기동 시
+#   `_maybe_resume_spine` ㉠이 장면을 처음부터 다시 튼다(세이브 키 0 — 판정은 여전히 비트 파생).
+var _spine_b6_pending := false
 # 에필로그 화면이 떠 있는가. ★`_run_over`와 **다른 축**이다: 저건 런이 끝나 되돌릴 수 없는
 # 상태고(옛 21일 게이트의 잔재), 이건 닫으면 **코지 샌드박스로 돌아가는** 1회성 화면이다
 # (결정 11 "게임 종료 아님" · RUN_DAYS 게이트 부활 없음). 그래서 `_run_over`를 재사용하지 않는다.
@@ -12096,6 +12101,10 @@ func _load_game() -> bool:
 	_illust_id = ""
 	_illust_a = 0.0
 	_epilogue_pending = false
+	# ★[폴리시 R11] B6 장면 예약도 형제 예약들과 같이 0에서 시작한다 — 표를 든 채 다른 세이브를
+	#   열면 그 세이브의 장면이 아닌 것이 닫히며 비트를 찍는다. 표가 없어도 손실이 아니다:
+	#   비트가 아직 안 섰으므로 `_maybe_resume_spine` ㉠이 장면을 처음부터 다시 튼다.
+	_spine_b6_pending = false
 	if _epilogue_open:
 		_close_epilogue()
 	# ★[S9-T4] 절기 물음 원장 복원(구세이브 = 빈 원장 = 다음 주 첫날에 처음 묻는다).
@@ -20812,6 +20821,17 @@ func _close_spine_scene() -> void:
 	_illust_id = ""
 	_illust_a = 0.0
 	_spine_say.clear()
+	# ★[폴리시 R11] **B6 비트가 서는 자리**(옛 자리 = `_fire_spine_b6`의 장면 시작 — B7이 R6에서
+	#   `_open_epilogue`로 옮겨간 것과 같은 이동). 여기 도달했다는 것은 컷신과 세 대사 묶음이 전부
+	#   닫혔다는 뜻이다. 두 종료 경로(대사가 다 닫힌 `_on_dialogue_finished` · 이을 묶음이 하나도
+	#   없을 때의 컷신 안전망) 어느 쪽으로 나가든 여기를 지나므로, 비트를 안 찍은 채 장면만 끝나
+	#   `_maybe_resume_spine`이 같은 장면을 무한히 다시 트는 갈래가 생기지 않는다.
+	if _spine_b6_pending:
+		_spine_b6_pending = false
+		if not _spine_bit_seen(SPINE_B6):
+			_mark_spine_bit(SPINE_B6)
+			_open_okja_track()          # ★ 결정 10 "B6 후 트랙 개통" — 개통의 자리가 여기로 따라왔다
+			_save_game()                # 장면이 끝난 그 프레임에 굳힌다(B7 = `_open_epilogue`와 같은 규율)
 	if not _run_over and not _epilogue_open and spine_puzzle == null:
 		player.set_physics_process(true)
 	queue_redraw()
@@ -20826,9 +20846,13 @@ func _fire_spine_b6() -> void:
 		return
 	if not _begin_cutscene(Spine.B6_CUTSCENE.duplicate(true), "", PackedStringArray()):
 		return                          # 러너 거절 — 비트를 안 찍었으니 상태가 안 상한다
-	_mark_spine_bit(SPINE_B6)
-	_open_okja_track()                  # ★ 결정 10 "B6 후 트랙 개통" — 개통의 자리가 여기다
-	_save_game()                        # 비트를 즉시 굳힌다(B5 완료와 같은 규율)
+	# ★[폴리시 R11] **비트·트랙 개통·세이브를 여기서 하지 않는다** — R6가 B7에 준 처방을 형제인
+	#   B6에도 그대로 적용했다(그 근거는 `_fire_spine_b7`의 R6 머리말). 옛 자리(장면 시작)는 비트를
+	#   즉시 디스크에 굳혔는데 대사 열(`_spine_say`)은 비영속이라, 세 묶음이 도는 동안 앱이 꺼지면
+	#   재기동 시 `_maybe_resume_spine` ㉠(B5 있고 B6 없음)이 거짓·㉡(앵커와 부부)도 거짓이 되어
+	#   §6.5 카타르시스 전환의 지문·앵커 대사·마무리가 **그 세이브에서 영영 못 떴다**.
+	#   이제 표만 세우고, 마지막 묶음이 닫히는 `_close_spine_scene`이 셋을 함께 집행한다.
+	_spine_b6_pending = true
 	var r := _resident(OKJA_RID)
 	# ★ §6.4 결혼 경로별 톤 — 이미 다른 이와 맺어졌으면 *씁쓸한 축복*이 온다. 분기 판정은 여기서
 	#   하고 본문은 캐릭터 파일이 든다(판정 = main · 말 = 캐릭터, 앞 아홉 태스크와 같은 이음매).
@@ -21042,7 +21066,9 @@ func _maybe_resume_spine() -> void:
 		return
 	if not _spine_say.is_empty() or _spine_b5_pending:
 		return
-	if _epilogue_open or _epilogue_pending:
+	# ★[폴리시 R11] `_spine_b6_pending`도 같은 줄에 세운다 — B6가 이제 비트를 장면 끝에 찍으므로,
+	#   재생 도중엔 ㉠의 전제(B5 있고 B6 없음)가 계속 참이다(B7이 R6에서 받은 그 가드와 같은 이유).
+	if _epilogue_open or _epilogue_pending or _spine_b6_pending:
 		return
 	# ㉠ B5는 끝났는데 B6가 안 왔다 — 귀환을 다시 튼다(`_fire_spine_b6`가 전제·중복을 스스로 다시 잰다).
 	if _spine_bit_seen(SPINE_B5) and not _spine_bit_seen(SPINE_B6):
