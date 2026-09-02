@@ -5412,7 +5412,10 @@ func _field_at(t: Vector2i) -> FarmField:
 # 로드, 건물이 새로 서는 두 순간에 부른다(멱등). ①건물 카탈로그 재구성(늘봄방 행 등록 — 출입·카메라·
 # 세이브 복원이 전부 이 dict 주도) ②안방 확장 카메라 재적용(카탈로그를 다시 세웠으므로 짝으로)
 # ③현재 무대가 HOME이면 그리드 재빌드(다른 구역이면 다음 워프의 _rebuild_region이 자연히 세운다).
-func _refresh_greenhouse() -> void:
+# ★[폴리시 R11] `rebuild=false` = 로드 경로(뒤따르는 `_restore_location`이 어차피 재빌드한다).
+#   늘봄방을 세운 세이브에서는 이 함수와 그 안의 `_refresh_home_expansion`이 각각 한 번씩 더 구워
+#   로드 한 번에 HOME 그리드가 넉 번 섰다 — 아래로 넘겨 둘 다 접는다(완공 아침 경로는 기본값 그대로).
+func _refresh_greenhouse(rebuild: bool = true) -> void:
 	if not _greenhouse_built():
 		return
 	# ★[폴리시 R5] 그리드를 다시 세우기 **전에** 예정지를 비운다 — _rebuild_region → _build_facade가
@@ -5421,9 +5424,10 @@ func _refresh_greenhouse() -> void:
 	# ★[폴리시 R6] 비우는 것은 물건만이 아니다 — **그 안에 서 있는 플레이어도** 함께 내보낸다.
 	_evict_from_greenhouse_lot()
 	_build_building_catalog()
-	_refresh_home_expansion()   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
+	_refresh_home_expansion(rebuild)   # 확장 안방의 deco 배치 칸 재주입(집 cam은 카탈로그가 스스로 파생한다)
 	if _region == RegionCatalog.HOME:
-		_rebuild_region(RegionCatalog.HOME)
+		if rebuild:
+			_rebuild_region(RegionCatalog.HOME)
 		if _indoor == "늘봄방":
 			_apply_camera_limits()
 
@@ -5447,12 +5451,20 @@ func home_house_cam_rect() -> Rect2i:
 #   있었고**, 그 배치가 그대로 세이브에 굳었다. 아래 세 줄은 전부 `home_house_rect()` 파생이라
 #   가드만 걷으면 좁아지는 방향도 같은 식이 잡는다(배치 dict 자체는 `home_deco.load_save`가 이미
 #   세이브 시점으로 되감으므로 잘라 낼 것이 없다 — 걷을 것은 경계뿐이었다).
-func _refresh_home_expansion() -> void:
+# ★[폴리시 R11] `rebuild` 인자는 **로드 경로 전용**이다(`_refresh_season_terrain(false)`와 같은 뜻·
+#   같은 자리). `_load_game`은 `_restore_location`이 저장 구역을 *언제나* 재빌드한 **뒤에** 이 함수를
+#   부르는데, 여기서 또 부르면 같은 HOME 그리드를 연달아 두 번 굽는다 — 재빌드는 `home_house_rect()`
+#   파생이고 그 진실원인 `carpenter.load_save`는 `_restore_location`보다 한참 앞에서 끝나므로, 두 번째
+#   결과는 첫 번째와 **바이트 단위로 같다**(순수 낭비). 실측: 재빌드 1회 ≈ 2.5s라 로드 1회가 5s→2.5s.
+#   카메라만은 여전히 여기서 잡는다 — 위 `_buildings["집"]["cam"]` 교체가 `_restore_location`의 카메라
+#   적용 **뒤**라, 그 줄을 건너뛰면 확장 안방에서 옛 둘레가 남는다.
+func _refresh_home_expansion(rebuild: bool = true) -> void:
 	_configure_home_deco_bounds()
 	if _buildings.has("집"):
 		_buildings["집"]["cam"] = home_house_cam_rect()
 	if _region == RegionCatalog.HOME:
-		_rebuild_region(RegionCatalog.HOME)
+		if rebuild:
+			_rebuild_region(RegionCatalog.HOME)
 		if _indoor == "집":
 			_apply_camera_limits()
 
@@ -12253,7 +12265,9 @@ func _load_game() -> bool:
 	#   `_build_building_catalog`는 `_buildings`를 통째로 다시 만들고 두 조건부 방을 스스로 다시
 	#   재므로, 앞에 한 번 두면 두 방향(생김·사라짐)이 모두 원장 파생이 된다(멱등).
 	_build_building_catalog()
-	_refresh_greenhouse()
+	# ★[폴리시 R11] `rebuild=false` — 아래 `_restore_location`이 저장 구역을 언제나 재빌드한다
+	#   (`_refresh_season_terrain(false)`와 같은 이유·같은 자리: 카탈로그만 다시 파고 굽기는 그쪽 몫).
+	_refresh_greenhouse(false)
 	# ★[S10-T8] 시련장 문 복원 — 늘봄방과 **완전히 같은 이유로 _restore_location보다 먼저**다.
 	#   부팅 시점의 카탈로그는 반딧넋 원장이 복원되기 전에 섰으므로, 여기서 다시 세우지 않으면
 	#   시련장 안에서 저장한 세이브가 바깥으로 튕긴다. 미개방 세이브면 스스로 no-op이다.
@@ -12273,7 +12287,10 @@ func _load_game() -> bool:
 	_pet_event_armed = false
 	# ★[S8-T7] 안방 확장 세이브 복원 — deco 배치 가능 칸을 확장 rect로 재주입한다(완공 아침과 같은
 	# 헬퍼·멱등 — 미확장 세이브면 스스로 no-op). 그리드·카메라는 위 재빌드와 카탈로그가 이미 세운다.
-	_refresh_home_expansion()
+	# ★[폴리시 R11] 바로 윗줄이 종전에도 이미 "그리드는 위 재빌드가 세운다"고 적어 두었는데 호출은
+	#   그 말을 안 지켰다 — 기본값이 재빌드라 `_restore_location` 직후 같은 HOME 그리드를 한 번 더
+	#   구웠다(`carpenter`는 훨씬 앞에서 복원되므로 두 결과는 동일). `false`로 그 말대로 만든다.
+	_refresh_home_expansion(false)
 	# M2.4 F9 재로드(이 함수 직접 호출 경로)에서도 복원된 day로 의상·보너스를 맞춘다(멱등).
 	# ★[S6-T3] 이 호출이 카페 일구기 사다리(좌석·곳간 용량·손님 볼륨)도 함께 세운다 — 위에서
 	#   누적 매출·하트·거둔 영혼이 다 복원된 *뒤*라야 단계가 제대로 파생된다.

@@ -736,6 +736,36 @@ func _initialize() -> void:
 	_check("㉒f 폐기는 정산 요약을 쏘지 않는다(존재한 적 없는 매출·약탈을 합산해 알리지 않는다)",
 		closed_hits[0] == 0)
 
+	# ── ㉓ #32 로드 한 번이 HOME 무대를 두 번 굽던 낭비 ────────────────────────────────
+	# `_restore_location`은 저장 구역을 **언제나** 재빌드하는데(폴리시 R5가 "이미 서 있으면 건너뛴다"
+	# 최적화를 일부러 폐기한 자리), 그 **직후** `_refresh_home_expansion`이 같은 HOME을 한 번 더
+	# 구웠다. 두 결과는 같다 — 재빌드는 `home_house_rect()` 파생이고 그 진실원 `carpenter.load_save`는
+	# 훨씬 앞줄에서 끝나므로, 두 번째 굽기는 첫 번째와 바이트 단위로 같은 순수 낭비다(늘봄방을 세운
+	# 세이브면 `_refresh_greenhouse`까지 껴 넉 번). 실측 재빌드 1회 ≈ 2.5s라 로드가 5s→2.5s로 준다.
+	# ★ 이 낭비가 `bana_test`를 러너 워치독(120s) 밖으로 밀어 **"결정적 hang"으로 오진**시켰다 —
+	#   그 스위트는 main을 13번 세우고 그중 11번이 로드 경로다(행이 아니라 누적 비용이었다).
+	_check("㉓ 계약: 로드는 `_restore_location` **뒤에** 안방 확장을 재적용한다(그리드는 그쪽이 세운다)",
+		_in_func("func _load_game", "_restore_location(data)")
+		and _line_of("\t_refresh_home_expansion(false)") > _line_of("\t_restore_location(data)"))
+	_check("㉓b 로드 경로는 두 `_refresh_*`에 재빌드 금지를 넘긴다(`_refresh_season_terrain(false)`와 같은 결)",
+		_in_func("func _load_game", "_refresh_home_expansion(false)")
+		and _in_func("func _load_game", "_refresh_greenhouse(false)"))
+	# 건너뛰는 것은 **굽기뿐**이다 — 배치 경계·집 카메라 둘레는 `false`에서도 다시 주입돼야 한다
+	# (그 둘은 `_restore_location`의 카메라 적용보다 *뒤*라, 함께 빠지면 확장 안방에 옛 둘레가 남는다).
+	m._region = RegionCatalog.HOME
+	m._buildings["집"]["cam"] = Rect2i(0, 0, 1, 1)   # 일부러 어긋난 값
+	m._last_player_tile_y = 12345                    # 재빌드 감별용 표식(재빌드는 -9999로 무효화)
+	m._refresh_home_expansion(false)
+	_check("㉓c 재빌드를 건너뛰어도 집 카메라 둘레는 `home_house_cam_rect()`로 다시 주입된다",
+		m._buildings["집"]["cam"] == m.home_house_cam_rect())
+	_check("㉓d 그리고 그때 무대는 다시 굽지 않는다(Y-split 캐시 표식이 그대로 남는다)",
+		m._last_player_tile_y == 12345)
+	# 반대 방향 — 기본 인자(완공 아침·건물이 서는 순간)는 **여전히 굽는다**. 스킵이 로드 경로에만
+	# 걸렸는지를 같은 표식으로 잰다(굽기가 통째로 죽으면 완공한 방이 화면에 안 서는 회귀가 된다).
+	m._refresh_home_expansion()
+	_check("㉓e 기본 인자는 종전대로 무대를 다시 굽는다(완공 아침 경로 불변)",
+		m._last_player_tile_y == -9999)
+
 	print("── 결과: %s (실패 %d)" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
 

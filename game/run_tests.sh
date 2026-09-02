@@ -22,6 +22,20 @@ GODOT="${GODOT:-godot}"
 TIMEOUT="${TIMEOUT:-120}"
 PLAYTEST_DIR="playtest"
 
+# 스위트별 워치독 **하한** — 기본 120초로는 못 재는 소수 스위트만 여기서 올린다. 기본값을 통째로
+# 올리면 나머지 40여 스위트의 회귀 감도까지 같이 무뎌지므로 예외 목록으로 둔다.
+#   bana_test: main.tscn을 13번 세우고 그중 11번이 세이브 로드 경로다(부팅 1회 ≈ 8s) → 실측 119초.
+#   2026-09-03 폴리시 R11에서 이 119초가 120초 워치독에 걸려 "㉗에서 결정적 hang"으로 오진됐다
+#   (행이 아니라 누적 비용이었다 — 400초를 주면 전 단언이 통과한다). 같은 커밋에서 로드 경로의
+#   중복 재빌드를 걷어 147초→119초로 줄였고, 남은 것은 스위트 구조상의 실비라 여유를 준다.
+suite_timeout() {
+  local floor=0
+  case "$1" in
+    bana_test) floor=240 ;;
+  esac
+  if [ "$floor" -gt "$TIMEOUT" ]; then echo "$floor"; else echo "$TIMEOUT"; fi
+}
+
 # 인자가 없으면 모든 *_test.gd, 있으면 그 이름들(경로·.gd·_test 접미사 모두 허용)
 names=()
 if [ "$#" -eq 0 ]; then
@@ -46,7 +60,9 @@ run_one() {
     return 2
   fi
 
-  echo "▶ $name  (워치독 ${TIMEOUT}s)"
+  local to
+  to="$(suite_timeout "$name")"
+  echo "▶ $name  (워치독 ${to}s)"
   # 출력을 로그로 받아 종료 후 되쏜다 — 스크립트 파싱/로드 실패 시 Godot이 종료코드 0으로 끝나
   # "통과"로 오탐되던 구멍(S2-T6에서 실증)을 에러 패턴 검사로 막기 위함.
   local log
@@ -54,12 +70,18 @@ run_one() {
   "$GODOT" --headless --path "$PWD" --script "$script" > "$log" 2>&1 &
   local pid=$!
 
-  # 워치독: TIMEOUT 후에도 살아 있으면 강제 종료
-  ( sleep "$TIMEOUT"; kill -9 "$pid" 2>/dev/null \
-      && echo "  ⏱ [WATCHDOG] ${TIMEOUT}s 초과 → 강제 종료(FAIL)" ) &
+  # 워치독: to초 후에도 살아 있으면 강제 종료
+  ( sleep "$to"; kill -9 "$pid" 2>/dev/null \
+      && echo "  ⏱ [WATCHDOG] ${to}s 초과 → 강제 종료(FAIL)" ) &
   local wd=$!
 
   wait "$pid"; local ec=$?
+  # ★ `kill $wd`는 서브셸만 죽이고 그 **자식 `sleep`은 고아로 남는다.** 고아가 러너의 stdout을
+  #   물고 있어, 출력을 파이프로 받으면(`./run_tests.sh x | tail`) 테스트가 끝난 뒤에도 파이프가
+  #   to초를 다 채울 때까지 안 닫혔다 — 큰 TIMEOUT을 주고 재보면 실제 소요와 무관하게 늘 to초로
+  #   읽혀, "이 스위트는 워치독까지 매달린다"는 오독을 낳는다(2026-09-03 R11에서 실제로 겪음).
+  #   자식부터 걷고 서브셸을 죽인다.
+  pkill -P "$wd" 2>/dev/null
   kill "$wd" 2>/dev/null; wait "$wd" 2>/dev/null
   cat "$log"
   if [ "$ec" -eq 0 ] && grep -qE "SCRIPT ERROR|Parse Error" "$log"; then
