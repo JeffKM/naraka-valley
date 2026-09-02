@@ -80,6 +80,15 @@ func _line_of(needle: String) -> int:
 			return i
 	return -1
 
+# start 이후 첫 매치(-1 = 없음) — 같은 니들이 여러 함수에 흩어져 있을 때 계약이 사는 함수 안에서
+# 재기 위해 쓴다(polish_r6의 그 헬퍼와 같다). `contains`는 부분 일치라 전역 첫 매치가 엉뚱한
+# 훅에 걸리는 일이 실제로 있었다(㉓ 주석 참조).
+func _line_after(start: int, needle: String) -> int:
+	for i in range(maxi(start, 0), _src.size()):
+		if _src[i].contains(needle):
+			return i
+	return -1
+
 func _in_func(fn_needle: String, needle: String) -> bool:
 	var head := _line_of(fn_needle)
 	if head < 0:
@@ -744,9 +753,14 @@ func _initialize() -> void:
 	# 세이브면 `_refresh_greenhouse`까지 껴 넉 번). 실측 재빌드 1회 ≈ 2.5s라 로드가 5s→2.5s로 준다.
 	# ★ 이 낭비가 `bana_test`를 러너 워치독(120s) 밖으로 밀어 **"결정적 hang"으로 오진**시켰다 —
 	#   그 스위트는 main을 13번 세우고 그중 11번이 로드 경로다(행이 아니라 누적 비용이었다).
+	# ★[폴리시 R12] 순서 비교를 **`_load_game` 머리 뒤로 좁힌다.** 종전엔 `_line_of`(전역 첫 매치)로
+	#   두 줄을 찾았는데, R12가 `_refresh_greenhouse` 안쪽 호출도 `_refresh_home_expansion(false)`로
+	#   바꾸면서(완공 아침의 HOME 이중 굽기 제거) 같은 니들이 그 훨씬 앞줄에 먼저 걸렸다 — 계약은
+	#   그대로인데 단언만 거짓이 되는 형태라, 재는 자리를 계약이 사는 함수 안으로 맞춘다.
+	var lg_i := _line_of("func _load_game")
 	_check("㉓ 계약: 로드는 `_restore_location` **뒤에** 안방 확장을 재적용한다(그리드는 그쪽이 세운다)",
 		_in_func("func _load_game", "_restore_location(data)")
-		and _line_of("\t_refresh_home_expansion(false)") > _line_of("\t_restore_location(data)"))
+		and _line_after(lg_i, "\t_refresh_home_expansion(false)") > _line_after(lg_i, "\t_restore_location(data)"))
 	_check("㉓b 로드 경로는 두 `_refresh_*`에 재빌드 금지를 넘긴다(`_refresh_season_terrain(false)`와 같은 결)",
 		_in_func("func _load_game", "_refresh_home_expansion(false)")
 		and _in_func("func _load_game", "_refresh_greenhouse(false)"))

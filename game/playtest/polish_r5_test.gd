@@ -328,7 +328,9 @@ func _initialize() -> void:
 		m._greenhouse_lot_occupants().is_empty()
 		and m.inventory.count_of(ItemCatalog.SPRINKLER) + m.chest.count_of(ItemCatalog.SPRINKLER)
 			+ m.storehouse_chest.count_of(ItemCatalog.SPRINKLER) == 1)
-	var refresh_i := _line_of("func _refresh_greenhouse()")
+	# ★[폴리시 R12] 니들 정정 — ⑮e와 같은 뿌리다(R11이 `rebuild` 인자를 신설해 서명이 바뀌면서
+	#   이 `contains` 니들이 -1이 됐다). 계약("회수가 재빌드보다 앞")은 그대로라 인자를 안 보게 좁힌다.
+	var refresh_i := _line_of("func _refresh_greenhouse(")
 	var reclaim_i := _line_of("\t_reclaim_greenhouse_lot()")
 	var rebuild_i := _line_of("\t\t_rebuild_region(RegionCatalog.HOME)")
 	_check("①j 회수가 **그리드 재빌드보다 앞**에 선다(벽이 덮은 뒤엔 겨눌 수도 걷을 수도 없다) — %d < %d < %d"
@@ -639,7 +641,10 @@ func _initialize() -> void:
 			% str(only_wide),
 		not m.home_deco._cells_for(HomeDecoCatalog.L_FLOOR).has(only_wide))
 	# 소스 관례(peddler_test ⑫) — 함수 첫 줄이 곧바로 bounds 재주입이다(편도 가드가 없다).
-	var hx_i := _line_of("func _refresh_home_expansion() -> void:")
+	# ★[폴리시 R12] 니들 정정 — R11이 `rebuild` 인자를 신설하면서 서명이
+	#   `func _refresh_home_expansion(rebuild: bool = true) -> void:`로 바뀌어 이 니들이 -1이 됐다
+	#   (계약 = "함수 첫 줄이 곧 bounds 재주입"은 그대로다). 인자를 안 보는 형태로 좁힌다.
+	var hx_i := _line_of("func _refresh_home_expansion(")
 	_check("⑮e 편도 가드가 소스에서 사라졌다 — 함수(main.gd:%d) 다음 줄이 곧 bounds 재주입" % (hx_i + 1),
 		hx_i >= 0 and _src[hx_i + 1].contains("_configure_home_deco_bounds()"))
 

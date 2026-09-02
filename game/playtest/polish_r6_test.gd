@@ -402,7 +402,10 @@ func _initialize() -> void:
 	var inv_i := _line_after(load_i, "inventory.load_save(data[\"inventory\"])")
 	var chest_i := _line_after(load_i, "chest.load_save(data.get(\"chest\", {}))")
 	var store_i := _line_after(load_i, "storehouse_chest.load_save(data.get(\"storehouse_chest\", {}))")
-	var refresh_i := _line_after(load_i, "_refresh_greenhouse()")
+	# ★[폴리시 R12] 니들 정정 — R11이 로드 경로를 `_refresh_greenhouse(false)`로 바꾸면서(재빌드
+	#   금지 인자 신설) 이 `contains` 니들이 아무 줄에도 안 걸려 -1이 됐고, 계약은 그대로인데
+	#   순서 비교만 거짓이 됐다. 인자를 안 보는 형태로 좁혀 두 세대를 함께 잡는다.
+	var refresh_i := _line_after(load_i, "_refresh_greenhouse(")
 	_check("⑨a 백팩·집 상자·갈무리방이 로드 안에서 **회수보다 먼저** 파일에서 되감긴다 — %d·%d·%d < %d"
 			% [inv_i + 1, chest_i + 1, store_i + 1, refresh_i + 1],
 		load_i > 0 and inv_i > load_i and chest_i > inv_i and store_i > chest_i
