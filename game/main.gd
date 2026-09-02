@@ -18331,6 +18331,14 @@ func _on_frame_discard(slot_index: int) -> void:
 	if ItemCatalog.is_rarecrow(id):
 		_notice("레어크로우는 버릴 수 없다 — 밭에 세워 두거나 백팩에 간직하자")
 		return
+	# ★[폴리시 R10] 기본 도구 5종(괭이·물뿌리개·낫·곡괭이·도끼)도 같은 이유로 못 버린다 —
+	#   **지급처가 새 게임 1회의 `START_TOOLS`뿐이고**(CAT_TOOL = 유니크·비매라 어느 매대에도 없다)
+	#   버리면 그 동사가 세이브에서 영구 차단된다(괭이 = 밭갈이·파종·물주기·수확 사슬 전체).
+	#   판정은 그 유일한 지급 목록에서 파생한다(수치·id 복제 0). 낚싯대·태클·무기는 같은 CAT_TOOL
+	#   이지만 상점 재구매가 있어 여기서 안 막는다 — 16칸 백팩에서 여분을 못 버리면 그게 새 압박이다.
+	if Inventory.START_TOOLS.has(id):
+		_notice("%s는 버릴 수 없다 — 다시 구할 곳이 없다" % ItemCatalog.name_of(id))
+		return
 	var n := inventory.count_at(slot_index)
 	inventory.remove_at(slot_index, n)
 	audio.sfx("ui")
