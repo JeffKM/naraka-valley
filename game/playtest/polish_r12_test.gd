@@ -29,6 +29,29 @@ extends SceneTree
 # 판정: ①~⑨ 전부 CONFIRMED. #4·#10은 #2와 같은 가족(같은 다섯 조각·같은 두 갈래)이라 캐노니컬
 #       한 자리(`_drop_cafe_popups`)에서 함께 봉합하고 ②가 두 갈래를 모두 잰다. #17은 #11과
 #       같은 결함의 두 줄(5427·5430)을 각각 가리킨 것이라 ⑨ 한 수정이 둘을 덮는다.
+#
+# ── 배치 B(#12~#22) ─────────────────────────────────────────────────────────
+# 렌즈: 인벤 만재 계약 · 완주 후 안내 · 매 프레임 IO · 이중 굽기 · 추종자 원장.
+#   ⑩ #12 개간(`reclaim.clear`)이 만재에서 칸을 영구히 굳히고 드랍을 증발시킨 채 "+N"을 알렸다 —
+#         형제 창구 여섯이 지키는 「적재先」 계약의 마지막 미커버 창구(재점령 잡초 낫질도 같은 줄).
+#   ⑪ #14 잡초 혼합 씨앗 롤이 `add_seed`의 bool(R2가 일부러 만든 반환)을 안 봐 거짓 획득을 알렸다.
+#   ⑫ #13 야시장 씨앗·보부상 씨앗·보부상 일반 셋이 만재를 "골드 부족"으로 오보했다(두 사유를
+#         한 조건에 뭉친 형태 — 형제 창구 셋은 진작 삼항으로 가르고 있었다).
+#   ⑬ R5 ④i 정정 — R10이 새로 쓴 "버릴 수 없다" 안내에 고정 조사 "는"이 다시 들어와 전수 스캔이
+#         baseline부터 실패 중이었다(도구 이름은 받침이 갈린다).
+#   ⑭ #15 혼백관 기증대만 완주 분기가 없어, "전시 11/11"과 "들고 오자"가 한 줄에 나란히 섰다.
+#   ⑮ #16 ♡MAX 뒤 선물이 실효 0인데 명목 점수를 알리고 주 2회 카운터까지 먹었다(ADR-0008 —
+#         게이트를 만들지 않고 정보·소비 계약만 갈랐다).
+#   ⑯ #18·#19 매대 아이콘 훅 둘이 캐시 없이 매 프레임 `ResourceLoader.exists` + `load`를 때렸다.
+#   ⑰ #20 절기 첫날 밤 층 안 강제 취침이 같은 프레임에 같은 구역을 두 번 구웠다(1차 결과는 2차가
+#         캐시를 비우며 통째로 버린다 — 순수 낭비).
+#   ⑱ #21 방목 슬롯 선정이 설치물·프롭·[F] 창구를 안 봐 짐승이 업화로 위에 스폰되고, 그 칸 안내가
+#         `has_animal_at` 갈래에서 끊겨 통째로 사라졌다(반대 방향 가드도 비어 있었다).
+#   ⑲ #22 삽사리·승마만 `data.has()` 가드로 복원해, 키 없는 구세이브를 F9로 부르면 살아 있는
+#         추종자 노드가 롤백되지 않았다(같은 함수의 R3 주석이 이미 금지한 형태).
+#
+# 판정: ⑩~⑲ 전부 CONFIRMED. #17은 배치 A #11의 DUP(6f67603이 이미 봉합 — 잔여 갈래 없음)이라
+#       배치 B에 수정이 없다. #20은 같은 "이중 굽기" 계열이지만 **다른 경로**라 독립 봉합했다.
 
 var _fail := 0
 var _src: PackedStringArray = PackedStringArray()
@@ -94,6 +117,35 @@ func _wipe_slot(slot: int) -> void:
 	if FileAccess.file_exists(t):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(t))
 
+# ── 배치 B 공용 헬퍼 ─────────────────────────────────────────────────────────
+# 마지막 알림 줄(notice_feed는 최신이 배열 끝) — polish_r9의 그 헬퍼.
+func _last_notice(m: Node) -> String:
+	var items: Array = m.notice_feed._items
+	return "" if items.is_empty() else String(items[items.size() - 1]["text"])
+
+func _slot_of(inv: Object, id: String) -> int:
+	for i in range(inv.slots.size()):
+		if inv.id_at(i) == id:
+			return i
+	return -1
+
+func _select(m: Node, id: String) -> void:
+	m.inventory.add_item(id, 1)   # 유니크 도구는 이미 있으면 무시(멱등)
+	m.inventory.select(_slot_of(m.inventory, id))
+
+# ★[폴리시 R2 공용 · garden_pot_test에서 인용] 백팩을 **빈 슬롯 0**으로 채운다. 슬롯에 직접 쓴다:
+#   `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다. keep에 든 인덱스는 비워 둔다.
+func _fill_backpack_full(inv: Object, keep: Array = []) -> void:
+	var pool: Array = Museum.donatable_ids()
+	for i in range(inv.slots.size()):
+		if keep.has(i):
+			inv.slots[i] = null
+			continue
+		inv.slots[i] = {"id": String(pool[i]), "count": 1, "quality": 0} if i < pool.size() \
+			else {"id": ItemCatalog.harvest_id(CropCatalog.PIANHWA), "count": 1,
+				"quality": (i - pool.size()) % 4}
+	inv.changed.emit()
+
 
 func _initialize() -> void:
 	print("══ 폴리시 12회차 — R11 diff · 다중 슬롯 교차 · 트윈/타이머 생애주기 · 프레임 순서(배치 A) ══")
@@ -114,6 +166,20 @@ func _initialize() -> void:
 	_check_sleep_locks(m)
 	_check_epilogue_clock(m)
 	_check_greenhouse_rebuild(m)
+
+	# ── 배치 B(#12~#22) ──
+	print("══ 배치 B — 인벤 만재 계약 · 완주 후 안내 · 매 프레임 IO · 이중 굽기 · 추종자 ══")
+	await _check_reclaim_full_backpack(m)
+	_check_mixed_seed_full(m)
+	_check_retail_full_reason(m)
+	_check_fixed_josa()
+	_check_museum_complete(m)
+	_check_gift_maxed(m)
+	_check_icon_cache(m)
+	_check_floor_exit_rebuild()
+	_check_season_terrain_fold(m)
+	_check_pasture_slots(m)
+	_check_follower_rollback(m)
 
 	print("── 결과: %s (실패 %d) ──" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
@@ -387,3 +453,421 @@ func _check_greenhouse_rebuild(m: Node) -> void:
 		m._last_player_tile_y == -9999)
 	_check("⑨g 그리고 늘봄방이 실제로 카탈로그에 섰다(구운 결과가 화면 원장에 반영됐다)",
 		m._buildings.has("늘봄방"))
+
+
+# ══ 배치 B(#12~#22) ══════════════════════════════════════════════════════════
+
+# 인벤을 통째로 비운다(창구별 무대가 서로를 안 오염시키게 — 만재 셋업이 여럿 이어진다).
+func _clear_inventory(inv: Object) -> void:
+	for i in range(inv.slots.size()):
+		inv.slots[i] = null
+	inv.changed.emit()
+
+# 그리드에서 그 종류의 debris가 선 첫 칸(하드코딩 좌표 대신 지금 무대에서 찾는다 — 레이아웃이
+# 바뀌어도 니들이 안 낡는다). 없으면 (-1,-1).
+func _debris_tile_of(m: Node, kind: String) -> Vector2i:
+	for y in range(m._grid.size()):
+		for x in range(m._grid[y].size()):
+			var t := Vector2i(x, y)
+			if m._debris_kind_at(t) == kind:
+				return t
+	return Vector2i(-1, -1)
+
+
+# ── ⑩ #12 개간이 만재에서 칸을 굳히고 드랍을 증발시키지 않는다 ────────────────
+# `reclaim.clear`는 `_cleared[t] = true`로 그 칸을 영구히 개간 완료로 굳히는 **비가역·멱등** 동사인데
+# `add_item`의 반환을 안 봐서, 백팩이 가득하면 드랍이 어디에도 안 들어가고 바로 다음 줄의 토스트가
+# 조건 없이 "+N"을 알렸다 — 화면은 받았다 하고 원장엔 없으며 그 그루터기는 다시 못 친다.
+func _check_reclaim_full_backpack(m: Node) -> void:
+	print("── ⑩ #12 만재에서 개간이 칸을 굳히지 않는다(적재 선검사) ──")
+	m._region = RegionCatalog.HOME
+	m._rebuild_region(RegionCatalog.HOME)
+	var kind := DebrisCatalog.EMBER
+	var t := _debris_tile_of(m, kind)
+	var drop_id: String = DebrisCatalog.drop_for(kind)
+	var drop_n: int = DebrisCatalog.drop_count(kind)
+	var tool_id: String = DebrisCatalog.tool_for(kind)
+	_check("⑩a-pre 무대: %s이 선 칸 %s · 도구 %s · 드랍 %s ×%d(전부 카탈로그 파생)"
+			% [kind, str(t), tool_id, drop_id, drop_n],
+		t != Vector2i(-1, -1) and drop_id != "" and drop_n > 0)
+	if t == Vector2i(-1, -1):
+		return
+
+	# 만재 셋업 — 슬롯 0만 남겨 도구를 꽂고, 나머지 15칸을 서로 다른 종으로 채운다.
+	_fill_backpack_full(m.inventory, [0])
+	m.inventory.slots[0] = {"id": tool_id, "count": 1, "quality": 0}
+	m.inventory.select(0)
+	m.energy.refill()
+	var e_before: int = m.energy.current
+	_check("⑩b-pre 무대: 든 것이 맞는 도구이고 그 드랍은 들어갈 자리가 없다",
+		m.inventory.selected_id() == tool_id and not m.inventory.can_add(drop_id, drop_n))
+
+	m._target = t
+	m._use_tool()
+	_check("⑩c 그 칸이 개간 완료로 굳지 않았다 — 다시 칠 수 있다(멱등 가드가 영구히 삼키지 않는다)",
+		not m.reclaim.is_cleared(t) and m._debris_kind_at(t) == kind)
+	_check("⑩d 드랍도 안 생겼고 혼력도 안 나갔다(무동작 — 화면만 받은 척하지 않는다)",
+		m.inventory.count_of(drop_id) == 0 and m.energy.current == e_before)
+	_check("⑩e 이유를 말한다 — '%s'" % _last_notice(m),
+		_last_notice(m).contains("백팩이 가득"))
+
+	# 자리를 비우면 **그 자리에서** 성사된다(가드가 칸을 영구히 죽인 게 아니다).
+	m.inventory.slots[m.inventory.slots.size() - 1] = null
+	m.inventory.changed.emit()
+	m._target = t
+	m._use_tool()
+	_check("⑩f 한 칸을 비우자 같은 칸이 개간되고 드랍 %d개가 실제로 들어온다" % drop_n,
+		m.reclaim.is_cleared(t) and m.inventory.count_of(drop_id) == drop_n)
+	await process_frame
+
+
+# ── ⑪ #14 잡초 혼합 씨앗 롤이 만재에서 획득을 거짓 보고하지 않는다 ────────────
+# `add_seed`는 R2에서 일부러 bool을 돌려주게 바뀌었는데(inventory.gd 머리말) 이 호출부만 안 봤다.
+# 롤 시드는 (날·칸) 결정적이라 같은 무대에서 두 번 굴려도 결과가 같다 — 그래서 "가득일 때"와
+# "한 칸 비웠을 때"를 **같은 칸·같은 날**로 비교할 수 있다(무작위가 아니라 계약을 잰다).
+func _check_mixed_seed_full(m: Node) -> void:
+	print("── ⑪ #14 만재에서 혼합 씨앗 롤이 거짓 획득을 알리지 않는다 ──")
+	# 그날 롤이 맞는 칸을 찾는다(공식·확률 모두 main에서 읽는다 — 수치 복제 0).
+	var hit := Vector2i(-1, -1)
+	for y in range(0, 48):
+		for x in range(0, 48):
+			var rng := RandomNumberGenerator.new()
+			rng.seed = hash("mixdrop:%d:%d:%d" % [m.clock.day, x, y])
+			if rng.randf() < m.MIXED_SEED_DROP_CHANCE:
+				hit = Vector2i(x, y)
+				break
+		if hit != Vector2i(-1, -1):
+			break
+	_check("⑪a-pre 무대: day %d에 롤이 맞는 칸 %s를 찾았다" % [m.clock.day, str(hit)],
+		hit != Vector2i(-1, -1))
+	if hit == Vector2i(-1, -1):
+		return
+
+	var seed_id: String = ItemCatalog.seed_id(CropCatalog.MIXED)
+	_fill_backpack_full(m.inventory)
+	_check("⑪b-pre 무대: 혼합 씨앗이 들어갈 자리가 없다",
+		not m.inventory.can_add(seed_id, 1) and m.inventory.count_of(seed_id) == 0)
+	m._roll_mixed_seed_drop(hit)
+	_check("⑪c 씨앗이 안 들어왔고 획득 보고도 없다 — 대신 흩어졌다고 말한다('%s')" % _last_notice(m),
+		m.inventory.count_of(seed_id) == 0 and _last_notice(m).contains("흩어졌"))
+
+	m.inventory.slots[0] = null
+	m.inventory.changed.emit()
+	m._roll_mixed_seed_drop(hit)
+	_check("⑪d 같은 칸·같은 날인데 자리가 생기자 씨앗이 실제로 들어온다(롤을 막은 게 아니다)",
+		m.inventory.count_of(seed_id) == 1)
+
+
+# ── ⑫ #13 소매 3창구가 만재를 '골드 부족'으로 오보하지 않는다 ─────────────────
+# 형제 창구(`_buy_store_generic_n`·만물상 씨앗·스프링클러)는 진작 사유를 가르는데 야시장 씨앗·
+# 보부상 씨앗·보부상 일반 셋만 두 사유를 한 조건에 뭉쳐, 냥이 만 단위로 남아도 "골드 부족"이 떴다.
+func _check_retail_full_reason(m: Node) -> void:
+	print("── ⑫ #13 야시장·보부상 소매가 만재와 냥 부족을 가른다 ──")
+	var day0: int = m.clock.day
+	var gold0: int = m.wallet.gold
+	m.wallet.gold = 999999
+
+	# ㉠ 야시장 씨앗 — 성야절 야시장 날로 시계를 옮긴다(날짜는 카탈로그에서 찾는다).
+	var nm_day := -1
+	for d in range(1, 500):
+		if SeasonalEvent.event_for_day(d) == SeasonalEvent.NIGHT_MARKET:
+			nm_day = d
+			break
+	_check("⑫a-pre 무대: 야시장이 서는 날 %d를 찾았다" % nm_day, nm_day > 0)
+	if nm_day > 0:
+		m.clock.day = nm_day
+		var crop: String = CropCatalog.PIANHWA
+		_fill_backpack_full(m.inventory)
+		m._try_buy_market_seed(crop, 1)
+		var nm_notice := _last_notice(m)
+		_check("⑫b 야시장 — 냥이 999999인데 자리가 없다고 말한다('%s')" % nm_notice,
+			nm_notice.contains("자리가 없다") and not nm_notice.contains("골드 부족"))
+		# 대조: 자리가 있는데 냥이 없으면 종전 문구 그대로다(사유가 뒤바뀐 게 아니다).
+		_clear_inventory(m.inventory)
+		m.wallet.gold = 0
+		m._try_buy_market_seed(crop, 1)
+		_check("⑫c 대조 — 자리가 있고 냥이 0이면 여전히 '골드 부족'이다('%s')" % _last_notice(m),
+			_last_notice(m).contains("골드 부족"))
+		m.wallet.gold = 999999
+
+	# ㉡㉢ 보부상 씨앗·일반 — 좌판이 서는 날의 실제 재고 행에서 id를 뽑는다.
+	# 봇짐 구성은 날마다 갈리므로(day 해시 뽑기) 씨앗 행·일반 행이 **둘 다** 선 개장일을 찾는다 —
+	# 하루만 보고 "행이 없다"로 넘어가면 두 창구 중 하나가 조용히 안 재진다.
+	var ped_day := -1
+	var seed_id := ""
+	var item_id := ""
+	var probe: int = m.clock.day
+	for _i in 30:
+		probe = Peddler.next_open_day(probe + 1)   # +1 — `next_open_day`는 오늘이 개장일이면 오늘을 준다
+		var s_id := ""
+		var i_id := ""
+		for row in m.peddler.rows_for(probe, {}):
+			var k := str(row.get("kind", ""))
+			if s_id == "" and k == Peddler.KIND_SEED:
+				s_id = str(row["buy_id"])
+			elif i_id == "" and k == Peddler.KIND_ITEM:
+				i_id = str(row["buy_id"])
+		if s_id != "" and i_id != "":
+			ped_day = probe
+			seed_id = s_id
+			item_id = i_id
+			break
+	_check("⑫d-pre 무대: day %d 봇짐에서 씨앗행 '%s' · 일반행 '%s'를 둘 다 뽑았다" % [ped_day, seed_id, item_id],
+		ped_day > 0 and seed_id != "" and item_id != "")
+	if ped_day > 0:
+		m.clock.day = ped_day
+		_fill_backpack_full(m.inventory)
+		m._try_buy_peddler_seed(seed_id, 1)
+		_check("⑫e 보부상 씨앗 — 만재를 만재라고 말한다('%s')" % _last_notice(m),
+			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("골드 부족"))
+		_fill_backpack_full(m.inventory)
+		m._try_buy_peddler_item(item_id, 1)
+		_check("⑫f 보부상 일반 — 만재를 만재라고 말한다('%s')" % _last_notice(m),
+			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("골드 부족"))
+		# 대조 — 두 창구 다 냥이 0이면 종전 문구 그대로다(사유가 뒤바뀐 게 아니다).
+		_clear_inventory(m.inventory)
+		m.wallet.gold = 0
+		m._try_buy_peddler_seed(seed_id, 1)
+		_check("⑫g 대조 — 보부상 씨앗도 자리가 있고 냥이 0이면 '골드 부족'이다('%s')" % _last_notice(m),
+			_last_notice(m).contains("골드 부족"))
+		m._try_buy_peddler_item(item_id, 1)
+		_check("⑫h 대조 — 보부상 일반도 마찬가지('%s')" % _last_notice(m),
+			_last_notice(m).contains("골드 부족"))
+
+	m.clock.day = day0
+	m.wallet.gold = gold0
+	_clear_inventory(m.inventory)
+
+
+# ── ⑬ R5 ④i 잔존 정정 — 런타임 이름 옆 고정 조사 0곳 ─────────────────────────
+# R5가 세운 전수 스캔이 baseline에서 실패 중이었다: R10이 "버릴 수 없다" 안내를 새로 쓰며 고정
+# "는"이 다시 들어왔다(도구 이름은 받침이 갈리므로 "괭이는"/"저승 낚싯대는"이 한 식에서 나와야 한다).
+func _check_fixed_josa() -> void:
+	print("── ⑬ R5 ④i 정정 — main.gd에 런타임 이름 옆 고정 조사가 없다 ──")
+	var name_srcs := ["name_of(", "title_of(", "species_name(", "display_name", "name_ko", "large_name("]
+	var josa_re := RegEx.create_from_string("%s ?(를|을|는|은|가|이|와|과)([^가-힣]|$)")
+	var leftovers: Array = []
+	for i in _src.size():
+		var w := ""
+		for k in range(i, mini(i + 3, _src.size())):
+			w += _src[k] + " "
+		if josa_re.search(w) == null:
+			continue
+		for s in name_srcs:
+			if w.contains(String(s)):
+				leftovers.append(i + 1)
+				break
+	_check("⑬a 고정 조사 잔존 0곳(잔존 줄: %s)" % str(leftovers), leftovers.is_empty())
+	_check("⑬b 그 자리가 실제로 받침을 가른다 — '괭이는' / '저승 낚싯대는'이 한 식에서",
+		HanjiUi.with_eun(ItemCatalog.name_of(ItemCatalog.HOE))
+			== ItemCatalog.name_of(ItemCatalog.HOE) + HanjiUi.josa_eun(ItemCatalog.name_of(ItemCatalog.HOE)))
+
+
+# ── ⑭ #15 혼백관 기증대가 완주를 안다 ────────────────────────────────────────
+# 로스터는 `donatable_ids()`(유품 3 + 책 8)로 고정이라 종점이 있다. 다 바친 뒤에도 기증대만
+# "들고 오자"를 반복해, "전시 11/11"과 도달 불가 지시가 한 줄에 나란히 섰다(형제 둘은 진작 분기가 있다).
+func _check_museum_complete(m: Node) -> void:
+	print("── ⑭ #15 기증대가 완주 분기를 갖는다 ──")
+	var roster: Array = Museum.donatable_ids()
+	_check("⑭a-pre 무대: 완주 전에는 완주가 아니다", not m._museum_complete())
+	for id in roster:
+		m.museum.donate(String(id), m.clock.day)
+	_check("⑭b 로스터를 다 바치면 완주다 — 분모는 `donatable_ids()` 파생이다(수 하드코딩 0)",
+		m._museum_complete() and m.museum.donated_count() == roster.size())
+
+	# 빈손으로 [F] — 완주 뒤에는 죽은 지시를 반복하지 않는다. 밀린 답례를 먼저 소비해 둔다:
+	# `_try_donate_selected`는 R2 규약대로 답례 정산을 앞에 두므로, 안 비우면 그 갈래가 먼저 먹는다.
+	_clear_inventory(m.inventory)
+	var guard := 0
+	while m._claim_museum_milestones() and guard < 20:
+		guard += 1
+	_clear_inventory(m.inventory)
+	_select(m, ItemCatalog.HOE)   # 기증감이 아닌 것을 든다(빈손과 같은 갈래)
+	m._try_donate_selected()
+	_check("⑭c [F]가 완주를 말한다 — '%s'" % _last_notice(m),
+		_last_notice(m).contains("모두 전시") and not _last_notice(m).contains("들어야 한다"))
+
+	# 프롬프트도 같은 분기를 갖는다(_process 안이라 줄 순서로 잰다 — 완주 갈래가 '들고 오자'보다 먼저).
+	var done_i := _line_of("elif _museum_complete():")
+	var beg_i := _line_of("혼백관 기증대 — 유품이나 되찾은 책을 들고 오자")
+	_check("⑭d 프롬프트 사슬에서 완주 갈래가 '들고 오자'보다 먼저 온다(%d < %d)" % [done_i, beg_i],
+		done_i > 0 and beg_i > 0 and done_i < beg_i)
+
+
+# ── ⑮ #16 ♡MAX 선물이 명목 점수를 알리지도, 주간 횟수를 먹지도 않는다 ─────────
+# `_add`가 MAX_POINTS에서 clamp하므로 실효는 정확히 0인데 `gift()`는 명목을 돌려주고, 비생일
+# 경로는 주 2회 카운터까지 소모했다 — 아이템 1개 + 그 주 기회 1회를 먹고 "+40 호감도"라 보고.
+# ADR-0008: 선물 자체는 안 막는다. 정보(문구)와 소비 계약(카운터)만 가른다.
+func _check_gift_maxed(m: Node) -> void:
+	print("── ⑮ #16 만점 상대의 선물이 사실을 말한다 ──")
+	var day := 10
+	var maxed := Affinity.new()
+	maxed.points = Affinity.MAX_POINTS
+	var normal := Affinity.new()
+	normal.points = 0
+	_check("⑮a-pre 무대: 하나는 천장에 닿았고 하나는 아니다",
+		maxed.is_maxed() and not normal.is_maxed())
+
+	var got_max := maxed.gift(40, day)
+	var got_normal := normal.gift(40, day)
+	_check("⑮b 만점 쪽은 점수가 한 톨도 안 올랐다(실효 0 — clamp가 이미 그랬다)",
+		maxed.points == Affinity.MAX_POINTS and got_max == 40)
+	_check("⑮c 그런데 **주간 카운터를 안 먹었다** — 예산은 올릴 수 있을 때만 쓴다",
+		maxed.gifts_used_in_week(day) == 0
+		and maxed.gifts_left_in_week(day) == Affinity.GIFTS_PER_WEEK)
+	_check("⑮d 대조: 만점이 아닌 쪽은 종전대로 카운터를 쓰고 점수도 오른다(계약이 안 넓어졌다)",
+		normal.points == got_normal and got_normal == 40
+		and normal.gifts_used_in_week(day) == 1)
+	_check("⑮e 하루 1회 리듬은 양쪽 다 그대로 소모된다(그건 예산이 아니라 날짜다)",
+		not maxed.can_gift(day) and not normal.can_gift(day))
+	maxed.free()
+	normal.free()
+
+	# 화면 문구 — 만점이면 명목 점수 대신 사실을 말한다(선물 창구가 그 술어를 실제로 본다).
+	_check("⑮f 선물 창구가 건네기 **전에** 천장을 기억하고 문구를 가른다",
+		_line_of("var was_maxed: bool = r.affinity.is_maxed()") > 0
+		and _line_of("호감도는 이미 가득하다") > 0
+		and _line_of("var was_maxed: bool = r.affinity.is_maxed()")
+			< _line_of("var gained := r.affinity.gift("))
+
+
+# ── ⑯ #18·#19 매대 아이콘 훅이 매 프레임 디스크를 안 두드린다 ─────────────────
+# 두 훅의 호출부는 전부 `_process`가 매 프레임 돌리는 매대 행 조립기다(목공방·야시장·보부상·시련패).
+# 값이 변하는 사건은 실행 중에 없으므로 세션 수명 캐시가 맞다 — `_prop_tex`가 이미 그 형태다.
+func _check_icon_cache(m: Node) -> void:
+	print("── ⑯ #18·#19 매대 아이콘 훅에 1회 조회 캐시가 섰다 ──")
+	m._ui_tex_cache.clear()
+	var sets: Array = HomeDecoCatalog.purchasable_ids()
+	_check("⑯a-pre 무대: 매대에 설 가구 세트가 있다(%d종)" % sets.size(), not sets.is_empty())
+	if sets.is_empty():
+		return
+	var sid := String(sets[0])
+	var first: Texture2D = m._deco_icon(sid)
+	var keys_after_first: int = m._ui_tex_cache.size()
+	var second: Texture2D = m._deco_icon(sid)
+	_check("⑯b 두 번째 조회가 캐시에서 나온다 — 키가 안 늘고 같은 값을 돌려준다(없음=null도 캐시)",
+		m._ui_tex_cache.size() == keys_after_first and second == first)
+	_check("⑯c 그 캐시가 실제로 그 경로를 들고 있다(조회한 파일 = 담긴 키)",
+		m._ui_tex_cache.has("res://assets/ui/deco_%s.png" % sid.to_lower()))
+
+	m._ui_tex_cache.clear()
+	var tok: Texture2D = m._trial_token_icon()
+	_check("⑯d 시련패 아이콘도 같은 캐시를 탄다(값 보존 — 실제 파일이라 non-null)",
+		m._ui_tex_cache.has(m.TRIAL_TOKEN_ICON_PATH) and tok != null
+		and m._trial_token_icon() == tok)
+	# 두 훅 본문에 날 조회가 안 남았다(`_illust_texture` 주석이 금지한 그 형태).
+	_check("⑯e 두 훅 본문에 `ResourceLoader.exists` 날 조회가 없다 — 공용 `_ui_tex` 하나만 부른다",
+		not _in_func("func _deco_icon", "ResourceLoader.exists")
+		and not _in_func("func _trial_token_icon", "ResourceLoader.exists")
+		and _in_func("func _deco_icon", "_ui_tex(")
+		and _in_func("func _trial_token_icon", "_ui_tex("))
+
+
+# ── ⑰ #20 층 탈출과 절기 지형이 같은 구역을 두 번 굽지 않는다 ─────────────────
+# 절기 첫날 밤 층 안에서 24:00 쓰러짐으로 날이 넘어가면 `_on_day_advanced`가 한 프레임에
+# `_rebuild_region(_region)`을 두 번 불렀다(층 탈출 1차 + 절기 지형 2차). 1차 결과는 2차가 캐시를
+# 비우며 통째로 버리므로 순수 낭비였다. 처방 = 굽기 **전에** 캐시를 버려 한 번의 굽기가 곧 새 절기다.
+func _check_floor_exit_rebuild() -> void:
+	print("── ⑰ #20 층 탈출 재빌드가 절기 굽기와 겹치지 않는다 ──")
+	# 갱도·나락 두 블록 모두 정리(false)를 굽기보다 앞에 둔다.
+	var mine_i := _line_of("_clear_mine_mobs()   # ★[S5-T5]")
+	var mine_pre := _line_after(mine_i, "_refresh_season_terrain(false)")
+	var mine_bake := _line_after(mine_i, "_rebuild_region(_region)")
+	_check("⑰a 갱도 층 탈출 — 캐시 정리(%d)가 굽기(%d)보다 앞이다" % [mine_pre, mine_bake],
+		mine_i > 0 and mine_pre > 0 and mine_bake > 0 and mine_pre < mine_bake)
+	# 니들은 나락 블록에만 있는 문구로 잡는다 — `narak_floors.begin_run()`은 진입 경로에도 있어
+	# 첫 매치가 그쪽으로 새면 뒤의 두 줄 번호가 엉뚱한 함수에서 잡힌다.
+	var narak_i := _line_of("이번 런 기록 소멸")
+	var narak_pre := _line_after(narak_i, "_refresh_season_terrain(false)")
+	var narak_bake := _line_after(narak_i, "_rebuild_region(_region)")
+	_check("⑰b 나락 런 종료 — 같은 순서다(%d < %d · 두 블록이 안 갈렸다)" % [narak_pre, narak_bake],
+		narak_i > 0 and narak_pre > 0 and narak_bake > 0 and narak_pre < narak_bake)
+
+
+# ⑰의 라이브 짝 — `_refresh_season_terrain(false)`가 캐시만 버리고 굽지 않으며, 그 뒤의 `true`
+# 호출이 스스로 no-op이 되는지(그래야 이중 굽기가 실제로 사라진다). 굽기 여부는 `_rebuild_region`이
+# 무효화하는 Y-split 표식으로 잰다(polish_r11 ㉓·배치 A ⑨c의 그 기법).
+func _check_season_terrain_fold(m: Node) -> void:
+	var before: int = m._bf_season
+	m._season_field_override = (before + 1) % 4
+	_check("⑰c-pre 무대: 절기가 어긋났다(%d ≠ %d — 이 순간이 곧 리로드가 필요한 순간)"
+			% [m._season_field_index(), before],
+		m._season_field_index() != before)
+	m._last_player_tile_y = 12345
+	m._refresh_season_terrain(false)
+	_check("⑰d `false`는 캐시만 버리고 안 굽는다(표식 12345가 그대로) — 굽기는 층 탈출이 한 번에 한다",
+		m._last_player_tile_y == 12345 and m._wang_tiles.is_empty() and m._field_paint.is_empty())
+	_check("⑰e 그러면서 새 절기를 새겼다 — 뒤따르는 `true` 호출이 no-op이 될 근거다",
+		m._bf_season == m._season_field_index())
+	m._refresh_season_terrain(true)
+	_check("⑰f 그래서 하루 정산 맨 끝의 `true` 호출이 스스로 아무것도 안 굽는다(이중 굽기 소멸)",
+		m._last_player_tile_y == 12345)
+	m._season_field_override = -1
+	m._bf_season = -1
+
+
+# ── ⑱ #21 방목 슬롯이 설치물·프롭·[F] 창구를 피한다 ──────────────────────────
+# `_free_pasture_tiles`의 후보 판정이 `is_solid` 한 줄뿐이라, 방목지 첫 줄에 세운 업화로 칸이
+# 라운드로빈 slots[0]이 돼 첫 마리가 그 위에 섰다. 그러면 프롬프트 사슬이 `has_animal_at`에서
+# 먼저 끊겨 제련 진행을 읽을 수단이 그날 0이 된다([F]는 여전히 먹히므로 화면과 동작이 갈린다).
+func _check_pasture_slots(m: Node) -> void:
+	print("── ⑱ #21 방목 슬롯과 설치물이 서로를 피한다 ──")
+	m._region = RegionCatalog.HOME
+	m._indoor = ""
+	var base: Array = m._free_pasture_tiles()
+	_check("⑱a-pre 무대: 방목 슬롯이 하나 이상 있다(%d칸)" % base.size(), base.size() > 0)
+	if base.is_empty():
+		return
+	var t: Vector2i = base[0]
+
+	# ㉠ 설치물 → 슬롯에서 빠진다.
+	m.furnace.place(m._region, t)
+	var after: Array = m._free_pasture_tiles()
+	_check("⑱b 업화로를 세운 칸 %s가 슬롯 목록에서 정확히 하나 빠졌다" % str(t),
+		not (t in after) and after.size() == base.size() - 1)
+	m.furnace.remove(m._region, t)
+	_check("⑱c 걷어내면 그 칸이 그대로 돌아온다(가드가 방목지를 영구히 죽이지 않는다)",
+		(t in m._free_pasture_tiles()) and m._free_pasture_tiles().size() == base.size())
+
+	# ㉡ 반대 방향 — 짐승이 선 칸에는 설치물을 못 세운다.
+	var anchors: Array = m.ranch.animal_tiles()
+	_check("⑱d-pre 무대: 스타터 짐승이 있다(%d마리)" % anchors.size(), anchors.size() > 0)
+	if anchors.is_empty():
+		return
+	_check("⑱e-pre 무대: 짐승이 서기 전에는 그 칸에 업화로를 세울 수 있었다",
+		m._can_place_furnace(t))
+	m.ranch.send_to_pasture(anchors[0], t)
+	_check("⑱f 짐승이 선 칸에는 업화로·결정기·스프링클러 어느 것도 못 선다(안내 사슬이 안 끊긴다)",
+		m.ranch.has_animal_at(t) and not m._can_place_furnace(t)
+		and not m._can_place_crystalarium(t) and not m._can_place_sprinkler(t))
+	# 이미 나가 있는 짐승 칸을 빼는 것은 **R8이 `_release_open_buildings`에 세운 두 번째 필터**다
+	# (`occupied_pasture_tiles`) — 여기 새 가드와 합쳐져야 "설치물도 짐승도 안 겹친다"가 성립한다.
+	_check("⑱g 그 칸은 R8 필터가 잡는다 — 새 가드와 합쳐 다음 방출이 같은 칸을 다시 안 집는다",
+		m.ranch.occupied_pasture_tiles().has(t)
+		and _in_func("func _release_open_buildings", "ranch.occupied_pasture_tiles()"))
+
+
+# ── ⑲ #22 F9 로드가 삽사리·승마 상태를 되감는다 ──────────────────────────────
+# 로드 경로가 `data.has(...)` 가드를 달고 있어, 키 없는 구세이브를 세션 중에 F9로 부르면
+# `load_save`가 아예 안 불려 **살아 있는 노드가 롤백되지 않았다**. 같은 함수의 R3 주석이 아이템
+# 원장 넷에 대해 이미 금지한 형태다 — Pet·Mount만 그 처방을 안 받았다.
+func _check_follower_rollback(m: Node) -> void:
+	print("── ⑲ #22 키 없는 구세이브가 추종자 상태를 되감는다 ──")
+	_check("⑲a 로드 경로가 두 원장을 **무조건** 부른다(`.get`으로 빈 dict 폴백)",
+		_in_func("func _load_game", "mount.load_save(data.get(\"mount\", {}))")
+		and _in_func("func _load_game", "pet.load_save(data.get(\"pet\", {}))"))
+	_check("⑲b 그리고 `has` 가드가 남아 있지 않다(부분 수정 방지)",
+		not _in_func("func _load_game", "data.has(\"pet\")")
+		and not _in_func("func _load_game", "data.has(\"mount\")"))
+
+	# 빈 dict가 실제로 롤백인가 — 살아 있는 노드에 입양·승마를 새겨 놓고 되감아 본다.
+	m.pet._adopted = true
+	m.pet._friend = 5
+	m.mount._mounted = true
+	m.pet.load_save({})
+	m.mount.load_save({})
+	_check("⑲c 빈 dict = '미입양·안 탄 상태' — 구세이브의 뜻과 정확히 같다",
+		not m.pet.is_adopted() and m.pet.hearts() == 0 and not m.mount.is_mounted())
+	m._sync_mount()
+	_check("⑲d 속도 계수도 함께 되감긴다(로드 직후 ×1.5가 다시 실리지 않는다)",
+		is_equal_approx(m.player.speed_scale, m.mount.speed_scale()))

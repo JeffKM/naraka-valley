@@ -847,8 +847,17 @@ func _initialize() -> void:
 		not m._is_farmable(m.PET_TILE))
 	m._target = m.PET_TILE
 	m._target_valid = m._is_farmable(m.PET_TILE)
-	_check("⑳c 겨눠도 밭 프롬프트가 없다 — 화면이 숨긴 동사가 애초에 존재하지 않는다",
-		m._farm_prompt() == "")
+	# ★[폴리시 R12 정정] R6이 잠근 계약은 "프롬프트가 **빈 문자열**"이었는데, R11(a5088f7)이 그
+	#   침묵을 일부러 걷었다 — 예약 칸 둘(미호·삽사리)은 스타터 밭 한가운데의 흙으로 칠해지는데
+	#   주인이 화면에 없는 시간대(미호 15:00 출근·삽사리 입양 전)엔 괭이질이 무알림 무동작이라,
+	#   day 1 튜토리얼 밭에서 "왜 안 되지"만 남았다. 그래서 **동사는 그대로 막되 이유는 읽힌다**.
+	#   R6이 지키려던 것은 "화면이 숨긴 동사를 제안하지 않는다"이므로 그 뜻으로 다시 잰다:
+	#   ㉠ 클릭 동사를 한 개도 안 내밀고 ㉡ 나오는 문구는 예약 사유 그 자체다(제3의 문구 아님).
+	var pet_prompt: String = m._farm_prompt()
+	_check("⑳c 겨눠도 밭 **동사**는 없다 — 화면이 숨긴 동사를 제안하지 않는다(문구: %s)" % pet_prompt,
+		not pet_prompt.contains("[좌클릭]") and not pet_prompt.contains("[우클릭]"))
+	_check("⑳c2 대신 R11의 예약 사유가 그대로 나온다 — 침묵이 아니라 설명이다",
+		pet_prompt == m._reserved_tile_reason(m.PET_TILE) and pet_prompt != "")
 	var patch_ok := 0
 	for yy2 in range(m.STARTER_PATCH_RECT.position.y, m.STARTER_PATCH_RECT.end.y):
 		for xx2 in range(m.STARTER_PATCH_RECT.position.x, m.STARTER_PATCH_RECT.end.x):
