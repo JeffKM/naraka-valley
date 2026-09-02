@@ -13780,7 +13780,10 @@ func _process(delta: float) -> void:
 	# 잠깐 띄운다. ★owner 2026-07-03 3차 HUD 가이드 — 좌하단 wide notice(화면 폭 날것 띠)를 폐기하고
 	# 전용 상단-중앙 팝업 배너(한지 플레이트·외곽선·페이드)로 교체. 매 프레임 guidance()를 보되 직전과
 	# 다를 때만 show_guide(=단계 전환 1회). 모달 중엔 위 early-return이라 비교 보존.
-	var guide := onboarding.guidance()
+	# ★[폴리시 R11] 미호의 **지금 스테이션 구역**을 함께 넘긴다(onboarding.guidance 머리말 — 15:00에
+	#   카페로 출근하면 "밭(위쪽)"이 거짓이 된다). 런타임 tile이 아니라 스케줄에서 파생하는 건
+	#   `_is_stationed_in_cafe`가 든 그 규율이다(프레임 갱신 순서에 안 기댄다).
+	var guide := onboarding.guidance(_miho_stationed_away())
 	if guide != _last_onboarding_guide:
 		_last_onboarding_guide = guide
 		if guide != "" and onboarding_banner != null:
@@ -16821,6 +16824,20 @@ func _tree_prompt(t: Vector2i) -> String:
 	return "[좌클릭] %s %s (%d타 남음)" % [label, "치우기" if stump else "벌목",
 		tree_ledger.hp_at(_region, t, axe_tier())]
 
+# ★[폴리시 R11] 겨눈 칸이 **주민·짐승의 예약 칸이라** 밭일에서 빠졌는가("" = 그냥 밭이 아닌 칸).
+# `_is_farmable`의 두 예외와 **한 줄씩 대응**한다(술어를 복제하지 않고 같은 상수를 읽는다).
+# 흙으로 보이는 칸에서만 말한다 — 길·벽·물 위에서 "누구의 자리"라고 말할 이유가 없다.
+func _reserved_tile_reason(t: Vector2i) -> String:
+	if _region != RegionCatalog.HOME:
+		return ""
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h or _grid[t.y][t.x] != SOIL:
+		return ""
+	if t == MIHO_FIELD_TILE:
+		return "미호의 자리 — 밭일은 못 한다 (15시부터는 나루 마을 카페)"
+	if t == PET_TILE:
+		return "삽사리의 자리 — 밭일은 못 한다 (개가 누울 자리)"
+	return ""
+
 # 밭 칸 프롬프트: 든 도구·칸 상태에서 다음에 할 수 있는 동작을 파생한다("" = 안내 없음).
 # 맨손 수확(RMB)은 도구와 무관하게 다 자란 칸이면 항상 안내한다. 그 외엔 든 도구가 칸 상태에
 # 맞을 때만 [좌클릭] 동사를 보인다(안 맞으면 "" — 자동 분기 없음의 HUD 짝, ADR-0024 §2).
@@ -16857,7 +16874,13 @@ func _farm_prompt() -> String:
 	if pot_prompt != "":
 		return pot_prompt
 	if not _target_valid:
-		return ""
+		# ★[폴리시 R11] **예약 칸의 침묵을 걷는다.** 미호 자리(42,14)와 삽사리 자리(44,12)는 둘 다
+		#   스타터 밭(STARTER_PATCH_RECT) 안이라 다른 23칸과 똑같은 흙으로 칠해지는데, `_is_farmable`이
+		#   무조건 뺀다. 주인이 화면에 서 있는 동안엔 그 그림이 곧 사유였지만 — 미호는 15:00에 카페로
+		#   출근하고 삽사리는 입양 전엔 한 픽셀도 안 그려진다 — 그 시간엔 프롬프트가 통째로 사라져
+		#   day 1 튜토리얼 밭 정중앙에서 괭이질이 **무알림 무동작**이었다(R6가 PET_TILE 배제를 넣으며
+		#   적어 둔 "화면이 가능한 동사를 숨김"의 거울상). 동사는 그대로 막되 이유는 읽힌다.
+		return _reserved_tile_reason(_target)
 	var pfield := _field_at(_target)          # ★[S10-T5] 이 칸의 주인 밭(노지/늘봄방)
 	# ★ ADR-0059 결정3 — 수확은 무과금이라 혼력과 무관하게 항상 안내(0에서도 거둘 수 있다).
 	if pfield.is_mature(_target):
@@ -22542,6 +22565,19 @@ func _cafe_guest_pool() -> Array:
 			continue                                  # 지금 카페 안에 서 있다 → 손님으로 안 앉힌다
 		out.append({"id": gid, "weight": guests.weight_of(gid)})
 	return out
+
+# ★[폴리시 R11] 미호의 지금 스테이션이 **안식 농원 밖**인가(온보딩 MEET_MIHO 안내의 유일한 입력).
+# 스케줄에서 파생하므로 시각·카페 영업시간·좌표를 여기서 복제하지 않는다 — 미호 레코드가 없거나
+# 스케줄 항목이 비면 false(= 옛 문구 그대로)라 실패해도 안전한 쪽으로 접힌다.
+func _miho_stationed_away() -> bool:
+	var r := _resident("miho")
+	if r == null:
+		return false
+	var e := r.station_at(clock.minutes)
+	if e.is_empty():
+		return false
+	var region := String(e.get("region", ""))
+	return region != "" and region != RegionCatalog.HOME
 
 # 이 주민의 *지금 시각 스테이션*이 카페 실내인가. 런타임 tile이 아니라 스케줄에서 파생하는 건
 # 프레임 갱신 순서에 안 기대기 위해서다(_update_resident_stations보다 먼저 불려도 같은 답).
