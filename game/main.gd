@@ -10239,7 +10239,7 @@ func _on_day_advanced(day: int) -> void:
 		#   곱셈기 CafeMargin과 같은 돈 축이되 소스가 다르다: 마진=서빙 매출·팁=출하 정산).
 		#   최소 1골드 보장(2% 절사로 0이 되면 "팁"이 장부에 안 보인다). 마일스톤 누적
 		#   (_cafe_revenue_total)엔 여전히 안 넣는다(raw 판매 — ADR-0009 그대로).
-		if _spouse_id == "mel":
+		if _spouse_of_morning(day) == "mel":
 			var tip := maxi(1, ship_gold * SPOUSE_MEL_TIP_PCT / 100)
 			ship_gold += tip
 			_notice("멜이 장부를 손질했다 — 출하 팁 +%d골드" % tip)
@@ -10428,7 +10428,7 @@ func _on_day_advanced(day: int) -> void:
 	#   혼우(비) 급수도 안 닿으므로, 재배를 온실로 옮긴 엔드게임 플레이어에게 결혼 잡일 ①이 통째로
 	#   무효였다(칸 0개 → 알림도 안 뜬다). 예산은 **한 몫을 나눠 쓴다**(노지 먼저, 남는 만큼 온실) —
 	#   미호의 하루 손 노동이 밭이 늘었다고 곱절이 되지는 않는다(수치는 SPOUSE_MIHO_WATER_TILES 그대로).
-	if _spouse_id == "miho":
+	if _spouse_of_morning(day) == "miho":
 		var watered_by_spouse := farm.water_dry(SPOUSE_MIHO_WATER_TILES)
 		if greenhouse_farm != null and watered_by_spouse < SPOUSE_MIHO_WATER_TILES:
 			watered_by_spouse += greenhouse_farm.water_dry(SPOUSE_MIHO_WATER_TILES - watered_by_spouse)
@@ -19240,7 +19240,10 @@ func _setup_residents() -> void:
 			return false                # 이미 열었으면 F를 흘려보낸다(원문 가드 그대로)
 		_open_night_bar()
 		return true
-	r_bana.effect_fn = func() -> String: return BanaGuard.summary(bana_affinity.hearts())
+	# ★[폴리시 R11] 배우자 잡일 ③(자동 차단 +1)까지 함께 말한다 — 주입부(_process)와 같은 조건을
+	#   같은 상수로 묻는다(수치 복제 0). 관계 탭이 그 밤의 실효 보호와 어긋나지 않게 하는 유일한 자리.
+	r_bana.effect_fn = func() -> String: return BanaGuard.summary(bana_affinity.hearts(),
+		SPOUSE_BANA_EXTRA_BLOCK if _spouse_id == "bana" else 0)
 	_register_resident(r_bana)
 
 	# ── 네오(M2.3) — 만물상 점주. ★[ADR-0060 결정 8] **이중 신분**: 점주 레이어(shop_key = 매대·
@@ -21501,6 +21504,20 @@ func _try_propose(r: Resident) -> void:
 	_notice("%s 혼례 부적을 받아들였다 — %s 아침, 혼례를 올린다" % [HanjiUi.with_i(r.display_name), GameClock.date_label(_wedding_day)],
 		NOTICE_SECS * 2.0)
 
+# ★[폴리시 R11] 그 아침의 배우자 — **오늘 식을 올릴 연인까지 포함**한다. 아침 잡일 둘(멜 출하
+# 팁 · 미호 물주기)은 `_on_day_advanced`에서 `_advance_wedding`보다 **앞줄**에 있어, 혼례 아침엔
+# `_spouse_id`가 아직 ""이었다 — 두 잡일이 하루 늦게 시작했다. 반면 바나 잡일은 `_process` 매
+# 프레임 파생이라 혼례 당일 밤부터 실효라(주석: "결혼 아침부터 즉시 실효") 세 잡일의 개시가
+# 하루 어긋났다. 순서를 뒤집는 대신(혼례 배너가 아침 알림 맨 앞으로 올라가 뒤따르는 열 줄에
+# 밀린다) 두 잡일만 이 술어로 묻는다 — 조건은 `_advance_wedding`의 첫 두 줄과 글자 그대로 같고,
+# 그 함수가 예정을 접기 *전에* 불리므로 답이 갈리지 않는다.
+func _spouse_of_morning(day: int) -> String:
+	if _spouse_id != "":
+		return _spouse_id
+	if _wedding_day > 0 and day >= _wedding_day:
+		return _romance_partner
+	return ""
+
 # 혼례 아침 — 예정일에 닿으면 식을 올린다(아침 정산 훅). 간이 연출 = 배너 한 줄(등급은 S9).
 # 대기 중 연애가 깨졌으면(이혼 스텁 등 — 방어) 예정을 조용히 접는다.
 func _advance_wedding(day: int) -> void:
@@ -21616,6 +21633,13 @@ func _do_divorce() -> void:
 	_jealousy.erase(rid)
 	if r != null and r.affinity != null:
 		r.affinity.reset_hearts()
+	# ★[폴리시 R11] **앵커 트랙을 그 자리에서 다시 잰다** — 혼인 성립(`_advance_wedding` 끝)이 이미
+	#   갖고 있던 그 한 줄의 역방향 짝이다. `_okja_track_open()`은 `_spouse_id`를 보므로 이혼 순간
+	#   곧바로 참이 되는데, 하트 실값은 이 갱신이 원장에서 다시 찍어야만 따라온다. 없으면 트랙은
+	#   열렸는데 ♡는 0에 멎어(잠금 판정으로 0이 찍힌 상태 그대로) 다음 취침·기증·옥자 대화 중
+	#   하나가 올 때까지 명부 부적 창구가 이유 없이 잠겨 보였다 — R8이 기증 경로에 정확히 같은
+	#   이유로 한 줄을 더한 그 선례(`_donate_*`)의 셋째 자리다. 트랙 미개통이면 무동작.
+	_refresh_okja_track()
 	audio.sfx("ui")
 	_notice("부적의 혼이 풀렸다 — %s의 혼인이 끝났다" % HanjiUi.with_gwa(r.display_name if r != null else rid),
 		NOTICE_SECS * 2.0)
