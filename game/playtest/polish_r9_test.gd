@@ -713,8 +713,15 @@ func _initialize() -> void:
 	_check("⑰e 확산·재점령이 **한 표**로 함께 미뤄진다(둘 중 하나만 살아남지 않는다)",
 		_in_func("func _process", "_run_weed_spread(pending_weed_day)")
 		and _in_func("func _process", "_run_weed_encroach(pending_weed_day)"))
-	_check("⑰f 로드는 그 표를 버린다(되감긴 날의 밤이 로드 직후 터지지 않는다)",
-		_in_func("func _load_game", "_weed_day_pending_day = 0"))
+	# ★[폴리시 R10 #1 개정] 이 단언은 **뒤집혔다.** R9는 표를 형제 둘(절기 재스폰·방목 방출)과 같은
+	#   계약으로 봐 로드에서 버렸는데, 잡초만 계약이 다르다: 취침 자동 세이브가 `_on_day_advanced`
+	#   **뒤**에 뜨므로 파일의 `reclaim`은 *확산 전*이고, 표까지 버리면 되감기가 아니라 그 밤의
+	#   영구 스킵이 된다(마을 강제 취침 + F9 한 번 = 매일 밤 면제 — 이 발견이 막으려던 그 악용의
+	#   재개통). 표를 원장과 같은 파일에 실어 둘이 늘 같은 시점을 가리키게 한다 — polish_r10 ①.
+	_check("⑰f 로드는 그 표를 **버리지 않고 파일에서 되살린다**(R10 #1 개정 — F9 우회 봉합)",
+		not _in_func("func _load_game", "_weed_day_pending_day = 0")
+		and _in_func("func _load_game", "data.get(\"weed_pending_day\", 0)")
+		and _in_func("func _save_game", "\"weed_pending_day\": _weed_day_pending_day"))
 
 	# ── ⑱ #18 기절 알림이 시계 클램프를 말한다 ────────────────────────────────
 	print("── ⑱ #18 기절 알림 진실성 ──")

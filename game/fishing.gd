@@ -340,10 +340,15 @@ func is_perfect_window() -> bool:
 func perfect_flash() -> bool:
 	return _perfect_flash > 0.0
 
-# 이 세션의 후킹 혼력 비용(체급 기준값 × 스킬 절감 계수, 하한 1). main이 사전 판정·소모에 쓴다.
+# ★[폴리시 R10] 후킹 비용의 **구조적 하한**. 스킬 절감이 아무리 세도 이 아래로는 안 내려가므로,
+#   혼력이 이 값에 못 미치면 *어떤 어종이 걸리든* 후킹 게이트가 반드시 실패한다 — main이 캐스팅
+#   사전 판정에 그대로 쓰는 단일 출처다(수치 복제 0).
+const MIN_HOOK_ENERGY := 1
+
+# 이 세션의 후킹 혼력 비용(체급 기준값 × 스킬 절감 계수, 하한 MIN_HOOK_ENERGY). main이 사전 판정·소모에 쓴다.
 func energy_cost() -> int:
 	var base := int(fish.get("energy", base_energy_for_class(int(fish.get("weight_class", WeightClass.SMALL)))))
-	return maxi(int(round(float(base) * float(mods.get("energy_factor", 1.0)))), 1)
+	return maxi(int(round(float(base) * float(mods.get("energy_factor", 1.0)))), MIN_HOOK_ENERGY)
 
 # 물고기 체급(0~3).
 func weight_class() -> int:

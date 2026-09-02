@@ -2367,6 +2367,13 @@ const KITCHEN_TILE := Vector2i(11, 88)
 #   플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 나눠 그린다(매 프레임 아님 — 값싸게).
 var _front_props: Node2D = null
 var _last_player_tile_y: int = -9999
+# ★[폴리시 R10] main 캔버스가 **타일 눈금으로만** 갱신되는 구조(위 행 넘김 + `_update_target`의 발
+#   타일 변화)의 예외 창구. 이 캔버스 위에 그려지는 것 중 둘은 소스가 타일보다 잘게 움직인다 —
+#   ㉠ 승마 스프라이트(`_draw_mount` = 플레이어 **픽셀** 좌표) ㉡ 혼 감지 가장자리 마커·추적자 ▼
+#   (`_draw_forage_detect` = **카메라** rect). 타일 눈금만 있으면 최대 한 칸(32px) 묵은 그림이
+#   남아, 말이 32px씩 순간이동해 사람과 분리되고 여백 14px짜리 마커는 화면 밖으로 밀려났다.
+#   여기 담는 값 = 마지막으로 재드로우를 건 그 소스 좌표(Vector2.INF = 그릴 것이 꺼져 있음).
+var _live_canvas_src: Vector2 = Vector2.INF
 # ★[roster] 나무 occlusion fade — key=나무 앵커 타일(Vector2i), value=현재 알파(1.0=불투명). 매 프레임
 #   플레이어 겹침을 판정해 target(TREE_FADE_MIN/1.0)으로 lerp, 변화가 있으면 _front_props를 다시 그린다.
 var _tree_fade: Dictionary = {}
@@ -2884,6 +2891,12 @@ var _mugol_sword_given := false
 #   있는데, 60층 상자는 1회성이라 버리면 재입수 경로가 없다 — 그러면 나락이 영구 봉인된다.
 #   그래서 **점등 게이트는 이 플래그가 본다**(S5-T7이 배선할 자리 — 지금은 기록·알림까지만).
 var _narak_key_found := false
+# ★[폴리시 R10] 잠긴 나락 문 안내를 이미 낸 칸(= 그 칸에 서 있는 동안 재알림 억제 래치).
+#   `_maybe_warp_edge`는 매 프레임 도는데 판정이 "들어선 순간"이 아니라 "지금 밟고 있는 칸"이고,
+#   그 문 칸은 `_carve_v`로 뚫려 있어 **거기 서 있을 수 있다**. 래치가 없으면 60회/초로 같은
+#   줄이 밀려 들어가 알림 피드(MAX_ITEMS 4·중복 제거 없음)가 포화되고, 직전 수확 토스트·XP·정산
+#   알림이 네 프레임 만에 전부 밀려났다. 칸을 벗어나면 아래에서 다시 무장한다(sentinel).
+var _gate_notice_tile := Vector2i(-9999, -9999)
 
 # T2.3 현재 심을 작물. Q로 카탈로그(빠른 성장 순)를 순환 선택한다.
 # 그레이박스에선 도구·씨앗 인벤토리 UI 없이 이 한 변수로 작물 종류를 고른다.
@@ -3244,7 +3257,11 @@ func _ready() -> void:
 	tree_ledger = TreeLedger.new()       # ★[S4-T3] 나무 원장(RefCounted — 채집물 스폰 원장과 같은 결)
 	tree_ledger.changed.connect(_on_tree_ledger_changed)   # 벌목·성장·재성장·복원 시 충돌·드로우 갱신
 	tapper = TapperLedger.new()          # ★[S4-T6] 수액 채취기 원장(RefCounted — 나무 원장과 같은 결)
-	tapper.changed.connect(queue_redraw) # 설치·수거·회수·일일 진행·복원 시 그레이박스 갱신(게잡이통 결)
+	# ★[폴리시 R10] 설치·수거·회수·일일 진행·복원 시 갱신 — 단 **두 캔버스 모두**(_redraw_world).
+	#   채취기는 형제 원장들과 달리 Y-split을 타서 플레이어보다 앞이면 `_front_props`가 그린다
+	#   (`_draw_tappers_front`). main만 갱신하면 앞 패스에 옛 그림이 남아, 이미 거둔 채취기에
+	#   "수거 대기" 방울이 계속 떠 있고 회수한 채취기가 플레이어 위 레이어에 유령으로 남았다.
+	tapper.changed.connect(_redraw_world)
 	furnace = FurnaceLedger.new()        # ★[S5-T3] 업화로 원장(RefCounted — 채취기와 같은 결·축만 분)
 	furnace.changed.connect(queue_redraw)     # 설치·투입·완성·수거·회수·복원 시 그레이박스 갱신
 	panning = PanningSpots.new()         # ★[S10-T1] 사금 스폿 원장(RefCounted — 채집물 스폰 원장과 같은 결)
@@ -4390,6 +4407,39 @@ func _seed_home_trees() -> void:
 # 원장이 바뀐 프레임(벌목·성장·재성장·파종·세이브 복원). 안식 프롭 나무의 충돌(벤 나무는 통과 O)과
 # 화면을 다시 세운다. 숲 그리드 동기화는 호출부(_chop_tree·_on_day_advanced)가 칸 단위로 처리한다
 # (원장 신호는 "어느 칸"을 안 실어 나르므로 — FarmField.tile_changed와 갈리는 지점).
+# ★[폴리시 R10] 월드 두 캔버스를 함께 다시 그린다 — main(플레이어 아래)과 `_front_props`(위).
+#   Y-split을 타는 그림(프롭·채취기)은 플레이어 위치에 따라 **어느 캔버스가 그리는지가 갈리므로**,
+#   그 원장이 바뀌면 두 쪽 다 무효화해야 한다. main만 갱신하는 `queue_redraw` 직결은 앞 패스에
+#   옛 그림을 남긴다(유령 스프라이트·사라진 상태 표식).
+func _redraw_world() -> void:
+	queue_redraw()
+	if _front_props != null:
+		_front_props.queue_redraw()
+
+# ★[폴리시 R10] "매 프레임 파생" 그림의 소스 좌표(Vector2.INF = 지금 그런 그림이 없다).
+#   ㉠ 승마 = 플레이어 픽셀 좌표(`_draw_mount`가 그 자리에 48px 시트를 얹는다)
+#   ㉡ 혼 감지·추적자 = 카메라 중심(`_forage_view_rect`가 그 값으로 화면 rect를 만든다)
+#   승마 중이면 카메라도 플레이어를 따르므로 앞의 하나면 두 그림이 함께 신선해진다.
+#   ★ 게이트는 전부 **퍼크·상태 파생**이다(반경 0·추적 없음 = 그릴 것이 없다 → 요청 0).
+func _live_canvas_source() -> Vector2:
+	if player == null:
+		return Vector2.INF
+	if mount != null and mount.is_mounted():
+		return player.global_position
+	if _indoor == "" and _cam != null and forage_spawns != null \
+			and (forage_track_enabled() or forage_detect_radius() != 0):
+		return _cam.get_screen_center_position()
+	return Vector2.INF
+
+# 소스가 **실제로 바뀐 프레임에만** 재드로우를 건다 — 제자리에 서 있으면 요청이 0이라 종전
+# 타일 눈금 비용을 그대로 유지하고, 켜고 끈 프레임(승·하차, 무대 이탈)도 한 번은 반드시 지난다.
+func _tick_live_canvas() -> void:
+	var src := _live_canvas_source()
+	if src == _live_canvas_src:
+		return
+	_live_canvas_src = src
+	queue_redraw()
+
 func _on_tree_ledger_changed() -> void:
 	_rebuild_prop_collision()
 	_mark_forest_art_dirty()   # ★[S4-T9] 단계·그루터기·이끼가 바뀌면 폼이 바뀐다(순수 시각·지연 재빌드)
@@ -6560,19 +6610,52 @@ func _side_dish_choices() -> int:
 	return n
 
 # 지금 플레이어가 겨누는 스윙 부채꼴(벽 뒤 칸 제외). CombatSkill이 순수 기하를 주고, "그 칸이
-# 실제로 닿는가"(맵 밖·SOLID)를 여기서 자른다 — 벽 하나 사이로 몹을 베는 일이 없게.
+# 실제로 닿는가"(맵 밖·SOLID·가림)를 여기서 자른다 — 벽 하나 사이로 몹을 베는 일이 없게.
+# ★[폴리시 R10 #3] **선 자리(origin)가 맨 앞에 든다.** 순수 기하는 origin을 절대 안 담는데
+#   (`swing_arc`는 f*1부터 시작한다) 추적 아키타입에는 접촉 시 정지가 없어 몹이 플레이어 픽셀
+#   좌표로 계속 수렴한다 — 붙잡히면 `m.tile()`이 곧 `_player_tile()`이라, 몸을 겹친 채 접촉
+#   피해를 받으면서 검은 한 대도 안 들어갔다(한 칸 물러서야만 판정이 살았다). 겹친 적을 베는
+#   것은 부채꼴 *모양*의 문제가 아니라 "그 칸이 닿는가"의 문제라 여기가 그 자리다.
+# ★[폴리시 R10 #4] **가림(shadowing)도 여기서 자른다.** 종전엔 SOLID 칸을 *빼기만* 해서 정면
+#   1칸이 막혀도 정면 2칸이 arc에 남았다 — 머리말이 선언한 "벽 하나 사이로 못 벤다"와 정반대로,
+#   안 깬 돌 뒤의 제자리형(화귀·나찰·위장 잡귀)을 일방적으로 처리할 수 있었다(화염구는 돌에
+#   막히는데 검만 통과). 날개(대각)는 사이에 낀 칸이 없어 가림 대상이 아니다.
 func _weapon_arc() -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	if player == null:
 		return out
 	var origin := _player_tile()
-	for t: Vector2i in CombatSkill.swing_arc(origin, Vector2i(player.get_facing().round())):
-		if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid.size():
+	var cells: Array[Vector2i] = [origin]
+	cells.append_array(CombatSkill.swing_arc(origin, Vector2i(player.get_facing().round())))
+	for t: Vector2i in cells:
+		if _blocks_swing(t):
 			continue
-		if t.y < _grid.size() and t.x < _grid[t.y].size() and is_solid(_grid[t.y][t.x]):
+		if _swing_shadowed(origin, t):
 			continue
 		out.append(t)
 	return out
+
+# 그 칸이 스윙을 막나 — 맵 밖이거나 SOLID(벽·바위·절벽·프롭). 두 술어가 한 곳에 있어야
+# arc 산출과 가림 판정이 같은 기준을 본다.
+func _blocks_swing(t: Vector2i) -> bool:
+	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid.size():
+		return true
+	if t.x >= _grid[t.y].size():
+		return true
+	return is_solid(_grid[t.y][t.x])
+
+# origin에서 t까지 **사이에 낀 칸**이 하나라도 막혔나(끝점 둘은 제외 — 자기 칸은 위에서 이미 봤다).
+# 축 정렬이 아닌 칸(날개 대각)은 사이 칸이 정의되지 않으므로 늘 false다 — 정면 직선만 가려진다.
+func _swing_shadowed(origin: Vector2i, t: Vector2i) -> bool:
+	var d := t - origin
+	if d.x != 0 and d.y != 0:
+		return false
+	var step := Vector2i(signi(d.x), signi(d.y))
+	var n := maxi(absi(d.x), absi(d.y))
+	for k in range(1, n):
+		if _blocks_swing(origin + step * k):
+			return true
+	return false
 
 # ★[S5-T5] 지금 무대의 몹 레코드 목록([{tile, ...}]) — 층 안에서만 채워진다(지상·다른 구역은 빈 배열).
 #   레코드는 `CombatSkill.hits_in_arc`가 arc 겹침만 보는 **불투명 dict**이고, 개체 본체는 `ref`로
@@ -11396,6 +11479,10 @@ func _maybe_warp_edge() -> void:
 	if _in_dungeon_floor():
 		return
 	var t := _player_tile()
+	# ★[폴리시 R10] 잠금 안내 래치 재무장 — 다른 칸으로 한 칸이라도 나가면 다음 진입에 다시 알린다
+	#   (래치를 안 풀면 한 번 본 문은 영영 침묵한다 — 억제가 소실로 넘어가는 자리).
+	if t != _gate_notice_tile:
+		_gate_notice_tile = Vector2i(-9999, -9999)
 	for w in RegionCatalog.warps_of(_region):
 		if w["at"] == RegionCatalog.TILE_TBD or t != w["at"]:
 			continue
@@ -11406,7 +11493,12 @@ func _maybe_warp_edge() -> void:
 		#   한 번 열린 문이 도로 잠겨 진행이 영구 봉인된다(60층 상자는 1회성이라 되찾을 길도 없다).
 		#   그래서 T6이 개봉 시점에 `_narak_key_found`를 세워 뒀고, 여기가 그 계약의 소비처다.
 		if w["to"] == RegionCatalog.NARAK and not _narak_key_found:
-			_notice("굳게 봉인돼 있다 — 나락 열쇠가 있어야 열린다")
+			# ★[폴리시 R10] 그 칸에 **들어선 프레임에만** 한 번 알린다(매 프레임 push = 피드 포화).
+			#   이 문엔 `interact_prompt` 분기가 없어 이 알림이 유일한 피드백이라, 억제가 아니라
+			#   1회화가 정답이다 — 안내는 그대로 남고 다른 알림을 밀어내지만 않는다.
+			if _gate_notice_tile != t:
+				_gate_notice_tile = t
+				_notice("굳게 봉인돼 있다 — 나락 열쇠가 있어야 열린다")
 			return
 		_warp(w["to"], "", _warp_dest(w))
 		return
@@ -11609,6 +11701,14 @@ func _save_game() -> void:
 		"tapper": tapper.to_save(),         # ★[S4-T6] 수액 채취기(구역별 좌표·종·남은 날·고인 수액·등급)
 		"furnace": furnace.to_save(),       # ★[S5-T3] 업화로(구역별 좌표·넣은 광석·남은 제련 분·주괴·등급)
 		"geode_opened": _geode_opened,       # ★[S5-T3] 누적 지오드 개봉 수(개봉 롤 시드 — 재롤 차단)
+		# ★[폴리시 R10] 밀린 **그 밤의 잡초 표**. 형제 표 둘(절기 재스폰·방목 방출)과 계약이 갈리는
+		#   유일한 자리라 실어 보낸다. 저 둘은 "표를 버려도 잃는 것이 없다"가 근거였는데(로드가
+		#   되감는 원장이 *이미 집행된* 상태라 표만 버리면 그만), 잡초는 정반대다: 취침 자동 세이브가
+		#   `_on_day_advanced` **뒤**에 뜨므로 파일에 실리는 `reclaim`은 *확산 전*이고, 표까지 버리면
+		#   되감기가 아니라 그 밤의 영구 스킵이 된다. 마을에 서서 강제 취침 → F9 한 번이면 ADR-0055
+		#   차등 재점령과 잡초 손실이 매일 밤 면제되는, R9가 막았던 그 무비용 악용이 그대로 열렸다.
+		#   표를 원장과 같은 파일에 담으면 둘이 늘 같은 시점을 가리켜 그 갈림이 사라진다.
+		"weed_pending_day": _weed_day_pending_day,
 		# ★[폴리시 R5] 나머지 **일련번호 시드 4종**도 같은 이유로 실린다. 이들은 세이브에도 없고
 		#   `_load_game`이 리셋하지도 않아 F9 인플레이스 로드에서 홀로 살아남았다 — 시계·혼력·
 		#   인벤이 전부 되감기는데 시드만 +1로 남으니, 같은 칸·같은 분의 캐스팅이 매번 다른 어종·
@@ -11762,7 +11862,9 @@ func _load_game() -> bool:
 	# ★[폴리시 R6] 밀린 방목 방출 표도 같은 이유로 버린다 — 세션 로컬이고, 로드는 `ranch`를 세이브
 	#   시점으로 되감으므로 표만 살아남으면 되감긴 날의 짐승이 로드 직후 방목지로 나간다.
 	_pasture_release_pending = false
-	_weed_day_pending_day = 0   # ★[폴리시 R9] 밀린 잡초 밤도 같은 이유로 버린다(위 두 표와 같은 계약)
+	# ★[폴리시 R10] 밀린 잡초 밤만 **버리지 않고 파일에서 되살린다** — 위 두 표와 갈리는 자리다
+	#   (근거는 `_save_game`의 그 키 머리말). 키 없는 구세이브 = 0이라 하위호환은 종전과 같다.
+	_weed_day_pending_day = maxi(int(data.get("weed_pending_day", 0)), 0)
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
 	#   값을 붓기 때문이다(없으면 저장돼 있던 칸이 조용히 사라진다). `_spine_bits` 복원은 아래
@@ -12669,6 +12771,7 @@ func _process(delta: float) -> void:
 			if _front_props != null:
 				_front_props.queue_redraw()
 		_update_tree_fade(delta)   # ★[roster] 수관 뒤 캐릭터 occlusion fade(행 넘김과 별개 — 매 프레임 부드럽게)
+	_tick_live_canvas()   # ★[폴리시 R10] 타일보다 잘게 움직이는 그림(승마·혼 감지 마커)의 재드로우
 	# 음소거 토글(M) — 연출·대화·마무리 화면 어디서든 받는다(입력 가드보다 위, UX 토글이라
 	# 게임 상태와 무관). audio가 Music·SFX 버스를 함께 음소거한다.
 	if Input.is_action_just_pressed("mute_audio"):
@@ -12794,7 +12897,14 @@ func _process(delta: float) -> void:
 			if Input.is_action_just_pressed("shop_toggle"):
 				_resolve_confession(_confess_rid)
 				return
-			if Input.is_action_just_pressed("gift_item"):
+			# ★[폴리시 R10 #7] 선택지가 떠 있으면 [G]는 **삼키지 않는다**. `dialogue.advance()`는
+			#   `has_choice()`면 확정 no-op이라, 종전엔 화면이 한 글자도 안 바뀌는데 제안만 사라져
+			#   [F]가 죽었다(입력이 아무 일도 안 한 것처럼 보이면서 상태만 파괴). 아래 선택지
+			#   분기로 흘려보내면 제안은 그대로 서 있고, 고르는 순간 대화가 닫히며
+			#   `_on_dialogue_finished`가 어차피 접는다 — [G]가 하려던 것과 결과가 같다.
+			#   [F]는 여기 그대로 둔다: `_resolve_confession`이 `replace_lines`로 화면을 갈아
+			#   피드백을 남기고 물음 원장까지 되감는다(R8이 세운 그 경로).
+			if Input.is_action_just_pressed("gift_item") and not dialogue.has_choice():
 				_confess_rid = ""       # 이 대화에선 접어 둔다(무벌칙 — 다음 대화에 다시 선다)
 				dialogue.advance()
 				return
@@ -13560,10 +13670,16 @@ func _process(delta: float) -> void:
 	#   맨 앞의 한 갈래이고, 여러 LMB 디스패치가 같은 프레임에 겹쳐도 스윙은 하나다(_swing_weapon).
 	# ★[S6-T5] 체키 촬영 중엔 LMB가 **셔터**다 — 무기를 든 채 찍으면 스윙이 같이 나가므로 막는다.
 	# ★[S6-T6] 칵테일 제조 중의 LMB(붓기·셰이킹)도 같은 이유로 도구질로 흘리지 않는다.
+	# ★[폴리시 R10 #5] **릴 격투도 같은 줄에 세운다.** LMB를 세션 입력으로 쓰는 셋째 세션인데
+	#   이 가드만 빠져 있었다 — `_tick_fishing` 분기는 return을 안 하므로 그대로 여기까지 흘러,
+	#   격투 중 핫바로 곁들이·명부환을 들면 릴을 당길 때마다 `_use_tool`이 함께 돌아 접시·환약을
+	#   누른 횟수만큼 태웠고(퍼펙트 릴은 한 격투에서 LMB를 여러 번 다시 누른다), 무기를 들었으면
+	#   `_combat_swings`(세이브에 실리는 타격 롤 시드 축)가 릴 입력마다 밀렸다. 역방향도 같다:
+	#   입질 대기 중 곁들이를 먹으면 그 누름이 후킹으로도 들어갔다.
 	var holding_weapon := ItemCatalog._is_weapon(inventory.selected_id())
 	var holding_free_use := _is_free_use_item(inventory.selected_id())
 	# ★[S10-T2] 레어크로우도 스프링클러와 같은 이유로 도구질로 흘리지 않는다(설치 LMB와 중복 방지).
-	if not _sleeping and cheki == null and cocktail == null \
+	if not _sleeping and cheki == null and cocktail == null and fishing == null \
 			and (_target_valid or holding_weapon or pot_at_target or holding_free_use) \
 			and not holding_sprinkler and not holding_garden_pot and held_rarecrow == "" \
 			and Input.is_action_just_pressed("use_tool"):
@@ -13763,7 +13879,13 @@ func _process(delta: float) -> void:
 		#   여기서만 읽을 수 있다(★[owner 큐: 슬롯 장전 UI는 아트/UX 패스에서 재검토]).
 		interact_prompt.visible = not _sleeping
 		var gear_line := _fishing_gear_line(inventory.selected_id())
-		interact_prompt.text = "[좌클릭] 낚싯줄 던지기" + ("" if gear_line == "" else "   " + gear_line)
+		# ★[폴리시 R10] 혼력이 후킹 하한에도 못 미치면 **던지기 안내 자체를 걷는다** — 형제 창구
+		#   (나무·밭·화분·개간)의 "혼력 부족 — 집에서 취침"과 같은 문법. 집행부(`_start_fishing`)의
+		#   사전 판정과 같은 술어를 읽으므로 화면과 동작이 갈리지 않는다.
+		if energy != null and not energy.can_act(FishingSession.MIN_HOOK_ENERGY):
+			interact_prompt.text = "혼력 부족 — 챌 힘이 없다 (집에서 취침)"
+		else:
+			interact_prompt.text = "[좌클릭] 낚싯줄 던지기" + ("" if gear_line == "" else "   " + gear_line)
 	elif _needs_rod_hint():
 		# ★ [S3-T5] 낚싯대 없이 낚시터에 먼저 닿은 동선의 안내(옛 자동 지급 폐기의 짝). 삼도천 강
 		#   낚시터는 뱃사공(황천해)보다 먼저 만나는 자리라, 여기서 막히면 어디로 가야 하는지 알려 준다.
@@ -14629,6 +14751,16 @@ func _start_fishing(water: Vector2i) -> void:
 	#   하나 있으면 어느 등급이 나와도 반드시 들어간다(틀리면 늘 안전한 쪽).
 	if inventory != null and not inventory.has_free_slot():
 		_notice("백팩이 가득 차 낚싯대를 던질 수 없다 — 자리를 비우고 다시")
+		return
+	# ★[폴리시 R10] **혼력 사전 판정** — 바로 위 R2 선검사와 같은 자리·같은 이유다(되돌릴 수 없는
+	#   소모가 곧 다음 줄에 있다: 미끼는 캐스팅 순간 확정 소모되고 입질 결과와 무관하게 안 돌아온다).
+	#   후킹 비용의 하한이 `MIN_HOOK_ENERGY`라, 그마저 못 내면 어떤 어종이 걸리든 후킹 게이트가
+	#   **반드시** 실패한다 — 보장 미끼(150냥)를 바닥날 때까지 태우며 100% "입질을 놓쳤다"를 반복할
+	#   수 있었다. 형제 동사(곡괭이 `_mine_rock`·팬닝 `_pan_spot`)는 소모 **전에** 막고 알린다.
+	#   ★ ADR-0008과 충돌하지 않는다: 이건 저혼력을 막는 게이트가 아니라(캐스팅·대기는 여전히 무과금)
+	#     "확정 실패 + 자원 소각"만 걷어내는 판정이다. 혼력 1이면 그대로 던진다.
+	if energy != null and not energy.can_act(FishingSession.MIN_HOOK_ENERGY):
+		_notice("혼력이 바닥나 챌 힘이 없다 — 미끼만 버린다. 집에서 취침")
 		return
 	if _cast_bait != "":
 		inventory.remove_item(_cast_bait, 1)   # 캐스팅 시 1개 소모(입질 결과와 무관 — 던진 값이다)
@@ -16619,6 +16751,13 @@ func _animal_prompt(t: Vector2i) -> String:
 	#   하트 막대를 스프라이트로 만든 그 리스크와 같다). 프롬프트는 글리프 무의존 텍스트로 간다.
 	if parts.is_empty():
 		return "%s 호감 %d — 오늘 돌봄 완료" % [label, hearts]
+	# ★[폴리시 R10] 혼력 게이트 안내 — 위 두 동사는 **둘 다 과금**이고(산물 수집·쓰다듬 = `_try_harvest`
+	#   목축 갈래의 `can_act` · 건초 급여 = `_use_tool`의 과금 갈래. 건초는 씨앗·비료 어느 무과금
+	#   카테고리도 아니다), 두 집행부 모두 **알림 없이 조용히 돌아간다**. 형제 창구(나무·밭·화분·
+	#   개간·이끼)가 전부 세워 둔 이 안내가 목축에만 없어, 하루 마지막 혼력 구간에서 화면이 가능하다고
+	#   말한 동사가 침묵으로 실패했다. 비용 출처도 집행부와 같은 하나다(`_farming_energy_cost`).
+	if not energy.can_act(_farming_energy_cost()):
+		return "%s 호감 %d — 혼력 부족 (집에서 취침)" % [label, hearts]
 	return "%s   (호감 %d)" % ["  ".join(parts), hearts]
 
 # ★ [S1-8] 개간 프롬프트: 조준한 debris에 대해 맞는 도구면 [좌클릭] 개간, 아니면 필요한 도구를 안내한다.
@@ -18214,6 +18353,14 @@ func _on_frame_discard(slot_index: int) -> void:
 	#   이 금지가 곧 수집 판정을 원장 없이 파생으로 둘 수 있는 근거이기도 하다(`_rarecrow_owned`).
 	if ItemCatalog.is_rarecrow(id):
 		_notice("레어크로우는 버릴 수 없다 — 밭에 세워 두거나 백팩에 간직하자")
+		return
+	# ★[폴리시 R10] 기본 도구 5종(괭이·물뿌리개·낫·곡괭이·도끼)도 같은 이유로 못 버린다 —
+	#   **지급처가 새 게임 1회의 `START_TOOLS`뿐이고**(CAT_TOOL = 유니크·비매라 어느 매대에도 없다)
+	#   버리면 그 동사가 세이브에서 영구 차단된다(괭이 = 밭갈이·파종·물주기·수확 사슬 전체).
+	#   판정은 그 유일한 지급 목록에서 파생한다(수치·id 복제 0). 낚싯대·태클·무기는 같은 CAT_TOOL
+	#   이지만 상점 재구매가 있어 여기서 안 막는다 — 16칸 백팩에서 여분을 못 버리면 그게 새 압박이다.
+	if Inventory.START_TOOLS.has(id):
+		_notice("%s는 버릴 수 없다 — 다시 구할 곳이 없다" % ItemCatalog.name_of(id))
 		return
 	var n := inventory.count_at(slot_index)
 	inventory.remove_at(slot_index, n)
@@ -22579,6 +22726,7 @@ func _toggle_mount() -> void:
 		mount.dismount()
 		audio.sfx("ui")
 		_notice("먹갈기에서 내렸다")
+		queue_redraw()   # ★[폴리시 R10] Mount는 시그널이 없다 — 상태를 바꾼 이 자리가 갱신 책임자다
 		return
 	if not Mount.ride_allowed(_indoor, _region, cutscene != null, _narak_depth):
 		_notice("여기서는 탈 수 없다 — 먹갈기는 바깥에서 기다린다")
@@ -22586,6 +22734,10 @@ func _toggle_mount() -> void:
 	mount.mount_up(_indoor, _region, cutscene != null, _narak_depth)
 	audio.sfx("ui")
 	_notice("먹갈기가 왔다 — 올라탔다")
+	# ★[폴리시 R10] 시그널 없는 원장(bool 하나)이라 화면 반영이 호출부 몫이다. 이게 없으면 제자리
+	#   휘파람에서 속도만 ×1.5가 되고 말은 **첫 타일을 건널 때까지** 안 나타났다(하차도 대칭으로
+	#   말 그림이 남았다). `_notice`는 알림 Label만 건드려 월드 캔버스와 무관하다.
+	queue_redraw()
 
 # 매 프레임 — 승마 계수를 플레이어에 흘려넣고, 탈 수 없는 자리로 들어갔으면 말없이 내린다.
 # ★ 계수 대입을 **강제 하차 뒤**에 두는 것이 중요하다: 순서가 반대면 실내로 들어간 첫 프레임에
@@ -22595,6 +22747,7 @@ func _sync_mount() -> void:
 		return
 	if mount.enforce(_indoor, _region, cutscene != null, _narak_depth):
 		_notice("먹갈기에서 내렸다 — 여기까지는 따라오지 못한다")
+		queue_redraw()   # ★[폴리시 R10] 강제 하차도 상태 변이다(_toggle_mount 두 갈래와 같은 책임)
 	player.speed_scale = mount.speed_scale()
 
 # ── ★[S10-T4 / ADR-0069 결정 7] 삽사리 — 획득·쓰다듬·물그릇 ────────────────────
@@ -22669,6 +22822,11 @@ func _fill_pet_bowl() -> void:
 	pet.fill_bowl(clock.day)
 	audio.sfx("ui")
 	_notice("물그릇을 채웠다 — %s" % pet.summary())
+	# ★[폴리시 R10] Pet도 시그널이 없는 원장이라 갱신이 이 자리 몫이다. 물 띠(`_draw_sapsari` 끝줄)는
+	#   "오늘 몫을 눈으로 확인하는 유일한 표면"인데, 이게 없으면 그 칸에 선 채로는 재드로우 트리거가
+	#   0이라 "채웠다"는 알림과 "빈 그릇" 그림이 화면에 동시에 남았다(아트 훅 주석이 막으려던 그 회귀가
+	#   시그널 쪽 구멍으로 재발). 쓰다듬은 그리는 상태가 없어 여기만 필요하다.
+	queue_redraw()
 
 # ── ★[S10-T4 / ADR-0069 결정 12] 동행 혼 — 예정·탄생 ──────────────────────────
 # 아침 훅의 판정(예약만). B4와 완전히 같은 두 단계이고, 이유도 같다 — 이 훅은 취침 연출 한가운데
@@ -23163,7 +23321,14 @@ func _on_dialogue_finished() -> void:
 	dialogue_panel.visible = false
 	dialogue_portrait.visible = false  # P2.4 초상화 슬롯도 함께 닫는다
 	_set_dialogue_skin("")             # ★[S9-T9] 편지지 → 기본 한지 복귀(되돌리기는 여기 한 곳)
-	player.set_physics_process(true)
+	# ★[폴리시 R10 #6] **취침 연출 중이면 잠금을 안 푼다.** `_on_sleep_done`의 R2 가드("대화가 열려
+	#   있으면 물리를 안 켠다 — 닫히는 프레임에 여기가 어차피 켠다")가 세운 불변식을 이 *닫힘*
+	#   경로가 무조건 켜기로 되뚫었다: 23:5x에 편지·대화를 연 채 24:00 강제 취침에 걸리면 `_process`의
+	#   대화 분기엔 `_sleeping` 가드가 없어 암전 트윈이 도는 동안에도 [E]가 먹히고, 마지막 줄을
+	#   넘기는 순간 여기서 물리가 켜져 검은 화면 뒤에서 걸어 다녔다(쓰러진 자리가 아닌 곳에서
+	#   아침을 맞는다). `_end_cutscene`이 이미 쓰는 형태(`set_physics_process(not _sleeping)`)와
+	#   같다 — 잠들어 있으면 `_on_sleep_done`이 눈뜨는 프레임에 켠다.
+	player.set_physics_process(not _sleeping)
 	# T5.1 온보딩 전진은 '누구와의 대화였나'(_talking_to)로도 가른다 — 멜이 카페에
 	# 상주하며 미호 멘토 단계 도중에도 말 걸 수 있게 됐기 때문(화자 구분 없이 단계로만
 	# 가르면 멜 대화가 미호 단계를 잘못 전진시킨다). 멜 대화는 온보딩과 무관하다.

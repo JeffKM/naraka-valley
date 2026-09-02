@@ -189,13 +189,27 @@ func _initialize() -> void:
 	_check("③‴c set_inv_info 무크래시 + 날짜 문자열 비어있지 않음", m._inv_date_string() != "")
 	m._close_frame()
 	# 휴지통: 집은 슬롯을 _on_frame_discard가 통째로 비운다(경제 0).
+	# ★[폴리시 R10] 폐기 **불가** 목록이 생겼다(책·레어크로우에 이어 기본 도구 5종 — 재획득 경로 0).
+	#   그래서 "첫 비지 않은 슬롯"은 더는 버릴 수 있는 칸이 아니다(0~4번 = START_TOOLS).
 	var slot := -1
+	var tool_slot := -1
 	for i in range(Inventory.SIZE):
-		if m.inventory.id_at(i) != "":
+		var sid: String = m.inventory.id_at(i)
+		if sid == "":
+			continue
+		if Inventory.START_TOOLS.has(sid):
+			if tool_slot < 0:
+				tool_slot = i
+			continue
+		if slot < 0:
 			slot = i
-			break
-	_check("③‴pre 비울 아이템 슬롯 존재", slot >= 0)
+	_check("③‴pre 비울 아이템 슬롯 존재(도구가 아닌 칸)", slot >= 0 and tool_slot >= 0)
 	var g_before: int = m.wallet.gold
+	var tool_id: String = m.inventory.id_at(tool_slot)
+	m._on_frame_discard(tool_slot)
+	_check("③‴pre′ 기본 도구 칸은 휴지통이 거절한다 — %s가 그대로다(소프트락 차단)"
+			% ItemCatalog.name_of(tool_id),
+		m.inventory.id_at(tool_slot) == tool_id)
 	m._on_frame_discard(slot)
 	_check("③‴d 휴지통 버리기 = 슬롯 비움", m.inventory.id_at(slot) == "")
 	_check("③‴e 버리기는 경제 0(지갑 불변)", m.wallet.gold == g_before)

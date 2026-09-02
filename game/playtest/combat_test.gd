@@ -324,8 +324,10 @@ func _initialize() -> void:
 	for t: Vector2i in arc_live:
 		if m.is_solid(m._grid[t.y][t.x]):
 			arc_walkable = false
-	_check("⑦i 라이브 arc는 벽·프롭 칸을 뺀다(벽 하나 사이로 못 벤다)",
-		arc_walkable and arc_live.size() <= 4)
+	# ★[폴리시 R10 #3] 상한이 4 → 5로 올랐다: 라이브 arc는 순수 부채꼴 4칸에 **선 자리(origin)**를
+	#   더한다(겹친 추적 몹을 베기 위해 — `_weapon_arc` 머리말). 순수 기하(⑤a)는 그대로 4칸이다.
+	_check("⑦i 라이브 arc는 벽·프롭 칸을 뺀다(벽 하나 사이로 못 벤다) · 선 자리 포함 최대 5칸",
+		arc_walkable and arc_live.size() <= 5 and arc_live.has(m._player_tile()))
 	# ── 무기 미장착이면 기존 도구 거동 완전 불변 ──
 	m.energy.current = SoulEnergy.MAX
 	_check("⑦j pre 괭이로 전환", _equip(m, ItemCatalog.HOE))
