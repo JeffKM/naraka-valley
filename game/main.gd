@@ -18374,7 +18374,12 @@ func _on_frame_discard(slot_index: int) -> void:
 	#   버리면 그 동사가 세이브에서 영구 차단된다(괭이 = 밭갈이·파종·물주기·수확 사슬 전체).
 	#   판정은 그 유일한 지급 목록에서 파생한다(수치·id 복제 0). 낚싯대·태클·무기는 같은 CAT_TOOL
 	#   이지만 상점 재구매가 있어 여기서 안 막는다 — 16칸 백팩에서 여분을 못 버리면 그게 새 압박이다.
-	if Inventory.START_TOOLS.has(id):
+	# ★[폴리시 R11] 그 "상점 재구매가 있어"가 **T1 낚싯대에는 거짓**이었다: 뱃사공 증정품이라
+	#   `price 0`이고 생선가게 매대 행은 T2~T4뿐이며, 유일한 지급처는 `_boatman_rod_given`(세이브
+	#   영속)이 두 번 주지 않는다 — 버리면 T2(500냥)를 살 때까지 낚시 사슬 전체가 그 세이브에서
+	#   막힌다. 그래서 **매대 가격 0인 기어**를 같은 표에 세운다(id를 손으로 안 적는다 — 앞으로
+	#   생길 증정 기어도 저절로 따라오고, 값이 붙어 매대에 서는 순간 저절로 풀린다).
+	if Inventory.START_TOOLS.has(id) or (GearCatalog.is_rod(id) and GearCatalog.price_of(id) <= 0):
 		_notice("%s는 버릴 수 없다 — 다시 구할 곳이 없다" % ItemCatalog.name_of(id))
 		return
 	var n := inventory.count_at(slot_index)
