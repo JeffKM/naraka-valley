@@ -13891,7 +13891,10 @@ func _process(delta: float) -> void:
 		# ★[폴리시 R10] 혼력이 후킹 하한에도 못 미치면 **던지기 안내 자체를 걷는다** — 형제 창구
 		#   (나무·밭·화분·개간)의 "혼력 부족 — 집에서 취침"과 같은 문법. 집행부(`_start_fishing`)의
 		#   사전 판정과 같은 술어를 읽으므로 화면과 동작이 갈리지 않는다.
-		if energy != null and not energy.can_act(FishingSession.MIN_HOOK_ENERGY):
+		# ★[폴리시 R11] 그 술어가 이제 **도달 가능한 최저 비용**을 본다(FishingSession.min_hook_energy —
+		#   옛 MIN_HOOK_ENERGY는 클램프 하한 1이라 도달 불가였고, 혼력 1~3에서 화면이 "던지기"라
+		#   말해 놓고 후킹이 확정 실패했다). 두 자리가 같은 함수를 부르므로 갈림이 여전히 0이다.
+		if energy != null and not energy.can_act(FishingSession.min_hook_energy(_fishing_mods())):
 			interact_prompt.text = "혼력 부족 — 챌 힘이 없다 (집에서 취침)"
 		else:
 			interact_prompt.text = "[좌클릭] 낚싯줄 던지기" + ("" if gear_line == "" else "   " + gear_line)
@@ -14767,8 +14770,11 @@ func _start_fishing(water: Vector2i) -> void:
 	#   **반드시** 실패한다 — 보장 미끼(150냥)를 바닥날 때까지 태우며 100% "입질을 놓쳤다"를 반복할
 	#   수 있었다. 형제 동사(곡괭이 `_mine_rock`·팬닝 `_pan_spot`)는 소모 **전에** 막고 알린다.
 	#   ★ ADR-0008과 충돌하지 않는다: 이건 저혼력을 막는 게이트가 아니라(캐스팅·대기는 여전히 무과금)
-	#     "확정 실패 + 자원 소각"만 걷어내는 판정이다. 혼력 1이면 그대로 던진다.
-	if energy != null and not energy.can_act(FishingSession.MIN_HOOK_ENERGY):
+	#     "확정 실패 + 자원 소각"만 걷어내는 판정이다.
+	#   ★[폴리시 R11] 하한을 **도달 가능한 최저 비용**으로 고쳤다(`FishingSession.min_hook_energy`).
+	#     옛 `MIN_HOOK_ENERGY`(=1)는 어떤 어종·어떤 숙련에서도 나올 수 없는 값이라(최저가 소 체급
+	#     4 × 절감 하한 0.70 = 3), 혼력 1~3의 확정 실패 구간이 그대로 열려 있었다.
+	if energy != null and not energy.can_act(FishingSession.min_hook_energy(_fishing_mods())):
 		_notice("혼력이 바닥나 챌 힘이 없다 — 미끼만 버린다. 집에서 취침")
 		return
 	if _cast_bait != "":
