@@ -396,8 +396,8 @@ func _initialize() -> void:
 	_check("⑪a 규칙표 [0]이 MineFloors 0티어 기준값과 동치(ORE_HITS·GEM_HITS)",
 		MineFloors.ORE_HITS == ToolTier.pickaxe_ore_hits(0)
 		and MineFloors.GEM_HITS == ToolTier.pickaxe_gem_hits(0))
-	_check("⑪b 광석 3/2/2/1/1 · 보석 5/4/3/2/2(*잠정*)",
-		ToolTier.PICK_ORE_HITS == [3, 2, 2, 1, 1] and ToolTier.PICK_GEM_HITS == [5, 4, 3, 2, 2])
+	_check("⑪b 광석 3/2/2/1/1 · 보석 5/4/3/2/1(*잠정* — ★폴리시 R10에서 보석 최고 티어 2→1로 교정)",
+		ToolTier.PICK_ORE_HITS == [3, 2, 2, 1, 1] and ToolTier.PICK_GEM_HITS == [5, 4, 3, 2, 1])
 	var hits_ok := true
 	for tier in ToolTier.MAX_TIER + 1:
 		if MineFloors.node_hits(MineFloors.N_MYEONGDONG, tier) != ToolTier.pickaxe_ore_hits(tier) \
@@ -419,9 +419,10 @@ func _initialize() -> void:
 		and ToolTier.pickaxe_breaks_boulder(2))
 	# 라이브: 곡괭이를 벼리면 그 프레임부터 타수가 줄어든다(main._mine_rock의 접점 하나).
 	m3.tool_tier.set_tier(ToolTier.PICKAXE, 4)
-	_check("⑪g 라이브 — 4티어 곡괭이에서 광석 1타 · 보석 2타",
+	_check("⑪g 라이브 — 4티어 곡괭이에서 광석 1타 · 보석 1타(★폴리시 R10 — 3티어의 2타에서 내려왔다)",
 		MineFloors.node_hits(MineFloors.N_MYEONGDONG, m3.pickaxe_tier()) == 1
-		and MineFloors.node_hits(MineFloors.N_GEM_MYEONGOK, m3.pickaxe_tier()) == 2)
+		and MineFloors.node_hits(MineFloors.N_GEM_MYEONGOK, m3.pickaxe_tier()) == 1
+		and MineFloors.node_hits(MineFloors.N_GEM_MYEONGOK, 3) == 2)
 	m3.tool_tier.set_tier(ToolTier.PICKAXE, 0)
 
 	# ── ★[S5-T3] ⑫ 괭이·물뿌리개 AoE + 물뿌리개 용량 ──
