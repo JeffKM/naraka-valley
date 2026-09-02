@@ -31,8 +31,16 @@ var _items: Array = []
 
 # 알림 한 줄을 큐에 민다(main._notice가 호출). secs 후 자동으로 사라진다. 큐가 가득 차면
 # 가장 오래된(앞) 항목을 밀어낸다 — 최신 이벤트가 항상 보이게.
+# ★[폴리시 R11] `keep` = **밀려나면 다시 오지 않는 줄**(1회성 래치가 거는 알림). 큐가 가득 차면
+#   여전히 가장 오래된 것부터 버리되 이 표가 붙은 줄은 건너뛴다. 왜 필요했나: 축출 규칙이 나이
+#   하나뿐이라, 아침 정산처럼 한 프레임에 열 줄 넘게 미는 자리에서는 **한 프레임도 안 그려진 채
+#   사라지는 줄**이 생겼다. 도감 완주 트로피(`codex.claim_trophy`가 세이브에 박는 영구 래치)가
+#   그 예다 — 게잡이통·채취기·의뢰 만료·편지가 뒤이어 밀면 다섯째·여섯째 push에서 pop_front로
+#   제거되고, 래치 때문에 영영 다시 뜨지 않는다.
+#   ★ 큐가 MAX_ITEMS를 넘지 않는다는 계약은 그대로다: 버릴 만한 줄이 하나도 없으면(전부 keep)
+#     그때만 맨 앞을 버린다 — 상한이 keep 때문에 무너지지 않는다.
 func push(text: String, secs: float, wide: bool = false, icon: Texture2D = null, gold: bool = false,
-		tint: Color = Color(0, 0, 0, 0)) -> void:
+		tint: Color = Color(0, 0, 0, 0), keep: bool = false) -> void:
 	if text == "":
 		return
 	# wide = 긴 안내(온보딩)용 — 좌측 컬럼(MAX_W) 대신 화면 폭 가까이 허용해 한 줄이 안 잘리게 한다.
@@ -41,9 +49,16 @@ func push(text: String, secs: float, wide: bool = false, icon: Texture2D = null,
 	#   좋아함·시큰둥·질색)를 색으로 먼저 말하는 데 쓴다 — 태그 문자열을 읽기 전에 결과가 도착한다.
 	#   가법 옵션이라 기존 호출부(전부 5인자 이하)는 한 줄도 안 바뀐다.
 	_items.append({"text": text, "secs": maxf(secs, 0.1), "wide": wide, "icon": icon, "gold": gold,
-		"tint": tint})
+		"tint": tint, "keep": keep})
 	while _items.size() > MAX_ITEMS:
-		_items.pop_front()
+		# 가장 오래된 것부터 훑되 keep은 건너뛴다. 방금 민 줄(배열 끝)은 후보에서 뺀다 —
+		# "최신 이벤트가 항상 보이게"가 이 큐의 원래 계약이다.
+		var victim := -1
+		for i in _items.size() - 1:
+			if not bool(_items[i].get("keep", false)):
+				victim = i
+				break
+		_items.remove_at(victim if victim >= 0 else 0)
 	queue_redraw()
 
 func _process(delta: float) -> void:

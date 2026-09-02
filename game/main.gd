@@ -2991,6 +2991,9 @@ var _talking_to := ""
 # 같은 결로 일시 표시용이라 세이브하지 않는다(cafe.gd 세이브 무상태와 일관).
 var _cafe_summary_secs := 0.0
 const CAFE_SUMMARY_SECS := 5.0  # 마감 정산 팝업 표시 시간(읽을 시간을 넉넉히)
+# ★[폴리시 R11] 마일스톤 팝업에 가려질까 봐 미뤄 둔 마감 정산 본문("" = 미룬 것 없음).
+# 팝업 타이머가 끝나는 프레임에 소비된다(_process) — 근거는 `_on_cafe_closed`의 그 자리.
+var _cafe_summary_pending := ""
 
 # T7.2 카페 마일스톤 1단의 "누적 서빙 매출"(카페 손님 서빙 + 밤 바 응대). 출하대 raw 판매는
 # 빼고 *카페를 운영한* 매출만 센다(ADR-0009 — 마일스톤은 카페를 굴리는 쪽으로 당긴다). 매크로
@@ -10270,7 +10273,10 @@ func _on_day_advanced(day: int) -> void:
 	if codex != null and codex.trophy_pending():
 		codex.claim_trophy(day)
 		if notice_feed != null:
-			notice_feed.push("명부 도감 완주 — 이 땅의 것을 모두 명부에 올렸다", 5.0, false, null, true)
+			# ★[폴리시 R11] `keep` — 이 줄은 세이브 전체에서 딱 한 번 발화하는 래치(trophy_day)의
+			#   유일한 표면이라, 뒤이어 미는 아침 알림 열 줄에 밀려 사라지면 영영 안 뜬다.
+			notice_feed.push("명부 도감 완주 — 이 땅의 것을 모두 명부에 올렸다", 5.0, false, null, true,
+				Color(0, 0, 0, 0), true)
 		audio.sfx("ui")
 	# ★[S7-T1 / ADR-0065 결정 1] 옛 T4.2 런 종료 게이트(RunSummary.is_over → _end_run → return)가
 	#   여기 있었다. RUN_DAYS=21에서 하루를 더 자면 게임이 끝나 **절기 전환(day 29)에 영원히 도달
@@ -10633,6 +10639,10 @@ func _on_day_advanced(day: int) -> void:
 	#   (날짜가 갈려 있어 한 아침에 둘이 겹치지 않는다: 행사 12/20/16/15 vs 테마 데이 25).
 	for line in _seasonal_morning_notices():
 		_notice(line, NOTICE_SECS * 2.0)
+	# ★[폴리시 R11] 생일 배너(당일 + D-1) — 위 두 층과 같은 자리·같은 길이. 날짜에 매인 네 층 중
+	#   이것만 push 채널이 없어, 상한 면제라는 그 주 최대치 기회가 조용히 지나갔다.
+	for line in _birthday_morning_notices():
+		_notice(line, NOTICE_SECS * 2.0)
 	# ★[S10-T3 / ADR-0069 결정 5] 보부상이 왔다 — 절기 행사 배너와 **같은 문법·또 다른 층**이다.
 	#   행사 배너와 한 아침에 겹칠 수는 있지만(7의 배수 vs 12/20/16/15는 서로 소수가 아니다) 무대가
 	#   갈려 있어(광장 vs 다리 남단) 둘 다 뜨는 게 오히려 맞다 — "오늘 갈 데가 둘"이다.
@@ -10800,6 +10810,39 @@ func _seasonal_morning_notices() -> Array:
 	if tomorrow != SeasonalEvent.NONE:
 		out.append(SeasonalEvent.preview_text(tomorrow))
 	return out
+
+# ★[폴리시 R11] 생일 아침 배너(당일 + D-1) — 테마 데이·절기 행사·보부상과 **같은 문법의 넷째
+# 형제**다. 날짜에 매인 네 층 중 생일만 push 채널이 통째로 없어서, 남은 표면이 플레이어가 직접
+# 열어야 보이는 것 둘(달력 마커·관계 탭 꼬리)뿐이었다. 그게 손해로 이어지는 이유: 선물은 인당
+# 주 2회 상한인데 **생일만 그 상한이 면제**되고 보정도 따로 붙는다 — 그 주 최대치 기회가 아무
+# 고지 없이 지나갔다. 조회 방향은 `Resident.birthday_on_day`(달력 마커가 쓰는 그 함수)라 날짜
+# 표는 여전히 한 곳(Resident.BIRTHDAYS)이고, 이름은 로스터에서 뜬다(레코드가 없으면 줄 없음).
+func _birthday_morning_notices() -> Array:
+	var out: Array = []
+	if clock == null:
+		return out
+	var today := _display_name_of(Resident.birthday_on_day(clock.day))
+	if today != "":
+		out.append("오늘은 %s의 생일이다 — 선물 주 상한이 면제된다" % today)
+	var tomorrow := _display_name_of(Resident.birthday_on_day(clock.day + 1))
+	if tomorrow != "":
+		out.append("내일은 %s의 생일이다 — 선물을 미리 챙겨 두자" % tomorrow)
+	return out
+
+# 점괘 거울 ◇ — 다가오는 생일 한 줄. 형제 셋(테마 데이·절기 행사·보부상)과 같은 자리·같은 문법.
+# ★ 창은 한 절기(28일)다: 생일이 절기마다 여럿이라 그 안에 반드시 하나가 들고, 더 넓히면 늘
+#   같은 사람이 걸려 예고가 아니라 상시 표시가 된다.
+func _birthday_upcoming_line() -> String:
+	if clock == null:
+		return ""
+	for ahead in range(0, GameClock.DAYS_PER_SEASON):
+		var nm := _display_name_of(Resident.birthday_on_day(clock.day + ahead))
+		if nm == "":
+			continue
+		if ahead == 0:
+			return "오늘: %s의 생일 (선물 주 상한 면제)" % nm
+		return "%s: %s의 생일" % ["내일" if ahead == 1 else "%d일 뒤" % ahead, nm]
+	return ""
 
 # 점괘 거울 ㉤ — 다가오는 절기 행사 한 줄("3일 뒤: 저승 야시장"). `_festival_upcoming_line`과
 # **같은 문법의 형제 함수**다(한 절기 앞까지 훑어 첫 슬롯을 문구로 낸다).
@@ -12336,10 +12379,12 @@ func _restore_location(data: Dictionary) -> void:
 # ★[S6-T8] `icon`은 아이템 획득 토스트(_toast_item)가 이미 쓰던 push의 넷째 인자를 열어 준 것이다.
 #   카페 사슬 알림(서빙·체키·곁들이)이 "무슨 잔이 나갔나"를 글자와 함께 그림으로도 말한다.
 # ★[S8-T9 아트 패스] tint = 글자 색 지정(알파 0 = 무틴트 = 종전 색) — 가법 인자라 기존 호출부 불변.
+# ★[폴리시 R11] `keep` = 밀려나면 다시 오지 않는 줄(NoticeFeed.push 머리말 — 1회성 래치 전용).
+#   기본값 false라 기존 호출부 전량은 한 글자도 안 바뀐다.
 func _notice(msg: String, secs: float = NOTICE_SECS, wide: bool = false, icon: Texture2D = null,
-		tint: Color = Color(0, 0, 0, 0)) -> void:
+		tint: Color = Color(0, 0, 0, 0), keep: bool = false) -> void:
 	if notice_feed != null:
-		notice_feed.push(msg, secs, wide, icon, false, tint)
+		notice_feed.push(msg, secs, wide, icon, false, tint, keep)
 
 # ★ Phase C — 아이템 획득 토스트(좌하단 알림에 아이콘+이름 +수량). 게임플레이 획득 지점(수확·수집·
 # 개간 드랍)에서만 부른다 — 세이브 로드·구매·회수는 각자 알림/무알림이라 이중 토스트·로드 스팸 회피.
@@ -13110,6 +13155,11 @@ func _process(delta: float) -> void:
 		_milestone_popup_secs -= delta
 		if _milestone_popup_secs <= 0.0:
 			milestone_panel.visible = false
+			# ★[폴리시 R11] 가려질까 봐 미뤄 둔 카페 마감 정산이 있으면 이제 띄운다(_on_cafe_closed).
+			if _cafe_summary_pending != "":
+				var pending := _cafe_summary_pending
+				_cafe_summary_pending = ""
+				_show_cafe_summary(pending)
 
 	# ★ ADR-0024 핫바 선택: 숫자키(1~0,-,=)로 슬롯 직접 선택 + 휠로 순환. 든 것이 LMB 동사를 정한다.
 	# Q 작물 순환은 폐기 — 씨앗은 이제 핫바 아이템(ADR-0020 데이터 주도 아이템 위에서).
@@ -21194,6 +21244,7 @@ func _open_epilogue() -> void:
 	player.set_physics_process(false)
 	player.velocity = Vector2.ZERO
 	cafe_summary_panel.visible = false
+	_cafe_summary_pending = ""   # ★[폴리시 R11] 미뤄 둔 정산도 함께 버린다(회고 화면 위로 뒤늦게 뜨지 않게)
 	if notice_feed != null:
 		notice_feed.visible = false
 	ending_text.text = RunSummary.epilogue_text(clock.day, wallet.gold, _run_harvested,
@@ -21589,8 +21640,10 @@ func _advance_wedding(day: int) -> void:
 	audio.sfx("ui")
 	# ★[S8-T10] 끝의 " ♥"를 뗐다 — neodgm.ttf에 ♥ 글리프가 없어 두부(□)로 떴다(heart_bar.gd:4의
 	#   그 리스크). 이 배너에 그림 하트를 넣을 자리는 없고(알림 피드는 글자 한 줄), 문구만으로 충분하다.
+	# ★[폴리시 R11] `keep` — 혼례 아침은 세이브에 한 번뿐인 사건이고(예정일을 방금 0으로 접었다)
+	#   이 배너가 그 유일한 고지인데, 뒤이어 아침 알림 여덟 줄이 더 밀려 4칸 큐에서 축출됐다.
 	_notice("혼례를 올렸다 — %s 부부가 되었다" % HanjiUi.with_gwa(r.display_name if r != null else _spouse_id),
-		NOTICE_SECS * 3.0)
+		NOTICE_SECS * 3.0, false, null, Color(0, 0, 0, 0), true)
 	# ★[S9b-T8 / ADR-0068 결정 10] **궁극의 결혼 분기 = B7 해방.** 앵커와의 혼례 아침에만 선다 —
 	#   §6.4 "해방의 두 층" 중 ㉡(앵커의 해방)은 이 분기 한정이기 때문이다(㉠ 플레이어 자신의
 	#   해방은 결혼과 독립이라 B6가 이미 줬다). 여기서 재생하지 않고 **예약만** 하는 이유는 B4와
@@ -22198,6 +22251,7 @@ func _end_run() -> void:
 	player.velocity = Vector2.ZERO
 	# T5.4 카페 정산 팝업은 마무리 화면보다 위에 그려질 수 있어 명시적으로 숨긴다.
 	cafe_summary_panel.visible = false
+	_cafe_summary_pending = ""   # ★[폴리시 R11] 미뤄 둔 정산도 함께 버린다(마무리 화면 위로 뒤늦게 뜨지 않게)
 	# 알림 피드·디버그 리드아웃은 코드로 $CanvasLayer에 나중 추가돼 EndingPanel 위에
 	# 그려지므로(트리순서상 위), 마무리 화면이 깔끔히 덮이게 같이 숨긴다.
 	if notice_feed != null:
@@ -22750,11 +22804,25 @@ func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
 	#   서빙 수와 나란히 놓이면 그날 "깊이 vs 회전"을 어느 쪽으로 굴렸는지가 한눈에 읽힌다.
 	if cafe.today_cheki() > 0:
 		lines.append("체키  %d장" % cafe.today_cheki())
-	cafe_summary_text.text = "\n".join(lines)
-	cafe_summary_panel.visible = true
-	_cafe_summary_secs = CAFE_SUMMARY_SECS
+	# ★[폴리시 R11] 마일스톤 팝업이 떠 있으면 **미룬다.** 두 팝업은 같은 CanvasLayer의 씬 형제고
+	#   정산 패널이 뒤에 선언돼 위에 그려지는데, 사각형이 MilestonePanel 본문을 거의 전부 덮고
+	#   전역 Panel 테마가 불투명 한지라 비쳐 보이지도 않는다. 마일스톤은 래치(1단·2단·3단 각각
+	#   1회)라 가려지면 그 축하 문구가 세이브에서 영영 사라진다 — 반면 정산은 매일 뜨는 줄이라
+	#   몇 초 미뤄도 잃는 것이 없다. 1단↔2단 팝업이 이미 세운 "한 팝업이 다른 팝업을 덮어 삼키지
+	#   않는다"(_show_milestone2_reached 머리말)의 확장이다: 저긴 같은 노드, 여긴 겹치는 두 노드.
+	#   ★ 매출 골드 사운드는 여기 그대로 둔다 — 마감 그 자체의 신호라 패널과 묶인 소리가 아니다.
+	if _milestone_popup_secs > 0.0:
+		_cafe_summary_pending = "\n".join(lines)
+	else:
+		_show_cafe_summary("\n".join(lines))
 	if revenue > 0:
 		audio.sfx("gold")                     # P2.6 카페 일일 정산 매출 골드
+
+# 마감 정산 패널을 띄운다(본문은 호출부가 조립 — 즉시/미룸 두 경로가 이 한 자리를 공유한다).
+func _show_cafe_summary(text: String) -> void:
+	cafe_summary_text.text = text
+	cafe_summary_panel.visible = true
+	_cafe_summary_secs = CAFE_SUMMARY_SECS
 
 # ── T7.2 카페 마일스톤 / ★[S6-T3] 카페 일구기 사다리 ────────────────────────
 # 관계 루프 산출물 = **미호+멜 두 사람의 하트 합**. 곱셈기들이 각자 하트를 곱셈기로 환류하듯
@@ -23287,6 +23355,10 @@ func _mirror_forecast_text() -> String:
 	var ped := _peddler_upcoming_line()
 	if ped != "":
 		lines.append("◇ " + ped)
+	# ㉦ ★[폴리시 R11] 다가오는 생일 — 형제 셋과 나란히 서는 넷째 줄(`_birthday_upcoming_line`).
+	var bday := _birthday_upcoming_line()
+	if bday != "":
+		lines.append("◇ " + bday)
 	return "\n".join(lines)
 
 # 다가오는 보부상 한 줄("오늘"/"내일"/"N일 뒤"). 문자열 조립을 함수로 뽑아 둔 이유는 형제들과 같다 —
