@@ -4999,6 +4999,17 @@ func _deco_blocked() -> bool:
 func _toggle_deco_mode() -> void:
 	_deco_mode = not _deco_mode
 	if _deco_mode:
+		# ★[폴리시 R11] 켜는 그 자리에서 **조회 패널을 먼저 접는다**(점괘 거울·달력). 꾸미기
+		#   편집면은 월드 캔버스의 `_draw` 오버레이라 CanvasLayer 패널 **아래**에 그려지는데,
+		#   두 패널을 접는 경로(거울 자동 접기·[F] 토글·달력 Esc·달력 자동 접기)가 전부
+		#   `if _deco_mode: return`(프레임 절단) **아래**에 있어, 열어 둔 채 C를 누르면 편집면이
+		#   통째로 가린 채 모드를 끄기 전에는 어떤 입력으로도 못 닫혔다. R3가 연출·모달에 세운
+		#   `_deco_blocked` 게이트와 갈리는 이유: 저건 **때**가 아니라 열어 둔 조회 창이라,
+		#   진입을 막으면 C가 죽은 키가 된다(닫고 켜 주는 것이 플레이어가 하려던 일이다).
+		if mirror_panel != null and mirror_panel.visible:
+			_close_mirror()
+		if calendar_panel != null:
+			calendar_panel.close()
 		_notice("집 꾸미기 (C=끄기 · 좌클릭=놓기 · 우클릭=지우기 · Q/E=레이어 · [/]=세트 · ,/.=아이템 · R=회전)", 4.0, true)
 	queue_redraw()
 
@@ -12840,11 +12851,20 @@ func _process(delta: float) -> void:
 	# 패널 밖에서만 — 미니멀 결). _process가 가시성 단일 출처라 _open/_close_frame의 hotbar 토글과
 	# 일관(프레임 열림도 아래 조건에 포함).
 	var _hud_hidden := dialogue.is_open() or frame.is_open() or _sleeping \
+		or _transitioning \
 		or cafe_summary_panel.visible or milestone_panel.visible or ending_panel.visible \
 		or mirror_panel.visible \
 		or cutscene != null \
 		or spine_puzzle != null \
 		or _illust_id != ""
+		# ★[폴리시 R11] 건물·구역 전환 암전도 같은 연출 화면이다. Fade는 **씬 자식**(main.tscn)이고
+		#   상시 HUD 다섯(핫바·혼력바·시계·컨텍스트 팝업·툴팁)과 달력은 전부 그 뒤에 런타임
+		#   add_child된 $CanvasLayer 자식이라 Fade 위에 그려진다 — 같은 fade 노드를 쓰는 취침이
+		#   `_sleeping` 덕에 깨끗이 암전되는 반면, 모든 문 출입·가장자리 워프에서는 검은 화면 위에
+		#   하단 핫바·우하단 혼력바·우상단 시계가 그대로 떠 있었다. `if _transitioning: return`은
+		#   이 가시성 대입보다 **아래**라 그 줄이 막아 주지도 못한다.
+		#   ★ 곁따라 달력도 문을 지날 때 접힌다 — 대화·프레임·정산·거울이 이미 접는 그 규약을
+		#     암전에도 똑같이 적용한 것이라(열어 둔 채 걷는 것은 여전히 자유, 문 하나가 예외).
 		# ★[S9-T2] 컷신 재생 중엔 상시 HUD를 접는다(연출 화면).
 		# ★[S9b-T7] 내면 공간(B5)도 같은 연출 화면이다 — 오히려 여기는 세계 자체가 사라진 자리라
 		#   상시 HUD가 한 조각이라도 남으면 "게임 화면 위에 퍼즐"이 되어 §6.5 2단이 무너진다.
@@ -12944,7 +12964,14 @@ func _process(delta: float) -> void:
 					dialogue.choose(i)
 					return
 			return
-		if Input.is_action_just_pressed("action"):
+		# ★[폴리시 R11] **[E]도 받는다.** 대화창은 매 줄 "[E] 다음 / [E] 닫기"를 그리는데(23382)
+		#   진행을 받는 폴링은 여기 하나였고 `action`에 묶인 이벤트는 우클릭뿐이라, 화면이 지시한
+		#   키를 눌러도 대사가 한 줄도 안 넘어갔다(위 선택지 주석의 "넘기기([E]/우클릭)"가 이미
+		#   E를 전제하고 있어 의도가 아님이 분명하다). E는 `menu_tab`인데 **대화 중엔 그 액션이
+		#   비어 있다** — 메뉴 분기는 이 가드 아래라 도달할 수 없고, 프레임 탭 순환도 대화 중엔
+		#   못 돈다. 그래서 새 액션을 만들지 않고 그 키를 이 자리에서만 빌려 쓴다(입력맵 무접촉).
+		#   선택지·고백 제안 분기는 **위**에서 이미 return 하므로 삼킴 규약도 그대로다.
+		if Input.is_action_just_pressed("action") or Input.is_action_just_pressed("menu_tab"):
 			dialogue.advance()
 		return
 
