@@ -730,6 +730,30 @@ static func _is_hay(id: String) -> bool:
 static func _is_material(id: String) -> bool:
 	return MATERIALS.has(id)
 
+# ★[폴리시 R13] **출하 가능 자재** — 이 카탈로그가 값을 매겨 두고 그 값을 받는 창구가 코드에 0인
+# 자재들이다. R8(중복 유품)·R9(결정기 부품)이 두 번 봉합한 "카탈로그가 값을 매긴 물건에 판매 창구가
+# 0"과 같은 클래스라 답도 같다 — 출하함으로 판다(ADR-0021 "판매 = 출하함 단일 창구").
+# 등재 조건은 둘 다 참일 때다: ㉠이 표가 값을 선언했고(price > 0) ㉡그 물건을 삼키는 곳이 코드에
+# 없다(제작 레시피·게시판 의뢰 풀·시련 납품 표·카페 시그니처 어디에도 안 실린다).
+#   · 원목·단단한 원목·수액·이끼·광물은 **여기 안 든다** — 제작·건축·제련이 이미 삼키므로 창구가
+#     0이 아니고, 자재군 전체를 여는 것도 아니다(출하 술어는 이 표에 실린 id만 받는다).
+#   · 나락혼정도 안 든다 — 카페 시그니처(곳간 → 서빙)가 소비처다.
+# 되돌리는 법: 이 표에서 id를 빼면 종전(휴지통이 유일한 처분)으로 정확히 돌아간다.
+const SHIPPABLE_MATERIALS := {
+	# 인양·게잡이통 잡동사니. 세 곳이 팔린다고 적어 뒀고(MATERIALS 표 "팔면 푼돈" · salvage.gd:59
+	# "팔면 푼돈(5G)"), 결정적으로 crab_pot.gd:42의 통 기대값 계산이 이 5냥을 **수입으로 산입한다**
+	# — 창구가 없으면 그 EV가 거짓이 되고 밤 산출의 25%가 백팩 칸만 먹는다.
+	ROTTEN_NET: true,
+	# 잡귀 부산물 2종. 위 선언부가 "하류 소비처는 S6 소관 — 지금은 **소지·판매까지가 실효 범위**"라
+	# 못 박았는데 그 판매가 배선된 적이 없어, 전투(채광 곁다리 + 나락 엔드게임)라는 활동 축의 자재
+	# 산출이 어떤 재화로도 전환되지 않았다.
+	NEOKGARU: true,
+	HONBULSSI: true,
+}
+
+static func is_shippable_material(id: String) -> bool:
+	return SHIPPABLE_MATERIALS.has(id)
+
 static func _is_relic(id: String) -> bool:
 	return RELICS.has(id)   # ★[S2-T5] 유품 — 혼백관 기증 대상
 

@@ -264,8 +264,12 @@ func _initialize() -> void:
 	_check("⑨f 구역 id는 그대로 업화 갱도", m._region == RegionCatalog.EOPHWA_MINE)
 	var layout: Dictionary = m._mine_layout
 	_check("⑨g 입구 사다리 칸에 착지", m._player_tile() == layout["entrance"])
-	_check("⑨h 카메라 층 크기로 격리",
-		m._cam.limit_right == MineFloors.FLOOR_W * m.TILE and m._cam.limit_bottom == MineFloors.FLOOR_H * m.TILE)
+	# ★[폴리시 R13] 층은 화면보다 좁아서 한계를 층 크기 그대로 두면 층이 화면 오른쪽에 붙고 왼쪽에
+	#   죽은 검은 띠가 남았다 — 이제 남는 폭을 양쪽에 반씩 나눠 준다. 계약은 "한계 중심 = 층 중심"
+	#   (`limit_left + limit_right == 층 폭`)이고, 세로는 층이 화면보다 높아 종전대로 층 높이다.
+	_check("⑨h 카메라 층 격리(가로는 층 중심에 대칭·세로는 층 높이)",
+		m._cam.limit_left + m._cam.limit_right == MineFloors.FLOOR_W * m.TILE
+		and m._cam.limit_bottom == MineFloors.FLOOR_H * m.TILE)
 	_check("⑨i 도달 최심층 갱신(1)", m.mine_floors.depth() == 1)
 	_check("⑨j 층 안 취침 불가(집 구역 아님)", not m._can_sleep())
 	m._maybe_toggle_building()

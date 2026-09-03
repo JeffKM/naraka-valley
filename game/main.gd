@@ -4909,6 +4909,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if not _edit_mode:
 		return
+	# ★[폴리시 R13] 이 아래 무효화는 전부 두 캔버스를 함께 친다(main + `_front_props`). 프롭 배열은
+	#   앞 패스도 소비하는데 여기가 main만 갱신해서, 플레이어 발치보다 **남쪽**에 새로 놓은 프롭은
+	#   BACK 패스가 건너뛰고 앞 패스는 다시 안 그려져 **화면에 안 나타났고**(놓았는데 없다), 반대로
+	#   앞 패스에 이미 있던 프롭을 지우면 그 그림이 플레이어 위에 남았다. `_process`의 배치 모드
+	#   early return도 main만 다시 큐에 넣고, 편집 중엔 이동이 멈춰 행 넘김 재분할도 안 탄다.
 	var key := _edit_key()
 	if key == "":
 		return
@@ -4926,11 +4931,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _edit_dragging:
 				_rebuild_prop_collision()   # 드래그 끝 — 보이는 자리와 막히는 자리 일치
 			_edit_dragging = false
-		queue_redraw()
+		_redraw_world()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion and _edit_dragging and _edit_sel_entry >= 0:
 		layout[_edit_sel_entry][1][_edit_sel_tile] = _mouse_tile()
-		queue_redraw()
+		_redraw_world()
 	elif event is InputEventKey and event.pressed:
 		if event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
 			_edit_delete()
@@ -4943,7 +4948,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_BRACKETRIGHT:
 			_edit_palette = (_edit_palette + 1) % _EDIT_PALETTE.size()
 			_notice("팔레트: " + _EDIT_PALETTE[_edit_palette])
-		queue_redraw()
+		_redraw_world()
 
 func _edit_place_new(tile: Vector2i) -> void:
 	var key := _edit_key()
@@ -4969,7 +4974,7 @@ func _edit_delete() -> void:
 	_edit_sel_entry = -1
 	_edit_sel_tile = -1
 	_rebuild_prop_collision()
-	queue_redraw()
+	_redraw_world()
 
 # 배치 모드 오버레이(월드 좌표) — 선택 노란 테두리 + 마우스 칸 청록 격자 + 팔레트 고스트.
 func _draw_edit_overlay() -> void:
@@ -9912,10 +9917,29 @@ func _apply_camera_limits() -> void:
 	# "집"→HOUSE_CAM·"카페"→CAFE_CAM·공유 집 6채→HOUSE_CAM·만물상→STORE_CAM, 한 데이터 흐름).
 	if _indoor != "" and _buildings.has(_indoor):
 		r = _buildings[_indoor]["cam"]
-	_cam.limit_left = r.position.x * TILE
-	_cam.limit_top = r.position.y * TILE
-	_cam.limit_right = r.end.x * TILE
-	_cam.limit_bottom = r.end.y * TILE
+	var lft := r.position.x * TILE
+	var top := r.position.y * TILE
+	var rgt := r.end.x * TILE
+	var bot := r.end.y * TILE
+	# ★[폴리시 R13] 층은 뷰포트보다 **좁다**(24칸=768px < 화면 960px). Godot Camera2D는 한계를
+	#   좌→우 순으로 클램프하고 뒤가 이기므로, 그대로 두면 화면 rect가 `limit_right − 960`에 고정돼
+	#   ①층이 화면 오른쪽에 붙고 ②왼쪽 192px(6칸)이 아무것도 안 그려진 죽은 띠로 남았다(지면 굽기는
+	#   `_grid_w * TILE`뿐이라 채울 그림 자체가 없다) ③플레이어가 어디로 가도 가로 추적이 없다.
+	#   남는 폭을 **양쪽에 반씩** 나눠 주면 좌·우 클램프가 같은 값을 내 층이 화면 정중앙에 선다
+	#   (스타듀 갱도 관례 — 좁은 층은 가운데 고정에 양옆 검은 여백). 실내 방은 `indoor_mask`가
+	#   이미 바깥을 가려 두었으므로 종전 한계를 그대로 둔다(마스크 구멍 좌표·회귀 불변).
+	if _in_mine_floor() or _in_narak_floor():
+		var view: Vector2 = get_viewport_rect().size / _cam.zoom
+		var pad_x := int(maxf((view.x - float(rgt - lft)) * 0.5, 0.0))
+		var pad_y := int(maxf((view.y - float(bot - top)) * 0.5, 0.0))
+		lft -= pad_x
+		rgt += pad_x
+		top -= pad_y
+		bot += pad_y
+	_cam.limit_left = lft
+	_cam.limit_top = top
+	_cam.limit_right = rgt
+	_cam.limit_bottom = bot
 
 # ── P2.3③ 밤 라이팅 ────────────────────────────────────────────────────────
 # CanvasModulate(화면 색조) + 소울 등불 자리 빛웅덩이를 월드 캔버스에 붙인다. 등불 위치는
@@ -10961,6 +10985,11 @@ func _try_derby_exchange() -> void:
 		_:
 			return
 	seasonal_event.exchange_tag(clock.day)   # 지급이 끝난 뒤에야 태그를 뗀다
+	# ★[폴리시 R13] 좌판 위 금빛 점은 `tags_on(day)` 파생인데 `SeasonalEvent`엔 `changed`가 없어
+	#   자동 훅에 안 실리고, [F]를 누르는 동안 `_target`이 고정이라 `_update_target`의 무효화도
+	#   안 걸렸다 — "남은 태그 0" 알림 옆에 점이 그대로 켜져 있었다. R10이 `_fill_pet_bowl`에 세운
+	#   "시그널 없는 원장은 갱신이 이 자리 몫"과 같은 처방.
+	queue_redraw()
 	audio.sfx("ui")
 	_notice("금빛 태그 교환 — %s (남은 태그 %d)" % [label, seasonal_event.tags_on(clock.day)])
 	# ★[S10-T2 / ADR-0069 결정 4] 획득처 ⑥ — 그날 교환이 문턱에 닿으면 특별 부상 1회 한정.
@@ -12097,14 +12126,20 @@ func _load_game() -> bool:
 		rarecrow.load_save(data["rarecrow"])
 	if data.has("crab_pot"):   # ★ [S3-T7] — 키 없는 구세이브는 게잡이통 0(빈 원장·하위호환)
 		crab_pot.load_save(data["crab_pot"])
-	if data.has("museum"):   # ★ [S2-T5] — 키 없는 구버전은 기증 0(빈 원장·하위호환)
-		museum.load_save(data["museum"])
-	if data.has("codex"):    # ★ [S10-T6] — 키 없는 구세이브는 등재 0·트로피 없음(빈 원장·하위호환).
-		codex.load_save(data["codex"])   #   기존 플레이어도 다음 출하부터 자연히 채워 나간다(무막힘)
-	if data.has("fireflies"):  # ★ [S10-T7] — 키 없는 구세이브는 안치 0(전 반딧넋이 제자리에 있는 새 수집·하위호환)
-		fireflies.load_save(data["fireflies"])
-	if data.has("quest_board"):   # ★ [S2-T6] — 키 없는 구버전은 수락 0·완료 0(빈 원장·하위호환)
-		quest_board.load_save(data["quest_board"])
+	# ★[폴리시 R13] **누적 원장 다섯도 `has` 가드를 걷는다**(R3의 아이템 원장 넷·R12의 삽사리/승마와
+	#   같은 처방. 아래 `mine`·`forage_found`·`guest_pool`·`trial_ground`가 같은 클러스터다).
+	#   판별식은 "부팅으로 시드되는가"다 — 이 다섯은 **오직 플레이로만 쌓이는** 원장이라 빈 dict가
+	#   곧 "키 없는 구세이브를 부팅으로 읽은 상태"와 정확히 같다(각 load_save의 첫 줄이 자기 원장을
+	#   비운다). 반대로 바로 아래 `forage`·`flower_patch`·`forage_spawn`·`berry_bush`는 부팅/취침이
+	#   맵에서 다시 시드하므로 빈 dict ≠ 부팅 결과다 — 그쪽 가드는 그대로 둔다.
+	#   가드가 남아 있으면 키 없는 구세이브를 F9로 *실행 중에* 읽을 때 load_save가 아예 안 불려
+	#   **버린 타임라인의 누적이 살아남는다**: ㉠도감은 생선가게 즉시 환전이 `codex.record`를 찍으므로
+	#   취침 없이도 부풀고, 그 값이 열람대 진행 바 → 다음 취침의 1회성 트로피 래치 → `_save_game`
+	#   순으로 굳는다 ㉡혼백관·게시판·반딧넋도 같은 결이다.
+	museum.load_save(data.get("museum", {}))          # ★ [S2-T5] 기증 원장
+	codex.load_save(data.get("codex", {}))            # ★ [S10-T6] 등재·트로피(다음 출하부터 자연히 채워진다)
+	fireflies.load_save(data.get("fireflies", {}))    # ★ [S10-T7] 안치 원장
+	quest_board.load_save(data.get("quest_board", {}))   # ★ [S2-T6] 수락·완료 이력
 	if data.has("forage"):    # ★ [B1-a.3] — 키 없는 구버전은 사료풀 0(부팅 후 _seed_forage_tiles가 맵에서 시드). changed가 드로우 갱신
 		forage.load_save(data["forage"])
 	if data.has("flower_patch"):  # ★ ADR-0052 — 키 없는 구세이브는 딴 상태 0(부팅 후 _seed_flower_patches가 배치에서 시드). changed가 드로우 갱신
@@ -12113,9 +12148,10 @@ func _load_game() -> bool:
 		forage_spawns.load_save(data["forage_spawn"])
 	if data.has("berry_bush"):    # ★[S4-T8] — 키 없는 구세이브는 열매 0(다음 취침이 절기 창이면 다시 단다·무막힘)
 		berry_bushes.load_save(data["berry_bush"])
-	if data.has("forage_found"):  # ★[S4-T5] — 키 없는 구세이브는 발견 0(주우면 그때부터 기록·무막힘)
-		var ff: Variant = data["forage_found"]
-		_forage_found = ff.duplicate() if typeof(ff) == TYPE_DICTIONARY else {}
+	# ★[S4-T5] 발견 원장 — 키 없는 구세이브는 발견 0(주우면 그때부터 기록·무막힘).
+	# ★[폴리시 R13] 위 다섯과 같은 클러스터(플레이로만 쌓이는 누적) — 가드 없이 무조건 되감는다.
+	var ff: Variant = data.get("forage_found", {})
+	_forage_found = ff.duplicate() if typeof(ff) == TYPE_DICTIONARY else {}
 	if data.has("menu_found"):    # ★[S6-T2] — 키 없는 구세이브는 발견 0(재료를 다시 손에 넣으면 그때 열린다)
 		var mf: Variant = data["menu_found"]
 		_menu_found = mf.duplicate() if typeof(mf) == TYPE_DICTIONARY else {}
@@ -12156,8 +12192,13 @@ func _load_game() -> bool:
 		mount.load_save(data.get("mount", {}))
 	if pet != null:
 		pet.load_save(data.get("pet", {}))
-	if data.has("mine"):          # ★[S5-T1] — 키 없는 구세이브는 도달 깊이 0·채굴 기록 0(지상 시작·무막힘)
-		mine_floors.load_save(data["mine"])
+	# ★[S5-T1] 갱도 원장 — 키 없는 구세이브는 도달 깊이 0·채굴 기록 0(지상 시작·무막힘).
+	# ★[폴리시 R13] 가드를 걷는다(위 누적 원장 클러스터와 같은 처방). 여기는 소비처가 **관계 관문**
+	#   이라 결과가 더 무겁다: `_depth`는 하강만으로 오르는 영구값이라 취침·저장 없이도 부푸는데,
+	#   가드가 있으면 pre-S5-T1 세이브를 F9로 읽어도 그 값이 남아 `_deed_ledgers()`의 `"mine_depth"`
+	#   → `Deed.check("bana", 1, ...)`가 **갱도에 한 번도 안 들어간 세이브에서 ♡1 관문을 연다**
+	#   (엘리베이터 체크포인트도 같은 값 파생이고, 다음 취침이 그 깊이를 파일에 굳힌다).
+	mine_floors.load_save(data.get("mine", {}))
 	if data.has("home_deco"):   # ★ [S1-9] — 키 없는 구버전은 배치·해금 0(빈 집). changed가 드로우 갱신
 		home_deco.load_save(data["home_deco"])
 	if data.has("wallet"):
@@ -12184,8 +12225,10 @@ func _load_game() -> bool:
 	# ★[S10-T8] 시련장·경지 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(보부상과 같은
 	#   하위호환 관례). 막히는 것은 0이다: 문은 반딧넋 카운트가 열고, 이번 주 시련은 주 시드에서
 	#   그대로 파생되며, 경지 포인트는 스킬 XP에서 다시 계산된다.
-	if data.has("trial_ground") and trial != null:
-		trial.load_save(data["trial_ground"])
+	# ★[폴리시 R13] 시련장은 완료 누적·시련패 잔량이 오직 플레이로만 쌓이는 원장이라 가드를 걷는다
+	#   (위 누적 원장 클러스터와 같은 처방 — null 검사는 노드가 늦게 서므로 그대로 둔다).
+	if trial != null:
+		trial.load_save(data.get("trial_ground", {}))
 	if data.has("mastery") and mastery != null:
 		mastery.load_save(data["mastery"])
 	# ★[S9-T3] 편지 원장 — 키 없는 구세이브는 **빈 우편함**으로 시작한다(곳간·출하함과 같은 하위호환
@@ -12198,8 +12241,8 @@ func _load_game() -> bool:
 		books.load_save(data["books"])
 	# ★[S6-T4] 단골 원장 — 키 없는 구세이브는 **전원 처음 오는 손님**으로 시작한다(빈 원장 = 기본
 	#   가중치. 아무것도 안 막힌다 — 명명 손님은 그대로 오고 이력만 0부터 쌓인다).
-	if data.has("guest_pool"):
-		guests.load_save(data["guest_pool"])
+	# ★[폴리시 R13] 방문 이력도 플레이로만 쌓이는 누적이라 가드를 걷는다(위 클러스터와 같은 처방).
+	guests.load_save(data.get("guest_pool", {}))
 	# ★[폴리시 R5] 카페 하루치 접객 원장(키 없는 구세이브 = 오늘 아무도 안 다녀갔다).
 	# ★[폴리시 R6] **`has` 가드를 걷어 빈 dict로 무조건 되감는다.** R5가 하루치 리셋 책임을
 	#   `_open_shop`의 무조건 리셋에서 `_ledger_day != day` 비교로 옮긴 순간, "안 되감는다"의 뜻이
@@ -12976,7 +13019,9 @@ func _process(delta: float) -> void:
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
-	if (_region == RegionCatalog.HOME or _is_forest_art_region()) and player != null:
+	# ★[폴리시 R13] 구역 목록을 `_has_split_pass()`로 모았다 — 앞 패스를 그리는 구역(마을·삼도천·
+	#   황천해 포함)이면 전부 여기서 재분할·fade를 받는다(그 술어 선언부에 경위).
+	if _has_split_pass() and player != null:
 		var _pty := int(player.global_position.y) / TILE
 		if _pty != _last_player_tile_y:
 			_last_player_tile_y = _pty
@@ -17306,8 +17351,12 @@ func _on_frame_deposit(slot_index: int) -> void:
 	#   지키면 답이 하나로 떨어진다 — 중복 유품은 출하함으로 판다.
 	# ★[폴리시 R9] 결정기 부품·결정기(`_mine_device_sellable`)가 넷째 갈래로 합류했다 — 사유는
 	#   유품과 정확히 같다(카탈로그가 값을 선언했는데 그 값을 받는 창구가 0). 술어 참조.
+	# ★[폴리시 R13] 다섯째 갈래 = `ItemCatalog.SHIPPABLE_MATERIALS`(삭은 그물·넋가루·혼불씨). 사유는
+	#   유품·결정기 부품과 정확히 같고(값은 매겨졌는데 그 값을 받는 창구가 0), **자재군 전체를 여는
+	#   것이 아니라** 그 표에 실린 id만 받는다 — 원목·이끼·주괴는 그대로 거절이다(술어 선언부 참조).
 	if id == "" or not (ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST
-			or Codex.is_tracked(id) or _relic_sellable(id) or _mine_device_sellable(id)):
+			or Codex.is_tracked(id) or _relic_sellable(id) or _mine_device_sellable(id)
+			or ItemCatalog.is_shippable_material(id)):
 		return   # 출하 대상 밖(씨앗·도구·비료·자재·미기증 유품·책)은 무동작
 	var n := inventory.count_at(slot_index)
 	var q := inventory.quality_at(slot_index)   # ★ S1-6 이 슬롯의 등급을 함께 출하(worst-first 오염 방지 = 슬롯 지정 제거)
@@ -21470,8 +21519,15 @@ func _close_epilogue() -> void:
 	ending_restart.text = "처음부터 다시 시작"
 	if notice_feed != null:
 		notice_feed.visible = true
-	clock.running = _epilogue_clock_prev
-	player.set_physics_process(true)
+	# ★[폴리시 R13] **『정지 주인 ≠ 재개 주인』의 닫는 자리.** R12가 `_close_spine_scene`·
+	#   `_on_dialogue_finished`에 세운 `not _sleeping` 가드의 형제인데 여기만 비어 있었다: B7 마지막
+	#   묶음이 24:00 강제 취침 트윈 한가운데서 닫히면 다음 프레임의 [E]/우클릭이 그대로 이 함수를
+	#   띄우고, 그러면 ㉠남은 트윈(~1.1초) 동안 **완전 암전 뒤에서 플레이어가 걸어 다녀** 쓰러진 자리가
+	#   아닌 칸에서 아침을 맞고 ㉡`_do_sleep`이 세운 시계 정지를 에필로그가 풀어 버린다. 취침 중이면
+	#   두 잠금의 주인은 취침이므로 여기서는 손대지 않는다(`_on_sleep_done`이 눈뜨는 프레임에 켠다).
+	if not _sleeping:
+		clock.running = _epilogue_clock_prev
+	player.set_physics_process(not _sleeping)
 	_save_game()                      # 돌아간 자리를 굳힌다(에필로그는 1회성 — 다시 안 뜬다)
 
 # 관계 요약 행 — 진급한 칸이 있는 사람만, 높은 칸부터. 배우자·앵커가 늘 위에 오도록 정렬한다.
@@ -26237,10 +26293,40 @@ func _draw_prop_shadow(canvas: CanvasItem, t: Vector2i, yo: int, tsz: Vector2) -
 #   아니면 1.0으로 move_toward. 알파가 바뀐 프레임에만 _front_props를 다시 그린다(정적이면 재드로우 0).
 # ★[S4-T9] occlusion fade 모수 = 그 구역의 부피 프롭 배열. 안식은 손저작+절차 병합, 숲은 T9 절차
 #   배열이다(다른 구역은 fade 대상이 없어 빈 배열 = 종전대로 무동작).
+# ★[폴리시 R13] Y-split을 타는 구역인가 — **단일 출처**다. 이 술어가 ㉠행 넘김 재분할 게이트
+#   (`_process`) ㉡앞 패스 그리기(`_draw_front_props`) ㉢occlusion fade(`_update_tree_fade`) 셋을
+#   함께 켠다. 셋이 제각기 구역 목록을 들고 있던 동안, 앞 패스는 마을·삼도천·황천해도 그리는데
+#   게이트와 fade는 안식·숲만 알아서 **그 세 구역의 앞 패스가 진입 프레임의 split_y로 굳었다**
+#   (main 캔버스의 뒤 패스만 `_update_target`으로 매 걸음 다시 갈려, 마을 벚꽃 나무가 통째로
+#   사라지거나 반대 방향에선 플레이어를 덮었고, 26256 주석이 선언한 마을 나무 fade도 안 돌았다).
+#   목록을 늘릴 땐 여기부터 — 술어가 권위고 아래 `_split_prop_entries`는 그 짐이다(한쪽만 늘면
+#   "안 그려짐"으로 즉시 드러나지, 옛 그림이 남는 조용한 고장이 되지 않는다).
+func _has_split_pass() -> bool:
+	match _region:
+		RegionCatalog.HOME, RegionCatalog.NARU_VILLAGE, RegionCatalog.SAMDOCHEON, \
+				RegionCatalog.HWANGCHEONHAE, RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
+			return true
+	return false
+
+# 그 구역의 Y-split 대상 엔트리. 앞 패스와 fade가 **같은 배열**을 본다(둘이 다른 배열을 보면
+# "화면엔 앞에 있는데 fade는 다른 나무를 재는" 어긋남이 생긴다 — 옛 fade는 구역 불문 안식 배열을
+# 봤다). 앞 패스가 없는 구역은 빈 배열이다.
+func _split_prop_entries() -> Array:
+	if not _has_split_pass():
+		return []
+	match _region:
+		RegionCatalog.NARU_VILLAGE:
+			# ★[S2-T9] 마을 벚꽃 나무도 같은 Y-split을 받는다(수관 뒤로 지나가면 반투명 — FADE_PROPS).
+			return _prop_layouts.get("VILLAGE_OUTDOOR", [])
+		RegionCatalog.SAMDOCHEON:
+			return _prop_layouts.get("SAMDO_OUTDOOR", [])
+		RegionCatalog.HWANGCHEONHAE:
+			return _prop_layouts.get("HWANG_OUTDOOR", [])
+	# ★[S4-T9] 숲 캐노피·원장 폼도 같은 Y-split(수관 뒤로 지나가면 반투명 — FADE_PROPS).
+	return _forest_prop_entries() if _is_forest_art_region() else _home_prop_entries()
+
 func _fade_prop_entries() -> Array:
-	if _is_forest_art_region():
-		return _forest_prop_entries()
-	return _home_prop_entries()
+	return _split_prop_entries()
 
 func _update_tree_fade(delta: float) -> void:
 	var ppos := player.global_position
@@ -26312,31 +26398,17 @@ func _draw_mihok_fog(canvas: CanvasItem) -> void:
 			canvas.draw_circle(c, r * (1.0 - 0.085 * float(k)), Color(_FOG_COLOR, step))
 
 func _draw_front_props(canvas: CanvasItem) -> void:
-	if player == null:
+	if player == null or not _has_split_pass():
 		return
-	match _region:
-		RegionCatalog.HOME:
-			_draw_props_for(_home_prop_entries(), canvas, _PROP_PASS_FRONT, player.global_position.y)
-			# ★[폴리시 R13] 마당 나무에 박은 채취기도 숲과 같은 Y-split — 이 한 줄이 없어 안식에선
-			#   앞 패스로 갈린 채취기를 다시 그리는 손이 아예 없었다(상태 표식이 통째로 묻혔다).
-			_draw_tappers_front(canvas)
-		RegionCatalog.NARU_VILLAGE:
-			# ★[S2-T9] 마을 벚꽃 나무도 같은 Y-split을 받는다(수관 뒤로 지나가면 반투명 — FADE_PROPS).
-			_draw_props_for(_prop_layouts.get("VILLAGE_OUTDOOR", []), canvas, _PROP_PASS_FRONT,
-				player.global_position.y)
-		RegionCatalog.SAMDOCHEON:
-			_draw_props_for(_prop_layouts.get("SAMDO_OUTDOOR", []), canvas, _PROP_PASS_FRONT,
-				player.global_position.y)
-		RegionCatalog.HWANGCHEONHAE:
-			_draw_props_for(_prop_layouts.get("HWANG_OUTDOOR", []), canvas, _PROP_PASS_FRONT,
-				player.global_position.y)
-		RegionCatalog.JEOSEUNG_FOREST, RegionCatalog.MIHOK_FOREST:
-			# ★[S4-T9] 숲 캐노피·원장 폼도 같은 Y-split(수관 뒤로 지나가면 반투명 — FADE_PROPS).
-			_draw_props_for(_forest_prop_entries(), canvas, _PROP_PASS_FRONT, player.global_position.y)
-			# ★[S4-T10] 채취기도 같은 Y-split — 캐노피와 같은 패스에 있어야 "수거 대기" 표식이 안 묻힌다.
-			_draw_tappers_front(canvas)
-			# 안개는 나무보다도 위다 — 숲 전체를 덮는 대기라 프롭 뒤에 깔면 "바닥 얼룩"으로 읽힌다.
-			_draw_mihok_fog(canvas)
+	_draw_props_for(_split_prop_entries(), canvas, _PROP_PASS_FRONT, player.global_position.y)
+	# ★[폴리시 R13] 마당 나무에 박은 채취기도 숲과 같은 Y-split — 이 한 줄이 없어 안식에선
+	#   앞 패스로 갈린 채취기를 다시 그리는 손이 아예 없었다(상태 표식이 통째로 묻혔다).
+	# ★[S4-T10] 숲도 같다 — 캐노피와 같은 패스에 있어야 "수거 대기" 표식이 안 묻힌다.
+	if _region == RegionCatalog.HOME or _is_forest_art_region():
+		_draw_tappers_front(canvas)
+	# 안개는 나무보다도 위다 — 숲 전체를 덮는 대기라 프롭 뒤에 깔면 "바닥 얼룩"으로 읽힌다.
+	if _is_forest_art_region():
+		_draw_mihok_fog(canvas)
 
 # 좌석에 앉은 손님과 머리 위 인내심 바를 그린다. 인내심이 줄수록 바가 짧아지고 붉어져
 # "곧 떠난다"가 눈에 보인다(서빙 우선순위 판단의 근거). 몸체는 그레이박스지만 P2.7 톤 패스에서

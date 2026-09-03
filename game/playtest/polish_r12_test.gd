@@ -391,8 +391,13 @@ func _check_sleep_locks(m: Node) -> void:
 		m.player.is_physics_processing())
 	_check("⑦c 목록에 내면 공간(`spine_puzzle`)도 함께 들었다 — 걸어 다니는 곳이 아니다",
 		_in_func("func _on_sleep_done", "and not _epilogue_open and spine_puzzle == null:"))
-	_check("⑦d 다시 켜는 자리는 두 화면이 닫히는 그곳이다(`_close_epilogue`·`_close_spine_scene`)",
-		_in_func("func _close_epilogue", "player.set_physics_process(true)")
+	# ★[폴리시 R13 정정] 니들이 갈렸다 — 두 닫는 자리는 **취침 중이 아닐 때만** 다시 켠다.
+	#   R12 시점엔 `_close_spine_scene`만 `not _sleeping` 항을 받았고 `_close_epilogue`는 무조건
+	#   켜고 있었는데, R13 #16이 그 마지막 형제를 합류시켰다(취침 트윈 중엔 잠금의 주인이 취침이고
+	#   `_on_sleep_done`이 눈뜨는 프레임에 켠다). "닫는 자리가 켠다"는 계약은 그대로다.
+	_check("⑦d 다시 켜는 자리는 두 화면이 닫히는 그곳이다(`_close_epilogue`·`_close_spine_scene` — 취침 중이면 취침 몫)",
+		_in_func("func _close_epilogue", "player.set_physics_process(not _sleeping)")
+		and _in_func("func _close_spine_scene", "not _sleeping:")
 		and _in_func("func _close_spine_scene", "player.set_physics_process(true)"))
 
 
@@ -407,10 +412,17 @@ func _check_epilogue_clock(m: Node) -> void:
 	m._open_epilogue()
 	_check("⑧a 취침 중 스냅은 true다 — 기억할 값은 '연출이 끝나면 시계가 어떤 상태여야 하는가'다",
 		m._epilogue_clock_prev == true)
-	m._close_epilogue()
+	# ★[폴리시 R13 정정] 닫는 자리를 **취침 밖에서** 잰다. R13 #16이 `_close_epilogue`에
+	#   `not _sleeping` 가드를 세웠기 때문이다 — 트윈 한가운데서 닫으면 시계 복원은 취침 몫이고
+	#   (0.4초 뒤 `clock.sleep()`이 `running = true`로 되돌린다), 에필로그가 그 자리를 가로채면
+	#   "연출이 끝나면 시계가 어떤 상태여야 하는가"를 취침이 아니라 에필로그가 정하게 된다.
+	#   R12가 막으려던 **영구 정지**는 그대로 안 일어난다: 스냅 값이 true라 취침 밖 닫기가 되살린다.
 	m._sleeping = false
+	m._close_epilogue()
 	_check("⑧b 그래서 엔딩을 닫으면 시간이 다시 흐른다(종전엔 여기서 영구 정지했다)",
 		m.clock.running == true)
+	_check("⑧b2 취침 트윈 한가운데서 닫으면 시계는 그대로 멈춰 있다 — 되살리는 주인은 취침이다(R13 #16)",
+		_close_during_sleep_keeps_clock_stopped(m))
 	# 대조 — 취침이 아닌 이유로 멈춰 있던 시계는 여전히 되살리지 않는다(컷신의 그 규율 보존).
 	m._epilogue_open = false
 	m.clock.running = false
@@ -876,3 +888,19 @@ func _check_follower_rollback(m: Node) -> void:
 	m._sync_mount()
 	_check("⑲d 속도 계수도 함께 되감긴다(로드 직후 ×1.5가 다시 실리지 않는다)",
 		is_equal_approx(m.player.speed_scale, m.mount.speed_scale()))
+
+
+# ★[폴리시 R13 정정] ⑧b2 보조 — 취침 트윈 구간을 재현해 닫아 보고 시계가 멈춘 채인지 잰다.
+# (⑧ 본문의 상태를 어지르지 않도록 값을 세우고 되돌리는 일을 여기 가둔다.)
+func _close_during_sleep_keeps_clock_stopped(m: Node) -> bool:
+	var prev_open: bool = m._epilogue_open
+	m._sleeping = true
+	m._epilogue_open = true
+	m._epilogue_clock_prev = true
+	m.clock.running = false
+	m._close_epilogue()
+	var stopped: bool = not m.clock.running
+	m._sleeping = false
+	m._epilogue_open = prev_open
+	m.clock.running = true
+	return stopped

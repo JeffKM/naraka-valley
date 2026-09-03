@@ -1,7 +1,8 @@
 extends SceneTree
-# ★[폴리시 13회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#9).
+# ★[폴리시 13회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#9) + 배치 B(#10~#18).
 #
-# 렌즈: R12 diff 리뷰 · 시그널/생애주기 · 문구·용어.
+# 렌즈: R12 diff 리뷰 · 시그널/생애주기 · 문구·용어 · 원장 단조성 · 맵 가장자리 ·
+#       상태변경↔무효화 짝 · 시계 정지/재개 · 경제 흐름.
 #
 # 무엇을 보증하나(번호 = 13회차 헌트 배치 A 발견 인덱스):
 #   ① #0 (high) R12가 세운 `is_maxed()` 술어는 "만점 상대의 선물은 실효가 정확히 0"을 전제했는데
@@ -26,7 +27,22 @@ extends SceneTree
 #   ⑨ #8 같은 설비를 출하함/무인 출하함/출하대 세 이름으로 불렀다(도감 조건문만 다른 이름).
 #   ⑩ #9 관계 탭 바나 효과줄에 영문 단위 "s"와, 아크 본문이 회귀로 금지한 옛 프레이밍이 남아 있었다.
 #
-# 판정: ①~⑩ 전부 CONFIRMED(REFUTED·DUP 없음).
+#   ⑪ #10·#11 `if data.has(key):` 가드 때문에 키 없는 구세이브를 **실행 중에** F9로 읽으면
+#        `load_save`가 아예 안 불려 버린 타임라인의 누적이 살아남았다 — 갱도 도달 최심층은
+#        바나 ♡1 deed 관문을, 명부 도감 등재는 1회성 트로피 래치를 잘못 연다.
+#   ⑫ #12 층 폭(24칸=768px)이 화면 폭(960px)보다 좁은데 카메라 한계를 층 크기 그대로 잡아,
+#        층이 화면 오른쪽에 붙고 왼쪽 6칸이 아무것도 안 그려진 검은 띠로 남았다.
+#   ⑬ #13 (high) 앞 패스는 마을·삼도천·황천해도 그리는데 재분할 게이트와 fade는 안식·숲만
+#        알아서, 그 세 구역의 앞 패스가 진입 프레임의 split_y로 굳었다(나무가 사라지거나 덮었다).
+#   ⑭ #14 더비 태그를 교환해도 좌판 위 금빛 점이 안 꺼졌다(`SeasonalEvent`엔 `changed`가 없다).
+#   ⑮ #15 F10 배치 모드의 놓기·삭제가 main만 갱신해 앞 패스에 옛 그림이 남았다.
+#   ⑯ #16 `_close_epilogue`가 취침 여부를 안 보고 시계·이동 잠금을 되살렸다 — 암전 뒤에서
+#        플레이어가 걸어 다니는, R12가 형제 셋에서 막은 바로 그 증상의 마지막 자리.
+#   ⑰ #17·#18 카탈로그가 값을 매긴 자재 셋(삭은 그물·넋가루·혼불씨)에 냥으로 바꾸는 창구가
+#        0이었다 — R8(중복 유품)·R9(결정기 부품)과 같은 클래스.
+#
+# 판정: ①~⑰ 전부 CONFIRMED(REFUTED·DUP 없음). #19(곁들이 혼력 자기증식)는 OWNER-DECISION —
+#       쿨다운·상한 신설은 새 게이트라 여기서 안 잰다.
 #
 # 실행: ./run_tests.sh polish_r13   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -69,6 +85,19 @@ func _in_func(fn_needle: String, needle: String) -> bool:
 			return true
 	return false
 
+# 같은 함수 몸통 안에서 니들이 몇 번 나오는가(무효화 자리 수를 세는 단언용 — 잔존 0건 확인).
+func _count_in_func(fn_needle: String, needle: String) -> int:
+	var head := _line_of(fn_needle)
+	if head < 0:
+		return -1
+	var n := 0
+	for i in range(head + 1, _src.size()):
+		if _src[i].begins_with("func "):
+			break
+		if _src[i].contains(needle):
+			n += 1
+	return n
+
 # ★ 한 줄에서 **주석 밖 문자열 리터럴**만 뽑는다(따옴표 밖의 첫 `#`부터가 주석). 용어·화폐 스캔이
 #   내부 식별자·설계 주석에 걸리지 않게 하는 것이 이 헬퍼의 전부다 — 표시 층만 잰다.
 func _display_strings(line: String) -> Array:
@@ -107,7 +136,7 @@ func _initialize() -> void:
 	await _run_checks()
 
 func _run_checks() -> void:
-	print("══ 폴리시 R13 배치 A 회귀(#0~#9) ══")
+	print("══ 폴리시 R13 회귀 — 배치 A(#0~#9) + 배치 B(#10~#18) ══")
 	var cleaner := SaveManager.new()
 	cleaner.delete_save()
 	_src = _lines_of_file("res://main.gd")
@@ -124,6 +153,13 @@ func _run_checks() -> void:
 	_check_mel_intro(m)
 	_check_ship_bin_name()
 	_check_bana_summary()
+	_check_ledger_rollback(m)
+	_check_floor_camera(m)
+	_check_split_source(m)
+	_check_derby_redraw(m)
+	_check_edit_invalidate(m)
+	_check_epilogue_sleep(m)
+	_check_shippable_materials(m)
 
 	print("── 결과 ──")
 	print("  실패 %d건" % _fail)
@@ -479,3 +515,280 @@ func _check_bana_summary() -> void:
 func _last_notice(m: Node) -> String:
 	var items: Array = m.notice_feed._items
 	return "" if items.is_empty() else String(items[items.size() - 1]["text"])
+
+
+# ── ⑪ #10·#11 F9 인플레이스 로드가 누적 원장을 되감는다 ──────────────────────
+# `if data.has(key):` 가드 때문에 키 없는 구세이브를 **실행 중에** F9로 읽으면 `load_save`가 아예
+# 안 불려 버린 타임라인의 누적이 살아남았다. 소비처가 관계 관문(갱도 깊이 → 바나 ♡1 deed)과
+# 1회성 트로피 래치(도감)라 결과가 무겁다. R3(아이템 원장 넷)·R12(삽사리·승마)와 같은 처방이되,
+# 판별식은 "부팅으로 시드되는가"다 — 여기 여덟은 오직 플레이로만 쌓이므로 빈 dict = 부팅 결과다.
+func _check_ledger_rollback(m: Node) -> void:
+	print("── ⑪ #10·#11 키 없는 구세이브가 누적 원장을 되감는다 ──")
+	var calls := [
+		"museum.load_save(data.get(\"museum\", {}))",
+		"codex.load_save(data.get(\"codex\", {}))",
+		"fireflies.load_save(data.get(\"fireflies\", {}))",
+		"quest_board.load_save(data.get(\"quest_board\", {}))",
+		"mine_floors.load_save(data.get(\"mine\", {}))",
+		"guests.load_save(data.get(\"guest_pool\", {}))",
+		"trial.load_save(data.get(\"trial_ground\", {}))",
+	]
+	var missing: Array = []
+	for c in calls:
+		if not _in_func("func _load_game", String(c)):
+			missing.append(c)
+	_check("⑪a 로드 경로가 누적 원장 일곱을 **무조건** 부른다(`.get` 빈 dict 폴백 — 누락 %d건)"
+			% missing.size(), missing.is_empty())
+	for c in missing:
+		print("      · 누락: " + String(c))
+	var guards: Array = []
+	for k in ["\"museum\"", "\"codex\"", "\"fireflies\"", "\"quest_board\"", "\"mine\"",
+			"\"guest_pool\"", "\"trial_ground\"", "\"forage_found\""]:
+		if _in_func("func _load_game", "data.has(%s)" % String(k)):
+			guards.append(k)
+	_check("⑪b 그 여덟(발견 원장 포함)에 `has` 가드가 안 남았다(부분 수정 방지 — 잔존 %d건)"
+			% guards.size(), guards.is_empty())
+	_check("⑪c-pre 무대: 부팅이 맵에서 다시 시드하는 원장(채집물·꽃·절기 스폰·열매)은 **그대로 가드를 둔다**"
+			+ " — 그쪽은 빈 dict ≠ 부팅 결과다",
+		_in_func("func _load_game", "data.has(\"forage\")")
+		and _in_func("func _load_game", "data.has(\"flower_patch\")")
+		and _in_func("func _load_game", "data.has(\"forage_spawn\")")
+		and _in_func("func _load_game", "data.has(\"berry_bush\")"))
+
+	# ── 거동으로 잰다: 키를 뺀 세이브를 만들고, 살아 있는 노드에 버린 타임라인을 새긴 뒤 F9.
+	m._save_game()
+	var raw: Dictionary = m.saver.load_game(m._active_slot)
+	var keys := ["mine", "codex", "quest_board", "guest_pool", "trial_ground", "forage_found"]
+	var present := true
+	for k in keys:
+		if not raw.has(k):
+			present = false
+		raw.erase(k)
+	_check("⑪d-pre 무대: 방금 쓴 세이브엔 여섯 키가 다 있었고, 그것을 지워 **키 없는 구세이브**를 만들었다",
+		present)
+	m.saver.save_game(raw, m._active_slot)
+
+	var tracked: Array = Codex.tracked_ids()
+	var sample_id := String(tracked[0]) if not tracked.is_empty() else ""
+	m.mine_floors.load_save({"depth": Deed.BANA_MINE_DEPTH})
+	m.codex.load_save({"shipped": {sample_id: m.clock.day}})
+	m.quest_board.load_save({"completed_total": 7})
+	var guest_id := String(GuestPool.GUEST_IDS[0])   # 로스터 파생(하드코딩 금지 — 표에 없는 id는 걸러진다)
+	m.guests.load_save({"visits": {guest_id: 3}})
+	m.trial.load_save({"tokens": 5})
+	m._forage_found = {"soul_fiber": 1}
+	_check("⑪e-pre 무대: 살아 있는 노드에 버린 타임라인이 새겨졌다(깊이 %d · 도감 '%s' 등재 · 의뢰 7 · 단골 · 시련패 5 · 발견 1)"
+			% [m.mine_floors.depth(), sample_id],
+		m.mine_floors.depth() >= Deed.BANA_MINE_DEPTH and m.codex.shipped_count() == 1
+		and m.quest_board.completed_total == 7 and m.trial.tokens == 5
+		and m.guests.visits_of(guest_id) == 3 and m._forage_found.size() == 1)
+	_check("⑪f-pre 무대: 그 상태에선 바나 ♡1 deed 관문이 실제로 **열려 있다**(되감김의 하류가 관계 관문이다)",
+		Deed.check("bana", 1, m._deed_ledgers()))
+
+	var loaded: bool = m._load_game()
+	_check("⑪g-pre 무대: F9 로드가 성립했다", loaded)
+	_check("⑪h 여섯 원장이 전부 '키 없는 구세이브의 뜻'(0)으로 되감겼다",
+		m.mine_floors.depth() == 0 and m.codex.shipped_count() == 0
+		and m.quest_board.completed_total == 0 and m.trial.tokens == 0
+		and m.guests.visits_of(guest_id) == 0 and m._forage_found.is_empty())
+	_check("⑪i 하류가 함께 닫혔다 — 갱도에 한 번도 안 들어간 세이브에서 바나 ♡1 관문이 안 열린다",
+		not Deed.check("bana", 1, m._deed_ledgers())
+		and int(m._deed_ledgers()["mine_depth"]) == 0)
+
+
+# ── ⑫ #12 좁은 층에서 카메라가 화면 정중앙에 선다 ────────────────────────────
+# 층은 24칸(768px)인데 화면은 960px다. Godot Camera2D는 한계를 좌→우 순으로 클램프하고 뒤가
+# 이기므로, 한계를 층 크기 그대로 두면 화면 rect가 `limit_right − 960`에 고정돼 층이 오른쪽에
+# 붙고 왼쪽 6칸이 아무것도 안 그려진 검은 띠로 남았다(지면 굽기는 층 폭까지뿐이라 채울 그림도 없다).
+func _check_floor_camera(m: Node) -> void:
+	print("── ⑫ #12 갱도·나락 층 카메라 정렬 ──")
+	var view_w: float = m.get_viewport_rect().size.x / m._cam.zoom.x
+	var floor_w: int = MineFloors.FLOOR_W * m.TILE
+	_check("⑫a-pre 무대: 층 폭(%dpx)이 화면 폭(%dpx)보다 **좁다** — 이 결함이 성립하는 조건 자체"
+			% [floor_w, int(view_w)], float(floor_w) < view_w)
+
+	var prev_region: String = m._region
+	var prev_floor: int = m._mine_floor
+	m._region = RegionCatalog.EOPHWA_MINE
+	m._mine_floor = 1
+	_check("⑫b-pre 무대: 지금이 갱도 층이다(카메라 분기가 실제로 이 갈래를 탄다)", m._in_mine_floor())
+	m._apply_camera_limits()
+	var lft: int = m._cam.limit_left
+	var rgt: int = m._cam.limit_right
+	_check("⑫c 한계 중심 = 층 중심(left %d + right %d == 층 폭 %d) — 층이 화면 정중앙에 선다"
+			% [lft, rgt, floor_w], lft + rgt == floor_w)
+	_check("⑫d 한계 폭(%dpx)이 화면 폭 이상이라 좌·우 클램프가 같은 값을 낸다(죽은 띠가 안 남는다)"
+			% (rgt - lft), float(rgt - lft) >= view_w)
+	_check("⑫e 세로는 손대지 않았다 — 층 높이(%dpx)가 화면보다 높아 남는 폭이 0이다"
+			% (MineFloors.FLOOR_H * m.TILE),
+		m._cam.limit_top == 0 and m._cam.limit_bottom == MineFloors.FLOOR_H * m.TILE)
+
+	m._mine_floor = prev_floor
+	m._region = prev_region
+	m._apply_camera_limits()
+	var out_w: int = RegionCatalog.size_of(m._region).x * m.TILE
+	_check("⑫f 지상은 종전 그대로다(구역이 화면보다 넓어 패딩 0 — left 0 · right = 구역 폭 %d)" % out_w,
+		m._cam.limit_left == 0 and m._cam.limit_right == out_w)
+
+
+# ── ⑬ #13 Y-split의 구역 목록이 단일 출처다 ─────────────────────────────────
+# 앞 패스(`_draw_front_props`)는 마을·삼도천·황천해도 그리는데 행 넘김 재분할 게이트와
+# occlusion fade는 안식·숲만 알고 있었다 — 그 세 구역의 앞 패스가 진입 프레임의 split_y로 굳어,
+# 뒤 패스만 매 걸음 다시 갈리는 동안 마을 벚꽃 나무가 통째로 사라지거나 플레이어를 덮었다.
+func _check_split_source(m: Node) -> void:
+	print("── ⑬ #13 앞 패스·재분할·fade가 같은 구역 목록을 쓴다 ──")
+	_check("⑬a 재분할 게이트가 술어를 쓴다(`_process`의 행 넘김 블록)",
+		_in_func("func _process", "if _has_split_pass() and player != null:"))
+	_check("⑬b 앞 패스도 같은 술어로 열린다(한쪽만 늘면 '안 그려짐'으로 즉시 드러난다)",
+		_in_func("func _draw_front_props", "not _has_split_pass()"))
+	_check("⑬c fade가 앞 패스와 **같은 배열**을 본다(`_fade_prop_entries` = `_split_prop_entries`)",
+		_in_func("func _fade_prop_entries", "return _split_prop_entries()"))
+
+	var prev_region: String = m._region
+	_check("⑬d-pre 무대: 부팅 구역(안식)은 종전부터 재분할·fade를 받았다(회귀 없음 확인)",
+		m._has_split_pass() and not m._split_prop_entries().is_empty())
+	var home_entries: Array = m._split_prop_entries()
+	var joined: Array = []
+	for rid in [RegionCatalog.NARU_VILLAGE, RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE]:
+		m._region = rid
+		if m._has_split_pass() and not m._split_prop_entries().is_empty():
+			joined.append(rid)
+	_check("⑬e 마을·삼도천·황천해 셋이 합류했다 — 술어가 참이고 그 구역의 split 원장도 비어 있지 않다(%s)"
+			% str(joined), joined.size() == 3)
+
+	m._region = RegionCatalog.NARU_VILLAGE
+	var village: Array = m._split_prop_entries()
+	_check("⑬f 마을에서 fade가 **마을 프롭**을 잰다 — 옛 코드는 구역 불문 안식 배열을 봤다",
+		m._fade_prop_entries() == village
+		and village == m._prop_layouts.get("VILLAGE_OUTDOOR", [])
+		and village != home_entries)
+	var has_fade_tree := false
+	for e in village:
+		if e[0] in m.FADE_PROPS and e[0] in m.SPLIT_PROPS:
+			has_fade_tree = true
+	_check("⑬g-pre 무대: 마을 원장에 **Y-split ∩ fade 대상**(벚꽃 나무)이 실재한다 — 게이트가 잴 것이 있다",
+		has_fade_tree)
+
+	m._region = RegionCatalog.EOPHWA_MINE
+	_check("⑬h 앞 패스가 없는 구역은 술어도 거짓이고 원장도 빈 배열이다(갱도)",
+		not m._has_split_pass() and m._split_prop_entries().is_empty())
+	m._region = prev_region
+
+
+# ── ⑭ #14 더비 태그 교환이 좌판 그림을 갱신한다 ──────────────────────────────
+# 좌판 위 금빛 점은 `tags_on(day)` 파생인데 `SeasonalEvent`엔 `changed`가 없어 자동 훅에 안 실리고,
+# [F]를 누르는 동안 `_target`이 고정이라 `_update_target`의 무효화도 안 걸렸다.
+func _check_derby_redraw(m: Node) -> void:
+	print("── ⑭ #14 더비 부스 금빛 점 무효화 ──")
+	_check("⑭a-pre 무대: `SeasonalEvent`엔 `changed` 시그널이 없다(자동 훅에 못 실리는 근거)",
+		not m.seasonal_event.has_signal("changed"))
+	m.seasonal_event.derby_day = m.clock.day
+	m.seasonal_event.derby_tags = 1
+	m.seasonal_event.derby_exchanges = 0
+	_check("⑭b-pre 무대: 오늘 금빛 태그를 1개 들고 있다(좌판 위 점이 켜져 있는 상태)",
+		m.seasonal_event.tags_on(m.clock.day) == 1)
+	m._try_derby_exchange()
+	_check("⑭c 교환이 원장을 실제로 줄였다(그림이 가리키는 값이 갈렸다)",
+		m.seasonal_event.tags_on(m.clock.day) == 0
+		and _last_notice(m).contains("금빛 태그 교환"))
+	_check("⑭d 그 자리가 직접 재드로우를 건다 — 시그널 없는 원장은 갱신이 이 자리 몫이다(R10 `_fill_pet_bowl`)",
+		_in_func("func _try_derby_exchange", "queue_redraw()"))
+
+
+# ── ⑮ #15 F10 배치 모드가 두 캔버스를 함께 무효화한다 ────────────────────────
+# 프롭 배열은 앞 패스도 소비하는데 편집 경로가 main만 갱신해서, 플레이어 발치보다 남쪽에 놓은
+# 프롭은 화면에 안 나타나고 지운 프롭은 플레이어 위에 남았다(배치 모드는 이동이 멎어 행 넘김
+# 재분할도 안 탄다).
+func _check_edit_invalidate(m: Node) -> void:
+	print("── ⑮ #15 배치 모드 앞 패스 무효화 ──")
+	_check("⑮a-pre 무대: `_redraw_world()`가 실제로 두 캔버스를 무효화한다(main + `_front_props`)",
+		_in_func("func _redraw_world", "queue_redraw()")
+		and _in_func("func _redraw_world", "_front_props.queue_redraw()"))
+	_check("⑮b 배치 모드 입력 갈래(놓기·드래그·삭제·팔레트)가 전부 `_redraw_world()`다 — main 전용 갱신 0건",
+		_count_in_func("func _unhandled_input", "_redraw_world()") == 3
+		and _count_in_func("func _unhandled_input", "queue_redraw()") == 0)
+	_check("⑮c 삭제도 같은 자리를 쓴다", _in_func("func _edit_delete", "_redraw_world()"))
+	_check("⑮d-pre 무대: 편집이 고치는 배열은 앞 패스가 소비하는 그 원장이다(안식 = 'HOME' 키)",
+		m._edit_key() == "HOME" and m._prop_layouts.has(m._edit_key()))
+
+
+# ── ⑯ #16 에필로그를 닫아도 취침의 잠금은 취침이 쥔다 ────────────────────────
+# 『정지 주인 ≠ 재개 주인』의 남은 닫는 자리. B7 마지막 묶음이 24:00 강제 취침 트윈 한가운데서
+# 닫히면 다음 프레임의 [E]가 `_close_epilogue`를 띄우고, 그것이 취침의 시계 정지와 이동 잠금을
+# 무조건 풀어 **암전 뒤에서 플레이어가 걸어 다녔다**.
+func _check_epilogue_sleep(m: Node) -> void:
+	print("── ⑯ #16 `_close_epilogue`의 취침 가드 ──")
+	_check("⑯a-pre 무대: 형제 두 자리는 R12가 이미 `_sleeping`을 본다(같은 계열의 앞선 처방)",
+		_in_func("func _on_dialogue_finished", "player.set_physics_process(not _sleeping)")
+		and _in_func("func _close_spine_scene", "_sleeping"))
+
+	# ㉠ 취침 트윈 한가운데서 닫는 갈래 — 두 잠금의 주인은 취침이다.
+	m._sleeping = true
+	m._epilogue_open = true
+	m._epilogue_clock_prev = true
+	m.clock.running = false
+	m.player.set_physics_process(false)
+	m._close_epilogue()
+	_check("⑯b-pre 무대: 에필로그가 실제로 닫혔다(가드가 early return으로 도망친 게 아니다)",
+		not m._epilogue_open)
+	_check("⑯c 취침 중이면 시계도 이동도 안 건드린다 — 암전 뒤에서 걸어 다니지 않는다",
+		not m.clock.running and not m.player.is_physics_processing())
+
+	# ㉡ 평시 갈래 — 정정이 정상 경로를 안 깨뜨렸다.
+	m._sleeping = false
+	m._epilogue_open = true
+	m._epilogue_clock_prev = true
+	m.clock.running = false
+	m.player.set_physics_process(false)
+	m._close_epilogue()
+	_check("⑯d 취침이 아니면 종전대로 스냅한 값으로 되돌린다(시계 재개 · 이동 해제)",
+		m.clock.running and m.player.is_physics_processing())
+
+
+# ── ⑰ #17·#18 값이 매겨진 자재에 판매 창구가 생겼다 ─────────────────────────
+# 삭은 그물(게잡이통 밤 산출의 25% · 통 EV 계산이 그 5냥을 수입으로 산입)과 잡귀 부산물 2종
+# (카탈로그가 "지금은 소지·판매까지가 실효 범위"라 선언)에 냥으로 바꾸는 창구가 한 곳도 없었다.
+# R8(중복 유품)·R9(결정기 부품)과 같은 클래스라 답도 같다 — 출하함으로 판다.
+func _check_shippable_materials(m: Node) -> void:
+	print("── ⑰ #17·#18 값이 매겨진 자재의 판매 창구 ──")
+	var ids: Array = ItemCatalog.SHIPPABLE_MATERIALS.keys()
+	var priced := true
+	var rejected_before := true
+	for id in ids:
+		var sid := String(id)
+		if ItemCatalog.price_of(sid) <= 0:
+			priced = false
+		# 종전 네 갈래가 전부 거절했는가(다섯째 갈래가 필요했던 근거).
+		if ItemCatalog.category_of(sid) == ItemCatalog.CAT_HARVEST or Codex.is_tracked(sid) \
+				or ItemCatalog._is_relic(sid) or ItemCatalog._is_mine_device(sid):
+			rejected_before = false
+	_check("⑰a-pre 무대: 표에 실린 %d종이 전부 값이 매겨져 있다(카탈로그가 '팔린다'고 선언한 물건)"
+			% ids.size(), not ids.is_empty() and priced)
+	_check("⑰b-pre 무대: 종전 네 갈래(수확물·도감 추적·중복 유품·결정기)는 그 전부를 거절한다",
+		rejected_before)
+	_check("⑰c 자재군 전체를 연 것이 아니다 — 제작·건축이 삼키는 자재와 카페 소재는 여전히 거절",
+		not ItemCatalog.is_shippable_material(ItemCatalog.WOOD)
+		and not ItemCatalog.is_shippable_material(ItemCatalog.JEOSEUNG_IKKI)
+		and not ItemCatalog.is_shippable_material(ItemCatalog.NARAK_HONJEONG))
+	_check("⑰d-pre 무대: 삭은 그물은 게잡이통 밤 산출 표에 실려 있다(창구가 필요한 이유)",
+		str(CrabPotLedger.catch_table()).contains(ItemCatalog.ROTTEN_NET))
+
+	# 실제 창구 — 백팩에 넣고 출하함에 투입해 본다.
+	m.ship_bin.load_save({})
+	m.inventory.load_save({})
+	var accepted: Array = []
+	for id in ids:
+		var sid := String(id)
+		if not m.inventory.add_item(sid, 1, ItemCatalog.Q_NORMAL):
+			continue
+		m._on_frame_deposit(m.inventory._find_id(sid))
+		if m.ship_bin.count_of(sid) == 1:
+			accepted.append(sid)
+	_check("⑰e 셋 다 출하함이 받는다(%s)" % str(accepted), accepted.size() == ids.size())
+	var expect := 0
+	for id in ids:
+		expect += ItemCatalog.price_of(String(id))
+	_check("⑰f 정산 예상액이 카탈로그 값의 합과 같다(%d냥 — 새 눈금 0)" % expect,
+		m.ship_bin.preview_gold() == expect)
+	m.ship_bin.load_save({})
+	m.inventory.load_save({})
