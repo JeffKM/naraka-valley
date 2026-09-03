@@ -83,6 +83,10 @@ func _in_func(fn_needle: String, needle: String) -> bool:
 # 그 함수 **안에서** needle이 처음 나오는 줄 인덱스(-1 = 그 함수 안엔 없다). 함수 밖의 동명
 # 호출에 속지 않으려면 위치 비교는 반드시 이쪽을 쓴다(`_refresh_festival()`처럼 부팅 경로에도
 # 같은 줄이 있는 자리 — 전역 `_line_of`로 재면 늘 참인 무의미한 단언이 된다).
+# ★[폴리시 R15] **줄 전체가 주석인 줄은 건너뛴다.** main.gd는 폴리시 회차마다 계약의 근거를 함수 안
+#   주석으로 적고 그 주석이 자기가 지키는 코드를 그대로 인용하므로, 니들이 실제 가드보다 주석에
+#   먼저 걸렸다 — ⑲d(`_fire_pet_event`의 `_sleeping`)가 그 자리였다: 가드 항을 지우고 위 주석만
+#   남기면 계약이 사라진 채 초록이었다. 코드 뒤 꼬리 주석이 달린 줄은 여전히 코드라 그대로 센다.
 func _line_in_func(fn_needle: String, needle: String) -> int:
 	var head := _line_of(fn_needle)
 	if head < 0:
@@ -90,6 +94,8 @@ func _line_in_func(fn_needle: String, needle: String) -> int:
 	for i in range(head + 1, _src.size()):
 		if _src[i].begins_with("func "):
 			return -1
+		if _src[i].strip_edges().begins_with("#"):
+			continue
 		if _src[i].contains(needle):
 			return i
 	return -1

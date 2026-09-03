@@ -106,9 +106,24 @@ func _initialize() -> void:
 	_check("③ footprint 몸통 = WALL(통과 불가)·문만 PATH(grid 불변)", all_wall)
 	_check("③ 필드 텍스처 구분 유지(_bf_grass ≠ _bf_earth)",
 		m._bf_grass != null and m._bf_grass != m._bf_earth)
-	# grass 시스템 살아있음 — 먼 잔디 군락 seed가 여전히 잔디로 판정(패드 밖).
-	_check("③ 잔디 시스템 살아있음(_g16_is_grass_patch 판정 가능)",
-		m._g16_is_grass_patch(60, 50) or m._g16_is_grass_patch(58, 48) or not m._g16_near_building(60, 50))
+	# grass 시스템 살아있음 — 패드 밖 마당에서 잔디 술어가 **실제로 갈린다**.
+	# ★[폴리시 R15] 옛 판정식은 3항 or였고 마지막 항이 `not m._g16_near_building(60, 50)`이었는데,
+	#   그 항은 45줄 위 ①("먼 마당(60,50)·(55,45) = 패드 아님")이 이미 참으로 단언한 것이라 or 전체가
+	#   항진이었다 — `_g16_is_grass_patch`가 `return false`로 퇴화해(잔디 시스템 전멸) 앞 두 항이
+	#   무너져도 ✓로 출력됐다. 좌표 두 개의 운에 기대는 대신 **패드 밖 전 마당**에서 술어가 두 답을
+	#   다 내는지 본다: 상시 false(잔디 전멸)로도 상시 true(패드 밖이 통째로 잔디)로도 퇴화하면 red다.
+	var grass_out := 0
+	var dirt_out := 0
+	for gy in range(m._outdoor_h):
+		for gx in range(m._grid_w):
+			if m._g16_near_building(gx, gy):
+				continue
+			if m._g16_is_grass_patch(gx, gy):
+				grass_out += 1
+			else:
+				dirt_out += 1
+	_check("③ 잔디 시스템 살아있음 — 패드 밖 마당에서 술어가 갈린다(잔디 %d칸 · 흙 %d칸, 둘 다 있다)"
+		% [grass_out, dirt_out], grass_out > 0 and dirt_out > 0)
 
 	m.queue_free()
 	await process_frame

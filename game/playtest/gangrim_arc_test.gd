@@ -376,6 +376,13 @@ func _run_checks() -> void:
 		g4.contains("유예") and g4.contains("나는 주지 않았다") and g4.contains("내 죄다"))
 	_check("⑨h ♡4가 플레이어의 죄를 겨누지 않는다(메인 3인 조각의 독점 영역)",
 		not g4.contains("네 죄") and not g4.contains("네가 지은"))
+	# ★[폴리시 R15] 비어 있음 가드 — 아래 `_src()` 단언은 전부 부정형이라 파일을 못 열면(`KID`와
+	#   파일명이 어긋나면) `not "".contains(x)`가 모조리 참이 되어 검사가 죽은 채 초록이 된다
+	#   (⑩h의 척추 소유 분리 단언까지 같은 배를 탄다 — luck_forecast_test ⑦a 관례).
+	_check("⑨i-pre %s.gd를 실제로 읽었다(부정 단언이 공허하지 않다 — 주석 제외 %d자)"
+			% [KID, _src().length()],
+		FileAccess.file_exists("res://%s.gd" % KID) and _src().length() > 2000
+		and _src().contains("func "))
 	_check("⑨i 본문은 Affinity를 모른다(0점 계약의 구조적 근거)",
 		not _src().contains("Affinity") and not _src().contains("add_points"))
 	_check("⑨j 명부·인도를 메카닉으로 쓰지 않는다(백스토리 한정 — effect_fn 0)",

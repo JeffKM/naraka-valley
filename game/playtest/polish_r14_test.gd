@@ -309,11 +309,28 @@ func _check_format_specs() -> void:
 	_check("③d 그리고 고친 형태는 통과시킨다(이스케이프된 퍼센트는 리터럴)",
 		_scan_format("10%%로 %d~%d") == Vector2i(2, 0))
 	# 두 라벨이 이제 실측값을 싣는다 — 문구가 엔진 오류 문자열로 안 바뀐다.
-	_check("③e 나락 ②b 라벨이 실측을 싣는다(엔진 오류 문자열로 안 바뀐다)",
-		("②b 낙하 층수(3~8, 10%%로 2x−1) — 실측 %d~%d" % [3, 15]).contains("10%로")
-		and ("②b … 실측 %d~%d" % [3, 15]).contains("실측 3~15"))
-	_check("③f 잡귀 ⑨d 라벨도 관측값을 싣는다",
-		("⑨d 처치 롤이 15%% 근처(관측 %d/2000)" % 316).contains("15% 근처(관측 316/2000)"))
+	# ★[폴리시 R15] 옛 ③e·③f는 **이 줄에서 손으로 옮겨 적은 리터럴**이 자기 부분문자열을 포함하는지
+	#   물었다 — 좌변이 상수라 입력과 무관하게 항상 참인 항진 단언이었고, 옮겨 적은 문구가 실제
+	#   라벨과 달라(진짜 라벨은 `narak_run_test.gd`·`mob_test.gd`에 있다) 그 라벨을 옛 형태로
+	#   되돌려도 초록이었다. 이제 **대상 파일을 열어** 그 줄을 찾고 스캐너를 그 줄에 실제로 태운다.
+	#   (③b 전수 스캔이 주 방어이고 여기는 R14가 고친 두 자리에 박는 못 — 잔존 확인이 아니라
+	#    "그 라벨이 아직 거기 살아 있고 이스케이프가 온전한가"를 지목해 잰다.)
+	for probe in [["res://playtest/narak_run_test.gd", "②b 낙하 층수", "③e 나락 ②b 라벨"],
+			["res://playtest/mob_test.gd", "처치 롤이", "③f 잡귀 ⑨d 라벨"]]:
+		var probe_lines := _lines_of_file(String(probe[0]))
+		var label_line := ""
+		for pl in probe_lines:
+			if String(pl).contains(String(probe[1])):
+				label_line = String(pl)
+				break
+		var bad := 0
+		for s in _display_strings(label_line):
+			var sc2 := _scan_format(String(s))
+			if sc2.x > 0 and sc2.y > 0:
+				bad += sc2.y
+		_check("%s가 %s에 살아 있고 퍼센트가 이스케이프돼 있다(무효 지시자 %d)"
+				% [String(probe[2]), String(probe[0]).get_file(), bad],
+			label_line != "" and label_line.contains("%%") and bad == 0)
 
 
 # ── ④ #4 「큰 %s」 뒤 조사가 받침을 가른다 ────────────────────────────────────

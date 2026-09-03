@@ -100,6 +100,37 @@ func _in_func(fn_needle: String, needle: String) -> bool:
 			return true
 	return false
 
+# ★[폴리시 R15] 다른 파일의 **함수 본문**을 연다(주석 줄은 뺀다). `_in_func`는 `_src`(main.gd)만
+#   들기 때문에, main.gd에 없는 함수를 니들로 주면 머리를 못 찾아 **항상 false**를 돌려준다 —
+#   ㉒b가 그 자리에 걸려 `== false` 항진이 됐고, 뒤의 `or`는 단락 평가로 실행조차 안 됐다.
+func _func_body_of(path: String, fn_needle: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return out
+	var lines := f.get_as_text().split("\n")
+	var head := -1
+	for i in range(lines.size()):
+		if String(lines[i]).begins_with(fn_needle):
+			head = i
+			break
+	if head < 0:
+		return out
+	for i in range(head + 1, lines.size()):
+		if String(lines[i]).begins_with("func "):
+			break
+		if String(lines[i]).strip_edges().begins_with("#"):
+			continue
+		out.append(String(lines[i]))
+	return out
+
+# 함수 본문에서 니들이 처음 나오는 줄 번호(본문 기준 · 없으면 −1) — 두 항의 **순서**를 재는 용도.
+func _body_index(body: PackedStringArray, needle: String) -> int:
+	for i in range(body.size()):
+		if body[i].contains(needle):
+			return i
+	return -1
+
 # 다른 파일의 소스 한 줄 검사(save.gd·형제 스위트 — main.gd는 _src·_in_func가 든다).
 func _file_has(path: String, needle: String) -> bool:
 	var f := FileAccess.open(path, FileAccess.READ)
@@ -352,8 +383,14 @@ func _initialize() -> void:
 	m._target = m.PET_TILE
 	m._target_valid = m._is_farmable(m._target)
 	var pet_prompt: String = m._farm_prompt()
+	# ★[폴리시 R15] 이 줄이 재는 R11 계약은 "**사유가 읽힌다**"이지 "삽사리라고 적혀 있다"가 아니었다.
+	#   R15 #11이 그 이름을 입양 뒤로 옮겼다 — 삽사리는 day 7 이후 나루 마을 사건으로 들어오고 그
+	#   전엔 한 픽셀도 안 그려지므로, 입양 전에 그 이름으로 거부를 설명하면 화면에 없는 것을 가리키게
+	#   된다. 그래서 여기선 계약 그대로 "비지 않고 사유가 읽힌다"만 재고, **이름을 안 부른다**는 쪽을
+	#   덧붙인다(이름이 돌아오는 입양 뒤 갈래는 polish_r15 ⑫e가 잇는다). 동사 차단은 ⑧b가 그대로 잰다.
 	_check("⑧d 삽사리 칸도 같다 — 입양 전(그림이 한 픽셀도 없을 때)에도 사유를 읽는다 — %s" % pet_prompt,
-		pet_prompt != "" and pet_prompt.contains("삽사리"))
+		pet_prompt != "" and pet_prompt.contains("밭일은 못 한다")
+		and not pet_prompt.contains("삽사리") and not m.pet.is_adopted())
 	_check("⑧e 두 문구가 갈린다(어느 자리인지 화면이 구분해 말한다)", miho_prompt != pet_prompt)
 	# 평범한 밭 칸·예약 아닌 자리에는 아무 말도 새로 안 붙는다(회귀 0).
 	var plain := Vector2i(-1, -1)
@@ -721,9 +758,18 @@ func _initialize() -> void:
 	print("── ㉒ #23 F9 — 열지도 않은 바에서 약탈이 집행되지 않는다 ──")
 	_check("㉒a 로드가 밤 바 세션을 폐기한다(낚시·체키·칵테일과 같은 줄)",
 		_in_func("func _load_game", "night_bar.abandon()"))
-	_check("㉒b `end_day`는 그 리셋을 재사용하되 정산을 먼저 쏜다(요약 경로 불변)",
-		_in_func("func end_day", "closed.emit(_raided, _revenue, _left)") == false
-			or _file_has("res://night_bar.gd", "\tabandon()"))
+	# ★[폴리시 R15] 옛 판정식 `_in_func("func end_day", …) == false or _file_has(…)`은 **구조적
+	#   항진**이었다: `_in_func`는 main.gd만 훑는데 `end_day`는 night_bar.gd에 살아 머리를 못 찾고
+	#   항상 false를 돌려줬고, `== false`가 참이 되면서 뒤의 `or`는 단락 평가로 한 번도 안 돌았다.
+	#   `func abandon()`을 통째로 지우고 호출도 지워도 ✓였다(계약을 한 글자도 안 재는 줄). 이제
+	#   night_bar.gd의 그 함수 본문을 실제로 열고, 두 항이 **그 순서로** 서 있는지까지 잰다.
+	var end_day_body := _func_body_of("res://night_bar.gd", "func end_day")
+	var i_settle := _body_index(end_day_body, "closed.emit(_raided, _revenue, _left)")
+	var i_reset := _body_index(end_day_body, "abandon()")
+	_check("㉒b-pre night_bar.gd `func end_day` 본문을 읽었다(주석 제외 %d줄 — 판정이 공허하지 않다)"
+		% end_day_body.size(), end_day_body.size() >= 2)
+	_check("㉒b `end_day`는 그 리셋을 재사용하되 정산을 먼저 쏜다(정산 %d행 → abandon %d행)"
+		% [i_settle, i_reset], i_settle >= 0 and i_reset >= 0 and i_settle < i_reset)
 	m._transitioning = false
 	var saved_before: bool = m._save_game()
 	m.night_bar.open_bar(19 * 60)
