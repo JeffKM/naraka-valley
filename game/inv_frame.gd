@@ -1323,7 +1323,7 @@ func _draw_store_top(panel: Rect2) -> void:
 	#   (♡0 "네오 할인: 정가 — 네오와 친해지면 매대가 싸진다" = 13px에서 415px > 가용 320px). 옛
 	#   `draw_text(max_w)`는 이걸 소리 없이 하드 컷 해 "…네오와 친해지"에서 끊었다. 이제 들어갈
 	#   때까지 글자를 줄이고, 그래도 넘치면 말줄임으로 "끊겼다"를 보이게 한다.
-	_draw_store_header(panel, 0.0)
+	_draw_store_header(panel)
 	# 품목 행(아이콘·이름·가격·구매 버튼). 행 클릭 or 버튼 클릭으로 구매(Shift=대량).
 	# 헤더(2줄) 아래부터 백팩 그리드 직전까지 꽉 채워 판매 품목 전부(씨앗 4 + 스프링클러)를 담는다.
 	# ★ [S3-T5] 실제 행 그리기는 공용 `_draw_row_list`로 옮겼다(생선가게 기어 매대·환전 탭이 같은
@@ -1446,7 +1446,7 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 # 만물상과 같은 셸을 쓰되 **서브탭 2개**를 든다: [기어] 낚싯대·미끼·태클 구매 / [환전] 보유 물고기
 # 즉시 현금화. 두 탭이 같은 `_draw_row_list`를 공유해 룩·스크롤 문법이 한 출처다.
 func _draw_fishshop_top(panel: Rect2) -> void:
-	_draw_store_header(panel, 116.0)   # 우측은 서브탭 자리로 비워 둔다
+	_draw_store_header(panel)   # 우측(제목 줄)은 서브탭 자리로 비워 둔다 — store_header_pad()
 	# 서브탭 2개(헤더 우측 상단 — 메뉴 탭과 같은 plate 문법).
 	_fs_tab_rects.clear()
 	var labels := ["기어", "환전"]
@@ -1499,7 +1499,7 @@ func _draw_fishshop_top(panel: Rect2) -> void:
 #   [가구·자재] 가구 테마세트 해금 구매 + 원목 소매(벌목을 안 해도 자재가 안 막히는 우회로).
 # 두 탭이 같은 `_draw_row_list`를 공유해 룩·스크롤 문법이 한 출처다(만물상·생선가게와도 동일).
 func _draw_woodshop_top(panel: Rect2) -> void:
-	_draw_store_header(panel, 126.0)   # 우측은 서브탭 자리로 비워 둔다
+	_draw_store_header(panel)   # 우측(제목 줄)은 서브탭 자리로 비워 둔다 — store_header_pad()
 	# 서브탭 2개(헤더 우측 상단 — 생선가게와 같은 plate 문법·같은 좌표계).
 	_ws_tab_rects.clear()
 	var labels := ["건축", "가구·자재"]
@@ -1556,7 +1556,7 @@ func _click_woodshop(p: Vector2, shift: bool) -> void:
 # ★ 목록에 무엇이 뜨는가는 여기가 안 정한다 — main._guild_items()가 도달 깊이로 걸러 넘긴다
 #   (미달 무기는 **행 자체가 없다** — 게잡이통 lvl3 선례. 프레임은 표시·클릭만 든다).
 func _draw_guild_top(panel: Rect2) -> void:
-	_draw_store_header(panel, 0.0)
+	_draw_store_header(panel)
 	_store_row_rects.clear()
 	var row_y := panel.position.y + PAD + 42.0
 	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0
@@ -1612,21 +1612,73 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
 
 # ★[폴리시 R15] 매대 헤더 한 자리(만물상·생선가게·목공방·길드 공용). 두 가지를 여기로 모은다.
-#   ① 헤더 줄 그리기(옛 네 곳의 복붙 루프) ② **마지막 줄 꼬리에 Shift 대량 구매 안내**.
-#   왜 마지막 줄 꼬리인가: 품목 행이 `PAD + 42`에서 시작해 셋째 줄을 새로 놓을 자리가 없고,
-#   `draw_text_fit`이 안 들어가면 글자를 줄이므로 기존 두 줄 레이아웃을 한 픽셀도 안 건드린다.
-#   문구가 "낱개 품목"이라 못 박는 이유: 같은 매대에 1회성 행(의뢰·해금·유니크)이 섞여 있어
-#   무조건 "5개씩"이라 적으면 그 행들에 대해 거짓이 된다(main이 `store_bulk`로 0/값을 가른다).
-func _draw_store_header(panel: Rect2, right_pad: float) -> float:
+#   ① 헤더 줄 그리기(옛 네 곳의 복붙 루프) ② **Shift 대량 구매 안내**.
+#   문구가 "낱개"라고 못 박는 이유: 같은 매대에 1회성 행(의뢰·해금·유니크)이 섞여 있어 무조건
+#   "5개씩"이라 적으면 그 행들에 대해 거짓이 된다(main이 `store_bulk`로 0/값을 가른다).
+#
+# ★[폴리시 R16 #0] **안내를 꼬리에 잇지 않는다.** R15는 마지막 줄 문자열 끝에 안내를 이어 붙이고
+#   그 합을 `draw_text_fit`에 넘겼는데, 그 함수는 min_size(10)까지 줄인 뒤에도 안 들어가면
+#   `elide`로 **뒤를 잘라낸다** — 잘리는 뒤가 정확히 방금 붙인 안내였다. 실측(neodgm):
+#   만물상 ♡0 둘째 줄 300px + 안내 215px = 515 > 가용 320 → 안내가 한 글자도 안 떴고, 종전
+#   size 13으로 온전히 들어가던 ♡1 줄(271px)까지 10으로 깎인 뒤 말줄임됐다. 네 매대 전부 그랬다.
+#   그래서 안내는 **자기 자리를 예약받아 따로 그린다**(그 줄의 본문 max_w를 그만큼 줄인다) —
+#   이웃 줄이 아무리 길어져도 안내는 안 잘린다. 자리는 `store_header_layout`이 한 곳에서 정하고
+#   그리기도 회귀도 그 식을 본다(옛 회귀 ㉑이 `store_bulk` 값만 재고 **그리기 경로를 한 번도
+#   안 태워** 이 구멍을 통째로 놓쳤다).
+const STORE_HINT_SIZE := 10       # 안내 글자 크기 — 본문 13보다 작은 보조 정보(읽는 순서를 색이 아니라 크기로)
+const STORE_HINT_GAP := 10.0      # 본문과 안내 사이 최소 간격
+
+# 헤더 우측에 비워 둘 폭 — **서브탭 판이 서는 가게만** 그만큼 양보한다. 옛 코드는 이 값을 호출부
+# 리터럴로 들고 전 줄에 똑같이 먹였는데, 서브탭 판은 `panel.y + PAD + 2`에서 20px이라 세로로
+# 겹치는 것은 **제목 줄뿐**이다(둘째 줄 글자 윗변 = PAD + 32 − ascent(13) = PAD + 22 = 판 밑변).
+# 둘째 줄까지 폭을 깎을 이유가 없어, 그 줄은 판 폭을 온전히 쓴다(생선가게 204→320·목공방 194→320).
+func store_header_pad() -> float:
+	match context:
+		CTX_FISHSHOP:
+			return 116.0
+		CTX_WOODSHOP:
+			return 126.0
+	return 0.0
+
+# 대량 구매 안내 문구(빈 문자열 = 안내 없음). 값도 대상 범위도 여기 한 줄이 단일 출처다.
+func store_bulk_hint() -> String:
+	return "" if store_bulk <= 1 else "Shift+클릭 = 낱개 %d개씩" % store_bulk
+
+# 헤더 배치 — [{text, size, x, y, max_w, hint}] 목록. 그리기와 회귀가 **같은 식**을 본다.
+# 안내가 붙는 줄: 제목 줄에 자리가 남으면 거기(만물상·길드 — 서브탭이 없어 152px 남는다),
+# 아니면 마지막 줄(생선가게·목공방 — 제목 옆이 서브탭 판이라 43·59px뿐이다).
+# 어느 줄이 되는가는 제목 폭과 서브탭 유무만 보므로 **가게마다 고정**이다(♡·소지금으로 안 흔들린다).
+func store_header_layout(panel: Rect2, right_pad: float) -> Array:
+	var out: Array = []
 	var lines := store_text.split("\n")
+	if lines.is_empty():
+		return out
+	var full := panel.size.x - PAD * 2.0
+	var hint := store_bulk_hint()
+	var hint_w := HanjiUi.text_width(hint, STORE_HINT_SIZE) if hint != "" else 0.0
+	var hint_line := -1
+	if hint != "":
+		var head_room := (full - right_pad) - HanjiUi.text_width(String(lines[0]), 13) - STORE_HINT_GAP
+		hint_line = 0 if head_room >= hint_w else lines.size() - 1
 	var y := panel.position.y + PAD + 14.0
 	for i in lines.size():
-		var line := String(lines[i])
-		if i == lines.size() - 1 and store_bulk > 1:
-			line += "   ·   Shift+클릭 = 한 번에 %d개 (낱개 품목)" % store_bulk
-		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
-			panel.size.x - PAD * 2.0 - right_pad)
+		var limit := (full - right_pad) if i == 0 else full
+		var reserve := (hint_w + STORE_HINT_GAP) if i == hint_line else 0.0
+		out.append({"text": String(lines[i]), "size": 13, "x": panel.position.x + PAD, "y": y,
+			"max_w": limit - reserve, "hint": false})
+		if i == hint_line:
+			# 안내는 그 줄 오른쪽 끝에 붙고 max_w = 제 폭이다 → draw_text_fit이 줄이지도 자르지도 않는다.
+			out.append({"text": hint, "size": STORE_HINT_SIZE,
+				"x": panel.position.x + PAD + limit - hint_w, "y": y, "max_w": hint_w, "hint": true})
 		y += 18.0
+	return out
+
+func _draw_store_header(panel: Rect2) -> float:
+	var y := panel.position.y + PAD + 14.0
+	for e in store_header_layout(panel, store_header_pad()):
+		HanjiUi.draw_text_fit(self, Vector2(float(e["x"]), float(e["y"])), String(e["text"]),
+			int(e["size"]), HanjiUi.INK_LIGHT, float(e["max_w"]))
+		y = maxf(y, float(e["y"]) + 18.0)
 	return y
 
 # ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.
