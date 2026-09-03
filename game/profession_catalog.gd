@@ -182,7 +182,9 @@ const _TREE := {
 		{"id": "defender", "tier": 10, "requires": "fighter", "name": "수호자", "desc": "최대 체력 +25",
 			"perks": [{"dim": DIM_MAX_HP, "value": 25.0}]},            # 투사와 **합산** = +40
 		{"id": "acrobat", "tier": 10, "requires": "scout", "name": "곡예사",
-			"desc": "특수기 쿨다운 절반 (무기 특수동작 도입 전까지 효과 보류)",
+			# ★[폴리시 R17 #6] 표의 30개 desc 중 **유일하게** 선택 버튼 판(가용 260px)을 넘겨(280px)
+			#   글자 꼬리가 테두리 밖으로 나왔다. 뜻은 그대로 두고 중복어("무기"·"효과")만 걷었다.
+			"desc": "특수기 쿨다운 절반 (특수동작 도입 전까지 보류)",
 			"perks": [{"dim": DIM_SPECIAL_COOLDOWN, "value": 0.5}]},   # ★예약 퍼크(해석기가 중립 반환)
 		{"id": "desperado", "tier": 10, "requires": "scout", "name": "결사", "desc": "크리 위력 2배",
 			"perks": [{"dim": DIM_CRIT_MULT, "value": 2.0}]},          # ×3 → ×6
