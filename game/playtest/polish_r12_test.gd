@@ -659,7 +659,9 @@ func _check_retail_full_reason(m: Node) -> void:
 func _check_fixed_josa() -> void:
 	print("── ⑬ R5 ④i 정정 — main.gd에 런타임 이름 옆 고정 조사가 없다 ──")
 	var name_srcs := ["name_of(", "title_of(", "species_name(", "display_name", "name_ko", "large_name("]
-	var josa_re := RegEx.create_from_string("%s ?(를|을|는|은|가|이|와|과)([^가-힣]|$)")
+	# ★[폴리시 R14] 닫는 인용부호(「…」·『…』)가 낀 형태를 함께 잡는다 — `%s」을`이 이 창을
+	#   빠져나가 넋둥우리 분기의 고정 조사가 살아남았던 사각이다(main.gd 목공방 안내).
+	var josa_re := RegEx.create_from_string("%s[」』]? ?(를|을|는|은|가|이|와|과)([^가-힣]|$)")
 	var leftovers: Array = []
 	for i in _src.size():
 		var w := ""

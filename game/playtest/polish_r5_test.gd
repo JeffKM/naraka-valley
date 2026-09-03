@@ -186,7 +186,9 @@ func _initialize() -> void:
 	#   서식 문자열과 인자가 다른 줄에 있는 문구가 많아 3행 창으로 본다. "%s 가구 세트"처럼
 	#   조사가 아닌 한글이 이어지는 자리는 뒤 문자 조건([^가-힣])으로 걸러진다.
 	var name_srcs := ["name_of(", "title_of(", "species_name(", "display_name", "name_ko", "large_name("]
-	var josa_re := RegEx.create_from_string("%s ?(를|을|는|은|가|이|와|과)([^가-힣]|$)")
+	# ★[폴리시 R14] 닫는 인용부호(「…」·『…』)가 낀 형태를 함께 잡는다 — `%s」을`이 이 창을
+	#   빠져나가 넋둥우리 분기의 고정 조사가 살아남았던 사각이다(main.gd 목공방 안내).
+	var josa_re := RegEx.create_from_string("%s[」』]? ?(를|을|는|은|가|이|와|과)([^가-힣]|$)")
 	var leftovers: Array = []
 	for i in _src.size():
 		var w := ""

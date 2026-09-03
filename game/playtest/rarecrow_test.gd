@@ -145,6 +145,9 @@ func _part_pure() -> void:
 		[3, 3, ItemCatalog.RARECROW_3], "쓰레기", [4]]})
 	_check("⑧c 손상 행·사라진 종·중복 종은 조용히 버린다",
 		led4.count() == 1 and led4.id_at(Vector2i(2, 2)) == ItemCatalog.RARECROW_3)
+	# ★[폴리시 R14] 트리 밖 new() 정리 — `RarecrowLedger`는 `extends Node`라 안 놓으면 누수 경고.
+	for n in [led, led2, led3, led4]:
+		n.free()
 
 # ══ main 통합 층 ═════════════════════════════════════════════════════════════
 func _part_main() -> void:

@@ -77,6 +77,11 @@ func _initialize() -> void:
 	bad.load_save({"slots": [{"id": "__nope__", "count": 3}, {"id": hid, "count": -2}, {"id": hid, "count": 5}]})
 	_check("①q 미지·음수 제거·유효 보존", bad.count_at(2) == 5 and bad.id_at(0) == "" and bad.id_at(1) == "")
 
+	# ★[폴리시 R14] SceneTree 밖에서 new()한 노드 정리 — `StorageChest`는 `extends Node`라 지역
+	#   변수가 스코프를 벗어나도 해제되지 않는데, 이 파일엔 free()가 한 번도 없어 넷이 그대로 남았다.
+	for box in [c, full, c2, bad]:
+		box.free()
+
 	# ── ② 프레임 CTX_CHEST(모달) ──
 	print("── ② 프레임 CTX_CHEST ──")
 	var m: Node = await _spawn_main()

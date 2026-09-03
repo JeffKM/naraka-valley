@@ -124,6 +124,7 @@ func _test_slot_core() -> void:
 	for i in Inventory.SIZE:
 		full.slots[i] = {"id": "pianhwa", "count": 1}  # 모든 칸 점유(직접 셋업)
 	_check("②k 가득 차면 새 아이템 거절", not full.add_item(ItemCatalog.HOE))
+	inv.free(); full.free()   # ★[폴리시 R14] 트리 밖 new() 정리(누수 경고 방지 — 아래 형제 함수도 동형)
 
 # ── ③ 의미 API(작물군 id 기반) ────────────────────────────────────────────────
 func _test_semantic_api() -> void:
@@ -146,6 +147,7 @@ func _test_semantic_api() -> void:
 	inv.clear_harvest()
 	_check("③j clear_harvest = 수확물 0", inv.total_harvest() == 0)
 	_check("③k clear_harvest가 씨앗 보존", inv.seed_count(CropCatalog.HONRYEONGCHO) == 2)
+	inv.free()
 
 func _no_change_add_seed(inv: Inventory, bad: String) -> bool:
 	var before := inv.total_harvest() + inv.seed_count(CropCatalog.HONRYEONGCHO)
@@ -170,6 +172,7 @@ func _test_selection() -> void:
 	inv.select_prev()
 	inv.select_prev()  # 0 → -1 → 핫바 끝칸(HOTBAR_SLOTS-1) 순환 (★핫바 첫 행 범위로 한정)
 	_check("④f prev 순환(0→핫바 끝칸)", inv.selected_index == Inventory.HOTBAR_SLOTS - 1)
+	inv.free()
 
 # ── ⑤ 세이브 라운드트립 ──────────────────────────────────────────────────────
 func _test_save_roundtrip() -> void:
@@ -191,6 +194,7 @@ func _test_save_roundtrip() -> void:
 	_check("⑤c 씨앗 스택 복원(7)", b.seed_count(CropCatalog.PIANHWA) == 7)
 	_check("⑤d 수확물 복원(4)", b.harvest_count(CropCatalog.YEONGHON_HOBAK) == 4)
 	_check("⑤e 선택 인덱스 복원", b.selected_index == 2)
+	a.free(); b.free()
 
 # ── ⑥ 손상 세이브 방어 ───────────────────────────────────────────────────────
 func _test_corruption_defense() -> void:
@@ -216,6 +220,7 @@ func _test_corruption_defense() -> void:
 	_check("⑥c 미지·음수·비dict 슬롯 제거", inv.count_of("garbage_xyz") == 0 and inv.harvest_count(CropCatalog.PIANHWA) == 0)
 	_check("⑥d 유효 도구 1개만(유니크 중복 제거)", inv.count_of(ItemCatalog.HOE) == 1)
 	_check("⑥e 유효 수확물 보존", inv.harvest_count(CropCatalog.HONRYEONGCHO) == 5)
+	inv.free()
 
 # ── ⑦ 시작 키트 ──────────────────────────────────────────────────────────────
 func _test_start_kit() -> void:
@@ -225,6 +230,7 @@ func _test_start_kit() -> void:
 	_check("⑦a 괭이 지급", inv.count_of(ItemCatalog.HOE) == 1)
 	_check("⑦b 물뿌리개 지급", inv.count_of(ItemCatalog.WATERING_CAN) == 1)
 	_check("⑦c 혼령초 씨앗 지급", inv.seed_count(CropCatalog.HONRYEONGCHO) == Inventory.START_SEEDS[CropCatalog.HONRYEONGCHO])
+	inv.free()
 
 # ── ⑨ [폴리시 R2] can_add 선검사 · add_harvest 반환 계약 ──────────────────────
 # 되돌릴 수 없는 사건(수확·발굴·포획·회수) 앞에서 "적재 먼저"를 지키는 창구다. 판정이 add_item과
@@ -253,6 +259,7 @@ func _test_can_add() -> void:
 	_fill_backpack_full(inv2)
 	_check("⑨i **가득 차면 false**(호출부가 소실을 감지할 수 있다)",
 		not inv2.has_free_slot() and not inv2.add_harvest(CropCatalog.HONRYEONGCHO, 1, 0))
+	inv.free(); inv2.free()
 
 # ★[폴리시 R2 공용] 백팩을 **빈 슬롯 0**으로 채운다 — 되돌릴 수 없는 사건 앞의 무대 셋업.
 #   슬롯에 직접 쓴다: `add_item`으로 채우면 같은 (id,품질)이 스택으로 합쳐져 칸이 안 준다.

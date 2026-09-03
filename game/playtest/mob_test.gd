@@ -602,7 +602,7 @@ func _initialize() -> void:
 	for i in 2000:
 		if MineFloors.roll_mob_ladder(1, 1 + i % 60, i):
 			hits += 1
-	_check("⑨d 2000회 처치 롤이 15% 근처(관측 %d/2000)" % hits, hits > 240 and hits < 360)
+	_check("⑨d 2000회 처치 롤이 15%% 근처(관측 %d/2000)" % hits, hits > 240 and hits < 360)
 
 	# ── ⑩ 라이브 배선(main) ─────────────────────────────────────────────────
 	print("── ⑩ 라이브 — 스폰·스윙·처치·접촉 피해 ──")

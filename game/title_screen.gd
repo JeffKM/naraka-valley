@@ -233,6 +233,14 @@ func _input(event: InputEvent) -> void:
 				activate()
 			KEY_ESCAPE:
 				_cancel()
+			KEY_F11:
+				# ★[폴리시 R14] 설정 패널이 "전체화면 (F11)"이라고 단축키를 광고하는데 **타이틀에서만
+				#   그 키가 죽어 있었다**: F11을 실제로 처리하는 자리는 main `_process` 하나인데,
+				#   타이틀은 `get_tree().paused = true`로 트리를 세우고 main은 PAUSABLE이라 그 프레임
+				#   함수가 아예 안 돈다(게임 시작 뒤에는 정상 동작 — "타이틀에서만 안 먹는" 비대칭).
+				#   여기는 ALWAYS라 눌린 키가 들어오므로, 체크박스와 **같은 신호**로 올려 보낸다
+				#   (적용·영속의 주인은 여전히 main 한 곳 — 표시만 하는 이 화면의 규율 그대로).
+				fullscreen_nudged.emit()
 	elif event is InputEventMouseMotion:
 		var mp: Vector2 = _canvas.get_local_mouse_position() if _canvas != null else event.position
 		# ★ 패럴랙스 시차 입력 — 화면 중앙 기준 정규화([-1,1]). _process가 매 프레임 redraw하므로 여기선 값만.

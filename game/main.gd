@@ -3043,6 +3043,13 @@ var _spine_b5_closing := false
 # ★ 컷신이 시계를 `_cutscene_clock_prev`로 스냅하는 것과 정확히 같은 규율이다: "끝나면 무조건
 #   켠다"로 두면 *다른 이유로* 멈춰 있던 것까지 되살린다.
 var _spine_b5_mute_prev := false
+# ★[폴리시 R14] **지금이 B5 강제 음소거 구간인가**(발동 → 컷신 → 내면 공간 → 닫기). 켜져 있는 동안
+#   눌린 [M]은 위 `_spine_b5_mute_prev` 스냅을 그 값으로 갱신한다 — 안 그러면 구간 중 플레이어가
+#   표명한 의사를 닫는 자리가 조용히 덮어썼다(㉠음소거로 들어가 안에서 소리를 켰는데 나올 때 다시
+#   꺼지고, ㉡소리를 켠 채 들어가 안에서 [M]을 눌러 적막을 되찾아도 나올 때 다시 켜진다). 화면에
+#   음소거 표시가 하나도 없어 플레이어는 그 뒤집힘의 이유를 볼 방법도 없다. 형제 스냅인 시계가
+#   `_spine_b5_clock_prev`에서 못 박은 그 규율("스냅이 진실이어야 한다")의 사용자-의사 축이다.
+var _spine_b5_mute_forced := false
 var _spine_b5_clock_prev := true
 # 이번 재생의 파편 표(`Spine.fragments()` 스냅 — 그리기·이름 조회용). 세션과 함께 버려진다.
 var _spine_b5_frags: Array = []
@@ -4806,11 +4813,43 @@ func _save_layouts() -> void:
 #   [ ] = 팔레트 순환 · Ctrl+S = layout.json 저장. 좌표는 _prop_layouts에 직접 쓰고 _save_layouts로 영속.
 func _toggle_edit_mode() -> void:
 	_edit_mode = not _edit_mode
+	# ★[폴리시 R14] 두 저작 모드(F10 배치 · C 꾸미기)는 **동시에 설 수 없다** — 켜는 자리에서 먼저
+	#   접는다. `_process`의 순서가 [배치 토글 → `if _edit_mode: return` → 꾸미기 토글]이라, 꾸미기
+	#   중에 F10을 누르면 그 아래 C 토글 줄과 `_deco_blocked()` 자동 접기가 **매 프레임 도달 불가**가
+	#   되어 꾸미기를 끌 수 없었다. 반대로 `_unhandled_input`은 `if _deco_mode: _deco_input(event);
+	#   return`이 위라 배치 모드의 드래그·Del·[ ]·Ctrl+S가 한 줄도 안 먹었다 — 두 모드가 겹쳐 선 채
+	#   **어느 쪽 종료 키도 안 듣는** 상태(탈출구는 F10 한 번 더). `_toggle_deco_mode`가 켜는 자리에서
+	#   조회 패널을 먼저 접는 것과 같은 결이다.
+	if _edit_mode and _deco_mode:
+		_toggle_deco_mode()
+	# ★[폴리시 R14] **이동도 함께 잠근다** — 머리말이 선언한 "ON이면 _process가 시뮬을 멈춘다"의
+	#   미집행 축(#13이 꾸미기 쪽에 세운 그 잠금과 같은 형태·같은 이유: player 이동은 main `_process`가
+	#   아니라 `_physics_process`에서 방향키를 직접 읽어, 문·워프 트리거가 얼어붙은 채 걸어 다녔다).
+	#   위 꾸미기 접기가 이동을 되돌려 놓고 오는 경로도 여기서 다시 잠근다(순서가 계약).
+	if player != null:
+		if _edit_mode:
+			player.set_physics_process(false)
+			player.velocity = Vector2.ZERO
+		elif not _deco_blocked():
+			player.set_physics_process(true)
 	_edit_sel_entry = -1
 	_edit_sel_tile = -1
 	_edit_dragging = false
 	_edit_update_ui()   # 안내는 패널 버튼·오버레이가 한다(중앙 _notice 길게 안 띄움)
 	queue_redraw()
+
+# ★[폴리시 R14] 좌상단 [배치 모드 끄기] **버튼 클릭 전용** 경로 — 끄는 그 프레임의 LMB를 삼킨다.
+#   버튼은 CanvasLayer 위 상시 표시라 편집 중 클릭으로 모드를 끌 수 있는데, Godot은 입력을
+#   `_process`보다 먼저 흘리므로 이 클릭으로 `_edit_mode`가 false가 되면 같은 프레임의 `_process`가
+#   배치 early return을 **통과해** 월드 디스패치까지 내려갔다 — 그 LMB는 아직
+#   `Input.is_action_just_pressed("use_tool")`가 참이라 커서 밑에서 도구가 돌거나(`_use_tool`)
+#   스프링클러·화분·레어크로우·게잡이통·업화로·결정기를 들고 있었다면 그 자리에 설치물이 놓였다.
+#   R4가 프레임 우상단 [X]에 세운 `_swallow_input_once`와 같은 표다. **켜는 클릭에는 안 세운다** —
+#   그쪽은 `if _edit_mode: return`이 이미 프레임을 끊어 샐 곳이 없다(삼키는 범위를 새는 축으로만 좁힌다).
+func _on_edit_toggle_pressed() -> void:
+	_toggle_edit_mode()
+	if not _edit_mode:
+		_swallow_input_once = true
 
 # ★ 맥 친화 배치 모드 패널(좌상단). 키 없이 마우스만으로: [배치 모드] 토글 + (ON시) [이전][팔레트명]
 # [다음][저장][삭제]. 디버그/에디터 전용(_ready에서 OS.has_feature("editor")일 때만 생성).
@@ -4826,7 +4865,7 @@ func _make_edit_ui() -> void:
 	$CanvasLayer.add_child(box)
 	_edit_btn_toggle = Button.new()
 	_edit_btn_toggle.focus_mode = Control.FOCUS_NONE
-	_edit_btn_toggle.pressed.connect(_toggle_edit_mode)
+	_edit_btn_toggle.pressed.connect(_on_edit_toggle_pressed)
 	box.add_child(_edit_btn_toggle)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
@@ -5011,6 +5050,23 @@ func _deco_blocked() -> bool:
 
 func _toggle_deco_mode() -> void:
 	_deco_mode = not _deco_mode
+	# ★[폴리시 R14] **이동도 함께 잠근다.** 모드 머리말이 선언한 "켜면 게임플레이 입력·시뮬을
+	#   멈추고"가 이동 축에만 미집행이었다: player의 이동은 main `_process`와 무관한
+	#   `_physics_process`에서 방향키를 직접 읽는데, `if _deco_mode: return`이 끊는 것은 `_process`
+	#   쪽뿐이라 문·워프 트리거(`_maybe_toggle_building`·`_maybe_warp_edge`)·타깃 갱신이 얼어붙은
+	#   채로 플레이어만 걸어 다녔다. 실내 문 칸으로 걸어가면 퇴장이 안 일어나고(정상 플레이에선
+	#   밟는 즉시 나가므로 그 칸에 머무는 상태 자체가 없다), 모드를 끄는 **그 프레임에** 얼어 있던
+	#   트리거가 한꺼번에 걸려 페이드와 함께 집 밖으로 튕겨 나갔다. 다른 모드는 전부 잠근다
+	#   (`_open_frame`·`_start_dialogue`·`_begin_cutscene`·`_open_spine_puzzle`).
+	# ★ 끄는 자리에서는 `_deco_blocked()`가 거짓일 때만 되돌린다 — 취침·연출·모달이 들어와
+	#   자동으로 접히는 경로(위 `_deco_blocked` 자동 토글)에서는 잠금의 주인이 그쪽이므로
+	#   여기서 켜면 암전 뒤에서 걸어 다니게 된다(『정지 주인 ≠ 재개 주인』).
+	if player != null:
+		if _deco_mode:
+			player.set_physics_process(false)
+			player.velocity = Vector2.ZERO
+		elif not _deco_blocked():
+			player.set_physics_process(true)
 	if _deco_mode:
 		# ★[폴리시 R11] 켜는 그 자리에서 **조회 패널을 먼저 접는다**(점괘 거울·달력). 꾸미기
 		#   편집면은 월드 캔버스의 `_draw` 오버레이라 CanvasLayer 패널 **아래**에 그려지는데,
@@ -10095,6 +10151,14 @@ func _setup_settings() -> void:
 	settings.load_settings()
 	_apply_audio_volumes()
 	_apply_fullscreen(settings.fullscreen)
+	# ★[폴리시 R14] **창 모드가 앱 밖에서 바뀌어도 값이 따라온다.** 종전엔 `settings.fullscreen`을
+	#   쓰는 writer가 F11·옵션 탭 두 핸들러뿐이라, macOS 초록 버튼/⌃⌘F처럼 **OS가 창 모드를 바꾸는
+	#   경로**(R13이 `_window_is_fullscreen` 주석에서 이미 실재를 기록한 그 경로)에서 값이 영구히
+	#   실제와 어긋났다: 체크박스가 꺼짐인데 화면은 전체화면이라 "껐더니 꺼지는" 조작이 되고,
+	#   settings.cfg도 낡은 값이라 재기동 때 사용자가 껐던 전체화면이 되살아났다(왕복 5단계 중
+	#   '변경→저장' 고리가 OS발 변경에서 끊긴 것). 전체화면 진입·이탈은 창 크기를 바꾸므로
+	#   `size_changed`가 그 변화의 신호원이 된다 — 값이 실제와 다를 때만 쓰고 저장한다(멱등).
+	get_window().size_changed.connect(_sync_fullscreen_setting)
 	# 옵션 탭 설정 조작 신호(볼륨 −/+·전체화면 토글) — main이 실제 적용·영속을 수행.
 	frame.music_vol_changed.connect(_on_music_vol_changed)
 	frame.sfx_vol_changed.connect(_on_sfx_vol_changed)
@@ -10115,6 +10179,16 @@ func _apply_audio_volumes() -> void:
 func _window_is_fullscreen() -> bool:
 	var m := get_window().mode
 	return m == Window.MODE_FULLSCREEN or m == Window.MODE_EXCLUSIVE_FULLSCREEN
+
+# ★[폴리시 R14] 실제 창 모드 → 설정 값(위 `size_changed` 구독자). 방향이 `_apply_fullscreen`과
+#   **반대**인 유일한 자리다: 저건 값을 창에 밀고, 여기는 앱 밖에서 바뀐 창을 값으로 끌어온다.
+#   F11·체크박스 경로에서도 같이 불리지만 그때는 값이 이미 맞아 `set_fullscreen`이 false를 돌려
+#   저장 IO가 안 난다(멱등). 부팅 극초기(settings 생성 전)엔 null 가드 — F11 핸들러와 같은 결.
+func _sync_fullscreen_setting() -> void:
+	if settings == null:
+		return
+	if settings.set_fullscreen(_window_is_fullscreen()):
+		settings.save_settings()
 
 # 창 ↔ 전체화면 적용(값→창모드). 실제 창 상태만 바꾸고 값은 GameSettings가 든다.
 func _apply_fullscreen(on: bool) -> void:
@@ -13032,8 +13106,15 @@ func _process(delta: float) -> void:
 	_tick_live_canvas()   # ★[폴리시 R10] 타일보다 잘게 움직이는 그림(승마·혼 감지 마커)의 재드로우
 	# 음소거 토글(M) — 연출·대화·마무리 화면 어디서든 받는다(입력 가드보다 위, UX 토글이라
 	# 게임 상태와 무관). audio가 Music·SFX 버스를 함께 음소거한다.
+	# ★[폴리시 R14] 척추 B5 **강제 음소거 구간에서 눌린 M은 원복 근거를 갱신한다.** 이 줄이 모든
+	#   입력 가드보다 위라 B5 컷신·내면 공간이 도는 내내 살아 있는데, 닫는 자리는 진입 때 스냅해 둔
+	#   `_spine_b5_mute_prev` 하나로만 되돌린다 — 그래서 구간 중 플레이어가 표명한 의사(소리를 켰다·
+	#   껐다)가 닫히는 순간 조용히 취소됐다. 스냅이 **마지막 사용자 의사**를 들게 해 그 취소를 없앤다
+	#   (구간 밖에서는 종전과 한 글자도 다르지 않다 — `_spine_b5_mute_forced` 선언부 참조).
 	if Input.is_action_just_pressed("mute_audio"):
-		audio.toggle_mute()
+		var muted_now := audio.toggle_mute()
+		if _spine_b5_mute_forced:
+			_spine_b5_mute_prev = muted_now
 	# 전체화면 토글(F11) — 음소거와 같은 결로 입력 가드보다 위에서 어디서든 받는다.
 	if Input.is_action_just_pressed("toggle_fullscreen"):
 		_toggle_fullscreen()
@@ -13265,6 +13346,21 @@ func _process(delta: float) -> void:
 	if calendar_panel != null and calendar_panel.is_open() \
 			and Input.is_action_just_pressed("ui_cancel"):
 		calendar_panel.close()
+		return
+	# ★[폴리시 R14] **화면을 덮은 조회 오버레이 위의 클릭을 월드로 흘리지 않는다.** 바로 위 시계
+	#   가드는 `clock_hud.hit_test`가 참인 픽셀만 막는데, 두 조회 패널에는 그 표가 없었다:
+	#   ㉠점괘 거울 패널은 뜨는 순간 `_hud_hidden`이 clock_hud를 통째로 숨겨 위 가드의
+	#     `clock_hud.visible` 조건이 죽는다 — 그래서 예보를 덮으려는 **우클릭 한 번**이 그대로
+	#     내려가 `_do_sleep`을 불렀다(`_facing_mirror`는 집 안만 성립하므로 늘 취침 가능 자리다).
+	#     하루가 통째로 소비되고 `_do_sleep` 끝의 자동 저장이 그걸 굳혀 되돌릴 수 없었다. 좌클릭도
+	#     같은 구멍이었다(곁들이·명부환을 든 채 누르면 `holding_free_use` 항으로 하나가 소모).
+	#   ㉡달력은 비-모달(mouse_filter IGNORE)이라 판 자체에 hit_test가 없어, 격자를 눌러 날짜를
+	#     짚거나 화면을 눌러 닫으려던 좌클릭이 13255 주석이 못 박은 그 사고(도끼질 동반)로 나갔다.
+	#   R4가 타이틀·프레임 [X]에 세운 `_swallow_input_once`와 같은 뜻이되, 저건 한 프레임이고
+	#   여기는 **패널이 떠 있는 동안 그려진 판 위**만 막는다(판 밖은 그대로 논다 — 달력은 비-모달이
+	#   정체성이고, 거울도 패널 밖에서는 평소처럼 걸어 다니며 일할 수 있어야 한다).
+	if not _sleeping and _pointer_over_overlay(get_viewport().get_mouse_position()) \
+			and (Input.is_action_just_pressed("use_tool") or Input.is_action_just_pressed("action")):
 		return
 	# 건물 외관 문에 닿으면 실내로, 실내 문에 닿으면 밖으로 — 자동 fade 전환(스타듀식 출입).
 	_maybe_toggle_building()
@@ -13615,9 +13711,12 @@ func _process(delta: float) -> void:
 		return
 	# ★ [S4-T6] 수액 채취기(F): 채취기가 박힌 나무를 바라보며 F — 수거 / 회수(게잡이통과 같은 사다리).
 	#   나무 칸이라 [F]가 겹칠 상대가 없고(벌목은 LMB), 프롬프트도 같은 순서로 파생된다.
-	if not _sleeping and tapper != null and _indoor == "" and tapper.has_at(_region, _target) \
+	# ★[폴리시 R14] 겨눈 칸을 원장 칸으로 되돌려 본다(`_tapper_ledger_tile` — 안식 마당 나무는
+	#   통이 그려진 밑동과 원장 앵커가 3칸 어긋나 있다). 숲·자체 파종 나무는 항등이라 거동 불변.
+	if not _sleeping and tapper != null and _indoor == "" \
+			and tapper.has_at(_region, _tapper_ledger_tile(_target)) \
 			and Input.is_action_just_pressed("shop_toggle"):
-		_use_tapper(_target)
+		_use_tapper(_tapper_ledger_tile(_target))
 		return
 	# ★ [S5-T3] 업화로(F): 세워 둔 화덕을 바라보며 F — 수거 / 투입 / 회수(상태별 한 동사).
 	#   채취기와 같은 사다리이고, 화덕은 빈 지면 위라 [F]가 겹칠 상대가 없다(설치는 LMB).
@@ -14230,7 +14329,12 @@ func _process(delta: float) -> void:
 				interact_prompt.text = "[우클릭/F] 곳간 (장원제 출품은 마쳤다 · %d/%d)" % [
 					larder.total(), larder.capacity]
 			else:
-				interact_prompt.text = "[F] 곳간 장원제 출품 (재고 %d종 — 차감 없음)" % larder.ids().size()
+				# ★[폴리시 R14] **상한을 안내에 싣는다.** 종전엔 곳간 전 종수를 출품 안내 안에 넣어,
+				#   12종을 쟁여 두고 [F]를 누르면 결과 알림이 "출품 9종"이라 다르게 말했다(점수도
+				#   9종분). `_grange_entries`가 판매가 내림차순 상위 GRANGE_MAX_ENTRIES에서 자르는데,
+				#   이건 하루 1회 래치라 **되돌릴 수 없는 동작 직전의 안내**다 — 상한을 말해야 한다.
+				interact_prompt.text = "[F] 곳간 장원제 출품 (상위 %d종 · 재고 %d종 — 차감 없음)" % [
+					mini(larder.ids().size(), SeasonalEvent.GRANGE_MAX_ENTRIES), larder.ids().size()]
 		else:
 			interact_prompt.text = "[우클릭/F] 곳간 (수확물 적재 → 융합 메뉴 재료 · %d/%d)" % [
 				larder.total(), larder.capacity]
@@ -14483,11 +14587,13 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[F] 반딧넋 거두기 (%d/%d)" % [
 			fireflies.collected_count(), FireflySouls.total_count()]
-	elif tapper != null and _indoor == "" and tapper.has_at(_region, _target):
+	elif tapper != null and _indoor == "" and tapper.has_at(_region, _tapper_ledger_tile(_target)):
 		# ★[S4-T6] 채취기가 박힌 나무를 바라볼 때: 상태별 [F] 한 동사(수거 / 회수). **나무 프롬프트보다
 		#   먼저** 본다 — 그 칸의 지금 할 일은 벌목이 아니라 채취기이고, 벌목은 애초에 막혀 있다.
+		# ★[폴리시 R14] 겨눈 칸을 원장 칸으로 되돌린다 — 입력 사슬과 **같은 술어**여야 "안내는 뜨는데
+		#   [F]가 안 먹는다"(또는 그 반대)가 안 생긴다.
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = _tapper_prompt(_target)
+		interact_prompt.text = _tapper_prompt(_tapper_ledger_tile(_target))
 	elif inventory.selected_id() == ItemCatalog.TAPPER and _can_place_tapper(_target):
 		# ★[S4-T6] 채취기를 들고 성숙 나무를 겨눌 때: LMB로 설치(주기는 종이 정한다).
 		interact_prompt.visible = not _sleeping
@@ -15760,6 +15866,23 @@ func _use_tapper(t: Vector2i) -> void:
 		inventory.remove_item(ItemCatalog.TAPPER, 1)   # 원장이 거절 → 방금 넣은 채취기를 되돈다(무해)
 
 # 채취기를 겨눴을 때의 안내 문구(상호작용 사다리와 **같은 순서**로 파생 — 프롬프트와 실동작 불일치 0).
+# ★[폴리시 R14] 겨눈 칸 → **채취기 원장 칸**. 안식 마당 나무의 채취기는 R13 보정으로 밑동 칸에
+#   그려지는데(`_tapper_home_drop` = 나무 스프라이트 높이 − 한 칸 = 3칸), 원장·설치·수거 키는
+#   손저작 앵커 칸 그대로다 — 그래서 통이 그려진 밑동을 마주 보고 [F]를 눌러도 `tapper.has_at`이
+#   거짓이라 프롬프트조차 안 떴고, 수거하려면 통이 한 조각도 없는 3칸 북쪽 캐노피 꼭대기를 겨눠야
+#   했다(R13 이전엔 그리는 칸 = 겨누는 칸이라 어긋남이 0이었다).
+# ★ **원장·세이브 키는 한 글자도 안 바꾼다** — 겨눈 칸을 앵커로 되돌리는 이 한 함수가 그 다리다
+#   (설치는 여전히 성숙 나무 = 앵커 칸을 겨눠야 성립한다 · `_can_place_tapper` 무수정).
+# ★ 보정이 0인 자리는 첫 두 줄에서 그대로 빠져나간다: 숲(원장 칸 = 발치)·안식 자체 파종 나무
+#   (손저작 앵커가 아니라 큰 스프라이트도 없다 — `_draw_tappers_pass`의 `anchors.has(t)`와 같은 술어).
+func _tapper_ledger_tile(t: Vector2i) -> Vector2i:
+	if tapper == null or tapper.has_at(_region, t) or _region != RegionCatalog.HOME:
+		return t
+	var a := t - Vector2i(0, int(_tapper_home_drop()) / TILE)
+	if a == t or not _home_tree_anchor_set().has(a):
+		return t
+	return a if tapper.has_at(_region, a) else t
+
 func _tapper_prompt(t: Vector2i) -> String:
 	var got := tapper.pending_product(_region, t)
 	if got != "":
@@ -18001,7 +18124,15 @@ func _try_upgrade_tool(tool_id: String) -> bool:
 func _tier_effect_text(tool_id: String, tier: int) -> String:
 	match tool_id:
 		ToolTier.AXE:
-			return "성숙목 %d타 · 더 굵은 것을 벨 수 있다" % ToolTier.axe_mature_hp(tier)
+			# ★[폴리시 R14] "더 굵은 것을 벨 수 있다"는 **접근 게이트가 실제로 열리는 티어에서만**
+			#   붙인다. 도끼가 여는 대상은 큰 그루터기(TIER_LARGE_STUMP)·큰 통나무(TIER_LARGE_LOG)
+			#   둘뿐이고 `TreeLedger.required_tier`가 참조하는 값도 그 둘이 전량이라, 티어 3·4에서는
+			#   새로 벨 수 있게 된 대상이 0종인데도 25,000냥짜리 업화로 알림이 그 약속을 되풀이했다
+			#   (곡괭이 표가 R10에서 인정·교정한 "최고 티어 실효 0"과 같은 클래스).
+			#   상한은 상수에서 파생한다 — 게이트가 늘면 이 줄이 저절로 따라 넓어진다.
+			if tier <= maxi(ToolTier.TIER_LARGE_STUMP, ToolTier.TIER_LARGE_LOG):
+				return "성숙목 %d타 · 더 굵은 것을 벨 수 있다" % ToolTier.axe_mature_hp(tier)
+			return "성숙목 %d타" % ToolTier.axe_mature_hp(tier)
 		ToolTier.PICKAXE:
 			return "광맥 %d타 · 보석 %d타" % [ToolTier.pickaxe_ore_hits(tier), ToolTier.pickaxe_gem_hits(tier)]
 		ToolTier.HOE, ToolTier.WATERING_CAN:
@@ -18978,9 +19109,27 @@ func _woodshop_text() -> String:
 		second = "짓는 중: %s   ·   %s" % [busy, second]
 	else:
 		# 놀고 있을 때는 가게의 규칙을 먼저 말한다 — 동시 1건·공기는 값의 일부라 사기 전에 보여야 한다.
-		second = "한 번에 한 채 · 공기 %d일   ·   %s" % [
-			Carpenter.build_days(Carpenter.PROJ_BIG_COOP), second]
+		# ★[폴리시 R14] 공기를 **카탈로그 전량에서 파생**한다 — 종전엔 `PROJ_BIG_COOP` 한 건(2일)을
+		#   전 매대의 공통 규칙인 양 박아, 늘봄방(3일)을 발주하면 직후 알림이 "3일 뒤 아침 완공"이라
+		#   다르게 말했다. `_build_rows` 주석이 "공기는 이름에 안 넣고 헤더가 상시 안내한다"고 못 박아
+		#   여기가 공기를 말하는 유일한 표면이라, 한 프로젝트의 값을 일반화하면 그 안내가 거짓이 된다.
+		#   표에 새 프로젝트가 붙으면 이 줄이 저절로 따라 넓어진다(하드코딩 0).
+		second = "한 번에 한 채 · %s   ·   %s" % [_build_days_text(), second]
 	return "\n".join(["── 옹이의 목공방 ──", second])
+
+# ★[폴리시 R14] 매대 헤더의 공기 안내 — 카탈로그 전량에서 파생한다. 전 프로젝트가 같은 날수면
+#   "공기 N일", 갈리면 "공기 N~M일"(지금은 2건 2일 · 늘봄방만 3일이라 후자). 값의 진실원은
+#   `Carpenter.PROJECTS` 하나이고 여기는 조회자다.
+func _build_days_text() -> String:
+	var lo := 0
+	var hi := 0
+	for id in Carpenter.ids():
+		var d := Carpenter.build_days(String(id))
+		lo = d if lo == 0 else mini(lo, d)
+		hi = maxi(hi, d)
+	if hi <= 0:
+		return "공기 —"
+	return "공기 %d일" % lo if lo == hi else "공기 %d~%d일" % [lo, hi]
 
 # 건축 의뢰 행 — 카탈로그 전량(지금은 성장 티어 2건). 값은 옹이 ♡ 할인가(골드만 — 원목은 자재라
 # 할인 대상이 아니다, Carpenter.wood_cost 주석). 완공분·진행 중엔 잠금 행(구매 히트 미등록).
@@ -19260,8 +19409,11 @@ func _try_buy_animal(species: String) -> bool:
 	var nm := AnimalCatalog.name_of(species)
 	var bld := _animal_building_of(species)
 	if ranch.is_full(bld):
-		_notice("%s 정원이 찼다 (%d/%d) — 목공방에서 「큰 %s」을 지어야 한다"
-			% [bld, ranch.occupancy_of(bld), ranch.capacity_of(bld), bld])
+		# ★[폴리시 R14] 조사 고정 "을" 봉합 — `bld`는 받침이 갈리는 런타임 이름이라("넋둥우리" /
+		#   "넋우릿간") coop 분기에서 "「큰 넋둥우리」을"이 나왔다. R5/R12의 전수 가드 정규식이
+		#   `%s」을`처럼 `」`가 낀 형태를 못 잡던 사각이다(가드 쪽도 함께 좁혔다).
+		_notice("%s 정원이 찼다 (%d/%d) — 목공방에서 「큰 %s」%s 지어야 한다"
+			% [bld, ranch.occupancy_of(bld), ranch.capacity_of(bld), bld, HanjiUi.josa_eul(bld)])
 		return false
 	var spot := _free_animal_spot(species)
 	if spot == Ranch.NO_ANIMAL:
@@ -19343,7 +19495,12 @@ func _gift_rhythm_text(r: Resident) -> String:
 		return "선물 매일 가능(부부) · 오늘 생일" if bday else "선물 매일 가능(부부)"
 	if bday:
 		return "오늘 생일 — 주 상한 면제"
-	return "이번 주 선물 %d/%d" % [r.affinity.gifts_left_in_week(clock.day), Affinity.GIFTS_PER_WEEK]
+	# ★[폴리시 R14] 분자를 **쓴 횟수**로 바로잡았다 — 종전엔 잔여(`gifts_left_in_week`)를 넣어
+	#   이 저장소의 다른 모든 `%d/%d`(전시·도감·의뢰·친밀도·물뿌리개 = 달성/총량)와 뜻이 정반대였다.
+	#   같은 패널 윗줄이 "친밀도 3/5"(아직 못 채웠다)인데 꼬리만 "2/2"가 "이미 다 썼다"였고,
+	#   두 번 선물해 소진하면 "0/2"가 되어 관례대로 읽는 플레이어에겐 "아직 하나도 안 썼다"로 보였다.
+	#   판정(`can_gift`)은 그대로다 — 고친 것은 표기뿐이다.
+	return "이번 주 선물 %d/%d" % [r.affinity.gifts_used_in_week(clock.day), Affinity.GIFTS_PER_WEEK]
 
 # ★ [S8-T1 / ADR-0066 결정 11] 관계 상태 배지 훅 — 연애(T6)·결혼(T7)이 마저 채울 자리다.
 # ★[S8-T5] 첫 실값: **진급 대기**(점수 만충·관문 미통과 — Affinity.pending_promotion). "다음 칸이
@@ -21032,12 +21189,14 @@ func _maybe_spine_b5() -> void:
 # 여기서 직접 죽이고(원복 근거를 먼저 스냅한다 — 컷신의 시계 스냅과 같은 규율) 나머지는 러너에 맡긴다.
 func _begin_spine_b5() -> void:
 	_spine_b5_mute_prev = audio.is_muted()
+	_spine_b5_mute_forced = true        # ★[폴리시 R14] 이 구간의 [M]은 위 스냅을 갱신한다(선언부 참조)
 	audio.set_muted(true)               # §6.5 2단 "모든 인게임 소음(BGM·환경음) 소거 → 적막"
 	_spine_b5_pending = true
 	# 예약 대화 0으로 튼다 — 지문은 컷신이 끝난 뒤 **내면 공간 안에서** 선다(_end_cutscene 참조).
 	if not _begin_cutscene(Spine.B5_CUTSCENE.duplicate(true), "", PackedStringArray()):
 		_spine_b5_pending = false       # 러너가 거절(중첩 재생 등) — 소리를 되돌리고 없던 일로
 		audio.set_muted(_spine_b5_mute_prev)
+		_spine_b5_mute_forced = false
 
 # 내면 공간 개시 — 세션을 세우고 오프닝 지문을 연다.
 func _open_spine_puzzle() -> void:
@@ -21046,6 +21205,7 @@ func _open_spine_puzzle() -> void:
 	if not session.start():
 		# 이을 것이 없는 판(파편 0~1) — 여기까지 올 수 없는 조합이지만, 조용히 원복한다.
 		audio.set_muted(_spine_b5_mute_prev)
+		_spine_b5_mute_forced = false
 		player.set_physics_process(true)
 		return
 	spine_puzzle = session
@@ -21118,11 +21278,21 @@ func _close_spine_puzzle() -> void:
 	spine_puzzle = null
 	_spine_b5_frags = []
 	_spine_b5_closing = false
-	clock.running = _spine_b5_clock_prev
+	# ★[폴리시 R14] **『정지 주인 ≠ 재개 주인』의 마지막 미봉합 자리.** R12·R13이 `_close_spine_scene`·
+	#   `_on_dialogue_finished`·`_close_epilogue`에 세운 그 가드가 짝인 여기만 비어 있었다: 24:00 강제
+	#   취침 트윈(≈1.1초) 안에서 B5 발동 컷신이 끝나면 `_end_cutscene`이 복원을 건너뛴 채 곧바로
+	#   `_open_spine_puzzle`로 오고(21053 주석의 그 경로), 같은 트윈 안에서 완료 지문이 닫히면
+	#   ㉠`_on_dialogue_finished`가 `not _sleeping`으로 잠근 이동을 세 줄 뒤 여기가 무조건 켜서
+	#   **완전 암전 뒤에서 플레이어가 걸어 다니고**(쓰러진 자리가 아닌 칸에서 아침을 맞는다)
+	#   ㉡R13이 `true`로 바꾼 스냅이 복원되며 `_do_sleep`이 세운 시계 정지가 취침 한가운데서 풀렸다.
+	#   취침 중이면 두 잠금의 주인은 취침이므로 손대지 않는다(`_on_sleep_done`이 눈뜨는 프레임에 켠다).
+	if not _sleeping:
+		clock.running = _spine_b5_clock_prev
 	audio.set_muted(_spine_b5_mute_prev)
+	_spine_b5_mute_forced = false   # ★[폴리시 R14] 구간 종료 — 이후의 [M]은 스냅을 안 건드린다
 	interact_prompt.visible = false
 	if not _run_over:
-		player.set_physics_process(true)
+		player.set_physics_process(not _sleeping)
 	queue_redraw()
 	# ★[S9b-T8 / ADR-0068 결정 9·10] **B6 이음매의 이행** — S9b-T7이 "여기서 이어 붙이면 된다"고
 	#   남긴 그 자리다(§6.5 5단 "카타르시스 전환"). 위 세 줄이 세계를 되돌리자마자 S등급 그림이
@@ -23222,6 +23392,19 @@ func _show_milestone3_reached() -> void:
 #   새로 여는 판정까지 그 아쉬움을 답습할 필요는 없어서 여기만 테스트 가능한 표면으로 연다.
 func _facing_mirror() -> bool:
 	return not _sleeping and _indoor == "집" and _target == MIRROR_TILE
+
+# ★[폴리시 R14] 지금 커서가 **조회 오버레이의 그려진 판 위**인가(점괘 거울 예보 · 절기 달력).
+#   판정은 논리 좌표로 한다 — 두 패널 다 $CanvasLayer 자식이라 clock_hud.hit_test와 같은 스케일
+#   보정을 거쳐야 창 크기가 바뀌어도 판과 판정이 안 어긋난다.
+func _pointer_over_overlay(screen_pos: Vector2) -> bool:
+	if mirror_panel != null and mirror_panel.visible:
+		var sc := 1.0
+		var par := mirror_panel.get_parent()
+		if par is CanvasLayer and par.scale.x != 0.0:
+			sc = par.scale.x
+		if Rect2(mirror_panel.position, mirror_panel.size).has_point(screen_pos / sc):
+			return true
+	return calendar_panel != null and calendar_panel.hit_test(screen_pos)
 
 func _open_mirror() -> void:
 	mirror_text.text = _mirror_forecast_text()

@@ -138,6 +138,11 @@ func _initialize() -> void:
 	_check("⑪ 혼합 품질 합산 정산", bin.preview_gold() == int(base_price * 2.0) + base_price)
 	_check("⑪ count_of 전 품질 합(2)", bin.count_of(CROP) == 2)
 	bin.free()
+	# ★[폴리시 R14] 앞부분에서 만든 순수 인스턴스도 같이 정리한다 — `field.gd`·`inventory.gd` 둘 다
+	#   `extends Node`인데 이 파일은 여기(bin)와 아래 legacy_* 셋만 해제해, 같은 규약을 아는 파일
+	#   안에서 해제한 것과 안 한 것이 갈려 있었다.
+	for n in [farm, inv, f2, f3, inv2]:
+		n.free()
 
 	# ── Part B: main 스폰(⑫~⑭) ──
 	const SAVE := "user://save.dat"

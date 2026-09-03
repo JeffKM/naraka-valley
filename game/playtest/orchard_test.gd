@@ -116,6 +116,10 @@ func _initialize() -> void:
 	orch3.advance_day(141)   # ★ 로드 후 첫 틱 = 유화절(비제철) → 증가 0(유령과일 차단)
 	_check("⑦★ 로드-틱 절기 경계 결착(비제철 즉시 반영·count 고정1)", orch3.fruit_count_of(b) == 1)
 
+	# ★[폴리시 R14] 트리 밖 new() 정리 — `Orchard`는 `extends Node`라 안 놓으면 종료 시 누수 경고.
+	for n in [orch, orch2, orch3]:
+		n.free()
+
 	# ── Part B: main 통합(⑧⑨) ──
 	var m := await _spawn_main()
 	# ⑨ 절기 유도 CONTEXT 정합(static — main 무관하지만 부팅 정합 확인 겸).

@@ -69,6 +69,14 @@ const SFX_STEM := {
 # ── 페이드/볼륨 ────────────────────────────────────────────────────────────
 const FULL_DB := 0.0
 const SILENT_DB := -40.0
+# ★[폴리시 R14] **볼륨 0%의 바닥**. 종전엔 크로스페이드용 SILENT_DB(-40 dB = 진폭 0.01)를 그대로
+#   썼는데 그건 무음이 아니라 "아주 작은 소리"라, 설정이 "0%"로 표시되고 트랙바가 비어 있는데도
+#   BGM·효과음이 계속 들렸다(settings.gd가 못 박은 "0=무음" 계약 위반). 덤으로 그 바닥은 비단조이기도
+#   했다 — settings.cfg에서 온 0.002는 `linear_to_db` ≈ -54 dB라 0.0의 -40 dB보다 **더 조용**했다.
+#   -80 dB는 Godot 믹서의 관례적 최저치(진폭 0.0001)라 실질 무음이고 위 역전도 사라진다.
+#   ★ 크로스페이드 바닥(SILENT_DB)은 그대로 둔다 — 저건 1초 뒤 정지가 뒤따르는 *과도* 값이고,
+#     여기는 사용자가 정한 *정상* 값이라 뜻이 다르다.
+const MUTE_DB := -80.0
 const CROSSFADE_SECS := 1.0
 const SFX_VOICES := 8  # 동시 SFX 보이스 풀(겹쳐 나도 끊기지 않게)
 
@@ -129,6 +137,15 @@ func _ready() -> void:
 	#   INHERIT라 이 값을 따른다(음악은 정지 메뉴에서도 이어지는 게 자연스럽다).
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_ensure_buses()
+	# ★[폴리시 R14] **버스 음소거를 노드 상태에 맞춘다(전역 → 노드 방향의 되감기).** 음소거의 주인은
+	#   `AudioServer`의 버스 플래그 하나인데 그건 씬 트리 **밖**의 전역 서버라
+	#   `reload_current_scene()`(F8 세이브 삭제→재시작)을 넘어 살아남고, `_ensure_buses`는 이미 있는
+	#   버스를 건너뛸 뿐이라 mute=true가 그대로 남았다 — 새 GameAudio의 `_muted`는 false인데 실제로는
+	#   타이틀 BGM부터 전 SFX까지 통째로 무음이고 `is_muted()`는 false라 답했다(화면에 음소거 표시가
+	#   없어 원인을 볼 방법도 없다). 게다가 첫 [M]은 `set_muted(true)`라 아무것도 안 바뀌어 입력이
+	#   죽은 것처럼 보이고 **두 번째** [M]에서야 소리가 돌아왔다. 형제인 버스 **볼륨**은 부팅 때
+	#   `_apply_audio_volumes()`가 다시 걸어 이 짝이 이미 있다 — mute만 비어 있던 비대칭을 메운다.
+	set_muted(_muted)
 	_music_a = _make_player(MUSIC_BUS)
 	_music_b = _make_player(MUSIC_BUS)
 	for i in SFX_VOICES:
@@ -264,7 +281,7 @@ func is_muted() -> bool:
 # ── ★ ADR-0048 Phase D 볼륨(설정 화면) ───────────────────────────────────────
 # 음악·효과음 버스 볼륨을 0..1 선형으로 받아 dB로 적용한다(설정 GameSettings 값 → main이 이 API로 적용).
 # 버스 볼륨은 크로스페이드(플레이어별 volume_db)·음소거(bus mute)와 직교라 서로 안 싸운다(카테고리 마스터).
-# 0(또는 근사)이면 무음 바닥(SILENT_DB)으로 내려 완전히 죽인다(linear_to_db(0)=-inf 방어).
+# 0(또는 근사)이면 무음 바닥(MUTE_DB)으로 내려 완전히 죽인다(linear_to_db(0)=-inf 방어).
 func set_music_volume(v01: float) -> void:
 	_set_bus_volume(MUSIC_BUS, v01)
 
@@ -276,4 +293,4 @@ func _set_bus_volume(bus: String, v01: float) -> void:
 	if idx == -1:
 		return
 	var v := clampf(v01, 0.0, 1.0)
-	AudioServer.set_bus_volume_db(idx, SILENT_DB if v <= 0.001 else linear_to_db(v))
+	AudioServer.set_bus_volume_db(idx, MUTE_DB if v <= 0.001 else linear_to_db(v))
