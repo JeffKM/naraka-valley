@@ -109,7 +109,9 @@ func _initialize() -> void:
 		not m._is_free_use_item(ItemCatalog.HOE)
 		and not m._is_free_use_item(ItemCatalog.WATERING_CAN)
 		and not m._is_free_use_item(ItemCatalog.seed_id(CropCatalog.PIANHWA)))
-	var gate_i := _line_of("or holding_weapon or pot_at_target or holding_free_use")
+	# ★[폴리시 R17 경유 발견] R16 #5가 이 or-항을 `pot_at_target` → `pot_dispatch`로 갈면서 니들이
+	#   상해 있었다(계약 불변 — 항 넷이 전부 산다. r7 ⑬e·r10 ⑤b가 같은 건이다).
+	var gate_i := _line_of("or holding_weapon or pot_dispatch or holding_free_use")
 	_check("②c LMB 디스패치 게이트가 그 술어를 or-항으로 단다(main.gd:%d)" % (gate_i + 1), gate_i >= 0)
 	# 게이트가 필요한 이유 = 층 안엔 밭 흙이 한 칸도 없다. 그 사실을 실호출로 못 박는다.
 	var mine_like := Vector2i(1, 1)   # 안식 그리드에서도 밭이 아닌 칸(집·길·풀 어느 쪽이든 SOIL 아님)

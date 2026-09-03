@@ -91,7 +91,8 @@ func _initialize() -> void:
 	# ── ① #1 밀린 잡초 밤 표가 세이브를 왕복한다 ────────────────────────────────
 	print("── ① #1 밀린 잡초 밤 — 표가 원장과 같은 파일에 실린다 ──")
 	_check("①a 취침 자동 세이브는 날이 바뀐 **뒤**에 뜬다(그래서 표를 버리면 손실이 된다)",
-		_line_of("func _on_sleep_done") > 0 and _in_func("func _on_sleep_done", "_save_game()"))
+		# ★[폴리시 R17 #8] 호출이 실패를 말하는 창구(`_save_or_warn`) 경유로 갈렸다 — 위상 계약 불변.
+		_line_of("func _on_sleep_done") > 0 and _in_func("func _on_sleep_done", "_save_or_warn()"))
 	m._weed_day_pending_day = 12
 	m._save_game()
 	var raw: Dictionary = m.saver.load_game(m._active_slot)
@@ -207,7 +208,9 @@ func _initialize() -> void:
 	_check("⑤a `_use_tool` 디스패치 게이트가 세션 셋을 **모두** 본다(체키·칵테일·낚시)",
 		gate > 0)
 	_check("⑤b 그 게이트는 여전히 자유 사용 물건·무기를 or-항으로 들고 있다(거동 축소 0)",
-		_line_of("and (_target_valid or holding_weapon or pot_at_target or holding_free_use)") > 0)
+		# ★[폴리시 R17 경유 발견] R16 #5가 이 or-항을 `pot_at_target` → `pot_dispatch`로 갈면서
+		#   니들이 상해 있었다(계약 자체는 그대로 — 항 넷이 전부 산다). 이름만 따라 옮긴다.
+		_line_of("and (_target_valid or holding_weapon or pot_dispatch or holding_free_use)") > 0)
 	_check("⑤c 세션 틱 분기는 종전대로 return이 없다(그래서 게이트가 유일한 방어다)",
 		_line_of("if fishing != null and not _sleeping:") > 0
 		and _line_of("if fishing != null and not _sleeping:") < gate)

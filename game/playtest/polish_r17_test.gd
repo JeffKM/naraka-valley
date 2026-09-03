@@ -107,6 +107,12 @@ func _line_in_func(lines: PackedStringArray, fn_needle: String, needle: String) 
 
 # 그 줄에 박힌 첫 문자열 리터럴(따옴표 안). 표시 문구를 **소스에서 그대로** 집어 재기 위한 것 —
 # 테스트가 문구를 옮겨 적으면 문구가 바뀐 날 초록인 채로 넘침이 되살아난다.
+func _feed_texts(m: Node) -> Array:
+	var out: Array = []
+	for it in m.notice_feed._items:
+		out.append(String(it["text"]))
+	return out
+
 func _literal_at(lines: PackedStringArray, idx: int) -> String:
 	if idx < 0 or idx >= lines.size():
 		return ""
@@ -144,6 +150,15 @@ func _run_checks() -> void:
 	await _check_mirror_fit(m)
 	_check_profession_desc_width(m)
 	_check_craft_header_width(m)
+
+	_check_save_failure_voice(m)
+	_check_menu_found_rewind(m)
+	_check_sleep_clock_leak(m)
+	_check_night_bar_keep(m)
+	_check_weed_tone(m)
+	_check_notice_step_reload(m)
+	await _check_crab_pot_bait(m)
+	_record_flavor_index(m)
 
 	print("── 결과: %s (실패 %d) ──" % ["통과" if _fail == 0 else "실패", _fail])
 	quit(1 if _fail > 0 else 0)
@@ -251,12 +266,21 @@ func _check_booth_guard(m: Node) -> void:
 	m._rebuild_region(keep)
 	await process_frame
 	# 프롬프트 사슬이 그 양보를 **화면에** 옮긴다(실행 사다리는 손대지 않았다 = 매몰 0).
-	var pr_f := _line_in(_src, "elif _furnace_at(_target) and not _facing_event_booth():")
-	var pr_c := _line_in(_src, "elif _crystalarium_at(_target) and not _facing_event_booth():")
+	var pr_f := _line_in(_src, "elif _furnace_at(_target) and not _f_taken_before_machine(_target):")
+	var pr_c := _line_in(_src, "elif _crystalarium_at(_target) and not _f_taken_before_machine(_target):")
 	var ex_ped := _line_in(_src, "if _facing_peddler() and Input.is_action_just_pressed(\"shop_toggle\"):")
 	var ex_fur := _line_in(_src, "if not _sleeping and _furnace_at(_target) and Input.is_action_just_pressed(\"shop_toggle\"):")
-	_check("②d 두 기계 프롬프트가 부스에 양보한다(업화로 %d행 · 결정기 %d행)" % [pr_f + 1, pr_c + 1],
+	_check("②d 두 기계 프롬프트가 양보 절을 든다(업화로 %d행 · 결정기 %d행)" % [pr_f + 1, pr_c + 1],
 		pr_f >= 0 and pr_c >= 0)
+	# 양보 대상은 **실행 사다리에서 기계보다 위에 선 것 전수**다(부스 셋 + 게잡이통 + 수액 채취기).
+	# R16 #13이 기계 안내를 맨 앞으로 올리며 셋 다에서 같은 역전을 만들었고, polish_r8 ⑥c가 그
+	# 사실을 R16 이후 줄곧 빨갛게 붙들고 있었다.
+	var ex_pot := _line_in(_src, "crab_pot.has_at(_region, _target) \\")
+	var ex_tap := _line_in(_src, "tapper.has_at(_region, _tapper_ledger_tile(_target)) \\")
+	_check("②f 통(%d행)·채취기(%d행)도 실행 사다리에서 기계(%d행)보다 먼저 잡으므로 같은 양보를 받는다"
+			% [ex_pot + 1, ex_tap + 1, ex_fur + 1],
+		ex_pot > 0 and ex_tap > ex_pot and ex_fur > ex_tap
+			and _src[pr_f].contains("_f_taken_before_machine"))
 	_check("②e 실행 사다리는 그대로다 — 부스(%d행)가 기계(%d행)보다 먼저 잡는 그 순서에 프롬프트를 맞춘 것이다"
 			% [ex_ped + 1, ex_fur + 1], ex_ped >= 0 and ex_fur > ex_ped)
 
@@ -534,3 +558,336 @@ func _check_craft_header_width(m: Node) -> void:
 	var old_w := HanjiUi.text_width(old_tpl % " · ".join(axes), 12)
 	_check("⑧c 결함 재현: 옛 문구는 폭 인자도 없이 %.0f > %.0f로 그대로 넘쳤다" % [old_w, avail],
 		old_w > avail)
+
+# ── ⑨ #8 저장 실패가 화면에 말해진다(라이브 · 실제 IO 실패 주입) ─────────────
+# 무대를 진짜로 만든다: `SaveManager`가 쓸 수 없는 슬롯을 주어 `_save_game()`이 실제로 false를
+# 돌려주게 하고(문자열 스텁이 아니라 IO 경로 그대로), 그때 화면에 무엇이 뜨는지를 큐에서 읽는다.
+func _check_save_failure_voice(m: Node) -> void:
+	print("⑨ #8 저장 실패 알림")
+	var keep_slot: int = m._active_slot
+	m.notice_feed._items.clear()
+	# 성공 기준선 — 성공은 종전대로 `_save_game`의 "저장됨" 한 줄뿐이다(이중 토스트 0 = R11 계약).
+	var ok: bool = m._save_or_warn()
+	var ok_lines := _feed_texts(m)
+	_check("⑨ 무대: 정상 슬롯에서는 성공하고 성공 문구는 한 줄뿐이다(%s)" % str(ok_lines),
+		ok and ok_lines.size() == 1 and String(ok_lines[0]).contains("저장됨"))
+	# 실패 주입 — **진짜 IO 실패**다(스텁 0): 임시 파일 자리에 디렉터리를 세우면
+	# `save.gd`의 `FileAccess.open(tmp, WRITE)`가 null을 돌려주고 그 경로가 그대로 false로 흐른다.
+	m.notice_feed._items.clear()
+	m._active_slot = 7
+	var tmp := SaveManager.slot_path(7) + SaveManager.TMP_SUFFIX
+	DirAccess.make_dir_absolute(tmp)
+	var bad: bool = m._save_or_warn()
+	var bad_lines := _feed_texts(m)
+	DirAccess.remove_absolute(tmp)
+	m._active_slot = keep_slot
+	var said := ""
+	for s in bad_lines:
+		if String(s).contains("저장하지"):
+			said = String(s)
+	_check("⑨a 실제로 쓰기가 실패하고(%s) 화면이 그 사실을 말한다 — 「%s」" % [str(bad), said],
+		not bad and said != "" and not said.contains("저장됨"))
+	# ★ 취침 자동 저장은 아침 훅과 같은 프레임이라 keep이 없으면 축출된다(#11과 같은 판별식).
+	var kept := false
+	for it in m.notice_feed._items:
+		if String(it["text"]).contains("저장하지"):
+			kept = bool(it.get("keep", false))
+	_check("⑨b 그 경고에 keep 표가 붙어 있다(아침 알림 더미에 밀려 사라지지 않게)", kept)
+	# 반환값을 버리던 다섯 입구가 전부 새 창구로 갈렸다 — 소스 전수(명단 하드코딩 0).
+	var raw := 0
+	var warned := 0
+	var cur := ""
+	var raw_fns: Array = []
+	for line in _src:
+		var ln := String(line)
+		if ln.begins_with("func "):
+			cur = ln.substr(5, maxi(ln.find("("), 5) - 5)
+		if ln.strip_edges().begins_with("#") or cur == "_save_or_warn":
+			continue
+		if ln.contains("_save_game()") and not ln.contains("func _save_game"):
+			raw += 1
+			raw_fns.append(cur)
+		if ln.contains("_save_or_warn()") and not ln.contains("func _save_or_warn"):
+			warned += 1
+	_check("⑨c 날 `_save_game()` 호출부는 성패를 **보는** 둘만 남았다(%s) · 새 창구 경유 %d곳"
+			% [str(raw_fns), warned],
+		raw == 2 and raw_fns.has("_on_frame_save") and raw_fns.has("_on_frame_quit") and warned == 5)
+	m.notice_feed._items.clear()
+
+# ── ⑩ #9 `menu_found`가 형제와 같은 무가드로 되감긴다(라이브 왕복) ───────────
+func _check_menu_found_rewind(m: Node) -> void:
+	print("⑩ #9 융합 메뉴 발견 원장 되감기")
+	# ㉠ 부팅으로 시드되지 않음 — 이 원장의 유일한 기록처가 `item_gained` 훅이고, 로드는 `changed`만 쏜다.
+	var writer := _line_in(_src, "_menu_found[id] = true")
+	var loader := _line_in_func(_lines_of_file("res://inventory.gd"), "func load_save", "changed.emit()")
+	_check("⑩ 무대: 기록처가 `_on_item_gained` 한 곳(main %d행)이고 `inventory.load_save`는 changed만 쏜다(%d행)"
+			% [writer + 1, loader + 1], writer >= 0 and loader >= 0)
+	# ㉡ 라이브 왕복 — 원장을 채운 뒤 **키가 없는 구세이브 dict**를 로드에 먹인다.
+	var keep: Dictionary = m._menu_found.duplicate()
+	m._menu_found = {"__ghost__": true}
+	m._apply_menu_found({})
+	_check("⑩a 키 없는 구세이브를 읽으면 원장이 비워진다(버린 타임라인의 해금이 안 살아남는다)",
+		m._menu_found.is_empty())
+	m._apply_menu_found({"menu_found": {"x": true}})
+	_check("⑩b 키가 있으면 그 값으로 되감는다(%s)" % str(m._menu_found),
+		m._menu_found.has("x") and not m._menu_found.has("__ghost__"))
+	m._menu_found = keep
+	# ㉢ 형제와 같은 문법인가 — 두 줄이 같은 `.get(키, {})` 모양이어야 계약이 하나다.
+	var ff := _line_in_func(_src, "func _load_game", "data.get(\"forage_found\", {})")
+	var mf := _line_in_func(_src, "func _apply_menu_found", "data.get(\"menu_found\", {})")
+	var seam := _line_in_func(_src, "func _load_game", "_apply_menu_found(data)")
+	var guarded := _line_in(_src, "data.has(\"menu_found\")")
+	_check("⑩c 두 형제가 같은 무가드 `.get(키, {})` 문법이다(forage_found %d행 · menu_found %d행 · 옛 has 가드 %d)"
+			% [ff + 1, mf + 1, guarded + 1], ff >= 0 and mf >= 0 and guarded < 0)
+	_check("⑩d 로드가 그 창구를 실제로 부른다(%d행 — 씬 밖 헬퍼가 아니라 로드 경로 위다)" % (seam + 1),
+		seam > 0 and seam > ff)
+
+# ── ⑪ #10 취침 트윈이 도는 동안 시계가 안 흐른다 ────────────────────────────
+# 재는 것은 문자열이 아니라 **시계 상태와 실제 분**이다: 아침 훅이 도는 시점의 running과,
+# 트윈 길이만큼 프레임을 흘렸을 때 minutes가 START_MIN에서 안 움직이는가.
+func _check_sleep_clock_leak(m: Node) -> void:
+	print("⑪ #10 취침 트윈 시계 누수")
+	var per_sec: float = float(GameClock.END_MIN - GameClock.START_MIN) / GameClock.REAL_SECONDS_PER_DAY
+	var tween_secs := 0.7   # 아래 ⑪c가 소스에서 다시 판다(여긴 표시용)
+	var seen_running := [true]
+	var probe := func(_d: int) -> void: seen_running[0] = m.clock.running
+	m.clock.day_advanced.connect(probe)
+	m.clock.running = true
+	m.clock.sleep(false)
+	m.clock.day_advanced.disconnect(probe)
+	_check("⑪a 아침 훅(day_advanced)이 도는 동안 시계는 멈춰 있다 — `_arm_spine_b4` 머리말이 단언하는 그 상태",
+		seen_running[0] == false and m.clock.running == false)
+	# 트윈 구간을 실제로 흘려도 분이 안 움직인다(멈춘 시계는 `_process`가 안 민다).
+	var before: float = m.clock.minutes
+	m.clock._process(tween_secs)
+	_check("⑪b 그 0.7초 동안 분이 한 눈금도 안 간다(%.1f → %.1f · 종전 손실 %.1f 게임분)"
+			% [before, m.clock.minutes, tween_secs * per_sec],
+		is_equal_approx(before, m.clock.minutes) and before == float(GameClock.START_MIN))
+	# 대조군 — 기본값(resume)은 종전 그대로 즉시 흐른다(헤드리스 하네스가 쓰는 그 경로).
+	m.clock.sleep()
+	_check("⑪c 대조: 인자 없는 `sleep()`은 종전대로 곧바로 흐른다(다른 호출부 거동 불변)",
+		m.clock.running == true)
+	# 정지 주인 = 재개 주인 — `_do_sleep`이 멈추고 `_on_sleep_done`이 켠다.
+	var stop := _line_in_func(_src, "func _do_sleep", "clock.running = false")
+	var bind := _line_in_func(_src, "func _do_sleep", "clock.sleep.bind(false)")
+	var resume := _line_in_func(_src, "func _on_sleep_done", "clock.running = true")
+	var b4 := _line_in_func(_src, "func _on_sleep_done", "_fire_spine_b4()")
+	_check("⑪d 멈춘 자리(%d행)와 켜는 자리(%d행)가 한 연출의 양끝이고, 콜백은 재개를 미룬다(%d행)"
+			% [stop + 1, resume + 1, bind + 1], stop >= 0 and bind >= 0 and resume >= 0)
+	_check("⑪e 재개가 컷신 스냅(`_fire_spine_b4` %d행)보다 **먼저**다 — 꺼진 채 스냅되면 연출 뒤 시간이 안 간다"
+			% (b4 + 1), b4 > resume)
+	# 트윈 길이는 소스에서 판다(0.7 = interval 0.3 + 페이드인 0.4).
+	var iv := _line_in_func(_src, "func _do_sleep", "tween_interval(")
+	var fi := _line_in_func(_src, "func _do_sleep", "tween_property(fade, \"modulate:a\", 0.0")
+	_check("⑪f 재개를 미룬 구간이 실제로 트윈 꼬리 전체다(정지 %d행 · 페이드인 %d행 · 그 뒤가 `_on_sleep_done`)"
+			% [iv + 1, fi + 1], iv > bind and fi > iv)
+
+# ── ⑫ #11 밤 바 마감 정산이 아침 알림 더미에 안 밀린다(라이브) ──────────────
+func _check_night_bar_keep(m: Node) -> void:
+	print("⑫ #11 밤 바 마감 정산 축출")
+	m.notice_feed._items.clear()
+	m._on_night_closed(3, 120, 2)
+	var line := ""
+	var kept := false
+	for it in m.notice_feed._items:
+		if String(it["text"]).contains("나라카 바 마감"):
+			line = String(it["text"])
+			kept = bool(it.get("keep", false))
+	_check("⑫ 무대: 정산 한 줄이 큐에 들어갔다 — 「%s」" % line, line != "")
+	_check("⑫a 그 줄에 keep 표가 붙어 있다", kept)
+	# 아침 훅이 미는 만큼(MAX_ITEMS 초과) 계속 밀어도 살아남는다 — 분모는 피드에서 판다.
+	for i in m.notice_feed.MAX_ITEMS + 3:
+		m._notice("아침 알림 %d" % i)
+	var survived := false
+	for it in m.notice_feed._items:
+		if String(it["text"]).contains("나라카 바 마감"):
+			survived = true
+	_check("⑫b MAX_ITEMS(%d)를 %d줄 넘겨 밀어도 살아남는다(종전엔 다섯째 push에서 축출됐다)"
+			% [m.notice_feed.MAX_ITEMS, m.notice_feed.MAX_ITEMS + 3], survived)
+	_check("⑫c 큐 상한 계약은 그대로다(%d ≤ %d — keep이 상한을 무너뜨리지 않는다)"
+			% [m.notice_feed._items.size(), m.notice_feed.MAX_ITEMS],
+		m.notice_feed._items.size() <= m.notice_feed.MAX_ITEMS)
+	# 다시 볼 경로가 없다는 근거 — `end_day`는 `closed`를 쏘고 곧바로 정산을 0으로 지운다.
+	var nb := _lines_of_file("res://night_bar.gd")
+	var emit_line := _line_in_func(nb, "func end_day", "closed.emit(")
+	var wipe := _line_in_func(nb, "func end_day", "abandon()")
+	_check("⑫d 근거: `end_day`가 정산을 쏜(%d행) 직후 `abandon()`(%d행)이 값을 0으로 지운다 — 재발행 경로 0"
+			% [emit_line + 1, wipe + 1], emit_line >= 0 and wipe > emit_line)
+	m.notice_feed._items.clear()
+
+# ── ⑬ #12 재점령 잡초가 debris 잡초와 같은 톤으로 그려진다 ──────────────────
+# 픽셀로 잰다: 두 경로가 같은 칸에서 집는 텍스처가 **같은 객체**인가(캐시 합류), 그리고 그것이
+# 원본과 실제로 다른 톤인가(합류가 무의미하지 않다는 대조군).
+func _check_weed_tone(m: Node) -> void:
+	print("⑬ #12 재점령 잡초 톤")
+	var t := Vector2i(11, 23)
+	var variant: Texture2D = m._debris_variant_tex(m.PROP_DEBRIS_WEEDS, t)
+	var muted: Texture2D = m._muted_prop_tex(variant, m._MUTE_WOODY.has(m.PROP_DEBRIS_WEEDS))
+	_check("⑬ 무대: 잡초가 muted 대상 목록에 있고 목본이 아니다(잔디류 강도)",
+		m._MUTE_GREEN_PROPS.has(m.PROP_DEBRIS_WEEDS) and not m._MUTE_WOODY.has(m.PROP_DEBRIS_WEEDS))
+	# 그리기 경로가 실제로 그 캐시를 태우는가 — 두 줄이 같은 식을 쓴다.
+	var enc := _line_in_func(_src, "func _draw_encroach_weeds", "_muted_prop_tex(")
+	var props := _line_in(_src, "draw_tex = _muted_prop_tex(draw_tex, _MUTE_WOODY.has(tex))")
+	_check("⑬a 두 그리기 경로가 같은 캐시를 태운다(재점령 %d행 · debris %d행)" % [enc + 1, props + 1],
+		enc >= 0 and props >= 0)
+	_check("⑬b 그 캐시는 같은 변주에 대해 **같은 객체**를 돌려준다(톤이 갈릴 수 없다)",
+		muted == m._muted_prop_tex(variant, false))
+	# 대조군 — mute가 실제로 픽셀을 바꾼다(합류가 공허하지 않다는 증거).
+	var a := variant.get_image()
+	var b := muted.get_image()
+	var diff := 0
+	var checked := 0
+	for y in range(0, b.get_height(), 2):
+		for x in range(0, b.get_width(), 2):
+			var pa := a.get_pixel(x, y)
+			if pa.a < 0.5:
+				continue
+			checked += 1
+			if not pa.is_equal_approx(b.get_pixel(x, y)):
+				diff += 1
+	_check("⑬c 대조: mute 사본은 원본과 실제로 다르다(검사 %d px 중 %d px 변경 — 종전엔 이 차이가 그대로 화면에 갈렸다)"
+			% [checked, diff], checked > 0 and diff > 0)
+
+# ── ⑭ #13 NOTICE 단계 세이브를 F9로 불러오면 통보가 다시 열린다(라이브) ─────
+func _check_notice_step_reload(m: Node) -> void:
+	print("⑭ #13 NOTICE 단계 F9 왕복")
+	var keep_step: int = m.onboarding.step
+	var keep_slot: int = m._active_slot
+	# ㉠ 무대 — NOTICE 단계를 파일에 굳힌다(통보를 못 넘긴 채 24:00 강제 취침이 만드는 그 파일).
+	_dismiss_dialogue(m)
+	m.onboarding.step = Onboarding.NOTICE
+	var saved: bool = m._save_game()
+	_check("⑭ 무대: NOTICE 단계가 파일에 실렸다(%s)" % str(saved), saved)
+	# ㉡ 플레이가 진행돼 단계를 넘긴 뒤 F9 — 종전엔 여기서 통보가 다시 안 열렸다.
+	m.onboarding.step = Onboarding.MEET_MIHO
+	_dismiss_dialogue(m)
+	var loaded: bool = m._load_game()
+	_check("⑭a 로드가 단계를 NOTICE로 되감았다(%s · loaded=%s)"
+			% [str(m.onboarding.step == Onboarding.NOTICE), str(loaded)],
+		loaded and m.onboarding.step == Onboarding.NOTICE)
+	_check("⑭b **그 프레임에 통보가 다시 열려 있다** — 종전엔 이 대화가 없어 단계가 영원히 갇혔다(대화 %s)"
+			% str(m.dialogue.is_open()), m.dialogue.is_open())
+	# ㉢ 그리고 그 대화를 끝내면 단계가 실제로 넘어간다(탈출구가 살아 있다).
+	_dismiss_dialogue(m)
+	m._on_dialogue_finished()
+	_check("⑭c 통보를 끝내면 단계가 넘어간다(NOTICE → %d) — 갇힘이 풀렸다" % m.onboarding.step,
+		m.onboarding.step > Onboarding.NOTICE)
+	# ㉣ 갇혔을 때 무엇이 죽는지 — 이 술어들이 그 사고의 실체다(문서가 아니라 코드로 남긴다).
+	m.onboarding.step = Onboarding.NOTICE
+	var r_okja: Resident = m._resident("okja")
+	var r_bana: Resident = m._resident("bana")
+	_check("⑭d 근거: NOTICE에서는 옥자 게이트가 닫히고(facing %s) 안내도 비어 있다(「%s」)"
+			% [str(r_okja.facing_gate.call()), m.onboarding.guidance()],
+		r_okja != null and not r_okja.facing_gate.call() and m.onboarding.guidance() == "")
+	_check("⑭e 근거: 바나 무대도 함께 닫힌다(%s) — 밤 바가 통째로 잠긴다"
+			% str(r_bana.visible_rule.call()), r_bana != null and not r_bana.visible_rule.call())
+	m.onboarding.step = keep_step
+	m._active_slot = keep_slot
+	_dismiss_dialogue(m)
+
+# ── ⑮ #15 게잡이통 회수가 장전한 미끼를 돌려준다(라이브) ────────────────────
+func _check_crab_pot_bait(m: Node) -> void:
+	print("⑮ #15 게잡이통 미끼 반환")
+	m._indoor = ""
+	var t := Vector2i(-1, -1)
+	for r in [RegionCatalog.SAMDOCHEON, RegionCatalog.HWANGCHEONHAE, RegionCatalog.NARU_VILLAGE]:
+		m._rebuild_region(String(r))
+		for y in range(1, m._outdoor_h):
+			for x in range(1, m._grid_w):
+				if m._can_place_crab_pot(Vector2i(x, y)):
+					t = Vector2i(x, y)
+					break
+			if t.x >= 0:
+				break
+		if t.x >= 0:
+			break
+	_check("⑮ 무대: 통을 놓을 수 있는 물가 칸을 찾았다(%s · %s)" % [m._region, str(t)], t.x >= 0)
+	if t.x < 0:
+		return
+	for i in m.inventory.slots.size():
+		m.inventory.slots[i] = null
+	m.inventory.add_item(ItemCatalog.CRAB_POT, 1)
+	m.inventory.add_item(ItemCatalog.BAIT_BASIC, 1)
+	m._target = t
+	m._sleeping = false
+	m._place_crab_pot(t)
+	m._use_crab_pot(t)   # ② 장전 — 미끼 1개가 통으로 들어간다
+	_check("⑮a 무대: 미끼가 통에 들어갔다(장전 %s · 손에 남은 미끼 %d)"
+			% [str(m.crab_pot.is_baited(m._region, t)), m.inventory.count_of(ItemCatalog.BAIT_BASIC)],
+		m.crab_pot.is_baited(m._region, t) and m.inventory.count_of(ItemCatalog.BAIT_BASIC) == 0)
+	m.notice_feed._items.clear()
+	m._use_crab_pot(t)   # ③ 회수 — [F] 연타 한 번이 밟는 그 갈래
+	var said := ""
+	for it in m.notice_feed._items:
+		if String(it["text"]).contains("회수"):
+			said = String(it["text"])
+	_check("⑮b 회수가 통과 미끼를 **둘 다** 되돌린다(통 %d · 미끼 %d) — 종전엔 미끼가 증발했다"
+			% [m.inventory.count_of(ItemCatalog.CRAB_POT), m.inventory.count_of(ItemCatalog.BAIT_BASIC)],
+		m.inventory.count_of(ItemCatalog.CRAB_POT) == 1
+			and m.inventory.count_of(ItemCatalog.BAIT_BASIC) == 1
+			and not m.crab_pot.has_at(m._region, t))
+	_check("⑮c 알림이 그 사실을 말한다 — 「%s」" % said, said.contains("미끼"))
+	# 만재 거절 — 적재先 관례(부분 성공 0): 통은 들어가는데 미끼가 못 들어가는 **딱 그 상태**를
+	# 만든다(빈 칸 하나만 남긴다). 원장이 한 줄도 안 움직여야 한다.
+	m._place_crab_pot(t)
+	m._use_crab_pot(t)   # 다시 장전(회수분 미끼 1개를 그대로 쓴다)
+	var empties: Array = []
+	for i in m.inventory.slots.size():
+		if m.inventory.slots[i] == null:
+			empties.append(i)
+	for k in range(1, empties.size()):
+		m.inventory.slots[int(empties[k])] = {"id": ItemCatalog.STONE, "count": 999, "quality": 0}
+	_check("⑮ 무대: 빈 칸이 정확히 하나다(통은 들어가고 미끼는 못 들어간다)", empties.size() >= 1)
+	m.notice_feed._items.clear()
+	m._use_crab_pot(t)
+	var refused := ""
+	for it in m.notice_feed._items:
+		if String(it["text"]).contains("가득"):
+			refused = String(it["text"])
+	_check("⑮d 만재면 회수를 거절하고 원장은 그대로다(통 %s · 장전 %s) — 「%s」"
+			% [str(m.crab_pot.has_at(m._region, t)), str(m.crab_pot.is_baited(m._region, t)), refused],
+		m.crab_pot.has_at(m._region, t) and m.crab_pot.is_baited(m._region, t) and refused != "")
+	# 프롬프트가 그 동작을 말하고, Label 폭 안에 든다(R17 #3이 세운 한도).
+	var pr: String = m._crab_pot_prompt(t)
+	_check("⑮e 프롬프트가 미끼 반환을 말하고 폭이 %.0f ≤ %.0f다 — 「%s」"
+			% [HanjiUi.text_width(pr, m._prompt_font_size()), m._prompt_max_width(), pr],
+		pr.contains("미끼") and HanjiUi.text_width(pr, m._prompt_font_size()) <= m._prompt_max_width())
+	m.crab_pot.remove(m._region, t)
+	for i in m.inventory.slots.size():
+		m.inventory.slots[i] = null
+
+# ── ⑯ #14 OWNER-DECISION 기록 — 작물 사연 순환 index는 저장되지 않는다 ──────
+# 코드를 **안 고쳤다.** 아래 판정의 근거를 수치로 남긴다.
+func _record_flavor_index(m: Node) -> void:
+	print("⑯ #14 사연 순환 index(OWNER-DECISION)")
+	var decl := _line_in(_src, "var _harvest_seen: Dictionary = {}")
+	var doc := ""
+	for i in range(maxi(decl - 4, 0), decl):
+		if _src[i].contains("세이브하지 않는다"):
+			doc = _src[i].strip_edges()
+	_check("⑯ 무대: 미저장이 **선언부에 명시된 결정**이다(main %d행) — 「%s」" % [decl + 1, doc],
+		decl >= 0 and doc != "")
+	# 사실 ㉠ — 저장 dict에 키가 없다(형제 `_run_harvested`는 같은 사건에서 저장된다).
+	var in_save := _line_in_func(_src, "func _save_game", "harvest_seen")
+	var run_saved := _line_in_func(_src, "func _save_game", "\"run_harvested\"")
+	_check("⑯a 저장 dict에 키가 없다(%d) · 같은 수확 사건의 형제 `run_harvested`는 있다(%d행)"
+			% [in_save + 1, run_saved + 1], in_save < 0 and run_saved >= 0)
+	# 사실 ㉡ — 그래서 몇 줄이 세션 밖에서 도달 불가인가(카탈로그 파생 — 하드코딩 0).
+	var crops := 0
+	var lines := 0
+	for cid in SoulMemory.MEMORIES.keys():
+		crops += 1
+		lines += SoulMemory.count(String(cid))
+	var reachable := crops   # 세션마다 index 0부터 다시 — 실질 도달은 작물당 첫 줄
+	_check("⑯b 사실: 사연 %d줄(작물 %d종 × %d줄) 중 세션 간 실질 도달은 %d줄뿐이다 — 나머지 %d줄은 한 세션에서 연속 수확해야만 보인다"
+			% [lines, crops, lines / maxi(crops, 1), reachable, lines - reachable],
+		lines > crops and crops > 0)
+	# 사실 ㉢ — 형제 순환 index가 저장소에 없다(대조할 관례 자체가 없다 = 판단 근거 부재).
+	var siblings: Array = []
+	for line in _src:
+		var ln := String(line)
+		if ln.begins_with("var _") and (ln.contains("index") or ln.contains("_seen")) \
+				and ln.contains("Dictionary"):
+			siblings.append(ln.split(":")[0].strip_edges())
+	_check("⑯c 판정 OWNER-DECISION: 대조할 형제 순환 원장이 저장소에 없다(%s) — 저장은 사연 도달성을 바꾸는 **설계 결정**이라 폴리시 회차가 단독으로 뒤집지 않는다"
+			% str(siblings), siblings.size() == 1)

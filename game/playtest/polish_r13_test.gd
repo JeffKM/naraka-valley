@@ -304,9 +304,14 @@ func _check_milestone_kept(m: Node) -> void:
 # 끝나면 `_end_cutscene`이 `_sleeping` 가드로 복원을 건너뛴 채 곧바로 내면 공간을 연다.
 func _check_spine_clock(m: Node) -> void:
 	print("── ③ #2 내면 공간이 취침 중 false를 스냅하지 않는다 ──")
-	_check("③a-pre 무대: 취침이 시계를 끄고, 아침에 `clock.sleep`이 되돌린다(false가 일시적인 근거)",
+	# ★[폴리시 R17 #10] 되돌리는 **주인이 바뀌었다** — 종전엔 트윈 중간의 `clock.sleep`이 켰는데
+	#   그 자리가 페이드인 0.7초 앞이라 하루가 매일 ~8분씩 짧아졌다. 이제 `_do_sleep`이 멈추고
+	#   `_on_sleep_done`이 켠다(정지 주인 = 재개 주인). 이 무대가 재는 계약("취침 중 false는
+	#   일시적이다")은 그대로고, 그 false를 되살리는 자리만 트윈 꼬리로 옮겼다.
+	_check("③a-pre 무대: 취침이 시계를 끄고, 연출 끝(`_on_sleep_done`)이 되돌린다(false가 일시적인 근거)",
 		_in_func("func _do_sleep", "clock.running = false")
-		and _in_func("func _do_sleep", "tw.tween_callback(clock.sleep)"))
+		and _in_func("func _do_sleep", "tw.tween_callback(clock.sleep")
+		and _in_func("func _on_sleep_done", "clock.running = true"))
 	_check("③b-pre 무대: 컷신 종료가 `_sleeping`이면 시계 복원을 건너뛴다(그 false가 남는 경로)",
 		_in_func("func _end_cutscene", "if not _sleeping:")
 		and _in_func("func _end_cutscene", "_open_spine_puzzle()"))
