@@ -14337,13 +14337,15 @@ func _process(delta: float) -> void:
 	#     #13이 갱도 문에서 걷어낸 역전을 부스 칸에서 그대로 새로 만든 셈이었다. 순서를 통째로
 	#     되돌리는 대신 **이 두 갈래에만 양보 절**을 달아, 바뀌는 우선순위가 기계↔부스 한 쌍뿐이게
 	#     한다(주민 [F]가 `not _f_machine_at(_target)`로 양보하는 그 문법의 반대 방향).
-	#     새 배치는 `_f_booth_tile`이 막으므로 이 절이 참이 되는 것은 구세이브뿐이고, 행사가 아닌
-	#     날에는 [F]도 프롬프트도 그대로 화덕으로 돌아온다.
-	elif _furnace_at(_target) and not _facing_event_booth():
+	#     새 배치는 `_f_booth_tile`·`_installation_at`이 막으므로 이 절이 참이 되는 것은 구세이브
+	#     뿐이고, 행사가 아닌 날에는 [F]도 프롬프트도 그대로 화덕으로 돌아온다.
+	#   ★ 양보 대상이 부스 셋만이 아니다 — 게잡이통·수액 채취기도 실행 사다리에서 기계보다 먼저
+	#     잡는다(전수 근거는 `_f_taken_before_machine` 머리말).
+	elif _furnace_at(_target) and not _f_taken_before_machine(_target):
 		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _furnace_prompt(_target)
-	elif _crystalarium_at(_target) and not _facing_event_booth():
+	elif _crystalarium_at(_target) and not _f_taken_before_machine(_target):
 		# ★[S10-T1] 세워 둔 결정기를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _crystalarium_prompt(_target)
@@ -15709,6 +15711,26 @@ func _f_booth_tile(t: Vector2i) -> bool:
 func _facing_event_booth() -> bool:
 	return _facing_derby_booth() or _facing_night_market() or _facing_peddler()
 
+# ★[폴리시 R17 #1] 이 칸의 [F]를 **기계보다 먼저** 가져가는 것이 있는가 — 실행 사다리 상단 전수다.
+# 왜 목록이 이 셋인가: `[F]` 디스패치에서 기계(`_furnace_at`·`_crystalarium_at`)보다 위에 서서
+# `return`으로 프레임을 끊는 갈래 중, **같은 칸을 물 수 있는** 것이 이 셋뿐이다 —
+#   ㉠ 행사·좌판 부스(더비·야시장·보부상) ㉡ 게잡이통 ㉢ 수액 채취기.
+#   (우편함·삽사리·거울·게시판 등 나머지 [F] 창구는 좌표가 `_f_window_tile`·실내 가드로 이미
+#    갈려 기계와 한 칸에 설 수 없다.)
+# 무엇을 고치나: R16 #13이 기계 프롬프트를 사슬 **맨 앞**으로 올리며 갱도 문·나락 아가리와의
+# 역전은 걷었지만, 그 자리가 통(실행 사다리 13847)·채취기(13857)보다도 앞이라 **같은 클래스의
+# 역전을 세 칸에서 새로 만들었다**(polish_r8 ⑥c가 R16 이후 줄곧 빨간 채였고, 그 단언이 재던
+# 계약 "안내 사슬의 순서가 [F] 사다리와 같다"가 정확히 이것이다).
+# 봉합 축은 #1과 같다 — 실행을 뒤로 미루면 그 칸의 기계가 매몰되므로 **화면을 실행에 맞춘다**.
+# 겹침 자체는 배치 가드가 앞으로 막는다(`_installation_at`이 서로를, `_f_booth_tile`이 부스를)
+# — 이 술어가 참이 되는 것은 그 가드들이 서기 전의 구세이브뿐이고, 그때 이것이 유일한 탈출구다.
+func _f_taken_before_machine(t: Vector2i) -> bool:
+	if _facing_event_booth():
+		return true
+	if crab_pot != null and _indoor == "" and crab_pot.has_at(_region, t):
+		return true
+	return tapper != null and _indoor == "" and tapper.has_at(_region, _tapper_ledger_tile(t))
+
 func _sprinkler_at(t: Vector2i) -> bool:
 	return sprinkler != null and _region == RegionCatalog.HOME and sprinkler.has_at(t)
 
@@ -16054,15 +16076,36 @@ func _use_crab_pot(t: Vector2i) -> void:
 			queue_redraw()
 		return
 	# ③ 회수 — 빈 통을 인벤으로 되돌린다(스프링클러 회수 동형).
+	# ★[폴리시 R17 #15] **장전된 미끼도 함께 돌려준다.** 종전엔 회수가 그것을 소각했다:
+	#   `CrabPotLedger.remove`는 어획물만 지키고(`pending_catch != "" → 거절`) `baited` 플래그는
+	#   한 줄도 안 본 채 항목을 통째로 지우는데, 미끼를 되돌려 주는 코드가 저장소 어디에도 없다
+	#   (`advance_day`의 `e["baited"] = false`는 소비 쪽이고 `place`는 언제나 미장전으로 시작한다).
+	#   트리거는 [F] 연타 한 번이다 — 장전 직후 같은 칸에서 [F]를 또 누르면 사다리 ①은 어획물이
+	#   없어 건너뛰고 ②는 `not is_baited`가 거짓이라 건너뛰어 곧장 이 회수로 떨어진다.
+	#   형제 창구는 정확히 이 계열을 막는다: `FurnaceLedger.remove`는 광석이 든 화덕을 거절하고
+	#   ("걷는 걸로 광석 5개가 조용히 증발하면 손실"), 결정기 회수는 안에 든 보석과 잔여일까지
+	#   함께 돌려준다. 여기서는 **되돌려 주는 쪽**을 고른다 — 통을 못 걷게 막으면 미끼 하나 때문에
+	#   회수가 잠기고, 그건 이미 놓인 것을 언제나 걷을 수 있어야 한다는 규율과 어긋난다.
+	# ★ 순서는 위 ①과 같은 **적재先**이다: 원장을 지우기 전에 둘 다 백팩에 들어가는지 확인하고,
+	#   하나라도 못 들어가면 통까지 되돌려 **부분 성공을 만들지 않는다**(원장 불변).
+	var baited: bool = crab_pot.is_baited(_region, t)
 	if not inventory.add_item(ItemCatalog.CRAB_POT, 1):
 		_notice("백팩이 가득 차 통을 거둘 수 없다")
 		return
+	if baited and not inventory.add_item(ItemCatalog.BAIT_BASIC, 1):
+		inventory.remove_item(ItemCatalog.CRAB_POT, 1)
+		# ★[폴리시 R15 #19 계약] 월드에서 뜨는 "자리를 비우고"는 **가방 여는 키를 함께 말한다** —
+		#   바로 위 ① 수거 거절 줄과 같은 문구다(polish_r15 ⑳c가 이 경계를 소스 전수로 잠근다).
+		_notice("백팩이 가득 차 미끼를 돌려받을 수 없다 — [Tab] 가방에서 자리를 비우고 다시 [F]")
+		return
 	if crab_pot.remove(_region, t):
 		audio.sfx("ui")
-		_notice("게잡이통을 회수했다")
+		_notice("게잡이통을 회수했다 — 장전한 미끼도 돌려받았다" if baited else "게잡이통을 회수했다")
 		queue_redraw()
 	else:
 		inventory.remove_item(ItemCatalog.CRAB_POT, 1)   # 원장이 거절 → 방금 넣은 통을 되돈다(무해)
+		if baited:
+			inventory.remove_item(ItemCatalog.BAIT_BASIC, 1)
 
 # 게잡이통을 겨눴을 때의 안내 문구(상호작용 사다리와 **같은 순서**로 파생 — 프롬프트와 실동작 불일치 0).
 func _crab_pot_prompt(t: Vector2i) -> String:
@@ -16072,7 +16115,11 @@ func _crab_pot_prompt(t: Vector2i) -> String:
 	if crab_pot_bait_free():
 		return "[F] 게잡이통 회수 (미끼장인 — 미끼 없이도 걸린다)"
 	if crab_pot.is_baited(_region, t):
-		return "[F] 게잡이통 회수 (미끼 장전됨 — 내일 아침 확인)"
+		# ★[폴리시 R17 #15] 회수가 미끼를 어떻게 하는지 **말한다**. 종전엔 이 줄이 "내일 아침 확인"만
+		#   말해, [F]가 곧 회수라는 사실도 그때 미끼가 어떻게 되는지도 안내가 0이었다(그리고 실제로는
+		#   태웠다). 이제 돌려주므로 화면이 그 사실을 그대로 말한다(프롬프트↔동작 일치).
+		#   ★ 길이는 InteractPrompt Label 폭(624px) 안에 든다 — 552px(R17 #3이 세운 그 한도).
+		return "[F] 게잡이통 회수 (미끼 장전됨 — 내일 아침 확인 · 미끼는 돌려받는다)"
 	if inventory.has_item(ItemCatalog.BAIT_BASIC):
 		return "[F] 미끼 넣기 (일반 미끼 1개)"
 	return "[F] 게잡이통 회수 (미끼 없음 — 일반 미끼가 있어야 걸린다)"
