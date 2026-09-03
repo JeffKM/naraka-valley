@@ -13615,9 +13615,12 @@ func _process(delta: float) -> void:
 		return
 	# ★ [S4-T6] 수액 채취기(F): 채취기가 박힌 나무를 바라보며 F — 수거 / 회수(게잡이통과 같은 사다리).
 	#   나무 칸이라 [F]가 겹칠 상대가 없고(벌목은 LMB), 프롬프트도 같은 순서로 파생된다.
-	if not _sleeping and tapper != null and _indoor == "" and tapper.has_at(_region, _target) \
+	# ★[폴리시 R14] 겨눈 칸을 원장 칸으로 되돌려 본다(`_tapper_ledger_tile` — 안식 마당 나무는
+	#   통이 그려진 밑동과 원장 앵커가 3칸 어긋나 있다). 숲·자체 파종 나무는 항등이라 거동 불변.
+	if not _sleeping and tapper != null and _indoor == "" \
+			and tapper.has_at(_region, _tapper_ledger_tile(_target)) \
 			and Input.is_action_just_pressed("shop_toggle"):
-		_use_tapper(_target)
+		_use_tapper(_tapper_ledger_tile(_target))
 		return
 	# ★ [S5-T3] 업화로(F): 세워 둔 화덕을 바라보며 F — 수거 / 투입 / 회수(상태별 한 동사).
 	#   채취기와 같은 사다리이고, 화덕은 빈 지면 위라 [F]가 겹칠 상대가 없다(설치는 LMB).
@@ -14483,11 +14486,13 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[F] 반딧넋 거두기 (%d/%d)" % [
 			fireflies.collected_count(), FireflySouls.total_count()]
-	elif tapper != null and _indoor == "" and tapper.has_at(_region, _target):
+	elif tapper != null and _indoor == "" and tapper.has_at(_region, _tapper_ledger_tile(_target)):
 		# ★[S4-T6] 채취기가 박힌 나무를 바라볼 때: 상태별 [F] 한 동사(수거 / 회수). **나무 프롬프트보다
 		#   먼저** 본다 — 그 칸의 지금 할 일은 벌목이 아니라 채취기이고, 벌목은 애초에 막혀 있다.
+		# ★[폴리시 R14] 겨눈 칸을 원장 칸으로 되돌린다 — 입력 사슬과 **같은 술어**여야 "안내는 뜨는데
+		#   [F]가 안 먹는다"(또는 그 반대)가 안 생긴다.
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = _tapper_prompt(_target)
+		interact_prompt.text = _tapper_prompt(_tapper_ledger_tile(_target))
 	elif inventory.selected_id() == ItemCatalog.TAPPER and _can_place_tapper(_target):
 		# ★[S4-T6] 채취기를 들고 성숙 나무를 겨눌 때: LMB로 설치(주기는 종이 정한다).
 		interact_prompt.visible = not _sleeping
@@ -15760,6 +15765,23 @@ func _use_tapper(t: Vector2i) -> void:
 		inventory.remove_item(ItemCatalog.TAPPER, 1)   # 원장이 거절 → 방금 넣은 채취기를 되돈다(무해)
 
 # 채취기를 겨눴을 때의 안내 문구(상호작용 사다리와 **같은 순서**로 파생 — 프롬프트와 실동작 불일치 0).
+# ★[폴리시 R14] 겨눈 칸 → **채취기 원장 칸**. 안식 마당 나무의 채취기는 R13 보정으로 밑동 칸에
+#   그려지는데(`_tapper_home_drop` = 나무 스프라이트 높이 − 한 칸 = 3칸), 원장·설치·수거 키는
+#   손저작 앵커 칸 그대로다 — 그래서 통이 그려진 밑동을 마주 보고 [F]를 눌러도 `tapper.has_at`이
+#   거짓이라 프롬프트조차 안 떴고, 수거하려면 통이 한 조각도 없는 3칸 북쪽 캐노피 꼭대기를 겨눠야
+#   했다(R13 이전엔 그리는 칸 = 겨누는 칸이라 어긋남이 0이었다).
+# ★ **원장·세이브 키는 한 글자도 안 바꾼다** — 겨눈 칸을 앵커로 되돌리는 이 한 함수가 그 다리다
+#   (설치는 여전히 성숙 나무 = 앵커 칸을 겨눠야 성립한다 · `_can_place_tapper` 무수정).
+# ★ 보정이 0인 자리는 첫 두 줄에서 그대로 빠져나간다: 숲(원장 칸 = 발치)·안식 자체 파종 나무
+#   (손저작 앵커가 아니라 큰 스프라이트도 없다 — `_draw_tappers_pass`의 `anchors.has(t)`와 같은 술어).
+func _tapper_ledger_tile(t: Vector2i) -> Vector2i:
+	if tapper == null or tapper.has_at(_region, t) or _region != RegionCatalog.HOME:
+		return t
+	var a := t - Vector2i(0, int(_tapper_home_drop()) / TILE)
+	if a == t or not _home_tree_anchor_set().has(a):
+		return t
+	return a if tapper.has_at(_region, a) else t
+
 func _tapper_prompt(t: Vector2i) -> String:
 	var got := tapper.pending_product(_region, t)
 	if got != "":
@@ -21118,11 +21140,20 @@ func _close_spine_puzzle() -> void:
 	spine_puzzle = null
 	_spine_b5_frags = []
 	_spine_b5_closing = false
-	clock.running = _spine_b5_clock_prev
+	# ★[폴리시 R14] **『정지 주인 ≠ 재개 주인』의 마지막 미봉합 자리.** R12·R13이 `_close_spine_scene`·
+	#   `_on_dialogue_finished`·`_close_epilogue`에 세운 그 가드가 짝인 여기만 비어 있었다: 24:00 강제
+	#   취침 트윈(≈1.1초) 안에서 B5 발동 컷신이 끝나면 `_end_cutscene`이 복원을 건너뛴 채 곧바로
+	#   `_open_spine_puzzle`로 오고(21053 주석의 그 경로), 같은 트윈 안에서 완료 지문이 닫히면
+	#   ㉠`_on_dialogue_finished`가 `not _sleeping`으로 잠근 이동을 세 줄 뒤 여기가 무조건 켜서
+	#   **완전 암전 뒤에서 플레이어가 걸어 다니고**(쓰러진 자리가 아닌 칸에서 아침을 맞는다)
+	#   ㉡R13이 `true`로 바꾼 스냅이 복원되며 `_do_sleep`이 세운 시계 정지가 취침 한가운데서 풀렸다.
+	#   취침 중이면 두 잠금의 주인은 취침이므로 손대지 않는다(`_on_sleep_done`이 눈뜨는 프레임에 켠다).
+	if not _sleeping:
+		clock.running = _spine_b5_clock_prev
 	audio.set_muted(_spine_b5_mute_prev)
 	interact_prompt.visible = false
 	if not _run_over:
-		player.set_physics_process(true)
+		player.set_physics_process(not _sleeping)
 	queue_redraw()
 	# ★[S9b-T8 / ADR-0068 결정 9·10] **B6 이음매의 이행** — S9b-T7이 "여기서 이어 붙이면 된다"고
 	#   남긴 그 자리다(§6.5 5단 "카타르시스 전환"). 위 세 줄이 세계를 되돌리자마자 S등급 그림이
