@@ -103,8 +103,16 @@ func _draw_slot(i: int, pos: Vector2) -> void:
 		# 스택 개수 배지(2개 이상만). 칸 우하단에 작은 숫자(외곽선으로 아이콘 위 가독).
 		var n := inv.count_at(i)
 		if n > 1:
-			HanjiUi.draw_text(self, pos + Vector2(SLOT_PX - 11.0, SLOT_PX - 2.0),
-				str(n), 10, HanjiUi.INK_LIGHT)
+			# ★[폴리시 R15] **폭을 재서 오른쪽에 맞춘다.** 옛 줄은 칸 좌상단+13px에 좌측정렬이라 남은
+			#   폭이 11px뿐이었는데, 인벤에는 스택 상한이 없고 게임이 스스로 3자리를 요구한다(늘봄방
+			#   원목 500·큰 넋우릿간 450 — 한 슬롯에 400~500개를 들고 다니는 것이 정상 플레이다).
+			#   그래서 3자리부터 칸을 넘쳤고, 슬롯은 i 오름차순으로 그려지며 각자 자기 plate를 먼저
+			#   칠하므로 **넘친 자릿수 위에 다음 칸의 반투명 판과 단축키 글자가 덮여** 개수를 못 읽었다.
+			#   이 파일들의 다른 우측 정렬 숫자(시계 냥·매대 가격)는 전부 `text_width`로 맞추는데
+			#   개수 배지만 그 관례에서 빠져 있었다.
+			var cnt := str(n)
+			HanjiUi.draw_text(self, pos + Vector2(SLOT_PX - 2.0 - HanjiUi.text_width(cnt, 10), SLOT_PX - 2.0),
+				cnt, 10, HanjiUi.INK_LIGHT)
 		# ★ [S1R-T8] 물뿌리개 잔량 배지(우하단, 스택 배지 자리 재사용) — 물뿌리개는 유니크(스택 없음)라 겹침 없음.
 		#   잔량 0은 붉은빛으로 경고(리필 필요). main이 set_water_state로 값 주입(water_level<0 = 미표시).
 		if id == ItemCatalog.WATERING_CAN and water_level >= 0:

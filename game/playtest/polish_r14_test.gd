@@ -850,7 +850,18 @@ func _check_title_f11() -> void:
 	print("── ㉓ #23 타이틀 F11 ──")
 	var tlines := _lines_of_file("res://title_screen.gd")
 	var tsrc := "\n".join(tlines)
-	_check("㉓a-pre 무대: 설정 패널이 그 단축키를 광고한다(안내의 실물)", tsrc.contains("\"(F11)\""))
+	# ★[폴리시 R15] 이 줄이 재는 R14 계약은 "**설정 패널이 그 단축키를 광고한다**"이지 괄호로
+	#   적혀 있다가 아니었다. R15 #21이 표기를 게임의 지배 관례(대괄호)로 통일하면서 문자열이
+	#   `(F11)` → `[F11]`로 바뀌었다 — 광고의 실재는 그대로이므로 판정을 표기에서 떼어 낸다.
+	#   키 이름은 InputMap에서 파생해, 표기가 또 바뀌어도 "그 키를 광고하는가"만 남게 한다.
+	var f11_label := ""
+	for ev0 in InputMap.action_get_events("toggle_fullscreen"):
+		var k0 := ev0 as InputEventKey
+		if k0 != null:
+			f11_label = OS.get_keycode_string(k0.physical_keycode)
+			break
+	_check("㉓a-pre 무대: 설정 패널이 그 단축키를 광고한다(안내의 실물 — 「%s」)" % f11_label,
+		f11_label != "" and tsrc.contains("\"[%s]\"" % f11_label))
 	var ts := TitleScreen.new()
 	ts.fullscreen_nudged.connect(_on_title_fullscreen)
 	_fs_signal_seen = 0
