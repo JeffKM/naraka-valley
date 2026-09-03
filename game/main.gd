@@ -14027,9 +14027,13 @@ func _process(delta: float) -> void:
 	#   LMB가 아니라 [F]다(같은 칸에서 "수거·회수" 두 동사를 쓰므로 상호작용 키로 모은다).
 	#   ★ 위 벌목 디스패치와 같은 칸에서 겹치지만 충돌하지 않는다: 든 게 도끼가 아니면 _chop_tree가
 	#     스스로 무동작이고(자동 분기 없음, ADR-0024 §2), 반대로 도끼를 들었으면 여기가 안 걸린다.
+	# ★[폴리시 R15] 겨눈 칸 → **설치 원장 칸**(`_tapper_place_tile`). 수거·회수([F])가 R14에서
+	#   밑동으로 옮겨 갔으므로 설치도 같은 칸에서 성립해야 한다 — 안 그러면 박은 자리에서 거둘 수는
+	#   있는데 그 자리에 박을 수는 없다. 숲·자체 파종 나무는 항등이라 거동 불변.
 	var holding_tapper := inventory.selected_id() == ItemCatalog.TAPPER
-	if not _sleeping and holding_tapper and Input.is_action_just_pressed("use_tool") and _can_place_tapper(_target):
-		_place_tapper(_target)
+	var tapper_spot := _tapper_place_tile(_target)
+	if not _sleeping and holding_tapper and Input.is_action_just_pressed("use_tool") and _can_place_tapper(tapper_spot):
+		_place_tapper(tapper_spot)
 	# ★ [S5-T3] 업화로 설치 — 화덕을 들고 빈 지면·길을 겨눠 LMB. 투입·수거·회수는 [F]다(같은 칸에서
 	#   세 동사를 쓰므로 상호작용 키로 모은다 — 게잡이통·채취기와 같은 판단).
 	var holding_furnace := inventory.selected_id() == ItemCatalog.FURNACE
@@ -14594,12 +14598,15 @@ func _process(delta: float) -> void:
 		#   [F]가 안 먹는다"(또는 그 반대)가 안 생긴다.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _tapper_prompt(_tapper_ledger_tile(_target))
-	elif inventory.selected_id() == ItemCatalog.TAPPER and _can_place_tapper(_target):
+	elif inventory.selected_id() == ItemCatalog.TAPPER and _can_place_tapper(_tapper_place_tile(_target)):
 		# ★[S4-T6] 채취기를 들고 성숙 나무를 겨눌 때: LMB로 설치(주기는 종이 정한다).
+		# ★[폴리시 R15] 입력 사슬과 **같은 술어**(`_tapper_place_tile`) — 안내와 실동작이 같은 칸에서
+		#   서야 "안내는 뜨는데 LMB가 안 먹는다"(또는 그 반대)가 안 생긴다(R14가 [F] 축에 세운 규약).
+		var place_t := _tapper_place_tile(_target)
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 수액 채취기 박기 (%s — %d일 주기)" % [
-			TreeLedger.species_name(tree_ledger.species_at(_region, _target)),
-			TapperLedger.cycle_for(tree_ledger.species_at(_region, _target), forage_tap_cycle_cut())]
+			TreeLedger.species_name(tree_ledger.species_at(_region, place_t)),
+			TapperLedger.cycle_for(tree_ledger.species_at(_region, place_t), forage_tap_cycle_cut())]
 	elif tree_ledger != null and _indoor == "" and tree_ledger.has_moss(_region, _target):
 		# ★[S4-T8] 이끼 낀 성숙목을 바라볼 때: 낫을 들었으면 [좌클릭] 채취, 아니면 낫 안내.
 		#   **채취기 프롬프트 뒤·벌목 프롬프트 앞**이다 — 고인 수액은 시한이 있는 일이라 먼저 알려야 하고
@@ -14917,10 +14924,18 @@ func _use_tool() -> void:
 		# ★ [S1-5b] 든 묘목으로 혼의 나무를 심는다(안식 농원 전용). 앵커=조준 칸, 3×3 판정 통과 시.
 		# is_blocked = 맵밖 or is_solid(절벽·프롭) or is_crop_solid(트렐리스) — 지형 게이팅을 여기서 합성해
 		# orchard에 주입한다(orchard는 지형을 모름, greybox-spec §7.4). 심으면 묘목 1개 소모.
+		# ★[폴리시 R15] 동사 이름이 밭 파종("심기")과 **갈린다**. 새 게임 시작 키트에는 씨앗과 함께
+		#   묘목이 들어 있어(inventory.gd START_SAPLINGS), 온보딩 PLANT 단계에서 묘목을 들고 스타터
+		#   밭을 찍으면 이 갈래가 걸려 `_advance_onboarding("심기")` → `onboarding.planted()`가 단계를
+		#   WATER로 넘겼다. 그런데 방금 심은 것은 밭 원장이 아니라 orchard 원장이라, 다음 배너가
+		#   가리키는 "심은 칸에 물주기"는 `Field.water`가 `is_planted` 거짓으로 떨어져 **알림 한 줄 없이
+		#   무동작**이었다(프롬프트도 나무 앵커 분기에서 "" — 배너대로 해도 화면이 한 톨도 안 바뀐다).
+		#   과수 파종은 온보딩 사슬의 단계가 아니므로 그 자리를 소비하지 않는다(단계 자체는 불변 —
+		#   새 게이트가 아니라 남의 자리를 안 쓰는 것).
 		var fruit := ItemCatalog.fruit_of(item)
 		if inventory.has_sapling(fruit) and orchard.plant(_target, fruit, clock.day, _is_tree_blocked):
 			inventory.take_sapling(fruit)
-			verb = "심기"
+			verb = "묘목심기"
 	elif item == ItemCatalog.HAY and _region == RegionCatalog.HOME:
 		# ★ [S1-7] 든 건초로 조준 칸의 짐승을 급여한다(§4.1 — 하늘 목장 전용, 하루 1회). 급여 시 건초 1개 소모.
 		# ★[폴리시 R7] 겨눈 칸 → 짐승 키 해석(`animal_key_at`) — 방목 나간 짐승은 그 칸에 *몸이*
@@ -14985,7 +15000,7 @@ func _use_tool() -> void:
 	# ★ [S1R-T10] 도구 스윙 애니 1회 재생(시각 전용 — 위 즉발 효과와 독립). 든 도구에 맞는 모션이 있을 때만.
 	_swing_for_item(item)
 	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기·비료는 물/뿌리는 소리.
-	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water", "급여": "water", "개간": "hoe", "풀베기": "harvest"}.get(verb, ""))
+	audio.sfx({"괭이질": "hoe", "심기": "hoe", "묘목심기": "hoe", "물주기": "water", "비료": "water", "급여": "water", "개간": "hoe", "풀베기": "harvest"}.get(verb, ""))
 	_advance_onboarding(verb)                 # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
 	if not free_verb:
 		energy.spend(cost)                    # ★ ADR-0059 결정3 — 과금 동사(괭이·물·낫·개간·급여)만 소모
@@ -15882,6 +15897,21 @@ func _tapper_ledger_tile(t: Vector2i) -> Vector2i:
 	if a == t or not _home_tree_anchor_set().has(a):
 		return t
 	return a if tapper.has_at(_region, a) else t
+
+# ★[폴리시 R15] **설치 축의 같은 다리.** 위 함수는 "그 앵커에 *채취기가 박혀 있는가*"를 보므로 설치
+#   **전**에는 언제나 항등을 돌려준다 — 그래서 R14가 수거·회수만 밑동으로 옮겼고, 설치·설치 안내는
+#   여전히 원장 앵커(= 통도 나무 밑동도 한 조각 안 그려진 3칸 북쪽 캐노피 꼭대기)를 겨눠야 성립했다.
+#   한 채취기의 동사들이 3칸 갈려 서서, 박은 자리에서 거둘 수는 있는데 **그 자리에 박을 수는 없었다**
+#   (R14 커밋 본문이 스스로 결함으로 지목한 그 칸이 설치 축에 그대로 남아 있었다).
+#   이쪽 술어는 "발치 칸 위의 앵커에 **성숙 나무가 있는가**"다 — 채취기 유무를 안 보므로 설치 전에도
+#   선다. 원장·세이브 키는 여전히 한 글자도 안 바뀐다(겨눈 칸을 앵커로 되돌리는 다리일 뿐).
+func _tapper_place_tile(t: Vector2i) -> Vector2i:
+	if tree_ledger == null or _region != RegionCatalog.HOME or tree_ledger.is_mature(_region, t):
+		return t
+	var a := t - Vector2i(0, int(_tapper_home_drop()) / TILE)
+	if a == t or not _home_tree_anchor_set().has(a):
+		return t
+	return a if tree_ledger.is_mature(_region, a) else t
 
 func _tapper_prompt(t: Vector2i) -> String:
 	var got := tapper.pending_product(_region, t)
@@ -17263,7 +17293,14 @@ func _reserved_tile_reason(t: Vector2i) -> String:
 	if t == MIHO_FIELD_TILE:
 		return "미호의 자리 — 밭일은 못 한다 (15시부터는 나루 마을 카페)"
 	if t == PET_TILE:
-		return "삽사리의 자리 — 밭일은 못 한다 (개가 누울 자리)"
+		# ★[폴리시 R15] **삽사리가 실재할 때만 이름을 댄다.** 이 칸은 스타터 밭 25칸 중 하나라 day 1
+		#   TILL 배너를 따라온 신규 플레이어가 곧바로 겨누는데, 삽사리는 day 7 이후 나루 마을 사건으로
+		#   들어오고 그 전엔 한 픽셀도 안 그려진다 — 아직 등장한 적 없는 캐릭터 이름으로 거부를
+		#   설명하면 화면에 없는 것을 가리키는 셈이다(형제 분기인 미호 자리는 주인이 실제로 서 있다).
+		#   R11의 계약("동사는 막되 이유는 읽힌다")은 그대로 지킨다 — 이름만 빼고 사유는 남긴다.
+		if pet != null and pet.is_adopted():
+			return "삽사리의 자리 — 밭일은 못 한다 (개가 누울 자리)"
+		return "비워 둔 자리 — 밭일은 못 한다"
 	return ""
 
 # 밭 칸 프롬프트: 든 도구·칸 상태에서 다음에 할 수 있는 동작을 파생한다("" = 안내 없음).
