@@ -46,11 +46,16 @@ extends SceneTree
 #   ㉑ #20 Shift 대량 구매가 전 매대에 배선돼 있는데 표기가 0곳이었다.
 #   ㉒ #21 키 표기가 대괄호/괄호/무기호 세 갈래로 갈렸다(`[/]`는 판별 불가였다).
 #   ㉓ #23 스택 개수 배지가 3~4자리에서 슬롯 밖으로 넘쳐 다음 칸 판에 먹혔다(원목 400~500이 정상 플레이).
+#   ㉔ #22 **정보 정직성 축만** — 배너가 "어딘가로 가라"고 지시하면서 이동 키는 한 번도 말하지
+#        않았다(유일한 이동 안내 문자열 readout은 대입 다음 줄에서 `visible = false`가 되어 영원히
+#        안 뜬다). 첫 단계에 실제로 먹는 키를 붙이고, 그 표기가 InputMap과 어긋나지 않는지 잰다.
 #
-# 판정: #0~#21·#23 CONFIRMED. **#22(타이틀 WASD ↔ 월드 방향키 전용)만 OWNER-DECISION**이라 코드를
-#   안 고쳤다 — 인식은 참이지만(월드 이동은 `ui_*` 기본값뿐이고 project.godot에 `[input]` 섹션이 없다),
-#   해소는 "WASD를 이동에 묶는가"라는 **조작 체계 결정**이고 그 바인딩은 Godot의 Control 포커스
-#   이동까지 함께 타므로 폴리시 회차가 단독으로 정할 자리가 아니다.
+# 판정: #0~#21·#23 CONFIRMED. **#22는 축을 갈라 처리**했다 — 발견이 두 결함을 한 항목에 담고 있다:
+#   ㉠ 정보 정직성("이동 키가 어디에도 광고되지 않는다") = CONFIRMED, 여기 ㉔가 봉합을 잰다.
+#   ㉡ 조작 체계("타이틀은 WASD를 받는데 월드는 안 받는다") = **OWNER-DECISION**이라 코드 무수정.
+#      해소는 "WASD를 이동에 묶는가"라는 결정이고, `ui_*`에 키를 얹으면 Godot의 Control 포커스
+#      이동까지 함께 타므로 폴리시 회차가 단독으로 정할 자리가 아니다. 반대 방향(타이틀에서 WASD
+#      제거)은 조작을 더 나쁘게 만든다. ㉔c가 그 비대칭을 **사실로 기록**해 owner 큐에 남긴다.
 #
 # 하중 검증(계약을 일부러 깨고 빨개지는지 본 뒤 원복):
 #   #0 `_weather_hint`에 숫자 한 글자 → ⑥d·①b red · #1 `_tapper_place_tile` 항등 퇴화 → ②b·②c·②f·②g
@@ -165,6 +170,7 @@ func _run_checks() -> void:
 	_check_store_bulk_ad(m)
 	_check_key_notation()
 	_check_count_badges()
+	_check_move_key_ad(m)
 
 	m.queue_free()
 	await process_frame
@@ -957,3 +963,51 @@ func _check_count_badges() -> void:
 func _last_notice(m: Node) -> String:
 	var items: Array = m.notice_feed._items
 	return "" if items.is_empty() else String(items[items.size() - 1]["text"])
+
+
+# ── ㉔ #22 배너가 이동 키를 말하고, 그 표기가 참이다 ────────────────────────
+func _check_move_key_ad(m: Node) -> void:
+	print("── ㉔ #22 이동 키 광고(정보 정직성 축) ──")
+	var ob = m.onboarding
+	var prev: int = ob.step
+	ob.step = ob.MEET_MIHO
+	var g_home: String = ob.guidance(false)
+	var g_away: String = ob.guidance(true)
+	ob.step = prev
+	# 무대 — 이동 키를 알려 주던 유일한 문자열은 **영원히 안 뜬다**(대입 다음 줄이 숨김이다).
+	var lit := _line_in_func(_src, "func _process", "readout.text = \"방향키 이동", true)
+	var hid := _line_in_func(_src, "func _process", "readout.visible = false", true)
+	_check("㉔a-pre 무대: 옛 이동 안내는 대입(%d행) 직후 숨겨져(%d행) 한 번도 화면에 안 뜬다"
+			% [lit + 1, hid + 1], lit >= 0 and hid > lit)
+	# 그래서 "어딘가로 가라"고 지시하는 유일한 단계가 가는 법을 함께 말해야 한다.
+	_check("㉔b 두 갈래 배너가 모두 이동 키를 말한다 — 「%s」 / 「%s」"
+			% [g_home.substr(0, 26), g_away.substr(0, 26)],
+		g_home.contains("[방향키]") and g_away.contains("[방향키]"))
+	# ★ **광고는 언제나 참이어야 한다** — 표기한 것이 실제로 월드 이동에 묶여 있는가를 InputMap에서
+	#   판정한다. 동시에 이 검사가 #22 ㉡(조작 체계)의 사실을 기록한다: `ui_*`에는 방향키만 있고
+	#   WASD는 없는데 타이틀 화면은 WASD를 함께 받는다 — 그 비대칭 해소는 owner 결정이라 안 고쳤다.
+	var arrow_bound := true
+	var wasd_bound := false
+	for pair in [["ui_up", KEY_UP, KEY_W], ["ui_down", KEY_DOWN, KEY_S],
+			["ui_left", KEY_LEFT, KEY_A], ["ui_right", KEY_RIGHT, KEY_D]]:
+		var act := String(pair[0])
+		var has_arrow := false
+		for ev in InputMap.action_get_events(act):
+			var k := ev as InputEventKey
+			if k == null:
+				continue
+			var code: int = k.physical_keycode if k.physical_keycode != 0 else k.keycode
+			if code == int(pair[1]):
+				has_arrow = true
+			if code == int(pair[2]):
+				wasd_bound = true
+		if not has_arrow:
+			arrow_bound = false
+	_check("㉔c 표기가 참이다 — 월드 이동 `ui_*` 넷에 방향키가 실제로 묶여 있다", arrow_bound)
+	_check("㉔d 기록: WASD는 월드 이동에 안 묶여 있다(묶임 %s) — 타이틀만 WASD를 함께 받는 비대칭은"
+			% str(wasd_bound) + " 조작 체계 결정이라 owner 큐(그래서 배너가 WASD를 광고하지 않는다)",
+		not wasd_bound and not g_home.contains("WASD") and not g_away.contains("WASD"))
+	# 타이틀 쪽 사실도 소스에서 확인해 둔다(비대칭의 반대 절반 — 그래야 owner가 판단할 재료가 선다).
+	var t := _text_of("res://title_screen.gd")
+	_check("㉔e 기록: 타이틀 커서는 방향키와 WASD를 함께 받는다(비대칭의 반대 절반)",
+		t.contains("KEY_UP, KEY_W") and t.contains("KEY_LEFT, KEY_A"))
