@@ -14246,11 +14246,18 @@ func _process(delta: float) -> void:
 	#     새 배치만 가드로 막고, 화면은 실제로 일어날 일을 말하게 둔다 — `_crab_pot_prompt`가
 	#     팬닝·반딧넋 앞으로 옮겨 갈 때 세운 그 규율("어떤 원장 상태에서도 화면이 동작을 말한다")이다.
 	#   ★기계와 문·주민 칸이 겹치는 상태 자체는 아래 배치 가드가 앞으로 막는다(구세이브만 남는다).
-	elif _furnace_at(_target):
+	#   ★[폴리시 R17 #1] **부스에는 되돌려 양보한다.** 위로 올린 자리가 더비 부스·야시장·보부상
+	#     프롬프트보다도 앞이었는데, 실행 사다리에서는 그 셋이 기계보다 **먼저** 잡고 return한다 —
+	#     #13이 갱도 문에서 걷어낸 역전을 부스 칸에서 그대로 새로 만든 셈이었다. 순서를 통째로
+	#     되돌리는 대신 **이 두 갈래에만 양보 절**을 달아, 바뀌는 우선순위가 기계↔부스 한 쌍뿐이게
+	#     한다(주민 [F]가 `not _f_machine_at(_target)`로 양보하는 그 문법의 반대 방향).
+	#     새 배치는 `_f_booth_tile`이 막으므로 이 절이 참이 되는 것은 구세이브뿐이고, 행사가 아닌
+	#     날에는 [F]도 프롬프트도 그대로 화덕으로 돌아온다.
+	elif _furnace_at(_target) and not _facing_event_booth():
 		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _furnace_prompt(_target)
-	elif _crystalarium_at(_target):
+	elif _crystalarium_at(_target) and not _facing_event_booth():
 		# ★[S10-T1] 세워 둔 결정기를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _crystalarium_prompt(_target)
@@ -15532,10 +15539,27 @@ func _installation_at(t: Vector2i) -> bool:
 func _f_machine_at(t: Vector2i) -> bool:
 	return _furnace_at(t) or _crystalarium_at(t)
 
+# ★[폴리시 R17 #0] 이 주민이 **지금 이 무대에 서 있는가**(구역 축 단일 출처). `_facing_resident`와
+#   `_resident_tile`이 둘 다 이걸 부른다 — 두 곳이 같은 답을 내야 "가드가 막는 칸 ⊇ 남이 [F]를
+#   가져가는 칸"이 성립한다. 판정을 `station_region`(스케줄 파생)으로 하는 이유는 R7 주석 그대로다.
+#   region ""(멜·네오·주방요괴·미혼 옥자 = 카메라 격리 자리)은 구역을 안 가른다 — 그쪽은
+#   `_facing_resident`도 안 가르므로 [F]를 어디서든 가져갈 수 있고, 가드도 같이 서 있어야 한다.
+func _resident_on_stage(r: Resident) -> bool:
+	var st_region := r.station_region(int(clock.minutes)) if clock != null else r.tile_region
+	return st_region == "" or st_region == _region
+
 # 이 칸에 주민이 서 있는가 — `_can_place_crab_pot` ⑤가 쓰던 루프를 이름 있는 한 곳으로 뽑았다.
+# ★[폴리시 R17 #0] **구역 축을 뒤늦게 붙였다.** R16 #14가 이 술어를 `_can_place_furnace`·
+#   `_can_place_crystalarium`에 새로 물렸는데, 그 둘은 `_indoor == ""`만 요구할 뿐 **전 구역
+#   지상**에서 돌고 `_update_resident_station`은 플레이어가 어디에 있든 매 프레임 전 주민의
+#   `r.tile`을 제 구역 좌표로 갱신한다. 좌표 공간이 겹치므로(HOME 80×65 · 나루 마을 100×72 —
+#   실측: 세레나(39,62)·미르(66,54)·뱃사공(12,27)·옹이(13,48)가 전부 HOME 범위 안이다) 안식
+#   농원에서 그 칸을 겨누면 **화면엔 아무도 없는데** 업화로가 안 세워지고 프롬프트도 알림도 0이었다.
+#   주민이 스케줄대로 옮겨 가면 몇 분 뒤 같은 칸이 열리므로 "간헐 실패"로 읽힌다.
+#   R4가 `_installation_at`에서, R7이 `_facing_resident`에서 각각 봉합한 바로 그 사고의 세 번째 판이다.
 func _resident_tile(t: Vector2i) -> bool:
 	for r in _residents:
-		if r.tile != Resident.UNPLACED and r.tile == t:
+		if r.tile != Resident.UNPLACED and r.tile == t and _resident_on_stage(r):
 			return true
 	return false
 
@@ -15578,6 +15602,33 @@ func _f_window_tile(t: Vector2i) -> bool:
 	if _region != RegionCatalog.HOME or _indoor != "":
 		return false
 	return t == MAILBOX_TILE or t == PET_TILE or t == PET_BOWL_TILE
+
+# ★[폴리시 R17 #1] 이 칸이 **행사·좌판 부스 [F] 좌표**인가 — 위 `_f_window_tile`의 형제다(같은
+# 이유·같은 문법: 좌표 상수 하나로 열리는 야외 [F] 창구를 배치에서 뺀다). 다른 점은 무대뿐이라
+# 구역 축을 각 칸이 직접 든다(더비=삼도천 · 야시장·보부상=나루 마을).
+# 왜 필요한가: 이 세 창구는 [F] 실행 사다리에서 업화로·결정기보다 **먼저 잡고 return**하는데
+# (`_facing_derby_booth` 13678 근방 · `_facing_night_market` · `_facing_peddler` vs `_furnace_at`
+# 13780 근방), 세 칸은 전부 PATH라 기존 가드를 한 줄도 안 건드리고 화덕이 세워졌다(실측: 세 칸
+# 모두 `_can_place_furnace` true). 그러면 행사일마다 화면은 화덕 프롬프트를 말하는데 [F]는 매대를
+# 연다 — R16 #13이 갱도 문에서 걷어낸 그 역전이 부스 칸에서 되살아난다.
+# ★ **행사일을 안 본다**(좌표만 본다): 부스가 안 선 날 세워 두면 다음 행사일에 그대로 덫이 되므로,
+#   가드는 달력과 무관하게 늘 서 있어야 한다. 세 칸뿐이라 좁히는 비용도 그만큼이다.
+# ★ 이미 놓인 기계의 회수 경로는 안 막는다(가드는 신규 배치만 본다 — R16 #14·#15가 세운 규율).
+#   구세이브 탈출구는 아래 프롬프트 양보다: 화면이 "오늘은 매대가 열린다"를 말하고, 행사가 아닌
+#   날에는 [F]가 그대로 화덕으로 돌아온다(영구 매몰이 아니라 하루짜리 양보).
+func _f_booth_tile(t: Vector2i) -> bool:
+	if _indoor != "":
+		return false
+	if _region == RegionCatalog.SAMDOCHEON:
+		return t == DERBY_BOOTH_TILE
+	if _region == RegionCatalog.NARU_VILLAGE:
+		return t == NIGHT_MARKET_TILE or t == PEDDLER_TILE
+	return false
+
+# 지금 겨눈 칸에서 **행사·좌판 부스가 [F]를 가져가는가**(위 좌표 술어의 "오늘" 판). 프롬프트
+# 사슬에서 기계가 이 셋에 자리를 내주는 조건이고, 세 판정이 각자 무대·행사일을 이미 든다.
+func _facing_event_booth() -> bool:
+	return _facing_derby_booth() or _facing_night_market() or _facing_peddler()
 
 func _sprinkler_at(t: Vector2i) -> bool:
 	return sprinkler != null and _region == RegionCatalog.HOME and sprinkler.has_at(t)
@@ -16084,6 +16135,8 @@ func _can_place_furnace(t: Vector2i) -> bool:
 	# ★[폴리시 R8] [F] 창구 좌표 → 배제. **이 결함의 진원지**다 — 우편함 칸에 세운 업화로는 그 칸의
 	#   [F]가 입력 사다리에서 편지 열람에 먼저 잡혀, 화덕도 안에 든 광석도 영구 유실됐다.
 	if _f_window_tile(t):
+		return false
+	if _f_booth_tile(t):                      # ★[폴리시 R17 #1] 행사·좌판 부스 좌표 → 배제(그 술어 머리말)
 		return false
 	# ★[폴리시 R16 #14] 주민이 선 칸 → 배제. `_can_place_crab_pot` ⑤가 뱃사공 자리(12,27)를 두고
 	#   이미 세운 가드인데 업화로·결정기엔 없었다 — 그 칸의 [F]는 입력 사다리에서 **주민이 먼저**
@@ -16618,6 +16671,8 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 	if _tree_occupied_at(t):                  # ★[폴리시 R9] 런타임 파종목 → 배제(업화로와 완전 동형)
 		return false
 	if _f_window_tile(t):                     # ★[폴리시 R8] [F] 창구 좌표 → 배제(업화로와 완전 동형)
+		return false
+	if _f_booth_tile(t):                      # ★[폴리시 R17 #1] 부스 좌표 → 배제(업화로와 완전 동형·그 주석)
 		return false
 	if _resident_tile(t):                     # ★[폴리시 R16 #14] 주민 칸 → 배제(업화로와 완전 동형·그 주석)
 		return false
@@ -21082,8 +21137,9 @@ func _facing_resident() -> Resident:
 		#   판정은 `station_region`(스케줄 파생)이라 걷기용 `tile_region` 캐시와 무관하게 늘 지금
 		#   시각의 답이고, region ""(멜·네오·주방요괴·미혼 옥자 = 카메라 격리 자리)은 종전대로
 		#   구역을 안 가른다 — **좁히기만 하므로 같은 구역의 정상 대화는 한 건도 안 막힌다.**
-		var st_region := r.station_region(int(clock.minutes))
-		if st_region != "" and st_region != _region:
+		# ★[폴리시 R17 #0] 그 구역 술어를 `_resident_on_stage`로 뽑았다(거동 불변) — 배치 가드
+		#   `_resident_tile`이 같은 축을 쓰게 하려면 판정이 한 곳에 있어야 한다.
+		if not _resident_on_stage(r):
 			continue
 		if r.require_indoor != "" and _indoor != r.require_indoor:
 			continue
