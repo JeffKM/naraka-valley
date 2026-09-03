@@ -794,19 +794,30 @@ func _check_backpack_key_ad(m: Node) -> void:
 	_check("⑳a-pre 무대: 메뉴(백팩·관계·숙련·설정·제작)를 여는 키는 %s 하나뿐이다" % menu_key,
 		menu_key != "" and _line_in_func(_src, "func _process", "Input.is_action_just_pressed(\"menu_toggle\")", true) >= 0)
 	# 분모는 소스 파생 — "자리를 비우고"라고 **지시하는** 알림을 전수로 모아 그 전부를 본다.
+	# ★[폴리시 R16 #3] 판정을 **키**가 아니라 계약("가는 법을 함께 말한다")으로 되돌렸다. 종전엔
+	#   `[Tab]` 한 문자열만 봤는데, 그 알림 하나(`_on_frame_craft`)는 **메뉴 프레임이 열려 있는
+	#   동안에만** 발화한다 — 그 상태의 Tab은 `_close_frame()`이라 안내대로 누르면 가방이 *닫히고*,
+	#   백팩 그리드는 이미 같은 프레임 아래쪽에 그려져 있다. 거기서 참인 방법은 키가 아니라 자리다.
+	#   그래서 프레임 안에서 발화하는 줄은 **어디를 보라고 말하는가**로 잰다(polish_r16 ④가 짝).
 	var told := 0
 	var silent: Array = []
+	var cur_fn := ""
 	for raw in _src:
 		var ln := String(raw)
+		if ln.begins_with("func "):
+			cur_fn = ln.substr(5, maxi(ln.find("("), 5) - 5)
 		if ln.strip_edges().begins_with("#") or not ln.contains("_notice(") \
 				or not ln.contains("자리를 비우고"):
 			continue
 		told += 1
-		if not ln.contains("[%s]" % menu_key):
+		var in_frame := cur_fn.begins_with("_on_frame_")
+		var told_how := ln.contains("아래 가방") if in_frame else ln.contains("[%s]" % menu_key)
+		if not told_how:
 			silent.append(ln.strip_edges().substr(0, 40))
 	_check("⑳b-pre 무대: 자리를 비우라고 지시하는 알림이 %d줄 있다(소스 전수 — 명단 하드코딩 0)" % told,
 		told > 0)
-	_check("⑳c 그 전부가 가방 여는 키를 함께 말한다(지시만 하고 방법은 안 알려 주지 않는다)%s"
+	_check("⑳c 그 전부가 가는 법을 함께 말한다 — 월드 동작은 여는 키[%s], 프레임 안에서 뜨는 줄은"
+			% menu_key + " 이미 보이는 백팩의 자리(지시만 하고 방법은 안 알려 주지 않는다)%s"
 			% ("" if silent.is_empty() else " ← 침묵: " + str(silent)), silent.is_empty())
 
 
@@ -880,16 +891,22 @@ func _check_key_notation() -> void:
 			% ("" if paren.is_empty() else " ← 잔존: " + str(paren)), paren.is_empty())
 	# 꾸미기 안내 한 줄 — 옛 문구는 한 문장 안에서 무기호와 기호를 섞어 `[/]`가 "[ 와 ] 키"인지
 	# "/ 키"인지 판별 불가였다. 대괄호는 키 표기 전용으로 두고, 기호가 곧 키인 둘은 「」로 감싼다.
-	var deco_line := ""
+	# ★[폴리시 R16 #1] 안내가 **두 줄로 나뉘었다**(한 줄 819px이 620px 한계를 넘어 뒤가 화면 밖으로
+	#   나갔다). 재는 계약은 그대로 "표기가 대괄호 관례를 따른다"이므로, 한 줄이 아니라 진입 안내
+	#   **전체**를 모아 본다(어느 줄에 실렸는가는 이 단언이 물을 것이 아니다).
+	var deco_lines: Array = []
+	var deco_fn := ""
 	for raw in _src:
 		var ln := String(raw)
-		if not ln.strip_edges().begins_with("#") and ln.contains("_notice(") \
-				and ln.contains("집 꾸미기"):
-			deco_line = ln
-			break
-	_check("㉒c 꾸미기 안내가 대괄호 관례를 따르고 모호한 `[/]`가 없다 — %s"
-			% deco_line.strip_edges().substr(0, 60),
-		deco_line != "" and deco_line.contains("[C]") and deco_line.contains("[R]")
+		if ln.begins_with("func "):
+			deco_fn = ln.substr(5, maxi(ln.find("("), 5) - 5)
+		if deco_fn == "_toggle_deco_mode" and not ln.strip_edges().begins_with("#") \
+				and ln.contains("_notice("):
+			deco_lines.append(ln.strip_edges())
+	var deco_line := " ".join(deco_lines)
+	_check("㉒c 꾸미기 진입 안내(%d줄)가 대괄호 관례를 따르고 모호한 `[/]`가 없다 — %s"
+			% [deco_lines.size(), deco_line.substr(0, 60)],
+		deco_lines.size() >= 1 and deco_line.contains("[C]") and deco_line.contains("[R]")
 		and not deco_line.contains("[/]") and not deco_line.contains("C=끄기"))
 
 func _all_gd_files(dir_path: String, out: Array) -> void:
