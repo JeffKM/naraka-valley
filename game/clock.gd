@@ -108,11 +108,25 @@ func _process(delta: float) -> void:
 		minute_ticked.emit(day, int(minutes))
 
 # 취침: 날짜 +1, 시간을 아침으로 리셋하고 다시 흐르게 한다(완료기준).
-func sleep() -> void:
+# ★[폴리시 R17 #10] `resume`가 붙었다 — **시계를 다시 흐르게 할지 호출부가 고른다.**
+#   왜: main의 `_do_sleep`은 이 함수를 **트윈 중간 콜백**으로 부른다. 그 뒤로 `tween_interval(0.3)`
+#   + 페이드인 `tween_property(…, 0.4)`가 남아 있고 이동 잠금은 그 끝(`_on_sleep_done`)에서야
+#   풀리는데, 여기서 무조건 `running = true`로 되돌리는 바람에 **0.7초 실시간 동안 시계가 이미
+#   돌았다**. REAL_SECONDS_PER_DAY=90 → (END_MIN−START_MIN)/90 = 12 게임분/실초라 0.7 × 12 =
+#   8.4 게임분: 눈을 뜬 첫 프레임이 06:00이 아니라 ~06:08이고, 같은 프레임의 자동 저장이 그
+#   minutes를 파일에 굳혀 F9 로드도 06:08로 복원됐다. 계약상 1080분인 하루가 매일 0.8%씩,
+#   그것도 **플레이어가 조작할 수 없는 암전 구간에서** 짧아진다.
+#   봉합 축은 "정지 주인 = 재개 주인"이다 — 시계를 멈춘 것은 `_do_sleep`이므로 되살리는 것도
+#   그 연출의 끝(`_on_sleep_done`)이어야 한다. 기본값이 true라 **다른 호출부는 한 줄도 안 바뀐다**
+#   (헤드리스 하네스가 `clock.sleep()`을 직접 부르는 경로 포함 — 그쪽은 트윈을 안 타므로 즉시 재개가 맞다).
+#   ★ 덤으로 코드가 스스로 적어 둔 사실이 참이 된다: `_arm_spine_b4` 머리말은 아침 훅이
+#     "fade 트윈이 화면을 검게 덮은 상태 · `clock.running == false`"에서 불린다고 단언하는데,
+#     종전엔 이 함수가 `day_advanced.emit` **직전**에 이미 true로 돌려놓아 그 말이 거짓이었다.
+func sleep(resume: bool = true) -> void:
 	day += 1
 	minutes = START_MIN
 	_collapsed = false
-	running = true
+	running = resume
 	day_advanced.emit(day)
 	minute_ticked.emit(day, int(minutes))
 

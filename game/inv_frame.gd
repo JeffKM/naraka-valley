@@ -443,6 +443,11 @@ func _view() -> Vector2:
 		sc = par.scale.x
 	return Vector2(size.x / sc, size.y / sc)
 
+# ★[폴리시 R17] 글자가 넘어서면 안 되는 **오른쪽 실경계** — 패널 끝이 아니라 9-slice 나무 테두리
+# 안쪽이다(PAD 주석이 든 그 축을 가로에도 세운다). 폭 인자를 넘기는 쪽은 전부 여기서 판다.
+func _inner_right(panel: Rect2) -> float:
+	return panel.end.x - FRAME_MARGIN
+
 func _panel_rect() -> Rect2:
 	var view := _view()
 	# 패널 폭 = 백팩 그리드 + 좌우 여백 + 스크롤바 자리(항상 확보 — 스크롤 유무로 폭이 안 바뀌게).
@@ -812,9 +817,16 @@ func _draw_craft_tab(panel: Rect2, _font: Font) -> void:
 		return
 	var rows: Array = craft_rows_fn.call()
 	var axes: Array = _craft_skill_axes(rows)
-	HanjiUi.draw_text(self, Vector2(x, y),
-		"손 제작 — %s 숙련으로 배운다 (행 클릭 = 제작)" % " · ".join(axes) if not axes.is_empty()
-			else "손 제작 (행 클릭 = 제작)", 12, HanjiUi.INK_DIM)
+	# ★[폴리시 R17 #7] 이 줄이 나무 테두리 안쪽(가용 312px)을 넘어 꼬리가 테두리 위에 올라앉았다 —
+	#   이 파일이 `PAD(26) > FRAME_MARGIN(22)`를 못 박아 막으려던(PAD 주석) 바로 그 결함이다.
+	#   실측은 헌트가 적은 것보다 나빴다: 축은 둘이 아니라 **셋**이고(채광·채집·농사 — `_craft_rows`가
+	#   실제로 돌려주는 값) 그래서 330이 아니라 372px이었다. 두 겹으로 막는다.
+	#   ㉠ 문구에서 겹말("으로 배운다")을 걷어 축 셋에서도 12px 그대로 들어가게 하고(294px),
+	#   ㉡ 그리기를 `draw_text_fit`으로 갈아 축이 넷·다섯이 돼도 스스로 줄어들게 한다. 축은 행에서
+	#      파생되므로(R14) 이 줄은 카탈로그가 자라면 같이 자라는 줄이다 — 상수만 고치면 다시 샌다.
+	HanjiUi.draw_text_fit(self, Vector2(x, y),
+		"손 제작 — %s 숙련 (행 클릭 = 제작)" % " · ".join(axes) if not axes.is_empty()
+			else "손 제작 (행 클릭 = 제작)", 12, HanjiUi.INK_DIM, _inner_right(panel) - x)
 	y += 22.0
 	var row_w := panel.size.x - PAD * 2.0 - 24.0
 	for row in rows:
@@ -992,6 +1004,8 @@ const SK_ROW_GAP := 4.0     # 행 간 여백
 const SK_OPT_H := 28.0      # 전문직 선택 버튼 높이
 const SK_TAIL_X := 118.0    # 제목 오른쪽에 붙는 XP 꼬리의 x 오프셋
 const SK_PROF_X := 196.0    # XP 꼬리 오른쪽에 붙는 "전문직:" 요약의 x 오프셋
+# ★[폴리시 R17 #6] 선택 버튼·경지 버튼 안쪽 글자의 좌우 여백(대칭). 폭 상한이 이 값에서 파생된다.
+const OPT_TEXT_X := 10.0
 
 # ★ Phase B 숙련 탭 — main이 넘긴 _skill_rows를 레벨·진행바로 그린다(읽기 전용, 관계 탭과 대칭).
 func _draw_skill_tab(panel: Rect2, font: Font) -> void:
@@ -1057,8 +1071,15 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 			for opt in options:
 				var btn := Rect2(x + 8.0, y, bar_w - 16.0, SK_OPT_H)
 				_plate_btn(btn)
-				HanjiUi.draw_text(self, btn.position + Vector2(10.0, 12.0), String(opt.get("name", "")), 12, HanjiUi.INK_LIGHT)
-				HanjiUi.draw_text(self, btn.position + Vector2(10.0, 24.0), String(opt.get("desc", "")), 10, HanjiUi.INK_DIM)
+				# ★[폴리시 R17 #6] 두 줄 다 **버튼 판 안쪽으로 폭을 물린다**(좌우 10px 여백 대칭).
+				#   종전엔 인자가 없어 무제한이라, 가장 긴 설명(곡예사 280px)이 판 오른쪽 테두리를
+				#   10px 넘어 패널 바탕 위로 나왔다 — 바로 위 "전문직: %s" 줄이 이미 `bar_w - SK_PROF_X`를
+				#   넘기고 있는 그 관례를 이 두 줄만 안 따르고 있었다.
+				var opt_w := btn.size.x - OPT_TEXT_X * 2.0
+				HanjiUi.draw_text(self, btn.position + Vector2(OPT_TEXT_X, 12.0),
+					String(opt.get("name", "")), 12, HanjiUi.INK_LIGHT, opt_w)
+				HanjiUi.draw_text(self, btn.position + Vector2(OPT_TEXT_X, 24.0),
+					String(opt.get("desc", "")), 10, HanjiUi.INK_DIM, opt_w)
 				_prof_choice_rects.append({"rect": btn, "skill": skill, "prof_id": String(opt.get("id", ""))})
 				y += SK_OPT_H + 2.0
 		# ★[S10-T8 / ADR-0069 결정 11] 경지 줄 — 스킬 행 **바로 아래**에 붙는다(별 탭이 아니라
@@ -1287,9 +1308,14 @@ func _draw_larder_top(panel: Rect2) -> void:
 func _draw_chest_top(panel: Rect2) -> void:
 	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 18.0),
 		"저장 상자", 16, HanjiUi.GOLD_SOFT)
-	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 38.0),
-		"백팩 아이템 클릭=보관   ·   상자 아이템 클릭=회수 (판매 아님 — 순수 보관)",
-		12, HanjiUi.INK_DIM)
+	# ★[폴리시 R17 #4] 안내가 판을 98px 넘어 어두워진 월드 위에 떠 있었다(444px · 가용 324px).
+	#   같은 자리의 형제 두 줄(출하함·곳간)은 둘 다 300px이라 이 줄만 상수 문자열이 길었다.
+	#   ㉠ 문구를 형제와 같은 골격("무엇인가  ·  클릭 규칙")으로 줄이고(318px), ㉡ `draw_text_fit`으로
+	#      갈아 폭을 넘기면 스스로 줄어들게 한다 — 형제가 길어질 때 다시 새는 것을 막는 쪽이 상수
+	#      하나를 고치는 것보다 오래 간다.
+	HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 38.0),
+		"보관만(판매 아님)  ·  백팩 클릭=보관 / 상자 클릭=회수",
+		12, HanjiUi.INK_DIM, _inner_right(panel) - (panel.position.x + PAD))
 	_chest_rects.clear()
 	if chest == null:
 		return

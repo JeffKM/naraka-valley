@@ -791,8 +791,11 @@ func _key_label_of(action: String) -> String:
 func _check_backpack_key_ad(m: Node) -> void:
 	print("── ⑳ #19 백팩 만재 안내의 진입 키 ──")
 	var menu_key := _key_label_of("menu_toggle")
-	_check("⑳a-pre 무대: 메뉴(백팩·관계·숙련·설정·제작)를 여는 키는 %s 하나뿐이다" % menu_key,
-		menu_key != "" and _line_in_func(_src, "func _process", "Input.is_action_just_pressed(\"menu_toggle\")", true) >= 0)
+	var tab_key := _key_label_of("menu_tab")   # ★[폴리시 R17 #2] 프레임 안에서 가방 탭으로 가는 키
+	_check("⑳a-pre 무대: 메뉴를 여는 키는 %s 하나뿐이고, 그 안 탭 순환은 %s다" % [menu_key, tab_key],
+		menu_key != "" and tab_key != ""
+			and _line_in_func(_src, "func _process", "Input.is_action_just_pressed(\"menu_toggle\")", true) >= 0
+			and _line_in_func(_src, "func _process", "frame.cycle_tab()", true) >= 0)
 	# 분모는 소스 파생 — "자리를 비우고"라고 **지시하는** 알림을 전수로 모아 그 전부를 본다.
 	# ★[폴리시 R16 #3] 판정을 **키**가 아니라 계약("가는 법을 함께 말한다")으로 되돌렸다. 종전엔
 	#   `[Tab]` 한 문자열만 봤는데, 그 알림 하나(`_on_frame_craft`)는 **메뉴 프레임이 열려 있는
@@ -811,13 +814,21 @@ func _check_backpack_key_ad(m: Node) -> void:
 			continue
 		told += 1
 		var in_frame := cur_fn.begins_with("_on_frame_")
-		var told_how := ln.contains("아래 가방") if in_frame else ln.contains("[%s]" % menu_key)
+		# ★[폴리시 R17 #2] 프레임 안 줄의 판정을 "아래 가방" 한 문자열에서 **계약**으로 넓혔다.
+		#   R16 #3이 그 문구를 고를 때 든 근거("백팩 그리드가 같은 프레임 아래쪽에 이미 있다")가
+		#   제작 탭에서는 거짓이었다 — `_draw`는 인벤 탭에서만 백팩을 그린다. 그래서 참인 방법이
+		#   자리가 아니라 **탭 순환 키**로 갈렸다. 둘 다 "가방으로 가는 법"이므로 계약은 그대로다:
+		#   가방을 이름으로 부르고, 거기 닿는 길(자리 「아래」 또는 실제로 묶인 키)을 함께 댈 것.
+		var told_how := (ln.contains("가방")
+			and (ln.contains("아래") or ln.contains("[%s]" % tab_key))) if in_frame \
+			else ln.contains("[%s]" % menu_key)
 		if not told_how:
 			silent.append(ln.strip_edges().substr(0, 40))
 	_check("⑳b-pre 무대: 자리를 비우라고 지시하는 알림이 %d줄 있다(소스 전수 — 명단 하드코딩 0)" % told,
 		told > 0)
 	_check("⑳c 그 전부가 가는 법을 함께 말한다 — 월드 동작은 여는 키[%s], 프레임 안에서 뜨는 줄은"
-			% menu_key + " 이미 보이는 백팩의 자리(지시만 하고 방법은 안 알려 주지 않는다)%s"
+			% menu_key + " 백팩의 자리(아래) 또는 탭 키[%s]" % tab_key
+			+ "(지시만 하고 방법은 안 알려 주지 않는다)%s"
 			% ("" if silent.is_empty() else " ← 침묵: " + str(silent)), silent.is_empty())
 
 

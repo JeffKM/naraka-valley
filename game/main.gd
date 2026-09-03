@@ -6151,6 +6151,38 @@ func _mine_entry_options() -> Array[int]:
 	out.append_array(mine_floors.unlocked_elevators())
 	return out
 
+# ── ★[폴리시 R17 #3] 갱도 입구 프롬프트 한 줄 — **폭에 안 들어가면 목록을 범위로 접는다.** ──
+# 왜 있나: 이 줄은 `InteractPrompt` Label 경로라 `draw_text_fit`의 축소·말줄임 방어가 없다(clip_text도
+# 꺼져 있고 중앙 정렬이라, 넘치면 Label 밖으로 나가 좌우가 **뷰포트에** 잘린다 — 양끝이 동시에
+# 사라져 "[F] 갱도"도 마지막 층도 안 보인다). 실측(neodgm 16px): 전 층 나열은 엘리베이터가 6개
+# (30층 도달)일 때 648px으로 Label 폭을 넘고, 60층 세이브에서 888px까지 간다.
+# ★ 접는 축을 "범위 표기"로 고른 근거: 이 목록은 **정보를 담지 않는다**. 후보는 언제나
+#   1 + ELEVATOR_STEP의 배수(도달 깊이까지)라 목록 전체가 그 세 값에서 파생되고, 매 프레임 실제로
+#   달라지는 것은 지금 고른 층 하나뿐이다. 그래서 접힌 형태도 무손실이다(생략·말줄임이 아니다).
+# ★ 한도·글자 크기를 상수로 안 적는 이유: 둘 다 **그리는 노드가 든다**(Label 폭 = main.tscn 기하 ·
+#   글자 크기 = ui_theme.tres). 여기 숫자를 베끼면 그 둘 중 하나가 바뀔 때 조용히 어긋난다.
+func _mine_entry_prompt() -> String:
+	var head := "[F] 갱도 %d층으로 내려간다" % _mine_entry_pick
+	var opts := _mine_entry_options()
+	if opts.size() <= 1:
+		return head
+	var names: Array[String] = []
+	for f in opts:
+		names.append(("〔%d〕" % f) if f == _mine_entry_pick else str(f))
+	var full := head + "   [G] 엘리베이터: %s층" % " · ".join(names)
+	if HanjiUi.text_width(full, _prompt_font_size()) <= _prompt_max_width():
+		return full
+	return head + "   [G] 엘리베이터: %d · %d~%d층 (%d층 단위) 중 〔%d〕" % [
+		opts[0], MineFloors.ELEVATOR_STEP, opts[opts.size() - 1],
+		MineFloors.ELEVATOR_STEP, _mine_entry_pick]
+
+# 프롬프트 Label이 실제로 쓰는 폭·글자 크기(레이아웃·테마 파생 — 위 주석의 그 단일 출처).
+func _prompt_max_width() -> float:
+	return interact_prompt.size.x if interact_prompt != null else 0.0
+
+func _prompt_font_size() -> int:
+	return interact_prompt.get_theme_font_size("font_size") if interact_prompt != null else 16
+
 # [G] 진입 층 순환(그레이박스 선택 UI — 목록을 프롬프트 텍스트로 보이고 키로 돌린다).
 func _cycle_mine_entry() -> void:
 	var opts := _mine_entry_options()
@@ -11912,12 +11944,23 @@ func _do_sleep() -> void:
 	# 검은 화면으로 페이드 → 날짜 넘기기 → 다시 밝아짐. CanvasLayer라 카메라와 무관.
 	var tw := create_tween()
 	tw.tween_property(fade, "modulate:a", 1.0, 0.4)
-	tw.tween_callback(clock.sleep)       # day +1, 06:00 리셋
+	# ★[폴리시 R17 #10] `false` = **아직 시계를 다시 켜지 않는다.** 이 콜백 뒤로 0.7초(정지 0.3 +
+	#   페이드인 0.4)가 남아 있고 이동 잠금도 그 끝에서야 풀리는데, 종전엔 여기서 시계가 곧바로
+	#   돌아 매일 아침이 06:00이 아니라 ~06:08에 시작했다(근거 전문은 `GameClock.sleep` 머리말).
+	#   위 `clock.running = false`를 세운 것이 이 함수이므로 되살리는 것도 이 연출의 끝이다.
+	tw.tween_callback(clock.sleep.bind(false))   # day +1, 06:00 리셋(시계는 아직 멈춘 채)
 	tw.tween_interval(0.3)
 	tw.tween_property(fade, "modulate:a", 0.0, 0.4)
 	tw.tween_callback(_on_sleep_done)
 
 func _on_sleep_done() -> void:
+	# ★[폴리시 R17 #10] **시계를 여기서 다시 흐르게 한다**(정지 주인 = 재개 주인). `_do_sleep`이
+	#   멈췄으니 그 연출의 끝인 이 자리가 되살리는 자리다 — 트윈 중간의 `clock.sleep`이 켜던 종전에는
+	#   암전 뒤 0.7초가 하루에서 조용히 빠져나갔다. **아래 어떤 줄보다 먼저** 켜야 한다: 바로 밑
+	#   `_fire_spine_b4`·`_fire_spine_b7`·`_fire_soul_birth`가 시작하는 컷신은 `_cutscene_clock_prev
+	#   = clock.running`을 스냅해 끝날 때 그 값으로 되돌리므로, 꺼진 채로 스냅되면 연출이 끝나도
+	#   시간이 안 간다(`_open_epilogue`·B5가 `or _sleeping`으로 피해 온 그 함정의 컷신 판).
+	clock.running = true
 	_sleeping = false
 	# T4.2 슬라이스가 끝났으면(이 취침이 RUN_DAYS+1일째를 불렀음) 이동 잠금을 풀지 않고
 	# 마무리 화면을 유지한다. 진행은 보존하므로 다시 켜도 마무리 화면이 뜬다.
@@ -11951,7 +11994,8 @@ func _on_sleep_done() -> void:
 	#   다음 아침에 다시 예약된다 — 이 층은 B7 *이후*라 실제로 겹칠 조합은 없다(결정 12).
 	_fire_soul_birth()
 	# T2.5 스타듀식 자동 저장: 한 날이 끝나 잠들 때마다 진행을 보존한다.
-	_save_game()
+	# ★[폴리시 R17 #8] 성패를 **말한다** — 매일 밤 도는 주 저장 경로가 실패를 통째로 버렸다(그 창구 머리말).
+	_save_or_warn()
 
 # ── T2.5 세이브/로드 조율 ──────────────────────────────────────────────────
 # 각 시스템 노드는 자기 상태만 직렬화한다(단일 책임). main은 그 조각들을 모아
@@ -12127,6 +12171,27 @@ func _save_game() -> bool:
 	_notice("저장됨")
 	return true
 
+# ★[폴리시 R17 #8] **반환값을 버리던 입구들의 공통 창구.** R11이 `_save_game`을 void → bool로
+# 승격하며 "IO 성패를 아는 자리는 여기 하나"라고 못 박았는데, 그 bool을 실제로 본 것은 옵션 탭
+# 둘뿐이고 **매일 밤 도는 주 저장 경로**를 포함한 다섯 입구가 값을 그대로 버렸다(취침 자동 저장·
+# F5·척추 B5 확정·척추 B6 확정·에필로그 복귀). 그래서 쓰기가 실패해도 화면에는 아무 일도 안
+# 일어났다 — 성공 신호인 "저장됨"이 그냥 안 뜰 뿐이라 **성공과 실패가 화면상 구별되지 않았고**,
+# 플레이어는 며칠치를 그대로 이어 플레이했다(실패 사실은 `push_warning`으로 콘솔에만 남는다).
+# 척추 둘은 더 무겁다: 그 저장은 "여기서 껐다 켜도 같은 장면이 두 번 오지 않는다"가 목적이라,
+# 실패하면 비트가 메모리에만 남아 다음 실행에서 무실패 퍼즐이 통째로 재생된다(그 머리말이 스스로
+# 그것을 "보상이 아니라 사고"라고 부른다).
+# ★ **성공은 종전대로 무음이 아니다** — 성공 문구의 주인은 `_save_game` 하나(`"저장됨"`)라는
+#   R11 계약을 안 건드린다. 여기서 더하는 것은 실패 한 줄뿐이다(이중 토스트 0).
+# ★ `keep`을 다는 이유: 취침 자동 저장은 아침 훅과 **같은 프레임**이라, keep 없이는 이 경고가
+#   출하함 정산·까마귀·게잡이통·채취기 알림에 밀려 한 프레임도 안 그려진 채 축출된다(#11과 같은
+#   판별식 — "밀려나면 다시 오지 않는 1회성인가"). 저장 실패는 다시 알려 줄 자리가 없다.
+func _save_or_warn() -> bool:
+	if _save_game():
+		return true
+	_notice("저장하지 못했다 — 저장 공간·쓰기 권한을 확인하자", NOTICE_SECS * 2.0,
+		false, null, Color(0, 0, 0, 0), true)
+	return false
+
 # ★[폴리시 R6] 반환값이 void → **불러왔는가**로 바뀌었다. `saver.has_save`는 파일 존재만 보고
 #   실제 파싱·검증(`_read_wrapped`)은 따로 갈리므로 "파일은 있는데 안 읽히는 슬롯"이 존재한다
 #   (저장 중 크래시로 잘린 save.dat · VERSION을 올린 뒤의 구세이브 전량). 그때 이 함수는 조용히
@@ -12248,9 +12313,16 @@ func _load_game() -> bool:
 	# ★[폴리시 R13] 위 다섯과 같은 클러스터(플레이로만 쌓이는 누적) — 가드 없이 무조건 되감는다.
 	var ff: Variant = data.get("forage_found", {})
 	_forage_found = ff.duplicate() if typeof(ff) == TYPE_DICTIONARY else {}
-	if data.has("menu_found"):    # ★[S6-T2] — 키 없는 구세이브는 발견 0(재료를 다시 손에 넣으면 그때 열린다)
-		var mf: Variant = data["menu_found"]
-		_menu_found = mf.duplicate() if typeof(mf) == TYPE_DICTIONARY else {}
+	# ★[폴리시 R17 #9] **바로 윗줄과 같은 무가드로 맞췄다.** R13이 세운 판별식은 "부팅으로
+	#   시드되는가"이고, 아니면 `.get(키, {})`로 무조건 되감는 것이다. `_menu_found`는 부팅으로
+	#   시드되지 않는다 — 유일한 기록처가 `_on_item_gained`(`inventory.item_gained` 훅)인데 그
+	#   시그널은 인벤토리의 *추가* 경로 셋에서만 발화하고 `inventory.load_save`는 `changed`만 쏜다.
+	#   그래서 `has` 가드가 남아 있으면 S6-T2 이전 세이브(키 없음 — VERSION은 1 고정이라 그대로
+	#   읽힌다)를 F9로 불러올 때 대입이 아예 안 돌아, **버린 타임라인의 해금이 그대로 살아남고**
+	#   다음 취침의 `_save_game`이 그것을 그 파일에 굳혔다(발견한 적 없는 융합 메뉴가 열린 채로).
+	#   R13이 museum·codex·fireflies·quest_board·mine·guest_pool·trial_ground·forage_found에
+	#   적용한 것과 완전히 같은 사슬이고, 이 한 줄만 그 처방을 못 받았다.
+	_apply_menu_found(data)
 	if data.has("tree_ledger"):   # ★[S4-T3] — 키 없는 구세이브는 원장 0 → 구역 첫 빌드의 seed_region이
 		tree_ledger.load_save(data["tree_ledger"])   #   초기 배치를 결정적으로 재생성한다(종=좌표 해시·하위호환)
 	if data.has("tapper"):        # ★[S4-T6] — 키 없는 구세이브는 채취기 0(빈 원장·하위호환)
@@ -12553,6 +12625,20 @@ func _load_game() -> bool:
 	_milestone_celebrated = _milestone_complete()
 	_milestone2_celebrated = _milestone_stage2_complete()
 	_milestone3_celebrated = _milestone_stage3_complete()
+	# ★[폴리시 R17 #13] **옥자 통보를 다시 연다** — 부팅(`_begin_game`)이 이미 드는 그 한 줄이고,
+	#   위 카페 래치 셋과 정확히 같은 이유로 여기 빠져 있었다(F9는 원장을 되감으면서 그 원장을
+	#   소비하는 부팅 시드를 안 다시 깔았다 = R13의 "부팅으로 시드되는가" 판별식의 반대편).
+	#   무엇이 죽어 있었나: NOTICE 단계 세이브(통보를 못 넘긴 채 24:00 강제 취침이 자동 저장한
+	#   파일 — `_do_sleep`은 대화를 안 닫고 하루는 실시간 90초라 첫 실행에서 쉽게 만들어진다)를
+	#   F9로 불러오면 `onboarding.load_save`가 step을 NOTICE로 되감는데 통보를 여는 짝이 없어,
+	#   ㉠ `guidance()`가 NOTICE에 분기가 없어 배너 0 ㉡ 옥자의 `facing_gate`·`station_gate`가
+	#   `step > NOTICE`라 옥자가 UNPLACED·비표시가 되어 말을 걸 수 없고, 단계를 넘기는 유일한
+	#   입구가 **옥자와의 대화**(`_on_dialogue_finished`의 `_talking_to == okja`)라 단계가 영원히
+	#   NOTICE에 갇힌다 ㉢ 바나의 `visible_rule`도 `step <= NOTICE`면 false라 밤 무대·나라카 바가
+	#   통째로 닫힌다. 이후 취침 자동 저장이 NOTICE를 계속 굳혀, 앱을 재시작해야만 복구됐다.
+	#   ★ 멱등이다 — `_maybe_start_intro`는 `is_intro()`가 아니거나 대화 중이면 no-op이라,
+	#     NOTICE가 아닌 세이브(대다수)에서는 이 줄이 한 바이트도 하지 않는다.
+	_maybe_start_intro()
 	_notice("불러옴")
 	return true
 
@@ -13416,7 +13502,7 @@ func _process(delta: float) -> void:
 
 	# T2.5 수동 저장/불러오기(연출 중 제외). F5 저장 · F9 불러오기.
 	if not _sleeping and Input.is_action_just_pressed("save_game"):
-		_save_game()
+		_save_or_warn()   # ★[폴리시 R17 #8] F5도 성패를 말한다(종전엔 성공·실패가 화면상 구별 불가)
 	if not _sleeping and Input.is_action_just_pressed("load_game"):
 		# ★[폴리시 R6] 실패를 말한다 — 종전엔 세이브가 없거나 안 읽히면 F9가 **아무 반응 없이**
 		#   지나가, 눌렀는데 아무 일도 안 일어난 것인지 불러왔는데 같은 상태인지 알 수 없었다
@@ -14246,25 +14332,27 @@ func _process(delta: float) -> void:
 	#     새 배치만 가드로 막고, 화면은 실제로 일어날 일을 말하게 둔다 — `_crab_pot_prompt`가
 	#     팬닝·반딧넋 앞으로 옮겨 갈 때 세운 그 규율("어떤 원장 상태에서도 화면이 동작을 말한다")이다.
 	#   ★기계와 문·주민 칸이 겹치는 상태 자체는 아래 배치 가드가 앞으로 막는다(구세이브만 남는다).
-	elif _furnace_at(_target):
+	#   ★[폴리시 R17 #1] **부스에는 되돌려 양보한다.** 위로 올린 자리가 더비 부스·야시장·보부상
+	#     프롬프트보다도 앞이었는데, 실행 사다리에서는 그 셋이 기계보다 **먼저** 잡고 return한다 —
+	#     #13이 갱도 문에서 걷어낸 역전을 부스 칸에서 그대로 새로 만든 셈이었다. 순서를 통째로
+	#     되돌리는 대신 **이 두 갈래에만 양보 절**을 달아, 바뀌는 우선순위가 기계↔부스 한 쌍뿐이게
+	#     한다(주민 [F]가 `not _f_machine_at(_target)`로 양보하는 그 문법의 반대 방향).
+	#     새 배치는 `_f_booth_tile`·`_installation_at`이 막으므로 이 절이 참이 되는 것은 구세이브
+	#     뿐이고, 행사가 아닌 날에는 [F]도 프롬프트도 그대로 화덕으로 돌아온다.
+	#   ★ 양보 대상이 부스 셋만이 아니다 — 게잡이통·수액 채취기도 실행 사다리에서 기계보다 먼저
+	#     잡는다(전수 근거는 `_f_taken_before_machine` 머리말).
+	elif _furnace_at(_target) and not _f_taken_before_machine(_target):
 		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _furnace_prompt(_target)
-	elif _crystalarium_at(_target):
+	elif _crystalarium_at(_target) and not _f_taken_before_machine(_target):
 		# ★[S10-T1] 세워 둔 결정기를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _crystalarium_prompt(_target)
 	elif _at_dungeon_gate():
 		# ★[S5-T1] 갱도 입구 — 진입 층 선택은 그레이박스 텍스트 목록이다(엘리베이터 UI는 S5-T9/T10 아트).
 		interact_prompt.visible = true
-		var opts := _mine_entry_options()
-		var pick_line := "[F] 갱도 %d층으로 내려간다" % _mine_entry_pick
-		if opts.size() > 1:
-			var names: Array[String] = []
-			for f in opts:
-				names.append(("〔%d〕" % f) if f == _mine_entry_pick else str(f))
-			pick_line += "   [G] 엘리베이터: %s층" % " · ".join(names)
-		interact_prompt.text = pick_line
+		interact_prompt.text = _mine_entry_prompt()
 	elif _in_mine_floor():
 		# ★[S5-T1] 층 안 프롬프트 — 발밑(사다리) > 겨눈 칸(돌) 순. 남은 돌 수는 사다리 확률의 분모라
 		#   플레이어가 "다 캐면 열린다"를 읽을 수 있게 함께 보인다(스타듀의 암묵 규칙을 명시화).
@@ -15532,10 +15620,27 @@ func _installation_at(t: Vector2i) -> bool:
 func _f_machine_at(t: Vector2i) -> bool:
 	return _furnace_at(t) or _crystalarium_at(t)
 
+# ★[폴리시 R17 #0] 이 주민이 **지금 이 무대에 서 있는가**(구역 축 단일 출처). `_facing_resident`와
+#   `_resident_tile`이 둘 다 이걸 부른다 — 두 곳이 같은 답을 내야 "가드가 막는 칸 ⊇ 남이 [F]를
+#   가져가는 칸"이 성립한다. 판정을 `station_region`(스케줄 파생)으로 하는 이유는 R7 주석 그대로다.
+#   region ""(멜·네오·주방요괴·미혼 옥자 = 카메라 격리 자리)은 구역을 안 가른다 — 그쪽은
+#   `_facing_resident`도 안 가르므로 [F]를 어디서든 가져갈 수 있고, 가드도 같이 서 있어야 한다.
+func _resident_on_stage(r: Resident) -> bool:
+	var st_region := r.station_region(int(clock.minutes)) if clock != null else r.tile_region
+	return st_region == "" or st_region == _region
+
 # 이 칸에 주민이 서 있는가 — `_can_place_crab_pot` ⑤가 쓰던 루프를 이름 있는 한 곳으로 뽑았다.
+# ★[폴리시 R17 #0] **구역 축을 뒤늦게 붙였다.** R16 #14가 이 술어를 `_can_place_furnace`·
+#   `_can_place_crystalarium`에 새로 물렸는데, 그 둘은 `_indoor == ""`만 요구할 뿐 **전 구역
+#   지상**에서 돌고 `_update_resident_station`은 플레이어가 어디에 있든 매 프레임 전 주민의
+#   `r.tile`을 제 구역 좌표로 갱신한다. 좌표 공간이 겹치므로(HOME 80×65 · 나루 마을 100×72 —
+#   실측: 세레나(39,62)·미르(66,54)·뱃사공(12,27)·옹이(13,48)가 전부 HOME 범위 안이다) 안식
+#   농원에서 그 칸을 겨누면 **화면엔 아무도 없는데** 업화로가 안 세워지고 프롬프트도 알림도 0이었다.
+#   주민이 스케줄대로 옮겨 가면 몇 분 뒤 같은 칸이 열리므로 "간헐 실패"로 읽힌다.
+#   R4가 `_installation_at`에서, R7이 `_facing_resident`에서 각각 봉합한 바로 그 사고의 세 번째 판이다.
 func _resident_tile(t: Vector2i) -> bool:
 	for r in _residents:
-		if r.tile != Resident.UNPLACED and r.tile == t:
+		if r.tile != Resident.UNPLACED and r.tile == t and _resident_on_stage(r):
 			return true
 	return false
 
@@ -15578,6 +15683,53 @@ func _f_window_tile(t: Vector2i) -> bool:
 	if _region != RegionCatalog.HOME or _indoor != "":
 		return false
 	return t == MAILBOX_TILE or t == PET_TILE or t == PET_BOWL_TILE
+
+# ★[폴리시 R17 #1] 이 칸이 **행사·좌판 부스 [F] 좌표**인가 — 위 `_f_window_tile`의 형제다(같은
+# 이유·같은 문법: 좌표 상수 하나로 열리는 야외 [F] 창구를 배치에서 뺀다). 다른 점은 무대뿐이라
+# 구역 축을 각 칸이 직접 든다(더비=삼도천 · 야시장·보부상=나루 마을).
+# 왜 필요한가: 이 세 창구는 [F] 실행 사다리에서 업화로·결정기보다 **먼저 잡고 return**하는데
+# (`_facing_derby_booth` 13678 근방 · `_facing_night_market` · `_facing_peddler` vs `_furnace_at`
+# 13780 근방), 세 칸은 전부 PATH라 기존 가드를 한 줄도 안 건드리고 화덕이 세워졌다(실측: 세 칸
+# 모두 `_can_place_furnace` true). 그러면 행사일마다 화면은 화덕 프롬프트를 말하는데 [F]는 매대를
+# 연다 — R16 #13이 갱도 문에서 걷어낸 그 역전이 부스 칸에서 되살아난다.
+# ★ **행사일을 안 본다**(좌표만 본다): 부스가 안 선 날 세워 두면 다음 행사일에 그대로 덫이 되므로,
+#   가드는 달력과 무관하게 늘 서 있어야 한다. 세 칸뿐이라 좁히는 비용도 그만큼이다.
+# ★ 이미 놓인 기계의 회수 경로는 안 막는다(가드는 신규 배치만 본다 — R16 #14·#15가 세운 규율).
+#   구세이브 탈출구는 아래 프롬프트 양보다: 화면이 "오늘은 매대가 열린다"를 말하고, 행사가 아닌
+#   날에는 [F]가 그대로 화덕으로 돌아온다(영구 매몰이 아니라 하루짜리 양보).
+func _f_booth_tile(t: Vector2i) -> bool:
+	if _indoor != "":
+		return false
+	if _region == RegionCatalog.SAMDOCHEON:
+		return t == DERBY_BOOTH_TILE
+	if _region == RegionCatalog.NARU_VILLAGE:
+		return t == NIGHT_MARKET_TILE or t == PEDDLER_TILE
+	return false
+
+# 지금 겨눈 칸에서 **행사·좌판 부스가 [F]를 가져가는가**(위 좌표 술어의 "오늘" 판). 프롬프트
+# 사슬에서 기계가 이 셋에 자리를 내주는 조건이고, 세 판정이 각자 무대·행사일을 이미 든다.
+func _facing_event_booth() -> bool:
+	return _facing_derby_booth() or _facing_night_market() or _facing_peddler()
+
+# ★[폴리시 R17 #1] 이 칸의 [F]를 **기계보다 먼저** 가져가는 것이 있는가 — 실행 사다리 상단 전수다.
+# 왜 목록이 이 셋인가: `[F]` 디스패치에서 기계(`_furnace_at`·`_crystalarium_at`)보다 위에 서서
+# `return`으로 프레임을 끊는 갈래 중, **같은 칸을 물 수 있는** 것이 이 셋뿐이다 —
+#   ㉠ 행사·좌판 부스(더비·야시장·보부상) ㉡ 게잡이통 ㉢ 수액 채취기.
+#   (우편함·삽사리·거울·게시판 등 나머지 [F] 창구는 좌표가 `_f_window_tile`·실내 가드로 이미
+#    갈려 기계와 한 칸에 설 수 없다.)
+# 무엇을 고치나: R16 #13이 기계 프롬프트를 사슬 **맨 앞**으로 올리며 갱도 문·나락 아가리와의
+# 역전은 걷었지만, 그 자리가 통(실행 사다리 13847)·채취기(13857)보다도 앞이라 **같은 클래스의
+# 역전을 세 칸에서 새로 만들었다**(polish_r8 ⑥c가 R16 이후 줄곧 빨간 채였고, 그 단언이 재던
+# 계약 "안내 사슬의 순서가 [F] 사다리와 같다"가 정확히 이것이다).
+# 봉합 축은 #1과 같다 — 실행을 뒤로 미루면 그 칸의 기계가 매몰되므로 **화면을 실행에 맞춘다**.
+# 겹침 자체는 배치 가드가 앞으로 막는다(`_installation_at`이 서로를, `_f_booth_tile`이 부스를)
+# — 이 술어가 참이 되는 것은 그 가드들이 서기 전의 구세이브뿐이고, 그때 이것이 유일한 탈출구다.
+func _f_taken_before_machine(t: Vector2i) -> bool:
+	if _facing_event_booth():
+		return true
+	if crab_pot != null and _indoor == "" and crab_pot.has_at(_region, t):
+		return true
+	return tapper != null and _indoor == "" and tapper.has_at(_region, _tapper_ledger_tile(t))
 
 func _sprinkler_at(t: Vector2i) -> bool:
 	return sprinkler != null and _region == RegionCatalog.HOME and sprinkler.has_at(t)
@@ -15924,15 +16076,36 @@ func _use_crab_pot(t: Vector2i) -> void:
 			queue_redraw()
 		return
 	# ③ 회수 — 빈 통을 인벤으로 되돌린다(스프링클러 회수 동형).
+	# ★[폴리시 R17 #15] **장전된 미끼도 함께 돌려준다.** 종전엔 회수가 그것을 소각했다:
+	#   `CrabPotLedger.remove`는 어획물만 지키고(`pending_catch != "" → 거절`) `baited` 플래그는
+	#   한 줄도 안 본 채 항목을 통째로 지우는데, 미끼를 되돌려 주는 코드가 저장소 어디에도 없다
+	#   (`advance_day`의 `e["baited"] = false`는 소비 쪽이고 `place`는 언제나 미장전으로 시작한다).
+	#   트리거는 [F] 연타 한 번이다 — 장전 직후 같은 칸에서 [F]를 또 누르면 사다리 ①은 어획물이
+	#   없어 건너뛰고 ②는 `not is_baited`가 거짓이라 건너뛰어 곧장 이 회수로 떨어진다.
+	#   형제 창구는 정확히 이 계열을 막는다: `FurnaceLedger.remove`는 광석이 든 화덕을 거절하고
+	#   ("걷는 걸로 광석 5개가 조용히 증발하면 손실"), 결정기 회수는 안에 든 보석과 잔여일까지
+	#   함께 돌려준다. 여기서는 **되돌려 주는 쪽**을 고른다 — 통을 못 걷게 막으면 미끼 하나 때문에
+	#   회수가 잠기고, 그건 이미 놓인 것을 언제나 걷을 수 있어야 한다는 규율과 어긋난다.
+	# ★ 순서는 위 ①과 같은 **적재先**이다: 원장을 지우기 전에 둘 다 백팩에 들어가는지 확인하고,
+	#   하나라도 못 들어가면 통까지 되돌려 **부분 성공을 만들지 않는다**(원장 불변).
+	var baited: bool = crab_pot.is_baited(_region, t)
 	if not inventory.add_item(ItemCatalog.CRAB_POT, 1):
 		_notice("백팩이 가득 차 통을 거둘 수 없다")
 		return
+	if baited and not inventory.add_item(ItemCatalog.BAIT_BASIC, 1):
+		inventory.remove_item(ItemCatalog.CRAB_POT, 1)
+		# ★[폴리시 R15 #19 계약] 월드에서 뜨는 "자리를 비우고"는 **가방 여는 키를 함께 말한다** —
+		#   바로 위 ① 수거 거절 줄과 같은 문구다(polish_r15 ⑳c가 이 경계를 소스 전수로 잠근다).
+		_notice("백팩이 가득 차 미끼를 돌려받을 수 없다 — [Tab] 가방에서 자리를 비우고 다시 [F]")
+		return
 	if crab_pot.remove(_region, t):
 		audio.sfx("ui")
-		_notice("게잡이통을 회수했다")
+		_notice("게잡이통을 회수했다 — 장전한 미끼도 돌려받았다" if baited else "게잡이통을 회수했다")
 		queue_redraw()
 	else:
 		inventory.remove_item(ItemCatalog.CRAB_POT, 1)   # 원장이 거절 → 방금 넣은 통을 되돈다(무해)
+		if baited:
+			inventory.remove_item(ItemCatalog.BAIT_BASIC, 1)
 
 # 게잡이통을 겨눴을 때의 안내 문구(상호작용 사다리와 **같은 순서**로 파생 — 프롬프트와 실동작 불일치 0).
 func _crab_pot_prompt(t: Vector2i) -> String:
@@ -15942,7 +16115,11 @@ func _crab_pot_prompt(t: Vector2i) -> String:
 	if crab_pot_bait_free():
 		return "[F] 게잡이통 회수 (미끼장인 — 미끼 없이도 걸린다)"
 	if crab_pot.is_baited(_region, t):
-		return "[F] 게잡이통 회수 (미끼 장전됨 — 내일 아침 확인)"
+		# ★[폴리시 R17 #15] 회수가 미끼를 어떻게 하는지 **말한다**. 종전엔 이 줄이 "내일 아침 확인"만
+		#   말해, [F]가 곧 회수라는 사실도 그때 미끼가 어떻게 되는지도 안내가 0이었다(그리고 실제로는
+		#   태웠다). 이제 돌려주므로 화면이 그 사실을 그대로 말한다(프롬프트↔동작 일치).
+		#   ★ 길이는 InteractPrompt Label 폭(624px) 안에 든다 — 552px(R17 #3이 세운 그 한도).
+		return "[F] 게잡이통 회수 (미끼 장전됨 — 내일 아침 확인 · 미끼는 돌려받는다)"
 	if inventory.has_item(ItemCatalog.BAIT_BASIC):
 		return "[F] 미끼 넣기 (일반 미끼 1개)"
 	return "[F] 게잡이통 회수 (미끼 없음 — 일반 미끼가 있어야 걸린다)"
@@ -16084,6 +16261,8 @@ func _can_place_furnace(t: Vector2i) -> bool:
 	# ★[폴리시 R8] [F] 창구 좌표 → 배제. **이 결함의 진원지**다 — 우편함 칸에 세운 업화로는 그 칸의
 	#   [F]가 입력 사다리에서 편지 열람에 먼저 잡혀, 화덕도 안에 든 광석도 영구 유실됐다.
 	if _f_window_tile(t):
+		return false
+	if _f_booth_tile(t):                      # ★[폴리시 R17 #1] 행사·좌판 부스 좌표 → 배제(그 술어 머리말)
 		return false
 	# ★[폴리시 R16 #14] 주민이 선 칸 → 배제. `_can_place_crab_pot` ⑤가 뱃사공 자리(12,27)를 두고
 	#   이미 세운 가드인데 업화로·결정기엔 없었다 — 그 칸의 [F]는 입력 사다리에서 **주민이 먼저**
@@ -16619,6 +16798,8 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 		return false
 	if _f_window_tile(t):                     # ★[폴리시 R8] [F] 창구 좌표 → 배제(업화로와 완전 동형)
 		return false
+	if _f_booth_tile(t):                      # ★[폴리시 R17 #1] 부스 좌표 → 배제(업화로와 완전 동형·그 주석)
+		return false
 	if _resident_tile(t):                     # ★[폴리시 R16 #14] 주민 칸 → 배제(업화로와 완전 동형·그 주석)
 		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
@@ -17108,7 +17289,14 @@ func _on_frame_craft(recipe_id: String) -> void:
 		#   Tab은 `_close_frame()`이라 안내대로 누르면 가방이 *닫힌다* — 정반대 일이다. 게다가
 		#   같은 프레임 아래쪽에 백팩 그리드가 이미 그려져 있으니 갈 곳도 없다. 형제 24줄은 전부 월드
 		#   동작이라 [Tab]이 참이고, 프레임 안에서 발화하는 것은 이 한 줄뿐이다(polish_r16 ④가 그 경계를 잠근다).
-		_notice("백팩이 가득 차 %s 만들지 못했다 — 아래 가방에서 자리를 비우고 다시" % HanjiUi.with_eul(String(r["name_ko"])))
+		# ★[폴리시 R17 #2] 그 근거의 뒷줄("아래쪽에 백팩 그리드가 이미 그려져 있다")이 **제작 탭에는
+		#   거짓**이었다. 프레임 `_draw`는 `CTX_MENU`에서 `menu_tab == TAB_INV`일 때만 `_draw_backpack`을
+		#   부르고(inv_frame.gd), `craft_chosen`은 `TAB_CRAFT`에서만 방출된다 — 이 알림이 뜨는 화면
+		#   아래엔 레시피 행뿐이라 "아래 가방"이 가리키는 것이 없다. #3이 [Tab] 거짓 광고를 고치면서
+		#   같은 클래스의 거짓 지시로 갈아 끼운 자리라, 이번엔 **실제 절차**를 적는다: 탭 순환은 [E]고
+		#   (`menu_tab` 액션 → `frame.cycle_tab()`), 탭 아이콘 클릭(`set_tab`)도 같은 곳으로 간다.
+		_notice("백팩이 가득 차 %s 만들지 못했다 — [E] 가방 탭에서 자리를 비우고 다시"
+			% HanjiUi.with_eul(String(r["name_ko"])))
 		return
 	for m in r["mats"]:
 		inventory.remove_item(String(m["item"]), int(m["count"]))
@@ -21082,8 +21270,9 @@ func _facing_resident() -> Resident:
 		#   판정은 `station_region`(스케줄 파생)이라 걷기용 `tile_region` 캐시와 무관하게 늘 지금
 		#   시각의 답이고, region ""(멜·네오·주방요괴·미혼 옥자 = 카메라 격리 자리)은 종전대로
 		#   구역을 안 가른다 — **좁히기만 하므로 같은 구역의 정상 대화는 한 건도 안 막힌다.**
-		var st_region := r.station_region(int(clock.minutes))
-		if st_region != "" and st_region != _region:
+		# ★[폴리시 R17 #0] 그 구역 술어를 `_resident_on_stage`로 뽑았다(거동 불변) — 배치 가드
+		#   `_resident_tile`이 같은 축을 쓰게 하려면 판정이 한 곳에 있어야 한다.
+		if not _resident_on_stage(r):
 			continue
 		if r.require_indoor != "" and _indoor != r.require_indoor:
 			continue
@@ -21492,7 +21681,7 @@ func _finish_spine_puzzle() -> void:
 	if _spine_bit_seen(SPINE_B5):
 		return
 	_mark_spine_bit(SPINE_B5)
-	_save_game()
+	_save_or_warn()   # ★[폴리시 R17 #8] 실패하면 이 비트가 메모리에만 남아 무실패 퍼즐이 재생된다
 	_spine_b5_closing = true
 	interact_prompt.visible = false
 	_talking_to = ""
@@ -21596,7 +21785,8 @@ func _close_spine_scene() -> void:
 		if not _spine_bit_seen(SPINE_B6):
 			_mark_spine_bit(SPINE_B6)
 			_open_okja_track()          # ★ 결정 10 "B6 후 트랙 개통" — 개통의 자리가 여기로 따라왔다
-			_save_game()                # 장면이 끝난 그 프레임에 굳힌다(B7 = `_open_epilogue`와 같은 규율)
+			_save_or_warn()             # 장면이 끝난 그 프레임에 굳힌다(B7 = `_open_epilogue`와 같은 규율)
+			                            # ★[폴리시 R17 #8] 실패를 말한다 — B5와 완전히 같은 이유
 	# ★[폴리시 R12] `not _sleeping`이 이 줄의 **네 번째 항**이다. 이 함수를 부르는 자리는
 	#   `_on_dialogue_finished`의 마지막 묶음 종료인데, 바로 그 위에서 R10 #6이 세운
 	#   `player.set_physics_process(not _sleeping)`("취침 트윈 중엔 안 푼다")를 여기가 무조건
@@ -21935,7 +22125,8 @@ func _close_epilogue() -> void:
 	if not _sleeping:
 		clock.running = _epilogue_clock_prev
 	player.set_physics_process(not _sleeping)
-	_save_game()                      # 돌아간 자리를 굳힌다(에필로그는 1회성 — 다시 안 뜬다)
+	_save_or_warn()                   # 돌아간 자리를 굳힌다(에필로그는 1회성 — 다시 안 뜬다)
+	                                  # ★[폴리시 R17 #8] 1회성이라 실패를 놓치면 회고가 다시 뜬다
 
 # 관계 요약 행 — 진급한 칸이 있는 사람만, 높은 칸부터. 배우자·앵커가 늘 위에 오도록 정렬한다.
 func _build_epilogue_hearts() -> void:
@@ -23022,7 +23213,16 @@ func _on_night_closed(raided: int, revenue: int, left: int) -> void:
 	#   핸들러가 도는 동안 tonight_cocktails()는 아직 오늘 밤 값이다(시그니처를 안 늘리려는 선택 —
 	#   기존 closed(raided, revenue, left) 계약을 쓰는 night_bar_test 하네스가 그대로 산다).
 	var tail := " · 칵테일 %d잔" % night_bar.tonight_cocktails() if night_bar.tonight_cocktails() > 0 else ""
-	_notice("나라카 바 마감 · 밤 매출 %d냥 · 약탈 %d개 · 놓친 손님 %d명%s" % [revenue, raided, left, tail])
+	# ★[폴리시 R17 #11] **keep을 단다.** 이 줄은 `_on_day_advanced`의 두 번째 줄(`night_bar.end_day`)이
+	#   쏘는데, 같은 하루 전환 훅이 그 뒤로 출하함 정산·까마귀·게잡이통·채취기를 동기적으로 계속
+	#   밀어 `MAX_ITEMS(4)`를 넘기면 **언제나 이 줄이 가장 오래된 non-keep**이라 다섯째 push에서
+	#   축출됐다. 전부 한 프레임 안(트윈 콜백 → clock.sleep → day_advanced)이라 `NoticeFeed._draw`가
+	#   한 번도 안 돈 상태에서 사라지고, `closed.emit` 직후 `abandon()`이 매출·약탈·이탈을 전부 0으로
+	#   지워 **다시 볼 경로가 없다**. 그 밤의 결산은 이 줄이 유일한 표면이다(낮 카페는 전용 패널 +
+	#   `_cafe_summary_pending` 미룸까지 갖는다) — ADR-0010 #5 이중 손실의 결산이 옵트인한 플레이어에게
+	#   통째로 전달되지 않았다. R16 #10의 판별식("밀려나면 다시 오지 않는 1회성인가")에 정확히 걸린다.
+	_notice("나라카 바 마감 · 밤 매출 %d냥 · 약탈 %d개 · 놓친 손님 %d명%s" % [revenue, raided, left, tail],
+		NOTICE_SECS, false, null, Color(0, 0, 0, 0), true)
 
 # T6.4 ★ 막기 해소 계약 소비(이중 손실 ㉮ — 막기 실패→재고 약탈). 잡귀가 돌파하면(resolved에
 # repelled=false) 약탈량만큼 낮에 쌓은 수확물을 덜어낸다 — *내일* 카페가 굶는 미래 자산 손실
@@ -23430,6 +23630,14 @@ func _on_item_gained(id: String) -> void:
 	if MenuCatalog.menu_for_signature(id) != "":
 		_menu_found[id] = true
 
+# ★[폴리시 R17 #9] 융합 메뉴 발견 원장의 **로드 쪽 한 줄**(위 기록처와 짝). 함수로 뽑은 이유는
+# `_facing_mirror`와 같다 — 이 계약(키가 없어도 무조건 되감는다)은 구세이브에서만 갈리는 분기라,
+# 헤드리스가 손댈 수 있는 표면이 없으면 회귀가 그 분기를 영영 못 태운다(전량 저장되는 신규
+# 세이브로는 `has` 가드가 있으나 없으나 결과가 같아 결함이 재현되지 않는다).
+func _apply_menu_found(data: Dictionary) -> void:
+	var mf: Variant = data.get("menu_found", {})   # ★[S6-T2] 키 없는 구세이브는 발견 0(재료를 다시 손에 넣으면 그때 열린다)
+	_menu_found = mf.duplicate() if typeof(mf) == TYPE_DICTIONARY else {}
+
 # ★[S6-T2] `_has_any_harvest()` 삭제 — 유일한 소비자였던 서빙 프롬프트가 사라졌다. 기본 메뉴가
 # 무재료가 되면서 "재료가 없어 서빙 불가"라는 상태 자체가 없어졌기 때문이다(결정 2·4 무막힘).
 # 약탈은 _cheapest_harvest가 ""를 돌려주는 것으로 빈 재고를 판정하므로 이 함수를 안 쓴다.
@@ -23645,7 +23853,56 @@ func _pointer_over_overlay(screen_pos: Vector2) -> bool:
 
 func _open_mirror() -> void:
 	mirror_text.text = _mirror_forecast_text()
+	_layout_mirror_panel()
 	mirror_panel.visible = true
+
+# ── ★[폴리시 R17 #5] 거울 판을 **본문에 맞춰 세운다**(고정 기하 → 내용 파생) ────────────────
+# 무엇이 깨져 있었나: main.tscn의 판은 y 60~292 고정이고 본문 Label은 폭 412 · 높이 196이었는데,
+# `_mirror_forecast_text`가 쌓는 줄은 최대 13줄이고 그중 셋(운 둘째 줄 440px · 혼불 바람 예보
+# 600px · 보부상 예고 432px)이 412를 넘어 접혀 **실제로 16줄**이 그려졌다(실측 min_height 304px).
+# 세로 중앙 정렬이라 위아래로 54px씩 한지 프레임 밖으로 삐져나왔다.
+# 봉합 축을 "판을 내용에 맞춘다"로 고른 근거: 반대 축 둘은 둘 다 정보를 잃는다 — 줄을 접거나
+# 생략하면 그날의 예고(테마 데이·절기 행사·보부상·생일)가 사라지고, 글자를 줄이면 640×360
+# 내부해상도에서 본문이 못 읽히는 크기가 된다. 판은 토글 오버레이라 커져도 되는 표면이다.
+# ★ 덤으로 **평소엔 더 작아진다**: 예고가 없는 날은 6줄(114px)이라 판이 지금(232px)의 절반 이하다.
+# ★ 폭을 함께 넓힌 이유: 412 → 476이면 접히는 줄이 셋에서 하나로 줄어(16줄 → 14줄) 최악 높이가
+#   304 → 266으로 내려간다. 그 이상 넓혀도 혼불 바람 줄(600px)은 어차피 접히므로 얻는 게 없다.
+# ★ 줄 수를 Label 내부(`get_line_count`)가 아니라 폰트에서 재는 이유: 그건 shaping 시점에 의존해
+#   막 넣은 텍스트에 대해 참이 아닐 수 있다. 폰트 측정은 같은 답을 즉시 준다(둘이 같음을 회귀가 잰다).
+# ★ main.tscn의 기하는 **평범한 날 한 판**(6줄)일 뿐이다 — 이 함수가 매번 다시 세우므로 그 값은
+#   기본값이고, 최악 조합의 높이는 여기서만 나온다(그래서 이 호출을 지우면 회귀가 빨개진다).
+const MIRROR_W := 520.0          # 판 폭(논리 px) — 본문 폭 = 이것 − MIRROR_PAD_X*2
+const MIRROR_PAD_X := 22.0       # 한지 9-slice 테두리 안쪽 좌우 여백(옛 tscn 값 그대로)
+const MIRROR_PAD_Y := 18.0       # 위아래 여백(옛 tscn 값 그대로)
+const MIRROR_VIEW_MARGIN := 16.0 # 판이 뷰 위아래로 최소한 남겨 두는 여백
+
+func _layout_mirror_panel() -> void:
+	if mirror_panel == null or mirror_text == null:
+		return
+	var view := _logical_view_size(mirror_panel)
+	var body_w := MIRROR_W - MIRROR_PAD_X * 2.0
+	var body_h := _mirror_body_height(mirror_text.text, body_w)
+	var h := minf(body_h + MIRROR_PAD_Y * 2.0, view.y - MIRROR_VIEW_MARGIN)
+	mirror_panel.position = Vector2(floorf((view.x - MIRROR_W) * 0.5), floorf((view.y - h) * 0.5))
+	mirror_panel.size = Vector2(MIRROR_W, h)
+	mirror_text.position = Vector2(MIRROR_PAD_X, MIRROR_PAD_Y)
+	mirror_text.size = Vector2(body_w, h - MIRROR_PAD_Y * 2.0)
+
+# 본문이 폭 w에서 접힌 뒤 차지하는 높이 — Label이 쓰는 식 그대로(줄 수 × (폰트 높이 + 줄 간격)).
+func _mirror_body_height(text: String, w: float) -> float:
+	var fs := mirror_text.get_theme_font_size("font_size")
+	var fh := HanjiUi.FONT.get_height(fs)
+	var wrapped := HanjiUi.FONT.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, w, fs)
+	var lines := maxi(1, int(round(wrapped.y / fh)))
+	return float(lines) * (fh + float(mirror_text.get_theme_constant("line_spacing")))
+
+# CanvasLayer 스케일을 걷어낸 논리 뷰 치수(`_pointer_over_overlay`가 쓰는 그 보정과 같은 결).
+func _logical_view_size(node: CanvasItem) -> Vector2:
+	var view := Vector2(get_viewport().get_visible_rect().size)
+	var par := node.get_parent()
+	if par is CanvasLayer and par.scale.x != 0.0 and par.scale.y != 0.0:
+		view = Vector2(view.x / par.scale.x, view.y / par.scale.y)
+	return view
 
 func _close_mirror() -> void:
 	mirror_panel.visible = false
@@ -25687,7 +25944,16 @@ func _draw_encroach_weeds() -> void:
 		return
 	var tsz := PROP_DEBRIS_WEEDS.get_size()
 	for t in reclaim.weed_tiles():
-		var tex := _debris_variant_tex(PROP_DEBRIS_WEEDS, t)
+		# ★[폴리시 R17 #12] 변주를 뽑은 **뒤 muted 캐시에 합류시킨다** — 위 머리말이 못 박은
+		#   "debris 잡초와 같은 텍스처·변주를 써 시각 동일"이 그 한 걸음이 빠져 깨져 있었다.
+		#   `_draw_props_for`는 같은 `PROP_DEBRIS_WEEDS`를 그릴 때 `_MUTE_GREEN_PROPS` 판정으로
+		#   `_muted_prop_tex`의 세이지 사본으로 갈아 끼우는데(owner "초록 전부 muted"), 이쪽은
+		#   원본을 그대로 그렸다. `_muted_prop_tex`가 **원본을 보존하고 새 ImageTexture를 캐시**하므로
+		#   (`im.duplicate()`) 원본에는 mute가 영영 안 묻는다 — 같은 칸 해시로 고른 **같은 변주 한 장**이
+		#   한쪽은 세이지, 한쪽은 형광 초록으로 떴다. 낫 대상 두 종류가 서로 다른 초록으로 갈리면
+		#   "개간 대상임을 읽힌다"는 이 렌더의 목적 자체가 무너진다.
+		var tex := _muted_prop_tex(_debris_variant_tex(PROP_DEBRIS_WEEDS, t),
+			_MUTE_WOODY.has(PROP_DEBRIS_WEEDS))
 		draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), tsz), false)
 
 # ★[S5-T3 / ADR-0063 결정 3] 업화로 그레이박스 렌더(설치물 — 아트는 S5-T9/T10 아트 패스).

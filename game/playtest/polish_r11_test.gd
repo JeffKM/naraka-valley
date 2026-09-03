@@ -178,8 +178,11 @@ func _initialize() -> void:
 	_check("①a 표를 세우는 자리와 잡초 표의 자리가 **같은 함수**다(같은 위상 = 같은 계약)",
 		_in_func("func _on_day_advanced", "_season_respawn_pending_day = day")
 		and _in_func("func _on_day_advanced", "_weed_day_pending_day = day"))
+	# ★[폴리시 R17 #8] 호출이 `_save_or_warn()`으로 갈렸다(실패를 말하는 창구 경유 — 그 안에서
+	#   `_save_game()`을 부른다). 이 무대가 재는 위상("자동 저장이 날이 바뀐 뒤"), 곧 표가 그
+	#   파일에 실린다는 계약은 한 글자도 안 바뀌었다.
 	_check("①b 취침 자동 세이브는 날이 바뀐 **뒤**에 뜬다(그래서 표를 버리면 손실이 된다)",
-		_in_func("func _on_sleep_done", "_save_game()"))
+		_in_func("func _on_sleep_done", "_save_or_warn()"))
 	m._season_respawn_pending_day = 29
 	m._save_game()
 	var raw: Dictionary = m.saver.load_game(m._active_slot)
@@ -291,7 +294,7 @@ func _initialize() -> void:
 	_check("⑤b 장면을 거두는 자리가 셋을 함께 집행한다(비트·트랙 개통·세이브)",
 		_in_func("func _close_spine_scene", "_mark_spine_bit(SPINE_B6)")
 		and _in_func("func _close_spine_scene", "_open_okja_track()")
-		and _in_func("func _close_spine_scene", "_save_game()"))
+		and _in_func("func _close_spine_scene", "_save_or_warn()"))   # ★[폴리시 R17 #8] 실패를 말하는 창구 경유
 	_check("⑤c 형제 B7과 **같은 형태**다 — 저쪽 비트는 에필로그가 열리는 자리에 있다",
 		_in_func("func _open_epilogue", "_mark_spine_bit(SPINE_B7)")
 		and not _in_func("func _fire_spine_b7", "_mark_spine_bit(SPINE_B7)"))

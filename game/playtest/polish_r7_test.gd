@@ -536,8 +536,11 @@ func _initialize() -> void:
 	_check("⑨c 제 구역에서는 전원 그대로 잡힌다 — 정상 대화를 한 건도 안 깼다(막힌 이: %s)"
 			% str(same_region_blocked),
 		same_region_blocked.is_empty())
+	# ★[폴리시 R17 #0] 그 구역 술어가 `_resident_on_stage` 한 곳으로 뽑혔다(배치 가드
+	#   `_resident_tile`이 같은 답을 써야 해서). 파생원은 그대로 `station_region`이다.
 	_check("⑨d 판정은 스케줄 파생(`station_region`)이라 걷기용 캐시와 무관하게 늘 지금 시각의 답이다",
-		_in_func("func _facing_resident", "r.station_region(int(clock.minutes))"))
+		_in_func("func _resident_on_stage", "r.station_region(int(clock.minutes))")
+		and _in_func("func _facing_resident", "_resident_on_stage(r)"))
 	m._region = RegionCatalog.HOME
 	m._indoor = ""
 
@@ -696,7 +699,8 @@ func _initialize() -> void:
 	_check("⑬d 그 술어는 세 갈래보다 **먼저** 선언된다(줄 %d)" % hand_decl,
 		hand_decl > 0 and hand_decl < animal_br and hand_decl < debris_br and hand_decl < weed_br)
 	_check("⑬e 맨 아래 일반 갈래는 `holding_free_use`를 그대로 든다 — 손 물건이 여전히 **한 번** 실행된다",
-		_line_of("and (_target_valid or holding_weapon or pot_at_target or holding_free_use)") > weed_br)
+		# ★[폴리시 R17 경유 발견] R16 #5가 or-항을 `pot_at_target` → `pot_dispatch`로 갈았다(계약 불변).
+		_line_of("and (_target_valid or holding_weapon or pot_dispatch or holding_free_use)") > weed_br)
 	# 동사 자체는 호출 1회당 1개만 태운다(가드가 없어도 참이었던 성질 — 이중은 디스패치의 몫이었다).
 	_clear_backpack(m)
 	m.inventory.add_item(low_dish, 2)
