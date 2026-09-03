@@ -778,15 +778,38 @@ func _draw_menu_top(panel: Rect2) -> void:
 var craft_rows_fn: Callable = Callable()
 var _craft_row_rects: Array = []   # [{rect, id}] — 클릭 히트테스트(매 그리기 재구성)
 
+# ★[폴리시 R14] 제작 탭 헤더가 말할 **해금 축 이름들**(행 데이터 파생 · 중복 없이 등장 순서대로).
+#   채집 축은 `unlock_level > 0`인 행이 하나라도 있으면 선다(그 축의 라벨은 행이 안 싣는다 —
+#   `unlock_level`이 곧 채집이라는 것이 카탈로그의 스키마다). 2차 축은 행이 실어 온 라벨 그대로다.
+func _craft_skill_axes(rows: Array) -> Array:
+	var out: Array = []
+	for row in rows:
+		if int(row.get("unlock_level", 0)) > 0 and not out.has("채집"):
+			out.append("채집")
+		var lab := String(row.get("skill_gate_label", ""))
+		if int(row.get("skill_gate", 0)) > 0 and lab != "" and not out.has(lab):
+			out.append(lab)
+	return out
+
 func _draw_craft_tab(panel: Rect2, _font: Font) -> void:
 	_craft_row_rects.clear()
 	var x := panel.position.x + PAD + 12.0
 	var y := panel.position.y + PAD + 48.0
-	HanjiUi.draw_text(self, Vector2(x, y), "손 제작 — 채집 숙련으로 배운다 (행 클릭 = 제작)", 12, HanjiUi.INK_DIM)
-	y += 22.0
+	# ★[폴리시 R14] 해금 축을 **행에서 파생**한다 — 종전엔 "채집 숙련으로 배운다"고 단정했는데
+	#   카탈로그는 이미 축이 셋이다(계단=채광 Lv.2 · 상위 스프링클러 2종=농사 Lv.4/8, 셋 다 채집
+	#   문턱 0). 채집을 만렙까지 올려도 안 열리는 행이 바로 아래에 "해금: 채광 Lv.2"로 떠 있어
+	#   헤더가 그 행의 잠금 사유를 거짓으로 만들었다(아래 잠금 문구는 S5-T8에서 이미 고친 자리다).
+	#   축 이름은 행이 싣고 오므로(`skill_gate_label` — main `_craft_rows`) 여기에 스킬 하드코딩이
+	#   한 글자도 안 남는다: 축이 넷이 돼도 이 줄은 저절로 따라 넓어진다.
 	if craft_rows_fn.is_null():
+		HanjiUi.draw_text(self, Vector2(x, y), "손 제작 (행 클릭 = 제작)", 12, HanjiUi.INK_DIM)
 		return
 	var rows: Array = craft_rows_fn.call()
+	var axes: Array = _craft_skill_axes(rows)
+	HanjiUi.draw_text(self, Vector2(x, y),
+		"손 제작 — %s 숙련으로 배운다 (행 클릭 = 제작)" % " · ".join(axes) if not axes.is_empty()
+			else "손 제작 (행 클릭 = 제작)", 12, HanjiUi.INK_DIM)
+	y += 22.0
 	var row_w := panel.size.x - PAD * 2.0 - 24.0
 	for row in rows:
 		var r := Rect2(x - 4.0, y - 12.0, row_w, 34.0)

@@ -14233,7 +14233,12 @@ func _process(delta: float) -> void:
 				interact_prompt.text = "[우클릭/F] 곳간 (장원제 출품은 마쳤다 · %d/%d)" % [
 					larder.total(), larder.capacity]
 			else:
-				interact_prompt.text = "[F] 곳간 장원제 출품 (재고 %d종 — 차감 없음)" % larder.ids().size()
+				# ★[폴리시 R14] **상한을 안내에 싣는다.** 종전엔 곳간 전 종수를 출품 안내 안에 넣어,
+				#   12종을 쟁여 두고 [F]를 누르면 결과 알림이 "출품 9종"이라 다르게 말했다(점수도
+				#   9종분). `_grange_entries`가 판매가 내림차순 상위 GRANGE_MAX_ENTRIES에서 자르는데,
+				#   이건 하루 1회 래치라 **되돌릴 수 없는 동작 직전의 안내**다 — 상한을 말해야 한다.
+				interact_prompt.text = "[F] 곳간 장원제 출품 (상위 %d종 · 재고 %d종 — 차감 없음)" % [
+					mini(larder.ids().size(), SeasonalEvent.GRANGE_MAX_ENTRIES), larder.ids().size()]
 		else:
 			interact_prompt.text = "[우클릭/F] 곳간 (수확물 적재 → 융합 메뉴 재료 · %d/%d)" % [
 				larder.total(), larder.capacity]
@@ -18023,7 +18028,15 @@ func _try_upgrade_tool(tool_id: String) -> bool:
 func _tier_effect_text(tool_id: String, tier: int) -> String:
 	match tool_id:
 		ToolTier.AXE:
-			return "성숙목 %d타 · 더 굵은 것을 벨 수 있다" % ToolTier.axe_mature_hp(tier)
+			# ★[폴리시 R14] "더 굵은 것을 벨 수 있다"는 **접근 게이트가 실제로 열리는 티어에서만**
+			#   붙인다. 도끼가 여는 대상은 큰 그루터기(TIER_LARGE_STUMP)·큰 통나무(TIER_LARGE_LOG)
+			#   둘뿐이고 `TreeLedger.required_tier`가 참조하는 값도 그 둘이 전량이라, 티어 3·4에서는
+			#   새로 벨 수 있게 된 대상이 0종인데도 25,000냥짜리 업화로 알림이 그 약속을 되풀이했다
+			#   (곡괭이 표가 R10에서 인정·교정한 "최고 티어 실효 0"과 같은 클래스).
+			#   상한은 상수에서 파생한다 — 게이트가 늘면 이 줄이 저절로 따라 넓어진다.
+			if tier <= maxi(ToolTier.TIER_LARGE_STUMP, ToolTier.TIER_LARGE_LOG):
+				return "성숙목 %d타 · 더 굵은 것을 벨 수 있다" % ToolTier.axe_mature_hp(tier)
+			return "성숙목 %d타" % ToolTier.axe_mature_hp(tier)
 		ToolTier.PICKAXE:
 			return "광맥 %d타 · 보석 %d타" % [ToolTier.pickaxe_ore_hits(tier), ToolTier.pickaxe_gem_hits(tier)]
 		ToolTier.HOE, ToolTier.WATERING_CAN:
@@ -19000,9 +19013,27 @@ func _woodshop_text() -> String:
 		second = "짓는 중: %s   ·   %s" % [busy, second]
 	else:
 		# 놀고 있을 때는 가게의 규칙을 먼저 말한다 — 동시 1건·공기는 값의 일부라 사기 전에 보여야 한다.
-		second = "한 번에 한 채 · 공기 %d일   ·   %s" % [
-			Carpenter.build_days(Carpenter.PROJ_BIG_COOP), second]
+		# ★[폴리시 R14] 공기를 **카탈로그 전량에서 파생**한다 — 종전엔 `PROJ_BIG_COOP` 한 건(2일)을
+		#   전 매대의 공통 규칙인 양 박아, 늘봄방(3일)을 발주하면 직후 알림이 "3일 뒤 아침 완공"이라
+		#   다르게 말했다. `_build_rows` 주석이 "공기는 이름에 안 넣고 헤더가 상시 안내한다"고 못 박아
+		#   여기가 공기를 말하는 유일한 표면이라, 한 프로젝트의 값을 일반화하면 그 안내가 거짓이 된다.
+		#   표에 새 프로젝트가 붙으면 이 줄이 저절로 따라 넓어진다(하드코딩 0).
+		second = "한 번에 한 채 · %s   ·   %s" % [_build_days_text(), second]
 	return "\n".join(["── 옹이의 목공방 ──", second])
+
+# ★[폴리시 R14] 매대 헤더의 공기 안내 — 카탈로그 전량에서 파생한다. 전 프로젝트가 같은 날수면
+#   "공기 N일", 갈리면 "공기 N~M일"(지금은 2건 2일 · 늘봄방만 3일이라 후자). 값의 진실원은
+#   `Carpenter.PROJECTS` 하나이고 여기는 조회자다.
+func _build_days_text() -> String:
+	var lo := 0
+	var hi := 0
+	for id in Carpenter.ids():
+		var d := Carpenter.build_days(String(id))
+		lo = d if lo == 0 else mini(lo, d)
+		hi = maxi(hi, d)
+	if hi <= 0:
+		return "공기 —"
+	return "공기 %d일" % lo if lo == hi else "공기 %d~%d일" % [lo, hi]
 
 # 건축 의뢰 행 — 카탈로그 전량(지금은 성장 티어 2건). 값은 옹이 ♡ 할인가(골드만 — 원목은 자재라
 # 할인 대상이 아니다, Carpenter.wood_cost 주석). 완공분·진행 중엔 잠금 행(구매 히트 미등록).
@@ -19368,7 +19399,12 @@ func _gift_rhythm_text(r: Resident) -> String:
 		return "선물 매일 가능(부부) · 오늘 생일" if bday else "선물 매일 가능(부부)"
 	if bday:
 		return "오늘 생일 — 주 상한 면제"
-	return "이번 주 선물 %d/%d" % [r.affinity.gifts_left_in_week(clock.day), Affinity.GIFTS_PER_WEEK]
+	# ★[폴리시 R14] 분자를 **쓴 횟수**로 바로잡았다 — 종전엔 잔여(`gifts_left_in_week`)를 넣어
+	#   이 저장소의 다른 모든 `%d/%d`(전시·도감·의뢰·친밀도·물뿌리개 = 달성/총량)와 뜻이 정반대였다.
+	#   같은 패널 윗줄이 "친밀도 3/5"(아직 못 채웠다)인데 꼬리만 "2/2"가 "이미 다 썼다"였고,
+	#   두 번 선물해 소진하면 "0/2"가 되어 관례대로 읽는 플레이어에겐 "아직 하나도 안 썼다"로 보였다.
+	#   판정(`can_gift`)은 그대로다 — 고친 것은 표기뿐이다.
+	return "이번 주 선물 %d/%d" % [r.affinity.gifts_used_in_week(clock.day), Affinity.GIFTS_PER_WEEK]
 
 # ★ [S8-T1 / ADR-0066 결정 11] 관계 상태 배지 훅 — 연애(T6)·결혼(T7)이 마저 채울 자리다.
 # ★[S8-T5] 첫 실값: **진급 대기**(점수 만충·관문 미통과 — Affinity.pending_promotion). "다음 칸이

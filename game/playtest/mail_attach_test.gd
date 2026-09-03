@@ -109,7 +109,10 @@ func _run() -> void:
 	#   ⚠️ 나머지 관문 편지의 봉투 속 물건(매듭·조약돌·마른 이끼·눈 한 줌…)은 **정서적 소품**이라
 	#     일부러 첨부가 없다 — 인벤에 들어갈 종류가 아니고, 넣으려면 없는 아이템을 새로 만들어야
 	#     한다(그건 첨부 결함이 아니라 신규 아이템 결정 = owner 몫).
-	var expect_sorted: Array = [attached,
+	# ★[폴리시 R14] 명단에 `miho_gate1_seed`가 붙었다 — R8 스윕이 놓친 네 번째 자리다(본문 첫 줄이
+	#   "씨앗 한 줌이 들어 있다"고 실재 아이템군을 명시적으로 건네는데 첨부가 비어 있었다).
+	#   선재 단언을 **새 계약으로 정정**한 것이지 완화가 아니다: 구성을 그대로 못 박고 수만 늘렸다.
+	var expect_sorted: Array = [attached, "miho_gate1_seed",
 		"miho_gate3_pumpkin", "ken_gate1_pot", "scarlet_gate2_coin"]
 	attached_ids.sort()
 	expect_sorted.sort()
