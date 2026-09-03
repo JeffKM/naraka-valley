@@ -380,6 +380,13 @@ func _initialize() -> void:
 		not m.ranch.has_product(starter) and m.inventory.count_of(want) == 1
 		and m.energy.current < e0)
 
+	# ★[폴리시 R14] SceneTree 밖에서 new()한 노드라 직접 정리한다(누수 경고 방지 — `playtest_bot.gd`
+	#   287-288의 그 규약). `Ranch`는 `extends Node`라 지역 변수가 스코프를 벗어나도 해제되지 않아,
+	#   여기서 만든 순수 원장 전량이 종료까지 ObjectDB에 남아 "instances leaked" 경고가 났다.
+	#   목록은 이 함수가 만든 것 전부다(추가하면 여기에도 같이 적는다).
+	for ledger in [r, rr, rp, rd, r2, rc, rb, rb2, rw, re, rs, rs2, rold, rcl, rsi,
+			rf, rf2, rf3, rg, rgg, rga, rgo]:
+		ledger.free()
 	m.queue_free()
 	await process_frame
 	# 백업 복원(있었으면).

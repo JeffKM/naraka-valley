@@ -186,6 +186,10 @@ func _part_pure() -> void:
 	s5.load_save({"tiles": [[7, 7, 99], "쓰레기", [8]]})
 	_check("⑤d 손상 행은 버리고 손상 티어는 접는다",
 		s5.count() == 1 and s5.tier_at(Vector2i(7, 7)) == Sprinkler.TIER_1)
+	# ★[폴리시 R14] SceneTree 밖에서 new()한 노드 정리 — `Sprinkler`는 `extends Node`라 지역 변수가
+	#   스코프를 벗어나도 해제되지 않아 종료 시 "instances leaked" 경고에 합산됐다.
+	for led in [s, s2, s3, s4, s5]:
+		led.free()
 
 # ══ main 통합 층 ═════════════════════════════════════════════════════════════
 func _part_main() -> void:

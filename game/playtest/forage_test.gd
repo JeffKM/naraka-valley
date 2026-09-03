@@ -59,6 +59,9 @@ func _initialize() -> void:
 	var f3 := Forage.new()
 	f3.load_save({})
 	_check("⑤ 빈 세이브 로드 방어(사료풀 0)", f3.all_tiles().is_empty())
+	# ★[폴리시 R14] 트리 밖 new() 정리 — `Forage`는 `extends Node`라 안 놓으면 종료 시 누수 경고.
+	for n in [f, f2, f3]:
+		n.free()
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)

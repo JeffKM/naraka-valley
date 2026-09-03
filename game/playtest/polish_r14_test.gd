@@ -1,7 +1,8 @@
 extends SceneTree
-# ★[폴리시 14회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#13).
+# ★[폴리시 14회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#13) + 배치 B(#14~#26).
 #
-# 렌즈: R13 diff 리뷰 · 서식 인자 · 약속↔이행 · 입력 맵 충돌.
+# 렌즈: R13 diff 리뷰 · 서식 인자 · 약속↔이행 · 입력 맵 충돌 · 오디오-상태 짝 ·
+#       노드 수명 · 설정 왕복 · 표시 진실성.
 #
 # 무엇을 보증하나(번호 = 14회차 헌트 발견 인덱스):
 #   ① #0 R13이 안식 채취기의 **그림만** 밑동으로 내리고 상호작용·프롬프트는 앵커 칸에 둬,
@@ -30,8 +31,12 @@ extends SceneTree
 #   ⑬ #13 집 꾸미기 모드(C)가 이동을 안 잠가, 문·워프 트리거가 얼어 있는 채 플레이어가 걸어
 #        다니고 모드를 끄는 그 프레임에 얼어 있던 트리거가 한꺼번에 걸렸다.
 #
-# 판정: ①~⑬ 전부 CONFIRMED(REFUTED·DUP·OWNER 없음 — 배치 A 14건이 ⑬개 항목으로 묶인다:
-#       #2·#3이 같은 결함 클래스라 ③ 한 항목).
+# 배치 B(#14~#26)의 항목별 머리말은 아래 "배치 B" 구획에 있다(⑭~㉖).
+#
+# 판정: ①~⑬ + ⑭~㉕ = CONFIRMED, ㉖(#26) = #5 DUP(코드 무수정 — 배치 A 수리가 그 시나리오까지
+#       덮는지 실측으로 확인한다). REFUTED·OWNER 없음. 배치 A 14건이 ⑬개 항목으로 묶이는 것은
+#       #2·#3이 같은 결함 클래스라 ③ 한 항목이기 때문이고, 배치 B의 #18~#22는 같은 결함 클래스
+#       (하네스 노드 수명)라 한 스캐너가 다섯 파일을 함께 잰다.
 #
 # 실행: ./run_tests.sh polish_r14   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -150,7 +155,7 @@ func _initialize() -> void:
 	await _run_checks()
 
 func _run_checks() -> void:
-	print("══ 폴리시 R14 회귀 — 배치 A(#0~#13) ══")
+	print("══ 폴리시 R14 회귀 — 배치 A(#0~#13) + 배치 B(#14~#26) ══")
 	var cleaner := SaveManager.new()
 	cleaner.delete_save()
 	_src = _lines_of_file("res://main.gd")
@@ -173,9 +178,24 @@ func _run_checks() -> void:
 	_check_grange_cap(m)
 	_check_overlay_clicks(m)
 	_check_deco_lock(m)
+	# ── 배치 B(#14~#26) ──
+	_check_edit_button_swallow(m)
+	_check_authoring_modes_exclusive(m)
+	_check_mute_reload(m)
+	_check_b5_mute_intent(m)
+	_check_harness_node_lifetime()
+	_check_title_f11()
+	_check_fullscreen_sync(m)
+	_check_volume_floor(m)
+	_check_greenhouse_days_dup(m)
 
 	print("══ %s ══" % ("polish_r14_test 전체 통과" if _fail == 0 else "결과: FAIL (실패 %d)" % _fail))
 	cleaner.delete_save()
+	# ★[폴리시 R14] 이 파일이 ⑱~㉒로 강제하는 그 규약을 스스로도 지킨다(트리 밖 new() 직접 해제 ·
+	#   무대로 세운 main도 함께 — 종료 시 ObjectDB 누수 경고 0).
+	cleaner.free()
+	m.queue_free()
+	await process_frame
 	quit(1 if _fail > 0 else 0)
 
 
@@ -579,3 +599,337 @@ func _check_deco_lock(m: Node) -> void:
 	_check("⑬g 모드 토글이 다른 모드들과 같은 잠금 형태를 쓴다(`_open_frame`·`_start_dialogue` 결)",
 		_in_func("func _toggle_deco_mode", "player.set_physics_process(false)")
 		and _in_func("func _toggle_deco_mode", "elif not _deco_blocked():"))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 배치 B(#14~#26) — 입력 컨텍스트 · 오디오 상태 짝 · 테스트 노드 수명 · 설정 왕복.
+#
+#   ⑭ #14 좌상단 [배치 모드 끄기] 버튼 클릭이 같은 프레임 월드 LMB로 새어 도구·설치가 발동했다.
+#   ⑮ #15 꾸미기 중 F10 → 두 저작 모드가 겹쳐 선 채 C도 배치 입력도 안 먹었다.
+#   ⑯ #16 음소거가 전역 버스에만 남아 F8 재시작이 통째로 무음인 새 게임을 만들었다.
+#   ⑰ #17 척추 B5 강제 음소거 구간의 [M]을 닫는 자리의 스냅 원복이 조용히 덮어썼다.
+#   ⑱~㉒ #18~#22 playtest 하네스의 트리 밖 `new()` 노드 미해제(ObjectDB 누수 경고).
+#   ㉓ #23 타이틀 설정 패널의 "(F11)" 안내가 거짓 — 그 화면에서만 키가 죽어 있었다.
+#   ㉔ #24 OS 제스처로 창 모드가 바뀌면 `settings.fullscreen`이 영구 stale.
+#   ㉕ #25 볼륨 0%가 무음이 아니었다(바닥이 크로스페이드용 −40 dB).
+#   ㉖ #26 = #5 DUP — 배치 A의 카탈로그 파생이 이 시나리오까지 덮는지 실측으로 확인한다.
+
+
+# ── ⑭ #14 배치 모드 버튼: 끄는 클릭이 월드로 안 샌다 ─────────────────────────
+func _check_edit_button_swallow(m: Node) -> void:
+	print("── ⑭ #14 배치 모드 버튼 클릭 누수 ──")
+	_check("⑭a 버튼이 삼킴 표를 세우는 전용 경로에 배선됐다(맨 `_toggle_edit_mode` 직결 아님)",
+		_in_func("func _make_edit_ui", "_edit_btn_toggle.pressed.connect(_on_edit_toggle_pressed)"))
+	var edit_prev: bool = m._edit_mode
+	var deco_prev: bool = m._deco_mode
+	m._edit_mode = false
+	m._swallow_input_once = false
+	m._on_edit_toggle_pressed()
+	_check("⑭b **켜는** 클릭은 표를 안 세운다(`if _edit_mode: return`이 이미 프레임을 끊는다)",
+		m._edit_mode and not m._swallow_input_once)
+	m._on_edit_toggle_pressed()
+	_check("⑭c **끄는** 클릭이 그 프레임의 LMB를 삼킨다(커서 밑 도구·설치 발동 0)",
+		not m._edit_mode and m._swallow_input_once)
+	_check("⑭d 표를 소비하는 자리가 월드 디스패치보다 위다(R4가 세운 그 소비점 하나 — 복제 0)",
+		_in_func("func _process", "if _swallow_input_once:")
+		and _in_func("func _process", "_swallow_input_once = false"))
+	m._swallow_input_once = false
+	m._edit_mode = edit_prev
+	m._deco_mode = deco_prev
+
+
+# ── ⑮ #15 두 저작 모드는 동시에 설 수 없다 ───────────────────────────────────
+func _check_authoring_modes_exclusive(m: Node) -> void:
+	print("── ⑮ #15 배치 ↔ 꾸미기 상호배타 ──")
+	var guard := 0
+	while m.dialogue.is_open() and guard < 60:
+		m.dialogue.advance()
+		guard += 1
+	var indoor_prev: String = m._indoor
+	m._indoor = "집"
+	m.player.set_physics_process(true)
+	_check("⑮a-pre 무대: 꾸미기에 들어갈 수 있는 자리·때다(집 실내 · 막는 상태 없음)",
+		m._can_deco() and not m._deco_blocked() and not m._deco_mode and not m._edit_mode)
+	m._toggle_deco_mode()
+	_check("⑮b-pre 무대: 꾸미기가 켜졌다", m._deco_mode)
+	m._toggle_edit_mode()
+	_check("⑮c 배치 모드를 켜면 꾸미기가 먼저 접힌다(두 모드가 겹쳐 서지 않는다)",
+		m._edit_mode and not m._deco_mode)
+	_check("⑮d 그 상태에서 이동도 잠긴다(문·워프 트리거가 얼어 있는 채 걷지 않는다 — #13과 같은 계약)",
+		not m.player.is_physics_processing() and m.player.velocity == Vector2.ZERO)
+	m._toggle_edit_mode()
+	_check("⑮e 끄면 이동이 돌아온다(모드가 이동을 영구히 뺏지 않는다)",
+		not m._edit_mode and not m._deco_mode and m.player.is_physics_processing())
+	# 잠금의 주인 — 취침·연출이 들어와 막힌 상태면 끄는 자리가 이동을 켜지 않는다.
+	m._toggle_edit_mode()
+	m._sleeping = true
+	_check("⑯-pre 무대: 취침이 들어오면 `_deco_blocked`가 참이다", m._edit_mode and m._deco_blocked())
+	m._toggle_edit_mode()
+	_check("⑮f 막힌 상태의 끄기는 이동을 안 켠다(『정지 주인 ≠ 재개 주인』 — 암전 뒤 걷기 0)",
+		not m._edit_mode and not m.player.is_physics_processing())
+	m._sleeping = false
+	m.player.set_physics_process(true)
+	m._indoor = indoor_prev
+	_check("⑮g `_process` 순서가 그대로다(배치 early return이 꾸미기 토글보다 위 — 처방은 토글 쪽에 있다)",
+		_in_func("func _process", "if _edit_mode:")
+		and _in_func("func _toggle_edit_mode", "if _edit_mode and _deco_mode:"))
+
+
+# ── ⑯ #16 음소거는 씬 재로드를 넘어 살아남지 않는다 ──────────────────────────
+func _check_mute_reload(m: Node) -> void:
+	print("── ⑯ #16 음소거 되감기 ──")
+	var mi := AudioServer.get_bus_index(GameAudio.MUSIC_BUS)
+	var si := AudioServer.get_bus_index(GameAudio.SFX_BUS)
+	_check("⑯a-pre 무대: Music·SFX 버스가 서 있다(음소거의 실제 주인 = 씬 트리 밖 전역 서버)",
+		mi != -1 and si != -1)
+	if mi == -1 or si == -1:
+		return
+	m.audio.set_muted(true)
+	_check("⑯b-pre 무대: 음소거가 두 버스의 플래그로 남는다(F8 재시작이 이걸 안 지운다)",
+		AudioServer.is_bus_mute(mi) and AudioServer.is_bus_mute(si) and m.audio.is_muted())
+	# 재시작 모사 — 버스는 남긴 채 **새 GameAudio**만 세운다(reload_current_scene이 하는 일 그대로).
+	var fresh := GameAudio.new()
+	root.add_child(fresh)
+	_check("⑯c 새 GameAudio가 서면 버스가 노드 상태로 되감긴다(통째로 무음인 새 게임 0)",
+		not AudioServer.is_bus_mute(mi) and not AudioServer.is_bus_mute(si) and not fresh.is_muted())
+	_check("⑯d 첫 [M]이 실효한다(종전엔 `set_muted(true)`라 아무것도 안 바뀌어 두 번 눌러야 했다)",
+		fresh.toggle_mute() and AudioServer.is_bus_mute(mi) and AudioServer.is_bus_mute(si))
+	fresh.set_muted(false)
+	fresh.free()
+	_check("⑯e 형제 축(버스 볼륨)에는 그 짝이 이미 있었다 — mute만 비었던 비대칭",
+		_in_func("func _setup_settings", "_apply_audio_volumes()"))
+	m.audio.set_muted(false)
+	_check("⑯f 정리 — 무대를 원상복구했다(버스·노드 상태가 같다)",
+		not m.audio.is_muted() and not AudioServer.is_bus_mute(mi))
+
+
+# ── ⑰ #17 B5 강제 음소거 구간의 [M]이 원복 근거를 갱신한다 ───────────────────
+func _check_b5_mute_intent(m: Node) -> void:
+	print("── ⑰ #17 B5 강제 음소거 구간의 사용자 의사 ──")
+	_check("⑰a-pre 무대: 부팅 직후는 강제 음소거 구간이 아니다(구간 밖 [M] 거동은 종전 그대로)",
+		not m._spine_b5_mute_forced)
+	_check("⑰b 폴링이 **구간 중에만** 스냅을 갱신한다(그 표가 조건이다)",
+		_in_func("func _process", "if _spine_b5_mute_forced:")
+		and _in_func("func _process", "_spine_b5_mute_prev = muted_now"))
+	_check("⑰c 구간의 시작 = 강제 음소거를 거는 바로 그 자리",
+		_in_func("func _begin_spine_b5", "_spine_b5_mute_forced = true")
+		and _in_func("func _begin_spine_b5", "audio.set_muted(true)"))
+	_check("⑰d 소리를 되돌리는 자리마다 표를 내린다(닫기 + 중단 2경로 — 되돌린 뒤엔 갱신 대상이 아니다)",
+		_in_func("func _close_spine_puzzle", "_spine_b5_mute_forced = false")
+		and _in_func("func _begin_spine_b5", "_spine_b5_mute_forced = false")
+		and _in_func("func _open_spine_puzzle", "_spine_b5_mute_forced = false"))
+	_check("⑰e 닫는 자리는 여전히 **스냅 하나로만** 되돌린다(무조건 켜기 0 — 형제 `_spine_b5_clock_prev`의 규율)",
+		_in_func("func _close_spine_puzzle", "audio.set_muted(_spine_b5_mute_prev)")
+		and not _in_func("func _close_spine_puzzle", "audio.set_muted(false)"))
+
+
+# ── ⑱~㉒ #18~#22 하네스의 트리 밖 노드 수명 ──────────────────────────────────
+# `extends Node`는 RefCounted가 아니라 지역 변수가 스코프를 벗어나도 안 죽는다 —
+# `add_child` 없이 `new()`한 원장은 직접 `free()` 하지 않으면 종료 시 ObjectDB에 남는다
+# (`playtest_bot.gd:287-288`이 그 규약을 명시한다).
+# 판정은 **파일에서 파생**한다: `extends Node` + `class_name`인 클래스 전량을 res:// 재귀 스캔으로
+# 모으고, 대상 파일이 그중 무엇을 `new()`했는지 변수명까지 뽑아 그 이름 하나하나가 해제 문맥에
+# 등장하는지 본다(수·분모 하드코딩 0 — 파일에 인스턴스를 추가하면 이 단언이 저절로 따라 조인다).
+const _LEAK_TARGETS := [
+	"res://playtest/livestock_test.gd",       # #18 Ranch
+	"res://playtest/forage_test.gd",          # #18 잔여분 Forage
+	"res://playtest/orchard_test.gd",         # #18 잔여분 Orchard
+	"res://playtest/rarecrow_test.gd",        # #18 잔여분 RarecrowLedger
+	"res://playtest/weather_test.gd",         # #18 잔여분 FarmField
+	"res://playtest/inventory_test.gd",       # #19 Inventory
+	"res://playtest/sprinkler_tier_test.gd",  # #20 Sprinkler
+	"res://playtest/chest_test.gd",           # #21 StorageChest
+	"res://playtest/quality_skill_test.gd",   # #22 FarmField·Inventory
+]
+
+# `extends Node`(정확히 — Node2D·Control 등 파생은 제외)이면서 `class_name`을 가진 클래스 이름 집합.
+func _node_ledger_classes() -> Dictionary:
+	var out := {}
+	var files: Array = []
+	_all_gd_files("res://", files)
+	for path in files:
+		var lines := _lines_of_file(String(path))
+		var is_node := false
+		var cname := ""
+		for i in mini(lines.size(), 6):
+			var ln := lines[i].strip_edges()
+			if ln == "extends Node":
+				is_node = true
+			elif ln.begins_with("class_name "):
+				cname = ln.substr(11).strip_edges()
+		if is_node and cname != "":
+			out[cname] = true
+	return out
+
+# 그 파일이 트리 밖에서 만든 (변수명 → 클래스) 표.
+func _new_locals_of(lines: PackedStringArray, classes: Dictionary) -> Dictionary:
+	var out := {}
+	var re := RegEx.new()
+	re.compile("^\\t+var ([A-Za-z_][A-Za-z0-9_]*) := ([A-Za-z_][A-Za-z0-9_]*)\\.new\\(\\)")
+	for ln in lines:
+		var mt := re.search(ln)
+		if mt == null:
+			continue
+		var cls := mt.get_string(2)
+		if classes.has(cls):
+			out[mt.get_string(1)] = cls
+	return out
+
+# 해제 문맥으로 읽히는 줄 전량(직접 `x.free()` + `for n in [ … ]` 배열 리터럴 줄).
+func _free_context_text(lines: PackedStringArray) -> String:
+	var parts: Array = []
+	var in_list := false
+	for ln in lines:
+		if ln.contains(".free()") or ln.contains(".queue_free()"):
+			parts.append(ln)
+		var stripped := ln.strip_edges()
+		if in_list:
+			parts.append(ln)
+			if stripped.ends_with("]:"):
+				in_list = false
+		elif stripped.begins_with("for ") and stripped.contains(" in [") and not stripped.ends_with("]:"):
+			parts.append(ln)
+			in_list = true
+		elif stripped.begins_with("for ") and stripped.contains(" in ["):
+			parts.append(ln)
+	return "\n".join(PackedStringArray(parts))
+
+func _check_harness_node_lifetime() -> void:
+	print("── ⑱~㉒ #18~#22 하네스 노드 수명 ──")
+	var classes := _node_ledger_classes()
+	_check("⑱a-pre 무대: `extends Node` + `class_name` 클래스를 res:// 재귀 스캔으로 모았다(%d종 — Ranch·Inventory 포함)"
+			% classes.size(),
+		classes.has("Ranch") and classes.has("Inventory") and classes.has("Sprinkler")
+		and classes.has("StorageChest") and classes.has("FarmField") and classes.has("Forage")
+		and classes.has("Orchard") and classes.has("RarecrowLedger"))
+	for path in _LEAK_TARGETS:
+		var lines := _lines_of_file(String(path))
+		var locals := _new_locals_of(lines, classes)
+		var ctx := _free_context_text(lines)
+		var missing: Array = []
+		for v in locals:
+			var re := RegEx.new()
+			re.compile("\\b" + String(v) + "\\b")
+			if re.search(ctx) == null:
+				missing.append("%s(%s)" % [v, locals[v]])
+		var base := String(path).get_file()
+		_check("⑱b %s — 트리 밖 %s를 만들고 전량 해제한다%s"
+				% [base, str(locals.values()).replace("\"", ""),
+					"" if missing.is_empty() else " · 미해제 " + str(missing)],
+			not locals.is_empty() and missing.is_empty())
+	# 반례(올바른 형태의 선재 근거) — 이 규약은 하네스가 이미 알고 있던 것이다.
+	var bot := "\n".join(_lines_of_file("res://playtest/playtest_bot.gd"))
+	_check("⑱c 규약의 출처가 하네스 안에 있다(`playtest_bot.gd`의 그 주석·그 해제 줄)",
+		bot.contains("SceneTree 밖에서 new()한 노드라 직접 정리한다") and bot.contains("n.free()"))
+
+
+# ── ㉓ #23 타이틀의 "(F11)" 안내가 참이 된다 ─────────────────────────────────
+var _fs_signal_seen := 0
+
+func _on_title_fullscreen() -> void:
+	_fs_signal_seen += 1
+
+func _check_title_f11() -> void:
+	print("── ㉓ #23 타이틀 F11 ──")
+	var tlines := _lines_of_file("res://title_screen.gd")
+	var tsrc := "\n".join(tlines)
+	_check("㉓a-pre 무대: 설정 패널이 그 단축키를 광고한다(안내의 실물)", tsrc.contains("\"(F11)\""))
+	var ts := TitleScreen.new()
+	ts.fullscreen_nudged.connect(_on_title_fullscreen)
+	_fs_signal_seen = 0
+	var ev := InputEventKey.new()
+	ev.keycode = KEY_F11
+	ev.pressed = true
+	ts._input(ev)
+	_check("㉓b 타이틀에서 F11이 실제로 전체화면 신호를 올린다(광고한 그 키가 먹는다)",
+		_fs_signal_seen == 1)
+	var ev2 := InputEventKey.new()
+	ev2.keycode = KEY_F11
+	ev2.pressed = false
+	ts._input(ev2)
+	_check("㉓c 떼는 이벤트는 안 센다(한 번 누름 = 한 번 토글)", _fs_signal_seen == 1)
+	ts.fullscreen_nudged.disconnect(_on_title_fullscreen)
+	ts.free()
+	_check("㉓d 적용·영속의 주인은 여전히 main 한 곳이다(이 화면은 신호만 올린다 — 체크박스와 같은 창구)",
+		tsrc.contains("fullscreen_nudged.emit()") and not tsrc.contains("DisplayServer.window_set_mode"))
+
+
+# ── ㉔ #24 창 모드가 앱 밖에서 바뀌어도 설정 값이 따라온다 ───────────────────
+func _check_fullscreen_sync(m: Node) -> void:
+	print("── ㉔ #24 창 모드 → 설정 값 동기화 ──")
+	var cfg_prev := PackedByteArray()
+	var had_cfg := FileAccess.file_exists(GameSettings.PATH)
+	if had_cfg:
+		var fr := FileAccess.open(GameSettings.PATH, FileAccess.READ)
+		if fr != null:
+			cfg_prev = fr.get_buffer(fr.get_length())
+	var actual: bool = m._window_is_fullscreen()
+	_check("㉔a-pre 무대: 실제 창 모드를 두 값(FULLSCREEN·EXCLUSIVE)으로만 센다(R13이 세운 술어)",
+		_in_func("func _window_is_fullscreen", "Window.MODE_EXCLUSIVE_FULLSCREEN"))
+	# OS 제스처 모사 — 창 쪽만 바뀌고 값이 안 따라온 상태를 직접 만든다.
+	m.settings.fullscreen = not actual
+	_check("㉔b-pre 무대: 값이 실제와 어긋났다(체크박스·settings.cfg가 거짓을 말하는 그 상태)",
+		m.settings.fullscreen != m._window_is_fullscreen())
+	m._sync_fullscreen_setting()
+	_check("㉔c 동기화가 값을 실제로 끌어온다(표시·저장·재기동이 다시 같은 것을 말한다)",
+		m.settings.fullscreen == m._window_is_fullscreen())
+	_check("㉔d 멱등이다 — 이미 맞으면 아무것도 안 쓴다(저장 IO 0)",
+		not m.settings.set_fullscreen(m._window_is_fullscreen()))
+	_check("㉔e 창의 변화 신호가 그 동기화에 배선됐다(듣는 곳이 없던 것이 결함의 뿌리)",
+		m.get_window().size_changed.is_connected(Callable(m, "_sync_fullscreen_setting")))
+	_check("㉔f 방향이 `_apply_fullscreen`과 반대다(저건 값→창 · 이건 창→값 — 두 방향이 다 있어야 왕복이 닫힌다)",
+		_in_func("func _sync_fullscreen_setting", "settings.set_fullscreen(_window_is_fullscreen())")
+		and _in_func("func _apply_fullscreen", "win.mode = Window.MODE_FULLSCREEN if on else Window.MODE_WINDOWED"))
+	# 무대 원복(설정 파일 포함 — 이 스위트가 기기 환경설정을 바꾸지 않는다).
+	if had_cfg:
+		var fw := FileAccess.open(GameSettings.PATH, FileAccess.WRITE)
+		if fw != null:
+			fw.store_buffer(cfg_prev)
+			fw.close()
+		m.settings.load_settings()
+	elif FileAccess.file_exists(GameSettings.PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(GameSettings.PATH))
+
+
+# ── ㉕ #25 볼륨 0% = 실제 무음 ───────────────────────────────────────────────
+func _check_volume_floor(m: Node) -> void:
+	print("── ㉕ #25 볼륨 바닥(0%) ──")
+	var mi := AudioServer.get_bus_index(GameAudio.MUSIC_BUS)
+	if mi == -1:
+		_check("㉕a-pre 무대: Music 버스가 서 있다", false)
+		return
+	var vol_prev: float = m.settings.music_volume
+	m.audio.set_music_volume(0.0)
+	var db0 := AudioServer.get_bus_volume_db(mi)
+	_check("㉕a 0%%면 실질 무음 바닥으로 내려간다(%.1f dB — settings.gd가 못 박은 \"0=무음\" 계약)" % db0,
+		is_equal_approx(db0, GameAudio.MUTE_DB) and db0 <= -80.0)
+	_check("㉕b 그 바닥은 크로스페이드용 값이 아니다(과도 값과 정상 값의 뜻이 다르다)",
+		GameAudio.MUTE_DB < GameAudio.SILENT_DB and is_equal_approx(GameAudio.SILENT_DB, -40.0))
+	m.audio.set_music_volume(0.002)
+	var db_tiny := AudioServer.get_bus_volume_db(mi)
+	_check("㉕c 단조롭다 — 0.002(%.1f dB)가 0.0보다 **크다**(종전엔 −54 dB로 더 조용한 역전이었다)" % db_tiny,
+		db_tiny > db0)
+	m.audio.set_music_volume(0.5)
+	_check("㉕d 0이 아닌 값은 종전 그대로 `linear_to_db`다(바닥만 고쳤다)",
+		is_equal_approx(AudioServer.get_bus_volume_db(mi), linear_to_db(0.5)))
+	m.audio.set_music_volume(vol_prev)
+	_check("㉕e 정리 — 설정 볼륨으로 되돌렸다",
+		is_equal_approx(AudioServer.get_bus_volume_db(mi), linear_to_db(vol_prev)) or vol_prev <= 0.001)
+
+
+# ── ㉖ #26 = #5 DUP: 배치 A의 카탈로그 파생이 이 시나리오를 덮는다 ───────────
+func _check_greenhouse_days_dup(m: Node) -> void:
+	print("── ㉖ #26 (DUP of #5) 늘봄방 공기 사전 고지 ──")
+	var gh := Carpenter.build_days(Carpenter.PROJ_GREENHOUSE)
+	var coop := Carpenter.build_days(Carpenter.PROJ_BIG_COOP)
+	_check("㉖a-pre 무대: #26이 지목한 어긋남이 표에 실재한다(늘봄방 %d일 ≠ 큰 넋둥우리 %d일)"
+			% [gh, coop],
+		gh != coop)
+	var header: String = m._woodshop_text()
+	_check("㉖b 발주 **전** 고지가 늘봄방의 실제 공기를 포함한다(사기 전에 보는 그 화면)",
+		header.contains(str(gh)))
+	_check("㉖c 옛 하드코딩이 사라졌다 — 헤더가 한 프로젝트 값을 전 매대 규칙으로 말하지 않는다",
+		not header.contains("공기 %d일" % coop))
+	_check("㉖d 사전 고지와 사후 알림이 같은 원장을 본다(`Carpenter.build_days` 하나 — 1일 어긋남 0)",
+		_in_func("func _build_days_text", "Carpenter.build_days(String(id))")
+		and _in_func("func _try_order_build", "Carpenter.build_days(project_id)"))

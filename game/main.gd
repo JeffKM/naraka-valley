@@ -3043,6 +3043,13 @@ var _spine_b5_closing := false
 # ★ 컷신이 시계를 `_cutscene_clock_prev`로 스냅하는 것과 정확히 같은 규율이다: "끝나면 무조건
 #   켠다"로 두면 *다른 이유로* 멈춰 있던 것까지 되살린다.
 var _spine_b5_mute_prev := false
+# ★[폴리시 R14] **지금이 B5 강제 음소거 구간인가**(발동 → 컷신 → 내면 공간 → 닫기). 켜져 있는 동안
+#   눌린 [M]은 위 `_spine_b5_mute_prev` 스냅을 그 값으로 갱신한다 — 안 그러면 구간 중 플레이어가
+#   표명한 의사를 닫는 자리가 조용히 덮어썼다(㉠음소거로 들어가 안에서 소리를 켰는데 나올 때 다시
+#   꺼지고, ㉡소리를 켠 채 들어가 안에서 [M]을 눌러 적막을 되찾아도 나올 때 다시 켜진다). 화면에
+#   음소거 표시가 하나도 없어 플레이어는 그 뒤집힘의 이유를 볼 방법도 없다. 형제 스냅인 시계가
+#   `_spine_b5_clock_prev`에서 못 박은 그 규율("스냅이 진실이어야 한다")의 사용자-의사 축이다.
+var _spine_b5_mute_forced := false
 var _spine_b5_clock_prev := true
 # 이번 재생의 파편 표(`Spine.fragments()` 스냅 — 그리기·이름 조회용). 세션과 함께 버려진다.
 var _spine_b5_frags: Array = []
@@ -4806,11 +4813,43 @@ func _save_layouts() -> void:
 #   [ ] = 팔레트 순환 · Ctrl+S = layout.json 저장. 좌표는 _prop_layouts에 직접 쓰고 _save_layouts로 영속.
 func _toggle_edit_mode() -> void:
 	_edit_mode = not _edit_mode
+	# ★[폴리시 R14] 두 저작 모드(F10 배치 · C 꾸미기)는 **동시에 설 수 없다** — 켜는 자리에서 먼저
+	#   접는다. `_process`의 순서가 [배치 토글 → `if _edit_mode: return` → 꾸미기 토글]이라, 꾸미기
+	#   중에 F10을 누르면 그 아래 C 토글 줄과 `_deco_blocked()` 자동 접기가 **매 프레임 도달 불가**가
+	#   되어 꾸미기를 끌 수 없었다. 반대로 `_unhandled_input`은 `if _deco_mode: _deco_input(event);
+	#   return`이 위라 배치 모드의 드래그·Del·[ ]·Ctrl+S가 한 줄도 안 먹었다 — 두 모드가 겹쳐 선 채
+	#   **어느 쪽 종료 키도 안 듣는** 상태(탈출구는 F10 한 번 더). `_toggle_deco_mode`가 켜는 자리에서
+	#   조회 패널을 먼저 접는 것과 같은 결이다.
+	if _edit_mode and _deco_mode:
+		_toggle_deco_mode()
+	# ★[폴리시 R14] **이동도 함께 잠근다** — 머리말이 선언한 "ON이면 _process가 시뮬을 멈춘다"의
+	#   미집행 축(#13이 꾸미기 쪽에 세운 그 잠금과 같은 형태·같은 이유: player 이동은 main `_process`가
+	#   아니라 `_physics_process`에서 방향키를 직접 읽어, 문·워프 트리거가 얼어붙은 채 걸어 다녔다).
+	#   위 꾸미기 접기가 이동을 되돌려 놓고 오는 경로도 여기서 다시 잠근다(순서가 계약).
+	if player != null:
+		if _edit_mode:
+			player.set_physics_process(false)
+			player.velocity = Vector2.ZERO
+		elif not _deco_blocked():
+			player.set_physics_process(true)
 	_edit_sel_entry = -1
 	_edit_sel_tile = -1
 	_edit_dragging = false
 	_edit_update_ui()   # 안내는 패널 버튼·오버레이가 한다(중앙 _notice 길게 안 띄움)
 	queue_redraw()
+
+# ★[폴리시 R14] 좌상단 [배치 모드 끄기] **버튼 클릭 전용** 경로 — 끄는 그 프레임의 LMB를 삼킨다.
+#   버튼은 CanvasLayer 위 상시 표시라 편집 중 클릭으로 모드를 끌 수 있는데, Godot은 입력을
+#   `_process`보다 먼저 흘리므로 이 클릭으로 `_edit_mode`가 false가 되면 같은 프레임의 `_process`가
+#   배치 early return을 **통과해** 월드 디스패치까지 내려갔다 — 그 LMB는 아직
+#   `Input.is_action_just_pressed("use_tool")`가 참이라 커서 밑에서 도구가 돌거나(`_use_tool`)
+#   스프링클러·화분·레어크로우·게잡이통·업화로·결정기를 들고 있었다면 그 자리에 설치물이 놓였다.
+#   R4가 프레임 우상단 [X]에 세운 `_swallow_input_once`와 같은 표다. **켜는 클릭에는 안 세운다** —
+#   그쪽은 `if _edit_mode: return`이 이미 프레임을 끊어 샐 곳이 없다(삼키는 범위를 새는 축으로만 좁힌다).
+func _on_edit_toggle_pressed() -> void:
+	_toggle_edit_mode()
+	if not _edit_mode:
+		_swallow_input_once = true
 
 # ★ 맥 친화 배치 모드 패널(좌상단). 키 없이 마우스만으로: [배치 모드] 토글 + (ON시) [이전][팔레트명]
 # [다음][저장][삭제]. 디버그/에디터 전용(_ready에서 OS.has_feature("editor")일 때만 생성).
@@ -4826,7 +4865,7 @@ func _make_edit_ui() -> void:
 	$CanvasLayer.add_child(box)
 	_edit_btn_toggle = Button.new()
 	_edit_btn_toggle.focus_mode = Control.FOCUS_NONE
-	_edit_btn_toggle.pressed.connect(_toggle_edit_mode)
+	_edit_btn_toggle.pressed.connect(_on_edit_toggle_pressed)
 	box.add_child(_edit_btn_toggle)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
@@ -10112,6 +10151,14 @@ func _setup_settings() -> void:
 	settings.load_settings()
 	_apply_audio_volumes()
 	_apply_fullscreen(settings.fullscreen)
+	# ★[폴리시 R14] **창 모드가 앱 밖에서 바뀌어도 값이 따라온다.** 종전엔 `settings.fullscreen`을
+	#   쓰는 writer가 F11·옵션 탭 두 핸들러뿐이라, macOS 초록 버튼/⌃⌘F처럼 **OS가 창 모드를 바꾸는
+	#   경로**(R13이 `_window_is_fullscreen` 주석에서 이미 실재를 기록한 그 경로)에서 값이 영구히
+	#   실제와 어긋났다: 체크박스가 꺼짐인데 화면은 전체화면이라 "껐더니 꺼지는" 조작이 되고,
+	#   settings.cfg도 낡은 값이라 재기동 때 사용자가 껐던 전체화면이 되살아났다(왕복 5단계 중
+	#   '변경→저장' 고리가 OS발 변경에서 끊긴 것). 전체화면 진입·이탈은 창 크기를 바꾸므로
+	#   `size_changed`가 그 변화의 신호원이 된다 — 값이 실제와 다를 때만 쓰고 저장한다(멱등).
+	get_window().size_changed.connect(_sync_fullscreen_setting)
 	# 옵션 탭 설정 조작 신호(볼륨 −/+·전체화면 토글) — main이 실제 적용·영속을 수행.
 	frame.music_vol_changed.connect(_on_music_vol_changed)
 	frame.sfx_vol_changed.connect(_on_sfx_vol_changed)
@@ -10132,6 +10179,16 @@ func _apply_audio_volumes() -> void:
 func _window_is_fullscreen() -> bool:
 	var m := get_window().mode
 	return m == Window.MODE_FULLSCREEN or m == Window.MODE_EXCLUSIVE_FULLSCREEN
+
+# ★[폴리시 R14] 실제 창 모드 → 설정 값(위 `size_changed` 구독자). 방향이 `_apply_fullscreen`과
+#   **반대**인 유일한 자리다: 저건 값을 창에 밀고, 여기는 앱 밖에서 바뀐 창을 값으로 끌어온다.
+#   F11·체크박스 경로에서도 같이 불리지만 그때는 값이 이미 맞아 `set_fullscreen`이 false를 돌려
+#   저장 IO가 안 난다(멱등). 부팅 극초기(settings 생성 전)엔 null 가드 — F11 핸들러와 같은 결.
+func _sync_fullscreen_setting() -> void:
+	if settings == null:
+		return
+	if settings.set_fullscreen(_window_is_fullscreen()):
+		settings.save_settings()
 
 # 창 ↔ 전체화면 적용(값→창모드). 실제 창 상태만 바꾸고 값은 GameSettings가 든다.
 func _apply_fullscreen(on: bool) -> void:
@@ -13049,8 +13106,15 @@ func _process(delta: float) -> void:
 	_tick_live_canvas()   # ★[폴리시 R10] 타일보다 잘게 움직이는 그림(승마·혼 감지 마커)의 재드로우
 	# 음소거 토글(M) — 연출·대화·마무리 화면 어디서든 받는다(입력 가드보다 위, UX 토글이라
 	# 게임 상태와 무관). audio가 Music·SFX 버스를 함께 음소거한다.
+	# ★[폴리시 R14] 척추 B5 **강제 음소거 구간에서 눌린 M은 원복 근거를 갱신한다.** 이 줄이 모든
+	#   입력 가드보다 위라 B5 컷신·내면 공간이 도는 내내 살아 있는데, 닫는 자리는 진입 때 스냅해 둔
+	#   `_spine_b5_mute_prev` 하나로만 되돌린다 — 그래서 구간 중 플레이어가 표명한 의사(소리를 켰다·
+	#   껐다)가 닫히는 순간 조용히 취소됐다. 스냅이 **마지막 사용자 의사**를 들게 해 그 취소를 없앤다
+	#   (구간 밖에서는 종전과 한 글자도 다르지 않다 — `_spine_b5_mute_forced` 선언부 참조).
 	if Input.is_action_just_pressed("mute_audio"):
-		audio.toggle_mute()
+		var muted_now := audio.toggle_mute()
+		if _spine_b5_mute_forced:
+			_spine_b5_mute_prev = muted_now
 	# 전체화면 토글(F11) — 음소거와 같은 결로 입력 가드보다 위에서 어디서든 받는다.
 	if Input.is_action_just_pressed("toggle_fullscreen"):
 		_toggle_fullscreen()
@@ -21125,12 +21189,14 @@ func _maybe_spine_b5() -> void:
 # 여기서 직접 죽이고(원복 근거를 먼저 스냅한다 — 컷신의 시계 스냅과 같은 규율) 나머지는 러너에 맡긴다.
 func _begin_spine_b5() -> void:
 	_spine_b5_mute_prev = audio.is_muted()
+	_spine_b5_mute_forced = true        # ★[폴리시 R14] 이 구간의 [M]은 위 스냅을 갱신한다(선언부 참조)
 	audio.set_muted(true)               # §6.5 2단 "모든 인게임 소음(BGM·환경음) 소거 → 적막"
 	_spine_b5_pending = true
 	# 예약 대화 0으로 튼다 — 지문은 컷신이 끝난 뒤 **내면 공간 안에서** 선다(_end_cutscene 참조).
 	if not _begin_cutscene(Spine.B5_CUTSCENE.duplicate(true), "", PackedStringArray()):
 		_spine_b5_pending = false       # 러너가 거절(중첩 재생 등) — 소리를 되돌리고 없던 일로
 		audio.set_muted(_spine_b5_mute_prev)
+		_spine_b5_mute_forced = false
 
 # 내면 공간 개시 — 세션을 세우고 오프닝 지문을 연다.
 func _open_spine_puzzle() -> void:
@@ -21139,6 +21205,7 @@ func _open_spine_puzzle() -> void:
 	if not session.start():
 		# 이을 것이 없는 판(파편 0~1) — 여기까지 올 수 없는 조합이지만, 조용히 원복한다.
 		audio.set_muted(_spine_b5_mute_prev)
+		_spine_b5_mute_forced = false
 		player.set_physics_process(true)
 		return
 	spine_puzzle = session
@@ -21222,6 +21289,7 @@ func _close_spine_puzzle() -> void:
 	if not _sleeping:
 		clock.running = _spine_b5_clock_prev
 	audio.set_muted(_spine_b5_mute_prev)
+	_spine_b5_mute_forced = false   # ★[폴리시 R14] 구간 종료 — 이후의 [M]은 스냅을 안 건드린다
 	interact_prompt.visible = false
 	if not _run_over:
 		player.set_physics_process(not _sleeping)

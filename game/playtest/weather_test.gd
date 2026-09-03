@@ -247,6 +247,7 @@ func _initialize() -> void:
 	f.water(t_a)
 	f.advance_day()
 	_check("③f 무인자 호출은 종전 그대로 자란다(기본값 = 정확히 중립)", f.grown_days_of(t_a) == 1)
+	f.free()   # ★[폴리시 R14] 트리 밖 new() 정리 — `FarmField`는 `extends Node`(누수 경고 방지)
 
 	# ── ④ 방목 게이트 ───────────────────────────────────────────────────────
 	print("── ④ 방목 날씨 게이트(_weather_calm) ──")
