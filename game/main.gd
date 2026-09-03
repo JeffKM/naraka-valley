@@ -10704,7 +10704,12 @@ func _on_day_advanced(day: int) -> void:
 			# ★[S8-T7 / ADR-0066 결정 8] 안방 확장 — Ranch 무관 첫 프로젝트. 실효(방 rect 확장·
 			#   deco bounds 재주입·카메라)는 일괄 헬퍼가 진다(원장은 "다 지어졌다"까지만 안다).
 			_refresh_home_expansion()
-			_notice("안방 확장 완공 — 본가가 넓어졌다")
+			# ★[폴리시 R16 #10] `keep` — 완공 3종은 `carpenter.advance_day`가 세이브 원장으로 딱
+			#   한 번만 돌려주는 값이라(바로 위 "원장은 '다 지어졌다'까지만 안다") 밀려나면 영영
+			#   다시 안 뜬다. 같은 프레임이 뒤이어 네 줄(의뢰 만료·생일 D-1·보부상·전령)을 더 미는데
+			#   `NoticeFeed.MAX_ITEMS`가 4라 축출된다. R11이 도감 완주 트로피·혼례 배너에 건 그
+			#   처방의 누락된 형제다(판별 근거 = "밀려나면 다시 오지 않는 1회성 래치인가").
+			_notice("안방 확장 완공 — 본가가 넓어졌다", NOTICE_SECS, false, null, Color(0, 0, 0, 0), true)
 		elif built == Carpenter.PROJ_STABLE:
 			# ★[S10-T4 / ADR-0069 결정 6] 마구간 완공 = **휘파람 증정**. 원장은 "다 지어졌다"까지만
 			#   알고, 그 실효(소환 도구를 손에 쥐여 주는 일)는 안방 확장과 정확히 같은 자리에서
@@ -10715,13 +10720,15 @@ func _on_day_advanced(day: int) -> void:
 			# ★[S10-T5 / ADR-0069 결정 8] 늘봄방 완공 = **실내 구역 개설**. 안방 확장과 정확히 같은
 			#   자리·같은 문법(id 분기 하나 + 일괄 헬퍼) — 원장은 "다 지어졌다"까지만 안다.
 			_refresh_greenhouse()
-			_notice("늘봄방 완공 — 절기가 바뀌어도 시들지 않는 밭이 생겼다 (본가 동쪽)", NOTICE_SECS * 2.0)
+			_notice("늘봄방 완공 — 절기가 바뀌어도 시들지 않는 밭이 생겼다 (본가 동쪽)",
+				NOTICE_SECS * 2.0, false, null, Color(0, 0, 0, 0), true)   # ★[폴리시 R16 #10] keep(위 주석)
 		elif built != "":
 			var bld := Carpenter.building_of(built)
 			if bld != "" and ranch != null:
 				ranch.upgrade_building(bld)
 			_notice("%s 완공 — 이제 %d마리까지 들일 수 있다" % [Carpenter.name_of(built),
-				ranch.capacity_of(bld) if bld != "" and ranch != null else 0])
+				ranch.capacity_of(bld) if bld != "" and ranch != null else 0],
+				NOTICE_SECS, false, null, Color(0, 0, 0, 0), true)   # ★[폴리시 R16 #10] keep(위 주석)
 		# ★[S10-T4] 휘파람 재지급 훅 — 멱등이라 매일 불러도 공짜다(이미 들고 있으면 즉시 false).
 		#   완공 아침에 가방이 꽉 차 증정이 밀렸거나, 어떤 경로로든 휘파람이 사라진 세이브를
 		#   **다음 아침이 스스로 복구한다**(마구간을 지었는데 말을 못 부르는 봉쇄가 남지 않게).
@@ -14877,6 +14884,11 @@ func _use_tool() -> void:
 		#   ★혼력은 **AoE 1회 = 단일 비용**이다(아래 free_verb/cost 로직 불변): 스타듀의 차지드 도구도
 		#     한 번의 스윙이라 한 번 값을 매기고, 그게 티어를 사는 이유(편의 축)다.
 		var hoed := 0
+		# ★[폴리시 R16 #12] 유품 만재 알림을 **스윙당 한 줄로 집계**한다. 종전엔 AoE 루프 안에서
+		#   칸마다 push해, 3×3 티어로 한 번 갈면 글자까지 똑같은 줄이 최대 9번 밀렸다 —
+		#   `NoticeFeed.MAX_ITEMS`가 4라 큐가 한 문장의 복제본으로 가득 차고 직전에 떠 있던 수확
+		#   토스트·숙련 레벨업이 전부 축출됐다. 정보(몇 칸을 못 캤나)는 숫자로 남긴다.
+		var relic_blocked := 0
 		for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE)):
 			# ★[S10-T5] 칸의 주인 밭으로 라우팅(늘봄방 경작면이면 greenhouse_farm). 좌표 공간이
 			#   갈려 있어 노지 AoE는 한 칸도 늘봄방으로 새지 않는다(그 반대도 같다).
@@ -14888,7 +14900,7 @@ func _use_tool() -> void:
 			var relic_id := Museum.relic_roll(clock.day, at) \
 				if _region == RegionCatalog.HOME and not plot.is_tilled(at) else ""
 			if relic_id != "" and not inventory.can_add(relic_id, 1):
-				_notice("발밑에 무언가 걸린다 — 백팩이 가득 차 캘 수 없다 ([Tab] 가방에서 자리를 비우고 다시)")
+				relic_blocked += 1
 				continue
 			if not plot.hoe(at):
 				continue
@@ -14899,6 +14911,9 @@ func _use_tool() -> void:
 			if relic_id != "" and inventory.add_item(relic_id, 1):
 				_toast_item(relic_id, 1)
 				_notice("유품 발굴! %s — 삼도천 혼백관에 기증하자" % ItemCatalog.name_of(relic_id))
+		if relic_blocked > 0:
+			_notice("발밑에 무언가 걸린다 — 백팩이 가득 차 %d칸을 캘 수 없다 ([Tab] 가방에서 자리를 비우고 다시)"
+				% relic_blocked)
 		if hoed > 0:
 			verb = "괭이질"
 	elif item == ItemCatalog.WATERING_CAN:
@@ -15398,6 +15413,15 @@ func _grant_boatman_rod_lines() -> PackedStringArray:
 		_boatman_rod_given = true      # 구세이브 하위호환 — 이미 가진 사람에게 두 번 주지 않는다
 		return PackedStringArray()
 	if not inventory.add_item(ItemCatalog.ROD_T1, 1):
+		# ★[폴리시 R16 #11] **침묵이었다.** 플래그도 안 서고 증정 대사도 안 붙어 평소 잡담만
+		#   나가는데, ROD_T1은 price 0(증정품)이라 매대에 서지 않고 지급처가 이 함수 하나뿐이다
+		#   — 낚시 사슬 전체의 입구가 왜 안 열렸는지 알 단서가 화면 어디에도 없었다. 형제 증정
+		#   창구(휘파람·혼례 부적·행사 부상·혼백관 답례)는 전부 같은 자리에서 말한다.
+		#   ★문구는 형제 **증정** 창구(`_grant_mount_whistle`)의 관용구를 따른다("가방을 비우면 받는다").
+		#     세계 동작 쪽 형제들이 쓰는 "[Tab] 가방에서 자리를 비우고"를 안 쓰는 이유는 이 알림이
+		#     **대화 중**에 뜨기 때문이다 — `_process`의 대화 가드가 메뉴 토글보다 위에서 return하므로
+		#     그 순간 Tab은 죽은 키다(배치 A #3이 프레임 안에서 잡은 그 거짓 광고와 같은 종류).
+		_notice("가방이 가득 차 낡은 낚싯대를 못 받았다 — 가방을 비우고 다시 말을 걸면 받는다")
 		return PackedStringArray()     # 백팩 가득 — 다음 대화에 다시 시도(플래그 안 세움)
 	_boatman_rod_given = true
 	_toast_item(ItemCatalog.ROD_T1, 1)
@@ -15418,6 +15442,7 @@ func _grant_mugol_sword_lines() -> PackedStringArray:
 		_mugol_sword_given = true      # 구세이브·디버그 지급 하위호환 — 이미 가진 사람에게 두 번 주지 않는다
 		return PackedStringArray()
 	if not inventory.add_item(WeaponCatalog.SWORD_RUSTY, 1):
+		_notice("가방이 가득 차 녹슨 혼검을 못 받았다 — 가방을 비우고 다시 말을 걸면 받는다")   # ★[폴리시 R16 #11](위 쌍둥이 주석)
 		return PackedStringArray()     # 백팩 가득 — 다음 대화에 다시 시도(플래그 안 세움)
 	_mugol_sword_given = true
 	_toast_item(WeaponCatalog.SWORD_RUSTY, 1)
@@ -16630,6 +16655,15 @@ func _use_crystalarium(t: Vector2i) -> void:
 			% ItemCatalog.name_of(inside))
 		return
 	audio.sfx("ui")
+	# ★[폴리시 R16 #8] **성공 경로가 침묵이었다.** 형제 설치물 회수 창구 여섯(스프링클러·화분·
+	#   레어크로우·게잡이통·채취기·업화로)은 전부 걷은 사실을 말하는데 결정기만 블립 한 번으로
+	#   끝났다 — 기계와 안의 보석이 백팩에 들어오고 **며칠치 복제 진행이 사라지는데** 화면엔 한
+	#   글자도 안 떴다. 잃은 것을 함께 말하는 문법은 화분이 이미 쓰던 것이다("심긴 것도 함께 사라졌다").
+	if inside != "":
+		_notice("결정기를 걷었다 — 안의 %s도 돌려받았다(여물던 복제는 사라졌다)"
+			% ItemCatalog.name_of(inside))
+	else:
+		_notice("결정기를 걷었다")
 	queue_redraw()
 
 # 결정기 프롬프트 — 상태별 한 줄(_use_crystalarium의 사다리와 같은 순서).
@@ -17605,9 +17639,14 @@ func _on_frame_takeback(id: String) -> void:
 		if added > 0:
 			ship_bin.take_back(id, added, int(q))
 			restored += added
-	if restored > 0:
-		audio.sfx("ui")
-		_notice("출하함에서 %s %d개 회수" % [ItemCatalog.name_of(id), restored])
+	# ★[폴리시 R16 #9] `restored == 0`(백팩이 한 개도 못 받음)이 **완전 무반응**이었다 — 같은
+	#   패널의 형제 둘(`_on_frame_larder_take`·`_on_frame_chest_take`)은 같은 자리에서 말하는데
+	#   출하함 탭만 침묵해, 롤백이 거절된 것인지 클릭이 안 먹은 것인지 알 길이 없었다.
+	if restored <= 0:
+		_notice("백팩이 가득 찼습니다")
+		return
+	audio.sfx("ui")
+	_notice("출하함에서 %s %d개 회수" % [ItemCatalog.name_of(id), restored])
 
 # ── ★[S6-T1 / ADR-0064 결정 3] 곳간 적재/회수(프레임 시그널 핸들러) ────────────
 # 곳간 패널에서 백팩 슬롯을 클릭하면 그 슬롯을 통째로 곳간에 적재한다(인벤토리에서 빠짐).
