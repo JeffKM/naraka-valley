@@ -134,7 +134,7 @@ func _run_checks() -> void:
 	_check_grant_notice(m)
 	_check_relic_aggregate(m)
 	_check_prompt_exec_order(m)
-	_check_resident_tile_guard(m)
+	await _check_resident_tile_guard(m)
 	_check_barn_pot(m)
 
 	print("── 결과: %s (실패 %d) ──" % ["통과" if _fail == 0 else "실패", _fail])
@@ -796,8 +796,8 @@ func _check_prompt_exec_order(m: Node) -> void:
 	var exec_gate := _line_of("if _at_dungeon_gate():")
 	var exec_narak := _line_of("if _at_narak_mouth() and Input.is_action_just_pressed(\"shop_toggle\"):")
 	var exec_resident := _line_of("if faced_resident.shop_key.is_valid() and not _f_machine_at(_target)")
-	var pr_furnace := _line_of("elif _furnace_at(_target):")
-	var pr_crystal := _line_of("elif _crystalarium_at(_target):")
+	var pr_furnace := _line_of("elif _furnace_at(_target)")
+	var pr_crystal := _line_of("elif _crystalarium_at(_target)")
 	var pr_gate := _line_of("elif _at_dungeon_gate():")
 	var pr_narak := _line_of("elif _at_narak_mouth():")
 	var pr_resident := _line_of("elif faced_resident != null:")
@@ -838,11 +838,20 @@ func _check_resident_tile_guard(m: Node) -> void:
 	# ★공허 통과 방지 — **주민 가드 하나만이 막는 칸**을 고른다. 주민을 잠시 내려놓았을 때
 	#   배치가 되는 칸이라야, 아래 판정이 그 가드를 실제로 재는 것이 된다(다른 사유로 이미
 	#   막힌 칸을 고르면 가드를 통째로 지워도 초록이다 — 첫 시도가 정확히 그랬다).
+	# ★[폴리시 R17 #0] **주민의 무대로 찾아간다.** R16 당시엔 `_resident_tile`이 좌표만 봐서 어느
+	#   구역에 서 있든 이 루프가 걸렸는데, R17이 그 술어에 구역 축을 달아 "다른 구역 주민이 막는"
+	#   유령 가드를 걷었다(그게 봉합이다). 그래서 이제 무대를 그 주민 쪽으로 옮겨야 같은 것을 잰다 —
+	#   실측상 안식 농원 스테이션 6인은 전원 다른 사유로도 막힌 칸이라 여기선 후보가 안 나온다.
+	var keep_region: String = m._region
 	var rt := Vector2i(-1, -1)
 	var found: Resident = null
 	for r in m._residents:
 		if r.tile == Resident.UNPLACED:
 			continue
+		var st: String = r.station_region(int(m.clock.minutes))
+		if st != "" and st != m._region:
+			m._rebuild_region(st)
+			await m.get_tree().process_frame
 		var t: Vector2i = r.tile
 		r.tile = Resident.UNPLACED
 		var free_ok: bool = m._can_place_furnace(t)
@@ -851,6 +860,9 @@ func _check_resident_tile_guard(m: Node) -> void:
 			rt = t
 			found = r
 			break
+	if rt.x < 0 and m._region != keep_region:
+		m._rebuild_region(keep_region)
+		await m.get_tree().process_frame
 	_check("⑮ 무대: **주민만이 막는** 칸을 찾았다(%s — 주민을 내려놓으면 배치가 된다)" % str(rt),
 		rt.x >= 0 and found != null)
 	if rt.x < 0:
@@ -867,6 +879,9 @@ func _check_resident_tile_guard(m: Node) -> void:
 	m.furnace.remove(m._region, rt)
 	_check("⑮d 걷고 나면 술어가 꺼져 주민 [F]가 되돌아온다(양보는 매몰 상태에서만 산다)",
 		not m._f_machine_at(rt))
+	if m._region != keep_region:
+		m._rebuild_region(keep_region)
+		await m.get_tree().process_frame
 
 # ── ⑯ #15 축사엔 화분을 못 놓고, 이미 놓인 화분은 수확된다(라이브) ─────────
 func _check_barn_pot(m: Node) -> void:
