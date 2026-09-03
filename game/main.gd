@@ -5088,7 +5088,13 @@ func _toggle_deco_mode() -> void:
 		#   ·`R=`(무기호)와 `[/]`·`,/.`(기호가 곧 키)를 섞어 써서, 대괄호 관례상 `[/]`가 "[ 키와 ] 키"인지
 		#   "/ 키"인지 읽는 이가 판별할 수 없었다(실제 배선은 KEY_BRACKETLEFT/RIGHT = 대괄호 두 키).
 		#   기호 자체가 키인 둘은 「」로 감싸 대괄호 표기와 안 겹치게 한다.
-		_notice("집 꾸미기 — [C] 끄기 · 좌클릭 놓기 · 우클릭 지우기 · [Q]/[E] 레이어 · 「[」「]」 세트 · 「,」「.」 아이템 · [R] 회전", 4.0, true)
+		# ★[폴리시 R16 #1] **두 줄로 나눈다.** R15가 표기를 대괄호로 통일하며 이 한 줄이 819px이
+		#   됐는데, `wide` 알림의 폭 한계는 `view.x − MARGIN*2` = 620px이고 글자는 x=18에서 시작한다
+		#   (논리 화면 640×360) — 18+819 = 837이라 「,」「.」 아이템·[R] 회전이 통째로 화면 밖으로
+		#   나갔다. 옛 문구(676px)는 "=회전)"만 잘려 R 키는 읽혔으니 R15가 오히려 정보를 없앤 셈이다.
+		#   피드는 MAX_ITEMS 4에 최신이 아래로 쌓이므로 두 push가 위아래 두 줄로 함께 선다(357·441px).
+		_notice("집 꾸미기 — [C] 끄기 · 좌클릭 놓기 · 우클릭 지우기", 4.0, true)
+		_notice("[Q]/[E] 레이어 · 「[」「]」 세트 · 「,」「.」 아이템 · [R] 회전", 4.0, true)
 	queue_redraw()
 
 # 현재 선택 레이어 키(FLOOR/WALL/FURNITURE).
@@ -13852,7 +13858,7 @@ func _process(delta: float) -> void:
 	var free_use_hand := _is_free_use_item(inventory.selected_id())
 	# ★ [S1-7→B1-a.1] 짐승 상호작용 — 짐승은 실내 바닥(비-SOIL) 위라 _target_valid 게이트 밖에서 따로 디스패치한다.
 	#   LMB=건초 급여(_use_tool 내 hay 분기)·RMB=쓰다듬/산물 수집(_try_harvest 내 짐승 분기). 건물 실내에서 이뤄진다.
-	var on_animal := not _sleeping and _region == RegionCatalog.HOME and ranch.has_animal_at(_target)
+	var on_animal := _animal_dispatch_at(_target)
 	if on_animal and not free_use_hand and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
 	if on_animal and Input.is_action_just_pressed("action"):
@@ -14038,6 +14044,9 @@ func _process(delta: float) -> void:
 	# 조준 칸에 화분이 서 있는가 — 아래 도구 디스패치 게이트가 읽는다. 화분은 SOIL이 아닌 실내
 	# 마룻바닥에도 서므로, `_target_valid`(=밭 흙) 하나로는 화분 위 물주기·심기가 영영 안 나간다.
 	var pot_at_target := _pot_at(_target)
+	# ★[폴리시 R16 #5] 도구·수확 게이트가 보는 화분은 **짐승 칸을 뺀 것**이다(한 프레임 한 동사).
+	#   회수 갈래(`on_garden_pot`)는 위 `pot_at_target`을 그대로 써 매몰이 안 생긴다.
+	var pot_dispatch := _pot_dispatch_at(_target)
 	var on_garden_pot := not _sleeping and holding_garden_pot and pot_at_target
 	if on_garden_pot and Input.is_action_just_pressed("use_tool"):
 		_remove_garden_pot(_target)
@@ -14097,7 +14106,7 @@ func _process(delta: float) -> void:
 	var holding_free_use := _is_free_use_item(inventory.selected_id())
 	# ★[S10-T2] 레어크로우도 스프링클러와 같은 이유로 도구질로 흘리지 않는다(설치 LMB와 중복 방지).
 	if not _sleeping and cheki == null and cocktail == null and fishing == null \
-			and (_target_valid or holding_weapon or pot_at_target or holding_free_use) \
+			and (_target_valid or holding_weapon or pot_dispatch or holding_free_use) \
 			and not holding_sprinkler and not holding_garden_pot and held_rarecrow == "" \
 			and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
@@ -14107,7 +14116,7 @@ func _process(delta: float) -> void:
 	#   바뀌었다(_try_harvest 머리말). 빈 화분·안 자란 화분은 이 함수가 무동작이라 false를 돌려주고,
 	#   그 프레임의 RMB는 아래 취침으로 정상으로 흘러간다.
 	var harvest_took_rmb := false
-	if not _sleeping and (_target_valid or pot_at_target) and Input.is_action_just_pressed("action"):
+	if not _sleeping and (_target_valid or pot_dispatch) and Input.is_action_just_pressed("action"):
 		harvest_took_rmb = _try_harvest()
 	# ★ ADR-0024 취침(RMB): 집 안이면 RMB로도 잠든다(위 ui_accept와 병행 — 어느 쪽이든).
 	# ★[폴리시 R4] 바로 위 수확이 이 프레임의 RMB를 이미 썼으면 취침은 건너뛴다. S10-T5 화분이
@@ -15594,6 +15603,22 @@ func _remove_sprinkler(t: Vector2i) -> void:
 func _pot_at(t: Vector2i) -> bool:
 	return garden_pot != null and _region == RegionCatalog.HOME and garden_pot.has_at(t)
 
+# ★[폴리시 R16 #5] 이 칸이 **짐승 창구**인가 — `_process`의 짐승 디스패치가 보는 그 술어를 이름
+#   있는 한 곳으로 뽑았다(아래 `_pot_dispatch_at`이 같은 값을 봐야 두 창구가 안 겹친다).
+func _animal_dispatch_at(t: Vector2i) -> bool:
+	return not _sleeping and _region == RegionCatalog.HOME and ranch != null and ranch.has_animal_at(t)
+
+# 이 칸의 화분이 **도구·수확 디스패치**를 열어야 하나 — 짐승 칸이면 열지 않는다.
+# 왜: `_can_place_pot`이 짐승 칸을 안 막아 실내 짐승이 선 칸에 화분이 놓인다. 그러면 한 번의
+#   RMB에 ㉠ 짐승 갈래(`on_animal` → `_try_harvest`)와 ㉡ 화분 갈래(`pot_at_target` →
+#   `_try_harvest`)가 **같은 프레임에 둘 다** 걸려, 1회차가 산물을 걷고 2회차가 오늘치 쓰다듬을
+#   태우며 `_farming_energy_cost()`를 한 번 더 깎았다. LMB 축도 같다(`_use_tool`이 두 번 돈다 —
+#   R7이 `free_use_hand` 배제로 막은 그 겹침의 남은 반쪽이 `pot_at_target`이었다).
+#   ★ **회수는 이 술어를 안 쓴다**(`on_garden_pot`은 `_pot_at`을 본다) — 짐승 칸에 이미 놓인
+#     화분이 영영 안 걷히는 매몰을 만들지 않기 위해서다. 배치 자체를 막을지는 별건이다.
+func _pot_dispatch_at(t: Vector2i) -> bool:
+	return _pot_at(t) and not _animal_dispatch_at(t)
+
 # 이 칸에 화분을 놓을 수 있는가. 스프링클러 규칙의 **거울상**이다: 저쪽이 "바깥 지면"을 요구한다면
 # 이쪽은 "실내"를 요구한다(ADR-0069 결정 8 "배치 가능 위치 = 실내(집·늘봄방)").
 #   ㉠ 실내여야 한다(`_indoor != ""`) — 화분은 방 안 소품이다. 바깥에 놓는 건 그냥 밭이 하는 일이다.
@@ -16989,7 +17014,12 @@ func _on_frame_craft(recipe_id: String) -> void:
 	#   ★재료 롤백이 아니라 선적재를 고른 이유: 되돌려 담는 add_item은 등급을 못 싣는다(주괴 재료가
 	#   금→일반으로 깎인다). 되돌릴 일을 아예 안 만드는 쪽이 값을 잃지 않는다.
 	if not inventory.add_item(String(r["out_item"]), int(r["out_count"])):
-		_notice("백팩이 가득 차 %s 만들지 못했다 — [Tab] 가방에서 자리를 비우고 다시" % HanjiUi.with_eul(String(r["name_ko"])))
+		# ★[폴리시 R16 #3] 여기만 **[Tab]을 말하지 않는다.** 이 알림이 사는 `_on_frame_craft`는
+		#   `craft_chosen` 핸들러라 **메뉴 프레임(제작 탭)이 열려 있는 동안에만** 실행된다. 그 상태의
+		#   Tab은 `_close_frame()`이라 안내대로 누르면 가방이 *닫힌다* — 정반대 일이다. 게다가
+		#   같은 프레임 아래쪽에 백팩 그리드가 이미 그려져 있으니 갈 곳도 없다. 형제 24줄은 전부 월드
+		#   동작이라 [Tab]이 참이고, 프레임 안에서 발화하는 것은 이 한 줄뿐이다(polish_r16 ④가 그 경계를 잠근다).
+		_notice("백팩이 가득 차 %s 만들지 못했다 — 아래 가방에서 자리를 비우고 다시" % HanjiUi.with_eul(String(r["name_ko"])))
 		return
 	for m in r["mats"]:
 		inventory.remove_item(String(m["item"]), int(m["count"]))
@@ -18483,25 +18513,21 @@ func _draw_mine_mobs() -> void:
 			continue
 		# ★[S5-T7] 갱도 팔레트에 없으면 나락 팔레트를 본다(둘 다 없으면 회색 폴백 — 조용히 안 깨진다).
 		var col: Color = _MOB_COLORS.get(m.kind, _NARAK_MOB_COLORS.get(m.kind, Color(0.70, 0.70, 0.74)))
-		if not m.awake:
-			col = COLORS[ROCK]                       # 위장 = 바위인 척(같은 톤이라 눈에 안 걸린다)
 		if m.hurt > 0.0:
 			col = col.lerp(Color.WHITE, 0.55)        # 피격 플래시
 		# ★[S5-T10] 위장 중(달걀귀신)은 **층의 돌 프롭 그 자체**를 그린다. 그레이박스 시절엔 "바위색
 		#   사각"이 최선이었지만 이제 진짜 돌 그림이 있으므로, 옆 칸에 실제로 서 있는 돌과 **완전히
 		#   같은 그림**이어야 위장이 위장이 된다(색만 맞춘 사각은 자세히 보면 티가 난다).
-		#   ★타일 정렬이 아니라 m.pos 발치 기준이다 — 몹은 픽셀 연속 위치라 프롭 문법을 못 쓴다.
+		# ★[폴리시 R16 #6] **진짜 돌이 쓰는 그 함수를 그대로 부른다.** 종전엔 몹 렌더의 발치 규약
+		#   (`m.pos − (sz.x*0.5, sz.y − TILE*0.40)`)으로 따로 찍었는데, 진짜 돌은 타일 좌상단 blit라
+		#   (`_draw_mine_prop`) 32px 프롭에서 두 규약이 **세로로 정확히 3.2px 어긋났다**(내부해상도
+		#   960×540을 1920×1080으로 띄우니 화면상 6.4px). 돌 한 줄에서 하나만 위로 떠 있어 곡괭이를
+		#   대 보기도 전에 위장이 눈으로 들켰고, 손으로 편 발치 그림자도 같이 밀려 있었다.
+		#   위장형은 `awake=false`라 `Mob.step()`이 첫 줄에서 반환한다 — pos가 스폰값(타일 중심)
+		#   그대로라 `m.tile()`이 곧 그 칸이고, 그래서 프롭 문법을 그대로 쓸 수 있다.
+		#   ★이 분기 한정이다 — 깨어난 몹의 발치선은 한 픽셀도 안 바뀐다(아래 body 참조).
 		if not m.awake:
-			var rsz := MINE_TEX_ROCK.get_size()
-			var rp := m.pos - Vector2(rsz.x * 0.5, rsz.y - TILE * 0.40)
-			# ★발치 타원 그림자까지 함께 건다 — `_draw_mine_prop`이 진짜 돌마다 까는 그 그림자다.
-			#   빠뜨리면 "그림자 없는 돌 하나"가 되어 위장이 눈으로 들킨다(색만 맞춘 그레이박스
-			#   시절과 같은 실패). 타일 좌표가 아니라 픽셀 rect 기준이라 헬퍼 대신 두 줄을 편다.
-			draw_set_transform(Vector2(rp.x + rsz.x * 0.5 + 2.0, rp.y + rsz.y - 2.0), 0.0,
-				Vector2(1.0, 0.22))
-			draw_circle(Vector2.ZERO, rsz.x * 0.40, Color(0, 0, 0, 0.30))
-			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-			draw_texture_rect(MINE_TEX_ROCK, Rect2(rp, rsz), false, _mine_cast(1.0))
+			_draw_mine_prop(MINE_TEX_ROCK, m.tile(), _mine_cast(1.0))
 			continue                                  # 위장 중엔 HP 바·단서 없음(정말 바위처럼)
 		# ★[S5-T10] 몸통 = 종별 스프라이트. 프레임 크기가 곧 체급이라(보스만 64²) 그레이박스의
 		#   **1.7배 배율 코드가 사라졌다** — 체급을 코드가 아니라 아트가 든다.
@@ -21780,9 +21806,17 @@ func _open_epilogue() -> void:
 	ending_panel.visible = true
 
 # 엔딩 패널 버튼의 두 얼굴(위 `_ready` 연결 주석 참조).
+# ★[폴리시 R16 #4] 닫기 뒤 **그 프레임의 입력을 삼킨다.** `_close_epilogue()`가 `_epilogue_open`을
+#   즉시 내리는데 그 게이트를 읽는 자리는 `_process`뿐이고 입력 디스패치가 먼저 흐른다 —
+#   버튼 클릭의 press가 그 프레임에 떨어지면 `_process`는 이미 false가 된 게이트를 그냥 통과해
+#   내려가고, 같은 프레임의 `use_tool`이 살아 있어 `_use_tool()`·스프링클러/화분/레어크로우 설치
+#   갈래가 그대로 실행된다(에필로그는 혼례 아침 **집 안**에서 열려 늘 실내 배치 가능 자리다).
+#   `_on_frame_close_pressed`(프레임 [X])·`_on_edit_toggle_pressed`(배치 모드 끄기)가 이미 쓰는
+#   그 처방이고, 에필로그 게이트만 표가 빠져 있었다.
 func _on_ending_button() -> void:
 	if _epilogue_open:
 		_close_epilogue()
+		_swallow_input_once = true
 	else:
 		_delete_save_and_restart()
 
