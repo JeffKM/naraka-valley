@@ -125,7 +125,7 @@ func _initialize() -> void:
 		fall_max = maxi(fall_max, n)
 		if n > NarakFloors.SHAFT_MAX:
 			doubled += 1
-	_check("②b 낙하 층수 하한 ≥ 3 · 상한 ≤ 15(3~8, 10%로 2x−1) — 실측 %d~%d" % [fall_min, fall_max],
+	_check("②b 낙하 층수 하한 ≥ 3 · 상한 ≤ 15(3~8, 10%%로 2x−1) — 실측 %d~%d" % [fall_min, fall_max],
 		fall_min >= NarakFloors.SHAFT_MIN and fall_max <= NarakFloors.SHAFT_MAX * 2 - 1)
 	_check("②c 배증(2x−1)이 실제로 터진다 · 그러나 드물다(400표본 중 %d)" % doubled,
 		doubled > 0 and doubled < 120)

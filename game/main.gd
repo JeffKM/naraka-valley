@@ -19282,8 +19282,11 @@ func _try_buy_animal(species: String) -> bool:
 	var nm := AnimalCatalog.name_of(species)
 	var bld := _animal_building_of(species)
 	if ranch.is_full(bld):
-		_notice("%s 정원이 찼다 (%d/%d) — 목공방에서 「큰 %s」을 지어야 한다"
-			% [bld, ranch.occupancy_of(bld), ranch.capacity_of(bld), bld])
+		# ★[폴리시 R14] 조사 고정 "을" 봉합 — `bld`는 받침이 갈리는 런타임 이름이라("넋둥우리" /
+		#   "넋우릿간") coop 분기에서 "「큰 넋둥우리」을"이 나왔다. R5/R12의 전수 가드 정규식이
+		#   `%s」을`처럼 `」`가 낀 형태를 못 잡던 사각이다(가드 쪽도 함께 좁혔다).
+		_notice("%s 정원이 찼다 (%d/%d) — 목공방에서 「큰 %s」%s 지어야 한다"
+			% [bld, ranch.occupancy_of(bld), ranch.capacity_of(bld), bld, HanjiUi.josa_eul(bld)])
 		return false
 	var spot := _free_animal_spot(species)
 	if spot == Ranch.NO_ANIMAL:
