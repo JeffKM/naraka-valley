@@ -166,16 +166,16 @@ autowrap_mode = 2
 
 [node name="MirrorPanel" type="Panel" parent="CanvasLayer"]
 visible = false
-offset_left = 92.0
-offset_top = 60.0
-offset_right = 548.0
-offset_bottom = 292.0
+offset_left = 60.0
+offset_top = 105.0
+offset_right = 580.0
+offset_bottom = 255.0
 
 [node name="Text" type="Label" parent="CanvasLayer/MirrorPanel"]
 offset_left = 22.0
 offset_top = 18.0
-offset_right = 434.0
-offset_bottom = 214.0
+offset_right = 498.0
+offset_bottom = 132.0
 text = "..."
 horizontal_alignment = 1
 vertical_alignment = 1

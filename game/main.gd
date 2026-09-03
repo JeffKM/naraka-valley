@@ -6151,6 +6151,38 @@ func _mine_entry_options() -> Array[int]:
 	out.append_array(mine_floors.unlocked_elevators())
 	return out
 
+# ── ★[폴리시 R17 #3] 갱도 입구 프롬프트 한 줄 — **폭에 안 들어가면 목록을 범위로 접는다.** ──
+# 왜 있나: 이 줄은 `InteractPrompt` Label 경로라 `draw_text_fit`의 축소·말줄임 방어가 없다(clip_text도
+# 꺼져 있고 중앙 정렬이라, 넘치면 Label 밖으로 나가 좌우가 **뷰포트에** 잘린다 — 양끝이 동시에
+# 사라져 "[F] 갱도"도 마지막 층도 안 보인다). 실측(neodgm 16px): 전 층 나열은 엘리베이터가 6개
+# (30층 도달)일 때 648px으로 Label 폭을 넘고, 60층 세이브에서 888px까지 간다.
+# ★ 접는 축을 "범위 표기"로 고른 근거: 이 목록은 **정보를 담지 않는다**. 후보는 언제나
+#   1 + ELEVATOR_STEP의 배수(도달 깊이까지)라 목록 전체가 그 세 값에서 파생되고, 매 프레임 실제로
+#   달라지는 것은 지금 고른 층 하나뿐이다. 그래서 접힌 형태도 무손실이다(생략·말줄임이 아니다).
+# ★ 한도·글자 크기를 상수로 안 적는 이유: 둘 다 **그리는 노드가 든다**(Label 폭 = main.tscn 기하 ·
+#   글자 크기 = ui_theme.tres). 여기 숫자를 베끼면 그 둘 중 하나가 바뀔 때 조용히 어긋난다.
+func _mine_entry_prompt() -> String:
+	var head := "[F] 갱도 %d층으로 내려간다" % _mine_entry_pick
+	var opts := _mine_entry_options()
+	if opts.size() <= 1:
+		return head
+	var names: Array[String] = []
+	for f in opts:
+		names.append(("〔%d〕" % f) if f == _mine_entry_pick else str(f))
+	var full := head + "   [G] 엘리베이터: %s층" % " · ".join(names)
+	if HanjiUi.text_width(full, _prompt_font_size()) <= _prompt_max_width():
+		return full
+	return head + "   [G] 엘리베이터: %d · %d~%d층 (%d층 단위) 중 〔%d〕" % [
+		opts[0], MineFloors.ELEVATOR_STEP, opts[opts.size() - 1],
+		MineFloors.ELEVATOR_STEP, _mine_entry_pick]
+
+# 프롬프트 Label이 실제로 쓰는 폭·글자 크기(레이아웃·테마 파생 — 위 주석의 그 단일 출처).
+func _prompt_max_width() -> float:
+	return interact_prompt.size.x if interact_prompt != null else 0.0
+
+func _prompt_font_size() -> int:
+	return interact_prompt.get_theme_font_size("font_size") if interact_prompt != null else 16
+
 # [G] 진입 층 순환(그레이박스 선택 UI — 목록을 프롬프트 텍스트로 보이고 키로 돌린다).
 func _cycle_mine_entry() -> void:
 	var opts := _mine_entry_options()
@@ -14264,14 +14296,7 @@ func _process(delta: float) -> void:
 	elif _at_dungeon_gate():
 		# ★[S5-T1] 갱도 입구 — 진입 층 선택은 그레이박스 텍스트 목록이다(엘리베이터 UI는 S5-T9/T10 아트).
 		interact_prompt.visible = true
-		var opts := _mine_entry_options()
-		var pick_line := "[F] 갱도 %d층으로 내려간다" % _mine_entry_pick
-		if opts.size() > 1:
-			var names: Array[String] = []
-			for f in opts:
-				names.append(("〔%d〕" % f) if f == _mine_entry_pick else str(f))
-			pick_line += "   [G] 엘리베이터: %s층" % " · ".join(names)
-		interact_prompt.text = pick_line
+		interact_prompt.text = _mine_entry_prompt()
 	elif _in_mine_floor():
 		# ★[S5-T1] 층 안 프롬프트 — 발밑(사다리) > 겨눈 칸(돌) 순. 남은 돌 수는 사다리 확률의 분모라
 		#   플레이어가 "다 캐면 열린다"를 읽을 수 있게 함께 보인다(스타듀의 암묵 규칙을 명시화).
@@ -17163,7 +17188,14 @@ func _on_frame_craft(recipe_id: String) -> void:
 		#   Tab은 `_close_frame()`이라 안내대로 누르면 가방이 *닫힌다* — 정반대 일이다. 게다가
 		#   같은 프레임 아래쪽에 백팩 그리드가 이미 그려져 있으니 갈 곳도 없다. 형제 24줄은 전부 월드
 		#   동작이라 [Tab]이 참이고, 프레임 안에서 발화하는 것은 이 한 줄뿐이다(polish_r16 ④가 그 경계를 잠근다).
-		_notice("백팩이 가득 차 %s 만들지 못했다 — 아래 가방에서 자리를 비우고 다시" % HanjiUi.with_eul(String(r["name_ko"])))
+		# ★[폴리시 R17 #2] 그 근거의 뒷줄("아래쪽에 백팩 그리드가 이미 그려져 있다")이 **제작 탭에는
+		#   거짓**이었다. 프레임 `_draw`는 `CTX_MENU`에서 `menu_tab == TAB_INV`일 때만 `_draw_backpack`을
+		#   부르고(inv_frame.gd), `craft_chosen`은 `TAB_CRAFT`에서만 방출된다 — 이 알림이 뜨는 화면
+		#   아래엔 레시피 행뿐이라 "아래 가방"이 가리키는 것이 없다. #3이 [Tab] 거짓 광고를 고치면서
+		#   같은 클래스의 거짓 지시로 갈아 끼운 자리라, 이번엔 **실제 절차**를 적는다: 탭 순환은 [E]고
+		#   (`menu_tab` 액션 → `frame.cycle_tab()`), 탭 아이콘 클릭(`set_tab`)도 같은 곳으로 간다.
+		_notice("백팩이 가득 차 %s 만들지 못했다 — [E] 가방 탭에서 자리를 비우고 다시"
+			% HanjiUi.with_eul(String(r["name_ko"])))
 		return
 	for m in r["mats"]:
 		inventory.remove_item(String(m["item"]), int(m["count"]))
@@ -23701,7 +23733,56 @@ func _pointer_over_overlay(screen_pos: Vector2) -> bool:
 
 func _open_mirror() -> void:
 	mirror_text.text = _mirror_forecast_text()
+	_layout_mirror_panel()
 	mirror_panel.visible = true
+
+# ── ★[폴리시 R17 #5] 거울 판을 **본문에 맞춰 세운다**(고정 기하 → 내용 파생) ────────────────
+# 무엇이 깨져 있었나: main.tscn의 판은 y 60~292 고정이고 본문 Label은 폭 412 · 높이 196이었는데,
+# `_mirror_forecast_text`가 쌓는 줄은 최대 13줄이고 그중 셋(운 둘째 줄 440px · 혼불 바람 예보
+# 600px · 보부상 예고 432px)이 412를 넘어 접혀 **실제로 16줄**이 그려졌다(실측 min_height 304px).
+# 세로 중앙 정렬이라 위아래로 54px씩 한지 프레임 밖으로 삐져나왔다.
+# 봉합 축을 "판을 내용에 맞춘다"로 고른 근거: 반대 축 둘은 둘 다 정보를 잃는다 — 줄을 접거나
+# 생략하면 그날의 예고(테마 데이·절기 행사·보부상·생일)가 사라지고, 글자를 줄이면 640×360
+# 내부해상도에서 본문이 못 읽히는 크기가 된다. 판은 토글 오버레이라 커져도 되는 표면이다.
+# ★ 덤으로 **평소엔 더 작아진다**: 예고가 없는 날은 6줄(114px)이라 판이 지금(232px)의 절반 이하다.
+# ★ 폭을 함께 넓힌 이유: 412 → 476이면 접히는 줄이 셋에서 하나로 줄어(16줄 → 14줄) 최악 높이가
+#   304 → 266으로 내려간다. 그 이상 넓혀도 혼불 바람 줄(600px)은 어차피 접히므로 얻는 게 없다.
+# ★ 줄 수를 Label 내부(`get_line_count`)가 아니라 폰트에서 재는 이유: 그건 shaping 시점에 의존해
+#   막 넣은 텍스트에 대해 참이 아닐 수 있다. 폰트 측정은 같은 답을 즉시 준다(둘이 같음을 회귀가 잰다).
+# ★ main.tscn의 기하는 **평범한 날 한 판**(6줄)일 뿐이다 — 이 함수가 매번 다시 세우므로 그 값은
+#   기본값이고, 최악 조합의 높이는 여기서만 나온다(그래서 이 호출을 지우면 회귀가 빨개진다).
+const MIRROR_W := 520.0          # 판 폭(논리 px) — 본문 폭 = 이것 − MIRROR_PAD_X*2
+const MIRROR_PAD_X := 22.0       # 한지 9-slice 테두리 안쪽 좌우 여백(옛 tscn 값 그대로)
+const MIRROR_PAD_Y := 18.0       # 위아래 여백(옛 tscn 값 그대로)
+const MIRROR_VIEW_MARGIN := 16.0 # 판이 뷰 위아래로 최소한 남겨 두는 여백
+
+func _layout_mirror_panel() -> void:
+	if mirror_panel == null or mirror_text == null:
+		return
+	var view := _logical_view_size(mirror_panel)
+	var body_w := MIRROR_W - MIRROR_PAD_X * 2.0
+	var body_h := _mirror_body_height(mirror_text.text, body_w)
+	var h := minf(body_h + MIRROR_PAD_Y * 2.0, view.y - MIRROR_VIEW_MARGIN)
+	mirror_panel.position = Vector2(floorf((view.x - MIRROR_W) * 0.5), floorf((view.y - h) * 0.5))
+	mirror_panel.size = Vector2(MIRROR_W, h)
+	mirror_text.position = Vector2(MIRROR_PAD_X, MIRROR_PAD_Y)
+	mirror_text.size = Vector2(body_w, h - MIRROR_PAD_Y * 2.0)
+
+# 본문이 폭 w에서 접힌 뒤 차지하는 높이 — Label이 쓰는 식 그대로(줄 수 × (폰트 높이 + 줄 간격)).
+func _mirror_body_height(text: String, w: float) -> float:
+	var fs := mirror_text.get_theme_font_size("font_size")
+	var fh := HanjiUi.FONT.get_height(fs)
+	var wrapped := HanjiUi.FONT.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, w, fs)
+	var lines := maxi(1, int(round(wrapped.y / fh)))
+	return float(lines) * (fh + float(mirror_text.get_theme_constant("line_spacing")))
+
+# CanvasLayer 스케일을 걷어낸 논리 뷰 치수(`_pointer_over_overlay`가 쓰는 그 보정과 같은 결).
+func _logical_view_size(node: CanvasItem) -> Vector2:
+	var view := Vector2(get_viewport().get_visible_rect().size)
+	var par := node.get_parent()
+	if par is CanvasLayer and par.scale.x != 0.0 and par.scale.y != 0.0:
+		view = Vector2(view.x / par.scale.x, view.y / par.scale.y)
+	return view
 
 func _close_mirror() -> void:
 	mirror_panel.visible = false
