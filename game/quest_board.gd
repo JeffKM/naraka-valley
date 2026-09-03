@@ -382,6 +382,6 @@ func load_save(data: Dictionary) -> void:
 static func summary(quest: Dictionary) -> String:
 	if quest.is_empty():
 		return ""
-	return "%s ×%d — %s · %s까지 · +%d골드" % [
+	return "%s ×%d — %s · %s까지 · +%d냥" % [
 		ItemCatalog.name_of(String(quest["item_id"])), int(quest["count"]),
 		String(quest["client"]), GameClock.date_label(int(quest["due_day"])), int(quest["gold"])]

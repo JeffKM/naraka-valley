@@ -136,12 +136,21 @@ func hearts() -> int:
 func points_hearts() -> int:
 	return mini(points / POINTS_PER_HEART, MAX_HEARTS)
 
-# ★[폴리시 R12] 점수가 **천장에 닿았는가**(_add의 clamp 상한 = MAX_POINTS). 이 상태의 선물은
-#   실효가 정확히 0이라, 화면이 명목 점수를 알리면 그게 거짓말이 된다(gift 머리말의 0 *하한*은
-#   "미터 바닥"이라 명목 보고가 사실이지만, 천장은 미터가 아니라 **끝**이다 — 더 갈 곳이 없다).
-#   ADR-0008 주의: 이 술어는 선물을 **막지 않는다**. 정보(알림 문구)와 소비 계약(주간 카운터)만 가른다.
+# ★[폴리시 R12] 점수가 **천장에 닿았는가**(_add의 clamp 상한 = MAX_POINTS). 천장은 미터가
+#   아니라 **끝**이라, 더 얹을 수 없는 점수를 화면이 명목대로 알리면 그게 거짓말이 된다
+#   (gift 머리말의 0 *하한*은 "미터 바닥"이라 명목 보고가 사실인 것과 갈린다).
 func is_maxed() -> bool:
 	return points >= MAX_POINTS
+
+# ★[폴리시 R13] 이 선물이 **실효 0인가** — 천장에 눌리는 것은 *양수*뿐이다. R12는 만점 판정
+#   하나(is_maxed)로 알림 문구와 주간 카운터를 함께 갈랐는데, 선물 점수에는 음수 채널이 열려
+#   있어(GiftPrefs.POINTS의 DISLIKE −10 · HATE −20) 그 전제가 절반만 참이었다: 만점 상대에게
+#   건넨 질색 선물은 points를 실제로 깎는데도 "이미 가득하다"로 보고되고 예산도 안 썼다.
+#   부호를 함께 보면 두 계약이 한 번에 정직해진다 — 실효가 있는 선물은 화면이 숫자를 말하고
+#   주간 예산도 그대로 소모한다(R12 이전의 거동이 음수 쪽에만 되살아난다).
+#   ADR-0008 주의: 이 술어도 선물을 **막지 않는다**. 정보(알림 문구)와 소비 계약만 가른다.
+func is_gift_no_op(points_gained: int) -> bool:
+	return is_maxed() and points_gained >= 0
 
 # 진급 대기 중인가 — 점수는 다음 칸을 채웠는데 관문을 아직 안 지났다(관계 탭 "진급 대기" 배지의 값).
 func pending_promotion() -> bool:
@@ -218,12 +227,14 @@ func gift(points_gained: int, day: int, birthday: bool = false, week_exempt: boo
 	if not can_gift(day, birthday, week_exempt):
 		return 0
 	last_gift_day = day
-	if not birthday and not week_exempt and not is_maxed():
+	if not birthday and not week_exempt and not is_gift_no_op(points_gained):
 		# 주 카운터 소모 — 주가 바뀌었으면 이번 선물이 그 주의 첫 번째다.
-		# ★[폴리시 R12] **천장(is_maxed)에 닿았으면 안 쓴다.** 카운터는 "이 주에 관계를 얼마나
-		#   올릴 수 있나"의 예산인데, 실효 0인 선물이 그 예산을 먹으면 장부가 거짓이 된다(생일·결혼
-		#   면제가 카운터를 안 쓰는 것과 같은 이유). 하루 1회(last_gift_day)는 그대로 소모한다 —
-		#   그건 예산이 아니라 *날짜*의 기록이고, 알림 연타를 막는 리듬이다.
+		# ★[폴리시 R12 → R13 정정] **실효 0이면 안 쓴다.** 카운터는 "이 주에 관계를 얼마나
+		#   올릴 수 있나"의 예산인데, 아무것도 안 바꾸는 선물이 그 예산을 먹으면 장부가 거짓이
+		#   된다(생일·결혼 면제가 카운터를 안 쓰는 것과 같은 이유). R12는 그 판정을 만점 하나로
+		#   뒀는데, 만점에서도 **음수 선물은 실효가 있다** — 그건 예산을 쓰는 게 맞다(is_gift_no_op).
+		#   하루 1회(last_gift_day)는 부호와 무관하게 소모한다 — 그건 예산이 아니라 *날짜*의
+		#   기록이고, 알림 연타를 막는 리듬이다.
 		if GameClock.week_of(day) != gift_week:
 			gift_week = GameClock.week_of(day)
 			gifts_this_week = 0

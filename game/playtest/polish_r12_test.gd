@@ -35,7 +35,7 @@ extends SceneTree
 #   ⑩ #12 개간(`reclaim.clear`)이 만재에서 칸을 영구히 굳히고 드랍을 증발시킨 채 "+N"을 알렸다 —
 #         형제 창구 여섯이 지키는 「적재先」 계약의 마지막 미커버 창구(재점령 잡초 낫질도 같은 줄).
 #   ⑪ #14 잡초 혼합 씨앗 롤이 `add_seed`의 bool(R2가 일부러 만든 반환)을 안 봐 거짓 획득을 알렸다.
-#   ⑫ #13 야시장 씨앗·보부상 씨앗·보부상 일반 셋이 만재를 "골드 부족"으로 오보했다(두 사유를
+#   ⑫ #13 야시장 씨앗·보부상 씨앗·보부상 일반 셋이 만재를 "냥 부족"으로 오보했다(두 사유를
 #         한 조건에 뭉친 형태 — 형제 창구 셋은 진작 삼항으로 가르고 있었다).
 #   ⑬ R5 ④i 정정 — R10이 새로 쓴 "버릴 수 없다" 안내에 고정 조사 "는"이 다시 들어와 전수 스캔이
 #         baseline부터 실패 중이었다(도구 이름은 받침이 갈린다).
@@ -300,14 +300,16 @@ func _check_cafe_popups(m: Node) -> void:
 		and m._milestone_popup_secs > 0.0
 		and m.cafe_summary_panel.visible and m.milestone_panel.visible)
 
-	# ㉠취침 갈래 — 한 자리(`_drop_cafe_popups`)가 다섯을 다 버린다.
+	# ㉠기본 인자 — 한 자리(`_drop_cafe_popups`)가 다섯을 다 버린다(로드 갈래가 쓰는 형태).
 	m._drop_cafe_popups()
 	_check("②c 버리는 자리가 다섯을 **전부** 비운다 — 본문 \"\" · 타이머 둘 0 · 패널 둘 숨김",
 		m._cafe_summary_pending == "" and m._cafe_summary_secs == 0.0
 		and m._milestone_popup_secs == 0.0
 		and not m.cafe_summary_panel.visible and not m.milestone_panel.visible)
-	_check("②d 취침이 그 자리를 부른다(세션 셋 폐기와 같은 줄 — `_do_sleep`)",
-		_in_func("func _do_sleep", "_drop_cafe_popups()"))
+	# ★[폴리시 R13 정정] 취침 갈래는 `keep_milestone=true`로 부른다 — 1회성 래치인 마일스톤
+	#   축하를 여기서 버리면 그 문구가 세이브에서 영영 사라진다(R13 ②가 그 보존을 직접 잰다).
+	_check("②d 취침이 그 자리를 부르되 마일스톤은 남긴다(세션 셋 폐기와 같은 줄 — `_do_sleep`)",
+		_in_func("func _do_sleep", "_drop_cafe_popups(true)"))
 	_check("②e 로드도 같은 자리를 부른다(밤 바 폐기와 같은 줄 — `_load_game`)",
 		_in_func("func _load_game", "_drop_cafe_popups()"))
 	_check("②f 형제 두 경로는 종전대로 미룬 본문을 버린다(계약의 출처 — 화면을 갈아엎는 세 경로)",
@@ -558,9 +560,9 @@ func _check_mixed_seed_full(m: Node) -> void:
 		m.inventory.count_of(seed_id) == 1)
 
 
-# ── ⑫ #13 소매 3창구가 만재를 '골드 부족'으로 오보하지 않는다 ─────────────────
+# ── ⑫ #13 소매 3창구가 만재를 '냥 부족'으로 오보하지 않는다 ─────────────────
 # 형제 창구(`_buy_store_generic_n`·만물상 씨앗·스프링클러)는 진작 사유를 가르는데 야시장 씨앗·
-# 보부상 씨앗·보부상 일반 셋만 두 사유를 한 조건에 뭉쳐, 냥이 만 단위로 남아도 "골드 부족"이 떴다.
+# 보부상 씨앗·보부상 일반 셋만 두 사유를 한 조건에 뭉쳐, 냥이 만 단위로 남아도 "냥 부족"이 떴다.
 func _check_retail_full_reason(m: Node) -> void:
 	print("── ⑫ #13 야시장·보부상 소매가 만재와 냥 부족을 가른다 ──")
 	var day0: int = m.clock.day
@@ -581,13 +583,13 @@ func _check_retail_full_reason(m: Node) -> void:
 		m._try_buy_market_seed(crop, 1)
 		var nm_notice := _last_notice(m)
 		_check("⑫b 야시장 — 냥이 999999인데 자리가 없다고 말한다('%s')" % nm_notice,
-			nm_notice.contains("자리가 없다") and not nm_notice.contains("골드 부족"))
+			nm_notice.contains("자리가 없다") and not nm_notice.contains("냥 부족"))
 		# 대조: 자리가 있는데 냥이 없으면 종전 문구 그대로다(사유가 뒤바뀐 게 아니다).
 		_clear_inventory(m.inventory)
 		m.wallet.gold = 0
 		m._try_buy_market_seed(crop, 1)
-		_check("⑫c 대조 — 자리가 있고 냥이 0이면 여전히 '골드 부족'이다('%s')" % _last_notice(m),
-			_last_notice(m).contains("골드 부족"))
+		_check("⑫c 대조 — 자리가 있고 냥이 0이면 여전히 '냥 부족'이다('%s')" % _last_notice(m),
+			_last_notice(m).contains("냥 부족"))
 		m.wallet.gold = 999999
 
 	# ㉡㉢ 보부상 씨앗·일반 — 좌판이 서는 날의 실제 재고 행에서 id를 뽑는다.
@@ -619,20 +621,20 @@ func _check_retail_full_reason(m: Node) -> void:
 		_fill_backpack_full(m.inventory)
 		m._try_buy_peddler_seed(seed_id, 1)
 		_check("⑫e 보부상 씨앗 — 만재를 만재라고 말한다('%s')" % _last_notice(m),
-			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("골드 부족"))
+			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("냥 부족"))
 		_fill_backpack_full(m.inventory)
 		m._try_buy_peddler_item(item_id, 1)
 		_check("⑫f 보부상 일반 — 만재를 만재라고 말한다('%s')" % _last_notice(m),
-			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("골드 부족"))
+			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("냥 부족"))
 		# 대조 — 두 창구 다 냥이 0이면 종전 문구 그대로다(사유가 뒤바뀐 게 아니다).
 		_clear_inventory(m.inventory)
 		m.wallet.gold = 0
 		m._try_buy_peddler_seed(seed_id, 1)
-		_check("⑫g 대조 — 보부상 씨앗도 자리가 있고 냥이 0이면 '골드 부족'이다('%s')" % _last_notice(m),
-			_last_notice(m).contains("골드 부족"))
+		_check("⑫g 대조 — 보부상 씨앗도 자리가 있고 냥이 0이면 '냥 부족'이다('%s')" % _last_notice(m),
+			_last_notice(m).contains("냥 부족"))
 		m._try_buy_peddler_item(item_id, 1)
 		_check("⑫h 대조 — 보부상 일반도 마찬가지('%s')" % _last_notice(m),
-			_last_notice(m).contains("골드 부족"))
+			_last_notice(m).contains("냥 부족"))
 
 	m.clock.day = day0
 	m.wallet.gold = gold0
@@ -723,11 +725,14 @@ func _check_gift_maxed(m: Node) -> void:
 	maxed.free()
 	normal.free()
 
-	# 화면 문구 — 만점이면 명목 점수 대신 사실을 말한다(선물 창구가 그 술어를 실제로 본다).
-	_check("⑮f 선물 창구가 건네기 **전에** 천장을 기억하고 문구를 가른다",
-		_line_of("var was_maxed: bool = r.affinity.is_maxed()") > 0
+	# 화면 문구 — 실효 0이면 명목 점수 대신 사실을 말한다(선물 창구가 그 술어를 실제로 본다).
+	# ★[폴리시 R13 정정] 술어가 `is_maxed()` → `is_gift_no_op(points)`로 좁아졌다(만점이어도
+	#   음수 선물은 실효가 있다 — R13 ①이 그 갈림을 직접 잰다). 여기선 "건네기 전에 기억한다"는
+	#   순서 계약만 남기고 니들을 새 술어로 옮긴다.
+	_check("⑮f 선물 창구가 건네기 **전에** 실효 0 여부를 기억하고 문구를 가른다",
+		_line_of("var no_effect: bool = r.affinity.is_gift_no_op(points)") > 0
 		and _line_of("호감도는 이미 가득하다") > 0
-		and _line_of("var was_maxed: bool = r.affinity.is_maxed()")
+		and _line_of("var no_effect: bool = r.affinity.is_gift_no_op(points)")
 			< _line_of("var gained := r.affinity.gift("))
 
 

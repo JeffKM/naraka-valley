@@ -3602,7 +3602,7 @@ func _ensure_input_actions() -> void:
 # 창 ↔ 전체화면 토글(F11). 픽셀은 nearest+fractional 스케일이라 전체화면에서도 화면을 꽉 채우되
 # 또렷하다(ADR-0018 갱신 — 스타듀식 채움). 창 복귀 시 1920×1080 override로 돌아간다.
 func _toggle_fullscreen() -> void:
-	var now_full := get_window().mode != Window.MODE_WINDOWED
+	var now_full := _window_is_fullscreen()
 	_apply_fullscreen(not now_full)
 	# ★ Phase D — 설정 값·영속을 F11에서도 맞춘다(옵션 탭 체크박스와 단일 값 원천). 부팅 극초기(settings
 	#   생성 전 F11)엔 아직 없을 수 있어 null 가드.
@@ -5989,7 +5989,7 @@ func _open_mine_chest() -> void:
 	if gold_sum > 0:
 		wallet.earn(gold_sum)
 		_total_income += gold_sum             # ★[폴리시 R8] 누적 총수입(정보패널) — 출하 정산과 같은 결
-		got.append("%d골드" % gold_sum)
+		got.append("%d냥" % gold_sum)
 	audio.sfx("ui")
 	_notice("%d층 보상 상자 — %s" % [floor_no, " · ".join(got) if not got.is_empty() else "비어 있다"])
 	if _narak_key_found:
@@ -10083,6 +10083,15 @@ func _apply_audio_volumes() -> void:
 	audio.set_music_volume(settings.music_volume)
 	audio.set_sfx_volume(settings.sfx_volume)
 
+# ★[폴리시 R13] 지금 전체화면인가 — **"창모드가 아니다"로 물으면 안 된다.** Window.Mode는
+#   WINDOWED·MINIMIZED·MAXIMIZED·FULLSCREEN·EXCLUSIVE_FULLSCREEN 다섯이라, OS 버튼으로 창을
+#   최대화한 상태(MAXIMIZED)가 "전체화면"으로 잘못 읽혔다: F11 첫 입력이 전체화면 대신 최대화만
+#   풀었고, 이어지는 `settings.set_fullscreen(false)`는 값이 이미 false라 저장도 안 됐다
+#   (설정 파일·옵션 탭 체크박스는 계속 꺼짐 표시). 전체화면 두 값만 참으로 센다.
+func _window_is_fullscreen() -> bool:
+	var m := get_window().mode
+	return m == Window.MODE_FULLSCREEN or m == Window.MODE_EXCLUSIVE_FULLSCREEN
+
 # 창 ↔ 전체화면 적용(값→창모드). 실제 창 상태만 바꾸고 값은 GameSettings가 든다.
 func _apply_fullscreen(on: bool) -> void:
 	var win := get_window()
@@ -10103,7 +10112,7 @@ func _on_sfx_vol_changed(delta: float) -> void:
 
 # 옵션 탭 전체화면 체크박스 핸들러 — 현재 창모드의 반대로 토글(F11과 같은 결·같은 값 원천).
 func _on_fullscreen_toggled() -> void:
-	var now_full := get_window().mode != Window.MODE_WINDOWED
+	var now_full := _window_is_fullscreen()
 	_apply_fullscreen(not now_full)
 	if settings.set_fullscreen(not now_full):
 		settings.save_settings()
@@ -10280,11 +10289,11 @@ func _on_day_advanced(day: int) -> void:
 		if _spouse_of_morning(day) == "mel":
 			var tip := maxi(1, ship_gold * SPOUSE_MEL_TIP_PCT / 100)
 			ship_gold += tip
-			_notice("멜이 장부를 손질했다 — 출하 팁 +%d골드" % tip)
+			_notice("멜이 장부를 손질했다 — 출하 팁 +%d냥" % tip)
 		wallet.earn(ship_gold)
 		_total_income += ship_gold            # ★ [S1R-T12] 누적 총수입(정보패널)
 		audio.sfx("gold")                     # 출하 정산 골드 "치링"
-		_notice("출하함 정산 +%d골드" % ship_gold)
+		_notice("출하함 정산 +%d냥" % ship_gold)
 	# ★[S10-T6 / ADR-0069 결정 9] 명부 도감 완주 트로피 — **연출뿐**이다. 아이템도, 퍼센트도, 스탯
 	#   보정도 없다(결정 1 ② 합산 퍼센트·진엔딩 금지 / [ADR-0034] #4 영구 % 곱셈 금지). 금박 알림 한
 	#   줄이 뜨고, 혼백관 열람대 위에 작은 상이 선다 — 그게 전부다.
@@ -11044,7 +11053,7 @@ func _refresh_night_market() -> void:
 func _night_market_text() -> String:
 	return "\n".join([
 		"── 저승 야시장 ──",
-		"골드 %d · 오늘만 전 품목 %d%% 할인" % [wallet.gold,
+		"%d냥 · 오늘만 전 품목 %d%% 할인" % [wallet.gold,
 			int(round((1.0 - SeasonalEvent.MARKET_DISCOUNT) * 100.0))],
 	])
 
@@ -11193,7 +11202,7 @@ func _try_buy_market_seed(crop_id: String, n: int) -> void:
 		bought += 1
 	if bought == 0:
 		_notice("가방을 비우고 오자 — %s 씨앗을 받을 자리가 없다" % CropCatalog.name_of(crop_id) if full
-			else "골드 부족(%d 필요)" % unit)
+			else "냥 부족(%d 필요)" % unit)
 		return
 	_toast_item(ItemCatalog.seed_id(crop_id), bought)
 	audio.sfx("ui")
@@ -11236,7 +11245,7 @@ func _refresh_peddler() -> void:
 func _peddler_text() -> String:
 	return "\n".join([
 		"── 저승 보부상 ──",
-		"골드 %d · 봇짐은 %d일마다 이 길목에 선다(재고는 매번 다르다)" % [wallet.gold, Peddler.APPEAR_MODULUS],
+		"%d냥 · 봇짐은 %d일마다 이 길목에 선다(재고는 매번 다르다)" % [wallet.gold, Peddler.APPEAR_MODULUS],
 	])
 
 # 매대 품목 행. 로스터·정가·롤은 Peddler가 들고, 표시명·아이콘·보유 판정은 여기서 붙인다
@@ -11384,7 +11393,7 @@ func _try_buy_peddler_seed(crop_id: String, n: int) -> void:
 		bought += 1
 	if bought == 0:
 		_notice("가방을 비우고 오자 — %s 씨앗을 받을 자리가 없다" % CropCatalog.name_of(crop_id) if full
-			else "골드 부족(%d 필요)" % unit)
+			else "냥 부족(%d 필요)" % unit)
 		return
 	_toast_item(seed_item, bought)
 	audio.sfx("ui")
@@ -11409,7 +11418,7 @@ func _try_buy_peddler_item(id: String, n: int) -> void:
 		bought += 1
 	if bought == 0:
 		_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(ItemCatalog.name_of(id)) if full
-			else "골드 부족(%d 필요)" % unit)
+			else "냥 부족(%d 필요)" % unit)
 		return
 	_toast_item(id, bought)
 	audio.sfx("ui")
@@ -11766,7 +11775,9 @@ func _do_sleep() -> void:
 	# ★[폴리시 R12] 카페 팝업 둘도 같은 줄에 세운다(위 세 세션과 완전히 같은 이유 — 무대에 묶인
 	#   비영속 상태가 1.1초 트윈을 넘겨 살아남고, 그 틱에는 `_sleeping` 가드가 없다). 어제 밤의
 	#   마감 장부가 오늘 아침 화면 위에 뜨는 것이 그 구체적 형태다(`_drop_cafe_popups` 머리말 ㉠).
-	_drop_cafe_popups()
+	# ★[폴리시 R13 정정] 단 **마일스톤 축하는 남긴다**(keep_milestone) — 1회성 래치라 여기서
+	#   버리면 그 문구가 세이브에서 영영 사라진다(근거 전문은 `_drop_cafe_popups` 머리말 ㉠).
+	_drop_cafe_popups(true)
 	_sleeping = true
 	clock.running = false
 	audio.sfx("sleep")                 # P2.6 하루를 닫는 부드러운 하강 패드
@@ -13957,7 +13968,7 @@ func _process(delta: float) -> void:
 	gold_label.visible = false
 	# ★ C3 — 혼력은 우하단 혼력 바(vitals)가, 하트(미호·멜·바나·네오)는 메뉴 관계 탭이 그린다(프레임이
 	#   열렸을 때 위 입력 핸들러가 set_hearts로 값을 흘려넣는다 — 모달이라 이 HUD 블록엔 안 온다).
-	#   여우불·카페 마진·바나 경비·네오 할인 같은 관계 곱셈기도 관계 탭 효과 줄에서 복기한다(_heart_rows).
+	#   여우불·카페 마진·바나 수호·네오 할인 같은 관계 곱셈기도 관계 탭 효과 줄에서 복기한다(_heart_rows).
 	#   카페·밤 영업의 일시 이벤트(서빙·약탈·정산)는 알림 피드(_notice)로 흐른다 — 상시 상태 라벨
 	#   난립을 미니멀 HUD로 정리(ADR-0018).
 	# ★ C3 카페 마일스톤(시계 클러스터 곁 작은 진행 표시 — 매크로 목표, ADR-0009). 세 루프 산출물
@@ -14319,7 +14330,7 @@ func _process(delta: float) -> void:
 		#   말한다(벌칙 문구 없음 — 창이 닫히는 건 손해가 아니라 그냥 안 찍은 것이다).
 		#   ★ 입력 분기와 같은 술어(_cheki_offered_at)를 쓰므로 보이는 값과 눌리는 동작이 안 어긋난다.
 		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] %s체키 한 장 (+%d~%d골드 · %.0f초)" % [
+		interact_prompt.text = "[우클릭] %s체키 한 장 (+%d~%d냥 · %.0f초)" % [
 			_guest_prefix(_cheki_guest),
 			cafe.cheki_price(_cheki_menu, ChekiSession.Grade.OK),
 			cafe.cheki_price(_cheki_menu, ChekiSession.Grade.PERFECT),
@@ -14331,7 +14342,7 @@ func _process(delta: float) -> void:
 		# ★[S6-T4] 명명 손님이면 **누구인지**가 앞에 붙는다(익명은 종전 문구 그대로 — 이름이 없다).
 		var seat_served := _planned_menu(facing_seat)
 		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] %s%s 서빙 (+%d골드)" % [
+		interact_prompt.text = "[우클릭] %s%s 서빙 (+%d냥)" % [
 			_guest_prefix(cafe.guest_of(facing_seat)),
 			MenuCatalog.name_of(seat_served), cafe.serve_price(seat_served)]
 	elif _cocktail_offered_at(facing_seat):
@@ -14340,7 +14351,7 @@ func _process(delta: float) -> void:
 		#   닫히는 건 손해가 아니라 그냥 안 만든 것이다). ★ 입력 분기와 같은 술어를 쓰므로 보이는
 		#   값과 눌리는 동작이 안 어긋난다(체키 프롬프트와 같은 규율).
 		interact_prompt.visible = true
-		interact_prompt.text = "[우클릭] 칵테일 한 잔 (+%d~%d골드 · %.0f초)" % [
+		interact_prompt.text = "[우클릭] 칵테일 한 잔 (+%d~%d냥 · %.0f초)" % [
 			night_bar.cocktail_price(CocktailSession.Grade.OK),
 			night_bar.cocktail_price(CocktailSession.Grade.PERFECT),
 			ceilf(_cocktail_offer_secs)]
@@ -14348,7 +14359,7 @@ func _process(delta: float) -> void:
 		# T6.4 밤 바 손님을 바라볼 때: 우클릭으로 응대(정액 밤 매출, 재료 무소모 — 현재 자산).
 		interact_prompt.visible = true
 		# ★[S7-T6] 정액이 아니라 night_bar에 주입된 값을 읽는다 — 테마 데이엔 프롬프트도 오른 값을 말한다.
-		interact_prompt.text = "[우클릭] 응대 (+%d골드)" % night_bar.serve_price()
+		interact_prompt.text = "[우클릭] 응대 (+%d냥)" % night_bar.serve_price()
 	elif _region == RegionCatalog.HOME and ranch.has_animal_at(_target):
 		# ★ [S1-7→B1-a.1] 짐승을 바라볼 때: 산물 있으면 수집, 없으면 쓰다듬 / 든 게 건초면 급여 안내.
 		# ★[폴리시 R7] 겨눈 칸 → 짐승 키 해석 — 방목지의 짐승도 이 안내가 잡고, 비어 있는 실내
@@ -16459,10 +16470,10 @@ func buy_sprinkler(n: int = 1) -> int:
 		bought += 1
 	if bought == 0:
 		_notice("가방을 비우고 오자 — 저승 스프링클러를 받을 자리가 없다" if full
-			else "골드 부족(%d 필요)" % unit)
+			else "냥 부족(%d 필요)" % unit)
 		return 0
 	audio.sfx("ui")                           # 매대 거래 블립
-	_notice("저승 스프링클러 ×%d −%d골드 (만물상)" % [bought, unit * bought])
+	_notice("저승 스프링클러 ×%d −%d냥 (만물상)" % [bought, unit * bought])
 	return bought
 
 # RMB 맨손 수확(ADR-0024 §3 — 낫 없음, 수확=맨손). 다 자란 칸만 거두고, 거둔 영혼을 인벤토리에
@@ -17148,7 +17159,11 @@ func _farm_prompt() -> String:
 		var crop := ItemCatalog.crop_of(item)
 		if inventory.has_seed(crop):
 			return "[좌클릭] %s 심기" % CropCatalog.name_of(crop)
-		return "%s 씨앗 없음 — 카페·만물상에서 구매" % CropCatalog.name_of(crop)
+		# ★[폴리시 R13] "카페"를 뺐다 — 옛 멜 카페 매대 시절의 잔존 문구다. 이 세이브의 씨앗
+		#   창구는 만물상·야시장·보부상 셋이고 **카페 실내엔 씨앗 매대가 배선돼 있지 않다**
+		#   (CONTEXT [출하대] "씨앗 구매는 만물상 쪽"). 뒤 둘은 날짜에 매인 임시 무대라 상시
+		#   안내로 못 세운다 — 언제 봐도 참인 하나만 가리킨다(화분판도 같은 문자열).
+		return "%s 씨앗 없음 — 만물상에서 구매" % CropCatalog.name_of(crop)
 	# ★ [S1-6] 든 게 비료면 경작 칸에 뿌리기 안내(심김/빈칸 무관 — overwrite, §8.4).
 	# ★[폴리시 R9] **칸에 이미 뿌린 비료를 화면이 말한다.** 종전엔 `fertilizer_of`를 참조하는
 	#   곳이 playtest뿐이라(main 0건·오버레이 인덱스는 성장단계×2+젖음뿐) 무엇이 깔렸는지 알
@@ -17189,7 +17204,7 @@ func _pot_prompt() -> String:
 		var pcrop := ItemCatalog.crop_of(item)
 		if inventory.has_seed(pcrop):
 			return "[좌클릭] %s 심기 (화분 — 절기 무관)" % CropCatalog.name_of(pcrop)
-		return "%s 씨앗 없음 — 카페·만물상에서 구매" % CropCatalog.name_of(pcrop)
+		return "%s 씨앗 없음 — 만물상에서 구매" % CropCatalog.name_of(pcrop)
 	if garden_pot.is_planted(_target):
 		return "화분 — %s (물은 매일 손으로)" % CropCatalog.name_of(garden_pot.crop_of(_target))
 	return "빈 화분 — 씨앗을 들고 심자"
@@ -17708,10 +17723,10 @@ func _buy_store_generic_n(buy_id: String, kind: String, n: int) -> void:
 		bought += 1
 	if bought == 0:
 		_notice("가방을 비우고 오자 — %s 받을 자리가 없다" % HanjiUi.with_eul(label) if full
-			else "골드 부족(%d 필요)" % unit)
+			else "냥 부족(%d 필요)" % unit)
 		return
 	audio.sfx("ui")                           # 매대 거래 블립
-	_notice("%s ×%d −%d골드 (%s)" % [label, bought, unit * bought, shop])
+	_notice("%s ×%d −%d냥 (%s)" % [label, bought, unit * bought, shop])
 
 # ── ★ [S3-T5 / ADR-0061 결정 5] 물고기 즉시 환전(생선가게 환전 탭) ─────────────
 # ADR-0021 해석: 출하함(무인·익일 정산)은 **전 품목 야간 채널**로 그대로 두고, 뱃사공은 "상점 중
@@ -17739,7 +17754,7 @@ func _on_frame_sell_fish_all() -> void:
 		_notice("환전할 물고기가 없다")
 		return
 	audio.sfx("ui")
-	_notice("물고기 %d마리 환전 +%d골드 (생선가게)" % [n, gold])
+	_notice("물고기 %d마리 환전 +%d냥 (생선가게)" % [n, gold])
 
 # (어종, 등급) n마리를 환전한다. quiet=true면 알림·SFX를 호출 측이 합쳐 낸다(전량 환전).
 # 반환 = {"count": 실제 환전 수, "gold": 지급 골드}.
@@ -17765,7 +17780,7 @@ func _sell_fish_n(id: String, quality: int, n: int, quiet: bool = false) -> Dict
 	if not quiet:
 		audio.sfx("ui")
 		var qtag := (ItemCatalog.quality_name(quality) + " ") if quality > 0 else ""
-		_notice("%s%s ×%d 환전 +%d골드 (생선가게)" % [qtag, ItemCatalog.name_of(id), took, gold])
+		_notice("%s%s ×%d 환전 +%d냥 (생선가게)" % [qtag, ItemCatalog.name_of(id), took, gold])
 	return {"count": took, "gold": gold}
 
 # 인벤에서 (어종, 등급)이 정확히 일치하는 슬롯 보유 수(환전 행 합산·bulk 수량 산정).
@@ -18483,7 +18498,7 @@ func _try_deliver_quest() -> void:
 	if af != null:
 		af.add_points(int(done["affinity"]))   # 대화·선물의 하루 1회 게이팅과 별개 채널(의뢰 완료 = 1회성)
 	audio.sfx("gold")
-	_notice("의뢰 완료 — %s ×%d 납품 · +%d골드 · %s 호감도↑" % [ItemCatalog.name_of(id), need, gold,
+	_notice("의뢰 완료 — %s ×%d 납품 · +%d냥 · %s 호감도↑" % [ItemCatalog.name_of(id), need, gold,
 		String(done["client"])])
 
 # ★ [S2-T5] 혼백관 실내 그레이박스 진열 — 기증대(중북부 2×1 목대) + 북벽 전시대(유품 3좌 + 책 2좌 그릇).
@@ -18707,10 +18722,10 @@ func _buy_seed_store_n(crop_id: String, n: int) -> void:
 		bought += 1
 	if bought == 0:
 		_notice("가방을 비우고 오자 — %s 씨앗을 받을 자리가 없다" % CropCatalog.name_of(crop_id) if full
-			else "골드 부족(%d 필요)" % unit)
+			else "냥 부족(%d 필요)" % unit)
 		return
 	audio.sfx("ui")                           # 매대 거래 블립(씨앗 구매)
-	_notice("%s 씨앗 ×%d −%d골드 (만물상)" % [CropCatalog.name_of(crop_id), bought, unit * bought])
+	_notice("%s 씨앗 ×%d −%d냥 (만물상)" % [CropCatalog.name_of(crop_id), bought, unit * bought])
 
 # ★ [S1R-T12] 매대 헤더(프레임 상단 2줄 — 제목 + 골드·할인 요약). 품목은 _store_items 그리드가
 # 대신 그린다(옛 평문 가격줄 제거). ⑤a 회귀: "매대" 포함·"판매"/"전량 판매" 미포함 유지.
@@ -18718,7 +18733,7 @@ func _store_text() -> String:
 	var hearts := neo_affinity.hearts()
 	return "\n".join([
 		"── 네오의 만물상 매대 ──",
-		"골드 %d   ·   %s" % [wallet.gold, StoreDiscount.summary(hearts)],
+		"%d냥   ·   %s" % [wallet.gold, StoreDiscount.summary(hearts)],
 	])
 
 # ★ [S1R-T12] 매대 품목 행 데이터(프레임이 [아이콘|이름|가격|구매] 행으로 그린다). 판매 씨앗 전종
@@ -18819,7 +18834,7 @@ func _refresh_fishshop() -> void:
 func _fishshop_text() -> String:
 	return "\n".join([
 		"── 뱃사공의 생선가게 ──",
-		"골드 %d   ·   %s" % [wallet.gold, StoreDiscount.summary_for("뱃사공", "생선가게 매대", _boatman_hearts())],
+		"%d냥   ·   %s" % [wallet.gold, StoreDiscount.summary_for("뱃사공", "생선가게 매대", _boatman_hearts())],
 	])
 
 # 기어 매대 품목 행 — 낚싯대 T2~T4 + 미끼 3 + 태클 3(전량 GearCatalog 가격 · 뱃사공 할인가).
@@ -18907,7 +18922,7 @@ func _refresh_woodshop() -> void:
 # 목공방 헤더 2줄(제목 + 골드·옹이 할인 / 진행 중 의뢰·원목 보유). 만물상·생선가게 헤더와 대칭이되
 # **옹이 하트**를 보고, 둘째 줄에 이 가게에서만 의미 있는 두 값(진행 의뢰·원목 재고)을 얹는다.
 func _woodshop_text() -> String:
-	var second := "골드 %d   ·   원목 %d   ·   %s" % [wallet.gold, inventory.count_of(ItemCatalog.WOOD),
+	var second := "%d냥   ·   원목 %d   ·   %s" % [wallet.gold, inventory.count_of(ItemCatalog.WOOD),
 		StoreDiscount.summary_for("옹이", "목공방 매대", _ongi_hearts())]
 	var busy := carpenter.summary(clock.day) if carpenter != null else ""
 	if busy != "":
@@ -19060,7 +19075,7 @@ func _guild_text() -> String:
 		"── 무골의 모험가 길드 ──",
 		# ★[S5-T11 폴리시] 넓은 구분자("   ·   ")+"도달 깊이" 표기로 줄이 프레임 폭을 넘어
 		#   체력 끝자리가 잘렸다("체력 100/10" 실측 — T6 owner 큐). 구분자·표기 축약으로 봉합.
-		"골드 %d · 깊이 %d층 · %s" % [wallet.gold, depth, hp_line],
+		"%d냥 · 깊이 %d층 · %s" % [wallet.gold, depth, hp_line],
 	])
 
 # 길드 품목 행 — **도달 깊이로 해금된 검**(티어 순) + 명부환 1행.
@@ -20986,7 +21001,13 @@ func _open_spine_puzzle() -> void:
 		return
 	spine_puzzle = session
 	_spine_b5_closing = false
-	_spine_b5_clock_prev = clock.running
+	# ★[폴리시 R12 #9 → R13] 취침 중이면 **true를 스냅한다** — `_do_sleep`이 세운 `clock.running
+	#   = false`는 0.4초 페이드 트윈 동안의 *일시적* 값이고(아침에 `clock.sleep`이 되돌린다),
+	#   그 창에 컷신 마지막 프레임이 떨어지면 `_end_cutscene`이 `_sleeping` 가드로 복원을 건너뛴
+	#   채 곧바로 여기로 온다. 그 false를 기억하면 `_close_spine_puzzle`이 내면을 닫는 순간
+	#   시계를 영구 정지시킨다(분 틱·NPC 스케줄·영업창·날씨가 다 멎는다). 에필로그의 형제 자리와
+	#   같은 처방 — 두 화면 다 "닫으면 원상복구"가 계약이라 스냅이 진실이어야 한다.
+	_spine_b5_clock_prev = clock.running or _sleeping
 	clock.running = false               # 내면에는 시간이 흐르지 않는다
 	player.set_physics_process(false)   # 걸어 다니는 곳이 아니다
 	player.velocity = Vector2.ZERO
@@ -22397,7 +22418,11 @@ func _try_resident_gift(r: Resident) -> void:
 	# ★[폴리시 R12] **천장을 건네기 전에 기억한다** — `gift()`는 명목 점수를 돌려주므로(0 하한이
 	#   미터 바닥인 것과 달리 MAX_POINTS 천장은 관계의 *끝*이다) 이미 만점인 상대에게 건넨 선물이
 	#   "+160 호감도"라고 보고됐다. 아이템은 그대로 소모한다(ADR-0008 — 선물 자체는 안 막는다).
-	var was_maxed: bool = r.affinity.is_maxed()
+	# ★[폴리시 R13 정정] 판정을 만점 하나가 아니라 **부호까지** 본다(`is_gift_no_op`). 만점에서도
+	#   질색 선물(HATE −20)은 points를 실제로 깎으므로, "이미 가득하다"는 그 손실을 한 글자도 안
+	#   보이게 지웠다 — 하류로는 `points_hearts()`가 내려가 떠 있던 ♡5 고백 제안이 이유 없이
+	#   사라졌다. 실효가 있는 선물은 종전대로 숫자를 말한다(음수면 음수로).
+	var no_effect: bool = r.affinity.is_gift_no_op(points)
 	var gained := r.affinity.gift(points, clock.day, birthday, married)
 	var tag := GiftPrefs.tag_of(tier)
 	if birthday:
@@ -22406,8 +22431,9 @@ func _try_resident_gift(r: Resident) -> void:
 	# ★[S8-T9 아트 패스] tier 색 — 태그 문자열을 읽기 전에 결과(선호/질색)가 도착한다. 생일(×8)도
 	#   tier 색 그대로다(문구에 이미 "(생일!)"이 붙어 배율은 글자가 말한다 — 색축이 둘이면 못 읽힌다).
 	var tint: Color = GIFT_TIER_TINTS.get(tier, Color(0, 0, 0, 0))
-	# ★[폴리시 R12] 만점 상대에게는 **점수 대신 사실**을 말한다(주간 횟수도 안 쓰였다 — affinity.gift 참조).
-	var effect := "%s%+d 호감도" % [tag, gained] if not was_maxed else "%s호감도는 이미 가득하다" % tag
+	# ★[폴리시 R12 → R13] 실효 0인 선물에게만 **점수 대신 사실**을 말한다(그 경우 주간 횟수도
+	#   안 쓰였다 — affinity.gift 참조). 실효가 있으면 만점이라도 숫자를 그대로 알린다.
+	var effect := "%s%+d 호감도" % [tag, gained] if not no_effect else "%s호감도는 이미 가득하다" % tag
 	if who == "":
 		_notice("%s 선물 %s" % [ItemCatalog.name_of(id), effect],
 			NOTICE_SECS, false, null, tint)
@@ -22533,7 +22559,7 @@ func _on_night_closed(raided: int, revenue: int, left: int) -> void:
 	#   핸들러가 도는 동안 tonight_cocktails()는 아직 오늘 밤 값이다(시그니처를 안 늘리려는 선택 —
 	#   기존 closed(raided, revenue, left) 계약을 쓰는 night_bar_test 하네스가 그대로 산다).
 	var tail := " · 칵테일 %d잔" % night_bar.tonight_cocktails() if night_bar.tonight_cocktails() > 0 else ""
-	_notice("나라카 바 마감 · 밤 매출 %d골드 · 약탈 %d개 · 놓친 손님 %d명%s" % [revenue, raided, left, tail])
+	_notice("나라카 바 마감 · 밤 매출 %d냥 · 약탈 %d개 · 놓친 손님 %d명%s" % [revenue, raided, left, tail])
 
 # T6.4 ★ 막기 해소 계약 소비(이중 손실 ㉮ — 막기 실패→재고 약탈). 잡귀가 돌파하면(resolved에
 # repelled=false) 약탈량만큼 낮에 쌓은 수확물을 덜어낸다 — *내일* 카페가 굶는 미래 자산 손실
@@ -22588,7 +22614,7 @@ func _try_night_serve(seat: int) -> void:
 		_cafe_revenue_total += revenue        # T7.2 카페 마일스톤 누적(밤 응대도 카페/바 운영 매출)
 		_total_income += revenue              # ★ [S1R-T12] 누적 총수입(정보패널)
 		audio.sfx("serve")                    # P2.6 밤 손님 응대도 같은 서빙 종
-		_notice("밤 손님 응대 +%d골드" % revenue)
+		_notice("밤 손님 응대 +%d냥" % revenue)
 		_offer_cocktail(seat)                 # ★[S6-T6] 사슬 2단 — 그 자리에 칵테일 제안이 열린다
 
 # ── ★[S6-T6 / ADR-0064 결정 6] 칵테일 = 밤 응대 사슬의 둘째 단 ────────────────
@@ -22669,7 +22695,7 @@ func _finish_cocktail() -> void:
 	_cafe_revenue_total += revenue
 	_total_income += revenue                          # ★[S1R-T12] 누적 총수입(정보패널)
 	audio.sfx("gold")
-	_notice("칵테일 %s +%d골드" % [CocktailSession.grade_name(grade), revenue])
+	_notice("칵테일 %s +%d냥" % [CocktailSession.grade_name(grade), revenue])
 	queue_redraw()
 
 # T5.2 멜 선물: ★[S8-T2] **든 아이템** 1개를 건네 멜 호감도를 올린다(등급은 GiftPrefs).
@@ -22712,7 +22738,7 @@ func _try_serve(seat: int) -> void:
 	#      손님 쪽 ♡는 0이고, 오르는 건 멜 하나뿐이며, 그마저 하루 12점에서 멈춘다.
 	_credit_mel_revenue(revenue)
 	audio.sfx("serve")                        # P2.6 카운터 종 "딩"
-	_notice("%s%s 서빙 +%d골드" % [_guest_prefix(guest_id), MenuCatalog.name_of(served), revenue],
+	_notice("%s%s 서빙 +%d냥" % [_guest_prefix(guest_id), MenuCatalog.name_of(served), revenue],
 		NOTICE_SECS, false, _item_icon(served))   # ★[S6-T8] 나간 잔의 아이콘을 알림에 함께
 	_offer_cheki(seat, guest_id, served)      # ★[S6-T5] 사슬 2단 — 아는 얼굴이면 체키 제안이 열린다
 
@@ -22818,7 +22844,7 @@ func _finish_cheki() -> void:
 	_total_income += revenue                          # ★[S1R-T12] 누적 총수입(정보패널)
 	guests.record_cheki(guest_id, grade)              # 단골화 가속(♡ 아님 — 방문 가중치)
 	audio.sfx("gold")
-	_notice("%s체키 %s +%d골드" % [_guest_prefix(guest_id),
+	_notice("%s체키 %s +%d냥" % [_guest_prefix(guest_id),
 		ChekiSession.grade_name(grade), revenue], NOTICE_SECS, false, _HUD_BADGE_CHEKI)
 	queue_redraw()
 
@@ -22974,7 +23000,7 @@ func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
 	#   노출 0. 명명 손님이 없던 옛 세이브·초반 영업은 종전 3줄 그대로 보인다 = 거동 불변).
 	var lines := [
 		"── 오늘 카페 영업 마감 ──",
-		"매출  +%d골드" % revenue,
+		"매출  +%d냥" % revenue,
 		"서빙한 손님  %d명" % served,
 		"놓친 손님  %d명" % left,
 	]
@@ -23015,11 +23041,24 @@ func _show_cafe_summary(text: String) -> void:
 #     되감아도 이 다섯은 그대로 남아, **폐기된 타임라인**의 매출·서빙·체키 수가 복원된 아침에 뜬다.
 # 타이머 둘을 0으로 되돌리면서 패널 둘을 함께 숨기는 것이 짝이다 — 타이머만 죽이면 그 패널을
 # 거두는 유일한 손이 사라져 화면에 영영 남는다.
-func _drop_cafe_popups() -> void:
+#
+# ★[폴리시 R13 정정] `keep_milestone`으로 **취침 갈래만** 마일스톤 두 조각을 남긴다. R12는 잃어도
+# 되는 정산과 잃으면 안 되는 마일스톤을 한 함수에 묶어, R11이 바로 앞 회차에 세운 구분을 뒤집었다
+# (`_show_cafe_summary` 호출부 머리말 — "마일스톤은 래치라 가려지면 그 축하 문구가 세이브에서
+# 영영 사라진다 / 정산은 매일 뜨는 줄이라 몇 초 미뤄도 잃는 것이 없다"). 두 경로가 갈리는 이유:
+#   ㉠취침 — 래치(`_milestone_celebrated`)가 팝업보다 **먼저** 서므로, 6초 안에 자면 그 축하는
+#     다시 뜰 경로가 없다(재기동·로드도 `_milestone_celebrated = _milestone_complete()`로 래치를
+#     참으로 되세운다). 트윈 뒤에서 타이머가 계속 깎이는 건 그대로 두면 된다 — 몇 초 뒤 아침
+#     화면 위에 남는 것이 **그 축하 문구 자체**라, 어제 장부와 달리 지금 봐야 할 것이다.
+#   ㉡로드 — 되감긴 세이브는 래치도 함께 되감기므로(다시 문턱을 넘으면 다시 뜬다) 버려도 잃는 것이
+#     없고, 오히려 폐기된 타임라인의 축하가 복원된 아침에 남는다. 그래서 다섯을 전부 버린다.
+func _drop_cafe_popups(keep_milestone: bool = false) -> void:
 	_cafe_summary_pending = ""
 	_cafe_summary_secs = 0.0
-	_milestone_popup_secs = 0.0
 	cafe_summary_panel.visible = false
+	if keep_milestone:
+		return
+	_milestone_popup_secs = 0.0
 	milestone_panel.visible = false
 
 # ── T7.2 카페 마일스톤 / ★[S6-T3] 카페 일구기 사다리 ────────────────────────
@@ -23491,9 +23530,14 @@ func _open_codex() -> void:
 # `???`로 수를 밝힌다** — 채운 것과 못 채운 것이 한눈에 갈리는 것이 도감의 전부이기 때문이다.
 const CODEX_LIST_MAX := 6
 
+# ★[폴리시 R13] 머리글의 설비 이름을 **표시 층 다수결**에 맞췄다(종전 "출하대"). 같은 한 대의
+#   설비를 프롬프트는 "무인 출하함", 투입·회수·정산 알림 셋은 "출하함", 여기만 "출하대"라 불러,
+#   도감 등재 조건이 다른 창구를 가리키는 것처럼 읽혔다. 용어집 표제어는 "출하대"지만 그 항목
+#   본문이 ADR-0021로 "무인 출하함"으로 개정돼 있으므로, 화면이 실제로 쓰는 쪽으로 모은다
+#   (내부 식별자 `ship_bin`·`ShippingBin`도 이미 그쪽이다).
 func _codex_lines() -> PackedStringArray:
 	var out := PackedStringArray()
-	out.append("◆ 명부 도감 ◆   출하대에 올린 것이 스스로 이름을 얻는다 (%d/%d)" % [
+	out.append("◆ 명부 도감 ◆   출하함에 올린 것이 스스로 이름을 얻는다 (%d/%d)" % [
 		codex.shipped_count(), Codex.total_count()])
 	for cat in Codex.CATEGORIES:
 		out.append(_codex_category_line(String(cat)))
@@ -25340,8 +25384,11 @@ func _draw_tappers() -> void:
 	# 다시 그린다 — 안 그러면 앞 패스 캐노피(PROP_TREE_FOREST)가 채취기를 통째로 덮어 "수거 대기"
 	# 방울이 안 보인다([S4-T9 인계] 이끼가 SPLIT_PROPS로 푼 문제의 채취기판. 이끼와 달리 채취기는
 	# 상태가 매일 바뀌어 프롭 캐시에 못 들어가므로 같은 규칙을 손으로 적용한다).
+	# ★[폴리시 R13] 안식 농원도 같은 갈림을 받는다 — `_can_place_tapper`에 구역 제한이 없어
+	#   마당 나무 16그루에도 박히는데(그 머리말이 명시한다), 여긴 앞 패스 호출부가 아예 없어
+	#   채취기와 "수거 대기" 방울이 앞 패스 나무 스프라이트에 통째로 덮였다.
 	var split_y := 1.0e20
-	if _in_forest() and player != null:
+	if player != null and (_in_forest() or _region == RegionCatalog.HOME):
 		split_y = player.global_position.y
 	_draw_tappers_pass(self, false, split_y)
 
@@ -25354,17 +25401,35 @@ func _draw_tappers_front(canvas: CanvasItem) -> void:
 func _in_forest() -> bool:
 	return _region == RegionCatalog.JEOSEUNG_FOREST or _region == RegionCatalog.MIHOK_FOREST
 
+# ★[폴리시 R13] 안식 손저작 앵커에 박힌 채취기가 따라 내려가는 보정(px) = 나무 스프라이트 높이
+#   − 한 칸. 이 값을 더하면 채취기의 발치가 그 나무의 `_prop_base_y`와 **정확히 같아진다** —
+#   Y-split이 둘을 절대 다른 패스로 못 가른다는 것이 이 상수식의 전부다(회귀가 그 항등식을 잰다).
+func _tapper_home_drop() -> float:
+	return PROP_TREE_A.get_size().y - float(TILE)
+
 # 채취기 한 패스. front=false면 split_y 이하(뒤)만, true면 split_y 초과(앞)만 그린다.
-# 발치(base_y) = 타일 아래 모서리 — 프롭 Y-split(_prop_base_y)과 같은 기준이라 나무와 짝이 맞는다.
+# 발치(base_y) = 타일 아래 모서리 — 숲에선 프롭 Y-split(_prop_base_y)과 같은 기준이라 나무와 짝이
+# 맞는다: `_forest_item`이 원장 칸을 **발치**로 받아 앵커를 rows−1만큼 역산하므로, 그 나무의
+# `_prop_base_y`가 정확히 `t.y*TILE + TILE`로 되돌아온다.
+# ★[폴리시 R13] 안식 농원만 그 항등식이 깨진다 — 마당 나무의 원장 칸은 손저작 프롭의 **앵커
+#   (64×128 스프라이트의 상단)**라, 나무는 `t.y*TILE + 128`로 갈리는데 채취기는 `+32`로 갈렸다.
+#   96px 어긋난 두 발치는 플레이어가 그 사이에 서면 서로 다른 패스로 떨어져, 앞 패스 나무가 뒤
+#   패스 채취기를 덮는다. 게다가 앵커 칸에 그리면 통이 밑동이 아니라 **캐노피 꼭대기**에 뜬다
+#   (`_draw_tappers` 머리말의 "나무 밑동에 얹는다"와 어긋난다). 스프라이트 높이만큼 내려 밑동
+#   칸에 맞추면 발치와 그리는 자리가 한 값으로 함께 교정된다.
+# ★ 안식 **자체 파종**으로 자란 원장 나무는 손저작 앵커가 아니고 큰 스프라이트도 없다 — 보정 없이
+#   자기 칸 그대로다(없는 나무의 발치를 빌리면 통만 허공으로 내려간다).
 func _draw_tappers_pass(canvas: CanvasItem, front: bool, split_y: float) -> void:
 	if tapper == null:
 		return
 	var tsz := PROP_TAPPER.get_size()
+	var anchors: Dictionary = _home_tree_anchor_set() if _region == RegionCatalog.HOME else {}
 	for t: Vector2i in tapper.tiles(_region):
-		var base_y := float(t.y * TILE + TILE)
+		var drop: float = _tapper_home_drop() if anchors.has(t) else 0.0
+		var base_y := float(t.y * TILE + TILE) + drop
 		if (base_y > split_y) != front:
 			continue
-		var base := Vector2(t.x * TILE, t.y * TILE)
+		var base := Vector2(t.x * TILE, float(t.y * TILE) + drop)
 		canvas.draw_texture_rect(PROP_TAPPER, Rect2(base, tsz), false)
 		if tapper.pending_product(_region, t) != "":
 			# 수거 대기 방울(통 위) — "거둘 것 있음"의 유일한 표식이라 가장 밝다. 아트가 붙어도
@@ -26252,6 +26317,9 @@ func _draw_front_props(canvas: CanvasItem) -> void:
 	match _region:
 		RegionCatalog.HOME:
 			_draw_props_for(_home_prop_entries(), canvas, _PROP_PASS_FRONT, player.global_position.y)
+			# ★[폴리시 R13] 마당 나무에 박은 채취기도 숲과 같은 Y-split — 이 한 줄이 없어 안식에선
+			#   앞 패스로 갈린 채취기를 다시 그리는 손이 아예 없었다(상태 표식이 통째로 묻혔다).
+			_draw_tappers_front(canvas)
 		RegionCatalog.NARU_VILLAGE:
 			# ★[S2-T9] 마을 벚꽃 나무도 같은 Y-split을 받는다(수관 뒤로 지나가면 반투명 — FADE_PROPS).
 			_draw_props_for(_prop_layouts.get("VILLAGE_OUTDOOR", []), canvas, _PROP_PASS_FRONT,
