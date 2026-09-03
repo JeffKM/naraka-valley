@@ -2832,6 +2832,11 @@ var fishing: FishingSession = null
 var cheki: ChekiSession = null
 var _cheki_seat := -1            # 제안이 열린 좌석(-1 = 제안 없음)
 var _cheki_offer_secs := 0.0     # 제안 창 잔여(초) — 0 이하면 조용히 닫힌다
+# ★[폴리시 R15] 직전 프레임에 카페/밤 바를 **그렸는가**(세이브 무관 — 잔상 지우기용 1프레임 래치).
+#   마감·마감 전이가 tick 안에서 일어나 그 프레임엔 이미 닫힌 것으로 읽히므로, 이 둘이 "한 프레임 더
+#   그린다"를 들고 있어야 손님·잡귀 그림이 화면에 눌어붙지 않는다.
+var _cafe_drawn_open := false
+var _bar_drawn_active := false
 var _cheki_guest := ""           # 제안·촬영 대상 손님 id(명명 손님만 — 좌석이 비워져도 여기 남는다)
 var _cheki_menu := ""            # 방금 낸 잔의 메뉴 id(체키 매출의 기준가 — 사슬이 값을 물려받는다)
 var _cheki_serial := 0           # 촬영 일련번호(시드 섞기 — 같은 날 반복 촬영의 변주 고착 방지)
@@ -13136,6 +13141,13 @@ func _process(delta: float) -> void:
 	if _deco_mode and _deco_blocked():
 		_toggle_deco_mode()
 	if _deco_mode:
+		# ★[폴리시 R15] **시계 판은 여기서도 갱신한다.** 꾸미기 모드는 이동만 잠그고 `clock.running`은
+		#   건드리지 않아 시간이 그대로 흐르는데(24:00에 `collapsed` → `_do_sleep`이 그 자리에서 하루를
+		#   끝낸다), 시계 HUD를 갱신하는 유일한 자리가 이 return **아래**라 판이 진입 시점 값에 얼어붙은
+		#   채 화면에 떠 있었다. 대화·메뉴·거울은 `_hud_hidden`이 시계를 숨겨 거짓말을 안 하는데
+		#   꾸미기만 보이는 채로 낡아, 시간이 멈춘 줄 알고 꾸미다 하루를 통째로 잃었다.
+		#   시간을 멈추지 않는 이상(그건 설계 결정이다) 최소한 화면은 참이어야 한다.
+		_refresh_clock_hud()
 		queue_redraw()
 		return
 	# ★[S7-T4] 점괘 거울 패널은 타이머가 아니라 **자리**가 접는다 — 집을 나가거나 잠들면 저절로
@@ -13519,8 +13531,16 @@ func _process(delta: float) -> void:
 	# ★[S6-T5] 체키 제안 창 소진(서빙 직후 열린 6초). 촬영 중이 아닐 때만 돈다 — 세션이 시작되면
 	#   창은 이미 닫혀 있다(_start_cheki). 카페가 닫혀도 타이머로 조용히 만료된다(벌칙 0).
 	_tick_cheki_offer(delta)
-	if cafe.is_open() or _cheki_offer_secs > 0.0:
+	# ★[폴리시 R15] **닫히는 그 프레임까지 그린다.** 마감 전이는 바로 위 `cafe.tick` **안에서** 일어나
+	#   (`_close_shop`이 `_open = false`·`_clear_seats()`) 이 줄에 닿을 땐 `is_open()`이 이미 false다 —
+	#   그래서 직전 프레임이 그린 손님 형체·인내심 바·주문 말풍선이 CanvasItem에 그대로 남았다(원장은
+	#   빈 좌석인데). main은 카페 `changed`를 일부러 안 듣고 `minute_ticked` 리스너도 0건이라, 플레이어가
+	#   타일 행을 넘어 재분할 redraw가 걸리기 전까지 유령 손님이 화면에 붙어 있었다. 직전 프레임에
+	#   열려 있었으면 한 프레임 더 그려 그 잔상을 지운다(notice_feed가 "큐가 비는 그 프레임"에 세운 규약).
+	var cafe_open_now := cafe.is_open()
+	if cafe_open_now or _cafe_drawn_open or _cheki_offer_secs > 0.0:
 		queue_redraw()
+	_cafe_drawn_open = cafe_open_now
 	# T6.5 바나 이중 보호 곱셈기 주입(관계 곱셈기, ADR-0008·ADR-0010 #7): 바나 하트 → 밤 보호
 	# 세 축을 night_bar seam에 얹는다. cafe.margin과 같은 다리 — night_bar는 바나 호감도를 모르고
 	# 파라미터만 받는다(디커플링). 매 프레임 파생해 HUD·정산이 항상 현재 하트를 반영하고, F로
@@ -13548,8 +13568,12 @@ func _process(delta: float) -> void:
 		night_bar.tick(delta, clock.minutes)
 	# ★[S6-T6] 칵테일 제안 창 소진(밤 응대 직후 열린 6초). 세션이 시작되면 창은 이미 닫혀 있다.
 	_tick_cocktail_offer(delta)
-	if night_bar.is_active() or _cocktail_offer_secs > 0.0:
+	# ★[폴리시 R15] 카페 마감 줄과 **같은 구조·같은 처방**이다 — `_was_active`도 바로 위 tick 안에서
+	#   false로 떨어지므로, 잔상을 지울 마지막 한 프레임을 여기서 확보한다.
+	var bar_active_now := night_bar.is_active()
+	if bar_active_now or _bar_drawn_active or _cocktail_offer_secs > 0.0:
 		queue_redraw()
+	_bar_drawn_active = bar_active_now
 	# ★[S5-T5 / ADR-0063 결정 8] 갱도 층 잡귀 틱 — 이동·화염구·접촉 피해. 카페 손님·밤 바 잡귀 폴링과
 	#   같은 자리이고(연출 중 제외), 층 밖에선 `_tick_mobs`가 스스로 무동작이다. 위 `_transitioning`
 	#   early-return 뒤라 층 전환 fade 중엔 안 돈다(하강 무적 1초와 함께 착지 직후를 보호한다).
@@ -14096,12 +14120,7 @@ func _process(delta: float) -> void:
 	# ★ Phase C 시계 클러스터(우상단): raw ClockLabel/GoldLabel/MilestoneLabel을 한지 플레이트
 	# 하나로 통합했다(clock_hud). 절기 내 일차는 clock의 파생 하나로 수렴했다(요일은 도메인에 없음
 	# — clock_hud 주석). ★[S7-T8] ADR-0048이 비워 뒀던 날씨(☀) 자리를 오늘 하늘로 채운다.
-	var _dos := GameClock.day_of_season(clock.day)
-	if clock_hud != null:
-		clock_hud.set_state(GameClock.season_name(clock.season_index()), _dos, clock.clock_string(),
-			clock.phase(), wallet.gold,
-			CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()),
-			_weather_today())
+	_refresh_clock_hud()
 	# ★[S7-T8] 달력 패널 — 열려 있든 아니든 표시값을 흘려넣는다(값이 바뀔 때만 다시 파생·redraw).
 	#   해금 입력은 _festival_theme과 같은 다리(카페 단계·누적 서빙 매출)를 그대로 탄다.
 	if calendar_panel != null:
@@ -18321,9 +18340,16 @@ func _draw_node_at(t: Vector2i, nid: String, cls: String) -> void:
 
 # 남은 타수 눈금 — 광맥 발치 아래 띠. 어두운 홈 위에 금박 띠가 줄어든다(진행이 화면에 보인다).
 func _draw_hit_gauge(t: Vector2i, ratio: float) -> void:
+	# ★[폴리시 R15] **비율은 트랙 안으로 클램프한다.** 분모 `need`는 매 프레임 *현재* 곡괭이 티어에서
+	#   다시 파생되는데 분자 `done`은 때린 시점 티어로 원장에 쌓인 값이라(리셋은 날이 갈릴 때뿐), 같은
+	#   날 대장간에서 벼리면 need < done이 되어 ratio가 음수로 내려갔다. Godot은 폭이 음수인 rect를
+	#   좌측으로 뒤집어 정규화하므로 금빛 채움이 트랙 좌변 **밖**(옆 칸 위)으로 삐져나와 그려졌다.
+	#   클램프를 호출부가 아니라 여기 두는 이유: 이 게이지를 쓰는 자리가 갱도·나락 둘이고 앞으로 늘 수
+	#   있는데, 트랙을 벗어나지 않는 것은 호출부의 사정이 아니라 **이 그림의 불변식**이다.
+	var r := clampf(ratio, 0.0, 1.0)
 	var p := Vector2(t.x * TILE, t.y * TILE)
 	draw_rect(Rect2(p + Vector2(5, TILE - 7), Vector2(TILE - 10, 3)), Color(0.08, 0.07, 0.07, 0.7))
-	draw_rect(Rect2(p + Vector2(5, TILE - 7), Vector2(float(TILE - 10) * ratio, 3)),
+	draw_rect(Rect2(p + Vector2(5, TILE - 7), Vector2(float(TILE - 10) * r, 3)),
 		Color(0.92, 0.84, 0.42))
 
 # 사다리 한 칸. `up`이면 올라가는 사다리(밝은 벽감 — 한 층 위) / 아니면 내려가는 사다리(어두운
@@ -19042,6 +19068,17 @@ func _store_items() -> Array:
 
 # ══ ★ [S3-T5 / ADR-0061 결정 5] 뱃사공 생선가게 — 기어 매대 + 물고기 즉시 환전 ══════════
 # 프레임에 넘길 세 조각(헤더·기어 행·환전 행)을 한 번에 채운다(_open_frame·_process 공용).
+# ★[폴리시 R15] 시계 클러스터 한 줄 갱신(절기·일차·시각·위상·냥·마일스톤·오늘 하늘). 함수로 뽑은
+#   이유는 **호출 자리가 둘**이기 때문이다 — 평시 `_process` 꼬리와, 꾸미기 모드의 이른 return 앞.
+#   시계는 그 모드에서도 흐르므로 판이 얼면 화면이 거짓말을 한다(#15).
+func _refresh_clock_hud() -> void:
+	if clock_hud == null:
+		return
+	clock_hud.set_state(GameClock.season_name(clock.season_index()),
+		GameClock.day_of_season(clock.day), clock.clock_string(), clock.phase(), wallet.gold,
+		CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()),
+		_weather_today())
+
 func _refresh_fishshop() -> void:
 	frame.store_text = _fishshop_text()
 	frame.store_items = _fishshop_items()
