@@ -68,7 +68,7 @@ func _initialize() -> void:
 	m.frame.set_hearts([
 		{"name": "미호", "filled": 5, "total": 5, "effect": "여우불: 잠듦 — 미호와 친해지면 깨어난다 · 선물 매일 가능(부부)", "badge": "부부"},
 		{"name": "멜", "filled": 5, "total": 5, "effect": "멜 마진: ×1.0 — 멜과 친해지면 단가가 오른다 · 이번 주 선물 2/2", "badge": "혼례 준비 중"},
-		{"name": "바나", "filled": 5, "total": 5, "effect": "바나 경비: 잠듦 — 바나와 친해지면 밤을 지켜준다 · 이번 주 선물 1/2", "badge": "연애 중"},
+		{"name": "바나", "filled": 5, "total": 5, "effect": "바나 수호: 잠듦 — 바나와 친해지면 밤을 지켜준다 · 이번 주 선물 1/2", "badge": "연애 중"},
 		{"name": "네오", "filled": 0, "total": 5, "effect": "네오 할인: 정가 — 네오와 친해지면 매대가 싸진다 · 이번 주 선물 2/2", "badge": "진급 대기"},
 		{"name": "모찌", "filled": 2, "total": 5, "effect": "이번 주 선물 0/2"},
 		{"name": "뱃사공", "filled": 0, "total": 5, "effect": "생선가게 할인: 정가 · 이번 주 선물 2/2"},

@@ -65,7 +65,7 @@ static func text(day: int, gold: int, heart_bar: String, hearts: int, max_hearts
 		"저승 컨셉카페에서의 첫 %d일이 저물었다." % RUN_DAYS,
 		"",
 		"미호와의 사이   %s  (%d/%d)" % [heart_bar, hearts, max_hearts],
-		"모은 골드       %d" % gold,
+		"모은 냥         %d" % gold,
 		"거둔 영혼       %d" % harvested,
 		"",
 		"[ 그레이박스 수직 슬라이스 · Phase 1 ]",

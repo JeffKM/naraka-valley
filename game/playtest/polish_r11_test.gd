@@ -655,13 +655,13 @@ func _initialize() -> void:
 	_check("⑲c 축하가 끝나는 프레임에 정산이 이어서 뜬다(순서가 생기고 둘 다 읽힌다)",
 		not m.milestone_panel.visible and m.cafe_summary_panel.visible
 		and m._cafe_summary_pending == ""
-		and m.cafe_summary_text.text.contains("매출  +120골드"))
+		and m.cafe_summary_text.text.contains("매출  +120냥"))
 	m.cafe_summary_panel.visible = false
 	m._cafe_summary_secs = 0.0
 	m._on_cafe_closed(50, 1, 0)
 	_check("⑲d 마일스톤이 없으면 종전 그대로 즉시 뜬다(거동 불변)",
 		m.cafe_summary_panel.visible and m._cafe_summary_pending == ""
-		and m.cafe_summary_text.text.contains("매출  +50골드"))
+		and m.cafe_summary_text.text.contains("매출  +50냥"))
 	m.cafe_summary_panel.visible = false
 	m._cafe_summary_secs = 0.0
 

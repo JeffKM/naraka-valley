@@ -71,8 +71,14 @@ static func is_awake(hearts: int) -> bool:
 		or patience_secs(hearts) > NightBar.DEFAULT_PATIENCE
 
 # HUD 한 줄 요약(현재 바나 보호 상태). 관계→밤 보상을 눈에 보이게 한다(체감, ADR-0008).
-#   잠듦: "바나 경비: 잠듦 — 바나와 친해지면 밤을 지켜준다"
-#   깨어남: "바나 경비: 약탈 N개 · 자동차단 M마리 · 인내심 Ks" (자동차단 0이면 그 칸은 생략)
+#   잠듦: "바나 수호: 잠듦 — 바나와 친해지면 밤을 지켜준다"
+#   깨어남: "바나 수호: 약탈 N개 · 자동차단 M마리 · 인내심 N초" (자동차단 0이면 그 칸은 생략)
+# ★[폴리시 R13] 표시 문자열 두 곳을 고쳤다(계산은 한 줄도 안 바뀐다):
+#   ㉠ "바나 경비" → "바나 수호" — 바나의 속죄 축은 *밤을 서는 경비*가 아니라 **근원에서 끊는
+#     수호자**다(bana.gd 머리말의 그 정정 · ADR-0021 야간 경비 루프 폐기 · ADR-0031 나락 정립).
+#     아크 본문은 회귀 테스트가 그 옛 프레이밍을 금지하는데(bana_arc_test ⑧f), 정작 플레이어가
+#     읽는 관계 탭 한 줄만 그 말을 남기고 있었다.
+#   ㉡ "%ds" → "%d초" — 게임의 다른 초 표시는 전부 한글이다(체키·칵테일 프롬프트의 "%.0f초").
 # ★[폴리시 R11] `extra_block` = 이 매핑 **바깥에서 얹히는** 자동 차단(배우자 잡일 ③ — main이
 #   `night_bar.auto_block`에 더하는 그 값). 하트→보호 매핑은 여전히 여기 한 곳이지만, 화면이
 #   말하는 보호는 **그 밤 실제로 주입된 값**이어야 한다: 바나와 결혼하면 auto_block이 +1로
@@ -84,9 +90,9 @@ static func summary(hearts: int, extra_block: int = 0) -> String:
 	# 얹힌 차단이 있으면 그 자체가 깨어 있는 밤이다(♡0에서 얹힐 경로는 지금 없지만, 판정이
 	# 주입값을 따르게 해 두면 잠일이 늘어도 "잠듦"이라 거짓말하지 않는다).
 	if not is_awake(hearts) and ab <= 0:
-		return "바나 경비: 잠듦 — 바나와 친해지면 밤을 지켜준다"
-	var text := "바나 경비: 약탈 %d개" % raid_amount(hearts)
+		return "바나 수호: 잠듦 — 바나와 친해지면 밤을 지켜준다"
+	var text := "바나 수호: 약탈 %d개" % raid_amount(hearts)
 	if ab > 0:
 		text += " · 자동차단 %d마리" % ab
-	text += " · 인내심 %ds" % int(round(patience_secs(hearts)))
+	text += " · 인내심 %d초" % int(round(patience_secs(hearts)))
 	return text

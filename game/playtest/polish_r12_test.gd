@@ -35,7 +35,7 @@ extends SceneTree
 #   ⑩ #12 개간(`reclaim.clear`)이 만재에서 칸을 영구히 굳히고 드랍을 증발시킨 채 "+N"을 알렸다 —
 #         형제 창구 여섯이 지키는 「적재先」 계약의 마지막 미커버 창구(재점령 잡초 낫질도 같은 줄).
 #   ⑪ #14 잡초 혼합 씨앗 롤이 `add_seed`의 bool(R2가 일부러 만든 반환)을 안 봐 거짓 획득을 알렸다.
-#   ⑫ #13 야시장 씨앗·보부상 씨앗·보부상 일반 셋이 만재를 "골드 부족"으로 오보했다(두 사유를
+#   ⑫ #13 야시장 씨앗·보부상 씨앗·보부상 일반 셋이 만재를 "냥 부족"으로 오보했다(두 사유를
 #         한 조건에 뭉친 형태 — 형제 창구 셋은 진작 삼항으로 가르고 있었다).
 #   ⑬ R5 ④i 정정 — R10이 새로 쓴 "버릴 수 없다" 안내에 고정 조사 "는"이 다시 들어와 전수 스캔이
 #         baseline부터 실패 중이었다(도구 이름은 받침이 갈린다).
@@ -300,14 +300,16 @@ func _check_cafe_popups(m: Node) -> void:
 		and m._milestone_popup_secs > 0.0
 		and m.cafe_summary_panel.visible and m.milestone_panel.visible)
 
-	# ㉠취침 갈래 — 한 자리(`_drop_cafe_popups`)가 다섯을 다 버린다.
+	# ㉠기본 인자 — 한 자리(`_drop_cafe_popups`)가 다섯을 다 버린다(로드 갈래가 쓰는 형태).
 	m._drop_cafe_popups()
 	_check("②c 버리는 자리가 다섯을 **전부** 비운다 — 본문 \"\" · 타이머 둘 0 · 패널 둘 숨김",
 		m._cafe_summary_pending == "" and m._cafe_summary_secs == 0.0
 		and m._milestone_popup_secs == 0.0
 		and not m.cafe_summary_panel.visible and not m.milestone_panel.visible)
-	_check("②d 취침이 그 자리를 부른다(세션 셋 폐기와 같은 줄 — `_do_sleep`)",
-		_in_func("func _do_sleep", "_drop_cafe_popups()"))
+	# ★[폴리시 R13 정정] 취침 갈래는 `keep_milestone=true`로 부른다 — 1회성 래치인 마일스톤
+	#   축하를 여기서 버리면 그 문구가 세이브에서 영영 사라진다(R13 ②가 그 보존을 직접 잰다).
+	_check("②d 취침이 그 자리를 부르되 마일스톤은 남긴다(세션 셋 폐기와 같은 줄 — `_do_sleep`)",
+		_in_func("func _do_sleep", "_drop_cafe_popups(true)"))
 	_check("②e 로드도 같은 자리를 부른다(밤 바 폐기와 같은 줄 — `_load_game`)",
 		_in_func("func _load_game", "_drop_cafe_popups()"))
 	_check("②f 형제 두 경로는 종전대로 미룬 본문을 버린다(계약의 출처 — 화면을 갈아엎는 세 경로)",
@@ -389,8 +391,13 @@ func _check_sleep_locks(m: Node) -> void:
 		m.player.is_physics_processing())
 	_check("⑦c 목록에 내면 공간(`spine_puzzle`)도 함께 들었다 — 걸어 다니는 곳이 아니다",
 		_in_func("func _on_sleep_done", "and not _epilogue_open and spine_puzzle == null:"))
-	_check("⑦d 다시 켜는 자리는 두 화면이 닫히는 그곳이다(`_close_epilogue`·`_close_spine_scene`)",
-		_in_func("func _close_epilogue", "player.set_physics_process(true)")
+	# ★[폴리시 R13 정정] 니들이 갈렸다 — 두 닫는 자리는 **취침 중이 아닐 때만** 다시 켠다.
+	#   R12 시점엔 `_close_spine_scene`만 `not _sleeping` 항을 받았고 `_close_epilogue`는 무조건
+	#   켜고 있었는데, R13 #16이 그 마지막 형제를 합류시켰다(취침 트윈 중엔 잠금의 주인이 취침이고
+	#   `_on_sleep_done`이 눈뜨는 프레임에 켠다). "닫는 자리가 켠다"는 계약은 그대로다.
+	_check("⑦d 다시 켜는 자리는 두 화면이 닫히는 그곳이다(`_close_epilogue`·`_close_spine_scene` — 취침 중이면 취침 몫)",
+		_in_func("func _close_epilogue", "player.set_physics_process(not _sleeping)")
+		and _in_func("func _close_spine_scene", "not _sleeping:")
 		and _in_func("func _close_spine_scene", "player.set_physics_process(true)"))
 
 
@@ -405,10 +412,17 @@ func _check_epilogue_clock(m: Node) -> void:
 	m._open_epilogue()
 	_check("⑧a 취침 중 스냅은 true다 — 기억할 값은 '연출이 끝나면 시계가 어떤 상태여야 하는가'다",
 		m._epilogue_clock_prev == true)
-	m._close_epilogue()
+	# ★[폴리시 R13 정정] 닫는 자리를 **취침 밖에서** 잰다. R13 #16이 `_close_epilogue`에
+	#   `not _sleeping` 가드를 세웠기 때문이다 — 트윈 한가운데서 닫으면 시계 복원은 취침 몫이고
+	#   (0.4초 뒤 `clock.sleep()`이 `running = true`로 되돌린다), 에필로그가 그 자리를 가로채면
+	#   "연출이 끝나면 시계가 어떤 상태여야 하는가"를 취침이 아니라 에필로그가 정하게 된다.
+	#   R12가 막으려던 **영구 정지**는 그대로 안 일어난다: 스냅 값이 true라 취침 밖 닫기가 되살린다.
 	m._sleeping = false
+	m._close_epilogue()
 	_check("⑧b 그래서 엔딩을 닫으면 시간이 다시 흐른다(종전엔 여기서 영구 정지했다)",
 		m.clock.running == true)
+	_check("⑧b2 취침 트윈 한가운데서 닫으면 시계는 그대로 멈춰 있다 — 되살리는 주인은 취침이다(R13 #16)",
+		_close_during_sleep_keeps_clock_stopped(m))
 	# 대조 — 취침이 아닌 이유로 멈춰 있던 시계는 여전히 되살리지 않는다(컷신의 그 규율 보존).
 	m._epilogue_open = false
 	m.clock.running = false
@@ -558,9 +572,9 @@ func _check_mixed_seed_full(m: Node) -> void:
 		m.inventory.count_of(seed_id) == 1)
 
 
-# ── ⑫ #13 소매 3창구가 만재를 '골드 부족'으로 오보하지 않는다 ─────────────────
+# ── ⑫ #13 소매 3창구가 만재를 '냥 부족'으로 오보하지 않는다 ─────────────────
 # 형제 창구(`_buy_store_generic_n`·만물상 씨앗·스프링클러)는 진작 사유를 가르는데 야시장 씨앗·
-# 보부상 씨앗·보부상 일반 셋만 두 사유를 한 조건에 뭉쳐, 냥이 만 단위로 남아도 "골드 부족"이 떴다.
+# 보부상 씨앗·보부상 일반 셋만 두 사유를 한 조건에 뭉쳐, 냥이 만 단위로 남아도 "냥 부족"이 떴다.
 func _check_retail_full_reason(m: Node) -> void:
 	print("── ⑫ #13 야시장·보부상 소매가 만재와 냥 부족을 가른다 ──")
 	var day0: int = m.clock.day
@@ -581,13 +595,13 @@ func _check_retail_full_reason(m: Node) -> void:
 		m._try_buy_market_seed(crop, 1)
 		var nm_notice := _last_notice(m)
 		_check("⑫b 야시장 — 냥이 999999인데 자리가 없다고 말한다('%s')" % nm_notice,
-			nm_notice.contains("자리가 없다") and not nm_notice.contains("골드 부족"))
+			nm_notice.contains("자리가 없다") and not nm_notice.contains("냥 부족"))
 		# 대조: 자리가 있는데 냥이 없으면 종전 문구 그대로다(사유가 뒤바뀐 게 아니다).
 		_clear_inventory(m.inventory)
 		m.wallet.gold = 0
 		m._try_buy_market_seed(crop, 1)
-		_check("⑫c 대조 — 자리가 있고 냥이 0이면 여전히 '골드 부족'이다('%s')" % _last_notice(m),
-			_last_notice(m).contains("골드 부족"))
+		_check("⑫c 대조 — 자리가 있고 냥이 0이면 여전히 '냥 부족'이다('%s')" % _last_notice(m),
+			_last_notice(m).contains("냥 부족"))
 		m.wallet.gold = 999999
 
 	# ㉡㉢ 보부상 씨앗·일반 — 좌판이 서는 날의 실제 재고 행에서 id를 뽑는다.
@@ -619,20 +633,20 @@ func _check_retail_full_reason(m: Node) -> void:
 		_fill_backpack_full(m.inventory)
 		m._try_buy_peddler_seed(seed_id, 1)
 		_check("⑫e 보부상 씨앗 — 만재를 만재라고 말한다('%s')" % _last_notice(m),
-			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("골드 부족"))
+			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("냥 부족"))
 		_fill_backpack_full(m.inventory)
 		m._try_buy_peddler_item(item_id, 1)
 		_check("⑫f 보부상 일반 — 만재를 만재라고 말한다('%s')" % _last_notice(m),
-			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("골드 부족"))
+			_last_notice(m).contains("자리가 없다") and not _last_notice(m).contains("냥 부족"))
 		# 대조 — 두 창구 다 냥이 0이면 종전 문구 그대로다(사유가 뒤바뀐 게 아니다).
 		_clear_inventory(m.inventory)
 		m.wallet.gold = 0
 		m._try_buy_peddler_seed(seed_id, 1)
-		_check("⑫g 대조 — 보부상 씨앗도 자리가 있고 냥이 0이면 '골드 부족'이다('%s')" % _last_notice(m),
-			_last_notice(m).contains("골드 부족"))
+		_check("⑫g 대조 — 보부상 씨앗도 자리가 있고 냥이 0이면 '냥 부족'이다('%s')" % _last_notice(m),
+			_last_notice(m).contains("냥 부족"))
 		m._try_buy_peddler_item(item_id, 1)
 		_check("⑫h 대조 — 보부상 일반도 마찬가지('%s')" % _last_notice(m),
-			_last_notice(m).contains("골드 부족"))
+			_last_notice(m).contains("냥 부족"))
 
 	m.clock.day = day0
 	m.wallet.gold = gold0
@@ -723,11 +737,14 @@ func _check_gift_maxed(m: Node) -> void:
 	maxed.free()
 	normal.free()
 
-	# 화면 문구 — 만점이면 명목 점수 대신 사실을 말한다(선물 창구가 그 술어를 실제로 본다).
-	_check("⑮f 선물 창구가 건네기 **전에** 천장을 기억하고 문구를 가른다",
-		_line_of("var was_maxed: bool = r.affinity.is_maxed()") > 0
+	# 화면 문구 — 실효 0이면 명목 점수 대신 사실을 말한다(선물 창구가 그 술어를 실제로 본다).
+	# ★[폴리시 R13 정정] 술어가 `is_maxed()` → `is_gift_no_op(points)`로 좁아졌다(만점이어도
+	#   음수 선물은 실효가 있다 — R13 ①이 그 갈림을 직접 잰다). 여기선 "건네기 전에 기억한다"는
+	#   순서 계약만 남기고 니들을 새 술어로 옮긴다.
+	_check("⑮f 선물 창구가 건네기 **전에** 실효 0 여부를 기억하고 문구를 가른다",
+		_line_of("var no_effect: bool = r.affinity.is_gift_no_op(points)") > 0
 		and _line_of("호감도는 이미 가득하다") > 0
-		and _line_of("var was_maxed: bool = r.affinity.is_maxed()")
+		and _line_of("var no_effect: bool = r.affinity.is_gift_no_op(points)")
 			< _line_of("var gained := r.affinity.gift("))
 
 
@@ -871,3 +888,19 @@ func _check_follower_rollback(m: Node) -> void:
 	m._sync_mount()
 	_check("⑲d 속도 계수도 함께 되감긴다(로드 직후 ×1.5가 다시 실리지 않는다)",
 		is_equal_approx(m.player.speed_scale, m.mount.speed_scale()))
+
+
+# ★[폴리시 R13 정정] ⑧b2 보조 — 취침 트윈 구간을 재현해 닫아 보고 시계가 멈춘 채인지 잰다.
+# (⑧ 본문의 상태를 어지르지 않도록 값을 세우고 되돌리는 일을 여기 가둔다.)
+func _close_during_sleep_keeps_clock_stopped(m: Node) -> bool:
+	var prev_open: bool = m._epilogue_open
+	m._sleeping = true
+	m._epilogue_open = true
+	m._epilogue_clock_prev = true
+	m.clock.running = false
+	m._close_epilogue()
+	var stopped: bool = not m.clock.running
+	m._sleeping = false
+	m._epilogue_open = prev_open
+	m.clock.running = true
+	return stopped
