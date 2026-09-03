@@ -173,9 +173,9 @@ func _view() -> Vector2:
 		sc = par.scale.x
 	return Vector2(size.x / sc, size.y / sc)
 
-func _draw() -> void:
-	if not _open or _cells.is_empty():
-		return
+# ★[폴리시 R14] 그려진 달력 판의 사각(논리 좌표). `_draw`와 `hit_test`가 **같은 식 하나**를 봐야
+#   "눈에 보이는 판"과 "클릭을 막는 판"이 어긋나지 않는다(clock_hud의 `_plate_rect` 선례 동형).
+func frame_rect() -> Rect2:
 	var view := _view()
 	var rows := int(ceil(float(_cells.size()) / float(COLS)))
 	var grid_w := COLS * CELL_W + (COLS - 1) * CELL_GAP
@@ -187,8 +187,29 @@ func _draw() -> void:
 	var frame_h := PAD * 2.0 + float(HEAD_SIZE) + 8.0 + grid_h + 8.0 \
 		+ legs.size() * (LEG_SIZE + 3.0) + HanjiUi.text_descent(LEG_SIZE)
 	# 화면 중앙(시계 클러스터와 안 겹치게 살짝 아래로).
-	var frame := Rect2(floorf((view.x - frame_w) * 0.5), floorf((view.y - frame_h) * 0.5) + 8.0,
+	return Rect2(floorf((view.x - frame_w) * 0.5), floorf((view.y - frame_h) * 0.5) + 8.0,
 		frame_w, frame_h)
+
+# ★[폴리시 R14] 이 화면 좌표가 **펼쳐진 달력 판 위**인가. main이 그 위의 클릭을 월드 동사로
+#   흘리지 않으려고 쓴다 — 이 패널은 PRESET_FULL_RECT·mouse_filter IGNORE라 어떤 hit_test도
+#   없었고(비-모달의 대가), 달력 격자를 클릭해 날짜를 짚거나 화면을 눌러 닫으려던 LMB가 그대로
+#   도끼질로 나갔다. 판 **밖**은 계속 논다(열어 둔 채 걷는 자유는 이 패널의 정체성이다).
+func hit_test(screen_pos: Vector2) -> bool:
+	if not _open or _cells.is_empty():
+		return false
+	var sc := 1.0
+	var par := get_parent()
+	if par is CanvasLayer and par.scale.x != 0.0:
+		sc = par.scale.x
+	return frame_rect().has_point(screen_pos / sc)
+
+func _draw() -> void:
+	if not _open or _cells.is_empty():
+		return
+	var legs := _legend_rows()
+	var rows := int(ceil(float(_cells.size()) / float(COLS)))
+	var grid_h := rows * CELL_H + (rows - 1) * CELL_GAP
+	var frame := frame_rect()
 	HanjiUi.draw_frame(self, frame)
 	var x0 := frame.position.x + PAD
 	var y := frame.position.y + PAD + float(HEAD_SIZE)

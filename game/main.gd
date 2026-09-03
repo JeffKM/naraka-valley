@@ -5011,6 +5011,23 @@ func _deco_blocked() -> bool:
 
 func _toggle_deco_mode() -> void:
 	_deco_mode = not _deco_mode
+	# ★[폴리시 R14] **이동도 함께 잠근다.** 모드 머리말이 선언한 "켜면 게임플레이 입력·시뮬을
+	#   멈추고"가 이동 축에만 미집행이었다: player의 이동은 main `_process`와 무관한
+	#   `_physics_process`에서 방향키를 직접 읽는데, `if _deco_mode: return`이 끊는 것은 `_process`
+	#   쪽뿐이라 문·워프 트리거(`_maybe_toggle_building`·`_maybe_warp_edge`)·타깃 갱신이 얼어붙은
+	#   채로 플레이어만 걸어 다녔다. 실내 문 칸으로 걸어가면 퇴장이 안 일어나고(정상 플레이에선
+	#   밟는 즉시 나가므로 그 칸에 머무는 상태 자체가 없다), 모드를 끄는 **그 프레임에** 얼어 있던
+	#   트리거가 한꺼번에 걸려 페이드와 함께 집 밖으로 튕겨 나갔다. 다른 모드는 전부 잠근다
+	#   (`_open_frame`·`_start_dialogue`·`_begin_cutscene`·`_open_spine_puzzle`).
+	# ★ 끄는 자리에서는 `_deco_blocked()`가 거짓일 때만 되돌린다 — 취침·연출·모달이 들어와
+	#   자동으로 접히는 경로(위 `_deco_blocked` 자동 토글)에서는 잠금의 주인이 그쪽이므로
+	#   여기서 켜면 암전 뒤에서 걸어 다니게 된다(『정지 주인 ≠ 재개 주인』).
+	if player != null:
+		if _deco_mode:
+			player.set_physics_process(false)
+			player.velocity = Vector2.ZERO
+		elif not _deco_blocked():
+			player.set_physics_process(true)
 	if _deco_mode:
 		# ★[폴리시 R11] 켜는 그 자리에서 **조회 패널을 먼저 접는다**(점괘 거울·달력). 꾸미기
 		#   편집면은 월드 캔버스의 `_draw` 오버레이라 CanvasLayer 패널 **아래**에 그려지는데,
@@ -13265,6 +13282,21 @@ func _process(delta: float) -> void:
 	if calendar_panel != null and calendar_panel.is_open() \
 			and Input.is_action_just_pressed("ui_cancel"):
 		calendar_panel.close()
+		return
+	# ★[폴리시 R14] **화면을 덮은 조회 오버레이 위의 클릭을 월드로 흘리지 않는다.** 바로 위 시계
+	#   가드는 `clock_hud.hit_test`가 참인 픽셀만 막는데, 두 조회 패널에는 그 표가 없었다:
+	#   ㉠점괘 거울 패널은 뜨는 순간 `_hud_hidden`이 clock_hud를 통째로 숨겨 위 가드의
+	#     `clock_hud.visible` 조건이 죽는다 — 그래서 예보를 덮으려는 **우클릭 한 번**이 그대로
+	#     내려가 `_do_sleep`을 불렀다(`_facing_mirror`는 집 안만 성립하므로 늘 취침 가능 자리다).
+	#     하루가 통째로 소비되고 `_do_sleep` 끝의 자동 저장이 그걸 굳혀 되돌릴 수 없었다. 좌클릭도
+	#     같은 구멍이었다(곁들이·명부환을 든 채 누르면 `holding_free_use` 항으로 하나가 소모).
+	#   ㉡달력은 비-모달(mouse_filter IGNORE)이라 판 자체에 hit_test가 없어, 격자를 눌러 날짜를
+	#     짚거나 화면을 눌러 닫으려던 좌클릭이 13255 주석이 못 박은 그 사고(도끼질 동반)로 나갔다.
+	#   R4가 타이틀·프레임 [X]에 세운 `_swallow_input_once`와 같은 뜻이되, 저건 한 프레임이고
+	#   여기는 **패널이 떠 있는 동안 그려진 판 위**만 막는다(판 밖은 그대로 논다 — 달력은 비-모달이
+	#   정체성이고, 거울도 패널 밖에서는 평소처럼 걸어 다니며 일할 수 있어야 한다).
+	if not _sleeping and _pointer_over_overlay(get_viewport().get_mouse_position()) \
+			and (Input.is_action_just_pressed("use_tool") or Input.is_action_just_pressed("action")):
 		return
 	# 건물 외관 문에 닿으면 실내로, 실내 문에 닿으면 밖으로 — 자동 fade 전환(스타듀식 출입).
 	_maybe_toggle_building()
@@ -23292,6 +23324,19 @@ func _show_milestone3_reached() -> void:
 #   새로 여는 판정까지 그 아쉬움을 답습할 필요는 없어서 여기만 테스트 가능한 표면으로 연다.
 func _facing_mirror() -> bool:
 	return not _sleeping and _indoor == "집" and _target == MIRROR_TILE
+
+# ★[폴리시 R14] 지금 커서가 **조회 오버레이의 그려진 판 위**인가(점괘 거울 예보 · 절기 달력).
+#   판정은 논리 좌표로 한다 — 두 패널 다 $CanvasLayer 자식이라 clock_hud.hit_test와 같은 스케일
+#   보정을 거쳐야 창 크기가 바뀌어도 판과 판정이 안 어긋난다.
+func _pointer_over_overlay(screen_pos: Vector2) -> bool:
+	if mirror_panel != null and mirror_panel.visible:
+		var sc := 1.0
+		var par := mirror_panel.get_parent()
+		if par is CanvasLayer and par.scale.x != 0.0:
+			sc = par.scale.x
+		if Rect2(mirror_panel.position, mirror_panel.size).has_point(screen_pos / sc):
+			return true
+	return calendar_panel != null and calendar_panel.hit_test(screen_pos)
 
 func _open_mirror() -> void:
 	mirror_text.text = _mirror_forecast_text()
