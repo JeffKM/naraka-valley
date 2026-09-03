@@ -11944,12 +11944,23 @@ func _do_sleep() -> void:
 	# 검은 화면으로 페이드 → 날짜 넘기기 → 다시 밝아짐. CanvasLayer라 카메라와 무관.
 	var tw := create_tween()
 	tw.tween_property(fade, "modulate:a", 1.0, 0.4)
-	tw.tween_callback(clock.sleep)       # day +1, 06:00 리셋
+	# ★[폴리시 R17 #10] `false` = **아직 시계를 다시 켜지 않는다.** 이 콜백 뒤로 0.7초(정지 0.3 +
+	#   페이드인 0.4)가 남아 있고 이동 잠금도 그 끝에서야 풀리는데, 종전엔 여기서 시계가 곧바로
+	#   돌아 매일 아침이 06:00이 아니라 ~06:08에 시작했다(근거 전문은 `GameClock.sleep` 머리말).
+	#   위 `clock.running = false`를 세운 것이 이 함수이므로 되살리는 것도 이 연출의 끝이다.
+	tw.tween_callback(clock.sleep.bind(false))   # day +1, 06:00 리셋(시계는 아직 멈춘 채)
 	tw.tween_interval(0.3)
 	tw.tween_property(fade, "modulate:a", 0.0, 0.4)
 	tw.tween_callback(_on_sleep_done)
 
 func _on_sleep_done() -> void:
+	# ★[폴리시 R17 #10] **시계를 여기서 다시 흐르게 한다**(정지 주인 = 재개 주인). `_do_sleep`이
+	#   멈췄으니 그 연출의 끝인 이 자리가 되살리는 자리다 — 트윈 중간의 `clock.sleep`이 켜던 종전에는
+	#   암전 뒤 0.7초가 하루에서 조용히 빠져나갔다. **아래 어떤 줄보다 먼저** 켜야 한다: 바로 밑
+	#   `_fire_spine_b4`·`_fire_spine_b7`·`_fire_soul_birth`가 시작하는 컷신은 `_cutscene_clock_prev
+	#   = clock.running`을 스냅해 끝날 때 그 값으로 되돌리므로, 꺼진 채로 스냅되면 연출이 끝나도
+	#   시간이 안 간다(`_open_epilogue`·B5가 `or _sleeping`으로 피해 온 그 함정의 컷신 판).
+	clock.running = true
 	_sleeping = false
 	# T4.2 슬라이스가 끝났으면(이 취침이 RUN_DAYS+1일째를 불렀음) 이동 잠금을 풀지 않고
 	# 마무리 화면을 유지한다. 진행은 보존하므로 다시 켜도 마무리 화면이 뜬다.
@@ -23155,7 +23166,16 @@ func _on_night_closed(raided: int, revenue: int, left: int) -> void:
 	#   핸들러가 도는 동안 tonight_cocktails()는 아직 오늘 밤 값이다(시그니처를 안 늘리려는 선택 —
 	#   기존 closed(raided, revenue, left) 계약을 쓰는 night_bar_test 하네스가 그대로 산다).
 	var tail := " · 칵테일 %d잔" % night_bar.tonight_cocktails() if night_bar.tonight_cocktails() > 0 else ""
-	_notice("나라카 바 마감 · 밤 매출 %d냥 · 약탈 %d개 · 놓친 손님 %d명%s" % [revenue, raided, left, tail])
+	# ★[폴리시 R17 #11] **keep을 단다.** 이 줄은 `_on_day_advanced`의 두 번째 줄(`night_bar.end_day`)이
+	#   쏘는데, 같은 하루 전환 훅이 그 뒤로 출하함 정산·까마귀·게잡이통·채취기를 동기적으로 계속
+	#   밀어 `MAX_ITEMS(4)`를 넘기면 **언제나 이 줄이 가장 오래된 non-keep**이라 다섯째 push에서
+	#   축출됐다. 전부 한 프레임 안(트윈 콜백 → clock.sleep → day_advanced)이라 `NoticeFeed._draw`가
+	#   한 번도 안 돈 상태에서 사라지고, `closed.emit` 직후 `abandon()`이 매출·약탈·이탈을 전부 0으로
+	#   지워 **다시 볼 경로가 없다**. 그 밤의 결산은 이 줄이 유일한 표면이다(낮 카페는 전용 패널 +
+	#   `_cafe_summary_pending` 미룸까지 갖는다) — ADR-0010 #5 이중 손실의 결산이 옵트인한 플레이어에게
+	#   통째로 전달되지 않았다. R16 #10의 판별식("밀려나면 다시 오지 않는 1회성인가")에 정확히 걸린다.
+	_notice("나라카 바 마감 · 밤 매출 %d냥 · 약탈 %d개 · 놓친 손님 %d명%s" % [revenue, raided, left, tail],
+		NOTICE_SECS, false, null, Color(0, 0, 0, 0), true)
 
 # T6.4 ★ 막기 해소 계약 소비(이중 손실 ㉮ — 막기 실패→재고 약탈). 잡귀가 돌파하면(resolved에
 # repelled=false) 약탈량만큼 낮에 쌓은 수확물을 덜어낸다 — *내일* 카페가 굶는 미래 자산 손실
@@ -25877,7 +25897,16 @@ func _draw_encroach_weeds() -> void:
 		return
 	var tsz := PROP_DEBRIS_WEEDS.get_size()
 	for t in reclaim.weed_tiles():
-		var tex := _debris_variant_tex(PROP_DEBRIS_WEEDS, t)
+		# ★[폴리시 R17 #12] 변주를 뽑은 **뒤 muted 캐시에 합류시킨다** — 위 머리말이 못 박은
+		#   "debris 잡초와 같은 텍스처·변주를 써 시각 동일"이 그 한 걸음이 빠져 깨져 있었다.
+		#   `_draw_props_for`는 같은 `PROP_DEBRIS_WEEDS`를 그릴 때 `_MUTE_GREEN_PROPS` 판정으로
+		#   `_muted_prop_tex`의 세이지 사본으로 갈아 끼우는데(owner "초록 전부 muted"), 이쪽은
+		#   원본을 그대로 그렸다. `_muted_prop_tex`가 **원본을 보존하고 새 ImageTexture를 캐시**하므로
+		#   (`im.duplicate()`) 원본에는 mute가 영영 안 묻는다 — 같은 칸 해시로 고른 **같은 변주 한 장**이
+		#   한쪽은 세이지, 한쪽은 형광 초록으로 떴다. 낫 대상 두 종류가 서로 다른 초록으로 갈리면
+		#   "개간 대상임을 읽힌다"는 이 렌더의 목적 자체가 무너진다.
+		var tex := _muted_prop_tex(_debris_variant_tex(PROP_DEBRIS_WEEDS, t),
+			_MUTE_WOODY.has(PROP_DEBRIS_WEEDS))
 		draw_texture_rect(tex, Rect2(Vector2(t.x * TILE, t.y * TILE), tsz), false)
 
 # ★[S5-T3 / ADR-0063 결정 3] 업화로 그레이박스 렌더(설치물 — 아트는 S5-T9/T10 아트 패스).
