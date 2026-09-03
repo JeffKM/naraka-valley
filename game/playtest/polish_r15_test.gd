@@ -33,7 +33,24 @@ extends SceneTree
 #        나루 마을로 이주).
 #   ⑫ #11 튜토리얼 밭 안에서 **아직 존재하지 않는** 삽사리를 이유로 든 프롬프트가 1일차부터 떴다.
 #
-# 판정: #0~#11 전건 CONFIRMED(REFUTED·OWNER·DUP 없음).
+#   ⑬ #12 BGM·SFX 존재 판정이 `FileAccess.file_exists`라 **익스포트 빌드에서 전 오디오가 무음**이었다
+#        (오디오는 임포트 자산이라 PCK엔 remap만 담긴다 — 원본 경로는 릴리스에 존재하지 않는다).
+#   ⑭ #13 야생·희소 작물이 `CROP_SPRITES`에 키가 없어, 심은 뒤 수확까지 **빈 경작칸과 완전히 동일**했다.
+#   ⑮ #14 인벤을 안 건드리는 구매(가구 세트 해금 등)는 프레임 무효화 트리거가 하나도 없어 헤더 냥·
+#        행 잠금이 결제 전 값에 머물렀다.
+#   ⑯ #15 집 꾸미기 모드 중 시계 판이 얼어붙었다 — 시간은 계속 흘러 24:00에 하루가 끝난다.
+#   ⑰ #16 카페 마감 프레임에 무효화가 없어 좌석 손님 그림·인내심 바가 화면에 눌어붙었다(원장은 빈 좌석).
+#   ⑱ #17 타수 게이지 분모가 현재 티어 파생이라, 같은 날 벼리면 비율이 음수가 되어 트랙 밖에 그려졌다.
+#   ⑲ #18 가구 세트 안내가 [F10]을 광고했다 — 릴리스에선 죽은 디버그 키이고 실제 꾸미기 모드는 C다.
+#   ⑳ #19 메뉴(백팩) 진입 키가 어디에도 없어, "자리를 비우고 다시"가 방법 없이 지시만 했다.
+#   ㉑ #20 Shift 대량 구매가 전 매대에 배선돼 있는데 표기가 0곳이었다.
+#   ㉒ #21 키 표기가 대괄호/괄호/무기호 세 갈래로 갈렸다(`[/]`는 판별 불가였다).
+#   ㉓ #23 스택 개수 배지가 3~4자리에서 슬롯 밖으로 넘쳐 다음 칸 판에 먹혔다(원목 400~500이 정상 플레이).
+#
+# 판정: #0~#21·#23 CONFIRMED. **#22(타이틀 WASD ↔ 월드 방향키 전용)만 OWNER-DECISION**이라 코드를
+#   안 고쳤다 — 인식은 참이지만(월드 이동은 `ui_*` 기본값뿐이고 project.godot에 `[input]` 섹션이 없다),
+#   해소는 "WASD를 이동에 묶는가"라는 **조작 체계 결정**이고 그 바인딩은 Godot의 Control 포커스
+#   이동까지 함께 타므로 폴리시 회차가 단독으로 정할 자리가 아니다.
 #
 # 하중 검증(계약을 일부러 깨고 빨개지는지 본 뒤 원복):
 #   #0 `_weather_hint`에 숫자 한 글자 → ⑥d·①b red · #1 `_tapper_place_tile` 항등 퇴화 → ②b·②c·②f·②g
@@ -136,6 +153,18 @@ func _run_checks() -> void:
 	_check_harvest_guidance(m)
 	_check_miho_cafe_line(m)
 	_check_pet_tile_reason(m)
+	# ── 배치 B(#12~#23) ──
+	_check_audio_exists(m)
+	_check_unarted_crops(m)
+	await _check_frame_click_redraw(m)
+	_check_deco_clock(m)
+	_check_cafe_close_redraw(m)
+	_check_hit_gauge_clamp(m)
+	_check_deco_key_ad(m)
+	_check_backpack_key_ad(m)
+	_check_store_bulk_ad(m)
+	_check_key_notation()
+	_check_count_badges()
 
 	m.queue_free()
 	await process_frame
@@ -482,3 +511,449 @@ func _check_pet_tile_reason(m: Node) -> void:
 	var after: String = m._reserved_tile_reason(m.PET_TILE)
 	_check("⑫e 입양 뒤에는 삽사리를 호명한다(「%s」)" % after,
 		m.pet.is_adopted() and after.contains("삽사리"))
+
+
+# ══ 배치 B(#12~#23) ══════════════════════════════════════════════════════════
+
+# ── ⑬ #12 오디오 존재 판정이 remap을 따라간다 ────────────────────────────────
+func _check_audio_exists(m: Node) -> void:
+	print("── ⑬ #12 BGM·SFX 존재 판정(익스포트 안전) ──")
+	var a = m.audio
+	# 무대·분모는 **레지스트리 파생**이다(곡 목록·이벤트 목록을 여기 옮겨 적지 않는다).
+	var phases: Array = a.BGM_STEM.keys()
+	var events: Array = a.SFX_STEM.keys()
+	var bgm_dead := ""
+	var imported_proof := ""
+	for ph in phases:
+		var p: String = a.bgm_source(String(ph))
+		if p == "":
+			bgm_dead = String(ph)
+		elif not FileAccess.file_exists(p + ".import"):
+			imported_proof = p
+	var sfx_dead := ""
+	for e in events:
+		var p2: String = a.sfx_source(String(e))
+		if p2 == "":
+			sfx_dead = String(e)
+		elif not FileAccess.file_exists(p2 + ".import"):
+			imported_proof = p2
+	_check("⑬a-pre 무대: 곡 %d개·효과음 %d개가 등록돼 있다(표 파생)" % [phases.size(), events.size()],
+		phases.size() > 0 and events.size() > 0)
+	_check("⑬b 모든 phase가 실제 곡으로 해석된다(빈 경로 = 그 곡은 영원히 안 걸린다)%s"
+			% ("" if bgm_dead == "" else " ← 죽은 phase: " + bgm_dead), bgm_dead == "")
+	_check("⑬c 모든 SFX 이벤트가 실제 파일로 해석된다%s"
+			% ("" if sfx_dead == "" else " ← 죽은 이벤트: " + sfx_dead), sfx_dead == "")
+	# ★ 결함의 근거를 여기서 못 박는다 — 이 자산들은 **전부 임포트 자산**이다(`.import` 동반).
+	#   그래서 PCK에 담기는 것은 `.godot/imported/*` + `.remap`이고 원본은 익스포트에 존재하지 않는다:
+	#   `FileAccess.file_exists(원본)`은 에디터에서만 참이라 판정에 쓰면 릴리스에서 전 오디오가 무음이 된다.
+	_check("⑬d 그 파일들은 전부 임포트 자산이다(`.import` 동반 — 원본은 PCK에 안 담긴다)%s"
+			% ("" if imported_proof == "" else " ← .import 없음: " + imported_proof),
+		imported_proof == "")
+	# 판정식 회귀 — 죽은 형태가 코드 줄에 0곳(주석은 결함 해설이라 세지 않는다).
+	var dead_calls := 0
+	var live_calls := 0
+	for raw in _lines_of_file("res://audio.gd"):
+		var ln := String(raw)
+		if ln.strip_edges().begins_with("#"):
+			continue
+		if ln.contains("FileAccess.file_exists"):
+			dead_calls += 1
+		if ln.contains("ResourceLoader.exists"):
+			live_calls += 1
+	_check("⑬e audio.gd가 `FileAccess.file_exists`로 존재를 묻지 않는다(죽은 형태 %d곳 · 산 형태 %d곳)"
+			% [dead_calls, live_calls], dead_calls == 0 and live_calls >= 2)
+
+
+# ── ⑭ #13 아트 없는 작물도 밭에 그려진다 ────────────────────────────────────
+func _check_unarted_crops(m: Node) -> void:
+	print("── ⑭ #13 야생·희소 작물의 폴백 그림 ──")
+	# 분모는 **카탈로그 파생**이다 — "8종"을 여기 적지 않는다. CROP_SPRITES에 키가 생기면 이 목록이
+	# 저절로 줄고, 마지막 한 종까지 아트가 들어오면 목록이 비어 ⑭a-pre가 그 사실을 알린다.
+	var unarted: Array = []
+	for cid in CropCatalog.CATALOG.keys():
+		if not m.CROP_SPRITES.has(cid):
+			unarted.append(String(cid))
+	_check("⑭a-pre 무대: 3프레임 아트가 없는 심을 수 있는 작물이 %d종 있다(카탈로그 − CROP_SPRITES)"
+			% unarted.size(), unarted.size() > 0)
+	var blind := ""
+	var wrong_species := ""
+	var wrong_packet := ""
+	for cid in unarted:
+		var tex: Texture2D = m._unarted_crop_tex(cid)
+		if tex == null:
+			blind = cid
+			continue
+		var species: String = CropCatalog.wild_species(cid)
+		if species != "":
+			# 희소종 = 수확물이 한 종으로 확정 → 그 채집물 그림과 **같은 텍스처**여야 정직하다.
+			if not m.FORAGE_ICONS.has(species) or tex != m.FORAGE_ICONS[species]:
+				wrong_species = "%s→%s" % [cid, species]
+		elif not m.SEED_PACKET_ICONS.has(cid) or tex != m.SEED_PACKET_ICONS[cid]:
+			# 절기 모둠 = 수확 종이 롤 전까지 미정 → 그 씨앗 자신의 아이콘(약속하지 않는다).
+			wrong_packet = cid
+	_check("⑭b 그 전부가 그릴 그림을 갖는다 — 심으면 반드시 보인다%s"
+			% ("" if blind == "" else " ← 여전히 안 보임: " + blind), blind == "")
+	_check("⑭c 희소종은 **수확물 그 자체**를 보여 준다(채집물 스프라이트와 같은 텍스처)%s"
+			% ("" if wrong_species == "" else " ← 어긋남: " + wrong_species), wrong_species == "")
+	_check("⑭d 절기 모둠은 씨앗 아이콘이다 — 무엇이 나올지 약속하지 않는다%s"
+			% ("" if wrong_packet == "" else " ← 어긋남: " + wrong_packet), wrong_packet == "")
+	# 단계가 실제로 갈린다(작고 옅은 것 → 온전한 것). 성숙만 100%라 "다 자랐는가"가 한눈에 갈린다.
+	var ramp_ok := true
+	for i in range(1, m.UNARTED_STAGE_SCALE.size()):
+		if float(m.UNARTED_STAGE_SCALE[i]) <= float(m.UNARTED_STAGE_SCALE[i - 1]) \
+				or float(m.UNARTED_STAGE_ALPHA[i]) <= float(m.UNARTED_STAGE_ALPHA[i - 1]):
+			ramp_ok = false
+	_check("⑭e 단계 램프가 단조 증가하고 성숙만 온전하다(크기 %s · 농도 %s)"
+			% [str(m.UNARTED_STAGE_SCALE), str(m.UNARTED_STAGE_ALPHA)],
+		ramp_ok and float(m.UNARTED_STAGE_SCALE[-1]) == 1.0 and float(m.UNARTED_STAGE_ALPHA[-1]) == 1.0)
+	# 라이브 — 이 경로가 **실제로 도달된다**: 야생 씨앗은 심을 때 치환되지 않고 그 id로 원장에 든다
+	# (치환 분기는 혼합 씨앗만 잡는다). 그래서 옛 `continue`가 곧 "빈 칸과 동일"이었다.
+	# 라이브 프로브는 **야생 작물**로 고른다 — 미등록 목록에는 혼합 씨앗도 들어 있는데 그쪽은 심는
+	# 순간 정규 작물로 치환돼(`is_mixed` 분기) 이 폴백 경로에 애초에 안 닿는다.
+	var wild_id := ""
+	for cid in unarted:
+		if CropCatalog.is_wild(String(cid)):
+			wild_id = String(cid)
+			break
+	if wild_id != "":
+		var t: Vector2i = m.STARTER_PATCH_RECT.position + Vector2i(3, 3)
+		var fld = m._field_at(t)
+		var sowed: bool = fld.hoe(t) and fld.plant(t, wild_id)
+		_check("⑭f 라이브: 야생 씨앗은 치환 없이 그 id로 밭 원장에 든다(폴백 경로가 실제로 도달된다) — %s"
+				% fld.crop_of(t),
+			sowed and fld.crop_of(t) == wild_id and not CropCatalog.is_mixed(wild_id)
+			and m._unarted_crop_tex(fld.crop_of(t)) != null)
+		fld.remove_plant(t)
+
+
+# ── ⑮ #14 프레임 클릭이 언제나 다시 그리기를 부른다 ─────────────────────────
+var _drew_frame := false
+
+func _check_frame_click_redraw(m: Node) -> void:
+	print("── ⑮ #14 매대 클릭 → 프레임 무효화 ──")
+	# ★ 무대는 **매대**다. 메뉴 탭은 main이 매 프레임 `set_hearts`/`set_skills`/`set_inv_info`로
+	#   값을 밀어 넣고 그 세터들이 스스로 `queue_redraw`를 부르므로 늘 다시 그려진다 — 거기선 무엇을
+	#   해도 초록이라 아무것도 못 잰다. 매대는 정반대로 `store_text`·`store_items`가 세터 없는 평범한
+	#   var라 값만 갱신되고 무효화가 안 걸렸다. 결함이 실제로 살던 자리가 여기다.
+	var f = m.frame
+	f.open(f.CTX_STORE)
+	await process_frame
+	await process_frame                      # 열림에 딸린 첫 그림을 먼저 흘려보낸다
+	f.draw.connect(_on_frame_drew)
+	# ★ **무대 가드가 이 검사의 절반이다.** 가만히 둔 프레임이 매 프레임 다시 그려지고 있다면
+	#   아래 단언은 클릭과 무관하게 늘 참이 되어 아무것도 안 재게 된다(이 회차가 잡는 공허한 단언).
+	#   그래서 먼저 "아무 일 없는 프레임엔 안 그린다"를 확인하고, 그 다음에 클릭 한 번을 넣는다.
+	_drew_frame = false
+	await process_frame
+	await process_frame
+	var idle_drew := _drew_frame
+	_drew_frame = false
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	ev.position = Vector2(4.0, 4.0)          # 어느 행에도 안 걸리는 자리 — 꼬리의 무효화만 잰다
+	f._gui_input(ev)
+	await process_frame
+	await process_frame
+	var click_drew := _drew_frame
+	f.draw.disconnect(_on_frame_drew)
+	f.close()
+	_check("⑮a-pre 무대: 가만히 둔 프레임은 다시 안 그려진다(아래 단언이 공허하지 않다)", not idle_drew)
+	_check("⑮a 그런데 클릭 한 번은 다시 그리기 한 번을 부른다(인벤을 안 건드리는 구매도 낡지 않는다)",
+		click_drew)
+	# 그 낡음의 실제 피해자 — 인벤토리를 한 톨도 안 건드리는 구매 경로가 실재한다.
+	_check("⑮b 무대: 가구 세트 해금은 인벤을 안 건드린다(그래서 `inv.changed`가 덮어 주지 않았다)",
+		_line_in_func(_src, "func _try_buy_deco_set", "home_deco.unlock(set_id)", true) >= 0
+		and _line_in_func(_src, "func _try_buy_deco_set", "inventory.add_item", true) < 0)
+
+func _on_frame_drew() -> void:
+	_drew_frame = true
+
+
+# ── ⑯ #15 꾸미기 모드 중에도 시계 판이 참이다 ───────────────────────────────
+func _check_deco_clock(m: Node) -> void:
+	print("── ⑯ #15 꾸미기 모드 시계 갱신 ──")
+	var hud = m.clock_hud
+	_check("⑯a-pre 무대: 시계 판이 서 있고 꾸미기 모드는 시계를 멈추지 않는다(`clock.running` 무접촉)",
+		hud != null and _line_in_func(_src, "func _toggle_deco_mode", "clock.running", true) < 0)
+	if hud == null:
+		return
+	var deco_prev: bool = m._deco_mode
+	var min_prev: float = m.clock.minutes
+	m._deco_mode = true
+	m.clock.minutes = 8.0 * 60.0
+	m._refresh_clock_hud()
+	var t_before: String = hud._time
+	m.clock.minutes = 14.0 * 60.0 + 20.0
+	m._process(0.0)                            # 꾸미기 모드의 이른 return을 그대로 탄다
+	var t_after: String = hud._time
+	m._deco_mode = deco_prev
+	m.clock.minutes = min_prev
+	m._process(0.0)
+	_check("⑯b 꾸미기 중에 시간이 흐르면 판도 따라 움직인다(「%s」 → 「%s」)" % [t_before, t_after],
+		t_before != t_after and t_after.contains("14:20"))
+
+
+# ── ⑰ #16 카페·밤 바가 닫히는 프레임까지 그려진다 ──────────────────────────
+func _check_cafe_close_redraw(m: Node) -> void:
+	print("── ⑰ #16 마감 프레임 잔상 ──")
+	# 래치는 "직전 프레임에 그렸는가"다 — 마감 전이가 tick **안에서** 일어나 그 프레임엔 이미
+	# 닫힌 것으로 읽히므로, 이 래치가 없으면 손님 그림을 지울 마지막 한 프레임이 사라진다.
+	_check("⑰a-pre 무대: 마감 전이가 tick 안에서 일어난다(그 프레임엔 `is_open()`이 이미 거짓)",
+		_line_in_func(_lines_of_file("res://cafe.gd"), "func tick", "_close_shop()", true) >= 0)
+	# ★ **무효화 가드 자체**를 겨눈다(래치 변수의 존재가 아니라). 종전 판정은 `_cafe_drawn_open`이
+	#   어딘가에 나오기만 하면 참이라, 대입은 남기고 `if` 조건에서만 그 항을 빼도 초록이었다 —
+	#   그런데 잔상을 지우는 것은 대입이 아니라 **조건**이다(하중 검증에서 실제로 드러난 자리).
+	var lit := _line_in_func(_src, "func _process",
+		"if cafe_open_now or _cafe_drawn_open or _cheki_offer_secs > 0.0:", true)
+	var lit2 := _line_in_func(_src, "func _process",
+		"if bar_active_now or _bar_drawn_active or _cocktail_offer_secs > 0.0:", true)
+	_check("⑰b 무효화 가드가 두 래치를 **조건에서** 든다(카페 %d행 · 밤 바 %d행)" % [lit + 1, lit2 + 1],
+		lit >= 0 and lit2 >= 0)
+	# 라이브 — 열었다 닫는 두 프레임에서 래치가 참 → 거짓으로 내려간다(그 사이 프레임이 redraw 대상).
+	var open_prev: bool = m.cafe._open
+	m.cafe._open = true
+	m._process(0.0)
+	var latched: bool = m._cafe_drawn_open
+	m.cafe._open = false
+	m._process(0.0)                            # 이 프레임이 잔상을 지우는 마지막 한 장이다
+	var cleared: bool = not m._cafe_drawn_open
+	m.cafe._open = open_prev
+	m._process(0.0)
+	_check("⑰c 열린 프레임에 래치가 서고(%s) 닫힌 다음 프레임에 내려간다(%s) — 그 사이 한 장이 잔상을 지운다"
+			% [str(latched), str(cleared)], latched and cleared)
+
+
+# ── ⑱ #17 타수 게이지가 트랙을 안 벗어난다 ──────────────────────────────────
+func _check_hit_gauge_clamp(m: Node) -> void:
+	print("── ⑱ #17 광맥 타수 게이지 경계 ──")
+	# 무대: 티어가 오르면 필요 타수가 **준다** → 같은 날 벼리면 need < done이 실제로 성립한다
+	#   (done은 때린 시점 티어로 원장에 쌓이고 리셋은 날이 갈릴 때뿐이다). 값은 표에서 파생한다.
+	var lo := ToolTier.pickaxe_gem_hits(0)
+	var hi := ToolTier.pickaxe_gem_hits(ToolTier.MAX_TIER)
+	_check("⑱a-pre 무대: 곡괭이를 벼리면 보석 광맥 필요 타수가 준다(%d타 → %d타 — need<done 도달 가능)"
+			% [lo, hi], hi < lo)
+	# 클램프의 자리는 **그림 쪽**이다 — 이 게이지를 쓰는 자리가 갱도·나락 둘이고 앞으로 늘 수 있는데,
+	# 트랙을 안 벗어나는 것은 호출부의 사정이 아니라 이 그림의 불변식이라서다.
+	_check("⑱b `_draw_hit_gauge`가 받은 비율을 트랙 안으로 접는다(음수 폭 rect 불가)",
+		_line_in_func(_src, "func _draw_hit_gauge", "clampf(ratio, 0.0, 1.0)", true) >= 0)
+	# 옛 결함의 산술을 그대로 재현해 클램프 전 값이 실제로 음수였음을 못 박는다(0티어 4타 → 2티어).
+	var done := lo - 1
+	var need := ToolTier.pickaxe_gem_hits(2)
+	var raw := float(need - done) / float(need)
+	_check("⑱c 벼린 뒤의 원시 비율은 음수다(%d타 친 광맥 · 새 분모 %d → %.3f) — 클램프가 없으면 트랙 밖"
+			% [done, need, raw], raw < 0.0 and clampf(raw, 0.0, 1.0) == 0.0)
+
+
+# ── ⑲ #18 가구 세트 안내가 살아 있는 키를 가리킨다 ──────────────────────────
+func _check_deco_key_ad(m: Node) -> void:
+	print("── ⑲ #18 가구 세트 배치 안내 키 ──")
+	# 광고 문구 ↔ InputMap 실키 대조 — 키 이름을 여기 옮겨 적지 않고 **InputMap에서 파생**한다.
+	var deco_key := _key_label_of("deco_mode")
+	var place_key := _key_label_of("place_mode")
+	_check("⑲a-pre 무대: 꾸미기 모드는 %s · 저작 도구는 %s(둘은 다른 키다)" % [deco_key, place_key],
+		deco_key != "" and place_key != "" and deco_key != place_key)
+	# 저작 도구는 릴리스에서 죽은 키다 — 그래서 그걸 광고하면 안 되는 것이지, 표기가 예뻐서가 아니다.
+	_check("⑲b 저작 도구 폴링이 디버그 빌드 가드 뒤에 있다(릴리스에선 그 키가 무반응)",
+		_line_in_func(_src, "func _process", "OS.is_debug_build() and Input.is_action_just_pressed(\"place_mode\")", true) >= 0)
+	# 라이브 — 실제로 세트를 사서 그 알림을 받아 본다.
+	var set_id := ""
+	for sid in HomeDecoCatalog.SETS.keys():
+		if HomeDecoCatalog.price_of(String(sid)) > 0 and not m.home_deco.is_unlocked(String(sid)):
+			set_id = String(sid)
+			break
+	m.wallet.gold = 999999
+	var bought: bool = set_id != "" and m._try_buy_deco_set(set_id)
+	var msg := _last_notice(m)
+	_check("⑲c 라이브: 가구 세트를 사면 안내가 뜬다(%s) — 「%s」" % [set_id, msg], bought and msg != "")
+	_check("⑲d 그 안내가 가리키는 키가 **꾸미기 모드에 실제로 묶인 키**다([%s] 표기 · 죽은 [%s] 소멸)"
+			% [deco_key, place_key],
+		msg.contains("[%s]" % deco_key) and not msg.contains("[%s]" % place_key))
+
+# 액션에 묶인 첫 키보드 이벤트의 표기(InputMap 파생 — 키 이름 하드코딩 0). 없으면 "".
+func _key_label_of(action: String) -> String:
+	if not InputMap.has_action(action):
+		return ""
+	for ev in InputMap.action_get_events(action):
+		var k := ev as InputEventKey
+		if k != null:
+			return OS.get_keycode_string(k.physical_keycode)
+	return ""
+
+
+# ── ⑳ #19 "자리를 비우고" 지시가 가방 여는 법을 함께 말한다 ────────────────
+func _check_backpack_key_ad(m: Node) -> void:
+	print("── ⑳ #19 백팩 만재 안내의 진입 키 ──")
+	var menu_key := _key_label_of("menu_toggle")
+	_check("⑳a-pre 무대: 메뉴(백팩·관계·숙련·설정·제작)를 여는 키는 %s 하나뿐이다" % menu_key,
+		menu_key != "" and _line_in_func(_src, "func _process", "Input.is_action_just_pressed(\"menu_toggle\")", true) >= 0)
+	# 분모는 소스 파생 — "자리를 비우고"라고 **지시하는** 알림을 전수로 모아 그 전부를 본다.
+	var told := 0
+	var silent: Array = []
+	for raw in _src:
+		var ln := String(raw)
+		if ln.strip_edges().begins_with("#") or not ln.contains("_notice(") \
+				or not ln.contains("자리를 비우고"):
+			continue
+		told += 1
+		if not ln.contains("[%s]" % menu_key):
+			silent.append(ln.strip_edges().substr(0, 40))
+	_check("⑳b-pre 무대: 자리를 비우라고 지시하는 알림이 %d줄 있다(소스 전수 — 명단 하드코딩 0)" % told,
+		told > 0)
+	_check("⑳c 그 전부가 가방 여는 키를 함께 말한다(지시만 하고 방법은 안 알려 주지 않는다)%s"
+			% ("" if silent.is_empty() else " ← 침묵: " + str(silent)), silent.is_empty())
+
+
+# ── ㉑ #20 Shift 대량 구매가 화면에 표기된다(그리고 그 표기가 참이다) ───────
+func _check_store_bulk_ad(m: Node) -> void:
+	print("── ㉑ #20 대량 구매 표기 ──")
+	var f = m.frame
+	f.open(f.CTX_STORE)
+	m._process(0.0)
+	_check("㉑a 만물상을 열면 프레임이 묶음 크기를 받는다(main `STORE_BULK` 단일 출처 — %d)"
+			% f.store_bulk, f.store_bulk == m.STORE_BULK and m.STORE_BULK > 1)
+	# 표기가 참인가 = 그만큼 실제로 사지는가(라이브).
+	# 살 씨앗은 **지금 진열된 행**에서 고른다(절기 게이팅을 스스로 통과한 것만 매대에 뜬다).
+	var crop := ""
+	for r in f.store_items:
+		if String((r as Dictionary).get("kind", "")) == "seed":
+			crop = String((r as Dictionary).get("buy_id", ""))
+			break
+	m.wallet.gold = 999999
+	var before: int = m.inventory.seed_count(crop) if crop != "" else -1
+	if crop != "":
+		m._on_frame_buy_seed(crop, true)
+	var after: int = m.inventory.seed_count(crop) if crop != "" else -1
+	f.close()
+	_check("㉑b 표기가 참이다 — Shift 구매가 실제로 그 수만큼 들어온다(%s: %d → %d)"
+			% [crop, before, after],
+		crop != "" and after - before == m.STORE_BULK)
+	# 1회성 행에는 그 약속을 안 건다 — 안내와 실동작이 갈리면 그것이 곧 #18과 같은 거짓 광고다.
+	var exempt_wrong: Array = []
+	for k in m.BULK_EXEMPT_KINDS:
+		if m.kind_takes_bulk(String(k)):
+			exempt_wrong.append(String(k))
+		if _line_in_func(_src, "func _on_frame_buy_store_item", "\"%s\"" % String(k), true) < 0:
+			exempt_wrong.append("%s(디스패치에 없음)" % String(k))
+	_check("㉑c 1회성 kind %d종이 전부 대량 예외이고 디스패치에도 실재한다%s"
+			% [m.BULK_EXEMPT_KINDS.size(), "" if exempt_wrong.is_empty() else " ← " + str(exempt_wrong)],
+		not m.BULK_EXEMPT_KINDS.is_empty() and exempt_wrong.is_empty())
+	# 반대 축 — 수량을 실제로 태우는 세 kind는 예외 목록에 **없어야** 한다(목록이 과잉 확장되면 표기가 사라진다).
+	var bulk_kinds := ["fest_seed", "ped_seed", "ped_item"]
+	var mis: Array = []
+	for k in bulk_kinds:
+		if not m.kind_takes_bulk(k):
+			mis.append(k)
+	_check("㉑d 수량을 태우는 kind는 예외가 아니다(%s)%s" % [str(bulk_kinds),
+			"" if mis.is_empty() else " ← 잘못 제외: " + str(mis)], mis.is_empty())
+	_check("㉑e 표기는 매대가 낱개 품목을 가질 때만 뜬다(1회성만 있는 매대엔 0 — 거짓 약속 0)",
+		not m._store_rows_take_bulk([{"kind": "deco"}, {"kind": "build"}])
+		and m._store_rows_take_bulk([{"kind": "deco"}, {"kind": "seed"}]))
+
+
+# ── ㉒ #21 키 표기가 한 관례로 선다 ─────────────────────────────────────────
+func _check_key_notation() -> void:
+	print("── ㉒ #21 키 표기 관례 ──")
+	# 지배 관례는 대괄호다. 괄호형 "(F11)"이 표시 문자열에 남아 있지 않은지 **전 .gd 전수**로 본다.
+	var files: Array = []
+	_all_gd_files("res://", files)
+	var paren: Array = []
+	for path in files:
+		if String(path).begins_with("res://playtest/"):
+			continue
+		var plines := _lines_of_file(String(path))
+		for i in plines.size():
+			var ln := String(plines[i])
+			if ln.strip_edges().begins_with("#"):
+				continue
+			if ln.contains("\"(F11)\""):
+				paren.append("%s:%d" % [String(path).get_file(), i + 1])
+	_check("㉒a-pre 무대: 스캔 대상 .gd %d개(res:// 재귀 — 분모 하드코딩 0)" % files.size(),
+		files.size() > 100)
+	_check("㉒b 괄호형 키 표기가 0곳이다(대괄호 관례로 통일)%s"
+			% ("" if paren.is_empty() else " ← 잔존: " + str(paren)), paren.is_empty())
+	# 꾸미기 안내 한 줄 — 옛 문구는 한 문장 안에서 무기호와 기호를 섞어 `[/]`가 "[ 와 ] 키"인지
+	# "/ 키"인지 판별 불가였다. 대괄호는 키 표기 전용으로 두고, 기호가 곧 키인 둘은 「」로 감싼다.
+	var deco_line := ""
+	for raw in _src:
+		var ln := String(raw)
+		if not ln.strip_edges().begins_with("#") and ln.contains("_notice(") \
+				and ln.contains("집 꾸미기"):
+			deco_line = ln
+			break
+	_check("㉒c 꾸미기 안내가 대괄호 관례를 따르고 모호한 `[/]`가 없다 — %s"
+			% deco_line.strip_edges().substr(0, 60),
+		deco_line != "" and deco_line.contains("[C]") and deco_line.contains("[R]")
+		and not deco_line.contains("[/]") and not deco_line.contains("C=끄기"))
+
+func _all_gd_files(dir_path: String, out: Array) -> void:
+	var d := DirAccess.open(dir_path)
+	if d == null:
+		return
+	d.list_dir_begin()
+	var nm := d.get_next()
+	while nm != "":
+		if nm.begins_with("."):
+			nm = d.get_next()
+			continue
+		var full := dir_path.path_join(nm)
+		if d.current_is_dir():
+			_all_gd_files(full, out)
+		elif nm.ends_with(".gd"):
+			out.append(full)
+		nm = d.get_next()
+	d.list_dir_end()
+
+
+# ── ㉓ #23 스택 배지가 슬롯 안에 머문다 ─────────────────────────────────────
+func _check_count_badges() -> void:
+	print("── ㉓ #23 스택 개수 배지 경계 ──")
+	# 무대: 게임이 스스로 3자리 스택을 요구한다(건축 자재) — 인벤엔 스택 상한이 없다.
+	var need_wood := 0
+	for pid in Carpenter.PROJECTS.keys():
+		need_wood = maxi(need_wood, int((Carpenter.PROJECTS[pid] as Dictionary).get("wood", 0)))
+	_check("㉓a-pre 무대: 건축 의뢰가 요구하는 최대 원목이 %d개다(3자리 스택은 정상 플레이)" % need_wood,
+		need_wood >= 100)
+	# 배지 오른쪽 끝이 슬롯 안에 머무는가 — **실제 글자 폭을 재서** 본다(관례: text_width 우측 정렬).
+	var worst := str(need_wood * 10)          # 한 자리 더 여유를 두고 최악을 잡는다
+	var hot_x: float = float(HotbarHud.SLOT_PX) - 2.0 - HanjiUi.text_width(worst, 10)
+	var inv_x: float = float(InventoryFrame.SLOT) - 4.0 - HanjiUi.text_width(worst, 13)
+	_check("㉓b 핫바 배지가 슬롯 안에 들어간다(%s · 시작 %.1f ≥ 0 · 끝 %.1f ≤ %d)"
+			% [worst, hot_x, hot_x + HanjiUi.text_width(worst, 10), HotbarHud.SLOT_PX],
+		hot_x >= 0.0 and hot_x + HanjiUi.text_width(worst, 10) <= float(HotbarHud.SLOT_PX))
+	_check("㉓c 백팩·상자 배지도 칸 안에 들어간다(시작 %.1f ≥ 0 · 끝 %.1f ≤ %d)"
+			% [inv_x, inv_x + HanjiUi.text_width(worst, 13), InventoryFrame.SLOT],
+		inv_x >= 0.0 and inv_x + HanjiUi.text_width(worst, 13) <= float(InventoryFrame.SLOT))
+	# 옛 좌측정렬 고정 오프셋이 실제로 넘쳤다는 것 — 그래서 다음 칸 plate가 자릿수를 덮었다.
+	var old_left: float = float(HotbarHud.SLOT_PX) - 11.0
+	_check("㉓d 옛 고정 오프셋은 넘쳤다(시작 %.1f + 글자 %.1f > 칸 %d — 다음 칸 판에 먹혔다)"
+			% [old_left, HanjiUi.text_width(worst, 10), HotbarHud.SLOT_PX],
+		old_left + HanjiUi.text_width(worst, 10) > float(HotbarHud.SLOT_PX))
+	# ★ 위 셋은 **치수 산술**이라 그리는 코드가 옛 형태로 돌아가도 그대로 참이다(하중 검증에서
+	#   드러난 자리). 그래서 배지를 그리는 세 자리가 실제로 폭을 재는지 여기서 함께 못 박는다 —
+	#   자리는 파일에서 파생한다(고정 offset은 이 관례를 못 지킨다).
+	# 자리는 `var cnt := str(...)`로 파생한다(파일·행 번호 하드코딩 0). 그 바로 뒤 두 줄이 배지를
+	# 그리는 호출이고, 거기서 폭을 재지 않으면 고정 offset이 남아 있다는 뜻이다.
+	var sites := 0
+	var fixed_offset: Array = []
+	for path in ["res://hotbar_hud.gd", "res://inv_frame.gd"]:
+		var plines := _lines_of_file(path)
+		for i in plines.size():
+			if not String(plines[i]).contains("var cnt := str("):
+				continue
+			sites += 1
+			var call_txt := ""
+			for j in range(i + 1, mini(i + 3, plines.size())):
+				call_txt += String(plines[j])
+			if not call_txt.contains("HanjiUi.text_width(cnt,"):
+				fixed_offset.append("%s:%d" % [path.get_file(), i + 1])
+	_check("㉓e-pre 무대: 개수 배지를 그리는 자리를 %d곳 찾았다(핫바·백팩·상자 — 소스 파생)" % sites,
+		sites >= 3)
+	_check("㉓e 그 전부가 글자 폭을 재서 맞춘다(고정 offset 0곳)%s"
+			% ("" if fixed_offset.is_empty() else " ← 고정 offset 잔존: " + str(fixed_offset)),
+		fixed_offset.is_empty())
+
+# 마지막 알림 줄(notice_feed는 최신이 배열 끝).
+func _last_notice(m: Node) -> String:
+	var items: Array = m.notice_feed._items
+	return "" if items.is_empty() else String(items[items.size() - 1]["text"])
