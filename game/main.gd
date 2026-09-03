@@ -11983,7 +11983,8 @@ func _on_sleep_done() -> void:
 	#   다음 아침에 다시 예약된다 — 이 층은 B7 *이후*라 실제로 겹칠 조합은 없다(결정 12).
 	_fire_soul_birth()
 	# T2.5 스타듀식 자동 저장: 한 날이 끝나 잠들 때마다 진행을 보존한다.
-	_save_game()
+	# ★[폴리시 R17 #8] 성패를 **말한다** — 매일 밤 도는 주 저장 경로가 실패를 통째로 버렸다(그 창구 머리말).
+	_save_or_warn()
 
 # ── T2.5 세이브/로드 조율 ──────────────────────────────────────────────────
 # 각 시스템 노드는 자기 상태만 직렬화한다(단일 책임). main은 그 조각들을 모아
@@ -12159,6 +12160,27 @@ func _save_game() -> bool:
 	_notice("저장됨")
 	return true
 
+# ★[폴리시 R17 #8] **반환값을 버리던 입구들의 공통 창구.** R11이 `_save_game`을 void → bool로
+# 승격하며 "IO 성패를 아는 자리는 여기 하나"라고 못 박았는데, 그 bool을 실제로 본 것은 옵션 탭
+# 둘뿐이고 **매일 밤 도는 주 저장 경로**를 포함한 다섯 입구가 값을 그대로 버렸다(취침 자동 저장·
+# F5·척추 B5 확정·척추 B6 확정·에필로그 복귀). 그래서 쓰기가 실패해도 화면에는 아무 일도 안
+# 일어났다 — 성공 신호인 "저장됨"이 그냥 안 뜰 뿐이라 **성공과 실패가 화면상 구별되지 않았고**,
+# 플레이어는 며칠치를 그대로 이어 플레이했다(실패 사실은 `push_warning`으로 콘솔에만 남는다).
+# 척추 둘은 더 무겁다: 그 저장은 "여기서 껐다 켜도 같은 장면이 두 번 오지 않는다"가 목적이라,
+# 실패하면 비트가 메모리에만 남아 다음 실행에서 무실패 퍼즐이 통째로 재생된다(그 머리말이 스스로
+# 그것을 "보상이 아니라 사고"라고 부른다).
+# ★ **성공은 종전대로 무음이 아니다** — 성공 문구의 주인은 `_save_game` 하나(`"저장됨"`)라는
+#   R11 계약을 안 건드린다. 여기서 더하는 것은 실패 한 줄뿐이다(이중 토스트 0).
+# ★ `keep`을 다는 이유: 취침 자동 저장은 아침 훅과 **같은 프레임**이라, keep 없이는 이 경고가
+#   출하함 정산·까마귀·게잡이통·채취기 알림에 밀려 한 프레임도 안 그려진 채 축출된다(#11과 같은
+#   판별식 — "밀려나면 다시 오지 않는 1회성인가"). 저장 실패는 다시 알려 줄 자리가 없다.
+func _save_or_warn() -> bool:
+	if _save_game():
+		return true
+	_notice("저장하지 못했다 — 저장 공간·쓰기 권한을 확인하자", NOTICE_SECS * 2.0,
+		false, null, Color(0, 0, 0, 0), true)
+	return false
+
 # ★[폴리시 R6] 반환값이 void → **불러왔는가**로 바뀌었다. `saver.has_save`는 파일 존재만 보고
 #   실제 파싱·검증(`_read_wrapped`)은 따로 갈리므로 "파일은 있는데 안 읽히는 슬롯"이 존재한다
 #   (저장 중 크래시로 잘린 save.dat · VERSION을 올린 뒤의 구세이브 전량). 그때 이 함수는 조용히
@@ -12280,9 +12302,16 @@ func _load_game() -> bool:
 	# ★[폴리시 R13] 위 다섯과 같은 클러스터(플레이로만 쌓이는 누적) — 가드 없이 무조건 되감는다.
 	var ff: Variant = data.get("forage_found", {})
 	_forage_found = ff.duplicate() if typeof(ff) == TYPE_DICTIONARY else {}
-	if data.has("menu_found"):    # ★[S6-T2] — 키 없는 구세이브는 발견 0(재료를 다시 손에 넣으면 그때 열린다)
-		var mf: Variant = data["menu_found"]
-		_menu_found = mf.duplicate() if typeof(mf) == TYPE_DICTIONARY else {}
+	# ★[폴리시 R17 #9] **바로 윗줄과 같은 무가드로 맞췄다.** R13이 세운 판별식은 "부팅으로
+	#   시드되는가"이고, 아니면 `.get(키, {})`로 무조건 되감는 것이다. `_menu_found`는 부팅으로
+	#   시드되지 않는다 — 유일한 기록처가 `_on_item_gained`(`inventory.item_gained` 훅)인데 그
+	#   시그널은 인벤토리의 *추가* 경로 셋에서만 발화하고 `inventory.load_save`는 `changed`만 쏜다.
+	#   그래서 `has` 가드가 남아 있으면 S6-T2 이전 세이브(키 없음 — VERSION은 1 고정이라 그대로
+	#   읽힌다)를 F9로 불러올 때 대입이 아예 안 돌아, **버린 타임라인의 해금이 그대로 살아남고**
+	#   다음 취침의 `_save_game`이 그것을 그 파일에 굳혔다(발견한 적 없는 융합 메뉴가 열린 채로).
+	#   R13이 museum·codex·fireflies·quest_board·mine·guest_pool·trial_ground·forage_found에
+	#   적용한 것과 완전히 같은 사슬이고, 이 한 줄만 그 처방을 못 받았다.
+	_apply_menu_found(data)
 	if data.has("tree_ledger"):   # ★[S4-T3] — 키 없는 구세이브는 원장 0 → 구역 첫 빌드의 seed_region이
 		tree_ledger.load_save(data["tree_ledger"])   #   초기 배치를 결정적으로 재생성한다(종=좌표 해시·하위호환)
 	if data.has("tapper"):        # ★[S4-T6] — 키 없는 구세이브는 채취기 0(빈 원장·하위호환)
@@ -12585,6 +12614,20 @@ func _load_game() -> bool:
 	_milestone_celebrated = _milestone_complete()
 	_milestone2_celebrated = _milestone_stage2_complete()
 	_milestone3_celebrated = _milestone_stage3_complete()
+	# ★[폴리시 R17 #13] **옥자 통보를 다시 연다** — 부팅(`_begin_game`)이 이미 드는 그 한 줄이고,
+	#   위 카페 래치 셋과 정확히 같은 이유로 여기 빠져 있었다(F9는 원장을 되감으면서 그 원장을
+	#   소비하는 부팅 시드를 안 다시 깔았다 = R13의 "부팅으로 시드되는가" 판별식의 반대편).
+	#   무엇이 죽어 있었나: NOTICE 단계 세이브(통보를 못 넘긴 채 24:00 강제 취침이 자동 저장한
+	#   파일 — `_do_sleep`은 대화를 안 닫고 하루는 실시간 90초라 첫 실행에서 쉽게 만들어진다)를
+	#   F9로 불러오면 `onboarding.load_save`가 step을 NOTICE로 되감는데 통보를 여는 짝이 없어,
+	#   ㉠ `guidance()`가 NOTICE에 분기가 없어 배너 0 ㉡ 옥자의 `facing_gate`·`station_gate`가
+	#   `step > NOTICE`라 옥자가 UNPLACED·비표시가 되어 말을 걸 수 없고, 단계를 넘기는 유일한
+	#   입구가 **옥자와의 대화**(`_on_dialogue_finished`의 `_talking_to == okja`)라 단계가 영원히
+	#   NOTICE에 갇힌다 ㉢ 바나의 `visible_rule`도 `step <= NOTICE`면 false라 밤 무대·나라카 바가
+	#   통째로 닫힌다. 이후 취침 자동 저장이 NOTICE를 계속 굳혀, 앱을 재시작해야만 복구됐다.
+	#   ★ 멱등이다 — `_maybe_start_intro`는 `is_intro()`가 아니거나 대화 중이면 no-op이라,
+	#     NOTICE가 아닌 세이브(대다수)에서는 이 줄이 한 바이트도 하지 않는다.
+	_maybe_start_intro()
 	_notice("불러옴")
 	return true
 
@@ -13448,7 +13491,7 @@ func _process(delta: float) -> void:
 
 	# T2.5 수동 저장/불러오기(연출 중 제외). F5 저장 · F9 불러오기.
 	if not _sleeping and Input.is_action_just_pressed("save_game"):
-		_save_game()
+		_save_or_warn()   # ★[폴리시 R17 #8] F5도 성패를 말한다(종전엔 성공·실패가 화면상 구별 불가)
 	if not _sleeping and Input.is_action_just_pressed("load_game"):
 		# ★[폴리시 R6] 실패를 말한다 — 종전엔 세이브가 없거나 안 읽히면 F9가 **아무 반응 없이**
 		#   지나가, 눌렀는데 아무 일도 안 일어난 것인지 불러왔는데 같은 상태인지 알 수 없었다
@@ -21580,7 +21623,7 @@ func _finish_spine_puzzle() -> void:
 	if _spine_bit_seen(SPINE_B5):
 		return
 	_mark_spine_bit(SPINE_B5)
-	_save_game()
+	_save_or_warn()   # ★[폴리시 R17 #8] 실패하면 이 비트가 메모리에만 남아 무실패 퍼즐이 재생된다
 	_spine_b5_closing = true
 	interact_prompt.visible = false
 	_talking_to = ""
@@ -21684,7 +21727,8 @@ func _close_spine_scene() -> void:
 		if not _spine_bit_seen(SPINE_B6):
 			_mark_spine_bit(SPINE_B6)
 			_open_okja_track()          # ★ 결정 10 "B6 후 트랙 개통" — 개통의 자리가 여기로 따라왔다
-			_save_game()                # 장면이 끝난 그 프레임에 굳힌다(B7 = `_open_epilogue`와 같은 규율)
+			_save_or_warn()             # 장면이 끝난 그 프레임에 굳힌다(B7 = `_open_epilogue`와 같은 규율)
+			                            # ★[폴리시 R17 #8] 실패를 말한다 — B5와 완전히 같은 이유
 	# ★[폴리시 R12] `not _sleeping`이 이 줄의 **네 번째 항**이다. 이 함수를 부르는 자리는
 	#   `_on_dialogue_finished`의 마지막 묶음 종료인데, 바로 그 위에서 R10 #6이 세운
 	#   `player.set_physics_process(not _sleeping)`("취침 트윈 중엔 안 푼다")를 여기가 무조건
@@ -22023,7 +22067,8 @@ func _close_epilogue() -> void:
 	if not _sleeping:
 		clock.running = _epilogue_clock_prev
 	player.set_physics_process(not _sleeping)
-	_save_game()                      # 돌아간 자리를 굳힌다(에필로그는 1회성 — 다시 안 뜬다)
+	_save_or_warn()                   # 돌아간 자리를 굳힌다(에필로그는 1회성 — 다시 안 뜬다)
+	                                  # ★[폴리시 R17 #8] 1회성이라 실패를 놓치면 회고가 다시 뜬다
 
 # 관계 요약 행 — 진급한 칸이 있는 사람만, 높은 칸부터. 배우자·앵커가 늘 위에 오도록 정렬한다.
 func _build_epilogue_hearts() -> void:
@@ -23517,6 +23562,14 @@ func _menu_unlocked(menu_id: String) -> bool:
 func _on_item_gained(id: String) -> void:
 	if MenuCatalog.menu_for_signature(id) != "":
 		_menu_found[id] = true
+
+# ★[폴리시 R17 #9] 융합 메뉴 발견 원장의 **로드 쪽 한 줄**(위 기록처와 짝). 함수로 뽑은 이유는
+# `_facing_mirror`와 같다 — 이 계약(키가 없어도 무조건 되감는다)은 구세이브에서만 갈리는 분기라,
+# 헤드리스가 손댈 수 있는 표면이 없으면 회귀가 그 분기를 영영 못 태운다(전량 저장되는 신규
+# 세이브로는 `has` 가드가 있으나 없으나 결과가 같아 결함이 재현되지 않는다).
+func _apply_menu_found(data: Dictionary) -> void:
+	var mf: Variant = data.get("menu_found", {})   # ★[S6-T2] 키 없는 구세이브는 발견 0(재료를 다시 손에 넣으면 그때 열린다)
+	_menu_found = mf.duplicate() if typeof(mf) == TYPE_DICTIONARY else {}
 
 # ★[S6-T2] `_has_any_harvest()` 삭제 — 유일한 소비자였던 서빙 프롬프트가 사라졌다. 기본 메뉴가
 # 무재료가 되면서 "재료가 없어 서빙 불가"라는 상태 자체가 없어졌기 때문이다(결정 2·4 무막힘).
