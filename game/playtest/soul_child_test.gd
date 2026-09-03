@@ -53,6 +53,43 @@ func _write_bytes(path: String, bytes: PackedByteArray) -> void:
 	f.store_buffer(bytes)
 	f.close()
 
+# ★[폴리시 R15] 슬롯 파일의 상태 키 하나를 **파일 위에서** 갈아 끼운다(손상 세이브 제조).
+#   save.gd의 슬롯은 `var_to_str({"version":…, "meta":…, "data":…})` 텍스트라, 래퍼를 그대로 파싱해
+#   `data[key]`만 바꿔 다시 쓴다. 손상 방어가 **로드 경로에서** 성립하는지 재는 유일한 길이다.
+func _doctor_save(path: String, key: String, value: Variant) -> bool:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return false
+	var parsed: Variant = str_to_var(f.get_as_text())
+	f.close()
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return false
+	var wrapped: Dictionary = parsed
+	var d: Variant = wrapped.get("data", null)
+	if typeof(d) != TYPE_DICTIONARY:
+		return false
+	var data: Dictionary = d
+	data[key] = value
+	wrapped["data"] = data
+	var o := FileAccess.open(path, FileAccess.WRITE)
+	if o == null:
+		return false
+	o.store_string(var_to_str(wrapped))
+	o.close()
+	return true
+
+# 슬롯 파일에 지금 적혀 있는 상태 값(없으면 null) — 손상값이 실제로 박혔는지 되읽는 데 쓴다.
+func _save_data_value(path: String, key: String) -> Variant:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return null
+	var parsed: Variant = str_to_var(f.get_as_text())
+	f.close()
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return null
+	var d: Variant = (parsed as Dictionary).get("data", null)
+	return (d as Dictionary).get(key, null) if typeof(d) == TYPE_DICTIONARY else null
+
 # 컷신이 서 있으면 끝까지 재생한다(뒤따르는 대화는 안 닫는다 — 첫 줄을 재야 한다).
 func _settle(m: Node) -> void:
 	var guard := 0
@@ -231,14 +268,22 @@ func _initialize() -> void:
 		m3._soul_born == live_born and live_born
 		and m3._resident(m3.SOUL_CHILD_RID).node.visible)
 	_check("⑧b 예약은 세이브를 안 탄다(연출은 저장 대상이 아니다)", not m3._soul_birth_armed)
-	# 손상 방어 — "태어났는데 예정이 또 있는" 세이브를 로드에서 정리한다.
-	var raw: Dictionary = {"soul_born": true, "soul_due_day": 999}
-	m3._soul_born = bool(raw["soul_born"])
-	m3._soul_due_day = maxi(int(raw["soul_due_day"]), 0)
-	if m3._soul_born:
-		m3._soul_due_day = 0
-	_check("⑧c 손상 방어 — 탄생 뒤 예정은 0으로 정리(2호가 서지 않는다)",
-		m3._soul_due_day == 0)
+	# 손상 방어 — "태어났는데 예정이 또 있는" 세이브를 **로드 경로가** 정리한다.
+	# ★[폴리시 R15] 종전엔 이 자리가 main.gd `_load_game`의 정규화 세 줄을 테스트 안에서 그대로
+	#   **베껴 실행한 뒤** 자기가 넣은 값을 되읽었다 — 세이브 파일도 `_load_game`도 안 타서, 실제
+	#   정규화(`if _soul_born: _soul_due_day = 0`)를 지워도 ✓였다(2호가 예약된 채 초록). 이제 슬롯
+	#   파일의 그 두 키를 직접 손상시키고 **재부팅으로 왕복**한다 — 판정식이 프로덕션 경로에 선다.
+	await _despawn(m3)
+	var doctored: bool = _doctor_save(SAVE, "soul_born", true) \
+		and _doctor_save(SAVE, "soul_due_day", 999)
+	_check("⑧c-pre 슬롯 파일에 손상값이 실제로 박혔다(soul_born=true · soul_due_day=%s)"
+			% str(_save_data_value(SAVE, "soul_due_day")),
+		doctored and int(_save_data_value(SAVE, "soul_due_day")) == 999
+		and bool(_save_data_value(SAVE, "soul_born")))
+	var m4: Node = await _spawn_main()
+	_dismiss_dialogue(m4)
+	_check("⑧c 손상 방어 — 로드가 탄생 뒤 예정을 0으로 정리(2호가 서지 않는다) · 탄생은 살아 있다",
+		m4._soul_due_day == 0 and m4._soul_born)
 
 	# ── ⑨ 봉인 법칙 ──
 	print("── ⑨ ⚠️ 봉인 법칙 · 설정선 ──")
@@ -285,7 +330,7 @@ func _initialize() -> void:
 	_check("⑨f 컷신에 NPC 이동이 없다(암전 뒤에서 일어나는 일 — 옮길 것이 없다)",
 		not _has_verb(SoulChild.BIRTH_CUTSCENE, CutsceneRunner.VERB_NPC))
 
-	await _despawn(m3)
+	await _despawn(m4)
 
 	if had_save:
 		_write_bytes(SAVE, _read_bytes(BAK))

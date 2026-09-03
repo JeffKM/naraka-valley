@@ -109,6 +109,14 @@ func phase_for(minutes: float, run_over: bool, in_cafe: bool) -> String:
 		return PHASE_NIGHT
 	return PHASE_CAFE if in_cafe else PHASE_FARM
 
+# ★[폴리시 R15] 존재 판정은 **`ResourceLoader.exists`**다 — `FileAccess.file_exists`가 아니다.
+#   오디오는 전부 임포트 자산이라 PCK에 담기는 것은 `.import`의 `dest_files`(`.godot/imported/*.oggvorbisstr`
+#   ·`*.sample`)와 `.remap`이고, 원본 `.ogg/.wav`는 **익스포트 빌드에 존재하지 않는다**. 그래서
+#   `FileAccess.file_exists("res://assets/audio/…")`는 에디터에선 참이고 Steam/PC 빌드에선 전부 거짓 —
+#   `bgm_source`가 ""를 돌려 `set_phase`가 페이드아웃만 하고 곡을 한 번도 안 걸었고, `sfx_source`도 ""라
+#   `sfx()`가 즉시 반환해 효과음 전량이 무음이었다(`_muted`는 false라 [M] 표시로도 원인이 안 보인다).
+#   `ResourceLoader.exists`는 remap을 따라가므로 두 빌드에서 같은 답을 낸다 — 이 저장소의 다른 에셋
+#   훅(`_ui_tex`·`_illust_texture`·`char_sprite`·`crop_preview`)이 이미 전부 그 관례다.
 # phase → 실제 존재하는 BGM 파일 경로(.ogg 우선). 아직 없으면 ""(그 버스는 비운다).
 func bgm_source(phase: String) -> String:
 	var stem: String = BGM_STEM.get(phase, "")
@@ -116,7 +124,7 @@ func bgm_source(phase: String) -> String:
 		return ""
 	for ext in BGM_EXTS:
 		var p: String = BGM_DIR + stem + ext
-		if FileAccess.file_exists(p):
+		if ResourceLoader.exists(p):
 			return p
 	return ""
 
@@ -126,7 +134,7 @@ func sfx_source(event: String) -> String:
 	if stem == "":
 		return ""
 	var p: String = SFX_DIR + stem + ".wav"
-	return p if FileAccess.file_exists(p) else ""
+	return p if ResourceLoader.exists(p) else ""
 
 
 # ── 셋업 ───────────────────────────────────────────────────────────────────

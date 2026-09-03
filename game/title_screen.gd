@@ -582,7 +582,7 @@ func _paint_settings(ci: CanvasItem) -> void:
 		ci.draw_rect(_set_fs_rect.grow(-4.0), HanjiUi.GOLD)
 	var fcol := HanjiUi.GOLD_SOFT if fs_sel else HanjiUi.INK
 	HanjiUi.draw_text(ci, Vector2(x + 30.0, fy), ("❀ " if fs_sel else "") + "전체화면", 16, fcol)
-	HanjiUi.draw_text(ci, Vector2(x + 150.0, fy), "(F11)", 13, HanjiUi.INK_DIM)
+	HanjiUi.draw_text(ci, Vector2(x + 150.0, fy), "[F11]", 13, HanjiUi.INK_DIM)
 	_hit.append(Rect2(rect.position.x + 20.0, fy - 22.0, fw - 40.0, 32.0))
 	# 언어(한국어 고정 — 표시만, ADR-0048 §2).
 	HanjiUi.draw_text(ci, Vector2(x, fy + 34.0), "언어  한국어 (고정)", 13, HanjiUi.INK_DIM)

@@ -139,6 +139,9 @@ var larder: Larder = null        # ★[S6-T1] 카페 곳간(CTX_LARDER 상단 �
 var crop_icons: Dictionary = {}
 # main이 매 프레임 채워 넣는 보조 텍스트(매대 헤더·정산 미리보기 등) — 프레임은 표시만.
 var store_text: String = ""
+# ★[폴리시 R15] Shift 대량 구매 묶음 크기(0 = 이 매대엔 낱개 품목이 없어 안내를 끈다). 값의 주인은
+#   main의 `STORE_BULK`이고 여기선 받아 그리기만 한다(프레임에 가게 규칙을 안 심는다는 그 규율).
+var store_bulk: int = 0
 # ★ [S1R-T12] 매대 아이템 행 데이터(main이 _store_items로 주입 — 무상태 렌더). 각 항목:
 #   {icon_id, name, price, base, count, kind("seed"/"placeable"), buy_id}. price<base면 할인 표시.
 # ★[폴리시 R4] 보유 수량 키는 **`count`**다(옛 스키마 자구의 `owned`가 아니다). 공용 렌더러
@@ -607,8 +610,11 @@ func _draw_backpack(panel: Rect2) -> void:
 				draw_circle(pos + Vector2(8.0, SLOT - 8.0), 4.0, _quality_color(q))
 			var n := inv.count_at(i)
 			if n > 1:
-				HanjiUi.draw_text(self, pos + Vector2(SLOT - 16.0, SLOT - 5.0),
-					str(n), 13, HanjiUi.INK_LIGHT)
+				# ★[폴리시 R15] 폭을 재서 우측 정렬(핫바 배지와 같은 처방) — 좌측정렬 고정 오프셋은
+				#   4자리에서 GAP을 넘어 옆 칸을 침범했다. 원목 400~500 스택이 정상 플레이다.
+				var cnt := str(n)
+				HanjiUi.draw_text(self, pos + Vector2(SLOT - 4.0 - HanjiUi.text_width(cnt, 13), SLOT - 5.0),
+					cnt, 13, HanjiUi.INK_LIGHT)
 	_draw_bp_scrollbar(panel, origin)
 
 # 백팩 스크롤바(총 행 > 뷰포트일 때만). 트랙 + 썸(보이는 비율만큼 높이, first_row만큼 내림). 그리드
@@ -1114,7 +1120,7 @@ func _draw_options_tab(panel: Rect2, font: Font) -> void:
 	if _set_fullscreen:
 		draw_rect(_fullscreen_rect.grow(-4.0), HanjiUi.GOLD)
 	HanjiUi.draw_text(self, Vector2(x + 26.0, sy), "전체화면", 14, HanjiUi.INK_LIGHT)
-	HanjiUi.draw_text(self, Vector2(x + 120.0, sy), "(F11)", 12, HanjiUi.INK_DIM)
+	HanjiUi.draw_text(self, Vector2(x + 120.0, sy), "[F11]", 12, HanjiUi.INK_DIM)
 	# 언어(한국어 고정 — 표시만, ADR-0048 §2).
 	sy += 30.0
 	HanjiUi.draw_text(self, Vector2(x, sy), "언어  한국어 (고정)", 12, HanjiUi.INK_DIM)
@@ -1304,7 +1310,10 @@ func _draw_chest_top(panel: Rect2) -> void:
 				draw_circle(pos + Vector2(8.0, SLOT - 8.0), 4.0, _quality_color(q))
 			var n := chest.count_at(i)
 			if n > 1:
-				HanjiUi.draw_text(self, pos + Vector2(SLOT - 16.0, SLOT - 5.0), str(n), 13, HanjiUi.INK_LIGHT)
+				# ★[폴리시 R15] 백팩 격자와 같은 우측 정렬(상자·곳간도 400+ 스택을 담는다).
+				var cnt := str(n)
+				HanjiUi.draw_text(self, pos + Vector2(SLOT - 4.0 - HanjiUi.text_width(cnt, 13), SLOT - 5.0),
+					cnt, 13, HanjiUi.INK_LIGHT)
 
 # ── 매대 상단(본문 텍스트 + 구매 버튼) ────────────────────────────────────────
 func _draw_store_top(panel: Rect2) -> void:
@@ -1314,11 +1323,7 @@ func _draw_store_top(panel: Rect2) -> void:
 	#   (♡0 "네오 할인: 정가 — 네오와 친해지면 매대가 싸진다" = 13px에서 415px > 가용 320px). 옛
 	#   `draw_text(max_w)`는 이걸 소리 없이 하드 컷 해 "…네오와 친해지"에서 끊었다. 이제 들어갈
 	#   때까지 글자를 줄이고, 그래도 넘치면 말줄임으로 "끊겼다"를 보이게 한다.
-	var y := panel.position.y + PAD + 14.0
-	for line in store_text.split("\n"):
-		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
-			panel.size.x - PAD * 2.0)
-		y += 18.0
+	_draw_store_header(panel, 0.0)
 	# 품목 행(아이콘·이름·가격·구매 버튼). 행 클릭 or 버튼 클릭으로 구매(Shift=대량).
 	# 헤더(2줄) 아래부터 백팩 그리드 직전까지 꽉 채워 판매 품목 전부(씨앗 4 + 스프링클러)를 담는다.
 	# ★ [S3-T5] 실제 행 그리기는 공용 `_draw_row_list`로 옮겼다(생선가게 기어 매대·환전 탭이 같은
@@ -1441,11 +1446,7 @@ func _draw_row_list(panel: Rect2, rows: Array, row_y: float, max_y: float, scrol
 # 만물상과 같은 셸을 쓰되 **서브탭 2개**를 든다: [기어] 낚싯대·미끼·태클 구매 / [환전] 보유 물고기
 # 즉시 현금화. 두 탭이 같은 `_draw_row_list`를 공유해 룩·스크롤 문법이 한 출처다.
 func _draw_fishshop_top(panel: Rect2) -> void:
-	var y := panel.position.y + PAD + 14.0
-	for line in store_text.split("\n"):
-		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
-			panel.size.x - PAD * 2.0 - 116.0)   # 우측은 서브탭 자리로 비워 둔다
-		y += 18.0
+	_draw_store_header(panel, 116.0)   # 우측은 서브탭 자리로 비워 둔다
 	# 서브탭 2개(헤더 우측 상단 — 메뉴 탭과 같은 plate 문법).
 	_fs_tab_rects.clear()
 	var labels := ["기어", "환전"]
@@ -1498,11 +1499,7 @@ func _draw_fishshop_top(panel: Rect2) -> void:
 #   [가구·자재] 가구 테마세트 해금 구매 + 원목 소매(벌목을 안 해도 자재가 안 막히는 우회로).
 # 두 탭이 같은 `_draw_row_list`를 공유해 룩·스크롤 문법이 한 출처다(만물상·생선가게와도 동일).
 func _draw_woodshop_top(panel: Rect2) -> void:
-	var y := panel.position.y + PAD + 14.0
-	for line in store_text.split("\n"):
-		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
-			panel.size.x - PAD * 2.0 - 126.0)   # 우측은 서브탭 자리로 비워 둔다
-		y += 18.0
+	_draw_store_header(panel, 126.0)   # 우측은 서브탭 자리로 비워 둔다
 	# 서브탭 2개(헤더 우측 상단 — 생선가게와 같은 plate 문법·같은 좌표계).
 	_ws_tab_rects.clear()
 	var labels := ["건축", "가구·자재"]
@@ -1559,11 +1556,7 @@ func _click_woodshop(p: Vector2, shift: bool) -> void:
 # ★ 목록에 무엇이 뜨는가는 여기가 안 정한다 — main._guild_items()가 도달 깊이로 걸러 넘긴다
 #   (미달 무기는 **행 자체가 없다** — 게잡이통 lvl3 선례. 프레임은 표시·클릭만 든다).
 func _draw_guild_top(panel: Rect2) -> void:
-	var y := panel.position.y + PAD + 14.0
-	for line in store_text.split("\n"):
-		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
-			panel.size.x - PAD * 2.0)
-		y += 18.0
+	_draw_store_header(panel, 0.0)
 	_store_row_rects.clear()
 	var row_y := panel.position.y + PAD + 42.0
 	var max_y := panel.position.y + TOP_H + PAD * 2.0 - 6.0
@@ -1617,6 +1610,24 @@ func _buy_store_row(e: Dictionary, bulk: bool) -> void:
 		#       아니라 R7 배치가 그 스위트를 다시 안 돌린 일이었다(선별 회귀의 사각).
 		"sapling", "fert", "hay", "gear", "pot", "build", "deco", "wood", "weapon", "potion", "rarecrow", "livestock", "fest_deco", "fest_item", "fest_seed", "ped_item", "ped_seed", "ped_deco", "ped_rare", "ped_book", "trial_shop_rarecrow", "trial_shop_deco", "trial_shop_item":
 			buy_store_item.emit(String(e.get("buy_id", "")), String(e.get("kind", "")), bulk)
+
+# ★[폴리시 R15] 매대 헤더 한 자리(만물상·생선가게·목공방·길드 공용). 두 가지를 여기로 모은다.
+#   ① 헤더 줄 그리기(옛 네 곳의 복붙 루프) ② **마지막 줄 꼬리에 Shift 대량 구매 안내**.
+#   왜 마지막 줄 꼬리인가: 품목 행이 `PAD + 42`에서 시작해 셋째 줄을 새로 놓을 자리가 없고,
+#   `draw_text_fit`이 안 들어가면 글자를 줄이므로 기존 두 줄 레이아웃을 한 픽셀도 안 건드린다.
+#   문구가 "낱개 품목"이라 못 박는 이유: 같은 매대에 1회성 행(의뢰·해금·유니크)이 섞여 있어
+#   무조건 "5개씩"이라 적으면 그 행들에 대해 거짓이 된다(main이 `store_bulk`로 0/값을 가른다).
+func _draw_store_header(panel: Rect2, right_pad: float) -> float:
+	var lines := store_text.split("\n")
+	var y := panel.position.y + PAD + 14.0
+	for i in lines.size():
+		var line := String(lines[i])
+		if i == lines.size() - 1 and store_bulk > 1:
+			line += "   ·   Shift+클릭 = 한 번에 %d개 (낱개 품목)" % store_bulk
+		HanjiUi.draw_text_fit(self, Vector2(panel.position.x + PAD, y), line, 13, HanjiUi.INK_LIGHT,
+			panel.size.x - PAD * 2.0 - right_pad)
+		y += 18.0
+	return y
 
 # ★ [S3-T5] 생선가게 클릭 라우팅 — 서브탭 전환 > (기어) 구매 행 > (환전) 전량 버튼·환전 행.
 # 세 영역이 겹치지 않으므로 첫 매치 하나만 처리한다(만물상 행 라우팅과 같은 결).
@@ -1770,6 +1781,14 @@ func _gui_input(event: InputEvent) -> void:
 			_click_chest(p)
 		CTX_LARDER:
 			_click_larder(p)   # ★[S6-T1] 곳간(백팩=적재 / 재고 행=회수 — 출하함 동형)
+	# ★[폴리시 R15] **클릭 한 번 = 다시 그리기 한 번.** 이 프레임이 다시 그려지는 경로는 인벤 계열
+	#   `changed` 시그널과 탭·스크롤 조작뿐이었다 — 그래서 **인벤토리를 안 건드리는 구매**(가구 세트
+	#   해금·야시장/보부상/시련장 장식)는 redraw 트리거가 하나도 없어, 결제가 끝났는데 헤더의 냥·
+	#   시련패가 결제 전 값을 계속 표시하고 이미 해금된 행이 원래 가격으로 남았다(같은 행을 다시
+	#   누르면 "이미 해금했다"만 뜨고 화면은 그대로). 물건이 들어오는 구매는 `inv.changed`가 우연히
+	#   덮어 줘서 이 구멍이 잠복해 있었다. main은 프레임이 열린 동안 매대 값을 **매 프레임 폴링해**
+	#   흘려넣으므로(값은 늘 신선했고 없던 것은 무효화뿐이다), 여기서 한 번 무효화하면 낡음이 사라진다.
+	queue_redraw()
 	accept_event()
 
 # ★ 마우스 호버 탭 갱신(메뉴 컨텍스트만) — 바뀔 때만 다시 그린다(툴팁 표시).

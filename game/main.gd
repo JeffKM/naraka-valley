@@ -2832,6 +2832,11 @@ var fishing: FishingSession = null
 var cheki: ChekiSession = null
 var _cheki_seat := -1            # 제안이 열린 좌석(-1 = 제안 없음)
 var _cheki_offer_secs := 0.0     # 제안 창 잔여(초) — 0 이하면 조용히 닫힌다
+# ★[폴리시 R15] 직전 프레임에 카페/밤 바를 **그렸는가**(세이브 무관 — 잔상 지우기용 1프레임 래치).
+#   마감·마감 전이가 tick 안에서 일어나 그 프레임엔 이미 닫힌 것으로 읽히므로, 이 둘이 "한 프레임 더
+#   그린다"를 들고 있어야 손님·잡귀 그림이 화면에 눌어붙지 않는다.
+var _cafe_drawn_open := false
+var _bar_drawn_active := false
 var _cheki_guest := ""           # 제안·촬영 대상 손님 id(명명 손님만 — 좌석이 비워져도 여기 남는다)
 var _cheki_menu := ""            # 방금 낸 잔의 메뉴 id(체키 매출의 기준가 — 사슬이 값을 물려받는다)
 var _cheki_serial := 0           # 촬영 일련번호(시드 섞기 — 같은 날 반복 촬영의 변주 고착 방지)
@@ -5079,7 +5084,11 @@ func _toggle_deco_mode() -> void:
 			_close_mirror()
 		if calendar_panel != null:
 			calendar_panel.close()
-		_notice("집 꾸미기 (C=끄기 · 좌클릭=놓기 · 우클릭=지우기 · Q/E=레이어 · [/]=세트 · ,/.=아이템 · R=회전)", 4.0, true)
+		# ★[폴리시 R15] 표기를 게임의 지배 관례(대괄호)로 통일한다. 옛 줄은 한 문장 안에서 `C=`·`Q/E=`
+		#   ·`R=`(무기호)와 `[/]`·`,/.`(기호가 곧 키)를 섞어 써서, 대괄호 관례상 `[/]`가 "[ 키와 ] 키"인지
+		#   "/ 키"인지 읽는 이가 판별할 수 없었다(실제 배선은 KEY_BRACKETLEFT/RIGHT = 대괄호 두 키).
+		#   기호 자체가 키인 둘은 「」로 감싸 대괄호 표기와 안 겹치게 한다.
+		_notice("집 꾸미기 — [C] 끄기 · 좌클릭 놓기 · 우클릭 지우기 · [Q]/[E] 레이어 · 「[」「]」 세트 · 「,」「.」 아이템 · [R] 회전", 4.0, true)
 	queue_redraw()
 
 # 현재 선택 레이어 키(FLOOR/WALL/FURNITURE).
@@ -13136,6 +13145,13 @@ func _process(delta: float) -> void:
 	if _deco_mode and _deco_blocked():
 		_toggle_deco_mode()
 	if _deco_mode:
+		# ★[폴리시 R15] **시계 판은 여기서도 갱신한다.** 꾸미기 모드는 이동만 잠그고 `clock.running`은
+		#   건드리지 않아 시간이 그대로 흐르는데(24:00에 `collapsed` → `_do_sleep`이 그 자리에서 하루를
+		#   끝낸다), 시계 HUD를 갱신하는 유일한 자리가 이 return **아래**라 판이 진입 시점 값에 얼어붙은
+		#   채 화면에 떠 있었다. 대화·메뉴·거울은 `_hud_hidden`이 시계를 숨겨 거짓말을 안 하는데
+		#   꾸미기만 보이는 채로 낡아, 시간이 멈춘 줄 알고 꾸미다 하루를 통째로 잃었다.
+		#   시간을 멈추지 않는 이상(그건 설계 결정이다) 최소한 화면은 참이어야 한다.
+		_refresh_clock_hud()
 		queue_redraw()
 		return
 	# ★[S7-T4] 점괘 거울 패널은 타이머가 아니라 **자리**가 접는다 — 집을 나가거나 잠들면 저절로
@@ -13329,6 +13345,13 @@ func _process(delta: float) -> void:
 			_refresh_peddler()                   # ★[S10-T3] 보부상 행(구매 즉시 잠김·골드 헤더 갱신)
 		elif frame.context == InventoryFrame.CTX_TRIAL:
 			_refresh_trial_shop()                # ★[S10-T8] 시련장 행(구매 즉시 잠김·시련패 헤더 갱신)
+		# ★[폴리시 R15] 대량 구매(Shift) 안내값 주입 — **한 자리에서**, 지금 진열된 행에서 파생한다.
+		#   Shift는 전 매대 클릭 사슬에 배선돼 있는데 어느 화면에도 표기가 없어, 씨앗 60개를 사려는
+		#   플레이어가 12번으로 끝낼 조작을 60번 클릭했다(생선가게만 [전량 환전] 버튼으로 판매 축
+		#   하나가 우연히 노출돼 있었다). 값은 `STORE_BULK` 단일 출처이고, **그 매대에 낱개 품목이
+		#   하나도 없으면 0을 넣어 안내 자체를 끈다** — 1회성 행(의뢰·해금·유니크)만 있는 매대에
+		#   "5개씩"을 걸면 그건 #18과 같은 종류의 거짓 광고가 된다.
+		frame.store_bulk = STORE_BULK if _store_rows_take_bulk(frame.store_items) else 0
 		return
 
 	# ★[S7-T8 / ADR-0065 결정 10] 시계 판 클릭 = 절기 달력 토글(스타듀의 달력 게시판 자리 — 우리는
@@ -13519,8 +13542,16 @@ func _process(delta: float) -> void:
 	# ★[S6-T5] 체키 제안 창 소진(서빙 직후 열린 6초). 촬영 중이 아닐 때만 돈다 — 세션이 시작되면
 	#   창은 이미 닫혀 있다(_start_cheki). 카페가 닫혀도 타이머로 조용히 만료된다(벌칙 0).
 	_tick_cheki_offer(delta)
-	if cafe.is_open() or _cheki_offer_secs > 0.0:
+	# ★[폴리시 R15] **닫히는 그 프레임까지 그린다.** 마감 전이는 바로 위 `cafe.tick` **안에서** 일어나
+	#   (`_close_shop`이 `_open = false`·`_clear_seats()`) 이 줄에 닿을 땐 `is_open()`이 이미 false다 —
+	#   그래서 직전 프레임이 그린 손님 형체·인내심 바·주문 말풍선이 CanvasItem에 그대로 남았다(원장은
+	#   빈 좌석인데). main은 카페 `changed`를 일부러 안 듣고 `minute_ticked` 리스너도 0건이라, 플레이어가
+	#   타일 행을 넘어 재분할 redraw가 걸리기 전까지 유령 손님이 화면에 붙어 있었다. 직전 프레임에
+	#   열려 있었으면 한 프레임 더 그려 그 잔상을 지운다(notice_feed가 "큐가 비는 그 프레임"에 세운 규약).
+	var cafe_open_now := cafe.is_open()
+	if cafe_open_now or _cafe_drawn_open or _cheki_offer_secs > 0.0:
 		queue_redraw()
+	_cafe_drawn_open = cafe_open_now
 	# T6.5 바나 이중 보호 곱셈기 주입(관계 곱셈기, ADR-0008·ADR-0010 #7): 바나 하트 → 밤 보호
 	# 세 축을 night_bar seam에 얹는다. cafe.margin과 같은 다리 — night_bar는 바나 호감도를 모르고
 	# 파라미터만 받는다(디커플링). 매 프레임 파생해 HUD·정산이 항상 현재 하트를 반영하고, F로
@@ -13548,8 +13579,12 @@ func _process(delta: float) -> void:
 		night_bar.tick(delta, clock.minutes)
 	# ★[S6-T6] 칵테일 제안 창 소진(밤 응대 직후 열린 6초). 세션이 시작되면 창은 이미 닫혀 있다.
 	_tick_cocktail_offer(delta)
-	if night_bar.is_active() or _cocktail_offer_secs > 0.0:
+	# ★[폴리시 R15] 카페 마감 줄과 **같은 구조·같은 처방**이다 — `_was_active`도 바로 위 tick 안에서
+	#   false로 떨어지므로, 잔상을 지울 마지막 한 프레임을 여기서 확보한다.
+	var bar_active_now := night_bar.is_active()
+	if bar_active_now or _bar_drawn_active or _cocktail_offer_secs > 0.0:
 		queue_redraw()
+	_bar_drawn_active = bar_active_now
 	# ★[S5-T5 / ADR-0063 결정 8] 갱도 층 잡귀 틱 — 이동·화염구·접촉 피해. 카페 손님·밤 바 잡귀 폴링과
 	#   같은 자리이고(연출 중 제외), 층 밖에선 `_tick_mobs`가 스스로 무동작이다. 위 `_transitioning`
 	#   early-return 뒤라 층 전환 fade 중엔 안 돈다(하강 무적 1초와 함께 착지 직후를 보호한다).
@@ -14027,9 +14062,13 @@ func _process(delta: float) -> void:
 	#   LMB가 아니라 [F]다(같은 칸에서 "수거·회수" 두 동사를 쓰므로 상호작용 키로 모은다).
 	#   ★ 위 벌목 디스패치와 같은 칸에서 겹치지만 충돌하지 않는다: 든 게 도끼가 아니면 _chop_tree가
 	#     스스로 무동작이고(자동 분기 없음, ADR-0024 §2), 반대로 도끼를 들었으면 여기가 안 걸린다.
+	# ★[폴리시 R15] 겨눈 칸 → **설치 원장 칸**(`_tapper_place_tile`). 수거·회수([F])가 R14에서
+	#   밑동으로 옮겨 갔으므로 설치도 같은 칸에서 성립해야 한다 — 안 그러면 박은 자리에서 거둘 수는
+	#   있는데 그 자리에 박을 수는 없다. 숲·자체 파종 나무는 항등이라 거동 불변.
 	var holding_tapper := inventory.selected_id() == ItemCatalog.TAPPER
-	if not _sleeping and holding_tapper and Input.is_action_just_pressed("use_tool") and _can_place_tapper(_target):
-		_place_tapper(_target)
+	var tapper_spot := _tapper_place_tile(_target)
+	if not _sleeping and holding_tapper and Input.is_action_just_pressed("use_tool") and _can_place_tapper(tapper_spot):
+		_place_tapper(tapper_spot)
 	# ★ [S5-T3] 업화로 설치 — 화덕을 들고 빈 지면·길을 겨눠 LMB. 투입·수거·회수는 [F]다(같은 칸에서
 	#   세 동사를 쓰므로 상호작용 키로 모은다 — 게잡이통·채취기와 같은 판단).
 	var holding_furnace := inventory.selected_id() == ItemCatalog.FURNACE
@@ -14092,12 +14131,7 @@ func _process(delta: float) -> void:
 	# ★ Phase C 시계 클러스터(우상단): raw ClockLabel/GoldLabel/MilestoneLabel을 한지 플레이트
 	# 하나로 통합했다(clock_hud). 절기 내 일차는 clock의 파생 하나로 수렴했다(요일은 도메인에 없음
 	# — clock_hud 주석). ★[S7-T8] ADR-0048이 비워 뒀던 날씨(☀) 자리를 오늘 하늘로 채운다.
-	var _dos := GameClock.day_of_season(clock.day)
-	if clock_hud != null:
-		clock_hud.set_state(GameClock.season_name(clock.season_index()), _dos, clock.clock_string(),
-			clock.phase(), wallet.gold,
-			CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()),
-			_weather_today())
+	_refresh_clock_hud()
 	# ★[S7-T8] 달력 패널 — 열려 있든 아니든 표시값을 흘려넣는다(값이 바뀔 때만 다시 파생·redraw).
 	#   해금 입력은 _festival_theme과 같은 다리(카페 단계·누적 서빙 매출)를 그대로 탄다.
 	if calendar_panel != null:
@@ -14594,12 +14628,15 @@ func _process(delta: float) -> void:
 		#   [F]가 안 먹는다"(또는 그 반대)가 안 생긴다.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _tapper_prompt(_tapper_ledger_tile(_target))
-	elif inventory.selected_id() == ItemCatalog.TAPPER and _can_place_tapper(_target):
+	elif inventory.selected_id() == ItemCatalog.TAPPER and _can_place_tapper(_tapper_place_tile(_target)):
 		# ★[S4-T6] 채취기를 들고 성숙 나무를 겨눌 때: LMB로 설치(주기는 종이 정한다).
+		# ★[폴리시 R15] 입력 사슬과 **같은 술어**(`_tapper_place_tile`) — 안내와 실동작이 같은 칸에서
+		#   서야 "안내는 뜨는데 LMB가 안 먹는다"(또는 그 반대)가 안 생긴다(R14가 [F] 축에 세운 규약).
+		var place_t := _tapper_place_tile(_target)
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 수액 채취기 박기 (%s — %d일 주기)" % [
-			TreeLedger.species_name(tree_ledger.species_at(_region, _target)),
-			TapperLedger.cycle_for(tree_ledger.species_at(_region, _target), forage_tap_cycle_cut())]
+			TreeLedger.species_name(tree_ledger.species_at(_region, place_t)),
+			TapperLedger.cycle_for(tree_ledger.species_at(_region, place_t), forage_tap_cycle_cut())]
 	elif tree_ledger != null and _indoor == "" and tree_ledger.has_moss(_region, _target):
 		# ★[S4-T8] 이끼 낀 성숙목을 바라볼 때: 낫을 들었으면 [좌클릭] 채취, 아니면 낫 안내.
 		#   **채취기 프롬프트 뒤·벌목 프롬프트 앞**이다 — 고인 수액은 시한이 있는 일이라 먼저 알려야 하고
@@ -14842,7 +14879,7 @@ func _use_tool() -> void:
 			var relic_id := Museum.relic_roll(clock.day, at) \
 				if _region == RegionCatalog.HOME and not plot.is_tilled(at) else ""
 			if relic_id != "" and not inventory.can_add(relic_id, 1):
-				_notice("발밑에 무언가 걸린다 — 백팩이 가득 차 캘 수 없다 (자리를 비우고 다시)")
+				_notice("발밑에 무언가 걸린다 — 백팩이 가득 차 캘 수 없다 ([Tab] 가방에서 자리를 비우고 다시)")
 				continue
 			if not plot.hoe(at):
 				continue
@@ -14917,10 +14954,18 @@ func _use_tool() -> void:
 		# ★ [S1-5b] 든 묘목으로 혼의 나무를 심는다(안식 농원 전용). 앵커=조준 칸, 3×3 판정 통과 시.
 		# is_blocked = 맵밖 or is_solid(절벽·프롭) or is_crop_solid(트렐리스) — 지형 게이팅을 여기서 합성해
 		# orchard에 주입한다(orchard는 지형을 모름, greybox-spec §7.4). 심으면 묘목 1개 소모.
+		# ★[폴리시 R15] 동사 이름이 밭 파종("심기")과 **갈린다**. 새 게임 시작 키트에는 씨앗과 함께
+		#   묘목이 들어 있어(inventory.gd START_SAPLINGS), 온보딩 PLANT 단계에서 묘목을 들고 스타터
+		#   밭을 찍으면 이 갈래가 걸려 `_advance_onboarding("심기")` → `onboarding.planted()`가 단계를
+		#   WATER로 넘겼다. 그런데 방금 심은 것은 밭 원장이 아니라 orchard 원장이라, 다음 배너가
+		#   가리키는 "심은 칸에 물주기"는 `Field.water`가 `is_planted` 거짓으로 떨어져 **알림 한 줄 없이
+		#   무동작**이었다(프롬프트도 나무 앵커 분기에서 "" — 배너대로 해도 화면이 한 톨도 안 바뀐다).
+		#   과수 파종은 온보딩 사슬의 단계가 아니므로 그 자리를 소비하지 않는다(단계 자체는 불변 —
+		#   새 게이트가 아니라 남의 자리를 안 쓰는 것).
 		var fruit := ItemCatalog.fruit_of(item)
 		if inventory.has_sapling(fruit) and orchard.plant(_target, fruit, clock.day, _is_tree_blocked):
 			inventory.take_sapling(fruit)
-			verb = "심기"
+			verb = "묘목심기"
 	elif item == ItemCatalog.HAY and _region == RegionCatalog.HOME:
 		# ★ [S1-7] 든 건초로 조준 칸의 짐승을 급여한다(§4.1 — 하늘 목장 전용, 하루 1회). 급여 시 건초 1개 소모.
 		# ★[폴리시 R7] 겨눈 칸 → 짐승 키 해석(`animal_key_at`) — 방목 나간 짐승은 그 칸에 *몸이*
@@ -14950,7 +14995,7 @@ func _use_tool() -> void:
 			#   형제 창구는 예외 없이 이 계약을 지킨다(벌목·채굴·나락·처치 드랍·낚시·수확).
 			if DebrisCatalog.tool_for(kind) == item \
 					and not inventory.can_add(DebrisCatalog.drop_for(kind), DebrisCatalog.drop_count(kind)):
-				_notice("백팩이 가득 차 치울 수 없다 — 자리를 비우고 다시")
+				_notice("백팩이 가득 차 치울 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 				return
 			var res := reclaim.clear(_target, kind, item)
 			if not res.is_empty():
@@ -14972,7 +15017,7 @@ func _use_tool() -> void:
 			if DebrisCatalog.tool_for(DebrisCatalog.WEEDS) == item \
 					and not inventory.can_add(DebrisCatalog.drop_for(DebrisCatalog.WEEDS),
 						DebrisCatalog.drop_count(DebrisCatalog.WEEDS)):
-				_notice("백팩이 가득 차 벨 수 없다 — 자리를 비우고 다시")
+				_notice("백팩이 가득 차 벨 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 				return
 			var wres := reclaim.clear_weed(_target, item)
 			if not wres.is_empty():
@@ -14985,7 +15030,7 @@ func _use_tool() -> void:
 	# ★ [S1R-T10] 도구 스윙 애니 1회 재생(시각 전용 — 위 즉발 효과와 독립). 든 도구에 맞는 모션이 있을 때만.
 	_swing_for_item(item)
 	# P2.6 밭 동작 SFX. 괭이질·심기는 흙 다지는 둔탁한 "턱"(hoe 재사용), 물주기·비료는 물/뿌리는 소리.
-	audio.sfx({"괭이질": "hoe", "심기": "hoe", "물주기": "water", "비료": "water", "급여": "water", "개간": "hoe", "풀베기": "harvest"}.get(verb, ""))
+	audio.sfx({"괭이질": "hoe", "심기": "hoe", "묘목심기": "hoe", "물주기": "water", "비료": "water", "급여": "water", "개간": "hoe", "풀베기": "harvest"}.get(verb, ""))
 	_advance_onboarding(verb)                 # T4.1 이 동작이 온보딩 단계를 다음으로 넘긴다
 	if not free_verb:
 		energy.spend(cost)                    # ★ ADR-0059 결정3 — 과금 동사(괭이·물·낫·개간·급여)만 소모
@@ -15163,7 +15208,7 @@ func _start_fishing(water: Vector2i) -> void:
 	#   등급은 결착 때 굴려지므로 "이 어종 스택에 합칠 수 있나"를 지금은 알 수 없고, 빈 칸이
 	#   하나 있으면 어느 등급이 나와도 반드시 들어간다(틀리면 늘 안전한 쪽).
 	if inventory != null and not inventory.has_free_slot():
-		_notice("백팩이 가득 차 낚싯대를 던질 수 없다 — 자리를 비우고 다시")
+		_notice("백팩이 가득 차 낚싯대를 던질 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 		return
 	# ★[폴리시 R10] **혼력 사전 판정** — 바로 위 R2 선검사와 같은 자리·같은 이유다(되돌릴 수 없는
 	#   소모가 곧 다음 줄에 있다: 미끼는 캐스팅 순간 확정 소모되고 입질 결과와 무관하게 안 돌아온다).
@@ -15267,7 +15312,7 @@ func _finish_fishing() -> void:
 		#   종전엔 반환값을 안 봐서, 물고기는 어디에도 없는데 토스트·"낚았다!"·XP·더비 태그·인양·
 		#   Books·반딧넋 롤이 전부 돌았다(화면이 통째로 거짓말). 낚이지 않은 것으로 친다.
 		if not inventory.add_item(fish_id, 1, quality):
-			_notice("%s 끌어올렸지만 백팩이 가득 차 놓쳐 버렸다 — 자리를 비우고 다시"
+			_notice("%s 끌어올렸지만 백팩이 가득 차 놓쳐 버렸다 — [Tab] 가방에서 자리를 비우고 다시"
 				% HanjiUi.with_eul(ItemCatalog.name_of(fish_id)))
 			audio.sfx("ui")
 			queue_redraw()
@@ -15532,7 +15577,7 @@ func _remove_sprinkler(t: Vector2i) -> void:
 	if item_id == "":
 		return
 	if not inventory.add_item(item_id, 1):
-		_notice("백팩이 가득 차 %s 회수할 수 없다 — 자리를 비우고 다시" % HanjiUi.with_eul(ItemCatalog.name_of(item_id)))
+		_notice("백팩이 가득 차 %s 회수할 수 없다 — [Tab] 가방에서 자리를 비우고 다시" % HanjiUi.with_eul(ItemCatalog.name_of(item_id)))
 		return
 	if not sprinkler.remove(t):
 		inventory.remove_item(item_id, 1)   # 원장이 거절 → 방금 넣은 것을 되돈다(무해)
@@ -15599,7 +15644,7 @@ func _place_garden_pot(t: Vector2i) -> void:
 func _remove_garden_pot(t: Vector2i) -> void:
 	var had := garden_pot.is_planted(t)
 	if not inventory.add_item(ItemCatalog.GARDEN_POT, 1):
-		_notice("백팩이 가득 차 화분을 회수할 수 없다 — 자리를 비우고 다시")
+		_notice("백팩이 가득 차 화분을 회수할 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 		return
 	if not garden_pot.remove(t):
 		inventory.remove_item(ItemCatalog.GARDEN_POT, 1)   # 원장이 거절 → 되돈다(무해)
@@ -15638,7 +15683,7 @@ func _remove_rarecrow(t: Vector2i) -> void:
 	if id == "":
 		return
 	if not inventory.add_item(id, 1):
-		_notice("백팩이 가득 차 %s 거둘 수 없다 — 자리를 비우고 다시" % HanjiUi.with_eul(ItemCatalog.name_of(id)))
+		_notice("백팩이 가득 차 %s 거둘 수 없다 — [Tab] 가방에서 자리를 비우고 다시" % HanjiUi.with_eul(ItemCatalog.name_of(id)))
 		return
 	if rarecrow.remove(t) == "":
 		inventory.remove_item(id, 1)   # 원장이 거절 → 방금 넣은 것을 되돈다(무해)
@@ -15765,7 +15810,7 @@ func _use_crab_pot(t: Vector2i) -> void:
 	var got := crab_pot.pending_catch(_region, t)
 	if got != "":
 		if not inventory.add_item(got, 1):
-			_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시 [F]")
+			_notice("백팩이 가득 차 거둘 수 없다 — [Tab] 가방에서 자리를 비우고 다시 [F]")
 			return
 		crab_pot.collect(_region, t)
 		_toast_item(got, 1)
@@ -15845,7 +15890,7 @@ func _use_tapper(t: Vector2i) -> void:
 	if got != "":
 		var q := tapper.pending_quality(_region, t)
 		if not inventory.add_item(got, 1, q):
-			_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시 [F]")
+			_notice("백팩이 가득 차 거둘 수 없다 — [Tab] 가방에서 자리를 비우고 다시 [F]")
 			return
 		tapper.collect(_region, t)
 		_toast_item(got, 1)
@@ -15882,6 +15927,21 @@ func _tapper_ledger_tile(t: Vector2i) -> Vector2i:
 	if a == t or not _home_tree_anchor_set().has(a):
 		return t
 	return a if tapper.has_at(_region, a) else t
+
+# ★[폴리시 R15] **설치 축의 같은 다리.** 위 함수는 "그 앵커에 *채취기가 박혀 있는가*"를 보므로 설치
+#   **전**에는 언제나 항등을 돌려준다 — 그래서 R14가 수거·회수만 밑동으로 옮겼고, 설치·설치 안내는
+#   여전히 원장 앵커(= 통도 나무 밑동도 한 조각 안 그려진 3칸 북쪽 캐노피 꼭대기)를 겨눠야 성립했다.
+#   한 채취기의 동사들이 3칸 갈려 서서, 박은 자리에서 거둘 수는 있는데 **그 자리에 박을 수는 없었다**
+#   (R14 커밋 본문이 스스로 결함으로 지목한 그 칸이 설치 축에 그대로 남아 있었다).
+#   이쪽 술어는 "발치 칸 위의 앵커에 **성숙 나무가 있는가**"다 — 채취기 유무를 안 보므로 설치 전에도
+#   선다. 원장·세이브 키는 여전히 한 글자도 안 바뀐다(겨눈 칸을 앵커로 되돌리는 다리일 뿐).
+func _tapper_place_tile(t: Vector2i) -> Vector2i:
+	if tree_ledger == null or _region != RegionCatalog.HOME or tree_ledger.is_mature(_region, t):
+		return t
+	var a := t - Vector2i(0, int(_tapper_home_drop()) / TILE)
+	if a == t or not _home_tree_anchor_set().has(a):
+		return t
+	return a if tree_ledger.is_mature(_region, a) else t
 
 func _tapper_prompt(t: Vector2i) -> String:
 	var got := tapper.pending_product(_region, t)
@@ -15967,7 +16027,7 @@ func _use_furnace(t: Vector2i) -> void:
 		var id := furnace.product_at(_region, t)
 		var q := furnace.pending_quality(_region, t)
 		if not inventory.add_item(id, 1, q):
-			_notice("백팩이 가득 차 주괴를 담지 못했다 — 자리를 비우고 다시 [F]")
+			_notice("백팩이 가득 차 주괴를 담지 못했다 — [Tab] 가방에서 자리를 비우고 다시 [F]")
 			return
 		furnace.collect(_region, t)
 		_toast_item(id, 1)
@@ -16060,7 +16120,7 @@ func _pan_spot(t: Vector2i) -> bool:
 	var id := String(got.get("id", ""))
 	var n := int(got.get("count", 0))
 	if id != "" and n > 0 and not inventory.can_add(id, n):
-		_notice("가방이 가득 차 사금을 일 수 없다 — 자리를 비우고 다시 [F]")
+		_notice("가방이 가득 차 사금을 일 수 없다 — [Tab] 가방에서 자리를 비우고 다시 [F]")
 		return true
 	panning.pan(clock.day, _region, t)            # 여기서 비로소 스폿이 소진된다
 	energy.spend(cost)
@@ -16491,7 +16551,7 @@ func _use_crystalarium(t: Vector2i) -> void:
 	if crystalarium.is_ready(_region, t):
 		var gem := crystalarium.gem_at(_region, t)
 		if not inventory.add_item(gem, 1):
-			_notice("가방이 가득 찼다 — 자리를 비우고 다시 꺼내자")
+			_notice("가방이 가득 찼다 — [Tab] 가방에서 자리를 비우고 다시 꺼내자")
 			return
 		crystalarium.collect(_region, t)
 		_toast_item(gem, 1)
@@ -16674,7 +16734,7 @@ func _try_harvest() -> bool:
 			var want: String = ItemCatalog.large_product_id(pending["product_id"]) \
 				if bool(pending["is_large"]) else str(pending["product_id"])
 			if not inventory.can_add(want, 1, int(pending["quality"])):
-				_notice("백팩이 가득 차 산물을 담을 수 없다 — 자리를 비우고 다시")
+				_notice("백팩이 가득 차 산물을 담을 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 				return true
 			var got := ranch.collect(animal)   # {product_id, quality, is_large}
 			if not got.is_empty():
@@ -16716,7 +16776,7 @@ func _try_harvest() -> bool:
 			if orchard.fruit_count_of(anchor) > 0 and orchard.is_mature(anchor, clock.day) \
 					and not inventory.can_add(orchard.fruit_id_of(anchor), 1,
 						orchard.quality_tier_for_age(orchard.age_of(anchor, clock.day))):
-				_notice("백팩이 가득 차 과일을 딸 수 없다 — 자리를 비우고 다시")
+				_notice("백팩이 가득 차 과일을 딸 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 				return true
 			var picked := orchard.harvest(anchor, clock.day)   # {fruit_id,count,quality_tier} / {} = 미성숙·무결실
 			if not picked.is_empty():
@@ -16764,7 +16824,7 @@ func _try_harvest() -> bool:
 	#   (REGROW) 백팩이 가득하면 그 수확이 되찾을 곳 없이 사라졌는데, 화면엔 "+N" 토스트가 떠서
 	#   거짓말을 했다(add_harvest가 void였던 탓에 호출부는 실패를 알 수조차 없었다).
 	if not inventory.can_add(ItemCatalog.harvest_id(harvested_crop), 1, quality):
-		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
+		_notice("백팩이 가득 차 거둘 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 		return true
 	field.harvest(_target)
 	# ★ [S1-5a] 다수확(황천포도 2~3) — yield_range를 굴려 그만큼 적재(greybox-spec §6.5, 데이터는 S1-4 검증).
@@ -16855,7 +16915,7 @@ func _harvest_pot() -> void:
 	# ★[폴리시 R2] 노지와 같은 "적재 자리부터" — `garden_pot.harvest`가 포기를 지우므로 백팩이
 	#   가득하면 그 한 포기가 되찾을 곳 없이 사라진다.
 	if crop != "" and not inventory.can_add(ItemCatalog.harvest_id(crop), 1, pot_quality):
-		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
+		_notice("백팩이 가득 차 거둘 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 		return
 	if garden_pot.harvest(_target) == "":
 		return
@@ -16886,7 +16946,7 @@ func _pick_flower(tile: Vector2i) -> void:
 	# 품질 = 채집 레벨 기본 등급, 약초학자 하한(이리듐)과 max(퍼크가 base를 끌어올림). ADR-0052.
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
 	if not inventory.can_add(ItemCatalog.SPIRIT_FLOWER, 1, quality):
-		_notice("백팩이 가득 차 꽃을 딸 수 없다 — 자리를 비우고 다시")
+		_notice("백팩이 가득 차 꽃을 딸 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 		return
 	if not flower.pick(tile, clock.day):
 		return   # 방어(위 질의와 이 호출 사이에 상태가 바뀔 경로는 없다)
@@ -16929,7 +16989,7 @@ func _on_frame_craft(recipe_id: String) -> void:
 	#   ★재료 롤백이 아니라 선적재를 고른 이유: 되돌려 담는 add_item은 등급을 못 싣는다(주괴 재료가
 	#   금→일반으로 깎인다). 되돌릴 일을 아예 안 만드는 쪽이 값을 잃지 않는다.
 	if not inventory.add_item(String(r["out_item"]), int(r["out_count"])):
-		_notice("백팩이 가득 차 %s 만들지 못했다 — 자리를 비우고 다시" % HanjiUi.with_eul(String(r["name_ko"])))
+		_notice("백팩이 가득 차 %s 만들지 못했다 — [Tab] 가방에서 자리를 비우고 다시" % HanjiUi.with_eul(String(r["name_ko"])))
 		return
 	for m in r["mats"]:
 		inventory.remove_item(String(m["item"]), int(m["count"]))
@@ -17026,7 +17086,7 @@ func _harvest_wild(crop: String, from_pot: bool = false) -> void:
 	#   게이트까지 열렸다. 수량은 아래 더블드랍 롤이 정하지만 `can_add`는 스택 판정이라 1로 물어도
 	#   충분하다(첫 개가 들어가면 그 스택에 둘째도 합쳐진다).
 	if not inventory.can_add(species, 1, quality):
-		_notice("백팩이 가득 차 거둘 수 없다 — 자리를 비우고 다시")
+		_notice("백팩이 가득 차 거둘 수 없다 — [Tab] 가방에서 자리를 비우고 다시")
 		return
 	# SINGLE — 칸이 빈다(치환 수확이라 반환 작물 id는 안 쓴다). 화분이면 화분 원장이 빈다.
 	if from_pot:
@@ -17059,7 +17119,7 @@ func _pick_forage(tile: Vector2i) -> bool:
 	# 품질 = 채집 레벨 기본 등급 ⊔ 약초학자 하한(이리듐). 꽃 패치와 같은 소스(ADR-0052).
 	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
 	if not inventory.can_add(species, 1, quality):
-		_notice("백팩이 가득 차 %s 담을 수 없다 — 자리를 비우고 다시" % HanjiUi.with_eul(ItemCatalog.name_of(species)))
+		_notice("백팩이 가득 차 %s 담을 수 없다 — [Tab] 가방에서 자리를 비우고 다시" % HanjiUi.with_eul(ItemCatalog.name_of(species)))
 		return true
 	forage_spawns.pick(_region, tile)   # 자리를 확인한 뒤에 집는다(스폰 칸 소멸 = 되돌릴 수 없는 사건)
 	# 수량 = 기본 1, 채집꾼이면 double_drop 확률로 2배(추가분도 동일 등급 — 한 자리에서 두 개).
@@ -17112,7 +17172,7 @@ func _shake_bush(t: Vector2i) -> bool:
 	var n := ForageSkill.bush_yield(_skill_level(ProfessionCatalog.FORAGING))
 	if not inventory.add_item(id, n):
 		berry_bushes.set_berry(_region, t, true)  # 인벤 가득 — 열매를 덤불에 되돌린다(증발 방지)
-		_notice("백팩이 가득 차 열매를 담을 수 없다 — 자리를 비우고 다시 [F]")
+		_notice("백팩이 가득 차 열매를 담을 수 없다 — [Tab] 가방에서 자리를 비우고 다시 [F]")
 		return true
 	_toast_item(id, n)
 	_gain_forage_xp(ForageSkill.BUSH_SHAKE_XP * n)   # ★ 개당 1XP(스타듀 상속 — 수량만큼 배움도 는다)
@@ -17263,7 +17323,14 @@ func _reserved_tile_reason(t: Vector2i) -> String:
 	if t == MIHO_FIELD_TILE:
 		return "미호의 자리 — 밭일은 못 한다 (15시부터는 나루 마을 카페)"
 	if t == PET_TILE:
-		return "삽사리의 자리 — 밭일은 못 한다 (개가 누울 자리)"
+		# ★[폴리시 R15] **삽사리가 실재할 때만 이름을 댄다.** 이 칸은 스타터 밭 25칸 중 하나라 day 1
+		#   TILL 배너를 따라온 신규 플레이어가 곧바로 겨누는데, 삽사리는 day 7 이후 나루 마을 사건으로
+		#   들어오고 그 전엔 한 픽셀도 안 그려진다 — 아직 등장한 적 없는 캐릭터 이름으로 거부를
+		#   설명하면 화면에 없는 것을 가리키는 셈이다(형제 분기인 미호 자리는 주인이 실제로 서 있다).
+		#   R11의 계약("동사는 막되 이유는 읽힌다")은 그대로 지킨다 — 이름만 빼고 사유는 남긴다.
+		if pet != null and pet.is_adopted():
+			return "삽사리의 자리 — 밭일은 못 한다 (개가 누울 자리)"
+		return "비워 둔 자리 — 밭일은 못 한다"
 	return ""
 
 # 밭 칸 프롬프트: 든 도구·칸 상태에서 다음에 할 수 있는 동작을 파생한다("" = 안내 없음).
@@ -17711,6 +17778,24 @@ func _on_frame_buy_store_item(buy_id: String, kind: String, bulk: bool) -> void:
 			return
 	_buy_store_generic_n(buy_id, kind, STORE_BULK if bulk else 1)
 
+# ★[폴리시 R15] 이 kind가 Shift 대량 구매를 받는가 = 바로 위 `_on_frame_buy_store_item`에서 수량을
+#   안 태우고 **이른 return**으로 빠지는 1회성 행위 목록 밖인가. 안내와 실동작이 갈리면 "5개씩이라
+#   적혀 있는데 하나만 사진다"가 되므로, 표기 쪽이 이 한 술어를 통해 그 목록을 본다.
+#   ★ `"seed"`·`"placeable"`은 이 함수를 안 타는 별도 시그널(`buy_seed`·`buy_sprinkler_pressed`)인데
+#     둘 다 `STORE_BULK`를 그대로 받으므로 낱개 쪽이다 — 예외 목록에 없으니 저절로 참이 된다.
+const BULK_EXEMPT_KINDS := ["build", "deco", "livestock", "fest_deco", "fest_item", "rarecrow",
+	"ped_deco", "ped_rare", "ped_book", "trial_shop_deco", "trial_shop_rarecrow", "trial_shop_item"]
+
+static func kind_takes_bulk(kind: String) -> bool:
+	return not BULK_EXEMPT_KINDS.has(kind)
+
+# 진열된 행 중 하나라도 낱개(대량 가능) 품목인가. 하나도 없으면 안내를 끈다.
+func _store_rows_take_bulk(rows: Array) -> bool:
+	for r in rows:
+		if kind_takes_bulk(String((r as Dictionary).get("kind", ""))):
+			return true
+	return false
+
 # ★[S10-T2 / ADR-0069 결정 4] 만물상 레어크로우 구매(획득처 ③) — 네오 ♡ 할인가·1회 한정.
 # 야시장 한정 물품(`_try_buy_market_item`)의 만물상판이고 **적재 먼저·결제 나중** 순서 규율도 그대로다
 # (백팩이 가득이면 냥이 안 나간다 — 더비 교환이 세운 그 계약).
@@ -17747,7 +17832,7 @@ func _award_event_rarecrow(id: String, where: String) -> bool:
 	if seasonal_event.has_bought(id) or _rarecrow_owned(id):
 		return false
 	if not inventory.add_item(id, 1):
-		_notice("가방이 가득 차 %s 부상을 받지 못했다 — 자리를 비우고 다시 오자" % where)
+		_notice("가방이 가득 차 %s 부상을 받지 못했다 — [Tab] 가방에서 자리를 비우고 다시 오자" % where)
 		return false
 	seasonal_event.record_bought(id)
 	_toast_item(id, 1)
@@ -18177,7 +18262,7 @@ func _try_open_geode() -> bool:
 	var id := String(res["id"])
 	var n := int(res["count"])
 	if not inventory.add_item(id, n):
-		_notice("백팩이 가득 차 알돌을 깰 수 없다 — 자리를 비우고 오자")
+		_notice("백팩이 가득 차 알돌을 깰 수 없다 — [Tab] 가방에서 자리를 비우고 오자")
 		return true                       # ★알돌·냥 둘 다 그대로다(부분 소모 0)
 	wallet.spend(MiningSkill.GEODE_COST)
 	inventory.remove_item(held, 1)
@@ -18284,9 +18369,16 @@ func _draw_node_at(t: Vector2i, nid: String, cls: String) -> void:
 
 # 남은 타수 눈금 — 광맥 발치 아래 띠. 어두운 홈 위에 금박 띠가 줄어든다(진행이 화면에 보인다).
 func _draw_hit_gauge(t: Vector2i, ratio: float) -> void:
+	# ★[폴리시 R15] **비율은 트랙 안으로 클램프한다.** 분모 `need`는 매 프레임 *현재* 곡괭이 티어에서
+	#   다시 파생되는데 분자 `done`은 때린 시점 티어로 원장에 쌓인 값이라(리셋은 날이 갈릴 때뿐), 같은
+	#   날 대장간에서 벼리면 need < done이 되어 ratio가 음수로 내려갔다. Godot은 폭이 음수인 rect를
+	#   좌측으로 뒤집어 정규화하므로 금빛 채움이 트랙 좌변 **밖**(옆 칸 위)으로 삐져나와 그려졌다.
+	#   클램프를 호출부가 아니라 여기 두는 이유: 이 게이지를 쓰는 자리가 갱도·나락 둘이고 앞으로 늘 수
+	#   있는데, 트랙을 벗어나지 않는 것은 호출부의 사정이 아니라 **이 그림의 불변식**이다.
+	var r := clampf(ratio, 0.0, 1.0)
 	var p := Vector2(t.x * TILE, t.y * TILE)
 	draw_rect(Rect2(p + Vector2(5, TILE - 7), Vector2(TILE - 10, 3)), Color(0.08, 0.07, 0.07, 0.7))
-	draw_rect(Rect2(p + Vector2(5, TILE - 7), Vector2(float(TILE - 10) * ratio, 3)),
+	draw_rect(Rect2(p + Vector2(5, TILE - 7), Vector2(float(TILE - 10) * r, 3)),
 		Color(0.92, 0.84, 0.42))
 
 # 사다리 한 칸. `up`이면 올라가는 사다리(밝은 벽감 — 한 층 위) / 아니면 내려가는 사다리(어두운
@@ -19005,6 +19097,17 @@ func _store_items() -> Array:
 
 # ══ ★ [S3-T5 / ADR-0061 결정 5] 뱃사공 생선가게 — 기어 매대 + 물고기 즉시 환전 ══════════
 # 프레임에 넘길 세 조각(헤더·기어 행·환전 행)을 한 번에 채운다(_open_frame·_process 공용).
+# ★[폴리시 R15] 시계 클러스터 한 줄 갱신(절기·일차·시각·위상·냥·마일스톤·오늘 하늘). 함수로 뽑은
+#   이유는 **호출 자리가 둘**이기 때문이다 — 평시 `_process` 꼬리와, 꾸미기 모드의 이른 return 앞.
+#   시계는 그 모드에서도 흐르므로 판이 얼면 화면이 거짓말을 한다(#15).
+func _refresh_clock_hud() -> void:
+	if clock_hud == null:
+		return
+	clock_hud.set_state(GameClock.season_name(clock.season_index()),
+		GameClock.day_of_season(clock.day), clock.clock_string(), clock.phase(), wallet.gold,
+		CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()),
+		_weather_today())
+
 func _refresh_fishshop() -> void:
 	frame.store_text = _fishshop_text()
 	frame.store_items = _fishshop_items()
@@ -19390,7 +19493,13 @@ func _try_buy_deco_set(set_id: String) -> bool:
 		return false
 	home_deco.unlock(set_id)
 	audio.sfx("ui")
-	_notice("%s 가구 세트 해금 −%d냥 — 집에서 [F10] 꾸미기로 놓을 수 있다" % [HomeDecoCatalog.name_of(set_id), price])
+	# ★[폴리시 R15] **[F10] → [C].** F10에 묶인 건 `place_mode`(ADR-0025 디버그/에디터 전용 프롭 저작
+	#   도구)이고 폴링부가 `OS.is_debug_build()` 가드 뒤에 있어 **릴리스 빌드에선 아무 반응도 없다** —
+	#   디버그 빌드에서 눌러도 `layout.json`을 고치는 개발자 오버레이가 뜰 뿐 산 가구는 한 개도 못 놓는다.
+	#   실제 집 꾸미기 모드는 C(`deco_mode`)이고 해금 세트를 놓는 유일한 경로가 그 모드의 `_deco_place`다.
+	#   게다가 C를 알려 주는 문자열은 저장소에 **이미 C를 눌러 들어간 뒤에 뜨는 한 줄**뿐이라(끄는 법만
+	#   광고), 이 줄이 게임 전체에서 유일한 진입 안내였고 그것이 죽은 키를 가리키고 있었다.
+	_notice("%s 가구 세트 해금 −%d냥 — 집에서 [C] 꾸미기로 놓을 수 있다" % [HomeDecoCatalog.name_of(set_id), price])
 	return true
 
 # ★[폴리시 R7] 목공방 짐승 새끼 구매 — B1-b 성장 티어(큰 넋둥우리·큰 넋우릿간)를 **실효로 잇는**
@@ -23698,7 +23807,7 @@ func _roll_book_drop(source: String, serial: int) -> void:
 	if id == "":
 		return
 	if not inventory.add_item(id, 1):
-		_notice("낡은 종이 뭉치가 보였지만 백팩이 가득했다 — 자리를 비우고 다시 오자")
+		_notice("낡은 종이 뭉치가 보였지만 백팩이 가득했다 — [Tab] 가방에서 자리를 비우고 다시 오자")
 		return
 	books.acquire(id, clock.day)
 	_toast_item(id, 1)
@@ -25033,6 +25142,8 @@ func _draw_crops() -> void:
 		var crop_id := tfield.crop_of(t)
 		var frames: Variant = CROP_SPRITES.get(crop_id)
 		if frames == null:
+			_draw_unarted_crop(Rect2(Vector2(t.x * TILE, t.y * TILE), Vector2(TILE, TILE)),
+				crop_id, tfield.growth_stage(t))
 			continue
 		# growth_stage: 0=씨앗 / 1=새싹 / 2=수확가능 → 같은 인덱스 프레임. 칸(32×32)을 채운다.
 		var stage: int = clampi(tfield.growth_stage(t), 0, frames.size() - 1)
@@ -25070,10 +25181,50 @@ func _draw_garden_pots() -> void:
 			continue
 		var pframes: Variant = CROP_SPRITES.get(pcrop)
 		if pframes == null:
+			_draw_unarted_crop(Rect2(org + Vector2(0, -8), Vector2(TILE, TILE)), pcrop,
+				garden_pot.growth_stage(t))
 			continue
 		var pstage: int = clampi(garden_pot.growth_stage(t), 0, pframes.size() - 1)
 		# 작물은 화분 입구 위로 반 칸 띄워 얹는다(화분 몸통에 파묻히지 않게).
 		draw_texture_rect(pframes[pstage], Rect2(org + Vector2(0, -8), Vector2(TILE, TILE)), false)
+
+# ★[폴리시 R15] **아트가 아직 없는 작물의 폴백 그림.** `CROP_SPRITES`에는 3프레임 아트가 있는 5종만
+#   있는데, 심을 수 있는 작물은 그 밖에 야생·희소 8종(`CropCatalog` WILD_*)이 더 있다 — 제작으로 얻어
+#   밭에 심을 수 있고(치환 분기는 `is_mixed`, 즉 혼합 씨앗만 잡으므로 야생 id가 그대로 원장에 든다),
+#   `has_crop`도 통과한다. 그런데 옛 `_draw_crops`는 미등록 작물을 `continue`로 통째로 건너뛰었고 밭
+#   오버레이는 흙 톤만 그리므로, 12~40냥짜리 씨앗을 심고 며칠 물을 줘도 화면이 **빈 경작칸과 완전히
+#   동일**했다(심었는지·다 자랐는지·절기 사멸로 스러졌는지 구분 불가). 인벤 아이콘만 붙어 있어
+#   "들고는 있는데 심으면 사라지는" 비대칭이었다.
+#
+#   폴백 규칙 — **새 에셋 0개**(ADR-0001: 아트 생성은 이 회차의 일이 아니다). 그 작물의 정체를 이미
+#   들고 있는 그림을 단계에 따라 크기·농도로 갈라 그린다:
+#     · 희소종 모종 4 — 수확물이 한 종으로 확정이므로(`wild_species`) 그 채집물 스프라이트를 쓴다.
+#       화면에 뜨는 것이 곧 거둘 것이라 이 축은 완전히 정직하다.
+#     · 절기 모둠 4 — 수확 종이 거두는 순간의 롤 전까지 정해지지 않으므로 한 종을 못 박을 수 없다.
+#       그래서 **그 씨앗 자신의 아이콘**(`SEED_PACKET_ICONS`)을 쓴다: "야생 모둠(피안)이 여기 심겼다"
+#       까지만 말하고 무엇이 나올지는 약속하지 않는다 — 지금 실제로 정해진 것이 딱 거기까지다.
+#     · 단계는 `growth_stage`(0/1/2)에 맞춰 작고 옅은 것에서 온전한 것으로 자란다. 성숙만 100%라
+#       "다 자랐는가"가 한눈에 갈린다.
+#   ★ 이 훅은 **아트가 들어오면 저절로 꺼진다** — `CROP_SPRITES`에 키가 생기는 순간 위 두 호출부가
+#     정규 경로로 빠지므로, 여기 손댈 것이 없다.
+const UNARTED_STAGE_SCALE := [0.45, 0.70, 1.0]
+const UNARTED_STAGE_ALPHA := [0.55, 0.80, 1.0]
+
+func _unarted_crop_tex(crop_id: String) -> Texture2D:
+	var species := CropCatalog.wild_species(crop_id)
+	if species != "" and FORAGE_ICONS.has(species):
+		return FORAGE_ICONS[species] as Texture2D
+	return SEED_PACKET_ICONS.get(crop_id, null) as Texture2D
+
+func _draw_unarted_crop(base: Rect2, crop_id: String, stage: int) -> void:
+	var tex := _unarted_crop_tex(crop_id)
+	if tex == null or stage < 0:
+		return
+	var si: int = clampi(stage, 0, UNARTED_STAGE_SCALE.size() - 1)
+	var sc: float = float(UNARTED_STAGE_SCALE[si])
+	var sz := base.size * sc
+	draw_texture_rect(tex, Rect2(base.position + (base.size - sz) * 0.5, sz), false,
+		Color(1.0, 1.0, 1.0, float(UNARTED_STAGE_ALPHA[si])))
 
 # ★ [S1-5b] 혼의 나무 과수 그레이박스 표식(greybox-spec §7.4 — 대형 스프라이트·Y-sort=S1-10 이관).
 # 묘목(미성숙)=밑동 작은 새싹 / 성숙=3×3 수관(반투명 초록) + 밑동(갈색) + 매달린 과일 점(fruit_count).

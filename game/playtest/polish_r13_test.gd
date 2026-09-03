@@ -74,6 +74,11 @@ func _line_of(needle: String) -> int:
 			return i
 	return -1
 
+# ★[폴리시 R15] **주석 줄은 건너뛴다.** 이 저장소의 main.gd는 폴리시 회차마다 계약의 근거를 함수
+#   안 주석으로 길게 적어 두는데, 그 주석이 대개 자기가 지키는 코드의 니들을 그대로 인용한다 —
+#   그래서 니들이 실제 가드보다 **주석에 먼저 걸려**, 가드 항을 지우고 주석만 남겨도 초록이었다
+#   (⑯a-pre의 `_sleeping`이 main.gd `_close_spine_scene` 안 R12 주석에 먼저 걸리던 자리).
+#   줄 전체가 주석인 것만 뺀다 — 코드 뒤에 꼬리 주석이 달린 줄은 여전히 코드라 그대로 센다.
 func _in_func(fn_needle: String, needle: String) -> bool:
 	var head := _line_of(fn_needle)
 	if head < 0:
@@ -81,6 +86,8 @@ func _in_func(fn_needle: String, needle: String) -> bool:
 	for i in range(head + 1, _src.size()):
 		if _src[i].begins_with("func "):
 			return false
+		if _src[i].strip_edges().begins_with("#"):
+			continue
 		if _src[i].contains(needle):
 			return true
 	return false
@@ -94,6 +101,8 @@ func _count_in_func(fn_needle: String, needle: String) -> int:
 	for i in range(head + 1, _src.size()):
 		if _src[i].begins_with("func "):
 			break
+		if _src[i].strip_edges().begins_with("#"):
+			continue                                    # ★[폴리시 R15] `_in_func`와 같은 주석 규약
 		if _src[i].contains(needle):
 			n += 1
 	return n

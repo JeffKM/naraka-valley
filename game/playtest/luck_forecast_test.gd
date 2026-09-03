@@ -332,18 +332,40 @@ func _initialize() -> void:
 	# ⚠️ **원본값에 `%d`를 쓰지 않는다**(S7-T7에서 오탐으로 드러난 자리): 운은 언제나 −0.1~+0.1이라
 	#   `"%d" % v2`가 항상 "0"(또는 "-0")으로 퇴화해, 사실상 "본문에 숫자 0이 있으면 실패"라는 뜻이
 	#   된다. 점괘 거울에 행사 예고("20일 뒤: …")가 붙자 그 0에 걸렸다 — 운 값은 어디에도 안 떴는데도.
-	#   정수 자리수가 의미를 갖는 건 ×100 표기("운 −9")뿐이라 거기만 `%d`를 남긴다.
+	# ⚠️⚠️ **★[폴리시 R15] ×100 표기의 `%d`도 같은 함정이었다**(그 자리가 HEAD에서 상시 적색이었다):
+	#   `"%d" % (v2*100.0)`는 그냥 한두 자리 정수 문자열이고, ◇예고 네 줄은 날짜 카운트다운을 **항상**
+	#   싣는다(`Peddler.APPEAR_MODULUS == 7`이라 day 1이면 "6일 뒤"가 확정). trunc(luck×100)이 그
+	#   날짜와 겹치기만 하면 운이 한 글자도 안 떴는데 실패했고, |luck|<0.01인 날(확률 10%)은 "0"으로
+	#   퇴화해 "10일 뒤"·"20일 뒤"에 걸렸다. 그래서 **자릿수 목록을 못 박는 방식 자체를 버린다**:
+	#   ◇예고 줄(날짜가 정상적으로 드는 유일한 층)을 걷어낸 나머지 — 머리·fortune_text·날씨 줄·
+	#   D-1 경고 — 는 넷 다 수치를 안 담는 것이 계약이므로 **숫자가 한 글자도 없어야 한다**.
+	#   어떤 자리수·어떤 표기(백분율·소수·괄호 병기)로 운이 새도 반드시 red가 되고, 예고 줄이 몇
+	#   개 붙든 어떤 날짜를 싣든 영향을 안 받는다(퇴화 불가능).
 	var numeric_leak := false
+	var leak_where := ""
+	var scanned_lines := 0
 	for d4 in [d_great, d_terrible, 1, 28, 56]:
 		m.clock.day = int(d4)
 		var t2: String = m._mirror_forecast_text()
-		var v2 := DailyLuck.luck_for_day(int(d4))
-		for fmt in ["%.1f", "%.2f", "%.3f", "%.4f"]:
-			if t2.contains(fmt % v2) or t2.contains(fmt % (v2 * 100.0)):
-				numeric_leak = true
-		if t2.contains("%d" % (v2 * 100.0)):
-			numeric_leak = true
-	_check("⑥d 수치 노출 0 — 어떤 자리수로도 운 값이 본문에 안 뜬다(등급·문구만)", not numeric_leak)
+		for raw_line in t2.split("\n"):
+			var line := String(raw_line)
+			if line.begins_with("◇"):
+				continue                                   # 예고 줄 = 날짜 층(숫자가 정상)
+			if line.strip_edges() == "":
+				continue
+			scanned_lines += 1
+			for ci in range(line.length()):
+				var ch := line[ci]
+				if ch >= "0" and ch <= "9":
+					numeric_leak = true
+					if leak_where == "":
+						leak_where = "day %d — %s" % [int(d4), line]
+	# 비어 있음 가드 — 예고 줄을 걷어낸 뒤에도 잴 본문이 남아야 검사가 하중을 받는다(표본 5일 ×
+	# 최소 머리·운 2줄·날씨 1줄).
+	_check("⑥d-pre 예고 줄을 걷어낸 본문이 남는다(검사가 공허하지 않다) — 실측 %d줄" % scanned_lines,
+		scanned_lines >= 5 * 4)
+	_check("⑥d 수치 노출 0 — 예고 줄 밖 본문에 숫자가 한 글자도 없다(등급·문구만)%s"
+		% ("" if leak_where == "" else " ← 누출: " + leak_where), not numeric_leak)
 	# D-1 경고 — 절기 마지막 날에만 뜬다.
 	m.clock.day = 28
 	var txt_last: String = m._mirror_forecast_text()

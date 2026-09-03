@@ -355,6 +355,14 @@ func _run_checks() -> void:
 		g4.contains("용이 되려 했다") and g4.contains("전부 내쳤다") and g4.contains("천 년"))
 	_check("⑨i ♡4가 플레이어의 죄를 겨누지 않는다(메인 3인 조각의 독점 영역)",
 		not g4.contains("네 죄") and not g4.contains("네가 지은"))
+	# ★[폴리시 R15] **비어 있음 가드.** 아래 `_src()` 단언은 전부 부정형이라, `%s.gd`를 못 열어 ""가
+	#   돌아오면 `not "".contains(x)`가 모조리 참이 되어 소스 규율 검사가 통째로 죽은 채 초록이 된다
+	#   (파일을 옮기거나 `KID`와 파일명이 어긋나면 즉시 그 상태다). 이 저장소의 다른 소스 스캔은
+	#   luck_forecast_test ⑦a처럼 읽었음을 먼저 못 박는데 아크 다섯 스위트만 빠져 있었다.
+	_check("⑨j-pre %s.gd를 실제로 읽었다(부정 단언이 공허하지 않다 — 주석 제외 %d자)"
+			% [KID, _src().length()],
+		FileAccess.file_exists("res://%s.gd" % KID) and _src().length() > 2000
+		and _src().contains("func "))
 	_check("⑨j 본문은 호감도를 모른다(0점 계약의 구조적 근거)",
 		not _src().contains("Affinity") and not _src().contains("add_points"))
 	_check("⑨k 승천·비늘의 힘을 메카닉으로 쓰지 않는다(백스토리 한정 — 곱셈기 0 · 경제 무접촉)",

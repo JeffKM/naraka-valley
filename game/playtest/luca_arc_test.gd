@@ -368,6 +368,13 @@ func _run_checks() -> void:
 		g4.contains("곁에 있던") and g4.contains("내 손으로 부쉈어"))
 	_check("⑨i ♡4가 플레이어의 죄를 겨누지 않는다(메인 3인 조각의 독점 영역)",
 		not g4.contains("네 죄") and not g4.contains("네가 지은"))
+	# ★[폴리시 R15] 비어 있음 가드 — 아래 `_src()` 단언은 전부 부정형이라 파일을 못 열면(`KID`와
+	#   파일명이 어긋나면) `not "".contains(x)`가 모조리 참이 되어 검사가 죽은 채 초록이 된다
+	#   (luck_forecast_test ⑦a 관례를 아크 다섯 스위트만 안 갖고 있었다).
+	_check("⑨j-pre %s.gd를 실제로 읽었다(부정 단언이 공허하지 않다 — 주석 제외 %d자)"
+			% [KID, _src().length()],
+		FileAccess.file_exists("res://%s.gd" % KID) and _src().length() > 2000
+		and _src().contains("func "))
 	_check("⑨j 본문은 Affinity를 모른다(0점 계약의 구조적 근거)",
 		not _src().contains("Affinity") and not _src().contains("add_points"))
 	_check("⑨k 야성·변신을 메카닉으로 쓰지 않는다(백스토리 한정 — effect_fn 0 · 곱셈기 어휘 0)",
