@@ -1,5 +1,5 @@
 extends SceneTree
-# ★[폴리시 16회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#7).
+# ★[폴리시 16회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#7) · 배치 B(#8~#15).
 #
 # 렌즈: R15 diff 리뷰 · 이벤트 재진입 · 단위/스케일 정합.
 #
@@ -21,7 +21,16 @@ extends SceneTree
 #   ⑧ #7 **OWNER-DECISION 기록** — 몹의 판정 타일(pos=중심)과 몸 발치(pos+TILE*0.40)가 갈리는
 #        사실을 수치로 남긴다. 코드는 안 고쳤다(아래 판정 주석).
 #
-# 판정: #0~#6 CONFIRMED(봉합). **#7은 OWNER-DECISION** — 어느 축을 옮겨도 대가가 있다:
+#   ⑨ #8 결정기 회수 **성공 경로만** 알림 0 — 형제 설치물 회수 6창구 중 유일한 침묵이었다.
+#   ⑩ #9 출하함 회수가 백팩 만재에서 완전 무반응 — 같은 패널의 곳간·상자 형제는 둘 다 말한다.
+#   ⑪ #10 건물 완공 알림 3종이 keep 없이 아침 프레임에 밀려 **영구 축출**(원장이 한 번만 돌려준다).
+#   ⑫ #11 뱃사공 낚싯대·무골 혼검 증정이 백팩 만재에서 완전 침묵(지급처가 그 함수 하나뿐이다).
+#   ⑬ #12 괭이 AoE 유품 만재 알림이 칸마다 발화 — 한 스윙에 같은 문구가 최대 9줄로 4칸 큐를 덮었다.
+#   ⑭ #13 갱도 문·나락 아가리 앞 설치 기계에서 프롬프트와 실행이 **정반대**를 말했다(high).
+#   ⑮ #14 점주 칸에 업화로/결정기를 세울 수 있어 [F]가 매대에 먹히고 화덕이 **영구 회수 불가**였다.
+#   ⑯ #15 축사 안 화분은 RMB가 돌봄에 먹혀 수확 불가인데 프롬프트는 "[우클릭] 수확"이라 말했다.
+#
+# 판정: #0~#6 · #8~#15 CONFIRMED(봉합). **#7은 OWNER-DECISION** — 어느 축을 옮겨도 대가가 있다:
 #   ㉠ 판정을 발치로 옮기면 R10 #3이 깨진다. 추적형은 접촉 시 정지가 없어 플레이어 **픽셀 좌표로
 #      수렴**하고, 그때 `m.tile() == _player_tile()`이 되는 것이 "겹친 적을 벤다"의 성립 근거다
 #      (`_weapon_arc`가 origin을 arc 맨 앞에 담는 이유). 발치 타일은 그 등식을 한 행 깬다.
@@ -35,6 +44,16 @@ extends SceneTree
 #   #2 옛 출근 문구 복귀 → ③a red · #3 "[Tab] " 되돌림 → ④a red · #4 `_swallow_input_once = true`
 #   삭제 → ⑤a red · #5 `_pot_dispatch_at`의 `and not _animal_dispatch_at(t)` 삭제 → ⑥b red ·
 #   #6 위장 분기를 옛 `m.pos − (rsz.x*0.5, rsz.y − TILE*0.40)` 식으로 되돌림 → ⑦c red.
+#   #8 회수 성공 `_notice` 삭제 → ⑨b red · #9 `restored <= 0` 갈래 삭제 → ⑩b red ·
+#   #10 세 완공 줄의 keep 인자 제거 → ⑪b red · #11 증정 `_notice` 둘 삭제 → ⑫b red ·
+#   #12 알림을 다시 루프 안으로 → ⑬c red · #13 프롬프트를 옛 자리로 되돌림 → ⑭b red ·
+#   #14 `_resident_tile` 배제 삭제 → ⑮a red · #15 `ANIMAL_BUILDINGS` 배제 삭제 → ⑯a red.
+#
+# 배치 B의 봉합 축(근거는 커밋 본문):
+#   · #13 = **프롬프트를 실행 사다리에 맞춘다**(반대 축은 그 칸의 기계를 영영 못 꺼내게 만든다).
+#   · #14 = 배치 가드(주민 칸 배제) + **구세이브 탈출구**(주민 [F]가 기계 칸을 양보한다).
+#   · #15 = 배치 가드(축사 배제) + **구세이브 탈출구**(돌봄 RMB가 화분 칸을 양보한다).
+#   셋 다 "새 배치만 막고, 이미 놓인 것은 언제나 회수·사용 가능하게 둔다"는 한 규율이다.
 #
 # 실행: ./run_tests.sh polish_r16   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -109,6 +128,14 @@ func _run_checks() -> void:
 	_check_animal_pot_dispatch(m)
 	_check_disguise_rock(m)
 	_record_mob_foot_axis(m)
+	_check_crystalarium_notice(m)
+	_check_takeback_notice(m)
+	_check_completion_keep(m)
+	_check_grant_notice(m)
+	_check_relic_aggregate(m)
+	_check_prompt_exec_order(m)
+	_check_resident_tile_guard(m)
+	_check_barn_pot(m)
 
 	print("── 결과: %s (실패 %d) ──" % ["통과" if _fail == 0 else "실패", _fail])
 	quit(1 if _fail > 0 else 0)
@@ -409,13 +436,17 @@ func _check_animal_pot_dispatch(m: Node) -> void:
 		adult != Vector2i(-1, -1) and m.ranch.has_animal_at(adult))
 	if adult == Vector2i(-1, -1):
 		return
-	# 전제 — 배치 가드가 짐승 칸을 안 막는다(그래서 이 겹침이 정상 플레이로 성립한다).
-	# ★ 이 배제는 **배치 B(#15) 몫**이라 여기서 안 고쳤다. 여기 봉합한 것은 이중 실행뿐이다.
+	# 이 겹침이 어떻게 생기나 — 두 경로가 남았고, 그래서 이중 실행 봉합은 계속 하중을 받는다.
+	#   ㉠ **구세이브**: 축사 배치를 막은 것은 배치 B(#15)라, 그 가드가 서기 전에 놓인 화분은 남는다.
+	#   ㉡ **좌표 밴드 겹침**: `_pot_at`·`_animal_dispatch_at` 둘 다 `_indoor`를 안 보고 HOME 좌표만
+	#      본다(원장이 구역 축만 든다 — `_can_place_pot` 머리말의 "실내 밴드 좌표" 주석). 그래서
+	#      실내 화분 좌표와 방목 나온 짐승 좌표가 겹치면 바깥에서도 두 창구가 같은 칸을 문다.
+	# ★ 배치 A는 그 겹침의 **이중 실행**만 껐고, "애초에 축사엔 못 놓는다"는 배치 B ⑯a가 잰다.
 	m._region = RegionCatalog.HOME
 	var keep_indoor: String = m._indoor
 	m._indoor = m.ranch.building_of(adult)
-	_check("⑥a 전제: `_can_place_pot`이 짐승 칸을 배제하지 않는다(배치 B 몫 — 여기선 미수정)",
-		m._can_place_pot(adult))
+	_check("⑥a 배치 B(#15)가 축사 배치를 닫았다 — 그래도 위 두 경로가 남아 이중 실행 봉합이 산다",
+		not m._can_place_pot(adult))
 	m._indoor = keep_indoor
 
 	# 빈 실내 칸 하나 — 짐승이 없는 화분 칸은 여전히 디스패치가 열려야 한다(과잉 배제 방지).
@@ -522,3 +553,358 @@ func _record_mob_foot_axis(m: Node) -> void:
 		overlap.tile() == origin and low_foot.y == origin.y + 1 and low_foot != origin)
 	_check("⑧d 대가㉡: 렌더를 pos에 맞추면 전 몹이 %.1fpx 뜬다(화면상 %.1fpx — S5-T10이 못 박은 축)"
 			% [foot_off, foot_off * 2.0], foot_off > 0.0)
+
+# ── 배치 B 공용 헬퍼 ─────────────────────────────────────────────────────────
+# 백팩을 **실재하는 아이템**으로 가득 채운다(슬롯 직접 조작 — 그리기가 미지 id를 만나지 않게).
+# 채우는 것은 씨앗뿐이라, 아래 검사들이 넣으려는 물건(낚싯대·혼검·결정기·수확물)과 절대 안 겹친다.
+func _fill_backpack(m: Node, skip: Array = []) -> int:
+	var pool: Array = []
+	for src in [ItemCatalog.MINERALS.keys(), ItemCatalog.MATERIALS.keys(),
+			ItemCatalog.FORAGEABLES.keys()]:
+		for raw in src:
+			var id := str(raw)
+			if id != "" and not pool.has(id) and not skip.has(id):
+				pool.append(id)
+	for cid in CropCatalog.ids():
+		var sid := ItemCatalog.seed_id(String(cid))
+		if sid != "" and not pool.has(sid) and not skip.has(sid):
+			pool.append(sid)
+	var n := 0
+	for i in Inventory.SIZE:
+		if n >= pool.size():
+			break
+		m.inventory.slots[i] = {"id": String(pool[n]), "count": 1, "quality": 0}
+		n += 1
+	return n
+
+func _feed_texts(m: Node) -> Array:
+	var out: Array = []
+	for it in m.notice_feed._items:
+		out.append(String(it["text"]))
+	return out
+
+# 소스에서 니들이 처음 나오는 코드 줄(주석 제외 · 없으면 −1). 사슬 순서 판정용.
+func _line_of(needle: String) -> int:
+	for i in range(_src.size()):
+		if _src[i].strip_edges().begins_with("#"):
+			continue
+		if _src[i].contains(needle):
+			return i
+	return -1
+
+# ── ⑨ #8 결정기 회수 성공이 무엇을 걷었는지 말한다(라이브) ──────────────────
+func _check_crystalarium_notice(m: Node) -> void:
+	print("⑨ #8 결정기 회수 성공 알림")
+	m._region = RegionCatalog.HOME
+	m._indoor = ""
+	var t := Vector2i(-1, -1)
+	for y in range(4, 30):
+		for x in range(4, 40):
+			var c := Vector2i(x, y)
+			if m._can_place_crystalarium(c):
+				t = c
+				break
+		if t.x >= 0:
+			break
+	_check("⑨ 무대: 결정기를 세울 빈 지면을 찾았다(%s)" % str(t), t.x >= 0)
+	if t.x < 0:
+		return
+	var gem := ItemCatalog.GEM_NEOKSUJEONG
+	m.crystalarium.place(RegionCatalog.HOME, t)
+	m.crystalarium.load_gem(RegionCatalog.HOME, t, gem)
+	_check("⑨a 무대: 보석이 여무는 중이다(며칠치 진행이 걸린 상태 = 말해야 할 이유)",
+		m.crystalarium.is_growing(RegionCatalog.HOME, t))
+	# 손에 복제 불가 물건(괭이)을 들어 ㉢ 회수 갈래로 떨어뜨린다.
+	for i in Inventory.SIZE:
+		if m.inventory.id_at(i) == ItemCatalog.HOE:
+			m.inventory.selected_index = i
+			break
+	m.notice_feed._items.clear()
+	var keep_target: Vector2i = m._target
+	m._target = t
+	m._use_crystalarium(t)
+	m._target = keep_target
+	var said := _feed_texts(m)
+	var joined := " ".join(said)
+	_check("⑨b 걷은 사실과 **함께 돌려받은 보석**을 말한다(줄 %d — 「%s」)"
+			% [said.size(), joined.substr(0, 46)],
+		said.size() == 1 and joined.contains("결정기") and joined.contains(ItemCatalog.name_of(gem)))
+	_check("⑨c 실제로 걷혔다 — 원장에서 사라지고 기계·보석이 백팩에 들어왔다",
+		not m.crystalarium.has_at(RegionCatalog.HOME, t)
+			and m.inventory.count_of(ItemCatalog.CRYSTALARIUM) >= 1
+			and m.inventory.count_of(gem) >= 1)
+	# 형제 계약 — 업화로 회수도 같은 자리에서 말한다(이 침묵이 6창구 중 유일했다는 근거).
+	_check("⑨d 형제(업화로) 회수 성공도 같은 자리에서 말한다",
+		_line_in_func(_src, "func _use_furnace", "업화로를 걷었다") >= 0)
+	m.inventory.remove_item(ItemCatalog.CRYSTALARIUM, 1)
+	m.inventory.remove_item(gem, 1)
+	m.notice_feed._items.clear()
+
+# ── ⑩ #9 출하함 회수가 만재에서 말한다(라이브) ─────────────────────────────
+func _check_takeback_notice(m: Node) -> void:
+	print("⑩ #9 출하함 회수 만재 침묵")
+	var hid := ItemCatalog.harvest_id(CropCatalog.HONRYEONGCHO)
+	m.ship_bin.add(hid, 3, ItemCatalog.Q_NORMAL)
+	var filled := _fill_backpack(m, [hid])
+	_check("⑩ 무대: 백팩을 %d칸으로 채웠고 출하함에 %d개가 대기한다(회수 대상 ≠ 채운 것)"
+			% [filled, m.ship_bin.count_of(hid)],
+		filled == Inventory.SIZE and m.ship_bin.count_of(hid) == 3
+			and not m.inventory.can_add(hid, 1))
+	m.notice_feed._items.clear()
+	m._on_frame_takeback(hid)
+	var said := _feed_texts(m)
+	# 형제 문구를 소스에서 뽑아 그대로 대조한다(테스트가 문자열을 따로 정하지 않는다).
+	var sib := _line_in_func(_src, "func _on_frame_larder_take", "_notice(")
+	var sib_line := _src[sib] if sib >= 0 else ""
+	var sib_text := sib_line.substr(sib_line.find("\"") + 1)
+	sib_text = sib_text.substr(0, maxi(sib_text.find("\""), 0))
+	_check("⑩a 무대: 형제(곳간) 창구가 쓰는 문구를 소스에서 뽑았다 — 「%s」" % sib_text,
+		sib_text != "" and sib_text.contains("가득"))
+	_check("⑩b 만재 회수가 형제와 **같은 문구로** 말한다(줄 %d)" % said.size(),
+		said.size() == 1 and String(said[0]) == sib_text)
+	_check("⑩c 원장은 그대로다 — 말만 하고 출하 대기분을 잃지 않는다",
+		m.ship_bin.count_of(hid) == 3)
+	m.ship_bin.take_back(hid, 3, ItemCatalog.Q_NORMAL)
+	m.notice_feed._items.clear()
+
+# ── ⑪ #10 완공 알림이 아침 축출에서 살아남는다 ──────────────────────────────
+func _check_completion_keep(m: Node) -> void:
+	print("⑪ #10 완공 알림 keep")
+	# ㉠ 라이브 — keep이 붙은 줄은 4칸 큐에 여섯 줄이 더 밀려도 살아남는다.
+	m.notice_feed._items.clear()
+	m.notice_feed.push("SENTINEL 완공", 5.0, false, null, false, Color(0, 0, 0, 0), true)
+	for i in m.notice_feed.MAX_ITEMS + 2:
+		m.notice_feed.push("밀어내기 %d" % i, 5.0)
+	var alive := _feed_texts(m).has("SENTINEL 완공")
+	_check("⑪a keep 줄은 상한(%d)을 넘겨 여섯 줄이 더 밀려도 남는다(현재 큐 %d줄)"
+			% [m.notice_feed.MAX_ITEMS, m.notice_feed._items.size()],
+		alive and m.notice_feed._items.size() <= m.notice_feed.MAX_ITEMS)
+	m.notice_feed._items.clear()
+	# ㉡ 소스 — 완공 알림 **전수**가 그 표를 단다(명단 하드코딩 0: 그 블록에서 훑어 모은다).
+	var head := _line_of("var built := carpenter.advance_day(day)")
+	var naked: Array = []
+	var found := 0
+	if head >= 0:
+		var i := head
+		while i < _src.size() and i < head + 40:
+			var ln := _src[i]
+			if ln.contains("_notice(") and ln.contains("완공"):
+				found += 1
+				# 인자 목록이 다음 줄로 이어지는 호출도 있으므로 두 줄을 함께 본다.
+				var span := ln
+				for k in [1, 2]:
+					if i + k < _src.size():
+						span += _src[i + k]
+				if not span.contains("Color(0, 0, 0, 0), true"):
+					naked.append("%d행" % (i + 1))
+			i += 1
+	_check("⑪ 무대: 완공 아침 블록에서 완공 알림 %d줄을 훑어 모았다(하드코딩 0)" % found, found >= 3)
+	_check("⑪b 그 전부가 keep을 단다 — 원장이 한 번만 돌려주는 값이라 밀리면 영영 안 뜬다(누락: %s)"
+			% ("없음" if naked.is_empty() else ", ".join(naked)), naked.is_empty())
+
+# ── ⑫ #11 1회성 증정이 만재에서 말한다(라이브) ─────────────────────────────
+func _check_grant_notice(m: Node) -> void:
+	print("⑫ #11 증정 만재 침묵")
+	m.inventory.slots = []
+	m.inventory.slots.resize(Inventory.SIZE)
+	var filled := _fill_backpack(m, [ItemCatalog.ROD_T1, WeaponCatalog.SWORD_RUSTY])
+	m._boatman_rod_given = false
+	m._mugol_sword_given = false
+	_check("⑫ 무대: 백팩 만재 · 증정 래치 둘 다 미지급(%d칸)" % filled,
+		filled == Inventory.SIZE and not m.inventory.can_add(ItemCatalog.ROD_T1, 1)
+			and not m.inventory.can_add(WeaponCatalog.SWORD_RUSTY, 1))
+	m.notice_feed._items.clear()
+	var rod_lines: PackedStringArray = m._grant_boatman_rod_lines()
+	var rod_said := _feed_texts(m)
+	m.notice_feed._items.clear()
+	var sword_lines: PackedStringArray = m._grant_mugol_sword_lines()
+	var sword_said := _feed_texts(m)
+	m.notice_feed._items.clear()
+	_check("⑫a 무대: 증정이 실제로 막혔다(대사 0줄 · 래치 안 섬 — 다음 대화에 재시도)",
+		rod_lines.is_empty() and sword_lines.is_empty()
+			and not m._boatman_rod_given and not m._mugol_sword_given)
+	_check("⑫b 두 창구가 왜 못 받았는지 말한다 — 「%s」 / 「%s」"
+			% [" ".join(rod_said).substr(0, 24), " ".join(sword_said).substr(0, 24)],
+		rod_said.size() == 1 and String(rod_said[0]).contains("낚싯대")
+			and sword_said.size() == 1 and String(sword_said[0]).contains("혼검"))
+	# ★두 줄은 **대화 중**에 뜬다 — `_process`의 대화 가드(`if dialogue.is_open(): … return`)가
+	#   메뉴 토글보다 위에서 프레임을 끊으므로 그 순간 [Tab]은 죽은 키다. 그래서 세계 동작 형제들의
+	#   "[Tab] 가방에서 자리를 비우고"가 아니라 형제 **증정** 창구(`_grant_mount_whistle`)의 관용구를
+	#   따른다("가방을 비우면 받는다"). 배치 A #3이 프레임 안에서 잡은 거짓 광고와 같은 종류라,
+	#   다음 회차가 "형제와 문구를 맞춘다"며 [Tab]을 도로 붙이지 않게 여기서 못 박는다.
+	var dlg_gate := _line_of("if dialogue.is_open():")
+	var menu_gate := _line_of("Input.is_action_just_pressed(\"menu_toggle\")")
+	_check("⑫c 그 두 줄은 [Tab]을 광고하지 않는다 — 대화 가드(%d행)가 메뉴 토글(%d행)보다 위에서"
+			% [dlg_gate + 1, menu_gate + 1] + " return해 그 순간 Tab이 죽은 키이기 때문이다",
+		dlg_gate >= 0 and menu_gate > dlg_gate
+			and not " ".join(rod_said).contains("[Tab]")
+			and not " ".join(sword_said).contains("[Tab]"))
+	_check("⑫d 대신 형제 증정 창구(`_grant_mount_whistle`)의 관용구를 따른다 — 「가방을 비우면/비우고」",
+		_line_in_func(_src, "func _grant_mount_whistle", "가방을 비우면") >= 0
+			and String(rod_said[0]).contains("가방을 비우고")
+			and String(sword_said[0]).contains("가방을 비우고"))
+	m.inventory.slots = []
+	m.inventory.slots.resize(Inventory.SIZE)
+	m.inventory.grant_start_kit()
+
+# ── ⑬ #12 AoE 유품 만재 알림이 스윙당 한 줄로 집계된다 ─────────────────────
+func _check_relic_aggregate(m: Node) -> void:
+	print("⑬ #12 AoE 유품 알림 집계")
+	# 무대 전제 — 한 스윙(3×3)에 유품 롤이 둘 이상 걸리는 조합이 실재한다(그래서 복제본이 쌓였다).
+	var worst := 0
+	for day in range(1, 113):
+		for y in range(12, 17):
+			for x in range(40, 45):
+				var hits := 0
+				for dy in [-1, 0, 1]:
+					for dx in [-1, 0, 1]:
+						if Museum.relic_roll(day, Vector2i(x + dx, y + dy)) != "":
+							hits += 1
+				worst = maxi(worst, hits)
+	_check("⑬a 무대: 한 3×3 스윙에 유품 롤이 최대 %d칸까지 함께 걸린다(칸당 결정 롤 = 복제본 원인)"
+			% worst, worst >= 2)
+	# 알림이 루프 **밖**에 선다 — 들여쓰기로 판정한다(루프 안으로 되돌리면 깊이가 깊어져 빨개진다).
+	var loop_line := _line_of("for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE))")
+	var notice_line := _line_of("발밑에 무언가 걸린다")
+	var guard_line := _line_of("if relic_blocked > 0:")
+	var count_line := _line_of("relic_blocked += 1")
+	var loop_indent := _indent_of(loop_line)
+	var guard_indent := _indent_of(guard_line)
+	_check("⑬b 집계 카운터가 루프 안에서 센다(%d행) — 알림은 그 안에서 안 나간다" % (count_line + 1),
+		count_line >= 0 and _indent_of(count_line) > loop_indent)
+	_check("⑬c 알림이 루프 **밖**에서 한 번만 나간다 — 집계 가드가 루프와 같은 깊이다(루프 %d탭 %d행"
+			% [loop_indent, loop_line + 1] + " / 가드 %d탭 %d행 / 알림 %d행)"
+			% [guard_indent, guard_line + 1, notice_line + 1],
+		guard_line > loop_line and guard_indent == loop_indent
+			and notice_line > guard_line and _indent_of(notice_line) > guard_indent)
+	_check("⑬d 문구가 **몇 칸을 못 캤는지**를 남긴다(집계로 합치며 정보를 잃지 않았다)",
+		notice_line >= 0 and _src[notice_line].contains("%d칸"))
+
+func _indent_of(line: int) -> int:
+	if line < 0:
+		return -1
+	var n := 0
+	while n < _src[line].length() and _src[line][n] == "\t":
+		n += 1
+	return n
+
+# ── ⑭ #13 프롬프트 사슬이 입력 사다리와 같은 순서다 ────────────────────────
+func _check_prompt_exec_order(m: Node) -> void:
+	print("⑭ #13 프롬프트↔실행 순서")
+	var exec_furnace := _line_of("if not _sleeping and _furnace_at(_target) and Input.is_action_just_pressed(\"shop_toggle\"):")
+	var exec_crystal := _line_of("if not _sleeping and _crystalarium_at(_target) and Input.is_action_just_pressed(\"shop_toggle\"):")
+	var exec_gate := _line_of("if _at_dungeon_gate():")
+	var exec_narak := _line_of("if _at_narak_mouth() and Input.is_action_just_pressed(\"shop_toggle\"):")
+	var exec_resident := _line_of("if faced_resident.shop_key.is_valid() and not _f_machine_at(_target)")
+	var pr_furnace := _line_of("elif _furnace_at(_target):")
+	var pr_crystal := _line_of("elif _crystalarium_at(_target):")
+	var pr_gate := _line_of("elif _at_dungeon_gate():")
+	var pr_narak := _line_of("elif _at_narak_mouth():")
+	var pr_resident := _line_of("elif faced_resident != null:")
+	_check("⑭ 무대: 두 사슬의 다섯 갈래를 소스에서 모두 찾았다(실행 %d/%d/%d/%d/%d · 프롬프트 %d/%d/%d/%d/%d)"
+			% [exec_furnace + 1, exec_crystal + 1, exec_gate + 1, exec_narak + 1, exec_resident + 1,
+				pr_furnace + 1, pr_crystal + 1, pr_gate + 1, pr_narak + 1, pr_resident + 1],
+		mini(mini(exec_furnace, exec_crystal), mini(exec_gate, mini(exec_narak, exec_resident))) >= 0
+			and mini(mini(pr_furnace, pr_crystal), mini(pr_gate, mini(pr_narak, pr_resident))) >= 0)
+	# 계약: 기계 [F]가 문·아가리보다 **먼저** 잡는다 — 두 사슬이 같은 답을 내야 화면이 동작을 말한다.
+	var pairs := [
+		["업화로 vs 갱도 문", exec_furnace < exec_gate, pr_furnace < pr_gate],
+		["결정기 vs 갱도 문", exec_crystal < exec_gate, pr_crystal < pr_gate],
+		["업화로 vs 나락 아가리", exec_furnace < exec_narak, pr_furnace < pr_narak],
+		["결정기 vs 나락 아가리", exec_crystal < exec_narak, pr_crystal < pr_narak],
+	]
+	var mismatched: Array = []
+	for pr in pairs:
+		if bool(pr[1]) != bool(pr[2]):
+			mismatched.append(String(pr[0]))
+	_check("⑭a 네 쌍 전부에서 실행이 기계를 먼저 잡는다(하강은 return 뒤라 안 닿는다)",
+		exec_furnace < exec_gate and exec_crystal < exec_gate
+			and exec_furnace < exec_narak and exec_crystal < exec_narak)
+	_check("⑭b 프롬프트가 그 순서를 그대로 따른다(어긋남: %s)"
+			% ("없음" if mismatched.is_empty() else ", ".join(mismatched)), mismatched.is_empty())
+	# #14의 반대 방향 — 주민 [F]는 기계 칸을 양보하고, 프롬프트도 같은 순서다.
+	_check("⑭c 주민 [F]가 기계 칸을 양보하고(%d행) 프롬프트도 기계를 먼저 그린다(%d < %d)"
+			% [exec_resident + 1, pr_furnace + 1, pr_resident + 1],
+		exec_resident >= 0 and pr_furnace < pr_resident and pr_crystal < pr_resident)
+	# 설치 안내(LMB)는 올리지 않았다 — 손에 화덕을 든 것만으로 하강 안내가 사라지면 안 된다.
+	var pr_place := _line_of("elif inventory.selected_id() == ItemCatalog.FURNACE and _can_place_furnace(_target):")
+	_check("⑭d 설치 안내(LMB)는 원래 자리에 남았다(%d행 > 갱도 %d행) — [F]와 겹칠 축이 아니다"
+			% [pr_place + 1, pr_gate + 1], pr_place > pr_gate)
+
+# ── ⑮ #14 주민 칸엔 [F] 기계를 못 세운다(라이브) ───────────────────────────
+func _check_resident_tile_guard(m: Node) -> void:
+	print("⑮ #14 주민 칸 설치 가드")
+	m._indoor = ""
+	# ★공허 통과 방지 — **주민 가드 하나만이 막는 칸**을 고른다. 주민을 잠시 내려놓았을 때
+	#   배치가 되는 칸이라야, 아래 판정이 그 가드를 실제로 재는 것이 된다(다른 사유로 이미
+	#   막힌 칸을 고르면 가드를 통째로 지워도 초록이다 — 첫 시도가 정확히 그랬다).
+	var rt := Vector2i(-1, -1)
+	var found: Resident = null
+	for r in m._residents:
+		if r.tile == Resident.UNPLACED:
+			continue
+		var t: Vector2i = r.tile
+		r.tile = Resident.UNPLACED
+		var free_ok: bool = m._can_place_furnace(t)
+		r.tile = t
+		if free_ok:
+			rt = t
+			found = r
+			break
+	_check("⑮ 무대: **주민만이 막는** 칸을 찾았다(%s — 주민을 내려놓으면 배치가 된다)" % str(rt),
+		rt.x >= 0 and found != null)
+	if rt.x < 0:
+		return
+	_check("⑮a 그 칸엔 업화로·결정기를 못 세운다(게잡이통 ⑤가 이미 세운 가드와 같은 술어)",
+		not m._can_place_furnace(rt) and not m._can_place_crystalarium(rt)
+			and not m._can_place_crab_pot(rt))
+	# 구세이브 구제 — 이미 놓인 기계는 주민 [F]를 이기고 걷힌다(양보가 유일한 탈출구다).
+	m.furnace.place(m._region, rt)
+	_check("⑮b 이미 놓인 기계는 그 칸의 [F] 주인이 된다(`_f_machine_at` 참 — 주민이 양보한다)",
+		m._f_machine_at(rt))
+	_check("⑮c 그때 화면도 회수를 말한다 — 「%s」" % m._furnace_prompt(rt).substr(0, 34),
+		m._furnace_prompt(rt).contains("[F]"))
+	m.furnace.remove(m._region, rt)
+	_check("⑮d 걷고 나면 술어가 꺼져 주민 [F]가 되돌아온다(양보는 매몰 상태에서만 산다)",
+		not m._f_machine_at(rt))
+
+# ── ⑯ #15 축사엔 화분을 못 놓고, 이미 놓인 화분은 수확된다(라이브) ─────────
+func _check_barn_pot(m: Node) -> void:
+	print("⑯ #15 축사 안 화분")
+	var adult := Vector2i(-1, -1)
+	for at in m.ranch.animal_tiles():
+		if m.ranch.is_adult(at):
+			adult = at
+			break
+	if adult == Vector2i(-1, -1):
+		_check("⑯ 무대: 성체 짐승 칸을 못 찾았다", false)
+		return
+	var barn: String = m.ranch.building_of(adult)
+	m._region = RegionCatalog.HOME
+	var keep_indoor: String = m._indoor
+	# 대조군 — 같은 칸이 "집" 실내에서는 여전히 놓을 수 있다(새 가드가 축사 축만 자른다).
+	m._indoor = "집"
+	var ok_house: bool = m._can_place_pot(adult)
+	m._indoor = barn
+	var ok_barn: bool = m._can_place_pot(adult)
+	_check("⑯ 무대: 대조군이 성립한다 — 같은 칸이 집 실내에선 배치 가능(%s)" % str(ok_house), ok_house)
+	_check("⑯a 축사(%s) 실내엔 화분을 못 놓는다(ADR-0069 결정 8이 든 자리 = 집·늘봄방)" % barn,
+		ok_barn == false and m.ANIMAL_BUILDINGS.has(barn))
+	# 구세이브 구제 — 축사에 이미 선 화분은 돌봄 RMB가 양보해 수확 창구가 열린다.
+	var free_tile := adult + Vector2i(0, -1)
+	var guard := 0
+	while m.ranch.has_animal_at(free_tile) and guard < 8:
+		free_tile += Vector2i(1, 0)
+		guard += 1
+	m.garden_pot.place(free_tile)
+	_check("⑯b 축사에 이미 선 화분은 배치 A의 술어가 수확 창구를 연다(짐승 없는 칸)",
+		m._pot_dispatch_at(free_tile) and m._pot_at(free_tile))
+	var care := _line_of("if not _sleeping and _indoor in ANIMAL_BUILDINGS and not ranch.has_animal_at(_target) \\")
+	var care_yield := _src[care + 1] if care >= 0 else ""
+	_check("⑯c 돌봄 RMB가 화분 칸을 양보한다(%d행 — return으로 프레임을 끊던 그 갈래)" % (care + 2),
+		care >= 0 and care_yield.contains("not _pot_at(_target)"))
+	var pr_care := _line_of("elif _indoor in ANIMAL_BUILDINGS and ranch.animals_in(_indoor).size() > 0")
+	_check("⑯d 돌봄 프롬프트도 같은 양보를 한다(%d행) — 화면이 실제로 일어날 일을 말한다" % (pr_care + 1),
+		pr_care >= 0 and _src[pr_care].contains("not _pot_at(_target)"))
+	m.garden_pot.remove(free_tile)
+	m._indoor = keep_indoor
