@@ -13643,7 +13643,12 @@ func _process(delta: float) -> void:
 			return
 		# [F] 특수 훅(네오 매대 · 바나 나라카 바 옵트인). ★결정 8 — 이 채널은 관계 트랙과
 		# 서로를 게이팅하지 않는다(♡0이어도 열리고, 많이 열어도 하트가 안 오른다).
-		if faced_resident.shop_key.is_valid() and Input.is_action_just_pressed("shop_toggle"):
+		# ★[폴리시 R16 #14] 그 칸에 [F] 기계가 서 있으면 **가게 열기를 양보한다.** 위 배치 가드가
+		#   신규 배치를 막으므로 이 조건은 가드가 서기 전의 구세이브에서만 참이 되고, 그때 이 한
+		#   줄이 유일한 탈출구다(양보 없이는 화덕도 안에 든 광석도 영영 못 꺼낸다 = 소프트락).
+		#   아래 프롬프트도 같은 순서로 옮겨 화면이 이 동작을 그대로 말한다.
+		if faced_resident.shop_key.is_valid() and not _f_machine_at(_target) \
+				and Input.is_action_just_pressed("shop_toggle"):
 			if faced_resident.shop_key.call():
 				return
 	# ★ C2 무인 출하함 열기(RMB): 카페 출하함 칸을 바라보며 우클릭으로 패널을 연다(좌석·밭보다 먼저
@@ -13832,8 +13837,13 @@ func _process(delta: float) -> void:
 	#   자동으로 세우므로(문 방출→grazed·밤 귀가→penned), 실내 돌봄은 급여+청소만 남는다(SDV 건물 안 돌봄).
 	#   급여는 여물광(Ranch._silo_hay)에서 짐승당 1단 뽑는다 — 비면 굶는다(낫으로 미리 쌓아야, Q7). 짐승을
 	#   직접 바라볼 땐 아래 on_animal의 쓰다듬/수집(손급여)이 우선 → 여기선 짐승 밖 실내 칸에서만.
+	# ★[폴리시 R16 #15] 화분 칸은 **양보한다.** 이 갈래가 return으로 프레임을 끊어, 축사 안 화분은
+	#   심기·물주기는 되는데(아래 일반 갈래의 `pot_dispatch` or-항) 수확만 영영 안 됐다 — 짐승이
+	#   0마리면 프롬프트 사슬은 `_pot_prompt`로 흘러내려 "[우클릭] 수확"이라 말하는데, RMB는 여기
+	#   걸려 급여·청소 대상이 없으면 **알림 한 줄 없이 그냥 return**했다. 위 배치 가드가 신규
+	#   발생을 막고, 이 양보가 구세이브의 화분을 살린다(회수는 LMB라 원래 막히지 않았다).
 	if not _sleeping and _indoor in ANIMAL_BUILDINGS and not ranch.has_animal_at(_target) \
-			and Input.is_action_just_pressed("action"):
+			and not _pot_at(_target) and Input.is_action_just_pressed("action"):
 		var fed_ct := ranch.feed_from_silo_in(_indoor)
 		var cleaned := ranch.clean_all_in(_indoor)
 		if fed_ct > 0 or cleaned:
@@ -14225,6 +14235,25 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = true
 		interact_prompt.text = "[좌클릭 홀드] 당기기 · [놓기] 풀기   (이동하면 그만둠)" if fishing.state == FishingSession.State.FIGHT \
 			else "%s — [좌클릭]으로 챈다" % fishing.state_label()
+	# ★[폴리시 R16 #13·#14] **설치 기계 프롬프트를 입력 사다리와 같은 자리로 올렸다.** 실행부는
+	#   업화로(`_use_furnace`)·결정기가 갱도 입구·나락 아가리·주민 [F]보다 **먼저** 잡고 return하는데,
+	#   프롬프트 사슬만 그 셋이 앞에 있어 화면과 동작이 정반대를 말했다: 갱도 문 칸에 서서 옆
+	#   `MINE_SURFACE_RETURN`(24,7)의 화덕을 겨누면 "[F] 갱도 1층으로 내려간다"가 뜨는데 [F]는
+	#   하강이 아니라 화덕을 열고(비어 있고 손이 비었으면 **조용히 회수해 백팩에 넣고**), 광석을
+	#   들고 있었으면 광석 5 + 혼탄 1이 차감됐다. 나락 아가리(depth 0)도 동형이다.
+	#   ★봉합 축을 "프롬프트를 실행에 맞춘다"로 고른 근거: 반대 축(실행에서 기계를 뒤로 미루기)은
+	#     그 칸의 기계를 **영영 못 꺼내게** 만든다(매몰). 이미 놓인 것은 언제나 회수 가능해야 하므로
+	#     새 배치만 가드로 막고, 화면은 실제로 일어날 일을 말하게 둔다 — `_crab_pot_prompt`가
+	#     팬닝·반딧넋 앞으로 옮겨 갈 때 세운 그 규율("어떤 원장 상태에서도 화면이 동작을 말한다")이다.
+	#   ★기계와 문·주민 칸이 겹치는 상태 자체는 아래 배치 가드가 앞으로 막는다(구세이브만 남는다).
+	elif _furnace_at(_target):
+		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _furnace_prompt(_target)
+	elif _crystalarium_at(_target):
+		# ★[S10-T1] 세워 둔 결정기를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
+		interact_prompt.visible = not _sleeping
+		interact_prompt.text = _crystalarium_prompt(_target)
 	elif _at_dungeon_gate():
 		# ★[S5-T1] 갱도 입구 — 진입 층 선택은 그레이박스 텍스트 목록이다(엘리베이터 UI는 S5-T9/T10 아트).
 		interact_prompt.visible = true
@@ -14565,7 +14594,7 @@ func _process(delta: float) -> void:
 		#   앵커는 더 이상 안 잡는다(집행부 `_try_harvest`·건초 급여와 같은 술어를 본다).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _animal_prompt(ranch.animal_key_at(_target))
-	elif _indoor in ANIMAL_BUILDINGS and ranch.animals_in(_indoor).size() > 0:
+	elif _indoor in ANIMAL_BUILDINGS and ranch.animals_in(_indoor).size() > 0 and not _pot_at(_target):
 		# ★ [B1-a.1] 동물 건물 실내(짐승 밖 칸): 우클릭으로 그 건물 돌봄 일괄.
 		# ★[폴리시 R7] **실제 동작을 말한다.** 종전 문구는 "방목·격리·청결"이었는데, 이 우클릭이
 		#   집행하는 것은 `feed_from_silo_in`(여물광 건초 소모) + `clean_all_in` 둘뿐이다 —
@@ -14608,20 +14637,14 @@ func _process(delta: float) -> void:
 		#   순서를 사다리와 일치시켜 **어떤 원장 상태에서도** 화면이 동작을 말하게 둔다.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _crab_pot_prompt(_target)
-	elif _furnace_at(_target):
-		# ★[S5-T3] 세워 둔 업화로를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수). 채취기보다
-		#   먼저 볼 이유는 없지만(좌표가 안 겹친다) 설치물 프롬프트끼리 한자리에 모아 둔다.
-		interact_prompt.visible = not _sleeping
-		interact_prompt.text = _furnace_prompt(_target)
 	elif inventory.selected_id() == ItemCatalog.FURNACE and _can_place_furnace(_target):
 		# ★[S5-T3] 업화로를 들고 빈 지면을 겨눌 때: LMB로 설치.
+		#   ★[폴리시 R16 #13] **설치 안내는 원래 자리에 남는다** — 위로 올린 것은 "세워 둔 기계"
+		#     갈래뿐이다. 이쪽은 [F]가 아니라 LMB라 문·주민 [F]와 겹칠 축이 아니고, 올리면 손에
+		#     화덕을 든 채 갱도 문에 선 것만으로 하강 안내가 사라진다.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 업화로 세우기 (광석 %d + 혼탄 %d → 주괴 1)" % [
 			FurnaceLedger.ORE_PER_BATCH, FurnaceLedger.FUEL_PER_BATCH]
-	elif _crystalarium_at(_target):
-		# ★[S10-T1] 세워 둔 결정기를 바라볼 때: 상태별 [F] 한 동사(수거 / 투입 / 회수).
-		interact_prompt.visible = not _sleeping
-		interact_prompt.text = _crystalarium_prompt(_target)
 	elif inventory.selected_id() == ItemCatalog.CRYSTALARIUM and _can_place_crystalarium(_target):
 		# ★[S10-T1] 결정기를 들고 빈 지면을 겨눌 때: LMB로 설치.
 		interact_prompt.visible = not _sleeping
@@ -15501,6 +15524,21 @@ func _installation_at(t: Vector2i) -> bool:
 		return true
 	return tapper != null and tapper.has_at(_region, t)
 
+# ★[폴리시 R16 #13·#14] 이 칸에 **[F]가 유일한 동사인 기계**가 서 있는가(업화로·결정기).
+#   왜 따로 있나: 이 둘은 수거·투입·회수를 전부 [F] 하나로 하므로, 그 칸의 [F]를 남이 가져가면
+#   기계도 안에 든 것도 영영 못 꺼낸다(게잡이통·채취기는 `_installation_at`이 이미 서로를 막는다).
+#   아래 배치 가드가 남의 [F] 칸을 배제하므로 신규 세이브에서 이 술어와 주민·문 칸이 겹칠 일은
+#   없다 — 겹치는 것은 그 가드가 서기 전의 구세이브뿐이고, 그때 이 술어가 **탈출구**가 된다.
+func _f_machine_at(t: Vector2i) -> bool:
+	return _furnace_at(t) or _crystalarium_at(t)
+
+# 이 칸에 주민이 서 있는가 — `_can_place_crab_pot` ⑤가 쓰던 루프를 이름 있는 한 곳으로 뽑았다.
+func _resident_tile(t: Vector2i) -> bool:
+	for r in _residents:
+		if r.tile != Resident.UNPLACED and r.tile == t:
+			return true
+	return false
+
 # ★[폴리시 R12] 이 칸에 **방목 나온 짐승이 서 있는가**(설치물 원장과 별개 축 — 몸은 원장이 아니다).
 #   `_free_pasture_tiles`가 슬롯을 고를 때 설치물을 피하는 것과 **짝을 이루는 반대 방향**이다:
 #   그쪽만 고치면 이미 풀밭에 나와 있는 짐승 위에 낮 동안 화덕을 세울 수 있고, 그러면 그 칸의
@@ -15658,6 +15696,15 @@ func _pot_dispatch_at(t: Vector2i) -> bool:
 #      늘고 진실원이 갈린다) **문서화된 배치 범위로 좁혀** 좌표 하나가 주인을 유일하게 정하게 한다.
 func _can_place_pot(t: Vector2i) -> bool:
 	if garden_pot == null or _region != RegionCatalog.HOME or _indoor == "":
+		return false
+	# ★[폴리시 R16 #15] 짐승 건물 실내 → 배제. 종전엔 `_indoor != ""` 하나뿐이라 **HOME의 모든
+	#   실내**를 허용했는데, ADR-0069 결정 8이 든 자리는 "집·늘봄방"이고 `ANIMAL_BUILDINGS`도 HOME
+	#   실내라 그대로 통과했다. 그 안에 놓인 화분은 축사 돌봄 RMB가 먼저 잡아 수확이 영영 안 됐다
+	#   (프롬프트는 "[우클릭] 수확"이라 말한다). 배치를 막아 신규 발생을 끊고, 이미 놓인 화분은
+	#   아래 돌봄 갈래의 양보로 계속 수확·회수된다(매몰 없음).
+	# ★배치 A #5가 남긴 반쪽이 이 줄이다 — 저쪽은 짐승 칸의 **이중 실행**만 껐고(`_pot_dispatch_at`),
+	#   "애초에 축사에 못 놓는다"는 이 가드가 그 짝이다.
+	if _indoor in ANIMAL_BUILDINGS:
 		return false
 	if t.x < 0 or t.x >= _grid_w or t.y < 0 or t.y >= _grid_h:
 		return false
@@ -15823,9 +15870,8 @@ func _can_place_crab_pot(t: Vector2i) -> bool:
 		return false
 	# ⑤ 주민이 선 칸엔 못 놓는다 — 뱃사공 자리(12,27)가 마침 물가 인접이라, 통을 깔면 그 칸의 [F]가
 	#   가게 열기와 겹쳐 통이 영영 안 열린다(입력 사다리에서 주민이 먼저 잡는다). 아예 못 놓게 막는다.
-	for r in _residents:
-		if r.tile != Resident.UNPLACED and r.tile == t:
-			return false
+	if _resident_tile(t):
+		return false
 	return _is_waterside(t)
 
 # 이 칸이 물가인가 = 4방 인접 중 하나가 WATER. 통 설치의 핵심 조건이고, 프롬프트도 이걸 본다.
@@ -16038,6 +16084,13 @@ func _can_place_furnace(t: Vector2i) -> bool:
 	# ★[폴리시 R8] [F] 창구 좌표 → 배제. **이 결함의 진원지**다 — 우편함 칸에 세운 업화로는 그 칸의
 	#   [F]가 입력 사다리에서 편지 열람에 먼저 잡혀, 화덕도 안에 든 광석도 영구 유실됐다.
 	if _f_window_tile(t):
+		return false
+	# ★[폴리시 R16 #14] 주민이 선 칸 → 배제. `_can_place_crab_pot` ⑤가 뱃사공 자리(12,27)를 두고
+	#   이미 세운 가드인데 업화로·결정기엔 없었다 — 그 칸의 [F]는 입력 사다리에서 **주민이 먼저**
+	#   잡아 가게가 열리고 return하므로, 화덕은 투입도 수거도 회수도 영영 불가능해지고 `has_at`이
+	#   true라 다시 세울 수도 없었다(화덕과 안에 든 광석이 영구 유실). 게잡이통 주석이 짚은 그
+	#   사고가 `_f_window_tile`의 HOME 3칸 밖에서 그대로 재현된다.
+	if _resident_tile(t):
 		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
@@ -16565,6 +16618,8 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 	if _tree_occupied_at(t):                  # ★[폴리시 R9] 런타임 파종목 → 배제(업화로와 완전 동형)
 		return false
 	if _f_window_tile(t):                     # ★[폴리시 R8] [F] 창구 좌표 → 배제(업화로와 완전 동형)
+		return false
+	if _resident_tile(t):                     # ★[폴리시 R16 #14] 주민 칸 → 배제(업화로와 완전 동형·그 주석)
 		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
