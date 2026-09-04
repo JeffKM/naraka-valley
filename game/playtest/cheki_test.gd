@@ -31,6 +31,12 @@ func _spawn_main() -> Node:
 # 좌석 0에 "이 손님이 이 메뉴를 시켰다"를 심는다(cafe_guest_test 하네스 동형 — 스폰 롤을 기다리지
 # 않고 서빙→체키 사슬만 본다).
 func _seat_guest(m: Node, guest_id: String, menu_id: String) -> void:
+	# ★[폴리시 R18 #7] **영업 창을 먼저 연다.** 종전엔 부팅 직후(06:00 = 카페 마감 상태)의 좌석에
+	#   손님을 꽂았는데, 그건 플레이에서 성립하지 않는 무대다(손님은 영업 중에만 앉는다). 체키
+	#   제안 창구가 `cafe.is_open()`을 묻게 된 뒤 이 무대가 드러났다 — 술어가 아니라 무대가 틀렸다.
+	#   여는 것이 먼저다: `_open_shop`이 자리를 비우므로 그 뒤에 앉혀야 한다.
+	m.clock.minutes = float(Cafe.OPEN_MIN) + 60.0
+	m.cafe.tick(0.0, m.clock.minutes)
 	m.cafe._seats[0] = {"occupied": true, "patience": 5.0,
 		"max_patience": Cafe.DEFAULT_PATIENCE, "want": menu_id, "guest": guest_id}
 

@@ -44,15 +44,30 @@ func _process(_dt: float) -> void:
 	if idx >= 0:
 		var id := _inv.id_at(idx)
 		if id != "":
-			text = ItemCatalog.name_of(id)
-			var q := _inv.quality_at(idx)
-			if q > 0:
-				text = "%s · %s" % [text, ItemCatalog.quality_name(q)]
+			text = label_for(id, _inv.quality_at(idx))
 	# 텍스트가 바뀌거나(다른 슬롯) 표시 중 마우스가 움직이면 다시 그린다.
 	if text != _text or (text != "" and logical.distance_squared_to(_mouse) > 1.0):
 		_text = text
 		_mouse = logical
 		queue_redraw()
+
+# 칩 한 줄의 문구(id·등급 → 표시 문자열). `_process`가 그리는 그 값의 **유일 출처**다.
+# ★[폴리시 R18] **씨앗은 성장일수를 함께 말한다** — main.gd가 하단 요약 라벨을 숨기며 "씨앗
+#   보유 수·성장일 상세는 핫바 호버 툴팁(HudTooltip)이 담당"이라고 이 파일에 인계를 선언했는데,
+#   실제로 받은 적이 없었다. 그 사이 `CropCatalog.growth_days`가 화면에 닿는 경로는 **0**이었다
+#   (유일 호출부가 영영 비가시인 그 라벨이고, 만물상 매대 씨앗 행은 절기만 병기한다) — 절기 밖
+#   작물이 스러지는 규칙이 있는데도 "이 절기 안에 여무는가"를 잴 수치가 게임 어디에도 안 떴다.
+#   보유 수는 슬롯 개수 배지가 이미 그리므로 여기서 겹쳐 말하지 않는다.
+#   ★없는 id는 -1 sentinel이라(혼합 씨앗 봉지 등) 양수일 때만 붙인다.
+static func label_for(id: String, quality: int) -> String:
+	var text := ItemCatalog.name_of(id)
+	if quality > 0:
+		text = "%s · %s" % [text, ItemCatalog.quality_name(quality)]
+	if ItemCatalog.category_of(id) == ItemCatalog.CAT_SEED:
+		var days := CropCatalog.growth_days(ItemCatalog.crop_of(id))
+		if days > 0:
+			text = "%s · %d일" % [text, days]
+	return text
 
 func _draw() -> void:
 	if _text == "":

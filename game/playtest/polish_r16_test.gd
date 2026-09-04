@@ -480,8 +480,11 @@ func _check_animal_pot_dispatch(m: Node) -> void:
 			% [e0, e1, e2, str(first), str(second)],
 		first and second and e1 < e0 and e2 < e1)
 	# 그래서 두 게이트가 짐승 칸을 뺀 술어를 본다(옛 `pot_at_target`이 그 자리에 남아 있으면 안 된다).
+	# ★[폴리시 R18] 니들을 **`pot_dispatch`라는 이름 자체**로 좁힌다 — R18 #1이 두 게이트에
+	#   `orchard_dispatch` or-항을 더하며 줄 모양이 바뀌자, 문장 전체를 뜨던 옛 니들이
+	#   빗나갔다(이 스위트가 지키는 계약은 "짐승 칸을 뺀 술어를 본다"이지 줄의 생김새가 아니다).
 	var lmb := _line_in_func(_src, "func _process", "or holding_weapon or pot_dispatch or")
-	var rmb := _line_in_func(_src, "func _process", "(_target_valid or pot_dispatch)")
+	var rmb := _line_in_func(_src, "func _process", "(_target_valid or pot_dispatch or")
 	_check("⑥e 도구(%d행)·수확(%d행) 게이트가 짐승 칸을 뺀 술어를 본다" % [lmb + 1, rmb + 1],
 		lmb >= 0 and rmb >= 0)
 	m.garden_pot.remove(adult)
@@ -852,10 +855,17 @@ func _check_resident_tile_guard(m: Node) -> void:
 		if st != "" and st != m._region:
 			m._rebuild_region(st)
 			await m.get_tree().process_frame
+		# ★[폴리시 R18 #12] **스케줄도 함께 내려놓는다.** R18이 이 가드에 시간 축을 달아
+		#   "오늘 중 그가 설 칸"까지 예약하게 됐으므로, `r.tile`만 비우면 같은 칸이 스케줄
+		#   항목에 그대로 걸려 이 탐색이 후보를 하나도 못 찾는다(무대 기법이 낡은 것이지
+		#   계약이 바뀐 것이 아니다 — 아래 ⑮a가 재는 "주민이 막는다"는 그대로다).
 		var t: Vector2i = r.tile
+		var sched: Array = r.schedule
 		r.tile = Resident.UNPLACED
+		r.schedule = []
 		var free_ok: bool = m._can_place_furnace(t)
 		r.tile = t
+		r.schedule = sched
 		if free_ok:
 			rt = t
 			found = r
