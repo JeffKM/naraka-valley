@@ -202,6 +202,18 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			else:
 				draw_rect(inner, ItemCatalog.tool_color_of(id))
 				draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.22)), Color(0.90, 0.88, 0.80))
+		ItemCatalog.CAT_RELIC:
+			# ★[폴리시 R18] 유품 — `category_of`가 돌려주는 10종 중 **유일하게 케이스가 없던** 칸이다.
+			#   그래서 손에 든 유품은 판때기만 있는 빈 칸이었고(1개일 땐 개수 배지도 안 뜬다), 혼백관
+			#   기증은 "손에 든 것"이 기준이라 플레이어가 빈 칸을 하나씩 골라 [F]를 눌러 봐야 했다.
+			#   위 두 선례(CAT_MATERIAL·CAT_CONSUMABLE)가 받은 처방을 그대로 받는다: 아이콘 텍스처
+			#   먼저, 없으면 색박스 + 금박 테두리(수집물 = 기증 대상이라는 결이 다른 칸과 갈린다).
+			var rtex: Texture2D = crop_icons.get(id)
+			if rtex != null:
+				draw_texture_rect(rtex, inner, false)
+			else:
+				draw_rect(inner, ItemCatalog.tool_color_of(id))
+				draw_rect(inner, HanjiUi.GOLD_SOFT, false, 1.0)
 
 # 작물·수확물 스프라이트를 칸 안에 맞춰 그린다(없으면 흰 박스 폴백 — 손상 방어).
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:

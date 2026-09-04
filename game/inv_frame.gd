@@ -734,6 +734,15 @@ func _draw_icon(id: String, rect: Rect2) -> void:
 			else:
 				draw_rect(inner, ItemCatalog.tool_color_of(id))
 				draw_rect(Rect2(inner.position, Vector2(inner.size.x, inner.size.y * 0.22)), Color(0.90, 0.88, 0.80))
+		ItemCatalog.CAT_RELIC:
+			# ★[폴리시 R18] 유품 — 핫바 드로어와 **같은 처방·같은 색 출처**(ItemCatalog.RELICS.color).
+			#   이 match도 9종뿐이라 백팩 그리드에서도 유품 칸이 통째로 비어 보였다.
+			var rtex: Texture2D = crop_icons.get(id)
+			if rtex != null:
+				draw_texture_rect(rtex, inner, false)
+			else:
+				draw_rect(inner, ItemCatalog.tool_color_of(id))
+				draw_rect(inner, HanjiUi.GOLD_SOFT, false, 1.0)
 
 func _draw_crop_tex(crop_id: String, inner: Rect2) -> void:
 	var tex: Texture2D = crop_icons.get(crop_id)

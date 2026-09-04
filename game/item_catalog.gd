@@ -416,10 +416,15 @@ const KEYS := {                             # 열쇠 id → {name_ko}(비매·�
 const RELIC_BINYEO := "relic_binyeo"      # 은비녀 유품
 const RELIC_SPOON := "relic_spoon"        # 놋숟가락 유품
 const RELIC_KKOTSIN := "relic_kkotsin"    # 꽃신 유품
-const RELICS := {                          # 유품 id → {name_ko, price}(중복 발굴분 판매가)
-	RELIC_BINYEO: {"name_ko": "은비녀 유품", "price": 30},
-	RELIC_SPOON: {"name_ko": "놋숟가락 유품", "price": 20},
-	RELIC_KKOTSIN: {"name_ko": "꽃신 유품", "price": 25},
+# ★[폴리시 R18] `color`가 붙었다 — 슬롯 아이콘(핫바·백팩)의 그레이박스 폴백이 읽는 **단일 출처**다.
+#   종전엔 유품 색이 혼백관 진열 드로우 안의 지역 dict에만 살아 있었고 두 슬롯 드로어의 match엔
+#   CAT_RELIC 케이스가 아예 없어, 손에 든 유품이 판때기만 있는 **빈 칸**으로 보였다(개수 배지도
+#   1개일 땐 안 뜬다 → 어느 칸이 유품인지 화면으로 알 길이 0). 값은 그 진열 색 그대로 옮겨 왔고,
+#   진열 쪽도 이제 이 표를 파생해 읽는다(색이 두 곳에서 갈리지 않는다).
+const RELICS := {                          # 유품 id → {name_ko, price, color}(중복 발굴분 판매가·색박스)
+	RELIC_BINYEO: {"name_ko": "은비녀 유품", "price": 30, "color": Color(0.78, 0.80, 0.86)},   # 은빛
+	RELIC_SPOON: {"name_ko": "놋숟가락 유품", "price": 20, "color": Color(0.72, 0.58, 0.28)},  # 놋빛
+	RELIC_KKOTSIN: {"name_ko": "꽃신 유품", "price": 25, "color": Color(0.82, 0.42, 0.48)},    # 꽃신 분홍
 }
 
 # ── 채집물(ADR-0052 §118 · ADR-0033) — 안식 꽃 패치 손수확 산출(품질 실림) ──────────────
@@ -1142,6 +1147,8 @@ static func tool_color_of(id: String) -> Color:
 		return POTIONS[id]["color"]         # ★S5-T6 환약 색박스(CAT_CONSUMABLE 아이콘 폴백이 읽는다)
 	if _is_utility(id):
 		return UTILITIES[id]["color"]       # ★S5-T8 계단 색박스(환약과 같은 폴백 경로)
+	if _is_relic(id):
+		return RELICS[id]["color"]          # ★[폴리시 R18] 유품 색박스(슬롯 아이콘 폴백이 읽는다)
 	if _is_menu(id):
 		return MenuCatalog.color_of(id)     # ★S6-T1 메뉴 색박스(아이콘 아트 = S6 후속)
 	if _is_book(id):
