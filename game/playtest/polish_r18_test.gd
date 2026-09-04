@@ -1,8 +1,10 @@
 extends SceneTree
-# ★[폴리시 18회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#9).
+# ★[폴리시 18회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#9) + 배치 B(#10~#18).
 #
-# 렌즈: R17 diff 리뷰(#0) · 도달 계약(#1·#2) · 프롬프트↔실행 불일치(#3) · 표시 진실성(#4·#5·#8) ·
-#       시간 게이트(#6·#7) · 스케줄↔지도 정합(#9).
+# 렌즈: R17 diff 리뷰(#0) · 도달 계약(#1·#2·#11) · 프롬프트↔실행 불일치(#3) ·
+#       표시 진실성(#4·#5·#8) · 시간 게이트(#6·#7) · 스케줄↔지도 정합(#9·#10) ·
+#       배치 가드 시간 축(#12) · 죽은 갈래(#13) · 로드 리셋 누수(#14·#15) ·
+#       그리기 순서(#16·#18) · 그림↔원장 어긋남(#17).
 #
 # 이 회차의 태도 셋.
 #   ㉠ **"어느 칸을 겨눠야 하는가"는 눈에 보이는 것이 정한다.** #1·#2가 같은 병이다 — 원장 좌표와
@@ -25,8 +27,24 @@ extends SceneTree
 #   ⑧ #7 체키 제안창·촬영 세션이 카페 마감(19:00)을 넘어 살아남아 정산 뒤에 장부가 더 올랐다.
 #   ⑨ #8 방목 문 알림이 밤·잿눈에도 «짐승이 방목지로 나간다»고 말했지만 실제 방출은 0이었다.
 #   ⑩ #9 세레나 스케줄 3칸이 전부 강변 레인인데 걷기는 메인 복도로만 라우팅 — 집 WALL 관통 60칸.
+#   ⑪ #10 걷기가 '문 x열 = 길'로 가정 — 지도가 옆 열로 우회시킨 집들의 아침 전환이 벽을 뚫었다.
+#   ⑫ #11 네오는 ROMANCE_OPEN인데 require_indoor가 안 풀려, 안방 배우자에게 말을 걸 수 없었다.
+#   ⑬ #12 배치 가드가 '지금 서 있는 칸'만 봐서, 주민의 **다음** 스테이션 칸에 기계를 세울 수 있었다.
+#   ⑭ #13 `_run_over`가 죽은 갈래라 ENDING BGM이 정식 플레이에서 한 번도 안 들렸다.
+#   ⑮ #14 seasonal_event 로드가 `data.has` 뒤라, 키 없는 구세이브가 더비 당일치 원장을 물려받았다.
+#   ⑯ #15 peddler 로드도 같은 가드 뒤라, 하루 한 점 희귀 슬롯 잠금이 세이브를 건너 이월됐다.
+#   ⑰ #16 화면을 덮는 월드 오버레이를 플레이어·앞프롭·월드 라벨이 위에서 덮었다.
+#   ⑱ #17 안식 원장 나무의 그루터기·유목·이끼를 앵커 칸에 그려 실제 밑동보다 96px 위에 떴다.
+#   ⑲ #18 트렐리스 작물의 앞뒤가 밭 원장 순서(=괭이질 이력)로 정해졌다(같은 상태·다른 그림).
 #
-# 판정: #0~#9 전부 CONFIRMED(봉합). REFUTED·DUP·OWNER 0건.
+# 판정: #0~#18 전부 CONFIRMED(봉합). REFUTED·DUP·OWNER 0건.
+#
+# ★#13은 **뿌리를 안 건드린다**: `_run_over`를 되살리는 것은 세이브·F8 재시작까지 얽힌 설계
+#   결정이라(선언부가 "S9 엔딩 재사용 대기"로 남겨 둔 자산) 폴리시 회차의 몫이 아니다. 고친 것은
+#   플레이어가 실제로 잃던 것 하나 — 실존 에셋 `bgm_ending.ogg`가 해방 회고 화면에서 울리지
+#   않던 도달 경로다(`_open_epilogue`가 그 인자를 참으로 만든다). 같은 뿌리의 죽은 갈래 둘
+#   (`_process`의 `if _run_over:` F8 · `_on_ending_button`의 else)은 그 결정에 함께 걸려 있어
+#   손대지 않았고, ⑭a가 그 뿌리(호출부 0개)가 그대로임을 매 회차 재확인한다.
 #
 # 봉합 축(근거 전문은 커밋 본문·각 함수 머리말):
 #   · #0 = `_begin_cutscene`의 스냅에 `or _sleeping`(형제 둘이 R12/R13에 받은 그 가드의 컷신 판).
@@ -42,19 +60,43 @@ extends SceneTree
 #          미혼의 창(19:00~24:00)은 불변이라 새 관계 게이트가 아니다(ADR-0008).
 #   · #7 = `_cheki_offered_at`에 영업 창 술어 + `_on_cafe_closed`가 정산 **전에** 창구를 접는다.
 #   · #8 = `_ranch_door_open_notice(building, released, to_release)` — 방출 결과와 이유를 갈라 말한다.
-#   · #9 = `_road_lane_of`가 지도와 **같은 술어**로 레인을 가르고, 갈리면 다리 스파인에서 환승한다.
+#   · #9·#10 = 지도와 걷기가 **한 표를 읽는다**(`_village_door_spokes` — rect·door·lane 삼항).
+#          레인 배정도 우회 열도 그 표에서 나오므로 두 곳이 갈릴 자리가 없어진다. A*는 도입 안 함
+#          (ADR-0060 "보류" 재론 금지 유지 — 경유점 표를 한 겹 늘렸을 뿐이다).
+#   · #11 = `_facing_resident`의 require_indoor에 배우자 안방 예외 + 점주 창구(shop_key·
+#          prompt_extra)는 가게 방에 묶는다(ADR-0060 결정 8의 이중 신분이 그 분리다 — 관계
+#          레이어만 안방으로 따라오고 매대는 안 따라온다).
+#   · #12 = `_resident_tile`에 시간 축(스케줄 전 항목). **새 배치만 막고** 이미 놓인 기계는
+#          `_f_machine_at` 양보로 언제나 회수 가능하다(R17 #0/#1이 세운 규율 — 구세이브 매몰 0).
+#   · #13 = `_ending_music_on()` = `_run_over or _epilogue_open`(#0의 `or _sleeping`과 같은 형태 —
+#          새 상태·새 래치 0. 회고를 닫으면 `update_music`이 스스로 되잇는다).
+#   · #14·#15 = `has` 가드를 걷고 `data.get(key, {})`로 무조건 되감는다(R6가 카페에 쓴 처방의
+#          형제 전파). 판별식은 R13의 "부팅으로 시드되는가" — 둘 다 플레이가 채우는 원장이다.
+#   · #16 = z 셔틀 노드(`world_overlay.gd`, z20) — `front_props.gd`가 이미 세운 그 패턴이다.
+#          재그리기는 자기 `_process`로 판다(무효화 배선을 안 늘린다 — 한 자리 누락 = 유령 그림).
+#   · #17 = `_tree_ledger_draw_px`가 채취기와 **같은 드롭·같은 앵커 집합**을 쓴다(값 복제 0).
+#          덕분에 #2의 조준 다리와 자동으로 짝이 맞는다 — 겨누는 칸이 곧 그려지는 칸이 된다.
+#   · #18 = `_crop_draw_order`가 발치 y로 정렬한다(숲 프롭의 `_forest_sort_entries` 1:1).
 #
 # 하중 검증(계약을 일부러 깨서 red 확인 후 원복 — 전부 실측):
-#   #0 `or _sleeping` 삭제 → ①b·①c red ·
-#   #1 두 게이트의 `orchard_dispatch` or-항 삭제 → ②d·②e red ·
-#   #2 `_home_tree_ledger_tile` 본문을 `return t`로 → ③c·③d·③e red ·
-#   #3 갱도·나락 `_mount_prompt()` 분기 삭제 → ④d red ·
-#   #4 hotbar_hud의 CAT_RELIC 케이스 삭제 → ⑤b red · RELICS의 color 키 삭제 → ⑤d red ·
-#   #5 `label_for`의 씨앗 갈래 삭제 → ⑥b red ·
-#   #6 `_night_bar_optin_close_min`을 `NightBar.CLOSE_MIN` 고정으로 → ⑦b·⑦c red ·
-#   #7 `_cheki_offered_at`의 `cafe.is_open()` 삭제 → ⑧b red · `_on_cafe_closed`의 접기 삭제 → ⑧d red ·
-#   #8 `_ranch_door_open_notice`를 옛 한 줄로 되돌림 → ⑨b·⑨c red ·
-#   #9 `_road_lane_of`를 `ROAD_LANE_Y[region]` 고정으로 → ⑩b·⑩c red.
+#   #0 `or _sleeping` 삭제 → ①c·①d red ·
+#   #1 두 게이트의 `orchard_dispatch` or-항 삭제 → ②e red ·
+#   #2 `_home_tree_ledger_tile` 본문을 `return t`로 → ③c·③e·③f red ·
+#   #3 갱도·나락 휘파람 갈래 삭제 → ④d red · hotbar CAT_RELIC 케이스 삭제 → ⑤b red ·
+#   #4 `tool_color_of`의 유품 갈래 삭제 → ⑤d red · #5 `label_for` 씨앗 갈래 삭제 → ⑥b red ·
+#   #6 옵트인 상한 고정 → ⑦c·⑦d red · #7 `cafe.is_open()` 삭제 → ⑧e red ·
+#   #7 마감 접기 삭제 → ⑧b red · #8 알림을 옛 한 줄로 → ⑨d·⑨f·⑨g·⑨h red ·
+#   #9 `_road_lane_of` 고정 → ⑩c·⑩d·⑩e red(⑩c가 세레나 집 WALL (39,58)~(39,60)을 이름) ·
+#   #10 `_house_detour`를 빈 배열 고정으로 → ⑪b·⑪d·⑪e red(⑪e가 켄·스칼렛·미르·루카의 관통 칸을 이름) ·
+#   #11 require_indoor 예외 삭제 → ⑫d red · #12 `_resident_tile`의 스케줄 루프 삭제 → ⑬c red ·
+#   #13 `_ending_music_on`을 `_run_over` 고정으로 → ⑭c red ·
+#   #14·#15 두 `has` 가드 복원 → ⑮c·⑯c·⑯d red ·
+#   #16 셔틀 z를 0으로 → ⑰b red · #17 `_tree_ledger_draw_px`의 드롭 삭제 → ⑱b·⑱c red ·
+#   #18 `_crop_draw_order`의 정렬 삭제 → ⑲c·⑲d·⑲e red.
+#
+# ★⑲의 무대에서 배운 것: 밭 원장의 순서를 정하는 것은 **파종이 아니라 괭이질**이다(`hoe`가
+#   `_tiles`에 칸을 처음 넣는다). 심는 순서만 뒤집는 옛 무대는 정렬을 지워도 두 목록이 같아
+#   ⑲c가 헛돌았다 — 하중 검증이 그 공허를 스스로 잡아냈다.
 #
 # 실행: ./run_tests.sh polish_r18   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -155,6 +197,16 @@ func _run_checks() -> void:
 	_check_cheki_close_boundary(m)
 	_check_ranch_door_notice(m)
 	_check_riverside_lane(m)
+
+	# ── 배치 B(#10~#18) ────────────────────────────────────────────────────
+	_check_house_door_detour(m)
+	_check_spouse_require_indoor(m)
+	_check_station_placement_guard(m)
+	_check_ending_music(m)
+	await _check_daily_ledger_reload(m)
+	_check_overlay_z(m)
+	_check_tree_ledger_draw(m)
+	_check_crop_draw_order(m)
 
 	print("── 결과: %s (실패 %d) ──" % ["통과" if _fail == 0 else "실패", _fail])
 	quit(1 if _fail > 0 else 0)
@@ -592,3 +644,385 @@ func _path_tiles(m: Node, from_tile: Vector2i, spokes: PackedVector2Array) -> Ar
 				out.append(cur)
 		cur = nxt
 	return out
+
+# ── ⑪ #10 문 스포크 우회 열 — 걷기가 지도를 따른다(라이브) ──────────────────
+# 무대 공허 통과 방지: 우회가 **필요한 집이 실제로 있는지**를 표에서 먼저 세고(0이면 잴 것이
+# 없다), 그 집들의 문 앞 칸에서만 잰다.
+func _check_house_door_detour(m: Node) -> void:
+	print("⑪ #10 집 문 스포크 우회 열")
+	if m._region != RegionCatalog.NARU_VILLAGE:
+		m._rebuild_region(RegionCatalog.NARU_VILLAGE)
+	var table: Array = m._village_door_spokes()
+	var detour_houses: Array = []
+	var straight_houses: Array = []
+	for e in table:
+		var door: Vector2i = e[1]
+		if door.y > int(e[2]):
+			detour_houses.append(e)
+		else:
+			straight_houses.append(e)
+	_check("⑪a 무대: 문 스포크 표 %d채 중 **문 열을 못 쓰는 집**이 %d채다(지도의 else 갈래 — 0이면 이 결함이 없다)"
+			% [table.size(), detour_houses.size()], detour_houses.size() > 0)
+	# 지도가 판 우회 열과 걷기가 끼우는 경유점이 같은 열인가 — 표 하나에서 둘 다 나온다.
+	var lane_mismatch: Array = []
+	for e in detour_houses:
+		var rect: Rect2i = e[0]
+		var door: Vector2i = e[1]
+		var d: Array = m._house_detour(door + Vector2i(0, 1), int(e[2]), RegionCatalog.NARU_VILLAGE)
+		if d.size() != 2 or int(d[0].x) != int(rect.end.x) or int(d[1].x) != int(rect.end.x):
+			lane_mismatch.append(door)
+	_check("⑪b 우회 집 %d채 전부가 지도와 **같은 옆 열**(rect.end.x)을 경유점으로 받는다(어긋난 집 %s)"
+			% [detour_houses.size(), str(lane_mismatch)], lane_mismatch.is_empty())
+	_check("⑪c 문이 레인 위인 집 %d채는 우회를 **안 받는다**(지도의 if 갈래 — 과잉 적용 0)"
+			% straight_houses.size(),
+		straight_houses.all(func(e): return m._house_detour(Vector2i(e[1]) + Vector2i(0, 1),
+			int(e[2]), RegionCatalog.NARU_VILLAGE).is_empty()))
+
+	# 실제 걷기 칸이 SOLID를 지나지 않는다 — 이 결함의 본체(자기 집 벽 관통).
+	var bad: Array = []
+	for e in detour_houses:
+		var approach: Vector2i = Vector2i(e[1]) + Vector2i(0, 1)
+		var dest := Vector2i(int(m.BRIDGE_X[0]), int(e[2]))   # 같은 레인 위 다리 열(도달 가능 칸)
+		var spokes: PackedVector2Array = m._road_spokes(approach, dest, RegionCatalog.NARU_VILLAGE)
+		for t in _path_tiles(m, approach, spokes):
+			if m.is_solid(m._grid[t.y][t.x]):
+				bad.append([e[1], t])
+	_check("⑪d 우회 집 전 채의 외출 경로가 SOLID를 한 칸도 안 지난다(위반 %s)" % str(bad), bad.is_empty())
+
+	# 실제 주민 전환으로도 잰다 — 스케줄이 그 문 앞 칸에서 출발하는 사람 전부.
+	var walked := 0
+	var walk_bad: Array = []
+	for r in m._residents:
+		if r.schedule.size() < 2:
+			continue
+		for i in range(r.schedule.size() - 1):
+			var a: Vector2i = r.schedule[i]["tile"]
+			var b: Vector2i = r.schedule[i + 1]["tile"]
+			if String(r.schedule[i].get("region", "")) != RegionCatalog.NARU_VILLAGE \
+					or String(r.schedule[i + 1].get("region", "")) != RegionCatalog.NARU_VILLAGE:
+				continue
+			var sp: PackedVector2Array = m._road_spokes(a, b, RegionCatalog.NARU_VILLAGE)
+			if sp.is_empty():
+				continue
+			walked += 1
+			for t in _path_tiles(m, a, sp):
+				if m.is_solid(m._grid[t.y][t.x]):
+					walk_bad.append([r.id, t])
+	_check("⑪e 마을 안 주민 전환 %d건이 전부 벽을 안 뚫는다(위반 %s) — 종전엔 복도 남쪽 집들의 아침 전환이 전부 자기 집 몸통을 관통했다"
+			% [walked, str(walk_bad)], walked > 0 and walk_bad.is_empty())
+
+# ── ⑫ #11 네오 배우자 — 안방에서 말이 걸린다 / 매대는 안 열린다(라이브) ─────
+func _check_spouse_require_indoor(m: Node) -> void:
+	print("⑫ #11 배우자 안방 ↔ require_indoor")
+	var r = m._resident("neo")
+	_check("⑫a 무대: 네오는 require_indoor(%s)를 가진 **동시에** ROMANCE_OPEN 명단에 있다(둘을 함께 가진 유일한 사람)"
+			% r.require_indoor,
+		r != null and r.require_indoor != "" and m.ROMANCE_OPEN.has("neo"))
+	if r == null:
+		return
+	var prev_spouse: String = m._spouse_id
+	var prev_partner: String = m._romance_partner
+	var prev_min: float = m.clock.minutes
+	var prev_region: String = m._region
+	var prev_indoor: String = m._indoor
+	var prev_target: Vector2i = m._target
+	var sched_n: int = r.schedule.size()
+
+	m._romance_partner = "neo"
+	m._spouse_id = "neo"
+	m._apply_spouse_home_station()
+	_check("⑫b 무대: 혼례로 귀가 스테이션 한 칸이 붙었다(%d→%d칸 · 안방 %s)"
+			% [sched_n, r.schedule.size(), str(m.SPOUSE_HOME_TILE)], r.schedule.size() == sched_n + 1)
+	m.clock.minutes = float(m.SPOUSE_HOME_MIN.get("neo", Cafe.CLOSE_MIN)) + 60.0
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	m._indoor = "집"
+	m._update_resident_station(r)
+	m._target = m.SPOUSE_HOME_TILE
+	_check("⑫c 무대: 그 시각 네오가 안방 칸에 서 있고(%s) 무대도 그 구역이다" % str(r.tile),
+		r.tile == m.SPOUSE_HOME_TILE and m._resident_on_stage(r))
+	var faced = m._facing_resident()
+	_check("⑫d 안방에서 **말이 걸린다**(마주 본 주민 %s) — 종전엔 require_indoor가 매일 19:00~24:00 내내 눈앞 배우자를 무반응으로 만들었다"
+			% (faced.id if faced != null else "<없음>"), faced != null and faced.id == "neo")
+	# 점주 레이어는 따라오지 않는다(안방에서 만물상을 원격으로 열지 않는다 — #6과 같은 규율).
+	_check("⑫e 그 자리에서 매대는 **안 열린다**([F] %s · 광고 「%s」)"
+			% [str(bool(r.shop_key.call())), String(r.prompt_extra.call())],
+		not bool(r.shop_key.call()) and String(r.prompt_extra.call()) == "")
+	# 가게에서는 종전 그대로다(좁히는 축을 한 톨도 안 잃었다).
+	m._indoor = r.require_indoor
+	_check("⑫f 만물상 안에서는 매대가 그대로 열린다(광고 「%s」) — 점주 레이어 거동 불변"
+			% String(r.prompt_extra.call()),
+		String(r.prompt_extra.call()).contains("[F]") and bool(r.shop_key.call()))
+	if m.frame != null:
+		m.frame.close()
+	# 미혼 복귀 — 붙인 스테이션을 걷는다.
+	r.schedule.resize(sched_n)
+	m._spouse_id = prev_spouse
+	m._romance_partner = prev_partner
+	m.clock.minutes = prev_min
+	m._indoor = prev_indoor
+	m._target = prev_target
+	if m._region != prev_region:
+		m._rebuild_region(prev_region)
+
+# ── ⑬ #12 배치 가드의 시간 축 — 다음 스테이션 칸도 예약된다(라이브) ─────────
+func _check_station_placement_guard(m: Node) -> void:
+	print("⑬ #12 배치 가드 시간 축")
+	m._indoor = ""
+	var here: String = m._region
+	# 지금은 비어 있지만 **오늘 중 누군가 설** 칸을 찾는다(그런 칸이 없으면 잴 것이 없다).
+	var future := Vector2i(-1, -1)
+	var owner_id := ""
+	for r in m._residents:
+		for e in r.schedule:
+			var t: Vector2i = e.get("tile", Resident.UNPLACED)
+			if t == Resident.UNPLACED or t == r.tile:
+				continue
+			var reg := String(e.get("region", ""))
+			if reg != "" and reg != here:
+				continue
+			if t.x < 0 or t.y < 0 or t.x >= m._grid_w or t.y >= m._outdoor_h:
+				continue
+			future = t
+			owner_id = r.id
+			break
+		if future.x >= 0:
+			break
+	_check("⑬a 무대: 「지금 비었지만 오늘 중 %s가 설」 칸 %s를 스케줄에서 찾았다" % [owner_id, str(future)],
+		future.x >= 0)
+	if future.x < 0:
+		return
+	var standing := false
+	for r in m._residents:
+		if r.tile == future:
+			standing = true
+	_check("⑬b 무대: 그 칸엔 **지금 아무도 안 서 있다**(현재 칸만 보던 옛 가드는 여길 열어 줬다)",
+		not standing)
+	_check("⑬c 예약된다 — `_resident_tile` %s · 업화로 %s · 결정기 %s"
+			% [str(m._resident_tile(future)), str(m._can_place_furnace(future)),
+				str(m._can_place_crystalarium(future))],
+		m._resident_tile(future) and not m._can_place_furnace(future) \
+			and not m._can_place_crystalarium(future))
+	# **새 배치만 막는다** — 이미 놓인 기계의 회수 경로([F] 양보)는 그대로다.
+	var yield_line := _line_in(_src, "and not _f_machine_at(_target)")
+	_check("⑬d 구세이브 탈출구 불변: [F] 사다리의 기계 양보가 그대로 있다(main %d행) — 가드는 새 배치만 막는다"
+			% (yield_line + 1), yield_line >= 0)
+
+# ── ⑭ #13 엔딩 BGM이 실제로 도달한다(라이브) ────────────────────────────────
+func _check_ending_music(m: Node) -> void:
+	print("⑭ #13 엔딩 BGM 도달 경로")
+	# 사실 ㉠ — `_run_over`를 세우는 곳이 게임 코드에 0개다(그래서 인자만으로는 영영 false였다).
+	var setters := 0
+	for line in _src:
+		var ln := String(line)
+		if ln.strip_edges().begins_with("#"):
+			continue
+		if ln.contains("_end_run()") and not ln.contains("func _end_run"):
+			setters += 1
+	_check("⑭a 무대: `_end_run()`의 게임 코드 호출부가 여전히 0개다(%d) — 이 결함의 뿌리이자 손대지 않은 자리"
+			% setters, setters == 0)
+	var prev_open: bool = m._epilogue_open
+	var prev_running: bool = m.clock.running
+	_check("⑭b 평시엔 엔딩 phase가 아니다 — `_ending_music_on()` %s · phase 「%s」"
+			% [str(m._ending_music_on()),
+				m.audio.phase_for(m.clock.minutes, m._ending_music_on(), m._in_cafe())],
+		not m._ending_music_on() \
+			and m.audio.phase_for(m.clock.minutes, m._ending_music_on(), m._in_cafe()) != GameAudio.PHASE_ENDING)
+	m._open_epilogue()
+	_check("⑭c 해방 회고 화면이 서면 엔딩 phase가 선다 — phase 「%s」 · BGM stem 「%s」"
+			% [m.audio.phase_for(m.clock.minutes, m._ending_music_on(), m._in_cafe()),
+				String(GameAudio.BGM_STEM[GameAudio.PHASE_ENDING])],
+		m._epilogue_open \
+			and m.audio.phase_for(m.clock.minutes, m._ending_music_on(), m._in_cafe()) == GameAudio.PHASE_ENDING)
+	# 그 stem이 실존 에셋으로 해석된다(빈 phase를 세우면 소리가 없다 = 봉합이 반쪽이다).
+	var stem := String(GameAudio.BGM_STEM[GameAudio.PHASE_ENDING])
+	_check("⑭d 그 stem이 실존 파일로 해석된다(assets/audio/bgm/%s) — 세운 phase에 실제로 소리가 있다" % stem,
+		m.audio.bgm_source(GameAudio.PHASE_ENDING) != "")
+	m._close_epilogue()
+	_check("⑭e 회고를 닫으면 **스스로 원래 phase로 돌아온다**(「%s」) — 새 래치가 0이라 되감을 것도 없다"
+			% m.audio.phase_for(m.clock.minutes, m._ending_music_on(), m._in_cafe()),
+		not m._ending_music_on() \
+			and m.audio.phase_for(m.clock.minutes, m._ending_music_on(), m._in_cafe()) != GameAudio.PHASE_ENDING)
+	m._epilogue_open = prev_open
+	m.clock.running = prev_running
+
+# ── ⑮⑯ #14·#15 구세이브 로드가 당일치 원장을 되감는다(F9 왕복 실측) ─────────
+func _check_daily_ledger_reload(m: Node) -> void:
+	print("⑮⑯ #14·#15 구세이브 로드 리셋(F9 왕복)")
+	var d: int = m.clock.day
+	_check("⑯a 무대: 두 원장이 부팅 1회 생성 노드다(세션 내 로드가 인스턴스를 안 갈아끼운다)",
+		m.seasonal_event != null and m.peddler != null)
+	# ① 지금 상태를 저장한 뒤 **그 키 둘을 지운다** = 구세이브(S7-T7·S10-T3 이전 파일)의 재현.
+	var ok_save: bool = m._save_game()
+	var raw: Dictionary = m.saver.load_game(m._active_slot)
+	_check("⑯b 무대: 세이브가 서고(%s) 두 조각이 그 안에 있다" % str(ok_save),
+		ok_save and raw.has("seasonal_event") and raw.has("peddler"))
+	raw.erase("seasonal_event")
+	raw.erase("peddler")
+	m.saver.save_game(raw, m._active_slot)
+	# ② 직전 세션 값을 더럽힌다 — 같은 날짜의 당일치 원장(리셋이 `derby_day == d`에서 통째로 막힌다).
+	m.seasonal_event.load_save({"derby_day": d, "derby_tags": 3, "derby_exchanges": 2,
+		"grange_day": d, "market_bought": ["dirty_item"]})
+	var rare_id: String = m.peddler.RARECROW_ID
+	m.peddler.load_save({"rare_day": d, "rare_id": rare_id, "bought": [rare_id]})
+	_check("⑮a 무대: 직전 세션 값이 섰다 — 태그 %d장 · 보상 %d칸 · 장원제 %s · 희귀 슬롯 잠금 %s"
+			% [m.seasonal_event.tags_on(d), m.seasonal_event.derby_exchanges,
+				str(m.seasonal_event.grange_day == d), str(m.peddler.rare_taken_on(d))],
+		m.seasonal_event.tags_on(d) == 3 and m.seasonal_event.grange_day == d \
+			and m.peddler.rare_taken_on(d))
+	# ③ 그 구세이브를 로드한다(F9).
+	var ok_load: bool = m._load_game()
+	await process_frame
+	_check("⑮b 로드가 섰다(%s)" % str(ok_load), ok_load)
+	_check("⑮c 절기 원장이 되감겼다 — 태그 %d장 · 보상 %d칸 · 장원제 이력 %s · 한정품 차단 %s (어획 한 번 없는 세이브가 물려받지 않는다)"
+			% [m.seasonal_event.tags_on(d), m.seasonal_event.derby_exchanges,
+				str(m.seasonal_event.grange_day), str(m.seasonal_event.has_bought("dirty_item"))],
+		m.seasonal_event.tags_on(d) == 0 and m.seasonal_event.derby_exchanges == 0 \
+			and m.seasonal_event.grange_day == 0 and not m.seasonal_event.has_bought("dirty_item"))
+	_check("⑯c 보부상 원장이 되감겼다 — 희귀 슬롯 잠금 %s · 1회성 구매 이력 %s (`load_save` 머리말이 계약으로 못 박은 그 왕복)"
+			% [str(m.peddler.rare_taken_on(d)), str(m.peddler.has_bought(rare_id))],
+		not m.peddler.rare_taken_on(d) and not m.peddler.has_bought(rare_id))
+	# 판별식이 남는다: 두 조각은 **부팅으로 시드되지 않는다**(플레이가 채운다) → 로드는 무조건 되감는다.
+	var guarded := _line_in(_src, "if data.has(\"seasonal_event\")") >= 0 \
+		or _line_in(_src, "if data.has(\"peddler\")") >= 0
+	_check("⑯d `has` 가드가 걷혔다(잔존 %s) — R6가 카페에 쓴 그 처방의 형제 전파" % str(guarded), not guarded)
+	m.saver.delete_save(m._active_slot)
+
+# ── ⑰ #16 풀스크린 오버레이가 월드 자식들 위에 선다(라이브 z) ────────────────
+# 분모를 안 옮겨 적는다: main의 **전 CanvasItem 자식**을 훑어 최대 z를 데이터에서 뽑는다.
+func _check_overlay_z(m: Node) -> void:
+	print("⑰ #16 월드 오버레이 z")
+	_check("⑰a 무대: z 셔틀 노드가 서 있다", m._world_overlay != null)
+	if m._world_overlay == null:
+		return
+	var max_other := -9999
+	var worst := ""
+	for c in m.get_children():
+		if c == m._world_overlay or not (c is CanvasItem):
+			continue
+		if int(c.z_index) > max_other:
+			max_other = int(c.z_index)
+			worst = c.name
+	_check("⑰b 오버레이 z(%d)가 **다른 모든 월드 자식**보다 높다(최고 경쟁자 %s z%d) — 플레이어·앞프롭·월드 라벨이 암전 위에 남지 않는다"
+			% [m._world_overlay.z_index, worst, max_other], m._world_overlay.z_index > max_other)
+	# 라벨이 실제로 그 경쟁자 안에 들어 있는가(무대 공허 통과 방지 — 라벨이 0개면 잴 것이 없다).
+	_check("⑰c 무대: 월드 라벨이 %d개 서 있고 그 z(%d)도 위 비교에 포함됐다"
+			% [m._labels.size(), (int(m._labels[0].z_index) if m._labels.size() > 0 else -1)],
+		m._labels.size() > 0 and int(m._labels[0].z_index) <= max_other)
+	# main의 `_draw`는 더 이상 두 그림을 안 그린다(같은 그림이 두 겹으로 나가지 않는다).
+	var in_main_draw := _line_in_func(_src, "func _draw()", "_draw_spine_puzzle(")
+	var shuttle := _line_in(_src, "func _draw_world_overlays(canvas: CanvasItem)")
+	_check("⑰d main `_draw`에서 걷혔고(%d) 셔틀 창구가 섰다(main %d행)"
+			% [in_main_draw + 1, shuttle + 1], in_main_draw < 0 and shuttle >= 0)
+	# 셔틀의 재그리기 게이트가 두 그림의 자기 가드와 같은 답을 낸다(헛돌지도, 빠뜨리지도 않는다).
+	_check("⑰e 평시엔 오버레이가 없다고 답한다(`_world_overlay_active` %s)" % str(m._world_overlay_active()),
+		not m._world_overlay_active())
+	var prev_illust: String = m._illust_id
+	var prev_a: float = m._illust_a
+	m._illust_id = "b6"
+	m._illust_a = 1.0
+	_check("⑰f 일러스트가 서면 참이 된다(%s)" % str(m._world_overlay_active()), m._world_overlay_active())
+	m._illust_id = prev_illust
+	m._illust_a = prev_a
+
+# ── ⑱ #17 원장 나무 그림이 밑동에 선다(그리기 원점 함수 라이브 호출) ────────
+func _check_tree_ledger_draw(m: Node) -> void:
+	print("⑱ #17 원장 나무 그리기 원점")
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	m._indoor = ""
+	var drop_tiles: int = int(m._tapper_home_drop()) / int(m.TILE)
+	var anchors: Array = m._home_tree_anchors()
+	var anchor := Vector2i(-1, -1)
+	for t in anchors:
+		if m.tree_ledger.is_occupied(RegionCatalog.HOME, t):
+			anchor = t
+			break
+	_check("⑱a 무대: 손저작 앵커(%d그루) 중 원장이 아는 나무 %s · 보정 %d칸"
+			% [anchors.size(), str(anchor), drop_tiles], anchor.x >= 0 and drop_tiles > 0)
+	if anchor.x < 0:
+		return
+	var px: Vector2 = m._tree_ledger_draw_px(anchor)
+	var drawn_tile := Vector2i(int(px.x) / int(m.TILE), int(px.y) / int(m.TILE))
+	_check("⑱b 그리기 원점이 앵커가 아니라 **밑동 행**이다 — 원장 칸 %s → 그리는 칸 %s"
+			% [str(anchor), str(drawn_tile)], drawn_tile == anchor + Vector2i(0, drop_tiles))
+	# 채취기 그림과 **같은 발치**에 선다(형제 그림이 3칸 갈려 서지 않는다).
+	_check("⑱c 형제 그림(채취기)과 같은 발치다 — 나무 %.0fpx · 채취기 %.0fpx"
+			% [px.y, float(anchor.y * m.TILE) + m._tapper_home_drop()],
+		is_equal_approx(px.y, float(anchor.y * m.TILE) + m._tapper_home_drop()))
+	# R18 #2의 조준 다리와 짝이 맞는다: **겨누는 칸 = 그려지는 칸**.
+	_check("⑱d 조준 다리와 짝이 맞는다 — 그려진 칸 %s를 겨누면 원장 칸 %s로 이어진다"
+			% [str(drawn_tile), str(m._home_tree_ledger_tile(drawn_tile))],
+		m._home_tree_ledger_tile(drawn_tile) == anchor)
+	# 보정이 0인 자리(자체 파종·숲)는 항등 — 없는 나무의 발치를 빌리지 않는다.
+	var free := Vector2i(1, 1)
+	_check("⑱e 손저작 앵커가 아닌 칸은 항등이다 %s" % str(m._tree_ledger_draw_px(free)),
+		m._tree_ledger_draw_px(free) == Vector2(free.x * m.TILE, free.y * m.TILE))
+
+# ── ⑲ #18 트렐리스 앞뒤가 파종 순서에 안 흔들린다(그리기 순서 함수 라이브) ──
+func _check_crop_draw_order(m: Node) -> void:
+	print("⑲ #18 작물 그리기 순서")
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	m._indoor = ""
+	# 트렐리스 종을 카탈로그에서 파생한다(하드코딩 0 — 종이 늘면 함께 는다).
+	var trellis := ""
+	for cid in CropCatalog.ids():
+		if CropCatalog.is_trellis(String(cid)):
+			trellis = String(cid)
+			break
+	var plain := ""
+	for cid in CropCatalog.ids():
+		if not CropCatalog.is_trellis(String(cid)):
+			plain = String(cid)
+			break
+	_check("⑲a 무대: 트렐리스 종(%s)과 일반 종(%s)을 카탈로그에서 파생했다" % [trellis, plain],
+		trellis != "" and plain != "")
+	if trellis == "" or plain == "":
+		return
+	# 스타터 밭에서 세로로 붙은 두 칸을 고른다(위 칸이 넝쿨에 덮이는 그 조합).
+	var south := Vector2i(-1, -1)
+	var rect: Rect2i = m.STARTER_PATCH_RECT
+	for y in range(rect.position.y + 1, rect.end.y):
+		for x in range(rect.position.x, rect.end.x):
+			var s := Vector2i(x, y)
+			var n := Vector2i(x, y - 1)
+			if m._is_farmable(s) and m._is_farmable(n) \
+					and not m.farm.is_planted(s) and not m.farm.is_planted(n):
+				south = s
+				break
+		if south.x >= 0:
+			break
+	_check("⑲b 무대: 세로로 붙은 빈 밭 두 칸 %s(남·넝쿨)·%s(북)을 골랐다"
+			% [str(south), str(south - Vector2i(0, 1))], south.x >= 0)
+	if south.x < 0:
+		return
+	var north := south - Vector2i(0, 1)
+	var snap: Dictionary = m.farm.to_save()
+
+	# ㉠ 남(넝쿨)을 먼저 일군다 → ㉡ 북을 먼저 일군다. 두 이력의 그리기 순서가 **같아야** 한다.
+	# ★원장 순서를 정하는 것은 파종이 아니라 **괭이질**이다(`hoe`가 `_tiles`에 칸을 처음 넣는다) —
+	#   심는 순서만 뒤집으면 정렬을 지워도 두 목록이 같아 이 단언이 헛돈다(실측으로 확인).
+	m.farm.load_save(snap)
+	m.farm.hoe(south); m.farm.hoe(north)
+	m.farm.plant(south, trellis)
+	m.farm.plant(north, plain)
+	var order_a: Array = m._crop_draw_order()
+	m.farm.load_save(snap)
+	m.farm.hoe(north); m.farm.hoe(south)
+	m.farm.plant(north, plain)
+	m.farm.plant(south, trellis)
+	var order_b: Array = m._crop_draw_order()
+	_check("⑲c 두 파종 이력이 **같은 그리기 순서**를 낸다(%s == %s) — 같은 월드 상태가 다른 그림이 되지 않는다"
+			% [str(order_a), str(order_b)], order_a == order_b)
+	var ia := order_a.find(north)
+	var ib := order_a.find(south)
+	_check("⑲d 북(%s, i=%d)이 남(%s, i=%d)보다 **먼저** 그려진다 — 가까운 쪽 넝쿨이 위에 얹힌다"
+			% [str(north), ia, str(south), ib], ia >= 0 and ib >= 0 and ia < ib)
+	# 전 목록이 발치 y 오름차순이다(두 칸만 맞고 나머지가 어긋나면 반쪽이다).
+	var monotonic := true
+	for i in range(order_a.size() - 1):
+		if int(order_a[i].y) > int(order_a[i + 1].y):
+			monotonic = false
+	_check("⑲e 목록 %d칸 전체가 발치 y 오름차순이다" % order_a.size(), monotonic)
+	m.farm.load_save(snap)
