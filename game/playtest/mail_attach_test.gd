@@ -112,21 +112,30 @@ func _run() -> void:
 	# ★[폴리시 R14] 명단에 `miho_gate1_seed`가 붙었다 — R8 스윕이 놓친 네 번째 자리다(본문 첫 줄이
 	#   "씨앗 한 줌이 들어 있다"고 실재 아이템군을 명시적으로 건네는데 첨부가 비어 있었다).
 	#   선재 단언을 **새 계약으로 정정**한 것이지 완화가 아니다: 구성을 그대로 못 박고 수만 늘렸다.
+	# ★[폴리시 R19 #3] 다섯 번째 자리 = `seolhwa_gate2_camellia`. 첫 줄이 "서리동백 한 송이가
+	#   싸여 있다"고 실재 아이템(ItemCatalog.SEORI_DONGBAEK)을 명시로 건네는데 첨부가 비어 있었다 —
+	#   R8·R14와 같은 정정이고, 여기서도 수가 아니라 **구성**을 못 박는다.
 	var expect_sorted: Array = [attached, "miho_gate1_seed",
-		"miho_gate3_pumpkin", "ken_gate1_pot", "scarlet_gate2_coin"]
+		"miho_gate3_pumpkin", "ken_gate1_pot", "scarlet_gate2_coin", "seolhwa_gate2_camellia"]
 	attached_ids.sort()
 	expect_sorted.sort()
 	_check("⑥a 첨부를 가진 편지 = %s (나머지 %d통은 빈 첨부 — 정서적 소품)"
 		% [str(expect_sorted), Mailbox.LETTERS.size() - expect_sorted.size()],
 		attached_ids == expect_sorted)
-	_check("⑥b 관문 첨부 셋의 내용물이 본문이 건넨 그 물건이다(호박씨·화분·엽전 한 닢)",
+	_check("⑥b 관문 첨부 넷의 내용물이 본문이 건넨 그 물건이다(호박씨·화분·엽전 한 닢·서리동백)",
 		Mailbox.attachment_items_of("miho_gate3_pumpkin").size() == 1
 		and String(Mailbox.attachment_items_of("miho_gate3_pumpkin")[0]["id"])
 			== ItemCatalog.seed_id(CropCatalog.YEONGHON_HOBAK)
 		and Mailbox.attachment_items_of("ken_gate1_pot").size() == 1
 		and String(Mailbox.attachment_items_of("ken_gate1_pot")[0]["id"]) == ItemCatalog.GARDEN_POT
 		and Mailbox.attachment_items_of("scarlet_gate2_coin").is_empty()
-		and Mailbox.attachment_gold_of("scarlet_gate2_coin") > 0)
+		and Mailbox.attachment_gold_of("scarlet_gate2_coin") > 0
+		# ★[폴리시 R19 #3] 본문 첫 줄이 이름을 대는 그 꽃과 첨부 id가 같은 것이어야 한다.
+		and Mailbox.attachment_items_of("seolhwa_gate2_camellia").size() == 1
+		and String(Mailbox.attachment_items_of("seolhwa_gate2_camellia")[0]["id"])
+			== ItemCatalog.SEORI_DONGBAEK
+		and Mailbox.lines_of("seolhwa_gate2_camellia")[0].contains(
+			ItemCatalog.name_of(ItemCatalog.SEORI_DONGBAEK)))
 	_check("⑧a 편지 스키마 = from·lines·note·items·gold뿐(해금 키 0 — ADR-0064 발견 게이트)", schema_ok)
 
 	# ── ③ 진실원 대조 ──

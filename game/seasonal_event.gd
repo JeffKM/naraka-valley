@@ -128,7 +128,14 @@ static func name_of(ev: int) -> String:
 static func banner_text(ev: int) -> String:
 	match ev:
 		DERBY:
-			return "오늘은 %s — 삼도천에서 낚으면 금빛 태그가 붙는다(부두 곁 부스에서 교환)" % name_of(ev)
+			# ★[폴리시 R19 #12] 랜드마크를 "부두" → **"강 낚시터"**로 정정한다. 교환 부스
+			#   (main.DERBY_BOOTH_TILE 21,28)는 북안 물가 산책로(SAMDO_BANK_LANE_Y)에 서고 그
+			#   3칸 서쪽이 "강 낚시터" 라벨(SAMDO_FISHING_LABEL_TILE 18,28)이다. 삼도천에 "부두"
+			#   라벨은 **하나도 없고**(라벨 넷 = 나룻터·강 낚시터·잔교·하구), 화면에 뜨는 "부두"는
+			#   옆 구역 **황천해**의 것이라 안내를 따라가면 구역을 넘어가는데 거기 어획은
+			#   `_note_derby_catch`의 구역 가드에 걸려 태그조차 안 붙었다. 코드가 삼도천에서 "부두"라
+			#   부르는 SAMDO_DOCK_RECT는 북단 나룻터(y1..3)로 부스에서 25칸 북쪽이다.
+			return "오늘은 %s — 삼도천에서 낚으면 금빛 태그가 붙는다(강 낚시터 곁 부스에서 교환)" % name_of(ev)
 		JELLYFISH:
 			return "오늘은 %s — 저녁부터 황천해에 혼불해파리가 몰린다" % name_of(ev)
 		GRANGE:

@@ -56,11 +56,23 @@ const SOULWIND_RARE := 2.0       # 혼불 바람 던전 희귀 드랍 확률 ×2
 #
 # 강제 평온 2종은 분포보다 **먼저** 걸린다(오버라이드):
 #   ㉠ 절기 첫날 — 전환일엔 사멸·재스폰이 이미 한 판 벌어지므로 하늘까지 겹치지 않게 비운다.
-#   ㉡ 테마 데이 — 축제 당일은 맑아야 무대가 선다(_is_theme_day는 아직 스텁, T6에서 실효).
-static func weather_for_day(d: int) -> int:
+#   ㉡ 테마 데이 — 축제 당일은 맑아야 무대가 선다.
+#
+# ★[폴리시 R19 #13] `theme_open` = **그날 테마 데이가 실제로 열리는가**(해금까지 통과했는가).
+#   왜 인자로 받나: 종전엔 달력 **슬롯**만 보고 덮었는데(해금 무관) 비해금 슬롯은 플레이어에게
+#   완전한 평일이다 — 배너 0·장식 0·프리미엄 전부 1.0. 그런데 하늘만 확률표에서 빠져,
+#   혼불 바람 20%(몹 1.5·드랍 1.5·희귀 2.0)와 혼우 10%(밭 자동 급수·입질 1.25)가 절기마다
+#   하루씩 통째로 사라졌다. 이 파일과 festival.gd가 나란히 적어 둔 «부작용도 없다 — 누구도 손해
+#   보지 않는 무해한 잉여»는 그 세 배수가 존재하는 한 사실이 아니었고, 표시 층도 그 손실을
+#   설명하지 못한다(점괘 거울은 "평온"만 확정 통보하고 달력 칸은 비해금 표시 "?"만 찍는다).
+#   ★ 무상태는 그대로다 — 이 파일은 여전히 세이브를 모르고, **아는 쪽이 답을 들고 온다**
+#     (호출 측 주입 = festival.is_unlocked가 stage·revenue를 인자로 받는 그 문법 1:1).
+#   ★ 기본값 true = 종전 거동("슬롯이면 개최로 친다"). 해금 정보를 못 구하는 호출부(순수 파생만
+#     쓰는 회귀·도구)는 한 글자도 안 바뀌고, 손실이 실제로 나는 라이브 경로(main)만 참값을 넘긴다.
+static func weather_for_day(d: int, theme_open: bool = true) -> int:
 	if d <= 0:
 		return CALM
-	if GameClock.is_season_first_day(d) or _is_theme_day(d):
+	if GameClock.is_season_first_day(d) or (theme_open and _is_theme_day(d)):
 		return CALM
 	var dist: Array = DISTRIBUTION[GameClock.season_index_for_day(d)]
 	var r := absi(rand_from_seed(hash("weather:%d" % d))[0]) % 100
@@ -75,19 +87,21 @@ static func weather_for_day(d: int) -> int:
 #   분포를 무시하고 평온으로 못 박는다("당일 강제 평온"). T3의 스텁이 여기서 Festival 위임으로
 #   실효화됐다.
 #
-# ★ **개최가 아니라 달력 슬롯을 본다**(Festival.is_theme_slot — 해금 무관). 테마 데이 해금은
-#   세이브 상태(카페 단계·누적 매출)에 걸려 있는데 이 파일은 세이브를 모르는 순수 파생 롤이다.
-#   슬롯 기준으로 잡으면 day 하나로 답이 나와 무상태가 보존되고, 부작용은 없다: 해금 전이라
-#   행사가 안 열리는 25일에 하늘이 맑은 것은 아무것도 막지 않는 무해한 잉여다(비가 안 와서
-#   손해 보는 것이 없다 — 자동 급수는 편의지 게이트가 아니다).
+# ★ **달력 슬롯만 본다**(Festival.is_theme_slot — 해금 무관). 해금은 세이브 상태에 걸려 있는데
+#   이 파일은 세이브를 모르는 순수 파생 롤이라, 슬롯 판정만 여기 두고 **개최 여부는 위
+#   `weather_for_day`가 인자로 받는다**(폴리시 R19 #13).
+# ⚠️ 종전 주석이 «부작용은 없다 … 손해 보는 것이 없다»고 단정했는데 **사실이 아니었다**: 아래
+#   SOULWIND_* 셋과 혼우의 `waters_field`·RAIN_BITE가 실효 이득이라, 비해금 슬롯을 덮으면
+#   절기마다 하루씩 그 이득이 사라졌다. 그 오판이 이 파일 안에서 다시 인용되지 않게 남긴다.
 # ⚠️ 방향이 한쪽이다: Weather → Festival → GameClock. Festival이 Weather를 되짚어 참조하면
 #   순환이 되므로 축제 쪽에 날씨 조건을 붙이지 말 것(테마 데이는 어차피 항상 평온이라 필요도 없다).
 static func _is_theme_day(d: int) -> bool:
 	return Festival.is_theme_slot(d)
 
 # 내일 날씨(예보). 별도 상태가 없어 하루 앞을 그냥 굴려 보면 끝이다 — T6 점괘 거울의 입력.
-static func forecast(d: int) -> int:
-	return weather_for_day(d + 1)
+# ★[폴리시 R19 #13] `theme_open`을 그대로 넘긴다 — 예보와 실제가 갈릴 자리를 안 만든다.
+static func forecast(d: int, theme_open: bool = true) -> int:
+	return weather_for_day(d + 1, theme_open)
 
 # 표시명("" = 범위 밖). GameClock.season_name과 같은 관례.
 static func name_of(w: int) -> String:
