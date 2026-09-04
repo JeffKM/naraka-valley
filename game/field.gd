@@ -68,14 +68,43 @@ func is_mature(t: Vector2i) -> bool:
 func fertilizer_of(t: Vector2i) -> String:
 	return str(_tiles[t].get("fertilizer", "")) if is_tilled(t) else ""
 
-# 유효 성숙 목표일(§8.6) = base × 성장촉진 계수(1.0/0.75/0.67, ceil·최소 1). 성장 루프(advance_day·_grow)는
+# 유효 성숙 목표일(§8.6) = 성장촉진 계수를 먹인 임계(ceil·최소 1). 성장 루프(advance_day·_grow)는
 # 안 건드리고 성숙 판정 임계만 낮춘다(깔끔한 삽입, foxfire accel과 자연 합성). 미지 작물은 base(-1) 그대로.
+# ★[폴리시 R20 #4·#5·#6] 종전엔 이 값을 **호출될 때마다 현재 비료에서 다시 파생**했다(`ceili(base×f)`).
+#   임계가 실시간으로 움직이니 한 뿌리에서 세 방향이 깨졌다:
+#   ㉠ 다 자라기 직전 칸에 성장촉진 비료를 뿌리면 임계가 grown_days 아래로 내려앉아 **날이 안 바뀌었는데
+#      그 자리에서 즉시 성숙**했다(영혼 호박 grown 9 / base 12 → 임계 ceili(12×0.75)=9). 40냥짜리
+#      소모품을 '심을 때'가 아니라 '수확 직전'에 쓰는 것이 항상 우월해지고, 성장이 하루 경계 없이 뛰었다.
+#   ㉡ 반대로 성장촉진 위에 품질 비료를 덮으면(quality군은 f=1.0) 임계가 base로 되돌아가 **수확 대기 중이던
+#      작물이 미성숙으로 역행**했다 — 경고도 알림도 없이 물 두 번을 더 줘야 했다.
+#   ㉢ REGROW 되감기는 base를 기준으로 재는데 성숙 판정만 이 유효일을 써서 두 기준이 어긋났고,
+#      −25%짜리 비료가 재결실 주기를 −43%까지 깎았다(불사과 명목 7일 → 실제 4일).
+#   그래서 임계는 **도포 시점에 한 번 정해 칸에 적는다**(`need_days` 스냅샷). 계산식은 카탈로그가 스스로
+#   적어 둔 계약 그대로다 — "speed군의 **잔여** 성숙일 곱". 잔여에만 곱하므로 이미 지난 날은 절대 안
+#   깎이고(㉠ 소멸), 계수 1.0인 품질군은 잔여를 그대로 되돌려 임계가 안 변하며(㉡ 소멸), 되감기가
+#   같은 임계를 기준으로 돌아 쿨다운이 명목대로 선다(㉢ 소멸).
+# ★ 구세이브 폴백: 키가 없는 칸은 종전 식으로 답한다(`load_save`가 심긴 칸에 곧 적어 넣는다).
 func effective_growth_days(t: Vector2i) -> int:
 	var base := CropCatalog.growth_days(crop_of(t))
 	if base < 0:
 		return base
-	var f := FertilizerCatalog.speed_factor(str(_tiles[t].get("fertilizer", "")))
-	return maxi(1, ceili(base * f))
+	if _tiles[t].has("need_days"):
+		return maxi(1, int(_tiles[t]["need_days"]))
+	return _sealed_need(base, str(_tiles[t].get("fertilizer", "")))
+
+# 심는 순간의 임계 = base 전체가 곧 잔여라 "잔여 곱"이 base 곱과 같아진다(구세이브 폴백도 이 식).
+func _sealed_need(base: int, fert_id: String) -> int:
+	return maxi(1, ceili(base * FertilizerCatalog.speed_factor(fert_id)))
+
+# 심긴 칸에 비료를 갈아 뿌린 순간 임계를 **잔여 기준으로** 다시 잠근다. prev_need = 도포 직전 임계.
+# 이미 성숙한 칸(잔여 ≤ 0)은 손대지 않는다 — 어떤 비료도 다 자란 작물을 되돌리지 못한다.
+func _reseal_need(t: Vector2i, prev_need: int, fert_id: String) -> void:
+	var grown: int = int(_tiles[t]["grown_days"])
+	var left: int = prev_need - grown
+	if left <= 0:
+		_tiles[t]["need_days"] = prev_need
+		return
+	_tiles[t]["need_days"] = grown + maxi(1, ceili(left * FertilizerCatalog.speed_factor(fert_id)))
 
 # 수확 가능한 칸이 하나라도 있는가. T4.1 온보딩이 '집에서 키우기'에서 '수확하라'
 # 단계로 넘어갈 시점(취침으로 작물이 다 자란 순간)을 main이 판정하는 데 쓴다.
@@ -152,7 +181,12 @@ func fertilize(t: Vector2i, fert_id: String) -> bool:
 	#   한 개가 사라졌다. 다른 비료로의 overwrite는 그대로 성립한다(단일 필드 XOR 문법 불변).
 	if str(_tiles[t].get("fertilizer", "")) == fert_id:
 		return false
+	# ★[폴리시 R20 #4·#5] 도포 **직전** 임계를 먼저 읽는다 — 비료를 먼저 갈아끼우면 구세이브 폴백이
+	#   새 계수로 답해 기준선이 오염된다. 심긴 칸이면 그 임계의 잔여에 새 계수를 곱해 다시 잠근다.
+	var prev_need: int = effective_growth_days(t) if is_planted(t) else -1
 	_tiles[t]["fertilizer"] = fert_id
+	if prev_need >= 0:
+		_reseal_need(t, prev_need, fert_id)
 	tile_changed.emit(t)
 	return true
 
@@ -178,6 +212,10 @@ func plant(t: Vector2i, crop_id: String) -> bool:
 	_tiles[t]["planted"] = true
 	_tiles[t]["crop"] = crop_id
 	_tiles[t]["grown_days"] = 0
+	# ★[폴리시 R20 #4] 성숙 임계를 이 자리에서 한 번 잠근다(스냅샷) — 이후 비료를 갈아도
+	#   `_reseal_need`가 잔여 기준으로만 다시 잠그므로 임계가 뒤로 뛰거나 되돌아가지 않는다.
+	_tiles[t]["need_days"] = _sealed_need(CropCatalog.growth_days(crop_id),
+		str(_tiles[t].get("fertilizer", "")))
 	tile_changed.emit(t)
 	return true
 
@@ -224,11 +262,16 @@ func harvest(t: Vector2i) -> String:
 		return ""
 	var crop_id: String = _tiles[t]["crop"]
 	if CropCatalog.growth_mode(crop_id) == "REGROW":
-		# 넝쿨 보존. grown_days를 base−cd로 되감아, cd일 더 물주면 다시 성숙한다.
-		# (황천포도 base7·cd3 → 4 → +3일 = 7 재성숙.) planted/crop/watered는 그대로 둔다.
-		var base := CropCatalog.growth_days(crop_id)       # = base_growth_days 별칭
+		# 넝쿨 보존. grown_days를 (임계−cd)로 되감아, cd일 더 물주면 다시 성숙한다.
+		# (황천포도 임계7·cd3 → 4 → +3일 = 7 재성숙.) planted/crop/watered는 그대로 둔다.
+		# ★[폴리시 R20 #6] 기준을 base에서 **이 칸의 성숙 임계**로 바꾼다. 되감기는 base로 재고
+		#   성숙 판정만 유효 임계로 재던 탓에 위 한 줄의 약속("cd일 더 물주면")이 비료 깔린 칸에서
+		#   거짓이었다 — 불사과(base 12·cd 7)에 성장촉진을 깔면 grown 5로 되감기는데 임계는 9라
+		#   4일 만에 다시 열려, −25%짜리 비료가 재결실 주기만 −43% 깎았다. 한 기준으로 재면
+		#   쿨다운이 비료와 무관하게 명목값 그대로 선다(비료의 이득은 첫 결실에서 이미 받았다).
+		var need := effective_growth_days(t)
 		var cd := CropCatalog.regrow_cooldown(crop_id)
-		_tiles[t]["grown_days"] = maxi(0, base - cd)
+		_tiles[t]["grown_days"] = maxi(0, need - cd)
 	else:
 		_tiles[t]["planted"] = false
 		_tiles[t]["crop"] = ""
@@ -342,4 +385,13 @@ func load_save(data: Dictionary) -> void:
 			c["planted"] = false
 			c["crop"] = ""
 			c["grown_days"] = 0
+		# ★[폴리시 R20 #4] 성숙 임계 스냅샷 백필 — R20 이전에 심긴 칸은 `need_days`를 안 들고 온다.
+		#   종전 식(현재 비료의 base 곱)으로 한 번 적어 넣어 그 세이브의 임계를 **그 자리에 굳힌다**:
+		#   값이 종전과 같으니 진행 중인 작물의 성숙일이 안 흔들리고(구세이브 손해 0), 그 다음부터는
+		#   비료를 갈아도 임계가 뛰거나 되돌아가지 않는다. 위 손상 가드 **뒤**에 두는 것이 순서다 —
+		#   미지 작물 칸은 이미 빈 경작 칸으로 내려앉아 base<0 계산에 안 들어간다.
+		if bool(c.get("planted", false)) and not c.has("need_days"):
+			var b := CropCatalog.growth_days(str(c.get("crop", "")))
+			if b >= 0:
+				c["need_days"] = _sealed_need(b, str(c.get("fertilizer", "")))
 		tile_changed.emit(t)

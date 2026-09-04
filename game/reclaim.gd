@@ -242,7 +242,14 @@ func spread_day(extra_sources: Array, classify: Callable, day: int, is_winter: b
 # 반환 = {"weeds": [], "ember": [], "stump": []}(main이 알림·프롭 병합에 쓴다).
 #   · 성야절(is_winter) 진입 1일은 **재스폰 없음**(그날은 purge_weeds가 도는 날이다 — 결정 7).
 #   · 결정적: day 시드 "season_respawn:" 네임스페이스 Fisher–Yates(advance_day와 동형).
-func season_respawn(candidates: Array, day: int, is_winter: bool) -> Dictionary:
+#   · ★[폴리시 R20 #2] `solid_ok` = **SOLID 한 칸을 지금 세워도 되는가**를 호출 측(main)이 판정하는
+#     Callable(빈 Callable이면 종전 그대로 전부 허용). 왜 후보 필터로는 안 되나: 후보는 배치가
+#     시작되기 **전** 상태로 한 번에 판정돼 서로를 못 본다 — 플레이어의 열린 퇴로가 A·B 둘뿐이면
+#     A도 B도 각자 "다른 쪽이 남는다"로 후보에 살아남고, 여기서 둘 다 뽑혀 돌이 서면 사방이
+#     막힌다(맞는 도구 없이 잤으면 그 칸에서 못 나온다 — R19 #16이 닫으려던 그 소프트락).
+#     그래서 **뽑는 순간마다** 물어보고, 거절당한 굴림은 잡초로 내린다(잡초는 비-SOLID라
+#     매몰이 안 되고, 굴림 스트림도 안 흔들려 결정성이 그대로다).
+func season_respawn(candidates: Array, day: int, is_winter: bool, solid_ok: Callable = Callable()) -> Dictionary:
 	var out := {"weeds": [], "ember": [], "stump": []}
 	if is_winter or candidates.is_empty():
 		return out
@@ -268,6 +275,9 @@ func season_respawn(candidates: Array, day: int, is_winter: bool) -> Dictionary:
 	for k in range(want):
 		var t: Vector2i = pool[k]
 		var r := rng.randi_range(0, total - 1)
+		# ★[폴리시 R20 #2] SOLID 굴림은 호출 측 승인을 받아야 선다. 거절되면 잡초로 내린다.
+		if r >= SEASON_W_WEEDS and solid_ok.is_valid() and not solid_ok.call(t):
+			r = 0
 		if r < SEASON_W_WEEDS:
 			_weeds[t] = true
 			out["weeds"].append(t)
