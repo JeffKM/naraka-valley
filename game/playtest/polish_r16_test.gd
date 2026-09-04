@@ -480,8 +480,11 @@ func _check_animal_pot_dispatch(m: Node) -> void:
 			% [e0, e1, e2, str(first), str(second)],
 		first and second and e1 < e0 and e2 < e1)
 	# 그래서 두 게이트가 짐승 칸을 뺀 술어를 본다(옛 `pot_at_target`이 그 자리에 남아 있으면 안 된다).
+	# ★[폴리시 R18] 니들을 **`pot_dispatch`라는 이름 자체**로 좁힌다 — R18 #1이 두 게이트에
+	#   `orchard_dispatch` or-항을 더하며 줄 모양이 바뀌자, 문장 전체를 뜨던 옛 니들이
+	#   빗나갔다(이 스위트가 지키는 계약은 "짐승 칸을 뺀 술어를 본다"이지 줄의 생김새가 아니다).
 	var lmb := _line_in_func(_src, "func _process", "or holding_weapon or pot_dispatch or")
-	var rmb := _line_in_func(_src, "func _process", "(_target_valid or pot_dispatch)")
+	var rmb := _line_in_func(_src, "func _process", "(_target_valid or pot_dispatch or")
 	_check("⑥e 도구(%d행)·수확(%d행) 게이트가 짐승 칸을 뺀 술어를 본다" % [lmb + 1, rmb + 1],
 		lmb >= 0 and rmb >= 0)
 	m.garden_pot.remove(adult)
