@@ -2382,6 +2382,16 @@ var _tree_fade: Dictionary = {}
 # ★ T3③' 실내 가구 충돌 — 구역 빌드마다 SOLID_PROPS 칸에 사각 충돌을 다시 세운다(러그 제외).
 #   타일맵 벽과 같은 물리 레이어(기본 1)라 플레이어 move_and_slide가 통과 못 한다.
 var _prop_body: StaticBody2D = null
+# ★[폴리시 R20 #1] 프롭 충돌이 실제로 덮은 칸의 원장 — 키 = Vector2i, 값 = true.
+#   왜 필요한가: `_tile_blocked`는 `_grid`만 읽는데 마당의 통과 불가 프롭(업화석·석화 고목·통나무
+#   5종·울타리·덤불·돌담·나무/바위 발치)은 `_grid`를 한 글자도 안 건드리고 위 `_prop_body`에
+#   StaticBody 사각으로만 선다. 그래서 매몰 술어(`_player_blocked_at`)가 이들을 전부 "통행 가능"
+#   으로 답해, R19 #15·#16·#17이 세운 가드 셋이 안식 마당에서 사실상 무효였다.
+#   ★ **원장은 `_rebuild_prop_collision`이 세우는 그 사각에서 직접 파생한다**(좌표·규칙 복제 0):
+#     발치 바냐 풀타일이냐, debris가 개간됐냐, 원장 나무가 살아 있냐를 여기서 다시 판정하지
+#     않고, 물리가 실제로 받은 position/size만 `_register_prop_blocked`로 되받아 적는다.
+#   ★ 구역 축은 재구성이 든다 — 구역 빌드마다 통째로 비우고 다시 채우므로 항상 현재 구역 것이다.
+var _prop_blocked_tiles: Dictionary = {}
 # ★ 맵 경계 충돌체 — 옛 WALL 띠(시각)를 풀로 바꾸고(ADR-0026 룩 정합) 충돌만 외부 둘레에 둘러
 #   맵 밖 이탈을 막는다(_build_border가 구역 빌드마다 다시 세운다).
 var _border_body: StaticBody2D = null
@@ -4615,11 +4625,33 @@ func _tree_seed_free_cb() -> Callable:
 # 시각 lift(WALL_PROP_LIFT)와 같은 오프셋을 충돌에도 줘
 # 보이는 가구와 막히는 자리를 일치시킨다. 구역마다 가구 밴드가 달라(HOME y67~/마을 y74~) 외부 이동엔
 # 무관 — 빌드/워프(_build_grid)마다 한 번 세운다. 테스트·봇은 실내를 물리로 안 걷는다(직접 좌표 세팅).
+
+# ★[폴리시 R20 #1] 방금 세운 프롭 충돌 사각 하나를 칸 원장에 적는다 — `_prop_blocked_tiles`의
+#   유일한 기입구다. 인자는 `_rebuild_prop_collision`이 물리에 넘긴 **바로 그** 중심·크기라,
+#   발치 바/풀타일/개간 skip/원장 나무 skip 같은 규칙을 여기서 다시 알 필요가 없다.
+# ★ 판정 = "이 칸의 속살(2px 안쪽)을 사각이 물었는가". 칸 전체 포함이 아니라 교차로 재는 이유:
+#   실내 벽 가구는 WALL_PROP_LIFT(−18px)로 칸 격자에서 어긋나 있어 어떤 칸도 통째로는 안 덮는데,
+#   플레이어는 그 자리에 실제로 못 선다. 반대로 나무·바위 캐노피처럼 사각이 아예 안 닿는 칸은
+#   그대로 통행 가능으로 남는다(`_player_blocked_at` 머리말이 경계한 과잉 거절이 안 생긴다).
+#   2px 여백은 이웃 칸에 딱 맞닿은 사각이 경계 하나로 번지지 않게 하는 방어다.
+func _register_prop_blocked(center: Vector2, size: Vector2) -> void:
+	var r := Rect2(center - size * 0.5, size)
+	var tx0: int = int(floor(r.position.x / float(TILE)))
+	var tx1: int = int(ceil(r.end.x / float(TILE)))
+	var ty0: int = int(floor(r.position.y / float(TILE)))
+	var ty1: int = int(ceil(r.end.y / float(TILE)))
+	for ty in range(ty0, ty1):
+		for tx in range(tx0, tx1):
+			var core := Rect2(tx * TILE + 2, ty * TILE + 2, TILE - 4, TILE - 4)
+			if r.intersects(core):
+				_prop_blocked_tiles[Vector2i(tx, ty)] = true
+
 func _rebuild_prop_collision() -> void:
 	if _prop_body == null:
 		return
 	for c in _prop_body.get_children():
 		c.queue_free()
+	_prop_blocked_tiles.clear()   # ★[폴리시 R20 #1] 아래 사각들이 곧 이 원장을 다시 채운다
 	# ★ ADR-0025 ② 런타임 데이터 참조(const PROP_LAYOUT_* 대신). 구역 → 묶음 키 매핑.
 	var layout: Array = []
 	match _region:
@@ -4661,6 +4693,7 @@ func _rebuild_prop_collision() -> void:
 				cs.shape = rect
 				cs.position = Vector2(t.x * TILE, t.y * TILE + yo) + sz * 0.5
 			_prop_body.add_child(cs)
+			_register_prop_blocked(cs.position, rect.size)
 	# ★[S4-T3] 안식 자체 파종으로 *새로 돋은* 원장 나무 — 프롭 레이아웃에 없는 칸이라 위 루프가 못 세운다.
 	#   유목·그루터기라 발치 1칸(TILE)만 막는다(나무 프롭 TREE_FOOT_H와 같은 규약 = 통행 감각 일관).
 	if _region == RegionCatalog.HOME and tree_ledger != null:
@@ -4674,6 +4707,7 @@ func _rebuild_prop_collision() -> void:
 			cs2.shape = rect2
 			cs2.position = Vector2(t.x * TILE + TILE * 0.5, t.y * TILE + TILE * 0.5)
 			_prop_body.add_child(cs2)
+			_register_prop_blocked(cs2.position, rect2.size)
 
 # ★ [S1-5a] 트렐리스 넝쿨 충돌 재구성(greybox-spec §6.2) — farm.solid_crop_tiles()의 각 칸에
 # 16×16 사각 충돌을 세운다(터레인 SOLID_POLY −8..8과 동형). 넝쿨은 안식 농원(밭)에만 있으므로
@@ -12453,16 +12487,30 @@ func _load_game() -> bool:
 	#   (위 누적 원장 클러스터와 같은 처방 — null 검사는 노드가 늦게 서므로 그대로 둔다).
 	if trial != null:
 		trial.load_save(data.get("trial_ground", {}))
-	if data.has("mastery") and mastery != null:
-		mastery.load_save(data["mastery"])
+	# ★[폴리시 R20 #7] 아래 셋(경지 수령 이력·우편함·Books)은 위 누적 원장 클러스터가 R3·R6·R13·R18에
+	#   걸쳐 받은 **무가드 되감기를 못 받은 마지막 잔여**다. 판별식은 R13이 명문화한 그대로 —
+	#   "부팅으로 시드되는가": 셋 다 부팅이 아니라 **플레이가** 채우므로 로드는 반드시 되감아야
+	#   한다. 가드가 있으면 키 없는 구세이브를 F9로 *실행 중에* 읽을 때 `load_save`가 아예 안 불려
+	#   살아 있는 노드의 내용물이 그대로 남고, 형제인 `inventory`는 되감기므로 원장과 실물이 갈린다:
+	#     ㉠ books — "이미 주웠다"만 남고 책 아이템은 사라진다. `Books.peek_drop`이 `_remaining`으로
+	#        소유 id를 거르고 `Peddler.remaining_books`도 같은 원장을 보므로, 채굴·낚시·채집·개간
+	#        네 원천과 보부상 희귀 슬롯 **전부**에서 그 id가 영구 제외돼 완주가 구조적으로 불가능해진다.
+	#     ㉡ mastery — `claimed`가 남아 그 유물의 재수령이 영구 차단된다.
+	#     ㉢ mailbox — `inbox`/`outbox`가 살아남아 `Mailbox.send`의 `ever_sent` 가드가 서사 편지
+	#        재발송을 영구 거절한다.
+	#   그리고 다음 취침의 `_save_game`이 그 상태를 파일에 굳힌다. 셋 다 `load_save({})`가 자기
+	#   원장을 첫 줄에서 비우므로 "키 없는 구세이브 = 빈 원장"이라는 종전 계약은 그대로다
+	#   (null 검사는 노드가 늦게 설 수 있어 남긴다 — 시련장·보부상과 같은 관례).
+	if mastery != null:
+		mastery.load_save(data.get("mastery", {}))
 	# ★[S9-T3] 편지 원장 — 키 없는 구세이브는 **빈 우편함**으로 시작한다(곳간·출하함과 같은 하위호환
 	#   관례. 막히는 것은 0이다 — 앞으로의 사건이 보내는 편지는 그대로 도착한다).
-	if data.has("mailbox") and mailbox != null:
-		mailbox.load_save(data["mailbox"])
+	if mailbox != null:
+		mailbox.load_save(data.get("mailbox", {}))
 	# ★[S9-T7] Books 수집 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(우편함과 같은
 	#   하위호환 관례). 막히는 것은 0이다: 앞으로의 채굴·낚시·채집·개간이 그대로 굴러 나온다.
-	if data.has("books") and books != null:
-		books.load_save(data["books"])
+	if books != null:
+		books.load_save(data.get("books", {}))
 	# ★[S6-T4] 단골 원장 — 키 없는 구세이브는 **전원 처음 오는 손님**으로 시작한다(빈 원장 = 기본
 	#   가중치. 아무것도 안 막힌다 — 명명 손님은 그대로 오고 이력만 0부터 쌓인다).
 	# ★[폴리시 R13] 방문 이력도 플레이로만 쌓이는 누적이라 가드를 걷는다(위 클러스터와 같은 처방).
@@ -15230,8 +15278,15 @@ func _use_tool() -> void:
 		#   ★ 판정은 **앵커 한 칸**에만 건다 — `_is_tree_blocked`(3×3 전수 평가)에 넣으면 풋프린트가
 		#     늘 발밑을 포함하므로 나무를 한 그루도 못 심게 된다. 밑동만 SOLID고 캐노피는 걸어
 		#     다니는 칸이라, 막아야 하는 것도 밑동 하나다.
+		# ★[폴리시 R20 #12] **두 갈래를 문구가 갈라야 한다.** `_would_entrap_player`는 ㉠발밑과
+		#   ㉡마지막 퇴로 둘 다에 true를 내는데 여기는 한 문구뿐이라, R19 #15가 명시적으로 허용한
+		#   대로 세 칸을 먼저 막아 둔 플레이어가 네 번째 칸을 겨누면 "발밑에는 심을 수 없다 —
+		#   한 칸 물러서서 심자"가 떴다: 겨눈 칸은 발밑이 아니고, 물러설 칸도 없다. 형제인 트렐리스
+		#   갈래는 두 갈래를 다 덮는 문구를 쓴다(15247행) — 여기는 갈래가 실제로 갈리므로 각각
+		#   참인 말을 한다.
 		if _would_entrap_player(_target):
-			_notice("발밑에는 심을 수 없다 — 한 칸 물러서서 심자")
+			_notice("발밑에는 심을 수 없다 — 한 칸 물러서서 심자" if _target == _player_tile()
+				else "여기에 심으면 밑동에 갇힌다 — 한 칸 비켜서 심자")
 		elif inventory.has_sapling(fruit) and orchard.plant(_target, fruit, clock.day, _is_tree_blocked):
 			inventory.take_sapling(fruit)
 			verb = "묘목심기"
@@ -15843,7 +15898,12 @@ func _orchard_trunk_at(t: Vector2i) -> bool:
 # ★ 막는 것은 **새로 세우는 것**뿐이다: 이미 선 것은 각자의 창구가 그대로 걷는다(구세이브 매몰 0).
 # ★ 노지는 절기 첫날 사멸이 최대 28일 만에 풀어 주지만 **늘봄방은 그 순회에 안 들어간다** —
 #   거기선 같은 짓이 영구 소프트락이라, 무대를 가르지 않고 한 술어로 둘 다 막는다.
-func _would_entrap_player(t: Vector2i) -> bool:
+# ★[폴리시 R20 #2] `pending` = **이 한 배치가 이미 세우기로 한 SOLID 칸들**. 절기 재스폰은 칸을
+#   한 번에 8~16개 세우는데(`Reclaim.season_respawn`) 가드는 전부 *스폰 전* 상태로 평가돼 서로를
+#   못 봤다 — 열린 퇴로가 A·B 둘뿐인 자리에서 A는 "B가 남는다", B는 "A가 남는다"로 각자 통과한
+#   뒤 같은 아침에 둘 다 서면 사방이 막힌다. 배치 소비처가 뽑을 때마다 승인된 칸을 여기 넣어
+#   주면, 그 다음 판정이 그것들을 이미 선 것으로 본다(단일 술어 그대로·규칙 복제 0).
+func _would_entrap_player(t: Vector2i, pending: Dictionary = {}) -> bool:
 	if player == null:
 		return false
 	var here := _player_tile()
@@ -15851,16 +15911,24 @@ func _would_entrap_player(t: Vector2i) -> bool:
 		return true                       # ㉠ 발밑 = 즉시 매몰
 	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		var n: Vector2i = here + d
-		if n != t and not _player_blocked_at(n):
+		if n != t and not pending.has(n) and not _player_blocked_at(n):
 			return false                  # 다른 퇴로가 남는다
 	return true                           # ㉡ 이 칸이 마지막 퇴로였다
 
 # 위 술어가 "퇴로가 남는가"를 물을 때 쓰는 통행 판정 — 칸 전체를 막는 것만 센다.
 # ★ 전체를 막는 것만 보는 이유: FADE_PROPS(나무·바위)는 발치 한 행만 SOLID라 프롭 풋프린트를
-#   통째로 막힘으로 세면 멀쩡한 파종까지 거절된다(과잉 거절 = 설명 없는 무동작). 여기 든 셋은
-#   전부 32×32 풀타일 충돌이고 이 세 결함이 실제로 세우는 것들이다.
+#   통째로 막힘으로 세면 멀쩡한 파종까지 거절된다(과잉 거절 = 설명 없는 무동작).
+# ★[폴리시 R20 #1] 그런데 **프롭 충돌 자체가 한 축 빠져 있었다.** 앞 세 항은 `_grid`·밭·과수만
+#   보는데, 안식 마당의 통과 불가 프롭(업화석·석화 고목·통나무 5종·울타리·덤불·돌담 = 풀타일 /
+#   나무·바위·허수아비 = 발치 행)은 `_grid`에 한 글자도 안 실리고 `_prop_body` 사각으로만 선다.
+#   그래서 이 술어가 그것들을 전부 "퇴로가 남는다"로 답해, 세 결함 가드가 마당에서 헛돌았다 —
+#   debris 셋에 둘러싸인 칸의 네 번째 퇴로에 넝쿨·밑동을 심거나 절기 재스폰이 거기 돌을 세우면
+#   그대로 매몰이 성립했다(작물 제거 플레이어 입력 0 · orchard 제거 API 0 · 24:00 강제 취침은
+#   좌표 불변). 위 머리말이 경계한 과잉 거절은 안 생긴다: `_prop_blocked_tiles`는 풋프린트가
+#   아니라 **물리가 실제로 받은 사각**에서 파생하므로 캐노피 칸은 여전히 통행 가능이다.
 func _player_blocked_at(t: Vector2i) -> bool:
-	return _tile_blocked(t) or _field_at(t).is_crop_solid(t) or _orchard_trunk_at(t)
+	return _tile_blocked(t) or _field_at(t).is_crop_solid(t) or _orchard_trunk_at(t) \
+		or _prop_blocked_tiles.has(t)
 
 # ★[폴리시 R8] 이 칸이 **[F] 창구 좌표**인가 — 좌표 상수 하나로 열리는 야외 상호작용 자리다.
 # 왜 배치 가드가 이걸 물어야 하나: 설치물의 투입·수거·회수는 전부 [F] 한 동사인데, 입력 사다리에서
@@ -15876,7 +15944,29 @@ func _player_blocked_at(t: Vector2i) -> bool:
 # ★ 거울(MIRROR_TILE)은 여기 안 든다 — 실내 좌표이고 배치 가드는 전부 `_indoor == ""`를 요구해
 #   구조로 이미 막혀 있다. 구역 술어를 다는 이유도 같다(HOME 좌표 상수라 다른 무대엔 무의미).
 func _f_window_tile(t: Vector2i) -> bool:
-	if _region != RegionCatalog.HOME or _indoor != "":
+	if _region != RegionCatalog.HOME:
+		return false
+	# ★[폴리시 R20 #10] **실내 [F] 창구도 같은 이유로 뺀다.** 위 머리말이 "거울은 실내 좌표이고 배치
+	#   가드는 전부 `_indoor == \"\"`를 요구해 구조로 이미 막혀 있다"고 적었는데, 화분은 그 전제가
+	#   정반대다 — `_can_place_pot`은 **실내에서만** 선다(`_indoor == ""`면 즉시 false). 그래서 이
+	#   술어가 실내에서 무조건 false를 돌려주는 동안 실내 [F] 좌표가 한 칸도 안 막혔다.
+	# ★ **실측으로 뚫려 있던 것은 갈무리방(창고) 상자 칸 하나다**(STOREHOUSE_CHEST_TILE). 거기 놓인
+	#   화분의 작물은 영영 수확 불가다: RMB 사다리에서 `facing_storehouse_chest`가 `_try_harvest`보다
+	#   앞에서 return하고 프롬프트 사슬도 같은 순서라 "[우클릭] 수확"이 한 번도 안 떠, 왜 안 되는지
+	#   알 방법조차 없다(R16 #15가 짐승 건물에서 봉합한 그 사고와 같은 형태).
+	# ★ 집 쪽 세 칸(상자·거울·책장)은 **벽 가구 밴드(y68)라 `_grid`가 이미 SOLID**이고, 그래서
+	#   `_can_place_pot`의 `is_solid` 줄이 종전에도 막고 있었다 — 헌트가 «둘 다 뚫렸다»고 본 절반은
+	#   실측에서 반증됐다. 그래도 같은 표에 둔다: 이 가드는 좌표 축이고 저쪽은 지형 축이라, 실내
+	#   레이아웃이 한 번 바뀌면 그게 곧 다음 사각이다(회귀 ⑪이 두 축을 각각 잰다).
+	# ★ 막는 것은 **새 배치**뿐이다: 이미 놓인 화분은 LMB 회수가 그대로 듣는다(`_remove_garden_pot`).
+	#   상자 쪽 [F]를 화분에 양보시키지 않는 이유는 명확하다 — 그러면 저장 상자가 못 열린다.
+	# ★ 좌표는 `facing_chest`류가 읽는 **그 상수 그대로**다(값 복제 0).
+	if _indoor != "":
+		match _indoor:
+			"집":
+				return t == CHEST_TILE or t == MIRROR_TILE or BOOKSHELF_TILES.has(t)
+			"창고":
+				return t == STOREHOUSE_CHEST_TILE
 		return false
 	return t == MAILBOX_TILE or t == PET_TILE or t == PET_BOWL_TILE
 
@@ -16163,8 +16253,19 @@ func _remove_garden_pot(t: Vector2i) -> void:
 # 지면/경작지·성역/프롭/설치물 비겹침) — 밭에 서는 말뚝이라 지켜야 할 것이 정확히 같고, 규칙을
 # 복제하면 두 벌이 따로 늙는다. 다른 조건은 "이미 다른 레어크로우가 선 칸"뿐인데 그건 위
 # `_can_place_sprinkler`에 합류시켜 **한 술어가 둘 다 막는다**(양방향 겹침 방지).
+# ★[폴리시 R20 #16] **실내에는 안 선다.** 상속한 `_can_place_sprinkler`에는 `_indoor` 가드가 없고
+# 늘봄방 경작면은 SOIL이라 셀 조건도 통과해, 온실 안에 레어크로우가 그대로 섰다. 그런데 까마귀
+# 판정의 입력을 만드는 `_scarecrow_tiles()`는 `t.y < RegionCatalog.size_of(HOME).y`로 **실내 밴드
+# 좌표를 전부 버리므로** 그 레어크로우의 보호 기여가 정확히 0인데, 배치 알림은 매번 "반경 N칸의
+# 작물을 까마귀에게서 지킨다"고 단언했다. 게다가 습격 표적인 `_crow_target_tiles()`는 `farm`(노지)
+# 만 보므로 온실 작물은 애초에 표적이 아니다 — 즉 실내 배치는 어느 방향으로도 값이 0인 순수 덫이다.
+# 하필 레어크로우는 재획득 경로가 전부 1회성으로 잠긴 수집물이라, 8종을 온실에 늘어놓으면 알림의
+# 숫자만 커지고 노지는 무방비로 남는다.
+# ★ 막는 것은 새 배치뿐이다 — 이미 세운 것은 LMB 회수(`_remove_rarecrow`)가 실내에서도 그대로
+#   듣는다(그 갈래는 `_rarecrow_at`만 본다). 구세이브 탈출구 보존.
+# ★ 스프링클러는 안 막는다: 그쪽은 늘봄방 경작면을 실제로 적시는 실효 설치라 축이 다르다.
 func _can_place_rarecrow(t: Vector2i) -> bool:
-	return rarecrow != null and _can_place_sprinkler(t)
+	return rarecrow != null and _indoor == "" and _can_place_sprinkler(t)
 
 # 조준 칸에 든 레어크로우를 세운다(아이템 1개 소모). 겨눈 칸 = **밑동**(보호 반경 중심)이고 그림만
 # 위로 1칸 자란다(프롭 허수아비 1×2 실루엣 상속 — rarecrow.gd 머리말).
@@ -24639,9 +24740,22 @@ func _letter_attachment_fits(letter_id: String) -> bool:
 	for i in range(inventory.slots.size()):
 		if inventory.id_at(i) == "":
 			free += 1
+	# ★[폴리시 R20 #9] 합침 판정을 `has_item`(품질 **무관**)에서 `has_stack`(id, 품질 정확 일치)으로
+	#   바꾼다 — 실제 적재인 `add_item`이 `_find_stack(id, _norm_quality(id, quality))`만 합치기
+	#   때문이다. 두 술어가 갈린 탓에 등급이 실리는 첨부가 **알림 한 줄 없이 영구 유실**됐다:
+	#   서리동백(FORAGEABLES → CAT_HARVEST → `carries_quality` 참)의 등급 2짜리 스택만 든 채
+	#   백팩이 꽉 찬 상태에서 편지를 열면, 선검사는 «합쳐진다»로 free를 안 깎아 통과시키고
+	#   `mark_read`가 찍힌 뒤 `add_item(id, n)`(품질 0)이 q2 스택과 안 맞아 빈 슬롯을 요구하다
+	#   실패한다. 기독 원장이 곧 지급 원장이라 그 편지는 다시 열려도 첨부를 안 준다.
+	#   `_pick_flower`·`_pick_forage`·`_harvest_wild`가 이미 `can_add(id, n, quality)`라는 정밀
+	#   술어를 쓰는데 이 창구만 안 봤다 — 다만 여기는 **여러 개를 누적으로** 세야 해서
+	#   (합침/빈 슬롯을 한 bool로 뭉치는) `can_add` 대신 합침 축만 묻는 `has_stack`을 쓴다.
+	# ★ 유니크(도구·낚싯대·무기) 축은 여기서 안 연다: 현 첨부 로스터에 비-스택 품목이 0이고,
+	#   "이미 들고 있으면 영영 못 받는다"를 여기서 false로 막으면 그 편지가 **영구 미독**이 된다
+	#   (자리를 비워도 안 풀린다 = 이 알림이 거짓말이 된다). 회귀 ⑩이 그 전제(로스터 0)를 잠근다.
 	for e in items:
 		var iid := String(e["id"])
-		if ItemCatalog.stackable_of(iid) and inventory.has_item(iid):
+		if ItemCatalog.stackable_of(iid) and inventory.has_stack(iid):
 			continue                      # 기존 스택에 합쳐진다 — 빈 슬롯을 안 먹는다
 		free -= 1
 	return free >= 0
@@ -24800,9 +24914,21 @@ func _mirror_forecast_text() -> String:
 	# ㉠ 오늘의 운(등급 + 점괘) — 수치 노출 0.
 	lines.append(DailyLuck.fortune_text(d, _pet_luck_floor()))
 	lines.append("")
-	# ㉡ 내일 날씨 — Weather.forecast가 순수 함수라 예보가 곧 내일의 실제 하늘이다(빗나감 0).
+	# ㉡ 내일 날씨 — Weather.forecast는 day 시드 순수 롤이라 그 자체로는 빗나감이 없다.
+	# ★[폴리시 R20 #3] **단 한 갈래에서만 어긋난다.** R19 #13이 개최 여부를 인자로 넘기면서
+	#   `_forecast_on(d)`가 `_theme_open_on(d + 1)`을 읽게 됐는데, 그 판정은 순수하지 않다 —
+	#   `Festival.theme_for_day`가 카페 단계·누적 매출을 실시간으로 보고, 매출은 오늘 낮
+	#   서빙마다 자란다(그 함수 머리말이 "진척은 하루 중에도 자란다"고 못 박은 그대로). 그래서
+	#   내일이 **아직 안 열린 테마 슬롯**이면, 아침에 본 예보("혼우")가 오늘 낮 문턱을 넘는 순간
+	#   내일 하늘을 평온으로 뒤집는다. 혼우의 밭 자동 급수를 믿고 물뿌리개를 안 채운 플레이어가
+	#   마른 밭을 보는 자리다. 방향은 하나뿐이라(진척은 줄지 않으니 잠김→열림만 있다) 그 한
+	#   갈래에서만 단서를 단다 — 예보를 흐리지 않고 조건을 밝힌다.
 	var w := _forecast_on(d)
 	lines.append("내일: %s — %s" % [Weather.name_of(w), _weather_hint(w)])
+	var slot_tomorrow: int = Festival.theme_slot_for_day(d + 1)
+	if slot_tomorrow != Festival.NONE and not _theme_open_on(d + 1):
+		lines.append("※ 내일은 %s 자리다 — 오늘 카페가 문턱을 넘으면 하늘이 평온으로 바뀐다"
+			% Festival.name_of(slot_tomorrow))
 	# ㉢ D-1 사멸 경고 — 오늘이 절기 마지막 날이면 오늘 밤이 마지막 밤이다.
 	if GameClock.is_season_last_day(d):
 		lines.append("")
@@ -25208,7 +25334,16 @@ func _home_occupied_tiles() -> Dictionary:
 func _run_season_respawn(d: int) -> void:
 	if reclaim == null:
 		return
-	var respawn := reclaim.season_respawn(_encroach_candidates(), d, false)
+	# ★[폴리시 R20 #2] 배치 스포너의 **순차 재평가**. 후보 필터의 `_would_entrap_player`는 배치가
+	#   시작되기 전 상태 한 장으로 판정돼, 같은 아침에 함께 설 형제들을 못 본다. 승인된 SOLID 칸을
+	#   `pending`에 쌓아 다음 판정이 그것들을 이미 선 것으로 보게 한다(술어는 하나 그대로).
+	var pending: Dictionary = {}
+	var solid_ok := func(t: Vector2i) -> bool:
+		if _would_entrap_player(t, pending):
+			return false
+		pending[t] = true
+		return true
+	var respawn := reclaim.season_respawn(_encroach_candidates(), d, false, solid_ok)
 	var r_ember: Array = respawn["ember"]
 	var r_stump: Array = respawn["stump"]
 	var r_weeds: Array = respawn["weeds"]
@@ -25282,6 +25417,19 @@ func _encroach_candidates() -> Array:
 			#   돋았다(통행 불가인 채 낫질 대상). 반대 방향(`_is_tree_seed_free`)은 이미
 			#   `reclaim.has_weed`로 잡초를 배제하고 있어, 두 원장이 한쪽만 서로를 보던 자리다.
 			if tree_ledger != null and tree_ledger.is_occupied(_region, t):
+				continue
+			# ★[폴리시 R20 #0] 혼의 나무(과수) 원장 → 배제 — 바로 위 R6가 자연목에 대해 봉합한
+			#   그 비대칭의 **과수판**이다. 마당 나무는 두 원장이 나눠 갖는데(심은 혼의 나무=orchard ·
+			#   자체 파종=TreeLedger) 여기는 뒤의 하나만 물었다. 밑동 칸의 `_grid`는 GROUND/PATH
+			#   그대로고(밑동 SOLID의 실체는 `_orchard_body` StaticBody뿐) `_home_prop_entries()`도
+			#   orchard를 병합하지 않아, 위 여덟 겹을 전부 통과했다 — ORCHARD_ZONE_RECT가
+			#   ENCROACH_SCAN_RECT 안에 통째로 들어 있어 좌표도 실제로 겹친다. 그래서 심어 둔
+			#   과수 위에 굴림 2/3 가중치의 업화석·석화 고목이 겹쳐 서고, 그 칸이 `_debris_kind_at`
+			#   때문에 배치 가드 전부에서 debris 칸으로 읽혔다.
+			#   ★ 스무 줄 아래 `_weed_spread_class`가 확산 쪽에서 드는 **같은 술어·같은 폭**을 쓴다
+			#     (3×3 풋프린트 전체 — 캐노피 밑도 스타듀 동형으로 예약분이다). 두 입구가 한 규칙을
+			#     읽어야 규칙 복제가 0이다(R6가 tree_ledger에 대해 세운 그 관례 그대로).
+			if orchard != null and orchard.tree_at(t) != Orchard.TREE_NONE:
 				continue
 			# ★[폴리시 R19 #16] **사람이 선 칸은 성역이다.** 성역을 여덟 겹으로 걸러 놓고 좌표
 			#   술어가 한 줄도 없어, 절기 마지막 날 밤 마당의 맨흙에 선 채 24:00을 맞으면(강제
@@ -26826,7 +26974,14 @@ func _draw_tappers_pass(canvas: CanvasItem, front: bool, split_y: float) -> void
 		var base_y := float(t.y * TILE + TILE) + drop
 		if (base_y > split_y) != front:
 			continue
-		var base := Vector2(t.x * TILE, float(t.y * TILE) + drop)
+		# ★[폴리시 R20 #11] 원점을 **원장 그림과 같은 소스**에서 판다. R19 #2가 그루터기·이끼를
+		#   64px 프롭의 가로 중심(x+16)으로 옮기며 "충돌 rect가 정확히 그 x에 선다"를 정렬 기준으로
+		#   삼았는데, 같은 밑동에 얹히는 이 형제 그림만 세로 드롭만 받고 가로는 t.x*TILE 그대로라
+		#   **한 밑동에 16px 어긋난 두 그림**이 섰다(이끼는 발치 바 정중앙, 채취기는 그 서쪽 끝).
+		#   `_tree_ledger_draw_px`가 돌려주는 값이 곧 «(가로 중심 보정, 세로 드롭)»이라 그것을 그대로
+		#   쓰면 보정식이 한 벌로 남는다(값 복제 0 — 나무 폭이 바뀌면 둘이 함께 따라온다).
+		#   ★ 앞/뒤 패스 분기(base_y)는 안 건드린다 — 그건 세로 축뿐이라 종전 그대로다.
+		var base := _tree_ledger_draw_px(t)
 		canvas.draw_texture_rect(PROP_TAPPER, Rect2(base, tsz), false)
 		if tapper.pending_product(_region, t) != "":
 			# 수거 대기 방울(통 위) — "거둘 것 있음"의 유일한 표식이라 가장 밝다. 아트가 붙어도

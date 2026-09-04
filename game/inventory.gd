@@ -170,6 +170,14 @@ func count_of(id: String) -> int:
 func has_item(id: String) -> bool:
 	return _find_id(id) >= 0
 
+# ★[폴리시 R20 #9] **(id, 품질) 정확 일치 스택이 있는가** — `add_item`이 "빈 슬롯 없이도 합쳐지는가"를
+# 판정할 때 쓰는 바로 그 조건(`_find_stack`)의 공개 표면이다. `has_item`(품질 무관 `_find_id`)과
+# 갈리는 자리이고, 그 갈림이 곧 R20 #9의 결함이었다: 자리 선검사가 `has_item`으로 "합쳐진다"고
+# 답한 뒤 실제 적재는 등급이 달라 새 빈 슬롯을 요구해 실패했다. `can_add`는 합침과 빈 슬롯을 한
+# bool로 뭉쳐 돌려주므로, **여러 개를 누적으로 세는** 호출부(편지 첨부 자리 계산)는 이 술어가 필요하다.
+func has_stack(id: String, quality: int = 0) -> bool:
+	return _find_stack(id, _norm_quality(id, quality)) >= 0
+
 # 아이템 n개 추가(quality 지정 — 수확물·과일만 실효, 그 외 0 강제). 스택은 (id,quality) 일치 슬롯에
 # 합치거나 새 빈 슬롯에, 유니크(도구)는 중복 거절·1개만. 빈 슬롯이 없으면 거절. 추가했으면 true.
 func add_item(id: String, n: int = 1, quality: int = 0) -> bool:
