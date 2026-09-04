@@ -855,10 +855,17 @@ func _check_resident_tile_guard(m: Node) -> void:
 		if st != "" and st != m._region:
 			m._rebuild_region(st)
 			await m.get_tree().process_frame
+		# ★[폴리시 R18 #12] **스케줄도 함께 내려놓는다.** R18이 이 가드에 시간 축을 달아
+		#   "오늘 중 그가 설 칸"까지 예약하게 됐으므로, `r.tile`만 비우면 같은 칸이 스케줄
+		#   항목에 그대로 걸려 이 탐색이 후보를 하나도 못 찾는다(무대 기법이 낡은 것이지
+		#   계약이 바뀐 것이 아니다 — 아래 ⑮a가 재는 "주민이 막는다"는 그대로다).
 		var t: Vector2i = r.tile
+		var sched: Array = r.schedule
 		r.tile = Resident.UNPLACED
+		r.schedule = []
 		var free_ok: bool = m._can_place_furnace(t)
 		r.tile = t
+		r.schedule = sched
 		if free_ok:
 			rt = t
 			found = r

@@ -182,9 +182,15 @@ func _check_resident_region_axis(m: Node) -> void:
 		var t: Vector2i = r.tile
 		if t.x < 0 or t.x >= m._grid_w or t.y < 0 or t.y >= m._outdoor_h:
 			continue                      # 좌표 공간이 안 겹치면 애초에 사고가 안 난다
+		# ★[폴리시 R18 #12] **스케줄도 함께 내려놓는다** — R18이 이 가드에 시간 축을 달아
+		#   "오늘 중 그가 설 칸"까지 예약하므로, `r.tile`만 비우면 그 칸이 스케줄 항목에
+		#   그대로 걸려 후보를 못 찾는다(무대 기법이 낡은 것 — 재는 계약은 그대로다).
+		var sched: Array = r.schedule
 		r.tile = Resident.UNPLACED
+		r.schedule = []
 		var free_ok: bool = m._can_place_furnace(t)
 		r.tile = t
+		r.schedule = sched
 		if free_ok:
 			ghost = r
 			gt = t
@@ -203,10 +209,14 @@ func _check_resident_region_axis(m: Node) -> void:
 	var blocked_there: bool = m._resident_tile(gt)
 	var free_there := false
 	if blocked_there:
+		# ★[폴리시 R18 #12] 위 탐색과 같은 이유로 스케줄도 함께 내려놓는다(시간 축 예약 해제).
 		var keep: Vector2i = ghost.tile
+		var keep_sched: Array = ghost.schedule
 		ghost.tile = Resident.UNPLACED
+		ghost.schedule = []
 		free_there = m._can_place_furnace(gt)
 		ghost.tile = keep
+		ghost.schedule = keep_sched
 	_check("①b 같은 주민을 제 무대(%s)에서 만나면 그 칸은 그대로 막힌다(주민만이 막는다: %s)"
 			% [there, str(free_there)], blocked_there and free_there)
 	m._rebuild_region(here)
