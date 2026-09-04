@@ -70,7 +70,7 @@ func _hold(m: Node, id: String) -> void:
 # 미호 물주기 잡일이 날씨 급수·절기 사멸과 섞이지 않게(판정은 전부 day 파생이라 결정적).
 func _park_before_calm_day(m: Node) -> void:
 	var d: int = m.clock.day + 1
-	while Weather.waters_field(Weather.weather_for_day(d)) or GameClock.is_season_first_day(d):
+	while Weather.waters_field(m._weather_on(d)) or GameClock.is_season_first_day(d):
 		d += 1
 	m.clock.day = d - 1
 

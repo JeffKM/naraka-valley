@@ -74,6 +74,65 @@ extends SceneTree
 #   그 사이에 주석 블록이 있어 치환이 조용히 실패했고, ⑧ 전체가 초록으로 남아 "하중 없음"으로
 #   오독될 뻔했다. 파괴 후에는 **파괴가 실제로 먹었는지**(치환 횟수)를 먼저 확인한다.
 #
+# ══════════ 배치 B(#9~#17) ══════════════════════════════════════════════════
+#
+# 렌즈: 도착 칸 유효성(#9) · 활동 인터럽트 행렬(#10·#11) · 행사일 종결(#12·#13) ·
+#       F8 재시작 잔재(#14) · 플레이어 매몰(#15·#16·#17).
+#
+# 이 배치의 태도 둘.
+#   ㉠ **매몰 셋은 한 병이다.** #15·#16·#17이 각각 트렐리스·재스폰 debris·묘목 밑동으로 다르게
+#      보이지만 원인은 하나다 — 통과 불가 칸을 세우는 창구가 **플레이어 좌표를 안 본다**. 그래서
+#      술어도 하나(`_would_entrap_player`)로 두고, ⑮·⑯·⑰이 같은 술어를 서로 다른 창구에서 잰다.
+#   ㉡ **"선언했다"는 "구현했다"가 아니다.** #9는 R16 주석이 «아래 배치 가드가 앞으로 막는다»고
+#      적어 둔 계약인데 가드 전수에 그 좌표가 없던 자리다. ⑩은 선언을 읽지 않고 가드를 직접 태운다.
+#
+# 무엇을 보증하나(번호 = 19회차 헌트 발견 인덱스):
+#   ⑩ #9 갱도 입구 문(24,6)·나락 아가리(32,26)를 아는 배치 가드가 없어, 그 칸에 세운 업화로가
+#      [F] 사다리에서 하강을 가렸다(제련이 끝날 때까지 회수도 불가).
+#   ⑪ #10·#11 릴 격투 세션 중 LMB가 게잡이통·채취기·업화로·결정기 설치로 이중 집행됐다
+#      (`_use_tool` 갈래에만 있던 세션 가드가 형제 설치 갈래 넷에는 없었다).
+#   ⑫ #12 더비 안내가 부스 위치를 삼도천에 없는 랜드마크("부두")로 지목했다(그 간판은 황천해의
+#      것이고, 따라가면 구역 가드에 걸려 태그조차 안 붙는다).
+#   ⑬ #13 비해금 테마 데이 슬롯이 날씨를 강제 평온으로 덮어, 배너도 장식도 없는 평일에 그날치
+#      혼불 바람·혼우 이득만 사라졌다.
+#   ⑭ #14 F8 삭제 2단 확인 래치가 모달/연출 중 감소를 멈춰, 안내는 사라졌는데 무장은 무기한
+#      남았다 — 한참 뒤의 [F8] **한 번**이 곧장 삭제+재시작이었다.
+#   ⑮ #15 트렐리스 작물로 자기를 4방 포위하면 탈출 동사가 0이다(늘봄방에선 영구 소프트락).
+#   ⑯ #16 절기 재스폰 SOLID debris 후보에서 '플레이어가 선 칸'만 빠져 있었다.
+#   ⑰ #17 묘목을 발밑 칸에 심을 수 있었다 — 제거 API가 없는 영구 SOLID 밑동.
+#
+# 판정: #9~#12·#14~#17 CONFIRMED(봉합) · #13 CONFIRMED(해금 주입 — 순수 갈래 기본값은 보존).
+#       REFUTED·DUP·OWNER 0건. ★#17은 배치 A #7(`_traversal_reserved`)과 **겹치지 않는다**:
+#       저쪽은 구역 워프·도착·스폰 칸이고 이쪽은 플레이어 좌표라 성역의 축 자체가 다르다.
+#
+# 봉합 축:
+#   · #9  = `_f_gate_tile` — `_f_window_tile`·`_f_booth_tile`의 셋째 형제(구역·깊이 축을 직접 든다).
+#   · #10·#11 = `session_lmb` 한 줄을 설치 넷 + 도구 하나가 함께 읽는다(규칙 복제 0).
+#   · #12 = 랜드마크를 "강 낚시터"로 정정(배너·태그 알림 두 문구 모두 — 부스에서 가장 가까운 라벨).
+#   · #13 = `Weather.weather_for_day(d, theme_open)` — 무상태는 그대로 두고 **아는 쪽이 답을 들고
+#           온다**(main `_weather_on`·`_forecast_on` 단일 창구). 기본값 true = 종전 거동 보존.
+#   · #14 = 래치 감소를 `_process` 맨 위(라이팅·날씨 파티클과 같은 줄)로 — "정지 주인 = 재개 주인".
+#   · #15·#16·#17 = `_would_entrap_player` 하나(발밑 ∪ 마지막 4방 퇴로)를 세 창구가 읽는다.
+#           #16은 `_resident_tile`까지 함께 뺀다(배치 가드가 이미 예약하던 그 표).
+#
+# 하중 검증(배치 B — 실측 결과 그대로):
+#   #9  두 가드의 `_f_gate_tile` 행 삭제 → ⑩c·⑩d·⑩g red ·
+#   #10·#11 설치 갈래 넷에서 `not session_lmb` 삭제 → ⑪a(소비처 5→1)·⑪b(4/4→0/4) red ·
+#   #12 알림 문구를 "부두"로 되돌림 → ⑫b red(⑫a는 배너 쪽이라 따로 잡는다) ·
+#   #13 main이 해금을 안 넘기게 되돌림 → ⑬a·⑬b red ·
+#   #14 래치 감소를 조기 반환 아래로 되돌림 → ⑭a·⑭b red(⑭b가 20프레임 뒤 0.020초 잔존을 잰다) ·
+#   #15 트렐리스 거절 분기 삭제 → ⑮a(3→4)·⑮b red ·
+#   #16 후보 필터 삭제 → ⑯a·⑯b red · `or _resident_tile(t)`만 삭제 → ⑯c red ·
+#   #17 묘목 발밑 분기 삭제 → ⑰a red.
+#
+# ★배치 B에서 배운 것 둘.
+#   ㉠ **니들은 함수 안에서 세라.** ⑭a의 첫판은 `_line_in`(전역 첫 매치)으로 조기 반환 여섯을
+#      찾았는데 `if _edit_mode:`·`if frame.is_open():`가 다른 함수에도 있어 엉뚱한 행이 잡혔고,
+#      순서 비교가 조용히 무의미해졌다(`_line_in_func`로 교정).
+#   ㉡ **무대가 그 갈래를 안 태우면 초록은 공허하다.** ⑯c의 첫판은 기본 무대에 후보와 겹치는
+#      주민 칸이 0이라 봉합을 지워도 초록이었다 — 주민을 후보 칸에 **실제로 세운 뒤** 재도록
+#      고쳤다. ⑬의 무대도 같은 이유로 "롤이 비-평온인 비해금 슬롯"으로 좁혔다.
+#
 # 실행: ./run_tests.sh polish_r19   (헤드리스는 반드시 game/에서 · 순차)
 
 var _fail := 0
@@ -131,6 +190,15 @@ func _line_in_func(lines: PackedStringArray, fn_needle: String, needle: String) 
 			return i
 	return -1
 
+func _count_in(lines: PackedStringArray, needle: String) -> int:
+	var n := 0
+	for line in lines:
+		if String(line).strip_edges().begins_with("#"):
+			continue
+		if String(line).contains(needle):
+			n += 1
+	return n
+
 func _initialize() -> void:
 	await _run_checks()
 
@@ -161,6 +229,16 @@ func _run_checks() -> void:
 	_check_notice_keep_priority(m)
 	_check_warp_tile_sanctuary(m)
 	_check_orchard_trunk_guards(m)
+
+	print("══ 폴리시 R19 회귀 — 배치 B(#9~#17) ══")
+	_check_gate_tile_guard(m)
+	_check_session_lmb_guard(m)
+	_check_derby_landmark(m)
+	_check_theme_day_weather(m)
+	await _check_delete_latch_lifetime(m)
+	_check_trellis_entrapment(m)
+	_check_respawn_player_tile(m)
+	_check_sapling_underfoot(m)
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
@@ -754,3 +832,391 @@ func _check_orchard_trunk_guards(m: Node) -> void:
 	_check("⑨i 배치 가드 3종이 전부 `_orchard_trunk_at`를 문다(%d/3 — 레어크로우는 상속)" % guards,
 		guards == 3)
 	m.orchard.load_save(orchard_snap)
+
+# ══════════ 배치 B(#9~#17) ══════════════════════════════════════════════════
+
+# ── ⑩ #9 지하 진입 문 칸에 기계를 못 세운다(라이브) ─────────────────────────
+func _check_gate_tile_guard(m: Node) -> void:
+	print("⑩ #9 갱도 문·나락 아가리 배치 가드")
+	m._indoor = ""
+	m._mine_floor = 0
+	m._narak_depth = 0
+	if m._region != RegionCatalog.EOPHWA_MINE:
+		m._rebuild_region(RegionCatalog.EOPHWA_MINE)
+	var door: Vector2i = m.DUNGEON_GATE_DOOR
+	# 종전 가드가 왜 못 잡았나 — 문 칸은 PATH(비-SOLID)이고 기존 [F] 좌표 술어 둘은 무대가 갈린다.
+	_check("⑩a 무대: 갱도 입구 문 %s은 비-SOLID(길)이고 기존 [F] 좌표 술어 둘 다 false다(창구 %s·부스 %s)"
+			% [str(door), str(m._f_window_tile(door)), str(m._f_booth_tile(door))],
+		not m.is_solid(m._grid[door.y][door.x])
+		and not m._f_window_tile(door) and not m._f_booth_tile(door))
+	_check("⑩b `_f_gate_tile`이 그 칸을 안다", m._f_gate_tile(door))
+	_check("⑩c 업화로가 문 칸에 못 선다", not m._can_place_furnace(door))
+	_check("⑩d 결정기가 문 칸에 못 선다", not m._can_place_crystalarium(door))
+	# 과잉이 아니다 — 문이 아닌 이웃 빈 칸에는 여전히 선다.
+	var near := Vector2i(-9999, -9999)
+	for d in [Vector2i(0, 1), Vector2i(1, 0), Vector2i(-1, 0), Vector2i(1, 1), Vector2i(-1, 1)]:
+		var cand: Vector2i = door + d
+		if m._can_place_furnace(cand):
+			near = cand
+			break
+	_check("⑩e 문이 아닌 이웃 칸 %s에는 여전히 선다(가드가 과잉이 아니다)" % str(near),
+		near.x > -9999)
+	# 층 안에서는 같은 좌표라도 성역이 아니다(무대 축을 술어가 직접 든다).
+	m._mine_floor = 1
+	var in_floor: bool = m._f_gate_tile(door)
+	m._mine_floor = 0
+	_check("⑩f 층 안(`_mine_floor`>0)에서는 같은 좌표가 성역이 아니다(다른 그리드다) — %s" % str(in_floor),
+		not in_floor)
+
+	# 나락 아가리도 동형이다.
+	if m._region != RegionCatalog.NARAK:
+		m._rebuild_region(RegionCatalog.NARAK)
+	m._narak_depth = 0
+	var shaft: Vector2i = m.NARAK_SHAFT_TILE
+	_check("⑩g 나락 아가리 %s도 동형이다 — 비-SOLID(%s)이고 업화로(%s)·결정기(%s) 둘 다 거절"
+			% [str(shaft), str(not m.is_solid(m._grid[shaft.y][shaft.x])),
+				str(m._can_place_furnace(shaft)), str(m._can_place_crystalarium(shaft))],
+		not m.is_solid(m._grid[shaft.y][shaft.x]) and m._f_gate_tile(shaft)
+		and not m._can_place_furnace(shaft) and not m._can_place_crystalarium(shaft))
+	# 근거: [F] 실행 사다리에서 기계가 문보다 **앞에서 return**한다(그래서 하강이 가려졌다).
+	var f_furnace := _line_in(_src, "_furnace_at(_target) and Input.is_action_just_pressed(\"shop_toggle\")")
+	var f_gate := _line_in(_src, "if _at_dungeon_gate():")
+	var f_mouth := _line_in(_src, "if _at_narak_mouth() and Input.is_action_just_pressed(\"shop_toggle\")")
+	_check("⑩h 근거: [F] 사다리에서 화덕(main %d행)이 갱도 문(%d행)·나락 아가리(%d행)보다 앞에서 잡는다"
+			% [f_furnace + 1, f_gate + 1, f_mouth + 1],
+		f_furnace > 0 and f_gate > f_furnace and f_mouth > f_furnace)
+
+# ── ⑪ #10·#11 LMB 세션 중엔 설치가 안 나간다 ────────────────────────────────
+func _check_session_lmb_guard(m: Node) -> void:
+	print("⑪ #10·#11 세션 LMB ↔ 설치 겹침")
+	# 술어와 다섯 소비처(설치 넷 + 도구 하나)가 **한 줄**을 읽는다.
+	var decl := _line_in(_src, "var session_lmb := cheki != null or cocktail != null or fishing != null")
+	var users := _count_in(_src, "not session_lmb")
+	_check("⑪a 세션 술어가 셋을 모두 들고(main %d행) 소비처가 다섯이다(설치 넷 + 도구 하나 — 실측 %d)"
+			% [decl + 1, users], decl > 0 and users >= 5)
+	var branches := 0
+	for needle in ["not session_lmb and holding_pot", "not session_lmb and holding_tapper",
+			"not session_lmb and holding_furnace", "not session_lmb and holding_crystalarium"]:
+		if _line_in(_src, needle) > decl:
+			branches += 1
+	_check("⑪b 설치 갈래 넷이 전부 술어 **뒤에서** 그것을 문다(%d/4 — 게잡이통·채취기·업화로·결정기)"
+			% branches, branches == 4)
+	# 왜 필요했나 — 세션 분기는 return을 안 해서 같은 프레임이 아래 디스패치까지 흘러간다.
+	var tick := _line_in(_src, "if fishing != null and not _sleeping:")
+	_check("⑪c 근거: 릴 틱 분기(main %d행)가 설치 갈래보다 위인데 return이 없다 — 게이트가 유일한 방어다"
+			% (tick + 1), tick > 0 and tick < decl)
+	# 겹침이 구조적이라는 실증: 캐스팅이 성립하는 무대에서 네 배치 술어가 함께 참인 칸이 있다.
+	m._indoor = ""
+	if m._region != RegionCatalog.SAMDOCHEON:
+		m._rebuild_region(RegionCatalog.SAMDOCHEON)
+	var overlap := Vector2i(-9999, -9999)
+	var size: Vector2i = RegionCatalog.size_of(RegionCatalog.SAMDOCHEON)
+	for y in range(1, size.y - 1):
+		for x in range(1, size.x - 1):
+			var t := Vector2i(x, y)
+			if m._can_place_crab_pot(t) and m._can_place_furnace(t) and m._can_place_crystalarium(t):
+				overlap = t
+				break
+		if overlap.x > -9999:
+			break
+	_check("⑪d 낚시 무대(삼도천)에서 게잡이통·업화로·결정기가 **함께** 서는 칸 %s이 있다 — 겹침이 우연이 아니라 구조적이다"
+			% str(overlap), overlap.x > -9999)
+
+# ── ⑫ #12 더비 안내가 실존 랜드마크를 가리킨다(그리기 경로를 태운다) ────────
+func _check_derby_landmark(m: Node) -> void:
+	print("⑫ #12 더비 부스 랜드마크")
+	var banner: String = SeasonalEvent.banner_text(SeasonalEvent.DERBY)
+	_check("⑫a 아침 배너가 «강 낚시터»를 말하고 «부두»를 말하지 않는다 — 「%s」" % banner,
+		banner.contains("강 낚시터") and not banner.contains("부두"))
+	# 태그 알림은 **그 창구를 실제로 태워** 받는다(문구를 옮겨 적지 않는다).
+	m._indoor = ""
+	if m._region != RegionCatalog.SAMDOCHEON:
+		m._rebuild_region(RegionCatalog.SAMDOCHEON)
+	var derby_day := -1
+	for d in range(1, GameClock.DAYS_PER_SEASON * 4 + 1):
+		if SeasonalEvent.event_for_day(d) == SeasonalEvent.DERBY:
+			derby_day = d
+			break
+	var tag_line := ""
+	if derby_day > 0:
+		m.clock.day = derby_day
+		m.notice_feed._items.clear()
+		# 태그는 어획당 1/3 롤이라(SeasonalEvent.roll_tag) 붙을 때까지 창구를 반복해 태운다.
+		for _i in range(40):
+			m._note_derby_catch()
+			for it in m.notice_feed._items:
+				if String(it["text"]).contains("금빛 태그"):
+					tag_line = String(it["text"])
+			if tag_line != "":
+				break
+		m.notice_feed._items.clear()
+	_check("⑫b 태그 알림도 같은 이름을 말한다(더비일 %d · 라이브 창구) — 「%s」" % [derby_day, tag_line],
+		tag_line.contains("강 낚시터") and not tag_line.contains("부두"))
+	# 라이브 라벨 — 삼도천 화면에 "부두"는 하나도 없다(그리기 경로가 만든 노드를 센다).
+	var labels: Array = []
+	for lbl in m._labels:
+		labels.append(String(lbl.text))
+	_check("⑫c 삼도천 라벨 %s에 «부두»가 없다(그 간판은 옆 구역 황천해의 것이다)" % str(labels),
+		not labels.is_empty() and not labels.has("부두"))
+	# 부스에서 가장 가까운 라벨이 그 이름이다(좌표에서 파생 — 이름을 옮겨 적지 않는다).
+	var booth_px: Vector2 = m._tile_center_px(m.DERBY_BOOTH_TILE)
+	var best := ""
+	var best_d := 1.0e20
+	for lbl in m._labels:
+		var d2: float = (lbl.position + lbl.size * 0.5).distance_to(booth_px)
+		if d2 < best_d:
+			best_d = d2
+			best = String(lbl.text)
+	_check("⑫d 부스 %s에서 가장 가까운 라벨이 「%s」다(%.0fpx) — 안내가 가리키는 그 이름"
+			% [str(m.DERBY_BOOTH_TILE), best, best_d], best == "강 낚시터")
+	# 코드가 삼도천에서 "부두"라 부르는 것(SAMDO_DOCK_RECT)은 부스에서 멀다.
+	var dock_far: int = absi(m.SAMDO_DOCK_RECT.position.y - m.DERBY_BOOTH_TILE.y)
+	_check("⑫e 코드의 삼도천 «부두»(SAMDO_DOCK_RECT y%d)는 부스에서 %d칸 북쪽이다 — 따라가면 못 찾는다"
+			% [m.SAMDO_DOCK_RECT.position.y, dock_far], dock_far >= 20)
+
+# ── ⑬ #13 비해금 테마 슬롯이 하늘을 안 덮는다 ───────────────────────────────
+func _check_theme_day_weather(m: Node) -> void:
+	print("⑬ #13 비해금 테마 슬롯 ↔ 날씨")
+	# 무대: 달력 슬롯이면서 **지금 세이브로는 안 열리는** 날을 찾는다.
+	# ★ 무대를 **롤이 비-평온인** 비해금 슬롯으로 고른다 — 어차피 평온이 나오는 날에서 재면
+	#   봉합을 지워도 답이 같아 ⑬a·⑬d가 헛돈다(공허 통과 방지).
+	var slot_day := -1
+	for d in range(1, GameClock.DAYS_PER_SEASON * 4 + 1):
+		if not Festival.is_theme_slot(d) or m._theme_open_on(d) or GameClock.is_season_first_day(d):
+			continue
+		if Weather.weather_for_day(d, false) != Weather.CALM:
+			slot_day = d
+			break
+	_check("⑬ 무대: 달력 슬롯이지만 해금이 안 됐고 **롤이 비-평온**인 날 %d일을 찾았다(배너 0·장식 0·프리미엄 1.0인 평일)"
+			% slot_day, slot_day > 0)
+	if slot_day < 0:
+		return
+	_check("⑬a 그날 main의 하늘 = 분포 롤이다(강제 평온 해제) — %s ≠ 평온"
+			% Weather.NAMES[m._weather_on(slot_day)],
+		m._weather_on(slot_day) == Weather.weather_for_day(slot_day, false)
+		and m._weather_on(slot_day) != Weather.CALM)
+	# 공허 통과 방지: 슬롯 넷 중 적어도 하나는 실제로 비-평온이 나와야 "이득이 돌아왔다"가 성립한다.
+	var non_calm := 0
+	var locked_slots := 0
+	for d in range(1, GameClock.DAYS_PER_SEASON * 4 + 1):
+		if not Festival.is_theme_slot(d) or m._theme_open_on(d) or GameClock.is_season_first_day(d):
+			continue
+		locked_slots += 1
+		if m._weather_on(d) != Weather.CALM:
+			non_calm += 1
+	_check("⑬b 비해금 슬롯 %d일 중 %d일이 실제로 비-평온으로 돌아왔다(잃던 하루가 실재한다)"
+			% [locked_slots, non_calm], locked_slots > 0 and non_calm > 0)
+	_check("⑬c 해금되면 다시 덮인다(축제 무대는 맑아야 한다 — 계약 보존)",
+		Weather.weather_for_day(slot_day, true) == Weather.CALM)
+	_check("⑬d 예보와 실제가 안 갈린다 — 전날 예보 %s = 그날 하늘 %s"
+			% [Weather.NAMES[m._forecast_on(slot_day - 1)], Weather.NAMES[m._weather_on(slot_day)]],
+		m._forecast_on(slot_day - 1) == m._weather_on(slot_day))
+	_check("⑬e 순수 1인자 갈래의 기본값은 종전 그대로다(해금 정보를 못 구하는 호출부 거동 불변)",
+		Weather.weather_for_day(slot_day) == Weather.CALM)
+	# 손실이 실재였다는 근거 — 종전 주석의 "부작용 0"을 반증하는 배수들.
+	_check("⑬f 근거: 혼불 바람 배수 셋(%.2f·%.2f·%.2f)과 혼우 입질 %.2f·자동 급수(%s)가 실효 이득이다"
+			% [Weather.SOULWIND_MOB, Weather.SOULWIND_DROP, Weather.SOULWIND_RARE,
+				Weather.RAIN_BITE, str(Weather.waters_field(Weather.RAIN))],
+		Weather.SOULWIND_MOB > 1.0 and Weather.SOULWIND_DROP > 1.0 and Weather.SOULWIND_RARE > 1.0
+		and Weather.RAIN_BITE > 1.0 and Weather.waters_field(Weather.RAIN))
+
+# ── ⑭ #14 F8 삭제 래치가 모달 중에도 만료된다(라이브) ───────────────────────
+func _check_delete_latch_lifetime(m: Node) -> void:
+	print("⑭ #14 F8 삭제 2단 래치 수명")
+	# 소스 — 감소가 `_process`의 **모든 조기 반환보다 위**에 선다(정지 주인 = 재개 주인).
+	# ★ 니들은 **`_process` 안에서만** 센다 — 같은 문자열이 다른 함수에도 있어(전역 `_line_in`은
+	#   엉뚱한 행을 잡는다) 순서 비교가 조용히 무의미해진다.
+	var dec := _line_in_func(_src, "func _process", "_delete_armed_secs -= delta")
+	var gates: Array = []
+	for needle in ["if _edit_mode:", "if _deco_mode:", "if _transitioning:", "if cutscene != null:",
+			"if dialogue.is_open():", "if frame.is_open():"]:
+		gates.append(_line_in_func(_src, "func _process", needle))
+	var above := true
+	for g in gates:
+		if int(g) <= dec:
+			above = false
+	_check("⑭a 래치 감소(main %d행)가 조기 반환 여섯 %s보다 **위**에 선다"
+			% [dec + 1, str(gates)], dec > 0 and above)
+	# 라이브 — 메뉴를 연 채로도 래치가 만료된다(문구를 거두는 NoticeFeed와 같은 수명).
+	m._delete_armed_secs = 0.02
+	m.frame.open(InventoryFrame.CTX_MENU)
+	var opened: bool = m.frame.is_open()
+	for _i in range(20):
+		await process_frame
+	var left: float = m._delete_armed_secs
+	if opened:
+		m._close_frame()
+	m._delete_armed_secs = 0.0
+	_check("⑭b 메뉴가 열린 채(%s)로 20프레임을 돌려도 래치가 만료된다(남은 %.3f초) — 안내와 같은 수명"
+			% [str(opened), left], opened and left <= 0.0)
+	# 실행 분기는 그 값 하나만 본다 = 만료가 곧 안전이다.
+	var arm := _line_in_func(_src, "func _arm_or_confirm_delete", "if _delete_armed_secs > 0.0:")
+	_check("⑭c 근거: 확인 분기(main %d행)가 그 값 하나만 본다 — 얼어붙은 래치는 곧 즉시 삭제였다"
+			% (arm + 1), arm > 0)
+
+# ── ⑮ #15 트렐리스로 자기를 가두지 못한다(라이브) ───────────────────────────
+func _check_trellis_entrapment(m: Node) -> void:
+	print("⑮ #15 트렐리스 자기 포위")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	var trellis := ""
+	for c in CropCatalog.ids():
+		if CropCatalog.is_trellis(c):
+			trellis = c
+			break
+	var rect: Rect2i = m.STARTER_PATCH_RECT
+	var here := Vector2i(rect.position.x + 2, rect.position.y + 2)
+	_check("⑮ 무대: 트렐리스 작물(%s) · 스타터 밭 한복판 %s" % [trellis, str(here)],
+		trellis != "" and rect.has_point(here))
+	if trellis == "":
+		return
+	var farm_snap: Dictionary = m.farm.to_save()
+	m.player.global_position = m._tile_center_px(here)
+	var seed_id: String = ItemCatalog.seed_id(trellis)
+	m.inventory.slots[m.inventory.selected_index] = {"id": seed_id, "count": 99, "quality": 0}
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	var planted := 0
+	for i in range(dirs.size()):
+		var t: Vector2i = here + dirs[i]
+		m._field_at(t).hoe(t)
+		m._target = t
+		m._target_valid = m._is_farmable(t)
+		m.notice_feed._items.clear()
+		m._use_tool()
+		if m.farm.is_planted(t):
+			planted += 1
+	_check("⑮a 네 방향 중 **셋만** 심겼다(넷째가 마지막 퇴로라 거절) — 실측 %d" % planted,
+		planted == 3)
+	var last: Vector2i = here + dirs[3]
+	m._target = last
+	m._target_valid = m._is_farmable(last)
+	m.notice_feed._items.clear()
+	m._use_tool()
+	var told := ""
+	for it in m.notice_feed._items:
+		told = String(it["text"])
+	_check("⑮b 마지막 칸 %s은 심기지 않고 **왜 거절인지 말한다** — 「%s」" % [str(last), told],
+		not m.farm.is_planted(last) and told.contains("갇힌다"))
+	_check("⑮c 술어가 그 칸을 지목한다 — `_would_entrap_player(%s)` %s · 셋 심긴 뒤 퇴로가 하나뿐이다"
+			% [str(last), str(m._would_entrap_player(last))], m._would_entrap_player(last))
+	# 과잉이 아니다 — 퇴로가 둘 이상이면 여전히 심긴다.
+	m.farm.load_save(farm_snap)
+	m._target = here + dirs[0]
+	m._field_at(m._target).hoe(m._target)
+	m._target_valid = m._is_farmable(m._target)
+	m._use_tool()
+	_check("⑮d 사방이 트인 상태에서는 여전히 심긴다(첫 칸 %s) — 가드가 과잉이 아니다"
+			% str(m._target), m.farm.is_planted(m._target))
+	# 왜 거절이 정배인가 — 걷어내는 플레이어 입력이 저장소에 0이다.
+	var removers := 0
+	for line in _src:
+		var ln := String(line)
+		if ln.strip_edges().begins_with("#"):
+			continue
+		if ln.contains("remove_plant("):
+			removers += 1
+	_check("⑮e 근거: `remove_plant` 호출부 %d곳이 전부 자동 사건(까마귀·절기 사멸·잡초 확산·삽사리)이고 플레이어 입력이 0이다 — 탈출 동사가 없다"
+			% removers,
+		removers > 0 and _line_in_func(_src, "func _use_tool", "remove_plant(") < 0)
+	m.farm.load_save(farm_snap)
+	m.inventory.slots[m.inventory.selected_index] = null
+
+# ── ⑯ #16 절기 재스폰이 사람 선 칸을 비켜 간다(라이브) ──────────────────────
+func _check_respawn_player_tile(m: Node) -> void:
+	print("⑯ #16 재스폰 후보 ↔ 사람 선 칸")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	# 사람을 옮기기 **전** 후보 목록에서 한 칸을 고른다(그 칸이 원래 후보였음이 무대 전제다).
+	var base: Array = m._encroach_candidates()
+	_check("⑯ 무대: 재점령 후보가 %d칸 있다(공허 통과 방지)" % base.size(), base.size() >= 2)
+	if base.size() < 2:
+		return
+	var stand: Vector2i = base[0]
+	var other: Vector2i = base[1]
+	var saved_pos: Vector2 = m.player.global_position
+	m.player.global_position = m._tile_center_px(stand)
+	var after: Array = m._encroach_candidates()
+	_check("⑯a 사람이 선 칸 %s이 후보에서 빠진다(종전엔 발밑에 32×32 SOLID가 섰다)" % str(stand),
+		not after.has(stand) and after.has(other))
+	# 가드가 좌표를 실제로 따라간다 — 옮기면 그 칸이 다시 후보가 된다.
+	m.player.global_position = m._tile_center_px(other)
+	var moved: Array = m._encroach_candidates()
+	_check("⑯b 한 칸 옮기면 %s이 후보로 돌아오고 %s이 대신 빠진다(좌표를 따라가는 성역)"
+			% [str(stand), str(other)], moved.has(stand) and not moved.has(other))
+	m.player.global_position = saved_pos
+	# 주민 칸도 함께 빠진다 — 배치 가드가 이미 예약하던 그 표를 읽는다.
+	# 주민 축 — 기본 무대에는 후보와 겹치는 주민 칸이 없으므로(그대로 재면 공허) **주민을 후보
+	#   칸에 실제로 세운 뒤** 잰다. `_resident_tile`은 배치 가드가 이미 그 자리를 시간 축까지
+	#   포함해 예약하던 그 표다(R16 #14 · R18 #12).
+	var res = m._resident("miho")
+	var res_tile: Vector2i = base[2] if base.size() > 2 else other
+	var saved_tile: Vector2i = res.tile if res != null else Vector2i.ZERO
+	if res != null:
+		res.tile = res_tile
+	var with_res: Array = m._encroach_candidates()
+	var res_ok: bool = res != null and m._resident_tile(res_tile) and not with_res.has(res_tile)
+	if res != null:
+		res.tile = saved_tile
+	var back: Array = m._encroach_candidates()
+	_check("⑯c 주민이 선 칸 %s도 후보에서 빠진다(비키면 %s 복귀) — 배우자 안방 스테이션에 바위가 안 선다"
+			% [str(res_tile), str(back.has(res_tile))], res_ok and back.has(res_tile))
+	var final_list: Array = back
+	# 굴림이 세우는 것이 실제로 32×32 풀타일 충돌이다(그래서 발밑에 서면 못 나온다).
+	var solid_kinds := 0
+	for tex in m.DEBRIS_KIND.keys():
+		var kind: String = String(m.DEBRIS_KIND[tex])
+		if kind != DebrisCatalog.EMBER and kind != DebrisCatalog.STUMP:
+			continue
+		if tex in m.SOLID_PROPS and not (tex in m.FOOT_BAR_PROPS):
+			solid_kinds += 1
+	_check("⑯d 근거: 굴림의 2/3 가중치인 업화석·석화 고목이 SOLID_PROPS이고 FOOT_BAR_PROPS 밖이다(풀타일 충돌 %d종)"
+			% solid_kinds, solid_kinds >= 2)
+
+# ── ⑰ #17 묘목을 발밑에 못 심는다(라이브) ───────────────────────────────────
+func _check_sapling_underfoot(m: Node) -> void:
+	print("⑰ #17 묘목 발밑 심기")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	var orchard_snap: Dictionary = m.orchard.to_save()
+	var zone: Rect2i = m.ORCHARD_ZONE_RECT
+	var spot := Vector2i(-1, -1)
+	for y in range(zone.position.y + 1, zone.end.y - 1):
+		for x in range(zone.position.x + 1, zone.end.x - 1):
+			var t := Vector2i(x, y)
+			if m.orchard.can_plant(t, m._is_tree_blocked):
+				spot = t
+				break
+		if spot.x >= 0:
+			break
+	_check("⑰ 무대: 3×3이 비어 있는 앵커 %s" % str(spot), spot.x >= 0)
+	if spot.x < 0:
+		return
+	var fruit: String = FruitTreeCatalog.ids()[0]
+	var sapling: String = ItemCatalog.sapling_id(fruit)
+	m.inventory.slots[m.inventory.selected_index] = {"id": sapling, "count": 5, "quality": 0}
+	var before: int = m.inventory.count_of(sapling)
+	# 발밑을 겨눈다 — `_target` 오프셋 (0,0)은 실제로 허용된다.
+	m.player.global_position = m._tile_center_px(spot)
+	m._target = spot
+	m.notice_feed._items.clear()
+	m._use_tool()
+	var told := ""
+	for it in m.notice_feed._items:
+		told = String(it["text"])
+	_check("⑰a 발밑 %s에는 안 심긴다 + 왜인지 말한다 — 「%s」" % [str(spot), told],
+		not m.orchard.has_tree(spot) and told.contains("발밑")
+		and m.inventory.count_of(sapling) == before)
+	_check("⑰b 술어가 그 칸을 지목한다 — `_would_entrap_player(%s)`" % str(spot),
+		m._would_entrap_player(spot))
+	# 과잉이 아니다 — 한 칸 물러서면 그대로 심긴다.
+	m.player.global_position = m._tile_center_px(spot + Vector2i(0, 2))
+	m._target = spot
+	m._use_tool()
+	_check("⑰c 한 칸 물러서서 겨누면 그대로 심긴다(가드가 과잉이 아니다) — 묘목 %d → %d"
+			% [before, m.inventory.count_of(sapling)],
+		m.orchard.has_tree(spot) and m.inventory.count_of(sapling) == before - 1)
+	m.orchard.load_save(orchard_snap)
+	m.inventory.slots[m.inventory.selected_index] = null

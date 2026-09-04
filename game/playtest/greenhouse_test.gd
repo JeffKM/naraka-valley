@@ -191,7 +191,7 @@ func _run_checks() -> void:
 	# 잿눈 날을 찾아 그날 아침에 두 밭을 나란히 굴린다.
 	var snow_day := -1
 	for d in range(m.clock.day + 1, m.clock.day + 200):
-		if not Weather.grows_crops(Weather.weather_for_day(d)):
+		if not Weather.grows_crops(m._weather_on(d)):
 			snow_day = d
 			break
 	if snow_day > 0:

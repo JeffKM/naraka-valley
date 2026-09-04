@@ -220,7 +220,7 @@ func _initialize() -> void:
 		and outside.size() > m.SPOUSE_MIHO_WATER_TILES)
 	var calm_day := -1
 	for d in range(m.clock.day, m.clock.day + 60):
-		if Weather.weather_for_day(d) == Weather.CALM:
+		if m._weather_on(d) == Weather.CALM:
 			calm_day = d
 			break
 	m.clock.day = calm_day

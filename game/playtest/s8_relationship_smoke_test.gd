@@ -68,7 +68,7 @@ func _hold(m: Node, id: String) -> void:
 # 다음 "평온한 아침"(혼우 자동 급수 없음·절기 첫날 아님) 전날로 시계를 세운다(marriage_test 동형).
 func _park_before_calm_day(m: Node) -> void:
 	var d: int = m.clock.day + 1
-	while Weather.waters_field(Weather.weather_for_day(d)) or GameClock.is_season_first_day(d):
+	while Weather.waters_field(m._weather_on(d)) or GameClock.is_season_first_day(d):
 		d += 1
 	m.clock.day = d - 1
 

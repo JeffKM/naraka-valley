@@ -124,7 +124,7 @@ func _initialize() -> void:
 	# 무대: 평온한 낮 + 문 닫힌 두 건물(스타터 짐승 4마리 = 건물당 2).
 	var calm_day: int = m.clock.day
 	for d in range(m.clock.day, m.clock.day + 40):
-		if Weather.allows_grazing(Weather.weather_for_day(d)):
+		if Weather.allows_grazing(m._weather_on(d)):
 			calm_day = d
 			break
 	m.clock.day = calm_day
@@ -141,7 +141,7 @@ func _initialize() -> void:
 			% m.ranch.count(),
 		m.ranch.count() >= 4 and m.ranch.releasable().is_empty()
 		and m.ranch.occupied_pasture_tiles().is_empty()
-		and Weather.allows_grazing(Weather.weather_for_day(m.clock.day))
+		and Weather.allows_grazing(m._weather_on(m.clock.day))
 		and m.clock.phase() != "밤")
 	m.ranch.set_door(barn, true)
 	_check("①a 1차 방출 — %s 짐승이 방목지에 선다" % barn, m._release_open_buildings())
@@ -574,9 +574,9 @@ func _initialize() -> void:
 	var rain_day := -1
 	var calm_day2 := -1
 	for d in range(m.clock.day + 1, m.clock.day + 200):
-		if rain_day < 0 and Weather.weather_for_day(d) == Weather.RAIN:
+		if rain_day < 0 and m._weather_on(d) == Weather.RAIN:
 			rain_day = d
-		if calm_day2 < 0 and Weather.weather_for_day(d) == Weather.CALM:
+		if calm_day2 < 0 and m._weather_on(d) == Weather.CALM:
 			calm_day2 = d
 	_check("⑮pre 혼우일 %d · 평온일 %d 확보" % [rain_day, calm_day2],
 		rain_day > 0 and calm_day2 > 0)

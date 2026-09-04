@@ -327,7 +327,7 @@ func _initialize() -> void:
 	_check("⑥a 오늘 운 등급명이 들어간다", txt_great.contains("대길"))
 	_check("⑥b 점괘 한 줄이 들어간다", txt_great.contains(DailyLuck.fortune_line(DailyLuck.GREAT)))
 	_check("⑥c 내일 날씨 이름이 들어간다(100% 확정 예보)",
-		txt_great.contains(Weather.name_of(Weather.forecast(d_great))))
+		txt_great.contains(Weather.name_of(m._forecast_on(d_great))))
 	# ★ 수치 노출 0 — 본문 어디에도 운의 숫자가 없다(CONTEXT [명부의 운] "내부 연산은 숨김").
 	# ⚠️ **원본값에 `%d`를 쓰지 않는다**(S7-T7에서 오탐으로 드러난 자리): 운은 언제나 −0.1~+0.1이라
 	#   `"%d" % v2`가 항상 "0"(또는 "-0")으로 퇴화해, 사실상 "본문에 숫자 0이 있으면 실패"라는 뜻이

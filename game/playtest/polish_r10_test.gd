@@ -204,9 +204,12 @@ func _initialize() -> void:
 
 	# ── ⑤ #5 릴 격투 중 LMB가 도구 디스패치로 안 샌다 ───────────────────────────
 	print("── ⑤ #5 릴 격투 — 세 세션이 같은 줄에 선다 ──")
-	var gate := _line_of("if not _sleeping and cheki == null and cocktail == null and fishing == null")
-	_check("⑤a `_use_tool` 디스패치 게이트가 세션 셋을 **모두** 본다(체키·칵테일·낚시)",
-		gate > 0)
+	# ★[폴리시 R19 #10·#11] 세 항이 **이름 있는 술어**(`session_lmb`)로 접혔다 — 형제인 설치 갈래
+	#   넷이 같은 규칙을 읽어야 해서다(그 술어 머리말). 계약은 그대로: 셋을 모두 본다.
+	var sess := _line_of("var session_lmb := cheki != null or cocktail != null or fishing != null")
+	var gate := _line_of("if not _sleeping and not session_lmb \\")
+	_check("⑤a `_use_tool` 디스패치 게이트가 세션 셋을 **모두** 본다(체키·칵테일·낚시 — 술어 %d행·게이트 %d행)"
+			% [sess + 1, gate + 1], sess > 0 and gate > sess)
 	_check("⑤b 그 게이트는 여전히 자유 사용 물건·무기를 or-항으로 들고 있다(거동 축소 0)",
 		# ★[폴리시 R17 경유 발견] R16 #5가 이 or-항을 `pot_at_target` → `pot_dispatch`로 갈면서
 		#   니들이 상해 있었다(계약 자체는 그대로 — 항 넷이 전부 산다). 이름만 따라 옮긴다.
