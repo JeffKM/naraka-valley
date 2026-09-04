@@ -1,5 +1,5 @@
 extends SceneTree
-# ★[폴리시 21회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#12).
+# ★[폴리시 21회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#12) + 배치 B(#13~#24).
 #
 # 렌즈: R20 diff 리뷰(#0·#1) · 에너지 0 경계(#2·#3·#4) · 해금 첫 프레임(#5·#6·#7·#8) ·
 #       컷신/사건 재진입(#9) · 다중 로맨스 교차(#10·#11) · 좌표 키 구역 축(#12).
@@ -95,6 +95,75 @@ extends SceneTree
 #     `_cast_energy_need` 한 함수를 두 자리가 부르는지, ⑱c는 `_claim_codex_trophy`가 keep 표를
 #     다는지). ③f'를 더해 R11의 하한 계약이 그 함수 **안**에 살아 있음을 따로 잰다.
 #
+# ══ 배치 B(#13~#24) ═══════════════════════════════════════════════════════════
+# 렌즈: 부재 구역 시뮬(#13·#14·#15) · 로드 첫 프레임(#16) · 에너지 0 경계(#17·#18·#19) ·
+#       좌표 키 구역 축(#20·#21) · 다중 로맨스 교차(#22·#23·#24).
+#
+# 무엇을 보증하나:
+#   ⑬ #13 = **DUP(#1) + 잔여 축 1건**. 스포너 축(발밑 파종)은 #1 봉합이 이미 닫았고, 시나리오
+#      후단의 "탈출도 막혀 있다"만 남아 있었다 — `_restore_location`의 매몰 구제가 `_tile_blocked`
+#      (=`_grid`) 하나만 봐서, `_grid`를 한 글자도 안 건드리는 마당 원장 나무에 묻힌 좌표를 못
+#      봤다(R21 #1 이전에 굳은 세이브의 탈출구 0). 구제 술어를 진실원 `_player_blocked_at`으로.
+#   ⑭ #14 숲 빈 슬롯 재출현(20%/일)과 미혹 심층 큰 그루터기(**매일 100%**)가 사람이 선 칸을
+#      SOLID로 덮었다 — HOME 형제 셋이 전부 무는 매몰 가드를 이 둘만 안 물었다.
+#   ⑮ #15 마당 자체 파종만 집 밖 취침에 **통째로 스킵**됐다(형제 셋은 전부 이월 표를 세운다).
+#      면제 근거로 든 "결정 롤은 day 시드라 손실이 아니다"는 `_season_respawn_pending_day`
+#      선언부가 이미 명시 철회한 논거였고, 실효는 마당 나무 공급(HOME_CAP)의 영구 감소였다.
+#   ⑯ #16 F9 로드가 주민 보간 걷기만 안 끊어(낚시·체키·밤 바는 끊는다), 폐기된 타임라인 좌표에서
+#      NPC가 수십 초간 흘러왔다 — 논리 칸과 그려진 몸이 통째로 어긋난다.
+#   ⑰ #19 혼력 바의 "취침 신호" 색만 **무인자 `can_act()`**(고정 10)라, 실제 비용(팬닝 4·후킹
+#      하한·숙련 감산 7)과 눈금이 어긋나 아직 할 수 있는 일이 남았는데 바가 취침을 재촉했다.
+#      R6가 프롬프트 축에서 걷어낸 그 불일치이고, 그 회귀 단언은 main.gd만 읽어 이 한 자리를 놓쳤다.
+#   ⑱ #20·#21 스프링클러·레어크로우 **안내 사슬만** 좌표 원장을 날로 봐(입력·배치·렌더는 전부
+#      무대 술어를 쓴다), 다른 구역의 같은 좌표에서 회수 안내와 종 이름이 새고 그 칸의 뒤따르는
+#      안내(승마·밭)가 통째로 가려졌다.
+#   ⑲ #23 질투 감점(−30 points)의 표면이 화면 어디에도 없었다 — 근거 주석이 든 "관계 탭 하트가
+#      이미 보여 준다"는 S8-T5가 stage/points를 가른 뒤로 거짓이다(그리기 경로가 hearts()만 읽는다).
+#   ⑳ #24 앵커 정표 창구가 연애 슬롯을 안 봐(형제 창구는 첫 항이 그 축이다), 그 자리에서 늘
+#      거절될 유일 정표를 미리 발급했다 — 백팩을 영구 점유하는 사장 아이템 + 늘 실패하는 [G].
+#
+# 배치 B 판정: #13 = DUP(#1)(+잔여 축 봉합) · #17 = DUP(#3) · #18 = DUP(#4) · #22 = DUP(#11) ·
+#   나머지 여덟(#14·#15·#16·#19·#20·#21·#23·#24) 전부 CONFIRMED·봉합. REFUTED·OWNER 0건.
+#   ※ #17/#18/#22는 시도#1 구판이라 제목만 다르고 시나리오 축·봉합 지점이 같다(각각 ④·⑤·⑪가
+#     이미 그 계약을 잰다 — 구판에만 있는 추가 축은 없었다).
+#
+# 배치 B 봉합 축:
+#   · #13 = `_restore_location`의 구제 술어 교체(`_tile_blocked` → `_player_blocked_at`).
+#   · #14 = `TreeLedger.advance_day(day, free_cb, solid_ok)` — 세우기 **직전**의 거부권. 롤을
+#           먼저 굴리고 거부권을 나중에 물어 그날 출목열이 안 갈린다. main 쪽 콜백은 승인한 칸을
+#           pending에 적어 같은 밤의 형제 리스폰이 서로를 본다(R20 #2 규율 · 여기선 «후보 심사»가
+#           아니라 «집행 직전 승인»이라 그 기록이 정확하다).
+#   · #15 = `_tree_seed_pending_day`(형제 셋과 같은 표·같은 소비 자리·세이브 왕복) +
+#           `TreeLedger.catch_up_seeding`(파종 패스만 떼어낸 얇은 창구 — 성장·재출현·이끼를 두 번
+#           돌리지 않는다).
+#   · #16 = `_load_game`에 걷기 취소 두 줄(`_begin_cutscene`이 R7·R8에 세운 그 역연산).
+#   · #19 = `VitalsHud.set_low_cost` + main의 `_lowest_action_cost()`(네 동사의 소유자에게서 파생).
+#   · #20·#21 = 안내 사슬을 `_sprinkler_at`/`_rarecrow_at`(무대 술어)로.
+#   · #23 = `_heart_badge`에 «서운함» 한 줄 — **새 UI 0**(이미 있는 배지 자리를 쓴다). 원장이
+#           비면 배지도 사라져 "복원된 아침은 그냥 평소다" 규약과 어긋나지 않는다.
+#   · #24 = `_myeongbu_quest_open`에 `_romance_partner == ""` 한 항(집행부 게이트와 같은 폭).
+#
+# 배치 B 하중 검증(실측):
+#   #13 구제 술어를 `_tile_blocked`로 되돌림            → ⑬b red
+#   #14 원장의 거부권 무력화                            → ⑭c·⑭d·⑭e red
+#   #14 main 콜백을 늘 허용으로                         → ⑭a·⑭b red
+#   #15 이월 표를 안 세움 / 소비처 삭제                 → ⑮c·⑮d red / ⑮d red
+#   #16 로드의 걷기 취소 루프 삭제                      → ⑯b red
+#   #19 바를 무인자 `can_act()`로 되돌림 / 배선 삭제    → ⑰d red / ⑰b·⑰c red
+#   #20 스프링클러 안내를 원장 직행으로                 → ⑱b red
+#   #21 레어크로우 안내를 원장 직행으로                 → ⑱c red
+#   #23 배지 한 줄 삭제                                 → ⑲b red
+#   #24 연애 슬롯 항 삭제                               → ⑳b red
+# ★ ⑰만 그리기 경로를 못 태운다(헤드리스엔 draw 패스가 없다) — 대신 **화면이 읽는 그 필드**
+#   (`vitals.low_cost`)를 main의 HUD 갱신으로 실제로 흘려 넣어 재고, 무인자 호출부 0을 전 파일
+#   스캔으로 못 박는다(그 두 개가 이 항목의 하중이다).
+#
+# ★[폴리시 R21 부록] `polish_r6` ⑬e가 red였던 것은 **선재 결함이 아니라 stale 예시**였다:
+#   R20 #14가 «깊이 게이트 너머의 산출은 안 낸다»를 세우며 저승삼을 정당하게 걷어냈는데, ⑬e가
+#   그 종을 «사철 채집물» 증인으로 세워 두고 있었다. 두 계약은 축이 달라(절기 ↔ 깊이) 충돌하지
+#   않으므로 코드는 한 줄도 안 고치고, 증인을 해변종(황천산호)으로 갈고 깊이 축을 ⑬e'로 따로
+#   못 박았다(R20 #14를 되돌리면 ⑬e'가 red — 실측).
+#
 # 실행: ./run_tests.sh polish_r21   (헤드리스는 반드시 game/에서 · 순차)
 
 var _fail := 0
@@ -185,6 +254,16 @@ func _run_checks() -> void:
 	_check_cutscene_frame_guard()
 	_check_jealousy_notice(m)
 	_check_field_layer_region(m)
+
+	print("══ 폴리시 R21 회귀 — 배치 B(#13~#24) ══")
+	_check_buried_restore(m)
+	_check_forest_respawn_guard(m)
+	_check_seed_pending_carry(m)
+	_check_load_cancels_walk(m)
+	_check_energy_bar_scale(m)
+	_check_installation_prompt_region(m)
+	_check_jealousy_badge(m)
+	_check_myeongbu_slot_gate(m)
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
@@ -757,3 +836,370 @@ func _check_field_layer_region(m: Node) -> void:
 	_check("⑫c 안식으로 돌아오면 원장에서 다시 칠해진다(source %d) — 미룬 것은 그림뿐이다"
 			% m.field_layer.get_cell_source_id(t),
 		m.field_layer.get_cell_source_id(t) >= 0 and m.farm.is_tilled(t))
+
+# ── ⑬ #13 매몰 구제가 **프롭 충돌 원장까지** 본다(=#1의 잔여 축) ──────────────
+# #13의 스포너 축(발밑 파종)은 #1 봉합이 이미 닫았다 = DUP. 남은 것은 시나리오 후단의
+# "탈출도 막혀 있다" — 그 구세이브를 열 길이다.
+func _check_buried_restore(m: Node) -> void:
+	print("⑬ #13 로드 매몰 구제(잔여 축 · 스포너 축은 DUP(#1))")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	# 무대 = R21 #1 **이전에 굳은 세이브**: 발밑에 원장 나무가 선 좌표.
+	var t := Vector2i(-1, -1)
+	var occ: Dictionary = m._home_occupied_tiles()
+	for y in range(m._outdoor_h):
+		for x in range(m._grid_w):
+			var c := Vector2i(x, y)
+			if m._is_tree_seed_free(RegionCatalog.HOME, c, occ) and not m.tree_ledger.has_slot(RegionCatalog.HOME, c):
+				t = c
+				break
+		if t.x >= 0:
+			break
+	if t.x < 0:
+		_check("⑬ 무대 없음: 빈 파종 칸을 못 찾았다", false)
+		return
+	m.tree_ledger._put(RegionCatalog.HOME, t, {"species": TreeLedger.SP_PINE, "stage": 1,
+		"hp": TreeLedger.HP_SAPLING, "stump": false, "moss": false})
+	m._rebuild_prop_collision()
+	_check("⑬a 무대: %s에 원장 나무가 서서 **풀타일 충돌**이 걸렸다 — 그런데 `_grid` 축(`_tile_blocked`)은 그것을 못 본다(%s) · 진실원(`_player_blocked_at`)은 본다(%s)"
+			% [str(t), str(m._tile_blocked(t)), str(m._player_blocked_at(t))],
+		m._prop_blocked_tiles.has(t) and not m._tile_blocked(t) and m._player_blocked_at(t))
+	# 그 좌표를 실은 세이브를 연다 — 종전 구제는 `_tile_blocked`만 봐서 그대로 벽 안에 세웠다.
+	m._restore_location({"region": RegionCatalog.HOME, "indoor": "", "player_tile": t})
+	var landed: Vector2i = m._player_tile()
+	_check("⑬b 그 좌표로 복원하면 **구제된다** — %s가 아니라 %s(구역 스폰)에 선다"
+			% [str(t), str(landed)],
+		landed != t and landed == m.SPAWN_TILE and not m._player_blocked_at(landed))
+	m.tree_ledger.clear_slot(RegionCatalog.HOME, t)
+	m._rebuild_prop_collision()
+	_check("⑬c 대조: 나무를 치우면 같은 좌표가 다시 정상 복원된다(과잉 구제 0)",
+		not m._player_blocked_at(t))
+
+# ── ⑭ #14 숲 재출현·큰 그루터기도 사람이 선 칸은 안 덮는다 ───────────────────
+func _check_forest_respawn_guard(m: Node) -> void:
+	print("⑭ #14 숲 재출현·큰 그루터기 매몰 가드")
+	# ㉠ main이 넣는 거부권 콜백 자체 — 발밑은 거절, 먼 칸은 허용, 그리고 **배치 누적**을 든다.
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	m.player.global_position = m._tile_center_px(m.SPAWN_TILE)
+	var here: Vector2i = m._player_tile()
+	var cb: Callable = m._tree_respawn_ok_cb()
+	var foot_ok: bool = cb.call(m._region, here)
+	var far_ok: bool = cb.call(m._region, here + Vector2i(0, -6))
+	var other_region_ok: bool = cb.call(RegionCatalog.JEOSEUNG_FOREST, here)
+	_check("⑭a 거부권 콜백: 발밑 %s는 거절(%s) · 먼 칸은 허용(%s) · 사람이 없는 무대는 그대로 허용(%s)"
+			% [str(here), str(foot_ok), str(far_ok), str(other_region_ok)],
+		foot_ok == false and far_ok == true and other_region_ok == true)
+	# 배치 누적 — 네 이웃을 차례로 승인해 나가면 마지막 하나에서 «퇴로 0»이 되어 거절된다.
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	var approved: Array = []
+	var denied: Array = []
+	for d in dirs:
+		var n: Vector2i = here + d
+		if m._player_blocked_at(n):
+			continue
+		if bool(cb.call(m._region, n)):
+			approved.append(n)
+		else:
+			denied.append(n)
+	_check("⑭b 같은 밤의 배치가 누적된다 — 승인 %s · 마지막 퇴로에서 거절 %s(스냅샷 한 장이면 전부 통과했다)"
+			% [str(approved), str(denied)],
+		approved.size() >= 1 and denied.size() == 1)
+	# ㉡ 원장이 실제로 그 거부권을 문다 — 독립 원장에 숲 빈 슬롯 하나만 두고 굴린다.
+	var led := TreeLedger.new()
+	var forest := RegionCatalog.JEOSEUNG_FOREST
+	var ft := Vector2i(5, 5)
+	led._put(forest, ft, {"species": "", "stage": TreeLedger.STAGE_EMPTY, "hp": 0,
+		"stump": false, "moss": false})
+	var deny := func(_r: String, _t: Vector2i) -> bool: return false
+	var regrow_day := -1
+	for d in range(1, 400):
+		if not led.advance_day(d, Callable(), deny)["regrown"].is_empty():
+			regrow_day = d
+			break
+	_check("⑭c 거부권을 늘 false로 주면 %d일을 굴려도 빈 슬롯이 한 번도 안 살아난다(stage %d 유지)"
+			% [399, led.stage_at(forest, ft)],
+		regrow_day < 0 and led.stage_at(forest, ft) == TreeLedger.STAGE_EMPTY)
+	# 같은 원장·같은 날들을 **허용**으로 다시 굴리면 살아난다 = ⑭c가 공허하지 않다.
+	var allow_day := -1
+	for d in range(1, 400):
+		if not led.advance_day(d)["regrown"].is_empty():
+			allow_day = d
+			break
+	_check("⑭d 대조: 허용이면 %d일에 되살아난다(stage %d) — 거부권이 유일한 차이"
+			% [allow_day, led.stage_at(forest, ft)],
+		allow_day > 0 and led.stage_at(forest, ft) == TreeLedger.REGROW_STAGE)
+	# 큰 그루터기(확률 없는 매일 100% 부활)도 같은 거부권을 문다.
+	var led2 := TreeLedger.new()
+	var lt := Vector2i(7, 7)
+	led2._put(forest, lt, {"species": "", "stage": 0, "hp": 0, "stump": false, "moss": false,
+		"large": TreeLedger.KIND_LARGE_STUMP, "gone": true})
+	var blocked_out: Dictionary = led2.advance_day(9, Callable(), deny)
+	var freed_out: Dictionary = led2.advance_day(9)
+	_check("⑭e 큰 그루터기(매일 100%% 부활)도 거절되면 안 서고(%d건) 허용이면 그 자리에서 선다(%d건)"
+			% [blocked_out["large_respawned"].size(), freed_out["large_respawned"].size()],
+		blocked_out["large_respawned"].is_empty() and freed_out["large_respawned"].size() == 1)
+
+# ── ⑮ #15 집 밖에서 잔 밤의 마당 파종은 **이월**된다 ─────────────────────────
+func _check_seed_pending_carry(m: Node) -> void:
+	print("⑮ #15 자체 파종 이월 표")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	m.player.global_position = m._tile_center_px(m.SPAWN_TILE)
+	m._tree_seed_pending_day = 0
+	# 파종이 **실제로 나는 밤**을 찾는다(0건인 밤을 무대로 쓰면 뒤 단언이 공허하다). 찾은 뒤
+	# 원장을 그 자리에서 원복해 무대를 되돌린다.
+	var cb: Callable = m._tree_seed_free_cb()
+	var seed_day := -1
+	var dry: Array = []
+	for d in range(2, 200):
+		var got: Array = m.tree_ledger.catch_up_seeding(d, cb)
+		if not got.is_empty():
+			seed_day = d
+			dry = got
+			for e in got:
+				m.tree_ledger.clear_slot(RegionCatalog.HOME, e["tile"])
+			break
+	_check("⑮a 무대: %d일 밤은 마당 파종이 %d그루 나는 밤이다(원복 완료 — 지금 원장엔 없다)"
+			% [seed_day, dry.size()],
+		seed_day > 0 and not dry.is_empty()
+		and not m.tree_ledger.has_slot(RegionCatalog.HOME, dry[0]["tile"]))
+	if seed_day < 0:
+		return
+	# 그 밤을 **마을에서** 맞는다 — 판정 콜백이 무효라 원장은 파종 블록을 건너뛴다.
+	m._rebuild_region(RegionCatalog.NARU_VILLAGE)
+	_check("⑮b 무대: 안식 밖에서는 파종 판정 콜백이 무효다(안식 그리드를 물어볼 수 없다)",
+		not m._tree_seed_free_cb().is_valid())
+	var before: int = m.tree_ledger.occupied_count(RegionCatalog.HOME)
+	m._on_day_advanced(seed_day)
+	var after_night: int = m.tree_ledger.occupied_count(RegionCatalog.HOME)
+	var before_tiles: Dictionary = {}
+	for t in m.tree_ledger.tiles(RegionCatalog.HOME):
+		if m.tree_ledger.is_occupied(RegionCatalog.HOME, t):
+			before_tiles[t] = true
+	_check("⑮c 그 밤엔 파종이 0그루지만(%d → %d) **표가 선다**(밀린 밤 %d일)"
+			% [before, after_night, m._tree_seed_pending_day],
+		after_night == before and m._tree_seed_pending_day == seed_day)
+	# 귀가 프레임이 그 밤만 따로 집행한다 — 좌표까지 그날 결과 그대로다.
+	m._rebuild_region(RegionCatalog.HOME)
+	m.player.global_position = m._tile_center_px(m.SPAWN_TILE)
+	m._process(0.0)
+	# 그 프레임에 **새로 선 칸**을 원장 차집합으로 판다(카운트가 아니라 칸 목록으로 잰다).
+	#   ★ dry-run 집합과의 좌표 일치는 요구하지 않는다: 사이에 아침 훅이 성장·잡초를 돌려
+	#     성숙목·성역이 달라질 수 있고, 이 단언이 재는 것은 «그 밤이 집행됐는가»다.
+	var fresh: Array = []
+	for t in m.tree_ledger.tiles(RegionCatalog.HOME):
+		if m.tree_ledger.is_occupied(RegionCatalog.HOME, t) and not before_tiles.has(t):
+			fresh.append(t)
+	var not_free_before := 0
+	for t in fresh:
+		if before_tiles.has(t):
+			not_free_before += 1
+	_check("⑮d 안식에 다시 선 첫 프레임이 그 밤을 집행한다 — 표 소비(%d) · 그 프레임에 새로 선 칸 %s(전부 직전엔 비어 있던 자리 · 겹침 %d)"
+			% [m._tree_seed_pending_day, str(fresh), not_free_before],
+		m._tree_seed_pending_day == 0 and not fresh.is_empty() and not_free_before == 0)
+	var after_catch: int = m.tree_ledger.occupied_count(RegionCatalog.HOME)
+	m._process(0.0)
+	_check("⑮e 표는 한 번만 소비된다 — 다음 프레임에 두 번째 파종이 없다(%d 그대로)" % after_catch,
+		m.tree_ledger.occupied_count(RegionCatalog.HOME) == after_catch)
+	for t in fresh:
+		m.tree_ledger.clear_slot(RegionCatalog.HOME, t)
+
+# ── ⑯ #16 F9 로드가 주민 보간 걷기를 끊는다 ──────────────────────────────────
+func _check_load_cancels_walk(m: Node) -> void:
+	print("⑯ #16 로드 ↔ 주민 걷기")
+	# `Resident.walk`는 **첫 스테이션 전환에서** main이 만든다(`_begin_resident_walk`) — 부팅
+	# 직후엔 null이라, 그 자리에서 같은 인스턴스를 세워 «걷는 중»을 재현한다(로드 경로가 보는 것은
+	# 인스턴스 하나뿐이라 무대가 실물과 같다).
+	var r = null
+	for rr in m._residents:
+		if rr.node != null:
+			r = rr
+			break
+	if r == null:
+		_check("⑯ 무대 없음: 몸이 있는 주민이 없다", false)
+		return
+	if r.walk == null:
+		r.walk = ResidentWalk.new()
+	m._save_or_warn()
+	var from_px: Vector2 = m._tile_center_px(Vector2i(10, 10))
+	var path := PackedVector2Array([m._tile_center_px(Vector2i(40, 40))])
+	r.walk.start(from_px, path)
+	if r.node.has_method("set_walk_offset"):
+		r.node.set_walk_offset(r.walk.offset())
+	_check("⑯a 무대: %s가 보간 걷기 중이다(남은 거리 %.0fpx — 화면의 몸이 논리 칸 밖에 있다)"
+			% [r.display_name, r.walk.remaining_px()],
+		r.walk.is_walking() and r.walk.remaining_px() > 0.0)
+	var loaded: bool = m._load_game()
+	_check("⑯b F9 로드가 그 세션을 버린다(로드 %s · 걷는 중 %s) — 낚시·체키·밤 바와 같은 줄"
+			% [str(loaded), str(r.walk.is_walking())],
+		loaded and not r.walk.is_walking())
+
+# ── ⑰ #19 혼력 바의 "취침 신호"가 실제 동사 비용을 눈금으로 쓴다 ─────────────
+func _check_energy_bar_scale(m: Node) -> void:
+	print("⑰ #19 혼력 바 눈금")
+	var lowest: int = m._lowest_action_cost()
+	_check("⑰a 무대: 지금 가장 싼 동사 비용은 %d로, 고정 눈금 %d보다 싸다(그 사이가 거짓말 구간이었다)"
+			% [lowest, SoulEnergy.COST_PER_ACTION],
+		lowest > 0 and lowest < SoulEnergy.COST_PER_ACTION)
+	m._refresh_clock_hud()
+	_check("⑰b HUD 갱신이 그 눈금을 바에 흘려 넣는다(vitals.low_cost = %d)" % m.vitals.low_cost,
+		m.vitals.low_cost == lowest)
+	# 그 눈금이 실제로 색을 가른다 — 사이 구간에서는 아직 안 식고, 최저치 아래에서 식는다.
+	var mid: int = SoulEnergy.COST_PER_ACTION - 1
+	m.energy.current = mid
+	var lit_mid: bool = m.energy.can_act(m.vitals.low_cost)
+	m.energy.current = lowest - 1
+	var lit_low: bool = m.energy.can_act(m.vitals.low_cost)
+	m.energy.current = m.energy.MAX
+	_check("⑰c 혼력 %d에서는 아직 할 수 있는 일이 남아 바가 안 식고(%s), %d에서는 식는다(%s)"
+			% [mid, str(lit_mid), lowest - 1, str(lit_low)],
+		lit_mid and not lit_low)
+	# 저장소 전체에서 무인자 `can_act()` 호출부가 0 — R6의 회귀 단언이 main.gd만 읽어 놓친 축이다.
+	var naked: Array = []
+	var dir := DirAccess.open("res://")
+	if dir != null:
+		for f in dir.get_files():
+			if not String(f).ends_with(".gd") or String(f) == "energy.gd":
+				continue   # 기본값의 **소유자**는 제외 — 그 안의 무인자 호출이 곧 depleted의 정의다
+			var lines := _lines_of_file("res://" + String(f))
+			for i in range(lines.size()):
+				if lines[i].strip_edges().begins_with("#"):
+					continue
+				if lines[i].contains("can_act()"):
+					naked.append("%s:%d" % [String(f), i + 1])
+	_check("⑰d 소비자 쪽(energy.gd 밖)에 무인자 `can_act()` 호출부가 한 곳도 없다 — R6의 회귀 단언이 main.gd만 읽어 놓쳤던 축(잔존: %s)" % str(naked),
+		naked.is_empty())
+
+# ── ⑱ #20·#21 설치물 안내 사슬에도 무대 술어가 있다 ──────────────────────────
+func _check_installation_prompt_region(m: Node) -> void:
+	print("⑱ #20·#21 스프링클러·레어크로우 안내 구역 축")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	# 설치 — 원장에 좌표를 남긴다(구역 축이 없는 그 원장).
+	var spot := Vector2i(-1, -1)
+	for t in m.farm.tilled_tiles():
+		if m._can_place_sprinkler(t):
+			spot = t
+			break
+	if spot.x < 0:
+		_check("⑱ 무대 없음: 스프링클러를 놓을 칸이 없다", false)
+		return
+	var spr_id := String(ItemCatalog.SPRINKLER_TIERS.keys()[0])
+	var crow_id := String(ItemCatalog.RARECROWS[1])
+	m.sprinkler.place(spot, ItemCatalog.sprinkler_tier_of(spr_id))
+	m.rarecrow.place(spot + Vector2i(1, 0), String(ItemCatalog.RARECROWS[0]))
+	m.inventory.add_item(spr_id, 1)
+	m.inventory.add_item(crow_id, 1)
+	var spr_slot := -1
+	var crow_slot := -1
+	for i in range(Inventory.SIZE):
+		if m.inventory.id_at(i) == spr_id and spr_slot < 0:
+			spr_slot = i
+		if m.inventory.id_at(i) == crow_id and crow_slot < 0:
+			crow_slot = i
+	_check("⑱a 무대: 안식 %s·%s에 설치물이 서 있고 원장은 좌표만 든다(구역 축 없음) · 손에 들 %s·%s도 있다"
+			% [str(spot), str(spot + Vector2i(1, 0)), ItemCatalog.name_of(spr_id),
+				ItemCatalog.name_of(crow_id)],
+		m.sprinkler.has_at(spot) and m.rarecrow.has_at(spot + Vector2i(1, 0))
+		and m.inventory.count_of(spr_id) > 0 and m.inventory.count_of(crow_id) > 0)
+	# 같은 좌표를 **다른 구역**에서 겨눈다 — 마을은 100×72라 그 칸이 실재한다.
+	m._rebuild_region(RegionCatalog.NARU_VILLAGE)
+	m.player.global_position = m._tile_center_px(spot)
+	m._process(0.0)
+	var aim_off: Vector2i = m._target - m._player_tile()
+	m.player.global_position = m._tile_center_px(spot - aim_off)
+	m.inventory.select(spr_slot)
+	m._process(0.0)
+	var spr_text: String = m.interact_prompt.text if m.interact_prompt.visible else ""
+	_check("⑱b 마을에서 그 좌표를 겨누면 남의 구역 원장이 안 샌다 — 든 것 %s · 조준 %s · 안내 「%s」(회수 안내 없음)"
+			% [ItemCatalog.name_of(m.inventory.selected_id()), str(m._target), spr_text],
+		m.inventory.selected_id() == spr_id and m._target == spot and not spr_text.contains("회수"))
+	m.player.global_position = m._tile_center_px(spot + Vector2i(1, 0) - aim_off)
+	m.inventory.select(crow_slot)
+	m._process(0.0)
+	var crow_text: String = m.interact_prompt.text if m.interact_prompt.visible else ""
+	_check("⑱c 레어크로우도 같다 — 든 것 %s · 세워 둔 **종 이름**이 다른 구역 화면에 안 샌다(「%s」)"
+			% [ItemCatalog.name_of(m.inventory.selected_id()), crow_text],
+		m.inventory.selected_id() == crow_id
+		and not crow_text.contains(ItemCatalog.name_of(m.rarecrow.id_at(spot + Vector2i(1, 0)))))
+	# 대조 — 안식으로 돌아오면 같은 칸에서 회수 안내가 그대로 선다(가드가 넓어진 게 아니다).
+	m._rebuild_region(RegionCatalog.HOME)
+	m.player.global_position = m._tile_center_px(spot - aim_off)
+	m.inventory.select(spr_slot)
+	m._process(0.0)
+	var home_text: String = m.interact_prompt.text if m.interact_prompt.visible else ""
+	_check("⑱d 대조: 안식에서는 회수 안내가 그대로다 — 든 것 %s · 「%s」"
+			% [ItemCatalog.name_of(m.inventory.selected_id()), home_text],
+		m.inventory.selected_id() == spr_id and m._target == spot and home_text.contains("회수"))
+	m.sprinkler.remove(spot)
+	m.rarecrow.remove(spot + Vector2i(1, 0))
+
+# ── ⑲ #23 질투 감점에 화면 표면이 생긴다 ─────────────────────────────────────
+func _check_jealousy_badge(m: Node) -> void:
+	print("⑲ #23 질투 감점의 표면")
+	var roster: Array = m.JEALOUSY_ROSTER
+	var chosen := String(roster[0])
+	var victim := String(roster[1])
+	for rid in roster:
+		var rr = m._resident(String(rid))
+		if rr != null and rr.affinity != null:
+			rr.affinity.points = 0
+			rr.affinity.stage = 0
+	m._jealousy.clear()
+	var v = m._resident(victim)
+	v.affinity.points = m.JEALOUSY_HIT * 3
+	v.affinity.stage = v.affinity.points_hearts()
+	var hearts_before: int = v.affinity.hearts()
+	var badge_before := _badge_of(m, victim)
+	m._apply_jealousy(chosen)
+	var hearts_after: int = v.affinity.hearts()
+	_check("⑲a 무대: %s가 %d점 깎였는데 **하트는 그대로다**(♡%d → ♡%d) — 종전엔 이 사건의 표면이 0이었다"
+			% [v.display_name, m.JEALOUSY_HIT, hearts_before, hearts_after],
+		m._jealousy.has(victim) and hearts_after == hearts_before)
+	var badge_after := _badge_of(m, victim)
+	_check("⑲b 관계 탭 행이 그 사건을 말한다 — 배지 「%s」 → 「%s」" % [badge_before, badge_after],
+		badge_before == "" and badge_after != "" and badge_after != badge_before)
+	# 7일 뒤 자동 복원 = 흔적 0 규약 — 배지도 함께 사라진다.
+	m._advance_jealousy(m.clock.day + m.JEALOUSY_RESTORE_DAYS)
+	_check("⑲c 복원되면 배지도 사라진다(「%s」) — 「복원된 아침은 그냥 평소다」 규약 보존"
+			% _badge_of(m, victim),
+		not m._jealousy.has(victim) and _badge_of(m, victim) == "")
+	for rid in roster:
+		var r2 = m._resident(String(rid))
+		if r2 != null and r2.affinity != null:
+			r2.affinity.points = 0
+			r2.affinity.stage = 0
+	m._jealousy.clear()
+
+# 관계 탭 행에서 이 사람의 배지를 판다(그리기 입력 그대로 — main이 프레임에 넘기는 그 payload).
+func _badge_of(m: Node, rid: String) -> String:
+	var r = m._resident(rid)
+	if r == null:
+		return ""
+	for row in m._heart_rows():
+		if String(row.get("name", "")) == r.display_name:
+			return String(row.get("badge", ""))
+	return ""
+
+# ── ⑳ #24 앵커 정표 창구가 연애 슬롯을 본다 ─────────────────────────────────
+func _check_myeongbu_slot_gate(m: Node) -> void:
+	print("⑳ #24 정표 발급 ↔ 연애 슬롯")
+	var prev := String(m._romance_partner)
+	m._romance_partner = ""
+	var open_free: bool = m._myeongbu_quest_open()
+	_check("⑳a 무대: 슬롯이 비어 있으면 정표 창구가 열린다(앵커 ♡%d)"
+			% m._resident(m.OKJA_RID).affinity.hearts(), open_free)
+	m._romance_partner = String(m.JEALOUSY_ROSTER[0])
+	var open_taken: bool = m._myeongbu_quest_open()
+	var propose_ok: bool = m._okja_track_open() and m._romance_partner == ""
+	_check("⑳b 슬롯이 남에게 잡혀 있으면 **발급이 닫힌다**(%s) — 그 자리에서 청혼은 어차피 늘 거절이다(%s)"
+			% [str(open_taken), str(propose_ok)],
+		open_taken == false and propose_ok == false)
+	_check("⑳c 형제 창구는 반대 방향 그대로다 — 혼례 부적은 **건넬 상대가 있을 때만** 열린다(%s)"
+			% str(m._charm_quest_open()), m._charm_quest_open())
+	m._romance_partner = prev

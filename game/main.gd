@@ -2480,6 +2480,12 @@ var _pasture_release_pending := false
 #     day 시드라 같은 날을 두 번 굴려도 결과가 같고, 밀린 밤 수만큼 곱해 물리는 건 페널티 설계
 #     결정이라 여기서 새로 만들지 않는다(OWNER 큐).
 var _weed_day_pending_day := 0
+# ★[폴리시 R21 #15] 집 밖에서 날이 바뀌어 **밀린 그 밤의 마당 자체 파종**의 날짜(0 = 밀린 것 없음).
+#   위 셋과 같은 결이다 — 파종 판정(`_is_tree_seed_free`)이 안식 그리드·프롭·밭을 훑으므로 다른
+#   구역에서는 집행할 수 없고, 그 밤을 그냥 버리면 마당 나무 공급(HOME_CAP)이 영구히 준다.
+#   ★ 세이브를 왕복한다(형제 셋과 같은 이유 — 표가 선 그 프레임에 자동 저장이 찍힌다).
+#   ★ 롤이 (day, 좌표) 시드라 귀가 프레임에 돌려도 그날 결과와 한 칸도 안 갈린다(TreeLedger._seed_pass).
+var _tree_seed_pending_day := 0
 # ★[폴리시 R4] **입력 디스패치 단계에서 세계를 바꾼 프레임의 폴링을 한 번 삼킨다.** Godot은 한
 #   iteration에서 입력 디스패치(`_input`·`_gui_input`)를 `_process`보다 **먼저** 흘리는데, main은
 #   모든 월드 동사를 `Input.is_action_just_pressed`(전역 폴링)로 받는다 — 그래서 디스패치 단계에서
@@ -4642,13 +4648,37 @@ func _tree_seed_pending_solid() -> Dictionary:
 	return out
 
 # 자체 파종 판정 Callable(안식에 서 있을 때만 유효 — 다른 구역에서 자면 그날 파종은 건너뛴다.
-# _grid가 그 구역 것이라 안식 지형을 물어볼 수 없기 때문이다. 결정 롤은 day 시드라 손실이 아니라 스킵).
+# _grid가 그 구역 것이라 안식 지형을 물어볼 수 없기 때문이다).
+# ★[폴리시 R21 #15] 종전 머리말은 그 스킵을 "결정 롤은 day 시드라 손실이 아니라 스킵"이라 변호했는데,
+#   그 논거는 `_season_respawn_pending_day` 선언부가 이미 **명시 철회**한 것이다(똑같은 문장으로
+#   "표가 없던 종전과 같은 결과라 회귀가 아니다"라고 적었다가 거짓이라고). 롤이 day 시드인 것은
+#   *같은 날 다시 물으면 같은 답*이라는 뜻일 뿐, 그날을 통째로 건너뛰면 그 밤의 파종은 영영 없다 —
+#   집 밖에서 자는 밤마다 마당 나무 공급(HOME_CAP 40)이 영구히 줄었다. 같은 아침 훅의 형제 셋은
+#   전부 표를 세워 귀가 프레임에 집행한다(절기 재스폰·방목 방출·잡초 두 줄). 그래서 여기도 표를
+#   세우고(`_tree_seed_pending_day`) 안식에 다시 서는 첫 프레임에 그 밤의 파종만 따로 돌린다.
 func _tree_seed_free_cb() -> Callable:
 	if _region != RegionCatalog.HOME:
 		return Callable()
 	var occ := _home_occupied_tiles()
 	return func(region: String, t: Vector2i) -> bool:
 		return _is_tree_seed_free(region, t, occ)
+
+# ★[폴리시 R21 #14] 통행을 다시 막는 원장 경로(숲 재출현·큰 그루터기 리스폰)의 거부권 Callable.
+#   HOME 자체 파종만 매몰 가드를 물고(R21 #1) 숲 두 경로는 무검사였다 — 벤 자리에 선 채 24:00을
+#   맞으면 그 슬롯이 stage3로 되살아나며 `_sync_tree_tile`이 발밑을 `_grid[t] = TREE`로 덮었고,
+#   미혹 심층의 큰 그루터기는 확률조차 없이 **매일 100%** 그렇게 했다.
+#   ★ pending: 이 배치가 이미 세우기로 승인한 칸을 표에 적어 다음 판정이 그것을 이미 선 것으로
+#     본다(R20 #2 규율). 여기서는 그것이 정확하다 — 이 콜백은 후보 심사가 아니라 **집행 직전의
+#     최종 승인**이라, true를 돌려준 칸은 반드시 선다(파종 쪽 free_cb와 갈리는 점).
+func _tree_respawn_ok_cb() -> Callable:
+	var pending: Dictionary = {}
+	return func(region: String, t: Vector2i) -> bool:
+		if region != _region or player == null:
+			return true            # 사람이 없는 무대 — 막을 이유가 없다
+		if _would_entrap_player(t, pending):
+			return false
+		pending[t] = true
+		return true
 
 # ★ T3③' 프롭 충돌 재구성 — 현재 구역 레이아웃에서 SOLID_PROPS 텍스처 칸에만 사각 충돌을
 # 단다(러그·등불·꽃·debris(개간분)는 제외 = 통과 O. ★울타리는 2026-07-05 SOLID 편입 = 통과 불가).
@@ -10815,7 +10845,12 @@ func _on_day_advanced(day: int) -> void:
 	#   재출현 ③안식 성숙목 15% 반경 3칸 자체 파종. "코지 재성장"(ADR-0033)의 실수치라 민둥산이 안 남는다.
 	#   숲 재출현은 그 칸의 통행이 다시 막히는 것이므로 현재 구역이면 그리드를 즉시 동기화한다.
 	if tree_ledger != null:
-		var tree_day := tree_ledger.advance_day(day, _tree_seed_free_cb())
+		# ★[폴리시 R21 #15] 집 밖이면 그 밤의 파종을 **미룬다**(형제 셋과 같은 문법). 판정 콜백이
+		#   무효라 원장은 파종 블록을 건너뛰고, 표가 귀가 프레임에 그 밤만 따로 돌린다.
+		# ★[폴리시 R21 #14] 통행을 다시 막는 두 경로(숲 재출현·큰 그루터기)에 매몰 거부권을 건다.
+		if _region != RegionCatalog.HOME:
+			_tree_seed_pending_day = day
+		var tree_day := tree_ledger.advance_day(day, _tree_seed_free_cb(), _tree_respawn_ok_cb())
 		for e in tree_day["regrown"]:
 			if String(e["region"]) == _region:
 				_sync_tree_tile(e["tile"])
@@ -12172,6 +12207,7 @@ func _save_game() -> bool:
 		#     왕복해야 한다. 셋 다 후자다. 표를 원장과 같은 파일에 담으면 둘이 늘 같은 시점을
 		#     가리켜 그 갈림 자체가 사라진다.
 		"weed_pending_day": _weed_day_pending_day,
+		"tree_seed_pending_day": _tree_seed_pending_day,   # ★[폴리시 R21 #15] 밀린 밤의 마당 파종
 		"season_respawn_pending_day": _season_respawn_pending_day,
 		"pasture_release_pending": _pasture_release_pending,
 		# ★[폴리시 R5] 나머지 **일련번호 시드 4종**도 같은 이유로 실린다. 이들은 세이브에도 없고
@@ -12352,6 +12388,19 @@ func _load_game() -> bool:
 	#   존재한 적이 없으므로 알릴 것이 없다.
 	if night_bar != null:
 		night_bar.abandon()
+	# ★[폴리시 R21 #16] **주민 보간 걷기도 같은 줄에 세운다.** 위 셋(낚시·체키/칵테일·밤 바)과
+	#   똑같이 무대에 묶인 비영속 세션인데 로드 경로에만 그 역연산이 없었다. 남으면: 같은 프레임의
+	#   `_update_resident_stations`가 **되감긴 시각**으로 돌며 스테이션이 바뀐 주민마다
+	#   `_begin_resident_walk(prev=버려진 타임라인의 칸, ...)`를 새로 걸어, 논리 칸(말을 걸 수 있는
+	#   자리)과 그려진 몸이 수십 초 동안 통째로 어긋난다(마을 레인 왕복 ≈ 1,900px · 56px/s ≈ 34초).
+	#   역연산은 `_begin_cutscene`이 R7·R8에 세운 그 두 줄 그대로다 — 취소해도 손실 0이다(걷기는
+	#   시각 전용이고 논리 칸은 스테이션 갱신이 곧 다시 찍는다). 부팅/타이틀 [이어하기]는 전 주민이
+	#   `Resident.UNPLACED`라 원래 영향이 없었고, 이 줄은 그 경로에도 무해하다(멱등).
+	for rr in _residents:
+		if rr.walk != null and rr.walk.is_walking():
+			rr.walk.cancel()
+		if rr.node != null and rr.node.has_method("set_walk_offset"):
+			rr.node.set_walk_offset(Vector2.ZERO)
 	# ★[폴리시 R12] 카페 팝업 둘(마감 정산·마일스톤)과 그 타이머·미룬 본문도 같은 줄에 세운다 —
 	#   화면을 갈아엎는 세 경로(`_open_epilogue`·`_end_run`·로드) 중 로드만 그 줄이 빠져 있었다.
 	#   근거 전문은 `_drop_cafe_popups` 머리말 ㉡(폐기된 타임라인의 매출이 복원된 아침에 뜬다).
@@ -12376,6 +12425,7 @@ func _load_game() -> bool:
 	_season_respawn_pending_day = maxi(int(data.get("season_respawn_pending_day", 0)), 0)
 	_pasture_release_pending = bool(data.get("pasture_release_pending", false))
 	_weed_day_pending_day = maxi(int(data.get("weed_pending_day", 0)), 0)
+	_tree_seed_pending_day = maxi(int(data.get("tree_seed_pending_day", 0)), 0)   # ★[폴리시 R21 #15]
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
 	#   값을 붓기 때문이다(없으면 저장돼 있던 칸이 조용히 사라진다). `_spine_bits` 복원은 아래
@@ -12863,7 +12913,16 @@ func _restore_location(data: Dictionary) -> void:
 	#   그 자리가 정확히 이 경우고(자동 저장이 그 좌표를 굳히면 F9 재로드마저 같은 벽 안으로
 	#   돌아온다), 앞으로 어떤 건물이 서든 같은 사고를 낼 수 있다. 실내는 방 바닥이 곧 유효
 	#   좌표라 바깥일 때만 보고, 폴백은 그 구역의 스폰이다(구역 밖으로 밀지 않는다).
-	elif _indoor == "" and _tile_blocked(saved_tile):
+	# ★[폴리시 R21 #13] 구제 술어를 `_tile_blocked` → `_player_blocked_at`으로 넓혔다. R20 #1이
+	#   «칸을 막는 것»의 진실원을 `_player_blocked_at`(= `_grid` + 작물 + 과수 + `_prop_blocked_tiles`)로
+	#   세웠는데 이 구제만 `_grid` 축 하나에 머물러, **마당 원장 나무에 묻힌 좌표를 못 봤다** —
+	#   자체 파종 나무는 `_grid`를 한 글자도 안 건드리고 `_prop_body` 사각으로만 서기 때문이다
+	#   (`_sync_tree_tile`은 숲 2구역 전용). 그래서 R21 #1 이전 세이브가 발밑에 나무를 심어 둔 채로
+	#   굳었으면 F9 재로드가 매번 같은 벽 안으로 돌아왔다(구세이브 탈출구 0). 같은 이유로 트렐리스
+	#   넝쿨·과수 밑동에 묻힌 좌표도 이제 구제된다. 과잉 구제는 안 생긴다: `_prop_blocked_tiles`는
+	#   풋프린트가 아니라 **물리가 실제로 받은 사각**이 칸 속살을 문 자리만 적는다(그 머리말 참조).
+	#   ★ 순서도 맞다 — 바로 위 `_rebuild_region(saved_region)`이 프롭 충돌·원장을 이미 다시 세웠다.
+	elif _indoor == "" and _player_blocked_at(saved_tile):
 		push_warning("[폴리시 R6] 복원 좌표 %s가 막힌 칸 — %s 스폰으로 구제" % [saved_tile, saved_region])
 		saved_tile = RegionCatalog.spawn_of(saved_region)
 	player.position = _tile_center_px(saved_tile)
@@ -13370,6 +13429,16 @@ func _process(delta: float) -> void:
 		_weed_day_pending_day = 0
 		_run_weed_spread(pending_weed_day)
 		_run_weed_encroach(pending_weed_day)
+	# ★[폴리시 R21 #15] 밀린 **그 밤의 마당 자체 파종** 소비 — 위 셋과 같은 자리·같은 조건이다.
+	#   잡초 두 줄 **뒤**에 두는 것이 순서다: 아침 정산에서도 재점령이 파종보다 먼저 돌아 그 밤에
+	#   돋은 잡초가 파종 성역(`_is_tree_seed_free`의 `has_weed` 항)에 이미 반영돼 있다.
+	if _tree_seed_pending_day != 0 and _region == RegionCatalog.HOME \
+			and not _sleeping and not _transitioning and tree_ledger != null:
+		var pending_seed_day := _tree_seed_pending_day
+		_tree_seed_pending_day = 0
+		var caught := tree_ledger.catch_up_seeding(pending_seed_day, _tree_seed_free_cb())
+		if not caught.is_empty():
+			_notice("마당에 어린 나무가 %d그루 돋았다" % caught.size())
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
@@ -15046,8 +15115,15 @@ func _process(delta: float) -> void:
 		# ★ [S3-T7] 통을 들고 물가 인접 칸을 겨눌 때: LMB로 설치(설치 후 [F]로 미끼 장전).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] 게잡이통 놓기 (물가 — 미끼를 넣으면 밤새 어획)"
-	elif ItemCatalog.is_sprinkler(inventory.selected_id()) and sprinkler != null and sprinkler.has_at(_target):
+	elif ItemCatalog.is_sprinkler(inventory.selected_id()) and _sprinkler_at(_target):
 		# ★ [S1R-T9] 이미 설치된 스프링클러를 겨눌 때: LMB로 회수(허수아비 재회수 동형).
+		# ★[폴리시 R21 #20] 원장 직행을 **무대 술어**(`_sprinkler_at`)로 바꿨다 — `Sprinkler._tiles`는
+		#   좌표만 키로 들고 구역 축이 없어서, R2/R4가 배치·회수·렌더를 그 술어로 HOME에 좁혔고
+		#   입력 디스패치도 그것을 쓰는데 **안내 사슬만** 원장을 날로 봤다. 그래서 안식 (42,13)에
+		#   세운 스프링클러가 나루 마을의 같은 좌표에서 "[좌클릭] 단비 스프링클러 회수"로 떴고
+		#   (다른 구역 원장의 티어명까지 읽어 왔다) LMB는 아무 일도 안 했다. 게다가 이 elif가
+		#   사슬을 가로채 그 칸의 승마·밭 안내가 영영 안 떴다(먹갈기 옆에서 스프링클러를 들면
+		#   승마 안내가 사라진다). 술어를 맞추면 화면과 동작이 같은 칸에서 선다.
 		# ★[S10-T2] 회수되는 것은 **거기 선 티어**라 문구도 그 티어를 말한다(든 것이 아니라).
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] %s 회수" % Sprinkler.tier_name(sprinkler.tier_at(_target))
@@ -15058,8 +15134,11 @@ func _process(delta: float) -> void:
 		var spr_held := inventory.selected_id()
 		interact_prompt.text = "[좌클릭] %s 설치 (%d칸 자동 급수)" % [ItemCatalog.name_of(spr_held),
 			Sprinkler.range_size(ItemCatalog.sprinkler_tier_of(spr_held))]
-	elif ItemCatalog.is_rarecrow(inventory.selected_id()) and rarecrow != null and rarecrow.has_at(_target):
+	elif ItemCatalog.is_rarecrow(inventory.selected_id()) and _rarecrow_at(_target):
 		# ★[S10-T2] 세워 둔 레어크로우를 겨눌 때: LMB로 회수(스프링클러 동형).
+		# ★[폴리시 R21 #21] 위 스프링클러와 **같은 구멍·같은 봉합**이다(`Rarecrow._tiles`도 좌표
+		#   키뿐이라 `_rarecrow_at`이 무대 술어다). 종전엔 다른 구역의 같은 좌표에서 HOME에 세워 둔
+		#   종의 **이름까지** 새어 나오고 거둘 수 없는 안내가 떴다.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[좌클릭] %s 거두기" % ItemCatalog.name_of(rarecrow.id_at(_target))
 	elif ItemCatalog.is_rarecrow(inventory.selected_id()) and _can_place_rarecrow(_target):
@@ -19966,6 +20045,23 @@ func _refresh_clock_hud() -> void:
 		GameClock.day_of_season(clock.day), clock.clock_string(), clock.phase(), wallet.gold,
 		CafeMilestone.compact(_run_harvested, _cafe_revenue_total, _milestone_hearts()),
 		_weather_today())
+	# ★[폴리시 R21 #19] 혼력 바의 "취침 신호" 눈금도 같은 자리에서 흘려 넣는다(HUD 갱신 한 묶음).
+	#   `set_low_cost`는 값이 바뀔 때만 다시 그리므로 매 프레임 호출이 공짜다.
+	if vitals != null:
+		vitals.set_low_cost(_lowest_action_cost())
+
+# ★[폴리시 R21 #19] **지금 낼 수 있는 가장 싼 동사 비용** — 혼력 바가 "이제 자라"로 갈리는 눈금이다.
+#   값은 전부 각 소유자에게서 판다(숫자 하드코딩 0): 농사·채광은 숙련 감산 비용, 팬닝은 그 상수,
+#   후킹은 이번 캐스팅의 도달 가능 최저(R11의 그 함수). 넷 중 가장 싼 것을 못 내는 순간이 곧
+#   "어떤 동사도 못 낸다"이고, 그때부터 바가 식는다 — 그 전까지는 실제로 할 수 있는 일이 남아
+#   있으므로 바가 취침을 재촉하면 거짓말이 된다(R6가 프롬프트 축에서 세운 그 규율의 HUD 판).
+func _lowest_action_cost() -> int:
+	var low := SoulEnergy.COST_PER_ACTION
+	for c in [_farming_energy_cost(), _mining_energy_cost(), PanningSpots.PAN_ENERGY,
+			FishingSession.min_hook_energy(_fishing_mods())]:
+		if int(c) > 0 and int(c) < low:
+			low = int(c)
+	return low
 
 func _refresh_fishshop() -> void:
 	frame.store_text = _fishshop_text()
@@ -20486,6 +20582,17 @@ func _heart_badge(r: Resident) -> String:
 		return "연애 중"
 	if r.affinity != null and r.affinity.pending_promotion():
 		return "진급 대기"
+	# ★[폴리시 R21 #23] 질투 감점의 **유일한 표면**. `_apply_jealousy`가 근거로 든 "누가 얼마
+	#   깎였는지는 관계 탭 하트가 이미 보여 준다"는 S8-T5가 stage와 points를 가른 뒤로 거짓이었다 —
+	#   `add_points`는 points만 움직이고 하트(=stage)는 `promote()`/`reset_hearts()`만 내리는데,
+	#   관계 탭 행도 컨텍스트 팝업도 `hearts()`만 그린다(저장소 전체에서 `affinity.points`를 읽는
+	#   그리기 경로가 0이었다). 그래서 −30이 걸렸는지도, 7일 뒤 언제 풀렸는지도 알 방법이 없었다.
+	#   ★ 새 UI를 만들지 않고 **이미 있는 배지 자리**를 쓴다(문구는 알림과 같은 정서 어휘). 원장이
+	#     비면(자동 복원) 배지도 함께 사라져 "복원된 아침은 그냥 평소다"라는 규약과 어긋나지 않는다.
+	#   ★ 상태 배지(부부·연애·혼례)와 진급 대기 **뒤**에 둔다 — 저 넷은 지금 할 수 있는 일을
+	#     가리키고, 이건 지나가는 상태다.
+	if _jealousy.has(r.id):
+		return "서운함"
 	return ""
 
 # ★ Phase B 숙련 탭 행(_heart_rows와 대칭 — FarmSkill에서 레벨·진행 파생, 읽기 전용). 현재 농사 1종.
@@ -22603,9 +22710,16 @@ func _okja_charm_in_hand(r: Resident) -> bool:
 	return r != null and _okja_deed_only(r.id) and r.affinity != null \
 		and inventory.selected_id() == ItemCatalog.MYEONGBU_CHARM
 
+# ★[폴리시 R21 #24] **연애 슬롯도 본다.** 형제 창구 `_charm_quest_open`의 첫 항이
+#   `_romance_partner != ""`(건넬 상대가 있을 때만 발급)인데 이쪽은 그 축을 한 항도 안 봐서,
+#   슬롯이 남에게 잡혀 있어도 유일 정표를 무상 발급했다. 그 즉시 `_stored_anywhere`로 창구가 닫혀
+#   강림 프롬프트는 사라지고, 앵커를 마주 보면 `_okja_charm_in_hand`가 「[G] 청혼」을 광고하지만
+#   `_try_propose_okja`는 "곁에 이미 …가 있다"로 **항상** 거절한다 — 이혼(50,000냥)으로 슬롯을
+#   비우기 전까지 백팩 한 칸을 영구 점유하는 사장 아이템과, 누를 때마다 실패하는 광고된 [G]만
+#   남았다. 발급 창구를 집행부(`_try_propose_okja`)의 게이트와 같은 폭으로 맞춘다.
 func _myeongbu_quest_open() -> bool:
 	var r := _resident(OKJA_RID)
-	return _okja_track_open() and _spouse_id == "" and _wedding_day == 0 \
+	return _okja_track_open() and _spouse_id == "" and _wedding_day == 0 and _romance_partner == "" \
 		and r != null and r.affinity != null and r.affinity.hearts() >= Affinity.MAX_HEARTS \
 		and not _stored_anywhere(ItemCatalog.MYEONGBU_CHARM)   # ★[폴리시 R5] 상자 보관 = 재발급 차단
 
