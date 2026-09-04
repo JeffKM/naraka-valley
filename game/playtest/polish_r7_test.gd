@@ -700,7 +700,10 @@ func _initialize() -> void:
 		hand_decl > 0 and hand_decl < animal_br and hand_decl < debris_br and hand_decl < weed_br)
 	_check("⑬e 맨 아래 일반 갈래는 `holding_free_use`를 그대로 든다 — 손 물건이 여전히 **한 번** 실행된다",
 		# ★[폴리시 R17 경유 발견] R16 #5가 or-항을 `pot_at_target` → `pot_dispatch`로 갈았다(계약 불변).
-		_line_of("and (_target_valid or holding_weapon or pot_dispatch or holding_free_use)") > weed_br)
+		# ★[폴리시 R19 경유 발견] R18 #1이 다섯째 항을 더하며 그 줄이 두 줄로 접혀 닫는 괄호가
+		#   넘어갔다 — polish_r10 ⑤b와 **같은 니들이 같은 이유로** R18 시점부터 red였다.
+		#   계약("항 넷이 전부 산다")은 그대로이므로 닫는 괄호를 뺀 접두로 고친다.
+		_line_of("and (_target_valid or holding_weapon or pot_dispatch or holding_free_use") > weed_br)
 	# 동사 자체는 호출 1회당 1개만 태운다(가드가 없어도 참이었던 성질 — 이중은 디스패치의 몫이었다).
 	_clear_backpack(m)
 	m.inventory.add_item(low_dish, 2)

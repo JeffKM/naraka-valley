@@ -210,7 +210,11 @@ func _initialize() -> void:
 	_check("⑤b 그 게이트는 여전히 자유 사용 물건·무기를 or-항으로 들고 있다(거동 축소 0)",
 		# ★[폴리시 R17 경유 발견] R16 #5가 이 or-항을 `pot_at_target` → `pot_dispatch`로 갈면서
 		#   니들이 상해 있었다(계약 자체는 그대로 — 항 넷이 전부 산다). 이름만 따라 옮긴다.
-		_line_of("and (_target_valid or holding_weapon or pot_dispatch or holding_free_use)") > 0)
+		# ★[폴리시 R19 경유 발견] R18 #1이 다섯째 항(과수)을 더하며 그 줄이 **두 줄로 접혔고**,
+		#   닫는 괄호가 다음 줄로 넘어가 이 니들이 R18 시점부터 이미 red였다(HEAD의 main.gd에
+		#   이 문자열이 한 번도 없다 — R18의 선별 회귀가 이 스위트를 안 태운 자리다). 계약은
+		#   여전히 "항 넷이 전부 산다"이므로 **닫는 괄호를 뺀 접두**로 고친다.
+		_line_of("and (_target_valid or holding_weapon or pot_dispatch or holding_free_use") > 0)
 	_check("⑤c 세션 틱 분기는 종전대로 return이 없다(그래서 게이트가 유일한 방어다)",
 		_line_of("if fishing != null and not _sleeping:") > 0
 		and _line_of("if fishing != null and not _sleeping:") < gate)

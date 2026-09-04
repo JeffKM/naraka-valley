@@ -293,9 +293,12 @@ func _check_orchard_dispatch(m: Node) -> void:
 			% [str(canopy), str(planted), str(m._is_farmable(canopy)), str(m._orchard_dispatch_at(canopy))],
 		planted and not m._is_farmable(canopy) and m._orchard_dispatch_at(canopy))
 	# 게이트 두 줄이 실제로 그 or-항을 물고 있는가(입력 사슬의 자리 — 라이브로는 못 누른다).
-	var g_use := _line_in(_src, "or orchard_dispatch) \\")
+	# ★[폴리시 R19 #1] 니들이 **축별로 갈렸다** — 한 술어를 두 게이트에 같이 실었더니 수확 축이
+	#   LMB까지 열어 괭이·씨앗이 나무 밑 비-farmable 칸에 닿았다. R18의 취지(과수 프롬프트·수확
+	#   동작)는 그대로고, 게이트가 자기 축만 무는 것으로 바뀌었다(각 술어 머리말).
+	var g_use := _line_in(_src, "or orchard_plant_dispatch) \\")
 	var g_harv := _line_in(_src, "(_target_valid or pot_dispatch or orchard_dispatch)")
-	_check("②e 두 디스패치 게이트가 그 or-항을 물었다 — LMB `_use_tool`(main %d행) · RMB `_try_harvest`(%d행)"
+	_check("②e 두 디스패치 게이트가 각자의 축을 물었다 — LMB `_use_tool` = 심기 축(main %d행) · RMB `_try_harvest` = 수확 축(%d행)"
 			% [g_use + 1, g_harv + 1], g_use >= 0 and g_harv >= 0)
 	m.orchard.load_save(orchard_snap)      # 무대 원복 — 심은 나무를 원장에서 되돌린다
 	m.inventory.slots[m.inventory.selected_index] = null

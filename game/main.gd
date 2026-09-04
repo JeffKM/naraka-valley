@@ -14217,7 +14217,9 @@ func _process(delta: float) -> void:
 	#   아니라 GROUND 위에 서고(`_is_tree_blocked` 머리말 "SOIL 요구는 없다"), 과수원 존
 	#   (ORCHARD_ZONE_RECT)에는 SOIL이 한 칸도 없다. S10-T5 화분이 두 게이트에 or-항을 얻을 때
 	#   과수만 못 얻어, **프롬프트는 뜨는데 LMB/RMB가 한 번도 창구에 안 닿았다**(심기·수확 전부).
-	var orchard_dispatch := _orchard_dispatch_at(_target)
+	# ★[폴리시 R19 #1] 축을 갈라 받는다 — LMB는 심기 축만, RMB는 수확 축만(그 술어 머리말).
+	var orchard_plant_dispatch := _orchard_plant_dispatch()
+	var orchard_dispatch := _orchard_harvest_dispatch_at(_target)
 	var on_garden_pot := not _sleeping and holding_garden_pot and pot_at_target
 	if on_garden_pot and Input.is_action_just_pressed("use_tool"):
 		_remove_garden_pot(_target)
@@ -14278,7 +14280,7 @@ func _process(delta: float) -> void:
 	# ★[S10-T2] 레어크로우도 스프링클러와 같은 이유로 도구질로 흘리지 않는다(설치 LMB와 중복 방지).
 	if not _sleeping and cheki == null and cocktail == null and fishing == null \
 			and (_target_valid or holding_weapon or pot_dispatch or holding_free_use \
-				or orchard_dispatch) \
+				or orchard_plant_dispatch) \
 			and not holding_sprinkler and not holding_garden_pot and held_rarecrow == "" \
 			and Input.is_action_just_pressed("use_tool"):
 		_use_tool()
@@ -15765,6 +15767,18 @@ func _grazing_animal_at(t: Vector2i) -> bool:
 func _tree_occupied_at(t: Vector2i) -> bool:
 	return tree_ledger != null and tree_ledger.is_occupied(_region, t)
 
+# ★[폴리시 R19 #8] 이 칸이 **혼의 나무 밑동**인가 — 위 술어의 과수판이고, 존재 이유도 정확히 같다.
+# 마당 나무는 두 원장이 나눠 갖는데(심은 혼의 나무 = orchard · 자체 파종 = TreeLedger) 배치 가드
+# 셋은 뒤의 하나만 물었다. 밑동 칸은 `_sync_tree_tile`이 손대는 원장 칸과 달리 `_grid`가
+# GROUND/PATH 그대로고(밑동 SOLID의 실체는 `_orchard_body` StaticBody뿐), 그래서
+# `cell != GROUND and cell != SOIL`도 `is_solid(cell)`도 통과해 **밑동 위에 설치물이 겹쳐 섰다** —
+# 플레이어가 설 수 없는 칸이라 그림상 나무에 묻힌 설치물이 된다. 반대 방향(`_is_tree_seed_free`
+# 4600행 `t in orchard.trunk_tiles()`)은 이미 막혀 있어 가드가 단방향이던 자리다.
+# ★ 밑동(앵커) 한 칸만 본다 — 3×3 풋프린트의 나머지는 캐노피라 걸어 다닐 수 있고, 거기 서는
+#   설치물은 나무 그늘 아래 놓인 것이라 겹침이 아니다(충돌도 앵커에만 선다).
+func _orchard_trunk_at(t: Vector2i) -> bool:
+	return orchard != null and _region == RegionCatalog.HOME and orchard.has_tree(t)
+
 # ★[폴리시 R8] 이 칸이 **[F] 창구 좌표**인가 — 좌표 상수 하나로 열리는 야외 상호작용 자리다.
 # 왜 배치 가드가 이걸 물어야 하나: 설치물의 투입·수거·회수는 전부 [F] 한 동사인데, 입력 사다리에서
 # 우편함(`facing_mailbox`)이 업화로·결정기보다 **70줄 앞에서 잡고 return**한다. 그래서 우편함 칸에
@@ -15859,6 +15873,8 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 		return false
 	if _tree_occupied_at(t):                  # ★[폴리시 R9] 밤새 돋은 런타임 파종목 → 배제
 		return false                          #   (위 occ는 원장을 안 본다 — 그 술어 머리말)
+	if _orchard_trunk_at(t):                  # ★[폴리시 R19 #8] 혼의 나무 밑동 → 배제(그 술어 머리말)
+		return false
 	if _debris_kind_at(t) != "":              # 아직 안 치운 debris → 배제(개간 후 설치)
 		return false
 	if _field_at(t).is_crop_solid(t):         # 트렐리스 넝쿨 점유 → 배제(★[S10-T5] 늘봄방 넝쿨 포함)
@@ -15943,11 +15959,29 @@ func _pot_dispatch_at(t: Vector2i) -> bool:
 #      `orchard.plant(..., _is_tree_blocked)`로 스스로 판정하므로(못 심을 자리면 무동작),
 #      여기서 다시 묻지 않는다(판정 진실원 하나 — 프롬프트도 `orchard.can_plant`를 직접 본다).
 # 안식 농원 야외 전용이다 — `_use_tool`의 묘목 갈래·수확 갈래가 둘 다 그 두 술어를 걸고 있다.
+# ★[폴리시 R19 #1] **두 축을 부르는 쪽이 고른다** — 한 술어로 묶어 두 게이트에 같이 실었더니
+#   수확 축(㉠)이 LMB(도구질)까지 열어, **든 물건과 무관하게** 나무 3×3의 비-farmable 칸이
+#   창구에 닿았다. `_use_tool`의 괭이 갈래는 `_farm_aoe_tiles`가 조준 칸을 무조건 포함하고
+#   (`if at == t or _is_farmable(at)` — 그 칸의 유효성은 늘 호출 측 게이트 책임이라는 계약)
+#   `FarmField.hoe`는 지형을 한 줄도 안 보므로, 괭이로 나무 밑을 겨누면 그 칸이 밭 원장에
+#   등록되고 `Museum.relic_roll`까지 굴렀다(개간한 적 없는 칸에서 유품). 이어서 씨앗을 들면 같은
+#   게이트가 다시 열려 **나무 밑동 안에 작물이 심겼다**. `_is_farmable`는 여전히 거짓이라
+#   `_farm_prompt`는 그 칸에 아무 안내도 안 띄웠다(화면과 동작 불일치까지 동반).
+#   갈라 두면 R18의 취지(과수 프롬프트·수확 동작)는 그대로다 — LMB가 여는 유일한 과수 동사는
+#   묘목 심기이고(벌목·수액은 각자 디스패치를 이미 갖는다), RMB가 여는 유일한 동사는 수확이다.
 func _orchard_dispatch_at(t: Vector2i) -> bool:
+	return _orchard_harvest_dispatch_at(t) or _orchard_plant_dispatch()
+
+# ㉠ 수확 축(RMB) — 조준 칸이 어느 나무의 3×3 풋프린트에 드는가.
+func _orchard_harvest_dispatch_at(t: Vector2i) -> bool:
 	if orchard == null or _region != RegionCatalog.HOME or _indoor != "":
 		return false
-	if orchard.has_tree(orchard.tree_at(t)):
-		return true
+	return orchard.has_tree(orchard.tree_at(t))
+
+# ㉡ 심기 축(LMB) — 든 것이 묘목인가. 칸은 안 묻는다(`orchard.plant`가 스스로 판정).
+func _orchard_plant_dispatch() -> bool:
+	if orchard == null or _region != RegionCatalog.HOME or _indoor != "":
+		return false
 	return ItemCatalog.category_of(inventory.selected_id()) == ItemCatalog.CAT_SAPLING
 
 # 이 칸에 화분을 놓을 수 있는가. 스프링클러 규칙의 **거울상**이다: 저쪽이 "바깥 지면"을 요구한다면
@@ -16309,13 +16343,31 @@ func _use_tapper(t: Vector2i) -> void:
 #   (설치는 여전히 성숙 나무 = 앵커 칸을 겨눠야 성립한다 · `_can_place_tapper` 무수정).
 # ★ 보정이 0인 자리는 첫 두 줄에서 그대로 빠져나간다: 숲(원장 칸 = 발치)·안식 자체 파종 나무
 #   (손저작 앵커가 아니라 큰 스프라이트도 없다 — `_draw_tappers_pass`의 `anchors.has(t)`와 같은 술어).
+#
+# ★[폴리시 R19 #2] 아래 셋이 공유하는 **역산 표**. 손저작 나무 프롭은 64×128(2×4칸)이라 발치 행도
+#   **가로 두 칸**인데(충돌은 `_build_prop_collision`이 `rect.size.x = sz.x`로 두 칸을 통째로
+#   막는다) 종전 역산은 세로 드롭만 되짚어 **동쪽 발치 칸이 통째로 빠졌다** — 그 칸은 몸이 막히는데
+#   도끼도 낫도 채취기도 프롬프트도 전부 0인 "그림 없는 벽"이었고, 바로 옆 서쪽 칸에서는 넷 다
+#   정상이라 한 나무의 발치 두 칸이 서로 다르게 반응했다(R18 이전엔 두 칸 다 무반응이라 대칭).
+#   폭은 스프라이트에서 파생한다(값 복제 0). 후보 순서 = 서쪽부터 = 자기 앵커 우선이라, 두 나무의
+#   발치가 이웃해 겹치는 배치에서도 종전에 성립하던 dx=0 답이 먼저 잡힌다(더하기만·거동 보존).
+func _home_tree_anchor_candidates(t: Vector2i) -> Array:
+	var out: Array = []
+	var anchors := _home_tree_anchor_set()
+	var dy := int(_tapper_home_drop()) / TILE
+	for dx in range(int(PROP_TREE_A.get_size().x) / TILE):
+		var a := t - Vector2i(dx, dy)
+		if a != t and anchors.has(a):
+			out.append(a)
+	return out
+
 func _tapper_ledger_tile(t: Vector2i) -> Vector2i:
 	if tapper == null or tapper.has_at(_region, t) or _region != RegionCatalog.HOME:
 		return t
-	var a := t - Vector2i(0, int(_tapper_home_drop()) / TILE)
-	if a == t or not _home_tree_anchor_set().has(a):
-		return t
-	return a if tapper.has_at(_region, a) else t
+	for a: Vector2i in _home_tree_anchor_candidates(t):
+		if tapper.has_at(_region, a):
+			return a
+	return t
 
 # ★[폴리시 R15] **설치 축의 같은 다리.** 위 함수는 "그 앵커에 *채취기가 박혀 있는가*"를 보므로 설치
 #   **전**에는 언제나 항등을 돌려준다 — 그래서 R14가 수거·회수만 밑동으로 옮겼고, 설치·설치 안내는
@@ -16327,10 +16379,10 @@ func _tapper_ledger_tile(t: Vector2i) -> Vector2i:
 func _tapper_place_tile(t: Vector2i) -> Vector2i:
 	if tree_ledger == null or _region != RegionCatalog.HOME or tree_ledger.is_mature(_region, t):
 		return t
-	var a := t - Vector2i(0, int(_tapper_home_drop()) / TILE)
-	if a == t or not _home_tree_anchor_set().has(a):
-		return t
-	return a if tree_ledger.is_mature(_region, a) else t
+	for a: Vector2i in _home_tree_anchor_candidates(t):
+		if tree_ledger.is_mature(_region, a):
+			return a
+	return t
 
 # ★[폴리시 R18] **원장 나무 동사 전체의 같은 다리.** 위 두 함수가 채취기 축(수거·설치)에만 놓은
 #   밑동↔앵커 보정을 벌목·이끼가 함께 탄다 — 안식 마당 나무의 원장 칸은 손저작 프롭의 **앵커**
@@ -16345,10 +16397,10 @@ func _tapper_place_tile(t: Vector2i) -> Vector2i:
 func _home_tree_ledger_tile(t: Vector2i) -> Vector2i:
 	if tree_ledger == null or _region != RegionCatalog.HOME or tree_ledger.is_occupied(_region, t):
 		return t
-	var a := t - Vector2i(0, int(_tapper_home_drop()) / TILE)
-	if a == t or not _home_tree_anchor_set().has(a):
-		return t
-	return a if tree_ledger.is_occupied(_region, a) else t
+	for a: Vector2i in _home_tree_anchor_candidates(t):
+		if tree_ledger.is_occupied(_region, a):
+			return a
+	return t
 
 func _tapper_prompt(t: Vector2i) -> String:
 	var got := tapper.pending_product(_region, t)
@@ -16391,6 +16443,8 @@ func _can_place_furnace(t: Vector2i) -> bool:
 	if _installation_at(t):
 		return false
 	if _tree_occupied_at(t):                  # ★[폴리시 R9] 런타임 파종목 → 배제(아래 occ는 원장을 안 본다)
+		return false
+	if _orchard_trunk_at(t):                  # ★[폴리시 R19 #8] 혼의 나무 밑동 → 배제(스프링클러와 동형)
 		return false
 	# ★[폴리시 R8] [F] 창구 좌표 → 배제. **이 결함의 진원지**다 — 우편함 칸에 세운 업화로는 그 칸의
 	#   [F]가 입력 사다리에서 편지 열람에 먼저 잡혀, 화덕도 안에 든 광석도 영구 유실됐다.
@@ -16929,6 +16983,8 @@ func _can_place_crystalarium(t: Vector2i) -> bool:
 	if _installation_at(t):                   # ★[폴리시 R4] 업화로와 같은 단일 술어(레어크로우 포함·구역 축 포함)
 		return false
 	if _tree_occupied_at(t):                  # ★[폴리시 R9] 런타임 파종목 → 배제(업화로와 완전 동형)
+		return false
+	if _orchard_trunk_at(t):                  # ★[폴리시 R19 #8] 혼의 나무 밑동 → 배제(업화로와 완전 동형)
 		return false
 	if _f_window_tile(t):                     # ★[폴리시 R8] [F] 창구 좌표 → 배제(업화로와 완전 동형)
 		return false
@@ -17601,8 +17657,15 @@ func is_bush_tile(region: String, t: Vector2i) -> bool:
 
 # 덤불을 흔든다 — **줍기 결**이라 혼력 0(ADR-0033 #1)이고 도구도 필요 없다.
 #   수량 = 채집 레벨 계단(L0~3 1개 / L4~7 2개 / L8+ 3개, ForageSkill.bush_yield) · XP = 개당 1.
-#   ★ 품질은 안 실린다: 열매는 절기 창 나흘의 이벤트 산출이라 등급 롤을 태우면 "언제 흔드느냐"가
-#     아니라 "레벨이 몇이냐"가 값을 정하게 된다(수량 계단만으로 이미 레벨 보상이 있다). Q_NORMAL 고정.
+#   ★ **레벨 등급은 안 실린다**: 열매는 절기 창 나흘의 이벤트 산출이라 레벨 파생 등급
+#     (`_forage_base_quality`)을 태우면 "언제 흔드느냐"가 아니라 "레벨이 몇이냐"가 값을 정하게
+#     된다(수량 계단만으로 이미 레벨 보상이 있다). 그 배제는 그대로다.
+# ★[폴리시 R19 #4] 그런데 **전문직 퍼크 두 축은 탄다** — 그쪽은 레벨 곡선이 아니라 L10에서 고르는
+#   한 번의 선택이고, 무엇보다 두 desc가 대상 범위를 스스로 못 박는다: 약초학자 "**모든 채집물**
+#   최고 등급(이리듐) 고정" · 채집꾼 "**채집물** 20% 확률 2배". 넋딸기는 FORAGEABLES라
+#   `carries_quality`가 참이고 가격이 등급에 실제로 곱해지는데(ItemCatalog 1049행) 셋 중 이 창구만
+#   두 축 어느 것도 안 봐서, 같은 플레이어가 옆 빈터에서 줍는 것은 이리듐 ×2인데 덤불 열매만
+#   일반 등급 1배였다. 위 배제와 충돌하지 않는다 — 레벨은 여전히 등급을 안 정한다.
 # ★[폴리시 R5] 반환값 = 이 [F]를 소비했는가(_pick_forage와 같은 계약).
 func _shake_bush(t: Vector2i) -> bool:
 	if berry_bushes == null or not berry_bushes.has_berry(_region, t):
@@ -17611,7 +17674,10 @@ func _shake_bush(t: Vector2i) -> bool:
 	if id == "":
 		return false                              # 창 밖 잔여 플래그였다(원장이 정리만 하고 빈손)
 	var n := ForageSkill.bush_yield(_skill_level(ProfessionCatalog.FORAGING))
-	if not inventory.add_item(id, n):
+	if _forage_double_drop("bush", t):            # ★ day·칸 결정 시드(세 형제와 같은 창구·같은 규율)
+		n *= 2
+	var quality := forage_quality_floor()         # ★ 약초학자 하한만(레벨 base는 위 머리말대로 배제)
+	if not inventory.add_item(id, n, quality):
 		berry_bushes.set_berry(_region, t, true)  # 인벤 가득 — 열매를 덤불에 되돌린다(증발 방지)
 		_notice("백팩이 가득 차 열매를 담을 수 없다 — [Tab] 가방에서 자리를 비우고 다시 [F]")
 		return true
@@ -20224,7 +20290,15 @@ func _setup_residents() -> void:
 		{"from_min": 0, "tile": MIHO_FIELD_TILE, "region": RegionCatalog.HOME},
 		{"from_min": Cafe.OPEN_MIN, "tile": MIHO_CAFE_TILE, "region": RegionCatalog.NARU_VILLAGE},
 	]
-	r_miho.effect_fn = func() -> String: return Foxfire.summary(affinity.hearts())
+	# ★[폴리시 R19 #5] 여우불(작물 *성장* 가속) 뒤에 **농사 숙련 XP 가속**을 함께 말한다 — 두 축은
+	#   서로 다른 것이고(XpBoost 머리말 ㉡), XP 쪽은 라이브인데 표면이 0이었다. ♡0(×1.00)에선
+	#   붙이지 않는다: 등속은 광고할 효과가 아니고, 여우불이 accel 0을 감추는 그 규율과 같다.
+	r_miho.effect_fn = func() -> String:
+		var h := affinity.hearts()
+		var line := Foxfire.summary(h)
+		if XpBoost.mult(h) > 1.0:
+			line += " · 농사 %s" % XpBoost.summary(h)
+		return line
 	_register_resident(r_miho)
 
 	# ── 멜(T5.1/T5.2) — 카페 카운터 상주. 카페 방은 카메라로 격리돼 있어(구역 밖에선 못 닿는다)
@@ -20288,8 +20362,15 @@ func _setup_residents() -> void:
 		return true
 	# ★[폴리시 R11] 배우자 잡일 ③(자동 차단 +1)까지 함께 말한다 — 주입부(_process)와 같은 조건을
 	#   같은 상수로 묻는다(수치 복제 0). 관계 탭이 그 밤의 실효 보호와 어긋나지 않게 하는 유일한 자리.
-	r_bana.effect_fn = func() -> String: return BanaGuard.summary(bana_affinity.hearts(),
-		SPOUSE_BANA_EXTRA_BLOCK if _spouse_id == "bana" else 0)
+	# ★[폴리시 R19 #5] 나락 **전투 숙련 XP 가속**도 함께 말한다 — 계수는 전투 XP 경로가 실제로 쓰는
+	#   그 훅(`narak_bana_xp_mult`)에서 그대로 받아 표시와 실효가 갈릴 자리를 안 만든다.
+	r_bana.effect_fn = func() -> String:
+		var line := BanaGuard.summary(bana_affinity.hearts(),
+			SPOUSE_BANA_EXTRA_BLOCK if _spouse_id == "bana" else 0)
+		var m := narak_bana_xp_mult()
+		if m > 1.0:
+			line += " · 나락 전투 %s" % XpBoost.summary_by(m)
+		return line
 	_register_resident(r_bana)
 
 	# ── 네오(M2.3) — 만물상 점주. ★[ADR-0060 결정 8] **이중 신분**: 점주 레이어(shop_key = 매대·
@@ -21374,9 +21455,23 @@ const ROAD_LANE_Y := {RegionCatalog.NARU_VILLAGE: MAIN_CORRIDOR_Y}
 #   뚫고 나와 광장 돌담을 관통해 복도까지 26칸을 북상했다(세레나의 세 스테이션은 전부 y63이라
 #   12:00·17:00 전환이 매번 그 60칸짜리 관통 걷기였다 — 강변 레인을 따르면 8칸이다).
 #   **지도가 문 스포크를 가르는 그 술어를 그대로 쓴다** — 두 곳이 갈리면 또 어긋난다.
+#   ★[폴리시 R19 #0] R18이 "술어도 그 표 한 줄에 산다"고 선언했지만 실제로는 **두 술어가 갈려
+#     있었다**: 표는 집 **rect**로 가르고(`rect.position.y >= RIVERSIDE_ZONE_Y`) 여기는 **타일**로
+#     갈랐다. 한 집이 그 문턱을 걸치면 두 답이 어긋난다 — 주민집 8번은 rect y54(< 56)라 표에선
+#     메인 복도인데 문 앞 칸 (76,58)은 y58(≥ 56)이라 여기선 강변 레인이었다. 그러면
+#     `_house_detour`의 첫 필터(`int(e[2]) != lane`)가 그 집 항목을 통째로 건너뛰어 우회 경유점이
+#     비고, 프로스티 11:00 전환이 지도가 카브한 적 없는 y63까지 남하해 강변 산책로를 서진하는
+#     ~62칸 경로가 됐다(정로는 옆 열 (79,58)→(79,36) 우회다).
+#   **문 앞 칸은 표가 진실원이다** — 그 집에 지도가 실제로 카브한 레인을 그대로 돌려준다. 문 앞이
+#   아닌 칸(광장·강변 스테이션 등)만 y 문턱으로 가른다(종전 거동 그대로). 다른 4인(켄·미르·
+#   루카·스칼렛)은 rect·문 앞 칸이 둘 다 문턱 위라 두 갈래가 같은 답을 내 거동 불변이다.
 func _road_lane_of(t: Vector2i, region: String) -> int:
-	if region == RegionCatalog.NARU_VILLAGE and t.y >= RIVERSIDE_ZONE_Y:
-		return RIVERSIDE_LANE_Y
+	if region == RegionCatalog.NARU_VILLAGE:
+		for e in _village_door_spokes():
+			if t == Vector2i(e[1]) + Vector2i(0, 1):
+				return int(e[2])
+		if t.y >= RIVERSIDE_ZONE_Y:
+			return RIVERSIDE_LANE_Y
 	return int(ROAD_LANE_Y[region])
 
 func _road_spokes(from_tile: Vector2i, to_tile: Vector2i, region: String) -> PackedVector2Array:
@@ -24932,6 +25027,14 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 		return true
 	if t == MIHO_FIELD_TILE:
 		return true
+	# ★[폴리시 R19 #7] **구역 통행 칸은 나무에도 성역이다.** 안식 농원의 출구는 (78,32) 한 칸뿐인데
+	#   그 칸은 `_carve_h`가 깐 PATH라 비-SOLID고, 이 술어는 워프·도착 칸을 하나도 몰랐다 — 밑동을
+	#   거기 심으면 `_rebuild_orchard_collision`이 세운 32×32 StaticBody 때문에 `_player_tile()`이
+	#   영영 그 칸을 낼 수 없어(`_maybe_warp_edge`는 **그 칸에 실제로 서야만** 발동한다) 나머지
+	#   구역 전부가 도달 불가가 된다. 늘봄방 예정지와 같은 결의 예약이되 근거가 더 강하다:
+	#   저쪽은 완공이 덮는 것이고 이쪽은 **되돌릴 창구가 orchard에 아예 없다**(remove API 0).
+	if _traversal_reserved(t):
+		return true
 	# ★[폴리시 R5] 늘봄방 예정지는 나무에도 예약 부지다 — R4가 설치물 셋만 막고 여기를 비워 둬,
 	#   완공이 3×3 과수를 통째로 벽 밑에 묻을 수 있었다(설치물과 달리 회수 수단조차 없다).
 	if _greenhouse_lot_reserved(t):
@@ -24939,6 +25042,25 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 	if is_solid(_grid[t.y][t.x]):
 		return true
 	return farm.is_crop_solid(t)
+
+# ★[폴리시 R19 #7] 이 칸이 **구역 통행의 병목**인가 — 지금 무대에서 (㉠ 밖으로 나가는 워프 발동
+#   칸 ㉡ 다른 구역에서 이 무대로 들어오는 도착 칸 ㉢ 이 무대의 기본 스폰 칸) 중 하나. 셋 다
+#   RegionCatalog 표에서 파생한다(좌표 복제 0 — 표가 바뀌면 성역도 따라 움직인다).
+#   막는 것은 **새로 세우는 것**뿐이다: 이미 놓인 것은 각자의 회수 창구가 그대로 걷는다.
+func _traversal_reserved(t: Vector2i) -> bool:
+	if RegionCatalog.spawn_of(_region) == t:
+		return true
+	for w in RegionCatalog.warps_of(_region):
+		if w["at"] != RegionCatalog.TILE_TBD and Vector2i(w["at"]) == t:
+			return true
+	for rid in RegionCatalog.ids():
+		if rid == _region:
+			continue
+		for w in RegionCatalog.warps_of(rid):
+			if String(w["to"]) == _region and w["dest"] != RegionCatalog.TILE_TBD \
+					and Vector2i(w["dest"]) == t:
+				return true
+	return false
 
 # ★ [S1-8 §10.2] 조준 타일에 아직 안 치운 debris가 있으면 그 DebrisCatalog kind, 없으면 "". 배치는
 # _prop_layouts["HOME"] 시드에서 텍스처→kind로 역인한다(이미 치운 것은 reclaim이 걸러 "" 반환). 안식
@@ -26161,11 +26283,14 @@ const _MOSS_HILITE := Color(0.45, 0.63, 0.42)
 #   짝이 맞는다: 겨누는 칸이 곧 그려지는 칸이 된다.
 #   보정이 0인 자리는 그대로다: 숲(원장 칸 = 발치)·안식 **자체 파종** 나무(손저작 앵커가 아니라
 #   큰 스프라이트도 없다 — 채취기 패스의 `anchors.has(t)`와 같은 술어).
+# ★[폴리시 R19 #2] 가로도 같이 교정한다 — 프롭이 64px(2칸) 폭이라 그 트렁크의 중심은
+#   `t.x*TILE + sz.x*0.5`인데(충돌 rect가 정확히 그 x에 선다) 그루터기·이끼는 한 칸 기준으로
+#   그려져 반 칸 서쪽으로 치우쳐 있었다. 세로 드롭과 같은 소스(스프라이트 크기)에서 파생한다.
 func _tree_ledger_draw_px(t: Vector2i) -> Vector2:
-	var drop := 0.0
 	if _region == RegionCatalog.HOME and _home_tree_anchor_set().has(t):
-		drop = _tapper_home_drop()
-	return Vector2(t.x * TILE, float(t.y * TILE) + drop)
+		return Vector2(float(t.x * TILE) + (PROP_TREE_A.get_size().x - float(TILE)) * 0.5,
+			float(t.y * TILE) + _tapper_home_drop())
+	return Vector2(t.x * TILE, t.y * TILE)
 
 func _draw_tree_ledger() -> void:
 	if tree_ledger == null or _indoor != "":

@@ -58,6 +58,14 @@ func push(text: String, secs: float, wide: bool = false, icon: Texture2D = null,
 			if not bool(_items[i].get("keep", false)):
 				victim = i
 				break
+		# ★[폴리시 R19 #6] 앞이 전부 keep이면 **방금 민 줄부터 본다** — 그 줄이 평범한 알림이면
+		#   그것을 버린다. 종전 폴백은 곧장 `remove_at(0)`이라, 재발화 가능한 한 줄이 다시는 오지
+		#   않을 줄을 축출했다(하루 전환 한 프레임에 밤 바 마감·도감 트로피·완공·혼례 아침이 keep
+		#   4줄로 큐를 채우고, 뒤이은 출하 정산 한 줄이 밤 바 결산을 지웠다 — `abandon()`이 매출을
+		#   이미 0으로 지운 뒤라 되뜰 경로가 없다). 유실 우선순위를 keep 계약대로 되돌린다.
+		#   ★ 상한 계약은 그대로다: 새 줄까지 keep이면 여전히 맨 앞을 버린다(전부 keep인 불가피).
+		if victim < 0 and not bool(_items[-1].get("keep", false)):
+			victim = _items.size() - 1
 		_items.remove_at(victim if victim >= 0 else 0)
 	queue_redraw()
 

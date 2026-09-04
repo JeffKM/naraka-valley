@@ -51,6 +51,16 @@ static func scaled_by(amount: int, m: float) -> int:
 		return amount
 	return int(round(float(amount) * m))
 
-# 관계 탭 한 줄(effect_fn 결 — 실제 배선은 탭 재설계 T8 소관이라 지금은 조회 창구만 열어 둔다).
+# 관계 탭 한 줄(effect_fn 결).
+# ★[폴리시 R19 #5] **호출부가 0이던 자리를 배선했다** — 두 곱셈기는 라이브인데(미호 ♡ → 농사 XP ·
+#   바나 ♡ → 나락 전투 XP) 관계 탭이 그리는 줄은 여우불·수호뿐이라, ♡5로 숙련이 25% 빨라지는
+#   사실이 게임 안 어디에도 안 떴다. ADR-0008이 관계를 "*항상 명백히 우월한* 가속"으로 규정하는
+#   이상 그 우월함은 보여야 한다(광고가 곧 의도된 최적 경로의 안내다).
+# ★ `scaled`/`scaled_by`와 **같은 두 갈래 꼴**을 유지한다: 바나 쪽 계수는 예약 훅
+#   `main.narak_bana_xp_mult()`이 들고 오므로, 전투 XP 경로가 실제로 쓰는 그 값을 그대로 받는
+#   입구가 있어야 표시와 실효가 갈리지 않는다.
 static func summary(hearts: int) -> String:
-	return "숙련 ×%.2f" % mult(hearts)
+	return summary_by(mult(hearts))
+
+static func summary_by(m: float) -> String:
+	return "숙련 ×%.2f" % m
