@@ -164,6 +164,17 @@ func _run_checks() -> void:
 	_check_regrow_cooldown_nominal()
 	await _check_ledger_rewind(m)
 
+	print("══ 폴리시 R20 회귀 — 배치 B(#9~#17) ══")
+	_check_letter_attachment_quality(m)
+	_check_pot_indoor_f_window(m)
+	_check_tapper_alignment(m)
+	_check_sapling_notice_branches(m)
+	_check_layout_prop_entrapment(m)
+	_check_quest_pool_deep_gate()
+	_check_forecast_next_morning(m)
+	_check_rarecrow_indoor(m)
+	_check_quest_rod_stability()
+
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -634,3 +645,475 @@ func _check_ledger_rewind(m: Node) -> void:
 	_check("⑧f `has` 가드가 셋 다 걷혔다(잔존 %s) — R3·R6·R13·R18이 형제들에 쓴 그 처방의 마지막 전파"
 			% str(guarded), not guarded)
 	m.saver.delete_save(m._active_slot)
+
+# ══════════ 배치 B(#9~#17) ══════════════════════════════════════════════════
+#
+# 렌즈: 다중 로맨스 교차(#9·#10·#11) · 좌표/구역 축(#12) · 부재 구역 시뮬(#13·#14·#15) ·
+#       적재 첫 프레임(#16·#17).
+#
+# 이 배치의 태도 둘.
+#   ㉠ **두 술어가 갈리면 갈린 자리를 잰다.** #9는 자리 선검사(`has_item` — 품질 무관)와 실제
+#      적재(`_find_stack` — (id,품질) 정확 일치)가 갈린 자리다. ⑩은 «통과했다»가 아니라
+#      «통과시킨 뒤 적재가 실제로 실패한다»를 함께 보여, 선검사가 거짓을 말했음을 못 박는다.
+#   ㉡ **DUP은 판정만 하고 지나가지 않는다.** #13·#15는 각각 #1·#3과 한 뿌리라 코드를 안
+#      건드리지만, ⑭·⑯은 배치 A 회귀가 **안 태운 갈래**에서 같은 봉합을 다시 잰다
+#      (⑭ = 재스폰 debris가 아니라 레이아웃 SOLID 프롭 · ⑯ = 같은 날이 아니라 다음 날 아침의 하늘).
+#
+# 무엇을 보증하나(번호 = 20회차 헌트 발견 인덱스):
+#   ⑩ #9 편지 첨부 자리 선검사가 품질을 무시해, 등급 실린 스택만 든 채 백팩이 꽉 차면
+#      «합쳐진다»로 통과시킨 뒤 적재가 실패해 첨부가 **알림 한 줄 없이 영구 유실**됐다.
+#   ⑪ #10 `_can_place_pot`이 실내 [F] 창구 칸을 안 막아, **갈무리방(창고) 상자 칸**에 놓인 화분의
+#      작물이 영영 수확 불가였다(RMB 사다리에서 상자가 먼저 잡고 return · 프롬프트도 같은 순서).
+#      ★헌트가 «집 상자 칸도 같다»고 든 절반은 **반증**됐다 — 그 칸은 벽 가구 밴드(y68)라
+#      `_grid`가 SOLID고 `_can_place_pot`의 지형 가드가 종전에도 막았다(⑪c가 cell 값으로 잰다).
+#   ⑫ #11 R19 #2가 그루터기·이끼만 트렁크 중심으로 옮겨, 같은 밑동의 수액 채취기와 16px 어긋났다.
+#   ⑬ #12 묘목 거절 문구가 '발밑'을 단정해, 마지막 퇴로 갈래에서 화면과 사실이 어긋났다.
+#   ⑭ #13 = **DUP(#1)**. 같은 술어의 같은 구멍이고 창구만 다르다 — 여기서는 재스폰 debris가
+#      아니라 **레이아웃 SOLID 프롭**(울타리·통나무·덤불·돌담)으로 같은 봉합을 다시 잰다.
+#   ⑮ #14 의뢰 출제 풀이 깊이 게이트 산출을 «사철»로 오분류해, 유철 도끼 전에는 이행 확률 0인
+#      2일 의뢰가 걸렸다.
+#   ⑯ #15 = **DUP(#3)**. 거울의 «빗나감 0» 계약이 R19 #13 이후 깨진 그 한 자리다 — 여기서는
+#      배치 A ④가 안 잰 축, **전날 예보 ↔ 다음 날 아침의 실제 하늘**을 대조한다.
+#   ⑰ #16 늘봄방 실내에 세운 레어크로우가 까마귀 판정에 한 칸도 안 들어가는데 배치 알림만
+#      "반경 N칸을 지킨다"고 단언했다(1회성 수집물이라 그 종이 방어에서 통째로 빠진다).
+#   ⑱ #17 게시 중인 물고기 의뢰가 날이 안 바뀌었는데 낚싯대 티어를 올리는 순간 통째로 바뀌었다.
+#
+# 판정: #9·#11·#12·#14·#16·#17 CONFIRMED(봉합) · #10 CONFIRMED(부분 — 창고 상자 칸만.
+#       집 상자·거울·책장은 그리드가 이미 막고 있어 그 절반은 REFUTED) · #13 DUP(#1) · #15 DUP(#3).
+#       OWNER-DECISION 0건.
+#
+# 봉합 축:
+#   · #9 = `Inventory.has_stack(id, quality)` 신설 + 선검사가 그것을 읽는다. `can_add`를 안 쓰는
+#          이유는 **누적 계산** 때문이다(합침/빈 슬롯을 한 bool로 뭉치면 여러 개를 못 센다).
+#   · #10 = `_f_window_tile`에 실내 갈래. 좌표는 `facing_chest`류가 읽는 그 상수 그대로.
+#   · #11 = `_draw_tappers_pass`가 `_tree_ledger_draw_px(t)`를 원점으로 쓴다(보정식 한 벌).
+#   · #12 = 발밑 갈래와 마지막-퇴로 갈래가 각각 참인 말을 한다.
+#   · #14 = `_obtainable_between` 맨 앞에 `ForageSpawns.is_deep_gated` — 심층 로스터가 작물 id도
+#           물고 있어 FORAGEABLES 검사보다 **앞**이어야 양쪽이 함께 걸린다.
+#   · #16 = `_can_place_rarecrow`에 `_indoor == ""`. 회수는 실내에서도 그대로 듣는다.
+#   · #17 = 낚싯대 상한을 풀 구성이 아니라 **뽑은 뒤의 거부권**으로. 시드 인덱스가 장비와 무관해진다.
+#
+# 하중 검증(계약을 일부러 깨서 red 확인 후 원복 — 아래는 **실측 결과** 그대로다):
+#   #9 `has_stack` → `has_item` 되돌림 → ⑩d·⑩f red(⑩f가 「다음 미독 ""·화면 ""」으로 **첨부가
+#      침묵 속에 사라졌다**를 그대로 드러낸다 — 편지는 읽힘 처리되고 물건은 안 들어온다) ·
+#   #10 `_f_window_tile` 실내 갈래 삭제 → ⑪b red(⑪c·⑪d는 초록 유지 = 집 쪽 절반은 애초에
+#      그리드가 막고 있었다는 **반증의 실측**이다 — 이 파괴가 판정을 부분 CONFIRMED로 정정했다) ·
+#   #11 `_draw_tappers_pass`의 `_tree_ledger_draw_px(t)` → `Vector2(t.x*TILE, …)` → ⑫c·⑫d red ·
+#   #12 문구 삼항 삭제 → ⑬c red(마지막 퇴로 칸에서 「발밑에는 심을 수 없다」가 다시 뜬다) ·
+#   #14 `is_deep_gated` 행 삭제 → ⑮b·⑮c·⑮d red(⑮d가 «4일 jeoseung_sam»을 이름으로 잡는다) ·
+#   #16 `_indoor == ""` 삭제 → ⑰b red ·
+#   #17 거부권을 다시 `mini(max_class, rod_class)`로 → ⑱c red(399일 중 **125일**의 게시 물고기
+#      의뢰가 낚싯대 티어만으로 통째로 갈린다 — 3일 「넋붕어×3/네오」→「업화붕장어×2/네오」).
+#
+# ★배치 B에서 배운 것: **파괴가 판정을 정정한다.** #10은 시나리오가 상자 두 칸을 나란히 들었는데,
+#   봉합을 끄고 재니 집 상자 칸은 그대로 거절이었다(그 칸의 `_grid`가 벽 밴드라 SOLID). 파괴를
+#   안 돌렸으면 «둘 다 막았다»는 초록을 «둘 다 뚫려 있었다»로 오독한 채 넘어갔을 자리다.
+
+# ── ⑩ #9 편지 첨부 자리 선검사 ↔ 실제 적재 술어 ─────────────────────────────
+func _check_letter_attachment_quality(m: Node) -> void:
+	print("⑩ #9 편지 첨부 자리 선검사 ↔ 적재 술어")
+	var attach_ids: Array = []
+	var nonstack: Array = []
+	var owner_letter: Dictionary = {}
+	for lid in Mailbox.LETTERS.keys():
+		for e in Mailbox.attachment_items_of(String(lid)):
+			var iid := String(e["id"])
+			if not attach_ids.has(iid):
+				attach_ids.append(iid)
+				owner_letter[iid] = String(lid)
+			if not ItemCatalog.stackable_of(iid) and not nonstack.has(iid):
+				nonstack.append(iid)
+	_check("⑩a 무대: 첨부 로스터 %d종(%s) · 그중 비-스택 %s — 유니크 축을 안 여는 근거(열면 그 편지가 영구 미독이 된다)"
+			% [attach_ids.size(), " ".join(attach_ids), "0종" if nonstack.is_empty() else " ".join(nonstack)],
+		not attach_ids.is_empty() and nonstack.is_empty())
+	var qid := ""
+	for iid in attach_ids:
+		if ItemCatalog.carries_quality(String(iid)):
+			qid = String(iid)
+			break
+	_check("⑩b 무대: 등급을 실어 나르는 첨부가 있다 — 「%s」(`carries_quality` 참 = 두 술어가 갈리는 유일한 축)"
+			% qid, qid != "")
+	if qid == "":
+		return
+	var lid: String = String(owner_letter[qid])
+	var inv_snap: Array = m.inventory.slots.duplicate(true)
+	# 등급 2짜리 스택만으로 백팩을 가득 채운다 — 빈 슬롯 0 · 같은 id는 있지만 (id,0) 스택은 없다.
+	for i in range(m.inventory.slots.size()):
+		m.inventory.slots[i] = {"id": qid, "count": 1, "quality": 2}
+	_check("⑩c 무대: 백팩이 등급2 「%s」로 가득이다 — 빈 슬롯 %d · `has_item` %s(종전 술어는 통과) · `has_stack(등급0)` %s"
+			% [qid, m.inventory.slots.count(null), str(m.inventory.has_item(qid)),
+				str(m.inventory.has_stack(qid))],
+		m.inventory.has_item(qid) and not m.inventory.has_stack(qid))
+	_check("⑩d 자리 선검사가 **거절한다** — `_letter_attachment_fits(%s)` %s"
+			% [lid, str(m._letter_attachment_fits(lid))], not m._letter_attachment_fits(lid))
+	# 왜 거절이 정배인가 — 통과시켰다면 적재가 실제로 실패한다(선검사가 거짓을 말했다는 증거).
+	_check("⑩e 근거: 그 상태에서 `add_item(%s, 1)`은 실제로 실패한다 — 선검사의 «합쳐진다»가 거짓이었다"
+			% qid, not m.inventory.add_item(qid, 1))
+	# 라이브: 편지를 열지 않고 미독으로 남긴다(백팩을 비우고 다시 오면 그대로 받는다).
+	var mail_snap: Dictionary = m.mailbox.to_save()
+	m.mailbox.load_save({"outbox": [], "inbox": [lid], "read": {}})
+	m.notice_feed._items.clear()
+	m._read_next_letter()
+	var told := ""
+	for it in m.notice_feed._items:
+		told = String(it["text"])
+	_check("⑩f 라이브: 편지가 안 열리고 **미독으로 남는다** — 다음 미독 「%s」 · 화면 「%s」(첨부 유실 0)"
+			% [m.mailbox.next_unread(), told],
+		m.mailbox.next_unread() == lid and told.contains("불룩"))
+	_dismiss_dialogue(m)
+	# 과잉이 아니다 — (id, 등급0) 스택이 하나라도 있으면 그대로 합쳐져 편지가 열린다.
+	m.inventory.slots[0] = {"id": qid, "count": 1, "quality": 0}
+	_check("⑩g 등급0 스택이 하나 생기면 선검사가 통과한다 — `has_stack` %s · fits %s (가드가 과잉이 아니다)"
+			% [str(m.inventory.has_stack(qid)), str(m._letter_attachment_fits(lid))],
+		m.inventory.has_stack(qid) and m._letter_attachment_fits(lid))
+	m.mailbox.load_save(mail_snap)
+	for i in range(m.inventory.slots.size()):
+		m.inventory.slots[i] = inv_snap[i]
+
+# ── ⑪ #10 화분이 실내 [F] 창구 칸을 안 먹는다 ───────────────────────────────
+func _check_pot_indoor_f_window(m: Node) -> void:
+	print("⑪ #10 화분 ↔ 실내 [F] 창구 칸")
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	var prev_indoor: String = m._indoor
+	# ㉠ 실측으로 **실제 뚫려 있던 한 칸** — 갈무리방(창고) 상자. 여기가 이 건의 본론이다.
+	var store: Vector2i = m.STOREHOUSE_CHEST_TILE
+	m._indoor = "창고"
+	_check("⑪a 무대: 창고 상자 칸 %s은 실내 바닥이라 `_grid`상 비-SOLID다(cell %d) — `_can_place_pot`의 지형 가드를 통과하던 유일한 실내 [F] 칸"
+			% [str(store), m._grid[store.y][store.x]],
+		not m.is_solid(m._grid[store.y][store.x]) and m.garden_pot != null)
+	_check("⑪b 그 칸에는 화분이 안 놓인다 — `_can_place_pot(%s)` %s (봉합을 끄면 여기가 true였다)"
+			% [str(store), str(m._can_place_pot(store))], not m._can_place_pot(store))
+	# ㉡ 헌트가 «같이 뚫렸다»고 본 집 쪽 세 칸은 **반증**됐다 — 벽 가구 밴드라 그리드가 이미 막는다.
+	#    좌표 가드에도 넣어 두는 이유는 두 축이 다르기 때문이다(지형이 바뀌면 그게 다음 사각).
+	m._indoor = "집"
+	var shelf: Vector2i = m.BOOKSHELF_TILES[0]
+	var house_f: Array = [m.CHEST_TILE, m.MIRROR_TILE, shelf]
+	var grid_names: Array = []
+	var grid_blocked := true
+	var pot_blocked := true
+	for t: Vector2i in house_f:
+		grid_names.append("%s(cell %d·solid %s)" % [str(t), m._grid[t.y][t.x], str(m.is_solid(m._grid[t.y][t.x]))])
+		if not m.is_solid(m._grid[t.y][t.x]):
+			grid_blocked = false
+		if m._can_place_pot(t):
+			pot_blocked = false
+	_check("⑪c 반증: 집 쪽 [F] 세 칸은 **벽 가구 밴드라 `_grid`가 이미 SOLID**다 — %s (헌트가 든 절반은 종전에도 안 뚫렸다)"
+			% " ".join(grid_names), grid_blocked)
+	_check("⑪d 그래도 좌표 가드가 함께 막는다(지형 축과 좌표 축은 별개다) — 세 칸 전부 배치 거절",
+		pot_blocked)
+	# 과잉이 아니다 — 집 안의 평범한 바닥 칸에는 그대로 놓인다.
+	var floor_tile := Vector2i(11, 72)   # garden_pot_test ⑥가 쓰는 집 실내 바닥(HOME_HOUSE_RECT 안)
+	_check("⑪e 집 안의 평범한 바닥 칸 %s에는 그대로 놓인다 — 가드가 실내를 통째로 막지 않는다"
+			% str(floor_tile), m._can_place_pot(floor_tile))
+	# 탈출구 — 이미 놓인 화분(구세이브)은 그 칸에서도 회수된다.
+	m._indoor = "창고"
+	var inv_snap: Array = m.inventory.slots.duplicate(true)
+	m.inventory.slots[0] = null
+	var placed: bool = m.garden_pot.place(store)
+	m._remove_garden_pot(store)
+	_check("⑪f 탈출구: 원장에 이미 선 화분(%s)은 그 칸에서도 회수된다 — 회수 후 원장 %s · 되돌려받은 화분 %d개"
+			% [str(placed), str(m.garden_pot.has_at(store)), m.inventory.count_of(ItemCatalog.GARDEN_POT)],
+		placed and not m.garden_pot.has_at(store))
+	for i in range(m.inventory.slots.size()):
+		m.inventory.slots[i] = inv_snap[i]
+	m._indoor = prev_indoor
+
+# ── ⑫ #11 수액 채취기 ↔ 원장 그림 가로 정렬 ────────────────────────────────
+func _check_tapper_alignment(m: Node) -> void:
+	print("⑫ #11 채취기 ↔ 원장 그림 정렬")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	var anchors: Dictionary = m._home_tree_anchor_set()
+	var anchor := Vector2i(-1, -1)
+	for t: Vector2i in anchors.keys():
+		anchor = t
+		break
+	var span: float = m.PROP_TREE_A.get_size().x
+	_check("⑫a 무대: 안식 손저작 앵커 %d칸 중 %s를 골랐다 · 나무 폭 %.0fpx · 채취기 폭 %.0fpx(폭이 같으면 이 결함 자체가 없다)"
+			% [anchors.size(), str(anchor), span, m.PROP_TAPPER.get_size().x],
+		anchor.x >= 0 and span > m.PROP_TAPPER.get_size().x)
+	if anchor.x < 0:
+		return
+	var px: Vector2 = m._tree_ledger_draw_px(anchor)
+	var naive: float = float(anchor.x * m.TILE)
+	_check("⑫b 무대: 그 앵커의 원장 그림 x는 트렁크 중심 보정을 받는다 — %.0fpx ≠ 순진한 %.0fpx(차 %.0fpx)"
+			% [px.x, naive, px.x - naive], not is_equal_approx(px.x, naive))
+	_check("⑫c 채취기 원점도 **같은 소스에서** 온다 — `_draw_tappers_pass`가 `_tree_ledger_draw_px(t)`를 읽는다(니들은 함수 안에서)",
+		_line_in_func(_src, "func _draw_tappers_pass", "_tree_ledger_draw_px(t)") >= 0)
+	_check("⑫d 순진한 t.x*TILE 원점이 그 함수에 남아 있지 않다 — 두 그림이 16px 갈리던 자리",
+		_line_in_func(_src, "func _draw_tappers_pass", "Vector2(t.x * TILE, float(t.y * TILE) + drop)") < 0)
+	# 세로는 R18/R13 그대로다(가로만 고쳤다는 증거 — 보정을 통째로 갈아엎지 않았다).
+	_check("⑫e 세로 보정은 종전 그대로다 — %.0fpx = 앵커 %.0f + 드롭 %.0f"
+			% [px.y, float(anchor.y * m.TILE), m._tapper_home_drop()],
+		is_equal_approx(px.y, float(anchor.y * m.TILE) + m._tapper_home_drop()))
+	# 보정이 없는 자리(원장 밖 칸)는 항등 — 회수 가능한 것을 안 뺀다.
+	var free := Vector2i(2, 2)
+	_check("⑫f 앵커가 아닌 칸 %s은 항등이다(%.0f, %.0f) — 숲·비-앵커 그림은 한 픽셀도 안 움직인다"
+			% [str(free), m._tree_ledger_draw_px(free).x, m._tree_ledger_draw_px(free).y],
+		is_equal_approx(m._tree_ledger_draw_px(free).x, float(free.x * m.TILE)))
+
+# ── ⑬ #12 묘목 거절 문구가 두 갈래를 가른다 ────────────────────────────────
+func _check_sapling_notice_branches(m: Node) -> void:
+	print("⑬ #12 묘목 거절 문구 ↔ 갈래")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	var fruit: String = FruitTreeCatalog.ids()[0]
+	var rect: Rect2i = m.STARTER_PATCH_RECT
+	var here := Vector2i(rect.position.x + 2, rect.position.y + 2)
+	m.player.global_position = m._tile_center_px(here)
+	var farm_snap: Dictionary = m.farm.to_save()
+	var orch_snap: Dictionary = m.orchard.to_save()
+	var inv_snap: Array = m.inventory.slots.duplicate(true)
+	m.inventory.slots[m.inventory.selected_index] = {"id": ItemCatalog.sapling_id(fruit), "count": 9, "quality": 0}
+	# ㉠ 발밑 갈래 — 겨눈 칸이 곧 선 칸이다.
+	m._target = here
+	m._target_valid = true
+	m.notice_feed._items.clear()
+	m._use_tool()
+	var told_foot := ""
+	for it in m.notice_feed._items:
+		told_foot = String(it["text"])
+	_check("⑬a 발밑 갈래는 종전 문구 그대로다 — 「%s」" % told_foot, told_foot.contains("발밑"))
+	# ㉡ 마지막 퇴로 갈래 — 세 방향을 넝쿨로 막고 넷째를 겨눈다(R19 #15가 명시적으로 허용한 상태).
+	var trellis := ""
+	for c in CropCatalog.ids():
+		if CropCatalog.is_trellis(c):
+			trellis = c
+			break
+	var dirs := [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+	for i in range(3):
+		var t: Vector2i = here + dirs[i]
+		m._field_at(t).hoe(t)
+		m._field_at(t).plant(t, trellis)
+	m._rebuild_trellis_collision()
+	var last: Vector2i = here + dirs[3]
+	_check("⑬b 무대: 세 방향이 넝쿨로 막혔고 넷째 %s만 열려 있다 — 술어가 그 칸을 지목한다(%s) · 발밑은 아니다"
+			% [str(last), str(m._would_entrap_player(last))],
+		m._would_entrap_player(last) and last != m._player_tile())
+	m._target = last
+	m._target_valid = true
+	m.notice_feed._items.clear()
+	m._use_tool()
+	var told_last := ""
+	for it in m.notice_feed._items:
+		told_last = String(it["text"])
+	_check("⑬c 마지막 퇴로 갈래는 **다른 말을 한다** — 「%s」(겨눈 칸은 발밑이 아니고 물러설 칸도 없다)"
+			% told_last,
+		not told_last.contains("발밑") and told_last.contains("갇힌다") and not m.orchard.has_tree(last))
+	m.farm.load_save(farm_snap)
+	m.orchard.load_save(orch_snap)
+	m._rebuild_trellis_collision()
+	for i in range(m.inventory.slots.size()):
+		m.inventory.slots[i] = inv_snap[i]
+
+# ── ⑭ #13(DUP of #1) 레이아웃 SOLID 프롭도 매몰 술어가 본다 ─────────────────
+# 배치 A ②는 **재스폰 debris**로 쟀다. 여기는 손저작 레이아웃의 풀타일 SOLID 프롭(울타리·통나무·
+# 덤불·돌담)으로 같은 봉합을 다시 잰다 — #13이 든 목록이 debris보다 넓기 때문이다.
+func _check_layout_prop_entrapment(m: Node) -> void:
+	print("⑭ #13 DUP(#1) — 레이아웃 SOLID 프롭 ↔ 매몰 술어")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	# 풀타일 SOLID 프롭(발치 바가 아닌 것)이 실제로 세운 칸을 레이아웃에서 판다 — 좌표 복제 0.
+	var sample := Vector2i(-1, -1)
+	var sample_name := ""
+	for entry in m._home_prop_entries():
+		var tex: Texture2D = entry[0]
+		if not (tex in m.SOLID_PROPS) or (tex in m.FOOT_BAR_PROPS) or m.DEBRIS_KIND.has(tex):
+			continue
+		for t: Vector2i in entry[1]:
+			if m._prop_blocked_tiles.has(t) and m._grid[t.y][t.x] == m.GROUND:
+				sample = t
+				sample_name = tex.resource_path.get_file()
+				break
+		if sample.x >= 0:
+			break
+	_check("⑭a 무대: debris가 아닌 레이아웃 풀타일 SOLID 프롭이 선 칸 %s(%s) — `_grid`는 GROUND인데 물리는 막는다"
+			% [str(sample), sample_name], sample.x >= 0)
+	if sample.x < 0:
+		return
+	_check("⑭b 매몰 술어가 그 칸을 막힘으로 답한다 — `_tile_blocked` %s · `_player_blocked_at` %s (#1의 한 봉합이 이 목록까지 덮는다)"
+			% [str(m._tile_blocked(sample)), str(m._player_blocked_at(sample))],
+		not m._tile_blocked(sample) and m._player_blocked_at(sample))
+	_check("⑭c 그래서 그 칸을 낀 자리에서 퇴로 계산이 성립한다 — 술어가 `_prop_blocked_tiles`를 읽는다(니들은 함수 안에서)",
+		_line_in_func(_src, "func _player_blocked_at", "_prop_blocked_tiles.has(t)") >= 0)
+
+# ── ⑮ #14 의뢰 출제 풀 ↔ 깊이 게이트 ───────────────────────────────────────
+func _check_quest_pool_deep_gate() -> void:
+	print("⑮ #14 의뢰 풀 ↔ 깊이 게이트")
+	var gated: Array = ForageSpawns.species_for(ForageSpawns.KIND_DEEP, 0)
+	var raw: Array = QuestBoard.item_pool()
+	var raw_hits: Array = []
+	for id in gated:
+		if raw.has(String(id)):
+			raw_hits.append(String(id))
+	_check("⑮a 무대: 심층 로스터 %s 중 %s가 **원본 풀에 실제로 들어 있다**(필터가 할 일이 있다)"
+			% [" ".join(gated), " ".join(raw_hits)], not raw_hits.is_empty())
+	# 1년 전체를 훑어 어느 게시일에도 안 나오는지 본다(절기 축과 무관한 배제임을 보인다).
+	var leaked: Array = []
+	for d in range(1, 113):
+		var pool: Array = QuestBoard.item_pool_for(d, d + 1)
+		for id in gated:
+			if pool.has(String(id)) and not leaked.has(String(id)):
+				leaked.append(String(id))
+	_check("⑮b 112일 전 구간의 출제 풀에서 심층 산출이 0이다(누출: %s) — 절기와 무관한 배제"
+			% ("없음" if leaked.is_empty() else " ".join(leaked)), leaked.is_empty())
+	_check("⑮c 단일 출처를 읽는다 — `_obtainable_between`이 `ForageSpawns.is_deep_gated`를 문다(니들은 함수 안에서)",
+		_line_in_func(_lines_of_file("res://quest_board.gd"), "static func _obtainable_between",
+			"ForageSpawns.is_deep_gated(id)") >= 0)
+	# 라이브: 실제로 걸리는 일일 의뢰에도 안 섞인다.
+	var live_leak := ""
+	for d in range(1, 113):
+		var q: Dictionary = QuestBoard.daily_quest(d, FishCatalog.WC_LEGEND)
+		if not q.is_empty() and ForageSpawns.is_deep_gated(String(q.get("item_id", ""))):
+			live_leak = "%d일 %s" % [d, String(q["item_id"])]
+			break
+	_check("⑮d 라이브: 112일치 일일 의뢰 어디에도 심층 산출이 안 걸린다(누출: %s)"
+			% ("없음" if live_leak == "" else live_leak), live_leak == "")
+	# 과잉이 아니다 — 풀이 안 비고 평범한 채집물이 그대로 남는다.
+	var sample: Array = QuestBoard.item_pool_for(3, 4)
+	var forage_left := 0
+	for id in sample:
+		if ItemCatalog.FORAGEABLES.has(String(id)):
+			forage_left += 1
+	_check("⑮e 과잉이 아니다 — 3일 게시 풀 %d종에 채집물이 %d종 남는다(작물만 남는 폐허가 아니다)"
+			% [sample.size(), forage_left], sample.size() > 5 and forage_left > 0)
+
+# ── ⑯ #15(DUP of #3) 전날 예보 ↔ 다음 날 아침의 실제 하늘 ──────────────────
+# 배치 A ④는 «같은 날 매출이 답을 뒤집는다»까지 쟀다. 여기는 #15가 든 축 — **전날 확정 통보와
+# 이튿날 아침 실하늘의 대조** — 를 잰다. 봉합은 같은 한 줄(조건 단서)이라 코드는 안 건드린다.
+func _check_forecast_next_morning(m: Node) -> void:
+	print("⑯ #15 DUP(#3) — 전날 예보 ↔ 이튿날 하늘")
+	var d0: int = m.clock.day
+	var rev0: int = m._cafe_revenue_total
+	m._cafe_revenue_total = 0
+	var cstage: int = m._cafe_stage()
+	var target := -1
+	for d in range(1, 900):
+		var slot: int = Festival.theme_slot_for_day(d + 1)
+		if slot == Festival.NONE or Festival.is_unlocked(slot, cstage, 0):
+			continue
+		if not Festival.is_unlocked(slot, cstage, 999999):
+			continue
+		if Weather.weather_for_day(d + 1, false) == Weather.CALM:
+			continue
+		target = d
+		break
+	_check("⑯a 무대: %d일 밤의 다음 날이 미해금 매출 문턱 슬롯이고 잠긴 롤은 비-평온이다" % target, target > 0)
+	if target < 0:
+		m._cafe_revenue_total = rev0
+		return
+	m.clock.day = target
+	var told: int = m._forecast_on(target)
+	# ㉠ 아무것도 안 바뀌면 예보 = 이튿날 아침의 하늘(계약은 그 갈래에서 참이다).
+	_check("⑯b 진척이 그대로면 예보가 곧 이튿날 하늘이다 — 예보 「%s」 = 다음 아침 `_weather_on(%d)` 「%s」"
+			% [Weather.name_of(told), target + 1, Weather.name_of(m._weather_on(target + 1))],
+		told == m._weather_on(target + 1))
+	# ㉡ 그날 낮에 문턱을 넘으면 **전날 확정 통보와 이튿날 하늘이 갈린다** — 결함 조건 성립.
+	m._cafe_revenue_total = 999999
+	_check("⑯c 그날 낮에 문턱을 넘으면 갈린다 — 어제의 통보 「%s」 vs 오늘 아침 「%s」(#15가 든 그 어긋남)"
+			% [Weather.name_of(told), Weather.name_of(m._weather_on(target + 1))],
+		told != m._weather_on(target + 1))
+	# ㉢ 그래서 표시 층이 **그 갈래에서만** 조건을 밝힌다(= #3과 한 봉합).
+	m._cafe_revenue_total = 0
+	m._open_mirror()
+	var text_locked: String = m.mirror_text.text
+	m._cafe_revenue_total = 999999
+	m._open_mirror()
+	var text_open: String = m.mirror_text.text
+	_check("⑯d 봉합은 #3과 한 줄이다 — 잠긴 상태에선 단서가 뜨고(%s) 열린 뒤엔 안 뜬다(%s)"
+			% [str(text_locked.contains("문턱")), str(text_open.contains("문턱"))],
+		text_locked.contains("문턱") and not text_open.contains("문턱"))
+	m._cafe_revenue_total = rev0
+	m.clock.day = d0
+	m.mirror_panel.visible = false
+
+# ── ⑰ #16 레어크로우는 실내에 안 선다 ──────────────────────────────────────
+func _check_rarecrow_indoor(m: Node) -> void:
+	print("⑰ #16 레어크로우 ↔ 늘봄방 실내")
+	m._indoor = ""
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	m.carpenter.load_save({"active": [], "done": [Carpenter.PROJ_GREENHOUSE]})
+	m._refresh_greenhouse()
+	var plot: Rect2i = m.GREENHOUSE_PLOT_RECT
+	var inside := Vector2i(plot.position.x + 1, plot.position.y + 1)
+	m._indoor = "늘봄방"
+	_check("⑰a 무대: 늘봄방이 서고 경작면 %s이 SOIL이다(셀 조건을 통과하던 근거) · 까마귀 표적은 노지 밭뿐이다(%d칸)"
+			% [str(inside), m._crow_target_tiles().size()],
+		m._greenhouse_built() and m._grid[inside.y][inside.x] == m.SOIL)
+	_check("⑰b 실내에는 안 선다 — `_can_place_rarecrow(%s)` %s (스프링클러 상속에 `_indoor` 가드가 없던 자리)"
+			% [str(inside), str(m._can_place_rarecrow(inside))], not m._can_place_rarecrow(inside))
+	_check("⑰c 근거: 세웠어도 까마귀 판정에 한 칸도 안 들어간다 — `_scarecrow_tiles`가 y ≥ %d를 버린다(실내 밴드 %d)"
+			% [RegionCatalog.size_of(RegionCatalog.HOME).y, inside.y],
+		inside.y >= RegionCatalog.size_of(RegionCatalog.HOME).y)
+	# 과잉이 아니다 — 노지에는 종전 그대로 선다.
+	m._indoor = ""
+	var out_tile := Vector2i(-1, -1)
+	for t in m._encroach_candidates():
+		if m._can_place_rarecrow(t):
+			out_tile = t
+			break
+	_check("⑰d 노지에는 그대로 선다 — %s (가드가 배치를 통째로 막지 않는다)" % str(out_tile),
+		out_tile.x >= 0)
+	# 탈출구 — 이미 세운 것은 실내에서도 회수된다(1회성 수집물이라 이게 결정적이다).
+	var crow_id := ""
+	for iid in ItemCatalog.RARECROWS:
+		crow_id = String(iid)
+		break
+	var inv_snap: Array = m.inventory.slots.duplicate(true)
+	m.inventory.slots[0] = null
+	var placed: bool = m.rarecrow.place(inside, crow_id)
+	m._indoor = "늘봄방"
+	m._remove_rarecrow(inside)
+	_check("⑰e 탈출구: 실내에 이미 선 레어크로우(%s)는 그 자리에서 회수된다 — 원장 %s · 되돌려받음 %s"
+			% [str(placed), str(m.rarecrow.has_at(inside)), str(m.inventory.has_item(crow_id))],
+		placed and not m.rarecrow.has_at(inside) and m.inventory.has_item(crow_id))
+	for i in range(m.inventory.slots.size()):
+		m.inventory.slots[i] = inv_snap[i]
+	m._indoor = ""
+
+# ── ⑱ #17 게시 중 물고기 의뢰가 낚싯대에 안 흔들린다 ───────────────────────
+func _check_quest_rod_stability() -> void:
+	print("⑱ #17 게시 의뢰 ↔ 낚싯대 티어")
+	var pairs := 0          # 두 티어에서 **둘 다 물고기 의뢰**인 날
+	var churn: Array = []   # 그런데 내용이 갈린 날
+	var promoted := 0       # T1에선 작물·T2에선 물고기(남는 잔여 — 이행 불가 → 가능 방향)
+	for d in range(1, 400):
+		var small: Dictionary = QuestBoard.daily_quest(d, FishCatalog.WC_SMALL)
+		var big: Dictionary = QuestBoard.daily_quest(d, FishCatalog.WC_LEGEND)
+		if small.is_empty() or big.is_empty():
+			continue
+		var s_fish: bool = FishCatalog.has(String(small["item_id"]))
+		var b_fish: bool = FishCatalog.has(String(big["item_id"]))
+		if s_fish and b_fish:
+			pairs += 1
+			if String(small["item_id"]) != String(big["item_id"]) \
+					or int(small["count"]) != int(big["count"]) \
+					or String(small["client"]) != String(big["client"]) \
+					or int(small["gold"]) != int(big["gold"]):
+				churn.append("%d일 %s×%d/%s → %s×%d/%s" % [d, String(small["item_id"]),
+					int(small["count"]), String(small["client"]), String(big["item_id"]),
+					int(big["count"]), String(big["client"])])
+		elif not s_fish and b_fish:
+			promoted += 1
+	_check("⑱a 무대: 399일 중 두 티어가 **둘 다 물고기 의뢰**인 날이 %d일 있다(0이면 ⑱c가 공허하다)"
+			% pairs, pairs > 0)
+	_check("⑱b 무대: 그 갈래를 태운다 — 든 줄이 감당 못 해 작물로 폴백했다가 티어를 올리면 물고기가 되는 날이 %d일(남는 잔여·방향은 «불가→가능» 하나뿐)"
+			% promoted, promoted >= 0)
+	_check("⑱c 걸려 있던 물고기 의뢰는 낚싯대를 올려도 **한 글자도 안 바뀐다** — 갈린 날 %d일(%s)"
+			% [churn.size(), "없음" if churn.is_empty() else churn[0]], churn.is_empty())
+	# R6가 닫은 축은 그대로다 — 든 줄이 감당 못 하는 어종은 여전히 안 걸린다.
+	var over := ""
+	for d in range(1, 400):
+		var q: Dictionary = QuestBoard.daily_quest(d, FishCatalog.WC_SMALL)
+		if q.is_empty() or not FishCatalog.has(String(q["item_id"])):
+			continue
+		if FishCatalog.weight_class_of(String(q["item_id"])) > FishCatalog.WC_SMALL:
+			over = "%d일 %s" % [d, String(q["item_id"])]
+			break
+	_check("⑱d R6의 축은 그대로다 — T1 상한에서 과체급 어종이 걸리는 날 0(누출: %s)"
+			% ("없음" if over == "" else over), over == "")

@@ -15278,8 +15278,15 @@ func _use_tool() -> void:
 		#   ★ 판정은 **앵커 한 칸**에만 건다 — `_is_tree_blocked`(3×3 전수 평가)에 넣으면 풋프린트가
 		#     늘 발밑을 포함하므로 나무를 한 그루도 못 심게 된다. 밑동만 SOLID고 캐노피는 걸어
 		#     다니는 칸이라, 막아야 하는 것도 밑동 하나다.
+		# ★[폴리시 R20 #12] **두 갈래를 문구가 갈라야 한다.** `_would_entrap_player`는 ㉠발밑과
+		#   ㉡마지막 퇴로 둘 다에 true를 내는데 여기는 한 문구뿐이라, R19 #15가 명시적으로 허용한
+		#   대로 세 칸을 먼저 막아 둔 플레이어가 네 번째 칸을 겨누면 "발밑에는 심을 수 없다 —
+		#   한 칸 물러서서 심자"가 떴다: 겨눈 칸은 발밑이 아니고, 물러설 칸도 없다. 형제인 트렐리스
+		#   갈래는 두 갈래를 다 덮는 문구를 쓴다(15247행) — 여기는 갈래가 실제로 갈리므로 각각
+		#   참인 말을 한다.
 		if _would_entrap_player(_target):
-			_notice("발밑에는 심을 수 없다 — 한 칸 물러서서 심자")
+			_notice("발밑에는 심을 수 없다 — 한 칸 물러서서 심자" if _target == _player_tile()
+				else "여기에 심으면 밑동에 갇힌다 — 한 칸 비켜서 심자")
 		elif inventory.has_sapling(fruit) and orchard.plant(_target, fruit, clock.day, _is_tree_blocked):
 			inventory.take_sapling(fruit)
 			verb = "묘목심기"
@@ -15937,7 +15944,29 @@ func _player_blocked_at(t: Vector2i) -> bool:
 # ★ 거울(MIRROR_TILE)은 여기 안 든다 — 실내 좌표이고 배치 가드는 전부 `_indoor == ""`를 요구해
 #   구조로 이미 막혀 있다. 구역 술어를 다는 이유도 같다(HOME 좌표 상수라 다른 무대엔 무의미).
 func _f_window_tile(t: Vector2i) -> bool:
-	if _region != RegionCatalog.HOME or _indoor != "":
+	if _region != RegionCatalog.HOME:
+		return false
+	# ★[폴리시 R20 #10] **실내 [F] 창구도 같은 이유로 뺀다.** 위 머리말이 "거울은 실내 좌표이고 배치
+	#   가드는 전부 `_indoor == \"\"`를 요구해 구조로 이미 막혀 있다"고 적었는데, 화분은 그 전제가
+	#   정반대다 — `_can_place_pot`은 **실내에서만** 선다(`_indoor == ""`면 즉시 false). 그래서 이
+	#   술어가 실내에서 무조건 false를 돌려주는 동안 실내 [F] 좌표가 한 칸도 안 막혔다.
+	# ★ **실측으로 뚫려 있던 것은 갈무리방(창고) 상자 칸 하나다**(STOREHOUSE_CHEST_TILE). 거기 놓인
+	#   화분의 작물은 영영 수확 불가다: RMB 사다리에서 `facing_storehouse_chest`가 `_try_harvest`보다
+	#   앞에서 return하고 프롬프트 사슬도 같은 순서라 "[우클릭] 수확"이 한 번도 안 떠, 왜 안 되는지
+	#   알 방법조차 없다(R16 #15가 짐승 건물에서 봉합한 그 사고와 같은 형태).
+	# ★ 집 쪽 세 칸(상자·거울·책장)은 **벽 가구 밴드(y68)라 `_grid`가 이미 SOLID**이고, 그래서
+	#   `_can_place_pot`의 `is_solid` 줄이 종전에도 막고 있었다 — 헌트가 «둘 다 뚫렸다»고 본 절반은
+	#   실측에서 반증됐다. 그래도 같은 표에 둔다: 이 가드는 좌표 축이고 저쪽은 지형 축이라, 실내
+	#   레이아웃이 한 번 바뀌면 그게 곧 다음 사각이다(회귀 ⑪이 두 축을 각각 잰다).
+	# ★ 막는 것은 **새 배치**뿐이다: 이미 놓인 화분은 LMB 회수가 그대로 듣는다(`_remove_garden_pot`).
+	#   상자 쪽 [F]를 화분에 양보시키지 않는 이유는 명확하다 — 그러면 저장 상자가 못 열린다.
+	# ★ 좌표는 `facing_chest`류가 읽는 **그 상수 그대로**다(값 복제 0).
+	if _indoor != "":
+		match _indoor:
+			"집":
+				return t == CHEST_TILE or t == MIRROR_TILE or BOOKSHELF_TILES.has(t)
+			"창고":
+				return t == STOREHOUSE_CHEST_TILE
 		return false
 	return t == MAILBOX_TILE or t == PET_TILE or t == PET_BOWL_TILE
 
@@ -16224,8 +16253,19 @@ func _remove_garden_pot(t: Vector2i) -> void:
 # 지면/경작지·성역/프롭/설치물 비겹침) — 밭에 서는 말뚝이라 지켜야 할 것이 정확히 같고, 규칙을
 # 복제하면 두 벌이 따로 늙는다. 다른 조건은 "이미 다른 레어크로우가 선 칸"뿐인데 그건 위
 # `_can_place_sprinkler`에 합류시켜 **한 술어가 둘 다 막는다**(양방향 겹침 방지).
+# ★[폴리시 R20 #16] **실내에는 안 선다.** 상속한 `_can_place_sprinkler`에는 `_indoor` 가드가 없고
+# 늘봄방 경작면은 SOIL이라 셀 조건도 통과해, 온실 안에 레어크로우가 그대로 섰다. 그런데 까마귀
+# 판정의 입력을 만드는 `_scarecrow_tiles()`는 `t.y < RegionCatalog.size_of(HOME).y`로 **실내 밴드
+# 좌표를 전부 버리므로** 그 레어크로우의 보호 기여가 정확히 0인데, 배치 알림은 매번 "반경 N칸의
+# 작물을 까마귀에게서 지킨다"고 단언했다. 게다가 습격 표적인 `_crow_target_tiles()`는 `farm`(노지)
+# 만 보므로 온실 작물은 애초에 표적이 아니다 — 즉 실내 배치는 어느 방향으로도 값이 0인 순수 덫이다.
+# 하필 레어크로우는 재획득 경로가 전부 1회성으로 잠긴 수집물이라, 8종을 온실에 늘어놓으면 알림의
+# 숫자만 커지고 노지는 무방비로 남는다.
+# ★ 막는 것은 새 배치뿐이다 — 이미 세운 것은 LMB 회수(`_remove_rarecrow`)가 실내에서도 그대로
+#   듣는다(그 갈래는 `_rarecrow_at`만 본다). 구세이브 탈출구 보존.
+# ★ 스프링클러는 안 막는다: 그쪽은 늘봄방 경작면을 실제로 적시는 실효 설치라 축이 다르다.
 func _can_place_rarecrow(t: Vector2i) -> bool:
-	return rarecrow != null and _can_place_sprinkler(t)
+	return rarecrow != null and _indoor == "" and _can_place_sprinkler(t)
 
 # 조준 칸에 든 레어크로우를 세운다(아이템 1개 소모). 겨눈 칸 = **밑동**(보호 반경 중심)이고 그림만
 # 위로 1칸 자란다(프롭 허수아비 1×2 실루엣 상속 — rarecrow.gd 머리말).
@@ -24700,9 +24740,22 @@ func _letter_attachment_fits(letter_id: String) -> bool:
 	for i in range(inventory.slots.size()):
 		if inventory.id_at(i) == "":
 			free += 1
+	# ★[폴리시 R20 #9] 합침 판정을 `has_item`(품질 **무관**)에서 `has_stack`(id, 품질 정확 일치)으로
+	#   바꾼다 — 실제 적재인 `add_item`이 `_find_stack(id, _norm_quality(id, quality))`만 합치기
+	#   때문이다. 두 술어가 갈린 탓에 등급이 실리는 첨부가 **알림 한 줄 없이 영구 유실**됐다:
+	#   서리동백(FORAGEABLES → CAT_HARVEST → `carries_quality` 참)의 등급 2짜리 스택만 든 채
+	#   백팩이 꽉 찬 상태에서 편지를 열면, 선검사는 «합쳐진다»로 free를 안 깎아 통과시키고
+	#   `mark_read`가 찍힌 뒤 `add_item(id, n)`(품질 0)이 q2 스택과 안 맞아 빈 슬롯을 요구하다
+	#   실패한다. 기독 원장이 곧 지급 원장이라 그 편지는 다시 열려도 첨부를 안 준다.
+	#   `_pick_flower`·`_pick_forage`·`_harvest_wild`가 이미 `can_add(id, n, quality)`라는 정밀
+	#   술어를 쓰는데 이 창구만 안 봤다 — 다만 여기는 **여러 개를 누적으로** 세야 해서
+	#   (합침/빈 슬롯을 한 bool로 뭉치는) `can_add` 대신 합침 축만 묻는 `has_stack`을 쓴다.
+	# ★ 유니크(도구·낚싯대·무기) 축은 여기서 안 연다: 현 첨부 로스터에 비-스택 품목이 0이고,
+	#   "이미 들고 있으면 영영 못 받는다"를 여기서 false로 막으면 그 편지가 **영구 미독**이 된다
+	#   (자리를 비워도 안 풀린다 = 이 알림이 거짓말이 된다). 회귀 ⑩이 그 전제(로스터 0)를 잠근다.
 	for e in items:
 		var iid := String(e["id"])
-		if ItemCatalog.stackable_of(iid) and inventory.has_item(iid):
+		if ItemCatalog.stackable_of(iid) and inventory.has_stack(iid):
 			continue                      # 기존 스택에 합쳐진다 — 빈 슬롯을 안 먹는다
 		free -= 1
 	return free >= 0
@@ -26921,7 +26974,14 @@ func _draw_tappers_pass(canvas: CanvasItem, front: bool, split_y: float) -> void
 		var base_y := float(t.y * TILE + TILE) + drop
 		if (base_y > split_y) != front:
 			continue
-		var base := Vector2(t.x * TILE, float(t.y * TILE) + drop)
+		# ★[폴리시 R20 #11] 원점을 **원장 그림과 같은 소스**에서 판다. R19 #2가 그루터기·이끼를
+		#   64px 프롭의 가로 중심(x+16)으로 옮기며 "충돌 rect가 정확히 그 x에 선다"를 정렬 기준으로
+		#   삼았는데, 같은 밑동에 얹히는 이 형제 그림만 세로 드롭만 받고 가로는 t.x*TILE 그대로라
+		#   **한 밑동에 16px 어긋난 두 그림**이 섰다(이끼는 발치 바 정중앙, 채취기는 그 서쪽 끝).
+		#   `_tree_ledger_draw_px`가 돌려주는 값이 곧 «(가로 중심 보정, 세로 드롭)»이라 그것을 그대로
+		#   쓰면 보정식이 한 벌로 남는다(값 복제 0 — 나무 폭이 바뀌면 둘이 함께 따라온다).
+		#   ★ 앞/뒤 패스 분기(base_y)는 안 건드린다 — 그건 세로 축뿐이라 종전 그대로다.
+		var base := _tree_ledger_draw_px(t)
 		canvas.draw_texture_rect(PROP_TAPPER, Rect2(base, tsz), false)
 		if tapper.pending_product(_region, t) != "":
 			# 수거 대기 방울(통 위) — "거둘 것 있음"의 유일한 표식이라 가장 밝다. 아트가 붙어도

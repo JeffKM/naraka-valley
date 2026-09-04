@@ -88,6 +88,18 @@ static func item_pool_for(post_day: int, due_day: int) -> Array:
 
 # 이 대상이 [post_day, due_day] 안에 세계에 나올 수 있나. 채집물만 따지고 나머지는 통과시킨다.
 static func _obtainable_between(id: String, post_day: int, due_day: int) -> bool:
+	# ★[폴리시 R20 #14] **깊이 게이트 너머의 산출은 안 낸다.** 아래 `season_of`는 KIND_COMMON·
+	#   KIND_RARE만 순회하므로 심층 로스터(불사과·저승삼)는 구조적으로 −1이고, 그 −1이 마지막 줄에서
+	#   «사철»로 오분류돼 저승삼이 매일 출제 후보에 섰다. 그런데 심층 존은 큰 통나무 2칸(유철 도끼
+	#   티어) 너머라, 도끼를 올리기 전에는 그 종이 돋는 자리에 **걸어 들어갈 방법 자체가 없다** —
+	#   기한 2일짜리 «저승삼 ×3~5»가 걸리면 그 이틀 게시판이 통째로 죽는다. 이 함수 머리말이 스스로
+	#   닫겠다고 선언한 «획득 경로가 구조적으로 0» 축 그대로다.
+	#   ★ FORAGEABLES 검사보다 **앞에** 둔다: 심층 로스터는 작물 id(불사과)도 물고 있어(그 술어
+	#     머리말이 명시) 뒤에 두면 작물 갈래가 먼저 통과시킨다. 불사과는 씨앗이 만물상 미판매라
+	#     "재배·재고 축"의 예외이고, 같은 술어 하나가 양쪽을 걸러야 로스터가 늘어도 함께 막힌다.
+	#   ★ 단일 출처는 `ForageSpawns.is_deep_gated` — 만물상·보부상 두 소매 창구가 이미 읽는 그 표다.
+	if ForageSpawns.is_deep_gated(id):
+		return false
 	if not ItemCatalog.FORAGEABLES.has(id):
 		return true                                   # 작물 = 재배·재고 축(위 머리말)
 	# 덤불 열매 — 절기 창(피안 15~18 / 망연 8~11) 안의 날이 기한에 걸쳐 있어야 달린다.
@@ -164,8 +176,18 @@ static func _make_fish(kind: String, seed_n: int, post_day: int, due_day: int,
 	#   ★ 낚싯대가 아예 없으면 rod_class < 0 → 풀이 비고 호출부가 작물 의뢰로 폴백한다(뱃사공을
 	#     만나기 전에 물고기 의뢰가 걸리던 자리도 함께 닫힌다).
 	#   ★ 기본값은 상한 없음이라 인자를 안 주는 호출부(순수 파생 단위 테스트)는 종전 그대로다.
-	max_class = mini(max_class, rod_class)
-	if max_class < FishCatalog.WC_SMALL:
+	# ★[폴리시 R20 #17] 낚싯대 상한을 **풀 구성이 아니라 뽑은 뒤의 거부권**으로 쓴다. 종전엔
+	#   `max_class = mini(max_class, rod_class)`가 풀 자체를 줄여, 같은 날 대장간에서 낚싯대를
+	#   올리면 시드는 그대로인데 `pool.size()`만 커져 `r.randi() % pool.size()`의 인덱스가 달라졌다 —
+	#   key가 `daily:%d`로 동일한 «오늘의 게시물»의 어종·수량·의뢰인·보상이 날이 안 바뀌었는데
+	#   통째로 교체됐다(R6 주석이 보장한 것은 *수락한* 계약의 스냅샷까지였다).
+	#   이제 뽑기는 종류 상한(일일=중·중기=소)만 보므로 **낚싯대와 무관하게 결정적**이고, 든 줄이
+	#   감당 못 하는 어종이 나오면 {}를 돌려 호출부가 작물 의뢰로 폴백한다 — R6가 닫은 축
+	#   ("이행 확률 0인 의뢰를 안 낸다")은 그대로다.
+	#   ★ 남는 변화 하나는 정직하게 적어 둔다: 그 폴백 상태에서 낚싯대를 올리면 «작물 의뢰 →
+	#     물고기 의뢰»로 갈린다. 상태 없이(=세이브 왕복 없이) 지울 수 없는 잔여이고, 방향이
+	#     «이행 불가 → 이행 가능» 한쪽뿐이라 플레이어가 손해 보는 쪽이 아니다.
+	if rod_class < FishCatalog.WC_SMALL:
 		return {}
 	# ★[폴리시 R5] 기한 마지막 날의 절기까지 넘긴다 — 절기 마지막 날에 게시된 일일 의뢰의 기한
 	#   이틀째는 다음 절기라, 게시일 절기만 보면 그날 못 잡는 어종을 낼 수 있었다(FishCatalog.
@@ -176,6 +198,8 @@ static func _make_fish(kind: String, seed_n: int, post_day: int, due_day: int,
 		return {}
 	var r := _rng("%s_fish:%d" % [kind, seed_n])
 	var item_id: String = String(pool[r.randi() % pool.size()])
+	if FishCatalog.weight_class_of(item_id) > rod_class:
+		return {}                          # ★[폴리시 R20 #17] 든 줄이 못 감당하는 어종 → 작물 폴백
 	var count: int
 	if kind == KIND_DAILY:
 		# 수량 — 체급 반비례: 소 1~3 · 중 1~2(입질 가중상 중 체급이 6배쯤 귀하다 — S3-T3 CLASS_WEIGHT).
