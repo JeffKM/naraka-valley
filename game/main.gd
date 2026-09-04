@@ -4609,7 +4609,37 @@ func _is_tree_seed_free(region: String, t: Vector2i, occ: Dictionary) -> bool:
 		return false
 	if orchard != null and t in orchard.trunk_tiles():
 		return false
+	# ★[폴리시 R21 #1] **네 번째 SOLID 스포너도 매몰 가드를 문다.** R19 #15~#17과 R20 #1·#2가
+	#   "SOLID를 새로 세우는 창구는 전부 `_would_entrap_player`를 묻는다"를 불변식으로 세웠는데
+	#   (트렐리스·묘목·절기 재스폰 셋), 마당 자체 파종만 그 표를 한 줄도 안 읽었다. 돋은 칸은
+	#   실제로 통행 불가다 — `_rebuild_prop_collision`의 원장 나무 블록이 발치 1칸이 아니라
+	#   **풀타일** StaticBody를 세우고 `_register_prop_blocked`로 원장에도 적는다. 그래서 성숙목
+	#   반경 3칸(SEED_RADIUS) 안 맨흙에 선 채 24:00 강제 취침(좌표 불변)을 맞으면 발밑에 나무가
+	#   서거나 마지막 퇴로가 봉해졌고, 마당 원장 나무는 `_grid`를 안 건드리므로 `_restore_location`의
+	#   매몰 구제(`_tile_blocked` 축)도 그 칸을 막힌 칸으로 못 봐 F9 재로드가 같은 자리로 돌아왔다.
+	#   같은 아침 같은 마당에서 절기 재스폰은 이것을 `solid_ok`로 거절하는데 파종만 무검사였다.
+	if _would_entrap_player(t, _tree_seed_pending_solid()):
+		return false
 	return true
+
+# ★[폴리시 R21 #1] 이 배치가 **이미 심어 둔** 씨앗 칸(아직 물리에 안 선 SOLID). 원장의 자체 파종은
+#   성숙목마다 한 번씩 굴러 하룻밤에 여러 칸이 서는데, 충돌 재구성은 배치가 끝난 뒤 `changed`
+#   한 번으로 오므로 그 사이 `_prop_blocked_tiles`는 형제 씨앗들을 모른다 — R20 #2가 절기 재스폰에서
+#   겪은 그 사각이다(퇴로가 A·B 둘뿐이면 각자 "다른 하나가 남는다"로 통과한 뒤 둘 다 선다).
+#   ★ 별도 장부를 두지 않고 **원장에서 그대로 판다**: HOME의 원장 나무 충돌은
+#     `is_occupied` 그대로가 진실원이고(`_rebuild_prop_collision`의 그 루프와 같은 술어),
+#     이미 물리에 선 칸은 `_prop_blocked_tiles`가 들고 있으니 차집합이 곧 pending이다.
+#   ★ 퇴로 판정이 보는 칸은 플레이어 4방뿐이라 그 넷만 묻는다(판정당 4회 조회).
+func _tree_seed_pending_solid() -> Dictionary:
+	var out: Dictionary = {}
+	if tree_ledger == null or player == null:
+		return out
+	var here := _player_tile()
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var n: Vector2i = here + d
+		if tree_ledger.is_occupied(RegionCatalog.HOME, n) and not _prop_blocked_tiles.has(n):
+			out[n] = true
+	return out
 
 # 자체 파종 판정 Callable(안식에 서 있을 때만 유효 — 다른 구역에서 자면 그날 파종은 건너뛴다.
 # _grid가 그 구역 것이라 안식 지형을 물어볼 수 없기 때문이다. 결정 롤은 day 시드라 손실이 아니라 스킵).
@@ -9999,6 +10029,17 @@ func _place_labels() -> void:
 			#   읽어 준다. 라벨은 _rebuild_region마다 다시 굽히므로 열쇠 획득 후 재진입 시 자동 전환.
 			_add_label("나락 진입로 — 봉인 해제됨" if _narak_key_found
 				else "나락 진입로 (봉인 — 60층 나락 열쇠)", _tile_center_px(Vector2i(32, 8)))
+			# ★[폴리시 R21 #7] 명부 시련장 외관에도 이름을 붙인다. 외관을 **늘** 세우는 근거가
+			#   "잠긴 외관이 서 있어야 '저기 뭔가 있다'가 반딧넋을 모으는 이유가 된다"인데
+			#   (`_build_eophwa_mine`의 그 주석 · 선례로 든 나락 진입로 1:1), 정작 그 선례는 바로
+			#   윗줄처럼 **게이트 조건까지** 말하고 이 문만 이름 없는 회색 박스였다 — 미개방
+			#   상태에서 그 칸을 밟아도 아무 일도 안 일어나므로(진입은 카탈로그 등록으로만 갈린다)
+			#   무엇이고 무엇으로 열리는지 알리는 표면이 게임 안에 0개였고, 열린 뒤에도 대장간·
+			#   길드처럼 이름으로 식별되는 형제 두 방과 규약이 갈렸다.
+			#   ★ 문턱은 원장 파생이다(FireflySouls.GATE_COUNT — 숫자 하드코딩 0).
+			_add_label("명부 시련장 — 봉인 해제됨" if trial_ground_open()
+				else "명부 시련장 (봉인 — 반딧넋 %d)" % FireflySouls.GATE_COUNT,
+				_tile_center_px(TRIAL_EXT_DOOR))
 			_add_label("산길 → 나루 마을", _tile_center_px(Vector2i(14, 40)))   # 남단 산길 워프(14,43) 안내
 			_add_label("숲길 → 저승 숲", _tile_center_px(Vector2i(40, 3)))       # 북단 숲길 워프(40,1) 안내
 		RegionCatalog.NARAK:
@@ -10465,6 +10506,26 @@ func _setup_hud_overlays() -> void:
 func _in_cafe() -> bool:
 	return _zone_at(player.global_position) == "카페"
 
+# ★[폴리시 R21 #5] 명부 도감 완주 트로피 회수 — **등재 창구마다 그 자리에서 묻는다**(단일 출처).
+#   종전 회수 지점은 아침 출하 정산 직후 한 곳뿐인데 등재 창구는 **둘**이다(R8이 생선가게 즉시
+#   환전을 두 번째 창구로 인정하며 `codex.record`를 더한 그 자리). 그래서 마지막 한 종을 낮에
+#   환전으로 판 순간 `is_complete()`는 참인데 `trophy_day`는 −1이라 세 표면이 통째로 낡은 답을
+#   말했다: ㉠ 완주 알림 0줄 ㉡ 열람대 프롬프트가 74/74인데 완주 문구가 아니다 ㉢ 열람대 위 금빛
+#   상도 [F] 본문의 완주 줄도 안 선다 — 취침해 다음 아침에 닿아야 비로소, 그것도 완주와 무관한
+#   아침 줄들 사이에서 뒤늦게 발화했다. 보상이 '연출뿐'이라 그 한 줄·그 상이 답례의 전부인데
+#   완주한 그 순간에는 아무 일도 안 일어난 셈이다. 래치(trophy_day)가 1회성을 그대로 지므로
+#   창구가 늘어도 두 번 뜨지 않는다.
+func _claim_codex_trophy(day: int) -> void:
+	if codex == null or not codex.trophy_pending():
+		return
+	codex.claim_trophy(day)
+	if notice_feed != null:
+		# ★[폴리시 R11] `keep` — 이 줄은 세이브 전체에서 딱 한 번 발화하는 래치(trophy_day)의
+		#   유일한 표면이라, 뒤이어 미는 아침 알림 열 줄에 밀려 사라지면 영영 안 뜬다.
+		notice_feed.push("명부 도감 완주 — 이 땅의 것을 모두 명부에 올렸다", 5.0, false, null, true,
+			Color(0, 0, 0, 0), true)
+	audio.sfx("ui")
+
 # ── T1.5 하루 사이클 ──────────────────────────────────────────────────────
 func _setup_clock() -> void:
 	# 24:00에 도달하면(쓰러짐) 위치에 상관없이 강제 취침시킨다.
@@ -10515,14 +10576,7 @@ func _on_day_advanced(day: int) -> void:
 	#   보정도 없다(결정 1 ② 합산 퍼센트·진엔딩 금지 / [ADR-0034] #4 영구 % 곱셈 금지). 금박 알림 한
 	#   줄이 뜨고, 혼백관 열람대 위에 작은 상이 선다 — 그게 전부다.
 	#   ★ 1회성은 원장의 래치(trophy_day)가 진다 — 재정산·재로드에도 두 번 뜨지 않는다.
-	if codex != null and codex.trophy_pending():
-		codex.claim_trophy(day)
-		if notice_feed != null:
-			# ★[폴리시 R11] `keep` — 이 줄은 세이브 전체에서 딱 한 번 발화하는 래치(trophy_day)의
-			#   유일한 표면이라, 뒤이어 미는 아침 알림 열 줄에 밀려 사라지면 영영 안 뜬다.
-			notice_feed.push("명부 도감 완주 — 이 땅의 것을 모두 명부에 올렸다", 5.0, false, null, true,
-				Color(0, 0, 0, 0), true)
-		audio.sfx("ui")
+	_claim_codex_trophy(day)
 	# ★[S7-T1 / ADR-0065 결정 1] 옛 T4.2 런 종료 게이트(RunSummary.is_over → _end_run → return)가
 	#   여기 있었다. RUN_DAYS=21에서 하루를 더 자면 게임이 끝나 **절기 전환(day 29)에 영원히 도달
 	#   못 했다** — Slice 7(절기·날씨·축제)의 전제가 통째로 성립하지 않는 자리라 게이트만 걷어낸다.
@@ -13613,6 +13667,20 @@ func _process(delta: float) -> void:
 	_maybe_spine_b5()
 	# ★ 척추 사슬 재개 — 끊어진 이음매를 **원장에서 다시 잇는다**(아래 머리말).
 	_maybe_resume_spine()
+	# ★[폴리시 R21 #9] **연출을 연 그 프레임은 여기서 끝난다.** 함수 머리의 가드 넷
+	#   (`_transitioning` 13457 · `cutscene != null` 13462 · 대화 13471)은 이미 지나온 뒤라,
+	#   위 넷이 이 프레임 안에서 연출로 **진입시키면** 그 뒤 200줄의 입력이 재생 중인 컷신·워프
+	#   트윈 위로 그대로 쏟아졌다. 가장 비싼 것이 F9다: `_load_game`은 형제 연출 상태를 줄줄이
+	#   되감으면서도(`_spine_say`·`_illust_id`·`_epilogue_pending`·`_spine_b6_pending`) `cutscene`은
+	#   한 글자도 안 건드리므로, 버려진 세션의 러너가 새로 불러온 세계 위에서 계속 재생되다가
+	#   끝나는 프레임의 `_end_cutscene`이 **로드 전 세션의 시계 상태·주민 좌표·가시성**을 덮어쓰고
+	#   `_spine_b5_pending`까지 살아 있어 그 세이브에서 B5 내면 공간이 열렸다(이미 지났거나 게이트
+	#   미충족이어도). 다른 다섯 개 컷신 진입점은 전부 호출부가 그 프레임을 끝낸다(트윈 콜백 ·
+	#   `_on_dialogue_finished` 뒤 return · 관문 `_start_resident_dialogue` 뒤 return) — 새는 곳은
+	#   이 한 쌍(+워프·건물 토글의 `_transitioning`)뿐이라 같은 규율을 그 자리에 세운다.
+	#   머리 가드의 복제가 아니라 **상태를 바꾼 직후의 재검사** 한 줄이다.
+	if _transitioning or cutscene != null:
+		return
 
 	# 취침 입력: 집 안에서 Enter/Space(ui_accept)
 	if _can_sleep() and Input.is_action_just_pressed("ui_accept"):
@@ -14591,10 +14659,12 @@ func _process(delta: float) -> void:
 		# ★[폴리시 R10] 혼력이 후킹 하한에도 못 미치면 **던지기 안내 자체를 걷는다** — 형제 창구
 		#   (나무·밭·화분·개간)의 "혼력 부족 — 집에서 취침"과 같은 문법. 집행부(`_start_fishing`)의
 		#   사전 판정과 같은 술어를 읽으므로 화면과 동작이 갈리지 않는다.
-		# ★[폴리시 R11] 그 술어가 이제 **도달 가능한 최저 비용**을 본다(FishingSession.min_hook_energy —
-		#   옛 MIN_HOOK_ENERGY는 클램프 하한 1이라 도달 불가였고, 혼력 1~3에서 화면이 "던지기"라
-		#   말해 놓고 후킹이 확정 실패했다). 두 자리가 같은 함수를 부르므로 갈림이 여전히 0이다.
-		if energy != null and not energy.can_act(FishingSession.min_hook_energy(_fishing_mods())):
+		# ★[폴리시 R11] 그 술어가 이제 **도달 가능한 최저 비용**을 본다(옛 MIN_HOOK_ENERGY는 클램프
+		#   하한 1이라 도달 불가였고, 혼력 1~3에서 화면이 "던지기"라 말해 놓고 후킹이 확정 실패했다).
+		# ★[폴리시 R21 #2] 그 술어가 `_cast_energy_need` 한 함수로 모였다 — **보장 미끼를 든
+		#   캐스팅은 체급이 확정돼 하한이 아니라 그 비용이 기준**이기 때문이다. 집행부(`_start_fishing`)가
+		#   같은 함수를 부르므로 갈림은 여전히 0이고, 이제 그 확정 구간에서도 화면이 먼저 말한다.
+		if energy != null and not energy.can_act(_cast_energy_need(inventory.selected_id(), _fishing_mods())):
 			interact_prompt.text = "혼력 부족 — 챌 힘이 없다 (집에서 취침)"
 		else:
 			interact_prompt.text = "[좌클릭] 낚싯줄 던지기" + ("" if gear_line == "" else "   " + gear_line)
@@ -14866,6 +14936,23 @@ func _process(delta: float) -> void:
 		# ★ ADR-0052 활짝 핀 꽃 패치를 바라볼 때: 우클릭 맨손 채집(혼력0). 채집물+채집 XP.
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = "[우클릭] 피안화 채집 (채집 숙련)"
+	elif forage != null and _indoor == "" and _region == RegionCatalog.HOME and forage.is_grown(_target):
+		# ★[폴리시 R21 #3] 사료풀 낫질에 **안내가 한 줄도 없었다.** 이 동사는 `_use_tool`에서
+		#   free_verb 밖이라 상단 `if not free_verb and not energy.can_act(cost): return`에 걸리고
+		#   성공 시 `energy.spend`를 내는 과금 동사인데, 사슬 어디에도 사료풀 갈래가 없어 마지막
+		#   `_farm_prompt()`로 떨어졌다 — 사료풀 칸은 GROUND라 `_target_valid`가 거짓이고
+		#   `_reserved_tile_reason`이 ""를 돌려주니 화면엔 아무것도 안 뜨고 LMB는 알림 없이
+		#   되돌아갔다. 여물광 건초의 **유일한 소스**라 그 침묵이 곧 짐승 굶김으로 이어진다.
+		#   형제 과금 동사는 예외 없이 사유를 말한다(개간·벌목·이끼·목축·밭/화분·곡괭이·팬닝).
+		#   문구 세 갈래는 이끼 줄의 규약 그대로다 — 낫을 안 들었으면 필요한 도구를 말하고,
+		#   들었을 때만 혼력으로 갈린다(안 든 줄은 동사 약속이 아니라 "무엇이 필요한가"의 안내다).
+		interact_prompt.visible = not _sleeping
+		if inventory.selected_id() != ItemCatalog.SCYTHE:
+			interact_prompt.text = "다 자란 사료풀 — 낫으로 베면 여물광 건초가 된다"
+		elif not energy.can_act(_farming_energy_cost()):
+			interact_prompt.text = "혼력 부족 — 집에서 취침"
+		else:
+			interact_prompt.text = "[좌클릭] 사료풀 베기 (여물광 %d/%d단)" % [ranch.silo_hay(), Ranch.SILO_CAP]
 	elif forage_spawns != null and _indoor == "" and forage_spawns.has_at(_region, _target):
 		# ★[S4-T1] 숲 빈터에 돋은 채집물을 바라볼 때: 우클릭/[F] 맨손 채집(혼력0). 종명을 밝혀
 		#   "무엇을 줍는지"가 보이게 한다(아이콘 아트는 S4-T10).
@@ -15544,8 +15631,13 @@ func _start_fishing(water: Vector2i) -> void:
 	#   ★[폴리시 R11] 하한을 **도달 가능한 최저 비용**으로 고쳤다(`FishingSession.min_hook_energy`).
 	#     옛 `MIN_HOOK_ENERGY`(=1)는 어떤 어종·어떤 숙련에서도 나올 수 없는 값이라(최저가 소 체급
 	#     4 × 절감 하한 0.70 = 3), 혼력 1~3의 확정 실패 구간이 그대로 열려 있었다.
-	if energy != null and not energy.can_act(FishingSession.min_hook_energy(_fishing_mods())):
-		_notice("혼력이 바닥나 챌 힘이 없다 — 미끼만 버린다. 집에서 취침")
+	#   ★[폴리시 R21 #2] 그 하한을 `_cast_energy_need`로 감쌌다 — **보장 미끼면 체급이 캐스팅 순간
+	#     확정되므로** 하한이 아니라 그 확정 비용이 판정 기준이다(사유는 그 함수 머리말). 프롬프트도
+	#     같은 함수를 부르므로 화면과 집행이 여전히 안 갈린다(R10/R11이 세운 그 계약).
+	var cast_mods := _fishing_mods()
+	var need_energy := _cast_energy_need(rod_id, cast_mods)
+	if energy != null and not energy.can_act(need_energy):
+		_notice("혼력이 바닥나 챌 힘이 없다 — 미끼만 버린다. 집에서 취침 (필요 %d)" % need_energy)
 		return
 	if _cast_bait != "":
 		inventory.remove_item(_cast_bait, 1)   # 캐스팅 시 1개 소모(입질 결과와 무관 — 던진 값이다)
@@ -15556,7 +15648,7 @@ func _start_fishing(water: Vector2i) -> void:
 	# ★[S3-T6] 낚시 스킬의 세 계수를 여기서 얹는다 — 텐션 안전창은 rod에(기어 보너스 위에 가산),
 	#   혼력 절감·퍼펙트 창은 mods에. FishingSession은 여전히 스킬을 모른다(dict 둘이 유일한 접점).
 	fishing = FishingSession.new(s, FishCatalog.session_params(fish_id),
-		_fishing_rod_params(rod_id), _fishing_mods())
+		_fishing_rod_params(rod_id), cast_mods)   # ★[폴리시 R21 #2] 사전 판정이 본 그 mods 그대로
 	fishing.hook_gate = _fishing_hook_gate
 	fishing.cast()
 	player.face_toward(_target_center_px(water))
@@ -15575,6 +15667,28 @@ func _fishing_rod_params(rod_id: String) -> Dictionary:
 	p["tension_safe_bonus"] = float(p.get("tension_safe_bonus", 0.0)) \
 		+ FishSkill.tension_safe_bonus(_skill_level(ProfessionCatalog.FISHING))
 	return p
+
+# ★[폴리시 R21 #2] 이 캐스팅에 **실제로 필요한** 후킹 혼력 — 화면(프롬프트)과 집행부(`_start_fishing`)의
+#   단일 출처다. 두 자리가 갈리면 "[좌클릭] 낚싯줄 던지기"라 말해 놓고 미끼만 태우는 그 사고가
+#   되돌아온다(R10이 창구를 만들고 R11이 하한을 고치며 «두 자리가 같은 함수를 부른다»를 계약으로
+#   못 박은 자리 — polish_r11 ③f가 그것을 잰다).
+#   ㉠ 기본값 = 도달 가능한 최저 후킹 비용. 보통 캐스팅은 어떤 어종이 걸릴지 굴려 봐야 알므로
+#      "확정 실패"만 걷어내는 이 하한이 맞다(ADR-0008 — 저혼력을 막는 게이트가 아니다).
+#   ㉡ **보장 미끼면 체급이 캐스팅 순간 확정된다** — `roll_fish`가 가중 추첨을 건너뛰고 «cap 이하
+#      최고 체급»에서만 뽑기 때문이다. 그 체급은 rng가 아니라 풀에서 정해지므로 지금 물어볼 수
+#      있고(`FishCatalog.guaranteed_class` = 그 가지와 같은 술어 · 굴림 스트림 무소비), 그래서
+#      삼줄 낚싯대 + 보장 미끼 + 혼력 4~7의 «100% 확정 실패 + 150냥 소각» 구간이 닫힌다.
+func _cast_energy_need(rod_id: String, mods: Dictionary) -> int:
+	var need := FishingSession.min_hook_energy(mods)
+	var bait := GearCatalog.active_bait(rod_id, _owned_gear_ids())
+	var cap := GearCatalog.guarantee_cap_for(bait, rod_id)
+	if cap < 0:
+		return need
+	var wc := FishCatalog.guaranteed_class(_fishing_habitat(), clock.season_index(),
+		clock.phase(), cap, _weather_today())
+	if wc < 0:
+		return need
+	return maxi(need, FishingSession.hook_energy_for({"weight_class": wc}, mods))
 
 func _fishing_mods() -> Dictionary:
 	var lv := _skill_level(ProfessionCatalog.FISHING)
@@ -17137,9 +17251,23 @@ func _mastery_row(skill: String) -> Dictionary:
 		return {}
 	var levels := _skill_level_map()
 	if not Mastery.is_open(levels):
-		# ★ 만렙 전에는 **아무 줄도 안 띄운다** — 다섯 행 전부에 "아직 못 연다"가 붙으면 패널이
-		#   잔소리가 된다. 층의 존재는 5스킬을 다 채운 사람에게만 조용히 드러난다.
-		return {}
+		# ★[폴리시 R21 #8] ㉠ 갈래를 **구현한다.** 머리말이 네 상태를 계약으로 열거하면서 ㉠에
+		#   "무엇이 남았나까지 말해 준다"까지 적었는데 코드는 줄 자체를 안 세워, 그 안내를 위해
+		#   만들어진 `Mastery.pending_skills`(머리말이 "안내 문구용"이라 계약을 적은 그 함수)가
+		#   저장소 전체에서 런타임 호출부 0인 죽은 API로 남아 있었다 — R5가 `Peddler.next_open_day`
+		#   에서 봉합한 "머리말에 계약이 적힌 채 호출부가 한 곳도 없다"와 같은 계열이다. 그 결과
+		#   [경지] 층이 존재한다는 사실도, 무엇이 남았는지도 화면 어디에도 안 나왔다.
+		#   ★ 종전 주석이 경계한 **잔소리는 그대로 피한다**: 다섯 행 전부가 아니라 **첫 행 하나**에만
+		#     앉힌다(층은 게임에 하나뿐이니 줄도 하나다 — 행마다 붙을 성질의 정보가 아니다).
+		#     기준 행은 레지스트리 파생이라(SKILLS[0]) 표가 바뀌어도 따라온다.
+		var pend := Mastery.pending_skills(levels)
+		if pend.is_empty() or skill != String(ProfessionCatalog.SKILLS[0]):
+			return {}
+		var pend_names: Array = []
+		for s in pend:
+			pend_names.append(ProfessionCatalog.skill_name(String(s)))
+		return {"text": "[경지] 잠김 — 만렙이 남은 스킬: %s" % ", ".join(pend_names),
+			"claimable": false, "skill": skill}
 	var ov := mastery_overflow()
 	if mastery.has_claimed(skill):
 		return {"text": "[경지] %s — 수령함" % String(art["name"]), "claimable": false, "skill": skill}
@@ -17556,7 +17684,7 @@ func _try_harvest() -> bool:
 			% [ItemCatalog.name_of(ItemCatalog.harvest_id(harvested_crop)), dropped])
 	_toast_item(ItemCatalog.harvest_id(harvested_crop), count - dropped)   # ★ Phase C 획득 토스트(수확)
 	_gain_farm_xp(CropCatalog.sell_price(harvested_crop))  # ★ 수확 성공 XP(§8.9)+레벨업 감지
-	_run_harvested += 1                       # T4.2 슬라이스 점수판: 거둔 영혼 총수(수확 액션당 1)
+	_count_run_harvest()                      # T4.2 슬라이스 점수판: 거둔 영혼 총수(수확 액션당 1)
 	# ★[S8-T4 / ADR-0066 결정 4] 활동 → 하트: **수확 액션당 미호 +1**(일일 캡 12).
 	#   눈금을 `_run_harvested`와 같은 "액션당 1"로 맞춘다 — 다수확(황천포도 2~3)이 관계까지 3배로
 	#   불리면 작물 선택이 관계 최적화 문제로 변한다(수확은 밭을 돌본 *행위*이지 개수가 아니다).
@@ -17618,7 +17746,7 @@ func _harvest_pot() -> void:
 	inventory.add_harvest(crop, 1, pot_quality)
 	_toast_item(ItemCatalog.harvest_id(crop), 1)
 	_gain_farm_xp(CropCatalog.sell_price(crop))
-	_run_harvested += 1
+	_count_run_harvest()
 	_activity_credit("miho", 1)
 	_show_flavor(crop)
 	audio.sfx("harvest")
@@ -17808,7 +17936,7 @@ func _harvest_wild(crop: String, from_pot: bool = false) -> void:
 	_forage_found[species] = true   # 재배 수확도 발견(밭에서 길러도 채집 — 씨앗 사슬이 자가 확장)
 	_toast_item(species, count)
 	_gain_forage_xp(ForageSkill.PICK_XP)
-	_run_harvested += 1
+	_count_run_harvest()
 	audio.sfx("harvest")
 	player.swing_tool("harvest", FarmSkill.speed_factor(FarmSkill.level_for_xp(_farming_xp)))
 	queue_redraw()
@@ -18065,22 +18193,31 @@ func _farm_prompt() -> String:
 	var farm_cost := _farming_energy_cost()
 	if _region == RegionCatalog.HOME:
 		var anchor := orchard.tree_at(_target)
+		# ★[폴리시 R21 #4] **동사가 성립하는지 먼저 보고 혼력은 그 다음이다.** 종전엔 두 갈래 다
+		#   혼력을 맨 위에서 물어, *막을 동사가 애초에 없는* 자리에서도 "혼력 부족"이라 거짓 사유를
+		#   댔다 — 어제 심은 미성숙 나무(또는 비제철 성숙목)를 겨누면 그렇게 말해 놓고, 자고 일어나
+		#   혼력이 가득해도 그 나무는 여전히 아무것도 안 내준다(18074가 의도한 "조용히"가 저혼력
+		#   구간에서만 깨진다). 묘목도 같아서 3×3이 막힌 자리에서 진짜 사유("여기엔 못 심음") 대신
+		#   혼력을 탓했다. R10이 목축 프롬프트에서 바로잡은 그 순서(`parts.is_empty()`를 혼력 판정
+		#   위에 세운 자리)이자, 바로 아래 밭 갈래들이 이미 지키는 순서다(괭이질·물주기는 칸 상태를
+		#   먼저 본다). 혼력 줄은 **실제로 그 동사가 서는 갈래에만** 남는다(둘 다 과금 동사다 —
+		#   `_try_harvest`의 과수 가지·`_use_tool`의 묘목 가지가 각각 `energy.spend`를 낸다).
 		if orchard.has_tree(anchor):
-			if not energy.can_act(farm_cost):
-				return "혼력 부족 — 집에서 취침"
 			var n := orchard.fruit_count_of(anchor)
 			if orchard.is_mature(anchor, clock.day) and n > 0:
+				if not energy.can_act(farm_cost):
+					return "혼력 부족 — 집에서 취침"
 				return "[우클릭] 혼의 나무 수확 (%d개)" % n
 			return ""   # 아직 안 자랐거나 결실 없음 — 조용히(비제철/성장 중)
 		var held := inventory.selected_id()
 		if ItemCatalog.category_of(held) == ItemCatalog.CAT_SAPLING:
 			var fruit := ItemCatalog.fruit_of(held)
 			if inventory.has_sapling(fruit):
+				if not orchard.can_plant(_target, _is_tree_blocked):
+					return "여기엔 못 심음 — 3×3 빈 자리 필요"
 				if not energy.can_act(farm_cost):
 					return "혼력 부족 — 집에서 취침"
-				if orchard.can_plant(_target, _is_tree_blocked):
-					return "[좌클릭] %s 묘목 심기 (3×3)" % FruitTreeCatalog.name_of(fruit)
-				return "여기엔 못 심음 — 3×3 빈 자리 필요"
+				return "[좌클릭] %s 묘목 심기 (3×3)" % FruitTreeCatalog.name_of(fruit)
 	# ★[S10-T5] 화분 안내 — 밭 프롬프트보다 먼저(동사 우선순위와 같은 순서). `_target_valid`(=SOIL
 	#   여부) 게이트 **위**에 둔다: 화분은 실내 마룻바닥 위에도 서므로 그 칸은 farmable이 아니다.
 	var pot_prompt := _pot_prompt()
@@ -18757,6 +18894,8 @@ func _sell_fish_n(id: String, quality: int, n: int, quiet: bool = false) -> Dict
 	#   ★ 추적 대상 밖은 `codex.record`가 스스로 거른다 — 게잡이통 통용물이 섞여도 안전하다.
 	if codex != null and clock != null:
 		codex.record(id, clock.day)
+		# ★[폴리시 R21 #5] 등재한 그 자리에서 완주 래치도 회수한다(아침 정산 창구와 같은 한 줄).
+		_claim_codex_trophy(clock.day)
 	if not quiet:
 		audio.sfx("ui")
 		var qtag := (ItemCatalog.quality_name(quality) + " ") if quality > 0 else ""
@@ -20359,12 +20498,14 @@ func _skill_rows() -> Array:
 	#   전문직 선택·레벨·HP 파생은 지금 실효고 XP 소스(몹 처치)만 S5-T5 대기다 — 그래서 이 행은
 	#   L0/0XP로 뜨지만 *구조적으로* 나머지 넷과 완전히 같다(행이 특별 취급을 안 받는다).
 	#   ⚠️ 5행이 패널 높이를 넘겨 inv_frame의 숙련 탭 치수·스크롤을 함께 봉합했다(SK_ROW_H 주석).
+	# ★[폴리시 R21 #8] 행 제목도 표시명 표에서 판다 — 스킬 이름의 진실원이 두 곳이 되지 않게
+	#   (`[경지] 잠김` 안내가 같은 표를 읽는다). 표시 문자열은 한 글자도 안 바뀐다.
 	return [
-		_skill_row("농사", ProfessionCatalog.FARMING, _farming_xp),
-		_skill_row("채집", ProfessionCatalog.FORAGING, _foraging_xp),
-		_skill_row("낚시", ProfessionCatalog.FISHING, _fishing_xp),
-		_skill_row("채광", ProfessionCatalog.MINING, _mining_xp),
-		_skill_row("전투", ProfessionCatalog.COMBAT, _combat_xp),
+		_skill_row(ProfessionCatalog.skill_name(ProfessionCatalog.FARMING), ProfessionCatalog.FARMING, _farming_xp),
+		_skill_row(ProfessionCatalog.skill_name(ProfessionCatalog.FORAGING), ProfessionCatalog.FORAGING, _foraging_xp),
+		_skill_row(ProfessionCatalog.skill_name(ProfessionCatalog.FISHING), ProfessionCatalog.FISHING, _fishing_xp),
+		_skill_row(ProfessionCatalog.skill_name(ProfessionCatalog.MINING), ProfessionCatalog.MINING, _mining_xp),
+		_skill_row(ProfessionCatalog.skill_name(ProfessionCatalog.COMBAT), ProfessionCatalog.COMBAT, _combat_xp),
 	]
 
 # 한 스킬 행 조립 — 레벨/진행바 + 고른 전문직 이름 요약 + 지금 고를 수 있는 tier(0=없음).
@@ -22407,6 +22548,18 @@ func _close_okja_track() -> void:
 #   뿌리다 — 세 채널이 점수를 밀어 넣어도 다음 갱신에 덮여 사라지므로, 차단이 플래그가 아니라
 #   **구조**로 성립한다. 호출부 게이트 셋(아래 대화·선물·활동)은 그 위에 얹는 명시적 방어선이다.
 #   판정식은 `spine.gd`가 순수 static으로 들고(deed.gd 결) 여기는 원장 셋을 떠 넘기는 창구다.
+# ★[폴리시 R21 #6] 누적 수확 점수판을 올리는 **유일한 창구**(밭 수확·화분 수확·야생 채집 셋이
+#   여기로 모인다). 이 카운터는 점수판이면서 동시에 앵커 deed의 **라이브 축**이라(spine.gd의
+#   `OKJA_TEND_HARVEST`), 세는 자리에서 트랙을 다시 재지 않으면 600번째 수확이 점수를 300으로
+#   올려도 `r.affinity.points`·`stage`는 어제 값 그대로 남았다 — 관계 탭 한 행이 자기모순을 그리고
+#   (effect 줄은 `_run_harvested`를 실시간으로 읽어 "돌봄 600"인데 같은 행의 하트는 ♡4),
+#   강림의 「명부 혼례 부적」 게이트(`hearts() >= MAX_HEARTS`)가 다 갚은 그날 내내 잠겨 보였다.
+#   R8이 기증 축(`_donate_*`)에, R11이 이혼 경로에 같은 이유로 한 줄씩 더한 그 규율의 셋째 축이다
+#   (수확은 '가장 굵은 레버'라 마지막에 넘는 축이 되기 쉽다). 트랙 미개통이면 무동작이다.
+func _count_run_harvest() -> void:
+	_run_harvested += 1
+	_refresh_okja_track()
+
 func _refresh_okja_track() -> void:
 	var r := _resident(OKJA_RID)
 	if r == null or r.affinity == null:
@@ -22793,6 +22946,7 @@ func _confession_lines(r: Resident, accepted: bool) -> PackedStringArray:
 func _apply_jealousy(chosen: String) -> void:
 	if not JEALOUSY_ROSTER.has(chosen):
 		return
+	var hit := 0                        # 실제로 깎인 사람 수(0이면 알리지 않는다 — 아래 규율)
 	for rid in JEALOUSY_ROSTER:
 		if rid == chosen:
 			continue
@@ -22804,6 +22958,7 @@ func _apply_jealousy(chosen: String) -> void:
 		var cut := before - r.affinity.points
 		if cut <= 0:
 			continue                    # 0점이라 깎일 게 없었다 — 복원할 것도 없다
+		hit += 1
 		# 기존 항목이 있으면 합친다(방어 — 이혼→재연애가 7일 안에 겹쳐도 먼저 깎인 몫이 증발하지 않게).
 		var prev: Dictionary = _jealousy.get(rid, {})
 		_jealousy[rid] = {
@@ -22811,6 +22966,14 @@ func _apply_jealousy(chosen: String) -> void:
 			"amount": cut + int(prev.get("amount", 0)),
 		}
 	# 질투 알림은 명단이 아니라 정서로 — 누가 얼마 깎였는지는 관계 탭 하트가 이미 보여 준다.
+	# ★[폴리시 R21 #11] **집행이 0이면 알리지 않는다.** 이 줄은 루프 밖이라 뽑힌 사람이 로스터
+	#   안이기만 하면 무조건 발화했는데, 실제 감점은 `Affinity._add`의 0 하한에 눌려 0일 수 있다
+	#   (멜·바나와 한 번도 대화·선물하지 않은 판에서 미호에게 고백하면 둘 다 `cut == 0`이라
+	#   `_jealousy` 원장이 빈 채로 남는다). 그때 바로 위 근거 주석이 근거로 든 "관계 탭 하트"에는
+	#   보여 줄 변화가 0건이라, 알림만 없는 사건을 있었다고 말한다 — R15·R18이 결정기 회수·
+	#   출하함 만재·AoE 집계에 세운 그 규율(0건 무고지)의 미적용 자리였다.
+	if hit <= 0:
+		return
 	_notice("어디선가 서운한 기색이 느껴진다…")
 
 # 질투 자동 복원 — 아침 정산(_on_day_advanced)이 부른다. 예정일에 닿은 항목을 깎인 만큼 정확히
@@ -25704,7 +25867,20 @@ func _seed_flower_patches() -> void:
 				flower.seed(t)
 
 # 밭 칸 상태가 바뀌면 오버레이 타일을 갱신한다(FarmField.tile_changed로 호출).
+# ★[폴리시 R21 #12] **무대 술어** — `field_layer`는 좌표만 키로 드는 그리기 원장인데 지우는 쪽만
+#   구역을 보고(`_rebuild_region`의 `field_layer.clear()` + HOME 복귀 시 `_repaint_field_overlays`)
+#   쓰는 쪽은 날로 썼다. 그래서 안식 밖(마을·삼도천·숲·갱도 지상)에 선 채 24:00을 맞으면
+#   `_on_day_advanced`의 아침 정산이 칸마다 쏘는 `tile_changed`(혼우 급수·아침 마름·까마귀 제거)가
+#   **지금 화면에 깔린 남의 구역 그리드 위에** 안식 좌표의 고랑·젖음·성장단계를 찍었다 — 늘봄방
+#   경작면은 나루 마을 남단과 좌표가 겹쳐 강변에까지 찍혔고, 건물 출입으로도 안 지워져 **다른
+#   구역으로 실제 워프할 때까지** 남았다. 형제 그리기 경로는 전부 이 술어를 이미 들고 있다
+#   (`_rebuild_trellis_collision`·`_draw_crops`/`_draw_orchard`의 HOME 분기·스프링클러/레어크로우/
+#   재점령 잡초 드로우) — 여기만 빠져 있었다.
+# ★ 상태는 이미 갱신됐고 **그림만 미룬다**: 안식으로 돌아오는 `_rebuild_region`이
+#   `_repaint_field_overlays`로 원장 전량을 다시 칠하므로 복원 경로가 이미 서 있다(손실 0).
 func _on_tile_changed(t: Vector2i) -> void:
+	if _region != RegionCatalog.HOME:
+		return
 	var idx := _overlay_index(t)
 	if idx < 0:
 		field_layer.erase_cell(t)

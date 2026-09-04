@@ -27,6 +27,16 @@ const FISHING := "fishing"
 const COMBAT := "combat"
 const SKILLS := [FARMING, FORAGING, MINING, FISHING, COMBAT]
 
+# ★[폴리시 R21 #8] 스킬 **표시명**(한국어) — 종전엔 숙련 탭 행 제목(`_skill_rows`)에 리터럴로만
+#   있어서, 스킬 이름을 화면에 대야 하는 다른 자리가 그 다섯 글자를 다시 적을 수밖에 없었다.
+#   id → 표시명은 이 표 하나가 진실원이다(전문직 이름 `name_of`와 같은 결의 정적 조회).
+const SKILL_NAMES := {
+	FARMING: "농사", FORAGING: "채집", MINING: "채광", FISHING: "낚시", COMBAT: "전투",
+}
+
+static func skill_name(skill: String) -> String:
+	return String(SKILL_NAMES.get(skill, skill))
+
 # ── 퍼크 차원(비-가치 4차원, ADR-0052 §1) — 문자열 키(조회·세이브 안정) ──────────────
 const DIM_QUALITY_FLOOR := "quality_floor"  # 품질: 산출물 등급 하한(약초학자 → Q_IRIDIUM=3)
 const DIM_DOUBLE_DROP := "double_drop"      # 수량: 2배 드롭 확률(0..1)

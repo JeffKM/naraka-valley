@@ -361,10 +361,18 @@ static func min_hook_energy(mods: Dictionary) -> int:
 			lowest = c
 	return lowest if lowest > 0 else MIN_HOOK_ENERGY
 
+# ★[폴리시 R21 #2] 후킹 비용식의 **순수 코어** — 세션을 세우기 전에도 같은 값을 물을 수 있다.
+#   보장 미끼는 캐스팅 순간 체급이 확정되므로(GearCatalog.guarantee_cap_for → FishCatalog.roll_fish의
+#   확정 가지) main의 사전 판정이 "도달 가능 최저"가 아니라 **이 캐스팅의 실제 비용**을 물어야 한다.
+#   식은 아래 `energy_cost`가 쓰던 그 한 줄이고, 인스턴스 쪽이 이걸 부른다(두 자리에 안 적는다).
+static func hook_energy_for(params: Dictionary, mods_in: Dictionary) -> int:
+	var base := int(params.get("energy",
+		base_energy_for_class(int(params.get("weight_class", WeightClass.SMALL)))))
+	return maxi(int(round(float(base) * float(mods_in.get("energy_factor", 1.0)))), MIN_HOOK_ENERGY)
+
 # 이 세션의 후킹 혼력 비용(체급 기준값 × 스킬 절감 계수, 하한 MIN_HOOK_ENERGY). main이 사전 판정·소모에 쓴다.
 func energy_cost() -> int:
-	var base := int(fish.get("energy", base_energy_for_class(int(fish.get("weight_class", WeightClass.SMALL)))))
-	return maxi(int(round(float(base) * float(mods.get("energy_factor", 1.0)))), MIN_HOOK_ENERGY)
+	return hook_energy_for(fish, mods)
 
 # 물고기 체급(0~3).
 func weight_class() -> int:
