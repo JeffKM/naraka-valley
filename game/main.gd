@@ -2366,6 +2366,8 @@ const KITCHEN_TILE := Vector2i(11, 88)
 # ★[asset-ruleset §6] Y-split 프론트 프롭 오버레이(플레이어 위 z 레이어)와 재분할 트리거.
 #   플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 나눠 그린다(매 프레임 아님 — 값싸게).
 var _front_props: Node2D = null
+# ★[폴리시 R18 #16] 풀스크린 월드 오버레이 z 셔틀(z20 — 월드 라벨 z10보다 위). world_overlay.gd 참조.
+var _world_overlay: Node2D = null
 var _last_player_tile_y: int = -9999
 # ★[폴리시 R10] main 캔버스가 **타일 눈금으로만** 갱신되는 구조(위 행 넘김 + `_update_target`의 발
 #   타일 변화)의 예외 창구. 이 캔버스 위에 그려지는 것 중 둘은 소스가 타일보다 잘게 움직인다 —
@@ -3332,6 +3334,13 @@ func _ready() -> void:
 	_front_props.host = self
 	_front_props.z_index = 1
 	add_child(_front_props)
+	# ★[폴리시 R18 #16] 풀스크린 월드 오버레이(B5 내면 공간·B6/B7 일러스트) z 셔틀 — 앞프롭과
+	#   같은 결이되 **월드 라벨(z10)보다 위**여야 한다. 셋(플레이어 z0·앞프롭 z1·라벨 z10)을
+	#   한 번에 덮는 것이 이 노드의 존재 이유다(근거 전문은 world_overlay.gd 머리말).
+	_world_overlay = preload("res://world_overlay.gd").new()
+	_world_overlay.host = self
+	_world_overlay.z_index = 20
+	add_child(_world_overlay)
 	_setup_lighting()
 	_setup_audio()
 	_setup_hotbar()
@@ -7591,35 +7600,48 @@ func _carve_door_spoke(rect: Rect2i, door: Vector2i, lane_y: int) -> void:
 	_carve_v(side_x, lane_y, approach_y)      # 간선 → 옆 열로 남하
 	_carve_h(approach_y, door.x, side_x)      # 문 아래 칸까지 가로로 붙음
 
+# ★[폴리시 R18 #10] 마을 문 스포크 표 — `[rect, door, lane_y]` 삼항. **지도가 카브하는 그 표를
+#   걷기(`_road_spokes`)도 읽는다.** 두 곳이 따로 알면 어긋난다: 지도는 문이 레인보다 아래인
+#   집을 문 열이 아니라 건물 동쪽 옆 열로 우회시키는데(`_carve_door_spoke` else 갈래 — 문 열로
+#   곧장 내려가면 길이 건물 몸통을 세로로 관통해 벽을 걸어 통과할 수 있었다) 걷기는 문 열로
+#   직진해, 복도 남쪽 집들의 아침 전환이 전부 자기 집 WALL을 뚫고 나왔다.
+#   레인 배정 술어(강변대 여부)도 여기 한 줄로 산다 — 지도·걷기가 같은 답을 쓴다.
+func _village_door_spokes() -> Array:
+	var out: Array = [
+		[CAFE_EXT_RECT, CAFE_EXT_DOOR, MAIN_CORRIDOR_Y],      # 카페 문(8,31) → 복도
+		[MEL_HOUSE_RECT, MEL_HOUSE_DOOR, MAIN_CORRIDOR_Y],    # 멜 문(22,18) → 복도
+		[MIHO_HOUSE_RECT, MIHO_HOUSE_DOOR, MAIN_CORRIDOR_Y],  # 미호 문(6,47) — 복도 아래(우회)
+		[BANA_HOUSE_RECT, BANA_HOUSE_DOOR, MAIN_CORRIDOR_Y],  # 바나 문(31,47) — 복도 아래(우회)
+		[STORE_EXT_RECT, STORE_EXT_DOOR, MAIN_CORRIDOR_Y],    # 만물상 문(60,18) → 복도
+	]
+	# ★[ADR-0060 결정 2 / S2-T2] 주민 집 11채. 동편 9채는 메인 복도(y36)로, 강변 2채는 강변
+	#   보조 레인(RIVERSIDE_LANE_Y)으로 붙는다.
+	for i in RESIDENT_HOUSE_RECTS.size():
+		var rect: Rect2i = RESIDENT_HOUSE_RECTS[i]
+		out.append([rect, RESIDENT_HOUSE_DOORS[i],
+			RIVERSIDE_LANE_Y if rect.position.y >= RIVERSIDE_ZONE_Y else MAIN_CORRIDOR_Y])
+	return out
+
 func _carve_village_paths() -> void:
 	# ★C3 — 100×72 코지-와이드 동선. GROUND이 열려 도달성은 자동(C2 결) — 문 스포크는 시각 안내 레인이다.
 	for x in range(1, 99):
 		_set_tile(x, MAIN_CORRIDOR_Y, PATH)     # 메인 가로 복도(서워프·도착 ~ 동 가장자리, 무분절)
 
-	# 서편 문 → 복도.
-	_carve_door_spoke(CAFE_EXT_RECT, CAFE_EXT_DOOR, MAIN_CORRIDOR_Y)      # 카페 문(8,31) → 복도
-	_carve_door_spoke(MEL_HOUSE_RECT, MEL_HOUSE_DOOR, MAIN_CORRIDOR_Y)    # 멜 문(22,18) → 복도
-	_carve_door_spoke(MIHO_HOUSE_RECT, MIHO_HOUSE_DOOR, MAIN_CORRIDOR_Y)  # 미호 문(6,47) — 복도 아래(우회)
-	_carve_door_spoke(BANA_HOUSE_RECT, BANA_HOUSE_DOOR, MAIN_CORRIDOR_Y)  # 바나 문(31,47) — 복도 아래(우회)
-
-	# 동편 문 → 복도.
-	_carve_door_spoke(STORE_EXT_RECT, STORE_EXT_DOOR, MAIN_CORRIDOR_Y)    # 만물상 문(60,18) → 복도
-	# ★[ADR-0060 결정 2 / S2-T2] 주민 집 11채 문 스포크. 동편 9채는 메인 복도(y36)로, 강변 2채는
-	#   강변 보조 레인(RIVERSIDE_LANE_Y)으로 붙는다. 레인은 다리 스파인(BRIDGE_X)과 교차하므로
-	#   그 자체로 마을 동선에 이어진다 — 레인 span은 강변 문 x와 다리 열을 감싸는 최소 폭으로 잡는다.
+	# 문 스포크 전량(표는 `_village_door_spokes` 하나 — 걷기와 공유한다).
+	#   레인은 다리 스파인(BRIDGE_X)과 교차하므로 강변 레인도 그 자체로 마을 동선에 이어진다 —
+	#   레인 span은 강변 문 x와 다리 열을 감싸는 최소 폭으로 잡는다.
 	var lane_x0: int = int(BRIDGE_X[0])
 	var lane_x1: int = int(BRIDGE_X[1])
 	var has_riverside := false
-	for i in RESIDENT_HOUSE_RECTS.size():
-		var rect: Rect2i = RESIDENT_HOUSE_RECTS[i]
-		var door: Vector2i = RESIDENT_HOUSE_DOORS[i]
-		if rect.position.y >= RIVERSIDE_ZONE_Y:
+	for e in _village_door_spokes():
+		var rect: Rect2i = e[0]
+		var door: Vector2i = e[1]
+		var lane_y: int = e[2]
+		if lane_y == RIVERSIDE_LANE_Y:
 			has_riverside = true
 			lane_x0 = mini(lane_x0, door.x)
 			lane_x1 = maxi(lane_x1, door.x)
-			_carve_door_spoke(rect, door, RIVERSIDE_LANE_Y)   # 강변 집 → 물가 레인
-		else:
-			_carve_door_spoke(rect, door, MAIN_CORRIDOR_Y)    # 동편 집 → 메인 복도
+		_carve_door_spoke(rect, door, lane_y)
 	if has_riverside:
 		_carve_h(RIVERSIDE_LANE_Y, lane_x0, lane_x1)    # 강변 물가 산책로(다리 스파인과 교차)
 
@@ -10093,7 +10115,7 @@ func _setup_region_lamps() -> void:
 func _setup_audio() -> void:
 	audio = GameAudio.new()
 	add_child(audio)
-	audio.update_music(clock.minutes, _run_over, _in_cafe())
+	audio.update_music(clock.minutes, _ending_music_on(), _in_cafe())
 
 # ── ★ ADR-0024 핫바 HUD ───────────────────────────────────────────────────────
 # 하단 12칸 슬롯 바를 CanvasLayer에 붙이고, 인벤토리와 작물 아이콘(CROP_SPRITES의 mature 프레임)을
@@ -12400,12 +12422,28 @@ func _load_game() -> bool:
 	larder.load_save(data.get("larder", {}))                  # ★[S6-T1] 카페 곳간
 	# ★[S7-T7] 절기 행사 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(행사는 처음부터 열려
 	#   있으므로 막히는 것이 0이고, 더비 태그는 어차피 당일치라 잃을 것도 없다).
-	if data.has("seasonal_event") and seasonal_event != null:
-		seasonal_event.load_save(data["seasonal_event"])
+	# ★[폴리시 R18 #14] **`has` 가드를 걷어 빈 dict로 무조건 되감는다** — R6가 카페에 쓴 그 처방의
+	#   형제 전파다(바로 위 `cafe.load_save(data.get(...))`의 주석 ㉠이 근거 전문). 판별식은 R13이
+	#   명문화한 "부팅으로 시드되는가": 이 원장은 부팅이 아니라 **플레이가** 채우므로 로드는 반드시
+	#   되감아야 한다. 노드는 `_setup_seasonal_event`에서 부팅 1회 생성이라 세션 내내 같은
+	#   인스턴스이고, 당일치 리셋 `_roll_over(d)`는 `derby_day == d`면 통째로 건너뛴다 —
+	#   그래서 같은 날짜의 키 없는 구세이브를 로드하면 "안 되감는다"의 뜻이 **"직전 세션 값 유지"**로
+	#   뒤집혔다: 어획 한 번 없는 세이브가 금빛 태그 3장과 보상 사다리 2칸을 그대로 물려받고,
+	#   반대로 `grange_day`·`market_bought`가 남아 그 세이브의 장원제 출품과 한정품 구매가
+	#   영구히 막혔다. `load_save({})`는 전 필드를 `.get` 기본값으로 재조립하므로 뜻이 다시
+	#   "행사 이력이 아직 없다"가 된다.
+	if seasonal_event != null:
+		seasonal_event.load_save(data.get("seasonal_event", {}))
 	# ★[S10-T3] 보부상 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(야시장과 같은 하위호환
 	#   관례). 막히는 것은 0이다: 다음 7의 배수 날에 좌판이 그대로 서고 재고는 day에서 파생된다.
-	if data.has("peddler") and peddler != null:
-		peddler.load_save(data["peddler"])
+	# ★[폴리시 R18 #15] 위와 **같은 처방·같은 판별식**이다. 이쪽은 계약이 파일에 적혀 있기까지
+	#   하다 — `peddler.load_save` 머리말이 "하루 한 점 잠금도 왕복시킨다: 안 그러면 사고 저장하고
+	#   이어하면 그날 슬롯이 되살아난다(세이브-스컴이 아니라 **정상 이어하기**로 뚫리는 구멍)"라고
+	#   왕복을 못 박는데, 키 없는 구세이브에서는 그 왕복이 한 번도 안 돌았다. 방향만 반대다:
+	#   `rare_day`가 이월돼 산 적 없는 물건으로 그 세이브의 희귀 슬롯이 얼고, `bought`가 남아
+	#   레어크로우 같은 1회성 물품이 영구 차단된 뒤 다음 취침 자동 저장으로 파일에 굳었다.
+	if peddler != null:
+		peddler.load_save(data.get("peddler", {}))
 	# ★[S10-T8] 시련장·경지 원장 — 키 없는 구세이브는 **빈 원장**으로 시작한다(보부상과 같은
 	#   하위호환 관례). 막히는 것은 0이다: 문은 반딧넋 카운트가 열고, 이번 주 시련은 주 시드에서
 	#   그대로 파생되며, 경지 포인트는 스킬 XP에서 다시 계산된다.
@@ -13181,7 +13219,7 @@ func _process(delta: float) -> void:
 	# P2.6 BGM: 시각·종료·위치(카페 안인가)에서 phase(밭/카페/밤/엔딩)를 파생해 BGM을 잇는다
 	# (같은 phase면 즉시 반환, 라이팅과 같은 무상태 결). 시각이 멈춘 취침 연출 중에도 위치는
 	# 잠겨 있어(이동 잠금) phase가 안정적이다.
-	audio.update_music(clock.minutes, _run_over, _in_cafe())
+	audio.update_music(clock.minutes, _ending_music_on(), _in_cafe())
 	# ★[S5-T3 / ADR-0063 결정 3] 업화로 제련 진행 — 흐른 게임 분을 원장에 흘린다. 입력 가드보다
 	#   **먼저** 둔다: 대화·모달·취침 연출 중에도 시계가 흐르면 화덕은 계속 돌아야 한다(스타듀 정합).
 	_tick_furnaces()
@@ -15682,10 +15720,27 @@ func _resident_on_stage(r: Resident) -> bool:
 #   농원에서 그 칸을 겨누면 **화면엔 아무도 없는데** 업화로가 안 세워지고 프롬프트도 알림도 0이었다.
 #   주민이 스케줄대로 옮겨 가면 몇 분 뒤 같은 칸이 열리므로 "간헐 실패"로 읽힌다.
 #   R4가 `_installation_at`에서, R7이 `_facing_resident`에서 각각 봉합한 바로 그 사고의 세 번째 판이다.
+# ★[폴리시 R18 #12] **시간 축을 붙였다 — R17 #0의 반대편이다.** 저쪽이 "지금 다른 무대에 있는
+#   주민"의 유령 가드를 걷었다면, 이쪽은 "지금은 비어 있지만 **오늘 중 그가 설 칸**"의 구멍을
+#   막는다. `r.tile`은 `_update_resident_station`이 *그 시각의* 자리로만 갱신하므로 스케줄에 적힌
+#   나머지 칸들이 전부 가드 밖이었다: 07:00에 광장 (55,31)에 업화로를 세우면 09:00에 강림이 그
+#   칸으로 스냅돼 한 칸에 주민과 기계가 겹치고, [F] 사다리가 기계에 양보하므로 **그의 명부
+#   혼례 부적 창구가 09:00~15:00 내내 안 열린다**(프롬프트도 화덕 갈래가 먼저 잡아 안내조차 없다).
+#   조연 10인의 집앞·광장 칸 전부에 같은 구멍이 매일 열려 있었다.
+#   ★**새 배치만 막는다**(R17 #0/#1이 세운 그 규율) — 이미 놓인 기계는 `_f_machine_at` 양보가
+#     그대로 살아 있어 언제나 회수 가능하다. 구세이브가 매몰되지 않는다.
+#   ★구역 축은 항목마다 스스로 든다: 스테이션이 자기 region을 실으므로 그것으로 가르고,
+#     region ""(카메라 격리 자리)은 종전대로 구역을 안 가른다(`_resident_on_stage`와 같은 규약).
 func _resident_tile(t: Vector2i) -> bool:
 	for r in _residents:
 		if r.tile != Resident.UNPLACED and r.tile == t and _resident_on_stage(r):
 			return true
+		for e in r.schedule:
+			if e.get("tile", Resident.UNPLACED) != t:
+				continue
+			var reg := String(e.get("region", ""))
+			if reg == "" or reg == _region:
+				return true
 	return false
 
 # ★[폴리시 R12] 이 칸에 **방목 나온 짐승이 서 있는가**(설치물 원장과 별개 축 — 몸은 원장이 아니다).
@@ -20258,8 +20313,16 @@ func _setup_residents() -> void:
 	r_neo.portrait_stem = "neo"
 	r_neo.require_indoor = "만물상"
 	r_neo.schedule = [{"from_min": 0, "tile": NEO_TILE, "region": ""}]
-	r_neo.prompt_extra = func() -> String: return "   [F] 매대"
+	# ★[폴리시 R18 #11] **점주 레이어는 가게 방에 묶인다.** 결혼하면 네오도 19:00에 플레이어
+	#   안방(SPOUSE_HOME_TILE)으로 귀가하는데, 거기서 대화를 열어 주면서 매대까지 함께 열면
+	#   안방에서 만물상을 원격으로 여는 창구가 된다(#6 바 옵트인과 같은 형태의 좌표-무시 창구).
+	#   ADR-0060 결정 8의 이중 신분이 정확히 이 분리다 — 관계 레이어(대화·선물)만 안방으로
+	#   따라오고 점주 레이어는 만물상에 남는다. 안내·실행이 같은 술어를 본다(광고 = 지금 참인 키만).
+	r_neo.prompt_extra = func() -> String:
+		return "   [F] 매대" if _indoor == r_neo.require_indoor else ""
 	r_neo.shop_key = func() -> bool:
+		if _indoor != r_neo.require_indoor:
+			return false                # 가게 밖 — [F]를 흘려보낸다(원문 가드 결)
 		_open_frame(InventoryFrame.CTX_STORE)
 		return true
 	r_neo.effect_fn = func() -> String: return StoreDiscount.summary(neo_affinity.hearts())
@@ -21330,25 +21393,60 @@ func _road_spokes(from_tile: Vector2i, to_tile: Vector2i, region: String) -> Pac
 		return out
 	var lane_from := _road_lane_of(from_tile, region)
 	var lane_to := _road_lane_of(to_tile, region)
+	# ★[폴리시 R18 #10] 집 문 앞 칸이면 **지도가 판 우회 열**로 레인에 붙는다(`_house_detour`).
+	#   문 열로 직진하면 지도가 일부러 피해 간 그 관통 그림이 그대로 다시 그려진다.
+	var pts: Array = []
+	var from_out := _house_detour(from_tile, lane_from, region)
+	var to_in := _house_detour(to_tile, lane_to, region)
+	pts.append_array(from_out)
+	# 레인에 올라선 열 — 우회를 탔으면 옆 열, 아니면 자기 열이다.
+	var lane_x_from: int = int(from_out[-1].x) if not from_out.is_empty() else from_tile.x
+	var lane_x_to: int = int(to_in[-1].x) if not to_in.is_empty() else to_tile.x
 	if lane_from != lane_to:
-		# ★[폴리시 R18] 레인이 갈리면 **다리 스파인 열에서 환승한다** — 남향 스파인(BRIDGE_X)이
+		# ★[폴리시 R18 #9] 레인이 갈리면 **다리 스파인 열에서 환승한다** — 남향 스파인(BRIDGE_X)이
 		#   복도(y36)에서 강둑까지 세로로 내려가며 강변 레인을 가로지르므로, 두 레인을 잇는
 		#   유일한 길이 그 열이다(`_carve_village_paths`의 "레인은 다리 스파인과 교차하므로
 		#   그 자체로 마을 동선에 이어진다" 주석이 가리키는 그 교차점). ㄱ자 한 번이 ㄹ자 두 번이 된다.
 		var link_x := int(BRIDGE_X[0])
-		out.append(_tile_center_px(Vector2i(from_tile.x, lane_from)))
-		out.append(_tile_center_px(Vector2i(link_x, lane_from)))
-		out.append(_tile_center_px(Vector2i(link_x, lane_to)))
-		out.append(_tile_center_px(Vector2i(to_tile.x, lane_to)))
-		out.append(_tile_center_px(to_tile))
-		return out
-	var lane := lane_from
-	# 같은 열이면 곧장 세로로, 아니면 레인까지 올라갔다 가로로 건너 다시 내려온다.
-	if from_tile.x != to_tile.x:
-		out.append(_tile_center_px(Vector2i(from_tile.x, lane)))
-		out.append(_tile_center_px(Vector2i(to_tile.x, lane)))
-	out.append(_tile_center_px(to_tile))
+		pts.append(Vector2i(lane_x_from, lane_from))
+		pts.append(Vector2i(link_x, lane_from))
+		pts.append(Vector2i(link_x, lane_to))
+		pts.append(Vector2i(lane_x_to, lane_to))
+	elif lane_x_from != lane_x_to:
+		# 같은 레인: 레인까지 올라갔다 가로로 건너 다시 내려온다(같은 열이면 곧장 세로로).
+		pts.append(Vector2i(lane_x_from, lane_from))
+		pts.append(Vector2i(lane_x_to, lane_to))
+	# 도착 집의 우회는 **역순**으로 되짚는다(레인 → 옆 열 → 문 앞 칸).
+	for i in range(to_in.size() - 1, -1, -1):
+		pts.append(to_in[i])
+	pts.append(to_tile)
+	# 연속 중복 경유점은 걷기에 길이 0 구간이라 흘려보낸다(우회 끝점과 레인 진입점이 같은 칸일 때).
+	var prev := from_tile
+	for p: Vector2i in pts:
+		if p != prev:
+			out.append(_tile_center_px(p))
+			prev = p
 	return out
+
+# ★[폴리시 R18 #10] 이 칸이 **문 열을 못 쓰는 집의 문 앞 칸**이면 옆 열 우회 경유점 둘을 준다.
+#   지도(`_carve_door_spoke`)는 문이 레인보다 아래면 문 열이 아니라 건물 동쪽 옆 열(rect.end.x)로
+#   내려보낸다 — 문 열로 곧장 내려가는 길은 건물 몸통을 세로로 관통하고, 그 관통 칸은 PATH라
+#   **벽을 걸어 통과**할 수 있었기 때문이다(그 함수 머리말의 village_test ③h). 걷기가 그 우회를
+#   모르면 정확히 그 관통 그림이 다시 그려진다(켄 09:00 = (89,51)→(89,48)로 자기 집 벽 4칸 통과).
+#   반환 = [옆 열의 문 앞 행, 옆 열의 레인 행] · 빈 배열 = 우회가 필요 없다(문이 레인 위인 집·
+#   문 앞이 아닌 칸). 표는 지도가 카브할 때 읽는 그 표 하나다(`_village_door_spokes`).
+func _house_detour(t: Vector2i, lane: int, region: String) -> Array:
+	if region != RegionCatalog.NARU_VILLAGE:
+		return []
+	for e in _village_door_spokes():
+		var door: Vector2i = e[1]
+		if int(e[2]) != lane or door.y <= lane:
+			continue                     # 다른 레인의 집 · 문 열이 곧 길인 집(지도의 if 갈래)
+		if t != door + Vector2i(0, 1):
+			continue                     # 그 집 문 앞 칸(남향 진입 칸)이 아니다
+		var side_x: int = int(e[0].end.x)   # 지도가 판 우회 열 — `_carve_door_spoke`의 side_x 그대로
+		return [Vector2i(side_x, door.y + 1), Vector2i(side_x, lane)]
+	return []
 
 # ── 하위 참조 호환 래퍼(기존 호출부·헤드리스 테스트가 계속 부른다) ──────────
 func _update_miho_station() -> void:
@@ -21392,7 +21490,16 @@ func _facing_resident() -> Resident:
 		#   `_resident_tile`이 같은 축을 쓰게 하려면 판정이 한 곳에 있어야 한다.
 		if not _resident_on_stage(r):
 			continue
-		if r.require_indoor != "" and _indoor != r.require_indoor:
+		# ★[폴리시 R18 #11] **배우자 안방 스테이션은 이 가드 밖이다.** `require_indoor`는 카메라로
+		#   격리된 자기 일터(네오=만물상)에 말 걸기를 가두는 장치인데, `_apply_spouse_home_station`이
+		#   붙이는 귀가 스테이션이 가리키는 방은 그 일터가 아니라 **플레이어의 안방**이다. 네오만
+		#   이 둘을 동시에 가져(ROMANCE_OPEN ∩ require_indoor = 네오 한 사람) 결혼하면 매일
+		#   19:00~24:00 눈앞 안방에 선 배우자가 대화·선물·팝업 전부 무반응이었다.
+		#   ★좁히는 축은 한 톨도 안 잃는다: 그 스테이션은 region(HOME)을 스스로 들고 있어
+		#     `_resident_on_stage`가 이미 무대를 가르고, 점주 창구(shop_key·prompt_extra)는
+		#     레코드 쪽에서 따로 가게 방에 묶어 뒀다(안방에서 매대가 열리지 않는다).
+		if r.require_indoor != "" and _indoor != r.require_indoor \
+				and not _at_spouse_home_station(r):
 			continue
 		if r.require_visible and not r.node.visible:
 			continue
@@ -22630,6 +22737,12 @@ func _advance_wedding(day: int) -> void:
 # 배우자 HOME 이주 — 스케줄 배열에 귀가 스테이션 **1항목 append**(ADR-0066 결정 8 문면 그대로).
 # 멱등(이미 붙어 있으면 무동작)이라 혼례 아침·세이브 로드 양쪽에서 부른다(스케줄은 _ready마다
 # _setup_residents가 새로 조립하므로 로드 복원이 이 재적용을 필요로 한다).
+# ★[폴리시 R18 #11] 이 주민이 **지금 배우자 귀가 스테이션에 서 있는가**(`_facing_resident`의
+#   require_indoor 예외 술어 — 그 자리의 근거는 저쪽 주석). 배우자 본인일 때만 참이라, 같은
+#   좌표를 다른 이유로 밟는 누군가에게 가드가 헐거워지지 않는다.
+func _at_spouse_home_station(r: Resident) -> bool:
+	return _spouse_id != "" and r.id == _spouse_id and r.tile == SPOUSE_HOME_TILE
+
 func _apply_spouse_home_station() -> void:
 	var r := _resident(_spouse_id)
 	if r == null:
@@ -23229,6 +23342,21 @@ func _try_resident_gift(r: Resident) -> void:
 	else:
 		_notice("%s에게 %s 선물 %s" % [who, ItemCatalog.name_of(id), effect],
 			NOTICE_SECS, false, null, tint)
+
+# ★[폴리시 R18 #13] **엔딩 BGM이 화면에 닿는 유일한 경로.** `GameAudio.phase_for`에서
+#   PHASE_ENDING으로 가는 생산자는 이 인자 하나뿐인데(`PHASE_TITLE`처럼 `set_phase`를 직접 거는
+#   짝이 저장소에 없다), 그 인자로 넘기던 `_run_over`는 **세우는 곳이 0개**다 — 유일한 생산자
+#   `_end_run()`의 호출부가 게임 코드에 없고(육안 덤프 하네스뿐) 선언부 주석 자신이 "현재 호출부
+#   없음 — S9 엔딩(해방) 재사용 대기"라고 적어 둔다. 그 사이 실제 엔딩은 S9b-T8이 **다른 축**으로
+#   지은 `_open_epilogue`가 됐고 거기엔 audio 한 줄이 없어, 해방 회고 화면이 뜨는 내내 직전
+#   phase(밭/카페/밤)가 그대로 흘렀다 — 실존 에셋 `bgm_ending.ogg`가 정식 플레이에서 한 번도
+#   안 들렸다. 그 "재사용 대기"를 여기서 **인자 한 항으로** 잇는다.
+#   ★새 상태·새 래치가 0이다(#0의 `or _sleeping`과 같은 형태) — `_epilogue_open`이 내려가는
+#     프레임에 `update_music`이 스스로 원래 phase로 되잇는다(그 호출은 에필로그 early-return
+#     **위**에 있어 회고 중에도 매 프레임 돈다). `_run_over` 자체는 손대지 않는다: 그것을
+#     되살리는 것은 세이브·F8 재시작까지 얽힌 설계 결정이라 폴리시 회차의 몫이 아니다.
+func _ending_music_on() -> bool:
+	return _run_over or _epilogue_open
 
 # ── T4.2/T7.3 슬라이스 종료 ─────────────────────────────────────────────────
 # 슬라이스가 끝나면(또는 그 세이브를 이어받으면) 시계를 멈추고 이동을 잠근 뒤 마무리
@@ -25317,8 +25445,9 @@ func _draw() -> void:
 	_draw_fishing_hud()     # ★ [S3-T2] 릴 격투 그레이박스 게이지(세션 있을 때만 — 플레이어 머리 위)
 	_draw_cheki_hud()       # ★ [S6-T5] 체키 구도·셔터 그레이박스 트랙(세션 있을 때만)
 	_draw_cocktail_hud()    # ★ [S6-T6] 칵테일 붓기·셰이킹 그레이박스 트랙(세션 있을 때만)
-	_draw_spine_puzzle()    # ★[S9b-T7] B5 내면 공간(세션 있을 때만 — 화면을 통째로 덮는다)
-	_draw_illust()          # ★[S9b-T8] S등급 풀스크린 일러스트(B6·B7 — 그 위에 대화창이 선다)
+	# ★[폴리시 R18 #16] B5 내면 공간·S등급 일러스트는 여기서 **안 그린다** — main의 `_draw`는 부모
+	#   그리기라 플레이어(z0)·앞프롭(z1)·월드 라벨(z10)이 그 먹 사각 위에 남았다("화면을 통째로
+	#   덮는다"가 세 자식 앞에서 거짓이었다). 라벨보다 높은 z 셔틀(`_world_overlay`)이 그린다.
 	if _edit_mode:          # ★ ADR-0025 ① 배치 모드 오버레이(선택·마우스 칸·팔레트 고스트)
 		_draw_edit_overlay()
 	if _deco_mode:          # ★ [S1-9] 집 꾸미기 모드 오버레이(마우스 칸·팔레트 고스트)
@@ -25396,7 +25525,17 @@ func _illust_texture(id: String) -> Texture2D:
 	_illust_tex_cache[id] = tex
 	return tex
 
-func _draw_illust() -> void:
+# ★[폴리시 R18 #16] 지금 화면을 통째로 덮는 월드 오버레이가 서 있는가(z 셔틀의 재그리기 게이트).
+#   두 그림의 자기 가드와 **같은 술어**를 쓴다 — 여기서 참인데 저기서 안 그리면 셔틀이 헛돈다.
+func _world_overlay_active() -> bool:
+	return spine_puzzle != null or (_illust_id != "" and _illust_a > 0.0)
+
+# 두 오버레이를 한 캔버스에 잇는다(그리는 순서 = 옛 `_draw` 순서 그대로 — 일러스트가 위).
+func _draw_world_overlays(canvas: CanvasItem) -> void:
+	_draw_spine_puzzle(canvas)   # ★[S9b-T7] B5 내면 공간(세션 있을 때만 — 화면을 통째로 덮는다)
+	_draw_illust(canvas)         # ★[S9b-T8] S등급 풀스크린 일러스트(B6·B7 — 그 위에 대화창이 선다)
+
+func _draw_illust(canvas: CanvasItem) -> void:
 	if _illust_id == "" or _illust_a <= 0.0:
 		return
 	var geo := _spine_field()                      # 화면 덮기 지오메트리는 B5와 **같은 출처**를 쓴다
@@ -25406,7 +25545,7 @@ func _draw_illust() -> void:
 	var ink := _ILLUST_INK
 	ink.a = a
 	# 여백을 넉넉히 키운다(카메라 보간·정수 반올림에 가장자리가 새지 않게 — B5와 같은 이유·같은 값).
-	draw_rect(Rect2(center - view * 0.5 - Vector2(64, 64), view + Vector2(128, 128)), ink)
+	canvas.draw_rect(Rect2(center - view * 0.5 - Vector2(64, 64), view + Vector2(128, 128)), ink)
 	var tex := _illust_texture(_illust_id)
 	if tex != null:
 		# 원화 — 비율을 지켜 화면에 맞춘다(letterbox). 남는 자리는 위 먹 바탕이 그대로 진다.
@@ -25414,7 +25553,7 @@ func _draw_illust() -> void:
 		if ts.x > 0.0 and ts.y > 0.0:
 			var k := minf(view.x / ts.x, view.y / ts.y)
 			var sz := ts * k
-			draw_texture_rect(tex, Rect2(center - sz * 0.5, sz), false, Color(1, 1, 1, a))
+			canvas.draw_texture_rect(tex, Rect2(center - sz * 0.5, sz), false, Color(1, 1, 1, a))
 			return
 	# placeholder — 세로 대형 제목 + 가로 부제.
 	var title := Spine.illust_title(_illust_id)
@@ -25425,14 +25564,14 @@ func _draw_illust() -> void:
 		for i in n:
 			var ch := title.substr(i, 1)
 			var w := HanjiUi.text_width(ch, _ILLUST_TITLE_SIZE)
-			HanjiUi.draw_text(self, Vector2(center.x - w * 0.5, top + float(i) * _ILLUST_TITLE_STEP),
+			HanjiUi.draw_text(canvas, Vector2(center.x - w * 0.5, top + float(i) * _ILLUST_TITLE_STEP),
 				ch, _ILLUST_TITLE_SIZE, HanjiUi.GOLD_SOFT)
 	if sub != "":
 		var sw := HanjiUi.text_width(sub, _ILLUST_SUB_SIZE)
-		HanjiUi.draw_text(self, Vector2(center.x - sw * 0.5, center.y + view.y * 0.32),
+		HanjiUi.draw_text(canvas, Vector2(center.x - sw * 0.5, center.y + view.y * 0.32),
 			sub, _ILLUST_SUB_SIZE, HanjiUi.INK_DIM)
 
-func _draw_spine_puzzle() -> void:
+func _draw_spine_puzzle(canvas: CanvasItem) -> void:
 	if spine_puzzle == null:
 		return
 	var geo := _spine_field()
@@ -25440,7 +25579,7 @@ func _draw_spine_puzzle() -> void:
 	var view: Vector2 = geo["view"]
 	var span: float = geo["span"]
 	# ① 세계를 덮는다 — 여백을 넉넉히 키워(카메라 보간·정수 반올림) 가장자리가 새지 않게.
-	draw_rect(Rect2(center - view * 0.5 - Vector2(64, 64), view + Vector2(128, 128)), _SPINE_VOID)
+	canvas.draw_rect(Rect2(center - view * 0.5 - Vector2(64, 64), view + Vector2(128, 128)), _SPINE_VOID)
 	var n := spine_puzzle.count()
 	var hub: int = spine_puzzle.hub_index()
 	var hub_p: Vector2 = center + Spine.star_pos(hub, n) * span
@@ -25448,7 +25587,7 @@ func _draw_spine_puzzle() -> void:
 	for i in n:
 		if i == hub or not spine_puzzle.is_linked(i):
 			continue
-		draw_line(center + Spine.star_pos(i, n) * span, hub_p, HanjiUi.GOLD, 1.0)
+		canvas.draw_line(center + Spine.star_pos(i, n) * span, hub_p, HanjiUi.GOLD, 1.0)
 	# ③ 별 — 허브를 마지막에 그려 선 위에 앉게 한다.
 	var hint: int = spine_puzzle.hint_index()
 	for i in n:
@@ -25459,17 +25598,17 @@ func _draw_spine_puzzle() -> void:
 		# 세 **열쇠**(메인 조각)는 열한 **증거**보다 한 눈금 크다 — 라쇼몽 구조(§6.1 "메인은 죄의
 		# 열쇠 · 조연은 그날 밤 증거")를 크기 하나로 읽히게 한 그레이박스 구분이다.
 		var r: float = _SPINE_STAR_R + (2.0 if _spine_frag_kind(i) == Spine.KIND_KEY else 0.0)
-		draw_circle(p, r, HanjiUi.GOLD_SOFT if linked else _SPINE_DIM)
-		draw_circle(p, r, HanjiUi.INK_LIGHT if linked else HanjiUi.BORDER, false, 1.0)
+		canvas.draw_circle(p, r, HanjiUi.GOLD_SOFT if linked else _SPINE_DIM)
+		canvas.draw_circle(p, r, HanjiUi.INK_LIGHT if linked else HanjiUi.BORDER, false, 1.0)
 		if i == hint:
 			# 🟡 확증선의 화면 절반 — 겹테 둘로 "여기"를 말한다(말이 아니라 시선).
-			draw_circle(p, _SPINE_STAR_R + 4.0, HanjiUi.GOLD, false, 1.0)
-			draw_circle(p, _SPINE_STAR_R + 7.0, HanjiUi.GOLD_SOFT, false, 1.0)
+			canvas.draw_circle(p, _SPINE_STAR_R + 4.0, HanjiUi.GOLD, false, 1.0)
+			canvas.draw_circle(p, _SPINE_STAR_R + 7.0, HanjiUi.GOLD_SOFT, false, 1.0)
 		if i == spine_puzzle.cursor:
-			draw_circle(p, _SPINE_STAR_R + 2.0, HanjiUi.INK_LIGHT, false, 1.0)
-	draw_circle(hub_p, _SPINE_HUB_R, _SPINE_VOID)
-	draw_circle(hub_p, _SPINE_HUB_R, HanjiUi.GOLD_SOFT, false, 1.0)
-	draw_circle(hub_p, _SPINE_HUB_R - 3.0, HanjiUi.BORDER, false, 1.0)
+			canvas.draw_circle(p, _SPINE_STAR_R + 2.0, HanjiUi.INK_LIGHT, false, 1.0)
+	canvas.draw_circle(hub_p, _SPINE_HUB_R, _SPINE_VOID)
+	canvas.draw_circle(hub_p, _SPINE_HUB_R, HanjiUi.GOLD_SOFT, false, 1.0)
+	canvas.draw_circle(hub_p, _SPINE_HUB_R - 3.0, HanjiUi.BORDER, false, 1.0)
 
 # ★ [S3-T10 / ADR-0061 결정 10] 릴 격투 HUD — **스타듀 낚시 UI 문법 스킨**(S3-T2 그레이박스 리스킨).
 # 로직은 한 줄도 안 건드린다(FishingSession 불변) — 같은 네 수치를 다른 문법으로 그릴 뿐이다.
@@ -25693,13 +25832,26 @@ func _draw_cocktail_hud() -> void:
 		draw_circle(org + Vector2(_KHUD_W - 7.0 - float(steps - 1 - i) * 7.0, 5.0), 2.0,
 			HanjiUi.GOLD if lit else HanjiUi.INK_DIM)
 
+# ★[폴리시 R18 #18] 작물을 그리는 **순서**. `_draw_crops`가 도는 그 목록의 유일 출처다.
+#   종전엔 밭 원장이 주는 순서(=파종 이력)를 그대로 돌았는데, 트렐리스 작물(황천포도)만 위 칸까지
+#   침범하는 32×64라 그 넝쿨의 앞뒤가 **심은 순서**로 정해졌다: (30,20)에 포도를 먼저 심고
+#   (30,19)에 일반 작물을 심으면 뒤에 그려지는 북쪽 작물이 넝쿨 상단을 덮어 **먼 쪽이 가까운 쪽
+#   앞에** 서고, 심는 순서만 뒤집으면 같은 월드 상태가 다른 그림이 됐다. 같은 저장소의 숲 프롭이
+#   `_forest_sort_entries`로 이미 막아 둔 그 사고의 밭 판이다 — 발치 y로 정렬해 북쪽부터 그리면
+#   남쪽이 위에 얹히고, 원장 순서가 원근을 정하지 않는다(x는 동률 깨기 — 결과가 결정적이어야 한다).
+# ★[S10-T5] 노지 + 늘봄방 두 밭을 한 목록으로 합친다(좌표가 안 겹쳐 합집합이 안전하다).
+func _crop_draw_order() -> Array:
+	var out: Array = farm.planted_tiles()
+	if greenhouse_farm != null:
+		out = out + greenhouse_farm.planted_tiles()
+	out.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return a.y < b.y if a.y != b.y else a.x < b.x)
+	return out
+
 func _draw_crops() -> void:
 	# ★[S10-T5] 노지 + 늘봄방 두 밭을 한 패스로 그린다(좌표가 안 겹쳐 합집합이 안전하다). 실내
 	#   카메라가 방 둘레로 클립하므로 늘봄방 작물은 그 방에 들어갔을 때만 화면에 든다(창고 크레이트 결).
-	var draw_tiles: Array = farm.planted_tiles()
-	if greenhouse_farm != null:
-		draw_tiles = draw_tiles + greenhouse_farm.planted_tiles()
-	for t in draw_tiles:
+	for t in _crop_draw_order():
 		var tfield := _field_at(t)
 		var crop_id := tfield.crop_of(t)
 		var frames: Variant = CROP_SPRITES.get(crop_id)
@@ -25999,6 +26151,22 @@ const _LARGE_TOP := Color(0.58, 0.42, 0.27)          # 잘린 단면 나이테
 # ★[S4-T8] 저승 이끼 얼룩(밑동 — 나무 껍질보다 밝고 축축한 청록. 낫질 대상의 시각 신호).
 const _MOSS_COL := Color(0.32, 0.50, 0.34)
 const _MOSS_HILITE := Color(0.45, 0.63, 0.42)
+# ★[폴리시 R18 #17] 원장 칸 → **그리기 원점(px)**. `_draw_tree_ledger`가 쓰는 그 값의 유일 출처다.
+#   안식 손저작 나무의 원장 칸은 64×128 스프라이트의 **앵커(상단)**라, 종전처럼 원장 칸을 그대로
+#   원점으로 쓰면 그루터기·유목·이끼가 실제 밑동보다 96px 위 — 수관 한복판에 떴다. 충돌은 반대로
+#   발치 행에 서므로(`_build_prop_collision`의 TREE_FOOT_H) 벤 나무의 그루터기 그림과 플레이어를
+#   막는 벽이 3칸 어긋났고, 이끼는 "밑동에 얼룩"이라 선언해 놓고 캐노피 꼭대기에 찍혔다.
+#   형제 그림인 채취기는 R13에 이미 같은 보정을 받았다 — 그 함수가 쓰는 드롭·앵커 집합을
+#   **그대로** 쓴다(값 복제 0). 그래서 R18 #2의 조준 다리(`_home_tree_ledger_tile`)와도 자동으로
+#   짝이 맞는다: 겨누는 칸이 곧 그려지는 칸이 된다.
+#   보정이 0인 자리는 그대로다: 숲(원장 칸 = 발치)·안식 **자체 파종** 나무(손저작 앵커가 아니라
+#   큰 스프라이트도 없다 — 채취기 패스의 `anchors.has(t)`와 같은 술어).
+func _tree_ledger_draw_px(t: Vector2i) -> Vector2:
+	var drop := 0.0
+	if _region == RegionCatalog.HOME and _home_tree_anchor_set().has(t):
+		drop = _tapper_home_drop()
+	return Vector2(t.x * TILE, float(t.y * TILE) + drop)
+
 func _draw_tree_ledger() -> void:
 	if tree_ledger == null or _indoor != "":
 		return
@@ -26007,10 +26175,16 @@ func _draw_tree_ledger() -> void:
 	#   그루터기 아트가 아직 없다(자체 파종 유목의 아트 승격은 안식 아트 패스 소관).
 	if _is_forest_art_region():
 		return
+	# ★[폴리시 R18 #17] **안식 손저작 나무는 밑동에 그린다** — 원장 칸이 곧 그리기 원점이었는데,
+	#   그 칸은 64×128 스프라이트의 **앵커(상단)**라 그루터기·유목·이끼가 실제 밑동보다 96px 위,
+	#   즉 수관 한복판에 떠 있었다. 충돌은 반대로 발치 행에 서므로(`_build_prop_collision`의
+	#   TREE_FOOT_H) 벤 나무의 그루터기 그림과 플레이어를 막는 벽이 3칸 어긋났고, 이끼는 "밑동에
+	#   얼룩"이라 선언해 놓고 캐노피 꼭대기에 찍혔다. 형제 그림인 채취기는 R13에 이미 같은 보정을
+	#   받았다(`_draw_tappers_pass`) — 그 함수가 쓰는 드롭·앵커 집합을 그대로 쓴다(값 복제 0).
 	for t: Vector2i in tree_ledger.tiles(_region):
 		if not tree_ledger.is_occupied(_region, t):
 			continue
-		var px := Vector2(t.x * TILE, t.y * TILE)
+		var px := _tree_ledger_draw_px(t)
 		# ★[S4-T4] 큰 장애물 — 밑의 TREE 타일을 **덮어** 그린다(같은 칸에 나무 그림이 남으면 "왜 도끼가
 		#   안 먹히나"가 안 읽힌다). 큰 그루터기 = 넓은 밑동 / 큰 통나무 = 옆으로 누운 통(가로 결).
 		var large := tree_ledger.large_at(_region, t)
