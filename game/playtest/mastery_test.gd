@@ -11,8 +11,9 @@ extends SceneTree
 #   ④ 초과 XP·문턱 — 만렙 XP는 FarmSkill 곡선 파생(숫자 하드코딩 0) · 초과 경계 ±1 ·
 #      누적 문턱 5단 경계 ±1 · **포인트 5 = 유물 5**의 파리티.
 #   ⑤ 개방 — 4스킬 만렙 + 1 미달이면 닫힘 / 전부 만렙이면 열림. 남은 스킬 목록이 구성으로 뜬다.
-#   ⑥ main 배선 — 만렙 전 숙련 탭엔 경지 줄이 **없고**(잔소리 0), 만렙 후엔 선다 · 수령이 백팩에
-#      물건을 넣고 원장에 적는다 · 세이브 왕복 · 하위호환 · 미지 id 드롭.
+#   ⑥ main 배선 — 만렙 전 숙련 탭엔 경지 줄이 **첫 행 하나뿐**(잔소리 0의 실질 — 나머지 넷은
+#      침묵 · ★[폴리시 R21 #8] 개정), 만렙 후엔 다섯 행에 선다 · 수령이 백팩에 물건을 넣고
+#      원장에 적는다 · 세이브 왕복 · 하위호환 · 미지 id 드롭.
 #   ⑦ ⚠️ **[ADR-0008] 평평≠막힘** — 경지는 만렙 *뒤*의 추가 층이라 기존 스킬 계수(혼력 감산 등)를
 #      한 톨도 안 건드린다(수령 전후 비교).
 # 실행: godot --headless --path game --script res://playtest/mastery_test.gd
@@ -168,12 +169,24 @@ func _initialize() -> void:
 	_check("⑥a 부팅 — 경지 원장이 섰고 층은 닫혀 있다(신규 세이브 = 전 스킬 L0)",
 		m.mastery != null and not m.mastery_open() and m.mastery.claimed_count() == 0)
 	var rows0: Array = m._skill_rows()
-	var any_line := false
-	for r in rows0:
-		if not (r as Dictionary).get("mastery", {}).is_empty():
-			any_line = true
-	_check("⑥b ★만렙 전에는 숙련 탭에 경지 줄이 **하나도 없다**(잔소리 0 — %d행 전부 빈 dict)"
-			% rows0.size(), not any_line and rows0.size() == ProfessionCatalog.SKILLS.size())
+	var lines0 := 0
+	var first_line := ""
+	for i in range(rows0.size()):
+		var mst0: Dictionary = (rows0[i] as Dictionary).get("mastery", {})
+		if mst0.is_empty():
+			continue
+		lines0 += 1
+		if i == 0:
+			first_line = String(mst0.get("text", ""))
+	# ★[폴리시 R21 #8] 계약 개정: 종전 단언은 «5행 전부 빈 dict»였는데, 그러면 `_mastery_row`
+	#   머리말이 계약으로 적은 ㉠("미개방 — 무엇이 남았나까지 말해 준다")이 영영 구현되지 않고
+	#   그 안내를 위해 만든 `Mastery.pending_skills`가 런타임 호출부 0인 죽은 API로 남는다.
+	#   ㉠을 **첫 행 하나에만** 앉혀 두 계약을 함께 지킨다 — 이 단언이 재는 것은 그 실질이다:
+	#   층은 게임에 하나뿐이니 줄도 하나이고, 나머지 넷은 종전대로 침묵한다(잔소리 0).
+	_check("⑥b ★만렙 전 경지 줄은 **첫 행 하나뿐**이다(%d행 중 %d줄) · 그 줄이 무엇이 남았는지 이름으로 말한다 — 「%s」"
+			% [rows0.size(), lines0, first_line],
+		lines0 == 1 and first_line != "" and rows0.size() == ProfessionCatalog.SKILLS.size()
+		and first_line.contains(ProfessionCatalog.skill_name(ProfessionCatalog.COMBAT)))
 	# ⚠️ [ADR-0008] 기준선 — 경지가 열리기 전의 스킬 계수(혼력 감산)를 적어 둔다.
 	_max_all_skills(m, 0)
 	var energy_before: int = m._farming_energy_cost()

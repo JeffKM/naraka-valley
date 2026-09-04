@@ -98,11 +98,34 @@ func _sealed_need(base: int, fert_id: String) -> int:
 
 # 심긴 칸에 비료를 갈아 뿌린 순간 임계를 **잔여 기준으로** 다시 잠근다. prev_need = 도포 직전 임계.
 # 이미 성숙한 칸(잔여 ≤ 0)은 손대지 않는다 — 어떤 비료도 다 자란 작물을 되돌리지 못한다.
+# ★[폴리시 R21 #0] 잔여를 재는 자[尺]는 **직전 임계가 아니라 base**다. R20이 세운 첫 판은
+#   `left = prev_need - grown`이라 새 계수가 *직전 계수가 이미 깎아 놓은 잔여*에 다시 곱해졌고,
+#   `fertilize`의 멱등 가드는 **같은 id만** 막으므로(다른 비료 overwrite는 성립 — 단일 필드 XOR)
+#   임계가 «현재 비료 하나에서 파생»이 아니라 «지금까지 뿌린 모든 계수의 곱»이 됐다:
+#   ㉠ 동군 중첩 — 심은 날 성장촉진(0.75)·하이퍼(0.67)를 번갈아 뿌리면 12→9→7→6→5→…로
+#      계속 내려가, 12일 작물이 3일이 된다(하이퍼 단독 명목은 9다).
+#   ㉡ 이군 동시 적용 — 하이퍼로 9까지 내린 뒤 디럭스(품질군·계수 1.0)를 덮으면 1.0이 *깎인
+#      잔여*에 곱해져 임계가 9로 남는데 `roll_quality`는 현재 필드값만 보므로 품질표는 DELUXE다.
+#      **−33% 성숙 + 디럭스 품질이 한 칸에 동시 성립** = fertilizer_catalog가 §8.4에 못 박은
+#      2군 XOR("밭은 한 칸에 한 비료")의 붕괴다.
+#   base에서 재면 셋이 한꺼번에 닫힌다. 계약은 그대로 지켜진다:
+#   · 잔여 곱이라 이미 지난 날은 안 깎인다(R20 ㉠ 소멸) — need = grown + maxi(1,…) > grown이라
+#     어떤 도포도 그 자리에서 성숙시키지 못한다.
+#   · 이미 성숙한 칸은 위 `left <= 0` 가지가 그대로 지킨다(R20 ㉡의 "수확 대기 중 역행" 소멸).
+#   · 계수 1.0(품질군)은 `grown + (base - grown)` = base라 **무비료 임계로 정확히 되돌아간다**
+#     — 왕복 불변(무비료 ↔ 품질군 어느 쪽으로 몇 번을 갈아도 늘 base).
+#   · 되감기(harvest REGROW)는 여전히 `effective_growth_days` 한 기준을 쓴다(R20 ㉢ 불변).
+#   · 최솟값은 g=0에서라(need는 grown에 대해 단조 증가) **"심을 때부터 그 비료였을 때"보다
+#     낮은 임계를 만들 길이 없다** — 갈아 뿌리기로 얻는 이득의 상한이 명목값이다.
 func _reseal_need(t: Vector2i, prev_need: int, fert_id: String) -> void:
 	var grown: int = int(_tiles[t]["grown_days"])
-	var left: int = prev_need - grown
-	if left <= 0:
+	if prev_need - grown <= 0:
 		_tiles[t]["need_days"] = prev_need
+		return
+	var base := CropCatalog.growth_days(str(_tiles[t].get("crop", "")))
+	var left: int = base - grown
+	if left <= 0:
+		_tiles[t]["need_days"] = prev_need   # 방어(need ≤ base 불변식상 도달 불가)
 		return
 	_tiles[t]["need_days"] = grown + maxi(1, ceili(left * FertilizerCatalog.speed_factor(fert_id)))
 

@@ -463,7 +463,16 @@ func chop(region: String, t: Vector2i, day: int, level: int = 0,
 #      main이 free_cb(Callable(region, tile) -> bool)로 주입한다 — 이 원장은 밭·프롭·지형을 모른다
 #      (Reclaim이 후보를 받는 것과 같은 디커플링). free_cb가 무효면 파종을 건너뛴다.
 #   · 결정적: day + 구역 + 좌표 시드. 구역·좌표는 정렬 순회라 Dictionary 키 순서에 안 기댄다.
-func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
+#
+# ★[폴리시 R21 #14] `solid_ok`(Callable(region, tile) -> bool · 무효면 전부 허용) — **통행을 다시
+#   막는 두 경로**(② 숲 재출현 · 큰 그루터기 리스폰)가 세우기 직전에 무대에 물어보는 거부권이다.
+#   원장은 플레이어가 어디 섰는지 모르므로(디커플링) `Reclaim.season_respawn`의 `solid_ok`와 같은
+#   문법으로 main이 판정을 넣는다. **굴림 스트림은 안 흔들린다** — 시드가 (day, region, 좌표)라
+#   슬롯마다 독립이고, 거절은 그 슬롯의 값을 쓰지 않을 뿐 다른 슬롯의 출목을 한 톨도 안 민다.
+#   거절해도 손실은 없다: 빈 슬롯은 그대로 남아 다음 날 다시 굴리고, 큰 그루터기는 `gone`이
+#   유지돼 이튿날 100% 되살아난다(막는 것은 «지금 이 자리에 세우는 것» 하나뿐).
+func advance_day(day: int, free_cb: Callable = Callable(),
+		solid_ok: Callable = Callable()) -> Dictionary:
 	var out := {"grown": [], "regrown": [], "seeded": [], "large_respawned": [], "mossed": []}
 	for region: String in regions():
 		var mode := mode_for(region)
@@ -477,7 +486,8 @@ func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
 			# ★[S4-T4] 큰 장애물 슬롯은 성장·재성장 축 **밖**이다(자라지 않는다). 큰 그루터기만
 			#   확정적으로 되살아나고(일일 리스폰 = 지속 공급), 큰 통나무는 영영 치워진 채다.
 			if large != "":
-				if bool(e.get("gone", false)) and respawns_large(large):
+				if bool(e.get("gone", false)) and respawns_large(large) \
+						and _respawn_allowed(solid_ok, region, t):
 					e["gone"] = false
 					e["hp"] = hp_for_large(large)
 					_trees[region][t] = e
@@ -503,7 +513,9 @@ func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
 					_trees[region][t] = e
 					out["grown"].append({"region": region, "tile": t, "stage": stage})
 			elif stage == STAGE_EMPTY and mode == MODE_FOREST:
-				if rng.randf() < REGROW_CHANCE:
+				# ★[폴리시 R21 #14] 롤을 **먼저** 굴리고 거부권을 나중에 묻는다 — 순서를 바꾸면
+				#   사람이 선 슬롯만 `randf()`를 안 써서 그날의 출목열이 갈린다(결정성 보존).
+				if rng.randf() < REGROW_CHANCE and _respawn_allowed(solid_ok, region, t):
 					e["species"] = species_at_tile(region, t)
 					e["stage"] = REGROW_STAGE
 					e["hp"] = hp_for_stage(REGROW_STAGE)
@@ -512,29 +524,56 @@ func advance_day(day: int, free_cb: Callable = Callable()) -> Dictionary:
 					_trees[region][t] = e
 					out["regrown"].append({"region": region, "tile": t})
 	# ③ 자체 파종(안식) — 성숙목마다 한 번씩 굴린다. 상한(HOME_CAP)에 닿으면 멈춘다.
-	if free_cb.is_valid():
-		for region: String in regions():
-			if mode_for(region) != MODE_SEED:
-				continue
-			for t: Vector2i in tiles(region):
-				if occupied_count(region) >= HOME_CAP:
-					break
-				if not is_mature(region, t):
-					continue
-				var rng := RandomNumberGenerator.new()
-				rng.seed = hash("treeseed:%d:%s:%d:%d" % [day, region, t.x, t.y])
-				if rng.randf() >= SEED_CHANCE:
-					continue
-				var spot := _pick_seed_spot(region, t, free_cb, rng)
-				if spot == Vector2i(-1, -1):
-					continue
-				_put(region, spot, {"species": species_at_tile(region, spot), "stage": 1,
-					"hp": hp_for_stage(1), "stump": false, "moss": false})
-				out["seeded"].append({"region": region, "tile": spot})
+	#   ★[폴리시 R21 #15] 본문은 `_seed_pass`로 떼어냈다(단일 출처) — 집 밖에서 자 이 패스를
+	#     못 돈 밤은 main이 표에 적어 두었다가 귀가 프레임에 `catch_up_seeding`으로 이것만 돌린다.
+	out["seeded"].append_array(_seed_pass(day, free_cb))
 	if not out["grown"].is_empty() or not out["regrown"].is_empty() or not out["seeded"].is_empty() \
 			or not out["large_respawned"].is_empty() or not out["mossed"].is_empty():
 		changed.emit()
 	return out
+
+# ★[폴리시 R21 #15] 자체 파종 한 패스(그 밤의 롤 그대로 · 산출 = 돋은 칸 목록). 시드가
+#   (day, region, 좌표)라 **언제 부르든 그 밤의 결과가 같다** — 밀린 밤을 귀가 프레임에 돌려도
+#   그날 안식에서 잤을 때와 한 칸도 안 갈린다(이월이 손실 0인 근거).
+#   `changed`는 여기서 안 쏜다 — 호출부가 다른 산출과 함께 한 번만 쏘게(advance_day) 하거나
+#   단독 진입점(`catch_up_seeding`)이 쏜다.
+func _seed_pass(day: int, free_cb: Callable) -> Array:
+	var seeded: Array = []
+	if not free_cb.is_valid():
+		return seeded
+	for region: String in regions():
+		if mode_for(region) != MODE_SEED:
+			continue
+		for t: Vector2i in tiles(region):
+			if occupied_count(region) >= HOME_CAP:
+				break
+			if not is_mature(region, t):
+				continue
+			var rng := RandomNumberGenerator.new()
+			rng.seed = hash("treeseed:%d:%s:%d:%d" % [day, region, t.x, t.y])
+			if rng.randf() >= SEED_CHANCE:
+				continue
+			var spot := _pick_seed_spot(region, t, free_cb, rng)
+			if spot == Vector2i(-1, -1):
+				continue
+			_put(region, spot, {"species": species_at_tile(region, spot), "stage": 1,
+				"hp": hp_for_stage(1), "stump": false, "moss": false})
+			seeded.append({"region": region, "tile": spot})
+	return seeded
+
+# ★[폴리시 R21 #15] **밀린 밤의 파종만** 따로 돌리는 공개 진입점(main의 이월 표 소비처). 성장·
+#   재출현·이끼는 그 밤에 이미 돌았으므로 여기서 다시 돌리면 그날이 이틀치가 된다 — 그래서
+#   `advance_day`가 아니라 이 얇은 창구다.
+func catch_up_seeding(day: int, free_cb: Callable) -> Array:
+	var seeded := _seed_pass(day, free_cb)
+	if not seeded.is_empty():
+		changed.emit()
+	return seeded
+
+# ★[폴리시 R21 #14] 이 칸을 다시 SOLID로 덮어도 되는가(무효 Callable = 늘 허용 = 종전 거동).
+#   무대 판정을 원장이 알 필요가 없게 한 겹 감싼다(호출 두 자리가 같은 문장을 쓰게).
+func _respawn_allowed(solid_ok: Callable, region: String, t: Vector2i) -> bool:
+	return not solid_ok.is_valid() or bool(solid_ok.call(region, t))
 
 # 성숙목 주위 반경 SEED_RADIUS의 빈 칸 하나(없으면 (-1,-1)). 후보는 정렬 순회로 모으고 rng로
 # 하나 고른다 — 순회가 결정적이라 같은 날 같은 나무는 늘 같은 자리에 뿌린다.

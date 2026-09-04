@@ -612,9 +612,22 @@ func _initialize() -> void:
 			% [season_locked, QuestBoard.item_pool_for(1, 2).size(), QuestBoard.item_pool().size()],
 		season_locked > 0
 		and QuestBoard.item_pool_for(1, 2).size() < QuestBoard.item_pool().size())
-	_check("⑬e 사철 채집물(심층·해변)은 안 걸러진다 — 필터 축은 '절기'이지 '채집물'이 아니다",
-		QuestBoard.item_pool_for(1, 2).has(ItemCatalog.HWANGCHEON_SANHO)
-		and QuestBoard.item_pool_for(1, 2).has(ItemCatalog.JEOSEUNG_SAM))
+	# ★[폴리시 R21 부록] 예시 하나를 **갈아 끼웠다**(계약은 불변). 이 단언이 지키는 것은 «필터 축은
+	#   '절기'이지 '채집물'이 아니다» = 사철 종을 채집물이라는 이유만으로 걷어내지 않는가인데,
+	#   증인으로 저승삼(심층종)을 세워 둔 것이 화근이었다: R20 #14가 «깊이 게이트 너머의 산출은
+	#   안 낸다»는 **다른 축**을 앞에 세우면서(큰 통나무 2칸 = 유철 도끼 티어 너머라 그 종이 돋는
+	#   자리에 걸어 들어갈 방법 자체가 없다 — 기한 2일짜리 의뢰가 걸리면 그 이틀 게시판이 죽는다)
+	#   저승삼이 정당하게 빠졌고, 그 순간 이 줄이 red가 됐다. 두 계약은 **충돌하지 않는다**(절기 축
+	#   ↔ 깊이 축). 그래서 증인은 사철이면서 깊이 게이트 밖인 해변종(황천산호)으로 바꾸고,
+	#   깊이 축은 아래 한 줄로 따로 못 박아 둘이 각자 하중을 받게 한다.
+	_check("⑬e 사철 채집물(해변종)은 안 걸러진다 — 필터 축은 '절기'이지 '채집물'이 아니다",
+		ForageSpawns.season_of(ItemCatalog.HWANGCHEON_SANHO) < 0
+		and not ForageSpawns.is_deep_gated(ItemCatalog.HWANGCHEON_SANHO)
+		and QuestBoard.item_pool_for(1, 2).has(ItemCatalog.HWANGCHEON_SANHO))
+	_check("⑬e' 그런데 **깊이 게이트 너머**의 사철종은 빠진다(R20 #14 — 절기와 다른 축)",
+		ForageSpawns.season_of(ItemCatalog.JEOSEUNG_SAM) < 0
+		and ForageSpawns.is_deep_gated(ItemCatalog.JEOSEUNG_SAM)
+		and not QuestBoard.item_pool_for(1, 2).has(ItemCatalog.JEOSEUNG_SAM))
 
 	# ── ⑭ #14 물고기 의뢰 체급 상한과 낚싯대 ─────────────────────────────────
 	print("── ⑭ #14 지금 든 줄로 못 잡는 체급은 안 걸린다 ──")

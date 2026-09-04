@@ -248,10 +248,16 @@ func _initialize() -> void:
 	_check("③e 실집행 비용은 늘 이 하한 이상이다 — 소 체급 세션의 energy_cost로 대조",
 		FishingSession.new(1, {"weight_class": FishingSession.WeightClass.SMALL}, {}, {}).energy_cost()
 			>= FishingSession.min_hook_energy({}))
+	# ★[폴리시 R21 #2] 계약은 그대로다(«두 자리가 같은 함수를 부른다») — 그 함수가 `_cast_energy_need`로
+	#   바뀌었을 뿐이다. 왜 바뀌었나: **보장 미끼를 든 캐스팅은 체급이 캐스팅 순간 확정**되므로 기준이
+	#   도달 가능 최저가 아니라 그 확정 비용이다(그러지 않으면 화면은 "던지기"인데 집행이 미끼만
+	#   태운다 — R10이 걷어낸 그 손실의 재발). 하한 계약은 그 함수 **안**에 그대로 산다(아래 항).
 	_check("③f 화면(프롬프트)과 집행부(캐스팅)가 **같은 함수**를 부른다(갈림 0)",
-		_in_func("func _start_fishing", "FishingSession.min_hook_energy(_fishing_mods())")
-		and _line_of("energy.can_act(FishingSession.min_hook_energy(_fishing_mods()))") > 0
+		_in_func("func _start_fishing", "_cast_energy_need(rod_id, cast_mods)")
+		and _line_of("energy.can_act(_cast_energy_need(inventory.selected_id(), _fishing_mods()))") > 0
 		and _line_of("energy.can_act(FishingSession.MIN_HOOK_ENERGY)") < 0)
+	_check("③f' 그 함수의 기본값은 여전히 **도달 가능한 최저 비용**이다(R11의 하한 계약 보존)",
+		_in_func("func _cast_energy_need", "FishingSession.min_hook_energy(mods)"))
 
 	# ── ④ #3 T1 낚싯대는 버릴 수 없다 ───────────────────────────────────────────
 	print("── ④ #3 휴지통 — 재구매 없는 증정 기어가 폐기 금지 표에 든다 ──")
@@ -671,8 +677,11 @@ func _initialize() -> void:
 			% NoticeFeed.MAX_ITEMS,
 		nf._items.size() == NoticeFeed.MAX_ITEMS)
 	nf._items.clear()
+	# ★[폴리시 R21 #5] 그 줄의 **주인이 옮겨졌다** — 완주 래치 회수가 아침 정산 한 곳뿐이라 낮에
+	#   생선가게에서 완주한 순간에는 아무 표면도 안 섰고, 그래서 회수가 `_claim_codex_trophy`로
+	#   묶여 등재 창구 둘이 같은 한 줄을 부른다. `keep` 계약(이 단언이 재는 것)은 그대로다.
 	_check("⑱c 도감 완주 트로피가 그 표를 단다(세이브에 박히는 `trophy_day` 래치의 유일한 표면)",
-		_in_func("func _on_day_advanced", "notice_feed.push(\"명부 도감 완주"))
+		_in_func("func _claim_codex_trophy", "notice_feed.push(\"명부 도감 완주"))
 	_check("⑱d 혼례 배너도 같은 표를 단다(예정일을 방금 0으로 접은 1회성 고지)",
 		_in_func("func _advance_wedding", "Color(0, 0, 0, 0), true)"))
 

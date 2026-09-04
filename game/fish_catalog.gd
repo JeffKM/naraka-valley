@@ -388,6 +388,23 @@ static func season_roster(habitat: String, season_idx: int) -> Array:
 #   guarantee_cap : 보장 미끼(−1 = 없음). 0 이상이면 **가용 종 중 체급 ≤ cap인 것들의 최고 체급**에서
 #                   균등 추첨한다(= "이 낚싯대로 잡을 수 있는 가장 큰 놈" 확정). cap = 낚싯대 허용
 #                   체급이라 보장 미끼가 확정 끊김 함정이 되지 않는다(GearCatalog.guarantee_cap_for).
+# ★[폴리시 R21 #2] 보장 미끼가 **확정하는 체급**(−1 = 가용 종 없음). 아래 `roll_fish`의 보장 가지가
+#   고르는 그 값을 롤 없이 답한다 — 확정 체급은 rng와 무관하게 풀에서만 정해지기 때문이다(굴림
+#   스트림을 한 번도 안 건드린다 = 결정성 보존). main의 혼력 사전 판정·프롬프트가 «이 캐스팅의
+#   실제 후킹 비용»을 알아야 해서 낸 조회이고, 판정식은 아래와 **같은 술어 하나**를 공유한다.
+static func guaranteed_class(habitat: String, season_idx: int, phase: String, cap: int,
+		weather: int = WEATHER_ANY) -> int:
+	return _top_class_in(available_ids(habitat, season_idx, phase, false, weather), cap)
+
+# 이 풀에서 cap 이하 최고 체급(−1 = 없음) — 보장 가지와 위 조회의 단일 출처.
+static func _top_class_in(pool: Array, cap: int) -> int:
+	var top := -1
+	for id in pool:
+		var wc_g := weight_class_of(String(id))
+		if wc_g <= cap and wc_g > top:
+			top = wc_g
+	return top
+
 static func roll_fish(habitat: String, season_idx: int, phase: String,
 		rng: RandomNumberGenerator, class_shift: float = 0.0, guarantee_cap: int = -1,
 		weather: int = WEATHER_ANY) -> String:
@@ -396,11 +413,7 @@ static func roll_fish(habitat: String, season_idx: int, phase: String,
 		return ""
 	# ★ 보장 미끼 — 가중 추첨을 건너뛰고 "cap 이하 최고 체급" 안에서 균등 추첨한다(확정의 의미 보존).
 	if guarantee_cap >= 0:
-		var top := -1
-		for id in pool:
-			var wc_g := weight_class_of(id)
-			if wc_g <= guarantee_cap and wc_g > top:
-				top = wc_g
+		var top := _top_class_in(pool, guarantee_cap)
 		if top >= 0:
 			var best: Array = []
 			for id in pool:

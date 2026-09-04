@@ -29,6 +29,24 @@ const ROW_GAP := 4.0          # ★[S5-T4] 두 바 사이 간격(체력 ↔ 혼�
 var energy: SoulEnergy = null      # 그릴 혼력(현재/최대). main이 주입.
 var health: PlayerHealth = null    # ★[S5-T4] 그릴 체력(현재/최대 — 최대가 가변). main이 주입.
 
+# ★[폴리시 R21 #19] "식은 붉은빛(취침 신호)"으로 갈리는 **눈금**. 종전엔 무인자 `energy.can_act()`
+#   라 늘 `SoulEnergy.COST_PER_ACTION`(=10)으로 물었는데, 실제 비용은 동사마다 다르다(팬닝 4 ·
+#   후킹 하한 · 숙련 L10의 농사/채광 7). 그래서 혼력 9에서 바는 이미 "이제 자라"고 말하는데
+#   괭이질·채굴·사금 일기·캐스팅이 전부 정상 실행됐다 — 폴리시 R6가 프롬프트 축에서 정확히 이
+#   불일치를 걷어냈고(같은 무인자 호출), 그 회귀 단언은 `res://main.gd`만 읽어 **이 한 자리**를
+#   못 봤다(저장소에 남아 있던 마지막 무인자 `can_act()` 호출부).
+#   값은 main이 라이브 동사들에서 파생해 넣는다(HUD는 비용 표를 몰라야 한다 — 무상태 규약).
+#   기본값이 종전 상수라 주입 없는 옛 호출 경로의 거동은 한 톨도 안 바뀐다.
+var low_cost := SoulEnergy.COST_PER_ACTION
+
+# main이 매 프레임 흘려 넣는 "지금 낼 수 있는 가장 싼 동사 비용"(0 이하면 무시 = 종전 눈금).
+func set_low_cost(cost: int) -> void:
+	var c: int = cost if cost > 0 else SoulEnergy.COST_PER_ACTION
+	if c == low_cost:
+		return
+	low_cost = c
+	queue_redraw()
+
 # main이 두 자원을 주입하고 changed 구독을 건다. 전체 화면 앵커로 깔아 우하단 배치 기준을 잡는다.
 # ★ health는 기본값 null이라 옛 호출(vitals.setup(energy))도 그대로 돈다 — 그 경우 혼력 한 줄만 그린다.
 func setup(soul_energy: SoulEnergy, player_health: PlayerHealth = null) -> void:
@@ -73,7 +91,7 @@ func _draw() -> void:
 			health.current, health.maximum)
 	# 혼력 바(현재/최대). 바닥나면 채움이 0 → 비어 보이고, 색이 식는다(취침 신호).
 	var ratio := clampf(float(energy.current) / float(SoulEnergy.MAX), 0.0, 1.0)
-	var low := not energy.can_act()
+	var low := not energy.can_act(low_cost)
 	# 혼(soul) 보랏빛 채움 — 바닥나면 식은 붉은빛(취침 신호).
 	var fill := Color(0.52, 0.46, 0.76) if not low else Color(0.62, 0.42, 0.44)
 	_draw_bar(Vector2(right - BAR_W, soul_top), "혼력", ratio, fill, energy.current, SoulEnergy.MAX)
