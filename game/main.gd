@@ -4636,13 +4636,24 @@ func _is_tree_seed_free(region: String, t: Vector2i, occ: Dictionary) -> bool:
 #     `is_occupied` 그대로가 진실원이고(`_rebuild_prop_collision`의 그 루프와 같은 술어),
 #     이미 물리에 선 칸은 `_prop_blocked_tiles`가 들고 있으니 차집합이 곧 pending이다.
 #   ★ 퇴로 판정이 보는 칸은 플레이어 4방뿐이라 그 넷만 묻는다(판정당 4회 조회).
+#   ★[폴리시 R22 #1] **손저작 마당 나무 앵커는 그 차집합의 예외다** — 위 등식("이미 물리에 선 칸은
+#     `_prop_blocked_tiles`가 들고 있다")이 거기서만 성립하지 않는다. 앵커는 64×128 스프라이트의
+#     기준점이고 `_rebuild_prop_collision`은 그 나무를 **발치 바**로 세워(TREE_FOOT_H) 밑동 행
+#     하나만 원장에 적는다 — 앵커 칸(캐노피)은 `_player_blocked_at` 머리말이 못 박은 대로 의도적
+#     통행 가능이다. 그래서 차집합이 성숙목·그루터기 앵커를 전부 «곧 설 SOLID»로 오분류했고,
+#     퇴로 루프가 멀쩡히 걸어 나갈 수 있는 칸을 건너뛰어 성숙목 근처 파종이 이유 없이 상시
+#     거절됐다(#15가 되살리려던 HOME_CAP 공급이 다시 깎인다). 앵커 집합은 충돌을 세울 때 쓰는
+#     **그 함수 그대로** 판다(`_home_tree_anchor_set` — 값 복제 0).
 func _tree_seed_pending_solid() -> Dictionary:
 	var out: Dictionary = {}
 	if tree_ledger == null or player == null:
 		return out
 	var here := _player_tile()
+	var anchors := _home_tree_anchor_set()
 	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 		var n: Vector2i = here + d
+		if anchors.has(n):
+			continue
 		if tree_ledger.is_occupied(RegionCatalog.HOME, n) and not _prop_blocked_tiles.has(n):
 			out[n] = true
 	return out
@@ -12925,6 +12936,22 @@ func _restore_location(data: Dictionary) -> void:
 	elif _indoor == "" and _player_blocked_at(saved_tile):
 		push_warning("[폴리시 R6] 복원 좌표 %s가 막힌 칸 — %s 스폰으로 구제" % [saved_tile, saved_region])
 		saved_tile = RegionCatalog.spawn_of(saved_region)
+	# ★[폴리시 R22 #4] **구제의 무대 축을 실내까지 넓힌다.** R21 #13이 판정(`_player_blocked_at`)을
+	#   진실원 하나로 접었는데 무대 조건은 야외 한정으로 남아, 판정이 이미 옳게 답하는 칸을 한 줄이
+	#   버리고 있었다. 늘봄방 경작면은 **걷는 바닥 위에 런타임 SOLID가 서는 유일한 실내 무대**다 —
+	#   `_rebuild_trellis_collision`이 `greenhouse_farm.solid_crop_tiles()`까지 합집합으로 세우고
+	#   `_field_at` 라우터가 그 칸을 `is_crop_solid` 참으로 답한다. 그래서 트렐리스 매몰 가드가
+	#   붙기 전 세이브(발밑 (0,0) 오프셋 파종이 성립하던 판)를 열면 F9든 부팅이든 매번 같은 SOLID
+	#   칸에 놓였다 — R21 #13이 마당 원장 나무에 대해 닫은 «구세이브 탈출구 0»의 실내판이다.
+	#   ★ 폴백은 야외 스폰이 아니라 **그 방의 입장 칸**이다(`_buildings[...]["in_tile"]`) —
+	#     `_indoor`는 방에 남고 카메라도 방에 묶이므로, 구역 스폰(HOME=(40,60))으로 떨구면
+	#     좌표만 마당으로 가고 화면은 방인 어긋남이 된다. 입장 칸은 문으로 걸어 들어온 그 자리라
+	#     늘 유효한 바닥이다.
+	elif _indoor != "" and _buildings.has(_indoor) and _player_blocked_at(saved_tile):
+		var in_tile: Vector2i = _buildings[_indoor]["in_tile"]
+		push_warning("[폴리시 R22] 실내 복원 좌표 %s가 막힌 칸 — %s 입장 칸 %s로 구제"
+			% [saved_tile, _indoor, in_tile])
+		saved_tile = in_tile
 	player.position = _tile_center_px(saved_tile)
 	_apply_camera_limits()
 
@@ -13967,7 +13994,9 @@ func _process(delta: float) -> void:
 	# 이 한 블록으로 접혔다. 어떤 주민이 어느 키를 받는지는 레코드가 든다(can_gift·shop_key).
 	# 대상 칸이 서로 배타적이라(주민 칸끼리도, 출하함·상자·게시판·기증대와도) 순서는 무해하다.
 	if faced_resident != null:
-		if Input.is_action_just_pressed("action"):
+		# ★[폴리시 R22 #7] 그 칸에 **다 자란 화분**이 서 있으면 대화를 양보한다(`_pot_harvest_yield`
+		#   머리말 — 배치 가드가 서기 전 구세이브의 유일한 탈출구다). 아래 프롬프트도 같은 순서다.
+		if Input.is_action_just_pressed("action") and not _pot_harvest_yield(_target):
 			_start_resident_dialogue(faced_resident)
 			return
 		# 선물(G): 선택 작물 수확물 1개를 건넨다(호감도↑, 하루 1회 — Affinity가 게이팅).
@@ -14821,7 +14850,9 @@ func _process(delta: float) -> void:
 		# ★[S10-T3] 보부상 봇짐 — 야시장이 *할인*을 말하는 자리에 **재고의 일회성**을 말한다.
 		interact_prompt.visible = true
 		interact_prompt.text = "[F] 저승 보부상 봇짐 (오늘 재고는 오늘뿐)"
-	elif faced_resident != null:
+	elif faced_resident != null and not _pot_harvest_yield(_target):
+		# ★[폴리시 R22 #7] 다 자란 화분이 그 칸에 서 있으면 이 갈래를 건너뛴다 — 입력이 화분에
+		#   양보하는데 화면만 "[우클릭] 대화"라 말하면 프롬프트↔동작이 역전된다(R16 #13의 그 사고).
 		# ★ [S2-T7] 주민 프롬프트 — 옛 5갈래(미호·옥자·바나·멜·네오) 문구가 한 조립식으로 접혔다.
 		# 기본 "[우클릭] 대화" + (선물 채널이 있으면) "[G] <작물> 선물" + (특수 훅이 있으면) 꼬리
 		# (네오="[F] 매대" · 바나="[F] 나라카 바 열기"/"(나라카 바 영업 중)"). 문구는 원문 그대로다.
@@ -15420,9 +15451,21 @@ func _use_tool() -> void:
 		#   화분 칸의 *밑 타일* 밭으로 흘려보내지 않게, 화분이 선 칸은 여기서 통째로 배제한다.
 		if _pot_at(_target):
 			pass
-		elif _field_at(_target).fertilize(_target, item):
-			inventory.remove_item(item, 1)
-			verb = "비료"
+		else:
+			# ★[폴리시 R22 #2] **잔여가 늘어난 도포는 화면이 말한다.** 품질군(계수 1.0)을 성장촉진
+			#   위에 덮으면 임계가 base로 되돌아가는 것은 계약이지만(2군 XOR — 밭은 한 칸에 한
+			#   비료), 종전엔 그 대가가 알림·프롬프트 어디에도 표면이 없어 «수확이 코앞이었는데
+			#   왜 며칠이 늘었는지» 알 길이 0이었다. 재는 값은 두 창구가 같은 하나다
+			#   (`effective_growth_days` — 표시용 별도 계산 없음).
+			var fld := _field_at(_target)
+			var need_before: int = fld.effective_growth_days(_target) if fld.is_planted(_target) else -1
+			if fld.fertilize(_target, item):
+				inventory.remove_item(item, 1)
+				verb = "비료"
+				var need_after: int = fld.effective_growth_days(_target) if fld.is_planted(_target) else -1
+				if need_before >= 0 and need_after > need_before:
+					_notice("%s를 덮어 성숙일이 %d일 늘었다 — 성장촉진 이득은 사라진다(한 칸에 한 비료)"
+						% [ItemCatalog.name_of(item), need_after - need_before])
 	elif cat == ItemCatalog.CAT_SAPLING and _region == RegionCatalog.HOME and _indoor == "":
 		# ★ [S1-5b] 든 묘목으로 혼의 나무를 심는다(안식 농원 전용). 앵커=조준 칸, 3×3 판정 통과 시.
 		# is_blocked = 맵밖 or is_solid(절벽·프롭) or is_crop_solid(트렐리스) — 지형 게이팅을 여기서 합성해
@@ -16096,17 +16139,44 @@ func _orchard_trunk_at(t: Vector2i) -> bool:
 #   못 봤다 — 열린 퇴로가 A·B 둘뿐인 자리에서 A는 "B가 남는다", B는 "A가 남는다"로 각자 통과한
 #   뒤 같은 아침에 둘 다 서면 사방이 막힌다. 배치 소비처가 뽑을 때마다 승인된 칸을 여기 넣어
 #   주면, 그 다음 판정이 그것들을 이미 선 것으로 본다(단일 술어 그대로·규칙 복제 0).
+# ★[폴리시 R22 #3] **1스텝 전방만 보던 것을 연결성으로 바꾼다.** 종전 ㉡은 "지금 선 칸의 4방 중
+#   하나가 열려 있는가"였는데, 그 열린 이웃이 *그 자체로 주머니*일 수 있다 — 판정 기준 칸을 옮기는
+#   것만으로 R19 #15가 «늘봄방은 영구 소프트락»이라 적은 그 시나리오가 그대로 성립했다:
+#   (57,69)에 서서 셋을 심고(가드가 명시적으로 허용) 한 칸 옆 (56,69)로 옮겨 둘을 더 심으면
+#   두 칸짜리 주머니가 넝쿨 5칸+방 벽으로 완전히 봉해진다. 늘봄방은 넝쿨 제거 입력도·절기 사멸도·
+#   잡초 순회도·좌표를 옮기는 취침도 없고 `_restore_location`의 매몰 구제는 «막힌 칸»만 보지
+#   «갇힌 칸»은 못 보므로, 남는 것이 세이브 삭제뿐이었다.
+# ★ 그래서 발밑에서 **폭 우선으로 이어진 열린 칸을 센다**(t와 pending은 이미 선 것으로 둔다).
+#   전면 탐색이 아니라 상한(ENTRAP_FREE_MIN)에서 끊는다 — 이 술어가 묻는 것은 "어디까지 갈 수
+#   있는가"가 아니라 "주머니인가"이고, 열린 칸이 그만큼 이어지면 주머니가 아니다. 비용도 거기서
+#   묶인다(판정당 최대 상한×4 조회 — 절기 재스폰이 아침에 8~16번 불러도 실비가 상수다).
+# ★ 거동은 **좁히기만** 한다: 종전에 거절하던 자리는 전부 그대로 거절되고(퇴로 0이면 free도 0),
+#   새로 거절되는 것은 «열려 있지만 주머니인» 자리뿐이다. 셋까지 허용하던 코지 톤도 살아 있다 —
+#   위 재현의 ①은 다섯 칸이 이어져 있어 여전히 셋 다 심긴다.
+# ★ 결정성: 탐색 순서가 고정 4방 배열이고 굴림을 한 톨도 안 쓴다(아침 배치의 스트림 불변).
+const ENTRAP_FREE_MIN := 12   # 주머니가 아니라고 볼 최소 연결 칸 수(잠정 — 튜닝 인벤토리 큐)
+
 func _would_entrap_player(t: Vector2i, pending: Dictionary = {}) -> bool:
 	if player == null:
 		return false
 	var here := _player_tile()
 	if t == here:
 		return true                       # ㉠ 발밑 = 즉시 매몰
-	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-		var n: Vector2i = here + d
-		if n != t and not pending.has(n) and not _player_blocked_at(n):
-			return false                  # 다른 퇴로가 남는다
-	return true                           # ㉡ 이 칸이 마지막 퇴로였다
+	var seen: Dictionary = {here: true}
+	var queue: Array[Vector2i] = [here]
+	var free := 0
+	while not queue.is_empty():
+		var cur: Vector2i = queue.pop_front()
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = cur + d
+			if seen.has(n) or n == t or pending.has(n) or _player_blocked_at(n):
+				continue
+			seen[n] = true
+			free += 1
+			if free >= ENTRAP_FREE_MIN:
+				return false              # 주머니가 아니다 — 이만큼 이어져 있으면 갇힘이 아니다
+			queue.append(n)
+	return true                           # ㉡ 이 칸을 세우면 발밑이 주머니로 봉해진다
 
 # 위 술어가 "퇴로가 남는가"를 물을 때 쓰는 통행 판정 — 칸 전체를 막는 것만 센다.
 # ★ 전체를 막는 것만 보는 이유: FADE_PROPS(나무·바위)는 발치 한 행만 SOLID라 프롭 풋프린트를
@@ -16414,7 +16484,26 @@ func _can_place_pot(t: Vector2i) -> bool:
 		return false
 	if _f_window_tile(t):                     # ★[폴리시 R8] [F] 창구 좌표 → 배제(그 칸의 [F]는 남의 것)
 		return false
+	# ★[폴리시 R22 #7] **주민 상주 칸 → 배제.** 형제 배치 가드 셋(게잡이통·업화로·결정기)이 전부
+	#   `_resident_tile`을 물고 있는데 실내 전용인 이 함수만 빠져 있었고, 실내 상주 칸은 정확히
+	#   동행체 둘이다 — SOUL_CHILD_TILE(집 마룻바닥 한복판)과 SPOUSE_HOME_TILE(안방). 그 칸의
+	#   화분은 RMB 사슬에서 주민 대화가 **한참 앞에서** 잡고 return하므로 수확 디스패치에 한 번도
+	#   못 닿는다(프롬프트도 같은 순서라 "[우클릭] 수확"이 안 떠 원인 단서조차 없다). 동행 혼은
+	#   스케줄 항목을 부팅부터 들고 있어(region "") 깃들기 전에도 이 가드가 선다 — 즉 «깃든 뒤
+	#   갑자기 먹히는» 갈래가 원천적으로 안 생긴다.
+	#   ★ 막는 것은 **새 배치**뿐이다: 이미 놓인 화분은 아래 RMB 사슬의 양보(다 자란 화분이 있으면
+	#     대화를 한 프레임 미룬다)로 계속 수확되고 LMB 회수도 그대로다(R16 #14·#15의 그 규율).
+	if _resident_tile(t):
+		return false
 	return true
+
+# ★[폴리시 R22 #7] 이 칸의 화분이 **주민 대화보다 먼저** RMB를 받아야 하는가 = 다 자란 화분이 주민
+#   상주 칸에 서 있다. 위 가드가 서기 전 세이브에서만 참이 되고, 그때 이 한 줄이 유일한 탈출구다
+#   (없으면 그 작물은 영영 수확되지 않고, 남는 회수는 «심긴 것도 함께 사라지는» LMB뿐이다).
+#   ★ 양보는 **한 프레임짜리**다 — 거두고 나면 다 자란 화분이 아니므로 그 칸의 대화가 곧장 돌아온다
+#     (R17 #1이 부스 칸에 세운 «영구 매몰이 아니라 하루짜리 양보»와 같은 폭).
+func _pot_harvest_yield(t: Vector2i) -> bool:
+	return garden_pot != null and _pot_dispatch_at(t) and garden_pot.is_mature(t)
 
 # 조준 칸에 화분을 놓는다(아이템 1개 소모). 원장이 좌표를 든다(스프링클러와 같은 경계).
 func _place_garden_pot(t: Vector2i) -> void:
@@ -20055,13 +20144,30 @@ func _refresh_clock_hud() -> void:
 #   후킹은 이번 캐스팅의 도달 가능 최저(R11의 그 함수). 넷 중 가장 싼 것을 못 내는 순간이 곧
 #   "어떤 동사도 못 낸다"이고, 그때부터 바가 식는다 — 그 전까지는 실제로 할 수 있는 일이 남아
 #   있으므로 바가 취침을 재촉하면 거짓말이 된다(R6가 프롬프트 축에서 세운 그 규율의 HUD 판).
+# ★[폴리시 R22 #0] **낼 수 있는 = 지금 실제로 그 동사를 걸 수 있는**이다. R21이 넷을 무조건
+#   접던 종전엔 결과가 사실상 상수 4였다(팬닝 상수 4 · 후킹 최저 체급 4) — 팬닝 스폿도 낚싯대도
+#   없는 새 게임에서도 그랬다. 그래서 농사 L0(비용 10) 판의 혼력 4~9 구간 전체에서 바는 여전히
+#   보랏빛인데 `_use_tool`은 `can_act(10)`에서 조용히 되돌아가고 `_farm_prompt`는 "혼력 부족 —
+#   집에서 취침"을 띄웠다 — HUD와 프롬프트·집행이 정면으로 갈렸다. R21이 «바가 너무 일찍 붉다»
+#   (L10 한정 오차)를 고치면서 «바가 영영 안 붉다»(L0 전 구간)로 뒤집은 자리다.
+#   ★ 자리·보유를 각 소유자에게서 그대로 판다(술어 복제 0): 낚시는 `_has_any_rod()`(보유 판정의
+#     단일 술어 — 상자에 넣어 둔 대도 가진 것이다), 팬닝은 `panning.count(_region)`(오늘 이 무대에
+#     깔린 스폿 수 — 실내면 겨눌 수조차 없다). 채광은 곡괭이 보유(`_stored_anywhere`)를 본다.
+#   ★ 농사만 무조건이다 — 이 비용은 밭 동사뿐 아니라 잡초 낫질·목축·과수까지 쓰는 **바닥값**이라
+#     "아무 도구도 없다"가 성립하지 않는다. 넷이 다 빠지는 판은 없다(하한이 늘 농사 비용).
 func _lowest_action_cost() -> int:
-	var low := SoulEnergy.COST_PER_ACTION
-	for c in [_farming_energy_cost(), _mining_energy_cost(), PanningSpots.PAN_ENERGY,
-			FishingSession.min_hook_energy(_fishing_mods())]:
+	var low := _farming_energy_cost()
+	var cands: Array = []
+	if _stored_anywhere(ItemCatalog.PICKAXE):
+		cands.append(_mining_energy_cost())
+	if _indoor == "" and panning != null and panning.count(_region) > 0:
+		cands.append(PanningSpots.PAN_ENERGY)
+	if _has_any_rod():
+		cands.append(FishingSession.min_hook_energy(_fishing_mods()))
+	for c in cands:
 		if int(c) > 0 and int(c) < low:
 			low = int(c)
-	return low
+	return maxi(1, low)
 
 func _refresh_fishshop() -> void:
 	frame.store_text = _fishshop_text()
@@ -24917,10 +25023,19 @@ func _fill_pet_bowl() -> void:
 # `_process` 깊숙한 곳(모달·연출 가드 뒤)이라 **부팅·로드·탄생 직후 한 프레임이 비어 있다** —
 # 이 세 자리에서 직접 한 번 눌러 그 틈을 없앤다(배우자 이주 스테이션을 로드에서 재적용하는
 # `_apply_spouse_home_station`과 같은 결의 보정).
+# ★[폴리시 R22 #5] 가시성을 **레코드의 `visible_rule`에서 판다** — 종전의 `visible = _soul_born`은
+#   그 훅의 두 항(`_soul_born` ∧ `_region == HOME`) 중 하나를 빠뜨린 복제였고, 하필 이 헬퍼가
+#   소비되는 자리가 보정자(`_update_resident_stations`)가 못 도는 구간이다: `_apply_cutscene_frame`이
+#   암전 완료 프레임에 이걸 부르는데, 그 뒤 컷신 프레임은 `_process` 머리 가드에서, 이어 열리는
+#   BIRTH_LINES 4줄은 `dialogue.is_open()` 가드에서 각각 프레임을 끊는다. 그래서 남의 집 실내에서
+#   24:00을 맞으면(강제 취침은 무대를 안 가린다) 상주 칸 (16,72)를 그대로 품는 마을 공유 집 카메라
+#   안에 동행 혼의 몸이 대사 넷을 넘길 때까지 서 있었다 — R6가 `visible_rule`에 무대 층을 걸어
+#   봉합한 그 그림이 헬퍼 쪽 문으로 되살아난 것이다. 훅을 그대로 부르면 두 창구가 영영 안 갈린다.
 func _refresh_soul_child_body() -> void:
 	var r := _resident(SOUL_CHILD_RID)
-	if r != null and r.node != null:
-		r.node.visible = _soul_born
+	if r == null or r.node == null:
+		return
+	r.node.visible = r.visible_rule.call() if r.visible_rule.is_valid() else _soul_born
 
 func _arm_soul_birth(day: int) -> void:
 	if _soul_born or _soul_due_day <= 0 or day < _soul_due_day:
@@ -24938,6 +25053,13 @@ func _fire_soul_birth() -> void:
 	#   예정일이 남아 있는 한 다음 아침에 다시 예약한다.
 	if _run_over or cutscene != null or dialogue.is_open() or _soul_born:
 		return                          # 마무리 화면·재생 중·대화 중이면 접는다(다음 아침에 다시 예약된다)
+	# ★[폴리시 R22 #5] **무대 술어** — 형제인 `_fire_pet_event`가 폴리시 R3에서 받은 그 항이 여기만
+	#   없었다. 이 비트의 지문은 「눈을 뜨자, 방 안의 공기가…」·「이불깃을 붙잡고」인데 24:00 강제
+	#   취침은 무대를 안 가르므로(`_on_collapsed` → `_do_sleep`, 좌표 대입 0) 남의 집 실내에서
+	#   그대로 섰다. 접어도 잃지 않는다 — `_arm_soul_birth`가 예정일이 지난 한 다음 아침에 다시
+	#   예약한다(위 세 가드와 같은 되돌림 폭).
+	if _region != RegionCatalog.HOME:
+		return
 	var r := _resident(SOUL_CHILD_RID)
 	if r == null or r.node == null:
 		return
@@ -25551,6 +25673,18 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 	# ★[폴리시 R5] 늘봄방 예정지는 나무에도 예약 부지다 — R4가 설치물 셋만 막고 여기를 비워 둬,
 	#   완공이 3×3 과수를 통째로 벽 밑에 묻을 수 있었다(설치물과 달리 회수 수단조차 없다).
 	if _greenhouse_lot_reserved(t):
+		return true
+	# ★[폴리시 R22 #6] **[F] 창구 좌표는 나무에도 성역이다.** 스프링클러·레어크로우가 R8부터 물고
+	#   있는 그 표(`_f_window_tile` = 우편함·삽사리·물그릇)를 과수 술어만 안 봤다. PET_TILE은
+	#   STARTER_PATCH_RECT 안이라 `_grid`가 SOIL(비-SOLID)이고 3×3 풋프린트가 집 앞 프롭과도 안
+	#   겹쳐, 묘목을 겨누면 그대로 심겼다 — ㉠ `_rebuild_orchard_collision`이 개가 앉은 칸에 밑동
+	#   StaticBody를 세워 통행 불가로 만들고 ㉡ `_draw_sapsari`가 `_draw_orchard`보다 먼저 돌아
+	#   나무가 개와 물그릇을 통째로 덮는다. 밭 축은 R6가 같은 이유로 이미 PET_TILE을 뺐는데
+	#   («작물이 개를 덮는 갈래도 원천적으로 안 생긴다») 과수 쪽에서만 그 불변식이 거짓이었고,
+	#   이쪽은 작물과 달리 **되돌릴 창구가 아예 없다**(R19 #7이 적은 대로 orchard에 remove API 0).
+	#   ★ 술어는 그 표 자체를 그대로 부른다(좌표 복제 0). 심기 무대가 `_indoor == ""`·HOME이라
+	#     실내 갈래는 애초에 안 걸린다.
+	if _f_window_tile(t):
 		return true
 	if is_solid(_grid[t.y][t.x]):
 		return true
