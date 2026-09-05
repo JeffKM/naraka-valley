@@ -798,12 +798,19 @@ func _check_orchard_trunk_guards(m: Node) -> void:
 		anchor.x >= 0)
 	if anchor.x < 0:
 		return
-	# 그 칸에 이미 놓인 스프링클러는 나무가 서도 회수 가능해야 한다(새 배치만 막는다).
-	var canopy := anchor + Vector2i(1, 0)
-	var pre_placed: bool = m.sprinkler.place(canopy) if m._can_place_sprinkler(canopy) else false
-
 	_check("⑨ 무대: 그 칸에 혼의 나무를 심었다",
 		m.orchard.plant(anchor, FruitTreeCatalog.ids()[0], m.clock.day, m._is_tree_blocked))
+	# 그 칸에 이미 놓인 스프링클러는 나무가 서도 회수 가능해야 한다(새 배치만 막는다).
+	# ★[폴리시 R23 #19] 순서가 뒤집혔다 — 이제 `_is_tree_blocked`가 `_installation_at`을 물어
+	#   **설치물 위에는 애초에 못 심으므로**(그쪽이 유일하게 비가역인 방향이라 막았다) 「먼저 설치
+	#   → 그 위에 심기」는 성립하지 않는다. 그 상태가 남아 있을 수 있는 것은 가드 이전 구세이브뿐이고,
+	#   ⑨h가 재는 것도 정확히 그 구세이브의 탈출구다. 그래서 나무를 먼저 세우고, 스프링클러는
+	#   배치 가드를 지나지 않는 **원장 직행**으로 얹어 그 옛 상태를 재현한다.
+	var canopy := anchor + Vector2i(1, 0)
+	var pre_placed := false
+	if not m._sprinkler_at(canopy):
+		m.sprinkler._tiles[canopy] = Sprinkler.TIER_1
+		pre_placed = m._sprinkler_at(canopy)
 	_check("⑨b 스프링클러가 밑동 칸에 못 선다", not m._can_place_sprinkler(anchor))
 	_check("⑨c 업화로가 밑동 칸에 못 선다", not m._can_place_furnace(anchor))
 	_check("⑨d 결정기가 밑동 칸에 못 선다", not m._can_place_crystalarium(anchor))

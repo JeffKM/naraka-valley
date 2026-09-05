@@ -138,6 +138,24 @@ func _count_in_func(lines: PackedStringArray, fn_needle: String, needle: String)
 			n += 1
 	return n
 
+# 그 함수 **안**에서 니들이 처음 나오는 행 번호(1-based · -1 = 없음). 순서 단언의 창구다.
+func _line_of(lines: PackedStringArray, fn_needle: String, needle: String) -> int:
+	var head := -1
+	for i in range(lines.size()):
+		if lines[i].begins_with(fn_needle):
+			head = i
+			break
+	if head < 0:
+		return -1
+	for i in range(head + 1, lines.size()):
+		if lines[i].begins_with("func ") or lines[i].begins_with("static func "):
+			return -1
+		if lines[i].strip_edges().begins_with("#"):
+			continue
+		if lines[i].contains(needle):
+			return i + 1
+	return -1
+
 func _feed_has(m: Node, needle: String) -> bool:
 	if m.notice_feed == null:
 		return false
@@ -198,6 +216,18 @@ func _run_checks() -> void:
 	_check_trash_gift_weapon(m)     # ⑫
 	_check_pasture_sealed_sky(m)    # ③ — 짐승 위치를 갈아 두므로 뒤쪽
 	await _check_resident_affinity_rewind(m)   # ⑥ — 세이브 파일을 갈아 두므로 맨 끝
+
+	print("══ 폴리시 R23 회귀 — 배치 B(#13~#25) ══")
+	_check_notice_wrap(m)           # ⑬ #14
+	_check_prompt_fit(m)            # ⑭ #15·#16
+	_check_popup_layout(m)          # ⑮ #17·#18
+	_check_tree_installation(m)     # ⑯ #19
+	_check_sprinkler_resident(m)    # ⑰ #20
+	_check_refill_session(m)        # ⑱ #21
+	_check_pasture_trunk(m)         # ⑲ #22
+	_check_onboarding_seed(m)       # ⑳ #23
+	_check_banner_resume(m)         # ㉑ #24
+	await _check_intro_clock(m)     # ㉒ #25 — 통보를 열고 닫으므로 맨 끝
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
@@ -745,3 +775,376 @@ func _check_trash_gift_weapon(m: Node) -> void:
 	_check("⑫d 매대 무기 「%s」는 그대로 버려진다 — 표가 id가 아니라 **가격 0 술어**에서 파생한다"
 			% ItemCatalog.name_of(sold_sword), m.inventory.count_of(sold_sword) == 0)
 	_clear_backpack(m)
+
+# ══════════ 배치 B(#13~#25) ══════════════════════════════════════════════════
+#
+# 렌즈: 문구 폭·창 넘침(#14·#15·#16·#17·#18) · 상호작용 우선순위 사다리(#19·#20·#21·#22) ·
+#       첫날 온보딩 진실(#23·#24·#25) · 지급 창구 정합(#13 — OWNER).
+#
+# 이 배치의 태도 둘.
+#   ㉠ **표시 단언은 그리기 경로를 태운다**(R15가 세운 규약). ⑬은 NoticeFeed에 실제로 push하고
+#      `_draw`가 쓰는 그 폭 산식으로 줄 수를 재고, ⑭는 Label에 실제 문구를 넣어 폰트로 접어 보며,
+#      ⑮는 판·라벨의 **실측 size**를 본다. "상수가 크다"를 재는 항은 하나도 없다.
+#   ㉡ **무손실을 잰다.** 잘렸는지가 아니라 «한 글자도 안 잃었는지»가 축이라, ⑬·⑭는 접힌 뒤의
+#      가용 면적이 전문(全文)을 담는가를 묻는다(말줄임·축소로 고쳤다면 이 항이 빨개진다).
+#
+# 무엇을 보증하나(번호 = 23회차 헌트 발견 인덱스).
+#   ⑬ #14 알림 띠가 320px 하드 밴드라 non-wide 알림의 실 그리기 폭이 **308px 고정**이었고
+#      elide도 축소도 안 탔다 — 문자열 리터럴 330개 중 129개가 그 폭을 넘어 꼬리(「[Tab] 가방을
+#      비우고 다시」 같은 *해법*)가 통째로 사라졌다.
+#   ⑭ #15·#16 InteractPrompt Label(폭 624·중앙 정렬·wrap/clip 없음)에 대장간 벼리기(최대 776px)와
+#      게시판 일일+중기 병기(792~1088px)가 그대로 나가, 양끝이 **동시에** 화면 밖으로 잘렸다.
+#   ⑮ #17·#18 두 팝업이 고정 기하라 조건부로 늘어난 본문이 라벨·판을 넘어 한지 9-slice 테두리
+#      위·판 바깥 월드 위에 그려졌다(마감 정산 6줄 111px vs 라벨 80px · 2단 달성 7줄 130px vs 120px).
+#   ⑯ #19 `_is_tree_blocked`에 `_installation_at`이 없어 **설치물 위에 영구 SOLID 밑동**을 심을 수
+#      있었다(orchard remove API 0 — 반대 방향 셋은 전부 `_orchard_trunk_at`으로 거절한다).
+#   ⑰ #20 `_can_place_sprinkler`(가드 15개)에만 `_resident_tile`이 없어 주민 상주 칸에 설치되고,
+#      프롬프트 사슬이 주민 갈래에서 먼저 끊겨 회수 안내가 도달 불가였다(레어크로우가 상속).
+#   ⑱ #21 `on_refill`에 `session_lmb` 가드가 없어 릴 격투 중 매 당김이 리필을 함께 실행했다.
+#   ⑲ #22 `_free_pasture_tiles`가 `_orchard_trunk_at`을 안 봐 방목 짐승이 밑동 위에 배정됐다.
+#   ⑳ #23 PLANT 배너가 시작 절기에 **어디서도 못 구하는** 씨앗을 이름으로 지목했다.
+#   ㉑ #24 모달이 한 번 덮으면 그 단계의 안내 배너가 영구히 다시 안 떴다.
+#   ㉒ #25 오프닝 통보 중에 시계가 흘러(45실초 = 15:00) 옥자의 「밭에 있으니 가서 말 걸어」가
+#      대화가 닫히는 순간 거짓이 됐다 — 형제 셋(컷신·내면·에필로그)은 전부 시계를 세운다.
+#
+# 판정: #14·#15·#16·#17·#18·#19·#20·#21·#22·#23·#24·#25 CONFIRMED(전부 봉합) ·
+#   #13 = **OWNER-DECISION**(코드 불변 — 근거는 커밋 본문).
+#
+# 하중 검증(**실측** — 봉합을 되돌려 실제로 뜬 red를 그대로 옮겨 적는다. 파괴 3배치·전건 확인):
+#   #14 `_wrapped_rows`를 상수 1로 죽임       → ⑬b·⑬c red(3줄 → **1줄** = 가용 304px가 전문 714px를 못 담는다)
+#   #14 `draw_multiline_string` → `draw_string` → ⑬d red(그리기가 다시 잘라 그린다)
+#   #15·#16 `_fit_interact_prompt` 무력화       → ⑭c red(대장간 640px 줄에 판이 **18px 한 줄**로 남는다)
+#   #17 `_layout_popup_panel` 호출 삭제         → ⑮c·⑮d red(**라벨 111 + 여백 24 > 판 104** = 판 밖으로 나간다)
+#   #18 같은 호출 삭제(마일스톤 세 단계)         → ⑮f red(배선) · ⑮g red(라벨 134 + 24 > 판 144)
+#   #19 `_installation_at` 항 삭제              → ⑯c red(스프링클러 위에 영구 밑동이 선다)
+#   #20 `_resident_tile` 항 삭제                → ⑰c·⑰d red(미호 자리에 스프링클러·레어크로우가 선다)
+#   #21 `not session_lmb` 삭제                  → ⑱a·⑱c red(같은 술어 6자리 → **5자리**)
+#   #22 `_orchard_trunk_at` 항 삭제             → ⑲c red(슬롯 61 → **61** = 밑동 칸이 안 빠진다)
+#   #23 `seed_name` 갈래 삭제(하드코딩 복귀)     → ⑳a·⑳d red(씨앗 0에서도·다른 씨앗을 들어도 혼령초를 지목)
+#   #24 `_forget_onboarding_guide` 무력화        → ㉑c·㉑d red(래치가 그대로라 배너가 영영 안 뜬다)
+#   #25 `clock.running = false` 삭제            → ㉒c·㉒d·㉒e red(통보 중 **602분 → 1440분** = 하루가 통째로 흐른다)
+#
+# ★하중 검증에서 배운 것 셋.
+#   · **Godot Label은 접힌 본문에 맞춰 스스로 자란다.** 그래서 ⑮의 「본문 ≤ 라벨」만으로는 판이
+#     그대로여도 초록이 된다(파괴 실측에서 라벨이 tscn 80이 아니라 111로 잡혔다). 진짜 불변식은
+#     **「라벨 + 여백 ≤ 판」**(⑮d·⑮g)이고, 그 1px 차이가 봉합 자체도 정정했다 — `_layout_popup_panel`은
+#     우리 식으로 판을 재면 안 되고 라벨을 세운 뒤 그 높이를 **되읽어** 재야 한다.
+#   · **느슨한 니들은 형제에게 걸려 통과한다.** ⑱a의 첫 니들("and not session_lmb \\")은 리필이 아니라
+#     게잡이통 줄에 매칭돼 파괴에도 초록이었다. 형제 다섯이 같은 술어를 쓰는 사슬에서는 니들이
+#     **그 갈래의 변수명까지** 물어야 한다(`var on_refill := …`).
+#   · **⑭d는 ⑭c의 red-catcher가 아니다.** `_prompt_line_count`는 순수 측정이라 접기를 죽여도 여전히
+#     2줄을 답한다 — 접혔는가를 재는 항은 ⑭c(autowrap + 판 높이)이고, ⑭d가 재는 것은 «접히면
+#     전문이 남는가»라는 무손실 쪽이다. 두 축을 한 항으로 묶으면 하중이 반만 걸린다(R22 ①c의 그 교훈).
+
+# ── ⑬ #14 알림 띠 = 무손실 접힘 ──────────────────────────────────────────────
+# 문구를 손으로 안 짓는다: main이 실제로 쏘는 그 형태(최장 아이템명 + 만재 안내)를 카탈로그에서
+# 조립하고, 폭 산식도 `_draw`가 쓰는 그것(MAX_W − 16 − 아이콘)을 그대로 쓴다.
+func _check_notice_wrap(m: Node) -> void:
+	print("⑬ #14 알림 띠 ↔ 긴 문구")
+	var feed: NoticeFeed = m.notice_feed
+	if feed == null:
+		_check("⑬x 무대 없음(notice_feed null)", false)
+		return
+	# 카탈로그에서 **가장 긴 이름**을 판다(문자열을 옮겨 적지 않는다).
+	var longest := ""
+	for id in _catalog_roster():
+		var nm := ItemCatalog.name_of(String(id))
+		if nm.length() > longest.length():
+			longest = nm
+	var text := "백팩이 가득 차 %s 거둘 수 없다 — [Tab] 가방에서 자리를 비우고 다시" \
+		% HanjiUi.with_eul(longest)
+	var font := HanjiUi.font()
+	var full_w: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	var avail := NoticeFeed.MAX_W - 16.0
+	_check("⑬a 무대: 최장 이름 「%s」로 지은 그 알림이 %.0fpx — 띠 가용 폭 %.0fpx의 %.1f배다"
+			% [longest, full_w, avail, full_w / maxf(avail, 1.0)], full_w > avail)
+	var rows: int = feed._wrapped_rows(font, text, avail)
+	_check("⑬b 그 문구가 %d줄로 접힌다(한 줄에 안 들어가는 것을 원장이 인정한다)" % rows, rows >= 2)
+	# 무손실 판정 = 접힌 뒤의 **가용 면적**이 전문을 담는가(말줄임·축소로 고쳤다면 여기서 빨개진다).
+	_check("⑬c 접힌 면적이 전문을 담는다 — %d줄 × %.0fpx = %.0fpx ≥ %.0fpx(한 글자도 안 잃는다)"
+			% [rows, avail, float(rows) * avail, full_w], float(rows) * avail >= full_w)
+	_check("⑬d 그리기가 접는 창구를 실제로 탄다(`draw_multiline_string` — 잘라 그리는 `draw_string` 아님)",
+		_count_in_func(_feed_src(), "func _draw", "draw_multiline_string(") == 1
+			and _count_in_func(_feed_src(), "func _draw", "draw_string(") == 0)
+	# 짧은 알림은 종전대로 한 줄이다(과잉 접힘이 아니다 = 좌측 컬럼 결 보존).
+	_check("⑬e 짧은 알림은 여전히 한 줄이다 — 「저장됨」 %d줄(접힘이 필요할 때만 일어난다)"
+			% feed._wrapped_rows(font, "저장됨", avail),
+		feed._wrapped_rows(font, "저장됨", avail) == 1)
+
+# 이름 길이를 재는 아이템 로스터 — **카탈로그 상수에서 조립한다**(이름을 손으로 안 적는다).
+func _catalog_roster() -> Array:
+	var out: Array = []
+	out.append_array(ItemCatalog.RARECROWS)
+	for d in [ItemCatalog.RELICS, ItemCatalog.FORAGEABLES, ItemCatalog.MATERIALS,
+			ItemCatalog.MINERALS, ItemCatalog.POT_GOODS, ItemCatalog.PLACEABLES]:
+		out.append_array(d.keys())
+	return out
+
+func _feed_src() -> PackedStringArray:
+	return _lines_of_file("res://notice_feed.gd")
+
+# ── ⑭ #15·#16 프롬프트 = 무손실 접힘 ─────────────────────────────────────────
+func _check_prompt_fit(m: Node) -> void:
+	print("⑭ #15·#16 프롬프트 폭 ↔ 긴 한 줄")
+	var w: float = m._prompt_max_width()
+	var fs: int = m._prompt_font_size()
+	_check("⑭a 무대: InteractPrompt 폭 %.0fpx · 글자 %dpx(레이아웃·테마에서 파생 — 상수 복제 0)"
+			% [w, fs], w > 0.0 and fs > 0)
+	# 대장간 최악 조합을 **카탈로그에서** 만든다(티어 이름·주괴 이름·가격을 손으로 안 적는다).
+	var smithy: String = m._tool_upgrade_prompt(ItemCatalog.WATERING_CAN)
+	var board := "[F] 일일 — %s   [G] 중기 — %s" % [
+		QuestBoard.summary({"item_id": ItemCatalog.harvest_id(CropCatalog.HWANGCHEON_PODO),
+			"count": 3, "client": "미호", "due_day": 9, "gold": 800}),
+		QuestBoard.summary({"item_id": ItemCatalog.harvest_id(CropCatalog.YEONGHON_HOBAK),
+			"count": 2, "client": "세레나", "due_day": 12, "gold": 1200})]
+	var smithy_w := HanjiUi.text_width(smithy, fs)
+	var board_w := HanjiUi.text_width(board, fs)
+	_check("⑭b 무대: 대장간 한 줄 %.0fpx · 게시판 병기 %.0fpx — 둘 다 Label 폭 %.0f를 넘는다"
+			% [smithy_w, board_w, w], board_w > w)
+	m.interact_prompt.text = smithy
+	m._fit_interact_prompt()
+	var smithy_lines: int = m._prompt_line_count(smithy)
+	_check("⑭c 대장간 줄이 %d줄로 접히고 판이 %.0fpx로 자란다(양끝이 화면 밖으로 나가던 자리)"
+			% [smithy_lines, m.interact_prompt.size.y],
+		m.interact_prompt.autowrap_mode == TextServer.AUTOWRAP_WORD_SMART
+			and m.interact_prompt.size.y >= m.PROMPT_LINE_H * float(smithy_lines))
+	m.interact_prompt.text = board
+	m._fit_interact_prompt()
+	var board_lines: int = m._prompt_line_count(board)
+	_check("⑭d 게시판 병기가 %d줄로 접힌다 — 접힌 면적 %.0fpx ≥ 전문 %.0fpx(F↔G와 보상액이 다 남는다)"
+			% [board_lines, float(board_lines) * w, board_w],
+		board_lines >= 2 and float(board_lines) * w >= board_w)
+	# 짧은 프롬프트는 종전 한 줄·기본 높이 그대로다(과잉 확장이 아니다).
+	m.interact_prompt.text = "[F] 시련패 매대 (보유 0패)"
+	m._fit_interact_prompt()
+	_check("⑭e 짧은 프롬프트는 한 줄·%.0fpx 그대로다(내용 파생이지 상시 확장이 아니다)"
+			% m.interact_prompt.size.y, m.interact_prompt.size.y == m.PROMPT_LINE_H)
+	# ★배선 단언 — 위 넷은 테스트가 직접 부르므로 «사슬이 실제로 부르는가»를 못 잰다(R22 ⑧f 관례).
+	_check("⑭f 배선: 프롬프트 사슬이 끝에서 **한 번** 맞춘다(마흔 갈래 어느 것을 골랐든 지나는 자리)",
+		_count_in_func(_src, "func _process", "_fit_interact_prompt()") == 1)
+
+# ── ⑮ #17·#18 팝업 판 = 내용 파생 기하 ───────────────────────────────────────
+func _check_popup_layout(m: Node) -> void:
+	print("⑮ #17·#18 팝업 판 ↔ 본문")
+	# 마감 정산 — 최대 본문(아는 얼굴·체키 줄이 둘 다 붙는 날)을 실제 창구로 띄운다.
+	var summary := "\n".join(["── 오늘 카페 영업 마감 ──", "매출  +1200냥", "서빙한 손님  8명",
+		"놓친 손님  2명", "아는 얼굴  3명", "체키  2장"])
+	m._show_cafe_summary(summary)
+	var body_h: float = m._label_body_height(m.cafe_summary_text, summary, m.cafe_summary_text.size.x)
+	_check("⑮a 무대: 마감 정산 6줄 본문이 %.0fpx다(라벨 폭 %.0f에서 접힌 실측)"
+			% [body_h, m.cafe_summary_text.size.x], body_h > 0.0)
+	_check("⑮b 판이 본문에 맞춰 섰다 — 판 %.0fpx · 라벨 %.0fpx"
+			% [m.cafe_summary_panel.size.y, m.cafe_summary_text.size.y],
+		m.cafe_summary_panel.size.y > 0.0 and m.cafe_summary_text.size.y > 0.0)
+	_check("⑮c 본문이 라벨 안에 든다 — %.0f ≤ %.0f(종전엔 111 > 80이라 첫 줄·막줄이 테두리 위에 깔렸다)"
+			% [body_h, m.cafe_summary_text.size.y], body_h <= m.cafe_summary_text.size.y + 0.5)
+	_check("⑮d 라벨이 판 안에 든다 — 라벨 %.0f + 여백 %.0f×2 ≤ 판 %.0f"
+			% [m.cafe_summary_text.size.y, m.cafe_summary_text.position.y, m.cafe_summary_panel.size.y],
+		m.cafe_summary_text.size.y + m.cafe_summary_text.position.y * 2.0
+			<= m.cafe_summary_panel.size.y + 0.5)
+	m.cafe_summary_panel.visible = false
+	# 마일스톤 — 2단 달성(막줄이 폭 408에서 접혀 7줄이 되는 그 문구).
+	m._show_milestone2_reached()
+	var m_body: float = m._label_body_height(m.milestone_text, m.milestone_text.text, m.milestone_text.size.x)
+	_check("⑮e 2단 달성 본문 %.0fpx가 라벨 %.0fpx 안에 든다(래치라 세이브당 한 번뿐인 그 팝업)"
+			% [m_body, m.milestone_text.size.y], m_body <= m.milestone_text.size.y + 0.5)
+	# ★진짜 불변식은 «라벨이 판 안에 드는가»다 — Godot Label은 접힌 본문에 맞춰 **스스로 자라므로**
+	#   「본문 ≤ 라벨」만 재면 판이 그대로여도 초록이 된다(실측으로 배운 것 — 아래 ★ 항 참조).
+	#   판이 안 따라 자란 상태가 곧 «첫 줄·막줄이 한지 테두리 위에 그려진다»의 정의다.
+	_check("⑮g 라벨이 판 안에 든다 — 라벨 %.0f + 여백 %.0f×2 ≤ 판 %.0f"
+			% [m.milestone_text.size.y, m.milestone_text.position.y, m.milestone_panel.size.y],
+		m.milestone_text.size.y + m.milestone_text.position.y * 2.0
+			<= m.milestone_panel.size.y + 0.5)
+	_check("⑮f 세 단계가 전부 판을 다시 세운다(2단만 고치면 다음 문구가 같은 자리에서 다시 넘친다)",
+		_count_in_func(_src, "func _show_milestone_reached", "_layout_popup_panel(") == 1
+			and _count_in_func(_src, "func _show_milestone2_reached", "_layout_popup_panel(") == 1
+			and _count_in_func(_src, "func _show_milestone3_reached", "_layout_popup_panel(") == 1)
+	m.milestone_panel.visible = false
+
+# ── ⑯ #19 설치물 칸 = 나무의 성역 ────────────────────────────────────────────
+func _check_tree_installation(m: Node) -> void:
+	print("⑯ #19 혼의 나무 심기 ↔ 설치물")
+	m._region = RegionCatalog.HOME
+	m._indoor = ""
+	# 심을 수 있는 빈 칸을 판에서 찾는다(좌표를 옮겨 적지 않는다).
+	var spot := Vector2i(-1, -1)
+	for y in range(m._grid.size()):
+		for x in range(m._grid[y].size()):
+			var t := Vector2i(x, y)
+			if m._is_tree_blocked(t) or m._installation_at(t) or not m._can_place_sprinkler(t):
+				continue
+			spot = t
+			break
+		if spot != Vector2i(-1, -1):
+			break
+	_check("⑯a 무대: 빈 칸 %s는 지금 나무도 설치물도 막지 않는다" % str(spot),
+		spot != Vector2i(-1, -1) and not m._is_tree_blocked(spot))
+	if spot == Vector2i(-1, -1):
+		return
+	m.sprinkler.place(spot)
+	_check("⑯b 무대: 그 칸에 스프링클러가 섰다(설치물 원장이 그 칸을 든다)",
+		m._installation_at(spot))
+	_check("⑯c 이제 나무 심기가 그 칸을 **거절한다** — 되돌릴 창구가 orchard에 0이라 유일하게 비가역인 방향이었다",
+		m._is_tree_blocked(spot))
+	_check("⑯d 반대 방향은 종전대로다 — 밑동이 선 칸은 설치물이 거절한다(양방향 가드가 이제 대칭)",
+		not m._can_place_sprinkler(spot))
+	m.sprinkler.remove(spot)
+	_check("⑯e 회수하면 그 칸이 다시 열린다(가드가 래치가 아니라 그 프레임의 원장이다)",
+		not m._is_tree_blocked(spot) and not m._installation_at(spot))
+
+# ── ⑰ #20 주민 상주 칸 = 설치 금지 ───────────────────────────────────────────
+func _check_sprinkler_resident(m: Node) -> void:
+	print("⑰ #20 스프링클러·레어크로우 ↔ 주민 상주 칸")
+	m._region = RegionCatalog.HOME
+	m._indoor = ""
+	var seat: Vector2i = m.MIHO_FIELD_TILE
+	_check("⑰a 무대: 미호 자리 %s는 주민 상주 칸이다(형제 가드 넷이 이미 보는 그 술어)"
+			% str(seat), m._resident_tile(seat))
+	_check("⑰b 무대: 그 칸이 지형·프롭 축으로는 멀쩡하다(가드 열다섯을 통과하던 자리)",
+		not m._home_occupied_tiles().has(seat) and not m.sprinkler.has_at(seat))
+	_check("⑰c 스프링클러가 그 칸을 **거절한다**(형제 넷 `_can_place_pot`·`_can_place_crab_pot`·"
+			+ "`_can_place_crystalarium`·`_can_place_furnace`와 정렬)",
+		not m._can_place_sprinkler(seat))
+	var crow := String(ItemCatalog.RARECROWS[0])
+	_check("⑰d 레어크로우도 함께 거절된다(그 함수를 통째로 재사용하므로 구멍도 함께 닫힌다) — 표본 「%s」"
+			% ItemCatalog.name_of(crow), crow != "" and not m._can_place_rarecrow(seat))
+
+# ── ⑱ #21 릴 격투 중의 LMB는 리필이 아니다 ───────────────────────────────────
+func _check_refill_session(m: Node) -> void:
+	print("⑱ #21 물뿌리개 리필 ↔ LMB 세션")
+	# 니들은 **리필 갈래 그 줄**이다 — 형제 넷도 같은 술어를 쓰므로 느슨한 니들은 그쪽에 걸려 통과한다.
+	_check("⑱a 배선: 리필 갈래가 `session_lmb`를 문다(형제 넷·도구 갈래가 R19 #10·R10 #5에 받은 그 가드)",
+		_count_in_func(_src, "func _process", "var on_refill := not _sleeping and not session_lmb") == 1)
+	# 선언이 리필 갈래보다 **앞**이어야 한다(뒤면 파싱조차 안 된다 — 순서가 곧 계약이다).
+	var decl := _line_of(_src, "func _process", "var session_lmb :=")
+	var use := _line_of(_src, "func _process", "var on_refill :=")
+	_check("⑱b 배선 순서: 선언(%d행)이 리필 갈래(%d행)보다 앞이다" % [decl, use],
+		decl > 0 and use > 0 and decl < use)
+	_check("⑱c 리필을 포함해 같은 술어를 쓰는 갈래가 `_process` 안에 %d자리다(설치 넷·도구·리필)"
+			% _count_in_func(_src, "func _process", "not session_lmb"),
+		_count_in_func(_src, "func _process", "not session_lmb") >= 6)
+
+# ── ⑲ #22 방목 슬롯 ↔ 혼의 나무 밑동 ─────────────────────────────────────────
+func _check_pasture_trunk(m: Node) -> void:
+	print("⑲ #22 방목 배정 ↔ 밑동")
+	m._region = RegionCatalog.HOME
+	m._indoor = ""
+	var slots: Array = m._free_pasture_tiles()
+	_check("⑲a 무대: 방목 슬롯이 %d칸 있다" % slots.size(), not slots.is_empty())
+	if slots.is_empty():
+		return
+	var anchor: Vector2i = slots[0]
+	var fruit := String(FruitTreeCatalog.ids()[0])
+	m.orchard._trees[anchor] = {"fruit_id": fruit,
+		"planted_day": m.clock.day, "fruit_count": 0}
+	_check("⑲b 무대: 그 슬롯 %s에 혼의 나무 밑동이 섰다(방목지는 `_is_tree_blocked`가 예약하지 않는다)"
+			% str(anchor), m._orchard_trunk_at(anchor))
+	var after: Array = m._free_pasture_tiles()
+	_check("⑲c 그 칸이 슬롯에서 빠진다 — %d칸 → %d칸(짐승이 밑동 콜라이더 안에 서던 자리)"
+			% [slots.size(), after.size()], not after.has(anchor) and after.size() == slots.size() - 1)
+	m.orchard._trees.erase(anchor)
+	_check("⑲d 밑동을 걷으면 슬롯이 돌아온다 — %d칸(다음 아침 방출이 다시 고른다 = 자가 회복)"
+			% m._free_pasture_tiles().size(), m._free_pasture_tiles().has(anchor))
+
+# ── ⑳ #23 PLANT 배너 = 실제로 심을 수 있는 것 ────────────────────────────────
+func _check_onboarding_seed(m: Node) -> void:
+	print("⑳ #23 온보딩 PLANT 배너 ↔ 손에 든 씨앗")
+	var step0: int = m.onboarding.step
+	m.onboarding.step = Onboarding.PLANT
+	_clear_backpack(m)
+	_check("⑳a 씨앗이 하나도 없으면 배너가 **구하는 법**을 말한다(없는 물건을 지목하지 않는다) — 「%s」"
+			% m.onboarding.guidance(false, m._onboarding_seed_name()),
+		m._onboarding_seed_name() == ""
+			and m.onboarding.guidance(false, "").contains("출하함"))
+	# 시작 절기에 실제로 안 서는 스타터 씨앗(유화절 작물)이 그 함정의 실체다.
+	var starter := String(Inventory.START_SEEDS.keys()[0])
+	var start_season := GameClock.season_index_for_day(1)
+	_check("⑳b 무대: 스타터 씨앗 「%s」는 시작 절기(%d)에 제철이 아니다 — 매대가 통째로 거른다"
+			% [CropCatalog.name_of(starter), start_season],
+		not CropCatalog.in_season(starter, start_season))
+	m.inventory.add_item(ItemCatalog.seed_id(starter), 1)
+	var g1: String = m.onboarding.guidance(false, m._onboarding_seed_name())
+	_check("⑳c 씨앗을 가지면 **그 이름**을 지목한다 — 「%s」" % g1,
+		g1.contains(CropCatalog.name_of(starter)) and g1.contains("[좌클릭]"))
+	# 다른 씨앗으로 갈아 들면 문구도 따라간다(이름이 하드코딩이 아님의 증거).
+	_clear_backpack(m)
+	var other := ""
+	for cid in CropCatalog.ids():
+		if String(cid) != starter and ItemCatalog.has_item(ItemCatalog.seed_id(String(cid))):
+			other = String(cid)
+			break
+	m.inventory.add_item(ItemCatalog.seed_id(other), 1)
+	var g2: String = m.onboarding.guidance(false, m._onboarding_seed_name())
+	_check("⑳d 다른 씨앗을 들면 문구가 따라간다 — 「%s」(카탈로그 파생 · id 복제 0)" % g2,
+		other != "" and g2.contains(CropCatalog.name_of(other))
+			and not g2.contains(CropCatalog.name_of(starter)))
+	# ★ 두 갈래 다 **배너 판이 뷰포트 안**이어야 한다(R16 #2가 세운 그 판 — 첫 판은 707px이라
+	#   좌우로 33px씩 화면 밖으로 나갔다). R16 ③은 인자 없는 호출만 훑으므로 지목 갈래는 여기서 잰다.
+	var banner_view: Vector2 = m.onboarding_banner._view()
+	var named_plate: float = HanjiUi.text_width(g2, m.onboarding_banner.FONT_SIZE) \
+		+ m.onboarding_banner.PAD_X * 2.0
+	var empty_plate: float = HanjiUi.text_width(m.onboarding.guidance(false, ""),
+		m.onboarding_banner.FONT_SIZE) + m.onboarding_banner.PAD_X * 2.0
+	_check("⑳e 두 갈래의 배너 판이 뷰포트(%.0fpx) 안에 든다 — 지목 %.0fpx · 씨앗 0 %.0fpx"
+			% [banner_view.x, named_plate, empty_plate],
+		named_plate <= banner_view.x and empty_plate <= banner_view.x)
+	m.onboarding.step = step0
+	_clear_backpack(m)
+
+# ── ㉑ #24 모달이 덮었으면 모달이 닫힐 때 재개한다 ───────────────────────────
+func _check_banner_resume(m: Node) -> void:
+	print("㉑ #24 안내 배너 ↔ 모달")
+	var step0: int = m.onboarding.step
+	m.onboarding.step = Onboarding.TILL
+	m._last_onboarding_guide = m.onboarding.guidance(false, m._onboarding_seed_name())
+	_check("㉑a 무대: TILL 단계 배너가 한 번 떴다(래치에 그 문구가 실렸다) — 「%s」"
+			% m._last_onboarding_guide, m._last_onboarding_guide != "")
+	m.onboarding_banner.hide_now()
+	_check("㉑b 무대: 모달이 배너를 즉시 지웠다(남은 유지시간을 통째로 버린다)",
+		m.onboarding_banner._secs == 0.0 and m.onboarding_banner.modulate.a == 0.0)
+	m._forget_onboarding_guide()
+	_check("㉑c 덮은 쪽이 래치를 되감았다 — 래치 「%s」" % m._last_onboarding_guide,
+		m._last_onboarding_guide == "")
+	# 모달이 닫힌 첫 프레임의 그 비교가 다시 참이 되어 배너가 되돌아온다.
+	var guide: String = m.onboarding.guidance(false, m._onboarding_seed_name())
+	_check("㉑d 같은 단계 문구가 래치와 달라 배너가 다시 뜬다(종전엔 같아서 영영 안 떴다)",
+		guide != "" and guide != m._last_onboarding_guide)
+	m.onboarding_banner.show_guide(guide)
+	_check("㉑e 실제로 다시 떴다 — 알파 %.1f · 남은 %.1f초"
+			% [m.onboarding_banner.modulate.a, m.onboarding_banner._secs],
+		m.onboarding_banner.modulate.a > 0.0 and m.onboarding_banner._secs > 0.0)
+	_check("㉑f 배선: 배너를 지우는 세 모달(컷신·대화·프레임)이 전부 래치를 되감는다",
+		_count_in_func(_src, "func _process", "_forget_onboarding_guide()") == 3)
+	m.onboarding.step = step0
+	m.onboarding_banner.hide_now()
+
+# ── ㉒ #25 오프닝 통보 중에는 시간이 흐르지 않는다 ───────────────────────────
+func _check_intro_clock(m: Node) -> void:
+	print("㉒ #25 오프닝 통보 ↔ 시계")
+	var step0: int = m.onboarding.step
+	var running0: bool = m.clock.running
+	var minutes0: float = m.clock.minutes
+	_dismiss_dialogue(m)
+	m.clock.running = true
+	m.onboarding.step = Onboarding.NOTICE
+	m._maybe_start_intro()
+	_check("㉒a 무대: 통보가 실제로 열렸다(대화 %s · 옥자 %s)"
+			% [str(m.dialogue.is_open()), str(m.okja.visible)],
+		m.dialogue.is_open() and m.okja.visible)
+	_check("㉒b 이동이 잠긴다(종전에도 있던 그 잠금 — 거동 불변)",
+		not m.player.is_physics_processing())
+	_check("㉒c **시계도 멈춘다** — running %s(형제 셋 컷신·내면·에필로그가 든 그 문법)"
+			% str(m.clock.running), not m.clock.running)
+	# 미호가 카페로 출근하는 그 시각까지 흐를 만큼 틱을 굴려도 분침이 안 움직인다.
+	var ticks := 0
+	while ticks < 200:
+		m.clock._process(1.0)   # 시간이 실제로 흐르는 그 경로(running 게이트를 그대로 탄다)
+		ticks += 1
+	_check("㉒d 통보를 읽는 동안 분침이 한 칸도 안 간다 — %.0f분 그대로(옥자의 「밭에 있으니」가 참으로 남는다)"
+			% m.clock.minutes, is_equal_approx(m.clock.minutes, minutes0))
+	_dismiss_dialogue(m)
+	await process_frame
+	_check("㉒e 통보가 끝나면 시계가 스냅값으로 되돌아온다 — running %s" % str(m.clock.running),
+		m.clock.running)
+	m.onboarding.step = step0
+	m.clock.running = running0

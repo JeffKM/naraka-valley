@@ -24,6 +24,18 @@ const MARGIN := 10.0          # 화면 왼쪽 여백
 # 하단에서 RESERVE_BOTTOM만큼 띄운 자리가 가장 최근(맨 아래) 알림의 바닥이다.
 const RESERVE_BOTTOM := 124.0   # ★ Phase C — 좌하단 컨텍스트 팝업(핫바 위, top≈view.y-116) 위로 알림을 쌓는다
 const MAX_W := 320.0          # 알림 띠 최대 폭(좌측 컬럼 유지 — 중앙 프롬프트 침범 방지)
+
+# ★[폴리시 R23 #14] 이 폭에서 접힌 뒤 몇 줄이 되나(그리기·높이 계산의 단일 출처).
+#   ★ 줄 수를 폰트에서 재는 이유는 main `_mirror_body_height`가 적어 둔 그대로다 — 노드 내부
+#     (`get_line_count`)는 shaping 시점에 의존하는데 폰트 측정은 같은 답을 즉시 준다.
+func _wrapped_rows(font: Font, text: String, avail: float) -> int:
+	if text == "" or avail <= 0.0:
+		return 1
+	var fh := font.get_height(14)
+	if fh <= 0.0:
+		return 1
+	var wrapped := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, avail, 14)
+	return maxi(1, int(round(wrapped.y / fh)))
 const FADE_SECS := 0.6        # 사라지기 직전 알파가 줄어드는 구간(초)
 
 # 표시 큐. 각 항목 = {text, secs}(secs=남은 표시 시간). 가장 최근이 배열 끝(아래에 그린다).
@@ -97,13 +109,14 @@ func _draw() -> void:
 	var view := _view()
 	var font := HanjiUi.font()   # ★ Phase C — 한지 톤 통일(neodgm)
 	# 좌하단: 가장 최근(배열 끝)을 맨 아래에, 오래된 것일수록 위로 쌓는다.
+	# ★[폴리시 R23 #14] **바닥에서 위로 쌓되 줄 높이는 항목마다 다르다** — 접힌 줄 수만큼 띠가
+	#   커지므로 `ROW_H × row`라는 고정 눈금을 못 쓴다. 최신(배열 끝)부터 역순으로 훑으며 바닥을
+	#   깎아 올린다(가장 최근이 맨 아래라는 계약은 그대로다).
 	var n := _items.size()
-	for idx in n:
+	var bottom := view.y - RESERVE_BOTTOM
+	for idx in range(n - 1, -1, -1):
 		var item: Dictionary = _items[idx]
-		# 배열 끝(idx=n-1)이 맨 아래 줄(row 0). 하단 UI(핫바·프롬프트) 위로 RESERVE_BOTTOM만큼 띄운다.
-		var row := (n - 1) - idx
-		var y := view.y - RESERVE_BOTTOM - ROW_H * float(row + 1)
-		var pos := Vector2(MARGIN, y)
+		var pos := Vector2(MARGIN, 0.0)   # y는 아래에서 접은 줄 수를 알고 나서 정한다
 		# 마지막 FADE_SECS 동안 서서히 흐려진다(그 전엔 불투명).
 		var a := clampf(float(item["secs"]) / FADE_SECS, 0.0, 1.0)
 		var text: String = item["text"]
@@ -113,10 +126,24 @@ func _draw() -> void:
 		var icon_w := (ROW_H - 6.0) if icon != null else 0.0
 		# 가독성: 어두운 인셋 띠 + 밝은 글자(밤 라이팅 위에서도 읽히게) + 따뜻한 테두리. 좌측 컬럼을 넘지 않게 폭 제한.
 		# wide 항목(온보딩 안내)은 화면 폭 가까이 허용해 긴 한 줄이 안 잘리게 한다.
+		# ★[폴리시 R23 #14] **넘치면 접는다(잘라내지 않는다).** 종전엔 non-wide 항목의 실 그리기
+		#   폭이 308px 고정이고 elide도 축소도 안 탔다 — main의 `_notice` 호출 393곳 중 wide는 셋
+		#   뿐이라, 문자열 리터럴 330개 중 129개가 그 폭을 넘어 **꼬리가 통째로 사라졌다**. 하필
+		#   잘리는 쪽이 «무엇을 하면 풀리는지»다: "백팩이 가득 차 <최장 아이템명> 거둘 수 없다 —
+		#   [Tab] 가방에서 자리를 비우고 다시"(714px)는 「…레어크로우 ③ — 도롱이」에서 끊겨 문제도
+		#   해법도 안 보였다. R14/R17의 폭 스윕은 `draw_text_fit`을 쓰는 판·헤더 계열만 훑었고 이
+		#   피드는 대상 밖이었다(회귀 전체에 `MAX_W` 참조가 0이었다 = 아무도 안 재던 자리).
+		#   ★ 접는 축을 줄바꿈으로 고른 근거: 이 띠의 문구는 전부 정보이고(무슨 일·왜·어떻게),
+		#     말줄임은 하필 끝의 행동 지시를 먼저 먹는다. 폭은 그대로 두고 높이만 내용에서 판다.
 		var limit := (view.x - MARGIN * 2.0) if item.get("wide", false) else MAX_W
+		var avail := limit - 16.0 - icon_w
 		var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 		var w := minf(tw + 16.0 + icon_w, limit)
-		var box := Rect2(pos, Vector2(w, ROW_H - 2.0))
+		var rows := _wrapped_rows(font, text, avail)
+		var h := ROW_H * float(rows)
+		pos.y = bottom - h
+		bottom -= h
+		var box := Rect2(pos, Vector2(w, h - 2.0))
 		# 인셋 바탕 + 테두리(레벨업은 금박, 그 외 따뜻한 테두리). 한지 팔레트로 raw 톤 제거.
 		draw_rect(box, Color(HanjiUi.INSET.r, HanjiUi.INSET.g, HanjiUi.INSET.b, 0.72 * a))
 		var edge := HanjiUi.GOLD if gold else HanjiUi.BORDER
@@ -131,5 +158,7 @@ func _draw() -> void:
 		var col := HanjiUi.GOLD_SOFT if gold else Color(0.96, 0.95, 0.92)
 		if tint.a > 0.0:
 			col = tint
-		draw_string(font, Vector2(tx, pos.y + 15.0), text, HORIZONTAL_ALIGNMENT_LEFT, w - 12.0 - icon_w, 14,
-			Color(col.r, col.g, col.b, a))
+		# ★[폴리시 R23 #14] `draw_string`(한 줄·나머지 잘림) → `draw_multiline_string`(접힘).
+		#   접는 폭은 **줄 수를 셀 때 쓴 그 폭**이라(avail) 재는 값과 그리는 값이 갈리지 않는다.
+		draw_multiline_string(font, Vector2(tx, pos.y + 15.0), text, HORIZONTAL_ALIGNMENT_LEFT,
+			avail, 14, -1, Color(col.r, col.g, col.b, a))

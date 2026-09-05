@@ -3138,6 +3138,7 @@ var _season_q_posed_rid := ""
 # 시간이 얼어붙는 사고가 되므로, 정지는 아래 _cutscene_clock_prev 스냅으로만 다룬다.
 var cutscene: CutsceneRunner = null
 var _cutscene_clock_prev := true                 # 재생 직전 clock.running(끝나면 이 값으로 되돌린다)
+var _intro_clock_prev := true                    # ★[폴리시 R23 #25] 오프닝 통보 직전 clock.running(통보가 끝나면 이 값)
 var _cutscene_speaker := ""                      # 재생이 끝나면 이 화자로 대화를 연다("" = 대화 없음)
 var _cutscene_lines: PackedStringArray = PackedStringArray()
 # 컷신이 건드린 NPC의 원상태(id → {"pos": Vector2 px, "visible": bool}). 재생이 끝나면 그대로
@@ -6303,6 +6304,44 @@ func _mine_entry_prompt() -> String:
 	return head + "   [G] 엘리베이터: %d · %d~%d층 (%d층 단위) 중 〔%d〕" % [
 		opts[0], MineFloors.ELEVATOR_STEP, opts[opts.size() - 1],
 		MineFloors.ELEVATOR_STEP, _mine_entry_pick]
+
+# ★[폴리시 R23 #15·#16] **프롬프트 Label의 무손실 폭 방어** — 사슬이 무엇을 골랐든 마지막에 한 번
+#   부른다. R17 #3이 갱도 입구 한 줄에 세운 접힘은 «목록이 정보를 안 담는» 그 한 창구에서만
+#   성립했고, 같은 Label을 쓰는 형제 마흔 갈래는 여전히 무방비였다:
+#     · 대장간 벼리기(`_tool_upgrade_prompt`) — 32조합 중 24가 624px 초과·20이 화면(640) 초과.
+#       최악 776px이라 중앙 정렬로 좌우 68px씩 밖으로 나가 「업화 대장간 —」과 「부족 0/5」가
+#       **동시에** 사라졌다(첫 업그레이드 664px부터 이미 밖이다).
+#     · 만물상 게시판 — 일일·중기가 **둘 다 걸린 날이 정상 상태**인데(`offer`가 독립 시드다) 두
+#       요약을 한 줄에 붙여 이론 하한도 792px, 실제 어종 조합은 1088px이었다. 어느 키가 어느
+#       의뢰인지(F↔G)와 보상액이 함께 잘렸다.
+#   ★ 접는 축을 **자동 줄바꿈**으로 고른 근거: 이 두 줄은 R17의 엘리베이터와 달리 **전부 정보다**
+#     (의뢰인·기한·보상·주괴 수량). 생략·말줄임은 그 정보를 지우고, 글자 축소는 640×360 내부해상도
+#     에서 못 읽는 크기가 된다. 줄바꿈만이 한 글자도 안 잃는다 — R17 #5가 점괘 거울에서 «고정 기하
+#     → 내용 파생»으로 고른 그 축과 같다.
+#   ★ 판도 내용에서 파생한다: 접힌 줄 수만큼 Label을 아래로 키운다. 아래 CropLabel은 `visible`이
+#     매 프레임 false라(핫바 요약은 폐기된 표면) 그 자리를 실제로 쓰는 노드가 없다.
+#   ★ 폭·글자 크기를 여기 안 적는 이유는 R17이 적어 둔 그대로다 — 둘 다 **그리는 노드가 든다**.
+const PROMPT_LINE_H := 18.0   # 한 줄 높이(main.tscn InteractPrompt 기하 = offset_bottom − offset_top)
+
+func _fit_interact_prompt() -> void:
+	if interact_prompt == null:
+		return
+	interact_prompt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var lines := _prompt_line_count(interact_prompt.text)
+	interact_prompt.size.y = PROMPT_LINE_H * float(lines)
+
+# 그 문구가 Label 폭에서 접힌 뒤 몇 줄이 되나(폰트 측정 — `_mirror_body_height`가 든 그 규율:
+# `get_line_count`는 shaping 시점에 의존해 막 넣은 텍스트에 대해 참이 아닐 수 있다).
+func _prompt_line_count(text: String) -> int:
+	var w := _prompt_max_width()
+	if text == "" or w <= 0.0:
+		return 1
+	var fs := _prompt_font_size()
+	var fh := HanjiUi.FONT.get_height(fs)
+	if fh <= 0.0:
+		return 1
+	var wrapped := HanjiUi.FONT.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, w, fs)
+	return maxi(1, int(round(wrapped.y / fh)))
 
 # 프롬프트 Label이 실제로 쓰는 폭·글자 크기(레이아웃·테마 파생 — 위 주석의 그 단일 출처).
 func _prompt_max_width() -> float:
@@ -13681,6 +13720,7 @@ func _process(delta: float) -> void:
 		onboarding_label.visible = false
 		if onboarding_banner != null:
 			onboarding_banner.hide_now()
+			_forget_onboarding_guide()   # ★[폴리시 R23 #24] 덮은 쪽이 재개도 책임진다(그 함수 머리말)
 		_tick_cutscene(delta)
 		return
 	# T3.2 대화 중엔 다른 모든 입력을 막고 대사 넘기기(RMB=action)만 처리한다. 이동은 대화
@@ -13690,6 +13730,7 @@ func _process(delta: float) -> void:
 		onboarding_label.visible = false  # T4.1 대화가 화면을 채우는 동안 배너 숨김
 		if onboarding_banner != null:
 			onboarding_banner.hide_now()  # 대화가 화면을 채우면 상단 안내 배너도 즉시 숨김
+			_forget_onboarding_guide()   # ★[폴리시 R23 #24]
 		# ★[S8-T6] 고백 제안이 떠 있으면 [F] = 결행(수락/거절 분기), [G] = 아직(제안만 접고 진행).
 		#   F(shop_toggle)·G(gift_item)는 대화 밖 전용 키라 대화 중엔 비어 있다 — 충돌 없음.
 		if _confess_rid != "":
@@ -13753,6 +13794,7 @@ func _process(delta: float) -> void:
 		#   frame_inv·frame_store·곳간 상단). 대화·컷신이 이미 쓰던 그 가드와 같은 결.
 		if onboarding_banner != null:
 			onboarding_banner.hide_now()
+			_forget_onboarding_guide()   # ★[폴리시 R23 #24]
 		if Input.is_action_just_pressed("ui_cancel") or (frame.context != InventoryFrame.CTX_MENU and Input.is_action_just_pressed("menu_toggle")):
 			_close_frame()
 		elif frame.context == InventoryFrame.CTX_MENU and Input.is_action_just_pressed("menu_tab"):
@@ -14483,7 +14525,19 @@ func _process(delta: float) -> void:
 		_chop_tree(tree_t)
 	# ★ [S1R-T8 / ADR-0059 결정4] 물뿌리개 리필 — 혼우물(WELL_RECT·WALL)·연못(WATER)은 SOIL이 아니라
 	#   _target_valid 게이트 밖 → 개간·잡초와 같은 결로 따로 디스패치. 물뿌리개 들고 대상 겨눠 LMB = 잔량 풀충전.
-	var on_refill := not _sleeping and inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target)
+	# ★[폴리시 R23 #21] 선언을 **리필 갈래 앞으로** 올린다 — 아래 설치 갈래 넷·도구 갈래가 읽던 그
+	#   술어를 리필도 함께 읽어야 해서다(값·조건은 한 글자도 안 바뀐다. 멤버 셋에서 파생하므로
+	#   자리를 옮겨도 답이 같다).
+	var session_lmb := cheki != null or cocktail != null or fishing != null
+	# ★[폴리시 R23 #21] **릴 격투 중의 LMB는 리필이 아니다.** R19 #10·#11이 형제 넷(게잡이통·
+	#   채취기·업화로·결정기)에, R10 #5가 도구 갈래에 세운 그 가드를 리필만 못 받았다. 무대가
+	#   구조적으로 겹친다: 캐스팅한 칸은 물(WATER)이고 `_is_refill_target`이 보는 것이 정확히 그
+	#   술어라, 세션 중 핫바로 물뿌리개를 들면(핫바 전환은 의도적 무가드) `_tick_fishing`이 return을
+	#   안 해 같은 프레임이 여기까지 흘러온다. 그러면 퍼펙트 릴로 LMB를 다시 누를 때마다
+	#   `_refill_watering_can()`이 돌아 «이미 가득 찼다» 알림이 누른 횟수만큼 밀리고, 피드 상한이
+	#   4라 그 복제본이 입질·어획·XP 알림을 축출한다(격투의 피드백이 통째로 사라진다).
+	var on_refill := not _sleeping and not session_lmb \
+			and inventory.selected_id() == ItemCatalog.WATERING_CAN and _is_refill_target(_target)
 	if on_refill and Input.is_action_just_pressed("use_tool"):
 		_refill_watering_can()
 	# ★ [S1R-T9] 스프링클러 설치/철거 — 설치물은 GROUND/SOIL 위(비-SOIL 포함)라 _target_valid 게이트 밖에서
@@ -14540,7 +14594,8 @@ func _process(delta: float) -> void:
 	#   안 걸려 보유분이 계속 줄었다.
 	# ★ 핫바 선택에는 세션 가드가 없다(그건 그대로 둔다 — 세션 중 손을 바꾸는 것 자체는 막을 일이
 	#   아니고, 막아야 하는 것은 그 손이 **같은 LMB로 두 동사를 내는 것**이다).
-	var session_lmb := cheki != null or cocktail != null or fishing != null
+	# ★[폴리시 R23 #21] 선언 자체는 이 사슬의 **맨 앞**(물뿌리개 리필 갈래 앞)으로 올라갔다 —
+	#   리필도 같은 겹침을 앓던 다섯째 창구였기 때문이다(그 자리의 머리말).
 	# ★ [S3-T7] 게잡이통 설치 — 통을 들고 물가 인접 칸(백사장·부두 목판)을 겨눠 LMB. 회수는 LMB가
 	#   아니라 [F]다(스프링클러와 갈린 지점): 통은 "미끼 넣기·수거·회수" 세 동사를 한 칸에서 쓰므로
 	#   상호작용 키 하나(F)로 모으는 게 자연스럽다(출하함·기증대·게시판과 같은 결).
@@ -14674,7 +14729,11 @@ func _process(delta: float) -> void:
 	# ★[폴리시 R11] 미호의 **지금 스테이션 구역**을 함께 넘긴다(onboarding.guidance 머리말 — 15:00에
 	#   카페로 출근하면 "밭(위쪽)"이 거짓이 된다). 런타임 tile이 아니라 스케줄에서 파생하는 건
 	#   `_is_stationed_in_cafe`가 든 그 규율이다(프레임 갱신 순서에 안 기댄다).
-	var guide := onboarding.guidance(_miho_stationed_away())
+	# ★[폴리시 R23 #23] 심을 씨앗 이름도 함께 넘긴다(`_miho_stationed_away`와 같은 다리 — 온보딩은
+	#   인벤토리를 모른다). 백팩에 씨앗이 하나도 없으면 빈 문자열이라 배너가 «어디서 구하나»로 갈린다.
+	# ★[폴리시 R23 #24] 위 세 모달(컷신·대화·프레임)이 배너를 지울 때 이 래치를 함께 되감아 두므로,
+	#   모달이 닫힌 첫 프레임의 이 비교가 다시 참이 되어 배너가 **그 단계 문구를 다시 띄운다**.
+	var guide := onboarding.guidance(_miho_stationed_away(), _onboarding_seed_name())
 	if guide != _last_onboarding_guide:
 		_last_onboarding_guide = guide
 		if guide != "" and onboarding_banner != null:
@@ -15255,6 +15314,8 @@ func _process(delta: float) -> void:
 		var prompt := _farm_prompt()
 		interact_prompt.visible = not _sleeping and prompt != ""
 		interact_prompt.text = prompt
+	# ★[폴리시 R23 #15·#16] 사슬이 무엇을 골랐든 **마지막에 한 번 폭에 맞춘다**(아래 머리말).
+	_fit_interact_prompt()
 
 # ── ADR-0024 LMB 도구 사용 / RMB 맨손 수확 ──────────────────────────────────
 # ★ 핵심 피벗(ADR-0024 §2): 든 도구가 동사를 정한다(자동 분기 없음). 괭이→hoe·물뿌리개→water·
@@ -16422,6 +16483,16 @@ func _can_place_sprinkler(t: Vector2i) -> bool:
 	if garden_pot != null and garden_pot.has_at(t):   # ★[S10-T5] 놓아 둔 화분 → 배제(겹침 방지)
 		return false
 	if _greenhouse_lot_reserved(t):           # ★[폴리시 R4] 늘봄방 예정지 → 배제(완공이 덮어 매장)
+		return false
+	# ★[폴리시 R23 #20] **주민 상주 칸 → 배제.** 형제 배치 가드 넷은 전부 이 항을 물고 있는데
+	#   (`_can_place_pot`·`_can_place_crab_pot`·`_can_place_crystalarium`·`_can_place_furnace`)
+	#   열다섯 가드를 든 이 함수만 빠져 있었고, `_can_place_rarecrow`가 이 함수를 통째로 재사용해
+	#   같은 구멍을 상속했다. 미호 자리(MIHO_FIELD_TILE)는 스타터 밭 안이라 `_grid`가 SOIL이고
+	#   프롭 점유도 아니라 열다섯을 전부 통과한다. 그 칸에 세우면 미호가 서 있는 오전 내내 프롬프트
+	#   사슬이 주민 갈래에서 먼저 끊겨 «[좌클릭] … 회수»가 한 번도 안 뜬다(화면은 대화·선물만
+	#   말하는데 LMB는 회수를 낸다 = R22 #7이 화분에서 봉합한 그 역전 그대로).
+	#   ★ 예약 필요성은 코드가 이미 인정한다 — `_is_tree_blocked`가 그 한 칸을 하드코딩 예약한다.
+	if _resident_tile(t):
 		return false
 	return true
 
@@ -20946,6 +21017,22 @@ func _maybe_start_intro() -> void:
 		return
 	okja.visible = true
 	player.set_physics_process(false)  # 통보 중 이동 잠금(미호 대화·취침과 같은 결)
+	# ★[폴리시 R23 #25] **통보 중에는 시간도 멈춘다** — 형제 셋(컷신·내면 공간·에필로그)이 전부
+	#   `clock.running`을 스냅해 false로 두고 끝에서 되돌리는데, 이 오프닝만 이동만 잠그고 시계를
+	#   한 줄도 안 건드렸다. 그 비대칭이 옥자의 마지막 줄을 거짓말로 만든다: 하루는 06:00→24:00을
+	#   90실초에 흘리므로(`GameClock.REAL_SECONDS_PER_DAY`) 15:00은 **시작 45실초 뒤**이고,
+	#   미호는 유일하게 구역을 넘어 출퇴근하는 주민이라 그 시각에 나루 마을 카페로 옮겨 간다
+	#   (`_update_resident_station`이 안식 농원에서 그녀를 지운다). 다섯 줄짜리 통보를 읽는 동안
+	#   그 시각을 넘기면, 대화가 닫히는 순간 「농사는 미호가 가르칠 거다. 밭에 있으니 가서 말 걸어」가
+	#   가리키는 곳이 **빈 밭**이 된다.
+	#   ★ 봉합 축을 «문안»이 아니라 «시계»로 고른 근거 둘. ㉠ 옥자의 대사는 앵커의 서사 텍스트라
+	#     캐릭터 파일이 소유하고(okja.gd 머리말 · ADR-0005), 고쳐 쓰는 것은 집필 결정이다.
+	#     ㉡ 그런데 진짜 어긋난 것은 문장이 아니라 **무대다** — 읽는 데 든 시간이 세계의 시간으로
+	#     흐르는 모달은 이 하나뿐이고, 그 비대칭 때문에 신규 플레이어는 오프닝을 읽었다는 이유만으로
+	#     첫날의 절반을 잃기까지 한다. 시계를 세우면 문장이 다시 참이 되고 그 손해도 함께 사라진다.
+	#   ★ 스냅해 두고 되돌리는 것은 형제들의 그 문법 1:1이다(`_spine_b5_clock_prev` 계열).
+	_intro_clock_prev = clock.running
+	clock.running = false
 	player.velocity = Vector2.ZERO
 	_talking_to = okja.display_name()
 	dialogue.start(okja.display_name(), okja.lines())
@@ -24740,6 +24827,36 @@ func _cafe_guest_pool() -> Array:
 		out.append({"id": gid, "weight": guests.weight_of(gid)})
 	return out
 
+# ★[폴리시 R23 #23] 온보딩 PLANT 배너가 지목할 **지금 손에 잡히는 씨앗**의 작물 이름("" = 없음).
+#   순서가 곧 규칙이다: ㉠지금 든 것이 씨앗이면 그것(배너가 "핫바에서 들고"라 말하는데 이미 들었으면
+#   그 이름이 맞다) ㉡아니면 백팩의 첫 씨앗(슬롯 순 = 화면에 보이는 순서). 카탈로그 id를 손으로 안
+#   적으므로 스타터 지급물이 바뀌거나 절기가 돌아도 문구가 저절로 따라온다.
+# ★[폴리시 R23 #24] 배너 래치를 되감는다 = **덮은 쪽이 재개도 책임진다**(정지 주인 = 재개 주인).
+#   왜 필요했나: 배너 발화 조건이 «문구가 직전과 다를 때» 하나뿐인데, 모달 셋은 `hide_now()`로
+#   남은 유지시간(HOLD 6.0 + FADE 0.8초)을 통째로 버리면서 래치는 그대로 뒀다. 그러면 모달을 닫아도
+#   `guide != _last_onboarding_guide`가 거짓이라 `show_guide`가 **다시는 안 불린다** — 그 단계
+#   안내를 되볼 창구가 저장소에 하나도 없다(`onboarding_label`은 매 프레임 꺼진다). 첫날 재현이
+#   특히 나쁘다: TILL 배너가 «핫바에서 괭이를 들고(숫자키·휠)»라 말하고, 그 말대로 핫바를 보려고
+#   6.8초 안에 [Tab]을 누르면 프레임이 배너를 먹어 TILL 안내가 그 세이브에서 영영 사라진다
+#   (게임이 여러 문구에서 광고하는 그 키가 안내를 지우는 손이 된다). PLANT·WATER·GROW·HARVEST도
+#   문구가 고정이라 같은 경로로 잃는다.
+#   ★ 되감는 값이 ""인 이유: 다음 비교에서 **어떤 문구든** 다르다고 판정돼야 하고, 문구가 없는
+#     단계(온보딩 종료)에서는 `guide == ""`라 show_guide가 안 불려 빈 배너가 뜨지 않는다.
+func _forget_onboarding_guide() -> void:
+	_last_onboarding_guide = ""
+
+func _onboarding_seed_name() -> String:
+	if inventory == null:
+		return ""
+	var held := inventory.selected_id()
+	if ItemCatalog.category_of(held) == ItemCatalog.CAT_SEED:
+		return CropCatalog.name_of(ItemCatalog.crop_of(held))
+	for i in range(inventory.slots.size()):
+		var id := inventory.id_at(i)
+		if ItemCatalog.category_of(id) == ItemCatalog.CAT_SEED:
+			return CropCatalog.name_of(ItemCatalog.crop_of(id))
+	return ""
+
 # ★[폴리시 R11] 미호의 지금 스테이션이 **안식 농원 밖**인가(온보딩 MEET_MIHO 안내의 유일한 입력).
 # 스케줄에서 파생하므로 시각·카페 영업시간·좌표를 여기서 복제하지 않는다 — 미호 레코드가 없거나
 # 스케줄 항목이 비면 false(= 옛 문구 그대로)라 실패해도 안전한 쪽으로 접힌다.
@@ -24876,6 +24993,9 @@ func _on_cafe_closed(revenue: int, served: int, left: int) -> void:
 # 마감 정산 패널을 띄운다(본문은 호출부가 조립 — 즉시/미룸 두 경로가 이 한 자리를 공유한다).
 func _show_cafe_summary(text: String) -> void:
 	cafe_summary_text.text = text
+	# ★[폴리시 R23 #17] 판을 본문에 맞춘 **뒤** 보인다(그 함수 머리말 — 「아는 얼굴」·「체키」 줄이
+	#   붙는 날 6줄이 라벨 80px·판 104px를 통째로 넘어 한지 테두리 위에 그려지던 자리).
+	_layout_popup_panel(cafe_summary_panel, cafe_summary_text)
 	cafe_summary_panel.visible = true
 	_cafe_summary_secs = CAFE_SUMMARY_SECS
 
@@ -24985,6 +25105,9 @@ func _refresh_cafe_ladder() -> void:
 # 이제 실물이다 — 1단 팝업은 그 실물을 예고하고, 2단 팝업(_show_milestone2_reached)이 확인해 준다.
 func _show_milestone_reached() -> void:
 	milestone_text.text = CafeMilestone.reached_text()
+	# ★[폴리시 R23 #18] 세 단계가 같은 판·같은 라벨을 돌려 쓰므로 **셋 다** 여기서 맞춘다(2단만
+	#   고치면 다음에 늘어나는 문구가 같은 자리에서 다시 넘친다 — 3단도 이미 6줄로 여유가 0이다).
+	_layout_popup_panel(milestone_panel, milestone_text)
 	milestone_panel.visible = true
 	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
@@ -24994,6 +25117,9 @@ func _show_milestone_reached() -> void:
 # 다음 프레임으로 미룬다 — 한 팝업이 다른 팝업을 덮어 삼키지 않는다.
 func _show_milestone2_reached() -> void:
 	milestone_text.text = CafeMilestone.reached2_text()
+	# ★[폴리시 R23 #18] 세 단계가 같은 판·같은 라벨을 돌려 쓰므로 **셋 다** 여기서 맞춘다(2단만
+	#   고치면 다음에 늘어나는 문구가 같은 자리에서 다시 넘친다 — 3단도 이미 6줄로 여유가 0이다).
+	_layout_popup_panel(milestone_panel, milestone_text)
 	milestone_panel.visible = true
 	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
@@ -25001,6 +25127,9 @@ func _show_milestone2_reached() -> void:
 #   사다리의 마지막 칸이라 문구가 다음을 예고하지 않고, 대신 **열린 것 하나**(늘봄방)를 말한다.
 func _show_milestone3_reached() -> void:
 	milestone_text.text = CafeMilestone.reached3_text()
+	# ★[폴리시 R23 #18] 세 단계가 같은 판·같은 라벨을 돌려 쓰므로 **셋 다** 여기서 맞춘다(2단만
+	#   고치면 다음에 늘어나는 문구가 같은 자리에서 다시 넘친다 — 3단도 이미 6줄로 여유가 0이다).
+	_layout_popup_panel(milestone_panel, milestone_text)
 	milestone_panel.visible = true
 	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
@@ -25068,11 +25197,47 @@ func _layout_mirror_panel() -> void:
 
 # 본문이 폭 w에서 접힌 뒤 차지하는 높이 — Label이 쓰는 식 그대로(줄 수 × (폰트 높이 + 줄 간격)).
 func _mirror_body_height(text: String, w: float) -> float:
-	var fs := mirror_text.get_theme_font_size("font_size")
+	return _label_body_height(mirror_text, text, w)
+
+# ★[폴리시 R23 #17·#18] 위 식을 **어느 Label에나** 대는 일반형(폰트 크기·줄 간격은 그 Label의
+#   테마가 든다 — 값 복제 0). 점괘 거울이 R17 #5에 세운 「고정 기하 → 내용 파생」을 형제 팝업 둘이
+#   물려받는 자리다.
+func _label_body_height(label: Label, text: String, w: float) -> float:
+	var fs := label.get_theme_font_size("font_size")
 	var fh := HanjiUi.FONT.get_height(fs)
+	if fh <= 0.0 or w <= 0.0:
+		return 0.0
 	var wrapped := HanjiUi.FONT.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_CENTER, w, fs)
 	var lines := maxi(1, int(round(wrapped.y / fh)))
-	return float(lines) * (fh + float(mirror_text.get_theme_constant("line_spacing")))
+	return float(lines) * (fh + float(label.get_theme_constant("line_spacing")))
+
+# ★[폴리시 R23 #17·#18] **팝업 판을 본문에 맞춘다** — 폭·좌우 여백은 그대로 두고 높이만 다시 센다.
+#   왜: 두 팝업은 본문이 조건부로 늘어나는데(마감 정산 = 「아는 얼굴」·「체키」 줄이 붙는 날 6줄 ·
+#   2단 달성 = 미리보기 한 줄이 폭 408에서 접혀 7줄) 판·라벨 기하는 main.tscn 고정값 그대로였다.
+#     · 마감 정산 — 라벨 80px에 6줄(111px)이 **세로 중앙**으로 얹혀 블록이 판(104px)을 위아래로
+#       벗어났고, 전역 Panel 테마가 texture_margin 20의 한지 9-slice라 첫 줄(「── 오늘 카페 영업
+#       마감 ──」)과 막줄이 나무 테두리 위·판 바깥 월드 위에 그려졌다. 5줄에서 이미 92 > 80이다.
+#     · 2단 달성 — 라벨 120px에 7줄(130px). 이 팝업은 **래치라 세이브당 1회**뿐이고 다시 볼 창구가
+#       없어, 그 한 번이 깨지면 축하 문구가 그 세이브에서 영영 사라진다.
+#   ★ 접는 축(줄 생략·글자 축소)을 안 고른 근거는 거울의 그것과 같다 — 둘 다 정보를 잃는다.
+#     판은 뜨고 지는 오버레이라 커져도 되는 표면이다. 평소(4줄)엔 오히려 지금보다 작아진다.
+#   ★ 여백은 **main.tscn 기하에서 파생한다**: Label의 판 안 위치가 곧 좌우·상하 여백이라
+#     숫자를 여기 옮겨 적을 자리가 없다(거울이 상수 넷을 든 것과 갈리는 지점).
+#   ★ 위쪽 변을 고정하고 아래로만 자란다(거울은 중앙 정렬 — 저긴 화면 한복판의 조회 판이고
+#     이 둘은 상단에 뜨는 알림이라 머리가 튀는 것이 더 나쁘다).
+func _layout_popup_panel(panel: Panel, label: Label) -> void:
+	if panel == null or label == null:
+		return
+	var pad := label.position
+	var body_w := label.size.x
+	# ★ 라벨을 **먼저** 세우고 그 높이를 **되읽어** 판을 잰다. Godot Label은 접힌 본문에 맞춰
+	#   자기 최소 높이로 스스로 올라가는데(우리 식과 한두 px 갈린다), 그 사실을 무시하고 우리
+	#   계산값으로 판을 재면 판이 라벨보다 1px 작아져 «라벨이 판 밖으로 나간다»가 그대로 남는다
+	#   (실측으로 배운 것 — 회귀 ⑮g가 그 1px을 잡았다).
+	label.size = Vector2(body_w, _label_body_height(label, label.text, body_w))
+	var view := _logical_view_size(panel)
+	var cap := maxf(view.y - panel.position.y - MIRROR_VIEW_MARGIN, pad.y * 2.0)
+	panel.size = Vector2(panel.size.x, minf(label.size.y + pad.y * 2.0, cap))
 
 # CanvasLayer 스케일을 걷어낸 논리 뷰 치수(`_pointer_over_overlay`가 쓰는 그 보정과 같은 결).
 func _logical_view_size(node: CanvasItem) -> Vector2:
@@ -25780,6 +25945,10 @@ func _on_dialogue_finished() -> void:
 	# 상주하며 미호 멘토 단계 도중에도 말 걸 수 있게 됐기 때문(화자 구분 없이 단계로만
 	# 가르면 멜 대화가 미호 단계를 잘못 전진시킨다). 멜 대화는 온보딩과 무관하다.
 	if _talking_to == okja.display_name() and onboarding.step == Onboarding.NOTICE:
+		# ★[폴리시 R23 #25] 통보가 끝나는 이 한 자리가 시계를 되살리는 자리다(연출의 끝 = 되돌림 —
+		#   `_end_cutscene`·에필로그가 든 그 짝). 스냅값으로 되돌리므로 다른 이유로 멈춰 있었다면
+		#   멈춘 채 남는다.
+		clock.running = _intro_clock_prev
 		onboarding.notice_seen()
 		# T5.6 옥자는 통보를 끝내면 통보 자리에서 사라지고 카페로 상주를 옮긴다(이전엔 그냥
 		# 숨겼지만, 이제 매일 보는 사장으로 카페에 자리 잡는다 — _refresh_okja_station이
@@ -25894,6 +26063,18 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 	#   ★ 술어는 그 표 자체를 그대로 부른다(좌표 복제 0). 심기 무대가 `_indoor == ""`·HOME이라
 	#     실내 갈래는 애초에 안 걸린다.
 	if _f_window_tile(t):
+		return true
+	# ★[폴리시 R23 #19] **설치물 칸도 나무에 성역이다.** 반대 방향 셋은 예외 없이 서 있는데
+	#   (`_can_place_sprinkler`·`_can_place_crystalarium`·`_can_place_furnace`가 전부
+	#   `_orchard_trunk_at`으로 거절한다) 과수 쪽만 `_installation_at`을 한 줄도 안 봐서
+	#   R2가 세운 «한 칸에 둘 금지» 불변식이 **한쪽으로만** 뚫려 있었다 — 하필 뚫린 쪽이 유일하게
+	#   비가역인 쪽이다(orchard에 remove API 0 — R19 #7·R22 #6이 같은 이유로 적어 둔 그 사실).
+	#   스프링클러 칸은 GROUND/SOIL이라 아래 `is_solid`도 안 걸리고, 밑동이 서면
+	#   `_rebuild_orchard_collision`이 그 칸을 풀타일 StaticBody로 굳힌다. 레어크로우 자리였다면
+	#   그 칸은 8종 완주용 설치 자리로 영영 못 돌아온다(이후로 `_can_place_*`가 밑동으로 거절).
+	#   ★ 막는 것은 **새로 심는 것**뿐이다: 이미 놓인 설치물의 회수(LMB)는 입력 사다리에서 도구
+	#     갈래보다 앞이라 밑동 밑에서도 그대로 걷힌다(구세이브 탈출구가 닫히지 않는다).
+	if _installation_at(t):
 		return true
 	if is_solid(_grid[t.y][t.x]):
 		return true
@@ -26257,6 +26438,19 @@ func _free_pasture_tiles() -> Array:
 			if _installation_at(t):       # 플레이어 설치물(업화로·결정기·스프링클러·레어크로우…) → 배제
 				continue
 			if _f_window_tile(t):         # [F] 창구(우편함·게시판 등) → 배제
+				continue
+			# ★[폴리시 R23 #22] 혼의 나무 밑동 → 배제. R12가 이 함수에 `_installation_at`·
+			#   `_f_window_tile`을 붙이며 적은 실패 모드가 과수에서 그대로 남아 있었다: 밑동은
+			#   `_rebuild_orchard_collision`이 세우는 StaticBody일 뿐 `_grid`는 GROUND 그대로라
+			#   위 `is_solid`에 안 걸리고, `occ`(=`_home_occupied_tiles`)는 원장을 안 본다.
+			#   방목지는 `_is_tree_blocked`가 예약하지 않으므로 거기 심는 것 자체가 가능하고,
+			#   다음 아침 라운드로빈이 그 칸을 슬롯으로 집으면 짐승이 밑동 콜라이더 안에 선다 —
+			#   그러면 프롬프트가 `has_animal_at` 갈래에서 먼저 끊겨 그 칸의 과수 안내가 하루 종일
+			#   도달 불가가 되고, RMB 두 창구도 `_try_harvest`의 짐승 갈래에서 return돼 과일에
+			#   한 번도 안 닿는다(«어떤 원장 상태에서도 화면이 동작을 말한다» 규약 파손).
+			#   ★ 이미 배정된 짐승도 스스로 풀린다: 밤 정산이 실내로 들이고 다음 아침 방출이 이
+			#     목록에서 다시 고르므로, 그 칸이 빠진 순간 다른 슬롯으로 옮겨 선다.
+			if _orchard_trunk_at(t):
 				continue
 			out.append(t)
 	return out
