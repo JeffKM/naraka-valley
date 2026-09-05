@@ -803,7 +803,11 @@ func _check_prompt_exec_order(m: Node) -> void:
 	var pr_crystal := _line_of("elif _crystalarium_at(_target)")
 	var pr_gate := _line_of("elif _at_dungeon_gate():")
 	var pr_narak := _line_of("elif _at_narak_mouth():")
-	var pr_resident := _line_of("elif faced_resident != null:")
+	# ★[폴리시 R23] 니들에서 **콜론을 뗀다** — R22 #7이 이 갈래에 `and not _pot_harvest_yield(_target)`을
+	#   붙이면서 `elif faced_resident != null:`이 소스에서 사라졌고, 그 뒤로 이 항이 0을 물고 상시
+	#   red였다(선재 결함 — R23 배치 B 회귀에서 기준선 측정으로 드러났다). 재는 대상은 «주민 갈래가
+	#   프롬프트 사슬의 어디냐»이지 그 줄의 조건 전문이 아니므로, 갈래를 여는 술어까지만 문다.
+	var pr_resident := _line_of("elif faced_resident != null")
 	_check("⑭ 무대: 두 사슬의 다섯 갈래를 소스에서 모두 찾았다(실행 %d/%d/%d/%d/%d · 프롬프트 %d/%d/%d/%d/%d)"
 			% [exec_furnace + 1, exec_crystal + 1, exec_gate + 1, exec_narak + 1, exec_resident + 1,
 				pr_furnace + 1, pr_crystal + 1, pr_gate + 1, pr_narak + 1, pr_resident + 1],

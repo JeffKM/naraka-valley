@@ -239,7 +239,7 @@ static func rare_row(day: int, bought_ids: Array, owned_books: Dictionary) -> Di
 			"base": RARECROW_PRICE, "price": priced(day, SLOT_RARE, RARECROW_PRICE)}
 	# ② Books 미보유분 — 남은 것이 없으면 ③으로.
 	if r < RARE_CROW_PERMIL + RARE_BOOK_PERMIL:
-		var pool := remaining_books(owned_books)
+		var pool := remaining_books(owned_books, day)
 		if not pool.is_empty():
 			var bid := str(pool[_roll("peddler:book", day, 0, pool.size())])
 			var base := BOOK_PRICE if Books.is_book(bid) else NOTE_PRICE
@@ -249,11 +249,27 @@ static func rare_row(day: int, bought_ids: Array, owned_books: Dictionary) -> Di
 	return _fallback_row(day)
 
 # 아직 안 주운 책·노트(선언 순 보존 — Books._remaining과 같은 규율).
-static func remaining_books(owned_books: Dictionary) -> Array:
+# ★[폴리시 R23 #4] `day`를 주면 **그날 아침 기준**으로 판다(0 = 종전대로 살아 있는 원장).
+#   왜: 이 파일 머리말이 "day 하나면 무엇을 파나의 답이 통째로 나온다"를 결정성 계약으로 못 박는데,
+#   `rare_row`의 책 갈래는 시드(day 고정)로 원시 난수 R을 굴린 뒤 **분모만 살아 있는 원장에서** 팠다.
+#   그래서 아침에 좌판을 보고 갱도에 내려가 돌 드랍으로 다른 책을 한 권 주우면(그 창구들엔 하루 한 점
+#   잠금이 없다 — 잠금은 *보부상에서 산* 경우에만 걸린다) 미보유 23권 → 22권으로 분모가 줄어
+#   인덱스와 배열 원소가 함께 밀렸고, 오후에 돌아오면 **아침에 본 그 귀물이 다른 물건으로 바뀌어**
+#   있었다(마지막 한 권을 다른 경로로 주우면 pool이 비어 귀물 슬롯이 통째로 폴백 일반 아이템이 됐다).
+#   거꾸로 아무 책이나 하나 주워 오는 것이 마음에 안 드는 희귀 슬롯의 **재굴림 수단**이기도 했다.
+#   ★ 굳히는 방법 = **새 상태를 안 만든다.** `Books.acquired`가 이미 «id → 주운 day»라, 그날보다
+#     *앞서* 주운 것만 보유로 세면 그 아침의 원장이 그대로 파생된다 — 세이브 키 0개, F9 왕복도
+#     자동으로 옳다(아침 스냅샷을 따로 저장했다면 그것이 되감기는지 다시 물어야 했을 자리다).
+#   ★ 그날 산 책도 그날 pool에 남으므로 인덱스가 안 밀린다 — R3의 하루 한 점 잠금
+#     (`rare_taken_on`/`_taken_rare_row`)이 그 위에서 그대로 «산 물건을 그 자리에» 세운다.
+static func remaining_books(owned_books: Dictionary, day: int = 0) -> Array:
 	var out: Array = []
 	for id in Books.all_ids():
-		if not owned_books.has(str(id)):
-			out.append(str(id))
+		var sid := str(id)
+		if not owned_books.has(sid):
+			out.append(sid)
+		elif day > 0 and int(owned_books[sid]) >= day:
+			out.append(sid)   # 오늘(또는 그 뒤) 주운 것 = 이 아침엔 아직 미보유였다
 	return out
 
 # 폴백 = 일반 풀의 **정가 상위 N**에서 한 점(로스터 파생 — 고가 목록 하드코딩 0).

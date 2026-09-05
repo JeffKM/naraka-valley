@@ -193,6 +193,13 @@ func _check_forecast_numbers(m: Node) -> void:
 			if line.begins_with("◇"):
 				forecast_lines += 1
 				continue
+			# ★[폴리시 R23] **※ 줄도 뺀다** — 이 항이 막는 것은 머리말이 적은 대로 «명부의 운 *수치*»
+			#   노출이고, ※ 줄에 실리는 숫자는 운이 아니라 **해금 문턱의 이름**이다
+			#   (`Festival.unlock_hint` — "카페 1단"·"누적 서빙 매출 5000"). 그 줄은 R19·R22가
+			#   나중에 얹은 것이라 이 전수 스캔이 상시 red를 물고 있었다(선재 결함 — R23 배치 B
+			#   회귀에서 기준선 측정으로 드러났다). ◇ 예고 줄을 빼는 것과 정확히 같은 사유다.
+			if line.begins_with("※"):
+				continue
 			if line.strip_edges() == "":
 				continue
 			scanned += 1

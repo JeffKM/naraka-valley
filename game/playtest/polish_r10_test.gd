@@ -278,8 +278,12 @@ func _initialize() -> void:
 		and not _in_pan_spot("_gain_farm_xp"))
 	_check("⑨′ 형제 창구는 XP를 준다 — 갱도 바닥 줍기는 도구·혼력 0인데도 채집 XP(대비 축)",
 		_line_of("_gain_forage_xp(ForageSkill.PICK_XP)") > 0)
+	# ★[폴리시 R23] 점수판 니들을 **창구 이름**으로 바꾼다 — 그 누적은 이후 `_count_run_harvest()`
+	#   한 함수로 모였고(R8·R11이 옥자 트랙 갱신을 함께 태우려고 추출했다), 그 뒤로 이 항은
+	#   `_run_harvested += 1`을 찾다 상시 red였다(선재 결함 — R23 배치 B 회귀에서 기준선 측정으로
+	#   드러났다). 재는 계약은 그대로다: 야생 수확은 점수판에 들되 미호 크레딧은 안 받는다.
 	_check("⑩ 야생 수확은 채집 XP만 받고 미호 활동 크레딧은 안 받는데 `_run_harvested`엔 든다",
-		_line_of("func _harvest_wild") > 0 and _in_harvest_wild("_run_harvested += 1")
+		_line_of("func _harvest_wild") > 0 and _in_harvest_wild("_count_run_harvest()")
 		and not _in_harvest_wild("_activity_credit(\"miho\""))
 	_check("⑩′ 그 원장을 읽는 곳이 셋이다 — 미호 deed 문턱·카페 3단·마무리 요약(어느 쪽을 고쳐도 셋이 함께 움직인다)",
 		Deed.MIHO_HARVEST.size() == 4 and int(Deed.MIHO_HARVEST[3]) == 300
@@ -501,9 +505,15 @@ func _initialize() -> void:
 	# ★[폴리시 R11 정정] 술어가 클램프 하한(MIN_HOOK_ENERGY = 1)에서 **도달 가능한 최저 비용**으로
 	#   바뀌었다(#2 — 옛 값은 어떤 어종·어떤 숙련에서도 나올 수 없어 혼력 1~3의 확정 실패가 남았다).
 	#   여기서 잠그는 계약은 그대로다: 화면과 집행부가 *같은* 술어를 읽는다.
+	# ★[폴리시 R23] 술어 니들을 **지금의 단일 창구**로 바꾼다 — R21 #2가 그 판정을
+	#   `_cast_energy_need` 한 함수로 모으면서(보장 미끼는 체급이 확정돼 하한이 아니라 그 비용이
+	#   기준이다) 옛 이름이 소스에서 사라졌고, 그 뒤로 이 항의 뒷절이 0을 물고 상시 red였다
+	#   (선재 결함 — R23 배치 B 회귀에서 기준선 측정으로 드러났다). 재는 계약은 그대로다:
+	#   **화면과 집행부가 같은 술어를 읽는다**(그래서 집행부 쪽도 함께 문다).
 	_check("⑳b 프롬프트도 같은 술어를 읽어 화면이 먼저 말한다(집행부와 안내가 안 갈린다)",
 		_line_of("interact_prompt.text = \"혼력 부족 — 챌 힘이 없다 (집에서 취침)\"") > 0
-		and _line_of("energy.can_act(FishingSession.min_hook_energy(_fishing_mods()))") > 0)
+		and _in_func("func _process", "_cast_energy_need(inventory.selected_id(), _fishing_mods())")
+		and _in_func("func _start_fishing", "_cast_energy_need("))
 	m.energy.restore(SoulEnergy.MAX)
 	m._start_fishing(Vector2i(5, 5))
 	_check("⑳c 혼력이 있으면 종전 그대로 던진다 — 세션이 서고 미끼 1개가 나간다(거동 축소 0)",

@@ -218,8 +218,11 @@ func _initialize() -> void:
 	_check("②c 하위호환 — 키 없는 구세이브는 false다",
 		not bool(({} as Dictionary).get("pasture_release_pending", false))
 		and _line_of("data.get(\"pasture_release_pending\", false)") > 0)
+	# ★[폴리시 R23 #2] 니들에서 **인자를 뗀다** — R23이 그 호출에 `sealed_day`를 얹었다(밀린 아침은
+	#   굳은 하늘로 판정한다). 재는 계약은 «방출까지 간 프레임에만 표를 지운다»이지 인자 목록이
+	#   아니므로, 호출부의 자리와 그 반환을 조건으로 쓴다는 사실까지만 문다.
 	_check("②d 소비 계약은 안 바뀌었다 — **방출까지 간 프레임에만** 표를 지운다(R6 불변식)",
-		_in_func("func _process", "if _release_open_buildings():"))
+		_in_func("func _process", "if _release_open_buildings("))
 	m._pasture_release_pending = false
 
 	# ── ③ #2 캐스팅 선검사가 도달 가능한 최저 비용을 본다 ───────────────────────
@@ -367,8 +370,10 @@ func _initialize() -> void:
 	m.clock.minutes = float(Cafe.OPEN_MIN) + 1.0
 	_check("⑦d 라이브 술어: 영업 시작 뒤에는 구역이 갈린다(그 시각에 배너가 카페를 가리킨다)",
 		m._miho_stationed_away())
+	# ★[폴리시 R23 #23] 닫는 괄호를 뗀다 — 배너가 «심을 씨앗 이름»을 둘째 인자로 함께 받는다.
+	#   재는 것은 «main이 그 술어를 배너에 물리는가»이지 인자 개수가 아니다.
 	_check("⑦e main이 그 술어를 실제로 배너에 물린다(스케줄 파생 — 시각·좌표 복제 0)",
-		_line_of("onboarding.guidance(_miho_stationed_away())") > 0)
+		_line_of("onboarding.guidance(_miho_stationed_away()") > 0)
 	m.clock.minutes = float(GameClock.START_MIN)
 	m.onboarding.step = Onboarding.DONE
 
