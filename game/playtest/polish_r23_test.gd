@@ -328,7 +328,9 @@ func _check_regrow_fertilize() -> void:
 		f.fertilizer_of(t) == FertilizerCatalog.FERT_SPEED
 			and f.effective_growth_days(t) == need_before)
 	# 품질군은 되감기 칸에서도 통과한다(그쪽은 실효하므로 거절할 이유가 없다).
-	_check("②e' 같은 칸에서 품질군(디럭스)은 통과한다 — 거절은 «두 축 다 무효»일 때만이다",
+	# ★[폴리시 R24 #0] 라벨만 정정 — 거절 술어는 «두 축 다 무효»가 아니라 «들어오는 것이
+	#   성장촉진군인가» 하나다(하중은 그대로: 이 무대의 기존 비료가 성장촉진군이라 두 판정이 같다).
+	_check("②e' 같은 칸에서 품질군(디럭스)은 통과한다 — 거절은 들어오는 것이 성장촉진군일 때만이다",
 		not f.fertilize_sealed_no_op(t, FertilizerCatalog.FERT_DELUXE)
 			and f.fertilize(t, FertilizerCatalog.FERT_DELUXE))
 	_check("②e'' 그 통과가 임계를 안 건드린다(R22 #2 봉인 계약 불변) — 임계 %d"

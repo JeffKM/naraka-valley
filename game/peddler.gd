@@ -242,9 +242,21 @@ static func rare_row(day: int, bought_ids: Array, owned_books: Dictionary) -> Di
 		var pool := remaining_books(owned_books, day)
 		if not pool.is_empty():
 			var bid := str(pool[_roll("peddler:book", day, 0, pool.size())])
-			var base := BOOK_PRICE if Books.is_book(bid) else NOTE_PRICE
-			return {"kind": KIND_BOOK, "buy_id": bid, "slot": SLOT_RARE,
-				"base": base, "price": priced(day, SLOT_RARE, base)}
+			# ★[폴리시 R24 #2] **뽑힌 책을 이미 손에 넣었으면 그 자리를 죽은 행으로 세우지 않는다.**
+			#   R23 #4가 «그날 주운 책도 아침 원장 기준으로 pool에 남긴다»로 분모를 굳힌 뒤, 그
+			#   pool에 남은 책이 그날의 당첨이 되는 조합이 열렸다. 그러면 main은 그 행을
+			#   `locked = books.has_acquired`("이미 되찾음")로 세우고 `_try_buy_peddler_book`도
+			#   거절하는데, 보부상은 방문일마다 귀물 슬롯이 **하나뿐**이라 그날 귀물 재고가 통째로
+			#   소멸했다(갱도 돌 드랍·미혹 채집 등 하루 한 점 잠금이 없는 창구로 아침에 그 책을
+			#   주우면 성립 — 보부상에서 산 경우는 `rows_for`가 산 물건을 그 자리에 얼려 세운다).
+			#   ★ R23 #4의 결정성 계약은 **한 글자도 안 건드린다**: pool의 구성·정렬·인덱스 롤이
+			#     전부 그대로라 아침과 오후의 당첨 id가 같다(그 id를 갖고 있느냐만 다르게 답한다).
+			#     그래서 «좌판이 그날 안에서 재굴림된다»는 성립하지 않는다 — 대체분은 다른 책이
+			#     아니라 day 순수 함수인 폴백 행(③)이고, 어느 책을 줍든 그 답은 하나로 같다.
+			if not owned_books.has(bid):
+				var base := BOOK_PRICE if Books.is_book(bid) else NOTE_PRICE
+				return {"kind": KIND_BOOK, "buy_id": bid, "slot": SLOT_RARE,
+					"base": base, "price": priced(day, SLOT_RARE, base)}
 	# ③ 폴백 — 일반 풀 최고가 상위에서 한 점(귀물 좌판이 비는 날 0).
 	return _fallback_row(day)
 

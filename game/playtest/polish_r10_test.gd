@@ -93,25 +93,30 @@ func _initialize() -> void:
 	_check("①a 취침 자동 세이브는 날이 바뀐 **뒤**에 뜬다(그래서 표를 버리면 손실이 된다)",
 		# ★[폴리시 R17 #8] 호출이 실패를 말하는 창구(`_save_or_warn`) 경유로 갈렸다 — 위상 계약 불변.
 		_line_of("func _on_sleep_done") > 0 and _in_func("func _on_sleep_done", "_save_or_warn()"))
-	m._weed_day_pending_day = 12
+	# ★[폴리시 R24 #18] 표가 **스칼라 1칸 → 누적 배열**이 됐다(연속 강제 취침이 앞 밤을 덮던 자리).
+	#   이 무대가 재는 계약("표가 원장과 같은 파일에 실리고 되살아난다")은 그대로고, 담는 그릇만
+	#   갈렸다 — 그래서 값도 한 밤에서 두 밤으로 늘려 «전부» 왕복하는지까지 함께 잰다.
+	m._weed_pending_days = [12, 13]
 	m._save_game()
 	var raw: Dictionary = m.saver.load_game(m._active_slot)
-	_check("①b `_save_game`이 표를 실제로 적는다(키 weed_pending_day = 12)",
-		raw.has("weed_pending_day") and int(raw["weed_pending_day"]) == 12)
-	m._weed_day_pending_day = 0
+	_check("①b `_save_game`이 표를 실제로 적는다(키 weed_pending_days = [12, 13])",
+		raw.has("weed_pending_days") and str(raw["weed_pending_days"]) == str([12, 13]))
+	m._weed_pending_days = []
 	var ok_load: bool = m._load_game()
-	_check("①c 로드가 그 표를 되살린다(종전엔 무조건 0으로 버려 그 밤이 영영 안 굴렀다) — 12",
-		ok_load and m._weed_day_pending_day == 12)
-	_check("①d 하위호환 — 키 없는 구세이브는 0이다(파생 기본값이 종전과 같다)",
-		int(({} as Dictionary).get("weed_pending_day", 0)) == 0
-		and _line_of("data.get(\"weed_pending_day\", 0)") > 0)
+	_check("①c 로드가 그 표를 **전부** 되살린다(종전엔 무조건 0으로 버려 그 밤이 영영 안 굴렀다) — %s"
+			% str(m._weed_pending_days),
+		ok_load and str(m._weed_pending_days) == str([12, 13]))
+	_check("①d 하위호환 — 키 없는 구세이브는 빈 표이고, **구 키(스칼라)는 한 칸짜리 표로 읽힌다**",
+		m._pending_nights_from({}, "weed_pending_days", "weed_pending_day").is_empty()
+		and str(m._pending_nights_from({"weed_pending_day": 12}, "weed_pending_days",
+			"weed_pending_day")) == str([12]))
 	# 되살아난 표는 **집에서 실제로 소비된다** — 라운드트립만으로는 반쪽이라 소비까지 본다.
 	m._region = RegionCatalog.HOME
 	m._sleeping = false
 	m._transitioning = false
 	await process_frame
-	_check("①e 집에 있는 프레임이 그 표를 소비해 0으로 돌아간다(확산·재점령이 그 밤 값으로 굴렀다)",
-		m._weed_day_pending_day == 0)
+	_check("①e 집에 있는 프레임이 그 표를 **비운다**(확산·재점령이 밀린 두 밤 값으로 굴렀다) — 잔여 %s"
+			% str(m._weed_pending_days), m._weed_pending_days.is_empty())
 	# ★[폴리시 R11 정정] 여기 있던 "형제 표 둘은 로드가 버린다"는 **R10의 잘못된 논증을 잠근**
 	#   단언이었다(R11 #1·#4·#6·#8이 반증 — 그 둘도 세이브 시점엔 *집행 전*이라 버리면 손실이다).
 	#   같은 자리에서 이제 셋이 **모두** 왕복하는 것을 잠근다(계약이 하나로 합쳐졌다).

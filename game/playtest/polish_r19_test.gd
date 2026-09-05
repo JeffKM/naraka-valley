@@ -909,9 +909,20 @@ func _check_session_lmb_guard(m: Node) -> void:
 	_check("⑪b 설치 갈래 넷이 전부 술어 **뒤에서** 그것을 문다(%d/4 — 게잡이통·채취기·업화로·결정기)"
 			% branches, branches == 4)
 	# 왜 필요했나 — 세션 분기는 return을 안 해서 같은 프레임이 아래 디스패치까지 흘러간다.
+	# ★[폴리시 R24 #12] **전제가 뒤집혔다(그것이 봉합이다).** 종전 이 항은 「릴 틱이 술어 선언보다
+	#   위」를 근거로 들었는데, 바로 그 배치 때문에 «세션을 끝낸 그 LMB»가 닫는 프레임에만 술어를
+	#   false로 만들어 여섯 가드를 통째로 무력화했다. 이제 선언이 세 틱보다 **위**다 — 재는 계약은
+	#   그대로("틱은 return을 안 하므로 게이트가 유일한 방어다")이고, 그 방어가 성립하려면 선언이
+	#   틱보다 앞이어야 한다는 것이 R24가 더한 절반이다.
 	var tick := _line_in(_src, "if fishing != null and not _sleeping:")
-	_check("⑪c 근거: 릴 틱 분기(main %d행)가 설치 갈래보다 위인데 return이 없다 — 게이트가 유일한 방어다"
-			% (tick + 1), tick > 0 and tick < decl)
+	var users_after := 0
+	for needle2 in ["var on_refill := not _sleeping and not session_lmb",
+			"not session_lmb and holding_pot", "not session_lmb and holding_crystalarium"]:
+		if _line_in(_src, needle2) > tick:
+			users_after += 1
+	_check("⑪c 근거: 릴 틱 분기(main %d행)는 return이 없고 소비처가 전부 그 아래인데(%d/3), 술어 선언(%d행)은 그 **위**다 — 닫는 프레임에도 게이트가 산다"
+			% [tick + 1, users_after, decl + 1],
+		tick > 0 and decl > 0 and decl < tick and users_after == 3)
 	# 겹침이 구조적이라는 실증: 캐스팅이 성립하는 무대에서 네 배치 술어가 함께 참인 칸이 있다.
 	m._indoor = ""
 	if m._region != RegionCatalog.SAMDOCHEON:

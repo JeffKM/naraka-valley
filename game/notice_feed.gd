@@ -23,6 +23,13 @@ const MARGIN := 10.0          # 화면 왼쪽 여백
 # 핫바(하단 중앙)·하단 프롬프트와 안 겹치게 피드를 그 위로 올린다(좌하단이되 하단 UI 위).
 # 하단에서 RESERVE_BOTTOM만큼 띄운 자리가 가장 최근(맨 아래) 알림의 바닥이다.
 const RESERVE_BOTTOM := 124.0   # ★ Phase C — 좌하단 컨텍스트 팝업(핫바 위, top≈view.y-116) 위로 알림을 쌓는다
+# ★[폴리시 R24 #1] 스택이 **위로 넘지 못하는 선**. 종전엔 상한이 암묵적이었다 — 항목 높이가
+#   ROW_H 고정이라 4줄 = 88px이 구조적 천장이었고, R23 #14가 «넘치면 접는다»로 바꾸면서 그 천장이
+#   사라졌다(3줄짜리 띠 넷 = 264px > 예약 영역 236px). 넘친 띠는 화면 밖(y<0)으로 나가거나 상단
+#   HUD 위에 겹쳐 섰다. 값의 출처는 main.tscn의 상단 라벨 스택 맨 아래(MilestoneLabel
+#   offset_bottom = 72) — 그 아래부터가 이 피드가 써도 되는 공간이다(Readout 8..400 · ClockLabel
+#   312..632 · GoldLabel 312..632 · MilestoneLabel 232..632이 전부 그 위에 산다).
+const RESERVE_TOP := 72.0
 const MAX_W := 320.0          # 알림 띠 최대 폭(좌측 컬럼 유지 — 중앙 프롬프트 침범 방지)
 
 # ★[폴리시 R23 #14] 이 폭에서 접힌 뒤 몇 줄이 되나(그리기·높이 계산의 단일 출처).
@@ -103,6 +110,36 @@ func _view() -> Vector2:
 		sc = par.scale.x
 	return Vector2(size.x / sc, size.y / sc)
 
+# ★[폴리시 R24 #1] **스택 기하의 단일 출처.** `_draw`가 이 배열만 그리므로 "재는 값"과 "그리는
+#   값"이 갈릴 자리가 없다(R23 #14가 폭에 대해 세운 그 규율을 높이·위치까지 넓힌 것).
+#   반환 = 아래(최신)에서 위로 훑으며 **예약 영역 안에 들어간 항목만**, 각 원소 =
+#   {idx, pos, w, h, rows, avail}(idx = `_items` 인덱스).
+#   ★ 넘치는 항목은 **자르지도, 큐에서 버리지도 않는다** — 이 프레임에 그리지 않을 뿐이라
+#     앞의 띠가 시간으로 사라지면 그대로 다시 선다(무손실). 큐 상한은 여전히 push의 MAX_ITEMS다.
+#   ★ 최신 한 줄은 예약 영역보다 크더라도 반드시 선다 — "최신 이벤트가 항상 보이게"가 이 큐의
+#     원래 계약이고, 그것까지 접으면 방금 벌어진 일을 말할 창구가 0이 된다.
+func layout(font: Font, view: Vector2) -> Array:
+	var out: Array = []
+	var n := _items.size()
+	var bottom := view.y - RESERVE_BOTTOM
+	for idx in range(n - 1, -1, -1):
+		var item: Dictionary = _items[idx]
+		var icon: Texture2D = item.get("icon", null)
+		var icon_w := (ROW_H - 6.0) if icon != null else 0.0
+		var text: String = item["text"]
+		var limit := (view.x - MARGIN * 2.0) if item.get("wide", false) else MAX_W
+		var avail := limit - 16.0 - icon_w
+		var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+		var w := minf(tw + 16.0 + icon_w, limit)
+		var rows := _wrapped_rows(font, text, avail)
+		var h := ROW_H * float(rows)
+		if bottom - h < RESERVE_TOP and idx != n - 1:
+			break                     # 예약 영역을 넘으면 여기서 멈춘다(더 오래된 것도 안 그린다)
+		out.append({"idx": idx, "pos": Vector2(MARGIN, bottom - h), "w": w, "h": h,
+			"rows": rows, "avail": avail})
+		bottom -= h
+	return out
+
 func _draw() -> void:
 	if _items.is_empty():
 		return
@@ -111,12 +148,12 @@ func _draw() -> void:
 	# 좌하단: 가장 최근(배열 끝)을 맨 아래에, 오래된 것일수록 위로 쌓는다.
 	# ★[폴리시 R23 #14] **바닥에서 위로 쌓되 줄 높이는 항목마다 다르다** — 접힌 줄 수만큼 띠가
 	#   커지므로 `ROW_H × row`라는 고정 눈금을 못 쓴다. 최신(배열 끝)부터 역순으로 훑으며 바닥을
-	#   깎아 올린다(가장 최근이 맨 아래라는 계약은 그대로다).
-	var n := _items.size()
-	var bottom := view.y - RESERVE_BOTTOM
-	for idx in range(n - 1, -1, -1):
+	#   깎아 올린다(가장 최근이 맨 아래라는 계약은 그대로다). ★[폴리시 R24 #1] 그 훑기 자체는
+	#   `layout`이 든다 — 여기선 나온 자리에 색을 칠하기만 한다.
+	for slot in layout(font, view):
+		var idx: int = int(slot["idx"])
 		var item: Dictionary = _items[idx]
-		var pos := Vector2(MARGIN, 0.0)   # y는 아래에서 접은 줄 수를 알고 나서 정한다
+		var pos: Vector2 = slot["pos"]
 		# 마지막 FADE_SECS 동안 서서히 흐려진다(그 전엔 불투명).
 		var a := clampf(float(item["secs"]) / FADE_SECS, 0.0, 1.0)
 		var text: String = item["text"]
@@ -135,15 +172,8 @@ func _draw() -> void:
 		#   피드는 대상 밖이었다(회귀 전체에 `MAX_W` 참조가 0이었다 = 아무도 안 재던 자리).
 		#   ★ 접는 축을 줄바꿈으로 고른 근거: 이 띠의 문구는 전부 정보이고(무슨 일·왜·어떻게),
 		#     말줄임은 하필 끝의 행동 지시를 먼저 먹는다. 폭은 그대로 두고 높이만 내용에서 판다.
-		var limit := (view.x - MARGIN * 2.0) if item.get("wide", false) else MAX_W
-		var avail := limit - 16.0 - icon_w
-		var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-		var w := minf(tw + 16.0 + icon_w, limit)
-		var rows := _wrapped_rows(font, text, avail)
-		var h := ROW_H * float(rows)
-		pos.y = bottom - h
-		bottom -= h
-		var box := Rect2(pos, Vector2(w, h - 2.0))
+		var avail: float = slot["avail"]
+		var box := Rect2(pos, Vector2(float(slot["w"]), float(slot["h"]) - 2.0))
 		# 인셋 바탕 + 테두리(레벨업은 금박, 그 외 따뜻한 테두리). 한지 팔레트로 raw 톤 제거.
 		draw_rect(box, Color(HanjiUi.INSET.r, HanjiUi.INSET.g, HanjiUi.INSET.b, 0.72 * a))
 		var edge := HanjiUi.GOLD if gold else HanjiUi.BORDER

@@ -308,6 +308,9 @@ func _check_spine_clock(m: Node) -> void:
 	#   그 자리가 페이드인 0.7초 앞이라 하루가 매일 ~8분씩 짧아졌다. 이제 `_do_sleep`이 멈추고
 	#   `_on_sleep_done`이 켠다(정지 주인 = 재개 주인). 이 무대가 재는 계약("취침 중 false는
 	#   일시적이다")은 그대로고, 그 false를 되살리는 자리만 트윈 꼬리로 옮겼다.
+	# ★[폴리시 R24 #13] 그 되돌림이 **조건부**가 됐다 — 에필로그·내면 공간·마무리 화면이 시계를
+	#   잡고 있으면 트윈 꼬리가 그 정지를 덮지 않는다(『정지 주인 = 재개 주인』의 완성). 이 항이
+	#   재는 계약("취침 중 false는 일시적이다")은 그대로고, 그 조건은 `polish_r24` ⑭가 잰다.
 	_check("③a-pre 무대: 취침이 시계를 끄고, 연출 끝(`_on_sleep_done`)이 되돌린다(false가 일시적인 근거)",
 		_in_func("func _do_sleep", "clock.running = false")
 		and _in_func("func _do_sleep", "tw.tween_callback(clock.sleep")

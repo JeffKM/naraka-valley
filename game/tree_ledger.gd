@@ -111,8 +111,19 @@ static func mode_for(region: String) -> String:
 	return MODE_SEED if region == RegionCatalog.HOME else MODE_FOREST
 
 # 이 칸의 종(결정적 — 좌표 해시). 같은 자리는 늘 같은 종이라 세이브 없이도 재현된다.
+# ★[폴리시 R24 #3] **`hash(...) % N`을 직접 접지 않는다**(weather.gd 헤더가 박제한 함정 —
+#   books.gd `_roll`·firefly_soul·peddler·trial_ground·daily_luck 다섯 형제가 이미 지키는 관례).
+#   Godot의 String.hash는 djb2(h = h*33 + c)라 마지막 성분만 1 다른 좌표 문자열의 해시가 정확히
+#   1 차이가 나고, 여기선 그 마지막 성분이 y다 — 그래서 %3이 y로만 돌았다. 실측(64×34 스윕):
+#   안식·미혹에서 **가로 34줄이 전부 한 종**이었고(3행 주기 순환) 분포도 896/640/640으로 기울었다.
+#   그 결과 ㉠ 채취기 산출(`TapperLedger.product_for`)이 지도 가로 띠로 갈려 «한 줄에서는 절대
+#   다른 수액을 못 얻고», ㉡ `seed_for_species`의 씨앗 드랍도 같은 띠를 탔다. 믹싱 뒤 745/727/704.
+#   ★ 세이브 하위호환: 원장은 칸마다 `species`를 **저장한다**(to_save 3항 · TapperLedger도 설치
+#     시점의 종을 스냅해 저장한다). 그래서 이미 심긴 나무와 이미 박힌 채취기는 한 그루도 안 바뀐다 —
+#     새로 깔리는 슬롯(첫 시드·숲 재출현·자체 파종)만 고른 종을 받는다(«새 배치만 막고 놓인 것은
+#     그대로» 규율).
 static func species_at_tile(region: String, t: Vector2i) -> String:
-	var h: int = abs(hash("treesp:%s:%d:%d" % [region, t.x, t.y]))
+	var h: int = absi(rand_from_seed(hash("treesp:%s:%d:%d" % [region, t.x, t.y]))[0])
 	return SPECIES[h % SPECIES.size()]
 
 # 단계별 도끼 타수(그루터기는 HP_STUMP). ★[S4-T4] 성숙목만 도끼 티어로 줄어든다(10/8/6) —
@@ -449,9 +460,16 @@ func chop(region: String, t: Vector2i, day: int, level: int = 0,
 		out["hardwood"] = 1
 	# ★[S7-T4] 씨앗 보너스 — 길한 날엔 씨앗이 한 톨 더 붙는다. **위 단단한 원목 롤 뒤에** 굴린다:
 	#   앞에 끼우면 운이 붙는 날마다 원목 롤의 시드 소비가 한 칸 밀려 두 롤이 서로를 흔든다.
-	#   운 ≤ 0이면 단락 평가로 `randf()`를 아예 안 부른다 = 소비 0 = 종전 결과열 완전 보존.
-	if int(out["seeds"]) > 0 and luck_bonus > 0.0 and rng.randf() < luck_bonus:
-		out["seeds"] = int(out["seeds"]) + 1
+	#   운 0이면 단락 평가로 `randf()`를 아예 안 부른다 = 소비 0 = 종전 결과열 완전 보존.
+	# ★[폴리시 R24 #7] **양방향으로 배선한다.** 종전 조건은 `luck_bonus > 0.0`이라 대흉 날이 평
+	#   (운 0) 날과 한 톨도 다르지 않았고, 이 축만 «제로평균 보정»이 아니라 «대길에만 얹히는 순증»이
+	#   됐다. daily_luck.gd의 계수 표가 여섯 지점 공통 계약을 「계수 0.5 = 대길 +5%p·**대흉 −5%p**」로
+	#   못 박고 그 ④가 여기다 — 같은 함수의 형제 롤(단단한 원목)은 `hardwood_chance + luck_bonus`로
+	#   이미 양방향이고, 형제 지점 `DailyLuck.biased_yield`도 상·하단을 둘 다 든다.
+	#   ★ 스트림: 이 롤은 이 함수의 **마지막 소비**라 대흉 날 randf() 한 번이 새로 붙어도 뒤따라
+	#     흔들릴 롤이 없다(rng는 `chop:` 시드로 이 호출 안에서만 산다). 운 0인 날의 소비는 여전히 0.
+	if int(out["seeds"]) > 0 and not is_zero_approx(luck_bonus) and rng.randf() < absf(luck_bonus):
+		out["seeds"] = maxi(int(out["seeds"]) + (1 if luck_bonus > 0.0 else -1), 0)
 	changed.emit()
 	return out
 
