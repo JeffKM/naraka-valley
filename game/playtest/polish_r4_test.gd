@@ -495,13 +495,13 @@ func _initialize() -> void:
 	print("── ⑧ #12 F9 로드 뒤 엉뚱한 날의 대량 재스폰 차단 ──")
 	m._active_slot = 1
 	m._save_game()
-	m._season_respawn_pending_day = 29        # 집 밖에서 절기 마지막 밤을 넘긴 상태
+	m._season_respawn_pending_days = [29]     # ★[폴리시 R25 #3] 스칼라 → 누적 배열
 	m._load_game()
 	_check("⑧a 로드가 표를 버린다(fishing·_mine_entry_pick과 같은 세션 로컬 하드 리셋)",
-		m._season_respawn_pending_day == 0)
-	# `_process`의 소비 조건은 "표 != 0"이므로, 표가 0이면 안식에 서 있어도 집행되지 않는다.
+		m._season_respawn_pending_days.is_empty())
+	# `_process`의 소비 조건은 "표가 비지 않았다"이므로, 표가 비면 안식에 서 있어도 집행되지 않는다.
 	m._process(0.0)
-	_check("⑧b 그래서 안식 그리드가 선 다음 프레임에도 재스폰이 안 돈다", m._season_respawn_pending_day == 0)
+	_check("⑧b 그래서 안식 그리드가 선 다음 프레임에도 재스폰이 안 돈다", m._season_respawn_pending_days.is_empty())
 	var save1 := SaveManager.slot_path(1)
 	if FileAccess.file_exists(save1):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(save1))

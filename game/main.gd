@@ -2463,7 +2463,13 @@ var _hinted_encroach := false        # ★ [ADR-0055] 첫 재점령 멘토 힌�
 #     종전과 같은 결과라 회귀가 아니다"는 **거짓이었다**(#1·#4·#8): 표가 서는 그 프레임에 취침 자동
 #     세이브가 떨어지고 그 파일의 `reclaim`은 *재스폰 전*이라, 표를 버리면 되감기가 아니라 그
 #     절기치의 영구 스킵(다음 기회 28일 뒤)이다. 이제 세이브를 왕복한다(`_save_game` 머리말).
-var _season_respawn_pending_day := 0
+#   ★[폴리시 R25 #3] **밀린 절기를 전부 든다**(스칼라 1칸 → 누적 배열 — 잡초·파종 표가 R24 #18에서
+#     받은 그 처방의 셋째이자 마지막 자리). R24 #18은 「대입이 무조건이라 앞 밤이 덮여 영구히
+#     사라진다」를 근거로 형제 둘만 갈았는데, 그 논증이 글자 그대로 성립하는 자리가 여기다 —
+#     오히려 더 나쁘다: 아래 소비 블록이 자기 주석으로 못 박듯 이 패스는 **절기 첫날에만 열리는
+#     1회성**이라, 안식에 안 서는 채로 다음 절기 첫날(28일 뒤)을 밖에서 맞으면 앞 절기의 대량
+#     재스폰이 되찾을 창구 없이 통째로 증발했다.
+var _season_respawn_pending_days: Array = []
 # ★[폴리시 R6] 집 밖에서 날이 바뀌어 **밀린 아침 방목 방출**(false = 밀린 것 없음). 방목 슬롯 스캔은
 #   HOME 좌표 상수(PASTURE_SCAN_RECT)를 지금 실린 그리드로 훑으므로 다른 구역에서는 집행할 수 없다.
 #   위 절기 재스폰 표와 같은 결이고(★[폴리시 R11] 셋 다 세이브를 왕복한다 — 파일의 `ranch`가
@@ -2488,8 +2494,16 @@ var _weed_pending_days: Array = []
 # ★[폴리시 R22 #10·#11] 그 아침에 굳은 하늘(0 = 아직 안 굳음 → 종전 파생으로 떨어진다).
 #   `_weather_sealed_on` 머리말에 두 소비처와 근거가 있다. 세이브에 실린다 — 밀린 밤을 다음 세션에
 #   소비할 수 있고(잡초 표가 저장되므로), 그때도 그 아침의 답이어야 한다.
-var _weather_sealed_day := 0
-var _weather_sealed := Weather.CALM
+#   ★[폴리시 R25 #1·#5] **굳은 하늘도 밀린 밤 표와 같은 폭이 됐다**(스칼라 1칸 → {day: weather} 표).
+#     종전엔 굳는 칸이 하나뿐이라 위 잡초·파종 표가 누적 배열이 된 순간(R24 #18) 계약이 밤 하나에서만
+#     성립했다: 소비 루프가 여러 밤을 도는데 `_weather_sealed_on`은 가장 최근 밤에만 굳은 답을 주고
+#     나머지는 전부 `_weather_on(d)`로 떨어졌다 — 그 함수는 `_theme_open_on`을 지나 **살아 있는**
+#     카페 단계·누적 매출을 읽으므로, 낮에 테마 문턱을 넘고 귀가하면 앞 밤의 하늘이 혼우 → 평온으로
+#     뒤집혀 `SPREAD_WET_MULT`가 빠지고 그 밤의 확산 칸 집합이 통째로 갈렸다(R22 #10·#11이 «같은
+#     밤이 두 하늘로 결산된다»고 이름 붙인 바로 그 결함의 재발).
+#   ★ 표는 **밀린 밤 + 오늘**로만 유지한다(`_seal_weather_for` — 아무도 안 묻는 옛 날은 매 아침
+#     떨궈, 세이브가 판당 무한정 자라지 않는다).
+var _weather_sealed_days: Dictionary = {}
 # ★[폴리시 R24 #9] 그 아침에 굳은 **[삽사리] 운 하한 보정**(위 하늘 두 칸의 운 축 형제).
 #   `_luck_floor_on` 머리말에 소비처와 근거가 있다. 하늘과 같은 이유로 세이브에 실린다.
 var _luck_floor_sealed_day := 0
@@ -10707,8 +10721,9 @@ func _on_day_advanced(day: int) -> void:
 	#   중에도 자란다"). 같은 머리말이 예외도 함께 못 박았다 — **"하루 경계 이벤트는 그 아침의 답으로
 	#   굳는다"**. 그 굳은 답을 코드가 들고 있질 않아서, 아침의 답을 써야 할 두 자리가 낮의 답을 다시
 	#   팠다(밀린 잡초 확산 · 갱도 층 배치). 여기 한 칸이 그 «아침의 답»이다.
-	_weather_sealed_day = day
-	_weather_sealed = weather
+	# ★[폴리시 R25 #1·#5] 굳히기는 **표에 한 칸을 더한다**(선언부 — 밀린 밤이 여럿이면 그 밤들이
+	#   전부 자기 아침의 답을 받아야 한다). 오래된 칸 정리도 여기서 한다.
+	_seal_weather_for(day, weather)
 	# ★[폴리시 R24 #9] **오늘의 운도 여기서 굳는다**(위 하늘 굳히기의 운 축 형제 — 사유는
 	#   `_luck_floor_on` 머리말). 굳는 것은 운 값이 아니라 그 유일한 라이브 입력([삽사리] 만점
 	#   여부)이다 — 값 자체는 여전히 day에서 파생된다(DailyLuck은 상태 0).
@@ -10756,7 +10771,8 @@ func _on_day_advanced(day: int) -> void:
 			if _region == RegionCatalog.HOME:
 				_run_season_respawn(day)
 			else:
-				_season_respawn_pending_day = day
+				# ★[폴리시 R25 #3] 누적 — 앞 절기를 안 덮는다(형제 둘이 R24 #18에서 받은 그 창구).
+				_queue_pending_night(_season_respawn_pending_days, day)
 	# ★[S5-T1 / ADR-0063 결정 1] 갱도 층 리셋 — 날이 바뀌면 전 층이 리필된다(그날 깬 돌·열린 사다리
 	#   기록이 전량 소멸하고, 배치는 시드가 day를 물고 있어 저절로 갈린다). 스타듀 "매일 리필" 정합.
 	#   ★ 층 안에서 날이 바뀌면 **지상으로 되돌린다**: 지금은 층 안 취침이 불가능하지만(_can_sleep은 집
@@ -10915,8 +10931,8 @@ func _on_day_advanced(day: int) -> void:
 	# ★[폴리시 R6] 집 밖에서 날이 바뀌면 **미룬다**(절기 대량 재스폰과 같은 문법 — `_pasture_release_pending`
 	#   머리말). 방출은 HOME 그리드를 전제하므로 그 자리에서 집행할 수 없고, 그냥 건너뛰면 그날치
 	#   방목 가산(F_GRAZE·M_GRAZE)을 통째로 잃는다.
-	# ★[폴리시 R23 #2·#5] 아침 정산도 **굳은 하늘**로 판정한다(`_weather_sealed_day`는 이 함수 위쪽
-	#   에서 이미 오늘로 섰다). 지금은 값이 같지만, 두 자리가 같은 창구를 봐야 «집에서 잔 아침»과
+	# ★[폴리시 R23 #2·#5] 아침 정산도 **굳은 하늘**로 판정한다(`_weather_sealed_days`는 이 함수 위쪽
+	#   에서 이미 오늘 칸을 들었다). 지금은 값이 같지만, 두 자리가 같은 창구를 봐야 «집에서 잔 아침»과
 	#   «귀가 프레임에 소비한 아침»이 구조적으로 한 하늘을 쓴다(등가성이 우연이 아니게 된다).
 	# ★[폴리시 R24 #19] **표는 소비한 쪽만 지운다**(R21 `catch_up_seeding`의 «손실 0» 계보). 종전
 	#   대입은 무조건이라 두 방향으로 깨졌다: ㉠ 아직 소비되지 않은 true가 집에서 자는 아침에 그냥
@@ -12352,14 +12368,16 @@ func _save_game() -> bool:
 		#     가리켜 그 갈림 자체가 사라진다.
 		"weed_pending_days": _weed_pending_days,   # ★[폴리시 R24 #18] 스칼라 → 누적 배열(구 키는 로드에서 읽는다)
 		# ★[폴리시 R22 #10·#11] 그 아침에 굳은 하늘(잡초 표와 짝 — 밀린 밤을 다음 세션에 소비해도 같은 답).
-		"weather_sealed_day": _weather_sealed_day,
-		"weather_sealed": _weather_sealed,
+		#   ★[폴리시 R25 #1·#5] 잡초 표와 **같은 폭**이 됐다({day: weather} — 구 키 둘은 로드에서 읽는다).
+		#     `var_to_str` 직렬화라 int 키가 타입 그대로 왕복한다(save.gd 머리말).
+		"weather_sealed_days": _weather_sealed_days.duplicate(),
 		# ★[폴리시 R24 #9] 그 아침에 굳은 운 하한 보정(하늘 두 칸의 운 축 형제 — 같은 이유로 왕복한다:
 		#   F9·재부팅 뒤에도 같은 날은 같은 등급이어야 한다).
 		"luck_floor_sealed_day": _luck_floor_sealed_day,
 		"luck_floor_sealed": _luck_floor_sealed,
 		"tree_seed_pending_days": _tree_seed_pending_days,   # ★[폴리시 R21 #15 / R24 #18] 밀린 밤들의 마당 파종
-		"season_respawn_pending_day": _season_respawn_pending_day,
+		# ★[폴리시 R25 #3] 형제 둘과 같은 누적 배열(구 키 `season_respawn_pending_day`는 로드에서 읽는다).
+		"season_respawn_pending_days": _season_respawn_pending_days,
 		"pasture_release_pending": _pasture_release_pending,
 		# ★[폴리시 R5] 나머지 **일련번호 시드 4종**도 같은 이유로 실린다. 이들은 세이브에도 없고
 		#   `_load_game`이 리셋하지도 않아 F9 인플레이스 로드에서 홀로 살아남았다 — 시계·혼력·
@@ -12573,11 +12591,11 @@ func _load_game() -> bool:
 	#   그 세 키 머리말). 파일에서 읽으면 표와 원장이 늘 같은 시점을 가리키므로, R4·R6가 걱정한
 	#   "되감긴 날에 엉뚱하게 집행된다"도 함께 사라진다(그 표는 그 파일의 표다).
 	#   키 없는 구세이브 = 0/false라 하위호환은 종전과 같다.
-	_season_respawn_pending_day = maxi(int(data.get("season_respawn_pending_day", 0)), 0)
+	_season_respawn_pending_days = _pending_nights_from(data, "season_respawn_pending_days",
+		"season_respawn_pending_day")   # ★[폴리시 R25 #3]
 	_pasture_release_pending = bool(data.get("pasture_release_pending", false))
 	_weed_pending_days = _pending_nights_from(data, "weed_pending_days", "weed_pending_day")
-	_weather_sealed_day = maxi(int(data.get("weather_sealed_day", 0)), 0)   # ★[폴리시 R22 #10·#11]
-	_weather_sealed = int(data.get("weather_sealed", Weather.CALM))
+	_weather_sealed_days = _sealed_weather_from(data)   # ★[폴리시 R22 #10·#11 → R25 #1·#5]
 	_luck_floor_sealed_day = maxi(int(data.get("luck_floor_sealed_day", 0)), 0)   # ★[폴리시 R24 #9]
 	_luck_floor_sealed = bool(data.get("luck_floor_sealed", false))
 	_tree_seed_pending_days = _pending_nights_from(data, "tree_seed_pending_days", "tree_seed_pending_day")   # ★[R21 #15 / R24 #18]
@@ -12866,6 +12884,28 @@ func _load_game() -> bool:
 	var hb: Dictionary = data.get("heart_bits", {})
 	for k in hb:
 		_heart_bits[String(k)] = int(hb[k])
+	# ★[폴리시 R25 #12] **칸이 있으면 그 아래 관문 비트도 있어야 한다** — 로드가 그 함의를 원장에
+	#   다시 새긴다. `ROMANCE_OPEN` 로스터에서 stage를 올리는 창구는 `Affinity.promote()` 하나뿐이고
+	#   그 호출부(`_try_heart_promotion`)는 언제나 `_mark_heart_bit`를 함께 찍으므로, «stage N ⇒
+	#   관문 1..N을 지났다»는 구조적 참이다. 그런데 `Affinity.load_save`는 stage 키가 없는 구세이브에
+	#   옛 파생식(`points_hearts()`)을 기본값으로 주는 반면(affinity.gd — «하트를 소급 강등하지
+	#   않는다») 같은 로드에서 비트 원장은 빈 채로 시작해, 두 축이 그 지점에서만 어긋났다:
+	#   미호 points 180인 구세이브는 stage 3으로 소급되는데 진급이 `stage + 1`만 겨냥하므로
+	#   비트 1·2·3이 **어떤 경로로도 다시 설 수 없고**, 비트만 읽는 `_redemption_arc_complete` 때문에
+	#   ♡5 연인까지 가서 건넨 혼례 부적이 영구히 거절됐다(면제 경로 `_ever_married`는 결혼 이력을
+	#   요구해 순환이고, stage를 되감는 `reset_hearts()`도 이혼=결혼 이후라 닿을 수 없다).
+	#   ★ 앵커(옥자)는 대상 밖이다 — 그 트랙의 칸은 관문이 아니라 deed 파생이라 함의가 성립하지 않는다.
+	#   ★ **키가 아예 없을 때만** 소급한다(= 관문 도입 전 세이브). 원장이 실려 있으면 그것이 진실원이라
+	#     한 톨도 안 보탠다 — 잘 형성된 세이브에 비트를 합성하면 그 원장의 권위가 사라진다. 두 키는
+	#     S8-T5에서 **함께** 생겼으므로 «heart_bits 없음»과 «stage 없음»은 같은 세이브 세대를 가리킨다.
+	#   ★ 소급은 «지나온 칸까지»다 — 관문으로 오를 수 있는 상한(`HEART_GATE_MAX`)에서 자른다.
+	if not data.has("heart_bits"):
+		for rid in ROMANCE_OPEN:
+			var rr := _resident(String(rid))
+			if rr == null or rr.affinity == null:
+				continue
+			for h in range(1, mini(rr.affinity.stage, HEART_GATE_MAX) + 1):
+				_mark_heart_bit(String(rid), h)
 	# ★[S9b-T4 / ADR-0068 결정 7] 척추 비트 원장 복원(구세이브 = 0 = 아무 비트도 안 섬).
 	#   손상 방어로 음수는 0으로 자르고 정의된 비트(B4~B7) 밖은 마스크로 떨군다 — 엉뚱한 비트가
 	#   원장에 누우면 뒷 태스크(B5~B7)의 판정이 조용히 거짓이 된다.
@@ -13601,15 +13641,6 @@ func _process(delta: float) -> void:
 	#   입력 가드보다 **먼저** 둔다: 컷신·대화·취침 연출 중에 실내로 옮겨지는 경로(컷신 워프·
 	#   기절 퇴장)가 있어서, 가드 아래 두면 그 프레임들 동안 말을 탄 채로 실내에 서 있게 된다.
 	_sync_mount()
-	# ★[폴리시 R3] 밀린 절기 대량 재스폰 소비 — 집 밖에서 날이 바뀌어 후보 스캔이 불가능했던 그
-	#   1회성 패스를, 안식 농원 그리드가 다시 선 첫 프레임에 집행한다(`_season_respawn_pending_day`
-	#   머리말). 연출 중엔 건드리지 않는다: 그리드·프롭이 재빌드 도중일 수 있고, 한 프레임 늦어도
-	#   결과가 같다.
-	if _season_respawn_pending_day != 0 and _region == RegionCatalog.HOME \
-			and not _sleeping and not _transitioning:
-		var pending_day := _season_respawn_pending_day
-		_season_respawn_pending_day = 0
-		_run_season_respawn(pending_day)
 	# ★[폴리시 R6] 밀린 아침 방목 방출 소비 — 위와 같은 자리·같은 조건이되, 표는 **방출이 실제로
 	#   일어난 프레임에만** 지운다(`_release_open_buildings` 반환값). 밤에 돌아오면 그 프레임은
 	#   밤 가드에 걸려 아무 일도 안 하는데, 거기서 표를 버리면 밀린 하루를 잃기 때문이다.
@@ -13643,32 +13674,56 @@ func _process(delta: float) -> void:
 	#   성립) 밤 목록은 둘의 합집합이고 각 밤에서 자기 표에 있는 블록만 돈다.
 	#   ★ 파종 알림은 밤마다 쏘지 않고 **한 줄로 합친다** — 같은 문구 여러 줄이 알림 상한(4)을 채워
 	#     귀가 프레임의 다른 피드백을 축출하기 때문이다(NoticeFeed.push 머리말의 그 축출 규율).
+	# ★[폴리시 R25 #4] **밀린 절기 대량 재스폰도 이 한 루프 안으로 들어왔다.** 종전엔 R3의 별도
+	#   블록이 이 블록 **위**에 있어, 같은 프레임에 «재스폰(N+1) → 확산(N) → 파종(N) → 재점령(N)»
+	#   순으로 돌았다 — 집에서 잤다면 «확산(N)·파종(N)·재점령(N) → 재스폰(N+1)»이다. 위 R22 #14가
+	#   못 박은 그대로 순서가 관측 가능한 다른 세계를 만든다: `Reclaim.season_respawn`은 후보에서
+	#   `_weeds`/`_debris` 칸을 거르고 `_encroach_candidates`는 재스폰 debris를 프롭 점유로 병합해
+	#   보므로, 밤 N의 잡초가 없는 판에서 재스폰이 굴러가고 반대로 밤 N의 재점령 후보에는 아직
+	#   존재할 수 없는 재스폰 debris가 이미 들어 있었다. 세 표를 한 밤 목록으로 합쳐 **아침 정산과
+	#   같은 상대 순서**(재스폰 → 확산 → 파종 → 재점령)로 편다.
+	# ★[폴리시 R25 #7] **잡초 파괴 보고도 밤마다 쏘지 않고 합친다** — 파종 쪽에만 서 있던 위 규율의
+	#   짝이다. `_run_weed_spread`는 밤마다 최대 두 줄(작물·스프링클러)을 곧장 밀어, 세 밤이 밀리면
+	#   한 프레임에 최대 여섯 줄이 `MAX_ITEMS`(4) 큐를 스스로 밀어냈다 — 앞선 밤의 손실이 한 프레임도
+	#   안 보이고 같은 프레임의 다른 아침 피드백(출하 정산·완공·편지)까지 함께 축출됐다.
 	var carry_ready: bool = _region == RegionCatalog.HOME and not _sleeping and not _transitioning
-	if carry_ready and not (_weed_pending_days.is_empty() and _tree_seed_pending_days.is_empty()):
+	if carry_ready and not (_weed_pending_days.is_empty() and _tree_seed_pending_days.is_empty()
+			and _season_respawn_pending_days.is_empty()):
+		var respawn_owed: Array = _season_respawn_pending_days.duplicate()
 		var weed_owed: Array = _weed_pending_days.duplicate()
 		var seed_owed: Array = _tree_seed_pending_days.duplicate() if tree_ledger != null else []
+		_season_respawn_pending_days.clear()
 		_weed_pending_days.clear()
 		if tree_ledger != null:
 			_tree_seed_pending_days.clear()
 		var nights: Array = []
-		for n in weed_owed:
-			if not nights.has(n):
-				nights.append(n)
-		for n in seed_owed:
-			if not nights.has(n):
-				nights.append(n)
+		for src in [respawn_owed, weed_owed, seed_owed]:
+			for n in src:
+				if not nights.has(n):
+					nights.append(n)
 		nights.sort()
 		var seeded_total := 0
+		var eaten_total := 0
+		var broken_total := 0
 		for n in nights:
 			var night := int(n)
+			if respawn_owed.has(night):
+				_run_season_respawn(night)
 			if weed_owed.has(night):
-				_run_weed_spread(night)
+				var lost: Dictionary = _run_weed_spread(night, false)
+				eaten_total += int(lost["crops"])
+				broken_total += int(lost["sprinklers"])
 			if seed_owed.has(night):
 				seeded_total += tree_ledger.catch_up_seeding(night, _tree_seed_free_cb()).size()
 			if weed_owed.has(night):
 				_run_weed_encroach(night)
 		if seeded_total > 0:
 			_notice("마당에 어린 나무가 %d그루 돋았다" % seeded_total)
+		# 문구는 아침 정산의 그것과 **같은 문자열**이다(밤별 수치만 합산 — 규칙 복제 0).
+		if eaten_total > 0:
+			_notice(WEED_ATE_CROPS_NOTICE % eaten_total)
+		if broken_total > 0:
+			_notice(WEED_BROKE_SPRINKLERS_NOTICE % broken_total)
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
@@ -20151,11 +20206,19 @@ func _try_deliver_quest() -> void:
 	wallet.earn(gold)
 	_total_income += gold                    # ★ [S1R-T12] 누적 총수입(정보패널) — 출하 정산과 같은 결
 	var af := _quest_client_affinity(String(done["client"]))
+	# ★[폴리시 R25 #11] **천장에 눌린 납품은 «호감도↑»라고 말하지 않는다.** `add_points` → `_add`는
+	#   `clampi(points + n, 0, MAX_POINTS)`라 만충 상대에겐 실효가 0이고, 이 축은 stage와 절연돼
+	#   있어(ADR-0066 결정 5) 하트도 안 움직인다 — 그런데 알림은 조건 없이 상승을 광고했다.
+	#   형제 채널인 선물은 R12/R13에서 이 정확한 거짓말을 이미 끊었으므로(`is_gift_no_op`), 여기도
+	#   **그 술어를 그대로 탄다**(판정 복제 0). 갈리는 것은 문구 하나뿐이다 — 의뢰엔 주간 예산
+	#   개념이 없어 소비 계약은 무관하고, 납품·골드·차감은 종전 그대로다.
+	var aff_no_op := af != null and af.is_gift_no_op(int(done["affinity"]))
 	if af != null:
 		af.add_points(int(done["affinity"]))   # 대화·선물의 하루 1회 게이팅과 별개 채널(의뢰 완료 = 1회성)
 	audio.sfx("gold")
-	_notice("의뢰 완료 — %s ×%d 납품 · +%d냥 · %s 호감도↑" % [ItemCatalog.name_of(id), need, gold,
-		String(done["client"])])
+	var aff_text := "%s 호감도는 이미 가득하다" % String(done["client"]) if aff_no_op \
+		else "%s 호감도↑" % String(done["client"])
+	_notice("의뢰 완료 — %s ×%d 납품 · +%d냥 · %s" % [ItemCatalog.name_of(id), need, gold, aff_text])
 
 # ★ [S2-T5] 혼백관 실내 그레이박스 진열 — 기증대(중북부 2×1 목대) + 북벽 전시대(유품 3좌 + 책 2좌 그릇).
 # 전시는 원장(museum.donated)의 파생 — 좌표 상태 없음. 책 좌대는 [ADR-0034] 그릇 병설(아이템은 Slice 9).
@@ -22629,12 +22692,18 @@ const CHORUS_GATE_MAIN_STAGE := 3     # 그 중 1인이 이 칸 이상이면 열
 
 # 그 진급이 소프트 게이트 ㉠에 걸리는가(true = 통과 · false = 대기).
 # 조연 로스터의 ♡3이 아니면 언제나 통과다 — 판정이 이 한 곳이라 대상이 늘어도 식은 안 바뀐다.
+# ★[폴리시 R25 #9] 「대화재 접촉의 증인인가」는 **지나간 목격**이라 라이브 칸이 아니라 관문 원장의
+#   최고점을 묻는다(`_heart_stage_peak` 머리말). 종전엔 `affinity.stage`를 곧장 읽어, 미호 하나로
+#   조연들의 씨앗 컷신을 열어 둔 플레이어가 미호와 이혼하면 `reset_hearts()`가 미호 칸을 0으로
+#   내리며 **이미 본 목격이 취소됐다** — 그 뒤 어떤 조연도 ♡3 진급·발화·편지·비트가 전부 0이 되고
+#   (`_try_heart_promotion`이 빈 배열로 물러난다) 화면엔 이유가 한 글자도 안 뜬 채 관계 탭 배지만
+#   «진급 대기»로 영구히 굳었다. 형제 게이트 셋(`_redemption_arc_complete`·척추 조연 항·카페
+#   사다리)이 전부 영속 축을 읽는데 여기만 라이브 축을 읽던 자리다.
 func _chorus_gate_ok(rid: String, target: int) -> bool:
 	if target != CHORUS_GATE_HEART or not CHORUS_GATE_ROSTER.has(rid):
 		return true
 	for main_id in CHORUS_GATE_MAINS:
-		var r := _resident(String(main_id))
-		if r != null and r.affinity != null and r.affinity.stage >= CHORUS_GATE_MAIN_STAGE:
+		if _heart_stage_peak(String(main_id)) >= CHORUS_GATE_MAIN_STAGE:
 			return true
 	return false
 
@@ -22714,6 +22783,24 @@ func _heart_bit_seen(rid: String, heart: int) -> bool:
 
 func _mark_heart_bit(rid: String, heart: int) -> void:
 	_heart_bits[rid] = int(_heart_bits.get(rid, 0)) | (1 << heart)
+
+# ★[폴리시 R25 #8·#9] 그 사람이 **지나온 가장 높은 관문**. 하트 칸(`affinity.stage`)은 단조가
+#   아니다 — `_do_divorce`의 `reset_hearts()`가 그 칸을 0으로 떨어뜨린다(ADR-0066 결정 10의
+#   실질 페널티). 그래서 «그 사람의 조각을 얻었나»·«씨앗 컷신을 봤나»처럼 **지나간 사건**을 묻는
+#   자리는 라이브 칸이 아니라 이 영속 원장을 봐야 한다(`_heart_bits`는 이혼이 안 건드리는 별도
+#   축이라고 선언부가 이미 못 박았고, `_redemption_arc_complete`와 카페 사다리의
+#   `_milestone_hearts_peak`가 같은 이유로 이미 그 처방을 받았다).
+#   ★ ADR-0066 절연은 그대로다 — points/stage를 섞지 않고, **다른 축(비트 원장)을 읽을 뿐**이다.
+#   ★ 라이브 칸과의 max를 쓴다: 관문 없이 칸이 오르는 트랙(앵커 = deed 파생)도 안 깎이게.
+func _heart_stage_peak(rid: String) -> int:
+	var peak := 0
+	for h in range(1, Affinity.MAX_HEARTS + 1):
+		if _heart_bit_seen(rid, h):
+			peak = h
+	var r := _resident(rid)
+	if r != null and r.affinity != null:
+		peak = maxi(peak, r.affinity.stage)
+	return peak
 
 # ── ★[S9b-T4 / ADR-0068 결정 7] 척추 원장 `_spine_bits` + B4 공허 직면 ─────────
 # [narrative-bible §6] 척추 비트 중 **B4(공허 직면)**를 연다. §6.1 해결 게이트
@@ -22842,11 +22929,17 @@ func _spine_gate_ok() -> bool:
 	return Spine.gate_ok(_spine_main_stages(), _spine_bit_seen(SPINE_B4), _heart_bits)
 
 # 메인 3인의 하트 칸 스냅({rid: stage}) — 없는 주민·관계 트랙 없는 주민은 0으로 떨어진다(방어).
+# ★[폴리시 R25 #8] 넘기는 값은 **지나온 최고 관문**이다(`_heart_stage_peak`). 게이트가 묻는 것은
+#   «그 사람의 조각을 얻었나»라는 지나간 사건인데, 종전엔 라이브 `affinity.stage`를 떠 넘겨
+#   `_do_divorce`의 `reset_hearts()` 한 줄이 **엔드게임 관문을 재잠금**했다: 세 조각 ♡4로 연 뒤
+#   미호와 이혼하면 미혹 숲 라벨이 «잠김»으로 되돌아가고 옥자 집 문 앞에서 `_maybe_spine_b5`가
+#   알림 한 줄 없이 물러났다(그 줄 주석: «미충족 = 잠금 그대로·알림도 없다»). 같은 사건을 세는
+#   두 항 중 조연 쪽은 이미 비트 원장을 읽고 있었으므로(spine.gd `CHORUS_HEART`), 이 한 줄이
+#   두 항의 축을 맞춘다 — Spine은 한 글자도 안 바뀐다(판정식은 여전히 «칸 ≥ MAIN_STAGE»다).
 func _spine_main_stages() -> Dictionary:
 	var out := {}
 	for rid in Spine.MAIN_ROSTER:
-		var r := _resident(String(rid))
-		out[String(rid)] = r.affinity.stage if r != null and r.affinity != null else 0
+		out[String(rid)] = _heart_stage_peak(String(rid))
 	return out
 
 # 이번 판의 퍼즐 시드 — 세이브에 안 남기고 **날짜에서 파생**한다(B5는 한 세이브에 한 번뿐이라
@@ -23105,6 +23198,9 @@ func _okja_track_open() -> bool:
 		return false
 	return _spouse_id == "" or _spouse_id == OKJA_RID
 
+# ★[폴리시 R25 #10] 잠긴 앵커 트랙의 효과 줄 앞머리(♡0이 «왜» 0인지를 말하는 유일한 표면).
+const OKJA_TRACK_LOCKED_PREFIX := "곁에 다른 이가 있다 — 잠김 · "
+
 # 트랙 개통 — 이 순간에야 Affinity 노드가 **생긴다**. B6 전에는 아예 없다는 것이 "B6 후 개통"의
 # 가장 정직한 구현이고, 덕분에 개통 전 거동은 바이트 그대로다(관계 탭·세이브 키·선물 경로 전부).
 func _open_okja_track() -> void:
@@ -23118,13 +23214,21 @@ func _open_okja_track() -> void:
 	r.save_key = "okja_affinity"   # 신규 가법 키 — 구세이브엔 없어 ♡0에서 시작(하위호환 자동)
 	# 관계 탭 효과 줄 = **세 반전의 진행**이다(다른 로스터의 곱셈기 자리를 이 트랙은 이렇게 쓴다 —
 	# 여기엔 곱셈기가 없고 갚아야 할 목록이 있다. ADR-0008 "곱셈기 종류가 다르다"의 극단 사례).
+	# ★[폴리시 R25 #10] **잠금을 먼저 말한다.** `_refresh_okja_track`은 `_okja_track_open()`이
+	#   거짓이면 points·stage를 0으로 내리는데(배우자 잠금 — 결정 10-ⓓ) 이 줄만 그 판정을 안 봐,
+	#   관계 탭 옥자 행이 ♡0/5 옆에 «되찾음 5/5 · 마주함 ○ · 돌봄 600»을 나란히 그렸다. R21 #6이
+	#   같은 행에서 이름 붙인 그 자기모순(하트와 효과 줄이 서로 다른 세계를 말한다)이, 원인만
+	#   «갱신 누락»에서 «잠금 미반영»으로 바뀐 채 남아 있던 자리다 — 게다가 «잠겼다»를 말하는 표면이
+	#   저장소 어디에도 없었다. 갚은 목록 자체는 사라지지 않으므로(잠금은 해소되면 그대로 돌아온다)
+	#   진행을 지우지 않고 **이유를 앞에 붙인다**.
 	r.effect_fn = func() -> String:
 		var t := Spine.okja_deed_terms(
 			_spine_bit_seen(SPINE_B4) and _spine_bit_seen(SPINE_B5),
 			museum.donated_count(), Museum.donatable_ids().size(), _run_harvested)
-		return "되찾음 %d/%d · 마주함 %s · 돌봄 %d" % [
+		var body := "되찾음 %d/%d · 마주함 %s · 돌봄 %d" % [
 			museum.donated_count(), Museum.donatable_ids().size(),
 			"○" if int(t["face"]) > 0 else "—", _run_harvested]
+		return body if _okja_track_open() else OKJA_TRACK_LOCKED_PREFIX + body
 	_refresh_okja_track()
 
 # ★[폴리시 R5] 트랙 폐쇄 — `_open_okja_track`의 역연산. 개통 전 상태로 **바이트 그대로** 되돌린다
@@ -26291,9 +26395,15 @@ func _run_season_respawn(d: int) -> void:
 #   같은 한 함수를 부른다(`_run_season_respawn`이 세운 그 규율). 하루의 입력은 day 하나뿐이라
 #   날씨·절기·겨울 여부를 전부 여기서 파생한다 — 그래야 미뤄 둔 밤도 그 밤의 값으로 굴러간다.
 #   ★ 파괴 집행이 여기(main)에 있는 이유는 종전과 같다: Reclaim은 밭도 설치물도 모른다.
-func _run_weed_spread(d: int) -> void:
+# ★[폴리시 R25 #7] 그 밤에 **무엇을 잃었나**를 돌려준다({crops, sprinklers}) — 밀린 밤이 여럿일 때
+#   호출부가 밤별 두 줄을 쏘는 대신 합계 한 줄씩을 말하도록(파종 알림이 이미 지키던 그 규율).
+#   `announce=false`면 이 함수는 침묵하고 수치만 낸다. 아침 정산(밤 하나)은 종전 그대로 여기서 말한다.
+const WEED_ATE_CROPS_NOTICE := "잡초가 작물 %d포기를 삼켰다 — 낫으로 잡초를 베어 두자"
+const WEED_BROKE_SPRINKLERS_NOTICE := "잡초가 스프링클러 %d개를 부쉈다"
+
+func _run_weed_spread(d: int, announce: bool = true) -> Dictionary:
 	if reclaim == null or _region != RegionCatalog.HOME:
-		return
+		return {"crops": 0, "sprinklers": 0}
 	var wet: bool = Weather.waters_field(_weather_sealed_on(d)) or GameClock.is_season_first_day(d)
 	var spread := reclaim.spread_day(_seed_weed_sources(), _weed_spread_cb(), d,
 		GameClock.season_index_for_day(d) == 3,
@@ -26306,10 +26416,11 @@ func _run_weed_spread(d: int) -> void:
 		sprinkler.remove(pt)              # 설치물 소멸(회수 아님 — 인벤 반환 없음)
 	# 알림은 **파괴가 있었을 때만**. 그냥 번지기만 한 밤은 조용하다(아침 알림 줄 보호 — 잃은 게 없으면
 	# 말할 것도 없고, 거칠어진 마당은 화면이 이미 보여 준다).
-	if not eaten_crops.is_empty():
-		_notice("잡초가 작물 %d포기를 삼켰다 — 낫으로 잡초를 베어 두자" % eaten_crops.size())
-	if not broken_sprinklers.is_empty():
-		_notice("잡초가 스프링클러 %d개를 부쉈다" % broken_sprinklers.size())
+	if announce and not eaten_crops.is_empty():
+		_notice(WEED_ATE_CROPS_NOTICE % eaten_crops.size())
+	if announce and not broken_sprinklers.is_empty():
+		_notice(WEED_BROKE_SPRINKLERS_NOTICE % broken_sprinklers.size())
+	return {"crops": eaten_crops.size(), "sprinklers": broken_sprinklers.size()}
 
 # ★[폴리시 R9] 그 밤의 재점령 집행 — 위 확산의 짝(같은 표가 둘을 함께 미룬다).
 func _run_weed_encroach(d: int) -> void:
@@ -26508,8 +26619,41 @@ func _weather_on(d: int) -> int:
 #      다른 집합이 깔려 «같은 날 재진입 = 동일 배치, 재파밍 차단» 계약이 반짝이 축에서만 깨졌다).
 # ★ 다른 날(d ≠ 굳은 날)을 물으면 종전대로 판다 — 예보·달력은 미래를 묻는 자리이고 굳을 것이 없다.
 # ★ 구세이브·부팅 첫날은 굳은 값이 없어 그대로 종전 답으로 떨어진다(거동 불변 · 다음 아침에 굳는다).
+# ★[폴리시 R25 #1·#5] 굳은 답은 **날짜별 표**에서 온다(선언부 — 밀린 밤이 여럿이면 밤마다 자기
+#   아침의 답이 있어야 한다). 표에 없는 날은 종전대로 라이브로 판다.
 func _weather_sealed_on(d: int) -> int:
-	return _weather_sealed if d == _weather_sealed_day and _weather_sealed_day != 0 else _weather_on(d)
+	return int(_weather_sealed_days[d]) if _weather_sealed_days.has(d) else _weather_on(d)
+
+# ★[폴리시 R25 #1·#5] 오늘의 답을 표에 굳히고 **아무도 안 묻는 옛 날을 떨군다**. 남기는 것은
+#   «오늘 + 아직 안 소비된 밀린 밤 셋»뿐이다 — 그 셋이 `_weather_sealed_on`을 부르는 유일한
+#   미래 소비처이므로(귀가 프레임의 이월 루프), 그 밖의 날은 표에 있어도 아무도 안 읽는다.
+#   가지치기가 없으면 표가 판 길이만큼 자라 세이브에 그대로 실린다.
+# ★[폴리시 R25 #1·#5] 굳은 하늘 표의 세이브 왕복. 신 키(표)를 먼저 보고, 없으면 **구 키 둘
+#   (스칼라 쌍)** 을 한 칸짜리 표로 읽는다 — 밀린 밤 표가 R24 #18에서 받은 그 가법 확장과 동형이고
+#   (`_pending_nights_from` 머리말) 손상값·0은 조용히 버린다.
+func _sealed_weather_from(data: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	var raw: Variant = data.get("weather_sealed_days", null)
+	if typeof(raw) == TYPE_DICTIONARY:
+		for k in (raw as Dictionary):
+			var d := int(k)
+			if d > 0:
+				out[d] = int((raw as Dictionary)[k])
+		return out
+	var legacy_day := maxi(int(data.get("weather_sealed_day", 0)), 0)
+	if legacy_day > 0:
+		out[legacy_day] = int(data.get("weather_sealed", Weather.CALM))
+	return out
+
+func _seal_weather_for(day: int, weather: int) -> void:
+	var keep: Dictionary = {day: true}
+	for table in [_weed_pending_days, _tree_seed_pending_days, _season_respawn_pending_days]:
+		for n in table:
+			keep[int(n)] = true
+	for k in _weather_sealed_days.keys():
+		if not keep.has(int(k)):
+			_weather_sealed_days.erase(k)
+	_weather_sealed_days[day] = weather
 
 func _forecast_on(d: int) -> int:
 	return Weather.forecast(d, _theme_open_on(d + 1))
@@ -26629,6 +26773,18 @@ func _free_pasture_tiles() -> Array:
 			#   ★ 이미 배정된 짐승도 스스로 풀린다: 밤 정산이 실내로 들이고 다음 아침 방출이 이
 			#     목록에서 다시 고르므로, 그 칸이 빠진 순간 다른 슬롯으로 옮겨 선다.
 			if _orchard_trunk_at(t):
+				continue
+			# ★[폴리시 R25 #6] **런타임 나무 원장(자체 파종목) → 배제.** 바로 위 R23 #22가 과수에
+			#   대해 닫은 그 비대칭의 마지막 짝이다 — 형제 후보 함수 `_encroach_candidates`는 R6에서
+			#   이 한 줄을 이미 받았는데(그 주석에 근거 전문: 마당 자연목은 `_sync_tree_tile`이 숲에서만
+			#   그리드를 만지므로 `_grid`가 GROUND 그대로고, `occ`(=`_home_prop_entries`)는 레이아웃
+			#   시드·절차 스캐터·재스폰 debris만 병합해 **파종목이 없다**) 여기만 안 받았다.
+			#   좌표도 실제로 겹친다: HOME `TREE_B` 앵커 (3,24)의 자체 파종 반경(체비쇼프 3)이
+			#   PASTURE_SCAN_RECT와 x3..6 × y21..23에서 만나고, 그 칸에 돋은 stage1은
+			#   `_rebuild_prop_collision`이 **풀타일** StaticBody로 세운다. 그래서 다음 아침
+			#   라운드로빈이 그 칸을 슬롯으로 집으면 짐승이 나무 콜라이더 안에 서고, 프롬프트 사슬이
+			#   `has_animal_at` 갈래에서 먼저 끊겨 그 칸의 벌목 안내에 하루 종일 도달하지 못했다.
+			if tree_ledger != null and tree_ledger.is_occupied(_region, t):
 				continue
 			out.append(t)
 	return out

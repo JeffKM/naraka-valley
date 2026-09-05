@@ -867,9 +867,14 @@ func _check_pending_order(m: Node) -> void:
 		morning[0] > 0 and morning[1] > 0 and morning[2] > 0)
 	_check("⑬a' 아침 정산의 상대 순서는 **확산 → 파종 → 재점령**이다(주석이 주장하던 «재점령이 먼저»가 아니다)",
 		morning[0] < morning[1] and morning[1] < morning[2])
-	var pend := [_line_of(_src, "func _process", "_run_weed_spread(pending_weed_day)"),
+	# ★[폴리시 R25 정비] **선재 red 정정.** R24 #18이 이월 소비를 «밀린 밤 전부» 루프로 바꾸며
+	#   인자를 `pending_weed_day` → 루프 변수 `night`로 개명했는데 이 증인만 안 따라가, ⑬b는
+	#   그 커밋 이래 «찾은 행 −1»로 빨간 채였다(형제 증인 polish_r9 ⑰e는 그때 함께 갱신됐다).
+	#   이 항이 재는 것은 «이월 소비가 아침 정산과 같은 상대 순서다»이므로 니들만 따라간다.
+	#   ★ 니들은 `(` 앞까지 — R25 #7이 `_run_weed_spread`에 침묵 인자를 더해도 안 갈린다.
+	var pend := [_line_of(_src, "func _process", "_run_weed_spread(night"),
 		_line_of(_src, "func _process", "tree_ledger.catch_up_seeding("),
-		_line_of(_src, "func _process", "_run_weed_encroach(pending_weed_day)")]
+		_line_of(_src, "func _process", "_run_weed_encroach(night")]
 	_check("⑬b 이월 소비도 **같은 상대 순서**다(확산 %d행 · 파종 %d행 · 재점령 %d행)" % pend,
 		pend[0] > 0 and pend[1] > 0 and pend[2] > 0 and pend[0] < pend[1] and pend[1] < pend[2])
 	# 근거: 두 원장이 서로를 배제하므로 순서가 결과를 가른다(순서가 무해하면 ⑬b가 공허하다).
@@ -932,8 +937,7 @@ func _check_pending_weed_sky(m: Node) -> void:
 		for c in sources:
 			m.reclaim._weeds[c] = true
 		var before: int = m.reclaim.weed_count()
-		m._weather_sealed_day = d
-		m._weather_sealed = sky
+		m._weather_sealed_days = {d: sky}   # ★[폴리시 R25 #1] 스칼라 쌍 → 날짜별 표
 		m._run_weed_spread(d)
 		counts.append(m.reclaim.weed_count() - before)
 	_check("⑪c 그 아침의 답이 갈리면 결과도 갈린다 — 혼우 아침 %d칸 ↔ 평온 아침 %d칸(살아 있는 답은 둘 다 평온이었다)"
@@ -943,7 +947,7 @@ func _check_pending_weed_sky(m: Node) -> void:
 	m.reclaim.load_save(snap)
 	m._cafe_revenue_total = rev0
 	m.clock.day = d0
-	m._weather_sealed_day = 0
+	m._weather_sealed_days = {}
 
 # ── ⑩ #10 같은 날 재진입 = 같은 배치(하늘이 낮에 뒤집혀도) ───────────────────
 # ★ 이 절은 `_grid`를 층 그리드로 갈아엎으므로 **맨 끝**에 두고, 끝나면 안식을 다시 세운다.
@@ -963,15 +967,14 @@ func _check_mine_layout_stable(m: Node) -> void:
 	var region0: String = m._region
 	var floor0: int = m._mine_floor
 	m.clock.day = d
-	m._weather_sealed_day = d
-	m._weather_sealed = Weather.SOULWIND     # 그 아침의 답 = 혼불 바람
+	m._weather_sealed_days = {d: Weather.SOULWIND}   # 그 아침의 답 = 혼불 바람
 	m._region = RegionCatalog.EOPHWA_MINE
 	m._mine_floor = floor_no
 	m._build_mine_floor()
 	var first: Array = (m._mine_layout["shimmers"] as Array).duplicate()
 	m._cafe_revenue_total = 999999           # 낮에 문턱을 넘겼다 — 살아 있는 답이 평온으로 뒤집힌다
 	_check("⑩b' 무대 전제: 살아 있는 답이 실제로 뒤집혔다(「%s」)" % Weather.NAMES[m._weather_on(d)],
-		m._weather_on(d) == Weather.CALM and m._weather_on(d) != m._weather_sealed)
+		m._weather_on(d) == Weather.CALM and m._weather_on(d) != m._weather_sealed_on(d))
 	m._build_mine_floor()
 	var second: Array = (m._mine_layout["shimmers"] as Array).duplicate()
 	_check("⑩c 같은 날 재진입에 **같은 배치**가 깔린다 — 반짝이 %d칸 → %d칸(집합 일치 %s · 재파밍 차단 계약)"
@@ -983,6 +986,6 @@ func _check_mine_layout_stable(m: Node) -> void:
 	m._cafe_revenue_total = rev0
 	m.clock.day = d0
 	m._mine_floor = floor0
-	m._weather_sealed_day = 0
+	m._weather_sealed_days = {}
 	m._region = region0
 	m._rebuild_region(region0)

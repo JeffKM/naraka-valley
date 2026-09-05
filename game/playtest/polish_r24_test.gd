@@ -280,6 +280,12 @@ func _check_notice_stack(m: Node) -> void:
 		int(slots[0]["idx"]) == feed._items.size() - 1)
 	# 앞의 띠가 시간으로 사라지면 밀려 있던 것이 그대로 되돌아온다(무손실의 실체).
 	# 되돌아올 후보 = 숨은 것 중 **가장 최근**(스택은 최신부터 아래에서 위로 찬다).
+	# ★[폴리시 R25 #2] 무대를 **실제 타임라인**으로 갈았다. 종전 ②g는 `_items.remove_at(size()-1)`로
+	#   *최신* 항목을 손으로 지웠는데, ②b가 네 줄을 전부 같은 secs(5.0)로 밀어 세운 이 무대에서
+	#   그 제거 순서는 일어날 수 없다 — `_process`는 모든 항목을 같은 delta로 깎고 만료분을 한꺼번에
+	#   거르므로, 개별로 먼저 사라지는 쪽은 언제나 «먼저 밀린 = 숨어 있는» 항목이다. 그래서 «잃은
+	#   줄 0»이 어떤 실제 타임라인도 재현하지 못한 채 green이었고, R25 #0(숨은 띠가 안 그려진 채
+	#   만료된다)이 이 스위트를 그대로 통과했다. 이제 **시간을 흘려** 잰다.
 	var hidden_idx := -1
 	var shown: Dictionary = {}
 	for s2 in slots:
@@ -288,15 +294,22 @@ func _check_notice_stack(m: Node) -> void:
 		if not shown.has(i2):
 			hidden_idx = i2
 			break
-	feed._items.remove_at(feed._items.size() - 1)   # 최신 한 줄이 시간으로 사라진다
+	var hidden_text: String = String(feed._items[hidden_idx]["text"]) if hidden_idx >= 0 else ""
+	var hidden_secs: float = float(feed._items[hidden_idx]["secs"]) if hidden_idx >= 0 else 0.0
+	# 실제 시계 — 그려진 띠들이 secs를 다 쓸 때까지 `_process`를 돌린다(손으로 큐를 안 건드린다).
+	for _t in range(12):
+		if feed._items.size() <= (NoticeFeed.MAX_ITEMS - slots.size()):
+			break
+		feed._process(0.5)
+	var survived := false
+	for it in feed._items:
+		if String(it["text"]) == hidden_text and is_equal_approx(float(it["secs"]), hidden_secs):
+			survived = true
 	var slots2 := feed.layout(font, view)
-	var back := false
-	for s3 in slots2:
-		if int(s3["idx"]) == hidden_idx:
-			back = true
-	_check("②g 최신이 사라지면 밀려 있던 띠(idx %d)가 다시 선다 — 그린 %d개 → %d개(잃은 줄 0)"
-			% [hidden_idx, slots.size(), slots2.size()],
-		hidden_idx >= 0 and back and slots2.size() == slots.size())
+	var back := slots2.size() > 0 and survived
+	_check("②g 그린 띠가 **시간으로** 사라지면 밀려 있던 띠가 남은 시간 %.1f초를 그대로 들고 내려온다 — 큐 %d개 · 그린 %d개(잃은 줄 0)"
+			% [hidden_secs, feed._items.size(), slots2.size()],
+		hidden_idx >= 0 and survived and back and feed._items.size() == NoticeFeed.MAX_ITEMS - slots.size())
 	feed._items.clear()
 
 # ── ③ #2 보부상 귀물 슬롯이 죽은 행으로 서지 않는다 ──────────────────────────
@@ -618,7 +631,9 @@ func _check_luck_floor_seal(m: Node) -> void:
 	print("⑩ #9 [삽사리] 운 하한 ↔ 하루 굳히기")
 	_check("⑩a 배선: 하늘을 굳히는 그 아침 자리에서 운 하한도 함께 굳는다(형제 두 칸이 나란하다)",
 		_count_in(_src, "func _on_day_advanced", "_luck_floor_sealed_day = day") == 1
-			and _count_in(_src, "func _on_day_advanced", "_weather_sealed_day = day") == 1)
+			# ★[폴리시 R25 #1] 하늘 굳히기가 표 창구(`_seal_weather_for`)로 갈렸다 — 이 항이 재는
+			#   «두 칸이 같은 아침 자리에서 나란히 굳는다»는 그대로라 니들만 그 창구로 따라간다.
+			and _count_in(_src, "func _on_day_advanced", "_seal_weather_for(day, weather)") == 1)
 	_check("⑩b 배선: 세이브에 실린다 — F9·재부팅 뒤에도 같은 날은 같은 답(하늘 두 칸과 같은 결)",
 		_count_in(_src, "func _save_game", "\"luck_floor_sealed_day\":") == 1
 			and _count_in(_src, "func _load_game", "data.get(\"luck_floor_sealed_day\"") == 1)
@@ -915,7 +930,7 @@ func _check_pending_nights(m: Node) -> void:
 	m._queue_pending_night(tbl, 0)
 	_check("⑯b 창구가 밤을 쌓는다(같은 날 중복·0은 안 든다) — %s" % str(tbl), str(tbl) == str([7, 8]))
 	# 소비 순서 — 밤은 오름차순, 한 밤 안에서는 확산 → 파종 → 재점령(R22 #14 상대 순서 보존).
-	var spread := _line_in_func(_src, "func _process", "_run_weed_spread(night)")
+	var spread := _line_in_func(_src, "func _process", "_run_weed_spread(night")
 	var seed := _line_in_func(_src, "func _process", "catch_up_seeding(night,")
 	var enc := _line_in_func(_src, "func _process", "_run_weed_encroach(night)")
 	_check("⑯c 소비가 오름차순(nights.sort())이고 한 밤 안에서 확산(%d) → 파종(%d) → 재점령(%d) 순이다"
