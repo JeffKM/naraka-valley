@@ -132,6 +132,24 @@ func _count_in_func(lines: PackedStringArray, fn_needle: String, needle: String)
 			n += 1
 	return n
 
+# 그 함수 **안**에서 니들이 처음 나오는 행 번호(1-based · -1 = 없음). 순서 단언의 창구다.
+func _line_of(lines: PackedStringArray, fn_needle: String, needle: String) -> int:
+	var head := -1
+	for i in range(lines.size()):
+		if lines[i].begins_with(fn_needle):
+			head = i
+			break
+	if head < 0:
+		return -1
+	for i in range(head + 1, lines.size()):
+		if lines[i].begins_with("func ") or lines[i].begins_with("static func "):
+			return -1
+		if lines[i].strip_edges().begins_with("#"):
+			continue
+		if lines[i].contains(needle):
+			return i + 1
+	return -1
+
 func _feed_has(m: Node, needle: String) -> bool:
 	if m.notice_feed == null:
 		return false
@@ -181,6 +199,13 @@ func _run_checks() -> void:
 	_check_tree_window_tiles(m)     # ⑦
 	_check_pot_resident_tile(m)     # ⑧
 	_check_indoor_restore(m)        # ⑤ — `_indoor`를 갈아 두므로 맨 끝
+
+	print("══ 폴리시 R22 회귀 — 배치 B(#8~#14) ══")
+	_check_craft_placeable_shipping(m)   # ⑨ (+ #8 OWNER 근거)
+	_check_mirror_theme_hint(m)          # ⑫
+	_check_pending_order(m)              # ⑬
+	_check_pending_weed_sky(m)           # ⑪
+	_check_mine_layout_stable(m)         # ⑩ — `_grid`를 갈아엎으므로 맨 끝
 
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
@@ -661,3 +686,303 @@ func _check_indoor_restore(m: Node) -> void:
 	_check("⑤c' 근거: 그 좌표는 지금 판에서 실제로 막힌 칸이다(%s) — 구제가 헛돌지 않았다"
 			% str(m._player_blocked_at(blocked)), m._player_blocked_at(blocked))
 	m._indoor = ""
+
+# ══ 배치 B(#8~#14) ═══════════════════════════════════════════════════════════
+# 렌즈: 경제 왕복 차익(#8·#9) · 날씨×테마 교차(#10·#11·#12·#13) · 콜백 배선 스윕(#14).
+#
+# 판정: #9·#10·#11·#12·#13·#14 CONFIRMED(전부 봉합) · **#8 = OWNER-DECISION**(부품 3×120 = 360이
+#   결정기 잔가 400보다 싸 «클릭 한 번 = +40냥»이 성립하는 것은 실측으로 참이나, 봉합 방향이 둘 다
+#   **수치**다 — 제작비를 올리든 잔가를 내리든 MINE_DEVICES 머리말이 "값 전부 *잠정*(owner 큐 —
+#   ADR-0069 결정 1)"이라 못 박은 그 표를 고치는 일이다. 코드 무수정 · 대신 ⑨e·⑨f가 부등호와
+#   차액을 **이름과 숫자로** 드러내 두어, 어느 쪽으로 고치든 그 회귀가 바로 잡힌다).
+#   #11은 #10과 **동뿌리이나 DUP 아님** — 하나의 봉합(아침에 굳은 하늘)이 둘을 함께 닫지만 소비
+#   자리가 다르고(갱도 층 배치 ↔ 밀린 잡초 확산) 깨진 계약도 다르다(같은 날 재진입 동일 배치 ↔
+#   하루 경계 이벤트는 그 아침의 답으로 굳는다). 그래서 각자 자기 자리에서 잰다.
+#
+# 봉합 축:
+#   · #9  = 출하 술어의 **여섯째 갈래** `_craft_placeable_sellable` = 설치물 ∧ `CraftCatalog.makes`.
+#           매대에서 파는 설치물(스프링클러 T1·게잡이통)은 레시피가 없어 그대로 거절되므로
+#           «싸게 사서 정가에 되팔기»가 안 열린다. 값의 계약(잔가 ≤ 재료가)은 런타임이 아니라
+#           **회귀가** 집행한다 — 차익 나는 항목의 문을 조용히 닫으면 #9가 그대로 되돌아온다.
+#   · #10·#11 = `_weather_sealed_day`/`_weather_sealed` — **그 아침에 굳은 하늘**. `_theme_open_on`
+#           머리말이 이미 두 축을 선언해 뒀는데("진척은 하루 중에도 자란다" ∧ "하루 경계 이벤트는
+#           그 아침의 답으로 굳는다") 뒤쪽 축을 들고 있는 값이 코드에 없었다. 화면은 계속 살아 있는
+#           답을 보고, 하루치로 굳어야 하는 둘만 `_weather_sealed_on`을 본다.
+#   · #12·#13 = ※ 단서에서 **이름을 빼고 축을 바로잡는다**. 문턱 이름은 `Festival.unlock_hint`가
+#           UNLOCK_STAGE/UNLOCK_REVENUE 표에서 판다(값 복제 0).
+#   · #14 = 이월 소비를 아침 정산과 **같은 상대 순서**(확산 → 파종 → 재점령)로 편다.
+#
+# 하중 검증(실측):
+#   #9  여섯째 갈래 삭제                          → ⑨b red(다섯 종이 전부 출하함에 안 들어간다)
+#   #10 `_build_mine_floor`를 `_weather_today()`로 → ⑩c red(반짝이 2칸 → 0칸으로 재진입에 갈린다)
+#   #11 `_run_weed_spread`를 `_weather_on(d)`로    → ⑪c·⑪d red(두 하늘이 같은 4칸을 낸다)
+#   #12 ※ 줄에 테마 이름 복귀                     → ⑫b red
+#   #13 ※ 줄을 "카페가 문턱을 넘으면"으로 복귀    → ⑫c red
+#   #14 이월 순서를 재점령 → 파종으로 복귀        → ⑬b red(파종 13498행 > 재점령 13492행)
+#
+# ★배치 B에서 배운 것: **무대를 판에서 찾을 때 「양쪽 후보인 칸」을 찾아야 한다.** ⑬c의 첫 판은
+#   «파종 가능한 빈 칸»만 골라 맵 모서리 (0,0)을 집었는데 그 칸은 애초에 재점령 pool 밖이라,
+#   순서가 결과를 가르는 무대가 아니었다(⑬c''가 red). 순서 계약은 **두 원장이 같은 칸을 놓고
+#   다툴 때만** 관측되므로, 무대 조건도 «양쪽 모두의 후보»여야 한다.
+
+# 이 아이템이 든 백팩 슬롯(-1 = 없음).
+func _slot_of(m: Node, id: String) -> int:
+	for i in m.inventory.slots.size():
+		if m.inventory.id_at(i) == id:
+			return i
+	return -1
+
+# 조건에 맞는 테마 슬롯 날을 판에서 찾는다(좌표·날짜 하드코딩 0).
+#   want = 비해금일 때의 하늘 · revenue_axis = 매출 눈금으로 열리는 테마인가.
+func _find_theme_day(want: int, revenue_axis: bool) -> int:
+	for d in range(1, 2000):
+		var slot := Festival.theme_slot_for_day(d)
+		if slot == Festival.NONE:
+			continue
+		if (int(Festival.UNLOCK_REVENUE[slot]) > 0) != revenue_axis:
+			continue
+		if Weather.weather_for_day(d, false) != want:
+			continue
+		if Weather.weather_for_day(d, true) != Weather.CALM:
+			continue
+		return d
+	return -1
+
+# ── ⑨ #9 제작 전용 설치물의 잔가에 창구가 생긴다(+ #8 OWNER 근거) ────────────
+func _check_craft_placeable_shipping(m: Node) -> void:
+	print("⑨ #9 제작 전용 설치물 출하 창구 (+ #8 근거)")
+	# 제작 전용 설치물 = 설치물 ∧ 레시피 산출. 목록을 적지 않고 두 카탈로그에서 판다.
+	var craft_placeables: Array[String] = []
+	var store_placeables: Array[String] = []
+	for id in ItemCatalog.PLACEABLES.keys():
+		if CraftCatalog.makes(String(id)):
+			craft_placeables.append(String(id))
+		else:
+			store_placeables.append(String(id))
+	_check("⑨a 무대: 설치물 %d종이 제작 전용 %d · 매대 판매 %d로 갈린다(둘 다 비어 있지 않다)"
+			% [ItemCatalog.PLACEABLES.size(), craft_placeables.size(), store_placeables.size()],
+		not craft_placeables.is_empty() and not store_placeables.is_empty())
+
+	# 실제로 출하함에 들어가는가 — 드롭 핸들러를 그대로 태운다.
+	var accepted: Array[String] = []
+	var refused: Array[String] = []
+	for id in craft_placeables:
+		if not _hold(m, id):
+			continue
+		var before: int = m.ship_bin.count_of(id)
+		m._on_frame_deposit(_slot_of(m, id))
+		if m.ship_bin.count_of(id) > before:
+			accepted.append(id)
+		else:
+			refused.append(id)
+	_check("⑨b 제작 전용 설치물이 출하함에 들어간다 — 받은 것 %s · 거절된 것 %s"
+			% [accepted, refused], refused.is_empty() and accepted.size() == craft_placeables.size())
+	# 정산가가 카탈로그가 선언한 그 값이다(표시용 별도 계산 없음).
+	var mismatched: Array[String] = []
+	for id in accepted:
+		if ItemCatalog.ship_price_of(id) != ItemCatalog.price_of(id):
+			mismatched.append(id)
+	_check("⑨c 정산가 = 카탈로그가 «잔가(출하 시)»라 선언한 그 값이다 — 어긋난 항목 %s" % [mismatched],
+		mismatched.is_empty())
+
+	# 매대에서 파는 설치물은 여전히 거절된다 = «싸게 사서 정가에 되팔기»가 안 열린다.
+	var leaked: Array[String] = []
+	for id in store_placeables:
+		if not _hold(m, id):
+			continue
+		var before2: int = m.ship_bin.count_of(id)
+		m._on_frame_deposit(_slot_of(m, id))
+		if m.ship_bin.count_of(id) > before2:
+			leaked.append(id)
+	_check("⑨d 매대 판매 설치물은 그대로 거절된다(되팔기 차익 0) — 샌 것 %s" % [leaked],
+		leaked.is_empty())
+
+	# ★ #8 OWNER 근거 — «만들어 팔기가 차익이 되지 않게»(카탈로그 자구)를 전 항목에서 잰다.
+	var violators: Array[String] = []
+	for id in craft_placeables:
+		var mats: int = CraftCatalog.mats_value_of(id)
+		if mats >= 0 and ItemCatalog.price_of(id) > mats:
+			violators.append("%s(잔가 %d > 재료가 %d)" % [ItemCatalog.name_of(id),
+				ItemCatalog.price_of(id), mats])
+	_check("⑨e 제작 전용 설치물의 «잔가 ≤ 재료가»를 전수로 잰다 — 어긋난 항목 %s(0이어야 한다)"
+			% [violators], violators.is_empty())
+	# 결정기는 설치물 표 밖(MINE_DEVICES)이라 위 순회에 안 들어간다 — 그 하나가 #8이고 owner 큐다.
+	var part: String = ItemCatalog.CRYSTALARIUM_PART
+	var device: String = ItemCatalog.CRYSTALARIUM
+	var mats_gold: int = ItemCatalog.ship_price_of(part) * CrystalariumLedger.PARTS_PER_UNIT
+	var device_gold: int = ItemCatalog.ship_price_of(device)
+	_check("⑨f #8 OWNER: 부품 %d개를 그대로 출하 %d냥 ↔ 제작 후 출하 %d냥 — 클릭 한 번에 %+d냥(수치는 owner 큐)"
+			% [CrystalariumLedger.PARTS_PER_UNIT, mats_gold, device_gold, device_gold - mats_gold],
+		device_gold > mats_gold)
+	_check("⑨f' 그 차익이 형제들과 어긋난다 — 업화로 잔가 %d < 재료가 %d · 화분 잔가 %d < 재료가 %d"
+			% [ItemCatalog.price_of(ItemCatalog.FURNACE), CraftCatalog.mats_value_of(ItemCatalog.FURNACE),
+				ItemCatalog.price_of(ItemCatalog.GARDEN_POT), CraftCatalog.mats_value_of(ItemCatalog.GARDEN_POT)],
+		ItemCatalog.price_of(ItemCatalog.FURNACE) < CraftCatalog.mats_value_of(ItemCatalog.FURNACE)
+			and ItemCatalog.price_of(ItemCatalog.GARDEN_POT) < CraftCatalog.mats_value_of(ItemCatalog.GARDEN_POT))
+	# 판을 되돌린다(출하 대기 비우기 — 뒤 절이 깨끗한 판을 본다).
+	for id in m.ship_bin.ids().duplicate():
+		m._on_frame_takeback(String(id))
+
+# ── ⑫ #12·#13 ※ 단서는 이름을 안 싣고 축을 바로 말한다 ──────────────────────
+func _check_mirror_theme_hint(m: Node) -> void:
+	print("⑫ #12·#13 점괘 ※ 단서")
+	var d := _find_theme_day(Weather.RAIN, false)   # 단계 축 테마 + 비해금이면 혼우
+	_check("⑫a 무대: 단계 눈금으로 열리는 테마 슬롯 날 %d를 판에서 찾았다(비해금이면 하늘이 갈린다)" % d,
+		d > 1)
+	if d <= 1:
+		return
+	var slot := Festival.theme_slot_for_day(d)
+	var d0: int = m.clock.day
+	m.clock.day = d - 1
+	var locked: bool = not m._theme_open_on(d)
+	m._open_mirror()          # 표시 단언은 그리기 경로를 태운다
+	var text: String = m.mirror_text.text
+	_check("⑫a' 무대 전제: 내일(%d일)의 테마가 아직 잠겨 있고(%s) 거울에 ※ 줄이 떴다"
+			% [d, str(locked), ], locked and text.contains("※"))
+	_check("⑫b 그 줄은 **이름을 안 싣는다** — 「%s」 미포함(달력 범례가 같은 날을 「?」로 덮는 그 계약)"
+			% Festival.name_of(slot), not text.contains(Festival.name_of(slot)))
+	var hint := Festival.unlock_hint(slot)
+	_check("⑫c 대신 **그 테마의 실제 문턱**을 말한다 — 「%s」 포함 %s · 옛 문구(「카페가 문턱을」) 미포함 %s"
+			% [hint, str(text.contains(hint)), str(not text.contains("카페가 문턱을"))],
+		hint != "" and text.contains(hint) and not text.contains("카페가 문턱을"))
+	# 근거: 그 축은 매출이 아니다 — 하트만 채워도 단계가 오른다(3축 AND).
+	var th: int = CafeMilestone.TARGET_HARVEST
+	var tr: int = CafeMilestone.TARGET_REVENUE
+	var the: int = CafeMilestone.TARGET_HEARTS
+	_check("⑫d 근거: 이 테마의 눈금은 매출 %d(=0)이 아니라 단계 %d다 — 매출·수확을 넘긴 채 하트만 %d→%d로 올려도 단계가 %d→%d로 오른다"
+			% [int(Festival.UNLOCK_REVENUE[slot]), int(Festival.UNLOCK_STAGE[slot]), the - 1, the,
+				CafeMilestone.stage(th, tr, the - 1), CafeMilestone.stage(th, tr, the)],
+		int(Festival.UNLOCK_REVENUE[slot]) == 0 and int(Festival.UNLOCK_STAGE[slot]) > 0
+			and CafeMilestone.stage(th, tr, the - 1) < CafeMilestone.stage(th, tr, the))
+	m.mirror_panel.visible = false
+	m.clock.day = d0
+
+# ── ⑬ #14 이월 소비 순서 = 아침 정산 순서 ───────────────────────────────────
+func _check_pending_order(m: Node) -> void:
+	print("⑬ #14 이월 소비 순서")
+	var morning := [_line_of(_src, "func _on_day_advanced", "_run_weed_spread(day)"),
+		_line_of(_src, "func _on_day_advanced", "tree_ledger.advance_day(day"),
+		_line_of(_src, "func _on_day_advanced", "_run_weed_encroach(day)")]
+	_check("⑬a 무대: 아침 정산의 세 자리를 전부 찾았다(확산 %d행 · 파종 %d행 · 재점령 %d행)" % morning,
+		morning[0] > 0 and morning[1] > 0 and morning[2] > 0)
+	_check("⑬a' 아침 정산의 상대 순서는 **확산 → 파종 → 재점령**이다(주석이 주장하던 «재점령이 먼저»가 아니다)",
+		morning[0] < morning[1] and morning[1] < morning[2])
+	var pend := [_line_of(_src, "func _process", "_run_weed_spread(pending_weed_day)"),
+		_line_of(_src, "func _process", "tree_ledger.catch_up_seeding("),
+		_line_of(_src, "func _process", "_run_weed_encroach(pending_weed_day)")]
+	_check("⑬b 이월 소비도 **같은 상대 순서**다(확산 %d행 · 파종 %d행 · 재점령 %d행)" % pend,
+		pend[0] > 0 and pend[1] > 0 and pend[2] > 0 and pend[0] < pend[1] and pend[1] < pend[2])
+	# 근거: 두 원장이 서로를 배제하므로 순서가 결과를 가른다(순서가 무해하면 ⑬b가 공허하다).
+	# 두 원장이 **동시에** 후보로 삼는 칸을 판에서 찾는다 — 그 칸에서만 순서가 결과를 가른다.
+	var pool: Array = m._encroach_candidates()
+	var t := Vector2i(-1, -1)
+	for c: Vector2i in pool:
+		if not m.reclaim.has_weed(c) and not m.tree_ledger.is_occupied(RegionCatalog.HOME, c) \
+				and m._is_tree_seed_free(RegionCatalog.HOME, c, {}):
+			t = c
+			break
+	_check("⑬c 무대: 재점령 후보 %d칸 중 **파종도 가능한** 칸 %s를 찾았다(둘이 겹치지 않으면 순서가 무해하다)"
+			% [pool.size(), t], t.x >= 0)
+	if t.x < 0:
+		return
+	var seed_free_before: bool = m._is_tree_seed_free(RegionCatalog.HOME, t, {})
+	m.reclaim._weeds[t] = true
+	var seed_after_weed: bool = m._is_tree_seed_free(RegionCatalog.HOME, t, {})
+	m.reclaim._weeds.erase(t)
+	_check("⑬c' 근거 ㉠ 잡초가 먼저 돋으면 그 칸은 **파종에서 빠진다**(성역 판정 %s → %s)"
+			% [str(seed_free_before), str(seed_after_weed)], seed_free_before and not seed_after_weed)
+	m.tree_ledger._put(RegionCatalog.HOME, t, {"species": TreeLedger.SP_PINE, "stage": 1,
+		"hp": 1, "stump": false, "moss": false, "large": "", "gone": false})
+	var pool_after: Array = m._encroach_candidates()
+	m.tree_ledger._trees[RegionCatalog.HOME].erase(t)
+	_check("⑬c'' 근거 ㉡ 나무가 먼저 서면 그 칸은 **재점령 후보에서 빠진다**(pool %d칸 → %d칸 · 그 칸 포함 %s)"
+			% [pool.size(), pool_after.size(), str(pool_after.has(t))], not pool_after.has(t))
+
+# ── ⑪ #11 밀린 잡초 확산은 «그 아침의 하늘»로 굴러간다 ──────────────────────
+func _check_pending_weed_sky(m: Node) -> void:
+	print("⑪ #11 밀린 확산 ↔ 아침에 굳은 하늘")
+	var d := _find_theme_day(Weather.RAIN, true)   # 매출 눈금 테마(=냥 하나로 해금을 세울 수 있다)
+	_check("⑪a 무대: 비해금이면 혼우·해금되면 평온인 테마 슬롯 날 %d를 판에서 찾았다" % d, d > 1)
+	if d <= 1:
+		return
+	var d0: int = m.clock.day
+	var rev0: int = m._cafe_revenue_total
+	var snap: Dictionary = m.reclaim.to_save()
+	m.clock.day = d
+	m._cafe_revenue_total = 999999               # 낮에 문턱을 넘긴 세계 — 살아 있는 답은 평온이다
+	_check("⑪a' 무대 전제: 살아 있는 답은 「%s」인데 그 아침의 답은 「%s」일 수 있다(둘이 실제로 갈린다)"
+			% [Weather.NAMES[m._weather_on(d)], Weather.NAMES[Weather.RAIN]],
+		m._weather_on(d) == Weather.CALM)
+	# 잡초 소스를 넉넉히 깔아 배수 차이가 실제로 보이게 한다(확산은 소스마다 한 번씩 굴린다).
+	var sources: Array[Vector2i] = []
+	for y in range(m._grid.size()):
+		for x in range(m._grid[y].size()):
+			var c := Vector2i(x, y)
+			if sources.size() >= 60:
+				break
+			if not m._player_blocked_at(c) and m._weed_spread_class(c, {}) != Reclaim.DEST_BLOCK:
+				sources.append(c)
+		if sources.size() >= 60:
+			break
+	_check("⑪b 무대: 잡초 소스 %d칸을 판에서 깔았다(배수 차이가 보이려면 소스가 여럿이어야 한다)"
+			% sources.size(), sources.size() >= 20)
+	var counts: Array[int] = []
+	for sky in [Weather.RAIN, Weather.CALM]:
+		m.reclaim.load_save(snap)
+		for c in sources:
+			m.reclaim._weeds[c] = true
+		var before: int = m.reclaim.weed_count()
+		m._weather_sealed_day = d
+		m._weather_sealed = sky
+		m._run_weed_spread(d)
+		counts.append(m.reclaim.weed_count() - before)
+	_check("⑪c 그 아침의 답이 갈리면 결과도 갈린다 — 혼우 아침 %d칸 ↔ 평온 아침 %d칸(살아 있는 답은 둘 다 평온이었다)"
+			% [counts[0], counts[1]], counts[0] != counts[1])
+	_check("⑪d 혼우 쪽이 더 번진다 — 젖은 밤 배수(×%.1f)가 실제로 실렸다" % Reclaim.SPREAD_WET_MULT,
+		counts[0] > counts[1])
+	m.reclaim.load_save(snap)
+	m._cafe_revenue_total = rev0
+	m.clock.day = d0
+	m._weather_sealed_day = 0
+
+# ── ⑩ #10 같은 날 재진입 = 같은 배치(하늘이 낮에 뒤집혀도) ───────────────────
+# ★ 이 절은 `_grid`를 층 그리드로 갈아엎으므로 **맨 끝**에 두고, 끝나면 안식을 다시 세운다.
+func _check_mine_layout_stable(m: Node) -> void:
+	print("⑩ #10 갱도 층 배치 ↔ 아침에 굳은 하늘")
+	var d := _find_theme_day(Weather.SOULWIND, true)
+	_check("⑩a 무대: 비해금이면 혼불 바람·해금되면 평온인 테마 슬롯 날 %d를 판에서 찾았다" % d, d > 1)
+	if d <= 1:
+		return
+	var floor_no := 1
+	var a: Array = MineFloors.generate(d, floor_no, Weather.mob_spawn_scale(Weather.SOULWIND))["shimmers"]
+	var b: Array = MineFloors.generate(d, floor_no, Weather.mob_spawn_scale(Weather.CALM))["shimmers"]
+	_check("⑩b 근거: 몹 배수가 갈리면 반짝이 배치도 갈린다 — 혼불 바람 %d칸 ↔ 평온 %d칸(같으면 ⑩c가 공허하다)"
+			% [a.size(), b.size()], a != b)
+	var d0: int = m.clock.day
+	var rev0: int = m._cafe_revenue_total
+	var region0: String = m._region
+	var floor0: int = m._mine_floor
+	m.clock.day = d
+	m._weather_sealed_day = d
+	m._weather_sealed = Weather.SOULWIND     # 그 아침의 답 = 혼불 바람
+	m._region = RegionCatalog.EOPHWA_MINE
+	m._mine_floor = floor_no
+	m._build_mine_floor()
+	var first: Array = (m._mine_layout["shimmers"] as Array).duplicate()
+	m._cafe_revenue_total = 999999           # 낮에 문턱을 넘겼다 — 살아 있는 답이 평온으로 뒤집힌다
+	_check("⑩b' 무대 전제: 살아 있는 답이 실제로 뒤집혔다(「%s」)" % Weather.NAMES[m._weather_on(d)],
+		m._weather_on(d) == Weather.CALM and m._weather_on(d) != m._weather_sealed)
+	m._build_mine_floor()
+	var second: Array = (m._mine_layout["shimmers"] as Array).duplicate()
+	_check("⑩c 같은 날 재진입에 **같은 배치**가 깔린다 — 반짝이 %d칸 → %d칸(집합 일치 %s · 재파밍 차단 계약)"
+			% [first.size(), second.size(), str(first == second)],
+		not first.is_empty() and first == second)
+	# 다른 날은 종전대로 판다 — 예보·달력은 미래를 묻는 자리라 굳을 것이 없다.
+	_check("⑩d 다른 날은 굳은 값이 안 낀다 — `_weather_sealed_on(%d)` == `_weather_on(%d)`" % [d + 1, d + 1],
+		m._weather_sealed_on(d + 1) == m._weather_on(d + 1))
+	m._cafe_revenue_total = rev0
+	m.clock.day = d0
+	m._mine_floor = floor0
+	m._weather_sealed_day = 0
+	m._region = region0
+	m._rebuild_region(region0)

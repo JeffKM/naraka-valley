@@ -2480,6 +2480,11 @@ var _pasture_release_pending := false
 #     day 시드라 같은 날을 두 번 굴려도 결과가 같고, 밀린 밤 수만큼 곱해 물리는 건 페널티 설계
 #     결정이라 여기서 새로 만들지 않는다(OWNER 큐).
 var _weed_day_pending_day := 0
+# ★[폴리시 R22 #10·#11] 그 아침에 굳은 하늘(0 = 아직 안 굳음 → 종전 파생으로 떨어진다).
+#   `_weather_sealed_on` 머리말에 두 소비처와 근거가 있다. 세이브에 실린다 — 밀린 밤을 다음 세션에
+#   소비할 수 있고(잡초 표가 저장되므로), 그때도 그 아침의 답이어야 한다.
+var _weather_sealed_day := 0
+var _weather_sealed := Weather.CALM
 # ★[폴리시 R21 #15] 집 밖에서 날이 바뀌어 **밀린 그 밤의 마당 자체 파종**의 날짜(0 = 밀린 것 없음).
 #   위 셋과 같은 결이다 — 파종 판정(`_is_tree_seed_free`)이 안식 그리드·프롭·밭을 훑으므로 다른
 #   구역에서는 집행할 수 없고, 그 밤을 그냥 버리면 마당 나무 공급(HOME_CAP)이 영구히 준다.
@@ -6076,7 +6081,8 @@ func _in_mine_floor() -> bool:
 #   ★ 그날 이미 깬 돌은 원장이 빼 준다(같은 날 재진입 = 동일 배치 + 깬 돌 제외, 재파밍 차단).
 func _build_mine_floor() -> void:
 	mine_floors.advance_day(clock.day)      # 날이 갈렸으면 day-한정 기록 소멸(취침 훅의 방어적 짝)
-	_mine_layout = MineFloors.generate(clock.day, _mine_floor, Weather.mob_spawn_scale(_weather_today()))
+	_mine_layout = MineFloors.generate(clock.day, _mine_floor,
+		Weather.mob_spawn_scale(_weather_sealed_on(clock.day)))   # ★[폴리시 R22 #10] 아침에 굳은 하늘
 	_spawn_mine_mobs()                      # ★[S5-T5] 층 잡귀 재스폰(층 한정 비영속 — 들어설 때마다 새 판)
 	_grid = []
 	for y in _grid_h:
@@ -10634,6 +10640,15 @@ func _on_day_advanced(day: int) -> void:
 	#   ★ 절기 첫날은 Weather가 스스로 평온으로 못 박으므로(강제 평온), 사멸이 벌어지는 날에
 	#     잿눈·혼우가 겹치는 일은 정의상 없다 — 여기서 따로 가드하지 않는 이유다.
 	var weather := _weather_on(day)
+	# ★[폴리시 R22 #10·#11] **오늘의 하늘을 여기서 굳힌다.** 위 주석의 "day에서 파생되는 순수 롤"은
+	#   R19 #13이 테마 해금을 인자로 얹은 뒤로 절반만 참이다 — `_theme_open_on`이 살아 있는
+	#   `_cafe_stage()`·`_cafe_revenue_total`을 읽으므로, 슬롯 당일 낮에 문턱을 넘으면 그 프레임부터
+	#   `_weather_on(오늘)`의 답이 뒤집힌다. 그 실시간성 자체는 설계다(그 함수 머리말: "진척은 하루
+	#   중에도 자란다"). 같은 머리말이 예외도 함께 못 박았다 — **"하루 경계 이벤트는 그 아침의 답으로
+	#   굳는다"**. 그 굳은 답을 코드가 들고 있질 않아서, 아침의 답을 써야 할 두 자리가 낮의 답을 다시
+	#   팠다(밀린 잡초 확산 · 갱도 층 배치). 여기 한 칸이 그 «아침의 답»이다.
+	_weather_sealed_day = day
+	_weather_sealed = weather
 	# ★[S7-T2 / ADR-0065 결정 2] 작물 절기 사멸 — 절기 첫날 아침, 밭의 **비제철·비다절기** 작물이
 	#   일괄로 스러진다. `farm.advance_day`보다 위라 스러진 칸은 그날 자라지 않는다(하루 사이클 정합 —
 	#   까마귀 습격이 성장 전에 오는 것과 같은 순서 규율).
@@ -12218,6 +12233,9 @@ func _save_game() -> bool:
 		#     왕복해야 한다. 셋 다 후자다. 표를 원장과 같은 파일에 담으면 둘이 늘 같은 시점을
 		#     가리켜 그 갈림 자체가 사라진다.
 		"weed_pending_day": _weed_day_pending_day,
+		# ★[폴리시 R22 #10·#11] 그 아침에 굳은 하늘(잡초 표와 짝 — 밀린 밤을 다음 세션에 소비해도 같은 답).
+		"weather_sealed_day": _weather_sealed_day,
+		"weather_sealed": _weather_sealed,
 		"tree_seed_pending_day": _tree_seed_pending_day,   # ★[폴리시 R21 #15] 밀린 밤의 마당 파종
 		"season_respawn_pending_day": _season_respawn_pending_day,
 		"pasture_release_pending": _pasture_release_pending,
@@ -12436,6 +12454,8 @@ func _load_game() -> bool:
 	_season_respawn_pending_day = maxi(int(data.get("season_respawn_pending_day", 0)), 0)
 	_pasture_release_pending = bool(data.get("pasture_release_pending", false))
 	_weed_day_pending_day = maxi(int(data.get("weed_pending_day", 0)), 0)
+	_weather_sealed_day = maxi(int(data.get("weather_sealed_day", 0)), 0)   # ★[폴리시 R22 #10·#11]
+	_weather_sealed = int(data.get("weather_sealed", Weather.CALM))
 	_tree_seed_pending_day = maxi(int(data.get("tree_seed_pending_day", 0)), 0)   # ★[폴리시 R21 #15]
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
@@ -13450,15 +13470,26 @@ func _process(delta: float) -> void:
 	# ★[폴리시 R9] 밀린 **그 밤의 잡초 두 줄** 소비 — 절기 재스폰 표와 같은 자리·같은 조건이되
 	#   순서가 계약이다: 확산(현존 잡초가 번지며 작물·스프링클러를 부순다) 다음에 재점령(빈 여백에
 	#   새 포기가 돋는다). 아침 정산의 두 자리와 같은 상대 순서라 결과가 갈리지 않는다.
-	if _weed_day_pending_day != 0 and _region == RegionCatalog.HOME \
-			and not _sleeping and not _transitioning:
-		var pending_weed_day := _weed_day_pending_day
+	# ★[폴리시 R22 #14] **아침 정산의 상대 순서는 확산 → 파종 → 재점령이다**(`_on_day_advanced`에서
+	#   `_run_weed_spread` → `tree_ledger.advance_day` → `_run_weed_encroach` 순으로 배치돼 있다).
+	#   종전 이 자리는 확산 → **재점령 → 파종**이었고, 그것을 정당화하던 주석("아침 정산에서도
+	#   재점령이 파종보다 먼저 돌아")은 그 배치와 정반대라 전제가 거짓이었다. 순서가 관측 가능한
+	#   다른 세계를 만든다 — 두 원장이 서로를 배제하는 술어를 각자 들기 때문이다:
+	#   파종 성역은 `has_weed(t)`인 칸을 거절하고, 재점령 후보는 `tree_ledger.is_occupied(t)`인 칸을
+	#   뺀다. 파종이 먼저면 그 칸이 재점령 pool에서 빠지고, 재점령이 먼저면 pool에 남는다 — pool은
+	#   `hash("weeds:%d" % day)` 시드 Fisher–Yates로 섞이므로 **원소가 하나만 달라도 뽑히는 잡초 칸
+	#   집합 전체가 갈린다**(T 한 칸 문제가 아니다). 그러면 `TreeLedger.catch_up_seeding` 머리말이
+	#   명시한 «밀린 밤을 귀가 프레임에 돌려도 그날 안식에서 잤을 때와 한 칸도 안 갈린다(이월이
+	#   손실 0인 근거)»가 거짓이 된다 — R21 #15의 이월 표가 지키려던 것이 정확히 그 등가성이다.
+	#   그래서 세 줄을 아침 정산과 **같은 상대 순서로** 편다. 두 표는 서로 독립이라(잡초만 밀린 밤·
+	#   파종만 밀린 밤이 각각 성립) 각 블록의 가드는 그대로 두고 자리만 가른다.
+	var weed_ready: bool = _weed_day_pending_day != 0 and _region == RegionCatalog.HOME \
+			and not _sleeping and not _transitioning
+	var pending_weed_day := _weed_day_pending_day
+	if weed_ready:
 		_weed_day_pending_day = 0
 		_run_weed_spread(pending_weed_day)
-		_run_weed_encroach(pending_weed_day)
 	# ★[폴리시 R21 #15] 밀린 **그 밤의 마당 자체 파종** 소비 — 위 셋과 같은 자리·같은 조건이다.
-	#   잡초 두 줄 **뒤**에 두는 것이 순서다: 아침 정산에서도 재점령이 파종보다 먼저 돌아 그 밤에
-	#   돋은 잡초가 파종 성역(`_is_tree_seed_free`의 `has_weed` 항)에 이미 반영돼 있다.
 	if _tree_seed_pending_day != 0 and _region == RegionCatalog.HOME \
 			and not _sleeping and not _transitioning and tree_ledger != null:
 		var pending_seed_day := _tree_seed_pending_day
@@ -13466,6 +13497,8 @@ func _process(delta: float) -> void:
 		var caught := tree_ledger.catch_up_seeding(pending_seed_day, _tree_seed_free_cb())
 		if not caught.is_empty():
 			_notice("마당에 어린 나무가 %d그루 돋았다" % caught.size())
+	if weed_ready:
+		_run_weed_encroach(pending_weed_day)
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
@@ -18547,6 +18580,22 @@ func _relic_sellable(id: String) -> bool:
 func _mine_device_sellable(id: String) -> bool:
 	return ItemCatalog._is_mine_device(id)
 
+# ★[폴리시 R22 #9] **제작 전용 설치물** — 수액 채취기·업화로·화분·스프링클러 상위 2티어. 사유는
+#   유품(R8)·결정기 부품(R9)·출하 자재(R13)와 한 글자도 다르지 않다: 카탈로그가 값을 선언했는데
+#   그 값을 받는 창구가 0이었다. 세 항목의 주석은 의미까지 못 박아 뒀다 — "price = 잔가(출하 시)"
+#   (item_catalog.gd TAPPER·FURNACE·GARDEN_POT). 그런데 `category_of`가 이들을 CAT_PLACEABLE로
+#   떨어뜨리고 출하 술어의 다섯 갈래가 전부 이를 거절해(도감 5카탈로그에도 없고 유품·기계·출하
+#   자재도 아니다), 원목 40 + 석화 목재 2로 만든 채취기의 잉여분을 처분할 유일한 경로가 휴지통이었다.
+# ★ **설치물 일반을 여는 게 아니다** — 그 어긋남이 R9 술어가 경계한 자리다. 문은 `CraftCatalog.makes`
+#   가 참인 것에만 열린다: 매대에서 파는 설치물(스프링클러 T1 60냥·게잡이통 600냥)은 레시피가 없어
+#   여기서 거짓이 되고, 그래서 **싸게 사서 정가에 되파는 차익**(하트 할인가 매입 ↔ 정가 출하)이
+#   열리지 않는다. 판정의 진실원은 레시피 표 하나다(main에 id 목록을 복제하지 않는다).
+# ★ 값의 계약(만들어 팔기가 차익이 되지 않게 = 잔가 ≤ 재료가)은 **여기서 집행하지 않는다.** 런타임이
+#   차익 나는 항목의 문을 조용히 닫으면, 값을 선언하고 창구가 0인 이 결함이 그대로 되돌아온다.
+#   대신 회귀(`polish_r22` ⑨)가 전 항목을 훑어 그 부등호를 지키고, 어긋난 항목은 이름으로 드러낸다.
+func _craft_placeable_sellable(id: String) -> bool:
+	return ItemCatalog._is_placeable(id) and CraftCatalog.makes(id)
+
 func _on_frame_deposit(slot_index: int) -> void:
 	var id := inventory.id_at(slot_index)
 	# ★[S10-T6] 출하 가능 판정이 "수확물" 하나에서 **수확물 ∪ 명부 도감 추적 대상**으로 넓어졌다.
@@ -18567,9 +18616,11 @@ func _on_frame_deposit(slot_index: int) -> void:
 	# ★[폴리시 R13] 다섯째 갈래 = `ItemCatalog.SHIPPABLE_MATERIALS`(삭은 그물·넋가루·혼불씨). 사유는
 	#   유품·결정기 부품과 정확히 같고(값은 매겨졌는데 그 값을 받는 창구가 0), **자재군 전체를 여는
 	#   것이 아니라** 그 표에 실린 id만 받는다 — 원목·이끼·주괴는 그대로 거절이다(술어 선언부 참조).
+	# ★[폴리시 R22 #9] 여섯째 갈래 = **제작 전용 설치물**(`_craft_placeable_sellable`). 사유는 위
+	#   넷과 같고(값은 선언됐는데 창구가 0), 매대 판매 설치물은 레시피가 없어 그대로 거절된다.
 	if id == "" or not (ItemCatalog.category_of(id) == ItemCatalog.CAT_HARVEST
 			or Codex.is_tracked(id) or _relic_sellable(id) or _mine_device_sellable(id)
-			or ItemCatalog.is_shippable_material(id)):
+			or ItemCatalog.is_shippable_material(id) or _craft_placeable_sellable(id)):
 		return   # 출하 대상 밖(씨앗·도구·비료·자재·미기증 유품·책)은 무동작
 	var n := inventory.count_at(slot_index)
 	var q := inventory.quality_at(slot_index)   # ★ S1-6 이 슬롯의 등급을 함께 출하(worst-first 오염 방지 = 슬롯 지정 제거)
@@ -25326,8 +25377,18 @@ func _mirror_forecast_text() -> String:
 	lines.append("내일: %s — %s" % [Weather.name_of(w), _weather_hint(w)])
 	var slot_tomorrow: int = Festival.theme_slot_for_day(d + 1)
 	if slot_tomorrow != Festival.NONE and not _theme_open_on(d + 1):
-		lines.append("※ 내일은 %s 자리다 — 오늘 카페가 문턱을 넘으면 하늘이 평온으로 바뀐다"
-			% Festival.name_of(slot_tomorrow))
+		# ★[폴리시 R22 #12] **이름을 안 싣는다.** 이 줄은 조건상 «아직 안 열린 테마»에서만 뜨는데,
+		#   같은 화면의 형제 셋이 전부 그 이름을 가리는 계약을 든다 — 달력 범례는 "? (카페를 더
+		#   키우면)"으로 덮고(calendar_panel), 아침 배너와 바로 아래 ◇ 줄은 «못 여는 잔치를
+		#   광고하지 않는다»며 아예 침묵한다. 종전 문구는 정확히 비해금일 때만 이름을 찍어, 한 판
+		#   안에서 한 줄은 감추고 다른 줄은 밝히는 상태를 만들었다.
+		# ★[폴리시 R22 #13] **축도 바로잡는다.** "카페가 문턱을 넘으면"은 매출 축 하나를 가리키는데
+		#   앞 두 테마는 `CafeMilestone.stage`(수확·매출·하트 3축 AND)로 열린다 — 매출을 한 냥도
+		#   안 올리고 하트만 채워도 하늘이 뒤집히므로, 화면이 말한 조건을 건드린 적 없이 예보가
+		#   빗나갔다(단서가 회피 방법을 잘못 알려 준 셈). 문턱의 이름은 표에서 판다.
+		var hint := Festival.unlock_hint(slot_tomorrow)
+		lines.append("※ 내일은 아직 열리지 않은 테마 자리다 — 오늘 %s%s 넘기면 하늘이 평온으로 바뀐다"
+			% [hint, HanjiUi.josa_eul(hint)])
 	# ㉢ D-1 사멸 경고 — 오늘이 절기 마지막 날이면 오늘 밤이 마지막 밤이다.
 	if GameClock.is_season_last_day(d):
 		lines.append("")
@@ -25770,7 +25831,7 @@ func _run_season_respawn(d: int) -> void:
 func _run_weed_spread(d: int) -> void:
 	if reclaim == null or _region != RegionCatalog.HOME:
 		return
-	var wet: bool = Weather.waters_field(_weather_on(d)) or GameClock.is_season_first_day(d)
+	var wet: bool = Weather.waters_field(_weather_sealed_on(d)) or GameClock.is_season_first_day(d)
 	var spread := reclaim.spread_day(_seed_weed_sources(), _weed_spread_cb(), d,
 		GameClock.season_index_for_day(d) == 3,
 		Reclaim.SPREAD_WET_MULT if wet else 1.0)
@@ -25974,6 +26035,18 @@ func _theme_open_on(d: int) -> bool:
 
 func _weather_on(d: int) -> int:
 	return Weather.weather_for_day(d, _theme_open_on(d))
+
+# ★[폴리시 R22 #10·#11] **그 아침에 굳은 하늘**. 위 `_theme_open_on` 머리말이 선언한 두 축 중
+#   «하루 경계 이벤트는 그 아침의 답으로 굳는다» 쪽의 창구다 — 화면(HUD·파티클·프리미엄·장식)은
+#   계속 살아 있는 `_weather_on`을 보고, **하루치로 굳어야 하는 것**만 이쪽을 본다:
+#   ㉠ 밀린 잡초 확산(집 밖에서 날이 바뀐 밤을 귀가 프레임에 소비한다 — 그 사이 낮에 문턱을 넘으면
+#      같은 밤이 «비가 와서 밭이 젖은 밤»과 «평온해서 확산이 안 는 밤» 두 하늘로 결산됐다)
+#   ㉡ 갱도 층 배치(몹 배수가 굴림 소비 횟수를 갈라 반짝이 배치까지 흔든다 — 같은 날 재진입에
+#      다른 집합이 깔려 «같은 날 재진입 = 동일 배치, 재파밍 차단» 계약이 반짝이 축에서만 깨졌다).
+# ★ 다른 날(d ≠ 굳은 날)을 물으면 종전대로 판다 — 예보·달력은 미래를 묻는 자리이고 굳을 것이 없다.
+# ★ 구세이브·부팅 첫날은 굳은 값이 없어 그대로 종전 답으로 떨어진다(거동 불변 · 다음 아침에 굳는다).
+func _weather_sealed_on(d: int) -> int:
+	return _weather_sealed if d == _weather_sealed_day and _weather_sealed_day != 0 else _weather_on(d)
 
 func _forecast_on(d: int) -> int:
 	return Weather.forecast(d, _theme_open_on(d + 1))
