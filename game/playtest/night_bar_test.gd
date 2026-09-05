@@ -23,6 +23,16 @@ func _new_bar() -> NightBar:
 	b._ready()  # 트리에 안 붙이므로 스폿 초기화를 직접 부른다(테스트 하네스 — cafe_test와 동일)
 	return b
 
+# ★[폴리시 R25 #17] **약탈 집계는 두 걸음이다** — NightBar는 막기 해소 계약만 쏘고, 소비처가
+#   *실제로 덜어낸 개수*를 `record_raid`로 되돌려 준다(단일 출처 = 인벤토리). 종전엔 이 노드가
+#   돌파마다 요구량을 무조건 쌓아, 백팩에 수확물이 없는 밤에도 취침 정산이 「약탈 N개」를 보고했다.
+#   이 하네스는 «재고가 넉넉한 소비처»를 흉내낸다(요구량 전량이 확정된다 = 종전 수치와 같은 무대).
+func _stock_full(b: NightBar) -> NightBar:
+	b.resolved.connect(func(r: Dictionary) -> void:
+		if not bool(r.get("repelled", false)):
+			b.record_raid(int(r.get("raided", 0))))
+	return b
+
 const NIGHT := 20 * 60   # 20:00 — 밤 창(19–24시) 한복판
 const DAY := 12 * 60     # 12:00 — 낮(밤 창 밖)
 
@@ -52,6 +62,7 @@ func _initialize() -> void:
 	# ── ⑤ 잡귀 접근(approach) 소진 → 막지 못하면 재고 약탈(T6.4가 ★seam을 채움) ──
 	#     (T6.3에선 약탈 없이 사라졌으나, T6.4 막기 실패→약탈이 여기에 얹혔다 — 자세한 돌파/
 	#      막기 분기는 아래 ⑬·⑭에서 검증. 여기선 "안 막으면 손실이 난다"만 확인.)
+	_stock_full(b)
 	b.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)
 	_check("⑤ 접근 소진까지 안 막으면 재고 약탈(★seam 채움)", b.tonight_raided() == NightBar.DEFAULT_RAID)
 
@@ -122,6 +133,7 @@ func _initialize() -> void:
 	k.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)  # 잡귀 등장
 	var raids: Array = []
 	k.resolved.connect(func(r): raids.append(r))
+	_stock_full(k)
 	k.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)  # 안 막고 접근 소진 → 돌파(약탈)
 	_check("⑬ 돌파 시 약탈량이 _raided에 쌓인다", k.tonight_raided() == NightBar.DEFAULT_RAID)
 	var had_breakthrough := raids.any(func(r): return not r["repelled"] and r["raided"] == NightBar.DEFAULT_RAID)
@@ -136,7 +148,7 @@ func _initialize() -> void:
 	_check("⑭ 제때 막으면 그 잡귀 약탈은 0", l.tonight_raided() == 0)
 
 	# ── ⑮ raid_amount seam(★㉠): 약탈량을 키우면 돌파당 그만큼 약탈(T6.5 바나 보호가 줄임) ──
-	var n_bar := _new_bar()
+	var n_bar := _stock_full(_new_bar())
 	n_bar.raid_amount = 3
 	n_bar.open_bar(NIGHT)
 	n_bar.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)
@@ -170,7 +182,7 @@ func _initialize() -> void:
 	_check("⑱ 인내심 파라미터↑ → 손님이 더 오래 버팀(★㉡ seam)", r2.is_waiting(0))
 
 	# ── ⑲ 이중 손실 분리: 약탈(재고/미래)과 이탈(매출/현재)은 서로 독립 누적 + end_day가 셋 다 정산 ──
-	var s2 := _new_bar()
+	var s2 := _stock_full(_new_bar())
 	s2.open_bar(NIGHT)
 	s2.tick(NightBar.CUST_INTERVAL + 0.1, NIGHT)   # 손님 착석
 	var served := s2.serve(0)                       # 한 명 응대(매출)
@@ -198,7 +210,7 @@ func _initialize() -> void:
 	_check("⑳c 자동 차단도 막기 해소 계약을 쏜다({repelled:true,auto:true})", auto_ev)
 
 	# ── ㉑ 자동 차단 소진 후엔 다시 약탈된다(밤당 N마리까지만 받쳐줌) ──
-	var u := _new_bar()
+	var u := _stock_full(_new_bar())
 	u.auto_block = 1
 	u.raid_amount = 2
 	u.open_bar(NIGHT)
@@ -209,7 +221,7 @@ func _initialize() -> void:
 	_check("㉑b 차단 소진 후 2차 돌파는 약탈된다", u.tonight_raided() == 2)
 
 	# ── ㉒ auto_block 기본 0(♡0 base = 바나 잠듦)이면 첫 돌파부터 약탈(평평≠막힘) ──
-	var v2 := _new_bar()
+	var v2 := _stock_full(_new_bar())
 	v2.open_bar(NIGHT)
 	v2.tick(NightBar.SPAWN_INTERVAL + 0.1, NIGHT)
 	v2.tick(NightBar.DEFAULT_APPROACH + 1.0, NIGHT)

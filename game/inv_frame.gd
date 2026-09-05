@@ -20,7 +20,9 @@ class_name InventoryFrame
 #     헤드리스 검증은 로직(move_slot·sort·bin·buy)을 직접 부르므로 클릭 경로와 무관하게 보장된다.
 
 signal deposit_slot(slot_index: int)   # 출하함: 백팩 슬롯을 통째로 드롭(판매 예약)
-signal takeback_id(id: String)         # 출하함: 대기분을 통째로 롤백(취침 전 회수)
+# ★[폴리시 R25 #14] 회수도 **(id, 등급)** 단위다(대기 행이 그 축으로 갈렸다 — `_draw_bin_top`).
+#   quality < 0 = 그 id 전량(종전 거동 — 호출부가 없어도 계약을 남긴다).
+signal takeback_id(id: String, quality: int)   # 출하함: 그 등급 대기분을 롤백(취침 전 회수)
 # ★[폴리시 R3] `buy_pressed`(매대: 선택 씨앗 구매) 삭제 — **emit이 저장소에 0건**인 죽은 시그널이었다.
 #   매대가 행 그리드로 승격된 뒤(S1R-T12) 클릭은 아래 세 시그널로만 갈린다.
 signal buy_sprinkler_pressed(bulk: bool)  # ★ [S1R-T9] 매대: 저승 스프링클러 구매(bulk=Shift 대량)
@@ -179,7 +181,7 @@ var _bp_scroll_dragging := false # 스크롤바 썸을 잡고 드래그 중
 
 # 히트 테스트 캐시(_draw에서 채우고 _gui_input에서 읽는다).
 var _bp_rects: Array = []        # 백팩 12칸 Rect2
-var _bin_rects: Array = []       # 출하함 대기 슬롯 [{rect, id}]
+var _bin_rects: Array = []       # 출하함 대기 슬롯 [{rect, id, quality}] — ★[폴리시 R25 #14] 등급별 행
 var _chest_rects: Array = []     # ★ Phase D 상자 슬롯 Rect2(인덱스=상자 슬롯 번호)
 var _larder_rects: Array = []    # ★[S6-T1] 곳간 재고 행 [{rect, id}](출하함 _bin_rects 동형)
 var _tab_rects: Array = []       # 메뉴 탭 4개 Rect2
@@ -564,21 +566,41 @@ func _draw_close_x(panel: Rect2) -> void:
 	draw_line(c.position + Vector2(m, m), c.end - Vector2(m, m), HanjiUi.INK_LIGHT, 2.0)
 	draw_line(Vector2(c.end.x - m, c.position.y + m), Vector2(c.position.x + m, c.end.y - m), HanjiUi.INK_LIGHT, 2.0)
 
+# 확인창 본문 좌우 여백(문구 폭 → 판 폭 파생의 단일 눈금).
+const TRASH_TEXT_PAD := 48.0
+
+# ★[폴리시 R25 #13] **확인창 본문의 단일 출처**(그리기와 회귀가 같은 한 줄을 부른다 — R24 #1이
+#   알림 스택 기하에 세운 «재는 값 = 그리는 값» 규율의 문구판).
+#   무엇이 깨져 있었나: 이 판은 저장소에서 유일한 **비가역 폐기** 창구인데 본문이 `name_of` 하나뿐이라
+#   「황천포도(이리듐) ×3」을 집었을 때와 「황천포도(일반) ×20」을 집었을 때가 글자 하나 다르지 않았다
+#   (`quality_at`을 한 번도 안 불렀다). 되돌릴 수 있는 출하 드롭조차 등급을 싣고(main의 qtag) 슬롯엔
+#   등급 점이 그려지므로, 플레이어가 등급이 실재함을 아는 채로 파괴 확인창만 그 축을 감췄다.
+#   ★ 조사 판정은 이름 끝 글자를 보므로 앞머리를 붙여도 그대로 맞는다(HanjiUi.josa_eul).
+func trash_confirm_label() -> String:
+	var name := ""
+	if inv != null and _trash_pending >= 0 and _trash_pending < Inventory.SIZE:
+		name = ItemCatalog.name_of(inv.id_at(_trash_pending))
+		var tq := inv.quality_at(_trash_pending)
+		if tq > 0 and name != "":
+			name = "%s %s" % [ItemCatalog.quality_name(tq), name]
+	# ★[폴리시 2026-08-15] "괭이 을(를) 버릴까요?" → "괭이를 버릴까요?". 이름 뒤 군더더기 공백과
+	#   조사 병기를 걷어낸다(받침 판별은 HanjiUi.josa_eul 한 곳 — 다른 문구도 여기로 모으면 된다).
+	return "%s%s 버릴까요?" % [name, HanjiUi.josa_eul(name)]
+
 # ★ [S1R-T12] 버리기 확인 — 화면 중앙 작은 한지 패널 + [버리기]/[취소]. 확인 1회(스타듀 파괴 방어).
 func _draw_trash_confirm(panel: Rect2) -> void:
 	var view := _view()
 	draw_rect(Rect2(Vector2.ZERO, view), Color(0, 0, 0, 0.35))   # 이중 백드롭(모달 강조)
-	var w := 260.0
+	# ★[폴리시 R25 #13] 판 폭이 **문구에서 파생**된다 — 등급 앞머리가 붙어 길어진 문구가 고정 폭
+	#   260px에서 소리 없이 잘리면 «등급을 말한다»가 다시 거짓이 된다(R15 규약: 표시 단언은 말줄임을
+	#   태운다). 화면을 넘지 않게 상한만 건다.
+	var label := trash_confirm_label()
+	var w := clampf(HanjiUi.text_width(label, 14) + TRASH_TEXT_PAD, 260.0, view.x - 24.0)
 	var h := 108.0
 	var box := Rect2((view.x - w) * 0.5, (view.y - h) * 0.5, w, h)
 	HanjiUi.draw_frame(self, box)
-	var name := ""
-	if inv != null and _trash_pending < Inventory.SIZE:
-		name = ItemCatalog.name_of(inv.id_at(_trash_pending))
-	# ★[폴리시 2026-08-15] "괭이 을(를) 버릴까요?" → "괭이를 버릴까요?". 이름 뒤 군더더기 공백과
-	#   조사 병기를 걷어낸다(받침 판별은 HanjiUi.josa_eul 한 곳 — 다른 문구도 여기로 모으면 된다).
-	HanjiUi.draw_text(self, box.position + Vector2(24.0, 34.0),
-		"%s%s 버릴까요?" % [name, HanjiUi.josa_eul(name)], 14, HanjiUi.INK_LIGHT, w - 40.0)
+	HanjiUi.draw_text(self, box.position + Vector2(24.0, 34.0), label, 14, HanjiUi.INK_LIGHT,
+		w - TRASH_TEXT_PAD)
 	_trash_yes_rect = Rect2(box.position.x + 24.0, box.end.y - 40.0, 96.0, 26.0)
 	_plate_btn(_trash_yes_rect)
 	draw_rect(_trash_yes_rect, Color(0.72, 0.40, 0.34), false, 1.0)   # 파괴적 액센트
@@ -1178,6 +1200,29 @@ func _draw_volume_row(font: Font, x: float, yy: float, label: String, v01: float
 	HanjiUi.draw_text(self, Vector2(x + 248.0, yy), "%d%%" % roundi(v01 * 100.0), 13, HanjiUi.INK_LIGHT)
 	return [minus, plus]
 
+# ★[폴리시 R25 #14] **대기 목록의 단일 출처** — 행은 (id, 등급)이고 개수·금액이 그 행의 것이다
+#   (그리기와 회귀·히트가 같은 한 줄을 부른다 — R24 #1이 알림 스택 기하에 세운 그 규율).
+#   무엇이 깨져 있었나: 행 키가 `bin.ids()`이고 개수가 `bin.count_of(id)`(전 등급 합산)라
+#   「황천포도 ×6」 한 줄이었다 — 원장은 등급을 정확히 나눠 드는데(`pending = {id: {quality: count}}`)
+#   그리기만 그 축을 접었고, `qualities_of`는 우측 금액 합계에만 쓰였다. 같은 패널의 형제 그리드 셋
+#   (백팩·상자·매대/환전 행)은 전부 등급 점을 그리므로 배지가 붙는 화면과 안 붙는 화면이 한 판
+#   안에서 갈렸고, 회수는 그 id 전량을 되돌려 «일반분만 도로 빼고 이리듐은 정산»이 UI로 불가능했다.
+#   ★ 등급 오름차순 — 화면 순서가 원장 dict 키 순서에 흔들리지 않게 여기서 정렬한다.
+func bin_rows() -> Array:
+	var out: Array = []
+	if bin == null:
+		return out
+	for id0 in bin.ids():
+		var id := String(id0)
+		var quals: Array = bin.qualities_of(id).duplicate()
+		quals.sort()
+		for q0 in quals:
+			var q := int(q0)
+			var n := bin.count_of_quality(id, q)
+			out.append({"id": id, "quality": q, "count": n,
+				"gold": n * ItemCatalog.ship_price_of(id, q)})   # 출하가(메뉴는 원물가)
+	return out
+
 # ── 출하함 상단(대기 슬롯 + 정산 미리보기) ────────────────────────────────────
 func _draw_bin_top(panel: Rect2) -> void:
 	# ★ [S1R-T12] 출하 정산 = 품목별 [아이콘 | 이름×수량 | 소계 골드] 내역 행 + 총액 강조(GOLD).
@@ -1203,36 +1248,42 @@ func _draw_bin_top(panel: Rect2) -> void:
 	#   읽어야 "N종 적재 시 전 항목에 닿는가"를 숫자를 옮겨 적지 않고 잴 수 있다.
 	var area := top_list_area(panel)
 	var row_y := area.position.y
-	var ids: Array = bin.ids()
 	# ★[폴리시 R7] 창에 안 들어가는 품목을 **휠로 넘긴다**(매대 리스트와 같은 문법 — 클램프는
 	#   행수가 확정되는 그리기 시점에서, 휠 핸들러는 ±1만). 종전엔 넘치면 "…외 N종" 회색 글자
 	#   하나로 끝났는데, 히트 rect는 그려진 행에서만 나므로 그 N종은 **회수할 자리가 아예 없었다**
 	#   ("취침 전 잘못 넣었네 회수"라는 이 패널의 계약이 4번째 품목부터 성립하지 않았다).
+	# ★[폴리시 R25 #14] 행은 **(id, 등급)**이고 개수·금액도 그 행의 것이다(경위는 `bin_rows` 머리말).
+	#   여기선 그 목록에 색을 칠하기만 한다 — 재는 값과 그리는 값이 갈릴 자리가 없다.
+	var rows: Array = bin_rows()
 	var max_rows := top_rows_visible()
-	_top_scroll = clampi(_top_scroll, 0, maxi(0, ids.size() - max_rows))
+	_top_scroll = clampi(_top_scroll, 0, maxi(0, rows.size() - max_rows))
 	_top_area_rect = area
-	_top_rows_total = ids.size()   # ★[폴리시 R8] 휠 라우팅이 볼 총 품목 수(넘길 것이 있는가)
-	var shown := mini(ids.size() - _top_scroll, max_rows)
+	_top_rows_total = rows.size()   # ★[폴리시 R8] 휠 라우팅이 볼 총 행 수(넘길 것이 있는가)
+	var shown := mini(rows.size() - _top_scroll, max_rows)
 	for i in shown:
-		var id: String = ids[_top_scroll + i]
+		var row: Dictionary = rows[_top_scroll + i]
+		var id: String = String(row["id"])
+		var q: int = int(row["quality"])
 		var pos := Vector2(panel.position.x + PAD, row_y + i * TOP_ROW_H)
 		var icon_rect := Rect2(pos, Vector2(ICON, ICON))
-		_bin_rects.append({"rect": icon_rect, "id": id})
+		_bin_rects.append({"rect": icon_rect, "id": id, "quality": q})
 		_draw_slot_box(icon_rect, false)
 		_draw_icon(id, icon_rect)
-		var n := bin.count_of(id)
-		var sub := 0
-		for q in bin.qualities_of(id):
-			sub += bin.count_of_quality(id, int(q)) * ItemCatalog.ship_price_of(id, int(q))   # 출하가(메뉴는 원물가)
+		# 등급 점 — 형제 그리드 셋과 **같은 색·같은 문법**(좌하단 원). 일반(0)은 종전대로 무표시.
+		if q > 0:
+			draw_circle(pos + Vector2(6.0, ICON - 6.0), 3.5, _quality_color(q))
+		var n: int = int(row["count"])
+		var sub: int = int(row["gold"])
+		var qtag := (ItemCatalog.quality_name(q) + " ") if q > 0 else ""
 		var ty := pos.y + ICON - 8.0
 		HanjiUi.draw_text(self, Vector2(pos.x + ICON + 10.0, ty),
-			"%s ×%d" % [ItemCatalog.name_of(id), n], 13, HanjiUi.INK_LIGHT, 150.0)
+			"%s%s ×%d" % [qtag, ItemCatalog.name_of(id), n], 13, HanjiUi.INK_LIGHT, 150.0)
 		var subs := "+%d" % sub
 		HanjiUi.draw_text(self, Vector2(panel.end.x - PAD - HanjiUi.text_width(subs, 13), ty),
 			subs, 13, HanjiUi.GOLD_SOFT)
-	if ids.size() > max_rows:
+	if rows.size() > max_rows:
 		HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, row_y + shown * TOP_ROW_H + 12.0),
-			"%d–%d / %d종  ·  휠로 넘김" % [_top_scroll + 1, _top_scroll + shown, ids.size()],
+			"%d–%d / %d행  ·  휠로 넘김" % [_top_scroll + 1, _top_scroll + shown, rows.size()],
 			12, HanjiUi.INK_DIM)
 
 # ── ★[S6-T1] 곳간 상단(재고 행 + 용량) ────────────────────────────────────────
@@ -1970,7 +2021,7 @@ func _click_bin(p: Vector2) -> void:
 	# 대기 슬롯 클릭 = 롤백(회수).
 	for e in _bin_rects:
 		if e["rect"].has_point(p):
-			takeback_id.emit(e["id"])
+			takeback_id.emit(String(e["id"]), int(e.get("quality", -1)))
 			return
 
 # ★[S6-T1] 곳간 클릭: 백팩 슬롯=적재(larder_store) / 재고 행=회수(larder_take). 출하함 _click_bin과

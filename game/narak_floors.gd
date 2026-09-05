@@ -388,6 +388,16 @@ func begin_run() -> int:
 func run_id() -> int:
 	return _run
 
+# ★[폴리시 R25 #18] **시드 축만** 되살린다(런 상태는 여전히 안 남긴다 — 위 머리말 그대로).
+#   왜 필요했나: `_run`은 던전 전체의 유일한 시드 축인데(방·돌·광맥·상자는 `narak:<run>:<depth>` ·
+#   몹과 채굴 드랍은 main이 같은 `run_id()`로 판다) 세이브에도 로드에도 없어 **앱 재실행마다 0으로
+#   되감겼다** — 매 실행의 첫 런이 늘 같은 판이고, 좋은 런을 본 뒤 껐다 켜면 그 런을 그대로 반복
+#   수확할 수 있었다. 그 런의 성과인 `narak_best_boss`는 영구 저장되므로 영구 장부만 자라고 시드
+#   장부만 되감기던 자리다. main이 cast/cheki/cocktail serial·combat_swings를 「시드 축은 되감겨야
+#   결정적」이라며 세이브에 실은 그 규율의 형제다. 손상 방어로 음수는 0으로 자른다.
+func restore_run(n: int) -> void:
+	_run = maxi(n, 0)
+
 # ── 채굴 기록 ────────────────────────────────────────────────────────────────
 func is_mined(depth: int, tile: Vector2i) -> bool:
 	return _mined.has(depth) and _mined[depth].has(tile)

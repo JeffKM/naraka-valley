@@ -7043,8 +7043,11 @@ func _mobs_in_region() -> Array:
 # 몹 하나를 때린다. 피해량은 순수 함수가 정하고(결정적 시드 = 스윙 카운터) 여기선 차감·사망 처리만 한다.
 # ★[S5-T5] T4가 남긴 두 줄이 채워졌다: `hp -= damage` · 죽으면 `_gain_combat_xp(xp)`(+ 드랍·사다리 롤).
 func _strike_mob(weapon_id: String, mob: Dictionary) -> Dictionary:
+	# ★[폴리시 R25 #15] 개체 축 = **스폰 인덱스**(`_mobs_in_region`이 이미 레코드에 싣는 그 값 —
+	#   배열 위치가 아니라 개체가 든 인덱스라 사체 청소로 안 밀린다). 이 한 인자가 «한 스윙 = 한
+	#   결과»를 «한 스윙 × 한 몹 = 한 결과»로 되돌린다.
 	var res := CombatSkill.resolve_hit(weapon_id, _combat_swings, combat_damage_bonus(),
-		combat_crit_chance_mult(), combat_crit_power_mult())
+		combat_crit_chance_mult(), combat_crit_power_mult(), int(mob.get("index", -1)))
 	if bool(res["crit"]) and notice_feed != null:
 		notice_feed.push("치명타! %d" % int(res["damage"]), 1.5, false, null, false)
 	mob["last_damage"] = int(res["damage"])   # 관측 창(테스트가 읽는다 — T4부터의 계약 보존)
@@ -10757,19 +10760,24 @@ func _on_day_advanced(day: int) -> void:
 	#     그중 3할은 도구 게이트(업화석·석화 고목)라 개간이 "한 번 끝나고 마는 일"이 되지 않는다.
 	#   ★ 이 자리가 사멸 패스 **바로 뒤·갱도 리셋 앞**인 이유: 후보 계산이 지상 그리드를 전제하고,
 	#     여기서 돋은 debris가 아래 확산 패스의 목적지 면제(프롭 점유)로 곧바로 반영돼야 한다.
+	# ★[폴리시 R25 #20] **두 갈래가 같은 문법을 탄다.** 종전엔 성야 갈래(㉠)만 구역 가드 없이 그
+	#   자리에서 집행돼, 밀린 밤보다 **먼저** 잡초를 비웠다: 망연절 마지막 밤을 집 밖에서 넘기고
+	#   성야 첫날 아침도 밖에서 맞으면 purge가 먼저 돌고, 귀가 프레임이 그제야 night 84를 소비해
+	#   (그 밤은 망연절이라 `is_winter`가 거짓 → 확산·재점령이 정상 집행) 「눈 밑으로 졌다」고 통보한
+	#   마당에 잡초가 다시 섰다. 성야 나머지 27일은 확산·재점령이 전부 no-op이라 그 잡초는 저절로
+	#   사라지지도 않는다. 집에서 두 밤을 잤다면 순서가 spread(84) → encroach(84) → purge(85)라
+	#   마당이 깨끗하므로, 13634~13640이 세운 이월 등가성이 절기 경계에서만 깨져 있었다.
+	#   ★ 그래서 절기 첫날 이벤트를 **하나의 창구**(`_run_season_boundary`)로 접고, 집 밖이면 재스폰과
+	#     **같은 표**에 적어 같은 밤 슬롯에서 소비한다(아침 정산의 그 자리 = 확산보다 앞).
 	if season_start:
-		if GameClock.season_index_for_day(day) == 3:
-			var purged := reclaim.purge_weeds() if reclaim != null else 0
-			if purged > 0:
-				_notice("성야의 잿눈이 마당을 덮었다 — 잡초 %d포기가 눈 밑으로 졌다" % purged)
-		elif reclaim != null:
+		if reclaim != null:
 			# ★[폴리시 R3] **집 밖에서 날이 바뀌면 미룬다.** 후보 스캔(`_encroach_candidates`)은 첫 줄에서
 			#   `_region != HOME`이면 빈 배열을 돌려주는데, 쓰러짐(`_on_collapsed` → `_do_sleep`)은 어느
 			#   구역에서든 24:00에 들어온다 — 마을 광장에서 절기 마지막 밤을 넘기면 이 **1회성** 대량
 			#   재스폰이 빈 후보로 소진되고, 이 경로는 절기 첫날에만 열려 다음 기회가 28일 뒤였다.
 			#   그래서 여기선 표만 세우고, 안식 농원에 다시 서는 프레임에 그대로 집행한다.
 			if _region == RegionCatalog.HOME:
-				_run_season_respawn(day)
+				_run_season_boundary(day)
 			else:
 				# ★[폴리시 R25 #3] 누적 — 앞 절기를 안 덮는다(형제 둘이 R24 #18에서 받은 그 창구).
 				_queue_pending_night(_season_respawn_pending_days, day)
@@ -12388,6 +12396,10 @@ func _save_game() -> bool:
 		"cheki_serial": _cheki_serial,       # 체키 변주 시드 축
 		"cocktail_serial": _cocktail_serial, # 칵테일 변주 시드 축
 		"combat_swings": _combat_swings,     # 타격 롤 시드 축(데미지·치명)
+		# ★[폴리시 R25 #18] 나락 런 시드 축 — 위 넷과 **같은 규율**이다(런 상태가 아니라 시드 축이라
+		#   NarakFloors는 여전히 `to_save`가 없다 — `restore_run` 머리말에 경위). 이것이 빠져 있어
+		#   앱을 껐다 켜면 첫 런이 늘 같은 판이었다(좋은 런의 반복 수확).
+		"narak_run": narak_floors.run_id() if narak_floors != null else 0,
 		"panning": panning.to_save(),       # ★[S10-T1] 오늘의 사금 스폿(구역별 좌표 — 매일 새로 깔리는 델타)
 		"crystalarium": crystalarium.to_save(),   # ★[S10-T1] 결정기(구역별 좌표·든 보석·남은 일수)
 		"fireflies": fireflies.to_save(),   # ★[S10-T7] 반딧넋(안치한 id → day + 마일스톤 지급 기록. 게이트는 파생이라 저장 안 함)
@@ -12693,6 +12705,8 @@ func _load_game() -> bool:
 	_cheki_serial = maxi(int(data.get("cheki_serial", 0)), 0)
 	_cocktail_serial = maxi(int(data.get("cocktail_serial", 0)), 0)
 	_combat_swings = maxi(int(data.get("combat_swings", 0)), 0)
+	if narak_floors != null:   # ★[폴리시 R25 #18] 키 없는 구세이브 = 0(종전 거동 그대로)
+		narak_floors.restore_run(maxi(int(data.get("narak_run", 0)), 0))
 	if data.has("panning"):       # ★[S10-T1] — 키 없는 구세이브는 스폿 0(다음 취침이 그날 판을 깐다·무막힘)
 		panning.load_save(data["panning"])
 	crystalarium.load_save(data.get("crystalarium", {}))   # ★[S10-T1 / R24 #17] 결정기(빈 dict = 설치 0)
@@ -13708,7 +13722,7 @@ func _process(delta: float) -> void:
 		for n in nights:
 			var night := int(n)
 			if respawn_owed.has(night):
-				_run_season_respawn(night)
+				_run_season_boundary(night)
 			if weed_owed.has(night):
 				var lost: Dictionary = _run_weed_spread(night, false)
 				eaten_total += int(lost["crops"])
@@ -18996,9 +19010,12 @@ func _on_frame_deposit(slot_index: int) -> void:
 
 # 출하함 대기 슬롯을 클릭하면 그 분을 통째로 인벤토리에 도로 넣는다(취침 전 롤백 — "잘못 넣었네"
 # 회수). 인벤토리가 가득 차 일부만 들어가면 그만큼만 빼낸다(들어간 만큼만 대기에서 차감).
-func _on_frame_takeback(id: String) -> void:
+# ★[폴리시 R25 #14] `quality` = **그 행의 등급**(−1 = 그 id 전량 — 종전 거동). 대기 목록이 등급별
+#   행으로 갈리면서 회수도 같은 축을 받는다: 「일반분만 도로 빼고 이리듐은 정산시킨다」가 이제
+#   UI로 성립한다(종전엔 행이 id로 뭉쳐 있어 그 선택 자체가 없었다).
+func _on_frame_takeback(id: String, quality: int = -1) -> void:
 	# ★ S1-6: 품질별로 나눠 회수해 등급을 보존한다(출하함이 은/금을 나눠 들므로, 그대로 슬롯에 되돌림).
-	var quals: Array = ship_bin.qualities_of(id)
+	var quals: Array = ship_bin.qualities_of(id) if quality < 0 else [quality]
 	if quals.is_empty():
 		return
 	var restored := 0
@@ -19019,7 +19036,9 @@ func _on_frame_takeback(id: String) -> void:
 		_notice("백팩이 가득 찼습니다")
 		return
 	audio.sfx("ui")
-	_notice("출하함에서 %s %d개 회수" % [ItemCatalog.name_of(id), restored])
+	# ★[폴리시 R25 #14] 한 등급만 되돌린 경우엔 그 등급을 말한다(형제 창구의 `qtag` 관례).
+	var btag := (ItemCatalog.quality_name(quality) + " ") if quality > 0 else ""
+	_notice("출하함에서 %s%s %d개 회수" % [btag, ItemCatalog.name_of(id), restored])
 
 # ── ★[S6-T1 / ADR-0064 결정 3] 곳간 적재/회수(프레임 시그널 핸들러) ────────────
 # 곳간 패널에서 백팩 슬롯을 클릭하면 그 슬롯을 통째로 곳간에 적재한다(인벤토리에서 빠짐).
@@ -20421,9 +20440,14 @@ func _on_frame_discard(slot_index: int) -> void:
 		_notice("%s 버릴 수 없다 — 다시 구할 곳이 없다" % HanjiUi.with_eun(ItemCatalog.name_of(id)))
 		return
 	var n := inventory.count_at(slot_index)
+	# ★[폴리시 R25 #13] **사후 보고도 등급을 싣는다**(확인창과 같은 축 — 지우기 전에 읽는다).
+	#   형제 창구가 전부 이 꼬리를 단다: 되돌릴 수 있는 출하 드롭·환전이 `qtag`를 싣고, 곳간 적재는
+	#   등급 소거를 따로 경고한다. 유일하게 비가역인 이 창구만 «무슨 등급을 태웠는지»를 안 말했다.
+	var dq := inventory.quality_at(slot_index)
+	var dtag := (ItemCatalog.quality_name(dq) + " ") if dq > 0 else ""
 	inventory.remove_at(slot_index, n)
 	audio.sfx("ui")
-	_notice("%s %d개 버림" % [ItemCatalog.name_of(id), n])
+	_notice("%s%s %d개 버림" % [dtag, ItemCatalog.name_of(id), n])
 
 # 선택 작물 씨앗 1개를 *네오 할인가*로 산다(매대 클릭 단건). 골드가 모자라면 막는다.
 func _buy_seed_store(crop_id: String) -> void:
@@ -24711,6 +24735,10 @@ func _on_night_resolved(result: Dictionary) -> void:
 	if want <= 0:
 		return
 	var stolen := _raid_inventory(want)
+	# ★[폴리시 R25 #17] **실손실을 원장에 되돌려 준다.** 그 밤 정산(`closed` → 「약탈 N개」)이
+	#   읽는 값이 이 한 줄로 인벤토리와 같은 장부가 된다(night_bar는 요구량만 알고, 무엇이 실제로
+	#   빠졌는지는 여기만 안다 — 그 디커플링은 그대로 두고 방향만 뒤집었다).
+	night_bar.record_raid(stolen)
 	if stolen > 0:
 		_notice("막지 못했다 — 잡귀가 재고 %d개를 약탈했다" % stolen)
 	else:
@@ -26370,6 +26398,20 @@ func _home_occupied_tiles() -> Dictionary:
 #   → 밭·작물·구조물·이미 연 땅은 절대 재점령 안 됨(진보·cozy 성역). HOME 전용.
 # ★[폴리시 R3] 절기 대량 재스폰 집행 — 날이 바뀌는 아침(집에 있을 때)과 밀린 표를 소비하는
 #   귀가 프레임이 **같은 한 함수**를 부른다(두 자리에 같은 코드를 두면 언젠가 갈라진다).
+# ★[폴리시 R25 #20] **절기 첫날 마당 이벤트의 단일 창구.** 성야절이면 소멸(㉠), 그 밖이면 대량
+#   재스폰(㉡) — `_on_day_advanced`가 두 갈래로 갖고 있던 판정을 그대로 옮긴 것이라 값도 문구도
+#   한 글자 안 바뀐다. 창구가 하나여야 «집에서 잔 아침»과 «귀가 프레임에 소비한 밤»이 구조적으로
+#   같은 자리를 쓴다(아침 정산에서 이 자리는 확산보다 앞이고, 이월 루프에서도 그렇다).
+func _run_season_boundary(d: int) -> void:
+	if reclaim == null:
+		return
+	if GameClock.season_index_for_day(d) == 3:
+		var purged := reclaim.purge_weeds()
+		if purged > 0:
+			_notice("성야의 잿눈이 마당을 덮었다 — 잡초 %d포기가 눈 밑으로 졌다" % purged)
+		return
+	_run_season_respawn(d)
+
 func _run_season_respawn(d: int) -> void:
 	if reclaim == null:
 		return

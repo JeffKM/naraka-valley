@@ -404,7 +404,15 @@ func chop(region: String, t: Vector2i, day: int, level: int = 0,
 		return out                                   # 중간 타 — 산출 0(사건이 아직 안 났다)
 	# ── 마지막 타: 상태별로 결말이 갈린다 ──
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("chop:%s:%d:%d:%d" % [region, t.x, t.y, day])
+	# ★[폴리시 R25 #16] 시드에 **사건 축**이 있어야 한다. 종전 시드는 (구역, 좌표, day)뿐인데
+	#   성숙목을 베면 그 슬롯은 사라지지 않고 **같은 칸에 그루터기로 남고**(아래 ㉡ 가지) HP_STUMP가
+	#   3이라 같은 날 바로 치울 수 있다 — 그 제거가 같은 `chop()`을 다시 타 **동일한 시드**로 rng를
+	#   세우고 스트림의 첫 값을 읽었다. 그래서 «쓰러뜨린 원목 = 16»이면 그루터기 원목도 늘 같은 수가
+	#   나오는 고정 함수가 됐고(둘 다 같은 원값 u를 (u%5)+12 · (u%6)+4로 읽는다), 채집 lvl≥1이면
+	#   두 번째 소비(씨앗 ↔ 단단한 원목)까지 겹쳤다. main이 드랍 serial에서 이미 피한 그 충돌이다
+	#   (`chop_serial`의 「그루터기 정리는 나무 쓰러뜨리기와 **다른 serial**을 쓴다」).
+	var event := "stump" if was_stump else "tree"
+	rng.seed = hash("chop:%s:%d:%d:%d:%s" % [region, t.x, t.y, day, event])
 	if large != "":
 		# ㉮ 큰 장애물 제거 — 단단한 원목 고정 + 큰 장애물 XP 25. 슬롯은 남기고 `gone`만 세운다
 		#    (큰 그루터기는 밤에 되살아나야 하고, 큰 통나무는 "여긴 원래 통나무였다"를 기억한다).

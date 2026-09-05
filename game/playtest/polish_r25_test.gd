@@ -63,6 +63,52 @@ extends SceneTree
 #   #11 `is_gift_no_op` 갈래 삭제 → ⑨b red(점수 300 → 300인데 「네오 호감도↑」)
 #   #12 로드 소급 루프 삭제 → ⑩a·⑩b·⑩c' red(비트 1~3이 영영 0이라 아크가 안 닫힌다)
 #
+#
+# ══════════════════ 배치 B(#13~#23) — 같은 스위트에 이어 붙인다 ══════════════════
+#
+# 렌즈: 품질 축 보존(#13·#14) · RNG 스트림 소유(#15·#16) · 이중 부기 표류(#17·#18) ·
+#       캐시 무효화 완전성(#19) · 절기 경계 스윕(#20·#21·#22·#23).
+#
+# 무엇을 보증하나.
+#   ⑪ #13 저장소에서 **유일한 비가역 폐기** 창구(휴지통)가 확인창에도 사후 알림에도 등급을 안 실어,
+#      「황천포도(이리듐) ×3」과 「황천포도(일반) ×20」이 글자 하나 다르지 않았다.
+#   ⑫ #14 출하함 대기 행이 id로 뭉쳐 「×6」 한 줄이었다 — 원장은 등급을 나눠 드는데 그리기만 그
+#      축을 접었고(형제 그리드 셋은 전부 등급 점을 그린다) 회수도 전량이라 선택이 없었다.
+#   ⑬ #15 한 스윙이 arc 안 여러 몹을 때리면 전원이 **같은 시드 문자열**을 받아 피해가 강제로 같고
+#      크리가 «스윙 단위»가 됐다(처치 드랍은 이미 개체 축을 물고 있는데 타격만 밖에 있었다).
+#   ⑭ #16 성숙목 벌목과 **같은 날 같은 칸** 그루터기 제거가 같은 시드 문자열로 rng를 세워, 두
+#      사건이 같은 스트림 위치를 읽었다(main의 `chop_serial`이 드랍 축에서 이미 피한 그 충돌).
+#   ⑮ #17 밤 바 `_raided`가 돌파마다 요구량을 무조건 쌓아, 백팩이 빈 밤에도 취침 정산이 「약탈 N개」를
+#      보고했다(실제 손실은 main의 `_raid_inventory`가 있는 만큼만 가져간다 = 두 장부).
+#   ⑯ #18 나락 런 시드 축 `_run`이 세이브에도 로드에도 없어 **앱 재실행마다 0으로 되감겼다** —
+#      매 실행의 첫 런이 늘 같은 판이고, 좋은 런을 껐다 켜서 반복 수확할 수 있었다.
+#   ⑰ #19 업화로 진행 눈금이 매 분 변하는데 무효화는 «완성될 때만» — 걷지 않으면 띠가 얼어붙었다.
+#   ⑱ #20 성야절 잡초 소멸이 구역 가드 없이 그 자리에서 집행돼 **밀린 밤보다 먼저** 돌았다 —
+#      「눈 밑으로 졌다」고 통보한 마당에 지난 밤의 확산·재점령이 잡초를 다시 세웠다.
+#   ⑲ #22 절기 경계 채집물 의뢰가 **합집합**이라 «다음 절기 전용 종»을 출제했다(형제 물고기 갈래는
+#      같은 상황을 교집합으로 이미 닫아 뒀다) — 그 이틀 게시판이 이행 불가로 죽었다.
+#
+# 판정: #13~#20·#22 **CONFIRMED**(9건 봉합) · **#21 = #4 DUP · #23 = #1 DUP**(배치 A c1a9913이
+#   이미 봉합 — 이 스위트의 `DUP 재확인` 절이 그 두 봉합이 HEAD에 서 있음을 잰다).
+#   ★ **#16은 시나리오의 표제 재현이 반증됐다**(결함 자체는 성립). 「어느 나무든 쓰러뜨린 원목이
+#     16이면 그루터기 원목도 늘 같은 수」는 실측으로 거짓이다 — `randi_range`가 같은 원값 u를
+#     서로 다른 범위로 접어(12+u%5 · 4+u%6) 30가지 짝이 전부 열린다(⑭b가 30가지를 실측한다).
+#     진짜로 갈리는 축은 **스트림 위치가 같은 굴림**이고(둘 다 ①원목 randi → ②단단한 원목 randf),
+#     시드를 공유하면 ②가 120/120 일치한다(파괴 실측). ⑭c가 그 축을 잰다.
+#
+# 하중 검증(배치 B — **실측** · 파괴 9배치 전건 확인):
+#   #13 확인창의 등급 앞머리 + `dtag` 삭제  → ⑪b'·⑪d red(두 슬롯이 같은 문구 · 알림에 등급 0글자)
+#   #14 `bin_rows`를 id 합산으로 복귀·등급 점 삭제 → ⑫b·⑫c red(등급 [-1] · 개수 [6])
+#   #15 `_strike_mob`의 개체 축 인자 삭제   → ⑬a'·⑬c·⑬d red(200/200 같은 수치 · 크리 갈림 0회)
+#   #16 `chop` 시드의 사건 축 삭제          → ⑭a·⑭c red(단단한 원목 여부 **120/120 일치**)
+#   #17 `_tick_spots`의 무조건 대입 복귀·`record_raid` 무력화 → ⑮a·⑮b·⑮c red(빈 백팩인데 집계 3)
+#   #18 로드의 `restore_run` 삭제           → ⑯a·⑯d·⑯f red(run 0으로 되감겨 첫 런이 같은 판)
+#   #19 `if ticked:`를 `if not out.is_empty():`로 복귀 → ⑰c red(눈금은 움직였는데 changed 0회)
+#   #20 성야 갈래를 `_on_day_advanced`로 되돌림 → ⑱a·⑱e red(귀가 프레임에 잡초 13포기 부활).
+#       ★ 같은 파괴가 배치 A ③c·③c'·DUP-a도 문다 — 이월 루프의 절기 창구가 함께 사라지기 때문이다
+#         (두 봉합이 한 창구를 공유한다는 증거이기도 하다).
+#   #22 `and` → `or` 복귀                   → ⑲a·⑲d·⑲e red(다음 절기 전용 종이 경계 게시분을 통과)
+#
 # 실행: ./run_tests.sh polish_r25   (헤드리스는 반드시 game/에서 · 순차)
 
 var _fail := 0
@@ -200,6 +246,17 @@ func _run_checks() -> void:
 	_check_spine_gate_axis(m)        # ⑥ #8 — 미혹 숲을 세우므로 ⑦ 뒤에(끝나면 안식 복귀)
 	_check_okja_effect_lock(m)       # ⑧ #10
 	_check_quest_affinity_notice(m)  # ⑨ #11
+	print("══ 폴리시 R25 회귀 — 배치 B(#13~#23) ══")
+	_check_trash_quality(m)          # ⑪ #13
+	_check_bin_rows_quality(m)       # ⑫ #14
+	_check_swing_per_mob_seed(m)     # ⑬ #15
+	_check_chop_event_seed()         # ⑭ #16(무대 불요 — 순수 TreeLedger)
+	_check_raid_bookkeeping(m)       # ⑮ #17
+	_check_furnace_invalidate(m)     # ⑰ #19
+	await _check_purge_carry(m)      # ⑱ #20
+	_check_quest_season_edge()       # ⑲ #22(무대 불요 — 순수 카탈로그)
+	_check_dup_reconfirm()           # DUP 재확인(#21 = #4 · #23 = #1)
+	_check_narak_run_seed(m)         # ⑯ #18 — 세이브 파일을 쓰므로 ⑩ 앞에 두지 않는다
 	_check_old_save_heart_bits(m)    # ⑩ #12 — 세이브 파일을 쓰므로 맨 끝
 
 	# ★ 이 스위트는 ②·⑩에서 세이브를 **쓴다**(굳은 하늘 표 왕복·구세이브 소급이 파일 경로를 타야
@@ -403,7 +460,9 @@ func _check_respawn_carry(m: Node) -> void:
 	m.reclaim.load_save(snap0)
 	m.notice_feed._items.clear()
 	# 소비가 **밤 루프 안**이고, 한 밤 안에서 아침 정산과 같은 상대 순서다.
-	var resp := _line_in(_src, "func _process", "_run_season_respawn(night)")
+	# ★[폴리시 R25 #20] 절기 첫날 이벤트가 **한 창구**(`_run_season_boundary`)로 접히며 호출 이름이
+	#   갈렸다 — 이 항이 재는 «이월 소비의 상대 순서»는 그대로라 니들만 그 창구로 따라간다.
+	var resp := _line_in(_src, "func _process", "_run_season_boundary(night)")
 	var spread := _line_in(_src, "func _process", "_run_weed_spread(night")
 	var seed := _line_in(_src, "func _process", "catch_up_seeding(night")
 	var enc := _line_in(_src, "func _process", "_run_weed_encroach(night")
@@ -411,8 +470,9 @@ func _check_respawn_carry(m: Node) -> void:
 			% [resp, spread, seed, enc],
 		resp > 0 and spread > resp and seed > spread and enc > seed
 			and _count_in(_src, "func _process", "nights.sort()") == 1)
-	_check("③c' 별도 블록이 남아 있지 않다 — `_process`에 `_run_season_respawn`이 그 한 줄뿐이다",
-		_count_in(_src, "func _process", "_run_season_respawn(") == 1)
+	_check("③c' 별도 블록이 남아 있지 않다 — `_process`에 절기 창구가 그 한 줄뿐이다",
+		_count_in(_src, "func _process", "_run_season_boundary(") == 1
+			and _count_in(_src, "func _process", "_run_season_respawn(") == 0)
 	# ── 하중: 두 세계의 판을 통째로 비교한다(집에서 잔 판 ↔ 귀가 프레임의 판 ↔ 옛 순서의 판).
 	var season_day := -1
 	for dd in range(30, 400):
@@ -935,3 +995,517 @@ func _check_old_save_heart_bits(m: Node) -> void:
 	_check("⑩e 원장이 실린 세이브는 소급을 안 받는다 — %s의 칸 %d인데 비트 %d(파일이 진실원)"
 			% [rid2, r2b.affinity.stage, int(m._heart_bits.get(rid2, 0))],
 		ok2 and int(m._heart_bits.get(rid2, 0)) == 0 and r2b.affinity.stage == m.HEART_GATE_MAX)
+
+# ── ⑪ #13 휴지통 확인창·사후 알림이 등급을 말한다 ────────────────────────────
+func _check_trash_quality(m: Node) -> void:
+	print("⑪ #13 휴지통 ↔ 품질 축(유일한 비가역 폐기 창구)")
+	var frame = m.frame
+	if frame == null:
+		_check("⑪x 무대 없음(frame null)", false)
+		return
+	var isrc := _lines_of_file("res://inv_frame.gd")
+	_check("⑪a 배선: `_draw_trash_confirm`이 본문을 스스로 안 짓고 `trash_confirm_label` 하나만 소비한다(재는 값 = 그리는 값)",
+		_count_in(isrc, "func _draw_trash_confirm", "trash_confirm_label()") == 1
+			and _count_in(isrc, "func _draw_trash_confirm", "ItemCatalog.name_of(") == 0
+			and _count_in(isrc, "func _draw_trash_confirm", "josa_eul(") == 0)
+	# 무대: 같은 id를 등급만 갈라 두 슬롯에 나눠 든다(add_item이 등급이 다르면 반드시 별 슬롯).
+	var id := _quality_item()
+	_empty_inventory(m)
+	# 최고 등급 = 품질 이름표의 마지막 칸(수치 옮겨 적기 0).
+	var top: int = ItemCatalog.QUALITY_NAMES.size() - 1
+	var ok_plain: bool = m.inventory.add_item(id, 2, ItemCatalog.Q_NORMAL)
+	var ok_top: bool = m.inventory.add_item(id, 3, top)
+	var slot_plain := -1
+	var slot_top := -1
+	for i in Inventory.SIZE:
+		if m.inventory.id_at(i) != id:
+			continue
+		if m.inventory.quality_at(i) == top:
+			slot_top = i
+		elif m.inventory.quality_at(i) == ItemCatalog.Q_NORMAL:
+			slot_plain = i
+	_check("⑪b 무대: 「%s」이 등급별 두 슬롯으로 갈렸다(일반 %d · %s %d)"
+			% [ItemCatalog.name_of(id), slot_plain, ItemCatalog.quality_name(top), slot_top],
+		ok_plain and ok_top and slot_plain >= 0 and slot_top >= 0 and slot_plain != slot_top)
+	if slot_plain < 0 or slot_top < 0:
+		return
+	frame.inv = m.inventory
+	frame._trash_pending = slot_plain
+	var plain_label: String = frame.trash_confirm_label()
+	frame._trash_pending = slot_top
+	var top_label: String = frame.trash_confirm_label()
+	_check("⑪b' 확인창이 두 슬롯을 **다르게** 말한다 — 「%s」 ↔ 「%s」(종전엔 글자 하나 안 달랐다)"
+			% [plain_label, top_label],
+		plain_label != top_label and top_label.contains(ItemCatalog.quality_name(top))
+			and not plain_label.contains(ItemCatalog.quality_name(top)))
+	# ★[폴리시 R15 규약] 표시 단언은 잘림까지 태운다 — 판 폭이 문구에서 파생되므로 최장 이름도 산다.
+	var longest := ""
+	for cid2 in _quality_roster():
+		var nm := ItemCatalog.name_of(String(cid2))
+		if nm.length() > longest.length():
+			longest = nm
+	var worst := "%s %s%s 버릴까요?" % [ItemCatalog.quality_name(top), longest,
+		HanjiUi.josa_eul(longest)]
+	var view: Vector2 = frame._view()
+	var box_w: float = clampf(HanjiUi.text_width(worst, 14) + InventoryFrame.TRASH_TEXT_PAD,
+		260.0, view.x - 24.0)
+	_check("⑪c 최장 이름(「%s」)에 등급 앞머리가 붙어도 안 잘린다 — 문구 %.0fpx ≤ 본문 폭 %.0fpx"
+			% [longest, HanjiUi.text_width(worst, 14), box_w - InventoryFrame.TRASH_TEXT_PAD],
+		HanjiUi.text_width(worst, 14) <= box_w - InventoryFrame.TRASH_TEXT_PAD + 0.5)
+	# 사후 알림도 같은 축을 말한다(파괴는 실제로 집행된다 — 그 슬롯이 비는지까지 본다).
+	m.notice_feed._items.clear()
+	var before: int = m.inventory.count_at(slot_top)
+	m._on_frame_discard(slot_top)
+	var said := ""
+	for t in _notice_texts(m):
+		if t.contains("버림"):
+			said = t
+	_check("⑪d 사후 알림도 등급을 싣는다 — 「%s」(%d개가 실제로 사라졌다 · 종전엔 등급이 0글자)"
+			% [said, before],
+		before == 3 and m.inventory.count_at(slot_top) == 0
+			and said.contains(ItemCatalog.quality_name(top)) and said.contains("%d개" % before))
+	# 대조군 — 일반 등급은 앞머리가 안 붙는다(새 군더더기 0).
+	m.notice_feed._items.clear()
+	m._on_frame_discard(slot_plain)
+	var said2 := ""
+	for t2 in _notice_texts(m):
+		if t2.contains("버림"):
+			said2 = t2
+	_check("⑪e 대조군: 일반 등급엔 앞머리가 안 붙는다 — 「%s」" % said2,
+		said2 != "" and not said2.contains(ItemCatalog.quality_name(1))
+			and not said2.contains(ItemCatalog.quality_name(2))
+			and not said2.contains(ItemCatalog.quality_name(3)))
+	frame._trash_pending = -1
+	_empty_inventory(m)
+	m.notice_feed._items.clear()
+
+# 이름 길이를 재는 로스터 — 카탈로그 상수에서 조립한다(옮겨 적기 0 · polish_r24 관례).
+func _quality_roster() -> Array:
+	var out: Array = []
+	out.append_array(CropCatalog.ids())
+	for d in [ItemCatalog.FORAGEABLES, ItemCatalog.MATERIALS, ItemCatalog.MINERALS]:
+		out.append_array(d.keys())
+	return out
+
+# 백팩을 비운다(Inventory엔 일괄 비우기가 없다 — 슬롯 단위 제거가 유일한 창구).
+func _empty_inventory(m: Node) -> void:
+	for i in Inventory.SIZE:
+		var n: int = m.inventory.count_at(i)
+		if n > 0:
+			m.inventory.remove_at(i, n)
+
+# 등급을 무는 아이템 하나(카탈로그 술어에서 판다 — id 옮겨 적기 0).
+func _quality_item() -> String:
+	for cid in CropCatalog.ids():
+		if ItemCatalog.carries_quality(String(cid)):
+			return String(cid)
+	return ""
+
+# ── ⑫ #14 출하함 대기 행이 등급별로 갈린다 ──────────────────────────────────
+func _check_bin_rows_quality(m: Node) -> void:
+	print("⑫ #14 출하함 대기 행 ↔ 등급 배지")
+	var frame = m.frame
+	if frame == null:
+		_check("⑫x 무대 없음(frame null)", false)
+		return
+	var isrc := _lines_of_file("res://inv_frame.gd")
+	_check("⑫a 배선: `_draw_bin_top`이 행을 스스로 안 짓고 `bin_rows` 하나만 소비한다(재는 값 = 그리는 값)",
+		_count_in(isrc, "func _draw_bin_top", "bin_rows()") == 1
+			and _count_in(isrc, "func _draw_bin_top", "bin.qualities_of(") == 0
+			and _count_in(isrc, "func _draw_bin_top", "bin.count_of(") == 0)
+	var id := _quality_item()
+	var top: int = ItemCatalog.QUALITY_NAMES.size() - 1
+	m.ship_bin.pending.clear()
+	m.ship_bin.add(id, 1, top)                     # 최고 등급 1
+	m.ship_bin.add(id, 5, ItemCatalog.Q_NORMAL)    # 일반 5
+	frame.bin = m.ship_bin
+	var rows: Array = frame.bin_rows()
+	var quals: Array = []
+	var counts: Array = []
+	for r in rows:
+		quals.append(int(r["quality"]))
+		counts.append(int(r["count"]))
+	_check("⑫b **한 id가 등급별 두 행으로 선다** — 등급 %s · 개수 %s(종전엔 「×6」 한 줄이었다)"
+			% [str(quals), str(counts)],
+		rows.size() == 2 and quals == [ItemCatalog.Q_NORMAL, top] and counts == [5, 1])
+	var gold_ok := true
+	for r2 in rows:
+		if int(r2["gold"]) != int(r2["count"]) * ItemCatalog.ship_price_of(String(r2["id"]),
+				int(r2["quality"])):
+			gold_ok = false
+	_check("⑫c 우측 금액도 **그 행의 것**이다(전 등급 합산이 아니라 등급별 출하가 × 개수)", gold_ok)
+	_check("⑫d 총액은 안 갈린다 — 행 합계 %d = `preview_gold()` %d(행을 갈라도 정산은 같은 판)"
+			% [int(rows[0]["gold"]) + int(rows[1]["gold"]), m.ship_bin.preview_gold()],
+		int(rows[0]["gold"]) + int(rows[1]["gold"]) == m.ship_bin.preview_gold())
+	# 회수도 같은 축을 받는다 — 「일반분만 도로 빼고 이리듐은 정산」이 이제 성립한다.
+	_empty_inventory(m)
+	m.notice_feed._items.clear()
+	m._on_frame_takeback(id, ItemCatalog.Q_NORMAL)
+	_check("⑫e **그 등급만 회수된다** — 백팩 일반 %d개 · 출하함 잔여(일반 %d · 이리듐 %d)"
+			% [m.inventory.count_of(id), m.ship_bin.count_of_quality(id, ItemCatalog.Q_NORMAL),
+				m.ship_bin.count_of_quality(id, top)],
+		m.inventory.count_of(id) == 5
+			and m.ship_bin.count_of_quality(id, ItemCatalog.Q_NORMAL) == 0
+			and m.ship_bin.count_of_quality(id, top) == 1)
+	var took := ""
+	for t in _notice_texts(m):
+		if t.contains("회수"):
+			took = t
+	_check("⑫f 회수 알림도 등급을 싣는다(일반은 앞머리 없음) — 「%s」" % took, took.contains("회수"))
+	# 종전 계약(전량 회수)은 인자 −1로 그대로 산다 — 거동 축소 0.
+	m._on_frame_takeback(id, -1)
+	_check("⑫g 인자 −1은 종전대로 그 id 전량을 되돌린다(거동 축소 0) — 출하함 잔여 %d개"
+			% m.ship_bin.count_of(id), m.ship_bin.count_of(id) == 0)
+	m.ship_bin.pending.clear()
+	_empty_inventory(m)
+	m.notice_feed._items.clear()
+
+# ── ⑬ #15 한 스윙 안에서도 몹마다 다른 굴림 ─────────────────────────────────
+func _check_swing_per_mob_seed(m: Node) -> void:
+	print("⑬ #15 타격 시드 ↔ 개체 축")
+	var csrc := _lines_of_file("res://combat_skill.gd")
+	_check("⑬a 배선: 시드 문자열에 **개체 축**이 있다(무기·스윙만이 아니다)",
+		_count_in(csrc, "static func resolve_hit",
+			"hash(\"combat_hit:%s:%d:%d\" % [weapon_id, seed_value, target_key])") == 1)
+	_check("⑬a' 배선: 호출부가 **레코드의 스폰 인덱스**를 그 자리에 넘긴다(main이 이미 든 축)",
+		_count_in(_src, "func _strike_mob",
+			"combat_crit_power_mult(), int(mob.get(\"index\", -1))") == 1)
+	var weapon := String(WeaponCatalog.SWORDS.keys()[0])
+	_check("⑬b 무대: 무기 「%s」의 밴드가 실제로 폭을 갖는다(폭 0이면 이 절이 공허하다)"
+			% ItemCatalog.name_of(weapon),
+		WeaponCatalog.damage_max(weapon) > WeaponCatalog.damage_min(weapon))
+	# 같은 스윙(=같은 `_combat_swings`)이 두 몹을 때린다 — `_strike_mob`을 그대로 탄다
+	# (ref 없는 레코드는 순수 판정으로 돌아간다 — combat_test ⑤가 세운 그 결).
+	var same_dmg := 0
+	var same_crit := 0
+	var crit_split := 0
+	var trials := 200
+	var swings0: int = m._combat_swings
+	for k in trials:
+		m._combat_swings = swings0 + k + 1
+		var a: Dictionary = m._strike_mob(weapon, {"index": 0})
+		var b: Dictionary = m._strike_mob(weapon, {"index": 1})
+		if int(a["damage"]) == int(b["damage"]):
+			same_dmg += 1
+		if bool(a["crit"]) == bool(b["crit"]):
+			same_crit += 1
+		else:
+			crit_split += 1
+	m._combat_swings = swings0
+	_check("⑬c **한 스윙 안에서도 몹마다 다른 피해가 난다** — %d스윙 중 두 몹이 같은 수치인 스윙 %d회(종전엔 %d/%d)"
+			% [trials, same_dmg, trials, trials], same_dmg < trials)
+	_check("⑬d 크리도 **몹 단위**다 — 두 몹의 크리가 갈린 스윙 %d회(종전엔 0 — 둘 다 터지거나 둘 다 안 터졌다)"
+			% crit_split, crit_split > 0)
+	# 결정성은 그대로 — 같은 (스윙, 개체)는 언제나 같은 답이다.
+	m._combat_swings = swings0 + 7
+	var r1: Dictionary = m._strike_mob(weapon, {"index": 3})
+	var r2: Dictionary = m._strike_mob(weapon, {"index": 3})
+	_check("⑬e 결정성 불변 — 같은 (스윙, 개체)는 언제나 같은 답(%d ↔ %d · 크리 %s ↔ %s)"
+			% [int(r1["damage"]), int(r2["damage"]), str(r1["crit"]), str(r2["crit"])],
+		int(r1["damage"]) == int(r2["damage"]) and bool(r1["crit"]) == bool(r2["crit"]))
+	m._combat_swings = swings0
+
+# ── ⑭ #16 같은 칸·같은 날의 두 사건이 시드를 안 나눠 쓴다 ────────────────────
+func _check_chop_event_seed() -> void:
+	print("⑭ #16 벌목 ↔ 그루터기 산출 시드")
+	var tsrc := _lines_of_file("res://tree_ledger.gd")
+	_check("⑭a 배선: 시드 문자열에 **사건 축**이 있다(구역·좌표·day만이 아니다)",
+		_count_in(tsrc, "func chop", "var event := \"stump\" if was_stump else \"tree\"") == 1
+			and _count_in(tsrc, "func chop",
+				"hash(\"chop:%s:%d:%d:%d:%s\" % [region, t.x, t.y, day, event])") == 1)
+	# ★ 무대는 **두 사건의 같은 위치 굴림**을 잰다. 종전 판(원목 값의 짝)은 파괴를 안 물었다 —
+	#   `randi_range`가 같은 원값 u를 서로 다른 범위로 접으므로(12+u%5 · 4+u%6) 시드를 공유해도
+	#   두 값이 서로를 결정하지 않기 때문이다(CRT — 30가지 짝이 전부 열린다). 진짜로 갈리는 것은
+	#   **스트림 위치가 같은 굴림**이다: 채집 lvl 0에서 두 사건 모두 ①원목 `randi_range` → ②단단한
+	#   원목 `randf() < hw_chance`를 같은 순서로 소비하므로, 시드를 공유하면 ②의 결과가 **언제나
+	#   일치**한다(같은 원값·같은 문턱). 축이 갈리면 두 굴림은 서로 독립이다.
+	var region := RegionCatalog.HOME
+	var day := 40
+	var hw := 0.5                      # 문턱을 반반으로 둬 일치/불일치가 둘 다 관측되게
+	var agree := 0
+	var samples := 0
+	var wood_pairs: Dictionary = {}
+	for i in 120:
+		var led := TreeLedger.new()
+		var t := Vector2i(i % 12, 3 + i / 12)
+		led._put(region, t, {"species": TreeLedger.SP_PINE, "stage": TreeLedger.MAX_STAGE,
+			"hp": TreeLedger.hp_for_stage(TreeLedger.MAX_STAGE), "stump": false, "moss": false,
+			"large": "", "gone": false})
+		var felled: Dictionary = {}
+		for _h in range(TreeLedger.hp_for_stage(TreeLedger.MAX_STAGE)):
+			felled = led.chop(region, t, day, 0, 0, hw)
+		var cleared: Dictionary = {}
+		for _h2 in range(TreeLedger.HP_STUMP):
+			cleared = led.chop(region, t, day, 0, 0, hw)
+		if not bool(felled.get("felled", false)) or not bool(cleared.get("cleared", false)):
+			continue
+		samples += 1
+		if (int(felled["hardwood"]) > 0) == (int(cleared["hardwood"]) > 0):
+			agree += 1
+		wood_pairs["%d:%d" % [int(felled["wood"]), int(cleared["wood"])]] = true
+	_check("⑭b 무대: 성숙목 → 같은 날 같은 칸 그루터기를 %d칸에서 굴렸고 원목 짝이 %d가지 나왔다(두 사건이 실제로 벌어진다)"
+			% [samples, wood_pairs.size()], samples >= 60 and wood_pairs.size() >= 5)
+	_check("⑭c **두 사건의 같은 위치 굴림이 독립이다** — 단단한 원목 여부가 일치한 칸 %d/%d(시드를 공유하면 %d/%d = 100%%)"
+			% [agree, samples, samples, samples],
+		samples > 0 and agree < samples)
+	# 결정성은 그대로 — 같은 (칸, 날, 사건)은 언제나 같은 답이다.
+	var l1 := TreeLedger.new()
+	var l2 := TreeLedger.new()
+	var tt := Vector2i(4, 20)
+	var w1 := 0
+	var w2 := 0
+	for led2 in [l1, l2]:
+		led2._put(region, tt, {"species": TreeLedger.SP_PINE, "stage": TreeLedger.MAX_STAGE,
+			"hp": TreeLedger.hp_for_stage(TreeLedger.MAX_STAGE), "stump": false, "moss": false,
+			"large": "", "gone": false})
+	for _h3 in range(TreeLedger.hp_for_stage(TreeLedger.MAX_STAGE)):
+		w1 = int(l1.chop(region, tt, day, 0).get("wood", 0))
+		w2 = int(l2.chop(region, tt, day, 0).get("wood", 0))
+	_check("⑭d 결정성 불변 — 같은 (칸, 날, 사건)은 같은 답(%d ↔ %d)" % [w1, w2], w1 == w2 and w1 > 0)
+
+# ── ⑮ #17 밤 바 약탈 집계 = 실제 인벤 손실 ──────────────────────────────────
+func _check_raid_bookkeeping(m: Node) -> void:
+	print("⑮ #17 밤 바 약탈 집계 ↔ 실손실")
+	var nsrc := _lines_of_file("res://night_bar.gd")
+	_check("⑮a 배선: 돌파는 **계약만 쏘고** 집계는 소비처가 `record_raid`로 되돌려 준다(추정 대입 0)",
+		_count_in(nsrc, "func _tick_spots", "_raided += raid_amount") == 0
+			and _count_in(nsrc, "func _tick_spots", "resolved.emit({\"repelled\": false") == 1
+			and _count_in(_src, "func _on_night_resolved", "night_bar.record_raid(stolen)") == 1)
+	var bar = m.night_bar
+	var night := 20 * 60
+	# ㉠ 빈 백팩 — 실손실 0이면 정산도 0이어야 한다.
+	_empty_inventory(m)
+	bar.abandon()
+	bar.open_bar(night)
+	bar.tick(NightBar.SPAWN_INTERVAL + 0.1, night)
+	bar.tick(NightBar.DEFAULT_APPROACH + 1.0, night)
+	_check("⑮a' 무대: 잡귀가 실제로 돌파했다(요구량 %d)" % bar.raid_amount, bar.raid_amount > 0)
+	_check("⑮b **빈 백팩이면 정산도 0이다** — 집계 %d(종전엔 요구량 %d가 그대로 실려 없는 손실을 보고했다)"
+			% [bar.tonight_raided(), bar.raid_amount], bar.tonight_raided() == 0)
+	# ㉡ 부분 재고 — 있는 만큼만.
+	var hid := _quality_item()
+	bar.abandon()
+	_empty_inventory(m)
+	m.inventory.add_item(hid, 1)
+	bar.open_bar(night)
+	bar.tick(NightBar.SPAWN_INTERVAL + 0.1, night)
+	bar.tick(NightBar.DEFAULT_APPROACH + 1.0, night)
+	_check("⑮c **부분 약탈도 실수치다** — 재고 1개 · 요구 %d · 집계 %d · 백팩 잔여 %d"
+			% [bar.raid_amount, bar.tonight_raided(), m.inventory.count_of(hid)],
+		bar.tonight_raided() == 1 and m.inventory.count_of(hid) == 0)
+	# ㉢ 재고가 넉넉하면 요구량 전량이 확정된다(거동 축소 0).
+	bar.abandon()
+	_empty_inventory(m)
+	m.inventory.add_item(hid, 20)
+	var before: int = m.inventory.count_of(hid)
+	bar.open_bar(night)
+	bar.tick(NightBar.SPAWN_INTERVAL + 0.1, night)
+	bar.tick(NightBar.DEFAULT_APPROACH + 1.0, night)
+	var lost: int = before - m.inventory.count_of(hid)
+	_check("⑮d 재고가 넉넉하면 종전과 같은 수치다 — 집계 %d = 실제로 빠진 %d개(거동 축소 0)"
+			% [bar.tonight_raided(), lost],
+		bar.tonight_raided() == bar.raid_amount and lost == bar.raid_amount)
+	# 마감 정산 줄이 그 값을 그대로 싣는다(그 밤 결산의 유일한 표면).
+	m.notice_feed._items.clear()
+	bar.end_day()
+	var closed := ""
+	for t in _notice_texts(m):
+		if t.contains("나라카 바 마감"):
+			closed = t
+	_check("⑮e 마감 정산이 그 실수치를 싣는다 — 「%s」" % closed,
+		closed.contains("약탈 %d개" % lost))
+	bar.abandon()
+	_empty_inventory(m)
+	m.notice_feed._items.clear()
+
+# ── ⑯ #18 나락 런 시드 축이 세이브를 왕복한다 ────────────────────────────────
+func _check_narak_run_seed(m: Node) -> void:
+	print("⑯ #18 나락 런 시드 축 ↔ 세이브")
+	_check("⑯a 배선: 시드 축 형제들과 **같은 자리**에 실린다(cast/cheki/cocktail/combat_swings 옆)",
+		_count_in(_src, "func _save_game", "\"narak_run\":") == 1
+			and _count_in(_src, "func _load_game", "narak_floors.restore_run(") == 1)
+	if m.narak_floors == null:
+		_check("⑯x 무대 없음(narak_floors null)", false)
+		return
+	# 근거: run이 갈리면 판이 갈린다(안 갈리면 이 절이 공허하다).
+	var a := NarakFloors.generate(1, 1)
+	var b := NarakFloors.generate(2, 1)
+	_check("⑯b 근거: 런 축이 갈리면 층 배치가 갈린다 — run1 ↔ run2(같으면 ⑯c가 공허하다)", a != b)
+	var runs := 3
+	for _i in runs:
+		m.narak_floors.begin_run()
+	var want: int = m.narak_floors.run_id()
+	m._save_game()
+	var raw: Dictionary = m.saver.load_game(m._active_slot)
+	_check("⑯c 세이브가 런 축을 적는다 — narak_run %d(종전엔 키가 아예 없었다)"
+			% int(raw.get("narak_run", -1)), int(raw.get("narak_run", -1)) == want and want >= runs)
+	m.narak_floors.restore_run(0)                 # 앱 재실행 = 0에서 시작하던 그 상태
+	_check("⑯c' 무대 전제: 되감으면 0이다(재부팅이 하던 일)", m.narak_floors.run_id() == 0)
+	var ok: bool = m._load_game()
+	_check("⑯d **로드가 그 축을 되살린다** — run %d(종전엔 0이라 매 실행의 첫 런이 늘 같은 판이었다)"
+			% m.narak_floors.run_id(), ok and m.narak_floors.run_id() == want)
+	_check("⑯e 하위호환 — 키 없는 구세이브는 0이다(거동 불변)",
+		int(({} as Dictionary).get("narak_run", 0)) == 0)
+	# 그래서 로드 직후의 다음 런이 «껐다 켜기 전»과 다른 판이다.
+	var next_run: int = m.narak_floors.begin_run()
+	_check("⑯f 로드 뒤 다음 런은 %d — 재부팅 전 1번 런과 다른 판이 깔린다(반복 수확 차단)"
+			% next_run,
+		next_run == want + 1 and NarakFloors.generate(next_run, 1) != NarakFloors.generate(1, 1))
+
+# ── ⑰ #19 진행 눈금이 움직이는 프레임마다 무효화가 나간다 ────────────────────
+func _check_furnace_invalidate(m: Node) -> void:
+	print("⑰ #19 업화로 진행 눈금 ↔ 캐시 무효화")
+	_check("⑰a 배선: 무효화는 `changed` 하나뿐이다(이 훅이 안 나가면 화면이 얼어붙는다)",
+		_count_in(_src, "func _setup_ledgers", "furnace.changed.connect(queue_redraw)") == 1
+			or _line_in(_src, "func _ready", "furnace.changed.connect(queue_redraw)") > 0
+			or _src.size() > 0 and _grep_any(_src, "furnace.changed.connect(queue_redraw)"))
+	var fu := FurnaceLedger.new()
+	var region := RegionCatalog.HOME
+	var t := Vector2i(5, 5)
+	var ore := ""
+	for oid in ItemCatalog.MINERALS.keys():
+		if FurnaceLedger.is_smeltable(String(oid)):
+			ore = String(oid)
+			break
+	_check("⑰b 무대: 제련 가능한 광석 「%s」을 카탈로그에서 찾았다" % ItemCatalog.name_of(ore), ore != "")
+	if ore == "":
+		return
+	fu.place(region, t)
+	var loaded: bool = fu.load_ore(region, t, ore)
+	var total: int = fu.minutes_left(region, t)
+	_check("⑰b' 무대: 투입이 성립하고 남은 시간이 %d분이다(1분에 안 끝난다)" % total,
+		loaded and total > 2)
+	var fires := [0]
+	fu.changed.connect(func() -> void: fires[0] += 1)
+	var done: Array = fu.advance_minutes(1.0)
+	_check("⑰c **완성이 없어도 눈금이 움직이면 알린다** — 남은 %d분 · changed %d회 · 완성 %d기(종전엔 0회)"
+			% [fu.minutes_left(region, t), fires[0], done.size()],
+		done.is_empty() and fu.minutes_left(region, t) == total - 1 and fires[0] == 1)
+	# 움직일 것이 없으면 조용하다(무의미한 재드로우 0 — 새 낭비를 안 만든다).
+	fu.advance_minutes(float(total))          # 전부 익힌다(완성 프레임 1회)
+	var quiet0: int = fires[0]
+	fu.advance_minutes(5.0)
+	_check("⑰d 익어서 멈춘 화덕은 조용하다 — changed %d회 그대로(카운트다운 정지 = 무효화도 정지)"
+			% (fires[0] - quiet0), fires[0] == quiet0)
+	# 형제 정렬 — 결정기도 같은 조건으로 알린다.
+	var csrc := _lines_of_file("res://crystalarium.gd")
+	_check("⑰e 형제 정렬: 결정기도 **같은 조건**으로 알린다(한 규칙이 두 원장에서 안 갈린다)",
+		_count_in(csrc, "func advance_day", "ticked = true") == 1
+			and _count_in(csrc, "func advance_day", "if ticked:") == 1)
+
+func _grep_any(lines: PackedStringArray, needle: String) -> bool:
+	for l in lines:
+		if l.contains(needle) and not l.strip_edges().begins_with("#"):
+			return true
+	return false
+
+# ── ⑱ #20 성야 소멸이 밀린 밤과 같은 순서에 선다 ────────────────────────────
+func _check_purge_carry(m: Node) -> void:
+	print("⑱ #20 성야 잡초 소멸 ↔ 밀린 밤 순서")
+	_check("⑱a 배선: 절기 첫날 이벤트가 **한 창구**다(소멸·재스폰이 같은 자리를 쓴다)",
+		_count_in(_src, "func _on_day_advanced", "_run_season_boundary(day)") == 1
+			and _count_in(_src, "func _on_day_advanced", "reclaim.purge_weeds()") == 0
+			and _count_in(_src, "func _process", "_run_season_boundary(night)") == 1
+			and _count_in(_src, "func _run_season_boundary", "reclaim.purge_weeds()") == 1)
+	# 성야절 첫날과 그 전날 밤을 판에서 판다(수치 옮겨 적기 0).
+	var winter := -1
+	for d in range(2, 400):
+		if GameClock.is_season_first_day(d) and GameClock.season_index_for_day(d) == 3:
+			winter = d
+			break
+	var night_a := winter - 1
+	_check("⑱b 무대: 성야절 첫날 %d와 그 전날 밤 %d(망연절)를 판에서 찾았다 — 그 밤은 겨울이 아니다"
+			% [winter, night_a],
+		winter > 1 and GameClock.season_index_for_day(night_a) != 3)
+	if winter <= 1:
+		return
+	var snap: Dictionary = m.reclaim.to_save()
+	var sealed0: Dictionary = m._weather_sealed_days.duplicate()
+	m._weather_sealed_days = {night_a: Weather.CALM, winter: Weather.CALM}
+	# 세계 A — 집에서 두 밤을 잔 순서(확산·재점령 → 소멸).
+	m.reclaim.load_save(snap)
+	m._run_weed_spread(night_a, false)
+	m._run_weed_encroach(night_a)
+	m._run_season_boundary(winter)
+	var world_home := _yard_print(m)
+	_check("⑱c 무대 전제: 집에서 잤으면 성야 첫날 마당이 **비어 있다**(소멸이 마지막이라 잡초 %d포기)"
+			% m.reclaim.weed_count(), m.reclaim.weed_count() == 0)
+	# 세계 C — 옛 순서(소멸이 밀린 밤보다 먼저).
+	m.reclaim.load_save(snap)
+	m._run_season_boundary(winter)
+	m._run_weed_spread(night_a, false)
+	m._run_weed_encroach(night_a)
+	var world_old := _yard_print(m)
+	_check("⑱d 무대 전제: 옛 순서는 **다른 세계**를 만든다 — 잡초 %d포기가 되살아난다(0이면 ⑱e가 공허하다)"
+			% m.reclaim.weed_count(),
+		world_old != world_home and m.reclaim.weed_count() > 0)
+	# 세계 B — 표에 얹고 귀가 프레임 하나로 소비한다(실제 경로).
+	m.reclaim.load_save(snap)
+	m._weed_pending_days = [night_a, winter]
+	m._season_respawn_pending_days = [winter]
+	m._tree_seed_pending_days = []
+	await process_frame
+	var world_carry := _yard_print(m)
+	_check("⑱e **귀가 프레임의 판이 집에서 잔 판과 한 칸도 안 갈린다** — 잡초 %d포기(「눈 밑으로 졌다」고 통보한 마당이 깨끗하다)"
+			% m.reclaim.weed_count(), world_carry == world_home)
+	_check("⑱f 표가 전부 비었다(스킵 0) — 절기 %s · 잡초 %s"
+			% [str(m._season_respawn_pending_days), str(m._weed_pending_days)],
+		m._season_respawn_pending_days.is_empty() and m._weed_pending_days.is_empty())
+	m.reclaim.load_save(snap)
+	m._weather_sealed_days = sealed0
+	m.notice_feed._items.clear()
+
+# ── ⑲ #22 절기 경계 채집물 의뢰가 교집합으로 닫힌다 ─────────────────────────
+func _check_quest_season_edge() -> void:
+	print("⑲ #22 절기 경계 채집물 의뢰 ↔ 교집합")
+	var qsrc := _lines_of_file("res://quest_board.gd")
+	_check("⑲a 배선: 형제 물고기 갈래와 **같은 접속사**다(합집합이 아니라 교집합)",
+		_count_in(qsrc, "static func _obtainable_between",
+			"and s == GameClock.season_index_for_day(due_day)") == 1
+			and _count_in(qsrc, "static func _obtainable_between",
+				"or s == GameClock.season_index_for_day(due_day)") == 0)
+	# 무대: 절기 마지막 날(게시)과 다음 절기 첫날(기한)이 갈리는 그 하루를 판에서 판다.
+	var edge := GameClock.DAYS_PER_SEASON            # 절기 28일 = 게시일
+	var post_s := GameClock.season_index_for_day(edge)
+	var due_s := GameClock.season_index_for_day(edge + 1)
+	_check("⑲b 무대: day %d 게시분의 기한이 다음 절기다(게시 절기 %d ↔ 기한 절기 %d)"
+			% [edge, post_s, due_s], post_s != due_s)
+	# 다음 절기 전용 채집물 — 로스터에서 판다(id 옮겨 적기 0).
+	var next_only := ""
+	var same_season := ""
+	for sp in ForageSpawns.all_species():
+		var id := String(sp)
+		if not ItemCatalog.FORAGEABLES.has(id) or ForageSpawns.is_deep_gated(id):
+			continue
+		var s := ForageSpawns.season_of(id)
+		if s == due_s and next_only == "":
+			next_only = id
+		elif s == post_s and same_season == "":
+			same_season = id
+	_check("⑲c 무대: 다음 절기 전용 「%s」과 그 절기 종 「%s」을 로스터에서 찾았다"
+			% [ItemCatalog.name_of(next_only), ItemCatalog.name_of(same_season)],
+		next_only != "" and same_season != "")
+	if next_only == "" or same_season == "":
+		return
+	_check("⑲d **다음 절기 전용 종은 경계 게시분에서 빠진다** — 「%s」(종전엔 기한 절기만 맞으면 통과해 이행 불가 의뢰가 섰다)"
+			% ItemCatalog.name_of(next_only),
+		not QuestBoard._obtainable_between(next_only, edge, edge + 1))
+	_check("⑲e 그 절기 종도 **경계에선 빠진다**(기한 날엔 이미 세계에서 사라진다 — 물고기 갈래와 같은 판정)",
+		not QuestBoard._obtainable_between(same_season, edge, edge + 1))
+	_check("⑲f 경계가 아닌 날은 종전 그대로 통과한다(거동 축소 0) — 「%s」 day %d~%d"
+			% [ItemCatalog.name_of(same_season), edge - 2, edge - 1],
+		QuestBoard._obtainable_between(same_season, edge - 2, edge - 1))
+	# 풀이 비지 않는다 — 작물이 통과하므로 경계 날에도 출제가 성립한다(게시판이 죽지 않는다).
+	var pool: Array = QuestBoard.item_pool_for(edge, edge + 1)
+	_check("⑲g 경계 날에도 후보 풀이 안 빈다 — %d종(작물 갈래가 통과 · 폴백에 안 기댄다)"
+			% pool.size(), pool.size() > 0 and pool.size() < QuestBoard.item_pool().size())
+
+# ── DUP 재확인(#21 = #4 · #23 = #1) — 배치 A 봉합이 그대로 서 있나 ──────────
+func _check_dup_reconfirm() -> void:
+	print("DUP 재확인 — #21 = #4 · #23 = #1")
+	_check("DUP-a #21: `_process`에 별도 재스폰 블록이 없다 — 절기 이벤트가 밤 루프 안에서만 돈다",
+		_count_in(_src, "func _process", "_run_season_boundary(night)") == 1
+			and _count_in(_src, "func _process", "_season_respawn_pending_days = 0") == 0)
+	_check("DUP-b #23: 굳은 하늘이 **표**다 — 밀린 밤이 여럿이어도 밤마다 자기 아침의 답이 있다",
+		_count_in(_src, "func _weather_sealed_on", "_weather_sealed_days.has(d)") == 1
+			and _grep_any(_src, "var _weather_sealed_days: Dictionary = {}"))
