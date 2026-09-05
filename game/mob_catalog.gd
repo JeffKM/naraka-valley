@@ -411,12 +411,27 @@ static func roll_kind(pool: Array, rng: RandomNumberGenerator) -> String:
 #     스트림이 안 흔들린다(같은 시드에서 "몇 개 나오나"는 같고 "나오나 마나"만 갈린다).
 #   ★ 확률은 1.0으로 클램프한다. 그래서 보스의 확정 드랍(chance 1.0)은 배수를 먹어도 그대로 1.0이다.
 # ★[S7-T4 / ADR-0065 결정 5 ③] `luck_bonus` = 명부의 운 가산(기본 0.0 = 정확히 중립 — 무인자 호출
-#   결과열 불변). **순서가 계약이다: base에 운을 먼저 더하고, 그 합에 날씨 배수를 곱한다**
-#   ((base + luck) × scale). 운은 "명부가 오늘 나에게 얼마를 더 얹느냐"라 확률의 원점을 옮기는
-#   축이고, 날씨는 그렇게 정해진 확률을 통째로 키우는 축이다 — 순서를 뒤집으면 혼불 바람이 운까지
-#   1.5배로 증폭해 하루 변동폭이 두 축의 곱으로 튄다.
+#   결과열 불변). **순서가 계약이다: 날씨 배수를 base에 먼저 곱하고, 그 결과에 운을 더한다**
+#   (base × scale + luck). 날씨는 그 몹 드랍의 확률 자체를 통째로 키우는 축이고, 운은 "명부가 오늘
+#   나에게 얼마를 *더 얹느냐*"라 배수와 무관한 고정 눈금이다.
+#   ★[폴리시 R24 #8] **종전 코드는 `(base + luck) × scale`이었고, 바로 위 문장이 금지하려던 것을
+#     그대로 했다** — 대수적으로 (base + luck) × scale = base×scale + **luck×scale**이라 혼불 바람이
+#     운까지 함께 증폭한다(나락철: 평온 ±0.05 → 혼불 바람 ±0.10). 주석과 코드 중 어느 쪽이 계약인지는
+#     형제 다섯이 정한다 — 사다리(`c += luck_bonus`)·벌목(`hardwood_chance + luck_bonus`)·인양
+#     (`permil + luck×1000`)·다수확(`biased_yield`)·지오드(`base + luck`)가 전부 **배수와 무관한 평
+#     가산**이고, 계수 표의 주인인 daily_luck.gd가 「계수 0.5 = 대길 +5%p·대흉 −5%p」를 절대 눈금으로
+#     선언한다. 곱해지는 지점이 하나만 있으면 그 약속이 그 지점에서만 깨진다. 그래서 **코드를** 고친다
+#     (계수 W_MOB_DROP·날씨 배수 상수는 한 톨도 안 건드린다 — 튜닝 눈금은 owner 몫).
 #   ★ 확정 드랍(chance ≥ 1.0 = 보스 관문 보상)은 운도 배수도 **안 탄다**: 흉일에 관문 보상이 사라지면
 #     "관문을 넘으면 반드시 준다"는 계약이 깨진다(운은 곁다리를 흔들지 본상을 흔들지 않는다).
+#   ★ 소비 순서·횟수는 어느 형태든 같다(확률만 갈린다) — 같은 시드의 스트림은 불침범.
+# ★[폴리시 R24 #8] 그 계약의 **유일한 표면**. `roll_drops`가 이 한 줄만 부르므로 "계약이 무엇인가"와
+#   "코드가 무엇을 하는가"가 갈릴 자리가 없고, 회귀도 통계가 아니라 이 순수 함수를 직접 잰다.
+static func effective_chance(base: float, scale: float, luck_bonus: float) -> float:
+	if base >= 1.0:
+		return base                                  # 확정 드랍 — 운도 배수도 안 탄다
+	return clampf(base * maxf(scale, 0.0) + luck_bonus, 0.0, 1.0)
+
 static func roll_drops(kind: String, seed_value: int,
 		drop_scale: float = 1.0, rare_scale: float = 1.0, luck_bonus: float = 0.0) -> Array:
 	var out: Array = []
@@ -430,9 +445,7 @@ static func roll_drops(kind: String, seed_value: int,
 	for e: Dictionary in table:
 		var base := float(e["chance"])
 		var scale: float = rare_scale if base <= RARE_DROP_CHANCE else drop_scale
-		# 확정 드랍은 base 그대로 통과(운·배수 면제) — 그 외만 (base + 운) × 배수.
-		var p: float = base if base >= 1.0 else (base + luck_bonus) * maxf(scale, 0.0)
-		var hit := rng.randf() < clampf(p, 0.0, 1.0)
+		var hit := rng.randf() < effective_chance(base, scale, luck_bonus)   # 확률의 단일 출처
 		var n := rng.randi_range(int(e["min"]), int(e["max"]))
 		if hit and n > 0:
 			out.append({"id": String(e["id"]), "count": n})

@@ -341,16 +341,47 @@ func _initialize() -> void:
 	#   D-1 경고 — 는 넷 다 수치를 안 담는 것이 계약이므로 **숫자가 한 글자도 없어야 한다**.
 	#   어떤 자리수·어떤 표기(백분율·소수·괄호 병기)로 운이 새도 반드시 red가 되고, 예고 줄이 몇
 	#   개 붙든 어떤 날짜를 싣든 영향을 안 받는다(퇴화 불가능).
+	# ★[폴리시 R24 #10] **전건 재구성.** 위 논증은 «◇예고 줄이 날짜를 무는 유일한 층»을 전제로
+	#   서 있는데, R22 #13이 둘째 층을 추가하면서 그 전제가 깨졌다 — `※ 내일은 아직 열리지 않은
+	#   테마 자리다 — 오늘 <문턱>을 넘기면 …`의 <문턱>은 `Festival.unlock_hint`이고 그 반환은
+	#   "누적 서빙 매출 %d냥" 또는 "카페 %d단"이라 **언제나 숫자를 문다**. 지금 red가 아닌 이유는
+	#   고정 표본 [d_great, d_terrible, 1, 28, 56]이 그 줄이 뜨는 날을 못 보기 때문뿐이다.
+	#   그래서 둘을 함께 고친다:
+	#     ㉠ 그 날을 **표본에 넣는다**(판에서 찾는다 — 날짜를 손으로 안 적는다). 안 넣으면 이 가드가
+	#        영영 그 줄을 못 본 채 "전건이 참이다"를 자칭한다.
+	#     ㉡ ※ 줄을 문턱 층으로 인정해 스캔에서 걷어내되, **그 줄이 문 숫자가 정확히 문턱의 것인지**를
+	#        따로 못 박는다(아래 ⑥d-hint) — 걷어내기가 운 누출의 은신처가 되지 않게.
+	var hint_day := -1
+	for d5 in range(1, 200):
+		var slot: int = Festival.theme_slot_for_day(d5 + 1)
+		if slot != Festival.NONE and not m._theme_open_on(d5 + 1):
+			hint_day = d5
+			break
+	_check("⑥d-전건 ※ 문턱 단서가 실제로 뜨는 날을 판에서 찾았다 — day %d(비해금 테마 슬롯 전날)"
+			% hint_day, hint_day > 0)
 	var numeric_leak := false
 	var leak_where := ""
 	var scanned_lines := 0
-	for d4 in [d_great, d_terrible, 1, 28, 56]:
+	var saw_hint_line := false
+	var hint_line_ok := false
+	var sample_days: Array = [d_great, d_terrible, 1, 28, 56]
+	if hint_day > 0:
+		sample_days.append(hint_day)
+	for d4 in sample_days:
 		m.clock.day = int(d4)
 		var t2: String = m._mirror_forecast_text()
 		for raw_line in t2.split("\n"):
 			var line := String(raw_line)
 			if line.begins_with("◇"):
 				continue                                   # 예고 줄 = 날짜 층(숫자가 정상)
+			if line.begins_with("※"):
+				# 문턱 단서 층 — 이 줄의 숫자는 **문턱의 것**이지 운의 것이 아니다. 그 사실을
+				# 여기서 못 박고 지나간다(문자열을 옮겨 적지 않고 Festival에서 판다).
+				saw_hint_line = true
+				var slot2: int = Festival.theme_slot_for_day(int(d4) + 1)
+				var hint2: String = Festival.unlock_hint(slot2)
+				hint_line_ok = hint2 != "" and line.contains(hint2)
+				continue
 			if line.strip_edges() == "":
 				continue
 			scanned_lines += 1
@@ -360,12 +391,18 @@ func _initialize() -> void:
 					numeric_leak = true
 					if leak_where == "":
 						leak_where = "day %d — %s" % [int(d4), line]
-	# 비어 있음 가드 — 예고 줄을 걷어낸 뒤에도 잴 본문이 남아야 검사가 하중을 받는다(표본 5일 ×
-	# 최소 머리·운 2줄·날씨 1줄).
-	_check("⑥d-pre 예고 줄을 걷어낸 본문이 남는다(검사가 공허하지 않다) — 실측 %d줄" % scanned_lines,
-		scanned_lines >= 5 * 4)
-	_check("⑥d 수치 노출 0 — 예고 줄 밖 본문에 숫자가 한 글자도 없다(등급·문구만)%s"
+	# 비어 있음 가드 — 예고·문턱 줄을 걷어낸 뒤에도 잴 본문이 남아야 검사가 하중을 받는다
+	# (표본 하루당 최소 머리·운 2줄·날씨 1줄 + 여백).
+	# 분모는 표본 배열에서 판다(★[폴리시 R24 #10] 표본이 늘었으므로 숫자를 손으로 안 적는다).
+	_check("⑥d-pre 예고·문턱 줄을 걷어낸 본문이 남는다(검사가 공허하지 않다) — 표본 %d일 · 실측 %d줄"
+			% [sample_days.size(), scanned_lines],
+		scanned_lines >= sample_days.size() * 4)
+	_check("⑥d 수치 노출 0 — 예고·문턱 줄 밖 본문에 숫자가 한 글자도 없다(등급·문구만)%s"
 		% ("" if leak_where == "" else " ← 누출: " + leak_where), not numeric_leak)
+	# ★[폴리시 R24 #10] 걷어낸 ※ 층에도 하중을 건다 — 그 줄을 **실제로 봤고**, 그 줄이 문 문자열이
+	#   `Festival.unlock_hint`가 낸 문턱 그대로다(다른 숫자가 그 줄에 얹히면 이 항이 빨개진다).
+	_check("⑥d-hint ※ 문턱 줄을 표본이 실제로 지났고, 그 줄의 수치는 Festival.unlock_hint의 문턱이다",
+		saw_hint_line and hint_line_ok)
 	# D-1 경고 — 절기 마지막 날에만 뜬다.
 	m.clock.day = 28
 	var txt_last: String = m._mirror_forecast_text()

@@ -2485,6 +2485,10 @@ var _weed_day_pending_day := 0
 #   소비할 수 있고(잡초 표가 저장되므로), 그때도 그 아침의 답이어야 한다.
 var _weather_sealed_day := 0
 var _weather_sealed := Weather.CALM
+# ★[폴리시 R24 #9] 그 아침에 굳은 **[삽사리] 운 하한 보정**(위 하늘 두 칸의 운 축 형제).
+#   `_luck_floor_on` 머리말에 소비처와 근거가 있다. 하늘과 같은 이유로 세이브에 실린다.
+var _luck_floor_sealed_day := 0
+var _luck_floor_sealed := false
 # ★[폴리시 R21 #15] 집 밖에서 날이 바뀌어 **밀린 그 밤의 마당 자체 파종**의 날짜(0 = 밀린 것 없음).
 #   위 셋과 같은 결이다 — 파종 판정(`_is_tree_seed_free`)이 안식 그리드·프롭·밭을 훑으므로 다른
 #   구역에서는 집행할 수 없고, 그 밤을 그냥 버리면 마당 나무 공급(HOME_CAP)이 영구히 준다.
@@ -7321,9 +7325,9 @@ func _on_mob_killed(mob: Mob, spawn_index: int) -> void:
 	var full := false
 	# ★[S7-T3 / ADR-0065 결정 4] 혼불 바람이면 드랍 확률 ×1.5·희귀(나락철) ×2. 평온이면 두 값 다 1.0이라
 	#   기존 드랍 결과열이 한 톨도 안 변한다(수량 롤은 애초에 배수를 안 탄다 — MobCatalog 주석 참조).
-	# ★[S7-T4 / ADR-0065 결정 5 ③] 명부의 운(계수 ×0.5)이 여기 합류했다. **순서 = (base + 운) × 날씨**
-	#   (MobCatalog 주석의 계약). 운은 확률의 원점을 옮기고 날씨는 그 결과를 통째로 키운다 —
-	#   뒤집으면 혼불 바람이 운까지 1.5배로 증폭해 하루 변동폭이 두 축의 곱으로 튄다.
+	# ★[S7-T4 / ADR-0065 결정 5 ③] 명부의 운(계수 ×0.5)이 여기 합류했다. **순서 = base × 날씨 + 운**
+	#   (MobCatalog 주석의 계약 — ★[폴리시 R24 #8]이 그 주석과 코드의 어긋남을 코드 쪽으로 맞췄다).
+	#   날씨는 그 확률을 통째로 키우고, 운은 형제 다섯 지점과 같은 **평 가산 ±5%p**로만 얹힌다.
 	var wx := _weather_today()
 	for d: Dictionary in MobCatalog.roll_drops(mob.kind, drop_seed,
 			Weather.drop_scale(wx), Weather.rare_drop_scale(wx),
@@ -10696,6 +10700,11 @@ func _on_day_advanced(day: int) -> void:
 	#   팠다(밀린 잡초 확산 · 갱도 층 배치). 여기 한 칸이 그 «아침의 답»이다.
 	_weather_sealed_day = day
 	_weather_sealed = weather
+	# ★[폴리시 R24 #9] **오늘의 운도 여기서 굳는다**(위 하늘 굳히기의 운 축 형제 — 사유는
+	#   `_luck_floor_on` 머리말). 굳는 것은 운 값이 아니라 그 유일한 라이브 입력([삽사리] 만점
+	#   여부)이다 — 값 자체는 여전히 day에서 파생된다(DailyLuck은 상태 0).
+	_luck_floor_sealed_day = day
+	_luck_floor_sealed = pet != null and pet.luck_floor_active()
 	# ★[S7-T2 / ADR-0065 결정 2] 작물 절기 사멸 — 절기 첫날 아침, 밭의 **비제철·비다절기** 작물이
 	#   일괄로 스러진다. `farm.advance_day`보다 위라 스러진 칸은 그날 자라지 않는다(하루 사이클 정합 —
 	#   까마귀 습격이 성장 전에 오는 것과 같은 순서 규율).
@@ -12296,6 +12305,10 @@ func _save_game() -> bool:
 		# ★[폴리시 R22 #10·#11] 그 아침에 굳은 하늘(잡초 표와 짝 — 밀린 밤을 다음 세션에 소비해도 같은 답).
 		"weather_sealed_day": _weather_sealed_day,
 		"weather_sealed": _weather_sealed,
+		# ★[폴리시 R24 #9] 그 아침에 굳은 운 하한 보정(하늘 두 칸의 운 축 형제 — 같은 이유로 왕복한다:
+		#   F9·재부팅 뒤에도 같은 날은 같은 등급이어야 한다).
+		"luck_floor_sealed_day": _luck_floor_sealed_day,
+		"luck_floor_sealed": _luck_floor_sealed,
 		"tree_seed_pending_day": _tree_seed_pending_day,   # ★[폴리시 R21 #15] 밀린 밤의 마당 파종
 		"season_respawn_pending_day": _season_respawn_pending_day,
 		"pasture_release_pending": _pasture_release_pending,
@@ -12516,6 +12529,8 @@ func _load_game() -> bool:
 	_weed_day_pending_day = maxi(int(data.get("weed_pending_day", 0)), 0)
 	_weather_sealed_day = maxi(int(data.get("weather_sealed_day", 0)), 0)   # ★[폴리시 R22 #10·#11]
 	_weather_sealed = int(data.get("weather_sealed", Weather.CALM))
+	_luck_floor_sealed_day = maxi(int(data.get("luck_floor_sealed_day", 0)), 0)   # ★[폴리시 R24 #9]
+	_luck_floor_sealed = bool(data.get("luck_floor_sealed", false))
 	_tree_seed_pending_day = maxi(int(data.get("tree_seed_pending_day", 0)), 0)   # ★[폴리시 R21 #15]
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
@@ -17818,6 +17833,19 @@ func geode_double_chance() -> float:  # 발굴자(lvl10) — 지오드 개봉 2�
 	return MiningSkill.geode_double_chance(
 		_perk_value(ProfessionCatalog.MINING, ProfessionCatalog.DIM_GEODE_DOUBLE, 0.0))
 
+# ★[폴리시 R24 #6] 알돌 개봉 2배 롤에 **실제로 실리는** 확률(퍼크 ⊕ 명부의 운). 값을 여기 한 줄에
+#   모으는 이유는 그 합이 계약을 하나 지고 있어서다 — **운 가산은 확정 퍼크를 깰 수 없다.** 형제
+#   둘이 이미 같은 문법으로 이 경계를 든다: `MineFloors.ladder_chance`(「운을 얹기 전에 이미 1.0을
+#   넘겼다면 그대로 확정이다」)·`MobCatalog.effective_chance`(「확정 드랍(chance ≥ 1.0)은 운도
+#   배수도 안 탄다」). 지오드 지점만 그 가드가 없어, 발굴자(lvl10 «알돌 개봉 산출 2배» = 퍼크 값
+#   1.0)를 찍은 플레이어가 대흉 날(−0.10 × W_GEODE 0.5 = −0.05)에 알돌을 깨면 0.95가 넘어가 **약
+#   5%의 개봉이 1개**로 떨어졌다 — 냥은 그대로 나가고 알림도 그대로라, 화면에 «2배»라 적힌 확정
+#   퍼크가 조용히 95%짜리가 되는 광고-실효 어긋남이었다.
+# ★ 소비 횟수는 어느 쪽이든 같다 — `open_geode`는 유품이 아니면 늘 이 롤을 한 번 굴린다.
+func _geode_double_effective() -> float:
+	var base := geode_double_chance()
+	return base if base >= 1.0 else base + _luck_bonus(DailyLuck.W_GEODE)
+
 # ★[S5-T3] 업화로 분 진행 — 절대 게임 분의 델타를 원장에 흘린다(매 프레임·_process 앞머리).
 #   ★ 취침 점프가 여기서 **공짜로** 처리된다: clock.sleep()이 day +1·minutes = 06:00으로 갈면
 #     절대 분은 (22:00 → 다음날 06:00) = +480분이라, 그 밤만큼 제련이 진행된다(스타듀 정합 —
@@ -19513,8 +19541,7 @@ func _try_open_geode() -> bool:
 	#     결정 5가 명시적으로 금지한 자리다. 그래서 지오드 축에서 유일한 *플레이어 액션 롤*인
 	#     개봉 2배 롤에 얹었다("운 좋은 날 깬 알돌은 한 몫 더 나온다"). open_geode는 유품이 아니면
 	#     항상 이 롤을 굴리므로 소비 횟수도 안 변한다.
-	var res := MiningSkill.open_geode(held, _geode_opened,
-		geode_double_chance() + _luck_bonus(DailyLuck.W_GEODE))
+	var res := MiningSkill.open_geode(held, _geode_opened, _geode_double_effective())
 	if res.is_empty():
 		return true
 	var id := String(res["id"])
@@ -26395,12 +26422,31 @@ func _weather_fx_suppressed() -> bool:
 func _luck_bonus(weight: float) -> float:
 	return DailyLuck.bonus_for_day(clock.day, weight, _pet_luck_floor()) if clock != null else 0.0
 
+# ★[폴리시 R24 #9] **그 아침에 굳은 운 하한 보정**. `_weather_sealed_on`과 문법이 1:1이고, 그
+#   선례가 하늘에 대해 한 일을 운에 대해 한다.
+#   무엇이 깨져 있었나: daily_luck.gd 머리말이 「같은 day면 같은 운이다 — 세이브를 불러도,
+#   되감아도」를, 그리고 「거울도 보정된 등급을 읽는다」를 계약으로 든다. 그런데 보정의 입력인
+#   `pet.luck_floor_active()`는 **낮에 뒤집힌다** — 우정 992/1000으로 대흉 아침을 맞아 거울에서
+#   「대흉」을 읽고(그 판은 열 때 한 번 스냅한다), 마당에 나가 삽사리를 쓰다듬으면 그 프레임부터
+#   여섯 배선과 거울·거울 틴트가 전부 「흉」으로 답했다. 같은 달력 날짜가 **행동 순서에 따라 두
+#   등급**을 갖고, 아침 점괘를 믿고 갱도를 접은 플레이어는 실제로는 흉이던 하루를 버렸다.
+#   ★ 하늘과 같은 분리를 쓴다: **오늘**을 묻는 자리(운 6배선·거울 본문·거울 틴트)는 굳은 답을
+#     읽고, **다른 날**을 물으면 종전대로 라이브로 판다(예보·미래엔 굳을 것이 없다). 만점 보상은
+#     그래서 «쓰다듬은 그 순간»이 아니라 «다음 아침»부터 든다 — 하루의 답이 하루 안에서 하나다.
+#   ★ 구세이브·부팅 첫날은 굳은 값이 없어 그대로 라이브로 떨어진다(거동 불변 · 다음 아침에 굳는다).
+func _luck_floor_on(d: int) -> bool:
+	if _luck_floor_sealed_day != 0 and d == _luck_floor_sealed_day:
+		return _luck_floor_sealed
+	return pet != null and pet.luck_floor_active()
+
 # ★[S10-T4 / ADR-0069 결정 7] [삽사리] 만점 보상이 켜져 있는가 — **명부의 운 6배선 전부의 단일
 #   입구**다. 여섯 지점이 이미 `_luck_bonus` 하나를 지나므로 배선점이 여기 한 줄로 끝난다
 #   (weather.gd 계수가 daily_luck.gd 한 곳에만 사는 것과 같은 결의 이득).
 #   ⚠️ 평균이 아니라 **바닥**만 올린다 — 구현 계약은 DailyLuck.floor_luck 머리말에 있다.
+#   ★[폴리시 R24 #9] 오늘의 답은 **그 아침에 굳은 것**이다(`_luck_floor_on` 머리말) — 이 얇은
+#     표면은 "오늘"을 그 창구에 넘기기만 한다. clock이 없는 프레임(부팅 중)은 라이브 폴백.
 func _pet_luck_floor() -> bool:
-	return pet != null and pet.luck_floor_active()
+	return _luck_floor_on(clock.day) if clock != null else (pet != null and pet.luck_floor_active())
 
 # 방목 날씨 게이트. ★[S7-T3 / ADR-0065 결정 4] 스텁(항상 true)이 실효화됐다 — **잿눈이면 실내 잔류**다.
 # ★ 옛 B1-a Q5 스펙은 "혼우·잿눈 둘 다 실내"였는데 ADR-0065 결정 4가 **잿눈만** 지목했다. 근거:
@@ -28776,8 +28822,9 @@ func _draw_customers() -> void:
 # ★[S6-T8] 좌석에 앉은 손님 한 상 — 옛 `_draw_graybox_figure(CUST)` 회색 형체의 교체분.
 #   ㉠ **명명 손님** = 그 주민의 시트(GUEST_SHEETS) 남향 첫 프레임. 얼굴이 그대로 나오므로
 #      "누가 왔나"를 등불 표식이 아니라 사람으로 읽는다.
-#   ㉡ **익명 손님** = GUEST_ANON 6상 중 하나. **좌석·날짜로 결정적**이라 한 손님이 앉아 있는
-#      동안 상이 안 바뀌고(매 프레임 굴리면 깜빡인다), 날이 바뀌면 다른 얼굴이 온다.
+#   ㉡ **익명 손님** = GUEST_ANON 중 하나(로스터 크기는 그 상수가 주인 — 여기 숫자를 적지 않는다).
+#      **좌석·날짜로 결정적**이라 한 손님이 앉아 있는 동안 상이 안 바뀌고(매 프레임 굴리면
+#      깜빡인다), 날이 바뀌면 다른 얼굴이 온다.
 #      ★ 시드에 `salt`를 섞어 낮 카페와 밤 바가 같은 좌석에서 다른 상을 뽑게 한다(같은 자리에
 #        같은 익명이 밤낮으로 앉아 있으면 "손님이 바뀌었다"가 안 읽힌다).
 # ★ 앵커: 발치를 **칸 아래변**에 맞춘다(시트는 프레임 80² 안 y≈76이 발치 — CharSprite 규약).
@@ -28785,6 +28832,24 @@ func _draw_customers() -> void:
 #   카운터보다 남쪽(가까운 쪽)이라 카운터를 가리는 것이 탑다운 위상상 맞다.
 const _GUEST_FRAME := 80.0        # 주민 시트 프레임(CharSprite.FRAME)
 const _GUEST_FOOT := 76.0         # 프레임 안 발치선(CharSprite.FOOT_OFFSET_Y 파생 — 40+36)
+
+# ★[폴리시 R24 #4·#5] **표시용 결정 뽑기의 단일 창구** — 프로젝트 관례(hash → `rand_from_seed`
+#   믹싱 → % N)를 main의 그리기 경로에도 들인다. `hash(...) % N`을 직접 접으면 Godot String.hash의
+#   djb2(h = h*33 + c) 선형성이 그대로 남아, **같은 프레임에 나란히 뽑는 자리들**(좌석·스폿처럼
+#   시드가 한 성분만 다른 형제들)의 잔여가 고정 오프셋으로 묶인다. weather.gd 헤더가 박제한 그
+#   함정이고 books.gd `_roll`·firefly_soul·peddler·trial_ground·daily_luck 다섯이 이미 이 형태다.
+static func _seeded_pick(tag: String, modulo: int) -> int:
+	return absi(rand_from_seed(hash(tag))[0]) % maxi(modulo, 1)
+
+# ★[폴리시 R24 #4·#5] **뽑기의 단일 출처**(시드 문자열까지 포함). 그리기와 회귀가 같은 한 줄을
+#   보게 하려고 좌석/스폿 축을 각각 이름 있는 창구로 뺐다 — 시드 조립을 `_draw_*` 안에 두면
+#   회귀가 그 문자열을 다시 지어야 하고(복제), 그러면 그리기 쪽만 raw hash로 되돌아가도 분포
+#   단언이 초록으로 남는다(하중 검증에서 실제로 그렇게 됐다).
+func _anon_guest_index(salt: int, day: int, t: Vector2i) -> int:
+	return _seeded_pick("cafe_anon:%d:%d:%d:%d" % [salt, day, t.x, t.y], GUEST_ANON.size())
+
+func _jobgui_index(day: int, spot: int) -> int:
+	return _seeded_pick("bar_jobgui:%d:%d" % [day, spot], _BAR_JOBGUI.size())
 func _draw_guest_figure(t: Vector2i, guest_id: String, ratio: float, salt: int) -> void:
 	var cx := t.x * TILE + TILE * 0.5
 	var bottom := float((t.y + 1) * TILE)
@@ -28794,7 +28859,12 @@ func _draw_guest_figure(t: Vector2i, guest_id: String, ratio: float, salt: int) 
 			Rect2(cx - _GUEST_FRAME * 0.5, bottom - _GUEST_FOOT, _GUEST_FRAME, _GUEST_FRAME),
 			Rect2(0.0, 0.0, _GUEST_FRAME, _GUEST_FRAME))
 	elif not GUEST_ANON.is_empty():
-		var pick := absi(hash("cafe_anon:%d:%d:%d:%d" % [salt, clock.day, t.x, t.y])) % GUEST_ANON.size()
+		# ★[폴리시 R24 #4] raw `hash % N`이던 자리. SEAT_TILES는 y가 전부 같고 x만 다른 한 줄이라
+		#   djb2 선형성 때문에 좌석끼리 잔여가 고정 오프셋으로 잠겼다 — 실측(day 1..400 × salt 0/1
+		#   = 800표본) 배치가 **8가지**뿐이고 x=11과 x=19는 800일 전부 같은 상, 다섯 좌석의 서로
+		#   다른 상 수가 매일 정확히 4였다(= 위 ㉡ "날이 바뀌면 다른 얼굴"의 정반대). 믹싱 뒤
+		#   785/800가지. 굴림은 여전히 순수 함수라 저장·소비 순서에 아무것도 안 얹는다.
+		var pick := _anon_guest_index(salt, clock.day, t)
 		var tex: Texture2D = GUEST_ANON[pick]
 		var sz := tex.get_size()
 		draw_texture(tex, Vector2(cx - sz.x * 0.5, bottom - sz.y))
@@ -28867,7 +28937,11 @@ func _draw_jobgui() -> void:
 		if not night_bar.is_threat(i):
 			continue
 		var t: Vector2i = NIGHT_SPOT_TILES[i]
-		var pick := absi(hash("bar_jobgui:%d:%d" % [clock.day, i])) % _BAR_JOBGUI.size()
+		# ★[폴리시 R24 #5] raw `hash % N`이던 자리. 시드가 스폿 인덱스 한 글자만 다르고 djb2는 그
+		#   해시를 정확히 +1씩 밀므로 %3이 **강제로 0→1→2 회전**했다 — 실측(day 1..400) 27가지 중
+		#   3가지(회전)만 나왔고 그중 (0,1,2)가 301일 = 75.25%, 같은 종이 둘 서는 밤은 400일 동안
+		#   한 번도 없었다. 믹싱 뒤 27가지 전부가 고르게 나온다.
+		var pick := _jobgui_index(clock.day, i)
 		var tex: Texture2D = MOB_TEX.get(_BAR_JOBGUI[pick])
 		if tex == null:
 			_draw_graybox_figure(t, JOBGUI, night_bar.approach_ratio(i))
