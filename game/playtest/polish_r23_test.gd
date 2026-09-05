@@ -401,8 +401,7 @@ func _check_pasture_sealed_sky(m: Node) -> void:
 		a["grazed"] = false
 		a.erase("pasture_tile")
 	# 그 아침의 하늘만 **잿눈으로 굳힌다** = 미해금 테마 슬롯 아침의 재현.
-	m._weather_sealed_day = calm_day
-	m._weather_sealed = Weather.SNOW
+	m._weather_sealed_days = {calm_day: Weather.SNOW}   # ★[폴리시 R25 #1] 스칼라 쌍 → 날짜별 표
 	_check("③a 무대: 짐승 %d마리가 문 열린 실내에 있고 낮이다(방출 게이트 중 날씨만 남는다)"
 			% m.ranch.releasable().size(),
 		m.ranch.releasable().size() >= 1 and m.clock.phase() != "밤"
@@ -426,7 +425,7 @@ func _check_pasture_sealed_sky(m: Node) -> void:
 		not m.ranch.occupied_pasture_tiles().is_empty())
 	_check("③g 배선: 밀린 표 소비처가 인자를 넘긴다(형제 둘이 R22에서 받은 그 창구)",
 		_count_in_func(_src, "func _process", "_release_open_buildings(clock.day") >= 1)
-	m._weather_sealed_day = 0
+	m._weather_sealed_days = {}
 
 # ── ④ #3 화분 양보 ↔ 적재 자리 ───────────────────────────────────────────────
 func _check_pot_yield_room(m: Node) -> void:

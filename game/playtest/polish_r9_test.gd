@@ -721,7 +721,7 @@ func _initialize() -> void:
 	# ★[폴리시 R24 #18] 소비가 «밀린 밤 전부, 오래된 밤부터»로 바뀌며 인자가 루프 변수로 갈렸다 —
 	#   이 항이 재는 것은 «확산과 재점령이 한 표로 함께 미뤄진다»이므로 니들만 그 변수로 따라간다.
 	_check("⑰e 확산·재점령이 **한 표**로 함께 미뤄진다(둘 중 하나만 살아남지 않는다)",
-		_in_func("func _process", "_run_weed_spread(night)")
+		_in_func("func _process", "_run_weed_spread(night")
 		and _in_func("func _process", "_run_weed_encroach(night)"))
 	# ★[폴리시 R10 #1 개정] 이 단언은 **뒤집혔다.** R9는 표를 형제 둘(절기 재스폰·방목 방출)과 같은
 	#   계약으로 봐 로드에서 버렸는데, 잡초만 계약이 다르다: 취침 자동 세이브가 `_on_day_advanced`

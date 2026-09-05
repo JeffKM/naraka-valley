@@ -224,6 +224,7 @@ func collect(region: String, t: Vector2i) -> Dictionary:
 #   · minutes <= 0이면 무동작(정지·역행 방어).
 func advance_minutes(minutes: float) -> Array:
 	var out: Array = []
+	var ticked := false   # ★[폴리시 R25 #19] 이 프레임에 눈금이 실제로 움직였나(무효화 축)
 	if minutes <= 0.0:
 		return out
 	var step := int(floor(minutes))
@@ -244,10 +245,18 @@ func advance_minutes(minutes: float) -> Array:
 			left -= step
 			e["left"] = maxi(left, 0)
 			by_tile[t] = e
+			ticked = true
 			if left <= 0:
 				out.append({"region": region, "tile": t, "id": String(e["product"]),
 					"quality": int(e.get("quality", ItemCatalog.Q_NORMAL))})
-	if not out.is_empty():
+	# ★[폴리시 R25 #19] **눈금이 움직인 프레임마다** 알린다(종전엔 «완성된 화덕이 있을 때만»).
+	#   소비처는 매 분 갱신되어야 하는 진행 띠인데(main `_draw_furnaces`의 `total - left` 폭) 무효화
+	#   배선은 `furnace.changed → queue_redraw` 하나뿐이고 main 캔버스는 이벤트 구동이다 — 마당에
+	#   화덕을 놓고 걷지도 마우스를 움직이지도 않으면 재드로우 요청이 0이라 띠가 **투입 시점 0에서
+	#   얼어붙었다가** 완성되는 그 한 프레임에 금빛 덩이로 튀었다(「진행이 화면에 보인다」가 성립
+	#   안 함). 이 훅은 게임 분이 한 칸 넘어갈 때만 도므로(main `_tick_furnaces`의 `whole >= 1.0`)
+	#   프레임당 비용이 아니라 게임분당 재드로우 한 번이다.
+	if ticked:
 		changed.emit()
 	return out
 

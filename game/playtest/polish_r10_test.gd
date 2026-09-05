@@ -120,8 +120,11 @@ func _initialize() -> void:
 	# ★[폴리시 R11 정정] 여기 있던 "형제 표 둘은 로드가 버린다"는 **R10의 잘못된 논증을 잠근**
 	#   단언이었다(R11 #1·#4·#6·#8이 반증 — 그 둘도 세이브 시점엔 *집행 전*이라 버리면 손실이다).
 	#   같은 자리에서 이제 셋이 **모두** 왕복하는 것을 잠근다(계약이 하나로 합쳐졌다).
+	#   ★[폴리시 R25 #3] 절기 표가 누적 배열이 되며 로드 니들이 잡초 표와 **같은 창구**
+	#     (`_pending_nights_from`)로 갈렸다 — 이 항이 재는 «셋 다 파일에서 되살아난다»는 그대로라
+	#     니들만 그 창구로 따라간다(구 키는 그 안에서 폴백으로 계속 읽힌다).
 	_check("①f 형제 표 둘도 R11에서 같은 계약으로 합류했다(셋 다 파일에서 되살아난다)",
-		_line_of("data.get(\"season_respawn_pending_day\", 0)") > 0
+		_line_of("_pending_nights_from(data, \"season_respawn_pending_days\"") > 0
 		and _line_of("data.get(\"pasture_release_pending\", false)") > 0)
 
 	# ── ② #2 주괴 선물 배율 — R9의 "거동 불변" 전제가 거짓이었다 ────────────────

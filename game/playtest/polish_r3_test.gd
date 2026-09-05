@@ -187,20 +187,20 @@ func _initialize() -> void:
 		m._encroach_candidates().is_empty())
 	var weeds_before: int = m.reclaim.weed_count()
 	var debris_before: int = m.reclaim.respawned_debris_count()
-	m._season_respawn_pending_day = 0
+	m._season_respawn_pending_days = []   # ★[폴리시 R25 #3] 스칼라 → 누적 배열
 	m._on_day_advanced(season_day)
 	_check("⑧b 마당은 아직 그대로고(잡초 %d·재스폰 debris %d 불변) 표만 선다"
 		% [weeds_before, debris_before],
 		m.reclaim.weed_count() == weeds_before
 		and m.reclaim.respawned_debris_count() == debris_before
-		and m._season_respawn_pending_day == season_day)
+		and str(m._season_respawn_pending_days) == str([season_day]))
 	m._pet_event_armed = false                 # 위 재빌드가 다시 걸었을 수 있는 예약을 접는다(이 절 밖 상태)
 	m._rebuild_region(RegionCatalog.HOME)
 	m._indoor = ""
 	m._sleeping = false
 	m._transitioning = false
 	await process_frame
-	_check("⑧c 안식 농원에 다시 서는 프레임에 표가 소비된다", m._season_respawn_pending_day == 0)
+	_check("⑧c 안식 농원에 다시 서는 프레임에 표가 소비된다", m._season_respawn_pending_days.is_empty())
 	var grown: int = (m.reclaim.weed_count() - weeds_before) \
 		+ (m.reclaim.respawned_debris_count() - debris_before)
 	_check("⑧d 그 절기 재스폰이 실제로 돋았다(잡초 %d → %d · 재스폰 debris %d → %d)"

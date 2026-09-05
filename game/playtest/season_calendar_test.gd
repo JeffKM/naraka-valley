@@ -15,6 +15,9 @@ extends SceneTree
 # ★ RunSummary.RUN_DAYS 상수·정산 화면(_end_run)·호감도 곡선은 **보존 대상**이다
 #   (S9 엔딩 재사용 자산 — 게이트만 걷어냈지 자산을 지운 게 아니다). 그것도 함께 단언한다.
 #
+# ★[폴리시 R25 부록] ③의 무대가 **오프닝 통보를 닫고** 시작한다. R23 #25가 그 모달에 시계 정지를
+#   세운 뒤로 «부팅 직후엔 시계가 흐른다»가 더는 참이 아니기 때문이다(③pre3·③pre4에 경위).
+#
 # 실행: ./run_tests.sh season_calendar   (헤드리스는 반드시 game/에서 · 순차)
 
 var _fail := 0
@@ -30,6 +33,13 @@ func _new_main() -> Node:
 	await process_frame
 	await process_frame
 	return m
+
+# ★[폴리시 R25 부록] 열려 있는 대화를 끝까지 넘긴다(부팅 직후의 오프닝 통보 — 아래 ③ 참조).
+func _dismiss_dialogue(m: Node) -> void:
+	var guard := 0
+	while m.dialogue.is_open() and guard < 60:
+		m.dialogue.advance()
+		guard += 1
 
 func _despawn(m: Node) -> void:
 	m.queue_free()
@@ -101,6 +111,20 @@ func _initialize() -> void:
 	_check("③pre RUN_DAYS 상수는 보존(S9 엔딩 자산 — 지운 게 아니라 게이트만 걷음)",
 		RunSummary.RUN_DAYS == 21 and RunSummary.is_over(22))
 	_check("③pre2 _end_run 함수 보존(엔딩 재사용 대기)", m.has_method("_end_run"))
+	# ★[폴리시 R25 부록] **부팅 직후는 오프닝 통보 중이다.** R23 #25(3ac1538)가 그 모달에 형제 셋
+	#   (컷신·내면 공간·에필로그)과 같은 문법을 세우면서(`clock.running`을 스냅해 false로 두고 통보가
+	#   끝나는 자리에서 되돌린다) 이 무대의 암묵 전제가 조용히 깨졌다 — ③c는 «런 게이트가 없어져
+	#   시계가 흐른다»를 재는 항인데, 통보를 안 닫은 채 물으면 «통보가 멈춰 놨다»는 **다른 이유**로
+	#   빨개진다(그 커밋 이래 선재 red · 프로덕션은 정확했다). 실플레이는 그 다섯 줄을 읽고 닫으면서
+	#   시작하므로 무대도 거기까지 온다. 무대를 옮기기 전에 그 계약을 여기서 먼저 못 박아,
+	#   ③c가 «어떤 이유로든 흐른다»가 아니라 «통보를 닫았는데도 게이트가 안 끈다»를 물게 한다.
+	_check("③pre3 무대: 부팅 직후엔 오프닝 통보가 열려 있고 시계는 그 계약대로 멈춰 있다(R23 #25)",
+		m.dialogue.is_open() and not m.clock.running)
+	_dismiss_dialogue(m)
+	await process_frame
+	_check("③pre4 통보를 닫으면 시계가 되살아난다(정지 주인 = 재개 주인) — running %s · 대화 %s"
+			% [str(m.clock.running), str(m.dialogue.is_open())],
+		m.clock.running and not m.dialogue.is_open())
 	# 옛 게이트가 정확히 터지던 지점: 21일째 취침 → day 22 아침.
 	m.clock.day = 22
 	m._on_day_advanced(22)

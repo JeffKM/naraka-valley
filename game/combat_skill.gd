@@ -86,13 +86,22 @@ static func damage_factor(bonus: float) -> float:
 #   seed_value = 호출 측이 만든 결정적 시드(main은 스윙 카운터를 쓴다 — 좌표 해시 금지)
 #   dmg_bonus  = 투사·광전사 합산 퍼크(0.0 = 중립)
 #   crit_ch_mult / crit_pow_mult = 척후·결사 퍼크(1.0 = 중립)
+#   target_key = **개체 축**(호출 측이 주는 대상 식별자 — main은 몹의 스폰 인덱스를 쓴다)
 # ★ RNG 순차 소비: ①밴드 롤 → ②크리 롤. 순서를 바꾸면 같은 시드가 다른 답을 내므로 고정이다.
+# ★[폴리시 R25 #15] **시드에 개체 축이 있어야 한다.** 종전 시드는 (무기, 스윙 카운터)뿐이라 한
+#   스윙이 arc 안 여러 몹을 때리면 전원이 **같은 시드 문자열**을 받아 같은 스트림의 같은 값을
+#   읽었다 — 피해가 강제로 같고 크리도 «둘 다 터지거나 둘 다 안 터진다»(크리 확률이 몹 단위가
+#   아니라 스윙 단위가 되고, 무기 밴드 폭의 분산이 다중 타격에서 통째로 사라진다). 같은 저장소가
+#   처치 드랍에서 이미 같은 중복을 결함으로 못 박고 개체 축을 넣었다(main `_mobs_in_region`의
+#   R8 주석 «index는 개체가 든 스폰 인덱스다» · `MobCatalog.roll_drops` 머리말의 좌표 해시 금지
+#   규율) — 타격 롤만 그 밖에 남아 있었다. 기본값 0이면 축 없이 부르던 순수 판정 호출부(회귀)의
+#   문자열이 한 곳에서만 갈리므로 결정성은 그대로다.
 static func resolve_hit(weapon_id: String, seed_value: int, dmg_bonus: float = 0.0,
-		crit_ch_mult: float = 1.0, crit_pow_mult: float = 1.0) -> Dictionary:
+		crit_ch_mult: float = 1.0, crit_pow_mult: float = 1.0, target_key: int = 0) -> Dictionary:
 	if not WeaponCatalog.has(weapon_id):
 		return {"damage": 0, "crit": false, "base": 0}
 	var rng := RandomNumberGenerator.new()
-	rng.seed = hash("combat_hit:%s:%d" % [weapon_id, seed_value])
+	rng.seed = hash("combat_hit:%s:%d:%d" % [weapon_id, seed_value, target_key])
 	var base := WeaponCatalog.roll_damage(weapon_id, rng)
 	var crit := rng.randf() < crit_chance(crit_ch_mult)
 	var dmg := float(base) * damage_factor(dmg_bonus)

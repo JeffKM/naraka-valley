@@ -176,7 +176,8 @@ func _initialize() -> void:
 	# ── ① #4(=#1·#8) 밀린 절기 재스폰 표가 세이브를 왕복한다 ─────────────────────
 	print("── ① #4 절기 대량 재스폰 — 표가 원장과 같은 파일에 실린다 ──")
 	_check("①a 표를 세우는 자리와 잡초 표의 자리가 **같은 함수**다(같은 위상 = 같은 계약)",
-		_in_func("func _on_day_advanced", "_season_respawn_pending_day = day")
+		# ★[폴리시 R25 #3] 절기 표도 누적 배열이 되며 대입이 같은 창구로 갈렸다(잡초·파종과 3형제).
+		_in_func("func _on_day_advanced", "_queue_pending_night(_season_respawn_pending_days, day)")
 		# ★[폴리시 R24 #18] 잡초 표가 누적 배열이 되며 대입이 `_queue_pending_night`로 갈렸다 —
 		#   이 항이 재는 것은 «두 표가 같은 함수에서 선다»이므로 니들만 그 창구로 따라간다.
 		and _in_func("func _on_day_advanced", "_queue_pending_night(_weed_pending_days, day)"))
@@ -185,28 +186,31 @@ func _initialize() -> void:
 	#   파일에 실린다는 계약은 한 글자도 안 바뀌었다.
 	_check("①b 취침 자동 세이브는 날이 바뀐 **뒤**에 뜬다(그래서 표를 버리면 손실이 된다)",
 		_in_func("func _on_sleep_done", "_save_or_warn()"))
-	m._season_respawn_pending_day = 29
+	m._season_respawn_pending_days = [29]
 	m._save_game()
 	var raw: Dictionary = m.saver.load_game(m._active_slot)
-	_check("①c `_save_game`이 표를 실제로 적는다(키 season_respawn_pending_day = 29)",
-		raw.has("season_respawn_pending_day") and int(raw["season_respawn_pending_day"]) == 29)
+	_check("①c `_save_game`이 표를 실제로 적는다(키 season_respawn_pending_days = [29])",
+		raw.has("season_respawn_pending_days") and str(raw["season_respawn_pending_days"]) == str([29]))
 	_check("①d 같은 파일에 원장도 함께 실린다 — 표와 `reclaim`이 늘 같은 시점을 가리킨다",
 		# ★[폴리시 R24 #18] 잡초 표 키가 스칼라 → 누적 배열로 갈렸다(`weed_pending_days`).
 		#   이 항이 재는 것은 «표와 원장이 같은 파일에 실린다»이므로 키 이름만 따라간다.
 		raw.has("reclaim") and raw.has("weed_pending_days") and raw.has("pasture_release_pending"))
-	m._season_respawn_pending_day = 0
+	m._season_respawn_pending_days = []
 	var ok_load: bool = m._load_game()
 	_check("①e 로드가 그 표를 되살린다(종전엔 무조건 0으로 버려 그 절기치가 영영 안 굴렀다) — 29",
-		ok_load and m._season_respawn_pending_day == 29)
-	_check("①f 하위호환 — 키 없는 구세이브는 0이다(파생 기본값이 종전과 같다)",
-		int(({} as Dictionary).get("season_respawn_pending_day", 0)) == 0
-		and _line_of("data.get(\"season_respawn_pending_day\", 0)") > 0)
+		ok_load and str(m._season_respawn_pending_days) == str([29]))
+	# ★[폴리시 R25 #3] 하위호환 축이 «기본값 0»에서 «구 키 스칼라를 한 칸 표로 읽는다»로 넓어졌다
+	#   (잡초·파종 표가 R24 #18에서 받은 그 가법 확장 — `_pending_nights_from`).
+	_check("①f 하위호환 — 키 없는 구세이브는 빈 표, 구 키(스칼라 29)는 [29]로 읽힌다",
+		m._pending_nights_from({}, "season_respawn_pending_days", "season_respawn_pending_day").is_empty()
+		and str(m._pending_nights_from({"season_respawn_pending_day": 29},
+			"season_respawn_pending_days", "season_respawn_pending_day")) == str([29]))
 	m._region = RegionCatalog.HOME
 	m._sleeping = false
 	m._transitioning = false
 	await process_frame
 	_check("①g 집에 있는 프레임이 그 표를 소비해 0으로 돌아간다(그 절기 재스폰이 실제로 굴렀다)",
-		m._season_respawn_pending_day == 0)
+		m._season_respawn_pending_days.is_empty())
 
 	# ── ② #6 밀린 아침 방목 방출 표도 같은 계약 ─────────────────────────────────
 	print("── ② #6 방목 방출 — 표가 세이브를 왕복한다 ──")

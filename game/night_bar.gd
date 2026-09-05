@@ -183,7 +183,14 @@ func _tick_spots(delta: float) -> bool:
 					_auto_blocked += 1
 					resolved.emit({"repelled": true, "raided": 0, "auto": true})
 				else:
-					_raided += raid_amount
+					# ★[폴리시 R25 #17] **집계는 여기서 추정하지 않는다.** 종전엔 돌파마다
+					#   `_raided += raid_amount`를 무조건 더했는데, 실제 손실은 소비처(main)의
+					#   `_raid_inventory`가 «있는 만큼만» 가져간다 — 두 장부가 갈려, 백팩 수확물이
+					#   0인 밤에 「약탈할 재고가 없었다」를 매번 띄우고도 취침 정산은 「약탈 6개」를
+					#   보고했다. `abandon()`이 이 값을 곧바로 0으로 지우므로 그 줄이 그 밤 결산의
+					#   유일한 표면이고(main `_on_night_closed` 머리말), ADR-0010 이중 손실 ㉮의
+					#   결산이 실제 장부와 어긋난 채 전달됐다. 이제 계약만 쏘고, **확정은 소비처가
+					#   `record_raid`로 되돌려 준다**(단일 출처 = 인벤토리).
 					resolved.emit({"repelled": false, "raided": raid_amount})
 				dirty = true
 	# 새 잡귀 스폰(빈 스폿이 있을 때만 실제로 깃든다).
@@ -212,6 +219,12 @@ func _tick_customers(delta: float) -> bool:
 		if _seat_customer():
 			dirty = true
 	return dirty
+
+# ★[폴리시 R25 #17] 확정 손실을 원장에 적는다 — 막기 해소 계약을 받은 소비처가 **실제로 덜어낸
+#   개수**를 되돌려 주는 창구다(요구량이 아니라 실손실이 그 밤 정산의 값이다). 음수·0은 무시한다.
+func record_raid(actual: int) -> void:
+	if actual > 0:
+		_raided += actual
 
 func _clear_spots() -> void:
 	for s in _spots:

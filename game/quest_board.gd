@@ -111,8 +111,16 @@ static func _obtainable_between(id: String, post_day: int, due_day: int) -> bool
 	var s := ForageSpawns.season_of(id)
 	if s < 0:
 		return true                                   # 사철(심층·해변종·로스터 밖)
+	# ★[폴리시 R25 #22] **교집합이다**(종전 합집합). 형제 갈래인 물고기는 같은 상황을 이미 교집합으로
+	#   닫아 뒀다(`FishCatalog.quest_pool` — 게시 절기와 기한 절기 **둘 다**에 걸리는 어종만 낸다).
+	#   일일 의뢰는 `due_day = post_day + 1`이라 절기 28일 게시분만 두 절기에 걸치는데, 합집합이면
+	#   «다음 절기 전용 종»이 통과했다: 게시일에는 `ForageSpawns`가 그 절기 종만 돋우므로 세계에
+	#   그 종이 한 톨도 없고(절기 리셋 이후), 기한 마지막 날은 `season_reset`이 `_tiles`를 비운
+	#   **직후**부터 채우기 시작해 특정 한 종의 그날 기대 개수가 1을 밑돈다 — `DAILY_COUNT_MAX`(3)인
+	#   계약이 사실상 이행 불가다. 이 함수 머리말이 스스로 「획득 경로가 구조적으로 0인 경우를
+	#   닫는다」고 선언한 그 축이고, 절기 경계의 채집물만 그 규율 밖에 있었다.
 	return s == GameClock.season_index_for_day(post_day) \
-		or s == GameClock.season_index_for_day(due_day)
+		and s == GameClock.season_index_for_day(due_day)
 
 # 덤불 전용 열매인가(빈터 스폰이 아니라 흔들기 산출 — 절기 창 판정이 따로다).
 static func _is_berry(id: String) -> bool:

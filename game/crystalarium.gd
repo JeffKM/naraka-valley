@@ -191,6 +191,7 @@ func collect(region: String, t: Vector2i) -> String:
 #   · 수거 대기(left 0)는 그냥 지나간다 — 안 비우면 카운트다운이 멈춘다(설계 메모 3항).
 func advance_day() -> Array:
 	var out: Array = []
+	var ticked := false   # ★[폴리시 R25 #19] 눈금이 실제로 움직였나(업화로와 같은 축)
 	var regions: Array = _units.keys()
 	regions.sort()
 	for region in regions:
@@ -206,9 +207,13 @@ func advance_day() -> Array:
 			left -= 1
 			e["left"] = maxi(left, 0)
 			by_tile[t] = e
+			ticked = true
 			if left <= 0:
 				out.append({"region": region, "tile": t, "id": String(e["gem"])})
-	if not out.is_empty():
+	# ★[폴리시 R25 #19 형제 정렬] 업화로와 **같은 조건**으로 알린다(그 함수 머리말에 경위).
+	#   이쪽 눈금은 일 단위라 아침 정산 프레임의 다른 재드로우에 가려 관측되지 않았을 뿐, 조건부
+	#   emit이라는 형태는 같았다 — 한 규칙이 두 원장에서 갈리지 않게 함께 편다.
+	if ticked:
 		changed.emit()
 	return out
 
