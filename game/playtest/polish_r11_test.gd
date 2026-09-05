@@ -177,7 +177,9 @@ func _initialize() -> void:
 	print("── ① #4 절기 대량 재스폰 — 표가 원장과 같은 파일에 실린다 ──")
 	_check("①a 표를 세우는 자리와 잡초 표의 자리가 **같은 함수**다(같은 위상 = 같은 계약)",
 		_in_func("func _on_day_advanced", "_season_respawn_pending_day = day")
-		and _in_func("func _on_day_advanced", "_weed_day_pending_day = day"))
+		# ★[폴리시 R24 #18] 잡초 표가 누적 배열이 되며 대입이 `_queue_pending_night`로 갈렸다 —
+		#   이 항이 재는 것은 «두 표가 같은 함수에서 선다»이므로 니들만 그 창구로 따라간다.
+		and _in_func("func _on_day_advanced", "_queue_pending_night(_weed_pending_days, day)"))
 	# ★[폴리시 R17 #8] 호출이 `_save_or_warn()`으로 갈렸다(실패를 말하는 창구 경유 — 그 안에서
 	#   `_save_game()`을 부른다). 이 무대가 재는 위상("자동 저장이 날이 바뀐 뒤"), 곧 표가 그
 	#   파일에 실린다는 계약은 한 글자도 안 바뀌었다.
@@ -189,7 +191,9 @@ func _initialize() -> void:
 	_check("①c `_save_game`이 표를 실제로 적는다(키 season_respawn_pending_day = 29)",
 		raw.has("season_respawn_pending_day") and int(raw["season_respawn_pending_day"]) == 29)
 	_check("①d 같은 파일에 원장도 함께 실린다 — 표와 `reclaim`이 늘 같은 시점을 가리킨다",
-		raw.has("reclaim") and raw.has("weed_pending_day") and raw.has("pasture_release_pending"))
+		# ★[폴리시 R24 #18] 잡초 표 키가 스칼라 → 누적 배열로 갈렸다(`weed_pending_days`).
+		#   이 항이 재는 것은 «표와 원장이 같은 파일에 실린다»이므로 키 이름만 따라간다.
+		raw.has("reclaim") and raw.has("weed_pending_days") and raw.has("pasture_release_pending"))
 	m._season_respawn_pending_day = 0
 	var ok_load: bool = m._load_game()
 	_check("①e 로드가 그 표를 되살린다(종전엔 무조건 0으로 버려 그 절기치가 영영 안 굴렀다) — 29",

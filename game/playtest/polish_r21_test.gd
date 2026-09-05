@@ -133,7 +133,8 @@ extends SceneTree
 #           먼저 굴리고 거부권을 나중에 물어 그날 출목열이 안 갈린다. main 쪽 콜백은 승인한 칸을
 #           pending에 적어 같은 밤의 형제 리스폰이 서로를 본다(R20 #2 규율 · 여기선 «후보 심사»가
 #           아니라 «집행 직전 승인»이라 그 기록이 정확하다).
-#   · #15 = `_tree_seed_pending_day`(형제 셋과 같은 표·같은 소비 자리·세이브 왕복) +
+#   · #15 = `_tree_seed_pending_days`(형제 셋과 같은 표·같은 소비 자리·세이브 왕복 —
+#     ★[폴리시 R24 #18]에서 스칼라 1칸 → 누적 배열로 갈렸다) +
 #           `TreeLedger.catch_up_seeding`(파종 패스만 떼어낸 얇은 창구 — 성장·재출현·이끼를 두 번
 #           돌리지 않는다).
 #   · #16 = `_load_game`에 걷기 취소 두 줄(`_begin_cutscene`이 R7·R8에 세운 그 역연산).
@@ -949,7 +950,10 @@ func _check_seed_pending_carry(m: Node) -> void:
 	if m._region != RegionCatalog.HOME:
 		m._rebuild_region(RegionCatalog.HOME)
 	m.player.global_position = m._tile_center_px(m.SPAWN_TILE)
-	m._tree_seed_pending_day = 0
+	# ★[폴리시 R24 #18] 표가 스칼라 1칸 → 누적 배열이 됐다(연속 강제 취침이 앞 밤을 덮던 자리).
+	#   이 무대가 재는 계약(«집 밖 밤은 표가 서고, 귀가 첫 프레임이 그 밤을 한 번만 집행한다»)은
+	#   그대로고 담는 그릇만 갈렸다.
+	m._tree_seed_pending_days = []
 	# 파종이 **실제로 나는 밤**을 찾는다(0건인 밤을 무대로 쓰면 뒤 단언이 공허하다). 찾은 뒤
 	# 원장을 그 자리에서 원복해 무대를 되돌린다.
 	var cb: Callable = m._tree_seed_free_cb()
@@ -980,9 +984,9 @@ func _check_seed_pending_carry(m: Node) -> void:
 	for t in m.tree_ledger.tiles(RegionCatalog.HOME):
 		if m.tree_ledger.is_occupied(RegionCatalog.HOME, t):
 			before_tiles[t] = true
-	_check("⑮c 그 밤엔 파종이 0그루지만(%d → %d) **표가 선다**(밀린 밤 %d일)"
-			% [before, after_night, m._tree_seed_pending_day],
-		after_night == before and m._tree_seed_pending_day == seed_day)
+	_check("⑮c 그 밤엔 파종이 0그루지만(%d → %d) **표가 선다**(밀린 밤 %s)"
+			% [before, after_night, str(m._tree_seed_pending_days)],
+		after_night == before and str(m._tree_seed_pending_days) == str([seed_day]))
 	# 귀가 프레임이 그 밤만 따로 집행한다 — 좌표까지 그날 결과 그대로다.
 	m._rebuild_region(RegionCatalog.HOME)
 	m.player.global_position = m._tile_center_px(m.SPAWN_TILE)
@@ -998,9 +1002,9 @@ func _check_seed_pending_carry(m: Node) -> void:
 	for t in fresh:
 		if before_tiles.has(t):
 			not_free_before += 1
-	_check("⑮d 안식에 다시 선 첫 프레임이 그 밤을 집행한다 — 표 소비(%d) · 그 프레임에 새로 선 칸 %s(전부 직전엔 비어 있던 자리 · 겹침 %d)"
-			% [m._tree_seed_pending_day, str(fresh), not_free_before],
-		m._tree_seed_pending_day == 0 and not fresh.is_empty() and not_free_before == 0)
+	_check("⑮d 안식에 다시 선 첫 프레임이 그 밤을 집행한다 — 표 소비(%s) · 그 프레임에 새로 선 칸 %s(전부 직전엔 비어 있던 자리 · 겹침 %d)"
+			% [str(m._tree_seed_pending_days), str(fresh), not_free_before],
+		m._tree_seed_pending_days.is_empty() and not fresh.is_empty() and not_free_before == 0)
 	var after_catch: int = m.tree_ledger.occupied_count(RegionCatalog.HOME)
 	m._process(0.0)
 	_check("⑮e 표는 한 번만 소비된다 — 다음 프레임에 두 번째 파종이 없다(%d 그대로)" % after_catch,

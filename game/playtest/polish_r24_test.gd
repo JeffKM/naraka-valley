@@ -154,6 +154,19 @@ func _run_checks() -> void:
 	_check_luck_floor_seal(m)        # ⑩ #9
 	_check_mirror_hint_layer(m)      # ⑪ #10
 
+	print("══ 폴리시 R24 회귀 — 배치 B(#11~#20) ══")
+	_check_jealousy_axis(m)          # ⑫ #11(REFUTED)
+	_check_session_phase(m)          # ⑬ #12
+	_check_sleep_clock_owner(m)      # ⑭ #13
+	await _check_pending_nights(m)   # ⑯ #18
+	_check_pasture_carry(m)          # ⑰ #19
+	_check_cast_bait_truth(m)        # ⑱ #20
+	_check_old_save_rewind(m)        # ⑮ #14~#17 — 세이브 파일·열두 원장을 갈아 두므로 맨 끝
+
+	# ★ 이 스위트는 ⑮·⑯에서 세이브를 **쓴다**(구세이브 F9 되감기·밀린 밤 왕복이 파일 경로를 타야
+	#   하는 검증이라 무대가 곧 파일이다). 끝나면 지운다 — 남기면 다음 스위트가 부팅에서 그
+	#   «키를 뺀 세이브»를 이어받아 자기 결함이 아닌 이유로 빨개진다(스위트 간 오염 차단).
+	SaveManager.new().delete_save()
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
 
@@ -695,3 +708,451 @@ func _check_mirror_hint_layer(m: Node) -> void:
 	_check("⑪e ⑥d 표본이 그 날을 **실제로 지난다**(고정 표본이 통째로 빠뜨리던 자리)",
 		_count_in(lsrc, "func _initialize", "sample_days.append(hint_day)") == 1
 			and _count_in(lsrc, "func _initialize", "line.begins_with(\"※\")") == 1)
+
+# ══════════ 배치 B(#11~#20) ══════════════════════════════════════════════════
+#
+# 렌즈: 아침 정산 순서 감사(#11) · 든 물건 교체 행렬(#12) · 시계 정지 스택(#13) ·
+#       구세이브 이행 행렬(#14~#17) · 기절 여파 스윕(#18·#19·#20).
+#
+# 이 배치의 태도 셋.
+#   ㉠ **자리가 곧 정확성이다.** #11·#12는 값이 아니라 «언제의 값인가»가 틀린 자리다 — 그래서 단언도
+#      행 번호 관계(선언 < 틱 · 복원 < 하트 읽기)를 직접 잰다. 그 순서가 관측 가능한 다른 세계를
+#      만든다는 것은 별도 항이 든다(⑫b가 여우불 예산 차이를, ⑬c가 세션이 비는 사슬을 잰다).
+#   ㉡ **판별식으로 일괄한다.** #14~#17은 «부팅으로 시드되는가»(R13) 하나로 열두 원장을 정렬한 것이라,
+#      ⑮는 그 판별식의 **양쪽**을 잰다 — 걷은 열둘과, 그대로 둔 여섯(맵에서 다시 시드되는 쪽)을 함께
+#      본다. 과잉 적용도 결함이기 때문이다.
+#   ㉢ **손실 0을 잰다.** #18·#19는 이월 표의 계약이 «스킵 없이 전부 집행»이라, 단언도 «몇 개 남았나»가
+#      아니라 «두 밤이 쌓이고 둘 다 소비되는가»·«성공하지 않은 프레임이 표를 지우지 않는가»를 묻는다.
+#
+# 무엇을 보증하나(번호 = 24회차 헌트 발견 인덱스).
+#   ⑫ #11 = **REFUTED**. 헌트는 «질투 복원이 여우불 하트 읽기보다 242줄 뒤라 복원 아침이 하루 밀린다»고
+#      논증했지만 그 전제(«감점이 하트를 한 칸 내린다»)가 거짓이다 — `hearts()`는 stage 파생이고
+#      `add_points`는 stage를 한 칸도 안 건드린다. 이 절은 봉합이 아니라 **그 절연**을 잠근다.
+#   ⑬ #12 `session_lmb`이 세 세션 틱 **뒤**에 계산돼, 세션을 끝낸 그 LMB가 같은 프레임에 두 번째
+#      동사로 다시 집행됐다(여섯 가드가 «닫는 프레임»에만 통째로 무력 — 여는 프레임은 멀쩡했다).
+#   ⑭ #13 취침 트윈 종료의 무조건 `clock.running = true`가 에필로그·내면 공간의 시계 정지를 덮어써,
+#      회고 화면 뒤에서 하루가 흐르고 90실초마다 `_do_sleep`이 다시 돌아 자동 저장까지 됐다.
+#   ⑮ #14~#17 `has` 가드가 남은 열두 원장이 구세이브 로드에서 안 되감겨, 버린 타임라인의 건물 완공·
+#      도구 티어·짐승·설치물이 그대로 살아남고 다음 취침이 그것을 그 파일에 굳혔다.
+#   ⑯ #18 밀린 밤 이월 표가 스칼라 1칸이라 연속 강제 취침이 앞 밤을 덮어 **영구 스킵**시켰다
+#      (「갱도에서 N박」의 유지비가 1박치로 고정 · `catch_up_seeding`의 «손실 0»이 거짓).
+#   ⑰ #19 방목 이월 플래그를 다음 하루 경계가 **조건 없이** 지워, 소비되지 않은 빚이 사라졌다.
+#   ⑱ #20 낚시 혼력 사전 판정이 «미끼만 버린다»고 통보하는데 소모 줄이 그 return 뒤라 한 개도 안 탔다.
+#
+# 판정: #12~#20 CONFIRMED(9건 봉합) · **#11 = REFUTED**(코드 불변 — 근거는 ⑫와 커밋 본문).
+#
+# 하중 검증(**실측** — 봉합을 되돌려 실제로 뜬 red를 그대로 옮겨 적는다. 파괴 6배치 전건 확인):
+#   #12 선언을 다시 세 틱 뒤로            → ⑬a red(선언 14643행 ↔ 체키 14205 · 칵테일 14210 · 낚시 14451)
+#   #13 `_on_sleep_done`의 가드 철거       → ⑭a·⑭c·⑭d red(에필로그·내면 공간 뒤에서 running **true**)
+#   #14~#16 세 원장에 `has` 가드 복귀      → ⑮a(9/12)·⑮f(완공 **true**)·⑮g(도끼 티어 **3**)·⑮h(짐승 **4마리**)·⑮i red
+#   #18 `_queue_pending_night`를 덮어쓰기로 → ⑯b·⑯g red(집 밖 두 밤 뒤 표가 **[25] 한 칸**뿐)
+#   #19 무조건 대입 복귀                    → ⑰a·⑰d red(방출 못 한 아침에도 표가 **false**로 지워진다)
+#   #20 옛 문구 복귀                        → ⑱c red(「…미끼만 버린다…」인데 미끼 수량은 불변)
+#
+# ★하중 검증에서 배운 것 둘.
+#   · **#11의 전제가 무대에서 죽었다 — 그것이 판정이다.** 첫 판의 ⑫a는 «감점이 하트를 한 칸 내린다»를
+#     무대로 세우려다 ♡0 → ♡0을 실측했다. S8-T5/ADR-0066 결정 5가 `hearts()`를 점수 파생에서
+#     **stage**로 갈라 놓았기 때문이고(`_add`는 points만 clamp한다), 그래서 질투 −30/+30은 아침
+#     여우불이 읽는 값에 도달할 수 없다. 봉합을 되돌리고 절을 «두 축의 절연»을 잠그는 쪽으로 다시
+#     썼다 — 누가 `hearts()`를 점수 파생으로 되돌리면 그때 이 항이 빨개지며 결함이 된다.
+#   · **함수 니들은 `(` 앞까지 물어야 한다.** ⑬c의 첫 판이 1/3이었던 이유는 소스에 `func
+#     _tick_cheki_offer`·`func _tick_cocktail_offer`가 **먼저** 나와 `begins_with("func _tick_cheki")`가
+#     그쪽을 훑었기 때문이다(R23이 적어 둔 «느슨한 니들은 형제에게 걸려 통과한다»의 함수 판).
+
+# ── ⑫ #11 = REFUTED 질투 감점은 아침 하트에 도달할 수 없다 ─────────────────
+# ★ 이 절은 **봉합이 아니라 반증**을 잠근다. 헌트는 «복원이 하트 읽기보다 뒤라 복원 아침의
+#   여우불이 하루 밀린다»고 논증했는데, 그 전제(«감점이 하트를 한 칸 내린다»)가 거짓이다 —
+#   S8-T5/ADR-0066 결정 5가 `hearts()`를 점수 파생에서 **진급된 칸(stage)** 으로 갈라 놓았다.
+#   그래서 재는 것은 «순서»가 아니라 **두 축의 절연**이다: 그 절연이 살아 있는 한 이 순서는
+#   무해하고, 누가 `hearts()`를 다시 점수 파생으로 되돌리면 이 항이 빨개져 그 순간 결함이 된다.
+func _check_jealousy_axis(m: Node) -> void:
+	print("⑫ #11(REFUTED) 질투 점수 축 ↔ 아침 하트 축의 절연")
+	var hit: int = m.JEALOUSY_HIT
+	var per: int = Affinity.POINTS_PER_HEART
+	var a := Affinity.new()
+	a.points = per * 2
+	a.stage = 2
+	var hearts_before := a.hearts()
+	a.add_points(-hit)
+	_check("⑫a 무대: 감점 %d점이 하트 문턱(%d점)보다 작아 «문턱 바로 위»를 만들 수 있다 — points %d → %d"
+			% [hit, per, per * 2, a.points], hit < per and a.points == per * 2 - hit)
+	_check("⑫b **하트는 안 내려간다** — ♡%d 그대로(감점은 points 축이고 hearts()는 stage 파생이다)"
+			% a.hearts(), a.hearts() == hearts_before)
+	_check("⑫c 그 절연이 계약이다 — 점수가 허용하는 칸은 실제로 내려갔는데(points_hearts %d → %d) stage는 불변"
+			% [2, a.points_hearts()], a.points_hearts() < hearts_before)
+	a.add_points(hit)
+	_check("⑫d 복원도 대칭이다 — points가 돌아와도 하트는 처음부터 ♡%d였다(아침 여우불이 볼 값이 안 움직인다)"
+			% a.hearts(), a.hearts() == hearts_before and a.points == per * 2)
+	# stage를 움직이는 창구는 둘뿐이다 — 관문 진급과 이혼 리셋(점수 경로 0).
+	var asrc := _lines_of_file("res://affinity.gd")
+	_check("⑫e stage를 움직이는 창구는 관문 진급·이혼 리셋 둘뿐이다(`_add`는 points만 clamp한다)",
+		_count_in(asrc, "func promote", "stage += 1") == 1
+			and _count_in(asrc, "func reset_hearts", "stage = 0") == 1
+			and _count_in(asrc, "func _add", "stage") == 0)
+	# 아침 블록이 읽는 축이 정확히 그 stage 축이다(다른 축을 읽는 자리가 없다).
+	var head := -1
+	for i in range(_src.size()):
+		if _src[i].begins_with("func _on_day_advanced"):
+			head = i
+			break
+	var reads := 0
+	if head >= 0:
+		for i in range(head + 1, _src.size()):
+			if _src[i].begins_with("func "):
+				break
+			if _src[i].strip_edges().begins_with("#"):
+				continue
+			if _src[i].contains("affinity.hearts()") or _src[i].contains("affinity.points"):
+				reads += 1
+	_check("⑫f 아침 정산이 affinity를 읽는 자리는 `hearts()` 하나뿐이다(points를 읽는 자리 0 — 실측 %d곳)"
+			% reads, reads == 1)
+	a.free()
+
+# ── ⑬ #12 세션 술어가 세 틱보다 먼저 굳는다 ─────────────────────────────────
+func _check_session_phase(m: Node) -> void:
+	print("⑬ #12 session_lmb 위상 ↔ 세션을 끝낸 그 LMB")
+	var decl := _line_in_func(_src, "func _process", "var session_lmb := cheki != null")
+	var ticks := {
+		"체키": _line_in_func(_src, "func _process", "_tick_cheki(delta)"),
+		"칵테일": _line_in_func(_src, "func _process", "_tick_cocktail(delta)"),
+		"낚시": _line_in_func(_src, "func _process", "_tick_fishing(delta)"),
+	}
+	var above := 0
+	var names := PackedStringArray()
+	for k in ticks:
+		names.append("%s %d행" % [k, int(ticks[k])])
+		if decl > 0 and int(ticks[k]) > decl:
+			above += 1
+	_check("⑬a **선언(%d행)이 세 세션 틱보다 전부 위다** — %s(닫는 프레임에도 술어가 산다)"
+			% [decl, " · ".join(names)], decl > 0 and above == 3)
+	# 소비처 여섯이 전부 선언 아래다(선언을 올려도 아무도 읽기를 놓치지 않는다).
+	var users := 0
+	for needle in ["var on_refill := not _sleeping and not session_lmb",
+			"not session_lmb and holding_pot", "not session_lmb and holding_tapper",
+			"not session_lmb and holding_furnace", "not session_lmb and holding_crystalarium",
+			"if not _sleeping and not session_lmb \\"]:
+		if _line_in_func(_src, "func _process", needle) > decl:
+			users += 1
+	_check("⑬b 소비처 여섯이 전부 그 아래에서 읽는다(%d/6 — 리필·게잡이통·채취기·업화로·결정기·도구)"
+			% users, users == 6)
+	# 왜 자리가 정확성인가 — 세 틱이 **같은 프레임에** 자기 세션 참조를 비운다.
+	var clears := 0
+	for pair in [["func _finish_fishing", "fishing = null"], ["func _finish_cheki", "cheki = null"],
+			["func _finish_cocktail", "cocktail = null"]]:
+		if _count_in(_src, String(pair[0]), String(pair[1])) >= 1:
+			clears += 1
+	var chains := 0
+	# ★ 니들에 `(delta`까지 문다 — `func _tick_cheki_offer`·`_tick_cocktail_offer`가 소스에서 먼저
+	#   나와, 함수 이름만으로 찾으면 엉뚱한 함수를 훑는다(R23이 적어 둔 «느슨한 니들» 함정).
+	for pair2 in [["func _tick_fishing(delta", "_finish_fishing()"],
+			["func _tick_cheki(delta", "_finish_cheki()"],
+			["func _tick_cocktail(delta", "_finish_cocktail()"]]:
+		if _count_in(_src, String(pair2[0]), String(pair2[1])) >= 1:
+			chains += 1
+	_check("⑬c 근거: 세 틱이 같은 프레임에 종료를 부르고(%d/3) 그 종료가 참조를 비운다(%d/3) — 선언이 뒤면 그 프레임만 false가 된다"
+			% [chains, clears], chains == 3 and clears == 3)
+	# 술어가 읽는 셋과 틱이 비우는 셋이 같은 멤버다(느슨한 니들 방지).
+	var decl_txt := _src[decl - 1] if decl > 0 and decl <= _src.size() else ""
+	_check("⑬d 술어가 그 **셋 모두**를 든다 — 「%s」" % decl_txt.strip_edges(),
+		decl_txt.contains("cheki != null") and decl_txt.contains("cocktail != null")
+			and decl_txt.contains("fishing != null"))
+
+# ── ⑭ #13 취침 트윈은 자기가 멈춘 것만 되살린다 ─────────────────────────────
+func _check_sleep_clock_owner(m: Node) -> void:
+	print("⑭ #13 취침 트윈 종료 ↔ 다른 정지자")
+	var run0: bool = m.clock.running
+	var sleep0: bool = m._sleeping
+	var epi0: bool = m._epilogue_open
+	_check("⑭a 배선: 재개가 세 화면 술어로 감싸였다(물리 축이 이미 들던 그 목록의 시계 판)",
+		_count_in(_src, "func _on_sleep_done",
+			"if not _run_over and not _epilogue_open and spine_puzzle == null:") == 1
+			and _count_in(_src, "func _on_sleep_done", "clock.running = true") == 1)
+	_check("⑭b 배선: 대화·컷신은 그 목록에 **없다**(대화는 시계를 안 멈추고, 컷신은 매 프레임 재주장한다)",
+		_count_in(_src, "func _on_sleep_done", "not dialogue.is_open() and cutscene == null") == 1
+			and _count_in(_src, "func _apply_cutscene_frame", "clock.running = _cutscene_clock_prev") == 1)
+	# 거동 ① 에필로그가 시계를 잡고 있으면 트윈 꼬리가 덮지 않는다.
+	m._epilogue_open = true
+	m._sleeping = true
+	m.clock.running = false
+	m._on_sleep_done()
+	_check("⑭c **회고 화면 뒤에서 시간이 안 흐른다** — running %s(종전엔 true로 덮여 90실초마다 하루가 넘어갔다)"
+			% str(m.clock.running), not m.clock.running)
+	# 거동 ② 내면 공간(B5)도 같은 목록에 든다.
+	m._epilogue_open = false
+	m._sleeping = true
+	m.clock.running = false
+	var puzzle0 = m.spine_puzzle
+	m.spine_puzzle = SpineReconstruction.new(1, 3)
+	m._on_sleep_done()
+	_check("⑭d 내면 공간도 같은 목록에 든다 — running %s" % str(m.clock.running), not m.clock.running)
+	m.spine_puzzle = puzzle0
+	# 거동 ③ 아무 화면도 없으면 여전히 켠다(거동 축소 0 — R17 #10 계약 보존).
+	m._sleeping = true
+	m.clock.running = false
+	m._on_sleep_done()
+	_check("⑭e 화면이 없으면 종전대로 켠다 — running %s(R17 #10 «정지 주인 = 재개 주인» 불변)"
+			% str(m.clock.running), m.clock.running)
+	# 영구 정지가 아니다 — 닫는 자리가 스냅으로 되돌린다.
+	_check("⑭f 닫는 자리가 되돌린다(영구 정지가 아니라 «그 화면이 든 동안만» 멎는다)",
+		_count_in(_src, "func _close_epilogue", "clock.running = _epilogue_clock_prev") == 1
+			and _count_in(_src, "func _close_spine_puzzle", "clock.running = _spine_b5_clock_prev") == 1)
+	m.clock.running = run0
+	m._sleeping = sleep0
+	m._epilogue_open = epi0
+
+# ── ⑯ #18 밀린 밤 표가 밤을 쌓는다 ──────────────────────────────────────────
+func _check_pending_nights(m: Node) -> void:
+	print("⑯ #18 밀린 밤 이월 표 ↔ 연속 강제 취침")
+	_check("⑯a 배선: 대입이 덮어쓰기가 아니라 **누적**이다(두 표 모두 같은 창구를 쓴다)",
+		_count_in(_src, "func _on_day_advanced", "_queue_pending_night(_weed_pending_days, day)") == 1
+			and _count_in(_src, "func _on_day_advanced",
+				"_queue_pending_night(_tree_seed_pending_days, day)") == 1)
+	# 창구 자체의 계약 — 더하고, 같은 날은 한 번만, 0/음수는 안 든다.
+	var tbl: Array = []
+	m._queue_pending_night(tbl, 7)
+	m._queue_pending_night(tbl, 8)
+	m._queue_pending_night(tbl, 7)
+	m._queue_pending_night(tbl, 0)
+	_check("⑯b 창구가 밤을 쌓는다(같은 날 중복·0은 안 든다) — %s" % str(tbl), str(tbl) == str([7, 8]))
+	# 소비 순서 — 밤은 오름차순, 한 밤 안에서는 확산 → 파종 → 재점령(R22 #14 상대 순서 보존).
+	var spread := _line_in_func(_src, "func _process", "_run_weed_spread(night)")
+	var seed := _line_in_func(_src, "func _process", "catch_up_seeding(night,")
+	var enc := _line_in_func(_src, "func _process", "_run_weed_encroach(night)")
+	_check("⑯c 소비가 오름차순(nights.sort())이고 한 밤 안에서 확산(%d) → 파종(%d) → 재점령(%d) 순이다"
+			% [spread, seed, enc],
+		_count_in(_src, "func _process", "nights.sort()") == 1
+			and spread > 0 and seed > spread and enc > seed)
+	# 세이브 왕복 — 두 밤이 전부 실리고 전부 돌아온다.
+	m._weed_pending_days = [21, 22]
+	m._tree_seed_pending_days = [22]
+	m._save_game()
+	var raw: Dictionary = m.saver.load_game(m._active_slot)
+	_check("⑯d 세이브가 밀린 밤을 **전부** 적는다 — 잡초 %s · 파종 %s"
+			% [str(raw.get("weed_pending_days", [])), str(raw.get("tree_seed_pending_days", []))],
+		str(raw.get("weed_pending_days", [])) == str([21, 22])
+			and str(raw.get("tree_seed_pending_days", [])) == str([22]))
+	_check("⑯e 하위호환 — 구 키(스칼라 1칸)는 한 칸짜리 표로 읽히고, 키가 없으면 빈 표다",
+		str(m._pending_nights_from({"tree_seed_pending_day": 9}, "tree_seed_pending_days",
+			"tree_seed_pending_day")) == str([9])
+			and m._pending_nights_from({}, "tree_seed_pending_days", "tree_seed_pending_day").is_empty())
+	# 집에 선 프레임이 밀린 밤을 **전부** 비운다(스킵 0).
+	if m._region != RegionCatalog.HOME:
+		m._rebuild_region(RegionCatalog.HOME)
+	m._indoor = ""
+	m._sleeping = false
+	m._transitioning = false
+	m._weed_pending_days = [m.clock.day - 1, m.clock.day]
+	m._tree_seed_pending_days = [m.clock.day]
+	await process_frame
+	_check("⑯f 귀가 프레임이 밀린 밤을 **전부** 비운다 — 잡초 %s · 파종 %s(스킵 0)"
+			% [str(m._weed_pending_days), str(m._tree_seed_pending_days)],
+		m._weed_pending_days.is_empty() and m._tree_seed_pending_days.is_empty())
+	# ★ 이 결함의 실체 — **연속 강제 취침**. 집 밖에서 두 밤을 맞으면 두 밤이 다 남아야 한다.
+	var region_b: String = m._region
+	var day_b: int = m.clock.day
+	m._rebuild_region(RegionCatalog.NARU_VILLAGE)
+	m._indoor = ""
+	m._weed_pending_days = []
+	m._tree_seed_pending_days = []
+	m._pet_event_armed = false
+	m._on_day_advanced(day_b)
+	m._pet_event_armed = false
+	m._on_day_advanced(day_b + 1)
+	_check("⑯g **연속 강제 취침이 앞 밤을 안 덮는다** — 집 밖 두 밤 뒤 잡초 표 %s · 파종 표 %s(종전엔 각각 한 칸만 남았다)"
+			% [str(m._weed_pending_days), str(m._tree_seed_pending_days)],
+		str(m._weed_pending_days) == str([day_b, day_b + 1])
+			and str(m._tree_seed_pending_days) == str([day_b, day_b + 1]))
+	m.clock.day = day_b
+	m._weed_pending_days = []
+	m._tree_seed_pending_days = []
+	if m._region != region_b:
+		m._rebuild_region(region_b)
+
+# ── ⑰ #19 방목 이월 플래그는 소비한 쪽만 지운다 ─────────────────────────────
+func _check_pasture_carry(m: Node) -> void:
+	print("⑰ #19 방목 이월 플래그 ↔ 소비 계약")
+	_check("⑰a 배선: 대입이 조건부다 — 집이면 «방출 성공 여부»가 곧 표의 새 값이다",
+		_count_in(_src, "func _on_day_advanced",
+			"_pasture_release_pending = not _release_open_buildings(day)") == 1
+			and _count_in(_src, "func _on_day_advanced",
+				"_pasture_release_pending = _region != RegionCatalog.HOME") == 0)
+	var region0: String = m._region
+	var mins0: float = m.clock.minutes
+	var day0: int = m.clock.day
+	# ㉠ 집 밖 아침 = 표가 선다(종전 거동 불변).
+	m._rebuild_region(RegionCatalog.NARU_VILLAGE)
+	m._indoor = ""
+	m._pasture_release_pending = false
+	m._pet_event_armed = false
+	m._on_day_advanced(day0)
+	_check("⑰b 집 밖 아침엔 표가 선다(거동 불변) — %s" % str(m._pasture_release_pending),
+		m._pasture_release_pending)
+	# ㉡ 집 아침인데 방출이 물러나면(밤 가드) 표가 **살아남는다** — 종전엔 여기서 지워졌다.
+	m._rebuild_region(RegionCatalog.HOME)
+	m._indoor = ""
+	m._pasture_release_pending = true
+	m.clock.minutes = 22.0 * 60.0            # 밤 — `_release_open_buildings`가 false로 물러난다
+	_check("⑰c 무대: 이 시각엔 방출이 물러난다(밤 가드) — phase 「%s」 · 반환 %s"
+			% [m.clock.phase(), str(m._release_open_buildings(day0))],
+		m.clock.phase() == "밤" and not m._release_open_buildings(day0))
+	m._pet_event_armed = false
+	m._on_day_advanced(day0)
+	_check("⑰d **방출하지 못한 아침은 표를 안 지운다** — %s(종전엔 false로 덮여 빚이 사라졌다)"
+			% str(m._pasture_release_pending), m._pasture_release_pending)
+	# ㉢ 방출이 성공하면 표가 내려간다(소비한 쪽만 지운다 = 양방향).
+	m.clock.minutes = 8.0 * 60.0
+	m._pasture_release_pending = true
+	m._pet_event_armed = false
+	m._on_day_advanced(day0)
+	_check("⑰e 방출이 성공한 아침엔 표가 내려간다 — %s(무한 잔류가 아니다)"
+			% str(m._pasture_release_pending), not m._pasture_release_pending)
+	m.clock.minutes = mins0
+	m.clock.day = day0
+	if m._region != region0:
+		m._rebuild_region(region0)
+
+# ── ⑱ #20 낚시 혼력 사전 판정이 사실만 말한다 ───────────────────────────────
+func _check_cast_bait_truth(m: Node) -> void:
+	print("⑱ #20 낚시 혼력 사전 판정 ↔ 미끼")
+	# 무대: 낚싯대 + 미끼를 들고 혼력을 바닥낸다(문구·id는 카탈로그에서 판다).
+	var rod := String(GearCatalog.RODS.keys()[0])
+	var bait := ""
+	for b in GearCatalog.BAITS:
+		bait = String(b)
+		break
+	_clear_backpack24(m)
+	m.inventory.add_item(rod, 1)
+	m.inventory.add_item(bait, 1)
+	for i in range(m.inventory.slots.size()):
+		var sl = m.inventory.slots[i]
+		if sl != null and String(sl.get("id", "")) == rod:
+			m.inventory.selected_index = i
+			break
+	var e0: int = m.energy.current
+	m.energy.current = 0
+	_feed_clear24(m)
+	var bait_before: int = m.inventory.count_of(bait)
+	m._start_fishing(Vector2i(3, 3))
+	var bait_after: int = m.inventory.count_of(bait)
+	_check("⑱a 무대: 혼력 0으로 캐스팅을 시도했고 사전 판정이 물러났다(세션 %s)"
+			% ("없음" if m.fishing == null else "생성됨"), m.fishing == null)
+	_check("⑱b **미끼가 한 개도 안 탄다** — 「%s」 %d개 → %d개(소모 줄이 그 return 뒤에 있다)"
+			% [ItemCatalog.name_of(bait), bait_before, bait_after], bait_after == bait_before)
+	var said := ""
+	for it in m.notice_feed._items:
+		var tx := String(it.get("text", ""))
+		if tx.contains("챌 힘이 없다"):
+			said = tx
+	_check("⑱c 문구가 손실을 주장하지 않는다 — 「%s」" % said,
+		said != "" and not said.contains("버린") and said.contains("그대로"))
+	# 형제 대조 — 실제로 태우는 자리(후킹 실패)의 문구는 여전히 손실을 말한다(정직의 양방향).
+	_check("⑱d 형제 대조: 실제로 미끼가 타는 후킹 실패 쪽은 여전히 손실을 말한다(참인 문구는 그대로)",
+		_count_in(_src, "func _hook_refused_notice", "입질을 놓쳤다") >= 1
+			or _line_in(_src, "혼력이 모자라 챌 수 없었다 — 입질을 놓쳤다") > 0)
+	# 문구 폭 — R23 접힘으로 무손실이고, R24 #1 예약 영역 안에 든다.
+	var feed: NoticeFeed = m.notice_feed
+	var font := HanjiUi.font()
+	var avail := NoticeFeed.MAX_W - 16.0
+	var rows: int = feed._wrapped_rows(font, said, avail)
+	var full_w: float = font.get_string_size(said, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	var room := 360.0 - NoticeFeed.RESERVE_BOTTOM - NoticeFeed.RESERVE_TOP
+	_check("⑱e 그 문구가 무손실로 접히고(%d줄 × %.0fpx ≥ 전문 %.0fpx) 예약 영역(%.0fpx) 안에 든다"
+			% [rows, avail, full_w, room],
+		float(rows) * avail >= full_w and NoticeFeed.ROW_H * float(rows) <= room)
+	m.energy.current = e0
+	_feed_clear24(m)
+
+func _clear_backpack24(m: Node) -> void:
+	for i in range(m.inventory.slots.size()):
+		m.inventory.slots[i] = null
+	m.inventory.changed.emit()
+
+func _feed_clear24(m: Node) -> void:
+	if m.notice_feed != null:
+		m.notice_feed._items.clear()
+
+# 파일 전체에서 니들이 처음 나오는 행(1-based · -1 = 없음).
+func _line_in(lines: PackedStringArray, needle: String) -> int:
+	for i in range(lines.size()):
+		if lines[i].strip_edges().begins_with("#"):
+			continue
+		if lines[i].contains(needle):
+			return i + 1
+	return -1
+
+# 그 함수 **안**에서 니들이 처음 나오는 행(1-based · -1 = 없음).
+func _line_in_func(lines: PackedStringArray, fn_needle: String, needle: String) -> int:
+	var head := -1
+	for i in range(lines.size()):
+		if lines[i].begins_with(fn_needle):
+			head = i
+			break
+	if head < 0:
+		return -1
+	for i in range(head + 1, lines.size()):
+		if lines[i].begins_with("func ") or lines[i].begins_with("static func "):
+			return -1
+		if lines[i].strip_edges().begins_with("#"):
+			continue
+		if lines[i].contains(needle):
+			return i + 1
+	return -1
+
+# ── ⑮ #14~#17 구세이브 로드가 열두 원장을 되감는다 ──────────────────────────
+# ★ 세이브 파일을 **손으로 갈아** 「키 없는 구세이브」를 만든 뒤 F9로 읽는다 — 이 결함의 실체가
+#   정확히 그 경로이기 때문이다(부팅이 아니라 *실행 중* 로드에서 버린 타임라인이 살아남는다).
+#   그래서 이 절은 맨 끝에 둔다(세이브 파일과 열두 원장을 갈아 두므로).
+func _check_old_save_rewind(m: Node) -> void:
+	print("⑮ #14~#17 구세이브 로드 ↔ 열두 원장의 역연산")
+	# 판별식의 **양쪽**을 배선으로 잰다: 걷은 열둘과, 맵에서 다시 시드되므로 그대로 둔 여섯.
+	var unguarded := PackedStringArray()
+	for pair in [["carpenter", "carpenter"], ["tool_tier", "tool_tiers"], ["ranch", "ranch"],
+			["crystalarium", "crystalarium"], ["furnace", "furnace"], ["tapper", "tapper"],
+			["crab_pot", "crab_pot"], ["sprinkler", "sprinkler"], ["rarecrow", "rarecrow"],
+			["garden_pot", "garden_pot"], ["orchard", "orchard"], ["reclaim", "reclaim"]]:
+		var node := String(pair[0])
+		var key := String(pair[1])
+		if _count_in(_src, "func _load_game", "%s.load_save(data.get(\"%s\", {}))" % [node, key]) == 1 \
+				and _count_in(_src, "func _load_game", "if data.has(\"%s\"):" % key) == 0:
+			unguarded.append(node)
+	_check("⑮a 배선: 플레이로만 쌓이는 원장 열둘이 전부 무가드 `.get(키, {})`다 — %d/12 (%s)"
+			% [unguarded.size(), ", ".join(unguarded)], unguarded.size() == 12)
+	var still_guarded := 0
+	for key2 in ["forage", "flower_patch", "forage_spawn", "berry_bush", "panning", "tree_ledger"]:
+		if _count_in(_src, "func _load_game", "if data.has(\"%s\"):" % key2) == 1:
+			still_guarded += 1
+	_check("⑮b 판별식의 반대쪽은 **그대로 둔다** — 부팅·취침이 맵에서 다시 시드하는 여섯은 가드 유지(%d/6)"
+			% still_guarded, still_guarded == 6)
+	# ranch가 이 판별식의 교과서 사례인 근거 — 짐승 부팅 시드가 신규 가지 안에만 있다.
+	_check("⑮c 근거: 짐승을 세우는 유일한 부팅 시드가 `_begin_game`의 신규 가지에만 있다(로드 경로엔 시드가 없다)",
+		_count_in(_src, "func _begin_game", "_ensure_starter_animals()") == 1
+			and _count_in(_src, "func _load_game", "_ensure_starter_animals()") == 0)
+	# 거동 — 실물을 넣고, 그 키만 뺀 세이브를 만들어 F9로 읽는다.
+	m.carpenter.load_save({})
+	m.carpenter._done[Carpenter.PROJ_GREENHOUSE] = 1
+	m.tool_tier.load_save({})
+	var axe_tier := 3
+	m.tool_tier._tiers[ItemCatalog.AXE] = axe_tier
+	m._save_game()
+	var raw: Dictionary = m.saver.load_game(m._active_slot)
+	_check("⑮d 무대: 지금 판에는 늘봄방 완공과 도끼 티어 %d가 있고, 그것이 파일에도 실렸다"
+			% axe_tier,
+		m.carpenter.is_done(Carpenter.PROJ_GREENHOUSE) and m.tool_tier.tier_of(ItemCatalog.AXE) == axe_tier
+			and raw.has("carpenter") and raw.has("tool_tiers"))
+	# 그 두 키만 뺀 «구세이브»를 쓴다(나머지는 그대로 — 로드 자체는 성립해야 한다).
+	raw.erase("carpenter")
+	raw.erase("tool_tiers")
+	raw.erase("ranch")
+	m.saver.save_game(raw, m._active_slot)
+	var ok: bool = m._load_game()
+	_check("⑮e 그 구세이브가 정상적으로 읽힌다(무대 전제 — 로드 실패가 아니라 되감기를 잰다)", ok)
+	_check("⑮f **완공 이력이 되감긴다** — 늘봄방 완공 %s(종전엔 짓지도 않은 세계에 늘봄방·안방·마구간이 섰다)"
+			% str(m.carpenter.is_done(Carpenter.PROJ_GREENHOUSE)),
+		not m.carpenter.is_done(Carpenter.PROJ_GREENHOUSE))
+	_check("⑮g **도구 티어가 되감긴다** — 도끼 티어 %d(종전엔 큰 그루터기·굵은 통나무가 그 세계에서 열렸다)"
+			% m.tool_tier.tier_of(ItemCatalog.AXE), m.tool_tier.tier_of(ItemCatalog.AXE) == 0)
+	_check("⑮h **짐승 원장이 되감긴다** — %d마리(로드 경로엔 스타터 배치가 없으므로 빈 dict가 곧 부팅 상태다)"
+			% m.ranch.count(), m.ranch.count() == 0)
+	# 카탈로그가 원장 파생이라는 R2 계약이 그 되감김을 따라간다.
+	_check("⑮i R2 계약이 따라온다 — 늘봄방 밭이 함께 닫힌다(카탈로그·구역이 `carpenter.is_done` 파생)",
+		not m._greenhouse_built())
