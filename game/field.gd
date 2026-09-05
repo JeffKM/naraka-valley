@@ -212,6 +212,17 @@ func untill(t: Vector2i) -> bool:
 	tile_changed.emit(t)
 	return true
 
+# ★[폴리시 R23 #1] 이 칸에 이 비료를 뿌리면 **두 축 어느 것도 안 바뀌는가**(= 정직한 거절의 술어).
+#   거절 자체는 `fertilize`가 집행하고, 이유를 화면에 말하는 것은 호출부(main)의 몫이라 판정을
+#   공개 창구로 둔다 — 두 자리가 같은 한 술어를 봐야 «거절한 것만 말하고, 말한 것은 반드시
+#   거절된다»가 성립한다(같은 조건을 main에 다시 적으면 언젠가 갈린다).
+#   ★ 되감기 봉인 자체는 R22 #2의 계약이다(`_reseal_need` 머리말) — 여기서 되돌리지 않는다.
+func fertilize_sealed_no_op(t: Vector2i, fert_id: String) -> bool:
+	if not is_planted(t) or not bool(_tiles[t].get("regrown", false)):
+		return false
+	return FertilizerCatalog.state_of(fert_id) == FertilizerCatalog.STATE_NONE \
+		and FertilizerCatalog.state_of(str(_tiles[t].get("fertilizer", ""))) == FertilizerCatalog.STATE_NONE
+
 # ── S1-6 비료(§8.4) ─────────────────────────────────────────────────────────
 # 경작된 칸(심김/빈칸 무관)에 유효 비료를 뿌린다. 단일 fertilizer 필드라 다른 비료 투입 시 overwrite —
 # XOR가 자연 성립(한 칸에 한 비료). 성공 시 tile_changed·true(비료 소모는 호출 측 main). 미경작·무효 비료면 false.
@@ -224,6 +235,17 @@ func fertilize(t: Vector2i, fert_id: String) -> bool:
 	#   디럭스 비료가 깔린 칸을 한 번 더 누르면 **칸 상태가 바이트 단위로 같은 채** 120냥짜리
 	#   한 개가 사라졌다. 다른 비료로의 overwrite는 그대로 성립한다(단일 필드 XOR 문법 불변).
 	if str(_tiles[t].get("fertilizer", "")) == fert_id:
+		return false
+	# ★[폴리시 R23 #1] **아무것도 못 바꾸는 도포는 거절한다** — 위 멱등 가드의 확장이고 근거도 같다
+	#   (값비싼 소모품이 칸을 한 톨도 안 바꾼 채 사라지지 않게). R22 #2가 되감기 사이클에서 임계를
+	#   봉인한 뒤, 그 칸에 성장촉진군을 뿌리면 두 축이 **동시에** 아무 일도 안 한다:
+	#     ㉠ 임계 — `_reseal_need`가 `regrown` 가지에서 즉시 반환한다(그 봉인은 계약이라 불가침).
+	#     ㉡ 품질 — 성장촉진군은 `state`가 STATE_NONE이라 `roll_quality`가 무비료와 같은 표를 쓴다.
+	#   그래서 100냥짜리 하이퍼 비료가 소모만 되고 재결실은 하루도 안 당겨졌는데, R22가 붙인 표면은
+	#   *늘어난* 잔여만 말하므로(need_after > need_before) 알림조차 0인 **침묵 실패**였다.
+	#   품질군은 여전히 통과한다 — 그쪽은 `roll_quality`가 현재 필드값을 읽어 되감기 사이클에서도
+	#   실효하므로 거절할 이유가 없다(거절 조건이 «양쪽 다 무효»인 이유).
+	if fertilize_sealed_no_op(t, fert_id):
 		return false
 	# ★[폴리시 R20 #4·#5] 도포 **직전** 임계를 먼저 읽는다 — 비료를 먼저 갈아끼우면 구세이브 폴백이
 	#   새 계수로 답해 기준선이 오염된다. 심긴 칸이면 그 임계의 잔여에 새 계수를 곱해 다시 잠근다.
@@ -366,7 +388,10 @@ func solid_crop_tiles() -> Array:
 #   흙이 다음 날까지 남아 "눈 온 날 물을 준 셈"이 된다(결정 4의 "성장 정지 + 물 마름"과 정반대).
 #   그래서 마름은 그대로 돌리고 성장 두 갈래(물 준 칸 +1·여우불 범위)만 끈다 — field가 날씨를
 #   모른 채(Weather 참조 0) 값 하나만 받는 가법 확장이라 기존 호출부·테스트 시그니처는 불변이다.
-func advance_day(accel: int = 0, reach: int = 0, grow: bool = true) -> void:
+# ★[폴리시 R23 #9] 반환 = **여우불이 실제로 돌본 칸 수**(가법 확장 — 안 읽어도 종전 그대로).
+#   `water_dry`가 적신 칸 수를 돌려주는 것과 같은 이유다: reach는 비율이 아니라 «하루에 돌볼 최대
+#   칸 수»라 밭이 둘이면 **한 몫을 나눠 써야** 하는데, 호출부가 얼마를 썼는지 알 길이 없었다.
+func advance_day(accel: int = 0, reach: int = 0, grow: bool = true) -> int:
 	# 여우불 범위 후보를 마름 전(밤 상태)에 먼저 고른다 — 물 안 준 심긴 미성숙 칸.
 	var foxfire_targets := _foxfire_targets(reach) if grow else []
 	# 1) 물 준 칸: 기본 +1 에 여우불 가속을 더해 자란다(성장일수는 작물 한계까지만).
@@ -386,6 +411,7 @@ func advance_day(accel: int = 0, reach: int = 0, grow: bool = true) -> void:
 	for t in foxfire_targets:
 		_grow(t, 1)
 		tile_changed.emit(t)
+	return foxfire_targets.size()
 
 # 한 칸의 성장일수를 n만큼 올리되 작물 성장일수(완성)까지만 잰다(가속 과성장 방지).
 func _grow(t: Vector2i, n: int) -> void:

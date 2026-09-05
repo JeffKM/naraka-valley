@@ -4640,7 +4640,17 @@ func _is_tree_seed_free(region: String, t: Vector2i, occ: Dictionary) -> bool:
 #   ★ 별도 장부를 두지 않고 **원장에서 그대로 판다**: HOME의 원장 나무 충돌은
 #     `is_occupied` 그대로가 진실원이고(`_rebuild_prop_collision`의 그 루프와 같은 술어),
 #     이미 물리에 선 칸은 `_prop_blocked_tiles`가 들고 있으니 차집합이 곧 pending이다.
-#   ★ 퇴로 판정이 보는 칸은 플레이어 4방뿐이라 그 넷만 묻는다(판정당 4회 조회).
+#   ★[폴리시 R23 #0] **범위는 원장 전체다.** 종전 머리말은 "퇴로 판정이 보는 칸은 플레이어
+#     4방뿐이라 그 넷만 묻는다"였는데, 그 전제는 R22 #3이 `_would_entrap_player`를 1스텝에서
+#     **폭 우선(ENTRAP_FREE_MIN=12)** 으로 넓힌 순간 거짓이 됐다 — 판정은 발밑에서 열두 칸까지
+#     뻗는데 pending은 여전히 넷만 담아, 반경 2 이상의 «곧 설 SOLID»가 전부 *열린 칸*으로 세어졌다.
+#     그러면 R20 #2가 pending으로 닫았던 «순차 재평가» 사각이 다시 열린다: `_seed_pass`는 성숙목마다
+#     굴러 한 아침에 여러 칸을 세우는데 `_rebuild_prop_collision`은 패스가 **끝난 뒤 한 번**뿐이라,
+#     먼저 승인된 씨앗 S1은 원장에만 있고 물리엔 없다. 그 S1을 열린 칸으로 세면 free가 12에 닿아
+#     "주머니 아님"이 되고, 발밑 인접의 S2까지 승인돼 패스 끝의 재구성이 둘을 풀타일 SOLID로
+#     세우는 순간 플레이어가 봉해진다. 형제인 `_tree_respawn_ok_cb`는 패스 전체에 걸쳐 pending을
+#     누적해 이 사각이 없다 — 그 비대칭이 곧 증거였다.
+#     ★ 비용은 원장 상한에 묶인다(HOME_CAP 40 — `tiles`가 그 구역 슬롯만 준다).
 #   ★[폴리시 R22 #1] **손저작 마당 나무 앵커는 그 차집합의 예외다** — 위 등식("이미 물리에 선 칸은
 #     `_prop_blocked_tiles`가 들고 있다")이 거기서만 성립하지 않는다. 앵커는 64×128 스프라이트의
 #     기준점이고 `_rebuild_prop_collision`은 그 나무를 **발치 바**로 세워(TREE_FOOT_H) 밑동 행
@@ -4653,14 +4663,12 @@ func _tree_seed_pending_solid() -> Dictionary:
 	var out: Dictionary = {}
 	if tree_ledger == null or player == null:
 		return out
-	var here := _player_tile()
 	var anchors := _home_tree_anchor_set()
-	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-		var n: Vector2i = here + d
-		if anchors.has(n):
+	for t: Vector2i in tree_ledger.tiles(RegionCatalog.HOME):
+		if anchors.has(t):
 			continue
-		if tree_ledger.is_occupied(RegionCatalog.HOME, n) and not _prop_blocked_tiles.has(n):
-			out[n] = true
+		if tree_ledger.is_occupied(RegionCatalog.HOME, t) and not _prop_blocked_tiles.has(t):
+			out[t] = true
 	return out
 
 # 자체 파종 판정 Callable(안식에 서 있을 때만 유효 — 다른 구역에서 자면 그날 파종은 건너뛴다.
@@ -10756,16 +10764,26 @@ func _on_day_advanced(day: int) -> void:
 	#   ★ "노지"만이라는 단서가 지금 무의미한 건 밭이 전부 노지이기 때문이다(온실 = ADR-0065 서랍).
 	#     과수(orchard.advance_day)는 아래에서 따로 도는데, 눈이 와도 결실을 멈추지 않는다 — 절기가
 	#     결실을 가르는 건 ADR-0045의 불가침 영역이라 날씨가 끼어들지 않는다.
-	farm.advance_day(Foxfire.accel(h), Foxfire.reach(h), Weather.grows_crops(weather))
+	var foxfire_used := farm.advance_day(Foxfire.accel(h), Foxfire.reach(h), Weather.grows_crops(weather))
 	# ★[S10-T5 / ADR-0069 결정 8] 늘봄방 경작면의 하루. 노지와 **갈리는 인자가 하나**다: 날씨를
 	#   안 본다(`grow`를 늘 true로 준다). 바로 위 주석이 "'노지'만이라는 단서가 지금 무의미한 건
 	#   밭이 전부 노지이기 때문(온실 = 서랍)"이라 적어 둔 그 서랍이 열린 자리다 — 잿눈은 하늘의
 	#   일이고 늘봄방엔 하늘이 없다. 혼우(아침 자동 급수)도 같은 이유로 온실에 안 든다(위 패스가
 	#   `farm.tilled_tiles()`만 돌므로 **구조로** 면제 — 실내에 비가 오지 않는다).
-	#   ★ 여우불 가속·범위는 **그대로 얹는다**: 관계 곱셈기는 활동 전역에 걸리는 축이고(ADR-0008),
-	#     온실이라고 미호의 불이 꺼질 이유가 없다.
+	#   ★ 여우불 **가속**은 그대로 얹는다: 관계 곱셈기는 활동 전역에 걸리는 축이고(ADR-0008),
+	#     온실이라고 미호의 불이 꺼질 이유가 없다. accel은 «칸당 성장일수»라 진짜 비율 축이다.
+	#   ★[폴리시 R23 #9] 그런데 **범위(reach)는 비율이 아니라 하루 예산이다** — foxfire.gd가 그것을
+	#     "물을 못 준 심긴 칸을 여우불이 대신 돌봐 자라게 하는 **최대 칸 수**"로 정의하고
+	#     `_foxfire_targets`가 `cands.slice(0, limit)`로 자른다. 두 밭에 각각 전액을 주면 광고·계약상
+	#     상한 5칸이 실제로는 10칸이 됐다(♡5·양쪽에 미급수 미성숙 칸 5개 이상). 종전 근거는 accel과
+	#     reach를 한 문장으로 묶은 데서 왔고, 총량 상한에는 그 논리가 성립하지 않는다.
+	#     ★ 바로 아래 배우자 물주기가 정확히 같은 성질의 예산이고 **이미 나눠 쓰도록** 배선돼 있다
+	#       ("미호의 하루 손 노동이 밭이 늘었다고 곱절이 되지는 않는다") — 그 형제와 같은 문법으로 편다.
+	#     ★ 노지가 먼저 쓰고 남은 몫이 늘봄방으로 간다(순서 = 위 물주기의 그 순서). 남은 몫이 0이면
+	#       `_foxfire_targets`가 빈 배열로 접어 종전과 같은 무동작이다.
 	if greenhouse_farm != null:
-		greenhouse_farm.advance_day(Foxfire.accel(h), Foxfire.reach(h), true)
+		greenhouse_farm.advance_day(Foxfire.accel(h),
+			maxi(Foxfire.reach(h) - foxfire_used, 0), true)
 	# ★[S10-T5] 화분의 하루 — 젖은 화분만 자라고 **전부 마른다**(매일 손 물주기). 가속 인자를
 	#   안 받는다(garden_pot.gd advance_day 주석 — 화분은 곱셈기가 얹히는 밭이 아니다).
 	if garden_pot != null:
@@ -10832,9 +10850,12 @@ func _on_day_advanced(day: int) -> void:
 	# ★[폴리시 R6] 집 밖에서 날이 바뀌면 **미룬다**(절기 대량 재스폰과 같은 문법 — `_pasture_release_pending`
 	#   머리말). 방출은 HOME 그리드를 전제하므로 그 자리에서 집행할 수 없고, 그냥 건너뛰면 그날치
 	#   방목 가산(F_GRAZE·M_GRAZE)을 통째로 잃는다.
+	# ★[폴리시 R23 #2·#5] 아침 정산도 **굳은 하늘**로 판정한다(`_weather_sealed_day`는 이 함수 위쪽
+	#   에서 이미 오늘로 섰다). 지금은 값이 같지만, 두 자리가 같은 창구를 봐야 «집에서 잔 아침»과
+	#   «귀가 프레임에 소비한 아침»이 구조적으로 한 하늘을 쓴다(등가성이 우연이 아니게 된다).
 	_pasture_release_pending = _region != RegionCatalog.HOME
 	if not _pasture_release_pending:
-		_release_open_buildings()
+		_release_open_buildings(day)
 	# ★ [B1-a.3] 사료풀 재생 — 벤 지 REGROW_DAYS 지난 풀이 다시 자란다. 겨울(성야절)엔 재생 정지(Q7 굶음 긴장).
 	forage.advance_day(day, GameClock.season_index_for_day(day) == 3)
 	# ★ ADR-0052 꽃 패치 재생 — 딴 지 REGROW_DAYS 지난 패치가 다시 핀다(절기 무관 — 피안화는 저승 꽃).
@@ -12661,9 +12682,20 @@ func _load_game() -> bool:
 		cafe.load_save(data.get("cafe_day", {}))
 	# ★ [S2-T7] 주민 호감도 복원 — 세이브 키가 없는 구버전은 그 주민만 ♡0으로 시작한다
 	#   (네오 M2.3 원문 규칙과 같은 결: 정가·무막힘. 옛 4갈래 if가 이 루프로 접혔다).
+	# ★[폴리시 R23 #6] **`has` 가드를 걷어 빈 dict로 무조건 되감는다** — 위 누적 원장 클러스터가
+	#   R3·R6·R13·R18·R20에 걸쳐 받은 그 처방의 마지막 잔여다. 판별식은 R13이 명문화한 그대로
+	#   "부팅으로 시드되는가": 호감도는 부팅이 아니라 **오직 플레이가** 쌓는 누적이다. 위 주석의
+	#   "구버전은 ♡0으로 시작한다"는 **부팅 경로에서만** 참이었다(부팅은 `_register_resident`가
+	#   방금 낳은 ♡0 노드로 시작한다). 세션 내 F9는 같은 노드를 재사용하므로 대입이 아예 안 돌아
+	#   계약이 «직전 세션 값 유지»로 뒤집혔다 — 신규 키 주민(설화·세레나·미르 등)이 없는 구세이브를
+	#   실행 중에 읽으면 버린 타임라인의 ♡가 그대로 살아남고 형제인 `_heart_bits`만 되감겼다.
+	#   그러면 ㉠ 벌지 않은 ♡에서 `XpBoost`·`StoreDiscount` 곱셈기가 파생되고 ㉡ ♡는 찼는데 관문
+	#   비트는 0이라 `_redemption_arc_complete`가 «영영 안 열리는 혼인 게이트»로 굳으며 ㉢ 다음
+	#   취침의 `_save_game`이 그 ♡를 그 파일에 영구화했다. `load_save({})`는 첫 줄에서 points를
+	#   0으로 자르므로 "키 없는 구세이브 = ♡0" 계약은 그대로다.
 	for r in _residents:
-		if r.affinity != null and r.save_key != "" and data.has(r.save_key):
-			r.affinity.load_save(data[r.save_key])
+		if r.affinity != null and r.save_key != "":
+			r.affinity.load_save(data.get(r.save_key, {}))
 	if data.has("onboarding"):
 		onboarding.load_save(data["onboarding"])
 	# T4.2 슬라이스 점수판 누적(거둔 영혼 총수). 손상 방어로 음수는 0으로 자른다.
@@ -13463,9 +13495,12 @@ func _process(delta: float) -> void:
 	# ★[폴리시 R6] 밀린 아침 방목 방출 소비 — 위와 같은 자리·같은 조건이되, 표는 **방출이 실제로
 	#   일어난 프레임에만** 지운다(`_release_open_buildings` 반환값). 밤에 돌아오면 그 프레임은
 	#   밤 가드에 걸려 아무 일도 안 하는데, 거기서 표를 버리면 밀린 하루를 잃기 때문이다.
+	# ★[폴리시 R23 #2·#5] 밀린 몫이므로 **그 아침에 굳은 하늘**로 판정한다(형제 둘이 R22에서 받은
+	#   그 창구 — `_weather_sealed_on`). 표는 그 아침에 서고 그 아침에만 소비되므로 굳은 날은
+	#   늘 오늘이다(집 밖에서 또 자면 `_on_day_advanced`가 새 날로 다시 세운다).
 	if _pasture_release_pending and _region == RegionCatalog.HOME \
 			and not _sleeping and not _transitioning:
-		if _release_open_buildings():
+		if _release_open_buildings(clock.day if clock != null else 0):
 			_pasture_release_pending = false
 	# ★[폴리시 R9] 밀린 **그 밤의 잡초 두 줄** 소비 — 절기 재스폰 표와 같은 자리·같은 조건이되
 	#   순서가 계약이다: 확산(현존 잡초가 번지며 작물·스프링클러를 부순다) 다음에 재점령(빈 여백에
@@ -15492,7 +15527,16 @@ func _use_tool() -> void:
 			#   (`effective_growth_days` — 표시용 별도 계산 없음).
 			var fld := _field_at(_target)
 			var need_before: int = fld.effective_growth_days(_target) if fld.is_planted(_target) else -1
-			if fld.fertilize(_target, item):
+			# ★[폴리시 R23 #1] **소모 전에 사유를 말한다.** 되감기 사이클(수확한 넝쿨)의 임계는
+			#   R22 #2가 봉인했고 성장촉진군은 품질 축도 안 건드리므로, 그 조합은 100냥짜리가
+			#   사라지기만 하는 침묵 실패였다. field가 그 도포를 거절하고(아이템 불변) 여기서
+			#   이유를 낸다 — 술어는 거절을 집행하는 **그것 하나**다(조건 복제 0).
+			#   ★ 같은 비료 재도포(R9 멱등 가드)는 여전히 침묵이다: 그건 «이미 그 상태»라
+			#     플레이어가 잃은 것이 없고, 말할 것도 «아무 일도 없었다»뿐이다.
+			if fld.fertilize_sealed_no_op(_target, item):
+				_notice("%s는 이미 열매를 낸 포기엔 듣지 않는다 — 재결실 주기는 비료로 줄지 않는다"
+					% ItemCatalog.name_of(item))
+			elif fld.fertilize(_target, item):
 				inventory.remove_item(item, 1)
 				verb = "비료"
 				var need_after: int = fld.effective_growth_days(_target) if fld.is_planted(_target) else -1
@@ -16535,8 +16579,36 @@ func _can_place_pot(t: Vector2i) -> bool:
 #   (없으면 그 작물은 영영 수확되지 않고, 남는 회수는 «심긴 것도 함께 사라지는» LMB뿐이다).
 #   ★ 양보는 **한 프레임짜리**다 — 거두고 나면 다 자란 화분이 아니므로 그 칸의 대화가 곧장 돌아온다
 #     (R17 #1이 부스 칸에 세운 «영구 매몰이 아니라 하루짜리 양보»와 같은 폭).
+#   ★[폴리시 R23 #3] **적재 자리까지 묻는다.** 위 «한 프레임짜리»의 근거는 "거두고 나면 다 자란
+#     화분이 아니다"인데, 수확 창구는 만재에서 원장을 안 비우고 되돌아간다(`_harvest_pot`·
+#     `_harvest_wild`의 R2·R4 가드 — 포기가 되찾을 곳 없이 증발하지 않게). 그러면 `is_mature`가
+#     계속 참이라 양보 폭이 «한 프레임»이 아니라 «수확이 성공할 때까지»가 되어, 백팩이 찬 동안
+#     그 칸의 동행 혼·배우자 대화(하루 1회 호감도 채널 포함)가 입력·프롬프트 양쪽에서 통째로
+#     막혔다. 자리가 없으면 어차피 거둘 수 없으므로 양보할 이유도 없다 — 대화를 돌려준다.
 func _pot_harvest_yield(t: Vector2i) -> bool:
-	return garden_pot != null and _pot_dispatch_at(t) and garden_pot.is_mature(t)
+	return garden_pot != null and _pot_dispatch_at(t) and garden_pot.is_mature(t) \
+		and _pot_harvest_room(t)
+
+# ★[폴리시 R23 #3] 이 화분의 이번 결실을 **지금 백팩에 담을 수 있는가**. 수확 창구가 되돌아가는
+#   그 판정(`can_add`)을 창구와 **같은 종·같은 등급**으로 미리 묻는다 — 야생 작물은 채집 축으로
+#   가로채이므로(ADR-0033 #4) 종·등급 파생도 그쪽 것을 그대로 쓴다(`_wild_species_at`·
+#   `_wild_quality` — `_harvest_wild`가 부르는 바로 그 둘이라 값 복제가 0이고, 종 굴림도
+#   day·칸 시드라 여기서 물어도 스트림을 한 톨도 안 쓴다).
+func _pot_harvest_room(t: Vector2i) -> bool:
+	if garden_pot == null or inventory == null:
+		return true
+	var crop := garden_pot.crop_of(t)
+	if crop == "":
+		return true
+	if CropCatalog.is_wild(crop):
+		return inventory.can_add(_wild_species_at(crop, t), 1, _wild_quality())
+	return inventory.can_add(ItemCatalog.harvest_id(crop), 1,
+		FertilizerCatalog.roll_quality_seeded(FertilizerCatalog.STATE_NONE, _pot_quality_tag(t)))
+
+# 화분 수확 품질 사건의 이름(day·칸 — F9 재롤 차단). 창구와 미리보기가 같은 태그를 써야
+# «담을 수 있다고 말한 등급»과 «실제로 담기는 등급»이 갈리지 않는다.
+func _pot_quality_tag(t: Vector2i) -> String:
+	return "%d:pot:%d:%d" % [clock.day, t.x, t.y]
 
 # 조준 칸에 화분을 놓는다(아이템 1개 소모). 원장이 좌표를 든다(스프링클러와 같은 경계).
 func _place_garden_pot(t: Vector2i) -> void:
@@ -17818,6 +17890,16 @@ func _try_harvest() -> bool:
 				#   ★ 야생 작물 수확은 반대로 **안 붙인다**: ADR-0033 #4가 그 수확을 채집 축으로 통째
 				#     가로채 농사 XP조차 안 주므로(_harvest_wild), 미호 도메인 실적이 아니다.
 				_activity_credit("miho", 1)
+				# ★[폴리시 R23 #10] 누적 수확 점수판에도 합류한다 — 형제 셋(밭 `_try_harvest`·화분
+				#   `_harvest_pot`·야생 `_harvest_wild`)이 전부 이 창구로 모이는데 과수만 빠져 있었고,
+				#   배제 근거가 어디에도 없었다(이 코드베이스는 배제할 때 반드시 적는다 — 바로 위
+				#   "야생 작물 수확은 반대로 안 붙인다"가 그 관례다). 윗줄이 이미 «밭 수확과 같은
+				#   "수확 액션당 1" 눈금»을 선언하는데 두 줄 중 하나만 정렬돼 있던 자리다.
+				#   그래서 과수 위주로 노는 판에서 `_run_harvested`가 영원히 0이었고 (a) 미호 ♡1~♡4
+				#   진급 관문(`Deed.check("miho", …)`), (b) 카페 2·3단의 수확 축과 그 파생(좌석·곳간·
+				#   융합 슬롯·늘봄방 해금), (c) 앵커 '부재 반전'(`Spine.okja_deed_points`)이 통째로
+				#   잠긴 채였다. 형제 축인 멜은 정반대로 네 매출 창구가 모두 한 축을 올린다.
+				_count_run_harvest()
 				audio.sfx("harvest")
 				energy.spend(cost)
 				queue_redraw()
@@ -17935,8 +18017,10 @@ func _harvest_pot() -> void:
 	#   화분이 무비료 흙보다 구조적으로 열등해졌다. 밭이 부르는 그 함수를 같은 state로 부른다.
 	#   ★ 사건 시드도 노지 문법 그대로다(day·칸) — F9 로드로 등급을 재롤하는 통로를 안 연다.
 	#     밭 태그와 갈리도록 "pot"을 물리고, 화분 원장은 좌표만 키로 쓰므로 칸이 곧 유일 이름이다.
-	var pot_tag := "%d:pot:%d:%d" % [clock.day, _target.x, _target.y]
-	var pot_quality := FertilizerCatalog.roll_quality_seeded(FertilizerCatalog.STATE_NONE, pot_tag)
+	#   ★[폴리시 R23 #3] 태그 조립은 `_pot_quality_tag` 한 곳으로 옮겼다 — 양보 술어
+	#     (`_pot_harvest_room`)가 «담을 자리가 있는가»를 **이 등급 그대로** 미리 물어야 해서다.
+	var pot_quality := FertilizerCatalog.roll_quality_seeded(FertilizerCatalog.STATE_NONE,
+		_pot_quality_tag(_target))
 	# ★[폴리시 R2] 노지와 같은 "적재 자리부터" — `garden_pot.harvest`가 포기를 지우므로 백팩이
 	#   가득하면 그 한 포기가 되찾을 곳 없이 사라진다.
 	if crop != "" and not inventory.can_add(ItemCatalog.harvest_id(crop), 1, pot_quality):
@@ -18107,15 +18191,25 @@ func _mixed_crop_for(day: int, t: Vector2i) -> String:
 #   ★[폴리시 R9] `from_pot` = 이 포기가 선 원장이 화분인가(기본 false = 노지 밭). 야생 씨앗은
 #     화분에도 심기므로 그 수확이 이 치환을 못 타면 판매가 0의 유령 아이템이 된다 — 규칙을
 #     복제하는 대신 **비울 원장만** 인자로 갈랐다(품질·수량·XP·발견은 한 줄도 안 갈린다).
-func _harvest_wild(crop: String, from_pot: bool = false) -> void:
+# ★[폴리시 R23 #3] 이 칸에서 이 야생 작물이 낼 **종**(무상태 파생 — 굴림은 day·칸 시드라 몇 번을
+#   물어도 같은 답이고 전역 스트림을 안 쓴다). `_harvest_wild`와 `_pot_harvest_room`이 같은 답을
+#   봐야 «담을 자리가 있다»는 미리보기가 실제 수확과 갈리지 않는다.
+func _wild_species_at(crop: String, t: Vector2i) -> String:
 	var species := CropCatalog.wild_species(crop)
-	if species == "":
-		var pool := ForageSpawns.species_for(ForageSpawns.KIND_COMMON, CropCatalog.wild_season(crop))
-		var rng := RandomNumberGenerator.new()
-		rng.seed = hash("wildharvest:%d:%d:%d" % [clock.day, _target.x, _target.y])
-		species = pool[rng.randi_range(0, pool.size() - 1)]
-	var lvl := _skill_level(ProfessionCatalog.FORAGING)
-	var quality := maxi(_forage_base_quality(lvl), forage_quality_floor())
+	if species != "":
+		return species
+	var pool := ForageSpawns.species_for(ForageSpawns.KIND_COMMON, CropCatalog.wild_season(crop))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash("wildharvest:%d:%d:%d" % [clock.day, t.x, t.y])
+	return pool[rng.randi_range(0, pool.size() - 1)]
+
+# 야생 수확 등급 = 채집 레벨 기본 ⊔ 약초학자 하한(위와 같은 이유로 떼어냈다 — 단일 출처).
+func _wild_quality() -> int:
+	return maxi(_forage_base_quality(_skill_level(ProfessionCatalog.FORAGING)), forage_quality_floor())
+
+func _harvest_wild(crop: String, from_pot: bool = false) -> void:
+	var species := _wild_species_at(crop, _target)
+	var quality := _wild_quality()
 	# ★[폴리시 R4] **적재 자리부터 본다** — 노지(`_try_harvest`)·화분(`_harvest_pot`) 두 형제가 R2에
 	#   세운 규율인데, 그 둘보다 위에서 갈라져 나오는 이 갈래만 옛 거동이 남아 있었다. `harvest`가
 	#   칸을 비운 뒤 `add_item` 반환값을 안 봐서, 백팩이 가득하면 그 포기가 영구 소실되는데 화면엔
@@ -18213,7 +18307,17 @@ func _shake_bush(t: Vector2i) -> bool:
 	var id := berry_bushes.shake(_region, t, clock.day)
 	if id == "":
 		return false                              # 창 밖 잔여 플래그였다(원장이 정리만 하고 빈손)
-	var n := ForageSkill.bush_yield(_skill_level(ProfessionCatalog.FORAGING))
+	# ★[폴리시 R23 #7] **XP는 퍼크 곱 *전*의 수량으로 잰다**(아래 `_gain_forage_xp`가 이 값을 쓴다).
+	#   18225의 근거("수량만큼 배움도 는다")는 **레벨 파생 수량**(`bush_yield`)을 두고 쓴 문장이고,
+	#   R19 #4가 나중에 끼워 넣은 채집꾼 2배는 그 문장이 상정한 축이 아니다. 그대로 두면 비-가치
+	#   퍼크(ADR-0052 §1 = 품질·수량·효율·편의)가 **스킬 곡선을 2배로 가속**해 XP 슬롯을 무단
+	#   점유하고(그 슬롯은 별개 축이라고 `xp_boost.gd:24`가 못 박는다), 늘어난 XP → 레벨 →
+	#   `bush_yield` 계단 상승 → 다시 XP로 자기증식한다. 같은 저장소가 이 경계를 반대편에서 이미
+	#   지킨다 — `mining_skill.resolve_drop`의 끝줄 "XP는 **캔 광맥**의 값이다(승급한 드랍이 아니라
+	#   — 퍼크가 스킬 곡선을 가속하면 비-가치 축을 넘는다)". `_forage_double_drop`을 쓰는 형제 세
+	#   창구(`_pick_flower`·`_harvest_wild`·`_pick_forage`)도 전부 고정 XP다.
+	var base_n := ForageSkill.bush_yield(_skill_level(ProfessionCatalog.FORAGING))
+	var n := base_n
 	if _forage_double_drop("bush", t):            # ★ day·칸 결정 시드(세 형제와 같은 창구·같은 규율)
 		n *= 2
 	var quality := forage_quality_floor()         # ★ 약초학자 하한만(레벨 base는 위 머리말대로 배제)
@@ -18222,7 +18326,9 @@ func _shake_bush(t: Vector2i) -> bool:
 		_notice("백팩이 가득 차 열매를 담을 수 없다 — [Tab] 가방에서 자리를 비우고 다시 [F]")
 		return true
 	_toast_item(id, n)
-	_gain_forage_xp(ForageSkill.BUSH_SHAKE_XP * n)   # ★ 개당 1XP(스타듀 상속 — 수량만큼 배움도 는다)
+	# ★ 개당 1XP(스타듀 상속 — 수량만큼 배움도 는다). ★[폴리시 R23 #7] 자[尺]는 **레벨 파생 수량**
+	#   이지 퍼크 곱 뒤의 수량이 아니다(위 머리말 — 퍼크는 스킬 곡선에 못 닿는다).
+	_gain_forage_xp(ForageSkill.BUSH_SHAKE_XP * base_n)
 	audio.sfx("harvest")
 	_notice("덤불을 흔들어 %s ×%d를 얻었다" % [ItemCatalog.name_of(id), n])
 	queue_redraw()
@@ -20035,7 +20141,17 @@ func _on_frame_discard(slot_index: int) -> void:
 	#   영속)이 두 번 주지 않는다 — 버리면 T2(500냥)를 살 때까지 낚시 사슬 전체가 그 세이브에서
 	#   막힌다. 그래서 **매대 가격 0인 기어**를 같은 표에 세운다(id를 손으로 안 적는다 — 앞으로
 	#   생길 증정 기어도 저절로 따라오고, 값이 붙어 매대에 서는 순간 저절로 풀린다).
-	if Inventory.START_TOOLS.has(id) or (GearCatalog.is_rod(id) and GearCatalog.price_of(id) <= 0):
+	# ★[폴리시 R23 #12] **그 «매대 가격 0» 표에 무기도 든다.** R11이 세운 판정 사유("증정품이라
+	#   price 0이고 매대 행에 없으며 유일 지급처가 세이브 영속 플래그라 버리면 그 사슬 전체가
+	#   막힌다")가 녹슨 혼검에 한 글자도 안 틀린데 표는 낚싯대만 봤다 — `WeaponCatalog.SWORDS`의
+	#   `price 0`(주석이 "0 = 비매(증정품)"이라 적는다), 유일 지급처 `_grant_mugol_sword_lines`는
+	#   `_mugol_sword_given`(세이브 영속)이 두 번 주지 않고, 길드 매대는 `base <= 0` 가드에 걸려
+	#   애초에 못 판다. 다른 소실 경로는 전부 막혀 있어(선물 = `GiftPrefs.giftable` 거절 · 출하함 =
+	#   CAT_TOOL 거절) 휴지통이 유일한 구멍이었고, 버리면 갱도 10층 + 750냥으로 명동검을 살 때까지
+	#   그 세이브에 무기가 한 자루도 없다. 값이 붙어 매대에 서는 무기는 저절로 풀린다(R11의 그 규율).
+	if Inventory.START_TOOLS.has(id) \
+			or (GearCatalog.is_rod(id) and GearCatalog.price_of(id) <= 0) \
+			or (WeaponCatalog.has(id) and WeaponCatalog.price_of(id) <= 0):
 		# ★[폴리시 R12] 런타임 이름 옆 **고정 조사**를 걷는다(R5 ④i 전수 스캔이 잡던 마지막 한 자리 —
 		#   R10이 이 안내를 새로 쓰며 고정 "는"이 다시 들어왔다). "괭이는"/"저승 낚싯대는" 둘 다 한 식에서.
 		_notice("%s 버릴 수 없다 — 다시 구할 곳이 없다" % HanjiUi.with_eun(ItemCatalog.name_of(id)))
@@ -22820,6 +22936,8 @@ func _close_okja_track() -> void:
 #   강림의 「명부 혼례 부적」 게이트(`hearts() >= MAX_HEARTS`)가 다 갚은 그날 내내 잠겨 보였다.
 #   R8이 기증 축(`_donate_*`)에, R11이 이혼 경로에 같은 이유로 한 줄씩 더한 그 규율의 셋째 축이다
 #   (수확은 '가장 굵은 레버'라 마지막에 넘는 축이 되기 쉽다). 트랙 미개통이면 무동작이다.
+# ★[폴리시 R23 #10] 창구는 **넷**이다 — 밭 수확·화분 수확·야생 채집·**과수 수확**(그 넷이 여기로
+#   모인다). 종전 머리말은 셋만 적었는데 그건 배제가 아니라 누락이었다.
 func _count_run_harvest() -> void:
 	_run_harvested += 1
 	_refresh_okja_track()
@@ -23977,6 +24095,23 @@ func _activity_credit(rid: String, n: int) -> void:
 #   된다(99냥씩 벌고 저장하면 영원히 0점). 축의 주인이 main(_cafe_revenue_total)이라 키도 여기 둔다.
 const MEL_REVENUE_PER_POINT := 100
 
+# ★[폴리시 R23 #8] **멜 자신의 마진은 눈금에서 벗긴다.** 서빙가는 `메뉴가 × margin × 테마
+#   프리미엄`이고 margin은 `CafeMargin.margin(멜♡)`이라(main이 매 프레임 주입), 그 값을 그대로
+#   활동 눈금으로 쓰면 **멜의 곱셈기가 자기 하트를 가속하는 폐루프**가 된다 — ♡0(×1.0)에서 기본
+#   메뉴 4잔이 1점인데 ♡5(×2.0)에선 같은 4잔이 2점이다(일일 캡 12는 상한만 둘 뿐 배수를 상쇄하지
+#   않는다 — 캡에 닿는 서빙 수가 절반이 된다). 형제 채널 둘은 정확히 이 경계를 지키고 그 근거가
+#   코드에 있다: 미호는 "다수확(황천포도 2~3)이 관계까지 3배로 불리면 … 수확은 밭을 돌본 *행위*이지
+#   개수가 아니다"라 **액션당 1**이고(17888), 바나도 나락 처치당 1이다. ADR-0066 결정 4가 멜에게만
+#   «매출 100냥당 1점»이라는 냥 눈금을 준 것은 그대로 두되(그 크기는 튜닝 = owner 몫), 그 자[尺]가
+#   *자기 자신에서 파생된 배수*를 타는 것만 끊는다.
+#   ★ 테마 프리미엄·메뉴 등급·체키 등급은 그대로 탄다 — 그것들은 멜 하트에서 파생되지 않아 폐루프가
+#     아니고, "얼마나 잘 팔았는가"라는 실적 신호 그 자체다.
+#   ★ 나누는 값은 main이 cafe에 **주입한 그 배수**다(수치 복제 0). 밤 응대·칵테일은 이 배수를 애초에
+#     안 타므로(night_bar에 margin 축이 없다) 그쪽 호출부는 벗기지 않는다.
+func _unmargined_revenue(revenue: int) -> int:
+	var m: float = cafe.margin if cafe != null else 1.0
+	return int(round(revenue / m)) if m > 0.0 else revenue
+
 func _credit_mel_revenue(revenue: int) -> void:
 	if revenue <= 0:
 		return
@@ -24286,6 +24421,13 @@ func _try_night_serve(seat: int) -> void:
 		wallet.earn(revenue)
 		_cafe_revenue_total += revenue        # T7.2 카페 마일스톤 누적(밤 응대도 카페/바 운영 매출)
 		_total_income += revenue              # ★ [S1R-T12] 누적 총수입(정보패널)
+		# ★[폴리시 R23 #11] 멜 활동 채널에도 합류한다 — 위 줄이 이미 «밤 응대도 카페/바 운영 매출»
+		#   이라 적고 `cafe_milestone.gd`가 이 축의 정의를 "*서빙* 매출만 센다(카페 손님 서빙 + 밤 바
+		#   응대)"로 못 박는데, `_credit_mel_revenue`의 호출부는 저장소 전체에서 낮 서빙 하나뿐이었다.
+		#   그래서 **같은 밤 응대 매출이 멜 deed 관문은 통과시키면서 활동 하트엔 한 점도 안 넣었다** —
+		#   낮 카페를 안 열고 밤 바만 굴리면 관계 탭의 멜 활동 채널이 통째로 침묵했다(같은 판에서
+		#   미호는 수확마다, 바나는 처치마다 받는다). 밤 매출엔 멜 마진이 안 실려 벗길 것이 없다.
+		_credit_mel_revenue(revenue)
 		audio.sfx("serve")                    # P2.6 밤 손님 응대도 같은 서빙 종
 		_notice("밤 손님 응대 +%d냥" % revenue)
 		_offer_cocktail(seat)                 # ★[S6-T6] 사슬 2단 — 그 자리에 칵테일 제안이 열린다
@@ -24367,6 +24509,7 @@ func _finish_cocktail() -> void:
 	#   이 축이 옥자 축을 대변한다. 칵테일만 다른 곳으로 새면 축이 갈라진다).
 	_cafe_revenue_total += revenue
 	_total_income += revenue                          # ★[S1R-T12] 누적 총수입(정보패널)
+	_credit_mel_revenue(revenue)   # ★[폴리시 R23 #11] 밤 응대 사슬의 둘째 단도 같은 축이다(위 주석)
 	audio.sfx("gold")
 	_notice("칵테일 %s +%d냥" % [CocktailSession.grade_name(grade), revenue])
 	queue_redraw()
@@ -24409,7 +24552,9 @@ func _try_serve(seat: int) -> void:
 	#      손님(단골) 호감도를 채우는 것"이고, 이건 ADR-0032·ADR-0066 결정 4가 명시 개통한 **멜의
 	#      도메인 실적 채널**이다(카페 운영 = 멜의 속죄 무대라 매출이 그 사람의 실적이다). 여전히
 	#      손님 쪽 ♡는 0이고, 오르는 건 멜 하나뿐이며, 그마저 하루 12점에서 멈춘다.
-	_credit_mel_revenue(revenue)
+	#   ★[폴리시 R23 #8] 눈금은 **멜 마진을 벗긴** 매출이다(그 함수 머리말 — 곱셈기가 자기 입력을
+	#     가속하는 폐루프를 끊는다). 지갑·마일스톤 누적은 종전대로 실매출 그대로다.
+	_credit_mel_revenue(_unmargined_revenue(revenue))
 	audio.sfx("serve")                        # P2.6 카운터 종 "딩"
 	_notice("%s%s 서빙 +%d냥" % [_guest_prefix(guest_id), MenuCatalog.name_of(served), revenue],
 		NOTICE_SECS, false, _item_icon(served))   # ★[S6-T8] 나간 잔의 아이콘을 알림에 함께
@@ -24522,6 +24667,9 @@ func _finish_cheki() -> void:
 	#   ADR-0064 결정 7에서 **옥자 축을 대변**하기 때문이다(카페 실적 = 옥자의 인정).
 	_cafe_revenue_total += revenue
 	_total_income += revenue                          # ★[S1R-T12] 누적 총수입(정보패널)
+	# ★[폴리시 R23 #11] 체키도 서빙 사슬의 다음 단이라 같은 축이다(위 줄의 그 근거). ★#8 —
+	#   체키가는 `cafe.serve_price`에서 파생돼 **멜 마진이 이미 실려 있으므로** 눈금은 벗겨 잰다.
+	_credit_mel_revenue(_unmargined_revenue(revenue))
 	guests.record_cheki(guest_id, grade)              # 단골화 가속(♡ 아님 — 방문 가중치)
 	audio.sfx("gold")
 	_notice("%s체키 %s +%d냥" % [_guest_prefix(guest_id),
@@ -26138,8 +26286,24 @@ func _ranch_door_open_notice(building: String, released: bool, to_release: int) 
 		return "%s 방목 문 열림 — 잿눈이라 짐승이 안 나간다 (실내 급여·청소가 필요하다)" % building
 	return "%s 방목 문 열림 — 지금 나갈 짐승은 없다" % building
 
-func _release_open_buildings() -> bool:
-	if ranch == null or _region != RegionCatalog.HOME or not _weather_calm():
+# ★[폴리시 R23 #2·#5] `sealed_day` = 이 방출이 **어느 아침의 몫인가**(0 = 지금 이 순간의 몫).
+#   R22 #10·#11이 «하루 경계 이벤트는 그 아침의 답으로 굳는다»를 계약으로 세우고 소비처 둘
+#   (`_run_weed_spread`·`_build_mine_floor`)을 갈았는데, 형제인 **밀린 아침 방목 방출**만 살아 있는
+#   하늘을 계속 팠다. `_weather_on`은 `_theme_open_on`을 지나고 그 판정은 `_cafe_stage()`·
+#   `_cafe_revenue_total`을 실시간으로 읽으므로, 절기 25일(테마 슬롯)에 낮의 카페 매출이 해금
+#   문턱을 넘으면 그 프레임부터 하늘이 잿눈 → 평온으로 뒤집힌다. 그러면 집 밖에서 날이 바뀐
+#   플레이어가 16시에 귀가하는 순간 **같은 아침이 두 세계로 갈려 결산됐다** — 잡초 확산은 «잿눈인
+#   밤»으로, 방목은 «평온한 날»로. 아침 알림(`_ranch_door_open_notice`)이 "잿눈이라 안 나간다"고
+#   말한 뒤 실제로는 나가므로 화면과 동작도 갈렸다.
+#   ★ 문 토글은 인자 없이 부른다 — 그건 하루 경계가 아니라 **지금 이 프레임의 플레이어 동작**이라
+#     지금의 하늘을 보는 것이 옳다(`_ranch_door_open_notice`가 같은 술어로 이유를 말하는 그 자리).
+#   ★ 이 봉합이 #5가 지목한 비대칭도 함께 닫는다: 잿눈 아침을 집에서 맞은 플레이어의 방출 0과
+#     집을 비운 플레이어의 방출이 이제 **같은 하늘**로 판정되므로, «재시도 훅이 없다»가 결함이
+#     아니라 잿눈 규칙 그대로가 된다(양쪽 다 그날 방목이 없다).
+func _release_open_buildings(sealed_day: int = 0) -> bool:
+	var calm: bool = Weather.allows_grazing(_weather_sealed_on(sealed_day)) \
+		if sealed_day != 0 else _weather_calm()
+	if ranch == null or _region != RegionCatalog.HOME or not calm:
 		return false
 	# 밤엔 방출하지 않는다(방목=낮). day_advanced는 06:00 리셋 직후라 낮이지만, 문 토글은 언제든 눌리므로 가드.
 	if clock != null and clock.phase() == "밤":
