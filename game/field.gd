@@ -77,6 +77,12 @@ func fertilizer_of(t: Vector2i) -> String:
 #      소모품을 '심을 때'가 아니라 '수확 직전'에 쓰는 것이 항상 우월해지고, 성장이 하루 경계 없이 뛰었다.
 #   ㉡ 반대로 성장촉진 위에 품질 비료를 덮으면(quality군은 f=1.0) 임계가 base로 되돌아가 **수확 대기 중이던
 #      작물이 미성숙으로 역행**했다 — 경고도 알림도 없이 물 두 번을 더 줘야 했다.
+#      ★[폴리시 R22 #2] 이 항이 지키는 것은 **이미 성숙한 칸**뿐이다(아래 `_reseal_need`의 첫 가지).
+#      미성숙 칸에서 품질군이 임계를 base로 되돌리는 것은 회귀가 아니라 R21이 명시 선언한 계약이다
+#      («계수 1.0인 품질군은 무비료 임계로 정확히 되돌아간다 — 왕복 불변»). 그러지 않으면 하이퍼로
+#      깎은 잔여에 품질군이 얹혀 «−33% 성숙 + 디럭스 품질»이 한 칸에 동시 성립해 2군 XOR가 무너진다
+#      (§8.4). 두 머리말이 서로 반대되는 계약을 주장하던 자리를 여기서 가른다: **성숙 칸은 역행
+#      금지 · 미성숙 칸은 계약대로 되돌림 · 그 대가는 화면이 말한다**(main의 비료 갈래 알림).
 #   ㉢ REGROW 되감기는 base를 기준으로 재는데 성숙 판정만 이 유효일을 써서 두 기준이 어긋났고,
 #      −25%짜리 비료가 재결실 주기를 −43%까지 깎았다(불사과 명목 7일 → 실제 4일).
 #   그래서 임계는 **도포 시점에 한 번 정해 칸에 적는다**(`need_days` 스냅샷). 계산식은 카탈로그가 스스로
@@ -117,9 +123,24 @@ func _sealed_need(base: int, fert_id: String) -> int:
 #   · 되감기(harvest REGROW)는 여전히 `effective_growth_days` 한 기준을 쓴다(R20 ㉢ 불변).
 #   · 최솟값은 g=0에서라(need는 grown에 대해 단조 증가) **"심을 때부터 그 비료였을 때"보다
 #     낮은 임계를 만들 길이 없다** — 갈아 뿌리기로 얻는 이득의 상한이 명목값이다.
+#   ★[폴리시 R22 #2] **되감기 사이클에는 base라는 자를 댈 수 없다.** `harvest`의 REGROW 갈래는
+#     grown을 «이 칸의 임계 − cd»로 되감으므로(R20 #6의 그 한 줄) 그 순간부터 grown은 *임계의 자*로
+#     적힌 값이고 base와 통약되지 않는다. 그 위에 base 잔여를 곱하면 결과가 **무비료 명목보다도
+#     나빠진다**: 불사과(base 12·cd 7)를 하이퍼로 심으면 임계 9 → 수확 후 grown 2인데, 여기에
+#     디럭스(계수 1.0)를 덮으면 need = 2 + (12−2) = 12로 재결실까지 10일 — 아무 비료도 안 쓴 명목
+#     쿨다운 7일보다 길다. 어떤 순수 경로보다 나쁜 결과는 계약이 아니라 결함이다.
+#     그래서 되감기 사이클에서는 **임계를 건드리지 않는다**. 이것이 R20 ㉢("비료의 이득은 첫
+#     결실에서 이미 받았다 — 쿨다운은 비료와 무관하게 명목값")의 대칭이다: 이득이 없으니 손해도
+#     없다. 첫 사이클의 거동은 한 글자도 안 변한다(㉠·㉡·XOR 회복 전부 그대로).
+#   ★ 첫 사이클에서 품질군이 임계를 base로 되돌리는 것은 **계약이지 결함이 아니다**(위 ㉡ 항 ·
+#     `polish_r21` ①d가 그것을 잰다). 다만 그 되돌림이 침묵이면 안 되므로, 잔여가 실제로 늘어난
+#     도포만 main이 화면에 말한다(집행 0이면 알리지 않는다 — 알림 규율).
 func _reseal_need(t: Vector2i, prev_need: int, fert_id: String) -> void:
 	var grown: int = int(_tiles[t]["grown_days"])
 	if prev_need - grown <= 0:
+		_tiles[t]["need_days"] = prev_need
+		return
+	if bool(_tiles[t].get("regrown", false)):
 		_tiles[t]["need_days"] = prev_need
 		return
 	var base := CropCatalog.growth_days(str(_tiles[t].get("crop", "")))
@@ -239,6 +260,10 @@ func plant(t: Vector2i, crop_id: String) -> bool:
 	#   `_reseal_need`가 잔여 기준으로만 다시 잠그므로 임계가 뒤로 뛰거나 되돌아가지 않는다.
 	_tiles[t]["need_days"] = _sealed_need(CropCatalog.growth_days(crop_id),
 		str(_tiles[t].get("fertilizer", "")))
+	# ★[폴리시 R22 #2] 되감기 표식은 심는 순간 늘 꺼진다 — 새로 심은 칸은 언제나 첫 사이클이다
+	#   (`hoe`·`remove_plant`는 dict를 새로 만들어 이미 꺼져 있지만, 여기서도 명시해 표식이
+	#    이전 작물에서 새 작물로 새는 갈래를 원천적으로 없앤다).
+	_tiles[t]["regrown"] = false
 	tile_changed.emit(t)
 	return true
 
@@ -295,6 +320,10 @@ func harvest(t: Vector2i) -> String:
 		var need := effective_growth_days(t)
 		var cd := CropCatalog.regrow_cooldown(crop_id)
 		_tiles[t]["grown_days"] = maxi(0, need - cd)
+		# ★[폴리시 R22 #2] 이 칸은 이제 **되감기 사이클**이다 — grown이 base가 아니라 임계의 자로
+		#   적혔다는 표식이고, `_reseal_need`가 그 자에 base 잔여를 곱해 쿨다운을 명목보다 길게
+		#   늘리는 것을 막는다(그 머리말). 표식은 `plant`·`hoe`·`remove_plant`가 끈다.
+		_tiles[t]["regrown"] = true
 	else:
 		_tiles[t]["planted"] = false
 		_tiles[t]["crop"] = ""

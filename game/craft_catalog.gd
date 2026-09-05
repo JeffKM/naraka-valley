@@ -167,6 +167,32 @@ static func ids() -> Array:
 static func has(id: String) -> bool:
 	return catalog().has(id)
 
+# ★[폴리시 R22 #9] 이 **아이템**이 제작으로만 나오는가 = 어느 레시피의 산출인가(레시피 id가 아니라
+#   산출 id를 묻는 역방향 조회). 출하 창구가 "제작 전용 설치물"을 가려낼 때 쓴다 — 매대에서 파는
+#   설치물(스프링클러 T1·게잡이통)은 레시피가 없어 여기서 거짓이 되고, 그래서 되팔기 차익이 열리지
+#   않는다. 판정의 진실원을 레시피 표 하나로 두는 것이 요점이다(main에 id 목록을 복제하지 않는다).
+static func makes(item_id: String) -> bool:
+	if item_id == "":
+		return false
+	for id in ids():
+		if String(get_recipe(String(id)).get("out_item", "")) == item_id:
+			return true
+	return false
+
+# ★[폴리시 R22 #9] 이 아이템 1개를 만드는 데 드는 **재료의 값 합**(산출 개수로 나눈 1개분). 없으면 −1.
+#   craft_catalog 머리말의 "가치 창출 금지"(산출가가 재료가를 크게 웃돌지 않게)를 코드가 실제로
+#   잴 수 있게 하는 창구다 — 출하 창구가 이 값으로 «만들어 팔기가 차익이 되는가»를 판정한다.
+static func mats_value_of(item_id: String) -> int:
+	for id in ids():
+		var r := get_recipe(String(id))
+		if String(r.get("out_item", "")) != item_id:
+			continue
+		var total := 0
+		for m in r["mats"]:
+			total += ItemCatalog.price_of(String(m["item"])) * int(m["count"])
+		return int(floor(float(total) / float(maxi(1, int(r.get("out_count", 1))))))
+	return -1
+
 static func get_recipe(id: String) -> Dictionary:
 	return catalog().get(id, {})
 

@@ -108,6 +108,22 @@ static func is_theme_slot(d: int) -> bool:
 # stage = 카페 일구기 단계(CafeMilestone.stage) · revenue = 누적 서빙 매출.
 # 두 눈금 중 그 테마에 배정된 쪽만 실제로 문턱이 있고(다른 쪽은 0 = 무조건 통과), 결과적으로
 # 메이드=1단 · 바캉스=2단 · 힙합=매출 5,000 · 크리스마스=매출 12,000이 된다.
+# ★[폴리시 R22 #13] 이 테마를 여는 **문턱의 이름**("카페 2단" / "누적 서빙 매출 5,000냥"). 표에서
+#   그대로 파생한다 — 어느 눈금이 0이 아닌가가 곧 그 테마의 축이다(값 복제 0).
+#   왜 필요한가: 점괘 거울의 ※ 단서가 축을 "카페 매출" 하나로 말했는데, 앞 둘은 매출이 아니라
+#   `CafeMilestone.stage`(수확·매출·하트 3축 AND)를 본다. 그래서 매출을 한 냥도 안 올리고 하트만
+#   채워도 하늘이 뒤집히는데, 화면이 말한 조건은 건드린 적이 없어 예보가 이유 없이 빗나갔다.
+# ★ **테마 이름은 안 싣는다** — 이 문자열이 쓰이는 자리가 정확히 «아직 안 열린 테마»이고, 달력
+#   범례("? (카페를 더 키우면)")·아침 배너·거울 ◇ 줄이 전부 그 이름을 가리는 계약을 든다.
+static func unlock_hint(theme: int) -> String:
+	if theme < 0 or theme >= NAMES.size():
+		return ""
+	var rev := int(UNLOCK_REVENUE[theme])
+	if rev > 0:
+		return "누적 서빙 매출 %d냥" % rev
+	var st := int(UNLOCK_STAGE[theme])
+	return "카페 %d단" % st if st > 0 else ""
+
 static func is_unlocked(theme: int, stage: int, revenue: int) -> bool:
 	if theme < 0 or theme >= NAMES.size():
 		return false

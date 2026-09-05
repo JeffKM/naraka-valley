@@ -482,9 +482,17 @@ func _check_mirror_forecast_caveat(m: Node) -> void:
 	m._open_mirror()          # 표시 단언은 그리기 경로를 태운다(라벨 갱신 + 판 레이아웃)
 	var text: String = m.mirror_text.text
 	var theme_name: String = Festival.name_of(Festival.theme_slot_for_day(target + 1))
-	_check("④b 거울 본문에 조건 단서가 뜬다 — 테마명(%s) 포함 %s · 「문턱」 포함 %s"
-			% [theme_name, str(text.contains(theme_name)), str(text.contains("문턱"))],
-		text.contains(theme_name) and text.contains("문턱"))
+	# ★[폴리시 R22 #12·#13 계약 정정] 단서가 **무엇을 말하는가**가 바뀌었다. 종전 이 단언은
+	#   «테마명 + 「문턱」»을 요구했는데, R22가 그 둘을 각각 걷어냈다: ㉠ 이 줄은 조건상 늘
+	#   «아직 안 열린 테마»에서만 뜨므로 이름을 싣는 것이 같은 화면의 마스킹 계약(달력 「?」·
+	#   아침 배너·◇ 줄)과 정면으로 어긋났고 ㉡ "카페가 문턱을"이 가리킨 매출 축은 앞 두 테마의
+	#   실제 축(CafeMilestone.stage 3축 AND)이 아니었다. #3이 세운 **하중은 그대로다** — 어긋나는
+	#   갈래에서만, 플레이어가 실제로 손댈 수 있는 조건을 밝힌다. 그래서 니들만 «그 테마의 문턱
+	#   이름»(`Festival.unlock_hint`)으로 갈고, 이름이 **없음**을 함께 잰다(R22 ⑫b와 같은 계약).
+	var hint: String = Festival.unlock_hint(Festival.theme_slot_for_day(target + 1))
+	_check("④b 거울 본문에 조건 단서가 뜬다 — 문턱 이름(%s) 포함 %s · 테마명(%s) 미포함 %s"
+			% [hint, str(text.contains(hint)), theme_name, str(not text.contains(theme_name))],
+		hint != "" and text.contains(hint) and not text.contains(theme_name))
 	# 어긋남이 실제로 성립한다 — 문턱을 넘기면 같은 날의 예보 답이 뒤집힌다.
 	var w_locked: int = m._forecast_on(target)
 	m._cafe_revenue_total = 999999
@@ -1024,9 +1032,11 @@ func _check_forecast_next_morning(m: Node) -> void:
 	m._cafe_revenue_total = 999999
 	m._open_mirror()
 	var text_open: String = m.mirror_text.text
+	# ★[폴리시 R22 #12·#13 계약 정정] 니들이 「문턱」에서 **※ 표식**으로 바뀌었다(④b와 같은 사유 —
+	#   문구가 갈렸을 뿐 «잠긴 갈래에서만 뜬다»는 이 항의 하중은 한 글자도 안 변했다).
 	_check("⑯d 봉합은 #3과 한 줄이다 — 잠긴 상태에선 단서가 뜨고(%s) 열린 뒤엔 안 뜬다(%s)"
-			% [str(text_locked.contains("문턱")), str(text_open.contains("문턱"))],
-		text_locked.contains("문턱") and not text_open.contains("문턱"))
+			% [str(text_locked.contains("※")), str(text_open.contains("※"))],
+		text_locked.contains("※") and not text_open.contains("※"))
 	m._cafe_revenue_total = rev0
 	m.clock.day = d0
 	m.mirror_panel.visible = false
