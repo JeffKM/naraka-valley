@@ -50,7 +50,8 @@ const POINTS := {
 }
 
 # 품질 배율(러브·라이크만 — ADR-0066 결정 2). 일반/은/금/이리듐.
-# ★ **불변식: 일반 품질 러브(40) > 이리듐 라이크(int(25×1.5)=37)** — 스타듀가 지키는 그 성질이다.
+# ★ **불변식: 일반 품질 러브(40) > 이리듐 라이크(int(round(25×1.5))=38)** — 스타듀가 지키는 그
+#   성질이다. ★[폴리시 R28 #11] 정수화를 관례(반올림)에 맞추며 37 → 38이 됐고, 부등식은 그대로다.
 #   이게 깨지면 "그 사람이 정말 좋아하는 것"보다 "아무거나 최고 등급"이 최적이 되어, 선호 테이블이
 #   존재할 이유가 사라진다. gift_test가 이 부등식을 직접 단언한다.
 # ★ 싫어하는 선물에 배율을 안 얹는 이유: 이리듐 쓰레기가 *덜* 미운 것도, *더* 미운 것도 어색하다
@@ -450,7 +451,12 @@ static func points_for(tier: int, item_id: String = "", quality: int = ItemCatal
 		return base
 	if not ItemCatalog.carries_quality(item_id):
 		return base
-	return int(base * QUALITY_SCALE[clampi(quality, 0, 3)])
+	# ★[폴리시 R28 #11] **정수화는 반올림**(관례 = `XpBoost.scaled_by` 머리말이 선언한
+	#   `int(round(...))`). 종전 절단은 QUALITY_SCALE에 1.1이 섞여 곱이 정수로 안 떨어지는 라이크
+	#   채널에만 손실을 몰았다 — 은 25×1.1 = 27.5 → 27(−0.5) · 이리듐 25×1.5 = 37.5 → 37(−0.5)인데
+	#   러브 40은 44/50/60으로 전부 정수라 손실 0이다. 같은 «정수 점수에 배수를 얹는다»가 XP 가속은
+	#   반올림, 선물 등급은 절단으로 갈려 있던 자리다.
+	return int(round(base * QUALITY_SCALE[clampi(quality, 0, 3)]))
 
 # 그 사람에게 이 아이템(이 품질)을 건넸을 때의 점수 — tier_of + points_for의 한 창구.
 static func gift_points(resident_id: String, item_id: String, quality: int = ItemCatalog.Q_NORMAL) -> int:

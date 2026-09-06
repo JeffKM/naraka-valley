@@ -11016,7 +11016,9 @@ func _on_day_advanced(day: int) -> void:
 	var night := ranch.settle_night()
 	if int(night.get("exposed", 0)) > 0:
 		_notice("짐승 %d마리가 밖에 갇혔다 — 문을 열어 둬야 귀가한다" % int(night["exposed"]))
-	ranch.advance_day()        # ★ [S1-7] 짐승 데일리 정산 — 케어 플래그로 우정·기분 갱신·산물 생성·플래그 리셋(§4.1)
+	# ★[폴리시 R28 #1] 방목 이월(R27 #16)은 **아침 방출과 같은 하늘**로 판정한다 —
+	#   `_release_open_buildings`가 아래에서 보는 그 굳은 날씨를 그대로 넘긴다(그 술어 머리말).
+	ranch.advance_day(Weather.allows_grazing(_weather_sealed_on(day)))        # ★ [S1-7] 짐승 데일리 정산 — 케어 플래그로 우정·기분 갱신·산물 생성·플래그 리셋(§4.1)
 	# ★ [B1-a.2] 새 아침 방목 방출 — advance_day가 플래그를 리셋한 *뒤*, 문 열린 건물 짐승을 방목지로 내보낸다
 	#   (grazed=이번 새 날치). 평온·낮 게이트는 _release_open_buildings 안에서(★[S7-T3] _weather_calm이
 	#   이제 실제 날씨를 본다 — 잿눈 날 아침엔 방출 자체가 없다).
@@ -13918,6 +13920,13 @@ func _process(delta: float) -> void:
 	#   (구간 밖에서는 종전과 한 글자도 다르지 않다 — `_spine_b5_mute_forced` 선언부 참조).
 	if Input.is_action_just_pressed("mute_audio"):
 		var muted_now := audio.toggle_mute()
+		# ★[폴리시 R28 #7] **누른 것을 화면이 말한다.** M은 모든 입력 가드 위에서 상시 살아 있는데
+		#   저장소 전수에서 이 키를 광고하는 문자열도, 현재 상태를 그리는 자리도 0건이었다 —
+		#   실수로 누르면 타이틀 BGM부터 전 SFX까지 통째로 무음이 되는데 화면엔 아무 표식이 없고
+		#   (버스 mute와 volume은 직교라 옵션 탭 볼륨 바는 그대로 100%를 그린다) 되돌릴 방법도
+		#   게임 안에 안 적혀 있다. audio.gd가 그 사실을 이미 두 번 결함 원인으로 인용한다.
+		#   R14가 봉합한 죽은 「[F10]→[C]」·R27 #13 방목 문 [F]와 같은 «키 광고» 클래스다.
+		_notice("음소거 %s — [M]으로 되돌린다" % ("켜짐" if muted_now else "꺼짐"))
 		if _spine_b5_mute_forced:
 			_spine_b5_mute_prev = muted_now
 	# 전체화면 토글(F11) — 음소거와 같은 결로 입력 가드보다 위에서 어디서든 받는다.
@@ -14055,7 +14064,13 @@ func _process(delta: float) -> void:
 			_forget_onboarding_guide()   # ★[폴리시 R23 #24]
 		# ★[S8-T6] 고백 제안이 떠 있으면 [F] = 결행(수락/거절 분기), [G] = 아직(제안만 접고 진행).
 		#   F(shop_toggle)·G(gift_item)는 대화 밖 전용 키라 대화 중엔 비어 있다 — 충돌 없음.
-		if _confess_rid != "":
+		# ★[폴리시 R28 #6] **판정 창을 광고 창에 맞춘다.** 제안은 `CONFESS_OFFER_LINE` 한 줄로만
+		#   광고되는데(lines 맨 앞) 이 분기는 줄 인덱스를 한 항도 안 봐서, [E]/우클릭으로 그 줄을
+		#   넘긴 순간부터 화면엔 [F] 안내가 한 글자도 없는데 [F]는 여전히 고백을 결행했다 — 그리고
+		#   그 결행은 되돌릴 수 없다(`promote` + `_romance_partner` 확정 + 안 뽑힌 메인 2인 −30점).
+		#   월드에서 [F]는 매대·방목 문·주민 창구의 상시 키라 습관적으로 눌린다. 제안 줄이 **실제로
+		#   화면에 떠 있는 프레임**에만 받는다(형제 키 [G]도 같은 창을 쓴다 — 둘은 한 쌍의 광고다).
+		if _confess_rid != "" and dialogue.line() == CONFESS_OFFER_LINE:
 			if Input.is_action_just_pressed("shop_toggle"):
 				_resolve_confession(_confess_rid)
 				return
@@ -14126,7 +14141,9 @@ func _process(delta: float) -> void:
 		elif frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_SKILL:
 			frame.set_skills(_skill_rows())   # ★ Phase B 숙련 탭(관계 탭과 대칭 — 읽기 전용 파생)
 		elif frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_OPTIONS:
-			frame.set_settings(settings.music_volume, settings.sfx_volume, settings.fullscreen)   # ★ Phase D 설정 값 주입
+			# ★[폴리시 R28 #7] 음소거 상태도 함께 넘긴다(버스 mute는 볼륨과 직교 — 그 탭 머리말).
+			frame.set_settings(settings.music_volume, settings.sfx_volume, settings.fullscreen,
+				audio != null and audio.is_muted())   # ★ Phase D 설정 값 주입
 		elif frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_INV:
 			frame.set_inv_info(wallet.gold, _total_income, _inv_date_string(), "안식 농원")   # ★ [S1R-T12] 정보패널
 		if frame.context == InventoryFrame.CTX_STORE:
@@ -15156,6 +15173,12 @@ func _process(delta: float) -> void:
 			interact_prompt.text = "[F] 아래층으로" if _mine_floor < MineFloors.MAX_FLOOR else _mine_bottom_line()
 		elif _is_mine_entrance(here_t):
 			interact_prompt.text = "[F] 갱도 밖으로 나간다"
+		elif _free_use_prompt() != "":
+			# ★[폴리시 R28 #5] **든 소모품이 LMB를 이미 가져갔다** — 아래 돌·위장 잡귀 갈래는 곡괭이
+			#   문법을 말하는데(「곡괭이가 있어야 돌을 깰 수 있다」) 그 프레임의 좌클릭은 계단·명부환·
+			#   곁들이가 잡는다. 발밑 [F] 갈래(상자·반짝이·사다리·입구)보다는 아래다: 저쪽은 다른 키라
+			#   서로를 가리지 않고, 여기서 가려야 하는 것은 **같은 키를 두고 갈리는 광고**뿐이다.
+			interact_prompt.text = _free_use_prompt()
 		elif _disguised_mob_at(_target):
 			# ★[S5-T5] 위장 잡귀 칸 — 겨눈 것이 "돌"처럼 보이지만 ROCK 타일이 아니다. 곡괭이를 들었을
 			#   때만 안내한다(정체를 미리 알려 주지 않는다 — 찔러 보는 것이 곧 판별이다).
@@ -15207,6 +15230,8 @@ func _process(delta: float) -> void:
 			interact_prompt.text = "[F] 아래층으로"
 		elif _is_narak_exit(nt):
 			interact_prompt.text = "[F] 나락에서 빠져나간다 (이번 런 종료)"
+		elif _free_use_prompt() != "":
+			interact_prompt.text = _free_use_prompt()   # ★[폴리시 R28 #5] 갱도 쌍둥이와 같은 자리·같은 사유
 		elif _is_narak_rock(_target):
 			var nnid := _narak_node_at(_target)
 			var nbody := "돌 깨기 (혼력 %d · 남은 돌 %d)" % [
@@ -15495,6 +15520,8 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		interact_prompt.text = _animal_prompt(ranch.animal_key_at(_target))
 	elif _indoor in ANIMAL_BUILDINGS and ranch.animals_in(_indoor).size() > 0 and not _pot_at(_target):
+		# ★[폴리시 R28 #8] 이 갈래의 두 조건(짐승 ≥1 · 화분 아님)은 **돌봄 우클릭**의 조건이다 —
+		#   방목 문 [F]는 그 둘을 안 보므로 아래 사슬 끝에서 따로 붙인다(그 자리의 머리말).
 		# ★ [B1-a.1] 동물 건물 실내(짐승 밖 칸): 우클릭으로 그 건물 돌봄 일괄.
 		# ★[폴리시 R7] **실제 동작을 말한다.** 종전 문구는 "방목·격리·청결"이었는데, 이 우클릭이
 		#   집행하는 것은 `feed_from_silo_in`(여물광 건초 소모) + `clean_all_in` 둘뿐이다 —
@@ -15511,10 +15538,8 @@ func _process(delta: float) -> void:
 		#   배치 가드까지 목축 서브시스템 절반이 관측조차 안 됐다. 형제 [F] 창구는 예외 없이 자기 키를
 		#   광고한다(갱도 계단·휘파람·곁들이). R14가 봉합한 죽은 「[F10]→[C]」와 같은 «키 광고» 클래스다.
 		#   ★ 상태도 함께 말한다 — 토글이라 «지금 어느 쪽인가»가 없으면 누르는 것이 도박이 된다.
-		var tend := "[우클릭] %s 돌봄 (여물 급여 · 잠자리 청소 — 여물광 %d단)" % [_indoor, ranch.silo_hay()] \
+		interact_prompt.text = "[우클릭] %s 돌봄 (여물 급여 · 잠자리 청소 — 여물광 %d단)" % [_indoor, ranch.silo_hay()] \
 			if ranch.silo_hay() > 0 else "[우클릭] %s 잠자리 청소 (여물광이 비어 급여 불가)" % _indoor
-		interact_prompt.text = "%s   ·   [F] 방목 문 %s" % [
-			tend, "닫기 (지금 열림)" if ranch.door_open(_indoor) else "열기 (지금 닫힘)"]
 	elif _debris_kind_at(_target) != "":
 		# ★ [S1-8] 개간 대상 debris를 바라볼 때: 맞는 도구를 들었으면 [좌클릭] 개간, 아니면 필요한 도구 안내.
 		interact_prompt.visible = not _sleeping
@@ -15540,6 +15565,12 @@ func _process(delta: float) -> void:
 		interact_prompt.visible = not _sleeping
 		if inventory.selected_id() != ItemCatalog.SCYTHE:
 			interact_prompt.text = "다 자란 사료풀 — 낫으로 베면 여물광 건초가 된다"
+		# ★[폴리시 R28 #13] 여물광이 가득하면 **동사를 약속하지 않는다** — 집행부가 그 프레임에
+		#   선거절하므로(그 자리의 머리말) 화면도 같은 표를 본다. 종전엔 가득이라는 사실이 숫자
+		#   240/240으로만 있고 «베면 흩어진다»는 대가가 한 글자도 없었다.
+		elif ranch.silo_full():
+			interact_prompt.text = "여물광이 가득하다 (%d/%d단) — 급여로 비우고 다시" % [
+				ranch.silo_hay(), Ranch.SILO_CAP]
 		elif not energy.can_act(_farming_energy_cost()):
 			interact_prompt.text = "혼력 부족 — 집에서 취침"
 		else:
@@ -15676,8 +15707,28 @@ func _process(delta: float) -> void:
 	else:
 		# 밭 칸을 바라볼 때만 안내. 든 도구·칸 상태로 동사를 파생한다(LMB 도구질 / RMB 맨손 수확).
 		var prompt := _farm_prompt()
+		# ★[폴리시 R28 #5] 밭이 할 말이 없는 자리에서만 손 소모품 한 줄을 채운다 — 밭 갈래가 말하는
+		#   것은 그 칸이 실제로 내주는 동사라(예: "[우클릭] 수확") 든 물건이 그것을 밀어내면 안 된다.
+		#   지상에서 이 셋이 광고를 갖는 유일한 자리이자, 침묵을 메우는 자리다.
+		if prompt == "":
+			prompt = _free_use_prompt()
 		interact_prompt.visible = not _sleeping and prompt != ""
 		interact_prompt.text = prompt
+	# ★[폴리시 R28 #8] **방목 문 [F]는 집행부와 같은 폭으로 광고한다.** 집행 게이트는
+	#   `_indoor in ANIMAL_BUILDINGS` 한 항뿐인데(14647행) R27 #13이 세운 광고는 «짐승 ≥1마리»와
+	#   «화분 칸 아님»까지 요구해, 두 자리에서 화면이 조용해졌다: ㉠ 축사를 지어 놓고 짐승을 사기
+	#   전에 들어가면 사슬이 이 갈래를 건너뛰어 하단 안내가 통째로 사라지는데 [F]는 그대로 문을
+	#   토글하고 그 상태가 세이브에 남아 이후 아침 방출을 정한다. ㉡ 축사 안 화분 칸을 겨누면
+	#   안내가 화분 쪽으로 갈리는데 같은 칸의 [F]는 여전히 방목 문이다. 사슬이 무엇을 골랐든
+	#   그 무대에서 [F]가 살아 있으면 한 줄을 잇는다(형제 창구 `_facing_pet`·`_facing_mailbox`·
+	#   `_furnace_at`은 예외 없이 판정과 광고가 같은 술어를 본다).
+	#   ★ 상태도 함께 말한다 — 토글이라 «지금 어느 쪽인가»가 없으면 누르는 것이 도박이 된다.
+	if not _sleeping and ranch != null and _indoor in ANIMAL_BUILDINGS:
+		var door_line := "[F] 방목 문 %s" % [
+			"닫기 (지금 열림)" if ranch.door_open(_indoor) else "열기 (지금 닫힘)"]
+		interact_prompt.text = "%s   ·   %s" % [interact_prompt.text, door_line] \
+			if interact_prompt.text != "" else door_line
+		interact_prompt.visible = true
 	# ★[폴리시 R23 #15·#16] 사슬이 무엇을 골랐든 **마지막에 한 번 폭에 맞춘다**(아래 머리말).
 	_fit_interact_prompt()
 
@@ -15813,10 +15864,12 @@ func _hoe_aoe_has_work() -> bool:
 			return true
 	return false
 
+# ★[폴리시 R28 #0] 칸 판정은 **집행부와 같은 술어 하나**(`FarmField.can_water`)다 — 종전 두 항은
+#   `water()`의 셋째 항(`not is_mature`)을 빠뜨려, 성숙한 미급수 이웃 칸이 AoE에 들면 프롬프트만
+#   서고 집행이 전 칸 false를 돌려줬다(그 함수 머리말).
 func _water_aoe_has_work() -> bool:
 	for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.WATERING_CAN)):
-		var plot := _field_at(at)
-		if plot.is_planted(at) and not plot.is_watered(at):
+		if _field_at(at).can_water(at):
 			return true
 	return false
 
@@ -15830,6 +15883,39 @@ func _water_aoe_has_work() -> bool:
 #   전부 `_use_tool()`을 직접 불러 그 게이트를 건너뛴 것이었다).
 func _is_free_use_item(id: String) -> bool:
 	return ItemCatalog._is_potion(id) or MenuCatalog.is_side_dish(id) or id == ItemCatalog.STAIRS
+
+# ★[폴리시 R28 #5] 손 소모품 세 동사의 **[좌클릭] 한 줄**("" = 든 게 이 셋이 아니거나 여기선
+#   광고할 것이 없음). 휘파람이 R18에서 받은 것과 같은 처방이다: 셋 다 `_use_tool` 맨 앞에서
+#   무대·조준 칸과 무관하게 LMB를 가져가는데(`holding_free_use` or-항이 디스패치 게이트에 선 그
+#   사실) 저장소 전수에서 이 셋을 광고하는 문자열이 **0건**이었다 — 획득 알림도 안 알려 준다
+#   (무기 「손에 들고 좌클릭으로 휘두른다」·낚싯대 「물가를 겨누고 좌클릭으로 던져 보자」의 그 한
+#   줄이 명부환·곁들이·계단에는 없다). 게다가 갱도·나락에서는 광고가 **다른 동사를 말했다**:
+#   계단을 든 채 돌을 겨누면 「곡괭이가 있어야 돌을 깰 수 있다」가 서는데 실제 좌클릭은 계단을
+#   태우고 한 층 아래로 내려간다. 그래서 이 줄은 **조준 칸 갈래보다 위**에 선다(집행 순서와 같다).
+#   ★ 거절 사유도 여기서 말한다 — 셋 다 «가득하면 안 쓴다»가 계약이라(`_drink_potion`·
+#     `_eat_side_dish`의 ㉠) 누르기 전에 알아야 아낀다.
+func _free_use_prompt() -> String:
+	if inventory == null:
+		return ""
+	var id := inventory.selected_id()
+	if ItemCatalog._is_potion(id):
+		if health != null and health.current >= health.maximum:
+			return "체력이 가득하다 — %s 아껴 두자" % HanjiUi.with_eun(ItemCatalog.name_of(id))
+		return "[좌클릭] %s 마시기 (체력 +%d)" % [ItemCatalog.name_of(id), ItemCatalog.potion_heal(id)]
+	if MenuCatalog.is_side_dish(id):
+		if energy != null and energy.current >= SoulEnergy.MAX:
+			return "혼력이 가득하다 — %s 아껴 두자" % HanjiUi.with_eun(MenuCatalog.name_of(id))
+		return "[좌클릭] %s 먹기 (혼력 +%d)" % [MenuCatalog.name_of(id), MenuCatalog.restore_of(id)]
+	if id != ItemCatalog.STAIRS:
+		return ""
+	# 계단은 무대가 갈린다 — 놓을 수 있는 곳에서만 동사를 약속하고, 갱도 바닥에서는 사유를 말한다
+	# (`_use_stairs`가 누른 뒤에 내는 그 문장과 같은 뜻·같은 술어). 지상·실내에서는 조용하다:
+	# 그 무대의 프롬프트를 이 손 물건이 가려서는 안 된다(든 물건이 창구를 이기지 않는다).
+	if _can_use_stairs():
+		return "[좌클릭] 계단을 놓는다 (한 층 아래로)"
+	if _in_mine_floor():
+		return "갱도 바닥이다 — 계단을 놓을 자리가 없다"
+	return ""
 
 func _use_tool() -> void:
 	var item := inventory.selected_id()
@@ -15928,10 +16014,15 @@ func _use_tool() -> void:
 			if watered > 0:
 				_refresh_water_badge()
 				verb = "물주기"
-		elif _pot_at(_target) and garden_pot.is_planted(_target) and not garden_pot.is_watered(_target):
+		# ★[폴리시 R28 #12] **사유 갈래도 AoE 표를 본다.** 위 급수 루프는 티어 범위 전체를 도는데
+		#   이 두 줄만 조준 칸 하나를 봐서 폭이 갈렸다 — 빈 통(0/cap)으로 «간 뒤 아직 안 심은 칸»을
+		#   겨누고 앞 칸이 «심겼고 마른» 칸이면 어느 갈래도 안 잡혀 화면 약속 · 실행 0 · 알림 0의
+		#   완전 침묵이었다(0티어에선 AoE가 (1,1)이라 존재하지 않던 어긋남 = 업그레이드가 만든다).
+		#   판정자는 프롬프트와 같은 `_water_aoe_has_work()` 하나다.
+		elif _pot_at(_target) and garden_pot.can_water(_target):
 			_notice("물이 없다 — 혼우물·연못에서 채우자")
 			return
-		elif _field_at(_target).is_planted(_target) and not _field_at(_target).is_watered(_target):
+		elif _water_aoe_has_work():
 			_notice("물이 없다 — 혼우물·연못에서 채우자")
 			return
 	elif cat == ItemCatalog.CAT_SEED:
@@ -15989,7 +16080,13 @@ func _use_tool() -> void:
 				#   hanji_ui 머리말 「병기로 물러서지 않는다」). 이 두 줄은 그 전수 정리에서
 				#   빠져 polish_r5 ④i의 **선재 red**로 남아 있었다(이 배치와 무관한 잔여 —
 				#   미변경 브랜치에서도 같은 넷이 잡혔다). 서식 인자 수는 안 변한다.
-				_notice("%s 이미 열매를 낸 포기엔 듣지 않는다 — 재결실 주기는 비료로 줄지 않는다"
+				# ★[폴리시 R28 #2] **증명된 것만 단언한다.** 구세이브 백필이 세운 표식은 «되감겼을
+				#   수도, 첫 사이클일 수도»의 추정이라(그 판정식 머리말) 그 칸에 «이미 열매를 냈다»고
+				#   말하면 한 번도 수확한 적 없는 포기를 두고 화면이 거짓을 단언한다. 거절 자체는
+				#   같고(원장 계약 불변) 사유만 갈린다 — 참인 쪽은 «임계가 굳어 있다»다.
+				_notice(("%s 성숙 임계가 굳은 포기엔 듣지 않는다 — 재결실 주기는 비료로 줄지 않는다"
+					if fld.regrow_seal_is_guess(_target)
+					else "%s 이미 열매를 낸 포기엔 듣지 않는다 — 재결실 주기는 비료로 줄지 않는다")
 					% HanjiUi.with_eun(ItemCatalog.name_of(item)))
 			elif fld.fertilize(_target, item):
 				inventory.remove_item(item, 1)
@@ -16050,6 +16147,15 @@ func _use_tool() -> void:
 	elif item == ItemCatalog.SCYTHE and _region == RegionCatalog.HOME and forage.is_grown(_target):
 		# ★ [B1-a.3] 든 낫으로 조준 칸의 다 자란 사료풀을 벤다 → 여물광에 건초 +1(가득/초과 시 소멸, Q7).
 		#   낫은 개간(debris)에도 쓰이지만 사료풀 분기를 먼저 둬(둘은 좌표가 안 겹침) 풀 위에선 베기가 잡힌다.
+		# ★[폴리시 R28 #13] **적재先 규율**을 여물광 상한에도 세운다 — 같은 함수·같은 낫의 형제
+		#   갈래(잡초 낫질)는 백팩 상한에 이미 «가득 차 벨 수 없다»로 선거절하는데 여기만 그 표
+		#   밖이었다. 240/240에서 베면 혼력을 물고(`verb`가 서므로 아래 `energy.spend`가 돈다) 그
+		#   풀 타일이 3일(성야절이면 절기 끝까지 — `forage.advance_day`가 겨울엔 재생을 멈춘다)
+		#   소진되는데 건초는 0단이다. 여물광이 가득한 상태는 겨울 대비로 쌓아 둔 정상 플레이라
+		#   상시 도달 가능하고, 잃는 것이 되돌릴 수 없는 재생 노드라 손해가 백팩보다 무겁다.
+		if ranch.silo_full():
+			_notice("여물광이 가득하다 (%d/%d단) — 급여로 비우고 다시" % [ranch.silo_hay(), Ranch.SILO_CAP])
+			return
 		if forage.cut(_target, clock.day):
 			var stored := ranch.store_hay(1)
 			verb = "풀베기"
@@ -18925,6 +19031,14 @@ func _animal_prompt(t: Vector2i) -> String:
 			todo.append("청소")
 		if todo.is_empty():
 			return "%s 호감 %d — 오늘 돌봄 완료" % [label, hearts]
+		# ★[폴리시 R28 #3] **가리키는 창구가 실제로 그 일을 할 수 있는가.** 이 줄이 못 박는 수행처
+		#   (실내 빈 칸 [우클릭])의 급여 집행부는 `feed_from_silo_in`이고 첫 줄이 `if _silo_hay <= 0:
+		#   break`라, 여물광이 비면 한 마리도 못 먹인다. 같은 프레임의 형제 창구(15515행)는 이미 그
+		#   잔량을 선고지하는데(«누르고 나서 알 일이 아니다») 이 줄만 안 봐서, 두 프롬프트가 서로를
+		#   반박하고 지시대로 눌러도 급여는 0마리였다. 청소는 그대로 되므로 창구는 계속 가리킨다.
+		if not ranch.is_fed(t) and ranch.silo_hay() <= 0:
+			return "%s 호감 %d — 오늘 %s 남음 (실내 빈 칸에서 [우클릭] · 여물광이 비어 급여 불가)" % [
+				label, hearts, "·".join(PackedStringArray(todo))]
 		return "%s 호감 %d — 오늘 %s 남음 (실내 빈 칸에서 [우클릭])" % [
 			label, hearts, "·".join(PackedStringArray(todo))]
 	# ★[폴리시 R10] 혼력 게이트 안내 — 위 두 동사는 **둘 다 과금**이고(산물 수집·쓰다듬 = `_try_harvest`
@@ -19006,7 +19120,15 @@ func _farm_prompt() -> String:
 	#   화면은 "혼력 부족 — 집에서 취침"인데 LMB는 그대로 먹혔다(하루 마지막 한 동작 구간에서
 	#   HUD가 막혔다고 거짓말한다). 오차는 늘 한 방향이라(cost ≤ 10) 프롬프트만 엄격했다.
 	var farm_cost := _farming_energy_cost()
-	if _region == RegionCatalog.HOME:
+	# ★[폴리시 R28 #4] **무대 술어는 디스패치와 같은 하나다.** 종전엔 `_region == HOME` 한 항만 봐서
+	#   `_indoor` 축이 통째로 빠졌는데, 집행 두 창구는 예외 없이 실내를 배제한다
+	#   (`_orchard_plant_dispatch`·`_orchard_harvest_dispatch_at`이 둘 다 `_indoor != ""`에서 false).
+	#   집 방 바닥(HOUSE)은 `WORLD_SOLID_TILES` 밖이라 `orchard.can_plant`가 통과하고, 그래서 새 게임
+	#   시작 인벤(혼백도 묘목 2개)으로 방 한복판을 겨누면 「[좌클릭] … 묘목 심기 (3×3)」이 뜨는데
+	#   좌클릭은 **`_use_tool`에 닿지도 못했다**(실내에선 `_target_valid`·무기·화분·free_use가 전부
+	#   거짓이라 게이트 자체가 안 열린다) — 알림 한 줄 없는 완전 무동작. 두 축을 각각 그 창구의
+	#   술어로 갈라 물으면 화면과 동작이 같은 표를 쓴다.
+	if _orchard_harvest_dispatch_at(_target):
 		var anchor := orchard.tree_at(_target)
 		# ★[폴리시 R21 #4] **동사가 성립하는지 먼저 보고 혼력은 그 다음이다.** 종전엔 두 갈래 다
 		#   혼력을 맨 위에서 물어, *막을 동사가 애초에 없는* 자리에서도 "혼력 부족"이라 거짓 사유를
@@ -19017,22 +19139,20 @@ func _farm_prompt() -> String:
 		#   위에 세운 자리)이자, 바로 아래 밭 갈래들이 이미 지키는 순서다(괭이질·물주기는 칸 상태를
 		#   먼저 본다). 혼력 줄은 **실제로 그 동사가 서는 갈래에만** 남는다(둘 다 과금 동사다 —
 		#   `_try_harvest`의 과수 가지·`_use_tool`의 묘목 가지가 각각 `energy.spend`를 낸다).
-		if orchard.has_tree(anchor):
-			var n := orchard.fruit_count_of(anchor)
-			if orchard.is_mature(anchor, clock.day) and n > 0:
-				if not energy.can_act(farm_cost):
-					return "혼력 부족 — 집에서 취침"
-				return "[우클릭] 혼의 나무 수확 (%d개)" % n
-			return ""   # 아직 안 자랐거나 결실 없음 — 조용히(비제철/성장 중)
-		var held := inventory.selected_id()
-		if ItemCatalog.category_of(held) == ItemCatalog.CAT_SAPLING:
-			var fruit := ItemCatalog.fruit_of(held)
-			if inventory.has_sapling(fruit):
-				if not orchard.can_plant(_target, _is_tree_blocked):
-					return "여기엔 못 심음 — 3×3 빈 자리 필요"
-				if not energy.can_act(farm_cost):
-					return "혼력 부족 — 집에서 취침"
-				return "[좌클릭] %s 묘목 심기 (3×3)" % FruitTreeCatalog.name_of(fruit)
+		var n := orchard.fruit_count_of(anchor)
+		if orchard.is_mature(anchor, clock.day) and n > 0:
+			if not energy.can_act(farm_cost):
+				return "혼력 부족 — 집에서 취침"
+			return "[우클릭] 혼의 나무 수확 (%d개)" % n
+		return ""   # 아직 안 자랐거나 결실 없음 — 조용히(비제철/성장 중)
+	if _orchard_plant_dispatch():
+		var fruit := ItemCatalog.fruit_of(inventory.selected_id())
+		if inventory.has_sapling(fruit):
+			if not orchard.can_plant(_target, _is_tree_blocked):
+				return "여기엔 못 심음 — 3×3 빈 자리 필요"
+			if not energy.can_act(farm_cost):
+				return "혼력 부족 — 집에서 취침"
+			return "[좌클릭] %s 묘목 심기 (3×3)" % FruitTreeCatalog.name_of(fruit)
 	# ★[S10-T5] 화분 안내 — 밭 프롬프트보다 먼저(동사 우선순위와 같은 순서). `_target_valid`(=SOIL
 	#   여부) 게이트 **위**에 둔다: 화분은 실내 마룻바닥 위에도 서므로 그 칸은 farmable이 아니다.
 	var pot_prompt := _pot_prompt()
@@ -19065,6 +19185,13 @@ func _farm_prompt() -> String:
 			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 괭이질"
 	if item == ItemCatalog.WATERING_CAN and _water_aoe_has_work():
+		# ★[폴리시 R28 #12] **자원은 둘이다** — 물주기는 혼력과 *물통 잔량*을 함께 쓰는데 종전엔
+		#   혼력만 물어, 빈 통(0/cap)으로도 «[좌클릭] 물주기»를 약속했다. 집행부는 반대로
+		#   `_can_water`로 먼저 갈리므로 약속과 결과가 어긋난다(티어 AoE에선 알림조차 없었다 —
+		#   위 `_use_tool` 사유 갈래의 머리말). 형제 창구는 예외 없이 모자란 자원을 **누르기 전에**
+		#   말한다(혼력 아래 줄 · 사료풀 낫질 · 물뿌리개 리필의 "가득 참").
+		if _can_water <= 0:
+			return "물이 없다 — 혼우물·연못에서 채우자"
 		if not energy.can_act(farm_cost):
 			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 물주기"
@@ -19103,7 +19230,11 @@ func _pot_prompt() -> String:
 		return "[우클릭] 수확"
 	if item == ItemCatalog.GARDEN_POT:
 		return "[좌클릭] 화분 회수"
-	if item == ItemCatalog.WATERING_CAN and garden_pot.is_planted(_target) and not garden_pot.is_watered(_target):
+	if item == ItemCatalog.WATERING_CAN and garden_pot.can_water(_target):
+		# ★[폴리시 R28 #12] 노지판과 **같은 두 자원**을 같은 순서로 묻는다(물 → 혼력). 화분도
+		#   같은 `_use_tool` 물뿌리개 갈래를 타므로 빈 통이면 «물이 없다»로 거절당한다.
+		if _can_water <= 0:
+			return "물이 없다 — 혼우물·연못에서 채우자"
 		# ★[폴리시 R7] 물주기는 **과금 동사**다 — 화분 물주기의 실행 경로도 노지와 같은 `_use_tool`
 		#   물뿌리개 갈래라, 혼력이 `_farming_energy_cost()` 미만이면 상단 `can_act` 게이트에
 		#   **알림 하나 없이** 걸린다. 노지 밭(`_farm_prompt`)은 같은 동사에 이 안내를 이미 세워
@@ -21282,6 +21413,15 @@ func _try_buy_animal(species: String) -> bool:
 		# ★[폴리시 R14] 조사 고정 "을" 봉합 — `bld`는 받침이 갈리는 런타임 이름이라("넋둥우리" /
 		#   "넋우릿간") coop 분기에서 "「큰 넋둥우리」을"이 나왔다. R5/R12의 전수 가드 정규식이
 		#   `%s」을`처럼 `」`가 낀 형태를 못 잡던 사각이다(가드 쪽도 함께 좁혔다).
+		# ★[폴리시 R28 #14] **이행할 수 있는 지시만 낸다.** 티어는 둘뿐이고(`TIER_BASE`/`TIER_BIG`)
+		#   목공방 로스터에도 축사 계단은 「큰 …」 하나뿐이라, 이미 승격한 세이브에서 이 줄은
+		#   «이미 지었다»로 되돌아오는 지시였다(그 매대 행을 누르면 `carpenter.is_done` 가드). 최고
+		#   티어에서는 늘릴 방법이 없다는 사실 자체를 말한다 — R26 #9가 장원제에서 봉합한 «그 해에
+		#   이행할 수 없는 지시»의 목축판이다. 티어 판정은 원장 술어를 그대로 본다(수 복제 0).
+		if ranch.tier_of(bld) >= Ranch.TIER_BIG:
+			_notice("%s 정원이 찼다 (%d/%d) — 이미 최대 크기라 더 들일 수 없다"
+				% [bld, ranch.occupancy_of(bld), ranch.capacity_of(bld)])
+			return false
 		_notice("%s 정원이 찼다 (%d/%d) — 목공방에서 「큰 %s」%s 지어야 한다"
 			% [bld, ranch.occupancy_of(bld), ranch.capacity_of(bld), bld, HanjiUi.josa_eul(bld)])
 		return false

@@ -233,6 +233,12 @@ func fertilize_sealed_no_op(t: Vector2i, fert_id: String) -> bool:
 		return false
 	return FertilizerCatalog.state_of(fert_id) == FertilizerCatalog.STATE_NONE
 
+# ★[폴리시 R28 #2] 이 칸의 되감기 표식이 **구세이브 백필의 추정**인가(= 수확 이력으로 증명된
+#   것이 아닌가). 거절 사유를 말하는 쪽(main)이 «이미 열매를 낸 포기»라고 단언해도 되는지를
+#   여기서 묻는다 — 판정은 원장이 알고 말투는 화면이 고른다(`fertilize_sealed_no_op`과 같은 경계).
+func regrow_seal_is_guess(t: Vector2i) -> bool:
+	return is_planted(t) and bool(_tiles[t].get("regrown_guess", false))
+
 # ── S1-6 비료(§8.4) ─────────────────────────────────────────────────────────
 # 경작된 칸(심김/빈칸 무관)에 유효 비료를 뿌린다. 단일 fertilizer 필드라 다른 비료 투입 시 overwrite —
 # XOR가 자연 성립(한 칸에 한 비료). 성공 시 tile_changed·true(비료 소모는 호출 측 main). 미경작·무효 비료면 false.
@@ -299,13 +305,26 @@ func plant(t: Vector2i, crop_id: String) -> bool:
 	#   (`hoe`·`remove_plant`는 dict를 새로 만들어 이미 꺼져 있지만, 여기서도 명시해 표식이
 	#    이전 작물에서 새 작물로 새는 갈래를 원천적으로 없앤다).
 	_tiles[t]["regrown"] = false
+	_tiles[t]["regrown_guess"] = false   # ★[폴리시 R28 #2] 추정 딱지도 함께 꺼진다(새 포기 = 첫 사이클)
 	tile_changed.emit(t)
 	return true
+
+# ★[폴리시 R28 #0] **손 물주기가 이 칸을 실제로 바꾸는가** = 집행과 광고가 함께 보는 한 술어.
+#   R27 #17이 프롬프트를 티어 AoE로 넓히며 세운 판정자(`main._water_aoe_has_work`)는 두 항
+#   (`is_planted and not is_watered`)뿐인데 집행부인 아래 `water()`는 세 항이라, **성숙한 미급수
+#   칸**에서 둘이 갈렸다 — 성숙 칸의 watered는 매 아침 `advance_day`가 false로 되돌리므로 수확 안
+#   한 작물은 상시 그 상태다. 조준 칸이 성숙이면 프롬프트 사슬 위쪽의 "[우클릭] 수확"이 먼저
+#   가로채 0티어에서는 안 보였지만, AoE 이웃 칸이 성숙이면 «[좌클릭] 물주기»를 약속해 놓고
+#   `water()`가 전 칸 false를 돌려줘 혼력·물 소모 0·알림 0의 완전 침묵이 됐다(R27 #17이 봉합한
+#   «업그레이드를 산 플레이어에게만 화면이 거짓말한다»의 방향만 뒤집힌 재발).
+#   조건을 두 곳에 옮겨 적지 않는다 — 술어는 여기 하나다.
+func can_water(t: Vector2i) -> bool:
+	return is_planted(t) and not is_watered(t) and not is_mature(t)
 
 func water(t: Vector2i) -> bool:
 	# 다 자라지 않은, 심은 마른 칸에만 물을 준다(심기 → 물주기 순서 강제).
 	# 물 준 칸만 advance_day에서 자란다.
-	if not is_planted(t) or is_watered(t) or is_mature(t):
+	if not can_water(t):
 		return false
 	_tiles[t]["watered"] = true
 	tile_changed.emit(t)
@@ -359,6 +378,9 @@ func harvest(t: Vector2i) -> String:
 		#   적혔다는 표식이고, `_reseal_need`가 그 자에 base 잔여를 곱해 쿨다운을 명목보다 길게
 		#   늘리는 것을 막는다(그 머리말). 표식은 `plant`·`hoe`·`remove_plant`가 끈다.
 		_tiles[t]["regrown"] = true
+		# ★[폴리시 R28 #2] 여기서 새기는 표식은 **증명된 사실**이다(방금 이 칸에서 거뒀다) —
+		#   구세이브 백필이 남긴 «추정» 딱지를 그 자리에서 걷는다.
+		_tiles[t]["regrown_guess"] = false
 	else:
 		_tiles[t]["planted"] = false
 		_tiles[t]["crop"] = ""
@@ -502,9 +524,18 @@ func load_save(data: Dictionary) -> void:
 		#   끄므로 그 칸을 다시 심는 순간 스스로 낫는다.
 		# ★ cd == 0(비-REGROW 작물)은 애초에 되감기 갈래를 안 타므로 제외한다. 위 `need_days` 백필
 		#   **뒤**에 두는 것이 순서다 — 판정식이 그 값을 읽는다.
+		# ★[폴리시 R28 #2] **추정으로 세운 표식은 추정이라고 적어 둔다.** 위 판정식은 «되감긴 적
+		#   없음이 확정»인 쪽만 제외하므로 그 «나머지»에는 한 번도 열매를 낸 적 없는 첫 사이클 칸이
+		#   섞여 든다(황천포도 base 7·cd 3이면 심은 지 4일째부터, 불사과 base 12·cd 7이면 5일째부터
+		#   전건이 참이다). 원장 판정으로는 그렇게 보는 것이 옳지만(위 근거 — 명목보다 나쁜 결과를
+		#   못 낸다) **화면이 그 추정을 사실로 단언하면 안 된다**: 그 칸에 성장촉진군을 뿌리면
+		#   `fertilize_sealed_no_op`이 참을 돌려주고 main이 «이미 열매를 낸 포기»라 말하는데, 수확
+		#   이력이 세이브에 없으므로 그것은 증명된 사실이 아니다(R23·R24가 세운 표시 정직화 규약).
+		#   표식은 그대로 두고 **말투만** 갈린다 — 실제 수확(`harvest`)이 새기는 표식과 구별한다.
 		if bool(c.get("planted", false)) and not c.has("regrown"):
 			var rc := CropCatalog.regrow_cooldown(str(c.get("crop", "")))
 			var rn := int(c.get("need_days", -1))
 			if rc > 0 and rn >= 0 and int(c.get("grown_days", 0)) >= maxi(0, rn - rc):
 				c["regrown"] = true
+				c["regrown_guess"] = true
 		tile_changed.emit(t)

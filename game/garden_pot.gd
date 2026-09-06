@@ -106,8 +106,13 @@ func plant(t: Vector2i, crop_id: String) -> bool:
 
 # 손 물주기. 심긴·마른·미성숙 화분만(FarmField.water와 같은 사전조건).
 # ★ 이 함수가 화분에 물이 드는 **유일한 경로**다(차별 자구 ㉢ — 스프링클러·비·여우불 경로 없음).
+# ★[폴리시 R28 #0] 밭(`FarmField.can_water`)과 **같은 이름·같은 세 항**의 술어 — 프롬프트가
+#   집행 조건을 다시 적지 않고 이것을 본다(밭판 머리말에 그 사유가 있다).
+func can_water(t: Vector2i) -> bool:
+	return is_planted(t) and not is_watered(t) and not is_mature(t)
+
 func water(t: Vector2i) -> bool:
-	if not is_planted(t) or is_watered(t) or is_mature(t):
+	if not can_water(t):
 		return false
 	_pots[t]["watered"] = true
 	changed.emit()

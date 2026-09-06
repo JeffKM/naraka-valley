@@ -235,6 +235,7 @@ var _fullscreen_rect := Rect2()
 var _set_music := 0.8            # main이 set_settings로 매 프레임 주입(GameSettings 파생 — 읽기 전용 표시)
 var _set_sfx := 0.9
 var _set_fullscreen := false
+var _set_muted := false          # ★[폴리시 R28 #7] 음소거([M]) 현재 상태 — set_settings로 주입
 
 var _hearts: Array = []          # HeartBar 풀(관계 탭 재사용 — ★[S8-T1] 행 수만큼 동적으로 자란다)
 var _heart_effects: Array = []   # ★ C3 각 캐릭터의 관계 곱셈기 효과 줄(여우불·마진·경비·할인)
@@ -363,10 +364,14 @@ func set_skills(rows: Array) -> void:
 
 # ★ Phase D 설정 값 주입(읽기 전용 표시). main이 GameSettings에서 파생해 옵션 탭이 열려 있을 때 넘긴다
 # (_skill_rows·_heart_effects와 대칭 — 프레임은 값을 받아 바·체크박스만 그린다, 무상태).
-func set_settings(music: float, sfx: float, is_fullscreen: bool) -> void:
+# ★[폴리시 R28 #7] `is_muted` = 오디오 버스 음소거([M])의 **현재 상태**. 버스 mute와 volume은
+#   직교라(audio.gd) 볼륨 바 100%가 음소거를 한 글자도 반영하지 않는다 — 그 사실이 이미 두 번
+#   결함 원인으로 인용됐다(「화면에 음소거 표시가 없어 원인을 볼 방법도 없다」).
+func set_settings(music: float, sfx: float, is_fullscreen: bool, is_muted: bool = false) -> void:
 	_set_music = music
 	_set_sfx = sfx
 	_set_fullscreen = is_fullscreen
+	_set_muted = is_muted
 	if context == CTX_MENU and menu_tab == TAB_OPTIONS:
 		queue_redraw()
 
@@ -1177,6 +1182,17 @@ func _draw_options_tab(panel: Rect2, font: Font) -> void:
 		draw_rect(_fullscreen_rect.grow(-4.0), HanjiUi.GOLD)
 	HanjiUi.draw_text(self, Vector2(x + 26.0, sy), "전체화면", 14, HanjiUi.INK_LIGHT)
 	HanjiUi.draw_text(self, Vector2(x + 120.0, sy), "[F11]", 12, HanjiUi.INK_DIM)
+	# ★[폴리시 R28 #7] **음소거 행** — 전체화면과 같은 결(체크박스 = 지금 상태 · 회색 = 키). 종전엔
+	#   [M]이 상시 배선돼 있는데 이 탭에 행 자체가 없어, 실수로 누른 무음을 오디오 고장으로 읽고
+	#   되돌릴 키도 알 수 없었다(볼륨 바는 버스 mute와 직교라 100%를 그대로 그린다).
+	sy += 30.0
+	var mute_box := Rect2(x, sy - 14.0, 18.0, 18.0)
+	draw_rect(mute_box, HanjiUi.INSET)
+	draw_rect(mute_box, HanjiUi.BORDER, false, 1.0)
+	if _set_muted:
+		draw_rect(mute_box.grow(-4.0), HanjiUi.GOLD)
+	HanjiUi.draw_text(self, Vector2(x + 26.0, sy), "음소거", 14, HanjiUi.INK_LIGHT)
+	HanjiUi.draw_text(self, Vector2(x + 120.0, sy), "[M]", 12, HanjiUi.INK_DIM)
 	# 언어(한국어 고정 — 표시만, ADR-0048 §2).
 	sy += 30.0
 	HanjiUi.draw_text(self, Vector2(x, sy), "언어  한국어 (고정)", 12, HanjiUi.INK_DIM)

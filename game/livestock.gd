@@ -494,7 +494,14 @@ static func large_chance(hearts: int) -> float:
 # ── 하루 경과(§4.1 데일리 정산) — 취침 트리거(GameClock.day_advanced) ────────────
 # 각 짐승: ①케어 플래그로 우정·기분 델타 정산(clamp) ②급여했으면 산물 생성(품질=하트·기분 state roll,
 # 대형=P_large) ③케어 플래그 리셋. ⚠️ 절대 짐승 키를 지우지 않는다(비살상 불변식, §4.1).
-func advance_day() -> void:
+# ★[폴리시 R28 #1] `pasture_grazes` = **오늘 방목이 성립하는 날인가**(기본 true = 종전 거동).
+#   아래 R27 #16 이월 두 줄이 날씨를 한 항도 안 봐서, 이 게임의 단일 방목 게이트
+#   (`main._release_open_buildings`의 `Weather.allows_grazing` — 잿눈이면 방출 자체가 없다)
+#   **밖으로 새어 나갔다**: 잿눈 아침에 실내 짐승은 grazed=false인데, 문이 닫힌 채 밖에 갇힌
+#   짐승만 이월로 grazed=true를 받아 그날 밤 F_GRAZE·M_GRAZE를 챙겼다 — «아무도 못 나가는 날»에
+#   고립이 실내 격리보다 우월해지는 자리다. 이 원장 계층은 Weather를 모르므로(그 경계는 유지한다)
+#   판정을 값으로 받아, 방출과 이월이 **같은 하늘**을 본다.
+func advance_day(pasture_grazes: bool = true) -> void:
 	if _animals.is_empty():
 		return
 	_settle_no += 1                 # ★[폴리시 R5] 이 밤의 롤 시드 축(세이브가 든다 — 선언부 참조)
@@ -537,7 +544,9 @@ func advance_day() -> void:
 		#   답했고, 문이 닫힌 채 지나는 **매일** F_GRAZE·M_GRAZE가 조용히 몰수됐다.
 		#   설계가 명시한 고립 페널티는 야간 노출(M_NIGHT_EXPOSED) 하나뿐이다(56·361행) — 주간
 		#   방목 가산까지 뺏는 것은 그 계약 밖이다. 원장이 자기 위치와 어긋나지 않게 한다.
-		if str(a.get("location", LOC_INDOOR)) == LOC_PASTURE:
+		#   ★[폴리시 R28 #1] 단, **오늘이 방목이 성립하는 날일 때만**이다(머리말) — 잿눈 아침엔
+		#     아무도 안 나가므로 밖에 갇힌 짐승도 그날의 방목 가산을 받지 않는다.
+		if pasture_grazes and str(a.get("location", LOC_INDOOR)) == LOC_PASTURE:
 			a["grazed"] = true
 	changed.emit()
 
