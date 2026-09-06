@@ -332,8 +332,17 @@ func _run_checks() -> void:
 		guard.patience_ratio(1) < pat0)
 
 	# auto_block 계약이 세션 활성 중에도 그대로 — 못 막은 돌파를 바나가 대신 막고 약탈 0.
+	# ★[폴리시 R26 #0] **소비처 없는 맨몸 NightBar는 약탈을 집계하지 않는다.** R25 #17이 집계를
+	#   두 걸음으로 갈라(노드는 계약만 쏘고, 실손실은 소비처가 `record_raid`로 되돌려 준다) 이
+	#   무대의 유일한 소비처가 `seen`에 담기만 했다 — 그래서 아래 ⓔe의 `tonight_raided()` 항이
+	#   0으로 남아 red였다. 프로덕션 계약(단일 출처 = 인벤토리)은 그대로 두고, 형제 하네스인
+	#   night_bar_test `_stock_full`과 **같은 문법으로** «재고가 넉넉한 소비처»를 흉내 낸다
+	#   (요구량 전량이 확정되는 무대 = R25 이전과 같은 수치).
 	var seen: Array = []
-	guard.resolved.connect(func(r): seen.append(r))
+	guard.resolved.connect(func(r):
+		seen.append(r)
+		if not bool(r.get("repelled", false)):
+			guard.record_raid(int(r.get("raided", 0))))
 	guard._auto_blocks_left = 1
 	guard._spots[2] = {"active": true, "approach": 0.05, "max_approach": 5.0}
 	var raided_before := guard.tonight_raided()

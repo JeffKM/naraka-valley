@@ -11473,6 +11473,27 @@ func _grange_entries() -> Array:
 # ★[폴리시 R5] 반환값 = **이 [F]로 출품이 실제로 성립했는가**. false면 호출부가 평소의 적재 패널로
 #   흘려보낸다(위 디스패치 머리말 — 행사일에 곳간이 봉쇄되던 자리). 안내 문구는 그대로 뜬다:
 #   "왜 출품 화면이 아니라 적재 화면인가"를 그 한 줄이 설명한다.
+# ★[폴리시 R26 #9] 이 등급의 부상이 **지금 백팩에 다 들어가는가**(부상 없는 등급이면 늘 true).
+#   장원만 물건을 준다 — 품질 비료 5 + (아직 못 받았다면) 레어크로우 ⑦. 둘을 **누적으로** 세야
+#   하므로 `can_add`(합침·빈 슬롯을 한 bool로 뭉친다)를 두 번 부르는 대신, 형제 창구
+#   `_letter_attachment_fits`가 세운 문법을 그대로 쓴다: 빈 슬롯 수를 세고 «기존 스택에 합쳐지는
+#   것»만 면제한다(그 술어는 (id, 품질) 정확 일치인 `has_stack` — R20 #9가 봉합한 그 축).
+#   ★ 레어크로우는 비-스택이라 언제나 빈 슬롯 한 칸을 먹는다. 이미 가지고 있으면(어디든 —
+#     `_award_event_rarecrow`가 보는 그 두 술어) 애초에 안 주므로 자리도 안 센다.
+func _grange_awards_fit(rank: int) -> bool:
+	if inventory == null or rank < SeasonalEvent.GRANGE_TIER_NAMES.size() - 1:
+		return true
+	var free := 0
+	for i in range(inventory.slots.size()):
+		if inventory.id_at(i) == "":
+			free += 1
+	if not inventory.has_stack(FertilizerCatalog.FERT_QUALITY):
+		free -= 1                      # 합칠 스택이 없다 = 빈 슬롯 한 칸을 먹는다
+	var crow := SeasonalEvent.GRANGE_RARECROW
+	if not (seasonal_event.has_bought(crow) or _rarecrow_owned(crow)):
+		free -= 1                      # 레어크로우는 유니크 — 늘 새 칸
+	return free >= 0
+
 func _try_grange_entry() -> bool:
 	if seasonal_event == null or clock == null or larder == null:
 		return false
@@ -11485,6 +11506,22 @@ func _try_grange_entry() -> bool:
 		return false
 	var score := SeasonalEvent.score_entries(entries)
 	var rank := SeasonalEvent.grange_rank(score)
+	# ★[폴리시 R26 #9] **기회를 소비하기 전에 자리를 묻는다.** 종전엔 `record_grange`가 맨 앞에
+	#   있어 «차감(연 1회 래치) 後 · 거절 前»이 됐다: 백팩이 꽉 찬 채 장원이 나오면 품질 비료 5는
+	#   그 자리에서 증발하고, 레어크로우 ⑦(획득처가 이 창구 하나뿐)은 다음 해까지 잠겼다. 게다가
+	#   그 알림은 「자리를 비우고 **다시 오자**」라고 지시하는데, 같은 날 다시 [F]를 누르면 위
+	#   `grange_entered` 가드가 「이미 마쳤다」로 되돌려 보내 **그 해에 이행할 수 없는 지시**였다.
+	#   같은 파일의 형제 지급 창구는 예외 없이 반대 순서다 — `_claim_museum_milestones`·
+	#   `_claim_firefly_milestones`(적재 실패 시 claim 안 함) · `_on_frame_mastery`(머리말 「적재
+	#   먼저·기록 나중」) · `_read_next_letter`(열기 **전에** `_letter_attachment_fits`) ·
+	#   `_try_derby_exchange`(머리말 「지급이 성공한 뒤에 태그를 소비한다」). 이 함수만 밖에 있었다.
+	#   ★ 지급을 먼저 하고 실패 시 무래치로 빠지는 쪽은 **안 된다**: 비료만 들어가고 레어크로우가
+	#     막히면 래치 없이 되돌아가 다음 [F]에서 비료를 또 받는다(복제). 그래서 선검사다.
+	#   ★ false 반환 = 이 [F]가 출품이 아니었다 → 호출부가 평소의 곳간 적재 패널로 흘려보낸다
+	#     (위 R5 머리말의 그 계약). 마침 그 패널이 백팩을 비우는 창구라 지시와 화면이 맞물린다.
+	if not _grange_awards_fit(rank):
+		_notice("가방이 가득 차 장원 부상을 받을 수 없다 — [Tab] 가방에서 자리를 비우고 다시 오자")
+		return false
 	seasonal_event.record_grange(clock.day, rank)
 	var gold := SeasonalEvent.grange_gold(rank)
 	if gold > 0:
@@ -12634,8 +12671,18 @@ func _load_game() -> bool:
 		energy.load_save(data["energy"])
 	if data.has("farm"):
 		farm.load_save(data["farm"])
-	if data.has("greenhouse"):   # ★[S10-T5] — 키 없는 구세이브는 늘봄방 경작 0(빈 밭). 건물 자체는
-		greenhouse_farm.load_save(data["greenhouse"])   # carpenter의 done 목록이 들므로 여기선 밭만 복원한다
+	# ★[폴리시 R26 #4] **`has` 가드를 걷는다** — 아래 R13/R24 클러스터가 명문화한 판별식
+	#   («부팅으로 시드되는가 — 아니면 `.get(키, {})`로 무조건 되감는다»)의 마지막 잔여였다.
+	#   `greenhouse_farm`을 채우는 것은 오직 플레이어의 괭이질·파종이고 부팅 시드가 없다(생성은
+	#   빈 `FarmField.new()` 하나뿐이며 `_refresh_greenhouse`는 이 밭을 한 글자도 안 건드린다).
+	#   가드가 남아 있으면 늘봄방을 지은 세션에서 그 키가 없는 구세이브를 F9로 읽을 때
+	#   `load_save`가 아예 안 불려 **직전 타임라인의 경작면이 통째로 살아남고**, 이어지는 취침의
+	#   `_save_or_warn()`이 그 밭을 그 파일에 굳혔다 — 늘봄방을 지은 적 없는 세계(`carpenter`는
+	#   무가드로 되감긴다)에서 매 아침 `advance_day`가 작물을 키우고 수확까지 됐다.
+	#   ★ «키 없는 구세이브 = 빈 밭»이라는 이 줄의 종전 계약은 그대로다: `FarmField.load_save`가
+	#     첫 줄에서 `_tiles`를 통째로 갈아끼우므로 빈 dict가 곧 그 뜻이다. 같은 슬라이스의 쌍둥이
+	#     `garden_pot`(12651)이 이미 이 문법으로 서 있다.
+	greenhouse_farm.load_save(data.get("greenhouse", {}))   # ★[S10-T5] 늘봄방 경작면(건물 자체는 carpenter의 done 목록이 든다)
 	# ★[폴리시 R24 #16·#17] **설치·배치 원장 일곱도 `has` 가드를 걷는다**(아래 R13 클러스터의 잔여).
 	#   판별식은 그 클러스터가 명문화한 그대로 "부팅으로 시드되는가"다 — 이 일곱은 전부 플레이가
 	#   놓은 델타이고 부팅 시드가 없다(맵에서 다시 까는 `forage`·`flower_patch`·`forage_spawn`·
@@ -26314,6 +26361,23 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 	#   저쪽은 완공이 덮는 것이고 이쪽은 **되돌릴 창구가 orchard에 아예 없다**(remove API 0).
 	if _traversal_reserved(t):
 		return true
+	# ★[폴리시 R26 #8] **건물 문·퇴장 착지 칸도 나무에 성역이다** — 바로 윗줄이 구역 워프에 세운
+	#   그 논거가 건물 출입에 1:1로 성립하는데 반쪽만 채워져 있었다. `_maybe_toggle_building`은
+	#   `var t := _player_tile()` 뒤 `t == b["ext_door"]`로 판정하므로 워프와 똑같이 **그 칸에
+	#   실제로 서야만** 발동하고, 퇴장은 `_transition_to("", ib["out_tile"])` → `_warp`의
+	#   `player.position = _tile_center_px(dest_tile)`로 착지 칸 **정중앙에 강제 배치**한다
+	#   (`_traversal_reserved`의 dest 항과 같은 문장).
+	#   왜 지금까지 안 터졌나 — 다른 다섯 채는 문이 외관 rect 중앙이라 3×3 풋프린트 윗줄이 언제나
+	#   facade WALL을 물어 아래 `is_solid`가 거절했다(실측: 문·착지 칸 12개 중 11개가 `can_plant`
+	#   false). 넋둥우리만 «coop 문=우측 배치» 주석대로 문이 rect 동단에 붙어 동쪽 한 열이 facade
+	#   밖 GROUND라, 착지 칸 (13,16) 앵커의 아홉 칸이 전부 PATH/GROUND였다 — 즉 그 열한 칸은
+	#   규칙이 막은 게 아니라 **우연히** 막힌 것이고, 이 줄이 그 우연을 규칙으로 바꾼다.
+	#   결과가 비가역이라 더 그렇다: 밑동이 서면 문이 매번 SOLID 한복판으로 뱉는데 orchard에
+	#   제거 창구가 없고(R19 #7·R22 #6·R23 #19가 세 번 인용한 사실) 앵커가 SOLID라 배치 가드
+	#   전량이 그 칸을 거절한다.
+	#   ★ 좌표 복제 0 — `_buildings` 표에서 파생한다(문이 옮겨 가면 성역도 따라 움직인다).
+	if _building_door_reserved(t):
+		return true
 	# ★[폴리시 R5] 늘봄방 예정지는 나무에도 예약 부지다 — R4가 설치물 셋만 막고 여기를 비워 둬,
 	#   완공이 3×3 과수를 통째로 벽 밑에 묻을 수 있었다(설치물과 달리 회수 수단조차 없다).
 	if _greenhouse_lot_reserved(t):
@@ -26342,6 +26406,23 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 	#     갈래보다 앞이라 밑동 밑에서도 그대로 걷힌다(구세이브 탈출구가 닫히지 않는다).
 	if _installation_at(t):
 		return true
+	# ★[폴리시 R26 #5] **자체 파종 원장 칸도 나무에 성역이다.** 배치 가드 셋(`_can_place_sprinkler`
+	#   16658 · `_can_place_furnace` 17297 · `_can_place_crystalarium` 17853)은 예외 없이
+	#   `_tree_occupied_at`을 드는데 과수 술어만 그 한 줄이 없었다 — 그 술어의 머리말이 존재 이유를
+	#   직접 적는다(「`_sync_tree_tile`은 숲 구역에서만 그리드를 만지므로 파종목 칸의 `_grid`는
+	#   GROUND 그대로고, `_home_occupied_tiles()`는 원장을 한 줄도 안 본다」). 그래서 밤새 마당에
+	#   돋은 나무 칸에 묘목을 겨누면 아래 `is_solid`도 통과해 그대로 심겼고, 한 칸을 TreeLedger와
+	#   Orchard 두 원장이 동시에 쥔 채 `_rebuild_prop_collision`(풀타일)과
+	#   `_rebuild_orchard_collision`(밑동)이 같은 칸에 콜라이더를 세웠다.
+	#   ★ 반대 방향은 이미 서 있어 **가드가 단방향이었다** — `_is_tree_seed_free`의
+	#     `t in orchard.trunk_tiles()`가 그 짝이고, 하필 이쪽이 비가역이다(orchard에 remove API 0 —
+	#     R19 #7·R22 #6·R23 #19가 세 번 인용한 그 사실).
+	#   ★ 표시 축도 같이 되돌아온다: 겹친 칸에서는 프롬프트 사슬의 벌목 안내(15443)가 먼저 잡고
+	#     return해, 사슬 맨 끝의 과수 수확 안내가 영영 도달하지 않았다(결실이 익어도 화면은 벌목만
+	#     말한다). 겹침이 생기지 않으면 그 갈림도 생기지 않는다.
+	#   ★ 숲 구역에서는 실효 분기가 아니다(그쪽 그리드는 이미 SOLID라 아래 줄에서 걸린다).
+	if _tree_occupied_at(t):
+		return true
 	if is_solid(_grid[t.y][t.x]):
 		return true
 	return farm.is_crop_solid(t)
@@ -26363,6 +26444,25 @@ func _traversal_reserved(t: Vector2i) -> bool:
 			if String(w["to"]) == _region and w["dest"] != RegionCatalog.TILE_TBD \
 					and Vector2i(w["dest"]) == t:
 				return true
+	return false
+
+# ★[폴리시 R26 #8] 이 칸이 **건물 출입의 병목**인가 — 지금 무대의 건물 표에서 (㉠ 외관 문
+#   ext_door ㉡ 2칸 문의 짝 ext_door2 ㉢ 퇴장 착지 칸 out_tile) 셋을 든다. 위
+#   `_traversal_reserved`의 건물판이고 근거 문장도 그대로다: 문은 그 칸에 서야 발동하고, 착지
+#   칸은 좌표가 강제되므로 둘 다 «막히면 되돌릴 수 없는 통행 칸»이다.
+#   ★ 실내 좌표(in_tile·door)는 안 든다: 심기 무대가 `_indoor == ""`인 야외라 실내 밴드 칸은
+#     겨눌 수 없고, 안 쓰는 칸을 성역으로 넓히면 규칙이 자기 근거를 잃는다.
+#   ★ 표는 완공에 따라 자란다(늘봄방은 지어진 뒤에야 행이 선다) — 그 시점부터 자동으로 성역이다.
+#   ★ 막는 것은 **새로 심는 것**뿐이다: 이미 선 밑동은 각자의 창구가 그대로 걷는다.
+func _building_door_reserved(t: Vector2i) -> bool:
+	for id in _buildings:
+		var b: Dictionary = _buildings[id]
+		if b.get("region", "") != _region:
+			continue
+		if t == b["ext_door"] or t == b["out_tile"]:
+			return true
+		if b.has("ext_door2") and t == b["ext_door2"]:
+			return true
 	return false
 
 # ★ [S1-8 §10.2] 조준 타일에 아직 안 치운 debris가 있으면 그 DebrisCatalog kind, 없으면 "". 배치는
@@ -27971,8 +28071,13 @@ func _draw_furnaces() -> void:
 			draw_rect(mouth, Color(0.78, 0.28, 0.12))                     # 제련 중 = 붉은 불
 			draw_rect(Rect2(base + Vector2(11, 18), Vector2(TILE - 22, TILE - 28)), Color(0.98, 0.62, 0.20))
 			# 남은 시간 눈금 — 익을수록 아래 띠가 찬다(진행이 화면에 보인다·광맥 타수 눈금과 같은 결).
-			var ore := furnace.ore_at(_region, t)
-			var total := maxi(FurnaceLedger.smelt_minutes(ore, smelt_time_cut()), 1)
+			# ★[폴리시 R26 #6] 분모는 **그 제련물이 투입 시점에 굳힌 총 분**이다(종전엔
+			#   `smelt_minutes(ore, smelt_time_cut())`로 매 프레임 다시 팠다). `left`는 투입 시점
+			#   스냅샷인데 분모만 살아 있는 퍼크를 봐서, 제련 중에 [제련공](−50%)을 고르면
+			#   `total`이 `left` 밑으로 내려가 `w`가 음수가 됐다 — `draw_rect`가 음수 폭으로 불려
+			#   띠가 서쪽 이웃 칸으로 뻗거나 사라졌고, 음수까지 안 가는 구간에서도 비율이 실제
+			#   진행의 절반을 그렸다. 이제 분자·분모가 같은 순간의 같은 값에서 온다.
+			var total := maxi(furnace.minutes_total(_region, t), 1)
 			var left := furnace.minutes_left(_region, t)
 			var w := float(TILE - 10) * float(total - left) / float(total)
 			draw_rect(Rect2(base + Vector2(5, TILE - 6), Vector2(w, 3)), Color(0.92, 0.72, 0.32))

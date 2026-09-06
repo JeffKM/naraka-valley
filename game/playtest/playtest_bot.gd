@@ -340,6 +340,27 @@ func _run_night(night: NightBar, inv: Inventory, bana_hearts: int) -> Dictionary
 	night.raid_amount = BanaGuard.raid_amount(bana_hearts)    # ♡↑ → 약탈량↓(하한 1)
 	night.auto_block = BanaGuard.auto_block(bana_hearts)      # ♡↑ → 못 막은 돌파 N마리 대신 막음
 	night.patience_secs = BanaGuard.patience_secs(bana_hearts)  # ♡↑ → 손님 인내심↑(이탈↓)
+	# ★[폴리시 R26 #1] **약탈 소비처를 봇도 세운다.** R25 #17이 집계를 두 걸음으로 갈라 노드는
+	#   계약(`resolved`)만 쏘게 됐는데, 이 하네스는 main을 안 세우고 NightBar를 직접 굴리므로
+	#   `resolved`를 받는 주체가 0이었다 — `tonight_raided()`가 21일 내내 0이 되어 밭→재고→약탈
+	#   사슬(ADR-0010 이중 손실 ㉮)이 시뮬에서 통째로 사라지고, 러너는 실패 없이 수치만 거짓이
+	#   됐다(옵트인한 날의 `raid_actual_cum == 0`이 «옵트아웃은 손실 0» 항을 공허하게 참으로).
+	#   main `_on_night_resolved`와 **같은 순서**로 흉내 낸다: 요구량을 재고에서 있는 만큼만
+	#   덜어내고(`_deduct_raid`), 그 실손실을 `record_raid`로 되돌린다.
+	#   ★ 누적은 Dictionary에 담는다 — GDScript 람다는 지역 정수를 **값으로 캡처**해 `+=`가 밖으로
+	#     안 샌다(참조형인 dict만 바깥과 같은 장부다).
+	#   ★ 이 NightBar는 21일을 재사용하므로 밤이 끝나면 반드시 끊는다(안 끊으면 핸들러가 날마다
+	#     쌓여 한 돌파가 N번 차감된다).
+	var tally := {"attempted": 0}
+	var sink := func(r: Dictionary) -> void:
+		if bool(r.get("auto", false)) or bool(r.get("repelled", false)):
+			return                                  # 바나 자동 차단·내 막기 = 손실 0
+		var want: int = int(r.get("raided", 0))
+		if want <= 0:
+			return
+		tally["attempted"] = int(tally["attempted"]) + want
+		night.record_raid(_deduct_raid(inv, want))
+	night.resolved.connect(sink)
 	night.open_bar(float(NightBar.OPEN_MIN))
 	var served := 0
 	var revenue := 0
@@ -374,10 +395,11 @@ func _run_night(night: NightBar, inv: Inventory, bana_hearts: int) -> Dictionary
 				cooldown = spent
 				last_kind = best_kind
 		minutes += WINDOW_STEP * GAME_MIN_PER_REAL_SEC
-	# 못 막은 돌파가 노린 약탈량(바나 자동차단·약탈량↓ 반영된 값). main처럼 낮 재고에서 그만큼 차감.
-	var attempted: int = night.tonight_raided()
-	var actual := _deduct_raid(inv, attempted)
-	return {"served": served, "revenue": revenue, "raid_attempted": attempted, "raid_actual": actual}
+	# 못 막은 돌파가 노린 약탈량(바나 자동차단·약탈량↓ 반영된 값) vs 실제로 빠진 개수. 차감은 이미
+	# 위 소비처가 돌파마다 했고, `tonight_raided()`는 그 실손실의 누적이다(단일 출처 = 인벤토리).
+	night.resolved.disconnect(sink)
+	return {"served": served, "revenue": revenue,
+		"raid_attempted": int(tally["attempted"]), "raid_actual": night.tonight_raided()}
 
 
 # ── 밭 정책 헬퍼(T4.4 그대로) ───────────────────────────────────────────────
