@@ -116,6 +116,26 @@ func _ui_line_count(needle: String) -> int:
 			n += 1
 	return n
 
+# ★[폴리시 R27 #1] inv_frame 소스에서 **그 함수 몸통 안에** 이 줄이 있는가 — 위 `_in_func`의 UI
+#   소스 판이다. 종전 ③d·③e는 파일 전체에서 니들 개수가 2인지만 셌는데, R25 #14가 출하함 패널을
+#   (id,등급) 행 축으로 갈면서 그 패널의 목록 이름이 `ids` → `rows`로 바뀌자 카운트가 1로 떨어져
+#   **계약은 그대로인데 증인만 빨개졌다**. 니들을 패널별로 그 패널이 실제로 쓰는 이름과 함께 걸면
+#   축이 또 갈려도 «어느 패널이 무엇을 잃었나»를 그 자리에서 말한다(카운트는 그것을 못 말한다).
+func _ui_in_func(fn_needle: String, needle: String) -> bool:
+	var head := -1
+	for i in _ui_src.size():
+		if _ui_src[i].contains(fn_needle):
+			head = i
+			break
+	if head < 0:
+		return false
+	for i in range(head + 1, _ui_src.size()):
+		if _ui_src[i].begins_with("func "):
+			return false
+		if _ui_src[i].contains(needle):
+			return true
+	return false
+
 func _notice_has(m: Node, needle: String) -> bool:
 	if m.notice_feed == null:
 		return false
@@ -318,10 +338,15 @@ func _initialize() -> void:
 			unreachable.append(String(bin_ids[i]))
 	_check("③c 어떤 품목도 창 밖에 갇히지 않는다(도달 불가: %s)" % str(unreachable),
 		unreachable.is_empty())
-	_check("③d 그리기가 스크롤 위치를 실제로 반영한다 — 두 패널 모두 `ids[_top_scroll + i]`로 색인한다",
-		_ui_line_count("ids[_top_scroll + i]") == 2)
-	_check("③e 스크롤은 그리기 시점에 클램프된다(휠 핸들러는 ±1만 — 매대 리스트와 같은 규율)",
-		_ui_line_count("_top_scroll = clampi(_top_scroll, 0, maxi(0, ids.size() - max_rows))") == 2)
+	# ★[폴리시 R27 #1] 두 패널의 목록 축이 갈렸다(출하함 = R25 #14의 (id,등급) `rows` · 곳간 = `ids`).
+	#   계약은 그대로 «두 패널 다 스크롤 위치로 색인하고, 그리기 시점에 **자기 목록의 행 수**로
+	#   클램프한다»이므로, 패널 몸통마다 그 패널이 쓰는 이름으로 짚는다.
+	_check("③d 그리기가 스크롤 위치를 실제로 반영한다 — 출하함은 `rows[_top_scroll + i]` · 곳간은 `ids[_top_scroll + i]`",
+		_ui_in_func("func _draw_bin_top", "rows[_top_scroll + i]")
+			and _ui_in_func("func _draw_larder_top", "ids[_top_scroll + i]"))
+	_check("③e 스크롤은 그리기 시점에 **그 패널 자신의 행 수**로 클램프된다(휠 핸들러는 ±1만 — 매대 리스트와 같은 규율)",
+		_ui_in_func("func _draw_bin_top", "_top_scroll = clampi(_top_scroll, 0, maxi(0, rows.size() - max_rows))")
+			and _ui_in_func("func _draw_larder_top", "_top_scroll = clampi(_top_scroll, 0, maxi(0, ids.size() - max_rows))"))
 	# 휠 라우팅 — 두 컨텍스트 모두 `_backpack_visible()`이 참이라, 분기가 없으면 백팩만 굴렀다.
 	var panel: Rect2 = m.frame._panel_rect()
 	var area: Rect2 = m.frame.top_list_area(panel)

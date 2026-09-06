@@ -485,4 +485,26 @@ func load_save(data: Dictionary) -> void:
 			var b := CropCatalog.growth_days(str(c.get("crop", "")))
 			if b >= 0:
 				c["need_days"] = _sealed_need(b, str(c.get("fertilizer", "")))
+		# ★[폴리시 R27 #9] **되감기 표식 백필 — 임계를 해석하는 «자[尺]»의 축이다.** 바로 위 한 줄은
+		#   `need_days`(임계)만 복구하는데, 그 임계를 어느 자로 읽어야 하는지는 `regrown`이 정한다.
+		#   `regrown`은 R22가 `harvest`의 REGROW 갈래에 새로 심은 키라 그 이전 파일의 되감긴 칸엔
+		#   아예 없고, 그러면 `_reseal_need`의 봉인 가지가 전건 거짓으로 통과해 **임계의 자로 적힌
+		#   grown 위에 base 잔여를 곱하는** 마지막 줄이 돈다 — R22 #2가 「어떤 순수 경로보다 나쁜
+		#   결과는 계약이 아니라 결함이다」라고 이름 붙인 그 자리다(불사과 base 12·cd 7을 하이퍼로
+		#   심어 한 번 수확한 칸에 디럭스를 뿌리면 재결실이 10일 = 무비료 명목 7일보다 길어진다).
+		#   같은 세이브에서 `fertilize_sealed_no_op`도 false를 돌려줘 R23이 닫은 창구가 함께 열린다.
+		# ★ 표식을 «세이브에서 되찾을» 수는 없으므로(수확 이력이 파일에 없다) **증명 가능한 한쪽만
+		#   판정한다**: 되감기 칸의 grown은 언제나 `maxi(0, need - cd)`에서 출발해 자라므로
+		#   `grown < need - cd`인 칸은 **되감긴 적이 없음이 확정**이라 손대지 않는다. 그 밖은 되감기일
+		#   수도 첫 사이클일 수도 있는데, 둘 중 «되감기로 본다»만이 명목보다 나쁜 결과를 못 낸다
+		#   (봉인 = 임계 불변). 첫 사이클을 그렇게 봐도 손해는 «성장촉진이 이 칸엔 안 먹는다» 한 번
+		#   뿐이고 그마저 아이템을 안 태우며(R23의 거절 창구), `plant`·`hoe`·`remove_plant`가 표식을
+		#   끄므로 그 칸을 다시 심는 순간 스스로 낫는다.
+		# ★ cd == 0(비-REGROW 작물)은 애초에 되감기 갈래를 안 타므로 제외한다. 위 `need_days` 백필
+		#   **뒤**에 두는 것이 순서다 — 판정식이 그 값을 읽는다.
+		if bool(c.get("planted", false)) and not c.has("regrown"):
+			var rc := CropCatalog.regrow_cooldown(str(c.get("crop", "")))
+			var rn := int(c.get("need_days", -1))
+			if rc > 0 and rn >= 0 and int(c.get("grown_days", 0)) >= maxi(0, rn - rc):
+				c["regrown"] = true
 		tile_changed.emit(t)
