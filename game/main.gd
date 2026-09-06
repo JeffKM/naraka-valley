@@ -12634,8 +12634,18 @@ func _load_game() -> bool:
 		energy.load_save(data["energy"])
 	if data.has("farm"):
 		farm.load_save(data["farm"])
-	if data.has("greenhouse"):   # ★[S10-T5] — 키 없는 구세이브는 늘봄방 경작 0(빈 밭). 건물 자체는
-		greenhouse_farm.load_save(data["greenhouse"])   # carpenter의 done 목록이 들므로 여기선 밭만 복원한다
+	# ★[폴리시 R26 #4] **`has` 가드를 걷는다** — 아래 R13/R24 클러스터가 명문화한 판별식
+	#   («부팅으로 시드되는가 — 아니면 `.get(키, {})`로 무조건 되감는다»)의 마지막 잔여였다.
+	#   `greenhouse_farm`을 채우는 것은 오직 플레이어의 괭이질·파종이고 부팅 시드가 없다(생성은
+	#   빈 `FarmField.new()` 하나뿐이며 `_refresh_greenhouse`는 이 밭을 한 글자도 안 건드린다).
+	#   가드가 남아 있으면 늘봄방을 지은 세션에서 그 키가 없는 구세이브를 F9로 읽을 때
+	#   `load_save`가 아예 안 불려 **직전 타임라인의 경작면이 통째로 살아남고**, 이어지는 취침의
+	#   `_save_or_warn()`이 그 밭을 그 파일에 굳혔다 — 늘봄방을 지은 적 없는 세계(`carpenter`는
+	#   무가드로 되감긴다)에서 매 아침 `advance_day`가 작물을 키우고 수확까지 됐다.
+	#   ★ «키 없는 구세이브 = 빈 밭»이라는 이 줄의 종전 계약은 그대로다: `FarmField.load_save`가
+	#     첫 줄에서 `_tiles`를 통째로 갈아끼우므로 빈 dict가 곧 그 뜻이다. 같은 슬라이스의 쌍둥이
+	#     `garden_pot`(12651)이 이미 이 문법으로 서 있다.
+	greenhouse_farm.load_save(data.get("greenhouse", {}))   # ★[S10-T5] 늘봄방 경작면(건물 자체는 carpenter의 done 목록이 든다)
 	# ★[폴리시 R24 #16·#17] **설치·배치 원장 일곱도 `has` 가드를 걷는다**(아래 R13 클러스터의 잔여).
 	#   판별식은 그 클러스터가 명문화한 그대로 "부팅으로 시드되는가"다 — 이 일곱은 전부 플레이가
 	#   놓은 델타이고 부팅 시드가 없다(맵에서 다시 까는 `forage`·`flower_patch`·`forage_spawn`·
@@ -26341,6 +26351,23 @@ func _is_tree_blocked(t: Vector2i) -> bool:
 	#   ★ 막는 것은 **새로 심는 것**뿐이다: 이미 놓인 설치물의 회수(LMB)는 입력 사다리에서 도구
 	#     갈래보다 앞이라 밑동 밑에서도 그대로 걷힌다(구세이브 탈출구가 닫히지 않는다).
 	if _installation_at(t):
+		return true
+	# ★[폴리시 R26 #5] **자체 파종 원장 칸도 나무에 성역이다.** 배치 가드 셋(`_can_place_sprinkler`
+	#   16658 · `_can_place_furnace` 17297 · `_can_place_crystalarium` 17853)은 예외 없이
+	#   `_tree_occupied_at`을 드는데 과수 술어만 그 한 줄이 없었다 — 그 술어의 머리말이 존재 이유를
+	#   직접 적는다(「`_sync_tree_tile`은 숲 구역에서만 그리드를 만지므로 파종목 칸의 `_grid`는
+	#   GROUND 그대로고, `_home_occupied_tiles()`는 원장을 한 줄도 안 본다」). 그래서 밤새 마당에
+	#   돋은 나무 칸에 묘목을 겨누면 아래 `is_solid`도 통과해 그대로 심겼고, 한 칸을 TreeLedger와
+	#   Orchard 두 원장이 동시에 쥔 채 `_rebuild_prop_collision`(풀타일)과
+	#   `_rebuild_orchard_collision`(밑동)이 같은 칸에 콜라이더를 세웠다.
+	#   ★ 반대 방향은 이미 서 있어 **가드가 단방향이었다** — `_is_tree_seed_free`의
+	#     `t in orchard.trunk_tiles()`가 그 짝이고, 하필 이쪽이 비가역이다(orchard에 remove API 0 —
+	#     R19 #7·R22 #6·R23 #19가 세 번 인용한 그 사실).
+	#   ★ 표시 축도 같이 되돌아온다: 겹친 칸에서는 프롬프트 사슬의 벌목 안내(15443)가 먼저 잡고
+	#     return해, 사슬 맨 끝의 과수 수확 안내가 영영 도달하지 않았다(결실이 익어도 화면은 벌목만
+	#     말한다). 겹침이 생기지 않으면 그 갈림도 생기지 않는다.
+	#   ★ 숲 구역에서는 실효 분기가 아니다(그쪽 그리드는 이미 SOLID라 아래 줄에서 걸린다).
+	if _tree_occupied_at(t):
 		return true
 	if is_solid(_grid[t.y][t.x]):
 		return true

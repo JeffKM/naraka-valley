@@ -207,6 +207,10 @@ var _top_area_rect := Rect2()
 #   움직였다 — 그 자리에서 백팩(16칸 = 스크롤 필수)이 안 굴러가는 사각이 생겼다.
 var _top_rows_total := 0
 const TOP_ROW_H := 30.0          # 내역 한 행의 높이(두 패널 공용)
+# ★[폴리시 R26 #2] 한 행의 좌(품목)·우(값) 글자 블록 사이 최소 간격 — 두 블록이 서로의 자리를
+#   침범하지 않게 좌측 예산에서 뺀다(곳간 쪽 `right_budget`이 이미 쓰던 12.0과 같은 눈금).
+const ROW_GAP := 12.0
+const BIN_ROW_ICON := 26.0       # 출하함 내역 행 아이콘 칸 한 변(매대 행 ROW_ICON=20과 별개 눈금)
 # ★ [S3-T5] 생선가게 — 서브탭 히트 2개 + 환전 행 히트 + [전량 환전] 버튼 + 환전 리스트 스크롤.
 var _fs_tab_rects: Array = []
 var _ws_tab_rects: Array = []    # ★[S4-T7] 목공방 서브탭 2개 Rect2(생선가게 _fs_tab_rects 동형)
@@ -1223,6 +1227,19 @@ func bin_rows() -> Array:
 				"gold": n * ItemCatalog.ship_price_of(id, q)})   # 출하가(메뉴는 원물가)
 	return out
 
+# ★[폴리시 R26 #2] 출하함 한 행의 좌측 문구와 그 문구가 쓸 수 있는 폭 — **그리기와 회귀가 같은
+#   하나에서 읽는다**(치수를 두 곳에 옮겨 적으면 한쪽만 고쳐도 조용히 통과한다 — `top_list_area`와
+#   같은 규율). 폭은 우측 정산 금액이 실제로 차지하는 자리를 뺀 나머지고, 하한 60px은 판이 아주
+#   좁아졌을 때 음수 폭으로 무너지지 않게 하는 방어다.
+func bin_row_label(row: Dictionary) -> String:
+	var q := int(row["quality"])
+	var qtag := (ItemCatalog.quality_name(q) + " ") if q > 0 else ""
+	return "%s%s ×%d" % [qtag, ItemCatalog.name_of(String(row["id"])), int(row["count"])]
+
+func bin_row_left_budget(panel: Rect2, right_txt: String) -> float:
+	return maxf(60.0, (panel.end.x - PAD - HanjiUi.text_width(right_txt, 13) - ROW_GAP)
+		- (panel.position.x + PAD + BIN_ROW_ICON + 10.0))
+
 # ── 출하함 상단(대기 슬롯 + 정산 미리보기) ────────────────────────────────────
 func _draw_bin_top(panel: Rect2) -> void:
 	# ★ [S1R-T12] 출하 정산 = 품목별 [아이콘 | 이름×수량 | 소계 골드] 내역 행 + 총액 강조(GOLD).
@@ -1243,7 +1260,7 @@ func _draw_bin_top(panel: Rect2) -> void:
 	_bin_rects.clear()
 	if bin == null:
 		return
-	const ICON := 26.0
+	const ICON := BIN_ROW_ICON
 	# ★[폴리시 R7] 창 기하는 **단일 출처**(top_list_area)에서 온다 — 휠 라우팅·회귀가 같은 값을
 	#   읽어야 "N종 적재 시 전 항목에 닿는가"를 숫자를 옮겨 적지 않고 잴 수 있다.
 	var area := top_list_area(panel)
@@ -1272,13 +1289,22 @@ func _draw_bin_top(panel: Rect2) -> void:
 		# 등급 점 — 형제 그리드 셋과 **같은 색·같은 문법**(좌하단 원). 일반(0)은 종전대로 무표시.
 		if q > 0:
 			draw_circle(pos + Vector2(6.0, ICON - 6.0), 3.5, _quality_color(q))
-		var n: int = int(row["count"])
 		var sub: int = int(row["gold"])
-		var qtag := (ItemCatalog.quality_name(q) + " ") if q > 0 else ""
 		var ty := pos.y + ICON - 8.0
-		HanjiUi.draw_text(self, Vector2(pos.x + ICON + 10.0, ty),
-			"%s%s ×%d" % [qtag, ItemCatalog.name_of(id), n], 13, HanjiUi.INK_LIGHT, 150.0)
+		# ★[폴리시 R26 #2] **행 폭은 판 기하에서 파생한다**(종전 고정 150px). R25 #14가 이 줄에
+		#   등급 앞머리를 붙여 문구가 길어졌는데 폭 인자는 그대로여서, 「이리듐 검은여울 대메기 ×3」
+		#   같은 조합이 150px을 넘겨 **하필 개수(`×N`)가 소리 없이 잘렸다** — 등급을 보이려고 넣은
+		#   앞머리가 수량을 밀어낸 것이다(같은 배치의 형제 봉합 #13이 `_draw_trash_confirm` 머리말에
+		#   못 박은 규약 «고정 폭이면 길어진 문구가 소리 없이 잘린다»가 여기만 안 섰다).
+		#   자리는 **우측 정산 금액이 실제로 차지하는 폭**을 뺀 나머지고(두 글자 블록이 겹칠 자리가
+		#   없다), 그래도 모자라면 거울상 패널(`_draw_larder_top`)과 같은 문법으로 말줄임한다 —
+		#   잘리더라도 「…」로 잘렸다고 말한다.
 		var subs := "+%d" % sub
+		var left_x := pos.x + ICON + 10.0
+		var left_txt := bin_row_label(row)
+		var left_budget := bin_row_left_budget(panel, subs)
+		HanjiUi.draw_text(self, Vector2(left_x, ty), HanjiUi.elide(left_txt, 13, left_budget),
+			13, HanjiUi.INK_LIGHT, left_budget)
 		HanjiUi.draw_text(self, Vector2(panel.end.x - PAD - HanjiUi.text_width(subs, 13), ty),
 			subs, 13, HanjiUi.GOLD_SOFT)
 	if rows.size() > max_rows:

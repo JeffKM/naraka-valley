@@ -107,7 +107,10 @@ extends SceneTree
 #   #20 성야 갈래를 `_on_day_advanced`로 되돌림 → ⑱a·⑱e red(귀가 프레임에 잡초 13포기 부활).
 #       ★ 같은 파괴가 배치 A ③c·③c'·DUP-a도 문다 — 이월 루프의 절기 창구가 함께 사라지기 때문이다
 #         (두 봉합이 한 창구를 공유한다는 증거이기도 하다).
-#   #22 `and` → `or` 복귀                   → ⑲a·⑲d·⑲e red(다음 절기 전용 종이 경계 게시분을 통과)
+#   #22 기한 절기 항 부활(`or`/`and` 어느 쪽이든) → ⑲a red · `or` 복귀면 ⑲d도 red(다음 절기
+#       전용 종이 경계 게시분을 통과) · `and` 복귀면 ⑲e도 red(그 절기 종이 같이 지워진다)
+#       ★[폴리시 R26 #3] ⑲의 축이 «게시일 하나»로 좁혀졌다 — R25의 교집합이 막으려던 것과 함께
+#         **그날 실제로 돋아 있는 현 절기 종까지** 지웠기 때문이다(⑲a·⑲e가 그 정정을 든다).
 #
 # 실행: ./run_tests.sh polish_r25   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -1459,11 +1462,14 @@ func _check_purge_carry(m: Node) -> void:
 func _check_quest_season_edge() -> void:
 	print("⑲ #22 절기 경계 채집물 의뢰 ↔ 교집합")
 	var qsrc := _lines_of_file("res://quest_board.gd")
-	_check("⑲a 배선: 형제 물고기 갈래와 **같은 접속사**다(합집합이 아니라 교집합)",
+	# ★[폴리시 R26 #3] **축이 «게시일 하나»로 좁혀졌다.** R25가 세운 교집합은 막으려던 것(다음 절기
+	#   전용 종)을 막으면서 현 절기 종까지 같이 지웠다 — 그래서 기한일 항 자체를 걷어 냈다.
+	#   이 줄이 재는 것은 그대로 «기한 절기만 맞는 종이 통과할 창구가 없는가»다(합집합 복귀 금지).
+	_check("⑲a 배선: 판정 축은 **게시일 하나**다(기한 절기 항으로 통과하는 창구 0)",
 		_count_in(qsrc, "static func _obtainable_between",
-			"and s == GameClock.season_index_for_day(due_day)") == 1
+			"return s == GameClock.season_index_for_day(post_day)") == 1
 			and _count_in(qsrc, "static func _obtainable_between",
-				"or s == GameClock.season_index_for_day(due_day)") == 0)
+				"s == GameClock.season_index_for_day(due_day)") == 0)
 	# 무대: 절기 마지막 날(게시)과 다음 절기 첫날(기한)이 갈리는 그 하루를 판에서 판다.
 	var edge := GameClock.DAYS_PER_SEASON            # 절기 28일 = 게시일
 	var post_s := GameClock.season_index_for_day(edge)
@@ -1490,8 +1496,12 @@ func _check_quest_season_edge() -> void:
 	_check("⑲d **다음 절기 전용 종은 경계 게시분에서 빠진다** — 「%s」(종전엔 기한 절기만 맞으면 통과해 이행 불가 의뢰가 섰다)"
 			% ItemCatalog.name_of(next_only),
 		not QuestBoard._obtainable_between(next_only, edge, edge + 1))
-	_check("⑲e 그 절기 종도 **경계에선 빠진다**(기한 날엔 이미 세계에서 사라진다 — 물고기 갈래와 같은 판정)",
-		not QuestBoard._obtainable_between(same_season, edge, edge + 1))
+	# ★[폴리시 R26 #3] **뒤집혔다.** R25는 이 종도 경계에서 뺐는데(「기한 날엔 이미 세계에서
+	#   사라진다」), 그 종은 **게시일 당일 마당에 돋아 있어** 그날 주워 그날·다음 날 납품할 수 있다
+	#   (백팩은 밤을 넘긴다 — 기한 날 세계에 남아 있을 필요가 없다). 함수 머리말이 닫겠다고 선언한
+	#   축은 «획득 경로가 구조적으로 0»이고 이 종은 거기 해당하지 않는다.
+	_check("⑲e 그 절기 종은 **경계 게시분에도 남는다**(게시일에 실제로 돋아 있다 — 백팩이 밤을 넘긴다)",
+		QuestBoard._obtainable_between(same_season, edge, edge + 1))
 	_check("⑲f 경계가 아닌 날은 종전 그대로 통과한다(거동 축소 0) — 「%s」 day %d~%d"
 			% [ItemCatalog.name_of(same_season), edge - 2, edge - 1],
 		QuestBoard._obtainable_between(same_season, edge - 2, edge - 1))
