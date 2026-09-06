@@ -134,20 +134,23 @@ func _initialize() -> void:
 	# ── ② 납품 풀(로스터 파생) ──
 	print("── ② 납품 풀 ──")
 	var pool := TrialGround.deliver_pool()
+	# ★[폴리시 R27 #21] 하한이 «판매가 50»에서 **깊이 술어**로 갈렸다(`MineFloors.is_depth_gated`
+	#   — R9가 「소매 창구가 '무엇을 팔면 안 되나'를 물을 때 쓰는 단일 술어」로 신설한 그것).
+	#   옛 하한의 근거가 곧 깊이인데 자[尺]가 값이라 두 축의 답이 어긋났다 — 1층 산출(넋알돌·
+	#   넋수정)이 «심층» 시련이 되고, NODE_TABLE에 없는 나락철(도구 4티어 최종 재료)이 표적이 됐다.
 	var expect_pool: Array = []
 	for id in ItemCatalog.MINERALS:
 		var pr := int(ItemCatalog.MINERALS[id].get("price", 0))
-		if pr >= TrialGround.DELIVER_PRICE_MIN and pr <= TrialGround.DELIVER_PRICE_MAX:
+		if MineFloors.is_depth_gated(String(id)) and pr <= TrialGround.DELIVER_PRICE_MAX:
 			expect_pool.append(String(id))
 	expect_pool.sort()
-	_check("②a 풀 = MINERALS 가격 밴드 파생(하드코딩 목록 0 — %d종)" % pool.size(),
+	_check("②a 풀 = 깊이 게이트 ∩ 상한 파생(하드코딩 목록 0 — %d종)" % pool.size(),
 		pool == expect_pool and not pool.is_empty())
-	_check("②b ★구성 명시 — 넋수정·명옥·업화알돌이 들어 있다",
-		pool.has(ItemCatalog.GEM_NEOKSUJEONG) and pool.has(ItemCatalog.GEM_MYEONGOK)
-		and pool.has(ItemCatalog.GEODE_EOPHWA))
-	_check("②c ★밴드 밖은 구조적으로 없다 — 돌(지천)·명부금강/오색혼옥(초희귀)",
+	_check("②b ★구성 명시 — 명옥·업화알돌이 들어 있다(둘 다 floor_min > 1)",
+		pool.has(ItemCatalog.GEM_MYEONGOK) and pool.has(ItemCatalog.GEODE_EOPHWA))
+	_check("②c ★밖에 있는 것들 — 돌(지천)·명부금강/오색혼옥(초희귀·상한)·넋수정(1층 산출)",
 		not pool.has(ItemCatalog.STONE) and not pool.has(ItemCatalog.GEM_MYEONGBU_GEUMGANG)
-		and not pool.has(ItemCatalog.GEM_OSAEK_HONOK))
+		and not pool.has(ItemCatalog.GEM_OSAEK_HONOK) and not pool.has(ItemCatalog.GEM_NEOKSUJEONG))
 	var off_pool := 0
 	for w3 in 40:
 		var t3 := TrialGround.weekly_trial(w3)

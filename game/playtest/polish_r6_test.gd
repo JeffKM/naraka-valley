@@ -82,6 +82,21 @@ func _line_after(start: int, needle: String) -> int:
 			return i
 	return -1
 
+# ★[폴리시 R27 #4] 그 함수의 **몸통 안에** 이 줄이 있는가 — 함수 머리에서 다음 최상위 `func `까지만
+#   본다(형제 스위트 polish_r7·polish_r13이 쓰는 그 헬퍼). `_line_after`는 함수 경계를 안 보므로
+#   "로드 안에 있는가"를 물으면 두 함수 뒤 다른 훅의 같은 줄에 걸려 **공허 초록**이 된다(⑩g가
+#   실제로 그랬다).
+func _in_func(fn_needle: String, needle: String) -> bool:
+	var head := _line_of(fn_needle)
+	if head < 0:
+		return false
+	for i in range(head + 1, _src.size()):
+		if _src[i].begins_with("func "):
+			return false
+		if _src[i].contains(needle):
+			return true
+	return false
+
 # 알림 피드에 이 문구가 떠 있는가(플레이어가 실제로 들었는가 — 조용한 진행 금지의 계측).
 func _notice_has(m: Node, needle: String) -> bool:
 	if m.notice_feed == null:
@@ -519,11 +534,22 @@ func _initialize() -> void:
 	_check("⑩e 배정된 칸이 **안식 방목지 슬롯 안**이다(숲이 열어 준 좌표가 아니다) — %s"
 			% str(m.ranch._animals[beast].get("pasture_tile", Vector2i(-1, -1))),
 		home_slots.has(m.ranch._animals[beast].get("pasture_tile", Vector2i(-1, -1))))
-	_check("⑩f 아침 훅이 집 밖이면 표를 세운다(형제 훅들과 같은 문법 — 소스 대조)",
-		_line_of("_pasture_release_pending = _region != RegionCatalog.HOME") >= 0
-		and _line_of("if _release_open_buildings():") >= 0)
-	_check("⑩g 로드는 그 표를 버린다(절기 재스폰 표와 같은 이유 — 세션 로컬)",
-		_line_after(_line_of("func _load_game()"), "_pasture_release_pending = false") > 0)
+	# ★[폴리시 R27 #2] R24 #19가 이 대입을 **두 갈래로 갈랐다**(«표는 소비한 쪽만 지운다»). 종전
+	#   니들 둘(`_pasture_release_pending = _region != RegionCatalog.HOME` · `if _release_open_buildings():`)
+	#   은 저장소에 0건이라 확정 red였고, 같은 저장소의 polish_r24 ⑯가 그중 첫 니들이 **0건임을**
+	#   단언해 두 스위트가 정면으로 모순됐다. 계약을 새 형태로 옮겨 적는다: 집 밖이면 세우고, 집이면
+	#   지금 방출하되 **성공했을 때만** 내린다(형제 소비처 `_process`와 같은 규율).
+	_check("⑩f 아침 훅: 집 밖이면 표를 세우고, 집이면 방출이 **성공했을 때만** 내린다(R24 #19 — 소스 대조)",
+		_in_func("func _on_day_advanced", "_pasture_release_pending = true")
+		and _in_func("func _on_day_advanced", "_pasture_release_pending = not _release_open_buildings(day)"))
+	# ★[폴리시 R27 #4] 종전 ⑩g는 «로드가 그 표를 버린다»를 라벨로 걸었지만 두 겹으로 공허했다:
+	#   ㉠ `_line_after`가 함수 경계를 안 봐서 실제로 매치된 줄은 `_load_game`이 아니라 두 함수 뒤
+	#      `_process`의 소비처였고(늘 참) ㉡ 라벨이 주장하는 계약 자체가 R11(fdfbb32) 이후 거짓이다 —
+	#      이 표는 세이브를 왕복한다. R10이 명문화한 판별식(«집행 전 표 = 왕복 필수»)에 걸리는 자리라
+	#      왕복이 곧 계약이므로, 재는 것을 **그 왕복**으로 바꾼다(저장 한 줄 + 복원 한 줄).
+	_check("⑩g 표는 세이브를 왕복한다(«집행 전 표 = 왕복 필수» — 집 밖에서 잔 밤의 빚을 F9가 안 지운다)",
+		_in_func("func _save_game", "\"pasture_release_pending\": _pasture_release_pending")
+		and _in_func("func _load_game", "_pasture_release_pending = bool(data.get(\"pasture_release_pending\", false))"))
 
 	# ── ⑪ #11 인플레이스 로드의 절기 지형 ────────────────────────────────────
 	print("── ⑪ #11 다른 절기 세이브를 옛 절기 팔레트로 그리지 않는다 ──")

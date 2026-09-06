@@ -454,8 +454,16 @@ func _check_greenhouse_rewind(m: Node) -> void:
 # ── ⑥ #5 자체 파종 원장 칸은 혼의 나무에도 성역이다(가드가 양방향) ───────────
 func _check_tree_ledger_sanctuary(m: Node) -> void:
 	print("⑥ #5 과수 심기 ↔ 자체 파종 원장")
-	_check("⑥a 배선: `_is_tree_blocked`이 런타임 나무 원장을 든다(형제 배치 가드 셋과 같은 술어)",
-		_count_in(_src, "func _is_tree_blocked", "_tree_occupied_at(t)") == 1)
+	# ★[폴리시 R27 #0] **항의 자리가 옮겨졌다 — 폭이 틀렸기 때문이다.** R26이 넣은 자리
+	#   (`_is_tree_blocked`)는 `orchard.can_plant`가 풋프린트 **아홉 칸 전부**에 부르는 술어라
+	#   캐노피 여덟 칸까지 함께 거절했는데, R26이 스스로 선언한 결함은 앵커 한 칸의 것이다
+	#   (「한 칸을 두 원장이 쥔 채 두 재구성이 **같은 칸에** 콜라이더를 세웠다」 — 밑동 콜라이더는
+	#   앵커에만 서고, 마당 원장 나무 쪽도 발치 행만 막는다). 그래서 항은 `_would_entrap_player`와
+	#   같은 앵커 갈래(`_use_tool` 묘목 가지)로 갔다. 재는 계약은 그대로 «파종목 칸엔 밑동을 못
+	#   세운다»이고, **폭**이 앵커로 좁혀졌다.
+	_check("⑥a 배선: 원장 항은 3×3 전수 술어가 아니라 **앵커 갈래**가 든다(R19 #17이 같은 이유로 세운 그 자리)",
+		_count_in(_src, "func _is_tree_blocked", "_tree_occupied_at(t)") == 0
+			and _count_in(_src, "func _use_tool", "elif _tree_occupied_at(_target):") == 1)
 	_check("⑥b 배선: 반대 방향 짝이 그대로다 — `_is_tree_seed_free`가 밑동을 거절한다(양방향)",
 		_count_in(_src, "func _is_tree_seed_free", "orchard.trunk_tiles()") == 1)
 	# 무대 — 지금 판에서 **실제로 심을 수 있는** 앵커를 찾는다(좌표 옮겨 적기 0).
@@ -476,10 +484,22 @@ func _check_tree_ledger_sanctuary(m: Node) -> void:
 	m.tree_ledger._put(RegionCatalog.HOME, anchor,
 		{"species": TreeLedger.species_at_tile(RegionCatalog.HOME, anchor), "stage": 1,
 		"hp": TreeLedger.hp_for_stage(1), "stump": false, "moss": false})
-	_check("⑥c **파종목 칸은 막힌 칸이다** — `_is_tree_blocked` %s · `can_plant` %s(종전엔 둘 다 뚫려 두 원장이 한 칸을 쥐었다)"
-			% [str(m._is_tree_blocked(anchor)), str(m.orchard.can_plant(anchor, m._is_tree_blocked))],
-		m._is_tree_blocked(anchor) and not m.orchard.can_plant(anchor, m._is_tree_blocked)
-			and not m.orchard.has_tree(anchor))
+	# ★[폴리시 R27 #0] 판정 창구가 `_is_tree_blocked`에서 앵커 술어로 바뀌었다. 재는 것은 같다 —
+	#   그 칸에 밑동이 **서지 않는다**(원장이 한 칸을 둘로 쥐지 않는다).
+	_check("⑥c **파종목 칸엔 밑동이 안 선다** — `_tree_occupied_at` %s(종전엔 뚫려 두 원장이 한 칸을 쥐었다)"
+			% str(m._tree_occupied_at(anchor)),
+		m._tree_occupied_at(anchor) and not m.orchard.has_tree(anchor))
+	# ★[폴리시 R27 #0] **캐노피는 성역이 아니다** — 앵커에서 한 칸 비켜선 자리는 그 원장 나무를
+	#   이유로 막히지 않는다(형제 술어 `_orchard_trunk_at` 머리말이 못 박은 그 원칙의 짝).
+	#   R26 직후엔 이 여덟 칸이 전부 «못 심음»이었다.
+	var canopy_ok := false
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var cand: Vector2i = anchor + d
+		if not m._tree_occupied_at(cand) and Orchard.footprint_of(cand).has(anchor) \
+				and m.orchard.can_plant(cand, m._is_tree_blocked):
+			canopy_ok = true
+			break
+	_check("⑥c' 캐노피가 그 나무를 덮는 이웃 앵커는 여전히 심긴다(막는 폭 = 밑동 한 칸)", canopy_ok)
 	# 형제 배치 가드 셋도 같은 칸을 거절한다 — 이 술어가 그 표의 단일 출처라는 증거.
 	_check("⑥d 형제 셋도 같은 칸을 거절한다(같은 술어 하나에서 파생 — 스프링클러·업화로·결정기)",
 		not m._can_place_sprinkler(anchor) and not m._can_place_furnace(anchor)
@@ -487,15 +507,17 @@ func _check_tree_ledger_sanctuary(m: Node) -> void:
 	# 성역은 **영구가 아니다** — 벌목해 원장이 비면 그 자리는 다시 열린다(거동 축소 0).
 	m.tree_ledger.clear_slot(RegionCatalog.HOME, anchor)
 	_check("⑥e 원장이 비면 그 자리는 다시 열린다(막는 것은 새로 심는 것뿐 — 구세이브 탈출구)",
-		not m._is_tree_blocked(anchor) and m.orchard.can_plant(anchor, m._is_tree_blocked))
+		not m._tree_occupied_at(anchor) and m.orchard.can_plant(anchor, m._is_tree_blocked))
 	# ★ 배치 B #8 비커버 명문화 — 이 봉합이 더한 것은 **원장 항 하나**다. #8이 요구하는 건물 문·
 	#   퇴장 착지 칸 항은 이 술어에 아직 없고, 그 칸들은 PATH라 원장에도 안 실린다 — 즉 ⑥의 초록은
 	#   #8의 초록이 아니다(그쪽 워커가 따로 봉합한다).
 	# ★[배치 B에서 갱신] 배치 A 때 이 자리는 «#8 비커버»를 못 박는 단언이었다(원장 항 하나만 더한
 	#   봉합이 건물 문 칸을 안 막는다는 사실). 배치 B가 #8을 별도 항으로 봉합했으므로 **커버 단언**
 	#   으로 뒤집는다 — 두 결함이 별개라는 사실은 그대로고(항이 둘), 이제 둘 다 서 있다.
-	_check("⑥f 두 누락 항이 **모두** 섰다 — 원장(#5) + 건물 문·착지 칸(#8)은 별개 항이고 각자 봉합됐다",
-		_count_in(_src, "func _is_tree_blocked", "_tree_occupied_at(t)") == 1
+	# ★[폴리시 R27 #0] 원장 항은 앵커 갈래로 이사했고, 건물 문 항은 폭이 맞아 제자리다(완공·워프가
+	#   3×3을 통째로 덮으므로 그쪽은 전수 평가가 계약이다 — polish_r19 ⑧e가 같은 폭을 명시로 잰다).
+	_check("⑥f 두 누락 항이 **모두** 섰다 — 원장(#5)은 앵커 갈래에 · 건물 문·착지 칸(#8)은 3×3 전수 술어에",
+		_count_in(_src, "func _use_tool", "elif _tree_occupied_at(_target):") == 1
 			and _count_in(_src, "func _is_tree_blocked", "_building_door_reserved(t)") == 1)
 
 # ── ⑦ #6 업화로 진행 눈금의 분모가 «투입 시점에 굳은 총 분»이다 ─────────────

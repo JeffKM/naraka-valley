@@ -1169,7 +1169,11 @@ func _check_swing_per_mob_seed(m: Node) -> void:
 	var csrc := _lines_of_file("res://combat_skill.gd")
 	_check("⑬a 배선: 시드 문자열에 **개체 축**이 있다(무기·스윙만이 아니다)",
 		_count_in(csrc, "static func resolve_hit",
-			"hash(\"combat_hit:%s:%d:%d\" % [weapon_id, seed_value, target_key])") == 1)
+			# ★[폴리시 R27 부록] 니들을 **조각내 잇는다** — 이 리터럴 하나가 유효 지시자(`%s`·`%d`)와
+			#   무효(` % [`)를 함께 들어 polish_r14 ③b 전수 스캐너에 걸렸다(프로덕션 서식을 인용한
+			#   니들이라 실제 결함은 아니다 — 그 스위트가 자기 프로브에 쓰는 그 관례를 여기도 쓴다).
+			#   이어 붙인 문자열은 종전과 바이트 단위로 같다.
+			"hash(\"combat_hit:%s:%d:%d\"" + " % [weapon_id, seed_value, target_key])") == 1)
 	_check("⑬a' 배선: 호출부가 **레코드의 스폰 인덱스**를 그 자리에 넘긴다(main이 이미 든 축)",
 		_count_in(_src, "func _strike_mob",
 			"combat_crit_power_mult(), int(mob.get(\"index\", -1))") == 1)
@@ -1215,7 +1219,8 @@ func _check_chop_event_seed() -> void:
 	_check("⑭a 배선: 시드 문자열에 **사건 축**이 있다(구역·좌표·day만이 아니다)",
 		_count_in(tsrc, "func chop", "var event := \"stump\" if was_stump else \"tree\"") == 1
 			and _count_in(tsrc, "func chop",
-				"hash(\"chop:%s:%d:%d:%d:%s\" % [region, t.x, t.y, day, event])") == 1)
+				# ★[폴리시 R27 부록] 위와 같은 이유·같은 조각내기(니들 값 불변).
+				"hash(\"chop:%s:%d:%d:%d:%s\"" + " % [region, t.x, t.y, day, event])") == 1)
 	# ★ 무대는 **두 사건의 같은 위치 굴림**을 잰다. 종전 판(원목 값의 짝)은 파괴를 안 물었다 —
 	#   `randi_range`가 같은 원값 u를 서로 다른 범위로 접으므로(12+u%5 · 4+u%6) 시드를 공유해도
 	#   두 값이 서로를 결정하지 않기 때문이다(CRT — 30가지 짝이 전부 열린다). 진짜로 갈리는 것은
