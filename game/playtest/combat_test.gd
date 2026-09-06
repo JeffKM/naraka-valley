@@ -210,9 +210,13 @@ func _initialize() -> void:
 	# 같은 시드에서 피해 퍼크만 얹으면 정확히 그 비율만큼 오른다(base 롤은 불변 = 순차 소비 규율).
 	var plain := CombatSkill.resolve_hit(WeaponCatalog.SWORD_EOPHWADO, 7)
 	var buffed := CombatSkill.resolve_hit(WeaponCatalog.SWORD_EOPHWADO, 7, 0.25)
-	_check("④h 같은 시드 · 피해 퍼크만 다름 → base 롤 동일 · 최종만 ×1.25",
+	# ★[폴리시 R28 #10] 정수화가 저장소 관례(`int(round(...))` — `XpBoost.scaled_by` 머리말)로
+	#   통일되며 이 증인의 절단도 함께 갱신했다. 종전 `int(...)`는 밴드 값이 홀수일 때 半을
+	#   삼켜, 「투사만 걸면 녹슨 혼검 전 밴드에서 피해가 한 점도 안 오른다」는 결함과 같은 절단을
+	#   증인 쪽에서도 옳다고 못 박고 있었다(polish_r28 ⑪이 그 축을 직접 잰다).
+	_check("④h 같은 시드 · 피해 퍼크만 다름 → base 롤 동일 · 최종만 ×1.25(반올림)",
 		int(plain["base"]) == int(buffed["base"])
-		and int(buffed["damage"]) == int(float(plain["base"]) * 1.25))
+		and int(buffed["damage"]) == int(round(float(plain["base"]) * 1.25)))
 	# 크리가 확정으로 터지는 시드를 찾아 배율이 실제로 얹히는지 본다(결사 = 3배 → 6배).
 	var crit_seed := -1
 	for i in 500:

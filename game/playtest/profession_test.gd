@@ -280,8 +280,14 @@ func _initialize() -> void:
 	fr._prof_choice_rects = [{"rect": Rect2(10, 10, 120, 30), "skill": F, "prof_id": "gatherer"}]
 	var captured := {"skill": "", "id": "", "hit": false}
 	fr.profession_chosen.connect(func(s, pid): captured.skill = s; captured.id = pid; captured.hit = true)
-	fr._click_menu(Vector2(20, 20))   # 버튼 안 클릭
-	_check("⑪ 버튼 클릭 → profession_chosen(채집꾼)", captured.hit and captured.skill == F and captured.id == "gatherer")
+	# ★[폴리시 R28 #19] **2단 확인**으로 바뀌었다 — 전문직은 이 세이브에서 다시 못 고르는데 이
+	#   창구만 단일 클릭 즉시 확정이라, 저장소가 네 곳에서 지키는 비가역 규율(휴지통 확인창·이혼
+	#   [F] 2타·F8 삭제 래치·[종료] 2단) 밖에 홀로 남아 있었다. 첫 클릭은 무장, 둘째가 확정이다
+	#   (`polish_r28` ⑲가 무장 이동·해제까지 잰다). 라우팅 계약 자체는 그대로다.
+	fr._click_menu(Vector2(20, 20))   # 첫 클릭 = 무장(확정 아님)
+	_check("⑪ 첫 클릭은 무장만 한다(비가역 2단 확인)", not captured.hit and fr._prof_armed != "")
+	fr._click_menu(Vector2(20, 20))   # 둘째 클릭 = 확정
+	_check("⑪ 두 번째 클릭 → profession_chosen(채집꾼)", captured.hit and captured.skill == F and captured.id == "gatherer")
 	captured.hit = false
 	fr._click_menu(Vector2(300, 300))   # 버튼 밖 클릭 = 무신호
 	_check("⑪ 버튼 밖 클릭 = 무신호", not captured.hit)

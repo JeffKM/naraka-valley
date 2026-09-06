@@ -138,6 +138,12 @@ var inv: Inventory = null
 var bin: ShippingBin = null
 var chest: StorageChest = null   # ★ Phase D 저장 상자(CTX_CHEST 상단 그리드 — main이 set_chest로 주입)
 var larder: Larder = null        # ★[S6-T1] 카페 곳간(CTX_LARDER 상단 재고 행 — main이 attach_larder로 주입)
+# ★[폴리시 R28 #28] 오늘 **메뉴판에 실제로 걸린** 융합 메뉴 id들(main이 `_cafe_order_pool`에서
+#   파생해 주입 — 빈 배열 = 아직 모름 = 종전 표시 그대로). 카페 1단은 융합 슬롯이 4칸뿐이라
+#   해금·제철을 통과한 시그니처가 5종 이상이면 잘린 것은 그날 **어떤 손님의 주문도 될 수 없는데**,
+#   곳간 패널은 재고 행마다 조건 없이 메뉴명과 가격을 금박으로 찍어 "이걸 쟁이면 이게 나간다"고
+#   말했다. 죽은 재고가 용량만 먹는 동안 그 사실을 읽을 표면이 저장소에 하나도 없던 자리다.
+var _menu_board: PackedStringArray = PackedStringArray()
 var crop_icons: Dictionary = {}
 # main이 매 프레임 채워 넣는 보조 텍스트(매대 헤더·정산 미리보기 등) — 프레임은 표시만.
 var store_text: String = ""
@@ -235,6 +241,10 @@ var _fullscreen_rect := Rect2()
 var _set_music := 0.8            # main이 set_settings로 매 프레임 주입(GameSettings 파생 — 읽기 전용 표시)
 var _set_sfx := 0.9
 var _set_fullscreen := false
+var _set_muted := false          # ★[폴리시 R28 #7] 음소거([M]) 현재 상태 — set_settings로 주입
+# ★[폴리시 R28 #21] 숙련 탭 배지 — 지금 고를 수 있는 전문직이 있는가(main이 매 프레임 주입).
+#   `_pending_profession_tier` 머리말이 선언한 «UI 배지»의 실물이다(종전 소비처 0).
+var _skill_badge := false
 
 var _hearts: Array = []          # HeartBar 풀(관계 탭 재사용 — ★[S8-T1] 행 수만큼 동적으로 자란다)
 var _heart_effects: Array = []   # ★ C3 각 캐릭터의 관계 곱셈기 효과 줄(여우불·마진·경비·할인)
@@ -248,6 +258,12 @@ var _rel_area_rect := Rect2()    # 휠 히트테스트 영역(_draw_rel_tab이 �
 var _skill_rows: Array = []
 # ★ ADR-0052 전문직 선택 버튼 클릭 영역 — _draw_skill_tab이 매 그리기마다 재구성 [{rect, skill, prof_id}].
 var _prof_choice_rects: Array = []
+# ★[폴리시 R28 #19] **비가역 선택의 2단 확인 래치**("skill|prof_id", "" = 무장 없음). 전문직은 이
+#   세이브에서 다시 못 바꾸는데(`_can_choose_profession`의 «슬롯 비어있음» 항 + 슬롯을 비우는 경로
+#   0) 이 창구만 단일 클릭 즉시 확정이었다 — 저장소의 다른 비가역 동작은 예외 없이 2단이다
+#   (휴지통 확인창 · 이혼 [F] 2타 · F8 삭제 래치 · [종료] 2단). 모달을 새로 세우지 않고 **같은
+#   버튼을 두 번 누르는** 래치를 쓰는 이유는 이혼·F8이 이미 그 문법이기 때문이다(신규 UI 축 0).
+var _prof_armed := ""
 # ★[S10-T8 / ADR-0069 결정 11] [경지] 유물 수령 버튼 클릭 영역 — 전문직 버튼과 **완전 동형**
 #   ([{rect, skill}] · 매 그리기마다 재구성). 경지가 "새 장소가 아니라 스킬 패널의 확장"이라는
 #   결정 11의 자구가 코드 층에서는 바로 이것이다 — 새 탭도 새 컨텍스트도 없이 같은 탭에 줄이 는다.
@@ -324,6 +340,7 @@ func open(ctx: int) -> void:
 	fishshop_tab = FS_TAB_GEAR   # ★ [S3-T5] 생선가게는 항상 기어 매대부터(예측 가능한 첫 화면)
 	_build_scroll = 0            # ★ [S4-T7] 건축 리스트도 맨 위로
 	_skill_scroll = 0            # ★ [S5-T4] 숙련 탭 5행 리스트도 맨 위로
+	_prof_armed = ""             # ★[폴리시 R28 #19] 열 때 전문직 확정 래치 해제(휴지통 대기와 같은 결)
 	_rel_scroll = 0              # ★ [S8-T1] 관계 탭 하트 리스트도 맨 위로
 	woodshop_tab = WS_TAB_BUILD  # ★ [S4-T7] 목공방은 항상 건축 의뢰부터(가게의 얼굴 = 로빈 건축)
 	visible = true
@@ -335,6 +352,7 @@ func close() -> void:
 	context = CTX_NONE
 	_held = -1
 	_trash_pending = -1
+	_prof_armed = ""             # ★[폴리시 R28 #19] 창구를 떠나면 확정 래치도 풀린다
 	_hover_tab = -1
 	_bp_scroll_dragging = false
 	visible = false
@@ -348,6 +366,7 @@ func set_tab(t: int) -> void:
 	menu_tab = t
 	_held = -1
 	_trash_pending = -1
+	_prof_armed = ""             # ★[폴리시 R28 #19] 탭을 옮기면 무장도 함께 내린다
 	_apply_heart_visibility()
 	queue_redraw()
 
@@ -361,12 +380,40 @@ func set_skills(rows: Array) -> void:
 	_skill_rows = rows
 	queue_redraw()
 
+# ★[폴리시 R28 #21] 숙련 탭 배지 주입(읽기 전용 — set_settings와 같은 결). main이 자격을 판정하고
+#   프레임은 점 하나를 그린다. 값이 안 바뀌면 재그리기도 안 한다(매 프레임 주입이라 값쌈).
+# ★[폴리시 R28 #28] 오늘의 메뉴판 주입(읽기 전용 — set_skills·set_settings와 같은 결).
+func set_menu_board(ids: PackedStringArray) -> void:
+	if _menu_board == ids:
+		return
+	_menu_board = ids
+	if context == CTX_LARDER:
+		queue_redraw()
+
+# ★[폴리시 R28 #28] 이 재고가 **오늘 메뉴판 밖**인가 = 쟁여도 그날은 안 나간다(그리기와 회귀가
+#   같은 한 술어를 본다 — R24 #1이 세운 «재는 값 = 그리는 값»). 메뉴판을 아직 모르면 false다.
+func larder_row_offboard(id: String) -> bool:
+	if _menu_board.is_empty():
+		return false
+	var menu_id := MenuCatalog.menu_for_signature(id)
+	return menu_id != "" and not _menu_board.has(menu_id)
+
+func set_skill_badge(on: bool) -> void:
+	if _skill_badge == on:
+		return
+	_skill_badge = on
+	queue_redraw()
+
 # ★ Phase D 설정 값 주입(읽기 전용 표시). main이 GameSettings에서 파생해 옵션 탭이 열려 있을 때 넘긴다
 # (_skill_rows·_heart_effects와 대칭 — 프레임은 값을 받아 바·체크박스만 그린다, 무상태).
-func set_settings(music: float, sfx: float, is_fullscreen: bool) -> void:
+# ★[폴리시 R28 #7] `is_muted` = 오디오 버스 음소거([M])의 **현재 상태**. 버스 mute와 volume은
+#   직교라(audio.gd) 볼륨 바 100%가 음소거를 한 글자도 반영하지 않는다 — 그 사실이 이미 두 번
+#   결함 원인으로 인용됐다(「화면에 음소거 표시가 없어 원인을 볼 방법도 없다」).
+func set_settings(music: float, sfx: float, is_fullscreen: bool, is_muted: bool = false) -> void:
 	_set_music = music
 	_set_sfx = sfx
 	_set_fullscreen = is_fullscreen
+	_set_muted = is_muted
 	if context == CTX_MENU and menu_tab == TAB_OPTIONS:
 		queue_redraw()
 
@@ -803,6 +850,12 @@ func _draw_menu_top(panel: Rect2) -> void:
 		var ipos := r.position + (r.size - isz) * 0.5
 		draw_texture_rect(tex, Rect2(ipos, isz), false,
 			Color(1, 1, 1, 1) if on else Color(0.62, 0.62, 0.62, 0.9))
+		# ★[폴리시 R28 #21] 숙련 탭 배지 — 고를 수 있는 전문직이 있으면 아이콘 우상단에 금박 점.
+		#   탭을 열기 전에 «저기 할 일이 있다»가 닿는 유일한 표면이다(레벨업 알림 4초와 짝).
+		if i == TAB_SKILL and _skill_badge:
+			var dot := Rect2(r.end.x - 8.0, r.position.y + 3.0, 5.0, 5.0)
+			draw_rect(dot, HanjiUi.GOLD)
+			draw_rect(dot, HanjiUi.BORDER, false, 1.0)
 	# 호버 툴팁(아이콘만이라 첫 사용자 학습 보조 — 호버 탭 아래에 한글명 한지 칩).
 	if _hover_tab >= 0 and _hover_tab < _tab_rects.size():
 		_draw_tab_tooltip(font, _tab_rects[_hover_tab], TAB_LABELS[_hover_tab])
@@ -1098,14 +1151,28 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 		if frac > 0.0:
 			draw_rect(Rect2(track.position, Vector2(track.size.x * frac, track.size.y)), HanjiUi.GOLD)
 		y += SK_ROW_H
+		# ★[폴리시 R28 #22] 고른 전문직의 **효과 한 줄**(main이 `ProfessionCatalog.desc_of`로 파생).
+		#   위 요약 꼬리는 폭이 물려 있어 이름만 싣고, 무엇을 하는 퍼크인지는 여기서 읽힌다 —
+		#   되돌릴 수 없는 선택의 내용이 확정과 동시에 사라지던 자리(그 필드의 머리말).
+		for pl in row.get("profession_lines", []):
+			HanjiUi.draw_text(self, Vector2(x + 8.0, y + 8.0), String(pl), 10, HanjiUi.INK_DIM, bar_w - 8.0)
+			y += 12.0
 		# ★ ADR-0052 — 선택 대기(pending) 시 2갈래 버튼(name + desc). 클릭 영역을 _prof_choice_rects에 등록.
 		if not options.is_empty():
 			var skill := String(row.get("skill", ""))
-			HanjiUi.draw_text(self, Vector2(x, y + 12.0), "▶ 전문직 선택 (Lv.%d):" % int(row.get("pending_tier", 0)), 12, HanjiUi.GOLD)
+			# ★[폴리시 R28 #19] **비가역이라는 사실을 머리말이 말한다.** 종전엔 이 줄에도 버튼
+			#   desc에도 «한 번 고르면 못 바꾼다»가 한 글자도 없었다.
+			HanjiUi.draw_text(self, Vector2(x, y + 12.0),
+				"▶ 전문직 선택 (Lv.%d) — 한 번 고르면 못 바꾼다" % int(row.get("pending_tier", 0)),
+				12, HanjiUi.GOLD, bar_w)
 			y += 18.0
 			for opt in options:
 				var btn := Rect2(x + 8.0, y, bar_w - 16.0, SK_OPT_H)
 				_plate_btn(btn)
+				# 무장된 버튼은 파괴적 액센트로 갈아입고 «한 번 더»를 말한다(휴지통 [버리기] 결).
+				var armed := _prof_armed == "%s|%s" % [skill, String(opt.get("id", ""))]
+				if armed:
+					draw_rect(btn, Color(0.72, 0.40, 0.34), false, 1.0)
 				# ★[폴리시 R17 #6] 두 줄 다 **버튼 판 안쪽으로 폭을 물린다**(좌우 10px 여백 대칭).
 				#   종전엔 인자가 없어 무제한이라, 가장 긴 설명(곡예사 280px)이 판 오른쪽 테두리를
 				#   10px 넘어 패널 바탕 위로 나왔다 — 바로 위 "전문직: %s" 줄이 이미 `bar_w - SK_PROF_X`를
@@ -1113,8 +1180,11 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 				var opt_w := btn.size.x - OPT_TEXT_X * 2.0
 				HanjiUi.draw_text(self, btn.position + Vector2(OPT_TEXT_X, 12.0),
 					String(opt.get("name", "")), 12, HanjiUi.INK_LIGHT, opt_w)
+				# ★[폴리시 R28 #19] 무장된 버튼의 둘째 줄은 **확정 안내**로 갈아입는다 — 설명은
+				#   이미 첫 클릭 전에 읽었고, 지금 알아야 하는 것은 «다음 클릭이 끝»이라는 사실이다.
 				HanjiUi.draw_text(self, btn.position + Vector2(OPT_TEXT_X, 24.0),
-					String(opt.get("desc", "")), 10, HanjiUi.INK_DIM, opt_w)
+					("한 번 더 누르면 확정 — 되돌릴 수 없다" if armed else String(opt.get("desc", ""))),
+					10, (Color(0.95, 0.72, 0.66) if armed else HanjiUi.INK_DIM), opt_w)
 				_prof_choice_rects.append({"rect": btn, "skill": skill, "prof_id": String(opt.get("id", ""))})
 				y += SK_OPT_H + 2.0
 		# ★[S10-T8 / ADR-0069 결정 11] 경지 줄 — 스킬 행 **바로 아래**에 붙는다(별 탭이 아니라
@@ -1177,6 +1247,17 @@ func _draw_options_tab(panel: Rect2, font: Font) -> void:
 		draw_rect(_fullscreen_rect.grow(-4.0), HanjiUi.GOLD)
 	HanjiUi.draw_text(self, Vector2(x + 26.0, sy), "전체화면", 14, HanjiUi.INK_LIGHT)
 	HanjiUi.draw_text(self, Vector2(x + 120.0, sy), "[F11]", 12, HanjiUi.INK_DIM)
+	# ★[폴리시 R28 #7] **음소거 행** — 전체화면과 같은 결(체크박스 = 지금 상태 · 회색 = 키). 종전엔
+	#   [M]이 상시 배선돼 있는데 이 탭에 행 자체가 없어, 실수로 누른 무음을 오디오 고장으로 읽고
+	#   되돌릴 키도 알 수 없었다(볼륨 바는 버스 mute와 직교라 100%를 그대로 그린다).
+	sy += 30.0
+	var mute_box := Rect2(x, sy - 14.0, 18.0, 18.0)
+	draw_rect(mute_box, HanjiUi.INSET)
+	draw_rect(mute_box, HanjiUi.BORDER, false, 1.0)
+	if _set_muted:
+		draw_rect(mute_box.grow(-4.0), HanjiUi.GOLD)
+	HanjiUi.draw_text(self, Vector2(x + 26.0, sy), "음소거", 14, HanjiUi.INK_LIGHT)
+	HanjiUi.draw_text(self, Vector2(x + 120.0, sy), "[M]", 12, HanjiUi.INK_DIM)
 	# 언어(한국어 고정 — 표시만, ADR-0048 §2).
 	sy += 30.0
 	HanjiUi.draw_text(self, Vector2(x, sy), "언어  한국어 (고정)", 12, HanjiUi.INK_DIM)
@@ -1329,8 +1410,13 @@ func _draw_larder_top(panel: Rect2) -> void:
 	var cap_col: Color = HanjiUi.GOLD if used < cap else Color(0.86, 0.36, 0.32)
 	HanjiUi.draw_text(self, Vector2(panel.end.x - FRAME_MARGIN - 28.0 - cw,
 		panel.position.y + PAD + 20.0), cap_str, 15, cap_col)
+	# ★[폴리시 R28 #28] 메뉴판 칸수와 «흐린 줄»의 뜻을 여기서 한 번 말한다 — 행마다 꼬리를 붙이면
+	#   오른쪽 글자 예산(아래 `right_budget`)에 먹혀 말줄임으로 사라진다.
+	var cap_line := "융합 메뉴 재료  ·  백팩 클릭=적재 / 재고 클릭=회수"
+	if not _menu_board.is_empty():
+		cap_line += "  ·  오늘 메뉴판 %d칸(흐린 줄은 오늘 안 나간다)" % _menu_board.size()
 	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 38.0),
-		"융합 메뉴 재료  ·  백팩 클릭=적재 / 재고 클릭=회수", 12, HanjiUi.INK_DIM)
+		cap_line, 12, HanjiUi.INK_DIM, panel.size.x - PAD * 2.0)
 	_larder_rects.clear()
 	if larder == null:
 		return
@@ -1363,7 +1449,8 @@ func _draw_larder_top(panel: Rect2) -> void:
 		var menu_id := MenuCatalog.menu_for_signature(id)
 		var right := "—" if menu_id == "" else "%s  %d냥" % [
 			MenuCatalog.name_of(menu_id), MenuCatalog.price_of(menu_id)]
-		var rc: Color = HanjiUi.INK_DIM if menu_id == "" else HanjiUi.GOLD_SOFT
+		# ★[폴리시 R28 #28] 메뉴판 밖이면 금박을 벗긴다(«팔릴 것처럼»을 말하지 않는다 — 위 머리말).
+		var rc: Color = HanjiUi.INK_DIM if menu_id == "" or larder_row_offboard(id) else HanjiUi.GOLD_SOFT
 		# ★[폴리시 2026-08-15] 메뉴 이름은 **13px에서 크게** 뜬다. 육안 판정에서 "혼령초 라떼"의 끝
 		#   글자가 잘린 것처럼 보였는데, 실제로는 잘린 게 아니라 neodgm 13px + 외곽선이 겹받침 글자
 		#   (떼 = ㄸ+ㅔ)의 1px 속공간을 메워 통짜 네모로 뭉갠 것이었다(15px에선 또렷하게 갈린다).
@@ -1995,6 +2082,14 @@ func _click_menu(p: Vector2) -> void:
 	if menu_tab == TAB_SKILL:
 		for e in _prof_choice_rects:
 			if e["rect"].has_point(p):
+				# ★[폴리시 R28 #19] 첫 클릭은 **무장**만 한다(그 선언부의 사유). 다른 버튼을 누르면
+				#   무장이 그쪽으로 옮겨 가므로 «잘못 무장한 채 확정»이 안 생긴다.
+				var key := "%s|%s" % [String(e["skill"]), String(e["prof_id"])]
+				if _prof_armed != key:
+					_prof_armed = key
+					queue_redraw()
+					return
+				_prof_armed = ""
 				profession_chosen.emit(String(e["skill"]), String(e["prof_id"]))
 				return
 		# ★[S10-T8] 경지 유물 수령 — 전문직 버튼과 같은 결(프레임은 자격을 모르고 신호만 올린다).

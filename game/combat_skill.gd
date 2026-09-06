@@ -108,7 +108,15 @@ static func resolve_hit(weapon_id: String, seed_value: int, dmg_bonus: float = 0
 	if crit:
 		dmg *= crit_mult(crit_pow_mult)
 	# 최소 1 — 밴드 하한이 1 이상이라 도달하지 않는 방어값(무기가 등록됐으면 늘 때린다).
-	return {"damage": maxi(int(dmg), 1), "crit": crit, "base": base}
+	# ★[폴리시 R28 #10] **정수화는 반올림**이다 — 이 저장소가 명시한 배수 처리 관례
+	#   (`XpBoost.scaled_by` 머리말 「main의 기존 배수 처리 관례 그대로(int(round(...)) — 혼력 비용·
+	#   채광 계수가 쓰는 그 방식)」이고 `_farming_energy_cost`·`_mining_energy_cost`·
+	#   `FishingSession.hook_energy_for`·`Cafe.serve_price`가 전부 그렇다). 전투 한 곳만 절단이라
+	#   **퍼크가 밴드 전체에서 실효 0이 됐다**: 녹슨 혼검 밴드 2~5에 투사(+10%)만 걸면
+	#   2.2/3.3/4.4/5.5 → 2/3/4/5로 네 값 전부 제자리라, 길드 첫 전문직이 시작 무기에서 정확히
+	#   아무 것도 하지 않는다(ADR-0052가 전문직에 약속한 실효, ADR-0008의 «명백히 우월한 가속»).
+	#   크리도 같이 깎였다(2×1.1×3 = 6.6 → 6).
+	return {"damage": maxi(int(round(dmg)), 1), "crit": crit, "base": base}
 
 # ── 몹 → 플레이어 피해 판정 ─────────────────────────────────────────────────
 # 몹별 **고정 데미지**(변동 롤 생략 — ADR-0063 결정 4). 플레이어 방어 스탯은 장비 클러스터 서랍이라

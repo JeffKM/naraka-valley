@@ -200,10 +200,12 @@ func _run_checks() -> void:
 		and GiftPrefs.points_for(GiftPrefs.LOVE, hobak, ItemCatalog.Q_SILVER) == 44
 		and GiftPrefs.points_for(GiftPrefs.LOVE, hobak, ItemCatalog.Q_GOLD) == 50
 		and GiftPrefs.points_for(GiftPrefs.LOVE, hobak, ItemCatalog.Q_IRIDIUM) == 60)
-	_check("③d 라이크 품질 배율(이리듐 = 37)",
-		GiftPrefs.points_for(GiftPrefs.LIKE, hobak, ItemCatalog.Q_IRIDIUM) == 37)
+	# ★[폴리시 R28 #11] 정수화가 관례(반올림)로 통일되며 은 27→28 · 이리듐 37→38이 됐다.
+	_check("③d 라이크 품질 배율(은 = 28 · 이리듐 = 38 — int(round))",
+		GiftPrefs.points_for(GiftPrefs.LIKE, hobak, ItemCatalog.Q_SILVER) == 28
+		and GiftPrefs.points_for(GiftPrefs.LIKE, hobak, ItemCatalog.Q_IRIDIUM) == 38)
 	# ★ 스타듀 불변식 — 이게 깨지면 "그 사람이 좋아하는 것"보다 "아무거나 최고 등급"이 최적이 된다.
-	_check("③e ★불변식: 일반 품질 러브(40) > 이리듐 라이크(37)",
+	_check("③e ★불변식: 일반 품질 러브(40) > 이리듐 라이크(38)",
 		GiftPrefs.points_for(GiftPrefs.LOVE, hobak, ItemCatalog.Q_NORMAL)
 			> GiftPrefs.points_for(GiftPrefs.LIKE, hobak, ItemCatalog.Q_IRIDIUM))
 	_check("③f 뉴트럴·디스라이크·헤이트엔 배율 없음",
