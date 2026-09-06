@@ -183,6 +183,8 @@ func _run_checks() -> void:
 	await _check_forage_silo_cap(m)      # ⑬ #13
 	_check_animal_cap_notice(m)          # ⑭ #14
 
+	await _run_checks_b(m)
+
 	SaveManager.new().delete_save()
 	print("══ 결과: %s (실패 %d) ══" % ["PASS" if _fail == 0 else "FAIL", _fail])
 	quit(1 if _fail > 0 else 0)
@@ -745,3 +747,522 @@ func _check_animal_cap_notice(m: Node) -> void:
 	for slot in placed2:
 		m.ranch._animals.erase(slot)
 	m.ranch._animals.erase(Vector2i(60, 91))
+
+# ══ 배치 B(#15~#29) ═══════════════════════════════════════════════════════════
+# 렌즈: 알림 적재물의 진실(#15~#18) · XP/전문직 배선 재훑기(#19~#23) ·
+#       편지 생애주기(#24~#26) · 카페 영업 사슬(#27~#29).
+#
+# 이 배치의 태도 셋.
+#   ㉠ **문구 파생은 함수로 뽑는다.** #16·#17은 알림 문자열이 `_process`/`_on_day_advanced` 안에
+#      인라인이라 헤드리스가 프로덕션 문구를 탈 방법이 없던 자리다 — R18이 `_ranch_door_open_notice`
+#      로 세운 그 이음매를 두 곳에 더 놓아, 회귀가 «그리는 그 글자»를 그대로 잰다.
+#   ㉡ **머리말이 계약을 적어 두고 소비처가 0이면 그것은 죽은 계약이다.** #21(`_pending_profession_tier`
+#      의 «UI 배지·온보딩»)·#22(`ProfessionCatalog.desc_of`)·#25(존재하지 않는 «회귀 ⑩»)가 셋 다
+#      그 계열이고, 봉합은 머리말을 지우는 것이 아니라 **약속한 소비처를 세우는 것**이다.
+#   ㉢ **되돌릴 수 없는 것에는 두 번 묻는다.** #19는 저장소가 네 창구에서 지키는 규율(휴지통 확인창·
+#      이혼 [F] 2타·F8 삭제 래치·[종료] 2단) 밖에 홀로 남아 있던 자리다.
+#
+# 무엇을 보증하나(번호 = 28회차 헌트 발견 인덱스).
+#   ⑮ #15 방목 문 열림 알림이 «빈 자리가 없다»와 «나갈 짐승이 없다»를 가른다.
+#   ⑯ #16 축사 돌봄 [F]가 **실제로 청소했을 때만** 청소를 말한다.
+#   ⑰ #17 결정기 아침 알림이 다 된 기계 **전부**를 말한다(첫 항목만이 아니라).
+#   ⑱ #18 저장 상자 보관·회수 알림이 등급을 싣는다(형제 창구 `qtag` 관례).
+#   ⑲ #19 전문직 선택이 **2단 확인**이다(첫 클릭 = 무장 · 둘째 = 확정).
+#   ⑳ #20 숙련 레벨업 알림이 keep이라 keep 큐에서 자기 자신에게 축출되지 않는다.
+#   ㉑ #21 Lv5/Lv10 도달이 **전문직 해금을 말하고**, 탭 배지가 그 계약의 나머지 절반을 진다.
+#   ㉒ #22 고른 전문직의 **효과 한 줄**이 숙련 탭에 남는다(`desc_of` 소비처 신설).
+#   ㉓ #24 편지 첨부는 융합 메뉴를 해금하지 않는다(발견 게이트 = 세상에서 얻는 축).
+#   ㉔ #25 첨부 로스터에 비-스택 품목이 0이다 — **실재하지 않던 «회귀 ⑩»의 대체**.
+#   ㉕ #26 이미 지나온 관문의 여진 편지가 구세이브에도 뒤늦게 도착한다.
+#   ㉖ #27 마감 정산 팝업이 상시 HUD를 지우지 않고, 하단 예약 띠도 안 넘는다.
+#   ㉗ #28 곳간 패널이 **오늘 메뉴판 밖** 재고를 팔릴 것처럼 말하지 않는다.
+#   ㉘ #29 날씨 힌트가 그 하늘이 실제로 바꾸는 **모든 축**을 말한다(레지스트리 전수).
+#
+# 판정: CONFIRMED 14 · **OWNER-DECISION 1**(#23 — 코드 무수정) · REFUTED·DUP 0.
+#   ★ #15·#16은 배치 A의 #8(방목 문 광고)·#3(급여 안내)과 **이웃이되 별개 자리**다(오케 위임 대조
+#     사항): A는 «누르기 전의 프롬프트»를, B는 «누른 뒤의 알림»을 잰다 — 함수도 다르고
+#     (`_process` 프롬프트 사슬 ↔ `_ranch_door_open_notice`/`_ranch_tend_notice`) 두 봉합이
+#     서로의 니들·문자열을 한 글자도 건드리지 않는다. DUP 아님.
+#   ★ #23 OWNER-DECISION(코드 무수정) — 미호 XpBoost가 목축 XP까지 곱하는데, 같은 분기가
+#     `_activity_credit("miho", 1)`은 목축에만 안 준다. 한 호출부 안에서 «목축은 미호 도메인인가»의
+#     답이 두 줄 사이에 갈리는 것은 실재하나, 어느 쪽으로 맞추든 경제(하트 채널) 또는 숙련 속도가
+#     움직이므로 후보안만 커밋 본문에 남긴다.
+#
+# 하중 검증(파괴 15배치 — 전건 red 실측).
+#   #15 빈 슬롯 갈래 삭제                → ⑮a·⑮d red   · #16 `cleaned` 항 삭제      → ⑯b red
+#   #17 목록 전체 → [0] 복귀             → ⑰b·⑰c red   · #18 두 `qtag` 삭제         → ⑱b·⑱c red
+#   #19 무장 래치 삭제(즉시 emit)        → ⑲a~⑲d red   · #20 keep 인자 삭제         → ⑳c red
+#   #21 알림 꼬리 + 배지 주입 삭제       → ㉑a·㉑c red  · #22 `profession_lines` 삭제 → ㉒c red
+#   #24 `_mail_grant_active` 가드 삭제   → ㉓a·㉓c red
+#   #26 아침 훅의 백필 호출 삭제         → ㉕a red      · 백필 **본문** 무력화       → ㉕c red
+#   #27 `_hud_hidden`에 판 복귀          → ㉖a·㉖c red
+#   #28 행 색의 offboard 항 삭제         → ㉗a red      · 술어 **본문** 무력화       → ㉗d red
+#   #29 두 문구를 종전으로 복귀          → ㉘b red(누락 3건을 이름까지 짚어 낸다)
+#   #25 ㉔는 **데이터 전수 단언**이라 파괴 대상이 프로덕션이 아니라 로스터다 — 첨부 한 줄에
+#       비-스택 품목(괭이)을 넣어 실측했다 → ㉔b red(「위반: miho_gate1_seed:hoe」). 실재하지
+#       않던 「회귀 ⑩」이 잠근다고만 적혀 있던 그 전제를 이제 실제로 잠근다.
+#   ★ #26·#28은 «호출부»와 «본문»을 갈라 두 번 파괴했다 — 배치 A ⑩·①이 쓴 그 구조다(니들이
+#     배선을, 라이브 단언이 로직을 각각 든다). 나머지 안 죽는 줄은 전부 무대·대조군이다.
+
+func _run_checks_b(m: Node) -> void:
+	print("══ 폴리시 R28 회귀 — 배치 B(#15~#29) ══")
+	_check_door_open_notice(m)        # ⑮ #15
+	_check_tend_notice(m)             # ⑯ #16
+	_check_crystal_notice(m)          # ⑰ #17
+	_check_chest_quality_tag(m)       # ⑱ #18
+	_check_profession_confirm(m)      # ⑲ #19
+	_check_levelup_keep(m)            # ⑳ #20
+	_check_profession_reach(m)        # ㉑ #21
+	_check_profession_desc(m)         # ㉒ #22
+	_check_mail_menu_gate(m)          # ㉓ #24
+	_check_attachment_roster()        # ㉔ #25
+	_check_gate_letter_backfill(m)    # ㉕ #26
+	await _check_summary_hud(m)       # ㉖ #27
+	_check_menu_board(m)              # ㉗ #28
+	_check_weather_hint(m)            # ㉘ #29
+
+# ── ⑮ #15 방목 문 열림 알림 ↔ 빈 슬롯 ────────────────────────────────────────
+func _check_door_open_notice(m: Node) -> void:
+	print("⑮ #15 방목 문 열림 알림 ↔ 거절 사유")
+	_check("⑮a 배선: 알림이 방출과 **같은 슬롯 표**를 본다(조건 복제 0)",
+		_count_in(_src, "func _ranch_door_open_notice", "_free_pasture_slots().is_empty()") == 1
+			and _count_in(_src, "func _release_open_buildings", "_free_pasture_slots()") == 1)
+	var barn: String = m.ANIMAL_BUILDINGS[0]
+	# 무대 — 낮·평온이어야 앞선 두 갈래를 지난다(그 둘은 R18이 세운 자리라 그대로 살아 있다).
+	var calm_day := -1
+	for d in range(1, 60):
+		m.clock.day = d
+		if m._weather_calm():
+			calm_day = d
+			break
+	m.clock.minutes = 12 * 60
+	_check("⑮b 무대: 낮·평온한 날(day %d)이라 밤·잿눈 갈래를 지난다" % calm_day,
+		calm_day > 0 and m._weather_calm() and m.clock.phase() != "밤")
+	# 방목 칸을 전부 채운다 — 원장은 좌표만 보므로(occupied_pasture_tiles) 가짜 키로 덮는다.
+	var free_before: int = m._free_pasture_slots().size()
+	var i := 0
+	for t: Vector2i in m._free_pasture_tiles():
+		m.ranch._animals[Vector2i(-100 - i, -100)] = {
+			"species": AnimalCatalog.ids()[0], "home_building": "__block__",
+			"location": Ranch.LOC_PASTURE, "pasture_tile": t,
+			"friendship": 0, "mood": 0, "fed": false, "petted": false, "grazed": false,
+			"penned": false, "cleaned": false, "product": 0, "product_quality": 0,
+			"product_large": false, "age": 99}
+		i += 1
+	_check("⑮c 무대: 빈 방목 칸이 %d → 0이 됐다(설치물·나무가 방목지를 덮은 상태)" % free_before,
+		free_before > 0 and m._free_pasture_slots().is_empty())
+	var txt: String = m._ranch_door_open_notice(barn, false, 3)
+	_check("⑮d 나갈 짐승이 **있는데** 자리가 없으면 그 사유를 말한다 — 「%s」" % txt,
+		txt.contains("빈 자리가 없다") and not txt.contains("나갈 짐승은 없다"))
+	var txt0: String = m._ranch_door_open_notice(barn, false, 0)
+	_check("⑮e 대조군: 나갈 짐승이 0이면 종전 문구 그대로다 — 「%s」" % txt0,
+		txt0.contains("나갈 짐승은 없다"))
+	for j in i:
+		m.ranch._animals.erase(Vector2i(-100 - j, -100))
+
+# ── ⑯ #16 축사 돌봄 알림 ↔ 실제 청소 ─────────────────────────────────────────
+func _check_tend_notice(m: Node) -> void:
+	print("⑯ #16 축사 돌봄 [F] 알림 ↔ 한 일")
+	_check("⑯a 배선: 집행부가 문구를 **파생 함수 하나**에서 받는다(인라인 조립 0)",
+		_count_in(_src, "func _process", "_ranch_tend_notice(_indoor, fed_ct, cleaned)") == 1)
+	m.ranch._silo_hay = 10
+	var fed_only: String = m._ranch_tend_notice("넋둥우리", 2, false)
+	var fed_clean: String = m._ranch_tend_notice("넋둥우리", 2, true)
+	_check("⑯b 청소가 0마리면 «청소»를 말하지 않는다 — 「%s」" % fed_only,
+		fed_only.contains("급여 2마리") and not fed_only.contains("청소"))
+	_check("⑯c 실제로 청소했으면 그대로 말한다 — 「%s」" % fed_clean,
+		fed_clean.contains("급여 2마리") and fed_clean.contains("청소"))
+	# 원장 쪽 전제 — 이미 청소된 축사는 false를 돌려준다(그래서 이 조합이 상시 도달 가능하다).
+	var beast := Vector2i(-1, -1)
+	for tile in m.ranch._animals.keys():
+		beast = tile
+		break
+	if beast.x >= 0:
+		var bld: String = String(m.ranch._animals[beast].get("home_building", ""))
+		m.ranch.clean_all_in(bld)
+		_check("⑯d 전제: 이미 청소된 축사의 `clean_all_in`은 false다(한 마리도 안 바뀐다)",
+			not m.ranch.clean_all_in(bld))
+
+# ── ⑰ #17 결정기 아침 알림 ↔ 목록 전체 ───────────────────────────────────────
+func _check_crystal_notice(m: Node) -> void:
+	print("⑰ #17 결정기 아침 알림 ↔ 여문 기계 전부")
+	_check("⑰a 배선: 아침 정산이 문구를 **파생 함수 하나**에서 받는다",
+		_count_in(_src, "func _on_day_advanced", "_crystal_done_notice(crystal_done)") == 1)
+	# 서로 다른 보석 둘이 같은 아침에 여문 목록(형제 패시브 창구처럼 개수도 싣는다).
+	# 보석 둘은 **결정기 로스터에서** 판다(id 옮겨 적기 0 — 주기가 다른 두 종이 요점이다).
+	var gems: Array = []
+	for gid in [ItemCatalog.GEM_NEOKSUJEONG, ItemCatalog.GEM_MYEONGOK,
+			ItemCatalog.GEM_YEOMJUSEOK, ItemCatalog.GEM_MYEONGBU_GEUMGANG]:
+		if CrystalariumLedger.days_for(String(gid)) > 0:
+			gems.append(String(gid))
+	var done: Array = [
+		{"region": RegionCatalog.HOME, "tile": Vector2i(1, 1), "id": String(gems[0])},
+		{"region": RegionCatalog.HOME, "tile": Vector2i(2, 2), "id": String(gems[1])}]
+	var txt: String = m._crystal_done_notice(done)
+	_check("⑰b 둘이 함께 여물면 **둘 다** 이름이 뜬다 — 「%s」" % txt,
+		txt.contains(ItemCatalog.name_of(String(gems[0])))
+			and txt.contains(ItemCatalog.name_of(String(gems[1]))))
+	_check("⑰c 형제 패시브 창구처럼 **기수**도 싣는다(게잡이통·채취기·업화로 관례)",
+		txt.contains("%d기" % done.size()))
+	var one: String = m._crystal_done_notice([done[0]])
+	_check("⑰d 대조군: 하나면 하나만 말한다 — 「%s」" % one,
+		one.contains(ItemCatalog.name_of(String(gems[0])))
+			and not one.contains(ItemCatalog.name_of(String(gems[1]))))
+
+# ── ⑱ #18 저장 상자 알림 ↔ 등급 ──────────────────────────────────────────────
+func _check_chest_quality_tag(m: Node) -> void:
+	print("⑱ #18 저장 상자 보관·회수 ↔ 등급 태그")
+	var it := ""
+	for id in CropCatalog.ids():
+		if ItemCatalog.carries_quality(id):
+			it = id
+			break
+	_check("⑱a 무대: 품질을 싣는 물건 «%s»와 활성 상자가 있다" % it,
+		it != "" and m._active_chest != null)
+	if it == "" or m._active_chest == null:
+		return
+	m.inventory.add_item(it, 3, ItemCatalog.Q_IRIDIUM)
+	var slot := -1
+	for i in range(m.inventory.slots.size()):
+		if m.inventory.id_at(i) == it and m.inventory.quality_at(i) == ItemCatalog.Q_IRIDIUM:
+			slot = i
+			break
+	if slot < 0:
+		_check("⑱a2 무대: 이리듐 슬롯을 못 잡았다", false)
+		return
+	_clear_notices(m)
+	m._on_frame_chest_store(slot)
+	_check("⑱b 보관 알림이 **어느 등급이 움직였는지** 말한다(상자는 (id,품질)별 행이다)",
+		_notice_has(m, ItemCatalog.quality_name(ItemCatalog.Q_IRIDIUM))
+			and _notice_has(m, "저장 상자에"))
+	# 회수 짝 — 방금 넣은 그 행을 되돌린다.
+	var idx := -1
+	for i in range(StorageChest.SIZE):
+		var e: Dictionary = m._active_chest.peek(i)
+		if String(e.get("id", "")) == it and int(e.get("quality", 0)) == ItemCatalog.Q_IRIDIUM:
+			idx = i
+			break
+	if idx < 0:
+		_check("⑱b2 무대: 상자에서 그 행을 못 찾았다", false)
+		return
+	_clear_notices(m)
+	m._on_frame_chest_take(idx)
+	_check("⑱c 회수 알림도 같은 꼬리를 단다(형제 창구 전수 관례)",
+		_notice_has(m, ItemCatalog.quality_name(ItemCatalog.Q_IRIDIUM))
+			and _notice_has(m, "저장 상자에서"))
+
+# ── ⑲ #19 전문직 선택 = 2단 확인 ─────────────────────────────────────────────
+var _prof_emits := 0
+
+func _on_prof_emit(_skill: String, _pid: String) -> void:
+	_prof_emits += 1
+
+func _check_profession_confirm(m: Node) -> void:
+	print("⑲ #19 비가역 선택 ↔ 확인 규율")
+	_check("⑲a 배선: 첫 클릭이 **무장**만 하고, 창구를 떠나면 풀린다(휴지통 대기와 같은 결)",
+		_count_in(_ui_src, "func _click_menu", "_prof_armed = key") == 1
+			and _count_in(_ui_src, "func close", "_prof_armed = \"\"") == 1
+			and _count_in(_ui_src, "func set_tab", "_prof_armed = \"\"") == 1)
+	var f = m.frame
+	_prof_emits = 0
+	if not f.profession_chosen.is_connected(_on_prof_emit):
+		f.profession_chosen.connect(_on_prof_emit)
+	f.context = InventoryFrame.CTX_MENU
+	f.menu_tab = InventoryFrame.TAB_SKILL
+	f._prof_armed = ""
+	f._prof_choice_rects = [{"rect": Rect2(0.0, 0.0, 20.0, 20.0),
+		"skill": ProfessionCatalog.FORAGING, "prof_id": "gatherer"}]
+	f._click_menu(Vector2(5.0, 5.0))
+	_check("⑲b 첫 클릭은 확정하지 않는다(신호 %d건 · 무장 「%s」)" % [_prof_emits, f._prof_armed],
+		_prof_emits == 0 and f._prof_armed != "")
+	f._prof_choice_rects = [{"rect": Rect2(0.0, 0.0, 20.0, 20.0),
+		"skill": ProfessionCatalog.FORAGING, "prof_id": "gatherer"}]
+	f._click_menu(Vector2(5.0, 5.0))
+	_check("⑲c 같은 버튼을 한 번 더 누르면 그때 확정된다(신호 %d건)" % _prof_emits,
+		_prof_emits == 1 and f._prof_armed == "")
+	# 다른 버튼을 누르면 무장이 그쪽으로 옮겨 간다(잘못 무장한 채 확정 0).
+	f._prof_armed = "%s|%s" % [ProfessionCatalog.FORAGING, "gatherer"]
+	f._prof_choice_rects = [{"rect": Rect2(0.0, 0.0, 20.0, 20.0),
+		"skill": ProfessionCatalog.FORAGING, "prof_id": "tracker"}]
+	f._click_menu(Vector2(5.0, 5.0))
+	_check("⑲d 다른 갈래를 누르면 확정이 아니라 **무장 이동**이다(신호 %d건)" % _prof_emits,
+		_prof_emits == 1 and f._prof_armed.ends_with("tracker"))
+	_check("⑲e 화면이 비가역을 말한다(머리말 + 무장 시 확정 안내)",
+		_count_in(_ui_src, "func _draw_skill_tab", "한 번 고르면 못 바꾼다") == 1
+			and _count_in(_ui_src, "func _draw_skill_tab", "한 번 더 누르면 확정 — 되돌릴 수 없다") == 1)
+	f._prof_armed = ""
+	f._prof_choice_rects = []
+	f.context = InventoryFrame.CTX_NONE
+
+# ── ⑳ #20 레벨업 알림 keep ───────────────────────────────────────────────────
+func _check_levelup_keep(m: Node) -> void:
+	print("⑳ #20 숙련 레벨업 알림 ↔ 1회성 래치")
+	_check("⑳a 배선: 다섯 스킬이 **한 창구**를 쓴다(같은 모양의 push 흩어짐 0)",
+		_count_in(_src, "func _gain_farm_xp", "_notice_skill_level(") == 1
+			and _count_in(_src, "func _gain_forage_xp", "_notice_skill_level(") == 1
+			and _count_in(_src, "func _gain_fishing_xp", "_notice_skill_level(") == 1
+			and _count_in(_src, "func _gain_mining_xp", "_notice_skill_level(") == 1
+			and _count_in(_src, "func _gain_combat_xp", "_notice_skill_level(") == 1)
+	# 큐를 keep 4줄로 채운다 — R19 #6이 실재를 적어 둔 그 상태(하루 전환 한 프레임).
+	_clear_notices(m)
+	for i in NoticeFeed.MAX_ITEMS:
+		m.notice_feed.push("영구 래치 %d" % i, 4.0, false, null, false, Color(0, 0, 0, 0), true)
+	_check("⑳b 무대: 큐가 keep %d줄로 찼다" % NoticeFeed.MAX_ITEMS,
+		m.notice_feed._items.size() == NoticeFeed.MAX_ITEMS)
+	m._notice_skill_level(ProfessionCatalog.FORAGING, 3)
+	_check("⑳c 그 큐에서도 레벨업 줄이 **살아남는다**(종전엔 자기 자신이 victim이었다)",
+		_notice_has(m, "숙련 ▲ 채집 Lv 3"))
+	_clear_notices(m)
+
+# ── ㉑ #21 전문직 해금 도달성 ─────────────────────────────────────────────────
+func _check_profession_reach(m: Node) -> void:
+	print("㉑ #21 전문직 해금 ↔ 정보 도달성")
+	_check("㉑a 배선: 배지가 `_pending_profession_tier`를 소비하고(머리말의 «UI 배지»), 탭이 그린다",
+		_count_in(_src, "func _any_pending_profession", "_pending_profession_tier(") == 1
+			and _count_in(_src, "func _process", "frame.set_skill_badge(_any_pending_profession())") == 1
+			and _count_in(_ui_src, "func _draw_menu_top", "_skill_badge") == 1)
+	# 무대 — 채집 Lv5에 닿게 XP를 준다(곡선은 레지스트리 파생).
+	var before_xp: int = m._foraging_xp
+	m._foraging_xp = int(ForageSkill.xp_thresholds()[4])
+	_check("㉑b 무대: 채집 Lv5 · 고를 수 있는 전문직이 서 있다(tier %d)"
+			% m._pending_profession_tier(ProfessionCatalog.FORAGING),
+		m._skill_level(ProfessionCatalog.FORAGING) >= 5
+			and m._pending_profession_tier(ProfessionCatalog.FORAGING) > 0
+			and m._any_pending_profession())
+	_clear_notices(m)
+	m._notice_skill_level(ProfessionCatalog.FORAGING, 5)
+	_check("㉑c 도달 알림이 **선택지가 열렸다는 사실과 가는 길**을 함께 말한다",
+		_notice_has(m, "전문직을 고를 수 있다") and _notice_has(m, "[Tab]"))
+	# 대조군 — 고를 것이 없는 레벨의 알림엔 그 꼬리가 안 붙는다(과잉 광고 0).
+	m._foraging_xp = 0
+	_clear_notices(m)
+	m._notice_skill_level(ProfessionCatalog.FORAGING, 2)
+	_check("㉑d 대조군: 대기 중인 tier가 없으면 꼬리가 안 붙는다",
+		_notice_has(m, "숙련 ▲ 채집 Lv 2") and not _notice_has(m, "전문직을 고를 수 있다"))
+	m._foraging_xp = before_xp
+	_clear_notices(m)
+
+# ── ㉒ #22 고른 전문직의 효과 한 줄 ──────────────────────────────────────────
+func _check_profession_desc(m: Node) -> void:
+	print("㉒ #22 고른 전문직 ↔ 퍼크 설명 도달성")
+	_check("㉒a 배선: `desc_of`가 소비처를 얻었고, 숙련 탭이 그 줄을 그린다(호출부 0이던 API)",
+		_count_in(_src, "func _skill_row(display_name", "ProfessionCatalog.desc_of(skill, pid)") == 1
+			and _count_in(_ui_src, "func _draw_skill_tab", "row.get(\"profession_lines\", [])") == 1)
+	# 실제로 하나 고른다 — 자격 판정은 프로덕션 창구가 그대로 진다.
+	var before_xp: int = m._foraging_xp
+	m._foraging_xp = int(ForageSkill.xp_thresholds()[4])
+	var pid := ""
+	for p in ProfessionCatalog.tier_profs(ProfessionCatalog.FORAGING, 5):
+		if m._can_choose_profession(ProfessionCatalog.FORAGING, String(p["id"])):
+			pid = String(p["id"])
+			break
+	_check("㉒b 무대: 고를 수 있는 채집 전문직 «%s»를 찾아 확정했다" % pid,
+		pid != "" and m.choose_profession(ProfessionCatalog.FORAGING, pid))
+	if pid == "":
+		m._foraging_xp = before_xp
+		return
+	var line := ""
+	for row in m._skill_rows():
+		if String(row.get("skill", "")) == ProfessionCatalog.FORAGING:
+			var pls: Array = row.get("profession_lines", [])
+			line = String(pls[0]) if not pls.is_empty() else ""
+	_check("㉒c 고른 뒤에도 **그 퍼크가 무엇인지** 화면에 남는다 — 「%s」" % line,
+		line.contains(ProfessionCatalog.name_of(ProfessionCatalog.FORAGING, pid))
+			and line.contains(ProfessionCatalog.desc_of(ProfessionCatalog.FORAGING, pid)))
+	m._professions.erase(ProfessionCatalog.FORAGING)
+	m._foraging_xp = before_xp
+
+# ── ㉓ #24 편지 첨부 ↔ 메뉴 해금 게이트 ─────────────────────────────────────
+func _check_mail_menu_gate(m: Node) -> void:
+	print("㉓ #24 편지 채널 ↔ 융합 메뉴 발견 게이트")
+	_check("㉓a 배선: 지급이 채널을 잠그고, 발견 기록이 그 축을 본다",
+		_count_in(_src, "func _grant_letter_attachment", "_mail_grant_active = true") == 1
+			and _count_in(_src, "func _on_item_gained", "_mail_grant_active") == 1)
+	# 첨부 중 **융합 시그니처**인 편지를 로스터에서 찾는다(id 옮겨 적기 0).
+	var letter := ""
+	var sig := ""
+	for lid in Mailbox.LETTERS.keys():
+		for e in Mailbox.attachment_items_of(String(lid)):
+			var iid := String(e["id"])
+			if MenuCatalog.menu_for_signature(iid) != "":
+				letter = String(lid)
+				sig = iid
+				break
+		if letter != "":
+			break
+	_check("㉓b 무대: 시그니처를 첨부로 든 편지 «%s»(재료 %s)가 로스터에 있다" % [letter, sig],
+		letter != "" and sig != "")
+	if letter == "":
+		return
+	var menu_id := MenuCatalog.menu_for_signature(sig)
+	m._menu_found.erase(sig)
+	m._grant_letter_attachment(letter)
+	_check("㉓c 편지로 받은 재료는 **메뉴를 열지 않는다**(물건은 그대로 손에 들어온다)",
+		not m._menu_unlocked(menu_id) and m.inventory.count_of(sig) > 0)
+	# 대조군 — 세상에서 같은 재료를 얻으면 그때 정상적으로 열린다(발견 게이트의 원래 문법).
+	m.inventory.add_item(sig, 1)
+	_check("㉓d 대조군: 세상에서 얻으면 그 자리에서 열린다(게이트를 없앤 게 아니다)",
+		m._menu_unlocked(menu_id))
+
+# ── ㉔ #25 첨부 로스터 전수(죽은 증인의 대체) ────────────────────────────────
+func _check_attachment_roster() -> void:
+	print("㉔ #25 첨부 로스터 ↔ 유니크 축 전제")
+	var total := 0
+	var uniq: Array = []
+	for lid in Mailbox.LETTERS.keys():
+		for e in Mailbox.attachment_items_of(String(lid)):
+			total += 1
+			var iid := String(e["id"])
+			if not ItemCatalog.stackable_of(iid):
+				uniq.append("%s:%s" % [String(lid), iid])
+	_check("㉔a 무대: 로스터에서 첨부 %d건을 훑었다(카탈로그 파생 — 첨부가 자라면 이 수도 자란다)"
+			% total,
+		total > 0)
+	_check("㉔b 첨부에 **비-스택 품목이 0이다** — 선검사의 «유니크 축을 안 연다»는 전제가 실제로 참이다%s"
+			% ("" if uniq.is_empty() else " (위반: %s)" % ", ".join(PackedStringArray(uniq))),
+		uniq.is_empty())
+
+# ── ㉕ #26 관문 여진 편지 백필 ───────────────────────────────────────────────
+func _check_gate_letter_backfill(m: Node) -> void:
+	print("㉕ #26 지나온 관문 ↔ 구세이브 편지 백필")
+	_check("㉕a 배선: 아침 훅이 전령 줄과 같은 자리에서 백필을 부른다(멱등 — `ever_sent`)",
+		_count_in(_src, "func _on_day_advanced", "_backfill_gate_letters()") == 1
+			and _count_in(_src, "func _backfill_gate_letters", "_heart_bit_seen(r.id, h)") == 1)
+	# 관문 편지를 가진 주민·하트 칸을 로스터에서 찾는다(id 옮겨 적기 0).
+	var rid := ""
+	var heart := 0
+	var lid := ""
+	for r in m._residents:
+		if r == null or r.node == null or not r.node.has_method("heart_gate_letter"):
+			continue
+		for h in range(1, Affinity.MAX_HEARTS + 1):
+			var cand := String(r.node.heart_gate_letter(h))
+			if cand != "" and not m.mailbox.ever_sent(cand):
+				rid = r.id
+				heart = h
+				lid = cand
+				break
+		if rid != "":
+			break
+	_check("㉕b 무대: 아직 안 보낸 관문 편지 «%s»(%s ♡%d)를 찾았다" % [lid, rid, heart], lid != "")
+	if lid == "":
+		return
+	# 「이미 지나온 칸」 = 영속 비트만 서 있고 편지는 없는 상태(편지 개통 이전 세이브의 모양).
+	m._mark_heart_bit(rid, heart)
+	m._backfill_gate_letters()
+	_check("㉕c 지나온 칸의 편지가 **뒤늦게 큐에 선다**(막히는 것은 0이 실제로 참이 된다)",
+		m.mailbox.ever_sent(lid))
+	# 대조군 — 안 지난 칸은 그대로 안 온다(과잉 발송 0).
+	var unseen := ""
+	for r2 in m._residents:
+		if r2 == null or r2.node == null or not r2.node.has_method("heart_gate_letter"):
+			continue
+		for h2 in range(1, Affinity.MAX_HEARTS + 1):
+			var c2 := String(r2.node.heart_gate_letter(h2))
+			if c2 != "" and not m.mailbox.ever_sent(c2) and not m._heart_bit_seen(r2.id, h2):
+				unseen = c2
+				break
+		if unseen != "":
+			break
+	m._backfill_gate_letters()
+	_check("㉕d 대조군: 지나지 않은 칸의 편지 «%s»는 오지 않는다" % unseen,
+		unseen == "" or not m.mailbox.ever_sent(unseen))
+
+# ── ㉖ #27 마감 정산 팝업 ↔ 상시 HUD ────────────────────────────────────────
+func _check_summary_hud(m: Node) -> void:
+	print("㉖ #27 비차단 정산 팝업 ↔ 체력 바")
+	_check("㉖a 배선: 이 판이 `_hud_hidden` 목록에서 빠졌고, 하단 예약 띠를 인자로 받는다",
+		_count_in(_src, "func _process", "cafe_summary_panel.visible or milestone_panel") == 0
+			and _count_in(_src, "func _show_cafe_summary",
+				"_layout_popup_panel(cafe_summary_panel, cafe_summary_text, NoticeFeed.RESERVE_BOTTOM)") == 1)
+	m._indoor = ""
+	m._sleeping = false
+	m._transitioning = false
+	m.frame.close()
+	_dismiss_dialogue(m)
+	m._show_cafe_summary("오늘 매출 1234냥\n서빙 5잔\n아는 얼굴 2\n체키 1\n손님 7\n마감")
+	await process_frame
+	await process_frame
+	_check("㉖b 무대: 정산 판이 떠 있다", m.cafe_summary_panel.visible)
+	_check("㉖c 그 5초 동안 **체력·혼력 바가 살아 있다**(비차단 팝업 뒤에서 전투가 계속된다)",
+		m.vitals.visible and m.hotbar.visible)
+	var view: Vector2 = m._logical_view_size(m.cafe_summary_panel)
+	_check("㉖d 판이 하단 예약 띠(%d)를 안 넘는다 — 그래서 가릴 이유가 없다(바닥 %.0f / 한계 %.0f)"
+			% [int(NoticeFeed.RESERVE_BOTTOM), m.cafe_summary_panel.position.y + m.cafe_summary_panel.size.y,
+				view.y - NoticeFeed.RESERVE_BOTTOM],
+		m.cafe_summary_panel.position.y + m.cafe_summary_panel.size.y
+			<= view.y - NoticeFeed.RESERVE_BOTTOM + 0.5)
+	m.cafe_summary_panel.visible = false
+	m._cafe_summary_secs = 0.0
+
+# ── ㉗ #28 곳간 ↔ 오늘의 메뉴판 ──────────────────────────────────────────────
+func _check_menu_board(m: Node) -> void:
+	print("㉗ #28 곳간 표시 ↔ 메뉴판 슬롯 상한")
+	_check("㉗a 배선: 곳간 패널이 오늘의 메뉴판을 주입받고, 행 색이 그 술어를 본다",
+		_count_in(_src, "func _process", "frame.set_menu_board(_menu_board_ids())") == 1
+			and _count_in(_src, "func _menu_board_ids", "_cafe_order_pool()") == 1
+			and _count_in(_ui_src, "func _draw_larder_top", "larder_row_offboard(id)") == 1)
+	# 메뉴판은 슬롯 상한을 절대 안 넘는다(주문 후보의 유일 출처에서 판다).
+	var slots: int = CafeMilestone.fusion_slots_of(m._cafe_stage())
+	_check("㉗b 메뉴판 칸수가 단계 상한(%d) 이하다" % slots, m._menu_board_ids().size() <= slots)
+	# 두 시그니처를 잡아 하나만 판에 올린다 — 나머지 줄은 «오늘 안 나간다»로 갈린다.
+	var sigs: Array = []
+	for mid in MenuCatalog.fusion_ids():
+		sigs.append(MenuCatalog.signature_of(String(mid)))
+		if sigs.size() >= 2:
+			break
+	_check("㉗c 무대: 융합 시그니처 둘(%s / %s)을 잡았다" % [String(sigs[0]), String(sigs[1])],
+		sigs.size() >= 2)
+	if sigs.size() < 2:
+		return
+	var on_board := PackedStringArray([MenuCatalog.menu_for_signature(String(sigs[0]))])
+	m.frame.set_menu_board(on_board)
+	_check("㉗d 메뉴판에 걸린 재료는 그대로고, **잘린 재료는 «오늘 안 나간다»로 갈린다**",
+		not m.frame.larder_row_offboard(String(sigs[0]))
+			and m.frame.larder_row_offboard(String(sigs[1])))
+	m.frame.set_menu_board(PackedStringArray())
+	_check("㉗e 대조군: 메뉴판을 모르면 아무 줄도 흐려지지 않는다(주입 전 첫 프레임 방어)",
+		not m.frame.larder_row_offboard(String(sigs[1])))
+
+# ── ㉘ #29 날씨 힌트 ↔ 실제로 바뀌는 축 전수 ────────────────────────────────
+func _check_weather_hint(m: Node) -> void:
+	print("㉘ #29 날씨 한 줄 ↔ 그 하늘이 하는 일")
+	# 축 → 그 축이 살아 있으면 힌트에 반드시 들어가야 하는 낱말(하나라도 맞으면 통과).
+	var axes: Array = [
+		{"name": "밭 자동 급수", "keys": ["밭", "젖"]},
+		{"name": "노지 성장", "keys": ["노지", "작물"]},
+		{"name": "방목", "keys": ["짐승", "방목"]},
+		{"name": "카페 손님", "keys": ["카페"]},
+		{"name": "낚시 입질", "keys": ["입질", "문다"]},
+		{"name": "던전 잡귀", "keys": ["잡귀"]},
+	]
+	var checked := 0
+	var missing: Array = []
+	for w in range(Weather.NAMES.size()):     # ★ 로스터는 레지스트리에서 판다(총원 하드코딩 0)
+		var hint: String = m._weather_hint(w)
+		var live: Array = [
+			Weather.waters_field(w),
+			not Weather.grows_crops(w),
+			not Weather.allows_grazing(w),
+			absf(Weather.cafe_spawn_scale(w) - 1.0) > 0.001,
+			absf(Weather.bite_wait_factor(w) - 1.0) > 0.001,
+			absf(Weather.mob_spawn_scale(w) - 1.0) > 0.001,
+		]
+		for i in axes.size():
+			if not bool(live[i]):
+				continue
+			checked += 1
+			var hit := false
+			for k in axes[i]["keys"]:
+				if hint.contains(String(k)):
+					hit = true
+			if not hit:
+				missing.append("%s/%s" % [Weather.name_of(w), String(axes[i]["name"])])
+	_check("㉘a 무대: 하늘 %d종에서 살아 있는 축 %d개를 훑었다(전부 Weather 조회에서 파생)"
+			% [Weather.NAMES.size(), checked],
+		Weather.NAMES.size() > 0 and checked > 0)
+	_check("㉘b 힌트가 **빠뜨린 축이 없다**%s"
+			% ("" if missing.is_empty() else " (누락: %s)" % ", ".join(PackedStringArray(missing))),
+		missing.is_empty())
+	_check("㉘c 평온은 여전히 조용하다(과잉 광고 0) — 「%s」" % m._weather_hint(Weather.CALM),
+		m._weather_hint(Weather.CALM) == "여느 하늘")

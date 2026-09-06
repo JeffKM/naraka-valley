@@ -2552,6 +2552,9 @@ var _forage_found: Dictionary = {}
 #   ★ 관계(♡) 게이트는 여기 없다(ADR-0008 — 미호·멜 하트는 곱셈기이지 해금 조건이 아니다).
 #   세이브 키 "menu_found"(키 없는 구세이브 = 빈 원장 → 재료를 다시 손에 넣는 순간 열린다·무막힘).
 var _menu_found: Dictionary = {}
+# ★[폴리시 R28 #24] 지금 프레임이 **편지 첨부 지급 중**인가 — `_on_item_gained`의 발견 기록이
+#   이 축을 본다(그 두 자리의 머리말). 세이브에 안 실린다: 한 함수 안에서 서고 지는 순간 상태다.
+var _mail_grant_active := false
 # ★[S4-T3 / ADR-0062 결정 3] 나무 원장(벌목 가능한 *내부* 나무 — 종 3·성장 5단계·타수·그루터기·재성장).
 #   맵 경계 프레이밍 밴드(TREE_BORDER_BAND 안쪽 테두리)는 여기 안 들어온다 = 불벌목 벽(flood-fill·워프
 #   불변식 보존). ForageSpawns와 같은 RefCounted 순수 원장이고, 통행 판정·그리드 동기화·산출 적재는
@@ -7231,8 +7234,7 @@ func _gain_combat_xp(amount: int) -> void:
 	var after := CombatSkill.level_for_xp(_combat_xp)
 	_refresh_max_hp()
 	if after > before and notice_feed != null:
-		notice_feed.push("숙련 ▲ 전투 Lv %d" % after, 4.0, false, null, true)
-		audio.sfx("ui")
+		_notice_skill_level(ProfessionCatalog.COMBAT, after)
 
 # ── ★ 전투 전문직 편의 조회(채집·낚시 파일럿과 같은 결) ─────────────────────
 # ★ 채광 트리와 달리 **여기 넷은 실제 값을 돌려준다**(ProfessionCatalog COMBAT perks 인코딩 완료).
@@ -11061,8 +11063,12 @@ func _on_day_advanced(day: int) -> void:
 	if crystalarium != null:
 		var crystal_done: Array = crystalarium.advance_day()
 		if not crystal_done.is_empty():
-			_notice("결정기에서 %s 여물었다 — 들러서 꺼내자"
-				% HanjiUi.with_i(ItemCatalog.name_of(String(crystal_done[0]["id"]))))
+			# ★[폴리시 R28 #17] **목록 전체를 말한다.** 종전엔 `crystal_done[0]` 하나만 읽어, 주기가
+			#   다른 두 기계(넋수정 2일 · 명부금강 8일)가 같은 아침에 만나면 좌표 정렬 첫 칸의 보석만
+			#   이름이 뜨고 나머지는 화면에 한 글자도 안 나왔다. 안 비운 기계는 카운트다운이 멈추므로
+			#   (`advance_day`의 «수거 대기는 그냥 지나간다») 못 본 기계는 그날치 복제를 잃는다.
+			#   같은 아침 정산의 형제 패시브 창구는 전부 개수를 싣는다(게잡이통·채취기·업화로).
+			_notice(_crystal_done_notice(crystal_done))
 	# ★[S4-T8 / ADR-0062 결정 9 ㉠] 덤불 밤 결실 — 절기 창(피안 15~18 / 망연 8~11) 안에서만 덤불당
 	#   20% 결정 롤로 열매가 달린다. 창을 벗어나면 롤이 없고 남은 열매도 진다(채집물 절기 전환과 같은 결).
 	#   절기 판정은 clock의 기존 파생을 그대로 쓴다 — 신규 시스템 0(ADR-0062 결정 9 마지막 줄).
@@ -11254,6 +11260,17 @@ func _on_day_advanced(day: int) -> void:
 		#     머리말) 자격이 아니라 개통을 알린다. `send`는 멱등이라(ever_sent) 매일 불러도 한 번만
 		#     나가고, 이 자리에 두면 옛 세이브를 이어받아도 다음 아침에 뒤늦게 도착한다.
 		mailbox.send(HERALD_NOTICE_LETTER)
+		# ★[폴리시 R28 #26] **지나온 관문의 여진 편지 백필** — 위 전령 줄과 같은 자리·같은 근거다.
+		#   편지 원장 로드 주석이 「키 없는 구세이브는 빈 우편함으로 시작한다 … 막히는 것은 0이다」
+		#   라고 계약을 적는데, 그것이 참인 것은 **앞으로 성사될 칸뿐**이었다: 발송 창구가
+		#   `_send_gate_letter` 하나뿐이고 그 함수는 `promote()`가 성공한 그 프레임에만 불리는데,
+		#   관문은 칸당 1회라(`_heart_bit_seen`) 이미 지난 칸은 다시 성사되지 않는다. 그래서 편지
+		#   개통 이전 세이브를 이어받으면 미호 ♡1~♡4·멜 ♡1~♡3 등 **이미 지나온 칸의 39통이 한 통도
+		#   도착할 수 없었고**, 그 첨부(씨앗·화분·엽전·서리동백)도 함께 소실됐다.
+		#   ★ 백필 재료는 이미 있다 — «이 관문을 지났다»는 영속 비트(`_heart_bit_seen`)와 멱등
+		#     발송(`Mailbox.send`의 `ever_sent`). 매일 부르는 것이 맞다(전령과 같은 이유): 조건이
+		#     계속 참이어도 두 번째부터는 조용히 false다.
+		_backfill_gate_letters()
 	# ★[S7-T9 / ADR-0065 결정 11] 절기 팔레트 스왑 — 땅의 낯빛이 절기를 따라 바뀐다.
 	#   **하루 정산의 맨 끝**에 둔다: 이 호출 안의 `_rebuild_region`이 그리드를 다시 세우므로,
 	#   지상 그리드를 전제하는 위 정산들(재점령 후보·잡초 확산·나무 파종)이 전부 끝난 뒤라야
@@ -13414,6 +13431,34 @@ func _item_icon(id: String) -> Texture2D:
 #     (밭 수확·과수 수확 전부 미호 도메인). 한 곳에서 곱해야 소스가 늘어도 자동으로 따라온다.
 #   ★ ♡0 = ×1.0이라 관계를 안 쌓아도 숙련은 종전 속도 그대로다(ADR-0008 "평평 ≠ 막힘").
 #     테스트가 직접 부르는 경로도 ♡0에서는 값이 한 톨도 안 변한다.
+# ★[폴리시 R28 #20·#21] 숙련 레벨업 한 줄 — 다섯 스킬이 **같은 한 창구**를 쓴다(종전엔 같은 모양의
+#   push가 다섯 곳에 흩어져 있었다). 두 가지를 함께 고친다.
+#   ㉠ **keep** — 이 알림은 `after > before`인 프레임에만 발화하는 순수 1회성 래치라 밀려나면 다시
+#      오지 않는다(R16 #10이 세운 판별식 «밀려나면 영영 다시 안 뜨는가» 그대로). 종전 5인자 push는
+#      keep이 기본 false여서, 앞이 전부 keep인 큐에서는 notice_feed의 R19 #6 폴백이 **방금 민 자기
+#      자신을 victim으로 지목**해 한 프레임도 안 그려진 채 사라졌다(하루 전환 한 프레임에 밤 바
+#      마감·도감 트로피·완공·혼례가 keep 4줄로 큐를 채우는 그 상태 — R19 #6 주석이 실재를 적어 뒀다).
+#   ㉡ **전문직 해금 고지** — `_pending_profession_tier`의 머리말이 «UI 배지·온보딩용»이라 계약을
+#      적어 두고 런타임 소비처는 숙련 탭 머리말 숫자 하나뿐이라, Lv5/Lv10에 닿아도 [Tab]→숙련 탭을
+#      스스로 열기 전에는 선택지가 열렸다는 사실이 게임 안 어디에도 없었다. 그 사실을 이 줄이
+#      말한다(그리고 탭 아이콘 배지가 그 계약의 나머지 절반을 진다 — `_any_pending_profession`).
+func _notice_skill_level(skill: String, after: int) -> void:
+	if notice_feed == null:
+		return
+	var line := "숙련 ▲ %s Lv %d" % [ProfessionCatalog.skill_name(skill), after]
+	if _pending_profession_tier(skill) > 0:
+		line += " — 전문직을 고를 수 있다 ([Tab] → 숙련)"
+	notice_feed.push(line, 4.0, false, null, true, Color(0, 0, 0, 0), true)   # gold=금박 · keep=1회성 래치
+	audio.sfx("ui")
+
+# ★[폴리시 R28 #21] 지금 **어느 스킬이든** 고를 수 있는 전문직이 있는가 — 숙련 탭 아이콘 배지의
+#   술어다. 스킬 명단은 레지스트리에서 판다(`ProfessionCatalog.SKILLS` — 총원 하드코딩 0).
+func _any_pending_profession() -> bool:
+	for skill in ProfessionCatalog.SKILLS:
+		if _pending_profession_tier(String(skill)) > 0:
+			return true
+	return false
+
 func _gain_farm_xp(amount: int) -> void:
 	if amount <= 0:
 		return
@@ -13422,8 +13467,7 @@ func _gain_farm_xp(amount: int) -> void:
 	_farming_xp += amount
 	var after := FarmSkill.level_for_xp(_farming_xp)
 	if after > before and notice_feed != null:
-		notice_feed.push("숙련 ▲ 농사 Lv %d" % after, 4.0, false, null, true)  # gold=금박 강조
-		audio.sfx("ui")
+		_notice_skill_level(ProfessionCatalog.FARMING, after)
 
 # ★ ADR-0052 그레이박스 — 채집 XP 적립 + 레벨업 감지(_gain_farm_xp 대칭). 소스 = 꽃 패치 손수확·
 # 숲 빈터 줍기(둘 다 ForageSkill.PICK_XP 고정 — S4-T2에서 기준가 방식을 걷어냈다).
@@ -13436,8 +13480,7 @@ func _gain_forage_xp(amount: int) -> void:
 	_foraging_xp += amount
 	var after := ForageSkill.level_for_xp(_foraging_xp)
 	if after > before and notice_feed != null:
-		notice_feed.push("숙련 ▲ 채집 Lv %d" % after, 4.0, false, null, true)
-		audio.sfx("ui")
+		_notice_skill_level(ProfessionCatalog.FORAGING, after)
 
 # ★[S3-T6 / ADR-0061 결정 6] 낚시 XP 적립 + 레벨업 감지(_gain_farm_xp 대칭). 소스는 _finish_fishing의
 # 포획 분기 하나뿐이다(놓친 격투 = 0 — 리스크는 혼력으로 이미 냈다).
@@ -13448,8 +13491,7 @@ func _gain_fishing_xp(amount: int) -> void:
 	_fishing_xp += amount
 	var after := FishSkill.level_for_xp(_fishing_xp)
 	if after > before and notice_feed != null:
-		notice_feed.push("숙련 ▲ 낚시 Lv %d" % after, 4.0, false, null, true)
-		audio.sfx("ui")
+		_notice_skill_level(ProfessionCatalog.FISHING, after)
 
 # ★[S5-T2 / ADR-0063 결정 9] 채광 XP 적립 + 레벨업 감지(_gain_farm_xp 대칭). 소스는 _mine_rock의
 # 파괴 분기 하나뿐이다(중간 타 = 0 — 벌목과 같이 "부순 사건"에만 값을 매긴다).
@@ -13460,8 +13502,7 @@ func _gain_mining_xp(amount: int) -> void:
 	_mining_xp += amount
 	var after := MiningSkill.level_for_xp(_mining_xp)
 	if after > before and notice_feed != null:
-		notice_feed.push("숙련 ▲ 채광 Lv %d" % after, 4.0, false, null, true)
-		audio.sfx("ui")
+		_notice_skill_level(ProfessionCatalog.MINING, after)
 
 # ── ADR-0052 전문직 선택·조회 API ──────────────────────────────────────────────
 # 스킬의 현재 레벨(FarmSkill 곡선 공유 — FishSkill·MiningSkill·CombatSkill도 그 곡선에 위임한다).
@@ -13541,7 +13582,10 @@ func choose_profession(skill: String, prof_id: String) -> bool:
 	if skill == ProfessionCatalog.COMBAT:
 		_refresh_max_hp()
 	if notice_feed != null:
-		notice_feed.push("전문직 ▲ %s" % ProfessionCatalog.name_of(skill, prof_id), 4.0, false, null, true)
+		# ★[폴리시 R28 #20] 레벨업 줄과 **같은 클래스**의 1회성 래치다(전문직은 이 세이브에서 다시
+		#   못 고른다) — keep을 함께 세운다.
+		notice_feed.push("전문직 ▲ %s" % ProfessionCatalog.name_of(skill, prof_id), 4.0, false, null,
+			true, Color(0, 0, 0, 0), true)
 		audio.sfx("ui")
 	return true
 
@@ -13973,9 +14017,16 @@ func _process(delta: float) -> void:
 	# 핫바를, 정산창이 혼력 바를 덮음). 모달/패널이 열린 동안 둘 다 숨겨 안 겹치게 한다(상시 HUD는
 	# 패널 밖에서만 — 미니멀 결). _process가 가시성 단일 출처라 _open/_close_frame의 hotbar 토글과
 	# 일관(프레임 열림도 아래 조건에 포함).
+	# ★[폴리시 R28 #27] **마감 정산 팝업은 이 목록에서 빠진다.** 이 판은 비차단이라 5실초 동안
+	#   세계가 계속 돌고(몹 틱·접촉 피해·시계) 플레이어도 계속 움직이는데, 상시 HUD를 통째로
+	#   지우면 그 5초를 **체력 바 없이** 싸우게 된다 — 게임 시각 19:00마다, 구역과 무관하게
+	#   (`cafe.tick`에 구역 가드가 없다) 매일 반복됐다. 가림의 옛 근거("정산창이 혼력 바를 덮음")도
+	#   지금은 성립하지 않는다: 판은 화면 중앙대에 서고, 아래 `_show_cafe_summary`가 **하단 HUD
+	#   예약 띠**(NoticeFeed.RESERVE_BOTTOM)를 넘지 못하게 높이를 물린다. 나머지 모달(마일스톤·
+	#   마무리·거울·프레임·대화)은 입력을 실제로 잡거나 화면을 채우므로 그대로 둔다.
 	var _hud_hidden := dialogue.is_open() or frame.is_open() or _sleeping \
 		or _transitioning \
-		or cafe_summary_panel.visible or milestone_panel.visible or ending_panel.visible \
+		or milestone_panel.visible or ending_panel.visible \
 		or mirror_panel.visible \
 		or cutscene != null \
 		or spine_puzzle != null \
@@ -14136,6 +14187,10 @@ func _process(delta: float) -> void:
 			_close_frame()
 		elif frame.context == InventoryFrame.CTX_MENU and Input.is_action_just_pressed("menu_tab"):
 			frame.cycle_tab()
+		# ★[폴리시 R28 #21] 숙련 탭 배지 — **탭과 무관하게** 매 프레임 준다(다른 탭에 서 있을 때
+		#   보여야 «저기 할 일이 있다»가 닿는다). 판정은 main, 그림은 프레임(무상태 주입 관례).
+		if frame.context == InventoryFrame.CTX_MENU:
+			frame.set_skill_badge(_any_pending_profession())
 		if frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_REL:
 			frame.set_hearts(_heart_rows())
 		elif frame.context == InventoryFrame.CTX_MENU and frame.menu_tab == InventoryFrame.TAB_SKILL:
@@ -14157,6 +14212,10 @@ func _process(delta: float) -> void:
 			_refresh_guild()                     # ★ [S5-T6] 길드 매대 행(구매 즉시 "보유 중"으로 잠김)
 		elif frame.context == InventoryFrame.CTX_NIGHTMARKET:
 			_refresh_night_market()              # ★[S7-T7] 야시장 행(구매 즉시 "해금됨/구입함"으로 잠김)
+		elif frame.context == InventoryFrame.CTX_LARDER:
+			# ★[폴리시 R28 #28] 오늘의 메뉴판을 주입한다 — 곳간 패널이 «쟁이면 나간다»를 말하는
+			#   그 줄이 실제로 오늘 주문 후보인지를 같은 표(`_cafe_order_pool`)에서 판다.
+			frame.set_menu_board(_menu_board_ids())
 		elif frame.context == InventoryFrame.CTX_PEDDLER:
 			_refresh_peddler()                   # ★[S10-T3] 보부상 행(구매 즉시 잠김·골드 헤더 갱신)
 		elif frame.context == InventoryFrame.CTX_TRIAL:
@@ -14688,10 +14747,7 @@ func _process(delta: float) -> void:
 		var cleaned := ranch.clean_all_in(_indoor)
 		if fed_ct > 0 or cleaned:
 			audio.sfx("ui")
-			if fed_ct > 0:
-				_notice("%s 여물 급여 %d마리 + 청소 (여물광 %d단 남음)" % [_indoor, fed_ct, ranch.silo_hay()])
-			else:
-				_notice("%s 청소 완료 — 여물광이 비어 급여 못 함" % _indoor if ranch.silo_hay() <= 0 else "%s 청소 완료 — 잠자리를 정갈히" % _indoor)
+			_notice(_ranch_tend_notice(_indoor, fed_ct, cleaned))
 		elif ranch.silo_hay() <= 0:
 			_notice("여물광이 비었다 — 낫으로 사료풀을 베어 채워야 한다")
 		return
@@ -19503,7 +19559,11 @@ func _on_frame_chest_store(slot_index: int) -> void:
 		return
 	inventory.remove_at(slot_index, stored)   # 넣은 만큼만 차감(상자 가득 부분 이동 안전)
 	audio.sfx("ui")
-	_notice("저장 상자에 %s %d개 보관" % [ItemCatalog.name_of(id), stored])
+	# ★[폴리시 R28 #18] **등급을 말한다**(형제 창구 전수가 지키는 `qtag` 관례 — 출하 드롭·회수·
+	#   환전·휴지통). 상자는 `store`가 (id, 품질)별 행을 세우므로 같은 물건이 등급별로 여러 줄
+	#   서는데, 알림만 등급을 버려 「황천포도 3개 보관」이 어느 줄에 갔는지 알 길이 없었다.
+	var sq_tag := (ItemCatalog.quality_name(q) + " ") if q > 0 else ""
+	_notice("저장 상자에 %s%s %d개 보관" % [sq_tag, ItemCatalog.name_of(id), stored])
 
 # 상자 슬롯을 통째로 백팩에 되돌린다. 백팩이 가득 차 일부만 들어가면 그만큼만 상자에서 뺀다(출하함 회수 결).
 func _on_frame_chest_take(chest_index: int) -> void:
@@ -19525,7 +19585,10 @@ func _on_frame_chest_take(chest_index: int) -> void:
 		return
 	_active_chest.remove_at(chest_index, added)
 	audio.sfx("ui")
-	_notice("저장 상자에서 %s %d개 회수" % [ItemCatalog.name_of(id), added])
+	# ★[폴리시 R28 #18] 보관 짝과 **같은 꼬리**(그 자리의 머리말) — 등급별 행에서 어느 줄이
+	#   움직였는지가 알림만으로 갈린다.
+	var tq_tag := (ItemCatalog.quality_name(q) + " ") if q > 0 else ""
+	_notice("저장 상자에서 %s%s %d개 회수" % [tq_tag, ItemCatalog.name_of(id), added])
 
 # ── ★ C2 네오 만물상 매대 구매(프레임 시그널 핸들러) ──────────────────────────
 # 매대에서 [구매] 버튼을 클릭하면 선택 작물 씨앗을 네오 할인가로 산다. bulk(Shift)=대량(BULK개,
@@ -21567,10 +21630,21 @@ func _skill_row(display_name: String, skill: String, xp: int) -> Dictionary:
 	var floor_xp := 0 if lv <= 0 else int(FarmSkill.XP_THRESHOLDS[lv - 1])
 	var next_xp := 0 if lv >= FarmSkill.MAX_LEVEL else int(FarmSkill.XP_THRESHOLDS[lv])
 	var chosen: Array = []
+	# ★[폴리시 R28 #22] **고른 뒤에도 그 퍼크가 무엇인지 읽힌다.** `ProfessionCatalog.desc_of`는
+	#   저장소 전체에서 호출부가 0이었다 — 선택 *전* 설명은 카탈로그 dict를 직접 읽어 버튼 둘째 줄로
+	#   지나가고, 선택 *후* 행에는 이름만 남았다. 되돌릴 수 없는 선택인데 그 내용이 확정과 동시에
+	#   화면에서 사라지던 자리다(「덫꾼」이 게잡이통 소모 −50%라는 사실을 게임 안에서 다시 볼 방법 0).
+	#   ★ 요약 꼬리(`profession`)에 붙이지 않고 **별 줄**로 내보내는 이유: 그 꼬리는 폭이
+	#     `bar_w - SK_PROF_X`로 물려 있어 설명을 얹으면 말줄임에 먹힌다(R23이 세운 «표시 단언은
+	#     말줄임을 태운다»의 반대편 — 잘릴 자리에 넣지 않는다).
+	var chosen_lines: Array = []
 	for tier in [5, 10]:
 		var pid := _profession_at(skill, tier)
 		if pid != "":
 			chosen.append(ProfessionCatalog.name_of(skill, pid))
+			var pdesc := ProfessionCatalog.desc_of(skill, pid)
+			chosen_lines.append("· %s — %s" % [ProfessionCatalog.name_of(skill, pid), pdesc]
+				if pdesc != "" else "· %s" % ProfessionCatalog.name_of(skill, pid))
 	# 지금 고를 수 있는 전문직 목록(프레임이 버튼으로 그림 — main이 자격 판정, 프레임은 무상태 렌더).
 	# pt==0이면 tier_profs가 빈 배열이라 options=[](선택 UI 미표시).
 	var pt := _pending_profession_tier(skill)
@@ -21583,6 +21657,7 @@ func _skill_row(display_name: String, skill: String, xp: int) -> Dictionary:
 	return {"name": display_name, "level": lv, "max": FarmSkill.MAX_LEVEL, "xp": xp,
 		"floor_xp": floor_xp, "next_xp": next_xp,
 		"skill": skill, "profession": ", ".join(chosen), "pending_tier": pt, "options": options,
+		"profession_lines": chosen_lines,   # ★[폴리시 R28 #22] 고른 퍼크의 효과 한 줄씩(desc_of)
 		"mastery": _mastery_row(skill)}
 
 # ★ Phase B 옵션 탭 핸들러 — 프레임은 신호만, 실제 저장·종료는 main이 수행(지갑·세이브 소유).
@@ -23167,6 +23242,20 @@ func _try_heart_promotion(r: Resident) -> PackedStringArray:
 # **중복 발송 방어도 mailbox.send가 진다**(같은 편지는 두 번 안 온다 — 재구애로 관문이 다시 성사돼도
 # 안전하다). 그래서 여기는 판정이 0줄이다 — heart_gate_lines·heart_gate_cutscene과 같은 이음매로
 # 캐릭터 파일에 메서드 하나가 붙는 것이 편지 개통의 전부다(ADR-0005).
+# ★[폴리시 R28 #26] 이미 지나온 관문의 여진 편지를 뒤늦게 큐에 넣는다(호출부 머리말에 경위).
+#   판정은 «그 관문을 봤는가»라는 영속 비트 하나이고, 중복은 `mailbox.send`가 진다(멱등) — 그래서
+#   이 함수는 오늘 성사된 칸에 대해서도 안전하다(같은 편지는 두 번 안 나간다). 하트 상한은
+#   `Affinity.MAX_HEARTS`에서 판다(총원 하드코딩 0).
+func _backfill_gate_letters() -> void:
+	if mailbox == null:
+		return
+	for r in _residents:
+		if r == null or r.node == null:
+			continue
+		for h in range(1, Affinity.MAX_HEARTS + 1):
+			if _heart_bit_seen(r.id, h):
+				_send_gate_letter(r, h)
+
 func _send_gate_letter(r: Resident, target: int) -> void:
 	if mailbox == null or r == null or r.node == null or not r.node.has_method("heart_gate_letter"):
 		return
@@ -25435,6 +25524,15 @@ func _guest_prefix(guest_id: String) -> String:
 #   ㉡ 동률이면 카탈로그 선언 순(작물→물고기→채집→수액→나락혼정) — 결정적이라 같은 상태면 같은 판이다.
 # ★ 재고 0인 융합도 슬롯이 남으면 걸린다 — 폴백 경로(주문했는데 재료가 없다 = 곳간을 채울 이유)를
 #   죽이지 않기 위해서다(결정 4 무막힘. cafe.gd W_FUSION_EMPTY 주석과 같은 근거).
+# ★[폴리시 R28 #28] 오늘 **메뉴판에 실제로 걸린** 융합 메뉴 id들 — 곳간 패널이 «이걸 쟁이면
+#   이게 나간다»를 말하는 그 줄의 진위를 가르는 표다. 주문 후보의 유일 출처인 `_cafe_order_pool`
+#   에서 그대로 판다(슬롯 상한·해금·제철·재고 정렬이 이미 그 안에 다 들어 있다 — 규칙 복제 0).
+func _menu_board_ids() -> PackedStringArray:
+	var out := PackedStringArray()
+	for e in _cafe_order_pool():
+		out.append(String(e["id"]))
+	return out
+
 func _cafe_order_pool() -> Array:
 	var stocked: Array = []
 	var empty: Array = []
@@ -25560,6 +25658,10 @@ func _menu_unlocked(menu_id: String) -> bool:
 # 멱등이다(이미 true인 걸 다시 true로 써도 무해) — 로드 경로가 add_item을 경유해 시그널이 다시
 # 돌아도 원장이 흔들리지 않는다.
 func _on_item_gained(id: String) -> void:
+	# ★[폴리시 R28 #24] 편지 첨부로 들어온 물건은 **발견으로 세지 않는다**(그 지급처의 머리말 —
+	#   「편지는 레시피·콘텐츠 해금 채널이 아니다」가 여기서 집행된다). 다른 모든 획득 경로는 종전 그대로다.
+	if _mail_grant_active:
+		return
 	if MenuCatalog.menu_for_signature(id) != "":
 		_menu_found[id] = true
 
@@ -25646,7 +25748,10 @@ func _show_cafe_summary(text: String) -> void:
 	cafe_summary_text.text = text
 	# ★[폴리시 R23 #17] 판을 본문에 맞춘 **뒤** 보인다(그 함수 머리말 — 「아는 얼굴」·「체키」 줄이
 	#   붙는 날 6줄이 라벨 80px·판 104px를 통째로 넘어 한지 테두리 위에 그려지던 자리).
-	_layout_popup_panel(cafe_summary_panel, cafe_summary_text)
+	# ★[폴리시 R28 #27] 이 판은 **상시 HUD와 나란히** 뜬다(그 목록에서 빠졌다) — 그래서 하단
+	#   예약 띠를 침범하지 않게 높이를 물린다. 값의 출처는 알림 피드가 이미 든 그 상수 하나다
+	#   (핫바·프롬프트·컨텍스트 팝업이 사는 띠 = `NoticeFeed.RESERVE_BOTTOM`).
+	_layout_popup_panel(cafe_summary_panel, cafe_summary_text, NoticeFeed.RESERVE_BOTTOM)
 	cafe_summary_panel.visible = true
 	_cafe_summary_secs = CAFE_SUMMARY_SECS
 
@@ -25876,7 +25981,7 @@ func _label_body_height(label: Label, text: String, w: float) -> float:
 #     숫자를 여기 옮겨 적을 자리가 없다(거울이 상수 넷을 든 것과 갈리는 지점).
 #   ★ 위쪽 변을 고정하고 아래로만 자란다(거울은 중앙 정렬 — 저긴 화면 한복판의 조회 판이고
 #     이 둘은 상단에 뜨는 알림이라 머리가 튀는 것이 더 나쁘다).
-func _layout_popup_panel(panel: Panel, label: Label) -> void:
+func _layout_popup_panel(panel: Panel, label: Label, bottom_reserve: float = 0.0) -> void:
 	if panel == null or label == null:
 		return
 	var pad := label.position
@@ -25887,7 +25992,10 @@ func _layout_popup_panel(panel: Panel, label: Label) -> void:
 	#   (실측으로 배운 것 — 회귀 ⑮g가 그 1px을 잡았다).
 	label.size = Vector2(body_w, _label_body_height(label, label.text, body_w))
 	var view := _logical_view_size(panel)
-	var cap := maxf(view.y - panel.position.y - MIRROR_VIEW_MARGIN, pad.y * 2.0)
+	# ★[폴리시 R28 #27] `bottom_reserve` = 하단에서 비워 둘 띠(0 = 종전 그대로). 상시 HUD와
+	#   나란히 뜨는 판만 이 값을 넘긴다 — 겹치면 «가려서 숨긴다»가 다시 필요해진다.
+	var cap := maxf(view.y - panel.position.y - MIRROR_VIEW_MARGIN - maxf(bottom_reserve, 0.0),
+		pad.y * 2.0)
 	panel.size = Vector2(panel.size.x, minf(label.size.y + pad.y * 2.0, cap))
 
 # CanvasLayer 스케일을 걷어낸 논리 뷰 치수(`_pointer_over_overlay`가 쓰는 그 보정과 같은 결).
@@ -26166,7 +26274,14 @@ func _letter_attachment_fits(letter_id: String) -> bool:
 	#   (합침/빈 슬롯을 한 bool로 뭉치는) `can_add` 대신 합침 축만 묻는 `has_stack`을 쓴다.
 	# ★ 유니크(도구·낚싯대·무기) 축은 여기서 안 연다: 현 첨부 로스터에 비-스택 품목이 0이고,
 	#   "이미 들고 있으면 영영 못 받는다"를 여기서 false로 막으면 그 편지가 **영구 미독**이 된다
-	#   (자리를 비워도 안 풀린다 = 이 알림이 거짓말이 된다). 회귀 ⑩이 그 전제(로스터 0)를 잠근다.
+	#   (자리를 비워도 안 풀린다 = 이 알림이 거짓말이 된다).
+	# ★[폴리시 R28 #25] **그 전제를 잠근다던 증인이 실재하지 않았다.** 종전 주석은 「회귀 ⑩이 그
+	#   전제(로스터 0)를 잠근다」고 적었는데 `mail_attach_test`의 단언 번호는 ①~⑧뿐이고 ⑨·⑩이
+	#   아예 없었다 — 즉 아무것도 잠그고 있지 않았다. 누가 LETTERS에 비-스택 첨부(도구·무기·
+	#   낚싯대·열쇠·책)를 한 줄 더하면, 이미 그 물건을 든 플레이어에게 이 선검사가 자리만 세어
+	#   통과시키고 `mark_read`가 먼저 찍힌 뒤 `add_item`이 거절해 **알림 한 줄 없이 첨부가 영구
+	#   유실**된다(R20 #9가 등급 축에서 봉합한 그 사고의 유니크 판). 전제는 `polish_r28` ⑫가
+	#   **로스터 전수**로 잰다(카탈로그 파생 — 첨부가 자라면 증인도 함께 자란다).
 	for e in items:
 		var iid := String(e["id"])
 		if ItemCatalog.stackable_of(iid) and inventory.has_stack(iid):
@@ -26180,6 +26295,18 @@ func _letter_attachment_fits(letter_id: String) -> bool:
 #   (mailbox.gd:7 규약 · ADR-0064 발견 게이트 · ADR-0069 결정 3의 명시 자구).
 func _grant_letter_attachment(letter_id: String) -> void:
 	var parts: Array = []
+	# ★[폴리시 R28 #24] **채널 구별을 실제로 집행한다.** 위 자구(«물건과 냥 전달뿐»)와 mailbox.gd의
+	#   두 규약(«메뉴 해금 경로 비사용 — ADR-0064 발견 게이트 유지»)이 데이터 층에서 강제된다고
+	#   적혀 있었지만, 발견은 첨부 **스키마 키**가 아니라 **아이템 id 자체**를 타고 들어온다:
+	#   `inventory.add_item` → `item_gained` → `_on_item_gained`가 시그니처면 `_menu_found`를 찍는다.
+	#   그래서 설화 ♡2 편지의 서리동백 한 개가 「서리동백 밀크티」를 **영구 해금**했다 — 서리동백은
+	#   성야절 전용 채집물이라 정상 경로로는 day 85 이후에나 닿는 메뉴가 편지 한 통으로 두세 절기
+	#   앞당겨 열렸다. 첨부 데이터를 바꾸지 않고 **채널을 잠그는** 이유는 재발 때문이다: 로스터에
+	#   시그니처 아이템을 한 줄만 더해도 같은 사고가 조용히 되살아난다(스키마 가드는 그 축을 못 본다).
+	#   ★ 물건은 그대로 손에 들어온다 — 잠기는 것은 «편지가 레시피를 연다»는 그 한 축뿐이고,
+	#     같은 재료를 세상에서 다시 얻으면 그때 정상적으로 발견된다(발견 게이트의 원래 문법).
+	var mail_grant_prev := _mail_grant_active
+	_mail_grant_active = true
 	for e in Mailbox.attachment_items_of(letter_id):
 		var iid := String(e["id"])
 		var n := int(e["n"])
@@ -26187,6 +26314,7 @@ func _grant_letter_attachment(letter_id: String) -> void:
 			continue                      # 위 `_letter_attachment_fits`가 이미 걸렀다(이중 방어)
 		_toast_item(iid, n)
 		parts.append("%s ×%d" % [ItemCatalog.name_of(iid), n])
+	_mail_grant_active = mail_grant_prev
 	var gold := Mailbox.attachment_gold_of(letter_id)
 	if gold > 0 and wallet != null:
 		wallet.earn(gold)
@@ -26394,10 +26522,16 @@ func _peddler_upcoming_line() -> String:
 # 날씨 한 줄 힌트 — "그 하늘이 나에게 무엇을 하는가"를 말한다(효과 수치가 아니라 행동 지침).
 func _weather_hint(w: int) -> String:
 	match w:
+		# ★[폴리시 R28 #29] **그 하늘이 하는 일을 빠짐없이 말한다.** 이 문자열이 "그 하늘이 나에게
+		#   무엇을 하는가"의 저장소 유일 창구인데(소비처 = 점괘 거울 한 줄 · clock_hud는 아이콘만),
+		#   잿눈은 셋 중 둘만 말하고 **카페 붐빔**(SNOW_CAFE_GUESTS 1.5)을 빠뜨렸다 — 하필 «내일
+		#   무엇을 준비할까»로 이어지는 유일한 항목(곳간을 채우고 그날 카페에 붙어 있을 이유)이다.
+		#   혼우도 같은 방식으로 입질 가속(RAIN_BITE)을 빠뜨려 계통적 누락이었다. 수치는 여전히 안
+		#   싣는다(이 함수의 계약은 «효과 수치가 아니라 행동 지침»이다) — 빠진 것은 축이지 값이 아니다.
 		Weather.RAIN:
-			return "밭이 스스로 젖는다"
+			return "밭이 스스로 젖고, 물고기가 잘 문다"
 		Weather.SNOW:
-			return "노지 작물이 하루 멈추고, 짐승은 안에 둔다"
+			return "노지가 하루 멈추고 짐승은 안에 둔다 — 대신 카페가 붐비고, 입질은 뜸하다"
 		Weather.SOULWIND:
 			return "갱도가 술렁인다 — 잡귀도, 그것들이 남기는 것도 많아진다"
 	return "여느 하늘"
@@ -27310,6 +27444,15 @@ func _ranch_door_open_notice(building: String, released: bool, to_release: int) 
 		return "%s 방목 문 열림 — 밤이라 나가지 않는다 (귀가 통로만 열린다)" % building
 	if not _weather_calm():
 		return "%s 방목 문 열림 — 잿눈이라 짐승이 안 나간다 (실내 급여·청소가 필요하다)" % building
+	# ★[폴리시 R28 #15] **«나갈 짐승이 없다»와 «내보낼 자리가 없다»는 다른 사유다.**
+	#   `_release_open_buildings`는 방목 슬롯이 0이면 짐승 유무와 무관하게 false로 돌아가는데
+	#   (그 함수의 `slots.is_empty()` 갈래) 이 사슬엔 그 갈래가 없어 마지막 기본값으로 떨어졌다 —
+	#   실내에 나갈 짐승 N마리가 그대로 있는데 화면은 「지금 나갈 짐승은 없다」고 말한다. 그러면
+	#   플레이어는 방목지를 치워야 한다는 사실을 알 길이 없고 그날치 방목 가산을 잃는다(R18이 이
+	#   함수를 세운 취지 «이유를 갈라 말하면 다음 행동이 달라진다»의 정반대). 술어는 방출이 쓰는
+	#   **그것 하나**를 그대로 다시 묻는다(조건 복제 0 — 이 함수의 기존 규율).
+	if to_release > 0 and _free_pasture_slots().is_empty():
+		return "%s 방목 문 열림 — 방목지에 빈 자리가 없다 (설치물·나무를 치우면 나간다)" % building
 	return "%s 방목 문 열림 — 지금 나갈 짐승은 없다" % building
 
 # ★[폴리시 R23 #2·#5] `sealed_day` = 이 방출이 **어느 아침의 몫인가**(0 = 지금 이 순간의 몫).
@@ -27340,11 +27483,7 @@ func _release_open_buildings(sealed_day: int = 0) -> bool:
 	#   두 마리 중 `animal_key_at`이 잡는 건 첫 매치 하나뿐이라 나머지는 그날 급여·쓰다듬·수집이
 	#   전부 막히고(실내 앵커도 `has_animal_at`이 false), 그 산물은 다음 advance_day에 덮여 사라진다.
 	#   밤 정산이 문 닫힌 짐승의 방목 좌표를 유지하므로 겹침은 다음 날 아침까지 이어졌다.
-	var taken: Dictionary = ranch.occupied_pasture_tiles()
-	var slots: Array = []
-	for t: Vector2i in _free_pasture_tiles():
-		if not taken.has(t):
-			slots.append(t)
+	var slots: Array = _free_pasture_slots()
 	if slots.is_empty():
 		return false
 	var i := 0
@@ -27352,6 +27491,49 @@ func _release_open_buildings(sealed_day: int = 0) -> bool:
 		ranch.send_to_pasture(tile, slots[i % slots.size()])
 		i += 1
 	return true
+
+# ★[폴리시 R28 #16] 축사 돌봄 [F] 한 줄 — **그 한 번이 실제로 한 일만** 말한다(문구 파생을 함수로
+#   뽑은 이유는 R18의 `_ranch_door_open_notice`와 같다: 헤드리스가 문구를 그대로 단언한다).
+#   무엇이 깨져 있었나: 급여 갈래가 `cleaned`를 한 번도 안 봐서 «급여 N마리 + 청소»가 단언이었다.
+#   `clean_all_in`은 이미 청소된 축사에서 false를 돌려주므로(한 마리도 안 바뀜) 이 조합은 상시
+#   도달 가능하다 — 여물광이 빈 아침에 우클릭해 전원 cleaned=true를 세운 뒤, 사료풀을 베어 채우고
+#   같은 날 다시 누르면 그 [F]는 청소를 한 톨도 안 하고서 했다고 말했다. 아래 청소 전용 갈래는
+#   이미 잔량으로 갈리는데 급여 갈래만 그 규율 밖이었다.
+func _ranch_tend_notice(building: String, fed_ct: int, cleaned: bool) -> String:
+	if fed_ct > 0:
+		return "%s 여물 급여 %d마리%s (여물광 %d단 남음)" % [building, fed_ct,
+			" + 청소" if cleaned else "", ranch.silo_hay()]
+	if ranch.silo_hay() <= 0:
+		return "%s 청소 완료 — 여물광이 비어 급여 못 함" % building
+	return "%s 청소 완료 — 잠자리를 정갈히" % building
+
+# ★[폴리시 R28 #17] 결정기 아침 한 줄 — **다 된 것 전부**를 말한다(문구 파생은 형제 알림들과 같은
+#   이음매). 종전엔 `crystal_done[0]` 하나만 읽어, 주기가 다른 두 기계(넋수정 2일 · 명부금강 8일)가
+#   같은 아침에 만나면 좌표 정렬 첫 칸의 보석만 이름이 뜨고 나머지는 화면에 한 글자도 안 나왔다.
+#   안 비운 기계는 카운트다운이 멈추므로(`Crystalarium.advance_day`의 «수거 대기는 그냥 지나간다»)
+#   못 본 기계는 그날치 복제를 통째로 잃는다. 같은 아침 정산의 형제 패시브 창구는 전부 개수를
+#   싣는다(게잡이통 %d개 · 채취기 %d개 · 업화로 %d기).
+func _crystal_done_notice(done: Array) -> String:
+	var gem_names: Array = []
+	for e in done:
+		var gnm := ItemCatalog.name_of(String(e["id"]))
+		if gnm != "" and not gem_names.has(gnm):
+			gem_names.append(gnm)
+	return "결정기 %d기에서 %s 여물었다 — 들러서 꺼내자" % [done.size(),
+		HanjiUi.with_i("·".join(PackedStringArray(gem_names)))]
+
+# ★[폴리시 R28 #15] **지금 짐승을 세울 수 있는 빈 방목 칸** — 방출과 알림이 같은 표를 본다.
+#   ★[폴리시 R8] 이미 방목 나간 짐승이 선 칸은 후보에서 뺀다(위 `_release_open_buildings` 머리말의
+#     그 사유 — 라운드로빈이 매 호출 0에서 다시 돌아 겹쳐 배정하던 자리).
+func _free_pasture_slots() -> Array:
+	if ranch == null:
+		return []
+	var taken: Dictionary = ranch.occupied_pasture_tiles()
+	var out: Array = []
+	for t: Vector2i in _free_pasture_tiles():
+		if not taken.has(t):
+			out.append(t)
+	return out
 
 # ★ [B1-a.3] 사료풀 시드 — FORAGE_SCAN_RECT 안의 걸을 수 있는(비-SOLID) 고지 풀 타일을 Forage에 등록.
 #   여물광 footprint(SILO_EXT_RECT=WALL)는 is_solid로 자동 제외된다. seed는 멱등(복원 상태 보존).
