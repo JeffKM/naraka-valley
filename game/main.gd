@@ -4347,7 +4347,16 @@ func _collect_forest_canopy(items: Array) -> void:
 				continue
 			if not _canopy_foot_ok(x, y):
 				continue
-			var h: int = abs(hash("canopy:%s:%d:%d" % [_region, x, y]))
+			# ★[폴리시 R27 #12] **원시 djb2 → `rand_from_seed`**(#10·#11과 같은 계보·같은 처방).
+			#   djb2는 33^k ≡ 1 (mod 8)이라 8칸짜리 mix에서 x든 y든 한 칸 움직이면 인덱스가 +1 되고,
+			#   이 루프는 `_CANOPY_STEP := 2`로 도므로 **한 행 안에서 인덱스가 +2씩 고정 증가**했다.
+			#   실측(저승 숲): y=43 행이 [7,1,3,5,7,0,2,4,6,…]로 완전히 규칙적이고 y=39와 y=41이,
+			#   y=10과 y=20이 **동일한 인덱스열**이었다 — 특별 나무(TREE_A/B)가 8칸 주기 격자 위
+			#   같은 열에만 서고 행끼리 같은 무늬를 반복해, 바로 위 반칸 엇갈림(«격자가 안 읽히게»)이
+			#   무력해진다. 출현 비율 2/8은 정상이라 **배치 규칙성만** 어긋난 자리다.
+			#   ★ 놓인 것은 안 움직인다: 이 인덱스는 좌표에서 매 프레임 다시 파는 **순수 그림 축**이라
+			#     세이브에 한 바이트도 안 실린다(원장 나무의 `species`와 갈리는 지점 — 그쪽은 저장된다).
+			var h: int = absi(rand_from_seed(hash("canopy:%s:%d:%d" % [_region, x, y]))[0])
 			items.append(_forest_item(mix[h % mix.size()], Vector2i(x, y)))
 			taken[Vector2i(x, y)] = true
 			taken[Vector2i(x + 1, y)] = true
@@ -4377,7 +4386,8 @@ func _collect_forest_tree_art(items: Array) -> void:
 			continue                           # 빈 슬롯 = 벤 자리(재성장 대기 — 아무것도 안 선다)
 		if stage >= TreeLedger.MAX_STAGE:
 			# 성숙목 — 종은 좌표 해시라 같은 자리는 늘 같은 수종(원장 species와 같은 결정성).
-			var h: int = abs(hash("ledgertree:%s:%d:%d" % [_region, t.x, t.y]))
+			# ★[폴리시 R27 #12] 캐노피 쪽과 **같은 표를 같은 방식으로** 판다(형제 창구 정렬).
+			var h: int = absi(rand_from_seed(hash("ledgertree:%s:%d:%d" % [_region, t.x, t.y]))[0])
 			var mix: Array = _CANOPY_MIX_MIHOK if _region == RegionCatalog.MIHOK_FOREST else _CANOPY_MIX_JEOSEUNG
 			items.append(_forest_item(mix[h % mix.size()], t))
 		elif stage >= 3:
@@ -9333,7 +9343,16 @@ func _g16_bake_leaf_litter(out: Image, surf: Array) -> void:
 			if int(surf[y][x]) < 0 or int(surf[y][x]) == 4:
 				continue                 # 건물·절벽(투명 통과)·물 위엔 낙엽이 안 앉는다
 			for k in 3:                  # 칸당 최대 3알갱이
-				var h: int = abs(hash("leaf:%s:%d:%d:%d" % [_region, x, y, k]))
+				# ★[폴리시 R27 #11] **원시 djb2를 그대로 나누지 않는다** — #10·#12와 같은 계보이자
+				#   여기선 «칸당 3알갱이»라는 설계 자체가 죽는 자리다. djb2(h = h*33 + c)에서 시드의
+				#   **마지막 성분이 k**라 k=0,1,2의 해시가 딱 1씩만 차이 나, ㉠ 아래 밀도 판정이 세
+				#   알갱이에서 늘 같은 답이고(칸 단위 all-or-nothing) ㉡ px·py 오프셋까지 대개 같아
+				#   세 알갱이가 한 픽셀에 겹쳐 찍힌다. 실측(저승 숲 60×44·density 0.16): 낙엽이 놓인
+				#   422칸이 예외 없이 3알갱이 전부를 통과시키고(1266/422 = 정확히 3.0) 그중 292칸(69%)
+				#   은 세 번 같은 2×2를 덮어써 보이는 알갱이가 1개다. 덤으로 같은 열에서 y가 1 늘 때
+				#   r이 +0.1089씩 램프해 약 9칸 주기의 가로 띠가 반복된다.
+				#   ★ 처방은 형제 셋과 같다(weather.gd 머리말·TreeLedger.species_at_tile·#10·#12).
+				var h: int = absi(rand_from_seed(hash("leaf:%s:%d:%d:%d" % [_region, x, y, k]))[0])
 				if float(h % 10000) / 10000.0 >= _g16_leaf_density:
 					continue
 				var px: int = x * TILE + ((h / 7) % (TILE / 2)) * 2
@@ -14283,7 +14302,13 @@ func _process(delta: float) -> void:
 	var facing_firefly := not _sleeping and _indoor == "혼백관" and _target == MUSEUM_FIREFLY_TILE
 	# ★ [S4-T4] 대장간 무인 업그레이드대: 대장간 안에서 업그레이드대 칸을 바라볼 때(_indoor 가드 —
 	#   기증대와 정확히 같은 결. 다른 구역의 같은 좌표에 닿아도 무반응).
-	var facing_upgrade := not _sleeping and _indoor == "대장간" and _target == SMITHY_UPGRADE_TILE
+	# ★[폴리시 R27 #18] 모루 아트는 **2×1칸**인데(`SMITHY_TEX_ANVIL` 64×32 — 그리기 주석도
+	#   「모루 프롭(2×1칸)」이라 적는다) 상호작용은 오른쪽 한 칸뿐이었다. 왼쪽 절반(12,47)을
+	#   겨누면 커서 밑에 모루가 그려져 있는데 프롬프트도 안 뜨고 [F]도 흘러갔다 — 모루는 «순수
+	#   장식·충돌 없음»이라 그 칸에 그냥 설 수도 있어 더 그렇다. 형제 창구는 예외 없이 역매핑 표를
+	#   둔다(수액 채취기 `_tapper_ledger_tile` · 마당 나무 `_home_tree_anchor_candidates` — 폭이
+	#   스프라이트에서 파생된다). 이 술어 하나를 실행(F 디스패치)과 프롬프트가 함께 쓰므로 한 줄로 낫는다.
+	var facing_upgrade := not _sleeping and _indoor == "대장간" and _smithy_anvil_tiles().has(_target)
 	# ★ [S10-T8] 명부 시련장 무인 창구 둘 — 시련 게시판(수락·완료)과 시련패 매대. 같은 방 두 칸이라
 	#   좌표로 갈리고, `_in_trial_room()`이 방 자체를 가드한다(문이 안 열렸으면 애초에 못 들어온다).
 	var facing_trial_board := _in_trial_room() and _target == TRIAL_BOARD_TILE
@@ -15142,9 +15167,17 @@ func _process(delta: float) -> void:
 			var body := "돌 깨기 (혼력 %d · 남은 돌 %d)" % [
 				_mining_energy_cost(), mine_floors.rocks_left_count(clock.day, _mine_floor)]
 			if nid != "":
+				# ★[폴리시 R27 #19] 분자를 분모로 **접는다** — 같은 (done, need) 쌍을 쓰는 그림 쪽은
+				#   R15가 이미 `clampf(ratio, 0, 1)`로 봉합했는데(19887행 주석이 「need < done이 되어
+				#   ratio가 음수로 내려갔다」라고 그 시나리오를 명시한다) 글자 쪽에는 그 처방이 안 붙었다.
+				#   분모 `need`는 매 프레임 **현재** 곡괭이 티어에서 재파생되고 분자 `done`은 때린 시점
+				#   티어로 원장에 쌓인 누적값이라(리셋은 층 리필뿐), 5타짜리 광맥을 4타 친 뒤 대장간에서
+				#   티어를 올려 need가 3이 되면 「4/3타」가 뜬다 — 다 친 것보다 필요 타수가 적은데 광맥은
+				#   그대로 서 있다. 집행은 정상이라 다음 한 타에 깨지지만 그 프레임 동안 눈금이 거짓말한다.
+				var m_need: int = MineFloors.node_hits(nid, pickaxe_tier())
 				body = "%s 광맥 캐기 (혼력 %d · %d/%d타)" % [ItemCatalog.name_of(nid),
-					_mining_energy_cost(), mine_floors.node_hits_done(_mine_floor, _target),
-					MineFloors.node_hits(nid, pickaxe_tier())]   # ★[S5-T3] 든 곡괭이 티어 기준 타수
+					_mining_energy_cost(),
+					mini(mine_floors.node_hits_done(_mine_floor, _target), m_need), m_need]   # ★[S5-T3] 든 곡괭이 티어 기준 타수
 			interact_prompt.text = ("[좌클릭] 곡괭이로 " + body) \
 				if inventory.selected_id() == ItemCatalog.PICKAXE else "곡괭이가 있어야 돌을 깰 수 있다"
 		elif _mount_prompt() != "":
@@ -15179,9 +15212,11 @@ func _process(delta: float) -> void:
 			var nbody := "돌 깨기 (혼력 %d · 남은 돌 %d)" % [
 				_mining_energy_cost(), narak_floors.rocks_left_count(_narak_depth)]
 			if nnid != "":
+				# ★[폴리시 R27 #19] 갱도 쌍둥이와 **같은 접기**(형제 창구 정렬 — 같은 병·같은 처방).
+				var n_need: int = NarakFloors.node_hits(nnid, pickaxe_tier())
 				nbody = "%s 광맥 캐기 (혼력 %d · %d/%d타)" % [ItemCatalog.name_of(nnid),
-					_mining_energy_cost(), narak_floors.node_hits_done(_narak_depth, _target),
-					NarakFloors.node_hits(nnid, pickaxe_tier())]
+					_mining_energy_cost(),
+					mini(narak_floors.node_hits_done(_narak_depth, _target), n_need), n_need]
 			interact_prompt.text = ("[좌클릭] 곡괭이로 " + nbody) \
 				if inventory.selected_id() == ItemCatalog.PICKAXE else "곡괭이가 있어야 돌을 깰 수 있다"
 		elif _mount_prompt() != "":
@@ -15468,8 +15503,18 @@ func _process(delta: float) -> void:
 		#   급여를 한 글자도 안 알리고**, 대신 이 조작으로는 절대 서지 않는 두 동사를 약속했다.
 		#   여물광이 비면 급여가 성립하지 않으므로 그 사실도 미리 말한다(누르고 나서 알 일이 아니다).
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = "[우클릭] %s 돌봄 (여물 급여 · 잠자리 청소 — 여물광 %d단)" % [_indoor, ranch.silo_hay()] \
+		# ★[폴리시 R27 #13] **방목 문 [F]를 광고한다.** 집행부(14620행 `shop_toggle`)는 서 있는데
+		#   저장소 어디에도 그 키를 미리 말하는 문자열이 없었고(방목을 말하는 문구는 전부 «누른 뒤»의
+		#   알림이다), 문 기본값은 닫힘이다. 그래서 F를 우연히 누르지 않은 플레이어에게는
+		#   `releasable()`이 영구히 비어 `_release_open_buildings`가 매일 방출 0으로 돌고 —
+		#   짐승은 평생 F_GRAZE·M_GRAZE를 못 받으며 방목지·잿눈 방목 금지·실외 고립·`_grazing_animal_at`
+		#   배치 가드까지 목축 서브시스템 절반이 관측조차 안 됐다. 형제 [F] 창구는 예외 없이 자기 키를
+		#   광고한다(갱도 계단·휘파람·곁들이). R14가 봉합한 죽은 「[F10]→[C]」와 같은 «키 광고» 클래스다.
+		#   ★ 상태도 함께 말한다 — 토글이라 «지금 어느 쪽인가»가 없으면 누르는 것이 도박이 된다.
+		var tend := "[우클릭] %s 돌봄 (여물 급여 · 잠자리 청소 — 여물광 %d단)" % [_indoor, ranch.silo_hay()] \
 			if ranch.silo_hay() > 0 else "[우클릭] %s 잠자리 청소 (여물광이 비어 급여 불가)" % _indoor
+		interact_prompt.text = "%s   ·   [F] 방목 문 %s" % [
+			tend, "닫기 (지금 열림)" if ranch.door_open(_indoor) else "열기 (지금 닫힘)"]
 	elif _debris_kind_at(_target) != "":
 		# ★ [S1-8] 개간 대상 debris를 바라볼 때: 맞는 도구를 들었으면 [좌클릭] 개간, 아니면 필요한 도구 안내.
 		interact_prompt.visible = not _sleeping
@@ -15742,12 +15787,38 @@ func _tool_aoe_tiles(t: Vector2i, aoe: Vector2i) -> Array[Vector2i]:
 # ★ **조준 칸(t) 자체는 안 거른다**: 그 칸의 판정은 여전히 호출 측 게이트의 책임이고(라이브 경로는
 #   `_target_valid`가 통과시킨 칸만 넘긴다), 여기서 한 번 더 거르면 0티어 거동이 기존과 달라진다
 #   (좌표를 직접 세팅해 `_use_tool`을 부르는 헤드리스 경로가 조용히 죽는다 — well_test가 실증).
+# ★[폴리시 R27 #18] 모루 그림이 덮는 칸들 — **그리기와 같은 출처**(텍스처 폭)에서 판다. 그리기는
+#   조준 칸이 아트의 오른쪽이 되도록 왼쪽으로 당겨 앉히므로(20155행 주석), 칸 목록도 오른쪽 끝을
+#   `SMITHY_UPGRADE_TILE`로 두고 폭만큼 왼쪽으로 뻗는다(좌표 복제 0 — 아트가 넓어지면 따라온다).
+func _smithy_anvil_tiles() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var w: int = maxi(1, int(SMITHY_TEX_ANVIL.get_size().x) / TILE)
+	for i in w:
+		out.append(SMITHY_UPGRADE_TILE - Vector2i(w - 1 - i, 0))
+	return out
+
 func _farm_aoe_tiles(t: Vector2i, aoe: Vector2i) -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
 	for at: Vector2i in _tool_aoe_tiles(t, aoe):
 		if at == t or _is_farmable(at):
 			out.append(at)
 	return out
+
+# ★[폴리시 R27 #17] 지금 스윙이 **한 칸이라도 실제로 바꾸는가** — 프롬프트가 «가능한 동사»를
+#   숨기지 않도록, 집행 루프(`_use_tool`의 괭이·물뿌리개 가지)와 **같은 AoE 표·같은 밭 라우팅**을
+#   태워 묻는다. 조준 칸만 보면 티어 AoE의 둘째·셋째 칸이 화면에서 사라진다.
+func _hoe_aoe_has_work() -> bool:
+	for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE)):
+		if not _field_at(at).is_tilled(at):
+			return true
+	return false
+
+func _water_aoe_has_work() -> bool:
+	for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.WATERING_CAN)):
+		var plot := _field_at(at)
+		if plot.is_planted(at) and not plot.is_watered(at):
+			return true
+	return false
 
 # ★[폴리시 R4] **조준 칸을 보지 않는 손 물건**인가(명부환·곁들이·계단). 아래 `_use_tool` 맨 앞이
 #   이 셋을 혼력 게이트 *위에서* 갈라 두었는데, 정작 `_process`의 LMB 디스패치 게이트가
@@ -18839,7 +18910,23 @@ func _animal_prompt(t: Vector2i) -> String:
 	# ★[S8-T10] "♥%d" → "호감 %d" — neodgm.ttf에 ♥ 글리프가 없어 두부(□)로 떴다(heart_bar.gd:4가
 	#   하트 막대를 스프라이트로 만든 그 리스크와 같다). 프롬프트는 글리프 무의존 텍스트로 간다.
 	if parts.is_empty():
-		return "%s 호감 %d — 오늘 돌봄 완료" % [label, hearts]
+		# ★[폴리시 R27 #14] **완료는 실제로 완료일 때만 말한다.** 위 `parts`를 채우는 조건은
+		#   ①산물 대기 ②미쓰다듬 ③**손에 건초를 들었을 때만** 미급여뿐이라, 급여 여부는 든 물건에
+		#   따라 판정에서 빠지고 청소(`cleaned`)는 아예 안 봤다. 그래서 괭이를 든 채 쓰다듬기만 한
+		#   하루에도 화면은 «오늘 돌봄 완료»라 말했고, 그날 밤 `advance_day`는 F_NO_FEED·M_NO_FEED·
+		#   M_MUCK을 그대로 물리고 산물도 안 냈다(급여 성체만 낸다). R23·R24가 세운 «표시 정직화»
+		#   (선물 분자·장원제 상한·목공방 공기)의 목축판 누락이다.
+		#   ★ 남은 둘은 이 창구의 동사가 아니다 — 여물통 급여·잠자리 청소는 **짐승 밖 실내 칸의
+		#     우클릭**이라(15471행 창구), 무엇이 남았는지와 함께 **어디서 하는지**를 같이 말한다.
+		var todo: Array = []
+		if not ranch.is_fed(t):
+			todo.append("급여")
+		if not ranch.is_cleaned(t):
+			todo.append("청소")
+		if todo.is_empty():
+			return "%s 호감 %d — 오늘 돌봄 완료" % [label, hearts]
+		return "%s 호감 %d — 오늘 %s 남음 (실내 빈 칸에서 [우클릭])" % [
+			label, hearts, "·".join(PackedStringArray(todo))]
 	# ★[폴리시 R10] 혼력 게이트 안내 — 위 두 동사는 **둘 다 과금**이고(산물 수집·쓰다듬 = `_try_harvest`
 	#   목축 갈래의 `can_act` · 건초 급여 = `_use_tool`의 과금 갈래. 건초는 씨앗·비료 어느 무과금
 	#   카테고리도 아니다), 두 집행부 모두 **알림 없이 조용히 돌아간다**. 형제 창구(나무·밭·화분·
@@ -18965,11 +19052,19 @@ func _farm_prompt() -> String:
 		return "[우클릭] 수확"
 	var item := inventory.selected_id()
 	# 과금 동사(괭이·물)만 혼력 부족 시 차단 안내한다(무과금 파종·시비는 아래에서 혼력 무관 안내).
-	if item == ItemCatalog.HOE and not pfield.is_tilled(_target):
+	# ★[폴리시 R27 #17] 두 갈래는 **집행부와 같은 AoE 표**를 본다. 종전엔 조준 칸 한 칸만 봐서,
+	#   티어를 산 플레이어에게만 화면이 조용해졌다 — 이미 간 칸을 겨누고 그 너머 두 칸이 미경작인
+	#   자세에서 `_farm_prompt`가 ""로 떨어져 안내가 통째로 사라지는데(호출부가 `prompt != ""`로
+	#   가린다), LMB는 `_target_valid`(=SOIL, 간 칸도 참)를 통과해 AoE 둘째·셋째 칸을 실제로 갈고
+	#   혼력까지 뺐다. 0티어에서는 AoE가 (1,1)이라 이 어긋남이 존재하지 않으므로 **업그레이드가
+	#   화면을 침묵시키는** 모양이었다 — R21 #3이 사료풀에서 봉합한 «화면이 가능한 동사를 숨김»의
+	#   티어판이다. 판정은 `_hoe_aoe_has_work`·`_water_aoe_has_work`가 집행 루프와 같은 표·같은
+	#   밭 라우팅(`_field_at`)으로 판다(조건을 두 곳에 옮겨 적지 않는다).
+	if item == ItemCatalog.HOE and _hoe_aoe_has_work():
 		if not energy.can_act(farm_cost):
 			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 괭이질"
-	if item == ItemCatalog.WATERING_CAN and pfield.is_planted(_target) and not pfield.is_watered(_target):
+	if item == ItemCatalog.WATERING_CAN and _water_aoe_has_work():
 		if not energy.can_act(farm_cost):
 			return "혼력 부족 — 집에서 취침"
 		return "[좌클릭] 물주기"

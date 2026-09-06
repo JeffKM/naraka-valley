@@ -595,6 +595,27 @@ func _line_of(needle: String) -> int:
 			return i
 	return -1
 
+# ★[폴리시 R27 #17] 그 **함수 몸통 안에서** 니들이 처음 나오는 코드 줄(−1 = 없음). 위 전역 검색은
+#   같은 니들이 다른 함수에 먼저 나타나면 조용히 그쪽을 짚는다 — R27 #17이 프롬프트용 AoE 술어
+#   (`_hoe_aoe_has_work`)를 신설하면서 그 함수의 루프가 `_use_tool`보다 위에 서자, ⑬c의 «루프»가
+#   집행부가 아니라 헬퍼를 가리켜 들여쓰기 깊이 판정이 통째로 어긋났다(1탭 vs 2탭).
+func _line_of_in(fn_needle: String, needle: String) -> int:
+	var head := -1
+	for i in range(_src.size()):
+		if _src[i].begins_with(fn_needle):
+			head = i
+			break
+	if head < 0:
+		return -1
+	for i in range(head + 1, _src.size()):
+		if _src[i].begins_with("func ") or _src[i].begins_with("static func "):
+			return -1
+		if _src[i].strip_edges().begins_with("#"):
+			continue
+		if _src[i].contains(needle):
+			return i
+	return -1
+
 # ── ⑨ #8 결정기 회수 성공이 무엇을 걷었는지 말한다(라이브) ──────────────────
 func _check_crystalarium_notice(m: Node) -> void:
 	print("⑨ #8 결정기 회수 성공 알림")
@@ -767,10 +788,14 @@ func _check_relic_aggregate(m: Node) -> void:
 	_check("⑬a 무대: 한 3×3 스윙에 유품 롤이 최대 %d칸까지 함께 걸린다(칸당 결정 롤 = 복제본 원인)"
 			% worst, worst >= 2)
 	# 알림이 루프 **밖**에 선다 — 들여쓰기로 판정한다(루프 안으로 되돌리면 깊이가 깊어져 빨개진다).
-	var loop_line := _line_of("for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE))")
-	var notice_line := _line_of("발밑에 무언가 걸린다")
-	var guard_line := _line_of("if relic_blocked > 0:")
-	var count_line := _line_of("relic_blocked += 1")
+	# ★[폴리시 R27 #17] 네 줄 다 **`_use_tool` 몸통 안에서** 찾는다 — 같은 AoE 표를 프롬프트용
+	#   술어도 쓰게 되면서 전역 검색이 그쪽을 먼저 짚었다(집행부가 아니라 헬퍼의 루프를 재면
+	#   들여쓰기 깊이가 한 탭 얕아 이 판정이 통째로 거짓이 된다).
+	var loop_line := _line_of_in("func _use_tool",
+		"for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE))")
+	var notice_line := _line_of_in("func _use_tool", "발밑에 무언가 걸린다")
+	var guard_line := _line_of_in("func _use_tool", "if relic_blocked > 0:")
+	var count_line := _line_of_in("func _use_tool", "relic_blocked += 1")
 	var loop_indent := _indent_of(loop_line)
 	var guard_indent := _indent_of(guard_line)
 	_check("⑬b 집계 카운터가 루프 안에서 센다(%d행) — 알림은 그 안에서 안 나간다" % (count_line + 1),

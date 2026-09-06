@@ -286,6 +286,12 @@ func is_fed(tile: Vector2i) -> bool:
 func is_petted(tile: Vector2i) -> bool:
 	return _animals.has(tile) and bool(_animals[tile]["petted"])
 
+# ★[폴리시 R27 #14] 잠자리 청소 플래그 — 형제 둘(`is_fed`·`is_petted`)과 같은 문법이다.
+#   이 축만 접근자가 없어 main의 «오늘 돌봄 완료» 판정에서 통째로 빠져 있었다(청소를 안 한
+#   하루에도 화면이 «완료»라 말했다 — advance_day는 그 하루에 M_MUCK를 물린다).
+func is_cleaned(tile: Vector2i) -> bool:
+	return _animals.has(tile) and bool(_animals[tile]["cleaned"])
+
 # 대기 중인 미수집 산물이 있는가(수집 프롬프트·드로우가 쓴다).
 func has_product(tile: Vector2i) -> bool:
 	return _animals.has(tile) and int(_animals[tile]["product"]) > 0
@@ -523,6 +529,16 @@ func advance_day() -> void:
 		# ③ 데일리 케어 플래그 리셋(새 하루).
 		for flag in ["fed", "petted", "grazed", "penned", "cleaned"]:
 			a[flag] = false
+		# ★[폴리시 R27 #16] **방목지에 그대로 서 있는 짐승은 새 날에도 방목 중이다.** `settle_night`
+		#   이 지난 뒤 LOC_PASTURE로 남는 것은 «문 닫힌 채 밖에서 밤을 난» 짐승뿐인데(귀가한 쪽은
+		#   LOC_INDOOR로 돌아간다), `releasable()`은 **실내 짐승만** 돌려주므로 아침 방출이 그를
+		#   다시 안 집는다 — 그래서 그림·술어는 «방목 중»이라 말하는데(main `_draw_ranch`가 방목
+		#   칸에 그리고 `_grazing_animal_at`이 배치 가드 셋에서 그 칸을 배제한다) 원장만 아니라고
+		#   답했고, 문이 닫힌 채 지나는 **매일** F_GRAZE·M_GRAZE가 조용히 몰수됐다.
+		#   설계가 명시한 고립 페널티는 야간 노출(M_NIGHT_EXPOSED) 하나뿐이다(56·361행) — 주간
+		#   방목 가산까지 뺏는 것은 그 계약 밖이다. 원장이 자기 위치와 어긋나지 않게 한다.
+		if str(a.get("location", LOC_INDOOR)) == LOC_PASTURE:
+			a["grazed"] = true
 	changed.emit()
 
 # ── 세이브/로드(§8.9) — FarmField/Orchard 패턴 계승 ───────────────────────────

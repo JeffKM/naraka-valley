@@ -60,6 +60,44 @@ extends SceneTree
 #   #10 `rand_from_seed`를 원시 `abs(hash(...))`로 복귀      → ⑪b·⑪c red(통과 열 수가 한 자릿수로 뭉친다)
 #   ★ ①a·②a·③…의 «무대» 줄들은 파괴에 안 죽는다(전제를 재는 자리다) — 하중은 위 목록이 든다.
 #
+#
+# ══ 배치 B(#11~#21) ═══════════════════════════════════════════════════════════
+# 렌즈: 확률 질량 보존(#11·#12) · 목축 생애주기 사슬(#13~#16) · 도구 업그레이드
+#       생애주기(#17~#19) · 가격표 정합(#20·#21).
+#
+# 판정: CONFIRMED 9 · **OWNER-DECISION 2**(#15·#20 — 코드 무수정) · REFUTED·DUP 0.
+#
+# 무엇을 보증하나(번호 = 27회차 헌트 발견 인덱스).
+#   ⑫ #11 낙엽 «칸당 3알갱이»가 실제로 세 번 독립으로 굴러간다(종전엔 칸 단위 all-or-nothing).
+#   ⑬ #12 캐노피 변주가 8칸 주기 격자로 서지 않고 행끼리 무늬를 반복하지 않는다.
+#   ⑭ #13 방목 문 [F]가 실내 프롬프트에서 **키와 상태로** 광고된다(사슬 전체의 유일한 입구).
+#   ⑮ #14 «오늘 돌봄 완료»는 급여·청소까지 끝났을 때만 뜬다(아니면 무엇이 남았는지 말한다).
+#   ⑯ #16 방목지에 그대로 선 짐승은 새 날에도 방목 중이다(원장이 자기 위치와 안 어긋난다).
+#   ⑰ #17 티어 AoE 프롬프트가 집행부와 같은 범위를 본다(업그레이드가 화면을 침묵시키지 않는다).
+#   ⑱ #18 모루 상호작용 칸이 **아트 폭 파생**이다(왼쪽 절반이 더는 죽은 칸이 아니다).
+#   ⑲ #19 광맥 타수 눈금이 분자를 분모로 접는다(«4/3타» 0 — 그림 쪽 R15 clampf의 글자판).
+#   ⑳ #21 시련 납품 풀이 판매가 밴드가 아니라 **깊이 단일 술어**에서 나온다.
+#
+# ★ OWNER-DECISION 2건(코드 무수정 — 후보안은 커밋 본문).
+#   #15 짐승 기분(mood)이 DELUXE 산물을 게이팅하는데 UI 도달성이 0이다. 결함은 실재하나
+#       «어떻게 노출하나»가 설계 선택이라(수치/2단 낱말/아이콘) 어휘를 발명하지 않는다.
+#   #20 멜 배우자 출하 팁 +2%가 ADR-0061 결정 5의 «판매 채널 총액 동일»과 정면으로 어긋난다.
+#       ADR-0008(관계 = 곱셈기)과 그 계약 중 **어느 쪽이 양보하는가**가 owner 몫이다.
+#
+# 하중 검증(파괴 9배치 — 봉합을 되돌리면 실제로 red가 남는가 · 전건 실측):
+#   #11 원시 djb2 복귀        → ⑫a·⑫c red(낙엽 칸 비율 0.399 → 0.160 = 접힌 답 그대로)
+#   #12 원시 djb2 복귀        → ⑬a·⑬c·⑬d red(간격 «정확히 8칸» 8% → 50% · 겹치는 행 0 → 2)
+#   #13 문 광고 삭제          → ⑭c·⑭d red · #14 완료 판정 복귀 → ⑮b red
+#   #16 이월 두 줄 삭제       → ⑯d red · #17 조준 칸 단독 판정 복귀 → ⑰a·⑰d red
+#   #18 단일 칸 비교 복귀     → ⑱a red · #19 `mini` 제거 → ⑲a red
+#   #21 판매가 하한 복귀      → ⑳b·⑳c·⑳d red(1층 산출 둘 + 나락철이 그대로 풀에 든다)
+#   ★ ⑱b·⑱c(칸 표 자체)·⑲b~⑲d(무대)·⑯e(대조군)·⑭a(무대)는 그 파괴에 안 죽는다 — 각각
+#     **헬퍼 회귀**와 **무대 성립**을 재는 자리이고, 소비처 쪽 하중은 ⑱a·⑲a가 든다(배치 A ①의
+#     두 반쪽 구조와 같다 — 파괴를 갈래로 나눠 각각 실측했다).
+#   ★ ⑬은 **초안 지표 두 개가 파괴에 안 죽어** 두 번 다시 설계했다: `mix.find`는 같은 텍스처
+#     여섯 칸을 전부 0으로 접고, «4점 주기»는 djb2의 자릿수 올림 때문에 성립하다 만다. 파괴
+#     상태의 실측 로그(x = 12·20·38·46 / 13·21·39·47)로 갈아탄 자리다.
+#
 # 실행: ./run_tests.sh polish_r27   (헤드리스는 반드시 game/에서 · 순차)
 
 var _fail := 0
@@ -160,6 +198,17 @@ func _run_checks() -> void:
 	await _check_home_deco_rewind(m)     # ⑧ #7
 	await _check_romance_roster(m)       # ⑨ #8
 	await _check_forest_decor_spread(m)  # ⑪ #10(구역 재빌드가 무대라 맨 끝)
+
+	print("══ 폴리시 R27 회귀 — 배치 B(#11~#21) ══")
+	_check_trial_deliver_pool()          # ⑳ #21(무대 불요 — 순수 카탈로그)
+	_check_pasture_graze_carry()         # ⑯ #16(무대 불요 — 순수 Ranch)
+	await _check_leaf_litter_grains(m)   # ⑫ #11(숲 무대 — 위 ⑪이 이미 숲에 서 있다)
+	await _check_canopy_variation(m)     # ⑬ #12(같은 무대)
+	await _check_animal_care_honesty(m)  # ⑮ #14
+	await _check_pasture_door_ad(m)      # ⑭ #13
+	await _check_aoe_prompt(m)           # ⑰ #17
+	_check_anvil_tiles(m)                # ⑱ #18
+	_check_node_hits_fold(m)             # ⑲ #19
 
 	# ★ ⑤·⑧·⑨는 세이브 파일을 **쓴다**(구세이브 되감기·왕복이 파일 경로를 타야 하는 검증이라
 	#   무대가 곧 파일이다). 끝나면 지운다 — polish_r24 ⑮·r25 ⑩·r26 ⑤가 세운 그 관례.
@@ -512,3 +561,338 @@ func _check_forest_decor_spread(m: Node) -> void:
 		_check("⑪c %s: 한 열이 전체를 도배하지 않는다(최다 열 %d점 / %d점 = %.0f%%)"
 				% [region, worst, items.size(), 100.0 * float(worst) / maxf(1.0, float(items.size()))],
 			items.size() > 0 and float(worst) <= float(items.size()) * 0.15)
+
+
+# ── ⑫ #11 낙엽 «칸당 3알갱이»가 실제로 세 번 독립으로 굴러간다 ────────────────
+# ★ 프로덕션 함수(`_g16_bake_leaf_litter`)를 그대로 태운다 — 식을 테스트가 다시 구현하면
+#   되돌려도 안 죽는 공허 초록이 된다(#10 초안에서 실측으로 겪은 함정).
+func _check_leaf_litter_grains(m: Node) -> void:
+	print("⑫ #11 낙엽 알갱이 ↔ 세 번 독립 롤")
+	_check("⑫a 배선: 원시 djb2를 그대로 나누지 않는다(#10·#12와 같은 처방)",
+		_count_in(_src, "func _g16_bake_leaf_litter",
+			"absi(rand_from_seed(hash(\"leaf:%s:%d:%d:%d\"") == 1
+		and _count_in(_src, "func _g16_bake_leaf_litter", "abs(hash(\"leaf:%s:%d:%d:%d\"") == 0)
+	m._rebuild_region(RegionCatalog.JEOSEUNG_FOREST)
+	await process_frame
+	var d: float = m._g16_leaf_density
+	_check("⑫b 무대: 이 구역의 낙엽 밀도가 0이 아니다(%.3f — 0이면 함수가 즉시 빠진다)" % d, d > 0.0)
+	if d <= 0.0:
+		return
+	# 불투명 판을 하나 세워 프로덕션 베이크를 그대로 돌린다(투명 픽셀은 함수가 건너뛴다).
+	var w: int = m._grid_w
+	var h: int = m._outdoor_h
+	var img := Image.create(w * m.TILE, h * m.TILE, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.5, 0.5, 0.5, 1.0))
+	# ★ 기준색은 **판에서 되읽는다** — FORMAT_RGBA8은 0.5를 128/255로 양자화하므로 리터럴과
+	#   비교하면 모든 픽셀이 «바뀐 픽셀»로 세어진다(초안이 실제로 그래서 비율이 1.000이었다).
+	var basec: Color = img.get_pixel(0, 0)
+	var surf: Array = []
+	for _y in h:
+		var row: Array = []
+		for _x in w:
+			row.append(0)
+		surf.append(row)
+	m._g16_bake_leaf_litter(img, surf)
+	# 낙엽이 앉은 칸 수를 센다(색이 바뀐 픽셀이 하나라도 있는 칸).
+	var leafed := 0
+	for y in h:
+		for x in w:
+			var hit := false
+			for j in m.TILE:
+				for i in m.TILE:
+					if img.get_pixel(x * m.TILE + i, y * m.TILE + j) != basec:
+						hit = true
+						break
+				if hit:
+					break
+			if hit:
+				leafed += 1
+	var ratio: float = float(leafed) / float(w * h)
+	# 세 롤이 **독립**이면 칸이 낙엽을 받을 확률은 1-(1-d)^3다. 종전(마지막 성분이 k)에는 세 롤의
+	# 답이 늘 같아 그 확률이 정확히 d로 접혔다 — 즉 «칸당 3알갱이»가 실질 1알갱이였다.
+	var want: float = 1.0 - pow(1.0 - d, 3.0)
+	_check("⑫c 낙엽 칸 비율 %.3f가 «세 번 독립» 기대 %.3f에 든다(접힌 답은 d=%.3f 근처였다)"
+			% [ratio, want, d],
+		ratio >= want * 0.75 and ratio <= want * 1.25 and ratio > d * 1.5)
+
+# ── ⑬ #12 캐노피 변주가 행마다 같은 무늬를 반복하지 않는다 ───────────────────
+func _check_canopy_variation(m: Node) -> void:
+	print("⑬ #12 캐노피 변주 인덱스 ↔ 격자 규칙성")
+	_check("⑬a 배선: 캐노피·성숙목 두 창구가 같은 처방을 쓴다(형제 창구 정렬)",
+		_count_in(_src, "func _collect_forest_canopy",
+			"absi(rand_from_seed(hash(\"canopy:%s:%d:%d\"") == 1
+		and _count_in(_src, "func _collect_forest_tree_art",
+			"absi(rand_from_seed(hash(\"ledgertree:%s:%d:%d\"") == 1)
+	var mix: Array = m._CANOPY_MIX_JEOSEUNG
+	var items: Array = []
+	m._collect_forest_canopy(items)
+	_check("⑬b 무대: 캐노피 후보가 %d점 섰다(mix %d칸)" % [items.size(), mix.size()],
+		items.size() > 20 and mix.size() > 1)
+	if items.size() <= 20:
+		return
+	# `_forest_item`의 `key`가 곧 발치 행이라 그것으로 행을 묶는다(앵커 y는 텍스처 높이만큼 밀린다).
+	var rows: Dictionary = {}
+	for it in items:
+		var k: int = int(it["key"])
+		if not rows.has(k):
+			rows[k] = []
+		rows[k].append({"x": int(it["tile"].x), "tex": it["tex"]})
+	# ★ 재는 것은 발견물이 실측으로 지목한 **그 증상 두 개**다(모델을 세우지 않는다 — djb2의
+	#   자릿수 올림 때문에 «인덱스 = x의 아핀식»도 «4점 주기»도 성립하다 말다 해서, 그 둘로 만든
+	#   초안 지표는 파괴에 안 죽었다. 실측 로그로 갈아탄 자리다):
+	#   ㉠ 특별 나무가 한 행 안에서 **정확히 mix 한 바퀴(8칸) 간격**에 선다.
+	#     파괴 실측 — 저승 숲 두 행이 x = 12·20·38·46 / 13·21·39·47이었다(간격열 8·18·8).
+	#   ㉡ **서로 다른 행이 같은 간격열**을 반복한다(위 두 행이 글자 단위로 같다 = 반칸 엇갈림이
+	#     무력해진 그 증거).
+	var gaps_total := 0
+	var gaps_lattice := 0
+	var sigs: Dictionary = {}
+	for k in rows:
+		var arr: Array = rows[k]
+		arr.sort_custom(func(a, b): return int(a["x"]) < int(b["x"]))
+		var sx: Array = []
+		for e in arr:
+			if e["tex"] != mix[0]:
+				sx.append(int(e["x"]))
+		if sx.size() < 2:
+			continue
+		var sig := ""
+		for q in range(1, sx.size()):
+			var g: int = int(sx[q]) - int(sx[q - 1])
+			gaps_total += 1
+			if g == mix.size():
+				gaps_lattice += 1
+			sig += "%d," % g
+		if sx.size() >= 3:
+			sigs[sig] = int(sigs.get(sig, 0)) + 1
+	var dup_rows := 0
+	for sg in sigs:
+		if int(sigs[sg]) > 1:
+			dup_rows += int(sigs[sg])
+	_check("⑬c 특별 나무 간격 %d개 중 «정확히 %d칸» %d개(%.0f%%) — 격자면 대다수가 그 값이다"
+			% [gaps_total, mix.size(), gaps_lattice,
+				100.0 * float(gaps_lattice) / maxf(1.0, float(gaps_total))],
+		gaps_total >= 4 and float(gaps_lattice) < float(gaps_total) * 0.5)
+	_check("⑬d 간격열이 겹치는 행 %d개 / 표본 %d개 — 종전엔 두 행이 글자 단위로 같았다"
+			% [dup_rows, sigs.size()],
+		dup_rows == 0)
+
+# ── ⑭ #13 방목 문 [F]가 화면에서 광고된다 ────────────────────────────────────
+func _check_pasture_door_ad(m: Node) -> void:
+	print("⑭ #13 방목 문 [F] ↔ 키 광고")
+	_check("⑭a 무대 전제: 저장소에 방목 문 **집행부**가 서 있다(광고만 없던 자리)",
+		_count_in(_src, "func _process", "_indoor in ANIMAL_BUILDINGS and Input.is_action_just_pressed") == 1)
+	var barn: String = m.ANIMAL_BUILDINGS[0]
+	var beast := Vector2i(-1, -1)
+	for tile in m.ranch._animals.keys():
+		if String(m.ranch._animals[tile].get("home_building", "")) == barn:
+			beast = tile
+			break
+	_check("⑭b 무대: %s에 짐승이 있다 %s" % [barn, str(beast)], beast.x >= 0)
+	if beast.x < 0:
+		return
+	# 문 상태 두 갈래를 **프로덕션 문자열 그대로** 받는다(프롬프트는 `_process` 안이라 프레임을 태운다).
+	m._region = RegionCatalog.HOME
+	m._indoor = barn
+	m._sleeping = false
+	m._transitioning = false
+	m._target = beast + Vector2i(0, 1) if not m.ranch.has_animal_at(beast + Vector2i(0, 1)) else beast + Vector2i(1, 0)
+	m.ranch.set_door(barn, false)
+	await process_frame
+	await process_frame
+	var closed_txt: String = m.interact_prompt.text
+	m.ranch.set_door(barn, true)
+	await process_frame
+	await process_frame
+	var open_txt: String = m.interact_prompt.text
+	_check("⑭c 닫힘일 때 화면이 키와 상태를 말한다 — 「%s」" % closed_txt,
+		closed_txt.contains("[F] 방목 문") and closed_txt.contains("지금 닫힘"))
+	_check("⑭d 열림일 때 문구가 따라간다 — 「%s」" % open_txt,
+		open_txt.contains("[F] 방목 문") and open_txt.contains("지금 열림"))
+	m.ranch.set_door(barn, false)
+	m._indoor = ""
+
+# ── ⑮ #14 «오늘 돌봄 완료»가 실제 완료일 때만 뜬다 ───────────────────────────
+func _check_animal_care_honesty(m: Node) -> void:
+	print("⑮ #14 짐승 프롬프트 ↔ 급여·청소")
+	var beast := Vector2i(-1, -1)
+	for tile in m.ranch._animals.keys():
+		beast = tile
+		break
+	_check("⑮a 무대: 짐승 한 마리를 잡았다 %s" % str(beast), beast.x >= 0)
+	if beast.x < 0:
+		return
+	var a: Dictionary = m.ranch._animals[beast]
+	a["product"] = 0
+	a["petted"] = true
+	a["fed"] = false
+	a["cleaned"] = false
+	# 손에 건초가 없으면 종전 `parts`는 비어 «완료»로 떨어졌다(급여는 건초를 들었을 때만 판정).
+	m.inventory.add_item(ItemCatalog.HOE, 1)
+	for i in range(m.inventory.slots.size()):
+		if m.inventory.id_at(i) == ItemCatalog.HOE:
+			m.inventory.select(i)
+			break
+	var txt: String = m._animal_prompt(beast)
+	_check("⑮b 미급여·미청소인데 «완료»라 말하지 않는다 — 「%s」" % txt,
+		not txt.contains("오늘 돌봄 완료") and txt.contains("급여") and txt.contains("청소"))
+	a["fed"] = true
+	a["cleaned"] = true
+	var txt2: String = m._animal_prompt(beast)
+	_check("⑮c 셋을 다 하면 그때 «완료»다 — 「%s」" % txt2, txt2.contains("오늘 돌봄 완료"))
+
+# ── ⑯ #16 방목지에 선 짐승은 새 날에도 방목 중이다 ───────────────────────────
+func _check_pasture_graze_carry() -> void:
+	print("⑯ #16 실외 고립 ↔ 방목 가산")
+	var r := Ranch.new()
+	var t := Vector2i(2, 2)
+	var barn := "넋둥우리"
+	_check("⑯a 무대: 짐승을 %s에 들였다" % barn,
+		r.add_animal(t, AnimalCatalog.ids()[0], barn))
+	r.set_door(barn, true)
+	_check("⑯b 무대: 문이 열려 방목지로 나갔다(grazed)",
+		r.send_to_pasture(t, Vector2i(9, 9)) and r.is_outside(t))
+	r.set_door(barn, false)                      # 오후에 문을 닫았다 = 밤에 실외 고립
+	var night: Dictionary = r.settle_night()
+	_check("⑯c 무대: 실외 고립으로 남았다(귀가 0 · 노출 %d)" % int(night.get("exposed", 0)),
+		int(night.get("exposed", 0)) == 1 and r.is_outside(t))
+	r.advance_day()
+	_check("⑯d 새 아침에도 **방목 중이다** — 원장이 자기 위치와 어긋나지 않는다(그림·`_grazing_animal_at`은 «방목 중»이라 말한다)",
+		r.is_outside(t) and r._animals[t]["grazed"])
+	# 대조군 — 실내에 있는 짐승은 새 아침에 grazed가 꺼져 있어야 한다(과잉 적용 0).
+	var t2 := Vector2i(3, 3)
+	r.add_animal(t2, AnimalCatalog.ids()[0], barn)
+	r.settle_night()
+	r.advance_day()
+	_check("⑯e 대조군: 실내 짐승은 새 아침에 grazed가 꺼져 있다(문을 열어야 그날 방목이 선다)",
+		not r.is_outside(t2) and not r._animals[t2]["grazed"])
+	r.free()
+
+# ── ⑰ #17 AoE 프롬프트가 집행부와 같은 범위를 본다 ───────────────────────────
+func _check_aoe_prompt(m: Node) -> void:
+	print("⑰ #17 티어 AoE ↔ 프롬프트 침묵")
+	_check("⑰a 배선: 두 갈래가 AoE 술어를 문다(조준 칸 단독 판정 0)",
+		_count_in(_src, "func _farm_prompt", "_hoe_aoe_has_work()") == 1
+		and _count_in(_src, "func _farm_prompt", "_water_aoe_has_work()") == 1)
+	m._indoor = ""
+	m._region = RegionCatalog.HOME
+	m._rebuild_region(RegionCatalog.HOME)
+	await process_frame
+	# 밭 흙 한 줄을 찾아 조준 칸만 갈아 둔다(그 너머는 미경작 — 종전엔 여기서 화면이 침묵했다).
+	# ★ 일렬 AoE는 **바라보는 방향**으로 뻗는다(`_tool_aoe_tiles` — dir = 조준 칸 − 발 칸).
+	#   그래서 무대는 «플레이어가 위, 조준 칸이 아래»로 세워야 티어 범위가 실제로 성립한다
+	#   (초안은 발 위치를 안 세워 dir이 ZERO였고, 그러면 0티어와 같은 한 칸짜리 AoE가 된다).
+	var t := Vector2i(-1, -1)
+	for y in range(m.STARTER_PATCH_RECT.position.y + 1, m.STARTER_PATCH_RECT.end.y - 2):
+		for x in range(m.STARTER_PATCH_RECT.position.x, m.STARTER_PATCH_RECT.end.x):
+			var c := Vector2i(x, y)
+			if m._is_farmable(c) and m._is_farmable(c + Vector2i(0, 1)) \
+					and not m.farm.is_tilled(c) and not m.farm.is_tilled(c + Vector2i(0, 1)):
+				t = c
+				break
+		if t.x >= 0:
+			break
+	_check("⑰b 무대: 조준 칸 %s와 그 아래 칸이 둘 다 경작 가능하다" % str(t), t.x >= 0)
+	if t.x < 0:
+		return
+	m.player.position = m._tile_center_px(t - Vector2i(0, 1))
+	m.farm.hoe(t)
+	m.tool_tier.set_tier(ItemCatalog.HOE, 1)     # 명동 괭이 = 세로 3칸
+	var aoe: Vector2i = m.tool_aoe(ItemCatalog.HOE)
+	m._target = t
+	var span: Array = m._farm_aoe_tiles(t, aoe)
+	_check("⑰c 무대: 티어 AoE %s가 조준 칸 밖으로 %d칸 더 뻗는다(0티어면 이 어긋남이 존재하지 않는다)"
+			% [str(aoe), span.size() - 1],
+		aoe != Vector2i(1, 1) and span.size() > 1)
+	m.energy.refill()
+	m.inventory.add_item(ItemCatalog.HOE, 1)
+	for i in range(m.inventory.slots.size()):
+		if m.inventory.id_at(i) == ItemCatalog.HOE:
+			m.inventory.select(i)
+			break
+	m._target = t
+	m._target_valid = true
+	var p: String = m._farm_prompt()
+	_check("⑰d 조준 칸은 이미 갈렸지만 AoE 안에 갈 칸이 있어 **화면이 말한다** — 「%s」" % p,
+		m.farm.is_tilled(t) and p.contains("괭이질"))
+	# 대조군 — AoE 전체가 이미 갈렸으면 종전대로 침묵한다(과잉 광고 0).
+	for at: Vector2i in m._farm_aoe_tiles(t, aoe):
+		m._field_at(at).hoe(at)
+	var p2: String = m._farm_prompt()
+	_check("⑰e 대조군: AoE가 통째로 갈린 뒤엔 괭이질을 광고하지 않는다 — 「%s」" % p2,
+		not p2.contains("괭이질"))
+	m.tool_tier.set_tier(ItemCatalog.HOE, 0)
+
+# ── ⑱ #18 모루 상호작용 칸이 아트 폭을 따른다 ────────────────────────────────
+func _check_anvil_tiles(m: Node) -> void:
+	print("⑱ #18 모루 아트 ↔ 상호작용 칸")
+	_check("⑱a 배선: 겨눔 판정이 칸 **표**를 문다(단일 칸 비교 0 — 실행·프롬프트가 이 하나를 공유한다)",
+		_count_in(_src, "func _process", "_smithy_anvil_tiles().has(_target)") == 1
+		and _count_in(_src, "func _process", "_target == SMITHY_UPGRADE_TILE") == 0)
+	var tiles: Array = m._smithy_anvil_tiles()
+	var w: int = int(m.SMITHY_TEX_ANVIL.get_size().x) / m.TILE
+	_check("⑱b 칸 수가 **아트 폭 파생**이다(%d칸 = 텍스처 %dpx / 타일 %dpx — 좌표 복제 0)"
+			% [tiles.size(), int(m.SMITHY_TEX_ANVIL.get_size().x), m.TILE],
+		tiles.size() == w and w == 2)
+	_check("⑱c 그림이 덮는 두 칸이 다 들어 있다 — 왼쪽 %s·오른쪽 %s(종전엔 오른쪽만 열렸다)"
+			% [str(m.SMITHY_UPGRADE_TILE - Vector2i(1, 0)), str(m.SMITHY_UPGRADE_TILE)],
+		tiles.has(m.SMITHY_UPGRADE_TILE) and tiles.has(m.SMITHY_UPGRADE_TILE - Vector2i(1, 0)))
+
+# ── ⑲ #19 광맥 타수 눈금이 «4/3타»를 안 낸다 ─────────────────────────────────
+func _check_node_hits_fold(m: Node) -> void:
+	print("⑲ #19 광맥 타수 눈금 ↔ 티어 교체")
+	_check("⑲a 배선: 갱도·나락 두 문구가 분자를 분모로 접는다(그림 쪽 R15 clampf의 글자판)",
+		_count_in(_src, "func _process",
+			"mini(mine_floors.node_hits_done(_mine_floor, _target), m_need)") == 1
+		and _count_in(_src, "func _process",
+			"mini(narak_floors.node_hits_done(_narak_depth, _target), n_need)") == 1)
+	# 무대가 실재하는가 — 티어를 올리면 need가 이미 친 타수 **아래로** 내려가는 종이 있는가.
+	var gem := ""
+	for nid in MineFloors.node_kinds():
+		# done의 현실적 최댓값은 need0 − 1이다(need0째 타에 깨진다) — 그것이 need2를 넘어야
+		#   «다 친 것보다 필요 타수가 적은데 광맥이 서 있는» 그 프레임이 성립한다.
+		if MineFloors.node_hits(String(nid), 0) - 1 > MineFloors.node_hits(String(nid), 2):
+			gem = String(nid)
+			break
+	_check("⑲b 무대: 티어로 타수가 줄어드는 광맥 「%s」(%d타 → %d타)"
+			% [gem, MineFloors.node_hits(gem, 0), MineFloors.node_hits(gem, 2)],
+		gem != "")
+	if gem == "":
+		return
+	var t := Vector2i(5, 5)
+	var need0: int = MineFloors.node_hits(gem, 0)
+	var need2: int = MineFloors.node_hits(gem, 2)
+	for _i in (need0 - 1):
+		m.mine_floors.add_node_hit(1, t)
+	var done: int = m.mine_floors.node_hits_done(1, t)
+	_check("⑲c 무대: 0티어로 %d타 친 뒤 2티어 요구가 %d타 — 분자가 분모를 **넘는다**(눈금이 거짓말할 조건)"
+			% [done, need2],
+		done > need2)
+	_check("⑲d 접은 값은 분모를 안 넘는다(%d/%d — 종전 표시는 %d/%d였다)"
+			% [mini(done, need2), need2, done, need2],
+		mini(done, need2) == need2)
+
+# ── ⑳ #21 시련 납품 풀이 깊이 술어에서 나온다 ────────────────────────────────
+func _check_trial_deliver_pool() -> void:
+	print("⑳ #21 시련 납품 풀 ↔ 깊이 단일 술어")
+	var pool: Array = TrialGround.deliver_pool()
+	_check("⑳a 풀이 비어 있지 않다(%d종)" % pool.size(), not pool.is_empty())
+	# ㉠ 전량이 깊이 게이트를 넘는다 — «1층 왕복으로 끝나는 시련» 0.
+	var shallow: Array = []
+	for id in pool:
+		if not MineFloors.is_depth_gated(String(id)):
+			shallow.append(String(id))
+	_check("⑳b 풀 전량이 `is_depth_gated`를 통과한다(1층 산출 잔존: %s)" % str(shallow),
+		shallow.is_empty())
+	_check("⑳c 종전에 들어 있던 1층 산출 둘이 빠졌다(넋알돌·넋수정 — `mine_floors`가 「1층에서 손에 넣을 수 있는 물건」이라 적은 그 둘)",
+		not pool.has(ItemCatalog.GEM_NEOKSUJEONG) and not pool.has(ItemCatalog.GEODE_NEOKAL))
+	# ㉡ 나락철 — NODE_TABLE에 없는 종이라 술어가 false를 준다(보부상이 이름으로 뺀 그 물건).
+	_check("⑳d 나락철 광석이 표적이 아니다(도구 4티어 최종 재료 — 시련은 5~9개를 **소각**한다)",
+		not pool.has(ItemCatalog.ORE_NARAKCHEOL))
+	# ㉢ 상한은 그대로다(깊이와 다른 것을 막는다 — 초희귀 유입 통제).
+	_check("⑳e 상한도 그대로다 — 명부금강(깊이 게이트 통과·정가 상한 초과)은 여전히 밖이다",
+		not pool.has(ItemCatalog.GEM_MYEONGBU_GEUMGANG))
+	# ㉣ 깊이 게이트를 넘고 상한 안이면 값이 싸도 든다(옛 하한 50이 잘라내던 쪽).
+	_check("⑳f 깊이를 넘으면 값이 싸도 든다 — 명옥·업화알돌과 함께 21·41층 저가종도 후보다(%d종)" % pool.size(),
+		pool.has(ItemCatalog.GEM_MYEONGOK) and pool.has(ItemCatalog.GEODE_EOPHWA)
+			and pool.size() > 2)
