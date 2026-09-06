@@ -365,11 +365,17 @@ func _part_main() -> void:
 	m.saver.save_game(raw, m._active_slot, {})
 	m._load_game()
 	_dismiss_dialogue(m)
-	# ★ 키가 없으면 main은 `load_save`를 **아예 안 부른다**(reclaim·sprinkler와 같은 관례) — 그래서
-	#   인메모리 원장이 그대로 남는 것이 정상 거동이고, 노드 레벨 하위호환은 위 ⑧b가 이미 잠갔다.
-	#   여기서 보는 것은 "구세이브를 읽어도 터지지 않는다"이다.
-	_check("⑧f 구세이브(rarecrow 키 없음) 로드 = 크래시 없음 · 인메모리 원장 유지",
-		m.rarecrow.id_at(p2) == ItemCatalog.RARECROW_3)
+	# ★[폴리시 R26 부록] **증인을 새 계약으로 정정한다(선재 red).** 이 줄은 「키가 없으면 main이
+	#   `load_save`를 아예 안 부르므로 인메모리 원장이 그대로 남는다」를 재고 있었는데, R24 배치 B
+	#   (커밋 0534458)가 설치·배치 원장 일곱의 `has` 가드를 걷으면서 이 키도 무조건 되감기로 바뀌었다
+	#   (`rarecrow.load_save(data.get("rarecrow", {}))`) — 그때 이 무대만 안 따라와 그 커밋 이후로
+	#   red였다(R26 배치 B 검증 중 발견 · 원인 커밋 확정은 `git log -S`).
+	#   ★ 프로덕션이 옳다: 레어크로우는 부팅이 한 칸도 시드하지 않는 «플레이가 놓은 델타»라, R13이
+	#     명문화한 판별식(«부팅으로 시드되는가 — 아니면 `.get(키, {})`로 무조건 되감는다»)의 되감기
+	#     쪽이다. 키 없는 구세이브 = 배치 0이고, 그 세계로 되감기는 것이 이 원장의 계약이다.
+	#   여기서 보는 것은 ㉠ 구세이브를 읽어도 터지지 않는다 ㉡ 그 세계의 배치로 **되감긴다**.
+	_check("⑧f 구세이브(rarecrow 키 없음) 로드 = 크래시 없음 · 배치가 되감긴다(키 없음 = 배치 0)",
+		m.rarecrow.id_at(p2) == "" and m.rarecrow.count() == 0)
 
 	await _despawn(m)
 

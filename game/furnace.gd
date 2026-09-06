@@ -130,6 +130,12 @@ func product_at(region: String, t: Vector2i) -> String:
 func minutes_left(region: String, t: Vector2i) -> int:
 	return maxi(int(_forges[region][t].get("left", 0)), 0) if has_at(region, t) else 0
 
+# ★[폴리시 R26 #6] **이 제련물이 투입 시점에 확정한 총 분**(0 = 빈 화덕). 진행 띠의 분모는 이
+#   값이어야 한다 — `smelt_minutes(ore, 살아 있는 퍼크)`를 다시 파면 분자(`left`, 투입 시점
+#   스냅샷)와 시점이 갈린다. 항상 `left <= total`이 성립하므로 띠 폭이 음수가 될 자리가 없다.
+func minutes_total(region: String, t: Vector2i) -> int:
+	return maxi(int(_forges[region][t].get("total", 0)), 0) if has_at(region, t) else 0
+
 # 제련 중인가(광석이 들었고 아직 안 익었다).
 func is_smelting(region: String, t: Vector2i) -> bool:
 	return product_at(region, t) != "" and minutes_left(region, t) > 0
@@ -154,7 +160,7 @@ func place(region: String, t: Vector2i) -> bool:
 		return false
 	if not _forges.has(region):
 		_forges[region] = {}
-	_forges[region][t] = {"ore": "", "product": "", "left": 0, "quality": ItemCatalog.Q_NORMAL}
+	_forges[region][t] = {"ore": "", "product": "", "left": 0, "total": 0, "quality": ItemCatalog.Q_NORMAL}
 	changed.emit()
 	return true
 
@@ -198,8 +204,15 @@ func load_ore(region: String, t: Vector2i, ore_id: String, time_cut: float = 0.0
 	var ingot := ingot_for(ore_id)
 	if ingot == "":
 		return false
+	# ★[폴리시 R26 #6] **총량도 투입 시점에 굳힌다.** `left`가 이 순간의 퍼크로 확정되는 스냅샷인데
+	#   (바로 위 머리말이 못 박은 「진행 중인 제련물엔 소급되지 않는다」 계약), 소비처인 진행 띠는
+	#   분모를 매 프레임 *살아 있는* 퍼크로 다시 팠다 — 분자와 분모가 서로 다른 시점의 퍼크를 봐서
+	#   제련 중에 [제련공]을 고르면 `total < left`가 되어 띠 폭이 음수로 그려졌다.
+	#   같은 dict가 자기 눈금의 두 끝을 다 들면 그 갈림이 생길 자리가 없다(형제 결정기는 분모가
+	#   카탈로그 상수라 애초에 안 갈린다 — 이 한 줄이 두 기계의 눈금 규칙을 같은 결로 맞춘다).
+	var mins := smelt_minutes(ore_id, time_cut)
 	_forges[region][t] = {"ore": ore_id, "product": ingot,
-		"left": smelt_minutes(ore_id, time_cut), "quality": quality_for(quality_step)}
+		"left": mins, "total": mins, "quality": quality_for(quality_step)}
 	changed.emit()
 	return true
 
@@ -211,7 +224,7 @@ func collect(region: String, t: Vector2i) -> Dictionary:
 		return {}
 	var id := product_at(region, t)
 	var q := pending_quality(region, t)
-	_forges[region][t] = {"ore": "", "product": "", "left": 0, "quality": ItemCatalog.Q_NORMAL}
+	_forges[region][t] = {"ore": "", "product": "", "left": 0, "total": 0, "quality": ItemCatalog.Q_NORMAL}
 	changed.emit()
 	return {"id": id, "quality": q}
 
@@ -269,8 +282,11 @@ func to_save() -> Dictionary:
 		var arr: Array = []
 		for t: Vector2i in _forges[region]:
 			var e: Dictionary = _forges[region][t]
+			# ★[폴리시 R26 #6] 총 분은 **일곱째 항으로 뒤에 붙인다**(위 머리말의 「항목이 늘어도 뒤에
+			#   붙이면 되는 형태」 그대로 — 앞 여섯 항의 뜻·자리는 한 바이트도 안 움직인다).
 			arr.append([t.x, t.y, String(e.get("ore", "")), String(e.get("product", "")),
-				int(e.get("left", 0)), int(e.get("quality", ItemCatalog.Q_NORMAL))])
+				int(e.get("left", 0)), int(e.get("quality", ItemCatalog.Q_NORMAL)),
+				int(e.get("total", 0))])
 		out[region] = arr
 	return {"forges": out}
 
@@ -301,10 +317,19 @@ func load_save(data: Dictionary) -> void:
 					got = ""
 				var left: int = maxi(int(e[4]), 0) if e.size() >= 5 else 0
 				var q: int = int(e[5]) if e.size() >= 6 else ItemCatalog.Q_NORMAL
+				# ★[폴리시 R26 #6] 스키마 백필 — 총 분 항이 없는 구세이브(S5-T8 이전 파일 포함)는
+				#   **남은 분을 그대로 총량으로 삼는다**. 지난 진행분은 파일 어디에도 없으므로
+				#   그 한 번의 제련만 0%에서 다시 채워지고(보수적·단조), 다음 투입부터 정확하다.
+				#   `smelt_minutes(ore, 0.0)`으로 되추정하지 않는 이유: 그 제련이 제련공 퍼크 아래
+				#   들어갔다면 base가 실제 총량의 두 배라 진행을 **과대보고**한다(음수는 안 나지만
+				#   거짓을 그린다 — 모르는 값은 추정하지 않고 아는 값으로 굳힌다).
+				var total: int = maxi(int(e[6]), left) if e.size() >= 7 else left
 				if got == "":
 					left = 0
+					total = 0
 				by_tile[Vector2i(int(e[0]), int(e[1]))] = {"ore": ore, "product": got,
-					"left": left, "quality": clampi(q, ItemCatalog.Q_NORMAL, MAX_QUALITY)}
+					"left": left, "total": total,
+					"quality": clampi(q, ItemCatalog.Q_NORMAL, MAX_QUALITY)}
 			if not by_tile.is_empty():
 				_forges[String(region)] = by_tile
 	changed.emit()

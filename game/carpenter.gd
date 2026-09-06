@@ -194,7 +194,15 @@ func summary(day: int) -> String:
 	if not is_active():
 		return ""
 	var left := days_left(day)
-	if left <= 0:
+	# ★[폴리시 R26 #7] 문턱이 **1**이다(종전 0 — 어떤 날짜로도 도달 불가였다). `days_left`는
+	#   `maxi(0, due_day - day)`이고 `advance_day`는 `day >= due_day`인 아침에 곧바로 완공해
+	#   `_active`를 비우므로, 이 요약은 그 프레임부터 첫 줄에서 ""로 빠진다 — 즉 `left`가 0이 되는
+	#   프레임이 존재하지 않았다. `PROJECTS`의 `days`가 전부 2~3이라 실제로 취할 수 있는 값은
+	#   3·2·1뿐이고, 「내일 아침 완공」은 그중 **1**을 두고 쓴 문구다(완공 전날 = 다음 아침에
+	#   `advance_day`가 짓는 날). 문턱을 1로 내려 그 문구를 제 날짜에 세운다.
+	#   ★ 「1일 남음」과 정보량이 같은 게 아니라 더 정확하다: 완공은 *날이 바뀌는 아침*에 일어나므로
+	#     남은 하루가 통째로 남은 게 아니라 다음 아침이 곧 완공이다.
+	if left <= 1:
 		return "%s — 내일 아침 완공" % name_of(active_id())
 	return "%s — %d일 남음" % [name_of(active_id()), left]
 

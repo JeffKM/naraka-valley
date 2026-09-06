@@ -1,9 +1,10 @@
 extends SceneTree
-# ★[폴리시 26회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#5).
+# ★[폴리시 26회차] 버그 헌트 확정분 회귀 — 배치 A(#0~#5) + 배치 B(#6~#9).
 #
-# 렌즈: R25 diff 리뷰(#0~#3) · 세이브/로드 고정점(#4) · 중복 술어 표류(#5).
+# 렌즈: R25 diff 리뷰(#0~#3) · 세이브/로드 고정점(#4) · 중복 술어 표류(#5) ·
+#       기계 시간 원장(#6·#7) · 문↔워프 대칭(#8) · 거절 경로 무결성(#9).
 #
-# 이 배치의 태도 셋.
+# 이 두 배치의 태도 넷.
 #   ㉠ **계약을 뒤집으면 그 계약의 소비처를 전수로 세워야 한다.** #0·#1은 같은 뿌리다 — R25 #17이
 #      약탈 집계를 «노드는 계약만 쏘고 소비처가 실손실을 되돌린다»로 갈랐는데, main 말고
 #      NightBar를 직접 굴리는 무대 둘(cocktail_test의 맨몸 바 · 밸런스 시뮬 봇)이 소비처를 안
@@ -12,8 +13,13 @@ extends SceneTree
 #   ㉡ **좁히는 봉합은 «무엇까지 좁혔나»를 되물어야 한다.** #3은 R25 #22가 막으려던 것(다음 절기
 #      전용 종)과 함께 **그날 실제로 돋아 있는 현 절기 종까지** 지운 자리다. 그래서 ④는 하한
 #      (다음 절기 종은 여전히 빠진다)과 회복(현 절기 종이 후보 풀에 실제로 산다)을 같이 잰다.
-#   ㉢ **가드는 양방향이어야 한다.** #5는 반대 방향(`_is_tree_seed_free` → 밑동)이 이미 서 있는데
-#      과수 방향만 원장을 안 봐서 단방향이던 자리다. ⑥은 양쪽을 한 무대에서 나란히 묻는다.
+#   ㉢ **가드는 양방향이어야 하고, 우연히 막힌 것은 막힌 게 아니다.** #5는 반대 방향
+#      (`_is_tree_seed_free` → 밑동)이 이미 서 있는데 과수 방향만 원장을 안 봐 단방향이던 자리고,
+#      #8은 건물 문 열두 칸 중 열한 칸이 «풋프린트가 facade 벽을 문다»는 **우연**으로만 막혀 있던
+#      자리다(실측). ⑥·⑨는 그 둘을 규칙으로 바꾼 뒤 양쪽을 나란히 묻는다.
+#   ㉣ **굳는 값과 살아 있는 값을 한 식에 섞지 않는다.** #6은 분자(투입 시점 스냅샷)와 분모(매
+#      프레임 다시 판 퍼크)가 서로 다른 시점을 봐서 띠 폭이 음수가 된 자리다 — 원장이 자기 눈금의
+#      두 끝을 다 들게 해 갈릴 자리를 없앤다.
 #
 # 무엇을 보증하나(번호 = 26회차 헌트 발견 인덱스).
 #   ① #0 소비처 0인 맨몸 NightBar는 돌파해도 `_raided`가 안 오른다(R25 #17 계약) — cocktail_test의
@@ -23,24 +29,32 @@ extends SceneTree
 #   ④ #3 절기 경계 게시분에서 채집물 갈래가 통째로 사라졌다(연 4일 — 폴백이 작물로 덮어 조용했다).
 #   ⑤ #4 `"greenhouse"` 키만 `has` 가드가 남아, 버린 타임라인의 늘봄방 작물이 구세이브에 굳었다.
 #   ⑥ #5 `_is_tree_blocked`만 자체 파종 원장을 안 봐, 밑동이 마당 파종목 위에 겹쳐 섰다(비가역).
+#   ⑦ #6 업화로 진행 띠의 분모가 살아 있는 퍼크값이라, 제련 중 [제련공] 선택이 폭을 음수로 만들었다.
+#   ⑧ #7 목공방 요약의 «내일 아침 완공»이 **어떤 날짜로도 안 뜨는** 죽은 문구였다(문턱 0).
+#   ⑨ #8 건물 문·퇴장 착지 칸이 나무 술어에 한 줄도 없어, 넋둥우리 착지 칸에 밑동이 섰다(영구 SOLID).
+#   ⑩ #9 장원제 래치가 부상 지급보다 앞서, 만재 시 연 1회 기회와 부상이 함께 증발했다.
 #
-# 판정: #0~#5 **전건 CONFIRMED**(6건 봉합) · REFUTED·DUP·OWNER 0.
-#   ★ 배치 B 몫 #8의 명시 판정도 여기 남긴다: **#5와 형제이되 별개 결함이다.** 둘 다
-#     `_is_tree_blocked`의 누락 항이지만 항이 다르다 — #5는 **런타임 나무 원장**(`_tree_occupied_at`),
-#     #8은 **건물 문·퇴장 착지 칸**이다. ⑥a가 더한 한 줄은 (13,16) 같은 PATH 도착 칸을 한 톨도
-#     막지 않으므로(그 칸엔 원장 항목이 없다) #8은 그쪽 워커가 따로 봉합해야 한다. ⑥f가 그
-#     비커버를 **실측으로** 못 박는다(이 봉합이 #8까지 덮었다고 오독하지 않게).
+# 판정: #0~#9 **전건 CONFIRMED**(10건 봉합) · REFUTED·DUP·OWNER 0.
+#   ★ #5와 #8은 **형제이되 별개 결함**이다(배치 A 판정을 배치 B가 실측으로 확인): 둘 다
+#     `_is_tree_blocked`의 누락 항이지만 항이 다르다 — #5는 런타임 나무 원장(`_tree_occupied_at`),
+#     #8은 건물 문·착지 칸(`_building_door_reserved`)이고, 어느 한 줄도 다른 쪽 칸을 안 막는다.
+#     ⑥f가 두 항이 각자 서 있음을 든다.
 #
-# 하중 검증(파괴 6배치 — 봉합을 되돌리면 실제로 red가 남는가 · 전건 확인):
-#   #0 cocktail_test guard 소비처의 `record_raid` 삭제 → cocktail ⓔe red(0 == 3) · ①c red
-#   #1 `_run_night`의 sink 배선 삭제·옛 `attempted := night.tonight_raided()` 복귀 → ②a red
+# 하중 검증(파괴 10배치 — 봉합을 되돌리면 실제로 red가 남는가 · 전건 확인):
+#   #0 cocktail_test guard 소비처의 `record_raid` 삭제 → cocktail ⓔe red(0 == 3) · ①d red
+#   #1 `_run_night`의 sink 배선 삭제·옛 `attempted := night.tonight_raided()` 복귀 → ②a·②b red
 #   #2 좌측 폭을 `150.0` 고정으로 복귀            → ③a' red(그리는 줄이 파생 예산을 안 쓴다)
 #      ★ ③b·③c는 **파괴에 안 죽는다**(헬퍼는 그대로라 값이 안 흔들린다) — 그 둘은 «얼마나
 #        넘쳤나/들어가나»를 실측하는 무대 단언이고, 하중은 ③a'가 든다(파괴 실측으로 갈랐다).
 #   #3 기한 절기 항(`and …due_day`) 부활          → ④a·④b·④d red(경계 게시분 **절기 전용** 채집물 0종)
 #      ★ ④d는 사철종을 세면 파괴에 안 죽는다(그쪽은 교집합도 통과시켰다) — 절기 전용 갈래만 센다.
 #   #4 `data.get("greenhouse", {})`를 `has` 가드로 복귀 → ⑤a·⑤d red(버린 밭이 살아남는다)
-#   #5 `_is_tree_blocked`의 `_tree_occupied_at` 줄 삭제 → ⑥a·⑥c red(파종목 위에 밑동이 선다)
+#   #5 `_is_tree_blocked`의 `_tree_occupied_at` 줄 삭제 → ⑥a·⑥c·⑥f red(파종목 위에 밑동이 선다)
+#   #6 분모를 `smelt_minutes(ore, smelt_time_cut())`로 복귀 → ⑦a red · `load_ore`의 total 삭제 →
+#      ⑦b·⑦c'·⑦d·⑦e red(굳은 총 분이 0이 되어 비율이 무너진다)
+#   #7 문턱을 `left <= 0`으로 복귀                → ⑧a·⑧b·⑧c·⑧d red(전 프로젝트에서 0/N 도달)
+#   #8 `_building_door_reserved` 줄 삭제          → ⑨a·⑨b·⑨c·⑥f red(착지 칸이 다시 `can_plant`)
+#   #9 `_grange_awards_fit` 선검사 삭제           → ⑩a·⑩b·⑩c red(만재인데 래치가 찍히고 부상이 증발)
 #
 # 실행: ./run_tests.sh polish_r26   (헤드리스는 반드시 game/에서 · 순차)
 
@@ -90,6 +104,32 @@ func _count_in(lines: PackedStringArray, fn_needle: String, needle: String) -> i
 			n += 1
 	return n
 
+# 그 함수 안에서 니들이 처음 나오는 **줄 번호**(−1 = 없음). 두 줄의 선후를 재는 자리에 쓴다
+# (polish_r11 이후 관례 — «어느 쪽이 먼저 도는가»가 계약인 봉합의 회귀 도구).
+func _line_in(lines: PackedStringArray, fn_needle: String, needle: String) -> int:
+	var head := -1
+	for i in range(lines.size()):
+		if lines[i].begins_with(fn_needle):
+			head = i
+			break
+	if head < 0:
+		return -1
+	for i in range(head + 1, lines.size()):
+		if lines[i].begins_with("func ") or lines[i].begins_with("static func "):
+			break
+		if lines[i].strip_edges().begins_with("#"):
+			continue
+		if lines[i].contains(needle):
+			return i + 1
+	return -1
+
+# 알림 큐의 지금 문구들(그리기 큐 그대로 — 내부 상태를 새로 만들지 않는다).
+func _notice_texts(m: Node) -> PackedStringArray:
+	var out := PackedStringArray()
+	for it in m.notice_feed._items:
+		out.append(String(it["text"]))
+	return out
+
 # 맨몸 NightBar(트리에 안 붙이므로 스폿 초기화를 직접 부른다 — night_bar_test·cocktail_test 관례).
 func _new_bar() -> NightBar:
 	var b := NightBar.new()
@@ -130,6 +170,12 @@ func _run_checks() -> void:
 
 	await _check_bin_row_width(m)    # ③ #2
 	_check_tree_ledger_sanctuary(m)  # ⑥ #5
+
+	print("══ 폴리시 R26 회귀 — 배치 B(#6~#9) ══")
+	_check_furnace_scale()           # ⑦ #6(무대 불요 — 순수 FurnaceLedger)
+	_check_carpenter_summary()       # ⑧ #7(무대 불요 — 순수 Carpenter)
+	_check_building_door_sanctuary(m)   # ⑨ #8
+	_check_grange_award_order(m)     # ⑩ #9
 	await _check_greenhouse_rewind(m)   # ⑤ #4 — 세이브 파일을 쓰므로 맨 끝
 
 	# ★ 이 스위트는 ⑤에서 세이브를 **쓴다**(구세이브 되감기가 파일 경로를 타야 하는 검증이라
@@ -445,6 +491,263 @@ func _check_tree_ledger_sanctuary(m: Node) -> void:
 	# ★ 배치 B #8 비커버 명문화 — 이 봉합이 더한 것은 **원장 항 하나**다. #8이 요구하는 건물 문·
 	#   퇴장 착지 칸 항은 이 술어에 아직 없고, 그 칸들은 PATH라 원장에도 안 실린다 — 즉 ⑥의 초록은
 	#   #8의 초록이 아니다(그쪽 워커가 따로 봉합한다).
-	_check("⑥f 배치 B #8은 별개 결함이다 — `_is_tree_blocked`에 건물 문·착지 칸 항이 아직 없다(이 봉합의 비커버)",
-		_count_in(_src, "func _is_tree_blocked", "out_tile") == 0
-			and _count_in(_src, "func _is_tree_blocked", "ext_door") == 0)
+	# ★[배치 B에서 갱신] 배치 A 때 이 자리는 «#8 비커버»를 못 박는 단언이었다(원장 항 하나만 더한
+	#   봉합이 건물 문 칸을 안 막는다는 사실). 배치 B가 #8을 별도 항으로 봉합했으므로 **커버 단언**
+	#   으로 뒤집는다 — 두 결함이 별개라는 사실은 그대로고(항이 둘), 이제 둘 다 서 있다.
+	_check("⑥f 두 누락 항이 **모두** 섰다 — 원장(#5) + 건물 문·착지 칸(#8)은 별개 항이고 각자 봉합됐다",
+		_count_in(_src, "func _is_tree_blocked", "_tree_occupied_at(t)") == 1
+			and _count_in(_src, "func _is_tree_blocked", "_building_door_reserved(t)") == 1)
+
+# ── ⑦ #6 업화로 진행 눈금의 분모가 «투입 시점에 굳은 총 분»이다 ─────────────
+func _check_furnace_scale() -> void:
+	print("⑦ #6 업화로 진행 띠 ↔ 굳은 분모")
+	_check("⑦a 배선: 분모가 원장의 굳은 총 분이다(살아 있는 퍼크로 다시 파는 창구 0)",
+		_count_in(_src, "func _draw_furnaces", "furnace.minutes_total(_region, t)") == 1
+			and _count_in(_src, "func _draw_furnaces",
+				"FurnaceLedger.smelt_minutes(ore, smelt_time_cut())") == 0)
+	# 로스터에서 광석을 판다(id 옮겨 적기 0) — 단축이 실제로 값을 바꾸는 종이어야 무대가 선다.
+	var ore := ""
+	for o in FurnaceLedger.smeltable_ores():
+		var oid := String(o)
+		if FurnaceLedger.smelt_minutes(oid, 0.5) < FurnaceLedger.smelt_minutes(oid, 0.0):
+			ore = oid
+			break
+	_check("⑦b' 무대: 단축이 실효인 광석 「%s」을 로스터에서 찾았다(base %d분 → −50%% %d분)"
+			% [ItemCatalog.name_of(ore), FurnaceLedger.smelt_minutes(ore, 0.0),
+				FurnaceLedger.smelt_minutes(ore, 0.5)],
+		ore != "" and FurnaceLedger.smelt_minutes(ore, 0.5) < FurnaceLedger.smelt_minutes(ore, 0.0))
+	if ore == "":
+		return
+	var f := FurnaceLedger.new()
+	var t := Vector2i(3, 4)
+	var rg := RegionCatalog.HOME
+	f.place(rg, t)
+	f.load_ore(rg, t, ore, 0.0)      # 퍼크 없이 투입 — left·total 둘 다 base
+	var base_total := FurnaceLedger.smelt_minutes(ore, 0.0)
+	_check("⑦b 투입이 총 분을 함께 굳힌다 — total %d = left %d = base %d"
+			% [f.minutes_total(rg, t), f.minutes_left(rg, t), base_total],
+		f.minutes_total(rg, t) == base_total and f.minutes_left(rg, t) == base_total)
+	# ★핵심 — 제련 중에 [제련공]을 골라도(= `smelt_time_cut()`이 0.0→0.5) 분모가 안 흔들린다.
+	f.advance_minutes(float(int(base_total / 4)))
+	var left := f.minutes_left(rg, t)
+	var live_total := FurnaceLedger.smelt_minutes(ore, 0.5)   # 종전 코드가 매 프레임 파던 그 값
+	var old_w := float(live_total - left) / float(maxi(live_total, 1))
+	var new_w := float(f.minutes_total(rg, t) - left) / float(maxi(f.minutes_total(rg, t), 1))
+	_check("⑦c **종전 분모는 음수 폭을 냈다** — 살아 있는 퍼크 %d분 vs 남은 %d분 → 비율 %.2f(음수)"
+			% [live_total, left, old_w], live_total < left and old_w < 0.0)
+	_check("⑦c' 굳은 분모는 실제 진행을 그린다 — %d/%d = %.2f(0~1 · 단조)"
+			% [f.minutes_total(rg, t) - left, f.minutes_total(rg, t), new_w],
+		new_w > 0.0 and new_w < 1.0 and f.minutes_total(rg, t) >= left
+			and is_equal_approx(new_w, float(base_total - left) / float(base_total)))
+	# 퍼크 아래 **새로** 투입하면 그때의 값으로 다시 굳는다(소급이 아니라 시점 계약).
+	f.advance_minutes(float(base_total))     # 다 익히고
+	f.collect(rg, t)
+	f.load_ore(rg, t, ore, 0.5)
+	_check("⑦d 퍼크 아래 새로 투입하면 그 시점 값으로 굳는다 — total %d = left %d(= −50%% %d분)"
+			% [f.minutes_total(rg, t), f.minutes_left(rg, t), live_total],
+		f.minutes_total(rg, t) == live_total and f.minutes_left(rg, t) == live_total)
+	# 세이브 왕복 — 총 분이 파일을 건넌다(7항).
+	var raw: Dictionary = f.to_save()
+	var g := FurnaceLedger.new()
+	g.load_save(raw)
+	_check("⑦e 세이브 왕복이 총 분을 보존한다 — total %d · left %d"
+			% [g.minutes_total(rg, t), g.minutes_left(rg, t)],
+		g.minutes_total(rg, t) == f.minutes_total(rg, t)
+			and g.minutes_left(rg, t) == f.minutes_left(rg, t))
+	# 구세이브 백필 — 6항 배열(총 분 항 없음)은 남은 분을 총량으로 삼는다(보수적 · 음수 폭 0).
+	var arr: Array = raw["forges"][rg]
+	var six: Array = Array(arr[0]).slice(0, 6)
+	var h := FurnaceLedger.new()
+	h.load_save({"forges": {rg: [six]}})
+	_check("⑦f 구세이브(6항) 백필: 남은 분을 총량으로 삼는다 — total %d = left %d(과대보고 0 · 폭 음수 0)"
+			% [h.minutes_total(rg, t), h.minutes_left(rg, t)],
+		h.minutes_total(rg, t) == h.minutes_left(rg, t)
+			and h.minutes_total(rg, t) >= h.minutes_left(rg, t))
+
+# ── ⑧ #7 목공방 요약의 «내일 아침 완공»이 제 날짜에 뜬다 ────────────────────
+func _check_carpenter_summary() -> void:
+	print("⑧ #7 목공방 진행 요약 ↔ 도달 가능성")
+	var csrc := _lines_of_file("res://carpenter.gd")
+	_check("⑧a 배선: 문턱이 1이다(0이면 그 프레임이 존재하지 않는다)",
+		_count_in(csrc, "func summary", "if left <= 1:") == 1
+			and _count_in(csrc, "func summary", "if left <= 0:") == 0)
+	# 근거 — `advance_day`가 예정일 아침에 곧바로 비우므로 `left == 0`인 활성 프레임이 없다.
+	_check("⑧a' 근거: 완공은 `day >= due_day`인 아침에 일어나 `_active`를 비운다(요약이 그 프레임부터 \"\")",
+		_count_in(csrc, "func advance_day", "if not is_active() or day < due_day():") == 1)
+	# 거동 — **전 프로젝트**를 실제로 굴려 문구 수열을 모은다(days 하드코딩 0 · 레지스트리 파생).
+	var reached := 0
+	var projects: Array = Carpenter.PROJECTS.keys()
+	var sample := ""
+	for pid0 in projects:
+		var pid := String(pid0)
+		var c := Carpenter.new()
+		var day := 10
+		c.order(pid, day)
+		var seen: Array = []
+		var guard := 0
+		while c.is_active() and guard < 12:
+			seen.append(c.summary(day))       # 그날 낮의 요약(아침 완공 처리 뒤)
+			day += 1
+			guard += 1
+			c.advance_day(day)                # 다음 아침
+		var said := false
+		for s in seen:
+			if String(s).contains("내일 아침 완공"):
+				said = true
+		if said:
+			reached += 1
+		if pid == String(projects[0]):
+			sample = " · ".join(PackedStringArray(seen))
+	_check("⑧b **모든 프로젝트에서 그 문구가 뜬다** — %d/%d(종전엔 0/%d = 어떤 날짜로도 도달 불가)"
+			% [reached, projects.size(), projects.size()],
+		reached == projects.size() and projects.size() > 0)
+	_check("⑧c 수열이 «N일 남음 → 내일 아침 완공 → 완공»이다 — 「%s」(남음 갈래도 안 죽는다)" % sample,
+		sample.contains("일 남음") and sample.contains("내일 아침 완공")
+			and sample.find("일 남음") < sample.find("내일 아침 완공"))
+	# 그 문구가 **참**인가 — 다음 아침에 실제로 완공된다(R15 «광고는 언제나 참»).
+	var pid2 := String(projects[0])
+	var c2 := Carpenter.new()
+	c2.order(pid2, 10)
+	var d := 10
+	while c2.is_active() and not c2.summary(d).contains("내일 아침 완공") and d < 20:
+		d += 1
+		c2.advance_day(d)
+	var done_id := c2.advance_day(d + 1)
+	_check("⑧d 그 문구는 **참이다** — day %d에 뜬 뒤 day %d 아침에 「%s」이 실제로 완공됐다"
+			% [d, d + 1, Carpenter.name_of(pid2)],
+		done_id == pid2 and c2.is_done(pid2) and not c2.is_active())
+
+# ── ⑨ #8 건물 문·퇴장 착지 칸도 나무에 성역이다 ─────────────────────────────
+func _check_building_door_sanctuary(m: Node) -> void:
+	print("⑨ #8 혼의 나무 ↔ 건물 문·착지 칸")
+	_check("⑨a 배선: 술어가 서 있고 `_is_tree_blocked`이 그것을 든다",
+		_count_in(_src, "func _is_tree_blocked", "_building_door_reserved(t)") == 1
+			and _count_in(_src, "func _building_door_reserved", "for id in _buildings:") == 1)
+	_check("⑨a' 배선: 좌표를 옮겨 적지 않는다(표에서 파생 — 리터럴 Vector2i 0 · 실내 좌표 0)",
+		_count_in(_src, "func _building_door_reserved", "Vector2i(") == 0
+			and _count_in(_src, "func _building_door_reserved", "\"in_tile\"") == 0)
+	# 실측 — 지금 무대의 건물 문·착지 칸을 **표에서** 전수로 판다(분모 하드코딩 0).
+	var tiles: Array = []
+	var out_tiles: Dictionary = {}
+	for id in m._buildings:
+		var b: Dictionary = m._buildings[id]
+		if b.get("region", "") != m._region:
+			continue
+		for key in ["ext_door", "ext_door2", "out_tile"]:
+			if b.has(key):
+				tiles.append(b[key])
+		out_tiles[String(id)] = b["out_tile"]
+	var blocked := 0
+	var plantable := 0
+	for t0 in tiles:
+		var t: Vector2i = t0
+		if m._is_tree_blocked(t):
+			blocked += 1
+		if m.orchard.can_plant(t, m._is_tree_blocked):
+			plantable += 1
+	_check("⑨b 문·착지 칸 %d개가 **전부** 막힌 칸이고 밑동을 못 받는다(심을 수 있는 칸 %d개)"
+			% [blocked, plantable],
+		tiles.size() > 0 and blocked == tiles.size() and plantable == 0)
+	# ★ 종전에 유일하게 뚫려 있던 칸 — 넋둥우리 퇴장 착지(문이 rect 동단이라 3×3이 벽을 안 문다).
+	var coop: Vector2i = out_tiles.get("넋둥우리", Vector2i(-1, -1))
+	_check("⑨c 종전 유일한 구멍이 막혔다 — 넋둥우리 착지 칸 (%d,%d) blocked=%s(실측 12칸 중 이 한 칸만 `can_plant`였다)"
+			% [coop.x, coop.y, str(m._is_tree_blocked(coop))],
+		coop.x >= 0 and m._building_door_reserved(coop) and m._is_tree_blocked(coop))
+	# 성역이 문 주변으로 번지지 않는다(과잉 확장 0) — 표에 없는 칸은 이 술어가 안 든다.
+	var near := coop + Vector2i(0, 3)
+	_check("⑨d 성역은 표에 있는 칸뿐이다 — 이웃 칸 (%d,%d)는 이 술어가 안 든다(과잉 확장 0)"
+			% [near.x, near.y], not m._building_door_reserved(near))
+	# 근거 재검증 — R19 #7의 문장이 건물에도 1:1로 성립한다(그 칸에 서야 발동 · 착지 좌표 강제).
+	_check("⑨e 근거: 출입은 **그 칸에 서야** 발동하고(`_player_tile` 비교) 퇴장은 착지 칸 좌표를 강제한다",
+		_count_in(_src, "func _maybe_toggle_building", "var t := _player_tile()") == 1
+			and _count_in(_src, "func _maybe_toggle_building", "t == b[\"ext_door\"]") == 1
+			and _count_in(_src, "func _maybe_toggle_building", "_transition_to(\"\", ib[\"out_tile\"])") == 1)
+
+# ── ⑩ #9 장원제 부상은 «받을 수 있을 때만» 기회를 소비한다 ──────────────────
+func _check_grange_award_order(m: Node) -> void:
+	print("⑩ #9 장원제 래치 ↔ 부상 지급 순서")
+	var fit_line := _line_in(_src, "func _try_grange_entry", "_grange_awards_fit(rank)")
+	var latch_line := _line_in(_src, "func _try_grange_entry", "seasonal_event.record_grange(")
+	_check("⑩a 배선: 자리 선검사(%d행)가 래치(%d행)보다 **위**다(형제 창구의 「적재 먼저·기록 나중」)"
+			% [fit_line, latch_line],
+		fit_line > 0 and latch_line > 0 and fit_line < latch_line)
+	# 무대 — 곳간을 채워 장원 등급을 만들고, 백팩을 꽉 채운다.
+	var champion: int = SeasonalEvent.GRANGE_TIER_NAMES.size() - 1
+	m.larder.stock.clear()
+	var pool: Array = []
+	for cid in CropCatalog.ids():
+		pool.append(String(cid))
+	for fid in ItemCatalog.FORAGEABLES.keys():
+		pool.append(String(fid))
+	pool.sort_custom(func(a, b): return ItemCatalog.price_of(a) > ItemCatalog.price_of(b))
+	for pid in pool:
+		if SeasonalEvent.grange_rank(SeasonalEvent.score_entries(m._grange_entries())) >= champion:
+			break
+		m.larder.add(String(pid), 1)
+	var rank: int = SeasonalEvent.grange_rank(SeasonalEvent.score_entries(m._grange_entries()))
+	_check("⑩b' 무대: 곳간 %d종으로 장원 등급이 나온다(점수 %d ≥ 문턱 %d)"
+			% [m.larder.ids().size(), SeasonalEvent.score_entries(m._grange_entries()),
+				int(SeasonalEvent.GRANGE_TIER_SCORES[champion])],
+		rank == champion)
+	# 백팩을 만재로(합칠 스택도 없게 — 비료·레어크로우 둘 다 새 칸을 요구하는 최악 상태).
+	for i in range(m.inventory.slots.size()):
+		m.inventory.slots[i] = null
+	var filler: Array = []
+	for cid2 in CropCatalog.ids():
+		filler.append(String(cid2))
+	var fi := 0
+	for i2 in range(m.inventory.slots.size()):
+		m.inventory.slots[i2] = {"id": String(filler[fi % filler.size()]), "count": 1,
+			"quality": ItemCatalog.Q_NORMAL}
+		fi += 1
+	m.seasonal_event.grange_day = -1
+	var day: int = m.clock.day
+	_check("⑩b'' 무대: 백팩이 만재고 품질 비료 스택이 없다(자리 %s · 부상 적재 불가)"
+			% str(m.inventory.has_free_slot()),
+		not m.inventory.has_free_slot()
+			and not m.inventory.has_stack(FertilizerCatalog.FERT_QUALITY)
+			and not m._grange_awards_fit(rank))
+	m.notice_feed._items.clear()
+	var ok1: bool = m._try_grange_entry()
+	var said := ""
+	for tx in _notice_texts(m):
+		if tx.contains("장원 부상"):
+			said = tx
+	_check("⑩b **만재면 기회를 안 쓴다** — 출품 %s · 오늘 래치 %s · 알림 「%s」"
+			% [str(ok1), str(m.seasonal_event.grange_entered(day)), said],
+		not ok1 and not m.seasonal_event.grange_entered(day)
+			and said.contains("자리를 비우고") and not m.seasonal_event.has_bought(SeasonalEvent.GRANGE_RARECROW))
+	# 자리를 비우고 **같은 날** 다시 — 이제 그 지시가 이행 가능하다(종전엔 「이미 마쳤다」로 막혔다).
+	m.inventory.slots[0] = null
+	m.inventory.slots[1] = null
+	m.notice_feed._items.clear()
+	var gold0: int = m.wallet.gold
+	var ok2: bool = m._try_grange_entry()
+	_check("⑩c 자리를 비우면 **같은 날** 출품이 성립한다 — %s · 래치 %s · 품질 비료 %d개 · 레어크로우 %s(+%d냥)"
+			% [str(ok2), str(m.seasonal_event.grange_entered(day)),
+				m.inventory.count_of(FertilizerCatalog.FERT_QUALITY),
+				str(m.seasonal_event.has_bought(SeasonalEvent.GRANGE_RARECROW)),
+				m.wallet.gold - gold0],
+		ok2 and m.seasonal_event.grange_entered(day)
+			and m.inventory.count_of(FertilizerCatalog.FERT_QUALITY) == SeasonalEvent.GRANGE_CHAMPION_FERT
+			and m.seasonal_event.has_bought(SeasonalEvent.GRANGE_RARECROW)
+			and m.wallet.gold - gold0 == SeasonalEvent.grange_gold(rank))
+	# 하루 1회 계약은 그대로 — 성립한 뒤엔 같은 날 다시 안 열린다(거동 축소 0).
+	_check("⑩d 성립한 뒤엔 하루 1회 계약이 그대로 닫는다", not m._try_grange_entry())
+	# 부상 없는 등급은 만재여도 그대로 출품된다(선검사가 새 문턱을 만들지 않는다).
+	for i3 in range(m.inventory.slots.size()):
+		m.inventory.slots[i3] = {"id": String(filler[i3 % filler.size()]), "count": 1,
+			"quality": ItemCatalog.Q_NORMAL}
+	m.seasonal_event.grange_day = -1
+	m.larder.stock.clear()
+	m.larder.add(String(pool[0]), 1)
+	var low: int = SeasonalEvent.grange_rank(SeasonalEvent.score_entries(m._grange_entries()))
+	_check("⑩e 부상 없는 등급은 만재여도 그대로 출품된다 — 등급 %d(「%s」 · 물건 부상이 0이라 선검사가 늘 참)"
+			% [low, SeasonalEvent.grange_rank_name(low)],
+		low < SeasonalEvent.GRANGE_TIER_NAMES.size() - 1 and m._grange_awards_fit(low)
+			and m._try_grange_entry())
+	# 형제 규율 재확인 — 다른 지급 창구는 여전히 «적재 먼저».
+	_check("⑩f 형제 창구의 규율이 그대로다(적재 실패 시 기록 안 함 · 편지는 열기 전에 자리를 묻는다)",
+		_count_in(_src, "func _claim_museum_milestones", "if not inventory.add_item(") >= 1
+			and _count_in(_src, "func _read_next_letter", "_letter_attachment_fits(") >= 1)
+	m.larder.stock.clear()
