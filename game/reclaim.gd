@@ -287,8 +287,20 @@ func season_respawn(candidates: Array, day: int, is_winter: bool, solid_ok: Call
 	for k in range(want):
 		var t: Vector2i = pool[k]
 		var r := rng.randi_range(0, total - 1)
-		# ★[폴리시 R20 #2] SOLID 굴림은 호출 측 승인을 받아야 선다. 거절되면 잡초로 내린다.
-		if r >= SEASON_W_WEEDS and solid_ok.is_valid() and not solid_ok.call(t):
+		# ★[폴리시 R30 #0] SOLID 굴림은 **아직 안 연 땅에만** 선다 — 두 원장(_cleared·_debris)은
+		#   서로소여야 한다. R29 #9가 「잡초를 벤 자리」를 재점령 후보로 되돌린 뒤로 그 칸에도
+		#   solid가 앉을 수 있게 됐는데, 그러면 조회 창구 전부가 `_cleared`를 먼저 봐서
+		#   **안 보이고·못 치우고·산출 0인 유령**이 앉는다: `respawned_debris_kind`가 ""를 돌려
+		#   프롭 병합이 0이 되고(드로우·충돌 0), main의 `_debris_kind_at`도 ""라 개간 디스패치가
+		#   도달 못 하며, 겨눠도 아래 `clear`의 멱등 가드가 무동작이다. 그런데 `_debris[t]`는
+		#   세이브에 실린 채 이후 모든 절기의 위 풀 필터에서 t를 영구히 빼므로, R29 #9가
+		#   되살리려던 §3(「방치하면 마당이 서서히 다시 거칠어진다」)을 절기마다 스스로 갉아먹는다.
+		#   ★ 잡초 축이 다시 여는 것은 **잡초 층**이지 solid 층이 아니다(ADR-0055 §1 표 그대로) —
+		#     이 칸의 잡초 재점령은 종전대로 그대로 산다.
+		#   ★ 거절된 굴림을 잡초로 내리는 처리는 R20 #2의 그것과 한 글자도 안 다르다(굴림 스트림
+		#     불변 = 결정성 보존).
+		if r >= SEASON_W_WEEDS and (_cleared.has(t)
+				or (solid_ok.is_valid() and not solid_ok.call(t))):
 			r = 0
 		if r < SEASON_W_WEEDS:
 			_weeds[t] = true
@@ -351,9 +363,16 @@ func load_save(data: Dictionary) -> void:
 			if typeof(e) == TYPE_ARRAY and e.size() >= 2:
 				_weeds[Vector2i(int(e[0]), int(e[1]))] = true
 	_debris = {}               # ★[S7-T5] 키 없는 구버전 세이브 = 재스폰 debris 0(하위호환)
+	# ★[폴리시 R30 #0] **구세이브 이행** — 위 `season_respawn` 주석의 서로소 불변식을 로드에서
+	#   재보증한다(아래 루프). R29 #9와 그 봉합 사이에 저장된 세이브는 `_cleared`와 겹친 유령
+	#   debris를 실을 수 있는데, 그 칸은 어떤 창구로도 못 보고 못 치우면서 재점령 풀에서만 영구히
+	#   빠진다. 겹침은 정의상 전부 그 유령이다 — 정상 경로에선 `clear`가 `_debris.erase`를 함께
+	#   하므로 공존이 성립하지 않는다. 걷어 내면 그 칸이 잡초가 다시 돋는 마당으로 돌아온다.
 	var debris: Variant = data.get("debris", [])
 	if typeof(debris) == TYPE_ARRAY:
 		for e in debris:
 			if typeof(e) == TYPE_ARRAY and e.size() >= 3 and DebrisCatalog.has(str(e[2])):
 				_debris[Vector2i(int(e[0]), int(e[1]))] = str(e[2])
+	for t in _cleared:
+		_debris.erase(t)
 	changed.emit()

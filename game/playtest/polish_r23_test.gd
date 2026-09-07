@@ -423,8 +423,14 @@ func _check_pasture_sealed_sky(m: Node) -> void:
 	_check("③f 그때는 실제로 나갔다 — 방목지 점유 %d칸"
 			% m.ranch.occupied_pasture_tiles().size(),
 		not m.ranch.occupied_pasture_tiles().is_empty())
+	# ★[폴리시 R30 #1] **창구가 한 곳으로 접혔다** — 이월 방출이 밤 목록 안(마지막 밤의 확산 뒤·
+	#   파종 앞)으로 들어가며 `_process`의 호출부가 둘이 됐고, 한 프레임 두 번 시도를 막으려면
+	#   표·인자·반환 계약이 한 자리에 있어야 한다. 재는 계약은 한 글자도 안 바뀐다: 밀린 방출이
+	#   **그 아침의 굳은 하늘**로 결산되도록 day를 넘기는가(니들만 그 자리로 따라간다).
 	_check("③g 배선: 밀린 표 소비처가 인자를 넘긴다(형제 둘이 R22에서 받은 그 창구)",
-		_count_in_func(_src, "func _process", "_release_open_buildings(clock.day") >= 1)
+		_count_in_func(_src, "func _try_pending_pasture_release",
+			"_release_open_buildings(clock.day") == 1
+		and _count_in_func(_src, "func _process", "_try_pending_pasture_release(") >= 2)
 	m._weather_sealed_days = {}
 
 # ── ④ #3 화분 양보 ↔ 적재 자리 ───────────────────────────────────────────────
@@ -985,13 +991,19 @@ func _check_tree_installation(m: Node) -> void:
 	m.sprinkler.place(spot)
 	_check("⑯b 무대: 그 칸에 스프링클러가 섰다(설치물 원장이 그 칸을 든다)",
 		m._installation_at(spot))
-	_check("⑯c 이제 나무 심기가 그 칸을 **거절한다** — 되돌릴 창구가 orchard에 0이라 유일하게 비가역인 방향이었다",
-		m._is_tree_blocked(spot))
+	# ★[폴리시 R30 #10] **거절의 자리가 옮겼다.** 3×3 전수 술어(`_is_tree_blocked`)에 둔 설치물
+	#   항은 캐노피 여덟 칸까지 함께 지웠으므로(R27 #0이 형제 항 `_tree_occupied_at`에 한 그 진단·
+	#   그 이사) `_use_tool`의 앵커 갈래로 내려갔다. 재는 계약은 한 글자도 안 바뀐다 — 설치물
+	#   칸에는 **밑동이 못 선다**. 달라진 것은 폭뿐이고, 그 폭이 이제 반대 방향
+	#   (`_orchard_trunk_at` = 밑동 한 칸)과 대칭이다(아래 ⑯d가 그 반대편을 그대로 잰다).
+	_check("⑯c 이제 나무 심기가 그 칸을 **거절한다**(앵커 갈래) — 되돌릴 창구가 orchard에 0이라 유일하게 비가역인 방향이었다",
+		m._installation_at(spot)
+		and _count_in_func(_src, "func _use_tool", "elif _installation_at(_target):") == 1)
 	_check("⑯d 반대 방향은 종전대로다 — 밑동이 선 칸은 설치물이 거절한다(양방향 가드가 이제 대칭)",
 		not m._can_place_sprinkler(spot))
 	m.sprinkler.remove(spot)
 	_check("⑯e 회수하면 그 칸이 다시 열린다(가드가 래치가 아니라 그 프레임의 원장이다)",
-		not m._is_tree_blocked(spot) and not m._installation_at(spot))
+		not m._installation_at(spot) and not m._is_tree_blocked(spot))
 
 # ── ⑰ #20 주민 상주 칸 = 설치 금지 ───────────────────────────────────────────
 func _check_sprinkler_resident(m: Node) -> void:

@@ -332,9 +332,17 @@ func is_telegraphing() -> bool:
 	return state == State.FIGHT and not line_broke_by_class and not is_bursting() \
 		and _burst_timer <= TELEGRAPH_SECS
 
-# 퍼펙트 릴 창이 아직 열려 있나(HUD 초록 테두리).
+# 퍼펙트 릴 창이 **딸 수 있는 상태로** 열려 있나(HUD 금박 겹테).
+# ★[폴리시 R30 #19] `_perfect_armed`를 함께 든다 — 채색 술어와 실효 술어가 갈려 있었다. 무장은
+#   발버둥이 시작되는 그 프레임에 한 번만 정해지고(`_perfect_armed = reeling` — 「당기는 중이
+#   아니었다면 '풀 것'이 없다」) 창 도중에 다시 서지 않는데, 이 술어는 남은 초만 봤다. 그래서
+#   줄을 푼 채 발버둥 시작을 맞으면 HUD가 0.3초 내내 금박 겹테를 두르는데 그 창 안에서 무엇을
+#   눌러도 `perfect_count`도 `PERFECT_STAMINA_CUT`도 한 번도 안 붙었다 — 금박 테는 이 게임에서
+#   «지금 풀면 크리»를 말하는 **유일한 표면**이라, 도달 불가한 보상을 광고하고 그 프레임의
+#   조작을 낭비시켰다. 판정하는 그 두 항(`_perfect_left > 0.0 and _perfect_armed`)을 그대로 든다.
+# ★ 옛 머리말의 「초록 테두리」도 함께 고친다 — 실제 그리기는 GOLD_SOFT다(문구 표류).
 func is_perfect_window() -> bool:
-	return _perfect_left > 0.0
+	return _perfect_left > 0.0 and _perfect_armed
 
 # 퍼펙트 성공 플래시가 남아 있나(HUD 연출 전용 — 로직 무영향).
 func perfect_flash() -> bool:

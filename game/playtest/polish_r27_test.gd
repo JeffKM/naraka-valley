@@ -439,9 +439,12 @@ func _check_home_deco_rewind(m: Node) -> void:
 # ── ⑨ #8 로스터 밖 연애 슬롯 id는 로드에서 버려진다 ──────────────────────────
 func _check_romance_roster(m: Node) -> void:
 	print("⑨ #8 연애 슬롯 ↔ 로스터 실재 검증")
-	_check("⑨a 배선: 로드가 `ROMANCE_OPEN` 실재를 본다(형제 원장 전부가 가진 그 방어)",
+	# ★[폴리시 R30 부록 — 선재 증인 rot] 술어 이름이 R29 #21에서 `_romance_slot_valid`로 갈렸다
+	#   (자[尺]가 한 칸 좁아 앵커 청혼을 재기동마다 지웠기 때문 — 그 주석에 경위). 재는 계약은
+	#   그대로다: **로스터 밖 유령 id는 로드가 버린다**(아래 ⑨b~가 그 거동을 그대로 잰다).
+	_check("⑨a 배선: 로드가 슬롯 자격 술어로 실재를 본다(형제 원장 전부가 가진 그 방어)",
 		_count_in(_src, "func _load_game",
-			"if _romance_partner != \"\" and not ROMANCE_OPEN.has(_romance_partner):") == 1)
+			"if _romance_partner != \"\" and not _romance_slot_valid(_romance_partner):") == 1)
 	var ghost := "__r27_ghost__"
 	_check("⑨a' 무대: 그 id는 실제로 로스터 밖이다", not m.ROMANCE_OPEN.has(ghost))
 	m._active_slot = 2

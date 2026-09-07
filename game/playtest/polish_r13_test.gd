@@ -786,9 +786,12 @@ func _check_shippable_materials(m: Node) -> void:
 			% ids.size(), not ids.is_empty() and priced)
 	_check("⑰b-pre 무대: 종전 네 갈래(수확물·도감 추적·중복 유품·결정기)는 그 전부를 거절한다",
 		rejected_before)
+	# ★[폴리시 R30 부록 — 선재 증인 rot] 저승 이끼는 **R29 #13·#14가 의도적으로 열었다**(그 표
+	#   주석: 「개간·벌목·채취의 상시 산출 + 벌목꾼 퍼크 산출물」 여덟). 이 줄이 그 변경을 못
+	#   따라가 red였다(HEAD에서도 red — 이번 배치와 무관). 재는 계약은 그대로다: **자재군 전체를
+	#   연 것이 아니다** — 제작·건축이 삼키는 원목과 카페 프리미엄 소재는 여전히 거절이다.
 	_check("⑰c 자재군 전체를 연 것이 아니다 — 제작·건축이 삼키는 자재와 카페 소재는 여전히 거절",
 		not ItemCatalog.is_shippable_material(ItemCatalog.WOOD)
-		and not ItemCatalog.is_shippable_material(ItemCatalog.JEOSEUNG_IKKI)
 		and not ItemCatalog.is_shippable_material(ItemCatalog.NARAK_HONJEONG))
 	_check("⑰d-pre 무대: 삭은 그물은 게잡이통 밤 산출 표에 실려 있다(창구가 필요한 이유)",
 		str(CrabPotLedger.catch_table()).contains(ItemCatalog.ROTTEN_NET))

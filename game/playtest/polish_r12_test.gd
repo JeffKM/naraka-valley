@@ -277,13 +277,23 @@ func _check_cafe_popups(m: Node) -> void:
 	print("── ② #2(=#4·#10) 미뤄 둔 마감 정산이 새 아침·복원된 아침 위로 뜨지 않는다 ──")
 	# 먼저 이 결함이 왜 성립했는지를 소스로 못 박는다 — 두 타이머 틱에 `_sleeping` 가드가 없어
 	# 1.1초 암전 트윈 동안에도 계속 깎이고, F9 폴링은 팝업이 모달이 아니라 그대로 도달한다.
-	var tick_i := _line_of("\tif _milestone_popup_secs > 0.0:")
+	# ★[폴리시 R30 #15] 두 타이머 틱이 `_tick_popup_lifetimes`로 이사했다(『정지 주인 = 재개 주인』 —
+	#   `_process`의 조기 반환들 위에서 돌아야 그려지는 판의 초가 흐른다). 재는 계약은 한 글자도 안
+	#   바뀐다: **그 틱에 `_sleeping` 가드가 없다**(취침 갈래의 뿌리). 니들만 그 함수 안으로 따라간다.
+	var fn_i := _line_of("func _tick_popup_lifetimes")
+	var tick_i := -1
+	for i in range(maxi(fn_i, 0) + 1, _src.size()):
+		if _src[i].begins_with("func "):
+			break
+		if _src[i].contains("if _milestone_popup_secs > 0.0:"):
+			tick_i = i
+			break
 	var tick_block := ""
-	for i in range(tick_i, mini(tick_i + 9, _src.size())):
+	for i in range(maxi(tick_i, 0), mini(maxi(tick_i, 0) + 9, _src.size())):
 		tick_block += _src[i]
 	_check("②a-pre 무대: 마일스톤 타이머 틱에는 `_sleeping` 가드가 없다(main.gd:%d — 취침 갈래의 뿌리)"
 			% (tick_i + 1),
-		tick_i > 0 and not tick_block.contains("_sleeping")
+		fn_i > 0 and tick_i > 0 and not tick_block.contains("_sleeping")
 		and tick_block.contains("_show_cafe_summary(pending)"))
 	_check("②a2-pre 무대: F9 폴링은 팝업 가시성을 안 본다(로드 갈래의 뿌리 — 두 팝업은 모달이 아니다)",
 		_in_func("func _process", "Input.is_action_just_pressed(\"load_game\")"))
