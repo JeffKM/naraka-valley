@@ -4694,7 +4694,11 @@ func _is_tree_seed_free(region: String, t: Vector2i, occ: Dictionary) -> bool:
 	#   전부 통과한다. 돋은 stage1은 `_rebuild_prop_collision`이 **풀타일** StaticBody로 세워 그
 	#   칸이 통행 불가가 되고, 프롬프트 사슬은 `facing_mailbox`가 벌목 안내보다 앞에서 잡고
 	#   return하므로 왜 못 지나는지·도끼로 벨 수 있다는 사실을 알릴 창구가 0이 된다.
-	if _f_window_tile(t):
+	# ★[폴리시 R31 #7] **무대를 명시로 «야외»라 말한다.** 자체 파종은 야외 그리드 좌표만 다루는데
+	#   (바로 위 `_grid[t.y][t.x] != GROUND` 검사가 그 사실을 이미 요구한다) 종전의 무인자 술어는
+	#   «잠든 플레이어가 서 있는 실내»를 읽어, 이 가드가 정상 취침 경로에서 한 번도 안 걸렸다
+	#   (그 함수 머리말의 전문). 형제 `_installation_at_region`이 밤의 원장 훅에 대해 받은 그 짝이다.
+	if _f_window_tile_in("", t):
 		return false
 	if orchard != null and t in orchard.trunk_tiles():
 		return false
@@ -5471,6 +5475,27 @@ func _greenhouse_lot_occupants() -> Array:
 					or (tapper != null and tapper.has_at(RegionCatalog.HOME, t)):
 				out.append(t)
 	return out
+
+# ★[폴리시 R31 #5] 그 칸에 선 설치물의 **아이템 id**(= 이름을 되찾는 유일한 다리). 위 함수는
+# 좌표만 돌려주는데 다섯 원장을 합쳐 담으므로 «어느 원장의 것인가»가 반환값에서 소실돼, 호출부는
+# 이름을 복구할 수 없었다 — 그래서 발주 거절 알림이 `str(lot[0])`으로 **타일 좌표**를 찍었다
+# (게임 안에 타일 좌표를 보여 주는 표면이 하나도 없어 플레이어에겐 해독 불가능한 문자열이다.
+# 형제 창구는 예외 없이 `ItemCatalog.name_of`를 쓴다). 갈래·id의 출처는 회수기
+# (`_reclaim_greenhouse_lot`)가 이미 쓰는 그 표 그대로다 — 값 복제 0.
+# ★ 다섯 원장의 로스터를 위 함수와 **같은 순서·같은 조건**으로 든다: 저기 실린 좌표가 여기서
+#   빈 문자열이 되는 일이 없어야 알림이 «(  등)»으로 비지 않는다.
+func _installation_item_at(t: Vector2i) -> String:
+	if sprinkler != null and sprinkler.has_at(t):
+		return ItemCatalog.sprinkler_item_for_tier(sprinkler.tier_at(t))
+	if rarecrow != null and rarecrow.has_at(t):
+		return rarecrow.id_at(t)
+	if furnace != null and furnace.has_at(RegionCatalog.HOME, t):
+		return ItemCatalog.FURNACE
+	if crystalarium != null and crystalarium.has_at(RegionCatalog.HOME, t):
+		return ItemCatalog.CRYSTALARIUM
+	if tapper != null and tapper.has_at(RegionCatalog.HOME, t):
+		return ItemCatalog.TAPPER
+	return ""
 
 # 예정지 안에 심긴 혼의 나무가 있는가(발주 게이트 전용). 나무는 3×3 풋프린트라 앵커가 rect 밖이어도
 # 가지가 걸릴 수 있으므로, 칸마다 그 칸의 주인 나무를 되물어 본다.
@@ -13219,6 +13244,17 @@ func _load_game() -> bool:
 	#   `_menu_found`·모듈 층 아홉). 떨어뜨리는 값 `{}`는 «키 없는 구세이브»와 같은 뜻이라
 	#   하위호환 계약도 그대로 산다.
 	var hb_raw: Variant = data.get("heart_bits", {})
+	# ★[폴리시 R31 #0] **떨어뜨린 그릇은 «키 없음»과 같은 뜻이다 — 아래 소급 백필도 그렇게 읽어야
+	#   한다.** 위 R30 #2 머리말이 「떨어뜨리는 값 `{}`는 «키 없는 구세이브»와 같은 뜻이라
+	#   하위호환 계약도 그대로 산다」고 그 동치를 선언했는데, 형제 세 키(`season_q_week`·
+	#   `ever_married`·`jealousy`)와 달리 이 키만 **바로 아래에서 `data.has()`로 갈래가 갈린다**
+	#   — 손상 세이브는 `hb`가 `{}`로 떨어져도 `has`는 참이라 R25 #12 백필이 통째로 건너뛰어졌다.
+	#   귀결은 R25 #12가 이름 붙인 그 상태 그대로다: stage 3인데 관문 비트가 0이고 진급은
+	#   `stage + 1`만 겨냥하므로 어떤 경로로도 다시 설 수 없어 혼례 부적이 영구 거절된다
+	#   (게다가 다음 취침의 `_save_game`이 `heart_bits: {}`를 굳혀 손상이 영구화된다).
+	#   ★ 판별식을 **읽은 결과 하나**로 모은다 — `data.has()`를 다시 묻지 않으면 두 자리가
+	#     갈릴 수 없다(그릇이 성했고 키도 있을 때만 «원장이 진실원»이다).
+	var hb_present := typeof(hb_raw) == TYPE_DICTIONARY and data.has("heart_bits")
 	var hb: Dictionary = hb_raw if typeof(hb_raw) == TYPE_DICTIONARY else {}
 	for k in hb:
 		_heart_bits[String(k)] = int(hb[k])
@@ -13237,7 +13273,7 @@ func _load_game() -> bool:
 	#     한 톨도 안 보탠다 — 잘 형성된 세이브에 비트를 합성하면 그 원장의 권위가 사라진다. 두 키는
 	#     S8-T5에서 **함께** 생겼으므로 «heart_bits 없음»과 «stage 없음»은 같은 세이브 세대를 가리킨다.
 	#   ★ 소급은 «지나온 칸까지»다 — 관문으로 오를 수 있는 상한(`HEART_GATE_MAX`)에서 자른다.
-	if not data.has("heart_bits"):
+	if not hb_present:
 		for rid in ROMANCE_OPEN:
 			var rr := _resident(String(rid))
 			if rr == null or rr.affinity == null:
@@ -17011,7 +17047,9 @@ func _installation_at_region(region: String, t: Vector2i) -> bool:
 		#   성역이라 밤새 그 칸에 돋은 자체 파종목이 **재획득 경로가 1회성으로 잠긴 수집물**의
 		#   실루엣을 통째로 묻는다(그 나무는 원장 나무 패스에서 더 뒤에 그려진다).
 		#   ★ 폭의 자[尺]는 그림이다 — 밑동에서 위로 한 칸(`t + (0,1)`에 밑동이 있으면 t는 머리 칸).
-		if rarecrow != null and (rarecrow.has_at(t) or rarecrow.has_at(t + Vector2i(0, 1))):
+		#   ★[폴리시 R31 #4] 그 «두 칸»을 술어 하나로 뽑았다(`_rarecrow_blocks`) — 아래 잡초 확산
+		#     입구가 같은 폭을 읽어야 해서다. 규칙이 두 자리에 적히면 갈린다는 것을 이 결함이 실증했다.
+		if _rarecrow_blocks(t):
 			return true
 	if furnace != null and furnace.has_at(region, t):
 		return true
@@ -17211,6 +17249,22 @@ func _player_blocked_at(t: Vector2i) -> bool:
 # ★ 거울(MIRROR_TILE)은 여기 안 든다 — 실내 좌표이고 배치 가드는 전부 `_indoor == ""`를 요구해
 #   구조로 이미 막혀 있다. 구역 술어를 다는 이유도 같다(HOME 좌표 상수라 다른 무대엔 무의미).
 func _f_window_tile(t: Vector2i) -> bool:
+	return _f_window_tile_in(_indoor, t)
+
+# ★[폴리시 R31 #7] **무대를 인자로 받는 형제**(R30 #13이 `_installation_at_region`을 낳은 그 이유·
+# 그 문법). 위 술어는 「칸의 무대」가 아니라 「플레이어가 지금 어디 서 있는가」로 답하는데, 그
+# 차이가 **정상 취침 경로 전체를 무효로 만들었다**: 자체 파종이 실제로 굴러가는 유일한 경로는
+# 집 안에서 자는 밤이고(`_can_sleep`이 「집」을 요구한다) `_do_sleep`은 `_indoor`를 한 줄도 안
+# 건드린 채 `_on_day_advanced`로 넘어가므로, 그 프레임의 `_indoor`는 「집」이다 → 야외 표
+# (우편함·삽사리·물그릇)에 **한 번도 도달하지 않은 채** 실내 세 칸과만 비교하고 false를 돌려줬다.
+# 그래서 R30 #8이 「[F] 창구 좌표는 밤새 돋는 나무에도 성역이다」라고 선언한 그 가드가 프로덕션에서
+# 통째로 통과했고, 우편함 칸(MAILBOX_TILE)에 돋은 stage1이 풀타일 StaticBody로 칸을 막으면서
+# 프롬프트 사슬은 `facing_mailbox`가 벌목 안내보다 앞에서 잡아 «도끼로 벨 수 있다»가 한 번도
+# 안 떴다(= R30 #8 머리말이 적은 결과가 그대로 성립). 그림도 우편함 → 원장 나무 순서라 미독
+# 부적 깃발이 나무에 덮인다.
+# ★ 회귀가 못 잡은 이유도 같다 — 하네스 기본 무대(`_indoor == ""`)에서 야외 갈래를 단언해,
+#   프로덕션이 그 술어를 부르는 무대를 한 번도 세우지 않았다.
+func _f_window_tile_in(indoor: String, t: Vector2i) -> bool:
 	if _region != RegionCatalog.HOME:
 		return false
 	# ★[폴리시 R20 #10] **실내 [F] 창구도 같은 이유로 뺀다.** 위 머리말이 "거울은 실내 좌표이고 배치
@@ -17228,8 +17282,8 @@ func _f_window_tile(t: Vector2i) -> bool:
 	# ★ 막는 것은 **새 배치**뿐이다: 이미 놓인 화분은 LMB 회수가 그대로 듣는다(`_remove_garden_pot`).
 	#   상자 쪽 [F]를 화분에 양보시키지 않는 이유는 명확하다 — 그러면 저장 상자가 못 열린다.
 	# ★ 좌표는 `facing_chest`류가 읽는 **그 상수 그대로**다(값 복제 0).
-	if _indoor != "":
-		match _indoor:
+	if indoor != "":
+		match indoor:
 			"집":
 				return t == CHEST_TILE or t == MIRROR_TILE or BOOKSHELF_TILES.has(t)
 			"창고":
@@ -17315,6 +17369,13 @@ func _sprinkler_at(t: Vector2i) -> bool:
 # 8종 완주가 조용히 풀렸다.
 func _rarecrow_at(t: Vector2i) -> bool:
 	return rarecrow != null and _region == RegionCatalog.HOME and rarecrow.has_at(t)
+
+# ★[폴리시 R30 #13 / R31 #4] 레어크로우가 **먹는 두 칸**(밑동 + 그 위 머리 칸)의 단일 출처.
+# 무대 축은 안 든다 — 부르는 쪽이 이미 안식을 물고 있다(`_installation_at_region`의 HOME 갈래 ·
+# `_weed_spread_class`의 첫 줄). 원장은 밑동 한 칸만 싣고 폭은 그림이 정하므로(`_draw_rarecrows`가
+# 32×64를 밑동에서 위로 한 칸 더 채운다) 그 파생을 여기 한 줄에만 적는다.
+func _rarecrow_blocks(t: Vector2i) -> bool:
+	return rarecrow != null and (rarecrow.has_at(t) or rarecrow.has_at(t + Vector2i(0, 1)))
 
 func _can_place_sprinkler(t: Vector2i) -> bool:
 	if _region != RegionCatalog.HOME or sprinkler == null:
@@ -21729,8 +21790,10 @@ func _try_order_build(project_id: String) -> bool:
 	if project_id == Carpenter.PROJ_GREENHOUSE:
 		var lot := _greenhouse_lot_occupants()
 		if not lot.is_empty():
+			# ★[폴리시 R31 #5] 「(%s 등)」의 자리는 «무엇을 치워야 하는가»를 예시로 말하는 칸이다 —
+			#   종전 `str(lot[0])`은 타일 좌표를 그대로 찍어 「((12, 7) 등)」이 떴다.
 			_notice("늘봄방 부지(본가 동쪽)에 설치물이 %d개 서 있다 — 먼저 치우자 (%s 등)"
-				% [lot.size(), str(lot[0])])
+				% [lot.size(), ItemCatalog.name_of(_installation_item_at(lot[0]))])
 			return false
 		if _greenhouse_lot_has_tree():
 			_notice("늘봄방 부지(본가 동쪽)에 심긴 나무가 있다 — 먼저 베어 내자")
@@ -26166,7 +26229,33 @@ func _tick_popup_lifetimes(delta: float) -> void:
 		if _cafe_summary_secs <= 0.0:
 			cafe_summary_panel.visible = false
 	# T7.2 카페 1단 달성 팝업 표시 시간이 지나면 숨긴다(카페 정산 팝업과 같은 결 — 비차단 자동 해제).
-	if _milestone_popup_secs > 0.0:
+	# ★[폴리시 R31 #1·#2] **가려진 동안엔 안 깎는다.** R30 #15가 이 함수를 조기 반환들 위로 올린
+	#   근거(『정지 주인 = 재개 주인』)는 「두 판의 `visible`은 아무도 안 내리므로 그리기는 어떤
+	#   모드에서도 계속된다」였는데, 그 전제는 **visible 플래그**만 말하고 «실제로 보이는가»는
+	#   말하지 않는다. 두 오버레이가 그 사이를 뚫었다(둘 다 런타임 add_child라 씬 자식인
+	#   MilestonePanel **위**에 그려진다 — 14249 머리말이 그 사실을 이미 적는다):
+	#     ㉠메뉴 프레임 — `_draw()` 첫 줄이 논리 화면 전체를 0.45 검정으로 덮는다. 축하 직후
+	#       [Tab]을 누르면 종전엔 `if frame.is_open(): return`이 옛 타이머 자리보다 **위**라
+	#       초가 얼어 있었는데, R30 #15의 이사로 어두운 판 아래에서 6초가 다 흘렀다.
+	#     ㉡절기 달력 — 비-모달이라 「열어 둔 채 걷는 자유」가 이 패널의 정체성인데, R30 #14가
+	#       마일스톤을 `_hud_hidden`에서 빼면서 그 부수효과로 «축하 하나에 달력이 접히던 것»도
+	#       함께 껐다. 그 접힘이야말로 축하를 읽히게 하던 유일한 장치였다(두 사각형이 본문
+	#       대부분에서 겹친다).
+	#   마일스톤은 **세이브당 1회 래치**라(래치가 팝업보다 먼저 서고 재기동·로드도 되세운다)
+	#   가려진 채 만료되면 그 축하는 그 세이브에서 영영 사라진다 — R13이 `keep_milestone`으로
+	#   지키려 한 바로 그 손실이다. R25가 알림 띠에 세운 규약 «시간은 그려진 띠에게만 흐른다»를
+	#   그대로 적용한다.
+	#   ★ 『정지 주인 = 재개 주인』은 지켜진다 — 멈추는 판정이 **이 함수 안**에 있고 매 프레임
+	#     다시 평가되므로, 정지도 재개도 주인이 이 한 자리다(남이 얼려 두고 안 녹이는 그 사고가
+	#     구조적으로 불가능하다). R19 #14·R29 #17이 래치를 여기로 올린 이유가 그것이다.
+	#   ★ **정산 팝업은 대상이 아니다** — R30 #15가 봉합한 그 사고(불투명 한지 판이 대화 본문을
+	#     덮은 채 대화가 끝날 때까지 안 사라짐)가 바로 이 판의 것이고, 매일 뜨는 줄이라 몇 초를
+	#     잃어도 되는 쪽이다(R11이 두 판을 가른 그 구분 그대로).
+	#   ★ 취침(`_sleeping`)은 안 든다 — R13이 명시로 「트윈 뒤에서 계속 깎이는 건 그대로 두면
+	#     된다: 몇 초 뒤 아침 화면 위에 남는 것이 그 축하 문구 자체」라고 결정한 자리다.
+	#   ★ 컷신·내면 공간(척추 퍼즐)·연출 일러스트도 안 든다 — 그 셋은 main의 **월드 `_draw`**가
+	#     그리므로 CanvasLayer 아래다(이 판을 못 덮는다).
+	if _milestone_popup_secs > 0.0 and not _milestone_occluded():
 		_milestone_popup_secs -= delta
 		if _milestone_popup_secs <= 0.0:
 			milestone_panel.visible = false
@@ -26175,6 +26264,16 @@ func _tick_popup_lifetimes(delta: float) -> void:
 				var pending := _cafe_summary_pending
 				_cafe_summary_pending = ""
 				_show_cafe_summary(pending)
+
+# ★[폴리시 R31 #1·#2] 1회성 축하 판이 **지금 남에게 덮여 있는가**(위 타이머의 유일한 입력).
+# 조건은 둘 다 「런타임 add_child라 씬 패널 위에 그려진다 ∧ 본문 사각형을 실제로 덮는다」로
+# 판별했다 — 그래서 하단 띠에 서는 대화 판은 안 든다(위 `_layout_popup_panel`이 예약 띠를 물면
+# 이 판의 본문은 대화 판 윗변 위에서 끝난다). 판정을 함수로 뽑은 이유는 `_facing_mirror`와 같다:
+# 프로덕션이 실제로 태우는 그 식을 회귀가 그대로 부를 수 있어야 한다.
+func _milestone_occluded() -> bool:
+	if frame != null and frame.is_open():
+		return true
+	return calendar_panel != null and calendar_panel.is_open()
 
 func _drop_cafe_popups(keep_milestone: bool = false) -> void:
 	_cafe_summary_pending = ""
@@ -26262,7 +26361,13 @@ func _show_milestone_reached() -> void:
 	milestone_text.text = CafeMilestone.reached_text()
 	# ★[폴리시 R23 #18] 세 단계가 같은 판·같은 라벨을 돌려 쓰므로 **셋 다** 여기서 맞춘다(2단만
 	#   고치면 다음에 늘어나는 문구가 같은 자리에서 다시 넘친다 — 3단도 이미 6줄로 여유가 0이다).
-	_layout_popup_panel(milestone_panel, milestone_text)
+	# ★[폴리시 R31 #3] **하단 예약 띠를 물린다**(형제 마감 정산이 R28 #27에서 받은 그 짝).
+	#   R30 #14가 이 판을 `_hud_hidden`에서 빼면서 그 자리엔 이제 핫바·컨텍스트 팝업이 실제로
+	#   떠 있는데, 세 호출부 전부가 3번째 인자를 생략해 `bottom_reserve = 0`이었다 — 2단 축하는
+	#   R23 #18이 실측한 대로 폭 408에서 7줄이라 판이 예약선 안으로 파고들고, 주민을 마주 본 채
+	#   문턱을 넘으면 세이브당 한 번뿐인 축하의 막줄이 컨텍스트 팝업 초상화에 덮였다.
+	#   값의 출처는 정산 판이 든 그 상수 하나다(`NoticeFeed.RESERVE_BOTTOM` — 치수 복제 0).
+	_layout_popup_panel(milestone_panel, milestone_text, NoticeFeed.RESERVE_BOTTOM)
 	milestone_panel.visible = true
 	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
@@ -26274,7 +26379,13 @@ func _show_milestone2_reached() -> void:
 	milestone_text.text = CafeMilestone.reached2_text()
 	# ★[폴리시 R23 #18] 세 단계가 같은 판·같은 라벨을 돌려 쓰므로 **셋 다** 여기서 맞춘다(2단만
 	#   고치면 다음에 늘어나는 문구가 같은 자리에서 다시 넘친다 — 3단도 이미 6줄로 여유가 0이다).
-	_layout_popup_panel(milestone_panel, milestone_text)
+	# ★[폴리시 R31 #3] **하단 예약 띠를 물린다**(형제 마감 정산이 R28 #27에서 받은 그 짝).
+	#   R30 #14가 이 판을 `_hud_hidden`에서 빼면서 그 자리엔 이제 핫바·컨텍스트 팝업이 실제로
+	#   떠 있는데, 세 호출부 전부가 3번째 인자를 생략해 `bottom_reserve = 0`이었다 — 2단 축하는
+	#   R23 #18이 실측한 대로 폭 408에서 7줄이라 판이 예약선 안으로 파고들고, 주민을 마주 본 채
+	#   문턱을 넘으면 세이브당 한 번뿐인 축하의 막줄이 컨텍스트 팝업 초상화에 덮였다.
+	#   값의 출처는 정산 판이 든 그 상수 하나다(`NoticeFeed.RESERVE_BOTTOM` — 치수 복제 0).
+	_layout_popup_panel(milestone_panel, milestone_text, NoticeFeed.RESERVE_BOTTOM)
 	milestone_panel.visible = true
 	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
@@ -26284,7 +26395,13 @@ func _show_milestone3_reached() -> void:
 	milestone_text.text = CafeMilestone.reached3_text()
 	# ★[폴리시 R23 #18] 세 단계가 같은 판·같은 라벨을 돌려 쓰므로 **셋 다** 여기서 맞춘다(2단만
 	#   고치면 다음에 늘어나는 문구가 같은 자리에서 다시 넘친다 — 3단도 이미 6줄로 여유가 0이다).
-	_layout_popup_panel(milestone_panel, milestone_text)
+	# ★[폴리시 R31 #3] **하단 예약 띠를 물린다**(형제 마감 정산이 R28 #27에서 받은 그 짝).
+	#   R30 #14가 이 판을 `_hud_hidden`에서 빼면서 그 자리엔 이제 핫바·컨텍스트 팝업이 실제로
+	#   떠 있는데, 세 호출부 전부가 3번째 인자를 생략해 `bottom_reserve = 0`이었다 — 2단 축하는
+	#   R23 #18이 실측한 대로 폭 408에서 7줄이라 판이 예약선 안으로 파고들고, 주민을 마주 본 채
+	#   문턱을 넘으면 세이브당 한 번뿐인 축하의 막줄이 컨텍스트 팝업 초상화에 덮였다.
+	#   값의 출처는 정산 판이 든 그 상수 하나다(`NoticeFeed.RESERVE_BOTTOM` — 치수 복제 0).
+	_layout_popup_panel(milestone_panel, milestone_text, NoticeFeed.RESERVE_BOTTOM)
 	milestone_panel.visible = true
 	_milestone_popup_secs = MILESTONE_POPUP_SECS
 
@@ -27629,7 +27746,14 @@ func _weed_spread_class(t: Vector2i, occ: Dictionary) -> int:
 	#   그대로다 — ADR-0065가 명시한 둘(작물·스프링클러) 말고는 삼키지 않는다. 게다가 레어크로우는
 	#   중복 입수가 없는 수집물이라 잡초에 부서지면 8종 완주가 영영 불가능해진다(책을 버릴 수 없게
 	#   막은 것과 같은 판단).
-	if rarecrow != null and rarecrow.has_at(t):
+	# ★[폴리시 R31 #4] **머리 칸까지 면제한다** — 형제 입구(`_encroach_candidates`)는 R30 #13이
+	#   두 칸으로 못 박은 `_installation_at`을 물고 있는데 이 확산 입구만 원장을 날로 뒤져
+	#   밑동 한 칸이었다. 레어크로우 원장은 `_home_prop_entries()`에 한 줄도 안 실려 `occ.has(t)`도
+	#   거짓이므로 머리 칸이 그대로 `DEST_OPEN`으로 통과했고, 그 칸에 돋은 잡초 프롭이
+	#   ㉠`_draw_rarecrows` **뒤**에 그려져 상반신(팔·머리)을 덮고 ㉡`_debris_kind_at() != ""`가 되어
+	#   배치 가드 전량이 그 칸을 debris로 거절했다(R30 #13이 반대 방향에 대해 적은 실패 모드의 거울상).
+	#   스무 줄 위 주석이 요구하는 「두 입구가 한 규칙을 읽어야 규칙 복제가 0이다」를 여기서 이행한다.
+	if _rarecrow_blocks(t):
 		return Reclaim.DEST_BLOCK
 	# ★파괴 2종 — ADR-0065가 명시한 것만. 다른 설치물까지 삼키면 "잡초에 다 잃는다"가 되어 cozy를 넘는다.
 	if sprinkler != null and sprinkler.has_at(t):
