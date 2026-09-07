@@ -255,13 +255,22 @@ func _check_carry_order() -> void:
 	_check("⑪a 계약: 아침 정산은 «재스폰(%d행) → 방출(%d행)» 순이다"
 			% [morning_respawn + 1, morning_release + 1],
 		morning_respawn > 0 and morning_release > morning_respawn)
+	# ★[폴리시 R30 #1] **방출이 밤 목록 안으로 들어갔다** — 목록 뒤에 두면 파종·재점령보다도 뒤라
+	#   이번엔 파종↔방출이 아침 정산과 정반대가 됐기 때문이다(그 자리 주석에 경위). 그래서
+	#   `_process`의 호출부가 둘이 됐고, **집행 자체는** `_try_pending_pasture_release` 한 창구로
+	#   접혔으며 두 호출부는 `pasture_tried` 하나로 «한 프레임 한 번»을 지킨다. 여기서 재는 계약은
+	#   한 글자도 안 바뀐다: ㉠ 이월 방출은 절기 재스폰보다 **뒤**다 ㉡ 창구가 늘지 않았다.
 	var carry_loop := _line_of(_src, "_run_season_boundary(night)")
-	var carry_release := _line_of(_src, "if _release_open_buildings(clock.day if clock != null else 0):")
+	var carry_release := _line_of(_src, "pasture_tried = _try_pending_pasture_release()")
 	_check("⑪b 이월 경로도 **같은 상대 순서**다(밤 목록 %d행 → 방출 %d행) — 종전엔 정반대였다"
 			% [carry_loop + 1, carry_release + 1],
 		carry_loop > 0 and carry_release > carry_loop)
-	_check("⑪c 방출 소비는 여전히 한 자리뿐이다(자리를 옮겼지 창구가 늘지 않았다)",
-		_count_in(_src, "func _process", "if _release_open_buildings(clock.day if clock != null else 0):") == 1)
+	_check("⑪c 방출 **집행**은 여전히 한 자리뿐이다(자리를 옮겼지 창구가 늘지 않았다)",
+		_count_in(_src, "func _try_pending_pasture_release",
+			"if _release_open_buildings(clock.day if clock != null else 0):") == 1
+		and _count_in(_src, "func _process", "_release_open_buildings(clock.day") == 0
+		and _count_in(_src, "func _process", "_try_pending_pasture_release()") == 2
+		and _count_in(_src, "func _process", "if not pasture_tried:") == 1)
 
 # ── ⑫ #19 자체 파종 성역 ↔ 짐승 ─────────────────────────────────────────────
 func _check_seed_ranch_guard(m: Node) -> void:

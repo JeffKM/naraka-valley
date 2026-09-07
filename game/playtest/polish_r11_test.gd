@@ -229,8 +229,13 @@ func _initialize() -> void:
 	# ★[폴리시 R23 #2] 니들에서 **인자를 뗀다** — R23이 그 호출에 `sealed_day`를 얹었다(밀린 아침은
 	#   굳은 하늘로 판정한다). 재는 계약은 «방출까지 간 프레임에만 표를 지운다»이지 인자 목록이
 	#   아니므로, 호출부의 자리와 그 반환을 조건으로 쓴다는 사실까지만 문다.
+	# ★[폴리시 R30 #1] 소비처가 `_try_pending_pasture_release` **한 창구**로 접혔다 — 이월 방출이
+	#   밤 목록 안(마지막 밤의 확산 뒤·파종 앞)으로 들어가며 `_process`의 호출부가 둘이 됐고,
+	#   한 프레임 두 번 시도를 막으려면 표·인자·반환 계약이 한 자리에 있어야 한다. 재는 계약은
+	#   그대로 «방출까지 간 프레임에만 표를 지운다»라, 니들만 그 자리로 따라간다.
 	_check("②d 소비 계약은 안 바뀌었다 — **방출까지 간 프레임에만** 표를 지운다(R6 불변식)",
-		_in_func("func _process", "if _release_open_buildings("))
+		_in_func("func _try_pending_pasture_release", "if _release_open_buildings(")
+		and _in_func("func _process", "_try_pending_pasture_release()"))
 	m._pasture_release_pending = false
 
 	# ── ③ #2 캐스팅 선검사가 도달 가능한 최저 비용을 본다 ───────────────────────
