@@ -2518,6 +2518,12 @@ var _luck_floor_sealed := false
 #     한 칸도 안 갈린다(이월이 손실 0인 근거)」를 단언하는데, 두 밤이 밀리면 앞 밤의 자체 파종 굴림이
 #     통째로 증발해 그 «손실 0»이 거짓이 됐다.
 var _tree_seed_pending_days: Array = []
+# ★[폴리시 R29 #20] 밀린 밤의 **파종 자격 스냅샷**(day → 그 밤의 성숙목 좌표 배열). 위 표가 «어느
+#   밤이 밀렸나»만 들어, 귀가 프레임의 `catch_up_seeding`이 «누가 굴릴 자격이 있나»를 *지금* 원장에서
+#   다시 판정했다 — 그 사이에 자란 나무가 지난 밤 몫의 롤을 굴려, `catch_up_seeding` 머리말이 못
+#   박은 «집에서 잤을 때와 한 칸도 안 갈린다»가 거짓이었다. 자격은 그 밤에 굳혀 온다(굳는 값과
+#   살아 있는 값을 섞지 않는다). 세이브는 가법 키 — 구세이브·스냅샷 없는 밤은 종전대로 라이브다.
+var _tree_seed_pending_mature: Dictionary = {}
 # ★[폴리시 R4] **입력 디스패치 단계에서 세계를 바꾼 프레임의 폴링을 한 번 삼킨다.** Godot은 한
 #   iteration에서 입력 디스패치(`_input`·`_gui_input`)를 `_process`보다 **먼저** 흘리는데, main은
 #   모든 월드 동사를 `Input.is_action_just_pressed`(전역 폴링)로 받는다 — 그래서 디스패치 단계에서
@@ -2972,6 +2978,12 @@ const FLAVOR_SECS := 3.5          # T3.5 사연 한 줄은 읽을 시간을 더 
 # '무장' 상태를 켜고, 그 안에 한 번 더 F8을 누르면 실제로 삭제·재시작한다. 0이면 비무장.
 var _delete_armed_secs := 0.0
 const DELETE_CONFIRM_SECS := 3.0  # 2단 확인 대기 시간(이 안에 다시 F8이면 실행)
+# ★[폴리시 R29 #17] 불러오기(F9)도 **같은 래치**를 받는다. F8의 근거("되돌릴 수 없어 2단 확인")가
+#   F9에 그대로 걸리는데 이쪽만 1타 즉시 실행이었다 — 마지막 저장 이후의 하루치 농사·낚시·채광이
+#   확인 한 번 없이 사라지고, 저장소 전수에서 [F9]를 플레이어에게 광고하는 문자열이 0건이라
+#   무엇을 눌렀는지도 화면에 적힌 적이 없었다(형제 상시 키 [M]·[F11]·[F8]은 전부 광고를 받았다).
+#   래치를 F8과 **같은 상수·같은 문법**으로 공유한다(수명이 갈리지 않게 — 소비도 같은 자리).
+var _load_armed_secs := 0.0
 
 # ★[폴리시 R11] 옵션 탭 [종료]가 저장에 실패했음을 한 번 알린 뒤 무장하는 래치(_on_frame_quit).
 # 시간 만료가 없는 것은 F8과 다른 점이다 — 저장 실패는 순간의 오타가 아니라 **환경의 상태**라,
@@ -3087,6 +3099,10 @@ var _spine_bits := 0
 # `_arm_spine_b4`/`_fire_spine_b4` 머리말이 이 두 단계로 나눈 이유를 든다). **세이브 안 한다**:
 # 예약은 한 취침 사슬 안에서 반드시 소비되고, 그 사슬의 끝(`_on_sleep_done`)이 세이브보다 앞선다.
 var _spine_b4_armed := false
+# ★[폴리시 R29 #22] B4 장면이 **재생 중**이라는 표(비트를 장면 끝에 찍기 위한 한 칸 — B6의
+#   `_spine_b6_pending`과 같은 결). 세션 로컬이다: 재생 도중 앱이 닫히면 비트가 안 찍힌 채이므로
+#   다음 아침 `_arm_spine_b4`가 그대로 다시 예약한다(그 함수 머리말의 그 계약).
+var _spine_b4_pending := false
 # ── ★[S9b-T7 / ADR-0068 결정 8] B5 재구성 — 내면 공간 재생 상태 ────────────────
 # 진행 중인 재구성 세션(null = 내면 공간 밖). ★**세이브 키 0**: 컷신·낚시 세션과 같은 결로,
 # B5는 한 자리에서 시작해 한 자리에서 끝난다(무실패라 중간 이탈 유인 자체가 없다). 세이브에
@@ -4671,6 +4687,16 @@ func _is_tree_seed_free(region: String, t: Vector2i, occ: Dictionary) -> bool:
 	if _installation_at(t):
 		return false
 	if orchard != null and t in orchard.trunk_tiles():
+		return false
+	# ★[폴리시 R29 #19] **짐승이 선 칸도 성역이다** — 반대 방향은 R25 #6이 이미 세웠는데
+	#   (`_free_pasture_tiles`가 `tree_ledger.is_occupied`를 물어 나무 칸을 슬롯에서 뺀다)
+	#   이쪽만 그 짝을 안 받아 가드가 단방향이었다. 두 훅의 순서는 두 경로 다 «방출 먼저,
+	#   파종 나중»이라(아침 정산 · 이월 소비) 방금 방목 나간 짐승 발밑에 stage1이 돋을 수 있고,
+	#   원장 나무 충돌은 발치 1칸이 아니라 **풀타일** StaticBody라 그 칸이 통행 불가가 된다
+	#   — R25 #6 주석이 반대 방향에 대해 적어 둔 결과가 그대로 성립한다(프롬프트가
+	#   `has_animal_at` 갈래에서 끊겨 그 칸의 벌목 안내 도달 0). `_would_entrap_player`는
+	#   플레이어 기준이라 짐승을 못 보고, occ(=`_home_prop_entries`)도 짐승 원장을 안 든다.
+	if ranch != null and ranch.has_animal_at(t):
 		return false
 	# ★[폴리시 R21 #1] **네 번째 SOLID 스포너도 매몰 가드를 문다.** R19 #15~#17과 R20 #1·#2가
 	#   "SOLID를 새로 세우는 창구는 전부 `_would_entrap_player`를 묻는다"를 불변식으로 세웠는데
@@ -10533,6 +10559,7 @@ func _setup_settings() -> void:
 	frame.music_vol_changed.connect(_on_music_vol_changed)
 	frame.sfx_vol_changed.connect(_on_sfx_vol_changed)
 	frame.fullscreen_toggled.connect(_on_fullscreen_toggled)
+	frame.mute_toggled.connect(_on_frame_mute_toggled)   # ★[폴리시 R29 #3] 음소거 체크박스
 
 # 현재 설정 볼륨을 오디오 버스에 적용한다(음악·효과음 각 0..1 → dB, audio가 변환).
 func _apply_audio_volumes() -> void:
@@ -10584,6 +10611,17 @@ func _on_fullscreen_toggled() -> void:
 	_apply_fullscreen(not now_full)
 	if settings.set_fullscreen(not now_full):
 		settings.save_settings()
+
+# ★[폴리시 R29 #3] 옵션 탭 음소거 체크박스 핸들러 — **[M] 키와 글자 그대로 같은 동사**다
+#   (진실원은 오디오 버스 하나 · 알림 문구도 그 자리와 같다). 프레임은 신호만 올리고 실제
+#   토글·문구는 여기서 — 전체화면 체크박스가 F11과 값 원천을 공유하는 그 결.
+func _on_frame_mute_toggled() -> void:
+	if audio == null:
+		return
+	var muted_now: bool = audio.toggle_mute()
+	_notice("음소거 %s — [M]으로 되돌린다" % ("켜짐" if muted_now else "꺼짐"))
+	if _spine_b5_mute_forced:
+		_spine_b5_mute_prev = muted_now   # 강제 음소거 구간의 «마지막 사용자 의사»(그 자리 머리말)
 
 # ── ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대 컨텍스트 스위칭) ────────────────
 # 하단 백팩 공통 + 상단 레이어 교체. 핫바와 같은 CanvasLayer에 핫바 *위*로 붙여(나중 자식) 열렸을
@@ -11087,6 +11125,10 @@ func _on_day_advanced(day: int) -> void:
 		if _region != RegionCatalog.HOME:
 			_queue_pending_night(_tree_seed_pending_days, day)   # ★[폴리시 R24 #18] 잡초 표와 같은 누적
 		var tree_day := tree_ledger.advance_day(day, _tree_seed_free_cb(), _tree_respawn_ok_cb())
+		# ★[폴리시 R29 #20] 그 밤의 **파종 자격**을 여기서 굳힌다 — 성장 루프가 방금 돈 직후이자
+		#   집에서 잤다면 `_seed_pass`가 섰을 바로 그 자리다(자격의 시점이 한 프레임도 안 어긋난다).
+		if _region != RegionCatalog.HOME:
+			_tree_seed_pending_mature[day] = tree_ledger.mature_tiles(RegionCatalog.HOME)
 		for e in tree_day["regrown"]:
 			if String(e["region"]) == _region:
 				_sync_tree_tile(e["tile"])
@@ -11942,7 +11984,9 @@ func _try_buy_peddler_rare(id: String) -> bool:
 	peddler.record_rare(clock.day, id)   # ★ 하루 한 점 — 희귀 슬롯 잠금(즉시 재충전 차단)
 	_toast_item(id, 1)
 	audio.sfx("ui")
-	_notice("보부상의 봇짐에서 %s 찾아냈다 −%d냥" % [HanjiUi.with_eul(ItemCatalog.name_of(id)), price])
+	# ★[폴리시 R29 #23] 진행 꼬리 합류(만물상·행사 두 창구가 이미 달던 그 말 — 한 함수로 모았다).
+	_notice("보부상의 봇짐에서 %s 찾아냈다 −%d냥%s" % [HanjiUi.with_eul(ItemCatalog.name_of(id)),
+		price, _rarecrow_tail(id)])
 	return true
 
 # 책·노트 구매([ADR-0034] "여행 상인 흡수"의 이행 — Books 미보유분 저확률 입수처).
@@ -12524,6 +12568,8 @@ func _save_game() -> bool:
 		"luck_floor_sealed_day": _luck_floor_sealed_day,
 		"luck_floor_sealed": _luck_floor_sealed,
 		"tree_seed_pending_days": _tree_seed_pending_days,   # ★[폴리시 R21 #15 / R24 #18] 밀린 밤들의 마당 파종
+		# ★[폴리시 R29 #20] 그 밤들의 파종 자격 스냅샷(가법 키 — 없으면 라이브 판정으로 떨어진다).
+		"tree_seed_pending_mature": _tree_seed_mature_to_save(),
 		# ★[폴리시 R25 #3] 형제 둘과 같은 누적 배열(구 키 `season_respawn_pending_day`는 로드에서 읽는다).
 		"season_respawn_pending_days": _season_respawn_pending_days,
 		"pasture_release_pending": _pasture_release_pending,
@@ -12751,6 +12797,7 @@ func _load_game() -> bool:
 	_luck_floor_sealed_day = maxi(int(data.get("luck_floor_sealed_day", 0)), 0)   # ★[폴리시 R24 #9]
 	_luck_floor_sealed = bool(data.get("luck_floor_sealed", false))
 	_tree_seed_pending_days = _pending_nights_from(data, "tree_seed_pending_days", "tree_seed_pending_day")   # ★[R21 #15 / R24 #18]
+	_tree_seed_pending_mature = _tree_seed_mature_from(data)   # ★[폴리시 R29 #20]
 	# ★[S9b-T8 / ADR-0068 결정 10] 앵커 트랙 복원 — **주민 호감도 로드 루프보다 먼저** 열어야
 	#   한다. 트랙은 B6에서야 Affinity 노드가 생기는데, 그 루프는 `affinity != null`인 레코드에만
 	#   값을 붓기 때문이다(없으면 저장돼 있던 칸이 조용히 사라진다). `_spine_bits` 복원은 아래
@@ -13085,6 +13132,7 @@ func _load_game() -> bool:
 	#   원장에 누우면 뒷 태스크(B5~B7)의 판정이 조용히 거짓이 된다.
 	_spine_bits = maxi(int(data.get("spine_bits", 0)), 0) & SPINE_BITS_MASK
 	_spine_b4_armed = false   # 예약은 취침 사슬 한정 — 로드는 언제나 예약 없음에서 시작한다
+	_spine_b4_pending = false # ★[폴리시 R29 #22] 재생 표도 같이 내린다(형제 `_spine_b6_pending` 결)
 	# ★[S9b-T8] B7 예약·S등급 장면 상태도 같은 이유로 전부 0에서 시작한다(연출은 세이브 대상이
 	#   아니다 — 컷신 러너·B5 세션과 같은 결). 에필로그는 1회성이라 되살아나면 안 되고, 그 1회성의
 	#   진실원은 플래그가 아니라 **B7 비트**다(이미 선 비트는 다시 안 서고, 그래서 화면도 안 뜬다).
@@ -13131,7 +13179,18 @@ func _load_game() -> bool:
 	#   FireflySouls `is_valid_id` · Mastery `ARTIFACTS.has` · Rarecrow `is_rarecrow` ·
 	#   Peddler `has_text` · Mailbox `_sanitize_ids`) — 연애 슬롯만 그 짝을 안 받았다.
 	#   ★ 자[尺]는 `ROMANCE_OPEN` 하나다(명단이 넓어지면 검증도 따라 넓어진다 — 값 복제 0).
-	if _romance_partner != "" and not ROMANCE_OPEN.has(_romance_partner):
+	# ★[폴리시 R29 #21] 자가 **한 칸 좁았다.** `ROMANCE_OPEN`은 「고백 문법을 타는 명단」이라
+	#   앵커가 의도적으로 그 밖인데(그 상수 주석), 앵커는 고백이 아니라 **명부 혼례 부적 [G]**
+	#   라는 자기 창구로 같은 슬롯에 선다(`_try_propose_okja`가 `_romance_partner = OKJA_RID`).
+	#   그래서 이 검증이 청혼 성립을 **재기동마다** 지웠다: 취침 자동 저장이 "okja"를 굳히고,
+	#   부팅 로드가 그 줄에서 슬롯을 비우며 바로 아래 배우자 항이 혼인까지 함께 버린다.
+	#   귀결이 엔딩 임계 경로다 — ㉠혼례 전이면 `_wedding_day`만 남아 강림 [G] 재발급도 안 되고
+	#   혼례 아침 `_advance_wedding`이 `_romance_partner == ""`로 식을 조용히 취소한다 ㉡혼례
+	#   후면 `_maybe_resume_spine` ㉡의 `_spouse_id == OKJA_RID`가 영구 거짓이 되어 B7 해방·
+	#   에필로그 재개 경로가 함께 죽는다. 슬롯 자격은 「고백 가능한가」가 아니라 **「이 슬롯에
+	#   설 수 있는 창구가 있는가」**이므로 술어를 그 뜻으로 세운다(R27 #8의 방어는 그대로 산다 —
+	#   로스터 밖 유령 id는 여전히 버려진다).
+	if _romance_partner != "" and not _romance_slot_valid(_romance_partner):
 		_romance_partner = ""
 	# ★[S8-T7] 결혼 상태 복원(구세이브 = 미혼·예정 없음). 배우자는 반드시 연애 슬롯의 주인이어야
 	# 한다는 불변식(결혼 = 연애 위의 상태)을 로드에서 재보증한다 — 손상 세이브가 "미지의 배우자"나
@@ -13816,6 +13875,19 @@ func _arm_or_confirm_delete() -> void:
 		_delete_armed_secs = DELETE_CONFIRM_SECS
 		_notice("한 번 더 [F8]: 세이브 삭제 후 새로 시작", DELETE_CONFIRM_SECS)
 
+# ★[폴리시 R29 #17] F9 불러오기의 2단 확인 — **F8과 글자 그대로 같은 문법**이다(그 선언부 사유).
+#   첫 F9는 무장만 하고 «무엇이 사라지는가»를 말한다(광고가 여기서 처음 선다). 무장 중 또 F9면
+#   실행한다. 실패는 종전대로 말한다(R6 — 세이브가 없거나 안 읽히면 아무 반응이 없던 자리).
+func _arm_or_confirm_load() -> void:
+	if _load_armed_secs > 0.0:
+		_load_armed_secs = 0.0
+		if not _load_game():
+			_notice("불러올 세이브가 없다(또는 읽을 수 없다)", NOTICE_SECS * 2.0)
+	else:
+		_load_armed_secs = DELETE_CONFIRM_SECS
+		_notice("한 번 더 [F9]: 마지막 저장 시점으로 되돌린다 — 그 뒤 진행은 사라진다",
+			DELETE_CONFIRM_SECS)
+
 # 세이브를 지우고 씬을 다시 로드해 즉시 새 게임으로 시작한다. 세이브가 사라졌으므로 새
 # 씬의 _ready가 자동 복원 없이 옥자 오프닝 통보부터 다시 연다(README의 "지우고 재실행"을
 # 게임 안에서 한 키로). reload_current_scene은 프레임 끝에 안전하게 처리된다.
@@ -13843,6 +13915,10 @@ func _process(delta: float) -> void:
 	#   ★ 실행 입력(F8 폴링)은 여전히 가드 아래다 — 모달 중엔 누를 수 없고 래치만 조용히 만료된다.
 	if _delete_armed_secs > 0.0:
 		_delete_armed_secs -= delta
+	# ★[폴리시 R29 #17] F9 래치도 **같은 자리**에서 준다(위 R19 #14의 그 규율 — 정지 주인이 없어야
+	#   재개 주인도 필요 없다). 두 래치가 다른 자리에 있으면 수명이 갈려 같은 사고가 한쪽에 남는다.
+	if _load_armed_secs > 0.0:
+		_load_armed_secs -= delta
 	# ★[S7-T8] 날씨 파티클(비·눈) — 실내·지하는 하늘이 없으므로 끈다. 라이팅과 나란히 입력 가드
 	#   위에 둬, 대화·모달이 열려 있어도 창밖 비가 얼어붙지 않는다(라이팅과 같은 이유).
 	if weather_fx != null:
@@ -13864,10 +13940,8 @@ func _process(delta: float) -> void:
 	# ★[폴리시 R23 #2·#5] 밀린 몫이므로 **그 아침에 굳은 하늘**로 판정한다(형제 둘이 R22에서 받은
 	#   그 창구 — `_weather_sealed_on`). 표는 그 아침에 서고 그 아침에만 소비되므로 굳은 날은
 	#   늘 오늘이다(집 밖에서 또 자면 `_on_day_advanced`가 새 날로 다시 세운다).
-	if _pasture_release_pending and _region == RegionCatalog.HOME \
-			and not _sleeping and not _transitioning:
-		if _release_open_buildings(clock.day if clock != null else 0):
-			_pasture_release_pending = false
+	# ★[폴리시 R29 #18] **자리가 밤 목록 아래로 내려갔다**(아래 블록 끝 참조 — R25 #4가 세 표를
+	#   한 밤 목록으로 접으며 «귀가 프레임 == 집에서 잔 아침»을 세운 그 등가성의 마지막 갈래).
 	# ★[폴리시 R9] 밀린 **그 밤의 잡초 두 줄** 소비 — 절기 재스폰 표와 같은 자리·같은 조건이되
 	#   순서가 계약이다: 확산(현존 잡초가 번지며 작물·스프링클러를 부순다) 다음에 재점령(빈 여백에
 	#   새 포기가 돋는다). 아침 정산의 두 자리와 같은 상대 순서라 결과가 갈리지 않는다.
@@ -13931,7 +14005,11 @@ func _process(delta: float) -> void:
 				eaten_total += int(lost["crops"])
 				broken_total += int(lost["sprinklers"])
 			if seed_owed.has(night):
-				seeded_total += tree_ledger.catch_up_seeding(night, _tree_seed_free_cb()).size()
+				# ★[폴리시 R29 #20] 그 밤에 굳어 온 자격 목록을 그대로 넘긴다(없으면 null =
+				#   종전대로 라이브 판정 — 구세이브·스냅샷 없는 밤의 거동 불변).
+				var mature: Variant = _tree_seed_pending_mature.get(night, null)
+				_tree_seed_pending_mature.erase(night)
+				seeded_total += tree_ledger.catch_up_seeding(night, _tree_seed_free_cb(), mature).size()
 			if weed_owed.has(night):
 				_run_weed_encroach(night)
 		if seeded_total > 0:
@@ -13941,6 +14019,19 @@ func _process(delta: float) -> void:
 			_notice(WEED_ATE_CROPS_NOTICE % eaten_total)
 		if broken_total > 0:
 			_notice(WEED_BROKE_SPRINKLERS_NOTICE % broken_total)
+	# ★[폴리시 R29 #18] **밀린 방목 방출은 밤 목록 뒤에 선다.** 아침 정산의 상대 순서가
+	#   「절기 재스폰 → … → 방출」인데(`_on_day_advanced`에서 `_run_season_boundary`가 먼저다)
+	#   이월 경로만 정반대였다 — 방출이 «재스폰 전» 마당으로 슬롯을 골라, 같은 프레임 뒤에 깔리는
+	#   절기 SOLID debris(업화석·석화 고목)가 방금 짐승을 세운 그 칸에 그대로 섰다(후보 필터에
+	#   짐승 술어가 한 줄도 없다). 집에서 잤다면 `_free_pasture_tiles`의 `occ.has(t)`가 그 칸을
+	#   슬롯에서 뺐을 것이다. 귀결은 R12가 적어 둔 그 실패 모드 그대로 — 짐승이 SOLID 콜라이더
+	#   안에 서서 프롬프트 사슬이 `has_animal_at`에서 끊기고 그 칸의 개간 안내가 그날 종일
+	#   도달 불가가 된다. R25 #4가 세 표를 한 밤 목록으로 접으며 세운 «귀가 프레임 == 집에서 잔
+	#   아침»을 방목 축에서도 성립시킨다(가드·문구·표 소비 규율은 한 글자도 안 바뀐다).
+	if _pasture_release_pending and _region == RegionCatalog.HOME \
+			and not _sleeping and not _transitioning:
+		if _release_open_buildings(clock.day if clock != null else 0):
+			_pasture_release_pending = false
 	# ★[asset-ruleset §6] Y-split 재분할 — 플레이어가 타일 행을 넘을 때만 앞/뒤 프롭을 다시 그린다
 	#   (매 프레임 아님·값쌈). ★[S4-T9] 숲 2구역도 합류 — 캐노피가 화면을 덮는 무대라 재분할이
 	#   없으면 플레이어가 나무 뒤에서 통째로 사라진다(안식과 같은 이유·같은 처방).
@@ -14294,11 +14385,7 @@ func _process(delta: float) -> void:
 	if not _sleeping and Input.is_action_just_pressed("save_game"):
 		_save_or_warn()   # ★[폴리시 R17 #8] F5도 성패를 말한다(종전엔 성공·실패가 화면상 구별 불가)
 	if not _sleeping and Input.is_action_just_pressed("load_game"):
-		# ★[폴리시 R6] 실패를 말한다 — 종전엔 세이브가 없거나 안 읽히면 F9가 **아무 반응 없이**
-		#   지나가, 눌렀는데 아무 일도 안 일어난 것인지 불러왔는데 같은 상태인지 알 수 없었다
-		#   (성공은 `_load_game` 끝의 "불러옴"이 이미 말한다).
-		if not _load_game():
-			_notice("불러올 세이브가 없다(또는 읽을 수 없다)", NOTICE_SECS * 2.0)
+		_arm_or_confirm_load()
 	# 세이브 삭제+새 시작(F8). 되돌릴 수 없어 2단 확인 — 첫 F8은 무장만, 무장 중 다시 F8이면
 	# 실행. 연출(취침) 중엔 받지 않는다(저장/불러오기와 같은 결).
 	if not _sleeping and Input.is_action_just_pressed("delete_save"):
@@ -17369,6 +17456,30 @@ func _rarecrow_collected() -> int:
 			n += 1
 	return n
 
+# ★[폴리시 R29 #23] 획득 알림의 **진행 꼬리**(레어크로우가 아니면 빈 문자열). 만물상·행사 두
+#   창구가 이미 손으로 달고 있던 그 꼬리를 한 함수로 모아, 나머지 세 창구(보부상·시련장 매대·
+#   우편 첨부)도 같은 말을 하게 한다 — 레어크로우 8종은 완주가 **메카닉 효과**를 갖는 유일한
+#   수집 표면인데(까마귀 보호 반경 8→16) 다섯 창구 중 셋이 «몇/여덟»을 한 글자도 안 말했다.
+func _rarecrow_tail(id: String) -> String:
+	if not ItemCatalog.is_rarecrow(id):
+		return ""
+	return " (수집 %d/%d)" % [_rarecrow_collected(), ItemCatalog.RARECROWS.size()]
+
+# ★[폴리시 R29 #23] **완주한 프레임이 말한다.** 종전엔 `_rarecrow_complete()`의 소비처가
+#   `_scarecrow_radius()` 한 곳뿐이라, 여덟째 종을 손에 넣어도 반경이 두 배가 됐다는 사실을
+#   알리는 표면이 0이었다 — 마지막 한 종이 우편 첨부(자동 적재)나 매대로 들어와 그대로 상자에
+#   들어가면 알 길이 아예 없었다. 형제 완주 표면은 전부 발화한다(도감 트로피·반딧넋 45·혼백관).
+#   ★ 래치는 세션 로컬이다 — `_hinted_encroach`(첫 재점령 멘토 힌트)가 세운 그 관례 그대로,
+#     1회성 안내는 세이브 키를 안 늘린다(상자 왕복으로 한 세션에 한 번 더 뜨는 것이 상한이다).
+var _rarecrow_complete_told := false
+
+func _maybe_notice_rarecrow_complete() -> void:
+	if _rarecrow_complete_told or not _rarecrow_complete():
+		return
+	_rarecrow_complete_told = true
+	_notice("레어크로우 %d종을 모두 모았다 — 허수아비의 보호 반경이 %d칸으로 넓어졌다"
+		% [ItemCatalog.RARECROWS.size(), _scarecrow_radius()], NOTICE_SECS * 2.0)
+
 # 8종 완성인가 = 디럭스 반경 발효 조건([ADR-0051] 결정 5 · `crows.gd:18` DELUXE_RADIUS 예약의 이행).
 func _rarecrow_complete() -> bool:
 	return _rarecrow_collected() >= ItemCatalog.RARECROWS.size()
@@ -18101,7 +18212,10 @@ func _try_buy_trial_item(buy_id: String) -> void:
 		return
 	_toast_item(buy_id, 1)
 	audio.sfx("ui")
-	_notice("시련패로 %s 바꿨다 −%d패" % [HanjiUi.with_eul(ItemCatalog.name_of(buy_id)), price])
+	# ★[폴리시 R29 #23] 진행 꼬리 합류 — 시련장 매대는 «8슬롯의 마지막 칸»(그 선언부)이라
+	#   여기가 여덟째 종이 들어오는 가장 흔한 자리다.
+	_notice("시련패로 %s 바꿨다 −%d패%s" % [HanjiUi.with_eul(ItemCatalog.name_of(buy_id)),
+		price, _rarecrow_tail(buy_id)])
 
 # 가구 세트 — 해금 진실원은 **home_deco 한 곳**이다(야시장·목공방·보부상이 지키는 그 규율).
 func _try_buy_trial_deco(set_id: String) -> void:
@@ -23391,8 +23505,18 @@ func _arm_spine_b4() -> void:
 	_spine_b4_armed = true
 
 # ★ 예약 소비 — 취침 연출이 끝나 플레이어가 눈을 뜨는 그 프레임에 튼다(`_on_sleep_done`).
-# 비트는 **재생 시작에 찍는다**: 그 직후 자동 저장이 돌아 세이브에 그대로 실리고(중간에 껐다 켜도
-# 다시 안 뜬다), 예약도 함께 내려 한 번의 취침이 두 번 발동하지 않는다.
+# ★[폴리시 R29 #22] 비트는 이제 **장면이 닫히는 자리**에 찍는다(옛 자리 = 여기, 재생 시작).
+#   호출부 `_on_sleep_done`이 이 두 줄 바로 뒤에서 `_save_or_warn()`을 돌리므로, 종전엔 플레이어가
+#   첫 프레임을 보기도 전에 B4 비트가 디스크에 굳었다 — 컷신 3.9초 + 지문 10줄이 도는 동안 앱을
+#   닫으면 `_arm_spine_b4`의 «이미 본 비트» 가드가 영영 물러나고 `_maybe_resume_spine`엔 B4 갈래가
+#   없어(㉠ B5→B6 · ㉡ 혼례→B7 둘뿐) 척추의 질문을 세우는 장면이 재생 경로 0으로 사라졌다.
+#   형제 둘이 같은 실패 모드로 이미 교정됐다: B7은 R6가 `_open_epilogue`로, B6는 R11이
+#   `_close_spine_scene`으로 비트를 옮겼다. B4는 그림 없는 장면이라 그 두 자리를 안 지나므로
+#   («마지막 지문이 닫히는 프레임» = `_on_dialogue_finished`) 예약 한 칸으로 같은 규율을 세운다.
+#   ★ 재개 훅을 따로 두지 않는 것이 판단이다 — B4의 방아쇠는 **아침 훅**(`_arm_spine_b4`)이라
+#     비트가 안 찍힌 채 끊기면 다음 아침이 그대로 다시 예약한다(R2가 `dialogue.is_open()`
+#     갈래에 세운 그 계약과 같은 문장). 로드 직후 즉시 재생하면 «프로스티 ♡3 **다음 아침**»이라는
+#     방아쇠 자체가 갈린다.
 func _fire_spine_b4() -> void:
 	if not _spine_b4_armed:
 		return
@@ -23404,9 +23528,22 @@ func _fire_spine_b4() -> void:
 	#   비트를 안 찍고 물러나므로 **다음 아침에 그대로 다시 예약된다**(위 두 가드와 같은 계약).
 	if _run_over or cutscene != null or dialogue.is_open():
 		return                          # 마무리 화면·재생 중·대화 중이면 접는다(다음 아침에 다시 예약된다)
-	_mark_spine_bit(SPINE_B4)
+	_spine_b4_pending = true            # ★[폴리시 R29 #22] 비트는 장면이 닫힐 때 찍는다(위 머리말)
 	_begin_cutscene(SPINE_B4_CUTSCENE.duplicate(true), SPINE_B4_SPEAKER,
 		PackedStringArray(SPINE_B4_LINES))
+
+# ★[폴리시 R29 #22] B4 장면이 실제로 닫힌 자리에서 비트를 찍는다(B6의 `_close_spine_scene` 블록과
+#   같은 문법: 예약을 내리고 · 아직 안 찍혔으면 찍고 · 그 프레임에 굳힌다). 두 종료 경로가 여기로
+#   모인다 — 지문이 다 닫힌 `_on_dialogue_finished`와, 이을 지문이 하나도 없는 `_end_cutscene`
+#   안전망. 어느 쪽으로 나가든 지나므로 «비트를 안 찍은 채 장면만 끝나는» 갈래가 없다.
+func _settle_spine_b4() -> void:
+	if not _spine_b4_pending:
+		return
+	_spine_b4_pending = false
+	if _spine_bit_seen(SPINE_B4):
+		return
+	_mark_spine_bit(SPINE_B4)
+	_save_or_warn()                     # 장면이 끝난 그 프레임에 굳힌다(B6·B7과 같은 규율)
 
 # ── ★[S9b-T7 / ADR-0068 결정 8] 척추 B5 재구성 — 게이트 · 발동 · 내면 공간 ─────────
 # [narrative-bible §6.1]의 해결 게이트가 여기서 처음으로 **소비**된다. 판정식 자체는 `spine.gd`가
@@ -24077,6 +24214,12 @@ func _display_name_of(rid: String) -> String:
 #   · **로스터 고정 안전장치 ㉑와 다른 배열이다**(§6.2) — 저쪽은 B5가 요구하는 ♡3 명단
 #     (`CHORUS_GATE_ROSTER` = T1 11인)이고 이쪽은 연애 가능 명단(메인 3 + T1 11)이다. 둘을
 #     한 상수로 합치지 않는 이유는 메인 3인이 정확히 그 차집합이기 때문이다.
+# ★[폴리시 R29 #21] 연애 슬롯(`_romance_partner`)에 **설 수 있는** id인가. `ROMANCE_OPEN`이
+#   「고백 문법을 타는 명단」인 것과 갈린다 — 앵커는 그 명단 밖이면서 명부 혼례 부적 [G]라는
+#   자기 창구로 같은 슬롯에 선다(`_try_propose_okja`). 로드 검증이 이 술어를 쓴다.
+func _romance_slot_valid(rid: String) -> bool:
+	return ROMANCE_OPEN.has(rid) or rid == OKJA_RID
+
 const ROMANCE_OPEN := ["miho", "mel", "bana",
 	"mochi", "neo", "kkaebi", "ken", "seolhwa", "scarlet", "mir", "luca", "frosty", "gangrim",
 	"serena"]
@@ -24883,6 +25026,7 @@ func _end_cutscene() -> void:
 	_cutscene_speaker = ""
 	_cutscene_lines = PackedStringArray()
 	if lines.is_empty():
+		_settle_spine_b4()   # ★[폴리시 R29 #22] 이을 지문이 없는 종료도 «장면이 닫힌» 프레임이다
 		# ★[폴리시 R3] 취침 연출 중이면 잠금을 그대로 둔다 — `_on_sleep_done`이 눈뜨는 프레임에 푼다.
 		player.set_physics_process(not _sleeping)
 		return
@@ -25658,6 +25802,11 @@ func _menu_unlocked(menu_id: String) -> bool:
 # 멱등이다(이미 true인 걸 다시 true로 써도 무해) — 로드 경로가 add_item을 경유해 시그널이 다시
 # 돌아도 원장이 흔들리지 않는다.
 func _on_item_gained(id: String) -> void:
+	# ★[폴리시 R29 #23] 레어크로우 완주 발화는 **이 가드보다 위**다 — R28 #24의 가드가 막는 것은
+	#   「편지가 레시피·콘텐츠를 해금하는가」 한 축이고, 여덟째 종이 우편으로 들어오는 것은 그
+	#   해금이 아니라 이미 가진 물건의 수가 여덟이 됐다는 사실이다(그 창구가 정확히 침묵하던 자리).
+	if ItemCatalog.is_rarecrow(id):
+		_maybe_notice_rarecrow_complete()
 	# ★[폴리시 R28 #24] 편지 첨부로 들어온 물건은 **발견으로 세지 않는다**(그 지급처의 머리말 —
 	#   「편지는 레시피·콘텐츠 해금 채널이 아니다」가 여기서 집행된다). 다른 모든 획득 경로는 종전 그대로다.
 	if _mail_grant_active:
@@ -25904,15 +26053,35 @@ func _facing_mirror() -> bool:
 # ★[폴리시 R14] 지금 커서가 **조회 오버레이의 그려진 판 위**인가(점괘 거울 예보 · 절기 달력).
 #   판정은 논리 좌표로 한다 — 두 패널 다 $CanvasLayer 자식이라 clock_hud.hit_test와 같은 스케일
 #   보정을 거쳐야 창 크기가 바뀌어도 판과 판정이 안 어긋난다.
+# ★[폴리시 R29 #15] 표에 **형제 판 둘**을 세운다(마감 정산 · 마일스톤). 같은 `$CanvasLayer`
+#   아래 같은 `Panel` 타입으로 화면 중앙대를 덮는데 거울만 표에 있었다 — 그리고 R28 #27이 마감
+#   정산을 `_hud_hidden`에서 빼면서 그 5초 동안 월드 입력이 **전부 살아 있다**. 그래서 판을
+#   덮으려는 우클릭 한 번이 그대로 내려가 집 안에서 `_do_sleep`을 불렀고(하루 소비 + 자동 저장
+#   확정), 좌클릭은 `holding_free_use`·화분 배치로 나갔다 — R14가 거울에 대해 봉합한 실패와
+#   한 글자도 다르지 않다. 마일스톤은 `_hud_hidden`에 들어 clock_hud가 숨겨지므로 아래 시계
+#   가드의 `clock_hud.visible` 항까지 함께 죽는 이차 사각이 겹친다(거울의 ㉠과 같은 자리).
+# ★[폴리시 R29 #16] **시계 판도 이 표에 든다.** 위 클릭 가드(`use_tool` + `clock_hud.hit_test`)는
+#   LMB 한 축만 보므로 같은 픽셀의 **RMB가 어떤 가드에도 안 걸렸다** — 달력을 열려다 버튼을
+#   잘못 누른 우클릭이 곧바로 하루 소비(집 안 `_do_sleep`)·수확·꽃 채집으로 나갔다. LMB는 위
+#   가드가 먼저 잡아 달력을 토글하고 return 하므로 거동이 안 바뀐다(여긴 그 뒤 갈래만 막는다).
 func _pointer_over_overlay(screen_pos: Vector2) -> bool:
-	if mirror_panel != null and mirror_panel.visible:
-		var sc := 1.0
-		var par := mirror_panel.get_parent()
-		if par is CanvasLayer and par.scale.x != 0.0:
-			sc = par.scale.x
-		if Rect2(mirror_panel.position, mirror_panel.size).has_point(screen_pos / sc):
+	for p: Panel in [mirror_panel, cafe_summary_panel, milestone_panel]:
+		if _panel_covers_point(p, screen_pos):
 			return true
+	if clock_hud != null and clock_hud.visible and clock_hud.hit_test(screen_pos):
+		return true
 	return calendar_panel != null and calendar_panel.hit_test(screen_pos)
+
+# 그 판이 지금 그 화면 좌표를 덮고 있는가. 판정은 논리 좌표로 한다 — 전부 $CanvasLayer 자식이라
+# clock_hud.hit_test와 같은 스케일 보정을 거쳐야 창 크기가 바뀌어도 판과 판정이 안 어긋난다.
+func _panel_covers_point(panel: Panel, screen_pos: Vector2) -> bool:
+	if panel == null or not panel.visible:
+		return false
+	var sc := 1.0
+	var par := panel.get_parent()
+	if par is CanvasLayer and par.scale.x != 0.0:
+		sc = par.scale.x
+	return Rect2(panel.position, panel.size).has_point(screen_pos / sc)
 
 func _open_mirror() -> void:
 	mirror_text.text = _mirror_forecast_text()
@@ -25994,9 +26163,27 @@ func _layout_popup_panel(panel: Panel, label: Label, bottom_reserve: float = 0.0
 	var view := _logical_view_size(panel)
 	# ★[폴리시 R28 #27] `bottom_reserve` = 하단에서 비워 둘 띠(0 = 종전 그대로). 상시 HUD와
 	#   나란히 뜨는 판만 이 값을 넘긴다 — 겹치면 «가려서 숨긴다»가 다시 필요해진다.
-	var cap := maxf(view.y - panel.position.y - MIRROR_VIEW_MARGIN - maxf(bottom_reserve, 0.0),
-		pad.y * 2.0)
-	panel.size = Vector2(panel.size.x, minf(label.size.y + pad.y * 2.0, cap))
+	# ★[폴리시 R29 #0] **띠를 지키는 것은 판이 아니라 글이다.** R28 #27은 판 높이만 잘라(minf)
+	#   라벨은 실측 높이 그대로 세워 뒀는데, Godot Label은 부모 Panel이 안 잘라 준다 —
+	#   그래서 「아는 얼굴」·「체키」 줄이 붙는 날의 5·6줄이 판 바닥(예약선) 아래로 그대로
+	#   흘러내려, R23 #17이 「첫 줄과 막줄이 나무 테두리 위·판 바깥 월드 위」라고 이름 붙인
+	#   그 그림이 되살아났다(같은 커밋이 이 판을 `_hud_hidden`에서 뺐으므로 그 자리엔 이제
+	#   핫바·컨텍스트 팝업이 실제로 떠 있다). 자르는 대신 **위로 밀어 올린다**: 본문은 한 줄도
+	#   안 잃고(이 함수 머리말이 접는 축을 배제한 그 근거), 아래 끝은 예약선에 정확히 선다.
+	#   ★ 「위쪽 변 고정」 규약은 **들어갈 때만** 지킨다 — 안 들어가는 프레임에서 머리를 붙드는
+	#     것은 막줄을 버린다는 뜻이라 규약의 목적(머리가 튀는 게 더 나쁘다)보다 손해가 크다.
+	#   ★ 씬이 준 윗변은 노드 meta에 한 번만 굳힌다(되읽으면 지난 프레임의 보정이 누적된다).
+	if not panel.has_meta("popup_top_home"):
+		panel.set_meta("popup_top_home", panel.position.y)
+	var home_y := float(panel.get_meta("popup_top_home"))
+	var need := label.size.y + pad.y * 2.0
+	var limit := view.y - MIRROR_VIEW_MARGIN - maxf(bottom_reserve, 0.0)
+	var top := home_y
+	if home_y + need > limit:
+		top = maxf(MIRROR_VIEW_MARGIN, limit - need)
+	panel.position.y = top
+	var cap := maxf(limit - top, pad.y * 2.0)
+	panel.size = Vector2(panel.size.x, minf(need, cap))
 
 # CanvasLayer 스케일을 걷어낸 논리 뷰 치수(`_pointer_over_overlay`가 쓰는 그 보정과 같은 결).
 func _logical_view_size(node: CanvasItem) -> Vector2:
@@ -26313,7 +26500,9 @@ func _grant_letter_attachment(letter_id: String) -> void:
 		if inventory == null or not inventory.add_item(iid, n):
 			continue                      # 위 `_letter_attachment_fits`가 이미 걸렀다(이중 방어)
 		_toast_item(iid, n)
-		parts.append("%s ×%d" % [ItemCatalog.name_of(iid), n])
+		# ★[폴리시 R29 #23] 진행 꼬리 합류 — 우편은 **자동 적재**라 화면이 말하지 않으면
+		#   여덟째 종이 들어온 사실을 알 창구가 아예 없는 유일한 자리다.
+		parts.append("%s ×%d%s" % [ItemCatalog.name_of(iid), n, _rarecrow_tail(iid)])
 	_mail_grant_active = mail_grant_prev
 	var gold := Mailbox.attachment_gold_of(letter_id)
 	if gold > 0 and wallet != null:
@@ -26743,6 +26932,7 @@ func _on_dialogue_finished() -> void:
 		onboarding.talked_to_miho()
 	_talking_to = ""
 	_confess_rid = ""   # ★[S8-T6] 고백 제안은 그 대화 한정 — 닫히면 접힌다(다음 대화에 다시 선다)
+	_settle_spine_b4()  # ★[폴리시 R29 #22] B4 지문이 다 닫힌 프레임 = 비트가 서는 자리
 	# ★[S9b-T7 / ADR-0068 결정 8] 내면 공간(B5)의 지문이 닫힌 것 — 화면은 아직 내 안이다.
 	#   오프닝이면 이제 플레이어가 잇기 시작하고(이동 잠금 유지), 완료 지문이면 세계로 돌아간다.
 	#   ★ 위에서 이미 `player.set_physics_process(true)`가 한 번 풀렸으므로 **다시 잠근다** —
@@ -27077,9 +27267,18 @@ func _encroach_candidates() -> Array:
 			var t := Vector2i(x, y)
 			if _grid[y][x] != GROUND:              # 밭 흙·길·벽·물·절벽 = 진보/성역 → 배제
 				continue
-			if occ.has(t):                          # 프롭 점유(구조물·장식·debris) → 배제
+			# ★[폴리시 R29 #9] 성역의 축은 **solid**다 — ADR-0055 §1 표(잡초 solid=false → 매일
+			#   재생 / 업화석·석화 고목 solid=true → 치우면 영구)와 §2 성역 목록(「이미 치운
+			#   **solid** debris 자리」), 그리고 reclaim.gd 머리말이 같은 자구로 못 박은 그 축이다.
+			#   종전엔 두 배제가 종을 안 갈랐다: 점유 표(occ)는 시드 배치를 정적으로 들고,
+			#   `is_cleared`는 값이 종 무관 bool이라 — **낫으로 벤 시드 잡초 한 포기**가 이후
+			#   어떤 밤에도, 절기 대량 재스폰에서도 영구히 후보에서 빠졌다. 귀결은 개간할수록
+			#   후보 풀이 단조 감소하는 것이라, §3의 「수주간 완전 방치하면 마당이 서서히 다시
+			#   거칠어진다」가 초반에 부지런했던 세이브일수록 구조적으로 성립하지 않았다.
+			var weed_opened: bool = reclaim.is_weed_cleared(t)
+			if occ.has(t) and not weed_opened:      # 프롭 점유(구조물·장식·debris) → 배제
 				continue
-			if reclaim.is_cleared(t):               # 이미 연 땅(구조물 치운 성역) → 배제
+			if reclaim.is_cleared(t) and not weed_opened:   # 이미 연 땅(solid 치운 성역) → 배제
 				continue
 			if farm.is_tilled(t) or farm.is_planted(t):  # 밭 성역(이중 방어) → 배제
 				continue
@@ -27275,6 +27474,35 @@ func _sealed_weather_from(data: Dictionary) -> Dictionary:
 	var legacy_day := maxi(int(data.get("weather_sealed_day", 0)), 0)
 	if legacy_day > 0:
 		out[legacy_day] = int(data.get("weather_sealed", Weather.CALM))
+	return out
+
+# ★[폴리시 R29 #20] 파종 자격 스냅샷의 세이브 왕복. `_cleared`·재스폰 debris가 이미 쓰는 그 문법
+#   ([x, y] 목록)으로 좌표를 펴고, 로드는 밀린 밤 표에 **실제로 남아 있는 밤만** 되살린다
+#   (표와 스냅샷이 갈리면 스냅샷이 유령으로 남는다 — 소비처가 표를 따라 돌기 때문).
+func _tree_seed_mature_to_save() -> Dictionary:
+	var out: Dictionary = {}
+	for day in _tree_seed_pending_mature:
+		var pts: Array = []
+		for t: Vector2i in _tree_seed_pending_mature[day]:
+			pts.append([t.x, t.y])
+		out[int(day)] = pts
+	return out
+
+func _tree_seed_mature_from(data: Dictionary) -> Dictionary:
+	var out: Dictionary = {}
+	var raw: Variant = data.get("tree_seed_pending_mature", null)
+	if typeof(raw) != TYPE_DICTIONARY:
+		return out                                  # 구세이브 = 스냅샷 없음(라이브 판정 — 거동 불변)
+	for k in raw:
+		var day := int(k)
+		if not _tree_seed_pending_days.has(day):
+			continue                                # 밀린 밤 표 밖 = 소비될 일이 없는 유령
+		var pts: Array = []
+		if typeof(raw[k]) == TYPE_ARRAY:
+			for e in raw[k]:
+				if typeof(e) == TYPE_ARRAY and e.size() >= 2:
+					pts.append(Vector2i(int(e[0]), int(e[1])))
+		out[day] = pts
 	return out
 
 func _seal_weather_for(day: int, weather: int) -> void:

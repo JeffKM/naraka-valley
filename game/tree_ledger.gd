@@ -233,6 +233,16 @@ func is_stump(region: String, t: Vector2i) -> bool:
 func is_mature(region: String, t: Vector2i) -> bool:
 	return stage_at(region, t) >= MAX_STAGE and not is_stump(region, t)
 
+# ★[폴리시 R29 #20] 지금 이 구역에서 **파종 자격이 있는 나무들**(정렬 — `tiles`와 같은 순서).
+#   집 밖에서 잔 밤의 «누가 굴릴 자격이 있었나»를 그 밤에 굳혀 두려고 main이 부른다
+#   (`catch_up_seeding`의 `mature_snapshot` 인자 — 그 머리말의 등가성 계약을 실제로 참으로 만든다).
+func mature_tiles(region: String) -> Array:
+	var out: Array = []
+	for t: Vector2i in tiles(region):
+		if is_mature(region, t):
+			out.append(t)
+	return out
+
 func species_at(region: String, t: Vector2i) -> String:
 	return String(_trees[region][t].get("species", "")) if has_slot(region, t) else ""
 
@@ -563,7 +573,14 @@ func advance_day(day: int, free_cb: Callable = Callable(),
 #   그날 안식에서 잤을 때와 한 칸도 안 갈린다(이월이 손실 0인 근거).
 #   `changed`는 여기서 안 쏜다 — 호출부가 다른 산출과 함께 한 번만 쏘게(advance_day) 하거나
 #   단독 진입점(`catch_up_seeding`)이 쏜다.
-func _seed_pass(day: int, free_cb: Callable) -> Array:
+# ★[폴리시 R29 #20] 위 계약이 **파종 자격 축에서 거짓이었다.** 결정적인 것은 굴림뿐이고
+#   «누가 굴릴 자격이 있는가»(`is_mature`)는 day 시드가 아니라 **호출 시점의 라이브 원장**이라,
+#   밤 N을 밖에서 자고 day M(>N)에 귀가하면 그 사이에 성숙한 나무가 밤 N 몫의 롤을 굴렸다
+#   (집에서 잤다면 그 밤엔 아직 미성숙이라 굴리지도 않는다). `mature_snapshot`(null = 종전
+#   그대로 라이브)이 그 밤에 굳어 온 자격 목록을 대신 든다 — 「굳는 값과 살아 있는 값을 섞지
+#   않는다」의 파종판이다. 상한(HOME_CAP)은 스냅샷 축이 아니다: 밀린 밤들은 오름차순으로 돌고
+#   그 사이 HOME 점유를 바꾸는 것은 파종 자신뿐이라, 집에서 연달아 잔 밤들과 같은 순서로 찬다.
+func _seed_pass(day: int, free_cb: Callable, mature_snapshot: Variant = null) -> Array:
 	var seeded: Array = []
 	if not free_cb.is_valid():
 		return seeded
@@ -573,7 +590,10 @@ func _seed_pass(day: int, free_cb: Callable) -> Array:
 		for t: Vector2i in tiles(region):
 			if occupied_count(region) >= HOME_CAP:
 				break
-			if not is_mature(region, t):
+			if mature_snapshot != null:
+				if not (mature_snapshot as Array).has(t):
+					continue
+			elif not is_mature(region, t):
 				continue
 			var rng := RandomNumberGenerator.new()
 			rng.seed = hash("treeseed:%d:%s:%d:%d" % [day, region, t.x, t.y])
@@ -590,8 +610,8 @@ func _seed_pass(day: int, free_cb: Callable) -> Array:
 # ★[폴리시 R21 #15] **밀린 밤의 파종만** 따로 돌리는 공개 진입점(main의 이월 표 소비처). 성장·
 #   재출현·이끼는 그 밤에 이미 돌았으므로 여기서 다시 돌리면 그날이 이틀치가 된다 — 그래서
 #   `advance_day`가 아니라 이 얇은 창구다.
-func catch_up_seeding(day: int, free_cb: Callable) -> Array:
-	var seeded := _seed_pass(day, free_cb)
+func catch_up_seeding(day: int, free_cb: Callable, mature_snapshot: Variant = null) -> Array:
+	var seeded := _seed_pass(day, free_cb, mature_snapshot)
 	if not seeded.is_empty():
 		changed.emit()
 	return seeded

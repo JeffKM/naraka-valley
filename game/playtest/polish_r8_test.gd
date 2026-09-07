@@ -166,8 +166,13 @@ func _initialize() -> void:
 			resolved += 1
 	_check("①e 방목 칸을 겨누면 **그 짐승 자신**이 해석된다(첫 매치에 먹히는 마리 0)",
 		resolved == out_keys.size())
+	# ★[폴리시 R29 #5] 니들 갱신 — R28 #15가 슬롯 계산을 `_release_open_buildings`에서 뽑아
+	#   `_free_pasture_slots()`로 옮겼다(방출과 알림이 한 표를 공유하게). `_in_func`는 다음
+	#   `func ` 줄에서 멈추므로 옛 니들은 이사한 자리에 닿지 못해 **확정 red**였다. 프로덕션이
+	#   옳고 재는 계약(«후보에서 이미 나간 짐승 칸을 뺀다»)은 그대로다 — 보는 함수만 옮긴다.
 	_check("①f 후보 계산이 이미 나간 짐승의 칸을 뺀다(원장 파생 — main이 좌표를 따로 안 센다)",
-		_in_func("func _release_open_buildings", "ranch.occupied_pasture_tiles()"))
+		_in_func("func _free_pasture_slots", "ranch.occupied_pasture_tiles()")
+			and _in_func("func _release_open_buildings", "_free_pasture_slots()"))
 
 	# ── ③ #3 REFUTED — 방목 평면은 경작 대상이 아니다 ─────────────────────────
 	print("── ③ #3 방목 칸과 밭은 좌표상 겹치지 않는다(반박 근거 고정) ──")
@@ -506,8 +511,17 @@ func _initialize() -> void:
 		_in_func("func _apply_cutscene_frame", "cutscene.fade_alpha() >= 1.0"))
 	var soul: Resident = m._resident(m.SOUL_CHILD_RID)
 	_check("⑬pre 동행 혼 레코드·노드가 있다", soul != null and soul.node != null)
+	if soul != null:
+		_check("⑬pre2 무대: 가시성 훅이 걸려 있다(R6 이후 몸은 `visible_rule` 파생이다)",
+			soul.visible_rule.is_valid())
 	if soul != null and soul.node != null:
 		var born_prev: bool = m._soul_born
+		# ★[폴리시 R29 #24] **무대 정정** — 이 스위트가 서고 난 뒤 R6가 동행 혼의 `visible_rule`에
+		#   무대 층(`_region == HOME`)을 걸었고 R22 #5가 `_refresh_soul_child_body`를 그 훅 파생으로
+		#   갈았다. 앞 절들이 구역을 옮겨 둔 상태라 ⑬d가 «몸이 안 선다»로 확정 red였는데, 그건
+		#   프로덕션이 아니라 이 무대가 낡은 것이다(재는 계약 «암전이 다 내려온 프레임에 선다»는
+		#   그대로다 — 탄생 컷신은 언제나 안식에서 돈다).
+		m._region = RegionCatalog.HOME
 		m._soul_born = true
 		soul.node.visible = false
 		m._soul_body_pending = true

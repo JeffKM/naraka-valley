@@ -113,6 +113,23 @@ func _feed_texts(m: Node) -> Array:
 		out.append(String(it["text"]))
 	return out
 
+# ★[폴리시 R29 #7] idx가 든 `draw_text(` **호출문 한 문장**을 줄 접힘과 무관하게 되돌린다.
+# (호출 머리로 거슬러 올라간 뒤 괄호 균형이 닫힐 때까지 이어 붙인다.)
+func _call_stmt_at(lines: PackedStringArray, idx: int) -> String:
+	if idx < 0 or idx >= lines.size():
+		return ""
+	var start := idx
+	while start > 0 and not lines[start].contains("draw_text("):
+		start -= 1
+	var depth := 0
+	var out := ""
+	for i in range(start, mini(lines.size(), start + 8)):
+		out += lines[i]
+		depth += lines[i].count("(") - lines[i].count(")")
+		if depth <= 0:
+			break
+	return out
+
 func _literal_at(lines: PackedStringArray, idx: int) -> String:
 	if idx < 0 or idx >= lines.size():
 		return ""
@@ -407,12 +424,22 @@ func _check_chest_guide_width(m: Node) -> void:
 	_check("⑤a 안내가 나무 테두리 안쪽에 든다(%.0fpx ≤ 가용 %.0fpx · 판 %.0f~%.0f)"
 			% [w, avail, panel.position.x, panel.end.x], w <= avail)
 	# 형제 두 줄(출하함·곳간)과 같은 골격·같은 여유인가 — 이 줄만 튀던 것이 결함이었다.
+	# ★[폴리시 R29 #8] 곳간 쪽 니들 갱신 — R28 #28이 그 한 줄을 **조립식**으로 바꾸면서
+	#   `_literal_at`(첫 따옴표 쌍)은 꼬리가 붙기 전 접두사만 집게 됐다. 즉 화면에 실제로 서는
+	#   문자열을 이 스위트가 더는 한 번도 안 재고 있었다(범위 rot — 항상 통과). 재는 대상을
+	#   **프로덕션의 조립 결과**로 옮기고, 최악(메뉴판 만석)을 세워서 잰다.
 	var bin_lit := _literal_at(_inv_src, _line_in_func(_inv_src, "func _draw_bin_top", "백팩 클릭=드롭"))
-	var lar_lit := _literal_at(_inv_src, _line_in_func(_inv_src, "func _draw_larder_top", "백팩 클릭=적재"))
+	var keep_board: PackedStringArray = frame._menu_board
+	var full_board := PackedStringArray()
+	for i in MenuCatalog.FUSION_SLOTS_STAGE2:
+		full_board.append("__slot%d" % i)
+	frame.set_menu_board(full_board)
+	var lar_lit: String = frame.larder_caption()
+	frame.set_menu_board(keep_board)
 	var bw := HanjiUi.text_width(bin_lit, 12)
 	var lw := HanjiUi.text_width(lar_lit, 12)
-	_check("⑤b 형제 두 줄도 같은 폭 안이다(출하함 %.0f · 곳간 %.0f · 상자 %.0f ≤ %.0f)"
-			% [bw, lw, w, avail],
+	_check("⑤b 형제 두 줄도 같은 폭 안이다(출하함 %.0f · 곳간 %.0f · 상자 %.0f ≤ %.0f) — 곳간은 「%s」"
+			% [bw, lw, w, avail, lar_lit],
 		bin_lit != "" and lar_lit != "" and bw <= avail and lw <= avail and w <= avail)
 	# 넘칠 때 스스로 줄어드는 그리기로 갈았는가(문구가 다시 길어져도 판을 안 뚫는다).
 	var call := _line_in_func(_inv_src, "func _draw_chest_top", "draw_text_fit")
@@ -527,8 +554,14 @@ func _check_profession_desc_width(m: Node) -> void:
 	# 문구를 줄이는 것만으로는 다음 항목이 다시 샌다 — 그리기가 폭을 물어야 한다.
 	var dsc := _line_in_func(_inv_src, "func _draw_skill_tab", "opt.get(\"desc\", \"\")")
 	var nam := _line_in_func(_inv_src, "func _draw_skill_tab", "opt.get(\"name\", \"\")")
+	# ★[폴리시 R29 #7] 니들 갱신 — R28 #19가 desc 줄을 삼항 + 개행으로 쪼개면서 폭 인자가
+	#   **다음 줄**로 내려갔다. 옛 증인은 «한 줄»을 전제해 그 줄만 봤으므로 확정 red였다.
+	#   프로덕션은 폭 인자를 그대로 넘기고 있으니 재는 계약(«두 줄 다 폭을 문다»)은 그대로 두고,
+	#   접힌 호출문 한 문장을 통째로 보는 자로 바꾼다.
 	_check("⑦b 두 줄 다 폭 인자를 넘긴다(설명 %d행 · 이름 %d행 — `opt_w`)" % [dsc + 1, nam + 1],
-		dsc >= 0 and nam >= 0 and _inv_src[dsc].contains("opt_w") and _inv_src[nam].contains("opt_w"))
+		dsc >= 0 and nam >= 0
+			and _call_stmt_at(_inv_src, dsc).contains("opt_w")
+			and _call_stmt_at(_inv_src, nam).contains("opt_w"))
 	_check("⑦c 결함 재현: 옛 곡예사 문구는 같은 판을 넘겼다(%.0f > %.0f)"
 			% [HanjiUi.text_width("특수기 쿨다운 절반 (무기 특수동작 도입 전까지 효과 보류)", 10), avail],
 		HanjiUi.text_width("특수기 쿨다운 절반 (무기 특수동작 도입 전까지 효과 보류)", 10) > avail)

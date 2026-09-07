@@ -251,13 +251,19 @@ func _run_checks() -> void:
 		m._spine_b4_armed and not m._spine_bit_seen(m.SPINE_B4))
 
 	m._on_sleep_done()
-	_check("⑤c ★눈을 뜨는 프레임에 정확히 1회 재생된다(비트 기록 · 예약 소진)",
-		m.cutscene != null and m._spine_bit_seen(m.SPINE_B4) and not m._spine_b4_armed)
+	# ★[폴리시 R29 #22] 비트가 서는 자리가 «장면 시작 → 장면 종료»로 옮겨졌다(형제 B6·B7과 같은
+	#   이동 — 재생 도중 종료 시 지문이 유실되던 자리). 재는 계약(«정확히 1회 재생»)은 그대로다.
+	_check("⑤c ★눈을 뜨는 프레임에 정확히 1회 재생된다(예약 소진 · 기록은 종료 대기)",
+		m.cutscene != null and not m._spine_b4_armed
+		and m._spine_b4_pending and not m._spine_bit_seen(m.SPINE_B4))
 	_settle(m)
 	_check("⑤d 재생이 끝나면 **화자 없는** 내면 대화가 열린다",
 		m.dialogue.is_open() and m.dialogue.speaker() == ""
 		and m.dialogue.line() == String(m.SPINE_B4_LINES[0]))
 	_drain(m)
+	_check("⑤c2 ★지문이 다 닫힌 프레임에 비트가 선다(예약 %s · 비트 %s)"
+			% [str(m._spine_b4_pending), str(m._spine_bit_seen(m.SPINE_B4))],
+		not m._spine_b4_pending and m._spine_bit_seen(m.SPINE_B4))
 	_check("⑤e ★이제 세 항이 다 찼다 = 척추 해결 게이트가 열린다", m._spine_gate_ok())
 
 	# ── ⑥ B5 = 문 칸 발동 · 결정적 완주 · 확증선 · 즉시 저장 ──────────────────

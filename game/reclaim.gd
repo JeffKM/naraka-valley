@@ -35,7 +35,11 @@ signal changed()   # debris를 치우거나 잡초가 돋거나/베인 프레임
 #      든다(시드 오염 금지 §10.1 — main이 프롭 엔트리로 병합해 그리고·막고·개간시킨다).
 #   ③ 성야절 — 확산 정지·재스폰 없음 + 지상 잡초 소멸(purge_weeds).
 
-# 치운 debris 좌표 집합. 키 = 타일(Vector2i), 값 = true. 키가 없음 = 아직 안 치움(debris 그대로).
+# 치운 debris 좌표 집합. 키 = 타일(Vector2i), 값 = **치운 debris의 kind**. 키가 없음 = 아직 안 치움.
+# ★[폴리시 R29 #9] 값이 종전엔 `true`(종 무관)였다 — 그래서 «치운 자리 성역»이 ADR-0055 §1/§2가
+#   못 박은 **solid 축**을 잃고 잡초(non-solid)를 벤 자리까지 영구히 굳혔다. 값에 종을 실어
+#   `is_weed_cleared`가 그 축을 되살린다. 구버전 세이브는 종을 모르므로 ""(=성역 유지 · 보수적):
+#   모르는 칸을 잡초로 넘겨짚으면 «구조적 개간은 영구»라는 더 단단한 계약을 깰 수 있다.
 var _cleared: Dictionary = {}
 
 # ★ [ADR-0055] 재점령한 잡초 좌표 집합. 키 = 타일(Vector2i), 값 = true. advance_day가 밤마다 빈 맨땅
@@ -84,6 +88,14 @@ func is_cleared(t: Vector2i) -> bool:
 func cleared_count() -> int:
 	return _cleared.size()
 
+# ★[폴리시 R29 #9] 그 자리에서 치운 것이 **잡초(non-solid)**인가 = 성역이 아닌가.
+#   ADR-0055 §1 표(잡초 solid=false → 매일 재생 / 업화석·석화 고목 solid=true → 치우면 영구)와
+#   §2 성역 목록(「이미 치운 **solid** debris 자리」)의 축을 그대로 술어로 세운 것이다. 종을
+#   모르는 칸(구버전 세이브)은 false — 성역 쪽으로 보수적으로 판정한다(위 `_cleared` 머리말).
+func is_weed_cleared(t: Vector2i) -> bool:
+	var kind := str(_cleared.get(t, ""))
+	return DebrisCatalog.has(kind) and not DebrisCatalog.is_solid(kind)
+
 # ── 재점령 질의(ADR-0055) ─────────────────────────────────────────────────────
 # 이 타일에 재점령한 잡초가 있는가(드로우·낫 디스패치·프롬프트가 쓴다).
 func has_weed(t: Vector2i) -> bool:
@@ -122,7 +134,7 @@ func clear(t: Vector2i, kind: String, tool_id: String) -> Dictionary:
 		return {}                                   # 미지 debris(방어)
 	if DebrisCatalog.tool_for(kind) != tool_id:
 		return {}                                   # 틀린 도구 → 무동작
-	_cleared[t] = true
+	_cleared[t] = kind   # ★[폴리시 R29 #9] 종을 싣는다 — 성역 축(solid)이 여기서 살아난다
 	_debris.erase(t)   # ★[S7-T5] 절기 재스폰분이었다면 원장에서 뺀다(치운 자리는 _cleared 하나로 수렴)
 	changed.emit()
 	return {"drop": DebrisCatalog.drop_for(kind), "count": DebrisCatalog.drop_count(kind)}
@@ -310,9 +322,11 @@ func purge_weeds() -> int:
 # _cleared는 Vector2i 키 순수 Dictionary라, 키를 [x,y] 배열 목록으로 직렬화한다(var_to_str도 되지만
 # JSON·구조 안정성 위해 명시 목록). 로드는 통째 재구성 후 changed로 main이 드로우/충돌을 다시 세운다.
 func to_save() -> Dictionary:
+	# ★[폴리시 R29 #9] 치운 종까지 싣는다 — [x, y, kind] 3튜플(재스폰 debris가 이미 쓰는 그 문법).
+	#   구버전 2튜플은 로드가 그대로 받는다(가법 — VERSION 불변).
 	var tiles: Array = []
 	for t in _cleared:
-		tiles.append([t.x, t.y])
+		tiles.append([t.x, t.y, str(_cleared[t])])
 	var weeds: Array = []      # ★ [ADR-0055] 재점령 잡초 좌표(치운 debris와 별개 레이어)
 	for t in _weeds:
 		weeds.append([t.x, t.y])
@@ -328,7 +342,8 @@ func load_save(data: Dictionary) -> void:
 	if typeof(tiles) == TYPE_ARRAY:
 		for e in tiles:
 			if typeof(e) == TYPE_ARRAY and e.size() >= 2:
-				_cleared[Vector2i(int(e[0]), int(e[1]))] = true
+				# 3번째 항 = 치운 debris kind. 없는 구세이브는 ""(종 미상 → 성역 유지, 보수적).
+				_cleared[Vector2i(int(e[0]), int(e[1]))] = str(e[2]) if e.size() >= 3 else ""
 	_weeds = {}                # ★ [ADR-0055] — 키 없는 구버전 세이브는 잡초 0(하위호환)
 	var weeds: Variant = data.get("weeds", [])
 	if typeof(weeds) == TYPE_ARRAY:
