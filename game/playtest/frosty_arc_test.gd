@@ -467,13 +467,23 @@ func _run_checks() -> void:
 	_check("⑫g ★아침 훅이 예약한다(아직 재생 0 · 비트 0 — 취침 연출 한가운데라 안 튼다)",
 		m._spine_b4_armed and m.cutscene == null and not m._spine_bit_seen(m.SPINE_B4))
 	m._on_sleep_done()
-	_check("⑫h ★취침 1회 후 아침에 정확히 1회 발동(재생 중 · 비트 기록 · 예약 소진)",
-		m.cutscene != null and m._spine_bit_seen(m.SPINE_B4) and not m._spine_b4_armed)
+	# ★[폴리시 R29 #22] 비트가 서는 **자리가 옮겨졌다**(장면 시작 → 장면 종료). 종전엔 호출부
+	#   `_on_sleep_done`이 두 줄 뒤에서 자동 저장을 돌려, 플레이어가 첫 프레임을 보기도 전에 B4가
+	#   디스크에 굳었다 — 재생 도중 앱을 닫으면 그 지문이 재생 경로 없이 사라졌다(형제 B6·B7은
+	#   R11·R6에서 이미 같은 이동을 받았다). 재는 계약(«취침 1회 후 정확히 1회 발동»)은 그대로고,
+	#   기록 시점만 아래 ⑫h2로 내려간다.
+	_check("⑫h ★취침 1회 후 아침에 정확히 1회 발동(재생 중 · 예약 소진 · 기록은 아직 대기)",
+		m.cutscene != null and not m._spine_b4_armed
+		and m._spine_b4_pending and not m._spine_bit_seen(m.SPINE_B4))
 	_settle(m)
 	_check("⑫i 재생이 끝나면 **화자 없는** 내면 대화가 열린다(이름판 공백 = 내면엔 이름이 없다)",
 		m.cutscene == null and m.dialogue.is_open() and m.dialogue.speaker() == ""
 		and m.dialogue.line() == String(m.SPINE_B4_LINES[0]))
 	_drain(m)
+	# ★[폴리시 R29 #22] 지문이 다 닫힌 이 프레임이 **비트가 서는 자리**다(예약도 함께 내린다).
+	_check("⑫h2 ★장면이 끝난 프레임에 비트가 선다(예약 %s · 비트 %s)"
+			% [str(m._spine_b4_pending), str(m._spine_bit_seen(m.SPINE_B4))],
+		not m._spine_b4_pending and m._spine_bit_seen(m.SPINE_B4))
 	_check("⑫j 화면·시계 원복(암전 잔류 0)",
 		is_equal_approx(m.fade.modulate.a, 0.0) and m.clock.running
 		and m._cam.offset.is_equal_approx(Vector2.ZERO))

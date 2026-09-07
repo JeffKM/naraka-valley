@@ -511,8 +511,17 @@ func _initialize() -> void:
 		_in_func("func _apply_cutscene_frame", "cutscene.fade_alpha() >= 1.0"))
 	var soul: Resident = m._resident(m.SOUL_CHILD_RID)
 	_check("⑬pre 동행 혼 레코드·노드가 있다", soul != null and soul.node != null)
+	if soul != null:
+		_check("⑬pre2 무대: 가시성 훅이 걸려 있다(R6 이후 몸은 `visible_rule` 파생이다)",
+			soul.visible_rule.is_valid())
 	if soul != null and soul.node != null:
 		var born_prev: bool = m._soul_born
+		# ★[폴리시 R29 #24] **무대 정정** — 이 스위트가 서고 난 뒤 R6가 동행 혼의 `visible_rule`에
+		#   무대 층(`_region == HOME`)을 걸었고 R22 #5가 `_refresh_soul_child_body`를 그 훅 파생으로
+		#   갈았다. 앞 절들이 구역을 옮겨 둔 상태라 ⑬d가 «몸이 안 선다»로 확정 red였는데, 그건
+		#   프로덕션이 아니라 이 무대가 낡은 것이다(재는 계약 «암전이 다 내려온 프레임에 선다»는
+		#   그대로다 — 탄생 컷신은 언제나 안식에서 돈다).
+		m._region = RegionCatalog.HOME
 		m._soul_born = true
 		soul.node.visible = false
 		m._soul_body_pending = true
