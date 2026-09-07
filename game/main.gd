@@ -12079,8 +12079,26 @@ func _peddler_items() -> Array:
 # 가구 세트 구매 — 야시장(`_try_buy_market_deco`)·목공방(`_try_buy_deco_set`)과 **또 다른 가격 축**이라
 # 별도 경로다(각각 행사 정액 할인 / 옹이 ♡ 할인 / 보부상 웃돈). 해금 처리 자체는 home_deco 한 곳이
 # 진실원이라, 갈리는 것은 값을 구하는 줄 하나뿐이다.
+# ★[폴리시 R31 #16] **오늘 보부상이 서는가 — 결제층이 다시 묻는다.** 야시장의 형제 술어
+# (`_night_market_open_today`) 머리말이 **보부상을 근거로 들며** «결제 순간에 오늘 날짜를 다시
+# 묻는다 — 프레임은 표시일 뿐 계약이 아니다»라고 이 방어를 계약으로 선언했는데, 정작 보부상
+# 다섯 경로엔 그 갈래가 하나도 없었다. `Peddler.stock_rows`가 비출현일에 빈 배열을 돌려주므로
+# `_peddler_price`가 0을 내고, 그 0이 «냥 부족»(가구·희귀 — 「0냥 (보유 5000냥)」이라는 자기모순)
+# 또는 **침묵**(씨앗·품목 — `if unit <= 0: return`)으로 처리됐다.
+# ★ 진실원은 `Peddler`의 그 표 하나다(주기 상수를 여기 옮겨 적지 않는다).
+func _peddler_open_today() -> bool:
+	return peddler != null and clock != null and Peddler.is_open_day(clock.day)
+
+# 비출현일 거절 한 줄 — 다음 출현까지 며칠인지도 함께 말한다(야시장이 「그 하루뿐」을 말하는 자리).
+func _peddler_closed_notice() -> void:
+	_notice("보부상은 오늘 안 온다 — %d일 뒤 나루 마을에 다시 선다"
+		% Peddler.days_until(clock.day if clock != null else 0))
+
 func _try_buy_peddler_deco(set_id: String) -> bool:
 	if peddler == null or clock == null or home_deco == null or not HomeDecoCatalog.has_set(set_id):
+		return false
+	if not _peddler_open_today():          # ★[폴리시 R31 #16] 야시장이 세운 정직 갈래의 빠진 짝
+		_peddler_closed_notice()
 		return false
 	if home_deco.is_unlocked(set_id):
 		_notice("%s 세트는 이미 해금했다" % HomeDecoCatalog.name_of(set_id))
@@ -12098,6 +12116,9 @@ func _try_buy_peddler_deco(set_id: String) -> bool:
 #   (더비 교환·야시장 한정 물품이 쓰는 그 순서 규율 1:1).
 func _try_buy_peddler_rare(id: String) -> bool:
 	if peddler == null or inventory == null or clock == null or not ItemCatalog.has_item(id):
+		return false
+	if not _peddler_open_today():          # ★[폴리시 R31 #16] 위 가구 경로와 같은 갈래
+		_peddler_closed_notice()
 		return false
 	if peddler.has_bought(id):
 		_notice("%s 이미 샀다" % HanjiUi.with_eun(ItemCatalog.name_of(id)))
@@ -12130,6 +12151,9 @@ func _try_buy_peddler_book(id: String) -> bool:
 		return false
 	if not Books.has_text(id):
 		return false
+	if not _peddler_open_today():          # ★[폴리시 R31 #16] 다섯째 경로도 같은 갈래(「0냥」 문구 축)
+		_peddler_closed_notice()
+		return false
 	if books.has_acquired(id):
 		_notice("%s 이미 되찾았다" % HanjiUi.with_eun(Books.title_of(id)))
 		return false
@@ -12159,6 +12183,9 @@ func _try_buy_peddler_book(id: String) -> bool:
 func _try_buy_peddler_seed(crop_id: String, n: int) -> void:
 	if inventory == null or not CropCatalog.has_crop(crop_id) or n <= 0:
 		return
+	if not _peddler_open_today():          # ★[폴리시 R31 #16] 침묵으로 되돌아가던 두 경로 중 하나
+		_peddler_closed_notice()
+		return
 	var unit := _peddler_price(crop_id)
 	if unit <= 0:
 		return
@@ -12184,6 +12211,9 @@ func _try_buy_peddler_seed(crop_id: String, n: int) -> void:
 # 일반 스택 아이템 소매(채집물·재료·광물·통용물·수액) — 씨앗과 같은 결의 부분 구매.
 func _try_buy_peddler_item(id: String, n: int) -> void:
 	if inventory == null or not ItemCatalog.has_item(id) or n <= 0:
+		return
+	if not _peddler_open_today():          # ★[폴리시 R31 #16] 침묵으로 되돌아가던 두 경로 중 둘
+		_peddler_closed_notice()
 		return
 	var unit := _peddler_price(id)
 	if unit <= 0:
@@ -15860,7 +15890,24 @@ func _process(delta: float) -> void:
 	elif _region == RegionCatalog.HOME and reclaim != null and reclaim.has_weed(_target):
 		# ★ [ADR-0055] 밤새 돋은 재점령 잡초를 바라볼 때: 낫을 들었으면 [좌클릭] 풀베기, 아니면 낫 안내.
 		interact_prompt.visible = not _sleeping
-		interact_prompt.text = _debris_prompt(DebrisCatalog.WEEDS)
+		# ★[폴리시 R31 #13] **한 칸을 두 원장이 나눠 가질 수 있다 — 그러면 둘 다 말한다.**
+		#   `_weed_spread_class`는 목적지 지면을 `GROUND` 또는 `SOIL`로 받고 밭 술어는
+		#   `farm.is_planted`(→DEST_CROP) 하나뿐이라, **작물 없는 경작 칸**이 `DEST_OPEN`으로
+		#   통과한다(그 줄 주석이 「갈아둔 흙(작물 없음) = 그냥 점유」라고 명시 — 스폰 입구는 밭을
+		#   빼지만 확산은 안 뺀다). 그 칸은 `farm.is_tilled ∧ reclaim.has_weed`가 동시에 참이 되고,
+		#   여기서 두 사슬이 갈렸다: 입력은 `_target_valid`(=`_is_farmable`, SOIL이라 참)를 통과해
+		#   `_use_tool`·`_try_harvest`가 그대로 먹히는데, 프롬프트는 이 갈래가 `_farm_prompt()`보다
+		#   **먼저** 잡아 잡초 한 줄로 고정됐다 — 그 칸에 심어 다 자란 작물 앞에서 «[우클릭] 수확»이
+		#   한 프레임도 안 뜨고(작물은 `_draw_crops`가 잡초 뒤에 그려 화면엔 멀쩡히 서 있다), 그
+		#   칸의 밭 동사 전부(괭이·물·파종·시비·수확)가 화면에서 사라졌다.
+		#   ★ 갈래를 **양보시키지 않고 합친 근거**: 양보하면 이번엔 «낫으로 벨 수 있다»가 사라져
+		#     같은 결함이 반대편에 선다. 두 동사가 실제로 둘 다 서므로 화면도 둘 다 말한다
+		#     (`_animal_prompt`가 `parts`를 잇는 그 문법). 폭은 `_fit_interact_prompt`가 접는다.
+		#   ★ 겹치지 않는 평범한 잡초 칸은 문자열이 한 글자도 안 바뀐다(`_target_valid`가 거짓).
+		var weed_line := _debris_prompt(DebrisCatalog.WEEDS)
+		var farm_line := _farm_prompt() if _target_valid else ""
+		interact_prompt.text = weed_line if farm_line == "" \
+			else "%s  ·  %s" % [weed_line, farm_line]
 	elif _region == RegionCatalog.HOME and flower.is_bloomed(_target):
 		# ★ ADR-0052 활짝 핀 꽃 패치를 바라볼 때: 우클릭 맨손 채집(혼력0). 채집물+채집 XP.
 		interact_prompt.visible = not _sleeping
@@ -16173,6 +16220,19 @@ func _farm_aoe_tiles(t: Vector2i, aoe: Vector2i) -> Array[Vector2i]:
 #   태워 묻는다. 조준 칸만 보면 티어 AoE의 둘째·셋째 칸이 화면에서 사라진다.
 func _hoe_aoe_has_work() -> bool:
 	for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE)):
+		# ★[폴리시 R31 #9(#12 중복)] **집행 루프가 건너뛰는 칸은 «할 일»이 아니다** — R30 #11이
+		#   넣은 `if _pot_at(at): continue`의 빠진 반쪽이다. 이 항이 없으면 두 표가 갈리는 순간이
+		#   실재한다: 늘봄방 경작면은 전부 SOIL이고 `_can_place_pot`은 «이미 경작된 칸»만 배제하므로
+		#   화분은 늘 **미경작 SOIL** 위에 선다. 그 8이웃을 미리 갈아 둔 뒤 티어 괭이(1×3·3×3)로
+		#   이미 갈린 칸을 겨누면, AoE 안의 미경작 칸이 화분 칸 하나뿐인 프레임이 생긴다 →
+		#   `_farm_prompt`가 «[좌클릭] 괭이질»을 약속하고 혼력 게이트도 통과하는데, 집행부는
+		#   화분을 건너뛰고 나머지는 `plot.hoe`가 false라 `hoed == 0` → `verb == ""` →
+		#   `if verb == "": return`으로 조용히 빠진다(스윙·SFX·알림·혼력 소모가 전부 0인 완전 무동작).
+		#   R27 #17이 「판정자는 집행 루프와 같은 표 하나」라고 못 박은 그 계약의 반대 방향 파손이다.
+		#   ★ 0티어에서는 AoE가 (1,1)이라 애초에 안 생긴다 — 업그레이드를 산 플레이어에게만 화면이
+		#     거짓말하던 자리(R27 #17·R28 #0이 물주기 축에서 봉합한 그것의 괭이판).
+		if _pot_at(at):
+			continue
 		if not _field_at(at).is_tilled(at):
 			return true
 	return false
@@ -16207,6 +16267,21 @@ func _is_free_use_item(id: String) -> bool:
 #   태우고 한 층 아래로 내려간다. 그래서 이 줄은 **조준 칸 갈래보다 위**에 선다(집행 순서와 같다).
 #   ★ 거절 사유도 여기서 말한다 — 셋 다 «가득하면 안 쓴다»가 계약이라(`_drink_potion`·
 #     `_eat_side_dish`의 ㉠) 누르기 전에 알아야 아낀다.
+# ★[폴리시 R31 #10] 회복 동사의 광고값 — **표값이 아니라 실제로 들어갈 양**이다(넘치는 몫은
+# 함께 말한다). 두 창구가 세운 만점 거절 게이트의 근거는 「오조작 한 번이 그대로 손실」·
+# 「누르기 전에 알아야 아낀다」인데(그 함수들 머리말), 그 근거가 **그대로 성립하는 99/100 구간**엔
+# 사전 고지가 한 줄도 없었다: 혼력 99에서 «혼력 +30»을 보고 누르면 곳간 시그니처 1개가 소각되고
+# 실제 회복은 +1이며, 29가 사후 알림에서야 드러난다(집행부 `SoulEnergy.restore`·`Health.heal`이
+# 둘 다 `mini(amount, MAX - current)`로 자른다). 만점 거절은 «전부 버려질 때»만 막는 계단이라
+# 그 한 칸 아래는 표 밖이었다 — 계단을 연속으로 바꾼다.
+# ★ 가득 차지 않은 평범한 구간에서는 **문자열이 한 글자도 안 바뀐다**(«+30» 그대로).
+# ★ 상한·현재값의 출처는 각 창구의 그 자원 하나다(값 복제 0 — 여긴 서식만 판다).
+func _restore_gain_text(table: int, cur: int, maxv: int) -> String:
+	var gain: int = clampi(maxv - cur, 0, maxi(table, 0))
+	if gain >= table:
+		return "+%d" % table
+	return "+%d — 넘치는 %d은 버려진다" % [gain, table - gain]
+
 func _free_use_prompt() -> String:
 	if inventory == null:
 		return ""
@@ -16214,11 +16289,16 @@ func _free_use_prompt() -> String:
 	if ItemCatalog._is_potion(id):
 		if health != null and health.current >= health.maximum:
 			return "체력이 가득하다 — %s 아껴 두자" % HanjiUi.with_eun(ItemCatalog.name_of(id))
-		return "[좌클릭] %s 마시기 (체력 +%d)" % [ItemCatalog.name_of(id), ItemCatalog.potion_heal(id)]
+		return "[좌클릭] %s 마시기 (체력 %s)" % [ItemCatalog.name_of(id),
+			_restore_gain_text(ItemCatalog.potion_heal(id),
+				health.current if health != null else 0,
+				health.maximum if health != null else 0)]
 	if MenuCatalog.is_side_dish(id):
 		if energy != null and energy.current >= SoulEnergy.MAX:
 			return "혼력이 가득하다 — %s 아껴 두자" % HanjiUi.with_eun(MenuCatalog.name_of(id))
-		return "[좌클릭] %s 먹기 (혼력 +%d)" % [MenuCatalog.name_of(id), MenuCatalog.restore_of(id)]
+		return "[좌클릭] %s 먹기 (혼력 %s)" % [MenuCatalog.name_of(id),
+			_restore_gain_text(MenuCatalog.restore_of(id),
+				energy.current if energy != null else 0, SoulEnergy.MAX)]
 	if id != ItemCatalog.STAIRS:
 		return ""
 	# 계단은 무대가 갈린다 — 놓을 수 있는 곳에서만 동사를 약속하고, 갱도 바닥에서는 사유를 말한다
@@ -18476,6 +18556,22 @@ func _try_buy_trial_item(buy_id: String) -> void:
 	if trial == null or inventory == null or not ItemCatalog.has_item(buy_id):
 		return
 	var price := TrialGround.price_of(buy_id)
+	# ★[폴리시 R31 #15] **`can_buy`는 세 사유를 뭉친다 — 화면은 갈라 말한다.** 종전엔 그 한 술어의
+	#   거짓을 전부 «시련패가 모자라다»로 옮겨, 1회성 기구매 품목에 대해 「시련패가 모자라다 —
+	#   저승 허수아비 12패 (보유 30패)」라는 자기모순이 떴다(12 ≤ 30인데 모자라다고 말하고, 실제
+	#   사유는 한 글자도 안 나온다). 형제 창구는 예외 없이 사유를 가른다 — 바로 아래
+	#   `_try_buy_trial_deco`·야시장 `_try_buy_market_item`·보부상 `_try_buy_peddler_rare`·
+	#   만물상 `_try_buy_rarecrow`. 도달 경로는 결제층 방어면이고(진열 행은 `locked`라 클릭 히트가
+	#   없다), 이 저장소는 그 층을 «프레임 신호는 신뢰하지 않는다 — 잠긴 행을 우회한 구매 요청이
+	#   와도 결제 쪽이 다시 막는다»로 계약해 두었다. 그 계약을 이 갈래만 어기고 있었다.
+	#   ★ 순서는 `can_buy` 본문과 같다(취급 없음 → 1회성 기구매 → 잔고). 술어도 그것이 드는
+	#     것 그대로라 판정이 두 벌로 갈리지 않는다.
+	if price <= 0:
+		_notice("시련장 매대엔 %s 없다" % HanjiUi.with_i(ItemCatalog.name_of(buy_id)))
+		return
+	if TrialGround.is_once(buy_id) and trial.has_bought(buy_id):
+		_notice("%s 이미 바꿨다 — 한 번만 내주는 물건이다" % HanjiUi.with_eun(ItemCatalog.name_of(buy_id)))
+		return
 	if not trial.can_buy(buy_id):
 		_notice("시련패가 모자라다 — %s %d패 (보유 %d패)" % [
 			ItemCatalog.name_of(buy_id), price, trial.tokens])
@@ -19658,6 +19754,22 @@ func _farm_prompt() -> String:
 	if ItemCatalog.category_of(item) == ItemCatalog.CAT_FERTILIZER and pfield.is_tilled(_target):
 		if pfield.fertilizer_of(_target) == item:
 			return "%s — 이미 뿌려 둔 칸" % ItemCatalog.name_of(item)
+		# ★[폴리시 R31 #14] **거절될 동사는 약속하지 않는다.** 집행부는 소모 **전**에
+		#   `fld.fertilize_sealed_no_op`으로 되감기 봉인 칸을 거절하는데(R23 #1 — 「술어는 거절을
+		#   집행하는 그것 하나」), 이 갈래는 「같은 비료인가」만 묻고 나머지를 무조건 약속했다.
+		#   재현: REGROW 작물을 한 번 수확하면 `FarmField.harvest`가 `regrown`을 새기고 grown을
+		#   되감아 칸이 «미성숙 + 봉인»이 된다 → `is_mature`가 거짓이라 위 수확 줄에 안 걸리고,
+		#   성장촉진군(`state_of` == STATE_NONE)을 들면 여기서 «뿌리기»를 약속하지만 LMB는 무조건
+		#   거절된다. 아이템 손실은 없으나, 같은 함수의 형제 갈래들이 예외 없이 지키는
+		#   «모자란 자원·거절 사유는 누르기 전에 말한다»(R28 #12의 물통 0·혼력 갈래)의 표 밖에
+		#   이 한 갈래만 남아 있었다.
+		#   ★ 말투는 집행부가 내는 그 문장과 **같은 뜻**이고, 판정은 집행부가 드는 **그 술어 하나**다.
+		#     구세이브 백필 추정 여부(`regrow_seal_is_guess`)도 집행부와 같은 자리에서 갈린다.
+		if pfield.fertilize_sealed_no_op(_target, item):
+			return ("%s 성숙 임계가 굳은 포기엔 듣지 않는다"
+				if pfield.regrow_seal_is_guess(_target)
+				else "%s 이미 열매를 낸 포기엔 듣지 않는다") \
+				% HanjiUi.with_eun(ItemCatalog.name_of(item))
 		return "[좌클릭] %s 뿌리기" % ItemCatalog.name_of(item)
 	return ""
 
@@ -26273,7 +26385,36 @@ func _tick_popup_lifetimes(delta: float) -> void:
 func _milestone_occluded() -> bool:
 	if frame != null and frame.is_open():
 		return true
-	return calendar_panel != null and calendar_panel.is_open()
+	if calendar_panel != null and calendar_panel.is_open():
+		return true
+	return _notice_over_milestone()
+
+# ★[폴리시 R31 #6] **알림 띠도 이 판 위에 그려진다** — 그리고 이쪽은 가림이 확실한 경로다.
+#   NoticeFeed는 `$CanvasLayer.add_child`로 나중 추가돼 씬 자식인 MilestonePanel 위에 서고
+#   (main이 그 사실을 직접 적는다), `_hud_hidden`에서도 의도적으로 빠져 있으며(「정산 알림을
+#   계속 보여야 해 제외」), 띠 바탕이 72% 불투명이라 밑을 못 보게 한다. 재현 경로가 하필
+#   **문턱을 넘긴 그 프레임**이다: 카페 1단 문턱은 «누적 서빙 매출»이라 넘는 프레임은 반드시
+#   서빙 프레임이고 `_try_serve`가 같은 프레임에 아이콘 알림을 민다. 그 6초 동안 손님을 더
+#   받으면 서빙 알림이 쌓여 판의 좌측을 위로 덮어 올라간다. 형제 팝업엔 이미 이 보호가 있다
+#   (`_show_cafe_summary`가 마일스톤이 떠 있으면 자신을 미룬다) — 그 근거(「마일스톤은 래치라
+#   가려지면 그 축하 문구가 세이브에서 영영 사라진다」)가 여기서 더 확실하게 성립한다.
+#   ★ 미룸이 아니라 **정지**를 고른 이유: 알림은 미룰 수 없다(지금 벌어진 일을 말하는 창구라
+#     미루면 그 정보가 늦거나 사라진다). 대신 초를 멈추면 둘 다 산다 — 띠는 그대로 흐르고,
+#     띠가 비는 순간 축하가 남은 초를 마저 쓴다(알림은 저마다 수명이 있어 반드시 빈다).
+#   ★ 자리는 `_draw`가 쓰는 **그 함수**에서 그대로 받는다(`NoticeFeed.layout` — 기하 복제 0).
+#     그래서 R23 #14가 넣은 «접힌 줄만큼 띠가 커진다»도 자동으로 따라온다.
+#   ★ 판이 아니라 **본문 라벨**과 대 본다: 띠가 판의 아래 여백만 스치는 프레임까지 시간을
+#     멈추면 «가려졌다»의 뜻이 넓어진다(읽을 글자가 가려질 때만 멈춘다).
+func _notice_over_milestone() -> bool:
+	if notice_feed == null or milestone_panel == null or not milestone_panel.visible:
+		return false
+	if notice_feed._items.is_empty():
+		return false
+	var body := Rect2(milestone_panel.position + milestone_text.position, milestone_text.size)
+	for slot in notice_feed.layout(HanjiUi.font(), _logical_view_size(notice_feed)):
+		if Rect2(slot["pos"], Vector2(float(slot["w"]), float(slot["h"]))).intersects(body):
+			return true
+	return false
 
 func _drop_cafe_popups(keep_milestone: bool = false) -> void:
 	_cafe_summary_pending = ""
