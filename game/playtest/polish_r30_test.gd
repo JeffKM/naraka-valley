@@ -782,6 +782,12 @@ func _sec14_popup_lifetime(m: Node) -> void:
 		_check("⑭b `%s`로 프레임이 끊긴 채로도 마감 정산 판이 %d프레임 만에 거둬진다"
 				% [mode, guard],
 			m._cafe_summary_secs <= 0.0 and not m.cafe_summary_panel.visible and guard < 60)
+	# ★[폴리시 R31 #6] **무대에서 알림 띠를 비운다.** R31이 「띠가 축하 본문을 덮는 동안은 초가
+	#   안 흐른다」를 세웠으므로(1회성 래치라 가려진 채 만료되면 영영 사라진다), 앞 절들이 남긴
+	#   알림이 그대로면 이 절이 재려는 것(«`_transitioning` 아래에서도 같은 손이 거둔다»)이
+	#   다른 이유로 막힌다. 재는 대상은 그대로고 무대만 갖춘다 — 아래 대조군 ⑭b(마감 정산)는
+	#   그 가림의 대상이 아니라 종전대로 둔다.
+	m.notice_feed._items.clear()
 	m.milestone_panel.visible = true
 	m._milestone_popup_secs = 0.08
 	m._transitioning = true

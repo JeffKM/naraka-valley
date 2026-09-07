@@ -349,6 +349,8 @@ func open(ctx: int) -> void:
 	_skill_scroll = 0            # ★ [S5-T4] 숙련 탭 5행 리스트도 맨 위로
 	_prof_armed = ""             # ★[폴리시 R28 #19] 열 때 전문직 확정 래치 해제(휴지통 대기와 같은 결)
 	_rel_scroll = 0              # ★ [S8-T1] 관계 탭 하트 리스트도 맨 위로
+	_craft_scroll = 0            # ★[폴리시 R31 #8] 제작 탭 레시피 리스트도 맨 위로
+	_craft_area_rect = Rect2()   # 아직 안 그렸다 = 휠이 걸릴 자리가 없다(첫 프레임 방어)
 	woodshop_tab = WS_TAB_BUILD  # ★ [S4-T7] 목공방은 항상 건축 의뢰부터(가게의 얼굴 = 로빈 건축)
 	visible = true
 	_apply_heart_visibility()
@@ -902,6 +904,24 @@ func _draw_menu_top(panel: Rect2) -> void:
 #   main이 주입한 craft_rows_fn(무상태 콜백 — 프레임은 레벨·발견 원장·인벤을 모른다)에서 매 프레임 온다.
 var craft_rows_fn: Callable = Callable()
 var _craft_row_rects: Array = []   # [{rect, id}] — 클릭 히트테스트(매 그리기 재구성)
+# ★[폴리시 R31 #8] 제작 탭 첫 표시 행 인덱스 + 휠 히트테스트 영역(숙련 탭 `_skill_scroll`과 같은
+#   문법 — 클램프는 그리기 시점에 행수에서 파생). 왜 필요한가: 이 탭은 형제 셋이 가진 방어를
+#   **하나도** 안 가져(바닥 경계 `panel.end.y - FRAME_MARGIN` · break · 스크롤) `y += 40`으로
+#   무조건 다음 줄로 갔고, 판 높이가 상수 파생 고정값이라 5행까지만 그려졌다. 카탈로그가 15행이라
+#   i=7 이후 8행은 **한 픽셀도 안 그려지고 마우스가 닿을 수 없었다** — 상위 스프링클러 2종·화분·
+#   희귀 씨앗 4종·야생 씨앗 2종이 UI 층에서 통째로 도달 불가였고(대체 입수처 없음), 그런데도
+#   `_craft_row_rects`가 화면 밖 rect를 클릭 히트로 계속 등록했다(R29 #1이 숙련 탭에서 「보이지
+#   않는 판 밖이 확정 버튼이 됐다」고 봉합한 그 구조).
+var _craft_scroll := 0
+var _craft_area_rect := Rect2()
+# ★[폴리시 R31 #8] **실제로 그린 것**(숙련 탭 `_skill_draw_bottom`이 R29 #1에서 받은 그 관측점).
+#   선측정값이 아니라 이 실측이 「테두리를 안 물었나」·「마지막 행에 닿을 수 있나」를 판정한다.
+var _craft_draw_bottom := 0.0   # 마지막으로 그린 행 판의 아랫변
+var _craft_shown := 0           # 이번 프레임에 그린 행 수
+# 행 기하 — 종전 리터럴(34.0 / 40.0)을 상수로 올린다. 바닥 경계 판정이 같은 값을 다시 적으면
+# 다음에 행 높이가 바뀔 때 두 자리가 갈린다(그림은 픽셀 한 점도 안 바뀐다).
+const CRAFT_ROW_H := 34.0      # 행 판(plate) 높이
+const CRAFT_ROW_PITCH := 40.0  # 행 간 baseline 간격
 
 # ★[폴리시 R14] 제작 탭 헤더가 말할 **해금 축 이름들**(행 데이터 파생 · 중복 없이 등장 순서대로).
 #   채집 축은 `unlock_level > 0`인 행이 하나라도 있으면 선다(그 축의 라벨은 행이 안 싣는다 —
@@ -943,8 +963,21 @@ func _draw_craft_tab(panel: Rect2, _font: Font) -> void:
 			else "손 제작 (행 클릭 = 제작)", 12, HanjiUi.INK_DIM, _inner_right(panel) - x)
 	y += 22.0
 	var row_w := panel.size.x - PAD * 2.0 - 24.0
-	for row in rows:
-		var r := Rect2(x - 4.0, y - 12.0, row_w, 34.0)
+	# ★[폴리시 R31 #8] 가용 바닥 = 패널 하단에서 9-slice 나무 테두리를 뺀 자리(숙련 탭이 세운 그
+	#   기준선 그대로). 행 판의 윗변이 `y - 12`이므로 그 판이 이 선을 물면 안 그리고 스크롤로 넘긴다.
+	var max_y := panel.end.y - FRAME_MARGIN
+	# 스크롤 클램프는 그리기 시점(행수가 여기서 확정된다 — 휠 핸들러는 ±1만 한다). 행이 줄어든
+	# 뒤에도 빈 화면이 안 남게 마지막 행까지만 내려간다.
+	_craft_scroll = clampi(_craft_scroll, 0, maxi(rows.size() - 1, 0))
+	_craft_area_rect = Rect2(panel.position.x + PAD, y - 16.0, panel.size.x - PAD * 2.0, max_y - y + 16.0)
+	var shown := 0
+	for i in range(_craft_scroll, rows.size()):
+		var row: Dictionary = rows[i]
+		# 첫 행은 늘 그린다(빈 탭 방지 — 숙련 탭의 그 규율). 이후 행은 판이 통째로 들어갈 때만.
+		if shown > 0 and (y - 12.0) + CRAFT_ROW_H > max_y:
+			break
+		shown += 1
+		var r := Rect2(x - 4.0, y - 12.0, row_w, CRAFT_ROW_H)
 		var unlocked := bool(row.get("unlocked", false))
 		var can := bool(row.get("can", false))
 		if unlocked:
@@ -973,7 +1006,18 @@ func _draw_craft_tab(panel: Rect2, _font: Font) -> void:
 			var need := " + ".join(need_parts) if not need_parts.is_empty() else "-"
 			HanjiUi.draw_text(self, Vector2(x, y), "[잠김] %s" % String(row.get("name", "")), 13, HanjiUi.INK_DIM)
 			HanjiUi.draw_text(self, Vector2(x, y + 15.0), "해금: %s" % need, 11, HanjiUi.INK_DIM)
-		y += 40.0
+		y += CRAFT_ROW_PITCH
+	# 실측 기록 — 마지막 행 판의 아랫변(= 직전 baseline `y - PITCH` 기준 `-12 + ROW_H`).
+	_craft_shown = shown
+	_craft_draw_bottom = (y - CRAFT_ROW_PITCH - 12.0 + CRAFT_ROW_H) if shown > 0 else panel.position.y
+	# ★[폴리시 R31 #8] 넘치면 스크롤 안내(숙련 탭·매대 리스트의 "▲/▼" 결 — 위·아래 어느 쪽이
+	#   잘렸는지 함께 보인다). 이 줄이 없으면 «휠이 듣는다»는 사실 자체가 화면에 없다.
+	var hidden_below := rows.size() - _craft_scroll - shown
+	if _craft_scroll > 0 or hidden_below > 0:
+		var hint := "휠 스크롤 — %s%s" % [
+			("▲ %d " % _craft_scroll) if _craft_scroll > 0 else "",
+			("▼ %d" % hidden_below) if hidden_below > 0 else ""]
+		HanjiUi.draw_text(self, Vector2(x, max_y - 2.0), hint, 11, HanjiUi.INK_DIM, row_w)
 
 # ★ 아이콘 탭 호버 툴팁 — 한글명 한지 칩(어두운 박스 + 밝은 글자).
 # 위치 = 탭 바 우측 빈 공간(탭 행과 같은 높이). 옛 위치(호버 탭 바로 아래 tab.end.y+4)는 탭 칸 밖
@@ -2011,6 +2055,17 @@ func _gui_input(event: InputEvent) -> void:
 			queue_redraw(); accept_event(); return
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_skill_scroll += 1   # 클램프는 그리기 시점(행수 파생)
+			queue_redraw(); accept_event(); return
+	# ★[폴리시 R31 #8] 제작 탭 행 휠 스크롤 — 카탈로그 15행이 창(5행)을 넘긴다(숙련 탭과 **같은**
+	#   영역 문법). 제작 탭도 백팩을 안 그리므로(`_backpack_visible()`가 거짓) 아래 백팩 스크롤과
+	#   경합하지 않는다 — 종전엔 그 사실 때문에 이 탭의 휠이 어느 갈래에도 안 걸려 그냥 소멸했다.
+	if event.pressed and context == CTX_MENU and menu_tab == TAB_CRAFT \
+			and _craft_area_rect.has_point(event.position):
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_craft_scroll = maxi(_craft_scroll - 1, 0)
+			queue_redraw(); accept_event(); return
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_craft_scroll += 1   # 클램프는 그리기 시점(행수 파생)
 			queue_redraw(); accept_event(); return
 	# ★[S8-T1] 관계 탭 하트 휠 스크롤 — 관계 트랙 보유 9인이 패널을 넘긴다(숙련 탭과 같은 영역 문법).
 	#   관계 탭도 백팩을 안 그리므로 아래 백팩 스크롤과 경합하지 않는다. 스크롤은 HeartBar 노드의
