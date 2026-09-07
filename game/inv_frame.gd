@@ -44,6 +44,7 @@ signal larder_take(id: String)
 signal music_vol_changed(delta: float) # ★ Phase D 설정: 음악 볼륨 증감(옵션 탭 −/+)
 signal sfx_vol_changed(delta: float)   # ★ Phase D 설정: 효과음 볼륨 증감(옵션 탭 −/+)
 signal fullscreen_toggled              # ★ Phase D 설정: 전체화면 토글(옵션 탭 체크박스)
+signal mute_toggled                    # ★[폴리시 R29 #3] 옵션 탭 음소거 체크박스(main이 audio.toggle_mute)
 signal profession_chosen(skill: String, prof_id: String)   # ★ ADR-0052 숙련 탭: 전문직 선택(main이 choose_profession)
 signal craft_chosen(recipe_id: String)   # ★[S4-T5] 제작 탭: 레시피 행 클릭(main이 _on_frame_craft — 재료 차감·산출 적재)
 # ★[S10-T8 / ADR-0069 결정 11] 숙련 탭 [경지] 유물 수령 버튼(main이 포인트 검증·백팩 적재·원장 기록).
@@ -238,7 +239,13 @@ var _music_plus_rect := Rect2()
 var _sfx_minus_rect := Rect2()
 var _sfx_plus_rect := Rect2()
 var _fullscreen_rect := Rect2()
-var _set_music := 0.8            # main이 set_settings로 매 프레임 주입(GameSettings 파생 — 읽기 전용 표시)
+var _mute_rect := Rect2()        # ★[폴리시 R29 #3] 음소거 체크박스 클릭 영역(전체화면과 같은 결)
+# ★[폴리시 R29 #2] 옵션 탭 막줄(언어)의 실측 baseline — 그리기가 남기고 회귀가 «나무 테두리
+#   안쪽인가»를 잰다(값이 아니라 그린 자리를 재게 하는 자리 — 표시 단언은 그리기 경로를 탄다).
+var _opt_last_baseline := 0.0
+# ★[폴리시 R29 #1] 숙련 탭이 마지막으로 그린 세로 바닥(그리기가 남기는 실측 — 위와 같은 결).
+var _skill_draw_bottom := 0.0
+var _set_music := 0.8          # main이 set_settings로 매 프레임 주입(GameSettings 파생 — 읽기 전용 표시)
 var _set_sfx := 0.9
 var _set_fullscreen := false
 var _set_muted := false          # ★[폴리시 R28 #7] 음소거([M]) 현재 상태 — set_settings로 주입
@@ -389,6 +396,25 @@ func set_menu_board(ids: PackedStringArray) -> void:
 	_menu_board = ids
 	if context == CTX_LARDER:
 		queue_redraw()
+
+# ★[폴리시 R29 #4] 곳간 안내 한 줄 — **조립과 검증이 같은 한 함수**를 본다. R28 #28이 붙인 꼬리는
+#   같은 커밋이 새로 건 폭 예산(`larder_caption_budget`)을 크게 넘어, 말줄임으로 **덧붙인 절 전체가
+#   통째로 잘려** 있었다 — 「흐린 줄」의 뜻을 말하려고 만든 유일한 표면이 화면에 한 글자도 안 닿고
+#   행 색만 조용히 바뀌던 자리다(커밋이 행 꼬리를 포기한 그 근거가 캡션에도 그대로 적용된다).
+#   ★ 접기가 아니라 **줄이기**로 닫는다: 두 줄로 못 쪼갠다(바로 14px 아래가 재고 목록의 첫 행이라
+#     자리가 없다). 12px 한 줄에 들어가는 예산은 320px뿐이라, 종전 두 절(438px)에서 뜻이 겹치거나
+#     다른 데서 읽히는 말부터 덜어냈다 — 「메뉴」(바로 옆 「융합」이 이미 말한다)·「클릭」(아이콘
+#     행 문법)·칸수(메뉴판 자체가 든다). **남긴 것은 뜻이 유일한 둘**이다: 어느 쪽 클릭이 어느
+#     방향인가, 그리고 흐린 줄이 무엇인가.
+func larder_caption() -> String:
+	var s := "융합 재료 · 백팩=적재 / 재고=회수"
+	if not _menu_board.is_empty():
+		s += " · 흐린 줄=오늘 밖"
+	return s
+
+# 그 줄이 들어가야 하는 가로 예산(그리기가 넘기는 그 값 — 회귀가 같은 자를 쓴다).
+func larder_caption_budget() -> float:
+	return _panel_rect().size.x - PAD * 2.0
 
 # ★[폴리시 R28 #28] 이 재고가 **오늘 메뉴판 밖**인가 = 쟁여도 그날은 안 나간다(그리기와 회귀가
 #   같은 한 술어를 본다 — R24 #1이 세운 «재는 값 = 그리는 값»). 메뉴판을 아직 모르면 false다.
@@ -1090,6 +1116,9 @@ func _draw_heart_badge(font: Font, panel: Rect2, row_y: float, text: String) -> 
 const SK_ROW_H := 32.0      # 한 스킬 행(제목·XP 꼬리·전문직 요약 한 줄 + 진행바) 블록 높이
 const SK_ROW_GAP := 4.0     # 행 간 여백
 const SK_OPT_H := 28.0      # 전문직 선택 버튼 높이
+# ★[폴리시 R29 #1] 고른 전문직 효과 한 줄(R28 #22)이 먹는 세로 — **선측정(block)과 그리기가 같은
+#   값을 든다**. 상수로 뽑기 전엔 그리기 쪽에만 리터럴 12.0이 있어 선측정이 이 줄을 통째로 놓쳤다.
+const SK_PROF_LINE_H := 12.0
 const SK_TAIL_X := 118.0    # 제목 오른쪽에 붙는 XP 꼬리의 x 오프셋
 const SK_PROF_X := 196.0    # XP 꼬리 오른쪽에 붙는 "전문직:" 요약의 x 오프셋
 # ★[폴리시 R17 #6] 선택 버튼·경지 버튼 안쪽 글자의 좌우 여백(대칭). 폭 상한이 이 값에서 파생된다.
@@ -1119,7 +1148,13 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 		# ★[S10-T8] 경지 줄 — main이 주입한 {text, claimable, skill}({} = 안 그림 = 층 미개방).
 		var mst: Dictionary = row.get("mastery", {})
 		var mst_text := String(mst.get("text", ""))
-		var block := SK_ROW_H + SK_ROW_GAP
+		# ★[폴리시 R29 #1] 전문직 효과 줄(R28 #22)도 **선측정에 든다.** 종전엔 `block`에 한 항도
+		#   안 들어가, Lv5·Lv10을 둘 다 고른 행이 실제로는 `block`보다 24px 크게 그려졌다 —
+		#   마지막 통과 행의 경지 줄·선택 버튼·스크롤 안내가 나무 테두리 위(패널 밖까지)로 밀리고,
+		#   더 나쁘게는 그 자리에서 `_prof_choice_rects`가 **클릭 영역까지 등록**해 보이지 않는
+		#   판 밖이 비가역 전문직 확정 버튼이 됐다.
+		var prof_lines: Array = row.get("profession_lines", [])
+		var block := SK_ROW_H + SK_ROW_GAP + float(prof_lines.size()) * SK_PROF_LINE_H
 		if not options.is_empty():
 			block += 18.0 + float(options.size()) * (SK_OPT_H + 2.0)
 		if mst_text != "":
@@ -1154,9 +1189,9 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 		# ★[폴리시 R28 #22] 고른 전문직의 **효과 한 줄**(main이 `ProfessionCatalog.desc_of`로 파생).
 		#   위 요약 꼬리는 폭이 물려 있어 이름만 싣고, 무엇을 하는 퍼크인지는 여기서 읽힌다 —
 		#   되돌릴 수 없는 선택의 내용이 확정과 동시에 사라지던 자리(그 필드의 머리말).
-		for pl in row.get("profession_lines", []):
+		for pl in prof_lines:
 			HanjiUi.draw_text(self, Vector2(x + 8.0, y + 8.0), String(pl), 10, HanjiUi.INK_DIM, bar_w - 8.0)
-			y += 12.0
+			y += SK_PROF_LINE_H
 		# ★ ADR-0052 — 선택 대기(pending) 시 2갈래 버튼(name + desc). 클릭 영역을 _prof_choice_rects에 등록.
 		if not options.is_empty():
 			var skill := String(row.get("skill", ""))
@@ -1205,6 +1240,10 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 				y += SK_OPT_H + 2.0
 		y += SK_ROW_GAP   # 행 간 여백
 		shown += 1
+	# ★[폴리시 R29 #1] **실제로 그린 바닥** — 이 탭이 스스로 선언한 규율(「이 행이 차지할 총 높이를
+	#   미리 재서 들어갈 때만 그린다」)이 지켜졌는지는 선측정값이 아니라 이 실측이 판정한다.
+	#   회귀가 `panel.end.y - FRAME_MARGIN`과 대 본다(선측정이 한 항이라도 빠지면 여기서 삐져나온다).
+	_skill_draw_bottom = y - (SK_ROW_GAP if shown > 0 else 0.0)
 	# ★[S5-T4] 넘치면 스크롤 안내(매대 리스트의 "▼" 결). 위/아래 어느 쪽이 잘렸는지 함께 보인다.
 	var hidden_below := _skill_rows.size() - _skill_scroll - shown
 	if _skill_scroll > 0 or hidden_below > 0:
@@ -1213,12 +1252,32 @@ func _draw_skill_tab(panel: Rect2, font: Font) -> void:
 			("▼ %d" % hidden_below) if hidden_below > 0 else ""]
 		HanjiUi.draw_text(self, Vector2(x, max_y - 2.0), hint, 11, HanjiUi.INK_DIM, bar_w)
 
+# ── ★[폴리시 R29 #2] 옵션 탭 세로 눈금 ──────────────────────────────────────
+# 왜 표로 뽑았나: R28 #7이 음소거 행 한 줄을 끼우면서 그 아래 막줄(언어)이 30px씩 밀려
+# `panel.end.y - FRAME_MARGIN`(= 그릴 수 있는 하한) 아래로 내려갔다 — `_panel_rect()` 머리말이
+# 「옵션 탭 막줄이 나무 테두리에 안 걸치게(owner 리포트 2026-07-06)」라고 그 여백의 존재 이유를
+# 명시한 바로 그 결함의 재발이다. 눈금이 그리기 본문에 리터럴로 흩어져 있으면 행이 하나 늘 때마다
+# 같은 일이 반복되므로, **행 baseline을 한 함수가 낳고 회귀가 그 함수를 잰다**.
+const OPT_ACTION_DY := 42.0   # 패널 PAD 아래 첫 액션 버튼(저장) 줄
+const OPT_DIV_DY := 80.0      # "── 설정 ──" 구분선
+const OPT_SET_DY := 100.0     # 첫 설정 행(음악 볼륨) — 구분선과 20px(옛 8px 겹침 사고의 그 축)
+const OPT_VOL_STEP := 32.0    # 볼륨 두 행 사이(트랙·백분율이 있어 체크박스보다 넓다)
+const OPT_CHK_STEP := 26.0    # 볼륨→체크박스 · 체크박스끼리 · →언어(18px 칸 사이 8px 여백)
+
+# 설정 다섯 행의 baseline(음악·효과음·전체화면·음소거·언어) — 그리기가 그대로 소비한다.
+func options_row_ys(panel: Rect2) -> Array:
+	var sy := panel.position.y + PAD + OPT_ACTION_DY + OPT_SET_DY
+	return [sy, sy + OPT_VOL_STEP,
+		sy + OPT_VOL_STEP + OPT_CHK_STEP,
+		sy + OPT_VOL_STEP + OPT_CHK_STEP * 2.0,
+		sy + OPT_VOL_STEP + OPT_CHK_STEP * 3.0]
+
 # ★ Phase B 액션(저장·나가기) + ★ Phase D 설정 본체(음악·효과음 볼륨 −/+, 전체화면 토글, 언어=한국어 고정).
 # 값은 main이 GameSettings에서 set_settings로 주입한 것을 읽어 바·체크박스로만 그린다(무상태 — 조작은
 # 신호로 main에 올려 실제 볼륨·창모드·영속을 main이 수행, _click_menu TAB_OPTIONS 라우팅).
 func _draw_options_tab(panel: Rect2, font: Font) -> void:
 	var x := panel.position.x + PAD + 12.0
-	var y := panel.position.y + PAD + 42.0
+	var y := panel.position.y + PAD + OPT_ACTION_DY
 	_save_rect = Rect2(x, y, 200.0, 28.0)
 	_plate_btn(_save_rect)
 	HanjiUi.draw_text(self, _save_rect.position + Vector2(14.0, 19.0), "저장", 14, HanjiUi.INK_LIGHT)
@@ -1229,17 +1288,17 @@ func _draw_options_tab(panel: Rect2, font: Font) -> void:
 	# ── ★ Phase D 설정 본체 ──
 	# ★ 구분선을 볼륨 행과 확실히 띄운다 — 옛 (sy=y+84, 구분선 sy-8)은 "── 설정 ──"이 "음악 볼륨"
 	#   라벨과 겹쳤다(owner 리포트 2026-07-06). 구분선을 위로(y+80)·첫 행을 아래로(y+104) 분리.
-	HanjiUi.draw_text(self, Vector2(x, y + 80.0), "── 설정 ──", 13, HanjiUi.GOLD_SOFT)
-	var sy := y + 104.0
-	var r1 := _draw_volume_row(font, x, sy, "음악 볼륨", _set_music)
+	HanjiUi.draw_text(self, Vector2(x, y + OPT_DIV_DY), "── 설정 ──", 13, HanjiUi.GOLD_SOFT)
+	# ★[폴리시 R29 #2] 설정 다섯 줄의 baseline은 **한 표**에서 나온다(그리기와 회귀가 같은 눈금).
+	var rows := options_row_ys(panel)
+	var r1 := _draw_volume_row(font, x, rows[0], "음악 볼륨", _set_music)
 	_music_minus_rect = r1[0]
 	_music_plus_rect = r1[1]
-	sy += 34.0
-	var r2 := _draw_volume_row(font, x, sy, "효과음 볼륨", _set_sfx)
+	var r2 := _draw_volume_row(font, x, rows[1], "효과음 볼륨", _set_sfx)
 	_sfx_minus_rect = r2[0]
 	_sfx_plus_rect = r2[1]
 	# 전체화면 체크박스.
-	sy += 38.0
+	var sy: float = rows[2]
 	_fullscreen_rect = Rect2(x, sy - 14.0, 18.0, 18.0)
 	draw_rect(_fullscreen_rect, HanjiUi.INSET)
 	draw_rect(_fullscreen_rect, HanjiUi.BORDER, false, 1.0)
@@ -1250,17 +1309,22 @@ func _draw_options_tab(panel: Rect2, font: Font) -> void:
 	# ★[폴리시 R28 #7] **음소거 행** — 전체화면과 같은 결(체크박스 = 지금 상태 · 회색 = 키). 종전엔
 	#   [M]이 상시 배선돼 있는데 이 탭에 행 자체가 없어, 실수로 누른 무음을 오디오 고장으로 읽고
 	#   되돌릴 키도 알 수 없었다(볼륨 바는 버스 mute와 직교라 100%를 그대로 그린다).
-	sy += 30.0
-	var mute_box := Rect2(x, sy - 14.0, 18.0, 18.0)
-	draw_rect(mute_box, HanjiUi.INSET)
-	draw_rect(mute_box, HanjiUi.BORDER, false, 1.0)
+	# ★[폴리시 R29 #3] 그 체크박스를 **누를 수 있게** 한다 — 칸을 지역 변수로 버려 두는 바람에
+	#   `_click_menu`의 TAB_OPTIONS 라우팅에 갈래가 없었고, 바로 위 전체화면과 픽셀 문법이 똑같은
+	#   칸이 눌러도 아무 일도 안 했다(「반응 없음」이 다시 오디오 고장으로 읽히는 자리 — 이 행이
+	#   없애려던 바로 그 오독). 필드로 올려 형제 넷(`_fullscreen_rect`류)과 같은 결로 라우팅한다.
+	sy = rows[3]
+	_mute_rect = Rect2(x, sy - 14.0, 18.0, 18.0)
+	draw_rect(_mute_rect, HanjiUi.INSET)
+	draw_rect(_mute_rect, HanjiUi.BORDER, false, 1.0)
 	if _set_muted:
-		draw_rect(mute_box.grow(-4.0), HanjiUi.GOLD)
+		draw_rect(_mute_rect.grow(-4.0), HanjiUi.GOLD)
 	HanjiUi.draw_text(self, Vector2(x + 26.0, sy), "음소거", 14, HanjiUi.INK_LIGHT)
 	HanjiUi.draw_text(self, Vector2(x + 120.0, sy), "[M]", 12, HanjiUi.INK_DIM)
 	# 언어(한국어 고정 — 표시만, ADR-0048 §2).
-	sy += 30.0
+	sy = rows[4]
 	HanjiUi.draw_text(self, Vector2(x, sy), "언어  한국어 (고정)", 12, HanjiUi.INK_DIM)
+	_opt_last_baseline = sy   # ★[폴리시 R29 #2] 막줄 실측 — 회귀가 이 값으로 테두리 침범을 잰다
 
 # ★ Phase D 볼륨 한 줄(라벨 · [−] · 트랙바 · [+] · 백분율). [−]/[+] 버튼 Rect2 둘을 배열로 돌려준다.
 func _draw_volume_row(font: Font, x: float, yy: float, label: String, v01: float) -> Array:
@@ -1410,13 +1474,8 @@ func _draw_larder_top(panel: Rect2) -> void:
 	var cap_col: Color = HanjiUi.GOLD if used < cap else Color(0.86, 0.36, 0.32)
 	HanjiUi.draw_text(self, Vector2(panel.end.x - FRAME_MARGIN - 28.0 - cw,
 		panel.position.y + PAD + 20.0), cap_str, 15, cap_col)
-	# ★[폴리시 R28 #28] 메뉴판 칸수와 «흐린 줄»의 뜻을 여기서 한 번 말한다 — 행마다 꼬리를 붙이면
-	#   오른쪽 글자 예산(아래 `right_budget`)에 먹혀 말줄임으로 사라진다.
-	var cap_line := "융합 메뉴 재료  ·  백팩 클릭=적재 / 재고 클릭=회수"
-	if not _menu_board.is_empty():
-		cap_line += "  ·  오늘 메뉴판 %d칸(흐린 줄은 오늘 안 나간다)" % _menu_board.size()
 	HanjiUi.draw_text(self, Vector2(panel.position.x + PAD, panel.position.y + PAD + 38.0),
-		cap_line, 12, HanjiUi.INK_DIM, panel.size.x - PAD * 2.0)
+		larder_caption(), 12, HanjiUi.INK_DIM, larder_caption_budget())
 	_larder_rects.clear()
 	if larder == null:
 		return
@@ -2077,6 +2136,8 @@ func _click_menu(p: Vector2) -> void:
 			sfx_vol_changed.emit(VOL_STEP)
 		elif _fullscreen_rect.has_point(p):
 			fullscreen_toggled.emit()
+		elif _mute_rect.has_point(p):
+			mute_toggled.emit()   # ★[폴리시 R29 #3] 형제 체크박스(전체화면)와 같은 갈래
 		return
 	# ★ ADR-0052 숙련 탭: 전문직 선택 버튼(신호 — main이 choose_profession + 갱신). 옵션 탭과 같은 결.
 	if menu_tab == TAB_SKILL:

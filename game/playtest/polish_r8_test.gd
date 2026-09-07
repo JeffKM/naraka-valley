@@ -166,8 +166,13 @@ func _initialize() -> void:
 			resolved += 1
 	_check("①e 방목 칸을 겨누면 **그 짐승 자신**이 해석된다(첫 매치에 먹히는 마리 0)",
 		resolved == out_keys.size())
+	# ★[폴리시 R29 #5] 니들 갱신 — R28 #15가 슬롯 계산을 `_release_open_buildings`에서 뽑아
+	#   `_free_pasture_slots()`로 옮겼다(방출과 알림이 한 표를 공유하게). `_in_func`는 다음
+	#   `func ` 줄에서 멈추므로 옛 니들은 이사한 자리에 닿지 못해 **확정 red**였다. 프로덕션이
+	#   옳고 재는 계약(«후보에서 이미 나간 짐승 칸을 뺀다»)은 그대로다 — 보는 함수만 옮긴다.
 	_check("①f 후보 계산이 이미 나간 짐승의 칸을 뺀다(원장 파생 — main이 좌표를 따로 안 센다)",
-		_in_func("func _release_open_buildings", "ranch.occupied_pasture_tiles()"))
+		_in_func("func _free_pasture_slots", "ranch.occupied_pasture_tiles()")
+			and _in_func("func _release_open_buildings", "_free_pasture_slots()"))
 
 	# ── ③ #3 REFUTED — 방목 평면은 경작 대상이 아니다 ─────────────────────────
 	print("── ③ #3 방목 칸과 밭은 좌표상 겹치지 않는다(반박 근거 고정) ──")

@@ -861,9 +861,13 @@ func _check_pasture_slots(m: Node) -> void:
 		and not m._can_place_crystalarium(t) and not m._can_place_sprinkler(t))
 	# 이미 나가 있는 짐승 칸을 빼는 것은 **R8이 `_release_open_buildings`에 세운 두 번째 필터**다
 	# (`occupied_pasture_tiles`) — 여기 새 가드와 합쳐져야 "설치물도 짐승도 안 겹친다"가 성립한다.
+	# ★[폴리시 R29 #6] 니들 갱신 — polish_r8 ①f와 **같은 이사**가 원인인 형제 자리다(R28 #15가
+	#   `_free_pasture_slots()`를 신설해 방출·알림이 한 표를 보게 했다). 근거·판정은 그쪽과 공유하고,
+	#   여기서도 재는 계약(«그 칸은 R8 필터가 잡는다»)은 한 글자도 안 바뀐다.
 	_check("⑱g 그 칸은 R8 필터가 잡는다 — 새 가드와 합쳐 다음 방출이 같은 칸을 다시 안 집는다",
 		m.ranch.occupied_pasture_tiles().has(t)
-		and _in_func("func _release_open_buildings", "ranch.occupied_pasture_tiles()"))
+		and _in_func("func _free_pasture_slots", "ranch.occupied_pasture_tiles()")
+		and _in_func("func _release_open_buildings", "_free_pasture_slots()"))
 
 
 # ── ⑲ #22 F9 로드가 삽사리·승마 상태를 되감는다 ──────────────────────────────

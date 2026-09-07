@@ -10533,6 +10533,7 @@ func _setup_settings() -> void:
 	frame.music_vol_changed.connect(_on_music_vol_changed)
 	frame.sfx_vol_changed.connect(_on_sfx_vol_changed)
 	frame.fullscreen_toggled.connect(_on_fullscreen_toggled)
+	frame.mute_toggled.connect(_on_frame_mute_toggled)   # ★[폴리시 R29 #3] 음소거 체크박스
 
 # 현재 설정 볼륨을 오디오 버스에 적용한다(음악·효과음 각 0..1 → dB, audio가 변환).
 func _apply_audio_volumes() -> void:
@@ -10584,6 +10585,17 @@ func _on_fullscreen_toggled() -> void:
 	_apply_fullscreen(not now_full)
 	if settings.set_fullscreen(not now_full):
 		settings.save_settings()
+
+# ★[폴리시 R29 #3] 옵션 탭 음소거 체크박스 핸들러 — **[M] 키와 글자 그대로 같은 동사**다
+#   (진실원은 오디오 버스 하나 · 알림 문구도 그 자리와 같다). 프레임은 신호만 올리고 실제
+#   토글·문구는 여기서 — 전체화면 체크박스가 F11과 값 원천을 공유하는 그 결.
+func _on_frame_mute_toggled() -> void:
+	if audio == null:
+		return
+	var muted_now: bool = audio.toggle_mute()
+	_notice("음소거 %s — [M]으로 되돌린다" % ("켜짐" if muted_now else "꺼짐"))
+	if _spine_b5_mute_forced:
+		_spine_b5_mute_prev = muted_now   # 강제 음소거 구간의 «마지막 사용자 의사»(그 자리 머리말)
 
 # ── ★ C2 공통 인벤토리 프레임(메뉴/출하함/매대 컨텍스트 스위칭) ────────────────
 # 하단 백팩 공통 + 상단 레이어 교체. 핫바와 같은 CanvasLayer에 핫바 *위*로 붙여(나중 자식) 열렸을
@@ -25994,9 +26006,27 @@ func _layout_popup_panel(panel: Panel, label: Label, bottom_reserve: float = 0.0
 	var view := _logical_view_size(panel)
 	# ★[폴리시 R28 #27] `bottom_reserve` = 하단에서 비워 둘 띠(0 = 종전 그대로). 상시 HUD와
 	#   나란히 뜨는 판만 이 값을 넘긴다 — 겹치면 «가려서 숨긴다»가 다시 필요해진다.
-	var cap := maxf(view.y - panel.position.y - MIRROR_VIEW_MARGIN - maxf(bottom_reserve, 0.0),
-		pad.y * 2.0)
-	panel.size = Vector2(panel.size.x, minf(label.size.y + pad.y * 2.0, cap))
+	# ★[폴리시 R29 #0] **띠를 지키는 것은 판이 아니라 글이다.** R28 #27은 판 높이만 잘라(minf)
+	#   라벨은 실측 높이 그대로 세워 뒀는데, Godot Label은 부모 Panel이 안 잘라 준다 —
+	#   그래서 「아는 얼굴」·「체키」 줄이 붙는 날의 5·6줄이 판 바닥(예약선) 아래로 그대로
+	#   흘러내려, R23 #17이 「첫 줄과 막줄이 나무 테두리 위·판 바깥 월드 위」라고 이름 붙인
+	#   그 그림이 되살아났다(같은 커밋이 이 판을 `_hud_hidden`에서 뺐으므로 그 자리엔 이제
+	#   핫바·컨텍스트 팝업이 실제로 떠 있다). 자르는 대신 **위로 밀어 올린다**: 본문은 한 줄도
+	#   안 잃고(이 함수 머리말이 접는 축을 배제한 그 근거), 아래 끝은 예약선에 정확히 선다.
+	#   ★ 「위쪽 변 고정」 규약은 **들어갈 때만** 지킨다 — 안 들어가는 프레임에서 머리를 붙드는
+	#     것은 막줄을 버린다는 뜻이라 규약의 목적(머리가 튀는 게 더 나쁘다)보다 손해가 크다.
+	#   ★ 씬이 준 윗변은 노드 meta에 한 번만 굳힌다(되읽으면 지난 프레임의 보정이 누적된다).
+	if not panel.has_meta("popup_top_home"):
+		panel.set_meta("popup_top_home", panel.position.y)
+	var home_y := float(panel.get_meta("popup_top_home"))
+	var need := label.size.y + pad.y * 2.0
+	var limit := view.y - MIRROR_VIEW_MARGIN - maxf(bottom_reserve, 0.0)
+	var top := home_y
+	if home_y + need > limit:
+		top = maxf(MIRROR_VIEW_MARGIN, limit - need)
+	panel.position.y = top
+	var cap := maxf(limit - top, pad.y * 2.0)
+	panel.size = Vector2(panel.size.x, minf(need, cap))
 
 # CanvasLayer 스케일을 걷어낸 논리 뷰 치수(`_pointer_over_overlay`가 쓰는 그 보정과 같은 결).
 func _logical_view_size(node: CanvasItem) -> Vector2:
@@ -27077,9 +27107,18 @@ func _encroach_candidates() -> Array:
 			var t := Vector2i(x, y)
 			if _grid[y][x] != GROUND:              # 밭 흙·길·벽·물·절벽 = 진보/성역 → 배제
 				continue
-			if occ.has(t):                          # 프롭 점유(구조물·장식·debris) → 배제
+			# ★[폴리시 R29 #9] 성역의 축은 **solid**다 — ADR-0055 §1 표(잡초 solid=false → 매일
+			#   재생 / 업화석·석화 고목 solid=true → 치우면 영구)와 §2 성역 목록(「이미 치운
+			#   **solid** debris 자리」), 그리고 reclaim.gd 머리말이 같은 자구로 못 박은 그 축이다.
+			#   종전엔 두 배제가 종을 안 갈랐다: 점유 표(occ)는 시드 배치를 정적으로 들고,
+			#   `is_cleared`는 값이 종 무관 bool이라 — **낫으로 벤 시드 잡초 한 포기**가 이후
+			#   어떤 밤에도, 절기 대량 재스폰에서도 영구히 후보에서 빠졌다. 귀결은 개간할수록
+			#   후보 풀이 단조 감소하는 것이라, §3의 「수주간 완전 방치하면 마당이 서서히 다시
+			#   거칠어진다」가 초반에 부지런했던 세이브일수록 구조적으로 성립하지 않았다.
+			var weed_opened: bool = reclaim.is_weed_cleared(t)
+			if occ.has(t) and not weed_opened:      # 프롭 점유(구조물·장식·debris) → 배제
 				continue
-			if reclaim.is_cleared(t):               # 이미 연 땅(구조물 치운 성역) → 배제
+			if reclaim.is_cleared(t) and not weed_opened:   # 이미 연 땅(solid 치운 성역) → 배제
 				continue
 			if farm.is_tilled(t) or farm.is_planted(t):  # 밭 성역(이중 방어) → 배제
 				continue
