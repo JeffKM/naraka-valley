@@ -149,6 +149,7 @@ horizontal_alignment = 2
 
 [node name="MilestonePanel" type="Panel" parent="CanvasLayer"]
 visible = false
+mouse_filter = 2
 offset_left = 100.0
 offset_top = 108.0
 offset_right = 540.0
@@ -277,6 +278,7 @@ text = "처음부터 다시 시작"
 
 [node name="CafeSummaryPanel" type="Panel" parent="CanvasLayer"]
 visible = false
+mouse_filter = 2
 offset_left = 140.0
 offset_top = 128.0
 offset_right = 500.0

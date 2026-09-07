@@ -68,6 +68,13 @@ func is_unlocked(set_id: String) -> bool:
 func unlocked_sets() -> Array:
 	return _unlocked.keys()
 
+# ★[폴리시 R30 #20] 이 레이어에서 이 셀이 유효한가 — 아래 `place()`의 셋째 항을 그대로 공개한다.
+#   왜 필요한가: 꾸미기 고스트 채색이 «놓을 수 있다»를 색으로 광고하는데 그 판정식이 카탈로그
+#   조회 하나뿐이라 **항상 참**이었다(죽은 갈래). 표시 술어가 실효 술어와 같은 곳을 봐야 화면이
+#   거짓말을 안 하고, 규칙이 두 벌로 늙지 않는다(여기 하나가 진실원이다).
+func can_place_cell(layer: String, cell: Vector2i) -> bool:
+	return Cat.is_layer(layer) and _cells_for(layer).has(cell)
+
 # ── 배치(§11.2) ──────────────────────────────────────────────────────────────
 # 셀에 (set_id, item_key)를 배치한다. 아이템 layer는 카탈로그가 정한다(레이어 인자 불요). 회전은 가구만
 # 유의미(rot 0..3, 다른 레이어는 무시). 성공 시 true·changed. 실패(미지 아이템 / 미해금 세트 / 경계 밖)면

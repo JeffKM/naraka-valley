@@ -5344,6 +5344,14 @@ func _deco_cur_item() -> String:
 		return ""
 	return str(keys[clampi(_deco_item, 0, keys.size() - 1)])
 
+# ★[폴리시 R30 #20] 세트 순환 알림 한 줄 — **잠김을 그 자리에서 말한다.** 팔레트 순환은 전 4세트를
+#   도는데 새 게임의 해금은 둘뿐이라, 표기가 없으면 플레이어는 잠긴 세트를 고른 줄도 모른 채
+#   고스트만 보고 찍는다(위 채색 봉합의 글자판 — 색과 글자가 같은 사실을 말한다).
+func _deco_set_label() -> String:
+	var sid := _deco_cur_set()
+	var locked := home_deco != null and not home_deco.is_unlocked(sid)
+	return "세트: %s%s" % [HomeDecoCatalog.name_of(sid), " (잠김)" if locked else ""]
+
 func _deco_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_LEFT:
@@ -5366,11 +5374,11 @@ func _deco_input(event: InputEvent) -> void:
 			KEY_BRACKETLEFT:
 				_deco_set = posmod(_deco_set - 1, HomeDecoCatalog.set_ids().size())
 				_deco_item = 0
-				_notice("세트: " + HomeDecoCatalog.name_of(_deco_cur_set()))
+				_notice(_deco_set_label())
 			KEY_BRACKETRIGHT:
 				_deco_set = posmod(_deco_set + 1, HomeDecoCatalog.set_ids().size())
 				_deco_item = 0
-				_notice("세트: " + HomeDecoCatalog.name_of(_deco_cur_set()))
+				_notice(_deco_set_label())
 			KEY_COMMA:
 				var n1 := _deco_item_keys().size()
 				if n1 > 0:
@@ -5392,8 +5400,15 @@ func _deco_place(cell: Vector2i) -> void:
 	if item_key == "":
 		return
 	var rot := _deco_rot if _deco_cur_layer() == HomeDecoCatalog.L_FURNITURE else 0
+	# ★[폴리시 R30 #20] **사유를 갈라 말한다.** 종전 한 문구는 «여기»(칸)를 가리키는데 실패 사유의
+	#   하나는 «이 세트»(미해금)라, 팔레트가 전 4세트를 도는 이 UI에서 가장 흔한 거절이 거짓말이었다
+	#   (그러면 플레이어는 다른 칸을 계속 찍어 본다 — 다음 행동이 달라지는 종류의 거짓이다).
+	if not home_deco.is_unlocked(_deco_cur_set()):
+		_notice("%s 세트는 아직 잠겨 있다 — 해금하면 놓을 수 있다"
+			% HomeDecoCatalog.name_of(_deco_cur_set()))
+		return
 	if not home_deco.place(cell, _deco_cur_set(), item_key, rot):
-		_notice("여기엔 놓을 수 없어요")   # 경계 밖·미해금(방어)
+		_notice("여기엔 놓을 수 없어요")   # 경계 밖·그 레이어의 유효 칸 아님
 
 # 마우스 칸의 현재 레이어 배치를 지운다(레이어 간 공존이라 지금 레이어만).
 func _deco_remove(cell: Vector2i) -> void:
@@ -5863,11 +5878,30 @@ func _draw_deco_rot_notch(px: Vector2, rot: int) -> void:
 	draw_circle(px + Vector2(TILE * o.x, TILE * o.y), TILE * 0.09, Color(1, 1, 1, 0.9))
 
 # 꾸미기 모드 오버레이 — 마우스 칸 하이라이트 + 유효/무효 표시 + 현재 팔레트 고스트.
+# ★[폴리시 R30 #20] 고스트·커서의 **채색 술어**. `HomeDeco.place`가 실제로 보는 세 항을 그대로
+#   든다(아이템 실재 · 세트 해금 · 그 레이어의 유효 셀) — 그래야 화면이 「놓을 수 있다」를 색으로
+#   말할 때 그것이 참이다. 이름 있는 함수로 뽑은 이유는 `_facing_mirror`와 같다: 헤드리스가
+#   표시 술어와 실효 술어의 일치를 직접 잴 표면이 필요하다.
+func _deco_ghost_valid(cell: Vector2i) -> bool:
+	if home_deco == null:
+		return false
+	return HomeDecoCatalog.has_item(_deco_cur_set(), _deco_cur_item()) \
+		and home_deco.is_unlocked(_deco_cur_set()) \
+		and home_deco.can_place_cell(_deco_cur_layer(), cell)
+
 func _draw_deco_overlay() -> void:
 	var mt := _mouse_tile()
 	var layer := _deco_cur_layer()
-	var valid := HomeDecoCatalog.has_item(_deco_cur_set(), _deco_cur_item())
-	var ec := Color(0.2, 1, 1, 0.85)
+	# ★[폴리시 R30 #20] **채색 술어를 실효 술어와 같은 셋으로 세운다.** 이 함수 머리말은
+	#   「마우스 칸 하이라이트 + 유효/무효 표시 + 팔레트 고스트」라고 계약을 적어 두었는데, 종전
+	#   판정식은 카탈로그 조회 하나뿐이라 **항상 참**이었다(SETS 4종이 세 레이어 각각에 최소 하나를
+	#   갖고 `_deco_cur_item`은 그 목록에서 뽑은 키를 그대로 돌려주므로 거짓이 될 경로가 없다 =
+	#   죽은 갈래). 반면 `place()`가 실제로 보는 것은 세 항이다 — 아이템 실재 · **세트 해금** ·
+	#   그 레이어의 유효 셀. 그래서 미해금 세트에서도, 벽지를 든 채 바닥 칸을 겨눠도, 방 밖에서도
+	#   풀컬러 고스트와 청록 커서가 「놓을 수 있다」를 색으로 광고했다.
+	#   ★ 「무효 표시」도 이제 실제로 그린다: 커서 색이 갈린다(청록 = 놓인다 / 흐린 적 = 안 놓인다).
+	var valid := _deco_ghost_valid(mt)
+	var ec := Color(0.2, 1, 1, 0.85) if valid else Color(0.95, 0.42, 0.38, 0.75)
 	draw_rect(Rect2(Vector2(mt.x * TILE, mt.y * TILE), Vector2(TILE, TILE)), ec, false, 1.5)
 	if valid:   # 팔레트 고스트(현재 아이템 색 반투명)
 		var gc := HomeDecoCatalog.color_of(_deco_cur_set(), _deco_cur_item())
@@ -11569,6 +11603,34 @@ func _facing_derby_booth() -> bool:
 # ★ **지급이 성공한 뒤에 태그를 소비한다**(순서가 계약이다): 교환은 되돌릴 수 없으므로 백팩이
 #   가득해 못 받는 경우에도 태그가 사라지면 안 된다. 그래서 먼저 다음 보상을 *들여다보고*(소비 0)
 #   지급을 시도한 다음, 성공했을 때만 `exchange_tag`로 원장을 민다.
+# ★[폴리시 R30 #17] 문턱을 넘는 이 교환의 **사다리 보상 + 부상 레어크로우**가 지금 백팩에 다
+#   들어가는가. 자[尺]는 형제 `_grange_awards_fit`과 한 글자도 다르지 않다: 빈 슬롯을 세고
+#   «기존 스택에 합쳐지는 것»만 면제한다(그 술어는 (id, 품질) 정확 일치인 `has_stack`).
+#   ★ 부상을 이미 받았거나 어디든 가지고 있으면 애초에 안 주므로(그 두 술어 = `_award_event_rarecrow`가
+#     보는 것) 자리도 안 센다 — 그때는 사다리 갈래가 스스로 세는 종전 그대로다.
+#   ★ 엽전 보상은 자리를 안 먹는다(`ladder_id == ""`) — 그 사실이 이 결함의 원인이자 이 식의 요점이다.
+func _derby_awards_fit(reward: Dictionary) -> bool:
+	if inventory == null or seasonal_event == null:
+		return true
+	var crow := SeasonalEvent.DERBY_RARECROW
+	if seasonal_event.has_bought(crow) or _rarecrow_owned(crow):
+		return true
+	var free := 0
+	for i in range(inventory.slots.size()):
+		if inventory.id_at(i) == "":
+			free += 1
+	var kind := String(reward.get("kind", ""))
+	var rid := String(reward.get("id", ""))
+	var ladder_id := ""
+	if kind == "fert":
+		ladder_id = rid
+	elif kind == "seed":
+		ladder_id = ItemCatalog.seed_id(rid)
+	if ladder_id != "" and not inventory.has_stack(ladder_id):
+		free -= 1                      # 합칠 스택이 없다 = 빈 슬롯 한 칸을 먹는다
+	free -= 1                          # 레어크로우는 비-스택 유니크 — 늘 새 칸
+	return free >= 0
+
 func _try_derby_exchange() -> void:
 	if seasonal_event == null or clock == null:
 		return
@@ -11579,6 +11641,17 @@ func _try_derby_exchange() -> void:
 	var rid := String(reward.get("id", ""))
 	var n := int(reward.get("n", 0))
 	var kind := String(reward.get("kind", ""))
+	# ★[폴리시 R30 #17] **선검사** — 이 교환이 문턱을 넘는다면 사다리 보상과 부상 레어크로우가
+	#   *함께* 들어가야 시작한다(쌍둥이 창구 ⑦ 장원제가 R26 #9에서 받은 그 표의 더비판).
+	#   왜 여기만 뚫려 있었나: 문턱을 넘는 3번째 보상이 «엽전»이라 인벤 자리를 한 칸도 안 쓰므로
+	#   **만재에서도 반드시 성립한다** — 태그가 전부 소비된 뒤 부상만 거절되고, 화면은 「가방을
+	#   비우고 다시 오자」고 말하는데 태그가 0이라 부스는 「금빛 태그가 없다」로 되돌려 보낸다
+	#   (그날 안에 이행할 수 없는 지시). ⑥의 획득처는 이 창구 하나뿐이고 행사는 연 1회라 다음
+	#   피안 12일까지 잠기며, 8종 완주는 허수아비 보호 반경 8→16의 유일한 조건이다.
+	if seasonal_event.derby_exchanges + 1 >= SeasonalEvent.DERBY_RARECROW_EXCHANGES \
+			and not _derby_awards_fit(reward):
+		_notice("가방이 가득 차 낚시 더비 부상을 받을 수 없다 — [Tab] 가방에서 자리를 비우고 다시 오자")
+		return
 	var label := ""
 	match kind:
 		"fert":
@@ -13966,6 +14039,9 @@ func _process(delta: float) -> void:
 	#   재개 주인도 필요 없다). 두 래치가 다른 자리에 있으면 수명이 갈려 같은 사고가 한쪽에 남는다.
 	if _load_armed_secs > 0.0:
 		_load_armed_secs -= delta
+	# ★[폴리시 R30 #15] **비차단 팝업의 수명도 같은 자리에서 깎는다**(위 두 래치가 R19 #14·R29 #17
+	#   에서 받은 그 규율 — 『정지 주인 = 재개 주인』). 근거 전문은 그 함수 머리말에 있다.
+	_tick_popup_lifetimes(delta)
 	# ★[S7-T8] 날씨 파티클(비·눈) — 실내·지하는 하늘이 없으므로 끈다. 라이팅과 나란히 입력 가드
 	#   위에 둬, 대화·모달이 열려 있어도 창밖 비가 얼어붙지 않는다(라이팅과 같은 이유).
 	if weather_fx != null:
@@ -14180,11 +14256,19 @@ func _process(delta: float) -> void:
 	#   지우면 그 5초를 **체력 바 없이** 싸우게 된다 — 게임 시각 19:00마다, 구역과 무관하게
 	#   (`cafe.tick`에 구역 가드가 없다) 매일 반복됐다. 가림의 옛 근거("정산창이 혼력 바를 덮음")도
 	#   지금은 성립하지 않는다: 판은 화면 중앙대에 서고, 아래 `_show_cafe_summary`가 **하단 HUD
-	#   예약 띠**(NoticeFeed.RESERVE_BOTTOM)를 넘지 못하게 높이를 물린다. 나머지 모달(마일스톤·
-	#   마무리·거울·프레임·대화)은 입력을 실제로 잡거나 화면을 채우므로 그대로 둔다.
+	#   예약 띠**(NoticeFeed.RESERVE_BOTTOM)를 넘지 못하게 높이를 물린다.
+	# ★[폴리시 R30 #14] **마일스톤도 같은 이유로 뺐다** — R28 #27이 면제 사유로 적은 「나머지 모달은
+	#   입력을 실제로 잡거나 화면을 채우므로」가 이 판에 대해서만 거짓이었다: 중앙 팝업 하나일 뿐이고
+	#   `_process`는 이 판 때문에 return하지 않는다(6실초 동안 몹 틱·접촉 피해·시계가 그대로 돈다).
+	#   발화는 매 프레임 HUD 블록의 문턱 검사라 플레이어가 어디 있든 터지므로, 밤 나라카 바에서
+	#   3단 문턱을 넘기면 잡귀 위협이 틱하는 6초를 **체력 바 없이** 싸웠다 — R28 #27이 형제
+	#   (마감 정산)에 대해 이름 붙인 바로 그 실패 모드다. 덤으로 열어 둔 절기 달력이 축하 팝업
+	#   하나에 조용히 닫히던 것도 함께 진다(아래 `calendar_panel.close()`).
+	#   ★ 남는 것들은 근거가 산다: 마무리 화면은 입력을 통째로 잠그고, 거울·프레임·대화·컷신·
+	#     내면 공간·암전은 실제로 입력을 잡거나 화면을 채운다.
 	var _hud_hidden := dialogue.is_open() or frame.is_open() or _sleeping \
 		or _transitioning \
-		or milestone_panel.visible or ending_panel.visible \
+		or ending_panel.visible \
 		or mirror_panel.visible \
 		or cutscene != null \
 		or spine_puzzle != null \
@@ -14459,23 +14543,6 @@ func _process(delta: float) -> void:
 		_arm_or_confirm_delete()
 
 	# ★ C3 — 알림 피드(좌하단 큐)는 스스로 시간 경과로 항목을 거둔다(별도 표시 타이머 폐기).
-
-	# T5.4 카페 마감 정산 팝업 표시 시간이 지나면 숨긴다(자동 해제 — 비차단 팝업).
-	if _cafe_summary_secs > 0.0:
-		_cafe_summary_secs -= delta
-		if _cafe_summary_secs <= 0.0:
-			cafe_summary_panel.visible = false
-
-	# T7.2 카페 1단 달성 팝업 표시 시간이 지나면 숨긴다(카페 정산 팝업과 같은 결 — 비차단 자동 해제).
-	if _milestone_popup_secs > 0.0:
-		_milestone_popup_secs -= delta
-		if _milestone_popup_secs <= 0.0:
-			milestone_panel.visible = false
-			# ★[폴리시 R11] 가려질까 봐 미뤄 둔 카페 마감 정산이 있으면 이제 띄운다(_on_cafe_closed).
-			if _cafe_summary_pending != "":
-				var pending := _cafe_summary_pending
-				_cafe_summary_pending = ""
-				_show_cafe_summary(pending)
 
 	# ★ ADR-0024 핫바 선택: 숫자키(1~0,-,=)로 슬롯 직접 선택 + 휠로 순환. 든 것이 LMB 동사를 정한다.
 	# Q 작물 순환은 폐기 — 씨앗은 이제 핫바 아이템(ADR-0020 데이터 주도 아이템 위에서).
@@ -16173,6 +16240,19 @@ func _use_tool() -> void:
 		#   토스트·숙련 레벨업이 전부 축출됐다. 정보(몇 칸을 못 캤나)는 숫자로 남긴다.
 		var relic_blocked := 0
 		for at: Vector2i in _farm_aoe_tiles(_target, tool_aoe(ItemCatalog.HOE)):
+			# ★[폴리시 R30 #11] **화분 밑은 안 간다.** `_can_place_pot`의 ㉣(「이미 경작된 칸엔
+			#   화분을 안 놓는다」)이 그 사유를 「고랑을 화분이 덮어 밭이 죽는 사고 방지」라고 적어
+			#   두었는데 역방향이 비어 있어, 순서만 뒤집으면 같은 상태가 그대로 성립했다. 같은 함수의
+			#   형제 갈래 셋(물주기·씨앗·비료)은 예외 없이 화분을 명시로 갈라 든다(「놓은 물건이
+			#   밑의 흙보다 앞이다」) — 괭이만 그 표에서 빠졌다.
+			#   귀결: 화분 밑 고랑의 씨앗·물은 그 형제 갈래들 때문에 영영 화분으로 흘러 밭 칸이 죽고,
+			#   화분을 걷은 뒤엔 `is_tilled`가 참이라 같은 칸에 화분을 다시 못 놓는다. 프롬프트는
+			#   `_pot_prompt`가 먼저 잡아 좌클릭 동사를 한 글자도 광고하지 않으므로 **무광고 과금
+			#   동사**이기도 했다(티어 괭이면 겨누지도 않은 이웃 화분까지 같은 상태가 된다).
+			#   ★ 유품 롤보다 **앞**이다: 이 칸은 갈지 않으므로 그 발굴도 자리에 남아야 한다
+			#     (바로 아래 R2 규율 — 「자리가 없으면 칸을 갈지 않아 유품이 그 자리에 남는다」).
+			if _pot_at(at):
+				continue
 			# ★[S10-T5] 칸의 주인 밭으로 라우팅(늘봄방 경작면이면 greenhouse_farm). 좌표 공간이
 			#   갈려 있어 노지 AoE는 한 칸도 늘봄방으로 새지 않는다(그 반대도 같다).
 			var plot := _field_at(at)
@@ -16823,7 +16903,13 @@ func _roll_salvage() -> void:
 func _grant_boatman_rod_lines() -> PackedStringArray:
 	if _boatman_rod_given or inventory == null:
 		return PackedStringArray()
-	if inventory.has_item(ItemCatalog.ROD_T1):
+	# ★[폴리시 R30 #18] **보유 판정은 백팩 ∪ 집 상자 ∪ 갈무리방**이다. 저장 상자는 종류 제한 없이
+	#   도구·무기를 받으므로 백팩만 보면 «상자에 넣어 두면 안 가진 것»이 되어, 플래그가 없는
+	#   구세이브에서 그 물건을 상자에 넣은 채 처음 말을 걸면 **두 번째 사본**이 지급됐다. 두 물건은
+	#   스택 불가 + price 0이라 처분 경로가 하나도 없다(매대·출하함·선물·휴지통 전부 거절) — 즉
+	#   중복분은 영구 슬롯 점유이고, 이 저장소가 갱도 상자 주석에서 「두 자루가 순수 손해」라 못 박은
+	#   그 상태 그대로다. 형제 증정 창구는 전원 이미 이 술어로 통일돼 있다(부적 셋·휘파람·기어/검 매대).
+	if _stored_anywhere(ItemCatalog.ROD_T1):
 		_boatman_rod_given = true      # 구세이브 하위호환 — 이미 가진 사람에게 두 번 주지 않는다
 		return PackedStringArray()
 	if not inventory.add_item(ItemCatalog.ROD_T1, 1):
@@ -16852,7 +16938,7 @@ func _grant_boatman_rod_lines() -> PackedStringArray:
 func _grant_mugol_sword_lines() -> PackedStringArray:
 	if _mugol_sword_given or inventory == null:
 		return PackedStringArray()
-	if inventory.has_item(WeaponCatalog.SWORD_RUSTY):
+	if _stored_anywhere(WeaponCatalog.SWORD_RUSTY):   # ★[폴리시 R30 #18] 쌍둥이(위 주석) — 상자까지 본다
 		_mugol_sword_given = true      # 구세이브·디버그 지급 하위호환 — 이미 가진 사람에게 두 번 주지 않는다
 		return PackedStringArray()
 	if not inventory.add_item(WeaponCatalog.SWORD_RUSTY, 1):
@@ -16915,7 +17001,17 @@ func _installation_at_region(region: String, t: Vector2i) -> bool:
 	if region == RegionCatalog.HOME:
 		if sprinkler != null and sprinkler.has_at(t):
 			return true
-		if rarecrow != null and rarecrow.has_at(t):
+		# ★[폴리시 R30 #13] 레어크로우는 **두 칸을 먹는다** — 원장은 밑동 한 칸만 들지만 아트가
+		#   32×64라 `_draw_rarecrows`가 밑동에서 위로 한 칸을 더 채운다(`_place_rarecrow` 머리말이
+		#   「그림만 위로 1칸 자란다」고 이미 적는다). 대조군인 손저작 허수아비 프롭은
+		#   `_home_occupied_tiles`가 스프라이트 크기에서 두 칸을 파생해 예약하는데, 이 원장만 그 짝이
+		#   없어 **머리 칸이 어느 가드에도 안 잡혔다**(이 술어가 배치 가드 전량의 유일한 입력이다).
+		#   귀결 둘: ㉠ 그 칸에 세운 스프링클러는 `_draw_sprinklers` → `_draw_rarecrows` 순서 때문에
+		#   머리 텍스처에 통째로 덮여 화면에서 사라진다 ㉡ `_is_tree_seed_free`도 밑동 한 칸만
+		#   성역이라 밤새 그 칸에 돋은 자체 파종목이 **재획득 경로가 1회성으로 잠긴 수집물**의
+		#   실루엣을 통째로 묻는다(그 나무는 원장 나무 패스에서 더 뒤에 그려진다).
+		#   ★ 폭의 자[尺]는 그림이다 — 밑동에서 위로 한 칸(`t + (0,1)`에 밑동이 있으면 t는 머리 칸).
+		if rarecrow != null and (rarecrow.has_at(t) or rarecrow.has_at(t + Vector2i(0, 1))):
 			return true
 	if furnace != null and furnace.has_at(region, t):
 		return true
@@ -17492,8 +17588,14 @@ func _remove_garden_pot(t: Vector2i) -> void:
 # ★ 막는 것은 새 배치뿐이다 — 이미 세운 것은 LMB 회수(`_remove_rarecrow`)가 실내에서도 그대로
 #   듣는다(그 갈래는 `_rarecrow_at`만 본다). 구세이브 탈출구 보존.
 # ★ 스프링클러는 안 막는다: 그쪽은 늘봄방 경작면을 실제로 적시는 실효 설치라 축이 다르다.
+# ★[폴리시 R30 #13] **머리 칸도 함께 심사한다** — 두 칸 실루엣의 반대 방향이다. 위
+#   `_installation_at_region`이 머리 칸을 남의 배치에서 성역으로 들게 됐으니 이쪽도 남이 이미 선
+#   칸을 머리로 덮지 않아야 규칙이 대칭이 된다(안 그러면 순서만 뒤집어 같은 겹침이 그대로 성립한다).
+#   ★ 자기 자신과는 안 부딪친다: 심사 시점에 t에는 아직 아무것도 없다.
 func _can_place_rarecrow(t: Vector2i) -> bool:
-	return rarecrow != null and _indoor == "" and _can_place_sprinkler(t)
+	if rarecrow == null or _indoor != "" or not _can_place_sprinkler(t):
+		return false
+	return not _installation_at(t + Vector2i(0, -1))
 
 # 조준 칸에 든 레어크로우를 세운다(아이템 1개 소모). 겨눈 칸 = **밑동**(보호 반경 중심)이고 그림만
 # 위로 1칸 자란다(프롭 허수아비 1×2 실루엣 상속 — rarecrow.gd 머리말).
@@ -19510,6 +19612,15 @@ func _pot_prompt() -> String:
 	if not _pot_at(_target):
 		return ""
 	if garden_pot.is_mature(_target):
+		# ★[폴리시 R30 #12] **화분을 든 손이면 두 동사를 함께 말한다.** LMB 회수 갈래는 성숙 여부를
+		#   한 줄도 안 본다(`holding_garden_pot and pot_at_target` 둘뿐)고, `GardenPot.remove`가
+		#   「자라던 작물은 함께 사라진다 — 되돌림 없음」이다. 그런데 종전 사다리는 이 줄이 아래
+		#   회수 줄을 가로채, 다 자란 화분을 든 채 겨누면 화면에 «[우클릭] 수확» 한 줄뿐이고
+		#   좌클릭이 무엇을 하는지 광고가 0이었다 — 그 프레임의 LMB가 결실째 소각한다.
+		#   형제 설치물(스프링클러·레어크로우)은 예외 없이 **든 물건 기준으로** 회수를 광고한다.
+		#   ★ 사후 알림(「심긴 것도 함께 사라졌다」)은 이미 있었다 — 없던 것은 **사전** 고지다.
+		if item == ItemCatalog.GARDEN_POT:
+			return "[우클릭] 수확 · [좌클릭] 화분 회수 — 심긴 것도 함께 사라진다"
 		return "[우클릭] 수확"
 	if item == ItemCatalog.GARDEN_POT:
 		return "[좌클릭] 화분 회수"
@@ -26039,6 +26150,32 @@ func _show_cafe_summary(text: String) -> void:
 #     화면 위에 남는 것이 **그 축하 문구 자체**라, 어제 장부와 달리 지금 봐야 할 것이다.
 #   ㉡로드 — 되감긴 세이브는 래치도 함께 되감기므로(다시 문턱을 넘으면 다시 뜬다) 버려도 잃는 것이
 #     없고, 오히려 폐기된 타임라인의 축하가 복원된 아침에 남는다. 그래서 다섯을 전부 버린다.
+# ★[폴리시 R30 #15] 두 **비차단** 팝업의 수명을 깎는 유일한 손. `_process`의 조기 반환들보다
+#   **위**에서 돈다 — F8/F9 래치가 R19 #14·R29 #17에서 받은 그 자리이고, 근거도 같은 문장이다:
+#   『정지 주인 = 재개 주인』. 두 판의 `visible`은 아무도 안 내리므로 그리기는 어떤 모드에서도
+#   계속되는데, 초를 깎는 자리만 `_edit_mode`·`_deco_mode`·`_transitioning`·컷신·대화·척추 퍼즐·
+#   메뉴 프레임 **전부의 아래**에 있었다. 그래서 R25가 알림 띠에 세운 규약 «시간은 그려진 띠에게만
+#   흐른다»의 정확한 역상이 성립했다 — 19:00 마감 정산 5초 안에 카페에서 대화를 열면 초가 한 번도
+#   안 깎이고, 불투명 한지 판이 대화 본문 첫 줄들을 덮은 채 **대화가 끝날 때까지**(플레이어 페이스라
+#   무한) 사라지지 않았다. 컷신이 열리면 그 동결이 컷신 구간 전체로 늘어난다.
+#   ★ 거두기만 한다 — 띄우는 자리도 값도 한 글자도 안 바뀐다(이사만).
+func _tick_popup_lifetimes(delta: float) -> void:
+	# T5.4 카페 마감 정산 팝업 표시 시간이 지나면 숨긴다(자동 해제 — 비차단 팝업).
+	if _cafe_summary_secs > 0.0:
+		_cafe_summary_secs -= delta
+		if _cafe_summary_secs <= 0.0:
+			cafe_summary_panel.visible = false
+	# T7.2 카페 1단 달성 팝업 표시 시간이 지나면 숨긴다(카페 정산 팝업과 같은 결 — 비차단 자동 해제).
+	if _milestone_popup_secs > 0.0:
+		_milestone_popup_secs -= delta
+		if _milestone_popup_secs <= 0.0:
+			milestone_panel.visible = false
+			# ★[폴리시 R11] 가려질까 봐 미뤄 둔 카페 마감 정산이 있으면 이제 띄운다(_on_cafe_closed).
+			if _cafe_summary_pending != "":
+				var pending := _cafe_summary_pending
+				_cafe_summary_pending = ""
+				_show_cafe_summary(pending)
+
 func _drop_cafe_popups(keep_milestone: bool = false) -> void:
 	_cafe_summary_pending = ""
 	_cafe_summary_secs = 0.0

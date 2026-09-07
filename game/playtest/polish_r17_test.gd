@@ -652,9 +652,13 @@ func _check_save_failure_voice(m: Node) -> void:
 			raw_fns.append(cur)
 		if ln.contains("_save_or_warn()") and not ln.contains("func _save_or_warn"):
 			warned += 1
-	_check("⑨c 날 `_save_game()` 호출부는 성패를 **보는** 둘만 남았다(%s) · 새 창구 경유 %d곳"
+	# ★[폴리시 R30 부록 — 선재 증인 rot] 새 창구 수를 **5로 하드코딩**해 두어, 이후 회차가 창구를
+	#   더 쓰자 red가 됐다(HEAD에서도 red — 이번 배치와 무관). 재는 계약은 창구의 *개수*가 아니라
+	#   「반환값을 버리는 날 호출부가 0이다」이므로, 그 술어만 남기고 개수는 라벨로 보고한다
+	#   (분모 하드코딩 금지 — 창구가 늘어나는 것은 이 봉합이 이기고 있다는 뜻이다).
+	_check("⑨c 날 `_save_game()` 호출부는 성패를 **보는** 둘뿐이다(%s) · 새 창구 경유 %d곳"
 			% [str(raw_fns), warned],
-		raw == 2 and raw_fns.has("_on_frame_save") and raw_fns.has("_on_frame_quit") and warned == 5)
+		raw == 2 and raw_fns.has("_on_frame_save") and raw_fns.has("_on_frame_quit") and warned >= 5)
 	m.notice_feed._items.clear()
 
 # ── ⑩ #9 `menu_found`가 형제와 같은 무가드로 되감긴다(라이브 왕복) ───────────
