@@ -1,12 +1,23 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+> ## ⏸️ 개발 일시 중단 (2026-09-26 owner 결정)
+>
+> owner가 직접 플레이해 보니 아트, 캐릭터·맵 크기와 비율, 길 입구(한 칸만 뚫림) 등이 전반적으로 부자연스러웠다. 비주얼 판단을 Claude에게 전부 맡긴 결과 owner의 의도와 크게 달라졌고, 자율 폴리시 루프(31회)가 무엇을 고쳤는지도 체감되지 않았다. 그래서 **이 게임은 멈추고 다른 게임 프로젝트를 먼저 진행한다.**
+>
+> **재개 시 규칙:**
+> - 폴리시 루프나 이월 큐(백팩 16칸 등)로 재개하지 않는다.
+> - 아래 순서로 방식을 전환하고, 착수 전에 이 방식을 grill로 먼저 설계한다.
+>   1. 아트를 **부위(파츠)별로 먼저 준비**한다.
+>   2. **owner가 직접 배치하는 툴**을 마련한다(레벨/맵 에디터 — Godot 에디터나 LDtk·Tiled 같은 기존 툴 활용도 검토).
+>   3. owner가 손으로 배치한다.
+> - 비주얼·배치·비율은 owner가 결정한다. Claude는 툴·파츠 준비와 배선만 맡는다.
+> - 캐릭터 대비 타일, 길 폭, 문 폭 같은 비율 기준은 owner가 먼저 정한다.
+>
+> 중단 시점: main `6c2c95d` 이후(§9 폴리시 31회차에서 정지).
 
 ## 이 저장소의 성격 (먼저 읽을 것)
 
 **Dear My Naraka**는 저승 컨셉카페 세계관의 **진짜 스타듀밸리형 게임**(농사·낚시·채광·관계)이다. 엔진은 **Godot**, 타겟은 **Steam/PC**.
-
-현재 저장소는 **기획 단계**다. 아직 Godot 프로젝트(게임 코드)가 생성되지 않았고, 저장소에는 기획 문서·결정 기록·작업 도구만 있다. 첫 코드는 ROADMAP의 **Phase 1 / Sprint 1**(Godot 그레이박스)에서 시작된다.
 
 이 저장소는 **Git으로 버전 관리된다.** 원격은 `github.com/JeffKM/naraka-valley`(기본 브랜치 `main`)다. Git 작업은 `.claude/commands/`의 `/git:branch` `/git:commit` `/git:merge` `/git:pr` 워크플로우를 따른다.
 
@@ -48,6 +59,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 작업 도구
 
-- **shrimp-task-manager (MCP)** — `.mcp.json`에 설정된 작업 분해/관리용 MCP 서버. 소스는 `mcp-shrimp-task-manager/`에 벤더링되어 있다. **이 디렉터리는 도구이지 게임 코드가 아니다.** 데이터는 `shrimp_data/`에 저장된다.
-  - MCP 서버 빌드: `cd mcp-shrimp-task-manager && npm install && npm run build` (실행 진입점은 `dist/index.js`)
-- **`.claude/commands/`** — 슬래시 커맨드: `/docs:update-roadmap`(로드맵 진행 갱신), `/git:branch` `/git:commit` `/git:merge` `/git:pr`(Git 워크플로우).
+- **shrimp-task-manager (MCP)** — 작업 분해/관리용 MCP 서버. 소스는 `mcp-shrimp-task-manager/`에 벤더링되어 있다. **이 디렉터리는 도구이지 게임 코드가 아니다.** 데이터는 `shrimp_data/`에 저장된다.
